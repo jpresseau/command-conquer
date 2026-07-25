@@ -419,6 +419,10 @@ function _rtsNewGame(seed, diff) {
      passes bakes in counts that no longer describe the field. */
   _rtsTiberiumAdjust(G);
 
+  /* Waypoints last as well, for the same reason: they are snapped to open ground and named
+     after ore fields, so they have to be derived from the finished map, not the blank one. */
+  _rtsBuildWaypoints(G);
+
   _rtsRecalcPower('player'); _rtsRecalcPower('enemy');
   return G;
 }
@@ -2174,6 +2178,81 @@ function _rtsAIAllToHunt() {
    old attack wave - which shoved 60-70% of every idle unit at the player's nearest building
    - with this is what stops the opponent fighting as one undifferentiated blob. */
 
+/* ------------------------------------------------------- waypoints (TEAMTYPE.CPP) --
+   Every waypoint-taking team mission - MOVE, ATT_WAYPT, PATROL - names a place on the map
+   rather than a raw cell, and that indirection is the whole reason a team script can be
+   written once and still mean something. In the original a designer drops the waypoints by
+   hand in the scenario editor; this map is generated, so they are DERIVED from it instead.
+
+   Named rather than numbered, which is the same mechanism spelled legibly: what a scenario
+   author means by "waypoint 7" is "the gap in the ridge", and there is no reason to make the
+   team types refer to it as a number here.
+
+     home   the opponent's own command yard - where a team forms up
+     front  the direct approach to the player's base, short of the buildings
+     flank  the same base approached off the diagonal, so an attack does not always
+            arrive up the one corridor the player has learned to defend
+     mid    the contested ore in the middle of the map
+     ore    the field the player's own harvesters are working - a raider's hunting ground */
+function _rtsWayptSnap(tx, tz) {
+  tx = Math.max(1, Math.min(RTS_N - 2, Math.round(tx)));
+  tz = Math.max(1, Math.min(RTS_N - 2, Math.round(tz)));
+  var open = _rtsNearestOpen(tx, tz, 24);
+  return open ? { tx:open[0], tz:open[1] } : { tx:tx, tz:tz };
+}
+/* The ore cell closest to a given point, so "ore" and "mid" name real deposits rather than
+   wherever the field happened to be authored. */
+function _rtsNearestOre(G, tx, tz) {
+  var best = null, bd = 1e9;
+  for (var z = 0; z < RTS_N; z++) for (var x = 0; x < RTS_N; x++) {
+    if (G.scrap[_rtsIdx(x, z)] <= 0) continue;
+    var d = (x - tx) * (x - tx) + (z - tz) * (z - tz);
+    if (d < bd) { bd = d; best = { tx:x, tz:z }; }
+  }
+  return best;
+}
+function _rtsBuildWaypoints(G) {
+  var home = _rtsHas('enemy', 'yard'), foe = _rtsHas('player', 'yard');
+  var W = {};
+  var hx = home ? home.tx : RTS_N - 20, hz = home ? home.tz : 20;
+  var fx = foe ? foe.tx : 20, fz = foe ? foe.tz : RTS_N - 20;
+  W.home = _rtsWayptSnap(hx, hz + 6);
+
+  /* Stand off the target base rather than on top of it: a MOVE mission is an approach, and
+     a team that "arrives" inside the enemy buildings has already blundered into the fight
+     the flank was supposed to avoid. */
+  var dx = fx - hx, dz = fz - hz, len = Math.hypot(dx, dz) || 1;
+  var ux = dx / len, uz = dz / len, STAND = 13;
+  W.front = _rtsWayptSnap(fx - ux * STAND, fz - uz * STAND);
+
+  /* Perpendicular to the line between the two bases, so the flank is derived from the
+     layout rather than from a corner that happens to be right for this one map. Both signs
+     are candidates; take whichever lands on open ground furthest from the direct route. */
+  /* SWING is a real flank, not a trek. At 24 tiles on a 112-tile map this put the waypoint
+     out on the map edge and every team that used it spent most of the match walking. */
+  var px = -uz, pz = ux, SWING = 12, cand = null, cbest = -1;
+  for (var s = -1; s <= 1; s += 2) {
+    var c = _rtsWayptSnap(fx + px * s * SWING - ux * 6, fz + pz * s * SWING - uz * 6);
+    var away = Math.abs((c.tx - fx) * pz - (c.tz - fz) * px) + Math.hypot(c.tx - fx, c.tz - fz);
+    if (away > cbest) { cbest = away; cand = c; }
+  }
+  W.flank = cand;
+
+  var mid = _rtsNearestOre(G, RTS_N >> 1, RTS_N >> 1);
+  W.mid = _rtsWayptSnap(mid ? mid.tx : RTS_N >> 1, mid ? mid.tz : RTS_N >> 1);
+  var ore = _rtsNearestOre(G, fx, fz);
+  W.ore = _rtsWayptSnap(ore ? ore.tx : fx, ore ? ore.tz : fz);
+
+  G.waypt = W;
+  return W;
+}
+function _rtsWayptPos(name) {
+  var G = window._rtsG;
+  if (!G.waypt) _rtsBuildWaypoints(G);
+  var w = G.waypt[name] || G.waypt.front;
+  return w ? { x:_rtsWX(w.tx), z:_rtsWX(w.tz) } : null;
+}
+
 /* Quarry: the team leader asks Greatest_Threat for the best target of a KIND, so one team
    hunts harvesters while another goes for the power plants. */
 function _rtsQuarryMatch(o, quarry) {
@@ -2202,23 +2281,31 @@ function _rtsTeamLeader(t) {
   }
   return t.members[0] || null;
 }
-function _rtsTeamTarget(t) {
+/* `quarry` is the ATTACK mission's argument. It defaults to the team type's own quarry so
+   that a team with no mission list behaves exactly as it did before the list existed. */
+function _rtsTeamTarget(t, quarry, near) {
   var G = window._rtsG, lead = _rtsTeamLeader(t);
   if (!lead) return null;
+  if (quarry == null) quarry = t.type.quarry;
   var best = null, bv = 0, w = _rtsPickWeapon(lead, lead);
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
     if (o.dead || o.side !== 'player') continue;
-    if (!_rtsQuarryMatch(o, t.type.quarry)) continue;
+    if (!_rtsQuarryMatch(o, quarry)) continue;
+    /* ATT_WAYPT is "clear out what is HERE", so candidates outside the waypoint's radius
+       are not merely worth less - they are not candidates at all. */
+    if (near && Math.hypot(o.x - near.x, o.z - near.z) > near.r) continue;
     /* Greatest_Threat(THREAT_TIBERIUM) exists precisely to hunt harvesters, so an explicit
        quarry has to override IsNoThreat - otherwise a team raised to kill harvesters scores
        every harvester at zero and can never see one. */
-    var v = _rtsEvalObject(lead, o, _rtsRangeTo(lead, o), w, t.type.quarry !== 'anything');
+    var v = _rtsEvalObject(lead, o, _rtsRangeTo(lead, o), w, quarry !== 'anything');
     if (v > bv) { bv = v; best = o; }
   }
-  /* "If no target could be found, then the mission advances" - a quarry that no longer
-     exists on the map must not leave the team standing still forever. */
-  if (!best && t.type.quarry !== 'anything') {
+  /* "If no target could be found, then the mission advances" - so a quarry that no longer
+     exists on the map is a reason to move down the list, NOT a reason to fall back onto
+     some other target. Only a team with no list at all keeps the old fallback, because for
+     that team standing still forever is the only other outcome. */
+  if (!best && !near && !t.type.missions && quarry !== 'anything') {
     for (var j = 0; j < G.ents.length; j++) {
       var p = G.ents[j];
       if (p.dead || p.side !== 'player' || p.type !== 'struct') continue;
@@ -2302,7 +2389,8 @@ function _rtsTeamDesired(t) {
 function _rtsTeamMake(type) {
   var G = window._rtsG;
   var t = { id:G.teamSeq++, type:type, members:[], have:{}, target:null,
-    moving:false, hasBeen:false, under:true, zone:null, lagging:false };
+    moving:false, hasBeen:false, under:true, zone:null, lagging:false,
+    cur:0, guardUntil:0, legT:null };      /* Current: the index into MissionList[] */
   G.teams[t.id] = t;
   return t;
 }
@@ -2310,6 +2398,67 @@ function _rtsTeamDisband(t) {
   var G = window._rtsG;
   while (t.members.length) _rtsTeamRemove(t, t.members[0]);
   delete G.teams[t.id];
+}
+/* HouseClass::IsAlerted, as Suggested_New_Team reads it. The timer half matters as much as
+   the provocation half: a house that only wakes up when shot at would never field its late
+   team types against a player who simply turtles, so the opponent would get WEAKER the more
+   passively you played. */
+function _rtsHouseAlerted() {
+  var G = window._rtsG;
+  if (!G) return false;
+  var last = (G.ai.lastHit == null) ? -999 : G.ai.lastHit;
+  /* The FIRST ATTACK WAVE is this game's declaration of war, and it is what alerts the
+     house. Getting this wrong is expensive: gating the alert on a 240-second timer meant
+     that on hard - where the match is decided around 190s - Sappers and Assault were never
+     raised at all, since an idle player never provokes the house either. The opponent spent
+     whole matches fielding nothing but harassment and an idle player survived 47% longer.
+     The timer survives only as a backstop for a match where no wave ever goes out. */
+  return G.ai.wave > 0 || last > -900 || G.t >= RTS_ALERT_TIME;
+}
+/* Suggested_New_Team. The original builds a list of every type that is under its MaxAllowed
+   and passes the autocreate filter, then picks one AT RANDOM - `choices[Random_Pick(0,
+   choicecount-1)]` - rather than always taking the best-scoring one. The commented-out block
+   above it in TEAMTYPE.CPP is the scoring version that shipped disabled, so the randomness is
+   the deliberate choice: a predictable opponent is a solved one.
+
+   `spare` is how many loose units are available to crew the team; a type that cannot be
+   filled is not a candidate. */
+function _rtsSuggestTeam(spare) {
+  var G = window._rtsG, choices = [], counts = {}, tid, ti, kk;
+  for (tid in G.teams) {
+    var nm = G.teams[tid].type.name;
+    counts[nm] = (counts[nm] || 0) + 1;
+  }
+  var alerted = _rtsHouseAlerted();
+  /* "maxnum = 0" for the types the filter rejects. A type capped at zero should not still be
+     holding a team slot, so the moment the house changes phase its now-invalid teams are
+     disbanded and their members freed. Without this the four harassment teams raised before
+     the alert sat in the roster forever and the assault phase never got more than two slots
+     out of RTS_TEAM_MAX. */
+  for (tid in G.teams) {
+    if (alerted !== !!G.teams[tid].type.autocreate) { _rtsTeamDisband(G.teams[tid]); }
+  }
+  counts = {};
+  for (tid in G.teams) {
+    var nm2 = G.teams[tid].type.name;
+    counts[nm2] = (counts[nm2] || 0) + 1;
+  }
+  for (ti = 0; ti < RTS_TEAM_TYPES.length; ti++) {
+    var ty = RTS_TEAM_TYPES[ti];
+    if (G.teamHold[ty.name] && G.t < G.teamHold[ty.name]) continue;
+    /* "if ((alerted && !ttype->IsAutocreate) || (!alerted && ttype->IsAutocreate)) maxnum=0"
+       - a hard split, not a preference. Before the alert the opponent harasses; after it,
+       the heavy types come out and the harassing ones stop being raised. */
+    if (alerted !== !!ty.autocreate) continue;
+    /* MaxAllowed, per type. Without it the random pick happily raises six of one kind. */
+    if ((counts[ty.name] || 0) >= (ty.max == null ? RTS_TEAM_MAX : ty.max)) continue;
+    var need = 0;
+    for (kk in ty.members) need += ty.members[kk];
+    if (spare < need) continue;
+    choices.push(ty);
+  }
+  if (!choices.length) return null;
+  return choices[(Math.random() * choices.length) | 0];
 }
 /* Suspend_Teams: when the base is hit, everything below the survival priority is disbanded
    and its members are freed to defend. HOUSE.CPP calls this and it had nothing to call. */
@@ -2353,17 +2502,9 @@ function _rtsTeamMaybeRaise() {
   if (_rtsIQAt(RTS_IQ.guardArea)) spare -= 3;
   if (spare < 2) return false;
 
-  var choices = [];
-  for (i = 0; i < RTS_TEAM_TYPES.length; i++) {
-    var ty = RTS_TEAM_TYPES[i];
-    if (G.teamHold[ty.name] && G.t < G.teamHold[ty.name]) continue;
-    var need = 0, k;
-    for (k in ty.members) need += ty.members[k];
-    if (spare < need) continue;
-    choices.push(ty);
-  }
-  if (!choices.length) return false;
-  _rtsTeamMake(choices[(Math.random() * choices.length) | 0]);
+  var pick = _rtsSuggestTeam(spare);
+  if (!pick) return false;
+  _rtsTeamMake(pick);
   return true;
 }
 function _rtsTeamsTick(dt) {
@@ -2423,9 +2564,11 @@ function _rtsTeamsTick(dt) {
     if (!t.moving) continue;
 
     /* Lagging_Units: anyone who has fallen behind is told to catch up, and the rest HOLD
-       until they do. Without this the fast members arrive alone and die alone. */
+       until they do. Without this the fast members arrive alone and die alone.
+       IsSuicide - "charge toward target ignoring distractions" - opts out: a suicide team
+       does not stop for its stragglers. */
     var lag = false;
-    if (t.zone) {
+    if (t.zone && !t.type.suicide) {
       for (i = 0; i < t.members.length; i++) {
         m = t.members[i];
         if (!m.init || m.dead) continue;
@@ -2433,23 +2576,142 @@ function _rtsTeamsTick(dt) {
       }
     }
     t.lagging = lag;
-
-    /* Pick or refresh the quarry. */
-    if (!t.target || t.target.dead) t.target = _rtsTeamTarget(t);
-    if (!t.target) continue;
-
-    for (i = 0; i < t.members.length; i++) {
-      m = t.members[i];
-      if (m.dead || !m.init) continue;
-      if (lag && t.zone && Math.hypot(m.x - t.zone.x, m.z - t.zone.z) <= RTS_STRAY * 1.6) {
-        /* hold station while the stragglers close up */
-        if (m.order !== 'hold' && !m.target) { m.order = 'hold'; m.path = null; }
-        continue;
+    if (lag) {
+      for (i = 0; i < t.members.length; i++) {
+        m = t.members[i];
+        if (m.dead || !m.init) continue;
+        if (Math.hypot(m.x - t.zone.x, m.z - t.zone.z) <= RTS_STRAY * 1.6) {
+          if (m.order !== 'hold' && !m.target) { m.order = 'hold'; m.path = null; }
+        }
       }
-      if (m.order === 'hold') m.order = null;
-      if (m.order !== 'attack' || m.target !== t.target) _rtsOrderAttack(m, t.target);
+      continue;
     }
+
+    if (_rtsTeamDoMission(t, dt) === 'gone') continue;
   }
+}
+/* ----------------------------------------------------- the mission list (TEAMTYPE.CPP) --
+   `MissionList[]` with an index walked down it. Each entry is [mission, argument], and the
+   argument's meaning comes from TeamMission_Needs (see RTS_TMISSIONS).
+
+   Every mission answers one question - "am I done?" - and when the answer is yes the index
+   advances. TMISSION_LOOP is the only one that moves the index anywhere else. */
+function _rtsTeamOrderAll(t, fn) {
+  for (var i = 0; i < t.members.length; i++) {
+    var m = t.members[i];
+    if (m.dead || !m.init) continue;
+    if (m.order === 'hold') m.order = null;
+    fn(m, i);
+  }
+}
+/* Spread arrivals out so five units do not path onto one tile and jam the approach. */
+function _rtsTeamSpread(i) {
+  var a = i * 2.399963;                        /* golden angle, so any count fans out evenly */
+  var r = RTS_TILE * (1 + Math.sqrt(i) * 0.9);
+  return { x:Math.cos(a) * r, z:Math.sin(a) * r };
+}
+function _rtsTeamAdvance(t, to) {
+  t.cur = (to == null) ? (t.cur | 0) + 1 : to;
+  t.guardUntil = 0;
+  t.legT = null;
+  t.target = null;
+}
+function _rtsTeamDoMission(t, dt) {
+  var G = window._rtsG, list = t.type.missions, i, m;
+
+  /* No list: the pre-TEAMTYPE behaviour, which is exactly TMISSION_ATTACK on the type's own
+     quarry, forever. Keeping it means a team type can still be declared without a script. */
+  if (!list || !list.length) {
+    if (!t.target || t.target.dead) t.target = _rtsTeamTarget(t);
+    if (!t.target) return 'idle';
+    _rtsTeamOrderAll(t, function (mm) {
+      if (mm.order !== 'attack' || mm.target !== t.target) _rtsOrderAttack(mm, t.target);
+    });
+    return 'ok';
+  }
+
+  if (t.cur == null) t.cur = 0;
+
+  /* A LOOP entry consumes no time, so a list of nothing but jumps would spin forever inside
+     one tick. Bound the walk by the length of the list: that is enough for any number of
+     legitimate jumps and stops a malformed script dead. */
+  for (var guard = 0; guard <= list.length; guard++) {
+    if (t.cur >= list.length || t.cur < 0) {
+      /* Off the end of the list: the team's job is finished. Disbanding frees the members
+         to be recruited into whatever is raised next, rather than leaving a spent squad
+         standing in the field. */
+      _rtsTeamDisband(t);
+      return 'gone';
+    }
+    var entry = list[t.cur], mis = entry[0], arg = entry[1];
+
+    if (mis === 'loop') { _rtsTeamAdvance(t, arg | 0); continue; }
+
+    if (mis === 'guard') {
+      if (!t.guardUntil) t.guardUntil = G.t + (arg || 1) * RTS_GUARD_TICK;
+      if (G.t >= t.guardUntil) { _rtsTeamAdvance(t); continue; }
+      _rtsTeamOrderAll(t, function (mm) {
+        /* MISSION_STICKY, which is what the flag table in MISSION.CPP was for: hold this
+           spot, shoot what comes, and do not be dragged off it. */
+        if (!mm.target && mm.order !== 'hold') { mm.order = 'hold'; mm.path = null; mm.goal = null; }
+      });
+      return 'ok';
+    }
+
+    if (mis === 'move' || mis === 'patrol') {
+      var w = _rtsWayptPos(arg);
+      if (!w) { _rtsTeamAdvance(t); continue; }
+      /* Arrival is judged on the team CENTRE - a single member wedged behind a cliff must
+         not hold the whole script up. The timeout is the same idea for a team that cannot
+         reach the waypoint at all. */
+      if (t.zone && Math.hypot(t.zone.x - w.x, t.zone.z - w.z) <= RTS_WAYPT_ARRIVE) {
+        _rtsTeamAdvance(t); continue;
+      }
+      if (t.legT == null) t.legT = G.t;
+      if (G.t - t.legT > 120) { _rtsTeamAdvance(t); continue; }
+      /* PATROL engages on the way (attack-move); MOVE is a march. */
+      var amove = (mis === 'patrol');
+      _rtsTeamOrderAll(t, function (mm, idx) {
+        if (mm.target && !mm.target.dead && amove) return;      /* already busy en route */
+        var want = amove ? 'amove' : 'move', off = _rtsTeamSpread(idx);
+        if (mm.order === want && mm.goal
+            && Math.hypot(mm.goal.x - (w.x + off.x), mm.goal.z - (w.z + off.z)) < RTS_TILE) return;
+        _rtsOrderMove(mm, w.x + off.x, w.z + off.z, amove);
+      });
+      return 'ok';
+    }
+
+    if (mis === 'attwaypt') {
+      var wp = _rtsWayptPos(arg);
+      if (!wp) { _rtsTeamAdvance(t); continue; }
+      if (!t.target || t.target.dead) {
+        t.target = _rtsTeamTarget(t, 'anything', { x:wp.x, z:wp.z, r:RTS_TILE * 14 });
+      }
+      if (!t.target) { _rtsTeamAdvance(t); continue; }
+      _rtsTeamOrderAll(t, function (mm) {
+        if (mm.order !== 'attack' || mm.target !== t.target) _rtsOrderAttack(mm, t.target);
+      });
+      return 'ok';
+    }
+
+    if (mis === 'tarcom') {
+      /* ATTACKTARCOM: whatever the team is already fixed on - normally set by Took_Damage. */
+      if (!t.target || t.target.dead) { _rtsTeamAdvance(t); continue; }
+      _rtsTeamOrderAll(t, function (mm) {
+        if (mm.order !== 'attack' || mm.target !== t.target) _rtsOrderAttack(mm, t.target);
+      });
+      return 'ok';
+    }
+
+    /* TMISSION_ATTACK, and the default for anything unrecognised. */
+    if (!t.target || t.target.dead) t.target = _rtsTeamTarget(t, (mis === 'attack') ? arg : null);
+    if (!t.target) { _rtsTeamAdvance(t); continue; }
+    _rtsTeamOrderAll(t, function (mm) {
+      if (mm.order !== 'attack' || mm.target !== t.target) _rtsOrderAttack(mm, t.target);
+    });
+    return 'ok';
+  }
+  return 'ok';
 }
 /* Took_Damage: the team retargets onto whoever hit it - unless it is already fighting
    something that shoots back and is in range. "There is no point in endlessly shuffling
@@ -2459,6 +2721,9 @@ function _rtsTeamTookDamage(u, from) {
   if (u.sqd == null || !G.teams || !G.teams[u.sqd]) return;
   var t = G.teams[u.sqd];
   if (!from || from.side !== 'player' || !t.moving) return;
+  /* IsSuicide: "Charge toward target ignoring distractions". Being shot at IS the
+     distraction, so a suicide team never retargets onto whoever hit it. */
+  if (t.type.suicide) return;
   if (t.target === from) return;
   if (t.target && !t.target.dead) {
     var td = rtsStructDef(t.target.def) || rtsUnitDef(t.target.def);
@@ -2491,22 +2756,13 @@ function _rtsAIAttack(urgency) {
   for (tid in G.teams) live++;
   if (live >= RTS_TEAM_MAX) return false;
 
-  /* Only raise a type this army can actually crew, and respect a suspension. */
-  var choices = [], ti;
-  for (ti = 0; ti < RTS_TEAM_TYPES.length; ti++) {
-    var ty = RTS_TEAM_TYPES[ti];
-    if (G.teamHold[ty.name] && G.t < G.teamHold[ty.name]) continue;
-    /* IQGuardArea: a smart opponent keeps a garrison, so it will not raise a team it would
-       have to strip the whole base to fill. */
-    var need = 0, kk;
-    for (kk in ty.members) need += ty.members[kk];
-    var spare = _rtsIQAt(RTS_IQ.guardArea) ? Math.max(0, pool.length - 3) : pool.length;
-    if (urgency <= RTS_URGENCY.LOW) spare = Math.floor(spare * 0.5);   /* hit at home: hold back */
-    if (spare < need) continue;
-    choices.push(ty);
-  }
-  if (!choices.length) return false;
-  var pick = choices[(Math.random() * choices.length) | 0];
+  /* Only raise a type this army can actually crew, and respect a suspension.
+     IQGuardArea: a smart opponent keeps a garrison, so it will not raise a team it would
+     have to strip the whole base to fill. */
+  var spare = _rtsIQAt(RTS_IQ.guardArea) ? Math.max(0, pool.length - 3) : pool.length;
+  if (urgency <= RTS_URGENCY.LOW) spare = Math.floor(spare * 0.5);     /* hit at home: hold back */
+  var pick = _rtsSuggestTeam(spare);
+  if (!pick) return false;
   _rtsTeamMake(pick);
   G.ai.wave++;
   _rtsSay('Redline ' + pick.name + ' team inbound!');

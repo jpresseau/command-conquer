@@ -473,6 +473,49 @@ exist threw away the first-wave delay entirely and Commando was killing an idle 
 Result: first waves still at 212/152/106s, and the ladder is *tighter* than the blob's —
 hard now lands 168–174s where it used to range 164–205s.
 
+## Team mission lists — from TEAMTYPE.CPP
+
+A `TeamTypeClass` carries `MissionList[]` — an ordered script, each entry a mission plus one
+argument — and the team walks an index (`Current`) down it. `RTS_TMISSIONS` is the ported
+`TeamMission_Needs` table saying what argument each mission takes. Implemented: `move`,
+`patrol`, `attwaypt` (waypoint), `attack` (quarry), `tarcom`, `guard` (1/10th min), `loop`
+(line number). Deliberately absent: FORMATION, UNLOAD/LOAD/DEPLOY, SET_GLOBAL, SPY,
+HOUND_DOG, DO, MOVECELL — every one drives a subsystem this game doesn't have, and a stub
+would be invented behaviour rather than a port.
+
+**Waypoints are derived, not authored.** In RA a designer drops them in the scenario editor;
+this map is generated, so `_rtsBuildWaypoints` computes `home`/`front`/`flank`/`mid`/`ore`
+from the finished map and snaps each to open ground. `front` stands 13 tiles *off* the target
+base — a MOVE mission is an approach, and a team that "arrives" inside the enemy buildings has
+already blundered into the fight. `flank` is derived perpendicular to the base-to-base line.
+
+**Three things the ladder caught, all of them in content rather than mechanism.** The list
+machinery is faithful and verified first try; what made the AI *worse* was the scripts written
+on top of it. An idle player's survival went 243s → 329s on normal, and one seed ran the full
+600s while the opponent sat on 157 units it never committed.
+
+1. **The alert must fire while the match is still live.** Gating it on a 240s timer meant that
+   on hard — decided around 190s — the two building-killing types were never raised at all,
+   because an idle player never provokes the house either. The first attack wave is this
+   game's declaration of war and is what alerts the house; the timer is only a backstop.
+2. **A type filtered to `maxnum = 0` must not keep its team slot.** Four harassment teams
+   raised before the alert squatted the roster forever and the assault phase got two slots out
+   of six. An alerted house disbands its now-invalid teams and frees the members.
+3. **A script must end on something decisive.** Raiders' list was conditional on a harvester
+   existing at every step, so with none on the map three buggies looped round an empty ore
+   field indefinitely. Every list now terminates in `attack buildings` or `tarcom`. Approach
+   legs are `patrol` (attack-move), not `move` — a silent march past targets is a real cost.
+   And `SWING` for the flank is 12 tiles, not 24: at 24 the waypoint landed on the map edge.
+
+`MaxAllowed` is per type, which the random pick in `Suggested_New_Team` needs or it will raise
+six of one kind. `IsAutocreate` is a hard split, not a preference — an alerted house draws
+only from autocreate types, so the two lists are the opponent's early and late game.
+`IsSuicide` opts a team out of both retargeting on damage and waiting for stragglers.
+
+Measured against the pre-TEAMTYPE baseline (mean seconds an idle player survives, 3 seeds):
+easy 350→323, normal 243→229, hard 187→190. Stronger on easy and normal, parity on hard, and
+notably more consistent — normal lands 233/229/226 where it used to scatter 223/245/262.
+
 ## Missions — from MISSION.CPP
 
 `MissionControlClass` is a **flag table indexed by mission**, read from the INI. Four fields
