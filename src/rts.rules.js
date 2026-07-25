@@ -111,6 +111,23 @@ var RTS_COND_YELLOW = 0.66, RTS_COND_RED = 0.33;
 var RTS_PRONE_DAMAGE = 0.5;     /* Rule.ProneDamageBias */
 var RTS_PRONE_SPEED = 0.5;      /* prone infantry crawl at half pace */
 
+/* ------------------------------------------------------------ buildings --
+   BUILDING.CPP. A structure is not a static lump of hit points: it produces less power as
+   it burns, it can be patched up a step at a time for money, it can be sold back for half,
+   and when it goes down its crew runs out of the wreck.
+
+   Repair_AI runs on a timer and each tick calls Repair_Step (hit points) for Repair_Cost
+   (credits). The cost is the same fraction of the building's price as the hit points are of
+   its total, scaled by RepairPercent - so patching a building all the way up from nothing
+   costs a fraction of building a new one, which is the whole reason to do it. */
+var RTS_REPAIR_RATE = 0.75;     /* seconds between repair steps (Rule.RepairRate) */
+var RTS_REPAIR_STEP = 0.05;     /* fraction of max hp restored per step (Rule.RepairStep) */
+var RTS_REPAIR_PCT = 0.32;      /* Rule.RepairPercent - repairing is cheaper than rebuilding */
+var RTS_REFUND_PCT = 0.5;       /* Rule.RefundPercent: sell gives back half */
+var RTS_SURVIVOR_FRACTION = 0.5;/* Rule.SurvivorFraction, used by How_Many_Survivors */
+var RTS_SURVIVOR_ODDS = 0.5;    /* Drop_Debris only rolls some of them out of a wreck */
+var RTS_DECON_TIME = 0.35;      /* Mission_Deconstruction: build-up run backwards, this x build */
+
 /* Armour class per thing, used with weapon.vs above. */
 function rtsArmour(e) {
   if (e.type === 'struct') return 'building';

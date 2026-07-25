@@ -200,6 +200,41 @@ Animation state that is purely visual (door stage, blink phase) lives in `_rtsR.
 by entity id, **not** on the entity — the simulation stays renderer-free, which is what lets
 a whole battle be stepped headlessly.
 
+## Structures have a life — from BUILDING.CPP
+
+The implementation file, and it is mostly about a building being a *thing that runs* rather
+than a lump of hit points:
+
+- **`Power_Output()` is `Class->Power * fixed(LastStrength, MaxStrength)`** — a damaged power
+  plant supplies proportionally less. That one line makes raiding the generators a real tactic
+  instead of an all-or-nothing demolition job. **Drain is not scaled**: a wrecked refinery
+  still eats its full draw. Output now moves with hit points, so `_rtsRecalcPower` runs every
+  tick rather than only when something is built or dies.
+- **`Exit_Object()` / `Find_Exit_Cell()`** — a new unit walks out of a clear perimeter cell,
+  scanning outward ring by ring and preferring the building's exit side. Harvesters leaving a
+  refinery exit to the south-west and are given `MISSION_HARVEST` immediately. Units used to
+  appear at the building's centre and shove their way out through the walls.
+- **`Repair_AI` is a toggle, not a button press.** It spends `Repair_Cost()` every
+  `Rule.RepairRate` for `Repair_Step()` hit points, blinks `IsWrenchVisible`, and gives up on
+  its own when the money runs out — and the AI *sells* a building it cannot afford to fix once
+  it is below `ConditionRed`. Repairing costs a fraction of rebuilding, which is the entire
+  reason to do it.
+- **`Sell_Back` / `Mission_Deconstruction`** — the build-up animation runs backwards, then the
+  crew walks out. Refund is `RefundPercent`, docked for damage. The Command Yard is not
+  sellable here; losing it is a loss condition.
+- **`How_Many_Survivors()`** = `Bound((Raw_Cost * SurvivorFraction) / cost of an E1, 1, 5)`.
+  `Drop_Debris` rolls only some of them out of a wreck, and they come out at `PANIC` fear so
+  they scatter — a building falling over should read as people dying, not a prop being
+  removed. A sale releases all of them, calmly.
+- **`shakes = Class->Cost_Of() / 400`**, then `Shake_The_Screen(shakes)`. The integer division
+  is the point: a 300-credit power plant does not move the camera at all while the war factory
+  rattles the whole screen, so the shake reports what you just lost.
+- `Drop_Debris` also marks **every cell** the building stood on — a quarter scorched, the rest
+  cratered.
+
+Repair and sell are sidebar *modes* (`_rtsUI.mode`), armed by a button and spent on the next
+click, competing with structure placement for that click — arming one cancels the others.
+
 ## Verifying
 
 No test suite — use headless Playwright against the **built** `index.html`. Node + Playwright

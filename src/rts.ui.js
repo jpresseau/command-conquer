@@ -20,7 +20,7 @@ function rtsOpen(seed) {
     +   '<canvas id="rtsHud"></canvas>'
     +   '<div class="rts-top"><span class="rts-title">RC COMMAND</span>'
     +     '<span class="rts-vs"><b class="p">Vanguard</b> vs <b class="e">Redline</b></span>'
-    +     '<span class="rts-help">drag select · right-click order · 1-9 teams (ctrl set, alt jump) · WASD pan · wheel zoom · Esc</span>'
+    +     '<span class="rts-help">drag select · right-click order · 1-9 teams (ctrl set, alt jump) · repair/sell buttons · WASD pan · wheel zoom · Esc</span>'
     +     '<button type="button" class="rts-mute" id="rtsMute" title="Sound on" onclick="rtsMuteToggle()">🔊</button>'
     +     '<button type="button" class="rts-x" onclick="rtsClose()">✕</button></div>'
     +   '<div class="rts-msg" id="rtsMsg"></div>'
@@ -34,6 +34,12 @@ function rtsOpen(seed) {
     +     '<button type="button" class="on" data-cat="struct" onclick="rtsTab(\'struct\')">Build</button>'
     +     '<button type="button" data-cat="infantry" onclick="rtsTab(\'infantry\')">Infantry</button>'
     +     '<button type="button" data-cat="vehicle" onclick="rtsTab(\'vehicle\')">Vehicles</button>'
+    +   '</div>'
+    +   '<div class="rts-ops">'
+    +     '<button type="button" data-mode="repair" onclick="rtsMode(\'repair\')" '
+    +       'title="Repair: click one of your buildings to patch it up for credits">🔧 REPAIR</button>'
+    +     '<button type="button" data-mode="sell" onclick="rtsMode(\'sell\')" '
+    +       'title="Sell: click one of your buildings to sell it back">💲 SELL</button>'
     +   '</div>'
     +   '<div class="rts-mid">'
     +     '<div class="rts-pwr" title="Power"><span class="ptxt">P<br>W<br>R</span>'
@@ -107,6 +113,45 @@ function rtsTab(cat) {
   for (var i = 0; i < ts.length; i++) ts[i].className = (ts[i].getAttribute('data-cat') === cat) ? 'on' : '';
   _rtsBuildList();
 }
+/* The repair and sell cursors. Both are modes, exactly as in the original sidebar: arm the
+   button, then click a building. Arming one disarms the other and cancels a pending
+   placement, since all three want the next click. */
+function rtsMode(m) {
+  var U = window._rtsUI;
+  if (!U) return;
+  U.mode = (U.mode === m) ? null : m;
+  if (U.mode && U.place) { U.place = null; _rtsGhostHide(); }
+  var bs = document.querySelectorAll('#rcgRts .rts-ops button');
+  for (var i = 0; i < bs.length; i++) bs[i].className = (bs[i].getAttribute('data-mode') === U.mode) ? 'on' : '';
+  var cv = document.getElementById('rtsCv');
+  if (cv) cv.style.cursor = U.mode ? 'crosshair' : '';
+  if (typeof _rtsSfx === 'function') _rtsSfx('click');
+  if (U.mode === 'repair') _rtsSay('Repair: click a damaged building. Click it again to stop.');
+  else if (U.mode === 'sell') _rtsSay('Sell: click a building to sell it back.');
+}
+/* Returns true when the click was consumed by the armed mode. */
+function _rtsModeClick(mx, my) {
+  var U = window._rtsUI;
+  if (!U.mode) return false;
+  var hit = _rtsPickAt(mx, my);
+  var e = hit && hit.ent;
+  if (!e || e.type !== 'struct' || e.side !== 'player') {
+    if (typeof _rtsSfx === 'function') _rtsSfx('deny');
+    _rtsSay('Pick one of your own buildings.');
+    return true;
+  }
+  if (U.mode === 'sell') {
+    if (_rtsSell(e)) _rtsSay('Sold — ' + Math.round(rtsStructDef(e.def).cost * RTS_REFUND_PCT) + ' credits back.');
+    else { if (typeof _rtsSfx === 'function') _rtsSfx('deny');
+      _rtsSay(e.def === 'yard' ? 'The Command Yard cannot be sold.' : 'Cannot sell that.'); }
+  } else {
+    if (_rtsToggleRepair(e)) {
+      if (typeof _rtsSfx === 'function') _rtsSfx('click');
+      _rtsSay(e.repair ? 'Repairing ' + rtsStructDef(e.def).name + '.' : 'Repairs stopped.');
+    } else { if (typeof _rtsSfx === 'function') _rtsSfx('deny'); _rtsSay('That building is undamaged.'); }
+  }
+  return true;
+}
 function _rtsCatItems(cat) {
   var out = [], i;
   if (cat === 'struct') {
@@ -143,6 +188,7 @@ function _rtsBuildList() {
 function _rtsItemClick(key) {
   var G = window._rtsG, U = window._rtsUI, S = G.sides.player;
   var cat = _rtsQueueCat(key);
+  if (U.mode) rtsMode(null);            /* building something disarms the repair/sell cursor */
   if (typeof _rtsSfx === 'function') _rtsSfx('click');
   if (cat === 'struct' && S.ready === key) { U.place = key; _rtsGhostShow(key); return; }
   if (S.q[cat] && S.q[cat].key === key) { _rtsCancel('player', cat); if (U.place === key) { U.place = null; _rtsGhostHide(); } return; }
@@ -244,7 +290,11 @@ function _rtsBindInput() {
   cv.oncontextmenu = function (e) { e.preventDefault(); return false; };
   cv.onmousedown = function (e) {
     var r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
-    if (e.button === 2) { _rtsRightClick(mx, my); return; }
+    if (e.button === 2) {
+      if (U.mode) { rtsMode(U.mode); return; }        /* right-click drops the repair/sell cursor */
+      _rtsRightClick(mx, my); return;
+    }
+    if (U.mode) { _rtsModeClick(mx, my); return; }
     if (U.place) { _rtsTryPlace(mx, my); return; }
     U.drag = { x0:mx, y0:my, x1:mx, y1:my, add:e.shiftKey || e.ctrlKey, moved:false };
   };
@@ -292,7 +342,8 @@ function _rtsKeyDown(e) {
   if (!U) return;
   var k = e.key;
   if (k === 'Escape') {
-    if (U.place) { U.place = null; _rtsGhostHide(); }
+    if (U.mode) rtsMode(U.mode);
+    else if (U.place) { U.place = null; _rtsGhostHide(); }
     else rtsClose();
     e.preventDefault(); return;
   }
@@ -448,6 +499,9 @@ function _rtsDrawHud(dt) {
     g.fillRect(s.x - bw / 2 - 1, s.y - bh - 1, bw + 2, bh + 2);
     g.fillStyle = frac > 0.6 ? '#5fdc7a' : (frac > 0.3 ? '#e8c35a' : '#e3574a');
     g.fillRect(s.x - bw / 2, s.y - bh, bw * frac, bh);
+    /* BUILDING.CPP toggles IsWrenchVisible on the repair timer - the wrench blinks on a
+       building under repair so you can see at a glance where your credits are going. */
+    if (e.repair && (typeof _rtsPulse !== 'function' || _rtsPulse() > 0.45)) _rtsDrawWrench(g, s.x, s.y - bh - 9);
     if (selected) {
       /* corner brackets, the classic selection look */
       var r = (e.type === 'struct' ? rtsStructDef(e.def).w * _rtsR.cell * 0.5 : _rtsR.cell * 0.42);
@@ -491,6 +545,18 @@ function _rtsDrawHud(dt) {
     g.fillText('Click to place ' + rtsStructDef(U.place).name + '  ·  Esc to cancel', W / 2, 31);
     g.textAlign = 'left';
   }
+}
+/* Drawn as strokes rather than a 🔧 glyph: an emoji here depends on a font the machine may
+   not have, and a missing one silently draws nothing at all. */
+function _rtsDrawWrench(g, x, y) {
+  g.save(); g.translate(x, y); g.rotate(-0.6); g.lineCap = 'round';
+  for (var pass = 0; pass < 2; pass++) {
+    g.strokeStyle = pass ? '#ffd473' : 'rgba(0,0,0,0.8)';
+    g.lineWidth = pass ? 2 : 4.5;
+    g.beginPath(); g.moveTo(0, -3); g.lineTo(0, 5); g.stroke();              /* handle */
+    g.beginPath(); g.arc(0, -5, 2.8, 0.75, Math.PI * 2 - 0.75); g.stroke();  /* open jaw */
+  }
+  g.restore();
 }
 function _rtsDrawMini() {
   var G = window._rtsG, mini = document.getElementById('rtsMini');

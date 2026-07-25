@@ -71,6 +71,16 @@
 #rcgRts .rts-tabs button.on{background:#2e6fd0;border-color:#4a8ff0;color:#fff}
 #rcgRts .rts-tabs button:hover:not(.on){background:#1c2634}
 
+/* repair / sell cursors - armed one blinks, the way the sidebar buttons did */
+#rcgRts .rts-ops{display:flex;gap:3px}
+#rcgRts .rts-ops button{flex:1;padding:5px 0;border:1px solid #2b3a4d;border-radius:3px;background:#131a24;
+  color:#9db0c6;font-size:10.5px;font-weight:700;letter-spacing:.5px;cursor:pointer}
+#rcgRts .rts-ops button:hover:not(.on){background:#1c2634}
+#rcgRts .rts-ops button[data-mode="repair"].on{background:#2f7a4a;border-color:#5fdc7a;color:#fff;
+  animation:rtsPwrPulse 1s ease-in-out infinite}
+#rcgRts .rts-ops button[data-mode="sell"].on{background:#9c6a1c;border-color:#ffcf6a;color:#fff;
+  animation:rtsPwrPulse 1s ease-in-out infinite}
+
 /* middle: vertical power strip + tile grid */
 #rcgRts .rts-mid{flex:1 1 auto;display:flex;gap:6px;min-height:0}
 #rcgRts .rts-pwr{flex:0 0 20px;display:flex;flex-direction:column;align-items:center;gap:4px;

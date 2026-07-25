@@ -440,19 +440,41 @@ function _rtsPlaceStruct(side, key, tx, tz, instant) {
   if (instant && d.freeUnit) _rtsSpawnAt(side, d.freeUnit, e);
   return e;
 }
-/* Spawn a unit just outside `src`, on ground that is actually open. Without the open-tile
-   search a refinery's free harvester can land inside a neighbouring building's footprint. */
-function _rtsSpawnAt(side, key, src) {
+/* BUILDING.CPP Find_Exit_Cell(): a new unit does not appear inside the building, it walks
+   out of it. Walk the ring of cells around the footprint and take the clear one nearest the
+   building's exit side, widening the ring until something is free. `prefX/prefZ` is that
+   exit direction - the war factory's door faces the camera, and a refinery backs its
+   harvester out to the south-west, both as in the original. */
+function _rtsExitCell(src, prefX, prefZ) {
   var d = rtsStructDef(src.def);
-  var out = Math.max(d.w, d.h) * RTS_TILE * 0.5 + RTS_TILE * 1.2;
-  for (var i = 0; i < 16; i++) {
-    var a = (side === 'player' ? 0.5 : Math.PI + 0.5) + i * (Math.PI * 2 / 16);
-    var x = src.x + Math.cos(a) * out, z = src.z + Math.sin(a) * out;
-    var tx = _rtsTX(x), tz = _rtsTX(z);
-    if (!_rtsBlocked(tx, tz)) return _rtsSpawnUnit(side, key, _rtsWX(tx), _rtsWX(tz));
+  var cx = src.tx + (d.w - 1) / 2, cz = src.tz + (d.h - 1) / 2;
+  var pl = Math.hypot(prefX, prefZ) || 1;
+  prefX /= pl; prefZ /= pl;
+  for (var ring = 1; ring <= 6; ring++) {
+    var x0 = src.tx - ring, x1 = src.tx + d.w - 1 + ring;
+    var z0 = src.tz - ring, z1 = src.tz + d.h - 1 + ring;
+    var best = null, bs = 1e9;
+    for (var tx = x0; tx <= x1; tx++) for (var tz = z0; tz <= z1; tz++) {
+      if (tx !== x0 && tx !== x1 && tz !== z0 && tz !== z1) continue;   /* border cells only */
+      if (!_rtsInB(tx, tz) || _rtsBlocked(tx, tz)) continue;
+      var dx = tx - cx, dz = tz - cz, len = Math.hypot(dx, dz) || 1;
+      /* nearest first, then whichever of those best matches the exit direction */
+      var score = len - (dx / len * prefX + dz / len * prefZ) * 1.6;
+      if (score < bs) { bs = score; best = [tx, tz]; }
+    }
+    if (best) return best;
   }
-  var open = _rtsNearestOpen(_rtsTX(src.x), _rtsTX(src.z), 12);
-  return open ? _rtsSpawnUnit(side, key, _rtsWX(open[0]), _rtsWX(open[1])) : null;
+  return _rtsNearestOpen(_rtsTX(src.x), _rtsTX(src.z), 14);
+}
+/* Exit_Object: put the unit on a clear exit cell, and give a harvester leaving a refinery
+   its harvest order straight away rather than leaving it parked by the door. */
+function _rtsSpawnAt(side, key, src) {
+  var u = rtsUnitDef(key), harv = !!(u && u.harvest);
+  var cell = _rtsExitCell(src, harv ? -0.7 : 0, harv ? 0.7 : 1);
+  if (!cell) return null;
+  var e = _rtsSpawnUnit(side, key, _rtsWX(cell[0]), _rtsWX(cell[1]));
+  if (e && harv) _rtsOrderHarvest(e, null, null);
+  return e;
 }
 function _rtsSpawnUnit(side, key, x, z) {
   /* team: Handle_Team's Group. -1 = unassigned. */
@@ -473,7 +495,11 @@ function _rtsKill(e) {
   if (e.dead) return;
   e.dead = true;
   if (e.type === 'struct') { _rtsFootprint(e, false); _rtsRecalcPower(e.side); }
-  if (e.type === 'struct') {
+  if (e.type === 'struct' && e.selling) {
+    /* Sold, not destroyed: a puff of dust where it stood, and no fireworks. */
+    G.fx.push({ kind:'pop', x:e.x, y:1, z:e.z, t:0, big:1.6 });
+  }
+  else if (e.type === 'struct') {
     var sd = rtsStructDef(e.def);
     G.fx.push({ kind:'boom', x:e.x, y:1, z:e.z, t:0, big:Math.max(2, sd.w * 0.7) });
     /* Secondary blasts walking across the footprint on a delay, then debris thrown clear.
@@ -483,7 +509,13 @@ function _rtsKill(e) {
       G.fx.push({ kind:'boom', t:-0.10 - rn() * 0.5, big:0.8 + rn() * 0.9,
         x:e.x + (rn() - 0.5) * sd.w * RTS_TILE, y:1, z:e.z + (rn() - 0.5) * sd.h * RTS_TILE });
     }
-    G.shake = Math.min(1, G.shake + 0.35 + sd.w * 0.12);
+    /* BUILDING.CPP Take_Damage: shakes = Class->Cost_Of() / 400, then Shake_The_Screen.
+       So a cheap power plant going up does not move the camera at all and the war factory
+       rattles the whole screen - the shake reports what you just lost. */
+    G.shake = Math.min(1, G.shake + ((rtsStructDef(e.def).cost / 400) | 0) * 0.12);
+    /* Drop_Debris marks every cell the building stood on: mostly craters, some scorch. */
+    _rtsWreckGround(e);
+    _rtsDropDebris(e);
     for (var k = 0; k < 9 + sd.w * 3; k++) {
       var a = rn() * 6.283, sp = 4 + rn() * 15;
       G.fx.push({ kind:'debris', x:e.x, y:2 + rn() * 3, z:e.z, t:0,
@@ -496,10 +528,98 @@ function _rtsKill(e) {
       if (G.corpses.length > 220) G.corpses.shift();
     }
   }
-  if (typeof _rtsSfx === 'function') _rtsSfx(e.type === 'struct' ? 'boom' : 'pop', e.x, e.z);
+  if (typeof _rtsSfx === 'function')
+    _rtsSfx(e.selling ? 'place' : (e.type === 'struct' ? 'boom' : 'pop'), e.x, e.z);
   if (e.side === 'player' && e.type === 'unit') G.stats.lostU++;
   if (e.side === 'enemy') G.stats.killed++;
   var si = G.sel.indexOf(e); if (si >= 0) G.sel.splice(si, 1);
+}
+
+/* ------------------------------------------------- wrecks and survivors --
+   BUILDING.CPP Drop_Debris(): every cell the building covered is marked - a quarter of them
+   scorched, the rest cratered - and some of the crew stumble out of the ruin. */
+function _rtsWreckGround(e) {
+  var G = window._rtsG, d = rtsStructDef(e.def);
+  for (var tx = e.tx; tx < e.tx + d.w; tx++) for (var tz = e.tz; tz < e.tz + d.h; tz++) {
+    if (!_rtsInB(tx, tz)) continue;
+    var i = _rtsIdx(tx, tz);
+    if (G.terrain[i] === RTS_T_WATER) continue;
+    var r = ((tx * 73856093) ^ (tz * 19349663) ^ (e.id * 83492791)) >>> 0;
+    if ((r % 4) === 0) {                       /* 25% scorch ... */
+      if (!(G.scorch[i] & 7)) { G.scorch[i] = (G.scorch[i] & 8) | (1 + (r >>> 8) % 6); G.newScorch.push(i); }
+    } else if (!(G.scorch[i] & 8)) {           /* ... else a crater */
+      G.scorch[i] = (G.scorch[i] & 7) | 8; G.newScorch.push(i);
+    }
+  }
+}
+/* How_Many_Survivors(): (Raw_Cost * SurvivorFraction) / cost of a rifle squad, bounded 1..5.
+   A big expensive building holds more people than a generator shed. */
+function _rtsSurvivorCount(e) {
+  var d = rtsStructDef(e.def), e1 = rtsUnitDef('rifle');
+  var n = Math.floor((d.cost * RTS_SURVIVOR_FRACTION) / Math.max(1, e1.cost));
+  return Math.max(1, Math.min(5, n));
+}
+/* Put `n` survivors out of the wreck. They come out terrified, which is what makes a
+   building falling over read as people dying rather than a prop being removed. */
+function _rtsEvacuate(e, n, scared) {
+  var out = [];
+  for (var i = 0; i < n; i++) {
+    var cell = _rtsExitCell(e, Math.cos(i * 1.9), Math.sin(i * 1.9));
+    if (!cell) break;
+    var u = _rtsSpawnUnit(e.side, 'rifle', _rtsWX(cell[0]), _rtsWX(cell[1]));
+    if (!u) break;
+    if (scared) { u.fear = RTS_FEAR.PANIC; _rtsScatter(u, e.x, e.z); }
+    out.push(u);
+  }
+  return out;
+}
+function _rtsDropDebris(e) {
+  var n = 0, want = _rtsSurvivorCount(e);
+  for (var i = 0; i < want; i++) if (Math.random() < RTS_SURVIVOR_ODDS) n++;
+  if (n) _rtsEvacuate(e, n, true);
+}
+
+/* --------------------------------------------------------- repair / sell --
+   Repair_AI + Sell_Back + Mission_Deconstruction. Repair is a toggle on the building (the
+   blinking wrench), not a one-shot: it eats credits a step at a time and gives up on its
+   own when the money runs out. */
+function _rtsToggleRepair(e) {
+  if (!e || e.dead || e.type !== 'struct' || e.building || e.selling) return false;
+  if (e.hp >= e.maxHp && !e.repair) return false;
+  e.repair = e.repair ? 0 : 1; e.rtimer = 0;
+  return true;
+}
+function _rtsRepairCost(e) {
+  return rtsStructDef(e.def).cost * RTS_REPAIR_STEP * RTS_REPAIR_PCT;
+}
+function _rtsRepairAI(e, dt) {
+  var G = window._rtsG, S = G.sides[e.side];
+  if (e.hp >= e.maxHp) { e.hp = e.maxHp; e.repair = 0; return; }
+  e.rtimer = (e.rtimer || 0) + dt;
+  if (e.rtimer < RTS_REPAIR_RATE) return;
+  e.rtimer = 0;
+  var cost = _rtsRepairCost(e);
+  if (S.credits < cost) {
+    /* Repair_AI gives up when it cannot pay, and the AI sells rather than sit on a wreck. */
+    e.repair = 0;
+    if (e.side === 'player') _rtsSay('Not enough credits to keep repairing.');
+    else if (e.hp < e.maxHp * RTS_COND_RED) _rtsSell(e);
+    return;
+  }
+  S.credits -= cost;
+  e.hp = Math.min(e.maxHp, e.hp + e.maxHp * RTS_REPAIR_STEP);
+}
+/* Sell_Back: half the price back straight away, then the building deconstructs (the build-up
+   animation played backwards) and its crew walks out. */
+function _rtsSell(e) {
+  var G = window._rtsG;
+  if (!e || e.dead || e.type !== 'struct' || e.selling) return false;
+  if (e.def === 'yard') return false;           /* selling the Command Yard is suicide, not a sale */
+  e.selling = 1; e.repair = 0; e.building = 1; e.bprog = 1;
+  G.sides[e.side].credits += Math.round(rtsStructDef(e.def).cost * RTS_REFUND_PCT
+    * (e.hp / e.maxHp * 0.5 + 0.5));           /* a wreck is worth less than a clean building */
+  if (e.side === 'player' && typeof _rtsSfx === 'function') _rtsSfx('build');
+  return true;
 }
 /* ANIM.CPP's AI + Middle + ChainTo, for the effect list.
 
@@ -566,15 +686,21 @@ function _rtsAnimMiddle(f, def) {
   }
 }
 
+/* BUILDING.CPP Power_Output(): Class->Power * fixed(LastStrength, Class->MaxStrength).
+   A power plant that has been shot up supplies proportionally less - so a raid on the
+   generators browns out the base without having to level them. Drain is NOT scaled: a
+   half-wrecked refinery still eats its full draw. Because output now moves with hit points
+   this has to be recomputed every tick, not just when something is built or dies. */
 function _rtsRecalcPower(side) {
   var G = window._rtsG, made = 0, used = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (e.type !== 'struct' || e.side !== side || e.dead || e.building) continue;
     var d = rtsStructDef(e.def);
-    if (d.power > 0) made += d.power; else used += -d.power;
+    if (d.power > 0) made += d.power * Math.max(0, Math.min(1, e.hp / e.maxHp));
+    else used += -d.power;
   }
-  G.sides[side].powerMade = made; G.sides[side].powerUsed = used;
+  G.sides[side].powerMade = Math.round(made); G.sides[side].powerUsed = used;
 }
 function _rtsPowerFactor(side) {
   var s = window._rtsG.sides[side];
@@ -961,6 +1087,18 @@ function _rtsNearestRefinery(e) {
 function _rtsUpdateStruct(e, dt) {
   var d = rtsStructDef(e.def);
   if (e.hitT > 0) e.hitT -= dt;
+  if (e.selling) {
+    /* Mission_Deconstruction: the build-up animation, in reverse. When it reaches the
+       ground the crew comes out and the building is gone. */
+    e.bprog -= dt / Math.max(0.4, d.build * RTS_DECON_TIME);
+    e.hp = Math.max(1, d.hp * Math.max(0, e.bprog));
+    if (e.bprog <= 0) {
+      e.bprog = 0;
+      _rtsEvacuate(e, _rtsSurvivorCount(e), false);
+      _rtsKill(e);
+    }
+    return;
+  }
   if (e.building) {
     /* buildings rise out of the ground while they finish, and gain HP as they go */
     e.bprog += dt / Math.max(0.5, d.build * 0.5) * _rtsPowerFactor(e.side);
@@ -969,6 +1107,7 @@ function _rtsUpdateStruct(e, dt) {
       if (d.freeUnit) _rtsSpawnAt(e.side, d.freeUnit, e); }
     return;
   }
+  if (e.repair) _rtsRepairAI(e, dt);
   if (!d.weapon) return;
   var w = RTS_WEAPONS[d.weapon];
   if (e.cool > 0) e.cool -= dt;
@@ -1016,6 +1155,15 @@ function _rtsUpdateAI(dt) {
   G.ai.build -= dt;
   if (G.ai.build <= 0) {
     G.ai.build = 5;
+    /* Repair_AI: the AI patches its base up whenever it can afford to, which is why raiding
+       an enemy base and leaving means finding it whole again ten seconds later. */
+    if (S.credits > 500) {
+      for (var r = 0; r < G.ents.length; r++) {
+        var b = G.ents[r];
+        if (b.dead || b.side !== 'enemy' || b.type !== 'struct' || b.building || b.selling) continue;
+        if (!b.repair && b.hp < b.maxHp * 0.85) { b.repair = 1; b.rtimer = 0; }
+      }
+    }
     var harv = 0, refs = 0, army = [], i;
     for (i = 0; i < G.ents.length; i++) {
       var e = G.ents[i];
@@ -1115,6 +1263,8 @@ function _rtsTick(dt) {
   if (G.msgT > 0) G.msgT -= dt;
 
   _rtsTickOre(dt);
+  /* Power_Output tracks hit points, so it has to be re-totalled before anything reads it. */
+  _rtsRecalcPower('player'); _rtsRecalcPower('enemy');
   _rtsTickProduction('player', dt);
   _rtsTickProduction('enemy', dt);
   _rtsUpdateAI(dt);
