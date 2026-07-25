@@ -423,6 +423,56 @@ already casts one.
   a flat four seconds, so a **miss detonates near where it was aimed** instead of sailing
   across the map and exploding in somebody else's base.
 
+## Teams — from TEAM.CPP
+
+A `TeamTypeClass` is a **composition plus a quarry**. The team recruits until it is at full
+strength, only then moves out, and picks its target **by category** rather than by proximity.
+That is the whole difference between an opponent that shoves a share of everything idle at
+your closest building and one that sends three buggies after your harvesters while rocket
+soldiers go for your power.
+
+- **Full strength gates the march.** `IsFullStrength` sets `IsHasBeen`; a team that drops
+  under strength while moving stops and regroups. `IsReinforcable` decides whether it will
+  dally to pick up replacements — a non-reinforceable team is never under strength again once
+  it has set out.
+- **Initiation.** A new recruit is *not* initiated; `Coordinate_Conscript` sends it to the
+  team centre and it counts as joined once inside `StrayDistance`. Only initiated members are
+  averaged into `Calc_Center`, so a straggler racing to catch up doesn't drag the centre out
+  to meet it.
+- **`Lagging_Units`**: anyone who has fallen behind is told to close up and **everyone else
+  holds** until they do. This is what makes an army arrive together instead of feeding itself
+  in piecemeal.
+- **`RecruitPriority`** does two jobs: a team may steal members from a lower-priority team,
+  and `Suspend_Teams` disbands everything below a threshold when the base is attacked. That
+  last one is where most of `Base_Is_Attacked`'s defenders actually come from — HOUSE.CPP has
+  been calling it since it was ported, with nothing to call.
+- **`Took_Damage`** retargets the team onto its attacker — *unless* it is already fighting
+  something that shoots back and is in range. "No point in endlessly shuffling between targets
+  that have firepower."
+
+**Two traps, both of which failed silently.**
+
+`e.team` was **already taken** by the player's control groups (the 1–9 keys) and is
+initialised to `-1`. Reusing the name made every candidate look like it already belonged to a
+team with id −1, so nothing could ever be recruited — no error, no thrown exception, just
+teams that stayed permanently empty. The membership field is **`sqd`**.
+
+`IsNoThreat` and `QUARRY_HARVESTERS` are in direct conflict. A harvester scores zero in a
+normal threat scan, so a team raised specifically to hunt harvesters could never see one.
+`Greatest_Threat(THREAT_TIBERIUM)` exists precisely to override that, so an explicit quarry
+passes `force` and bypasses the flag.
+
+**Teams cannot be the only offensive behaviour.** A team marches only at full strength and
+only fields its own composition, so leaving team creation on the attack-wave timer left the
+opponent committing ~15 units where the blob sent 60–70% of everything — an idle player
+survived half again as long. Teams are raised continuously whenever there are loose units to
+crew one. But that raise **must not pre-empt the opening**: raising teams the moment units
+exist threw away the first-wave delay entirely and Commando was killing an idle player at
+100s instead of 170. Surplus teams supply an existing war; they don't start one early.
+
+Result: first waves still at 212/152/106s, and the ladder is *tighter* than the blob's —
+hard now lands 168–174s where it used to range 164–205s.
+
 ## Missions — from MISSION.CPP
 
 `MissionControlClass` is a **flag table indexed by mission**, read from the INI. Four fields
