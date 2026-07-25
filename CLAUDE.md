@@ -516,6 +516,76 @@ Measured against the pre-TEAMTYPE baseline (mean seconds an idle player survives
 easy 350→323, normal 243→229, hard 187→190. Stronger on easy and normal, parity on hard, and
 notably more consistent — normal lands 233/229/226 where it used to scatter 223/245/262.
 
+## Triggers — from TRIGGER.CPP + TEVENT.CPP + TACTION.CPP
+
+The three files only make sense together: TRIGGER.CPP is the machinery, TEVENT.CPP the
+conditions, TACTION.CPP the effects. Implemented in full: three persistence modes (`volatile`
+fires once and deletes itself, `semi` fires when the last attachment is gone, `persistent`
+resets and repeats), four event-combination modes (`only` / `and` / `or` / `linked`),
+`Find_Or_Make`'s one-live-instance-per-type, forcing, and trigger-to-trigger chaining.
+
+**Three things that are easy to get wrong and only visible in the source:**
+
+- **`TDEventClass::IsTripped` is a latch, and only some events set it.** A NOTIFY event
+  (`attacked`, `destroyed`, `discovered`) trips on the single frame it is reported and stays
+  true forever after. A TIME event does *not* — it returns on the early ambient path, and its
+  latch is the timer sitting at zero. Either way `and` spans time, which is the whole point:
+  event 1 can trip minutes before event 2. Without the latch, `and` would only ever fire if
+  both events happened on the same frame.
+- **There are two different houses.** TEVENT.CPP does two separate lookups: the trigger's
+  OWNER for credits / just-built / loss counts / factories, and the event's ARGUMENT house for
+  low-power, discovery and the whole `*_DESTROYED` family. Conflating them aims "all units
+  destroyed" at the wrong side. Modelled here as `who: 'owner' | 'arg'` in `RTS_TEVENTS`.
+- **The action's return value is load-bearing.** TRIGGER.CPP deletes or resets a trigger only
+  `if (ok)` — the OR of its actions' return values. An action that reports failure leaves the
+  trigger armed to retry. That is why `Do_Reinforcements` with nowhere to place a team isn't
+  silently dropped, and `_rtsTeamReinforce` preserves it.
+
+`forced` short-circuits everything: a forced event trips unconditionally and a forced spring
+bypasses `EventControl` entirely, so a chained trigger does not re-check its own conditions.
+
+**The scenario is MINE; the engine is the port.** RA's triggers come from hand-authored
+campaign INIs and there is no author for a generated skirmish map. `RTS_TRIGGERS` therefore
+ships four informational beats and is asserted by harness to use only `text`/`playSound`.
+`TACTION_AUTOCREATE` is now available as the proper source of the alert flag that TEAMTYPE's
+split reads, but the shipped alert was deliberately NOT rewired onto it — that would re-open a
+balance question that was already measured and closed.
+
+`RTS_MESSAGE_DELAY` is also mine, and forced by a difference between the games: RA posts to a
+message *list* where each entry has its own lifetime, so repeats merely stack. This game has
+one message slot, so a `persistent` trigger whose condition stays true starved the channel —
+measured at 600 posts in 10 seconds, with an unrelated message not surviving a single frame.
+The text action now refuses to repeat inside the window, and refuses by *returning false*, so
+the `if (ok)` gate leaves the trigger armed rather than counting a firing that did nothing.
+
+## Measuring balance: the RNG is not seeded — pin it
+
+**The difficulty ladder is far noisier than it looks, and this invalidates any A/B run on a
+handful of seeds.** The simulation calls bare `Math.random()` for attack-wave intervals and
+team-type selection, so no run is reproducible. Running the *identical build* twice:
+
+    run 1   easy=315s  normal=227s  hard=190s
+    run 2   easy=502s  normal=251s  hard=187s
+
+Seed 9001 on easy fell at 318s in one run and never fell at all (>600s) in the next. `hard` is
+comparatively stable (190 vs 187); `easy` is close to useless as a single-run signal, because
+an easy opponent's outcome hinges on a couple of coin flips early.
+
+**So do not compare two builds by running the ladder on each.** Pin the generator first:
+
+```js
+let s = 0xC0FFEE; Math.random = () => { s = (s*1664525 + 1013904223)>>>0; return s/4294967296; };
+```
+
+With that in place a seed replays exactly, and an A/B becomes a comparison rather than an
+estimate — the trigger layer was shown inert this way, producing byte-identical fall times,
+unit counts, credits and kill/loss tallies with the trigger table populated and emptied.
+
+Earlier balance figures in this file that were taken from single unpinned runs — notably the
+easy-difficulty numbers in the TEAM.CPP and TEAMTYPE.CPP sections — should be read as
+indicative only. The right fix is to route gameplay randomness through the existing seeded
+`_rtsRngMake` so the shipped game is reproducible too; that has not been done yet.
+
 ## Missions — from MISSION.CPP
 
 `MissionControlClass` is a **flag table indexed by mission**, read from the INI. Four fields
