@@ -21,7 +21,9 @@ each one is there because the matching bug already shipped once.
 ## Layout
 
 - `src/rts.rules.js` — **every balance number**, data only. Retune here.
-- `src/rts.sprites.js` — **all artwork**: palette, terrain bake, buildings, unit facings, effects.
+- `src/rts.r3d.js` — the **sprite baker**: a small 3D rasteriser that runs once at load.
+- `src/rts.sprites.js` — palette, terrain bake, ore, effects, and the 3D **models** for every
+  structure and unit.
 - `src/rts.audio.js` — all sound, synthesized at runtime with WebAudio. No sampled assets.
 - `src/rts.core.js` — simulation: grid, A* pathfinding, combat, economy, enemy AI. Deliberately
   renderer-free, so a whole battle can be stepped headlessly. Swapping the 3D renderer for the
@@ -40,9 +42,19 @@ breaking it shipped once.
   and two art-pixels per screen pixel. A build that drew 24px art at 40px cells resampled every
   sprite by 1.667× and the whole picture went soft, with pixels of two different sizes side by
   side. `_rtsApplyCam` enforces this; do not reintroduce a free-running `cell`.
-- **Never rotate the canvas.** `ctx.rotate()` + `fillRect` anti-aliases every diagonal. Unit
-  facings are built by `_sprRot`, which walks destination pixels and inverse-rotates each into
-  the unit's local frame, so a tank at 45° keeps hard square pixels.
+- **Structures and units are pre-rendered 3D, not drawn.** Westwood modelled them, rendered
+  each to a bitmap at a fixed camera and light, and shipped the bitmaps — which is why the
+  originals have volume and flat facets. `rts.r3d.js` does the same at load: models in 3D,
+  baked to sprites, then the game is the 2D sprite engine it already was. No WebGL, no
+  library, no per-frame cost. Unit facings come from yawing the *model*, so a tank at 45°
+  shows its side and tracks properly.
+- **The ground plane is not foreshortened.** Projection is oblique — `screenY = z - K*y` —
+  because a 3×3 structure has to cover exactly 72×72 art pixels or it stops lining up with
+  its tiles. Height projects straight up into headroom above the footprint.
+- **Watch face winding and light direction.** Both failed silently and cost a round each: a
+  cylinder wound the wrong way survives backface culling by showing you the *inside* of its
+  far wall (stacks came out as dark discs), and a light with a negative z component lights
+  the backs of buildings, leaving every front elevation at flat ambient.
 - **The map is a landscape, not a field.** `_rtsGenTerrain` (in the *core*, since obstacles
   are simulation state) lays down conifer groves, thin rock ridges, a lake with a beach and
   dirt roads, into a second `G.terrain` layer of `RTS_T_*` codes that the renderer reads.

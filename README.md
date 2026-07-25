@@ -40,15 +40,17 @@ timer. A player who does nothing is overrun in about four and a half minutes.
 
 There are no art or audio assets in this repository, and none are downloaded at runtime:
 
-- **Every sprite is drawn in code** at 24 pixels per map cell: six structures per faction, five
-  unit types in eight facings each, four ore densities, explosions and muzzle flashes. Hard
-  near-black outlines are traced from the alpha channel, so a building made of overlapping
-  parts still gets one clean line around the whole silhouette.
+- **Structures and units are pre-rendered 3D.** They are defined as 3D models and rasterised
+  to sprites once at startup by a ~200-line renderer with its own scanline fill and depth
+  buffer — the same approach the games of the era used, and the reason the results have real
+  volume and flat shaded facets. Nothing renders in 3D at runtime; there is no WebGL context
+  and no library. Unit facings come from rotating the model, not the canvas.
+- **Everything else is drawn in code** at 24 pixels per map cell: terrain, four ore densities,
+  explosions and muzzle flashes. Hard near-black outlines are traced from the alpha channel,
+  so a building made of overlapping parts gets one clean line around the whole silhouette.
 - **The battlefield is painted once** into a single 2688×2688 canvas from continuous noise, so
   dirt patches are organic blobs rather than per-cell tiles — and the ground costs one blit
   per frame.
-- **Unit facings are rotated by inverse pixel sampling**, not by `ctx.rotate()`, so a tank
-  turned 45° still has square pixels instead of an anti-aliased fringe.
 - **Sidebar icons** are the sprites themselves on a dark plate.
 - **All sound** is synthesized with WebAudio: weapons are shaped noise plus pitch-swept
   oscillators, and the music is a scheduled drum machine with a distorted bass riff and lead
@@ -67,7 +69,8 @@ Edit the files under `src/`, run the build, commit the regenerated `index.html`.
 | File | What it owns |
 | --- | --- |
 | `src/rts.rules.js` | **Every balance number.** Retune the game here and nowhere else. |
-| `src/rts.sprites.js` | All artwork: palette, terrain bake, buildings, unit facings, effects |
+| `src/rts.r3d.js` | The sprite baker: a small 3D rasteriser, run once at load |
+| `src/rts.sprites.js` | Palette, terrain bake, ore, effects, and the 3D models |
 | `src/rts.audio.js` | All sound and music |
 | `src/rts.core.js` | Simulation: grid, A\* pathfinding, combat, economy, enemy AI. Renderer-free, so a battle can be stepped headlessly. |
 | `src/rts.render.js` | Canvas 2D. Reads the sim, never writes it. |
