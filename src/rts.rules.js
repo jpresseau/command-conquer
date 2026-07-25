@@ -296,6 +296,13 @@ function rtsSightTiles(def) {
 var RTS_TURRET_ROT = 3.0;       /* radians/second, the turret's own rate */
 var RTS_FIRE_ANGLE = 0.2;       /* ~11 degrees: Can_Fire's `diff < 8` out of 256 */
 var RTS_RECOIL_TIME = 0.12;     /* how long the turret sits recoiled after firing */
+/* TURRET.CPP Fire_Coord: how far the muzzle sits ahead of the object's centre, as a multiple
+   of the body radius. A turret overhangs its hull, so its barrel reaches past the body; a
+   hull-mounted gun fires from inside the silhouette. A defence structure gets a flat reach,
+   since the gun is most of the building. */
+var RTS_MUZZLE_TURRET = 1.15;
+var RTS_MUZZLE_HULL   = 0.75;
+var RTS_MUZZLE_STRUCT = 2.2;
 /* Overrun_Square: a tracked vehicle drives over infantry. Approaching one makes them scatter
    (`cellptr->Incoming(0, true)`); actually reaching them kills them. Should_Crush_It refuses
    for HUMAN-controlled vehicles - your own tanks never auto-crush, you have to drive them

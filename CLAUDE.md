@@ -399,6 +399,14 @@ already casts one.
   Homing weapons get four times the angular tolerance (`diff >>= 2`). Measured: a tank whose
   gun starts 180° off does not fire until 1.03 s, against a 1.05 s swing time.
 - `Recoil_Adjust` moves the turret back one pixel along its facing when it fires.
+- `Fire_Coord` / `Fire_Direction` (TURRET.CPP): a shot leaves the **muzzle**, on whichever
+  facing actually carries the weapon — the turret's for a turreted vehicle, the hull's for
+  everything else, and the building's own facing for a defence structure. Since the turret is
+  drawn as a separate sprite, spawning shots at the object's centre makes a tank with its gun
+  swung 90° appear to fire sideways out of its own flank. `_rtsFireCoord` is used by the
+  tracer, the projectile **and** the renderer's muzzle flash, so all three agree; the flash
+  used to be offset along `e.turret` unconditionally, which put it on the turret's bearing
+  even for a hull-mounted gun like the buggy's.
 
 **`Overrun_Square`**: a tracked vehicle threatens the ground in front of it — infantry within
 `CrushDistance` scatter (`Incoming()`), and any actually under the tracks are killed. Hook this
