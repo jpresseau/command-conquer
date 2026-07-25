@@ -425,8 +425,24 @@ function _rtsKill(e) {
   if (e.dead) return;
   e.dead = true;
   if (e.type === 'struct') { _rtsFootprint(e, false); _rtsRecalcPower(e.side); }
-  G.fx.push({ kind:e.type === 'struct' ? 'boom' : 'pop', x:e.x, y:1, z:e.z, t:0,
-    big:e.type === 'struct' ? Math.max(2, rtsStructDef(e.def).w * 0.7) : 1 });
+  if (e.type === 'struct') {
+    var sd = rtsStructDef(e.def);
+    G.fx.push({ kind:'boom', x:e.x, y:1, z:e.z, t:0, big:Math.max(2, sd.w * 0.7) });
+    /* Secondary blasts walking across the footprint on a delay, then debris thrown clear.
+       A structure going down should be an event; one puff was not. */
+    var rn = _rtsRngMake((e.id * 7919) >>> 0);
+    for (var b = 0; b < 3 + sd.w; b++) {
+      G.fx.push({ kind:'boom', t:-0.10 - rn() * 0.5, big:0.8 + rn() * 0.9,
+        x:e.x + (rn() - 0.5) * sd.w * RTS_TILE, y:1, z:e.z + (rn() - 0.5) * sd.h * RTS_TILE });
+    }
+    for (var k = 0; k < 9 + sd.w * 3; k++) {
+      var a = rn() * 6.283, sp = 4 + rn() * 15;
+      G.fx.push({ kind:'debris', x:e.x, y:2 + rn() * 3, z:e.z, t:0,
+        vx:Math.cos(a) * sp, vz:Math.sin(a) * sp, vy:7 + rn() * 11, big:0.6 + rn() * 0.8 });
+    }
+  } else {
+    G.fx.push({ kind:'pop', x:e.x, y:1, z:e.z, t:0, big:1 });
+  }
   if (typeof _rtsSfx === 'function') _rtsSfx(e.type === 'struct' ? 'boom' : 'pop', e.x, e.z);
   if (e.side === 'player' && e.type === 'unit') G.stats.lostU++;
   if (e.side === 'enemy') G.stats.killed++;
@@ -955,7 +971,18 @@ function _rtsTick(dt) {
   _rtsSeparate(dt);
   _rtsUpdateProj(dt);
 
-  for (i = G.fx.length - 1; i >= 0; i--) { G.fx[i].t += dt; if (G.fx[i].t > 0.75) G.fx.splice(i, 1); }
+  for (i = G.fx.length - 1; i >= 0; i--) {
+    var fxi = G.fx[i];
+    fxi.t += dt;
+    if (fxi.kind === 'debris') {
+      fxi.x += fxi.vx * dt; fxi.z += fxi.vz * dt;
+      fxi.vy -= 34 * dt; fxi.y += fxi.vy * dt;
+      if (fxi.y < 0) { fxi.y = 0; fxi.vy = -fxi.vy * 0.35; fxi.vx *= 0.5; fxi.vz *= 0.5; }
+      if (fxi.t > 1.6) G.fx.splice(i, 1);
+      continue;
+    }
+    if (fxi.t > 0.75) G.fx.splice(i, 1);
+  }
   for (i = G.ents.length - 1; i >= 0; i--) if (G.ents[i].dead && G.ents[i].reaped) G.ents.splice(i, 1);
 
   /* win / lose: losing every structure ends it, the way it did in the originals */

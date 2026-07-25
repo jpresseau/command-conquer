@@ -111,6 +111,25 @@ exceeds 2^53, the low bits come back as garbage, and the failure is silent — t
 produced a terrain bake containing no dirt whatsoever because the "random" grade never crossed
 its threshold.
 
+## Structures animate
+
+Taken from `BUILDING.H` in the GPL Red Alert source, which is a game-logic header but says
+plainly what is meant to move — a structure is not one static bitmap:
+
+- `MAX_DOOR_STAGE 18` / `DOOR_OPEN_STAGE 9` — the War Factory door is an animation, wide open
+  at stage 9. Driven here off whether a vehicle is on the production line.
+- `BState` / `QueueBState` — buildings have an idle look and a working look. Refinery and
+  power plant blink while running.
+- `Mission_Construction` — a placed structure assembles rather than sliding up out of the
+  ground: rising reveal, a bright beam at the leading edge, and stippled rows above it so
+  the boundary dissolves instead of being a hard horizontal cut.
+- `Drop_Debris()` — a dying structure throws debris and fires secondary blasts across its
+  footprint on a delay, instead of vanishing under one puff.
+
+Animation state that is purely visual (door stage, blink phase) lives in `_rtsR.anim` keyed
+by entity id, **not** on the entity — the simulation stays renderer-free, which is what lets
+a whole battle be stepped headlessly.
+
 ## Verifying
 
 No test suite — use headless Playwright against the **built** `index.html`. Node + Playwright

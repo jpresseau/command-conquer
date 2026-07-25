@@ -166,6 +166,20 @@ function _rtsRFrame(dt) {
   /* --- explosions, tracers, muzzle flashes --- */
   for (i = 0; i < G.fx.length; i++) {
     var f = G.fx[i], k = f.t / 0.75;
+    if (f.t < 0) continue;                       /* a delayed secondary blast, not started */
+    if (f.kind === 'debris') {
+      /* Chunks thrown clear of a dying structure. Height projects upward the same way the
+         baked sprites do, so a chunk arcs over the ground rather than sliding along it. */
+      var ds = Math.max(1, Math.round(cell * 0.07 * (f.big || 1)));
+      var dxp = Math.round(_rtsSX(f.x)), dyp = Math.round(_rtsSY(f.z) - f.y * _rtsZoom() * 0.8);
+      g.globalAlpha = f.t > 1.2 ? Math.max(0, (1.6 - f.t) / 0.4) : 1;
+      g.fillStyle = '#15171b';
+      g.fillRect(dxp - ds, Math.round(_rtsSY(f.z)) - 1, ds * 2, 2);     /* ground shadow */
+      g.fillStyle = f.t < 0.35 ? '#e0561c' : RTS_PAL.dark[1];
+      g.fillRect(dxp - ds, dyp - ds, ds * 2, ds * 2);
+      g.globalAlpha = 1;
+      continue;
+    }
     if (f.kind === 'tracer') {
       if (f.t > 0.06) continue;
       g.strokeStyle = 'rgba(255,242,192,0.9)';
@@ -206,17 +220,39 @@ function _rtsDrawStruct(g, e, TSscale, cell) {
   var w = Math.round(spr.c.width * TSscale), h = Math.round(spr.c.height * TSscale);
   var top = py - Math.round(spr.head * TSscale);
   if (e.building) {
-    /* under construction: only the finished fraction is drawn, rising from the ground */
+    /* Build-up. BUILDING.H drives this off Mission_Construction, and in the originals a
+       structure visibly assembles rather than sliding up out of the ground. Here: the
+       finished fraction is revealed from the bottom, the leading edge carries a bright
+       construction beam, and a few stippled rows above it flicker so the boundary
+       dissolves instead of being a hard horizontal cut. */
     var showH = Math.max(2, Math.round(h * Math.min(1, e.bprog)));
+    var edge = top + (h - showH);
     g.save();
-    g.beginPath(); g.rect(px, top + (h - showH), w, showH); g.clip();
+    g.beginPath(); g.rect(px, edge, w, showH); g.clip();
     g.drawImage(spr.c, px, top, w, h);
     g.restore();
+    var band = Math.max(1, Math.round(cell / 12));
+    for (var q = 1; q <= 4; q++) {                                /* dissolving stipple */
+      var by = edge - q * band;
+      if (by < top) break;
+      if (((q + ((e.bprog * 30) | 0)) & 1) === 0) continue;
+      g.save();
+      g.beginPath(); g.rect(px, by, w, band); g.clip();
+      g.globalAlpha = 0.85 - q * 0.18;
+      g.drawImage(spr.c, px, top, w, h);
+      g.restore();
+      g.globalAlpha = 1;
+    }
+    g.fillStyle = '#cfe6ff';
+    g.globalAlpha = 0.75;
+    g.fillRect(px, edge - band, w, band);                          /* construction beam */
+    g.globalAlpha = 1;
     return;
   }
   if (e.hitT > 0) g.globalAlpha = 0.75;
   g.drawImage(spr.c, px, top, w, h);
   g.globalAlpha = 1;
+  _rtsDrawStructAnim(g, e, def, px, top, w, h, cell);
   /* turret barrel tracks its target */
   if (def.weapon) {
     var cx = _rtsSX(e.x), cy = _rtsSY(e.z) - cell * 0.25, L = cell * 0.55;
@@ -249,6 +285,49 @@ function _rtsDrawUnit(g, e, TSscale) {
     g.fillStyle = RTS_PAL.ore[1];
     var s = Math.max(2, Math.round(w * 0.16));
     g.fillRect(Math.round(_rtsSX(e.x) - s / 2), Math.round(_rtsSY(e.z) - h * 0.42), s, s);
+  }
+}
+
+/* Animated states. BUILDING.H carries BState/QueueBState and MAX_DOOR_STAGE 18 with
+   DOOR_OPEN_STAGE 9: a structure is not one static bitmap, it has an idle look and a
+   working look, and the War Factory's door is an eighteen-frame animation. Door and
+   activity phase are kept here, keyed by entity id, so the simulation stays renderer-free. */
+function _rtsStructAnim(id) {
+  var A = _rtsR.anim || (_rtsR.anim = {});
+  return A[id] || (A[id] = { door: 0, phase: 0 });
+}
+function _rtsDrawStructAnim(g, e, def, px, top, w, h, cell) {
+  var G = window._rtsG, S = G.sides[e.side], a = _rtsStructAnim(e.id);
+  var u = cell / RTS_TS;                       /* screen px per art px */
+
+  if (def.produces === 'vehicle') {
+    /* Open while a vehicle is on the line, shut otherwise. 18 stages, wide open at 9. */
+    var want = (S.q && S.q.vehicle) ? 9 : 0;
+    a.door += Math.max(-0.35, Math.min(0.35, want - a.door)) * 0.5;
+    var open = Math.max(0, Math.min(1, a.door / 9));
+    if (open > 0.01) {
+      var dw = Math.round(30 * u), dh = Math.round(13 * u * open);
+      var dx = px + Math.round(w / 2 - dw / 2);
+      var dy = top + h - Math.round(15 * u);
+      g.fillStyle = '#0d0f12';
+      g.fillRect(dx, dy, dw, dh);
+      g.fillStyle = RTS_PAL.lit;
+      g.globalAlpha = 0.35;
+      g.fillRect(dx, dy + dh - Math.max(1, Math.round(u)), dw, Math.max(1, Math.round(u)));
+      g.globalAlpha = 1;
+    }
+  }
+  if (e.def === 'refinery' || e.def === 'power') {
+    /* A working structure blinks. Cheap, but it is the difference between a base that is
+       running and a row of ornaments. */
+    a.phase += 0.06;
+    var lit = (Math.sin(a.phase) > 0.2);
+    if (lit) {
+      var r = Math.max(1, Math.round(u * 2));
+      g.fillStyle = e.def === 'refinery' ? '#ffd070' : '#8fe8a8';
+      g.fillRect(px + Math.round(w * 0.18), top + Math.round(h * 0.30), r, r);
+      g.fillRect(px + Math.round(w * 0.74), top + Math.round(h * 0.30), r, r);
+    }
   }
 }
 
