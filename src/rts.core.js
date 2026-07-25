@@ -296,7 +296,7 @@ function _rtsCarveRoad(G, x0, z0, x1, z1, rnd) {
 
 function _rtsNewGame(seed) {
   var G = {
-    t:0, seed:seed || 12345, over:null, msg:null, msgT:0,
+    t:0, seed:seed || 12345, over:null, msg:null, msgT:0, shake:0,
     blocked:new Uint8Array(RTS_N * RTS_N),
     terrain:new Uint8Array(RTS_N * RTS_N),  /* RTS_T_* - what the ground IS, for the renderer */
     scrap:new Float32Array(RTS_N * RTS_N),
@@ -435,6 +435,7 @@ function _rtsKill(e) {
       G.fx.push({ kind:'boom', t:-0.10 - rn() * 0.5, big:0.8 + rn() * 0.9,
         x:e.x + (rn() - 0.5) * sd.w * RTS_TILE, y:1, z:e.z + (rn() - 0.5) * sd.h * RTS_TILE });
     }
+    G.shake = Math.min(1, G.shake + 0.35 + sd.w * 0.12);
     for (var k = 0; k < 9 + sd.w * 3; k++) {
       var a = rn() * 6.283, sp = 4 + rn() * 15;
       G.fx.push({ kind:'debris', x:e.x, y:2 + rn() * 3, z:e.z, t:0,
@@ -971,6 +972,7 @@ function _rtsTick(dt) {
   _rtsSeparate(dt);
   _rtsUpdateProj(dt);
 
+  if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 2.2);
   for (i = G.fx.length - 1; i >= 0; i--) {
     var fxi = G.fx[i];
     fxi.t += dt;

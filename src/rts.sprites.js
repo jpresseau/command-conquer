@@ -386,6 +386,31 @@ function _sprOre() {
   return out;
 }
 
+/* Water shimmer, as a cycle of overlay frames.
+
+   CONQUER.CPP animates water by ROTATING A BAND OF PALETTE ENTRIES one step every quarter
+   second - the colours move through the pixels while the pixels stay put. With no indexed
+   palette to rotate, the equivalent is a short cycle of highlight overlays drawn over the
+   baked water: same effect, same cadence. A static lake is one of the deadest things on a
+   map, and mine was static. */
+function _sprWaterCycle() {
+  var out = [], TS = RTS_TS, W = RTS_PAL.water, n;
+  for (var f = 0; f < 4; f++) {
+    var t = _sprMake(TS, TS), g = t.g;
+    for (n = 0; n < 22; n++) {
+      var x = _sprHash(n, 3, 41) * TS, y = _sprHash(3, n, 47) * TS;
+      /* The highlight walks along each crest rather than blinking on and off. */
+      var ph = (n + f) & 3;
+      if (ph > 1) continue;
+      var len = 3 + (_sprHash(n, n, 53) * 5 | 0);
+      _sprRect(g, x + f, y, len, 1, ph === 0 ? W[3] : W[4]);
+      _sprRect(g, x + f + 1, y + 1, Math.max(1, len - 2), 1, W[1]);
+    }
+    out.push(t.c);
+  }
+  return out;
+}
+
 /* A run of sandbags, one map cell long. Baked from the 3D models like everything else, so
    the bags catch the same light as the buildings. Stamped along RTS_T_WALL cells. */
 function _sprSandbag() {
@@ -629,6 +654,7 @@ function _rtsSprites() {
   var S = { ore: _sprOre(), bld: {}, unit: {}, fx: _sprFx(), pad: {} };
   RTS_STRUCTS.forEach(function (d) { S.pad[d.key] = _sprPad(d.w, d.h); });
   S.bag = _sprSandbag();
+  S.wave = _sprWaterCycle();
   ['player', 'enemy'].forEach(function (side) {
     S.bld[side] = {}; S.unit[side] = {};
     RTS_STRUCTS.forEach(function (d) { S.bld[side][d.key] = _sprBuilding(d.key, side); });

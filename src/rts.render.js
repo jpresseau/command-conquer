@@ -83,15 +83,52 @@ function _rtsPickAt(mx, my) {
   return best ? { ent: best, x: p.x, z: p.z } : { ent: null, x: p.x, z: p.z };
 }
 
+/* CONQUER.CPP: Color_Cycle(). Two clocks drive everything that shimmers.
+
+   The pulse steps by 20 every TIMER_SECOND/6, bouncing between 0x20 and 150, and is applied
+   to CC_PULSE_COLOR (radar box, glowing interface) and CC_EMBER_COLOR - RGBClass(255,80,80),
+   the glow on burning things. The water clock rotates a band of palette entries one step
+   every TIMER_SECOND/4.
+
+   With no indexed palette to rotate, the same numbers drive an overlay cycle instead. The
+   cadences are the originals' because they are what the eye recognises. */
+var _RTS_PULSE = { val: 0x20, up: true, t: 0, wt: 0, wf: 0 };
+function _rtsCycleTick(dt) {
+  var P = _RTS_PULSE;
+  P.t += dt;
+  while (P.t >= 1 / 6) {
+    P.t -= 1 / 6;
+    P.val += P.up ? 20 : -20;
+    if (P.val > 150) { P.val = 150; P.up = false; }
+    if (P.val < 0x20) { P.val = 0x20; P.up = true; }
+  }
+  P.wt += dt;
+  while (P.wt >= 1 / 4) { P.wt -= 1 / 4; P.wf = (P.wf + 1) & 3; }
+}
+function _rtsPulse() { return _RTS_PULSE.val / 255; }        /* 0.125 .. 0.588 */
+function _rtsEmber() {
+  var k = _rtsPulse();
+  return 'rgb(' + Math.round(255 * k) + ',' + Math.round(80 * k) + ',' + Math.round(80 * k) + ')';
+}
+
 /* --------------------------------------------------------------- the frame */
 function _rtsRFrame(dt) {
   var R = _rtsR, G = window._rtsG, g = R.g, S = R.spr, i;
   var z = _rtsZoom(), cell = R.cell, TSscale = cell / RTS_TS;
 
-  g.setTransform(R.dpr, 0, 0, R.dpr, 0, 0);
+  _rtsCycleTick(dt);
+  /* Shake_The_Screen(): the original blits the page offset by a couple of pixels, picking a
+     new offset each tick. Same idea, applied as a transform offset. */
+  var shk = G.shake || 0, shy = 0, shx = 0;
+  if (shk > 0.02) {
+    R.shakeF = (R.shakeF || 0) + 1;
+    shy = ((R.shakeF & 1) ? 1 : -1) * Math.round(shk * 5);
+    shx = ((R.shakeF & 2) ? 1 : -1) * Math.round(shk * 3);
+  }
+  g.setTransform(R.dpr, 0, 0, R.dpr, shx * R.dpr, shy * R.dpr);
   g.imageSmoothingEnabled = false;
   g.fillStyle = '#1a1d16';
-  g.fillRect(0, 0, R.W, R.H);
+  g.fillRect(-8, -8, R.W + 16, R.H + 16);
 
   /* visible cell range, padded so half-on-screen sprites still draw */
   var tx0 = Math.max(0, _rtsTX(R.focus.x - R.W / 2 / z) - 1);
@@ -113,9 +150,15 @@ function _rtsRFrame(dt) {
     for (var tx = tx0; tx <= tx1; tx++) {
       var idx = _rtsIdx(tx, tz);
       var ore = G.scrap[idx];
-      if (ore <= 0) continue;
+      var isWater = G.terrain && G.terrain[idx] === RTS_T_WATER;
+      if (ore <= 0 && !isWater) continue;
       var px = Math.round(_rtsSX(_rtsWX(tx) - RTS_TILE / 2));
       var py = Math.round(_rtsSY(_rtsWX(tz) - RTS_TILE / 2));
+      if (isWater) {
+        /* The crest highlights step round a four-frame cycle, so the lake moves. */
+        g.drawImage(S.wave[(_RTS_PULSE.wf + tx + tz) & 3], px, py, cell, cell);
+        continue;
+      }
       var stage = Math.min(3, Math.floor(ore / RTS_SCRAP_TILE * 4));
       var vari = (tx * 7 + tz * 13) % 3;
       g.drawImage(S.ore[stage][vari], px, py, cell, cell);
@@ -316,6 +359,22 @@ function _rtsDrawStructAnim(g, e, def, px, top, w, h, cell) {
       g.fillRect(dx, dy + dh - Math.max(1, Math.round(u)), dw, Math.max(1, Math.round(u)));
       g.globalAlpha = 1;
     }
+  }
+  /* A structure below a third health burns. CC_EMBER_COLOR pulses on the same clock as the
+     radar, which is what ties the whole screen's glow together in the original. */
+  var hpFrac = e.hp / rtsStructDef(e.def).hp;
+  if (hpFrac < 0.34) {
+    var er = Math.max(1, Math.round(u * 3));
+    g.fillStyle = _rtsEmber();
+    for (var q = 0; q < 3; q++) {
+      var ex = px + Math.round(w * (0.24 + q * 0.26));
+      var ey = top + Math.round(h * (0.42 + ((q * 7 + (_RTS_PULSE.wf & 1)) % 3) * 0.14));
+      g.fillRect(ex, ey, er, er);
+    }
+    g.globalAlpha = 0.28 + _rtsPulse() * 0.3;
+    g.fillStyle = '#2a2a2e';
+    g.fillRect(px + Math.round(w * 0.3), top - Math.round(u * 5), Math.round(w * 0.4), Math.round(u * 6));
+    g.globalAlpha = 1;
   }
   if (e.def === 'refinery' || e.def === 'power') {
     /* A working structure blinks. Cheap, but it is the difference between a base that is

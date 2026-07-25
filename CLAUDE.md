@@ -111,6 +111,21 @@ exceeds 2^53, the low bits come back as garbage, and the failure is silent — t
 produced a terrain bake containing no dirt whatsoever because the "random" grade never crossed
 its threshold.
 
+## Colour cycling — from CONQUER.CPP
+
+`Color_Cycle()` in the GPL source is the palette animation, and its constants are reproduced
+exactly in `_rtsCycleTick` because the cadences are what the eye recognises:
+
+- **Pulse**: steps by 20 every `TIMER_SECOND/6`, bouncing between `0x20` and 150. Drives
+  `CC_PULSE_COLOR` (the radar viewport box) and `CC_EMBER_COLOR` — `RGBClass(255,80,80)`,
+  the glow on burning things. Structures under a third health carry it, with smoke.
+- **Water**: a band of palette entries rotates one step every `TIMER_SECOND/4`. There is no
+  indexed palette here to rotate, so the equivalent is a four-frame highlight overlay on the
+  same clock. A static lake is one of the deadest things on a map.
+- **`Shake_The_Screen()`**: the original blits the page offset a couple of pixels, re-picking
+  each tick. Here it is a transform offset driven by `G.shake`, which a dying structure sets
+  — shake is simulation state in the original too (`TimeQuake`), so it lives in the core.
+
 ## Structures animate
 
 Taken from `BUILDING.H` in the GPL Red Alert source, which is a game-logic header but says
