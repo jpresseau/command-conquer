@@ -189,7 +189,16 @@ var RTS_SPREAD_FLOOR = 4;     /* MinDamage applies only inside this many steps *
    which is what makes a gem patch worth crossing the map for. */
 var RTS_GOLD_VALUE = 35;
 var RTS_GEM_VALUE = 110;
-var RTS_GEM_MULT = RTS_GEM_VALUE / RTS_GOLD_VALUE;
+/* CELL.CPP Tiberium_Adjust prices a gem STEP at `Rule.GemValue * 4`, against `Rule.GoldValue`
+   for a gold step - so per step gems are worth 12.6x, not 3.1x. The familiar ~3x only shows
+   up per TILE, because _adjgem caps a gem cell at 3 steps while gold reaches 12. Using the
+   bare 110/35 ratio per unit mined, together with that cap, made a gem tile worth LESS than
+   a gold one (measured 344 against 419) - precisely backwards for the deposit you are meant
+   to fight over. */
+var RTS_GEM_MULT = (RTS_GEM_VALUE * 4) / RTS_GOLD_VALUE;
+/* How much further a harvester will drive for gems. Bounded on purpose - see the note in
+   _rtsNearestScrap. This is a routing preference, not a price. */
+var RTS_GEM_DETOUR = 3;
 
 /* ------------------------------------------------------------ difficulty --
    RULES.CPP's DifficultyClass: the game does not make the AI "better", it multiplies a
@@ -222,6 +231,7 @@ var RTS_IQ = {
   scatter:3,        /* its infantry scatter from incoming fire */
   harvester:3,      /* replaces lost harvesters */
   guardArea:4,      /* leaves a garrison at home instead of sending everything */
+  refill:3,         /* restarts a production line the instant it frees */
   production:5      /* full build order and base expansion */
 };
 
@@ -393,6 +403,13 @@ var RTS_BUILD_RADIUS = 9;       /* tiles: how far from an existing structure you
 var RTS_ORE_GROW_EVERY = 6;     /* seconds between growth passes */
 var RTS_ORE_GROW_AMT = 26;      /* added to an existing non-full tile each pass */
 var RTS_ORE_SPREAD_CHANCE = 0.10; /* chance a rich tile seeds an empty neighbour */
+/* CELL.CPP counts ore in DISCRETE LEVELS - OverlayData 0..11, twelve of them. The thresholds
+   below are quoted straight from Can_Tiberium_Grow (`OverlayData >= 11` stops growth) and
+   Can_Tiberium_Spread (`OverlayData <= 6` cannot seed), expressed as fractions of a full
+   tile so the rest of the economy can keep working in credits. */
+var RTS_ORE_LEVELS = 12;
+var RTS_ORE_RICHNESS = 0.51;    /* scales _adj so total map wealth matches the old fields */
+var RTS_ORE_SPREAD_MIN = 7 / 12;  /* must be ABOVE level 6 to seed a neighbour */
 /* MAP.CPP keeps a fixed-size candidate list filled by reservoir sampling, so the cost of a
    growth pass does not scale with how much ore is on the map. */
 var RTS_ORE_SAMPLE = 1200;
