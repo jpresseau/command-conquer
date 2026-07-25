@@ -484,6 +484,10 @@ function _rtsVisible(tx, tz) {
 function _rtsEntSeen(e) {
   if (!e) return false;
   if (e.side === 'player') return true;
+  /* Fire_At reveals a shooter that was hidden in the darkness. The visibility grid is
+     rebuilt from scratch every sweep, so the reveal lives on the shooter as a short timer
+     rather than as a mark on the grid that the next sweep would wipe. */
+  if (e.spot > 0) return true;
   var tx = _rtsTX(e.x), tz = _rtsTX(e.z);
   return e.type === 'struct' ? _rtsSeen(tx, tz) : _rtsVisible(tx, tz);
 }
@@ -1047,18 +1051,75 @@ function _rtsRangeTo(a, b) {
   return Math.max(0, d);
 }
 function _rtsEnemyOf(side) { return side === 'player' ? 'enemy' : 'player'; }
-function _rtsFindTarget(e, range) {
-  var G = window._rtsG, foe = _rtsEnemyOf(e.side), best = null, bd = 1e9;
+/* Base centres are needed once per candidate but cost a pass over every structure, so they
+   are cached and refreshed on the visibility clock rather than recomputed per lookup. */
+function _rtsZoneCache() {
+  var G = window._rtsG;
+  if (!G.zc || G.t - G.zcT > 0.5) {
+    G.zc = { player:_rtsBaseCentre('player'), enemy:_rtsBaseCentre('enemy') };
+    G.zcT = G.t;
+  }
+  return G.zc;
+}
+/* TECHNO.CPP Evaluate_Object. The target scan scores candidates rather than just measuring
+   how far away they are, which is the difference between an army that shoots whatever it
+   bumps into and one that picks off the harvester. */
+function _rtsEvalObject(e, o, dist, w) {
+  var d = rtsStructDef(o.def) || rtsUnitDef(o.def);
+  if (!d) return 0;
+  /* A weapon that cannot hurt the thing at all should never choose it. */
+  if (w && w.vs && !w.vs[rtsArmour(o)]) return 0;
+
+  /* Value() = Risk + Reward, plus Crew.Kills - a unit that has been killing things is worth
+     shooting first.
+
+     Points stand in as cost, with hit points as a floor. The floor is load-bearing, not
+     decoration: the Command Yard is free, so cost alone values the most important building
+     in the game at ZERO, and a zero-valued candidate is discarded outright. Nothing could
+     target a construction yard at all - measured, the Commando AI ran to 179 units and 27
+     buildings while an idle player calmly survived eight minutes, because neither side could
+     shoot the other's yard. */
+  var value = Math.max(d.cost, d.hp || 0) + (o.kills || 0) * RTS_KILL_VALUE;
+
+  var zc = _rtsZoneCache();
+  /* Outside the protective umbrella of its OWN base: a straggler is a soft target. */
+  if (_rtsWhichZone(zc[o.side], o.x, o.z) < 0) value *= RTS_EXPOSED_MULT;
+  /* NervousBias: ...and something that has got inside MY base matters more than the same
+     thing sitting in a field somewhere. */
+  if (_rtsWhichZone(zc[e.side], o.x, o.z) >= 0) value *= RTS_NERVOUS_BIAS;
+
+  /* Area_Modify is deliberately NOT implemented. It halves a candidate's value for each
+     friendly building near it, so a suppressed weapon stops lobbing high explosive into its
+     own base - but it is gated on a per-weapon `IsSupressed` flag that only a few RA weapons
+     carry, and this game has no equivalent data. Mapping it onto "any splash weapon" was the
+     obvious guess and it is wrong: measured, it drove the value of a target standing INSIDE
+     your own base down to 640k against 1.28M for the same unit in open ground, exactly
+     inverting NervousBias and leaving the base undefended. Without the flag, the rule does
+     more harm than the friendly fire it prevents. */
+  if (value <= 0) return 0;
+  /* Lessen threat as a factor of distance - LINEAR in cells. The squared version is sitting
+     right there in the original, commented out; the shipped line is this one. */
+  return Math.max(1, (value * RTS_THREAT_SCALE) / (dist / RTS_TILE + 1));
+}
+function _rtsFindTarget(e, range, w) {
+  var G = window._rtsG, foe = _rtsEnemyOf(e.side), best = null, bv = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
     if (o.dead || o.side !== foe) continue;
-    var d = _rtsRangeTo(e, o);
-    if (d > range) continue;
-    /* prefer units over buildings at equal-ish distance - shoot the thing shooting you */
-    var score = d + (o.type === 'struct' ? 8 : 0);
-    if (score < bd) { bd = score; best = o; }
+    var dist = _rtsRangeTo(e, o);
+    if (dist > range) continue;
+    var v = _rtsEvalObject(e, o, dist, w);
+    if (v > bv) { bv = v; best = o; }
   }
   return best;
+}
+/* Threat_Range: 0 means "use weapon range", 1 means area guard - twice the weapon range,
+   clamped. Every sight radius in this game is already inside the clamp, so it never binds
+   here; it is kept because the clamp is the rule, not the current unit table. */
+function _rtsThreatRange(e, control, w) {
+  var reach = w ? w.range : 0;
+  if (control === 0) return reach;
+  return Math.min(reach * 2, RTS_THREAT_MAX_CELLS * RTS_TILE);
 }
 /* TURRET.CPP Fire_Direction / Fire_Coord. A shot leaves the MUZZLE, and the muzzle is on
    whichever facing actually carries the weapon: the turret's for a turreted vehicle, the
@@ -1091,6 +1152,9 @@ function _rtsFire(e, tgt, w) {
   e.cool = w.cool * bias.rof; e.fire = 0.09;      /* ROFBias: higher = slower reload */
   e.recoil = RTS_RECOIL_TIME;                     /* Recoil_Adjust */
   var m = _rtsFireCoord(e);
+  /* "If a projectile was fired from a unit that is hidden in the darkness, reveal that unit
+     and a little area around it." The muzzle flash gives away the shooter. */
+  if (e.side !== 'player' && !_rtsVisible(_rtsTX(e.x), _rtsTX(e.z))) e.spot = RTS_MUZZLE_SPOT;
   if (typeof _rtsSfx === 'function') _rtsSfx(w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
     : (w.shot === 'missile' ? 'rocket' : (e.type === 'struct' ? 'turretgun' : 'cannon')), e.x, e.z);
   var dmg = w.dmg * (w.vs[rtsArmour(tgt)] || 1) * bias.fire;
@@ -1147,6 +1211,77 @@ function _rtsAttacked(side) {
   _rtsSay('Your base is under attack!');
   if (typeof _rtsSfx === 'function') _rtsSfx('alert');
 }
+/* TECHNO.CPP Base_Is_Attacked. "This routine will pull units off of the field and send them
+   back to defend the base. This routine will make taking an enemy base much more difficult."
+   It is exactly that: raid a defended base and its army comes home.
+
+   Humans deal with their own base-is-attacked problems, so this only ever runs for the AI.
+   A building that can shoot back does not overreact, and a BaseAttackTimer on the attacker
+   stops one long firefight from recalling the whole army over and over. */
+function _rtsBaseIsAttacked(bldg, enemy) {
+  var G = window._rtsG;
+  if (bldg.side !== 'enemy' || !enemy || enemy.type !== 'unit') return 0;
+  if (rtsStructDef(bldg.def).weapon) return 0;     /* it can defend itself */
+  if (enemy.baseTimer && G.t < enemy.baseTimer) return 0;
+
+  /* "desired" is how much defence to throw at it: the attacker's risk scaled by tech level.
+     Risk stands in as cost here, the same substitution Evaluate_Object uses for Value. */
+  var desired = rtsUnitDef(enemy.def).cost, pool = [], i;
+  for (i = 0; i < G.ents.length; i++) {
+    var u = G.ents[i];
+    if (u.dead || u.side !== 'enemy' || u.type !== 'unit') continue;
+    var ud = rtsUnitDef(u.def);
+    if (!ud.weapon || ud.harvest) continue;
+    var w = RTS_WEAPONS[ud.weapon];
+    /* "Don't allow a response if it doesn't have a weapon that will affect the enemy." */
+    if (w.vs && !w.vs[rtsArmour(enemy)]) continue;
+    /* Already fighting this attacker? Then it is part of the answer, not part of the ask. */
+    if (u.target === enemy) { desired -= ud.cost; continue; }
+    /* Threat it can apply, best when it is close - Rescue_Mission's ranking, in spirit. */
+    pool.push({ u:u, v:ud.cost * 1000 / (_rtsRangeTo(u, bldg) / RTS_TILE + 1) });
+  }
+  if (desired <= 0 || !pool.length) return 0;
+
+  pool.sort(function (a, b) { return b.v - a.v; });
+  var sent = 0, risk = 0;
+  for (i = 0; i < pool.length && i < RTS_DEFENDERS; i++) {
+    var p = pool[i];
+    /* "Alternates between guard area and attack" - half go straight for the attacker, half
+       take up station on the building being hit. A pure charge leaves the base empty again
+       the moment the raider dies. */
+    if (Math.random() < 0.5) { p.u.order = 'attack'; p.u.target = enemy; p.u.path = null; }
+    else _rtsOrderMove(p.u, bldg.x + (Math.random() - 0.5) * RTS_TILE * 4,
+                             bldg.z + (Math.random() - 0.5) * RTS_TILE * 4, true);
+    sent++;
+    risk += rtsUnitDef(p.u.def).cost;
+    if (risk > desired) break;
+  }
+  /* BaseDefenseDelay: once enough has been committed, this attacker stops re-triggering. */
+  if (risk > desired) enemy.baseTimer = G.t + RTS_BASE_DEFENSE_DELAY;
+  return sent;
+}
+/* TECHNO.CPP Is_Allowed_To_Retaliate. Shooting back is not automatic. */
+function _rtsCanRetaliate(tgt, from) {
+  if (!from || !from.side) return false;                    /* no source, no retaliation */
+  if (tgt.dead || tgt.type !== 'unit') return false;
+  if (from.side === tgt.side) return false;                 /* never against an ally */
+  var d = rtsUnitDef(tgt.def);
+  if (!d || !d.weapon) return false;
+  var w = RTS_WEAPONS[d.weapon];
+  /* "Don't allow retaliation if it isn't equipped with a weapon that can deal with the
+     threat" - a Modifier of zero against that armour means shooting back is pointless. */
+  if (w.vs && !w.vs[rtsArmour(from)]) return false;
+  /* Idle: always turn and fight. */
+  if (!tgt.order) return true;
+  /* Already busy: "Compare potential threat of the current target and the potential new
+     target. Don't retaliate if it is currently attacking the greater threat." The original
+     only bothers half the time, which is what stops a firefight turning into every unit
+     spinning between whoever shot last. */
+  if (Math.random() < 0.5) return false;
+  if (!tgt.target || tgt.target.dead) return true;
+  var dn = _rtsRangeTo(tgt, from), dc = _rtsRangeTo(tgt, tgt.target);
+  return _rtsEvalObject(tgt, from, dn, w) > _rtsEvalObject(tgt, tgt.target, dc, w);
+}
 function _rtsDamage(tgt, dmg, from, floor) {
   if (!tgt || tgt.dead) return;
   if (tgt.prone) dmg *= RTS_PRONE_DAMAGE;
@@ -1163,9 +1298,16 @@ function _rtsDamage(tgt, dmg, from, floor) {
   /* HouseClass::Attacked(). A structure taking malicious damage puts its owner into the
      ATTACKED state for a minute, which several unrelated AI decisions then read - and, for
      the player, raises the warning, rate-limited by SpeakDelay. */
-  if (tgt.type === 'struct' && from && from.side && from.side !== tgt.side) _rtsAttacked(tgt.side);
-  if (tgt.type === 'unit' && from && !tgt.order && rtsUnitDef(tgt.def).weapon) { tgt.order = 'attack'; tgt.target = from; }
-  if (tgt.hp <= 0) _rtsKill(tgt);
+  if (tgt.type === 'struct' && from && from.side && from.side !== tgt.side) {
+    _rtsAttacked(tgt.side);
+    _rtsBaseIsAttacked(tgt, from);
+  }
+  if (_rtsCanRetaliate(tgt, from)) { tgt.order = 'attack'; tgt.target = from; }
+  if (tgt.hp <= 0) {
+    /* Crew.Made_A_Kill: something that has killed becomes a hotter target itself. */
+    if (from && from.side && from.side !== tgt.side) from.kills = (from.kills || 0) + 1;
+    _rtsKill(tgt);
+  }
   else if (tgt.type === 'unit' && rtsUnitDef(tgt.def).harvest && tgt.carry > 0
            && tgt.hp <= tgt.maxHp * RTS_COND_YELLOW && tgt.hstate && tgt.hstate !== 'unload') {
     /* Take_Damage: a damaged harvester with a load aboard heads for the refinery rather than
@@ -1326,6 +1468,7 @@ function _rtsUpdateUnit(e, dt) {
   if (e.fire > 0) e.fire -= dt;
   if (e.recoil > 0) e.recoil -= dt;
   if (e.hitT > 0) e.hitT -= dt;
+  if (e.spot > 0) e.spot -= dt;
   if (d.kind === 'infantry') _rtsFearAI(e, dt);
   /* Overrun_Square runs BEFORE the engage logic: a tank that is holding position and firing
      returns early from this function, and hooking the crush on the end meant a stationary
@@ -1339,7 +1482,7 @@ function _rtsUpdateUnit(e, dt) {
   var tgt = e.target;
   if (tgt && tgt.dead) { tgt = e.target = null; if (e.order === 'attack') e.order = null; }
   if (w && !tgt && (e.order === 'amove' || !e.order)) {
-    tgt = _rtsFindTarget(e, d.sight);
+    tgt = _rtsFindTarget(e, d.sight, w);
     if (tgt) { e.target = tgt; if (!e.order) { e.order = 'attack'; e.path = null; } }
   }
   if (w) {
@@ -1350,7 +1493,7 @@ function _rtsUpdateUnit(e, dt) {
     var shootAt = null, chasing = false;
     if (tgt) {
       if (_rtsRangeTo(e, tgt) <= w.range) shootAt = tgt;
-      else { chasing = true; shootAt = _rtsFindTarget(e, w.range); }
+      else { chasing = true; shootAt = _rtsFindTarget(e, w.range, w); }
     }
     if (shootAt) {
       /* turret tracks its mark even while the hull is still swinging round */
@@ -1521,7 +1664,7 @@ function _rtsUpdateStruct(e, dt) {
   if (e.recoil > 0) e.recoil -= dt;
   /* a browned-out base loses its defences - power actually matters */
   if (_rtsPowerFactor(e.side) < 0.999) return;
-  if (!e.target || e.target.dead || _rtsRangeTo(e, e.target) > w.range) e.target = _rtsFindTarget(e, w.range);
+  if (!e.target || e.target.dead || _rtsRangeTo(e, e.target) > w.range) e.target = _rtsFindTarget(e, w.range, w);
   if (!e.target) return;
   var ta = Math.atan2(e.target.z - e.z, e.target.x - e.x), td = ta - e.rot;
   while (td > Math.PI) td -= Math.PI * 2; while (td < -Math.PI) td += Math.PI * 2;
