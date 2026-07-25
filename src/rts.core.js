@@ -506,6 +506,80 @@ function _rtsLayBase(start, foe, list, side) {
   }
 }
 
+/* ------------------------------------------------------------- BASE.CPP: the base blueprint
+
+   A base in the originals is not "n refineries and m turrets somewhere near the yard" - it is
+   an ORDERED LIST OF NODES, each one a (building type, cell) pair. `Get_Building` looks at the
+   node's cell and returns the building only if a building OF THAT TYPE is standing exactly
+   there; `Is_Built` is that test as a bool; `Next_Buildable` walks the list in order and hands
+   back the first HOLE, optionally filtered to a type. Order is priority, and the cell is part
+   of the plan rather than something to work out later.
+
+   The consequence that matters is rebuilding. Blow up an enemy refinery and the node it
+   occupied becomes a hole; the next refinery the AI builds goes back in that hole - the same
+   cell it was lost from. The base repairs to its plan instead of being reshaped by whatever
+   was destroyed.
+
+   The adaptation: RA reads its nodes from the scenario INI, where a designer placed them.
+   There are no scenario files here, so the blueprint is SEEDED from the opening layout
+   `_rtsLayBase` produces and GROWN by recording every position the AI scan-places into. So the
+   first raid is repaired against the designed opening, and later expansion becomes part of the
+   plan the moment it is built. */
+function _rtsBaseAdd(side, key, tx, tz) {
+  var G = window._rtsG;
+  if (!G.base) G.base = {};
+  if (!G.base[side]) G.base[side] = [];
+  G.base[side].push({ key:key, tx:tx, tz:tz });
+}
+/* Get_Building: type AND cell must both match, which is what makes a node a plan rather than
+   a hint. A power plant sitting where the refinery node is does not fill that node. */
+function _rtsBaseGetBuilding(side, node) {
+  var G = window._rtsG;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.selling || e.type !== 'struct' || e.side !== side) continue;
+    if (e.def === node.key && e.tx === node.tx && e.tz === node.tz) return e;
+  }
+  return null;
+}
+/* Next_Buildable: the first hole, in list order. A null type means "any hole".
+
+   One addition to the original: a hole whose cell can no longer be built on is skipped rather
+   than returned. RA checks placement separately; doing it inside the walk matters here because
+   returning only the FIRST hole means one permanently blocked node - the player walled over it,
+   ore crept in - would shadow every later hole of the same type and the plan would stop
+   repairing itself from that point on. A hole you cannot build in is not a hole you can fill. */
+function _rtsNextBuildable(side, key) {
+  var G = window._rtsG, list = (G.base && G.base[side]) || [];
+  for (var i = 0; i < list.length; i++) {
+    var n = list[i];
+    if (key && n.key !== key) continue;
+    if (_rtsBaseGetBuilding(side, n)) continue;
+    if (!_rtsCanPlace(side, n.key, n.tx, n.tz)) continue;
+    return n;
+  }
+  return null;
+}
+/* Is_Node: is this building part of the plan? Used to keep _rtsPlaceStruct from adding a
+   second node every time a hole is filled by the building it was a hole for. */
+function _rtsBaseIsNode(e) {
+  if (!e || e.type !== 'struct') return false;
+  var G = window._rtsG, list = (G.base && G.base[e.side]) || [];
+  for (var i = 0; i < list.length; i++)
+    if (list[i].key === e.def && list[i].tx === e.tx && list[i].tz === e.tz) return true;
+  return false;
+}
+/* Selling is a decision NOT to have the building - the AI sells for cash or to shed power
+   load. Leaving the node behind would make it a hole, the AI would rebuild it, and the pair
+   would oscillate forever. Destruction leaves the node; a sale removes it. */
+function _rtsBaseDropNode(e) {
+  var G = window._rtsG;
+  if (!G.base || !G.base[e.side]) return;
+  var list = G.base[e.side];
+  for (var i = 0; i < list.length; i++)
+    if (list[i].key === e.def && list[i].tx === e.tx && list[i].tz === e.tz) { list.splice(i, 1); return; }
+}
+
 function _rtsNewGame(seed, diff) {
   var G = {
     t:0, seed:seed || 12345, over:null, msg:null, msgT:0, shake:0,
@@ -514,6 +588,8 @@ function _rtsNewGame(seed, diff) {
     blocked:new Uint8Array(RTS_N * RTS_N),
     terrain:new Uint8Array(RTS_N * RTS_N),  /* RTS_T_* - what the ground IS, for the renderer */
     scorch:new Uint8Array(RTS_N * RTS_N),   /* 0 none, 1-6 scorch variant, +8 bit = crater */
+    /* BASE.CPP's node list, per side: the ordered (type, cell) plan a base is rebuilt against */
+    base:{ player:[], enemy:[] },
     corpses:[],                             /* {x,z,v} the renderer has yet to stamp */
     newScorch:[],                           /* cells the renderer has yet to stamp */
     scrap:new Float32Array(RTS_N * RTS_N),
@@ -744,6 +820,10 @@ function _rtsPlaceStruct(side, key, tx, tz, instant) {
      has to be built delivers it in _rtsUpdateStruct when construction finishes - granting
      it in both places gave every constructed refinery two harvesters for the price of one. */
   if (instant) _rtsGrandOpening(e);
+  /* Every structure placed becomes a node in its side's blueprint, unless it is filling a hole
+     that is already one. Recording it here rather than at each call site is what keeps the
+     invariant simple: a node exists for every building that has ever stood, until it is sold. */
+  if (!_rtsBaseIsNode(e)) _rtsBaseAdd(side, key, tx, tz);
   return e;
 }
 /* BUILDING.CPP Find_Exit_Cell(): a new unit does not appear inside the building, it walks
@@ -815,6 +895,7 @@ function _rtsKill(e) {
   if (e.type === 'struct' && e.selling) {
     /* Sold, not destroyed: a puff of dust where it stood, and no fireworks. */
     G.fx.push({ kind:'pop', x:e.x, y:1, z:e.z, t:0, big:1.6 });
+    _rtsBaseDropNode(e);          /* a sale is a decision not to have it - see _rtsBaseDropNode */
   }
   else if (e.type === 'struct') {
     var sd = rtsStructDef(e.def);
@@ -2165,6 +2246,11 @@ function _rtsAIWeakZone() {
    the ore is the single most common way a build-order AI wastes its money. */
 function _rtsAIPlace(key) {
   var G = window._rtsG, i, e, aim = null;
+  /* Next_Buildable first. If the plan has a fillable hole of this type, the building goes back
+     into it - that is the whole point of the node list, and it comes before any of the aiming
+     below because the plan already decided where this one belongs. */
+  var node = _rtsNextBuildable('enemy', key);
+  if (node) { _rtsPlaceStruct('enemy', key, node.tx, node.tz, false); return true; }
   if (key === 'refinery') aim = _rtsAIOreSpot();
   else if (key === 'turret') aim = _rtsAIWeakZone();
   var anchors = [];
@@ -2191,6 +2277,8 @@ function _rtsAIPlace(key) {
         if (s < bs) { bs = s; best = [tx, tz]; }
       }
     }
+    /* Anything placed outside the plan becomes part of it (in _rtsPlaceStruct), so the next
+       raid is repaired against the base as it actually stands, not just the opening layout. */
     if (best) { _rtsPlaceStruct('enemy', key, best[0], best[1], false); return true; }
   }
   return false;
