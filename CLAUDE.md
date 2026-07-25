@@ -643,6 +643,72 @@ Commitment lands at 47% rather than the 62% asked for, and that is a real constr
 than a bug: a team only recruits units matching its composition, so a tank-heavy army cannot
 fill the rocket slots in Sappers. Raising it further means changing the compositions.
 
+## The base blueprint — from BASE.CPP
+
+A base in the originals is not "n refineries and m turrets somewhere near the yard". It is an
+**ordered list of nodes**, each one a `(building type, cell)` pair. `Get_Building` looks at the
+node's cell and returns the building only if a building **of that type** is standing **exactly
+there**; `Is_Built` is that as a bool; `Next_Buildable` walks the list in order and hands back
+the first *hole*, optionally filtered to a type. Order is priority, and the cell is part of the
+plan rather than something to work out later.
+
+The consequence that matters is **rebuilding**. Destroy an enemy refinery and its node becomes
+a hole; the next refinery the AI builds goes back into that hole — the cell it was lost from.
+The base repairs to its plan instead of being reshaped by whatever you happened to kill.
+
+**The adaptation.** RA reads its nodes from the scenario INI, where a designer placed them.
+There are no scenario files here, so the blueprint is **seeded** from the opening layout
+`_rtsLayBase` produces and **grown** by recording every position the AI scan-places into. The
+recording happens in `_rtsPlaceStruct`, not at the call sites, which keeps the invariant simple:
+*a node exists for every structure that has ever stood, until it is sold.*
+
+**Selling drops the node; destruction keeps it.** The AI sells buildings for cash and to shed
+power load. If a sale left a hole the AI would rebuild it and the pair would oscillate forever.
+Destruction is something done to you; a sale is a decision not to have the building.
+
+**One addition to `Next_Buildable`: it skips a hole whose cell can no longer be built on.** RA
+checks placement separately. Doing it inside the walk matters here because only the *first* hole
+is returned — one permanently blocked node (the player built over it, ore crept in) would shadow
+every later hole of the same type and the plan would stop repairing itself from that point on.
+
+### What it changed, measured
+
+Same raid on both trees: run to four minutes on hard, raze the half of the enemy base nearest
+the player's start, run three minutes more. Five seeds.
+
+|                                  | before | after |
+| -------------------------------- | ------ | ----- |
+| razed buildings back in their own cell | 0.8 / 10.8 | **8.6 / 10.8** |
+| structures three minutes later   | 19.8   | 20.2  |
+| turrets                          | 7.8    | 8.0   |
+| mean turret distance from the yard | 9.5  | **8.4** |
+| furthest structure from the yard | 14.5   | **12.8** |
+| harvesters                       | 7.8    | 7.8   |
+| idle credits                     | 15,440 | **11,545** |
+
+So the base repairs to plan, stays tighter, and is no weaker for it — same harvesters, slightly
+more structures and turrets, and a quarter less money sitting idle because placement fails less
+often. Seed 9002 contributes 0/6 to that first row and is not a blueprint failure: that raid
+broke the AI outright (5 structures left, 243 credits) and it never rebuilt anything at all.
+Excluding it the rate is 43/45.
+
+**This was invisible to the ladder, and that is correct.** easy 293s / normal 218s / hard 176s,
+seed for seed, byte-identical before and after. The idle player the ladder simulates never
+attacks the enemy base, so the rebuild path never runs. A change that only fires when the player
+fights back needs a harness where the player fights back — `raid.js`, not `ladder3.js`.
+
+**The sprawl this fixed has a named cause.** `_rtsAIWeakZone` aims each new turret at
+`centre + radius × 2`. Placing a turret far out raises the base radius, which places the next one
+further out again — a feedback loop that had the enemy base reaching 26 tiles from its yard by
+minute seven on seed 9003. Filling holes instead of scanning outward breaks the loop.
+
+Verified: 24 assertions in `basenode.js` — the opening layout being the blueprint, `Get_Building`
+requiring type *and* cell *and* side, holes appearing on death at the exact cell, the type filter,
+no duplicate node when a hole is refilled, exactly one node appended per new building, sell-drops
+vs destroy-keeps, a blocked hole not shadowing a later one, and end to end: after four minutes of
+real play every structure the AI built is a node with no duplicates, and three razed turrets all
+come back in their own cells.
+
 ## Selecting things — from DISPLAY.CPP
 
 Before this the whole selection vocabulary was: click, rubber band, control groups. That is
