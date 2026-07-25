@@ -290,6 +290,11 @@ var RTS_ALERT_DELAY = 25;       /* Rule.SpeakDelay: cooldown on "base under atta
 var RTS_DAMAGE_DELAY = 20;      /* seconds between brownout damage ticks */
 var RTS_POWER_DAMAGE = 6;       /* hit points per tick, on buildings above ConditionYellow */
 
+/* Cap on how many producing buildings the opponent may parallelise; see _rtsLines. Two is
+   its own structure limit for both factories and barracks, so this is a ceiling rather than a
+   constraint today - it exists so raising RTS_AI.limit cannot silently uncap production. */
+var RTS_AI_MAX_LINES = 2;
+
 var RTS_AI = {
   baseSizeAdd:3,
   powerSurplus:50,          /* keep this much spare power in hand */

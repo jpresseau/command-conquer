@@ -604,6 +604,43 @@ measured at 600 posts in 10 seconds, with an unrelated message not surviving a s
 The text action now refuses to repeat inside the window, and refuses by *returning false*, so
 the `if (ok)` gate leaves the trigger armed rather than counting a firing that did nothing.
 
+## The opponent's production ceiling
+
+**MINE, not a port, and a fix for a measured defect.** By five minutes on hard the opponent
+had **28,576 credits it could not spend**. The cause is two things meeting:
+
+- `_rtsAIWants` returns **null** once every structure type is at its hard `RTS_AI.limit`
+  (refinery 4, barracks 2, factory 2, turret 12). The structure line then idles 47% of the
+  time. Note the base-size target is NOT what binds — the limit table is. Confirm this by
+  calling `_rtsAIWants` directly rather than reading the code; an earlier diagnosis here got
+  it wrong and proposed flooring the base size, which would have changed nothing.
+- Unit lines were already at **0% idle**. One queue per category caps spending at roughly one
+  tank plus one rifle squad at a time, whatever the income.
+
+So the opponent built a second war factory and a second barracks and got **nothing** for them.
+
+`_rtsLines` scales the build RATE by the number of producing buildings, for the AI only — the
+player keeps one line per category, because that is what the classic sidebar is. Cost scales
+with rate, so the money is genuinely spent rather than conjured. In RA a `FactoryClass` belongs
+to a BUILDING, so a house with two war factories really does build two things at once; this is
+that idea without disturbing the single-queue model the sidebar depends on.
+
+Measured: credits at five minutes **28,576 → 1,104**, units **116 → 175**, unit lines now idle
+12–13%. Ladder easy=306s (byte-identical) normal=220s (unchanged) hard=187s (from 176s).
+
+Three things worth knowing about this change:
+
+- **It self-gates by difficulty.** `easy` is bit-for-bit unchanged because it sits below
+  `RTS_IQ.production` and never builds the second factory the fix rewards.
+- **It is a PARTIAL fix.** The credits become units, but those units garrison rather than
+  attack — enemy units still alive when the player falls went from ~68 to ~112. The remaining
+  bottleneck is team commitment, not production.
+- **Hard's mean moved on one seed.** Four of five hard seeds land within a few seconds of
+  before; seed 9004 swung 167→224. With a deterministic sim that is not noise, it is genuine
+  divergence from altered timing — worth remembering that a single seed can carry a mean.
+
+Perf at the higher unit count: 202 live entities, 2.45 ms per sim tick, 6.8x headroom at 60fps.
+
 ## Measuring balance: the RNG is not seeded — pin it
 
 **The difficulty ladder is far noisier than it looks, and this invalidates any A/B run on a
