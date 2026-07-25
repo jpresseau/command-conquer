@@ -27,33 +27,33 @@ function _rtsRInit(cv) {
   _rtsR = {
     cv: cv, g: g, W: W, H: H, dpr: dpr,
     focus: { x: _rtsWX(21), z: _rtsWX(87) },
-    cell: 40,                    /* screen pixels per map cell; always an integer */
+    zi: RTS_ZOOM_DEF,            /* index into RTS_ZOOMS */
+    cell: RTS_ZOOMS[RTS_ZOOM_DEF],
     dist: 0,                     /* derived: world height visible, kept for the UI + minimap */
     spr: _rtsSprites(),
     ghost: null, ghostKey: null,
-    tmap: null
+    terrain: null
   };
-  _rtsBuildTerrainMap();
+  _rtsR.terrain = _rtsBakeTerrain(window._rtsG);
   _rtsApplyCam();
   return _rtsR;
 }
 
-/* Which terrain sprite each cell uses. Fixed per map so the ground does not shimmer. */
-function _rtsBuildTerrainMap() {
-  var R = _rtsR, G = window._rtsG, n = RTS_N * RTS_N;
-  var m = new Uint8Array(n), s = (G.seed || 1) >>> 0;
-  for (var i = 0; i < n; i++) {
-    s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0;
-    m[i] = (s % 100) < 82 ? (s % 4) : 4 + (s % 2);      /* mostly grass, some dirt */
-  }
-  R.tmap = m;
-}
-
 function _rtsZoom() { return _rtsR.cell / RTS_TILE; }          /* screen px per world unit */
+/* Zoom is not a free number. The art is 24 px per cell, so a screen cell of anything but
+   24, its double or its half resamples every sprite by a fraction and the whole picture
+   goes soft - which is exactly how the first pass looked. */
 function _rtsApplyCam() {
   var R = _rtsR;
-  R.cell = Math.max(16, Math.min(88, Math.round(R.cell)));
+  R.zi = Math.max(0, Math.min(RTS_ZOOMS.length - 1, R.zi | 0));
+  R.cell = RTS_ZOOMS[R.zi];
   R.dist = R.H / _rtsZoom();
+}
+function _rtsZoomStep(dir) {
+  var R = _rtsR;
+  if (!R) return;
+  R.zi = Math.max(0, Math.min(RTS_ZOOMS.length - 1, R.zi + (dir > 0 ? 1 : -1)));
+  _rtsApplyCam();
 }
 function _rtsViewSpan() {
   var R = _rtsR, z = _rtsZoom();
@@ -99,19 +99,26 @@ function _rtsRFrame(dt) {
   var tz0 = Math.max(0, _rtsTX(R.focus.z - R.H / 2 / z) - 2);
   var tz1 = Math.min(RTS_N - 1, _rtsTX(R.focus.z + R.H / 2 / z) + 2);
 
-  /* --- terrain, ore, rock --- */
+  /* --- terrain: one blit of the baked map, plus ore on top ---
+     The ground is a single pre-painted canvas, so the visible window is one drawImage
+     rather than a couple of thousand tile blits - and, more to the point, its dirt
+     patches are continuous noise instead of per-cell stamps, so there is no grid. */
+  var srcX = (R.focus.x / RTS_TILE + RTS_N / 2) * RTS_TS - (R.W / 2) / TSscale;
+  var srcY = (R.focus.z / RTS_TILE + RTS_N / 2) * RTS_TS - (R.H / 2) / TSscale;
+  g.drawImage(R.terrain,
+    srcX, srcY, R.W / TSscale, R.H / TSscale,
+    0, 0, R.W, R.H);
+
   for (var tz = tz0; tz <= tz1; tz++) {
     for (var tx = tx0; tx <= tx1; tx++) {
       var idx = _rtsIdx(tx, tz);
+      var ore = G.scrap[idx];
+      if (ore <= 0) continue;
       var px = Math.round(_rtsSX(_rtsWX(tx) - RTS_TILE / 2));
       var py = Math.round(_rtsSY(_rtsWX(tz) - RTS_TILE / 2));
-      g.drawImage(S.terrain[R.tmap[idx]], px, py, cell, cell);
-      var ore = G.scrap[idx];
-      if (ore > 0) {
-        var stage = Math.min(3, Math.floor(ore / RTS_SCRAP_TILE * 4));
-        g.drawImage(S.ore[stage], px, py, cell, cell);
-      }
-      if (G.blocked[idx] === 2) g.drawImage(S.rock, px, py, cell, cell);
+      var stage = Math.min(3, Math.floor(ore / RTS_SCRAP_TILE * 4));
+      var vari = (tx * 7 + tz * 13) % 3;
+      g.drawImage(S.ore[stage][vari], px, py, cell, cell);
     }
   }
 
@@ -249,7 +256,10 @@ function _rtsRResize(W, H) {
   R.g.imageSmoothingEnabled = false;
   _rtsApplyCam();
 }
-function _rtsRDispose() { _rtsR = null; _RTS_SPR = null; }
+function _rtsRDispose() {
+  if (_rtsR && _rtsR.terrain) { _rtsR.terrain.width = 1; _rtsR.terrain.height = 1; }  /* 2688^2 is ~29 MB */
+  _rtsR = null; _RTS_SPR = null;
+}
 
 /* ------------------------------------------------------------- sidebar icons --
    The sprites already are the artwork, so an icon is just the sprite on a dark plate. */

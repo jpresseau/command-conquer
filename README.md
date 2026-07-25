@@ -2,7 +2,7 @@
 
 A real-time strategy game in the spirit of the mid-90s base-builders. Mine ore with harvesters,
 unload it at a refinery for credits, climb a power-and-prerequisite tech tree, and fight the
-Redline faction across a 72×72 tile battlefield.
+Redline faction across a 112×112 tile battlefield.
 
 **Play it: https://jpresseau.github.io/command-conquer/**
 
@@ -40,10 +40,16 @@ timer. A player who does nothing is overrun in about four and a half minutes.
 
 There are no art or audio assets in this repository, and none are downloaded at runtime:
 
-- **Buildings and units** are procedural three.js geometry, built once per type and faction, then
-  merged per material and cloned — about 13 draw calls for a building with 80 parts.
-- **Sidebar icons** are real 3/4 renders of each model, rasterised at startup onto a throwaway
-  renderer that is disposed immediately.
+- **Every sprite is drawn in code** at 24 pixels per map cell: six structures per faction, five
+  unit types in eight facings each, four ore densities, explosions and muzzle flashes. Hard
+  near-black outlines are traced from the alpha channel, so a building made of overlapping
+  parts still gets one clean line around the whole silhouette.
+- **The battlefield is painted once** into a single 2688×2688 canvas from continuous noise, so
+  dirt patches are organic blobs rather than per-cell tiles — and the ground costs one blit
+  per frame.
+- **Unit facings are rotated by inverse pixel sampling**, not by `ctx.rotate()`, so a tank
+  turned 45° still has square pixels instead of an anti-aliased fringe.
+- **Sidebar icons** are the sprites themselves on a dark plate.
 - **All sound** is synthesized with WebAudio: weapons are shaped noise plus pitch-swept
   oscillators, and the music is a scheduled drum machine with a distorted bass riff and lead
   stabs. Not one sampled file.
@@ -61,13 +67,12 @@ Edit the files under `src/`, run the build, commit the regenerated `index.html`.
 | File | What it owns |
 | --- | --- |
 | `src/rts.rules.js` | **Every balance number.** Retune the game here and nowhere else. |
-| `src/rts.buildings.js` | Structure models, the material palette, the geometry merger |
+| `src/rts.sprites.js` | All artwork: palette, terrain bake, buildings, unit facings, effects |
 | `src/rts.audio.js` | All sound and music |
-| `src/rts.core.js` | Simulation: grid, A\* pathfinding, combat, economy, enemy AI. **No three.js**, so a battle can be stepped headlessly. |
-| `src/rts.render.js` | The scene. Reads the sim, never writes it. |
+| `src/rts.core.js` | Simulation: grid, A\* pathfinding, combat, economy, enemy AI. Renderer-free, so a battle can be stepped headlessly. |
+| `src/rts.render.js` | Canvas 2D. Reads the sim, never writes it. |
 | `src/rts.ui.js` | Sidebar, radar, HUD overlay, input, main loop |
 | `src/index.skeleton.html` | Page shell and title screen |
-| `src/three.min.js` | Vendored three.js r128 (MIT). Replace wholesale to upgrade. |
 
 `build.py` fails the build on three things worth keeping: a syntax error in any source, two files
 defining the same top-level name (everything shares one global scope, so a duplicate silently
@@ -93,4 +98,4 @@ ordered across the map should all arrive.
 Original work. This is **not** affiliated with, and contains no code, art or audio from, any
 existing game. It's an original game in a genre, the way a platformer is not Mario.
 
-Bundled three.js is MIT-licensed, © three.js authors.
+There are no third-party libraries in this repository.

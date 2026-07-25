@@ -268,8 +268,9 @@ function _rtsBindInput() {
   };
   cv.onwheel = function (e) {
     e.preventDefault();
-    /* zoom in whole pixels per cell - fractional scaling would blur the sprites */
-    _rtsR.cell = Math.max(16, Math.min(88, _rtsR.cell + (e.deltaY > 0 ? -8 : 8)));
+    /* Zoom steps between fixed levels. See _rtsApplyCam: anything off RTS_ZOOMS resamples
+       24px-per-cell art by a fraction and softens every sprite on screen. */
+    _rtsZoomStep(e.deltaY > 0 ? -1 : 1);
     _rtsClampFocus();
   };
   var mini = document.getElementById('rtsMini');
@@ -501,7 +502,7 @@ function _rtsPanTick(dt) {
    screen. Derive the limit from what is actually visible at the current zoom. */
 function _rtsClampFocus() {
   var R = _rtsR, span = RTS_N * RTS_TILE, vs = _rtsViewSpan();
-  var lx = Math.max(0, span / 2 - vs.w * 0.42), lz = Math.max(0, span / 2 - vs.h * 0.42);
+  var lx = Math.max(0, span / 2 - vs.w * 0.5), lz = Math.max(0, span / 2 - vs.h * 0.5);
   R.focus.x = Math.max(-lx, Math.min(lx, R.focus.x));
   R.focus.z = Math.max(-lz, Math.min(lz, R.focus.z));
   _rtsApplyCam();

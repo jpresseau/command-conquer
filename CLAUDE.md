@@ -3,8 +3,8 @@
 Guidance for Claude Code (claude.ai/code) working in this repository.
 
 **RC Command** is a browser real-time strategy game, deployed via GitHub Pages from `main`.
-It ships as one generated, fully self-contained `index.html` (~0.7 MB) — no network calls, no
-assets on disk, no dependencies beyond a vendored three.js.
+It ships as one generated, fully self-contained `index.html` (~0.13 MB) — no network calls, no
+asset files, and **no libraries at all**. Every pixel and every sound is generated in code.
 
 ## Build — READ FIRST
 
@@ -21,32 +21,46 @@ each one is there because the matching bug already shipped once.
 ## Layout
 
 - `src/rts.rules.js` — **every balance number**, data only. Retune here.
-- `src/rts.buildings.js` — structure models, material palette, per-material geometry merger.
+- `src/rts.sprites.js` — **all artwork**: palette, terrain bake, buildings, unit facings, effects.
 - `src/rts.audio.js` — all sound, synthesized at runtime with WebAudio. No sampled assets.
 - `src/rts.core.js` — simulation: grid, A* pathfinding, combat, economy, enemy AI. Deliberately
-  contains **no THREE.js**, so a whole battle can be stepped headlessly.
-- `src/rts.render.js` — the scene. Reads the sim, never writes it.
+  renderer-free, so a whole battle can be stepped headlessly. Swapping the 3D renderer for the
+  2D one cost this file zero lines.
+- `src/rts.render.js` — canvas 2D. Reads the sim, never writes it.
 - `src/rts.ui.js` — sidebar, radar, HUD overlay canvas, input, main loop.
 - `src/index.skeleton.html` — page shell + title screen; `src/style.css`.
-- `src/three.min.js` — vendored three.js **r128**. Note the age: no `CapsuleGeometry`, no
-  `BufferGeometryUtils` in core, `outputEncoding`/`sRGBEncoding` rather than `outputColorSpace`.
 
 ## Presentation rules — these are load-bearing
 
-- **Orthographic, near-top-down camera** (`RTS_CAM_TILT`, `_rtsApplyCam`). No perspective
-  divergence; the battlefield reads as a map. `R.dist` is the world height visible on screen and
-  the frustum derives from it; `_rtsClampFocus` keeps the view on the map via `_rtsViewSpan()`.
-- **Pick colours dark.** Sun + hemi light multiply roughly 1.5× before ACES tone-mapping, so a
-  mid grey renders near-white and a saturated team colour washes out to pastel. The palette in
-  `_rtsPal()` is chosen to land correctly *after* the tone-map — an early pass rendered as a row
-  of white blocks for exactly this reason. Faceted roofs need `flat: true`, or a 3-sided prism
-  shades like a barrel.
-- **Roofs carry the detail.** The camera looks down at ~45°, so vents, catwalks, skylights,
-  markings and team panels on top are most of what the player actually sees.
-- **Ore is flat gold patches on the ground**, not standing crystals, overlapping at full density
-  so a rich field reads as continuous terrain.
-- **Sidebar is icon tiles with a clock-wipe**, not a text list. Icons are 3/4 renders generated
-  once by `_rtsMakeIcons` on a throwaway renderer that is disposed straight after.
+Art is authored at **`RTS_TS` = 24 pixels per map cell**. The four rules below are the ones that
+separate "looks like the game" from "looks like a web demo", and each is written down because
+breaking it shipped once.
+
+- **Never scale by a fraction.** Screen cells come from `RTS_ZOOMS` = 12/24/48 only — half, one
+  and two art-pixels per screen pixel. A build that drew 24px art at 40px cells resampled every
+  sprite by 1.667× and the whole picture went soft, with pixels of two different sizes side by
+  side. `_rtsApplyCam` enforces this; do not reintroduce a free-running `cell`.
+- **Never rotate the canvas.** `ctx.rotate()` + `fillRect` anti-aliases every diagonal. Unit
+  facings are built by `_sprRot`, which walks destination pixels and inverse-rotates each into
+  the unit's local frame, so a tank at 45° keeps hard square pixels.
+- **Terrain is one baked canvas, not per-cell tiles.** `_rtsBakeTerrain` paints the whole
+  112×112 map at art resolution using continuous fbm noise. Tiling six random 24px tiles per
+  cell is what produced a checkerboard of axis-aligned brown squares: every patch was exactly
+  one cell and the seams lined up into a visible grid. As a bonus the ground is now one
+  `drawImage` per frame instead of ~2000.
+- **Silhouette over surface.** Each structure must be nameable from across the map: the yard has
+  a crane gantry, the power plant two stacks, the refinery silos and a dock, the barracks the
+  only pitched roof, the factory a ribbed shed. A pass where all six were the same grey
+  rectangle with a coloured stripe was unreadable at a glance.
+
+Also load-bearing: units need **internal contrast** — hull, turret and tracks each a full tone
+apart, or the unit reads as a solid brick. Ore is flat gold on the ground, stained at high
+density and wrapped across cell edges so a field looks continuous rather than stamped.
+
+Beware `_sprHash`: every multiply must be `Math.imul`. A plain `a * b` on two 32-bit ints
+exceeds 2^53, the low bits come back as garbage, and the failure is silent — the first version
+produced a terrain bake containing no dirt whatsoever because the "random" grade never crossed
+its threshold.
 
 ## Verifying
 
@@ -62,5 +76,10 @@ Serve the repo root, load `/`, click `#rtsGo`. Since `rts.core.js` is renderer-f
 balance changes: a passive player is overrun in a few minutes, a player who masses forces can
 destroy the enemy base, and 40 units ordered across the map all arrive.
 
-For audio, do not trust "no errors" — tap an `AnalyserNode` on `_rtsA.master` and measure RMS.
-A silent-but-not-throwing music bug shipped once precisely because nothing was logged.
+**"No errors" is not verification.** Three separate bugs here threw nothing at all: buildings
+rendering pure black, music that was silent, and a START BATTLE button that did nothing. Measure
+the output instead.
+
+- Audio: tap an `AnalyserNode` on `_rtsA.master` and read RMS.
+- Art: dump the sprites onto a sheet at 6–9× and look at them, and sample the baked terrain's
+  pixel histogram — a palette entry at 0% means that material is not being generated.
