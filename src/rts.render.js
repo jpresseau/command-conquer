@@ -92,7 +92,7 @@ function _rtsPickAt(mx, my) {
 
    With no indexed palette to rotate, the same numbers drive an overlay cycle instead. The
    cadences are the originals' because they are what the eye recognises. */
-var _RTS_PULSE = { val: 0x20, up: true, t: 0, wt: 0, wf: 0 };
+var _RTS_PULSE = { val: 0x20, up: true, t: 0, wt: 0, wf: 0, at: 0, frame: 0 };
 function _rtsCycleTick(dt) {
   var P = _RTS_PULSE;
   P.t += dt;
@@ -104,7 +104,16 @@ function _rtsCycleTick(dt) {
   }
   P.wt += dt;
   while (P.wt >= 1 / 4) { P.wt -= 1 / 4; P.wf = (P.wf + 1) & 3; }
+  /* Sync_Delay() pins the original to 15 FPS, and that cadence is a big part of how its
+     animation reads - chunky rather than smooth. Movement here stays continuous (it would
+     look broken at 15 Hz on a modern display), but everything that picks an animation FRAME
+     advances off this counter instead of off wall-clock time. */
+  P.at += dt;
+  while (P.at >= 1 / 15) { P.at -= 1 / 15; P.frame++; }
 }
+function _rtsAnimFrame() { return _RTS_PULSE.frame; }
+/* Time quantised to the 15 Hz grid, for anything choosing a frame from an elapsed timer. */
+function _rtsAnimQ(t) { return Math.floor(t * 15) / 15; }
 function _rtsPulse() { return _RTS_PULSE.val / 255; }        /* 0.125 .. 0.588 */
 function _rtsEmber() {
   var k = _rtsPulse();
@@ -208,7 +217,7 @@ function _rtsRFrame(dt) {
 
   /* --- explosions, tracers, muzzle flashes --- */
   for (i = 0; i < G.fx.length; i++) {
-    var f = G.fx[i], k = f.t / 0.75;
+    var f = G.fx[i], k = _rtsAnimQ(f.t) / 0.75;
     if (f.t < 0) continue;                       /* a delayed secondary blast, not started */
     if (f.kind === 'debris') {
       /* Chunks thrown clear of a dying structure. Height projects upward the same way the
@@ -278,7 +287,7 @@ function _rtsDrawStruct(g, e, TSscale, cell) {
     for (var q = 1; q <= 4; q++) {                                /* dissolving stipple */
       var by = edge - q * band;
       if (by < top) break;
-      if (((q + ((e.bprog * 30) | 0)) & 1) === 0) continue;
+      if (((q + _rtsAnimFrame()) & 1) === 0) continue;
       g.save();
       g.beginPath(); g.rect(px, by, w, band); g.clip();
       g.globalAlpha = 0.85 - q * 0.18;
@@ -337,7 +346,7 @@ function _rtsDrawUnit(g, e, TSscale) {
    activity phase are kept here, keyed by entity id, so the simulation stays renderer-free. */
 function _rtsStructAnim(id) {
   var A = _rtsR.anim || (_rtsR.anim = {});
-  return A[id] || (A[id] = { door: 0, phase: 0 });
+  return A[id] || (A[id] = { door: 0, phase: 0, df: -1 });
 }
 function _rtsDrawStructAnim(g, e, def, px, top, w, h, cell) {
   var G = window._rtsG, S = G.sides[e.side], a = _rtsStructAnim(e.id);
@@ -346,7 +355,11 @@ function _rtsDrawStructAnim(g, e, def, px, top, w, h, cell) {
   if (def.produces === 'vehicle') {
     /* Open while a vehicle is on the line, shut otherwise. 18 stages, wide open at 9. */
     var want = (S.q && S.q.vehicle) ? 9 : 0;
-    a.door += Math.max(-0.35, Math.min(0.35, want - a.door)) * 0.5;
+    /* One stage per animation frame: MAX_DOOR_STAGE 18 at 15 FPS is the original's timing. */
+    if (a.df !== _rtsAnimFrame()) {
+      a.df = _rtsAnimFrame();
+      a.door += Math.max(-1, Math.min(1, want - a.door));
+    }
     var open = Math.max(0, Math.min(1, a.door / 9));
     if (open > 0.01) {
       var dw = Math.round(30 * u), dh = Math.round(13 * u * open);
@@ -379,8 +392,7 @@ function _rtsDrawStructAnim(g, e, def, px, top, w, h, cell) {
   if (e.def === 'refinery' || e.def === 'power') {
     /* A working structure blinks. Cheap, but it is the difference between a base that is
        running and a row of ornaments. */
-    a.phase += 0.06;
-    var lit = (Math.sin(a.phase) > 0.2);
+    var lit = (((_rtsAnimFrame() + e.id) % 14) < 6);
     if (lit) {
       var r = Math.max(1, Math.round(u * 2));
       g.fillStyle = e.def === 'refinery' ? '#ffd070' : '#8fe8a8';
@@ -388,6 +400,45 @@ function _rtsDrawStructAnim(g, e, def, px, top, w, h, cell) {
       g.fillRect(px + Math.round(w * 0.74), top + Math.round(h * 0.30), r, r);
     }
   }
+}
+
+/* ------------------------------------------------------------ radar icons --
+   CONQUER.CPP's Get_Radar_Icon builds a radar blip by DOWNSAMPLING THE REAL SHAPE - three
+   samples per map cell, each taking the first non-transparent pixel found across a nine-tap
+   offset kernel, so a thin feature does not drop out between samples. That is why structures
+   are recognisable on the original's radar instead of being coloured blocks, which is what
+   these were.
+
+   Built once per structure type on first use. */
+var _RTS_RICON = null;
+function _rtsRadarIcon(key, side) {
+  if (!_RTS_RICON) _RTS_RICON = {};
+  var ck = key + ':' + side;
+  if (_RTS_RICON[ck]) return _RTS_RICON[ck];
+  var OFFX = [0, 0, -1, 1, 0, -1, 1, -1, 1], OFFY = [0, 0, -1, 1, 0, -1, 1, -1, 1];
+  var def = rtsStructDef(key), spr = _rtsSprites().bld[side][key];
+  var Z = 3, W = def.w * Z, H = def.h * Z;
+  var src = spr.c.getContext('2d').getImageData(0, 0, spr.c.width, spr.c.height).data;
+  var sw = spr.c.width;
+  var t = _sprMake(W, H), g = t.g;
+  for (var iy = 0; iy < H; iy++) {
+    for (var ix = 0; ix < W; ix++) {
+      /* Sample the footprint only - the headroom above it belongs to no tile. */
+      var bx = Math.round((ix + 0.5) * RTS_TS / Z);
+      var by = spr.head + Math.round((iy + 0.5) * RTS_TS / Z);
+      for (var n = 0; n < 9; n++) {
+        var qx = bx - OFFX[n], qy = by - OFFY[n];
+        if (qx < 0 || qy < 0 || qx >= sw) continue;
+        var o = (qy * sw + qx) * 4;
+        if (src[o + 3] < 128) continue;
+        g.fillStyle = 'rgb(' + src[o] + ',' + src[o + 1] + ',' + src[o + 2] + ')';
+        g.fillRect(ix, iy, 1, 1);
+        break;
+      }
+    }
+  }
+  _RTS_RICON[ck] = t.c;
+  return t.c;
 }
 
 /* ------------------------------------------------------------ placement ghost */

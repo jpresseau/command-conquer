@@ -412,11 +412,12 @@ function _rtsSpawnAt(side, key, src) {
   return open ? _rtsSpawnUnit(side, key, _rtsWX(open[0]), _rtsWX(open[1])) : null;
 }
 function _rtsSpawnUnit(side, key, x, z) {
+  /* team: Handle_Team's Group. -1 = unassigned. */
   var G = window._rtsG, d = rtsUnitDef(key);
   if (!d) return null;
   var e = { id:G.nextId++, type:'unit', side:side, def:key, x:x, z:z, rot:side === 'player' ? 0 : Math.PI,
     hp:d.hp, maxHp:d.hp, r:d.r, cool:0, path:null, pi:0, order:null, target:null,
-    carry:0, hstate:null, htile:null, dead:false, mesh:null, turret:0, fire:0 };
+    carry:0, hstate:null, htile:null, dead:false, mesh:null, turret:0, fire:0, team:-1 };
   G.ents.push(e); G.byId[e.id] = e;
   return e;
 }

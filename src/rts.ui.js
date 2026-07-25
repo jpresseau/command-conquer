@@ -20,7 +20,7 @@ function rtsOpen(seed) {
     +   '<canvas id="rtsHud"></canvas>'
     +   '<div class="rts-top"><span class="rts-title">RC COMMAND</span>'
     +     '<span class="rts-vs"><b class="p">Vanguard</b> vs <b class="e">Redline</b></span>'
-    +     '<span class="rts-help">drag select · right-click order · WASD/edge pan · wheel zoom · Esc quit</span>'
+    +     '<span class="rts-help">drag select · right-click order · 1-9 teams (ctrl set, alt jump) · WASD pan · wheel zoom · Esc</span>'
     +     '<button type="button" class="rts-mute" id="rtsMute" title="Sound on" onclick="rtsMuteToggle()">🔊</button>'
     +     '<button type="button" class="rts-x" onclick="rtsClose()">✕</button></div>'
     +   '<div class="rts-msg" id="rtsMsg"></div>'
@@ -74,6 +74,7 @@ function rtsClose() {
   window.removeEventListener('resize', _rtsOnResize);
   if (typeof _rtsMusicStop === 'function') _rtsMusicStop();
   _rtsRDispose();
+  if (typeof _RTS_RICON !== 'undefined') _RTS_RICON = null;
   window._rtsUI = null; window._rtsG = null;
   if (d.parentNode) d.parentNode.removeChild(d);
   /* standalone build: quitting a battle returns to the title screen rather than a blank page */
@@ -301,6 +302,47 @@ function _rtsKeyDown(e) {
     e.preventDefault();
   }
   if (k === 'a' || k === 'A') U.attackMove = true;
+
+  /* Team hotkeys, per CONQUER.CPP's Handle_Team. The four modifier cases are the
+     originals': plain selects, shift adds to the selection, ctrl assigns the current
+     selection to the team, alt selects and centres the view on it. */
+  if (k >= '0' && k <= '9') {
+    var team = (k === '0') ? 9 : (k.charCodeAt(0) - 49);
+    var action = e.shiftKey ? 1 : (e.ctrlKey || e.metaKey ? 2 : (e.altKey ? 3 : 0));
+    _rtsHandleTeam(team, action);
+    e.preventDefault();
+  }
+}
+
+/* action: 0 select · 1 add to selection · 2 assign selection to team · 3 select and centre */
+function _rtsHandleTeam(team, action) {
+  var G = window._rtsG, i, e, n = 0;
+  if (action === 2) {
+    for (i = 0; i < G.ents.length; i++) {
+      e = G.ents[i];
+      if (e.type !== 'unit' || e.side !== 'player' || e.dead) continue;
+      if (e.team === team) e.team = -1;                    /* clear the old membership */
+      if (G.sel.indexOf(e) >= 0) { e.team = team; n++; }
+    }
+    if (n) _rtsSay('Team ' + ((team + 1) % 10) + ': ' + n + ' unit' + (n === 1 ? '' : 's') + '.');
+    else _rtsSay('Nothing selected to assign.');
+    if (typeof _rtsSfx === 'function') _rtsSfx(n ? 'click' : 'deny');
+    return;
+  }
+  if (action !== 1) G.sel.length = 0;
+  var sx = 0, sz = 0;
+  for (i = 0; i < G.ents.length; i++) {
+    e = G.ents[i];
+    if (e.type !== 'unit' || e.side !== 'player' || e.dead || e.team !== team) continue;
+    if (G.sel.indexOf(e) < 0) G.sel.push(e);
+    sx += e.x; sz += e.z; n++;
+  }
+  if (!n) return;
+  if (action === 3) {                                       /* alt: centre on the team */
+    _rtsR.focus.x = sx / n; _rtsR.focus.z = sz / n;
+    _rtsClampFocus();
+  }
+  if (typeof _rtsSfx === 'function') _rtsSfx('click');
 }
 function _rtsKeyUp(e) {
   var U = window._rtsUI;
@@ -474,7 +516,9 @@ function _rtsDrawMini() {
     g.fillStyle = e.side === 'player' ? '#5ea8ff' : '#ff6a52';
     if (e.type === 'struct') {
       var d = rtsStructDef(e.def);
-      g.fillRect(e.tx * sc, e.tz * sc, d.w * sc, d.h * sc);
+      var ico = (typeof _rtsRadarIcon === 'function') ? _rtsRadarIcon(e.def, e.side) : null;
+      if (ico) g.drawImage(ico, e.tx * sc, e.tz * sc, d.w * sc, d.h * sc);
+      else g.fillRect(e.tx * sc, e.tz * sc, d.w * sc, d.h * sc);
     } else {
       var mx = (e.x / RTS_TILE + RTS_N / 2) * sc, mz = (e.z / RTS_TILE + RTS_N / 2) * sc;
       g.fillRect(mx - 1.5, mz - 1.5, 3, 3);

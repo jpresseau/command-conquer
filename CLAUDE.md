@@ -126,6 +126,20 @@ exactly in `_rtsCycleTick` because the cadences are what the eye recognises:
   each tick. Here it is a transform offset driven by `G.shake`, which a dying structure sets
   — shake is simulation state in the original too (`TimeQuake`), so it lives in the core.
 
+## More from CONQUER.CPP
+
+- **`Sync_Delay()` pins the original to 15 FPS**, and that cadence is a lot of how its
+  animation reads. Movement here stays continuous — it looks broken at 15 Hz on a modern
+  display — but everything choosing an animation FRAME runs off `_rtsAnimFrame()`, a 15 Hz
+  counter. Use `_rtsAnimQ(t)` to quantise an elapsed timer to the same grid.
+- **`Get_Radar_Icon()`** builds a radar blip by downsampling the real shape: three samples
+  per cell, each taking the first non-transparent pixel across a nine-tap offset kernel so
+  thin features don't drop out between samples. `_rtsRadarIcon` does the same, which is why
+  structures are recognisable on the radar rather than coloured blocks.
+- **`Handle_Team()`** — number keys with the original's four modifier cases: plain selects,
+  shift adds, ctrl assigns the selection, alt selects and centres. Unit `team` is
+  Handle_Team's `Group`.
+
 ## Structures animate
 
 Taken from `BUILDING.H` in the GPL Red Alert source, which is a game-logic header but says
