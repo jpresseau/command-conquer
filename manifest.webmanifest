@@ -1,0 +1,15 @@
+{
+  "name": "RC Command",
+  "short_name": "RC Command",
+  "description": "A real-time strategy game — mine Scrap, build a base, and take on the Redline faction.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#0d1117",
+  "theme_color": "#10141a",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

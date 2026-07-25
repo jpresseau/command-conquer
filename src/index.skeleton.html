@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>RC Command</title>
+<meta name="description" content="RC Command — a real-time strategy game. Mine Scrap, build a base, and take on the Redline faction.">
+<meta name="theme-color" content="#10141a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>/*@@CSS:style.css@@*/</style>
+<style>
+/* --- standalone shell: the title screen this app boots into --- */
+html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
+#rtsHome{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:22px;padding:24px;box-sizing:border-box;overflow:auto;
+  background:radial-gradient(ellipse at 50% 35%,#1d2a3a 0%,#111722 55%,#0b0f16 100%);
+  font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#dfe8f2;text-align:center}
+#rtsHome.gone{display:none}
+#rtsHome h1{margin:0;font-size:clamp(34px,7vw,62px);font-weight:800;letter-spacing:clamp(6px,2vw,14px);
+  color:#ffcf6a;text-shadow:0 0 34px rgba(255,207,106,.28)}
+#rtsHome .sub{margin:-12px 0 0;font-size:clamp(12px,2.2vw,15px);letter-spacing:3px;opacity:.62;text-transform:uppercase}
+#rtsHome .vs{font-size:15px;opacity:.9}
+#rtsHome .vs b.p{color:#6fb0ff}
+#rtsHome .vs b.e{color:#ff8571}
+#rtsHome .go{padding:14px 46px;border:0;border-radius:8px;background:#2e6fd0;color:#fff;font-size:17px;font-weight:700;
+  letter-spacing:1.5px;cursor:pointer;box-shadow:0 10px 34px rgba(46,111,208,.36);transition:transform .12s,background .12s}
+#rtsHome .go:hover{background:#3d84ee;transform:translateY(-1px)}
+#rtsHome .go:disabled{background:#3a4658;box-shadow:none;cursor:progress;transform:none}
+#rtsHome .keys{display:grid;grid-template-columns:auto 1fr;gap:7px 16px;max-width:460px;text-align:left;
+  font-size:12.5px;background:rgba(255,255,255,.035);border:1px solid #263447;border-radius:9px;padding:16px 20px}
+#rtsHome .keys dt{color:#8fd0ff;font-weight:600;white-space:nowrap}
+#rtsHome .keys dd{margin:0;opacity:.78}
+#rtsHome .brief{max-width:520px;font-size:13px;opacity:.72;line-height:1.6}
+#rtsHome .foot{font-size:11px;opacity:.4;max-width:560px;line-height:1.6}
+#rtsHome .foot a{color:#8fd0ff}
+#rtsErr{display:none;max-width:520px;padding:12px 16px;border:1px solid #7d3b34;border-radius:8px;
+  background:#251513;color:#ffb4a6;font-size:12.5px;text-align:left;white-space:pre-wrap}
+</style>
+</head>
+<body>
+
+<div id="rtsHome">
+  <h1>RC COMMAND</h1>
+  <p class="sub">Real-Time Strategy</p>
+  <p class="vs"><b class="p">Vanguard</b> &nbsp;versus&nbsp; <b class="e">Redline</b></p>
+  <p class="brief">Mine <b>Scrap</b> with harvesters, unload it at a refinery for credits, and spend them
+    on power, production and armour. Redline is doing the same thing across the map — and their first
+    attack wave is already on a timer.</p>
+  <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE</button>
+  <dl class="keys">
+    <dt>Left-drag</dt><dd>select your units</dd>
+    <dt>Right-click</dt><dd>context order — enemy: attack · scrap: harvest · ground: move</dd>
+    <dt>A + right-click</dt><dd>attack-move (engage anything on the way)</dd>
+    <dt>WASD / arrows</dt><dd>pan the camera (screen edges work too)</dd>
+    <dt>Mouse wheel</dt><dd>zoom</dd>
+    <dt>Esc</dt><dd>leave the battle</dd>
+  </dl>
+  <div id="rtsErr"></div>
+  <p class="foot">An original game in the spirit of the mid-90s base-building RTS. Not affiliated with,
+    and containing no assets from, any existing game. All art and audio generated in code.</p>
+</div>
+
+<script>//@@THREE@@</script>
+
+<script>//@@INC:rts.rules.js@@</script>
+<script>//@@INC:rts.buildings.js@@</script>
+<script>//@@INC:rts.audio.js@@</script>
+<script>//@@INC:rts.core.js@@</script>
+<script>//@@INC:rts.render.js@@</script>
+<script>//@@INC:rts.ui.js@@</script>
+
+<script>
+/* ---- standalone shell wiring ---- */
+window._RTS_STANDALONE = true;
+
+function rtsHome(){
+  var h = document.getElementById('rtsHome');
+  if (h) h.classList.remove('gone');
+  var b = document.getElementById('rtsGo');
+  if (b) { b.disabled = false; b.textContent = 'START BATTLE'; }
+}
+function rtsStart(btn){
+  var err = document.getElementById('rtsErr');
+  if (err) err.style.display = 'none';
+  if (typeof window.THREE === 'undefined') {
+    if (err) { err.style.display = 'block'; err.textContent = 'WebGL / three.js failed to load.'; }
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = 'BUILDING BATTLEFIELD…'; }
+  /* let the button repaint before the (synchronous) first-run building construction */
+  setTimeout(function(){
+    try {
+      document.getElementById('rtsHome').classList.add('gone');
+      rtsOpen();
+    } catch (e) {
+      rtsHome();
+      if (err) { err.style.display = 'block'; err.textContent = 'Could not start:\n' + ((e && e.message) || e); }
+    }
+  }, 30);
+}
+/* Enter/Space on the title screen starts a battle. */
+document.addEventListener('keydown', function(e){
+  var h = document.getElementById('rtsHome');
+  if (!h || h.classList.contains('gone')) return;
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); rtsStart(document.getElementById('rtsGo')); }
+});
+if ('serviceWorker' in navigator) {
+  try { navigator.serviceWorker.register('sw.js', { scope: './' }); } catch (e) {}
+}
+</script>
+
+</body>
+</html>

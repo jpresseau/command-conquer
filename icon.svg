@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="RC Command">
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#243244"/>
+      <stop offset="1" stop-color="#0d1219"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe0a0"/>
+      <stop offset="1" stop-color="#e0a32a"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="96" fill="url(#plate)"/>
+  <rect x="14" y="14" width="484" height="484" rx="84" fill="none" stroke="#3d5470" stroke-width="8"/>
+
+  <!-- radar sweep arcs -->
+  <g fill="none" stroke="#4a8ff0" stroke-linecap="round" opacity="0.45">
+    <path d="M256 372 A116 116 0 0 1 256 140" stroke-width="10"/>
+    <path d="M256 330 A74 74 0 0 1 256 182" stroke-width="10" opacity="0.75"/>
+  </g>
+
+  <!-- command chevrons -->
+  <g fill="url(#gold)">
+    <path d="M256 132 L360 244 L310 244 L256 186 L202 244 L152 244 Z"/>
+    <path d="M256 226 L360 338 L310 338 L256 280 L202 338 L152 338 Z" opacity="0.82"/>
+  </g>
+
+  <!-- faction bar: Vanguard / Redline -->
+  <rect x="152" y="386" width="102" height="26" rx="13" fill="#4a8ff0"/>
+  <rect x="258" y="386" width="102" height="26" rx="13" fill="#e0503c"/>
+</svg>
