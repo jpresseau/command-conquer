@@ -14,7 +14,7 @@ window._rtsG = null;
    layer tells the renderer what to draw there, and is why the map can read as a forest with
    cliffs and a shoreline rather than an empty field. */
 var RTS_T_GRASS = 0, RTS_T_TREE = 1, RTS_T_ROCK = 2, RTS_T_WATER = 3,
-    RTS_T_ROAD  = 4, RTS_T_SAND = 5;
+    RTS_T_ROAD  = 4, RTS_T_SAND = 5, RTS_T_WALL = 6;
 
 /* ------------------------------------------------------------- grid helpers */
 function _rtsIdx(tx, tz) { return tz * RTS_N + tx; }
@@ -237,6 +237,23 @@ function _rtsGenTerrain(G, rnd) {
   _rtsCarveRoad(G, 20, 90, 92, 22, rnd);          /* the main diagonal, base to base */
   _rtsCarveRoad(G, 20, 90, 90, 78, rnd);          /* south branch, toward the lake */
   _rtsCarveRoad(G, 92, 22, 26, 34, rnd);          /* north branch */
+
+  /* --- sandbag emplacements. Short dog-legged chains of old fortification, left over from
+         whoever fought here last. They are scattered all over the reference material and are
+         most of why those maps read as contested ground rather than open country. Blocking,
+         but short enough to go around. --- */
+  for (var wc = 0; wc < 70; wc++) {
+    var wx = 8 + ((rnd() * (N - 16)) | 0), wz = 8 + ((rnd() * (N - 16)) | 0);
+    if (!free(wx, wz) || G.terrain[_rtsIdx(wx, wz)] !== RTS_T_GRASS) continue;
+    var dir = (rnd() * 4) | 0, len = 4 + ((rnd() * 6) | 0);
+    var DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+    for (var ws = 0; ws < len; ws++) {
+      if (ws === (len >> 1)) dir = (dir + (rnd() < 0.5 ? 1 : 3)) % 4;   /* one dog-leg */
+      if (!free(wx, wz) || G.terrain[_rtsIdx(wx, wz)] !== RTS_T_GRASS) break;
+      set(wx, wz, RTS_T_WALL, true);
+      wx += DIRS[dir][0]; wz += DIRS[dir][1];
+    }
+  }
 
   /* Trees never grow right up against ore, so a field has a little clearing around it. */
   for (tx = 1; tx < N - 1; tx++) {

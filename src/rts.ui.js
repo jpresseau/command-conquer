@@ -456,7 +456,7 @@ function _rtsDrawMini() {
   var g = mini.getContext('2d'), S = mini.width, sc = S / RTS_N, i;
   /* The radar mirrors the terrain layer, so forest, ridges, the lake and the roads are all
      legible at a glance - the whole point of having a radar rather than a blank green square. */
-  var TCOL = ['#3b4b26', '#243d1d', '#6a665c', '#2b4c6b', '#6f6046', '#8a7c58'];
+  var TCOL = ['#374626', '#22391b', '#6a665c', '#2b4c6b', '#5a4e39', '#8a7c58', '#a89663'];
   g.fillStyle = TCOL[0]; g.fillRect(0, 0, S, S);
   for (var tz = 0; tz < RTS_N; tz++) for (var tx = 0; tx < RTS_N; tx++) {
     var idx = _rtsIdx(tx, tz);

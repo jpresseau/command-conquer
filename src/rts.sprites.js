@@ -26,7 +26,7 @@ var RTS_PAL = {
      an earlier olive palette read as a golf course with gravel on it. */
   grass: ['#2f3d1e', '#374626', '#273417', '#405030', '#1f2b12'],
   dirt:  ['#6a5a3f', '#786748', '#5b4d35', '#847150'],
-  rock:  ['#6a665c', '#7d7970', '#4a473f', '#8d897f'],
+  rock:  ['#5b5344', '#6b6252', '#3c372d', '#7c7362'],
   bush:  ['#2c3818', '#222c12', '#39471f'],
   /* Canopy is deliberately a long way darker than the grass, with one bright tip tone. An
      earlier set sat within a few points of the ground colour and the whole forest
@@ -35,6 +35,7 @@ var RTS_PAL = {
   water: ['#2b4c6b', '#356088', '#20384f', '#4a7ba6', '#6fa3c9'],
   sand:  ['#8a7c58', '#9c8e68', '#75684a'],
   road:  ['#5a4e39', '#665942', '#4b412f'],
+  bag:   ['#a89663', '#bcaa78', '#7d6e47'],
   ore:   ['#b08420', '#d4a934', '#eecb62', '#7d5c12', '#8f6a17'],
   conc:  ['#8c8c83', '#a3a39a', '#6c6c64', '#b6b6ad'],
   steel: ['#59616d', '#6d7583', '#424953', '#818a99'],
@@ -297,6 +298,15 @@ function _rtsBakeTerrain(G) {
   _sprEdge(rockCv.c);
   g.drawImage(rockCv.c, 0, 0);
 
+  /* --- sandbag emplacements --- */
+  var bagSpr = _sprSandbag();
+  for (tz = 0; tz < N; tz++) {
+    for (tx = 0; tx < N; tx++) {
+      if (G.terrain[_rtsIdx(tx, tz)] !== RTS_T_WALL) continue;
+      g.drawImage(bagSpr.c, tx * TS, tz * TS - bagSpr.head);
+    }
+  }
+
   /* --- forest. Conifers, drawn back-to-front down the map so a grove overlaps correctly,
          each one taller than its cell with a cast shadow. This is the single biggest
          difference between "a field" and "a battlefield". --- */
@@ -344,37 +354,25 @@ function _sprTree(g, cx, cy, sc, variant, TR) {
    chosen by a hash of the cell, kill the last of the repetition. */
 function _sprOre() {
   var out = [], P = RTS_PAL.ore, TS = RTS_TS;
-  for (var s = 0; s < 4; s++) {
+  for (var st = 0; st < 4; st++) {
     var variants = [];
     for (var v = 0; v < 3; v++) {
-      var t = _sprMake(TS, TS), g = t.g, seed = s * 977 + v * 131 + 17;
-      /* At high density the ground itself is ore-stained, which is what makes a rich
-         field look like terrain instead of scattered confetti. */
-      if (s >= 2) {
-        g.globalAlpha = s === 2 ? 0.28 : 0.52;
-        _sprRect(g, 0, 0, TS, TS, P[3]);
-        g.globalAlpha = 1;
-        /* Break the stain up, or a rich field becomes one flat gold carpet with no
-           texture at all - which is what a solid fill looked like. */
-        g.globalAlpha = s === 2 ? 0.2 : 0.34;
-        for (var b = 0; b < 26; b++) {
-          _sprRect(g, _sprHash(b, v, seed + 31) * TS, _sprHash(v, b, seed + 37) * TS,
-            2 + (_sprHash(b, b, seed + 41) * 4 | 0), 2, P[4]);
-        }
-        g.globalAlpha = 1;
-      }
-      var n = 6 + s * 9;
+      var t = _sprMake(TS, TS), g = t.g, seed = st * 977 + v * 131 + 17;
+      var n = [8, 17, 30, 44][st];
       for (var i = 0; i < n; i++) {
         var x = _sprHash(i, v, seed) * TS, y = _sprHash(v, i, seed + 5) * TS;
-        var w = 2 + (_sprHash(i, i, seed + 9) * 3 | 0), h = 2 + (_sprHash(i, v + i, seed + 13) * 2 | 0);
-        var top = P[(_sprHash(i, s, seed + 17) * 3) | 0];
+        var big = _sprHash(i, i, seed + 9) < 0.35;
+        var w = big ? 3 : 2, h = big ? 3 : 2;
+        /* Drawn wrapped, so a cluster runs across the cell edge and a worked field reads
+           as one continuous deposit instead of a grid of identical stamps. */
         for (var oy = -1; oy <= 1; oy++) {
           for (var ox = -1; ox <= 1; ox++) {
             var px = x + ox * TS, py = y + oy * TS;
-            if (px < -6 || px > TS + 2 || py < -6 || py > TS + 2) continue;
-            _sprRect(g, px, py + 1, w, h, P[4]);      /* seam under the nugget */
-            _sprRect(g, px, py, w, h, top);
-            _sprRect(g, px, py, 1, 1, P[2]);          /* glint */
+            if (px < -4 || px > TS + 1 || py < -4 || py > TS + 1) continue;
+            _sprRect(g, px, py + 1, w, h, P[3]);            /* the crystal's own shadow */
+            _sprRect(g, px, py, w, h, P[0]);
+            _sprRect(g, px, py, w - 1, 1, P[1]);            /* lit facet */
+            _sprRect(g, px, py, 1, 1, P[2]);                /* glint */
           }
         }
       }
@@ -383,6 +381,22 @@ function _sprOre() {
     out.push(variants);
   }
   return out;
+}
+
+/* A run of sandbags, one map cell long. Baked from the 3D models like everything else, so
+   the bags catch the same light as the buildings. Stamped along RTS_T_WALL cells. */
+function _sprSandbag() {
+  var m = [], BG = RTS_PAL.bag;
+  for (var row = 0; row < 3; row++) {
+    var y = row * 4, off = (row % 2) ? 4 : 0, cnt = (row % 2) ? 3 : 4;
+    for (var i = 0; i < cnt; i++) {
+      _r3Box(m, -RTS_TS / 2 + 4 + off + i * 8, y, 0, 8, 5, 11,
+        row === 2 ? BG[1] : (row ? BG[0] : BG[2]), BG[1]);
+    }
+  }
+  var r = _r3BakeFootprint(m, RTS_TS, RTS_TS);
+  _sprEdge(r.c);
+  return { c: _sprShadow(r.c, 2, 2), head: r.head };
 }
 
 /* ============================================================ 3D MODELS ==
@@ -398,6 +412,19 @@ function _sprBuilding(key, side) {
   var W = def.w * RTS_TS, D = def.h * RTS_TS;
   var C = RTS_PAL.conc, S = RTS_PAL.steel, DK = RTS_PAL.dark, B = RTS_PAL.bld[side];
   var m = [], i;
+  /* Facade detail. In the reference a wall is never one flat colour - it carries pale
+     pilasters and rows of lit windows, and that is a lot of what separates a building from
+     a coloured box. Mounted 1.5 units proud of the wall face so they read cleanly. */
+  function winRow(z, y, cx, count, gap, w, h) {
+    for (var k = 0; k < count; k++) {
+      _r3Box(m, cx + (k - (count - 1) / 2) * gap, y, z, w, h, 1.5, RTS_PAL.glass, RTS_PAL.glass);
+    }
+  }
+  function pilasters(z, y, cx, count, gap, w, h) {
+    for (var k = 0; k < count; k++) {
+      _r3Box(m, cx + (k - (count - 1) / 2) * gap, y, z, w, h, 1.5, B.trim, B.trim);
+    }
+  }
 
   if (key === 'yard') {
     /* Command Yard: a heavy slab under a full-width crane gantry. Nothing else in the base
@@ -412,6 +439,8 @@ function _sprBuilding(key, side) {
     _r3Box(m, 2, 47, 0, W - 22, 5, 7, S[2], S[1]);                 /* jib */
     _r3Box(m, 24, 37, 0, 2, 10, 2, DK[1], DK[3]);                  /* hoist cable */
     _r3Box(m, 24, 32, 0, 11, 5, 8, S[0], S[1]);                    /* hook block */
+    pilasters(34, 0, 0, 5, 13, 5, 25);
+    winRow(34, 13, 0, 4, 13, 6, 5);
     _r3Box(m, 0, 0, D / 2 - 5, W - 20, 2, 9, RTS_PAL.hazard[0], RTS_PAL.hazard[0]);
 
   } else if (key === 'power') {
@@ -423,6 +452,8 @@ function _sprBuilding(key, side) {
     _r3Cyl(m, 12, 0, -3, 8, 32, S[0], DK[1]);
     _r3Box(m, -14, 0, 14, 11, 9, 8, S[2], S[1]);                   /* transformers */
     for (i = 0; i < 3; i++) _r3Box(m, -17 + i * 3, 9, 14, 1, 5, 1, S[3], S[3]);
+    pilasters(21, 0, 0, 4, 11, 4, 18);
+    winRow(21, 9, 0, 3, 11, 5, 4);
     _r3Box(m, 10, 18, 12, 18, 2, 6, DK[1], DK[3]);
 
   } else if (key === 'refinery') {
@@ -436,6 +467,8 @@ function _sprBuilding(key, side) {
     _r3Cyl(m, 21, 0, 14, 11, 32, S[0], S[3]);
     _r3Box(m, 5, 36, -12, 22, 2, 4, S[2], S[3]);                   /* catwalk */
     _r3Box(m, 22, 40, -12, 4, 11, 4, S[0], S[1]);                  /* vent pipe */
+    pilasters(21, 0, -12, 4, 11, 5, 23);
+    winRow(21, 12, -12, 3, 11, 6, 5);
     _r3Box(m, -14, 0, D / 2 - 7, W - 32, 3, 13, DK[1], DK[3]);     /* dock floor */
     _r3Box(m, -14, 3, D / 2 - 12, W - 32, 1, 3, RTS_PAL.hazard[0], RTS_PAL.hazard[0]);
 
@@ -444,6 +477,8 @@ function _sprBuilding(key, side) {
     _r3Box(m, 0, 0, 0, W - 10, 13, D - 12, B.wall);
     _r3Hip(m, 0, 13, 0, W - 2, 19, D - 4, 11, B.roof);             /* steep, overhanging */
     _r3Box(m, 0, 19, 0, W - 4, 2, 5, TM[0], TM[1]);                /* unit band along the ridge */
+    winRow(19, 5, -14, 2, 9, 5, 4);
+    winRow(19, 5, 14, 2, 9, 5, 4);
     _r3Box(m, 0, 0, D / 2 - 6, 11, 11, 3, DK[1], DK[3]);            /* door */
     for (i = 0; i < 3; i++) {                                      /* sandbag ring */
       _r3Cyl(m, -16 + i * 5, 0, D / 2 - 2, 3, 3, RTS_PAL.dirt[3], RTS_PAL.dirt[1], 8);
@@ -463,6 +498,9 @@ function _sprBuilding(key, side) {
     for (i = 0; i < 5; i++) {
       _r3Gable(m, 0, 15, -16 + i * 8, W - 10, 7, 8, i === 2 ? TM[0] : B.roof);
     }
+    pilasters(33, 0, 0, 6, 12, 4, 15);
+    winRow(33, 9, -24, 2, 11, 5, 4);
+    winRow(33, 9, 24, 2, 11, 5, 4);
     _r3Box(m, 0, 0, D / 2 - 3, 30, 15, 3, DK[1], DK[3]);           /* roll-up door */
     _r3Box(m, 0, 0, D / 2 + 1, 38, 1, 6, RTS_PAL.hazard[0], RTS_PAL.hazard[0]);
     _r3Cyl(m, -W / 2 + 10, 15, -12, 4, 20, S[0], DK[1], 10);        /* exhausts */
@@ -587,6 +625,7 @@ function _rtsSprites() {
   if (_RTS_SPR) return _RTS_SPR;
   var S = { ore: _sprOre(), bld: {}, unit: {}, fx: _sprFx(), pad: {} };
   RTS_STRUCTS.forEach(function (d) { S.pad[d.key] = _sprPad(d.w, d.h); });
+  S.bag = _sprSandbag();
   ['player', 'enemy'].forEach(function (side) {
     S.bld[side] = {}; S.unit[side] = {};
     RTS_STRUCTS.forEach(function (d) { S.bld[side][d.key] = _sprBuilding(d.key, side); });

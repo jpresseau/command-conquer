@@ -58,6 +58,11 @@ breaking it shipped once.
   and rejected: a plain gable, whose near slope covers five times the pixels of the far one
   under this camera, and a barrel vault, whose entire near half points at the light and
   lands on one shading band. The factory uses small repeated ridges instead.
+- **A wall is never one flat colour.** Structures carry pale pilasters and rows of lit
+  windows mounted 1.5 units proud of the wall face. Without them a building is a coloured
+  box, however good its roof is.
+- **Ore is discrete crystals with ground showing between them**, not a solid fill. A stain
+  layer was tried and a rich field came out as a flat gold carpet with no texture at all.
 - **Structures are faction-coloured, not concrete** (`RTS_PAL.bld`): coloured walls under
   maroon roofs, on a pale irregular concrete pad drawn by `_sprPad`. An all-grey pass read
   as an industrial estate, and buildings straight on grass read as furniture on a lawn.
