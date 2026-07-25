@@ -36,7 +36,14 @@ function _rtsRngMake(seed) {
   s = (Math.imul(s ^ 0x9e3779b9, 2654435761) ^ 0x85ebca6b) >>> 0;
   if (!s) s = 1;
   for (var w = 0; w < 8; w++) { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; }
-  return function () { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
+  var f = function () { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
+  /* The stream's position has to be readable and settable or a saved game resumes on a
+     different roll sequence than the one it was saved from - the whole match diverges from
+     the first shot. Accessors rather than a property updated per call: this is the hottest
+     function in the simulation and it should stay a closure variable. */
+  f.get = function () { return s; };
+  f.set = function (v) { s = (v || 1) >>> 0; };
+  return f;
 }
 
 /* Gameplay randomness runs off the SCENARIO SEED, never off bare Math.random.

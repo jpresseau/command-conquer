@@ -28,6 +28,10 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   letter-spacing:1.5px;cursor:pointer;box-shadow:0 10px 34px rgba(46,111,208,.36);transition:transform .12s,background .12s}
 #rtsHome .go:hover{background:#3d84ee;transform:translateY(-1px)}
 #rtsHome .go:disabled{background:#3a4658;box-shadow:none;cursor:progress;transform:none}
+#rtsHome .go.resume{margin-top:-10px;padding:11px 34px;font-size:14px;background:#1d2735;border:1px solid #2b3a4d;
+  box-shadow:none;font-weight:600}
+#rtsHome .go.resume:hover{background:#26344a}
+#rtsHome .go.resume small{display:block;font-size:11px;letter-spacing:.4px;opacity:.6;font-weight:400;margin-top:3px}
 #rtsHome .keys{display:grid;grid-template-columns:auto 1fr;gap:7px 16px;max-width:460px;text-align:left;
   font-size:12.5px;background:rgba(255,255,255,.035);border:1px solid #263447;border-radius:9px;padding:16px 20px}
 #rtsHome .keys dt{color:#8fd0ff;font-weight:600;white-space:nowrap}
@@ -57,6 +61,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   <div class="diff" id="rtsDiff"></div>
   <p class="diffnote" id="rtsDiffNote"></p>
   <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE</button>
+  <button type="button" class="go resume" id="rtsResume" onclick="rtsLoadGame()" hidden>RESUME BATTLE</button>
   <dl class="keys">
     <dt>Left-drag</dt><dd>select your units</dd>
     <dt>Right-click</dt><dd>context order — enemy: attack · scrap: harvest · ground: move</dd>
@@ -84,6 +89,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 <script>//@@INC:rts.core.js@@</script>
 <script>//@@INC:rts.render.js@@</script>
 <script>//@@INC:rts.ui.js@@</script>
+<script>//@@INC:rts.save.js@@</script>
 
 <script>
 /* ---- standalone shell wiring ---- */
@@ -117,8 +123,21 @@ function rtsHome(){
   var b = document.getElementById('rtsGo');
   if (b) { b.disabled = false; b.textContent = 'START BATTLE'; }
   rtsBuildDiff();
+  rtsShowResume();
+}
+/* Get_Savefile_Info's job: print what is in the save without loading it. The button only
+   appears when there is a save this build can actually read - the version stamp does that
+   check, so a save from older code shows nothing rather than a button that fails. */
+function rtsShowResume(){
+  var r = document.getElementById('rtsResume');
+  if (!r) return;
+  var info = (typeof rtsSaveInfo === 'function') ? rtsSaveInfo() : null;
+  if (!info) { r.hidden = true; return; }
+  r.hidden = false;
+  r.innerHTML = 'RESUME BATTLE<small>' + String(info.desc).replace(/[<&]/g, '') + '</small>';
 }
 rtsBuildDiff();
+rtsShowResume();
 function rtsStart(btn){
   var err = document.getElementById('rtsErr');
   if (err) err.style.display = 'none';

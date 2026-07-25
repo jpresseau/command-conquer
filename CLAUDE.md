@@ -643,6 +643,81 @@ Commitment lands at 47% rather than the 62% asked for, and that is a real constr
 than a bug: a team only recruits units matching its composition, so a tank-heavy army cannot
 fill the rocket slots in Sappers. Raising it further means changing the compositions.
 
+## Saving a battle — from SAVELOAD.CPP
+
+`src/rts.save.js`. Three ideas from the original, and they are the whole design.
+
+**`Code_All_Pointers` / `Decode_All_Pointers` is the one that matters.** A pointer means nothing
+in a file, so RA turns every pointer into a TARGET (type + index) before writing and back into a
+pointer after reading. The JavaScript problem is identical in kind: `e.target`, `u.ref`, a team's
+`members`, `G.sel` and a shell's `from` are object references, and JSON cannot express "the same
+object as over there" — encode them naively and you get either a cycle it refuses to serialise or
+a dozen duplicate copies of one tank. Here an entity codes to `{__e:id}`; the shared type-tables
+(`RTS_WEAPONS`, `RTS_TEAM_TYPES`, `RTS_TRIGGERS`) code to `{__s:tok}` by **identity**, never
+equality; typed arrays code to base64. Anything still self-referential after those rules throws
+with the path that caused it rather than overflowing the stack.
+
+**The ordering constraint is RA's too.** It codes Houses last and decodes them first, because
+every other object's House pointer goes through them. Here entities decode in two passes — every
+shell exists and is registered in `byId` before any field is resolved — so a reference resolves
+regardless of the order things were written in.
+
+**`SAVEGAME_VERSION` is the sum of the `sizeof()` of every class in the save.** Change a
+structure and old saves stop loading, with no discipline required from the programmer.
+`_rtsSaveVersion()` is the same trick in this game's terms: map size, unit/structure/weapon
+counts, team types, triggers. Add a unit and every existing save is rejected automatically.
+
+**Verify before you touch anything.** Load_Game's comment says that if it returns false "the
+entire game will be in an unknown state", which is why the digest check happens *first* and bails
+"before any damage could be done". Version, presence, byte length and an FNV-1a checksum are all
+checked before `rtsClose()` is called. A refused load leaves the running battle untouched — the
+harness asserts exactly that.
+
+**What is not saved** — `Post_Load_Game`'s "fixup any expediency data that can be inferred from
+the physical data loaded": meshes, power totals, the base-centre cache. Deriving them again is
+smaller and safer than trusting a stale copy. Scorch is the one that needs a nudge: the marks
+live in `G.scorch` but they had been *stamped* into a terrain bake that died with the old battle,
+so every scorched cell is pushed back onto `G.newScorch` for the renderer to re-stamp.
+
+**The RNG had to grow accessors.** `_rtsRngMake`'s state was a closure variable, which cannot be
+read. A save that does not carry the generator's *position* resumes on a different roll sequence
+and the match diverges from the first shot. `f.get()` / `f.set()` rather than a property updated
+per call — it is the hottest function in the simulation. Both generators are created **lazily**,
+so the restore has to construct a missing one with exactly the same seed the lazy path uses; the
+first version of this silently left `oreRnd` null and the ore field grew differently from the
+moment of loading. That was caught by the determinism test, not by looking.
+
+**The load path goes through the same door as starting a battle.** `rtsLoadGame` parks the body
+on `window._RTS_PENDING_LOAD`, closes, and calls `rtsOpen`, which applies it *between*
+`_rtsNewGame` (which supplies every invariant) and `_rtsRInit` (which bakes the terrain the save
+actually carries, not the one the seed would have produced).
+
+Interface: 💾 / 📂 in the top bar, **Ctrl+S** to save, and a **RESUME BATTLE** button on the title
+screen carrying the save's description. Loading is deliberately *not* on a key — it throws the
+current battle away and that deserves a click. The title button is `Get_Savefile_Info`: the header
+is a separate small localStorage record, so listing a save never parses its 300 KB body.
+
+### How this was verified
+
+The test that matters is **simulation identity**, which the seeded RNG (PR #12) makes possible:
+save at a moment chosen *by condition* — shells in the air, units with targets, wreckage on the
+ground — then run 90 s from the original and 90 s from the restored copy and compare a fingerprint
+covering every entity's identity, position, health, order and coded links, both economies, both
+generator positions, all six mutable maps, and the team and trigger bookkeeping. They match. A
+missed field shows up as a diverging fingerprint; that is how the `oreRnd` bug was found.
+
+31 assertions in `save.js`: the round trip; references decoding to live objects rather than copies
+(4 targets, 5 harvester links, 11 teams / 44 members, 1 shell in flight, the 3-unit selection);
+type-tables decoding to the shared objects; power recomputed; scorch re-queued; the storage guards
+(corrupted body, truncated body, wrong version — each refused with the running game untouched);
+the full button path save → quit → resume; a seven-minute battle at 182 entities saving to 304 KB;
+and the resumed frame rendering **0 % of pixels different** from the frame that was saved.
+
+Two harness assertions were wrong before the code was: one expected the difficulty *key* where
+`desc` carries the display name, and one capped screen darkness at 50 % when 71 % of an idle
+game's map is legitimately under shroud. Compare the two frames' darkness to each other, not to a
+number picked by eye.
+
 ## The base blueprint — from BASE.CPP
 
 A base in the originals is not "n refineries and m turrets somewhere near the yard". It is an

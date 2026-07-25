@@ -22,6 +22,8 @@ function rtsOpen(seed) {
     +     '<span class="rts-vs"><b class="p">Vanguard</b> vs <b class="e">Redline</b>'
     +       '<i class="dif" id="rtsDifLbl"></i></span>'
     +     '<span class="rts-help">drag select · right-click order · S hold · 1-9 teams (ctrl set, alt jump) · repair/sell · wheel zoom · Esc</span>'
+    +     '<button type="button" class="rts-mute" id="rtsSaveBtn" title="Save this battle (Ctrl+S)" onclick="rtsSaveGame()">💾</button>'
+    +     '<button type="button" class="rts-mute" id="rtsLoadBtn" title="Resume the saved battle" onclick="rtsLoadGame()">📂</button>'
     +     '<button type="button" class="rts-mute" id="rtsMute" title="Sound on" onclick="rtsMuteToggle()">🔊</button>'
     +     '<button type="button" class="rts-x" onclick="rtsClose()">✕</button></div>'
     +   '<div class="rts-msg" id="rtsMsg"></div>'
@@ -51,7 +53,13 @@ function rtsOpen(seed) {
     + '</div>';
   document.body.appendChild(d);
 
-  _rtsNewGame(seed || (((new Date()).getTime()) & 0xffff));
+  /* A pending load lands BETWEEN the new game and the renderer: _rtsNewGame supplies every
+     invariant, the save overwrites the state on top of it, and _rtsRInit then bakes the
+     terrain the save actually carries rather than the one the seed would have produced. */
+  var _load = window._RTS_PENDING_LOAD; window._RTS_PENDING_LOAD = null;
+  _rtsNewGame(_load ? _load.seed : (seed || (((new Date()).getTime()) & 0xffff)),
+              _load ? _load.diff : undefined);
+  if (_load) _rtsApplyState(window._rtsG, _load);
   var cv = document.getElementById('rtsCv');
   _rtsResizeCanvases();
   _rtsRInit(cv);
@@ -73,7 +81,8 @@ function rtsOpen(seed) {
   window.addEventListener('resize', _rtsOnResize);
   /* rtsOpen runs off a real click, so this is a valid gesture to unlock WebAudio */
   if (typeof _rtsAudioInit === 'function') { _rtsAudioInit(); _rtsAudioResume(); _rtsMusicStart(); }
-  _rtsSay('Vanguard command online. Build a Refinery to start earning.');
+  if (_load) _rtsSay('Battle resumed.');
+  else _rtsSay('Vanguard command online. Build a Refinery to start earning.');
   _rtsUI.last = (new Date()).getTime();
   _rtsLoop();
 }
@@ -495,6 +504,9 @@ function _rtsKeyDown(e) {
     if (e.ctrlKey || e.metaKey) { _rtsSelectAllArmy(); e.preventDefault(); }
     else U.attackMove = true;
   }
+  /* Ctrl+S saves. Loading is deliberately NOT on a key - it throws the current battle away
+     and that should take a deliberate click, not a mistyped shortcut. */
+  if ((k === 's' || k === 'S') && (e.ctrlKey || e.metaKey)) { rtsSaveGame(); e.preventDefault(); return; }
   /* N walks the army, shift+N walks it backwards. */
   if (k === 'n' || k === 'N') { _rtsCycleObject(e.shiftKey ? -1 : 1); e.preventDefault(); }
   /* Home centres on the selection; with nothing selected it falls back to your command yard,
