@@ -21,7 +21,7 @@ function rtsOpen(seed) {
     +   '<div class="rts-top"><span class="rts-title">RC COMMAND</span>'
     +     '<span class="rts-vs"><b class="p">Vanguard</b> vs <b class="e">Redline</b>'
     +       '<i class="dif" id="rtsDifLbl"></i></span>'
-    +     '<span class="rts-help">drag select · right-click order · 1-9 teams (ctrl set, alt jump) · repair/sell buttons · WASD pan · wheel zoom · Esc</span>'
+    +     '<span class="rts-help">drag select · right-click order · S hold · 1-9 teams (ctrl set, alt jump) · repair/sell · wheel zoom · Esc</span>'
     +     '<button type="button" class="rts-mute" id="rtsMute" title="Sound on" onclick="rtsMuteToggle()">🔊</button>'
     +     '<button type="button" class="rts-x" onclick="rtsClose()">✕</button></div>'
     +   '<div class="rts-msg" id="rtsMsg"></div>'
@@ -426,6 +426,18 @@ function _rtsKeyDown(e) {
     e.preventDefault();
   }
   if (k === 'a' || k === 'A') U.attackMove = true;
+  /* MISSION_STICKY. Hold position: fire from where you stand, never chase, and the AI's
+     base-defence recall leaves you alone. */
+  if (k === 's' || k === 'S') {
+    var held = 0;
+    for (var hi = 0; hi < G.sel.length; hi++) {
+      var hu = G.sel[hi];
+      if (!hu || hu.dead || hu.side !== 'player' || hu.type !== 'unit') continue;
+      if (rtsUnitDef(hu.def).harvest) continue;      /* a harvester on hold is just idle */
+      hu.order = 'hold'; hu.path = null; hu.goal = null; hu.susp = null; held++;
+    }
+    if (held) { _rtsSay(held + ' holding position.'); if (typeof _rtsSfx === 'function') _rtsSfx('order'); }
+  }
 
   /* Team hotkeys, per CONQUER.CPP's Handle_Team. The four modifier cases are the
      originals': plain selects, shift adds to the selection, ctrl assigns the current

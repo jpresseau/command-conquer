@@ -339,6 +339,41 @@ var RTS_CRATER_ORE = 6;   /* ANIM.CPP: a crater calls Reduce_Tiberium(6) */
    ANXIOUS they lie down; below it they get up. */
 var RTS_FEAR = { NONE:0, ANXIOUS:10, SCARED:50, PANIC:100, MAXIMUM:255 };
 var RTS_FEAR_DECAY = 15;        /* per second; the original decays 1 per frame at 15 FPS */
+
+/* ------------------------------------------------- missions (MISSION.CPP) --
+   MissionControlClass is a FLAG TABLE indexed by mission, read from the INI. Four of its
+   fields decide how the rest of the game treats an object, and until now this game had them
+   hardcoded in three separate places, each inferred from whatever the caller happened to
+   need at the time:
+
+     IsRetaliate   - shoots back when hit                            (default true)
+     IsScatter     - gets out of the way of incoming                 (default true)
+     IsRecruitable - may be recruited into a team, or recalled to defend the base (true)
+     IsNoThreat    - is not considered a threat by a target scan     (default false)
+
+   `rate` is MissionControl's Rate: how often the mission's own logic wants to think. It is
+   recorded because it is part of the contract, but this engine runs every unit every frame -
+   at 25 ms per simulated second for 78 entities there is nothing to buy by staggering them,
+   and a unit reacting on a 30-second timer feels broken on a modern display.
+
+   `hold` is MISSION_STICKY - it stays where it is put. That distinction between GUARD and
+   STICKY is the reason the table earns its keep: a unit told to hold a position should not
+   be dragged off it by the base-defence recall. */
+var RTS_MISSIONS = {
+  guard:   { retaliate:true,  scatter:true,  recruitable:true,  noThreat:false, hold:false, rate:0.13 },
+  move:    { retaliate:true,  scatter:true,  recruitable:true,  noThreat:false, hold:false, rate:0.06 },
+  amove:   { retaliate:true,  scatter:true,  recruitable:true,  noThreat:false, hold:false, rate:0.06 },
+  attack:  { retaliate:true,  scatter:true,  recruitable:true,  noThreat:false, hold:false, rate:0.06 },
+  /* A harvester is unarmed, so it cannot retaliate, and pulling it off the ore to defend the
+     base costs more than the raid does. Not a threat either - nothing should pick a fight
+     with it in preference to something that shoots back. It is still a target, and a rich
+     one; IsNoThreat governs what it provokes, not what it is worth. */
+  harvest: { retaliate:false, scatter:true,  recruitable:false, noThreat:true,  hold:false, rate:0.13 },
+  /* STICKY: holds ground. Fires from where it stands, never chases, and the base-defence
+     recall leaves it alone. */
+  hold:    { retaliate:true,  scatter:false, recruitable:false, noThreat:false, hold:true,  rate:0.13 }
+};
+var RTS_MISSION_DEFAULT = { retaliate:true, scatter:true, recruitable:true, noThreat:false, hold:false, rate:0.13 };
 /* RULES.CPP: ConditionYellow = 1/2, ConditionRed = 1/4. These are not cosmetic - they are the
    thresholds for damaged building art, the fear escalation ladder and the AI's sell-back
    decision, so having them at 0.66/0.33 quietly mistuned all three. */
@@ -3219,6 +3254,11 @@ function _rtsZoneCache() {
 function _rtsEvalObject(e, o, dist, w) {
   var d = rtsStructDef(o.def) || rtsUnitDef(o.def);
   if (!d) return 0;
+  /* "If the object is in a harmless state, don't bother to consider it a threat." A
+     harvester on the ore is not what an auto-acquiring gun should turn to face while
+     something armed is in range - though a player who right-clicks one still gets it, and
+     it is still worth a great deal once chosen. */
+  if (o !== e.target && _rtsMission(o).noThreat) return 0;
   /* A weapon that cannot hurt the thing at all should never choose it - and for a
      two-weapon object the question is asked of its BEST weapon against this armour, or a
      tank would refuse to look at infantry its coaxial gun handles perfectly well. */
@@ -3400,6 +3440,9 @@ function _rtsFearAI(e, dt) {
 }
 function _rtsScatter(e, fromX, fromZ) {
   var G = window._rtsG;
+  /* MissionControl IsScatter. A unit holding a position stands its ground - being shoved off
+     it by every near miss is exactly what a hold order exists to prevent. */
+  if (!_rtsMission(e).scatter) return;
   var a = Math.atan2(e.z - fromZ, e.x - fromX);
   a += (Math.random() - 0.5) * (Math.PI / 2);      /* Random_Pick(0,4)-2 facings of spread */
   var d = RTS_TILE * (1.5 + Math.random());
@@ -3440,6 +3483,8 @@ function _rtsBaseIsAttacked(bldg, enemy) {
     if (u.dead || u.side !== 'enemy' || u.type !== 'unit') continue;
     var ud = rtsUnitDef(u.def);
     if (!ud.weapon || ud.harvest) continue;
+    /* "Never recruit sticky guard units to defend a base." */
+    if (!_rtsMission(u).recruitable) continue;
     var w = RTS_WEAPONS[ud.weapon];
     /* "Don't allow a response if it doesn't have a weapon that will affect the enemy." */
     if (w.vs && !w.vs[rtsArmour(enemy)]) continue;
@@ -3457,9 +3502,12 @@ function _rtsBaseIsAttacked(bldg, enemy) {
     /* "Alternates between guard area and attack" - half go straight for the attacker, half
        take up station on the building being hit. A pure charge leaves the base empty again
        the moment the raider dies. */
-    if (Math.random() < 0.5) { p.u.order = 'attack'; p.u.target = enemy; p.u.path = null; }
-    else _rtsOrderMove(p.u, bldg.x + (Math.random() - 0.5) * RTS_TILE * 4,
-                             bldg.z + (Math.random() - 0.5) * RTS_TILE * 4, true);
+    if (Math.random() < 0.5) _rtsOverrideMission(p.u, 'attack', enemy);
+    else {
+      _rtsOverrideMission(p.u, 'amove', null);
+      _rtsOrderMove(p.u, bldg.x + (Math.random() - 0.5) * RTS_TILE * 4,
+                         bldg.z + (Math.random() - 0.5) * RTS_TILE * 4, true);
+    }
     sent++;
     risk += rtsUnitDef(p.u.def).cost;
     if (risk > desired) break;
@@ -3468,11 +3516,42 @@ function _rtsBaseIsAttacked(bldg, enemy) {
   if (risk > desired) enemy.baseTimer = G.t + RTS_BASE_DEFENSE_DELAY;
   return sent;
 }
+/* MISSION.CPP Override_Mission / Restore_Mission. A temporary order remembers the one it
+   interrupted, and puts it back when it is done. Base_Is_Attacked recalls units to defend
+   and previously just overwrote their orders, so an army pulled home to swat one raider
+   simply forgot it had been going anywhere - it stood in the base for the rest of the match. */
+function _rtsOverrideMission(e, order, tgt) {
+  if (!e || e.dead) return false;
+  if (e.susp === undefined || e.susp === null) {
+    e.susp = { order:e.order || null, goal:e.goal ? { x:e.goal.x, z:e.goal.z } : null };
+  }
+  e.order = order; e.target = tgt || null; e.path = null;
+  return true;
+}
+function _rtsRestoreMission(e) {
+  if (!e || e.susp == null) return false;
+  var s = e.susp; e.susp = null;
+  if (!s.order) { e.order = null; e.goal = null; e.path = null; return true; }
+  if (s.order === 'move' || s.order === 'amove') {
+    if (s.goal) { _rtsOrderMove(e, s.goal.x, s.goal.z, s.order === 'amove'); return true; }
+  }
+  e.order = s.order; e.path = null;
+  return true;
+}
+/* MISSION.CPP MissionControl: the flag table for whatever this object is currently doing.
+   Get_Mission returns the queued mission when there is no active one, so an object with no
+   order is on GUARD rather than in some nameless idle state. */
+function _rtsMission(e) {
+  if (!e) return RTS_MISSION_DEFAULT;
+  var m = e.order || (e.hstate ? 'harvest' : 'guard');
+  return RTS_MISSIONS[m] || RTS_MISSION_DEFAULT;
+}
 /* TECHNO.CPP Is_Allowed_To_Retaliate. Shooting back is not automatic. */
 function _rtsCanRetaliate(tgt, from) {
   if (!from || !from.side) return false;                    /* no source, no retaliation */
   if (tgt.dead || tgt.type !== 'unit') return false;
   if (from.side === tgt.side) return false;                 /* never against an ally */
+  if (!_rtsMission(tgt).retaliate) return false;            /* "If the mission precludes it" */
   var d = rtsUnitDef(tgt.def);
   if (!d || !d.weapon) return false;
   var w = RTS_WEAPONS[d.weapon];
@@ -3688,8 +3767,20 @@ function _rtsUpdateUnit(e, dt) {
 
   /* ---- engage ---- */
   var tgt = e.target;
-  if (tgt && tgt.dead) { tgt = e.target = null; if (e.order === 'attack') e.order = null; }
-  if (w && !tgt && (e.order === 'amove' || !e.order)) {
+  if (tgt && tgt.dead) {
+    tgt = e.target = null;
+    if (e.order === 'attack') { if (!_rtsRestoreMission(e)) e.order = null; }
+  }
+  /* An overridden mission that has run its course puts the old one back. Without this only
+     the attack case ever restores, and the half of the defenders sent to stand guard would
+     never resume what they were doing. */
+  if (e.susp != null && !e.target && !e.path) _rtsRestoreMission(e);
+  /* MISSION_STICKY holds ground: it acquires and fires, but never takes a chase order and
+     never picks up a path. */
+  if (e.order === 'hold') {
+    e.path = null; e.goal = null;
+    if (w && (!tgt || _rtsRangeTo(e, tgt) > _rtsReach(e))) e.target = tgt = _rtsFindTarget(e, _rtsReach(e));
+  } else if (w && !tgt && (e.order === 'amove' || !e.order)) {
     tgt = _rtsFindTarget(e, d.sight);
     if (tgt) { e.target = tgt; if (!e.order) { e.order = 'attack'; e.path = null; } }
   }
@@ -5162,7 +5253,7 @@ function rtsOpen(seed) {
     +   '<div class="rts-top"><span class="rts-title">RC COMMAND</span>'
     +     '<span class="rts-vs"><b class="p">Vanguard</b> vs <b class="e">Redline</b>'
     +       '<i class="dif" id="rtsDifLbl"></i></span>'
-    +     '<span class="rts-help">drag select · right-click order · 1-9 teams (ctrl set, alt jump) · repair/sell buttons · WASD pan · wheel zoom · Esc</span>'
+    +     '<span class="rts-help">drag select · right-click order · S hold · 1-9 teams (ctrl set, alt jump) · repair/sell · wheel zoom · Esc</span>'
     +     '<button type="button" class="rts-mute" id="rtsMute" title="Sound on" onclick="rtsMuteToggle()">🔊</button>'
     +     '<button type="button" class="rts-x" onclick="rtsClose()">✕</button></div>'
     +   '<div class="rts-msg" id="rtsMsg"></div>'
@@ -5567,6 +5658,18 @@ function _rtsKeyDown(e) {
     e.preventDefault();
   }
   if (k === 'a' || k === 'A') U.attackMove = true;
+  /* MISSION_STICKY. Hold position: fire from where you stand, never chase, and the AI's
+     base-defence recall leaves you alone. */
+  if (k === 's' || k === 'S') {
+    var held = 0;
+    for (var hi = 0; hi < G.sel.length; hi++) {
+      var hu = G.sel[hi];
+      if (!hu || hu.dead || hu.side !== 'player' || hu.type !== 'unit') continue;
+      if (rtsUnitDef(hu.def).harvest) continue;      /* a harvester on hold is just idle */
+      hu.order = 'hold'; hu.path = null; hu.goal = null; hu.susp = null; held++;
+    }
+    if (held) { _rtsSay(held + ' holding position.'); if (typeof _rtsSfx === 'function') _rtsSfx('order'); }
+  }
 
   /* Team hotkeys, per CONQUER.CPP's Handle_Team. The four modifier cases are the
      originals': plain selects, shift adds to the selection, ctrl assigns the current
