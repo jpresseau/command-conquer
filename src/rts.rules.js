@@ -303,6 +303,11 @@ var RTS_RECOIL_TIME = 0.12;     /* how long the turret sits recoiled after firin
 var RTS_MUZZLE_TURRET = 1.15;
 var RTS_MUZZLE_HULL   = 0.75;
 var RTS_MUZZLE_STRUCT = 2.2;
+/* Fire_Direction: a non-homing shell leaves along the barrel and holds that bearing, so it
+   can miss. How close it has to pass to something hostile to detonate on it, and how far
+   past the aim point it keeps flying before going off on its own. */
+var RTS_SHELL_HIT  = 1.8;
+var RTS_SHELL_OVER = 0.35;
 /* Overrun_Square: a tracked vehicle drives over infantry. Approaching one makes them scatter
    (`cellptr->Incoming(0, true)`); actually reaching them kills them. Should_Crush_It refuses
    for HUMAN-controlled vehicles - your own tanks never auto-crush, you have to drive them

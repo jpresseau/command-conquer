@@ -618,9 +618,95 @@ function _rtsDrawHud(dt) {
     g.fillText('Click to place ' + rtsStructDef(U.place).name + '  ·  Esc to cancel', W / 2, 31);
     g.textAlign = 'left';
   }
+  /* The action cursor goes last so nothing draws over it. While one is showing the OS
+     pointer is hidden, or you get two cursors fighting for the same few pixels. */
+  var act = (U.mouse.over && !U.drag) ? _rtsActionAt(U.mouse.x, U.mouse.y) : null;
+  var cv2 = document.getElementById('rtsCv');
+  if (cv2) {
+    var want = act ? 'none' : (U.mode ? 'crosshair' : 'crosshair');
+    if (cv2.style.cursor !== want) cv2.style.cursor = want;
+  }
+  if (act) _rtsDrawCursor(g, U.mouse.x, U.mouse.y, act);
 }
 /* Drawn as strokes rather than a 🔧 glyph: an emoji here depends on a font the machine may
    not have, and a missing one silently draws nothing at all. */
+/* ------------------------------------------------------- action cursor --
+   What would happen if you clicked right now? The original changes the mouse shape as it
+   passes over the map - move, attack, enter, no-entry - so the answer is always on screen
+   instead of being something you find out by trying it. This mirrors the decisions
+   _rtsRightClick actually makes, so the cursor cannot promise an order the click will not
+   give. (Built from this game's own action set - DISPLAY.CPP was not among the files mined.) */
+function _rtsActionAt(mx, my) {
+  var G = window._rtsG, U = window._rtsUI;
+  if (!G || G.over) return null;
+  if (U.place) return null;                      /* the ghost is already the feedback */
+  if (U.mode === 'repair' || U.mode === 'sell') {
+    var h0 = _rtsPickAt(mx, my), t0 = h0 && h0.ent;
+    if (t0 && t0.side === 'player' && t0.type === 'struct') return U.mode;
+    return 'no';
+  }
+  var hit = _rtsPickAt(mx, my);
+  if (!hit) return null;
+  var tgt = hit.ent;
+  var mine = [], i;
+  /* Runs inside the render loop, so one bad entry must not take the whole frame down. */
+  for (i = 0; i < G.sel.length; i++) {
+    var sv = G.sel[i];
+    if (sv && !sv.dead && sv.side === 'player' && sv.type === 'unit') mine.push(sv);
+  }
+  if (!mine.length) return (tgt && !tgt.dead) ? 'select' : null;
+  if (tgt && tgt.side === 'enemy') return 'attack';
+  var tx = _rtsTX(hit.x), tz = _rtsTX(hit.z);
+  var onScrap = _rtsInB(tx, tz) && G.scrap[_rtsIdx(tx, tz)] > 0;
+  var harv = false;
+  for (i = 0; i < mine.length; i++) if (rtsUnitDef(mine[i].def).harvest) harv = true;
+  if (harv && onScrap) return 'harvest';
+  if (harv && tgt && tgt.side === 'player' && tgt.def === 'refinery') return 'deliver';
+  /* Somewhere no ground unit can stand is a no-entry, not a move order that quietly fails. */
+  if (!_rtsInB(tx, tz) || _rtsBlocked(tx, tz)) return 'no';
+  return U.attackMove ? 'amove' : 'move';
+}
+function _rtsDrawCursor(g, x, y, kind) {
+  if (!kind) return;
+  g.save(); g.translate(x, y); g.lineCap = 'round'; g.lineJoin = 'round';
+  var col = { move:'#8ef07a', amove:'#ffd473', attack:'#ff6a5a', harvest:'#ffd473',
+    deliver:'#8ef07a', select:'#9fd0ff', repair:'#ffd473', sell:'#ff9a4a', no:'#ff6a5a' }[kind] || '#8ef07a';
+  /* every shape is stroked twice: a fat dark pass first so it stays legible on pale ore */
+  for (var pass = 0; pass < 2; pass++) {
+    g.strokeStyle = pass ? col : 'rgba(0,0,0,0.75)';
+    g.lineWidth = pass ? 2 : 4.5;
+    if (kind === 'attack') {                       /* reticle with a gap at the cardinals */
+      g.beginPath(); g.arc(0, 0, 8, 0, Math.PI * 2); g.stroke();
+      [[0, -1], [0, 1], [-1, 0], [1, 0]].forEach(function (d) {
+        g.beginPath(); g.moveTo(d[0] * 5, d[1] * 5); g.lineTo(d[0] * 12, d[1] * 12); g.stroke();
+      });
+    } else if (kind === 'no') {                    /* circle with a bar through it */
+      g.beginPath(); g.arc(0, 0, 8, 0, Math.PI * 2); g.stroke();
+      g.beginPath(); g.moveTo(-5.7, -5.7); g.lineTo(5.7, 5.7); g.stroke();
+    } else if (kind === 'select') {                /* four corner ticks */
+      [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (c) {
+        g.beginPath();
+        g.moveTo(c[0] * 9, c[1] * 4); g.lineTo(c[0] * 9, c[1] * 9); g.lineTo(c[0] * 4, c[1] * 9);
+        g.stroke();
+      });
+    } else if (kind === 'harvest' || kind === 'deliver') {   /* a scoop */
+      g.beginPath(); g.arc(0, 1, 7, 0.15, Math.PI - 0.15); g.stroke();
+      g.beginPath(); g.moveTo(0, -9); g.lineTo(0, -2); g.stroke();
+      if (kind === 'deliver') { g.beginPath(); g.moveTo(-4, -6); g.lineTo(0, -10); g.lineTo(4, -6); g.stroke(); }
+    } else if (kind === 'sell') {                  /* banknote */
+      g.beginPath(); g.rect(-9, -6, 18, 12); g.stroke();
+      g.beginPath(); g.arc(0, 0, 3, 0, Math.PI * 2); g.stroke();
+    } else if (kind === 'repair') {
+      g.restore(); _rtsDrawWrench(g, x, y); g.save(); g.translate(x, y);
+      break;
+    } else {                                       /* move / attack-move: a chevron */
+      g.beginPath(); g.moveTo(-7, -3); g.lineTo(0, 5); g.lineTo(7, -3); g.stroke();
+      g.beginPath(); g.moveTo(0, 5); g.lineTo(0, -8); g.stroke();
+      if (kind === 'amove') { g.beginPath(); g.arc(0, -1, 10, 0, Math.PI * 2); g.stroke(); }
+    }
+  }
+  g.restore();
+}
 function _rtsDrawWrench(g, x, y) {
   g.save(); g.translate(x, y); g.rotate(-0.6); g.lineCap = 'round';
   for (var pass = 0; pass < 2; pass++) {
