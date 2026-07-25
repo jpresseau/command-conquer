@@ -643,6 +643,71 @@ Commitment lands at 47% rather than the 62% asked for, and that is a real constr
 than a bug: a team only recruits units matching its composition, so a tank-heavy army cannot
 fill the rocket slots in Sappers. Raising it further means changing the compositions.
 
+## Why the art read flat, and the two things that fixed it
+
+Asked why the buildings and vehicles didn't look like the real thing. Beyond the obvious — there
+are no original assets here and never will be — the answer was two concrete defects, both found
+by rendering every asset onto clear ground and *looking*, which had not been done in a while.
+
+**`R3_K` was 0.8.** That constant is how far one unit of model height climbs the screen, and at
+0.8 a 50-unit-tall structure rose only 40 px above a 72 px footprint. The roof dominated every
+sprite and the walls were a thin band beneath it — buildings read as plates lying on the grass.
+The silhouettes were *already in the models* (the yard's gantry, the refinery's silos, the power
+plant's stacks); they were being squashed. **1.3** lets them show a real front elevation.
+
+Raising it cannot break footprint alignment, and that is worth knowing: the ground plane is not
+foreshortened at all, so K multiplies height only. The extra rise lands in `head`, the headroom
+above the footprint that `_r3BakeFootprint` measures and the renderer offsets by, so a 3×3
+building still covers exactly its 72×72 pixels of ground.
+
+**The unit models were four boxes each.** A tank was two track boxes, a hull, a turret and a
+barrel; infantry were a torso box and a helmet box. No amount of projection fixes that. They now
+carry track runs with road wheels and fender skirts, a sloped glacis, a tapered turret with a
+mantlet and muzzle brake, a hatch and an aerial; the buggy has four round wheels with hubs and a
+roll hoop; the harvester has a ribbed hopper, a cutter head with teeth and a stack; infantry have
+legs, shoulders and a helmet brim so they read as figures rather than dominoes.
+
+**`_r3Cyl` is a VERTICAL cylinder** — its `h` runs along y. Anything lying along the ground has to
+be built from boxes. The first draft of the tank made the gun barrel a 9-unit vertical cylinder,
+i.e. a flagpole.
+
+### The bug that raising K caused, and the assertion that now prevents it
+
+`_r3BakeCentred` centres a model on its **origin, not its bounds**, so a taller model runs off the
+top of its square long before it runs off the sides. Raising K lifted every roofline by 60% and
+silently sheared the top off the infantry and the gun off the tank. The hand-picked canvas sizes
+that had been fine for years were suddenly wrong, and nothing said so.
+
+Hand-picked sizes were the real defect, so they are gone. `_r3FitSize(models, margin)` measures
+the worst case over **every variant at every one of the eight facings** and returns the square
+that holds it; `_sprUnitFit` memoises it per unit type. All variants of one unit must share a
+square — hull and turret are drawn at the same screen position and would separate otherwise, and
+a prone squad that changed size would jump — so the measurement takes the union.
+
+`unitzoom.js` asserts **no opaque pixel touches any edge of any baked unit frame**, all eight
+facings. That is what caught this, and it is cheap enough to keep.
+
+**Structures are deliberately exempt from that assertion**, and getting this wrong cost a round
+trip: `_r3BakeFootprint` sizes their canvas to exactly `footW × (footD + head)`, so a 3×3 building
+is *required* to fill all 72 px of its width and to reach the top of its headroom. Touching the
+edge is correct there. The structure assertion is that the sprite is exactly footprint + headroom
+instead.
+
+### Cost
+
+Sprite memory 0.8 MB → 2.2 MB (the extra is transparent margin; the renderer draws the canvas
+centred, so margin is invisible and free at draw time). Frame time 1.38 ms → 1.32 ms across 30
+frames on a populated field — unchanged. No simulation code is touched.
+
+### Still open on the art
+
+Not done yet, in the order they are worth doing: the shading ramp is narrow and the whole player
+palette sits in one mid-tone navy band, where the reference separates a bright top, a mid front, a
+near-black side and a hard dark outline; there is no yaw on structures, so an axis-aligned box
+shows top and front only and never a third face (`rts.r3d.js` documents this and says form should
+come from cylinders, chamfers and sloped roofs — the buildings mostly still don't); and the
+per-building silhouette work (refinery dock ramp, factory chevron apron) is untouched.
+
 ## Saving a battle — from SAVELOAD.CPP
 
 `src/rts.save.js`. Three ideas from the original, and they are the whole design.
