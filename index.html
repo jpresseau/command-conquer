@@ -6960,15 +6960,76 @@ function _rtsBindInput() {
     _rtsClampFocus();
   };
   var mini = document.getElementById('rtsMini');
-  function miniGo(e) {
+  function miniWorld(e) {
     var r = mini.getBoundingClientRect();
     var fx = (e.clientX - r.left) / r.width, fz = (e.clientY - r.top) / r.height;
     var span = RTS_N * RTS_TILE;
-    _rtsR.focus.x = (fx - 0.5) * span; _rtsR.focus.z = (fz - 0.5) * span;
+    return { x:(fx - 0.5) * span, z:(fz - 0.5) * span };
+  }
+  function miniGo(e) {
+    var w = miniWorld(e);
+    _rtsR.focus.x = w.x; _rtsR.focus.z = w.z;
     _rtsClampFocus();
   }
-  mini.onmousedown = function (e) { U.miniDrag = true; miniGo(e); };
+  /* RADAR.CPP's RTacticalClass::Action: a click on the radar with units selected ISSUES AN
+     ORDER, it does not move the view. That is how you commit an army across the map without
+     scrolling to it. Only a restricted set of actions is allowed from the radar - MOVE,
+     NOMOVE, ATTACK, ENTER, CAPTURE, SABOTAGE - and anything else falls through to nothing.
+
+     Two deliberate differences. RA puts the order on the LEFT button because its right button
+     toggles radar zoom; this game has no radar zoom and already uses right-click as the one
+     context-sensitive order button everywhere else, so the order stays on the right and the
+     left button keeps moving the view. Consistency with the rest of this game's input beats
+     matching a binding whose other half does not exist here.
+
+     The shroud rule is kept exactly: `shadow = !IsMapped` means an unexplored cell cannot be
+     targeted, only moved to. */
+  function miniOrder(e) {
+    var G = window._rtsG;
+    if (!G || G.over) return false;
+    var mine = [], i;
+    for (i = 0; i < G.sel.length; i++) {
+      var sv = G.sel[i];
+      if (sv && !sv.dead && sv.side === 'player' && sv.type === 'unit') mine.push(sv);
+    }
+    if (!mine.length) return false;
+    var w = miniWorld(e), tx = _rtsTX(w.x), tz = _rtsTX(w.z);
+    if (!_rtsInB(tx, tz)) return false;
+    var mapped = !!G.mapped[_rtsIdx(tx, tz)];
+    /* Pick out anything standing there, but only if the cell has been explored. */
+    var tgt = null;
+    if (mapped) {
+      for (i = 0; i < G.ents.length; i++) {
+        var o = G.ents[i];
+        if (o.dead || o.side === 'player') continue;
+        if (o.type === 'struct') {
+          var sd = rtsStructDef(o.def);
+          if (tx >= o.tx && tx < o.tx + sd.w && tz >= o.tz && tz < o.tz + sd.h) { tgt = o; break; }
+        } else if (_rtsTX(o.x) === tx && _rtsTX(o.z) === tz) { tgt = o; break; }
+      }
+    }
+    if (tgt) {
+      for (i = 0; i < mine.length; i++) _rtsOrderAttack(mine[i], tgt);
+      _rtsFlash(tgt.x, tgt.z, 'attack');
+    } else {
+      var onScrap = mapped && G.scrap[_rtsIdx(tx, tz)] > 0;
+      var spread = _rtsFormation(mine.length);
+      for (i = 0; i < mine.length; i++) {
+        var u = mine[i], ud = rtsUnitDef(u.def);
+        if (ud.harvest && onScrap) { _rtsOrderHarvest(u, tx, tz); continue; }
+        _rtsOrderMove(u, w.x + spread[i].x, w.z + spread[i].z, !!U.attackMove);
+      }
+      _rtsFlash(w.x, w.z, onScrap ? 'harvest' : 'move');
+    }
+    if (typeof _rtsSfx === 'function') _rtsSfx('order');
+    return true;
+  }
+  /* LEFT button only. mousedown fires for every button, so without this guard the
+     right-click order ALSO recentred the view - the army got its order and the camera
+     jumped away from whatever the player was watching. */
+  mini.onmousedown = function (e) { if (e.button !== 0) return; U.miniDrag = true; miniGo(e); };
   mini.onmousemove = function (e) { if (U.miniDrag) miniGo(e); };
+  mini.oncontextmenu = function (e) { e.preventDefault(); miniOrder(e); return false; };
   window.addEventListener('mouseup', function () { if (window._rtsUI) window._rtsUI.miniDrag = false; });
 }
 function _rtsKeyDown(e) {

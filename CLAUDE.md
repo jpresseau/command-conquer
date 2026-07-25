@@ -604,6 +604,36 @@ measured at 600 posts in 10 seconds, with an unrelated message not surviving a s
 The text action now refuses to repeat inside the window, and refuses by *returning false*, so
 the `if (ok)` gate leaves the trigger armed rather than counting a firing that did nothing.
 
+## Commanding from the radar — from RADAR.CPP
+
+`RTacticalClass::Action` does something the minimap here did not: **with units selected, a
+click on the radar issues an ORDER rather than moving the view.** That is how an army gets
+committed across the map without scrolling to it. The action is filtered to a restricted set -
+MOVE, NOMOVE, ATTACK, ENTER, CAPTURE, SABOTAGE - and anything else falls through to nothing.
+
+The shroud rule is ported exactly: `shadow = !IsMapped` means an unexplored cell cannot be
+*targeted*, only moved to. Right-clicking fog sends the units there; it never acquires
+whatever happens to be standing in it.
+
+**Two deliberate differences from the original.** RA puts the order on the LEFT button because
+its right button toggles radar zoom. This game has no radar zoom, and right-click is already
+the one context-sensitive order button everywhere else — so the order is on the RIGHT and left
+keeps moving the view. Matching a binding whose other half does not exist would have made the
+input inconsistent with the rest of the game for no gain.
+
+**The bug this shipped with, caught by measuring rather than clicking:** `mousedown` fires for
+*every* button, so the right-click order ALSO recentred the view — the army got its order and
+the camera jumped off whatever the player was watching. `onmousedown` now ignores anything but
+button 0. If a handler is bound to mousedown and there is a right-click path anywhere near it,
+check that guard.
+
+Verified: four selected units right-clicked onto a revealed enemy yard all take an attack
+order and path to it; the view does not move; left-click still moves the view; and a
+right-click on shrouded ground produces a move order for all four and never an attack.
+
+Note `rtsui2.js` in the scratchpad is a stale harness — it loads `/command/` and expects
+`window.rtsOpen`, from before the RTS moved to its own repo. It fails on a clean `main` too.
+
 ## The opponent's production ceiling
 
 **MINE, not a port, and a fix for a measured defect.** By five minutes on hard the opponent
