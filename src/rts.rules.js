@@ -233,6 +233,29 @@ var RTS_AI = {
   limit:{ refinery:4,    barracks:2,    factory:2,    turret:12   }
 };
 
+/* ---------------------------------------------------------------- shroud --
+   MAP.CPP Sight_From(). Two flags per cell, and the distinction is the whole feature:
+
+     IsMapped  - this cell has been explored. Once lifted it stays lifted.
+     IsVisible - this cell is inside something's sight range RIGHT NOW.
+
+   So the map has three states, not two: black where you have never been, dimmed where you
+   have been but are not looking, and clear where you are. Enemy units vanish when they leave
+   your sight; enemy buildings you have already seen stay drawn, because they are part of what
+   you remember about the map.
+
+   Sight_From caps sight range at ten cells and tests true circular distance, so the revealed
+   area is a disc rather than a square. */
+var RTS_SIGHT_MAX = 10;
+var RTS_SIGHT_BONUS = 2;     /* the rules' `sight` is in world units; this widens the disc */
+var RTS_VIS_HZ = 15;         /* the visibility sweep runs on the original's 15 FPS clock */
+var RTS_FOG_DIM = 0.45;      /* how far explored-but-unseen ground is darkened */
+
+/* Sight range in TILES for a structure or unit definition. */
+function rtsSightTiles(def) {
+  return Math.max(3, Math.min(RTS_SIGHT_MAX, Math.round((def.sight || 12) / RTS_TILE) + RTS_SIGHT_BONUS));
+}
+
 /* Armour class per thing, used with weapon.vs above. */
 function rtsArmour(e) {
   if (e.type === 'struct') return 'building';
@@ -261,6 +284,9 @@ var RTS_BUILD_RADIUS = 9;       /* tiles: how far from an existing structure you
 var RTS_ORE_GROW_EVERY = 6;     /* seconds between growth passes */
 var RTS_ORE_GROW_AMT = 26;      /* added to an existing non-full tile each pass */
 var RTS_ORE_SPREAD_CHANCE = 0.10; /* chance a rich tile seeds an empty neighbour */
+/* MAP.CPP keeps a fixed-size candidate list filled by reservoir sampling, so the cost of a
+   growth pass does not scale with how much ore is on the map. */
+var RTS_ORE_SAMPLE = 1200;
 
 /* Enemy waves. RULES.CPP has AttackInterval 3 / AttackDelay 5 in MINUTES, which is the
    pacing of a 40-minute skirmish; a match here is a fraction of that, so these are the same

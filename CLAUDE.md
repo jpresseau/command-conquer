@@ -344,6 +344,43 @@ is a plume with a ring spreading on the surface and no mark left behind. Draw th
 as a *ring plus a collapsing column*: a filled pale disc at that size reads as a cloud. Effect
 frames must stay **square** — the renderer draws every one at `width × width`.
 
+## Shroud — from MAP.CPP
+
+`Sight_From()` is the whole feature, and the part that matters is that a cell carries **two**
+flags, not one:
+
+- **`IsMapped`** — explored. Once lifted it stays lifted.
+- **`IsVisible`** — inside something's sight range *right now*.
+
+So the map has three states: black where you have never been, dimmed where you have been but
+are not looking, and clear where you are. All three are verified by sampling actual pixels —
+`clear` ≈ (64,80,48), `explored` ≈ (27,36,20), `shrouded` = (4,6,9).
+
+- An enemy **unit** vanishes the moment it leaves your sight. An enemy **building** you have
+  already scouted stays drawn, because it is part of what you know about the ground rather
+  than something that moves. Same rule governs the radar, and clicking: you cannot select
+  what you cannot see.
+- `RadiusOffset[]` is a flat list of cell offsets **ordered by ring**, with `RadiusCount[r]`
+  giving how many entries cover radius r. Sight_From walks the first `RadiusCount[range]`
+  entries *and then filters by true distance*, which is what makes the revealed area an exact
+  circle — the table is a superset. Reproducing that gives exactly the original's reveal: 5
+  cells at range 1, 13 at range 2, 113 at range 6. The ring ordering is also what makes the
+  original's incremental scan possible (a unit that moved one cell only refreshes its outer
+  rings); here the whole `vis` layer is rebuilt on the 15 Hz clock instead, which is cheaper
+  than it sounds and much simpler.
+- The shroud is baked into a **112×112 canvas, one pixel per cell**, and blown up with
+  smoothing off: the layer costs one `drawImage`, and the edges stay hard and cell-aligned
+  the way the original's shroud tiles do.
+- **The AI is not fogged**, exactly as the original's computer opponent is not.
+
+`Map::Logic()` also amortises **ore growth**: each frame scans
+`MAP_CELL_TOTAL / (GrowthRate * TICKS_PER_MINUTE)` cells from a rolling cursor and collects
+candidates by reservoir sampling, so no frame ever pays for a full-map pass (worst-case tick
+measured at 0.1 ms, flat). Watch the translation: `Random_Pick(lo, hi)` is **inclusive at both
+ends**, so with Excess 0 and Count 0 the original's test is `0 <= 0` — true, and the first
+candidate always enters the list. Writing it as `rnd() * (excess+1) <= count` makes that test
+never true, the list stays empty forever, and ore silently never grows again. Nothing throws.
+
 ## Verifying
 
 No test suite — use headless Playwright against the **built** `index.html`. Node + Playwright

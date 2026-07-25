@@ -74,7 +74,7 @@ function _rtsPickAt(mx, my) {
   var best = null, bd = 1e9, i;
   for (i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.dead) continue;
+    if (e.dead || !_rtsEntSeen(e)) continue;     /* you cannot click what you cannot see */
     var rad, d = Math.hypot(e.x - p.x, e.z - p.z);
     if (e.type === 'struct') { var sd = rtsStructDef(e.def); rad = Math.max(sd.w, sd.h) * RTS_TILE * 0.55; }
     else rad = Math.max(2.2, e.r * 1.6);
@@ -203,6 +203,7 @@ function _rtsRFrame(dt) {
   for (i = 0; i < G.ents.length; i++) {
     var pe = G.ents[i];
     if (pe.type !== 'struct' || (pe.dead && !(pe.wreck > 0))) continue;
+    if (!_rtsEntSeen(pe)) continue;
     var pd = rtsStructDef(pe.def);
     var pad = S.pad[pe.def];
     var pw = Math.round(pad.width * TSscale), ph = Math.round(pad.height * TSscale);
@@ -219,6 +220,7 @@ function _rtsRFrame(dt) {
     /* CountDown: a destroyed structure is still on the map, burning, for a moment. Dropping
        it on the frame it died left its own explosion hanging over bare grass. */
     if (e.dead && !(e.type === 'struct' && e.wreck > 0)) continue;
+    if (!_rtsEntSeen(e)) continue;         /* out of sight, off the screen */
     if (e.z < R.focus.z - R.H / z || e.z > R.focus.z + R.H / z) continue;
     if (e.x < R.focus.x - R.W / z || e.x > R.focus.x + R.W / z) continue;
     draw.push(e);
@@ -234,6 +236,7 @@ function _rtsRFrame(dt) {
   /* --- projectiles --- */
   for (i = 0; i < G.proj.length; i++) {
     var p = G.proj[i];
+    if (!_rtsVisible(_rtsTX(p.x), _rtsTX(p.z))) continue;
     var sx = Math.round(_rtsSX(p.x)), sy = Math.round(_rtsSY(p.z));
     g.fillStyle = p.kind === 'missile' ? '#ffd070' : '#fff2c0';
     var r = Math.max(2, Math.round(cell * (p.kind === 'missile' ? 0.09 : 0.06)));
@@ -282,6 +285,32 @@ function _rtsRFrame(dt) {
       var sz = img.width * TSscale * (f.big || 1) * 0.9;
       g.drawImage(img, Math.round(_rtsSX(f.x) - sz / 2), Math.round(_rtsSY(f.z) - sz / 2), sz, sz);
     }
+  }
+
+  /* --- shroud. MAP.CPP keeps IsMapped and IsVisible per cell; this paints them.
+     Baked into a 112x112 canvas (one pixel per cell) and blown up with smoothing off, so
+     the whole layer is one drawImage and the edges stay hard and cell-aligned the way the
+     original's shroud tiles do. Re-baked only when the visibility sweep says something
+     changed, which is at most 15 times a second. --- */
+  if (G.mapped) {
+    if (!R.fog) {
+      R.fog = document.createElement('canvas');
+      R.fog.width = RTS_N; R.fog.height = RTS_N;
+      R.fogG = R.fog.getContext('2d');
+      G.visDirty = 1;
+    }
+    if (G.visDirty) {
+      G.visDirty = 0;
+      var fim = R.fogG.createImageData(RTS_N, RTS_N), fd = fim.data;
+      for (i = 0; i < RTS_N * RTS_N; i++) {
+        var a = G.mapped[i] ? (G.vis[i] ? 0 : Math.round(255 * RTS_FOG_DIM)) : 255;
+        fd[i * 4] = 4; fd[i * 4 + 1] = 6; fd[i * 4 + 2] = 9; fd[i * 4 + 3] = a;
+      }
+      R.fogG.putImageData(fim, 0, 0);
+    }
+    var fsx = R.focus.x / RTS_TILE + RTS_N / 2 - (R.W / 2) / cell;
+    var fsy = R.focus.z / RTS_TILE + RTS_N / 2 - (R.H / 2) / cell;
+    g.drawImage(R.fog, fsx, fsy, R.W / cell, R.H / cell, 0, 0, R.W, R.H);
   }
 
   /* --- placement ghost --- */

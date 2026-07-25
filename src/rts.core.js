@@ -348,6 +348,10 @@ function _rtsNewGame(seed, diff) {
     /* GoldValue 35 / GemValue 110: a flag per tile, not a second resource. Same mining, same
        refinery, ~3x the credits - so a gem field is worth crossing the map for. */
     gems:new Uint8Array(RTS_N * RTS_N),
+    /* MAP.CPP's IsMapped / IsVisible, one byte each. These are the PLAYER's knowledge of the
+       map - the AI is not fogged, exactly as the original's computer opponent is not. */
+    mapped:new Uint8Array(RTS_N * RTS_N),
+    vis:new Uint8Array(RTS_N * RTS_N),
     owner:new Int32Array(RTS_N * RTS_N),   /* entity id occupying the tile, 0 = none */
     ents:[], byId:{}, nextId:1,
     sel:[], proj:[], fx:[],
@@ -401,6 +405,87 @@ function _rtsNewGame(seed, diff) {
 
   _rtsRecalcPower('player'); _rtsRecalcPower('enemy');
   return G;
+}
+
+/* ----------------------------------------------------------------- shroud --
+   MAP.CPP builds RadiusOffset[] once - a flat list of cell offsets ordered by ring, with
+   RadiusCount[r] giving how many entries cover a radius of r. Sight_From then walks the
+   first RadiusCount[range] entries, which is why revealing a ten-cell disc costs one pass
+   over 309 precomputed offsets rather than a 21x21 box scan with a distance test in it.
+
+   The ring ordering is what makes the original's incremental scan possible: a unit that has
+   moved one cell only needs its outer rings refreshed. Built here rather than typed out. */
+var _RTS_RAD = null;
+function _rtsRadiusTable() {
+  if (_RTS_RAD) return _RTS_RAD;
+  var rings = [], r, dx, dz;
+  for (r = 0; r <= RTS_SIGHT_MAX; r++) rings.push([]);
+  for (dz = -RTS_SIGHT_MAX; dz <= RTS_SIGHT_MAX; dz++) {
+    for (dx = -RTS_SIGHT_MAX; dx <= RTS_SIGHT_MAX; dx++) {
+      var d = Math.sqrt(dx * dx + dz * dz);
+      if (d > RTS_SIGHT_MAX + 0.5) continue;
+      rings[Math.max(0, Math.min(RTS_SIGHT_MAX, Math.round(d)))].push(dx, dz);
+    }
+  }
+  var off = [], count = [];
+  for (r = 0; r <= RTS_SIGHT_MAX; r++) {
+    for (var i = 0; i < rings[r].length; i++) off.push(rings[r][i]);
+    count.push(off.length >> 1);
+  }
+  _RTS_RAD = { off:off, count:count };
+  return _RTS_RAD;
+}
+/* Sight_From: mark everything within `range` cells as seen now and explored forever. */
+function _rtsSightFrom(tx, tz, range) {
+  var G = window._rtsG, T = _rtsRadiusTable();
+  range = Math.max(0, Math.min(RTS_SIGHT_MAX, range | 0));
+  var n = T.count[range] * 2, off = T.off, rr = range * range;
+  for (var i = 0; i < n; i += 2) {
+    var dx = off[i], dz = off[i + 1];
+    /* Sight_From filters the ring list by TRUE distance as well - the offset table is a
+       superset, and this is what makes the revealed area an exact circle. */
+    if (dx * dx + dz * dz > rr) continue;
+    var x = tx + dx, z = tz + dz;
+    if (x < 0 || z < 0 || x >= RTS_N || z >= RTS_N) continue;
+    var c = z * RTS_N + x;
+    G.vis[c] = 1; G.mapped[c] = 1;
+  }
+}
+/* Rebuilt on the 15 Hz clock rather than per frame: everything the player owns looks, and
+   what nothing is looking at falls back to explored-but-dim. */
+function _rtsVisTick(dt) {
+  var G = window._rtsG;
+  G.visT = (G.visT || 0) + dt;
+  if (G.visT < 1 / RTS_VIS_HZ) return;
+  G.visT = 0;
+  G.vis.fill(0);
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.side !== 'player') continue;
+    var def = e.type === 'struct' ? rtsStructDef(e.def) : rtsUnitDef(e.def);
+    if (!def) continue;
+    _rtsSightFrom(_rtsTX(e.x), _rtsTX(e.z), rtsSightTiles(def));
+  }
+  G.visDirty = 1;                 /* the renderer only re-bakes the shroud when this is set */
+}
+function _rtsSeen(tx, tz) {
+  var G = window._rtsG;
+  if (!G.mapped || !_rtsInB(tx, tz)) return true;
+  return !!G.mapped[_rtsIdx(tx, tz)];
+}
+function _rtsVisible(tx, tz) {
+  var G = window._rtsG;
+  if (!G.vis || !_rtsInB(tx, tz)) return true;
+  return !!G.vis[_rtsIdx(tx, tz)];
+}
+/* Can the player see this entity at all? A unit vanishes the moment it leaves your sight;
+   a building you have already scouted stays on the map, because it is part of what you know
+   about the ground rather than something that moves. */
+function _rtsEntSeen(e) {
+  if (!e) return false;
+  if (e.side === 'player') return true;
+  var tx = _rtsTX(e.x), tz = _rtsTX(e.z);
+  return e.type === 'struct' ? _rtsSeen(tx, tz) : _rtsVisible(tx, tz);
 }
 
 /* ------------------------------------------------------------- entities */
@@ -1473,33 +1558,80 @@ function _rtsSay(m) { var G = window._rtsG; G.msg = m; G.msgT = 4; }
 
 /* Ore regrows into partly-mined tiles and slowly seeds empty neighbours, so a worked-out
    field recovers instead of leaving a dead map (RULES.CPP: IsTGrowth / IsTSpread). */
+/* MAP.CPP Map::Logic(). Ore growth is AMORTISED rather than done in one sweep: each frame
+   scans `MAP_CELL_TOTAL / (GrowthRate * TICKS_PER_MINUTE)` cells from a rolling cursor, and
+   candidates are collected by reservoir sampling -
+
+       if (Random_Pick(0, Excess) <= Count) { add, or replace a random slot }
+       Excess++
+
+   - so the candidate list stays a bounded, roughly uniform sample of the whole map however
+   much ore there is. When the cursor wraps, the sampled cells grow and spread. The win is
+   that no frame ever pays for a full 112x112 pass; the old version walked every cell at once
+   and that cost lands as a hitch on a slow machine. */
+/* Random_Pick(0, hi), inclusive at both ends. */
+function _rtsPick(rnd, hi) { return (rnd() * (hi + 1)) | 0; }
 function _rtsTickOre(dt) {
   var G = window._rtsG;
-  G.oreT = (G.oreT || 0) + dt;
-  if (G.oreT < RTS_ORE_GROW_EVERY) return;
-  G.oreT = 0;
   if (!G.oreRnd) G.oreRnd = _rtsRngMake(G.seed ^ 0x5eed);
-  var tx, tz, i, grew = false;
-  for (tz = 1; tz < RTS_N - 1; tz++) {
-    for (tx = 1; tx < RTS_N - 1; tx++) {
-      i = _rtsIdx(tx, tz);
-      var a = G.scrap[i];
-      if (a <= 0 || a >= RTS_SCRAP_TILE) continue;
-      if (G.gems[i]) continue;      /* IsTGrowth is ore only - a gem field is finite */
-      G.scrap[i] = Math.min(RTS_SCRAP_TILE, a + RTS_ORE_GROW_AMT);
-      grew = true;
-      /* a rich tile occasionally seeds an adjacent empty, unblocked one */
-      if (a > RTS_SCRAP_TILE * 0.6 && G.oreRnd() < RTS_ORE_SPREAD_CHANCE) {
-        var d = (G.oreRnd() * 4) | 0;
-        var nx = tx + (d === 0 ? 1 : d === 1 ? -1 : 0), nz = tz + (d === 2 ? 1 : d === 3 ? -1 : 0);
-        var ni = _rtsIdx(nx, nz);
-        if (_rtsInB(nx, nz) && G.scrap[ni] <= 0 && G.blocked[ni] === 0) {
-          G.scrap[ni] = RTS_SCRAP_TILE * 0.2;
-          G.scrapDirty = true;      /* new tile - the render layer must re-lay the field */
-        }
+  if (!G.oreGrow) { G.oreGrow = []; G.oreSpread = []; G.oreScan = 0; G.oreGExcess = 0; G.oreSExcess = 0; }
+
+  /* how many cells to look at this step so the whole map is covered in RTS_ORE_GROW_EVERY */
+  /* Random_Pick(lo, hi) is INCLUSIVE of both ends, and the reservoir depends on that: with
+     Excess 0 and Count 0 the original's test is `0 <= 0`, which is true, so the very first
+     candidate always enters the list. Translating it as `rnd() * (excess+1) <= count` makes
+     that first test `something-above-zero <= 0` - never true - and the list stays empty
+     forever. Ore then silently never grows, with nothing thrown and nothing logged. */
+  var total = RTS_N * RTS_N;
+  var sub = Math.max(1, Math.ceil(total * dt / RTS_ORE_GROW_EVERY));
+  var i, r;
+  for (var n = 0; n < sub && G.oreScan < total; n++, G.oreScan++) {
+    i = G.oreScan;
+    var a = G.scrap[i];
+    if (a <= 0 || a >= RTS_SCRAP_TILE) continue;
+    if (G.gems[i]) continue;                 /* IsTGrowth is ore only - a gem field is finite */
+
+    /* Can_Tiberium_Grow */
+    if (_rtsPick(G.oreRnd, G.oreGExcess) <= G.oreGrow.length) {
+      if (G.oreGrow.length < RTS_ORE_SAMPLE) G.oreGrow.push(i);
+      else G.oreGrow[(G.oreRnd() * G.oreGrow.length) | 0] = i;
+    }
+    G.oreGExcess++;
+
+    /* Can_Tiberium_Spread - only a rich cell can seed a neighbour */
+    if (a > RTS_SCRAP_TILE * 0.6) {
+      if (_rtsPick(G.oreRnd, G.oreSExcess) <= G.oreSpread.length) {
+        if (G.oreSpread.length < RTS_ORE_SAMPLE) G.oreSpread.push(i);
+        else G.oreSpread[(G.oreRnd() * G.oreSpread.length) | 0] = i;
       }
+      G.oreSExcess++;
     }
   }
+  if (G.oreScan < total) return;
+
+  /* the cursor has wrapped: apply what was sampled */
+  G.oreScan = 0;
+  var grew = false;
+  for (n = 0; n < G.oreGrow.length; n++) {
+    i = G.oreGrow[n];
+    if (G.scrap[i] <= 0 || G.scrap[i] >= RTS_SCRAP_TILE) continue;
+    G.scrap[i] = Math.min(RTS_SCRAP_TILE, G.scrap[i] + RTS_ORE_GROW_AMT);
+    grew = true;
+  }
+  for (n = 0; n < G.oreSpread.length; n++) {
+    i = G.oreSpread[n];
+    if (G.oreRnd() >= RTS_ORE_SPREAD_CHANCE) continue;
+    var tx = i % RTS_N, tz = (i / RTS_N) | 0;
+    var d = (G.oreRnd() * 4) | 0;
+    var nx = tx + (d === 0 ? 1 : d === 1 ? -1 : 0), nz = tz + (d === 2 ? 1 : d === 3 ? -1 : 0);
+    if (!_rtsInB(nx, nz)) continue;
+    var ni = _rtsIdx(nx, nz);
+    if (G.scrap[ni] > 0 || G.blocked[ni] !== 0) continue;
+    G.scrap[ni] = RTS_SCRAP_TILE * 0.2;
+    G.scrapDirty = true;             /* new tile - the render layer must re-lay the field */
+  }
+  G.oreGrow.length = 0; G.oreSpread.length = 0;
+  G.oreGExcess = 0; G.oreSExcess = 0;
   if (grew) G.oreGrew = true;
 }
 
@@ -1512,6 +1644,7 @@ function _rtsTick(dt) {
   if (G.msgT > 0) G.msgT -= dt;
 
   _rtsTickOre(dt);
+  _rtsVisTick(dt);
   /* Power_Output tracks hit points, so it has to be re-totalled before anything reads it. */
   _rtsRecalcPower('player'); _rtsRecalcPower('enemy');
   _rtsTickProduction('player', dt);

@@ -572,6 +572,8 @@ function _rtsDrawMini() {
   g.fillStyle = TCOL[0]; g.fillRect(0, 0, S, S);
   for (var tz = 0; tz < RTS_N; tz++) for (var tx = 0; tx < RTS_N; tx++) {
     var idx = _rtsIdx(tx, tz);
+    /* the radar shows what you have explored, and nothing else */
+    if (G.mapped && !G.mapped[idx]) { g.fillStyle = '#0a0d12'; g.fillRect(tx * sc, tz * sc, sc, sc); continue; }
     if (G.scrap[idx] > 0) g.fillStyle = G.gems[idx] ? '#9b7ae8' : '#c9a03a';
     else {
       var tk = G.terrain ? G.terrain[idx] : 0;
@@ -582,7 +584,7 @@ function _rtsDrawMini() {
   }
   for (i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.dead) continue;
+    if (e.dead || !_rtsEntSeen(e)) continue;
     g.fillStyle = e.side === 'player' ? '#5ea8ff' : '#ff6a52';
     if (e.type === 'struct') {
       var d = rtsStructDef(e.def);
