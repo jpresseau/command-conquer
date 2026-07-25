@@ -675,6 +675,15 @@ function _rtsKill(e) {
      victim's side alone credited the player for units the AI's own fires finished off. */
   if (e.side === 'enemy' && (!e.hurtBy || e.hurtBy === 'player')) G.stats.killed++;
   var si = G.sel.indexOf(e); if (si >= 0) G.sel.splice(si, 1);
+  /* SIDEBAR.CPP Recalc is only called when a FACTORY is destroyed - it is an exhaustive
+     sweep and the comment is explicit that it should not run for every casualty. */
+  if (e.type === 'struct') {
+    var gone = _rtsProdRecalc(e.side);
+    if (gone.length && e.side === 'player') {
+      var gd = rtsStructDef(gone[0]) || rtsUnitDef(gone[0]);
+      _rtsSay('Construction halted — ' + (gd ? gd.name : gone[0]) + ' abandoned.');
+    }
+  }
 }
 
 /* ------------------------------------------------- wrecks and survivors --
@@ -898,11 +907,41 @@ function _rtsCanQueue(side, key) {
   if (S.credits < _rtsCostOf(side, def)) return false;
   return true;
 }
+/* Can this side produce `key` at all - ignoring money and ignoring whether the line is
+   already busy? This is SIDEBAR.CPP's `Who_Can_Build_Me`: the question Recalc asks of every
+   cameo when a factory is lost. */
+function _rtsCanProduce(side, key) {
+  var def = rtsStructDef(key) || rtsUnitDef(key);
+  if (!def) return false;
+  var cat = _rtsQueueCat(key);
+  if (!_rtsAvailable(side, def)) return false;
+  if (cat === 'struct') return !!_rtsHas(side, 'yard');
+  if (cat === 'infantry') return !!_rtsHas(side, 'barracks');
+  if (cat === 'vehicle') return !!_rtsHas(side, 'factory');
+  return true;
+}
 function _rtsQueue(side, key) {
   if (!_rtsCanQueue(side, key)) return false;
   var S = window._rtsG.sides[side], def = rtsStructDef(key) || rtsUnitDef(key);
   S.q[_rtsQueueCat(key)] = { key:key, prog:0, total:_rtsBuildTimeOf(side, def),
-    cost:_rtsCostOf(side, def), paid:0 };
+    cost:_rtsCostOf(side, def), paid:0, hold:0 };
+  return true;
+}
+/* SIDEBAR.CPP SelectClass::Action, RIGHTPRESS: "If production is in progress, put it on
+   hold. If production is already on hold, then abandon it." Two distinct presses, and the
+   distinction matters - a single click should never be able to destroy a nearly-finished
+   war factory. Suspending keeps the money already spent tied up in the job; abandoning
+   refunds it. */
+function _rtsSuspend(side, cat) {
+  var S = window._rtsG.sides[side], q = S.q[cat];
+  if (!q || q.hold) return false;
+  q.hold = 1;
+  return true;
+}
+function _rtsResume(side, cat) {
+  var S = window._rtsG.sides[side], q = S.q[cat];
+  if (!q || !q.hold) return false;
+  q.hold = 0;
   return true;
 }
 function _rtsCancel(side, cat) {
@@ -911,10 +950,29 @@ function _rtsCancel(side, cat) {
   S.credits += q.paid;         /* refund what was actually spent */
   S.q[cat] = null;
 }
+/* SIDEBAR.CPP Recalc: called when a factory is destroyed. Anything that can no longer be
+   built by anybody is dropped, and its production abandoned. Without this, blowing up a
+   barracks left the rifle squad inside it still ticking toward completion and then walking
+   out of a building that no longer exists. Returns what it had to abandon. */
+function _rtsProdRecalc(side) {
+  var G = window._rtsG, S = G.sides[side], lost = [], cat;
+  for (cat in S.q) {
+    var q = S.q[cat];
+    if (q && !_rtsCanProduce(side, q.key)) { lost.push(q.key); _rtsCancel(side, cat); }
+  }
+  /* A finished building still waiting to be placed needs a yard to come out of. */
+  if (S.ready && !_rtsHas(side, 'yard')) {
+    var rd = rtsStructDef(S.ready);
+    if (rd) S.credits += _rtsCostOf(side, rd);
+    lost.push(S.ready);
+    S.ready = null; S.readyTry = 0;
+  }
+  return lost;
+}
 function _rtsTickProduction(side, dt) {
   var G = window._rtsG, S = G.sides[side], pf = _rtsPowerFactor(side), cat;
   for (cat in S.q) {
-    var q = S.q[cat]; if (!q) continue;
+    var q = S.q[cat]; if (!q || q.hold) continue;  /* a suspended line spends nothing */
     var rate = dt / q.total * pf;                  /* fraction of the job done this step */
     var want = q.cost * rate;
     if (want > S.credits) { want = S.credits; rate = q.cost > 0 ? want / q.cost : rate; }

@@ -57,7 +57,7 @@ function rtsOpen(seed) {
   _rtsRInit(cv);
 
   window._rtsUI = { cat:'struct', place:null, drag:null, keys:{}, last:0, raf:0, dead:false,
-    btns:{}, mouse:{ x:0, y:0, over:false }, miniDrag:false, credShown:0,
+    btns:{}, mouse:{ x:0, y:0, over:false }, miniDrag:false, credShown:0, avail:null,
     icons:_rtsMakeIcons('player') };
   var dl = document.getElementById('rtsDifLbl'), dd = _rtsBias('enemy');
   if (dl) { dl.textContent = dd.name; dl.title = 'Difficulty: ' + dd.name + ' (IQ ' + dd.iq + '/' + RTS_IQ.max + ') — ' + dd.desc; }
@@ -181,8 +181,11 @@ function _rtsBuildList() {
         + '<span class="pct"></span>'
         + '<span class="nm">' + def.name + '</span>'
         + '<span class="ct">' + def.cost + '</span>';
-      b.title = def.name + ' — ' + def.cost + ' credits\n' + def.desc;
+      b.title = def.name + ' — ' + def.cost + ' credits\n' + def.desc
+        + '\nRight-click while building: hold, then right-click again to cancel.';
       b.onclick = function () { _rtsItemClick(def.key); };
+      /* SelectClass::Action reads RIGHTPRESS as "cancel": hold first, abandon second. */
+      b.oncontextmenu = function (ev) { ev.preventDefault(); _rtsItemCancel(def.key); return false; };
       list.appendChild(b);
       U.btns[def.key] = b;
     })(items[i]);
@@ -194,8 +197,24 @@ function _rtsItemClick(key) {
   if (U.mode) rtsMode(null);            /* building something disarms the repair/sell cursor */
   if (typeof _rtsSfx === 'function') _rtsSfx('click');
   if (cat === 'struct' && S.ready === key) { U.place = key; _rtsGhostShow(key); return; }
-  if (S.q[cat] && S.q[cat].key === key) { _rtsCancel('player', cat); if (U.place === key) { U.place = null; _rtsGhostHide(); } return; }
-  if (_rtsQueue('player', key)) { if (typeof _rtsSfx === 'function') _rtsSfx('build'); }
+  /* Left click on the item already on the line: resume it if it is suspended, otherwise
+     leave it alone. It used to abandon outright, which meant one stray click threw away a
+     nearly-finished war factory and the credits with it. Cancelling is a right-click now,
+     and it takes two. */
+  if (S.q[cat] && S.q[cat].key === key) {
+    if (_rtsResume('player', cat)) {
+      _rtsSay(cat === 'infantry' ? 'Training.' : 'Building.');
+      if (typeof _rtsSfx === 'function') _rtsSfx('build');
+    } else {
+      _rtsSay('Already building. Right-click to hold or cancel.');
+    }
+    return;
+  }
+  if (_rtsQueue('player', key)) {
+    /* VOX_TRAINING for infantry, VOX_BUILDING for everything else. */
+    _rtsSay(cat === 'infantry' ? 'Training.' : 'Building.');
+    if (typeof _rtsSfx === 'function') _rtsSfx('build');
+  }
   else {
     var def = rtsStructDef(key) || rtsUnitDef(key);
     if (typeof _rtsSfx === 'function') _rtsSfx('deny');
@@ -207,8 +226,52 @@ function _rtsItemClick(key) {
     else if (S.ready) _rtsSay('Place the finished building first.');
   }
 }
+/* RIGHTPRESS on a cameo. First press suspends, second abandons and refunds. */
+function _rtsItemCancel(key) {
+  var G = window._rtsG, U = window._rtsUI, S = G.sides.player;
+  var cat = _rtsQueueCat(key), q = S.q[cat];
+  if (!q || q.key !== key) {
+    /* Right-clicking a finished building that is waiting to be placed cancels the placement
+       cursor rather than the building itself. */
+    if (cat === 'struct' && S.ready === key && U.place === key) {
+      U.place = null; _rtsGhostHide();
+      if (typeof _rtsSfx === 'function') _rtsSfx('click');
+    }
+    return;
+  }
+  if (_rtsSuspend('player', cat)) {
+    _rtsSay('On hold.');
+    if (typeof _rtsSfx === 'function') _rtsSfx('click');
+  } else {
+    _rtsCancel('player', cat);
+    if (U.place === key) { U.place = null; _rtsGhostHide(); }
+    _rtsSay('Canceled.');
+    if (typeof _rtsSfx === 'function') _rtsSfx('deny');
+  }
+}
+/* StripClass::Add speaks VOX_NEW_CONSTRUCT when something joins the buildable list. It is
+   the cue that finishing a barracks just opened up infantry - easy to miss otherwise, since
+   the new options are on a tab you are not looking at. Watches every category, not just the
+   visible one, and stays quiet on the first pass so a new game does not announce itself. */
+function _rtsWatchNewOptions() {
+  var U = window._rtsUI, cats = ['struct', 'infantry', 'vehicle'], now = {}, fresh = 0, i, j;
+  for (i = 0; i < cats.length; i++) {
+    var items = _rtsCatItems(cats[i]);
+    for (j = 0; j < items.length; j++) {
+      if (!_rtsCanProduce('player', items[j].key)) continue;
+      now[items[j].key] = 1;
+      if (U.avail && !U.avail[items[j].key]) fresh++;
+    }
+  }
+  if (fresh) {
+    _rtsSay('New construction options.');
+    if (typeof _rtsSfx === 'function') _rtsSfx('ready');
+  }
+  U.avail = now;
+}
 function _rtsSyncSidebar(dt) {
   var G = window._rtsG, U = window._rtsUI, S = G.sides.player;
+  _rtsWatchNewOptions();
 
   /* Credits roll toward the true value instead of snapping - the classic counter tick. */
   var target = Math.floor(S.credits);
@@ -242,13 +305,19 @@ function _rtsSyncSidebar(dt) {
       cls += ' ready'; pct.textContent = 'READY'; wipe.style.background = 'none';
     } else if (q && q.key === key) {
       cls += ' busy';
-      pct.textContent = Math.floor(q.prog * 100) + '%';
+      /* PIP_HOLDING: a suspended job shows that it is held, not how far along it is. */
+      if (q.hold) { cls += ' hold'; pct.textContent = 'HOLD'; }
+      else pct.textContent = Math.floor(q.prog * 100) + '%';
       /* clock wipe: the built portion is revealed clockwise from the top */
       var deg = Math.max(0, Math.min(360, q.prog * 360));
       wipe.style.background = 'conic-gradient(from 0deg, rgba(0,0,0,0) 0deg, rgba(0,0,0,0) '
         + deg + 'deg, rgba(4,7,11,0.74) ' + deg + 'deg, rgba(4,7,11,0.74) 360deg)';
     } else {
       pct.textContent = '';
+      /* "If there is already a factory producing this kind of object, then all objects of
+         this type are displayed in a disabled state" - the whole column greys out, so it is
+         obvious at a glance that the line is taken rather than that you cannot afford it. */
+      if (avail && (q || (cat === 'struct' && S.ready))) cls += ' busyline';
       wipe.style.background = avail ? 'none' : 'rgba(4,7,11,0.55)';
     }
     if (U.place === key) cls += ' placing';

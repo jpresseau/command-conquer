@@ -123,6 +123,11 @@
 #rcgRts .rts-tile.ready{border-color:#5fdc7a;box-shadow:0 0 10px rgba(95,220,122,.3)}
 #rcgRts .rts-tile.ready .pct{color:#8ef07a;font-size:11px}
 #rcgRts .rts-tile.placing{outline:2px solid #8ef07a;outline-offset:-2px}
+/* PIP_HOLDING - suspended production. Amber, so it reads as "waiting on you", not "broken". */
+#rcgRts .rts-tile.hold{border-color:#d9a441;box-shadow:0 0 0 1px rgba(217,164,65,.35) inset}
+#rcgRts .rts-tile.hold .pct{color:#f0c66e;font-size:11px}
+/* A cameo whose production line is already taken: buildable, just not right now. */
+#rcgRts .rts-tile.busyline{opacity:.55}
 
 /* selection readout */
 #rcgRts .rts-sel{flex:0 0 auto;padding:5px 8px;border:1px solid #2b3a4d;border-radius:4px;background:#080c11;
