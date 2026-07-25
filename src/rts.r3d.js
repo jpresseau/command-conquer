@@ -67,6 +67,29 @@ function _r3Box(out, x, y, z, w, h, d, col, topCol) {
   _r3F(out, [[x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1]], col);             /* right */
   _r3F(out, [[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]], col);             /* left */
 }
+/* A block with a CHAMFERED top - vertical walls, then four slopes running inward to an
+   inset roof. This is the workhorse for structures and it exists for one reason: with no
+   yaw, a plain box presents exactly two faces, top and front, so its roof is a single flat
+   polygon of a single colour and the whole building reads as a shed. The chamfer splits the
+   roof edge into four planes at four angles, which the light then separates into four
+   distinct tones - front bright, back dim, and the two sides in between. That rim of
+   graded facets is most of what makes a pre-rendered structure look solid. */
+function _r3Slab(out, x, y, z, w, h, d, bev, col, topCol) {
+  bev = Math.max(1, Math.min(bev, Math.min(w, d) / 2 - 1, h - 1));
+  var yw = y + h - bev, yt = y + h;
+  var x0 = x - w / 2, x1 = x + w / 2, z0 = z - d / 2, z1 = z + d / 2;
+  var ix0 = x0 + bev, ix1 = x1 - bev, iz0 = z0 + bev, iz1 = z1 - bev;
+  _r3F(out, [[x0, y, z1], [x1, y, z1], [x1, yw, z1], [x0, yw, z1]], col);          /* walls */
+  _r3F(out, [[x1, y, z0], [x0, y, z0], [x0, yw, z0], [x1, yw, z0]], col);
+  _r3F(out, [[x1, y, z1], [x1, y, z0], [x1, yw, z0], [x1, yw, z1]], col);
+  _r3F(out, [[x0, y, z0], [x0, y, z1], [x0, yw, z1], [x0, yw, z0]], col);
+  _r3F(out, [[x0, yw, z1], [x1, yw, z1], [ix1, yt, iz1], [ix0, yt, iz1]], col);    /* chamfers */
+  _r3F(out, [[x1, yw, z0], [x0, yw, z0], [ix0, yt, iz0], [ix1, yt, iz0]], col);
+  _r3F(out, [[x1, yw, z1], [x1, yw, z0], [ix1, yt, iz0], [ix1, yt, iz1]], col);
+  _r3F(out, [[x0, yw, z0], [x0, yw, z1], [ix0, yt, iz1], [ix0, yt, iz0]], col);
+  _r3F(out, [[ix0, yt, iz0], [ix0, yt, iz1], [ix1, yt, iz1], [ix1, yt, iz0]], topCol || col);
+}
+
 /* Upright cylinder. Enough segments that it reads round rather than faceted, but the flat
    shading still bands it, which is exactly the period look. */
 function _r3Cyl(out, x, y, z, r, h, col, topCol, seg) {
@@ -107,6 +130,18 @@ function _r3Gable(out, x, y, z, w, h, d, col) {
   _r3F(out, [[x1, y, z0], [x0, y, z0], [x0, y1, z], [x1, y1, z]], col);   /* back slope */
   _r3F(out, [[x0, y, z0], [x0, y, z1], [x0, y1, z]], col);                /* gable ends */
   _r3F(out, [[x1, y, z1], [x1, y, z0], [x1, y1, z]], col);
+}
+
+/* Hipped roof: a ridge along x with all FOUR sides sloping. A plain gable does not work
+   under this camera - the near slope covers five times the pixels of the far one, so the
+   roof reads as a single flat plane. Sloping the ends too puts two more tones on screen. */
+function _r3Hip(out, x, y, z, w, h, d, inset, col) {
+  var x0 = x - w / 2, x1 = x + w / 2, z0 = z - d / 2, z1 = z + d / 2, y1 = y + h;
+  var rx0 = x0 + inset, rx1 = x1 - inset;
+  _r3F(out, [[x0, y, z1], [x1, y, z1], [rx1, y1, z], [rx0, y1, z]], col);   /* near slope */
+  _r3F(out, [[x1, y, z0], [x0, y, z0], [rx0, y1, z], [rx1, y1, z]], col);   /* far slope */
+  _r3F(out, [[x0, y, z0], [x0, y, z1], [rx0, y1, z]], col);                 /* hip ends */
+  _r3F(out, [[x1, y, z1], [x1, y, z0], [rx1, y1, z]], col);
 }
 
 /* Rotate a model about the vertical axis. Used for unit facings. */

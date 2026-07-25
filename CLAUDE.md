@@ -51,6 +51,16 @@ breaking it shipped once.
 - **The ground plane is not foreshortened.** Projection is oblique — `screenY = z - K*y` —
   because a 3×3 structure has to cover exactly 72×72 art pixels or it stops lining up with
   its tiles. Height projects straight up into headroom above the footprint.
+- **Never leave a roof as one flat polygon.** With no yaw a plain box shows exactly two
+  faces, so its roof is a single polygon of a single colour and the building reads as a
+  shed. Structures use `_r3Slab` (chamfered top, which splits the roof edge into four
+  planes at four angles and therefore four tones) or a `_r3Hip` roof. Two forms were tried
+  and rejected: a plain gable, whose near slope covers five times the pixels of the far one
+  under this camera, and a barrel vault, whose entire near half points at the light and
+  lands on one shading band. The factory uses small repeated ridges instead.
+- **Structures are faction-coloured, not concrete** (`RTS_PAL.bld`): coloured walls under
+  maroon roofs, on a pale irregular concrete pad drawn by `_sprPad`. An all-grey pass read
+  as an industrial estate, and buildings straight on grass read as furniture on a lawn.
 - **Watch face winding and light direction.** Both failed silently and cost a round each: a
   cylinder wound the wrong way survives backface culling by showing you the *inside* of its
   far wall (stacks came out as dark discs), and a light with a negative z component lights

@@ -372,6 +372,29 @@ function _r3Box(out, x, y, z, w, h, d, col, topCol) {
   _r3F(out, [[x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1]], col);             /* right */
   _r3F(out, [[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]], col);             /* left */
 }
+/* A block with a CHAMFERED top - vertical walls, then four slopes running inward to an
+   inset roof. This is the workhorse for structures and it exists for one reason: with no
+   yaw, a plain box presents exactly two faces, top and front, so its roof is a single flat
+   polygon of a single colour and the whole building reads as a shed. The chamfer splits the
+   roof edge into four planes at four angles, which the light then separates into four
+   distinct tones - front bright, back dim, and the two sides in between. That rim of
+   graded facets is most of what makes a pre-rendered structure look solid. */
+function _r3Slab(out, x, y, z, w, h, d, bev, col, topCol) {
+  bev = Math.max(1, Math.min(bev, Math.min(w, d) / 2 - 1, h - 1));
+  var yw = y + h - bev, yt = y + h;
+  var x0 = x - w / 2, x1 = x + w / 2, z0 = z - d / 2, z1 = z + d / 2;
+  var ix0 = x0 + bev, ix1 = x1 - bev, iz0 = z0 + bev, iz1 = z1 - bev;
+  _r3F(out, [[x0, y, z1], [x1, y, z1], [x1, yw, z1], [x0, yw, z1]], col);          /* walls */
+  _r3F(out, [[x1, y, z0], [x0, y, z0], [x0, yw, z0], [x1, yw, z0]], col);
+  _r3F(out, [[x1, y, z1], [x1, y, z0], [x1, yw, z0], [x1, yw, z1]], col);
+  _r3F(out, [[x0, y, z0], [x0, y, z1], [x0, yw, z1], [x0, yw, z0]], col);
+  _r3F(out, [[x0, yw, z1], [x1, yw, z1], [ix1, yt, iz1], [ix0, yt, iz1]], col);    /* chamfers */
+  _r3F(out, [[x1, yw, z0], [x0, yw, z0], [ix0, yt, iz0], [ix1, yt, iz0]], col);
+  _r3F(out, [[x1, yw, z1], [x1, yw, z0], [ix1, yt, iz0], [ix1, yt, iz1]], col);
+  _r3F(out, [[x0, yw, z0], [x0, yw, z1], [ix0, yt, iz1], [ix0, yt, iz0]], col);
+  _r3F(out, [[ix0, yt, iz0], [ix0, yt, iz1], [ix1, yt, iz1], [ix1, yt, iz0]], topCol || col);
+}
+
 /* Upright cylinder. Enough segments that it reads round rather than faceted, but the flat
    shading still bands it, which is exactly the period look. */
 function _r3Cyl(out, x, y, z, r, h, col, topCol, seg) {
@@ -412,6 +435,18 @@ function _r3Gable(out, x, y, z, w, h, d, col) {
   _r3F(out, [[x1, y, z0], [x0, y, z0], [x0, y1, z], [x1, y1, z]], col);   /* back slope */
   _r3F(out, [[x0, y, z0], [x0, y, z1], [x0, y1, z]], col);                /* gable ends */
   _r3F(out, [[x1, y, z1], [x1, y, z0], [x1, y1, z]], col);
+}
+
+/* Hipped roof: a ridge along x with all FOUR sides sloping. A plain gable does not work
+   under this camera - the near slope covers five times the pixels of the far one, so the
+   roof reads as a single flat plane. Sloping the ends too puts two more tones on screen. */
+function _r3Hip(out, x, y, z, w, h, d, inset, col) {
+  var x0 = x - w / 2, x1 = x + w / 2, z0 = z - d / 2, z1 = z + d / 2, y1 = y + h;
+  var rx0 = x0 + inset, rx1 = x1 - inset;
+  _r3F(out, [[x0, y, z1], [x1, y, z1], [rx1, y1, z], [rx0, y1, z]], col);   /* near slope */
+  _r3F(out, [[x1, y, z0], [x0, y, z0], [rx0, y1, z], [rx1, y1, z]], col);   /* far slope */
+  _r3F(out, [[x0, y, z0], [x0, y, z1], [rx0, y1, z]], col);                 /* hip ends */
+  _r3F(out, [[x1, y, z1], [x1, y, z0], [rx1, y1, z]], col);
 }
 
 /* Rotate a model about the vertical axis. Used for unit facings. */
@@ -555,7 +590,7 @@ var RTS_PAL = {
   out:   '#15171b',
   /* Forest green, not lawn green. The reference material is dark, cool and low-contrast;
      an earlier olive palette read as a golf course with gravel on it. */
-  grass: ['#3d4d27', '#46562f', '#354420', '#4f5f38', '#2d3b1b'],
+  grass: ['#2f3d1e', '#374626', '#273417', '#405030', '#1f2b12'],
   dirt:  ['#6a5a3f', '#786748', '#5b4d35', '#847150'],
   rock:  ['#6a665c', '#7d7970', '#4a473f', '#8d897f'],
   bush:  ['#2c3818', '#222c12', '#39471f'],
@@ -576,6 +611,14 @@ var RTS_PAL = {
   team: {
     player: ['#2f5fa8', '#3f7fd0', '#1e3f74', '#69a9ee'],
     enemy:  ['#a83228', '#d04438', '#741e18', '#ec7663']
+  },
+  /* Structures are NOT grey. In the reference each faction's buildings are strongly
+     coloured - steel blue walls under maroon roofs on one side, red on the other - and that
+     colour is most of how you tell whose base you are looking at from across the map. An
+     all-concrete pass read as a grey industrial estate. */
+  bld: {
+    player: { wall:'#4a6b91', roof:'#6b4436', trim:'#aebccb', dark:'#2f4a68' },
+    enemy:  { wall:'#944034', roof:'#4e3630', trim:'#c9a89f', dark:'#5f2820' }
   }
 };
 
@@ -919,17 +962,18 @@ function _sprOre() {
 function _sprBuilding(key, side) {
   var def = rtsStructDef(key), TM = RTS_PAL.team[side];
   var W = def.w * RTS_TS, D = def.h * RTS_TS;
-  var C = RTS_PAL.conc, S = RTS_PAL.steel, DK = RTS_PAL.dark;
+  var C = RTS_PAL.conc, S = RTS_PAL.steel, DK = RTS_PAL.dark, B = RTS_PAL.bld[side];
   var m = [], i;
 
   if (key === 'yard') {
     /* Command Yard: a heavy slab under a full-width crane gantry. Nothing else in the base
        has anything spanning its whole width above the roof line, so it reads at any zoom. */
-    _r3Box(m, 0, 0, 2, W - 8, 25, D - 10, C[0]);
-    _r3Box(m, 0, 25, -14, W - 18, 3, 16, TM[0], TM[1]);            /* team panel */
-    for (i = 0; i < 4; i++) _r3Box(m, -24 + i * 16, 25, 6, 9, 5, 8, DK[1], DK[3]);  /* AC units */
-    _r3Box(m, 0, 25, 22, W - 22, 2, 5, S[0], S[3]);                /* conduit run */
-    _r3Box(m, 20, 25, 16, 16, 6, 12, S[2], S[1]);                  /* rooftop tank */
+    _r3Slab(m, 0, 0, 2, W - 8, 25, D - 10, 5, B.wall, B.roof);
+    _r3Slab(m, -5, 25, -8, W - 32, 9, D - 40, 3, B.wall, B.roof);            /* penthouse */
+    _r3Box(m, -5, 34, -14, W - 40, 2, 4, TM[0], TM[1]);            /* team panel on it */
+    for (i = 0; i < 3; i++) _r3Box(m, -18 + i * 13, 25, 8, 8, 5, 7, DK[1], DK[3]);  /* AC units */
+    _r3Box(m, 0, 25, 20, W - 26, 2, 5, S[0], S[3]);                /* conduit run */
+    _r3Box(m, 19, 25, 12, 14, 7, 11, S[2], S[1]);                  /* rooftop tank */
     _r3Box(m, -26, 0, 0, 9, 52, 9, S[2], S[1]);                    /* crane tower */
     _r3Box(m, 2, 47, 0, W - 22, 5, 7, S[2], S[1]);                 /* jib */
     _r3Box(m, 24, 37, 0, 2, 10, 2, DK[1], DK[3]);                  /* hoist cable */
@@ -938,8 +982,9 @@ function _sprBuilding(key, side) {
 
   } else if (key === 'power') {
     /* Power Plant: low hall, two big cooling stacks, transformer bank. */
-    _r3Box(m, 0, 0, 3, W - 8, 18, D - 12, C[0]);
-    _r3Box(m, 0, 18, -3, W - 18, 3, 12, TM[0], TM[1]);
+    _r3Slab(m, 0, 0, 3, W - 8, 18, D - 12, 4, B.wall, B.roof);
+    _r3Gable(m, 0, 18, 6, W - 20, 8, D - 26, B.roof);                /* turbine hall ridge */
+    _r3Box(m, 0, 22, 6, W - 22, 1, 3, TM[0], TM[1]);
     _r3Cyl(m, -11, 0, -8, 8, 38, S[0], DK[1]);                     /* stacks, dark mouths */
     _r3Cyl(m, 12, 0, -3, 8, 32, S[0], DK[1]);
     _r3Box(m, -14, 0, 14, 11, 9, 8, S[2], S[1]);                   /* transformers */
@@ -949,9 +994,10 @@ function _sprBuilding(key, side) {
   } else if (key === 'refinery') {
     /* Refinery: processing block, two fat silos, and a wide dock at the front for the
        harvester to drive into. The silos are the silhouette. */
-    _r3Box(m, -12, 0, -4, W - 34, 23, D - 22, C[0]);
-    _r3Box(m, -12, 23, -16, W - 44, 3, 12, TM[0], TM[1]);
-    for (i = 0; i < 3; i++) _r3Box(m, -26 + i * 13, 23, 2, 8, 5, 8, DK[1], DK[3]);
+    _r3Slab(m, -12, 0, -4, W - 34, 23, D - 22, 4, B.wall, B.roof);
+    _r3Slab(m, -14, 23, -14, W - 50, 8, 16, 3, B.wall, B.roof);              /* control room */
+    _r3Box(m, -14, 31, -20, W - 58, 2, 3, TM[0], TM[1]);
+    for (i = 0; i < 3; i++) _r3Box(m, -24 + i * 11, 23, 4, 7, 5, 7, DK[1], DK[3]);
     _r3Cyl(m, 22, 0, -12, 12, 40, S[0], S[3]);                     /* rear silo */
     _r3Cyl(m, 21, 0, 14, 11, 32, S[0], S[3]);
     _r3Box(m, 5, 36, -12, 22, 2, 4, S[2], S[3]);                   /* catwalk */
@@ -961,8 +1007,8 @@ function _sprBuilding(key, side) {
 
   } else if (key === 'barracks') {
     /* Barracks: the only pitched roof in the set. */
-    _r3Box(m, 0, 0, 0, W - 8, 13, D - 10, C[0]);
-    _r3Gable(m, 0, 13, 0, W - 4, 15, D - 6, RTS_PAL.dirt[1]);
+    _r3Box(m, 0, 0, 0, W - 10, 13, D - 12, B.wall);
+    _r3Hip(m, 0, 13, 0, W - 2, 19, D - 4, 11, B.roof);             /* steep, overhanging */
     _r3Box(m, 0, 19, 0, W - 4, 2, 5, TM[0], TM[1]);                /* unit band along the ridge */
     _r3Box(m, 0, 0, D / 2 - 6, 11, 11, 3, DK[1], DK[3]);            /* door */
     for (i = 0; i < 3; i++) {                                      /* sandbag ring */
@@ -975,26 +1021,23 @@ function _sprBuilding(key, side) {
   } else if (key === 'factory') {
     /* War Factory: wide shed with a barrel roof, roll-up door, exhaust bank. The curved
        roof is where the flat shading pays off - it bands into visible facets. */
-    _r3Box(m, 0, 0, 0, W - 8, 17, D - 8, C[0]);
-    for (i = 0; i < 9; i++) {                                      /* barrel roof segments */
-      var a0 = (i / 9) * Math.PI, a1 = ((i + 1) / 9) * Math.PI;
-      var r = (D - 10) / 2, hy = 17;
-      var z0 = -Math.cos(a0) * r, y0 = hy + Math.sin(a0) * 9;
-      var z1 = -Math.cos(a1) * r, y1 = hy + Math.sin(a1) * 9;
-      /* Wound so the normal points up and outward. The other order aims it at the ground
-         and the whole roof vanishes behind its own culled faces. */
-      _r3F(m, [[(W - 8) / 2, y0, z0], [-(W - 8) / 2, y0, z0],
-               [-(W - 8) / 2, y1, z1], [(W - 8) / 2, y1, z1]], i === 4 ? TM[0] : S[0]);
+    _r3Box(m, 0, 0, 0, W - 8, 15, D - 8, B.wall);
+    /* Ridged saw-tooth roof. A barrel vault was tried first and read dead flat: seen from
+       above and in front, the whole near half of a barrel points at the light, so every
+       segment lands on the same shading band. Five small ridges alternate bright and dark
+       instead, which is legible at any zoom. */
+    for (i = 0; i < 5; i++) {
+      _r3Gable(m, 0, 15, -16 + i * 8, W - 10, 7, 8, i === 2 ? TM[0] : B.roof);
     }
     _r3Box(m, 0, 0, D / 2 - 3, 30, 15, 3, DK[1], DK[3]);           /* roll-up door */
     _r3Box(m, 0, 0, D / 2 + 1, 38, 1, 6, RTS_PAL.hazard[0], RTS_PAL.hazard[0]);
-    _r3Cyl(m, -W / 2 + 10, 17, -12, 4, 18, S[0], DK[1], 10);        /* exhausts */
-    _r3Cyl(m, -W / 2 + 19, 17, -12, 4, 13, S[0], DK[1], 10);
+    _r3Cyl(m, -W / 2 + 10, 15, -12, 4, 20, S[0], DK[1], 10);        /* exhausts */
+    _r3Cyl(m, -W / 2 + 19, 15, -12, 4, 15, S[0], DK[1], 10);
 
   } else if (key === 'turret') {
     /* Turret: concrete pad and a squat rotating housing. The barrel is drawn by the
        renderer instead, because it has to track a target. */
-    _r3Cyl(m, 0, 0, 0, 11, 4, C[0], C[1], 16);
+    _r3Cone(m, 0, 0, 0, 11, 9, 4, C[0], 16);
     _r3Cone(m, 0, 4, 0, 8, 6, 8, TM[0], 14);
     _r3Cyl(m, 0, 12, 0, 6, 3, TM[1], TM[3], 14);
   }
@@ -1061,12 +1104,34 @@ function _sprUnit(key, side) {
   return frames;
 }
 
+/* The concrete apron a structure stands on. In the reference every building sits on a pale
+   irregular pad noticeably larger than itself - it is what stops a base looking like
+   furniture set down on a lawn. Baked per footprint size and reused. */
+function _sprPad(wCells, hCells) {
+  var W = wCells * RTS_TS + 20, H = hCells * RTS_TS + 16;
+  var t = _sprMake(W, H), g = t.g, P = RTS_PAL.conc, seed = wCells * 31 + hCells * 7;
+  for (var y = 0; y < H; y += 2) {
+    for (var x = 0; x < W; x += 2) {
+      /* Distance to the edge of a rounded rect, wobbled by noise, gives a ragged verge. */
+      var dx = Math.max(0, Math.abs(x - W / 2) - (W / 2 - 11));
+      var dy = Math.max(0, Math.abs(y - H / 2) - (H / 2 - 9));
+      var e = Math.hypot(dx, dy) + (_sprVN(x, y, 9, seed) - 0.5) * 9;
+      if (e > 5) continue;
+      var h = _sprHash(x >> 1, y >> 1, seed + 5);
+      g.globalAlpha = e > 3 ? 0.5 : 1;
+      _sprRect(g, x, y, 2, 2, h < 0.18 ? P[2] : (h < 0.66 ? P[0] : P[1]));
+    }
+  }
+  g.globalAlpha = 1;
+  return t.c;
+}
+
 /* Muzzle flashes and explosions, as small frame strips. */
 function _sprFx() {
   var boom = [], i;
   var cols = ['#fff4cc', '#ffd070', '#ff9a2e', '#e0561c', '#8a3410', '#3a2418'];
   for (i = 0; i < 6; i++) {
-    var s = 14 + i * 8, t = _sprMake(s, s), g = t.g, c = s / 2;
+    var s = 20 + i * 13, t = _sprMake(s, s), g = t.g, c = s / 2;
     _sprDisc(g, c, c, c - 1 - i * 0.5, cols[Math.min(5, i)]);
     if (i < 4) _sprDisc(g, c, c, (c - 1) * 0.55, cols[Math.max(0, i - 1)]);
     if (i < 3) for (var k = 0; k < 6; k++) {                     /* debris specks */
@@ -1086,7 +1151,8 @@ function _sprFx() {
 
 function _rtsSprites() {
   if (_RTS_SPR) return _RTS_SPR;
-  var S = { ore: _sprOre(), bld: {}, unit: {}, fx: _sprFx() };
+  var S = { ore: _sprOre(), bld: {}, unit: {}, fx: _sprFx(), pad: {} };
+  RTS_STRUCTS.forEach(function (d) { S.pad[d.key] = _sprPad(d.w, d.h); });
   ['player', 'enemy'].forEach(function (side) {
     S.bld[side] = {}; S.unit[side] = {};
     RTS_STRUCTS.forEach(function (d) { S.bld[side][d.key] = _sprBuilding(d.key, side); });
@@ -2500,16 +2566,12 @@ function _rtsRFrame(dt) {
     var pe = G.ents[i];
     if (pe.dead || pe.type !== 'struct') continue;
     var pd = rtsStructDef(pe.def);
-    var ppx = Math.round(_rtsSX(_rtsWX(pe.tx) - RTS_TILE / 2)) - Math.round(cell * 0.28);
-    var ppy = Math.round(_rtsSY(_rtsWX(pe.tz) - RTS_TILE / 2)) - Math.round(cell * 0.22);
-    var pw = pd.w * cell + Math.round(cell * 0.56), ph = pd.h * cell + Math.round(cell * 0.5);
+    var pad = S.pad[pe.def];
+    var pw = Math.round(pad.width * TSscale), ph = Math.round(pad.height * TSscale);
+    var ppx = Math.round(_rtsSX(_rtsWX(pe.tx) - RTS_TILE / 2)) - Math.round(10 * TSscale);
+    var ppy = Math.round(_rtsSY(_rtsWX(pe.tz) - RTS_TILE / 2)) - Math.round(8 * TSscale);
     if (ppx > R.W || ppy > R.H || ppx + pw < 0 || ppy + ph < 0) continue;
-    g.globalAlpha = 0.55;
-    g.fillStyle = RTS_PAL.sand[2];
-    g.fillRect(ppx, ppy + Math.round(cell * 0.12), pw, ph - Math.round(cell * 0.12));
-    g.fillStyle = RTS_PAL.sand[0];
-    g.fillRect(ppx + 2, ppy + Math.round(cell * 0.12), pw - 4, ph - Math.round(cell * 0.22));
-    g.globalAlpha = 1;
+    g.drawImage(pad, ppx, ppy, pw, ph);
   }
 
   /* --- everything that stands up, painted back to front --- */
