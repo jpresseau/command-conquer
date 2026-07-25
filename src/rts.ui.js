@@ -55,6 +55,11 @@ function rtsOpen(seed) {
   var cv = document.getElementById('rtsCv');
   _rtsResizeCanvases();
   _rtsRInit(cv);
+  /* The view opens on the player's OWN command yard. It used to open on a fixed corner,
+     which was fine while the start was also fixed; with SCENARIO.CPP's rolled start the
+     match can begin anywhere on the ring and a hardcoded focus looks at empty ground. */
+  var _home = _rtsHas('player', 'yard');
+  if (_home) { _rtsR.focus.x = _home.x; _rtsR.focus.z = _home.z; }
 
   window._rtsUI = { cat:'struct', place:null, drag:null, keys:{}, last:0, raf:0, dead:false,
     btns:{}, mouse:{ x:0, y:0, over:false }, miniDrag:false, credShown:0, avail:null,
