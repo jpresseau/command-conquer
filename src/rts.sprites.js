@@ -737,7 +737,49 @@ function _sprFx() {
     _sprDisc(f.g, 4.5, 4.5, 4 - i, i === 0 ? '#fff6d0' : (i === 1 ? '#ffd070' : '#ff9a30'));
     flash.push(f.c);
   }
-  return { boom: boom, flash: flash };
+  /* Combat_Anim's PIFF: a small dirty spark, for a bullet strike. Grey-white, not fire -
+     a rifle round hitting a hull does not look like a shell going off. */
+  var piff = [];
+  for (i = 0; i < 4; i++) {
+    var ps = 8 + i * 4, pt = _sprMake(ps, ps), pg = pt.g, pc = ps / 2;
+    var pcol = ['#ffffff', '#dfe6ee', '#9fadbb', '#6b7784'][i];
+    _sprDisc(pg, pc, pc, Math.max(1, (ps / 2 - 1) * (i < 2 ? 0.55 : 0.8)), pcol);
+    for (var pk = 0; pk < 4; pk++) {
+      var pa = pk / 4 * 6.283 + i * 0.7;
+      _sprRect(pg, pc + Math.cos(pa) * pc * 0.7, pc + Math.sin(pa) * pc * 0.7, 1, 1, '#f2f6fa');
+    }
+    piff.push(pt.c);
+  }
+  /* ...and the water set: a column of water thrown up, with a ring spreading on the surface.
+     Drawn as a ring plus a collapsing column rather than a pale disc - a filled circle at
+     this size reads as a cloud, not as a shell landing in a lake. The canvas has to stay
+     SQUARE: the effect renderer draws every frame at width x width. */
+  var splash = [];
+  for (i = 0; i < 5; i++) {
+    var ss = 20 + i * 9, st = _sprMake(ss, ss), sg = st.g, sc = ss / 2;
+    var kk = i / 4;
+    /* the ring, flattened because the camera looks along the ground plane */
+    var rr = (sc - 2) * (0.28 + kk * 0.72);
+    for (var sk = 0; sk < 22; sk++) {
+      var sa = sk / 22 * 6.283;
+      _sprRect(sg, sc + Math.cos(sa) * rr, sc + Math.sin(sa) * rr * 0.42, 2, 2,
+        i < 3 ? '#eaf6fc' : '#b6d6e6');
+    }
+    /* the column: tall and bright at first, collapsing back into the ring */
+    if (i < 3) {
+      var cw = 5 - i, ch = ss * 0.5 * (1 - kk * 0.7);
+      _sprRect(sg, sc - cw / 2, sc - ch, cw, ch, '#dff0f8');
+      _sprRect(sg, sc - cw / 2, sc - ch, cw, Math.max(2, ch * 0.35), '#ffffff');
+    }
+    /* droplets, thrown up and out */
+    for (var dk = 0; dk < 9; dk++) {
+      var da = dk / 9 * 6.283 + i, dd = rr * (0.7 + _sprHash(dk, i, 7) * 0.6);
+      _sprRect(sg, sc + Math.cos(da) * dd, sc + Math.sin(da) * dd * 0.42 - (2 - kk * 2) * 3,
+        2, 2, '#ffffff');
+    }
+    splash.push(st.c);
+  }
+  return { boom: boom, flash: flash, piff: piff, splash: splash };
 }
 
 function _rtsSprites() {

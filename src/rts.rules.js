@@ -93,11 +93,20 @@ var RTS_WEAPONS = {
    damage  : an attached animation applies this per second to whatever it is riding on
              (WARHEAD_FIRE in the original). This is what makes a burning unit burn down. */
 var RTS_ANIMS = {
-  boom: { dur:0.75, biggest:0.34, scorch:true,  crater:true,  chain:'fire', loops:1 },
-  hit:  { dur:0.50, biggest:0.30, scorch:true,  crater:false, chain:null,   loops:1 },
-  pop:  { dur:0.40, biggest:0.30, scorch:false, crater:false, chain:null,   loops:1 },
-  fire: { dur:1.10, biggest:0,    scorch:true,  crater:false, chain:null,   loops:2, damage:9 }
+  boom:   { dur:0.75, biggest:0.34, scorch:true,  crater:true,  chain:'fire', loops:1 },
+  hit:    { dur:0.50, biggest:0.30, scorch:true,  crater:false, chain:null,   loops:1 },
+  pop:    { dur:0.40, biggest:0.30, scorch:false, crater:false, chain:null,   loops:1 },
+  /* Combat_Anim's PIFF: the little spark a bullet makes. No mark on the ground. */
+  piff:   { dur:0.22, biggest:0.30, scorch:false, crater:false, chain:null,   loops:1 },
+  /* ...and its water set. An explosion over water throws a plume, and leaves nothing. */
+  splash: { dur:0.55, biggest:0.30, scorch:false, crater:false, chain:null,   loops:1 },
+  fire:   { dur:1.10, biggest:0,    scorch:true,  crater:false, chain:null,   loops:2, damage:9 }
 };
+/* Combat_Anim picks the explosion from the DAMAGE and the LAND TYPE - a rifle round and a
+   tank shell are not the same event, and neither is over water. The thresholds mirror the
+   original's: tiny hits piff, mid hits throw fragments, big ones are a fireball. */
+var RTS_ANIM_PIFF = 15;      /* below this, a spark (ExplosionSet 2: PIFF / PIFFPIFF) */
+var RTS_ANIM_BOOM = 40;      /* at or above this, the full fireball */
 var RTS_CRATER_ORE = 6;   /* ANIM.CPP: a crater calls Reduce_Tiberium(6) */
 
 /* ------------------------------------------------------------- infantry --
@@ -132,15 +141,32 @@ var RTS_SURVIVOR_ODDS = 0.5;    /* Drop_Debris only rolls some of them out of a 
 var RTS_DECON_TIME = 0.35;      /* Mission_Deconstruction: build-up run backwards, this x build */
 
 /* --------------------------------------------------------------- combat --
-   RULES.CPP General section. MinDamage/MaxDamage clamp every hit, so no amount of armour
-   bias can reduce a hit to nothing (a shot always does *something*, which is what stops two
-   units plinking at each other forever) and no multiplier stack can one-shot the map.
-   ExplosionSpread is the splash falloff: damage HALVES for each cell away from the blast,
-   which is much sharper than a linear taper and is why standing one cell further out in the
-   original genuinely saves a unit. */
+   COMBAT.CPP's Modify_Damage is the whole of the blast model, and its falloff is a DIVISION,
+   not a taper:
+
+       steps = distance / (SpreadFactor * PIXEL_LEPTON_W/2), bounded 0..16
+       if (steps) damage /= steps
+       if (steps < 4) damage = max(damage, MinDamage)     <- floor near the blast ONLY
+       damage = min(damage, MaxDamage)
+
+   So damage falls as 1/d: brutal at the impact point, nearly nothing a cell out, and the
+   MinDamage floor deliberately stops applying past a quarter of full damage - "allow damage
+   to drop to zero only if the distance would have reduced damage to less than 1/4 full
+   damage". A unit at the edge of a blast should take NOTHING, not a courtesy point.
+
+   RTS_SPREAD_STEPS is the steps-per-tile at SpreadFactor 1, scaled here so that a weapon's
+   existing `splash` radius plays the SpreadFactor role. */
 var RTS_MIN_DAMAGE = 1;
 var RTS_MAX_DAMAGE = 1000;
-var RTS_EXP_SPREAD = 0.5;
+var RTS_SPREAD_STEPS = 8;
+/* Explosion_Damage only ever examines the impact cell and the eight around it, with
+   range = ICON_LEPTON_W * 1.5 - so a blast NEVER spills further than a cell and a half,
+   whatever the warhead. SpreadFactor shapes the curve inside that; it does not widen it.
+   A weapon's `splash` is therefore its SpreadFactor here, not its radius. */
+var RTS_BLAST_CELLS = 1.5;
+
+var RTS_SPREAD_MAX = 16;      /* Bound(distance, 0, 16) */
+var RTS_SPREAD_FLOOR = 4;     /* MinDamage applies only inside this many steps */
 
 /* -------------------------------------------------------------- economy --
    GoldValue 35 / GemValue 110 - gems are worth a bit over three times ore per unit mined,
@@ -214,6 +240,11 @@ function rtsArmour(e) {
    Each scrap tile starts with RTS_SCRAP_TILE and is mined at RTS_HARVEST_RATE/s. */
 var RTS_START_CREDITS = 3000;   /* RULES.CPP: MPDefaultMoney */
 var RTS_SCRAP_TILE = 500;
+/* COMBAT.CPP IsTiberiumDestroyer: Reduce_Tiberium(strength / 10), counted in ore LEVELS - a
+   full cell holds about twelve. Fighting over an ore field strips it, which is why the patch
+   you have been shelling all game is bare by the end. Declared here, after the tile capacity
+   it is derived from: a var read before its assignment is NaN, and silently so. */
+var RTS_ORE_PER_LEVEL = 500 / 12;
 var RTS_HARVEST_RATE = 190;
 var RTS_UNLOAD_RATE = 700;      /* scrap/second poured into the refinery */
 var RTS_LOW_POWER_MIN = 0.28;   /* worst-case build-speed multiplier when browned out */

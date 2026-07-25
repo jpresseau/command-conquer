@@ -271,8 +271,12 @@ function _rtsRFrame(dt) {
       g.lineTo(_rtsSX(f.x2), _rtsSY(f.z2));
       g.stroke();
     } else {
-      var fr = Math.min(5, Math.floor(k * 6));
-      var img = S.fx.boom[fr];
+      /* Combat_Anim: which set of frames this is comes from the animation kind, which the
+         simulation chose from the damage and the land type. */
+      var set = f.kind === 'piff' ? S.fx.piff : (f.kind === 'splash' ? S.fx.splash : S.fx.boom);
+      var dur = (RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].dur) || 0.75;
+      var fr = Math.min(set.length - 1, Math.floor(_rtsAnimQ(f.t) / dur * set.length));
+      var img = set[Math.max(0, fr)];
       var sz = img.width * TSscale * (f.big || 1) * 0.9;
       g.drawImage(img, Math.round(_rtsSX(f.x) - sz / 2), Math.round(_rtsSY(f.z) - sz / 2), sz, sz);
     }

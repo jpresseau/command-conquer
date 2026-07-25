@@ -300,11 +300,20 @@ var RTS_WEAPONS = {
    damage  : an attached animation applies this per second to whatever it is riding on
              (WARHEAD_FIRE in the original). This is what makes a burning unit burn down. */
 var RTS_ANIMS = {
-  boom: { dur:0.75, biggest:0.34, scorch:true,  crater:true,  chain:'fire', loops:1 },
-  hit:  { dur:0.50, biggest:0.30, scorch:true,  crater:false, chain:null,   loops:1 },
-  pop:  { dur:0.40, biggest:0.30, scorch:false, crater:false, chain:null,   loops:1 },
-  fire: { dur:1.10, biggest:0,    scorch:true,  crater:false, chain:null,   loops:2, damage:9 }
+  boom:   { dur:0.75, biggest:0.34, scorch:true,  crater:true,  chain:'fire', loops:1 },
+  hit:    { dur:0.50, biggest:0.30, scorch:true,  crater:false, chain:null,   loops:1 },
+  pop:    { dur:0.40, biggest:0.30, scorch:false, crater:false, chain:null,   loops:1 },
+  /* Combat_Anim's PIFF: the little spark a bullet makes. No mark on the ground. */
+  piff:   { dur:0.22, biggest:0.30, scorch:false, crater:false, chain:null,   loops:1 },
+  /* ...and its water set. An explosion over water throws a plume, and leaves nothing. */
+  splash: { dur:0.55, biggest:0.30, scorch:false, crater:false, chain:null,   loops:1 },
+  fire:   { dur:1.10, biggest:0,    scorch:true,  crater:false, chain:null,   loops:2, damage:9 }
 };
+/* Combat_Anim picks the explosion from the DAMAGE and the LAND TYPE - a rifle round and a
+   tank shell are not the same event, and neither is over water. The thresholds mirror the
+   original's: tiny hits piff, mid hits throw fragments, big ones are a fireball. */
+var RTS_ANIM_PIFF = 15;      /* below this, a spark (ExplosionSet 2: PIFF / PIFFPIFF) */
+var RTS_ANIM_BOOM = 40;      /* at or above this, the full fireball */
 var RTS_CRATER_ORE = 6;   /* ANIM.CPP: a crater calls Reduce_Tiberium(6) */
 
 /* ------------------------------------------------------------- infantry --
@@ -339,15 +348,32 @@ var RTS_SURVIVOR_ODDS = 0.5;    /* Drop_Debris only rolls some of them out of a 
 var RTS_DECON_TIME = 0.35;      /* Mission_Deconstruction: build-up run backwards, this x build */
 
 /* --------------------------------------------------------------- combat --
-   RULES.CPP General section. MinDamage/MaxDamage clamp every hit, so no amount of armour
-   bias can reduce a hit to nothing (a shot always does *something*, which is what stops two
-   units plinking at each other forever) and no multiplier stack can one-shot the map.
-   ExplosionSpread is the splash falloff: damage HALVES for each cell away from the blast,
-   which is much sharper than a linear taper and is why standing one cell further out in the
-   original genuinely saves a unit. */
+   COMBAT.CPP's Modify_Damage is the whole of the blast model, and its falloff is a DIVISION,
+   not a taper:
+
+       steps = distance / (SpreadFactor * PIXEL_LEPTON_W/2), bounded 0..16
+       if (steps) damage /= steps
+       if (steps < 4) damage = max(damage, MinDamage)     <- floor near the blast ONLY
+       damage = min(damage, MaxDamage)
+
+   So damage falls as 1/d: brutal at the impact point, nearly nothing a cell out, and the
+   MinDamage floor deliberately stops applying past a quarter of full damage - "allow damage
+   to drop to zero only if the distance would have reduced damage to less than 1/4 full
+   damage". A unit at the edge of a blast should take NOTHING, not a courtesy point.
+
+   RTS_SPREAD_STEPS is the steps-per-tile at SpreadFactor 1, scaled here so that a weapon's
+   existing `splash` radius plays the SpreadFactor role. */
 var RTS_MIN_DAMAGE = 1;
 var RTS_MAX_DAMAGE = 1000;
-var RTS_EXP_SPREAD = 0.5;
+var RTS_SPREAD_STEPS = 8;
+/* Explosion_Damage only ever examines the impact cell and the eight around it, with
+   range = ICON_LEPTON_W * 1.5 - so a blast NEVER spills further than a cell and a half,
+   whatever the warhead. SpreadFactor shapes the curve inside that; it does not widen it.
+   A weapon's `splash` is therefore its SpreadFactor here, not its radius. */
+var RTS_BLAST_CELLS = 1.5;
+
+var RTS_SPREAD_MAX = 16;      /* Bound(distance, 0, 16) */
+var RTS_SPREAD_FLOOR = 4;     /* MinDamage applies only inside this many steps */
 
 /* -------------------------------------------------------------- economy --
    GoldValue 35 / GemValue 110 - gems are worth a bit over three times ore per unit mined,
@@ -421,6 +447,11 @@ function rtsArmour(e) {
    Each scrap tile starts with RTS_SCRAP_TILE and is mined at RTS_HARVEST_RATE/s. */
 var RTS_START_CREDITS = 3000;   /* RULES.CPP: MPDefaultMoney */
 var RTS_SCRAP_TILE = 500;
+/* COMBAT.CPP IsTiberiumDestroyer: Reduce_Tiberium(strength / 10), counted in ore LEVELS - a
+   full cell holds about twelve. Fighting over an ore field strips it, which is why the patch
+   you have been shelling all game is bare by the end. Declared here, after the tile capacity
+   it is derived from: a var read before its assignment is NaN, and silently so. */
+var RTS_ORE_PER_LEVEL = 500 / 12;
 var RTS_HARVEST_RATE = 190;
 var RTS_UNLOAD_RATE = 700;      /* scrap/second poured into the refinery */
 var RTS_LOW_POWER_MIN = 0.28;   /* worst-case build-speed multiplier when browned out */
@@ -1533,7 +1564,49 @@ function _sprFx() {
     _sprDisc(f.g, 4.5, 4.5, 4 - i, i === 0 ? '#fff6d0' : (i === 1 ? '#ffd070' : '#ff9a30'));
     flash.push(f.c);
   }
-  return { boom: boom, flash: flash };
+  /* Combat_Anim's PIFF: a small dirty spark, for a bullet strike. Grey-white, not fire -
+     a rifle round hitting a hull does not look like a shell going off. */
+  var piff = [];
+  for (i = 0; i < 4; i++) {
+    var ps = 8 + i * 4, pt = _sprMake(ps, ps), pg = pt.g, pc = ps / 2;
+    var pcol = ['#ffffff', '#dfe6ee', '#9fadbb', '#6b7784'][i];
+    _sprDisc(pg, pc, pc, Math.max(1, (ps / 2 - 1) * (i < 2 ? 0.55 : 0.8)), pcol);
+    for (var pk = 0; pk < 4; pk++) {
+      var pa = pk / 4 * 6.283 + i * 0.7;
+      _sprRect(pg, pc + Math.cos(pa) * pc * 0.7, pc + Math.sin(pa) * pc * 0.7, 1, 1, '#f2f6fa');
+    }
+    piff.push(pt.c);
+  }
+  /* ...and the water set: a column of water thrown up, with a ring spreading on the surface.
+     Drawn as a ring plus a collapsing column rather than a pale disc - a filled circle at
+     this size reads as a cloud, not as a shell landing in a lake. The canvas has to stay
+     SQUARE: the effect renderer draws every frame at width x width. */
+  var splash = [];
+  for (i = 0; i < 5; i++) {
+    var ss = 20 + i * 9, st = _sprMake(ss, ss), sg = st.g, sc = ss / 2;
+    var kk = i / 4;
+    /* the ring, flattened because the camera looks along the ground plane */
+    var rr = (sc - 2) * (0.28 + kk * 0.72);
+    for (var sk = 0; sk < 22; sk++) {
+      var sa = sk / 22 * 6.283;
+      _sprRect(sg, sc + Math.cos(sa) * rr, sc + Math.sin(sa) * rr * 0.42, 2, 2,
+        i < 3 ? '#eaf6fc' : '#b6d6e6');
+    }
+    /* the column: tall and bright at first, collapsing back into the ring */
+    if (i < 3) {
+      var cw = 5 - i, ch = ss * 0.5 * (1 - kk * 0.7);
+      _sprRect(sg, sc - cw / 2, sc - ch, cw, ch, '#dff0f8');
+      _sprRect(sg, sc - cw / 2, sc - ch, cw, Math.max(2, ch * 0.35), '#ffffff');
+    }
+    /* droplets, thrown up and out */
+    for (var dk = 0; dk < 9; dk++) {
+      var da = dk / 9 * 6.283 + i, dd = rr * (0.7 + _sprHash(dk, i, 7) * 0.6);
+      _sprRect(sg, sc + Math.cos(da) * dd, sc + Math.sin(da) * dd * 0.42 - (2 - kk * 2) * 3,
+        2, 2, '#ffffff');
+    }
+    splash.push(st.c);
+  }
+  return { boom: boom, flash: flash, piff: piff, splash: splash };
 }
 
 function _rtsSprites() {
@@ -2560,6 +2633,18 @@ function _rtsAnimAI(dt) {
     }
   }
 }
+/* COMBAT.CPP Combat_Anim. */
+function _rtsCombatAnim(dmg, x, z, big) {
+  var G = window._rtsG;
+  if (!(dmg > 0)) return null;
+  var tx = _rtsTX(x), tz = _rtsTX(z);
+  var water = _rtsInB(tx, tz) && G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER;
+  var kind = water ? 'splash' : (dmg < RTS_ANIM_PIFF ? 'piff' : (dmg < RTS_ANIM_BOOM ? 'hit' : 'boom'));
+  /* scale with damage the way the original steps through its list, rather than one fixed size */
+  var scale = (big || 1) * (0.7 + Math.min(1, dmg / 90) * 0.7);
+  G.fx.push({ kind:kind, x:x, y:1, z:z, t:0, big:scale });
+  return kind;
+}
 function _rtsAnimMiddle(f, def) {
   var G = window._rtsG;
   var tx = _rtsTX(f.x), tz = _rtsTX(f.z);
@@ -2746,10 +2831,11 @@ function _rtsFire(e, tgt, w) {
   if (w.speed <= 0) {
     _rtsDamage(tgt, dmg, e);
     G.fx.push({ kind:'tracer', x:e.x, y:1.3, z:e.z, x2:tgt.x, y2:1.3, z2:tgt.z, t:0 });
+    _rtsCombatAnim(dmg, tgt.x, tgt.z, 0.5);
   } else {
     var d = Math.hypot(tgt.x - e.x, tgt.z - e.z) || 1;
     G.proj.push({ kind:w.shot, x:e.x, y:1.4, z:e.z, vx:(tgt.x - e.x) / d * w.speed, vz:(tgt.z - e.z) / d * w.speed,
-      speed:w.speed, tgt:tgt, dmg:dmg, splash:w.splash, side:e.side, life:4, w:w });
+      speed:w.speed, tgt:tgt, dmg:dmg, splash:w.splash, side:e.side, life:4, w:w, from:e });
   }
 }
 /* INFANTRY.CPP Fear_AI + Scatter. Only infantry have this. */
@@ -2772,13 +2858,15 @@ function _rtsScatter(e, fromX, fromZ) {
   e.path = [{ x:gx, z:gz }]; e.pi = 0; e.goal = { x:gx, z:gz };
 }
 
-function _rtsDamage(tgt, dmg, from) {
+function _rtsDamage(tgt, dmg, from, floor) {
   if (!tgt || tgt.dead) return;
   if (tgt.prone) dmg *= RTS_PRONE_DAMAGE;
   dmg /= _rtsBias(tgt.side).armor;                 /* ArmorBias defends the whole house */
-  /* Modify_Damage clamps last: a hit always does at least MinDamage, so two units can never
-     stand there plinking zeroes at each other, and no stack of multipliers exceeds MaxDamage. */
-  dmg = Math.max(RTS_MIN_DAMAGE, Math.min(RTS_MAX_DAMAGE, dmg));
+  /* Modify_Damage clamps last. The MinDamage floor is NOT unconditional - it applies to a
+     direct hit and to the inner ring of a blast, so two units can never plink zeroes at each
+     other, while the edge of an explosion is still allowed to do nothing at all. */
+  if (floor !== false) dmg = Math.max(RTS_MIN_DAMAGE, dmg);
+  dmg = Math.min(RTS_MAX_DAMAGE, dmg);
   tgt.hp -= dmg;
   tgt.hitT = 0.18;
   /* an idle unit that gets shot shoots back instead of standing there */
@@ -2803,17 +2891,42 @@ function _rtsDamage(tgt, dmg, from) {
     window._rtsG.fx.push({ kind:'fire', x:tgt.x, y:1, z:tgt.z, t:0, big:0.75, att:tgt.id, loops:3 });
   }
 }
-/* ExplosionSpread: blast damage HALVES for every cell of distance, not a linear taper. The
-   difference is felt - one cell further out is half the damage, two cells is a quarter, so
-   spreading a group out genuinely saves it. */
-function _rtsSplash(x, z, rad, dmg, side) {
-  var G = window._rtsG, foe = _rtsEnemyOf(side);
+/* COMBAT.CPP Modify_Damage: the falloff is a DIVISION by distance, not a taper. Damage is
+   brutal at the impact point and collapses as 1/d, and the MinDamage floor only applies
+   within RTS_SPREAD_FLOOR steps - past that a blast is allowed to do literally nothing,
+   which is the difference between "everyone nearby takes a point" and a real blast radius.
+
+   Two rules from Explosion_Damage that matter as much as the curve:
+   - a hit anywhere on a BUILDING's footprint counts as a direct hit on its centre, so a
+     shell landing on the corner of a refinery is not quietly downgraded to a graze;
+   - the blast damages everyone except whoever fired it. Friendly fire is real: park your
+     own squad around a target and your rockets will kill them. */
+function _rtsSplashSteps(d, spread, target, tx, tz) {
+  if (target && target.type === 'struct') {
+    var sd = rtsStructDef(target.def);
+    if (tx >= target.tx && tx < target.tx + sd.w && tz >= target.tz && tz < target.tz + sd.h) return 0;
+  }
+  var steps = Math.round(d / RTS_TILE * (RTS_SPREAD_STEPS / Math.max(0.5, spread)));
+  return Math.max(0, Math.min(RTS_SPREAD_MAX, steps));
+}
+function _rtsSplash(x, z, rad, dmg, side, spread, from) {
+  var G = window._rtsG, tx = _rtsTX(x), tz = _rtsTX(z);
+  spread = spread || 1;
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
-    if (o.dead || o.side !== foe) continue;
+    if (o.dead || o === from) continue;
     var d = Math.hypot(o.x - x, o.z - z);
     if (d > rad) continue;
-    _rtsDamage(o, dmg * Math.pow(RTS_EXP_SPREAD, d / RTS_TILE), null);
+    var steps = _rtsSplashSteps(d, spread, o, tx, tz);
+    var hit = steps ? dmg / steps : dmg;
+    if (steps >= RTS_SPREAD_FLOOR && hit < RTS_MIN_DAMAGE) continue;   /* allowed to be nothing */
+    _rtsDamage(o, hit, null, steps < RTS_SPREAD_FLOOR);
+  }
+  /* IsTiberiumDestroyer: Reduce_Tiberium(strength / 10). Shelling an ore field destroys it. */
+  if (_rtsInB(tx, tz) && G.scrap[_rtsIdx(tx, tz)] > 0) {
+    var oi = _rtsIdx(tx, tz);
+    G.scrap[oi] = Math.max(0, G.scrap[oi] - (dmg / 10) * RTS_ORE_PER_LEVEL);
+    if (G.scrap[oi] <= 0) { G.gems[oi] = 0; G.scrapDirty = true; }
   }
 }
 
@@ -3076,8 +3189,8 @@ function _rtsUpdateProj(dt) {
     if (p.tgt && !p.tgt.dead && _rtsRangeTo(p, p.tgt) < 1.8) hit = p.tgt;
     if (hit || p.life <= 0) {
       if (hit) _rtsDamage(hit, p.dmg, null);
-      if (p.splash > 0) _rtsSplash(p.x, p.z, p.splash * RTS_TILE * 0.8, p.dmg, p.side);
-      G.fx.push({ kind:'hit', x:p.x, y:1, z:p.z, t:0, big:p.splash > 0 ? 1.4 : 0.7 });
+      if (p.splash > 0) _rtsSplash(p.x, p.z, RTS_BLAST_CELLS * RTS_TILE, p.dmg, p.side, p.splash, p.from);
+      _rtsCombatAnim(p.dmg, p.x, p.z, p.splash > 0 ? 1.4 : 0.7);
       G.proj.splice(i, 1);
     }
   }
@@ -3619,8 +3732,12 @@ function _rtsRFrame(dt) {
       g.lineTo(_rtsSX(f.x2), _rtsSY(f.z2));
       g.stroke();
     } else {
-      var fr = Math.min(5, Math.floor(k * 6));
-      var img = S.fx.boom[fr];
+      /* Combat_Anim: which set of frames this is comes from the animation kind, which the
+         simulation chose from the damage and the land type. */
+      var set = f.kind === 'piff' ? S.fx.piff : (f.kind === 'splash' ? S.fx.splash : S.fx.boom);
+      var dur = (RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].dur) || 0.75;
+      var fr = Math.min(set.length - 1, Math.floor(_rtsAnimQ(f.t) / dur * set.length));
+      var img = set[Math.max(0, fr)];
       var sz = img.width * TSscale * (f.big || 1) * 0.9;
       g.drawImage(img, Math.round(_rtsSX(f.x) - sz / 2), Math.round(_rtsSY(f.z) - sz / 2), sz, sz);
     }

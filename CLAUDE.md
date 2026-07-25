@@ -280,9 +280,45 @@ AI's banked credits at the three-minute mark, and it does not throw or log anyth
 
 Also corrected from this file: **ConditionYellow = 1/2 and ConditionRed = 1/4** (they were
 0.66/0.33 here, quietly mistuning damaged-building art, the fear ladder and the AI's
-sell-back decision), `RepairPercent = 1/4`, `MinDamage 1` / `MaxDamage 1000` clamping every
-hit, and **ExplosionSpread**: splash damage *halves per cell* of distance rather than tapering
-linearly, so spreading a group out genuinely saves it.
+sell-back decision), `RepairPercent = 1/4`, and `MinDamage 1` / `MaxDamage 1000`.
+
+## The blast model — from COMBAT.CPP
+
+`Modify_Damage` is the whole of it, and the falloff is a **division**, not a taper:
+
+```
+steps = distance / (SpreadFactor * PIXEL_LEPTON_W/2), bounded 0..16
+if (steps) damage /= steps
+if (steps < 4) damage = max(damage, MinDamage)      <- floor near the blast ONLY
+damage = min(damage, MaxDamage)
+```
+
+Damage falls as **1/d**: full at the impact point, a fraction one cell out. And the MinDamage
+floor deliberately *stops applying* past four steps — "allow damage to drop to zero only if
+the distance would have reduced damage to less than 1/4 full damage". A unit at the edge of a
+blast takes **nothing**, not a courtesy point. (An earlier pass here read RULES.CPP's
+`ExplosionSpread` as "damage halves per cell" and shipped an exponential curve; this file is
+where the real formula lives, and it is neither exponential nor floored everywhere.)
+
+Two rules in `Explosion_Damage` matter as much as the curve:
+
+- **A hit anywhere on a building's footprint counts as a direct hit on its centre** (`if
+  RTTI_BUILDING && impacto == object → distance = 0`). Without it a shell landing on the
+  corner of a 3×3 refinery is silently downgraded to a graze — measured here as 200 damage
+  versus 12.5.
+- **The blast damages everyone except whoever fired it.** Friendly fire is real: park your
+  own squad around a target and your own rockets will kill them.
+- The routine only ever examines the impact cell and the eight around it (`range =
+  ICON_LEPTON_W * 1.5`), so a blast **never spills further than a cell and a half**, whatever
+  the warhead. SpreadFactor shapes the curve inside that radius; it does not widen it.
+- `IsTiberiumDestroyer` → `Reduce_Tiberium(strength / 10)`: shelling an ore field strips it.
+
+**`Combat_Anim` picks the explosion from the damage and the land type** — a rifle round and a
+tank shell are not the same event, and neither is over water. Small hits piff (a grey-white
+spark, not fire), mid hits throw fragments, big ones are a fireball, and anything over water
+is a plume with a ring spreading on the surface and no mark left behind. Draw the water plume
+as a *ring plus a collapsing column*: a filled pale disc at that size reads as a cloud. Effect
+frames must stay **square** — the renderer draws every one at `width × width`.
 
 ## Verifying
 

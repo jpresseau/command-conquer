@@ -679,6 +679,18 @@ function _rtsAnimAI(dt) {
     }
   }
 }
+/* COMBAT.CPP Combat_Anim. */
+function _rtsCombatAnim(dmg, x, z, big) {
+  var G = window._rtsG;
+  if (!(dmg > 0)) return null;
+  var tx = _rtsTX(x), tz = _rtsTX(z);
+  var water = _rtsInB(tx, tz) && G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER;
+  var kind = water ? 'splash' : (dmg < RTS_ANIM_PIFF ? 'piff' : (dmg < RTS_ANIM_BOOM ? 'hit' : 'boom'));
+  /* scale with damage the way the original steps through its list, rather than one fixed size */
+  var scale = (big || 1) * (0.7 + Math.min(1, dmg / 90) * 0.7);
+  G.fx.push({ kind:kind, x:x, y:1, z:z, t:0, big:scale });
+  return kind;
+}
 function _rtsAnimMiddle(f, def) {
   var G = window._rtsG;
   var tx = _rtsTX(f.x), tz = _rtsTX(f.z);
@@ -865,10 +877,11 @@ function _rtsFire(e, tgt, w) {
   if (w.speed <= 0) {
     _rtsDamage(tgt, dmg, e);
     G.fx.push({ kind:'tracer', x:e.x, y:1.3, z:e.z, x2:tgt.x, y2:1.3, z2:tgt.z, t:0 });
+    _rtsCombatAnim(dmg, tgt.x, tgt.z, 0.5);
   } else {
     var d = Math.hypot(tgt.x - e.x, tgt.z - e.z) || 1;
     G.proj.push({ kind:w.shot, x:e.x, y:1.4, z:e.z, vx:(tgt.x - e.x) / d * w.speed, vz:(tgt.z - e.z) / d * w.speed,
-      speed:w.speed, tgt:tgt, dmg:dmg, splash:w.splash, side:e.side, life:4, w:w });
+      speed:w.speed, tgt:tgt, dmg:dmg, splash:w.splash, side:e.side, life:4, w:w, from:e });
   }
 }
 /* INFANTRY.CPP Fear_AI + Scatter. Only infantry have this. */
@@ -891,13 +904,15 @@ function _rtsScatter(e, fromX, fromZ) {
   e.path = [{ x:gx, z:gz }]; e.pi = 0; e.goal = { x:gx, z:gz };
 }
 
-function _rtsDamage(tgt, dmg, from) {
+function _rtsDamage(tgt, dmg, from, floor) {
   if (!tgt || tgt.dead) return;
   if (tgt.prone) dmg *= RTS_PRONE_DAMAGE;
   dmg /= _rtsBias(tgt.side).armor;                 /* ArmorBias defends the whole house */
-  /* Modify_Damage clamps last: a hit always does at least MinDamage, so two units can never
-     stand there plinking zeroes at each other, and no stack of multipliers exceeds MaxDamage. */
-  dmg = Math.max(RTS_MIN_DAMAGE, Math.min(RTS_MAX_DAMAGE, dmg));
+  /* Modify_Damage clamps last. The MinDamage floor is NOT unconditional - it applies to a
+     direct hit and to the inner ring of a blast, so two units can never plink zeroes at each
+     other, while the edge of an explosion is still allowed to do nothing at all. */
+  if (floor !== false) dmg = Math.max(RTS_MIN_DAMAGE, dmg);
+  dmg = Math.min(RTS_MAX_DAMAGE, dmg);
   tgt.hp -= dmg;
   tgt.hitT = 0.18;
   /* an idle unit that gets shot shoots back instead of standing there */
@@ -922,17 +937,42 @@ function _rtsDamage(tgt, dmg, from) {
     window._rtsG.fx.push({ kind:'fire', x:tgt.x, y:1, z:tgt.z, t:0, big:0.75, att:tgt.id, loops:3 });
   }
 }
-/* ExplosionSpread: blast damage HALVES for every cell of distance, not a linear taper. The
-   difference is felt - one cell further out is half the damage, two cells is a quarter, so
-   spreading a group out genuinely saves it. */
-function _rtsSplash(x, z, rad, dmg, side) {
-  var G = window._rtsG, foe = _rtsEnemyOf(side);
+/* COMBAT.CPP Modify_Damage: the falloff is a DIVISION by distance, not a taper. Damage is
+   brutal at the impact point and collapses as 1/d, and the MinDamage floor only applies
+   within RTS_SPREAD_FLOOR steps - past that a blast is allowed to do literally nothing,
+   which is the difference between "everyone nearby takes a point" and a real blast radius.
+
+   Two rules from Explosion_Damage that matter as much as the curve:
+   - a hit anywhere on a BUILDING's footprint counts as a direct hit on its centre, so a
+     shell landing on the corner of a refinery is not quietly downgraded to a graze;
+   - the blast damages everyone except whoever fired it. Friendly fire is real: park your
+     own squad around a target and your rockets will kill them. */
+function _rtsSplashSteps(d, spread, target, tx, tz) {
+  if (target && target.type === 'struct') {
+    var sd = rtsStructDef(target.def);
+    if (tx >= target.tx && tx < target.tx + sd.w && tz >= target.tz && tz < target.tz + sd.h) return 0;
+  }
+  var steps = Math.round(d / RTS_TILE * (RTS_SPREAD_STEPS / Math.max(0.5, spread)));
+  return Math.max(0, Math.min(RTS_SPREAD_MAX, steps));
+}
+function _rtsSplash(x, z, rad, dmg, side, spread, from) {
+  var G = window._rtsG, tx = _rtsTX(x), tz = _rtsTX(z);
+  spread = spread || 1;
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
-    if (o.dead || o.side !== foe) continue;
+    if (o.dead || o === from) continue;
     var d = Math.hypot(o.x - x, o.z - z);
     if (d > rad) continue;
-    _rtsDamage(o, dmg * Math.pow(RTS_EXP_SPREAD, d / RTS_TILE), null);
+    var steps = _rtsSplashSteps(d, spread, o, tx, tz);
+    var hit = steps ? dmg / steps : dmg;
+    if (steps >= RTS_SPREAD_FLOOR && hit < RTS_MIN_DAMAGE) continue;   /* allowed to be nothing */
+    _rtsDamage(o, hit, null, steps < RTS_SPREAD_FLOOR);
+  }
+  /* IsTiberiumDestroyer: Reduce_Tiberium(strength / 10). Shelling an ore field destroys it. */
+  if (_rtsInB(tx, tz) && G.scrap[_rtsIdx(tx, tz)] > 0) {
+    var oi = _rtsIdx(tx, tz);
+    G.scrap[oi] = Math.max(0, G.scrap[oi] - (dmg / 10) * RTS_ORE_PER_LEVEL);
+    if (G.scrap[oi] <= 0) { G.gems[oi] = 0; G.scrapDirty = true; }
   }
 }
 
@@ -1195,8 +1235,8 @@ function _rtsUpdateProj(dt) {
     if (p.tgt && !p.tgt.dead && _rtsRangeTo(p, p.tgt) < 1.8) hit = p.tgt;
     if (hit || p.life <= 0) {
       if (hit) _rtsDamage(hit, p.dmg, null);
-      if (p.splash > 0) _rtsSplash(p.x, p.z, p.splash * RTS_TILE * 0.8, p.dmg, p.side);
-      G.fx.push({ kind:'hit', x:p.x, y:1, z:p.z, t:0, big:p.splash > 0 ? 1.4 : 0.7 });
+      if (p.splash > 0) _rtsSplash(p.x, p.z, RTS_BLAST_CELLS * RTS_TILE, p.dmg, p.side, p.splash, p.from);
+      _rtsCombatAnim(p.dmg, p.x, p.z, p.splash > 0 ? 1.4 : 0.7);
       G.proj.splice(i, 1);
     }
   }
