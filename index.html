@@ -29,6 +29,8 @@
 #rcgRts .rts-vs{font-size:12px;opacity:.9}
 #rcgRts .rts-vs b.p{color:#6fb0ff}
 #rcgRts .rts-vs b.e{color:#ff8571}
+#rcgRts .rts-vs .dif{margin-left:9px;padding:1px 7px;border:1px solid #3a4a5f;border-radius:9px;
+  font-style:normal;font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:#ffcf6a;opacity:.85}
 #rcgRts .rts-help{font-size:11px;opacity:.55;margin-left:auto;margin-right:38px}
 #rcgRts .rts-x{position:absolute;right:6px;top:5px;width:24px;height:24px;border:0;border-radius:5px;
   background:rgba(255,255,255,.12);color:#fff;font-size:14px;cursor:pointer;pointer-events:auto}
@@ -166,6 +168,12 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 #rtsHome .keys dt{color:#8fd0ff;font-weight:600;white-space:nowrap}
 #rtsHome .keys dd{margin:0;opacity:.78}
 #rtsHome .brief{max-width:520px;font-size:13px;opacity:.72;line-height:1.6}
+#rtsHome .diff{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+#rtsHome .diff button{padding:9px 20px;border:1px solid #2b3a4d;border-radius:7px;background:#141c27;
+  color:#9db0c6;font:inherit;font-weight:700;letter-spacing:1px;cursor:pointer;transition:background .12s,border-color .12s}
+#rtsHome .diff button:hover{background:#1d2735}
+#rtsHome .diff button.on{background:#2e6fd0;border-color:#6fb0ff;color:#fff}
+#rtsHome .diffnote{margin:-14px 0 0;font-size:12.5px;opacity:.62;min-height:1.4em}
 #rtsHome .foot{font-size:11px;opacity:.4;max-width:560px;line-height:1.6}
 #rtsHome .foot a{color:#8fd0ff}
 #rtsErr{display:none;max-width:520px;padding:12px 16px;border:1px solid #7d3b34;border-radius:8px;
@@ -181,6 +189,8 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   <p class="brief">Mine <b>Scrap</b> with harvesters, unload it at a refinery for credits, and spend them
     on power, production and armour. Redline is doing the same thing across the map — and their first
     attack wave is already on a timer.</p>
+  <div class="diff" id="rtsDiff"></div>
+  <p class="diffnote" id="rtsDiffNote"></p>
   <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE</button>
   <dl class="keys">
     <dt>Left-drag</dt><dd>select your units</dd>
@@ -304,7 +314,10 @@ var RTS_CRATER_ORE = 6;   /* ANIM.CPP: a crater calls Reduce_Tiberium(6) */
    ANXIOUS they lie down; below it they get up. */
 var RTS_FEAR = { NONE:0, ANXIOUS:10, SCARED:50, PANIC:100, MAXIMUM:255 };
 var RTS_FEAR_DECAY = 15;        /* per second; the original decays 1 per frame at 15 FPS */
-var RTS_COND_YELLOW = 0.66, RTS_COND_RED = 0.33;
+/* RULES.CPP: ConditionYellow = 1/2, ConditionRed = 1/4. These are not cosmetic - they are the
+   thresholds for damaged building art, the fear escalation ladder and the AI's sell-back
+   decision, so having them at 0.66/0.33 quietly mistuned all three. */
+var RTS_COND_YELLOW = 0.5, RTS_COND_RED = 0.25;
 var RTS_PRONE_DAMAGE = 0.5;     /* Rule.ProneDamageBias */
 var RTS_PRONE_SPEED = 0.5;      /* prone infantry crawl at half pace */
 
@@ -319,11 +332,82 @@ var RTS_PRONE_SPEED = 0.5;      /* prone infantry crawl at half pace */
    costs a fraction of building a new one, which is the whole reason to do it. */
 var RTS_REPAIR_RATE = 0.75;     /* seconds between repair steps (Rule.RepairRate) */
 var RTS_REPAIR_STEP = 0.05;     /* fraction of max hp restored per step (Rule.RepairStep) */
-var RTS_REPAIR_PCT = 0.32;      /* Rule.RepairPercent - repairing is cheaper than rebuilding */
+var RTS_REPAIR_PCT = 0.25;      /* Rule.RepairPercent = 1/4 */
 var RTS_REFUND_PCT = 0.5;       /* Rule.RefundPercent: sell gives back half */
 var RTS_SURVIVOR_FRACTION = 0.5;/* Rule.SurvivorFraction, used by How_Many_Survivors */
 var RTS_SURVIVOR_ODDS = 0.5;    /* Drop_Debris only rolls some of them out of a wreck */
 var RTS_DECON_TIME = 0.35;      /* Mission_Deconstruction: build-up run backwards, this x build */
+
+/* --------------------------------------------------------------- combat --
+   RULES.CPP General section. MinDamage/MaxDamage clamp every hit, so no amount of armour
+   bias can reduce a hit to nothing (a shot always does *something*, which is what stops two
+   units plinking at each other forever) and no multiplier stack can one-shot the map.
+   ExplosionSpread is the splash falloff: damage HALVES for each cell away from the blast,
+   which is much sharper than a linear taper and is why standing one cell further out in the
+   original genuinely saves a unit. */
+var RTS_MIN_DAMAGE = 1;
+var RTS_MAX_DAMAGE = 1000;
+var RTS_EXP_SPREAD = 0.5;
+
+/* -------------------------------------------------------------- economy --
+   GoldValue 35 / GemValue 110 - gems are worth a bit over three times ore per unit mined,
+   which is what makes a gem patch worth crossing the map for. */
+var RTS_GOLD_VALUE = 35;
+var RTS_GEM_VALUE = 110;
+var RTS_GEM_MULT = RTS_GEM_VALUE / RTS_GOLD_VALUE;
+
+/* ------------------------------------------------------------ difficulty --
+   RULES.CPP's DifficultyClass: the game does not make the AI "better", it multiplies a
+   handful of biases on a whole house. The fields are the original's; the numbers are ours,
+   because the shipped RULES.INI values are not in this source file.
+
+   iq    : how many of the AI's behaviours are switched on at all (see RTS_IQ below)
+   fire  : FirepowerBias        speed : GroundspeedBias
+   armor : ArmorBias            rof   : ROFBias (higher = slower reload)
+   cost  : CostBias             build : BuildSpeedBias (higher = slower)
+   wall  : IsWallDestroyer      scan  : IsContentScan (looks inside transports/buildings) */
+var RTS_DIFF = {
+  easy:   { name:'Recruit',  iq:2, fire:0.75, speed:0.85, armor:0.7, rof:1.3,  cost:1.2, build:1.4, wall:false, scan:false,
+            desc:'Redline attacks late, builds little and hits softly.' },
+  normal: { name:'Soldier',  iq:3, fire:1,    speed:1,    armor:1,   rof:1,    cost:1,   build:1,   wall:true,  scan:false,
+            desc:'An even fight. Redline expands and repairs.' },
+  hard:   { name:'Commando', iq:5, fire:1.15, speed:1.1,  armor:1.2, rof:0.85, cost:0.8, build:0.7, wall:true,  scan:true,
+            desc:'Redline builds a real base, defends it and comes early.' }
+};
+var RTS_DIFF_DEFAULT = 'normal';
+
+/* -------------------------------------------------------------------- IQ --
+   RULES.CPP's IQ section is the part worth stealing: each AI behaviour has an IQ level at
+   which it switches ON. A low-IQ opponent is not a high-IQ one with worse numbers - it is
+   missing specific, nameable abilities, which is far more legible than a damage multiplier. */
+var RTS_IQ = {
+  max:5,
+  sellBack:2,       /* sells a building it cannot afford to repair */
+  repairSell:3,     /* repairs damaged buildings at all */
+  scatter:3,        /* its infantry scatter from incoming fire */
+  harvester:3,      /* replaces lost harvesters */
+  guardArea:4,      /* leaves a garrison at home instead of sending everything */
+  production:5      /* full build order and base expansion */
+};
+
+/* ------------------------------------------------------------- AI base --
+   RULES.CPP's [AI] section. The AI does not follow a fixed build order - it holds a target
+   *composition*: each structure type wants `ratio` of the base size, capped at `limit`, and
+   it builds whatever it is furthest short of. BaseSizeAdd is the key one: the AI aims for
+   the human's building count plus this, so it keeps pace with how you are actually playing
+   instead of building to a script. */
+var RTS_AI = {
+  baseSizeAdd:3,
+  powerSurplus:50,          /* keep this much spare power in hand */
+  powerEmergency:0.75,      /* below 3/4 of demand supplied, power is an emergency */
+  creditReserve:1000,       /* RepairThreshhold: never spend the last of the treasury */
+  infantryReserve:2000,     /* above this it can afford to spend on infantry freely */
+  infantryBaseMult:2,
+  attackInterval:3,         /* minutes between attack waves, before difficulty bias */
+  attackDelay:5,            /* minutes before the first one */
+  ratio:{ refinery:0.16, barracks:0.16, factory:0.10, turret:0.50 },
+  limit:{ refinery:4,    barracks:2,    factory:2,    turret:12   }
+};
 
 /* Armour class per thing, used with weapon.vs above. */
 function rtsArmour(e) {
@@ -349,8 +433,9 @@ var RTS_ORE_GROW_EVERY = 6;     /* seconds between growth passes */
 var RTS_ORE_GROW_AMT = 26;      /* added to an existing non-full tile each pass */
 var RTS_ORE_SPREAD_CHANCE = 0.10; /* chance a rich tile seeds an empty neighbour */
 
-/* Enemy waves: every RTS_WAVE_EVERY seconds the AI throws a group at you, growing
-   over time. Kept intentionally readable so it is easy to tune. */
+/* Enemy waves. RULES.CPP has AttackInterval 3 / AttackDelay 5 in MINUTES, which is the
+   pacing of a 40-minute skirmish; a match here is a fraction of that, so these are the same
+   idea on this game's clock. Difficulty scales both (see RTS_DIFF.build). */
 var RTS_WAVE_EVERY = 85;
 var RTS_WAVE_FIRST = 150;   /* a refinery costs 1400 and takes 18s - the first wave must not
                                land before a new player has had time to stand up an economy */
@@ -1945,7 +2030,7 @@ function _rtsClearLine(x0, z0, x1, z1) {
 function _rtsSideNew(key) {
   return { key:key, credits:RTS_START_CREDITS, powerMade:0, powerUsed:0,
     q:{ struct:null, infantry:null, vehicle:null },   /* one build line per category, like the classic sidebar */
-    ready:null,                                        /* finished structure awaiting placement */
+    ready:null, readyTry:0,                            /* finished structure awaiting placement */
     lost:false };
 }
 /* ------------------------------------------------------------------ terrain --
@@ -2125,9 +2210,11 @@ function _rtsCarveRoad(G, x0, z0, x1, z1, rnd, force) {
   }
 }
 
-function _rtsNewGame(seed) {
+function _rtsNewGame(seed, diff) {
   var G = {
     t:0, seed:seed || 12345, over:null, msg:null, msgT:0, shake:0,
+    /* the whole difficulty system is this one string plus RTS_DIFF; see _rtsBias */
+    diff:(RTS_DIFF[diff] ? diff : (RTS_DIFF[window._RTS_DIFF] ? window._RTS_DIFF : RTS_DIFF_DEFAULT)),
     blocked:new Uint8Array(RTS_N * RTS_N),
     terrain:new Uint8Array(RTS_N * RTS_N),  /* RTS_T_* - what the ground IS, for the renderer */
     scorch:new Uint8Array(RTS_N * RTS_N),   /* 0 none, 1-6 scorch variant, +8 bit = crater */
@@ -2138,10 +2225,12 @@ function _rtsNewGame(seed) {
     ents:[], byId:{}, nextId:1,
     sel:[], proj:[], fx:[],
     sides:{ player:_rtsSideNew('player'), enemy:_rtsSideNew('enemy') },
-    ai:{ next:RTS_WAVE_FIRST, wave:0, build:6 },
+    ai:{ next:0, wave:0, build:6, place:0 },  /* AttackDelay filled in below, once diff is known */
     stats:{ killed:0, lostU:0 }
   };
   window._rtsG = G;
+  /* AttackDelay: how long you get before the first wave, stretched on the easy setting. */
+  G.ai.next = RTS_WAVE_FIRST * _rtsBias('enemy').build;
   _rtsPathfindInit();
   var rnd = _rtsRngMake(G.seed);
 
@@ -2526,13 +2615,14 @@ function _rtsCanQueue(side, key) {
   if (!_rtsAvailable(side, def)) return false;
   if (cat === 'infantry' && !_rtsHas(side, 'barracks')) return false;
   if (cat === 'vehicle' && !_rtsHas(side, 'factory')) return false;
-  if (S.credits < def.cost) return false;
+  if (S.credits < _rtsCostOf(side, def)) return false;
   return true;
 }
 function _rtsQueue(side, key) {
   if (!_rtsCanQueue(side, key)) return false;
   var S = window._rtsG.sides[side], def = rtsStructDef(key) || rtsUnitDef(key);
-  S.q[_rtsQueueCat(key)] = { key:key, prog:0, total:Math.max(0.1, def.build), cost:def.cost, paid:0 };
+  S.q[_rtsQueueCat(key)] = { key:key, prog:0, total:_rtsBuildTimeOf(side, def),
+    cost:_rtsCostOf(side, def), paid:0 };
   return true;
 }
 function _rtsCancel(side, cat) {
@@ -2591,6 +2681,24 @@ function _rtsOrderHarvest(e, tx, tz) {
   e.path = null;
 }
 
+/* ---------------------------------------------------------- difficulty --
+   RULES.CPP's DifficultyClass is applied to a whole HOUSE, not to individual units, and it
+   is a set of multipliers rather than special-case code. Everything the enemy does goes
+   through _rtsBias; the player's side always gets the identity table, so a bias can never
+   silently change how your own units behave. */
+var _RTS_NOBIAS = { name:'Player', iq:5, fire:1, speed:1, armor:1, rof:1, cost:1, build:1, wall:true, scan:true };
+function _rtsBias(side) {
+  if (side !== 'enemy') return _RTS_NOBIAS;
+  var G = window._rtsG;
+  return (G && RTS_DIFF[G.diff]) || RTS_DIFF[RTS_DIFF_DEFAULT];
+}
+/* Is an AI behaviour switched on at the current IQ? RULES.CPP gates each one separately, so
+   a weak opponent is missing nameable abilities rather than just doing less damage. */
+function _rtsIQAt(level) { return _rtsBias('enemy').iq >= level; }
+/* CostBias / BuildSpeedBias, applied wherever a price or a build time is read. */
+function _rtsCostOf(side, def) { return Math.round(def.cost * _rtsBias(side).cost); }
+function _rtsBuildTimeOf(side, def) { return Math.max(0.1, def.build * _rtsBias(side).build); }
+
 /* ------------------------------------------------------------- combat */
 function _rtsDist(a, b) { return Math.hypot(a.x - b.x, a.z - b.z); }
 /* Structures are big: measure to the edge of the footprint, not the centre, or nothing
@@ -2615,11 +2723,11 @@ function _rtsFindTarget(e, range) {
   return best;
 }
 function _rtsFire(e, tgt, w) {
-  var G = window._rtsG;
-  e.cool = w.cool; e.fire = 0.09;
+  var G = window._rtsG, bias = _rtsBias(e.side);
+  e.cool = w.cool * bias.rof; e.fire = 0.09;      /* ROFBias: higher = slower reload */
   if (typeof _rtsSfx === 'function') _rtsSfx(w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
     : (w.shot === 'missile' ? 'rocket' : (e.type === 'struct' ? 'turretgun' : 'cannon')), e.x, e.z);
-  var dmg = w.dmg * (w.vs[rtsArmour(tgt)] || 1);
+  var dmg = w.dmg * (w.vs[rtsArmour(tgt)] || 1) * bias.fire;
   if (w.speed <= 0) {
     _rtsDamage(tgt, dmg, e);
     G.fx.push({ kind:'tracer', x:e.x, y:1.3, z:e.z, x2:tgt.x, y2:1.3, z2:tgt.z, t:0 });
@@ -2650,8 +2758,12 @@ function _rtsScatter(e, fromX, fromZ) {
 }
 
 function _rtsDamage(tgt, dmg, from) {
-  if (tgt.prone) dmg *= RTS_PRONE_DAMAGE;
   if (!tgt || tgt.dead) return;
+  if (tgt.prone) dmg *= RTS_PRONE_DAMAGE;
+  dmg /= _rtsBias(tgt.side).armor;                 /* ArmorBias defends the whole house */
+  /* Modify_Damage clamps last: a hit always does at least MinDamage, so two units can never
+     stand there plinking zeroes at each other, and no stack of multipliers exceeds MaxDamage. */
+  dmg = Math.max(RTS_MIN_DAMAGE, Math.min(RTS_MAX_DAMAGE, dmg));
   tgt.hp -= dmg;
   tgt.hitT = 0.18;
   /* an idle unit that gets shot shoots back instead of standing there */
@@ -2666,7 +2778,9 @@ function _rtsDamage(tgt, dmg, from) {
       if (hr > RTS_COND_YELLOW) more /= 2;
       tgt.fear = Math.min(RTS_FEAR.MAXIMUM, tgt.fear + more);
     }
-    if (from) _rtsScatter(tgt, from.x, from.z);
+    /* IQScatter: dodging incoming fire is a learned behaviour in RULES.CPP, not a reflex
+       every soldier has. Yours always scatter; a low-IQ opponent's stand and take it. */
+    if (from && (tgt.side !== 'enemy' || _rtsIQAt(RTS_IQ.scatter))) _rtsScatter(tgt, from.x, from.z);
   }
   else if (tgt.type === 'unit' && !tgt.burning && tgt.hp < tgt.maxHp * 0.3) {
     /* Attach_To: the flame follows the unit and eats it, exactly as ANIM.CPP does. */
@@ -2674,6 +2788,9 @@ function _rtsDamage(tgt, dmg, from) {
     window._rtsG.fx.push({ kind:'fire', x:tgt.x, y:1, z:tgt.z, t:0, big:0.75, att:tgt.id, loops:3 });
   }
 }
+/* ExplosionSpread: blast damage HALVES for every cell of distance, not a linear taper. The
+   difference is felt - one cell further out is half the damage, two cells is a quarter, so
+   spreading a group out genuinely saves it. */
 function _rtsSplash(x, z, rad, dmg, side) {
   var G = window._rtsG, foe = _rtsEnemyOf(side);
   for (var i = 0; i < G.ents.length; i++) {
@@ -2681,7 +2798,7 @@ function _rtsSplash(x, z, rad, dmg, side) {
     if (o.dead || o.side !== foe) continue;
     var d = Math.hypot(o.x - x, o.z - z);
     if (d > rad) continue;
-    _rtsDamage(o, dmg * (1 - d / rad) * 0.6, null);
+    _rtsDamage(o, dmg * Math.pow(RTS_EXP_SPREAD, d / RTS_TILE), null);
   }
 }
 
@@ -2706,6 +2823,7 @@ function _rtsSteer(e, dt, d) {
   /* a vehicle slows while it is still swinging round; infantry just walk */
   var align = Math.max(0, 1 - Math.abs(diff) / 1.6);
   var sp = d.speed * (d.kind === 'infantry' ? Math.max(0.35, align) : align * align);
+  sp *= _rtsBias(e.side).speed;                    /* GroundspeedBias */
   if (e.prone) sp *= RTS_PRONE_SPEED;
   var nx = e.x + Math.cos(e.rot) * sp * dt, nz = e.z + Math.sin(e.rot) * sp * dt;
   /* While standing on a blocked tile, movement is unrestricted - that is how a unit
@@ -2938,70 +3056,173 @@ function _rtsUpdateProj(dt) {
 }
 
 /* ------------------------------------------------------------ enemy AI --
-   Deliberately simple and legible: keep a harvester alive, replace losses, and
-   throw a growing wave at the player on a timer. */
+   The build order comes from RULES.CPP's [AI] section, and the important idea there is that
+   the AI does not follow a script - it holds a target base COMPOSITION. Each structure type
+   wants `ratio` of the base size capped at `limit`, and the AI builds whatever it is
+   furthest short of. Base size tracks the human's building count plus BaseSizeAdd, so the
+   opponent grows in response to how you are actually playing. */
+function _rtsAIWants(S) {
+  var G = window._rtsG, have = {}, i, e, theirs = 0, own = 0;
+  for (i = 0; i < G.ents.length; i++) {
+    e = G.ents[i];
+    if (e.type !== 'struct' || e.dead || e.selling) continue;
+    if (e.side === 'player') { theirs++; continue; }
+    have[e.def] = (have[e.def] || 0) + 1; own++;
+  }
+  /* count what is already on the way, or the AI queues four refineries in a row */
+  if (S.q.struct) have[S.q.struct.key] = (have[S.q.struct.key] || 0) + 1;
+  if (S.ready) have[S.ready] = (have[S.ready] || 0) + 1;
+
+  /* PowerSurplus: keep spare capacity in hand rather than building power only once the
+     lights are already out. Below PowerEmergency it is the only thing worth building. */
+  var slack = S.powerMade - S.powerUsed;
+  if (slack < RTS_AI.powerSurplus) return { key:'power', urgent:slack < 0 ||
+    S.powerMade < S.powerUsed * RTS_AI.powerEmergency };
+
+  /* Below IQProduction the opponent keeps a minimal base and never expands - that is the
+     whole difference between the low difficulties and the high one. */
+  var order = _rtsIQAt(RTS_IQ.production) ? ['refinery', 'barracks', 'factory', 'turret']
+            : (_rtsIQAt(RTS_IQ.repairSell) ? ['refinery', 'barracks'] : []);
+  var size = Math.max(own, theirs + RTS_AI.baseSizeAdd);
+  for (i = 0; i < order.length; i++) {
+    var k = order[i], want = Math.min(RTS_AI.limit[k], Math.ceil(size * RTS_AI.ratio[k]));
+    if ((have[k] || 0) < want) return { key:k, urgent:false };
+  }
+  return null;
+}
+/* Where to put it: a refinery hugs the nearest ore, a turret goes on the side facing the
+   player, everything else clusters. Dropping a refinery on the far side of the base from
+   the ore is the single most common way a build-order AI wastes its money. */
+function _rtsAIPlace(key) {
+  var G = window._rtsG, i, e, aim = null;
+  if (key === 'refinery') aim = _rtsAIOreSpot();
+  else if (key === 'turret') { var p = _rtsHas('player', 'yard') || _rtsHas('player', 'power'); if (p) aim = { x:p.x, z:p.z }; }
+  var anchors = [];
+  for (i = 0; i < G.ents.length; i++) {
+    e = G.ents[i];
+    if (e.type === 'struct' && e.side === 'enemy' && !e.dead && !e.selling) anchors.push(e);
+  }
+  if (!anchors.length) return false;
+  if (aim) anchors.sort(function (a, b) {
+    return Math.hypot(a.x - aim.x, a.z - aim.z) - Math.hypot(b.x - aim.x, b.z - aim.z);
+  });
+  /* Try every anchor, best-first. Searching only the nearest one looks fine until that
+     corner of the base fills up - then placement fails forever, the finished building never
+     leaves the "ready" slot, and the AI's whole structure queue is jammed for the rest of
+     the match while its credits pile up. */
+  var R = RTS_BUILD_RADIUS;
+  for (var a = 0; a < anchors.length; a++) {
+    var anchor = anchors[a], best = null, bs = 1e9;
+    for (var tx = anchor.tx - R; tx <= anchor.tx + R; tx++) {
+      for (var tz = anchor.tz - R; tz <= anchor.tz + R; tz++) {
+        if (!_rtsCanPlace('enemy', key, tx, tz)) continue;
+        var wx = _rtsWX(tx), wz = _rtsWX(tz);
+        var s = aim ? Math.hypot(wx - aim.x, wz - aim.z) : Math.hypot(wx - anchor.x, wz - anchor.z);
+        if (s < bs) { bs = s; best = [tx, tz]; }
+      }
+    }
+    if (best) { _rtsPlaceStruct('enemy', key, best[0], best[1], false); return true; }
+  }
+  return false;
+}
+/* The richest ore nearest to ANY of the AI's buildings - not to its yard. As the base creeps
+   outward the frontier is what matters; measuring from the yard sent late refineries back
+   toward a field that had already been mined out. */
+function _rtsAIOreSpot() {
+  var G = window._rtsG, structs = [], i, e;
+  for (i = 0; i < G.ents.length; i++) {
+    e = G.ents[i];
+    if (e.type === 'struct' && e.side === 'enemy' && !e.dead && !e.selling) structs.push(e);
+  }
+  if (!structs.length) return null;
+  var best = null, bd = 1e9;
+  for (var tx = 0; tx < RTS_N; tx += 2) for (var tz = 0; tz < RTS_N; tz += 2) {
+    if (G.scrap[_rtsIdx(tx, tz)] < RTS_SCRAP_TILE * 0.4) continue;
+    var wx = _rtsWX(tx), wz = _rtsWX(tz), d = 1e9;
+    for (i = 0; i < structs.length; i++) d = Math.min(d, Math.hypot(wx - structs[i].x, wz - structs[i].z));
+    if (d < bd) { bd = d; best = { x:wx, z:wz }; }
+  }
+  return best;
+}
+/* Keep the production lines fed. Economy first, and crucially the AI SAVES for a harvester
+   instead of dribbling its income away on cheap infantry - without that it parks at ~90
+   credits forever, never affords the 1200 harvester, and its army stops growing two minutes
+   in. InfantryReserve is the "we are rich" line: above it the AI restarts a line the instant
+   it frees up, below it it only decides on its slow tick, so a poor opponent trickles and a
+   rich one runs its factories flat out. */
+function _rtsAIUnits(S) {
+  var G = window._rtsG, harv = 0, i;
+  for (i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.side !== 'enemy' || e.type !== 'unit') continue;
+    if (rtsUnitDef(e.def).harvest) harv++;
+  }
+  var wantHarv = _rtsIQAt(RTS_IQ.harvester) ? 3 : 1;
+  if (harv < wantHarv) {
+    if (_rtsCanQueue('enemy', 'harvester')) { _rtsQueue('enemy', 'harvester'); return; }
+  }
+  if (_rtsCanQueue('enemy', 'tank') && S.credits > 1600) _rtsQueue('enemy', 'tank');
+  else if (_rtsCanQueue('enemy', 'buggy') && S.credits > 900) _rtsQueue('enemy', 'buggy');
+  if (_rtsCanQueue('enemy', 'rocket') && S.credits > 500) _rtsQueue('enemy', 'rocket');
+  else if (_rtsCanQueue('enemy', 'rifle') && S.credits > 250) _rtsQueue('enemy', 'rifle');
+}
 function _rtsUpdateAI(dt) {
   var G = window._rtsG, S = G.sides.enemy;
   if (S.lost) return;
+  /* Rich: refill a line as soon as it empties, rather than waiting up to five seconds for
+     the next decision. Without this the opponent banks tens of thousands of credits it
+     structurally cannot spend, while the human restarts a queue the moment it frees. */
+  if (S.credits > RTS_AI.infantryReserve) _rtsAIUnits(S);
   G.ai.build -= dt;
   if (G.ai.build <= 0) {
     G.ai.build = 5;
-    /* Repair_AI: the AI patches its base up whenever it can afford to, which is why raiding
-       an enemy base and leaving means finding it whole again ten seconds later. */
-    if (S.credits > 500) {
+    /* Repair_AI, gated on IQRepairSell: the low difficulties simply cannot do this, which is
+       why raiding a Commando base and leaving means finding it whole again. */
+    if (_rtsIQAt(RTS_IQ.repairSell) && S.credits > RTS_AI.creditReserve * 0.5) {
       for (var r = 0; r < G.ents.length; r++) {
         var b = G.ents[r];
         if (b.dead || b.side !== 'enemy' || b.type !== 'struct' || b.building || b.selling) continue;
         if (!b.repair && b.hp < b.maxHp * 0.85) { b.repair = 1; b.rtimer = 0; }
       }
     }
-    var harv = 0, refs = 0, army = [], i;
-    for (i = 0; i < G.ents.length; i++) {
-      var e = G.ents[i];
-      if (e.dead || e.side !== 'enemy') continue;
-      if (e.type === 'struct') { if (e.def === 'refinery') refs++; continue; }
-      if (rtsUnitDef(e.def).harvest) harv++; else army.push(e);
+    _rtsAIUnits(S);
+
+    /* Structures: build toward the target composition, keeping CreditReserve in hand for
+       everything except a power emergency. */
+    var want = _rtsAIWants(S);
+    if (want && !S.q.struct && !S.ready) {
+      var sd = rtsStructDef(want.key);
+      var reserve = want.urgent ? 0 : RTS_AI.creditReserve;
+      if (S.credits >= _rtsCostOf('enemy', sd) + reserve) _rtsQueue('enemy', want.key);
     }
-    /* Economy first, and crucially the AI SAVES for a harvester instead of dribbling its
-       income away on cheap infantry - without this it parks at ~90 credits forever, never
-       affords the 1200 harvester, and its army stops growing about two minutes in. */
-    if (harv < 3) {
-      if (_rtsCanQueue('enemy', 'harvester')) _rtsQueue('enemy', 'harvester');
-    } else if (_rtsCanQueue('enemy', 'tank') && S.credits > 1600) _rtsQueue('enemy', 'tank');
-    else if (_rtsCanQueue('enemy', 'buggy') && S.credits > 900) _rtsQueue('enemy', 'buggy');
-    else if (_rtsCanQueue('enemy', 'rocket') && S.credits > 500) _rtsQueue('enemy', 'rocket');
-    else if (_rtsCanQueue('enemy', 'rifle') && S.credits > 250) _rtsQueue('enemy', 'rifle');
-    /* rebuild a dead power plant so the AI does not brown itself out permanently */
-    if (S.powerUsed > S.powerMade && _rtsCanQueue('enemy', 'power')) _rtsQueue('enemy', 'power');
-    /* once genuinely rich, expand rather than stockpile - but cap it, or the AI spends its
-       whole income on refineries it does not have the harvesters to use */
-    else if (S.credits > 4000 && refs < 2 && !S.q.struct && _rtsCanQueue('enemy', 'refinery')) _rtsQueue('enemy', 'refinery');
   }
-  /* the AI places its own finished buildings next to the yard */
+  /* The AI places its own finished buildings. Throttled: the search is over every anchor's
+     build radius, which is not something to run on every frame. */
   if (S.ready) {
-    var yard = _rtsHas('enemy', 'yard'), placed = false;
-    if (yard) {
-      for (var rr = 3; rr <= RTS_BUILD_RADIUS && !placed; rr++) {
-        for (var a = 0; a < 12 && !placed; a++) {
-          var ang = a / 12 * Math.PI * 2;
-          var tx = Math.round(yard.tx + Math.cos(ang) * rr), tz = Math.round(yard.tz + Math.sin(ang) * rr);
-          if (_rtsCanPlace('enemy', S.ready, tx, tz)) { _rtsPlaceStruct('enemy', S.ready, tx, tz, false); placed = true; }
-        }
-      }
+    G.ai.place -= dt;
+    if (G.ai.place <= 0) {
+      G.ai.place = 0.6;
+      if (_rtsAIPlace(S.ready)) { S.ready = null; S.readyTry = 0; }
+      else if (++S.readyTry > 8 || !_rtsHas('enemy', 'yard')) { S.ready = null; S.readyTry = 0; }
     }
-    if (placed || !yard) S.ready = null;
   }
   G.ai.next -= dt;
   if (G.ai.next <= 0) {
-    G.ai.next = RTS_WAVE_EVERY; G.ai.wave++;
+    /* AttackInterval, scaled by the difficulty's build bias - a slower opponent also comes
+       at you less often, so Recruit is a genuinely gentler game rather than the same game
+       with weaker tanks. */
+    G.ai.next = RTS_WAVE_EVERY * _rtsBias('enemy').build; G.ai.wave++;
     var pool = [], k;
     for (k = 0; k < G.ents.length; k++) {
       var u = G.ents[k];
       if (!u.dead && u.side === 'enemy' && u.type === 'unit' && !rtsUnitDef(u.def).harvest && !u.order) pool.push(u);
     }
     /* Commit a real share of the idle army, not a token squad. Sending a fixed handful let
-       the AI pile up forty-odd defenders at home, which is both un-fun and unbeatable. */
-    var send = Math.min(pool.length, Math.max(3, Math.ceil(pool.length * 0.6)));
+       the AI pile up forty-odd defenders at home, which is both un-fun and unbeatable.
+       IQGuardArea: only a smart opponent knows to hold some of it back as a garrison. */
+    var share = _rtsIQAt(RTS_IQ.guardArea) ? 0.7 : 0.6;
+    var send = Math.min(pool.length, Math.max(3, Math.ceil(pool.length * share)));
+    if (_rtsIQAt(RTS_IQ.guardArea)) send = Math.min(send, Math.max(3, pool.length - 3));
     if (send >= 2) {
       var aim = _rtsHas('player', 'yard') || _rtsHas('player', 'refinery') || _rtsHas('player', 'power');
       if (aim) {
@@ -3637,7 +3858,8 @@ function rtsOpen(seed) {
     +   '<canvas id="rtsCv"></canvas>'
     +   '<canvas id="rtsHud"></canvas>'
     +   '<div class="rts-top"><span class="rts-title">RC COMMAND</span>'
-    +     '<span class="rts-vs"><b class="p">Vanguard</b> vs <b class="e">Redline</b></span>'
+    +     '<span class="rts-vs"><b class="p">Vanguard</b> vs <b class="e">Redline</b>'
+    +       '<i class="dif" id="rtsDifLbl"></i></span>'
     +     '<span class="rts-help">drag select · right-click order · 1-9 teams (ctrl set, alt jump) · repair/sell buttons · WASD pan · wheel zoom · Esc</span>'
     +     '<button type="button" class="rts-mute" id="rtsMute" title="Sound on" onclick="rtsMuteToggle()">🔊</button>'
     +     '<button type="button" class="rts-x" onclick="rtsClose()">✕</button></div>'
@@ -3676,6 +3898,8 @@ function rtsOpen(seed) {
   window._rtsUI = { cat:'struct', place:null, drag:null, keys:{}, last:0, raf:0, dead:false,
     btns:{}, mouse:{ x:0, y:0, over:false }, miniDrag:false, credShown:0,
     icons:_rtsMakeIcons('player') };
+  var dl = document.getElementById('rtsDifLbl'), dd = _rtsBias('enemy');
+  if (dl) { dl.textContent = dd.name; dl.title = 'Difficulty: ' + dd.name + ' (IQ ' + dd.iq + '/' + RTS_IQ.max + ') — ' + dd.desc; }
   _rtsBuildList();
   _rtsBindInput();
   document.addEventListener('keydown', _rtsKeyDown, true);
@@ -4279,12 +4503,36 @@ function _rtsLoop() {
 /* ---- standalone shell wiring ---- */
 window._RTS_STANDALONE = true;
 
+/* Difficulty picker. RULES.CPP applies a difficulty to a whole house as a set of biases plus
+   an IQ level, and the IQ is the interesting half: it decides which of the opponent's
+   behaviours exist at all. Kept on window so a battle started any other way still sees it. */
+window._RTS_DIFF = window._RTS_DIFF || RTS_DIFF_DEFAULT;
+function rtsSetDiff(k){
+  if (!RTS_DIFF[k]) return;
+  window._RTS_DIFF = k;
+  var wrap = document.getElementById('rtsDiff');
+  if (!wrap) return;
+  var bs = wrap.getElementsByTagName('button');
+  for (var i = 0; i < bs.length; i++) bs[i].className = (bs[i].getAttribute('data-d') === k) ? 'on' : '';
+  document.getElementById('rtsDiffNote').textContent = RTS_DIFF[k].desc;
+}
+function rtsBuildDiff(){
+  var wrap = document.getElementById('rtsDiff');
+  if (!wrap || wrap.firstChild) return;
+  var html = '';
+  for (var k in RTS_DIFF) html += '<button type="button" data-d="' + k + '" onclick="rtsSetDiff(\'' + k + '\')">'
+    + RTS_DIFF[k].name.toUpperCase() + '</button>';
+  wrap.innerHTML = html;
+  rtsSetDiff(window._RTS_DIFF);
+}
 function rtsHome(){
   var h = document.getElementById('rtsHome');
   if (h) h.classList.remove('gone');
   var b = document.getElementById('rtsGo');
   if (b) { b.disabled = false; b.textContent = 'START BATTLE'; }
+  rtsBuildDiff();
 }
+rtsBuildDiff();
 function rtsStart(btn){
   var err = document.getElementById('rtsErr');
   if (err) err.style.display = 'none';

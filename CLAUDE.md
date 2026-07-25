@@ -235,6 +235,42 @@ than a lump of hit points:
 Repair and sell are sidebar *modes* (`_rtsUI.mode`), armed by a button and spent on the next
 click, competing with structure placement for that click — arming one cancels the others.
 
+## Difficulty, IQ and the AI base — from RULES.CPP
+
+The balance database, and three ideas in it are worth more than all its numbers:
+
+- **Difficulty is a set of biases applied to a whole HOUSE**, not special-case code:
+  FirepowerBias, GroundspeedBias, ArmorBias, ROFBias, CostBias, BuildSpeedBias. Everything
+  the opponent does goes through `_rtsBias(side)`, and the player's side always gets the
+  identity table — a bias can never silently change how your own units behave. The *fields*
+  are the original's; the numbers in `RTS_DIFF` are ours (the shipped RULES.INI values are
+  not in the source).
+- **IQ gates behaviours, one at a time.** RULES.CPP gives each AI ability its own IQ
+  threshold — `IQRepairSell 3`, `IQScatter 3`, `IQHarvester 3`, `IQGuardArea 4`,
+  `IQProduction 5`. A weak opponent is therefore *missing nameable abilities* rather than
+  doing less damage: Recruit cannot repair, its infantry do not dodge, and it never expands.
+  This is far more legible from the player's chair than a damage multiplier, and it is why
+  the difficulty setting changes how the enemy plays rather than how much it hurts.
+- **The AI holds a target base COMPOSITION, not a build order.** Each structure type wants
+  `ratio` of the base size capped at `limit` (`RefineryRatio .16/limit 4`, `WarRatio .1`,
+  `DefenseRatio .5` …), and it builds whatever it is furthest short of. `BaseSizeAdd 3` means
+  base size tracks *the human's* building count plus three, so the opponent grows in response
+  to how you are actually playing. `PowerSurplus 50` keeps spare capacity in hand instead of
+  reacting once the lights are out.
+
+Placement matters as much as the choice: a refinery aims at the richest ore nearest **any**
+of the AI's buildings (measuring from the yard sends late refineries back to a mined-out
+field), and a turret goes on the side facing you. `_rtsAIPlace` tries every anchor, best
+first — searching only the nearest one works until that corner fills up, and then placement
+fails forever, the finished building never leaves the `ready` slot, and the AI's entire
+structure queue is jammed for the rest of the match while its credits pile up.
+
+Also corrected from this file: **ConditionYellow = 1/2 and ConditionRed = 1/4** (they were
+0.66/0.33 here, quietly mistuning damaged-building art, the fear ladder and the AI's
+sell-back decision), `RepairPercent = 1/4`, `MinDamage 1` / `MaxDamage 1000` clamping every
+hit, and **ExplosionSpread**: splash damage *halves per cell* of distance rather than tapering
+linearly, so spreading a group out genuinely saves it.
+
 ## Verifying
 
 No test suite — use headless Playwright against the **built** `index.html`. Node + Playwright

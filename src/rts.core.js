@@ -154,7 +154,7 @@ function _rtsClearLine(x0, z0, x1, z1) {
 function _rtsSideNew(key) {
   return { key:key, credits:RTS_START_CREDITS, powerMade:0, powerUsed:0,
     q:{ struct:null, infantry:null, vehicle:null },   /* one build line per category, like the classic sidebar */
-    ready:null,                                        /* finished structure awaiting placement */
+    ready:null, readyTry:0,                            /* finished structure awaiting placement */
     lost:false };
 }
 /* ------------------------------------------------------------------ terrain --
@@ -334,9 +334,11 @@ function _rtsCarveRoad(G, x0, z0, x1, z1, rnd, force) {
   }
 }
 
-function _rtsNewGame(seed) {
+function _rtsNewGame(seed, diff) {
   var G = {
     t:0, seed:seed || 12345, over:null, msg:null, msgT:0, shake:0,
+    /* the whole difficulty system is this one string plus RTS_DIFF; see _rtsBias */
+    diff:(RTS_DIFF[diff] ? diff : (RTS_DIFF[window._RTS_DIFF] ? window._RTS_DIFF : RTS_DIFF_DEFAULT)),
     blocked:new Uint8Array(RTS_N * RTS_N),
     terrain:new Uint8Array(RTS_N * RTS_N),  /* RTS_T_* - what the ground IS, for the renderer */
     scorch:new Uint8Array(RTS_N * RTS_N),   /* 0 none, 1-6 scorch variant, +8 bit = crater */
@@ -347,10 +349,12 @@ function _rtsNewGame(seed) {
     ents:[], byId:{}, nextId:1,
     sel:[], proj:[], fx:[],
     sides:{ player:_rtsSideNew('player'), enemy:_rtsSideNew('enemy') },
-    ai:{ next:RTS_WAVE_FIRST, wave:0, build:6 },
+    ai:{ next:0, wave:0, build:6, place:0 },  /* AttackDelay filled in below, once diff is known */
     stats:{ killed:0, lostU:0 }
   };
   window._rtsG = G;
+  /* AttackDelay: how long you get before the first wave, stretched on the easy setting. */
+  G.ai.next = RTS_WAVE_FIRST * _rtsBias('enemy').build;
   _rtsPathfindInit();
   var rnd = _rtsRngMake(G.seed);
 
@@ -735,13 +739,14 @@ function _rtsCanQueue(side, key) {
   if (!_rtsAvailable(side, def)) return false;
   if (cat === 'infantry' && !_rtsHas(side, 'barracks')) return false;
   if (cat === 'vehicle' && !_rtsHas(side, 'factory')) return false;
-  if (S.credits < def.cost) return false;
+  if (S.credits < _rtsCostOf(side, def)) return false;
   return true;
 }
 function _rtsQueue(side, key) {
   if (!_rtsCanQueue(side, key)) return false;
   var S = window._rtsG.sides[side], def = rtsStructDef(key) || rtsUnitDef(key);
-  S.q[_rtsQueueCat(key)] = { key:key, prog:0, total:Math.max(0.1, def.build), cost:def.cost, paid:0 };
+  S.q[_rtsQueueCat(key)] = { key:key, prog:0, total:_rtsBuildTimeOf(side, def),
+    cost:_rtsCostOf(side, def), paid:0 };
   return true;
 }
 function _rtsCancel(side, cat) {
@@ -800,6 +805,24 @@ function _rtsOrderHarvest(e, tx, tz) {
   e.path = null;
 }
 
+/* ---------------------------------------------------------- difficulty --
+   RULES.CPP's DifficultyClass is applied to a whole HOUSE, not to individual units, and it
+   is a set of multipliers rather than special-case code. Everything the enemy does goes
+   through _rtsBias; the player's side always gets the identity table, so a bias can never
+   silently change how your own units behave. */
+var _RTS_NOBIAS = { name:'Player', iq:5, fire:1, speed:1, armor:1, rof:1, cost:1, build:1, wall:true, scan:true };
+function _rtsBias(side) {
+  if (side !== 'enemy') return _RTS_NOBIAS;
+  var G = window._rtsG;
+  return (G && RTS_DIFF[G.diff]) || RTS_DIFF[RTS_DIFF_DEFAULT];
+}
+/* Is an AI behaviour switched on at the current IQ? RULES.CPP gates each one separately, so
+   a weak opponent is missing nameable abilities rather than just doing less damage. */
+function _rtsIQAt(level) { return _rtsBias('enemy').iq >= level; }
+/* CostBias / BuildSpeedBias, applied wherever a price or a build time is read. */
+function _rtsCostOf(side, def) { return Math.round(def.cost * _rtsBias(side).cost); }
+function _rtsBuildTimeOf(side, def) { return Math.max(0.1, def.build * _rtsBias(side).build); }
+
 /* ------------------------------------------------------------- combat */
 function _rtsDist(a, b) { return Math.hypot(a.x - b.x, a.z - b.z); }
 /* Structures are big: measure to the edge of the footprint, not the centre, or nothing
@@ -824,11 +847,11 @@ function _rtsFindTarget(e, range) {
   return best;
 }
 function _rtsFire(e, tgt, w) {
-  var G = window._rtsG;
-  e.cool = w.cool; e.fire = 0.09;
+  var G = window._rtsG, bias = _rtsBias(e.side);
+  e.cool = w.cool * bias.rof; e.fire = 0.09;      /* ROFBias: higher = slower reload */
   if (typeof _rtsSfx === 'function') _rtsSfx(w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
     : (w.shot === 'missile' ? 'rocket' : (e.type === 'struct' ? 'turretgun' : 'cannon')), e.x, e.z);
-  var dmg = w.dmg * (w.vs[rtsArmour(tgt)] || 1);
+  var dmg = w.dmg * (w.vs[rtsArmour(tgt)] || 1) * bias.fire;
   if (w.speed <= 0) {
     _rtsDamage(tgt, dmg, e);
     G.fx.push({ kind:'tracer', x:e.x, y:1.3, z:e.z, x2:tgt.x, y2:1.3, z2:tgt.z, t:0 });
@@ -859,8 +882,12 @@ function _rtsScatter(e, fromX, fromZ) {
 }
 
 function _rtsDamage(tgt, dmg, from) {
-  if (tgt.prone) dmg *= RTS_PRONE_DAMAGE;
   if (!tgt || tgt.dead) return;
+  if (tgt.prone) dmg *= RTS_PRONE_DAMAGE;
+  dmg /= _rtsBias(tgt.side).armor;                 /* ArmorBias defends the whole house */
+  /* Modify_Damage clamps last: a hit always does at least MinDamage, so two units can never
+     stand there plinking zeroes at each other, and no stack of multipliers exceeds MaxDamage. */
+  dmg = Math.max(RTS_MIN_DAMAGE, Math.min(RTS_MAX_DAMAGE, dmg));
   tgt.hp -= dmg;
   tgt.hitT = 0.18;
   /* an idle unit that gets shot shoots back instead of standing there */
@@ -875,7 +902,9 @@ function _rtsDamage(tgt, dmg, from) {
       if (hr > RTS_COND_YELLOW) more /= 2;
       tgt.fear = Math.min(RTS_FEAR.MAXIMUM, tgt.fear + more);
     }
-    if (from) _rtsScatter(tgt, from.x, from.z);
+    /* IQScatter: dodging incoming fire is a learned behaviour in RULES.CPP, not a reflex
+       every soldier has. Yours always scatter; a low-IQ opponent's stand and take it. */
+    if (from && (tgt.side !== 'enemy' || _rtsIQAt(RTS_IQ.scatter))) _rtsScatter(tgt, from.x, from.z);
   }
   else if (tgt.type === 'unit' && !tgt.burning && tgt.hp < tgt.maxHp * 0.3) {
     /* Attach_To: the flame follows the unit and eats it, exactly as ANIM.CPP does. */
@@ -883,6 +912,9 @@ function _rtsDamage(tgt, dmg, from) {
     window._rtsG.fx.push({ kind:'fire', x:tgt.x, y:1, z:tgt.z, t:0, big:0.75, att:tgt.id, loops:3 });
   }
 }
+/* ExplosionSpread: blast damage HALVES for every cell of distance, not a linear taper. The
+   difference is felt - one cell further out is half the damage, two cells is a quarter, so
+   spreading a group out genuinely saves it. */
 function _rtsSplash(x, z, rad, dmg, side) {
   var G = window._rtsG, foe = _rtsEnemyOf(side);
   for (var i = 0; i < G.ents.length; i++) {
@@ -890,7 +922,7 @@ function _rtsSplash(x, z, rad, dmg, side) {
     if (o.dead || o.side !== foe) continue;
     var d = Math.hypot(o.x - x, o.z - z);
     if (d > rad) continue;
-    _rtsDamage(o, dmg * (1 - d / rad) * 0.6, null);
+    _rtsDamage(o, dmg * Math.pow(RTS_EXP_SPREAD, d / RTS_TILE), null);
   }
 }
 
@@ -915,6 +947,7 @@ function _rtsSteer(e, dt, d) {
   /* a vehicle slows while it is still swinging round; infantry just walk */
   var align = Math.max(0, 1 - Math.abs(diff) / 1.6);
   var sp = d.speed * (d.kind === 'infantry' ? Math.max(0.35, align) : align * align);
+  sp *= _rtsBias(e.side).speed;                    /* GroundspeedBias */
   if (e.prone) sp *= RTS_PRONE_SPEED;
   var nx = e.x + Math.cos(e.rot) * sp * dt, nz = e.z + Math.sin(e.rot) * sp * dt;
   /* While standing on a blocked tile, movement is unrestricted - that is how a unit
@@ -1147,70 +1180,173 @@ function _rtsUpdateProj(dt) {
 }
 
 /* ------------------------------------------------------------ enemy AI --
-   Deliberately simple and legible: keep a harvester alive, replace losses, and
-   throw a growing wave at the player on a timer. */
+   The build order comes from RULES.CPP's [AI] section, and the important idea there is that
+   the AI does not follow a script - it holds a target base COMPOSITION. Each structure type
+   wants `ratio` of the base size capped at `limit`, and the AI builds whatever it is
+   furthest short of. Base size tracks the human's building count plus BaseSizeAdd, so the
+   opponent grows in response to how you are actually playing. */
+function _rtsAIWants(S) {
+  var G = window._rtsG, have = {}, i, e, theirs = 0, own = 0;
+  for (i = 0; i < G.ents.length; i++) {
+    e = G.ents[i];
+    if (e.type !== 'struct' || e.dead || e.selling) continue;
+    if (e.side === 'player') { theirs++; continue; }
+    have[e.def] = (have[e.def] || 0) + 1; own++;
+  }
+  /* count what is already on the way, or the AI queues four refineries in a row */
+  if (S.q.struct) have[S.q.struct.key] = (have[S.q.struct.key] || 0) + 1;
+  if (S.ready) have[S.ready] = (have[S.ready] || 0) + 1;
+
+  /* PowerSurplus: keep spare capacity in hand rather than building power only once the
+     lights are already out. Below PowerEmergency it is the only thing worth building. */
+  var slack = S.powerMade - S.powerUsed;
+  if (slack < RTS_AI.powerSurplus) return { key:'power', urgent:slack < 0 ||
+    S.powerMade < S.powerUsed * RTS_AI.powerEmergency };
+
+  /* Below IQProduction the opponent keeps a minimal base and never expands - that is the
+     whole difference between the low difficulties and the high one. */
+  var order = _rtsIQAt(RTS_IQ.production) ? ['refinery', 'barracks', 'factory', 'turret']
+            : (_rtsIQAt(RTS_IQ.repairSell) ? ['refinery', 'barracks'] : []);
+  var size = Math.max(own, theirs + RTS_AI.baseSizeAdd);
+  for (i = 0; i < order.length; i++) {
+    var k = order[i], want = Math.min(RTS_AI.limit[k], Math.ceil(size * RTS_AI.ratio[k]));
+    if ((have[k] || 0) < want) return { key:k, urgent:false };
+  }
+  return null;
+}
+/* Where to put it: a refinery hugs the nearest ore, a turret goes on the side facing the
+   player, everything else clusters. Dropping a refinery on the far side of the base from
+   the ore is the single most common way a build-order AI wastes its money. */
+function _rtsAIPlace(key) {
+  var G = window._rtsG, i, e, aim = null;
+  if (key === 'refinery') aim = _rtsAIOreSpot();
+  else if (key === 'turret') { var p = _rtsHas('player', 'yard') || _rtsHas('player', 'power'); if (p) aim = { x:p.x, z:p.z }; }
+  var anchors = [];
+  for (i = 0; i < G.ents.length; i++) {
+    e = G.ents[i];
+    if (e.type === 'struct' && e.side === 'enemy' && !e.dead && !e.selling) anchors.push(e);
+  }
+  if (!anchors.length) return false;
+  if (aim) anchors.sort(function (a, b) {
+    return Math.hypot(a.x - aim.x, a.z - aim.z) - Math.hypot(b.x - aim.x, b.z - aim.z);
+  });
+  /* Try every anchor, best-first. Searching only the nearest one looks fine until that
+     corner of the base fills up - then placement fails forever, the finished building never
+     leaves the "ready" slot, and the AI's whole structure queue is jammed for the rest of
+     the match while its credits pile up. */
+  var R = RTS_BUILD_RADIUS;
+  for (var a = 0; a < anchors.length; a++) {
+    var anchor = anchors[a], best = null, bs = 1e9;
+    for (var tx = anchor.tx - R; tx <= anchor.tx + R; tx++) {
+      for (var tz = anchor.tz - R; tz <= anchor.tz + R; tz++) {
+        if (!_rtsCanPlace('enemy', key, tx, tz)) continue;
+        var wx = _rtsWX(tx), wz = _rtsWX(tz);
+        var s = aim ? Math.hypot(wx - aim.x, wz - aim.z) : Math.hypot(wx - anchor.x, wz - anchor.z);
+        if (s < bs) { bs = s; best = [tx, tz]; }
+      }
+    }
+    if (best) { _rtsPlaceStruct('enemy', key, best[0], best[1], false); return true; }
+  }
+  return false;
+}
+/* The richest ore nearest to ANY of the AI's buildings - not to its yard. As the base creeps
+   outward the frontier is what matters; measuring from the yard sent late refineries back
+   toward a field that had already been mined out. */
+function _rtsAIOreSpot() {
+  var G = window._rtsG, structs = [], i, e;
+  for (i = 0; i < G.ents.length; i++) {
+    e = G.ents[i];
+    if (e.type === 'struct' && e.side === 'enemy' && !e.dead && !e.selling) structs.push(e);
+  }
+  if (!structs.length) return null;
+  var best = null, bd = 1e9;
+  for (var tx = 0; tx < RTS_N; tx += 2) for (var tz = 0; tz < RTS_N; tz += 2) {
+    if (G.scrap[_rtsIdx(tx, tz)] < RTS_SCRAP_TILE * 0.4) continue;
+    var wx = _rtsWX(tx), wz = _rtsWX(tz), d = 1e9;
+    for (i = 0; i < structs.length; i++) d = Math.min(d, Math.hypot(wx - structs[i].x, wz - structs[i].z));
+    if (d < bd) { bd = d; best = { x:wx, z:wz }; }
+  }
+  return best;
+}
+/* Keep the production lines fed. Economy first, and crucially the AI SAVES for a harvester
+   instead of dribbling its income away on cheap infantry - without that it parks at ~90
+   credits forever, never affords the 1200 harvester, and its army stops growing two minutes
+   in. InfantryReserve is the "we are rich" line: above it the AI restarts a line the instant
+   it frees up, below it it only decides on its slow tick, so a poor opponent trickles and a
+   rich one runs its factories flat out. */
+function _rtsAIUnits(S) {
+  var G = window._rtsG, harv = 0, i;
+  for (i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.side !== 'enemy' || e.type !== 'unit') continue;
+    if (rtsUnitDef(e.def).harvest) harv++;
+  }
+  var wantHarv = _rtsIQAt(RTS_IQ.harvester) ? 3 : 1;
+  if (harv < wantHarv) {
+    if (_rtsCanQueue('enemy', 'harvester')) { _rtsQueue('enemy', 'harvester'); return; }
+  }
+  if (_rtsCanQueue('enemy', 'tank') && S.credits > 1600) _rtsQueue('enemy', 'tank');
+  else if (_rtsCanQueue('enemy', 'buggy') && S.credits > 900) _rtsQueue('enemy', 'buggy');
+  if (_rtsCanQueue('enemy', 'rocket') && S.credits > 500) _rtsQueue('enemy', 'rocket');
+  else if (_rtsCanQueue('enemy', 'rifle') && S.credits > 250) _rtsQueue('enemy', 'rifle');
+}
 function _rtsUpdateAI(dt) {
   var G = window._rtsG, S = G.sides.enemy;
   if (S.lost) return;
+  /* Rich: refill a line as soon as it empties, rather than waiting up to five seconds for
+     the next decision. Without this the opponent banks tens of thousands of credits it
+     structurally cannot spend, while the human restarts a queue the moment it frees. */
+  if (S.credits > RTS_AI.infantryReserve) _rtsAIUnits(S);
   G.ai.build -= dt;
   if (G.ai.build <= 0) {
     G.ai.build = 5;
-    /* Repair_AI: the AI patches its base up whenever it can afford to, which is why raiding
-       an enemy base and leaving means finding it whole again ten seconds later. */
-    if (S.credits > 500) {
+    /* Repair_AI, gated on IQRepairSell: the low difficulties simply cannot do this, which is
+       why raiding a Commando base and leaving means finding it whole again. */
+    if (_rtsIQAt(RTS_IQ.repairSell) && S.credits > RTS_AI.creditReserve * 0.5) {
       for (var r = 0; r < G.ents.length; r++) {
         var b = G.ents[r];
         if (b.dead || b.side !== 'enemy' || b.type !== 'struct' || b.building || b.selling) continue;
         if (!b.repair && b.hp < b.maxHp * 0.85) { b.repair = 1; b.rtimer = 0; }
       }
     }
-    var harv = 0, refs = 0, army = [], i;
-    for (i = 0; i < G.ents.length; i++) {
-      var e = G.ents[i];
-      if (e.dead || e.side !== 'enemy') continue;
-      if (e.type === 'struct') { if (e.def === 'refinery') refs++; continue; }
-      if (rtsUnitDef(e.def).harvest) harv++; else army.push(e);
+    _rtsAIUnits(S);
+
+    /* Structures: build toward the target composition, keeping CreditReserve in hand for
+       everything except a power emergency. */
+    var want = _rtsAIWants(S);
+    if (want && !S.q.struct && !S.ready) {
+      var sd = rtsStructDef(want.key);
+      var reserve = want.urgent ? 0 : RTS_AI.creditReserve;
+      if (S.credits >= _rtsCostOf('enemy', sd) + reserve) _rtsQueue('enemy', want.key);
     }
-    /* Economy first, and crucially the AI SAVES for a harvester instead of dribbling its
-       income away on cheap infantry - without this it parks at ~90 credits forever, never
-       affords the 1200 harvester, and its army stops growing about two minutes in. */
-    if (harv < 3) {
-      if (_rtsCanQueue('enemy', 'harvester')) _rtsQueue('enemy', 'harvester');
-    } else if (_rtsCanQueue('enemy', 'tank') && S.credits > 1600) _rtsQueue('enemy', 'tank');
-    else if (_rtsCanQueue('enemy', 'buggy') && S.credits > 900) _rtsQueue('enemy', 'buggy');
-    else if (_rtsCanQueue('enemy', 'rocket') && S.credits > 500) _rtsQueue('enemy', 'rocket');
-    else if (_rtsCanQueue('enemy', 'rifle') && S.credits > 250) _rtsQueue('enemy', 'rifle');
-    /* rebuild a dead power plant so the AI does not brown itself out permanently */
-    if (S.powerUsed > S.powerMade && _rtsCanQueue('enemy', 'power')) _rtsQueue('enemy', 'power');
-    /* once genuinely rich, expand rather than stockpile - but cap it, or the AI spends its
-       whole income on refineries it does not have the harvesters to use */
-    else if (S.credits > 4000 && refs < 2 && !S.q.struct && _rtsCanQueue('enemy', 'refinery')) _rtsQueue('enemy', 'refinery');
   }
-  /* the AI places its own finished buildings next to the yard */
+  /* The AI places its own finished buildings. Throttled: the search is over every anchor's
+     build radius, which is not something to run on every frame. */
   if (S.ready) {
-    var yard = _rtsHas('enemy', 'yard'), placed = false;
-    if (yard) {
-      for (var rr = 3; rr <= RTS_BUILD_RADIUS && !placed; rr++) {
-        for (var a = 0; a < 12 && !placed; a++) {
-          var ang = a / 12 * Math.PI * 2;
-          var tx = Math.round(yard.tx + Math.cos(ang) * rr), tz = Math.round(yard.tz + Math.sin(ang) * rr);
-          if (_rtsCanPlace('enemy', S.ready, tx, tz)) { _rtsPlaceStruct('enemy', S.ready, tx, tz, false); placed = true; }
-        }
-      }
+    G.ai.place -= dt;
+    if (G.ai.place <= 0) {
+      G.ai.place = 0.6;
+      if (_rtsAIPlace(S.ready)) { S.ready = null; S.readyTry = 0; }
+      else if (++S.readyTry > 8 || !_rtsHas('enemy', 'yard')) { S.ready = null; S.readyTry = 0; }
     }
-    if (placed || !yard) S.ready = null;
   }
   G.ai.next -= dt;
   if (G.ai.next <= 0) {
-    G.ai.next = RTS_WAVE_EVERY; G.ai.wave++;
+    /* AttackInterval, scaled by the difficulty's build bias - a slower opponent also comes
+       at you less often, so Recruit is a genuinely gentler game rather than the same game
+       with weaker tanks. */
+    G.ai.next = RTS_WAVE_EVERY * _rtsBias('enemy').build; G.ai.wave++;
     var pool = [], k;
     for (k = 0; k < G.ents.length; k++) {
       var u = G.ents[k];
       if (!u.dead && u.side === 'enemy' && u.type === 'unit' && !rtsUnitDef(u.def).harvest && !u.order) pool.push(u);
     }
     /* Commit a real share of the idle army, not a token squad. Sending a fixed handful let
-       the AI pile up forty-odd defenders at home, which is both un-fun and unbeatable. */
-    var send = Math.min(pool.length, Math.max(3, Math.ceil(pool.length * 0.6)));
+       the AI pile up forty-odd defenders at home, which is both un-fun and unbeatable.
+       IQGuardArea: only a smart opponent knows to hold some of it back as a garrison. */
+    var share = _rtsIQAt(RTS_IQ.guardArea) ? 0.7 : 0.6;
+    var send = Math.min(pool.length, Math.max(3, Math.ceil(pool.length * share)));
+    if (_rtsIQAt(RTS_IQ.guardArea)) send = Math.min(send, Math.max(3, pool.length - 3));
     if (send >= 2) {
       var aim = _rtsHas('player', 'yard') || _rtsHas('player', 'refinery') || _rtsHas('player', 'power');
       if (aim) {

@@ -19,7 +19,8 @@ function rtsOpen(seed) {
     +   '<canvas id="rtsCv"></canvas>'
     +   '<canvas id="rtsHud"></canvas>'
     +   '<div class="rts-top"><span class="rts-title">RC COMMAND</span>'
-    +     '<span class="rts-vs"><b class="p">Vanguard</b> vs <b class="e">Redline</b></span>'
+    +     '<span class="rts-vs"><b class="p">Vanguard</b> vs <b class="e">Redline</b>'
+    +       '<i class="dif" id="rtsDifLbl"></i></span>'
     +     '<span class="rts-help">drag select · right-click order · 1-9 teams (ctrl set, alt jump) · repair/sell buttons · WASD pan · wheel zoom · Esc</span>'
     +     '<button type="button" class="rts-mute" id="rtsMute" title="Sound on" onclick="rtsMuteToggle()">🔊</button>'
     +     '<button type="button" class="rts-x" onclick="rtsClose()">✕</button></div>'
@@ -58,6 +59,8 @@ function rtsOpen(seed) {
   window._rtsUI = { cat:'struct', place:null, drag:null, keys:{}, last:0, raf:0, dead:false,
     btns:{}, mouse:{ x:0, y:0, over:false }, miniDrag:false, credShown:0,
     icons:_rtsMakeIcons('player') };
+  var dl = document.getElementById('rtsDifLbl'), dd = _rtsBias('enemy');
+  if (dl) { dl.textContent = dd.name; dl.title = 'Difficulty: ' + dd.name + ' (IQ ' + dd.iq + '/' + RTS_IQ.max + ') — ' + dd.desc; }
   _rtsBuildList();
   _rtsBindInput();
   document.addEventListener('keydown', _rtsKeyDown, true);

@@ -107,7 +107,10 @@ var RTS_CRATER_ORE = 6;   /* ANIM.CPP: a crater calls Reduce_Tiberium(6) */
    ANXIOUS they lie down; below it they get up. */
 var RTS_FEAR = { NONE:0, ANXIOUS:10, SCARED:50, PANIC:100, MAXIMUM:255 };
 var RTS_FEAR_DECAY = 15;        /* per second; the original decays 1 per frame at 15 FPS */
-var RTS_COND_YELLOW = 0.66, RTS_COND_RED = 0.33;
+/* RULES.CPP: ConditionYellow = 1/2, ConditionRed = 1/4. These are not cosmetic - they are the
+   thresholds for damaged building art, the fear escalation ladder and the AI's sell-back
+   decision, so having them at 0.66/0.33 quietly mistuned all three. */
+var RTS_COND_YELLOW = 0.5, RTS_COND_RED = 0.25;
 var RTS_PRONE_DAMAGE = 0.5;     /* Rule.ProneDamageBias */
 var RTS_PRONE_SPEED = 0.5;      /* prone infantry crawl at half pace */
 
@@ -122,11 +125,82 @@ var RTS_PRONE_SPEED = 0.5;      /* prone infantry crawl at half pace */
    costs a fraction of building a new one, which is the whole reason to do it. */
 var RTS_REPAIR_RATE = 0.75;     /* seconds between repair steps (Rule.RepairRate) */
 var RTS_REPAIR_STEP = 0.05;     /* fraction of max hp restored per step (Rule.RepairStep) */
-var RTS_REPAIR_PCT = 0.32;      /* Rule.RepairPercent - repairing is cheaper than rebuilding */
+var RTS_REPAIR_PCT = 0.25;      /* Rule.RepairPercent = 1/4 */
 var RTS_REFUND_PCT = 0.5;       /* Rule.RefundPercent: sell gives back half */
 var RTS_SURVIVOR_FRACTION = 0.5;/* Rule.SurvivorFraction, used by How_Many_Survivors */
 var RTS_SURVIVOR_ODDS = 0.5;    /* Drop_Debris only rolls some of them out of a wreck */
 var RTS_DECON_TIME = 0.35;      /* Mission_Deconstruction: build-up run backwards, this x build */
+
+/* --------------------------------------------------------------- combat --
+   RULES.CPP General section. MinDamage/MaxDamage clamp every hit, so no amount of armour
+   bias can reduce a hit to nothing (a shot always does *something*, which is what stops two
+   units plinking at each other forever) and no multiplier stack can one-shot the map.
+   ExplosionSpread is the splash falloff: damage HALVES for each cell away from the blast,
+   which is much sharper than a linear taper and is why standing one cell further out in the
+   original genuinely saves a unit. */
+var RTS_MIN_DAMAGE = 1;
+var RTS_MAX_DAMAGE = 1000;
+var RTS_EXP_SPREAD = 0.5;
+
+/* -------------------------------------------------------------- economy --
+   GoldValue 35 / GemValue 110 - gems are worth a bit over three times ore per unit mined,
+   which is what makes a gem patch worth crossing the map for. */
+var RTS_GOLD_VALUE = 35;
+var RTS_GEM_VALUE = 110;
+var RTS_GEM_MULT = RTS_GEM_VALUE / RTS_GOLD_VALUE;
+
+/* ------------------------------------------------------------ difficulty --
+   RULES.CPP's DifficultyClass: the game does not make the AI "better", it multiplies a
+   handful of biases on a whole house. The fields are the original's; the numbers are ours,
+   because the shipped RULES.INI values are not in this source file.
+
+   iq    : how many of the AI's behaviours are switched on at all (see RTS_IQ below)
+   fire  : FirepowerBias        speed : GroundspeedBias
+   armor : ArmorBias            rof   : ROFBias (higher = slower reload)
+   cost  : CostBias             build : BuildSpeedBias (higher = slower)
+   wall  : IsWallDestroyer      scan  : IsContentScan (looks inside transports/buildings) */
+var RTS_DIFF = {
+  easy:   { name:'Recruit',  iq:2, fire:0.75, speed:0.85, armor:0.7, rof:1.3,  cost:1.2, build:1.4, wall:false, scan:false,
+            desc:'Redline attacks late, builds little and hits softly.' },
+  normal: { name:'Soldier',  iq:3, fire:1,    speed:1,    armor:1,   rof:1,    cost:1,   build:1,   wall:true,  scan:false,
+            desc:'An even fight. Redline expands and repairs.' },
+  hard:   { name:'Commando', iq:5, fire:1.15, speed:1.1,  armor:1.2, rof:0.85, cost:0.8, build:0.7, wall:true,  scan:true,
+            desc:'Redline builds a real base, defends it and comes early.' }
+};
+var RTS_DIFF_DEFAULT = 'normal';
+
+/* -------------------------------------------------------------------- IQ --
+   RULES.CPP's IQ section is the part worth stealing: each AI behaviour has an IQ level at
+   which it switches ON. A low-IQ opponent is not a high-IQ one with worse numbers - it is
+   missing specific, nameable abilities, which is far more legible than a damage multiplier. */
+var RTS_IQ = {
+  max:5,
+  sellBack:2,       /* sells a building it cannot afford to repair */
+  repairSell:3,     /* repairs damaged buildings at all */
+  scatter:3,        /* its infantry scatter from incoming fire */
+  harvester:3,      /* replaces lost harvesters */
+  guardArea:4,      /* leaves a garrison at home instead of sending everything */
+  production:5      /* full build order and base expansion */
+};
+
+/* ------------------------------------------------------------- AI base --
+   RULES.CPP's [AI] section. The AI does not follow a fixed build order - it holds a target
+   *composition*: each structure type wants `ratio` of the base size, capped at `limit`, and
+   it builds whatever it is furthest short of. BaseSizeAdd is the key one: the AI aims for
+   the human's building count plus this, so it keeps pace with how you are actually playing
+   instead of building to a script. */
+var RTS_AI = {
+  baseSizeAdd:3,
+  powerSurplus:50,          /* keep this much spare power in hand */
+  powerEmergency:0.75,      /* below 3/4 of demand supplied, power is an emergency */
+  creditReserve:1000,       /* RepairThreshhold: never spend the last of the treasury */
+  infantryReserve:2000,     /* above this it can afford to spend on infantry freely */
+  infantryBaseMult:2,
+  attackInterval:3,         /* minutes between attack waves, before difficulty bias */
+  attackDelay:5,            /* minutes before the first one */
+  ratio:{ refinery:0.16, barracks:0.16, factory:0.10, turret:0.50 },
+  limit:{ refinery:4,    barracks:2,    factory:2,    turret:12   }
+};
 
 /* Armour class per thing, used with weapon.vs above. */
 function rtsArmour(e) {
@@ -152,8 +226,9 @@ var RTS_ORE_GROW_EVERY = 6;     /* seconds between growth passes */
 var RTS_ORE_GROW_AMT = 26;      /* added to an existing non-full tile each pass */
 var RTS_ORE_SPREAD_CHANCE = 0.10; /* chance a rich tile seeds an empty neighbour */
 
-/* Enemy waves: every RTS_WAVE_EVERY seconds the AI throws a group at you, growing
-   over time. Kept intentionally readable so it is easy to tune. */
+/* Enemy waves. RULES.CPP has AttackInterval 3 / AttackDelay 5 in MINUTES, which is the
+   pacing of a 40-minute skirmish; a match here is a fraction of that, so these are the same
+   idea on this game's clock. Difficulty scales both (see RTS_DIFF.build). */
 var RTS_WAVE_EVERY = 85;
 var RTS_WAVE_FIRST = 150;   /* a refinery costs 1400 and takes 18s - the first wave must not
                                land before a new player has had time to stand up an economy */
