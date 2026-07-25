@@ -33,8 +33,8 @@
    can interpenetrate freely without any face sorting. */
 
 var R3_K = 0.8;                       /* how far a unit of height climbs the screen */
-var R3_AMB = 0.34, R3_DIF = 0.66;     /* ambient / diffuse split */
-var R3_STEPS = 6;                     /* quantise shading - period renderers banded, and
+var R3_AMB = 0.30, R3_DIF = 0.72;     /* ambient / diffuse split */
+var R3_STEPS = 9;                     /* quantise shading - period renderers banded, and
                                          banding also keeps the palette tight */
 /* Upper-left and IN FRONT. The z component has to be positive: a front-facing wall has
    normal +z, and it is the face the camera sees most of. A first attempt lit from behind
@@ -172,18 +172,62 @@ function _r3Bounds(faces) {
 }
 
 /* ------------------------------------------------------------------- render --
-   Scanline fill with a per-pixel depth buffer, straight into ImageData. Canvas fill() would
-   anti-alias every silhouette edge, which is the one thing this art style cannot have. */
+   Scanline fill with a per-pixel depth buffer, then a shading pass over the buffers.
+
+   The first version wrote colour directly during rasterisation as `base * brightness`,
+   quantised to six bands. That is the cheapest possible shading and it looks it: scaling
+   RGB toward black desaturates as it darkens, so every shadow slid to muddy grey, and six
+   hard bands with no dither gave big flat plates of colour. Everything downstream - more
+   geometry, better silhouettes - was fighting that.
+
+   What happens now, per pixel:
+     1. rasterise, keeping depth, surface normal, base colour and a lit-ness value
+     2. ambient occlusion from the depth buffer, so creases between parts darken
+     3. ordered 4x4 dither between quantisation levels, which is how art of this era got
+        smooth gradients out of a small palette
+     4. a colour RAMP rather than a multiply: shadows shift cool and keep saturation,
+        highlights shift warm toward daylight
+     5. a rim light along the up-left silhouette so the shape separates from the ground
+
+   All of it runs once, at load, on sprites a few dozen pixels across. */
+
+/* 4x4 ordered dither. Values 0..15. */
+var R3_BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+
+/* Map a base colour and a lit-ness value onto a colour ramp.
+   v < 1 darkens toward a cool shadow, v > 1 lifts toward warm daylight. Multiplying toward
+   black instead - the obvious thing - drains the colour out of every shaded face. */
+function _r3Ramp(c, v, out) {
+  if (v <= 1) {
+    var k = v < 0 ? 0 : v;
+    out[0] = c[0] * (0.30 + 0.70 * k) + (1 - k) * 7;
+    out[1] = c[1] * (0.32 + 0.68 * k) + (1 - k) * 10;
+    out[2] = c[2] * (0.38 + 0.62 * k) + (1 - k) * 21;
+  } else {
+    var m = v - 1; if (m > 1) m = 1;
+    out[0] = c[0] + (255 - c[0]) * m * 0.60;
+    out[1] = c[1] + (250 - c[1]) * m * 0.60;
+    out[2] = c[2] + (228 - c[2]) * m * 0.60;
+  }
+}
+
 function _r3Render(faces, W, H, ox, oy) {
   W = Math.max(1, Math.ceil(W)); H = Math.max(1, Math.ceil(H));
   var t = _sprMake(W, H), g = t.g;
   var img = g.createImageData(W, H), d = img.data;
-  var zb = new Float32Array(W * H); zb.fill(-1e30);
+  var N = W * H;
+  var zb = new Float32Array(N); zb.fill(-1e30);
+  var vb = new Float32Array(N);                 /* lit-ness */
+  var cb = new Uint8Array(N * 3);               /* base colour */
+  var mk = new Uint8Array(N);                   /* coverage */
   var i, j;
+
+  /* half-vector for a cheap specular term - gives cylinders a sheen along one side */
+  var hx = R3_LIGHT[0] + R3_VIEW[0], hy = R3_LIGHT[1] + R3_VIEW[1], hz = R3_LIGHT[2] + R3_VIEW[2];
+  var hl = Math.hypot(hx, hy, hz); hx /= hl; hy /= hl; hz /= hl;
 
   for (i = 0; i < faces.length; i++) {
     var f = faces[i], v = f.v;
-    /* normal from the first three vertices */
     var ax = v[1][0] - v[0][0], ay = v[1][1] - v[0][1], az = v[1][2] - v[0][2];
     var bx = v[2][0] - v[1][0], by = v[2][1] - v[1][1], bz = v[2][2] - v[1][2];
     var nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
@@ -194,25 +238,26 @@ function _r3Render(faces, W, H, ox, oy) {
 
     var lam = nx * R3_LIGHT[0] + ny * R3_LIGHT[1] + nz * R3_LIGHT[2];
     if (lam < 0) lam = 0;
-    var sh = R3_AMB + R3_DIF * lam;
-    sh = Math.round(sh * R3_STEPS) / R3_STEPS;                    /* band it */
-    var cr = Math.min(255, f.c[0] * sh) | 0, cg = Math.min(255, f.c[1] * sh) | 0,
-        cb = Math.min(255, f.c[2] * sh) | 0;
+    var sp = nx * hx + ny * hy + nz * hz;
+    if (sp < 0) sp = 0;
+    sp = sp * sp; sp = sp * sp; sp = sp * sp; sp = sp * sp; /* ^16, a tight highlight */
+    /* A touch of sky bounce from above keeps upward faces from going dead in shadow. */
+    var sky = 0.10 * (ny > 0 ? ny : 0);
+    var lit = R3_AMB + R3_DIF * lam + sky + 0.16 * sp;
+    if (lit > 1.10) lit = 1.10;         /* a broad, strong specular blew lit roofs out to pink */
 
-    /* project + depth */
-    var n = v.length, px = new Float64Array(n), py = new Float64Array(n), pd = new Float64Array(n);
+    var n2 = v.length, px = new Float64Array(n2), py = new Float64Array(n2), pd = new Float64Array(n2);
     var ymin = 1e9, ymax = -1e9;
-    for (j = 0; j < n; j++) {
+    for (j = 0; j < n2; j++) {
       px[j] = ox + v[j][0];
       py[j] = oy + (v[j][2] - R3_K * v[j][1]);
       pd[j] = v[j][1] + R3_K * v[j][2];
       if (py[j] < ymin) ymin = py[j];
       if (py[j] > ymax) ymax = py[j];
     }
-    /* depth is affine in screen space, so solve it once per face from three vertices */
     var d0x = px[1] - px[0], d0y = py[1] - py[0], d1x = px[2] - px[0], d1y = py[2] - py[0];
     var det = d0x * d1y - d0y * d1x;
-    if (Math.abs(det) < 1e-9) continue;                            /* edge-on */
+    if (Math.abs(det) < 1e-9) continue;
     var e0 = pd[1] - pd[0], e1 = pd[2] - pd[0];
     var da = (e0 * d1y - e1 * d0y) / det, db = (e1 * d0x - e0 * d1x) / det;
     var dc = pd[0] - da * px[0] - db * py[0];
@@ -220,25 +265,70 @@ function _r3Render(faces, W, H, ox, oy) {
     var yA = Math.max(0, Math.floor(ymin)), yB = Math.min(H - 1, Math.ceil(ymax));
     for (var yy = yA; yy <= yB; yy++) {
       var yc = yy + 0.5, xlo = 1e9, xhi = -1e9;
-      for (j = 0; j < n; j++) {
-        var k = (j + 1) % n, y0 = py[j], y1 = py[k];
+      for (j = 0; j < n2; j++) {
+        var k2 = (j + 1) % n2, y0 = py[j], y1 = py[k2];
         if ((y0 <= yc) === (y1 <= yc)) continue;
         var tt = (yc - y0) / (y1 - y0);
-        var xx = px[j] + (px[k] - px[j]) * tt;
+        var xx = px[j] + (px[k2] - px[j]) * tt;
         if (xx < xlo) xlo = xx;
         if (xx > xhi) xhi = xx;
       }
       if (xhi < xlo) continue;
       var xA = Math.max(0, Math.round(xlo)), xB = Math.min(W - 1, Math.round(xhi) - 1);
-      if (xB < xA && xhi - xlo > 0.35) xB = xA;                    /* keep 1px-wide slivers */
+      if (xB < xA && xhi - xlo > 0.35) xB = xA;
       for (var xx2 = xA; xx2 <= xB; xx2++) {
         var dep = da * (xx2 + 0.5) + db * yc + dc;
         var o = yy * W + xx2;
         if (dep <= zb[o]) continue;
-        zb[o] = dep;
-        var q = o * 4;
-        d[q] = cr; d[q + 1] = cg; d[q + 2] = cb; d[q + 3] = 255;
+        zb[o] = dep; vb[o] = lit; mk[o] = 1;
+        cb[o * 3] = f.c[0]; cb[o * 3 + 1] = f.c[1]; cb[o * 3 + 2] = f.c[2];
       }
+    }
+  }
+
+  /* ---- shading pass ---- */
+  var rgb = [0, 0, 0];
+  for (var y2 = 0; y2 < H; y2++) {
+    for (var x2 = 0; x2 < W; x2++) {
+      var p = y2 * W + x2;
+      if (!mk[p]) continue;
+      var lit2 = vb[p];
+
+      /* Ambient occlusion: count neighbours that sit measurably in front of this pixel.
+         Those are the creases where one part meets another, and darkening them is most of
+         what stops a model looking like flat decals stacked on each other. */
+      var occ = 0, tot = 0;
+      for (var oy2 = -2; oy2 <= 2; oy2++) {
+        for (var ox2 = -2; ox2 <= 2; ox2++) {
+          if (!ox2 && !oy2) continue;
+          var qx = x2 + ox2, qy = y2 + oy2;
+          if (qx < 0 || qy < 0 || qx >= W || qy >= H) continue;
+          var q = qy * W + qx;
+          tot++;
+          if (mk[q] && zb[q] > zb[p] + 1.1) occ++;
+        }
+      }
+      var mod = tot ? -0.40 * (occ / tot) : 0;
+
+      /* Rim light on the up-left silhouette, so the shape lifts off the ground behind it. */
+      var up = y2 > 0 ? mk[p - W] : 0, lf = x2 > 0 ? mk[p - 1] : 0;
+      if (!up || !lf) mod += 0.13;
+
+      /* Quantise the face's own lighting WITHOUT dither, so a flat face stays one solid
+         tone, and dither only the spatially-varying part - the occlusion and rim. Dithering
+         the face value too puts a checkerboard across every large flat roof, which is what
+         the first attempt did: dither belongs on gradients, not on flat surfaces. */
+      var bay = (R3_BAYER[(y2 & 3) * 4 + (x2 & 3)] + 0.5) / 16 - 0.5;
+      var q2 = Math.round(lit2 * R3_STEPS) / R3_STEPS
+             + Math.round((mod + bay / R3_STEPS) * R3_STEPS) / R3_STEPS;
+
+      rgb[0] = cb[p * 3]; rgb[1] = cb[p * 3 + 1]; rgb[2] = cb[p * 3 + 2];
+      _r3Ramp(rgb, q2, rgb);
+      var w = p * 4;
+      d[w] = rgb[0] < 0 ? 0 : (rgb[0] > 255 ? 255 : rgb[0]);
+      d[w + 1] = rgb[1] < 0 ? 0 : (rgb[1] > 255 ? 255 : rgb[1]);
+      d[w + 2] = rgb[2] < 0 ? 0 : (rgb[2] > 255 ? 255 : rgb[2]);
+      d[w + 3] = 255;
     }
   }
   g.putImageData(img, 0, 0);

@@ -58,6 +58,18 @@ breaking it shipped once.
   and rejected: a plain gable, whose near slope covers five times the pixels of the far one
   under this camera, and a barrel vault, whose entire near half points at the light and
   lands on one shading band. The factory uses small repeated ridges instead.
+- **The shading pipeline is the thing that decides whether this looks cheap.** Per pixel the
+  baker keeps depth, base colour and a lit-ness value, then does: ambient occlusion off the
+  depth buffer, ordered 4x4 dither, a colour RAMP, and a rim light on the up-left silhouette.
+  Three rules inside it, each learned by getting it wrong:
+  - **Ramp, never multiply.** Scaling RGB toward black desaturates as it darkens, so every
+    shadow slides to muddy grey. The ramp keeps saturation in shadow and shifts it cool,
+    and lifts highlights toward warm daylight.
+  - **Dither the gradients, not the faces.** Dithering the face's own lighting puts a
+    checkerboard across every large flat roof. Quantise the face value clean and dither
+    only the spatially-varying part (occlusion, rim).
+  - **Keep the specular tight.** A broad one (^8 at 0.34) pushed lit roofs past the top of
+    the ramp and they blew out to pink.
 - **A wall is never one flat colour.** Structures carry pale pilasters and rows of lit
   windows mounted 1.5 units proud of the wall face. Without them a building is a coloured
   box, however good its roof is.

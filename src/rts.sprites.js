@@ -310,7 +310,7 @@ function _rtsBakeTerrain(G) {
   /* --- forest. Conifers, drawn back-to-front down the map so a grove overlaps correctly,
          each one taller than its cell with a cast shadow. This is the single biggest
          difference between "a field" and "a battlefield". --- */
-  var TR = RTS_PAL.tree;
+  var trees = _sprTrees();
   for (tz = 0; tz < N; tz++) {
     for (tx = 0; tx < N; tx++) {
       if (G.terrain[_rtsIdx(tx, tz)] !== RTS_T_TREE) continue;
@@ -318,33 +318,36 @@ function _rtsBakeTerrain(G) {
          into visible rows; a grove has to look sown, not planted. */
       var jx = (_sprHash(tx, tz, seed + 101) - 0.5) * 17;
       var jy = (_sprHash(tz, tx, seed + 103) - 0.5) * 15;
-      cx = tx * TS + TS / 2 + jx; cy = tz * TS + TS / 2 + jy;
-      var sc = 0.82 + _sprHash(tx, tz, seed + 107) * 0.42;
-      _sprTree(g, cx, cy, sc, _sprHash(tx + tz, tz, seed + 109), TR);
+      var tr = trees[(_sprHash(tx, tz, seed + 107) * 3) | 0];
+      g.drawImage(tr.c, Math.round(tx * TS + jx), Math.round(tz * TS + jy - tr.head));
     }
   }
   return t.c;
 }
 
-/* One conifer: cast shadow, trunk, then three stacked canopy tiers narrowing upward. The
-   tiers are ellipses rather than a triangle so the silhouette stays soft and organic when
-   twenty of them overlap. */
-function _sprTree(g, cx, cy, sc, variant, TR) {
-  var r = 8 * sc, hgt = 15 * sc;
-  g.globalAlpha = 0.42;
-  _sprEll(g, cx + 4 * sc, cy + 4 * sc, r * 1.0, r * 0.52, '#000');
-  g.globalAlpha = 1;
-  _sprRect(g, cx - 1, cy - 1, 2, Math.max(2, 4 * sc), TR[4]);          /* trunk */
-  var tiers = variant > 0.5 ? 3 : 4;
-  for (var i = 0; i < tiers; i++) {
-    var f = i / tiers;
-    var ty = cy - f * hgt;
-    var tr = r * (1 - f * 0.52);
-    _sprEll(g, cx + 1, ty + 1, tr, tr * 0.62, TR[2]);                  /* shaded underside */
-    _sprEll(g, cx, ty, tr * 0.94, tr * 0.58, TR[0]);
-    _sprEll(g, cx - tr * 0.24, ty - tr * 0.16, tr * 0.5, tr * 0.3, TR[1]);
-    if (i === tiers - 1) _sprEll(g, cx - tr * 0.3, ty - tr * 0.2, tr * 0.26, tr * 0.16, TR[3]);
+/* Conifers, baked from 3D like everything else. They were stacked 2D ellipses before, which
+   left the forest looking like flat cut-outs while the buildings beside it had volume - and
+   the forest is a fifth of the map, so it set the tone for the whole picture. Three size
+   variants, picked per cell. */
+var _RTS_TREES = null;
+function _sprTrees() {
+  if (_RTS_TREES) return _RTS_TREES;
+  var TR = RTS_PAL.tree, out = [];
+  for (var v = 0; v < 3; v++) {
+    var sc = [0.82, 1.0, 1.22][v], m = [];
+    _r3Cyl(m, 0, 0, 0, 1.6 * sc, 5 * sc, TR[4], TR[4], 8);            /* trunk */
+    var tiers = v === 1 ? 4 : 3;
+    for (var i = 0; i < tiers; i++) {
+      var f = i / tiers;
+      var r0 = 8 * sc * (1 - f * 0.55), r1 = r0 * 0.42;
+      var y = (3 + f * 13) * sc, h = 6.5 * sc;
+      _r3Cone(m, 0, y, 0, r0, r1, h, i === tiers - 1 ? TR[1] : TR[0], 12);
+    }
+    var r = _r3BakeFootprint(m, RTS_TS, RTS_TS);
+    out.push({ c: _sprShadow(r.c, 3, 3), head: r.head });
   }
+  _RTS_TREES = out;
+  return out;
 }
 
 /* ------------------------------------------------------------------------ ore --
