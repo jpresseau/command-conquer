@@ -308,6 +308,36 @@ var RTS_MUZZLE_STRUCT = 2.2;
    past the aim point it keeps flying before going off on its own. */
 var RTS_SHELL_HIT  = 1.8;
 var RTS_SHELL_OVER = 0.35;
+
+/* ------------------------------------------------ threat scan (TECHNO.CPP) --
+   Evaluate_Object scores a candidate target rather than just measuring how far away it is.
+   The base value is the object's Points (Risk + Reward); this game has no Points table, so
+   cost stands in for it - a war factory outranks a rifle squad by the same logic either way.
+
+   `value = rawval + object->Crew.Kills` makes a unit that has already killed things a hotter
+   target: veterans get focused down. Kills are added raw to a Points-scale number in the
+   original, but costs here run 100-1600 rather than 10-80, so the kill term is scaled up to
+   stay meaningful instead of vanishing into the rounding. */
+var RTS_KILL_VALUE = 60;
+/* "If the object is outside of the protective umbrella of the enemy base, then give it a
+   target boost" - stragglers and lone harvesters out in the open get hunted first. */
+var RTS_EXPOSED_MULT = 2;
+/* NervousBias: a target that has got INTO your own base is worth more than the same target
+   sitting in a field. This is what makes a base defend itself properly. */
+var RTS_NERVOUS_BIAS = 2;
+/* The distance falloff is LINEAR in cells - note the original has the squared version right
+   there, commented out, and ships the linear one. */
+var RTS_THREAT_SCALE = 32000;
+/* Threat_Range for area guard: twice the weapon range, clamped. 0x0A00 leptons = 10 cells. */
+var RTS_THREAT_MAX_CELLS = 10;
+/* Base_Is_Attacked: how many defenders may be recalled at once, and how long before the same
+   attacker can trigger another recall (BaseDefenseDelay, in seconds). */
+var RTS_DEFENDERS = 6;
+var RTS_BASE_DEFENSE_DELAY = 30;
+/* Firing from the darkness gives you away: Fire_At does a Sight_From of radius 2 around a
+   shooter the player cannot currently see. Here it is a short reveal on the shooter itself,
+   since the visibility grid is rebuilt every sweep and a one-shot mark would be erased. */
+var RTS_MUZZLE_SPOT = 1.6;
 /* Overrun_Square: a tracked vehicle drives over infantry. Approaching one makes them scatter
    (`cellptr->Incoming(0, true)`); actually reaching them kills them. Should_Crush_It refuses
    for HUMAN-controlled vehicles - your own tanks never auto-crush, you have to drive them

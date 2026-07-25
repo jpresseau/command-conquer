@@ -423,6 +423,62 @@ already casts one.
   a flat four seconds, so a **miss detonates near where it was aimed** instead of sailing
   across the map and exploding in somebody else's base.
 
+## Picking a target — from TECHNO.CPP
+
+`Greatest_Threat` / `Evaluate_Object` **score** candidates rather than measuring how far away
+they are. That is the difference between an army that shoots whatever it bumps into and one
+that picks off the harvester.
+
+```
+value  = Points (Risk + Reward)  + Crew.Kills
+       × 2                        if outside its OWN base's zone   (a straggler is soft)
+       × NervousBias              if inside MY base's zone
+score  = value × 32000 / (distance in cells + 1)          ← LINEAR, not squared
+```
+
+The squared falloff is sitting right there in the original, commented out; the shipped line is
+the linear one. A weapon whose `Modifier` against that armour is zero never selects the target
+at all.
+
+- **Points stand in as `max(cost, hp)`, and the hp floor is load-bearing.** The Command Yard is
+  free, so cost alone values the most important building in the game at zero — and a
+  zero-valued candidate is discarded. Nothing could target a construction yard: measured, the
+  Commando AI ran to 179 units and 27 buildings while an idle player calmly survived eight
+  minutes, because neither side could shoot the other's yard.
+- **`Crew.Kills` makes veterans hotter targets.** Kills are added raw to a Points-scale number
+  in the original; costs here run 100–1600 rather than 10–80, so the term is scaled or it
+  vanishes into the rounding.
+- **`Area_Modify` is deliberately NOT implemented.** It halves a candidate's value per nearby
+  friendly building, but it is gated on a per-weapon `IsSupressed` flag that only a few RA
+  weapons carry and this game has no equivalent data for. Mapping it onto "any splash weapon"
+  is the obvious guess and it is wrong: measured, it drove a target standing *inside* your own
+  base down to 640k against 1.28M for the same unit in open ground — exactly inverting
+  NervousBias and leaving the base undefended.
+
+**`Is_Allowed_To_Retaliate`** — shooting back is not automatic. No source, an ally, or no weapon
+that can hurt the attacker all mean no. An idle unit always turns and fights. A unit already
+engaged only switches if the attacker is genuinely the better target, and even then the
+original only bothers **half the time** — that coin flip is what stops a firefight becoming
+every unit spinning toward whoever shot last. Measured: 0% switching away from a better target,
+~50% switching to one.
+
+**`Base_Is_Attacked`** — *"will pull units off of the field and send them back to defend the
+base… will make taking an enemy base much more difficult."* Raid a defended base and its army
+comes home. Only the AI runs this (humans deal with their own base-is-attacked problems), a
+building that can shoot back doesn't overreact, and a `BaseAttackTimer` on the attacker stops
+one long firefight from recalling the army over and over. Defenders alternate 50/50 between
+charging the attacker and taking station on the building — a pure charge empties the base again
+the moment the raider dies.
+
+**Firing from the dark gives you away.** `Fire_At` does a `Sight_From` of radius 2 around a
+shooter the player can't see. Here the reveal lives on the shooter as a short timer rather than
+as a mark on the grid, because the visibility grid is rebuilt from scratch every sweep and a
+one-shot mark would be erased before it was drawn.
+
+`Threat_Range`'s area-guard clamp (2× weapon range, capped at 10 cells) is implemented but never
+binds — every sight radius in this game is already inside it. It is kept because the clamp is
+the rule, not the current unit table.
+
 ## Action cursors
 
 The cursor answers "what happens if I click here?" before you find out by trying: move,
