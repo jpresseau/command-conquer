@@ -256,6 +256,25 @@ function rtsSightTiles(def) {
   return Math.max(3, Math.min(RTS_SIGHT_MAX, Math.round((def.sight || 12) / RTS_TILE) + RTS_SIGHT_BONUS));
 }
 
+/* ------------------------------------------------------------- vehicles --
+   UNIT.CPP. A vehicle carries two facings: PrimaryFacing is the hull and SecondaryFacing is
+   the turret, and they are drawn as separate shapes. Can_Fire refuses with FIRE_FACING until
+   the turret is within about 11 degrees of the target, and with FIRE_ROTATING if the turret
+   is still swinging and the weapon does not home. */
+var RTS_TURRET_ROT = 3.0;       /* radians/second, the turret's own rate */
+var RTS_FIRE_ANGLE = 0.2;       /* ~11 degrees: Can_Fire's `diff < 8` out of 256 */
+var RTS_RECOIL_TIME = 0.12;     /* how long the turret sits recoiled after firing */
+/* Overrun_Square: a tracked vehicle drives over infantry. Approaching one makes them scatter
+   (`cellptr->Incoming(0, true)`); actually reaching them kills them. Should_Crush_It refuses
+   for HUMAN-controlled vehicles - your own tanks never auto-crush, you have to drive them
+   over deliberately - and only within CrushDistance. */
+var RTS_CRUSHERS = { tank:1, harvester:1 };
+var RTS_CRUSH_DIST = 1.5 * 4;   /* Rule.CrushDistance 0x0180 = 1.5 cells */
+var RTS_CRUSH_KILL = 0.9;       /* world units: close enough to actually run them down */
+/* Take_Damage: a destroyed vehicle has a 50% chance of throwing out a crew member, who
+   starts wounded and runs. Unarmed vehicles produce a technician instead of a soldier. */
+var RTS_CREW_CHANCE = 0.5;
+
 /* Armour class per thing, used with weapon.vs above. */
 function rtsArmour(e) {
   if (e.type === 'struct') return 'building';

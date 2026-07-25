@@ -381,6 +381,36 @@ ends**, so with Excess 0 and Count 0 the original's test is `0 <= 0` — true, a
 candidate always enters the list. Writing it as `rnd() * (excess+1) <= count` makes that test
 never true, the list stays empty forever, and ore silently never grows again. Nothing throws.
 
+## Vehicles — from UNIT.CPP
+
+**A vehicle carries two facings.** `PrimaryFacing` is the hull, `SecondaryFacing` is the
+turret, and they are drawn as *separate shapes*. This is the single most recognisable thing
+about a C&C tank — it drives one way while its gun tracks another — and baking the turret into
+the hull sprite throws it away. `_sprUnit(key, side, prone, part)` builds `'hull'` and
+`'turret'` halves; both bake into the same size canvas about the same origin, so drawing one
+over the other at the same screen position lines them up with **no per-facing offset table**.
+The turret model is centred on its own pivot so it rotates in place. `RTS_TURRETED` lists
+which units get the treatment. The turret sprite must not carry a drop shadow — the hull
+already casts one.
+
+- `Rotation_AI`: with no target the turret drifts back to the hull's facing.
+- `Can_Fire` refuses with **FIRE_FACING** until the turret is within `diff < 8` of 256 (~11°),
+  and with **FIRE_ROTATING** if the turret is still swinging and the projectile does not home.
+  Homing weapons get four times the angular tolerance (`diff >>= 2`). Measured: a tank whose
+  gun starts 180° off does not fire until 1.03 s, against a 1.05 s swing time.
+- `Recoil_Adjust` moves the turret back one pixel along its facing when it fires.
+
+**`Overrun_Square`**: a tracked vehicle threatens the ground in front of it — infantry within
+`CrushDistance` scatter (`Incoming()`), and any actually under the tracks are killed. Hook this
+*before* the engage logic: a tank holding position and firing returns early from the unit
+update, so hanging the crush off the end meant a stationary tank never ran anything over.
+
+`Take_Damage` on a vehicle: **half the time a crew member bails out**, wounded
+(`Random_Pick(5, MaxStrength/2)`) and running — but never from one that was crushed, since
+there is nobody left to climb out. Units with more than 400 hit points rock the screen when
+they die. And a damaged harvester carrying a load heads for the refinery instead of finishing
+its mining run in the open.
+
 ## Verifying
 
 No test suite — use headless Playwright against the **built** `index.html`. Node + Playwright

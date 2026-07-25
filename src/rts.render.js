@@ -407,13 +407,26 @@ function _rtsDrawStruct(g, e, TSscale, cell) {
 function _rtsDrawUnit(g, e, TSscale) {
   var R = _rtsR, d = rtsUnitDef(e.def);
   var f = ((Math.round(e.rot / (Math.PI * 2) * 8) % 8) + 8) % 8;
+  var turreted = R.spr.turret && R.spr.turret[e.side][e.def];
   var img = (e.prone && R.spr.prone[e.side][e.def])
     ? R.spr.prone[e.side][e.def][f]
-    : R.spr.unit[e.side][e.def][f];
+    : (turreted ? R.spr.hull[e.side][e.def][f] : R.spr.unit[e.side][e.def][f]);
   var w = Math.round(img.width * TSscale), h = Math.round(img.height * TSscale);
   var px = Math.round(_rtsSX(e.x) - w / 2), py = Math.round(_rtsSY(e.z) - h / 2);
   if (e.hitT > 0) g.globalAlpha = 0.7;
   g.drawImage(img, px, py, w, h);
+  /* SecondaryFacing: the turret is its own shape at its own angle, drawn over the hull. */
+  if (turreted) {
+    var tf = ((Math.round(e.turret / (Math.PI * 2) * 8) % 8) + 8) % 8;
+    var timg = turreted[tf], rx = 0, ry = 0;
+    /* Recoil_Adjust: a firing turret moves back one pixel along its facing. */
+    if (e.recoil > 0) {
+      var u = Math.max(1, Math.round(TSscale));
+      rx = -Math.round(Math.cos(e.turret)) * u;
+      ry = -Math.round(Math.sin(e.turret)) * u;
+    }
+    g.drawImage(timg, px + rx, py + ry, w, h);
+  }
   g.globalAlpha = 1;
   if (e.fire > 0) {
     var fl = R.spr.fx.flash[Math.min(2, Math.floor(e.fire * 30))];

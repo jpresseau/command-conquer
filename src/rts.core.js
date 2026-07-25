@@ -646,9 +646,26 @@ function _rtsKill(e) {
     }
   } else {
     G.fx.push({ kind:'pop', x:e.x, y:1, z:e.z, t:0, big:1 });
-    if (rtsUnitDef(e.def).kind === 'infantry') {
+    var ud = rtsUnitDef(e.def);
+    if (ud.kind === 'infantry') {
       G.corpses.push({ x:e.x, z:e.z, v:(e.id * 5) % 3 });
       if (G.corpses.length > 220) G.corpses.shift();
+    } else {
+      /* Take_Damage: half the time a crew member bails out of a wrecked vehicle, wounded and
+         running. Not from one that was crushed - there is nobody left to climb out. */
+      if (!e.crushed && Math.random() < RTS_CREW_CHANCE) {
+        var cell = _rtsNearestOpen(_rtsTX(e.x), _rtsTX(e.z), 4);
+        if (cell) {
+          var crew = _rtsSpawnUnit(e.side, 'rifle', _rtsWX(cell[0]), _rtsWX(cell[1]));
+          if (crew) {
+            crew.hp = Math.max(5, Math.round(crew.maxHp * (0.15 + Math.random() * 0.35)));
+            crew.fear = RTS_FEAR.PANIC;
+            _rtsScatter(crew, e.x, e.z);
+          }
+        }
+      }
+      /* "Very strong units that have an explosion will also rock the screen." */
+      if (ud.hp > 400) G.shake = Math.min(1, G.shake + 0.12);
     }
   }
   if (typeof _rtsSfx === 'function')
@@ -988,6 +1005,7 @@ function _rtsFindTarget(e, range) {
 function _rtsFire(e, tgt, w) {
   var G = window._rtsG, bias = _rtsBias(e.side);
   e.cool = w.cool * bias.rof; e.fire = 0.09;      /* ROFBias: higher = slower reload */
+  e.recoil = RTS_RECOIL_TIME;                     /* Recoil_Adjust */
   if (typeof _rtsSfx === 'function') _rtsSfx(w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
     : (w.shot === 'missile' ? 'rocket' : (e.type === 'struct' ? 'turretgun' : 'cannon')), e.x, e.z);
   var dmg = w.dmg * (w.vs[rtsArmour(tgt)] || 1) * bias.fire;
@@ -1036,6 +1054,12 @@ function _rtsDamage(tgt, dmg, from, floor) {
   if (from && from.side) tgt.hurtBy = from.side;     /* WhoLastHurtMe, for the kill credit */
   if (tgt.type === 'unit' && from && !tgt.order && rtsUnitDef(tgt.def).weapon) { tgt.order = 'attack'; tgt.target = from; }
   if (tgt.hp <= 0) _rtsKill(tgt);
+  else if (tgt.type === 'unit' && rtsUnitDef(tgt.def).harvest && tgt.carry > 0
+           && tgt.hp <= tgt.maxHp * RTS_COND_YELLOW && tgt.hstate && tgt.hstate !== 'unload') {
+    /* Take_Damage: a damaged harvester with a load aboard heads for the refinery rather than
+       sitting in the open finishing its mining run. */
+    tgt.hstate = 'toRef'; tgt.path = null;
+  }
   else if (tgt.type === 'unit' && rtsUnitDef(tgt.def).kind === 'infantry') {
     /* Fear climbs faster the more hurt the soldier already is. */
     if (tgt.fear < RTS_FEAR.SCARED) tgt.fear = RTS_FEAR.SCARED;
@@ -1188,8 +1212,13 @@ function _rtsUpdateUnit(e, dt) {
   var G = window._rtsG, d = rtsUnitDef(e.def), w = d.weapon ? RTS_WEAPONS[d.weapon] : null;
   if (e.cool > 0) e.cool -= dt;
   if (e.fire > 0) e.fire -= dt;
+  if (e.recoil > 0) e.recoil -= dt;
   if (e.hitT > 0) e.hitT -= dt;
   if (d.kind === 'infantry') _rtsFearAI(e, dt);
+  /* Overrun_Square runs BEFORE the engage logic: a tank that is holding position and firing
+     returns early from this function, and hooking the crush on the end meant a stationary
+     tank never ran anything over. */
+  if (RTS_CRUSHERS[e.def]) _rtsOverrun(e);
 
   /* ---- harvester economy loop ---- */
   if (d.harvest) { _rtsUpdateHarvester(e, dt, d); return; }
@@ -1215,8 +1244,20 @@ function _rtsUpdateUnit(e, dt) {
       /* turret tracks its mark even while the hull is still swinging round */
       var ta = Math.atan2(shootAt.z - e.z, shootAt.x - e.x), td = ta - e.turret;
       while (td > Math.PI) td -= Math.PI * 2; while (td < -Math.PI) td += Math.PI * 2;
-      e.turret += Math.min(Math.abs(td), 4 * dt) * (td < 0 ? -1 : 1);
-      if (e.cool <= 0 && Math.abs(td) < 0.35) _rtsFire(e, shootAt, w);
+      var step = Math.min(Math.abs(td), RTS_TURRET_ROT * dt);
+      e.turret += step * (td < 0 ? -1 : 1);
+      e.tRot = Math.abs(td) > step + 1e-6;                /* still swinging */
+      /* Can_Fire: FIRE_FACING unless the turret is lined up, and a homing weapon is four
+         times more forgiving about it (Modify: `diff >>= 2`). A turret still rotating
+         cannot fire at all unless its projectile homes - FIRE_ROTATING. */
+      var tol = w.speed > 0 && w.shot === 'missile' ? RTS_FIRE_ANGLE * 4 : RTS_FIRE_ANGLE;
+      var homing = w.shot === 'missile';
+      if (e.cool <= 0 && Math.abs(td) < tol && (homing || !e.tRot)) _rtsFire(e, shootAt, w);
+    } else if (!e.path) {
+      /* no target: the turret returns to the hull's facing, as Rotation_AI does */
+      var rd = e.rot - e.turret;
+      while (rd > Math.PI) rd -= Math.PI * 2; while (rd < -Math.PI) rd += Math.PI * 2;
+      e.turret += Math.min(Math.abs(rd), RTS_TURRET_ROT * 0.5 * dt) * (rd < 0 ? -1 : 1);
     }
     if (tgt && !chasing) {
       if (e.order === 'attack' || e.order === 'amove' || !e.order) e.path = null;
@@ -1229,6 +1270,29 @@ function _rtsUpdateUnit(e, dt) {
   } else { e.turret = e.rot; }
 
   if (e.path) { _rtsSteer(e, dt, d); if (!e.path && (e.order === 'move' || e.order === 'amove')) e.order = null; }
+}
+/* UNIT.CPP Overrun_Square. A crusher threatens the ground in front of it: infantry there
+   scatter out of the way, and any that are actually under the tracks are killed. The
+   original refuses to let HUMAN vehicles auto-crush - you have to drive over them yourself -
+   which is why your own tanks never mow down the enemy infantry they are shooting at. */
+function _rtsOverrun(e) {
+  var G = window._rtsG, foe = _rtsEnemyOf(e.side);
+  for (var i = 0; i < G.ents.length; i++) {
+    var o = G.ents[i];
+    if (o.dead || o.type !== 'unit' || o.side === e.side) continue;
+    if (rtsUnitDef(o.def).kind !== 'infantry') continue;
+    var d = Math.hypot(o.x - e.x, o.z - e.z);
+    if (d > RTS_CRUSH_DIST) continue;
+    if (d <= RTS_CRUSH_KILL) {
+      o.hurtBy = e.side; o.crushed = 1;
+      _rtsKill(o);
+      if (typeof _rtsSfx === 'function') _rtsSfx('pop', o.x, o.z);
+    } else {
+      /* Incoming(): they panic and try to get out from under it */
+      o.fear = Math.max(o.fear, RTS_FEAR.SCARED);
+      if (!o.path && (o.side !== 'enemy' || _rtsIQAt(RTS_IQ.scatter))) _rtsScatter(o, e.x, e.z);
+    }
+  }
 }
 function _rtsUpdateHarvester(e, dt, d) {
   var G = window._rtsG;
@@ -1342,6 +1406,7 @@ function _rtsUpdateStruct(e, dt) {
   var w = RTS_WEAPONS[d.weapon];
   if (e.cool > 0) e.cool -= dt;
   if (e.fire > 0) e.fire -= dt;
+  if (e.recoil > 0) e.recoil -= dt;
   /* a browned-out base loses its defences - power actually matters */
   if (_rtsPowerFactor(e.side) < 0.999) return;
   if (!e.target || e.target.dead || _rtsRangeTo(e, e.target) > w.range) e.target = _rtsFindTarget(e, w.range);

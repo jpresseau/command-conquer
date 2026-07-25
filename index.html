@@ -463,6 +463,25 @@ function rtsSightTiles(def) {
   return Math.max(3, Math.min(RTS_SIGHT_MAX, Math.round((def.sight || 12) / RTS_TILE) + RTS_SIGHT_BONUS));
 }
 
+/* ------------------------------------------------------------- vehicles --
+   UNIT.CPP. A vehicle carries two facings: PrimaryFacing is the hull and SecondaryFacing is
+   the turret, and they are drawn as separate shapes. Can_Fire refuses with FIRE_FACING until
+   the turret is within about 11 degrees of the target, and with FIRE_ROTATING if the turret
+   is still swinging and the weapon does not home. */
+var RTS_TURRET_ROT = 3.0;       /* radians/second, the turret's own rate */
+var RTS_FIRE_ANGLE = 0.2;       /* ~11 degrees: Can_Fire's `diff < 8` out of 256 */
+var RTS_RECOIL_TIME = 0.12;     /* how long the turret sits recoiled after firing */
+/* Overrun_Square: a tracked vehicle drives over infantry. Approaching one makes them scatter
+   (`cellptr->Incoming(0, true)`); actually reaching them kills them. Should_Crush_It refuses
+   for HUMAN-controlled vehicles - your own tanks never auto-crush, you have to drive them
+   over deliberately - and only within CrushDistance. */
+var RTS_CRUSHERS = { tank:1, harvester:1 };
+var RTS_CRUSH_DIST = 1.5 * 4;   /* Rule.CrushDistance 0x0180 = 1.5 cells */
+var RTS_CRUSH_KILL = 0.9;       /* world units: close enough to actually run them down */
+/* Take_Damage: a destroyed vehicle has a 50% chance of throwing out a crew member, who
+   starts wounded and runs. Unarmed vehicles produce a technician instead of a soldier. */
+var RTS_CREW_CHANCE = 0.5;
+
 /* Armour class per thing, used with weapon.vs above. */
 function rtsArmour(e) {
   if (e.type === 'struct') return 'building';
@@ -1413,11 +1432,13 @@ function _sprBuilding(key, side) {
    One model per type, yawed to each of eight facings and rendered separately. Because the
    model is rotated in 3D rather than the canvas being rotated in 2D, a tank at 45 degrees
    shows its side and its tracks correctly instead of being a smeared copy of the front. */
-function _sprUnit(key, side) {
+/* part: undefined = the whole unit, 'hull' = body only, 'turret' = turret only. Hull and
+   turret bake into the same size canvas about the same origin, so drawing one over the other
+   at the same screen position lines them up with no per-facing offset table. */
+function _sprUnit(key, side, prone, part) {
   var d = rtsUnitDef(key), TM = RTS_PAL.team[side];
   var S = RTS_PAL.steel, DK = RTS_PAL.dark, O = RTS_PAL.ore;
   var size = key === 'harvester' ? 30 : (d.kind === 'infantry' ? 16 : 26);
-  var prone = arguments[2];
   var m = [], i;
 
   if (d.kind === 'infantry') {
@@ -1439,11 +1460,19 @@ function _sprUnit(key, side) {
       }
     }
   } else if (key === 'tank') {
-    _r3Box(m, 0, 0, -6, 19, 4, 5, DK[0], DK[1]);                   /* tracks */
-    _r3Box(m, 0, 0, 6, 19, 4, 5, DK[0], DK[1]);
-    _r3Box(m, 0, 3, 0, 18, 4, 10, TM[0], TM[1]);                   /* hull */
-    _r3Box(m, -1, 7, 0, 10, 4, 9, TM[1], TM[3]);                   /* turret */
-    _r3Box(m, 7, 8, 0, 13, 1.8, 1.8, DK[1], DK[3]);                /* barrel */
+    /* UNIT.CPP keeps PrimaryFacing (hull) and SecondaryFacing (turret) as separate values and
+       draws them as separate shapes. So the turret is baked on its own, pivoting about the
+       model origin - which is what lets a tank drive one way while its gun tracks another.
+       `part` selects which half to build. */
+    if (part !== 'turret') {
+      _r3Box(m, 0, 0, -6, 19, 4, 5, DK[0], DK[1]);                 /* tracks */
+      _r3Box(m, 0, 0, 6, 19, 4, 5, DK[0], DK[1]);
+      _r3Box(m, 0, 3, 0, 18, 4, 10, TM[0], TM[1]);                 /* hull */
+    }
+    if (part !== 'hull') {
+      _r3Box(m, 0, 7, 0, 10, 4, 9, TM[1], TM[3]);                  /* turret, centred on its pivot */
+      _r3Box(m, 8, 8, 0, 13, 1.8, 1.8, DK[1], DK[3]);              /* barrel */
+    }
   } else if (key === 'buggy') {
     for (i = 0; i < 4; i++) {
       _r3Cyl(m, i < 2 ? 6 : -6, 0, (i % 2) ? 5.5 : -5.5, 3, 3.5, DK[0], DK[1], 8);
@@ -1470,10 +1499,13 @@ function _sprUnit(key, side) {
   for (var f = 0; f < 8; f++) {
     var cv = _r3BakeCentred(_r3Yaw(m, -f / 8 * Math.PI * 2), size);
     _sprEdge(cv);
-    frames.push(_sprShadow(cv, 1, 2));
+    /* the turret is drawn ON the hull, so it must not cast a second ground shadow */
+    frames.push(part === 'turret' ? cv : _sprShadow(cv, 1, 2));
   }
   return frames;
 }
+/* Which units carry a separately-rotating turret. */
+var RTS_TURRETED = { tank:1 };
 
 /* The concrete apron a structure stands on. In the reference every building sits on a pale
    irregular pad noticeably larger than itself - it is what stops a base looking like
@@ -1654,7 +1686,15 @@ function _rtsSprites() {
   ['player', 'enemy'].forEach(function (side) {
     S.bld[side] = {}; S.unit[side] = {};
     RTS_STRUCTS.forEach(function (d) { S.bld[side][d.key] = _sprBuilding(d.key, side); });
-    RTS_UNITS.forEach(function (d) { S.unit[side][d.key] = _sprUnit(d.key, side); });
+    S.hull = S.hull || {}; S.turret = S.turret || {};
+    S.hull[side] = {}; S.turret[side] = {};
+    RTS_UNITS.forEach(function (d) {
+      S.unit[side][d.key] = _sprUnit(d.key, side);
+      if (RTS_TURRETED[d.key]) {
+        S.hull[side][d.key] = _sprUnit(d.key, side, false, 'hull');
+        S.turret[side][d.key] = _sprUnit(d.key, side, false, 'turret');
+      }
+    });
     S.prone[side] = {};
     RTS_UNITS.forEach(function (d) {
       if (d.kind === 'infantry') S.prone[side][d.key] = _sprUnit(d.key, side, true);
@@ -2631,9 +2671,26 @@ function _rtsKill(e) {
     }
   } else {
     G.fx.push({ kind:'pop', x:e.x, y:1, z:e.z, t:0, big:1 });
-    if (rtsUnitDef(e.def).kind === 'infantry') {
+    var ud = rtsUnitDef(e.def);
+    if (ud.kind === 'infantry') {
       G.corpses.push({ x:e.x, z:e.z, v:(e.id * 5) % 3 });
       if (G.corpses.length > 220) G.corpses.shift();
+    } else {
+      /* Take_Damage: half the time a crew member bails out of a wrecked vehicle, wounded and
+         running. Not from one that was crushed - there is nobody left to climb out. */
+      if (!e.crushed && Math.random() < RTS_CREW_CHANCE) {
+        var cell = _rtsNearestOpen(_rtsTX(e.x), _rtsTX(e.z), 4);
+        if (cell) {
+          var crew = _rtsSpawnUnit(e.side, 'rifle', _rtsWX(cell[0]), _rtsWX(cell[1]));
+          if (crew) {
+            crew.hp = Math.max(5, Math.round(crew.maxHp * (0.15 + Math.random() * 0.35)));
+            crew.fear = RTS_FEAR.PANIC;
+            _rtsScatter(crew, e.x, e.z);
+          }
+        }
+      }
+      /* "Very strong units that have an explosion will also rock the screen." */
+      if (ud.hp > 400) G.shake = Math.min(1, G.shake + 0.12);
     }
   }
   if (typeof _rtsSfx === 'function')
@@ -2973,6 +3030,7 @@ function _rtsFindTarget(e, range) {
 function _rtsFire(e, tgt, w) {
   var G = window._rtsG, bias = _rtsBias(e.side);
   e.cool = w.cool * bias.rof; e.fire = 0.09;      /* ROFBias: higher = slower reload */
+  e.recoil = RTS_RECOIL_TIME;                     /* Recoil_Adjust */
   if (typeof _rtsSfx === 'function') _rtsSfx(w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
     : (w.shot === 'missile' ? 'rocket' : (e.type === 'struct' ? 'turretgun' : 'cannon')), e.x, e.z);
   var dmg = w.dmg * (w.vs[rtsArmour(tgt)] || 1) * bias.fire;
@@ -3021,6 +3079,12 @@ function _rtsDamage(tgt, dmg, from, floor) {
   if (from && from.side) tgt.hurtBy = from.side;     /* WhoLastHurtMe, for the kill credit */
   if (tgt.type === 'unit' && from && !tgt.order && rtsUnitDef(tgt.def).weapon) { tgt.order = 'attack'; tgt.target = from; }
   if (tgt.hp <= 0) _rtsKill(tgt);
+  else if (tgt.type === 'unit' && rtsUnitDef(tgt.def).harvest && tgt.carry > 0
+           && tgt.hp <= tgt.maxHp * RTS_COND_YELLOW && tgt.hstate && tgt.hstate !== 'unload') {
+    /* Take_Damage: a damaged harvester with a load aboard heads for the refinery rather than
+       sitting in the open finishing its mining run. */
+    tgt.hstate = 'toRef'; tgt.path = null;
+  }
   else if (tgt.type === 'unit' && rtsUnitDef(tgt.def).kind === 'infantry') {
     /* Fear climbs faster the more hurt the soldier already is. */
     if (tgt.fear < RTS_FEAR.SCARED) tgt.fear = RTS_FEAR.SCARED;
@@ -3173,8 +3237,13 @@ function _rtsUpdateUnit(e, dt) {
   var G = window._rtsG, d = rtsUnitDef(e.def), w = d.weapon ? RTS_WEAPONS[d.weapon] : null;
   if (e.cool > 0) e.cool -= dt;
   if (e.fire > 0) e.fire -= dt;
+  if (e.recoil > 0) e.recoil -= dt;
   if (e.hitT > 0) e.hitT -= dt;
   if (d.kind === 'infantry') _rtsFearAI(e, dt);
+  /* Overrun_Square runs BEFORE the engage logic: a tank that is holding position and firing
+     returns early from this function, and hooking the crush on the end meant a stationary
+     tank never ran anything over. */
+  if (RTS_CRUSHERS[e.def]) _rtsOverrun(e);
 
   /* ---- harvester economy loop ---- */
   if (d.harvest) { _rtsUpdateHarvester(e, dt, d); return; }
@@ -3200,8 +3269,20 @@ function _rtsUpdateUnit(e, dt) {
       /* turret tracks its mark even while the hull is still swinging round */
       var ta = Math.atan2(shootAt.z - e.z, shootAt.x - e.x), td = ta - e.turret;
       while (td > Math.PI) td -= Math.PI * 2; while (td < -Math.PI) td += Math.PI * 2;
-      e.turret += Math.min(Math.abs(td), 4 * dt) * (td < 0 ? -1 : 1);
-      if (e.cool <= 0 && Math.abs(td) < 0.35) _rtsFire(e, shootAt, w);
+      var step = Math.min(Math.abs(td), RTS_TURRET_ROT * dt);
+      e.turret += step * (td < 0 ? -1 : 1);
+      e.tRot = Math.abs(td) > step + 1e-6;                /* still swinging */
+      /* Can_Fire: FIRE_FACING unless the turret is lined up, and a homing weapon is four
+         times more forgiving about it (Modify: `diff >>= 2`). A turret still rotating
+         cannot fire at all unless its projectile homes - FIRE_ROTATING. */
+      var tol = w.speed > 0 && w.shot === 'missile' ? RTS_FIRE_ANGLE * 4 : RTS_FIRE_ANGLE;
+      var homing = w.shot === 'missile';
+      if (e.cool <= 0 && Math.abs(td) < tol && (homing || !e.tRot)) _rtsFire(e, shootAt, w);
+    } else if (!e.path) {
+      /* no target: the turret returns to the hull's facing, as Rotation_AI does */
+      var rd = e.rot - e.turret;
+      while (rd > Math.PI) rd -= Math.PI * 2; while (rd < -Math.PI) rd += Math.PI * 2;
+      e.turret += Math.min(Math.abs(rd), RTS_TURRET_ROT * 0.5 * dt) * (rd < 0 ? -1 : 1);
     }
     if (tgt && !chasing) {
       if (e.order === 'attack' || e.order === 'amove' || !e.order) e.path = null;
@@ -3214,6 +3295,29 @@ function _rtsUpdateUnit(e, dt) {
   } else { e.turret = e.rot; }
 
   if (e.path) { _rtsSteer(e, dt, d); if (!e.path && (e.order === 'move' || e.order === 'amove')) e.order = null; }
+}
+/* UNIT.CPP Overrun_Square. A crusher threatens the ground in front of it: infantry there
+   scatter out of the way, and any that are actually under the tracks are killed. The
+   original refuses to let HUMAN vehicles auto-crush - you have to drive over them yourself -
+   which is why your own tanks never mow down the enemy infantry they are shooting at. */
+function _rtsOverrun(e) {
+  var G = window._rtsG, foe = _rtsEnemyOf(e.side);
+  for (var i = 0; i < G.ents.length; i++) {
+    var o = G.ents[i];
+    if (o.dead || o.type !== 'unit' || o.side === e.side) continue;
+    if (rtsUnitDef(o.def).kind !== 'infantry') continue;
+    var d = Math.hypot(o.x - e.x, o.z - e.z);
+    if (d > RTS_CRUSH_DIST) continue;
+    if (d <= RTS_CRUSH_KILL) {
+      o.hurtBy = e.side; o.crushed = 1;
+      _rtsKill(o);
+      if (typeof _rtsSfx === 'function') _rtsSfx('pop', o.x, o.z);
+    } else {
+      /* Incoming(): they panic and try to get out from under it */
+      o.fear = Math.max(o.fear, RTS_FEAR.SCARED);
+      if (!o.path && (o.side !== 'enemy' || _rtsIQAt(RTS_IQ.scatter))) _rtsScatter(o, e.x, e.z);
+    }
+  }
 }
 function _rtsUpdateHarvester(e, dt, d) {
   var G = window._rtsG;
@@ -3327,6 +3431,7 @@ function _rtsUpdateStruct(e, dt) {
   var w = RTS_WEAPONS[d.weapon];
   if (e.cool > 0) e.cool -= dt;
   if (e.fire > 0) e.fire -= dt;
+  if (e.recoil > 0) e.recoil -= dt;
   /* a browned-out base loses its defences - power actually matters */
   if (_rtsPowerFactor(e.side) < 0.999) return;
   if (!e.target || e.target.dead || _rtsRangeTo(e, e.target) > w.range) e.target = _rtsFindTarget(e, w.range);
@@ -4090,13 +4195,26 @@ function _rtsDrawStruct(g, e, TSscale, cell) {
 function _rtsDrawUnit(g, e, TSscale) {
   var R = _rtsR, d = rtsUnitDef(e.def);
   var f = ((Math.round(e.rot / (Math.PI * 2) * 8) % 8) + 8) % 8;
+  var turreted = R.spr.turret && R.spr.turret[e.side][e.def];
   var img = (e.prone && R.spr.prone[e.side][e.def])
     ? R.spr.prone[e.side][e.def][f]
-    : R.spr.unit[e.side][e.def][f];
+    : (turreted ? R.spr.hull[e.side][e.def][f] : R.spr.unit[e.side][e.def][f]);
   var w = Math.round(img.width * TSscale), h = Math.round(img.height * TSscale);
   var px = Math.round(_rtsSX(e.x) - w / 2), py = Math.round(_rtsSY(e.z) - h / 2);
   if (e.hitT > 0) g.globalAlpha = 0.7;
   g.drawImage(img, px, py, w, h);
+  /* SecondaryFacing: the turret is its own shape at its own angle, drawn over the hull. */
+  if (turreted) {
+    var tf = ((Math.round(e.turret / (Math.PI * 2) * 8) % 8) + 8) % 8;
+    var timg = turreted[tf], rx = 0, ry = 0;
+    /* Recoil_Adjust: a firing turret moves back one pixel along its facing. */
+    if (e.recoil > 0) {
+      var u = Math.max(1, Math.round(TSscale));
+      rx = -Math.round(Math.cos(e.turret)) * u;
+      ry = -Math.round(Math.sin(e.turret)) * u;
+    }
+    g.drawImage(timg, px + rx, py + ry, w, h);
+  }
   g.globalAlpha = 1;
   if (e.fire > 0) {
     var fl = R.spr.fx.flash[Math.min(2, Math.floor(e.fire * 30))];

@@ -555,11 +555,13 @@ function _sprBuilding(key, side) {
    One model per type, yawed to each of eight facings and rendered separately. Because the
    model is rotated in 3D rather than the canvas being rotated in 2D, a tank at 45 degrees
    shows its side and its tracks correctly instead of being a smeared copy of the front. */
-function _sprUnit(key, side) {
+/* part: undefined = the whole unit, 'hull' = body only, 'turret' = turret only. Hull and
+   turret bake into the same size canvas about the same origin, so drawing one over the other
+   at the same screen position lines them up with no per-facing offset table. */
+function _sprUnit(key, side, prone, part) {
   var d = rtsUnitDef(key), TM = RTS_PAL.team[side];
   var S = RTS_PAL.steel, DK = RTS_PAL.dark, O = RTS_PAL.ore;
   var size = key === 'harvester' ? 30 : (d.kind === 'infantry' ? 16 : 26);
-  var prone = arguments[2];
   var m = [], i;
 
   if (d.kind === 'infantry') {
@@ -581,11 +583,19 @@ function _sprUnit(key, side) {
       }
     }
   } else if (key === 'tank') {
-    _r3Box(m, 0, 0, -6, 19, 4, 5, DK[0], DK[1]);                   /* tracks */
-    _r3Box(m, 0, 0, 6, 19, 4, 5, DK[0], DK[1]);
-    _r3Box(m, 0, 3, 0, 18, 4, 10, TM[0], TM[1]);                   /* hull */
-    _r3Box(m, -1, 7, 0, 10, 4, 9, TM[1], TM[3]);                   /* turret */
-    _r3Box(m, 7, 8, 0, 13, 1.8, 1.8, DK[1], DK[3]);                /* barrel */
+    /* UNIT.CPP keeps PrimaryFacing (hull) and SecondaryFacing (turret) as separate values and
+       draws them as separate shapes. So the turret is baked on its own, pivoting about the
+       model origin - which is what lets a tank drive one way while its gun tracks another.
+       `part` selects which half to build. */
+    if (part !== 'turret') {
+      _r3Box(m, 0, 0, -6, 19, 4, 5, DK[0], DK[1]);                 /* tracks */
+      _r3Box(m, 0, 0, 6, 19, 4, 5, DK[0], DK[1]);
+      _r3Box(m, 0, 3, 0, 18, 4, 10, TM[0], TM[1]);                 /* hull */
+    }
+    if (part !== 'hull') {
+      _r3Box(m, 0, 7, 0, 10, 4, 9, TM[1], TM[3]);                  /* turret, centred on its pivot */
+      _r3Box(m, 8, 8, 0, 13, 1.8, 1.8, DK[1], DK[3]);              /* barrel */
+    }
   } else if (key === 'buggy') {
     for (i = 0; i < 4; i++) {
       _r3Cyl(m, i < 2 ? 6 : -6, 0, (i % 2) ? 5.5 : -5.5, 3, 3.5, DK[0], DK[1], 8);
@@ -612,10 +622,13 @@ function _sprUnit(key, side) {
   for (var f = 0; f < 8; f++) {
     var cv = _r3BakeCentred(_r3Yaw(m, -f / 8 * Math.PI * 2), size);
     _sprEdge(cv);
-    frames.push(_sprShadow(cv, 1, 2));
+    /* the turret is drawn ON the hull, so it must not cast a second ground shadow */
+    frames.push(part === 'turret' ? cv : _sprShadow(cv, 1, 2));
   }
   return frames;
 }
+/* Which units carry a separately-rotating turret. */
+var RTS_TURRETED = { tank:1 };
 
 /* The concrete apron a structure stands on. In the reference every building sits on a pale
    irregular pad noticeably larger than itself - it is what stops a base looking like
@@ -796,7 +809,15 @@ function _rtsSprites() {
   ['player', 'enemy'].forEach(function (side) {
     S.bld[side] = {}; S.unit[side] = {};
     RTS_STRUCTS.forEach(function (d) { S.bld[side][d.key] = _sprBuilding(d.key, side); });
-    RTS_UNITS.forEach(function (d) { S.unit[side][d.key] = _sprUnit(d.key, side); });
+    S.hull = S.hull || {}; S.turret = S.turret || {};
+    S.hull[side] = {}; S.turret[side] = {};
+    RTS_UNITS.forEach(function (d) {
+      S.unit[side][d.key] = _sprUnit(d.key, side);
+      if (RTS_TURRETED[d.key]) {
+        S.hull[side][d.key] = _sprUnit(d.key, side, false, 'hull');
+        S.turret[side][d.key] = _sprUnit(d.key, side, false, 'turret');
+      }
+    });
     S.prone[side] = {};
     RTS_UNITS.forEach(function (d) {
       if (d.kind === 'infantry') S.prone[side][d.key] = _sprUnit(d.key, side, true);
