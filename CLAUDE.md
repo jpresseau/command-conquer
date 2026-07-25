@@ -411,6 +411,47 @@ there is nobody left to climb out. Units with more than 400 hit points rock the 
 they die. And a damaged harvester carrying a load heads for the refinery instead of finishing
 its mining run in the open.
 
+## The opposing house — from HOUSE.CPP
+
+`Expert_AI` is not a build script. Every five seconds it **scores each strategy for urgency**
+(NONE → LOW → MEDIUM → HIGH → CRITICAL) with a `Check_*` function, then acts from CRITICAL
+downward. Note the original computes an `acted` flag with the stated intent of stopping after
+the highest level that did something, and then never breaks on it — follow the code, not the
+comment: every level gets its turn. `_rtsAIUrgency` scores `power / raisePower / lowerPower /
+raiseMoney / fireSale / attack / build`; `_rtsAIDo` carries each one out.
+
+Underneath sits a **house state machine** — BUILDUP / BROKE / ATTACKED / ENDGAME — that several
+unrelated checks read, which is how one fact ("we were hit in the last minute") shifts the
+whole opponent at once: it builds power more urgently, sells more readily, and commits fewer
+units to its next attack because it needs a garrison.
+
+- **Selling is a lever, not a panic.** `AI_Raise_Money` / `AI_Raise_Power` work down a fixed
+  list, each entry with the urgency at which it becomes sellable. Only the turret — static
+  defence, no income, no production — is sellable at LOW, and letting it go is the most
+  valuable thing a poor opponent does: it took the Recruit AI's eight-minute army from 12 to 50
+  units on one seed. Production goes at MEDIUM, the economy only in a real emergency, and the
+  yard is never on the list.
+- **`Check_Fire_Sale`**: when nothing that can *produce* is left standing, the house sells
+  everything and `Do_All_To_Hunt` throws every remaining unit at you. A losing AI goes out
+  swinging instead of sitting in a corner waiting to be mopped up.
+- **`AttackInterval` is randomised over a 4× spread** (`× (0.5 + rnd × 1.5)`), so waves never
+  arrive on a metronome. Measured gaps around an 85 s base: `[91, 127, 108, 62, 42, 105]`.
+- **`Recalc_Center` + `Which_Zone`**: the base centre is a *cost-weighted* average of building
+  positions, the radius the mean distance from it, and the surroundings split into CORE plus
+  four compass zones. `Find_Build_Location` rates each zone by how far its defence sits below
+  the base average and aims the next turret at the weakest — putting every turret on the side
+  facing the player is exactly the mistake this routine exists to prevent.
+- **Brownout hurts.** Buildings that *draw* power take damage while the base is under-supplied,
+  but only down to ConditionYellow. The construction yard draws nothing and is untouched.
+- Beware measuring brownout on the AI's own base: it answers a power emergency by *selling* a
+  power-drawing building, which looks exactly like damage if you only watch hit points. Measure
+  it on the player's side.
+
+`Assign_Handicap` is the difficulty layer above all of this (see RULES.CPP above). The IQ gates
+are what actually separate the difficulties: Recruit never expands its base, never repairs and
+never scatters. Measured over eight minutes against a passive player: Recruit fields 16 units
+from 8 buildings, Commando 64 from 19, and the first attack wave lands at 212 s / 152 s / 106 s.
+
 ## Verifying
 
 No test suite — use headless Playwright against the **built** `index.html`. Node + Playwright

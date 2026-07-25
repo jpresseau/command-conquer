@@ -220,6 +220,20 @@ var RTS_IQ = {
    it builds whatever it is furthest short of. BaseSizeAdd is the key one: the AI aims for
    the human's building count plus this, so it keeps pace with how you are actually playing
    instead of building to a script. */
+/* HOUSE.CPP's Expert_AI. The architecture is the valuable part: every strategy is scored for
+   URGENCY, and the AI then acts on the most urgent ones first, "because higher urgency actions
+   tend to greatly affect the lower urgency actions". A flat if/else build order cannot express
+   "I am broke AND under attack AND browned out" - this can.
+
+   The house also runs a small state machine that the urgency checks read. */
+var RTS_URGENCY = { NONE:0, LOW:1, MEDIUM:2, HIGH:3, CRITICAL:4 };
+var RTS_STATE = { BUILDUP:0, BROKE:1, ATTACKED:2, ENDGAME:3 };
+var RTS_ALERT_DELAY = 25;       /* Rule.SpeakDelay: cooldown on "base under attack" */
+/* A house that cannot meet its power demand takes structural damage over time - only on the
+   buildings that actually draw power, so a minefield does not blow itself up in a brownout. */
+var RTS_DAMAGE_DELAY = 20;      /* seconds between brownout damage ticks */
+var RTS_POWER_DAMAGE = 6;       /* hit points per tick, on buildings above ConditionYellow */
+
 var RTS_AI = {
   baseSizeAdd:3,
   powerSurplus:50,          /* keep this much spare power in hand */
@@ -230,7 +244,25 @@ var RTS_AI = {
   attackInterval:3,         /* minutes between attack waves, before difficulty bias */
   attackDelay:5,            /* minutes before the first one */
   ratio:{ refinery:0.16, barracks:0.16, factory:0.10, turret:0.50 },
-  limit:{ refinery:4,    barracks:2,    factory:2,    turret:12   }
+  limit:{ refinery:4,    barracks:2,    factory:2,    turret:12   },
+  /* Check_Raise_Money / Check_Raise_Power / Check_Lower_Power thresholds. */
+  brokeMoney:100,           /* below this, raising cash is urgent */
+  desperateMoney:2000,      /* ...and worse if there is no income either */
+  powerEmergencyGap:40,     /* deficit below which power is an emergency, not a preference */
+  powerWaste:150,           /* surplus above which a power plant is dead money */
+  /* AI_Raise_Money and AI_Raise_Power sell in a fixed order, least valuable first, each with
+     the urgency at which it becomes sellable.
+
+     The ordering is what stops this being self-destruction. Only the turret - static defence,
+     no income, no production - goes at LOW, and that turns out to be the most valuable thing
+     a poor opponent does: across 3 difficulties x 3 seeds, allowing it took the Recruit AI's
+     eight-minute army from 12 to 50 units on one seed and 36 to 48 on another, and changed
+     nothing on the rest. A broke AI sitting on two turrets it cannot afford to support is
+     better off spending them. Production goes at MEDIUM, the economy only in a real
+     emergency, and the yard is on neither list: selling it is not a recovery, it is a
+     surrender. */
+  sellForMoney:[['turret', 1], ['factory', 2], ['barracks', 2], ['power', 3], ['refinery', 4]],
+  sellForPower:[['turret', 1], ['barracks', 2], ['factory', 2], ['refinery', 3]]
 };
 
 /* ---------------------------------------------------------------- shroud --
