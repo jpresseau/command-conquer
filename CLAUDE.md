@@ -111,6 +111,29 @@ exceeds 2^53, the low bits come back as garbage, and the failure is silent — t
 produced a terrain bake containing no dirt whatsoever because the "random" grade never crossed
 its threshold.
 
+## Animations — from ANIM.CPP
+
+`RTS_ANIMS` in the rules is AnimTypeClass trimmed to what this game uses, and the field that
+matters most is **`biggest`**:
+
+- **Ground-altering effects fire at the animation's BIGGEST stage, not at its start.** ANIM.CPP
+  does this so a crater or scorch mark appears *under* the fireball rather than popping into
+  view in plain sight beside it. `_rtsAnimMiddle` is the equivalent of `Middle()`. If you move
+  that call to t=0 the illusion breaks immediately.
+- **`chain`** is ChainTo: an animation metamorphoses instead of ending. An explosion becomes a
+  fire, which is why a battlefield keeps burning after the shooting stops.
+- **`damage`** on an attached animation applies to whatever it rides (WARHEAD_FIRE). Units
+  under 30% health catch fire, the flame tracks them, and it burns them down.
+- Scorch marks and craters are stamped **permanently into the baked terrain canvas**, so they
+  cost nothing after the frame they appear on. Craters also eat the ore in their cell
+  (`Reduce_Tiberium(6)`).
+
+**Ore must be reachable.** Roads connect the two bases, but forest can ring an ore field and
+water can leave one on an island — about one map in three was affected. Map gen now flood
+fills from the player start and carves out to any unreachable ore, and that carve is allowed
+to lay a causeway across water. Always re-run the path harness over several fresh maps after
+touching obstacle density; a single map proves nothing, because the seed is random.
+
 ## Colour cycling — from CONQUER.CPP
 
 `Color_Cycle()` in the GPL source is the palette animation, and its constants are reproduced

@@ -270,6 +270,23 @@ var RTS_WEAPONS = {
   turretgun: { dmg:22, range:22, cool:0.9,  shot:'shell',   speed:70,  splash:1, vs:{ infantry:1.0, vehicle:0.9,  building:0.6  } }
 };
 
+/* ------------------------------------------------------------------ anims --
+   AnimTypeClass from ANIM.CPP, trimmed to what this game uses.
+
+   biggest : the stage at which the animation covers the most ground. Ground-altering side
+             effects fire THERE, not at the start - ANIM.CPP does this so a crater or scorch
+             appears under the fireball rather than popping into view in plain sight.
+   chain   : ChainTo. The animation metamorphoses into this one instead of ending.
+   damage  : an attached animation applies this per second to whatever it is riding on
+             (WARHEAD_FIRE in the original). This is what makes a burning unit burn down. */
+var RTS_ANIMS = {
+  boom: { dur:0.75, biggest:0.34, scorch:true,  crater:true,  chain:'fire', loops:1 },
+  hit:  { dur:0.50, biggest:0.30, scorch:true,  crater:false, chain:null,   loops:1 },
+  pop:  { dur:0.40, biggest:0.30, scorch:false, crater:false, chain:null,   loops:1 },
+  fire: { dur:1.10, biggest:0,    scorch:true,  crater:false, chain:null,   loops:2, damage:9 }
+};
+var RTS_CRATER_ORE = 6;   /* ANIM.CPP: a crater calls Reduce_Tiberium(6) */
+
 /* Armour class per thing, used with weapon.vs above. */
 function rtsArmour(e) {
   if (e.type === 'struct') return 'building';
@@ -1282,6 +1299,63 @@ function _sprPad(wCells, hCells) {
   return t.c;
 }
 
+/* Scorch marks and craters - SmudgeClass in the original, SMUDGE_SCORCH1..6 and
+   SMUDGE_CRATER1. Stamped permanently into the baked terrain, so a battlefield accumulates
+   a record of what happened on it instead of resetting between explosions. */
+function _sprScorch() {
+  var out = [], TS = RTS_TS;
+  for (var v = 0; v < 6; v++) {
+    var t = _sprMake(TS, TS), g = t.g, seed = v * 313 + 29;
+    for (var y = 0; y < TS; y += 2) {
+      for (var x = 0; x < TS; x += 2) {
+        var dx = (x - TS / 2) / (TS / 2), dy = (y - TS / 2) / (TS / 2);
+        var d = Math.hypot(dx, dy) + (_sprVN(x, y, 7, seed) - 0.5) * 0.75;
+        if (d > 0.92) continue;
+        var h = _sprHash(x >> 1, y >> 1, seed);
+        g.globalAlpha = (1 - d) * 0.85;
+        _sprRect(g, x, y, 2, 2, h < 0.4 ? '#141210' : (h < 0.78 ? '#241f19' : '#312a22'));
+      }
+    }
+    g.globalAlpha = 1;
+    out.push(t.c);
+  }
+  return out;
+}
+function _sprCrater() {
+  var TS = RTS_TS, t = _sprMake(TS, TS), g = t.g;
+  for (var y = 0; y < TS; y += 2) {
+    for (var x = 0; x < TS; x += 2) {
+      var dx = (x - TS / 2) / (TS / 2), dy = (y - TS / 2) / (TS / 2);
+      var d = Math.hypot(dx, dy) + (_sprVN(x, y, 6, 71) - 0.5) * 0.5;
+      if (d > 0.88) continue;
+      g.globalAlpha = d > 0.6 ? 0.6 : 0.95;
+      /* Lit north rim, dark bowl, so it reads as a hole rather than a stain. */
+      var col = (d > 0.62 && dy < 0) ? '#6b6252' : (d < 0.35 ? '#171410' : '#2c261e');
+      _sprRect(g, x, y, 2, 2, col);
+    }
+  }
+  g.globalAlpha = 1;
+  return t.c;
+}
+/* Flame frames. ANIM_FIRE_SMALL is what an explosion chains into and what rides a burning
+   unit; it has to read at a glance without drowning the sprite underneath. */
+function _sprFire() {
+  var out = [], n = 5;
+  for (var f = 0; f < n; f++) {
+    var t = _sprMake(16, 20), g = t.g, seed = f * 97 + 11;
+    for (var i = 0; i < 16; i++) {
+      var yy = 19 - (i * 1.1 + _sprHash(i, f, seed) * 5);
+      var wob = Math.sin((i / 16) * 3.1 + f * 1.3) * 3;
+      var wx = 8 + wob - 2, w = Math.max(1, 5 - i * 0.25);
+      var k = i / 16;
+      var col = k < 0.32 ? '#fff2c0' : (k < 0.55 ? '#ffcf6a' : (k < 0.78 ? '#ff9a2e' : '#e0561c'));
+      _sprRect(g, wx, yy, w, 2, col);
+    }
+    out.push(t.c);
+  }
+  return out;
+}
+
 /* Muzzle flashes and explosions, as small frame strips. */
 function _sprFx() {
   var boom = [], i;
@@ -1311,6 +1385,9 @@ function _rtsSprites() {
   RTS_STRUCTS.forEach(function (d) { S.pad[d.key] = _sprPad(d.w, d.h); });
   S.bag = _sprSandbag();
   S.wave = _sprWaterCycle();
+  S.scorch = _sprScorch();
+  S.crater = _sprCrater();
+  S.fire = _sprFire();
   ['player', 'enemy'].forEach(function (side) {
     S.bld[side] = {}; S.unit[side] = {};
     RTS_STRUCTS.forEach(function (d) { S.bld[side][d.key] = _sprBuilding(d.key, side); });
@@ -1896,6 +1973,42 @@ function _rtsGenTerrain(G, rnd) {
     }
   }
 
+  /* --- connectivity guarantee for ore ---
+     Roads link the two bases, but a forest can still ring an ore field completely and leave
+     it unharvestable. Roughly one map in three did. Flood fill from the player start and
+     carve a track out to any ore that the fill could not reach. --- */
+  var reach = new Uint8Array(N * N), stack = [_rtsIdx(20, 90)];
+  reach[stack[0]] = 1;
+  while (stack.length) {
+    var ci = stack.pop(), cxr = ci % N, czr = (ci / N) | 0;
+    for (var dq = 0; dq < 4; dq++) {
+      var nxr = cxr + [1, -1, 0, 0][dq], nzr = czr + [0, 0, 1, -1][dq];
+      if (!_rtsInB(nxr, nzr)) continue;
+      var nir = _rtsIdx(nxr, nzr);
+      if (reach[nir] || G.blocked[nir] === 2) continue;
+      reach[nir] = 1; stack.push(nir);
+    }
+  }
+  for (tx = 0; tx < N; tx++) {
+    for (tz = 0; tz < N; tz++) {
+      i = _rtsIdx(tx, tz);
+      if (G.scrap[i] <= 0 || reach[i]) continue;
+      _rtsCarveRoad(G, tx, tz, 20, 90, rnd, true);   /* cut through to the player start */
+      /* One carve reconnects the whole blob, so re-run the fill rather than carving per tile. */
+      reach.fill(0); stack = [_rtsIdx(20, 90)]; reach[stack[0]] = 1;
+      while (stack.length) {
+        var c2 = stack.pop(), cx2r = c2 % N, cz2r = (c2 / N) | 0;
+        for (var d2 = 0; d2 < 4; d2++) {
+          var nx2 = cx2r + [1, -1, 0, 0][d2], nz2 = cz2r + [0, 0, 1, -1][d2];
+          if (!_rtsInB(nx2, nz2)) continue;
+          var ni2 = _rtsIdx(nx2, nz2);
+          if (reach[ni2] || G.blocked[ni2] === 2) continue;
+          reach[ni2] = 1; stack.push(ni2);
+        }
+      }
+    }
+  }
+
   /* Trees never grow right up against ore, so a field has a little clearing around it. */
   for (tx = 1; tx < N - 1; tx++) {
     for (tz = 1; tz < N - 1; tz++) {
@@ -1910,9 +2023,9 @@ function _rtsGenTerrain(G, rnd) {
 }
 
 /* A wandering 3-tile-wide track between two points. Clears obstacles as it goes. */
-function _rtsCarveRoad(G, x0, z0, x1, z1, rnd) {
+function _rtsCarveRoad(G, x0, z0, x1, z1, rnd, force) {
   var steps = Math.ceil(Math.hypot(x1 - x0, z1 - z0)) * 2;
-  var sway = (rnd() - 0.5) * 26;
+  var sway = force ? 0 : (rnd() - 0.5) * 26;
   for (var s = 0; s <= steps; s++) {
     var t = s / steps;
     /* a sine bulge perpendicular to the line, so roads bend instead of ruling a diagonal */
@@ -1926,7 +2039,11 @@ function _rtsCarveRoad(G, x0, z0, x1, z1, rnd) {
         var tx = Math.round(px) + ox, tz = Math.round(pz) + oz;
         if (!_rtsInB(tx, tz)) continue;
         var i = _rtsIdx(tx, tz);
-        if (G.scrap[i] > 0 || G.terrain[i] === RTS_T_WATER) continue;
+        if (G.scrap[i] > 0) continue;
+        /* Normally a road stops at the shore. The connectivity pass passes force, and then
+           it lays a causeway instead - an ore field on an island is unharvestable, and the
+           lake is generated after the ore, so islands do happen. */
+        if (G.terrain[i] === RTS_T_WATER && !force) continue;
         if (G.blocked[i] === 1) continue;                 /* never bulldoze a structure */
         G.blocked[i] = 0;
         G.terrain[i] = RTS_T_ROAD;
@@ -1940,6 +2057,8 @@ function _rtsNewGame(seed) {
     t:0, seed:seed || 12345, over:null, msg:null, msgT:0, shake:0,
     blocked:new Uint8Array(RTS_N * RTS_N),
     terrain:new Uint8Array(RTS_N * RTS_N),  /* RTS_T_* - what the ground IS, for the renderer */
+    scorch:new Uint8Array(RTS_N * RTS_N),   /* 0 none, 1-6 scorch variant, +8 bit = crater */
+    newScorch:[],                           /* cells the renderer has yet to stamp */
     scrap:new Float32Array(RTS_N * RTS_N),
     owner:new Int32Array(RTS_N * RTS_N),   /* entity id occupying the tile, 0 = none */
     ents:[], byId:{}, nextId:1,
@@ -2091,6 +2210,71 @@ function _rtsKill(e) {
   if (e.side === 'enemy') G.stats.killed++;
   var si = G.sel.indexOf(e); if (si >= 0) G.sel.splice(si, 1);
 }
+/* ANIM.CPP's AI + Middle + ChainTo, for the effect list.
+
+   The ordering here is the point: Middle fires when the animation reaches its BIGGEST stage,
+   so the scorch or crater is laid down while the fireball is at full size and covering it.
+   Placing it at the start makes the mark visibly pop into existence next to the explosion. */
+function _rtsAnimAI(dt) {
+  var G = window._rtsG, i;
+  for (i = G.fx.length - 1; i >= 0; i--) {
+    var f = G.fx[i];
+    var def = RTS_ANIMS[f.kind];
+    if (!def || f.t < 0) continue;
+
+    /* An attached animation rides its object and burns it down. */
+    if (f.att) {
+      var host = G.byId[f.att];
+      if (!host || host.dead) { f.att = 0; }
+      else {
+        f.x = host.x; f.z = host.z;
+        if (def.damage) {
+          f.acc = (f.acc || 0) + def.damage * dt;
+          if (f.acc >= 1) {
+            var dmg = Math.floor(f.acc); f.acc -= dmg;
+            host.hp -= dmg;
+            if (host.hp <= 0) { _rtsKill(host); f.att = 0; }
+          }
+        }
+      }
+    }
+
+    if (!f.mid && f.t >= def.dur * def.biggest) {
+      f.mid = 1;
+      _rtsAnimMiddle(f, def);
+    }
+    if (f.t >= def.dur) {
+      if (f.loops === undefined) f.loops = def.loops || 1;
+      if (f.loops > 1) { f.loops--; f.t = 0; f.mid = 0; continue; }
+      if (def.chain) {
+        /* ChainTo: it does not end, it metamorphoses. */
+        f.kind = def.chain; f.t = 0; f.mid = 0;
+        f.loops = RTS_ANIMS[def.chain].loops || 1;
+        f.big = (f.big || 1) * 0.6;
+        continue;
+      }
+      G.fx.splice(i, 1);
+    }
+  }
+}
+function _rtsAnimMiddle(f, def) {
+  var G = window._rtsG;
+  var tx = _rtsTX(f.x), tz = _rtsTX(f.z);
+  if (!_rtsInB(tx, tz)) return;
+  var i = _rtsIdx(tx, tz);
+  if (G.terrain[i] === RTS_T_WATER) return;
+  if (def.crater) {
+    /* Reduce_Tiberium(6): a crater eats the ore it lands in. */
+    if (G.scrap[i] > 0) G.scrap[i] = Math.max(0, G.scrap[i] - RTS_CRATER_ORE * 10);
+    if (!(G.scorch[i] & 8)) { G.scorch[i] = (G.scorch[i] & 7) | 8; G.newScorch.push(i); }
+    return;
+  }
+  if (def.scorch && !(G.scorch[i] & 7)) {
+    G.scorch[i] |= 1 + (((tx * 7 + tz * 13 + G.fx.length) % 6) | 0);
+    G.newScorch.push(i);
+  }
+}
+
 function _rtsRecalcPower(side) {
   var G = window._rtsG, made = 0, used = 0;
   for (var i = 0; i < G.ents.length; i++) {
@@ -2244,6 +2428,11 @@ function _rtsDamage(tgt, dmg, from) {
   /* an idle unit that gets shot shoots back instead of standing there */
   if (tgt.type === 'unit' && from && !tgt.order && rtsUnitDef(tgt.def).weapon) { tgt.order = 'attack'; tgt.target = from; }
   if (tgt.hp <= 0) _rtsKill(tgt);
+  else if (tgt.type === 'unit' && !tgt.burning && tgt.hp < tgt.maxHp * 0.3) {
+    /* Attach_To: the flame follows the unit and eats it, exactly as ANIM.CPP does. */
+    tgt.burning = 1;
+    window._rtsG.fx.push({ kind:'fire', x:tgt.x, y:1, z:tgt.z, t:0, big:0.75, att:tgt.id, loops:3 });
+  }
 }
 function _rtsSplash(x, z, rad, dmg, side) {
   var G = window._rtsG, foe = _rtsEnemyOf(side);
@@ -2615,6 +2804,7 @@ function _rtsTick(dt) {
   _rtsUpdateProj(dt);
 
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 2.2);
+  _rtsAnimAI(dt);
   for (i = G.fx.length - 1; i >= 0; i--) {
     var fxi = G.fx[i];
     fxi.t += dt;
@@ -2625,7 +2815,7 @@ function _rtsTick(dt) {
       if (fxi.t > 1.6) G.fx.splice(i, 1);
       continue;
     }
-    if (fxi.t > 0.75) G.fx.splice(i, 1);
+    if (!RTS_ANIMS[fxi.kind] && fxi.t > 0.75) G.fx.splice(i, 1);
   }
   for (i = G.ents.length - 1; i >= 0; i--) if (G.ents[i].dead && G.ents[i].reaped) G.ents.splice(i, 1);
 
@@ -2816,6 +3006,20 @@ function _rtsRFrame(dt) {
     }
   }
 
+  /* --- new scorch marks and craters, stamped once into the baked terrain. Because the
+     ground is a single canvas, a smudge costs nothing after the frame it appears on. --- */
+  if (G.newScorch && G.newScorch.length) {
+    var tg = R.terrain.getContext('2d');
+    tg.imageSmoothingEnabled = false;
+    while (G.newScorch.length) {
+      var ni = G.newScorch.pop();
+      var nx = (ni % RTS_N) * RTS_TS, ny = ((ni / RTS_N) | 0) * RTS_TS;
+      var sv = G.scorch[ni];
+      if (sv & 8) tg.drawImage(S.crater, nx, ny);
+      else tg.drawImage(S.scorch[((sv & 7) - 1) % 6], nx, ny);
+    }
+  }
+
   /* --- foundation pads. A separate pass before any structure is drawn, so one building's
      pad can never cover its neighbour. Without these a base looks like furniture dropped
      on a lawn; a scuffed earth apron is what makes it look built. --- */
@@ -2872,6 +3076,13 @@ function _rtsRFrame(dt) {
       g.fillStyle = f.t < 0.35 ? '#e0561c' : RTS_PAL.dark[1];
       g.fillRect(dxp - ds, dyp - ds, ds * 2, ds * 2);
       g.globalAlpha = 1;
+      continue;
+    }
+    if (f.kind === 'fire') {
+      var ff = S.fire[_rtsAnimFrame() % S.fire.length];
+      var fw = Math.round(ff.width * TSscale * (f.big || 1));
+      var fh = Math.round(ff.height * TSscale * (f.big || 1));
+      g.drawImage(ff, Math.round(_rtsSX(f.x) - fw / 2), Math.round(_rtsSY(f.z) - fh * 0.8), fw, fh);
       continue;
     }
     if (f.kind === 'tracer') {

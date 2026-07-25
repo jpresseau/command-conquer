@@ -255,6 +255,42 @@ function _rtsGenTerrain(G, rnd) {
     }
   }
 
+  /* --- connectivity guarantee for ore ---
+     Roads link the two bases, but a forest can still ring an ore field completely and leave
+     it unharvestable. Roughly one map in three did. Flood fill from the player start and
+     carve a track out to any ore that the fill could not reach. --- */
+  var reach = new Uint8Array(N * N), stack = [_rtsIdx(20, 90)];
+  reach[stack[0]] = 1;
+  while (stack.length) {
+    var ci = stack.pop(), cxr = ci % N, czr = (ci / N) | 0;
+    for (var dq = 0; dq < 4; dq++) {
+      var nxr = cxr + [1, -1, 0, 0][dq], nzr = czr + [0, 0, 1, -1][dq];
+      if (!_rtsInB(nxr, nzr)) continue;
+      var nir = _rtsIdx(nxr, nzr);
+      if (reach[nir] || G.blocked[nir] === 2) continue;
+      reach[nir] = 1; stack.push(nir);
+    }
+  }
+  for (tx = 0; tx < N; tx++) {
+    for (tz = 0; tz < N; tz++) {
+      i = _rtsIdx(tx, tz);
+      if (G.scrap[i] <= 0 || reach[i]) continue;
+      _rtsCarveRoad(G, tx, tz, 20, 90, rnd, true);   /* cut through to the player start */
+      /* One carve reconnects the whole blob, so re-run the fill rather than carving per tile. */
+      reach.fill(0); stack = [_rtsIdx(20, 90)]; reach[stack[0]] = 1;
+      while (stack.length) {
+        var c2 = stack.pop(), cx2r = c2 % N, cz2r = (c2 / N) | 0;
+        for (var d2 = 0; d2 < 4; d2++) {
+          var nx2 = cx2r + [1, -1, 0, 0][d2], nz2 = cz2r + [0, 0, 1, -1][d2];
+          if (!_rtsInB(nx2, nz2)) continue;
+          var ni2 = _rtsIdx(nx2, nz2);
+          if (reach[ni2] || G.blocked[ni2] === 2) continue;
+          reach[ni2] = 1; stack.push(ni2);
+        }
+      }
+    }
+  }
+
   /* Trees never grow right up against ore, so a field has a little clearing around it. */
   for (tx = 1; tx < N - 1; tx++) {
     for (tz = 1; tz < N - 1; tz++) {
@@ -269,9 +305,9 @@ function _rtsGenTerrain(G, rnd) {
 }
 
 /* A wandering 3-tile-wide track between two points. Clears obstacles as it goes. */
-function _rtsCarveRoad(G, x0, z0, x1, z1, rnd) {
+function _rtsCarveRoad(G, x0, z0, x1, z1, rnd, force) {
   var steps = Math.ceil(Math.hypot(x1 - x0, z1 - z0)) * 2;
-  var sway = (rnd() - 0.5) * 26;
+  var sway = force ? 0 : (rnd() - 0.5) * 26;
   for (var s = 0; s <= steps; s++) {
     var t = s / steps;
     /* a sine bulge perpendicular to the line, so roads bend instead of ruling a diagonal */
@@ -285,7 +321,11 @@ function _rtsCarveRoad(G, x0, z0, x1, z1, rnd) {
         var tx = Math.round(px) + ox, tz = Math.round(pz) + oz;
         if (!_rtsInB(tx, tz)) continue;
         var i = _rtsIdx(tx, tz);
-        if (G.scrap[i] > 0 || G.terrain[i] === RTS_T_WATER) continue;
+        if (G.scrap[i] > 0) continue;
+        /* Normally a road stops at the shore. The connectivity pass passes force, and then
+           it lays a causeway instead - an ore field on an island is unharvestable, and the
+           lake is generated after the ore, so islands do happen. */
+        if (G.terrain[i] === RTS_T_WATER && !force) continue;
         if (G.blocked[i] === 1) continue;                 /* never bulldoze a structure */
         G.blocked[i] = 0;
         G.terrain[i] = RTS_T_ROAD;
@@ -299,6 +339,8 @@ function _rtsNewGame(seed) {
     t:0, seed:seed || 12345, over:null, msg:null, msgT:0, shake:0,
     blocked:new Uint8Array(RTS_N * RTS_N),
     terrain:new Uint8Array(RTS_N * RTS_N),  /* RTS_T_* - what the ground IS, for the renderer */
+    scorch:new Uint8Array(RTS_N * RTS_N),   /* 0 none, 1-6 scorch variant, +8 bit = crater */
+    newScorch:[],                           /* cells the renderer has yet to stamp */
     scrap:new Float32Array(RTS_N * RTS_N),
     owner:new Int32Array(RTS_N * RTS_N),   /* entity id occupying the tile, 0 = none */
     ents:[], byId:{}, nextId:1,
@@ -450,6 +492,71 @@ function _rtsKill(e) {
   if (e.side === 'enemy') G.stats.killed++;
   var si = G.sel.indexOf(e); if (si >= 0) G.sel.splice(si, 1);
 }
+/* ANIM.CPP's AI + Middle + ChainTo, for the effect list.
+
+   The ordering here is the point: Middle fires when the animation reaches its BIGGEST stage,
+   so the scorch or crater is laid down while the fireball is at full size and covering it.
+   Placing it at the start makes the mark visibly pop into existence next to the explosion. */
+function _rtsAnimAI(dt) {
+  var G = window._rtsG, i;
+  for (i = G.fx.length - 1; i >= 0; i--) {
+    var f = G.fx[i];
+    var def = RTS_ANIMS[f.kind];
+    if (!def || f.t < 0) continue;
+
+    /* An attached animation rides its object and burns it down. */
+    if (f.att) {
+      var host = G.byId[f.att];
+      if (!host || host.dead) { f.att = 0; }
+      else {
+        f.x = host.x; f.z = host.z;
+        if (def.damage) {
+          f.acc = (f.acc || 0) + def.damage * dt;
+          if (f.acc >= 1) {
+            var dmg = Math.floor(f.acc); f.acc -= dmg;
+            host.hp -= dmg;
+            if (host.hp <= 0) { _rtsKill(host); f.att = 0; }
+          }
+        }
+      }
+    }
+
+    if (!f.mid && f.t >= def.dur * def.biggest) {
+      f.mid = 1;
+      _rtsAnimMiddle(f, def);
+    }
+    if (f.t >= def.dur) {
+      if (f.loops === undefined) f.loops = def.loops || 1;
+      if (f.loops > 1) { f.loops--; f.t = 0; f.mid = 0; continue; }
+      if (def.chain) {
+        /* ChainTo: it does not end, it metamorphoses. */
+        f.kind = def.chain; f.t = 0; f.mid = 0;
+        f.loops = RTS_ANIMS[def.chain].loops || 1;
+        f.big = (f.big || 1) * 0.6;
+        continue;
+      }
+      G.fx.splice(i, 1);
+    }
+  }
+}
+function _rtsAnimMiddle(f, def) {
+  var G = window._rtsG;
+  var tx = _rtsTX(f.x), tz = _rtsTX(f.z);
+  if (!_rtsInB(tx, tz)) return;
+  var i = _rtsIdx(tx, tz);
+  if (G.terrain[i] === RTS_T_WATER) return;
+  if (def.crater) {
+    /* Reduce_Tiberium(6): a crater eats the ore it lands in. */
+    if (G.scrap[i] > 0) G.scrap[i] = Math.max(0, G.scrap[i] - RTS_CRATER_ORE * 10);
+    if (!(G.scorch[i] & 8)) { G.scorch[i] = (G.scorch[i] & 7) | 8; G.newScorch.push(i); }
+    return;
+  }
+  if (def.scorch && !(G.scorch[i] & 7)) {
+    G.scorch[i] |= 1 + (((tx * 7 + tz * 13 + G.fx.length) % 6) | 0);
+    G.newScorch.push(i);
+  }
+}
+
 function _rtsRecalcPower(side) {
   var G = window._rtsG, made = 0, used = 0;
   for (var i = 0; i < G.ents.length; i++) {
@@ -603,6 +710,11 @@ function _rtsDamage(tgt, dmg, from) {
   /* an idle unit that gets shot shoots back instead of standing there */
   if (tgt.type === 'unit' && from && !tgt.order && rtsUnitDef(tgt.def).weapon) { tgt.order = 'attack'; tgt.target = from; }
   if (tgt.hp <= 0) _rtsKill(tgt);
+  else if (tgt.type === 'unit' && !tgt.burning && tgt.hp < tgt.maxHp * 0.3) {
+    /* Attach_To: the flame follows the unit and eats it, exactly as ANIM.CPP does. */
+    tgt.burning = 1;
+    window._rtsG.fx.push({ kind:'fire', x:tgt.x, y:1, z:tgt.z, t:0, big:0.75, att:tgt.id, loops:3 });
+  }
 }
 function _rtsSplash(x, z, rad, dmg, side) {
   var G = window._rtsG, foe = _rtsEnemyOf(side);
@@ -974,6 +1086,7 @@ function _rtsTick(dt) {
   _rtsUpdateProj(dt);
 
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 2.2);
+  _rtsAnimAI(dt);
   for (i = G.fx.length - 1; i >= 0; i--) {
     var fxi = G.fx[i];
     fxi.t += dt;
@@ -984,7 +1097,7 @@ function _rtsTick(dt) {
       if (fxi.t > 1.6) G.fx.splice(i, 1);
       continue;
     }
-    if (fxi.t > 0.75) G.fx.splice(i, 1);
+    if (!RTS_ANIMS[fxi.kind] && fxi.t > 0.75) G.fx.splice(i, 1);
   }
   for (i = G.ents.length - 1; i >= 0; i--) if (G.ents[i].dead && G.ents[i].reaped) G.ents.splice(i, 1);
 

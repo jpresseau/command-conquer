@@ -83,6 +83,23 @@ var RTS_WEAPONS = {
   turretgun: { dmg:22, range:22, cool:0.9,  shot:'shell',   speed:70,  splash:1, vs:{ infantry:1.0, vehicle:0.9,  building:0.6  } }
 };
 
+/* ------------------------------------------------------------------ anims --
+   AnimTypeClass from ANIM.CPP, trimmed to what this game uses.
+
+   biggest : the stage at which the animation covers the most ground. Ground-altering side
+             effects fire THERE, not at the start - ANIM.CPP does this so a crater or scorch
+             appears under the fireball rather than popping into view in plain sight.
+   chain   : ChainTo. The animation metamorphoses into this one instead of ending.
+   damage  : an attached animation applies this per second to whatever it is riding on
+             (WARHEAD_FIRE in the original). This is what makes a burning unit burn down. */
+var RTS_ANIMS = {
+  boom: { dur:0.75, biggest:0.34, scorch:true,  crater:true,  chain:'fire', loops:1 },
+  hit:  { dur:0.50, biggest:0.30, scorch:true,  crater:false, chain:null,   loops:1 },
+  pop:  { dur:0.40, biggest:0.30, scorch:false, crater:false, chain:null,   loops:1 },
+  fire: { dur:1.10, biggest:0,    scorch:true,  crater:false, chain:null,   loops:2, damage:9 }
+};
+var RTS_CRATER_ORE = 6;   /* ANIM.CPP: a crater calls Reduce_Tiberium(6) */
+
 /* Armour class per thing, used with weapon.vs above. */
 function rtsArmour(e) {
   if (e.type === 'struct') return 'building';

@@ -626,6 +626,63 @@ function _sprPad(wCells, hCells) {
   return t.c;
 }
 
+/* Scorch marks and craters - SmudgeClass in the original, SMUDGE_SCORCH1..6 and
+   SMUDGE_CRATER1. Stamped permanently into the baked terrain, so a battlefield accumulates
+   a record of what happened on it instead of resetting between explosions. */
+function _sprScorch() {
+  var out = [], TS = RTS_TS;
+  for (var v = 0; v < 6; v++) {
+    var t = _sprMake(TS, TS), g = t.g, seed = v * 313 + 29;
+    for (var y = 0; y < TS; y += 2) {
+      for (var x = 0; x < TS; x += 2) {
+        var dx = (x - TS / 2) / (TS / 2), dy = (y - TS / 2) / (TS / 2);
+        var d = Math.hypot(dx, dy) + (_sprVN(x, y, 7, seed) - 0.5) * 0.75;
+        if (d > 0.92) continue;
+        var h = _sprHash(x >> 1, y >> 1, seed);
+        g.globalAlpha = (1 - d) * 0.85;
+        _sprRect(g, x, y, 2, 2, h < 0.4 ? '#141210' : (h < 0.78 ? '#241f19' : '#312a22'));
+      }
+    }
+    g.globalAlpha = 1;
+    out.push(t.c);
+  }
+  return out;
+}
+function _sprCrater() {
+  var TS = RTS_TS, t = _sprMake(TS, TS), g = t.g;
+  for (var y = 0; y < TS; y += 2) {
+    for (var x = 0; x < TS; x += 2) {
+      var dx = (x - TS / 2) / (TS / 2), dy = (y - TS / 2) / (TS / 2);
+      var d = Math.hypot(dx, dy) + (_sprVN(x, y, 6, 71) - 0.5) * 0.5;
+      if (d > 0.88) continue;
+      g.globalAlpha = d > 0.6 ? 0.6 : 0.95;
+      /* Lit north rim, dark bowl, so it reads as a hole rather than a stain. */
+      var col = (d > 0.62 && dy < 0) ? '#6b6252' : (d < 0.35 ? '#171410' : '#2c261e');
+      _sprRect(g, x, y, 2, 2, col);
+    }
+  }
+  g.globalAlpha = 1;
+  return t.c;
+}
+/* Flame frames. ANIM_FIRE_SMALL is what an explosion chains into and what rides a burning
+   unit; it has to read at a glance without drowning the sprite underneath. */
+function _sprFire() {
+  var out = [], n = 5;
+  for (var f = 0; f < n; f++) {
+    var t = _sprMake(16, 20), g = t.g, seed = f * 97 + 11;
+    for (var i = 0; i < 16; i++) {
+      var yy = 19 - (i * 1.1 + _sprHash(i, f, seed) * 5);
+      var wob = Math.sin((i / 16) * 3.1 + f * 1.3) * 3;
+      var wx = 8 + wob - 2, w = Math.max(1, 5 - i * 0.25);
+      var k = i / 16;
+      var col = k < 0.32 ? '#fff2c0' : (k < 0.55 ? '#ffcf6a' : (k < 0.78 ? '#ff9a2e' : '#e0561c'));
+      _sprRect(g, wx, yy, w, 2, col);
+    }
+    out.push(t.c);
+  }
+  return out;
+}
+
 /* Muzzle flashes and explosions, as small frame strips. */
 function _sprFx() {
   var boom = [], i;
@@ -655,6 +712,9 @@ function _rtsSprites() {
   RTS_STRUCTS.forEach(function (d) { S.pad[d.key] = _sprPad(d.w, d.h); });
   S.bag = _sprSandbag();
   S.wave = _sprWaterCycle();
+  S.scorch = _sprScorch();
+  S.crater = _sprCrater();
+  S.fire = _sprFire();
   ['player', 'enemy'].forEach(function (side) {
     S.bld[side] = {}; S.unit[side] = {};
     RTS_STRUCTS.forEach(function (d) { S.bld[side][d.key] = _sprBuilding(d.key, side); });

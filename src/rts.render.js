@@ -174,6 +174,20 @@ function _rtsRFrame(dt) {
     }
   }
 
+  /* --- new scorch marks and craters, stamped once into the baked terrain. Because the
+     ground is a single canvas, a smudge costs nothing after the frame it appears on. --- */
+  if (G.newScorch && G.newScorch.length) {
+    var tg = R.terrain.getContext('2d');
+    tg.imageSmoothingEnabled = false;
+    while (G.newScorch.length) {
+      var ni = G.newScorch.pop();
+      var nx = (ni % RTS_N) * RTS_TS, ny = ((ni / RTS_N) | 0) * RTS_TS;
+      var sv = G.scorch[ni];
+      if (sv & 8) tg.drawImage(S.crater, nx, ny);
+      else tg.drawImage(S.scorch[((sv & 7) - 1) % 6], nx, ny);
+    }
+  }
+
   /* --- foundation pads. A separate pass before any structure is drawn, so one building's
      pad can never cover its neighbour. Without these a base looks like furniture dropped
      on a lawn; a scuffed earth apron is what makes it look built. --- */
@@ -230,6 +244,13 @@ function _rtsRFrame(dt) {
       g.fillStyle = f.t < 0.35 ? '#e0561c' : RTS_PAL.dark[1];
       g.fillRect(dxp - ds, dyp - ds, ds * 2, ds * 2);
       g.globalAlpha = 1;
+      continue;
+    }
+    if (f.kind === 'fire') {
+      var ff = S.fire[_rtsAnimFrame() % S.fire.length];
+      var fw = Math.round(ff.width * TSscale * (f.big || 1));
+      var fh = Math.round(ff.height * TSscale * (f.big || 1));
+      g.drawImage(ff, Math.round(_rtsSX(f.x) - fw / 2), Math.round(_rtsSY(f.z) - fh * 0.8), fw, fh);
       continue;
     }
     if (f.kind === 'tracer') {
