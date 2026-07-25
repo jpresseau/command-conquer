@@ -260,7 +260,8 @@ function _rtsSyncSidebar(dt) {
   else if (sel.length === 1) {
     var e = sel[0], ed = rtsStructDef(e.def) || rtsUnitDef(e.def);
     txt = ed.name + ' — ' + Math.ceil(e.hp) + '/' + e.maxHp + ' hp';
-    if (e.type === 'unit' && rtsUnitDef(e.def).harvest) txt += ' · ' + Math.floor(e.carry) + ' ore';
+    if (e.type === 'unit' && rtsUnitDef(e.def).harvest)
+      txt += ' · ' + Math.floor(e.carry) + ' load (' + Math.floor(e.carryVal || 0) + ' credits)';
   } else {
     var counts = {}, i;
     for (i = 0; i < sel.length; i++) { var n = (rtsUnitDef(sel[i].def) || rtsStructDef(sel[i].def)).name; counts[n] = (counts[n] || 0) + 1; }
@@ -571,7 +572,7 @@ function _rtsDrawMini() {
   g.fillStyle = TCOL[0]; g.fillRect(0, 0, S, S);
   for (var tz = 0; tz < RTS_N; tz++) for (var tx = 0; tx < RTS_N; tx++) {
     var idx = _rtsIdx(tx, tz);
-    if (G.scrap[idx] > 0) g.fillStyle = '#c9a03a';
+    if (G.scrap[idx] > 0) g.fillStyle = G.gems[idx] ? '#9b7ae8' : '#c9a03a';
     else {
       var tk = G.terrain ? G.terrain[idx] : 0;
       if (tk === 0) continue;

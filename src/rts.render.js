@@ -170,7 +170,7 @@ function _rtsRFrame(dt) {
       }
       var stage = Math.min(3, Math.floor(ore / RTS_SCRAP_TILE * 4));
       var vari = (tx * 7 + tz * 13) % 3;
-      g.drawImage(S.ore[stage][vari], px, py, cell, cell);
+      g.drawImage((G.gems && G.gems[idx] ? S.gem : S.ore)[stage][vari], px, py, cell, cell);
     }
   }
 

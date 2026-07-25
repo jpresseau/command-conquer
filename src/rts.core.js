@@ -345,6 +345,9 @@ function _rtsNewGame(seed, diff) {
     corpses:[],                             /* {x,z,v} the renderer has yet to stamp */
     newScorch:[],                           /* cells the renderer has yet to stamp */
     scrap:new Float32Array(RTS_N * RTS_N),
+    /* GoldValue 35 / GemValue 110: a flag per tile, not a second resource. Same mining, same
+       refinery, ~3x the credits - so a gem field is worth crossing the map for. */
+    gems:new Uint8Array(RTS_N * RTS_N),
     owner:new Int32Array(RTS_N * RTS_N),   /* entity id occupying the tile, 0 = none */
     ents:[], byId:{}, nextId:1,
     sel:[], proj:[], fx:[],
@@ -359,15 +362,19 @@ function _rtsNewGame(seed, diff) {
   var rnd = _rtsRngMake(G.seed);
 
   /* --- ore fields: a few blobs, biggest ones out in the contested middle --- */
-  var fields = [[28,82,7],[82,28,7],[38,38,6],[74,74,6],[56,56,10],[22,32,5],[90,80,5],[34,62,5],[78,50,5]];
+  /* The fourth number is the gem flag. The gem patches sit out in contested ground, never in
+     either starting corner - a high-value deposit you can mine in total safety is not a
+     decision, and both bases are meant to want the middle. */
+  var fields = [[28,82,7,0],[82,28,7,0],[38,38,6,0],[74,74,6,0],[56,56,10,0],
+                [22,32,5,0],[90,80,5,0],[34,62,5,1],[78,50,5,1]];
   for (var f = 0; f < fields.length; f++) {
-    var cx = fields[f][0], cz = fields[f][1], rad = fields[f][2];
+    var cx = fields[f][0], cz = fields[f][1], rad = fields[f][2], isGem = fields[f][3];
     for (var tx = cx - rad; tx <= cx + rad; tx++) for (var tz = cz - rad; tz <= cz + rad; tz++) {
       if (!_rtsInB(tx, tz)) continue;
       var d = Math.hypot(tx - cx, tz - cz);
       if (d > rad) continue;
       var amt = RTS_SCRAP_TILE * (1 - d / (rad + 1)) * (0.6 + rnd() * 0.6);
-      if (amt > 40) G.scrap[_rtsIdx(tx, tz)] = amt;
+      if (amt > 40) { G.scrap[_rtsIdx(tx, tz)] = amt; if (isGem) G.gems[_rtsIdx(tx, tz)] = 1; }
     }
   }
   _rtsGenTerrain(G, rnd);
@@ -406,7 +413,7 @@ function _rtsFootprint(e, on) {
       G.blocked[i] = 1; G.owner[i] = e.id;
       /* the ground under a structure is cleared - otherwise the starting bases (which are
          placed without the player's build check) end up with crystals poking through them */
-      if (G.scrap[i] > 0) { G.scrap[i] = 0; G.scrapDirty = true; }
+      if (G.scrap[i] > 0) { G.scrap[i] = 0; G.gems[i] = 0; G.scrapDirty = true; }
     }
     else if (G.owner[i] === e.id) { G.blocked[i] = 0; G.owner[i] = 0; }
   }
@@ -486,7 +493,7 @@ function _rtsSpawnUnit(side, key, x, z) {
   if (!d) return null;
   var e = { id:G.nextId++, type:'unit', side:side, def:key, x:x, z:z, rot:side === 'player' ? 0 : Math.PI,
     hp:d.hp, maxHp:d.hp, r:d.r, cool:0, path:null, pi:0, order:null, target:null,
-    carry:0, hstate:null, htile:null, dead:false, mesh:null, turret:0, fire:0, team:-1,
+    carry:0, carryVal:0, hstate:null, htile:null, dead:false, mesh:null, turret:0, fire:0, team:-1,
     fear:0, prone:0,
     /* MasterDoControls marks DO_WALK and DO_CRAWL 'randomstart'. That is why a squad does
        not march in lockstep - each soldier's walk cycle begins on a different frame. */
@@ -680,7 +687,10 @@ function _rtsAnimMiddle(f, def) {
   if (G.terrain[i] === RTS_T_WATER) return;
   if (def.crater) {
     /* Reduce_Tiberium(6): a crater eats the ore it lands in. */
-    if (G.scrap[i] > 0) G.scrap[i] = Math.max(0, G.scrap[i] - RTS_CRATER_ORE * 10);
+    if (G.scrap[i] > 0) {
+      G.scrap[i] = Math.max(0, G.scrap[i] - RTS_CRATER_ORE * 10);
+      if (G.scrap[i] <= 0) { G.gems[i] = 0; G.scrapDirty = true; }
+    }
     if (!(G.scorch[i] & 8)) { G.scorch[i] = (G.scorch[i] & 7) | 8; G.newScorch.push(i); }
     return;
   }
@@ -1077,7 +1087,9 @@ function _rtsUpdateHarvester(e, dt, d) {
   } else if (e.hstate === 'mining') {
     var i = _rtsIdx(e.htile.tx, e.htile.tz), take = Math.min(RTS_HARVEST_RATE * dt, G.scrap[i], d.capacity - e.carry);
     G.scrap[i] -= take; e.carry += take;
-    if (G.scrap[i] <= 0.5) { G.scrap[i] = 0; G.scrapDirty = true; e.htile = null; e.hstate = 'toField'; }
+    /* The hopper holds BAILS; what they are worth depends on what was in the ground. */
+    e.carryVal += take * (G.gems[i] ? RTS_GEM_MULT : 1);
+    if (G.scrap[i] <= 0.5) { G.scrap[i] = 0; G.gems[i] = 0; G.scrapDirty = true; e.htile = null; e.hstate = 'toField'; }
     if (e.carry >= d.capacity - 0.5) { e.hstate = 'toRef'; e.path = null; }
   } else if (e.hstate === 'toRef') {
     var ref = _rtsNearestRefinery(e);
@@ -1091,17 +1103,28 @@ function _rtsUpdateHarvester(e, dt, d) {
   } else if (e.hstate === 'unload') {
     if (!e.ref || e.ref.dead) { e.hstate = 'toRef'; return; }
     var give = Math.min(RTS_UNLOAD_RATE * dt, e.carry);
-    e.carry -= give; G.sides[e.side].credits += give;
-    if (e.carry <= 0.5) { e.carry = 0; e.hstate = 'toField'; }
+    var pay = e.carry > 0 ? e.carryVal * (give / e.carry) : 0;
+    e.carry -= give; e.carryVal = Math.max(0, e.carryVal - pay);
+    G.sides[e.side].credits += pay;
+    if (e.carry <= 0.5) { e.carry = 0; e.carryVal = 0; e.hstate = 'toField'; }
   }
 }
+/* Nearest deposit, with gems worth a detour. The score is the WHOLE trip - out to the tile
+   and back to the refinery - divided by what a load from it is worth, so a harvester will
+   pass a nearer ore patch for gems only when the longer haul actually pays. Scoring on the
+   one-way distance instead sends harvesters chasing gems across the map and drops income:
+   mining takes about four seconds, the drive takes most of a minute. */
 function _rtsNearestScrap(e) {
-  var G = window._rtsG, best = null, bd = 1e9;
+  var G = window._rtsG, best = null, bs = 1e9;
+  var ref = _rtsNearestRefinery(e);
+  var rx = ref ? ref.x : e.x, rz = ref ? ref.z : e.z;
   for (var tz = 0; tz < RTS_N; tz++) for (var tx = 0; tx < RTS_N; tx++) {
     var i = _rtsIdx(tx, tz);
     if (G.scrap[i] <= 0) continue;
-    var d = Math.hypot(_rtsWX(tx) - e.x, _rtsWX(tz) - e.z);
-    if (d < bd) { bd = d; best = { tx:tx, tz:tz }; }
+    var wx = _rtsWX(tx), wz = _rtsWX(tz);
+    var trip = Math.hypot(wx - e.x, wz - e.z) + Math.hypot(wx - rx, wz - rz);
+    var s = trip / (G.gems[i] ? RTS_GEM_MULT : 1);
+    if (s < bs) { bs = s; best = { tx:tx, tz:tz }; }
   }
   return best;
 }
@@ -1373,6 +1396,7 @@ function _rtsTickOre(dt) {
       i = _rtsIdx(tx, tz);
       var a = G.scrap[i];
       if (a <= 0 || a >= RTS_SCRAP_TILE) continue;
+      if (G.gems[i]) continue;      /* IsTGrowth is ore only - a gem field is finite */
       G.scrap[i] = Math.min(RTS_SCRAP_TILE, a + RTS_ORE_GROW_AMT);
       grew = true;
       /* a rich tile occasionally seeds an adjacent empty, unblocked one */

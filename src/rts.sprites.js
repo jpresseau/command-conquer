@@ -37,6 +37,9 @@ var RTS_PAL = {
   road:  ['#5a4e39', '#665942', '#4b412f'],
   bag:   ['#a89663', '#bcaa78', '#7d6e47'],
   ore:   ['#b08420', '#d4a934', '#eecb62', '#7d5c12', '#8f6a17'],
+  /* GemValue 110 vs GoldValue 35: gems are the high-value deposit, and they have to read as
+     a different mineral at a glance or the player will never cross the map for one. */
+  gem:   ['#6a4bb0', '#8f6ee0', '#c4b0ff', '#3d2a70', '#4a3585'],
   conc:  ['#8c8c83', '#a3a39a', '#6c6c64', '#b6b6ad'],
   steel: ['#59616d', '#6d7583', '#424953', '#818a99'],
   dark:  ['#31363e', '#3f4650', '#22262c', '#4b5360'],
@@ -355,8 +358,9 @@ function _sprTrees() {
    left/right/up/down - so clusters run across cell edges and a worked field reads as
    continuous ground rather than a grid of identical stamps. Three variants per stage,
    chosen by a hash of the cell, kill the last of the repetition. */
-function _sprOre() {
-  var out = [], P = RTS_PAL.ore, TS = RTS_TS;
+function _sprOre(P) {
+  var out = [], TS = RTS_TS;
+  P = P || RTS_PAL.ore;
   for (var st = 0; st < 4; st++) {
     var variants = [];
     for (var v = 0; v < 3; v++) {
@@ -738,7 +742,8 @@ function _sprFx() {
 
 function _rtsSprites() {
   if (_RTS_SPR) return _RTS_SPR;
-  var S = { ore: _sprOre(), bld: {}, unit: {}, prone: {}, fx: _sprFx(), pad: {} };
+  var S = { ore: _sprOre(RTS_PAL.ore), gem: _sprOre(RTS_PAL.gem),
+    bld: {}, unit: {}, prone: {}, fx: _sprFx(), pad: {} };
   RTS_STRUCTS.forEach(function (d) { S.pad[d.key] = _sprPad(d.w, d.h); });
   S.bag = _sprSandbag();
   S.wave = _sprWaterCycle();

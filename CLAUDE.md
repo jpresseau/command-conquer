@@ -265,6 +265,19 @@ first — searching only the nearest one works until that corner fills up, and t
 fails forever, the finished building never leaves the `ready` slot, and the AI's entire
 structure queue is jammed for the rest of the match while its credits pile up.
 
+**Gems** are `GoldValue 35` / `GemValue 110`: not a second resource but a flag per tile, so
+the same harvester, mining at the same rate into the same refinery, brings back a bit over
+three times the credits. The hopper therefore has to hold *bails and their value* separately
+(`carry` / `carryVal`) — paying out the bulk would have thrown the whole point away. Gem
+fields sit in contested ground and, per `IsTGrowth`, do **not** regrow: a gem patch is finite
+and worth fighting over, an ore field always comes back.
+
+Harvester field choice scores the **whole round trip** — out to the tile *and* back to the
+refinery — divided by what a load is worth. Scoring the one-way distance instead sends
+harvesters chasing gems across the map: mining a load takes about four seconds and the drive
+takes most of a minute, so the return leg dominates. That mistake cost roughly 90% of the
+AI's banked credits at the three-minute mark, and it does not throw or log anything.
+
 Also corrected from this file: **ConditionYellow = 1/2 and ConditionRed = 1/4** (they were
 0.66/0.33 here, quietly mistuning damaged-building art, the fear ladder and the AI's
 sell-back decision), `RepairPercent = 1/4`, `MinDamage 1` / `MaxDamage 1000` clamping every
