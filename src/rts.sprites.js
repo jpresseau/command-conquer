@@ -27,10 +27,19 @@ var _RTS_SPR = null;
    first pass's bright lawn-green ground was the single loudest wrong note in the picture. */
 var RTS_PAL = {
   out:   '#15171b',
-  grass: ['#454f2c', '#4e5933', '#3a4325', '#576240', '#333c20'],
+  /* Forest green, not lawn green. The reference material is dark, cool and low-contrast;
+     an earlier olive palette read as a golf course with gravel on it. */
+  grass: ['#3d4d27', '#46562f', '#354420', '#4f5f38', '#2d3b1b'],
   dirt:  ['#6a5a3f', '#786748', '#5b4d35', '#847150'],
-  rock:  ['#6a665c', '#7d7970', '#54514a', '#8d897f'],
-  bush:  ['#39471f', '#2c3818', '#465828'],
+  rock:  ['#6a665c', '#7d7970', '#4a473f', '#8d897f'],
+  bush:  ['#2c3818', '#222c12', '#39471f'],
+  /* Canopy is deliberately a long way darker than the grass, with one bright tip tone. An
+     earlier set sat within a few points of the ground colour and the whole forest
+     disappeared into texture - you could not see that they were trees. */
+  tree:  ['#1c3316', '#26431d', '#111f0d', '#3d7031', '#43301c'],   /* canopy tones + trunk */
+  water: ['#2b4c6b', '#356088', '#20384f', '#4a7ba6', '#6fa3c9'],
+  sand:  ['#8a7c58', '#9c8e68', '#75684a'],
+  road:  ['#5a4e39', '#665942', '#4b412f'],
   ore:   ['#b08420', '#d4a934', '#eecb62', '#7d5c12', '#8f6a17'],
   conc:  ['#8c8c83', '#a3a39a', '#6c6c64', '#b6b6ad'],
   steel: ['#59616d', '#6d7583', '#424953', '#818a99'],
@@ -165,10 +174,13 @@ function _rtsBakeTerrain(G) {
       var n = _sprFbm(bx, by, seed);
       var grain = _sprHash(bx >> 1, by >> 1, seed + 3);
       var pal, k;
-      if (n > 0.62) {                                   /* dirt: broad organic patches */
+      /* Bare earth is rare now that the map has roads, beaches and ore aprons on it - an
+         earlier threshold of 0.62 put dirt everywhere and the battlefield came out more
+         tan than green, which is the opposite of the reference. */
+      if (n > 0.72) {                                   /* dirt: broad organic patches */
         pal = dr;
         k = grain < 0.18 ? 3 : (grain < 0.5 ? 1 : (grain < 0.82 ? 0 : 2));
-        if (n < 0.66 && grain < 0.45) { pal = gr; k = 2; }   /* ragged edge, not a hard border */
+        if (n < 0.75 && grain < 0.45) { pal = gr; k = 2; }   /* ragged edge, not a hard border */
       } else {
         pal = gr;
         k = grain < 0.12 ? 4 : (grain < 0.42 ? 2 : (grain < 0.76 ? 0 : 1));
@@ -204,29 +216,122 @@ function _rtsBakeTerrain(G) {
     }
   }
 
-  /* Rock outcrops on impassable cells, drawn bigger than the cell and merged with their
-     neighbours so a run of blocked cells reads as one ridge instead of a row of boxes. */
-  var rockCv = _sprMake(S, S), rg = rockCv.g;
-  for (var tz = 0; tz < N; tz++) {
-    for (var tx = 0; tx < N; tx++) {
-      if (G.blocked[_rtsIdx(tx, tz)] !== 2) continue;
-      var cx = tx * RTS_TS + RTS_TS / 2, cy = tz * RTS_TS + RTS_TS / 2;
-      var h = _sprHash(tx, tz, seed + 61);
-      var rx = RTS_TS * (0.52 + h * 0.16), ry = RTS_TS * (0.46 + _sprHash(tx, tz, seed + 67) * 0.16);
-      _sprEll(rg, cx, cy + 2, rx, ry, RTS_PAL.rock[2]);          /* shadowed base */
-      _sprEll(rg, cx, cy, rx * 0.92, ry * 0.86, RTS_PAL.rock[0]);
-      _sprEll(rg, cx - rx * 0.2, cy - ry * 0.3, rx * 0.55, ry * 0.45, RTS_PAL.rock[1]);
-      _sprEll(rg, cx - rx * 0.3, cy - ry * 0.4, rx * 0.28, ry * 0.2, RTS_PAL.rock[3]);
-      for (var f = 0; f < 5; f++) {                              /* fracture speckle */
-        var fx = cx + (_sprHash(tx * 31 + f, tz, seed + 71) - 0.5) * rx * 1.4;
-        var fy = cy + (_sprHash(tx, tz * 31 + f, seed + 73) - 0.5) * ry * 1.4;
-        _sprRect(rg, fx, fy, 1 + (_sprHash(f, tx + tz, seed + 79) * 2 | 0), 1, RTS_PAL.rock[2]);
+  /* --- ground cover per tile: sand, road and water are painted flat, under everything --- */
+  var TS = RTS_TS, tx, tz, k, cx, cy;
+  function tileAt(x, z) { return _rtsInB(x, z) ? G.terrain[_rtsIdx(x, z)] : -1; }
+  for (tz = 0; tz < N; tz++) {
+    for (tx = 0; tx < N; tx++) {
+      k = G.terrain[_rtsIdx(tx, tz)];
+      if (k !== RTS_T_SAND && k !== RTS_T_ROAD && k !== RTS_T_WATER) continue;
+      var pal = k === RTS_T_WATER ? RTS_PAL.water : (k === RTS_T_ROAD ? RTS_PAL.road : RTS_PAL.sand);
+      for (var py = 0; py < TS; py += 2) {
+        for (var px = 0; px < TS; px += 2) {
+          var gx = tx * TS + px, gy = tz * TS + py;
+          var hv = _sprHash(gx >> 1, gy >> 1, seed + 91);
+          /* Edges dither into the neighbour so a road has a ragged verge, not a kerb. */
+          var edge = (px < 3 && tileAt(tx - 1, tz) !== k) || (px > TS - 4 && tileAt(tx + 1, tz) !== k) ||
+                     (py < 3 && tileAt(tx, tz - 1) !== k) || (py > TS - 4 && tileAt(tx, tz + 1) !== k);
+          if (edge && hv < 0.45) continue;
+          _sprRect(g, gx, gy, 2, 2, pal[hv < 0.3 ? 2 : (hv < 0.72 ? 0 : 1)]);
+        }
+      }
+    }
+  }
+  /* Water gets highlight ripples once the body is down, so they run across tile seams. */
+  for (var w = 0; w < (S * S) / 1400; w++) {
+    var wx = _sprHash(w, 3, seed + 95) * S, wy = _sprHash(3, w, seed + 97) * S;
+    if (tileAt((wx / TS) | 0, (wy / TS) | 0) !== RTS_T_WATER) continue;
+    var wl = 3 + (_sprHash(w, w, seed + 99) * 6 | 0);
+    _sprRect(g, wx, wy, wl, 1, RTS_PAL.water[3]);
+    _sprRect(g, wx + 1, wy + 1, wl - 2, 1, RTS_PAL.water[4]);
+  }
+
+  /* --- rock ridges. Drawn bigger than their cell and merged with their neighbours, so a
+         run of blocked cells reads as one wall rather than a row of boxes. The south face
+         is a hard dark band: that shadow is what makes a ridge read as height. --- */
+  var rockCv = _sprMake(S, S), rg = rockCv.g, RK = RTS_PAL.rock;
+  function isRock(x, z) { return tileAt(x, z) === RTS_T_ROCK; }
+  for (tz = 0; tz < N; tz++) {
+    for (tx = 0; tx < N; tx++) {
+      if (!isRock(tx, tz)) continue;
+      var ox = tx * TS, oy = tz * TS;
+      /* Extend to the cell edge wherever the neighbour is also rock, and pull in with a
+         ragged margin where it is not. Drawing each cell as an ellipse - the first attempt -
+         turned a ridge into a string of grey bubbles; a plateau needs flat tops and
+         straight-ish edges to read as stone. */
+      var l = isRock(tx - 1, tz) ? 0 : 2 + (_sprHash(tx, tz, seed + 61) * 3 | 0);
+      var r2 = isRock(tx + 1, tz) ? 0 : 2 + (_sprHash(tx, tz, seed + 62) * 3 | 0);
+      var u = isRock(tx, tz - 1) ? 0 : 2 + (_sprHash(tx, tz, seed + 63) * 3 | 0);
+      var dn = isRock(tx, tz + 1) ? 0 : 3 + (_sprHash(tx, tz, seed + 64) * 3 | 0);
+      var bx = ox + l, by = oy + u, bw = TS - l - r2, bh = TS - u - dn;
+      /* Mottled stone, in 2px blocks. Filling the cell with one flat grey and outlining it
+         turned a ridge into a paved plaza with visible cell borders - the same tiling
+         artefact the ground had, just in grey. The texture has to cross the cell seam. */
+      for (var sy = 0; sy < bh; sy += 2) {
+        for (var sx = 0; sx < bw; sx += 2) {
+          var gx2 = bx + sx, gy2 = by + sy;
+          var hv2 = _sprHash(gx2 >> 1, gy2 >> 1, seed + 71);
+          _sprRect(rg, gx2, gy2, 2, 2, hv2 < 0.22 ? RK[2] : (hv2 < 0.68 ? RK[0] : RK[1]));
+        }
+      }
+      /* Lighting only on faces that are actually exposed. */
+      if (!isRock(tx, tz - 1)) {
+        _sprRect(rg, bx, by, bw, 2, RK[3]);                        /* sunlit north lip */
+        _sprRect(rg, bx, by + 2, bw, 1, RK[1]);
+      }
+      if (!isRock(tx - 1, tz)) _sprRect(rg, bx, by, 2, bh, RK[1]);
+      if (!isRock(tx + 1, tz)) _sprRect(rg, bx + bw - 2, by, 2, bh, RK[2]);
+      if (!isRock(tx, tz + 1)) {                                   /* the drop, in shadow */
+        _sprRect(rg, bx, by + bh - 8, bw, 8, RK[2]);
+        _sprRect(rg, bx, by + bh - 8, bw, 1, RK[0]);
+        for (var cf = 0; cf < 4; cf++) {                           /* vertical fissures */
+          var fxx = bx + 2 + Math.floor(cf * (bw - 4) / 3);
+          _sprRect(rg, fxx, by + bh - 7, 1, 5 + (_sprHash(cf, tx + tz, seed + 77) * 2 | 0), RK[0]);
+        }
       }
     }
   }
   _sprEdge(rockCv.c);
   g.drawImage(rockCv.c, 0, 0);
+
+  /* --- forest. Conifers, drawn back-to-front down the map so a grove overlaps correctly,
+         each one taller than its cell with a cast shadow. This is the single biggest
+         difference between "a field" and "a battlefield". --- */
+  var TR = RTS_PAL.tree;
+  for (tz = 0; tz < N; tz++) {
+    for (tx = 0; tx < N; tx++) {
+      if (G.terrain[_rtsIdx(tx, tz)] !== RTS_T_TREE) continue;
+      /* Jitter close to a full cell. One tree per cell nudged a few pixels still lines up
+         into visible rows; a grove has to look sown, not planted. */
+      var jx = (_sprHash(tx, tz, seed + 101) - 0.5) * 17;
+      var jy = (_sprHash(tz, tx, seed + 103) - 0.5) * 15;
+      cx = tx * TS + TS / 2 + jx; cy = tz * TS + TS / 2 + jy;
+      var sc = 0.82 + _sprHash(tx, tz, seed + 107) * 0.42;
+      _sprTree(g, cx, cy, sc, _sprHash(tx + tz, tz, seed + 109), TR);
+    }
+  }
   return t.c;
+}
+
+/* One conifer: cast shadow, trunk, then three stacked canopy tiers narrowing upward. The
+   tiers are ellipses rather than a triangle so the silhouette stays soft and organic when
+   twenty of them overlap. */
+function _sprTree(g, cx, cy, sc, variant, TR) {
+  var r = 8 * sc, hgt = 15 * sc;
+  g.globalAlpha = 0.42;
+  _sprEll(g, cx + 4 * sc, cy + 4 * sc, r * 1.0, r * 0.52, '#000');
+  g.globalAlpha = 1;
+  _sprRect(g, cx - 1, cy - 1, 2, Math.max(2, 4 * sc), TR[4]);          /* trunk */
+  var tiers = variant > 0.5 ? 3 : 4;
+  for (var i = 0; i < tiers; i++) {
+    var f = i / tiers;
+    var ty = cy - f * hgt;
+    var tr = r * (1 - f * 0.52);
+    _sprEll(g, cx + 1, ty + 1, tr, tr * 0.62, TR[2]);                  /* shaded underside */
+    _sprEll(g, cx, ty, tr * 0.94, tr * 0.58, TR[0]);
+    _sprEll(g, cx - tr * 0.24, ty - tr * 0.16, tr * 0.5, tr * 0.3, TR[1]);
+    if (i === tiers - 1) _sprEll(g, cx - tr * 0.3, ty - tr * 0.2, tr * 0.26, tr * 0.16, TR[3]);
+  }
 }
 
 /* ------------------------------------------------------------------------ ore --

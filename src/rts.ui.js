@@ -454,11 +454,19 @@ function _rtsDrawMini() {
   var G = window._rtsG, mini = document.getElementById('rtsMini');
   if (!mini) return;
   var g = mini.getContext('2d'), S = mini.width, sc = S / RTS_N, i;
-  g.fillStyle = '#5d6647'; g.fillRect(0, 0, S, S);
+  /* The radar mirrors the terrain layer, so forest, ridges, the lake and the roads are all
+     legible at a glance - the whole point of having a radar rather than a blank green square. */
+  var TCOL = ['#3b4b26', '#243d1d', '#6a665c', '#2b4c6b', '#6f6046', '#8a7c58'];
+  g.fillStyle = TCOL[0]; g.fillRect(0, 0, S, S);
   for (var tz = 0; tz < RTS_N; tz++) for (var tx = 0; tx < RTS_N; tx++) {
     var idx = _rtsIdx(tx, tz);
-    if (G.scrap[idx] > 0) { g.fillStyle = '#c9a03a'; g.fillRect(tx * sc, tz * sc, sc, sc); }
-    else if (G.blocked[idx] === 2) { g.fillStyle = '#4a473f'; g.fillRect(tx * sc, tz * sc, sc, sc); }
+    if (G.scrap[idx] > 0) g.fillStyle = '#c9a03a';
+    else {
+      var tk = G.terrain ? G.terrain[idx] : 0;
+      if (tk === 0) continue;
+      g.fillStyle = TCOL[tk] || TCOL[0];
+    }
+    g.fillRect(tx * sc, tz * sc, sc, sc);
   }
   for (i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];

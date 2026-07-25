@@ -10,6 +10,12 @@
 
 window._rtsG = null;
 
+/* What the ground at a tile IS. The sim only cares whether a tile is blocked; this second
+   layer tells the renderer what to draw there, and is why the map can read as a forest with
+   cliffs and a shoreline rather than an empty field. */
+var RTS_T_GRASS = 0, RTS_T_TREE = 1, RTS_T_ROCK = 2, RTS_T_WATER = 3,
+    RTS_T_ROAD  = 4, RTS_T_SAND = 5;
+
 /* ------------------------------------------------------------- grid helpers */
 function _rtsIdx(tx, tz) { return tz * RTS_N + tx; }
 function _rtsInB(tx, tz) { return tx >= 0 && tz >= 0 && tx < RTS_N && tz < RTS_N; }
@@ -151,10 +157,131 @@ function _rtsSideNew(key) {
     ready:null,                                        /* finished structure awaiting placement */
     lost:false };
 }
+/* ------------------------------------------------------------------ terrain --
+   An earlier map was 62 random 1-3 tile rock rectangles on otherwise empty ground, and it
+   looked like a field with gravel on it. The games this is modelled on put a *landscape*
+   under the battle: dense conifer forest, rock ridges, a shoreline, and dirt roads cutting
+   through it all. That is what this builds.
+
+   Everything here is clustered noise rather than scattered singles - a grove of twenty
+   trees reads as forest, twenty lone trees read as litter. Roads are carved LAST and are
+   what guarantees the two bases can still reach each other; see _rtsCarveRoad. */
+function _rtsGenTerrain(G, rnd) {
+  var N = RTS_N, i, tx, tz;
+  var seed = G.seed | 0;
+  function nz(x, y, sc, s) {                       /* smooth value noise, tile units */
+    var fx = x / sc, fy = y / sc, x0 = Math.floor(fx), y0 = Math.floor(fy);
+    var ax = fx - x0, ay = fy - y0;
+    ax = ax * ax * (3 - 2 * ax); ay = ay * ay * (3 - 2 * ay);
+    function h(a, b) {
+      var v = Math.imul(a | 0, 374761393) ^ Math.imul(b | 0, 668265263) ^ Math.imul(s | 0, 1442695041);
+      v = Math.imul(v ^ (v >>> 13), 1274126177); v ^= v >>> 16;
+      return (v >>> 0) / 4294967296;
+    }
+    var p = h(x0, y0), q = h(x0 + 1, y0), r = h(x0, y0 + 1), t = h(x0 + 1, y0 + 1);
+    return (p + (q - p) * ax) * (1 - ay) + (r + (t - r) * ax) * ay;
+  }
+  /* Base areas and ore stay clear of everything. */
+  function nearBase(x, z) {
+    return Math.hypot(x - 20, z - 90) < 17 || Math.hypot(x - 92, z - 22) < 17;
+  }
+  function free(x, z) {
+    return _rtsInB(x, z) && G.scrap[_rtsIdx(x, z)] <= 0 && !nearBase(x, z);
+  }
+  function set(x, z, terr, block) {
+    var k = _rtsIdx(x, z);
+    G.terrain[k] = terr;
+    G.blocked[k] = block ? 2 : 0;
+  }
+
+  /* --- water: one lake, pushed into a corner away from both starts --- */
+  var lx = 88, lz = 88, lr = 13;
+  for (tx = lx - lr - 4; tx <= lx + lr + 4; tx++) {
+    for (tz = lz - lr - 4; tz <= lz + lr + 4; tz++) {
+      if (!free(tx, tz)) continue;
+      var wob = nz(tx, tz, 9, seed + 3) * 7 - 3.5;
+      var dd = Math.hypot(tx - lx, tz - lz) + wob;
+      if (dd < lr) set(tx, tz, RTS_T_WATER, true);
+      else if (dd < lr + 2.2) set(tx, tz, RTS_T_SAND, false);   /* beach */
+    }
+  }
+
+  /* --- rock ridges: high-contrast bands of a low-frequency noise field, which gives
+         long connected walls rather than the confetti a per-tile threshold produces --- */
+  for (tx = 0; tx < N; tx++) {
+    for (tz = 0; tz < N; tz++) {
+      if (!free(tx, tz) || G.terrain[_rtsIdx(tx, tz)] !== RTS_T_GRASS) continue;
+      /* A narrow band either side of a noise contour gives long thin walls. Widening this
+         even slightly turns the ridges into one huge mesa, because the field is smooth and
+         the region near the contour grows fast. */
+      var ridge = Math.abs(nz(tx, tz, 19, seed + 11) - 0.5);
+      if (ridge < 0.016 && nz(tx, tz, 6, seed + 13) > 0.42) set(tx, tz, RTS_T_ROCK, true);
+    }
+  }
+
+  /* --- forest: groves where a low-frequency mask is high, thinned by a high-frequency
+         one so a grove has gaps in it and units can thread through --- */
+  for (tx = 0; tx < N; tx++) {
+    for (tz = 0; tz < N; tz++) {
+      if (!free(tx, tz) || G.terrain[_rtsIdx(tx, tz)] !== RTS_T_GRASS) continue;
+      var grove = nz(tx, tz, 17, seed + 21);
+      var thin = nz(tx, tz, 3.1, seed + 23);
+      if (grove > 0.55 && thin > 0.38) set(tx, tz, RTS_T_TREE, true);
+      else if (grove > 0.46 && thin > 0.76) set(tx, tz, RTS_T_TREE, true);   /* stragglers */
+    }
+  }
+
+  /* --- roads. Carved last, straight through whatever is in the way, so they double as
+         the guarantee that the map stays connected: every road links the two start
+         corners, so a unit can always get from one base to the other. --- */
+  _rtsCarveRoad(G, 20, 90, 92, 22, rnd);          /* the main diagonal, base to base */
+  _rtsCarveRoad(G, 20, 90, 90, 78, rnd);          /* south branch, toward the lake */
+  _rtsCarveRoad(G, 92, 22, 26, 34, rnd);          /* north branch */
+
+  /* Trees never grow right up against ore, so a field has a little clearing around it. */
+  for (tx = 1; tx < N - 1; tx++) {
+    for (tz = 1; tz < N - 1; tz++) {
+      i = _rtsIdx(tx, tz);
+      if (G.terrain[i] !== RTS_T_TREE) continue;
+      if (G.scrap[_rtsIdx(tx + 1, tz)] > 0 || G.scrap[_rtsIdx(tx - 1, tz)] > 0 ||
+          G.scrap[_rtsIdx(tx, tz + 1)] > 0 || G.scrap[_rtsIdx(tx, tz - 1)] > 0) {
+        G.terrain[i] = RTS_T_GRASS; G.blocked[i] = 0;
+      }
+    }
+  }
+}
+
+/* A wandering 3-tile-wide track between two points. Clears obstacles as it goes. */
+function _rtsCarveRoad(G, x0, z0, x1, z1, rnd) {
+  var steps = Math.ceil(Math.hypot(x1 - x0, z1 - z0)) * 2;
+  var sway = (rnd() - 0.5) * 26;
+  for (var s = 0; s <= steps; s++) {
+    var t = s / steps;
+    /* a sine bulge perpendicular to the line, so roads bend instead of ruling a diagonal */
+    var px = x0 + (x1 - x0) * t, pz = z0 + (z1 - z0) * t;
+    var dx = x1 - x0, dz = z1 - z0, L = Math.hypot(dx, dz) || 1;
+    var off = Math.sin(t * Math.PI) * sway;
+    px += (-dz / L) * off; pz += (dx / L) * off;
+    /* Two tiles wide. Three read as a runway rather than a track. */
+    for (var ox = 0; ox <= 1; ox++) {
+      for (var oz = 0; oz <= 1; oz++) {
+        var tx = Math.round(px) + ox, tz = Math.round(pz) + oz;
+        if (!_rtsInB(tx, tz)) continue;
+        var i = _rtsIdx(tx, tz);
+        if (G.scrap[i] > 0 || G.terrain[i] === RTS_T_WATER) continue;
+        if (G.blocked[i] === 1) continue;                 /* never bulldoze a structure */
+        G.blocked[i] = 0;
+        G.terrain[i] = RTS_T_ROAD;
+      }
+    }
+  }
+}
+
 function _rtsNewGame(seed) {
   var G = {
     t:0, seed:seed || 12345, over:null, msg:null, msgT:0,
     blocked:new Uint8Array(RTS_N * RTS_N),
+    terrain:new Uint8Array(RTS_N * RTS_N),  /* RTS_T_* - what the ground IS, for the renderer */
     scrap:new Float32Array(RTS_N * RTS_N),
     owner:new Int32Array(RTS_N * RTS_N),   /* entity id occupying the tile, 0 = none */
     ents:[], byId:{}, nextId:1,
@@ -179,16 +306,7 @@ function _rtsNewGame(seed) {
       if (amt > 40) G.scrap[_rtsIdx(tx, tz)] = amt;
     }
   }
-  /* --- impassable rock outcrops, kept off the bases and off the scrap --- */
-  for (var r = 0; r < 62; r++) {
-    var rx = 6 + ((rnd() * (RTS_N - 12)) | 0), rz = 6 + ((rnd() * (RTS_N - 12)) | 0);
-    if (Math.hypot(rx - 20, rz - 90) < 20 || Math.hypot(rx - 92, rz - 22) < 20) continue;
-    var rw = 1 + ((rnd() * 3) | 0), rh = 1 + ((rnd() * 3) | 0);
-    for (var ax = rx; ax < rx + rw; ax++) for (var az = rz; az < rz + rh; az++) {
-      if (!_rtsInB(ax, az) || G.scrap[_rtsIdx(ax, az)] > 0) continue;
-      G.blocked[_rtsIdx(ax, az)] = 2;  /* 2 = terrain (never cleared) */
-    }
-  }
+  _rtsGenTerrain(G, rnd);
 
   /* --- the two bases: player bottom-left, Redline top-right.
      Footprints are small (Command Yard 3x3) so a base is a cluster of compact structures

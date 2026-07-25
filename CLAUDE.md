@@ -43,6 +43,16 @@ breaking it shipped once.
 - **Never rotate the canvas.** `ctx.rotate()` + `fillRect` anti-aliases every diagonal. Unit
   facings are built by `_sprRot`, which walks destination pixels and inverse-rotates each into
   the unit's local frame, so a tank at 45° keeps hard square pixels.
+- **The map is a landscape, not a field.** `_rtsGenTerrain` (in the *core*, since obstacles
+  are simulation state) lays down conifer groves, thin rock ridges, a lake with a beach and
+  dirt roads, into a second `G.terrain` layer of `RTS_T_*` codes that the renderer reads.
+  Roads are carved last and connect the two start corners, which is what guarantees the map
+  stays passable — always re-run a flood fill after changing obstacle density. Two traps
+  found the hard way: canopy tones within a few points of the grass make the whole forest
+  vanish into texture, and per-cell jitter smaller than about half a cell leaves the trees
+  in visible rows. Rock is mottled per-2px with lighting **only on exposed faces** — a flat
+  fill plus a per-cell lip turns a ridge into a paved plaza, and widening the ridge noise
+  band even slightly collapses every ridge into one huge mesa.
 - **Terrain is one baked canvas, not per-cell tiles.** `_rtsBakeTerrain` paints the whole
   112×112 map at art resolution using continuous fbm noise. Tiling six random 24px tiles per
   cell is what produced a checkerboard of axis-aligned brown squares: every patch was exactly

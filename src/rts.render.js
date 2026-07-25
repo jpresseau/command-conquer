@@ -122,6 +122,25 @@ function _rtsRFrame(dt) {
     }
   }
 
+  /* --- foundation pads. A separate pass before any structure is drawn, so one building's
+     pad can never cover its neighbour. Without these a base looks like furniture dropped
+     on a lawn; a scuffed earth apron is what makes it look built. --- */
+  for (i = 0; i < G.ents.length; i++) {
+    var pe = G.ents[i];
+    if (pe.dead || pe.type !== 'struct') continue;
+    var pd = rtsStructDef(pe.def);
+    var ppx = Math.round(_rtsSX(_rtsWX(pe.tx) - RTS_TILE / 2)) - Math.round(cell * 0.28);
+    var ppy = Math.round(_rtsSY(_rtsWX(pe.tz) - RTS_TILE / 2)) - Math.round(cell * 0.22);
+    var pw = pd.w * cell + Math.round(cell * 0.56), ph = pd.h * cell + Math.round(cell * 0.5);
+    if (ppx > R.W || ppy > R.H || ppx + pw < 0 || ppy + ph < 0) continue;
+    g.globalAlpha = 0.55;
+    g.fillStyle = RTS_PAL.sand[2];
+    g.fillRect(ppx, ppy + Math.round(cell * 0.12), pw, ph - Math.round(cell * 0.12));
+    g.fillStyle = RTS_PAL.sand[0];
+    g.fillRect(ppx + 2, ppy + Math.round(cell * 0.12), pw - 4, ph - Math.round(cell * 0.22));
+    g.globalAlpha = 1;
+  }
+
   /* --- everything that stands up, painted back to front --- */
   var draw = [];
   for (i = 0; i < G.ents.length; i++) {
