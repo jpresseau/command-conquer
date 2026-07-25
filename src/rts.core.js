@@ -2607,6 +2607,27 @@ function _rtsTeamDisband(t) {
   while (t.members.length) _rtsTeamRemove(t, t.members[0]);
   delete G.teams[t.id];
 }
+/* The concurrent-team ceiling, derived from the army rather than fixed. See RTS_TEAM_COMMIT.
+   Counts only units that could actually fight: harvesters are not an army. */
+function _rtsTeamCap() {
+  var G = window._rtsG, army = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.side !== 'enemy' || e.type !== 'unit') continue;
+    if (rtsUnitDef(e.def).harvest) continue;
+    army++;
+  }
+  var want = Math.floor(army * RTS_TEAM_COMMIT / RTS_TEAM_TYPICAL);
+  return Math.max(RTS_TEAM_MAX, Math.min(RTS_TEAM_MAX_HARD, want));
+}
+/* ...and the same scaling applied per type, so the extra slots are shared across the types
+   that are currently eligible rather than all going to whichever one the roll happens to
+   pick first. The authored `max` stays the floor. */
+function _rtsTypeCap(ty, eligible) {
+  var cap = _rtsTeamCap();
+  return Math.max(ty.max == null ? RTS_TEAM_MAX : ty.max,
+                  Math.ceil(cap / Math.max(1, eligible)));
+}
 /* HouseClass::IsAlerted, as Suggested_New_Team reads it. The timer half matters as much as
    the provocation half: a house that only wakes up when shot at would never field its late
    team types against a player who simply turtles, so the opponent would get WEAKER the more
@@ -2637,7 +2658,10 @@ function _rtsSuggestTeam(spare) {
     var nm = G.teams[tid].type.name;
     counts[nm] = (counts[nm] || 0) + 1;
   }
-  var alerted = _rtsHouseAlerted();
+  var alerted = _rtsHouseAlerted(), _elig = 0;
+  for (ti = 0; ti < RTS_TEAM_TYPES.length; ti++) {
+    if (alerted === !!RTS_TEAM_TYPES[ti].autocreate) _elig++;
+  }
   /* "maxnum = 0" for the types the filter rejects. A type capped at zero should not still be
      holding a team slot, so the moment the house changes phase its now-invalid teams are
      disbanded and their members freed. Without this the four harassment teams raised before
@@ -2658,8 +2682,9 @@ function _rtsSuggestTeam(spare) {
        - a hard split, not a preference. Before the alert the opponent harasses; after it,
        the heavy types come out and the harassing ones stop being raised. */
     if (alerted !== !!ty.autocreate) continue;
-    /* MaxAllowed, per type. Without it the random pick happily raises six of one kind. */
-    if ((counts[ty.name] || 0) >= (ty.max == null ? RTS_TEAM_MAX : ty.max)) continue;
+    /* MaxAllowed, per type - but as a floor that scales with the army; see _rtsTypeCap.
+       Without any cap the random pick happily raises every team of one kind. */
+    if ((counts[ty.name] || 0) >= _rtsTypeCap(ty, _elig)) continue;
     var need = 0;
     for (kk in ty.members) need += ty.members[kk];
     if (spare < need) continue;
@@ -2696,7 +2721,7 @@ function _rtsTeamMaybeRaise() {
 
   var live = 0;
   for (tid in G.teams) live++;
-  if (live >= RTS_TEAM_MAX) return false;
+  if (live >= _rtsTeamCap()) return false;
 
   var spare = 0;
   for (i = 0; i < G.ents.length; i++) {
@@ -2962,7 +2987,7 @@ function _rtsAIAttack(urgency) {
   if (!G.teams) { G.teams = {}; G.teamSeq = 0; G.teamHold = {}; }
   var live = 0, tid;
   for (tid in G.teams) live++;
-  if (live >= RTS_TEAM_MAX) return false;
+  if (live >= _rtsTeamCap()) return false;
 
   /* Only raise a type this army can actually crew, and respect a suspension.
      IQGuardArea: a smart opponent keeps a garrison, so it will not raise a team it would

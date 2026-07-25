@@ -548,7 +548,28 @@ var RTS_TEAM_TYPES = [
     missions:[ ['patrol','front'], ['attack','buildings'], ['loop',1] ] }
 ];
 var RTS_ALERT_TIME = 150;        /* backstop only: the first attack wave normally alerts the house */
-var RTS_TEAM_MAX = 6;            /* concurrent teams */
+
+/* ------------------------------------------------- committing the army (mine, not ported) --
+   RTS_TEAM_MAX and the per-type `max` are a FLOOR, not a ceiling. A fixed cap on concurrent
+   teams means the fraction of the army actually committed collapses as the opponent gets
+   richer, and that is precisely what was measured on hard once production was uncapped:
+
+       min 3   army 100   in teams 18   18% committed   82 idle at home
+       min 6   army 186   in teams 20   11% committed  165 idle at home
+
+   Four teams, permanently - Sappers x2 and Assault x2, every type pinned at max 2 - so
+   Suggested_New_Team returned null on 45 of 51 calls. The opponent's entire offensive
+   capacity was 20 units regardless of how large its army grew.
+
+   RA does not hit this because MaxAllowed is authored per scenario against a known army size,
+   and because a campaign house also attacks outside the team system. There is no author here,
+   so the cap has to derive from the army instead: commit roughly RTS_TEAM_COMMIT of it, in
+   teams of about RTS_TEAM_TYPICAL, and never fewer than the authored floor. The hard ceiling
+   exists so a runaway economy cannot spawn unbounded teams. */
+var RTS_TEAM_MAX = 6;            /* floor: concurrent teams when the army is small */
+var RTS_TEAM_MAX_HARD = 22;      /* ceiling: never raise more than this many at once */
+var RTS_TEAM_COMMIT = 0.62;      /* share of the field army that should be on the attack */
+var RTS_TEAM_TYPICAL = 5;        /* typical team size, for turning that share into a count */
 var RTS_SUSPEND_PRIORITY = 3;    /* Rule.SuspendPriority: disband below this when attacked */
 var RTS_SUSPEND_DELAY = 40;      /* Rule.SuspendDelay, seconds before a suspended type reforms */
 /* Rule.StrayDistance: how far a member may drift from the team centre before it is told to
