@@ -360,6 +360,7 @@ function _rtsNewGame(seed, diff) {
     sel:[], proj:[], fx:[],
     sides:{ player:_rtsSideNew('player'), enemy:_rtsSideNew('enemy') },
     ai:{ next:0, wave:0, build:6, place:0, state:0, lastHit:-999, want:null },
+    teams:{}, teamSeq:0, teamHold:{},
     stats:{ killed:0, lostU:0 }
   };
   window._rtsG = G;
@@ -1079,14 +1080,14 @@ function _rtsZoneCache() {
 /* TECHNO.CPP Evaluate_Object. The target scan scores candidates rather than just measuring
    how far away they are, which is the difference between an army that shoots whatever it
    bumps into and one that picks off the harvester. */
-function _rtsEvalObject(e, o, dist, w) {
+function _rtsEvalObject(e, o, dist, w, force) {
   var d = rtsStructDef(o.def) || rtsUnitDef(o.def);
   if (!d) return 0;
   /* "If the object is in a harmless state, don't bother to consider it a threat." A
      harvester on the ore is not what an auto-acquiring gun should turn to face while
      something armed is in range - though a player who right-clicks one still gets it, and
      it is still worth a great deal once chosen. */
-  if (o !== e.target && _rtsMission(o).noThreat) return 0;
+  if (!force && o !== e.target && _rtsMission(o).noThreat) return 0;
   /* A weapon that cannot hurt the thing at all should never choose it - and for a
      two-weapon object the question is asked of its BEST weapon against this armour, or a
      tank would refuse to look at infantry its coaxial gun handles perfectly well. */
@@ -1303,6 +1304,11 @@ function _rtsBaseIsAttacked(bldg, enemy) {
   if (rtsStructDef(bldg.def).weapon) return 0;     /* it can defend itself */
   if (enemy.baseTimer && G.t < enemy.baseTimer) return 0;
 
+  /* "We will need units to defend our base. We need to suspend teams until the situation has
+     been dealt with." Below the survival priority a team is disbanded outright and its
+     members freed - which is where most of the defenders actually come from. */
+  _rtsSuspendTeams(RTS_SUSPEND_PRIORITY);
+
   /* "desired" is how much defence to throw at it: the attacker's risk scaled by tech level.
      Risk stands in as cost here, the same substitution Evaluate_Object uses for Value. */
   var desired = rtsUnitDef(enemy.def).cost, pool = [], i;
@@ -1417,6 +1423,7 @@ function _rtsDamage(tgt, dmg, from, floor) {
     _rtsAttacked(tgt.side);
     _rtsBaseIsAttacked(tgt, from);
   }
+  if (tgt.type === 'unit' && tgt.sqd != null) _rtsTeamTookDamage(tgt, from);
   if (_rtsCanRetaliate(tgt, from)) { tgt.order = 'attack'; tgt.target = from; }
   if (tgt.hp <= 0) {
     /* Crew.Made_A_Kill: something that has killed becomes a hotter target itself. */
@@ -2147,6 +2154,9 @@ function _rtsAIDo(strat, urgency, S) {
 /* Do_All_To_Hunt. */
 function _rtsAIAllToHunt() {
   var G = window._rtsG;
+  /* Do_All_To_Hunt overrides everything, so the teams are dissolved first - otherwise the
+     team logic would keep re-issuing its own orders on top of the hunt. */
+  for (var tid in (G.teams || {})) _rtsTeamDisband(G.teams[tid]);
   var aim = _rtsHas('player', 'yard') || _rtsHas('player', 'refinery') || _rtsHas('player', 'power');
   if (!aim) return;
   for (var i = 0; i < G.ents.length; i++) {
@@ -2157,35 +2167,356 @@ function _rtsAIAllToHunt() {
   }
 }
 /* AI_Attack. Only a share of the idle army goes; the rest garrisons. */
+
+/* ------------------------------------------------------------- teams (TEAM.CPP) --
+   A team is a composition plus a mission. It recruits until it is at full strength, only
+   then moves out, and picks its target by CATEGORY rather than by proximity. Replacing the
+   old attack wave - which shoved 60-70% of every idle unit at the player's nearest building
+   - with this is what stops the opponent fighting as one undifferentiated blob. */
+
+/* Quarry: the team leader asks Greatest_Threat for the best target of a KIND, so one team
+   hunts harvesters while another goes for the power plants. */
+function _rtsQuarryMatch(o, quarry) {
+  if (quarry === 'anything') return true;
+  if (o.type === 'unit') {
+    var ud = rtsUnitDef(o.def);
+    if (quarry === 'harvester') return !!ud.harvest;
+    if (quarry === 'infantry') return ud.kind === 'infantry';
+    if (quarry === 'vehicles') return ud.kind === 'vehicle';
+    return false;
+  }
+  var sd = rtsStructDef(o.def);
+  if (quarry === 'buildings') return true;
+  if (quarry === 'power') return sd.power > 0;
+  if (quarry === 'factories') return !!sd.produces;
+  if (quarry === 'defense') return !!sd.weapon;
+  return false;
+}
+/* TMission_Attack: the LEADER picks the target, and the leader is the first active member
+   that actually has a weapon - "this presumes that some member is better than no member". */
+function _rtsTeamLeader(t) {
+  var i, m;
+  for (i = 0; i < t.members.length; i++) {
+    m = t.members[i];
+    if (!m.dead && rtsUnitDef(m.def).weapon) return m;
+  }
+  return t.members[0] || null;
+}
+function _rtsTeamTarget(t) {
+  var G = window._rtsG, lead = _rtsTeamLeader(t);
+  if (!lead) return null;
+  var best = null, bv = 0, w = _rtsPickWeapon(lead, lead);
+  for (var i = 0; i < G.ents.length; i++) {
+    var o = G.ents[i];
+    if (o.dead || o.side !== 'player') continue;
+    if (!_rtsQuarryMatch(o, t.type.quarry)) continue;
+    /* Greatest_Threat(THREAT_TIBERIUM) exists precisely to hunt harvesters, so an explicit
+       quarry has to override IsNoThreat - otherwise a team raised to kill harvesters scores
+       every harvester at zero and can never see one. */
+    var v = _rtsEvalObject(lead, o, _rtsRangeTo(lead, o), w, t.type.quarry !== 'anything');
+    if (v > bv) { bv = v; best = o; }
+  }
+  /* "If no target could be found, then the mission advances" - a quarry that no longer
+     exists on the map must not leave the team standing still forever. */
+  if (!best && t.type.quarry !== 'anything') {
+    for (var j = 0; j < G.ents.length; j++) {
+      var p = G.ents[j];
+      if (p.dead || p.side !== 'player' || p.type !== 'struct') continue;
+      var pv = _rtsEvalObject(lead, p, _rtsRangeTo(lead, p), w);
+      if (pv > bv) { bv = pv; best = p; }
+    }
+  }
+  return best;
+}
+/* Calc_Center: the average position of INITIATED members only. A recruit still running to
+   join up must not drag the team's centre out to meet it. */
+function _rtsTeamCentre(t) {
+  var x = 0, z = 0, n = 0, i, m;
+  for (i = 0; i < t.members.length; i++) {
+    m = t.members[i];
+    if (m.dead || !m.init) continue;
+    x += m.x; z += m.z; n++;
+  }
+  if (!n) {
+    for (i = 0; i < t.members.length; i++) if (!t.members[i].dead) return { x:t.members[i].x, z:t.members[i].z };
+    return null;
+  }
+  return { x:x / n, z:z / n };
+}
+/* Can_Add. The mission gate is the one MISSION.CPP's IsRecruitable exists for. */
+function _rtsTeamCanAdd(t, u) {
+  if (u.dead || u.side !== 'enemy' || u.type !== 'unit') return false;
+  if (rtsUnitDef(u.def).harvest) return false;
+  if (!_rtsMission(u).recruitable) return false;
+  var want = t.type.members[u.def] || 0;
+  if (!want) return false;
+  if ((t.have[u.def] || 0) >= want) return false;
+  /* "Allows member stealing from lesser priority teams." */
+  if (u.sqd != null) {
+    var other = window._rtsG.teams[u.sqd];
+    if (!other || other.type.priority >= t.type.priority) return false;
+  }
+  return true;
+}
+/* NOTE: the membership field is `sqd`, not `team`. `e.team` is already taken by the player's
+   control groups (the 1-9 keys) and is initialised to -1, so reusing the name made every
+   candidate look like it already belonged to a team with id -1 - and nothing could ever be
+   recruited, silently, with no error anywhere. */
+function _rtsTeamAdd(t, u) {
+  var G = window._rtsG;
+  if (u.sqd != null && G.teams[u.sqd]) _rtsTeamRemove(G.teams[u.sqd], u);
+  t.members.push(u);
+  t.have[u.def] = (t.have[u.def] || 0) + 1;
+  u.sqd = t.id;
+  u.init = (t.members.length === 1);      /* the first member is the team, so it is initiated */
+  return true;
+}
+function _rtsTeamRemove(t, u) {
+  var i = t.members.indexOf(u);
+  if (i < 0) return false;
+  t.members.splice(i, 1);
+  t.have[u.def] = Math.max(0, (t.have[u.def] || 1) - 1);
+  u.sqd = null; u.init = false;
+  /* "A unit that breaks off of a team will enter idle mode." */
+  u.order = null; u.target = null; u.path = null; u.goal = null;
+  return true;
+}
+/* Recruit: pick the CLOSEST eligible unit to the team's centre, not just any. */
+function _rtsTeamRecruit(t, centre) {
+  var G = window._rtsG, best = null, bd = 1e9;
+  var cx = centre ? centre.x : 0, cz = centre ? centre.z : 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var u = G.ents[i];
+    if (!_rtsTeamCanAdd(t, u)) continue;
+    var d = centre ? Math.hypot(u.x - cx, u.z - cz) : 0;
+    if (d < bd) { bd = d; best = u; }
+  }
+  if (best) { _rtsTeamAdd(t, best); return true; }
+  return false;
+}
+function _rtsTeamDesired(t) {
+  var n = 0;
+  for (var k in t.type.members) n += t.type.members[k];
+  return n;
+}
+function _rtsTeamMake(type) {
+  var G = window._rtsG;
+  var t = { id:G.teamSeq++, type:type, members:[], have:{}, target:null,
+    moving:false, hasBeen:false, under:true, zone:null, lagging:false };
+  G.teams[t.id] = t;
+  return t;
+}
+function _rtsTeamDisband(t) {
+  var G = window._rtsG;
+  while (t.members.length) _rtsTeamRemove(t, t.members[0]);
+  delete G.teams[t.id];
+}
+/* Suspend_Teams: when the base is hit, everything below the survival priority is disbanded
+   and its members are freed to defend. HOUSE.CPP calls this and it had nothing to call. */
+function _rtsSuspendTeams(priority) {
+  var G = window._rtsG, n = 0;
+  for (var id in G.teams) {
+    var t = G.teams[id];
+    if (t.type.priority < priority) { _rtsTeamDisband(t); G.teamHold[t.type.name] = G.t + RTS_SUSPEND_DELAY; n++; }
+  }
+  return n;
+}
+/* AI_Unit's counterpart for offence: keep the army employed. A team only marches at full
+   strength and only fields its own composition, so leaving team creation on the attack-wave
+   timer alone left most of the army standing in the base - the opponent committed about
+   fifteen units where the old blob sent sixty per cent of everything, and an idle player
+   survived half again as long. Raise a team whenever there are enough loose units to crew
+   one; the wave timer still governs the announcement, not the war. */
+function _rtsTeamMaybeRaise() {
+  var G = window._rtsG, i, tid;
+  if (!G.teams) { G.teams = {}; G.teamSeq = 0; G.teamHold = {}; }
+  /* Do NOT pre-empt the opening. The attack-wave timer is what gives a new player time to
+     stand up an economy before anything arrives; raising teams the moment there are units to
+     crew them threw that away entirely and the Commando AI was killing an idle player at 100
+     seconds instead of 170. Surplus teams are a way to keep an existing war supplied, not a
+     way to start one early. */
+  if (!G.ai || !G.ai.wave) return false;
+
+  var live = 0;
+  for (tid in G.teams) live++;
+  if (live >= RTS_TEAM_MAX) return false;
+
+  var spare = 0;
+  for (i = 0; i < G.ents.length; i++) {
+    var u = G.ents[i];
+    if (u.dead || u.side !== 'enemy' || u.type !== 'unit') continue;
+    if (rtsUnitDef(u.def).harvest || u.sqd != null) continue;
+    if (!_rtsMission(u).recruitable) continue;
+    spare++;
+  }
+  /* IQGuardArea: a smart opponent keeps a garrison back rather than emptying the base. */
+  if (_rtsIQAt(RTS_IQ.guardArea)) spare -= 3;
+  if (spare < 2) return false;
+
+  var choices = [];
+  for (i = 0; i < RTS_TEAM_TYPES.length; i++) {
+    var ty = RTS_TEAM_TYPES[i];
+    if (G.teamHold[ty.name] && G.t < G.teamHold[ty.name]) continue;
+    var need = 0, k;
+    for (k in ty.members) need += ty.members[k];
+    if (spare < need) continue;
+    choices.push(ty);
+  }
+  if (!choices.length) return false;
+  _rtsTeamMake(choices[(Math.random() * choices.length) | 0]);
+  return true;
+}
+function _rtsTeamsTick(dt) {
+  var G = window._rtsG, id, t, i, m;
+  if (!G.teams) { G.teams = {}; G.teamSeq = 0; G.teamHold = {}; }
+
+  for (id in G.teams) {
+    t = G.teams[id];
+    /* prune the dead */
+    for (i = t.members.length - 1; i >= 0; i--) {
+      m = t.members[i];
+      if (m.dead) { t.have[m.def] = Math.max(0, (t.have[m.def] || 1) - 1); t.members.splice(i, 1); }
+    }
+    var total = t.members.length, desired = _rtsTeamDesired(t);
+
+    if (!total) {
+      /* "If there are no members and the team has reached full strength at one time, delete." */
+      if (t.hasBeen) { _rtsTeamDisband(t); continue; }
+    }
+
+    var full = (total >= desired);
+    if (full) t.hasBeen = true;
+    /* Reinforceable teams snap out of under-strength at a third; the rest are never under
+       strength again once they have set out. */
+    if (t.type.reinforce) t.under = (desired > 2) ? (total <= desired / 3) : (total < desired);
+    else t.under = !t.hasBeen;
+
+    /* Flag into action at full strength. */
+    if (!t.moving && full) {
+      t.moving = true; t.hasBeen = true; t.under = false;
+      for (i = 0; i < t.members.length; i++) t.members[i].init = true;
+    }
+    /* Under strength while moving: stop and regroup. */
+    if (t.moving && t.under) { t.moving = false; t.target = null; }
+
+    t.zone = _rtsTeamCentre(t);
+
+    /* Recruit while there is room. */
+    if (!t.moving || (!full && t.type.reinforce)) {
+      for (i = 0; i < 2; i++) if (!_rtsTeamRecruit(t, t.zone)) break;
+    }
+
+    if (!t.members.length) continue;
+
+    /* Coordinate_Conscript: an uninitiated recruit runs for the team centre, and counts as
+       joined once it is inside StrayDistance. */
+    var stragglers = 0;
+    for (i = 0; i < t.members.length; i++) {
+      m = t.members[i];
+      if (m.init) continue;
+      if (t.zone && Math.hypot(m.x - t.zone.x, m.z - t.zone.z) > RTS_STRAY) {
+        stragglers++;
+        if (!m.path && !m.order) _rtsOrderMove(m, t.zone.x, t.zone.z, false);
+      } else m.init = true;
+    }
+
+    if (!t.moving) continue;
+
+    /* Lagging_Units: anyone who has fallen behind is told to catch up, and the rest HOLD
+       until they do. Without this the fast members arrive alone and die alone. */
+    var lag = false;
+    if (t.zone) {
+      for (i = 0; i < t.members.length; i++) {
+        m = t.members[i];
+        if (!m.init || m.dead) continue;
+        if (Math.hypot(m.x - t.zone.x, m.z - t.zone.z) > RTS_STRAY * 1.6) { lag = true; break; }
+      }
+    }
+    t.lagging = lag;
+
+    /* Pick or refresh the quarry. */
+    if (!t.target || t.target.dead) t.target = _rtsTeamTarget(t);
+    if (!t.target) continue;
+
+    for (i = 0; i < t.members.length; i++) {
+      m = t.members[i];
+      if (m.dead || !m.init) continue;
+      if (lag && t.zone && Math.hypot(m.x - t.zone.x, m.z - t.zone.z) <= RTS_STRAY * 1.6) {
+        /* hold station while the stragglers close up */
+        if (m.order !== 'hold' && !m.target) { m.order = 'hold'; m.path = null; }
+        continue;
+      }
+      if (m.order === 'hold') m.order = null;
+      if (m.order !== 'attack' || m.target !== t.target) _rtsOrderAttack(m, t.target);
+    }
+  }
+}
+/* Took_Damage: the team retargets onto whoever hit it - unless it is already fighting
+   something that shoots back and is in range. "There is no point in endlessly shuffling
+   between targets that have firepower." */
+function _rtsTeamTookDamage(u, from) {
+  var G = window._rtsG;
+  if (u.sqd == null || !G.teams || !G.teams[u.sqd]) return;
+  var t = G.teams[u.sqd];
+  if (!from || from.side !== 'player' || !t.moving) return;
+  if (t.target === from) return;
+  if (t.target && !t.target.dead) {
+    var td = rtsStructDef(t.target.def) || rtsUnitDef(t.target.def);
+    var lead = _rtsTeamLeader(t);
+    if (td && td.weapon && lead && _rtsRangeTo(lead, t.target) <= _rtsReach(lead)) return;
+  }
+  t.target = from;
+}
+
 function _rtsAIAttack(urgency) {
   var G = window._rtsG, pool = [], k;
   for (k = 0; k < G.ents.length; k++) {
     var u = G.ents[k];
-    if (!u.dead && u.side === 'enemy' && u.type === 'unit' && !rtsUnitDef(u.def).harvest && !u.order) pool.push(u);
+    if (!u.dead && u.side === 'enemy' && u.type === 'unit' && !rtsUnitDef(u.def).harvest
+        && u.sqd == null && _rtsMission(u).recruitable) pool.push(u);
   }
   /* Commit a real share of the idle army, not a token squad. Sending a fixed handful let
      the AI pile up forty-odd defenders at home, which is both un-fun and unbeatable.
      IQGuardArea: only a smart opponent knows to hold some of it back as a garrison. */
-  var share = _rtsIQAt(RTS_IQ.guardArea) ? 0.7 : 0.6;
-  if (urgency <= RTS_URGENCY.LOW) share *= 0.5;      /* under attack at home: send fewer */
-  var send = Math.min(pool.length, Math.max(3, Math.ceil(pool.length * share)));
-  if (_rtsIQAt(RTS_IQ.guardArea)) send = Math.min(send, Math.max(3, pool.length - 3));
-
   /* AttackInterval is deliberately randomised over a 4x spread in the original, so waves
      never arrive on a metronome you can set your watch by. */
   G.ai.next = RTS_WAVE_EVERY * _rtsBias('enemy').build * (0.5 + Math.random() * 1.5);
-  if (send < 2) return false;
-  var aim = _rtsHas('player', 'yard') || _rtsHas('player', 'refinery') || _rtsHas('player', 'power');
-  if (!aim) return false;
+  if (!_rtsHas('player', 'yard') && !_rtsHas('player', 'refinery') && !_rtsHas('player', 'power')) return false;
+
+  /* Raise a TEAM rather than shoving a share of everything idle at the nearest building.
+     A team holds a composition and a quarry, waits until it is at full strength, and then
+     goes after the kind of thing it was raised to kill. */
+  if (!G.teams) { G.teams = {}; G.teamSeq = 0; G.teamHold = {}; }
+  var live = 0, tid;
+  for (tid in G.teams) live++;
+  if (live >= RTS_TEAM_MAX) return false;
+
+  /* Only raise a type this army can actually crew, and respect a suspension. */
+  var choices = [], ti;
+  for (ti = 0; ti < RTS_TEAM_TYPES.length; ti++) {
+    var ty = RTS_TEAM_TYPES[ti];
+    if (G.teamHold[ty.name] && G.t < G.teamHold[ty.name]) continue;
+    /* IQGuardArea: a smart opponent keeps a garrison, so it will not raise a team it would
+       have to strip the whole base to fill. */
+    var need = 0, kk;
+    for (kk in ty.members) need += ty.members[kk];
+    var spare = _rtsIQAt(RTS_IQ.guardArea) ? Math.max(0, pool.length - 3) : pool.length;
+    if (urgency <= RTS_URGENCY.LOW) spare = Math.floor(spare * 0.5);   /* hit at home: hold back */
+    if (spare < need) continue;
+    choices.push(ty);
+  }
+  if (!choices.length) return false;
+  var pick = choices[(Math.random() * choices.length) | 0];
+  _rtsTeamMake(pick);
   G.ai.wave++;
-  for (k = 0; k < send; k++) _rtsOrderMove(pool[k], aim.x + (k % 3 - 1) * 5, aim.z + ((k / 3) | 0) * 5, true);
-  _rtsSay('Redline attack wave inbound!');
+  _rtsSay('Redline ' + pick.name + ' team inbound!');
   if (typeof _rtsSfx === 'function') _rtsSfx('alert');
   return true;
 }
 function _rtsUpdateAI(dt) {
   var G = window._rtsG, S = G.sides.enemy;
   if (S.lost) return;
+  _rtsTeamsTick(dt);
   /* Rich: refill a line as soon as it empties, rather than waiting up to five seconds for
      the next decision. Without this the opponent banks tens of thousands of credits it
      structurally cannot spend, while the human restarts a queue the moment it frees. */
@@ -2211,6 +2542,7 @@ function _rtsUpdateAI(dt) {
       }
     }
     _rtsAIUnits(S);
+    _rtsTeamMaybeRaise();
 
     /* Expert_AI: score every strategy, then act from CRITICAL downward. Note the original
        computes an `acted` flag with the stated intent of stopping after the highest urgency

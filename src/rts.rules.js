@@ -456,5 +456,32 @@ var RTS_WAVE_EVERY = 85;
 var RTS_WAVE_FIRST = 150;   /* a refinery costs 1400 and takes 18s - the first wave must not
                                land before a new player has had time to stand up an economy */
 
+/* ---------------------------------------------------------- teams (TEAM.CPP) --
+   A TeamTypeClass is a COMPOSITION plus a QUARRY. The team recruits until it is at full
+   strength, only then moves out, and picks its target by category rather than by "whatever
+   is nearest". That is the whole difference between an opponent that sends a blob at your
+   closest building and one that sends three buggies after your harvesters while a separate
+   group of rocket soldiers goes for your power.
+
+   `priority` is RecruitPriority, and it does two jobs: a team may steal members from a team
+   of LOWER priority, and Suspend_Teams disbands everything below a threshold when the base
+   is attacked, freeing those units to defend.
+
+   `reinforce` is IsReinforcable. A team that is not reinforceable is never considered under
+   strength once it has set out - "this ensures that once the team has started, it won't
+   dally to pick up new members". */
+var RTS_TEAM_TYPES = [
+  { name:'Raiders',  priority:1, reinforce:true,  quarry:'harvester', members:{ buggy:3 } },
+  { name:'Skirmish', priority:2, reinforce:true,  quarry:'anything',  members:{ rifle:4, rocket:1 } },
+  { name:'Sappers',  priority:3, reinforce:false, quarry:'power',     members:{ rocket:3, rifle:2 } },
+  { name:'Assault',  priority:4, reinforce:false, quarry:'buildings', members:{ tank:3, rocket:2 } }
+];
+var RTS_TEAM_MAX = 6;            /* concurrent teams */
+var RTS_SUSPEND_PRIORITY = 3;    /* Rule.SuspendPriority: disband below this when attacked */
+var RTS_SUSPEND_DELAY = 40;      /* Rule.SuspendDelay, seconds before a suspended type reforms */
+/* Rule.StrayDistance: how far a member may drift from the team centre before it is told to
+   regroup, and the radius inside which a new recruit counts as having joined up. */
+var RTS_STRAY = 9 * RTS_TILE;
+
 function rtsStructDef(k) { for (var i=0;i<RTS_STRUCTS.length;i++) if (RTS_STRUCTS[i].key===k) return RTS_STRUCTS[i]; return null; }
 function rtsUnitDef(k)   { for (var i=0;i<RTS_UNITS.length;i++)   if (RTS_UNITS[i].key===k)   return RTS_UNITS[i];   return null; }
