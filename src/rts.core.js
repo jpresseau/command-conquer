@@ -418,6 +418,20 @@ function _rtsFootprint(e, on) {
     else if (G.owner[i] === e.id) { G.blocked[i] = 0; G.owner[i] = 0; }
   }
 }
+/* BUILDING.H Flush_For_Placement: units do not block a structure going up, so anything
+   standing on the new footprint has to be shoved clear. Without it a unit ends up embedded
+   in a wall - which happened once the AI started building enough to land on its own army. */
+function _rtsFlushForPlacement(e) {
+  var G = window._rtsG, d = rtsStructDef(e.def);
+  for (var i = 0; i < G.ents.length; i++) {
+    var u = G.ents[i];
+    if (u.dead || u.type !== 'unit') continue;
+    var tx = _rtsTX(u.x), tz = _rtsTX(u.z);
+    if (tx < e.tx || tx >= e.tx + d.w || tz < e.tz || tz >= e.tz + d.h) continue;
+    var cell = _rtsExitCell(e, u.x - e.x, u.z - e.z);
+    if (cell) { u.x = _rtsWX(cell[0]); u.z = _rtsWX(cell[1]); u.path = null; }
+  }
+}
 function _rtsCanPlace(side, key, tx, tz) {
   var G = window._rtsG, d = rtsStructDef(key);
   if (!d) return false;
@@ -444,11 +458,12 @@ function _rtsPlaceStruct(side, key, tx, tz, instant) {
     building:instant ? 0 : 1, bprog:instant ? 1 : 0, dead:false, mesh:null };
   G.ents.push(e); G.byId[e.id] = e;
   _rtsFootprint(e, true);
+  _rtsFlushForPlacement(e);
   _rtsRecalcPower(side);
   /* Only a pre-placed (instant) structure hands over its free unit here. A structure that
      has to be built delivers it in _rtsUpdateStruct when construction finishes - granting
      it in both places gave every constructed refinery two harvesters for the price of one. */
-  if (instant && d.freeUnit) _rtsSpawnAt(side, d.freeUnit, e);
+  if (instant) _rtsGrandOpening(e);
   return e;
 }
 /* BUILDING.CPP Find_Exit_Cell(): a new unit does not appear inside the building, it walks
@@ -476,6 +491,17 @@ function _rtsExitCell(src, prefX, prefZ) {
     if (best) return best;
   }
   return _rtsNearestOpen(_rtsTX(src.x), _rtsTX(src.z), 14);
+}
+/* Grand_Opening, guarded by HasOpened. BUILDING.H keeps that flag precisely so that "multiple
+   inadvertant calls to Grand_Opening won't cause problems" - which is the exact bug that once
+   gave every constructed refinery two harvesters, because the free unit was handed out at
+   placement AND again when construction finished. The flag makes that impossible rather than
+   merely fixed. */
+function _rtsGrandOpening(e) {
+  if (e.opened) return;
+  e.opened = 1;
+  var d = rtsStructDef(e.def);
+  if (d.freeUnit) _rtsSpawnAt(e.side, d.freeUnit, e);
 }
 /* Exit_Object: put the unit on a clear exit cell, and give a harvester leaving a refinery
    its harvest order straight away rather than leaving it parked by the door. */
@@ -524,6 +550,7 @@ function _rtsKill(e) {
        So a cheap power plant going up does not move the camera at all and the war factory
        rattles the whole screen - the shake reports what you just lost. */
     G.shake = Math.min(1, G.shake + ((rtsStructDef(e.def).cost / 400) | 0) * 0.12);
+    e.wreck = RTS_WRECK_TIME;      /* CountDown: burn on the map before being removed */
     /* Drop_Debris marks every cell the building stood on: mostly craters, some scorch. */
     _rtsWreckGround(e);
     _rtsDropDebris(e);
@@ -542,7 +569,9 @@ function _rtsKill(e) {
   if (typeof _rtsSfx === 'function')
     _rtsSfx(e.selling ? 'place' : (e.type === 'struct' ? 'boom' : 'pop'), e.x, e.z);
   if (e.side === 'player' && e.type === 'unit') G.stats.lostU++;
-  if (e.side === 'enemy') G.stats.killed++;
+  /* WhoLastHurtMe: a thing that burns to death is still someone's kill. Scoring it off the
+     victim's side alone credited the player for units the AI's own fires finished off. */
+  if (e.side === 'enemy' && (!e.hurtBy || e.hurtBy === 'player')) G.stats.killed++;
   var si = G.sel.indexOf(e); if (si >= 0) G.sel.splice(si, 1);
 }
 
@@ -585,6 +614,9 @@ function _rtsEvacuate(e, n, scared) {
   return out;
 }
 function _rtsDropDebris(e) {
+  /* IsSurvivorless: "destroyed by some method that would prevent survivors". A building that
+     burned down has no crew left to run out of it. */
+  if (e.burned) return;
   var n = 0, want = _rtsSurvivorCount(e);
   for (var i = 0; i < want; i++) if (Math.random() < RTS_SURVIVOR_ODDS) n++;
   if (n) _rtsEvacuate(e, n, true);
@@ -655,7 +687,7 @@ function _rtsAnimAI(dt) {
           if (f.acc >= 1) {
             var dmg = Math.floor(f.acc); f.acc -= dmg;
             host.hp -= dmg;
-            if (host.hp <= 0) { _rtsKill(host); f.att = 0; }
+            if (host.hp <= 0) { host.burned = 1; _rtsKill(host); f.att = 0; }
           }
         }
       }
@@ -916,6 +948,7 @@ function _rtsDamage(tgt, dmg, from, floor) {
   tgt.hp -= dmg;
   tgt.hitT = 0.18;
   /* an idle unit that gets shot shoots back instead of standing there */
+  if (from && from.side) tgt.hurtBy = from.side;     /* WhoLastHurtMe, for the kill credit */
   if (tgt.type === 'unit' && from && !tgt.order && rtsUnitDef(tgt.def).weapon) { tgt.order = 'attack'; tgt.target = from; }
   if (tgt.hp <= 0) _rtsKill(tgt);
   else if (tgt.type === 'unit' && rtsUnitDef(tgt.def).kind === 'infantry') {
@@ -1134,11 +1167,21 @@ function _rtsUpdateHarvester(e, dt, d) {
   } else if (e.hstate === 'toRef') {
     var ref = _rtsNearestRefinery(e);
     if (!ref) { e.path = null; return; }
+    /* Docking_Coord: a harvester drives to the refinery's DOCK, not its centre. Pathing at
+       the centre of a 3x3 building means every harvester aims at a blocked cell, stops
+       wherever the crowd stops, and they pile up on whichever side they arrived from. */
+    var dock = _rtsDockCoord(ref);
     /* generous docking radius: a harvester that stops one tile short of the strict range
        would otherwise hover beside the refinery without ever unloading */
-    if (_rtsRangeTo(e, ref) < RTS_TILE * 2.2) { e.path = null; e.hstate = 'unload'; e.ref = ref; return; }
+    /* Arrive at the dock, but unload from anywhere alongside the building: four harvesters
+       converging on one point shove each other back out of a strict dock radius, and the one
+       at the back of the queue never finishes its trip. The dock is the destination, not a
+       condition. */
+    if (Math.hypot(e.x - dock.x, e.z - dock.z) < RTS_TILE * 1.6 || _rtsRangeTo(e, ref) < RTS_TILE * 2.2) {
+      e.path = null; e.hstate = 'unload'; e.ref = ref; return;
+    }
     e.rep = (e.rep || 0) - dt;
-    if (!e.path || e.rep <= 0) { e.goal = { x:ref.x, z:ref.z }; e.path = _rtsPath(e.x, e.z, ref.x, ref.z); e.pi = 0; e.rep = 1.5; if (!e.path) return; }
+    if (!e.path || e.rep <= 0) { e.goal = { x:dock.x, z:dock.z }; e.path = _rtsPath(e.x, e.z, dock.x, dock.z); e.pi = 0; e.rep = 1.5; if (!e.path) return; }
     _rtsSteer(e, dt, d);
   } else if (e.hstate === 'unload') {
     if (!e.ref || e.ref.dead) { e.hstate = 'toRef'; return; }
@@ -1167,6 +1210,12 @@ function _rtsNearestScrap(e) {
     if (s < bs) { bs = s; best = { tx:tx, tz:tz }; }
   }
   return best;
+}
+/* BUILDING.H Docking_Coord: the point a harvester actually parks at. South face of the
+   refinery, one tile clear of the footprint - the same side the free harvester exits from. */
+function _rtsDockCoord(ref) {
+  var d = rtsStructDef(ref.def);
+  return { x:_rtsWX(ref.tx) + (d.w - 1) * RTS_TILE / 2, z:_rtsWX(ref.tz + d.h) };
 }
 function _rtsNearestRefinery(e) {
   var G = window._rtsG, best = null, bd = 1e9;
@@ -1200,7 +1249,7 @@ function _rtsUpdateStruct(e, dt) {
     e.bprog += dt / Math.max(0.5, d.build * 0.5) * _rtsPowerFactor(e.side);
     e.hp = d.hp * (0.15 + 0.85 * Math.min(1, e.bprog));
     if (e.bprog >= 1) { e.bprog = 1; e.building = 0; e.hp = d.hp; _rtsRecalcPower(e.side);
-      if (d.freeUnit) _rtsSpawnAt(e.side, d.freeUnit, e); }
+      _rtsGrandOpening(e); }
     return;
   }
   if (e.repair) _rtsRepairAI(e, dt);
@@ -1492,7 +1541,16 @@ function _rtsTick(dt) {
     }
     if (!RTS_ANIMS[fxi.kind] && fxi.t > 0.75) G.fx.splice(i, 1);
   }
-  for (i = G.ents.length - 1; i >= 0; i--) if (G.ents[i].dead && G.ents[i].reaped) G.ents.splice(i, 1);
+  /* CountDown. A destroyed structure keeps burning on the map for a moment before it is
+     actually removed; everything else is reaped as soon as its death effects are in flight.
+     Nothing set `reaped` before this, so dead entities accumulated in the list forever. */
+  for (i = G.ents.length - 1; i >= 0; i--) {
+    e = G.ents[i];
+    if (!e.dead) continue;
+    if (e.wreck > 0) { e.wreck -= dt; continue; }
+    G.ents.splice(i, 1);
+    delete G.byId[e.id];
+  }
 
   /* win / lose: losing every structure ends it, the way it did in the originals */
   var pAlive = 0, eAlive = 0;

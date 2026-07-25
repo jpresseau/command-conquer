@@ -200,6 +200,30 @@ Animation state that is purely visual (door stage, blink phase) lives in `_rtsR.
 by entity id, **not** on the entity — the simulation stays renderer-free, which is what lets
 a whole battle be stepped headlessly.
 
+Five more from this header, all of them things a building needs in order to feel like an
+object rather than a token:
+
+- **`CountDown`** — "if the building is destroyed, it won't actually be removed from the map
+  until this value reaches zero. This delay is for cosmetic reasons." A structure deleted on
+  the frame it dies leaves its own explosion hanging over bare grass. The wreck now stays for
+  `RTS_WRECK_TIME`, darkening and sinking with fire on it, and is removed after. This is also
+  what finally reaps the entity list: nothing ever set `reaped`, so dead entities accumulated
+  in `G.ents` for the whole match.
+- **`Grand_Opening` guarded by `HasOpened`** — the flag exists so that "multiple inadvertant
+  calls to Grand_Opening won't cause problems", which is the exact bug that once gave every
+  constructed refinery two harvesters (granted at placement *and* again on completion). The
+  guard makes it impossible rather than merely fixed.
+- **`Docking_Coord`** — a harvester drives to the refinery's dock face, not its centre.
+  Measured as **income-neutral** (A/B over three seeds × four minutes: 33.6k vs 34.4k, seeds
+  disagreeing on direction) — it is a positional fix, so harvesters queue on one side instead
+  of piling up on whichever side they happened to arrive from. Don't claim it earns more.
+- **`Flush_For_Placement`** — units do not block a structure going up, so anything standing on
+  a new footprint is shoved clear. Once the AI started building enough structures it landed
+  on its own army, leaving units embedded in walls.
+- **`WhoLastHurtMe`** and **`IsSurvivorless`** — a thing that burns to death is still someone's
+  kill (scoring off the victim's side alone credited the player for units the AI's own fires
+  finished off), and a building that burned down has no crew left to run out of it.
+
 ## Structures have a life — from BUILDING.CPP
 
 The implementation file, and it is mostly about a building being a *thing that runs* rather

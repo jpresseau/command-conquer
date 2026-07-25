@@ -202,7 +202,7 @@ function _rtsRFrame(dt) {
      on a lawn; a scuffed earth apron is what makes it look built. --- */
   for (i = 0; i < G.ents.length; i++) {
     var pe = G.ents[i];
-    if (pe.dead || pe.type !== 'struct') continue;
+    if (pe.type !== 'struct' || (pe.dead && !(pe.wreck > 0))) continue;
     var pd = rtsStructDef(pe.def);
     var pad = S.pad[pe.def];
     var pw = Math.round(pad.width * TSscale), ph = Math.round(pad.height * TSscale);
@@ -216,7 +216,9 @@ function _rtsRFrame(dt) {
   var draw = [];
   for (i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.dead) continue;
+    /* CountDown: a destroyed structure is still on the map, burning, for a moment. Dropping
+       it on the frame it died left its own explosion hanging over bare grass. */
+    if (e.dead && !(e.type === 'struct' && e.wreck > 0)) continue;
     if (e.z < R.focus.z - R.H / z || e.z > R.focus.z + R.H / z) continue;
     if (e.x < R.focus.x - R.W / z || e.x > R.focus.x + R.W / z) continue;
     draw.push(e);
@@ -332,6 +334,29 @@ function _rtsDrawStruct(g, e, TSscale, cell) {
     g.fillStyle = '#cfe6ff';
     g.globalAlpha = 0.75;
     g.fillRect(px, edge - band, w, band);                          /* construction beam */
+    g.globalAlpha = 1;
+    return;
+  }
+  if (e.dead) {
+    /* CountDown: the wreck. Darkened, sinking slightly and fading out over its last moments,
+       with fire on top - so a destroyed building collapses rather than being deleted. */
+    var k = Math.max(0, Math.min(1, e.wreck / RTS_WRECK_TIME));
+    var sink = Math.round(h * (1 - k) * 0.16);
+    g.save();
+    g.globalAlpha = 0.35 + k * 0.6;
+    g.beginPath(); g.rect(px, top + sink, w, h - sink); g.clip();
+    g.drawImage(spr.c, px, top, w, h);
+    /* burn it down to a silhouette as it goes */
+    g.globalCompositeOperation = 'source-atop';
+    g.fillStyle = 'rgba(14,12,12,' + (0.45 + (1 - k) * 0.4).toFixed(2) + ')';
+    g.fillRect(px, top, w, h);
+    g.restore();
+    g.globalAlpha = 1;
+    var ffr = _rtsAnimFrame() % R.spr.fire.length, fimg = R.spr.fire[ffr];
+    var fws = Math.round(fimg.width * TSscale * (0.9 + def.w * 0.35));
+    var fhs = Math.round(fimg.height * TSscale * (0.9 + def.w * 0.35));
+    g.globalAlpha = Math.min(1, k * 1.6);
+    g.drawImage(fimg, Math.round(_rtsSX(e.x) - fws / 2), Math.round(_rtsSY(e.z) - fhs * 0.75), fws, fhs);
     g.globalAlpha = 1;
     return;
   }

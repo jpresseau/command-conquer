@@ -139,6 +139,11 @@ var RTS_REFUND_PCT = 0.5;       /* Rule.RefundPercent: sell gives back half */
 var RTS_SURVIVOR_FRACTION = 0.5;/* Rule.SurvivorFraction, used by How_Many_Survivors */
 var RTS_SURVIVOR_ODDS = 0.5;    /* Drop_Debris only rolls some of them out of a wreck */
 var RTS_DECON_TIME = 0.35;      /* Mission_Deconstruction: build-up run backwards, this x build */
+/* BUILDING.H CountDown: "if the building is destroyed, it won't actually be removed from the
+   map until this value reaches zero. This delay is for cosmetic reasons." A structure that
+   vanishes on the frame it dies leaves its own explosion hanging in mid-air over bare grass.
+   The wreck stays, burning, and only then is taken off the map. */
+var RTS_WRECK_TIME = 3.0;
 
 /* --------------------------------------------------------------- combat --
    COMBAT.CPP's Modify_Damage is the whole of the blast model, and its falloff is a DIVISION,
