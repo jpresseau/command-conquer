@@ -569,7 +569,10 @@ function _rtsRResize(W, H) {
 }
 function _rtsRDispose() {
   if (_rtsR && _rtsR.terrain) { _rtsR.terrain.width = 1; _rtsR.terrain.height = 1; }  /* 2688^2 is ~29 MB */
-  _rtsR = null; _RTS_SPR = null;
+  /* _RTS_UFIT caches a measured canvas size per unit type. It is pure geometry, so it would
+     survive a dispose harmlessly - but a harness that pokes R3_K between runs would then bake
+     into stale squares, so it dies with the rest of the sprite cache. */
+  _rtsR = null; _RTS_SPR = null; _RTS_UFIT = {};
 }
 
 /* ------------------------------------------------------------- sidebar icons --

@@ -32,7 +32,17 @@
    `y + K*z` increases toward the camera. Every pixel is depth-tested against it, so models
    can interpenetrate freely without any face sorting. */
 
-var R3_K = 0.8;                       /* how far a unit of height climbs the screen */
+/* How far a unit of model height climbs the screen. This one constant decides whether a
+   building reads as a volume or as a plate lying on the grass, and 0.8 was much too low: a
+   50-unit-tall structure rose only 40px above a 72px footprint, so the roof dominated the
+   sprite and the walls were a thin band beneath it. At 1.3 the same models show a real front
+   elevation and the silhouettes that were already built into them become visible.
+
+   Raising it cannot break footprint alignment, because the ground plane is not foreshortened
+   at all - K multiplies HEIGHT only. The extra rise lands in `head`, the headroom above the
+   footprint that _r3BakeFootprint measures and the renderer offsets by, so a 3x3 building
+   still covers exactly its 72x72 pixels of ground. */
+var R3_K = 1.3;
 var R3_AMB = 0.30, R3_DIF = 0.72;     /* ambient / diffuse split */
 var R3_STEPS = 9;                     /* quantise shading - period renderers banded, and
                                          banding also keeps the palette tight */
@@ -347,4 +357,22 @@ function _r3BakeFootprint(faces, footW, footD) {
 /* Render a model centred in a square - used for units, which are not grid-aligned. */
 function _r3BakeCentred(faces, size) {
   return _r3Render(faces, size, size, size / 2, size / 2);
+}
+/* The square a model needs so that NO facing clips. _r3BakeCentred centres on the model's
+   ORIGIN, not on its bounds, so a tall model runs off the top long before it runs off the
+   sides - and a unit is yawed to eight facings, each with different extents, so the answer is
+   the worst case over all eight rather than the bounds of the one you happen to measure.
+
+   This exists because hand-picked canvas sizes are a trap: raising R3_K lifted every roofline
+   by 60% and silently sheared the top off the infantry and the gun off the tank. Measuring
+   costs a few milliseconds once at load and cannot go stale. */
+function _r3FitSize(models, margin) {
+  var r = 0;
+  for (var i = 0; i < models.length; i++) {
+    for (var f = 0; f < 8; f++) {
+      var b = _r3Bounds(_r3Yaw(models[i], -f / 8 * Math.PI * 2));
+      r = Math.max(r, Math.abs(b.x0), Math.abs(b.x1), Math.abs(b.y0), Math.abs(b.y1));
+    }
+  }
+  return Math.ceil(r * 2) + margin * 2;
 }

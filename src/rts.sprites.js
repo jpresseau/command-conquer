@@ -558,11 +558,30 @@ function _sprBuilding(key, side) {
 /* part: undefined = the whole unit, 'hull' = body only, 'turret' = turret only. Hull and
    turret bake into the same size canvas about the same origin, so drawing one over the other
    at the same screen position lines them up with no per-facing offset table. */
-function _sprUnit(key, side, prone, part) {
+function _sprUnitModel(key, side, prone, part) {
   var d = rtsUnitDef(key), TM = RTS_PAL.team[side];
   var S = RTS_PAL.steel, DK = RTS_PAL.dark, O = RTS_PAL.ore;
-  var size = key === 'harvester' ? 30 : (d.kind === 'infantry' ? 16 : 26);
   var m = [], i;
+
+  /* Road wheels and a track run - the detail that separates a tracked vehicle from a box with
+     dark stripes down its sides. The wheels sit proud of the hull, the skirt caps them, so at a
+     diagonal facing you read wheel, skirt and hull as three separate values instead of one.
+
+     _r3Cyl is a VERTICAL cylinder - its h runs along y - so anything lying along the ground has
+     to be built from boxes. The road wheels are therefore a row of small blocks stepped proud of
+     the track run rather than actual discs, which at this size reads the same and costs less. */
+  function tracks(len, zoff, wheels, rad) {
+    for (var s = -1; s <= 1; s += 2) {
+      var z = s * zoff;
+      _r3Slab(m, 0, 0, z, len, rad * 2.1, rad * 2.0, 0.9, DK[0], DK[1]);      /* track run */
+      for (var k = 0; k < wheels; k++) {
+        var wx = (k - (wheels - 1) / 2) * (len - rad * 2.4) / (wheels - 1);
+        _r3Box(m, wx, rad * 0.45, z + s * rad * 0.5, rad * 1.5, rad * 1.2, rad * 1.1,
+               (k % 2) ? DK[2] : DK[1], DK[2]);
+      }
+      _r3Box(m, 0, rad * 2.0, z, len - 1, 1.2, rad * 2.4, TM[2], TM[1]);      /* fender skirt */
+    }
+  }
 
   if (d.kind === 'infantry') {
     /* Two figures, offset so a squad does not read as one blob. +x is the nose.
@@ -576,10 +595,22 @@ function _sprUnit(key, side, prone, part) {
         _r3Box(m, mx + 2.6, 0, mz, 2.4, 2, 2.4, '#c8a882', '#d8bc96');
         _r3Box(m, mx + 5, 0.6, mz, 5, 1, 1, DK[1], DK[3]);         /* weapon, braced */
       } else {
-        _r3Box(m, mx, 0, mz, 3.5, 5, 3, TM[0], TM[1]);             /* torso */
-        _r3Box(m, mx, 5, mz, 3, 2, 3, '#c8a882', '#d8bc96');       /* helmet */
-        if (key === 'rocket') _r3Box(m, mx + 3, 4, mz, 7, 1.6, 1.6, DK[1], DK[3]);
-        else _r3Box(m, mx + 3, 3.5, mz, 5, 1, 1, DK[1], DK[3]);
+        /* A soldier has to read as a figure at about 10 pixels, so it gets legs, a torso that
+           narrows into shoulders, and a helmet with a brim - three stacked shapes of different
+           widths. One box was a domino. */
+        _r3Box(m, mx, 0, mz - 0.9, 1.7, 2.6, 1.4, DK[1], DK[2]);   /* legs */
+        _r3Box(m, mx, 0, mz + 0.9, 1.7, 2.6, 1.4, DK[1], DK[2]);
+        _r3Box(m, mx, 2.4, mz, 3.2, 3.4, 3.2, TM[0], TM[1]);       /* torso */
+        _r3Box(m, mx - 0.4, 5.0, mz, 3.8, 0.9, 3.8, TM[1], TM[3]); /* shoulders/webbing */
+        _r3Box(m, mx, 5.9, mz, 2.2, 1.5, 2.2, '#c8a882', '#d8bc96');   /* head */
+        _r3Box(m, mx - 0.3, 7.0, mz, 3.0, 0.9, 3.0, TM[2], '#d8bc96'); /* helmet brim */
+        if (key === 'rocket') {
+          _r3Box(m, mx + 2.0, 5.2, mz - 0.6, 7.5, 1.8, 1.8, DK[1], DK[3]);  /* launch tube */
+          _r3Box(m, mx - 2.2, 5.2, mz - 0.6, 2.0, 2.2, 2.2, DK[0], DK[2]);  /* back blast end */
+        } else {
+          _r3Box(m, mx + 2.4, 4.4, mz - 0.5, 5.2, 0.9, 0.9, DK[1], DK[3]);  /* rifle */
+          _r3Box(m, mx + 0.4, 4.0, mz - 0.5, 1.6, 1.4, 1.0, DK[0], DK[2]);  /* stock */
+        }
       }
     }
   } else if (key === 'tank') {
@@ -588,29 +619,57 @@ function _sprUnit(key, side, prone, part) {
        model origin - which is what lets a tank drive one way while its gun tracks another.
        `part` selects which half to build. */
     if (part !== 'turret') {
-      _r3Box(m, 0, 0, -6, 19, 4, 5, DK[0], DK[1]);                 /* tracks */
-      _r3Box(m, 0, 0, 6, 19, 4, 5, DK[0], DK[1]);
-      _r3Box(m, 0, 3, 0, 18, 4, 10, TM[0], TM[1]);                 /* hull */
+      tracks(20, 6.4, 5, 2.4);
+      /* Lower hull, then a sloped glacis over it. The taper is what stops the front reading
+         as one flat rectangle - it splits the nose into two shading bands. */
+      _r3Slab(m, 0, 3.4, 0, 18, 3.6, 10.5, 1.1, TM[0], TM[1]);
+      _r3Hip(m, -1, 7.0, 0, 17, 1.9, 10.5, 2.6, TM[1]);            /* deck, tapered */
+      _r3Box(m, 7.6, 3.4, 0, 3.2, 3.4, 9.4, TM[1], TM[3]);         /* glacis plate */
+      _r3Box(m, -7.4, 5.0, 3.2, 3.4, 2.0, 3.0, S[2], S[1]);        /* stowage box */
+      _r3Cyl(m, -8.6, 4.2, -3.4, 1.0, 2.6, DK[1], DK[3], 8);       /* exhaust */
     }
     if (part !== 'hull') {
-      _r3Box(m, 0, 7, 0, 10, 4, 9, TM[1], TM[3]);                  /* turret, centred on its pivot */
-      _r3Box(m, 8, 8, 0, 13, 1.8, 1.8, DK[1], DK[3]);              /* barrel */
+      /* Turret: a tapered housing with a mantlet and a muzzle brake, centred on its pivot so
+         it can rotate independently of the hull. */
+      _r3Slab(m, -0.6, 8.6, 0, 10.5, 3.4, 9.0, 1.0, TM[1], TM[3]);
+      _r3Hip(m, -0.6, 12.0, 0, 9.5, 1.4, 8.2, 2.0, TM[3]);
+      _r3Box(m, 5.0, 9.4, 0, 3.0, 2.6, 4.2, DK[1], DK[3]);         /* mantlet */
+      _r3Box(m, 11.0, 9.9, 0, 9.0, 1.7, 1.7, DK[1], DK[3]);        /* barrel, along +x */
+      _r3Box(m, 15.8, 9.7, 0, 2.2, 2.2, 2.2, DK[0], DK[3]);        /* muzzle brake */
+      _r3Cyl(m, -3.4, 12.6, 1.6, 1.5, 1.0, S[1], S[0], 10);        /* commander's hatch */
+      _r3Box(m, -4.6, 13.0, -2.6, 0.6, 4.5, 0.6, DK[1], DK[3]);    /* aerial */
     }
   } else if (key === 'buggy') {
+    /* Wheels are the buggy's whole identity, so they are proper vertical cylinders standing
+       clear of the body with a light hub - four round shapes at the corners read instantly as
+       "wheeled" against the tank's four square track runs. */
     for (i = 0; i < 4; i++) {
-      _r3Cyl(m, i < 2 ? 6 : -6, 0, (i % 2) ? 5.5 : -5.5, 3, 3.5, DK[0], DK[1], 8);
+      var bx = i < 2 ? 6.2 : -6.2, bz = (i % 2) ? 6.0 : -6.0;
+      _r3Cyl(m, bx, 0, bz, 3.1, 3.4, DK[0], DK[1], 12);
+      _r3Cyl(m, bx, 1.0, bz, 1.4, 2.6, S[2], S[1], 10);            /* hub */
     }
-    _r3Box(m, 0, 2.5, 0, 17, 3.5, 8, TM[0], TM[1]);                /* body */
-    _r3Box(m, -2, 6, 0, 7, 3, 7, TM[2], RTS_PAL.glass);            /* open cockpit */
-    _r3Box(m, 4, 8, 0, 9, 1.4, 1.4, DK[1], DK[3]);                 /* pintle gun */
+    _r3Slab(m, 0, 2.8, 0, 17, 3.2, 8.2, 1.0, TM[0], TM[1]);        /* body tub */
+    _r3Box(m, 6.6, 3.2, 0, 3.6, 2.2, 7.6, TM[1], TM[3]);           /* sloped nose */
+    _r3Box(m, -1.5, 6.0, 0, 7.5, 2.8, 7.0, DK[2], DK[1]);          /* open cockpit well */
+    _r3Box(m, -1.5, 6.4, -3.2, 6.5, 2.2, 0.9, TM[2], TM[1]);       /* roll bar sides */
+    _r3Box(m, -1.5, 6.4, 3.2, 6.5, 2.2, 0.9, TM[2], TM[1]);
+    _r3Box(m, -4.8, 6.0, 0, 1.0, 4.6, 7.0, TM[1], TM[3]);          /* roll hoop */
+    _r3Box(m, 3.2, 8.4, 0, 8.5, 1.3, 1.3, DK[1], DK[3]);           /* pintle gun */
+    _r3Box(m, -7.6, 4.2, 0, 2.2, 1.6, 5.0, S[2], S[1]);            /* spare/rack */
   } else if (key === 'harvester') {
-    _r3Box(m, 0, 0, -7.5, 22, 5, 6, DK[0], DK[1]);                 /* heavy tracks */
-    _r3Box(m, 0, 0, 7.5, 22, 5, 6, DK[0], DK[1]);
-    _r3Box(m, -5, 4, 0, 15, 8, 13, S[0], S[1]);                    /* hopper */
-    _r3Box(m, -5, 12, 0, 12, 1, 10, O[0], O[1]);                   /* ore heaped in it */
-    _r3Box(m, 8, 4, 0, 8, 7, 11, TM[0], TM[1]);                    /* cab */
-    _r3Box(m, 11, 6, 0, 2, 4, 8, RTS_PAL.glass, RTS_PAL.glass);
-    _r3Box(m, 14, 0, 0, 4, 3, 15, DK[1], DK[3]);                   /* intake blade */
+    tracks(23, 7.8, 6, 2.9);                                       /* heavy tracks */
+    _r3Slab(m, -4.5, 5.0, 0, 16, 7.5, 13.5, 1.2, S[0], S[1]);      /* hopper */
+    for (i = 0; i < 4; i++)                                        /* ribs down the hopper */
+      _r3Box(m, -11 + i * 4.4, 5.0, 0, 1.0, 7.2, 14.0, S[2], S[1]);
+    _r3Box(m, -4.5, 12.4, 0, 13, 1.0, 10.5, O[0], O[1]);           /* ore heaped in it */
+    _r3Box(m, -4.5, 12.9, -1.5, 8, 0.8, 5.0, O[1], O[2]);
+    _r3Slab(m, 8.0, 5.0, 0, 8, 7.5, 11.5, 1.0, TM[0], TM[1]);      /* cab */
+    _r3Box(m, 11.6, 8.0, 0, 1.6, 3.4, 8.4, RTS_PAL.glass, RTS_PAL.glass);
+    _r3Box(m, 8.0, 12.6, 0, 6.5, 0.9, 9.5, TM[1], TM[3]);          /* cab roof */
+    _r3Cyl(m, 4.6, 12.6, -3.6, 0.9, 3.2, DK[1], DK[3], 8);         /* stack */
+    _r3Box(m, 14.5, 0.8, 0, 4.5, 2.6, 15.5, DK[1], DK[3]);         /* intake blade */
+    for (i = 0; i < 5; i++)                                        /* cutter teeth */
+      _r3Box(m, 16.6, 0.8, -6 + i * 3, 1.6, 2.0, 1.4, S[1], S[0]);
   } else {
     _r3Box(m, 0, 0, -5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 0, 5, 15, 3.5, 4, DK[0], DK[1]);
@@ -618,6 +677,21 @@ function _sprUnit(key, side, prone, part) {
     _r3Box(m, 4, 6, 0, 8, 1.4, 1.4, DK[1], DK[3]);
   }
 
+  return m;
+}
+/* The canvas every variant of one unit bakes into. It has to be the SAME square for all of
+   them: hull and turret are drawn at the same screen position and would separate otherwise,
+   and a prone squad that changed size would jump. So the size is measured from the union of
+   every variant, at every facing, and memoised per key. */
+var _RTS_UFIT = {};
+function _sprUnitFit(key, side) {
+  if (_RTS_UFIT[key] != null) return _RTS_UFIT[key];
+  var models = [_sprUnitModel(key, side, false, null)];
+  if (rtsUnitDef(key).kind === 'infantry') models.push(_sprUnitModel(key, side, true, null));
+  return (_RTS_UFIT[key] = _r3FitSize(models, 2));
+}
+function _sprUnit(key, side, prone, part) {
+  var m = _sprUnitModel(key, side, prone, part), size = _sprUnitFit(key, side);
   var frames = [];
   for (var f = 0; f < 8; f++) {
     var cv = _r3BakeCentred(_r3Yaw(m, -f / 8 * Math.PI * 2), size);
