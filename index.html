@@ -502,6 +502,11 @@ var RTS_ALERT_DELAY = 25;       /* Rule.SpeakDelay: cooldown on "base under atta
 var RTS_DAMAGE_DELAY = 20;      /* seconds between brownout damage ticks */
 var RTS_POWER_DAMAGE = 6;       /* hit points per tick, on buildings above ConditionYellow */
 
+/* Cap on how many producing buildings the opponent may parallelise; see _rtsLines. Two is
+   its own structure limit for both factories and barracks, so this is a ceiling rather than a
+   constraint today - it exists so raising RTS_AI.limit cannot silently uncap production. */
+var RTS_AI_MAX_LINES = 2;
+
 var RTS_AI = {
   baseSizeAdd:3,
   powerSurplus:50,          /* keep this much spare power in hand */
@@ -3564,11 +3569,36 @@ function _rtsProdRecalc(side) {
   }
   return lost;
 }
+/* How many buildings are actually producing this category. In RA a FactoryClass belongs to
+   a BUILDING, so a house with two war factories genuinely builds two things at once; here
+   there is one queue per category, which is right for the PLAYER - the classic sidebar works
+   exactly that way - but for the opponent it meant a second war factory and a second barracks
+   did nothing whatsoever.
+
+   That is not a cosmetic waste. Measured on hard at five minutes, the opponent sits at every
+   structure limit (refinery 4, barracks 2, factory 2, turret 12), so _rtsAIWants returns null
+   and the structure line is permanently idle, while the unit lines run at 0% idle and cannot
+   absorb the income. The result was 28,576 banked credits it had no way to spend.
+
+   Scaling the build RATE by the number of producing buildings keeps the single queue - and
+   therefore the whole sidebar model - while making the second factory mean something. Cost
+   scales with rate automatically, so the money is genuinely spent rather than conjured. */
+function _rtsLines(side, cat) {
+  if (side === 'player') return 1;               /* the sidebar is one line per category */
+  var G = window._rtsG, key = cat === 'infantry' ? 'barracks' : (cat === 'vehicle' ? 'factory' : null);
+  if (!key) return 1;
+  var n = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (!e.dead && !e.building && !e.selling && e.side === side && e.def === key) n++;
+  }
+  return Math.max(1, Math.min(RTS_AI_MAX_LINES, n));
+}
 function _rtsTickProduction(side, dt) {
   var G = window._rtsG, S = G.sides[side], pf = _rtsPowerFactor(side), cat;
   for (cat in S.q) {
     var q = S.q[cat]; if (!q || q.hold) continue;  /* a suspended line spends nothing */
-    var rate = dt / q.total * pf;                  /* fraction of the job done this step */
+    var rate = dt / q.total * pf * _rtsLines(side, cat);   /* fraction of the job done this step */
     var want = q.cost * rate;
     if (want > S.credits) { want = S.credits; rate = q.cost > 0 ? want / q.cost : rate; }
     if (q.cost > 0 && want <= 0) continue;          /* broke: the line stalls, as it should */
