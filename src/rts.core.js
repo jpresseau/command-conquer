@@ -1067,7 +1067,10 @@ function _rtsZoneCache() {
 function _rtsEvalObject(e, o, dist, w) {
   var d = rtsStructDef(o.def) || rtsUnitDef(o.def);
   if (!d) return 0;
-  /* A weapon that cannot hurt the thing at all should never choose it. */
+  /* A weapon that cannot hurt the thing at all should never choose it - and for a
+     two-weapon object the question is asked of its BEST weapon against this armour, or a
+     tank would refuse to look at infantry its coaxial gun handles perfectly well. */
+  if (!w) w = _rtsPickWeapon(e, o);
   if (w && w.vs && !w.vs[rtsArmour(o)]) return 0;
 
   /* Value() = Risk + Reward, plus Crew.Kills - a unit that has been killing things is worth
@@ -1113,6 +1116,39 @@ function _rtsFindTarget(e, range, w) {
   }
   return best;
 }
+/* TECHNO.CPP What_Weapon_Should_I_Use. Every weapon this object carries is scored against
+   the candidate's armour - `Modifier[armor] * 1000`, DOUBLED when the target is already in
+   that weapon's range, and zeroed outright when it could not fire at all. Highest wins, and
+   the primary wins ties (the original returns 0 unless `w2 > w1` strictly).
+
+   The doubling is the interesting half: it biases toward the weapon that can shoot NOW over
+   the one that would be better after driving closer. */
+function _rtsGuns(e) {
+  var d = (e.type === 'struct') ? rtsStructDef(e.def) : rtsUnitDef(e.def);
+  var out = [];
+  if (d && d.weapon) out.push(RTS_WEAPONS[d.weapon]);
+  if (d && d.weapon2) out.push(RTS_WEAPONS[d.weapon2]);
+  return out;
+}
+function _rtsPickWeapon(e, tgt) {
+  var ws = _rtsGuns(e);
+  if (ws.length < 2) return ws[0];
+  var armour = rtsArmour(tgt), dist = _rtsRangeTo(e, tgt), best = ws[0], bv = -1;
+  for (var i = 0; i < ws.length; i++) {
+    var w = ws[i], mod = w.vs ? (w.vs[armour] || 0) : 1;
+    var v = mod * 1000;
+    if (dist <= w.range) v *= 2;
+    if (!mod) v = 0;                                  /* FIRE_CANT */
+    if (v > bv) { bv = v; best = w; }
+  }
+  return best;
+}
+/* The longest reach this object has, for "should I even look over there" questions. */
+function _rtsReach(e) {
+  var ws = _rtsGuns(e), r = 0;
+  for (var i = 0; i < ws.length; i++) if (ws[i].range > r) r = ws[i].range;
+  return r;
+}
 /* Threat_Range: 0 means "use weapon range", 1 means area guard - twice the weapon range,
    clamped. Every sight radius in this game is already inside the clamp, so it never binds
    here; it is kept because the clamp is the rule, not the current unit table. */
@@ -1137,7 +1173,7 @@ function _rtsThreatRange(e, control, w) {
 function _rtsMuzzleAngle(e) {
   return e.type === 'struct' ? e.rot : e.turret;
 }
-function _rtsFireCoord(e) {
+function _rtsFireCoord(e, w) {
   var reach;
   if (e.type === 'struct') reach = RTS_MUZZLE_STRUCT;
   else {
@@ -1145,13 +1181,33 @@ function _rtsFireCoord(e) {
     reach = (d.r || 1) * (RTS_TURRETED[e.def] ? RTS_MUZZLE_TURRET : RTS_MUZZLE_HULL);
   }
   var a = _rtsMuzzleAngle(e);
-  return { x:e.x + Math.cos(a) * reach, z:e.z + Math.sin(a) * reach };
+  var x = e.x + Math.cos(a) * reach, z = e.z + Math.sin(a) * reach;
+  /* PrimaryLateral: the coordinate steps sideways off the barrel line, to the LEFT or the
+     RIGHT depending on IsSecondShot. That is how a two-barrel weapon visibly alternates. */
+  if (w && w.burst > 1) {
+    var s = (e.second === false ? 1 : -1) * RTS_MUZZLE_LATERAL;
+    x += Math.cos(a + Math.PI / 2) * s;
+    z += Math.sin(a + Math.PI / 2) * s;
+  }
+  return { x:x, z:z };
 }
 function _rtsFire(e, tgt, w) {
   var G = window._rtsG, bias = _rtsBias(e.side);
-  e.cool = w.cool * bias.rof; e.fire = 0.09;      /* ROFBias: higher = slower reload */
+  /* Rearm_Delay + Is_Two_Shooter. A burst weapon does NOT reload evenly: the delay assigned
+     after each shot alternates, so shots arrive as a fast pair and then a long wait, rather
+     than as a metronome. `IsSecondShot` starts true, so the first shot of a fresh unit takes
+     the full ROF and the pair forms after it. Recoil_Adjust's lateral offset rides the same
+     flag - a two-barrel weapon alternates sides, which is where the visible stagger in a
+     salvo comes from. */
+  if (w.burst > 1) {
+    e.cool = (e.second === false ? RTS_BURST_DELAY : w.cool * bias.rof);
+    e.second = (e.second === false);
+  } else {
+    e.cool = w.cool * bias.rof; e.second = true;  /* ROFBias: higher = slower reload */
+  }
+  e.fire = 0.09;
   e.recoil = RTS_RECOIL_TIME;                     /* Recoil_Adjust */
-  var m = _rtsFireCoord(e);
+  var m = _rtsFireCoord(e, w);
   /* "If a projectile was fired from a unit that is hidden in the darkness, reveal that unit
      and a little area around it." The muzzle flash gives away the shooter. */
   if (e.side !== 'player' && !_rtsVisible(_rtsTX(e.x), _rtsTX(e.z))) e.spot = RTS_MUZZLE_SPOT;
@@ -1482,7 +1538,7 @@ function _rtsUpdateUnit(e, dt) {
   var tgt = e.target;
   if (tgt && tgt.dead) { tgt = e.target = null; if (e.order === 'attack') e.order = null; }
   if (w && !tgt && (e.order === 'amove' || !e.order)) {
-    tgt = _rtsFindTarget(e, d.sight, w);
+    tgt = _rtsFindTarget(e, d.sight);
     if (tgt) { e.target = tgt; if (!e.order) { e.order = 'attack'; e.path = null; } }
   }
   if (w) {
@@ -1492,10 +1548,13 @@ function _rtsUpdateUnit(e, dt) {
        an assault lose fifty tanks while killing one defender. */
     var shootAt = null, chasing = false;
     if (tgt) {
-      if (_rtsRangeTo(e, tgt) <= w.range) shootAt = tgt;
-      else { chasing = true; shootAt = _rtsFindTarget(e, w.range, w); }
+      if (_rtsRangeTo(e, tgt) <= _rtsReach(e)) shootAt = tgt;
+      else { chasing = true; shootAt = _rtsFindTarget(e, _rtsReach(e)); }
     }
     if (shootAt) {
+      /* What_Weapon_Should_I_Use, re-asked per target: a tank switches to its coaxial gun
+         for infantry and back to the main gun for armour, without the player doing anything. */
+      var fw = _rtsPickWeapon(e, shootAt);
       /* turret tracks its mark even while the hull is still swinging round */
       var ta = Math.atan2(shootAt.z - e.z, shootAt.x - e.x), td = ta - e.turret;
       while (td > Math.PI) td -= Math.PI * 2; while (td < -Math.PI) td += Math.PI * 2;
@@ -1505,9 +1564,10 @@ function _rtsUpdateUnit(e, dt) {
       /* Can_Fire: FIRE_FACING unless the turret is lined up, and a homing weapon is four
          times more forgiving about it (Modify: `diff >>= 2`). A turret still rotating
          cannot fire at all unless its projectile homes - FIRE_ROTATING. */
-      var tol = w.speed > 0 && w.shot === 'missile' ? RTS_FIRE_ANGLE * 4 : RTS_FIRE_ANGLE;
-      var homing = w.shot === 'missile';
-      if (e.cool <= 0 && Math.abs(td) < tol && (homing || !e.tRot)) _rtsFire(e, shootAt, w);
+      var tol = fw.speed > 0 && fw.shot === 'missile' ? RTS_FIRE_ANGLE * 4 : RTS_FIRE_ANGLE;
+      var homing = fw.shot === 'missile';
+      if (e.cool <= 0 && Math.abs(td) < tol && (homing || !e.tRot)
+          && _rtsRangeTo(e, shootAt) <= fw.range) _rtsFire(e, shootAt, fw);
     } else if (!e.path) {
       /* no target: the turret returns to the hull's facing, as Rotation_AI does */
       var rd = e.rot - e.turret;

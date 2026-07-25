@@ -60,8 +60,11 @@ var RTS_UNITS = [
     desc:'Slow-firing missiles. Tears up vehicles and buildings.' },
   { key:'buggy',    name:'Scout Buggy',   kind:'vehicle',  cost:500,  build:7,  hp:170,  speed:16,  turn:3.2,r:1.6, sight:22, weapon:'mg',
     desc:'Fast RC scout. Shreds infantry, folds against tanks.' },
-  { key:'tank',     name:'Battle Tank',   kind:'vehicle',  cost:800,  build:11, hp:460,  speed:9,   turn:1.8,r:2.0, sight:18, weapon:'cannon',
-    desc:'The backbone of any serious attack.' },
+  /* weapon2: TECHNO.CPP's SecondaryWeapon. What_Weapon_Should_I_Use scores both against the
+     target's armour and takes the better, so the tank answers infantry with its coaxial gun
+     and armour with the main gun, with no input from the player. */
+  { key:'tank',     name:'Battle Tank',   kind:'vehicle',  cost:800,  build:11, hp:460,  speed:9,   turn:1.8,r:2.0, sight:18, weapon:'cannon', weapon2:'coax',
+    desc:'The backbone of any serious attack. Coaxial gun for infantry.' },
   { key:'harvester',name:'Harvester',     kind:'vehicle',  cost:1200, build:14, hp:700,  speed:7.5, turn:1.6,r:2.2, sight:14, weapon:null,
     harvest:true, capacity:700,
     desc:'Mines Scrap fields and unloads at a refinery.' }
@@ -78,7 +81,15 @@ var RTS_UNITS = [
 var RTS_WEAPONS = {
   rifle:     { dmg:7,  range:15, cool:0.55, shot:'tracer',  speed:0,   splash:0, vs:{ infantry:1.0, vehicle:0.35, building:0.25 } },
   mg:        { dmg:9,  range:16, cool:0.35, shot:'tracer',  speed:0,   splash:0, vs:{ infantry:1.0, vehicle:0.4,  building:0.3  } },
-  rocket:    { dmg:26, range:20, cool:2.1,  shot:'missile', speed:34,  splash:2, vs:{ infantry:0.5, vehicle:1.3,  building:1.2  } },
+  /* burst: Is_Two_Shooter. Rearm_Delay alternates the reload so the shots arrive as a fast
+     pair and then a long wait. Which weapons burst is a choice here, not ported data - RA
+     carries it in RULES.INI and this game has no equivalent - so it goes on the launcher,
+     where a visible two-missile salvo is the whole character of the unit. Per-missile damage
+     is halved against the old single shot and the reload retuned so the sustained output
+     lands where it was; see the measured figures in CLAUDE.md. */
+  rocket:    { dmg:13, range:20, cool:1.80, burst:2, shot:'missile', speed:34,  splash:2, vs:{ infantry:0.5, vehicle:1.3,  building:1.2  } },
+  /* A tank's coaxial machine gun: short, weak, and murder on infantry. */
+  coax:      { dmg:14, range:13, cool:0.32,  shot:'tracer',  speed:0,   splash:0, vs:{ infantry:1.0, vehicle:0.2,  building:0.15 } },
   cannon:    { dmg:38, range:18, cool:1.5,  shot:'shell',   speed:60,  splash:3, vs:{ infantry:0.7, vehicle:1.0,  building:1.0  } },
   turretgun: { dmg:22, range:22, cool:0.9,  shot:'shell',   speed:70,  splash:1, vs:{ infantry:1.0, vehicle:0.9,  building:0.6  } }
 };
@@ -296,6 +307,11 @@ function rtsSightTiles(def) {
 var RTS_TURRET_ROT = 3.0;       /* radians/second, the turret's own rate */
 var RTS_FIRE_ANGLE = 0.2;       /* ~11 degrees: Can_Fire's `diff < 8` out of 256 */
 var RTS_RECOIL_TIME = 0.12;     /* how long the turret sits recoiled after firing */
+/* Rearm_Delay: the SHORT half of a two-shooter's alternating reload. The original returns a
+   flat 3 ticks here regardless of the weapon, which at 15 FPS is a fifth of a second. */
+var RTS_BURST_DELAY = 0.2;
+/* PrimaryLateral: how far off the barrel line the second shot of a pair appears. */
+var RTS_MUZZLE_LATERAL = 0.5;
 /* TURRET.CPP Fire_Coord: how far the muzzle sits ahead of the object's centre, as a multiple
    of the body radius. A turret overhangs its hull, so its barrel reaches past the body; a
    hull-mounted gun fires from inside the silhouette. A defence structure gets a flat reach,
