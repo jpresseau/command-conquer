@@ -643,6 +643,56 @@ Commitment lands at 47% rather than the 62% asked for, and that is a real constr
 than a bug: a team only recruits units matching its composition, so a tank-heavy army cannot
 fill the rocket slots in Sappers. Raising it further means changing the compositions.
 
+## Selecting things — from DISPLAY.CPP
+
+Before this the whole selection vocabulary was: click, rubber band, control groups. That is
+less than any RTS of the era shipped with, and the missing commands are the ones a player
+reaches for every few seconds.
+
+**`Is_Players_Army` is the one predicate, and everything routes through it.** Player-controlled,
+selectable, *not a building*. That last clause is why dragging a band across your own base
+grabs the tanks parked in it and leaves the barracks alone. It lives here as `_rtsIsArmy(e)`
+and the band, the double-click, select-all, the object cycle and the team hotkeys all call it —
+one definition, so they cannot drift apart. Several of those used to inline their own copy.
+
+**`Next_Object` / `Prev_Object`** walk the ground layer for the next object passing that
+predicate, wrapping to the first when you run off the end and starting at the front when
+nothing is selected. `G.ents` is this game's ground layer and its order is stable for an
+entity's lifetime, so N walks the army in a fixed order rather than jumping about. Bound to
+**N** and **Shift+N**. The originals select *and centre*, and so does this — the point of the
+key is to go and look at the unit, not to tick a box off screen.
+
+**`Center_Map` with no argument** averages the selection's coordinates and puts the tactical
+view there. Bound to **Home**; with nothing selected it falls back to your command yard, which
+makes it the "where was I" key after chasing a raid across the map. `_rtsHandleTeam`'s alt case
+was doing this arithmetic inline and now calls `_rtsCenterOnSel` too.
+
+**Double-click a unit to select every one of its type in view.** Deliberately scoped to the
+tactical view, not the whole map — "all the ones I can see" is the useful command; "all the
+ones I own" is Ctrl+A. 350 ms window, re-armed on every click so a triple-click reads as two
+double-clicks rather than one double plus one dead click.
+
+**Ctrl+A is mine, not a port** — the originals have no select-all — but it runs through the
+same `Is_Players_Army` filter, so it takes the army and never the base.
+
+DISPLAY.CPP's small pixel threshold before `Mouse_Left_Held` engages rubber-band mode was
+already matched (`> 4` in `onmousemove`); nothing to change there.
+
+**Two things the harness caught that clicking would not have.** Ctrl+A shares its key with
+attack-move, so without the modifier check it armed attack-move as a side effect of selecting
+the army — a mode you would only notice on your next right-click. And the double-click test
+initially "failed" at 7-of-5 because the game spawns its own starting units: the expected count
+has to be measured from the world, not from what the harness placed. Assert against a value you
+derived, not one you assumed.
+
+The start screen's key list had also drifted — it never mentioned S, the team hotkeys or the
+radar orders. It now lists everything that is bound.
+
+Verified: 43 assertions across `sel.js` (predicate, double-click scoping, additive selection,
+cycle order/wrap/centre/recovery-when-the-held-unit-dies, `Center_Map` averaging and dead-member
+handling, team hotkeys and band select unregressed) and `selkeys.js` (the same commands driven
+through real DOM key and mouse events, plus 30 s of simulation afterwards).
+
 ## Commanding from the radar — from RADAR.CPP
 
 `RTacticalClass::Action` does something the minimap here did not: **with units selected, a
