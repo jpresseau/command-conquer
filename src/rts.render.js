@@ -176,6 +176,15 @@ function _rtsRFrame(dt) {
 
   /* --- new scorch marks and craters, stamped once into the baked terrain. Because the
      ground is a single canvas, a smudge costs nothing after the frame it appears on. --- */
+  if (G.corpses && G.corpses.length) {
+    var cg = R.terrain.getContext('2d');
+    cg.imageSmoothingEnabled = false;
+    while (G.corpses.length) {
+      var cp = G.corpses.pop();
+      var cpx = (cp.x / RTS_TILE + RTS_N / 2) * RTS_TS, cpy = (cp.z / RTS_TILE + RTS_N / 2) * RTS_TS;
+      cg.drawImage(S.corpse[cp.v % 3], Math.round(cpx - 7), Math.round(cpy - 6));
+    }
+  }
   if (G.newScorch && G.newScorch.length) {
     var tg = R.terrain.getContext('2d');
     tg.imageSmoothingEnabled = false;
@@ -340,7 +349,9 @@ function _rtsDrawStruct(g, e, TSscale, cell) {
 function _rtsDrawUnit(g, e, TSscale) {
   var R = _rtsR, d = rtsUnitDef(e.def);
   var f = ((Math.round(e.rot / (Math.PI * 2) * 8) % 8) + 8) % 8;
-  var img = R.spr.unit[e.side][e.def][f];
+  var img = (e.prone && R.spr.prone[e.side][e.def])
+    ? R.spr.prone[e.side][e.def][f]
+    : R.spr.unit[e.side][e.def][f];
   var w = Math.round(img.width * TSscale), h = Math.round(img.height * TSscale);
   var px = Math.round(_rtsSX(e.x) - w / 2), py = Math.round(_rtsSY(e.z) - h / 2);
   if (e.hitT > 0) g.globalAlpha = 0.7;

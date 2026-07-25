@@ -100,6 +100,17 @@ var RTS_ANIMS = {
 };
 var RTS_CRATER_ORE = 6;   /* ANIM.CPP: a crater calls Reduce_Tiberium(6) */
 
+/* ------------------------------------------------------------- infantry --
+   INFANTRY.CPP. Fear is a counter that decays one step per frame; taking a hit slams it to
+   SCARED, and otherwise it climbs by ANXIOUS halved once for each health threshold the
+   soldier is still above - so wounded infantry panic much faster than fresh ones. At
+   ANXIOUS they lie down; below it they get up. */
+var RTS_FEAR = { NONE:0, ANXIOUS:10, SCARED:50, PANIC:100, MAXIMUM:255 };
+var RTS_FEAR_DECAY = 15;        /* per second; the original decays 1 per frame at 15 FPS */
+var RTS_COND_YELLOW = 0.66, RTS_COND_RED = 0.33;
+var RTS_PRONE_DAMAGE = 0.5;     /* Rule.ProneDamageBias */
+var RTS_PRONE_SPEED = 0.5;      /* prone infantry crawl at half pace */
+
 /* Armour class per thing, used with weapon.vs above. */
 function rtsArmour(e) {
   if (e.type === 'struct') return 'building';

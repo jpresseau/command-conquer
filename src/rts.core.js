@@ -340,6 +340,7 @@ function _rtsNewGame(seed) {
     blocked:new Uint8Array(RTS_N * RTS_N),
     terrain:new Uint8Array(RTS_N * RTS_N),  /* RTS_T_* - what the ground IS, for the renderer */
     scorch:new Uint8Array(RTS_N * RTS_N),   /* 0 none, 1-6 scorch variant, +8 bit = crater */
+    corpses:[],                             /* {x,z,v} the renderer has yet to stamp */
     newScorch:[],                           /* cells the renderer has yet to stamp */
     scrap:new Float32Array(RTS_N * RTS_N),
     owner:new Int32Array(RTS_N * RTS_N),   /* entity id occupying the tile, 0 = none */
@@ -459,7 +460,11 @@ function _rtsSpawnUnit(side, key, x, z) {
   if (!d) return null;
   var e = { id:G.nextId++, type:'unit', side:side, def:key, x:x, z:z, rot:side === 'player' ? 0 : Math.PI,
     hp:d.hp, maxHp:d.hp, r:d.r, cool:0, path:null, pi:0, order:null, target:null,
-    carry:0, hstate:null, htile:null, dead:false, mesh:null, turret:0, fire:0, team:-1 };
+    carry:0, hstate:null, htile:null, dead:false, mesh:null, turret:0, fire:0, team:-1,
+    fear:0, prone:0,
+    /* MasterDoControls marks DO_WALK and DO_CRAWL 'randomstart'. That is why a squad does
+       not march in lockstep - each soldier's walk cycle begins on a different frame. */
+    gait:(G.nextId * 7) % 8 };
   G.ents.push(e); G.byId[e.id] = e;
   return e;
 }
@@ -486,6 +491,10 @@ function _rtsKill(e) {
     }
   } else {
     G.fx.push({ kind:'pop', x:e.x, y:1, z:e.z, t:0, big:1 });
+    if (rtsUnitDef(e.def).kind === 'infantry') {
+      G.corpses.push({ x:e.x, z:e.z, v:(e.id * 5) % 3 });
+      if (G.corpses.length > 220) G.corpses.shift();
+    }
   }
   if (typeof _rtsSfx === 'function') _rtsSfx(e.type === 'struct' ? 'boom' : 'pop', e.x, e.z);
   if (e.side === 'player' && e.type === 'unit') G.stats.lostU++;
@@ -703,13 +712,45 @@ function _rtsFire(e, tgt, w) {
       speed:w.speed, tgt:tgt, dmg:dmg, splash:w.splash, side:e.side, life:4, w:w });
   }
 }
+/* INFANTRY.CPP Fear_AI + Scatter. Only infantry have this. */
+function _rtsFearAI(e, dt) {
+  if (e.fear > 0) e.fear = Math.max(0, e.fear - RTS_FEAR_DECAY * dt);
+  if (e.prone) {
+    if (e.fear < RTS_FEAR.ANXIOUS) e.prone = 0;
+  } else if (e.fear >= RTS_FEAR.ANXIOUS && !e.path) {
+    e.prone = 1;                     /* do not drop while actually travelling somewhere */
+  }
+}
+function _rtsScatter(e, fromX, fromZ) {
+  var G = window._rtsG;
+  var a = Math.atan2(e.z - fromZ, e.x - fromX);
+  a += (Math.random() - 0.5) * (Math.PI / 2);      /* Random_Pick(0,4)-2 facings of spread */
+  var d = RTS_TILE * (1.5 + Math.random());
+  var gx = e.x + Math.cos(a) * d, gz = e.z + Math.sin(a) * d;
+  var tx = _rtsTX(gx), tz = _rtsTX(gz);
+  if (!_rtsInB(tx, tz) || _rtsBlocked(tx, tz)) return;
+  e.path = [{ x:gx, z:gz }]; e.pi = 0; e.goal = { x:gx, z:gz };
+}
+
 function _rtsDamage(tgt, dmg, from) {
+  if (tgt.prone) dmg *= RTS_PRONE_DAMAGE;
   if (!tgt || tgt.dead) return;
   tgt.hp -= dmg;
   tgt.hitT = 0.18;
   /* an idle unit that gets shot shoots back instead of standing there */
   if (tgt.type === 'unit' && from && !tgt.order && rtsUnitDef(tgt.def).weapon) { tgt.order = 'attack'; tgt.target = from; }
   if (tgt.hp <= 0) _rtsKill(tgt);
+  else if (tgt.type === 'unit' && rtsUnitDef(tgt.def).kind === 'infantry') {
+    /* Fear climbs faster the more hurt the soldier already is. */
+    if (tgt.fear < RTS_FEAR.SCARED) tgt.fear = RTS_FEAR.SCARED;
+    else {
+      var more = RTS_FEAR.ANXIOUS, hr = tgt.hp / tgt.maxHp;
+      if (hr > RTS_COND_RED) more /= 2;
+      if (hr > RTS_COND_YELLOW) more /= 2;
+      tgt.fear = Math.min(RTS_FEAR.MAXIMUM, tgt.fear + more);
+    }
+    if (from) _rtsScatter(tgt, from.x, from.z);
+  }
   else if (tgt.type === 'unit' && !tgt.burning && tgt.hp < tgt.maxHp * 0.3) {
     /* Attach_To: the flame follows the unit and eats it, exactly as ANIM.CPP does. */
     tgt.burning = 1;
@@ -748,6 +789,7 @@ function _rtsSteer(e, dt, d) {
   /* a vehicle slows while it is still swinging round; infantry just walk */
   var align = Math.max(0, 1 - Math.abs(diff) / 1.6);
   var sp = d.speed * (d.kind === 'infantry' ? Math.max(0.35, align) : align * align);
+  if (e.prone) sp *= RTS_PRONE_SPEED;
   var nx = e.x + Math.cos(e.rot) * sp * dt, nz = e.z + Math.sin(e.rot) * sp * dt;
   /* While standing on a blocked tile, movement is unrestricted - that is how a unit
      extracts itself from a footprint it ended up inside. Blocking it here as well would
@@ -820,6 +862,7 @@ function _rtsUpdateUnit(e, dt) {
   if (e.cool > 0) e.cool -= dt;
   if (e.fire > 0) e.fire -= dt;
   if (e.hitT > 0) e.hitT -= dt;
+  if (d.kind === 'infantry') _rtsFearAI(e, dt);
 
   /* ---- harvester economy loop ---- */
   if (d.harvest) { _rtsUpdateHarvester(e, dt, d); return; }

@@ -287,6 +287,17 @@ var RTS_ANIMS = {
 };
 var RTS_CRATER_ORE = 6;   /* ANIM.CPP: a crater calls Reduce_Tiberium(6) */
 
+/* ------------------------------------------------------------- infantry --
+   INFANTRY.CPP. Fear is a counter that decays one step per frame; taking a hit slams it to
+   SCARED, and otherwise it climbs by ANXIOUS halved once for each health threshold the
+   soldier is still above - so wounded infantry panic much faster than fresh ones. At
+   ANXIOUS they lie down; below it they get up. */
+var RTS_FEAR = { NONE:0, ANXIOUS:10, SCARED:50, PANIC:100, MAXIMUM:255 };
+var RTS_FEAR_DECAY = 15;        /* per second; the original decays 1 per frame at 15 FPS */
+var RTS_COND_YELLOW = 0.66, RTS_COND_RED = 0.33;
+var RTS_PRONE_DAMAGE = 0.5;     /* Rule.ProneDamageBias */
+var RTS_PRONE_SPEED = 0.5;      /* prone infantry crawl at half pace */
+
 /* Armour class per thing, used with weapon.vs above. */
 function rtsArmour(e) {
   if (e.type === 'struct') return 'building';
@@ -1228,17 +1239,26 @@ function _sprUnit(key, side) {
   var d = rtsUnitDef(key), TM = RTS_PAL.team[side];
   var S = RTS_PAL.steel, DK = RTS_PAL.dark, O = RTS_PAL.ore;
   var size = key === 'harvester' ? 30 : (d.kind === 'infantry' ? 16 : 26);
+  var prone = arguments[2];
   var m = [], i;
 
   if (d.kind === 'infantry') {
-    /* Two figures, offset so a squad does not read as one blob. +x is the nose. */
+    /* Two figures, offset so a squad does not read as one blob. +x is the nose.
+       Prone is a genuinely different silhouette - low, long and facing forward - because
+       that is the only way the player can tell at a glance that they are pinned. */
     var men = [[2.5, -3], [-2.5, 2.5]];
     for (i = 0; i < 2; i++) {
       var mx = men[i][0], mz = men[i][1];
-      _r3Box(m, mx, 0, mz, 3.5, 5, 3, TM[0], TM[1]);               /* torso */
-      _r3Box(m, mx, 5, mz, 3, 2, 3, '#c8a882', '#d8bc96');         /* helmet */
-      if (key === 'rocket') _r3Box(m, mx + 3, 4, mz, 7, 1.6, 1.6, DK[1], DK[3]);
-      else _r3Box(m, mx + 3, 3.5, mz, 5, 1, 1, DK[1], DK[3]);
+      if (prone) {
+        _r3Box(m, mx - 1, 0, mz, 7, 2, 2.6, TM[0], TM[1]);         /* body, lying down */
+        _r3Box(m, mx + 2.6, 0, mz, 2.4, 2, 2.4, '#c8a882', '#d8bc96');
+        _r3Box(m, mx + 5, 0.6, mz, 5, 1, 1, DK[1], DK[3]);         /* weapon, braced */
+      } else {
+        _r3Box(m, mx, 0, mz, 3.5, 5, 3, TM[0], TM[1]);             /* torso */
+        _r3Box(m, mx, 5, mz, 3, 2, 3, '#c8a882', '#d8bc96');       /* helmet */
+        if (key === 'rocket') _r3Box(m, mx + 3, 4, mz, 7, 1.6, 1.6, DK[1], DK[3]);
+        else _r3Box(m, mx + 3, 3.5, mz, 5, 1, 1, DK[1], DK[3]);
+      }
     }
   } else if (key === 'tank') {
     _r3Box(m, 0, 0, -6, 19, 4, 5, DK[0], DK[1]);                   /* tracks */
@@ -1297,6 +1317,27 @@ function _sprPad(wCells, hCells) {
   }
   g.globalAlpha = 1;
   return t.c;
+}
+
+/* Corpses. INFANTRY.CPP leaves ANIM_CORPSE1..3 behind depending on how the soldier died,
+   and they sit in LAYER_SURFACE - under everything. Stamped into the terrain here for the
+   same reason the scorch marks are: permanent, and free after the frame they appear. */
+function _sprCorpse() {
+  var out = [];
+  for (var v = 0; v < 3; v++) {
+    var t = _sprMake(14, 12), g = t.g, seed = v * 71 + 5;
+    g.globalAlpha = 0.75;
+    for (var i = 0; i < 26; i++) {
+      var x = 2 + _sprHash(i, v, seed) * 10, y = 3 + _sprHash(v, i, seed + 3) * 7;
+      var h = _sprHash(i, i, seed + 7);
+      _sprRect(g, x, y, 1 + (h * 2 | 0), 1, h < 0.45 ? '#3a2b28' : (h < 0.8 ? '#4a3733' : '#5c4038'));
+    }
+    g.globalAlpha = 0.5;
+    _sprEll(g, 7, 9, 5, 2, '#20191a');
+    g.globalAlpha = 1;
+    out.push(t.c);
+  }
+  return out;
 }
 
 /* Scorch marks and craters - SmudgeClass in the original, SMUDGE_SCORCH1..6 and
@@ -1381,17 +1422,22 @@ function _sprFx() {
 
 function _rtsSprites() {
   if (_RTS_SPR) return _RTS_SPR;
-  var S = { ore: _sprOre(), bld: {}, unit: {}, fx: _sprFx(), pad: {} };
+  var S = { ore: _sprOre(), bld: {}, unit: {}, prone: {}, fx: _sprFx(), pad: {} };
   RTS_STRUCTS.forEach(function (d) { S.pad[d.key] = _sprPad(d.w, d.h); });
   S.bag = _sprSandbag();
   S.wave = _sprWaterCycle();
   S.scorch = _sprScorch();
   S.crater = _sprCrater();
   S.fire = _sprFire();
+  S.corpse = _sprCorpse();
   ['player', 'enemy'].forEach(function (side) {
     S.bld[side] = {}; S.unit[side] = {};
     RTS_STRUCTS.forEach(function (d) { S.bld[side][d.key] = _sprBuilding(d.key, side); });
     RTS_UNITS.forEach(function (d) { S.unit[side][d.key] = _sprUnit(d.key, side); });
+    S.prone[side] = {};
+    RTS_UNITS.forEach(function (d) {
+      if (d.kind === 'infantry') S.prone[side][d.key] = _sprUnit(d.key, side, true);
+    });
   });
   _RTS_SPR = S;
   return S;
@@ -2058,6 +2104,7 @@ function _rtsNewGame(seed) {
     blocked:new Uint8Array(RTS_N * RTS_N),
     terrain:new Uint8Array(RTS_N * RTS_N),  /* RTS_T_* - what the ground IS, for the renderer */
     scorch:new Uint8Array(RTS_N * RTS_N),   /* 0 none, 1-6 scorch variant, +8 bit = crater */
+    corpses:[],                             /* {x,z,v} the renderer has yet to stamp */
     newScorch:[],                           /* cells the renderer has yet to stamp */
     scrap:new Float32Array(RTS_N * RTS_N),
     owner:new Int32Array(RTS_N * RTS_N),   /* entity id occupying the tile, 0 = none */
@@ -2177,7 +2224,11 @@ function _rtsSpawnUnit(side, key, x, z) {
   if (!d) return null;
   var e = { id:G.nextId++, type:'unit', side:side, def:key, x:x, z:z, rot:side === 'player' ? 0 : Math.PI,
     hp:d.hp, maxHp:d.hp, r:d.r, cool:0, path:null, pi:0, order:null, target:null,
-    carry:0, hstate:null, htile:null, dead:false, mesh:null, turret:0, fire:0, team:-1 };
+    carry:0, hstate:null, htile:null, dead:false, mesh:null, turret:0, fire:0, team:-1,
+    fear:0, prone:0,
+    /* MasterDoControls marks DO_WALK and DO_CRAWL 'randomstart'. That is why a squad does
+       not march in lockstep - each soldier's walk cycle begins on a different frame. */
+    gait:(G.nextId * 7) % 8 };
   G.ents.push(e); G.byId[e.id] = e;
   return e;
 }
@@ -2204,6 +2255,10 @@ function _rtsKill(e) {
     }
   } else {
     G.fx.push({ kind:'pop', x:e.x, y:1, z:e.z, t:0, big:1 });
+    if (rtsUnitDef(e.def).kind === 'infantry') {
+      G.corpses.push({ x:e.x, z:e.z, v:(e.id * 5) % 3 });
+      if (G.corpses.length > 220) G.corpses.shift();
+    }
   }
   if (typeof _rtsSfx === 'function') _rtsSfx(e.type === 'struct' ? 'boom' : 'pop', e.x, e.z);
   if (e.side === 'player' && e.type === 'unit') G.stats.lostU++;
@@ -2421,13 +2476,45 @@ function _rtsFire(e, tgt, w) {
       speed:w.speed, tgt:tgt, dmg:dmg, splash:w.splash, side:e.side, life:4, w:w });
   }
 }
+/* INFANTRY.CPP Fear_AI + Scatter. Only infantry have this. */
+function _rtsFearAI(e, dt) {
+  if (e.fear > 0) e.fear = Math.max(0, e.fear - RTS_FEAR_DECAY * dt);
+  if (e.prone) {
+    if (e.fear < RTS_FEAR.ANXIOUS) e.prone = 0;
+  } else if (e.fear >= RTS_FEAR.ANXIOUS && !e.path) {
+    e.prone = 1;                     /* do not drop while actually travelling somewhere */
+  }
+}
+function _rtsScatter(e, fromX, fromZ) {
+  var G = window._rtsG;
+  var a = Math.atan2(e.z - fromZ, e.x - fromX);
+  a += (Math.random() - 0.5) * (Math.PI / 2);      /* Random_Pick(0,4)-2 facings of spread */
+  var d = RTS_TILE * (1.5 + Math.random());
+  var gx = e.x + Math.cos(a) * d, gz = e.z + Math.sin(a) * d;
+  var tx = _rtsTX(gx), tz = _rtsTX(gz);
+  if (!_rtsInB(tx, tz) || _rtsBlocked(tx, tz)) return;
+  e.path = [{ x:gx, z:gz }]; e.pi = 0; e.goal = { x:gx, z:gz };
+}
+
 function _rtsDamage(tgt, dmg, from) {
+  if (tgt.prone) dmg *= RTS_PRONE_DAMAGE;
   if (!tgt || tgt.dead) return;
   tgt.hp -= dmg;
   tgt.hitT = 0.18;
   /* an idle unit that gets shot shoots back instead of standing there */
   if (tgt.type === 'unit' && from && !tgt.order && rtsUnitDef(tgt.def).weapon) { tgt.order = 'attack'; tgt.target = from; }
   if (tgt.hp <= 0) _rtsKill(tgt);
+  else if (tgt.type === 'unit' && rtsUnitDef(tgt.def).kind === 'infantry') {
+    /* Fear climbs faster the more hurt the soldier already is. */
+    if (tgt.fear < RTS_FEAR.SCARED) tgt.fear = RTS_FEAR.SCARED;
+    else {
+      var more = RTS_FEAR.ANXIOUS, hr = tgt.hp / tgt.maxHp;
+      if (hr > RTS_COND_RED) more /= 2;
+      if (hr > RTS_COND_YELLOW) more /= 2;
+      tgt.fear = Math.min(RTS_FEAR.MAXIMUM, tgt.fear + more);
+    }
+    if (from) _rtsScatter(tgt, from.x, from.z);
+  }
   else if (tgt.type === 'unit' && !tgt.burning && tgt.hp < tgt.maxHp * 0.3) {
     /* Attach_To: the flame follows the unit and eats it, exactly as ANIM.CPP does. */
     tgt.burning = 1;
@@ -2466,6 +2553,7 @@ function _rtsSteer(e, dt, d) {
   /* a vehicle slows while it is still swinging round; infantry just walk */
   var align = Math.max(0, 1 - Math.abs(diff) / 1.6);
   var sp = d.speed * (d.kind === 'infantry' ? Math.max(0.35, align) : align * align);
+  if (e.prone) sp *= RTS_PRONE_SPEED;
   var nx = e.x + Math.cos(e.rot) * sp * dt, nz = e.z + Math.sin(e.rot) * sp * dt;
   /* While standing on a blocked tile, movement is unrestricted - that is how a unit
      extracts itself from a footprint it ended up inside. Blocking it here as well would
@@ -2538,6 +2626,7 @@ function _rtsUpdateUnit(e, dt) {
   if (e.cool > 0) e.cool -= dt;
   if (e.fire > 0) e.fire -= dt;
   if (e.hitT > 0) e.hitT -= dt;
+  if (d.kind === 'infantry') _rtsFearAI(e, dt);
 
   /* ---- harvester economy loop ---- */
   if (d.harvest) { _rtsUpdateHarvester(e, dt, d); return; }
@@ -3008,6 +3097,15 @@ function _rtsRFrame(dt) {
 
   /* --- new scorch marks and craters, stamped once into the baked terrain. Because the
      ground is a single canvas, a smudge costs nothing after the frame it appears on. --- */
+  if (G.corpses && G.corpses.length) {
+    var cg = R.terrain.getContext('2d');
+    cg.imageSmoothingEnabled = false;
+    while (G.corpses.length) {
+      var cp = G.corpses.pop();
+      var cpx = (cp.x / RTS_TILE + RTS_N / 2) * RTS_TS, cpy = (cp.z / RTS_TILE + RTS_N / 2) * RTS_TS;
+      cg.drawImage(S.corpse[cp.v % 3], Math.round(cpx - 7), Math.round(cpy - 6));
+    }
+  }
   if (G.newScorch && G.newScorch.length) {
     var tg = R.terrain.getContext('2d');
     tg.imageSmoothingEnabled = false;
@@ -3172,7 +3270,9 @@ function _rtsDrawStruct(g, e, TSscale, cell) {
 function _rtsDrawUnit(g, e, TSscale) {
   var R = _rtsR, d = rtsUnitDef(e.def);
   var f = ((Math.round(e.rot / (Math.PI * 2) * 8) % 8) + 8) % 8;
-  var img = R.spr.unit[e.side][e.def][f];
+  var img = (e.prone && R.spr.prone[e.side][e.def])
+    ? R.spr.prone[e.side][e.def][f]
+    : R.spr.unit[e.side][e.def][f];
   var w = Math.round(img.width * TSscale), h = Math.round(img.height * TSscale);
   var px = Math.round(_rtsSX(e.x) - w / 2), py = Math.round(_rtsSY(e.z) - h / 2);
   if (e.hitT > 0) g.globalAlpha = 0.7;

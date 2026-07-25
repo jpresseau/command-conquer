@@ -111,6 +111,24 @@ exceeds 2^53, the low bits come back as garbage, and the failure is silent — t
 produced a terrain bake containing no dirt whatsoever because the "random" grade never crossed
 its threshold.
 
+## Infantry — from INFANTRY.CPP
+
+- **Fear.** A counter that decays steadily. Taking a hit slams it to `SCARED`; otherwise it
+  climbs by `ANXIOUS` **halved once for each health threshold the soldier is still above**, so
+  wounded infantry panic much faster than fresh ones. At `ANXIOUS` they lie down; below it
+  they get up.
+- **Prone** takes `ProneDamageBias` (half) damage and crawls at half speed, and has its own
+  sprite set — a low, long silhouette, because that is the only way to see at a glance that
+  a squad is pinned.
+- **Ordering matters**: `Fear_AI` will not let infantry drop *while they still have somewhere
+  to be*. A hit makes them `Scatter()` first — roughly away from the threat with a couple of
+  facings of random spread — and they go prone only once they stop. Do not "fix" this.
+- **`MasterDoControls` marks `DO_WALK` and `DO_CRAWL` `randomstart`.** Each unit gets a `gait`
+  offset so a squad does not march in lockstep. It is a one-line detail that stops a group
+  looking mechanical.
+- **Corpses** persist, stamped into the baked terrain like scorch marks (they live in
+  `LAYER_SURFACE`, under everything, in the original).
+
 ## Animations — from ANIM.CPP
 
 `RTS_ANIMS` in the rules is AnimTypeClass trimmed to what this game uses, and the field that

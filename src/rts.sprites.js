@@ -555,17 +555,26 @@ function _sprUnit(key, side) {
   var d = rtsUnitDef(key), TM = RTS_PAL.team[side];
   var S = RTS_PAL.steel, DK = RTS_PAL.dark, O = RTS_PAL.ore;
   var size = key === 'harvester' ? 30 : (d.kind === 'infantry' ? 16 : 26);
+  var prone = arguments[2];
   var m = [], i;
 
   if (d.kind === 'infantry') {
-    /* Two figures, offset so a squad does not read as one blob. +x is the nose. */
+    /* Two figures, offset so a squad does not read as one blob. +x is the nose.
+       Prone is a genuinely different silhouette - low, long and facing forward - because
+       that is the only way the player can tell at a glance that they are pinned. */
     var men = [[2.5, -3], [-2.5, 2.5]];
     for (i = 0; i < 2; i++) {
       var mx = men[i][0], mz = men[i][1];
-      _r3Box(m, mx, 0, mz, 3.5, 5, 3, TM[0], TM[1]);               /* torso */
-      _r3Box(m, mx, 5, mz, 3, 2, 3, '#c8a882', '#d8bc96');         /* helmet */
-      if (key === 'rocket') _r3Box(m, mx + 3, 4, mz, 7, 1.6, 1.6, DK[1], DK[3]);
-      else _r3Box(m, mx + 3, 3.5, mz, 5, 1, 1, DK[1], DK[3]);
+      if (prone) {
+        _r3Box(m, mx - 1, 0, mz, 7, 2, 2.6, TM[0], TM[1]);         /* body, lying down */
+        _r3Box(m, mx + 2.6, 0, mz, 2.4, 2, 2.4, '#c8a882', '#d8bc96');
+        _r3Box(m, mx + 5, 0.6, mz, 5, 1, 1, DK[1], DK[3]);         /* weapon, braced */
+      } else {
+        _r3Box(m, mx, 0, mz, 3.5, 5, 3, TM[0], TM[1]);             /* torso */
+        _r3Box(m, mx, 5, mz, 3, 2, 3, '#c8a882', '#d8bc96');       /* helmet */
+        if (key === 'rocket') _r3Box(m, mx + 3, 4, mz, 7, 1.6, 1.6, DK[1], DK[3]);
+        else _r3Box(m, mx + 3, 3.5, mz, 5, 1, 1, DK[1], DK[3]);
+      }
     }
   } else if (key === 'tank') {
     _r3Box(m, 0, 0, -6, 19, 4, 5, DK[0], DK[1]);                   /* tracks */
@@ -624,6 +633,27 @@ function _sprPad(wCells, hCells) {
   }
   g.globalAlpha = 1;
   return t.c;
+}
+
+/* Corpses. INFANTRY.CPP leaves ANIM_CORPSE1..3 behind depending on how the soldier died,
+   and they sit in LAYER_SURFACE - under everything. Stamped into the terrain here for the
+   same reason the scorch marks are: permanent, and free after the frame they appear. */
+function _sprCorpse() {
+  var out = [];
+  for (var v = 0; v < 3; v++) {
+    var t = _sprMake(14, 12), g = t.g, seed = v * 71 + 5;
+    g.globalAlpha = 0.75;
+    for (var i = 0; i < 26; i++) {
+      var x = 2 + _sprHash(i, v, seed) * 10, y = 3 + _sprHash(v, i, seed + 3) * 7;
+      var h = _sprHash(i, i, seed + 7);
+      _sprRect(g, x, y, 1 + (h * 2 | 0), 1, h < 0.45 ? '#3a2b28' : (h < 0.8 ? '#4a3733' : '#5c4038'));
+    }
+    g.globalAlpha = 0.5;
+    _sprEll(g, 7, 9, 5, 2, '#20191a');
+    g.globalAlpha = 1;
+    out.push(t.c);
+  }
+  return out;
 }
 
 /* Scorch marks and craters - SmudgeClass in the original, SMUDGE_SCORCH1..6 and
@@ -708,17 +738,22 @@ function _sprFx() {
 
 function _rtsSprites() {
   if (_RTS_SPR) return _RTS_SPR;
-  var S = { ore: _sprOre(), bld: {}, unit: {}, fx: _sprFx(), pad: {} };
+  var S = { ore: _sprOre(), bld: {}, unit: {}, prone: {}, fx: _sprFx(), pad: {} };
   RTS_STRUCTS.forEach(function (d) { S.pad[d.key] = _sprPad(d.w, d.h); });
   S.bag = _sprSandbag();
   S.wave = _sprWaterCycle();
   S.scorch = _sprScorch();
   S.crater = _sprCrater();
   S.fire = _sprFire();
+  S.corpse = _sprCorpse();
   ['player', 'enemy'].forEach(function (side) {
     S.bld[side] = {}; S.unit[side] = {};
     RTS_STRUCTS.forEach(function (d) { S.bld[side][d.key] = _sprBuilding(d.key, side); });
     RTS_UNITS.forEach(function (d) { S.unit[side][d.key] = _sprUnit(d.key, side); });
+    S.prone[side] = {};
+    RTS_UNITS.forEach(function (d) {
+      if (d.kind === 'infantry') S.prone[side][d.key] = _sprUnit(d.key, side, true);
+    });
   });
   _RTS_SPR = S;
   return S;
