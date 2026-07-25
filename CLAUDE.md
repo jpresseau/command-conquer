@@ -475,6 +475,43 @@ shooter the player can't see. Here the reveal lives on the shooter as a short ti
 as a mark on the grid, because the visibility grid is rebuilt from scratch every sweep and a
 one-shot mark would be erased before it was drawn.
 
+**`What_Weapon_Should_I_Use`** scores every weapon the object carries against the candidate's
+armour — `Modifier[armor] × 1000`, **doubled when the target is already in that weapon's
+range**, zeroed when it could not fire at all, primary wins ties. The doubling is the
+interesting half: it biases toward the weapon that can shoot *now* over the one that would be
+better after driving closer. The Battle Tank carries `weapon2:'coax'` and switches to it for
+infantry with no input from the player — measured 180 coax shots against a rifle squad, 40
+cannon rounds against a tank, and the main gun chosen for infantry standing beyond coax range.
+
+**`Rearm_Delay` + `Is_Two_Shooter`** — a burst weapon does not reload evenly. The delay
+assigned after each shot alternates, so shots arrive as a fast pair and then a long wait:
+measured gaps of `[1.56, 0.22, 1.57, 0.21]`. `IsSecondShot` starts *true*, so the first shot of
+a fresh unit takes the full ROF and the pair forms after it. The same flag drives
+`PrimaryLateral`, so a two-barrel weapon visibly alternates sides.
+
+**Which weapons burst, and which units carry a secondary, is a choice here — not ported data.**
+RA keeps it in RULES.INI and this game has no equivalent. Both were tuned against isolated
+measurements so only the intended change survives:
+
+| | before | after | |
+|---|---|---|---|
+| tank vs infantry | 18.18 | **21.12** | +16%, the point of a coaxial gun |
+| tank vs tank | 50.67 | 50.67 | 0% |
+| tank vs building | 22.16 | 23.12 | +4%, one extra shot in the window |
+| rocket vs tank | 24.50 | 24.93 | +2% |
+| rifle vs infantry | 6.24 | 6.24 | 0% |
+
+**Measure DPS on an isolated map.** The first pass at these numbers ran on a live game and the
+enemy AI polluted every one of them — two runs of the same scenario disagreed by 2× on
+tank-vs-building, which read as a balance regression and was pure harness noise. Kill every
+other entity first, and hold `G.over`/`lost` open each frame or the victory check stops the
+tick and you measure a single shot. Also null the target's `cool`: a punching bag that shoots
+back makes infantry panic, and then the number measures fear rather than firepower.
+
+And note **prone halves incoming damage**, which is why a machine gun can be *worse* against
+infantry than a cannon: the first coax numbers looked like a bug and were the prone rule
+working correctly.
+
 `Threat_Range`'s area-guard clamp (2× weapon range, capped at 10 cells) is implemented but never
 binds — every sight radius in this game is already inside it. It is kept because the clamp is
 the rule, not the current unit table.

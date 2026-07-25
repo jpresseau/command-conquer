@@ -434,7 +434,7 @@ function _rtsDrawUnit(g, e, TSscale) {
        simulation used, projected. Offsetting along `e.turret` regardless put the flash on the
        turret's bearing even for a hull-mounted gun like the buggy's, so the flash and its own
        tracer came off the vehicle at different angles. */
-    var mz = _rtsFireCoord(e);
+    var mz = _rtsFireCoord(e, e.type === 'struct' ? null : RTS_WEAPONS[d.weapon]);
     var fx = _rtsSX(mz.x), fy = _rtsSY(mz.z);
     var fs = fl.width * TSscale;
     g.drawImage(fl, Math.round(fx - fs / 2), Math.round(fy - fs / 2), fs, fs);
