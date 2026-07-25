@@ -427,6 +427,20 @@ var RTS_IQ = {
    it builds whatever it is furthest short of. BaseSizeAdd is the key one: the AI aims for
    the human's building count plus this, so it keeps pace with how you are actually playing
    instead of building to a script. */
+/* HOUSE.CPP's Expert_AI. The architecture is the valuable part: every strategy is scored for
+   URGENCY, and the AI then acts on the most urgent ones first, "because higher urgency actions
+   tend to greatly affect the lower urgency actions". A flat if/else build order cannot express
+   "I am broke AND under attack AND browned out" - this can.
+
+   The house also runs a small state machine that the urgency checks read. */
+var RTS_URGENCY = { NONE:0, LOW:1, MEDIUM:2, HIGH:3, CRITICAL:4 };
+var RTS_STATE = { BUILDUP:0, BROKE:1, ATTACKED:2, ENDGAME:3 };
+var RTS_ALERT_DELAY = 25;       /* Rule.SpeakDelay: cooldown on "base under attack" */
+/* A house that cannot meet its power demand takes structural damage over time - only on the
+   buildings that actually draw power, so a minefield does not blow itself up in a brownout. */
+var RTS_DAMAGE_DELAY = 20;      /* seconds between brownout damage ticks */
+var RTS_POWER_DAMAGE = 6;       /* hit points per tick, on buildings above ConditionYellow */
+
 var RTS_AI = {
   baseSizeAdd:3,
   powerSurplus:50,          /* keep this much spare power in hand */
@@ -437,7 +451,25 @@ var RTS_AI = {
   attackInterval:3,         /* minutes between attack waves, before difficulty bias */
   attackDelay:5,            /* minutes before the first one */
   ratio:{ refinery:0.16, barracks:0.16, factory:0.10, turret:0.50 },
-  limit:{ refinery:4,    barracks:2,    factory:2,    turret:12   }
+  limit:{ refinery:4,    barracks:2,    factory:2,    turret:12   },
+  /* Check_Raise_Money / Check_Raise_Power / Check_Lower_Power thresholds. */
+  brokeMoney:100,           /* below this, raising cash is urgent */
+  desperateMoney:2000,      /* ...and worse if there is no income either */
+  powerEmergencyGap:40,     /* deficit below which power is an emergency, not a preference */
+  powerWaste:150,           /* surplus above which a power plant is dead money */
+  /* AI_Raise_Money and AI_Raise_Power sell in a fixed order, least valuable first, each with
+     the urgency at which it becomes sellable.
+
+     The ordering is what stops this being self-destruction. Only the turret - static defence,
+     no income, no production - goes at LOW, and that turns out to be the most valuable thing
+     a poor opponent does: across 3 difficulties x 3 seeds, allowing it took the Recruit AI's
+     eight-minute army from 12 to 50 units on one seed and 36 to 48 on another, and changed
+     nothing on the rest. A broke AI sitting on two turrets it cannot afford to support is
+     better off spending them. Production goes at MEDIUM, the economy only in a real
+     emergency, and the yard is on neither list: selling it is not a recovery, it is a
+     surrender. */
+  sellForMoney:[['turret', 1], ['factory', 2], ['barracks', 2], ['power', 3], ['refinery', 4]],
+  sellForPower:[['turret', 1], ['barracks', 2], ['factory', 2], ['refinery', 3]]
 };
 
 /* ---------------------------------------------------------------- shroud --
@@ -2381,7 +2413,7 @@ function _rtsNewGame(seed, diff) {
     ents:[], byId:{}, nextId:1,
     sel:[], proj:[], fx:[],
     sides:{ player:_rtsSideNew('player'), enemy:_rtsSideNew('enemy') },
-    ai:{ next:0, wave:0, build:6, place:0 },  /* AttackDelay filled in below, once diff is known */
+    ai:{ next:0, wave:0, build:6, place:0, state:0, lastHit:-999, want:null },
     stats:{ killed:0, lostU:0 }
   };
   window._rtsG = G;
@@ -3064,6 +3096,16 @@ function _rtsScatter(e, fromX, fromZ) {
   e.path = [{ x:gx, z:gz }]; e.pi = 0; e.goal = { x:gx, z:gz };
 }
 
+function _rtsAttacked(side) {
+  var G = window._rtsG;
+  if (side === 'enemy') { G.ai.lastHit = G.t; return; }
+  var last = (G.playerHit == null) ? -999 : G.playerHit;
+  if (G.t - last < RTS_ALERT_DELAY) return;      /* SpeakDelay - and do NOT restart the clock,
+                                                    or a sustained attack never warns twice */
+  G.playerHit = G.t;
+  _rtsSay('Your base is under attack!');
+  if (typeof _rtsSfx === 'function') _rtsSfx('alert');
+}
 function _rtsDamage(tgt, dmg, from, floor) {
   if (!tgt || tgt.dead) return;
   if (tgt.prone) dmg *= RTS_PRONE_DAMAGE;
@@ -3077,6 +3119,10 @@ function _rtsDamage(tgt, dmg, from, floor) {
   tgt.hitT = 0.18;
   /* an idle unit that gets shot shoots back instead of standing there */
   if (from && from.side) tgt.hurtBy = from.side;     /* WhoLastHurtMe, for the kill credit */
+  /* HouseClass::Attacked(). A structure taking malicious damage puts its owner into the
+     ATTACKED state for a minute, which several unrelated AI decisions then read - and, for
+     the player, raises the warning, rate-limited by SpeakDelay. */
+  if (tgt.type === 'struct' && from && from.side && from.side !== tgt.side) _rtsAttacked(tgt.side);
   if (tgt.type === 'unit' && from && !tgt.order && rtsUnitDef(tgt.def).weapon) { tgt.order = 'attack'; tgt.target = from; }
   if (tgt.hp <= 0) _rtsKill(tgt);
   else if (tgt.type === 'unit' && rtsUnitDef(tgt.def).harvest && tgt.carry > 0
@@ -3501,13 +3547,68 @@ function _rtsAIWants(S) {
   }
   return null;
 }
-/* Where to put it: a refinery hugs the nearest ore, a turret goes on the side facing the
-   player, everything else clusters. Dropping a refinery on the far side of the base from
+/* HOUSE.CPP Recalc_Center: the base centre is a COST-WEIGHTED average of building positions
+   ("give more weight to buildings that cost more"), and the radius is the mean distance from
+   it. Zones follow: CORE inside the radius, then NORTH/EAST/SOUTH/WEST by direction. */
+function _rtsBaseCentre(side) {
+  var G = window._rtsG, x = 0, z = 0, n = 0, i, e;
+  for (i = 0; i < G.ents.length; i++) {
+    e = G.ents[i];
+    if (e.dead || e.type !== 'struct' || e.side !== side || e.selling) continue;
+    var w = ((rtsStructDef(e.def).cost / 1000) | 0) + 1;
+    for (var k = 0; k < w; k++) { x += e.x; z += e.z; n++; }
+  }
+  if (!n) return null;
+  var c = { x:x / n, z:z / n, r:0 }, rad = 0, cnt = 0;
+  for (i = 0; i < G.ents.length; i++) {
+    e = G.ents[i];
+    if (e.dead || e.type !== 'struct' || e.side !== side || e.selling) continue;
+    rad += Math.hypot(e.x - c.x, e.z - c.z); cnt++;
+  }
+  c.r = Math.max(cnt ? rad / cnt : 0, RTS_TILE * 2);
+  return c;
+}
+/* Which_Zone: 0 core, 1 north, 2 east, 3 south, 4 west, -1 too far to be part of the base. */
+function _rtsWhichZone(c, x, z) {
+  if (!c) return -1;
+  var d = Math.hypot(x - c.x, z - c.z);
+  if (d <= c.r) return 0;
+  if (d > c.r * 4) return -1;
+  var a = Math.atan2(z - c.z, x - c.x);
+  if (a >= -Math.PI * 0.75 && a < -Math.PI * 0.25) return 1;   /* north (-z) */
+  if (a >= -Math.PI * 0.25 && a < Math.PI * 0.25) return 2;    /* east */
+  if (a >= Math.PI * 0.25 && a < Math.PI * 0.75) return 3;     /* south */
+  return 4;                                                    /* west */
+}
+/* Find_Build_Location: rate each zone by how far its defence sits BELOW the base average,
+   and aim the new defensive building at the weakest one. Putting every turret on the side
+   facing the enemy is exactly the mistake this routine exists to avoid - it leaves the other
+   three approaches open. */
+function _rtsAIWeakZone() {
+  var G = window._rtsG, c = _rtsBaseCentre('enemy');
+  if (!c) return null;
+  var def = [0, 0, 0, 0, 0], i;
+  for (i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.type !== 'struct' || e.side !== 'enemy' || e.selling) continue;
+    var sd = rtsStructDef(e.def);
+    if (!sd.weapon) continue;
+    var z = _rtsWhichZone(c, e.x, e.z);
+    if (z >= 0) def[z]++;
+  }
+  /* the core counts for half, as in the original's `if (z == ZONE_CORE) diff /= 2` */
+  var best = 1, bestv = 1e9;
+  for (i = 1; i <= 4; i++) if (def[i] < bestv) { bestv = def[i]; best = i; }
+  var ang = [0, -Math.PI / 2, 0, Math.PI / 2, Math.PI][best];
+  return { x:c.x + Math.cos(ang) * c.r * 2, z:c.z + Math.sin(ang) * c.r * 2 };
+}
+/* Where to put it: a refinery hugs the nearest ore, a turret covers the base's weakest
+   approach, everything else clusters. Dropping a refinery on the far side of the base from
    the ore is the single most common way a build-order AI wastes its money. */
 function _rtsAIPlace(key) {
   var G = window._rtsG, i, e, aim = null;
   if (key === 'refinery') aim = _rtsAIOreSpot();
-  else if (key === 'turret') { var p = _rtsHas('player', 'yard') || _rtsHas('player', 'power'); if (p) aim = { x:p.x, z:p.z }; }
+  else if (key === 'turret') aim = _rtsAIWeakZone();
   var anchors = [];
   for (i = 0; i < G.ents.length; i++) {
     e = G.ents[i];
@@ -3577,6 +3678,172 @@ function _rtsAIUnits(S) {
   if (_rtsCanQueue('enemy', 'rocket') && S.credits > 500) _rtsQueue('enemy', 'rocket');
   else if (_rtsCanQueue('enemy', 'rifle') && S.credits > 250) _rtsQueue('enemy', 'rifle');
 }
+/* HOUSE.CPP's house state machine. The urgency checks all read it, which is how one flag
+   ("we were attacked in the last minute") changes several unrelated decisions at once. */
+function _rtsAIStateTick(S) {
+  var G = window._rtsG;
+  if (G.ai.state === RTS_STATE.ENDGAME) return;
+  /* `G.ai.lastHit || -999` is wrong: at game start the timestamp IS 0, which is falsy, so
+     the fallback fires and a base attacked on the first second never enters ATTACKED. */
+  var last = (G.ai.lastHit == null) ? -999 : G.ai.lastHit;
+  if (G.t - last < 60) { G.ai.state = RTS_STATE.ATTACKED; return; }
+  G.ai.state = S.credits < 25 ? RTS_STATE.BROKE : RTS_STATE.BUILDUP;
+}
+function _rtsAICanEarn() {
+  return !!(_rtsHas('enemy', 'refinery') && _rtsAIHarvesters());
+}
+function _rtsAIHarvesters() {
+  var G = window._rtsG, n = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (!e.dead && e.side === 'enemy' && e.type === 'unit' && rtsUnitDef(e.def).harvest) n++;
+  }
+  return n;
+}
+/* Does this house still own anything that can PRODUCE? Check_Fire_Sale's question. */
+function _rtsAIHasFactory() {
+  return !!(_rtsHas('enemy', 'yard') || _rtsHas('enemy', 'barracks') || _rtsHas('enemy', 'factory'));
+}
+/* Score every strategy. NONE means "not worth doing at all right now". */
+function _rtsAIUrgency(S) {
+  var G = window._rtsG, U = RTS_URGENCY, u = {};
+  var pf = _rtsPowerFactor('enemy'), slack = S.powerMade - S.powerUsed;
+  var attacked = G.ai.state === RTS_STATE.ATTACKED;
+
+  /* Check_Build_Power */
+  u.power = U.NONE;
+  if (slack < RTS_AI.powerSurplus && _rtsAICanEarn()) {
+    u.power = U.LOW;
+    if (pf < RTS_AI.powerEmergency) u.power = U.MEDIUM;
+    if (attacked) u.power = U.HIGH;          /* browned-out defences during a raid */
+  }
+  /* Check_Raise_Power: a deficit big enough that selling something is the fastest fix. */
+  u.raisePower = U.NONE;
+  if (pf < RTS_AI.powerEmergency && slack < -RTS_AI.powerEmergencyGap) {
+    u.raisePower = attacked ? U.HIGH : U.MEDIUM;
+  }
+  /* Check_Lower_Power: surplus power is dead money. */
+  u.lowerPower = (slack > RTS_AI.powerWaste) ? U.LOW : U.NONE;
+
+  /* Check_Raise_Money */
+  u.raiseMoney = U.NONE;
+  if (S.credits < RTS_AI.brokeMoney) u.raiseMoney = U.LOW;
+  if (S.credits < RTS_AI.desperateMoney && !_rtsAICanEarn()) u.raiseMoney++;
+
+  /* Check_Fire_Sale: nothing left that can build. The game is over; go out swinging. */
+  u.fireSale = U.NONE;
+  if (!attacked && _rtsCount('enemy', 'struct') > 0 && !_rtsAIHasFactory()) u.fireSale = U.CRITICAL;
+
+  /* Check_Attack */
+  u.attack = U.NONE;
+  if (G.t > 60 && G.ai.next <= 0) u.attack = attacked ? U.LOW : U.CRITICAL;
+
+  /* Building the base out. These are the composition ratios, expressed as urgency. */
+  var want = _rtsAIWants(S);
+  u.build = U.NONE;
+  if (want) u.build = want.key === 'refinery' && !_rtsHas('enemy', 'refinery') ? U.HIGH
+    : (want.urgent ? U.HIGH : U.MEDIUM);
+  G.ai.want = want;
+  return u;
+}
+function _rtsCount(side, type) {
+  var G = window._rtsG, n = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (!e.dead && e.side === side && e.type === type && !e.selling) n++;
+  }
+  return n;
+}
+/* Sell the first building on the list whose urgency threshold this situation has reached. */
+function _rtsAISellFrom(list, urgency) {
+  for (var i = 0; i < list.length; i++) {
+    if (urgency < list[i][1]) continue;
+    var b = _rtsHas('enemy', list[i][0]);
+    if (b && _rtsSell(b)) return true;
+  }
+  return false;
+}
+function _rtsAIDo(strat, urgency, S) {
+  var G = window._rtsG;
+  switch (strat) {
+    case 'build':
+      if (!G.ai.want || S.q.struct || S.ready) return false;
+      var sd = rtsStructDef(G.ai.want.key);
+      var reserve = (urgency >= RTS_URGENCY.HIGH) ? 0 : RTS_AI.creditReserve;
+      if (S.credits < _rtsCostOf('enemy', sd) + reserve) return false;
+      return _rtsQueue('enemy', G.ai.want.key);
+
+    case 'raiseMoney':
+      if (!_rtsIQAt(RTS_IQ.sellBack)) return false;
+      return _rtsAISellFrom(RTS_AI.sellForMoney, urgency);
+
+    case 'raisePower':
+      if (!_rtsIQAt(RTS_IQ.sellBack)) return false;
+      return _rtsAISellFrom(RTS_AI.sellForPower, urgency);
+
+    case 'lowerPower':
+      if (!_rtsIQAt(RTS_IQ.sellBack)) return false;
+      /* only if losing one would not brown the base out */
+      var p = _rtsHas('enemy', 'power');
+      if (!p || S.powerMade - rtsStructDef('power').power < S.powerUsed) return false;
+      return _rtsSell(p);
+
+    case 'fireSale':
+      /* Fire_Sale + Do_All_To_Hunt: sell the lot and throw everything at the player. */
+      G.ai.state = RTS_STATE.ENDGAME;
+      var sold = 0, i, e;
+      for (i = 0; i < G.ents.length; i++) {
+        e = G.ents[i];
+        if (e.dead || e.side !== 'enemy' || e.type !== 'struct' || e.selling) continue;
+        if (_rtsSell(e)) sold++;
+      }
+      _rtsAIAllToHunt();
+      return sold > 0;
+
+    case 'attack':
+      return _rtsAIAttack(urgency);
+  }
+  return false;
+}
+/* Do_All_To_Hunt. */
+function _rtsAIAllToHunt() {
+  var G = window._rtsG;
+  var aim = _rtsHas('player', 'yard') || _rtsHas('player', 'refinery') || _rtsHas('player', 'power');
+  if (!aim) return;
+  for (var i = 0; i < G.ents.length; i++) {
+    var u = G.ents[i];
+    if (u.dead || u.side !== 'enemy' || u.type !== 'unit') continue;
+    if (rtsUnitDef(u.def).harvest) continue;
+    _rtsOrderMove(u, aim.x + (i % 3 - 1) * 5, aim.z + ((i / 3) | 0 % 3) * 5, true);
+  }
+}
+/* AI_Attack. Only a share of the idle army goes; the rest garrisons. */
+function _rtsAIAttack(urgency) {
+  var G = window._rtsG, pool = [], k;
+  for (k = 0; k < G.ents.length; k++) {
+    var u = G.ents[k];
+    if (!u.dead && u.side === 'enemy' && u.type === 'unit' && !rtsUnitDef(u.def).harvest && !u.order) pool.push(u);
+  }
+  /* Commit a real share of the idle army, not a token squad. Sending a fixed handful let
+     the AI pile up forty-odd defenders at home, which is both un-fun and unbeatable.
+     IQGuardArea: only a smart opponent knows to hold some of it back as a garrison. */
+  var share = _rtsIQAt(RTS_IQ.guardArea) ? 0.7 : 0.6;
+  if (urgency <= RTS_URGENCY.LOW) share *= 0.5;      /* under attack at home: send fewer */
+  var send = Math.min(pool.length, Math.max(3, Math.ceil(pool.length * share)));
+  if (_rtsIQAt(RTS_IQ.guardArea)) send = Math.min(send, Math.max(3, pool.length - 3));
+
+  /* AttackInterval is deliberately randomised over a 4x spread in the original, so waves
+     never arrive on a metronome you can set your watch by. */
+  G.ai.next = RTS_WAVE_EVERY * _rtsBias('enemy').build * (0.5 + Math.random() * 1.5);
+  if (send < 2) return false;
+  var aim = _rtsHas('player', 'yard') || _rtsHas('player', 'refinery') || _rtsHas('player', 'power');
+  if (!aim) return false;
+  G.ai.wave++;
+  for (k = 0; k < send; k++) _rtsOrderMove(pool[k], aim.x + (k % 3 - 1) * 5, aim.z + ((k / 3) | 0) * 5, true);
+  _rtsSay('Redline attack wave inbound!');
+  if (typeof _rtsSfx === 'function') _rtsSfx('alert');
+  return true;
+}
 function _rtsUpdateAI(dt) {
   var G = window._rtsG, S = G.sides.enemy;
   if (S.lost) return;
@@ -3584,9 +3851,12 @@ function _rtsUpdateAI(dt) {
      the next decision. Without this the opponent banks tens of thousands of credits it
      structurally cannot spend, while the human restarts a queue the moment it frees. */
   if (S.credits > RTS_AI.infantryReserve) _rtsAIUnits(S);
+  G.ai.next -= dt;
   G.ai.build -= dt;
   if (G.ai.build <= 0) {
     G.ai.build = 5;
+    _rtsAIStateTick(S);
+
     /* Repair_AI, gated on IQRepairSell: the low difficulties simply cannot do this, which is
        why raiding a Commando base and leaving means finding it whole again. */
     if (_rtsIQAt(RTS_IQ.repairSell) && S.credits > RTS_AI.creditReserve * 0.5) {
@@ -3598,13 +3868,13 @@ function _rtsUpdateAI(dt) {
     }
     _rtsAIUnits(S);
 
-    /* Structures: build toward the target composition, keeping CreditReserve in hand for
-       everything except a power emergency. */
-    var want = _rtsAIWants(S);
-    if (want && !S.q.struct && !S.ready) {
-      var sd = rtsStructDef(want.key);
-      var reserve = want.urgent ? 0 : RTS_AI.creditReserve;
-      if (S.credits >= _rtsCostOf('enemy', sd) + reserve) _rtsQueue('enemy', want.key);
+    /* Expert_AI: score every strategy, then act from CRITICAL downward. Note the original
+       computes an `acted` flag with the stated intent of stopping after the highest urgency
+       level that did something - but never actually breaks on it. Following the code rather
+       than the comment: every level gets its turn. */
+    var urg = _rtsAIUrgency(S);
+    for (var u = RTS_URGENCY.CRITICAL; u >= RTS_URGENCY.LOW; u--) {
+      for (var strat in urg) if (urg[strat] === u) _rtsAIDo(strat, u, S);
     }
   }
   /* The AI places its own finished buildings. Throttled: the search is over every anchor's
@@ -3615,32 +3885,6 @@ function _rtsUpdateAI(dt) {
       G.ai.place = 0.6;
       if (_rtsAIPlace(S.ready)) { S.ready = null; S.readyTry = 0; }
       else if (++S.readyTry > 8 || !_rtsHas('enemy', 'yard')) { S.ready = null; S.readyTry = 0; }
-    }
-  }
-  G.ai.next -= dt;
-  if (G.ai.next <= 0) {
-    /* AttackInterval, scaled by the difficulty's build bias - a slower opponent also comes
-       at you less often, so Recruit is a genuinely gentler game rather than the same game
-       with weaker tanks. */
-    G.ai.next = RTS_WAVE_EVERY * _rtsBias('enemy').build; G.ai.wave++;
-    var pool = [], k;
-    for (k = 0; k < G.ents.length; k++) {
-      var u = G.ents[k];
-      if (!u.dead && u.side === 'enemy' && u.type === 'unit' && !rtsUnitDef(u.def).harvest && !u.order) pool.push(u);
-    }
-    /* Commit a real share of the idle army, not a token squad. Sending a fixed handful let
-       the AI pile up forty-odd defenders at home, which is both un-fun and unbeatable.
-       IQGuardArea: only a smart opponent knows to hold some of it back as a garrison. */
-    var share = _rtsIQAt(RTS_IQ.guardArea) ? 0.7 : 0.6;
-    var send = Math.min(pool.length, Math.max(3, Math.ceil(pool.length * share)));
-    if (_rtsIQAt(RTS_IQ.guardArea)) send = Math.min(send, Math.max(3, pool.length - 3));
-    if (send >= 2) {
-      var aim = _rtsHas('player', 'yard') || _rtsHas('player', 'refinery') || _rtsHas('player', 'power');
-      if (aim) {
-        for (k = 0; k < send; k++) _rtsOrderMove(pool[k], aim.x + (k % 3 - 1) * 5, aim.z + ((k / 3) | 0) * 5, true);
-        _rtsSay('Redline attack wave inbound!');
-        if (typeof _rtsSfx === 'function') _rtsSfx('alert');
-      }
     }
   }
 }
@@ -3725,6 +3969,30 @@ function _rtsTickOre(dt) {
   if (grew) G.oreGrew = true;
 }
 
+/* HouseClass::AI: "if there is insufficient power, then all buildings that are above half
+   strength take a little bit of damage." Only buildings that actually DRAW power - the
+   original notes this specifically so that land mines do not blow themselves up in a
+   brownout. This is what makes losing your power plants cost something even before you
+   notice the production slowdown. */
+function _rtsPowerDamage(dt) {
+  var G = window._rtsG;
+  G.dmgT = (G.dmgT || 0) + dt;
+  if (G.dmgT < RTS_DAMAGE_DELAY) return;
+  G.dmgT = 0;
+  for (var side in G.sides) {
+    if (_rtsPowerFactor(side) >= 0.999) continue;
+    for (var i = 0; i < G.ents.length; i++) {
+      var e = G.ents[i];
+      if (e.dead || e.type !== 'struct' || e.side !== side || e.building || e.selling) continue;
+      var d = rtsStructDef(e.def);
+      if (d.power >= 0) continue;                     /* only what draws power */
+      if (e.hp <= e.maxHp * RTS_COND_YELLOW) continue; /* "above half strength" */
+      e.hp -= RTS_POWER_DAMAGE;
+      e.hitT = 0.18;
+    }
+  }
+}
+
 /* ------------------------------------------------------------ main tick */
 function _rtsTick(dt) {
   var G = window._rtsG;
@@ -3735,6 +4003,7 @@ function _rtsTick(dt) {
 
   _rtsTickOre(dt);
   _rtsVisTick(dt);
+  _rtsPowerDamage(dt);
   /* Power_Output tracks hit points, so it has to be re-totalled before anything reads it. */
   _rtsRecalcPower('player'); _rtsRecalcPower('enemy');
   _rtsTickProduction('player', dt);
