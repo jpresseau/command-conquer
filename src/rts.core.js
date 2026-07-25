@@ -29,6 +29,13 @@ function _rtsBlocked(tx, tz) { var G = window._rtsG; return !_rtsInB(tx, tz) || 
 /* Deterministic PRNG so a given seed always lays out the same battlefield. */
 function _rtsRngMake(seed) {
   var s = (seed || 1) >>> 0;
+  /* Scramble and warm up before handing the stream out. A bare xorshift started from a small
+     integer returns a tiny first value - seed 1 gives about 0.00006 - so any `(rnd()*n)|0`
+     off the first call lands on 0 for every low seed. That is not theoretical: it made all
+     24 test maps roll the same start position. */
+  s = (Math.imul(s ^ 0x9e3779b9, 2654435761) ^ 0x85ebca6b) >>> 0;
+  if (!s) s = 1;
+  for (var w = 0; w < 8; w++) { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; }
   return function () { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
 }
 
@@ -187,7 +194,7 @@ function _rtsSideNew(key) {
    Everything here is clustered noise rather than scattered singles - a grove of twenty
    trees reads as forest, twenty lone trees read as litter. Roads are carved LAST and are
    what guarantees the two bases can still reach each other; see _rtsCarveRoad. */
-function _rtsGenTerrain(G, rnd) {
+function _rtsGenTerrain(G, rnd, starts) {
   var N = RTS_N, i, tx, tz;
   var seed = G.seed | 0;
   function nz(x, y, sc, s) {                       /* smooth value noise, tile units */
@@ -255,9 +262,37 @@ function _rtsGenTerrain(G, rnd) {
   /* --- roads. Carved last, straight through whatever is in the way, so they double as
          the guarantee that the map stays connected: every road links the two start
          corners, so a unit can always get from one base to the other. --- */
-  _rtsCarveRoad(G, 20, 90, 92, 22, rnd);          /* the main diagonal, base to base */
-  _rtsCarveRoad(G, 20, 90, 90, 78, rnd);          /* south branch, toward the lake */
-  _rtsCarveRoad(G, 92, 22, 26, 34, rnd);          /* north branch */
+  /* Clear a build area at each start FIRST. Terrain is generated before the bases are placed,
+     so a start can land inside a forest or a lake; the base then gets scan-placed as much as
+     32 rings away while the roads still meet at the original point, and the map comes apart -
+     one seed in twenty-four had a player base with no route to anything, ore included. */
+  function _clearStart(b) {
+    for (var ox = -5; ox <= 5; ox++) for (var oz = -5; oz <= 5; oz++) {
+      if (ox * ox + oz * oz > 30) continue;
+      var cx = b.tx + ox, cz = b.tz + oz;
+      if (!_rtsInB(cx, cz)) continue;
+      var ci = _rtsIdx(cx, cz);
+      if (G.blocked[ci] === 1) continue;               /* never bulldoze a structure */
+      G.blocked[ci] = 0;
+      if (G.terrain[ci] !== RTS_T_ROAD) G.terrain[ci] = RTS_T_GRASS;
+    }
+  }
+
+  /* Every road still links the two STARTS, which is what guarantees the map stays passable -
+     they are just no longer two fixed corners. The branches are expressed in the same local
+     frame as the bases so they fan out sideways from the main route whatever axis it runs on. */
+  var _sp = starts.player, _se = starts.enemy;
+  var _dx = _se.tx - _sp.tx, _dz = _se.tz - _sp.tz, _L = Math.hypot(_dx, _dz) || 1;
+  var _ux = _dx / _L, _uz = _dz / _L, _px = -_uz, _pz = _ux;
+  function _off(b, along, across) {
+    return [Math.max(2, Math.min(N - 3, Math.round(b.tx + _ux * along + _px * across))),
+            Math.max(2, Math.min(N - 3, Math.round(b.tz + _uz * along + _pz * across)))];
+  }
+  _clearStart(_sp); _clearStart(_se);
+  var _b1 = _off(_sp, _L * 0.55,  30), _b2 = _off(_se, -_L * 0.55, -30);
+  _rtsCarveRoad(G, _sp.tx, _sp.tz, _se.tx, _se.tz, rnd);      /* the main route, base to base */
+  _rtsCarveRoad(G, _sp.tx, _sp.tz, _b1[0], _b1[1], rnd);      /* one branch out to each flank */
+  _rtsCarveRoad(G, _se.tx, _se.tz, _b2[0], _b2[1], rnd);
 
   /* --- sandbag emplacements. Short dog-legged chains of old fortification, left over from
          whoever fought here last. They are scattered all over the reference material and are
@@ -280,7 +315,7 @@ function _rtsGenTerrain(G, rnd) {
      Roads link the two bases, but a forest can still ring an ore field completely and leave
      it unharvestable. Roughly one map in three did. Flood fill from the player start and
      carve a track out to any ore that the fill could not reach. --- */
-  var reach = new Uint8Array(N * N), stack = [_rtsIdx(20, 90)];
+  var reach = new Uint8Array(N * N), stack = [_rtsIdx(_sp.tx, _sp.tz)];
   reach[stack[0]] = 1;
   while (stack.length) {
     var ci = stack.pop(), cxr = ci % N, czr = (ci / N) | 0;
@@ -296,9 +331,9 @@ function _rtsGenTerrain(G, rnd) {
     for (tz = 0; tz < N; tz++) {
       i = _rtsIdx(tx, tz);
       if (G.scrap[i] <= 0 || reach[i]) continue;
-      _rtsCarveRoad(G, tx, tz, 20, 90, rnd, true);   /* cut through to the player start */
+      _rtsCarveRoad(G, tx, tz, _sp.tx, _sp.tz, rnd, true);   /* cut through to the player start */
       /* One carve reconnects the whole blob, so re-run the fill rather than carving per tile. */
-      reach.fill(0); stack = [_rtsIdx(20, 90)]; reach[stack[0]] = 1;
+      reach.fill(0); stack = [_rtsIdx(_sp.tx, _sp.tz)]; reach[stack[0]] = 1;
       while (stack.length) {
         var c2 = stack.pop(), cx2r = c2 % N, cz2r = (c2 / N) | 0;
         for (var d2 = 0; d2 < 4; d2++) {
@@ -355,6 +390,122 @@ function _rtsCarveRoad(G, x0, z0, x1, z1, rnd, force) {
   }
 }
 
+
+/* ------------------------------------------------ start positions (SCENARIO.CPP) --
+   Create_Units picks the first house's start AT RANDOM from the waypoint list, then gives
+   every later house the waypoint with the highest SUM OF DISTANCES to all already-taken
+   starts - "the waypoint with the largest score is the one that is furthest from all other
+   taken waypoints". For two houses that means: roll the axis, then take the far end of it.
+
+   In RA the candidate list is authored per scenario. This map is generated, so the candidates
+   are a ring inset from the edge; the roll therefore chooses which diagonal the match is
+   fought along, and the whole map - ore, roads, connectivity, waypoints - follows from it
+   instead of being pinned to one corner every game. */
+function _rtsStartCandidates() {
+  var c = [], n = 8, R = RTS_N * 0.36, mid = RTS_N / 2;
+  for (var i = 0; i < n; i++) {
+    var a = (i / n) * Math.PI * 2;
+    c.push({ tx:Math.round(mid + Math.cos(a) * R), tz:Math.round(mid + Math.sin(a) * R) });
+  }
+  return c;
+}
+function _rtsPickStarts(rnd) {
+  var cand = _rtsStartCandidates(), taken = [], i, j;
+  /* "int pick = Random_Pick(0, num_waypts-1)" - the first is simply chosen. */
+  taken.push(cand.splice((rnd() * cand.length) | 0, 1)[0]);
+  /* ...every later one maximises the summed distance to those already taken. */
+  while (taken.length < 2) {
+    var best = 0, bestScore = -1;
+    for (i = 0; i < cand.length; i++) {
+      var score = 0;
+      for (j = 0; j < taken.length; j++) score += Math.hypot(cand[i].tx - taken[j].tx, cand[i].tz - taken[j].tz);
+      if (score > bestScore) { bestScore = score; best = i; }
+    }
+    taken.push(cand.splice(best, 1)[0]);
+  }
+  return { player:taken[0], enemy:taken[1] };
+}
+/* The ore layout is expressed RELATIVE to the two starts rather than as fixed cells: a home
+   field beside each base, matched pairs out along the line between them, and the gems in
+   contested ground at the midpoint. Mirroring it about the midpoint is what keeps the map
+   fair whichever axis the roll produced. */
+function _rtsOreFields(S) {
+  var p = S.player, e = S.enemy;
+  var mx = (p.tx + e.tx) / 2, mz = (p.tz + e.tz) / 2;
+  var dx = e.tx - p.tx, dz = e.tz - p.tz, L = Math.hypot(dx, dz) || 1;
+  var ux = dx / L, uz = dz / L, px = -uz, pz = ux;
+  function at(base, along, across, rad, gem) {
+    return [Math.round(base.tx + ux * along + px * across),
+            Math.round(base.tz + uz * along + pz * across), rad, gem];
+  }
+  return [
+    /* home fields: close enough to mine from the start, offset so they are not underfoot */
+    at(p,  9,  -7, 7, 0), at(e, -9,   7, 7, 0),
+    /* a second field each, on the other flank, to give the base two directions to work */
+    at(p, 14,  10, 5, 0), at(e, -14, -10, 5, 0),
+    /* the big contested field in the middle */
+    [Math.round(mx), Math.round(mz), 10, 0],
+    /* matched mid-field pairs either side of the centre line */
+    at(p, L * 0.42,  18, 6, 0), at(e, -L * 0.42, -18, 6, 0),
+    /* gems: small, unmirrored pair straddling the midpoint, in the most contested ground */
+    [Math.round(mx + px * 14), Math.round(mz + pz * 14), 3, 1],
+    [Math.round(mx - px * 14), Math.round(mz - pz * 14), 3, 1]
+  ];
+}
+
+
+/* Scan_Place_Object: "loop through distances from the given center cell; skip the center
+   cell. For each distance, try placing the object along each rotational direction; if none
+   are available, try each direction with a random scatter value." The second pass exists
+   because otherwise everything lines up along eight spokes out of the centre.
+
+   Returns the cell used, or null if 32 rings found nothing. */
+var _RTS_FACING8 = [[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1]];
+function _rtsScanPlace(tx, tz, fits, rnd) {
+  if (fits(tx, tz)) return { tx:tx, tz:tz };
+  for (var dist = 1; dist < 32; dist++) {
+    var rot = ((rnd ? rnd() : 0) * 8) | 0;                 /* "Pick a random starting direction" */
+    for (var tryval = 0; tryval < 2; tryval++) {
+      for (var f = 0; f < 8; f++) {
+        var d = _RTS_FACING8[(rot + f) % 8];
+        var cx = tx + d[0] * dist, cz = tz + d[1] * dist;
+        if (tryval > 0 && rnd) {                            /* Clip_Scatter, second pass only */
+          cx += ((rnd() * 3) | 0) - 1; cz += ((rnd() * 3) | 0) - 1;
+        }
+        if (cx === tx && cz === tz) continue;
+        if (fits(cx, cz)) return { tx:cx, tz:cz };
+      }
+    }
+  }
+  return null;
+}
+/* Lay out a base in its own local frame: `along` points at the opponent, `across` to the
+   side. The same table then produces the same arrangement whichever axis the start roll
+   picked, instead of the layout only making sense on one diagonal. */
+function _rtsLayBase(start, foe, list, side) {
+  var G = window._rtsG;
+  var dx = foe.tx - start.tx, dz = foe.tz - start.tz, L = Math.hypot(dx, dz) || 1;
+  var ux = dx / L, uz = dz / L, px = -uz, pz = ux;
+  for (var i = 0; i < list.length; i++) {
+    var kind = list[i][0], key = list[i][1], along = list[i][2], across = list[i][3];
+    var tx = Math.round(start.tx + ux * along + px * across);
+    var tz = Math.round(start.tz + uz * along + pz * across);
+    if (kind === 'unit') {
+      var open = _rtsScanPlace(tx, tz, function (x, z) { return _rtsInB(x, z) && !_rtsBlocked(x, z); }, _rtsRnd);
+      if (open) _rtsSpawnUnit(side, key, _rtsWX(open.tx), _rtsWX(open.tz));
+      continue;
+    }
+    var d = rtsStructDef(key);
+    var spot = _rtsScanPlace(tx, tz, function (x, z) {
+      for (var ox = 0; ox < d.w; ox++) for (var oz = 0; oz < d.h; oz++) {
+        if (!_rtsInB(x + ox, z + oz) || _rtsBlocked(x + ox, z + oz)) return false;
+      }
+      return true;
+    }, _rtsRnd);
+    if (spot) _rtsPlaceStruct(side, key, spot.tx, spot.tz, true);
+  }
+}
+
 function _rtsNewGame(seed, diff) {
   var G = {
     t:0, seed:seed || 12345, over:null, msg:null, msgT:0, shake:0,
@@ -399,8 +550,10 @@ function _rtsNewGame(seed, diff) {
      flat 3x multiplier left the AI sitting on 90k credits it could not spend by the four
      minute mark. Small patch, no regrowth, enormous payout: that is the whole point of the
      deposit in the middle of the map. */
-  var fields = [[28,82,7,0],[82,28,7,0],[38,38,6,0],[74,74,6,0],[56,56,10,0],
-                [22,32,5,0],[90,80,5,0],[34,62,3,1],[78,50,3,1]];
+  /* The two starts are rolled BEFORE anything else is laid down, because the ore, the roads,
+     the connectivity fill and the team waypoints are all expressed relative to them. */
+  G.starts = _rtsPickStarts(rnd);
+  var fields = _rtsOreFields(G.starts);
   for (var f = 0; f < fields.length; f++) {
     var cx = fields[f][0], cz = fields[f][1], rad = fields[f][2], isGem = fields[f][3];
     for (var tx = cx - rad; tx <= cx + rad; tx++) for (var tz = cz - rad; tz <= cz + rad; tz++) {
@@ -411,27 +564,25 @@ function _rtsNewGame(seed, diff) {
       if (isGem) G.gems[_rtsIdx(tx, tz)] = 1;
     }
   }
-  _rtsGenTerrain(G, rnd);
+  _rtsGenTerrain(G, rnd, G.starts);
 
   /* --- the two bases: player bottom-left, Redline top-right.
      Footprints are small (Command Yard 3x3) so a base is a cluster of compact structures
      on a large map, the way the originals laid out - not a few slabs filling the screen. --- */
-  _rtsPlaceStruct('player', 'yard', 18, 88, true);
-  _rtsPlaceStruct('player', 'power', 23, 89, true);
-  _rtsSpawnUnit('player', 'rifle', _rtsWX(21), _rtsWX(84));
-  _rtsSpawnUnit('player', 'rifle', _rtsWX(23), _rtsWX(85));
-  _rtsSpawnUnit('player', 'buggy', _rtsWX(19), _rtsWX(85));
-
-  _rtsPlaceStruct('enemy', 'yard', 91, 20, true);
-  _rtsPlaceStruct('enemy', 'power', 87, 21, true);
-  _rtsPlaceStruct('enemy', 'refinery', 91, 25, true);
-  _rtsPlaceStruct('enemy', 'barracks', 87, 25, true);
-  _rtsPlaceStruct('enemy', 'factory', 95, 24, true);
-  _rtsPlaceStruct('enemy', 'turret', 89, 29, true);
-  _rtsPlaceStruct('enemy', 'turret', 94, 29, true);
-  _rtsSpawnUnit('enemy', 'harvester', _rtsWX(92), _rtsWX(32));
-  _rtsSpawnUnit('enemy', 'rifle', _rtsWX(89), _rtsWX(32));
-  _rtsSpawnUnit('enemy', 'tank', _rtsWX(94), _rtsWX(33));
+  /* Each base is laid out in its own local frame - `along` toward the opponent, `across` to
+     the side - so the same arrangement works whichever axis the roll produced. Scan_Place_Object
+     is what fills in when a slot is blocked: it walks outward through distances, trying every
+     facing at each, rather than giving up on the exact cell. */
+  _rtsLayBase(G.starts.player, G.starts.enemy, [
+    ['struct','yard',    0,  0], ['struct','power',   1,  5],
+    ['unit',  'rifle',   3, -3], ['unit',  'rifle',   4, -1], ['unit', 'buggy', 1, -4]
+  ], 'player');
+  _rtsLayBase(G.starts.enemy, G.starts.player, [
+    ['struct','yard',    0,  0], ['struct','power',  -1, -5],
+    ['struct','refinery',5,  0], ['struct','barracks',4, -5],
+    ['struct','factory', 4,  5], ['struct','turret',  9, -2], ['struct','turret', 9, 3],
+    ['unit',  'harvester',11, 1], ['unit','rifle',   10, -2], ['unit','tank',   11, 3]
+  ], 'enemy');
 
   /* Density LAST. Terrain generation and the two bases both erase ore, and a cell's level is
      a function of how many neighbours still have some - so running the adjust before those

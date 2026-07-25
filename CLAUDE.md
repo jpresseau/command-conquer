@@ -516,6 +516,52 @@ Measured against the pre-TEAMTYPE baseline (mean seconds an idle player survives
 easy 350→323, normal 243→229, hard 187→190. Stronger on easy and normal, parity on hard, and
 notably more consistent — normal lands 233/229/226 where it used to scatter 223/245/262.
 
+## Start positions — from SCENARIO.CPP
+
+`Create_Units` picks the first house's start **at random** from the waypoint list, then gives
+every later house the waypoint with the highest **sum of distances** to all already-taken
+starts. For two houses that means: roll the axis, then take the far end of it. RA's candidates
+are authored per scenario; this map is generated, so they are a ring of eight positions inset
+from the edge, and the roll chooses which diagonal the match is fought along.
+
+**Everything else is derived from the two starts**, which is what makes the whole map change
+rather than just the base coordinates:
+
+- Ore is expressed relative to the starts — a home field beside each base, matched pairs out
+  along the line between them, the big contested field at the midpoint, and the gems
+  straddling it. Mirroring about the midpoint keeps it fair whichever axis came up.
+- Roads run start-to-start with a flank branch each, so the connectivity guarantee still
+  holds. The ore flood fill seeds from the player's start rather than a fixed cell.
+- Base layouts are written in a **local frame** — `along` toward the opponent, `across` to the
+  side — so one table produces a sensible arrangement on any axis.
+- `_rtsScanPlace` is `Scan_Place_Object`: walk outward through distances, try all eight
+  facings at each, then repeat the ring with a random scatter "so our units aren't all aligned
+  along spokes". It fills in whenever a slot is blocked.
+- The camera opens on the player's own yard. It used to open on a fixed corner, which was
+  fine only while the start was fixed too.
+
+**Two bugs this shipped with, both caught by measuring 24 maps rather than looking at one:**
+
+1. **All 24 seeds rolled the same start.** `_rtsRngMake` was a bare xorshift, and a bare
+   xorshift seeded with a small integer returns a tiny *first* value — seed 1 gives about
+   0.00006 — so `(rnd() * 8) | 0` was 0 for every low seed. The generator now scrambles the
+   seed and warms up eight rounds before handing the stream out. Any `(rnd()*n)|0` taken off a
+   fresh stream is suspect; check it.
+2. **One seed in 24 produced a completely disconnected map** — a player base with no route to
+   the enemy or to any ore at all. Terrain is generated *before* bases are placed, so a start
+   could land in a lake, the base would be scan-placed up to 32 rings away, and the roads
+   would still meet at the original point. Terrain generation now clears a build area at each
+   start before carving roads.
+
+Harness (`starts.js`) asserts over 24 seeds: every base complete, the enemy always reachable,
+**all ore always reachable**, separation 79–83 tiles and 901–941 ore cells so no seed is a
+lopsided draw. Seven distinct layouts appeared in 24 rolls, of eight possible.
+
+Ladder after: easy=306s normal=220s hard=176s (from 304/264/187). The headline is not that
+the opponent got stronger — it is that **normal is no longer bimodal**. It was 293/225/289/
+222/293, two clusters 70s apart; it is now 221/229/215/214/223. That split was an artifact of
+one fixed map layout, not a property of the difficulty.
+
 ## Triggers — from TRIGGER.CPP + TEVENT.CPP + TACTION.CPP
 
 The three files only make sense together: TRIGGER.CPP is the machinery, TEVENT.CPP the
