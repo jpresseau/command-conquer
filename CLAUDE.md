@@ -423,6 +423,60 @@ already casts one.
   a flat four seconds, so a **miss detonates near where it was aimed** instead of sailing
   across the map and exploding in somebody else's base.
 
+## Ore fields — from CELL.CPP
+
+**`Tiberium_Adjust` sets a cell's density from how many of its EIGHT neighbours also carry
+ore**, through a lookup table. That one rule is what makes a field read as a field — thick
+core, thinning ragged edge — with no noise function anywhere:
+
+```
+static int _adj[9]    = {0,1,3,4,6,7,8,10,11};
+static int _adjgem[9] = {0,0,0,1,1,1,2,2,2};   // and clamped to 2
+```
+
+Run the adjust **last**, after terrain generation and base placement. Both of those erase ore,
+and a cell's level is a function of how many neighbours still have some, so adjusting earlier
+bakes in counts that no longer describe the field.
+
+**The gem table is the whole gem economy.** A gem cell tops out at 3 steps where gold reaches
+12 — and `Tiberium_Adjust` prices a gem step at `Rule.GemValue * 4` against `Rule.GoldValue`
+for gold. So per *step* gems are worth **12.6×**, and the familiar ~3× only appears per *tile*
+because of the cap. Using the bare 110/35 ratio per unit mined, together with the cap, made a
+gem tile worth **less** than a gold one (measured 344 against 419) — exactly backwards for the
+deposit both bases are supposed to fight over.
+
+- Gem patches must stay **small**. A harvester bay full of gems is worth an order of magnitude
+  more than the same bay full of gold; fields sized for a flat 3× multiplier left the AI on
+  90k credits it could not spend. Small patch, no regrowth, enormous payout.
+- **Bound the harvester's gem preference separately from the price.** `Goto_Tiberium` just
+  takes the closest patch; preferring gems at all is this game's idea. Dividing the trip by the
+  full 12.6× sent every harvester on the map to the middle.
+
+**`RTS_ORE_RICHNESS` scales the whole table.** `_adj` puts most of a blob at 7–8 neighbours and
+therefore near the top of the table — nearly twice what a radial falloff averages. Scale the
+density rather than shrinking the fields: the footprints are what refinery placement and
+harvester routing navigate by, and pulling ore away from the bases stopped the Commando AI
+expanding at all (19 buildings down to 8).
+
+**Spread**: `Spread_Tiberium` picks a random starting facing and then walks **all eight**,
+taking the first cell that can germinate. Picking one direction and giving up when it fails
+biases growth to the cardinals and leaves permanent holes inside a field. `Can_Tiberium_Germinate`
+also refuses ground that could not be *built* on, which is stricter than "passable" — ore
+creeping over a road quietly makes unbuildable ground minable.
+
+**Growth and spread are separate questions.** `Can_Tiberium_Grow` stops at level 11;
+`Can_Tiberium_Spread` wants level > 6. A single `if (full) continue` above both lists meant
+tiles at full density never spread — and a full tile is the likeliest seeder there is. Over
+eight minutes that bug produced **10 new cells where the fix produces 417**, which had been
+quietly starving the whole economy: the Recruit AI's income was 3,740 credits per eight
+minutes, less than one harvester load a minute for two harvesters.
+
+That last one is worth remembering when a difficulty number looks "right". Recruit's 15-unit
+army was a number a bug produced. With ore spreading it fields ~48 — and the ladder is
+unchanged where it counts, because its units are individually far weaker (fire 0.75 against
+1.15, armor 0.7 against 1.2). Measure the ladder by **how long an idle player survives**
+(easy ~300–380s, normal ~222–225s, hard ~164–205s), not by counting units.
+
 ## Picking a target — from TECHNO.CPP
 
 `Greatest_Threat` / `Evaluate_Object` **score** candidates rather than measuring how far away

@@ -401,7 +401,16 @@ var RTS_SPREAD_FLOOR = 4;     /* MinDamage applies only inside this many steps *
    which is what makes a gem patch worth crossing the map for. */
 var RTS_GOLD_VALUE = 35;
 var RTS_GEM_VALUE = 110;
-var RTS_GEM_MULT = RTS_GEM_VALUE / RTS_GOLD_VALUE;
+/* CELL.CPP Tiberium_Adjust prices a gem STEP at `Rule.GemValue * 4`, against `Rule.GoldValue`
+   for a gold step - so per step gems are worth 12.6x, not 3.1x. The familiar ~3x only shows
+   up per TILE, because _adjgem caps a gem cell at 3 steps while gold reaches 12. Using the
+   bare 110/35 ratio per unit mined, together with that cap, made a gem tile worth LESS than
+   a gold one (measured 344 against 419) - precisely backwards for the deposit you are meant
+   to fight over. */
+var RTS_GEM_MULT = (RTS_GEM_VALUE * 4) / RTS_GOLD_VALUE;
+/* How much further a harvester will drive for gems. Bounded on purpose - see the note in
+   _rtsNearestScrap. This is a routing preference, not a price. */
+var RTS_GEM_DETOUR = 3;
 
 /* ------------------------------------------------------------ difficulty --
    RULES.CPP's DifficultyClass: the game does not make the AI "better", it multiplies a
@@ -434,6 +443,7 @@ var RTS_IQ = {
   scatter:3,        /* its infantry scatter from incoming fire */
   harvester:3,      /* replaces lost harvesters */
   guardArea:4,      /* leaves a garrison at home instead of sending everything */
+  refill:3,         /* restarts a production line the instant it frees */
   production:5      /* full build order and base expansion */
 };
 
@@ -605,6 +615,13 @@ var RTS_BUILD_RADIUS = 9;       /* tiles: how far from an existing structure you
 var RTS_ORE_GROW_EVERY = 6;     /* seconds between growth passes */
 var RTS_ORE_GROW_AMT = 26;      /* added to an existing non-full tile each pass */
 var RTS_ORE_SPREAD_CHANCE = 0.10; /* chance a rich tile seeds an empty neighbour */
+/* CELL.CPP counts ore in DISCRETE LEVELS - OverlayData 0..11, twelve of them. The thresholds
+   below are quoted straight from Can_Tiberium_Grow (`OverlayData >= 11` stops growth) and
+   Can_Tiberium_Spread (`OverlayData <= 6` cannot seed), expressed as fractions of a full
+   tile so the rest of the economy can keep working in credits. */
+var RTS_ORE_LEVELS = 12;
+var RTS_ORE_RICHNESS = 0.51;    /* scales _adj so total map wealth matches the old fields */
+var RTS_ORE_SPREAD_MIN = 7 / 12;  /* must be ABOVE level 6 to seed a neighbour */
 /* MAP.CPP keeps a fixed-size candidate list filled by reservoir sampling, so the cost of a
    growth pass does not scale with how much ore is on the map. */
 var RTS_ORE_SAMPLE = 1200;
@@ -2135,6 +2152,9 @@ window._rtsG = null;
    cliffs and a shoreline rather than an empty field. */
 var RTS_T_GRASS = 0, RTS_T_TREE = 1, RTS_T_ROCK = 2, RTS_T_WATER = 3,
     RTS_T_ROAD  = 4, RTS_T_SAND = 5, RTS_T_WALL = 6;
+/* Ground[land].Build - which land types ore is allowed to appear on at all. Sand counts;
+   roads, water, rock and forest do not. */
+var RTS_ORE_GROUND = [true, false, false, false, false, true, false];
 
 /* ------------------------------------------------------------- grid helpers */
 function _rtsIdx(tx, tz) { return tz * RTS_N + tx; }
@@ -2488,17 +2508,24 @@ function _rtsNewGame(seed, diff) {
   /* --- ore fields: a few blobs, biggest ones out in the contested middle --- */
   /* The fourth number is the gem flag. The gem patches sit out in contested ground, never in
      either starting corner - a high-value deposit you can mine in total safety is not a
-     decision, and both bases are meant to want the middle. */
+     decision, and both bases are meant to want the middle.
+
+     Gem patches are SMALL, and have to be. A gem step is priced at four times GemValue while
+     _adjgem caps a gem cell at three steps, so a harvester bay filled with gems is worth an
+     order of magnitude more than the same bay filled with gold. Fields sized for the old
+     flat 3x multiplier left the AI sitting on 90k credits it could not spend by the four
+     minute mark. Small patch, no regrowth, enormous payout: that is the whole point of the
+     deposit in the middle of the map. */
   var fields = [[28,82,7,0],[82,28,7,0],[38,38,6,0],[74,74,6,0],[56,56,10,0],
-                [22,32,5,0],[90,80,5,0],[34,62,5,1],[78,50,5,1]];
+                [22,32,5,0],[90,80,5,0],[34,62,3,1],[78,50,3,1]];
   for (var f = 0; f < fields.length; f++) {
     var cx = fields[f][0], cz = fields[f][1], rad = fields[f][2], isGem = fields[f][3];
     for (var tx = cx - rad; tx <= cx + rad; tx++) for (var tz = cz - rad; tz <= cz + rad; tz++) {
       if (!_rtsInB(tx, tz)) continue;
       var d = Math.hypot(tx - cx, tz - cz);
-      if (d > rad) continue;
-      var amt = RTS_SCRAP_TILE * (1 - d / (rad + 1)) * (0.6 + rnd() * 0.6);
-      if (amt > 40) { G.scrap[_rtsIdx(tx, tz)] = amt; if (isGem) G.gems[_rtsIdx(tx, tz)] = 1; }
+      if (d > rad * (0.72 + rnd() * 0.42)) continue;    /* ragged edge rather than a disc */
+      G.scrap[_rtsIdx(tx, tz)] = 1;                     /* shape only; density set below */
+      if (isGem) G.gems[_rtsIdx(tx, tz)] = 1;
     }
   }
   _rtsGenTerrain(G, rnd);
@@ -2522,6 +2549,11 @@ function _rtsNewGame(seed, diff) {
   _rtsSpawnUnit('enemy', 'harvester', _rtsWX(92), _rtsWX(32));
   _rtsSpawnUnit('enemy', 'rifle', _rtsWX(89), _rtsWX(32));
   _rtsSpawnUnit('enemy', 'tank', _rtsWX(94), _rtsWX(33));
+
+  /* Density LAST. Terrain generation and the two bases both erase ore, and a cell's level is
+     a function of how many neighbours still have some - so running the adjust before those
+     passes bakes in counts that no longer describe the field. */
+  _rtsTiberiumAdjust(G);
 
   _rtsRecalcPower('player'); _rtsRecalcPower('enemy');
   return G;
@@ -3790,7 +3822,14 @@ function _rtsNearestScrap(e) {
     if (G.scrap[i] <= 0) continue;
     var wx = _rtsWX(tx), wz = _rtsWX(tz);
     var trip = Math.hypot(wx - e.x, wz - e.z) + Math.hypot(wx - rx, wz - rz);
-    var s = trip / (G.gems[i] ? RTS_GEM_MULT : 1);
+    /* The detour is weighted by a CAPPED preference, not by the raw value ratio. Once a gem
+       step was correctly priced at four times GemValue, dividing the trip by the full 12.6x
+       meant a gem tile twelve times further away scored the same as ore underfoot - every
+       harvester on the map beelined for the middle, stripped it, and got rich. The Recruit
+       AI went from 15 units to 60 and the difficulty ladder collapsed into one rung.
+       Goto_Tiberium in the original just takes the CLOSEST patch; preferring gems at all is
+       this game's idea, so bounding that preference is this game's job. */
+    var s = trip / (G.gems[i] ? RTS_GEM_DETOUR : 1);
     if (s < bs) { bs = s; best = { tx:tx, tz:tz }; }
   }
   return best;
@@ -4231,7 +4270,12 @@ function _rtsUpdateAI(dt) {
   /* Rich: refill a line as soon as it empties, rather than waiting up to five seconds for
      the next decision. Without this the opponent banks tens of thousands of credits it
      structurally cannot spend, while the human restarts a queue the moment it frees. */
-  if (S.credits > RTS_AI.infantryReserve) _rtsAIUnits(S);
+  /* Rich: refill a line the moment it empties rather than waiting up to five seconds for
+     the next decision. This is a SMART behaviour and is gated like every other one. A house
+     that cannot expand its base spends its whole income on units, so handing perfect queue
+     efficiency to the low difficulties turned Recruit into a unit pump - 53 units against
+     Commando's 61, which is not a difficulty ladder, it is one rung. */
+  if (_rtsIQAt(RTS_IQ.refill) && S.credits > RTS_AI.infantryReserve) _rtsAIUnits(S);
   G.ai.next -= dt;
   G.ai.build -= dt;
   if (G.ai.build <= 0) {
@@ -4286,6 +4330,57 @@ function _rtsSay(m) { var G = window._rtsG; G.msg = m; G.msgT = 4; }
    and that cost lands as a hitch on a slow machine. */
 /* Random_Pick(0, hi), inclusive at both ends. */
 function _rtsPick(rnd, hi) { return (rnd() * (hi + 1)) | 0; }
+/* FacingType order, N first and clockwise, matching Adjacent_Cell(). */
+var _RTS_FACE = [[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1]];
+/* Can_Tiberium_Germinate: on the map, nothing built on it, no ore already, and ground that
+   could be BUILT on - which is stricter than "passable". Ore creeping across a road or a
+   riverbank looks wrong and, worse, quietly makes unbuildable ground minable. */
+function _rtsCanGerminate(tx, tz) {
+  var G = window._rtsG;
+  if (!_rtsInB(tx, tz)) return false;
+  var i = _rtsIdx(tx, tz);
+  if (G.scrap[i] > 0) return false;                 /* Overlay != OVERLAY_NONE */
+  if (G.blocked[i] !== 0) return false;             /* a building or impassable terrain */
+  return RTS_ORE_GROUND[G.terrain ? G.terrain[i] : RTS_T_GRASS] === true;
+}
+/* CELL.CPP Tiberium_Adjust. A cell's density is set from HOW MANY OF ITS EIGHT NEIGHBOURS
+   also carry ore, through a lookup table. That single rule is what makes a field read as a
+   field: the middle is thick, the edge thins out, and nothing needs a noise function.
+
+       static int _adj[9]    = {0,1,3,4,6,7,8,10,11};
+       static int _adjgem[9] = {0,0,0,1,1,1,2,2,2};   // and clamped to 2
+
+   The gem table is the whole gem economy. A gem cell tops out at level 2 of 11, so a gem
+   patch holds a fraction of the ore a gold field of the same area does - it is worth
+   crossing the map for because each scoop pays 3x, not because there is a lot of it. */
+var _RTS_ADJ = [0, 1, 3, 4, 6, 7, 8, 10, 11];
+var _RTS_ADJ_GEM = [0, 0, 0, 1, 1, 1, 2, 2, 2];
+function _rtsTiberiumAdjust(G) {
+  var lvl = new Uint8Array(RTS_N * RTS_N), tx, tz, i;
+  for (tz = 0; tz < RTS_N; tz++) for (tx = 0; tx < RTS_N; tx++) {
+    i = _rtsIdx(tx, tz);
+    if (G.scrap[i] <= 0) continue;
+    var count = 0;
+    for (var f = 0; f < 8; f++) {
+      var nx = tx + _RTS_FACE[f][0], nz = tz + _RTS_FACE[f][1];
+      if (_rtsInB(nx, nz) && G.scrap[_rtsIdx(nx, nz)] > 0) count++;
+    }
+    lvl[i] = G.gems[i] ? Math.min(_RTS_ADJ_GEM[count], 2) : _RTS_ADJ[count];
+  }
+  for (i = 0; i < lvl.length; i++) {
+    if (G.scrap[i] <= 0) continue;
+    /* (OverlayData + 1) steps of ore, scaled onto this game's per-tile capacity. */
+    /* RICHNESS scales the whole table. Tiberium_Adjust puts most of a blob at 7-8 ore
+       neighbours and therefore near the top of _adj, which is nearly twice what the old
+       radial falloff averaged - the same field footprints would have handed both sides
+       double the economy. Scaling here rather than shrinking the fields matters: the
+       footprints are what the AI's refinery placement and its harvesters navigate by, and
+       pulling ore away from the bases stopped the Commando AI expanding at all (19
+       buildings down to 8). Same map, same distances, less in each tile. */
+    G.scrap[i] = (lvl[i] + 1) / RTS_ORE_LEVELS * RTS_SCRAP_TILE * RTS_ORE_RICHNESS;
+  }
+  G.scrapDirty = true;
+}
 function _rtsTickOre(dt) {
   var G = window._rtsG;
   if (!G.oreRnd) G.oreRnd = _rtsRngMake(G.seed ^ 0x5eed);
@@ -4303,18 +4398,24 @@ function _rtsTickOre(dt) {
   for (var n = 0; n < sub && G.oreScan < total; n++, G.oreScan++) {
     i = G.oreScan;
     var a = G.scrap[i];
-    if (a <= 0 || a >= RTS_SCRAP_TILE) continue;
+    if (a <= 0) continue;
     if (G.gems[i]) continue;                 /* IsTGrowth is ore only - a gem field is finite */
 
-    /* Can_Tiberium_Grow */
-    if (_rtsPick(G.oreRnd, G.oreGExcess) <= G.oreGrow.length) {
-      if (G.oreGrow.length < RTS_ORE_SAMPLE) G.oreGrow.push(i);
-      else G.oreGrow[(G.oreRnd() * G.oreGrow.length) | 0] = i;
+    /* Can_Tiberium_Grow: `OverlayData >= 11` cannot grow any further. This full-tile test
+       used to sit above BOTH lists, so a tile at full density was skipped outright and never
+       spread either - exactly backwards, because Can_Tiberium_Spread wants the RICHEST cells
+       and a full one is the likeliest seeder there is. The two questions are separate in
+       CELL.CPP and have to be separate here. */
+    if (a < RTS_SCRAP_TILE) {
+      if (_rtsPick(G.oreRnd, G.oreGExcess) <= G.oreGrow.length) {
+        if (G.oreGrow.length < RTS_ORE_SAMPLE) G.oreGrow.push(i);
+        else G.oreGrow[(G.oreRnd() * G.oreGrow.length) | 0] = i;
+      }
+      G.oreGExcess++;
     }
-    G.oreGExcess++;
 
     /* Can_Tiberium_Spread - only a rich cell can seed a neighbour */
-    if (a > RTS_SCRAP_TILE * 0.6) {
+    if (a > RTS_SCRAP_TILE * RTS_ORE_SPREAD_MIN) {
       if (_rtsPick(G.oreRnd, G.oreSExcess) <= G.oreSpread.length) {
         if (G.oreSpread.length < RTS_ORE_SAMPLE) G.oreSpread.push(i);
         else G.oreSpread[(G.oreRnd() * G.oreSpread.length) | 0] = i;
@@ -4336,14 +4437,21 @@ function _rtsTickOre(dt) {
   for (n = 0; n < G.oreSpread.length; n++) {
     i = G.oreSpread[n];
     if (G.oreRnd() >= RTS_ORE_SPREAD_CHANCE) continue;
+    /* Spread_Tiberium: pick a random STARTING facing, then walk all eight in order and take
+       the first cell that can germinate. Picking one direction at random and giving up when
+       it fails - which is what this did - biases growth to the four cardinals and leaves
+       permanent holes inside a field, because the one cell that could have been filled is
+       only ever offered a 1-in-4 chance per attempt. */
     var tx = i % RTS_N, tz = (i / RTS_N) | 0;
-    var d = (G.oreRnd() * 4) | 0;
-    var nx = tx + (d === 0 ? 1 : d === 1 ? -1 : 0), nz = tz + (d === 2 ? 1 : d === 3 ? -1 : 0);
-    if (!_rtsInB(nx, nz)) continue;
-    var ni = _rtsIdx(nx, nz);
-    if (G.scrap[ni] > 0 || G.blocked[ni] !== 0) continue;
-    G.scrap[ni] = RTS_SCRAP_TILE * 0.2;
-    G.scrapDirty = true;             /* new tile - the render layer must re-lay the field */
+    var off = _rtsPick(G.oreRnd, 7);
+    for (var s = 0; s < 8; s++) {
+      var fc = _RTS_FACE[(off + s) & 7];
+      var nx = tx + fc[0], nz = tz + fc[1];
+      if (!_rtsCanGerminate(nx, nz)) continue;
+      G.scrap[_rtsIdx(nx, nz)] = RTS_SCRAP_TILE / RTS_ORE_LEVELS;   /* OverlayData = 0 */
+      G.scrapDirty = true;           /* new tile - the render layer must re-lay the field */
+      break;
+    }
   }
   G.oreGrow.length = 0; G.oreSpread.length = 0;
   G.oreGExcess = 0; G.oreSExcess = 0;
