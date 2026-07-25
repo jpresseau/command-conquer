@@ -1,6 +1,8 @@
-/* RC COMMAND - simulation core. Pure game state + logic; no THREE.js in this file.
-   rts.render.js owns every mesh, rts.ui.js owns the DOM. Keeping the sim renderer-free
-   means the whole battle can be stepped headlessly (which is how it gets verified).
+/* RC COMMAND - simulation core. Pure game state + logic; no rendering in this file.
+   rts.render.js owns every pixel, rts.ui.js owns the DOM. Keeping the sim renderer-free
+   means the whole battle can be stepped headlessly (which is how it gets verified) - and it
+   is what allowed the renderer to be swapped from three.js to canvas 2D without touching a
+   line of this file.
 
    The world is a fixed grid (RTS_N x RTS_N). Structures occupy whole tiles and block
    them; units move continuously and avoid each other with soft separation rather than

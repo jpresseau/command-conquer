@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Assemble index.html - the whole RC Command game.  Usage: python3 build.py
 
-The shipped game is a single self-contained index.html with no network dependencies at all:
-three.js is vendored, every model is generated in code, and every sound is synthesized at
-runtime. Edit the files in src/, run this, commit the regenerated index.html.
+The shipped game is a single self-contained index.html with no network dependencies and no
+libraries at all - it is canvas 2D, every sprite is drawn in code, and every sound is
+synthesized at runtime. Edit the files in src/, run this, commit the regenerated index.html.
 
-  //@@THREE@@       -> src/three.min.js
   //@@INC:<path>@@  -> src/<path>
   /*@@CSS:<path>@*/ -> src/<path>, inlined into a <style>
 """
@@ -20,14 +19,6 @@ SRC = os.path.join(ROOT, 'src')
 def read(p):
     with open(p, encoding='utf-8') as f:
         return f.read()
-
-
-def read_three():
-    """Our own vendored copy - deliberately not lifted out of the other app's source."""
-    p = os.path.join(SRC, 'three.min.js')
-    if not os.path.exists(p):
-        sys.exit('build.py: src/three.min.js is missing')
-    return read(p)
 
 
 def check_syntax(js, label):
@@ -50,7 +41,7 @@ def check_syntax(js, label):
         os.unlink(tmp)
 
 
-GAME_SOURCES = ('rts.rules.js', 'rts.buildings.js', 'rts.audio.js',
+GAME_SOURCES = ('rts.rules.js', 'rts.sprites.js', 'rts.audio.js',
                 'rts.core.js', 'rts.render.js', 'rts.ui.js')
 
 
@@ -84,7 +75,6 @@ def main():
     for rel in GAME_SOURCES:
         check_syntax(read(os.path.join(SRC, rel)), rel)
 
-    page = page.replace('//@@THREE@@', read_three())
     page = re.sub(r'(?:/\*|//)@@(?:INC|CSS):([\w./-]+)@@(?:\*/)?',
                   lambda m: read(os.path.join(SRC, m.group(1))), page)
 

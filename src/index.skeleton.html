@@ -62,10 +62,8 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
     and containing no assets from, any existing game. All art and audio generated in code.</p>
 </div>
 
-<script>//@@THREE@@</script>
-
 <script>//@@INC:rts.rules.js@@</script>
-<script>//@@INC:rts.buildings.js@@</script>
+<script>//@@INC:rts.sprites.js@@</script>
 <script>//@@INC:rts.audio.js@@</script>
 <script>//@@INC:rts.core.js@@</script>
 <script>//@@INC:rts.render.js@@</script>
@@ -84,11 +82,7 @@ function rtsHome(){
 function rtsStart(btn){
   var err = document.getElementById('rtsErr');
   if (err) err.style.display = 'none';
-  if (typeof window.THREE === 'undefined') {
-    if (err) { err.style.display = 'block'; err.textContent = 'WebGL / three.js failed to load.'; }
-    return;
-  }
-  if (btn) { btn.disabled = true; btn.textContent = 'BUILDING BATTLEFIELD…'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'DEPLOYING…'; }
   /* let the button repaint before the (synchronous) first-run building construction */
   setTimeout(function(){
     try {

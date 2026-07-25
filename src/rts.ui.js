@@ -1,15 +1,13 @@
 /* RC COMMAND - UI + input + the main loop.
 
    Layout is the classic one: battlefield on the left, a fixed command sidebar on the
-   right holding credits, power, minimap and the build lists. Selection brackets, health
-   bars and the drag box are drawn on a 2D overlay canvas above the WebGL view rather
-   than as 3D sprites - cheaper, and it keeps the crisp flat look the originals had. */
+   right holding credits, power, radar and the build tiles. Selection brackets, health bars
+   and the drag box are drawn on a 2D overlay canvas above the battlefield canvas. */
 
 window._rtsUI = null;
 
 function rtsOpen(seed) {
   if (document.getElementById('rcgRts')) return;
-  if (typeof window.THREE === 'undefined') { alert('3D engine not loaded.'); return; }
   /* hide the title screen while a battle is running */
   var _home = document.getElementById('rtsHome');
   if (_home) _home.classList.add('gone');
@@ -270,7 +268,8 @@ function _rtsBindInput() {
   };
   cv.onwheel = function (e) {
     e.preventDefault();
-    _rtsR.dist = Math.max(52, Math.min(240, _rtsR.dist * (e.deltaY > 0 ? 1.12 : 0.89)));
+    /* zoom in whole pixels per cell - fractional scaling would blur the sprites */
+    _rtsR.cell = Math.max(16, Math.min(88, _rtsR.cell + (e.deltaY > 0 ? -8 : 8)));
     _rtsClampFocus();
   };
   var mini = document.getElementById('rtsMini');
@@ -408,7 +407,7 @@ function _rtsDrawHud(dt) {
     g.fillRect(s.x - bw / 2, s.y - bh, bw * frac, bh);
     if (selected) {
       /* corner brackets, the classic selection look */
-      var r = (e.type === 'struct' ? rtsStructDef(e.def).w * 5.2 : 15) * (118 / _rtsR.dist);
+      var r = (e.type === 'struct' ? rtsStructDef(e.def).w * _rtsR.cell * 0.5 : _rtsR.cell * 0.42);
       r = Math.max(10, Math.min(70, r));
       var cy = s.y + r * 0.55, L = Math.max(5, r * 0.42);
       g.strokeStyle = e.side === 'player' ? '#8ef07a' : '#ff8a7a';
