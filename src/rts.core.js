@@ -32,6 +32,24 @@ function _rtsRngMake(seed) {
   return function () { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
 }
 
+/* Gameplay randomness runs off the SCENARIO SEED, never off bare Math.random.
+
+   This is not tidiness - it is what makes a balance claim checkable. With Math.random the
+   same build run twice gave a mean idle-player survival of 315s and then 502s on easy, and a
+   single seed fell at 318s in one run and survived the full ten minutes in the next. Any A/B
+   between two builds was measuring the generator, not the change. Seeded, a seed replays
+   exactly and a comparison is a comparison.
+
+   Three independent streams off the same seed, so that consuming a number in one cannot
+   shift another: the map generator (raw seed), ore growth (^0x5eed), and this, the gameplay
+   stream (^0x9e3779b9) - attack intervals, team choice, scatter, survivors, accuracy. */
+function _rtsRnd() {
+  var G = window._rtsG;
+  if (!G) return Math.random();
+  if (!G.rnd) G.rnd = _rtsRngMake((G.seed ^ 0x9e3779b9) >>> 0);
+  return G.rnd();
+}
+
 /* --------------------------------------------------------------------- A* --
    8-way octile A* over the blocked grid. Diagonals are refused when they would cut
    a blocked corner, so units never clip through a building corner. Returns an array
@@ -359,6 +377,7 @@ function _rtsNewGame(seed, diff) {
     ents:[], byId:{}, nextId:1,
     sel:[], proj:[], fx:[],
     sides:{ player:_rtsSideNew('player'), enemy:_rtsSideNew('enemy') },
+    rnd:null,                              /* seeded on first use; see _rtsRnd */
     ai:{ next:0, wave:0, build:6, place:0, state:0, lastHit:-999, want:null },
     teams:{}, teamSeq:0, teamHold:{},
     stats:{ killed:0, lostU:0 }
@@ -678,12 +697,12 @@ function _rtsKill(e) {
     } else {
       /* Take_Damage: half the time a crew member bails out of a wrecked vehicle, wounded and
          running. Not from one that was crushed - there is nobody left to climb out. */
-      if (!e.crushed && Math.random() < RTS_CREW_CHANCE) {
+      if (!e.crushed && _rtsRnd() < RTS_CREW_CHANCE) {
         var cell = _rtsNearestOpen(_rtsTX(e.x), _rtsTX(e.z), 4);
         if (cell) {
           var crew = _rtsSpawnUnit(e.side, 'rifle', _rtsWX(cell[0]), _rtsWX(cell[1]));
           if (crew) {
-            crew.hp = Math.max(5, Math.round(crew.maxHp * (0.15 + Math.random() * 0.35)));
+            crew.hp = Math.max(5, Math.round(crew.maxHp * (0.15 + _rtsRnd() * 0.35)));
             crew.fear = RTS_FEAR.PANIC;
             _rtsScatter(crew, e.x, e.z);
           }
@@ -760,7 +779,7 @@ function _rtsDropDebris(e) {
      burned down has no crew left to run out of it. */
   if (e.burned) return;
   var n = 0, want = _rtsSurvivorCount(e);
-  for (var i = 0; i < want; i++) if (Math.random() < RTS_SURVIVOR_ODDS) n++;
+  for (var i = 0; i < want; i++) if (_rtsRnd() < RTS_SURVIVOR_ODDS) n++;
   if (n) _rtsEvacuate(e, n, true);
 }
 
@@ -1285,8 +1304,8 @@ function _rtsScatter(e, fromX, fromZ) {
      it by every near miss is exactly what a hold order exists to prevent. */
   if (!_rtsMission(e).scatter) return;
   var a = Math.atan2(e.z - fromZ, e.x - fromX);
-  a += (Math.random() - 0.5) * (Math.PI / 2);      /* Random_Pick(0,4)-2 facings of spread */
-  var d = RTS_TILE * (1.5 + Math.random());
+  a += (_rtsRnd() - 0.5) * (Math.PI / 2);      /* Random_Pick(0,4)-2 facings of spread */
+  var d = RTS_TILE * (1.5 + _rtsRnd());
   var gx = e.x + Math.cos(a) * d, gz = e.z + Math.sin(a) * d;
   var tx = _rtsTX(gx), tz = _rtsTX(gz);
   if (!_rtsInB(tx, tz) || _rtsBlocked(tx, tz)) return;
@@ -1348,11 +1367,11 @@ function _rtsBaseIsAttacked(bldg, enemy) {
     /* "Alternates between guard area and attack" - half go straight for the attacker, half
        take up station on the building being hit. A pure charge leaves the base empty again
        the moment the raider dies. */
-    if (Math.random() < 0.5) _rtsOverrideMission(p.u, 'attack', enemy);
+    if (_rtsRnd() < 0.5) _rtsOverrideMission(p.u, 'attack', enemy);
     else {
       _rtsOverrideMission(p.u, 'amove', null);
-      _rtsOrderMove(p.u, bldg.x + (Math.random() - 0.5) * RTS_TILE * 4,
-                         bldg.z + (Math.random() - 0.5) * RTS_TILE * 4, true);
+      _rtsOrderMove(p.u, bldg.x + (_rtsRnd() - 0.5) * RTS_TILE * 4,
+                         bldg.z + (_rtsRnd() - 0.5) * RTS_TILE * 4, true);
     }
     sent++;
     risk += rtsUnitDef(p.u.def).cost;
@@ -1410,7 +1429,7 @@ function _rtsCanRetaliate(tgt, from) {
      target. Don't retaliate if it is currently attacking the greater threat." The original
      only bothers half the time, which is what stops a firefight turning into every unit
      spinning between whoever shot last. */
-  if (Math.random() < 0.5) return false;
+  if (_rtsRnd() < 0.5) return false;
   if (!tgt.target || tgt.target.dead) return true;
   var dn = _rtsRangeTo(tgt, from), dc = _rtsRangeTo(tgt, tgt.target);
   return _rtsEvalObject(tgt, from, dn, w) > _rtsEvalObject(tgt, tgt.target, dc, w);
@@ -2471,7 +2490,7 @@ function _rtsSuggestTeam(spare) {
     choices.push(ty);
   }
   if (!choices.length) return null;
-  return choices[(Math.random() * choices.length) | 0];
+  return choices[(_rtsRnd() * choices.length) | 0];
 }
 /* Suspend_Teams: when the base is hit, everything below the survival priority is disbanded
    and its members are freed to defend. HOUSE.CPP calls this and it had nothing to call. */
@@ -2758,7 +2777,7 @@ function _rtsAIAttack(urgency) {
      IQGuardArea: only a smart opponent knows to hold some of it back as a garrison. */
   /* AttackInterval is deliberately randomised over a 4x spread in the original, so waves
      never arrive on a metronome you can set your watch by. */
-  G.ai.next = RTS_WAVE_EVERY * _rtsBias('enemy').build * (0.5 + Math.random() * 1.5);
+  G.ai.next = RTS_WAVE_EVERY * _rtsBias('enemy').build * (0.5 + _rtsRnd() * 1.5);
   if (!_rtsHas('player', 'yard') && !_rtsHas('player', 'refinery') && !_rtsHas('player', 'power')) return false;
 
   /* Raise a TEAM rather than shoving a share of everything idle at the nearest building.

@@ -581,10 +581,31 @@ With that in place a seed replays exactly, and an A/B becomes a comparison rathe
 estimate — the trigger layer was shown inert this way, producing byte-identical fall times,
 unit counts, credits and kill/loss tallies with the trigger table populated and emptied.
 
+**This is now fixed in the game itself, and pinning is no longer required.** All gameplay
+randomness runs through `_rtsRnd()`, seeded off the scenario seed, so a seed replays exactly:
+same fall time to the centisecond, same unit counts, same credits, same kill and loss tallies.
+Three independent streams off the one seed keep the subsystems from shifting each other — the
+map generator (raw seed), ore growth (`^0x5eed`) and gameplay (`^0x9e3779b9`). Interleaving a
+different seed between two runs of the same seed does not disturb it.
+
+Reproducible five-seed baseline, mean seconds an idle player survives:
+
+    easy=304s  normal=264s  hard=187s
+
+`normal` is **bimodal** — 293/225/289/222/293 — two clusters roughly 70s apart rather than a
+spread around a mean. Quoting its mean hides that; the useful question about a change on
+normal is which cluster each seed lands in, not what the average did.
+
 Earlier balance figures in this file that were taken from single unpinned runs — notably the
-easy-difficulty numbers in the TEAM.CPP and TEAMTYPE.CPP sections — should be read as
-indicative only. The right fix is to route gameplay randomness through the existing seeded
-`_rtsRngMake` so the shipped game is reproducible too; that has not been done yet.
+easy-difficulty numbers in the TEAM.CPP and TEAMTYPE.CPP sections — predate this and should
+be read as indicative only.
+
+**Seeding also exposes flaky assertions.** `_rtsCanRetaliate` on a non-idle unit applies
+TECHNO.CPP's "the original only bothers half the time" coin flip, so a single call is a coin
+flip and asserting on it means nothing. The mission harness had exactly that assertion and had
+been passing on luck; it now samples 400 calls and checks the proportion. If a harness
+assertion starts failing after a change to the random stream, ask whether it was ever really
+testing anything.
 
 ## Missions — from MISSION.CPP
 
