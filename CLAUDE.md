@@ -460,6 +460,42 @@ are what actually separate the difficulties: Recruit never expands its base, nev
 never scatters. Measured over eight minutes against a passive player: Recruit fields 16 units
 from 8 buildings, Commando 64 from 19, and the first attack wave lands at 212 s / 152 s / 106 s.
 
+## Production and the sidebar — from SIDEBAR.CPP
+
+**Two independent lines.** `Which_Column` puts buildings in column 0 and everything else in
+column 1, and each column holds at most one factory. That is `S.q.struct` / `S.q.infantry` /
+`S.q.vehicle` here.
+
+**A click means different things by button** (`SelectClass::Action`):
+
+- **Left** — start production, or resume a suspended job, or (for a finished building) enter
+  placement mode. Left-clicking a job that is already running does **nothing**; it used to
+  cancel outright, which meant one stray click threw away a nearly-finished war factory along
+  with the credits.
+- **Right** — *"If production is in progress, put it on hold. If production is already on
+  hold, then abandon it."* Two distinct presses. Holding freezes the clock and stops all
+  spending; abandoning refunds what was actually paid so far (`q.paid`, not the full cost —
+  the money not yet spent was never taken).
+
+**While a line is busy, every cameo in that column greys out** (`busyline`), because
+`Fetch_Factory(otype)` returning non-null disables the whole type. This is the difference
+between "you can't afford it" and "that line is taken", and without it the player just gets a
+silent no.
+
+**`Recalc` runs when a factory dies, and only then** — the source comment is explicit that the
+sweep is expensive and should not run for every casualty. Anything no longer buildable by
+anybody is dropped and its production abandoned with a refund; a finished building still
+waiting to be placed needs a yard to come out of, so it goes too. Without this, blowing up a
+barracks left the rifle squad inside it still ticking toward completion and then walking out
+of a building that no longer exists.
+
+**EVA lines**: `VOX_TRAINING` ("Training") for infantry vs `VOX_BUILDING` ("Building") for
+everything else; `VOX_SUSPENDED` / `VOX_CANCELED`; and `VOX_NEW_CONSTRUCT` ("New construction
+options") from `StripClass::Add` whenever something *joins* the buildable list — the cue that
+finishing a barracks just unlocked infantry, which is easy to miss when the new options are on
+a tab you are not looking at. Watch every category, not just the visible one, and stay quiet
+on the first pass or a new game announces itself.
+
 ## Verifying
 
 No test suite — use headless Playwright against the **built** `index.html`. Node + Playwright

@@ -134,6 +134,11 @@
 #rcgRts .rts-tile.ready{border-color:#5fdc7a;box-shadow:0 0 10px rgba(95,220,122,.3)}
 #rcgRts .rts-tile.ready .pct{color:#8ef07a;font-size:11px}
 #rcgRts .rts-tile.placing{outline:2px solid #8ef07a;outline-offset:-2px}
+/* PIP_HOLDING - suspended production. Amber, so it reads as "waiting on you", not "broken". */
+#rcgRts .rts-tile.hold{border-color:#d9a441;box-shadow:0 0 0 1px rgba(217,164,65,.35) inset}
+#rcgRts .rts-tile.hold .pct{color:#f0c66e;font-size:11px}
+/* A cameo whose production line is already taken: buildable, just not right now. */
+#rcgRts .rts-tile.busyline{opacity:.55}
 
 /* selection readout */
 #rcgRts .rts-sel{flex:0 0 auto;padding:5px 8px;border:1px solid #2b3a4d;border-radius:4px;background:#080c11;
@@ -2739,6 +2744,15 @@ function _rtsKill(e) {
      victim's side alone credited the player for units the AI's own fires finished off. */
   if (e.side === 'enemy' && (!e.hurtBy || e.hurtBy === 'player')) G.stats.killed++;
   var si = G.sel.indexOf(e); if (si >= 0) G.sel.splice(si, 1);
+  /* SIDEBAR.CPP Recalc is only called when a FACTORY is destroyed - it is an exhaustive
+     sweep and the comment is explicit that it should not run for every casualty. */
+  if (e.type === 'struct') {
+    var gone = _rtsProdRecalc(e.side);
+    if (gone.length && e.side === 'player') {
+      var gd = rtsStructDef(gone[0]) || rtsUnitDef(gone[0]);
+      _rtsSay('Construction halted — ' + (gd ? gd.name : gone[0]) + ' abandoned.');
+    }
+  }
 }
 
 /* ------------------------------------------------- wrecks and survivors --
@@ -2962,11 +2976,41 @@ function _rtsCanQueue(side, key) {
   if (S.credits < _rtsCostOf(side, def)) return false;
   return true;
 }
+/* Can this side produce `key` at all - ignoring money and ignoring whether the line is
+   already busy? This is SIDEBAR.CPP's `Who_Can_Build_Me`: the question Recalc asks of every
+   cameo when a factory is lost. */
+function _rtsCanProduce(side, key) {
+  var def = rtsStructDef(key) || rtsUnitDef(key);
+  if (!def) return false;
+  var cat = _rtsQueueCat(key);
+  if (!_rtsAvailable(side, def)) return false;
+  if (cat === 'struct') return !!_rtsHas(side, 'yard');
+  if (cat === 'infantry') return !!_rtsHas(side, 'barracks');
+  if (cat === 'vehicle') return !!_rtsHas(side, 'factory');
+  return true;
+}
 function _rtsQueue(side, key) {
   if (!_rtsCanQueue(side, key)) return false;
   var S = window._rtsG.sides[side], def = rtsStructDef(key) || rtsUnitDef(key);
   S.q[_rtsQueueCat(key)] = { key:key, prog:0, total:_rtsBuildTimeOf(side, def),
-    cost:_rtsCostOf(side, def), paid:0 };
+    cost:_rtsCostOf(side, def), paid:0, hold:0 };
+  return true;
+}
+/* SIDEBAR.CPP SelectClass::Action, RIGHTPRESS: "If production is in progress, put it on
+   hold. If production is already on hold, then abandon it." Two distinct presses, and the
+   distinction matters - a single click should never be able to destroy a nearly-finished
+   war factory. Suspending keeps the money already spent tied up in the job; abandoning
+   refunds it. */
+function _rtsSuspend(side, cat) {
+  var S = window._rtsG.sides[side], q = S.q[cat];
+  if (!q || q.hold) return false;
+  q.hold = 1;
+  return true;
+}
+function _rtsResume(side, cat) {
+  var S = window._rtsG.sides[side], q = S.q[cat];
+  if (!q || !q.hold) return false;
+  q.hold = 0;
   return true;
 }
 function _rtsCancel(side, cat) {
@@ -2975,10 +3019,29 @@ function _rtsCancel(side, cat) {
   S.credits += q.paid;         /* refund what was actually spent */
   S.q[cat] = null;
 }
+/* SIDEBAR.CPP Recalc: called when a factory is destroyed. Anything that can no longer be
+   built by anybody is dropped, and its production abandoned. Without this, blowing up a
+   barracks left the rifle squad inside it still ticking toward completion and then walking
+   out of a building that no longer exists. Returns what it had to abandon. */
+function _rtsProdRecalc(side) {
+  var G = window._rtsG, S = G.sides[side], lost = [], cat;
+  for (cat in S.q) {
+    var q = S.q[cat];
+    if (q && !_rtsCanProduce(side, q.key)) { lost.push(q.key); _rtsCancel(side, cat); }
+  }
+  /* A finished building still waiting to be placed needs a yard to come out of. */
+  if (S.ready && !_rtsHas(side, 'yard')) {
+    var rd = rtsStructDef(S.ready);
+    if (rd) S.credits += _rtsCostOf(side, rd);
+    lost.push(S.ready);
+    S.ready = null; S.readyTry = 0;
+  }
+  return lost;
+}
 function _rtsTickProduction(side, dt) {
   var G = window._rtsG, S = G.sides[side], pf = _rtsPowerFactor(side), cat;
   for (cat in S.q) {
-    var q = S.q[cat]; if (!q) continue;
+    var q = S.q[cat]; if (!q || q.hold) continue;  /* a suspended line spends nothing */
     var rate = dt / q.total * pf;                  /* fraction of the job done this step */
     var want = q.cost * rate;
     if (want > S.credits) { want = S.credits; rate = q.cost > 0 ? want / q.cost : rate; }
@@ -4741,7 +4804,7 @@ function rtsOpen(seed) {
   _rtsRInit(cv);
 
   window._rtsUI = { cat:'struct', place:null, drag:null, keys:{}, last:0, raf:0, dead:false,
-    btns:{}, mouse:{ x:0, y:0, over:false }, miniDrag:false, credShown:0,
+    btns:{}, mouse:{ x:0, y:0, over:false }, miniDrag:false, credShown:0, avail:null,
     icons:_rtsMakeIcons('player') };
   var dl = document.getElementById('rtsDifLbl'), dd = _rtsBias('enemy');
   if (dl) { dl.textContent = dd.name; dl.title = 'Difficulty: ' + dd.name + ' (IQ ' + dd.iq + '/' + RTS_IQ.max + ') — ' + dd.desc; }
@@ -4865,8 +4928,11 @@ function _rtsBuildList() {
         + '<span class="pct"></span>'
         + '<span class="nm">' + def.name + '</span>'
         + '<span class="ct">' + def.cost + '</span>';
-      b.title = def.name + ' — ' + def.cost + ' credits\n' + def.desc;
+      b.title = def.name + ' — ' + def.cost + ' credits\n' + def.desc
+        + '\nRight-click while building: hold, then right-click again to cancel.';
       b.onclick = function () { _rtsItemClick(def.key); };
+      /* SelectClass::Action reads RIGHTPRESS as "cancel": hold first, abandon second. */
+      b.oncontextmenu = function (ev) { ev.preventDefault(); _rtsItemCancel(def.key); return false; };
       list.appendChild(b);
       U.btns[def.key] = b;
     })(items[i]);
@@ -4878,8 +4944,24 @@ function _rtsItemClick(key) {
   if (U.mode) rtsMode(null);            /* building something disarms the repair/sell cursor */
   if (typeof _rtsSfx === 'function') _rtsSfx('click');
   if (cat === 'struct' && S.ready === key) { U.place = key; _rtsGhostShow(key); return; }
-  if (S.q[cat] && S.q[cat].key === key) { _rtsCancel('player', cat); if (U.place === key) { U.place = null; _rtsGhostHide(); } return; }
-  if (_rtsQueue('player', key)) { if (typeof _rtsSfx === 'function') _rtsSfx('build'); }
+  /* Left click on the item already on the line: resume it if it is suspended, otherwise
+     leave it alone. It used to abandon outright, which meant one stray click threw away a
+     nearly-finished war factory and the credits with it. Cancelling is a right-click now,
+     and it takes two. */
+  if (S.q[cat] && S.q[cat].key === key) {
+    if (_rtsResume('player', cat)) {
+      _rtsSay(cat === 'infantry' ? 'Training.' : 'Building.');
+      if (typeof _rtsSfx === 'function') _rtsSfx('build');
+    } else {
+      _rtsSay('Already building. Right-click to hold or cancel.');
+    }
+    return;
+  }
+  if (_rtsQueue('player', key)) {
+    /* VOX_TRAINING for infantry, VOX_BUILDING for everything else. */
+    _rtsSay(cat === 'infantry' ? 'Training.' : 'Building.');
+    if (typeof _rtsSfx === 'function') _rtsSfx('build');
+  }
   else {
     var def = rtsStructDef(key) || rtsUnitDef(key);
     if (typeof _rtsSfx === 'function') _rtsSfx('deny');
@@ -4891,8 +4973,52 @@ function _rtsItemClick(key) {
     else if (S.ready) _rtsSay('Place the finished building first.');
   }
 }
+/* RIGHTPRESS on a cameo. First press suspends, second abandons and refunds. */
+function _rtsItemCancel(key) {
+  var G = window._rtsG, U = window._rtsUI, S = G.sides.player;
+  var cat = _rtsQueueCat(key), q = S.q[cat];
+  if (!q || q.key !== key) {
+    /* Right-clicking a finished building that is waiting to be placed cancels the placement
+       cursor rather than the building itself. */
+    if (cat === 'struct' && S.ready === key && U.place === key) {
+      U.place = null; _rtsGhostHide();
+      if (typeof _rtsSfx === 'function') _rtsSfx('click');
+    }
+    return;
+  }
+  if (_rtsSuspend('player', cat)) {
+    _rtsSay('On hold.');
+    if (typeof _rtsSfx === 'function') _rtsSfx('click');
+  } else {
+    _rtsCancel('player', cat);
+    if (U.place === key) { U.place = null; _rtsGhostHide(); }
+    _rtsSay('Canceled.');
+    if (typeof _rtsSfx === 'function') _rtsSfx('deny');
+  }
+}
+/* StripClass::Add speaks VOX_NEW_CONSTRUCT when something joins the buildable list. It is
+   the cue that finishing a barracks just opened up infantry - easy to miss otherwise, since
+   the new options are on a tab you are not looking at. Watches every category, not just the
+   visible one, and stays quiet on the first pass so a new game does not announce itself. */
+function _rtsWatchNewOptions() {
+  var U = window._rtsUI, cats = ['struct', 'infantry', 'vehicle'], now = {}, fresh = 0, i, j;
+  for (i = 0; i < cats.length; i++) {
+    var items = _rtsCatItems(cats[i]);
+    for (j = 0; j < items.length; j++) {
+      if (!_rtsCanProduce('player', items[j].key)) continue;
+      now[items[j].key] = 1;
+      if (U.avail && !U.avail[items[j].key]) fresh++;
+    }
+  }
+  if (fresh) {
+    _rtsSay('New construction options.');
+    if (typeof _rtsSfx === 'function') _rtsSfx('ready');
+  }
+  U.avail = now;
+}
 function _rtsSyncSidebar(dt) {
   var G = window._rtsG, U = window._rtsUI, S = G.sides.player;
+  _rtsWatchNewOptions();
 
   /* Credits roll toward the true value instead of snapping - the classic counter tick. */
   var target = Math.floor(S.credits);
@@ -4926,13 +5052,19 @@ function _rtsSyncSidebar(dt) {
       cls += ' ready'; pct.textContent = 'READY'; wipe.style.background = 'none';
     } else if (q && q.key === key) {
       cls += ' busy';
-      pct.textContent = Math.floor(q.prog * 100) + '%';
+      /* PIP_HOLDING: a suspended job shows that it is held, not how far along it is. */
+      if (q.hold) { cls += ' hold'; pct.textContent = 'HOLD'; }
+      else pct.textContent = Math.floor(q.prog * 100) + '%';
       /* clock wipe: the built portion is revealed clockwise from the top */
       var deg = Math.max(0, Math.min(360, q.prog * 360));
       wipe.style.background = 'conic-gradient(from 0deg, rgba(0,0,0,0) 0deg, rgba(0,0,0,0) '
         + deg + 'deg, rgba(4,7,11,0.74) ' + deg + 'deg, rgba(4,7,11,0.74) 360deg)';
     } else {
       pct.textContent = '';
+      /* "If there is already a factory producing this kind of object, then all objects of
+         this type are displayed in a disabled state" - the whole column greys out, so it is
+         obvious at a glance that the line is taken rather than that you cannot afford it. */
+      if (avail && (q || (cat === 'struct' && S.ready))) cls += ' busyline';
       wipe.style.background = avail ? 'none' : 'rgba(4,7,11,0.55)';
     }
     if (U.place === key) cls += ' placing';
