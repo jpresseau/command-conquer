@@ -399,14 +399,42 @@ already casts one.
   Homing weapons get four times the angular tolerance (`diff >>= 2`). Measured: a tank whose
   gun starts 180° off does not fire until 1.03 s, against a 1.05 s swing time.
 - `Recoil_Adjust` moves the turret back one pixel along its facing when it fires.
-- `Fire_Coord` / `Fire_Direction` (TURRET.CPP): a shot leaves the **muzzle**, on whichever
-  facing actually carries the weapon — the turret's for a turreted vehicle, the hull's for
-  everything else, and the building's own facing for a defence structure. Since the turret is
-  drawn as a separate sprite, spawning shots at the object's centre makes a tank with its gun
-  swung 90° appear to fire sideways out of its own flank. `_rtsFireCoord` is used by the
-  tracer, the projectile **and** the renderer's muzzle flash, so all three agree; the flash
-  used to be offset along `e.turret` unconditionally, which put it on the turret's bearing
-  even for a hull-mounted gun like the buggy's.
+- `Fire_Coord` (TURRET.CPP): a shot leaves the **muzzle**, not the middle of the vehicle.
+  Since the turret is drawn as a separate sprite, spawning shots at the object's centre makes
+  a tank with its gun swung 90° appear to fire sideways out of its own flank. `_rtsFireCoord`
+  is used by the tracer, the projectile **and** the renderer's muzzle flash, so all three
+  agree.
+- **One bearing carries the weapon**, and it is `e.turret` for *every* armed unit — turret
+  drawn separately or not — because that is the bearing `Can_Fire` gated on. Structures aim by
+  turning their whole selves (`e.rot`). Using the hull bearing for units without a drawn
+  turret put a buggy's flash on its nose while `Can_Fire` was testing a bearing that could be
+  ninety degrees away.
+- `Fire_Direction`: **a dumb shell leaves along the barrel and holds that bearing.** It does
+  not curve onto the target, so `Can_Fire`'s ±11° tolerance has consequences — a tank shooting
+  at something fast can miss. Missiles home, which is exactly why `Can_Fire` is four times
+  more forgiving about their facing (`diff >>= 2`). Measured per shot: 100% against a
+  stationary target at any range, 92% against a mover at 6 tiles, 86% at 9.
+- A shell in flight **belongs to nobody** — it hits the first hostile thing it runs into, which
+  need not be what it was aimed at, so an infantry screen absorbs shells meant for the tanks
+  behind it. Only hostiles are tested; stopping on friendlies too would block every massed
+  formation's line of fire, which is a different game. Splash still catches friendlies, as
+  `Explosion_Damage` always did.
+- Flight is bounded by the distance to the mark (`reach / speed + RTS_SHELL_OVER`) rather than
+  a flat four seconds, so a **miss detonates near where it was aimed** instead of sailing
+  across the map and exploding in somebody else's base.
+
+## Action cursors
+
+The cursor answers "what happens if I click here?" before you find out by trying: move,
+attack-move, attack, harvest, deliver, select, repair, sell, no-entry. `_rtsActionAt` mirrors
+the decisions `_rtsRightClick` actually makes, so the cursor can never promise an order the
+click won't give — there is a test that hovers, reads the promise, clicks, and compares.
+Shapes are **stroked twice**, a fat dark pass under a coloured one, so they stay legible over
+pale ore as well as dark forest; and the OS pointer is hidden while one is showing or two
+cursors fight over the same few pixels. `_rtsActionAt` runs inside the render loop, so it
+tolerates a bad entry in `G.sel` rather than taking the whole frame down with it.
+
+(Built from this game's own action set — `DISPLAY.CPP` was not among the files mined.)
 
 **`Overrun_Square`**: a tracked vehicle threatens the ground in front of it — infantry within
 `CrushDistance` scatter (`Incoming()`), and any actually under the tracks are killed. Hook this

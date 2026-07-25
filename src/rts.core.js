@@ -1067,9 +1067,14 @@ function _rtsFindTarget(e, range) {
    barrel points somewhere else entirely - the turret is drawn separately, so the mismatch
    is plainly visible. Barrel reach is derived from the body radius rather than a new table:
    a turret overhangs its hull, a hull-mounted gun sits inside the body. */
+/* The bearing the WEAPON is pointing - which is the bearing Can_Fire tested before allowing
+   the shot, so it is the one the shell has to leave along. A structure aims by turning its
+   whole self (`e.rot`); every armed unit aims with `e.turret`, whether or not it has a turret
+   drawn separately. (An earlier pass used the hull bearing for units without a drawn turret,
+   which put a buggy's muzzle flash on its nose while Can_Fire was gating on a bearing that
+   could be ninety degrees away.) */
 function _rtsMuzzleAngle(e) {
-  if (e.type === 'struct') return e.rot;                    /* the gun IS the building */
-  return RTS_TURRETED[e.def] ? e.turret : e.rot;
+  return e.type === 'struct' ? e.rot : e.turret;
 }
 function _rtsFireCoord(e) {
   var reach;
@@ -1094,12 +1099,22 @@ function _rtsFire(e, tgt, w) {
     G.fx.push({ kind:'tracer', x:m.x, y:1.3, z:m.z, x2:tgt.x, y2:1.3, z2:tgt.z, t:0 });
     _rtsCombatAnim(dmg, tgt.x, tgt.z, 0.5);
   } else {
-    /* travel still starts from the barrel, but aims at the mark: Can_Fire has already
-       insisted the barrel is within FIRE_FACING tolerance of it, and letting a shell fly
-       along the barrel instead would make tanks miss - a balance change, not this one. */
-    var d = Math.hypot(tgt.x - m.x, tgt.z - m.z) || 1;
-    G.proj.push({ kind:w.shot, x:m.x, y:1.4, z:m.z, vx:(tgt.x - m.x) / d * w.speed, vz:(tgt.z - m.z) / d * w.speed,
-      speed:w.speed, tgt:tgt, dmg:dmg, splash:w.splash, side:e.side, life:4, w:w, from:e });
+    /* Fire_Direction: the shot leaves ALONG THE BARREL. Can_Fire only insists the barrel is
+       within FIRE_FACING (~11 degrees) of the mark, so a dumb shell departs at whatever
+       angle the turret happens to be sitting at and flies straight - it does not curve onto
+       the target. That tolerance now has consequences: a tank shooting at something fast and
+       close can genuinely miss. Missiles still home, which is exactly why Can_Fire is four
+       times more forgiving about their facing (`diff >>= 2`).
+
+       Flight is bounded by the distance to the mark rather than a flat four seconds, so a
+       miss detonates near where it was aimed instead of sailing off across the map and
+       exploding in somebody else's base. */
+    var a = _rtsMuzzleAngle(e);
+    var reach = Math.hypot(tgt.x - m.x, tgt.z - m.z);
+    G.proj.push({ kind:w.shot, x:m.x, y:1.4, z:m.z,
+      vx:Math.cos(a) * w.speed, vz:Math.sin(a) * w.speed,
+      speed:w.speed, tgt:tgt, dmg:dmg, splash:w.splash, side:e.side,
+      life:Math.min(4, reach / w.speed + RTS_SHELL_OVER), w:w, from:e });
   }
 }
 /* INFANTRY.CPP Fear_AI + Scatter. Only infantry have this. */
@@ -1514,23 +1529,40 @@ function _rtsUpdateStruct(e, dt) {
   if (e.cool <= 0 && Math.abs(td) < 0.3) _rtsFire(e, e.target, w);
 }
 
-/* --------------------------------------------------------- projectiles */
+/* --------------------------------------------------------- projectiles --
+   A shot in flight belongs to nobody in particular: it hits the first hostile thing it runs
+   into, which need not be what it was aimed at. An infantry screen in front of a tank column
+   now actually absorbs shells meant for the tanks. Only hostiles are tested - letting shells
+   stop on friendlies as well would block every massed formation's line of fire, which is a
+   different game. Splash still catches friendlies, as Explosion_Damage always did. */
+function _rtsProjHit(p) {
+  var G = window._rtsG, foe = _rtsEnemyOf(p.side), best = null, bd = 1e9;
+  for (var i = 0; i < G.ents.length; i++) {
+    var o = G.ents[i];
+    if (o.dead || o.side !== foe) continue;
+    var dx = o.x - p.x, dz = o.z - p.z;
+    if (dx > RTS_SHELL_HIT * 6 || dx < -RTS_SHELL_HIT * 6) continue;   /* cheap reject */
+    if (dz > RTS_SHELL_HIT * 6 || dz < -RTS_SHELL_HIT * 6) continue;
+    var d = _rtsRangeTo(p, o);
+    if (d < RTS_SHELL_HIT && d < bd) { bd = d; best = o; }
+  }
+  return best;
+}
 function _rtsUpdateProj(dt) {
   var G = window._rtsG;
   for (var i = G.proj.length - 1; i >= 0; i--) {
     var p = G.proj[i];
     p.life -= dt;
-    /* missiles home; shells fly straight at where the target was */
+    /* missiles home; shells hold the bearing they left the barrel on */
     if (p.kind === 'missile' && p.tgt && !p.tgt.dead) {
       var dx = p.tgt.x - p.x, dz = p.tgt.z - p.z, d = Math.hypot(dx, dz) || 1;
       p.vx += (dx / d * p.speed - p.vx) * Math.min(1, dt * 4);
       p.vz += (dz / d * p.speed - p.vz) * Math.min(1, dt * 4);
     }
     p.x += p.vx * dt; p.z += p.vz * dt;
-    var hit = null;
-    if (p.tgt && !p.tgt.dead && _rtsRangeTo(p, p.tgt) < 1.8) hit = p.tgt;
+    var hit = _rtsProjHit(p);
     if (hit || p.life <= 0) {
-      if (hit) _rtsDamage(hit, p.dmg, null);
+      if (hit) _rtsDamage(hit, p.dmg, p.from);
       if (p.splash > 0) _rtsSplash(p.x, p.z, RTS_BLAST_CELLS * RTS_TILE, p.dmg, p.side, p.splash, p.from);
       _rtsCombatAnim(p.dmg, p.x, p.z, p.splash > 0 ? 1.4 : 0.7);
       G.proj.splice(i, 1);
