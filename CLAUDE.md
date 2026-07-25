@@ -604,6 +604,45 @@ measured at 600 posts in 10 seconds, with an unrelated message not surviving a s
 The text action now refuses to repeat inside the window, and refuses by *returning false*, so
 the `if (ok)` gate leaves the trigger armed rather than counting a firing that did nothing.
 
+## Committing the army (mine, not ported)
+
+The companion to the production ceiling above, and the same shape of bug: **a fixed cap that
+was sane at small scale binds forever at large scale.** Once production was uncapped, hard
+looked like this:
+
+    min 3   army 100   in teams 18   18% committed    82 idle at home   4 teams
+    min 6   army 186   in teams 20   11% committed   165 idle at home   4 teams
+
+Four teams, permanently — Sappers x2 and Assault x2, every type pinned at its authored
+`max: 2`, so `_rtsSuggestTeam` returned **null on 45 of 51 calls**. The opponent's entire
+offensive capacity was 20 units no matter how large its army grew. It built an army and sat
+on it.
+
+RA does not hit this because `MaxAllowed` is authored per scenario against a known army size,
+and because a campaign house also attacks outside the team system entirely. There is no author
+here, so **the cap derives from the army**: commit `RTS_TEAM_COMMIT` of the field army in
+teams of about `RTS_TEAM_TYPICAL`, never fewer than the authored floor, never more than
+`RTS_TEAM_MAX_HARD`. `_rtsTypeCap` shares the extra slots across the types that are currently
+eligible, so the alert split still decides *which* types exist and only the count scales.
+
+Measured, hard at six minutes: **11% -> 47% committed**, 4 -> 22 teams, 165 -> 103 idle.
+Ladder easy 306->293s, normal 220->218s, hard 187->176s.
+
+**The real prize was consistency, not strength.** Per-seed spread collapsed — easy went from
+367/289/289/287/300 (80s spread) to 302/293/291/288/292 (14s), hard from 169/183/188/224/169
+(55s) to 168/179/178/183/171 (15s). The seed-9004 outlier recorded in the production-ceiling
+section as "genuine divergence, not noise" was really an artifact of a tiny committed force:
+with only 20 units ever attacking, a handful of unit trades decided the match. Commit half the
+army and the outcome stops hinging on them. **Treat a wide per-seed spread as a signal that
+something is under-committed, not as inherent variance.**
+
+Sim cost went *down*, 2.45 -> 2.28 ms/tick at ~200 entities: units that march and fight are
+cheaper than units milling around the base being separated from each other every frame.
+
+Commitment lands at 47% rather than the 62% asked for, and that is a real constraint rather
+than a bug: a team only recruits units matching its composition, so a tank-heavy army cannot
+fill the rocket slots in Sappers. Raising it further means changing the compositions.
+
 ## Commanding from the radar — from RADAR.CPP
 
 `RTacticalClass::Action` does something the minimap here did not: **with units selected, a
