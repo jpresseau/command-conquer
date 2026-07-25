@@ -423,6 +423,50 @@ already casts one.
   a flat four seconds, so a **miss detonates near where it was aimed** instead of sailing
   across the map and exploding in somebody else's base.
 
+## Missions — from MISSION.CPP
+
+`MissionControlClass` is a **flag table indexed by mission**, read from the INI. Four fields
+decide how the rest of the game treats an object, and they had been hardcoded in three
+separate places here, each inferred from whatever the caller happened to need:
+
+| flag | default | meaning |
+|---|---|---|
+| `IsRetaliate` | true | shoots back when hit |
+| `IsScatter` | true | gets out of the way of incoming |
+| `IsRecruitable` | true | may be recruited into a team, or recalled to defend the base |
+| `IsNoThreat` | false | is not considered a threat by a target scan |
+
+`Get_Mission` returns the *queued* mission when there is no active one, so an object with no
+order is on **GUARD** — not in some nameless idle state. `RTS_MISSIONS` mirrors that: unknown
+and absent orders both fall through to the default row.
+
+**The table earns its keep through STICKY.** The distinction between `MISSION_GUARD` and
+`MISSION_STICKY` is the whole reason to have per-mission flags — a unit told to hold a
+position should not be dragged off it. **S** puts the selection on hold: it acquires and fires
+from where it stands, never takes a path, ignores scatter, and `Base_Is_Attacked` skips it
+("never recruit sticky guard units to defend a base"). Measured: 0 units moved over ten
+seconds with bait 12 tiles away, 175 damage dealt to something that walked into range, and 0
+of 6 holding units recalled where guarding ones are.
+
+`IsNoThreat` is about what an object *provokes*, not what it is *worth*. A harvester on the
+ore is not what an auto-acquiring gun should turn to face while something armed is in range —
+but it stays a legal, valuable target when a player right-clicks it. Measured: the gun picks
+the armed rifle over the closer and far more expensive harvester, and an explicit order still
+scores the harvester above zero.
+
+**`Override_Mission` / `Restore_Mission`** — a temporary order remembers the one it interrupted
+and puts it back. `Base_Is_Attacked` previously just overwrote orders, so an army pulled home
+to swat one raider forgot it had been going anywhere and stood in the base for the rest of the
+match. Restore fires when the override's target dies *or* when it has no target and no path
+left, or only the attack half would ever resume.
+
+**Not implemented: the mission queue and per-mission think rates.** `Assign_Mission` queues and
+`Commence()` promotes at a safe moment, because RA's units sit on a discrete cell grid and
+cannot change their minds mid-cell; orders here apply immediately and that reads as
+responsive. `MissionControl.Rate` staggers how often each mission thinks — worth nothing at
+25 ms per simulated second for 78 entities, and a unit reacting on a 30-second timer feels
+broken on a modern display. The rates are recorded in the table as documentation.
+
 ## Ore fields — from CELL.CPP
 
 **`Tiberium_Adjust` sets a cell's density from how many of its EIGHT neighbours also carry

@@ -127,6 +127,41 @@ var RTS_CRATER_ORE = 6;   /* ANIM.CPP: a crater calls Reduce_Tiberium(6) */
    ANXIOUS they lie down; below it they get up. */
 var RTS_FEAR = { NONE:0, ANXIOUS:10, SCARED:50, PANIC:100, MAXIMUM:255 };
 var RTS_FEAR_DECAY = 15;        /* per second; the original decays 1 per frame at 15 FPS */
+
+/* ------------------------------------------------- missions (MISSION.CPP) --
+   MissionControlClass is a FLAG TABLE indexed by mission, read from the INI. Four of its
+   fields decide how the rest of the game treats an object, and until now this game had them
+   hardcoded in three separate places, each inferred from whatever the caller happened to
+   need at the time:
+
+     IsRetaliate   - shoots back when hit                            (default true)
+     IsScatter     - gets out of the way of incoming                 (default true)
+     IsRecruitable - may be recruited into a team, or recalled to defend the base (true)
+     IsNoThreat    - is not considered a threat by a target scan     (default false)
+
+   `rate` is MissionControl's Rate: how often the mission's own logic wants to think. It is
+   recorded because it is part of the contract, but this engine runs every unit every frame -
+   at 25 ms per simulated second for 78 entities there is nothing to buy by staggering them,
+   and a unit reacting on a 30-second timer feels broken on a modern display.
+
+   `hold` is MISSION_STICKY - it stays where it is put. That distinction between GUARD and
+   STICKY is the reason the table earns its keep: a unit told to hold a position should not
+   be dragged off it by the base-defence recall. */
+var RTS_MISSIONS = {
+  guard:   { retaliate:true,  scatter:true,  recruitable:true,  noThreat:false, hold:false, rate:0.13 },
+  move:    { retaliate:true,  scatter:true,  recruitable:true,  noThreat:false, hold:false, rate:0.06 },
+  amove:   { retaliate:true,  scatter:true,  recruitable:true,  noThreat:false, hold:false, rate:0.06 },
+  attack:  { retaliate:true,  scatter:true,  recruitable:true,  noThreat:false, hold:false, rate:0.06 },
+  /* A harvester is unarmed, so it cannot retaliate, and pulling it off the ore to defend the
+     base costs more than the raid does. Not a threat either - nothing should pick a fight
+     with it in preference to something that shoots back. It is still a target, and a rich
+     one; IsNoThreat governs what it provokes, not what it is worth. */
+  harvest: { retaliate:false, scatter:true,  recruitable:false, noThreat:true,  hold:false, rate:0.13 },
+  /* STICKY: holds ground. Fires from where it stands, never chases, and the base-defence
+     recall leaves it alone. */
+  hold:    { retaliate:true,  scatter:false, recruitable:false, noThreat:false, hold:true,  rate:0.13 }
+};
+var RTS_MISSION_DEFAULT = { retaliate:true, scatter:true, recruitable:true, noThreat:false, hold:false, rate:0.13 };
 /* RULES.CPP: ConditionYellow = 1/2, ConditionRed = 1/4. These are not cosmetic - they are the
    thresholds for damaged building art, the fear escalation ladder and the AI's sell-back
    decision, so having them at 0.66/0.33 quietly mistuned all three. */

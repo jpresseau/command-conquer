@@ -1082,6 +1082,11 @@ function _rtsZoneCache() {
 function _rtsEvalObject(e, o, dist, w) {
   var d = rtsStructDef(o.def) || rtsUnitDef(o.def);
   if (!d) return 0;
+  /* "If the object is in a harmless state, don't bother to consider it a threat." A
+     harvester on the ore is not what an auto-acquiring gun should turn to face while
+     something armed is in range - though a player who right-clicks one still gets it, and
+     it is still worth a great deal once chosen. */
+  if (o !== e.target && _rtsMission(o).noThreat) return 0;
   /* A weapon that cannot hurt the thing at all should never choose it - and for a
      two-weapon object the question is asked of its BEST weapon against this armour, or a
      tank would refuse to look at infantry its coaxial gun handles perfectly well. */
@@ -1263,6 +1268,9 @@ function _rtsFearAI(e, dt) {
 }
 function _rtsScatter(e, fromX, fromZ) {
   var G = window._rtsG;
+  /* MissionControl IsScatter. A unit holding a position stands its ground - being shoved off
+     it by every near miss is exactly what a hold order exists to prevent. */
+  if (!_rtsMission(e).scatter) return;
   var a = Math.atan2(e.z - fromZ, e.x - fromX);
   a += (Math.random() - 0.5) * (Math.PI / 2);      /* Random_Pick(0,4)-2 facings of spread */
   var d = RTS_TILE * (1.5 + Math.random());
@@ -1303,6 +1311,8 @@ function _rtsBaseIsAttacked(bldg, enemy) {
     if (u.dead || u.side !== 'enemy' || u.type !== 'unit') continue;
     var ud = rtsUnitDef(u.def);
     if (!ud.weapon || ud.harvest) continue;
+    /* "Never recruit sticky guard units to defend a base." */
+    if (!_rtsMission(u).recruitable) continue;
     var w = RTS_WEAPONS[ud.weapon];
     /* "Don't allow a response if it doesn't have a weapon that will affect the enemy." */
     if (w.vs && !w.vs[rtsArmour(enemy)]) continue;
@@ -1320,9 +1330,12 @@ function _rtsBaseIsAttacked(bldg, enemy) {
     /* "Alternates between guard area and attack" - half go straight for the attacker, half
        take up station on the building being hit. A pure charge leaves the base empty again
        the moment the raider dies. */
-    if (Math.random() < 0.5) { p.u.order = 'attack'; p.u.target = enemy; p.u.path = null; }
-    else _rtsOrderMove(p.u, bldg.x + (Math.random() - 0.5) * RTS_TILE * 4,
-                             bldg.z + (Math.random() - 0.5) * RTS_TILE * 4, true);
+    if (Math.random() < 0.5) _rtsOverrideMission(p.u, 'attack', enemy);
+    else {
+      _rtsOverrideMission(p.u, 'amove', null);
+      _rtsOrderMove(p.u, bldg.x + (Math.random() - 0.5) * RTS_TILE * 4,
+                         bldg.z + (Math.random() - 0.5) * RTS_TILE * 4, true);
+    }
     sent++;
     risk += rtsUnitDef(p.u.def).cost;
     if (risk > desired) break;
@@ -1331,11 +1344,42 @@ function _rtsBaseIsAttacked(bldg, enemy) {
   if (risk > desired) enemy.baseTimer = G.t + RTS_BASE_DEFENSE_DELAY;
   return sent;
 }
+/* MISSION.CPP Override_Mission / Restore_Mission. A temporary order remembers the one it
+   interrupted, and puts it back when it is done. Base_Is_Attacked recalls units to defend
+   and previously just overwrote their orders, so an army pulled home to swat one raider
+   simply forgot it had been going anywhere - it stood in the base for the rest of the match. */
+function _rtsOverrideMission(e, order, tgt) {
+  if (!e || e.dead) return false;
+  if (e.susp === undefined || e.susp === null) {
+    e.susp = { order:e.order || null, goal:e.goal ? { x:e.goal.x, z:e.goal.z } : null };
+  }
+  e.order = order; e.target = tgt || null; e.path = null;
+  return true;
+}
+function _rtsRestoreMission(e) {
+  if (!e || e.susp == null) return false;
+  var s = e.susp; e.susp = null;
+  if (!s.order) { e.order = null; e.goal = null; e.path = null; return true; }
+  if (s.order === 'move' || s.order === 'amove') {
+    if (s.goal) { _rtsOrderMove(e, s.goal.x, s.goal.z, s.order === 'amove'); return true; }
+  }
+  e.order = s.order; e.path = null;
+  return true;
+}
+/* MISSION.CPP MissionControl: the flag table for whatever this object is currently doing.
+   Get_Mission returns the queued mission when there is no active one, so an object with no
+   order is on GUARD rather than in some nameless idle state. */
+function _rtsMission(e) {
+  if (!e) return RTS_MISSION_DEFAULT;
+  var m = e.order || (e.hstate ? 'harvest' : 'guard');
+  return RTS_MISSIONS[m] || RTS_MISSION_DEFAULT;
+}
 /* TECHNO.CPP Is_Allowed_To_Retaliate. Shooting back is not automatic. */
 function _rtsCanRetaliate(tgt, from) {
   if (!from || !from.side) return false;                    /* no source, no retaliation */
   if (tgt.dead || tgt.type !== 'unit') return false;
   if (from.side === tgt.side) return false;                 /* never against an ally */
+  if (!_rtsMission(tgt).retaliate) return false;            /* "If the mission precludes it" */
   var d = rtsUnitDef(tgt.def);
   if (!d || !d.weapon) return false;
   var w = RTS_WEAPONS[d.weapon];
@@ -1551,8 +1595,20 @@ function _rtsUpdateUnit(e, dt) {
 
   /* ---- engage ---- */
   var tgt = e.target;
-  if (tgt && tgt.dead) { tgt = e.target = null; if (e.order === 'attack') e.order = null; }
-  if (w && !tgt && (e.order === 'amove' || !e.order)) {
+  if (tgt && tgt.dead) {
+    tgt = e.target = null;
+    if (e.order === 'attack') { if (!_rtsRestoreMission(e)) e.order = null; }
+  }
+  /* An overridden mission that has run its course puts the old one back. Without this only
+     the attack case ever restores, and the half of the defenders sent to stand guard would
+     never resume what they were doing. */
+  if (e.susp != null && !e.target && !e.path) _rtsRestoreMission(e);
+  /* MISSION_STICKY holds ground: it acquires and fires, but never takes a chase order and
+     never picks up a path. */
+  if (e.order === 'hold') {
+    e.path = null; e.goal = null;
+    if (w && (!tgt || _rtsRangeTo(e, tgt) > _rtsReach(e))) e.target = tgt = _rtsFindTarget(e, _rtsReach(e));
+  } else if (w && !tgt && (e.order === 'amove' || !e.order)) {
     tgt = _rtsFindTarget(e, d.sight);
     if (tgt) { e.target = tgt; if (!e.order) { e.order = 'attack'; e.path = null; } }
   }
