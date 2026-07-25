@@ -1002,20 +1002,45 @@ function _rtsFindTarget(e, range) {
   }
   return best;
 }
+/* TURRET.CPP Fire_Direction / Fire_Coord. A shot leaves the MUZZLE, and the muzzle is on
+   whichever facing actually carries the weapon: the turret's for a turreted vehicle, the
+   hull's for everything else. Spawning shots at the object's centre is what makes a tank
+   with its gun swung 90 degrees appear to fire sideways out of its own flank while the
+   barrel points somewhere else entirely - the turret is drawn separately, so the mismatch
+   is plainly visible. Barrel reach is derived from the body radius rather than a new table:
+   a turret overhangs its hull, a hull-mounted gun sits inside the body. */
+function _rtsMuzzleAngle(e) {
+  if (e.type === 'struct') return e.rot;                    /* the gun IS the building */
+  return RTS_TURRETED[e.def] ? e.turret : e.rot;
+}
+function _rtsFireCoord(e) {
+  var reach;
+  if (e.type === 'struct') reach = RTS_MUZZLE_STRUCT;
+  else {
+    var d = rtsUnitDef(e.def);
+    reach = (d.r || 1) * (RTS_TURRETED[e.def] ? RTS_MUZZLE_TURRET : RTS_MUZZLE_HULL);
+  }
+  var a = _rtsMuzzleAngle(e);
+  return { x:e.x + Math.cos(a) * reach, z:e.z + Math.sin(a) * reach };
+}
 function _rtsFire(e, tgt, w) {
   var G = window._rtsG, bias = _rtsBias(e.side);
   e.cool = w.cool * bias.rof; e.fire = 0.09;      /* ROFBias: higher = slower reload */
   e.recoil = RTS_RECOIL_TIME;                     /* Recoil_Adjust */
+  var m = _rtsFireCoord(e);
   if (typeof _rtsSfx === 'function') _rtsSfx(w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
     : (w.shot === 'missile' ? 'rocket' : (e.type === 'struct' ? 'turretgun' : 'cannon')), e.x, e.z);
   var dmg = w.dmg * (w.vs[rtsArmour(tgt)] || 1) * bias.fire;
   if (w.speed <= 0) {
     _rtsDamage(tgt, dmg, e);
-    G.fx.push({ kind:'tracer', x:e.x, y:1.3, z:e.z, x2:tgt.x, y2:1.3, z2:tgt.z, t:0 });
+    G.fx.push({ kind:'tracer', x:m.x, y:1.3, z:m.z, x2:tgt.x, y2:1.3, z2:tgt.z, t:0 });
     _rtsCombatAnim(dmg, tgt.x, tgt.z, 0.5);
   } else {
-    var d = Math.hypot(tgt.x - e.x, tgt.z - e.z) || 1;
-    G.proj.push({ kind:w.shot, x:e.x, y:1.4, z:e.z, vx:(tgt.x - e.x) / d * w.speed, vz:(tgt.z - e.z) / d * w.speed,
+    /* travel still starts from the barrel, but aims at the mark: Can_Fire has already
+       insisted the barrel is within FIRE_FACING tolerance of it, and letting a shell fly
+       along the barrel instead would make tanks miss - a balance change, not this one. */
+    var d = Math.hypot(tgt.x - m.x, tgt.z - m.z) || 1;
+    G.proj.push({ kind:w.shot, x:m.x, y:1.4, z:m.z, vx:(tgt.x - m.x) / d * w.speed, vz:(tgt.z - m.z) / d * w.speed,
       speed:w.speed, tgt:tgt, dmg:dmg, splash:w.splash, side:e.side, life:4, w:w, from:e });
   }
 }
