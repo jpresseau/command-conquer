@@ -1102,7 +1102,28 @@ function _sprFx() {
     }
     splash.push(st.c);
   }
-  return { boom: boom, flash: flash, piff: piff, splash: splash };
+  /* Flame, for ADATA's burn ladder. Deliberately NOT a new generator: `_sprFire()` already
+     draws this game's flame, for a building coming apart, and a burning building should not
+     look like a different fire from a dying one. It returns 16x20 - taller than wide, which
+     is what a flame is - so the effect renderer had to stop forcing every frame square. */
+  var fire = null;   /* filled in by _rtsSprites from the ONE flame set - see below */
+  /* SmokeM: what a fire leaves when it has burnt down. Grey, rising, thinning out. Drawn
+     with the same square-canvas rule the effect renderer needs. */
+  var smoke = [];
+  for (i = 0; i < 6; i++) {
+    var ms = 30, mt = _sprMake(ms, ms), mg = mt.g, mc = ms / 2, mu = i / 5;
+    var puffs = [[0.00, 0.16, '#6b6560'], [0.30, 0.22, '#7b746e'],
+                 [0.62, 0.26, '#8a837c'], [0.92, 0.30, '#98918a']];
+    for (var pk2 = 0; pk2 < puffs.length; pk2++) {
+      var rise = puffs[pk2][0] + mu * 0.5;
+      if (rise > 1.15) continue;
+      var rad = ms * puffs[pk2][1] * (0.45 + rise * 0.85) * (1 - mu * 0.25);
+      _sprDisc(mg, mc + Math.sin(rise * 4.1 + i) * ms * 0.10,
+        ms - 3 - rise * (ms - 6), Math.max(1, rad), puffs[pk2][2]);
+    }
+    smoke.push(mt.c);
+  }
+  return { boom: boom, flash: flash, piff: piff, splash: splash, fire: fire, smoke: smoke };
 }
 
 function _rtsSprites() {
@@ -1133,6 +1154,11 @@ function _rtsSprites() {
       if (d.kind === 'infantry') S.prone[side][d.key] = _sprUnit(d.key, side, true);
     });
   });
+  /* One flame set, referenced twice. `_sprFx` cannot call `_sprFire()` itself without
+     baking a second identical set of canvases - same pixels, twice the memory, and two
+     things that are supposed to be the same fire drifting apart the moment either is
+     retuned. Assigned here, where both already exist. */
+  S.fx.fire = S.fire;
   _RTS_SPR = S;
   return S;
 }

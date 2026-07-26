@@ -763,6 +763,84 @@ gun preferring heavy, small arms unable to hurt a wall while shells and rockets 
 rule applying to walls rather than to all concrete. Ladder easy 298 s / normal 218 s / hard 175 s,
 within a second of the previous run on every difficulty.
 
+## Things burn — from ADATA.CPP
+
+ADATA.CPP is the animation table, **not** the aircraft table (that is `AADATA.CPP`; this file
+was requested under the wrong name). It is also the first data file in this series whose
+numbers are actually *in the source* rather than in `RULES.INI` — animations are hardcoded,
+so everything below is quoted rather than invented.
+
+### The burn ladder
+
+RA does not have "a fire". It has three, each with its own damage rate, chaining **down**
+into the next and finally into smoke:
+
+| rung | ADATA | damage | size | scorches |
+|---|---|---|---|---|
+| `firebig` | `OnFireBig` | `fixed(1,10)` → 1.5 hp/s | 23 px | yes |
+| `firemed` | `OnFireMed` | `fixed(1,16)` → 0.9375 hp/s | 14 px | no |
+| `firesmall` | `OnFireSmall` | `fixed(1,32)` → 0.46875 hp/s | 11 px | no |
+| `smoke` | `SmokeM` | none | — | no |
+
+`Damage` is a fixed amount per **tick** at 15 FPS, which is where the hp/s column comes from.
+Only `OnFireBig` is `IsScorcher`. Four loops per rung.
+
+A fire is therefore not an effect that plays and stops — it **burns itself down**. A building
+you shot and then left alone smoulders out; one you keep hitting is topped back up to full
+size on each hit. That re-ignition rule is what makes a sustained bombardment look and behave
+differently from a single shell, and it is why `_rtsIgnite` is one entry point rather than a
+`push` at each call site.
+
+**Structures burn now, and did not before** — the old code lit units only. Which rung a thing
+starts on comes from its footprint: a 3×3 refinery gets `OnFireBig`, a 1×1 pillbox gets
+`OnFireSmall`. Buildings catch at ConditionRed, units at 0.3 (unchanged).
+
+The old single `fire` did **9 hp/s** — six times the original's fiercest burn, a number picked
+by eye. Fire is a smoulder plus a visual state, not a second damage system: a full-health
+refinery burning the whole ladder down loses about 13 hp of 950.
+
+### IsSticky
+
+`VehHit1/2/3` and `Frag1` carry `IsSticky` — "sticks to unit in square". `FBall1` and
+`ArtExp1` do not. The distinction is physical: a spark struck **off** something rides that
+thing, while a shell's fireball belongs to the ground where it went off. Without it a tank
+crossing the map at seven units a second left its own impact sparks hanging in mid-air, which
+was happening to every moving target in the game.
+
+### Three things this shook out
+
+1. **A dangling `ChainTo` crashed the whole match.** Deleting the old `fire` key left `boom`
+   chaining to a name that no longer existed, and `_rtsAnimAI` threw reading `.loops` of
+   `undefined` mid-tick. Forty targeted assertions passed; the first real match died on tick
+   one. A typo in a data table now drops the effect instead of stopping the game, and a test
+   asserts every `chain` in `RTS_ANIMS` resolves. A fireball now chains to `firesmall` — a
+   ground fire, with nothing attached, so it does no damage.
+2. **The flame was nearly drawn twice.** `_sprFire()` already existed for a building coming
+   apart. `_sprFx` calling it again would have baked a second identical set of canvases that
+   drift apart the moment either is retuned; `S.fx.fire = S.fire` in `_rtsSprites` shares the
+   one set. Doing that required the effect renderer to stop forcing every frame **square** —
+   a flame is 16×20, and squashing it to 16×16 is why sharing looked impossible at first.
+   Every pre-existing effect set is square, so honouring aspect changed none of them.
+3. **Flame size must come off footprint WIDTH, not cell count.** Scaled on `cells/9`, a 3×3
+   got only 20% more flame than a 1×1 and the fire on a refinery read as a spark. It now
+   matches the formula the dying-building flame already used, so a burning building and a
+   dying one are the same fire at the same size.
+
+### Verified
+
+40 assertions in `burn.js`: the ladder's chain order, ADATA's damage rates and relative
+sizes, only-big-scorches, ignition rung by footprint, no flame stacking on repeated ignition,
+the walk down big → med → small → smoke → out, the burning flag clearing so a thing can catch
+again, re-ignition topping a burnt-down fire back up, per-rung damage measured against
+ADATA's 1.5 hp/s, a big fire finishing a 3 hp building **and a small one correctly failing
+to**, ignition happening on its own below ConditionRed but not at half health, sticky sparks
+riding a mover while fireballs and hits on buildings do not, a sticky spark neither damaging
+its host nor putting its fire out, and the shared non-square flame set.
+
+Regression: storage 34/34, save/load 31/31, verbs 26/26, mech 20/20. Ladder **296 / 220 /
+174 s** — identical to the run before this change, which matters because burning structures is
+new damage that did not exist.
+
 ## Storage, and the silo — from BDATA.CPP
 
 BDATA.CPP is the fifth data file in a row to confirm that the balance numbers live in

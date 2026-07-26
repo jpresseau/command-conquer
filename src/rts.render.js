@@ -278,12 +278,22 @@ function _rtsRFrame(dt) {
     } else {
       /* Combat_Anim: which set of frames this is comes from the animation kind, which the
          simulation chose from the damage and the land type. */
-      var set = f.kind === 'piff' ? S.fx.piff : (f.kind === 'splash' ? S.fx.splash : S.fx.boom);
+      var set = f.kind === 'piff' ? S.fx.piff
+              : (f.kind === 'splash' ? S.fx.splash
+              : (f.kind === 'smoke' ? S.fx.smoke
+              : (RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].size ? S.fx.fire : S.fx.boom)));
       var dur = (RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].dur) || 0.75;
       var fr = Math.min(set.length - 1, Math.floor(_rtsAnimQ(f.t) / dur * set.length));
       var img = set[Math.max(0, fr)];
       var sz = img.width * TSscale * (f.big || 1) * 0.9;
-      g.drawImage(img, Math.round(_rtsSX(f.x) - sz / 2), Math.round(_rtsSY(f.z) - sz / 2), sz, sz);
+      /* Draw at the frame's OWN aspect ratio. This used to force every effect square, which
+         is harmless for a fireball or a spark but squashes a flame - and a flame is taller
+         than it is wide. Every pre-existing effect set is square, so this changes none of
+         them. A fire is also anchored near its BASE rather than its centre, because it
+         stands on the ground rather than hanging in the air around it. */
+      var szh = sz * (img.height / img.width);
+      var anchor = RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].size ? 0.72 : 0.5;
+      g.drawImage(img, Math.round(_rtsSX(f.x) - sz / 2), Math.round(_rtsSY(f.z) - szh * anchor), sz, szh);
     }
   }
 

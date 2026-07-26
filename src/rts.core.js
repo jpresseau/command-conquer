@@ -1256,7 +1256,7 @@ function _rtsAnimAI(dt) {
     /* An attached animation rides its object and burns it down. */
     if (f.att) {
       var host = G.byId[f.att];
-      if (!host || host.dead) { f.att = 0; }
+      if (!host || host.dead) { if (host && !f.stick) host.burning = 0; f.att = 0; }
       else {
         f.x = host.x; f.z = host.z;
         if (def.damage) {
@@ -1277,19 +1277,34 @@ function _rtsAnimAI(dt) {
     if (f.t >= def.dur) {
       if (f.loops === undefined) f.loops = def.loops || 1;
       if (f.loops > 1) { f.loops--; f.t = 0; f.mid = 0; continue; }
-      if (def.chain) {
+      var nx = def.chain ? RTS_ANIMS[def.chain] : null;
+      /* A chain naming an animation that does not exist used to throw here, mid-tick, and
+         take the whole match with it - which is exactly what happened when the burn ladder
+         replaced the old single `fire` and left `boom` pointing at a dead key. A typo in a
+         data table should drop the effect, not stop the game. */
+      if (def.chain && !nx) { G.fx.splice(i, 1); continue; }
+      if (nx) {
         /* ChainTo: it does not end, it metamorphoses. */
         f.kind = def.chain; f.t = 0; f.mid = 0;
-        f.loops = RTS_ANIMS[def.chain].loops || 1;
-        f.big = (f.big || 1) * 0.6;
+        f.loops = nx.loops || 1;
+        /* Each rung of the burn ladder has its OWN drawn size in ADATA (23/14/11 px), so the
+           step down is that ratio against the host's base scale - not a blind taper applied
+           to whatever the previous stage happened to be. `f.base` is the host's scale; a
+           chain on something with no base (a fireball guttering out) keeps the old rule. */
+        if (nx.size && f.base) f.big = f.base * nx.size;
+        else f.big = (f.big || 1) * 0.6;
         continue;
       }
+      /* The flame is out. Clear the flag or the object can never catch fire again - it
+         would sit permanently "burning" with nothing burning it. A sticky IMPACT anim is
+         attached to the same object but is not its fire, so it must not put the fire out. */
+      if (f.att && !f.stick) { var hz = G.byId[f.att]; if (hz) hz.burning = 0; }
       G.fx.splice(i, 1);
     }
   }
 }
 /* COMBAT.CPP Combat_Anim. */
-function _rtsCombatAnim(dmg, x, z, big) {
+function _rtsCombatAnim(dmg, x, z, big, stick) {
   var G = window._rtsG;
   if (!(dmg > 0)) return null;
   var tx = _rtsTX(x), tz = _rtsTX(z);
@@ -1297,7 +1312,18 @@ function _rtsCombatAnim(dmg, x, z, big) {
   var kind = water ? 'splash' : (dmg < RTS_ANIM_PIFF ? 'piff' : (dmg < RTS_ANIM_BOOM ? 'hit' : 'boom'));
   /* scale with damage the way the original steps through its list, rather than one fixed size */
   var scale = (big || 1) * (0.7 + Math.min(1, dmg / 90) * 0.7);
-  G.fx.push({ kind:kind, x:x, y:1, z:z, t:0, big:scale });
+  var fx = { kind:kind, x:x, y:1, z:z, t:0, big:scale };
+  /* ADATA.CPP IsSticky - "sticks to unit in square". VehHit1/2/3 and Frag1 carry it; FBall1
+     and ArtExp1 do not. The distinction is physical: a spark struck OFF something rides that
+     thing, while a shell's fireball belongs to the ground where it went off. Without this a
+     tank crossing the map at seven units a second leaves its own impact sparks hanging in
+     mid-air behind it, which is what was happening to every moving target in the game.
+
+     Only for the smaller kinds. A `boom` is a fireball, and RA does not stick those. */
+  if (stick && !stick.dead && stick.type === 'unit' && kind !== 'boom' && kind !== 'splash') {
+    fx.att = stick.id; fx.stick = 1;
+  }
+  G.fx.push(fx);
   return kind;
 }
 function _rtsAnimMiddle(f, def) {
@@ -1726,7 +1752,7 @@ function _rtsFire(e, tgt, w) {
   if (w.speed <= 0) {
     _rtsDamage(tgt, dmg, e);
     G.fx.push({ kind:'tracer', x:m.x, y:1.3, z:m.z, x2:tgt.x, y2:1.3, z2:tgt.z, t:0 });
-    _rtsCombatAnim(dmg, tgt.x, tgt.z, 0.5);
+    _rtsCombatAnim(dmg, tgt.x, tgt.z, 0.5, tgt);
   } else {
     /* Fire_Direction: the shot leaves ALONG THE BARREL. Can_Fire only insists the barrel is
        within FIRE_FACING (~11 degrees) of the mark, so a dumb shell departs at whatever
@@ -1957,11 +1983,54 @@ function _rtsDamage(tgt, dmg, from, floor) {
        every soldier has. Yours always scatter; a low-IQ opponent's stand and take it. */
     if (from && (tgt.side !== 'enemy' || _rtsIQAt(RTS_IQ.scatter))) _rtsScatter(tgt, from.x, from.z);
   }
-  else if (tgt.type === 'unit' && !tgt.burning && tgt.hp < tgt.maxHp * 0.3) {
-    /* Attach_To: the flame follows the unit and eats it, exactly as ANIM.CPP does. */
-    tgt.burning = 1;
-    window._rtsG.fx.push({ kind:'fire', x:tgt.x, y:1, z:tgt.z, t:0, big:0.75, att:tgt.id, loops:3 });
+  else if (tgt.type === 'unit' && tgt.hp < tgt.maxHp * RTS_BURN_UNIT) _rtsIgnite(tgt);
+  if (tgt.type === 'struct' && tgt.hp < tgt.maxHp * RTS_BURN_STRUCT) _rtsIgnite(tgt);
+}
+/* ANIM.CPP Attach_To + BuildingClass::Take_Damage. A badly hurt thing catches fire, the
+   flame rides it, and the flame eats it.
+
+   Structures burn too, and did not before - which is most of what this is for. A refinery
+   on fire is one of the most recognisable sights in the game, and the old code lit units
+   only. Which rung of ADATA's ladder it starts on comes from how big the thing is: a 3x3
+   refinery gets `OnFireBig`, a 1x1 pillbox gets `OnFireSmall`.
+
+   Re-igniting matters as much as igniting. The ladder burns DOWN - big to medium to small
+   to smoke - so a building left alone smoulders out and stops taking damage. Hit it again
+   while it is only smouldering and it goes back up to full size, which is what makes a
+   sustained bombardment look and behave differently from one shell. */
+function _rtsIgnite(tgt) {
+  var G = window._rtsG;
+  if (!tgt || tgt.dead) return null;
+  var kind = 'firesmall', base = 0.75;
+  if (tgt.type === 'struct') {
+    var d = rtsStructDef(tgt.def), cells = d ? d.w * d.h : 1;
+    kind = cells >= RTS_FIRE_BIG ? 'firebig' : (cells >= RTS_FIRE_MED ? 'firemed' : 'firesmall');
+    /* Scaled off the footprint WIDTH, matching the flame a building already draws while it
+       comes apart (`0.9 + def.w * 0.35` in the renderer) so a burning building and a dying
+       one are the same fire at the same size. Scaled off cell COUNT instead, a 3x3 got only
+       20% more flame than a 1x1 and the fire on a refinery read as a spark. */
+    base = 0.6 + (d ? d.w : 1) * 0.55;
   }
+  var rank = { firebig:3, firemed:2, firesmall:1, smoke:0 };
+  /* Already alight: top the existing flame back up rather than stacking a second one on the
+     same object. Stacking was the first version and it doubled the damage rate every hit. */
+  if (tgt.burning) {
+    for (var i = 0; i < G.fx.length; i++) {
+      var f = G.fx[i];
+      if (f.att !== tgt.id || rank[f.kind] === undefined) continue;
+      if (rank[kind] > rank[f.kind]) {
+        f.kind = kind; f.loops = RTS_ANIMS[kind].loops || 1; f.big = base * RTS_ANIMS[kind].size;
+      }
+      f.t = 0; f.mid = 0;
+      return f;
+    }
+    tgt.burning = 0;          /* flagged alight with no flame left - the fx was reaped */
+  }
+  tgt.burning = 1;
+  var nf = { kind:kind, x:tgt.x, y:1, z:tgt.z, t:0, base:base,
+    big:base * RTS_ANIMS[kind].size, att:tgt.id, loops:RTS_ANIMS[kind].loops || 1 };
+  G.fx.push(nf);
+  return nf;
 }
 /* COMBAT.CPP Modify_Damage: the falloff is a DIVISION by distance, not a taper. Damage is
    brutal at the impact point and collapses as 1/d, and the MinDamage floor only applies
@@ -2484,7 +2553,7 @@ function _rtsUpdateProj(dt) {
     if (hit || p.life <= 0) {
       if (hit) _rtsDamage(hit, p.dmg, p.from);
       if (p.splash > 0) _rtsSplash(p.x, p.z, RTS_BLAST_CELLS * RTS_TILE, p.dmg, p.side, p.splash, p.from);
-      _rtsCombatAnim(p.dmg, p.x, p.z, p.splash > 0 ? 1.4 : 0.7);
+      _rtsCombatAnim(p.dmg, p.x, p.z, p.splash > 0 ? 1.4 : 0.7, hit);
       G.proj.splice(i, 1);
     }
   }
