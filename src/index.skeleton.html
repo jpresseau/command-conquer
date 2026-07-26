@@ -97,6 +97,15 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
       draw with the real sprites instead of its own. Nothing is uploaded — the files are read in
       your browser.</span>
   </p>
+  <p class="artload">
+    <label class="artbtn">PLAY A REAL MAP
+      <input type="file" id="rtsMapPick" multiple accept=".oramap,.bin,.yaml" onchange="rtsMapPicked(this)">
+    </label>
+    <span id="rtsMapNote">Optional. Choose an <b>.oramap</b> file — or a map's <b>map.bin</b> and
+      <b>map.yaml</b> together — and the battle is fought on that map's own terrain, ore and start
+      positions instead of a generated one. Temperate maps only, and load the artwork above too or
+      there is nothing to draw the cliffs with.</span>
+  </p>
   <dl class="keys">
     <dt class="hd">Selecting</dt>
     <dt>Left-drag</dt><dd>select your units</dd>
@@ -135,10 +144,15 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 <script>//@@INC:../ra/blowfish.js@@</script>
 <script>//@@INC:../ra/mix.js@@</script>
 <script>//@@INC:../ra/shp.js@@</script>
+<script>//@@INC:../ra/zip.js@@</script>
+<script>//@@INC:../ra/ramap.js@@</script>
+<script>//@@INC:../ra/tiletab.js@@</script>
 <script>//@@INC:rts.rules.js@@</script>
 <script>//@@INC:rts.r3d.js@@</script>
 <script>//@@INC:rts.sprites.js@@</script>
 <script>//@@INC:rts.mixart.js@@</script>
+<script>//@@INC:rts.map.js@@</script>
+<script>//@@INC:rts.store.js@@</script>
 <script>//@@INC:rts.audio.js@@</script>
 <script>//@@INC:rts.core.js@@</script>
 <script>//@@INC:rts.render.js@@</script>
@@ -192,6 +206,44 @@ function rtsShowResume(){
 }
 rtsBuildDiff();
 rtsShowResume();
+
+/* Anything the player chose last time loads itself now. This is the whole point of
+   src/rts.store.js: picking 13 MB of archives out of a file dialog is a decision, and a
+   decision should be made once rather than charged as a toll on every visit. Nothing here
+   blocks the START button - the game is fully playable with neither. */
+function rtsRestoreSaved() {
+  if (typeof rtsStoreRestore !== 'function') return;
+  var mixNote = document.getElementById('rtsMixNote');
+  var mapNote = document.getElementById('rtsMapNote');
+  var before = mixNote && mixNote.textContent, mapBefore = mapNote && mapNote.textContent;
+  if (mixNote) mixNote.textContent = 'Checking for artwork you loaded before…';
+  rtsStoreRestore(function (mix) {
+    if (!mixNote) return;
+    if (mix) {
+      mixNote.textContent = 'Original artwork loaded from last time — ' + mix.count +
+        ' archives, ' + (mix.bytes / 1048576).toFixed(1) + ' MB. ';
+      mixNote.className = 'ok';
+      rtsAddForget(mixNote);
+    } else { mixNote.textContent = before; mixNote.className = ''; }
+  }, function (map) {
+    if (!mapNote) return;
+    if (map) { mapNote.textContent = rtsMapDescribe(map); mapNote.className = 'ok'; }
+    else { mapNote.textContent = mapBefore; mapNote.className = ''; }
+  });
+}
+/* Remembering has to be undoable, or a bad file becomes permanent. */
+function rtsAddForget(host) {
+  if (!host || document.getElementById('rtsForget')) return;
+  var a = document.createElement('a');
+  a.id = 'rtsForget'; a.href = '#'; a.textContent = 'forget these';
+  a.onclick = function (ev) {
+    ev.preventDefault();
+    rtsStoreForget().then(function () { location.reload(); });
+    return false;
+  };
+  host.appendChild(a);
+}
+rtsRestoreSaved();
 function rtsStart(btn){
   var err = document.getElementById('rtsErr');
   if (err) err.style.display = 'none';

@@ -264,8 +264,16 @@ function _mixFinish(log, done) {
    to is in this file, and because the whole feature has to be removable in one piece. */
 function rtsMixPicked(input) {
   var note = document.getElementById('rtsMixNote');
+  var picked = input.files;
   if (note) note.textContent = 'Reading...';
-  rtsMixLoadFiles(input.files, function (err, log) {
+  rtsMixLoadFiles(picked, function (err, log) {
+    if (_rtsArtReady() && typeof rtsStoreSaveMix === 'function') {
+      /* Chosen once, not once per visit. 13 MB of archives is far too much for localStorage,
+         so this goes to IndexedDB; see src/rts.store.js. */
+      rtsStoreSaveMix(picked).then(function (saved) {
+        if (note && saved) note.textContent += ' Saved — it will load itself next time.';
+      });
+    }
     if (!note) return;
     if (_rtsArtReady()) {
       note.textContent = 'Original artwork loaded. ' +

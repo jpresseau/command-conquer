@@ -164,5 +164,7 @@
           color: #c8d2dc; font: inherit; font-size: 11px; letter-spacing: 0.08em; }
 .artbtn:hover { background: #232a33; border-color: #55637a; }
 .artbtn input { display: none; }
-#rtsMixNote.ok  { color: #7fc98a; }
-#rtsMixNote.bad { color: #d08a72; white-space: pre-line; }
+#rtsMixNote.ok, #rtsMapNote.ok  { color: #7fc98a; }
+#rtsMixNote.bad, #rtsMapNote.bad { color: #d08a72; white-space: pre-line; }
+/* undoing "remember these files" has to be reachable, or one bad pick is permanent */
+#rtsForget { color: #8fd0ff; margin-left: 4px; }

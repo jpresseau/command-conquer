@@ -291,7 +291,20 @@ function _rtsBakeTerrain(G) {
      way the original picks them. Everything layered on afterwards (rock, trees, ore, the dirt
      patches' drawn edges) stays procedural, because those are multi-tile templates with real
      placement rules and half-applying them would look worse than either end state. */
-  if (typeof _mixGround === 'function' && _mixGround()) {
+  /* On a REAL map the cell names its own template and tile, so the ground is painted exactly
+     as its author laid it out - including the cliffs and shorelines, which is the entire
+     reason for loading a map. That is the one case where RTS_T_ROCK is not skipped below:
+     a cliff drawn from the template the map names is a real cliff, not half of one. */
+  if (window._RTS_MAP && typeof _rtsMapPaintCell === 'function' &&
+      typeof _mixGround === 'function' && _mixGround()) {
+    for (var mz = 0; mz < N; mz++) {
+      for (var mx2 = 0; mx2 < N; mx2++) {
+        if (_rtsMapPaintCell(d, S, mx2, mz)) continue;
+        /* a hole in the template, or a piece the table does not know - fill it with ground */
+        _mixPaintCell(d, S, mx2, mz, G.terrain[_rtsIdx(mx2, mz)], seed);
+      }
+    }
+  } else if (typeof _mixGround === 'function' && _mixGround()) {
     for (var gz = 0; gz < N; gz++) {
       for (var gx = 0; gx < N; gx++) {
         var gk = G.terrain[_rtsIdx(gx, gz)];
