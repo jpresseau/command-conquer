@@ -424,7 +424,11 @@ function _r3Render(faces, W, H, ox, oy) {
    that was built and simply stops it stacking into a tower. It cannot affect footprint
    alignment: the ground plane is not foreshortened at all, so y scaling moves nothing in x
    or z. */
-var R3_STRUCT_SQUASH = 0.55;
+/* 1.0 now that the models themselves are built low. The squash was a global rescue for
+   sixteen models that had each grown into a tower; once they are authored at the reference's
+   proportions it is double-counting, and it was flattening the one feature on each building
+   that is supposed to stand up and identify it. */
+var R3_STRUCT_SQUASH = 1;
 
 function _r3BakeFootprint(faces, footW, footD) {
   if (R3_STRUCT_SQUASH !== 1) {
