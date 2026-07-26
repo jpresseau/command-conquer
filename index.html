@@ -251,7 +251,9 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
    the origin, so tile (tx,tz) has its centre at ((tx-RTS_N/2+0.5)*RTS_TILE, ...). */
 
 var RTS_TILE = 4;      /* world units per tile */
-var RTS_N = 112;       /* tiles per side. Red Alert maps run to 128 - a big map with small
+var RTS_N = 128;       /* DEFINES.H MAP_CELL_W. This was 112, chosen by eye with a comment
+                          saying "Red Alert maps run to 128" - so the right number was known and
+                          not used. A big map with small
                           buildings on it is a large part of why the original reads the way
                           it does, and why an early pass here looked like a diorama. */
 
@@ -384,7 +386,8 @@ var RTS_UNITS = [
     armour:'heavy',
     desc:'The backbone of any serious attack. Coaxial gun for infantry.' },
   { key:'harvester',name:'Harvester',     kind:'vehicle',  cost:1400, build:14, hp:700,  speed:7.5, turn:1.6,r:2.2, sight:14, weapon:null,
-    harvest:true, capacity:700,
+    /* RULES.CPP BailCount(28) x GoldValue(35) = 980 credits a full load, exactly. Was 700. */
+    harvest:true, capacity:980,
     armour:'heavy',
     desc:'Mines Scrap fields and unloads at a refinery.' },
   /* --- second tier. `needs` on a unit gates it the same way it gates a structure. --- */
@@ -873,8 +876,11 @@ var RTS_AI = {
    `w` is the pick weight. The money crate is the common one because it is the one that is
    never a disappointment; the mine is the reason driving over an unknown crate is a decision
    rather than free loot. */
-var RTS_CRATE_MAX = 3;             /* Rule.CrateMaximum */
-var RTS_CRATE_TIME = 3;            /* Rule.CrateTime, in minutes */
+/* NOT Rule.CrateMaximum, which is 255 - an upper bound, not a target. RULES.CPP has
+   CrateMinimum(1)/CrateMaximum(255) and the real count is derived from map size. Three is
+   ours, and now says so. */
+var RTS_CRATE_MAX = 3;
+var RTS_CRATE_TIME = 10;           /* RULES.CPP CrateTime(10), in minutes. Was 3, invented. */
 var RTS_CRATE_TRIES = 200;         /* give up re-rolling rather than spin forever */
 var RTS_CRATES = [
   { key:'money',  w:22, name:'Credits',        anim:'DOLLAR' },
@@ -887,7 +893,10 @@ var RTS_CRATES = [
   { key:'unit',   w:9,  name:'Abandoned vehicle', anim:'—' },
   { key:'mine',   w:9,  name:'Booby trap',     anim:'MINE' }
 ];
-var RTS_CRATE_MONEY = [400, 1200];  /* range a money crate pays */
+/* RULES.CPP SoloCrateMoney(2000) - a single figure, not a range. The spread is kept because
+   a crate that always pays exactly the same is a worse decision than one that might not be
+   worth the detour, but it is now centred on the real number instead of on 800. */
+var RTS_CRATE_MONEY = [1400, 2600];
 var RTS_CRATE_MINE_DMG = 90;
 var RTS_CRATE_MINE_RADIUS = RTS_TILE * 2.2;
 /* What a free-vehicle crate can contain: things that are useful on their own, in the open,
@@ -1061,7 +1070,10 @@ var RTS_BUILD_RADIUS = 9;       /* tiles: how far from an existing structure you
 /* Ore regrows and spreads, as it does in the original (RULES.CPP: IsTGrowth, IsTSpread,
    GrowthRate). A field you have worked out slowly comes back, so a long game does not
    grind to a halt on a dead map. */
-var RTS_ORE_GROW_EVERY = 6;     /* seconds between growth passes */
+/* RULES.CPP GrowthRate(2) - TWO MINUTES between growth sweeps, not six seconds. Ore was
+   regrowing twenty times faster than the original, which is most of why a worked-out field
+   here comes back while you watch instead of over the course of a long game. */
+var RTS_ORE_GROW_EVERY = 120;
 var RTS_ORE_GROW_AMT = 26;      /* added to an existing non-full tile each pass */
 var RTS_ORE_SPREAD_CHANCE = 0.10; /* chance a rich tile seeds an empty neighbour */
 /* CELL.CPP counts ore in DISCRETE LEVELS - OverlayData 0..11, twelve of them. The thresholds
