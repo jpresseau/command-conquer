@@ -34,6 +34,178 @@ var RTS_MAP_EDGE = 10;    /* a start this close to the window edge has nowhere t
    path sees the same answer. */
 window._RTS_MAP = window._RTS_MAP || null;
 
+/* ============================================================== MAIN.MIX ==
+   The maps that came with the player's own copy of the game.
+
+   Everything above reads what the community publishes. This reads what is inside MAIN.MIX -
+   the archive RA installs, which is a container of containers: general.mix, redalert.mix and
+   the rest are nested inside it, and the scenarios are nested inside those.
+
+   Two problems make this more than "open the file".
+
+   FIRST, a MIX index stores HASHES, not names. There is no directory to list; the only
+   question that can be asked is "is this exact name present". So the names have to be
+   generated, and RA's scheme is rigid enough to enumerate exhaustively:
+
+       sc <side> <nn> <dir> <var> . ini|mpr        SCENARIO.CPP Set_Scenario_Name
+          g|u|m   01-99  e|w   a-e
+
+   That is ~6000 candidates, which is nothing to hash. (An earlier pass through this had the
+   last two fields the wrong way round - variant before direction - which finds nothing at all
+   and looks exactly like "there are no maps in here".)
+
+   SECOND, MAIN.MIX is hundreds of megabytes and the browser must not hold it. It does not
+   have to: the index sits at the front, and every entry record carries an absolute offset and
+   length. So only the head is read, and individual entries are pulled out with File.slice -
+   which the browser satisfies straight off disk. Reading the whole archive to get at a 40 KB
+   scenario would be the obvious approach and would also be the one that runs the tab out of
+   memory. */
+
+var RTS_MAP_MIX_HEAD = 6 << 20;   /* enough for any real index; ~500k entries */
+
+/* The nested archives worth descending into. Listing them is not a shortcut - a MIX cannot be
+   enumerated, so a nested archive can only be found by guessing its name too. */
+var RTS_MAP_NEST = ['general.mix', 'redalert.mix', 'expand.mix', 'expand2.mix', 'aftrmath.mix',
+                    'mplayer.mix', 'missions.mix', 'local.mix', 'main.mix', 'hires.mix',
+                    'lores.mix', 'conquer.mix', 'transit.mix', 'editor.mix'];
+
+var _RTS_SCEN_NAMES = null;
+function _rtsMapScenNames() {
+  if (_RTS_SCEN_NAMES) return _RTS_SCEN_NAMES;
+  var out = [], sides = ['g', 'u', 'm'], dirs = ['e', 'w'], vars = ['a', 'b', 'c', 'd', 'e'];
+  for (var s = 0; s < sides.length; s++) {
+    for (var n = 1; n <= 99; n++) {
+      var nn = (n < 10 ? '0' : '') + n;
+      for (var d = 0; d < dirs.length; d++) {
+        for (var v = 0; v < vars.length; v++) {
+          var stem = 'sc' + sides[s] + nn + dirs[d] + vars[v];
+          out.push(stem + '.ini'); out.push(stem + '.mpr');
+        }
+      }
+    }
+  }
+  return (_RTS_SCEN_NAMES = out);
+}
+
+function _rtsSliceBytes(file, from, len) {
+  return new Promise(function (res) {
+    var fr = new FileReader();
+    fr.onload = function () { res(new Uint8Array(fr.result)); };
+    fr.onerror = function () { res(null); };
+    fr.readAsArrayBuffer(file.slice(from, from + len));
+  });
+}
+
+/* Open an archive's index from its first few megabytes. The reader only ever touches the
+   header and the index to build the file list, so a truncated buffer is enough - the entry
+   offsets it hands back are absolute and are used against the File, not against this. */
+function _rtsMapMixIndex(file) {
+  return _rtsSliceBytes(file, 0, Math.min(RTS_MAP_MIX_HEAD, file.size)).then(function (head) {
+    if (!head) return null;
+    var a;
+    try { a = window.RA_MIX.mixOpen(head); } catch (e) { return null; }
+    return (a && !a.error) ? a : null;
+  });
+}
+
+function _rtsMapMixEntry(file, archive, name) {
+  var rec = archive.byId(window.RA_MIX.mixHash(name));
+  if (!rec || rec.offset + rec.size > file.size) return Promise.resolve(null);
+  return _rtsSliceBytes(file, rec.offset, rec.size);
+}
+
+/* Find every scenario in a .mix, descending one level into the nested archives. Returns the
+   list; loading one is a separate step, because a player choosing a map wants to see what is
+   there before committing to one. */
+function rtsMapScanMix(file, onProgress) {
+  var found = [], names = _rtsMapScenNames();
+
+  function scan(archive, bytesOf, label, depth) {
+    var hits = [], i;
+    for (i = 0; i < names.length; i++) {
+      if (archive.has(names[i])) hits.push({ name: names[i], from: label });
+    }
+    hits.forEach(function (h) { h.get = bytesOf; found.push(h); });
+    if (onProgress) onProgress(label + ': ' + archive.count + ' entries, ' + hits.length + ' maps');
+    if (depth <= 0) return Promise.resolve();
+
+    /* descend: pull each nested archive out whole and scan it the same way */
+    var nest = RTS_MAP_NEST.filter(function (nm) { return archive.has(nm) && nm !== label; });
+    return nest.reduce(function (chain, nm) {
+      return chain.then(function () {
+        return bytesOf(nm).then(function (sub) {
+          if (!sub) return;
+          var a;
+          try { a = window.RA_MIX.mixOpen(sub); } catch (e) { return; }
+          if (!a || a.error) return;
+          return scan(a, function (inner) {
+            return Promise.resolve(a.read(inner));
+          }, nm, depth - 1);
+        });
+      });
+    }, Promise.resolve());
+  }
+
+  return _rtsMapMixIndex(file).then(function (top) {
+    if (!top) return { error: 'that file is not a readable MIX archive' };
+    return scan(top, function (nm) { return _rtsMapMixEntry(file, top, nm); },
+                String(file.name || 'archive').toLowerCase(), 1)
+      .then(function () {
+        if (!found.length) {
+          return { error: 'no scenarios in there. MAIN.MIX from a full install is the one that ' +
+                          'has them - the art archives on their own do not.' };
+        }
+        return { maps: found };
+      });
+  }).catch(function (e) { return { error: 'could not scan that archive: ' + ((e && e.message) || e) }; });
+}
+
+/* The list of scenarios found in an archive. A plain <select>, because the interesting part
+   is which map you get, not the chrome around choosing it. Each entry knows how to fetch its
+   own bytes - the archive itself is never held. */
+function _rtsMapListHide() {
+  var el = document.getElementById('rtsMapList');
+  if (el && el.parentNode) el.parentNode.removeChild(el);
+}
+function _rtsMapListShow(maps, note) {
+  _rtsMapListHide();
+  var wrap = document.createElement('div');
+  wrap.id = 'rtsMapList';
+  var sel = document.createElement('select');
+  maps.forEach(function (m, i) {
+    var o = document.createElement('option');
+    o.value = String(i);
+    o.textContent = m.name + '  (' + m.from + ')';
+    sel.appendChild(o);
+  });
+  var btn = document.createElement('button');
+  btn.type = 'button'; btn.textContent = 'LOAD';
+  btn.onclick = function () {
+    var m = maps[sel.value | 0];
+    note.textContent = 'Reading ' + m.name + '…'; note.className = '';
+    btn.disabled = true;
+    m.get(m.name).then(function (bytes) {
+      btn.disabled = false;
+      if (!bytes) { note.textContent = 'could not read ' + m.name; note.className = 'bad'; return; }
+      var txt = '';
+      for (var i = 0; i < bytes.length; i++) txt += String.fromCharCode(bytes[i]);
+      var M = rtsMapFromScenario(txt, m.name);
+      if (!M || M.error) {
+        rtsMapClear();
+        note.textContent = (M && M.error) || 'could not read that scenario';
+        note.className = 'bad';
+        return;
+      }
+      window._RTS_MAP = M;
+      if (typeof rtsStoreSaveMap === 'function') rtsStoreSaveMap(M);
+      note.textContent = rtsMapDescribe(M);
+      note.className = 'ok';
+    });
+  };
+  wrap.appendChild(sel); wrap.appendChild(btn);
+  note.parentNode.appendChild(wrap);
+}
+
 /* One line describing a loaded map, shared by the picker and by the restore-on-boot path so
    they cannot drift into saying different things about the same map. */
 function rtsMapDescribe(M) {
@@ -51,6 +223,22 @@ function rtsMapPicked(input) {
   var note = document.getElementById('rtsMapNote');
   function say(msg, cls) { if (note) { note.textContent = msg; note.className = cls || ''; } }
   if (!input.files || !input.files.length) return;
+  _rtsMapListHide();
+
+  /* A .mix is not a map, it is an archive that may CONTAIN maps - so it gets scanned and the
+     player picks from what turned up, rather than the game choosing one for them. */
+  var mixF = [].slice.call(input.files).filter(function (f) { return /\.mix$/i.test(f.name); })[0];
+  if (mixF) {
+    say('Searching ' + mixF.name + ' for scenarios…');
+    rtsMapScanMix(mixF, function (p) { say('Searching… ' + p); }).then(function (r) {
+      if (r.error) { say(r.error, 'bad'); return; }
+      say('Found ' + r.maps.length + ' scenario' + (r.maps.length === 1 ? '' : 's') + ' in ' +
+          mixF.name + '. Choose one:', 'ok');
+      _rtsMapListShow(r.maps, note);
+    });
+    return;
+  }
+
   say('Reading...');
   rtsMapLoadFiles(input.files).then(function (M) {
     if (!M || M.error) { rtsMapClear(); say(M ? M.error : 'could not read that map', 'bad'); return; }
@@ -103,6 +291,15 @@ function rtsMapLoadFiles(files) {
   var packed = list.filter(function (f) { return /\.oramap$/i.test(f.name); })[0];
   var binF   = list.filter(function (f) { return /(^|\/)map\.bin$/i.test(f.name); })[0];
   var ymlF   = list.filter(function (f) { return /(^|\/)map\.yaml$/i.test(f.name); })[0];
+  var scen   = list.filter(function (f) { return /\.(mpr|ini)$/i.test(f.name); })[0];
+
+  /* A loose .MPR or .INI is one of RA's own scenarios, and it carries its terrain inside
+     itself - see ra/inimap.js. Handled first because it needs neither of the two files below. */
+  if (scen && !packed && !binF) {
+    return readAs(scen, true).then(function (txt) {
+      return rtsMapFromScenario(txt, scen.name);
+    });
+  }
 
   var get;
   if (packed) {
@@ -133,32 +330,50 @@ function rtsMapLoadFiles(files) {
     if (b.w !== y.w || b.h !== y.h) {
       return { error: 'map.bin says ' + b.w + 'x' + b.h + ' but map.yaml says ' + y.w + 'x' + y.h };
     }
-    /* Only the temperate tileset is wired up: it is the one whose classification table is
-       baked in, and the one the artwork loader's temperat.mix draws. Saying so is much more
-       use than rendering a snow map as an unreadable mess. */
-    if (y.tileset && y.tileset !== 'TEMPERAT') {
-      return { error: 'this is a ' + y.tileset + ' map - only TEMPERAT maps are supported so far' };
-    }
-    var fit = _rtsMapFit(y);
-    if (fit.error) return { error: fit.error };
-
-    /* The battlefield takes the map's size. RTS_N is read at runtime everywhere - there is no
-       baked 128 anywhere in the grid maths - and rts.save.js already folds it into the save's
-       version stamp, so a size change invalidates old saves by itself instead of loading one
-       at the wrong dimensions. Restored by rtsMapClear when the map is dropped. */
-    var prevN = RTS_N;
-    RTS_N = fit.n;
-    var M = { bin: b, yaml: y, fit: fit, name: g.name, title: y.title, author: y.author, n: fit.n,
-              /* the bytes as they arrived, so rts.store.js can remember the map and re-read it
-                 through whatever these rules look like on the next visit */
-              raw: { bin: g.bin, yaml: g.yaml } };
-    /* Build now so an unplayable map is refused at the menu rather than at the battle. */
-    var built = _rtsMapBuild(M);
-    if (built.error) { RTS_N = prevN; return { error: built.error }; }
-    M.built = built;
-    M.stats = built.stats;
-    return M;
+    return _rtsMapAssemble(b, y, { bin: g.bin, yaml: g.yaml }, g.name);
   });
+}
+
+/* One of RA's own scenarios, from a loose .MPR/.INI or lifted out of MAIN.MIX. It comes out of
+   ra/inimap.js in exactly the shape the .oramap path produces, so from here the two are the
+   same map to everything downstream. */
+function rtsMapFromScenario(text, name) {
+  if (!window.RA_INIMAP) return { error: 'the scenario reader is not loaded' };
+  var b = window.RA_INIMAP.inimapRead(text);
+  if (b.error) return { error: name + ': ' + b.error };
+  var y = window.RA_INIMAP.inimapMeta(text, name);
+  return _rtsMapAssemble(b, y, { ini: text }, name);
+}
+
+/* The tail every map path shares: check the tileset, choose the window, size the battlefield,
+   and build. Kept in one place so a map cannot be accepted by one route on terms another route
+   would have refused. */
+function _rtsMapAssemble(b, y, raw, name) {
+  /* Only the temperate tileset is wired up: it is the one whose classification table is
+     baked in, and the one the artwork loader's temperat.mix draws. Saying so is much more
+     use than rendering a snow map as an unreadable mess. */
+  if (y.tileset && y.tileset !== 'TEMPERAT') {
+    return { error: 'this is a ' + y.tileset + ' map - only temperate maps work so far' };
+  }
+  var fit = _rtsMapFit(y);
+  if (fit.error) return { error: fit.error };
+
+  /* The battlefield takes the map's size. RTS_N is read at runtime everywhere - there is no
+     baked 128 anywhere in the grid maths - and rts.save.js already folds it into the save's
+     version stamp, so a size change invalidates old saves by itself instead of loading one
+     at the wrong dimensions. Restored by rtsMapClear when the map is dropped. */
+  var prevN = RTS_N;
+  RTS_N = fit.n;
+  var M = { bin: b, yaml: y, fit: fit, name: name, title: y.title, author: y.author, n: fit.n,
+            /* the bytes as they arrived, so rts.store.js can remember the map and re-read it
+               through whatever these rules look like on the next visit */
+            raw: raw };
+  /* Build now so an unplayable map is refused at the menu rather than at the battle. */
+  var built = _rtsMapBuild(M);
+  if (built.error) { RTS_N = prevN; return { error: built.error }; }
+  M.built = built;
+  M.stats = built.stats;
+  return M;
 }
 
 /* Drop the loaded map and go back to generating. Putting the grid size back is the part that
@@ -242,10 +457,13 @@ function _rtsMapBuild(M) {
       G.blocked[i] = L.block;
       if (L.block) { blocked++; continue; }
 
-      /* ResourceIndex 1 is ore and 2 is gems (world.yaml). */
+      /* ResourceIndex 1 is ore and 2 is gems (world.yaml). 3 is a wall, which only RA's own
+         scenarios carry - OverlayPack stores sandbag/fence/concrete walls in the same layer
+         as the ore, and they are obstacles, not scenery. */
       var rt = b.resType[my * b.w + mx];
       if (rt === 1) { G.scrap[i] = 1; ore++; }
       else if (rt === 2) { G.scrap[i] = 1; G.gems[i] = 1; gems++; }
+      else if (rt === 3) { G.terrain[i] = RTS_T_WALL; G.blocked[i] = 2; blocked++; }
     }
   }
 

@@ -179,6 +179,17 @@
 #rtsMixNote.bad, #rtsMapNote.bad { color: #d08a72; white-space: pre-line; }
 /* undoing "remember these files" has to be reachable, or one bad pick is permanent */
 #rtsForget { color: #8fd0ff; margin-left: 4px; }
+
+/* the scenario chooser that appears after searching a .mix archive */
+#rtsMapList { margin: 8px 0 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+#rtsMapList select { max-width: 340px; padding: 5px 8px; border: 1px solid #3c4654;
+                     border-radius: 3px; background: #1b2027; color: #c8d2dc; font: inherit;
+                     font-size: 11px; }
+#rtsMapList button { padding: 5px 14px; border: 1px solid #3c4654; border-radius: 3px;
+                     background: #22303f; color: #cfe0f0; font: inherit; font-size: 11px;
+                     letter-spacing: 0.08em; cursor: pointer; }
+#rtsMapList button:hover { background: #2b3d51; }
+#rtsMapList button:disabled { opacity: 0.5; cursor: progress; }
 </style>
 <style>
 /* --- standalone shell: the title screen this app boots into --- */
@@ -269,12 +280,15 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </p>
   <p class="artload">
     <label class="artbtn">PLAY A REAL MAP
-      <input type="file" id="rtsMapPick" multiple accept=".oramap,.bin,.yaml" onchange="rtsMapPicked(this)">
+      <input type="file" id="rtsMapPick" multiple accept=".oramap,.bin,.yaml,.mpr,.ini,.mix"
+             onchange="rtsMapPicked(this)">
     </label>
-    <span id="rtsMapNote">Optional. Choose an <b>.oramap</b> file — or a map's <b>map.bin</b> and
-      <b>map.yaml</b> together — and the battle is fought on that map's own terrain, ore and start
-      positions instead of a generated one. Temperate maps only, and load the artwork above too or
-      there is nothing to draw the cliffs with.</span>
+    <span id="rtsMapNote">Optional. The battle is fought on a real map's own terrain, ore and
+      start positions instead of a generated one. Point this at your own <b>MAIN.MIX</b> and it
+      will search it for the scenarios Red Alert shipped with; a loose <b>.mpr</b> or <b>.ini</b>
+      scenario works too, as does an <b>.oramap</b>, or a map's <b>map.bin</b> and <b>map.yaml</b>
+      together. Temperate maps only, and load the artwork above as well or there is nothing to
+      draw the cliffs with.</span>
   </p>
   <dl class="keys">
     <dt class="hd">Selecting</dt>
@@ -1223,6 +1237,198 @@ function ramapYaml(text) {
 var _exp = { ramapBin: ramapBin, ramapYaml: ramapYaml };
 if (typeof module !== 'undefined' && module.exports) module.exports = _exp;
 else if (typeof window !== 'undefined') window.RA_MAP = _exp;
+</script>
+<script>/* Red Alert's OWN map format - the scenarios that shipped with the game.
+
+   The .oramap reader in ramap.js reads what the community publishes today. This reads what is
+   inside the player's own copy: RA keeps every scenario as a single .INI (campaign) or .MPR
+   (multiplayer) file, and unlike the C&C that came before it, the terrain is not a separate
+   .BIN - it lives in the INI, base64'd and LCW-compressed, in a section called [MapPack].
+
+   The layout, once unpacked, is one flat 128x128 grid regardless of how big the playable part
+   is - RA always allocates the whole board and uses [Map]'s X/Y/Width/Height to say which
+   rectangle of it is in play:
+
+     [MapPack]      128*128 u16 template ids, THEN 128*128 u8 tile indices   (49152 bytes)
+     [OverlayPack]  128*128 u8 overlay codes, 0xFF for none                  (16384 bytes)
+     [Waypoints]    N=cell ; 0-7 are the multiplayer starts
+     [TERRAIN]      cell=T07 ; the trees
+     [Map]          Theater, X, Y, Width, Height
+
+   Both packs are the same encoding: concatenate the numbered lines in order, base64-decode,
+   then read a series of chunks. Each chunk header is a u32 whose LOW THREE BYTES are the
+   compressed length - the fourth byte is a format marker and is not part of the number. Every
+   chunk expands to exactly 8192 bytes. Masking that u32 wrong is the classic way to get a
+   reader that works on some maps and produces garbage on others, because the fourth byte is
+   frequently zero and the bug then hides.
+
+   What comes out is deliberately the SAME SHAPE that ramapBin and ramapYaml produce, so
+   everything downstream - the window fitting, the terrain classification, the painter - does
+   not know or care which kind of map file it came from. */
+
+var _inilcw = (typeof require !== 'undefined') ? require('./lcw.js') : window.RA_LCW;
+
+var RA_INI_DIM = 128;               /* DEFINES.H MAP_CELL_W - always, whatever [Map] says */
+var _RA_CHUNK = 8192;
+
+/* ------------------------------------------------------------------ base64 --
+   Browser and node disagree about who provides this, and neither is present in both. */
+function _iniB64(s) {
+  s = String(s).replace(/[^A-Za-z0-9+/=]/g, '');
+  if (typeof atob === 'function') {
+    var bin = atob(s), out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  if (typeof Buffer !== 'undefined') return new Uint8Array(Buffer.from(s, 'base64'));
+  return new Uint8Array(0);
+}
+
+/* ------------------------------------------------------------------- INI --
+   RA's INI is not quite an INI: keys repeat, values contain '=', and section names vary in
+   case between scenarios. Sections are kept as ordered key/value LISTS rather than objects
+   because [MapPack]'s numbered lines must be concatenated in file order, and an object would
+   silently reorder them. */
+function iniParse(text) {
+  var lines = String(text).replace(/\r/g, '').split('\n');
+  var sections = {}, cur = null;
+  for (var i = 0; i < lines.length; i++) {
+    var t = lines[i].trim();
+    if (!t || t.charAt(0) === ';') continue;
+    var m = t.match(/^\[([^\]]+)\]/);
+    if (m) { cur = m[1].toLowerCase(); if (!sections[cur]) sections[cur] = []; continue; }
+    if (!cur) continue;
+    var eq = t.indexOf('=');
+    if (eq < 0) continue;
+    sections[cur].push([t.slice(0, eq).trim(), t.slice(eq + 1).trim()]);
+  }
+  return {
+    has: function (s) { return !!sections[String(s).toLowerCase()]; },
+    list: function (s) { return sections[String(s).toLowerCase()] || []; },
+    get: function (s, k) {
+      var rows = sections[String(s).toLowerCase()] || [];
+      for (var j = 0; j < rows.length; j++) if (rows[j][0].toLowerCase() === String(k).toLowerCase()) return rows[j][1];
+      return null;
+    }
+  };
+}
+
+/* Concatenate a pack's numbered lines, decode, and expand its LCW chunks. */
+function _iniUnpack(rows, wantBytes) {
+  var i, s = '';
+  /* keyed by ascending number, and the file order is already that - but a scenario edited by
+     hand can have them out of order, and one line in the wrong place corrupts everything
+     after it, so sort rather than trust */
+  var sorted = rows.slice().sort(function (a, b) { return (a[0] | 0) - (b[0] | 0); });
+  for (i = 0; i < sorted.length; i++) s += sorted[i][1];
+  var packed = _iniB64(s);
+  if (!packed.length) return null;
+
+  var out = new Uint8Array(wantBytes), at = 0, p = 0;
+  var dv = new DataView(packed.buffer, packed.byteOffset, packed.byteLength);
+  while (p + 4 <= packed.length && at < wantBytes) {
+    /* LOW THREE BYTES only - the fourth is a format marker, not part of the length */
+    var clen = dv.getUint32(p, true) & 0xffffff;
+    p += 4;
+    if (!clen || p + clen > packed.length) break;
+    var chunk = new Uint8Array(_RA_CHUNK);
+    try { _inilcw.lcwDecompress(packed, p, chunk); } catch (e) { break; }
+    var take = Math.min(_RA_CHUNK, wantBytes - at);
+    out.set(chunk.subarray(0, take), at);
+    at += take; p += clen;
+  }
+  return at ? { data: out, filled: at } : null;
+}
+
+/* --------------------------------------------------------------- overlay --
+   OverlayType, in order. Only three groups matter to this game: the four gold stages, the
+   four gem stages, and the walls. Everything past them is scenery this game has no concept
+   of, and is skipped rather than guessed at. */
+var RA_OVR_GOLD = [5, 6, 7, 8], RA_OVR_GEM = [9, 10, 11, 12], RA_OVR_WALL_MAX = 4;
+
+/* ------------------------------------------------------------------ read --
+   Produces the same {w,h,tmpl,tidx,resType,resDensity} that ramapBin does, so the rest of the
+   pipeline cannot tell the two formats apart. */
+function inimapRead(text) {
+  if (!text) return { error: 'empty scenario file' };
+  var ini = iniParse(text);
+  if (!ini.has('mappack')) return { error: 'no [MapPack] - not a Red Alert scenario' };
+
+  var D = RA_INI_DIM, n = D * D;
+  var mp = _iniUnpack(ini.list('mappack'), n * 3);
+  if (!mp) return { error: '[MapPack] would not decompress' };
+
+  var tmpl = new Uint16Array(n), tidx = new Uint8Array(n), i;
+  var dv = new DataView(mp.data.buffer, mp.data.byteOffset, mp.data.byteLength);
+  for (i = 0; i < n; i++) {
+    var id = dv.getUint16(i * 2, true);
+    /* RA writes 0xFFFF for "nothing here", which is clear ground, and the tile table carries
+       65535 for exactly that reason. Leave it - the classifier knows it. */
+    tmpl[i] = id;
+    tidx[i] = mp.data[n * 2 + i];
+  }
+
+  var resT = new Uint8Array(n), resD = new Uint8Array(n), walls = 0, ore = 0, gems = 0;
+  var op = ini.has('overlaypack') ? _iniUnpack(ini.list('overlaypack'), n) : null;
+  if (op) {
+    for (i = 0; i < n; i++) {
+      var o = op.data[i];
+      if (o === 0xff) continue;
+      if (RA_OVR_GOLD.indexOf(o) >= 0) { resT[i] = 1; resD[i] = 12; ore++; }
+      else if (RA_OVR_GEM.indexOf(o) >= 0) { resT[i] = 2; resD[i] = 3; gems++; }
+      else if (o <= RA_OVR_WALL_MAX) { resT[i] = 3; walls++; }     /* 3 = wall, see rts.map.js */
+    }
+  }
+
+  return { format: 'ini', w: D, h: D, tmpl: tmpl, tidx: tidx, height: null,
+           resType: resT, resDensity: resD,
+           counts: { ore: ore, gems: gems, walls: walls } };
+}
+
+/* Everything that is not the terrain grid: the playable rectangle, the start waypoints and
+   the trees. Shaped like ramapYaml's result for the same reason. */
+function inimapMeta(text, name) {
+  var ini = iniParse(text), D = RA_INI_DIM;
+  function num(k, dflt) { var v = parseInt(ini.get('map', k), 10); return isFinite(v) ? v : dflt; }
+  var x = num('X', 0), y = num('Y', 0), w = num('Width', D), h = num('Height', D);
+  /* A scenario with a nonsense rectangle is more likely to be a file that is not a scenario
+     at all than a real map with bad numbers, so clamp rather than trust. */
+  if (w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > D || y + h > D) { x = 0; y = 0; w = D; h = D; }
+
+  /* Waypoints 0-7 are the multiplayer starts; the rest are script targets. A cell number is
+     y*128+x, the same flat index the packs use. */
+  var spawns = [], wps = ini.list('waypoints'), i;
+  for (i = 0; i < wps.length; i++) {
+    var idx = wps[i][0] | 0, cell = parseInt(wps[i][1], 10);
+    if (idx < 0 || idx > 7 || !isFinite(cell) || cell < 0 || cell >= D * D) continue;
+    spawns.push({ x: cell % D, y: (cell / D) | 0 });
+  }
+
+  /* [TERRAIN] is cell=TYPE, and every type in it is a tree or a tree clump. */
+  var actors = [], tr = ini.list('terrain');
+  for (i = 0; i < tr.length; i++) {
+    var c = parseInt(tr[i][0], 10);
+    if (!isFinite(c) || c < 0 || c >= D * D) continue;
+    actors.push({ id: 'terrain' + i, type: String(tr[i][1]).toLowerCase(), x: c % D, y: (c / D) | 0, owner: '' });
+  }
+
+  var theatre = String(ini.get('map', 'Theater') || '').toUpperCase();
+  return {
+    title:  ini.get('basic', 'Name') || name || 'Untitled',
+    author: ini.get('basic', 'Author') || '',
+    /* RA spells it TEMPERATE, OpenRA spells it TEMPERAT; downstream only knows the latter. */
+    tileset: theatre === 'TEMPERATE' ? 'TEMPERAT' : theatre,
+    w: D, h: D,
+    bounds: { x: x, y: y, w: w, h: h },
+    actors: actors,
+    spawns: spawns
+  };
+}
+
+var _exp = { iniParse: iniParse, inimapRead: inimapRead, inimapMeta: inimapMeta,
+             RA_INI_DIM: RA_INI_DIM };
+if (typeof module !== 'undefined' && module.exports) module.exports = _exp;
+else if (typeof window !== 'undefined') window.RA_INIMAP = _exp;
 </script>
 <script>/* Which land type is under every tile of every temperate template.
 
@@ -4820,7 +5026,43 @@ function rtsMixLoadFiles(files, done) {
   }
 }
 
+/* MAIN.MIX is a container of containers: conquer, local, temperat and hires are all nested
+   inside it. Descending one level means a player can point at that one file instead of hunting
+   down four - and since a MIX index stores hashes rather than names, the only way to find a
+   nested archive is to ask for it by name, which is what this list is for.
+
+   Only archives NOT already loaded are taken, so a directly chosen file always wins over a
+   copy found inside something else. */
+var RTS_MIX_NEST = ['conquer.mix', 'local.mix', 'temperat.mix', 'hires.mix', 'lores.mix',
+                    'snow.mix', 'interior.mix', 'allies.mix', 'russian.mix', 'general.mix',
+                    'redalert.mix', 'expand.mix', 'expand2.mix'];
+
+function _mixDescend(log) {
+  var outer = Object.keys(RTS_MIX.open), i, j, grew = 0;
+  for (i = 0; i < outer.length; i++) {
+    var a = RTS_MIX.open[outer[i]];
+    if (!a || a.error) continue;
+    for (j = 0; j < RTS_MIX_NEST.length; j++) {
+      var nm = RTS_MIX_NEST[j];
+      if (RTS_MIX.open[nm] || !a.has(nm)) continue;
+      var bytes = a.read(nm);
+      if (!bytes) continue;
+      try {
+        var sub = window.RA_MIX.mixOpen(bytes);
+        if (sub && !sub.error) {
+          RTS_MIX.open[nm] = sub;
+          log.push('  ' + nm + ': ' + sub.count + ' files (inside ' + outer[i] + ')');
+          grew++;
+        }
+      } catch (e) { /* a nested archive that will not open is not the outer one's fault */ }
+    }
+  }
+  return grew;
+}
+
 function _mixFinish(log, done) {
+  /* one level is enough for MAIN.MIX -> general.mix -> the art archives */
+  if (_mixDescend(log)) _mixDescend(log);
   var loc = RTS_MIX.open['local.mix'];
   if (loc && !loc.error) {
     var p = loc.read('temperat.pal');
@@ -5067,6 +5309,178 @@ var RTS_MAP_EDGE = 10;    /* a start this close to the window edge has nowhere t
    path sees the same answer. */
 window._RTS_MAP = window._RTS_MAP || null;
 
+/* ============================================================== MAIN.MIX ==
+   The maps that came with the player's own copy of the game.
+
+   Everything above reads what the community publishes. This reads what is inside MAIN.MIX -
+   the archive RA installs, which is a container of containers: general.mix, redalert.mix and
+   the rest are nested inside it, and the scenarios are nested inside those.
+
+   Two problems make this more than "open the file".
+
+   FIRST, a MIX index stores HASHES, not names. There is no directory to list; the only
+   question that can be asked is "is this exact name present". So the names have to be
+   generated, and RA's scheme is rigid enough to enumerate exhaustively:
+
+       sc <side> <nn> <dir> <var> . ini|mpr        SCENARIO.CPP Set_Scenario_Name
+          g|u|m   01-99  e|w   a-e
+
+   That is ~6000 candidates, which is nothing to hash. (An earlier pass through this had the
+   last two fields the wrong way round - variant before direction - which finds nothing at all
+   and looks exactly like "there are no maps in here".)
+
+   SECOND, MAIN.MIX is hundreds of megabytes and the browser must not hold it. It does not
+   have to: the index sits at the front, and every entry record carries an absolute offset and
+   length. So only the head is read, and individual entries are pulled out with File.slice -
+   which the browser satisfies straight off disk. Reading the whole archive to get at a 40 KB
+   scenario would be the obvious approach and would also be the one that runs the tab out of
+   memory. */
+
+var RTS_MAP_MIX_HEAD = 6 << 20;   /* enough for any real index; ~500k entries */
+
+/* The nested archives worth descending into. Listing them is not a shortcut - a MIX cannot be
+   enumerated, so a nested archive can only be found by guessing its name too. */
+var RTS_MAP_NEST = ['general.mix', 'redalert.mix', 'expand.mix', 'expand2.mix', 'aftrmath.mix',
+                    'mplayer.mix', 'missions.mix', 'local.mix', 'main.mix', 'hires.mix',
+                    'lores.mix', 'conquer.mix', 'transit.mix', 'editor.mix'];
+
+var _RTS_SCEN_NAMES = null;
+function _rtsMapScenNames() {
+  if (_RTS_SCEN_NAMES) return _RTS_SCEN_NAMES;
+  var out = [], sides = ['g', 'u', 'm'], dirs = ['e', 'w'], vars = ['a', 'b', 'c', 'd', 'e'];
+  for (var s = 0; s < sides.length; s++) {
+    for (var n = 1; n <= 99; n++) {
+      var nn = (n < 10 ? '0' : '') + n;
+      for (var d = 0; d < dirs.length; d++) {
+        for (var v = 0; v < vars.length; v++) {
+          var stem = 'sc' + sides[s] + nn + dirs[d] + vars[v];
+          out.push(stem + '.ini'); out.push(stem + '.mpr');
+        }
+      }
+    }
+  }
+  return (_RTS_SCEN_NAMES = out);
+}
+
+function _rtsSliceBytes(file, from, len) {
+  return new Promise(function (res) {
+    var fr = new FileReader();
+    fr.onload = function () { res(new Uint8Array(fr.result)); };
+    fr.onerror = function () { res(null); };
+    fr.readAsArrayBuffer(file.slice(from, from + len));
+  });
+}
+
+/* Open an archive's index from its first few megabytes. The reader only ever touches the
+   header and the index to build the file list, so a truncated buffer is enough - the entry
+   offsets it hands back are absolute and are used against the File, not against this. */
+function _rtsMapMixIndex(file) {
+  return _rtsSliceBytes(file, 0, Math.min(RTS_MAP_MIX_HEAD, file.size)).then(function (head) {
+    if (!head) return null;
+    var a;
+    try { a = window.RA_MIX.mixOpen(head); } catch (e) { return null; }
+    return (a && !a.error) ? a : null;
+  });
+}
+
+function _rtsMapMixEntry(file, archive, name) {
+  var rec = archive.byId(window.RA_MIX.mixHash(name));
+  if (!rec || rec.offset + rec.size > file.size) return Promise.resolve(null);
+  return _rtsSliceBytes(file, rec.offset, rec.size);
+}
+
+/* Find every scenario in a .mix, descending one level into the nested archives. Returns the
+   list; loading one is a separate step, because a player choosing a map wants to see what is
+   there before committing to one. */
+function rtsMapScanMix(file, onProgress) {
+  var found = [], names = _rtsMapScenNames();
+
+  function scan(archive, bytesOf, label, depth) {
+    var hits = [], i;
+    for (i = 0; i < names.length; i++) {
+      if (archive.has(names[i])) hits.push({ name: names[i], from: label });
+    }
+    hits.forEach(function (h) { h.get = bytesOf; found.push(h); });
+    if (onProgress) onProgress(label + ': ' + archive.count + ' entries, ' + hits.length + ' maps');
+    if (depth <= 0) return Promise.resolve();
+
+    /* descend: pull each nested archive out whole and scan it the same way */
+    var nest = RTS_MAP_NEST.filter(function (nm) { return archive.has(nm) && nm !== label; });
+    return nest.reduce(function (chain, nm) {
+      return chain.then(function () {
+        return bytesOf(nm).then(function (sub) {
+          if (!sub) return;
+          var a;
+          try { a = window.RA_MIX.mixOpen(sub); } catch (e) { return; }
+          if (!a || a.error) return;
+          return scan(a, function (inner) {
+            return Promise.resolve(a.read(inner));
+          }, nm, depth - 1);
+        });
+      });
+    }, Promise.resolve());
+  }
+
+  return _rtsMapMixIndex(file).then(function (top) {
+    if (!top) return { error: 'that file is not a readable MIX archive' };
+    return scan(top, function (nm) { return _rtsMapMixEntry(file, top, nm); },
+                String(file.name || 'archive').toLowerCase(), 1)
+      .then(function () {
+        if (!found.length) {
+          return { error: 'no scenarios in there. MAIN.MIX from a full install is the one that ' +
+                          'has them - the art archives on their own do not.' };
+        }
+        return { maps: found };
+      });
+  }).catch(function (e) { return { error: 'could not scan that archive: ' + ((e && e.message) || e) }; });
+}
+
+/* The list of scenarios found in an archive. A plain <select>, because the interesting part
+   is which map you get, not the chrome around choosing it. Each entry knows how to fetch its
+   own bytes - the archive itself is never held. */
+function _rtsMapListHide() {
+  var el = document.getElementById('rtsMapList');
+  if (el && el.parentNode) el.parentNode.removeChild(el);
+}
+function _rtsMapListShow(maps, note) {
+  _rtsMapListHide();
+  var wrap = document.createElement('div');
+  wrap.id = 'rtsMapList';
+  var sel = document.createElement('select');
+  maps.forEach(function (m, i) {
+    var o = document.createElement('option');
+    o.value = String(i);
+    o.textContent = m.name + '  (' + m.from + ')';
+    sel.appendChild(o);
+  });
+  var btn = document.createElement('button');
+  btn.type = 'button'; btn.textContent = 'LOAD';
+  btn.onclick = function () {
+    var m = maps[sel.value | 0];
+    note.textContent = 'Reading ' + m.name + '…'; note.className = '';
+    btn.disabled = true;
+    m.get(m.name).then(function (bytes) {
+      btn.disabled = false;
+      if (!bytes) { note.textContent = 'could not read ' + m.name; note.className = 'bad'; return; }
+      var txt = '';
+      for (var i = 0; i < bytes.length; i++) txt += String.fromCharCode(bytes[i]);
+      var M = rtsMapFromScenario(txt, m.name);
+      if (!M || M.error) {
+        rtsMapClear();
+        note.textContent = (M && M.error) || 'could not read that scenario';
+        note.className = 'bad';
+        return;
+      }
+      window._RTS_MAP = M;
+      if (typeof rtsStoreSaveMap === 'function') rtsStoreSaveMap(M);
+      note.textContent = rtsMapDescribe(M);
+      note.className = 'ok';
+    });
+  };
+  wrap.appendChild(sel); wrap.appendChild(btn);
+  note.parentNode.appendChild(wrap);
+}
+
 /* One line describing a loaded map, shared by the picker and by the restore-on-boot path so
    they cannot drift into saying different things about the same map. */
 function rtsMapDescribe(M) {
@@ -5084,6 +5498,22 @@ function rtsMapPicked(input) {
   var note = document.getElementById('rtsMapNote');
   function say(msg, cls) { if (note) { note.textContent = msg; note.className = cls || ''; } }
   if (!input.files || !input.files.length) return;
+  _rtsMapListHide();
+
+  /* A .mix is not a map, it is an archive that may CONTAIN maps - so it gets scanned and the
+     player picks from what turned up, rather than the game choosing one for them. */
+  var mixF = [].slice.call(input.files).filter(function (f) { return /\.mix$/i.test(f.name); })[0];
+  if (mixF) {
+    say('Searching ' + mixF.name + ' for scenarios…');
+    rtsMapScanMix(mixF, function (p) { say('Searching… ' + p); }).then(function (r) {
+      if (r.error) { say(r.error, 'bad'); return; }
+      say('Found ' + r.maps.length + ' scenario' + (r.maps.length === 1 ? '' : 's') + ' in ' +
+          mixF.name + '. Choose one:', 'ok');
+      _rtsMapListShow(r.maps, note);
+    });
+    return;
+  }
+
   say('Reading...');
   rtsMapLoadFiles(input.files).then(function (M) {
     if (!M || M.error) { rtsMapClear(); say(M ? M.error : 'could not read that map', 'bad'); return; }
@@ -5136,6 +5566,15 @@ function rtsMapLoadFiles(files) {
   var packed = list.filter(function (f) { return /\.oramap$/i.test(f.name); })[0];
   var binF   = list.filter(function (f) { return /(^|\/)map\.bin$/i.test(f.name); })[0];
   var ymlF   = list.filter(function (f) { return /(^|\/)map\.yaml$/i.test(f.name); })[0];
+  var scen   = list.filter(function (f) { return /\.(mpr|ini)$/i.test(f.name); })[0];
+
+  /* A loose .MPR or .INI is one of RA's own scenarios, and it carries its terrain inside
+     itself - see ra/inimap.js. Handled first because it needs neither of the two files below. */
+  if (scen && !packed && !binF) {
+    return readAs(scen, true).then(function (txt) {
+      return rtsMapFromScenario(txt, scen.name);
+    });
+  }
 
   var get;
   if (packed) {
@@ -5166,32 +5605,50 @@ function rtsMapLoadFiles(files) {
     if (b.w !== y.w || b.h !== y.h) {
       return { error: 'map.bin says ' + b.w + 'x' + b.h + ' but map.yaml says ' + y.w + 'x' + y.h };
     }
-    /* Only the temperate tileset is wired up: it is the one whose classification table is
-       baked in, and the one the artwork loader's temperat.mix draws. Saying so is much more
-       use than rendering a snow map as an unreadable mess. */
-    if (y.tileset && y.tileset !== 'TEMPERAT') {
-      return { error: 'this is a ' + y.tileset + ' map - only TEMPERAT maps are supported so far' };
-    }
-    var fit = _rtsMapFit(y);
-    if (fit.error) return { error: fit.error };
-
-    /* The battlefield takes the map's size. RTS_N is read at runtime everywhere - there is no
-       baked 128 anywhere in the grid maths - and rts.save.js already folds it into the save's
-       version stamp, so a size change invalidates old saves by itself instead of loading one
-       at the wrong dimensions. Restored by rtsMapClear when the map is dropped. */
-    var prevN = RTS_N;
-    RTS_N = fit.n;
-    var M = { bin: b, yaml: y, fit: fit, name: g.name, title: y.title, author: y.author, n: fit.n,
-              /* the bytes as they arrived, so rts.store.js can remember the map and re-read it
-                 through whatever these rules look like on the next visit */
-              raw: { bin: g.bin, yaml: g.yaml } };
-    /* Build now so an unplayable map is refused at the menu rather than at the battle. */
-    var built = _rtsMapBuild(M);
-    if (built.error) { RTS_N = prevN; return { error: built.error }; }
-    M.built = built;
-    M.stats = built.stats;
-    return M;
+    return _rtsMapAssemble(b, y, { bin: g.bin, yaml: g.yaml }, g.name);
   });
+}
+
+/* One of RA's own scenarios, from a loose .MPR/.INI or lifted out of MAIN.MIX. It comes out of
+   ra/inimap.js in exactly the shape the .oramap path produces, so from here the two are the
+   same map to everything downstream. */
+function rtsMapFromScenario(text, name) {
+  if (!window.RA_INIMAP) return { error: 'the scenario reader is not loaded' };
+  var b = window.RA_INIMAP.inimapRead(text);
+  if (b.error) return { error: name + ': ' + b.error };
+  var y = window.RA_INIMAP.inimapMeta(text, name);
+  return _rtsMapAssemble(b, y, { ini: text }, name);
+}
+
+/* The tail every map path shares: check the tileset, choose the window, size the battlefield,
+   and build. Kept in one place so a map cannot be accepted by one route on terms another route
+   would have refused. */
+function _rtsMapAssemble(b, y, raw, name) {
+  /* Only the temperate tileset is wired up: it is the one whose classification table is
+     baked in, and the one the artwork loader's temperat.mix draws. Saying so is much more
+     use than rendering a snow map as an unreadable mess. */
+  if (y.tileset && y.tileset !== 'TEMPERAT') {
+    return { error: 'this is a ' + y.tileset + ' map - only temperate maps work so far' };
+  }
+  var fit = _rtsMapFit(y);
+  if (fit.error) return { error: fit.error };
+
+  /* The battlefield takes the map's size. RTS_N is read at runtime everywhere - there is no
+     baked 128 anywhere in the grid maths - and rts.save.js already folds it into the save's
+     version stamp, so a size change invalidates old saves by itself instead of loading one
+     at the wrong dimensions. Restored by rtsMapClear when the map is dropped. */
+  var prevN = RTS_N;
+  RTS_N = fit.n;
+  var M = { bin: b, yaml: y, fit: fit, name: name, title: y.title, author: y.author, n: fit.n,
+            /* the bytes as they arrived, so rts.store.js can remember the map and re-read it
+               through whatever these rules look like on the next visit */
+            raw: raw };
+  /* Build now so an unplayable map is refused at the menu rather than at the battle. */
+  var built = _rtsMapBuild(M);
+  if (built.error) { RTS_N = prevN; return { error: built.error }; }
+  M.built = built;
+  M.stats = built.stats;
+  return M;
 }
 
 /* Drop the loaded map and go back to generating. Putting the grid size back is the part that
@@ -5275,10 +5732,13 @@ function _rtsMapBuild(M) {
       G.blocked[i] = L.block;
       if (L.block) { blocked++; continue; }
 
-      /* ResourceIndex 1 is ore and 2 is gems (world.yaml). */
+      /* ResourceIndex 1 is ore and 2 is gems (world.yaml). 3 is a wall, which only RA's own
+         scenarios carry - OverlayPack stores sandbag/fence/concrete walls in the same layer
+         as the ore, and they are obstacles, not scenery. */
       var rt = b.resType[my * b.w + mx];
       if (rt === 1) { G.scrap[i] = 1; ore++; }
       else if (rt === 2) { G.scrap[i] = 1; G.gems[i] = 1; gems++; }
+      else if (rt === 3) { G.terrain[i] = RTS_T_WALL; G.blocked[i] = 2; blocked++; }
     }
   }
 
@@ -5587,13 +6047,22 @@ var RTS_STORE_MAP = 'map.v1';
 
 function rtsStoreSaveMap(M) {
   if (!M || !M.raw) return Promise.resolve(false);
-  return _rtsStorePut(RTS_STORE_MAP, { at: Date.now(), name: M.name, bin: M.raw.bin, yaml: M.raw.yaml })
+  return _rtsStorePut(RTS_STORE_MAP, { at: Date.now(), name: M.name,
+                                       bin: M.raw.bin, yaml: M.raw.yaml, ini: M.raw.ini })
     .then(function (r) { return !!r; }).catch(function () { return false; });
 }
 
 function rtsStoreLoadMap() {
   return _rtsStoreGet(RTS_STORE_MAP).then(function (rec) {
-    if (!rec || !rec.bin || !rec.yaml) return null;
+    if (!rec) return null;
+    /* One of RA's own scenarios: a single text file, and it rebuilds without touching a Blob. */
+    if (rec.ini) {
+      var M2 = rtsMapFromScenario(rec.ini, rec.name);
+      if (!M2 || M2.error) return null;
+      window._RTS_MAP = M2;
+      return M2;
+    }
+    if (!rec.bin || !rec.yaml) return null;
     var b = new Blob([rec.bin]); b.name = 'map.bin';
     var y = new Blob([rec.yaml]); y.name = 'map.yaml';
     return rtsMapLoadFiles([b, y]).then(function (M) {

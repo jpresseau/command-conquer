@@ -168,3 +168,14 @@
 #rtsMixNote.bad, #rtsMapNote.bad { color: #d08a72; white-space: pre-line; }
 /* undoing "remember these files" has to be reachable, or one bad pick is permanent */
 #rtsForget { color: #8fd0ff; margin-left: 4px; }
+
+/* the scenario chooser that appears after searching a .mix archive */
+#rtsMapList { margin: 8px 0 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+#rtsMapList select { max-width: 340px; padding: 5px 8px; border: 1px solid #3c4654;
+                     border-radius: 3px; background: #1b2027; color: #c8d2dc; font: inherit;
+                     font-size: 11px; }
+#rtsMapList button { padding: 5px 14px; border: 1px solid #3c4654; border-radius: 3px;
+                     background: #22303f; color: #cfe0f0; font: inherit; font-size: 11px;
+                     letter-spacing: 0.08em; cursor: pointer; }
+#rtsMapList button:hover { background: #2b3d51; }
+#rtsMapList button:disabled { opacity: 0.5; cursor: progress; }

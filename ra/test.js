@@ -433,6 +433,120 @@ function mkbin(w, h, fill) {
      Object.keys(chars).every(function (c) { return 'cwrkdbig-'.indexOf(c) >= 0; }), Object.keys(chars).join(''));
 })();
 
+
+/* ------------------------------------------------- RA's own scenario files --
+   There is no real .MPR to hand, so one is BUILT here: a full 128x128 scenario, packed the
+   way RA packs it, and read back. That means writing an LCW encoder, which the game does not
+   need and so does not have - a literal-run-only encoder is enough, because the decoder does
+   not care how well the stream was compressed, only that it is legal.
+
+   Building the file rather than fixturing one is also the only way to test the part most
+   likely to be wrong: the chunk header is a u32 whose low THREE bytes are the length, and the
+   fourth byte is a format marker. Here that fourth byte is set to a non-zero value on purpose,
+   because a reader that masks with 0xFFFFFFFF still passes every test where it happens to be
+   zero - which, in real files, is most of them. */
+var inimap = require('./inimap.js');
+
+/* 10nnnnnn literal runs, then the 0x80 terminator. Legal LCW, terrible compression. */
+function lcwLiteral(bytes) {
+  var out = [], i = 0;
+  while (i < bytes.length) {
+    var n = Math.min(63, bytes.length - i);
+    out.push(0x80 | n);
+    for (var j = 0; j < n; j++) out.push(bytes[i + j]);
+    i += n;
+  }
+  out.push(0x80);
+  return new Uint8Array(out);
+}
+
+/* Pack a byte array into RA's chunked+base64 form, 8192 bytes per chunk. */
+function raPack(bytes) {
+  var chunks = [], at = 0;
+  while (at < bytes.length) {
+    var raw = bytes.subarray(at, at + 8192);
+    var padded = new Uint8Array(8192); padded.set(raw);
+    var enc = lcwLiteral(padded);
+    var hdr = new Uint8Array(4);
+    hdr[0] = enc.length & 0xff; hdr[1] = (enc.length >> 8) & 0xff; hdr[2] = (enc.length >> 16) & 0xff;
+    hdr[3] = 0x20;                       /* the format marker the length must NOT include */
+    chunks.push(hdr, enc);
+    at += 8192;
+  }
+  var total = chunks.reduce(function (a, c) { return a + c.length; }, 0);
+  var flat = new Uint8Array(total), o = 0;
+  chunks.forEach(function (c) { flat.set(c, o); o += c.length; });
+  var b64 = Buffer.from(flat).toString('base64');
+  /* RA splits the base64 across numbered lines; the reader has to put them back in order. */
+  var rows = [], line = 1;
+  for (var i = 0; i < b64.length; i += 70) rows.push((line++) + '=' + b64.slice(i, i + 70));
+  return rows;
+}
+
+(function () {
+  var D = 128, n = D * D;
+  /* terrain: template 255 (clear) everywhere, with a block of template 1 (water) */
+  var pack = new Uint8Array(n * 3), pv = new DataView(pack.buffer);
+  for (var i = 0; i < n; i++) { pv.setUint16(i * 2, 255, true); pack[n * 2 + i] = 0; }
+  for (var y = 20; y < 30; y++) for (var x = 20; x < 30; x++) pv.setUint16((y * D + x) * 2, 1, true);
+  /* overlay: gold at one cell, gems at another, a wall at a third, 0xFF elsewhere */
+  var ovr = new Uint8Array(n); ovr.fill(0xff);
+  ovr[40 * D + 40] = 5;      /* GOLD01 */
+  ovr[41 * D + 41] = 10;     /* GEM02  */
+  ovr[42 * D + 42] = 2;      /* BRIK wall */
+
+  var text = [
+    '[Basic]', 'Name=Test Scenario', 'Author=Nobody',
+    '[Map]', 'Theater=TEMPERATE', 'X=8', 'Y=8', 'Width=100', 'Height=100',
+    '[Waypoints]', '0=' + (60 * D + 20), '1=' + (60 * D + 100), '25=' + (5 * D + 5),
+    '[TERRAIN]', (70 * D + 70) + '=T07', (71 * D + 71) + '=TC01',
+    '[MapPack]'
+  ].concat(raPack(pack), ['[OverlayPack]'], raPack(ovr)).join('\n');
+
+  var m = inimap.inimapRead(text);
+  ok('inimapRead unpacks [MapPack]', !m.error && m.w === 128 && m.h === 128, m.error || '');
+  ok('...and reads the template grid', m.tmpl[0] === 255 && m.tmpl[25 * D + 25] === 1,
+     m.tmpl ? (m.tmpl[0] + '/' + m.tmpl[25 * D + 25]) : 'none');
+  ok('...and the tile indices follow the templates, not interleaved with them',
+     m.tidx[0] === 0 && m.tidx[n - 1] === 0);
+  ok('...and reads gold out of [OverlayPack]', m.resType[40 * D + 40] === 1);
+  ok('...and gems', m.resType[41 * D + 41] === 2);
+  ok('...and walls', m.resType[42 * D + 42] === 3);
+  ok('...and leaves 0xFF cells empty', m.resType[0] === 0 && m.resType[99 * D + 99] === 0);
+  ok('...and counts what it found', m.counts.ore === 1 && m.counts.gems === 1 && m.counts.walls === 1,
+     JSON.stringify(m.counts));
+
+  var meta = inimap.inimapMeta(text, 'scm01ea.mpr');
+  ok('inimapMeta reads the playable rectangle', meta.bounds.x === 8 && meta.bounds.w === 100);
+  ok('...and translates RA TEMPERATE to the tileset name used everywhere else',
+     meta.tileset === 'TEMPERAT', meta.tileset);
+  ok('...and takes waypoints 0-7 as the starts, ignoring the script ones',
+     meta.spawns.length === 2, JSON.stringify(meta.spawns));
+  ok('...and converts a cell number to x,y',
+     meta.spawns[0].x === 20 && meta.spawns[0].y === 60, JSON.stringify(meta.spawns[0]));
+  ok('...and picks the trees out of [TERRAIN]', meta.actors.length === 2 &&
+     meta.actors[0].type === 't07' && meta.actors[0].x === 70);
+  ok('...and reads the name', meta.title === 'Test Scenario' && meta.author === 'Nobody');
+})();
+
+(function () {
+  ok('a file with no [MapPack] is refused', !!inimap.inimapRead('[Basic]\nName=x\n').error);
+  ok('...and so is an empty one', !!inimap.inimapRead('').error);
+  var ini = inimap.iniParse('[A]\nk=1\n[B]\nk=2\nk=3\n');
+  ok('iniParse keeps repeated keys rather than collapsing them', ini.list('b').length === 2);
+  ok('...and is case-insensitive about section and key names', ini.get('A', 'K') === '1');
+  ok('...and keeps = inside a value', inimap.iniParse('[A]\nk=a=b\n').get('a', 'k') === 'a=b');
+})();
+
+(function () {
+  /* A scenario whose [Map] rectangle is nonsense is far more likely to be a file that is not
+     a scenario than a real map with bad numbers. */
+  var t = '[Map]\nX=200\nY=0\nWidth=900\nHeight=4\n[MapPack]\n1=\n';
+  var meta = inimap.inimapMeta(t, 'x');
+  ok('a nonsense playable rectangle falls back to the whole board',
+     meta.bounds.x === 0 && meta.bounds.w === 128, JSON.stringify(meta.bounds));
+})();
+
 console.log("--- " + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
 

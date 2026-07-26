@@ -241,7 +241,43 @@ function rtsMixLoadFiles(files, done) {
   }
 }
 
+/* MAIN.MIX is a container of containers: conquer, local, temperat and hires are all nested
+   inside it. Descending one level means a player can point at that one file instead of hunting
+   down four - and since a MIX index stores hashes rather than names, the only way to find a
+   nested archive is to ask for it by name, which is what this list is for.
+
+   Only archives NOT already loaded are taken, so a directly chosen file always wins over a
+   copy found inside something else. */
+var RTS_MIX_NEST = ['conquer.mix', 'local.mix', 'temperat.mix', 'hires.mix', 'lores.mix',
+                    'snow.mix', 'interior.mix', 'allies.mix', 'russian.mix', 'general.mix',
+                    'redalert.mix', 'expand.mix', 'expand2.mix'];
+
+function _mixDescend(log) {
+  var outer = Object.keys(RTS_MIX.open), i, j, grew = 0;
+  for (i = 0; i < outer.length; i++) {
+    var a = RTS_MIX.open[outer[i]];
+    if (!a || a.error) continue;
+    for (j = 0; j < RTS_MIX_NEST.length; j++) {
+      var nm = RTS_MIX_NEST[j];
+      if (RTS_MIX.open[nm] || !a.has(nm)) continue;
+      var bytes = a.read(nm);
+      if (!bytes) continue;
+      try {
+        var sub = window.RA_MIX.mixOpen(bytes);
+        if (sub && !sub.error) {
+          RTS_MIX.open[nm] = sub;
+          log.push('  ' + nm + ': ' + sub.count + ' files (inside ' + outer[i] + ')');
+          grew++;
+        }
+      } catch (e) { /* a nested archive that will not open is not the outer one's fault */ }
+    }
+  }
+  return grew;
+}
+
 function _mixFinish(log, done) {
+  /* one level is enough for MAIN.MIX -> general.mix -> the art archives */
+  if (_mixDescend(log)) _mixDescend(log);
   var loc = RTS_MIX.open['local.mix'];
   if (loc && !loc.error) {
     var p = loc.read('temperat.pal');
