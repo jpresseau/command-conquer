@@ -112,9 +112,11 @@ var RTS_STRUCTS = [
 var RTS_UNITS = [
   { key:'rifle',    name:'Rifle Squad',   kind:'infantry', cost:100,  build:3,  hp:60,   speed:7,   turn:6,  r:1.1, sight:16, weapon:'rifle',
     armour:'none',
+    crawl:true, fraidy:true,
     desc:'Cheap infantry. Good against other infantry.' },
   { key:'rocket',   name:'Rocket Squad',  kind:'infantry', cost:300,  build:6,  hp:50,   speed:6,   turn:6,  r:1.1, sight:18, weapon:'rocket',
     armour:'none',
+    crawl:true, fraidy:true,
     desc:'Slow-firing missiles. Tears up vehicles and buildings.' },
   { key:'buggy',    name:'Scout Buggy',   kind:'vehicle',  cost:500,  build:7,  hp:170,  speed:16,  turn:3.2,r:1.6, sight:22, weapon:'mg',
     armour:'light',
@@ -132,6 +134,7 @@ var RTS_UNITS = [
   /* --- second tier. `needs` on a unit gates it the same way it gates a structure. --- */
   { key:'grenadier',name:'Grenadier',     kind:'infantry', cost:160,  build:4,  hp:65,   speed:6,   turn:6,  r:1.1, sight:15, weapon:'grenade',
     armour:'none',
+    crawl:true, fraidy:true,
     desc:'Lobbed charges. Clears infantry and cracks buildings; hopeless against a moving tank.' },
   { key:'light',    name:'Light Tank',    kind:'vehicle',  cost:700,  build:9,  hp:280,  speed:12,  turn:2.6,r:1.8, sight:18, weapon:'cannon',
     armour:'light',
@@ -150,11 +153,13 @@ var RTS_UNITS = [
   { key:'flame',    name:'Flame Squad',   kind:'infantry', cost:300,  build:5,  hp:75,   speed:6,   turn:6,  r:1.1, sight:12, weapon:'flame',
     needs:['lab'],
     armour:'none',
+    crawl:true, fraidy:true,
     desc:'Walks up and burns things down. Devastating up close, dead at any distance.' },
   /* capture: MISSION_CAPTURE. The unit is spent on arrival - it does not survive the job. */
   { key:'engineer', name:'Engineer',      kind:'infantry', cost:500,  build:8,  hp:45,   speed:6.5, turn:6,  r:1.1, sight:12, weapon:null,
     capture:true,
     armour:'none',
+    crawl:false, fraidy:false,
     desc:'Walks into an enemy building and takes it. Unarmed, and spent on arrival.' },
   /* --- four units that each add a VERB rather than another damage number. --- */
   /* Attack Dog: "extremely effective against infantry, completely worthless against vehicles
@@ -162,23 +167,27 @@ var RTS_UNITS = [
   { key:'dog',      name:'Attack Dog',    kind:'infantry', cost:200,  build:3,  hp:40,   speed:13,  turn:8,  r:0.9, sight:14, weapon:'bite',
     needs:['kennel'],
     armour:'none',
+    crawl:false, fraidy:false,
     desc:'Fast and vicious. Tears infantry apart; cannot scratch a vehicle or a wall.' },
   /* heals: friendly INFANTRY inside this radius are brought back up at healRate hp/sec. The
      same shape as the Service Depot's repair field - one is for people, the other for vehicles. */
   { key:'medic',    name:'Field Medic',   kind:'infantry', cost:800,  build:9,  hp:70,   speed:6.5, turn:6,  r:1.1, sight:12, weapon:null,
     heals:RTS_TILE * 3.0, healRate:9,
     armour:'none',
+    crawl:true, fraidy:false,
     desc:'Heals nearby infantry continuously and for free. Cannot heal himself.' },
   /* steal: walks into an enemy refinery and leaves with a fraction of that side\'s credits.
      Same walk-in as capture, different payload, spent the same way. */
   { key:'thief',    name:'Thief',         kind:'infantry', cost:500,  build:7,  hp:45,   speed:7,   turn:6,  r:1.1, sight:12, weapon:null,
     needs:['lab'], steal:0.5, stealFrom:'refinery',
     armour:'none',
+    crawl:false, fraidy:false,
     desc:'Walks into an enemy refinery and leaves with half their credits. Unarmed.' },
   /* demo: C4. "Can destroy buildings instantly if she is able to get adjacent to them." */
   { key:'tanya',    name:'Commando',      kind:'infantry', cost:1200, build:14, hp:130,  speed:8,   turn:7,  r:1.1, sight:16, weapon:'pistols',
     needs:['lab'], demo:true, only:1,
     armour:'none',
+    crawl:true, fraidy:false,
     desc:'Mows down infantry, and levels any building she can reach. Only one at a time.' }
 ];
 
@@ -235,7 +244,12 @@ var RTS_WEAPONS = {
   pillboxgun: { dmg:12, range:15, cool:0.30, shot:'tracer',  speed:0,  splash:0,
                 verses:{ none:1.15, wood:0.20, light:0.28, heavy:0.10, concrete:0.12 } },
   /* Attack Dog. ORGANIC: zero against everything that is not a person. */
-  bite:       { dmg:22, range:3,  cool:0.55, shot:'tracer',  speed:0,  splash:0,
+  /* Range is in WORLD units and a tile is 4 of them. At 3 the dog had to close to 0.75 of a
+     tile - but its own radius (0.9) plus an infantryman's (1.1) means the pair can never be
+     nearer than 2.0, and any jostle broke contact. Measured: ONE bite in eight seconds, 31
+     damage where a rifle squad did 56. The anti-infantry unit was worse at killing infantry
+     than the cheapest thing in the game. 5.5 is still unmistakably melee and is reachable. */
+  bite:       { dmg:22, range:5.5,cool:0.55, shot:'tracer',  speed:0,  splash:0,
                 verses:{ none:1.4,  wood:0,    light:0,    heavy:0,    concrete:0 } },
   /* Two .45s: shreds infantry, barely marks anything else. The Commando's threat to buildings
      is her C4, not this. */
