@@ -2650,3 +2650,52 @@ The walk assertion failed once and then passed on the next run **with only a `co
 soldier could walk fourteen tiles east depended on the map. It now pins the seed and searches
 outward for somewhere pathable, so it measures the walk cycle rather than the pathfinder's opinion
 of one particular tile. Three consecutive runs, 5/5.
+
+## Why cliffs are NOT taken from the templates
+
+The tileset was surveyed properly before deciding, and the answer is worth writing down so nobody
+repeats the investigation.
+
+`mods/ra/tilesets/temperat.yaml` describes 308 templates in eight categories:
+
+| category | count | shape |
+|---|---|---|
+| Beach | 54 | mostly 3×3 |
+| Water Cliffs | 52 | mostly 2×2 |
+| Bridge | 48 | mixed |
+| Road | 45 | mostly 2×2 |
+| Debris | 42 | **26 are 1×1** |
+| Cliffs | 42 | **28 are 2×2** |
+| River | 21 | mixed |
+| Terrain | 4 | clear, water |
+
+2×2 cliff pieces look like an autotile set, and the yaml even gives a per-cell terrain type — so
+the obvious plan is to derive a 4-bit occupancy mask per template and build a bitmask lookup.
+
+**That does not work, and the data says so plainly.** Nearly every 2×2 cliff template masks to
+`1111`:
+
+```
+135  s01.tem  mask 1111    0=Rock 1=Rock 2=Rock 3=Rock
+138  s04.tem  mask 1111    0=Rock 1=Rock 2=Rock 3=Rock
+144  s10.tem  mask 1111    0=Rock 1=Rock 2=Rock 3=Rock
+```
+
+The terrain type encodes **passability, not shape**. Every one of those pieces is impassable rock
+in all four cells; what differs between them is the *artwork* — which edge carries the cliff face,
+which corner turns. Nothing in the tileset says which is which.
+
+So placing them correctly is not a port of anything. RA's cliff templates are a **painter's
+palette for the map editor**, and real RA maps are hand-authored: a person picks the north-east
+corner piece because they can see it. Automating it means classifying 42 templates by analysing
+their pixels to infer where each face lies, then writing a generator that chains them — an
+invention, with a real chance of looking worse than the procedural cliffs already here, which were
+measured (`rockfit.js`: 0 px painted more than one cell from a blocked cell, 4.3% organic spill).
+
+**What IS automatable is the 1×1 set**, and that is what went in: `rf01`–`rf07` loose rock and
+`p01`–`p04` set dressing — fallen logs, a wreck, a crashed aircraft. Self-contained, one cell, no
+placement rules to get wrong.
+
+If the pixel-classification route is ever wanted, the shape of it is: decode each Cliffs template,
+find the shadowed face band per cell, label each piece N/S/E/W/corner, then run a marching-squares
+pass over the rock regions. That is a project, not a change.

@@ -255,7 +255,8 @@ function _mixFinish(log, done) {
   /* every cached bake has to go, or the game keeps drawing the sprites it made before
      the content arrived */
   if (RTS_MIX.ready) { _RTS_SPR = null; _RTS_UFIT = {}; _RTS_USCALE = {};
-                       _RTS_TREES = null; _RTS_MIXTREES = null; _RTS_TILECACHE = null; }
+                       _RTS_TREES = null; _RTS_MIXTREES = null; _RTS_TILECACHE = null;
+                       _RTS_MIXDEBRIS = null; }
   done && done(RTS_MIX.ready ? null : RTS_MIX.note, RTS_MIX.note);
 }
 
@@ -395,4 +396,40 @@ function _mixOre(gem) {
     out.push(row);
   }
   return out;
+}
+
+/* ----------------------------------------------------------------- debris --
+   The single-cell scatter. `rf01`..`rf07` are loose rock on grass and `p01`..`p04` are set
+   dressing - fallen logs, a wreck, a crashed aircraft - all 24x24 and all self-contained, which
+   is exactly why they are the only part of the tileset that can be placed automatically.
+
+   Everything larger in that file is a hand-authored piece from the map editor's palette; see the
+   note in CLAUDE.md about why cliffs are not done this way. */
+var RTS_MIX_DEBRIS = ['rf01','rf02','rf03','rf04','rf05','rf06','rf07'];
+var RTS_MIX_PROPS  = ['p01','p02','p03','p04','b1'];
+var _RTS_MIXDEBRIS = null;
+
+function _mixDebris() {
+  if (_RTS_MIXDEBRIS) return _RTS_MIXDEBRIS;
+  if (!_rtsArtReady()) return null;
+  var rock = [], props = [], i, t;
+  for (i = 0; i < RTS_MIX_DEBRIS.length; i++) { t = _mixTiles(RTS_MIX_DEBRIS[i] + '.tem'); if (t) rock.push(t.tile[0]); }
+  for (i = 0; i < RTS_MIX_PROPS.length; i++)  { t = _mixTiles(RTS_MIX_PROPS[i] + '.tem');  if (t) props.push(t.tile[0]); }
+  if (!rock.length) return null;
+  return (_RTS_MIXDEBRIS = { rock: rock, props: props });
+}
+
+/* Stamped straight into the baked terrain's pixels, skipping index 0 so the tile's own
+   transparent margin does not punch a hole in the ground under it. */
+function _mixStamp(d, S, tile, px, pz) {
+  var pal = RTS_MIX.pal;
+  for (var y = 0; y < RTS_TS; y++) {
+    var gy = pz + y; if (gy < 0 || gy >= S) continue;
+    for (var x = 0; x < RTS_TS; x++) {
+      var gx = px + x; if (gx < 0 || gx >= S) continue;
+      var v = tile[y * RTS_TS + x]; if (!v) continue;
+      var o = (gy * S + gx) * 4;
+      d[o] = pal[v * 3]; d[o + 1] = pal[v * 3 + 1]; d[o + 2] = pal[v * 3 + 2]; d[o + 3] = 255;
+    }
+  }
 }

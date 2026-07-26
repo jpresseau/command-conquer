@@ -302,6 +302,27 @@ function _rtsBakeTerrain(G) {
   }
   g.putImageData(img, 0, 0);
 
+  /* Real scatter first, when the player's files are loaded: loose rock on open ground and the
+     occasional log or wreck. Stamped before the procedural clutter so the tufts still go on top
+     and the ground keeps some life in it. */
+  if (typeof _mixDebris === 'function') {
+    var deb = _mixDebris();
+    if (deb) {
+      var dimg = g.getImageData(0, 0, S, S), dd = dimg.data;
+      for (var dz = 0; dz < N; dz++) {
+        for (var dx2 = 0; dx2 < N; dx2++) {
+          if (G.terrain[_rtsIdx(dx2, dz)] !== RTS_T_GRASS) continue;
+          var r = _sprHash(dx2, dz, seed + 211);
+          if (r > 0.045) continue;                       /* sparse - it is scenery, not gravel */
+          var set = (r < 0.006 && deb.props.length) ? deb.props : deb.rock;
+          var pick = (_sprHash(dz, dx2, seed + 212) * set.length) | 0;
+          _mixStamp(dd, S, set[Math.min(pick, set.length - 1)], dx2 * RTS_TS, dz * RTS_TS);
+        }
+      }
+      g.putImageData(dimg, 0, 0);
+    }
+  }
+
   /* Scatter that crosses cell lines: tufts, pebbles and bushes placed in world pixels. */
   var i, x, y;
   for (i = 0; i < S * S / 900; i++) {
