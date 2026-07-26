@@ -1385,9 +1385,24 @@ var RTS_TRIGGERS = [
    footprint that _r3BakeFootprint measures and the renderer offsets by, so a 3x3 building
    still covers exactly its 72x72 pixels of ground. */
 var R3_K = 1.3;
-var R3_AMB = 0.30, R3_DIF = 0.72;     /* ambient / diffuse split */
-var R3_STEPS = 9;                     /* quantise shading - period renderers banded, and
-                                         banding also keeps the palette tight */
+var R3_AMB = 0.34, R3_DIF = 0.70;     /* ambient / diffuse split. Ambient lifted a little:
+                                         the Remaster's shadowed faces are readable, not
+                                         black, because it is not working inside a 256-colour
+                                         palette and does not have to spend its range on
+                                         darks. */
+/* Quantisation steps. This was 9, chosen when the target was the 1996 sprites - "period
+   renderers banded, and banding also keeps the palette tight" - and at 9 steps every curved
+   surface shows visible contour rings.
+
+   The target is now the Remastered art, and posterisation is the single clearest difference
+   between the two. The Remaster is redrawn at high resolution with smooth shading; the 1996
+   sprites are hard bands out of a fixed palette. Raising this to 28 is most of what moves
+   the look from one to the other, and it costs nothing - it is a divisor in the shading
+   pass, not more geometry or more pixels.
+
+   It only became worth raising once the renderer supersampled. At 1:1 a fine ramp just
+   dithers into noise; averaging 3x3 samples first is what lets the extra steps resolve. */
+var R3_STEPS = 28;
 /* Upper-left and IN FRONT. The z component has to be positive: a front-facing wall has
    normal +z, and it is the face the camera sees most of. A first attempt lit from behind
    (-z) and every building came out with its whole front elevation sitting at flat ambient,
