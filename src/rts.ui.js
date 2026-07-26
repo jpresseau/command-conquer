@@ -524,6 +524,15 @@ function _rtsKeyDown(e) {
   if ((k === 's' || k === 'S') && (e.ctrlKey || e.metaKey)) { rtsSaveGame(); e.preventDefault(); return; }
   /* N walks the army, shift+N walks it backwards. */
   if (k === 'n' || k === 'N') { _rtsCycleObject(e.shiftKey ? -1 : 1); e.preventDefault(); }
+  /* D deploys every selected vehicle that can - an MCV into a Command Yard. */
+  if (k === 'd' || k === 'D') {
+    var G = window._rtsG, did = 0;
+    if (G && G.sel) G.sel.slice().forEach(function (u) {
+      if (u.side === 'player' && u.type === 'unit' && (rtsUnitDef(u.def) || {}).deploy
+          && _rtsDeploy(u)) did++;
+    });
+    if (did) e.preventDefault();
+  }
   /* Home centres on the selection; with nothing selected it falls back to your command yard,
      which is the "where was I" key when you have chased a raid across the map. */
   if (k === 'Home') {

@@ -1000,7 +1000,7 @@ function _rtsFlushForPlacement(e) {
     if (cell) { u.x = _rtsWX(cell[0]); u.z = _rtsWX(cell[1]); u.path = null; }
   }
 }
-function _rtsCanPlace(side, key, tx, tz) {
+function _rtsCanPlace(side, key, tx, tz, anywhere) {
   var G = window._rtsG, d = rtsStructDef(key);
   if (!d) return false;
   for (var ax = tx; ax < tx + d.w; ax++) for (var az = tz; az < tz + d.h; az++) {
@@ -1008,7 +1008,12 @@ function _rtsCanPlace(side, key, tx, tz) {
     if (G.blocked[_rtsIdx(ax, az)] !== 0) return false;
     if (G.scrap[_rtsIdx(ax, az)] > 0) return false;
   }
-  /* must be within build radius of one of your own structures (classic base-creep rule) */
+  /* Must be within build radius of one of your own structures (classic base-creep rule).
+     `anywhere` skips it: BuildingTypeClass::Legal_Placement, which is what an MCV deploy is
+     checked against, tests terrain and occupancy only. A vehicle whose entire purpose is to
+     found a base somewhere you have nothing cannot be held to a rule about being near
+     something you own. */
+  if (anywhere) return true;
   var cx = tx + d.w / 2, cz = tz + d.h / 2, near = false;
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
@@ -1364,19 +1369,9 @@ function _rtsRepairAI(e, dt) {
   _rtsSpend(S, cost);
   e.hp = Math.min(e.maxHp, e.hp + e.maxHp * RTS_REPAIR_STEP);
 }
-/* BDATA.CPP has Raw_Cost() - Cost_Of() minus the free unit a building ships with - and it
-   exists to stop exactly one exploit: refunding half of a price that INCLUDES a free
-   harvester pays you for a harvester you are keeping. It is deliberately NOT ported here,
-   because it measured wrong against our numbers. RA's refinery is 2000 and the 1400
-   harvester is priced INTO it; ours is 1400 for the building with the harvester on top, so
-   `cost` is already the raw cost and subtracting the harvester again refunds zero.
-
-   The exploit it guards against is real here and is left open on purpose rather than fixed
-   by stealth: sell a refinery for 700, rebuild for 1400, and you have bought a 1400-credit
-   harvester for 700. Closing it means deciding what a refinery should cost, which is a
-   balance change and not a data-file port. */
-/* Sell_Back: half the price back straight away, then the building deconstructs (the build-up
-   animation played backwards) and its crew walks out. */
+/* Sell_Back: half the RAW price back straight away - see rtsRawCost, which subtracts the free
+   unit the building shipped with - then the building deconstructs (the build-up animation
+   played backwards) and its crew walks out. */
 function _rtsSell(e) {
   var G = window._rtsG;
   if (!e || e.dead || e.type !== 'struct' || e.selling) return false;
@@ -1385,11 +1380,56 @@ function _rtsSell(e) {
   /* Refund_Money against the PurchasePrice the object carries, not against the sticker
      price. `paid` is absent only on a save written before this existed. */
   var price = (e.paid == null) ? rtsStructDef(e.def).cost : e.paid;
-  _rtsGrant(G.sides[e.side], Math.round(price * RTS_REFUND_PCT
+  /* Raw_Cost is taken off what was actually PAID, not off the sticker, so a building bought at
+     a discount cannot be sold back at a profit either. */
+  var fd = rtsStructDef(e.def), fu = fd && fd.freeUnit ? rtsUnitDef(fd.freeUnit) : null;
+  var raw = Math.max(0, price - (fu ? fu.cost : 0));
+  _rtsGrant(G.sides[e.side], Math.round(raw * RTS_REFUND_PCT
     * (e.hp / e.maxHp * 0.5 + 0.5)));          /* a wreck is worth less than a clean building */
   if (e.side === 'player' && typeof _rtsSfx === 'function') _rtsSfx('build');
   return true;
 }
+/* UNIT.CPP Try_To_Deploy. An MCV becomes a Command Yard, and three details from the original
+   are worth having exactly:
+
+   - the yard lands on the cell ADJACENT to the vehicle, not under it (`Adjacent_Cell(Coord,
+     FACING_NW)`), so the footprint grows away from where the vehicle was standing;
+   - placement is checked with Legal_Placement, which does NOT apply the build-radius rule -
+     see the `anywhere` argument to _rtsCanPlace;
+   - `building->Strength = Health_Ratio() * building->Class->MaxStrength`, so a wreck of an MCV
+     deploys a wreck of a yard rather than a fresh one. That is the detail that stops a damaged
+     MCV being a full repair.
+
+   Returns false and leaves the vehicle alone when there is no room, which is what the original
+   does before it says "cannot deploy here". */
+function _rtsDeploy(e) {
+  var G = window._rtsG;
+  if (!e || e.dead || e.type !== 'unit') return false;
+  var d = rtsUnitDef(e.def);
+  if (!d || !d.deploy) return false;
+  var sd = rtsStructDef(d.deploy);
+  if (!sd) return false;
+  var tx = _rtsTX(e.x) - (sd.w - 1), tz = _rtsTX(e.z) - (sd.h - 1);
+  if (!_rtsCanPlace(e.side, d.deploy, tx, tz, true)) {
+    if (e.side === 'player') _rtsSay('Cannot deploy here.');
+    return false;
+  }
+  var ratio = Math.max(0.01, Math.min(1, e.hp / e.maxHp));
+  _rtsKillQuiet(e);
+  var b = _rtsPlaceStruct(e.side, d.deploy, tx, tz, true, d.cost);
+  b.hp = Math.max(1, Math.round(sd.hp * ratio));
+  _rtsRecalcPower(e.side);
+  if (e.side === 'player' && typeof _rtsSfx === 'function') _rtsSfx('place', b.x, b.z);
+  return true;
+}
+/* Removing the vehicle without the wreck, the explosion or the kill credit - it was not
+   destroyed, it turned into something. */
+function _rtsKillQuiet(e) {
+  var G = window._rtsG;
+  e.dead = true;
+  if (G.sel) { var i = G.sel.indexOf(e); if (i >= 0) G.sel.splice(i, 1); }
+}
+
 /* ANIM.CPP's AI + Middle + ChainTo, for the effect list.
 
    The ordering here is the point: Middle fires when the animation reaches its BIGGEST stage,
@@ -1514,8 +1554,11 @@ function _rtsRecalcPower(side) {
 }
 function _rtsPowerFactor(side) {
   var s = window._rtsG.sides[side];
-  if (s.powerUsed <= s.powerMade) return 1;
-  return Math.max(RTS_LOW_POWER_MIN, s.powerMade / Math.max(1, s.powerUsed));
+  var p = s.powerUsed <= 0 ? 1 : s.powerMade / s.powerUsed;
+  if (p > 1) p = 1;
+  if (p < 1 && p > RTS_POWER_BAND) p = RTS_POWER_BAND;   /* the dead zone - see RTS_POWER_BAND */
+  if (p < RTS_POWER_MIN) p = RTS_POWER_MIN;
+  return p;
 }
 function _rtsHas(side, key) {
   var G = window._rtsG;
@@ -1717,6 +1760,12 @@ function _rtsOrderAttack(e, tgt) {
   if (e.type !== 'unit') return;
   var d = rtsUnitDef(e.def);
   if (!d.weapon) { _rtsOrderMove(e, tgt.x, tgt.z, false); return; }
+  /* "Dogs can only attack infantrymen" - INFANTRY.CPP downgrades ACTION_ATTACK to ACTION_NONE
+     rather than letting the order stand, so ordering a dog onto a tank is a move order. */
+  var _ow = RTS_WEAPONS[d.weapon];
+  if (_ow && _ow.maul && !(tgt.type === 'unit' && (rtsUnitDef(tgt.def) || {}).kind === 'infantry')) {
+    _rtsOrderMove(e, tgt.x, tgt.z, false); return;
+  }
   e.order = 'attack'; e.target = tgt; e.hstate = null;
   e.goal = { x:tgt.x, z:tgt.z };
   e.path = _rtsPath(e.x, e.z, tgt.x, tgt.z); e.pi = 0;
@@ -1829,6 +1878,9 @@ function _rtsFindTarget(e, range, w) {
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
     if (o.dead || o.side !== foe) continue;
+    /* "Dogs can only attack infantrymen" - INFANTRY.CPP turns ACTION_ATTACK into ACTION_NONE
+       against anything else. Without this a dog with a one-bite kill would delete tanks. */
+    if (w && w.maul && !(o.type === 'unit' && (rtsUnitDef(o.def) || {}).kind === 'infantry')) continue;
     var dist = _rtsRangeTo(e, o);
     if (dist > range) continue;
     var v = _rtsEvalObject(e, o, dist, w);
@@ -2123,6 +2175,26 @@ function _rtsCanRetaliate(tgt, from) {
 }
 function _rtsDamage(tgt, dmg, from, floor) {
   if (!tgt || tgt.dead) return;
+  /* The dog rule, ahead of every modifier because in the original it replaces the damage
+     rather than scaling it. See `maul` on the bite weapon in rts.rules.js. */
+  if (from && from.type === 'unit' && !from.dead) {
+    var _fw = RTS_WEAPONS[(rtsUnitDef(from.def) || {}).weapon];
+    if (_fw && _fw.maul) {
+      if (from.target !== tgt) return;              /* a dog spills nothing onto bystanders */
+      /* Infantry only, enforced HERE and not just at acquisition. _rtsFindTarget already skips
+         vehicles, but a forced order - a player right-click, a script - walks straight past
+         that, and a one-bite kill that reaches a tank is a 200-credit answer to a 1700-credit
+         one. In the original the order simply cannot be given (ACTION_ATTACK becomes
+         ACTION_NONE); making the damage refuse as well means no route can get around it. */
+      if (!(tgt.type === 'unit' && (rtsUnitDef(tgt.def) || {}).kind === 'infantry')) return;
+      tgt.hp = 0; tgt.hitT = 0.18;
+      if (from.side) tgt.hurtBy = from.side;
+      if (from.side !== tgt.side) from.kills = (from.kills || 0) + 1;
+      if (from.side !== tgt.side) _rtsTrigNotify('attacked', tgt, null);
+      _rtsKill(tgt);
+      return;
+    }
+  }
   if (tgt.prone) dmg *= RTS_PRONE_DAMAGE;
   dmg /= _rtsBias(tgt.side).armor;                 /* ArmorBias defends the whole house */
   dmg /= rtsCrateMult(tgt, 'armor');               /* ...and a crate defends one unit */
@@ -2948,6 +3020,22 @@ function _rtsAIUnits(S) {
 }
 /* HOUSE.CPP's house state machine. The urgency checks all read it, which is how one flag
    ("we were attacked in the last minute") changes several unrelated decisions at once. */
+/* The one AI rule the MCV needs. It is deliberately narrow: an opponent with no Command Yard
+   can build nothing at all, so an MCV sitting in its column is the difference between a
+   comeback and a corpse. It is not on the AI's shopping list - buying a 2500-credit vehicle it
+   has no use for while it still owns a yard would be a straight waste - so this only ever
+   fires on one it was given, by a crate or by a scenario. */
+function _rtsAIDeploy(side) {
+  var G = window._rtsG;
+  if (_rtsHas(side, 'yard')) return false;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.side !== side || e.type !== 'unit') continue;
+    if (!(rtsUnitDef(e.def) || {}).deploy) continue;
+    if (_rtsDeploy(e)) return true;
+  }
+  return false;
+}
 function _rtsAIStateTick(S) {
   var G = window._rtsG;
   if (G.ai.state === RTS_STATE.ENDGAME) return;
@@ -3730,6 +3818,7 @@ function _rtsUpdateAI(dt) {
   if (G.ai.build <= 0) {
     G.ai.build = 5;
     _rtsAIStateTick(S);
+    _rtsAIDeploy('enemy');
 
     /* Repair_AI, gated on IQRepairSell: the low difficulties simply cannot do this, which is
        why raiding a Commando base and leaving means finding it whole again. */
