@@ -183,6 +183,19 @@ function _r3Yaw(faces, ang) {
   return out;
 }
 
+/* Uniform scale about the origin. Units are authored at whatever size is comfortable to write
+   and brought onto a common size ladder afterwards, so that changing how big a tank is on
+   screen cannot accidentally change its proportions. */
+function _r3Scale(faces, s) {
+  var out = [], i, j;
+  for (i = 0; i < faces.length; i++) {
+    var f = faces[i], nv = [];
+    for (j = 0; j < f.v.length; j++) nv.push([f.v[j][0] * s, f.v[j][1] * s, f.v[j][2] * s]);
+    out.push({ v: nv, c: f.c });
+  }
+  return out;
+}
+
 /* Bounds of a model once projected, so a sprite can be sized to fit it exactly. */
 function _r3Bounds(faces) {
   var b = { x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9 }, i, j;

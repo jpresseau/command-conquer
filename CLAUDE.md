@@ -2053,3 +2053,75 @@ the output instead.
 - Audio: tap an `AnalyserNode` on `_rtsA.master` and read RMS.
 - Art: dump the sprites onto a sheet at 6–9× and look at them, and sample the baked terrain's
   pixel histogram — a palette entry at 0% means that material is not being generated.
+
+## The units, and the first piece of real reference art
+
+Four sidebar-cameo pages from CNCNZ.com — Allied and Soviet, units and structures. These are the
+first *actual game art* in this project rather than a description of it. The 64×48 cameos are
+embedded in the PDFs as raw Flate streams, so no PDF tooling is needed: scan for image dicts, keep
+the ones at 64×48, inflate, wrap in a PNG header. 106 of them across the four documents.
+
+They settled a question that had been guessed at from the start, and the guess was wrong.
+
+**Vehicles in Red Alert are not the team colour.** Every tank, truck and jeep in the cameos of
+*both* factions is khaki, olive or grey-green; the team colour is a remap over a small part of the
+sprite. Ours were team colour end to end, and that is most of why a Battle Tank, a Light Tank, an
+artillery piece and a Harvester read as four blue lumps that differed only in outline.
+
+So `RTS_PAL.veh` carries the body — Allied grey-green, Soviet warm khaki — and the team colour is
+cut back to the turret cap. **That split was measured, not assumed.** The first attempt put the
+team colour on the whole deck, which is the move that made structures readable, and it did nothing:
+the tank still came out 36% blue pixels, because under a camera that looks down the deck *is* most
+of the sprite. On a structure that is the point; on a vehicle it buries the khaki. Turret cap only:
+tank 18%, light 9%, artillery 7%.
+
+**`RTS_PAL.steel` is a blue grey**, and it was tinting every gun. An artillery piece measured 45%
+blue pixels with a hull carrying no team colour at all. Gun tubes now use `RTS_PAL.gun`, a neutral
+warm gunmetal.
+
+### Infantry are told apart by colour, not by shape
+
+Rendering all fifteen units as bare silhouettes, eight facings each, proved what no amount of
+modelling would fix: **nine of them were the same blob.** Rifleman, rocket soldier, grenadier,
+flamethrower, engineer, medic, thief, Tanya and the attack dog are all one figure-sized stack of
+boxes at 24 px, and always will be.
+
+The cameos show how the original solves it — the engineer's yellow hard hat, the medic's white
+tunic and red cross, the thief in black. So `RTS_INF_KIT` gives each kit a uniform, and the
+identity marker is the **top of the helmet**, because with `R3_K = 1.3` that is the single largest
+patch of any soldier. Same reasoning as putting the team colour on a building's roof. The helmet's
+*sides* stay team-coloured on every kit, so a squad of medics still shows whose it is without
+letting ownership compete with identity for the surface the camera actually sees.
+
+The attack dog is now **one** animal rather than two, running along +x at knee height, in tan with
+a team collar — the only unit not in uniform. A pair of them read as a squad, which is exactly
+why it shared its silhouette with the infantry.
+
+### The size ladder, and why a barrel kept disappearing
+
+A Battle Tank measured **69 px — just under three cells.** That put it level with a 2×2 building
+and turned four of them into one unreadable slab. `RTS_UNIT_SPAN` sets each unit's span in art
+pixels (a cell is 24), and `_sprUnitScale` measures the unscaled model once and brings it onto the
+ladder via `_r3Scale`. Authoring stays at whatever scale is comfortable to write, so changing how
+big a tank is cannot silently change its proportions. Tank 69 → 41, Mammoth 75 → 49, artillery
+73 → 43.
+
+The memo is seeded with `1` before it measures, so the `_sprUnitModel` call inside `_sprUnitScale`
+reads that and returns raw geometry instead of recursing.
+
+**Screen height is `z - 1.3y`, and that is why three of eight facings had no gun.** A barrel swung
+toward the camera gains z and gives it straight back to its own height. The old gun sat high on
+the turret and stopped short, so the two cancelled almost exactly and it folded into the hull.
+Guns are now mounted **low and reach well past the track guards** — then z wins and the muzzle
+clears the hull at every facing. Artillery, whose entire identity is one tube, also got a pale
+gunmetal tube over a deliberately squat chassis: depth is `y + 1.3z`, so at the facings where it
+does lie over the hull it draws on top of it as a bright bar instead of vanishing.
+
+### Verifying
+
+`unitzoom.js` still passes — no opaque pixel touches any canvas edge, all fifteen units, all eight
+facings. The change is render-only: nothing in `rts.core.js` or `rts.rules.js` moved, and no
+simulation or UI code reads a unit sprite's dimensions.
+
+The diagnostic worth keeping is the **silhouette sheet** — every unit, eight facings, alpha
+thresholded to black on white. Colour hides sameness; a silhouette sheet cannot.
