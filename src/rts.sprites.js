@@ -575,6 +575,41 @@ function _sprBuilding(key, side) {
     _r3Box(m, 0, 12, 3.5, 13, 3, 3, DK[1], DK[3]);
     _r3Box(m, -7, 17, 0, 3, 2, 8, S[2], S[1]);                     /* reload rack */
 
+  } else if (key === 'wall') {
+    /* A wall segment has to tile with itself, so it fills its cell edge to edge with no pad
+       and no overhang - anything proud of the footprint would show a seam every metre. */
+    _r3Box(m, 0, 0, 0, W, 9, D, C[0], C[1]);
+    _r3Box(m, 0, 9, 0, W - 3, 1.5, D - 3, C[1], C[2]);             /* capping course */
+    _r3Box(m, 0, 3.5, 0, W + 0.4, 1.2, D + 0.4, DK[1], DK[2]);     /* shadow line partway up */
+
+  } else if (key === 'pillbox') {
+    /* Pillbox: a squat hexagonal drum in a sandbag ring, low enough that it never reads as a
+       Gun Turret. The embrasure is a dark slot, which is the whole silhouette at this size. */
+    for (i = 0; i < 8; i++) {
+      var pa = i / 8 * Math.PI * 2;
+      _r3Cyl(m, Math.cos(pa) * 9.5, 0, Math.sin(pa) * 9.5, 2.6, 2.4, RTS_PAL.bag[0], RTS_PAL.bag[1], 10);
+    }
+    _r3Cone(m, 0, 0, 0, 8, 7, 7, C[0], 14);                        /* tapered drum */
+    _r3Cyl(m, 0, 7, 0, 7, 2.5, C[1], C[2], 14);                    /* roof slab */
+    _r3Box(m, 5, 3.5, 0, 5, 2.2, 9, DK[0], DK[2]);                 /* embrasure */
+    _r3Box(m, 8, 4.2, 0, 4, 1.0, 1.0, DK[1], DK[3]);               /* the gun in it */
+
+  } else if (key === 'depot') {
+    /* Service Depot: an open hardstanding with a gantry crane over it, so it reads as a place
+       vehicles GO rather than another shed. The pad is deliberately the biggest flat area in
+       the base - that is the visual cue for "park here". */
+    _r3Box(m, 0, 0, 0, W - 4, 1.6, D - 4, C[0], C[1]);             /* hardstanding */
+    _r3Box(m, 0, 1.6, 0, W - 16, 0.6, D - 10, RTS_PAL.hazard[0], RTS_PAL.hazard[0]);  /* bay markings */
+    _r3Box(m, -W / 2 + 5, 0, 0, 5, 20, D - 8, S[2], S[1]);         /* gantry legs */
+    _r3Box(m, W / 2 - 5, 0, 0, 5, 20, D - 8, S[2], S[1]);
+    _r3Box(m, 0, 20, 0, W - 4, 4, 8, S[0], S[1]);                  /* gantry beam */
+    _r3Box(m, 0, 22, 0, W - 20, 2, 5, TM[0], TM[1]);               /* team stripe on the beam */
+    _r3Box(m, 3, 15, 0, 8, 5, 7, S[0], S[3]);                      /* hoist trolley */
+    _r3Box(m, 3, 11, 0, 2, 4, 2, DK[1], DK[3]);                    /* hook */
+    _r3Slab(m, -W / 2 + 9, 1.6, D / 2 - 8, 12, 11, 10, 2, B.wall, B.roof);   /* workshop hut */
+    _r3Box(m, -W / 2 + 9, 12.6, D / 2 - 8, 8, 1.5, 4, TM[1], TM[3]);
+    for (i = 0; i < 3; i++) _r3Cyl(m, 9 + i * 4, 1.6, -D / 2 + 7, 1.8, 4, S[2], S[1], 10);  /* drums */
+
   } else if (key === 'turret') {
     /* Turret: concrete pad and a squat rotating housing. The barrel is drawn by the
        renderer instead, because it has to track a target. */
@@ -644,6 +679,20 @@ function _sprUnitModel(key, side, prone, part) {
         if (key === 'rocket') {
           _r3Box(m, mx + 2.0, 5.2, mz - 0.6, 7.5, 1.8, 1.8, DK[1], DK[3]);  /* launch tube */
           _r3Box(m, mx - 2.2, 5.2, mz - 0.6, 2.0, 2.2, 2.2, DK[0], DK[2]);  /* back blast end */
+        } else if (key === 'engineer') {
+          /* No weapon at all, a toolbox in one hand and a hard hat instead of a helmet. The
+             player has to be able to pick an engineer out of a mixed squad at a glance,
+             because losing it to a stray shell is losing 600 credits. */
+          _r3Box(m, mx - 0.3, 7.0, mz, 3.0, 0.9, 3.0, RTS_PAL.hazard[0], RTS_PAL.hazard[0]);
+          _r3Box(m, mx + 1.8, 2.2, mz - 1.3, 2.2, 1.8, 1.6, S[1], S[0]);    /* toolbox */
+          _r3Box(m, mx - 0.4, 5.0, mz, 3.9, 0.9, 3.9, RTS_PAL.hazard[0], RTS_PAL.hazard[0]);  /* hi-vis */
+        } else if (key === 'flame') {
+          /* Tanks on the back and a short wand - the opposite silhouette to the rocket squad's
+             long forward tube, which is the pair most likely to be confused. */
+          _r3Cyl(m, mx - 2.2, 2.4, mz - 1.0, 1.0, 4.0, DK[0], DK[2], 10);
+          _r3Cyl(m, mx - 2.2, 2.4, mz + 1.0, 1.0, 4.0, DK[0], DK[2], 10);
+          _r3Box(m, mx + 2.2, 4.4, mz - 0.5, 3.4, 1.2, 1.2, DK[1], DK[3]);  /* wand */
+          _r3Box(m, mx + 4.1, 4.4, mz - 0.5, 1.2, 1.6, 1.6, RTS_PAL.hazard[0], RTS_PAL.hazard[0]);
         } else if (key === 'grenadier') {
           /* Arm cocked back with a charge in it, and a satchel on the hip. The silhouette has
              to differ from the rifleman's forward-pointing line or a mixed squad is a smear. */

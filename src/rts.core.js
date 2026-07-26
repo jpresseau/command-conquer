@@ -894,6 +894,48 @@ function _rtsSpawnUnit(side, key, x, z) {
   G.ents.push(e); G.byId[e.id] = e;
   return e;
 }
+/* ------------------------------------------------------------ capture — MISSION_CAPTURE
+
+   An engineer walks into an enemy building and the building changes hands. The unit is spent
+   doing it, which is what keeps the whole thing from being free: 600 credits and a walk across
+   the map buys you one structure, and the structure keeps whatever damage it already had.
+
+   Everything derived from ownership has to move with it. Power is a per-side sum, so both
+   sides recalculate. The footprint's `owner` map is keyed by entity id rather than side, so it
+   needs no change - which is exactly why it was built that way. And the blueprint node moves
+   too, or the previous owner would keep trying to rebuild a building that is standing right
+   there in someone else's colours. */
+function _rtsCapture(eng, b) {
+  var G = window._rtsG, from = b.side;
+  if (!b || b.dead || b.type !== 'struct' || b.side === eng.side) return false;
+  _rtsBaseDropNode(b);                       /* off the old owner's plan... */
+  b.side = eng.side;
+  _rtsBaseAdd(b.side, b.def, b.tx, b.tz);    /* ...and onto the new one's */
+  b.target = null; b.cool = 0; b.repair = 0;
+  /* Taking a building does not repair it, and a captured shell is a liability. A floor stops
+     the pathological case of capturing something with 3 hp that dies before it is any use. */
+  b.hp = Math.max(b.hp, b.maxHp * 0.25);
+  _rtsRecalcPower(from); _rtsRecalcPower(b.side);
+  /* Anything that was shooting at it, or was ordered onto it, is now aiming at a friend. */
+  for (var i = 0; i < G.ents.length; i++) {
+    var o = G.ents[i];
+    if (!o.dead && o.target === b && o.side === b.side) { o.target = null; if (o.order === 'attack') o.order = null; }
+  }
+  if (G.sel.indexOf(b) >= 0 && b.side !== 'player') G.sel.splice(G.sel.indexOf(b), 1);
+  _rtsKill(eng);                              /* spent */
+  var nm = rtsStructDef(b.def).name;
+  if (b.side === 'player') { _rtsSay(nm + ' captured.'); if (typeof _rtsSfx === 'function') _rtsSfx('place'); }
+  else _rtsSay('They have taken your ' + nm + '!');
+  return true;
+}
+/* How close an engineer has to get: just outside the footprint, measured from the nearest
+   edge rather than the centre, or a 3x3 building would need the engineer to stand inside it. */
+function _rtsAtStruct(u, b, slack) {
+  var d = rtsStructDef(b.def);
+  var cx = Math.min(Math.max(u.x, _rtsWX(b.tx)), _rtsWX(b.tx + d.w - 1));
+  var cz = Math.min(Math.max(u.z, _rtsWX(b.tz)), _rtsWX(b.tz + d.h - 1));
+  return Math.hypot(u.x - cx, u.z - cz) <= (slack || RTS_TILE * 1.3);
+}
 function _rtsKill(e) {
   var G = window._rtsG;
   if (e.dead) return;
@@ -1896,6 +1938,31 @@ function _rtsUpdateUnit(e, dt) {
   /* ---- harvester economy loop ---- */
   if (d.harvest) { _rtsUpdateHarvester(e, dt, d); return; }
 
+  /* ---- engineer: walk to the target building and take it ----
+     Placed before the engage block because an engineer has no weapon and must never be pulled
+     into the "acquire something to shoot" path - it would stand there aiming at a tank. */
+  if (d.capture) {
+    var cb = e.target;
+    if (e.order === 'capture' && (!cb || cb.dead || cb.type !== 'struct' || cb.side === e.side)) {
+      e.order = null; e.target = null; e.path = null;
+    } else if (e.order === 'capture') {
+      if (_rtsAtStruct(e, cb)) { _rtsCapture(e, cb); return; }
+      if (!e.path) {
+        var sd = rtsStructDef(cb.def);
+        var gx = _rtsWX(cb.tx + (sd.w - 1) / 2), gz = _rtsWX(cb.tz + (sd.h - 1) / 2);
+        e.goal = { x:gx, z:gz };
+        e.path = _rtsPath(e.x, e.z, gx, gz); e.pi = 0;
+        /* No route to it - drop the order rather than stand still looking busy forever. */
+        if (!e.path) { e.order = null; e.target = null; return; }
+      }
+      _rtsSteer(e, dt, d);
+      return;
+    }
+    /* Not capturing: an engineer still walks, but never acquires a target. */
+    if (e.path) { _rtsSteer(e, dt, d); if (!e.path) e.order = null; }
+    return;
+  }
+
   /* ---- engage ---- */
   var tgt = e.target;
   if (tgt && tgt.dead) {
@@ -2102,6 +2169,21 @@ function _rtsUpdateStruct(e, dt) {
     return;
   }
   if (e.repair) _rtsRepairAI(e, dt);
+  /* Service Depot. Anything of yours with wheels or tracks that is parked on it gets patched
+     up for nothing - the point of the building is that it turns a battered army into a fresh
+     one without a trip through the production queue. Infantry are excluded, as in the
+     original: a depot repairs vehicles, it does not heal people. Needs power like everything
+     else, so browning out the base also stops the repairs. */
+  if (d.repairs && _rtsPowerFactor(e.side) >= 0.999) {
+    var G2 = window._rtsG;
+    for (var ri = 0; ri < G2.ents.length; ri++) {
+      var v = G2.ents[ri];
+      if (v.dead || v.type !== 'unit' || v.side !== e.side || v.hp >= v.maxHp) continue;
+      if (rtsUnitDef(v.def).kind !== 'vehicle') continue;
+      if (!_rtsAtStruct(v, e, d.repairs)) continue;
+      v.hp = Math.min(v.maxHp, v.hp + d.repairRate * dt);
+    }
+  }
   if (!d.weapon) return;
   var w = RTS_WEAPONS[d.weapon];
   if (e.cool > 0) e.cool -= dt;
