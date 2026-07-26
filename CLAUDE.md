@@ -763,6 +763,82 @@ gun preferring heavy, small arms unable to hurt a wall while shells and rockets 
 rule applying to walls rather than to all concrete. Ladder easy 298 s / normal 218 s / hard 175 s,
 within a second of the previous run on every difficulty.
 
+## The game was rendering at night — and the fog was why
+
+Two rounds of "it doesn't look like the original" and I had been treating the look as a matter
+of taste. It is measurable, and measuring it found a cause I would not have guessed.
+
+`lum.js` samples the play-area canvas and reports a luminance histogram. On a real match view:
+
+    median 33/255    p95 76    93% of every pixel below 64
+
+There were **no highlights anywhere in the frame**. Nothing above half brightness existed. That
+is not a stylistic choice, it is a picture rendered at night.
+
+### Two causes, and the smaller one was the palette
+
+The ground palette was genuinely dark — grass at luminance 56, tree canopy at 34 — built around
+a note in `RTS_PAL` reading "the reference material is dark, cool and low-contrast." Lifting it
+to a daylight range (grass ~100, canopy ~74, real highlight tones at the top of each ramp)
+moved the median from 33 to 57.
+
+**Still p95 76.** Unchanged. New highlight tones at luminance 157 were not reaching the screen
+at all, which meant something was compressing the range rather than the palette being wrong.
+
+It was `RTS_FOG_DIM = 0.45` — explored-but-unseen ground composited with 45% of near-black.
+Most of what is on screen at any moment is ground you have explored and are not currently
+looking at, so **nearly half the light was being removed from the majority of every frame.** A
+grass pixel at 100 arrived as 58, which is exactly the median that was measured.
+
+Same view, lifted palette underneath, varying only the fog:
+
+| `FOG_DIM` | median | p95 | below 64 |
+|---|---|---|---|
+| 0.45 | 57 | 76 | 62% |
+| 0.30 | 71 | 95 | 33% |
+| **0.22** | **79** | **106** | **13%** |
+| 0.00 | 100 | 134 | 3% |
+
+0.22 keeps "seen now" plainly distinct from "remembered" while letting the ground read as
+daylight. The **shroud is untouched** — unexplored ground is still black and enemy units still
+vanish when they leave your sight. Only the brightness of terrain memory changed.
+
+### The harness bug worth knowing about
+
+The first version of `lum.js` reported a mean luminance of **8/255** on a frame that visibly had
+a green field in it. Drawing happens in the rAF loop, not in `_rtsTick`, so reading the canvas
+inside the same `evaluate()` that moved the camera samples a frame that was never painted.
+Setup and sampling must be separate evaluates with a real `waitForTimeout` between them.
+
+Related: the visibility sweep runs every tick and overwrites anything written into `G.vis`, so
+forcing the fog off for a measurement has to go through the constant, not the array.
+
+### What is still not right
+
+The ground is daylit now but it is still **generated, not drawn**. RA composes terrain from
+24×24 icon-set templates (`WWFLAT32/TILE/ICONSET.CPP`, catalogued in `CODE/TDATA.CPP`) — hard
+cell edges, drawn cliff faces, shore and road pieces. This repo paints continuous noise into
+one big canvas, deliberately, to avoid a visible tile grid. That trade bought organic patches
+and cost all structure. It is the next thing to fix and it is a real rebuild.
+
+Also unresolved: everything uses free-form hex per model rather than one shared quantised
+palette, and team colour is a tint rather than `DRAWSHP.ASM`'s index remap over a reserved
+range. Both are why the frame reads as softer than the original.
+
+**The hues are provisional.** They sit in the right family and the right value range; they are
+not measured against the original. Reference frames would replace the numbers in `RTS_PAL`
+wholesale without any structural change.
+
+### Note on fetching source
+
+`raw.githubusercontent.com/electronicarts/CnC_Red_Alert/main/CODE/<FILE>.CPP` is reachable
+from this environment — files can be pulled directly rather than pasted in. The GitHub *API*
+is blocked (the session is scoped to this account's own repos), so directories cannot be
+listed, but any file fetches fine by exact path. `WWFLAT32/` and `WIN32LIB/` fetch too.
+
+There is **no art in that repository** — no `.MIX`, `.SHP`, `.PAL` or `.TMP`. Only the code
+that reads those formats. No source file will fix the way this game looks.
+
 ## Production, exactly — from FACTORY.CPP
 
 `FactoryClass` runs one production job. Two things in it were worth having, and finding them

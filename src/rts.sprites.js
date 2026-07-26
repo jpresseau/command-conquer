@@ -22,19 +22,36 @@ var _RTS_SPR = null;
    first pass's bright lawn-green ground was the single loudest wrong note in the picture. */
 var RTS_PAL = {
   out:   '#15171b',
-  /* Forest green, not lawn green. The reference material is dark, cool and low-contrast;
-     an earlier olive palette read as a golf course with gravel on it. */
-  grass: ['#2f3d1e', '#374626', '#273417', '#405030', '#1f2b12'],
-  dirt:  ['#6a5a3f', '#786748', '#5b4d35', '#847150'],
-  rock:  ['#5b5344', '#6b6252', '#3c372d', '#7c7362'],
-  bush:  ['#2c3818', '#222c12', '#39471f'],
-  /* Canopy is deliberately a long way darker than the grass, with one bright tip tone. An
-     earlier set sat within a few points of the ground colour and the whole forest
-     disappeared into texture - you could not see that they were trees. */
-  tree:  ['#1c3316', '#26431d', '#111f0d', '#3d7031', '#43301c'],   /* canopy tones + trunk */
+  /* A DAYLIT ground, and the numbers are the reason. This palette used to be built around
+     "the reference material is dark, cool and low-contrast" - the previous comment here -
+     and measured, that produced a frame with a median luminance of 33/255, a 95th percentile
+     of 76, and 93% of every pixel below 64. There were no highlights anywhere in the image;
+     nothing above half brightness existed. It did not read as a cool palette, it read as
+     night, and it is the single biggest reason the game does not look like what it is
+     imitating.
+
+     The target is an outdoor scene in daylight: a median around 90-110 with real top end
+     near 170, which is what `_rtsLumStats` in the harness measures. Hue relationships are
+     kept - grass is still a yellow-olive green, canopy still clearly darker than the ground
+     it stands on, dirt still warm - but every value is lifted and each ramp now carries a
+     genuine highlight tone at the top rather than five shades of the same dark.
+
+     The exact HUES here are still provisional: they are chosen to sit in the right family
+     and the right value range, not measured against the original. Reference frames would
+     replace these numbers wholesale and the structure would not have to change. */
+  grass: ['#5c6b39', '#68784a', '#4e5c2e', '#748459', '#434f26'],
+  dirt:  ['#8a7748', '#9c8a5c', '#786538', '#ad9c72'],
+  rock:  ['#7b7360', '#8d8571', '#5f594a', '#a09884'],
+  bush:  ['#48562c', '#3a4622', '#5a6b38'],
+  /* Canopy stays clearly darker than the grass - an earlier set sat within a few points of
+     the ground colour and the whole forest disappeared into texture. But "darker" was being
+     read as "nearly black": at luminance 34 against grass at 56, a fifth of the map was a
+     hole in the picture. It is now about 25% below the ground it stands on rather than 40%,
+     and the tip tone is bright enough to describe a canopy edge. */
+  tree:  ['#3a5228', '#48633a', '#2b3d1c', '#6b9455', '#5a4228'],   /* canopy tones + trunk */
   water: ['#2b4c6b', '#356088', '#20384f', '#4a7ba6', '#6fa3c9'],
-  sand:  ['#8a7c58', '#9c8e68', '#75684a'],
-  road:  ['#5a4e39', '#665942', '#4b412f'],
+  sand:  ['#b0a074', '#c2b287', '#9a8b63'],
+  road:  ['#7a6e56', '#8a7e66', '#665c48'],
   bag:   ['#a89663', '#bcaa78', '#7d6e47'],
   ore:   ['#b08420', '#d4a934', '#eecb62', '#7d5c12', '#8f6a17'],
   /* GemValue 110 vs GoldValue 35: gems are the high-value deposit, and they have to read as

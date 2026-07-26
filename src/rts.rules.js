@@ -673,7 +673,23 @@ var RTS_CRATE_CAP = { fire:2.2, armor:2.2, speed:1.9, rof:0.45 };
 var RTS_SIGHT_MAX = 10;
 var RTS_SIGHT_BONUS = 2;     /* the rules' `sight` is in world units; this widens the disc */
 var RTS_VIS_HZ = 15;         /* the visibility sweep runs on the original's 15 FPS clock */
-var RTS_FOG_DIM = 0.45;      /* how far explored-but-unseen ground is darkened */
+/* How far explored-but-unseen ground is darkened. This was 0.45, and it was the single
+   largest reason the game did not look like what it is imitating - far more than the palette.
+   Most of what is on screen at any moment is ground you have explored but are not currently
+   looking at, so nearly half the light was being taken out of the majority of every frame.
+
+   Measured on the same view, with the lifted palette underneath:
+
+     0.45  median 57   p95  76   62% of the frame below 64
+     0.30  median 71   p95  95   33%
+     0.22  median 79   p95 106   13%
+     0.00  median 100  p95 134    3%
+
+   0.22 keeps the distinction between "seen now" and "remembered" plainly readable while
+   letting the ground read as daylight. The SHROUD is untouched - ground you have never
+   explored is still black, and enemy units still vanish when they leave your sight. Only the
+   brightness of terrain memory changed. */
+var RTS_FOG_DIM = 0.22;
 
 /* Sight range in TILES for a structure or unit definition. */
 function rtsSightTiles(def) {
