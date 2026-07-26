@@ -211,14 +211,28 @@ function _rtsBakeTerrain(G) {
       /* Bare earth is rare now that the map has roads, beaches and ore aprons on it - an
          earlier threshold of 0.62 put dirt everywhere and the battlefield came out more
          tan than green, which is the opposite of the reference. */
-      if (n > 0.72) {                                   /* dirt: broad organic patches */
+      /* A DRAWN edge, not a blended one. The previous version deliberately dithered the
+         boundary - the comment read "ragged edge, not a hard border" - and that is the single
+         thing that makes this ground read as generated rather than as hand-authored tiles.
+         In the reference every dirt patch has a crisp outline with a darker rim inside it,
+         because it was drawn by someone, and the eye picks that up immediately even at 24
+         pixels a cell.
+
+         Three bands off one noise field: grass, a narrow dark rim, then the patch interior.
+         The rim is what sells it - a hard colour change alone still looks like a threshold,
+         while a hard change with a shadow line under it looks like an edge. */
+      if (n > 0.735) {                                  /* patch interior */
         pal = dr;
         k = grain < 0.18 ? 3 : (grain < 0.5 ? 1 : (grain < 0.82 ? 0 : 2));
-        if (n < 0.75 && grain < 0.45) { pal = gr; k = 2; }   /* ragged edge, not a hard border */
+      } else if (n > 0.715) {                           /* the rim - a drawn outline */
+        pal = dr;
+        k = 2;
       } else {
         pal = gr;
         k = grain < 0.12 ? 4 : (grain < 0.42 ? 2 : (grain < 0.76 ? 0 : 1));
-        if (n > 0.56 && grain < 0.35) { pal = gr; k = 3; }   /* sun-bleached toward the dirt */
+        /* grass immediately outside a patch is scuffed rather than lush, which reads as the
+           patch having worn outward instead of having been stamped on */
+        if (n > 0.64) k = grain < 0.5 ? 2 : 4;
       }
       var c = pal[k];
       for (var yy = 0; yy < B; yy++) {
