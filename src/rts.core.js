@@ -2154,8 +2154,13 @@ function _rtsUpdateUnit(e, dt) {
          cannot fire at all unless its projectile homes - FIRE_ROTATING. */
       var tol = fw.speed > 0 && fw.shot === 'missile' ? RTS_FIRE_ANGLE * 4 : RTS_FIRE_ANGLE;
       var homing = fw.shot === 'missile';
-      if (e.cool <= 0 && Math.abs(td) < tol && (homing || !e.tRot)
-          && _rtsRangeTo(e, shootAt) <= fw.range) _rtsFire(e, shootAt, fw);
+      /* NoMovingFire (UDATA.CPP): some hulls cannot fire on the move. Rather than simply
+         withholding the shot - which would leave artillery trundling past its target forever -
+         a unit in range STOPS, and fires on the tick after it has halted. */
+      var inRange = _rtsRangeTo(e, shootAt) <= fw.range;
+      if (d.noMovingFire && inRange && e.path) { e.path = null; e.goal = null; }
+      if (e.cool <= 0 && Math.abs(td) < tol && (homing || !e.tRot) && inRange
+          && !(d.noMovingFire && e.path)) _rtsFire(e, shootAt, fw);
     } else if (!e.path) {
       /* no target: the turret returns to the hull's facing, as Rotation_AI does */
       var rd = e.rot - e.turret;
