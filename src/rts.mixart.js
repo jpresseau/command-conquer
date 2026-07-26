@@ -302,10 +302,19 @@ function _mixTiles(name) {
   if (!d || d.length < 40) return null;
   var dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
   var w = dv.getUint16(0, true), h = dv.getUint16(2, true), n = dv.getUint16(4, true);
-  var img = dv.getUint32(16, true);
-  if (w !== RTS_TS || h !== RTS_TS || !n || img + n * w * h > d.length) return null;
-  var out = [];
-  for (i = 0; i < n; i++) out.push(d.subarray(img + i * w * h, img + (i + 1) * w * h));
+  var img = dv.getUint32(16, true), imgEnd = dv.getUint32(36, true);
+  if (w !== RTS_TS || h !== RTS_TS || !n || imgEnd <= img || imgEnd + n > d.length) return null;
+  /* EMPTY TILES ARE NOT STORED. Straight after the image data is one byte per tile POSITION
+     giving the image slot it uses, with 255 meaning "this cell of the template is blank". A
+     reader that assumes `count` tiles are present computes a size larger than the file and
+     rejects it - which is what the first version did, silently dropping 43 of the ~300
+     temperate templates, every one of them a shore or cliff piece with a hole in it. */
+  var map = d.subarray(imgEnd, imgEnd + n), out = [];
+  for (i = 0; i < n; i++) {
+    var slot = map[i];
+    var o = img + slot * w * h;
+    out.push((slot === 255 || o + w * h > imgEnd) ? null : d.subarray(o, o + w * h));
+  }
   return { w: w, h: h, n: n, tile: out };
 }
 
@@ -330,6 +339,7 @@ function _mixPaintCell(d, S, tx, tz, kind, seed) {
   var v = (_sprHash(tx, tz, seed + 137) * set.n) | 0;
   if (v >= set.n) v = set.n - 1;
   var t = set.tile[v], pal = RTS_MIX.pal;
+  if (!t) return false;
   for (var y = 0; y < RTS_TS; y++) {
     var row = (tz * RTS_TS + y) * S;
     for (var x = 0; x < RTS_TS; x++) {
@@ -413,8 +423,8 @@ function _mixDebris() {
   if (_RTS_MIXDEBRIS) return _RTS_MIXDEBRIS;
   if (!_rtsArtReady()) return null;
   var rock = [], props = [], i, t;
-  for (i = 0; i < RTS_MIX_DEBRIS.length; i++) { t = _mixTiles(RTS_MIX_DEBRIS[i] + '.tem'); if (t) rock.push(t.tile[0]); }
-  for (i = 0; i < RTS_MIX_PROPS.length; i++)  { t = _mixTiles(RTS_MIX_PROPS[i] + '.tem');  if (t) props.push(t.tile[0]); }
+  for (i = 0; i < RTS_MIX_DEBRIS.length; i++) { t = _mixTiles(RTS_MIX_DEBRIS[i] + '.tem'); if (t && t.tile[0]) rock.push(t.tile[0]); }
+  for (i = 0; i < RTS_MIX_PROPS.length; i++)  { t = _mixTiles(RTS_MIX_PROPS[i] + '.tem');  if (t && t.tile[0]) props.push(t.tile[0]); }
   if (!rock.length) return null;
   return (_RTS_MIXDEBRIS = { rock: rock, props: props });
 }
