@@ -441,6 +441,18 @@ function _rtsDrawUnit(g, e, TSscale) {
     : (turreted ? R.spr.hull[e.side][e.def][f] : R.spr.unit[e.side][e.def][f]);
   var w = Math.round(img.width * TSscale), h = Math.round(img.height * TSscale);
   var px = Math.round(_rtsSX(e.x) - w / 2), py = Math.round(_rtsSY(e.z) - h / 2);
+  /* An aircraft is drawn lifted off its own ground position, with a flattened shadow left
+     behind on the cell it is actually over. That gap is the only cue that says "this is above
+     the battlefield rather than on it" - without it a helicopter reads as a fast, oddly
+     invulnerable jeep. It shrinks to nothing while the machine is sitting on a pad rearming. */
+  if (e.air) {
+    var lift = Math.round((e.rearming > 0 ? 2 : (e.alt || 12)) * TSscale);
+    g.save();
+    g.globalAlpha = 0.28;
+    g.drawImage(img, px, py + Math.round(h * 0.06), w, Math.max(1, Math.round(h * 0.55)));
+    g.restore();
+    py -= lift;
+  }
   if (e.hitT > 0) g.globalAlpha = 0.7;
   g.drawImage(img, px, py, w, h);
   /* SecondaryFacing: the turret is its own shape at its own angle, drawn over the hull. */

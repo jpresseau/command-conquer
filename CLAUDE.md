@@ -2453,3 +2453,71 @@ passed the whole time — it was testing a live transport.
 Ladder unchanged at **329 / 246 / 214**, which is expected for the same reason as the MCV: the AI
 does not buy APCs and an idle player builds nothing. The transport suite is 13 assertions;
 `clip.js` is 1184 frames; the save suite is 31 and still green.
+
+## Aircraft — a flight layer, and the rule that makes it cost something
+
+`AIRCRAFT.CPP`. Three rules turn a fast unit into an aircraft, and the third is the one that
+matters:
+
+```
+Ammo = Class->MaxAmmo;          // a fixed number of shots
+if (!Ammo) mission = MISSION_ENTER;   // then home to a pad to reload
+```
+> *"If this aircraft has nowhere else to go, meaning that there is no airfield available, then
+> it has to crash."*
+
+That last clause is implemented, not softened. A helicopter whose pads have all been destroyed
+comes down — which is what stops air being a free permanent army and makes the Helipad a target
+worth defending.
+
+**`aa` is the whole air/ground contract.** A weapon without it cannot engage anything flying. Two
+weapons have it — the rocket squad's launcher and the Rocket Turret — exactly the two answers the
+original gives you. The helicopter's own missiles do *not*, so it carries no air-to-air, as the
+Longbow does not.
+
+### Three bugs, and none of them was visible by reading the code
+
+Everything about the crash rule and the ammo loop passed on the first run. Getting the helicopter
+to actually *land* took three fixes, each found by one assertion — "it flies home and reloads
+rather than crashing" — failing for a different reason:
+
+1. **The fly-home branch returned `false`.** The tick hook only steered when `_rtsAirTick` claimed
+   the tick, so the ordinary unit logic ran straight afterwards and overwrote the course. The
+   helicopter sat still with an empty rack and a pad it never flew to.
+2. **Separation shoved it off the apron.** Aircraft were still in the crowd-separation pass, which
+   pushed the machine back out every time it closed. It hovered at about six world units and
+   oscillated.
+3. **The pad's own footprint blocked it.** The mover's "is that cell blocked" test applies to
+   buildings, and a helipad is a building — so the aircraft was refused entry to the very
+   structure it was trying to land on, stopping dead at the pad's half-width plus its own radius.
+
+`_rtsPathFor(e, gx, gz)` is the other half of flight: an aircraft's "route" is the single waypoint
+it is heading for, because terrain, walls and units are all irrelevant to it. Routing every path
+request through one helper means no call site has to remember what it is holding. **Writing that
+with a regex over the call sites rewrote the helper's own body into infinite recursion** — worth
+checking after any sweeping rename.
+
+### Drawing something that is above the battlefield
+
+An aircraft is drawn lifted off its ground position with a flattened shadow left on the cell it is
+actually over. Without that gap a helicopter reads as a fast, oddly invulnerable jeep. The lift
+collapses to almost nothing while it is sitting on a pad reloading.
+
+**The rotor took two attempts and the second was worse than the first.** Drawn as a solid disc —
+the obvious way to say "spinning" — it came out as an opaque dark lid 31 px across that hid the
+entire aircraft; every facing was the same black circle. The next attempt used four blades at
+45-degree steps, which fails for a reason worth writing down: **these primitives are axis-aligned
+boxes, so a diagonal "bar" is a box that is long in both axes — a square.** Four of them merged
+into a solid diamond. Two crossed bars along x and z are genuine thin bars, and the fuselage and
+tail read through the gaps.
+
+### What is not done
+
+**The AI does not build helipads or helicopters.** Air is player-only for now. Teaching
+`_rtsAIWants` a new branch of the tech tree is a separate change with its own ladder run, and
+bolting it on untested would be exactly the kind of thing the rest of this file argues against.
+
+### Measuring
+
+Ladder unchanged at **329 / 246 / 214** — as expected, since the AI does not field aircraft. The
+flight suite is 13 assertions; `clip.js` is 1248 frames; the save suite is 31 and still green.

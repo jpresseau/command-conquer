@@ -1098,6 +1098,10 @@ function _rtsSpawnUnit(side, key, x, z) {
   var G = window._rtsG, d = rtsUnitDef(key);
   if (!d) return null;
   var e = { id:G.nextId++, type:'unit', side:side, def:key, x:x, z:z, rot:side === 'player' ? 0 : Math.PI,
+    /* AIRCRAFT.CPP: `Ammo = Class->MaxAmmo`. `air` is read all over the place as "this is not
+       on the ground" - it skips pathfinding, ignores blocked cells, draws at altitude, and can
+       only be shot at by an `aa` weapon. */
+    air:!!d.air, ammo:d.ammo || 0, rearming:0, alt:d.air ? (d.alt || 12) : 0,
     hp:d.hp, maxHp:d.hp, r:d.r, cool:0, path:null, pi:0, order:null, target:null,
     carry:0, carryVal:0, hstate:null, htile:null, dead:false, mesh:null, turret:0, fire:0, team:-1,
     fear:0, prone:0,
@@ -1808,7 +1812,7 @@ function _rtsOrderMove(e, x, z, attackMove) {
   e.order = attackMove ? 'amove' : 'move';
   e.target = null; e.hstate = null;
   e.goal = { x:x, z:z };                       /* remembered so a blocked repath keeps aiming here */
-  e.path = _rtsPath(e.x, e.z, x, z); e.pi = 0;
+  e.path = _rtsPathFor(e, x, z); e.pi = 0;
   if (!e.path) { e.order = null; }
 }
 /* Ordering infantry onto a friendly transport is a board order, not an attack - the original
@@ -1818,7 +1822,7 @@ function _rtsOrderBoard(inf, t) {
   if (!_rtsCanBoard(inf, t)) return false;
   inf.order = 'board'; inf.target = t; inf.hstate = null;
   inf.goal = { x:t.x, z:t.z };
-  inf.path = _rtsPath(inf.x, inf.z, t.x, t.z); inf.pi = 0;
+  inf.path = _rtsPathFor(inf, t.x, t.z); inf.pi = 0;
   return true;
 }
 function _rtsOrderAttack(e, tgt) {
@@ -1833,7 +1837,7 @@ function _rtsOrderAttack(e, tgt) {
   }
   e.order = 'attack'; e.target = tgt; e.hstate = null;
   e.goal = { x:tgt.x, z:tgt.z };
-  e.path = _rtsPath(e.x, e.z, tgt.x, tgt.z); e.pi = 0;
+  e.path = _rtsPathFor(e, tgt.x, tgt.z); e.pi = 0;
 }
 function _rtsOrderHarvest(e, tx, tz) {
   var d = rtsUnitDef(e.def);
@@ -1943,6 +1947,10 @@ function _rtsFindTarget(e, range, w) {
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
     if (o.dead || o.side !== foe || o.inside) continue;
+    /* The air/ground contract. A weapon without `aa` cannot engage anything flying, and an
+       aircraft's own weapons cannot reach another aircraft either - our helicopter carries no
+       air-to-air, exactly as the Longbow does not. */
+    if (o.air && !(w && w.aa)) continue;
     /* "Dogs can only attack infantrymen" - INFANTRY.CPP turns ACTION_ATTACK into ACTION_NONE
        against anything else. Without this a dog with a one-bite kill would delete tanks. */
     if (w && w.maul && !(o.type === 'unit' && (rtsUnitDef(o.def) || {}).kind === 'infantry')) continue;
@@ -2030,6 +2038,13 @@ function _rtsFireCoord(e, w) {
 }
 function _rtsFire(e, tgt, w) {
   var G = window._rtsG, bias = _rtsBias(e.side);
+  /* AIRCRAFT.CPP spends a round per shot and the aircraft is out of the fight when the rack is
+     empty. Decremented here rather than in the aircraft's own update so that every route to a
+     shot - ordered, acquired, retaliating - pays for it. */
+  if (e.air && e.ammo != null) {
+    if (e.ammo <= 0) return;
+    e.ammo--;
+  }
   /* Rearm_Delay + Is_Two_Shooter. A burst weapon does NOT reload evenly: the delay assigned
      after each shot alternates, so shots arrive as a fast pair and then a long wait, rather
      than as a metronome. `IsSecondShot` starts true, so the first shot of a fresh unit takes
@@ -2394,6 +2409,66 @@ function _rtsSplash(x, z, rad, dmg, side, spread, from) {
   }
 }
 
+/* AIRCRAFT.CPP's return-to-base loop. Out of ammo, an aircraft breaks off and flies to a pad
+   that will take it; sitting on the pad refills the rack over `rearm` seconds. The last clause
+   is the original's and is not softened:
+
+       "If this aircraft has nowhere else to go, meaning that there is no airfield available,
+        then it has to crash."
+
+   so a helicopter whose pads have all been destroyed comes down. That is what stops air being
+   a free permanent army and makes the pad a target worth defending. */
+function _rtsRearmPad(e) {
+  var G = window._rtsG, best = null, bd = 1e9;
+  for (var i = 0; i < G.ents.length; i++) {
+    var b = G.ents[i];
+    if (b.dead || b.building || b.type !== 'struct' || b.side !== e.side) continue;
+    if (!(rtsStructDef(b.def) || {}).rearm) continue;
+    var dd = Math.hypot(b.x - e.x, b.z - e.z);
+    if (dd < bd) { bd = dd; best = b; }
+  }
+  return best;
+}
+function _rtsAirTick(e, dt, d) {
+  if (!e.air) return false;
+  /* topping up on the pad */
+  if (e.rearming > 0) {
+    e.rearming -= dt;
+    if (e.rearming <= 0) { e.ammo = d.ammo || 0; e.rearming = 0; e.order = null; e.target = null; }
+    return true;                                   /* it does nothing else while reloading */
+  }
+  if (e.ammo > 0) return false;
+  var pad = _rtsRearmPad(e);
+  if (!pad) {
+    /* nowhere to go: it has to crash */
+    _rtsDamage(e, e.hp + 1, null, false);
+    return true;
+  }
+  e.target = null;
+  if (Math.hypot(pad.x - e.x, pad.z - e.z) <= RTS_TILE * 1.4) {
+    e.path = null; e.goal = null; e.rearming = d.rearm || 6;
+    return true;
+  }
+  if (!e.path || !e.goal || Math.hypot(pad.x - e.goal.x, pad.z - e.goal.z) > RTS_TILE) {
+    e.order = 'rearm'; e.goal = { x:pad.x, z:pad.z };
+    e.path = _rtsPathFor(e, pad.x, pad.z); e.pi = 0;
+  }
+  /* TRUE, not false. An aircraft on its way home has to own the tick: returning false let the
+     ordinary unit logic run straight afterwards and overwrite the course, so the helicopter
+     sat where it was with an empty rack and a pad it never flew to. It was the assertion that
+     said so - the pad lookup and the crash rule both passed on their own. */
+  return true;
+}
+
+/* An aircraft does not use the pathfinder at all. Terrain, walls and other units are all
+   irrelevant to it, so its "route" is the single waypoint it is heading for and it flies
+   straight there. Routing every path request through here means no call site has to remember
+   which kind of unit it is holding. */
+function _rtsPathFor(e, gx, gz) {
+  if (e && e.air) return [{ x:gx, z:gz }];
+  return _rtsPath(e.x, e.z, gx, gz);
+}
+
 /* --------------------------------------------------------- unit update */
 function _rtsSteer(e, dt, d) {
   /* Follow the current path with a capped turn rate, then push apart from neighbours.
@@ -2423,7 +2498,12 @@ function _rtsSteer(e, dt, d) {
      extracts itself from a footprint it ended up inside. Blocking it here as well would
      make the escape waypoint unreachable and re-trap it. */
   var freeing = _rtsBlocked(_rtsTX(e.x), _rtsTX(e.z));
-  if (!freeing && _rtsBlocked(_rtsTX(nx), _rtsTX(nz))) {
+  /* Nothing on the ground is in an aircraft's way - not walls, not cliffs, not the footprint
+     of the very pad it is trying to land on. That last one is what actually bit: a helicopter
+     flew home, stopped dead 5.9 world units out (the pad's half-width plus its own radius) and
+     hovered there with an empty rack, because the ordinary "is that cell blocked" test was
+     refusing to let it over the building. */
+  if (!e.air && !freeing && _rtsBlocked(_rtsTX(nx), _rtsTX(nz))) {
     e.stuck = (e.stuck || 0) + dt;
     /* Repath to the FINAL destination, not to the waypoint we happen to be blocked on.
        Repathing to the waypoint loses the real goal: a unit whose path was cut short (e.g.
@@ -2431,7 +2511,7 @@ function _rtsSteer(e, dt, d) {
        forever re-targeting the tile it is already standing on. */
     if (e.stuck > 0.5) {
       var g = e.goal || wp;
-      e.path = _rtsPath(e.x, e.z, g.x, g.z); e.pi = 0; e.stuck = 0;
+      e.path = _rtsPathFor(e, g.x, g.z); e.pi = 0; e.stuck = 0;
     }
     /* Last-resort unstick. A unit can end up genuinely wedged - pinned against a footprint
        by the units behind it, with every forward step blocked and every repath returning the
@@ -2444,7 +2524,7 @@ function _rtsSteer(e, dt, d) {
       if (open) { e.x = _rtsWX(open[0]); e.z = _rtsWX(open[1]); }
       e.jam = 0; e.stuck = 0;
       var g2 = e.goal || wp;
-      e.path = _rtsPath(e.x, e.z, g2.x, g2.z); e.pi = 0;
+      e.path = _rtsPathFor(e, g2.x, g2.z); e.pi = 0;
     }
     return true;
   }
@@ -2456,7 +2536,12 @@ function _rtsSeparate(dt) {
   var buckets = {}, cell = RTS_TILE * 2;
   for (i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.dead || e.type !== 'unit') continue;
+    if (e.dead || e.inside || e.type !== 'unit') continue;
+    /* Aircraft are not in the crowd. They share no space with anything on the ground, and
+       leaving them in this pass was what stopped a helicopter ever reaching its pad: the
+       separation step shoved it back out to about six world units every time it closed, so it
+       hovered just off the apron with an empty rack forever. */
+    if (e.air) continue;
     var k = ((e.x / cell) | 0) + ':' + ((e.z / cell) | 0);
     (buckets[k] || (buckets[k] = [])).push(e);
   }
@@ -2551,7 +2636,7 @@ function _rtsUpdateUnit(e, dt) {
          Re-path whenever the route is spent and we are still not there. */
       if (!e.path || e.pi >= e.path.length) {
         var tap = _rtsApproach(e, tb);
-        e.goal = tap; e.path = _rtsPath(e.x, e.z, tap.x, tap.z); e.pi = 0;
+        e.goal = tap; e.path = _rtsPathFor(e, tap.x, tap.z); e.pi = 0;
         if (!e.path) { e.order = null; e.target = null; return; }
       }
       _rtsSteer(e, dt, d); return;
@@ -2573,7 +2658,7 @@ function _rtsUpdateUnit(e, dt) {
          Re-path whenever the route is spent and we are still not there. */
       if (!e.path || e.pi >= e.path.length) {
         var dap = _rtsApproach(e, db);
-        e.goal = dap; e.path = _rtsPath(e.x, e.z, dap.x, dap.z); e.pi = 0;
+        e.goal = dap; e.path = _rtsPathFor(e, dap.x, dap.z); e.pi = 0;
         if (!e.path) { e.order = null; e.target = null; return; }
       }
       _rtsSteer(e, dt, d); return;
@@ -2596,7 +2681,7 @@ function _rtsUpdateUnit(e, dt) {
       if (!e.path || e.pi >= e.path.length) {
         var cap = _rtsApproach(e, cb);
         e.goal = cap;
-        e.path = _rtsPath(e.x, e.z, cap.x, cap.z); e.pi = 0;
+        e.path = _rtsPathFor(e, cap.x, cap.z); e.pi = 0;
         /* No route to it - drop the order rather than stand still looking busy forever. */
         if (!e.path) { e.order = null; e.target = null; return; }
       }
@@ -2608,6 +2693,10 @@ function _rtsUpdateUnit(e, dt) {
     return;
   }
 
+  /* An aircraft out of ammo is not available for anything else, so this runs first and can
+     take the whole tick. */
+  if (e.air && _rtsAirTick(e, dt, d)) { _rtsSteer(e, dt, d); return; }
+
   /* ---- boarding ---- */
   if (e.order === 'board') {
     var tr = e.target;
@@ -2617,7 +2706,7 @@ function _rtsUpdateUnit(e, dt) {
       /* the transport moves, so the destination is re-aimed rather than pathed once */
       if (!e.path || Math.hypot(tr.x - e.goal.x, tr.z - e.goal.z) > RTS_TILE) {
         e.goal = { x:tr.x, z:tr.z };
-        e.path = _rtsPath(e.x, e.z, tr.x, tr.z); e.pi = 0;
+        e.path = _rtsPathFor(e, tr.x, tr.z); e.pi = 0;
       }
     }
   }
@@ -2685,7 +2774,7 @@ function _rtsUpdateUnit(e, dt) {
     } else if (chasing && e.order === 'attack') {
       /* close on the ordered target; repath now and then rather than every frame */
       e.rep = (e.rep || 0) - dt;
-      if (!e.path || e.rep <= 0) { e.goal = { x:tgt.x, z:tgt.z }; e.path = _rtsPath(e.x, e.z, tgt.x, tgt.z); e.pi = 0; e.rep = 0.9; }
+      if (!e.path || e.rep <= 0) { e.goal = { x:tgt.x, z:tgt.z }; e.path = _rtsPathFor(e, tgt.x, tgt.z); e.pi = 0; e.rep = 0.9; }
     }
   } else { e.turret = e.rot; }
 
@@ -2724,7 +2813,7 @@ function _rtsUpdateHarvester(e, dt, d) {
     if (!e.htile) { e.path = null; return; }                      /* nothing left to mine */
     var wx = _rtsWX(e.htile.tx), wz = _rtsWX(e.htile.tz);
     if (Math.hypot(e.x - wx, e.z - wz) < RTS_TILE * 1.1) { e.path = null; e.hstate = 'mining'; return; }
-    if (!e.path) { e.goal = { x:wx, z:wz }; e.path = _rtsPath(e.x, e.z, wx, wz); e.pi = 0; if (!e.path) { e.htile = null; return; } }
+    if (!e.path) { e.goal = { x:wx, z:wz }; e.path = _rtsPathFor(e, wx, wz); e.pi = 0; if (!e.path) { e.htile = null; return; } }
     _rtsSteer(e, dt, d);
   } else if (e.hstate === 'mining') {
     var i = _rtsIdx(e.htile.tx, e.htile.tz), take = Math.min(RTS_HARVEST_RATE * dt, G.scrap[i], d.capacity - e.carry);
@@ -2750,7 +2839,7 @@ function _rtsUpdateHarvester(e, dt, d) {
       e.path = null; e.hstate = 'unload'; e.ref = ref; return;
     }
     e.rep = (e.rep || 0) - dt;
-    if (!e.path || e.rep <= 0) { e.goal = { x:dock.x, z:dock.z }; e.path = _rtsPath(e.x, e.z, dock.x, dock.z); e.pi = 0; e.rep = 1.5; if (!e.path) return; }
+    if (!e.path || e.rep <= 0) { e.goal = { x:dock.x, z:dock.z }; e.path = _rtsPathFor(e, dock.x, dock.z); e.pi = 0; e.rep = 1.5; if (!e.path) return; }
     _rtsSteer(e, dt, d);
   } else if (e.hstate === 'unload') {
     if (!e.ref || e.ref.dead) { e.hstate = 'toRef'; return; }

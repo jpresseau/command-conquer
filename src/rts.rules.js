@@ -114,6 +114,13 @@ var RTS_STRUCTS = [
      silos an overflowing opponent builds drew 130 power, browned its whole base out and cost
      it enough production that the player lived 81 seconds longer on one seed. A storage tank
      is passive; giving it an appetite turned the storage cap into an accidental nerf. */
+  /* Helipad. Produces helicopters and rearms them - AIRCRAFT.CPP sends an aircraft with no
+     ammo back to one, and if there is no airfield available "it has to crash", which is
+     implemented rather than softened. */
+  { key:'helipad',  name:'Helipad',      w:2, h:2, cost:1500, build:14, hp:500,  power:-10,  sight:10,
+    needs:['radar'], produces:'air', rearm:true,
+    armour:'concrete',
+    desc:'Builds and rearms helicopters. Without one, an aircraft out of ammo goes down.' },
   { key:'silo',     name:'Scrap Silo',   w:2, h:2, cost:150,  build:5,  hp:400,  power:0,    sight:8,
     needs:['refinery'], storage:1500, capturable:false,
     armour:'wood',
@@ -212,6 +219,17 @@ var RTS_UNITS = [
      Service Depot, as in the original, so it sits behind the same building that repairs it.
      `deploy` is the whole unit: it exists to put a Command Yard somewhere you do not have one,
      which is the only way back into the game after losing the first. */
+  /* Attack helicopter. AIRCRAFT.CPP's loop, and the three rules that make an aircraft an
+     aircraft rather than a fast tank:
+       Ammo = Class->MaxAmmo         - it carries a fixed number of shots,
+       if (!Ammo) -> MISSION_ENTER   - and goes home to a pad to reload when they are gone,
+       "If this aircraft has nowhere else to go, meaning that there is no airfield available,
+        then it has to crash."
+     Plus: it flies. Terrain does not block it and only an `aa` weapon can touch it. */
+  { key:'heli',     name:'Attack Heli',   kind:'air',      cost:1200, build:15, hp:200,  speed:22,  turn:5.0,r:1.6, sight:20, weapon:'hellfire',
+    needs:['helipad'], air:true, ammo:8, rearm:6, alt:14,
+    armour:'light',
+    desc:'Flies over anything. Eight missiles, then it must return to a pad to reload.' },
   /* Armoured Personnel Carrier. UDATA.CPP's UnitAPC is IsCrusher with no turret; the transport
      rules are in UNIT.CPP - capacity via Max_Passengers, and, in Death, the half of the branch
      that matters: when a TRANSPORT dies its infantry passengers are unlimboed at the wreck and
@@ -253,7 +271,10 @@ var RTS_WEAPONS = {
                 verses:{ none:1.0,  wood:0.35, light:0.50, heavy:0.20, concrete:0.25 } },
   /* burst: Is_Two_Shooter. Rearm_Delay alternates the reload so the shots arrive as a fast
      pair and then a long wait. */
-  rocket:     { dmg:13, range:20, cool:1.80, burst:2, shot:'missile', speed:34, splash:2, wall:true,
+  /* `aa` is the whole air/ground contract: a weapon without it simply cannot engage a
+     flying unit, and a base with neither of these two has no answer to a helicopter.
+     In the original the rocket soldier and the SAM site are exactly that answer. */
+  rocket:     { dmg:13, range:20, cool:1.80, burst:2, shot:'missile', speed:34, splash:2, wall:true, aa:true,
                 verses:{ none:0.5,  wood:1.30, light:1.20, heavy:1.35, concrete:1.10 } },
   /* A tank's coaxial machine gun: short, weak, and murder on infantry. */
   coax:       { dmg:14, range:13, cool:0.32, shot:'tracer',  speed:0,  splash:0,
@@ -273,7 +294,7 @@ var RTS_WEAPONS = {
                 verses:{ none:0.6,  wood:1.25, light:1.30, heavy:1.40, concrete:1.05 } },
   /* Rocket Turret: long and hard-hitting, deliberately poor against infantry so that cheap
      riflemen stay the correct answer to a wall of them. */
-  turretrocket:{ dmg:30, range:26, cool:2.0, burst:2, shot:'missile', speed:36, splash:2.2, wall:true,
+  turretrocket:{ dmg:30, range:26, cool:2.0, burst:2, shot:'missile', speed:36, splash:2.2, wall:true, aa:true,
                 verses:{ none:0.45, wood:1.10, light:1.30, heavy:1.50, concrete:0.90 } },
   /* Pillbox: a machine gun in concrete. The answer to an infantry rush at a point in the match
      where a Gun Turret is still unaffordable. */
@@ -297,6 +318,10 @@ var RTS_WEAPONS = {
      targeting rule in _rtsFindTarget, that is the whole unit: a 200-credit assassin that
      deletes exactly one man and cannot scratch a tank. We had given it a damage figure, which
      is precisely why it lost fights to the cheapest infantry in the game. */
+  /* The helicopter's missiles: heavy against armour, nearly useless against people, which is
+     what keeps it from being a flying answer to everything. */
+  hellfire:   { dmg:55, range:20, cool:1.1, shot:'rocket', speed:34, splash:0.9, ammo:1,
+                verses:{ none:0.35, wood:1.10, light:1.20, heavy:1.30, concrete:0.85 } },
   bite:       { dmg:22, range:5.5,cool:0.55, shot:'tracer',  speed:0,  splash:0, maul:true,
                 verses:{ none:1.4,  wood:0,    light:0,    heavy:0,    concrete:0 } },
   /* Two .45s: shreds infantry, barely marks anything else. The Commando's threat to buildings
