@@ -2188,3 +2188,57 @@ their Tanya is 1800 against RA's 1200, their Medic 200 against RA's 800. **So th
 transcribed.** What the mod folder *is* good for is anything descriptive of the original data
 rather than tuned on top of it: `sequences/` (facing counts, frame layouts, turret/hull splits)
 and `tilesets/` (terrain type per tile).
+
+## The base was 66% blue — structures against the cameo reference
+
+Reported as "the buildings are all blue toned", which is measurable, so it was measured:
+**66% of all opaque structure pixels were blue-dominant.** That is the same fault the vehicles
+had, one level up, and the structure cameos say what it should be instead.
+
+A Red Alert base is built from several materials. The power plants are **red brick with brick
+chimneys**; the Allied barracks are **sand-coloured Nissen huts**; the radar dome, walls and
+pillbox are **bare concrete**; the tech centre is a **pale office block**. `RTS_PAL.mat` carries
+brick, sand and pale, and each structure is built from the right one.
+
+**The team-coloured roof stays, but as a band rather than the whole surface.** The four worst
+offenders — tech centre, silo, refinery, power — each had their entire top face in team colour,
+and a top face is most of a sprite under this camera. They now take a material roof with a narrow
+team stripe laid across it. **66% → 13%**, and ownership still reads at a glance.
+
+The cameos cannot argue against a team-coloured roof at all, and it is worth being clear why:
+they are *sidebar icons*, drawn separately from the in-game sprites, carrying no player remap —
+the Construction Yard, Power Plant, Refinery, Radar Dome and Silo are literally the same image on
+the Allied and the Soviet sheet. What they are good evidence for is **form and base material**,
+which is what was taken from them.
+
+### Forms that were simply wrong
+
+| building     | was                          | reference                            |
+|--------------|------------------------------|--------------------------------------|
+| Yard         | flat slab + crane arm        | **vaulted hangar**, one big arch     |
+| Barracks     | pitched hall + flag          | **three sand Nissen huts**           |
+| Silo         | three cylinders              | **low ribbed bunker**                |
+| Depot        | open gantry frame            | **flat round apron** + a small hut   |
+| Tech Center  | tipped satellite dish        | **tall pale block**, ribbon windows  |
+| War Factory  | flat deck + roll-up door     | **big dark gable** over the bay      |
+| Adv. Power   | 4 stacks + cooling tower     | 4 brick chimneys, **no tower**       |
+| Kennel       | pitched shed + wire run      | **red doghouse**, arched entry       |
+
+The Tech Center is the one worth calling out: as a dish on a block it was a second Radar Dome in
+the same base. It is now the only structure taller than it is wide.
+
+### `_r3Vault`, and why the axis matters
+
+A barrel vault could not be built at all — `_r3Cyl` is upright, and faking an arch out of stepped
+boxes reads as a staircase at 48 px. `_r3Vault` is a half-cylinder, elliptical so height and span
+are independent.
+
+**The first version ran its axis along x and read as a flat plate**, which is a projection fact
+rather than a bug: with the axis along x you see almost nothing but the near flank, which sweeps
+from normal +z to normal +y and shades as a gently graded wall, while the two curved ends sit
+exactly edge-on and never draw. The measured screen extents make it obvious — the near flank
+covers ~51 px of the sprite and the far flank ~6.
+
+`alongZ` puts the arch profile in x-y and extrudes along z, so the **curve is in the silhouette**
+and the near cap faces the camera. That is the version that reads, and it is what the yard, the
+barracks huts and the kennel all use.
