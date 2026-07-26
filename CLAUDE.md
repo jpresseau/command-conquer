@@ -643,6 +643,44 @@ Commitment lands at 47% rather than the 62% asked for, and that is a real constr
 than a bug: a team only recruits units matching its composition, so a tank-heavy army cannot
 fill the rocket slots in Sappers. Raising it further means changing the compositions.
 
+## What the data files do and do not contain — UDATA.CPP, WEAPON.CPP
+
+Worth writing down so nobody chases these again. **The balance numbers are not in this
+repository.** `Strength`, `Armor`, `Cost`, `Speed`, `Sight`, `ROT`, `TechLevel`, `Damage`, `ROF`,
+`Range` all arrive through `TechnoTypeClass::Read_INI` / `WeaponTypeClass::Read_INI` from
+RULES.INI, which is a data file shipped inside the game's MIX archives rather than source. The
+`*DATA.CPP` stat blocks are **behaviour flags**, and `WEAPON.CPP`/`WARHEAD.CPP` are allocation
+plumbing plus an INI parser. Every damage figure in `rts.rules.js` is therefore still mine.
+
+The one exception is a comment: UDATA.CPP's `FIXIT_ANTS` block quotes a complete RULES.INI entry
+verbatim (`[ANT]` and `[Mandible]`), which is the only place the schema and scale are visible.
+Useful calibration from it — **`Sight` and `Range` are in CELLS**, and small ones: the ant sees 2
+cells and bites at 1.5. This game's ranges (3–34 world units = 0.75–8.5 cells) are in the right
+band.
+
+### What was portable
+
+**`IsCrusher`, and it was a correction.** UDATA.CPP's flags say every tracked hull crushes
+infantry — LTank, MTank, MTank2, HTank, Harvester, APC, MineLayer, MCV — while the **Jeep and the
+Artillery explicitly do not. `RTS_CRUSHERS` was missing `light` and `heavy` entirely**, so two of
+the three tanks in the game drove through infantry without touching them.
+
+**`NoMovingFire`.** Some hulls cannot fire on the move. Rather than withholding the shot — which
+would leave artillery trundling past its target forever — a flagged unit in range **stops**, and
+fires on the tick after it halts.
+
+**This nearly got reverted as inert, and the measurement is why it wasn't.** The control test
+("a Battle Tank may still fire while moving") failed, which looked like proof that every unit in
+this game already halts to fire. Counting every shot across three hard matches instead: **24 of
+417 are fired on the move**, by tanks and rocket soldiers on attack orders. The flag is a real
+constraint; the control had simply picked a duel where the existing stop-when-in-range rule fires
+first. A single ordered attack is not a sample.
+
+Verified: 13 assertions in `udata.js` — the crusher table against UDATA's flags, a Light Tank
+actually running a rifleman down, artillery flagged and nothing else, a gun that has to drive
+before it can shoot and never fires while doing so, and over two hard matches units without the
+flag firing on the move while artillery never does. Ladder unchanged at 298/218/175.
+
 ## Armour classes — from WARHEAD.CPP + CONST.CPP
 
 `CONST.CPP` gives `ArmorName[ARMOR_COUNT] = { "none", "wood", "light", "heavy", "concrete" }`, and

@@ -369,8 +369,11 @@ var RTS_UNITS = [
   { key:'light',    name:'Light Tank',    kind:'vehicle',  cost:700,  build:9,  hp:280,  speed:12,  turn:2.6,r:1.8, sight:18, weapon:'cannon',
     armour:'light',
     desc:'Cheap armour. Faster than a Battle Tank and half the price, with a third of the hull.' },
+  /* NoMovingFire, from UnitTypeClass::Read_INI. A gun this size cannot be fired on the move:
+     the unit has to come to a stop first, which is what makes artillery a thing you position
+     rather than a thing you drive at people. */
   { key:'arty',     name:'Artillery',     kind:'vehicle',  cost:600,  build:11, hp:150,  speed:6,   turn:1.4,r:1.9, sight:16, weapon:'howitzer',
-    needs:['radar'],
+    needs:['radar'], noMovingFire:true,
     armour:'light',
     desc:'Outranges every base defence in the game. Made of paper — never send it in first.' },
   { key:'heavy',    name:'Mammoth Tank',  kind:'vehicle',  cost:1700, build:20, hp:820,  speed:6.5, turn:1.3,r:2.2, sight:18, weapon:'heavycannon', weapon2:'coax',
@@ -844,7 +847,12 @@ var RTS_MUZZLE_SPOT = 1.6;
    (`cellptr->Incoming(0, true)`); actually reaching them kills them. Should_Crush_It refuses
    for HUMAN-controlled vehicles - your own tanks never auto-crush, you have to drive them
    over deliberately - and only within CrushDistance. */
-var RTS_CRUSHERS = { tank:1, harvester:1 };
+/* UnitTypeClass's "Can this unit squash infantry?" flag, read straight off UDATA.CPP's stat
+   blocks. Every tracked hull crushes: LTank, MTank, MTank2, HTank (Mammoth), Harvester, APC,
+   MineLayer and MCV all carry it. The JEEP and the ARTILLERY explicitly do NOT, which is the
+   correction this file supplied - `light` and `heavy` were missing from this table, and the
+   Scout Buggy was never meant to be here in the first place. */
+var RTS_CRUSHERS = { tank:1, light:1, heavy:1, harvester:1 };
 var RTS_CRUSH_DIST = 1.5 * 4;   /* Rule.CrushDistance 0x0180 = 1.5 cells */
 var RTS_CRUSH_KILL = 0.9;       /* world units: close enough to actually run them down */
 /* Take_Damage: a destroyed vehicle has a 50% chance of throwing out a crew member, who
@@ -5137,8 +5145,13 @@ function _rtsUpdateUnit(e, dt) {
          cannot fire at all unless its projectile homes - FIRE_ROTATING. */
       var tol = fw.speed > 0 && fw.shot === 'missile' ? RTS_FIRE_ANGLE * 4 : RTS_FIRE_ANGLE;
       var homing = fw.shot === 'missile';
-      if (e.cool <= 0 && Math.abs(td) < tol && (homing || !e.tRot)
-          && _rtsRangeTo(e, shootAt) <= fw.range) _rtsFire(e, shootAt, fw);
+      /* NoMovingFire (UDATA.CPP): some hulls cannot fire on the move. Rather than simply
+         withholding the shot - which would leave artillery trundling past its target forever -
+         a unit in range STOPS, and fires on the tick after it has halted. */
+      var inRange = _rtsRangeTo(e, shootAt) <= fw.range;
+      if (d.noMovingFire && inRange && e.path) { e.path = null; e.goal = null; }
+      if (e.cool <= 0 && Math.abs(td) < tol && (homing || !e.tRot) && inRange
+          && !(d.noMovingFire && e.path)) _rtsFire(e, shootAt, fw);
     } else if (!e.path) {
       /* no target: the turret returns to the hull's facing, as Rotation_AI does */
       var rd = e.rot - e.turret;
