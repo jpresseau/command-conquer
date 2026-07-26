@@ -236,6 +236,7 @@ function _rtsRFrame(dt) {
     /* CountDown: a destroyed structure is still on the map, burning, for a moment. Dropping
        it on the frame it died left its own explosion hanging over bare grass. */
     if (e.dead && !(e.type === 'struct' && e.wreck > 0)) continue;
+    if (e.inside) continue;                /* riding inside a transport */
     if (!_rtsEntSeen(e)) continue;         /* out of sight, off the screen */
     if (e.z < R.focus.z - R.H / z || e.z > R.focus.z + R.H / z) continue;
     if (e.x < R.focus.x - R.W / z || e.x > R.focus.x + R.W / z) continue;

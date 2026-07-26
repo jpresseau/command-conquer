@@ -457,7 +457,7 @@ function _rtsBindInput() {
     var mine = [], i;
     for (i = 0; i < G.sel.length; i++) {
       var sv = G.sel[i];
-      if (sv && !sv.dead && sv.side === 'player' && sv.type === 'unit') mine.push(sv);
+      if (sv && !sv.dead && !sv.inside && sv.side === 'player' && sv.type === 'unit') mine.push(sv);
     }
     if (!mine.length) return false;
     var w = miniWorld(e), tx = _rtsTX(w.x), tz = _rtsTX(w.z);
@@ -468,7 +468,7 @@ function _rtsBindInput() {
     if (mapped) {
       for (i = 0; i < G.ents.length; i++) {
         var o = G.ents[i];
-        if (o.dead || o.side === 'player') continue;
+        if (o.dead || o.inside || o.side === 'player') continue;
         if (o.type === 'struct') {
           var sd = rtsStructDef(o.def);
           if (tx >= o.tx && tx < o.tx + sd.w && tz >= o.tz && tz < o.tz + sd.h) { tgt = o; break; }
@@ -524,6 +524,14 @@ function _rtsKeyDown(e) {
   if ((k === 's' || k === 'S') && (e.ctrlKey || e.metaKey)) { rtsSaveGame(); e.preventDefault(); return; }
   /* N walks the army, shift+N walks it backwards. */
   if (k === 'n' || k === 'N') { _rtsCycleObject(e.shiftKey ? -1 : 1); e.preventDefault(); }
+  /* U unloads every selected transport that is carrying anything. */
+  if (k === 'u' || k === 'U') {
+    var Gu = window._rtsG, out = 0;
+    if (Gu && Gu.sel) Gu.sel.forEach(function (t) {
+      if (t.side === 'player' && t.type === 'unit') out += _rtsUnload(t);
+    });
+    if (out) e.preventDefault();
+  }
   /* D deploys every selected vehicle that can - an MCV into a Command Yard. */
   if (k === 'd' || k === 'D') {
     var G = window._rtsG, did = 0;
@@ -602,7 +610,7 @@ function _rtsKeyUp(e) {
    bulk selection in the originals is filtered through it, which is why a rubber band dragged
    across your base grabs the tanks parked in it and leaves the barracks alone. One predicate,
    used by the band, the double-click, select-all and the object cycle, so they cannot drift. */
-function _rtsIsArmy(e) { return !!e && !e.dead && e.side === 'player' && e.type === 'unit'; }
+function _rtsIsArmy(e) { return !!e && !e.dead && !e.inside && e.side === 'player' && e.type === 'unit'; }
 
 /* On screen right now. DISPLAY.CPP scopes double-click selection to the tactical view - it is
    "all the ones I can see", not "all the ones I own"; select-all is the command for that. */
@@ -729,7 +737,11 @@ function _rtsRightClick(mx, my) {
         else if (md.steal && tgt.def === md.stealFrom) job = 'capture';
         else if (md.demo) job = 'demo';
       }
-      if (job) {
+      /* Infantry sent at one of your own transports get in it. This has to come before the
+         attack order or right-clicking your own APC is an order to shoot it. */
+      if (tgt.side === mu.side && _rtsCanBoard(mu, tgt) && _rtsOrderBoard(mu, tgt)) {
+        special++;
+      } else if (job) {
         mu.order = job; mu.target = tgt; mu.path = null; mu.goal = null; mu.susp = null;
         special++; if (job === 'capture') capped++;
       } else _rtsOrderAttack(mu, tgt);
@@ -786,7 +798,7 @@ function _rtsDrawHud(dt) {
   /* health bars: always for selected, and for anything damaged */
   for (i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.dead) continue;
+    if (e.dead || e.inside) continue;      /* no health bar for a passenger */
     var selected = G.sel.indexOf(e) >= 0;
     var hurt = e.hp < e.maxHp - 0.5;
     if (!selected && !hurt) continue;
@@ -879,7 +891,7 @@ function _rtsActionAt(mx, my) {
   /* Runs inside the render loop, so one bad entry must not take the whole frame down. */
   for (i = 0; i < G.sel.length; i++) {
     var sv = G.sel[i];
-    if (sv && !sv.dead && sv.side === 'player' && sv.type === 'unit') mine.push(sv);
+    if (sv && !sv.dead && !sv.inside && sv.side === 'player' && sv.type === 'unit') mine.push(sv);
   }
   if (!mine.length) return (tgt && !tgt.dead) ? 'select' : null;
   if (tgt && tgt.side === 'enemy') return 'attack';
