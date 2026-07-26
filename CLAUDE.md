@@ -643,6 +643,48 @@ Commitment lands at 47% rather than the 62% asked for, and that is a real constr
 than a bug: a team only recruits units matching its composition, so a tank-heavy army cannot
 fill the rocket slots in Sappers. Raising it further means changing the compositions.
 
+## Infantry flags — from IDATA.CPP
+
+Same INI story for the numbers. The **forced defaults** in the constructor are the useful part,
+and three of them confirm decisions already made: `IsCrushable = true` for every infantry type,
+`IsRepairable = false` (which is exactly why the Service Depot ignores infantry), and
+`if (IsBomber) IsCapture = true` — a C4 unit is automatically also a walk-into-buildings unit,
+which is how the Commando was already built.
+
+**`IsCrawling`, and it was a correction.** Not every infantry type has prone artwork: the Dog,
+Engineer, Spy and Thief are all constructed with `is_crawling = false`. A type with no crawl
+frames must never enter the state — it would be lying about what it is doing. Now declared per
+type and enforced.
+
+**`IsFraidyCat` as a declared flag.** Panic is a property of the type in the original, read from
+RULES.INI. This game inferred it: `!d.capture && !d.steal && !d.demo && !d.heals`. That produced
+the right answer for the wrong reason and would have silently mis-classified the next unit added.
+
+### The bug that swap introduced, and the test that asserted it
+
+Gating the *whole* of `_rtsFearAI` on the flag also stopped fear **decaying**, so a specialist's
+fear ratcheted up on every hit and never came down. My own `idata.js` asserted this as correct
+("a medic keeps its fear untouched"). **Decay runs for everyone; only the response is gated.**
+
+### The Attack Dog was broken, and a comparative test found it
+
+`bite` had `range:3`. Range is in **world units** and a tile is four of them, so the dog had to
+close to 0.75 of a tile — but its own radius (0.9) plus an infantryman's (1.1) means the pair can
+never be nearer than 2.0. It landed **one bite in eight seconds**: 31 damage where a rifle squad
+did 56. The anti-infantry unit was worse at killing infantry than the cheapest thing in the game.
+Range is now 5.5 — still unmistakably melee, and actually reachable.
+
+**Three versions of that test were wrong before the code was.** A hardcoded hp threshold tuned to
+a previous build; then "a dog out-damages a rifle squad", which measured the *approach* rather
+than the bite; then "a dog kills a rifle squad", which is the same duel in disguise. A 40 hp dog
+crossing open ground against a 60 hp squad that outranges it 15 to 5.5 **loses, and should** —
+dogs are pack and ambush units. What is actually true and now asserted: 56 dps against people
+versus a rifleman's 12.7, faster movement, zero against armour, and at contact it takes a rifle
+squad to a quarter health inside eight seconds.
+
+**Recorded rather than asserted away:** the dog still trades poorly one-on-one and usually dies
+first. That is a live balance question about a unit added this session, not a settled design.
+
 ## What the data files do and do not contain — UDATA.CPP, WEAPON.CPP
 
 Worth writing down so nobody chases these again. **The balance numbers are not in this

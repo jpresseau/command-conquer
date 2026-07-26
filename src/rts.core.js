@@ -1669,12 +1669,24 @@ function _rtsFire(e, tgt, w) {
       life:Math.min(4, reach / w.speed + RTS_SHELL_OVER), w:w, from:e });
   }
 }
-/* INFANTRY.CPP Fear_AI + Scatter. Only infantry have this. */
+/* INFANTRY.CPP Fear_AI + Scatter. Only infantry have this.
+
+   IsCrawling, from IDATA.CPP: not every infantry type HAS prone artwork. The Dog, Engineer,
+   Spy and Thief are all constructed with `is_crawling = false`, and a type with no crawl frames
+   must never enter the state - it would be lying about what it is doing. */
 function _rtsFearAI(e, dt) {
+  var d = rtsUnitDef(e.def);
+  /* Fear DECAYS for everyone, including the types that never act on it. Gating this whole
+     function on IsFraidyCat was a real bug: a specialist's fear ratcheted up on every hit and
+     never came down, and anything downstream that reads a fear threshold then saw a
+     permanently terrified unit. Measured, it made the Attack Dog markedly worse at the one
+     job it has - 60 hp of damage in six seconds instead of a kill. Only the RESPONSE is
+     type-gated. */
   if (e.fear > 0) e.fear = Math.max(0, e.fear - RTS_FEAR_DECAY * dt);
+  if (!d || d.fraidy === false) { e.prone = 0; return; }
   if (e.prone) {
-    if (e.fear < RTS_FEAR.ANXIOUS) e.prone = 0;
-  } else if (e.fear >= RTS_FEAR.ANXIOUS && !e.path) {
+    if (e.fear < RTS_FEAR.ANXIOUS || d.crawl === false) e.prone = 0;
+  } else if (e.fear >= RTS_FEAR.ANXIOUS && !e.path && d.crawl !== false) {
     e.prone = 1;                     /* do not drop while actually travelling somewhere */
   }
 }
@@ -1689,7 +1701,7 @@ function _rtsScatter(e, fromX, fromZ) {
      seconds at a steady 12-14 units while her goal was rewritten each time she was shot. Fear
      was the obvious suspect and was not the cause; this was. */
   var _sd = rtsUnitDef(e.def);
-  if (_sd && (_sd.capture || _sd.steal || _sd.demo || _sd.heals)) return;
+  if (_sd && _sd.fraidy === false) return;
   var a = Math.atan2(e.z - fromZ, e.x - fromX);
   a += (_rtsRnd() - 0.5) * (Math.PI / 2);      /* Random_Pick(0,4)-2 facings of spread */
   var d = RTS_TILE * (1.5 + _rtsRnd());
@@ -2019,7 +2031,12 @@ function _rtsUpdateUnit(e, dt) {
      A deliberate deviation, and the reference argues for it: the Commando "can never be put in
      guard mode - you must manually target all enemies that you wish attacked". These units are
      directed rather than autonomous, so autonomous self-preservation does not apply. */
-  if (d.kind === 'infantry' && !d.capture && !d.steal && !d.demo && !d.heals) _rtsFearAI(e, dt);
+  /* IsFraidyCat, from IDATA.CPP's Read_INI - panic is a DECLARED property of the type, not
+     something inferred from what verbs a unit happens to carry. This used to read
+     `!d.capture && !d.steal && !d.demo && !d.heals`, which produced the right answer for the
+     wrong reason and would have mis-classified the next unit added. The flag is checked INSIDE
+     _rtsFearAI rather than here, so that fear still decays for the types that ignore it. */
+  if (d.kind === 'infantry') _rtsFearAI(e, dt);
   /* Overrun_Square runs BEFORE the engage logic: a tank that is holding position and firing
      returns early from this function, and hooking the crush on the end meant a stationary
      tank never ran anything over. */
