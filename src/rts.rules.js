@@ -305,15 +305,47 @@ function rtsVerses(w, tgt) {
    damage  : an attached animation applies this per second to whatever it is riding on
              (WARHEAD_FIRE in the original). This is what makes a burning unit burn down. */
 var RTS_ANIMS = {
-  boom:   { dur:0.75, biggest:0.34, scorch:true,  crater:true,  chain:'fire', loops:1 },
+  /* A fireball leaves a small fire burning where it went off - and that fire is on the
+     GROUND, with nothing attached to it, so it does no damage. Only a flame riding an object
+     burns that object. */
+  boom:   { dur:0.75, biggest:0.34, scorch:true,  crater:true,  chain:'firesmall', loops:1 },
   hit:    { dur:0.50, biggest:0.30, scorch:true,  crater:false, chain:null,   loops:1 },
   pop:    { dur:0.40, biggest:0.30, scorch:false, crater:false, chain:null,   loops:1 },
   /* Combat_Anim's PIFF: the little spark a bullet makes. No mark on the ground. */
   piff:   { dur:0.22, biggest:0.30, scorch:false, crater:false, chain:null,   loops:1 },
   /* ...and its water set. An explosion over water throws a plume, and leaves nothing. */
   splash: { dur:0.55, biggest:0.30, scorch:false, crater:false, chain:null,   loops:1 },
-  fire:   { dur:1.10, biggest:0,    scorch:true,  crater:false, chain:null,   loops:2, damage:9 }
+  /* ADATA.CPP's burn ladder. Three sizes of fire, each with its OWN damage rate, and each
+     chaining DOWN into the next before finally trailing into smoke - `OnFireBig` ->
+     `OnFireMed` -> `OnFireSmall` -> `SmokeM`. A fire is not a fixed effect that plays and
+     stops; it burns itself down. That is why a building you shot and then left alone
+     smoulders out, and one you keep hitting re-lights at full size.
+
+     `damage` is ADATA's `Damage` field converted out of its units: the original is a fixed
+     amount per TICK at 15 FPS, so fixed(1,10) = 1.5 hp/s, fixed(1,16) = 0.9375, and
+     fixed(1,32) = 0.46875. The old single `fire` did NINE hp/s, which is six times the
+     original's fiercest burn - it was a number picked by eye and it made a burning unit a
+     dead unit.
+
+     `size` is the relative draw scale, from ADATA's max-dimension field: 23 / 14 / 11 px.
+     Only the big one is IsScorcher; a small fire leaves no mark. */
+  firebig:   { dur:1.10, biggest:0, scorch:true,  crater:false, chain:'firemed',   loops:4, damage:1.5,     size:1.00 },
+  firemed:   { dur:1.10, biggest:0, scorch:false, crater:false, chain:'firesmall', loops:4, damage:0.9375,  size:0.61 },
+  firesmall: { dur:1.10, biggest:0, scorch:false, crater:false, chain:'smoke',     loops:4, damage:0.46875, size:0.48 },
+  /* SmokeM: no damage, no mark, just what is left over. */
+  smoke:     { dur:1.30, biggest:0, scorch:false, crater:false, chain:null,        loops:5, damage:0,       size:0.85 }
 };
+/* Which rung of the ladder a thing catches fire at, by how big it is. A pillbox does not
+   burn like a refinery. */
+var RTS_FIRE_BIG = 6;           /* footprint tiles at or above which a structure burns big */
+var RTS_FIRE_MED = 4;
+/* BuildingClass::Take_Damage lights a building up once it is badly hurt, not on the first
+   scratch. Units already used 0.3; structures use ConditionRed so a burning building reads
+   as one that is nearly gone. */
+var RTS_BURN_UNIT = 0.3;
+/* The literal, NOT RTS_COND_RED - that is declared further down this file, and a `var` read
+   before its assignment is `undefined` silently. Kept in step with it by this comment. */
+var RTS_BURN_STRUCT = 0.25;
 /* Combat_Anim picks the explosion from the DAMAGE and the LAND TYPE - a rifle round and a
    tank shell are not the same event, and neither is over water. The thresholds mirror the
    original's: tiny hits piff, mid hits throw fragments, big ones are a fireball. */
