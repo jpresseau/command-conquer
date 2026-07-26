@@ -1,0 +1,42 @@
+/* Which land type is under every tile of every temperate template.
+
+   map.bin says a cell is 'template 42, tile 3'. To know whether you can drive on it, or
+   whether it is the sea, something has to classify it - and the .tem art files do not: they
+   hold pixels and a position index and nothing else. RA keeps the classification in
+   TEMPLATE.CPP's TemplateTypeClass table, compiled into the game, which is why this table
+   has to exist as data here.
+
+   It is rules metadata, the same category as the unit costs and weapon damage tables in
+   rts.rules.js - ~300 rows of integers and one letter per cell. It is also inert on its own:
+   without the player's own temperat.mix there are no pixels for it to describe.
+
+   Each record is  id image w h classes  and the classes string is one character per tile of
+   the template, in position order:
+
+     c clear    r rough     d road      b beach/sand   g bridge     <- driveable
+     k rock     w water     i river                                 <- not
+     - no tile here at all (templates have holes; see _mixTiles)
+
+   Rock and Rough are separate on purpose. They look alike and RA colours them identically,
+   but world.yaml's ground locomotors list Rough among the terrain they have a speed for and
+   omit Rock entirely - so rough ground is slow going and rock is a wall. Merging them turns
+   660 cells of the tileset into obstacles that should be driveable.
+
+   Trees, ore, gems and walls are NOT here - they are overlay, stored per cell in the map
+   rather than baked into a terrain template. */
+var RA_TILETAB_SRC = `1 w1 1 1 w|2 w2 2 2 wwww|3 sh01 4 5 ---k-ccbbwwiww--w---|4 sh02 5 5 ----c---bbbcbbbbrri-wwk--|5 sh03 3 5 --c-bbbbbww-w--|6 sh04 3 3 bbbbbbwww|7 sh05 3 3 bkbbkkkii|8 sh06 3 3 bbbbbbwww|9 sh07 3 3 bbbbbbwww|10 sh08 1 2 bb|11 sh09 3 3 cikcibwww|12 sh10 5 6 c----bc---wbbw---wbb--kkk---ww|13 sh11 4 5 bc--bwb-wwbb--bb--wb|14 sh12 3 5 bc-bbbwbb-wb--w|15 sh13 6 5 wkb----bbb---wbbc--wwrbc---bbb|16 sh14 4 4 bbc-ibb-rbb--wbb|17 sh15 5 3 wwbc--wbb---wbb|18 sh16 3 3 wbcwbcwbc|19 sh17 2 1 bc|20 sh18 3 3 wwrwiiwbr|21 sh19 4 5 -wbc-bbcwbb-wbb-wbc-|22 sh20 5 4 --wbbwbbb-wbb--wbb--|23 sh21 5 3 -wbbcwbbc-wbb--|24 sh22 6 5 w-----ww----bbwwww-cbbwb---bbb|25 sh23 5 5 bww--bbwww-cbiw--cbb--bbb|26 sh24 3 4 bw-bww-cb--c|27 sh25 3 3 wwwkkbkkb|28 sh26 3 3 wwwbbrbbb|29 sh27 3 3 kkkbbbbbr|30 sh28 3 3 -kkbkkbrr|31 sh29 1 2 bc|32 sh30 3 2 biicir|33 sh31 6 5 ---wwb--wwbbwwwbc-bbwbc-ccbbc-|34 sh32 4 4 --wwwwbbbbb-cc--|35 sh33 3 4 -wbwbcbr-bb-|36 sh34 6 5 ---cbw-bbbb--bbw---bbw--bbw---|37 sh35 4 4 --bw-cbr-bbwcbw-|38 sh36 4 3 -bbwbbw-bww-|39 sh37 3 3 -bwcbwrbw|40 sh38 2 1 cb|41 sh39 3 3 kbwiiwcbw|42 sh40 5 5 cbw---bw---bww--cbbw--bbw|43 sh41 4 4 bw--bbw-bbww-cbw|44 sh42 4 3 bbw--bbi-cbw|45 sh43 3 3 bbbbbbbww|46 sh44 2 2 wbiw|47 sh45 3 3 wbwwrbwib|48 sh46 2 2 wiib|49 sh47 3 3 w--bw-bbw|50 sh48 2 2 wwcb|51 sh49 3 3 bwwkkiikk|52 sh50 2 2 bbbw|53 sh51 3 3 cbb-bb-rc|54 sh52 3 3 -cccbb-bw|55 sh53 3 3 bc-bbcwbc|56 sh54 3 3 wbcbb-c--|57 sh55 1 1 k|58 sh56 2 1 kk|59 wc01 2 2 kkkk|60 wc02 2 3 krkkkk|61 wc03 2 2 kkkk|62 wc04 2 2 kkkk|63 wc05 2 2 kkkk|64 wc06 2 3 rkkkk-|65 wc07 2 2 kkkk|66 wc08 2 2 kkkk|67 wc09 3 2 kkkikk|68 wc10 2 2 kkkk|69 wc11 2 2 kkkk|70 wc12 2 2 kkkk|71 wc13 3 2 kkrkkc|72 wc14 2 2 kbbb|73 wc15 2 2 kkkk|74 wc16 2 3 w-kk-k|75 wc17 2 2 kkkk|76 wc18 2 2 kkkk|77 wc19 2 2 kkkk|78 wc20 2 3 -ikkkr|79 wc21 1 2 kk|80 wc22 2 2 kkkk|81 wc23 3 2 kkikkw|82 wc24 2 2 kkkk|83 wc25 2 2 kkkk|84 wc26 2 2 kkkk|85 wc27 3 2 kkwckk|86 wc28 2 2 kk-k|87 wc29 2 2 kkkk|88 wc30 2 2 kkkk|89 wc31 2 2 kikk|90 wc32 2 2 kkw-|91 wc33 2 2 kkkk|92 wc34 2 2 kkkk|93 wc35 2 2 kkkk|94 wc36 2 2 kkkk|95 wc37 2 2 kkkk|96 wc38 2 2 kkkk|97 b1 1 1 k|98 b2 2 1 kk|99 b3 3 1 kkk|103 p01 1 1 k|104 p02 1 1 k|105 p03 1 1 k|106 p04 1 1 k|107 p07 4 2 rccccccc|108 p08 3 2 cccccc|109 p13 3 2 kkkkkk|110 p14 2 1 kk|112 rv01 5 4 kk---kiiiikkkkk-kr--|113 rv02 5 3 kkkrriiiiikkk--|114 rv03 4 4 kr--kkkckkii-cck|115 rv04 4 4 --kr-rkiiiiikkk-|116 rv05 3 3 cikkikkik|117 rv06 3 2 kikkik|118 rv07 3 2 kkikki|119 rv08 2 2 kiii|120 rv09 2 2 ccii|121 rv10 2 2 iiki|122 rv11 2 2 iiik|123 rv12 3 4 cikkikiikrik|124 rv13 4 4 --criiiiikikckir|125 falls1 3 3 kkkikkrkk|126 falls1a 3 3 wikwkkwik|127 falls2 3 2 kkkikk|128 falls2a 3 2 kkkiii|129 ford1 3 3 rirdrdcrr|130 ford2 3 3 rrrkrrcdc|131 bridge1 5 3 -kggkkggkk--k--|132 bridge1d 5 3 -kkkkkkkkk--k--|133 bridge2 5 2 kggk-kkggk|134 bridge2d 5 2 kkkk-kkkkk|135 s01 2 2 kkkk|136 s02 2 3 krkkkk|137 s03 2 2 kkkk|138 s04 2 2 kkkk|139 s05 2 2 kkkk|140 s06 2 3 rkkkk-|141 s07 2 2 kkkk|142 s08 2 2 kkkk|143 s09 3 2 kkkkkk|144 s10 2 2 kkkk|145 s11 2 2 kkkk|146 s12 2 2 kkkk|147 s13 3 2 kkrkkr|148 s14 2 2 krk-|149 s15 2 2 kkkk|150 s16 2 3 r-kk-k|151 s17 2 2 kkkk|152 s18 2 2 kkkk|153 s19 2 2 kkkk|154 s20 2 3 -kkkkr|155 s21 1 2 kk|156 s22 2 1 kk|157 s23 3 2 kkkkkr|158 s24 2 2 kkkk|159 s25 2 2 kkkk|160 s26 2 2 kkkk|161 s27 3 2 kkrrkk|162 s28 2 2 kk-k|163 s29 2 2 kkkk|164 s30 2 2 kkkk|165 s31 2 2 krkk|166 s32 2 2 kkr-|167 s33 2 2 kkkk|168 s34 2 2 kkkk|169 s35 2 2 kkkk|170 s36 2 2 kkkk|171 s37 2 2 kkkk|172 s38 2 2 kkkk|173 d01 2 2 -dcc|174 d02 2 2 cdcc|175 d03 1 2 cd|176 d04 2 2 -cdc|177 d05 3 4 -dcdd-dd-dd-|178 d06 2 3 d-dddc|179 d07 3 2 cdc-dc|180 d08 3 2 -d-cdc|181 d09 4 3 ccccdddd--cc|182 d10 4 2 ck--dddd|183 d11 2 3 -cddc-|184 d12 2 2 c-dd|185 d13 4 3 ddc-cddk--kd|186 d14 3 3 -cdckdddd|187 d15 3 3 dddddcdc-|188 d16 3 3 cdddddddk|189 d17 3 2 dddcdc|190 d18 3 3 cdcddccdk|191 d19 3 3 cdcdddcdc|192 d20 3 3 dc-ddccdd|193 d21 3 2 kddcdr|194 d22 3 3 -c-ddccdc|195 d23 3 3 -dccdcdd-|196 d24 3 3 dd-ddd-dd|197 d25 3 3 dd-ddd-dd|198 d26 2 2 -dd-|199 d27 2 2 -dd-|200 d28 2 2 ddr-|201 d29 2 2 ddd-|202 d30 2 2 ddd-|203 d31 2 2 -ddd|204 d32 2 2 -cdc|205 d33 2 2 -ddd|206 d34 3 3 -ddddddd-|207 d35 3 3 -ddddddd-|208 d36 2 2 d--d|209 d37 2 2 d--d|210 d38 2 2 dd-d|211 d39 2 2 dd-d|212 d40 2 2 dd-d|213 d41 2 2 k-dd|214 d42 2 2 d-dd|215 d43 2 2 c-dd|216 rf01 1 1 k|217 rf02 1 1 k|218 rf03 1 1 k|219 rf04 1 1 k|220 rf05 1 1 k|221 rf06 1 1 k|222 rf07 1 1 k|223 rf08 1 2 kk|224 rf09 1 2 kk|225 rf10 2 1 rr|226 rf11 2 1 kk|227 d44 1 1 d|228 d45 1 1 d|229 rv14 1 2 ki|230 rv15 2 1 ki|231 rc01 2 2 kkkk|232 rc02 2 2 kkkk|233 rc03 2 2 kkkk|234 rc04 2 2 kkkk|235 br1a 4 3 -kg-kggk-gkk|236 br1b 4 3 -kr-krrk-rkk|237 br1c 4 3 -kk-kkkk-kkk|238 br2a 5 3 -kg--kggkk-gkk-|239 br2b 5 3 -kr--krrkk-rkk-|240 br2c 5 3 -ww--kkkkk-kkk-|241 br3a 4 2 kg---gkk|242 br3b 4 2 kg---gkk|243 br3c 4 2 kk---kkk|244 br3d 4 2 ik---iii|245 br3e 4 2 ww---kww|246 br3f 4 2 ww---www|247 f01 3 3 rddbbbbbb|248 f02 3 3 bbbbbbbbb|249 f03 3 3 bbbbbbcdc|250 f04 3 3 cbbdbbcbb|251 f05 3 3 bbbbbbbbb|252 f06 3 3 bbcbbdbbc|255 clear1 1 1 c|378 bridge1h 5 3 -krrkkrrkk--r--|379 bridge2h 5 2 krrk-kkrrk|380 br1x 5 3 k--dc----k----w|381 br2x 5 1 d---b|382 bridge1x 5 4 --cggk---------gg-kk|383 bridge2x 5 5 ggrcr----i-----kkrgg---gg|400 hill01 4 3 rkkkkkrrkkrc|401 cliffsl1 1 2 kk|402 cliffsl2 1 2 kk|403 cliffsl3 2 1 kk|404 cliffsl4 2 1 kk|405 cliffsw1 1 2 kk|406 cliffsw2 1 2 kk|407 cliffsw3 2 1 kk|408 cliffsw4 2 1 kk|500 sh57 1 1 k|502 sh58 2 1 kk|503 sh59 2 1 kk|504 sh60 1 2 kk|505 sh61 1 1 k|506 sh62 1 1 k|507 sh63 2 2 kkkk|508 sh64 1 1 k|519 sbridge1x 3 4 cdc------cdc|520 sbridge1 3 2 igiigi|521 sbridge1h 3 2 igiigi|522 sbridge1d 3 2 ikiiki|523 sbridge3 4 2 -kgkigki|524 sbridge3h 4 2 -kgkigki|525 sbridge3d 4 2 -kkkiiki|526 sbridge3x 4 4 -ccdi-------dcii|527 sbridge4 4 2 kgk-ikgk|528 sbridge4h 4 2 kgk-ikgk|529 sbridge4d 4 2 kkk-ikkk|530 sbridge4x 5 5 dcc-i---ii----iiicdc---cd|531 sbridge2 2 3 iiggkk|532 sbridge2h 2 3 iiggkk|533 sbridge2d 2 3 iiiiii|534 sbridge2x 4 4 r--rd--dr--rciic|550 sccnr 2 3 kkkkkk|551 sccnl 2 3 kkkkkk|552 sccsr 2 3 kkkkkk|553 sccsl 2 3 kkkkkk|554 sccln 3 2 kkkkkk|555 sccls 3 2 kkkkkk|556 sccrn 3 2 kkkkkk|557 sccrs 3 2 kkkkkk|580 deca 1 1 r|581 decb 1 1 r|582 decc 1 1 r|583 decc 1 1 r|584 decd 1 1 r|585 dece 1 1 r|586 decf 1 1 r|587 decg 1 1 r|588 dech 1 1 r|590 fjord1 1 2 rr|591 fjord2 2 1 rr|65535 clear1 1 1 c`;
+
+/* id -> {img, w, h, t} , parsed once. */
+var RA_TILETAB = (function () {
+  var out = {}, recs = RA_TILETAB_SRC.split('|');
+  for (var i = 0; i < recs.length; i++) {
+    var f = recs[i].split(' ');
+    if (f.length < 5) continue;
+    out[f[0] | 0] = { img: f[1], w: f[2] | 0, h: f[3] | 0, t: f[4] };
+  }
+  return out;
+})();
+
+var _exp = { RA_TILETAB: RA_TILETAB };
+if (typeof module !== 'undefined' && module.exports) module.exports = _exp;
+else if (typeof window !== 'undefined') window.RA_TILETAB = RA_TILETAB;

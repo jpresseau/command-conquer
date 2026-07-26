@@ -695,6 +695,14 @@ function _rtsNewGame(seed, diff) {
      flat 3x multiplier left the AI sitting on 90k credits it could not spend by the four
      minute mark. Small patch, no regrowth, enormous payout: that is the whole point of the
      deposit in the middle of the map. */
+  /* A real map, if the player loaded one, replaces this whole section: its terrain, its
+     passability, its ore and its author's start positions all arrive together, already
+     checked for connectivity when it was loaded. See src/rts.map.js for why cliffs and
+     coastlines have to come from a map rather than from a generator. */
+  var _mapStarts = (typeof _rtsMapApply === 'function') ? _rtsMapApply(G) : null;
+  if (_mapStarts) {
+    G.starts = _mapStarts;
+  } else {
   /* The two starts are rolled BEFORE anything else is laid down, because the ore, the roads,
      the connectivity fill and the team waypoints are all expressed relative to them. */
   G.starts = _rtsPickStarts(rnd);
@@ -710,6 +718,7 @@ function _rtsNewGame(seed, diff) {
     }
   }
   _rtsGenTerrain(G, rnd, G.starts);
+  }
 
   /* --- the two bases: player bottom-left, Redline top-right.
      Footprints are small (Command Yard 3x3) so a base is a cluster of compact structures
