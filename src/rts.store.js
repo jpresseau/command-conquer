@@ -119,13 +119,22 @@ var RTS_STORE_MAP = 'map.v1';
 
 function rtsStoreSaveMap(M) {
   if (!M || !M.raw) return Promise.resolve(false);
-  return _rtsStorePut(RTS_STORE_MAP, { at: Date.now(), name: M.name, bin: M.raw.bin, yaml: M.raw.yaml })
+  return _rtsStorePut(RTS_STORE_MAP, { at: Date.now(), name: M.name,
+                                       bin: M.raw.bin, yaml: M.raw.yaml, ini: M.raw.ini })
     .then(function (r) { return !!r; }).catch(function () { return false; });
 }
 
 function rtsStoreLoadMap() {
   return _rtsStoreGet(RTS_STORE_MAP).then(function (rec) {
-    if (!rec || !rec.bin || !rec.yaml) return null;
+    if (!rec) return null;
+    /* One of RA's own scenarios: a single text file, and it rebuilds without touching a Blob. */
+    if (rec.ini) {
+      var M2 = rtsMapFromScenario(rec.ini, rec.name);
+      if (!M2 || M2.error) return null;
+      window._RTS_MAP = M2;
+      return M2;
+    }
+    if (!rec.bin || !rec.yaml) return null;
     var b = new Blob([rec.bin]); b.name = 'map.bin';
     var y = new Blob([rec.yaml]); y.name = 'map.yaml';
     return rtsMapLoadFiles([b, y]).then(function (M) {
