@@ -643,6 +643,63 @@ Commitment lands at 47% rather than the 62% asked for, and that is a real constr
 than a bug: a team only recruits units matching its composition, so a tank-heavy army cannot
 fill the rocket slots in Sappers. Raising it further means changing the compositions.
 
+## The roster: nine and nine, not five and six
+
+Asked why the game was limited to so few buildings and units. There was no reason. Every file
+pasted into this project has been a *systems* file — AI, teams, triggers, saves, selection — and
+content is not a port: it is entries in `rts.rules.js` plus models in `rts.sprites.js`. Nobody
+asked, so it never happened. The data layer already supported all of it: `needs` (a real tech
+tree, and it works on **units** as well as structures), `produces`, `freeUnit`, and a per-structure
+`weapon`. Adding content was data and models, not plumbing.
+
+**Structures 6 → 9.** Radar Dome (needs refinery), Tech Center (needs radar), Rocket Turret
+(needs factory). **Units 5 → 9.** Grenadier, Light Tank, Artillery and Heavy Tank — the last two
+gated behind the Tech Center.
+
+Each new weapon exists to beat something specific, so that a bigger roster is a set of answers
+rather than "buy the dearest thing you can afford": grenades arc (murder on anything stationary,
+useless against a moving tank); artillery reaches 34 against the Gun Turret's 22, which is the
+whole reason to buy one; the Rocket Turret is deliberately poor against infantry so cheap
+riflemen stay the correct answer to a wall of them.
+
+**The Radar Dome does something.** No dome, or the base browned out, and the map panel goes dark —
+and a dark panel neither draws, nor jumps the view, nor accepts orders. All three go through one
+`_rtsRadarLit()` so they cannot disagree. That is what makes bombing the dome worth doing.
+
+### The degenerate AI mix, and why weights are load-bearing
+
+The opponent's unit choice was a hardcoded if-chain, which is a large part of *why* the roster
+stayed at five: adding a unit meant editing the AI's brain. It is now `RTS_AI.mix`, a table of
+`{key, at, w}` per production line, and `RTS_AI.buildOrder` for structures.
+
+The first version walked that table best-first and took the first affordable hit. **Measured over
+three seeds at eight minutes that produced 461 grenadiers and 14 rocket soldiers** — whatever sits
+at the top is the only thing ever built, so the opponent had silently stopped fielding anti-armour
+infantry altogether. (The old if-chain had the same bug; it just happened to sit on `rocket`.)
+Weighted choice among everything affordable fixed it: rifle 170 / rocket 211 / grenadier 158 /
+tank 74 / light 62 / buggy 45 / arty 18 / heavy 21 — all nine types, a combined-arms army.
+
+### Balance held
+
+easy 293→**297** s, normal 218→**217** s, hard 176→**170** s. The ordering and the tight per-seed
+spread survive a roster that nearly doubled, with the opponent now fielding heavy tanks and
+artillery. Enemy structures on hard went 20→18 and units 100→115, which is the defence ratios
+being split between Gun and Rocket Turrets.
+
+### The sidebar
+
+Nine structures overflowed the build grid. It always scrolled, so nothing was unreachable — but
+**a list that scrolls with no sign that it scrolls reads as a list that has been cut off**, which
+is exactly how it looked. Tile aspect 1.16 → 1.02 (1.05 left it nine pixels short, the most
+annoying possible margin) plus a fade at the panel's bottom edge. On a short window the build tab
+went from four visible tiles to six; infantry and vehicles no longer scroll at all.
+
+Verified: 15 assertions in `content.js` — every roster entry bakes to a non-empty sprite, the
+three tanks are three different sprites, each `needs` gate actually locks its unit, the radar
+lights on a dome and goes out on a brownout and refuses to command while dark — plus the AI
+building and fielding every new type across three seeds, the full ladder, and `unitzoom.js`
+clipping checks on all nine units at all eight facings.
+
 ## Why the art read flat, and the two things that fixed it
 
 Asked why the buildings and vehicles didn't look like the real thing. Beyond the obvious — there
