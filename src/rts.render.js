@@ -168,9 +168,13 @@ function _rtsRFrame(dt) {
         g.drawImage(S.wave[(_RTS_PULSE.wf + tx + tz) & 3], px, py, cell, cell);
         continue;
       }
-      var stage = Math.min(3, Math.floor(ore / RTS_SCRAP_TILE * 4));
-      var vari = (tx * 7 + tz * 13) % 3;
-      g.drawImage((G.gems && G.gems[idx] ? S.gem : S.ore)[stage][vari], px, py, cell, cell);
+      /* The number of density steps comes from the sprite set, not from a literal: ours has
+         four, the original's gold has TWELVE and its gems three. Hard-coding 4 here worked
+         until real art arrived and then quietly showed a third of a field. */
+      var set = (G.gems && G.gems[idx] ? S.gem : S.ore);
+      var stage = Math.min(set.length - 1, Math.floor(ore / RTS_SCRAP_TILE * set.length));
+      var vari = (tx * 7 + tz * 13) % set[stage].length;
+      g.drawImage(set[stage][vari], px, py, cell, cell);
     }
   }
 
@@ -439,6 +443,15 @@ function _rtsDrawUnit(g, e, TSscale) {
   var img = (e.prone && R.spr.prone[e.side][e.def])
     ? R.spr.prone[e.side][e.def][f]
     : (turreted ? R.spr.hull[e.side][e.def][f] : R.spr.unit[e.side][e.def][f]);
+  /* A walking soldier steps through the run cycle. `gait` is MasterDoControls' 'randomstart' -
+     it was put on every unit at spawn long before there were frames to start - so a squad does
+     not march in lockstep. The cycle is driven off the clock rather than off distance covered,
+     which is what the original does (Tick: 100). */
+  var walk = R.spr.walk && R.spr.walk[e.side] && R.spr.walk[e.side][e.def];
+  if (walk && !e.prone && e.path && e.pi < e.path.length) {
+    var cyc = walk[f];
+    img = cyc[(Math.floor(_rtsG.t * 10) + (e.gait || 0)) % cyc.length];
+  }
   var w = Math.round(img.width * TSscale), h = Math.round(img.height * TSscale);
   var px = Math.round(_rtsSX(e.x) - w / 2), py = Math.round(_rtsSY(e.z) - h / 2);
   /* An aircraft is drawn lifted off its own ground position, with a flattened shadow left

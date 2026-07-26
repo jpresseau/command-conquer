@@ -3168,7 +3168,11 @@ function _sprTrees() {
    left/right/up/down - so clusters run across cell edges and a worked field reads as
    continuous ground rather than a grid of identical stamps. Three variants per stage,
    chosen by a hash of the cell, kill the last of the repetition. */
-function _sprOre(P) {
+function _sprOre(P, gem) {
+  if (typeof _mixOre === 'function') {
+    var real = _mixOre(gem);
+    if (real) return real;
+  }
   var out = [], TS = RTS_TS;
   P = P || RTS_PAL.ore;
   for (var st = 0; st < 4; st++) {
@@ -4141,7 +4145,7 @@ function _sprFx() {
 
 function _rtsSprites() {
   if (_RTS_SPR) return _RTS_SPR;
-  var S = { ore: _sprOre(RTS_PAL.ore), gem: _sprOre(RTS_PAL.gem),
+  var S = { ore: _sprOre(RTS_PAL.ore, false), gem: _sprOre(RTS_PAL.gem, true),
     bld: {}, unit: {}, prone: {}, fx: _sprFx(), pad: {} };
   RTS_STRUCTS.forEach(function (d) { S.pad[d.key] = _sprPad(d.w, d.h); });
   S.bag = _sprSandbag();
@@ -4172,6 +4176,16 @@ function _rtsSprites() {
     RTS_UNITS.forEach(function (d) {
       if (d.kind === 'infantry') S.prone[side][d.key] = _sprUnit(d.key, side, true);
     });
+    /* The walk cycle only exists with real artwork - there is no procedural equivalent, and a
+       missing entry simply means the renderer keeps drawing the standing frame. */
+    S.walk = S.walk || {}; S.walk[side] = {};
+    if (typeof _mixWalk === 'function') {
+      RTS_UNITS.forEach(function (d) {
+        if (d.kind !== 'infantry') return;
+        var w = _mixWalk(d.key, side);
+        if (w) S.walk[side][d.key] = w;
+      });
+    }
   });
   /* One flame set, referenced twice. `_sprFx` cannot call `_sprFire()` itself without
      baking a second identical set of canvases - same pixels, twice the memory, and two
@@ -4236,6 +4250,33 @@ var RTS_MIX_UNIT = {
    left for later: it needs the renderer to pick a frame from a sub-array per unit per tick, and
    that is a change to how every unit is drawn rather than a change to where sprites come from. */
 var RTS_MIX_STAND = 0, RTS_MIX_PRONE = 144, RTS_MIX_PRONE_STRIDE = 4;
+var RTS_MIX_RUN = 16, RTS_MIX_RUN_LEN = 6;
+
+/* The walk cycle, as its own set: eight facings each holding six frames. Kept apart from the
+   standing frames rather than folded in, because the renderer picks a stance first and a frame
+   within it second, and a flat array cannot express that. */
+function _mixWalk(key, side) {
+  var nm = RTS_MIX_UNIT[key];
+  if (!nm) return null;
+  var d = rtsUnitDef(key);
+  if (!d || d.kind !== 'infantry') return null;
+  var s = _mixShp(nm + '.shp');
+  if (!s) return null;
+  var need = RTS_MIX_RUN + 8 * RTS_MIX_RUN_LEN;
+  if (s.count < need) return null;
+  var pal = _mixTeamPal(RTS_MIX.pal, RTS_PAL.team[side][0]);
+  var out = [], f, k;
+  for (f = 0; f < 8; f++) {
+    var row = [], rf = _mixFacing(f, 8);
+    for (k = 0; k < RTS_MIX_RUN_LEN; k++) {
+      var fr = s.frame(RTS_MIX_RUN + rf * RTS_MIX_RUN_LEN + k);
+      row.push(fr ? _mixFrameToCanvas(fr, s.width, s.height, pal)
+                  : _sprMake(s.width, s.height).c);
+    }
+    out.push(row);
+  }
+  return out;
+}
 
 /* --------------------------------------------------------------- remapping --
    RA recolours a player's units by rewriting a RANGE of palette entries rather than by tinting
@@ -4523,6 +4564,35 @@ function _mixTrees() {
     out.push({ c: c, head: Math.max(0, s.height - RTS_TS) });
   }
   return out.length ? (_RTS_MIXTREES = out) : null;
+}
+
+/* -------------------------------------------------------------------- ore --
+   Ore and gems are overlay SHPs wearing the theatre extension, like the trees: gold01..gold04
+   with TWELVE density frames each, gem01..gem04 with three. The original grows a field through
+   those twelve stages, which is three times the resolution our own four-stage sprite had - so
+   the renderer asks the sprite set how many stages it has rather than assuming.
+
+   Four files x twelve frames is the variant axis and the density axis in one place: the file
+   picked per cell is the variant, the frame within it is how full that cell is. */
+function _mixOre(gem) {
+  if (!_rtsArtReady()) return null;
+  var base = gem ? 'gem' : 'gold', sets = [], i;
+  for (i = 1; i <= 4; i++) {
+    var s = _mixShp(base + '0' + i + '.tem');
+    if (s && s.count) sets.push(s);
+  }
+  if (!sets.length) return null;
+  var stages = sets[0].count, out = [], st, v;
+  for (st = 0; st < stages; st++) {
+    var row = [];
+    for (v = 0; v < sets.length; v++) {
+      var set = sets[v], idx = Math.min(st, set.count - 1), fr = set.frame(idx);
+      row.push(fr ? _mixFrameToCanvas(fr, set.width, set.height, RTS_MIX.pal)
+                  : _sprMake(RTS_TS, RTS_TS).c);
+    }
+    out.push(row);
+  }
+  return out;
 }
 </script>
 <script>/* RC COMMAND - audio. Everything here is SYNTHESIZED at runtime with WebAudio: there is not
@@ -9581,9 +9651,13 @@ function _rtsRFrame(dt) {
         g.drawImage(S.wave[(_RTS_PULSE.wf + tx + tz) & 3], px, py, cell, cell);
         continue;
       }
-      var stage = Math.min(3, Math.floor(ore / RTS_SCRAP_TILE * 4));
-      var vari = (tx * 7 + tz * 13) % 3;
-      g.drawImage((G.gems && G.gems[idx] ? S.gem : S.ore)[stage][vari], px, py, cell, cell);
+      /* The number of density steps comes from the sprite set, not from a literal: ours has
+         four, the original's gold has TWELVE and its gems three. Hard-coding 4 here worked
+         until real art arrived and then quietly showed a third of a field. */
+      var set = (G.gems && G.gems[idx] ? S.gem : S.ore);
+      var stage = Math.min(set.length - 1, Math.floor(ore / RTS_SCRAP_TILE * set.length));
+      var vari = (tx * 7 + tz * 13) % set[stage].length;
+      g.drawImage(set[stage][vari], px, py, cell, cell);
     }
   }
 
@@ -9852,6 +9926,15 @@ function _rtsDrawUnit(g, e, TSscale) {
   var img = (e.prone && R.spr.prone[e.side][e.def])
     ? R.spr.prone[e.side][e.def][f]
     : (turreted ? R.spr.hull[e.side][e.def][f] : R.spr.unit[e.side][e.def][f]);
+  /* A walking soldier steps through the run cycle. `gait` is MasterDoControls' 'randomstart' -
+     it was put on every unit at spawn long before there were frames to start - so a squad does
+     not march in lockstep. The cycle is driven off the clock rather than off distance covered,
+     which is what the original does (Tick: 100). */
+  var walk = R.spr.walk && R.spr.walk[e.side] && R.spr.walk[e.side][e.def];
+  if (walk && !e.prone && e.path && e.pi < e.path.length) {
+    var cyc = walk[f];
+    img = cyc[(Math.floor(_rtsG.t * 10) + (e.gait || 0)) % cyc.length];
+  }
   var w = Math.round(img.width * TSscale), h = Math.round(img.height * TSscale);
   var px = Math.round(_rtsSX(e.x) - w / 2), py = Math.round(_rtsSY(e.z) - h / 2);
   /* An aircraft is drawn lifted off its own ground position, with a flattened shadow left

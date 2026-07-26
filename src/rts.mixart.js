@@ -52,6 +52,33 @@ var RTS_MIX_UNIT = {
    left for later: it needs the renderer to pick a frame from a sub-array per unit per tick, and
    that is a change to how every unit is drawn rather than a change to where sprites come from. */
 var RTS_MIX_STAND = 0, RTS_MIX_PRONE = 144, RTS_MIX_PRONE_STRIDE = 4;
+var RTS_MIX_RUN = 16, RTS_MIX_RUN_LEN = 6;
+
+/* The walk cycle, as its own set: eight facings each holding six frames. Kept apart from the
+   standing frames rather than folded in, because the renderer picks a stance first and a frame
+   within it second, and a flat array cannot express that. */
+function _mixWalk(key, side) {
+  var nm = RTS_MIX_UNIT[key];
+  if (!nm) return null;
+  var d = rtsUnitDef(key);
+  if (!d || d.kind !== 'infantry') return null;
+  var s = _mixShp(nm + '.shp');
+  if (!s) return null;
+  var need = RTS_MIX_RUN + 8 * RTS_MIX_RUN_LEN;
+  if (s.count < need) return null;
+  var pal = _mixTeamPal(RTS_MIX.pal, RTS_PAL.team[side][0]);
+  var out = [], f, k;
+  for (f = 0; f < 8; f++) {
+    var row = [], rf = _mixFacing(f, 8);
+    for (k = 0; k < RTS_MIX_RUN_LEN; k++) {
+      var fr = s.frame(RTS_MIX_RUN + rf * RTS_MIX_RUN_LEN + k);
+      row.push(fr ? _mixFrameToCanvas(fr, s.width, s.height, pal)
+                  : _sprMake(s.width, s.height).c);
+    }
+    out.push(row);
+  }
+  return out;
+}
 
 /* --------------------------------------------------------------- remapping --
    RA recolours a player's units by rewriting a RANGE of palette entries rather than by tinting
@@ -339,4 +366,33 @@ function _mixTrees() {
     out.push({ c: c, head: Math.max(0, s.height - RTS_TS) });
   }
   return out.length ? (_RTS_MIXTREES = out) : null;
+}
+
+/* -------------------------------------------------------------------- ore --
+   Ore and gems are overlay SHPs wearing the theatre extension, like the trees: gold01..gold04
+   with TWELVE density frames each, gem01..gem04 with three. The original grows a field through
+   those twelve stages, which is three times the resolution our own four-stage sprite had - so
+   the renderer asks the sprite set how many stages it has rather than assuming.
+
+   Four files x twelve frames is the variant axis and the density axis in one place: the file
+   picked per cell is the variant, the frame within it is how full that cell is. */
+function _mixOre(gem) {
+  if (!_rtsArtReady()) return null;
+  var base = gem ? 'gem' : 'gold', sets = [], i;
+  for (i = 1; i <= 4; i++) {
+    var s = _mixShp(base + '0' + i + '.tem');
+    if (s && s.count) sets.push(s);
+  }
+  if (!sets.length) return null;
+  var stages = sets[0].count, out = [], st, v;
+  for (st = 0; st < stages; st++) {
+    var row = [];
+    for (v = 0; v < sets.length; v++) {
+      var set = sets[v], idx = Math.min(st, set.count - 1), fr = set.frame(idx);
+      row.push(fr ? _mixFrameToCanvas(fr, set.width, set.height, RTS_MIX.pal)
+                  : _sprMake(RTS_TS, RTS_TS).c);
+    }
+    out.push(row);
+  }
+  return out;
 }
