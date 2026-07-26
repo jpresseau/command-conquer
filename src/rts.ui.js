@@ -419,6 +419,7 @@ function _rtsBindInput() {
     return { x:(fx - 0.5) * span, z:(fz - 0.5) * span };
   }
   function miniGo(e) {
+    if (!_rtsRadarLit()) return;          /* a dark panel commands nothing and jumps nowhere */
     var w = miniWorld(e);
     _rtsR.focus.x = w.x; _rtsR.focus.z = w.z;
     _rtsClampFocus();
@@ -439,6 +440,7 @@ function _rtsBindInput() {
   function miniOrder(e) {
     var G = window._rtsG;
     if (!G || G.over) return false;
+    if (!_rtsRadarLit()) { _rtsSay('No radar — build a Radar Dome to command from the map.'); return false; }
     var mine = [], i;
     for (i = 0; i < G.sel.length; i++) {
       var sv = G.sel[i];
@@ -901,10 +903,34 @@ function _rtsDrawWrench(g, x, y) {
   }
   g.restore();
 }
+/* Is the radar working? A Radar Dome, standing and finished, with the base not in power
+   deficit. Everything the radar panel does - drawing, clicking to move the view, right-clicking
+   to order - is gated on this one answer, so they can never disagree. */
+function _rtsRadarLit() {
+  var G = window._rtsG;
+  if (!G || !_rtsHas('player', 'radar')) return false;
+  var PS = G.sides.player;
+  return PS.powerMade >= PS.powerUsed;
+}
 function _rtsDrawMini() {
   var G = window._rtsG, mini = document.getElementById('rtsMini');
   if (!mini) return;
   var g = mini.getContext('2d'), S = mini.width, sc = S / RTS_N, i;
+  /* No Radar Dome, no radar. In the originals the map panel is dead until you build the
+     structure that powers it, and it goes dead again the moment that structure is destroyed
+     or the base browns out - which is what makes bombing the dome worth doing. Powered means
+     the whole side is not in deficit; the same condition that stops a turret firing. */
+  var dome = _rtsHas('player', 'radar');
+  if (!_rtsRadarLit()) {
+    g.fillStyle = '#0a0d12'; g.fillRect(0, 0, S, S);
+    g.fillStyle = 'rgba(120,150,190,0.30)';
+    g.font = 'bold 11px ui-monospace,monospace'; g.textAlign = 'center';
+    g.fillText(dome ? 'NO POWER' : 'NO RADAR', S / 2, S / 2 - 4);
+    g.font = '9px ui-monospace,monospace';
+    g.fillText(dome ? 'restore power' : 'build a Radar Dome', S / 2, S / 2 + 10);
+    g.textAlign = 'left';
+    return;
+  }
   /* The radar mirrors the terrain layer, so forest, ridges, the lake and the roads are all
      legible at a glance - the whole point of having a radar rather than a blank green square. */
   var TCOL = ['#374626', '#22391b', '#6a665c', '#2b4c6b', '#5a4e39', '#8a7c58', '#a89663'];

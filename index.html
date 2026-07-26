@@ -111,11 +111,20 @@
 
 /* build tiles */
 #rcgRts .rts-grid{flex:1 1 auto;overflow-y:auto;display:grid;grid-template-columns:1fr 1fr;
-  gap:5px;align-content:start;padding-right:2px}
+  gap:5px;align-content:start;padding-right:2px;scrollbar-width:thin;scrollbar-color:#33445c transparent}
 #rcgRts .rts-grid::-webkit-scrollbar{width:7px}
 #rcgRts .rts-grid::-webkit-scrollbar-thumb{background:#33445c;border-radius:4px}
+/* A list that scrolls with no sign that it scrolls reads as a list that has been CUT OFF, which
+   is exactly how the build tab looked the moment it held nine structures instead of six. A fade
+   at the bottom edge says "there is more below" and costs no rows. */
+#rcgRts .rts-mid{position:relative}
+#rcgRts .rts-mid::after{content:'';position:absolute;left:0;right:0;bottom:0;height:9px;
+  pointer-events:none;background:linear-gradient(to bottom,rgba(10,13,18,0),rgba(10,13,18,.85))}
+/* 1.16 fitted six tiles down the panel and eight did not; 1.05 left it nine pixels short, which
+   is the most annoying possible margin. 1.02 fits the whole eight-tile build list at the sizes
+   this game is played at, and the fade above covers the short windows where it still scrolls. */
 #rcgRts .rts-tile{position:relative;display:block;padding:0;overflow:hidden;cursor:pointer;font:inherit;
-  border:1px solid #33445c;border-radius:4px;background:#0f151d;color:#dfe8f2;aspect-ratio:1/1.16}
+  border:1px solid #33445c;border-radius:4px;background:#0f151d;color:#dfe8f2;aspect-ratio:1/1.02}
 #rcgRts .rts-tile:hover{border-color:#5c86b8;background:#16202c}
 #rcgRts .rts-tile .ico{position:absolute;left:0;right:0;top:0;width:100%;height:76%;object-fit:contain;
   display:block;background:radial-gradient(ellipse at 50% 42%,#2b3a4c 0%,#131b25 72%)}
@@ -268,7 +277,17 @@ var RTS_STRUCTS = [
     desc:'Builds RC combat vehicles and Harvesters.' },
   { key:'turret',   name:'Gun Turret',    w:1, h:1, cost:500,  build:10, hp:520,  power:-20,  sight:18,
     needs:['barracks'], weapon:'turretgun',
-    desc:'Automated base defence. Needs power to fire.' }
+    desc:'Automated base defence. Needs power to fire.' },
+  /* --- the tier the roster was missing. `needs` already gated everything, so these are data. --- */
+  { key:'radar',    name:'Radar Dome',    w:2, h:2, cost:1000, build:14, hp:600,  power:-40,  sight:26,
+    needs:['refinery'], radar:true,
+    desc:'Switches the radar on. Without one the map panel stays dark.' },
+  { key:'lab',      name:'Tech Center',   w:2, h:2, cost:1500, build:22, hp:600,  power:-60,  sight:14,
+    needs:['radar'],
+    desc:'Unlocks Artillery and the Heavy Tank.' },
+  { key:'rocketpit',name:'Rocket Turret', w:1, h:1, cost:800,  build:14, hp:480,  power:-30,  sight:22,
+    needs:['factory'], weapon:'turretrocket',
+    desc:'Long-range base defence. Tears up armour, poor against infantry.' }
 ];
 
 /* ------------------------------------------------------------------- units --
@@ -291,7 +310,18 @@ var RTS_UNITS = [
     desc:'The backbone of any serious attack. Coaxial gun for infantry.' },
   { key:'harvester',name:'Harvester',     kind:'vehicle',  cost:1200, build:14, hp:700,  speed:7.5, turn:1.6,r:2.2, sight:14, weapon:null,
     harvest:true, capacity:700,
-    desc:'Mines Scrap fields and unloads at a refinery.' }
+    desc:'Mines Scrap fields and unloads at a refinery.' },
+  /* --- second tier. `needs` on a unit gates it the same way it gates a structure. --- */
+  { key:'grenadier',name:'Grenadier',     kind:'infantry', cost:180,  build:4,  hp:65,   speed:6,   turn:6,  r:1.1, sight:15, weapon:'grenade',
+    desc:'Lobbed charges. Clears infantry and cracks buildings; hopeless against a moving tank.' },
+  { key:'light',    name:'Light Tank',    kind:'vehicle',  cost:600,  build:9,  hp:280,  speed:12,  turn:2.6,r:1.8, sight:18, weapon:'cannon',
+    desc:'Cheap armour. Faster than a Battle Tank and half the price, with a third of the hull.' },
+  { key:'arty',     name:'Artillery',     kind:'vehicle',  cost:1000, build:15, hp:150,  speed:6,   turn:1.4,r:1.9, sight:16, weapon:'howitzer',
+    needs:['lab'],
+    desc:'Outranges every base defence in the game. Made of paper — never send it in first.' },
+  { key:'heavy',    name:'Heavy Tank',    kind:'vehicle',  cost:1500, build:20, hp:820,  speed:6.5, turn:1.3,r:2.2, sight:18, weapon:'heavycannon', weapon2:'coax',
+    needs:['lab'],
+    desc:'The heaviest hull on the field. Slow, expensive, and very hard to stop.' }
 ];
 
 /* --------------------------------------------------------------- weapons --
@@ -315,7 +345,19 @@ var RTS_WEAPONS = {
   /* A tank's coaxial machine gun: short, weak, and murder on infantry. */
   coax:      { dmg:14, range:13, cool:0.32,  shot:'tracer',  speed:0,   splash:0, vs:{ infantry:1.0, vehicle:0.2,  building:0.15 } },
   cannon:    { dmg:38, range:18, cool:1.5,  shot:'shell',   speed:60,  splash:3, vs:{ infantry:0.7, vehicle:1.0,  building:1.0  } },
-  turretgun: { dmg:22, range:22, cool:0.9,  shot:'shell',   speed:70,  splash:1, vs:{ infantry:1.0, vehicle:0.9,  building:0.6  } }
+  turretgun: { dmg:22, range:22, cool:0.9,  shot:'shell',   speed:70,  splash:1, vs:{ infantry:1.0, vehicle:0.9,  building:0.6  } },
+  /* --- second tier. Each of these exists to beat something specific, so that a bigger roster
+     is a set of answers rather than "buy the dearest thing you can afford". --- */
+  /* Grenades arc: murder on anything that stays still, near-useless against a moving vehicle. */
+  grenade:     { dmg:26, range:14, cool:1.9, shot:'shell',  speed:26, splash:3.4, vs:{ infantry:1.0, vehicle:0.35, building:1.1  } },
+  /* Artillery has the longest reach in the game on the thinnest chassis. 34 outranges the Gun
+     Turret's 22, which is the whole reason to buy one. */
+  howitzer:    { dmg:52, range:34, cool:3.4, shot:'shell',  speed:44, splash:5.0, vs:{ infantry:1.1, vehicle:0.75, building:1.3  } },
+  /* The Heavy Tank's gun: slower and dearer than the Battle Tank's, but it goes through armour. */
+  heavycannon: { dmg:62, range:20, cool:2.1, shot:'shell',  speed:58, splash:3.4, vs:{ infantry:0.6, vehicle:1.35, building:1.15 } },
+  /* Rocket Turret: long and hard-hitting, deliberately poor against infantry so that cheap
+     riflemen stay the correct answer to a wall of them. */
+  turretrocket:{ dmg:30, range:26, cool:2.0, burst:2, shot:'missile', speed:36, splash:2.2, vs:{ infantry:0.45, vehicle:1.4, building:1.0 } }
 };
 
 /* ------------------------------------------------------------------ anims --
@@ -528,8 +570,28 @@ var RTS_AI = {
   infantryBaseMult:2,
   attackInterval:3,         /* minutes between attack waves, before difficulty bias */
   attackDelay:5,            /* minutes before the first one */
-  ratio:{ refinery:0.16, barracks:0.16, factory:0.10, turret:0.50 },
-  limit:{ refinery:4,    barracks:2,    factory:2,    turret:12   },
+  ratio:{ refinery:0.16, barracks:0.16, factory:0.10, radar:0.06, lab:0.05, turret:0.34, rocketpit:0.16 },
+  limit:{ refinery:4,    barracks:2,    factory:2,    radar:1,    lab:1,    turret:8,    rocketpit:4    },
+  /* The order _rtsAIWants walks. Economy, then production, then tech, then defence - tech
+     before defence because a Tech Center that arrives after the match is decided is worth
+     nothing, and the defensive ratios are big enough to soak every spare credit otherwise. */
+  buildOrder:['refinery', 'barracks', 'factory', 'radar', 'lab', 'turret', 'rocketpit'],
+  /* What to spend a production run on. A table rather than an if-chain: adding a unit to
+     RTS_UNITS should not mean editing the opponent's brain, and the hardcoded ladder that used
+     to live in _rtsAIUnits is a large part of why the roster sat at five units. Gating is left
+     to _rtsCanQueue, which already checks `needs`.
+
+     `at` is the bank balance that justifies the purchase; `w` is how often to pick it among
+     everything affordable. The weights matter more than they look: a strict best-first walk is
+     DEGENERATE - whichever entry sits at the top is the only one ever built. Measured, that
+     produced 461 grenadiers against 14 rocket soldiers in eight minutes, which is to say the
+     opponent quietly stopped fielding anti-armour infantry altogether. Weighted choice keeps a
+     combined-arms army, which is the point of having a roster at all. */
+  mix:{
+    vehicle:[ { key:'heavy', at:2600, w:3 }, { key:'arty',  at:2000, w:2 }, { key:'tank', at:1600, w:4 },
+              { key:'light', at:1100, w:3 }, { key:'buggy', at:900,  w:2 } ],
+    infantry:[ { key:'grenadier', at:900, w:2 }, { key:'rocket', at:500, w:3 }, { key:'rifle', at:250, w:2 } ]
+  },
   /* Check_Raise_Money / Check_Raise_Power / Check_Lower_Power thresholds. */
   brokeMoney:100,           /* below this, raising cash is urgent */
   desperateMoney:2000,      /* ...and worse if there is no income either */
@@ -1850,6 +1912,43 @@ function _sprBuilding(key, side) {
     _r3Cyl(m, -W / 2 + 10, 15, -12, 4, 20, S[0], DK[1], 10);        /* exhausts */
     _r3Cyl(m, -W / 2 + 19, 15, -12, 4, 15, S[0], DK[1], 10);
 
+  } else if (key === 'radar') {
+    /* Radar Dome: a low blockhouse under a big dish. The dish is the whole silhouette and it
+       is the only curved mass in the base, so the dome is identifiable from across the map -
+       which matters, because it is the thing worth bombing first. */
+    _r3Slab(m, 0, 0, 4, W - 10, 14, D - 16, 3, B.wall, B.roof);
+    _r3Box(m, 0, 14, 4, W - 22, 2, 5, TM[0], TM[1]);
+    _r3Cone(m, -2, 14, -4, 5, 9, 5, S[2], 16);                     /* dish pedestal */
+    _r3Cone(m, -2, 19, -4, 11, 3, 8, S[0], 18);                    /* the dish itself */
+    _r3Cyl(m, -2, 27, -4, 1.2, 6, S[1], DK[1], 10);                /* feed horn mast */
+    _r3Box(m, -2, 33, -4, 4, 1.5, 4, DK[1], DK[3]);
+    _r3Box(m, 13, 14, 6, 6, 4, 7, DK[1], DK[3]);                   /* equipment hut */
+    pilasters(19, 0, 0, 3, 11, 4, 14);
+    winRow(19, 7, 0, 2, 11, 5, 4);
+
+  } else if (key === 'lab') {
+    /* Tech Center: the only building with a clean white upper storey and a glass band all the
+       way round, so the base reads as having a "civil" building in it once the tech is up. */
+    _r3Slab(m, 0, 0, 3, W - 10, 12, D - 14, 3, B.wall, B.roof);
+    _r3Box(m, 0, 12, 3, W - 16, 3, D - 20, RTS_PAL.glass, RTS_PAL.glass);   /* glazed band */
+    _r3Slab(m, 0, 15, 3, W - 12, 11, D - 16, 4, C[1], C[0]);       /* white upper storey */
+    _r3Box(m, 0, 26, 3, W - 20, 2, 5, TM[0], TM[1]);
+    _r3Cone(m, 0, 28, 0, 8, 6, 6, C[0], 18);                       /* observation cupola */
+    _r3Cyl(m, 0, 34, 0, 1.0, 5, S[1], DK[1], 10);
+    _r3Cyl(m, -12, 15, -8, 3, 8, S[2], S[1], 12);                  /* gas cylinders */
+    _r3Cyl(m, -12, 15, 0, 3, 8, S[2], S[1], 12);
+    winRow(17, 4, 0, 3, 10, 5, 4);
+
+  } else if (key === 'rocketpit') {
+    /* Rocket Turret: a revetted pit with a boxy launcher, so it does NOT read as a bigger Gun
+       Turret. Square where the gun turret is round, and taller. */
+    _r3Box(m, 0, 0, 0, 21, 5, 21, C[0], C[1]);                     /* concrete revetment */
+    _r3Box(m, 0, 5, 0, 14, 5, 14, DK[1], DK[2]);                   /* traverse ring */
+    _r3Slab(m, 0, 10, 0, 12, 7, 11, 1.5, TM[0], TM[1]);            /* launcher box */
+    _r3Box(m, 0, 12, -3.5, 13, 3, 3, DK[1], DK[3]);                /* two tubes */
+    _r3Box(m, 0, 12, 3.5, 13, 3, 3, DK[1], DK[3]);
+    _r3Box(m, -7, 17, 0, 3, 2, 8, S[2], S[1]);                     /* reload rack */
+
   } else if (key === 'turret') {
     /* Turret: concrete pad and a squat rotating housing. The barrel is drawn by the
        renderer instead, because it has to track a target. */
@@ -1919,6 +2018,12 @@ function _sprUnitModel(key, side, prone, part) {
         if (key === 'rocket') {
           _r3Box(m, mx + 2.0, 5.2, mz - 0.6, 7.5, 1.8, 1.8, DK[1], DK[3]);  /* launch tube */
           _r3Box(m, mx - 2.2, 5.2, mz - 0.6, 2.0, 2.2, 2.2, DK[0], DK[2]);  /* back blast end */
+        } else if (key === 'grenadier') {
+          /* Arm cocked back with a charge in it, and a satchel on the hip. The silhouette has
+             to differ from the rifleman's forward-pointing line or a mixed squad is a smear. */
+          _r3Box(m, mx - 1.6, 6.2, mz - 1.2, 2.6, 1.0, 1.0, TM[1], TM[3]);  /* raised arm */
+          _r3Cyl(m, mx - 2.6, 6.9, mz - 1.2, 0.8, 1.2, DK[0], DK[2], 8);    /* the charge */
+          _r3Box(m, mx + 0.9, 2.6, mz + 1.6, 1.8, 1.8, 1.2, S[2], S[1]);    /* satchel */
         } else {
           _r3Box(m, mx + 2.4, 4.4, mz - 0.5, 5.2, 0.9, 0.9, DK[1], DK[3]);  /* rifle */
           _r3Box(m, mx + 0.4, 4.0, mz - 0.5, 1.6, 1.4, 1.0, DK[0], DK[2]);  /* stock */
@@ -1951,6 +2056,59 @@ function _sprUnitModel(key, side, prone, part) {
       _r3Cyl(m, -3.4, 12.6, 1.6, 1.5, 1.0, S[1], S[0], 10);        /* commander's hatch */
       _r3Box(m, -4.6, 13.0, -2.6, 0.6, 4.5, 0.6, DK[1], DK[3]);    /* aerial */
     }
+  } else if (key === 'light') {
+    /* Light Tank: the Battle Tank's proportions at 80%, with a smaller one-piece turret and no
+       aerial or stowage. It has to read as "the cheap one" at a glance. */
+    if (part !== 'turret') {
+      tracks(16, 5.2, 4, 2.0);
+      _r3Slab(m, 0, 2.9, 0, 14.5, 3.0, 8.6, 1.0, TM[0], TM[1]);
+      _r3Hip(m, -0.8, 5.9, 0, 13.5, 1.6, 8.6, 2.2, TM[1]);
+      _r3Box(m, 6.2, 2.9, 0, 2.6, 2.8, 7.6, TM[1], TM[3]);         /* glacis */
+    }
+    if (part !== 'hull') {
+      _r3Slab(m, -0.5, 7.5, 0, 8.0, 2.8, 7.0, 0.9, TM[1], TM[3]);  /* turret */
+      _r3Box(m, 4.0, 8.1, 0, 2.2, 2.0, 3.2, DK[1], DK[3]);         /* mantlet */
+      _r3Box(m, 9.0, 8.5, 0, 7.5, 1.3, 1.3, DK[1], DK[3]);         /* barrel */
+    }
+
+  } else if (key === 'heavy') {
+    /* Heavy Tank: wider tracks, a longer hull, and TWO barrels side by side - the fastest way
+       to say "this is the expensive one" without any text. */
+    if (part !== 'turret') {
+      tracks(23, 7.6, 6, 2.9);
+      _r3Slab(m, 0, 4.2, 0, 21, 4.4, 12.5, 1.3, TM[0], TM[1]);
+      _r3Hip(m, -1, 8.6, 0, 20, 2.2, 12.5, 3.0, TM[1]);
+      _r3Box(m, 9.0, 4.2, 0, 3.6, 4.2, 11.0, TM[1], TM[3]);        /* glacis */
+      _r3Box(m, -8.5, 6.2, 4.0, 4.0, 2.6, 3.4, S[2], S[1]);        /* stowage */
+    }
+    if (part !== 'hull') {
+      _r3Slab(m, -0.6, 10.8, 0, 12.5, 4.2, 11.0, 1.2, TM[1], TM[3]);   /* turret */
+      _r3Hip(m, -0.6, 15.0, 0, 11.5, 1.6, 10.0, 2.4, TM[3]);
+      _r3Box(m, 6.0, 11.6, 0, 3.4, 3.0, 6.0, DK[1], DK[3]);        /* mantlet */
+      _r3Box(m, 12.5, 12.0, -2.0, 10.0, 1.8, 1.8, DK[1], DK[3]);   /* twin barrels */
+      _r3Box(m, 12.5, 12.0, 2.0, 10.0, 1.8, 1.8, DK[1], DK[3]);
+      _r3Cyl(m, -4.0, 16.6, 2.0, 1.6, 1.2, S[1], S[0], 10);        /* hatch */
+      _r3Box(m, -5.4, 17.0, -3.0, 0.6, 5.0, 0.6, DK[1], DK[3]);    /* aerial */
+    }
+
+  } else if (key === 'arty') {
+    /* Artillery: an open chassis dominated by one very long tube at a visible elevation, with
+       the recoil spades down at the back. Nothing else in the set has that profile. */
+    tracks(17, 5.6, 5, 2.2);
+    _r3Slab(m, -1, 3.1, 0, 15, 3.0, 9.0, 1.0, TM[0], TM[1]);       /* chassis */
+    _r3Box(m, -7.5, 3.1, 0, 3.0, 2.4, 8.0, DK[2], DK[1]);          /* engine deck */
+    _r3Box(m, -1.0, 6.1, 0, 7.0, 2.4, 6.0, DK[2], DK[1]);          /* open crew well */
+    _r3Box(m, -1.0, 6.4, -3.4, 8.0, 2.6, 0.9, TM[2], TM[1]);       /* gun shield sides */
+    _r3Box(m, -1.0, 6.4, 3.4, 8.0, 2.6, 0.9, TM[2], TM[1]);
+    _r3Box(m, 1.0, 8.4, 0, 5.0, 2.6, 5.0, S[2], S[1]);             /* cradle */
+    /* The tube is stepped upward along its length, which is how a fixed model shows elevation
+       without any way to rotate about z. */
+    _r3Box(m, 6.0, 9.6, 0, 6.0, 1.9, 1.9, DK[1], DK[3]);
+    _r3Box(m, 11.5, 10.6, 0, 6.0, 1.7, 1.7, DK[1], DK[3]);
+    _r3Box(m, 15.6, 11.4, 0, 2.4, 2.2, 2.2, DK[0], DK[3]);         /* muzzle */
+    _r3Box(m, -9.5, 1.0, -2.6, 4.0, 1.2, 1.6, S[1], S[0]);         /* recoil spades */
+    _r3Box(m, -9.5, 1.0, 2.6, 4.0, 1.2, 1.6, S[1], S[0]);
+
   } else if (key === 'buggy') {
     /* Wheels are the buggy's whole identity, so they are proper vertical cylinders standing
        clear of the body with a light hub - four round shapes at the corners read instantly as
@@ -2013,8 +2171,10 @@ function _sprUnit(key, side, prone, part) {
   }
   return frames;
 }
-/* Which units carry a separately-rotating turret. */
-var RTS_TURRETED = { tank:1 };
+/* Which units carry a separately-rotating turret. Artillery is deliberately NOT on this list:
+   a howitzer traverses on its chassis, and a fixed forward tube is what makes it read as
+   artillery rather than as another tank. */
+var RTS_TURRETED = { tank:1, light:1, heavy:1 };
 
 /* The concrete apron a structure stands on. In the reference every building sits on a pale
    irregular pad noticeably larger than itself - it is what stops a base looking like
@@ -4718,7 +4878,7 @@ function _rtsAIWants(S) {
 
   /* Below IQProduction the opponent keeps a minimal base and never expands - that is the
      whole difference between the low difficulties and the high one. */
-  var order = _rtsIQAt(RTS_IQ.production) ? ['refinery', 'barracks', 'factory', 'turret']
+  var order = _rtsIQAt(RTS_IQ.production) ? RTS_AI.buildOrder
             : (_rtsIQAt(RTS_IQ.repairSell) ? ['refinery', 'barracks'] : []);
   var size = Math.max(own, theirs + RTS_AI.baseSizeAdd);
   for (i = 0; i < order.length; i++) {
@@ -4860,10 +5020,28 @@ function _rtsAIUnits(S) {
   if (harv < wantHarv) {
     if (_rtsCanQueue('enemy', 'harvester')) { _rtsQueue('enemy', 'harvester'); return; }
   }
-  if (_rtsCanQueue('enemy', 'tank') && S.credits > 1600) _rtsQueue('enemy', 'tank');
-  else if (_rtsCanQueue('enemy', 'buggy') && S.credits > 900) _rtsQueue('enemy', 'buggy');
-  if (_rtsCanQueue('enemy', 'rocket') && S.credits > 500) _rtsQueue('enemy', 'rocket');
-  else if (_rtsCanQueue('enemy', 'rifle') && S.credits > 250) _rtsQueue('enemy', 'rifle');
+  /* One pass per production line: gather everything affordable and buildable, then pick among
+     them by weight. RTS_AI.mix holds the ladder so that adding a unit to RTS_UNITS does not
+     mean editing this function.
+
+     The weighting is load-bearing, not decoration. Walking the list best-first and taking the
+     first hit is degenerate - whatever sits at the top is the only thing ever built. Measured
+     over three seeds at eight minutes that gave 461 grenadiers and 14 rocket soldiers: the
+     opponent had silently stopped fielding anti-armour infantry. */
+  for (var cat in RTS_AI.mix) {
+    var list = RTS_AI.mix[cat], pool = [], total = 0;
+    for (i = 0; i < list.length; i++) {
+      if (S.credits <= list[i].at) continue;
+      if (!_rtsCanQueue('enemy', list[i].key)) continue;
+      pool.push(list[i]); total += list[i].w;
+    }
+    if (!pool.length) continue;
+    var roll = _rtsRnd() * total;
+    for (i = 0; i < pool.length; i++) {
+      roll -= pool[i].w;
+      if (roll <= 0 || i === pool.length - 1) { _rtsQueue('enemy', pool[i].key); break; }
+    }
+  }
 }
 /* HOUSE.CPP's house state machine. The urgency checks all read it, which is how one flag
    ("we were attacked in the last minute") changes several unrelated decisions at once. */
@@ -7234,6 +7412,7 @@ function _rtsBindInput() {
     return { x:(fx - 0.5) * span, z:(fz - 0.5) * span };
   }
   function miniGo(e) {
+    if (!_rtsRadarLit()) return;          /* a dark panel commands nothing and jumps nowhere */
     var w = miniWorld(e);
     _rtsR.focus.x = w.x; _rtsR.focus.z = w.z;
     _rtsClampFocus();
@@ -7254,6 +7433,7 @@ function _rtsBindInput() {
   function miniOrder(e) {
     var G = window._rtsG;
     if (!G || G.over) return false;
+    if (!_rtsRadarLit()) { _rtsSay('No radar — build a Radar Dome to command from the map.'); return false; }
     var mine = [], i;
     for (i = 0; i < G.sel.length; i++) {
       var sv = G.sel[i];
@@ -7716,10 +7896,34 @@ function _rtsDrawWrench(g, x, y) {
   }
   g.restore();
 }
+/* Is the radar working? A Radar Dome, standing and finished, with the base not in power
+   deficit. Everything the radar panel does - drawing, clicking to move the view, right-clicking
+   to order - is gated on this one answer, so they can never disagree. */
+function _rtsRadarLit() {
+  var G = window._rtsG;
+  if (!G || !_rtsHas('player', 'radar')) return false;
+  var PS = G.sides.player;
+  return PS.powerMade >= PS.powerUsed;
+}
 function _rtsDrawMini() {
   var G = window._rtsG, mini = document.getElementById('rtsMini');
   if (!mini) return;
   var g = mini.getContext('2d'), S = mini.width, sc = S / RTS_N, i;
+  /* No Radar Dome, no radar. In the originals the map panel is dead until you build the
+     structure that powers it, and it goes dead again the moment that structure is destroyed
+     or the base browns out - which is what makes bombing the dome worth doing. Powered means
+     the whole side is not in deficit; the same condition that stops a turret firing. */
+  var dome = _rtsHas('player', 'radar');
+  if (!_rtsRadarLit()) {
+    g.fillStyle = '#0a0d12'; g.fillRect(0, 0, S, S);
+    g.fillStyle = 'rgba(120,150,190,0.30)';
+    g.font = 'bold 11px ui-monospace,monospace'; g.textAlign = 'center';
+    g.fillText(dome ? 'NO POWER' : 'NO RADAR', S / 2, S / 2 - 4);
+    g.font = '9px ui-monospace,monospace';
+    g.fillText(dome ? 'restore power' : 'build a Radar Dome', S / 2, S / 2 + 10);
+    g.textAlign = 'left';
+    return;
+  }
   /* The radar mirrors the terrain layer, so forest, ridges, the lake and the roads are all
      legible at a glance - the whole point of having a radar rather than a blank green square. */
   var TCOL = ['#374626', '#22391b', '#6a665c', '#2b4c6b', '#5a4e39', '#8a7c58', '#a89663'];

@@ -100,11 +100,20 @@
 
 /* build tiles */
 #rcgRts .rts-grid{flex:1 1 auto;overflow-y:auto;display:grid;grid-template-columns:1fr 1fr;
-  gap:5px;align-content:start;padding-right:2px}
+  gap:5px;align-content:start;padding-right:2px;scrollbar-width:thin;scrollbar-color:#33445c transparent}
 #rcgRts .rts-grid::-webkit-scrollbar{width:7px}
 #rcgRts .rts-grid::-webkit-scrollbar-thumb{background:#33445c;border-radius:4px}
+/* A list that scrolls with no sign that it scrolls reads as a list that has been CUT OFF, which
+   is exactly how the build tab looked the moment it held nine structures instead of six. A fade
+   at the bottom edge says "there is more below" and costs no rows. */
+#rcgRts .rts-mid{position:relative}
+#rcgRts .rts-mid::after{content:'';position:absolute;left:0;right:0;bottom:0;height:9px;
+  pointer-events:none;background:linear-gradient(to bottom,rgba(10,13,18,0),rgba(10,13,18,.85))}
+/* 1.16 fitted six tiles down the panel and eight did not; 1.05 left it nine pixels short, which
+   is the most annoying possible margin. 1.02 fits the whole eight-tile build list at the sizes
+   this game is played at, and the fade above covers the short windows where it still scrolls. */
 #rcgRts .rts-tile{position:relative;display:block;padding:0;overflow:hidden;cursor:pointer;font:inherit;
-  border:1px solid #33445c;border-radius:4px;background:#0f151d;color:#dfe8f2;aspect-ratio:1/1.16}
+  border:1px solid #33445c;border-radius:4px;background:#0f151d;color:#dfe8f2;aspect-ratio:1/1.02}
 #rcgRts .rts-tile:hover{border-color:#5c86b8;background:#16202c}
 #rcgRts .rts-tile .ico{position:absolute;left:0;right:0;top:0;width:100%;height:76%;object-fit:contain;
   display:block;background:radial-gradient(ellipse at 50% 42%,#2b3a4c 0%,#131b25 72%)}

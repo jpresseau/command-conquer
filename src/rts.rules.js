@@ -44,7 +44,17 @@ var RTS_STRUCTS = [
     desc:'Builds RC combat vehicles and Harvesters.' },
   { key:'turret',   name:'Gun Turret',    w:1, h:1, cost:500,  build:10, hp:520,  power:-20,  sight:18,
     needs:['barracks'], weapon:'turretgun',
-    desc:'Automated base defence. Needs power to fire.' }
+    desc:'Automated base defence. Needs power to fire.' },
+  /* --- the tier the roster was missing. `needs` already gated everything, so these are data. --- */
+  { key:'radar',    name:'Radar Dome',    w:2, h:2, cost:1000, build:14, hp:600,  power:-40,  sight:26,
+    needs:['refinery'], radar:true,
+    desc:'Switches the radar on. Without one the map panel stays dark.' },
+  { key:'lab',      name:'Tech Center',   w:2, h:2, cost:1500, build:22, hp:600,  power:-60,  sight:14,
+    needs:['radar'],
+    desc:'Unlocks Artillery and the Heavy Tank.' },
+  { key:'rocketpit',name:'Rocket Turret', w:1, h:1, cost:800,  build:14, hp:480,  power:-30,  sight:22,
+    needs:['factory'], weapon:'turretrocket',
+    desc:'Long-range base defence. Tears up armour, poor against infantry.' }
 ];
 
 /* ------------------------------------------------------------------- units --
@@ -67,7 +77,18 @@ var RTS_UNITS = [
     desc:'The backbone of any serious attack. Coaxial gun for infantry.' },
   { key:'harvester',name:'Harvester',     kind:'vehicle',  cost:1200, build:14, hp:700,  speed:7.5, turn:1.6,r:2.2, sight:14, weapon:null,
     harvest:true, capacity:700,
-    desc:'Mines Scrap fields and unloads at a refinery.' }
+    desc:'Mines Scrap fields and unloads at a refinery.' },
+  /* --- second tier. `needs` on a unit gates it the same way it gates a structure. --- */
+  { key:'grenadier',name:'Grenadier',     kind:'infantry', cost:180,  build:4,  hp:65,   speed:6,   turn:6,  r:1.1, sight:15, weapon:'grenade',
+    desc:'Lobbed charges. Clears infantry and cracks buildings; hopeless against a moving tank.' },
+  { key:'light',    name:'Light Tank',    kind:'vehicle',  cost:600,  build:9,  hp:280,  speed:12,  turn:2.6,r:1.8, sight:18, weapon:'cannon',
+    desc:'Cheap armour. Faster than a Battle Tank and half the price, with a third of the hull.' },
+  { key:'arty',     name:'Artillery',     kind:'vehicle',  cost:1000, build:15, hp:150,  speed:6,   turn:1.4,r:1.9, sight:16, weapon:'howitzer',
+    needs:['lab'],
+    desc:'Outranges every base defence in the game. Made of paper — never send it in first.' },
+  { key:'heavy',    name:'Heavy Tank',    kind:'vehicle',  cost:1500, build:20, hp:820,  speed:6.5, turn:1.3,r:2.2, sight:18, weapon:'heavycannon', weapon2:'coax',
+    needs:['lab'],
+    desc:'The heaviest hull on the field. Slow, expensive, and very hard to stop.' }
 ];
 
 /* --------------------------------------------------------------- weapons --
@@ -91,7 +112,19 @@ var RTS_WEAPONS = {
   /* A tank's coaxial machine gun: short, weak, and murder on infantry. */
   coax:      { dmg:14, range:13, cool:0.32,  shot:'tracer',  speed:0,   splash:0, vs:{ infantry:1.0, vehicle:0.2,  building:0.15 } },
   cannon:    { dmg:38, range:18, cool:1.5,  shot:'shell',   speed:60,  splash:3, vs:{ infantry:0.7, vehicle:1.0,  building:1.0  } },
-  turretgun: { dmg:22, range:22, cool:0.9,  shot:'shell',   speed:70,  splash:1, vs:{ infantry:1.0, vehicle:0.9,  building:0.6  } }
+  turretgun: { dmg:22, range:22, cool:0.9,  shot:'shell',   speed:70,  splash:1, vs:{ infantry:1.0, vehicle:0.9,  building:0.6  } },
+  /* --- second tier. Each of these exists to beat something specific, so that a bigger roster
+     is a set of answers rather than "buy the dearest thing you can afford". --- */
+  /* Grenades arc: murder on anything that stays still, near-useless against a moving vehicle. */
+  grenade:     { dmg:26, range:14, cool:1.9, shot:'shell',  speed:26, splash:3.4, vs:{ infantry:1.0, vehicle:0.35, building:1.1  } },
+  /* Artillery has the longest reach in the game on the thinnest chassis. 34 outranges the Gun
+     Turret's 22, which is the whole reason to buy one. */
+  howitzer:    { dmg:52, range:34, cool:3.4, shot:'shell',  speed:44, splash:5.0, vs:{ infantry:1.1, vehicle:0.75, building:1.3  } },
+  /* The Heavy Tank's gun: slower and dearer than the Battle Tank's, but it goes through armour. */
+  heavycannon: { dmg:62, range:20, cool:2.1, shot:'shell',  speed:58, splash:3.4, vs:{ infantry:0.6, vehicle:1.35, building:1.15 } },
+  /* Rocket Turret: long and hard-hitting, deliberately poor against infantry so that cheap
+     riflemen stay the correct answer to a wall of them. */
+  turretrocket:{ dmg:30, range:26, cool:2.0, burst:2, shot:'missile', speed:36, splash:2.2, vs:{ infantry:0.45, vehicle:1.4, building:1.0 } }
 };
 
 /* ------------------------------------------------------------------ anims --
@@ -304,8 +337,28 @@ var RTS_AI = {
   infantryBaseMult:2,
   attackInterval:3,         /* minutes between attack waves, before difficulty bias */
   attackDelay:5,            /* minutes before the first one */
-  ratio:{ refinery:0.16, barracks:0.16, factory:0.10, turret:0.50 },
-  limit:{ refinery:4,    barracks:2,    factory:2,    turret:12   },
+  ratio:{ refinery:0.16, barracks:0.16, factory:0.10, radar:0.06, lab:0.05, turret:0.34, rocketpit:0.16 },
+  limit:{ refinery:4,    barracks:2,    factory:2,    radar:1,    lab:1,    turret:8,    rocketpit:4    },
+  /* The order _rtsAIWants walks. Economy, then production, then tech, then defence - tech
+     before defence because a Tech Center that arrives after the match is decided is worth
+     nothing, and the defensive ratios are big enough to soak every spare credit otherwise. */
+  buildOrder:['refinery', 'barracks', 'factory', 'radar', 'lab', 'turret', 'rocketpit'],
+  /* What to spend a production run on. A table rather than an if-chain: adding a unit to
+     RTS_UNITS should not mean editing the opponent's brain, and the hardcoded ladder that used
+     to live in _rtsAIUnits is a large part of why the roster sat at five units. Gating is left
+     to _rtsCanQueue, which already checks `needs`.
+
+     `at` is the bank balance that justifies the purchase; `w` is how often to pick it among
+     everything affordable. The weights matter more than they look: a strict best-first walk is
+     DEGENERATE - whichever entry sits at the top is the only one ever built. Measured, that
+     produced 461 grenadiers against 14 rocket soldiers in eight minutes, which is to say the
+     opponent quietly stopped fielding anti-armour infantry altogether. Weighted choice keeps a
+     combined-arms army, which is the point of having a roster at all. */
+  mix:{
+    vehicle:[ { key:'heavy', at:2600, w:3 }, { key:'arty',  at:2000, w:2 }, { key:'tank', at:1600, w:4 },
+              { key:'light', at:1100, w:3 }, { key:'buggy', at:900,  w:2 } ],
+    infantry:[ { key:'grenadier', at:900, w:2 }, { key:'rocket', at:500, w:3 }, { key:'rifle', at:250, w:2 } ]
+  },
   /* Check_Raise_Money / Check_Raise_Power / Check_Lower_Power thresholds. */
   brokeMoney:100,           /* below this, raising cash is urgent */
   desperateMoney:2000,      /* ...and worse if there is no income either */

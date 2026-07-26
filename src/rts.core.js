@@ -2184,7 +2184,7 @@ function _rtsAIWants(S) {
 
   /* Below IQProduction the opponent keeps a minimal base and never expands - that is the
      whole difference between the low difficulties and the high one. */
-  var order = _rtsIQAt(RTS_IQ.production) ? ['refinery', 'barracks', 'factory', 'turret']
+  var order = _rtsIQAt(RTS_IQ.production) ? RTS_AI.buildOrder
             : (_rtsIQAt(RTS_IQ.repairSell) ? ['refinery', 'barracks'] : []);
   var size = Math.max(own, theirs + RTS_AI.baseSizeAdd);
   for (i = 0; i < order.length; i++) {
@@ -2326,10 +2326,28 @@ function _rtsAIUnits(S) {
   if (harv < wantHarv) {
     if (_rtsCanQueue('enemy', 'harvester')) { _rtsQueue('enemy', 'harvester'); return; }
   }
-  if (_rtsCanQueue('enemy', 'tank') && S.credits > 1600) _rtsQueue('enemy', 'tank');
-  else if (_rtsCanQueue('enemy', 'buggy') && S.credits > 900) _rtsQueue('enemy', 'buggy');
-  if (_rtsCanQueue('enemy', 'rocket') && S.credits > 500) _rtsQueue('enemy', 'rocket');
-  else if (_rtsCanQueue('enemy', 'rifle') && S.credits > 250) _rtsQueue('enemy', 'rifle');
+  /* One pass per production line: gather everything affordable and buildable, then pick among
+     them by weight. RTS_AI.mix holds the ladder so that adding a unit to RTS_UNITS does not
+     mean editing this function.
+
+     The weighting is load-bearing, not decoration. Walking the list best-first and taking the
+     first hit is degenerate - whatever sits at the top is the only thing ever built. Measured
+     over three seeds at eight minutes that gave 461 grenadiers and 14 rocket soldiers: the
+     opponent had silently stopped fielding anti-armour infantry. */
+  for (var cat in RTS_AI.mix) {
+    var list = RTS_AI.mix[cat], pool = [], total = 0;
+    for (i = 0; i < list.length; i++) {
+      if (S.credits <= list[i].at) continue;
+      if (!_rtsCanQueue('enemy', list[i].key)) continue;
+      pool.push(list[i]); total += list[i].w;
+    }
+    if (!pool.length) continue;
+    var roll = _rtsRnd() * total;
+    for (i = 0; i < pool.length; i++) {
+      roll -= pool[i].w;
+      if (roll <= 0 || i === pool.length - 1) { _rtsQueue('enemy', pool[i].key); break; }
+    }
+  }
 }
 /* HOUSE.CPP's house state machine. The urgency checks all read it, which is how one flag
    ("we were attacked in the last minute") changes several unrelated decisions at once. */

@@ -538,6 +538,43 @@ function _sprBuilding(key, side) {
     _r3Cyl(m, -W / 2 + 10, 15, -12, 4, 20, S[0], DK[1], 10);        /* exhausts */
     _r3Cyl(m, -W / 2 + 19, 15, -12, 4, 15, S[0], DK[1], 10);
 
+  } else if (key === 'radar') {
+    /* Radar Dome: a low blockhouse under a big dish. The dish is the whole silhouette and it
+       is the only curved mass in the base, so the dome is identifiable from across the map -
+       which matters, because it is the thing worth bombing first. */
+    _r3Slab(m, 0, 0, 4, W - 10, 14, D - 16, 3, B.wall, B.roof);
+    _r3Box(m, 0, 14, 4, W - 22, 2, 5, TM[0], TM[1]);
+    _r3Cone(m, -2, 14, -4, 5, 9, 5, S[2], 16);                     /* dish pedestal */
+    _r3Cone(m, -2, 19, -4, 11, 3, 8, S[0], 18);                    /* the dish itself */
+    _r3Cyl(m, -2, 27, -4, 1.2, 6, S[1], DK[1], 10);                /* feed horn mast */
+    _r3Box(m, -2, 33, -4, 4, 1.5, 4, DK[1], DK[3]);
+    _r3Box(m, 13, 14, 6, 6, 4, 7, DK[1], DK[3]);                   /* equipment hut */
+    pilasters(19, 0, 0, 3, 11, 4, 14);
+    winRow(19, 7, 0, 2, 11, 5, 4);
+
+  } else if (key === 'lab') {
+    /* Tech Center: the only building with a clean white upper storey and a glass band all the
+       way round, so the base reads as having a "civil" building in it once the tech is up. */
+    _r3Slab(m, 0, 0, 3, W - 10, 12, D - 14, 3, B.wall, B.roof);
+    _r3Box(m, 0, 12, 3, W - 16, 3, D - 20, RTS_PAL.glass, RTS_PAL.glass);   /* glazed band */
+    _r3Slab(m, 0, 15, 3, W - 12, 11, D - 16, 4, C[1], C[0]);       /* white upper storey */
+    _r3Box(m, 0, 26, 3, W - 20, 2, 5, TM[0], TM[1]);
+    _r3Cone(m, 0, 28, 0, 8, 6, 6, C[0], 18);                       /* observation cupola */
+    _r3Cyl(m, 0, 34, 0, 1.0, 5, S[1], DK[1], 10);
+    _r3Cyl(m, -12, 15, -8, 3, 8, S[2], S[1], 12);                  /* gas cylinders */
+    _r3Cyl(m, -12, 15, 0, 3, 8, S[2], S[1], 12);
+    winRow(17, 4, 0, 3, 10, 5, 4);
+
+  } else if (key === 'rocketpit') {
+    /* Rocket Turret: a revetted pit with a boxy launcher, so it does NOT read as a bigger Gun
+       Turret. Square where the gun turret is round, and taller. */
+    _r3Box(m, 0, 0, 0, 21, 5, 21, C[0], C[1]);                     /* concrete revetment */
+    _r3Box(m, 0, 5, 0, 14, 5, 14, DK[1], DK[2]);                   /* traverse ring */
+    _r3Slab(m, 0, 10, 0, 12, 7, 11, 1.5, TM[0], TM[1]);            /* launcher box */
+    _r3Box(m, 0, 12, -3.5, 13, 3, 3, DK[1], DK[3]);                /* two tubes */
+    _r3Box(m, 0, 12, 3.5, 13, 3, 3, DK[1], DK[3]);
+    _r3Box(m, -7, 17, 0, 3, 2, 8, S[2], S[1]);                     /* reload rack */
+
   } else if (key === 'turret') {
     /* Turret: concrete pad and a squat rotating housing. The barrel is drawn by the
        renderer instead, because it has to track a target. */
@@ -607,6 +644,12 @@ function _sprUnitModel(key, side, prone, part) {
         if (key === 'rocket') {
           _r3Box(m, mx + 2.0, 5.2, mz - 0.6, 7.5, 1.8, 1.8, DK[1], DK[3]);  /* launch tube */
           _r3Box(m, mx - 2.2, 5.2, mz - 0.6, 2.0, 2.2, 2.2, DK[0], DK[2]);  /* back blast end */
+        } else if (key === 'grenadier') {
+          /* Arm cocked back with a charge in it, and a satchel on the hip. The silhouette has
+             to differ from the rifleman's forward-pointing line or a mixed squad is a smear. */
+          _r3Box(m, mx - 1.6, 6.2, mz - 1.2, 2.6, 1.0, 1.0, TM[1], TM[3]);  /* raised arm */
+          _r3Cyl(m, mx - 2.6, 6.9, mz - 1.2, 0.8, 1.2, DK[0], DK[2], 8);    /* the charge */
+          _r3Box(m, mx + 0.9, 2.6, mz + 1.6, 1.8, 1.8, 1.2, S[2], S[1]);    /* satchel */
         } else {
           _r3Box(m, mx + 2.4, 4.4, mz - 0.5, 5.2, 0.9, 0.9, DK[1], DK[3]);  /* rifle */
           _r3Box(m, mx + 0.4, 4.0, mz - 0.5, 1.6, 1.4, 1.0, DK[0], DK[2]);  /* stock */
@@ -639,6 +682,59 @@ function _sprUnitModel(key, side, prone, part) {
       _r3Cyl(m, -3.4, 12.6, 1.6, 1.5, 1.0, S[1], S[0], 10);        /* commander's hatch */
       _r3Box(m, -4.6, 13.0, -2.6, 0.6, 4.5, 0.6, DK[1], DK[3]);    /* aerial */
     }
+  } else if (key === 'light') {
+    /* Light Tank: the Battle Tank's proportions at 80%, with a smaller one-piece turret and no
+       aerial or stowage. It has to read as "the cheap one" at a glance. */
+    if (part !== 'turret') {
+      tracks(16, 5.2, 4, 2.0);
+      _r3Slab(m, 0, 2.9, 0, 14.5, 3.0, 8.6, 1.0, TM[0], TM[1]);
+      _r3Hip(m, -0.8, 5.9, 0, 13.5, 1.6, 8.6, 2.2, TM[1]);
+      _r3Box(m, 6.2, 2.9, 0, 2.6, 2.8, 7.6, TM[1], TM[3]);         /* glacis */
+    }
+    if (part !== 'hull') {
+      _r3Slab(m, -0.5, 7.5, 0, 8.0, 2.8, 7.0, 0.9, TM[1], TM[3]);  /* turret */
+      _r3Box(m, 4.0, 8.1, 0, 2.2, 2.0, 3.2, DK[1], DK[3]);         /* mantlet */
+      _r3Box(m, 9.0, 8.5, 0, 7.5, 1.3, 1.3, DK[1], DK[3]);         /* barrel */
+    }
+
+  } else if (key === 'heavy') {
+    /* Heavy Tank: wider tracks, a longer hull, and TWO barrels side by side - the fastest way
+       to say "this is the expensive one" without any text. */
+    if (part !== 'turret') {
+      tracks(23, 7.6, 6, 2.9);
+      _r3Slab(m, 0, 4.2, 0, 21, 4.4, 12.5, 1.3, TM[0], TM[1]);
+      _r3Hip(m, -1, 8.6, 0, 20, 2.2, 12.5, 3.0, TM[1]);
+      _r3Box(m, 9.0, 4.2, 0, 3.6, 4.2, 11.0, TM[1], TM[3]);        /* glacis */
+      _r3Box(m, -8.5, 6.2, 4.0, 4.0, 2.6, 3.4, S[2], S[1]);        /* stowage */
+    }
+    if (part !== 'hull') {
+      _r3Slab(m, -0.6, 10.8, 0, 12.5, 4.2, 11.0, 1.2, TM[1], TM[3]);   /* turret */
+      _r3Hip(m, -0.6, 15.0, 0, 11.5, 1.6, 10.0, 2.4, TM[3]);
+      _r3Box(m, 6.0, 11.6, 0, 3.4, 3.0, 6.0, DK[1], DK[3]);        /* mantlet */
+      _r3Box(m, 12.5, 12.0, -2.0, 10.0, 1.8, 1.8, DK[1], DK[3]);   /* twin barrels */
+      _r3Box(m, 12.5, 12.0, 2.0, 10.0, 1.8, 1.8, DK[1], DK[3]);
+      _r3Cyl(m, -4.0, 16.6, 2.0, 1.6, 1.2, S[1], S[0], 10);        /* hatch */
+      _r3Box(m, -5.4, 17.0, -3.0, 0.6, 5.0, 0.6, DK[1], DK[3]);    /* aerial */
+    }
+
+  } else if (key === 'arty') {
+    /* Artillery: an open chassis dominated by one very long tube at a visible elevation, with
+       the recoil spades down at the back. Nothing else in the set has that profile. */
+    tracks(17, 5.6, 5, 2.2);
+    _r3Slab(m, -1, 3.1, 0, 15, 3.0, 9.0, 1.0, TM[0], TM[1]);       /* chassis */
+    _r3Box(m, -7.5, 3.1, 0, 3.0, 2.4, 8.0, DK[2], DK[1]);          /* engine deck */
+    _r3Box(m, -1.0, 6.1, 0, 7.0, 2.4, 6.0, DK[2], DK[1]);          /* open crew well */
+    _r3Box(m, -1.0, 6.4, -3.4, 8.0, 2.6, 0.9, TM[2], TM[1]);       /* gun shield sides */
+    _r3Box(m, -1.0, 6.4, 3.4, 8.0, 2.6, 0.9, TM[2], TM[1]);
+    _r3Box(m, 1.0, 8.4, 0, 5.0, 2.6, 5.0, S[2], S[1]);             /* cradle */
+    /* The tube is stepped upward along its length, which is how a fixed model shows elevation
+       without any way to rotate about z. */
+    _r3Box(m, 6.0, 9.6, 0, 6.0, 1.9, 1.9, DK[1], DK[3]);
+    _r3Box(m, 11.5, 10.6, 0, 6.0, 1.7, 1.7, DK[1], DK[3]);
+    _r3Box(m, 15.6, 11.4, 0, 2.4, 2.2, 2.2, DK[0], DK[3]);         /* muzzle */
+    _r3Box(m, -9.5, 1.0, -2.6, 4.0, 1.2, 1.6, S[1], S[0]);         /* recoil spades */
+    _r3Box(m, -9.5, 1.0, 2.6, 4.0, 1.2, 1.6, S[1], S[0]);
+
   } else if (key === 'buggy') {
     /* Wheels are the buggy's whole identity, so they are proper vertical cylinders standing
        clear of the body with a light hub - four round shapes at the corners read instantly as
@@ -701,8 +797,10 @@ function _sprUnit(key, side, prone, part) {
   }
   return frames;
 }
-/* Which units carry a separately-rotating turret. */
-var RTS_TURRETED = { tank:1 };
+/* Which units carry a separately-rotating turret. Artillery is deliberately NOT on this list:
+   a howitzer traverses on its chassis, and a fixed forward tube is what makes it read as
+   artillery rather than as another tank. */
+var RTS_TURRETED = { tank:1, light:1, heavy:1 };
 
 /* The concrete apron a structure stands on. In the reference every building sits on a pale
    irregular pad noticeably larger than itself - it is what stops a base looking like
