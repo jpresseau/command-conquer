@@ -763,6 +763,95 @@ gun preferring heavy, small arms unable to hurt a wall while shells and rockets 
 rule applying to walls rather than to all concrete. Ladder easy 298 s / normal 218 s / hard 175 s,
 within a second of the previous run on every difficulty.
 
+## Storage, and the silo — from BDATA.CPP
+
+BDATA.CPP is the fifth data file in a row to confirm that the balance numbers live in
+`RULES.INI` outside the repository — `Storage`, `Adjacent`, `Capturable`, `Power`, `Bib` and
+the rest all arrive through `Read_INI`. What it does carry is a **mechanic** the economy was
+missing entirely, and it turned out to be the largest gap any of these files has exposed.
+
+### Two pools, not one
+
+`HOUSE.CPP` does not keep a single balance. It keeps two, and BDATA's `Capacity` is the reason:
+
+- **Credits** — money you were *given*: starting cash, a sale, a cancelled order, a thief's
+  haul. Uncapped; nothing physical is holding it.
+- **Tiberium** — harvested ore *sitting in your buildings*. Capped by the sum of every
+  structure's `Storage`, and a harvester unloading above that cap loses the difference on the
+  dock.
+
+`Available_Money()` is the sum; `Spend_Money()` drains the stored ore **first**, so the cap keeps
+biting until you have actually spent down. Collapsing them into one number makes the cap
+meaningless — you would start the match already over capacity and never earn a credit again.
+
+In `rts.core.js`: `rtsMoney(S)` to ask, `_rtsSpend` / `_rtsGrant` / `_rtsHarvested` to change.
+The distinction is load-bearing in both directions — harvest is the *only* income the cap may
+refuse, and a refund into a full store must still pay out in full.
+
+**Scrap Silo**: 2×2, $150, +1500 storage, needs a Refinery. The Refinery itself stores 2000.
+Nothing else in the game stores anything, so a player who never builds a silo is throwing away
+every credit past 2000 — which is the whole point of the building existing.
+
+### The two numbers here that were measured, not chosen
+
+Both were found by measuring the opponent, and both are cases where the storage cap would
+otherwise have been a straight nerf rather than a mechanic:
+
+1. **Silo power draw: 0, not −10.** At −10 each, the dozen silos an overflowing opponent
+   builds drew 130 power, browned its entire base out, and cost it enough production that the
+   player lived **81 seconds longer** on seed 9004 (218 s → 299 s). A storage tank is passive.
+   Giving it an appetite was the single most expensive invented number in this change.
+2. **Silo limit: 14, not 6.** At 6 the opponent filled its 17,000 of storage on `normal` and
+   then threw away 17,000 *more* credits over seven minutes — it has the income to overflow and
+   not the production lines to spend it down. Raising the ceiling cut mean spillage on `normal`
+   from 17,106 to 8,136. RA has no silo limit at all.
+
+`RTS_AI.siloUrgent` (0.8) lets a silo jump the base plan when the store is over 80 % full,
+mirroring `AI_Building` checking Tiberium against Capacity before anything else. Without that
+rule the opponent loses the income and never buys the fix, because a silo sits behind the whole
+defence tier in the build order.
+
+### What was deliberately NOT ported
+
+`Raw_Cost()` — `Cost_Of()` minus the free unit a building ships with. It exists to stop one
+exploit: refunding half of a price that *includes* a free harvester pays you for a harvester you
+are keeping. **It measured wrong against our numbers.** RA's refinery is 2000 with the 1400
+harvester priced *into* it; ours is 1400 for the building with the harvester on top, so `cost`
+is already the raw cost and subtracting the harvester again refunds **zero**. The first version
+of the test "passed" on `0 ≈ 0`.
+
+The exploit it guards is real here and is **left open on purpose** rather than fixed by stealth:
+sell a refinery for 700, rebuild for 1400, and you have bought a 1400-credit harvester for 700.
+Closing it means deciding what a refinery should cost, which is a balance change and not a
+data-file port.
+
+`IsCaptureable` **was** ported, as a defaulting flag the way the original has it — capturable
+unless the type says otherwise. Walls and silos are not: there is nothing inside either for an
+engineer to take over.
+
+### Verified
+
+34 assertions in `storage.js`: the two pools and their sum; starting cash not clipped by having
+nowhere to put it; spending draining the store before credits and never going below zero;
+harvest kept whole under the cap, clipped at it, and reported lost above it; a refund into a
+full store paying out in full; capacity tracking live finished buildings (a silo under
+construction stores nothing); a harvester spilling into a full store and *not* spilling with
+room, measured on the opponent because it is the side that actually runs one; the warning firing
+once and then holding its tongue; the thief taking a cut of stored ore rather than only loose
+change; walls and silos refusing capture while a power plant still accepts it; and the sidebar
+carrying both the storage bar and the silo cameo.
+
+Regression: verbs 26/26, mech 20/20, armour 16/16, udata 13/13, idata 9/9, save/load 31/31.
+Ladder **easy 296 s / normal 220 s / hard 174 s** against a baseline of 298 / 218 / 175 measured
+on the same tree with the change stashed — the per-seed comparison is what caught the brownout,
+since the mean alone read as noise.
+
+### The sidebar
+
+A storage bar under the credits ticker: green with room, amber past 85 %, red at the point where
+a harvester's load starts being thrown away, with `stored / capacity` in the tooltip. Without a
+readout the only sign that scrap is being lost is a line of text that has already scrolled off.
+
 ## Four more verbs, and the reference documents
 
 Handed the CNCNZ pages for Allied/Soviet units and structures plus the patch history. Costs and

@@ -187,10 +187,72 @@ function _rtsClearLine(x0, z0, x1, z1) {
 
 /* ------------------------------------------------------------------ state */
 function _rtsSideNew(key) {
-  return { key:key, credits:RTS_START_CREDITS, powerMade:0, powerUsed:0,
+  return { key:key, credits:RTS_START_CREDITS, ore:0, powerMade:0, powerUsed:0,
     q:{ struct:null, infantry:null, vehicle:null },   /* one build line per category, like the classic sidebar */
     ready:null, readyTry:0,                            /* finished structure awaiting placement */
+    spill:0, spillSaid:0,                              /* scrap lost to a full store, and the warning cooldown */
     lost:false };
+}
+/* --------------------------------------------------------------- the treasury --
+   HOUSE.CPP keeps TWO pools, not one, and BDATA.CPP's `Capacity` is the reason:
+
+     Credits  - money you were GIVEN. Starting cash, a sale, a cancelled order, a thief's
+                haul. Uncapped: nothing physical is holding it.
+     Tiberium - harvested ore SITTING IN YOUR BUILDINGS. Capped by the sum of every
+                structure's Storage, and a harvester that unloads above that cap loses the
+                difference on the dock.
+
+   Available_Money() is the sum of the two and is what everything asks about; Spend_Money()
+   drains the stored ore first, so the cap keeps biting until you have actually spent down.
+   Keeping them as one number would make the cap meaningless: you would start the match
+   already over capacity and never earn a credit.
+
+   Call rtsMoney() to ask, _rtsSpend/_rtsGrant/_rtsHarvested to change. Assigning to
+   `S.credits` directly still works and still means "given money", but it will not be capped
+   and will not warn - which is right for a refund and wrong for income. */
+function rtsMoney(S) { return S.credits + S.ore; }
+/* Sum of Storage over this side's finished, living structures. Rebuilt on demand rather than
+   cached: a capacity that goes stale when a silo is shot is a capacity that silently keeps
+   accepting scrap into a building that is no longer there. */
+function rtsCapacity(side) {
+  var G = window._rtsG, cap = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.type !== 'struct' || e.side !== side || e.building) continue;
+    var d = rtsStructDef(e.def);
+    if (d && d.storage) cap += d.storage;
+  }
+  return cap;
+}
+/* The original nags you about this once and then shuts up for a while - a message that fires
+   on every unload tick would be the only thing on screen. */
+var RTS_SILO_WARN_DELAY = 25;
+function _rtsSiloWarn(S) {
+  var G = window._rtsG;
+  if (S.spillSaid && G.t - S.spillSaid < RTS_SILO_WARN_DELAY) return;
+  S.spillSaid = G.t || 0.0001;
+  _rtsSay('Silos needed - scrap is being lost.');
+  if (typeof _rtsSfx === 'function') _rtsSfx('deny');
+}
+function _rtsSpend(S, n) {
+  if (n <= 0) return 0;
+  var paid = Math.min(n, rtsMoney(S));
+  if (S.ore >= paid) { S.ore -= paid; }
+  else { var rest = paid - S.ore; S.ore = 0; S.credits -= rest; }
+  return paid;
+}
+/* Money handed over rather than mined: never capped, never spilled. */
+function _rtsGrant(S, n) { if (n > 0) S.credits += n; }
+/* Harvested_Money: into the store, clamped, and the remainder is gone. Returns what was lost
+   so the caller can complain about it. */
+function _rtsHarvested(S, n) {
+  if (n <= 0) return 0;
+  var cap = rtsCapacity(S.key), room = Math.max(0, cap - S.ore);
+  var kept = Math.min(n, room);
+  S.ore += kept;
+  var lost = n - kept;
+  if (lost > 0) S.spill += lost;
+  return lost;
 }
 /* ------------------------------------------------------------------ terrain --
    An earlier map was 62 random 1-3 tile rock rectangles on otherwise empty ground, and it
@@ -908,6 +970,7 @@ function _rtsSpawnUnit(side, key, x, z) {
 function _rtsCapture(eng, b) {
   var G = window._rtsG, from = b.side;
   if (!b || b.dead || b.type !== 'struct' || b.side === eng.side) return false;
+  if (!rtsCapturable(b.def)) return false;
   _rtsBaseDropNode(b);                       /* off the old owner's plan... */
   b.side = eng.side;
   _rtsBaseAdd(b.side, b.def, b.tx, b.tz);    /* ...and onto the new one's */
@@ -933,9 +996,11 @@ function _rtsCapture(eng, b) {
    comes off the treasury - same effect, and it still takes walking into a defended base. */
 function _rtsSteal(th, b) {
   var G = window._rtsG, from = G.sides[b.side];
-  var take = Math.floor(from.credits * rtsUnitDef(th.def).steal);
-  from.credits -= take;
-  G.sides[th.side].credits += take;
+  /* Available_Money, so the store counts: a house sitting on full silos is exactly the house
+     worth robbing, and taking only the loose change would make the thief useless against it. */
+  var take = Math.floor(rtsMoney(from) * rtsUnitDef(th.def).steal);
+  _rtsSpend(from, take);
+  _rtsGrant(G.sides[th.side], take);
   _rtsKill(th);
   if (th.side === 'player') _rtsSay('Stole ' + take + ' credits.');
   else _rtsSay('They stole ' + take + ' credits from you!');
@@ -1143,16 +1208,27 @@ function _rtsRepairAI(e, dt) {
   if (e.rtimer < RTS_REPAIR_RATE) return;
   e.rtimer = 0;
   var cost = _rtsRepairCost(e);
-  if (S.credits < cost) {
+  if (rtsMoney(S) < cost) {
     /* Repair_AI gives up when it cannot pay, and the AI sells rather than sit on a wreck. */
     e.repair = 0;
     if (e.side === 'player') _rtsSay('Not enough credits to keep repairing.');
     else if (e.hp < e.maxHp * RTS_COND_RED) _rtsSell(e);
     return;
   }
-  S.credits -= cost;
+  _rtsSpend(S, cost);
   e.hp = Math.min(e.maxHp, e.hp + e.maxHp * RTS_REPAIR_STEP);
 }
+/* BDATA.CPP has Raw_Cost() - Cost_Of() minus the free unit a building ships with - and it
+   exists to stop exactly one exploit: refunding half of a price that INCLUDES a free
+   harvester pays you for a harvester you are keeping. It is deliberately NOT ported here,
+   because it measured wrong against our numbers. RA's refinery is 2000 and the 1400
+   harvester is priced INTO it; ours is 1400 for the building with the harvester on top, so
+   `cost` is already the raw cost and subtracting the harvester again refunds zero.
+
+   The exploit it guards against is real here and is left open on purpose rather than fixed
+   by stealth: sell a refinery for 700, rebuild for 1400, and you have bought a 1400-credit
+   harvester for 700. Closing it means deciding what a refinery should cost, which is a
+   balance change and not a data-file port. */
 /* Sell_Back: half the price back straight away, then the building deconstructs (the build-up
    animation played backwards) and its crew walks out. */
 function _rtsSell(e) {
@@ -1160,8 +1236,8 @@ function _rtsSell(e) {
   if (!e || e.dead || e.type !== 'struct' || e.selling) return false;
   if (e.def === 'yard') return false;           /* selling the Command Yard is suicide, not a sale */
   e.selling = 1; e.repair = 0; e.building = 1; e.bprog = 1;
-  G.sides[e.side].credits += Math.round(rtsStructDef(e.def).cost * RTS_REFUND_PCT
-    * (e.hp / e.maxHp * 0.5 + 0.5));           /* a wreck is worth less than a clean building */
+  _rtsGrant(G.sides[e.side], Math.round(rtsStructDef(e.def).cost * RTS_REFUND_PCT
+    * (e.hp / e.maxHp * 0.5 + 0.5)));          /* a wreck is worth less than a clean building */
   if (e.side === 'player' && typeof _rtsSfx === 'function') _rtsSfx('build');
   return true;
 }
@@ -1306,7 +1382,7 @@ function _rtsCanQueue(side, key) {
   }
   if (cat === 'infantry' && !_rtsHas(side, 'barracks')) return false;
   if (cat === 'vehicle' && !_rtsHas(side, 'factory')) return false;
-  if (S.credits < _rtsCostOf(side, def)) return false;
+  if (rtsMoney(S) < _rtsCostOf(side, def)) return false;
   return true;
 }
 /* Can this side produce `key` at all - ignoring money and ignoring whether the line is
@@ -1349,7 +1425,7 @@ function _rtsResume(side, cat) {
 function _rtsCancel(side, cat) {
   var S = window._rtsG.sides[side], q = S.q[cat];
   if (!q) return;
-  S.credits += q.paid;         /* refund what was actually spent */
+  _rtsGrant(S, q.paid);        /* refund what was actually spent */
   S.q[cat] = null;
 }
 /* SIDEBAR.CPP Recalc: called when a factory is destroyed. Anything that can no longer be
@@ -1365,7 +1441,7 @@ function _rtsProdRecalc(side) {
   /* A finished building still waiting to be placed needs a yard to come out of. */
   if (S.ready && !_rtsHas(side, 'yard')) {
     var rd = rtsStructDef(S.ready);
-    if (rd) S.credits += _rtsCostOf(side, rd);
+    if (rd) _rtsGrant(S, _rtsCostOf(side, rd));
     lost.push(S.ready);
     S.ready = null; S.readyTry = 0;
   }
@@ -1405,9 +1481,10 @@ function _rtsTickProduction(side, dt) {
     var q = S.q[cat]; if (!q || q.hold) continue;  /* a suspended line spends nothing */
     var rate = dt / q.total * pf * _rtsLines(side, cat);   /* fraction of the job done this step */
     var want = q.cost * rate;
-    if (want > S.credits) { want = S.credits; rate = q.cost > 0 ? want / q.cost : rate; }
+    var purse = rtsMoney(S);
+    if (want > purse) { want = purse; rate = q.cost > 0 ? want / q.cost : rate; }
     if (q.cost > 0 && want <= 0) continue;          /* broke: the line stalls, as it should */
-    S.credits -= want; q.paid += want; q.prog += rate;
+    _rtsSpend(S, want); q.paid += want; q.prog += rate;
     if (q.prog >= 1) {
       S.q[cat] = null;
       if (cat === 'struct') S.ready = q.key;        /* wait for the player to place it */
@@ -2105,7 +2182,8 @@ function _rtsUpdateUnit(e, dt) {
      into the "acquire something to shoot" path - it would stand there aiming at a tank. */
   if (d.capture) {
     var cb = e.target;
-    if (e.order === 'capture' && (!cb || cb.dead || cb.type !== 'struct' || cb.side === e.side)) {
+    if (e.order === 'capture' && (!cb || cb.dead || cb.type !== 'struct' || cb.side === e.side
+        || !rtsCapturable(cb.def))) {
       e.order = null; e.target = null; e.path = null;
     } else if (e.order === 'capture') {
       if (_rtsAtStruct(e, cb)) { _rtsCapture(e, cb); return; }
@@ -2262,7 +2340,10 @@ function _rtsUpdateHarvester(e, dt, d) {
     var give = Math.min(RTS_UNLOAD_RATE * dt, e.carry);
     var pay = e.carry > 0 ? e.carryVal * (give / e.carry) : 0;
     e.carry -= give; e.carryVal = Math.max(0, e.carryVal - pay);
-    G.sides[e.side].credits += pay;
+    /* Harvested_Money, not a credit deposit: this is the one income in the game that goes
+       into the STORE, so it is the one the Storage cap can refuse. */
+    var lost = _rtsHarvested(G.sides[e.side], pay);
+    if (lost > 0 && e.side === 'player') _rtsSiloWarn(G.sides[e.side]);
     if (e.carry <= 0.5) { e.carry = 0; e.carryVal = 0; e.hstate = 'toField'; }
   }
 }
@@ -2433,6 +2514,15 @@ function _rtsAIWants(S) {
   if (slack < RTS_AI.powerSurplus) return { key:'power', urgent:slack < 0 ||
     S.powerMade < S.powerUsed * RTS_AI.powerEmergency };
 
+  /* A house whose store is nearly full is throwing away income right now, and no ratio in the
+     base plan is worth more than that. This has to come BEFORE the ordered walk or the storage
+     cap is a pure nerf: the opponent would lose the credits and never buy the fix, because a
+     silo sits behind the whole defence tier in the build order. Gated on the silo actually
+     being buildable so an AI with no refinery does not sit here demanding one. */
+  var cap = rtsCapacity('enemy');
+  if (cap > 0 && S.ore >= cap * RTS_AI.siloUrgent && (have.silo || 0) < RTS_AI.limit.silo
+      && _rtsCanProduce('enemy', 'silo')) return { key:'silo', urgent:true };
+
   /* Below IQProduction the opponent keeps a minimal base and never expands - that is the
      whole difference between the low difficulties and the high one. */
   var order = _rtsIQAt(RTS_IQ.production) ? RTS_AI.buildOrder
@@ -2588,7 +2678,7 @@ function _rtsAIUnits(S) {
   for (var cat in RTS_AI.mix) {
     var list = RTS_AI.mix[cat], pool = [], total = 0;
     for (i = 0; i < list.length; i++) {
-      if (S.credits <= list[i].at) continue;
+      if (rtsMoney(S) <= list[i].at) continue;
       if (!_rtsCanQueue('enemy', list[i].key)) continue;
       pool.push(list[i]); total += list[i].w;
     }
@@ -2609,7 +2699,7 @@ function _rtsAIStateTick(S) {
      the fallback fires and a base attacked on the first second never enters ATTACKED. */
   var last = (G.ai.lastHit == null) ? -999 : G.ai.lastHit;
   if (G.t - last < 60) { G.ai.state = RTS_STATE.ATTACKED; return; }
-  G.ai.state = S.credits < 25 ? RTS_STATE.BROKE : RTS_STATE.BUILDUP;
+  G.ai.state = rtsMoney(S) < 25 ? RTS_STATE.BROKE : RTS_STATE.BUILDUP;
 }
 function _rtsAICanEarn() {
   return !!(_rtsHas('enemy', 'refinery') && _rtsAIHarvesters());
@@ -2649,8 +2739,8 @@ function _rtsAIUrgency(S) {
 
   /* Check_Raise_Money */
   u.raiseMoney = U.NONE;
-  if (S.credits < RTS_AI.brokeMoney) u.raiseMoney = U.LOW;
-  if (S.credits < RTS_AI.desperateMoney && !_rtsAICanEarn()) u.raiseMoney++;
+  if (rtsMoney(S) < RTS_AI.brokeMoney) u.raiseMoney = U.LOW;
+  if (rtsMoney(S) < RTS_AI.desperateMoney && !_rtsAICanEarn()) u.raiseMoney++;
 
   /* Check_Fire_Sale: nothing left that can build. The game is over; go out swinging. */
   u.fireSale = U.NONE;
@@ -2692,7 +2782,7 @@ function _rtsAIDo(strat, urgency, S) {
       if (!G.ai.want || S.q.struct || S.ready) return false;
       var sd = rtsStructDef(G.ai.want.key);
       var reserve = (urgency >= RTS_URGENCY.HIGH) ? 0 : RTS_AI.creditReserve;
-      if (S.credits < _rtsCostOf('enemy', sd) + reserve) return false;
+      if (rtsMoney(S) < _rtsCostOf('enemy', sd) + reserve) return false;
       return _rtsQueue('enemy', G.ai.want.key);
 
     case 'raiseMoney':
@@ -3378,7 +3468,7 @@ function _rtsUpdateAI(dt) {
      that cannot expand its base spends its whole income on units, so handing perfect queue
      efficiency to the low difficulties turned Recruit into a unit pump - 53 units against
      Commando's 61, which is not a difficulty ladder, it is one rung. */
-  if (_rtsIQAt(RTS_IQ.refill) && S.credits > RTS_AI.infantryReserve) _rtsAIUnits(S);
+  if (_rtsIQAt(RTS_IQ.refill) && rtsMoney(S) > RTS_AI.infantryReserve) _rtsAIUnits(S);
   G.ai.next -= dt;
   G.ai.build -= dt;
   if (G.ai.build <= 0) {
@@ -3387,7 +3477,7 @@ function _rtsUpdateAI(dt) {
 
     /* Repair_AI, gated on IQRepairSell: the low difficulties simply cannot do this, which is
        why raiding a Commando base and leaving means finding it whole again. */
-    if (_rtsIQAt(RTS_IQ.repairSell) && S.credits > RTS_AI.creditReserve * 0.5) {
+    if (_rtsIQAt(RTS_IQ.repairSell) && rtsMoney(S) > RTS_AI.creditReserve * 0.5) {
       for (var r = 0; r < G.ents.length; r++) {
         var b = G.ents[r];
         if (b.dead || b.side !== 'enemy' || b.type !== 'struct' || b.building || b.selling) continue;
@@ -3663,7 +3753,7 @@ function _rtsTEvent(inst, slot, event, obj, forced) {
   var S = G.sides[who];
   if (!S) return false;
   switch (name) {
-    case 'credits':        return S.credits >= arg;
+    case 'credits':        return rtsMoney(S) >= arg;
     case 'nUnitsLost':     return G.lost[who].units >= arg;
     case 'nBuildingsLost': return G.lost[who].structs >= arg;
     case 'build':          if (G.justBuilt[who].struct !== arg) return false; td.tripped = true; return true;
