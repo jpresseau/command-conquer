@@ -15,7 +15,7 @@
 
    The header's `delta` field is the size of the largest delta buffer, which is the hint that the
    deltas exist at all; it is not needed to decode and is read only for the record. */
-var lcw = require('./lcw.js');
+var lcw = (typeof require !== 'undefined') ? require('./lcw.js') : window.RA_LCW;
 
 /* Every frame is Width x Height bytes of PALETTE INDICES - not colour. Index 0 is transparent
    in every RA shape; the rest need a palette to mean anything. */
@@ -81,4 +81,9 @@ function palOpen(buf) {
   return out;
 }
 
-module.exports = { shpOpen: shpOpen, palOpen: palOpen };
+var _exp = { shpOpen: shpOpen, palOpen: palOpen };
+
+/* dual-mode: a CommonJS module for the test suite, a plain global for the browser
+   bundle, which has no loader at all and never will. */
+if (typeof module !== 'undefined' && module.exports) module.exports = _exp;
+else if (typeof window !== 'undefined') window.RA_SHP = _exp;

@@ -60,7 +60,7 @@ function mixOpen(buf) {
   var idx = null, idxAt = 0, bodyAt;
 
   if (encrypted) {
-    var bf = require('./blowfish.js');
+    var bf = (typeof require !== 'undefined') ? require('./blowfish.js') : window.RA_BLOWFISH;
     if (p + 80 > buf.length) {
       return { error: 'encrypted, but too short to hold a key block', flags: flags, files: [] };
     }
@@ -112,4 +112,8 @@ function mixOpen(buf) {
   };
 }
 
-if (typeof module !== 'undefined') module.exports = { mixHash: mixHash, mixOpen: mixOpen };
+/* dual-mode: a CommonJS module for the test suite, a plain global for the browser
+   bundle, which has no loader at all and never will. */
+var _exp = { mixHash: mixHash, mixOpen: mixOpen };
+if (typeof module !== 'undefined' && module.exports) module.exports = _exp;
+else if (typeof window !== 'undefined') window.RA_MIX = _exp;

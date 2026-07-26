@@ -2521,3 +2521,54 @@ bolting it on untested would be exactly the kind of thing the rest of this file 
 
 Ladder unchanged at **329 / 246 / 214** — as expected, since the AI does not field aircraft. The
 flight suite is 13 assertions; `clip.js` is 1248 frames; the save suite is 31 and still green.
+
+## Real Red Alert artwork, read from the player's own files
+
+The MIX, LCW, SHP and Blowfish readers all work. `src/rts.mixart.js` is the seam between them
+and the renderer.
+
+**It loads from disk rather than shipping with the game, and that is deliberate.** Red Alert was
+released as freeware by EA in 2008 and the archives are downloadable, but redistributing the
+artwork — especially re-cut into someone else's spritesheets — is a different thing from linking
+to the official package, and OpenRA, who have thought about this far longer, do not redistribute
+it either. **No game data is committed here.** The player points the game at their own copy on the
+home screen and the files are read in the browser; nothing is uploaded.
+
+Without content the game is exactly what it was. `_rtsArtReady()` is the only thing deciding which
+set the renderer gets, and `_sprBuilding` / `_sprUnit` fall through to the procedural bakers for
+any key with no counterpart — so a missing mapping is a fallback, not a hole.
+
+### Team colour is a palette remap, not a tint
+
+RA recolours a player's units by rewriting palette indices **80–95** rather than tinting pixels.
+That is why the vehicles come out of the archive gold and green: those are the unremapped slots.
+Rebuilding the block from our team colour keeps the original's shading intact — the ramp inside
+the block is preserved and only its hue moves — which is exactly what a per-pixel tint destroys.
+
+Index 4 is the drop shadow and is drawn as translucent black; painting it literally puts a hard
+green blob under every unit.
+
+### The facing map was measured, not reasoned
+
+RA's frame order starts somewhere else and runs the other way, and the first attempt had it wrong.
+Decoding all 32 turret frames of `2tnk.shp` and taking **the pixel furthest from centre — the
+barrel tip** — gives what each frame actually points at:
+
+```
+frame  0 -> -93 deg (north)     frame 16 -> +94 deg (south)
+frame  8 -> -173 deg (west)     frame 24 ->  -7 deg (east)
+```
+
+So the index starts at north and runs **anticlockwise**, while ours starts east and runs
+clockwise. Solving `-90 - i*(360/n) = f*(360/n)` gives **`i = -n/4 - f`**. The first version had
+the quarter-turn's sign the other way and every vehicle drove sideways.
+
+**A centroid check said "wrong" but could not say by how much** — a turret's centroid barely moves
+as it rotates, and it reported a 190-degree spread that meant nothing. Switching the measurement
+to the barrel tip turned it into a number: mean offset from the requested bearing **0.1°**.
+
+### Verifying
+
+The harness feeds the four archives into the running page exactly as the picker does, then
+measures. Fallback suites all still pass with no content loaded: `clip.js` 1248 frames, save 31,
+flight 13, the reader suite 53.

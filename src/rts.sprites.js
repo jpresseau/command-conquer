@@ -584,6 +584,12 @@ function _sprSandbag() {
    with y=0 at ground level and +y up. Build from the ground upward - every part sits on
    something below it, so the y offsets read as a running total. */
 function _sprBuilding(key, side) {
+  /* Real artwork wins when the player has pointed the game at their own game files; everything
+     below is the fallback that got this project to the point where it could ask. */
+  if (typeof _rtsArtReady === 'function' && _rtsArtReady()) {
+    var real = _mixBuilding(key, side);
+    if (real) return real;
+  }
   var def = rtsStructDef(key), TM = RTS_PAL.team[side];
   var W = def.w * RTS_TS, D = def.h * RTS_TS;
   var C = RTS_PAL.conc, S = RTS_PAL.steel, DK = RTS_PAL.dark, B = RTS_PAL.bld[side];
@@ -1244,6 +1250,10 @@ function _sprFacingsFor(d) { return d.kind === 'infantry' ? 8 : 32; }
 function _sprFacings(key) { return _sprFacingsFor(rtsUnitDef(key)); }
 
 function _sprUnit(key, side, prone, part) {
+  if (typeof _rtsArtReady === 'function' && _rtsArtReady()) {
+    var real = _mixUnit(key, side, prone, part);
+    if (real) return real;
+  }
   var m = _sprUnitModel(key, side, prone, part), size = _sprUnitFit(key, side);
   var frames = [], N = _sprFacings(key);
   for (var f = 0; f < N; f++) {

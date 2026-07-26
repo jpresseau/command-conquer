@@ -102,4 +102,8 @@ function xorDelta(src, srcOffset, dest) {
   }
 }
 
-if (typeof module !== 'undefined') module.exports = { lcwDecompress: lcwDecompress, xorDelta: xorDelta };
+/* dual-mode: a CommonJS module for the test suite, a plain global for the browser
+   bundle, which has no loader at all and never will. */
+var _exp = { lcwDecompress: lcwDecompress, xorDelta: xorDelta };
+if (typeof module !== 'undefined' && module.exports) module.exports = _exp;
+else if (typeof window !== 'undefined') window.RA_LCW = _exp;
