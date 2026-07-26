@@ -286,6 +286,20 @@ function _rtsBakeTerrain(G) {
       }
     }
   }
+  /* With the player's own game files loaded, the GROUND is repainted from the original's
+     terrain templates - real grass and water, one of sixteen clear variants picked per cell the
+     way the original picks them. Everything layered on afterwards (rock, trees, ore, the dirt
+     patches' drawn edges) stays procedural, because those are multi-tile templates with real
+     placement rules and half-applying them would look worse than either end state. */
+  if (typeof _mixGround === 'function' && _mixGround()) {
+    for (var gz = 0; gz < N; gz++) {
+      for (var gx = 0; gx < N; gx++) {
+        var gk = G.terrain[_rtsIdx(gx, gz)];
+        if (gk === RTS_T_ROCK) continue;                /* ours is better than half a cliff */
+        _mixPaintCell(d, S, gx, gz, gk, seed);
+      }
+    }
+  }
   g.putImageData(img, 0, 0);
 
   /* Scatter that crosses cell lines: tufts, pebbles and bushes placed in world pixels. */
@@ -479,6 +493,13 @@ function _rtsBakeTerrain(G) {
 var _RTS_TREES = null;
 function _sprTrees() {
   if (_RTS_TREES) return _RTS_TREES;
+  /* Real trees when the player's own files are loaded. Ours next to the original's ground was
+     the one thing in the first pass that looked plainly wrong - bright cones on RA's dark
+     temperate grass. */
+  if (typeof _mixTrees === 'function') {
+    var real = _mixTrees();
+    if (real) return (_RTS_TREES = real);
+  }
   var TR = RTS_PAL.tree, out = [];
   for (var v = 0; v < 3; v++) {
     var sc = [0.82, 1.0, 1.22][v], m = [];
