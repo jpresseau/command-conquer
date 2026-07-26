@@ -1071,11 +1071,19 @@ function _sprUnitFit(key, side) {
   if (rtsUnitDef(key).kind === 'infantry') models.push(_sprUnitModel(key, side, true, null));
   return (_RTS_UFIT[key] = _r3FitSize(models, 2));
 }
+/* How many facings a unit is baked at. Red Alert uses THIRTY-TWO for vehicles and eight for
+   infantry - `Facings: 32, UseClassicFacings: True` against a plain `Facings: 8` throughout
+   mods/ra/sequences. We were baking eight for everything, which is why a tank turning in the
+   original sweeps round while ours popped through 45-degree steps. Infantry really are eight in
+   the original, so they stay eight; the cost is paid only where it shows. */
+function _sprFacingsFor(d) { return d.kind === 'infantry' ? 8 : 32; }
+function _sprFacings(key) { return _sprFacingsFor(rtsUnitDef(key)); }
+
 function _sprUnit(key, side, prone, part) {
   var m = _sprUnitModel(key, side, prone, part), size = _sprUnitFit(key, side);
-  var frames = [];
-  for (var f = 0; f < 8; f++) {
-    var cv = _r3BakeCentred(_r3Yaw(m, -f / 8 * Math.PI * 2), size);
+  var frames = [], N = _sprFacings(key);
+  for (var f = 0; f < N; f++) {
+    var cv = _r3BakeCentred(_r3Yaw(m, -f / N * Math.PI * 2), size);
     _sprEdge(cv);
     /* the turret is drawn ON the hull, so it must not cast a second ground shadow */
     frames.push(part === 'turret' ? cv : _sprShadow(cv, 1, 2));
@@ -1309,10 +1317,15 @@ function _rtsSprites() {
     S.hull = S.hull || {}; S.turret = S.turret || {};
     S.hull[side] = {}; S.turret[side] = {};
     RTS_UNITS.forEach(function (d) {
-      S.unit[side][d.key] = _sprUnit(d.key, side);
       if (RTS_TURRETED[d.key]) {
+        /* A turreted unit is only ever DRAWN as hull + turret, so baking the combined body as
+           well was pure waste - 32 canvases per unit per side that nothing referenced. `unit`
+           aliases the hull instead of duplicating it. */
         S.hull[side][d.key] = _sprUnit(d.key, side, false, 'hull');
         S.turret[side][d.key] = _sprUnit(d.key, side, false, 'turret');
+        S.unit[side][d.key] = S.hull[side][d.key];
+      } else {
+        S.unit[side][d.key] = _sprUnit(d.key, side);
       }
     });
     S.prone[side] = {};

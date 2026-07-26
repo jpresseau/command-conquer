@@ -2125,3 +2125,66 @@ simulation or UI code reads a unit sprite's dimensions.
 
 The diagnostic worth keeping is the **silhouette sheet** — every unit, eight facings, alpha
 thresholded to black on white. Colour hides sameness; a silhouette sheet cannot.
+
+## Thirty-two facings — from OpenRA's `mods/ra/sequences`
+
+OpenRA's mod folder is not the original game's data, but its sequence definitions describe the
+original sprite sheets exactly, and one line settles a question that had been assumed wrong from
+the start:
+
+```
+harv:  idle:  Facings: 32   UseClassicFacings: True
+e1:    stand: Facings: 8
+```
+
+**Red Alert bakes vehicles at thirty-two facings and infantry at eight.** Every entry in
+`sequences/vehicles.yaml` is 32; every entry in `sequences/infantry.yaml` is 8. We were baking
+eight for everything, which is why a tank turning in the original sweeps round while ours popped
+through 45-degree steps — one of the more visible differences left, and a mechanical one rather
+than a matter of taste.
+
+`_sprFacingsFor(def)` returns 32 for vehicles and 8 for infantry; `_sprUnit` and `_rtsDrawUnit`
+both read it, so there is one definition of the number.
+
+**`_r3FitSize` now samples 32 yaws regardless of what the caller will bake.** A square measured
+over only the eight cardinal-and-diagonal facings is not guaranteed to hold the ones between them,
+and getting that wrong shears the gun off a tank silently. The measurement runs once at load.
+
+**The combined bake for turreted units was dead weight.** A tank is only ever *drawn* as hull plus
+turret, so `S.unit[side][key]` was 32 canvases per unit per side that nothing referenced. It now
+aliases the hull. That is 192 canvases and ~270 ms of the cost paid back.
+
+### Cost
+
+|                | 8 facings | 32 for vehicles |
+|----------------|-----------|-----------------|
+| bake at load   | 572 ms    | 772 ms          |
+| canvases       | 602       | 981             |
+| sprite memory  | 2.8 MB    | 5.3 MB          |
+
+Draw cost is unchanged — the same `drawImage` calls, indexing a longer array. `_rtsDrawUnit`
+already has the unit def in hand, so it calls `_sprFacingsFor(d)` rather than `_sprFacings(key)`;
+`rtsUnitDef` is a linear scan and this runs per unit per frame.
+
+`clip.js` asserts no opaque pixel touches a canvas edge and that every set has the facing count it
+should — **1056 frames, both sides, all four variants.**
+
+## What OpenRA's rules are NOT good for
+
+The `mods/ra/rules/*.yaml` files are OpenRA's own rebalance, not the original's numbers, and
+adopting them would move this project *away* from the thing it is imitating. The vehicle costs
+make it obvious:
+
+| unit          | ours | original RA | OpenRA |
+|---------------|------|-------------|--------|
+| Light Tank    | 700  | 700         | 700    |
+| Medium Tank   | 800  | 800         | 850    |
+| Mammoth       | 1700 | 1700        | 2000   |
+| Artillery     | 600  | 600         | 850    |
+| Harvester     | 1400 | 1400        | 1100   |
+
+Ours already match the original on five of six; OpenRA differs on four. Same story on infantry —
+their Tanya is 1800 against RA's 1200, their Medic 200 against RA's 800. **So they were not
+transcribed.** What the mod folder *is* good for is anything descriptive of the original data
+rather than tuned on top of it: `sequences/` (facing counts, frame layouts, turret/hull splits)
+and `tilesets/` (terrain type per tile).

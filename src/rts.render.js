@@ -432,7 +432,8 @@ function _rtsDrawStruct(g, e, TSscale, cell) {
 
 function _rtsDrawUnit(g, e, TSscale) {
   var R = _rtsR, d = rtsUnitDef(e.def);
-  var f = ((Math.round(e.rot / (Math.PI * 2) * 8) % 8) + 8) % 8;
+  var N = _sprFacingsFor(d);   /* d is already in hand - rtsUnitDef is a linear scan */
+  var f = ((Math.round(e.rot / (Math.PI * 2) * N) % N) + N) % N;
   var turreted = R.spr.turret && R.spr.turret[e.side][e.def];
   var img = (e.prone && R.spr.prone[e.side][e.def])
     ? R.spr.prone[e.side][e.def][f]
@@ -443,7 +444,7 @@ function _rtsDrawUnit(g, e, TSscale) {
   g.drawImage(img, px, py, w, h);
   /* SecondaryFacing: the turret is its own shape at its own angle, drawn over the hull. */
   if (turreted) {
-    var tf = ((Math.round(e.turret / (Math.PI * 2) * 8) % 8) + 8) % 8;
+    var tf = ((Math.round(e.turret / (Math.PI * 2) * N) % N) + N) % N;
     var timg = turreted[tf], rx = 0, ry = 0;
     /* Recoil_Adjust: a firing turret moves back one pixel along its facing. */
     if (e.recoil > 0) {
