@@ -26,6 +26,9 @@ var RTS_SIDES = {
    build: seconds to construct at full power
    power: + supplies, - draws
    needs: structure keys that must already be built and alive
+   storage: BDATA.CPP's `Capacity` (RULES.INI `Storage`) - how much HARVESTED scrap this
+            building can hold. See rtsCapacity/_rtsHarvested in rts.core.js: ore unloaded
+            above the sum of these is spilled on the ground and lost.
    Numbers are ours, but the shape of the tech tree is the classic one:
    power -> refinery/barracks -> factory -> defences. */
 var RTS_STRUCTS = [
@@ -36,9 +39,9 @@ var RTS_STRUCTS = [
     armour:'concrete',
     desc:'Supplies 100 power. Low power slows every production line.' },
   { key:'refinery', name:'Scrap Refinery',w:3, h:3, cost:1400, build:18, hp:950,  power:-30,  sight:12,
-    needs:['power'], freeUnit:'harvester',
+    needs:['power'], freeUnit:'harvester', storage:2000,
     armour:'concrete',
-    desc:'Harvesters unload here. Ships with one free Harvester.' },
+    desc:'Harvesters unload here, and it stores 2000 of scrap. Ships with one free Harvester.' },
   { key:'barracks', name:'Barracks',      w:2, h:2, cost:400,  build:9,  hp:650,  power:-20,  sight:12,
     needs:['power'], produces:'infantry',
     armour:'wood',
@@ -72,7 +75,7 @@ var RTS_STRUCTS = [
   /* Concrete Wall $50, no power, no prerequisite - the reference's numbers exactly. It is the
      one thing in the game you can build from the first second of a match. */
   { key:'wall',     name:'Concrete Wall', w:1, h:1, cost:50,   build:2,  hp:400,  power:0,    sight:0,
-    wall:true,
+    wall:true, capturable:false,
     armour:'concrete',
     desc:'A metre of concrete. Blocks movement, absorbs a lot, shoots at nothing.' },
   /* Pillbox $400 / -15 / needs Barracks, again straight from the reference. */
@@ -100,7 +103,19 @@ var RTS_STRUCTS = [
   { key:'flametower',name:'Flame Tower', w:1, h:1, cost:500,  build:11, hp:450,  power:-20,  sight:16,
     needs:['barracks'], weapon:'towerflame', deathBlast:{ dmg:70, radius:RTS_TILE * 2.6 },
     armour:'concrete',
-    desc:'Burns anything that comes close. Goes up in a fireball when it dies.' }
+    desc:'Burns anything that comes close. Goes up in a fireball when it dies.' },
+  /* BDATA.CPP's STRUCT_STORAGE. The silo does nothing but hold scrap - no power to speak of,
+     no weapon, no prerequisite past the refinery that fills it - and it is the cheapest
+     structure in the game that pays for itself, because without one every credit your
+     harvesters bring back above your capacity is thrown away at the dock. */
+  /* Zero power draw, and that number is MEASURED rather than chosen. At -10 each, the dozen
+     silos an overflowing opponent builds drew 130 power, browned its whole base out and cost
+     it enough production that the player lived 81 seconds longer on one seed. A storage tank
+     is passive; giving it an appetite turned the storage cap into an accidental nerf. */
+  { key:'silo',     name:'Scrap Silo',   w:2, h:2, cost:150,  build:5,  hp:400,  power:0,    sight:8,
+    needs:['refinery'], storage:1500, capturable:false,
+    armour:'wood',
+    desc:'Holds 1500 more scrap. Without enough storage, harvested scrap over the cap is lost.' }
 ];
 
 /* ------------------------------------------------------------------- units --
@@ -491,15 +506,25 @@ var RTS_AI = {
   attackInterval:3,         /* minutes between attack waves, before difficulty bias */
   attackDelay:5,            /* minutes before the first one */
   ratio:{ refinery:0.16, barracks:0.16, factory:0.10, radar:0.06, lab:0.05, depot:0.05,
-          apower:0.08, kennel:0.04, pillbox:0.18, flametower:0.12, turret:0.24, rocketpit:0.12 },
+          apower:0.08, kennel:0.04, silo:0.14, pillbox:0.18, flametower:0.12, turret:0.24, rocketpit:0.12 },
   limit:{ refinery:4,    barracks:2,    factory:2,    radar:1,    lab:1,    depot:1,
-          apower:2,    kennel:1,    pillbox:4,     flametower:3,     turret:6,     rocketpit:4 },
+  /* The silo limit is high on purpose and is the one number here that was MEASURED rather
+     than guessed. At 6 the opponent filled its 17,000 of storage on `normal` and then threw
+     away 17,000 more credits over seven minutes - it has the income to overflow and not the
+     production lines to spend it down, so a low ceiling turns the storage cap into a straight
+     nerf and hands the player about 16 extra seconds of life. RA has no silo limit at all. */
+          apower:2,    kennel:1,    silo:14,   pillbox:4,     flametower:3,     turret:6,     rocketpit:4 },
+  /* HOUSE.CPP AI_Building checks Tiberium against Capacity before it checks anything else:
+     an overflowing house builds a silo NEXT, whatever else the base plan wanted. Without this
+     the storage cap is a pure nerf to the opponent - it loses the income and never buys the
+     fix. Expressed as the fraction of capacity at which a silo jumps the queue. */
+  siloUrgent:0.8,
   /* The order _rtsAIWants walks. Economy, then production, then tech, then defence - tech
      before defence because a Tech Center that arrives after the match is decided is worth
      nothing, and the defensive ratios are big enough to soak every spare credit otherwise.
      The pillbox comes first among the defences because it is the one the AI can afford early;
      `wall` is deliberately absent, since an AI that cannot plan a line just scatters concrete. */
-  buildOrder:['refinery', 'barracks', 'factory', 'radar', 'apower', 'depot', 'lab', 'kennel',
+  buildOrder:['refinery', 'barracks', 'silo', 'factory', 'radar', 'apower', 'depot', 'lab', 'kennel',
               'pillbox', 'flametower', 'turret', 'rocketpit'],
   /* What to spend a production run on. A table rather than an if-chain: adding a unit to
      RTS_UNITS should not mean editing the opponent's brain, and the hardcoded ladder that used
@@ -657,6 +682,14 @@ var RTS_CREW_CHANCE = 0.5;
    they live in RULES.INI, which is a data file rather than source, so they were derived from
    the old three-bucket values to hold the measured balance and will be replaced wholesale if
    that file ever turns up. */
+/* BDATA.CPP's IsCaptureable, defaulting the way the original does: a building is capturable
+   unless its type says otherwise. Walls and silos are not - there is nothing inside either of
+   them for an engineer to take over, and "capture the enemy's wall" is not a plan. */
+function rtsCapturable(key) {
+  var d = rtsStructDef(key);
+  return !d || d.capturable !== false;
+}
+
 var RTS_ARMOUR = ['none', 'wood', 'light', 'heavy', 'concrete'];
 function rtsArmour(e) {
   var d = (e.type === 'struct') ? rtsStructDef(e.def) : rtsUnitDef(e.def);

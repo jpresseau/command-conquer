@@ -589,6 +589,25 @@ function _sprBuilding(key, side) {
     pilasters(23, 0, 0, 5, 12, 4, 20);
     winRow(23, 10, 0, 4, 12, 5, 4);
 
+  } else if (key === 'silo') {
+    /* Scrap Silo: two ribbed upright tanks on a pad, with a conveyor running into the top of
+       them. Upright cylinders are the one silhouette in the base that cannot be mistaken for a
+       shed, which matters - this is a building the player has to notice they are short of.
+       The scrap heaped in the open bay is the readable cue for what it holds. */
+    _r3Box(m, 0, 0, 0, W - 4, 1.8, D - 4, C[0], C[1]);                 /* pad */
+    for (i = 0; i < 2; i++) {
+      var sx = -8 + i * 16;
+      _r3Cyl(m, sx, 1.8, -4, 7.5, 22, S[0], S[1], 18);                 /* tank */
+      for (var rb = 0; rb < 3; rb++)                                   /* hoop ribs */
+        _r3Cyl(m, sx, 6 + rb * 6, -4, 8.1, 1.2, S[2], S[3], 18);
+      _r3Cone(m, sx, 23.8, -4, 7.5, 0.5, 5, C[1], 18);                 /* conical cap */
+      _r3Cyl(m, sx, 28.8, -4, 1.6, 2.5, DK[1], DK[3], 10);             /* vent */
+    }
+    _r3Box(m, 0, 26, -4, 20, 2.5, 4, S[2], S[1]);                      /* conveyor bridge */
+    _r3Box(m, 0, 28.5, -4, 14, 1.2, 3, TM[0], TM[1]);                  /* team stripe on it */
+    _r3Box(m, 0, 1.8, D / 2 - 7, W - 12, 4.5, 9, DK[0], DK[1]);        /* open receiving bay */
+    _r3Box(m, 0, 1.8, D / 2 - 7, W - 18, 5.5, 6, RTS_PAL.ore[0], RTS_PAL.ore[1]);  /* scrap in it */
+
   } else if (key === 'kennel') {
     /* Kennel: a run with a pitched shed at one end. Small, cheap and obviously not a defence -
        nothing about it should read as a gun. */

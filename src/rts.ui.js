@@ -31,6 +31,9 @@ function rtsOpen(seed) {
     + '</div>'
     + '<div class="rts-bar">'
     +   '<div class="rts-credits"><span class="lbl">CREDITS</span><span class="val" id="rtsCred">0</span></div>'
+    /* Storage: how full the silos are. Without a readout the only sign that scrap is being
+       thrown away is a line of text that has already scrolled off. */
+    +   '<div class="rts-store" id="rtsStore" title="Storage"><i id="rtsStoreFill"></i></div>'
     +   '<div class="rts-radar"><canvas id="rtsMini" width="188" height="188"></canvas>'
     +     '<span class="rlbl">RADAR</span></div>'
     +   '<div class="rts-tabs">'
@@ -235,7 +238,7 @@ function _rtsItemClick(key) {
     if (!_rtsAvailable('player', def)) _rtsSay('Needs ' + def.needs.map(function (n) { return rtsStructDef(n).name; }).join(' + ') + ' first.');
     else if (cat === 'infantry' && !_rtsHas('player', 'barracks')) _rtsSay('Build a Barracks first.');
     else if (cat === 'vehicle' && !_rtsHas('player', 'factory')) _rtsSay('Build a War Factory first.');
-    else if (S.credits < def.cost) _rtsSay('Not enough credits.');
+    else if (rtsMoney(S) < def.cost) _rtsSay('Not enough credits.');
     else if (S.q[cat]) _rtsSay('That production line is busy.');
     else if (S.ready) _rtsSay('Place the finished building first.');
   }
@@ -288,11 +291,21 @@ function _rtsSyncSidebar(dt) {
   _rtsWatchNewOptions();
 
   /* Credits roll toward the true value instead of snapping - the classic counter tick. */
-  var target = Math.floor(S.credits);
+  var target = Math.floor(rtsMoney(S));
   var step = Math.max(1, Math.ceil(Math.abs(target - U.credShown) * 0.28));
   if (U.credShown < target) U.credShown = Math.min(target, U.credShown + step);
   else if (U.credShown > target) U.credShown = Math.max(target, U.credShown - step);
   document.getElementById('rtsCred').textContent = U.credShown;
+
+  /* Storage bar. Full means every credit a harvester brings home from here is being lost, so
+     it turns red at the point where that starts rather than when the bar merely looks busy. */
+  var scap = rtsCapacity('player'), sfrac = scap > 0 ? Math.min(1, S.ore / scap) : 0;
+  var sf = document.getElementById('rtsStoreFill');
+  sf.style.width = (sfrac * 100) + '%';
+  sf.className = sfrac >= 0.999 ? 'full' : (sfrac > 0.85 ? 'warn' : '');
+  document.getElementById('rtsStore').title = scap > 0
+    ? 'Storage  ' + Math.floor(S.ore) + ' / ' + scap + (sfrac >= 0.999 ? '  — FULL, scrap is being lost' : '')
+    : 'Storage  no capacity — build a Refinery';
 
   /* Vertical power strip: the track is capacity, the fill is draw. */
   var pf = _rtsPowerFactor('player');
@@ -314,7 +327,7 @@ function _rtsSyncSidebar(dt) {
       && (cat !== 'vehicle' || !!_rtsHas('player', 'factory'));
     var cls = 'rts-tile';
     if (!avail) cls += ' locked';
-    else if (S.credits < def.cost && !(q && q.key === key)) cls += ' poor';
+    else if (rtsMoney(S) < def.cost && !(q && q.key === key)) cls += ' poor';
     if (cat === 'struct' && S.ready === key) {
       cls += ' ready'; pct.textContent = 'READY'; wipe.style.background = 'none';
     } else if (q && q.key === key) {
@@ -703,7 +716,7 @@ function _rtsRightClick(mx, my) {
     for (i = 0; i < mine.length; i++) {
       var mu = mine[i], md = rtsUnitDef(mu.def), job = null;
       if (tgt.type === 'struct') {
-        if (md.capture) job = 'capture';
+        if (md.capture && rtsCapturable(tgt.def)) job = 'capture';
         else if (md.steal && tgt.def === md.stealFrom) job = 'capture';
         else if (md.demo) job = 'demo';
       }
