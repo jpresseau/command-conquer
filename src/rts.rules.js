@@ -603,6 +603,60 @@ var RTS_AI = {
   sellForPower:[['turret', 1], ['barracks', 2], ['factory', 2], ['refinery', 3]]
 };
 
+/* ---------------------------------------------------------------- crates --
+   CRATE.CPP. A crate is a map OVERLAY, not an object: `Put_Crate` stamps one into a cell and
+   `Get_Crate` clears it. Crates do not accumulate - each one carries a timer, and when it
+   expires the crate is removed and re-created somewhere else, so the map always holds the
+   same number of them however long the match runs.
+
+     Timer = Random_Pick(CrateTime * TICKS_PER_MINUTE/2, CrateTime * TICKS_PER_MINUTE*2)
+
+   ...so a crate lives between half and twice `CrateTime`. Placement re-rolls a random map
+   location until the cell is clear to build.
+
+   `WaterCrateChance` and `OVERLAY_WATER_CRATE` are deliberately NOT ported. In the original,
+   `Is_Clear_To_Build(SPEED_FLOAT)` means clear for something that FLOATS, and a crate bobbing
+   in the sea is collectable because RA has ships. This game has no naval units and its water
+   cells are blocked outright, so a water crate would be loot nobody could ever reach - and
+   worse than useless, because it would hold one of the three crate slots hostage for its
+   entire lifetime. Measured before it was cut: with water cells blocked, the placement search
+   rejected every one of them and fell through to land 120 times out of 120, so the feature
+   was already dead code pretending to work.
+
+   WHAT IS NOT IN CRATE.CPP: the effects. That file creates, places and removes crates and
+   says nothing about what is inside one. The list below is ours, built from the crate
+   ANIMATIONS in ADATA.CPP - DOLLAR, ARMOR, FPOWER, RAPID, SPEED, INVUN, MINE, GPSBOX and the
+   rest are the powerups the original shipped, because each one needed art. What each is
+   worth here is a balance decision this repository is making, not a quotation.
+
+   `w` is the pick weight. The money crate is the common one because it is the one that is
+   never a disappointment; the mine is the reason driving over an unknown crate is a decision
+   rather than free loot. */
+var RTS_CRATE_MAX = 3;             /* Rule.CrateMaximum */
+var RTS_CRATE_TIME = 3;            /* Rule.CrateTime, in minutes */
+var RTS_CRATE_TRIES = 200;         /* give up re-rolling rather than spin forever */
+var RTS_CRATES = [
+  { key:'money',  w:22, name:'Credits',        anim:'DOLLAR' },
+  { key:'heal',   w:12, name:'Repair kit',     anim:'—' },
+  { key:'armour', w:11, name:'Armour plating', anim:'ARMOR',  mult:{ armor:1.25 } },
+  { key:'fpower', w:11, name:'Firepower',      anim:'FPOWER', mult:{ fire:1.3 } },
+  { key:'rapid',  w:9,  name:'Rapid reload',   anim:'RAPID',  mult:{ rof:0.75 } },
+  { key:'speed',  w:9,  name:'Engine tune',    anim:'SPEED',  mult:{ speed:1.35 } },
+  { key:'reveal', w:8,  name:'Map data',       anim:'GPSBOX' },
+  { key:'unit',   w:9,  name:'Abandoned vehicle', anim:'—' },
+  { key:'mine',   w:9,  name:'Booby trap',     anim:'MINE' }
+];
+var RTS_CRATE_MONEY = [400, 1200];  /* range a money crate pays */
+var RTS_CRATE_MINE_DMG = 90;
+var RTS_CRATE_MINE_RADIUS = RTS_TILE * 2.2;
+/* What a free-vehicle crate can contain: things that are useful on their own, in the open,
+   with no support. An engineer or a thief handed to you in the middle of nowhere is a unit
+   with nothing to do. */
+var RTS_CRATE_UNITS = ['buggy', 'light', 'tank', 'harvester'];
+/* A unit may keep stacking bonuses, but not without limit - a tank that has hoovered up six
+   firepower crates stops being a tank. */
+var RTS_CRATE_CAP = { fire:2.2, armor:2.2, speed:1.9, rof:0.45 };
+
 /* ---------------------------------------------------------------- shroud --
    MAP.CPP Sight_From(). Two flags per cell, and the distinction is the whole feature:
 

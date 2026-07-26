@@ -763,6 +763,79 @@ gun preferring heavy, small arms unable to hurt a wall while shells and rockets 
 rule applying to walls rather than to all concrete. Ladder easy 298 s / normal 218 s / hard 175 s,
 within a second of the previous run on every difficulty.
 
+## Crates — from CRATE.CPP
+
+CRATE.CPP is the spawn/place/remove half. A crate is a map **overlay**, not an object:
+`Put_Crate` stamps one into a cell, `Get_Crate` clears it. The load-bearing idea is that
+crates **do not accumulate** — each carries a timer, and `Create_Crate` removes whatever the
+slot was tracking before placing a new one, so the map holds the same number however long the
+match runs:
+
+    Timer = Random_Pick(CrateTime * TICKS_PER_MINUTE/2, CrateTime * TICKS_PER_MINUTE*2)
+
+...so a crate lives between **half and twice** `CrateTime`. Placement re-rolls a random
+location until the cell is clear to build.
+
+### What the file does not contain
+
+**The effects.** CRATE.CPP creates, places and removes crates and says nothing about what is
+inside one. `RTS_CRATES` is ours, built from the crate **animations** in ADATA.CPP — `DOLLAR`,
+`ARMOR`, `FPOWER`, `RAPID`, `SPEED`, `INVUN`, `MINE`, `GPSBOX` and the rest are the powerups
+the original shipped, because each one needed art. What each is *worth* here is a balance
+decision this repository is making, not a quotation, and the file header says so.
+
+Nine kinds: money, repair kit, armour, firepower, rapid reload, engine tune, map data, an
+abandoned vehicle, and a booby trap. The mine is the reason driving over an unknown crate is
+a decision rather than free loot.
+
+Bonuses ride the **unit** that collected them (`e.cr`), multiplying the house-wide difficulty
+bias rather than replacing it — `rtsCrateMult` next to `_rtsBias`. They stack and are capped,
+and `rof` is the odd one out: lower is faster, so its cap is a **floor**.
+
+### Water crates are deliberately not ported
+
+`Is_Clear_To_Build(SPEED_FLOAT)` means clear for something that **floats**, and a crate
+bobbing in the sea is collectable in the original because RA has ships. This game has none
+and its water cells are blocked outright, so a water crate would be loot nobody could reach —
+and worse than useless, because it would hold one of three crate slots hostage for its whole
+lifetime. Measured before it was cut: the placement search rejected every water cell and fell
+through to land **120 times out of 120**, so the branch was already dead code pretending to
+work. The test now asserts the absence.
+
+### The measurement that mattered
+
+Crates moved the `hard` ladder from 174 s to 183 s. That looked like a real balance change and
+it was not: logging every pickup showed **zero crates collected** in the seed that moved most.
+The cause was that placing three crates at map setup draws from the **main RNG stream**, which
+shifts every subsequent roll and turns every seeded scenario into a different battle.
+
+Crates now draw from their own generator seeded off the map seed, exactly as ore growth
+already does. With that, all fifteen ladder seeds are **byte-identical** to the run before the
+feature — which is the only honest way to claim a new subsystem changed nothing it shouldn't.
+
+The corollary is worth stating plainly: **crates are nearly inert in the idle-player
+benchmark**, 0–2 pickups per match, because the benchmark player never moves and neither side
+seeks them out. No crate-seeking AI was added. In real play a human moves units constantly and
+will meet them far more often.
+
+### Verified
+
+36 assertions in `crate.js`: the full complement at match start, every crate on clear
+buildable ground and never inside an ore field, no two sharing a cell, lifetimes inside the
+half-to-twice `CrateTime` window, expiry **replacing** rather than deleting and the count
+staying pinned across a ten-minute match, pickup removing the crate and spawning a
+replacement, money paying inside its declared range **and surviving a full store because it is
+a grant rather than harvest**, bonuses landing on the collector and being read by
+`rtsCrateMult`, stacking capped in both directions, and — the ones that matter — each of
+firepower, reload, armour and speed measurably changing damage dealt, damage taken and
+distance travelled rather than just sitting on the object. Plus heal, shroud lift (and *not*
+lifting the player's shroud when the opponent collects it), free vehicle from the declared
+list, the mine hurting its opener and being nobody's kill, both sides collecting, crates and
+bonuses surviving save/load, and no crate ever placed where nothing can reach it.
+
+Regression: burn 40/40, storage 34/34, save/load 31/31, verbs 26/26, mech 20/20, armour 16/16,
+udata 13/13, idata 9/9. Ladder **296 / 220 / 174 s**, identical seed by seed.
+
 ## Things burn — from ADATA.CPP
 
 ADATA.CPP is the animation table, **not** the aircraft table (that is `AADATA.CPP`; this file

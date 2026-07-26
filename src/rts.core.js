@@ -738,9 +738,152 @@ function _rtsNewGame(seed, diff) {
      after ore fields, so they have to be derived from the finished map, not the blank one. */
   _rtsBuildWaypoints(G);
   _rtsTrigInit(G);
+  _rtsCrateInit(G);           /* after the map is finished: a crate needs clear ground */
 
   _rtsRecalcPower('player'); _rtsRecalcPower('enemy');
   return G;
+}
+
+/* ----------------------------------------------------------------- crates --
+   CRATE.CPP. Each crate is a slot with a cell and a timer, and the set of slots is fixed:
+   `Create_Crate` removes whatever the slot was tracking before it places a new one, so
+   crates relocate rather than accumulate. Everything below follows that file except what is
+   inside a crate, which that file does not say - see RTS_CRATES.
+
+   Held as a small array rather than a per-cell overlay byte. The original needs an overlay
+   because its cell already carries one; here nothing else wants that storage, and a list of
+   three is cheaper to scan than 12,544 cells are to search. */
+/* Crates draw from their OWN generator, the way ore growth already does, and that is not a
+   tidiness point - it is the difference between a comparable measurement and a meaningless
+   one. Placing three crates off the main stream at map setup shifts every subsequent roll in
+   the match, so every seeded scenario in the repository becomes a different battle and the
+   ladder can no longer be compared against the run before. Measured: crates moved `hard` from
+   174 s to 183 s while the logs showed ZERO crates being picked up in the seed that moved
+   most. That was not balance, it was a reseed. */
+function _rtsCrateRnd(G) {
+  if (!G.crateRnd) G.crateRnd = _rtsRngMake((G.seed ^ 0xc4a7e) >>> 0);
+  return G.crateRnd;
+}
+function _rtsCrateInit(G) {
+  G.crates = [];
+  _rtsCrateRnd(G);
+  for (var i = 0; i < RTS_CRATE_MAX; i++) _rtsCrateNew(G);
+}
+/* Put_Crate: re-roll a random location until the cell is clear. The original loops forever
+   until it finds one; this gives up after RTS_CRATE_TRIES, because a map that somehow had no
+   clear ground left would hang the tick rather than skip a crate. */
+function _rtsCrateSpot(G) {
+  var rnd = _rtsCrateRnd(G);
+  for (var t = 0; t < RTS_CRATE_TRIES; t++) {
+    var tx = (rnd() * RTS_N) | 0, tz = (rnd() * RTS_N) | 0;
+    if (!_rtsInB(tx, tz)) continue;
+    var i = _rtsIdx(tx, tz);
+    if (G.blocked[i] !== 0) continue;                  /* Is_Clear_To_Build */
+    if (G.scrap[i] > 0) continue;                      /* not buried in an ore field */
+    /* one crate per cell */
+    var clash = false;
+    for (var c = 0; c < G.crates.length; c++) if (G.crates[c].tx === tx && G.crates[c].tz === tz) clash = true;
+    if (clash) continue;
+    return { tx:tx, tz:tz };
+  }
+  return null;
+}
+/* Weighted pick over RTS_CRATES. */
+function _rtsCratePick(G) {
+  var total = 0, i;
+  for (i = 0; i < RTS_CRATES.length; i++) total += RTS_CRATES[i].w;
+  var r = _rtsCrateRnd(G)() * total;
+  for (i = 0; i < RTS_CRATES.length; i++) { r -= RTS_CRATES[i].w; if (r <= 0) return RTS_CRATES[i]; }
+  return RTS_CRATES[0];
+}
+function _rtsCrateNew(G) {
+  var spot = _rtsCrateSpot(G);
+  if (!spot) return null;
+  /* Random_Pick(CrateTime * TICKS_PER_MINUTE/2, CrateTime * TICKS_PER_MINUTE*2): a crate
+     lives between HALF and TWICE CrateTime, expressed here in seconds. */
+  var lo = RTS_CRATE_TIME * 30, hi = RTS_CRATE_TIME * 120;
+  var cr = { tx:spot.tx, tz:spot.tz, kind:_rtsCratePick(G).key,
+    t:lo + _rtsCrateRnd(G)() * (hi - lo) };
+  G.crates.push(cr);
+  return cr;
+}
+/* A crate that times out is not simply deleted - Create_Crate removes the old one and places
+   a new one, so the count on the map is constant for the whole match. */
+function _rtsCrateAI(dt) {
+  var G = window._rtsG;
+  if (!G.crates) return;
+  for (var i = G.crates.length - 1; i >= 0; i--) {
+    G.crates[i].t -= dt;
+    if (G.crates[i].t <= 0) { G.crates.splice(i, 1); _rtsCrateNew(G); G.crateDirty = 1; }
+  }
+  /* Anything standing on one picks it up. Both sides: a crate does not know whose army it
+     is under, and an opponent that drives over free money should get it. */
+  for (var e = 0; e < G.ents.length; e++) {
+    var u = G.ents[e];
+    if (u.dead || u.type !== 'unit') continue;
+    var tx = _rtsTX(u.x), tz = _rtsTX(u.z);
+    for (var c = G.crates.length - 1; c >= 0; c--) {
+      var cr = G.crates[c];
+      if (cr.tx !== tx || cr.tz !== tz) continue;
+      G.crates.splice(c, 1);                            /* Get_Crate */
+      _rtsCrateOpen(cr, u);
+      _rtsCrateNew(G); G.crateDirty = 1;
+      break;
+    }
+  }
+}
+/* What is in the box. The effect list is ours; see the note on RTS_CRATES. */
+function _rtsCrateOpen(cr, u) {
+  var G = window._rtsG, S = G.sides[u.side], mine = u.side === 'player';
+  var def = null, i;
+  for (i = 0; i < RTS_CRATES.length; i++) if (RTS_CRATES[i].key === cr.kind) def = RTS_CRATES[i];
+  if (!def) return null;
+  var say = function (m) { if (mine) _rtsSay(m); };
+  var ping = function (n) { if (typeof _rtsSfx === 'function') _rtsSfx(n, u.x, u.z); };
+
+  if (def.mult) {
+    /* A bonus multiplies whatever the unit already had, capped so a unit that has hoovered
+       up six firepower crates is still a unit rather than a boss. `rof` is the odd one out:
+       lower is faster, so its cap is a FLOOR. */
+    u.cr = u.cr || {};
+    for (var k in def.mult) {
+      var v = (u.cr[k] || 1) * def.mult[k], cap = RTS_CRATE_CAP[k];
+      u.cr[k] = (k === 'rof') ? Math.max(cap, v) : Math.min(cap, v);
+    }
+    say(def.name + '!');
+    ping('place');
+    return def.key;
+  }
+  if (cr.kind === 'money') {
+    var amt = Math.round(RTS_CRATE_MONEY[0]
+      + _rtsCrateRnd(G)() * (RTS_CRATE_MONEY[1] - RTS_CRATE_MONEY[0]));
+    /* A GRANT, not harvest: crate money is found money and the storage cap must not eat it. */
+    _rtsGrant(S, amt);
+    say('Found ' + amt + ' credits.');
+    ping('place');
+  } else if (cr.kind === 'heal') {
+    u.hp = u.maxHp;
+    say('Repair kit.');
+    ping('place');
+  } else if (cr.kind === 'reveal') {
+    if (mine) { for (i = 0; i < G.mapped.length; i++) G.mapped[i] = 1; G.visDirty = 1; }
+    say('Map data recovered.');
+    ping('place');
+  } else if (cr.kind === 'unit') {
+    var key = RTS_CRATE_UNITS[(_rtsCrateRnd(G)() * RTS_CRATE_UNITS.length) | 0];
+    var got = _rtsSpawnUnit(u.side, key, _rtsWX(cr.tx), _rtsWX(cr.tz));
+    say('Abandoned ' + rtsUnitDef(key).name + ' recovered.');
+    ping('unitready');
+    return got ? 'unit' : null;
+  } else if (cr.kind === 'mine') {
+    /* The reason a crate is a decision. Damage comes from the crate itself rather than from
+       a side, so it is nobody's kill and cannot be farmed for credit. */
+    _rtsSplash(_rtsWX(cr.tx), _rtsWX(cr.tz), RTS_CRATE_MINE_RADIUS, RTS_CRATE_MINE_DMG, null, 2, null);
+    G.fx.push({ kind:'boom', x:_rtsWX(cr.tx), y:1, z:_rtsWX(cr.tz), t:0, big:1.5 });
+    say('It was a trap!');
+    ping('deny');
+  }
+  return cr.kind;
 }
 
 /* ----------------------------------------------------------------- shroud --
@@ -1559,6 +1702,14 @@ function _rtsOrderHarvest(e, tx, tz) {
    through _rtsBias; the player's side always gets the identity table, so a bias can never
    silently change how your own units behave. */
 var _RTS_NOBIAS = { name:'Player', iq:5, fire:1, speed:1, armor:1, rof:1, cost:1, build:1, wall:true, scan:true };
+/* A crate bonus lives on the UNIT that picked it up, multiplying the house-wide bias rather
+   than replacing it. `_rtsBias` answers for a whole side and is difficulty; this answers for
+   one object and is what it has found lying around. A unit with no bonuses costs one property
+   lookup, which is why this is a plain function rather than a merged object built per call. */
+function rtsCrateMult(e, what) {
+  var c = e && e.cr;
+  return (c && c[what]) ? c[what] : 1;
+}
 function _rtsBias(side) {
   if (side !== 'enemy') return _RTS_NOBIAS;
   var G = window._rtsG;
@@ -1735,10 +1886,10 @@ function _rtsFire(e, tgt, w) {
      flag - a two-barrel weapon alternates sides, which is where the visible stagger in a
      salvo comes from. */
   if (w.burst > 1) {
-    e.cool = (e.second === false ? RTS_BURST_DELAY : w.cool * bias.rof);
+    e.cool = (e.second === false ? RTS_BURST_DELAY : w.cool * bias.rof * rtsCrateMult(e, 'rof'));
     e.second = (e.second === false);
   } else {
-    e.cool = w.cool * bias.rof; e.second = true;  /* ROFBias: higher = slower reload */
+    e.cool = w.cool * bias.rof * rtsCrateMult(e, 'rof'); e.second = true;  /* ROFBias: higher = slower reload */
   }
   e.fire = 0.09;
   e.recoil = RTS_RECOIL_TIME;                     /* Recoil_Adjust */
@@ -1748,7 +1899,7 @@ function _rtsFire(e, tgt, w) {
   if (e.side !== 'player' && !_rtsVisible(_rtsTX(e.x), _rtsTX(e.z))) e.spot = RTS_MUZZLE_SPOT;
   if (typeof _rtsSfx === 'function') _rtsSfx(w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
     : (w.shot === 'missile' ? 'rocket' : (e.type === 'struct' ? 'turretgun' : 'cannon')), e.x, e.z);
-  var dmg = w.dmg * rtsVerses(w, tgt) * bias.fire;
+  var dmg = w.dmg * rtsVerses(w, tgt) * bias.fire * rtsCrateMult(e, 'fire');
   if (w.speed <= 0) {
     _rtsDamage(tgt, dmg, e);
     G.fx.push({ kind:'tracer', x:m.x, y:1.3, z:m.z, x2:tgt.x, y2:1.3, z2:tgt.z, t:0 });
@@ -1940,6 +2091,7 @@ function _rtsDamage(tgt, dmg, from, floor) {
   if (!tgt || tgt.dead) return;
   if (tgt.prone) dmg *= RTS_PRONE_DAMAGE;
   dmg /= _rtsBias(tgt.side).armor;                 /* ArmorBias defends the whole house */
+  dmg /= rtsCrateMult(tgt, 'armor');               /* ...and a crate defends one unit */
   /* Modify_Damage clamps last. The MinDamage floor is NOT unconditional - it applies to a
      direct hit and to the inner ring of a blast, so two units can never plink zeroes at each
      other, while the edge of an explosion is still allowed to do nothing at all. */
@@ -2093,6 +2245,7 @@ function _rtsSteer(e, dt, d) {
   var align = Math.max(0, 1 - Math.abs(diff) / 1.6);
   var sp = d.speed * (d.kind === 'infantry' ? Math.max(0.35, align) : align * align);
   sp *= _rtsBias(e.side).speed;                    /* GroundspeedBias */
+  sp *= rtsCrateMult(e, 'speed');
   if (e.prone) sp *= RTS_PRONE_SPEED;
   var nx = e.x + Math.cos(e.rot) * sp * dt, nz = e.z + Math.sin(e.rot) * sp * dt;
   /* While standing on a blocked tile, movement is unrestricted - that is how a unit
@@ -4075,6 +4228,7 @@ function _rtsTick(dt) {
 
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 2.2);
   _rtsAnimAI(dt);
+  _rtsCrateAI(dt);
   for (i = G.fx.length - 1; i >= 0; i--) {
     var fxi = G.fx[i];
     fxi.t += dt;
