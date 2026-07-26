@@ -169,6 +169,52 @@ function _r3Hip(out, x, y, z, w, h, d, inset, col) {
   _r3F(out, [[x1, y, z1], [x1, y, z0], [rx1, y1, z]], col);
 }
 
+/* A barrel VAULT - a half-cylinder lying with its axis along x, elliptical so that its height
+   and its span are independent. There was no way to build this shape: _r3Cyl is upright, and
+   faking an arch out of stepped boxes reads as a staircase at 48 px. The Construction Yard's
+   roof, the barracks' Nissen huts and the kennel are all this one form in the reference art.
+
+   `alongZ` picks which way the axis runs, and it is not a detail - see the comment inside. */
+function _r3Vault(out, x, y, z, w, h, d, col, seg, alongZ) {
+  seg = Math.max(seg || 12, 8);
+  var i, pts = [], q, r, cA = [], cB = [];
+  if (alongZ) {
+    /* Arch profile in x-y, extruded along z - so the CURVE is in the silhouette. Under this
+       camera that is the only version that reads: with the axis along x you see almost nothing
+       but the near flank, which sweeps from normal +z to normal +y and shades as a slightly
+       graded wall, while the two curved ends sit exactly edge-on and never draw at all. */
+    var rx = w / 2, z0 = z - d / 2, z1 = z + d / 2;
+    for (i = 0; i <= seg; i++) {
+      var a = Math.PI * i / seg;                     /* 0 = the +x springing, PI = the -x one */
+      pts.push([x + Math.cos(a) * rx, y + Math.sin(a) * h]);
+    }
+    for (i = 0; i < seg; i++) {
+      q = pts[i]; r = pts[i + 1];
+      _r3F(out, [[q[0], q[1], z1], [q[0], q[1], z0], [r[0], r[1], z0], [r[0], r[1], z1]], col);
+    }
+    for (i = 0; i <= seg; i++) {
+      cA.push([pts[i][0], pts[i][1], z1]);
+      cB.push([pts[seg - i][0], pts[seg - i][1], z0]);
+    }
+  } else {
+    var rz = d / 2, x0 = x - w / 2, x1 = x + w / 2;
+    for (i = 0; i <= seg; i++) {
+      var b = Math.PI * i / seg;
+      pts.push([z + Math.cos(b) * rz, y + Math.sin(b) * h]);
+    }
+    for (i = 0; i < seg; i++) {
+      q = pts[i]; r = pts[i + 1];
+      _r3F(out, [[x0, q[1], q[0]], [x1, q[1], q[0]], [x1, r[1], r[0]], [x0, r[1], r[0]]], col);
+    }
+    for (i = 0; i <= seg; i++) {
+      cA.push([x1, pts[i][1], pts[i][0]]);
+      cB.push([x0, pts[seg - i][1], pts[seg - i][0]]);
+    }
+  }
+  _r3F(out, cA, col);
+  _r3F(out, cB, col);
+}
+
 /* Rotate a model about the vertical axis. Used for unit facings. */
 function _r3Yaw(faces, ang) {
   var c = Math.cos(ang), s = Math.sin(ang), out = [], i, j;
