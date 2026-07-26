@@ -2931,6 +2931,20 @@ function _rtsBakeTerrain(G) {
       }
     }
   }
+  /* With the player's own game files loaded, the GROUND is repainted from the original's
+     terrain templates - real grass and water, one of sixteen clear variants picked per cell the
+     way the original picks them. Everything layered on afterwards (rock, trees, ore, the dirt
+     patches' drawn edges) stays procedural, because those are multi-tile templates with real
+     placement rules and half-applying them would look worse than either end state. */
+  if (typeof _mixGround === 'function' && _mixGround()) {
+    for (var gz = 0; gz < N; gz++) {
+      for (var gx = 0; gx < N; gx++) {
+        var gk = G.terrain[_rtsIdx(gx, gz)];
+        if (gk === RTS_T_ROCK) continue;                /* ours is better than half a cliff */
+        _mixPaintCell(d, S, gx, gz, gk, seed);
+      }
+    }
+  }
   g.putImageData(img, 0, 0);
 
   /* Scatter that crosses cell lines: tufts, pebbles and bushes placed in world pixels. */
@@ -3124,6 +3138,13 @@ function _rtsBakeTerrain(G) {
 var _RTS_TREES = null;
 function _sprTrees() {
   if (_RTS_TREES) return _RTS_TREES;
+  /* Real trees when the player's own files are loaded. Ours next to the original's ground was
+     the one thing in the first pass that looked plainly wrong - bright cones on RA's dark
+     temperate grass. */
+  if (typeof _mixTrees === 'function') {
+    var real = _mixTrees();
+    if (real) return (_RTS_TREES = real);
+  }
   var TR = RTS_PAL.tree, out = [];
   for (var v = 0; v < 3; v++) {
     var sc = [0.82, 1.0, 1.22][v], m = [];
@@ -4388,7 +4409,10 @@ function _mixFinish(log, done) {
   RTS_MIX.note = log.join('\n');
   if (!haveArt) RTS_MIX.note += '\nconquer.mix is the one with the artwork in it.';
   if (!RTS_MIX.pal) RTS_MIX.note += '\nlocal.mix is needed for the palette.';
-  if (RTS_MIX.ready) { _RTS_SPR = null; _RTS_UFIT = {}; _RTS_USCALE = {}; }
+  /* every cached bake has to go, or the game keeps drawing the sprites it made before
+     the content arrived */
+  if (RTS_MIX.ready) { _RTS_SPR = null; _RTS_UFIT = {}; _RTS_USCALE = {};
+                       _RTS_TREES = null; _RTS_MIXTREES = null; _RTS_TILECACHE = null; }
   done && done(RTS_MIX.ready ? null : RTS_MIX.note, RTS_MIX.note);
 }
 
@@ -4408,6 +4432,97 @@ function rtsMixPicked(input) {
       note.className = 'bad';
     }
   });
+}
+
+/* ------------------------------------------------------------------ tiles --
+   Terrain templates (.tem) are a different container again: a short header, then `count` tiles
+   of width x height RAW palette indices back to back. No compression at all.
+
+   The header field order took a moment - the obvious reading put ImgStart at offset 12, which
+   is the FILE SIZE, and produced tiles that ran off the end of the buffer. It is at 16:
+
+       0  uint16 width        (24)
+       2  uint16 height       (24)
+       4  uint16 count
+      16  uint32 imgStart
+
+   Only the base ground is taken from here. Rock, cliffs, trees and the ore fields stay
+   procedural: those are multi-tile templates with real placement rules in the original, and
+   half-applying them would look worse than either end state. */
+function _mixTiles(name) {
+  var i, a, d = null;
+  for (i = 0; i < RTS_MIX.want.length && !d; i++) {
+    a = RTS_MIX.open[RTS_MIX.want[i]];
+    if (a && !a.error && a.has(name)) d = a.read(name);
+  }
+  if (!d || d.length < 40) return null;
+  var dv = new DataView(d.buffer, d.byteOffset, d.byteLength);
+  var w = dv.getUint16(0, true), h = dv.getUint16(2, true), n = dv.getUint16(4, true);
+  var img = dv.getUint32(16, true);
+  if (w !== RTS_TS || h !== RTS_TS || !n || img + n * w * h > d.length) return null;
+  var out = [];
+  for (i = 0; i < n; i++) out.push(d.subarray(img + i * w * h, img + (i + 1) * w * h));
+  return { w: w, h: h, n: n, tile: out };
+}
+
+var _RTS_TILECACHE = null;
+function _mixGround() {
+  if (_RTS_TILECACHE) return _RTS_TILECACHE;
+  if (!_rtsArtReady()) return null;
+  var clear = _mixTiles('clear1.tem'), water = _mixTiles('w1.tem');
+  if (!clear) return null;
+  return (_RTS_TILECACHE = { clear: clear, water: water });
+}
+
+/* Paint one cell of the baked terrain canvas straight out of a template. Returns false when
+   there is nothing suitable, so the caller falls back to its own noise for that cell. */
+function _mixPaintCell(d, S, tx, tz, kind, seed) {
+  var g = _mixGround();
+  if (!g) return false;
+  var set = null;
+  if (kind === RTS_T_WATER && g.water) set = g.water;
+  else if (kind === RTS_T_GRASS || kind === RTS_T_TREE) set = g.clear;
+  if (!set) return false;
+  var v = (_sprHash(tx, tz, seed + 137) * set.n) | 0;
+  if (v >= set.n) v = set.n - 1;
+  var t = set.tile[v], pal = RTS_MIX.pal;
+  for (var y = 0; y < RTS_TS; y++) {
+    var row = (tz * RTS_TS + y) * S;
+    for (var x = 0; x < RTS_TS; x++) {
+      var idx = t[y * RTS_TS + x], o = (row + tx * RTS_TS + x) * 4;
+      d[o] = pal[idx * 3]; d[o + 1] = pal[idx * 3 + 1]; d[o + 2] = pal[idx * 3 + 2]; d[o + 3] = 255;
+    }
+  }
+  return true;
+}
+
+/* ------------------------------------------------------------------ trees --
+   The forest. Trees are `.tem` files - SHPs with a theatre extension rather than templates,
+   which is why probing for `t01.shp` found nothing. Frame 0 is the standing tree; the rest are
+   the burning/felled sequence, which nothing here uses yet.
+
+   Only the 48x48 singles are taken. tc01..tc05 are 72x48 and 96x72 clumps that occupy several
+   cells and would need the placement rules that go with them; a clump dropped on a one-cell
+   forest tile overlaps its neighbours and reads as a mess. */
+var RTS_MIX_TREES = ['t01','t02','t03','t05','t06','t07','t08','t10','t11','t12','t13','t14',
+                     't15','t16','t17'];
+var _RTS_MIXTREES = null;
+
+function _mixTrees() {
+  if (_RTS_MIXTREES) return _RTS_MIXTREES;
+  if (!_rtsArtReady()) return null;
+  var out = [], i;
+  for (i = 0; i < RTS_MIX_TREES.length; i++) {
+    var s = _mixShp(RTS_MIX_TREES[i] + '.tem');
+    if (!s || s.width !== 48) continue;
+    var fr = s.frame(0);
+    if (!fr) continue;
+    var c = _mixFrameToCanvas(fr, s.width, s.height, RTS_MIX.pal);
+    /* The renderer wants footprint + headroom, the same shape the procedural trees return. A
+       tree stands on ONE cell with everything above it overhang. */
+    out.push({ c: c, head: Math.max(0, s.height - RTS_TS) });
+  }
+  return out.length ? (_RTS_MIXTREES = out) : null;
 }
 </script>
 <script>/* RC COMMAND - audio. Everything here is SYNTHESIZED at runtime with WebAudio: there is not

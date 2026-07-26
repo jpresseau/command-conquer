@@ -2595,3 +2595,30 @@ thief, and the sprite sheet showed it immediately.
 The walk cycle is deliberately left alone: it needs the renderer to pick a frame from a sub-array
 per unit per tick, which is a change to how every unit is drawn rather than to where sprites come
 from.
+
+### Terrain templates, and the trees
+
+`.tem` files are two different things and the extension does not tell you which.
+
+**Terrain templates** are a container of their own: a short header, then `count` tiles of
+24×24 **raw** palette indices back to back, no compression. The header field order cost a
+moment — the obvious reading puts `imgStart` at offset 12, which is the *file size*, and yields
+tiles that run off the end of the buffer. It is at **16**.
+
+**Trees are SHPs with a `.tem` extension**, which is why probing for `t01.shp` found nothing at
+all. Frame 0 is the standing tree; the rest are the burning and felled sequence.
+
+Only the base ground is repainted from templates — clear grass (one of sixteen variants per cell,
+the way the original picks them) and water. **Rock, cliffs, ore and the dirt patches' drawn edges
+stay procedural**, because those are multi-tile templates with real placement rules and
+half-applying them looks worse than either end state. Only the 48×48 single trees are used;
+`tc01`–`tc05` are 72×48 and 96×72 clumps that span several cells and would overlap their
+neighbours without the placement rules that go with them.
+
+Our own trees against the original's ground were the one thing in the first pass that looked
+plainly wrong — bright cones on RA's dark temperate grass — which is what made the real ones
+worth doing in the same change rather than the next one.
+
+Every cached bake is dropped when content arrives (`_RTS_SPR`, `_RTS_UFIT`, `_RTS_USCALE`,
+`_RTS_TREES`, and the two new caches), or the game keeps drawing the sprites it made before the
+files were loaded.
