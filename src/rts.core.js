@@ -1503,7 +1503,7 @@ function _rtsEvalObject(e, o, dist, w, force) {
      two-weapon object the question is asked of its BEST weapon against this armour, or a
      tank would refuse to look at infantry its coaxial gun handles perfectly well. */
   if (!w) w = _rtsPickWeapon(e, o);
-  if (w && w.vs && !w.vs[rtsArmour(o)]) return 0;
+  if (w && !rtsVerses(w, o)) return 0;
 
   /* Value() = Risk + Reward, plus Crew.Kills - a unit that has been killing things is worth
      shooting first.
@@ -1565,9 +1565,9 @@ function _rtsGuns(e) {
 function _rtsPickWeapon(e, tgt) {
   var ws = _rtsGuns(e);
   if (ws.length < 2) return ws[0];
-  var armour = rtsArmour(tgt), dist = _rtsRangeTo(e, tgt), best = ws[0], bv = -1;
+  var dist = _rtsRangeTo(e, tgt), best = ws[0], bv = -1;
   for (var i = 0; i < ws.length; i++) {
-    var w = ws[i], mod = w.vs ? (w.vs[armour] || 0) : 1;
+    var w = ws[i], mod = rtsVerses(w, tgt);
     var v = mod * 1000;
     if (dist <= w.range) v *= 2;
     if (!mod) v = 0;                                  /* FIRE_CANT */
@@ -1645,7 +1645,7 @@ function _rtsFire(e, tgt, w) {
   if (e.side !== 'player' && !_rtsVisible(_rtsTX(e.x), _rtsTX(e.z))) e.spot = RTS_MUZZLE_SPOT;
   if (typeof _rtsSfx === 'function') _rtsSfx(w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
     : (w.shot === 'missile' ? 'rocket' : (e.type === 'struct' ? 'turretgun' : 'cannon')), e.x, e.z);
-  var dmg = w.dmg * (w.vs[rtsArmour(tgt)] || 1) * bias.fire;
+  var dmg = w.dmg * rtsVerses(w, tgt) * bias.fire;
   if (w.speed <= 0) {
     _rtsDamage(tgt, dmg, e);
     G.fx.push({ kind:'tracer', x:m.x, y:1.3, z:m.z, x2:tgt.x, y2:1.3, z2:tgt.z, t:0 });
@@ -1739,7 +1739,7 @@ function _rtsBaseIsAttacked(bldg, enemy) {
     if (!_rtsMission(u).recruitable) continue;
     var w = RTS_WEAPONS[ud.weapon];
     /* "Don't allow a response if it doesn't have a weapon that will affect the enemy." */
-    if (w.vs && !w.vs[rtsArmour(enemy)]) continue;
+    if (!rtsVerses(w, enemy)) continue;
     /* Already fighting this attacker? Then it is part of the answer, not part of the ask. */
     if (u.target === enemy) { desired -= ud.cost; continue; }
     /* Threat it can apply, best when it is close - Rescue_Mission's ranking, in spirit. */
@@ -1809,7 +1809,7 @@ function _rtsCanRetaliate(tgt, from) {
   var w = RTS_WEAPONS[d.weapon];
   /* "Don't allow retaliation if it isn't equipped with a weapon that can deal with the
      threat" - a Modifier of zero against that armour means shooting back is pointless. */
-  if (w.vs && !w.vs[rtsArmour(from)]) return false;
+  if (!rtsVerses(w, from)) return false;
   /* Idle: always turn and fight. */
   if (!tgt.order) return true;
   /* Already busy: "Compare potential threat of the current target and the potential new
