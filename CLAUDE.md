@@ -2242,3 +2242,54 @@ covers ~51 px of the sprite and the far flank ~6.
 `alongZ` puts the arch profile in x-y and extrudes along z, so the **curve is in the silhouette**
 and the near cap faces the camera. That is the version that reads, and it is what the yard, the
 barracks huts and the kennel all use.
+
+## Rock, from a coverage field instead of rectangles
+
+The last obviously-generated thing on the map. Rock was drawn per cell as an axis-aligned box,
+inset a few ragged pixels wherever the neighbour was not rock, and it rendered as a **paved
+plaza**: you could count the 24-pixel cells along every edge, the plateau was one flat grey, and
+the "drop" was a thin kerb along the bottom with tick marks in it.
+
+`cov(px, py)` samples the cell mask at cell **centres** and interpolates bilinearly. Its 0.5
+contour therefore lands exactly on the cell boundaries — the painted rock still matches the rock
+the pathfinder blocks, which is not negotiable — but it arrives there as a smooth curve rather
+than a staircase, and a noise term breaks it up.
+
+**The noise amplitude is a correctness parameter, not a taste one.** At 0.55 the boundary wandered
+most of a cell and rock was painted over ground a harvester could drive through. 0.34 keeps the
+wander to about a third of a cell.
+
+Every other feature is read off the same field by asking "is there still rock this many pixels
+away": the sunlit north lip, the shelf under it, the two side walls, and the south drop — whose
+**height** is how far the rock continues below, so a deep massif gets a full cliff face and a thin
+spur a short one. That is what makes a ridge read as a landform instead of a shape with a dark
+line under it. The face is striated from a hash on **x only**, so the streaks run down the cliff
+rather than speckling it.
+
+`RTS_PAL.rock` gained a fifth tone — a near-black used only at the base of a face — and the whole
+ramp was warmed towards brown; the neutral grey read as poured concrete against the olive ground.
+
+### Verifying, and the metric that lied first
+
+`rockfit.js` measures the paint against the blocking data:
+
+| | |
+|---|---|
+| rock painted 2+ cells from any blocked cell | **0 px** |
+| spill into an adjacent cell | 4.3% |
+| blocked cell area actually painted | 89.6% |
+
+The first run of that harness reported **8149 stray rock pixels**, which was the harness being
+wrong rather than the art: the scattered pebble clutter on open ground is drawn in `rock[0]` and
+`rock[2]`, so counting all five tones counts every pebble on the map. The stray and spill figures
+use only tones 1, 3 and 4, which nothing but the ridge draws.
+
+### Cost
+
+Naively the field is wanted at five or six nearby points per block, and evaluating it there
+directly cost **+353 ms** on the terrain bake. It is thresholded once per 2×2 block into a
+`Uint8Array` mask instead, and the near-rock cell set is worked out once rather than rescanned per
+pass. **702 ms before, 712 ms after** — effectively free.
+
+Zero is the correct value everywhere the mask is not filled, which is what makes the sparse fill
+safe: two cells out from any rock, `cov` is 0 and the noise can only reach 0.17.
