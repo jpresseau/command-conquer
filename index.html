@@ -1740,7 +1740,32 @@ function _r3Render(faces, W, H, ox, oy) {
 
 /* Render a model whose footprint must line up with the tile grid: the canvas is exactly
    footW wide, the footprint sits at the bottom, and everything above it becomes headroom. */
+/* Structures are FLATTENED before baking, and the reason is a measurement rather than taste.
+   In reference frames of the original nothing is a tower: a building rises to roughly half
+   its own footprint depth and no more, so the silhouette you read is a wide low mass with one
+   distinctive thing on top of it. The models here were coming out at 129 pixels tall on a 72
+   pixel footprint - a skyscraper - and every one of them had the same jagged fringe of roof
+   clutter along the top, which is exactly why they stopped being tellable apart.
+
+   Scaling the model's HEIGHT rather than editing sixteen models keeps every piece of detail
+   that was built and simply stops it stacking into a tower. It cannot affect footprint
+   alignment: the ground plane is not foreshortened at all, so y scaling moves nothing in x
+   or z. */
+var R3_STRUCT_SQUASH = 0.55;
+
 function _r3BakeFootprint(faces, footW, footD) {
+  if (R3_STRUCT_SQUASH !== 1) {
+    var sq = [];
+    for (var q = 0; q < faces.length; q++) {
+      var f = faces[q], nv = [];
+      for (var w = 0; w < f.v.length; w++) {
+        var vv = f.v[w];
+        nv.push([vv[0], vv[1] * R3_STRUCT_SQUASH, vv[2]]);
+      }
+      sq.push({ v: nv, c: f.c });
+    }
+    faces = sq;
+  }
   var b = _r3Bounds(faces);
   var head = Math.max(0, Math.ceil(-(b.y0 + footD / 2)));
   var W = footW, H = footD + head;
@@ -1843,9 +1868,19 @@ var RTS_PAL = {
      coloured - steel blue walls under maroon roofs on one side, red on the other - and that
      colour is most of how you tell whose base you are looking at from across the map. An
      all-concrete pass read as a grey industrial estate. */
+  /* Taken from reference frames of the original, and the correction that matters most is the
+     ROOF. It used to be a muddy brown on both sides with a thin team-coloured band laid over
+     it, and the result was that you could not tell whose base you were looking at without
+     stopping to check. In the reference the roof IS the team colour - Soviet buildings are
+     bright red across their whole top surface, Allied are steel blue - and because the camera
+     looks down, the roof is most of what you see. That one change does more for reading a
+     base at a glance than every piece of roof clutter put together.
+
+     The tones are also brighter and more saturated than what was here. The reference palette
+     is limited and high-contrast: red, grey, white, mid-green. Nothing in it is muddy. */
   bld: {
-    player: { wall:'#4a6b91', roof:'#6b4436', trim:'#aebccb', dark:'#2f4a68' },
-    enemy:  { wall:'#944034', roof:'#4e3630', trim:'#c9a89f', dark:'#5f2820' }
+    player: { wall:'#7d8794', roof:'#3f6ea8', trim:'#c8d2dc', dark:'#2b3d52' },
+    enemy:  { wall:'#8a8f94', roof:'#b8322a', trim:'#d8ccc8', dark:'#4a1f1a' }
   }
 };
 

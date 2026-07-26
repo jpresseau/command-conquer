@@ -71,9 +71,19 @@ var RTS_PAL = {
      coloured - steel blue walls under maroon roofs on one side, red on the other - and that
      colour is most of how you tell whose base you are looking at from across the map. An
      all-concrete pass read as a grey industrial estate. */
+  /* Taken from reference frames of the original, and the correction that matters most is the
+     ROOF. It used to be a muddy brown on both sides with a thin team-coloured band laid over
+     it, and the result was that you could not tell whose base you were looking at without
+     stopping to check. In the reference the roof IS the team colour - Soviet buildings are
+     bright red across their whole top surface, Allied are steel blue - and because the camera
+     looks down, the roof is most of what you see. That one change does more for reading a
+     base at a glance than every piece of roof clutter put together.
+
+     The tones are also brighter and more saturated than what was here. The reference palette
+     is limited and high-contrast: red, grey, white, mid-green. Nothing in it is muddy. */
   bld: {
-    player: { wall:'#4a6b91', roof:'#6b4436', trim:'#aebccb', dark:'#2f4a68' },
-    enemy:  { wall:'#944034', roof:'#4e3630', trim:'#c9a89f', dark:'#5f2820' }
+    player: { wall:'#7d8794', roof:'#3f6ea8', trim:'#c8d2dc', dark:'#2b3d52' },
+    enemy:  { wall:'#8a8f94', roof:'#b8322a', trim:'#d8ccc8', dark:'#4a1f1a' }
   }
 };
 

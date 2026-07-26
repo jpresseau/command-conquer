@@ -398,7 +398,32 @@ function _r3Render(faces, W, H, ox, oy) {
 
 /* Render a model whose footprint must line up with the tile grid: the canvas is exactly
    footW wide, the footprint sits at the bottom, and everything above it becomes headroom. */
+/* Structures are FLATTENED before baking, and the reason is a measurement rather than taste.
+   In reference frames of the original nothing is a tower: a building rises to roughly half
+   its own footprint depth and no more, so the silhouette you read is a wide low mass with one
+   distinctive thing on top of it. The models here were coming out at 129 pixels tall on a 72
+   pixel footprint - a skyscraper - and every one of them had the same jagged fringe of roof
+   clutter along the top, which is exactly why they stopped being tellable apart.
+
+   Scaling the model's HEIGHT rather than editing sixteen models keeps every piece of detail
+   that was built and simply stops it stacking into a tower. It cannot affect footprint
+   alignment: the ground plane is not foreshortened at all, so y scaling moves nothing in x
+   or z. */
+var R3_STRUCT_SQUASH = 0.55;
+
 function _r3BakeFootprint(faces, footW, footD) {
+  if (R3_STRUCT_SQUASH !== 1) {
+    var sq = [];
+    for (var q = 0; q < faces.length; q++) {
+      var f = faces[q], nv = [];
+      for (var w = 0; w < f.v.length; w++) {
+        var vv = f.v[w];
+        nv.push([vv[0], vv[1] * R3_STRUCT_SQUASH, vv[2]]);
+      }
+      sq.push({ v: nv, c: f.c });
+    }
+    faces = sq;
+  }
   var b = _r3Bounds(faces);
   var head = Math.max(0, Math.ceil(-(b.y0 + footD / 2)));
   var W = footW, H = footD + head;
