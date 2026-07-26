@@ -53,3 +53,56 @@ frames and not others.
 `raw.githubusercontent.com/electronicarts/CnC_Red_Alert/main/<PATH>` is reachable and files
 can be pulled directly by exact path. The GitHub *API* is blocked in this environment, so
 directories cannot be listed — but `CODE/`, `WWFLAT32/`, `WIN32LIB/` and `TOOLS/` all fetch.
+
+## SHP reader — and the day the real data turned up
+
+`shp.js` decodes Red Alert's shape format. It was written against the real `conquer.mix`, which
+arrived long after `mix.js` and `lcw.js` were built for it.
+
+A SHP is a header, an offset record per frame, then the frame data. The only part that needs care
+is that a frame is stored in one of **three** ways and two of them are deltas:
+
+| format | meaning |
+|---|---|
+| `0x80` | LCW (Format80) compressed, standalone |
+| `0x40` | XOR delta against the frame named by the record's second half |
+| `0x20` | XOR delta against the **previous** frame |
+
+RA leans on `0x20` heavily for rotation sets — 32 facings of the same tank differ only slightly
+from their neighbour — so a reader that decodes "just the frame I want" returns garbage for 30 of
+them. `shp.frame(i)` walks the chain and memoises, and there is an assertion that asking for a
+chained frame **first** gives the same answer as asking for it in order.
+
+### Verified against the real archives
+
+| | |
+|---|---|
+| `conquer.mix` | 230 files, index parsed, **164 identified by name** |
+| `temperat.mix` | 332 files | 
+| `2tnk.shp` | 64 frames, 36×36, 0 decode failures (32 hull + 32 turret) |
+| `4tnk.shp` | 64 frames, 48×48 |
+| `harv.shp` | 111 frames, 48×48 |
+| `heli.shp` | 32 frames, 46×29 |
+| `powr.shp` | 2 frames (intact, damaged) |
+
+The MIX index stores **hashes, not names**, so there is no way to enumerate an archive. Names are
+recovered by hashing a dictionary and probing — and OpenRA's `mods/ra/sequences/*.yaml` is a ready
+made dictionary, since it names the SHP behind every actor. 477 names, 245 of them present in the
+readable archives.
+
+### What is still locked
+
+Four of the eleven archives — `hires`, `lores`, `local`, `speech` — have **Blowfish-encrypted
+indexes**, and `mix.js` reports that rather than misreading it as noise (there has been an
+assertion for exactly this since before any data existed). `local.mix` is where the palettes live,
+which is why sprites currently decode to palette **indices** with no colours attached.
+
+Unlocking it needs the RA MIX v2 header: an 80-byte RSA-wrapped block holding a 56-byte Blowfish
+key, then a Blowfish-ECB encrypted index. That is the last blocker between this and real art.
+
+### Licensing
+
+The data is the **Red Alert freeware release**, published by EA in 2008 and distributed through
+OpenRA's own content downloader (`mods/ra-content/installer/downloads.yaml`). The zip's SHA1
+matches that manifest exactly: `aa022b208a3b45b4a45c00fdae22ccf3c6de3e5c`. **No game data is
+committed to this repository** — only the readers.
