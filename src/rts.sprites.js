@@ -1041,6 +1041,24 @@ function _sprFire() {
 }
 
 /* Muzzle flashes and explosions, as small frame strips. */
+/* A crate: a wooden box, bright against both the grass and the ore, because an object the
+   player is meant to notice and go and get has to be findable at this zoom.
+
+   ONE version, not two. CRATE.CPP also places OVERLAY_WATER_CRATE on cells that are clear
+   for SPEED_FLOAT - but that is collectable in the original because RA has ships, and this
+   game has none. See the note on RTS_CRATES. */
+function _sprCrate() {
+  var t = _sprMake(RTS_TS, RTS_TS), g = t.g, c = RTS_TS / 2;
+  _sprRect(g, c - 7, c - 2, 14, 4, '#2b2117');           /* shadow under it */
+  _sprRect(g, c - 7, c - 8, 14, 11, '#9c7038');          /* crate body */
+  _sprRect(g, c - 7, c - 8, 14, 2, '#c08f4c');           /* lit top edge */
+  _sprRect(g, c - 7, c + 1, 14, 2, '#6b4a22');           /* shaded bottom edge */
+  _sprRect(g, c - 7, c - 4, 14, 1, '#c9a05a');           /* slat lines */
+  _sprRect(g, c - 7, c - 1, 14, 1, '#c9a05a');
+  _sprRect(g, c - 1, c - 8, 2, 11, '#6b4a22');           /* upright brace */
+  _sprRect(g, c - 4, c - 6, 3, 3, '#e8c661');            /* stencil mark */
+  return t.c;
+}
 function _sprFx() {
   var boom = [], i;
   var cols = ['#fff4cc', '#ffd070', '#ff9a2e', '#e0561c', '#8a3410', '#3a2418'];
@@ -1135,6 +1153,7 @@ function _rtsSprites() {
   S.wave = _sprWaterCycle();
   S.scorch = _sprScorch();
   S.crater = _sprCrater();
+  S.crate = _sprCrate();
   S.fire = _sprFire();
   S.corpse = _sprCorpse();
   ['player', 'enemy'].forEach(function (side) {

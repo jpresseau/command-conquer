@@ -213,6 +213,22 @@ function _rtsRFrame(dt) {
     g.drawImage(pad, ppx, ppy, pw, ph);
   }
 
+  /* --- crates. Drawn with the ground clutter rather than with the objects that stand up:
+     a crate sits ON the map, and sorting it into the depth pass would let a unit walking
+     over one disappear behind it. Only where the player can see: a crate under the shroud is
+     something you have not found yet. --- */
+  if (G.crates) {
+    for (i = 0; i < G.crates.length; i++) {
+      var cr = G.crates[i];
+      if (!_rtsVisible(cr.tx, cr.tz)) continue;
+      var cimg = S.crate;
+      var cw = Math.round(cimg.width * TSscale), ch = Math.round(cimg.height * TSscale);
+      var cpx = Math.round(_rtsSX(_rtsWX(cr.tx)) - cw / 2), cpy = Math.round(_rtsSY(_rtsWX(cr.tz)) - ch / 2);
+      if (cpx > R.W || cpy > R.H || cpx + cw < 0 || cpy + ch < 0) continue;
+      g.drawImage(cimg, cpx, cpy, cw, ch);
+    }
+  }
+
   /* --- everything that stands up, painted back to front --- */
   var draw = [];
   for (i = 0; i < G.ents.length; i++) {

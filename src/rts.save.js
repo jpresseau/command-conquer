@@ -137,7 +137,7 @@ function _rtsHash(s) {
 function _rtsSaveState(G) {
   var ents = new Set(G.ents), statics = _rtsStatics(), body = {}, k;
   for (k in G) {
-    if (k === 'ents' || k === 'byId' || k === 'rnd' || k === 'oreRnd') continue;
+    if (k === 'ents' || k === 'byId' || k === 'rnd' || k === 'oreRnd' || k === 'crateRnd') continue;
     if (typeof G[k] === 'function') continue;
     body[k] = _rtsCode(G[k], ents, statics, [], k);
   }
@@ -152,6 +152,11 @@ function _rtsSaveState(G) {
   }
   body.rnd = G.rnd ? G.rnd.get() : null;
   body.oreRnd = G.oreRnd ? G.oreRnd.get() : null;
+  /* The crate stream, for the same reason as the ore one: restore the crates without their
+     generator's POSITION and the next crate to expire lands somewhere else than it would
+     have. `oreRnd` shipped that exact bug once - the field grew differently after every
+     load - and it was caught by a simulation-identity test rather than by reading the code. */
+  body.crateRnd = G.crateRnd ? G.crateRnd.get() : null;
   return body;
 }
 
@@ -170,7 +175,7 @@ function _rtsApplyState(G, body) {
     e.mesh = null;
   }
   for (k in body) {
-    if (k === 'ents' || k === 'rnd' || k === 'oreRnd') continue;
+    if (k === 'ents' || k === 'rnd' || k === 'oreRnd' || k === 'crateRnd') continue;
     G[k] = _rtsDecode(body[k], byId);
   }
   G.ents = shells;
@@ -186,6 +191,10 @@ function _rtsApplyState(G, body) {
   if (body.oreRnd !== null && body.oreRnd !== undefined) {
     if (!G.oreRnd) G.oreRnd = _rtsRngMake(G.seed ^ 0x5eed);
     G.oreRnd.set(body.oreRnd);
+  }
+  if (body.crateRnd !== null && body.crateRnd !== undefined) {
+    if (!G.crateRnd) G.crateRnd = _rtsRngMake((G.seed ^ 0xc4a7e) >>> 0);
+    G.crateRnd.set(body.crateRnd);
   }
 
   /* Post_Load_Game: everything inferable from what was just loaded, derived rather than
