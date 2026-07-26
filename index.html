@@ -4199,8 +4199,22 @@ var RTS_MIX_BLD = {
 };
 var RTS_MIX_UNIT = {
   buggy:'jeep', light:'1tnk', tank:'2tnk', heavy:'4tnk', arty:'arty',
-  harvester:'harv', apc:'apc', mcv:'mcv', heli:'heli'
+  harvester:'harv', apc:'apc', mcv:'mcv', heli:'heli',
+  rifle:'e1', rocket:'e3', grenadier:'e2', flame:'e4', engineer:'e6',
+  medic:'medi', thief:'thf', tanya:'e7', dog:'dog'
 };
+
+/* Infantry are not a rotation set, they are a sequence table, and the layout comes straight
+   from mods/ra/sequences/infantry.yaml:
+
+       stand:        frames 0..7                    (one per facing)
+       run:          Start 16, Length 6, Facings 8
+       prone-stand:  Start 144, Stride 4, Facings 8 (so facing f is 144 + f*4)
+
+   Only the two stances the renderer actually draws are wired up. The walk cycle is deliberately
+   left for later: it needs the renderer to pick a frame from a sub-array per unit per tick, and
+   that is a change to how every unit is drawn rather than a change to where sprites come from. */
+var RTS_MIX_STAND = 0, RTS_MIX_PRONE = 144, RTS_MIX_PRONE_STRIDE = 4;
 
 /* --------------------------------------------------------------- remapping --
    RA recolours a player's units by rewriting a RANGE of palette entries rather than by tinting
@@ -4308,15 +4322,31 @@ function _mixUnit(key, side, prone, part) {
   var s = _mixShp(nm + '.shp');
   if (!s) return null;
   var d = rtsUnitDef(key), n = _sprFacingsFor(d);
+  var inf = d.kind === 'infantry';
   var turreted = !!RTS_TURRETED[key];
   if (s.count < n) return null;
   if (part === 'turret' && (!turreted || s.count < n * 2)) return null;
   var pal = _mixTeamPal(RTS_MIX.pal, RTS_PAL.team[side][0]);
   var base = (part === 'turret') ? n : 0;
-  var out = [];
-  for (var f = 0; f < n; f++) {
-    var idx = base + _mixFacing(f, n);
-    var fr = s.frame(idx);
+  var out = [], f, idx, fr;
+  for (f = 0; f < n; f++) {
+    if (inf) {
+      /* Whether a type HAS crawl artwork is `IsCrawling` in IDATA.CPP - the Dog, Engineer, Spy
+         and Thief are all built with it false - and our rules already carry that as `crawl`,
+         because it was ported long before there was any artwork to apply it to.
+
+         Gating on it matters more than it looks. A bounds check is not enough: frame 144 exists
+         in all nine files, it just is not prone artwork in the ones without any, and what sits
+         there instead is the DEATH sequence. The first version drew a pool of blood for every
+         pinned engineer, dog and thief. */
+      var crawls = prone && d.crawl;
+      idx = crawls ? RTS_MIX_PRONE + _mixFacing(f, n) * RTS_MIX_PRONE_STRIDE
+                   : RTS_MIX_STAND + _mixFacing(f, n);
+      if (idx >= s.count) idx = RTS_MIX_STAND + _mixFacing(f, n);
+    } else {
+      idx = base + _mixFacing(f, n);
+    }
+    fr = s.frame(idx);
     out.push(fr ? _mixFrameToCanvas(fr, s.width, s.height, pal) : _sprMake(s.width, s.height).c);
   }
   return out;

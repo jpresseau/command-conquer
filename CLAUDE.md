@@ -2572,3 +2572,26 @@ to the barrel tip turned it into a number: mean offset from the requested bearin
 The harness feeds the four archives into the running page exactly as the picker does, then
 measures. Fallback suites all still pass with no content loaded: `clip.js` 1248 frames, save 31,
 flight 13, the reader suite 53.
+
+### Infantry are a sequence table, not a rotation set
+
+From `mods/ra/sequences/infantry.yaml`:
+
+```
+stand:        frames 0..7                     (one per facing)
+run:          Start 16, Length 6, Facings 8
+prone-stand:  Start 144, Stride 4, Facings 8  (so facing f is 144 + f*4)
+```
+
+**Whether a type has crawl artwork at all is `IsCrawling` in `IDATA.CPP`** — the Dog, Engineer,
+Spy and Thief are built with it false — and our rules already carried that as `crawl`, ported
+long before there was any artwork to apply it to.
+
+Gating on it matters more than it looks, and a bounds check is *not* enough: frame 144 exists in
+all nine files, it just isn't prone artwork in the ones that have none. **What sits there instead
+is the death sequence.** The first version drew a pool of blood for every pinned engineer, dog and
+thief, and the sprite sheet showed it immediately.
+
+The walk cycle is deliberately left alone: it needs the renderer to pick a frame from a sub-array
+per unit per tick, which is a change to how every unit is drawn rather than to where sprites come
+from.
