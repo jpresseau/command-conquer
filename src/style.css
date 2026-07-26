@@ -155,3 +155,14 @@
   #rcgRts .rts-help{display:none}
   #rcgRts .rts-tile .nm{font-size:8.5px}
 }
+
+/* ---- the original-artwork loader on the home screen ---------------------- */
+.artload { margin: 14px auto 0; max-width: 560px; font-size: 12px; line-height: 1.5;
+           color: #8b93a0; text-align: left; }
+.artbtn { display: inline-block; margin: 0 0 6px; padding: 7px 14px; cursor: pointer;
+          border: 1px solid #3c4654; border-radius: 3px; background: #1b2027;
+          color: #c8d2dc; font: inherit; font-size: 11px; letter-spacing: 0.08em; }
+.artbtn:hover { background: #232a33; border-color: #55637a; }
+.artbtn input { display: none; }
+#rtsMixNote.ok  { color: #7fc98a; }
+#rtsMixNote.bad { color: #d08a72; white-space: pre-line; }

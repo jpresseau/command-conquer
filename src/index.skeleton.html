@@ -62,6 +62,15 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   <p class="diffnote" id="rtsDiffNote"></p>
   <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE</button>
   <button type="button" class="go resume" id="rtsResume" onclick="rtsLoadGame()" hidden>RESUME BATTLE</button>
+  <p class="artload">
+    <label class="artbtn">USE ORIGINAL ARTWORK
+      <input type="file" id="rtsMixPick" multiple accept=".mix,.MIX" onchange="rtsMixPicked(this)">
+    </label>
+    <span id="rtsMixNote">Optional. Point this at <b>conquer.mix</b>, <b>local.mix</b>,
+      <b>temperat.mix</b> and <b>hires.mix</b> from your own copy of Red Alert and the game will
+      draw with the real sprites instead of its own. Nothing is uploaded — the files are read in
+      your browser.</span>
+  </p>
   <dl class="keys">
     <dt>Left-drag</dt><dd>select your units</dd>
     <dt>Right-click</dt><dd>context order — enemy: attack · scrap: harvest · ground: move</dd>
@@ -82,9 +91,14 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
     and containing no assets from, any existing game. All art and audio generated in code.</p>
 </div>
 
+<script>//@@INC:../ra/lcw.js@@</script>
+<script>//@@INC:../ra/blowfish.js@@</script>
+<script>//@@INC:../ra/mix.js@@</script>
+<script>//@@INC:../ra/shp.js@@</script>
 <script>//@@INC:rts.rules.js@@</script>
 <script>//@@INC:rts.r3d.js@@</script>
 <script>//@@INC:rts.sprites.js@@</script>
+<script>//@@INC:rts.mixart.js@@</script>
 <script>//@@INC:rts.audio.js@@</script>
 <script>//@@INC:rts.core.js@@</script>
 <script>//@@INC:rts.render.js@@</script>
