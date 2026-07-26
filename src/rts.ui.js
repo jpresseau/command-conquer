@@ -693,8 +693,19 @@ function _rtsRightClick(mx, my) {
   if (!mine.length) return;
   var tgt = hit.ent;
   if (tgt && tgt.side === 'enemy') {
-    for (i = 0; i < mine.length; i++) _rtsOrderAttack(mine[i], tgt);
-    _rtsFlash(tgt.x, tgt.z, 'attack');
+    /* An engineer sent at an enemy BUILDING captures it rather than attacking it - it has no
+       weapon, so an attack order would be a walk to the target followed by standing there. It
+       still cannot capture a unit, so those fall through to the attack path and are ignored. */
+    var capped = 0;
+    for (i = 0; i < mine.length; i++) {
+      var mu = mine[i];
+      if (rtsUnitDef(mu.def).capture && tgt.type === 'struct') {
+        mu.order = 'capture'; mu.target = tgt; mu.path = null; mu.goal = null; mu.susp = null;
+        capped++;
+      } else _rtsOrderAttack(mu, tgt);
+    }
+    _rtsFlash(tgt.x, tgt.z, capped === mine.length ? 'harvest' : 'attack');
+    if (capped) _rtsSay(capped === 1 ? 'Engineer moving to capture.' : capped + ' engineers moving to capture.');
     if (typeof _rtsSfx === 'function') _rtsSfx('order');
     return;
   }

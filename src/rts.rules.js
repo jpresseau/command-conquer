@@ -49,12 +49,29 @@ var RTS_STRUCTS = [
   { key:'radar',    name:'Radar Dome',    w:2, h:2, cost:1000, build:14, hp:600,  power:-40,  sight:26,
     needs:['refinery'], radar:true,
     desc:'Switches the radar on. Without one the map panel stays dark.' },
-  { key:'lab',      name:'Tech Center',   w:2, h:2, cost:1500, build:22, hp:600,  power:-60,  sight:14,
-    needs:['radar'],
-    desc:'Unlocks Artillery and the Heavy Tank.' },
+  /* Cost, power and prerequisites here are the reference's own: Tech Center $1500 / -200 /
+     War Factory + Radar Dome. -200 is two whole power plants, which is the point - the tech
+     tier is supposed to cost you an economy, not a line item. */
+  { key:'lab',      name:'Tech Center',   w:2, h:2, cost:1500, build:22, hp:600,  power:-200, sight:14,
+    needs:['radar', 'factory'],
+    desc:'Unlocks Artillery and the Heavy Tank. Draws as much power as two plants.' },
   { key:'rocketpit',name:'Rocket Turret', w:1, h:1, cost:800,  build:14, hp:480,  power:-30,  sight:22,
     needs:['factory'], weapon:'turretrocket',
-    desc:'Long-range base defence. Tears up armour, poor against infantry.' }
+    desc:'Long-range base defence. Tears up armour, poor against infantry.' },
+  /* --- defence you can afford early, and the two structures that do something other than
+     shoot. `wall` and `pillbox` are pure data; `depot` carries the repair field below. --- */
+  /* Concrete Wall $50, no power, no prerequisite - the reference's numbers exactly. It is the
+     one thing in the game you can build from the first second of a match. */
+  { key:'wall',     name:'Concrete Wall', w:1, h:1, cost:50,   build:2,  hp:400,  power:0,    sight:0,
+    wall:true,
+    desc:'A metre of concrete. Blocks movement, absorbs a lot, shoots at nothing.' },
+  /* Pillbox $400 / -15 / needs Barracks, again straight from the reference. */
+  { key:'pillbox',  name:'Pillbox',      w:1, h:1, cost:400,  build:6,  hp:420,  power:-15,  sight:15,
+    needs:['barracks'], weapon:'pillboxgun',
+    desc:'Cheap early defence. Shreds infantry, barely scratches armour.' },
+  { key:'depot',    name:'Service Depot',w:2, h:2, cost:1200, build:16, hp:700,  power:-30,  sight:12,
+    needs:['factory'], repairs:RTS_TILE * 3.2, repairRate:22,
+    desc:'Park damaged vehicles on it and they are patched up, free of charge.' }
 ];
 
 /* ------------------------------------------------------------------- units --
@@ -88,7 +105,14 @@ var RTS_UNITS = [
     desc:'Outranges every base defence in the game. Made of paper — never send it in first.' },
   { key:'heavy',    name:'Heavy Tank',    kind:'vehicle',  cost:1500, build:20, hp:820,  speed:6.5, turn:1.3,r:2.2, sight:18, weapon:'heavycannon', weapon2:'coax',
     needs:['lab'],
-    desc:'The heaviest hull on the field. Slow, expensive, and very hard to stop.' }
+    desc:'The heaviest hull on the field. Slow, expensive, and very hard to stop.' },
+  { key:'flame',    name:'Flame Squad',   kind:'infantry', cost:280,  build:5,  hp:75,   speed:6,   turn:6,  r:1.1, sight:12, weapon:'flame',
+    needs:['depot'],
+    desc:'Walks up and burns things down. Devastating up close, dead at any distance.' },
+  /* capture: MISSION_CAPTURE. The unit is spent on arrival - it does not survive the job. */
+  { key:'engineer', name:'Engineer',      kind:'infantry', cost:600,  build:8,  hp:45,   speed:6.5, turn:6,  r:1.1, sight:12, weapon:null,
+    needs:['radar'], capture:true,
+    desc:'Walks into an enemy building and takes it. Unarmed, and spent on arrival.' }
 ];
 
 /* --------------------------------------------------------------- weapons --
@@ -124,7 +148,13 @@ var RTS_WEAPONS = {
   heavycannon: { dmg:62, range:20, cool:2.1, shot:'shell',  speed:58, splash:3.4, vs:{ infantry:0.6, vehicle:1.35, building:1.15 } },
   /* Rocket Turret: long and hard-hitting, deliberately poor against infantry so that cheap
      riflemen stay the correct answer to a wall of them. */
-  turretrocket:{ dmg:30, range:26, cool:2.0, burst:2, shot:'missile', speed:36, splash:2.2, vs:{ infantry:0.45, vehicle:1.4, building:1.0 } }
+  turretrocket:{ dmg:30, range:26, cool:2.0, burst:2, shot:'missile', speed:36, splash:2.2, vs:{ infantry:0.45, vehicle:1.4, building:1.0 } },
+  /* Pillbox: a machine gun in concrete. Short, cheap, and the answer to an infantry rush at a
+     point in the match where a Gun Turret is still unaffordable. */
+  pillboxgun:  { dmg:12, range:15, cool:0.30, shot:'tracer', speed:0,  splash:0,   vs:{ infantry:1.15, vehicle:0.2, building:0.15 } },
+  /* Flame: very short reach, no travel time, and it does not care what it is burning. The
+     shortest range in the game is the price of the highest damage-per-second in it. */
+  flame:       { dmg:30, range:9,  cool:0.65, shot:'tracer', speed:0,  splash:2.6, vs:{ infantry:1.3, vehicle:0.6, building:1.4 } }
 };
 
 /* ------------------------------------------------------------------ anims --
@@ -337,12 +367,17 @@ var RTS_AI = {
   infantryBaseMult:2,
   attackInterval:3,         /* minutes between attack waves, before difficulty bias */
   attackDelay:5,            /* minutes before the first one */
-  ratio:{ refinery:0.16, barracks:0.16, factory:0.10, radar:0.06, lab:0.05, turret:0.34, rocketpit:0.16 },
-  limit:{ refinery:4,    barracks:2,    factory:2,    radar:1,    lab:1,    turret:8,    rocketpit:4    },
+  ratio:{ refinery:0.16, barracks:0.16, factory:0.10, radar:0.06, lab:0.05, depot:0.05,
+          pillbox:0.20, turret:0.28, rocketpit:0.14 },
+  limit:{ refinery:4,    barracks:2,    factory:2,    radar:1,    lab:1,    depot:1,
+          pillbox:5,     turret:7,      rocketpit:4 },
   /* The order _rtsAIWants walks. Economy, then production, then tech, then defence - tech
      before defence because a Tech Center that arrives after the match is decided is worth
-     nothing, and the defensive ratios are big enough to soak every spare credit otherwise. */
-  buildOrder:['refinery', 'barracks', 'factory', 'radar', 'lab', 'turret', 'rocketpit'],
+     nothing, and the defensive ratios are big enough to soak every spare credit otherwise.
+     The pillbox comes first among the defences because it is the one the AI can afford early;
+     `wall` is deliberately absent, since an AI that cannot plan a line just scatters concrete. */
+  buildOrder:['refinery', 'barracks', 'factory', 'radar', 'depot', 'lab',
+              'pillbox', 'turret', 'rocketpit'],
   /* What to spend a production run on. A table rather than an if-chain: adding a unit to
      RTS_UNITS should not mean editing the opponent's brain, and the hardcoded ladder that used
      to live in _rtsAIUnits is a large part of why the roster sat at five units. Gating is left
@@ -357,7 +392,11 @@ var RTS_AI = {
   mix:{
     vehicle:[ { key:'heavy', at:2600, w:3 }, { key:'arty',  at:2000, w:2 }, { key:'tank', at:1600, w:4 },
               { key:'light', at:1100, w:3 }, { key:'buggy', at:900,  w:2 } ],
-    infantry:[ { key:'grenadier', at:900, w:2 }, { key:'rocket', at:500, w:3 }, { key:'rifle', at:250, w:2 } ]
+    /* No engineer in the mix. Capturing is a decision about a specific building at a specific
+       moment, and an AI that buys engineers without a plan for them just donates 600 credits
+       to whatever shoots them first. Buildable by the player; not spammed by the opponent. */
+    infantry:[ { key:'flame', at:1200, w:2 }, { key:'grenadier', at:900, w:2 },
+               { key:'rocket', at:500, w:3 }, { key:'rifle', at:250, w:2 } ]
   },
   /* Check_Raise_Money / Check_Raise_Power / Check_Lower_Power thresholds. */
   brokeMoney:100,           /* below this, raising cash is urgent */

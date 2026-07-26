@@ -643,6 +643,73 @@ Commitment lands at 47% rather than the 62% asked for, and that is a real constr
 than a bug: a team only recruits units matching its composition, so a tank-heavy army cannot
 fill the rocket slots in Sappers. Raising it further means changing the compositions.
 
+## Capture, repair and walls — mechanics, not rows
+
+Asked for more. Rows are cheap; the things that change how the game is *played* are the ones
+that add a verb. This batch adds three, plus the cheap defences the early game was missing.
+
+**Engineer → capture (MISSION_CAPTURE).** Right-click an enemy *building* with an engineer
+selected and it walks in and takes it. The unit is spent doing it, which is what stops the whole
+thing being free: 600 credits and a walk across the map buys one structure, and the structure
+keeps whatever damage it already had (floored at 25%, so you cannot capture a 3-hp shell).
+
+Everything derived from ownership has to move with it, and this is the checklist:
+- **Power** is a per-side sum, so *both* sides recalculate.
+- **The footprint's `owner` map is keyed by entity id, not side**, so it needs no change at all —
+  which is exactly why it was built that way.
+- **The blueprint node moves** (`_rtsBaseDropNode` then `_rtsBaseAdd`), or the previous owner
+  spends the rest of the match trying to rebuild a building standing right there in your colours.
+- Anything of the new owner's that was shooting at it stops.
+
+The engineer branch sits **before** the engage block in `_rtsUpdateUnit`, deliberately: it has no
+weapon, and letting it reach the acquire-a-target path leaves it standing in the open aiming at a
+tank. It also never holds an order it cannot fulfil — no route means the order is dropped.
+
+**Service Depot.** Park a damaged *vehicle* on it and it is repaired free, at `repairRate` hp/s.
+Infantry are excluded, as in the reference: a depot repairs vehicles, it does not heal people. It
+needs power like everything else, so browning out the base stops the repairs.
+
+**Walls, Pillbox, Flame Squad.** Walls are 1×1, block their cell, have no weapon, and chain —
+a wall is itself a valid anchor for the next one. The Pillbox is the answer to an early infantry
+rush at a point where a Gun Turret is unaffordable. The Flame Squad has the shortest range in the
+game and the highest damage per second in it.
+
+**No engineer in the AI's mix, on purpose.** Capturing is a decision about a specific building at
+a specific moment; an AI that buys engineers without a plan for them donates 600 credits to
+whatever shoots them first. `wall` is out of `buildOrder` for the same reason — an AI that cannot
+plan a line just scatters concrete.
+
+### Numbers taken from the reference
+
+Where the reference gives a figure for a structure this game also has, it is used verbatim:
+Radar Dome $1000 / −40 / needs Refinery; Service Depot $1200 / −30 / needs War Factory; Pillbox
+$400 / −15 / needs Barracks; Concrete Wall $50, no power, **no prerequisite** (the one thing
+buildable from the first second of a match); Tech Center $1500 / **−200** / needs War Factory +
+Radar Dome. −200 is two whole power plants, and that is the point — the tech tier should cost an
+economy, not a line item.
+
+The long-tuned figures are deliberately **not** retrofitted. The reference prices an Ore Refinery
+at $2000 against this game's $1400, and the whole difficulty ladder is calibrated against the
+existing economy. Matching a number for its own sake would move the ladder for no gain.
+
+### Verified
+
+20 assertions in `mech.js`: capture converts the building, spends the engineer, does not repair
+it, moves power and the blueprint node, stops friendly fire at it, refuses a building already
+yours, drops that pointless order rather than looping, never acquires a shooting target, and
+drops an unroutable order. Depot repairs a parked vehicle at exactly its stated rate, ignores one
+out of range, ignores infantry, stops at full health, and does nothing while browned out. Walls
+block, chain, unblock on death and never shoot.
+
+Ladder unchanged at easy 297 s / normal 217 s / hard 170 s, seed for seed, including after the
+Tech Center's power draw went to −200. The opponent builds all of it (pillbox 10, depot 2 across
+three seeds) and fields flame squads (83).
+
+**Two harness bugs, both mine, both arithmetic.** The depot test wanted `hp > 240` when 22 hp/s
+× 6 s = 232 exactly — assert the *rate*, not a number picked by eye. And the "unreachable capture"
+test put its fake building at tile (2,2), which is merely a long walk; the engineer was correctly
+still walking. Off-map is unreachable; a far corner is not.
+
 ## The roster: nine and nine, not five and six
 
 Asked why the game was limited to so few buildings and units. There was no reason. Every file
