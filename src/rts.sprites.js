@@ -575,6 +575,42 @@ function _sprBuilding(key, side) {
     _r3Box(m, 0, 12, 3.5, 13, 3, 3, DK[1], DK[3]);
     _r3Box(m, -7, 17, 0, 3, 2, 8, S[2], S[1]);                     /* reload rack */
 
+  } else if (key === 'apower') {
+    /* Advanced Power Plant: the same vocabulary as the Power Plant - hall plus stacks - but
+       four stacks instead of two and a cooling tower, so it reads as "the big one" beside it. */
+    _r3Slab(m, 0, 0, 3, W - 8, 20, D - 12, 4, B.wall, B.roof);
+    _r3Gable(m, 0, 20, 6, W - 22, 9, D - 26, B.roof);
+    _r3Box(m, 0, 25, 6, W - 26, 1, 3, TM[0], TM[1]);
+    for (i = 0; i < 4; i++) _r3Cyl(m, -22 + i * 11, 0, -9, 6, 34 + (i % 2) * 8, S[0], DK[1]);
+    _r3Cone(m, 24, 0, 8, 11, 8, 22, S[2], 18);                     /* cooling tower */
+    _r3Cyl(m, 24, 22, 8, 8, 2, DK[1], DK[3], 18);                  /* its dark mouth */
+    _r3Box(m, -16, 0, 15, 13, 10, 8, S[2], S[1]);                  /* transformer bank */
+    for (i = 0; i < 4; i++) _r3Box(m, -20 + i * 3, 10, 15, 1, 6, 1, S[3], S[3]);
+    pilasters(23, 0, 0, 5, 12, 4, 20);
+    winRow(23, 10, 0, 4, 12, 5, 4);
+
+  } else if (key === 'kennel') {
+    /* Kennel: a run with a pitched shed at one end. Small, cheap and obviously not a defence -
+       nothing about it should read as a gun. */
+    _r3Box(m, 0, 0, 0, W - 3, 2, D - 3, RTS_PAL.dirt[2], RTS_PAL.dirt[1]);
+    _r3Box(m, -5, 2, 0, 11, 8, D - 6, B.wall);
+    _r3Gable(m, -5, 10, 0, 13, 5, D - 5, B.roof);                  /* shed roof */
+    _r3Box(m, -1, 3, 0, 3, 5, 5, DK[0], DK[2]);                    /* doorway */
+    for (i = 0; i < 5; i++) _r3Box(m, 8, 2, -8 + i * 4, 0.8, 7, 0.8, S[2], S[1]);  /* run railings */
+    _r3Box(m, 8, 9, 0, 0.8, 0.8, D - 5, S[2], S[1]);
+    _r3Box(m, 3, 2, -7, 4, 1.5, 3, S[1], S[0]);                    /* feed trough */
+
+  } else if (key === 'flametower') {
+    /* Flame Tower: a squat drum with a burner head and two fuel bottles at its foot. The
+       bottles are the tell - they are why it goes up when it dies. */
+    _r3Cyl(m, 0, 0, 0, 9, 4, C[0], C[1], 16);                      /* base ring */
+    _r3Cyl(m, 0, 4, 0, 6, 14, S[2], S[1], 16);                     /* column */
+    _r3Cyl(m, 0, 18, 0, 7, 4, TM[0], TM[1], 16);                   /* burner housing */
+    _r3Box(m, 6, 19, 0, 7, 2.6, 2.6, DK[1], DK[3]);                /* nozzle */
+    _r3Box(m, 10, 19, 0, 2, 3.4, 3.4, RTS_PAL.hazard[0], RTS_PAL.hazard[0]);  /* pilot flare */
+    _r3Cyl(m, -7, 0, -5, 2.6, 9, RTS_PAL.hazard[0], DK[1], 12);    /* fuel bottles */
+    _r3Cyl(m, -7, 0, 5, 2.6, 9, RTS_PAL.hazard[0], DK[1], 12);
+
   } else if (key === 'wall') {
     /* A wall segment has to tile with itself, so it fills its cell edge to edge with no pad
        and no overhang - anything proud of the footprint would show a seam every metre. */
@@ -632,7 +668,7 @@ function _sprBuilding(key, side) {
    at the same screen position lines them up with no per-facing offset table. */
 function _sprUnitModel(key, side, prone, part) {
   var d = rtsUnitDef(key), TM = RTS_PAL.team[side];
-  var S = RTS_PAL.steel, DK = RTS_PAL.dark, O = RTS_PAL.ore;
+  var S = RTS_PAL.steel, DK = RTS_PAL.dark, O = RTS_PAL.ore, C = RTS_PAL.conc;
   var m = [], i;
 
   /* Road wheels and a track run - the detail that separates a tracked vehicle from a box with
@@ -655,12 +691,27 @@ function _sprUnitModel(key, side, prone, part) {
     }
   }
 
-  if (d.kind === 'infantry') {
+  if (key === 'dog') {
+    /* Not a two-man squad and not upright: a low four-legged body on a long axis. At this size
+       the only thing that says "dog" is the silhouette being horizontal where every other
+       infantry sprite is vertical. */
+    for (i = 0; i < 2; i++) {
+      var dx0 = i ? 2.0 : -2.4, dz0 = i ? -1.6 : 1.6;
+      _r3Box(m, dx0, 0, dz0 - 0.9, 1.1, 2.4, 0.9, DK[1], DK[2]);   /* legs */
+      _r3Box(m, dx0, 0, dz0 + 0.9, 1.1, 2.4, 0.9, DK[1], DK[2]);
+      _r3Box(m, dx0, 2.2, dz0, 5.2, 2.0, 2.2, TM[1], TM[3]);       /* body, along +x */
+      _r3Box(m, dx0 + 3.0, 2.6, dz0, 2.0, 1.8, 1.8, TM[2], TM[1]); /* head */
+      _r3Box(m, dx0 + 3.9, 2.9, dz0, 0.9, 0.9, 1.4, DK[0], DK[2]); /* muzzle */
+      _r3Box(m, dx0 - 3.0, 3.4, dz0, 2.2, 0.7, 0.7, TM[1], TM[3]); /* tail */
+    }
+  } else if (d.kind === 'infantry') {
     /* Two figures, offset so a squad does not read as one blob. +x is the nose.
        Prone is a genuinely different silhouette - low, long and facing forward - because
        that is the only way the player can tell at a glance that they are pinned. */
-    var men = [[2.5, -3], [-2.5, 2.5]];
-    for (i = 0; i < 2; i++) {
+    /* Hero units are ONE figure. A Commando drawn as a two-man squad reads as two Commandos,
+       which is exactly the wrong signal for a unit limited to one at a time. */
+    var men = (key === 'tanya') ? [[0, 0]] : [[2.5, -3], [-2.5, 2.5]];
+    for (i = 0; i < men.length; i++) {
       var mx = men[i][0], mz = men[i][1];
       if (prone) {
         _r3Box(m, mx - 1, 0, mz, 7, 2, 2.6, TM[0], TM[1]);         /* body, lying down */
@@ -686,6 +737,25 @@ function _sprUnitModel(key, side, prone, part) {
           _r3Box(m, mx - 0.3, 7.0, mz, 3.0, 0.9, 3.0, RTS_PAL.hazard[0], RTS_PAL.hazard[0]);
           _r3Box(m, mx + 1.8, 2.2, mz - 1.3, 2.2, 1.8, 1.6, S[1], S[0]);    /* toolbox */
           _r3Box(m, mx - 0.4, 5.0, mz, 3.9, 0.9, 3.9, RTS_PAL.hazard[0], RTS_PAL.hazard[0]);  /* hi-vis */
+        } else if (key === 'medic') {
+          /* White over the team colour, with a cross on the back. The only bright white in the
+             whole roster, so a medic is findable in a crowd - which is the point of it. */
+          _r3Box(m, mx, 2.4, mz, 3.4, 3.6, 3.4, C[1], C[0]);
+          _r3Box(m, mx - 1.7, 3.4, mz, 0.6, 1.8, 0.6, '#c8302a', '#e04a42');
+          _r3Box(m, mx - 1.7, 4.0, mz, 0.6, 0.6, 1.8, '#c8302a', '#e04a42');
+          _r3Box(m, mx - 0.3, 7.0, mz, 3.0, 0.9, 3.0, C[1], C[0]);   /* white helmet */
+          _r3Box(m, mx + 1.9, 2.4, mz + 1.5, 2.0, 1.6, 1.2, C[0], C[1]);  /* medical bag */
+        } else if (key === 'thief') {
+          /* All dark, hunched, carrying a satchel and nothing else. Reads as "not a soldier". */
+          _r3Box(m, mx, 2.4, mz, 3.0, 3.0, 3.0, DK[1], DK[2]);
+          _r3Box(m, mx, 5.4, mz, 2.2, 1.5, 2.2, DK[0], DK[1]);        /* hood, no helmet */
+          _r3Box(m, mx + 1.8, 2.6, mz + 1.6, 2.4, 2.0, 1.4, S[2], S[1]);
+        } else if (key === 'tanya') {
+          /* One figure, not two - a hero unit should not read as a squad. Handled by the men
+             table below; here she just gets the pistols and a satchel of C4. */
+          _r3Box(m, mx + 2.2, 4.2, mz - 0.9, 2.6, 0.8, 0.8, DK[1], DK[3]);
+          _r3Box(m, mx + 2.2, 4.2, mz + 0.9, 2.6, 0.8, 0.8, DK[1], DK[3]);
+          _r3Box(m, mx - 1.6, 2.6, mz + 1.6, 2.2, 1.8, 1.2, RTS_PAL.hazard[0], RTS_PAL.hazard[0]);
         } else if (key === 'flame') {
           /* Tanks on the back and a short wand - the opposite silhouette to the rocket squad's
              long forward tube, which is the pair most likely to be confused. */

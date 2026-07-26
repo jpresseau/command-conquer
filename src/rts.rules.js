@@ -71,7 +71,21 @@ var RTS_STRUCTS = [
     desc:'Cheap early defence. Shreds infantry, barely scratches armour.' },
   { key:'depot',    name:'Service Depot',w:2, h:2, cost:1200, build:16, hp:700,  power:-30,  sight:12,
     needs:['factory'], repairs:RTS_TILE * 3.2, repairRate:22,
-    desc:'Park damaged vehicles on it and they are patched up, free of charge.' }
+    desc:'Park damaged vehicles on it and they are patched up, free of charge.' },
+  /* Advanced Power Plant $500 / +200 / needs Power Plant. Twice the output for well under
+     twice the price and one footprint instead of two - the correct answer once a base is big. */
+  { key:'apower',   name:'Adv. Power Plant', w:3, h:2, cost:500, build:11, hp:600, power:200, sight:10,
+    needs:['power'],
+    desc:'Supplies 200 power. Cheaper per unit than two plants, and half the footprint.' },
+  /* Kennel $200 / -10 / needs Barracks. It exists to gate the Attack Dog. */
+  { key:'kennel',   name:'Kennel',       w:1, h:1, cost:200,  build:5,  hp:400,  power:-10,  sight:10,
+    needs:['barracks'],
+    desc:'Trains Attack Dogs.' },
+  /* Flame Tower $500 / -20 / needs Barracks, and "damages nearby units and structures if
+     destroyed" - which this game already has a mechanism for, so it actually does. */
+  { key:'flametower',name:'Flame Tower', w:1, h:1, cost:500,  build:11, hp:450,  power:-20,  sight:16,
+    needs:['barracks'], weapon:'towerflame', deathBlast:{ dmg:70, radius:RTS_TILE * 2.6 },
+    desc:'Burns anything that comes close. Goes up in a fireball when it dies.' }
 ];
 
 /* ------------------------------------------------------------------- units --
@@ -92,27 +106,47 @@ var RTS_UNITS = [
      and armour with the main gun, with no input from the player. */
   { key:'tank',     name:'Battle Tank',   kind:'vehicle',  cost:800,  build:11, hp:460,  speed:9,   turn:1.8,r:2.0, sight:18, weapon:'cannon', weapon2:'coax',
     desc:'The backbone of any serious attack. Coaxial gun for infantry.' },
-  { key:'harvester',name:'Harvester',     kind:'vehicle',  cost:1200, build:14, hp:700,  speed:7.5, turn:1.6,r:2.2, sight:14, weapon:null,
+  { key:'harvester',name:'Harvester',     kind:'vehicle',  cost:1400, build:14, hp:700,  speed:7.5, turn:1.6,r:2.2, sight:14, weapon:null,
     harvest:true, capacity:700,
     desc:'Mines Scrap fields and unloads at a refinery.' },
   /* --- second tier. `needs` on a unit gates it the same way it gates a structure. --- */
-  { key:'grenadier',name:'Grenadier',     kind:'infantry', cost:180,  build:4,  hp:65,   speed:6,   turn:6,  r:1.1, sight:15, weapon:'grenade',
+  { key:'grenadier',name:'Grenadier',     kind:'infantry', cost:160,  build:4,  hp:65,   speed:6,   turn:6,  r:1.1, sight:15, weapon:'grenade',
     desc:'Lobbed charges. Clears infantry and cracks buildings; hopeless against a moving tank.' },
-  { key:'light',    name:'Light Tank',    kind:'vehicle',  cost:600,  build:9,  hp:280,  speed:12,  turn:2.6,r:1.8, sight:18, weapon:'cannon',
+  { key:'light',    name:'Light Tank',    kind:'vehicle',  cost:700,  build:9,  hp:280,  speed:12,  turn:2.6,r:1.8, sight:18, weapon:'cannon',
     desc:'Cheap armour. Faster than a Battle Tank and half the price, with a third of the hull.' },
-  { key:'arty',     name:'Artillery',     kind:'vehicle',  cost:1000, build:15, hp:150,  speed:6,   turn:1.4,r:1.9, sight:16, weapon:'howitzer',
-    needs:['lab'],
+  { key:'arty',     name:'Artillery',     kind:'vehicle',  cost:600,  build:11, hp:150,  speed:6,   turn:1.4,r:1.9, sight:16, weapon:'howitzer',
+    needs:['radar'],
     desc:'Outranges every base defence in the game. Made of paper — never send it in first.' },
-  { key:'heavy',    name:'Heavy Tank',    kind:'vehicle',  cost:1500, build:20, hp:820,  speed:6.5, turn:1.3,r:2.2, sight:18, weapon:'heavycannon', weapon2:'coax',
+  { key:'heavy',    name:'Mammoth Tank',  kind:'vehicle',  cost:1700, build:20, hp:820,  speed:6.5, turn:1.3,r:2.2, sight:18, weapon:'heavycannon', weapon2:'coax',
     needs:['lab'],
     desc:'The heaviest hull on the field. Slow, expensive, and very hard to stop.' },
-  { key:'flame',    name:'Flame Squad',   kind:'infantry', cost:280,  build:5,  hp:75,   speed:6,   turn:6,  r:1.1, sight:12, weapon:'flame',
-    needs:['depot'],
+  { key:'flame',    name:'Flame Squad',   kind:'infantry', cost:300,  build:5,  hp:75,   speed:6,   turn:6,  r:1.1, sight:12, weapon:'flame',
+    needs:['lab'],
     desc:'Walks up and burns things down. Devastating up close, dead at any distance.' },
   /* capture: MISSION_CAPTURE. The unit is spent on arrival - it does not survive the job. */
-  { key:'engineer', name:'Engineer',      kind:'infantry', cost:600,  build:8,  hp:45,   speed:6.5, turn:6,  r:1.1, sight:12, weapon:null,
-    needs:['radar'], capture:true,
-    desc:'Walks into an enemy building and takes it. Unarmed, and spent on arrival.' }
+  { key:'engineer', name:'Engineer',      kind:'infantry', cost:500,  build:8,  hp:45,   speed:6.5, turn:6,  r:1.1, sight:12, weapon:null,
+    capture:true,
+    desc:'Walks into an enemy building and takes it. Unarmed, and spent on arrival.' },
+  /* --- four units that each add a VERB rather than another damage number. --- */
+  /* Attack Dog: "extremely effective against infantry, completely worthless against vehicles
+     and structures". The `vs` table does that entirely - no special case anywhere in the code. */
+  { key:'dog',      name:'Attack Dog',    kind:'infantry', cost:200,  build:3,  hp:40,   speed:13,  turn:8,  r:0.9, sight:14, weapon:'bite',
+    needs:['kennel'],
+    desc:'Fast and vicious. Tears infantry apart; cannot scratch a vehicle or a wall.' },
+  /* heals: friendly INFANTRY inside this radius are brought back up at healRate hp/sec. The
+     same shape as the Service Depot's repair field - one is for people, the other for vehicles. */
+  { key:'medic',    name:'Field Medic',   kind:'infantry', cost:800,  build:9,  hp:70,   speed:6.5, turn:6,  r:1.1, sight:12, weapon:null,
+    heals:RTS_TILE * 3.0, healRate:9,
+    desc:'Heals nearby infantry continuously and for free. Cannot heal himself.' },
+  /* steal: walks into an enemy refinery and leaves with a fraction of that side\'s credits.
+     Same walk-in as capture, different payload, spent the same way. */
+  { key:'thief',    name:'Thief',         kind:'infantry', cost:500,  build:7,  hp:45,   speed:7,   turn:6,  r:1.1, sight:12, weapon:null,
+    needs:['lab'], steal:0.5, stealFrom:'refinery',
+    desc:'Walks into an enemy refinery and leaves with half their credits. Unarmed.' },
+  /* demo: C4. "Can destroy buildings instantly if she is able to get adjacent to them." */
+  { key:'tanya',    name:'Commando',      kind:'infantry', cost:1200, build:14, hp:130,  speed:8,   turn:7,  r:1.1, sight:16, weapon:'pistols',
+    needs:['lab'], demo:true, only:1,
+    desc:'Mows down infantry, and levels any building she can reach. Only one at a time.' }
 ];
 
 /* --------------------------------------------------------------- weapons --
@@ -152,6 +186,16 @@ var RTS_WEAPONS = {
   /* Pillbox: a machine gun in concrete. Short, cheap, and the answer to an infantry rush at a
      point in the match where a Gun Turret is still unaffordable. */
   pillboxgun:  { dmg:12, range:15, cool:0.30, shot:'tracer', speed:0,  splash:0,   vs:{ infantry:1.15, vehicle:0.2, building:0.15 } },
+  /* Attack Dog. Zero against anything that is not a person - the reference is explicit that a
+     dog is "completely worthless against vehicles and structures", and a 0 in the vs table is
+     the whole implementation of that. */
+  bite:        { dmg:22, range:3,  cool:0.55, shot:'tracer', speed:0,  splash:0,   vs:{ infantry:1.4,  vehicle:0,   building:0    } },
+  /* Two .45s: shreds infantry, barely marks anything else. The Commando's threat to buildings
+     is her C4, not this. */
+  pistols:     { dmg:26, range:12, cool:0.22, shot:'tracer', speed:0,  splash:0,   vs:{ infantry:1.6,  vehicle:0.15,building:0.1  } },
+  /* Flame Tower: the Flame Squad's weapon on a fixed mount - a little more reach, a lot more
+     of it, and it never has to walk into range. */
+  towerflame:  { dmg:34, range:13, cool:0.75, shot:'tracer', speed:0,  splash:3.0, vs:{ infantry:1.3,  vehicle:0.7, building:1.0  } },
   /* Flame: very short reach, no travel time, and it does not care what it is burning. The
      shortest range in the game is the price of the highest damage-per-second in it. */
   flame:       { dmg:30, range:9,  cool:0.65, shot:'tracer', speed:0,  splash:2.6, vs:{ infantry:1.3, vehicle:0.6, building:1.4 } }
@@ -368,16 +412,16 @@ var RTS_AI = {
   attackInterval:3,         /* minutes between attack waves, before difficulty bias */
   attackDelay:5,            /* minutes before the first one */
   ratio:{ refinery:0.16, barracks:0.16, factory:0.10, radar:0.06, lab:0.05, depot:0.05,
-          pillbox:0.20, turret:0.28, rocketpit:0.14 },
+          apower:0.08, kennel:0.04, pillbox:0.18, flametower:0.12, turret:0.24, rocketpit:0.12 },
   limit:{ refinery:4,    barracks:2,    factory:2,    radar:1,    lab:1,    depot:1,
-          pillbox:5,     turret:7,      rocketpit:4 },
+          apower:2,    kennel:1,    pillbox:4,     flametower:3,     turret:6,     rocketpit:4 },
   /* The order _rtsAIWants walks. Economy, then production, then tech, then defence - tech
      before defence because a Tech Center that arrives after the match is decided is worth
      nothing, and the defensive ratios are big enough to soak every spare credit otherwise.
      The pillbox comes first among the defences because it is the one the AI can afford early;
      `wall` is deliberately absent, since an AI that cannot plan a line just scatters concrete. */
-  buildOrder:['refinery', 'barracks', 'factory', 'radar', 'depot', 'lab',
-              'pillbox', 'turret', 'rocketpit'],
+  buildOrder:['refinery', 'barracks', 'factory', 'radar', 'apower', 'depot', 'lab', 'kennel',
+              'pillbox', 'flametower', 'turret', 'rocketpit'],
   /* What to spend a production run on. A table rather than an if-chain: adding a unit to
      RTS_UNITS should not mean editing the opponent's brain, and the hardcoded ladder that used
      to live in _rtsAIUnits is a large part of why the roster sat at five units. Gating is left
@@ -395,8 +439,13 @@ var RTS_AI = {
     /* No engineer in the mix. Capturing is a decision about a specific building at a specific
        moment, and an AI that buys engineers without a plan for them just donates 600 credits
        to whatever shoots them first. Buildable by the player; not spammed by the opponent. */
+    /* No engineer and no thief in the mix. Both are decisions about a specific building at a
+       specific moment, and an AI that buys them without a plan just donates the credits to
+       whatever shoots them first. The Commando is out for the same reason plus her `only` cap.
+       The dog IS in: it needs no plan, it just runs at infantry. */
     infantry:[ { key:'flame', at:1200, w:2 }, { key:'grenadier', at:900, w:2 },
-               { key:'rocket', at:500, w:3 }, { key:'rifle', at:250, w:2 } ]
+               { key:'rocket', at:500, w:3 }, { key:'dog', at:400, w:2 },
+               { key:'rifle', at:250, w:2 } ]
   },
   /* Check_Raise_Money / Check_Raise_Power / Check_Lower_Power thresholds. */
   brokeMoney:100,           /* below this, raising cash is urgent */

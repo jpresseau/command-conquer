@@ -696,16 +696,24 @@ function _rtsRightClick(mx, my) {
     /* An engineer sent at an enemy BUILDING captures it rather than attacking it - it has no
        weapon, so an attack order would be a walk to the target followed by standing there. It
        still cannot capture a unit, so those fall through to the attack path and are ignored. */
-    var capped = 0;
+    /* Specialists sent at an enemy BUILDING do their own job instead of attacking it. The
+       engineer and the thief have no weapon at all, so an attack order would be a walk followed
+       by standing there; the Commando has pistols but her C4 is the reason to send her. */
+    var capped = 0, special = 0;
     for (i = 0; i < mine.length; i++) {
-      var mu = mine[i];
-      if (rtsUnitDef(mu.def).capture && tgt.type === 'struct') {
-        mu.order = 'capture'; mu.target = tgt; mu.path = null; mu.goal = null; mu.susp = null;
-        capped++;
+      var mu = mine[i], md = rtsUnitDef(mu.def), job = null;
+      if (tgt.type === 'struct') {
+        if (md.capture) job = 'capture';
+        else if (md.steal && tgt.def === md.stealFrom) job = 'capture';
+        else if (md.demo) job = 'demo';
+      }
+      if (job) {
+        mu.order = job; mu.target = tgt; mu.path = null; mu.goal = null; mu.susp = null;
+        special++; if (job === 'capture') capped++;
       } else _rtsOrderAttack(mu, tgt);
     }
-    _rtsFlash(tgt.x, tgt.z, capped === mine.length ? 'harvest' : 'attack');
-    if (capped) _rtsSay(capped === 1 ? 'Engineer moving to capture.' : capped + ' engineers moving to capture.');
+    _rtsFlash(tgt.x, tgt.z, special === mine.length ? 'harvest' : 'attack');
+    if (special) _rtsSay(special === 1 ? 'Moving in.' : special + ' specialists moving in.');
     if (typeof _rtsSfx === 'function') _rtsSfx('order');
     return;
   }
