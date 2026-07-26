@@ -754,6 +754,21 @@ function _sprBuilding(key, side) {
       _r3Cyl(m, W / 2 - 9, 2, -8 + db * 8, 2.6, 5, RTS_PAL.hazard[0], S[3], 16);
     _r3Box(m, 6, 2, -D / 2 + 7, 12, 4, 4, S[2], S[1]);                   /* toolrack */
 
+  } else if (key === 'helipad') {
+    /* A flat pad, and in the reference it is exactly that: a marked square of apron with a
+       yellow cross on it and almost nothing standing up. Keeping it low is the point - the one
+       structure a helicopter can sit on top of has to look like it. */
+    _r3Box(m, 0, 0, 0, W - 4, 2.5, D - 4, C[2], C[0]);
+    _r3Box(m, 0, 2.5, 0, W - 12, 0.8, D - 12, C[0], C[1]);         /* the marked square */
+    _r3Box(m, 0, 3.3, 0, W - 22, 0.7, 4.5, RTS_PAL.hazard[0], RTS_PAL.hazard[0]);   /* the cross */
+    _r3Box(m, 0, 3.3, 0, 4.5, 0.7, D - 22, RTS_PAL.hazard[0], RTS_PAL.hazard[0]);
+    _r3Box(m, -W / 2 + 6, 2.5, -D / 2 + 6, 7, 9, 7, C[0], B.roof);  /* control hut, team roof */
+    _r3Box(m, -W / 2 + 6, 11.5, -D / 2 + 6, 1.2, 6, 1.2, S[3], S[3]);   /* mast */
+    for (var hp = 0; hp < 4; hp++)                                  /* corner lights */
+      _r3Cyl(m, (hp < 2 ? -1 : 1) * (W / 2 - 5), 2.5, (hp % 2 ? 1 : -1) * (D / 2 - 5),
+             1.0, 1.8, RTS_PAL.lit, RTS_PAL.lit, 10);
+    _r3Cyl(m, W / 2 - 7, 2.5, D / 2 - 7, 2.6, 4.5, RTS_PAL.hazard[0], S[3], 14);    /* fuel drum */
+
   } else if (key === 'silo') {
     /* Ore Silo. The cameo is a LOW RIBBED BUNKER - a wide flat green-grey box with vertical
        ribs down it and an open frame at one end - not the three cylinders that were here,
@@ -855,7 +870,7 @@ function _sprBuilding(key, side) {
    hundred hand-tuned coordinates, and it cannot silently change the unit's proportions. */
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
-  dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34
+  dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -1104,6 +1119,32 @@ function _sprUnitModel(key, side, prone, part) {
     _r3Box(m, -1.5, 6.0, 0, 7.5, 2.8, 7.0, DK[2], DK[1]);          /* open cockpit well */
     _r3Box(m, -4.8, 6.0, 0, 1.0, 4.6, 7.0, TM[1], TM[3]);          /* roll hoop */
     _r3Box(m, 3.2, 8.4, 0, 8.5, 1.3, 1.3, DK[1], DK[3]);           /* pintle gun */
+
+  } else if (key === 'heli') {
+    /* Attack helicopter. Two things carry it at this size: a long thin tail boom, which no
+       ground unit has, and the rotor disc - drawn as a wide, very flat cylinder rather than
+       blades, because at 24 px spinning blades are noise and a disc reads instantly. */
+    _r3Box(m, 0, 3.0, 0, 15.0, 4.6, 5.2, VH[0], VH[1]);            /* fuselage */
+    _r3Box(m, 5.6, 3.4, 0, 4.6, 3.6, 4.4, VH[1], VH[3]);           /* nose */
+    _r3Box(m, 7.6, 4.2, 0, 1.6, 2.2, 3.4, RTS_PAL.glass, RTS_PAL.glass);
+    _r3Box(m, -10.0, 4.6, 0, 11.0, 1.9, 1.9, VH[2], VH[1]);        /* tail boom */
+    _r3Box(m, -15.0, 4.6, 0, 1.4, 5.0, 1.4, VH[1], VH[3]);         /* tail fin */
+    _r3Cyl(m, -15.2, 6.2, 0.9, 2.4, 0.5, DK[1], DK[3], 14);        /* tail rotor disc */
+    _r3Box(m, 0, 7.6, 0, 3.2, 1.4, 3.2, GN[2], GN[1]);             /* rotor head */
+    /* BLADES, and only along the two axes. Drawn as a solid disc - the obvious way to say
+       "spinning" - the rotor came out as an opaque dark lid 31 px across that hid the entire
+       aircraft; every facing was the same black circle. The next attempt put four blades at
+       45-degree steps, which is worse for a reason worth writing down: these primitives are
+       axis-aligned boxes, so a diagonal "bar" is a box that is long in BOTH axes - a square.
+       Four of them merged into a solid diamond. Two crossed bars along x and z are genuine
+       thin bars, they read as a rotor, and the fuselage shows through the gaps. */
+    _r3Box(m, 0, 8.9, 0, 30.0, 0.5, 1.4, DK[1], DK[3]);
+    _r3Box(m, 0, 8.9, 0, 1.4, 0.5, 30.0, DK[1], DK[3]);
+    _r3Box(m, 1.0, 2.2, -3.6, 6.0, 1.4, 1.4, GN[1], GN[3]);        /* stub wings + pods */
+    _r3Box(m, 1.0, 2.2, 3.6, 6.0, 1.4, 1.4, GN[1], GN[3]);
+    _r3Box(m, 2.6, 1.4, -3.6, 4.0, 1.6, 2.0, DK[1], DK[3]);
+    _r3Box(m, 2.6, 1.4, 3.6, 4.0, 1.6, 2.0, DK[1], DK[3]);
+    _r3Box(m, 0, 0.4, 0, 9.0, 1.0, 6.6, TM[1], TM[3]);             /* skids / team stripe */
 
   } else if (key === 'apc') {
     /* A closed box on tracks with a rear ramp and a small cupola gun - no turret (UDATA.CPP
