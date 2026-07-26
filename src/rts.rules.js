@@ -40,7 +40,7 @@ var RTS_STRUCTS = [
   { key:'power',    name:'Power Plant',   w:2, h:2, cost:300,  build:7,  hp:500,  power:100,  sight:10,
     armour:'concrete',
     desc:'Supplies 100 power. Low power slows every production line.' },
-  { key:'refinery', name:'Scrap Refinery',w:3, h:3, cost:1400, build:18, hp:950,  power:-30,  sight:12,
+  { key:'refinery', name:'Scrap Refinery',w:3, h:3, cost:2000, build:18, hp:950,  power:-30,  sight:12,
     needs:['power'], freeUnit:'harvester', storage:2000,
     armour:'concrete',
     desc:'Harvesters unload here, and it stores 2000 of scrap. Ships with one free Harvester.' },
@@ -206,7 +206,16 @@ var RTS_UNITS = [
     needs:['lab'], demo:true, only:1,
     armour:'none',
     crawl:true, fraidy:false,
-    desc:'Mows down infantry, and levels any building she can reach. Only one at a time.' }
+    desc:'Mows down infantry, and levels any building she can reach. Only one at a time.' },
+  /* Mobile Construction Vehicle. UDATA.CPP's UnitMCV is unarmed, IsCrusher, IsGigundo, and can
+     turn up in a crate; UNIT.CPP's Try_To_Deploy turns it into a STRUCT_CONST. Requires the
+     Service Depot, as in the original, so it sits behind the same building that repairs it.
+     `deploy` is the whole unit: it exists to put a Command Yard somewhere you do not have one,
+     which is the only way back into the game after losing the first. */
+  { key:'mcv',      name:'Mobile Yard',   kind:'vehicle',  cost:2500, build:26, hp:600,  speed:5.5, turn:1.2,r:2.2, sight:14, weapon:null,
+    needs:['depot'], deploy:'yard', crush:true,
+    armour:'light',
+    desc:'Unarmed. Deploys into a Command Yard - press D, or use the Deploy button.' }
 ];
 
 /* --------------------------------------------------------------- weapons --
@@ -267,7 +276,19 @@ var RTS_WEAPONS = {
      nearer than 2.0, and any jostle broke contact. Measured: ONE bite in eight seconds, 31
      damage where a rifle squad did 56. The anti-infantry unit was worse at killing infantry
      than the cheapest thing in the game. 5.5 is still unmistakably melee and is reachable. */
-  bite:       { dmg:22, range:5.5,cool:0.55, shot:'tracer',  speed:0,  splash:0,
+  /* `maul` is INFANTRY.CPP's dog rule, and it replaces the damage number entirely:
+         if (source is infantry && source->Class->IsDog) {
+             if (source->TarCom == As_Target()) damage = Strength;
+             else                               damage = 0;
+         }
+     A bite is set to the target's CURRENT strength, so it always kills in one bite whatever
+     it bit; and anything that is not the dog's actual target takes nothing at all - a dog
+     spills no collateral. `dmg` below is therefore never used against a legal target and is
+     kept only as the fallback if `maul` is ever switched off. Combined with the infantry-only
+     targeting rule in _rtsFindTarget, that is the whole unit: a 200-credit assassin that
+     deletes exactly one man and cannot scratch a tank. We had given it a damage figure, which
+     is precisely why it lost fights to the cheapest infantry in the game. */
+  bite:       { dmg:22, range:5.5,cool:0.55, shot:'tracer',  speed:0,  splash:0, maul:true,
                 verses:{ none:1.4,  wood:0,    light:0,    heavy:0,    concrete:0 } },
   /* Two .45s: shreds infantry, barely marks anything else. The Commando's threat to buildings
      is her C4, not this. */
@@ -418,6 +439,23 @@ var RTS_REPAIR_RATE = 0.75;     /* seconds between repair steps (Rule.RepairRate
 var RTS_REPAIR_STEP = 0.05;     /* fraction of max hp restored per step (Rule.RepairStep) */
 var RTS_REPAIR_PCT = 0.25;      /* Rule.RepairPercent = 1/4 */
 var RTS_REFUND_PCT = 0.5;       /* Rule.RefundPercent: sell gives back half */
+/* BDATA.CPP's Raw_Cost(): a building's price MINUS the free unit it ships with.
+     if (Type == STRUCT_REFINERY) cost -= UnitTypeClass::As_Reference(UNIT_HARVESTER).Cost;
+   It exists to stop exactly one exploit, and refusing to port it left that exploit open here:
+   refund half of a price that INCLUDES a free harvester and you are being paid for a harvester
+   you keep. Sell a refinery, rebuild it, repeat - a money printer with an extra harvester
+   falling out of it each cycle.
+
+   Porting it needed the refinery priced the way the original prices it. RA's PROC is 2000 with
+   the 1400 harvester costed INTO that; ours was 1400 for the building with the harvester on
+   top, so raw cost came out at zero and the guard measured as a no-op. At 2000 the arithmetic
+   is the original's: raw cost 600, refund 300. */
+function rtsRawCost(key) {
+  var d = rtsStructDef(key);
+  if (!d) return 0;
+  var free = d.freeUnit ? rtsUnitDef(d.freeUnit) : null;
+  return Math.max(0, d.cost - (free ? free.cost : 0));
+}
 var RTS_SURVIVOR_FRACTION = 0.5;/* Rule.SurvivorFraction, used by How_Many_Survivors */
 var RTS_SURVIVOR_ODDS = 0.5;    /* Drop_Debris only rolls some of them out of a wreck */
 var RTS_DECON_TIME = 0.35;      /* Mission_Deconstruction: build-up run backwards, this x build */
@@ -661,7 +699,10 @@ var RTS_CRATE_MINE_RADIUS = RTS_TILE * 2.2;
 /* What a free-vehicle crate can contain: things that are useful on their own, in the open,
    with no support. An engineer or a thief handed to you in the middle of nowhere is a unit
    with nothing to do. */
-var RTS_CRATE_UNITS = ['buggy', 'light', 'tank', 'harvester'];
+/* UDATA.CPP marks the MCV "Can this be a goodie surprise from a crate? true", and that is the
+   one entry here that can change a match: a player who has lost their Command Yard and cannot
+   build anything is not out of the game while a crate might still hand them one. */
+var RTS_CRATE_UNITS = ['buggy', 'light', 'tank', 'harvester', 'mcv'];
 /* A unit may keep stacking bonuses, but not without limit - a tank that has hoovered up six
    firepower crates stops being a tank. */
 var RTS_CRATE_CAP = { fire:2.2, armor:2.2, speed:1.9, rof:0.45 };
@@ -823,7 +864,17 @@ var RTS_SCRAP_TILE = 500;
 var RTS_ORE_PER_LEVEL = 500 / 12;
 var RTS_HARVEST_RATE = 190;
 var RTS_UNLOAD_RATE = 700;      /* scrap/second poured into the refinery */
-var RTS_LOW_POWER_MIN = 0.28;   /* worst-case build-speed multiplier when browned out */
+/* TECHNO.CPP's Time_To_Build, verbatim:
+       fixed power = House->Power_Fraction();
+       if (power > 1) power = 1;
+       if (power < 1 && power > fixed::_3_4) power = fixed::_3_4;
+       if (power < fixed::_1_2) power = fixed::_1_2;
+   Two things in there that we did not have. The FLOOR is a half, not the 0.28 that was here -
+   a browned-out base in the original is slow, not crippled. And there is a DEAD ZONE: anything
+   between three quarters and full counts as three quarters, so the moment you dip under 100%
+   you pay a flat 25% whether you are at 99% or at 76%. That is what makes staying fully
+   powered feel like a real decision rather than a gradient you can ignore. */
+var RTS_POWER_BAND = 0.75, RTS_POWER_MIN = 0.5;
 var RTS_BUILD_RADIUS = 9;       /* tiles: how far from an existing structure you may build */
 
 /* Ore regrows and spreads, as it does in the original (RULES.CPP: IsTGrowth, IsTSpread,

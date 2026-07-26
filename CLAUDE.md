@@ -2293,3 +2293,109 @@ pass. **702 ms before, 712 ms after** — effectively free.
 
 Zero is the correct value everywhere the mask is not filled, which is what makes the sparse fill
 safe: two cells out from any rock, `cov` is 0 and the noise can only reach 0.17.
+
+## Closing the ledger — four items, and two that closed as "no defect"
+
+### The refinery money printer, and the price that made it real
+
+`BuildingTypeClass::Raw_Cost()` is a building's price minus the free unit it ships with:
+
+```cpp
+if (Type == STRUCT_REFINERY) cost -= UnitTypeClass::As_Reference(UNIT_HARVESTER).Cost;
+```
+
+It exists to stop exactly one exploit, and refusing to port it left that exploit open here:
+refund half of a price that INCLUDES a free harvester and you are being paid for a harvester you
+keep. Sell the refinery, rebuild it, repeat — a money printer with a spare harvester falling out
+each cycle.
+
+**Porting it needed the refinery priced the way the original prices it.** RA's PROC is 2000 with
+the 1400 harvester costed *into* that; ours was 1400 for the building with the harvester on top,
+so raw cost came out at zero and the guard measured as a no-op — which is precisely why an
+earlier pass concluded it "measured wrong" and skipped it. The refinery is now 2000, so the
+arithmetic is the original's: raw cost 600, refund 300. Raw_Cost is taken off what was actually
+*paid*, so a discounted building cannot be sold at a profit either.
+
+### The power band — the part we did not have
+
+`TechnoTypeClass::Time_To_Build`, verbatim:
+
+```cpp
+fixed power = House->Power_Fraction();
+if (power > 1) power = 1;
+if (power < 1 && power > fixed::_3_4) power = fixed::_3_4;
+if (power < fixed::_1_2) power = fixed::_1_2;
+```
+
+Two things in there. The **floor is a half**, not the 0.28 we had — a browned-out base in the
+original is slow, not crippled. And there is a **dead zone**: anything between three quarters and
+full counts as three quarters, so the moment you dip under 100% you pay a flat 25% whether you
+are at 99% or 76%. That is what makes staying fully powered a decision rather than a gradient.
+
+### The Attack Dog is not a damage number
+
+```cpp
+if (source is infantry && source->Class->IsDog) {
+    if (source->TarCom == As_Target()) damage = Strength;
+    else                               damage = 0;
+}
+```
+
+A bite is set to the target's **current strength** — it always kills in one — and anything that
+is not the dog's actual target takes **nothing at all**. Plus, from the action layer, *"dogs can
+only attack infantrymen"*: `ACTION_ATTACK` becomes `ACTION_NONE` against anything else.
+
+That is the whole unit: a 200-credit assassin that deletes exactly one man and cannot scratch a
+tank. We had given it a damage figure, which is exactly why it lost fights to the cheapest
+infantry in the game.
+
+**The infantry-only rule is enforced in the damage as well as at acquisition**, and the test
+suite is why. `_rtsFindTarget` skipping vehicles looked sufficient until an assertion forced a
+target onto a tank and the dog deleted it — a forced order walks straight past acquisition. In
+the original the order cannot be given; here both routes are closed.
+
+### The MCV — `UNIT.CPP::Try_To_Deploy`
+
+Three details worth having exactly: the yard lands on the cell **adjacent** to the vehicle, not
+under it; placement is checked with `Legal_Placement`, which does **not** apply the build-radius
+rule (hence `_rtsCanPlace(..., anywhere)`) — a vehicle whose purpose is to found a base where you
+own nothing cannot be held to a rule about being near something you own; and
+
+```cpp
+building->Strength = Health_Ratio() * building->Class->MaxStrength;
+```
+
+so a half-dead MCV deploys a half-dead yard, and deploying is not a free repair.
+
+`UDATA.CPP` marks it *"Can this be a goodie surprise from a crate? true"*, so it joins
+`RTS_CRATE_UNITS` — a player who has lost their yard is not out of the game while a crate might
+hand them one. The AI rule is deliberately narrow: it deploys an MCV **only when it has no
+yard**, and never buys one, because a 2500-credit vehicle it has no use for is a straight waste.
+
+### Two items closed as "the original does not do this either"
+
+**Crate-seeking AI.** There is none in Red Alert. The only AI-vs-crate logic in the whole source
+is a pair of guards in `UNIT.CPP` and `INFANTRY.CPP` that make a crate cell *impassable* to
+computer-controlled units — and only in a campaign game (`Session.Type == GAME_NORMAL`). In
+skirmish they drive over crates like any other ground and nothing seeks them out. Not a gap.
+
+**AI build slowdown.** `DifficultyClass` carries `FirepowerBias`, `GroundspeedBias`, `ArmorBias`,
+`ROFBias`, `CostBias`, `BuildSpeedBias`, `IsWallDestroyer`, `IsContentScan` — and `RTS_DIFF`
+already mirrors all eight, field for field. The *values* live in RULES.INI, which is data and is
+not in the GPL release, so ours stand. `IsBuildSlowdown` is read from the INI and then never used
+anywhere in the source.
+
+### Measuring
+
+The ladder (mean seconds an idle player survives, 5 seeds × 3 difficulties):
+
+| | easy | normal | hard |
+|---|---|---|---|
+| before | 339s | 251s | 214s |
+| economy | 329s | 246s | 214s |
+| + dog | 329s | 246s | 214s |
+
+Inside seed noise. **The dog change is invisible to this ladder and that is expected** — an idle
+player builds no infantry for a dog to kill — which is the whole reason it has its own suite
+(7 assertions) rather than being signed off on the ladder. The MCV likewise: the AI never buys
+one, so an idle-player ladder cannot see it. 8 assertions instead.

@@ -855,7 +855,7 @@ function _sprBuilding(key, side) {
    hundred hand-tuned coordinates, and it cannot silently change the unit's proportions. */
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
-  dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43
+  dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -1104,6 +1104,26 @@ function _sprUnitModel(key, side, prone, part) {
     _r3Box(m, -1.5, 6.0, 0, 7.5, 2.8, 7.0, DK[2], DK[1]);          /* open cockpit well */
     _r3Box(m, -4.8, 6.0, 0, 1.0, 4.6, 7.0, TM[1], TM[3]);          /* roll hoop */
     _r3Box(m, 3.2, 8.4, 0, 8.5, 1.3, 1.3, DK[1], DK[3]);           /* pintle gun */
+
+  } else if (key === 'mcv') {
+    /* A slab-sided transporter with the yard's gantry folded flat along its back - IsGigundo
+       in UDATA.CPP, so it is the biggest thing on wheels, and it carries no gun at all. The
+       folded arm is the read: it is the only vehicle with a lattice lying on top of it. */
+    tracks(22, 7.4, 6, 2.8);
+    _r3Slab(m, -2, 4.2, 0, 24, 8.5, 13.0, 1.3, VH[0], VH[1]);      /* the body */
+    for (i = 0; i < 4; i++)                                        /* side ribs */
+      _r3Box(m, -11 + i * 6.0, 4.2, 0, 1.2, 8.2, 13.5, VH[2], VH[1]);
+    _r3Box(m, -2, 12.7, 0, 22, 1.2, 11.0, VH[3], VH[3]);           /* roof deck */
+    _r3Box(m, -2, 13.9, 0, 8, 1.4, 4, TM[1], TM[3]);               /* team cap */
+    /* the folded gantry: two rails and their cross-bracing, lying along the deck */
+    _r3Box(m, -1, 13.9, -3.4, 20, 1.6, 1.6, GN[1], GN[3]);
+    _r3Box(m, -1, 13.9, 3.4, 20, 1.6, 1.6, GN[1], GN[3]);
+    for (i = 0; i < 4; i++)
+      _r3Box(m, -8 + i * 5.4, 14.1, 0, 1.2, 1.0, 6.4, GN[2], GN[0]);
+    _r3Slab(m, 11.5, 4.2, 0, 7, 9.0, 11.0, 1.0, VH[1], VH[3]);     /* cab */
+    _r3Box(m, 14.6, 7.6, 0, 1.6, 3.2, 8.0, RTS_PAL.glass, RTS_PAL.glass);
+    _r3Cyl(m, 8.0, 13.2, -4.2, 1.0, 3.4, DK[1], DK[3], 10);        /* stack */
+    _r3Box(m, -13.8, 2.0, 0, 3.0, 3.0, 10.0, GN[2], GN[1]);        /* rear jack beam */
 
   } else if (key === 'harvester') {
     /* The only gold on the board that moves. The heaped ore is the identity and it sits on the
