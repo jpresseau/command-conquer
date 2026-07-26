@@ -643,6 +643,74 @@ Commitment lands at 47% rather than the 62% asked for, and that is a real constr
 than a bug: a team only recruits units matching its composition, so a tank-heavy army cannot
 fill the rocket slots in Sappers. Raising it further means changing the compositions.
 
+## Four more verbs, and the reference documents
+
+Handed the CNCNZ pages for Allied/Soviet units and structures plus the patch history. Costs and
+prerequisites for anything this game also has are now the reference's, and four more units were
+added that each add a VERB rather than another damage number.
+
+**Field Medic** — a passive aura, not an order: heals friendly *infantry* in a radius, every tick,
+whatever else it is doing. "Cannot heal himself" is from the reference and stops a pair of medics
+being an immortal blob. Same shape as the Service Depot's repair field; one is for people, one for
+vehicles.
+
+**Thief** — walks into an enemy refinery and takes half that side's credits. Same walk-in as
+capture, different payload, spent the same way.
+
+**Commando** — C4. Instantly levels any building she can reach: no damage roll, no armour table.
+She survives, unlike the engineer and the thief, which is why she costs 1200 and is capped at one
+at a time by a new `only` field (which counts what is standing *and* what is in the queue, or you
+could stack three before the first appears).
+
+**Attack Dog** — "extremely effective against infantry, completely worthless against vehicles and
+structures". A `0` in the weapon's `vs` table is the entire implementation.
+
+Plus **Advanced Power Plant**, **Kennel** and **Flame Tower** — the last of which "damages nearby
+units and structures if destroyed", friendly ones included, which is why you do not build a row of
+them through the middle of your own base.
+
+### Three bugs behind one symptom
+
+The commando would not blow anything up. She walked toward the target and then orbited it at a
+constant 12-14 units for the whole test. Three separate causes, found by tracing rather than
+reading:
+
+1. **Pathing to a building's centre is pathing into blocked ground.** A footprint is blocked, so
+   the route resolves to "somewhere near it" and the unit circles. `_rtsApproach` returns a point
+   just outside the nearest footprint edge, on the side the unit is already on.
+2. **`_rtsDamage` scatters infantry on every hit.** A directed unit walking into a defended base
+   had its path rewritten to a random cell several times a second. Fear was the obvious suspect
+   and was *not* the cause — `_rtsFearAI` was innocent, `_rtsScatter` from the damage path was
+   not. Specialists (`capture`/`steal`/`demo`/`heals`) no longer scatter or panic; the reference
+   argues for it, since the Commando "can never be put in guard mode".
+3. **A consumed path is not a null path.** `e.path` stays truthy with `e.pi` past its end, so
+   `if (!e.path)` never re-paths and the unit parks wherever the route ran out — in this case
+   5.3 units from a 5.2 threshold, stuck by a tenth of a unit. The walk-in branches now re-path
+   on `!e.path || e.pi >= e.path.length`, and the approach point is 0.85 of a tile out rather
+   than a whole one (`_rtsWX` returns cell *centres*, so a full tile overshoots).
+
+Any one of the three alone would have hidden the other two.
+
+### From the patch history
+
+Patch 3.03 limited multi-factory production speedup to two factories. `RTS_AI_MAX_LINES` was
+already 2, chosen independently — a confirmation rather than a change. Patch 1.08's "starting
+points are more random" is the SCENARIO.CPP work already shipped. The rest of that document is
+Westwood Online matchmaking and does not apply.
+
+### Verified
+
+24 assertions in `verbs.js` on top of the existing suites. Ladder easy 297 s / normal 217 s /
+**hard 174 s** (from 170 — the opponent now spends on kennels, flame towers and advanced power,
+and its defence ratios split further). mech 20/20, save/load 31/31, no baked frame clips its
+canvas across all 15 units at 8 facings, all 15 structures exactly footprint+headroom.
+
+**Four harness bugs, all mine.** Two arithmetic (a thief test that compared end balances while
+the opponent went on earning and spending — measure the *transfer*; a `hp > 240` where the rate
+gives exactly 232). Two timing (a commando asserted alive 8 s after demolishing a building while
+standing in a defended enemy base — stop *at* the demolition; and an `only:1` test on a player
+with no Barracks and no Tech Center, which passed for entirely the wrong reason).
+
 ## Capture, repair and walls — mechanics, not rows
 
 Asked for more. Rows are cheap; the things that change how the game is *played* are the ones

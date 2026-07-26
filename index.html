@@ -304,7 +304,21 @@ var RTS_STRUCTS = [
     desc:'Cheap early defence. Shreds infantry, barely scratches armour.' },
   { key:'depot',    name:'Service Depot',w:2, h:2, cost:1200, build:16, hp:700,  power:-30,  sight:12,
     needs:['factory'], repairs:RTS_TILE * 3.2, repairRate:22,
-    desc:'Park damaged vehicles on it and they are patched up, free of charge.' }
+    desc:'Park damaged vehicles on it and they are patched up, free of charge.' },
+  /* Advanced Power Plant $500 / +200 / needs Power Plant. Twice the output for well under
+     twice the price and one footprint instead of two - the correct answer once a base is big. */
+  { key:'apower',   name:'Adv. Power Plant', w:3, h:2, cost:500, build:11, hp:600, power:200, sight:10,
+    needs:['power'],
+    desc:'Supplies 200 power. Cheaper per unit than two plants, and half the footprint.' },
+  /* Kennel $200 / -10 / needs Barracks. It exists to gate the Attack Dog. */
+  { key:'kennel',   name:'Kennel',       w:1, h:1, cost:200,  build:5,  hp:400,  power:-10,  sight:10,
+    needs:['barracks'],
+    desc:'Trains Attack Dogs.' },
+  /* Flame Tower $500 / -20 / needs Barracks, and "damages nearby units and structures if
+     destroyed" - which this game already has a mechanism for, so it actually does. */
+  { key:'flametower',name:'Flame Tower', w:1, h:1, cost:500,  build:11, hp:450,  power:-20,  sight:16,
+    needs:['barracks'], weapon:'towerflame', deathBlast:{ dmg:70, radius:RTS_TILE * 2.6 },
+    desc:'Burns anything that comes close. Goes up in a fireball when it dies.' }
 ];
 
 /* ------------------------------------------------------------------- units --
@@ -325,27 +339,47 @@ var RTS_UNITS = [
      and armour with the main gun, with no input from the player. */
   { key:'tank',     name:'Battle Tank',   kind:'vehicle',  cost:800,  build:11, hp:460,  speed:9,   turn:1.8,r:2.0, sight:18, weapon:'cannon', weapon2:'coax',
     desc:'The backbone of any serious attack. Coaxial gun for infantry.' },
-  { key:'harvester',name:'Harvester',     kind:'vehicle',  cost:1200, build:14, hp:700,  speed:7.5, turn:1.6,r:2.2, sight:14, weapon:null,
+  { key:'harvester',name:'Harvester',     kind:'vehicle',  cost:1400, build:14, hp:700,  speed:7.5, turn:1.6,r:2.2, sight:14, weapon:null,
     harvest:true, capacity:700,
     desc:'Mines Scrap fields and unloads at a refinery.' },
   /* --- second tier. `needs` on a unit gates it the same way it gates a structure. --- */
-  { key:'grenadier',name:'Grenadier',     kind:'infantry', cost:180,  build:4,  hp:65,   speed:6,   turn:6,  r:1.1, sight:15, weapon:'grenade',
+  { key:'grenadier',name:'Grenadier',     kind:'infantry', cost:160,  build:4,  hp:65,   speed:6,   turn:6,  r:1.1, sight:15, weapon:'grenade',
     desc:'Lobbed charges. Clears infantry and cracks buildings; hopeless against a moving tank.' },
-  { key:'light',    name:'Light Tank',    kind:'vehicle',  cost:600,  build:9,  hp:280,  speed:12,  turn:2.6,r:1.8, sight:18, weapon:'cannon',
+  { key:'light',    name:'Light Tank',    kind:'vehicle',  cost:700,  build:9,  hp:280,  speed:12,  turn:2.6,r:1.8, sight:18, weapon:'cannon',
     desc:'Cheap armour. Faster than a Battle Tank and half the price, with a third of the hull.' },
-  { key:'arty',     name:'Artillery',     kind:'vehicle',  cost:1000, build:15, hp:150,  speed:6,   turn:1.4,r:1.9, sight:16, weapon:'howitzer',
-    needs:['lab'],
+  { key:'arty',     name:'Artillery',     kind:'vehicle',  cost:600,  build:11, hp:150,  speed:6,   turn:1.4,r:1.9, sight:16, weapon:'howitzer',
+    needs:['radar'],
     desc:'Outranges every base defence in the game. Made of paper — never send it in first.' },
-  { key:'heavy',    name:'Heavy Tank',    kind:'vehicle',  cost:1500, build:20, hp:820,  speed:6.5, turn:1.3,r:2.2, sight:18, weapon:'heavycannon', weapon2:'coax',
+  { key:'heavy',    name:'Mammoth Tank',  kind:'vehicle',  cost:1700, build:20, hp:820,  speed:6.5, turn:1.3,r:2.2, sight:18, weapon:'heavycannon', weapon2:'coax',
     needs:['lab'],
     desc:'The heaviest hull on the field. Slow, expensive, and very hard to stop.' },
-  { key:'flame',    name:'Flame Squad',   kind:'infantry', cost:280,  build:5,  hp:75,   speed:6,   turn:6,  r:1.1, sight:12, weapon:'flame',
-    needs:['depot'],
+  { key:'flame',    name:'Flame Squad',   kind:'infantry', cost:300,  build:5,  hp:75,   speed:6,   turn:6,  r:1.1, sight:12, weapon:'flame',
+    needs:['lab'],
     desc:'Walks up and burns things down. Devastating up close, dead at any distance.' },
   /* capture: MISSION_CAPTURE. The unit is spent on arrival - it does not survive the job. */
-  { key:'engineer', name:'Engineer',      kind:'infantry', cost:600,  build:8,  hp:45,   speed:6.5, turn:6,  r:1.1, sight:12, weapon:null,
-    needs:['radar'], capture:true,
-    desc:'Walks into an enemy building and takes it. Unarmed, and spent on arrival.' }
+  { key:'engineer', name:'Engineer',      kind:'infantry', cost:500,  build:8,  hp:45,   speed:6.5, turn:6,  r:1.1, sight:12, weapon:null,
+    capture:true,
+    desc:'Walks into an enemy building and takes it. Unarmed, and spent on arrival.' },
+  /* --- four units that each add a VERB rather than another damage number. --- */
+  /* Attack Dog: "extremely effective against infantry, completely worthless against vehicles
+     and structures". The `vs` table does that entirely - no special case anywhere in the code. */
+  { key:'dog',      name:'Attack Dog',    kind:'infantry', cost:200,  build:3,  hp:40,   speed:13,  turn:8,  r:0.9, sight:14, weapon:'bite',
+    needs:['kennel'],
+    desc:'Fast and vicious. Tears infantry apart; cannot scratch a vehicle or a wall.' },
+  /* heals: friendly INFANTRY inside this radius are brought back up at healRate hp/sec. The
+     same shape as the Service Depot's repair field - one is for people, the other for vehicles. */
+  { key:'medic',    name:'Field Medic',   kind:'infantry', cost:800,  build:9,  hp:70,   speed:6.5, turn:6,  r:1.1, sight:12, weapon:null,
+    heals:RTS_TILE * 3.0, healRate:9,
+    desc:'Heals nearby infantry continuously and for free. Cannot heal himself.' },
+  /* steal: walks into an enemy refinery and leaves with a fraction of that side\'s credits.
+     Same walk-in as capture, different payload, spent the same way. */
+  { key:'thief',    name:'Thief',         kind:'infantry', cost:500,  build:7,  hp:45,   speed:7,   turn:6,  r:1.1, sight:12, weapon:null,
+    needs:['lab'], steal:0.5, stealFrom:'refinery',
+    desc:'Walks into an enemy refinery and leaves with half their credits. Unarmed.' },
+  /* demo: C4. "Can destroy buildings instantly if she is able to get adjacent to them." */
+  { key:'tanya',    name:'Commando',      kind:'infantry', cost:1200, build:14, hp:130,  speed:8,   turn:7,  r:1.1, sight:16, weapon:'pistols',
+    needs:['lab'], demo:true, only:1,
+    desc:'Mows down infantry, and levels any building she can reach. Only one at a time.' }
 ];
 
 /* --------------------------------------------------------------- weapons --
@@ -385,6 +419,16 @@ var RTS_WEAPONS = {
   /* Pillbox: a machine gun in concrete. Short, cheap, and the answer to an infantry rush at a
      point in the match where a Gun Turret is still unaffordable. */
   pillboxgun:  { dmg:12, range:15, cool:0.30, shot:'tracer', speed:0,  splash:0,   vs:{ infantry:1.15, vehicle:0.2, building:0.15 } },
+  /* Attack Dog. Zero against anything that is not a person - the reference is explicit that a
+     dog is "completely worthless against vehicles and structures", and a 0 in the vs table is
+     the whole implementation of that. */
+  bite:        { dmg:22, range:3,  cool:0.55, shot:'tracer', speed:0,  splash:0,   vs:{ infantry:1.4,  vehicle:0,   building:0    } },
+  /* Two .45s: shreds infantry, barely marks anything else. The Commando's threat to buildings
+     is her C4, not this. */
+  pistols:     { dmg:26, range:12, cool:0.22, shot:'tracer', speed:0,  splash:0,   vs:{ infantry:1.6,  vehicle:0.15,building:0.1  } },
+  /* Flame Tower: the Flame Squad's weapon on a fixed mount - a little more reach, a lot more
+     of it, and it never has to walk into range. */
+  towerflame:  { dmg:34, range:13, cool:0.75, shot:'tracer', speed:0,  splash:3.0, vs:{ infantry:1.3,  vehicle:0.7, building:1.0  } },
   /* Flame: very short reach, no travel time, and it does not care what it is burning. The
      shortest range in the game is the price of the highest damage-per-second in it. */
   flame:       { dmg:30, range:9,  cool:0.65, shot:'tracer', speed:0,  splash:2.6, vs:{ infantry:1.3, vehicle:0.6, building:1.4 } }
@@ -601,16 +645,16 @@ var RTS_AI = {
   attackInterval:3,         /* minutes between attack waves, before difficulty bias */
   attackDelay:5,            /* minutes before the first one */
   ratio:{ refinery:0.16, barracks:0.16, factory:0.10, radar:0.06, lab:0.05, depot:0.05,
-          pillbox:0.20, turret:0.28, rocketpit:0.14 },
+          apower:0.08, kennel:0.04, pillbox:0.18, flametower:0.12, turret:0.24, rocketpit:0.12 },
   limit:{ refinery:4,    barracks:2,    factory:2,    radar:1,    lab:1,    depot:1,
-          pillbox:5,     turret:7,      rocketpit:4 },
+          apower:2,    kennel:1,    pillbox:4,     flametower:3,     turret:6,     rocketpit:4 },
   /* The order _rtsAIWants walks. Economy, then production, then tech, then defence - tech
      before defence because a Tech Center that arrives after the match is decided is worth
      nothing, and the defensive ratios are big enough to soak every spare credit otherwise.
      The pillbox comes first among the defences because it is the one the AI can afford early;
      `wall` is deliberately absent, since an AI that cannot plan a line just scatters concrete. */
-  buildOrder:['refinery', 'barracks', 'factory', 'radar', 'depot', 'lab',
-              'pillbox', 'turret', 'rocketpit'],
+  buildOrder:['refinery', 'barracks', 'factory', 'radar', 'apower', 'depot', 'lab', 'kennel',
+              'pillbox', 'flametower', 'turret', 'rocketpit'],
   /* What to spend a production run on. A table rather than an if-chain: adding a unit to
      RTS_UNITS should not mean editing the opponent's brain, and the hardcoded ladder that used
      to live in _rtsAIUnits is a large part of why the roster sat at five units. Gating is left
@@ -628,8 +672,13 @@ var RTS_AI = {
     /* No engineer in the mix. Capturing is a decision about a specific building at a specific
        moment, and an AI that buys engineers without a plan for them just donates 600 credits
        to whatever shoots them first. Buildable by the player; not spammed by the opponent. */
+    /* No engineer and no thief in the mix. Both are decisions about a specific building at a
+       specific moment, and an AI that buys them without a plan just donates the credits to
+       whatever shoots them first. The Commando is out for the same reason plus her `only` cap.
+       The dog IS in: it needs no plan, it just runs at infantry. */
     infantry:[ { key:'flame', at:1200, w:2 }, { key:'grenadier', at:900, w:2 },
-               { key:'rocket', at:500, w:3 }, { key:'rifle', at:250, w:2 } ]
+               { key:'rocket', at:500, w:3 }, { key:'dog', at:400, w:2 },
+               { key:'rifle', at:250, w:2 } ]
   },
   /* Check_Raise_Money / Check_Raise_Power / Check_Lower_Power thresholds. */
   brokeMoney:100,           /* below this, raising cash is urgent */
@@ -1988,6 +2037,42 @@ function _sprBuilding(key, side) {
     _r3Box(m, 0, 12, 3.5, 13, 3, 3, DK[1], DK[3]);
     _r3Box(m, -7, 17, 0, 3, 2, 8, S[2], S[1]);                     /* reload rack */
 
+  } else if (key === 'apower') {
+    /* Advanced Power Plant: the same vocabulary as the Power Plant - hall plus stacks - but
+       four stacks instead of two and a cooling tower, so it reads as "the big one" beside it. */
+    _r3Slab(m, 0, 0, 3, W - 8, 20, D - 12, 4, B.wall, B.roof);
+    _r3Gable(m, 0, 20, 6, W - 22, 9, D - 26, B.roof);
+    _r3Box(m, 0, 25, 6, W - 26, 1, 3, TM[0], TM[1]);
+    for (i = 0; i < 4; i++) _r3Cyl(m, -22 + i * 11, 0, -9, 6, 34 + (i % 2) * 8, S[0], DK[1]);
+    _r3Cone(m, 24, 0, 8, 11, 8, 22, S[2], 18);                     /* cooling tower */
+    _r3Cyl(m, 24, 22, 8, 8, 2, DK[1], DK[3], 18);                  /* its dark mouth */
+    _r3Box(m, -16, 0, 15, 13, 10, 8, S[2], S[1]);                  /* transformer bank */
+    for (i = 0; i < 4; i++) _r3Box(m, -20 + i * 3, 10, 15, 1, 6, 1, S[3], S[3]);
+    pilasters(23, 0, 0, 5, 12, 4, 20);
+    winRow(23, 10, 0, 4, 12, 5, 4);
+
+  } else if (key === 'kennel') {
+    /* Kennel: a run with a pitched shed at one end. Small, cheap and obviously not a defence -
+       nothing about it should read as a gun. */
+    _r3Box(m, 0, 0, 0, W - 3, 2, D - 3, RTS_PAL.dirt[2], RTS_PAL.dirt[1]);
+    _r3Box(m, -5, 2, 0, 11, 8, D - 6, B.wall);
+    _r3Gable(m, -5, 10, 0, 13, 5, D - 5, B.roof);                  /* shed roof */
+    _r3Box(m, -1, 3, 0, 3, 5, 5, DK[0], DK[2]);                    /* doorway */
+    for (i = 0; i < 5; i++) _r3Box(m, 8, 2, -8 + i * 4, 0.8, 7, 0.8, S[2], S[1]);  /* run railings */
+    _r3Box(m, 8, 9, 0, 0.8, 0.8, D - 5, S[2], S[1]);
+    _r3Box(m, 3, 2, -7, 4, 1.5, 3, S[1], S[0]);                    /* feed trough */
+
+  } else if (key === 'flametower') {
+    /* Flame Tower: a squat drum with a burner head and two fuel bottles at its foot. The
+       bottles are the tell - they are why it goes up when it dies. */
+    _r3Cyl(m, 0, 0, 0, 9, 4, C[0], C[1], 16);                      /* base ring */
+    _r3Cyl(m, 0, 4, 0, 6, 14, S[2], S[1], 16);                     /* column */
+    _r3Cyl(m, 0, 18, 0, 7, 4, TM[0], TM[1], 16);                   /* burner housing */
+    _r3Box(m, 6, 19, 0, 7, 2.6, 2.6, DK[1], DK[3]);                /* nozzle */
+    _r3Box(m, 10, 19, 0, 2, 3.4, 3.4, RTS_PAL.hazard[0], RTS_PAL.hazard[0]);  /* pilot flare */
+    _r3Cyl(m, -7, 0, -5, 2.6, 9, RTS_PAL.hazard[0], DK[1], 12);    /* fuel bottles */
+    _r3Cyl(m, -7, 0, 5, 2.6, 9, RTS_PAL.hazard[0], DK[1], 12);
+
   } else if (key === 'wall') {
     /* A wall segment has to tile with itself, so it fills its cell edge to edge with no pad
        and no overhang - anything proud of the footprint would show a seam every metre. */
@@ -2045,7 +2130,7 @@ function _sprBuilding(key, side) {
    at the same screen position lines them up with no per-facing offset table. */
 function _sprUnitModel(key, side, prone, part) {
   var d = rtsUnitDef(key), TM = RTS_PAL.team[side];
-  var S = RTS_PAL.steel, DK = RTS_PAL.dark, O = RTS_PAL.ore;
+  var S = RTS_PAL.steel, DK = RTS_PAL.dark, O = RTS_PAL.ore, C = RTS_PAL.conc;
   var m = [], i;
 
   /* Road wheels and a track run - the detail that separates a tracked vehicle from a box with
@@ -2068,12 +2153,27 @@ function _sprUnitModel(key, side, prone, part) {
     }
   }
 
-  if (d.kind === 'infantry') {
+  if (key === 'dog') {
+    /* Not a two-man squad and not upright: a low four-legged body on a long axis. At this size
+       the only thing that says "dog" is the silhouette being horizontal where every other
+       infantry sprite is vertical. */
+    for (i = 0; i < 2; i++) {
+      var dx0 = i ? 2.0 : -2.4, dz0 = i ? -1.6 : 1.6;
+      _r3Box(m, dx0, 0, dz0 - 0.9, 1.1, 2.4, 0.9, DK[1], DK[2]);   /* legs */
+      _r3Box(m, dx0, 0, dz0 + 0.9, 1.1, 2.4, 0.9, DK[1], DK[2]);
+      _r3Box(m, dx0, 2.2, dz0, 5.2, 2.0, 2.2, TM[1], TM[3]);       /* body, along +x */
+      _r3Box(m, dx0 + 3.0, 2.6, dz0, 2.0, 1.8, 1.8, TM[2], TM[1]); /* head */
+      _r3Box(m, dx0 + 3.9, 2.9, dz0, 0.9, 0.9, 1.4, DK[0], DK[2]); /* muzzle */
+      _r3Box(m, dx0 - 3.0, 3.4, dz0, 2.2, 0.7, 0.7, TM[1], TM[3]); /* tail */
+    }
+  } else if (d.kind === 'infantry') {
     /* Two figures, offset so a squad does not read as one blob. +x is the nose.
        Prone is a genuinely different silhouette - low, long and facing forward - because
        that is the only way the player can tell at a glance that they are pinned. */
-    var men = [[2.5, -3], [-2.5, 2.5]];
-    for (i = 0; i < 2; i++) {
+    /* Hero units are ONE figure. A Commando drawn as a two-man squad reads as two Commandos,
+       which is exactly the wrong signal for a unit limited to one at a time. */
+    var men = (key === 'tanya') ? [[0, 0]] : [[2.5, -3], [-2.5, 2.5]];
+    for (i = 0; i < men.length; i++) {
       var mx = men[i][0], mz = men[i][1];
       if (prone) {
         _r3Box(m, mx - 1, 0, mz, 7, 2, 2.6, TM[0], TM[1]);         /* body, lying down */
@@ -2099,6 +2199,25 @@ function _sprUnitModel(key, side, prone, part) {
           _r3Box(m, mx - 0.3, 7.0, mz, 3.0, 0.9, 3.0, RTS_PAL.hazard[0], RTS_PAL.hazard[0]);
           _r3Box(m, mx + 1.8, 2.2, mz - 1.3, 2.2, 1.8, 1.6, S[1], S[0]);    /* toolbox */
           _r3Box(m, mx - 0.4, 5.0, mz, 3.9, 0.9, 3.9, RTS_PAL.hazard[0], RTS_PAL.hazard[0]);  /* hi-vis */
+        } else if (key === 'medic') {
+          /* White over the team colour, with a cross on the back. The only bright white in the
+             whole roster, so a medic is findable in a crowd - which is the point of it. */
+          _r3Box(m, mx, 2.4, mz, 3.4, 3.6, 3.4, C[1], C[0]);
+          _r3Box(m, mx - 1.7, 3.4, mz, 0.6, 1.8, 0.6, '#c8302a', '#e04a42');
+          _r3Box(m, mx - 1.7, 4.0, mz, 0.6, 0.6, 1.8, '#c8302a', '#e04a42');
+          _r3Box(m, mx - 0.3, 7.0, mz, 3.0, 0.9, 3.0, C[1], C[0]);   /* white helmet */
+          _r3Box(m, mx + 1.9, 2.4, mz + 1.5, 2.0, 1.6, 1.2, C[0], C[1]);  /* medical bag */
+        } else if (key === 'thief') {
+          /* All dark, hunched, carrying a satchel and nothing else. Reads as "not a soldier". */
+          _r3Box(m, mx, 2.4, mz, 3.0, 3.0, 3.0, DK[1], DK[2]);
+          _r3Box(m, mx, 5.4, mz, 2.2, 1.5, 2.2, DK[0], DK[1]);        /* hood, no helmet */
+          _r3Box(m, mx + 1.8, 2.6, mz + 1.6, 2.4, 2.0, 1.4, S[2], S[1]);
+        } else if (key === 'tanya') {
+          /* One figure, not two - a hero unit should not read as a squad. Handled by the men
+             table below; here she just gets the pistols and a satchel of C4. */
+          _r3Box(m, mx + 2.2, 4.2, mz - 0.9, 2.6, 0.8, 0.8, DK[1], DK[3]);
+          _r3Box(m, mx + 2.2, 4.2, mz + 0.9, 2.6, 0.8, 0.8, DK[1], DK[3]);
+          _r3Box(m, mx - 1.6, 2.6, mz + 1.6, 2.2, 1.8, 1.2, RTS_PAL.hazard[0], RTS_PAL.hazard[0]);
         } else if (key === 'flame') {
           /* Tanks on the back and a short wand - the opposite silhouette to the rocket squad's
              long forward tube, which is the pair most likely to be confused. */
@@ -3710,6 +3829,32 @@ function _rtsCapture(eng, b) {
   else _rtsSay('They have taken your ' + nm + '!');
   return true;
 }
+/* Thief: "any Thief that enters an enemy Ore Refinery will steal half the credits in that
+   structure". This game keeps credits on the side rather than in the building, so the fraction
+   comes off the treasury - same effect, and it still takes walking into a defended base. */
+function _rtsSteal(th, b) {
+  var G = window._rtsG, from = G.sides[b.side];
+  var take = Math.floor(from.credits * rtsUnitDef(th.def).steal);
+  from.credits -= take;
+  G.sides[th.side].credits += take;
+  _rtsKill(th);
+  if (th.side === 'player') _rtsSay('Stole ' + take + ' credits.');
+  else _rtsSay('They stole ' + take + ' credits from you!');
+  if (typeof _rtsSfx === 'function') _rtsSfx(th.side === 'player' ? 'place' : 'deny');
+  return take;
+}
+/* C4. "Can destroy buildings instantly if she is able to get adjacent to them." Instantly means
+   instantly - no damage roll, no armour table. She survives, unlike the engineer and the thief,
+   which is why she costs 1200 and is limited to one at a time. */
+function _rtsDemo(c, b) {
+  var nm = rtsStructDef(b.def).name;
+  _rtsKill(b);
+  c.order = null; c.target = null; c.path = null;
+  if (c.side === 'player') _rtsSay(nm + ' demolished.');
+  else _rtsSay('Your ' + nm + ' has been demolished!');
+  if (typeof _rtsSfx === 'function') _rtsSfx('boom', b.x, b.z);
+  return true;
+}
 /* How close an engineer has to get: just outside the footprint, measured from the nearest
    edge rather than the centre, or a 3x3 building would need the engineer to stand inside it. */
 function _rtsAtStruct(u, b, slack) {
@@ -3717,6 +3862,26 @@ function _rtsAtStruct(u, b, slack) {
   var cx = Math.min(Math.max(u.x, _rtsWX(b.tx)), _rtsWX(b.tx + d.w - 1));
   var cz = Math.min(Math.max(u.z, _rtsWX(b.tz)), _rtsWX(b.tz + d.h - 1));
   return Math.hypot(u.x - cx, u.z - cz) <= (slack || RTS_TILE * 1.3);
+}
+/* Where a walk-in unit should actually path to. NOT the building's centre: a footprint is
+   blocked ground, so asking the pathfinder for the middle of a barracks returns a route to
+   somewhere near it and the unit orbits the building forever without ever arriving. Measured:
+   a commando ordered onto a 2x2 barracks from three tiles out held station at 12-14 units for
+   the whole test and never triggered.
+
+   This returns a point one tile OUTSIDE the nearest footprint edge, on the side the unit is
+   already on - open ground, close enough to satisfy _rtsAtStruct on arrival. */
+function _rtsApproach(u, b) {
+  var d = rtsStructDef(b.def);
+  var cx = Math.min(Math.max(u.x, _rtsWX(b.tx)), _rtsWX(b.tx + d.w - 1));
+  var cz = Math.min(Math.max(u.z, _rtsWX(b.tz)), _rtsWX(b.tz + d.h - 1));
+  var dx = u.x - cx, dz = u.z - cz, L = Math.hypot(dx, dz);
+  if (L < 0.001) return { x:cx, z:cz };
+  /* 0.85 of a tile, not a whole one. _rtsWX returns cell CENTRES, so a full tile out from the
+     last cell centre lands ~1.3 units beyond the arrival threshold - and steering stops a
+     little short of any waypoint on top of that. Measured, a whole tile left the commando
+     parked 5.3 units from the clamped edge against a 5.2 threshold: stuck by a tenth of a unit. */
+  return { x:cx + dx / L * RTS_TILE * 0.85, z:cz + dz / L * RTS_TILE * 0.85 };
 }
 function _rtsKill(e) {
   var G = window._rtsG;
@@ -3730,6 +3895,19 @@ function _rtsKill(e) {
   }
   else if (e.type === 'struct') {
     var sd = rtsStructDef(e.def);
+    /* "Since there are volatile fuels used in the Flame Tower, it damages nearby units and
+       structures if destroyed." Friendly fire included - that is the whole drawback, and it is
+       why you do not build a row of them through the middle of your own base. */
+    if (sd.deathBlast) {
+      for (var bi = 0; bi < G.ents.length; bi++) {
+        var bt = G.ents[bi];
+        if (bt === e || bt.dead) continue;
+        var bd = Math.hypot(bt.x - e.x, bt.z - e.z);
+        if (bd > sd.deathBlast.radius) continue;
+        _rtsDamage(bt, sd.deathBlast.dmg * (1 - bd / sd.deathBlast.radius), null);
+      }
+      G.fx.push({ kind:'boom', x:e.x, y:1, z:e.z, t:0, big:3.4 });
+    }
     G.fx.push({ kind:'boom', x:e.x, y:1, z:e.z, t:0, big:Math.max(2, sd.w * 0.7) });
     /* Secondary blasts walking across the footprint on a delay, then debris thrown clear.
        A structure going down should be an event; one puff was not. */
@@ -4015,6 +4193,18 @@ function _rtsCanQueue(side, key) {
   if (cat === 'struct' && S.ready) return false;
   var def = rtsStructDef(key) || rtsUnitDef(key);
   if (!_rtsAvailable(side, def)) return false;
+  /* `only` is a hard cap on how many of a type may exist at once - the Commando is one at a
+     time, as in the reference. Counts what is standing AND what is on the way, or the queue
+     lets you stack three of them before the first one appears. */
+  if (def.only) {
+    var have = 0;
+    for (var oi = 0; oi < G.ents.length; oi++) {
+      var oe = G.ents[oi];
+      if (!oe.dead && oe.side === side && oe.type === 'unit' && oe.def === key) have++;
+    }
+    for (var qc in S.q) if (S.q[qc] && S.q[qc].key === key) have++;
+    if (have >= def.only) return false;
+  }
   if (cat === 'infantry' && !_rtsHas(side, 'barracks')) return false;
   if (cat === 'vehicle' && !_rtsHas(side, 'factory')) return false;
   if (S.credits < _rtsCostOf(side, def)) return false;
@@ -4105,6 +4295,9 @@ function _rtsLines(side, cat) {
     var e = G.ents[i];
     if (!e.dead && !e.building && !e.selling && e.side === side && e.def === key) n++;
   }
+  /* Patch 3.03 capped this at two: "speeding production by building multiple factories of the
+     same type has been limited to only 2 factories". RTS_AI_MAX_LINES was already 2, picked
+     independently - which is a pleasant confirmation rather than a change. */
   return Math.max(1, Math.min(RTS_AI_MAX_LINES, n));
 }
 function _rtsTickProduction(side, dt) {
@@ -4391,6 +4584,13 @@ function _rtsScatter(e, fromX, fromZ) {
   /* MissionControl IsScatter. A unit holding a position stands its ground - being shoved off
      it by every near miss is exactly what a hold order exists to prevent. */
   if (!_rtsMission(e).scatter) return;
+  /* Specialists never scatter. _rtsDamage calls this on EVERY hit, so a directed unit walking
+     into a defended base has its path rewritten to a random nearby cell several times a second
+     and never arrives - measured, a commando ordered onto an enemy barracks orbited it for ten
+     seconds at a steady 12-14 units while her goal was rewritten each time she was shot. Fear
+     was the obvious suspect and was not the cause; this was. */
+  var _sd = rtsUnitDef(e.def);
+  if (_sd && (_sd.capture || _sd.steal || _sd.demo || _sd.heals)) return;
   var a = Math.atan2(e.z - fromZ, e.x - fromX);
   a += (_rtsRnd() - 0.5) * (Math.PI / 2);      /* Random_Pick(0,4)-2 facings of spread */
   var d = RTS_TILE * (1.5 + _rtsRnd());
@@ -4711,7 +4911,16 @@ function _rtsUpdateUnit(e, dt) {
   if (e.recoil > 0) e.recoil -= dt;
   if (e.hitT > 0) e.hitT -= dt;
   if (e.spot > 0) e.spot -= dt;
-  if (d.kind === 'infantry') _rtsFearAI(e, dt);
+  /* Specialists do not panic. Fear scatters ordinary infantry, which is right for a rifle
+     squad and fatal for a directed one: measured, a commando ordered onto an enemy barracks sat
+     at fear 49.75, went prone, and had her goal rewritten every second - she circled the
+     building for ten seconds and never arrived. A unit you spent 1200 credits on and pointed at
+     one specific target has to complete the job, or the verb does not exist in practice.
+
+     A deliberate deviation, and the reference argues for it: the Commando "can never be put in
+     guard mode - you must manually target all enemies that you wish attacked". These units are
+     directed rather than autonomous, so autonomous self-preservation does not apply. */
+  if (d.kind === 'infantry' && !d.capture && !d.steal && !d.demo && !d.heals) _rtsFearAI(e, dt);
   /* Overrun_Square runs BEFORE the engage logic: a tank that is holding position and firing
      returns early from this function, and hooking the crush on the end meant a stationary
      tank never ran anything over. */
@@ -4719,6 +4928,61 @@ function _rtsUpdateUnit(e, dt) {
 
   /* ---- harvester economy loop ---- */
   if (d.harvest) { _rtsUpdateHarvester(e, dt, d); return; }
+
+  /* ---- Field Medic: a passive aura, not an order ----
+     Runs every tick regardless of what the medic is doing, because a medic that stops healing
+     while it walks is a medic nobody uses. "Cannot heal himself" comes straight from the
+     reference and stops a pair of medics being an immortal blob. */
+  if (d.heals) {
+    for (var hi = 0; hi < G.ents.length; hi++) {
+      var pt = G.ents[hi];
+      if (pt === e || pt.dead || pt.type !== 'unit' || pt.side !== e.side) continue;
+      if (pt.hp >= pt.maxHp || rtsUnitDef(pt.def).kind !== 'infantry') continue;
+      if (Math.hypot(pt.x - e.x, pt.z - e.z) > d.heals) continue;
+      pt.hp = Math.min(pt.maxHp, pt.hp + d.healRate * dt);
+    }
+  }
+
+  /* ---- Thief: walk into an enemy refinery and leave with half their treasury ---- */
+  if (d.steal) {
+    var tb = e.target;
+    if (e.order === 'capture' && (!tb || tb.dead || tb.type !== 'struct' || tb.side === e.side
+        || tb.def !== d.stealFrom)) { e.order = null; e.target = null; e.path = null; }
+    else if (e.order === 'capture') {
+      if (_rtsAtStruct(e, tb)) { _rtsSteal(e, tb); return; }
+      /* A CONSUMED path is not a null path: e.path stays truthy with e.pi past its end,
+         so guarding on `!e.path` alone leaves the unit parked wherever the route ran out.
+         Re-path whenever the route is spent and we are still not there. */
+      if (!e.path || e.pi >= e.path.length) {
+        var tap = _rtsApproach(e, tb);
+        e.goal = tap; e.path = _rtsPath(e.x, e.z, tap.x, tap.z); e.pi = 0;
+        if (!e.path) { e.order = null; e.target = null; return; }
+      }
+      _rtsSteer(e, dt, d); return;
+    }
+    if (e.path) { _rtsSteer(e, dt, d); if (!e.path) e.order = null; }
+    return;
+  }
+
+  /* ---- Commando: C4 on any building she can reach ----
+     She keeps her pistols, so this is NOT an early-return like the thief - only the demolition
+     order is special-cased, and everything else falls through to the normal engage logic. */
+  if (d.demo && e.order === 'demo') {
+    var db = e.target;
+    if (!db || db.dead || db.type !== 'struct' || db.side === e.side) { e.order = null; e.target = null; }
+    else if (_rtsAtStruct(e, db)) { _rtsDemo(e, db); return; }
+    else {
+      /* A CONSUMED path is not a null path: e.path stays truthy with e.pi past its end,
+         so guarding on `!e.path` alone leaves the unit parked wherever the route ran out.
+         Re-path whenever the route is spent and we are still not there. */
+      if (!e.path || e.pi >= e.path.length) {
+        var dap = _rtsApproach(e, db);
+        e.goal = dap; e.path = _rtsPath(e.x, e.z, dap.x, dap.z); e.pi = 0;
+        if (!e.path) { e.order = null; e.target = null; return; }
+      }
+      _rtsSteer(e, dt, d); return;
+    }
+  }
 
   /* ---- engineer: walk to the target building and take it ----
      Placed before the engage block because an engineer has no weapon and must never be pulled
@@ -4729,11 +4993,13 @@ function _rtsUpdateUnit(e, dt) {
       e.order = null; e.target = null; e.path = null;
     } else if (e.order === 'capture') {
       if (_rtsAtStruct(e, cb)) { _rtsCapture(e, cb); return; }
-      if (!e.path) {
-        var sd = rtsStructDef(cb.def);
-        var gx = _rtsWX(cb.tx + (sd.w - 1) / 2), gz = _rtsWX(cb.tz + (sd.h - 1) / 2);
-        e.goal = { x:gx, z:gz };
-        e.path = _rtsPath(e.x, e.z, gx, gz); e.pi = 0;
+      /* A CONSUMED path is not a null path: e.path stays truthy with e.pi past its end,
+         so guarding on `!e.path` alone leaves the unit parked wherever the route ran out.
+         Re-path whenever the route is spent and we are still not there. */
+      if (!e.path || e.pi >= e.path.length) {
+        var cap = _rtsApproach(e, cb);
+        e.goal = cap;
+        e.path = _rtsPath(e.x, e.z, cap.x, cap.z); e.pi = 0;
         /* No route to it - drop the order rather than stand still looking busy forever. */
         if (!e.path) { e.order = null; e.target = null; return; }
       }
@@ -7859,16 +8125,24 @@ function _rtsRightClick(mx, my) {
     /* An engineer sent at an enemy BUILDING captures it rather than attacking it - it has no
        weapon, so an attack order would be a walk to the target followed by standing there. It
        still cannot capture a unit, so those fall through to the attack path and are ignored. */
-    var capped = 0;
+    /* Specialists sent at an enemy BUILDING do their own job instead of attacking it. The
+       engineer and the thief have no weapon at all, so an attack order would be a walk followed
+       by standing there; the Commando has pistols but her C4 is the reason to send her. */
+    var capped = 0, special = 0;
     for (i = 0; i < mine.length; i++) {
-      var mu = mine[i];
-      if (rtsUnitDef(mu.def).capture && tgt.type === 'struct') {
-        mu.order = 'capture'; mu.target = tgt; mu.path = null; mu.goal = null; mu.susp = null;
-        capped++;
+      var mu = mine[i], md = rtsUnitDef(mu.def), job = null;
+      if (tgt.type === 'struct') {
+        if (md.capture) job = 'capture';
+        else if (md.steal && tgt.def === md.stealFrom) job = 'capture';
+        else if (md.demo) job = 'demo';
+      }
+      if (job) {
+        mu.order = job; mu.target = tgt; mu.path = null; mu.goal = null; mu.susp = null;
+        special++; if (job === 'capture') capped++;
       } else _rtsOrderAttack(mu, tgt);
     }
-    _rtsFlash(tgt.x, tgt.z, capped === mine.length ? 'harvest' : 'attack');
-    if (capped) _rtsSay(capped === 1 ? 'Engineer moving to capture.' : capped + ' engineers moving to capture.');
+    _rtsFlash(tgt.x, tgt.z, special === mine.length ? 'harvest' : 'attack');
+    if (special) _rtsSay(special === 1 ? 'Moving in.' : special + ' specialists moving in.');
     if (typeof _rtsSfx === 'function') _rtsSfx('order');
     return;
   }

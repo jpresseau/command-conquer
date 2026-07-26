@@ -928,6 +928,32 @@ function _rtsCapture(eng, b) {
   else _rtsSay('They have taken your ' + nm + '!');
   return true;
 }
+/* Thief: "any Thief that enters an enemy Ore Refinery will steal half the credits in that
+   structure". This game keeps credits on the side rather than in the building, so the fraction
+   comes off the treasury - same effect, and it still takes walking into a defended base. */
+function _rtsSteal(th, b) {
+  var G = window._rtsG, from = G.sides[b.side];
+  var take = Math.floor(from.credits * rtsUnitDef(th.def).steal);
+  from.credits -= take;
+  G.sides[th.side].credits += take;
+  _rtsKill(th);
+  if (th.side === 'player') _rtsSay('Stole ' + take + ' credits.');
+  else _rtsSay('They stole ' + take + ' credits from you!');
+  if (typeof _rtsSfx === 'function') _rtsSfx(th.side === 'player' ? 'place' : 'deny');
+  return take;
+}
+/* C4. "Can destroy buildings instantly if she is able to get adjacent to them." Instantly means
+   instantly - no damage roll, no armour table. She survives, unlike the engineer and the thief,
+   which is why she costs 1200 and is limited to one at a time. */
+function _rtsDemo(c, b) {
+  var nm = rtsStructDef(b.def).name;
+  _rtsKill(b);
+  c.order = null; c.target = null; c.path = null;
+  if (c.side === 'player') _rtsSay(nm + ' demolished.');
+  else _rtsSay('Your ' + nm + ' has been demolished!');
+  if (typeof _rtsSfx === 'function') _rtsSfx('boom', b.x, b.z);
+  return true;
+}
 /* How close an engineer has to get: just outside the footprint, measured from the nearest
    edge rather than the centre, or a 3x3 building would need the engineer to stand inside it. */
 function _rtsAtStruct(u, b, slack) {
@@ -935,6 +961,26 @@ function _rtsAtStruct(u, b, slack) {
   var cx = Math.min(Math.max(u.x, _rtsWX(b.tx)), _rtsWX(b.tx + d.w - 1));
   var cz = Math.min(Math.max(u.z, _rtsWX(b.tz)), _rtsWX(b.tz + d.h - 1));
   return Math.hypot(u.x - cx, u.z - cz) <= (slack || RTS_TILE * 1.3);
+}
+/* Where a walk-in unit should actually path to. NOT the building's centre: a footprint is
+   blocked ground, so asking the pathfinder for the middle of a barracks returns a route to
+   somewhere near it and the unit orbits the building forever without ever arriving. Measured:
+   a commando ordered onto a 2x2 barracks from three tiles out held station at 12-14 units for
+   the whole test and never triggered.
+
+   This returns a point one tile OUTSIDE the nearest footprint edge, on the side the unit is
+   already on - open ground, close enough to satisfy _rtsAtStruct on arrival. */
+function _rtsApproach(u, b) {
+  var d = rtsStructDef(b.def);
+  var cx = Math.min(Math.max(u.x, _rtsWX(b.tx)), _rtsWX(b.tx + d.w - 1));
+  var cz = Math.min(Math.max(u.z, _rtsWX(b.tz)), _rtsWX(b.tz + d.h - 1));
+  var dx = u.x - cx, dz = u.z - cz, L = Math.hypot(dx, dz);
+  if (L < 0.001) return { x:cx, z:cz };
+  /* 0.85 of a tile, not a whole one. _rtsWX returns cell CENTRES, so a full tile out from the
+     last cell centre lands ~1.3 units beyond the arrival threshold - and steering stops a
+     little short of any waypoint on top of that. Measured, a whole tile left the commando
+     parked 5.3 units from the clamped edge against a 5.2 threshold: stuck by a tenth of a unit. */
+  return { x:cx + dx / L * RTS_TILE * 0.85, z:cz + dz / L * RTS_TILE * 0.85 };
 }
 function _rtsKill(e) {
   var G = window._rtsG;
@@ -948,6 +994,19 @@ function _rtsKill(e) {
   }
   else if (e.type === 'struct') {
     var sd = rtsStructDef(e.def);
+    /* "Since there are volatile fuels used in the Flame Tower, it damages nearby units and
+       structures if destroyed." Friendly fire included - that is the whole drawback, and it is
+       why you do not build a row of them through the middle of your own base. */
+    if (sd.deathBlast) {
+      for (var bi = 0; bi < G.ents.length; bi++) {
+        var bt = G.ents[bi];
+        if (bt === e || bt.dead) continue;
+        var bd = Math.hypot(bt.x - e.x, bt.z - e.z);
+        if (bd > sd.deathBlast.radius) continue;
+        _rtsDamage(bt, sd.deathBlast.dmg * (1 - bd / sd.deathBlast.radius), null);
+      }
+      G.fx.push({ kind:'boom', x:e.x, y:1, z:e.z, t:0, big:3.4 });
+    }
     G.fx.push({ kind:'boom', x:e.x, y:1, z:e.z, t:0, big:Math.max(2, sd.w * 0.7) });
     /* Secondary blasts walking across the footprint on a delay, then debris thrown clear.
        A structure going down should be an event; one puff was not. */
@@ -1233,6 +1292,18 @@ function _rtsCanQueue(side, key) {
   if (cat === 'struct' && S.ready) return false;
   var def = rtsStructDef(key) || rtsUnitDef(key);
   if (!_rtsAvailable(side, def)) return false;
+  /* `only` is a hard cap on how many of a type may exist at once - the Commando is one at a
+     time, as in the reference. Counts what is standing AND what is on the way, or the queue
+     lets you stack three of them before the first one appears. */
+  if (def.only) {
+    var have = 0;
+    for (var oi = 0; oi < G.ents.length; oi++) {
+      var oe = G.ents[oi];
+      if (!oe.dead && oe.side === side && oe.type === 'unit' && oe.def === key) have++;
+    }
+    for (var qc in S.q) if (S.q[qc] && S.q[qc].key === key) have++;
+    if (have >= def.only) return false;
+  }
   if (cat === 'infantry' && !_rtsHas(side, 'barracks')) return false;
   if (cat === 'vehicle' && !_rtsHas(side, 'factory')) return false;
   if (S.credits < _rtsCostOf(side, def)) return false;
@@ -1323,6 +1394,9 @@ function _rtsLines(side, cat) {
     var e = G.ents[i];
     if (!e.dead && !e.building && !e.selling && e.side === side && e.def === key) n++;
   }
+  /* Patch 3.03 capped this at two: "speeding production by building multiple factories of the
+     same type has been limited to only 2 factories". RTS_AI_MAX_LINES was already 2, picked
+     independently - which is a pleasant confirmation rather than a change. */
   return Math.max(1, Math.min(RTS_AI_MAX_LINES, n));
 }
 function _rtsTickProduction(side, dt) {
@@ -1609,6 +1683,13 @@ function _rtsScatter(e, fromX, fromZ) {
   /* MissionControl IsScatter. A unit holding a position stands its ground - being shoved off
      it by every near miss is exactly what a hold order exists to prevent. */
   if (!_rtsMission(e).scatter) return;
+  /* Specialists never scatter. _rtsDamage calls this on EVERY hit, so a directed unit walking
+     into a defended base has its path rewritten to a random nearby cell several times a second
+     and never arrives - measured, a commando ordered onto an enemy barracks orbited it for ten
+     seconds at a steady 12-14 units while her goal was rewritten each time she was shot. Fear
+     was the obvious suspect and was not the cause; this was. */
+  var _sd = rtsUnitDef(e.def);
+  if (_sd && (_sd.capture || _sd.steal || _sd.demo || _sd.heals)) return;
   var a = Math.atan2(e.z - fromZ, e.x - fromX);
   a += (_rtsRnd() - 0.5) * (Math.PI / 2);      /* Random_Pick(0,4)-2 facings of spread */
   var d = RTS_TILE * (1.5 + _rtsRnd());
@@ -1929,7 +2010,16 @@ function _rtsUpdateUnit(e, dt) {
   if (e.recoil > 0) e.recoil -= dt;
   if (e.hitT > 0) e.hitT -= dt;
   if (e.spot > 0) e.spot -= dt;
-  if (d.kind === 'infantry') _rtsFearAI(e, dt);
+  /* Specialists do not panic. Fear scatters ordinary infantry, which is right for a rifle
+     squad and fatal for a directed one: measured, a commando ordered onto an enemy barracks sat
+     at fear 49.75, went prone, and had her goal rewritten every second - she circled the
+     building for ten seconds and never arrived. A unit you spent 1200 credits on and pointed at
+     one specific target has to complete the job, or the verb does not exist in practice.
+
+     A deliberate deviation, and the reference argues for it: the Commando "can never be put in
+     guard mode - you must manually target all enemies that you wish attacked". These units are
+     directed rather than autonomous, so autonomous self-preservation does not apply. */
+  if (d.kind === 'infantry' && !d.capture && !d.steal && !d.demo && !d.heals) _rtsFearAI(e, dt);
   /* Overrun_Square runs BEFORE the engage logic: a tank that is holding position and firing
      returns early from this function, and hooking the crush on the end meant a stationary
      tank never ran anything over. */
@@ -1937,6 +2027,61 @@ function _rtsUpdateUnit(e, dt) {
 
   /* ---- harvester economy loop ---- */
   if (d.harvest) { _rtsUpdateHarvester(e, dt, d); return; }
+
+  /* ---- Field Medic: a passive aura, not an order ----
+     Runs every tick regardless of what the medic is doing, because a medic that stops healing
+     while it walks is a medic nobody uses. "Cannot heal himself" comes straight from the
+     reference and stops a pair of medics being an immortal blob. */
+  if (d.heals) {
+    for (var hi = 0; hi < G.ents.length; hi++) {
+      var pt = G.ents[hi];
+      if (pt === e || pt.dead || pt.type !== 'unit' || pt.side !== e.side) continue;
+      if (pt.hp >= pt.maxHp || rtsUnitDef(pt.def).kind !== 'infantry') continue;
+      if (Math.hypot(pt.x - e.x, pt.z - e.z) > d.heals) continue;
+      pt.hp = Math.min(pt.maxHp, pt.hp + d.healRate * dt);
+    }
+  }
+
+  /* ---- Thief: walk into an enemy refinery and leave with half their treasury ---- */
+  if (d.steal) {
+    var tb = e.target;
+    if (e.order === 'capture' && (!tb || tb.dead || tb.type !== 'struct' || tb.side === e.side
+        || tb.def !== d.stealFrom)) { e.order = null; e.target = null; e.path = null; }
+    else if (e.order === 'capture') {
+      if (_rtsAtStruct(e, tb)) { _rtsSteal(e, tb); return; }
+      /* A CONSUMED path is not a null path: e.path stays truthy with e.pi past its end,
+         so guarding on `!e.path` alone leaves the unit parked wherever the route ran out.
+         Re-path whenever the route is spent and we are still not there. */
+      if (!e.path || e.pi >= e.path.length) {
+        var tap = _rtsApproach(e, tb);
+        e.goal = tap; e.path = _rtsPath(e.x, e.z, tap.x, tap.z); e.pi = 0;
+        if (!e.path) { e.order = null; e.target = null; return; }
+      }
+      _rtsSteer(e, dt, d); return;
+    }
+    if (e.path) { _rtsSteer(e, dt, d); if (!e.path) e.order = null; }
+    return;
+  }
+
+  /* ---- Commando: C4 on any building she can reach ----
+     She keeps her pistols, so this is NOT an early-return like the thief - only the demolition
+     order is special-cased, and everything else falls through to the normal engage logic. */
+  if (d.demo && e.order === 'demo') {
+    var db = e.target;
+    if (!db || db.dead || db.type !== 'struct' || db.side === e.side) { e.order = null; e.target = null; }
+    else if (_rtsAtStruct(e, db)) { _rtsDemo(e, db); return; }
+    else {
+      /* A CONSUMED path is not a null path: e.path stays truthy with e.pi past its end,
+         so guarding on `!e.path` alone leaves the unit parked wherever the route ran out.
+         Re-path whenever the route is spent and we are still not there. */
+      if (!e.path || e.pi >= e.path.length) {
+        var dap = _rtsApproach(e, db);
+        e.goal = dap; e.path = _rtsPath(e.x, e.z, dap.x, dap.z); e.pi = 0;
+        if (!e.path) { e.order = null; e.target = null; return; }
+      }
+      _rtsSteer(e, dt, d); return;
+    }
+  }
 
   /* ---- engineer: walk to the target building and take it ----
      Placed before the engage block because an engineer has no weapon and must never be pulled
@@ -1947,11 +2092,13 @@ function _rtsUpdateUnit(e, dt) {
       e.order = null; e.target = null; e.path = null;
     } else if (e.order === 'capture') {
       if (_rtsAtStruct(e, cb)) { _rtsCapture(e, cb); return; }
-      if (!e.path) {
-        var sd = rtsStructDef(cb.def);
-        var gx = _rtsWX(cb.tx + (sd.w - 1) / 2), gz = _rtsWX(cb.tz + (sd.h - 1) / 2);
-        e.goal = { x:gx, z:gz };
-        e.path = _rtsPath(e.x, e.z, gx, gz); e.pi = 0;
+      /* A CONSUMED path is not a null path: e.path stays truthy with e.pi past its end,
+         so guarding on `!e.path` alone leaves the unit parked wherever the route ran out.
+         Re-path whenever the route is spent and we are still not there. */
+      if (!e.path || e.pi >= e.path.length) {
+        var cap = _rtsApproach(e, cb);
+        e.goal = cap;
+        e.path = _rtsPath(e.x, e.z, cap.x, cap.z); e.pi = 0;
         /* No route to it - drop the order rather than stand still looking busy forever. */
         if (!e.path) { e.order = null; e.target = null; return; }
       }
