@@ -52,24 +52,50 @@ function mixOpen(buf) {
      starts straight in with the file count, which is never 0 in practice. */
   if (dv.getUint16(0, true) === 0) { flags = dv.getUint32(0, true); p = 4; }
 
+  /* An encrypted archive carries an 80-byte key block right after the flags, then its index
+     Blowfish-encrypted in 8-byte blocks; the BODY after the index is in the clear. So the
+     index is lifted out, decrypted into a scratch buffer and parsed from there, while every
+     file read still points straight into the original bytes. */
   var encrypted = !!(flags & 0x00020000);
+  var idx = null, idxAt = 0, bodyAt;
+
   if (encrypted) {
-    /* Blowfish-encrypted index. Not implemented: the archives that matter for artwork
-       (CONQUER, TEMPERAT, and the theatre files) are not encrypted, and pretending to read
-       one would produce a plausible-looking index of pure noise. Fail loudly instead. */
-    return { error: 'encrypted index (Blowfish) - not supported', flags: flags, files: [] };
+    var bf = require('./blowfish.js');
+    if (p + 80 > buf.length) {
+      return { error: 'encrypted, but too short to hold a key block', flags: flags, files: [] };
+    }
+    var key = bf.mixKeyFromBlock(buf.subarray(p, p + 80));
+    if (!key) return { error: 'could not recover the Blowfish key', flags: flags, files: [] };
+    var st = bf.bfInit(key);
+    var encAt = p + 80;
+    /* Decrypt one block first: it holds the count, and the count decides how much more of the
+       index there is to decrypt. Reading the whole rest of the file would work but a 3.8 MB
+       archive does not need 480,000 needless block operations. */
+    var first = bf.bfDecrypt(st, buf, encAt, 8);
+    var fdv = new DataView(first.buffer);
+    var n = fdv.getUint16(0, true);
+    var idxBytes = 6 + n * 12;
+    var blocks = Math.ceil(idxBytes / 8) * 8;
+    if (encAt + blocks > buf.length) {
+      return { error: 'encrypted index runs past the end of the file', flags: flags, files: [] };
+    }
+    idx = bf.bfDecrypt(st, buf, encAt, blocks);
+    idxAt = 0;
+    bodyAt = encAt + blocks;
   }
 
-  var count = dv.getUint16(p, true); p += 2;
-  var dataSize = dv.getUint32(p, true); p += 4;
+  var hdv = encrypted ? new DataView(idx.buffer, idx.byteOffset, idx.byteLength) : dv;
+  var q = encrypted ? idxAt : p;
+  var count = hdv.getUint16(q, true); q += 2;
+  var dataSize = hdv.getUint32(q, true); q += 4;
   var index = {}, list = [];
-  var bodyAt = p + count * 12;
+  if (!encrypted) bodyAt = q + count * 12;
 
   for (var i = 0; i < count; i++) {
-    var id = dv.getInt32(p, true);
-    var off = dv.getUint32(p + 4, true);
-    var len = dv.getUint32(p + 8, true);
-    p += 12;
+    var id = hdv.getInt32(q, true);
+    var off = hdv.getUint32(q + 4, true);
+    var len = hdv.getUint32(q + 8, true);
+    q += 12;
     var rec = { id: id, offset: bodyAt + off, size: len };
     index[id] = rec; list.push(rec);
   }
