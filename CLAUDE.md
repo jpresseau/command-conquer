@@ -763,6 +763,103 @@ gun preferring heavy, small arms unable to hurt a wall while shells and rockets 
 rule applying to walls rather than to all concrete. Ladder easy 298 s / normal 218 s / hard 175 s,
 within a second of the previous run on every difficulty.
 
+## Production, exactly — from FACTORY.CPP
+
+`FactoryClass` runs one production job. Two things in it were worth having, and finding them
+cost a bug that only a full match could expose.
+
+### Cost_Per_Tick: a job is driven by its BALANCE
+
+    cost = Cost_Per_Tick();          // Balance / steps_remaining
+    cost = min(cost, Balance);
+    ...
+    if (Fetch_Stage() == STEP_COUNT) { House->Spend_Money(Balance); Balance = 0; }
+
+The charge comes off the **outstanding balance**, is clamped to it, and any residue is settled
+at completion. Deriving the charge from the price and a rate — which is what this repo did —
+systematically **overcharges**, because the final tick's rate overshoots the job. Measured
+before the change: up to **1.21 credits on an 800-credit tank**, always over, never under.
+After: exact to four decimal places, including through a brownout.
+
+`q.bal` on the queue entry is the port. `Abandon()`'s refund (`Cost_Of() - Balance`, i.e. what
+was actually spent) already matched what this repo did.
+
+### PurchasePrice
+
+`FactoryClass::Set` records `Object->PurchasePrice = Cost_Of() * house.CostBias`. RA remembers
+**what was actually paid**, and refunds against that.
+
+This repo refunded `def.cost * RefundPercent` — the sticker price — while `CostBias` is real:
+an opponent on `hard` buys at 0.8×. It was therefore getting a **62.5 % return** on every sale
+where the player got 50 %, and only 41.7 % on `easy`. Structures now carry `paid`, threaded
+from the queue through `readyPaid` to placement, and a sale refunds against it. All three of
+player, `hard` opponent and `easy` opponent now return exactly 0.500.
+
+### The bug this introduced, and why the unit suite missed it
+
+Clamping the charge to the balance deadlocked every production line in the game. Rounding lets
+`bal` reach zero one tick before `prog` reaches one; `want` becomes zero; and the broke-guard —
+`if (q.cost > 0 && want <= 0) continue;` — skipped the completion check below it. Forever.
+
+The opponent sat on a finished harvester at `prog=1.000, bal=0.0, paid=1400.0` and never built
+anything again for the rest of the match. On `normal` it ended with **four units and seven
+structures** and never launched a single attack wave.
+
+**Twenty assertions passed on it.** They asserted that a job cost exactly its price — which it
+did, the money was all spent — and never that the unit *arrived*. The `while (S.q[cat] && n++ <
+60*180)` bound quietly expired and nothing noticed. The guard now tests for being **broke**,
+which is what it was always for, and the suite asserts delivery, line-clearing, the
+balance-empties-early case directly, and that a genuinely broke line still stalls and still
+resumes.
+
+Assert on the thing you wanted, not on the side effect you happened to measure.
+
+### Named, not shipped: the IQ-derived build slowdown
+
+    if (!House->IsHuman && Rule.Diff[...].IsBuildSlowdown) {
+        time = time * Inverse(fixed(House->IQ + Rule.MaxIQ, Rule.MaxIQ*2));
+    }
+
+"The build time will range from double normal time at the slowest to just normal time at the
+fastest." So in the original a computer house **never builds faster than a human** — the
+slowdown is bounded to [1×, 2×] and derived from IQ rather than set per difficulty.
+
+`RTS_DIFF.hard.build` here is **0.7** — faster than normal. That is a real divergence, but
+correcting it is a difficulty redesign rather than a port: `hard` leans on that number, and
+removing it would need compensation elsewhere. Recorded rather than smuggled in.
+
+Same for `Start()`'s power floor: RA bounds `Power_Fraction` to a minimum of **1/16**, where
+`RTS_LOW_POWER_MIN` is 0.28 — this game is 4.5× more forgiving of a browned-out base.
+
+### Verified
+
+29 assertions in `factory.js`: rifle, tank and heavy each costing exactly their price and
+**arriving**, the same through a mid-build brownout, the balance starting at full price and
+falling in step with progress, never going negative, a job whose balance empties early still
+completing, a broke line still stalling *and* resuming, pre-placed structures knowing their
+price, `CostBias` genuinely differing, a sale refunding half of what was paid, all three
+difficulty/side combinations returning the same 0.500, `readyPaid` surviving from completion
+to placement, abandon refunding exactly what was spent, queue-and-abandon being money-neutral
+across eight rounds, and balance and purchase price both surviving save/load — plus a job
+restored from a save written before `bal` existed still completing.
+
+Regression: crate 36/36, burn 40/40, storage 34/34, save/load 31/31, verbs 26/26, mech 20/20,
+armour 16/16, udata 13/13, idata 9/9.
+
+Ladder **296 / 222 / 177 s** against 296 / 220 / 174. `easy` is identical seed for seed;
+`hard` moves most, and that is the intended effect rather than noise — the opponent sells 21
+times per five matches on `hard` against 5 on `easy`, and on `hard` it was the one collecting
+the 62.5 % return.
+
+### A trap in this repo's harnesses
+
+Three separate measurements in this work were wrong before the code was, all for the same
+reason: **the refinery you place to satisfy the tech tree ships a free harvester.** Its income
+made a tank appear to cost −599 credits, made queue-and-abandon look like a 699-credit leak,
+and funded a "broke" production line back up to 12 % progress. Zeroing the treasury does not
+make a side broke; kill the harvester too, or measure `_rtsSpend`/`_rtsGrant` directly and
+filter to the side you mean.
+
 ## Crates — from CRATE.CPP
 
 CRATE.CPP is the spawn/place/remove half. A crate is a map **overlay**, not an object:

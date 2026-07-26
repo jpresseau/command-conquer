@@ -761,9 +761,9 @@ function _rtsTryPlace(mx, my) {
   var def = rtsStructDef(U.place);
   var tx = _rtsTX(p.x) - ((def.w / 2) | 0), tz = _rtsTX(p.z) - ((def.h / 2) | 0);
   if (!_rtsCanPlace('player', U.place, tx, tz)) { _rtsSay('Cannot build there — needs clear ground near your base.'); return; }
-  _rtsPlaceStruct('player', U.place, tx, tz, false);
+  _rtsPlaceStruct('player', U.place, tx, tz, false, G.sides.player.readyPaid);
   if (typeof _rtsSfx === 'function') _rtsSfx('place');
-  G.sides.player.ready = null;
+  G.sides.player.ready = null; G.sides.player.readyPaid = null;
   U.place = null; _rtsGhostHide();
 }
 

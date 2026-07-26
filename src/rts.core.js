@@ -1018,12 +1018,15 @@ function _rtsCanPlace(side, key, tx, tz) {
   }
   return near;
 }
-function _rtsPlaceStruct(side, key, tx, tz, instant) {
+function _rtsPlaceStruct(side, key, tx, tz, instant, paid) {
   var G = window._rtsG, d = rtsStructDef(key);
   var e = { id:G.nextId++, type:'struct', side:side, def:key, tx:tx, tz:tz,
     x:_rtsWX(tx) + (d.w - 1) * RTS_TILE / 2, z:_rtsWX(tz) + (d.h - 1) * RTS_TILE / 2,
     hp:instant ? d.hp : d.hp * 0.15, maxHp:d.hp, rot:0, cool:0, target:null,
-    building:instant ? 0 : 1, bprog:instant ? 1 : 0, dead:false, mesh:null };
+    building:instant ? 0 : 1, bprog:instant ? 1 : 0, dead:false, mesh:null,
+    /* PurchasePrice. A structure placed straight onto the map at match start was never
+       bought, so it is worth what it would have cost this side to buy. */
+    paid:paid == null ? _rtsCostOf(side, d) : paid };
   G.ents.push(e); G.byId[e.id] = e;
   _rtsFootprint(e, true);
   _rtsFlushForPlacement(e);
@@ -1379,7 +1382,10 @@ function _rtsSell(e) {
   if (!e || e.dead || e.type !== 'struct' || e.selling) return false;
   if (e.def === 'yard') return false;           /* selling the Command Yard is suicide, not a sale */
   e.selling = 1; e.repair = 0; e.building = 1; e.bprog = 1;
-  _rtsGrant(G.sides[e.side], Math.round(rtsStructDef(e.def).cost * RTS_REFUND_PCT
+  /* Refund_Money against the PurchasePrice the object carries, not against the sticker
+     price. `paid` is absent only on a save written before this existed. */
+  var price = (e.paid == null) ? rtsStructDef(e.def).cost : e.paid;
+  _rtsGrant(G.sides[e.side], Math.round(price * RTS_REFUND_PCT
     * (e.hp / e.maxHp * 0.5 + 0.5)));          /* a wreck is worth less than a clean building */
   if (e.side === 'player' && typeof _rtsSfx === 'function') _rtsSfx('build');
   return true;
@@ -1570,8 +1576,11 @@ function _rtsCanProduce(side, key) {
 function _rtsQueue(side, key) {
   if (!_rtsCanQueue(side, key)) return false;
   var S = window._rtsG.sides[side], def = rtsStructDef(key) || rtsUnitDef(key);
+  /* FactoryClass::Set: `Balance = Cost_Of() * CostBias`, and the job is driven by that
+     outstanding balance rather than by re-deriving a charge from the price each tick. */
+  var price = _rtsCostOf(side, def);
   S.q[_rtsQueueCat(key)] = { key:key, prog:0, total:_rtsBuildTimeOf(side, def),
-    cost:_rtsCostOf(side, def), paid:0, hold:0 };
+    cost:price, bal:price, paid:0, hold:0 };
   return true;
 }
 /* SIDEBAR.CPP SelectClass::Action, RIGHTPRESS: "If production is in progress, put it on
@@ -1610,7 +1619,8 @@ function _rtsProdRecalc(side) {
   /* A finished building still waiting to be placed needs a yard to come out of. */
   if (S.ready && !_rtsHas(side, 'yard')) {
     var rd = rtsStructDef(S.ready);
-    if (rd) _rtsGrant(S, _rtsCostOf(side, rd));
+    if (rd) _rtsGrant(S, S.readyPaid == null ? _rtsCostOf(side, rd) : S.readyPaid);
+    S.readyPaid = null;
     lost.push(S.ready);
     S.ready = null; S.readyTry = 0;
   }
@@ -1649,14 +1659,38 @@ function _rtsTickProduction(side, dt) {
   for (cat in S.q) {
     var q = S.q[cat]; if (!q || q.hold) continue;  /* a suspended line spends nothing */
     var rate = dt / q.total * pf * _rtsLines(side, cat);   /* fraction of the job done this step */
-    var want = q.cost * rate;
+    /* Cost_Per_Tick(): `min(cost, Balance)`. Charging `cost * rate` without that clamp
+       systematically OVERCHARGES, because the final tick's rate overshoots the job - measured
+       at up to 1.21 credits on an 800-credit tank, always over and never under. Driving the
+       charge off the outstanding balance is both the original's rule and the only way the
+       total can come out exactly equal to the price. */
+    if (q.bal === undefined) q.bal = Math.max(0, q.cost - q.paid);   /* a save from before this */
+    var want = Math.min(q.bal, q.cost * rate);
     var purse = rtsMoney(S);
-    if (want > purse) { want = purse; rate = q.cost > 0 ? want / q.cost : rate; }
-    if (q.cost > 0 && want <= 0) continue;          /* broke: the line stalls, as it should */
-    _rtsSpend(S, want); q.paid += want; q.prog += rate;
+    /* The stall is for being BROKE, and only for being broke. Testing `want <= 0` instead
+       deadlocks the line the moment the balance is paid off: rounding lets `bal` reach zero a
+       tick before `prog` reaches one, `want` becomes zero, and the `continue` skips the
+       completion check below - forever. Measured: the opponent sat on a finished harvester at
+       `prog=1.000, bal=0.0, paid=1400.0` for the whole match and never built anything again.
+       The unit suite missed it completely, because it asserted on money paid and never on the
+       unit arriving. */
+    if (want > purse) {
+      want = purse;
+      rate = q.cost > 0 ? want / q.cost : rate;
+      if (want <= 0) continue;                      /* nothing at all in the treasury */
+    }
+    _rtsSpend(S, want); q.paid += want; q.bal = Math.max(0, q.bal - want); q.prog += rate;
     if (q.prog >= 1) {
+      /* "If the production has completed... House->Spend_Money(Balance); Balance = 0" - the
+         rounding residue is settled at the end so the job costs exactly what it was priced
+         at, however the rate wandered on the way. */
+      if (q.bal > 0) { var last = _rtsSpend(S, q.bal); q.paid += last; q.bal = 0; }
       S.q[cat] = null;
-      if (cat === 'struct') S.ready = q.key;        /* wait for the player to place it */
+      /* PurchasePrice: what was ACTUALLY paid follows the building, so a refund later is not
+         computed from a sticker price the buyer never paid. It matters because CostBias is
+         real - an opponent on `hard` pays 0.8x - and refunding half of full price handed it a
+         62% return on every sale while the player got 50%. */
+      if (cat === 'struct') { S.ready = q.key; S.readyPaid = q.paid; }
       else _rtsDeliverUnit(side, q.key);
       if (side === 'player' && typeof _rtsSfx === 'function') _rtsSfx(cat === 'struct' ? 'ready' : 'unitready');
     }
@@ -2820,7 +2854,7 @@ function _rtsAIPlace(key) {
      into it - that is the whole point of the node list, and it comes before any of the aiming
      below because the plan already decided where this one belongs. */
   var node = _rtsNextBuildable('enemy', key);
-  if (node) { _rtsPlaceStruct('enemy', key, node.tx, node.tz, false); return true; }
+  if (node) { _rtsPlaceStruct('enemy', key, node.tx, node.tz, false, G.sides.enemy.readyPaid); return true; }
   if (key === 'refinery') aim = _rtsAIOreSpot();
   else if (key === 'turret') aim = _rtsAIWeakZone();
   var anchors = [];
@@ -2849,7 +2883,7 @@ function _rtsAIPlace(key) {
     }
     /* Anything placed outside the plan becomes part of it (in _rtsPlaceStruct), so the next
        raid is repaired against the base as it actually stands, not just the opening layout. */
-    if (best) { _rtsPlaceStruct('enemy', key, best[0], best[1], false); return true; }
+    if (best) { _rtsPlaceStruct('enemy', key, best[0], best[1], false, G.sides.enemy.readyPaid); return true; }
   }
   return false;
 }
@@ -3724,8 +3758,8 @@ function _rtsUpdateAI(dt) {
     G.ai.place -= dt;
     if (G.ai.place <= 0) {
       G.ai.place = 0.6;
-      if (_rtsAIPlace(S.ready)) { S.ready = null; S.readyTry = 0; }
-      else if (++S.readyTry > 8 || !_rtsHas('enemy', 'yard')) { S.ready = null; S.readyTry = 0; }
+      if (_rtsAIPlace(S.ready)) { S.ready = null; S.readyPaid = null; S.readyTry = 0; }
+      else if (++S.readyTry > 8 || !_rtsHas('enemy', 'yard')) { S.ready = null; S.readyPaid = null; S.readyTry = 0; }
     }
   }
 }
