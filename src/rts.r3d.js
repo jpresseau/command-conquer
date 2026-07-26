@@ -221,16 +221,38 @@ function _r3Ramp(c, v, out) {
   }
 }
 
+/* SUPERSAMPLING. The rasteriser used to draw straight into the output canvas at 1:1, which
+   put a hard jagged step on every facet edge and meant any detail smaller than a whole pixel
+   simply vanished. At 24 art-pixels per map cell that is most of the detail on a model.
+
+   Now the geometry and shading are computed at R3_SS times the output resolution and box-
+   downsampled. The cost is R3_SS^2 in raster work and it is paid once, at load.
+
+   Two decisions in the downsample that are the whole point:
+
+   - ALPHA IS THRESHOLDED, not averaged. Real sprite art of this era is 1-bit transparent -
+     an indexed image with one index reserved for "nothing here" - so a soft feathered
+     silhouette would read as modern, not as the thing being imitated. A pixel is opaque if
+     more than half its samples were covered, and the silhouette stays as hard as it was.
+   - QUANTISATION HAPPENS AFTER the downsample, not before. Posterising at supersample
+     resolution and then averaging turns the deliberate flat bands back into a smooth
+     gradient, which throws away the limited-palette look. Averaging first and quantising
+     second keeps flat faces flat while the EDGES between them resolve cleanly. */
+var R3_SS = 3;
+
 function _r3Render(faces, W, H, ox, oy) {
   W = Math.max(1, Math.ceil(W)); H = Math.max(1, Math.ceil(H));
+  var SS = R3_SS | 0; if (SS < 1) SS = 1;
+  var SW = W * SS, SH = H * SS;
   var t = _sprMake(W, H), g = t.g;
   var img = g.createImageData(W, H), d = img.data;
-  var N = W * H;
+  var N = SW * SH;
   var zb = new Float32Array(N); zb.fill(-1e30);
   var vb = new Float32Array(N);                 /* lit-ness */
   var cb = new Uint8Array(N * 3);               /* base colour */
   var mk = new Uint8Array(N);                   /* coverage */
   var i, j;
+  var sox = ox * SS, soy = oy * SS;
 
   /* half-vector for a cheap specular term - gives cylinders a sheen along one side */
   var hx = R3_LIGHT[0] + R3_VIEW[0], hy = R3_LIGHT[1] + R3_VIEW[1], hz = R3_LIGHT[2] + R3_VIEW[2];
@@ -256,11 +278,13 @@ function _r3Render(faces, W, H, ox, oy) {
     var lit = R3_AMB + R3_DIF * lam + sky + 0.16 * sp;
     if (lit > 1.10) lit = 1.10;         /* a broad, strong specular blew lit roofs out to pink */
 
+    /* Screen positions are scaled into the supersample grid; DEPTH deliberately is not, so
+       the occlusion threshold below stays in model units and does not have to track SS. */
     var n2 = v.length, px = new Float64Array(n2), py = new Float64Array(n2), pd = new Float64Array(n2);
     var ymin = 1e9, ymax = -1e9;
     for (j = 0; j < n2; j++) {
-      px[j] = ox + v[j][0];
-      py[j] = oy + (v[j][2] - R3_K * v[j][1]);
+      px[j] = sox + v[j][0] * SS;
+      py[j] = soy + (v[j][2] - R3_K * v[j][1]) * SS;
       pd[j] = v[j][1] + R3_K * v[j][2];
       if (py[j] < ymin) ymin = py[j];
       if (py[j] > ymax) ymax = py[j];
@@ -272,7 +296,7 @@ function _r3Render(faces, W, H, ox, oy) {
     var da = (e0 * d1y - e1 * d0y) / det, db = (e1 * d0x - e0 * d1x) / det;
     var dc = pd[0] - da * px[0] - db * py[0];
 
-    var yA = Math.max(0, Math.floor(ymin)), yB = Math.min(H - 1, Math.ceil(ymax));
+    var yA = Math.max(0, Math.floor(ymin)), yB = Math.min(SH - 1, Math.ceil(ymax));
     for (var yy = yA; yy <= yB; yy++) {
       var yc = yy + 0.5, xlo = 1e9, xhi = -1e9;
       for (j = 0; j < n2; j++) {
@@ -284,11 +308,11 @@ function _r3Render(faces, W, H, ox, oy) {
         if (xx > xhi) xhi = xx;
       }
       if (xhi < xlo) continue;
-      var xA = Math.max(0, Math.round(xlo)), xB = Math.min(W - 1, Math.round(xhi) - 1);
+      var xA = Math.max(0, Math.round(xlo)), xB = Math.min(SW - 1, Math.round(xhi) - 1);
       if (xB < xA && xhi - xlo > 0.35) xB = xA;
       for (var xx2 = xA; xx2 <= xB; xx2++) {
         var dep = da * (xx2 + 0.5) + db * yc + dc;
-        var o = yy * W + xx2;
+        var o = yy * SW + xx2;
         if (dep <= zb[o]) continue;
         zb[o] = dep; vb[o] = lit; mk[o] = 1;
         cb[o * 3] = f.c[0]; cb[o * 3 + 1] = f.c[1]; cb[o * 3 + 2] = f.c[2];
@@ -296,49 +320,76 @@ function _r3Render(faces, W, H, ox, oy) {
     }
   }
 
-  /* ---- shading pass ---- */
-  var rgb = [0, 0, 0];
-  for (var y2 = 0; y2 < H; y2++) {
-    for (var x2 = 0; x2 < W; x2++) {
-      var p = y2 * W + x2;
+  /* ---- shading pass, at supersample resolution, WITHOUT quantising ---- */
+  var val = new Float32Array(N);
+  var AOR = 2 * SS;                    /* the occlusion neighbourhood is in model units, so
+                                          its pixel radius has to grow with the supersample
+                                          or creases get thinner as SS rises */
+  var AOSTEP = SS;                     /* sample the ring rather than every pixel in it -
+                                          at SS=3 a full 12x12 gather is 144 reads per pixel
+                                          and utterly dominates the bake */
+  for (var y2 = 0; y2 < SH; y2++) {
+    for (var x2 = 0; x2 < SW; x2++) {
+      var p = y2 * SW + x2;
       if (!mk[p]) continue;
-      var lit2 = vb[p];
 
-      /* Ambient occlusion: count neighbours that sit measurably in front of this pixel.
-         Those are the creases where one part meets another, and darkening them is most of
-         what stops a model looking like flat decals stacked on each other. */
       var occ = 0, tot = 0;
-      for (var oy2 = -2; oy2 <= 2; oy2++) {
-        for (var ox2 = -2; ox2 <= 2; ox2++) {
+      for (var oy2 = -AOR; oy2 <= AOR; oy2 += AOSTEP) {
+        for (var ox2 = -AOR; ox2 <= AOR; ox2 += AOSTEP) {
           if (!ox2 && !oy2) continue;
           var qx = x2 + ox2, qy = y2 + oy2;
-          if (qx < 0 || qy < 0 || qx >= W || qy >= H) continue;
-          var q = qy * W + qx;
+          if (qx < 0 || qy < 0 || qx >= SW || qy >= SH) continue;
+          var q = qy * SW + qx;
           tot++;
           if (mk[q] && zb[q] > zb[p] + 1.1) occ++;
         }
       }
       var mod = tot ? -0.40 * (occ / tot) : 0;
 
-      /* Rim light on the up-left silhouette, so the shape lifts off the ground behind it. */
-      var up = y2 > 0 ? mk[p - W] : 0, lf = x2 > 0 ? mk[p - 1] : 0;
+      /* Rim light on the up-left silhouette, so the shape lifts off the ground behind it.
+         Stepped by SS so the rim stays one OUTPUT pixel wide rather than shrinking. */
+      var up = y2 >= SS ? mk[p - SW * SS] : 0, lf = x2 >= SS ? mk[p - SS] : 0;
       if (!up || !lf) mod += 0.13;
 
-      /* Quantise the face's own lighting WITHOUT dither, so a flat face stays one solid
-         tone, and dither only the spatially-varying part - the occlusion and rim. Dithering
-         the face value too puts a checkerboard across every large flat roof, which is what
-         the first attempt did: dither belongs on gradients, not on flat surfaces. */
-      var bay = (R3_BAYER[(y2 & 3) * 4 + (x2 & 3)] + 0.5) / 16 - 0.5;
-      var q2 = Math.round(lit2 * R3_STEPS) / R3_STEPS
-             + Math.round((mod + bay / R3_STEPS) * R3_STEPS) / R3_STEPS;
+      val[p] = vb[p] + mod;
+    }
+  }
 
-      rgb[0] = cb[p * 3]; rgb[1] = cb[p * 3 + 1]; rgb[2] = cb[p * 3 + 2];
+  /* ---- downsample, then quantise ---- */
+  var rgb = [0, 0, 0];
+  var inv = 1 / (SS * SS);
+  for (var oyy = 0; oyy < H; oyy++) {
+    for (var oxx = 0; oxx < W; oxx++) {
+      var cov = 0, sr = 0, sg = 0, sb = 0, sv = 0;
+      for (var sy = 0; sy < SS; sy++) {
+        var srow = (oyy * SS + sy) * SW + oxx * SS;
+        for (var sx = 0; sx < SS; sx++) {
+          var q3 = srow + sx;
+          if (!mk[q3]) continue;
+          cov++;
+          sr += cb[q3 * 3]; sg += cb[q3 * 3 + 1]; sb += cb[q3 * 3 + 2];
+          sv += val[q3];
+        }
+      }
+      /* 1-bit alpha: opaque only if MORE than half the samples were covered. Averaging
+         coverage into alpha instead would feather the silhouette, which reads as modern
+         rather than as the 1-bit indexed sprites this is imitating. */
+      if (cov * 2 <= SS * SS) continue;
+      var w2 = (oyy * W + oxx) * 4;
+      rgb[0] = sr / cov; rgb[1] = sg / cov; rgb[2] = sb / cov;
+      var lit3 = sv / cov;
+
+      /* Quantise here, at OUTPUT resolution, so a flat face is still one solid tone and the
+         dither pattern is one output pixel per cell rather than a sub-pixel shimmer that
+         averages to mud. */
+      var bay = (R3_BAYER[(oyy & 3) * 4 + (oxx & 3)] + 0.5) / 16 - 0.5;
+      var q2 = Math.round(lit3 * R3_STEPS + bay) / R3_STEPS;
+
       _r3Ramp(rgb, q2, rgb);
-      var w = p * 4;
-      d[w] = rgb[0] < 0 ? 0 : (rgb[0] > 255 ? 255 : rgb[0]);
-      d[w + 1] = rgb[1] < 0 ? 0 : (rgb[1] > 255 ? 255 : rgb[1]);
-      d[w + 2] = rgb[2] < 0 ? 0 : (rgb[2] > 255 ? 255 : rgb[2]);
-      d[w + 3] = 255;
+      d[w2] = rgb[0] < 0 ? 0 : (rgb[0] > 255 ? 255 : rgb[0]);
+      d[w2 + 1] = rgb[1] < 0 ? 0 : (rgb[1] > 255 ? 255 : rgb[1]);
+      d[w2 + 2] = rgb[2] < 0 ? 0 : (rgb[2] > 255 ? 255 : rgb[2]);
+      d[w2 + 3] = 255;
     }
   }
   g.putImageData(img, 0, 0);
