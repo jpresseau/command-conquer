@@ -30,33 +30,42 @@ var RTS_SIDES = {
    power -> refinery/barracks -> factory -> defences. */
 var RTS_STRUCTS = [
   { key:'yard',     name:'Command Yard',  w:3, h:3, cost:0,    build:0,  hp:1400, power:0,    sight:16,
+    armour:'concrete',
     desc:'The heart of your base. Everything you build must sit near it.' },
   { key:'power',    name:'Power Plant',   w:2, h:2, cost:300,  build:7,  hp:500,  power:100,  sight:10,
+    armour:'concrete',
     desc:'Supplies 100 power. Low power slows every production line.' },
   { key:'refinery', name:'Scrap Refinery',w:3, h:3, cost:1400, build:18, hp:950,  power:-30,  sight:12,
     needs:['power'], freeUnit:'harvester',
+    armour:'concrete',
     desc:'Harvesters unload here. Ships with one free Harvester.' },
   { key:'barracks', name:'Barracks',      w:2, h:2, cost:400,  build:9,  hp:650,  power:-20,  sight:12,
     needs:['power'], produces:'infantry',
+    armour:'wood',
     desc:'Trains infantry.' },
   { key:'factory',  name:'War Factory',   w:3, h:2, cost:1600, build:20, hp:900,  power:-30,  sight:12,
     needs:['refinery'], produces:'vehicle',
+    armour:'concrete',
     desc:'Builds RC combat vehicles and Harvesters.' },
   { key:'turret',   name:'Gun Turret',    w:1, h:1, cost:500,  build:10, hp:520,  power:-20,  sight:18,
     needs:['barracks'], weapon:'turretgun',
+    armour:'concrete',
     desc:'Automated base defence. Needs power to fire.' },
   /* --- the tier the roster was missing. `needs` already gated everything, so these are data. --- */
   { key:'radar',    name:'Radar Dome',    w:2, h:2, cost:1000, build:14, hp:600,  power:-40,  sight:26,
     needs:['refinery'], radar:true,
+    armour:'wood',
     desc:'Switches the radar on. Without one the map panel stays dark.' },
   /* Cost, power and prerequisites here are the reference's own: Tech Center $1500 / -200 /
      War Factory + Radar Dome. -200 is two whole power plants, which is the point - the tech
      tier is supposed to cost you an economy, not a line item. */
   { key:'lab',      name:'Tech Center',   w:2, h:2, cost:1500, build:22, hp:600,  power:-200, sight:14,
     needs:['radar', 'factory'],
+    armour:'wood',
     desc:'Unlocks Artillery and the Heavy Tank. Draws as much power as two plants.' },
   { key:'rocketpit',name:'Rocket Turret', w:1, h:1, cost:800,  build:14, hp:480,  power:-30,  sight:22,
     needs:['factory'], weapon:'turretrocket',
+    armour:'concrete',
     desc:'Long-range base defence. Tears up armour, poor against infantry.' },
   /* --- defence you can afford early, and the two structures that do something other than
      shoot. `wall` and `pillbox` are pure data; `depot` carries the repair field below. --- */
@@ -64,27 +73,33 @@ var RTS_STRUCTS = [
      one thing in the game you can build from the first second of a match. */
   { key:'wall',     name:'Concrete Wall', w:1, h:1, cost:50,   build:2,  hp:400,  power:0,    sight:0,
     wall:true,
+    armour:'concrete',
     desc:'A metre of concrete. Blocks movement, absorbs a lot, shoots at nothing.' },
   /* Pillbox $400 / -15 / needs Barracks, again straight from the reference. */
   { key:'pillbox',  name:'Pillbox',      w:1, h:1, cost:400,  build:6,  hp:420,  power:-15,  sight:15,
     needs:['barracks'], weapon:'pillboxgun',
+    armour:'concrete',
     desc:'Cheap early defence. Shreds infantry, barely scratches armour.' },
   { key:'depot',    name:'Service Depot',w:2, h:2, cost:1200, build:16, hp:700,  power:-30,  sight:12,
     needs:['factory'], repairs:RTS_TILE * 3.2, repairRate:22,
+    armour:'wood',
     desc:'Park damaged vehicles on it and they are patched up, free of charge.' },
   /* Advanced Power Plant $500 / +200 / needs Power Plant. Twice the output for well under
      twice the price and one footprint instead of two - the correct answer once a base is big. */
   { key:'apower',   name:'Adv. Power Plant', w:3, h:2, cost:500, build:11, hp:600, power:200, sight:10,
     needs:['power'],
+    armour:'concrete',
     desc:'Supplies 200 power. Cheaper per unit than two plants, and half the footprint.' },
   /* Kennel $200 / -10 / needs Barracks. It exists to gate the Attack Dog. */
   { key:'kennel',   name:'Kennel',       w:1, h:1, cost:200,  build:5,  hp:400,  power:-10,  sight:10,
     needs:['barracks'],
+    armour:'wood',
     desc:'Trains Attack Dogs.' },
   /* Flame Tower $500 / -20 / needs Barracks, and "damages nearby units and structures if
      destroyed" - which this game already has a mechanism for, so it actually does. */
   { key:'flametower',name:'Flame Tower', w:1, h:1, cost:500,  build:11, hp:450,  power:-20,  sight:16,
     needs:['barracks'], weapon:'towerflame', deathBlast:{ dmg:70, radius:RTS_TILE * 2.6 },
+    armour:'concrete',
     desc:'Burns anything that comes close. Goes up in a fireball when it dies.' }
 ];
 
@@ -96,56 +111,71 @@ var RTS_STRUCTS = [
    weapon : key into RTS_WEAPONS (null = unarmed) */
 var RTS_UNITS = [
   { key:'rifle',    name:'Rifle Squad',   kind:'infantry', cost:100,  build:3,  hp:60,   speed:7,   turn:6,  r:1.1, sight:16, weapon:'rifle',
+    armour:'none',
     desc:'Cheap infantry. Good against other infantry.' },
   { key:'rocket',   name:'Rocket Squad',  kind:'infantry', cost:300,  build:6,  hp:50,   speed:6,   turn:6,  r:1.1, sight:18, weapon:'rocket',
+    armour:'none',
     desc:'Slow-firing missiles. Tears up vehicles and buildings.' },
   { key:'buggy',    name:'Scout Buggy',   kind:'vehicle',  cost:500,  build:7,  hp:170,  speed:16,  turn:3.2,r:1.6, sight:22, weapon:'mg',
+    armour:'light',
     desc:'Fast RC scout. Shreds infantry, folds against tanks.' },
   /* weapon2: TECHNO.CPP's SecondaryWeapon. What_Weapon_Should_I_Use scores both against the
      target's armour and takes the better, so the tank answers infantry with its coaxial gun
      and armour with the main gun, with no input from the player. */
   { key:'tank',     name:'Battle Tank',   kind:'vehicle',  cost:800,  build:11, hp:460,  speed:9,   turn:1.8,r:2.0, sight:18, weapon:'cannon', weapon2:'coax',
+    armour:'heavy',
     desc:'The backbone of any serious attack. Coaxial gun for infantry.' },
   { key:'harvester',name:'Harvester',     kind:'vehicle',  cost:1400, build:14, hp:700,  speed:7.5, turn:1.6,r:2.2, sight:14, weapon:null,
     harvest:true, capacity:700,
+    armour:'heavy',
     desc:'Mines Scrap fields and unloads at a refinery.' },
   /* --- second tier. `needs` on a unit gates it the same way it gates a structure. --- */
   { key:'grenadier',name:'Grenadier',     kind:'infantry', cost:160,  build:4,  hp:65,   speed:6,   turn:6,  r:1.1, sight:15, weapon:'grenade',
+    armour:'none',
     desc:'Lobbed charges. Clears infantry and cracks buildings; hopeless against a moving tank.' },
   { key:'light',    name:'Light Tank',    kind:'vehicle',  cost:700,  build:9,  hp:280,  speed:12,  turn:2.6,r:1.8, sight:18, weapon:'cannon',
+    armour:'light',
     desc:'Cheap armour. Faster than a Battle Tank and half the price, with a third of the hull.' },
   { key:'arty',     name:'Artillery',     kind:'vehicle',  cost:600,  build:11, hp:150,  speed:6,   turn:1.4,r:1.9, sight:16, weapon:'howitzer',
     needs:['radar'],
+    armour:'light',
     desc:'Outranges every base defence in the game. Made of paper — never send it in first.' },
   { key:'heavy',    name:'Mammoth Tank',  kind:'vehicle',  cost:1700, build:20, hp:820,  speed:6.5, turn:1.3,r:2.2, sight:18, weapon:'heavycannon', weapon2:'coax',
     needs:['lab'],
+    armour:'heavy',
     desc:'The heaviest hull on the field. Slow, expensive, and very hard to stop.' },
   { key:'flame',    name:'Flame Squad',   kind:'infantry', cost:300,  build:5,  hp:75,   speed:6,   turn:6,  r:1.1, sight:12, weapon:'flame',
     needs:['lab'],
+    armour:'none',
     desc:'Walks up and burns things down. Devastating up close, dead at any distance.' },
   /* capture: MISSION_CAPTURE. The unit is spent on arrival - it does not survive the job. */
   { key:'engineer', name:'Engineer',      kind:'infantry', cost:500,  build:8,  hp:45,   speed:6.5, turn:6,  r:1.1, sight:12, weapon:null,
     capture:true,
+    armour:'none',
     desc:'Walks into an enemy building and takes it. Unarmed, and spent on arrival.' },
   /* --- four units that each add a VERB rather than another damage number. --- */
   /* Attack Dog: "extremely effective against infantry, completely worthless against vehicles
      and structures". The `vs` table does that entirely - no special case anywhere in the code. */
   { key:'dog',      name:'Attack Dog',    kind:'infantry', cost:200,  build:3,  hp:40,   speed:13,  turn:8,  r:0.9, sight:14, weapon:'bite',
     needs:['kennel'],
+    armour:'none',
     desc:'Fast and vicious. Tears infantry apart; cannot scratch a vehicle or a wall.' },
   /* heals: friendly INFANTRY inside this radius are brought back up at healRate hp/sec. The
      same shape as the Service Depot's repair field - one is for people, the other for vehicles. */
   { key:'medic',    name:'Field Medic',   kind:'infantry', cost:800,  build:9,  hp:70,   speed:6.5, turn:6,  r:1.1, sight:12, weapon:null,
     heals:RTS_TILE * 3.0, healRate:9,
+    armour:'none',
     desc:'Heals nearby infantry continuously and for free. Cannot heal himself.' },
   /* steal: walks into an enemy refinery and leaves with a fraction of that side\'s credits.
      Same walk-in as capture, different payload, spent the same way. */
   { key:'thief',    name:'Thief',         kind:'infantry', cost:500,  build:7,  hp:45,   speed:7,   turn:6,  r:1.1, sight:12, weapon:null,
     needs:['lab'], steal:0.5, stealFrom:'refinery',
+    armour:'none',
     desc:'Walks into an enemy refinery and leaves with half their credits. Unarmed.' },
   /* demo: C4. "Can destroy buildings instantly if she is able to get adjacent to them." */
   { key:'tanya',    name:'Commando',      kind:'infantry', cost:1200, build:14, hp:130,  speed:8,   turn:7,  r:1.1, sight:16, weapon:'pistols',
     needs:['lab'], demo:true, only:1,
+    armour:'none',
     desc:'Mows down infantry, and levels any building she can reach. Only one at a time.' }
 ];
 
@@ -158,48 +188,80 @@ var RTS_UNITS = [
    splash   : blast radius, 0 = single target
    vs       : damage multipliers by armour class */
 var RTS_WEAPONS = {
-  rifle:     { dmg:7,  range:15, cool:0.55, shot:'tracer',  speed:0,   splash:0, vs:{ infantry:1.0, vehicle:0.35, building:0.25 } },
-  mg:        { dmg:9,  range:16, cool:0.35, shot:'tracer',  speed:0,   splash:0, vs:{ infantry:1.0, vehicle:0.4,  building:0.3  } },
+  /* `verses` is WARHEAD.CPP's Modifier[armor], one multiplier per armour class in CONST.CPP's
+     order: none / wood / light / heavy / concrete. Missing entries default to 1, as they do in
+     the original ("Verses=100%,100%,100%,100%,100%").
+
+     `wall` is IsWallDestroyer. Only warheads that carry it can bring down a Concrete Wall -
+     which is the entire point of concrete, and the reason small arms are listed without it.
+     `wood` is IsWoodDestroyer, for clearing trees.
+
+     A weapon whose `heavy` entry is 0 is what the original calls ORGANIC - anti-personnel and
+     literally nothing else. `IsOrganic = (Modifier[ARMOR_STEEL] == 0)` is derived exactly this
+     way in WARHEAD.CPP; the Attack Dog was written that way before this file arrived. */
+  rifle:      { dmg:7,  range:15, cool:0.55, shot:'tracer',  speed:0,  splash:0,
+                verses:{ none:1.0,  wood:0.30, light:0.40, heavy:0.15, concrete:0.20 } },
+  mg:         { dmg:9,  range:16, cool:0.35, shot:'tracer',  speed:0,  splash:0,
+                verses:{ none:1.0,  wood:0.35, light:0.50, heavy:0.20, concrete:0.25 } },
   /* burst: Is_Two_Shooter. Rearm_Delay alternates the reload so the shots arrive as a fast
-     pair and then a long wait. Which weapons burst is a choice here, not ported data - RA
-     carries it in RULES.INI and this game has no equivalent - so it goes on the launcher,
-     where a visible two-missile salvo is the whole character of the unit. Per-missile damage
-     is halved against the old single shot and the reload retuned so the sustained output
-     lands where it was; see the measured figures in CLAUDE.md. */
-  rocket:    { dmg:13, range:20, cool:1.80, burst:2, shot:'missile', speed:34,  splash:2, vs:{ infantry:0.5, vehicle:1.3,  building:1.2  } },
+     pair and then a long wait. */
+  rocket:     { dmg:13, range:20, cool:1.80, burst:2, shot:'missile', speed:34, splash:2, wall:true,
+                verses:{ none:0.5,  wood:1.30, light:1.20, heavy:1.35, concrete:1.10 } },
   /* A tank's coaxial machine gun: short, weak, and murder on infantry. */
-  coax:      { dmg:14, range:13, cool:0.32,  shot:'tracer',  speed:0,   splash:0, vs:{ infantry:1.0, vehicle:0.2,  building:0.15 } },
-  cannon:    { dmg:38, range:18, cool:1.5,  shot:'shell',   speed:60,  splash:3, vs:{ infantry:0.7, vehicle:1.0,  building:1.0  } },
-  turretgun: { dmg:22, range:22, cool:0.9,  shot:'shell',   speed:70,  splash:1, vs:{ infantry:1.0, vehicle:0.9,  building:0.6  } },
-  /* --- second tier. Each of these exists to beat something specific, so that a bigger roster
-     is a set of answers rather than "buy the dearest thing you can afford". --- */
+  coax:       { dmg:14, range:13, cool:0.32, shot:'tracer',  speed:0,  splash:0,
+                verses:{ none:1.0,  wood:0.20, light:0.28, heavy:0.10, concrete:0.12 } },
+  cannon:     { dmg:38, range:18, cool:1.5,  shot:'shell',   speed:60, splash:3, wall:true, wood:true,
+                verses:{ none:0.7,  wood:1.10, light:1.15, heavy:0.90, concrete:0.90 } },
+  turretgun:  { dmg:22, range:22, cool:0.9,  shot:'shell',   speed:70, splash:1, wall:true,
+                verses:{ none:1.0,  wood:0.70, light:1.00, heavy:0.80, concrete:0.50 } },
   /* Grenades arc: murder on anything that stays still, near-useless against a moving vehicle. */
-  grenade:     { dmg:26, range:14, cool:1.9, shot:'shell',  speed:26, splash:3.4, vs:{ infantry:1.0, vehicle:0.35, building:1.1  } },
-  /* Artillery has the longest reach in the game on the thinnest chassis. 34 outranges the Gun
-     Turret's 22, which is the whole reason to buy one. */
-  howitzer:    { dmg:52, range:34, cool:3.4, shot:'shell',  speed:44, splash:5.0, vs:{ infantry:1.1, vehicle:0.75, building:1.3  } },
-  /* The Heavy Tank's gun: slower and dearer than the Battle Tank's, but it goes through armour. */
-  heavycannon: { dmg:62, range:20, cool:2.1, shot:'shell',  speed:58, splash:3.4, vs:{ infantry:0.6, vehicle:1.35, building:1.15 } },
+  grenade:    { dmg:26, range:14, cool:1.9,  shot:'shell',   speed:26, splash:3.4, wall:true, wood:true,
+                verses:{ none:1.0,  wood:1.30, light:0.45, heavy:0.25, concrete:0.95 } },
+  /* Artillery has the longest reach in the game on the thinnest chassis. */
+  howitzer:   { dmg:52, range:34, cool:3.4,  shot:'shell',   speed:44, splash:5.0, wall:true, wood:true,
+                verses:{ none:1.1,  wood:1.50, light:0.90, heavy:0.60, concrete:1.15 } },
+  /* The Mammoth's gun: slower and dearer than the Battle Tank's, but it goes through armour. */
+  heavycannon:{ dmg:62, range:20, cool:2.1,  shot:'shell',   speed:58, splash:3.4, wall:true, wood:true,
+                verses:{ none:0.6,  wood:1.25, light:1.30, heavy:1.40, concrete:1.05 } },
   /* Rocket Turret: long and hard-hitting, deliberately poor against infantry so that cheap
      riflemen stay the correct answer to a wall of them. */
-  turretrocket:{ dmg:30, range:26, cool:2.0, burst:2, shot:'missile', speed:36, splash:2.2, vs:{ infantry:0.45, vehicle:1.4, building:1.0 } },
-  /* Pillbox: a machine gun in concrete. Short, cheap, and the answer to an infantry rush at a
-     point in the match where a Gun Turret is still unaffordable. */
-  pillboxgun:  { dmg:12, range:15, cool:0.30, shot:'tracer', speed:0,  splash:0,   vs:{ infantry:1.15, vehicle:0.2, building:0.15 } },
-  /* Attack Dog. Zero against anything that is not a person - the reference is explicit that a
-     dog is "completely worthless against vehicles and structures", and a 0 in the vs table is
-     the whole implementation of that. */
-  bite:        { dmg:22, range:3,  cool:0.55, shot:'tracer', speed:0,  splash:0,   vs:{ infantry:1.4,  vehicle:0,   building:0    } },
+  turretrocket:{ dmg:30, range:26, cool:2.0, burst:2, shot:'missile', speed:36, splash:2.2, wall:true,
+                verses:{ none:0.45, wood:1.10, light:1.30, heavy:1.50, concrete:0.90 } },
+  /* Pillbox: a machine gun in concrete. The answer to an infantry rush at a point in the match
+     where a Gun Turret is still unaffordable. */
+  pillboxgun: { dmg:12, range:15, cool:0.30, shot:'tracer',  speed:0,  splash:0,
+                verses:{ none:1.15, wood:0.20, light:0.28, heavy:0.10, concrete:0.12 } },
+  /* Attack Dog. ORGANIC: zero against everything that is not a person. */
+  bite:       { dmg:22, range:3,  cool:0.55, shot:'tracer',  speed:0,  splash:0,
+                verses:{ none:1.4,  wood:0,    light:0,    heavy:0,    concrete:0 } },
   /* Two .45s: shreds infantry, barely marks anything else. The Commando's threat to buildings
      is her C4, not this. */
-  pistols:     { dmg:26, range:12, cool:0.22, shot:'tracer', speed:0,  splash:0,   vs:{ infantry:1.6,  vehicle:0.15,building:0.1  } },
-  /* Flame Tower: the Flame Squad's weapon on a fixed mount - a little more reach, a lot more
-     of it, and it never has to walk into range. */
-  towerflame:  { dmg:34, range:13, cool:0.75, shot:'tracer', speed:0,  splash:3.0, vs:{ infantry:1.3,  vehicle:0.7, building:1.0  } },
-  /* Flame: very short reach, no travel time, and it does not care what it is burning. The
-     shortest range in the game is the price of the highest damage-per-second in it. */
-  flame:       { dmg:30, range:9,  cool:0.65, shot:'tracer', speed:0,  splash:2.6, vs:{ infantry:1.3, vehicle:0.6, building:1.4 } }
+  pistols:    { dmg:26, range:12, cool:0.22, shot:'tracer',  speed:0,  splash:0,
+                verses:{ none:1.6,  wood:0.15, light:0.20, heavy:0.05, concrete:0.08 } },
+  /* Flame: very short reach, no travel time, and it does not care what it is burning. Wood
+     burns; concrete does not, which is why a flame squad is not the answer to a wall. */
+  flame:      { dmg:30, range:9,  cool:0.65, shot:'tracer',  speed:0,  splash:2.6, wood:true,
+                verses:{ none:1.3,  wood:1.70, light:0.70, heavy:0.50, concrete:1.20 } },
+  /* The Flame Squad's weapon on a fixed mount: a little more reach and a lot more of it. */
+  towerflame: { dmg:34, range:13, cool:0.75, shot:'tracer',  speed:0,  splash:3.0, wood:true,
+                verses:{ none:1.3,  wood:1.25, light:0.80, heavy:0.60, concrete:0.90 } }
 };
+
+/* WarheadTypeClass::Modifier[] with the original's defaulting rule: anything the table does not
+   mention takes 1. IsWallDestroyer is folded in here rather than checked at each call site,
+   because there are five of them and one of them forgetting is a silent balance bug. */
+function rtsVerses(w, tgt) {
+  if (!w) return 1;
+  var arm = rtsArmour(tgt);
+  if (arm === 'concrete' && tgt.type === 'struct') {
+    var sd = rtsStructDef(tgt.def);
+    if (sd && sd.wall && !w.wall) return 0;      /* small arms do not knock down concrete */
+  }
+  if (!w.verses) return 1;
+  var m = w.verses[arm];
+  return (m === undefined) ? 1 : m;
+}
+
 
 /* ------------------------------------------------------------------ anims --
    AnimTypeClass from ANIM.CPP, trimmed to what this game uses.
@@ -557,10 +619,30 @@ var RTS_CRUSH_KILL = 0.9;       /* world units: close enough to actually run the
 var RTS_CREW_CHANCE = 0.5;
 
 /* Armour class per thing, used with weapon.vs above. */
+/* ARMOUR — from CONST.CPP's ArmorName[] and WARHEAD.CPP's Modifier[armor].
+
+   `ArmorName[ARMOR_COUNT] = { "none", "wood", "light", "heavy", "concrete" }`, and a warhead
+   carries one multiplier PER ARMOUR CLASS ("Verses=100%,100%,100%,100%,100%" in RULES.INI),
+   defaulting to 1 for everything.
+
+   This game had three buckets - infantry / vehicle / building - derived from what a thing IS.
+   That is a worse model than RA's, and not by a little: armour is a PROPERTY of the object,
+   independent of its category, so a Mammoth and a concrete bunker can share `heavy` while a
+   Scout Buggy and a Battle Tank differ even though both are vehicles. Under the old scheme
+   every vehicle in the game necessarily took the same multiplier from every weapon.
+
+   The five classes are the port. The numbers in each weapon's `verses` table are still mine -
+   they live in RULES.INI, which is a data file rather than source, so they were derived from
+   the old three-bucket values to hold the measured balance and will be replaced wholesale if
+   that file ever turns up. */
+var RTS_ARMOUR = ['none', 'wood', 'light', 'heavy', 'concrete'];
 function rtsArmour(e) {
-  if (e.type === 'struct') return 'building';
-  var d = rtsUnitDef(e.def);
-  return (d && d.kind === 'infantry') ? 'infantry' : 'vehicle';
+  var d = (e.type === 'struct') ? rtsStructDef(e.def) : rtsUnitDef(e.def);
+  if (d && d.armour) return d.armour;
+  /* Anything that has not been given a class explicitly: infantry are ARMOR_NONE in the
+     original, everything else falls back to the middle of the range. */
+  if (e.type === 'struct') return 'concrete';
+  return (d && d.kind === 'infantry') ? 'none' : 'light';
 }
 
 /* ------------------------------------------------------------- economy --

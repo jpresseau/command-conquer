@@ -643,6 +643,46 @@ Commitment lands at 47% rather than the 62% asked for, and that is a real constr
 than a bug: a team only recruits units matching its composition, so a tank-heavy army cannot
 fill the rocket slots in Sappers. Raising it further means changing the compositions.
 
+## Armour classes — from WARHEAD.CPP + CONST.CPP
+
+`CONST.CPP` gives `ArmorName[ARMOR_COUNT] = { "none", "wood", "light", "heavy", "concrete" }`, and
+`WARHEAD.CPP` gives the model that uses them: a warhead carries **one multiplier per armour
+class** (`Modifier[armor]`, read from RULES.INI as `Verses=100%,100%,100%,100%,100%`), defaulting
+to 1 for anything unlisted.
+
+This game had three buckets — infantry / vehicle / building — derived from what a thing *is*.
+That is a worse model, and not by a little: **armour is a property of the object, independent of
+its category.** A Mammoth and a concrete bunker can share `heavy`; a Scout Buggy and a Battle Tank
+can differ even though both are vehicles. Under the old scheme every vehicle in the game
+necessarily took the same multiplier from every weapon, and there was no way to express "thin
+skin" at all.
+
+All five call sites already funnelled through one `rtsArmour(e)`, so the refactor was contained:
+that function now returns a declared class, every unit and structure carries `armour:`, and every
+weapon carries `verses:{none, wood, light, heavy, concrete}`.
+
+**`IsWallDestroyer`** is the other thing worth having. Only warheads that carry it can bring down
+a Concrete Wall — which is the entire *point* of concrete, and it arrived one PR after walls did.
+Small arms are now literally unable to scratch one: a rifle squad shooting a wall for ten seconds
+leaves it at 400/400. It is folded into `rtsVerses()` rather than checked at each call site,
+because there are five of them and one forgetting is a silent balance bug.
+
+**`IsOrganic = (Modifier[ARMOR_STEEL] == 0)`** — the original derives "anti-personnel only" from a
+zero against steel rather than storing a flag. The Attack Dog was written exactly that way before
+this file arrived, which is a pleasant confirmation.
+
+**The numbers are still mine.** `WARHEAD.CPP` is the class, not the data — the real multipliers
+live in RULES.INI, which is a data file rather than source. The five classes and the defaulting
+rule are the port; the values in each `verses` table were derived from the old three-bucket ones
+to hold the measured balance, and would be replaced wholesale if that file turns up.
+
+Verified: 16 assertions in `armour.js` — five classes, every entry declaring a real one, all
+infantry ARMOR_NONE as in the original, two vehicles resolving to different classes, the
+defaulting rule, the dog's organic zero, a machine gun preferring light armour and an anti-armour
+gun preferring heavy, small arms unable to hurt a wall while shells and rockets can, and the wall
+rule applying to walls rather than to all concrete. Ladder easy 298 s / normal 218 s / hard 175 s,
+within a second of the previous run on every difficulty.
+
 ## Four more verbs, and the reference documents
 
 Handed the CNCNZ pages for Allied/Soviet units and structures plus the patch history. Costs and
