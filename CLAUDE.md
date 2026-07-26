@@ -2622,3 +2622,31 @@ worth doing in the same change rather than the next one.
 Every cached bake is dropped when content arrives (`_RTS_SPR`, `_RTS_UFIT`, `_RTS_USCALE`,
 `_RTS_TREES`, and the two new caches), or the game keeps drawing the sprites it made before the
 files were loaded.
+
+### Ore, and the walk cycle
+
+**Ore and gems are overlay SHPs** wearing the theatre extension, like the trees: `gold01`–`gold04`
+with **twelve** density frames each, `gem01`–`gem04` with three. Four files × twelve frames is the
+variant axis and the density axis in one place — the file picked per cell is the variant, the
+frame within it is how full that cell is.
+
+Twelve stages is three times what our own sprite had, so **the renderer now asks the sprite set
+how many stages it has** rather than assuming four. Hard-coding `Math.min(3, ...)` worked right up
+until real art arrived and would then have quietly shown a third of every field.
+
+**The walk cycle** is `run: Start 16, Length 6, Facings 8`, kept as its own set rather than folded
+into the standing frames — the renderer picks a stance first and a frame within it second, and a
+flat array cannot express that. It only exists with real artwork; a missing entry just means the
+standing frame keeps being drawn.
+
+`gait` drives the phase, and it has been on every unit since the first week: *MasterDoControls
+marks DO_WALK and DO_CRAWL 'randomstart'*, so a squad does not march in lockstep. It was ported
+long before there were any frames for it to stagger.
+
+### A flaky test, caught by adding a debug line
+
+The walk assertion failed once and then passed on the next run **with only a `console.log` added**
+— which is the signature of a flaky test, not a bug. `rtsGo` picks a random seed, so whether the
+soldier could walk fourteen tiles east depended on the map. It now pins the seed and searches
+outward for somewhere pathable, so it measures the walk cycle rather than the pathfinder's opinion
+of one particular tile. Three consecutive runs, 5/5.

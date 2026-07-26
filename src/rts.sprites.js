@@ -523,7 +523,11 @@ function _sprTrees() {
    left/right/up/down - so clusters run across cell edges and a worked field reads as
    continuous ground rather than a grid of identical stamps. Three variants per stage,
    chosen by a hash of the cell, kill the last of the repetition. */
-function _sprOre(P) {
+function _sprOre(P, gem) {
+  if (typeof _mixOre === 'function') {
+    var real = _mixOre(gem);
+    if (real) return real;
+  }
   var out = [], TS = RTS_TS;
   P = P || RTS_PAL.ore;
   for (var st = 0; st < 4; st++) {
@@ -1496,7 +1500,7 @@ function _sprFx() {
 
 function _rtsSprites() {
   if (_RTS_SPR) return _RTS_SPR;
-  var S = { ore: _sprOre(RTS_PAL.ore), gem: _sprOre(RTS_PAL.gem),
+  var S = { ore: _sprOre(RTS_PAL.ore, false), gem: _sprOre(RTS_PAL.gem, true),
     bld: {}, unit: {}, prone: {}, fx: _sprFx(), pad: {} };
   RTS_STRUCTS.forEach(function (d) { S.pad[d.key] = _sprPad(d.w, d.h); });
   S.bag = _sprSandbag();
@@ -1527,6 +1531,16 @@ function _rtsSprites() {
     RTS_UNITS.forEach(function (d) {
       if (d.kind === 'infantry') S.prone[side][d.key] = _sprUnit(d.key, side, true);
     });
+    /* The walk cycle only exists with real artwork - there is no procedural equivalent, and a
+       missing entry simply means the renderer keeps drawing the standing frame. */
+    S.walk = S.walk || {}; S.walk[side] = {};
+    if (typeof _mixWalk === 'function') {
+      RTS_UNITS.forEach(function (d) {
+        if (d.kind !== 'infantry') return;
+        var w = _mixWalk(d.key, side);
+        if (w) S.walk[side][d.key] = w;
+      });
+    }
   });
   /* One flame set, referenced twice. `_sprFx` cannot call `_sprFire()` itself without
      baking a second identical set of canvases - same pixels, twice the memory, and two
