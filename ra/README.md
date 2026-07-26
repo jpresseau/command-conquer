@@ -106,3 +106,63 @@ The data is the **Red Alert freeware release**, published by EA in 2008 and dist
 OpenRA's own content downloader (`mods/ra-content/installer/downloads.yaml`). The zip's SHA1
 matches that manifest exactly: `aa022b208a3b45b4a45c00fdae22ccf3c6de3e5c`. **No game data is
 committed to this repository** — only the readers.
+
+## Blowfish — the last locked door
+
+Four archives store their index Blowfish-encrypted, and `local.mix` is where the palettes live,
+so this was the difference between palette *indices* and actual colours.
+
+The scheme is a signature check used backwards as key transport. The archive carries an 80-byte
+block after its flags word; that block is "decrypted" with a **public** key (`e = 0x10001`), which
+is the public-key operation, not the private one — anyone can do it, and that is the point. The
+key is not secret, it is just not in the clear. 56 bytes fall out and they are the Blowfish key
+for the index.
+
+The original does this with several hundred lines of hand-rolled 32-bit bignum. JavaScript has
+arbitrary-precision integers, so all of it is `m ** e % n`. **Both directions of the chunking are
+little-endian**, which is the one detail that silently yields plausible-looking garbage if you
+assume otherwise.
+
+Blowfish itself is Schneier's 1993 cipher, unencumbered. Its P-array and S-boxes are the
+hexadecimal digits of pi — a mathematical constant rather than anyone's design.
+
+### The bug that every published test vector missed
+
+The first draft encrypted **correctly** — it reproduced all six of Eric Young's ECB vectors — and
+could not decrypt its own output. The decrypt loop's Feistel halves are the *mirror* of the
+encrypt loop's, not a copy: because encryption ends on a swap, the decryptor's `l` is the
+encryptor's `r`, so undoing round 16 (which modified the encryptor's `l`) has to modify the
+**decryptor's `r`**.
+
+The published vectors only ever test one direction, so they all passed. The suite now asserts
+**both**, on every vector.
+
+A second one landed the moment decryption was switched on: `an encrypted index fails loudly`, an
+assertion written back when the answer was simply "not supported", started **throwing** instead of
+failing — a 64-byte stub walked off the end of its own key block and `BigInt(undefined)` took the
+reader down. A malformed archive has to fail, not throw.
+
+### What opened
+
+| archive | files | named |
+|---|---|---|
+| conquer | 230 | 164 |
+| temperat | 332 | 67 |
+| snow | 332 | 5 |
+| interior | 153 | 9 |
+| **hires** | **162** | **96** |
+| **lores** | **141** | **96** |
+| **local** | **66** | palettes |
+| **speech** | **107** | — |
+| allies / russian | 70 | — |
+
+**1593 files across ten archives, 341 of the 477 dictionary names present.** `temperat.pal`,
+`snow.pal` and `interior.pal` all recovered — and the infantry (`e1`, `e2`, `e3`, `e6`, `medi`,
+`thf`) turned out to be in `hires.mix`, which is why they were missing from `conquer.mix` earlier.
+
+Rendering `2tnk`, `4tnk`, `harv`, `heli`, `powr`, `proc`, `fact` and `dome` through
+`temperat.pal` produces the real artwork in its real colours. The gold and green on the vehicles
+are the **team-remap range** — the palette slots RA rewrites per player — so team colouring will
+work exactly the way the original's does.
+
+**No game data is committed. Only the readers.**
