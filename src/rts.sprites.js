@@ -41,7 +41,10 @@ var RTS_PAL = {
      replace these numbers wholesale and the structure would not have to change. */
   grass: ['#5c6b39', '#68784a', '#4e5c2e', '#748459', '#434f26'],
   dirt:  ['#8a7748', '#9c8a5c', '#786538', '#ad9c72'],
-  rock:  ['#7b7360', '#8d8571', '#5f594a', '#a09884'],
+  /* Five tones, not four: the fifth is a near-black used only at the base of a cliff face.
+     Warmed towards brown as well - the neutral grey read as poured concrete next to the
+     olive ground, and the reference's rock is a warm stone. */
+  rock:  ['#7a6f58', '#8e8368', '#4f4839', '#aa9e81', '#332e26'],
   bush:  ['#48562c', '#3a4622', '#5a6b38'],
   /* Canopy stays clearly darker than the grass - an earlier set sat within a few points of
      the ground colour and the whole forest disappeared into texture. But "darker" was being
@@ -333,51 +336,112 @@ function _rtsBakeTerrain(G) {
     _sprRect(g, wx + 1, wy + 1, wl - 2, 1, RTS_PAL.water[4]);
   }
 
-  /* --- rock ridges. Drawn bigger than their cell and merged with their neighbours, so a
-         run of blocked cells reads as one wall rather than a row of boxes. The south face
-         is a hard dark band: that shadow is what makes a ridge read as height. --- */
-  var rockCv = _sprMake(S, S), rg = rockCv.g, RK = RTS_PAL.rock;
+  /* --- rock ridges. --------------------------------------------------------------------
+     Rewritten off a continuous COVERAGE FIELD rather than per-cell rectangles. The old version
+     drew each rock cell as an axis-aligned box clipped against its neighbours, and rendered it
+     read as a paved plaza: you could count the 24-pixel cells along every edge, the whole
+     plateau was one flat grey, and the "drop" was a thin kerb along the bottom.
+
+     `cov` samples the cell mask at cell CENTRES and interpolates bilinearly, so its 0.5 contour
+     lands exactly on the cell boundaries - the painted rock still matches the rock the
+     pathfinder blocks, which is not negotiable - but it arrives there as a smooth curve instead
+     of a staircase, and a noise term then breaks it up.
+
+     Every other feature is read off that same field by asking "is there still rock this many
+     pixels away": the sunlit north lip, the side walls, and the tall south drop, whose HEIGHT
+     is how far the rock continues below - so a deep massif gets a full-height cliff face and a
+     thin spur gets a short one, which is what makes a ridge read as a landform rather than as
+     a shape with a dark line under it. --- */
+  var RK = RTS_PAL.rock;
+  var rockCv = _sprMake(S, S), rg = rockCv.g;
+  var rimg = rg.createImageData(S, S), rd = rimg.data;
   function isRock(x, z) { return tileAt(x, z) === RTS_T_ROCK; }
+  function rk(x, z) { return isRock(x, z) ? 1 : 0; }
+  function cov(px, py) {
+    var u = px / TS - 0.5, v = py / TS - 0.5;
+    var x0 = Math.floor(u), y0 = Math.floor(v), fx = u - x0, fy = v - y0;
+    fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy);
+    var a = rk(x0, y0), b = rk(x0 + 1, y0), c2 = rk(x0, y0 + 1), e2 = rk(x0 + 1, y0 + 1);
+    return (a + (b - a) * fx) * (1 - fy) + (c2 + (e2 - c2) * fx) * fy;
+  }
+  /* The noise amplitude is deliberately modest. At 0.55 the boundary wandered most of a cell
+     and rock was painted over ground a harvester could drive through; 0.34 keeps every wander
+     inside about a third of a cell, which is enough to kill the staircase and small enough
+     that what you see is still what blocks. */
+  function fld(px, py) {
+    return cov(px, py) + (_sprVN(px, py, 9, seed + 81) - 0.5) * 0.34;
+  }
+  var FACE = 11;                          /* the tallest a south drop is allowed to be */
+  /* The field is thresholded ONCE per 2x2 block into this mask, because every feature below
+     wants to know the answer at five or six nearby points and evaluating it there directly
+     cost 353 ms of the terrain bake. Zero is the correct value everywhere it is not filled:
+     two cells out from any rock, cov is 0 and the noise can only reach 0.17. */
+  var HS = S >> 1, FM = new Uint8Array(HS * HS);
+  var NEAR = new Uint8Array(N * N);       /* cells that can hold painted rock, worked out once */
+  for (tz = 0; tz < N; tz++)
+    for (tx = 0; tx < N; tx++)
+      if (isRock(tx, tz))
+        for (var mz = -1; mz <= 1; mz++)
+          for (var mx = -1; mx <= 1; mx++)
+            if (_rtsInB(tx + mx, tz + mz)) NEAR[(tz + mz) * N + (tx + mx)] = 1;
+  function solid(px, py) {
+    var hx = px >> 1, hy = py >> 1;
+    return (hx < 0 || hy < 0 || hx >= HS || hy >= HS) ? 0 : FM[hy * HS + hx];
+  }
   for (tz = 0; tz < N; tz++) {
     for (tx = 0; tx < N; tx++) {
-      if (!isRock(tx, tz)) continue;
-      var ox = tx * TS, oy = tz * TS;
-      /* Extend to the cell edge wherever the neighbour is also rock, and pull in with a
-         ragged margin where it is not. Drawing each cell as an ellipse - the first attempt -
-         turned a ridge into a string of grey bubbles; a plateau needs flat tops and
-         straight-ish edges to read as stone. */
-      var l = isRock(tx - 1, tz) ? 0 : 2 + (_sprHash(tx, tz, seed + 61) * 3 | 0);
-      var r2 = isRock(tx + 1, tz) ? 0 : 2 + (_sprHash(tx, tz, seed + 62) * 3 | 0);
-      var u = isRock(tx, tz - 1) ? 0 : 2 + (_sprHash(tx, tz, seed + 63) * 3 | 0);
-      var dn = isRock(tx, tz + 1) ? 0 : 3 + (_sprHash(tx, tz, seed + 64) * 3 | 0);
-      var bx = ox + l, by = oy + u, bw = TS - l - r2, bh = TS - u - dn;
-      /* Mottled stone, in 2px blocks. Filling the cell with one flat grey and outlining it
-         turned a ridge into a paved plaza with visible cell borders - the same tiling
-         artefact the ground had, just in grey. The texture has to cross the cell seam. */
-      for (var sy = 0; sy < bh; sy += 2) {
-        for (var sx = 0; sx < bw; sx += 2) {
-          var gx2 = bx + sx, gy2 = by + sy;
-          var hv2 = _sprHash(gx2 >> 1, gy2 >> 1, seed + 71);
-          _sprRect(rg, gx2, gy2, 2, 2, hv2 < 0.22 ? RK[2] : (hv2 < 0.68 ? RK[0] : RK[1]));
-        }
-      }
-      /* Lighting only on faces that are actually exposed. */
-      if (!isRock(tx, tz - 1)) {
-        _sprRect(rg, bx, by, bw, 2, RK[3]);                        /* sunlit north lip */
-        _sprRect(rg, bx, by + 2, bw, 1, RK[1]);
-      }
-      if (!isRock(tx - 1, tz)) _sprRect(rg, bx, by, 2, bh, RK[1]);
-      if (!isRock(tx + 1, tz)) _sprRect(rg, bx + bw - 2, by, 2, bh, RK[2]);
-      if (!isRock(tx, tz + 1)) {                                   /* the drop, in shadow */
-        _sprRect(rg, bx, by + bh - 8, bw, 8, RK[2]);
-        _sprRect(rg, bx, by + bh - 8, bw, 1, RK[0]);
-        for (var cf = 0; cf < 4; cf++) {                           /* vertical fissures */
-          var fxx = bx + 2 + Math.floor(cf * (bw - 4) / 3);
-          _sprRect(rg, fxx, by + bh - 7, 1, 5 + (_sprHash(cf, tx + tz, seed + 77) * 2 | 0), RK[0]);
+      if (!NEAR[tz * N + tx]) continue;
+      for (var fy2 = tz * TS; fy2 < tz * TS + TS; fy2 += 2)
+        for (var fx2 = tx * TS; fx2 < tx * TS + TS; fx2 += 2)
+          if (fld(fx2, fy2) > 0.5) FM[(fy2 >> 1) * HS + (fx2 >> 1)] = 1;
+    }
+  }
+  for (tz = 0; tz < N; tz++) {
+    for (tx = 0; tx < N; tx++) {
+      if (!NEAR[tz * N + tx]) continue;
+      for (var py = tz * TS; py < tz * TS + TS; py += 2) {
+        for (var px = tx * TS; px < tx * TS + TS; px += 2) {
+          if (!solid(px, py)) continue;
+          /* how far the rock continues downward decides the height of the drop */
+          var below = 0;
+          while (below < FACE && solid(px, py + below + 2)) below += 2;
+          var grain = _sprHash(px >> 1, py >> 1, seed + 71);
+          var col;
+          if (below < FACE) {
+            /* THE SOUTH FACE. Vertical striations from a hash on x only, so they run down the
+               cliff instead of speckling it - that verticality is most of what says "wall". */
+            var strip = _sprHash(px >> 1, 0, seed + 91);
+            var deep = below < FACE * 0.45;
+            col = strip < 0.30 ? RK[4] : (strip < 0.62 ? RK[2] : RK[0]);
+            if (deep) col = strip < 0.45 ? RK[4] : RK[2];
+          } else if (!solid(px, py - 3)) {
+            col = RK[3];                                        /* sunlit north lip */
+          } else if (!solid(px, py - 7)) {
+            col = RK[1];                                        /* the shelf under it */
+          } else if (!solid(px - 4, py) || !solid(px + 4, py)) {
+            col = !solid(px - 4, py) ? RK[1] : RK[2];           /* the two side walls */
+          } else {
+            /* Plateau top. A low-frequency band picks the broad facet and the grain only
+               dithers within it, so the top has large light and dark planes across it rather
+               than the single flat grey it used to be. */
+            var facet = _sprVN(px, py, 34, seed + 83);
+            col = facet < 0.36 ? (grain < 0.5 ? RK[2] : RK[0])
+                : (facet < 0.68 ? (grain < 0.5 ? RK[0] : RK[1])
+                                : (grain < 0.35 ? RK[1] : RK[3]));
+          }
+          var cc = _sprCol(col);
+          for (var ry = 0; ry < 2; ry++) {
+            var rrow = (py + ry) * S;
+            for (var rx = 0; rx < 2; rx++) {
+              var ro = (rrow + px + rx) * 4;
+              rd[ro] = cc[0]; rd[ro + 1] = cc[1]; rd[ro + 2] = cc[2]; rd[ro + 3] = 255;
+            }
+          }
         }
       }
     }
   }
+  rg.putImageData(rimg, 0, 0);
   _sprEdge(rockCv.c);
   g.drawImage(rockCv.c, 0, 0);
 
