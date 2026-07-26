@@ -212,6 +212,15 @@ var RTS_UNITS = [
      Service Depot, as in the original, so it sits behind the same building that repairs it.
      `deploy` is the whole unit: it exists to put a Command Yard somewhere you do not have one,
      which is the only way back into the game after losing the first. */
+  /* Armoured Personnel Carrier. UDATA.CPP's UnitAPC is IsCrusher with no turret; the transport
+     rules are in UNIT.CPP - capacity via Max_Passengers, and, in Death, the half of the branch
+     that matters: when a TRANSPORT dies its infantry passengers are unlimboed at the wreck and
+     scatter rather than dying with it. That one rule is what makes an APC a good buy instead of
+     a coffin, so it is implemented rather than approximated. */
+  { key:'apc',      name:'APC',           kind:'vehicle',  cost:850,  build:10, hp:350,  speed:14,  turn:2.4,r:1.9, sight:16, weapon:'mg',
+    needs:['barracks'], carries:5, crush:true,
+    armour:'heavy',
+    desc:'Carries five infantry. Fast and tough; its passengers walk away if it dies.' },
   { key:'mcv',      name:'Mobile Yard',   kind:'vehicle',  cost:2500, build:26, hp:600,  speed:5.5, turn:1.2,r:2.2, sight:14, weapon:null,
     needs:['depot'], deploy:'yard', crush:true,
     armour:'light',

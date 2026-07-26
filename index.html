@@ -453,6 +453,15 @@ var RTS_UNITS = [
      Service Depot, as in the original, so it sits behind the same building that repairs it.
      `deploy` is the whole unit: it exists to put a Command Yard somewhere you do not have one,
      which is the only way back into the game after losing the first. */
+  /* Armoured Personnel Carrier. UDATA.CPP's UnitAPC is IsCrusher with no turret; the transport
+     rules are in UNIT.CPP - capacity via Max_Passengers, and, in Death, the half of the branch
+     that matters: when a TRANSPORT dies its infantry passengers are unlimboed at the wreck and
+     scatter rather than dying with it. That one rule is what makes an APC a good buy instead of
+     a coffin, so it is implemented rather than approximated. */
+  { key:'apc',      name:'APC',           kind:'vehicle',  cost:850,  build:10, hp:350,  speed:14,  turn:2.4,r:1.9, sight:16, weapon:'mg',
+    needs:['barracks'], carries:5, crush:true,
+    armour:'heavy',
+    desc:'Carries five infantry. Fast and tough; its passengers walk away if it dies.' },
   { key:'mcv',      name:'Mobile Yard',   kind:'vehicle',  cost:2500, build:26, hp:600,  speed:5.5, turn:1.2,r:2.2, sight:14, weapon:null,
     needs:['depot'], deploy:'yard', crush:true,
     armour:'light',
@@ -2785,7 +2794,7 @@ function _sprBuilding(key, side) {
    hundred hand-tuned coordinates, and it cannot silently change the unit's proportions. */
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
-  dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46
+  dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -3034,6 +3043,25 @@ function _sprUnitModel(key, side, prone, part) {
     _r3Box(m, -1.5, 6.0, 0, 7.5, 2.8, 7.0, DK[2], DK[1]);          /* open cockpit well */
     _r3Box(m, -4.8, 6.0, 0, 1.0, 4.6, 7.0, TM[1], TM[3]);          /* roll hoop */
     _r3Box(m, 3.2, 8.4, 0, 8.5, 1.3, 1.3, DK[1], DK[3]);           /* pintle gun */
+
+  } else if (key === 'apc') {
+    /* A closed box on tracks with a rear ramp and a small cupola gun - no turret (UDATA.CPP
+       has IsTurretEquipped false), so the read is "a tank with no gun on top", which is
+       exactly what it is. The ramp is the tell that it carries something. */
+    tracks(17, 6.0, 5, 2.3);
+    _r3Slab(m, 0, 3.2, 0, 16.5, 7.5, 10.5, 1.2, VH[0], VH[1]);     /* the box */
+    _r3Box(m, 0, 10.7, 0, 14.5, 1.2, 9.0, VH[3], VH[3]);           /* roof */
+    _r3Box(m, 0, 11.9, 0, 6, 1.2, 4, TM[1], TM[3]);                /* team cap */
+    _r3Box(m, 7.4, 3.2, 0, 3.0, 6.6, 9.0, VH[1], VH[3]);           /* sloped nose */
+    _r3Box(m, 9.6, 6.6, 0, 1.4, 2.6, 6.4, RTS_PAL.glass, RTS_PAL.glass);
+    _r3Box(m, -8.6, 1.4, 0, 3.2, 6.0, 8.0, DK[2], DK[0]);          /* the rear ramp */
+    for (i = 0; i < 3; i++)                                        /* ramp ribs */
+      _r3Box(m, -9.4, 2.0 + i * 1.8, 0, 1.2, 0.9, 7.4, GN[2], GN[1]);
+    _r3Cyl(m, 2.0, 10.7, -2.4, 2.4, 2.4, VH[2], VH[3], 14);        /* cupola */
+    /* The gun is the one thing separating this box from the MCV's box at a glance, so it is
+       longer and darker than the little pintle it started as. */
+    _r3Box(m, 8.0, 11.4, -2.4, 10.0, 1.3, 1.3, DK[1], DK[3]);      /* its gun */
+    _r3Box(m, 12.6, 11.3, -2.4, 1.6, 1.6, 1.6, GN[0], GN[3]);      /* muzzle */
 
   } else if (key === 'mcv') {
     /* A slab-sided transporter with the yard's gantry folded flat along its back - IsGigundo
@@ -4899,6 +4927,7 @@ function _rtsKill(e) {
   var G = window._rtsG;
   if (e.dead) return;
   e.dead = true;
+  if (e.cargo && e.cargo.length) _rtsSpillCargo(e);   /* the passengers walk away from it */
   if (e.type === 'struct') { _rtsFootprint(e, false); _rtsRecalcPower(e.side); }
   if (e.type === 'struct' && e.selling) {
     /* Sold, not destroyed: a puff of dust where it stood, and no fireworks. */
@@ -5086,6 +5115,60 @@ function _rtsSell(e) {
   if (e.side === 'player' && typeof _rtsSfx === 'function') _rtsSfx('build');
   return true;
 }
+/* ------------------------------------------------------------------ transport --
+   UNIT.CPP's passenger rules. A boarded passenger stays in G.ents - it is NOT spliced out -
+   and carries `inside`, a reference to its transport. Keeping it in the entity list is what
+   makes saving work for nothing: the save encoder walks G.ents and turns entity references
+   into ids, so a passenger that had been lifted out of the list would round-trip as an inline
+   copy and come back as something that merely looked like a unit. The cost is that every place
+   which treats a unit as being ON THE MAP has to say so, and there are only four: the tick, the
+   draw list, target acquisition and selection. */
+function _rtsAboard(e) { return !!(e && e.inside); }
+function _rtsCargoCount(t) { return t && t.cargo ? t.cargo.length : 0; }
+function _rtsCanBoard(inf, t) {
+  if (!inf || !t || inf.dead || t.dead || inf === t) return false;
+  if (inf.side !== t.side || inf.inside) return false;
+  if ((rtsUnitDef(inf.def) || {}).kind !== 'infantry') return false;
+  var cap = (rtsUnitDef(t.def) || {}).carries || 0;
+  return cap > 0 && _rtsCargoCount(t) < cap;
+}
+function _rtsBoard(inf, t) {
+  if (!_rtsCanBoard(inf, t)) return false;
+  var G = window._rtsG;
+  if (!t.cargo) t.cargo = [];
+  t.cargo.push(inf);
+  inf.inside = t; inf.order = null; inf.target = null; inf.path = null; inf.prone = 0;
+  var si = G.sel.indexOf(inf); if (si >= 0) G.sel.splice(si, 1);
+  return true;
+}
+/* Detach_Object + Unlimbo + Scatter: passengers step out around the transport, one per free
+   spot, and are given the guard/hunt behaviour of a unit that has just arrived. */
+function _rtsUnload(t, force) {
+  /* `force` is not a nicety. _rtsKill sets dead BEFORE it spills the cargo, so a plain
+     "is it alive" guard here rejected the one call this rule exists for and every passenger
+     stayed sealed in the wreck. The suite caught it; reading the code did not. */
+  if (!t || (t.dead && !force) || !t.cargo || !t.cargo.length) return 0;
+  var G = window._rtsG, n = 0;
+  while (t.cargo.length) {
+    var inf = t.cargo.pop();
+    inf.inside = null;
+    if (inf.dead) continue;
+    var a = (n / 8) * Math.PI * 2 + t.rot, r = RTS_TILE * 1.1;
+    inf.x = t.x + Math.cos(a) * r; inf.z = t.z + Math.sin(a) * r;
+    inf.order = null; inf.path = null; inf.target = null;
+    _rtsScatter(inf);
+    n++;
+  }
+  return n;
+}
+/* UnitClass::Death, the transport half of the branch: infantry passengers survive and scatter,
+   anything else is recorded as a kill and deleted. Ours can only carry infantry, so in practice
+   everyone walks - which is the point of the unit. */
+function _rtsSpillCargo(t) {
+  if (!t || !t.cargo || !t.cargo.length) return 0;
+  return _rtsUnload(t, true);
+}
+
 /* UNIT.CPP Try_To_Deploy. An MCV becomes a Command Yard, and three details from the original
    are worth having exactly:
 
@@ -5453,6 +5536,16 @@ function _rtsOrderMove(e, x, z, attackMove) {
   e.path = _rtsPath(e.x, e.z, x, z); e.pi = 0;
   if (!e.path) { e.order = null; }
 }
+/* Ordering infantry onto a friendly transport is a board order, not an attack - the original
+   runs it over the radio (RADIO_TRYING_TO_LOAD / RADIO_ROGER). The passenger walks there and
+   boards when it arrives, which is handled in the move completion below. */
+function _rtsOrderBoard(inf, t) {
+  if (!_rtsCanBoard(inf, t)) return false;
+  inf.order = 'board'; inf.target = t; inf.hstate = null;
+  inf.goal = { x:t.x, z:t.z };
+  inf.path = _rtsPath(inf.x, inf.z, t.x, t.z); inf.pi = 0;
+  return true;
+}
 function _rtsOrderAttack(e, tgt) {
   if (e.type !== 'unit') return;
   var d = rtsUnitDef(e.def);
@@ -5574,7 +5667,7 @@ function _rtsFindTarget(e, range, w) {
   var G = window._rtsG, foe = _rtsEnemyOf(e.side), best = null, bv = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
-    if (o.dead || o.side !== foe) continue;
+    if (o.dead || o.side !== foe || o.inside) continue;
     /* "Dogs can only attack infantrymen" - INFANTRY.CPP turns ACTION_ATTACK into ACTION_NONE
        against anything else. Without this a dog with a one-bite kill would delete tanks. */
     if (w && w.maul && !(o.type === 'unit' && (rtsUnitDef(o.def) || {}).kind === 'infantry')) continue;
@@ -6118,6 +6211,16 @@ function _rtsSeparate(dt) {
   }
 }
 function _rtsUpdateUnit(e, dt) {
+  /* Cargo rides along. Their coordinates are kept in step with the transport rather than left
+     where they boarded, so anything that reads a passenger's position - the unload ring, a
+     save, a trigger - gets the truth instead of a stale spot on the map. */
+  if (e.cargo && e.cargo.length) {
+    for (var _ci = e.cargo.length - 1; _ci >= 0; _ci--) {
+      var _p = e.cargo[_ci];
+      if (!_p || _p.dead) { e.cargo.splice(_ci, 1); continue; }
+      _p.x = e.x; _p.z = e.z; _p.rot = e.rot;
+    }
+  }
   var G = window._rtsG, d = rtsUnitDef(e.def), w = d.weapon ? RTS_WEAPONS[d.weapon] : null;
   if (e.cool > 0) e.cool -= dt;
   if (e.fire > 0) e.fire -= dt;
@@ -6228,6 +6331,20 @@ function _rtsUpdateUnit(e, dt) {
     /* Not capturing: an engineer still walks, but never acquires a target. */
     if (e.path) { _rtsSteer(e, dt, d); if (!e.path) e.order = null; }
     return;
+  }
+
+  /* ---- boarding ---- */
+  if (e.order === 'board') {
+    var tr = e.target;
+    if (!tr || tr.dead || !_rtsCanBoard(e, tr)) { e.order = null; e.target = null; e.path = null; }
+    else if (_rtsRangeTo(e, tr) <= RTS_TILE * 1.6) { _rtsBoard(e, tr); return; }
+    else {
+      /* the transport moves, so the destination is re-aimed rather than pathed once */
+      if (!e.path || Math.hypot(tr.x - e.goal.x, tr.z - e.goal.z) > RTS_TILE) {
+        e.goal = { x:tr.x, z:tr.z };
+        e.path = _rtsPath(e.x, e.z, tr.x, tr.z); e.pi = 0;
+      }
+    }
   }
 
   /* ---- engage ---- */
@@ -8041,6 +8158,7 @@ function _rtsTick(dt) {
   for (i = 0; i < G.ents.length; i++) {
     e = G.ents[i];
     if (e.dead) continue;
+    if (e.inside) continue;                      /* riding in a transport - see _rtsAboard */
     if (e.type === 'unit') _rtsUpdateUnit(e, dt); else _rtsUpdateStruct(e, dt);
   }
   _rtsSeparate(dt);
@@ -8321,6 +8439,7 @@ function _rtsRFrame(dt) {
     /* CountDown: a destroyed structure is still on the map, burning, for a moment. Dropping
        it on the frame it died left its own explosion hanging over bare grass. */
     if (e.dead && !(e.type === 'struct' && e.wreck > 0)) continue;
+    if (e.inside) continue;                /* riding inside a transport */
     if (!_rtsEntSeen(e)) continue;         /* out of sight, off the screen */
     if (e.z < R.focus.z - R.H / z || e.z > R.focus.z + R.H / z) continue;
     if (e.x < R.focus.x - R.W / z || e.x > R.focus.x + R.W / z) continue;
@@ -9167,7 +9286,7 @@ function _rtsBindInput() {
     var mine = [], i;
     for (i = 0; i < G.sel.length; i++) {
       var sv = G.sel[i];
-      if (sv && !sv.dead && sv.side === 'player' && sv.type === 'unit') mine.push(sv);
+      if (sv && !sv.dead && !sv.inside && sv.side === 'player' && sv.type === 'unit') mine.push(sv);
     }
     if (!mine.length) return false;
     var w = miniWorld(e), tx = _rtsTX(w.x), tz = _rtsTX(w.z);
@@ -9178,7 +9297,7 @@ function _rtsBindInput() {
     if (mapped) {
       for (i = 0; i < G.ents.length; i++) {
         var o = G.ents[i];
-        if (o.dead || o.side === 'player') continue;
+        if (o.dead || o.inside || o.side === 'player') continue;
         if (o.type === 'struct') {
           var sd = rtsStructDef(o.def);
           if (tx >= o.tx && tx < o.tx + sd.w && tz >= o.tz && tz < o.tz + sd.h) { tgt = o; break; }
@@ -9234,6 +9353,14 @@ function _rtsKeyDown(e) {
   if ((k === 's' || k === 'S') && (e.ctrlKey || e.metaKey)) { rtsSaveGame(); e.preventDefault(); return; }
   /* N walks the army, shift+N walks it backwards. */
   if (k === 'n' || k === 'N') { _rtsCycleObject(e.shiftKey ? -1 : 1); e.preventDefault(); }
+  /* U unloads every selected transport that is carrying anything. */
+  if (k === 'u' || k === 'U') {
+    var Gu = window._rtsG, out = 0;
+    if (Gu && Gu.sel) Gu.sel.forEach(function (t) {
+      if (t.side === 'player' && t.type === 'unit') out += _rtsUnload(t);
+    });
+    if (out) e.preventDefault();
+  }
   /* D deploys every selected vehicle that can - an MCV into a Command Yard. */
   if (k === 'd' || k === 'D') {
     var G = window._rtsG, did = 0;
@@ -9312,7 +9439,7 @@ function _rtsKeyUp(e) {
    bulk selection in the originals is filtered through it, which is why a rubber band dragged
    across your base grabs the tanks parked in it and leaves the barracks alone. One predicate,
    used by the band, the double-click, select-all and the object cycle, so they cannot drift. */
-function _rtsIsArmy(e) { return !!e && !e.dead && e.side === 'player' && e.type === 'unit'; }
+function _rtsIsArmy(e) { return !!e && !e.dead && !e.inside && e.side === 'player' && e.type === 'unit'; }
 
 /* On screen right now. DISPLAY.CPP scopes double-click selection to the tactical view - it is
    "all the ones I can see", not "all the ones I own"; select-all is the command for that. */
@@ -9439,7 +9566,11 @@ function _rtsRightClick(mx, my) {
         else if (md.steal && tgt.def === md.stealFrom) job = 'capture';
         else if (md.demo) job = 'demo';
       }
-      if (job) {
+      /* Infantry sent at one of your own transports get in it. This has to come before the
+         attack order or right-clicking your own APC is an order to shoot it. */
+      if (tgt.side === mu.side && _rtsCanBoard(mu, tgt) && _rtsOrderBoard(mu, tgt)) {
+        special++;
+      } else if (job) {
         mu.order = job; mu.target = tgt; mu.path = null; mu.goal = null; mu.susp = null;
         special++; if (job === 'capture') capped++;
       } else _rtsOrderAttack(mu, tgt);
@@ -9496,7 +9627,7 @@ function _rtsDrawHud(dt) {
   /* health bars: always for selected, and for anything damaged */
   for (i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.dead) continue;
+    if (e.dead || e.inside) continue;      /* no health bar for a passenger */
     var selected = G.sel.indexOf(e) >= 0;
     var hurt = e.hp < e.maxHp - 0.5;
     if (!selected && !hurt) continue;
@@ -9589,7 +9720,7 @@ function _rtsActionAt(mx, my) {
   /* Runs inside the render loop, so one bad entry must not take the whole frame down. */
   for (i = 0; i < G.sel.length; i++) {
     var sv = G.sel[i];
-    if (sv && !sv.dead && sv.side === 'player' && sv.type === 'unit') mine.push(sv);
+    if (sv && !sv.dead && !sv.inside && sv.side === 'player' && sv.type === 'unit') mine.push(sv);
   }
   if (!mine.length) return (tgt && !tgt.dead) ? 'select' : null;
   if (tgt && tgt.side === 'enemy') return 'attack';

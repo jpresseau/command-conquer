@@ -2399,3 +2399,57 @@ Inside seed noise. **The dog change is invisible to this ladder and that is expe
 player builds no infantry for a dog to kill — which is the whole reason it has its own suite
 (7 assertions) rather than being signed off on the ladder. The MCV likewise: the AI never buys
 one, so an idle-player ladder cannot see it. 8 assertions instead.
+
+## The APC, and a transport subsystem
+
+`UNIT.CPP`'s passenger rules. The one that matters is in `UnitClass::Death`, and it is why an
+APC is worth buying rather than a coffin:
+
+```cpp
+} else {
+    while (Is_Something_Attached()) {
+        FootClass * object = Detach_Object();
+        if (object->Is_Infantry() && object->Unlimbo(Coord, DIR_N)) {
+            object->Scatter(0, true);
+        } else {
+            object->Record_The_Kill(source);
+            delete object;
+        }
+    }
+}
+```
+
+**Infantry passengers survive the transport's destruction** and scatter out of the wreck. Anything
+else is recorded as a kill. Ours can only carry infantry, so in practice everybody walks — which
+is the whole point of the unit.
+
+### Passengers stay in `G.ents`
+
+A boarded passenger is **not** spliced out of the entity list; it carries `inside`, a reference to
+its transport. That is a save decision, not a style one: the save encoder walks `G.ents` and turns
+entity references into ids, so a passenger lifted out of the list would round-trip as an inline
+*copy* and come back as something that merely resembled a unit — with `byId` not knowing about it
+and its identity broken against anything holding a reference.
+
+The cost is that every place treating a unit as being ON THE MAP has to say so, and it turned out
+to be only six: the tick, the draw list, target acquisition, and three selection paths
+(`_rtsIsArmy`, the click scan, the overlay pass). Two assertions pin the save behaviour — that a
+loaded APC comes back with its cargo, and that the passengers come back **by identity** rather
+than as copies.
+
+### The bug the suite caught and reading the code did not
+
+`_rtsUnload` guarded on `if (t.dead) return 0` — perfectly sensible — and `_rtsKill` sets `dead`
+**before** it spills the cargo. So the guard rejected the one call the whole rule exists for, and
+every passenger stayed sealed in the wreck. Five of five died; the assertion said so immediately.
+`_rtsUnload(t, force)` now takes the flag, and `_rtsSpillCargo` passes it.
+
+That is the same lesson as the production deadlock and the dangling `ChainTo`: **assert on the
+outcome you want, not on the mechanism you happened to build.** "Unloading returns everyone"
+passed the whole time — it was testing a live transport.
+
+### Measuring
+
+Ladder unchanged at **329 / 246 / 214**, which is expected for the same reason as the MCV: the AI
+does not buy APCs and an idle player builds nothing. The transport suite is 13 assertions;
+`clip.js` is 1184 frames; the save suite is 31 and still green.

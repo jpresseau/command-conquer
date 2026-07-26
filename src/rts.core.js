@@ -1202,6 +1202,7 @@ function _rtsKill(e) {
   var G = window._rtsG;
   if (e.dead) return;
   e.dead = true;
+  if (e.cargo && e.cargo.length) _rtsSpillCargo(e);   /* the passengers walk away from it */
   if (e.type === 'struct') { _rtsFootprint(e, false); _rtsRecalcPower(e.side); }
   if (e.type === 'struct' && e.selling) {
     /* Sold, not destroyed: a puff of dust where it stood, and no fireworks. */
@@ -1389,6 +1390,60 @@ function _rtsSell(e) {
   if (e.side === 'player' && typeof _rtsSfx === 'function') _rtsSfx('build');
   return true;
 }
+/* ------------------------------------------------------------------ transport --
+   UNIT.CPP's passenger rules. A boarded passenger stays in G.ents - it is NOT spliced out -
+   and carries `inside`, a reference to its transport. Keeping it in the entity list is what
+   makes saving work for nothing: the save encoder walks G.ents and turns entity references
+   into ids, so a passenger that had been lifted out of the list would round-trip as an inline
+   copy and come back as something that merely looked like a unit. The cost is that every place
+   which treats a unit as being ON THE MAP has to say so, and there are only four: the tick, the
+   draw list, target acquisition and selection. */
+function _rtsAboard(e) { return !!(e && e.inside); }
+function _rtsCargoCount(t) { return t && t.cargo ? t.cargo.length : 0; }
+function _rtsCanBoard(inf, t) {
+  if (!inf || !t || inf.dead || t.dead || inf === t) return false;
+  if (inf.side !== t.side || inf.inside) return false;
+  if ((rtsUnitDef(inf.def) || {}).kind !== 'infantry') return false;
+  var cap = (rtsUnitDef(t.def) || {}).carries || 0;
+  return cap > 0 && _rtsCargoCount(t) < cap;
+}
+function _rtsBoard(inf, t) {
+  if (!_rtsCanBoard(inf, t)) return false;
+  var G = window._rtsG;
+  if (!t.cargo) t.cargo = [];
+  t.cargo.push(inf);
+  inf.inside = t; inf.order = null; inf.target = null; inf.path = null; inf.prone = 0;
+  var si = G.sel.indexOf(inf); if (si >= 0) G.sel.splice(si, 1);
+  return true;
+}
+/* Detach_Object + Unlimbo + Scatter: passengers step out around the transport, one per free
+   spot, and are given the guard/hunt behaviour of a unit that has just arrived. */
+function _rtsUnload(t, force) {
+  /* `force` is not a nicety. _rtsKill sets dead BEFORE it spills the cargo, so a plain
+     "is it alive" guard here rejected the one call this rule exists for and every passenger
+     stayed sealed in the wreck. The suite caught it; reading the code did not. */
+  if (!t || (t.dead && !force) || !t.cargo || !t.cargo.length) return 0;
+  var G = window._rtsG, n = 0;
+  while (t.cargo.length) {
+    var inf = t.cargo.pop();
+    inf.inside = null;
+    if (inf.dead) continue;
+    var a = (n / 8) * Math.PI * 2 + t.rot, r = RTS_TILE * 1.1;
+    inf.x = t.x + Math.cos(a) * r; inf.z = t.z + Math.sin(a) * r;
+    inf.order = null; inf.path = null; inf.target = null;
+    _rtsScatter(inf);
+    n++;
+  }
+  return n;
+}
+/* UnitClass::Death, the transport half of the branch: infantry passengers survive and scatter,
+   anything else is recorded as a kill and deleted. Ours can only carry infantry, so in practice
+   everyone walks - which is the point of the unit. */
+function _rtsSpillCargo(t) {
+  if (!t || !t.cargo || !t.cargo.length) return 0;
+  return _rtsUnload(t, true);
+}
+
 /* UNIT.CPP Try_To_Deploy. An MCV becomes a Command Yard, and three details from the original
    are worth having exactly:
 
@@ -1756,6 +1811,16 @@ function _rtsOrderMove(e, x, z, attackMove) {
   e.path = _rtsPath(e.x, e.z, x, z); e.pi = 0;
   if (!e.path) { e.order = null; }
 }
+/* Ordering infantry onto a friendly transport is a board order, not an attack - the original
+   runs it over the radio (RADIO_TRYING_TO_LOAD / RADIO_ROGER). The passenger walks there and
+   boards when it arrives, which is handled in the move completion below. */
+function _rtsOrderBoard(inf, t) {
+  if (!_rtsCanBoard(inf, t)) return false;
+  inf.order = 'board'; inf.target = t; inf.hstate = null;
+  inf.goal = { x:t.x, z:t.z };
+  inf.path = _rtsPath(inf.x, inf.z, t.x, t.z); inf.pi = 0;
+  return true;
+}
 function _rtsOrderAttack(e, tgt) {
   if (e.type !== 'unit') return;
   var d = rtsUnitDef(e.def);
@@ -1877,7 +1942,7 @@ function _rtsFindTarget(e, range, w) {
   var G = window._rtsG, foe = _rtsEnemyOf(e.side), best = null, bv = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
-    if (o.dead || o.side !== foe) continue;
+    if (o.dead || o.side !== foe || o.inside) continue;
     /* "Dogs can only attack infantrymen" - INFANTRY.CPP turns ACTION_ATTACK into ACTION_NONE
        against anything else. Without this a dog with a one-bite kill would delete tanks. */
     if (w && w.maul && !(o.type === 'unit' && (rtsUnitDef(o.def) || {}).kind === 'infantry')) continue;
@@ -2421,6 +2486,16 @@ function _rtsSeparate(dt) {
   }
 }
 function _rtsUpdateUnit(e, dt) {
+  /* Cargo rides along. Their coordinates are kept in step with the transport rather than left
+     where they boarded, so anything that reads a passenger's position - the unload ring, a
+     save, a trigger - gets the truth instead of a stale spot on the map. */
+  if (e.cargo && e.cargo.length) {
+    for (var _ci = e.cargo.length - 1; _ci >= 0; _ci--) {
+      var _p = e.cargo[_ci];
+      if (!_p || _p.dead) { e.cargo.splice(_ci, 1); continue; }
+      _p.x = e.x; _p.z = e.z; _p.rot = e.rot;
+    }
+  }
   var G = window._rtsG, d = rtsUnitDef(e.def), w = d.weapon ? RTS_WEAPONS[d.weapon] : null;
   if (e.cool > 0) e.cool -= dt;
   if (e.fire > 0) e.fire -= dt;
@@ -2531,6 +2606,20 @@ function _rtsUpdateUnit(e, dt) {
     /* Not capturing: an engineer still walks, but never acquires a target. */
     if (e.path) { _rtsSteer(e, dt, d); if (!e.path) e.order = null; }
     return;
+  }
+
+  /* ---- boarding ---- */
+  if (e.order === 'board') {
+    var tr = e.target;
+    if (!tr || tr.dead || !_rtsCanBoard(e, tr)) { e.order = null; e.target = null; e.path = null; }
+    else if (_rtsRangeTo(e, tr) <= RTS_TILE * 1.6) { _rtsBoard(e, tr); return; }
+    else {
+      /* the transport moves, so the destination is re-aimed rather than pathed once */
+      if (!e.path || Math.hypot(tr.x - e.goal.x, tr.z - e.goal.z) > RTS_TILE) {
+        e.goal = { x:tr.x, z:tr.z };
+        e.path = _rtsPath(e.x, e.z, tr.x, tr.z); e.pi = 0;
+      }
+    }
   }
 
   /* ---- engage ---- */
@@ -4344,6 +4433,7 @@ function _rtsTick(dt) {
   for (i = 0; i < G.ents.length; i++) {
     e = G.ents[i];
     if (e.dead) continue;
+    if (e.inside) continue;                      /* riding in a transport - see _rtsAboard */
     if (e.type === 'unit') _rtsUpdateUnit(e, dt); else _rtsUpdateStruct(e, dt);
   }
   _rtsSeparate(dt);

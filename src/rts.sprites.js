@@ -855,7 +855,7 @@ function _sprBuilding(key, side) {
    hundred hand-tuned coordinates, and it cannot silently change the unit's proportions. */
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
-  dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46
+  dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -1104,6 +1104,25 @@ function _sprUnitModel(key, side, prone, part) {
     _r3Box(m, -1.5, 6.0, 0, 7.5, 2.8, 7.0, DK[2], DK[1]);          /* open cockpit well */
     _r3Box(m, -4.8, 6.0, 0, 1.0, 4.6, 7.0, TM[1], TM[3]);          /* roll hoop */
     _r3Box(m, 3.2, 8.4, 0, 8.5, 1.3, 1.3, DK[1], DK[3]);           /* pintle gun */
+
+  } else if (key === 'apc') {
+    /* A closed box on tracks with a rear ramp and a small cupola gun - no turret (UDATA.CPP
+       has IsTurretEquipped false), so the read is "a tank with no gun on top", which is
+       exactly what it is. The ramp is the tell that it carries something. */
+    tracks(17, 6.0, 5, 2.3);
+    _r3Slab(m, 0, 3.2, 0, 16.5, 7.5, 10.5, 1.2, VH[0], VH[1]);     /* the box */
+    _r3Box(m, 0, 10.7, 0, 14.5, 1.2, 9.0, VH[3], VH[3]);           /* roof */
+    _r3Box(m, 0, 11.9, 0, 6, 1.2, 4, TM[1], TM[3]);                /* team cap */
+    _r3Box(m, 7.4, 3.2, 0, 3.0, 6.6, 9.0, VH[1], VH[3]);           /* sloped nose */
+    _r3Box(m, 9.6, 6.6, 0, 1.4, 2.6, 6.4, RTS_PAL.glass, RTS_PAL.glass);
+    _r3Box(m, -8.6, 1.4, 0, 3.2, 6.0, 8.0, DK[2], DK[0]);          /* the rear ramp */
+    for (i = 0; i < 3; i++)                                        /* ramp ribs */
+      _r3Box(m, -9.4, 2.0 + i * 1.8, 0, 1.2, 0.9, 7.4, GN[2], GN[1]);
+    _r3Cyl(m, 2.0, 10.7, -2.4, 2.4, 2.4, VH[2], VH[3], 14);        /* cupola */
+    /* The gun is the one thing separating this box from the MCV's box at a glance, so it is
+       longer and darker than the little pintle it started as. */
+    _r3Box(m, 8.0, 11.4, -2.4, 10.0, 1.3, 1.3, DK[1], DK[3]);      /* its gun */
+    _r3Box(m, 12.6, 11.3, -2.4, 1.6, 1.6, 1.6, GN[0], GN[3]);      /* muzzle */
 
   } else if (key === 'mcv') {
     /* A slab-sided transporter with the yard's gantry folded flat along its back - IsGigundo
