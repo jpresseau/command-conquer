@@ -476,9 +476,13 @@ function _r3BakeCentred(faces, size) {
    costs a few milliseconds once at load and cannot go stale. */
 function _r3FitSize(models, margin) {
   var r = 0;
+  /* Sampled at 32 regardless of how many facings the caller will actually bake. Vehicles use 32
+     and infantry 8, and a square measured over only the eight cardinal-and-diagonal yaws is not
+     guaranteed to hold the ones in between. Measuring the finer set costs a few milliseconds
+     once and cannot be wrong. */
   for (var i = 0; i < models.length; i++) {
-    for (var f = 0; f < 8; f++) {
-      var b = _r3Bounds(_r3Yaw(models[i], -f / 8 * Math.PI * 2));
+    for (var f = 0; f < 32; f++) {
+      var b = _r3Bounds(_r3Yaw(models[i], -f / 32 * Math.PI * 2));
       r = Math.max(r, Math.abs(b.x0), Math.abs(b.x1), Math.abs(b.y0), Math.abs(b.y1));
     }
   }
