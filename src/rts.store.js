@@ -73,22 +73,24 @@ function _rtsStoreDel(keys) {
    bytes cannot go stale. */
 var RTS_STORE_MIX = 'mix.v1';
 
-function rtsStoreSaveMix(files) {
-  var list = [], i;
-  for (i = 0; i < files.length; i++) list.push(files[i]);
-  if (!list.length) return Promise.resolve(false);
-  return Promise.all(list.map(function (f) {
-    return new Promise(function (res) {
-      var fr = new FileReader();
-      fr.onload = function () { res({ name: String(f.name || '').toLowerCase(), buf: fr.result }); };
-      fr.onerror = function () { res(null); };
-      fr.readAsArrayBuffer(f);
-    });
-  })).then(function (all) {
-    var keep = all.filter(Boolean);
-    if (!keep.length) return false;
-    return _rtsStorePut(RTS_STORE_MIX, { at: Date.now(), files: keep }).then(function (r) { return !!r; });
-  }).catch(function () { return false; });
+/* Stores the archives the game USES, not the files the player picked. Those are usually the
+   same thing - four archives chosen by hand - but they are emphatically not when the pick is a
+   single MAIN.MIX: reading that whole to persist it allocated 320 MB and then tried to write
+   320 MB into IndexedDB, for the sake of the 16 MB inside it that anything ever reads.
+
+   RTS_MIX.bytes holds exactly those, whether they arrived as separate files or were sliced out
+   of a container, so this one path is right for both. */
+function rtsStoreSaveMix() {
+  var names = Object.keys(RTS_MIX.bytes || {});
+  if (!names.length) return Promise.resolve(false);
+  var keep = names.map(function (n) {
+    var b = RTS_MIX.bytes[n];
+    /* copy the view's own range - a subarray of a 16 MB parent would otherwise drag the
+       parent's whole buffer into the store */
+    return { name: n, buf: b.slice().buffer };
+  });
+  return _rtsStorePut(RTS_STORE_MIX, { at: Date.now(), files: keep })
+    .then(function (r) { return !!r; }).catch(function () { return false; });
 }
 
 /* Replay the remembered archives through rtsMixLoadFiles. Blob is enough - the loader only
@@ -147,7 +149,7 @@ function rtsStoreLoadMap() {
 
 function rtsStoreForget() {
   rtsMapClear();
-  RTS_MIX.open = {}; RTS_MIX.ready = false; RTS_MIX.pal = null;
+  RTS_MIX.open = {}; RTS_MIX.bytes = {}; RTS_MIX.ready = false; RTS_MIX.pal = null;
   return _rtsStoreDel([RTS_STORE_MIX, RTS_STORE_MAP]).then(function () { return true; });
 }
 

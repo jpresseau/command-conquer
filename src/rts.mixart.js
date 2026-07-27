@@ -21,6 +21,10 @@ var RTS_MIX = {
   want: ['conquer.mix', 'temperat.mix', 'local.mix', 'hires.mix', 'sounds.mix', 'speech.mix',
          'scores.mix', 'allies.mix', 'russian.mix'],
   open: {},                     /* name -> parsed archive */
+  /* name -> the BYTES that archive was opened from, for the archives the game actually
+     consults. Kept so persistence can store what is used rather than what was picked: point
+     the loader at a 320 MB MAIN.MIX and this holds the ~16 MB of art archives out of it. */
+  bytes: {},
   pal: null,                    /* the temperate palette, 256 x RGB */
   ready: false,
   note: ''
@@ -223,25 +227,101 @@ function _mixUnit(key, side, prone, part) {
    Handed a list of File objects from a picker. Each is read, parsed, and kept; the palette is
    pulled out of local.mix. Everything is reported rather than assumed, because a player who
    picks the wrong folder should be told which archive is missing. */
+/* Above this, an archive is opened by INDEX and its useful parts sliced out; below it, the
+   whole file is read, which is simpler and costs nothing on a 2 MB conquer.mix.
+
+   The threshold exists because a retail MAIN.MIX is a few hundred megabytes and reading one
+   whole peaked the heap at 641 MB - twice the file, because FileReader hands back an
+   ArrayBuffer and the copy into a Uint8Array is another. That survived on a desktop and would
+   not survive on a phone, and this ships as an installable PWA. Measured, not assumed. */
+var RTS_MIX_BIG = 32 << 20;
+
+function _mixSlice(file, from, len) {
+  return new Promise(function (res) {
+    var fr = new FileReader();
+    fr.onload = function () { res(new Uint8Array(fr.result)); };
+    fr.onerror = function () { res(null); };
+    fr.readAsArrayBuffer(file.slice(from, from + len));
+  });
+}
+
+/* A big archive is a container: what is wanted from it is the dozen nested archives, which come
+   to a few tens of megabytes between them, not the hundreds of megabytes of video around them.
+   So the index is read from the head and only the wanted entries are sliced out - and because
+   those slices are ordinary archives, everything downstream keeps working synchronously,
+   which it must: _mixShp and the sound lookup are called from inside the render loop. */
+function _mixLoadBig(file, got) {
+  var name = String(file.name || '').toLowerCase();
+  return _mixSlice(file, 0, Math.min(RTS_MIX_HEAD, file.size)).then(function (head) {
+    if (!head) { got.push(name + ': could not be read'); return; }
+    var top;
+    try { top = window.RA_MIX.mixOpen(head); } catch (e) { top = { error: 'unreadable' }; }
+    if (!top || top.error) { got.push(name + ': ' + ((top && top.error) || 'unreadable')); return; }
+    got.push(name + ': ' + top.count + ' entries, read by index (' +
+             Math.round(file.size / 1048576) + ' MB not loaded)');
+
+    var wanted = RTS_MIX.want.concat(RTS_MIX_NEST).filter(function (v, i, a) { return a.indexOf(v) === i; });
+    return wanted.reduce(function (chain, nm) {
+      return chain.then(function () {
+        if (RTS_MIX.open[nm]) return;                       /* a direct pick already won */
+        var rec = top.byId(window.RA_MIX.mixHash(nm));
+        if (!rec || rec.offset + rec.size > file.size) return;
+        return _mixSlice(file, rec.offset, rec.size).then(function (bytes) {
+          if (!bytes) return;
+          var sub;
+          try { sub = window.RA_MIX.mixOpen(bytes); } catch (e) { return; }
+          if (!sub || sub.error) return;
+          RTS_MIX.open[nm] = sub;
+          if (RTS_MIX.want.indexOf(nm) >= 0) RTS_MIX.bytes[nm] = bytes;
+          got.push('  ' + nm + ': ' + sub.count + ' files (sliced out of ' + name + ')');
+        });
+      });
+    }, Promise.resolve());
+  });
+}
+var RTS_MIX_HEAD = 6 << 20;      /* enough index for any real archive */
+
 function rtsMixLoadFiles(files, done) {
-  var left = files.length, got = [];
-  if (!left) { done && done('No files chosen.'); return; }
-  for (var i = 0; i < files.length; i++) {
-    (function (file) {
+  var list = [], i;
+  for (i = 0; i < files.length; i++) list.push(files[i]);
+  if (!list.length) { done && done('No files chosen.'); return; }
+  var got = [];
+
+  /* Small archives first and in parallel; big ones one at a time, so two 300 MB files cannot
+     both be part-way through a slice at once. */
+  var small = list.filter(function (f) { return f.size <= RTS_MIX_BIG; });
+  var big   = list.filter(function (f) { return f.size > RTS_MIX_BIG; });
+
+  Promise.all(small.map(function (file) {
+    return new Promise(function (res) {
       var fr = new FileReader();
       fr.onload = function () {
         var name = String(file.name || '').toLowerCase();
         try {
-          var a = window.RA_MIX.mixOpen(new Uint8Array(fr.result));
+          var raw = new Uint8Array(fr.result);
+          var a = window.RA_MIX.mixOpen(raw);
           if (a.error) got.push(name + ': ' + a.error);
-          else { RTS_MIX.open[name] = a; got.push(name + ': ' + a.count + ' files'); }
+          else {
+            RTS_MIX.open[name] = a;
+            if (RTS_MIX.want.indexOf(name) >= 0) RTS_MIX.bytes[name] = raw;
+            got.push(name + ': ' + a.count + ' files');
+          }
         } catch (e) { got.push(name + ': ' + (e && e.message ? e.message : 'unreadable')); }
-        if (--left === 0) _mixFinish(got, done);
+        res();
       };
-      fr.onerror = function () { got.push(file.name + ': could not be read'); if (--left === 0) _mixFinish(got, done); };
+      fr.onerror = function () { got.push(file.name + ': could not be read'); res(); };
       fr.readAsArrayBuffer(file);
-    })(files[i]);
-  }
+    });
+  })).then(function () {
+    return big.reduce(function (chain, f) {
+      return chain.then(function () { return _mixLoadBig(f, got); });
+    }, Promise.resolve());
+  }).then(function () {
+    _mixFinish(got, done);
+  }, function (e) {
+    got.push('load failed: ' + ((e && e.message) || e));
+    _mixFinish(got, done);
+  });
 }
 
 /* MAIN.MIX is a container of containers: conquer, local, temperat and hires are all nested
@@ -277,6 +357,8 @@ function _mixDescend(log) {
         var sub = window.RA_MIX.mixOpen(bytes);
         if (sub && !sub.error) {
           RTS_MIX.open[nm] = sub;
+          /* a view into the parent's buffer; persisting it copies only this range */
+          if (RTS_MIX.want.indexOf(nm) >= 0) RTS_MIX.bytes[nm] = bytes;
           log.push('  ' + nm + ': ' + sub.count + ' files (inside ' + outer[i] + ')');
           grew++;
         }
@@ -325,7 +407,7 @@ function rtsMixPicked(input) {
     if (_rtsArtReady() && typeof rtsStoreSaveMix === 'function') {
       /* Chosen once, not once per visit. 13 MB of archives is far too much for localStorage,
          so this goes to IndexedDB; see src/rts.store.js. */
-      rtsStoreSaveMix(picked).then(function (saved) {
+      rtsStoreSaveMix().then(function (saved) {
         if (note && saved) note.textContent += ' Saved — it will load itself next time.';
       });
     }
