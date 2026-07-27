@@ -1,4 +1,4 @@
-/* RC COMMAND - a Command & Conquer-style real-time strategy game.
+/* RED ALERT - a rebuild of Command & Conquer: Red Alert for the browser.
    Build a base, mine Scrap with harvesters, produce units, and fight the Redline faction.
    Standalone: the only outside dependency in the whole app is three.js.
 

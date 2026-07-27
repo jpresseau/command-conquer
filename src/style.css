@@ -1,7 +1,7 @@
-/* RC COMMAND - RTS mode. Full-screen overlay: battlefield left, command sidebar right.
+/* RED ALERT - RTS mode. Full-screen overlay: battlefield left, command sidebar right.
    Deliberately mid-90s military-console in feel (dark slate, amber/cyan readouts, hard
    edges) without borrowing any actual game's artwork. */
-/* above the welcome launcher (…2500) and the Studio (…2600) - RC Command is a full-screen
+/* above the welcome launcher (…2500) and the Studio (…2600) - Red Alert is a full-screen
    mode of its own and must not end up painted under either. */
 #rcgRts{position:fixed;inset:0;z-index:2147482700;display:flex;background:#10141a;
   font:13px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#dfe8f2;

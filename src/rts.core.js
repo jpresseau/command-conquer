@@ -1,4 +1,4 @@
-/* RC COMMAND - simulation core. Pure game state + logic; no rendering in this file.
+/* RED ALERT - simulation core. Pure game state + logic; no rendering in this file.
    rts.render.js owns every pixel, rts.ui.js owns the DOM. Keeping the sim renderer-free
    means the whole battle can be stepped headlessly (which is how it gets verified) - and it
    is what allowed the renderer to be swapped from three.js to canvas 2D without touching a

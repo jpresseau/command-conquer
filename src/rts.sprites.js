@@ -1,4 +1,4 @@
-/* RC COMMAND - sprite generation: terrain, ore, effects, and the palette everything uses.
+/* RED ALERT - sprite generation: terrain, ore, effects, and the palette everything uses.
 
    The structures and units are NOT drawn here - they are 3D models, defined further down
    and rendered to sprites once at load by rts.r3d.js. That is how the originals were made,

@@ -1,4 +1,4 @@
-/* RC Command service worker.
+/* Command & Conquer: Red Alert service worker.
    Network-only, exactly like the RC Garage one: it never caches page content, so the game
    always loads the latest deploy. Its only job is to make the app installable as a desktop
    app. Scoped to /command/ so it cannot interfere with the RC Garage app at the root. */

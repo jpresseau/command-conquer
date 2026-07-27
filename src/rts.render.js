@@ -1,4 +1,4 @@
-/* RC COMMAND - render layer. Canvas 2D, sprite-based, pure top-down.
+/* RED ALERT - render layer. Canvas 2D, sprite-based, pure top-down.
 
    This replaced a three.js renderer. The 3D version was the wrong medium: the games this
    is modelled on are 2D sprite games, and no amount of flattening the camera or shrinking

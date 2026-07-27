@@ -1,4 +1,4 @@
-/* RC COMMAND - real Red Alert artwork, read from the player's own game files.
+/* RED ALERT - real Red Alert artwork, read from the player's own game files.
 
    Everything else in this project draws its own sprites, because there were no originals to
    draw with. There are now: `ra/mix.js`, `lcw.js`, `blowfish.js` and `shp.js` read the shipped
