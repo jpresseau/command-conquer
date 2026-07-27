@@ -1225,6 +1225,9 @@ function _rtsKill(e) {
   var G = window._rtsG;
   if (e.dead) return;
   e.dead = true;
+  /* Infantry cry out when they die - ten recorded takes, and until now not one of them ever
+     played: the identification table knew what they were and nothing asked for them. */
+  if (e.type === 'unit' && typeof rtsDeathCry === 'function') rtsDeathCry(e);
   if (e.cargo && e.cargo.length) _rtsSpillCargo(e);   /* the passengers walk away from it */
   if (e.type === 'struct') { _rtsFootprint(e, false); _rtsRecalcPower(e.side); }
   if (e.type === 'struct' && e.selling) {
@@ -1233,6 +1236,8 @@ function _rtsKill(e) {
     _rtsBaseDropNode(e);          /* a sale is a decision not to have it - see _rtsBaseDropNode */
   }
   else if (e.type === 'struct') {
+    /* Losing a building is announced; losing one of THEIRS is not. */
+    if (e.side === 'player' && typeof rtsEva === 'function') rtsEva('lostbldg');
     var sd = rtsStructDef(e.def);
     /* "Since there are volatile fuels used in the Flame Tower, it damages nearby units and
        structures if destroyed." Friendly fire included - that is the whole drawback, and it is
@@ -1814,6 +1819,10 @@ function _rtsTickProduction(side, dt) {
       if (cat === 'struct') { S.ready = q.key; S.readyPaid = q.paid; }
       else _rtsDeliverUnit(side, q.key);
       if (side === 'player' && typeof _rtsSfx === 'function') _rtsSfx(cat === 'struct' ? 'ready' : 'unitready');
+      /* EVA calls it. A finished building and a finished unit are different announcements in
+         the original and were both silent here - "Construction complete" was in the table and
+         had no caller at all. */
+      if (side === 'player' && typeof rtsEva === 'function') rtsEva(cat === 'struct' ? 'built' : 'ready');
     }
   }
 }

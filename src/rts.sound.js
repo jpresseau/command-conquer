@@ -46,19 +46,6 @@ var RTS_SND_SFX = {
   alert:     'sonpulse'
 };
 
-/* EVA. These are announcements, not effects. */
-var RTS_SND_EVA = {
-  ready:    'unitrdy1',      /* unit ready */
-  built:    'constru1',
-  newopt:   'newopt1',       /* new construction options */
-  progres:  'progres1',      /* construction complete-ish */
-  reinfor:  'reinfor1',
-  cancel:   'cancld1',
-  captured: 'bldginf1',      /* building infiltrated */
-  attack:   'baseatk1',      /* our base is under attack */
-  lostbldg: 'pribldg1'
-};
-
 /* Decoded AudioBuffers, keyed by archive name. Decoding a 22 kHz clip is cheap but doing it on
    every shot is not, and a firefight asks for the same four sounds hundreds of times. */
 var _RTS_SNDBUF = {};
@@ -162,8 +149,11 @@ function _rtsSndTry(name) {
 /* EVA. Deliberately not routed through _rtsSfx: an announcement is not a battlefield sound and
    must not be dropped for being off screen.
 
-   Two sources, in order: the identity table, which knows these by content, and the older
-   guessed filenames as a fallback for anything the table did not match. */
+   Every line comes from the identity table, which knows them by content. There used to be a
+   second map of guessed filenames behind this as a fallback; it was dead - the table resolved
+   first for every key, so none of its nine entries ever produced a sound, and one of them named
+   a file that is not in the archives at all. A fallback that can never run is not a safety net,
+   it is a second answer nobody checks. */
 var RTS_EVA_NAMED = {
   ready:     'unit_ready',
   built:     'construction_complete',
@@ -186,8 +176,7 @@ function rtsEva(key) {
   if (!_rtsSndReady() || _rtsA.muted) return false;
   var now = _rtsA.ctx.currentTime;
   if (now - _RTS_EVA_LAST < 1.6) return false;     /* one voice at a time, or it is noise */
-  var buf = (RTS_EVA_NAMED[key] && rtsSndNamed(RTS_EVA_NAMED[key])) ||
-            _rtsSndBuf(RTS_SND_EVA[key]);
+  var buf = RTS_EVA_NAMED[key] && rtsSndNamed(RTS_EVA_NAMED[key]);
   if (!buf) return false;
   _RTS_EVA_LAST = now;
   return _rtsSndPlay(buf, _rtsA.master, 0.95);
@@ -229,10 +218,31 @@ var RTS_VOX_SPECIAL = {
   engineer: ['engineer_yes_sir', 'engineer_affirmative', 'engineer_movin_out', 'engineer_engineering'],
   thief:    ['thief_yea', 'thief_ok', 'thief_affirmative', 'thief_movin_out', 'thief_what'],
   medic:    ['medic_yes_sir', 'medic_affirmative', 'medic_reporting', 'medic_movin_out'],
+  /* All twelve of Tanya's takes. Six were listed and six were not, for no reason beyond the
+     list having been written from memory. */
   tanya:    ['tanya_yes_sir', 'tanya_lets_rock', 'tanya_im_there', 'tanya_whats_up',
-             'tanya_shake_it_baby', 'tanya_give_it_to_me'],
+             'tanya_shake_it_baby', 'tanya_give_it_to_me', 'tanya_cha_ching',
+             'tanya_chew_on_this', 'tanya_kiss_it_bye_bye', 'tanya_laugh',
+             'tanya_thats_all_you_got', 'tanya_yea'],
   dog:      ['dog_bark', 'dog_growl', 'dog_yes_sir']
 };
+
+/* Which army's voices the player hears. It is a VOICE choice and nothing else - both sides
+   field the same roster and the same rules - so it is offered as exactly that rather than
+   dressed up as a faction with consequences it does not have. Kept in localStorage: it is a
+   six-byte preference and does not belong in the archive store. */
+var RTS_VOX_SIDES = ['allied', 'soviet'];
+function rtsVoxSide() {
+  if (window._RTS_VOXSIDE) return window._RTS_VOXSIDE;
+  var v = null;
+  try { v = window.localStorage.getItem('rcgVoxSide'); } catch (e) {}
+  return (window._RTS_VOXSIDE = (RTS_VOX_SIDES.indexOf(v) >= 0 ? v : 'allied'));
+}
+function rtsSetVoxSide(v) {
+  if (RTS_VOX_SIDES.indexOf(v) < 0) return;
+  window._RTS_VOXSIDE = v;
+  try { window.localStorage.setItem('rcgVoxSide', v); } catch (e) {}
+}
 
 var _RTS_VOX_LAST = 0;
 function rtsVox(unit, what) {
@@ -244,7 +254,16 @@ function rtsVox(unit, what) {
 
   var def = (typeof rtsUnitDef === 'function') ? rtsUnitDef(unit.def) : null;
   var kind = (def && def.kind === 'infantry') ? 'infantry' : 'vehicle';
-  var side = unit.side === 'enemy' ? 'soviet' : 'allied';
+  /* WHICH ARMY THE PLAYER COMMANDS, not which side the unit is on.
+
+     This used to read `unit.side === 'enemy' ? 'soviet' : 'allied'`, which sounds right and
+     silences half the set: you only ever select your OWN units, so the enemy branch is
+     unreachable and 34 of the identified lines - the entire Soviet half - could never play.
+     The choice is the player's now; see RTS_VOX_SIDE. The enemy branch is kept because an
+     enemy unit CAN reach slot 0 of a mixed selection, and when it does it should not answer
+     in your own army's voice. */
+  var mine = unit.side === 'player';
+  var side = mine ? rtsVoxSide() : (rtsVoxSide() === 'soviet' ? 'allied' : 'soviet');
   var pool = RTS_VOX_SPECIAL[unit.def];
   if (!pool) {
     var t = (what === 'order' ? RTS_VOX_ORDER : RTS_VOX_SELECT)[side];
@@ -252,13 +271,64 @@ function rtsVox(unit, what) {
   }
   if (!pool || !pool.length) return false;
 
-  /* Stable per unit: the same soldier keeps the same voice rather than shuffling every click. */
+  /* Every line CROSSED WITH ITS TAKES, then indexed once.
+
+     This used to be `named(line) || named(line+'_1') || named(line+'_2')`, which reads like a
+     fallback chain and is not one: the pool holds base names, which are never keys, so the
+     first is always null and the second always resolves - and the third was unreachable. Every
+     second take in the set was dead, which is exactly the repetition the two takes exist to
+     prevent. Expanding first and picking once is the only way the id can choose among them. */
+  var cand = _rtsVoxTakes(pool);
+  if (!cand.length) return false;
   var seed = (unit.id != null ? unit.id : 0) | 0;
-  var line = pool[Math.abs(seed) % pool.length];
-  var buf = rtsSndNamed(line) || rtsSndNamed(line + '_1') || rtsSndNamed(line + '_2');
+  var buf = rtsSndNamed(cand[Math.abs(seed) % cand.length]);
   if (!buf) return false;
   _RTS_VOX_LAST = now;
   return _rtsSndPlay(buf, _rtsA.master, 0.9);
+}
+
+/* A pool of base names -> every name in the table that is one of their takes. Cached per pool
+   because it is the same handful of arrays every time and this runs on every click. */
+var _RTS_VOX_CACHE = {};
+function _rtsVoxTakes(pool) {
+  var key = pool.join('|');
+  if (_RTS_VOX_CACHE[key]) return _RTS_VOX_CACHE[key];
+  var out = [], i, j, sfx = ['', '_1', '_2'];
+  for (i = 0; i < pool.length; i++) {
+    for (j = 0; j < sfx.length; j++) {
+      var nm = pool[i] + sfx[j];
+      if (window.RA_SNDTAB && window.RA_SNDTAB[nm] != null) out.push(nm);
+    }
+  }
+  return (_RTS_VOX_CACHE[key] = out);
+}
+
+/* ------------------------------------------------------------ death cries --
+   Ten recorded takes, and until now not one of them played: the identity table knew what they
+   were and nothing ever asked. Infantry only - a tank crew does not scream, and RA does not
+   record one doing so. Deliberately routed through the SFX bus and the on-screen test, unlike
+   EVA: a man dying out of sight is not news, it is atmosphere, and atmosphere from across the
+   map is just noise. */
+var RTS_DEATH_CRIES = ['death_dedman1', 'death_dedman2', 'death_dedman3', 'death_dedman4',
+  'death_dedman5', 'death_dedman6', 'death_dedman7', 'death_dedman8', 'death_dedman10'];
+var _RTS_CRY_LAST = 0;
+
+function rtsDeathCry(unit) {
+  if (!_rtsSndReady() || _rtsA.muted || !unit) return false;
+  var def = (typeof rtsUnitDef === 'function') ? rtsUnitDef(unit.def) : null;
+  if (!def || def.kind !== 'infantry') return false;
+  if (unit.def === 'dog') return _rtsSndPlayNamed('dog_whine', 0.7);
+  if (typeof _rtsAudible === 'function' && !_rtsAudible(unit.x, unit.z)) return false;
+  var now = _rtsA.ctx.currentTime;
+  if (now - _RTS_CRY_LAST < 0.25) return false;     /* a squad wiped out is one cry, not eight */
+  _RTS_CRY_LAST = now;
+  var seed = (unit.id != null ? unit.id : 0) | 0;
+  return _rtsSndPlayNamed(RTS_DEATH_CRIES[Math.abs(seed) % RTS_DEATH_CRIES.length], 0.75);
+}
+
+function _rtsSndPlayNamed(name, gain) {
+  var buf = rtsSndNamed(name);
+  return buf ? _rtsSndPlay(buf, _rtsA.sfx, gain == null ? 0.85 : gain) : false;
 }
 
 /* ------------------------------------------------------------------ music --
