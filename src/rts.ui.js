@@ -174,11 +174,19 @@ function _rtsModeClick(mx, my) {
   return true;
 }
 function _rtsCatItems(cat) {
-  var out = [], i;
+  var out = [], i, side = rtsHouseSide('player');
   if (cat === 'struct') {
-    for (i = 0; i < RTS_STRUCTS.length; i++) if (RTS_STRUCTS[i].key !== 'yard') out.push(RTS_STRUCTS[i]);
+    for (i = 0; i < RTS_STRUCTS.length; i++) {
+      if (RTS_STRUCTS[i].key === 'yard') continue;
+      if (!rtsBuildableBy(RTS_STRUCTS[i], side)) continue;   /* the other army's, not yours */
+      out.push(RTS_STRUCTS[i]);
+    }
   } else {
-    for (i = 0; i < RTS_UNITS.length; i++) if (RTS_UNITS[i].kind === cat) out.push(RTS_UNITS[i]);
+    for (i = 0; i < RTS_UNITS.length; i++) {
+      if (RTS_UNITS[i].kind !== cat) continue;
+      if (!rtsBuildableBy(RTS_UNITS[i], side)) continue;
+      out.push(RTS_UNITS[i]);
+    }
   }
   return out;
 }

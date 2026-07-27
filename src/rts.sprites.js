@@ -71,6 +71,10 @@ var RTS_PAL = {
   glass: '#8fbcd4',
   lit:   '#ffd98a',
   hazard:['#c9a227', '#2a2a26'],
+  /* The Tesla Coil's arc. Pale blue-white, and deliberately the only thing on the battlefield
+     lit this colour - a Soviet defensive line should be identifiable at a glance, and the head
+     going dark is what tells you the power is out. */
+  spark: ['#bfe6ff', '#7fc4ff', '#e8f6ff'],
   team: {
     player: ['#2f5fa8', '#3f7fd0', '#1e3f74', '#69a9ee'],
     enemy:  ['#a83228', '#d04438', '#741e18', '#ec7663']
@@ -883,6 +887,29 @@ function _sprBuilding(key, side) {
     _r3Cyl(m, 3, 26.5, -2, 2, 4, RTS_PAL.hazard[0], S[3], 16);           /* pilot */
     _r3Cyl(m, 3, 9, -2, 4.6, 1.4, B.roof, B.roof, 18);                   /* team band */
     _r3Box(m, -1, 6, 1, 6, 1.5, 1.5, S[2], S[1]);                        /* feed pipe */
+
+  } else if (key === 'tesla') {
+    /* TESLA COIL. Two cells tall and almost nothing wide - the tallest, thinnest thing either
+       army builds, which is the whole point: you should be able to pick a Soviet defensive
+       line out of a skyline at a glance, the way the Flame Tower reads as a column and the
+       Pillbox reads as dug in.
+
+       A narrow mast on a heavy base, three insulator rings up the shaft, and the coil head as
+       a pair of stacked toroids with an arc gap between them. The head is emissive because it
+       is the part that says POWERED - and this building is dark and useless the moment the
+       power browns out, so the lit head is telling you something true. */
+    _r3Box(m, 0, 0, 0, W - 6, 4, D - 6, C[2], C[0]);                     /* concrete footing */
+    _r3Box(m, 0, 4, 0, 9, 3, 9, C[0], C[1]);                             /* transformer block */
+    _r3Cyl(m, 0, 7, 0, 2.6, 26, C[1], C[0], 16);                         /* the mast */
+    for (var _ti = 0; _ti < 3; _ti++) {                                  /* insulator rings */
+      _r3Cyl(m, 0, 11 + _ti * 7, 0, 4.2, 1.6, C[3], C[2], 16);
+    }
+    _r3Cyl(m, 0, 9, 0, 3.4, 1.5, B.roof, B.roof, 16);                    /* team band */
+    /* the head: two toroids with the arc gap between them */
+    _r3Cyl(m, 0, 33, 0, 7, 2.4, S[1], S[2], 20);
+    _r3Cyl(m, 0, 38.5, 0, 5.2, 2, S[1], S[2], 20);
+    _r3Cyl(m, 0, 35.4, 0, 1.3, 3.1, RTS_PAL.spark[2], RTS_PAL.spark[1], 12);  /* the arc */
+    _r3Cyl(m, 0, 41, 0, 1.6, 2.2, RTS_PAL.spark[0], RTS_PAL.spark[1], 12);    /* crown */
 
   } else if (key === 'wall') {
     /* Concrete Wall. Has to tile with itself edge to edge, so it fills the cell exactly and

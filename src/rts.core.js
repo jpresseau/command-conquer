@@ -1675,6 +1675,10 @@ function _rtsCanQueue(side, key) {
   if (cat === 'struct' && S.ready) return false;
   var def = rtsStructDef(key) || rtsUnitDef(key);
   if (!_rtsAvailable(side, def)) return false;
+  /* The other army's kit. Enforced HERE rather than only in the sidebar, because the sidebar
+     is one of several routes to a queue - the opponent's brain is another, and a save from
+     before a faction switch is a third. */
+  if (!rtsBuildableBy(def, rtsHouseSide(side))) return false;
   /* `only` is a hard cap on how many of a type may exist at once - the Commando is one at a
      time, as in the reference. Counts what is standing AND what is on the way, or the queue
      lets you stack three of them before the first one appears. */
@@ -2072,6 +2076,16 @@ function _rtsFireCoord(e, w) {
 }
 function _rtsFire(e, tgt, w) {
   var G = window._rtsG, bias = _rtsBias(e.side);
+  /* A structure that needs power does not fire without it. This is the Tesla Coil's whole
+     design and the reason a Soviet defensive line plays differently from an Allied one: it
+     hits far harder than anything at its price and it is only as good as the plants behind
+     it, so cutting the power is a strategy rather than an inconvenience. Checked at the one
+     place every shot passes through, because there are several routes to a shot and one of
+     them forgetting would be a silent balance bug. */
+  if (e.type === 'struct') {
+    var _sd = rtsStructDef(e.def);
+    if (_sd && _sd.needsPower && _rtsPowerFactor(e.side) < 0.999) return;
+  }
   /* AIRCRAFT.CPP spends a round per shot and the aircraft is out of the fight when the rack is
      empty. Decremented here rather than in the aircraft's own update so that every route to a
      shot - ordered, acquired, retaliating - pays for it. */
