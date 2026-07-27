@@ -84,12 +84,12 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   <p class="eyebrow">Command &amp; Conquer</p>
   <h1>RED ALERT</h1>
   <p class="sub">Real-Time Strategy</p>
-  <p class="vs"><b class="p">Vanguard</b> &nbsp;versus&nbsp; <b class="e">Redline</b></p>
-  <p class="brief">Mine <b>Scrap</b> with harvesters, unload it at a refinery for credits, and spend them
+  <p class="vs" id="rtsVs"></p>
+  <p class="brief">Mine <b>ore</b> with harvesters, unload it at a refinery for credits, and spend them
     on power, production and armour. Pick an army below and it decides what you can build: the
     <b>Allies</b> get pillboxes, gun turrets, medics, light tanks and helicopters, the <b>Soviets</b>
     get flame towers, Tesla coils, attack dogs and Mammoth tanks. Lose your power plants and the whole
-    base slows down — and a Tesla coil stops firing altogether. Redline takes the other army and is
+    base slows down — and a Tesla coil stops firing altogether. The enemy takes the other army and is
     doing the same thing across the map, with their first attack wave already on a timer.</p>
   <div class="diff" id="rtsDiff"></div>
   <p class="diffnote" id="rtsDiffNote"></p>
@@ -133,7 +133,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
     <dt>Home</dt><dd>centre on the selection (or on your command yard)</dd>
 
     <dt class="hd">Ordering</dt>
-    <dt>Right-click</dt><dd>context order — enemy: attack · scrap: harvest · ground: move</dd>
+    <dt>Right-click</dt><dd>context order — enemy: attack · ore: harvest · ground: move</dd>
     <dt>A + right-click</dt><dd>attack-move (engage anything on the way)</dd>
     <dt>S</dt><dd>hold position — fire from where you stand, never chase</dd>
     <dt>Right-click radar</dt><dd>order the selection across the map without scrolling</dd>
@@ -243,12 +243,23 @@ function rtsBuildVoxSide(){
   [].forEach.call(wrap.getElementsByTagName('button'), function (b) {
     b.className = (b.getAttribute('data-v') === cur) ? 'on' : '';
   });
+  rtsPaintVs();
   var have = typeof rtsSndNamed === 'function' && !!rtsSndNamed('yes_sir_soviet_vehicle_1');
   note.textContent = (cur === 'soviet'
     ? 'Soviet: Flame Towers, Tesla Coils, attack dogs, Mammoth tanks.'
     : 'Allied: Pillboxes, gun turrets, medics, light tanks, artillery, helicopters.')
-    + ' Redline takes the other army.'
+    + ' The enemy takes the other army.'
     + (have ? ' Your units answer in its voices.' : '');
+}
+
+/* "Allied versus Soviet", or the other way round once you pick the other army. Painted rather
+   than written into the markup because which side you are is a choice, and a fixed pair would be
+   wrong for half the players the moment the picker below it exists. */
+function rtsPaintVs(){
+  var el = document.getElementById('rtsVs');
+  if (!el || typeof rtsArmyName !== 'function') return;
+  el.innerHTML = '<b class="p">' + rtsArmyName('player') + '</b>&nbsp;versus&nbsp;<b class="e">' +
+                 rtsArmyName('enemy') + '</b>';
 }
 
 function rtsShowEditor(){

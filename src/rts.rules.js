@@ -1,5 +1,5 @@
 /* RED ALERT - a rebuild of Command & Conquer: Red Alert for the browser.
-   Build a base, mine Scrap with harvesters, produce units, and fight the Redline faction.
+   Build a base, mine ore with harvesters, produce units, and fight the opposing army.
    Standalone: the only outside dependency in the whole app is three.js.
 
    This file is the RULES layer - every balance number lives here, nothing else. The
@@ -16,10 +16,17 @@ var RTS_N = 128;       /* DEFINES.H MAP_CELL_W. This was 112, chosen by eye with
                           buildings on it is a large part of why the original reads the way
                           it does, and why an early pass here looked like a diorama. */
 
+/* The two houses. Colour is fixed - you are always blue and the opponent always red, which is
+   what makes a glance at the battlefield readable - but the NAME is not, because which army you
+   are is a choice made on the title screen. rtsArmyName answers it; see rtsHouseSide. */
 var RTS_SIDES = {
-  player: { key:'player', name:'Vanguard', color:0x4a8ff0, glow:0xa8d4ff, tag:'VGD' },
-  enemy:  { key:'enemy',  name:'Redline',  color:0xe0503c, glow:0xffb49f, tag:'RDL' }
+  player: { key:'player', color:0x4a8ff0, glow:0xa8d4ff },
+  enemy:  { key:'enemy',  color:0xe0503c, glow:0xffb49f }
 };
+/* "Allied" / "Soviet" for either house, following the army the player picked. Singular and
+   adjectival - "Allied command", "the Soviet base" - which is how Red Alert itself words it. */
+function rtsArmyName(house) { return rtsHouseSide(house) === 'soviet' ? 'Soviet' : 'Allied'; }
+function rtsArmyTag(house)  { return rtsHouseSide(house) === 'soviet' ? 'SOV' : 'ALD'; }
 
 /* ---------------------------------------------------------------- structures --
    The 3D model for each key is built by _rtsBuild() in rts.buildings.js.
@@ -40,10 +47,10 @@ var RTS_STRUCTS = [
   { key:'power',    name:'Power Plant',   w:2, h:2, cost:300,  build:7,  hp:500,  power:100,  sight:10,
     armour:'concrete',
     desc:'Supplies 100 power. Low power slows every production line.' },
-  { key:'refinery', name:'Scrap Refinery',w:3, h:3, cost:2000, build:18, hp:950,  power:-30,  sight:12,
+  { key:'refinery', name:'Ore Refinery',w:3, h:3, cost:2000, build:18, hp:950,  power:-30,  sight:12,
     needs:['power'], freeUnit:'harvester', storage:2000,
     armour:'concrete',
-    desc:'Harvesters unload here, and it stores 2000 of scrap. Ships with one free Harvester.' },
+    desc:'Harvesters unload here, and it stores 2000 of ore. Ships with one free Harvester.' },
   { key:'barracks', name:'Barracks',      w:2, h:2, cost:400,  build:9,  hp:650,  power:-20,  sight:12,
     needs:['power'], produces:'infantry',
     armour:'wood',
@@ -148,10 +155,10 @@ var RTS_STRUCTS = [
     needs:['radar'], produces:'air', rearm:true,
     side:'allied', armour:'concrete',
     desc:'Builds and rearms helicopters. Without one, an aircraft out of ammo goes down.' },
-  { key:'silo',     name:'Scrap Silo',   w:2, h:2, cost:150,  build:5,  hp:400,  power:0,    sight:8,
+  { key:'silo',     name:'Ore Silo',   w:2, h:2, cost:150,  build:5,  hp:400,  power:0,    sight:8,
     needs:['refinery'], storage:1500, capturable:false,
     armour:'wood',
-    desc:'Holds 1500 more scrap. Without enough storage, harvested scrap over the cap is lost.' },
+    desc:'Holds 1500 more ore. Without enough storage, harvested ore over the cap is lost.' },
 
   /* ------------------------------------------------------------ superweapons --
      Four buildings whose entire output is one button on a timer. They share a shape: a `super`
@@ -218,7 +225,7 @@ var RTS_UNITS = [
     /* RULES.CPP BailCount(28) x GoldValue(35) = 980 credits a full load, exactly. Was 700. */
     harvest:true, capacity:980,
     armour:'heavy',
-    desc:'Mines Scrap fields and unloads at a refinery.' },
+    desc:'Mines ore fields and unloads at a refinery.' },
   /* --- second tier. `needs` on a unit gates it the same way it gates a structure. --- */
   { key:'grenadier',name:'Grenadier',     kind:'infantry', cost:160,  build:4,  hp:65,   speed:6,   turn:6,  r:1.1, sight:15, weapon:'grenade',
     side:'soviet', armour:'none',
@@ -657,11 +664,11 @@ var RTS_GEM_DETOUR = 3;
    wall  : IsWallDestroyer      scan  : IsContentScan (looks inside transports/buildings) */
 var RTS_DIFF = {
   easy:   { name:'Recruit',  iq:2, fire:0.75, speed:0.85, armor:0.7, rof:1.3,  cost:1.2, build:1.4, wall:false, scan:false,
-            desc:'Redline attacks late, builds little and hits softly.' },
+            desc:'The enemy attacks late, builds little and hits softly.' },
   normal: { name:'Soldier',  iq:3, fire:1,    speed:1,    armor:1,   rof:1,    cost:1,   build:1,   wall:true,  scan:false,
-            desc:'An even fight. Redline expands and repairs.' },
+            desc:'An even fight. The enemy expands and repairs.' },
   hard:   { name:'Commando', iq:5, fire:1.15, speed:1.1,  armor:1.2, rof:0.85, cost:0.8, build:0.7, wall:true,  scan:true,
-            desc:'Redline builds a real base, defends it and comes early.' }
+            desc:'The enemy builds a real base, defends it and comes early.' }
 };
 var RTS_DIFF_DEFAULT = 'normal';
 
@@ -1343,6 +1350,6 @@ var RTS_TRIGGERS = [
      before event 2 and the trigger still fires. */
   { name:'warned', house:'player', persist:'volatile', control:'and',
     event1:['time', 30], event2:['nBuildingsLost', 2],
-    action1:['text', 'Redline is dismantling your base.'],
+    action1:['text', 'The enemy is dismantling your base.'],
     action2:['playSound', 'alert'] }
 ];

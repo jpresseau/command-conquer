@@ -763,7 +763,7 @@ function _rtsNewGame(seed, diff) {
   _rtsGenTerrain(G, rnd, G.starts);
   }
 
-  /* --- the two bases: player bottom-left, Redline top-right.
+  /* --- the two bases: player bottom-left, opponent top-right.
      Footprints are small (Command Yard 3x3) so a base is a cluster of compact structures
      on a large map, the way the originals laid out - not a few slabs filling the screen. --- */
   /* Each base is laid out in its own local frame - `along` toward the opponent, `across` to
@@ -4374,7 +4374,7 @@ function _rtsAIAttack(urgency) {
   if (!pick) return false;
   _rtsTeamMake(pick);
   G.ai.wave++;
-  _rtsSay('Redline ' + pick.name + ' team inbound!');
+  _rtsSay(rtsArmyName('enemy') + ' ' + pick.name + ' team inbound!');
   if (typeof _rtsSfx === 'function') _rtsSfx('alert');
   return true;
 }

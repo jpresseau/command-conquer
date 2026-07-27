@@ -2,7 +2,8 @@
 
 A rebuild of Westwood's 1996 real-time strategy game for the browser. Mine ore with harvesters,
 unload it at a refinery for credits, climb a power-and-prerequisite tech tree, and fight the
-Redline faction across a 112×112 tile battlefield.
+opposing army across a 112×112 tile battlefield. Play Allied or Soviet — the choice decides
+what you can build.
 
 Rules, unit costs, weapon damage and AI behaviour are ported from the Red Alert source release;
 the game can also read your own installed copy for the original artwork, sound and maps.
@@ -31,17 +32,17 @@ self-contained `index.html`.
 
 ## How it plays
 
-Build a **Scrap Refinery** early — it ships with a free Harvester and it is the only thing that
+Build an **Ore Refinery** early — it ships with a free Harvester and it is the only thing that
 turns ore into credits. Everything needs **power**, and a browned-out base builds slowly and its
 turrets stop firing entirely. The tech tree is the classic shape:
 
 ```
-Power Plant ──┬── Scrap Refinery ── War Factory ── vehicles + harvesters
+Power Plant ──┬── Ore Refinery ─── War Factory ── vehicles + harvesters
               └── Barracks ──┬── infantry
                              └── Gun Turret
 ```
 
-Redline is doing the same thing on the other side of the map, and its first attack wave is on a
+The enemy is doing the same thing on the other side of the map, and its first attack wave is on a
 timer. A player who does nothing is overrun in about four and a half minutes.
 
 ## Everything is generated in code
