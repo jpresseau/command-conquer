@@ -19,7 +19,8 @@ function rtsOpen(seed) {
     +   '<canvas id="rtsCv"></canvas>'
     +   '<canvas id="rtsHud"></canvas>'
     +   '<div class="rts-top"><span class="rts-title">RED ALERT</span>'
-    +     '<span class="rts-vs"><b class="p">Vanguard</b> vs <b class="e">Redline</b>'
+    +     '<span class="rts-vs"><b class="p">' + rtsArmyName('player') + '</b> vs <b class="e">' +
+          rtsArmyName('enemy') + '</b>'
     +       '<i class="dif" id="rtsDifLbl"></i></span>'
     +     '<span class="rts-help">drag select · right-click order · S hold · 1-9 teams (ctrl set, alt jump) · repair/sell · wheel zoom · Esc</span>'
     +     '<button type="button" class="rts-mute" id="rtsSaveBtn" title="Save this battle (Ctrl+S)" onclick="rtsSaveGame()">💾</button>'
@@ -85,7 +86,7 @@ function rtsOpen(seed) {
   /* rtsOpen runs off a real click, so this is a valid gesture to unlock WebAudio */
   if (typeof _rtsAudioInit === 'function') { _rtsAudioInit(); _rtsAudioResume(); _rtsMusicStart(); }
   if (_load) _rtsSay('Battle resumed.');
-  else _rtsSay('Vanguard command online. Build a Refinery to start earning.');
+  else _rtsSay(rtsArmyName('player') + ' command online. Build a Refinery to start earning.');
   _rtsUI.last = (new Date()).getTime();
   _rtsLoop();
 }
@@ -529,7 +530,8 @@ function _rtsSyncSidebar(dt) {
     var o = document.getElementById('rtsOver');
     o.className = 'rts-over on';
     o.innerHTML = '<div class="card ' + G.over + '"><h2>' + (G.over === 'win' ? 'VICTORY' : 'DEFEATED') + '</h2>'
-      + '<p>' + (G.over === 'win' ? 'Redline has been wiped off the map.' : 'Vanguard command has fallen.') + '</p>'
+      + '<p>' + (G.over === 'win' ? 'The ' + rtsArmyName('enemy') + ' forces have been wiped off the map.'
+                          : rtsArmyName('player') + ' command has fallen.') + '</p>'
       + '<p class="s">Enemy units destroyed: ' + G.stats.killed + ' · Units lost: ' + G.stats.lostU + '</p>'
       + '<button type="button" onclick="rtsRestart()">Play again</button> '
       + '<button type="button" onclick="rtsClose()">Quit</button></div>';
