@@ -6235,6 +6235,8 @@ function _rtsMapListShow(maps, note) {
     sel.appendChild(o);
   });
   var btn = document.createElement('button');
+  /* deliberately after `btn` exists - the labelling pass disables it while it runs */
+  setTimeout(function () { _rtsMapLabel(maps, sel, btn, note); }, 0);
   btn.type = 'button'; btn.textContent = 'LOAD';
   btn.onclick = function () {
     var m = maps[sel.value | 0];
@@ -6260,6 +6262,73 @@ function _rtsMapListShow(maps, note) {
   };
   wrap.appendChild(sel); wrap.appendChild(btn);
   note.parentNode.appendChild(wrap);
+}
+
+/* Put the real names on the list.
+
+   A full install answers "which scenarios are in here?" with sixty-odd entries called
+   scg01ea.ini, which is the archive's filename and not a name anybody chose. The scenario itself
+   carries the one the game shows - scg01ea is "A Path Beyond" - and it also carries the terrain,
+   so the same read that gets the title gets whether the map has a coast and whether it loads at
+   all. Doing it once up front beats making the player load sixty maps to find the one they want.
+
+   This reads every scenario through `rtsMapFromScenario`, the exact call LOAD makes, so a label
+   cannot promise something the loader then refuses; a scenario that throws here is one that would
+   have failed on selection, and is marked unplayable instead of left as a trap. Reading one costs
+   single-digit to ~30ms, so a full install is a second or so - done a slice at a time so the
+   title screen keeps painting rather than locking up.
+
+   It is careful to touch no global state: `rtsMapFromScenario` saves and restores RTS_N itself,
+   and `window._RTS_MAP` is only ever set by LOAD. Scanning the list must not change which map
+   you are about to play. */
+function _rtsMapLabel(maps, sel, btn, note) {
+  var good = 0, coastal = 0, bad = 0;
+  btn.disabled = true;
+
+  /* Sequential rather than all-at-once. The bytes come from slicing the File, so sixty parallel
+     reads would have sixty scenario buffers alive at the same moment - the same mistake that
+     put 641 MB on the heap when the loader read whole archives. One at a time costs nothing
+     here because the work is dominated by parsing, not by I/O. */
+  return maps.reduce(function (chain, m, i) {
+    return chain.then(function () {
+      note.textContent = 'Reading scenario ' + (i + 1) + ' of ' + maps.length + '…';
+      note.className = '';
+      return m.get(m.name).then(function (bytes) {
+        label(m, sel.options[i], bytes);
+      }, function () { mark(sel.options[i], m, 'unreadable'); });
+    });
+  }, Promise.resolve()).then(function () {
+    btn.disabled = false;
+    note.textContent = maps.length + ' scenario' + (maps.length === 1 ? '' : 's') + ' — ' +
+      good + ' playable, ' + coastal + ' with a coast for naval yards' +
+      (bad ? ', ' + bad + ' unreadable' : '') + '. Choose one:';
+    note.className = 'ok';
+    return { good: good, coastal: coastal, bad: bad };
+  });
+
+  function mark(opt, m, why) {
+    bad++;
+    if (!opt) return;
+    opt.textContent = m.name + ' — ' + why;
+    opt.disabled = true;
+  }
+
+  function label(m, opt, bytes) {
+    if (!bytes) { mark(opt, m, 'unreadable'); return; }
+    var txt = '', k;
+    for (k = 0; k < bytes.length; k++) txt += String.fromCharCode(bytes[k]);
+    var M;
+    try { M = rtsMapFromScenario(txt, m.name); } catch (e) { M = null; }
+    if (!M || M.error) { mark(opt, m, (M && M.error) || 'unreadable'); return; }
+    good++;
+    var s = M.stats || {};
+    if (s.shore > 0) coastal++;
+    if (!opt) return;
+    /* The anchor is the point of the whole pass: it is the one property you cannot guess from a
+       name, and it is scannable down a list in a way a sentence is not. */
+    opt.textContent = (s.shore > 0 ? '⚓ ' : '') + M.title +
+      '  (' + m.name + (s.shore > 0 ? ', coastal' : '') + ')';
+  }
 }
 
 /* One line describing a loaded map, shared by the picker and by the restore-on-boot path so
