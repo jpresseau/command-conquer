@@ -340,8 +340,8 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
       start positions instead of a generated one. Point this at your own <b>MAIN.MIX</b> and it
       will search it for the scenarios Red Alert shipped with; a loose <b>.mpr</b> or <b>.ini</b>
       scenario works too, as does an <b>.oramap</b>, or a map's <b>map.bin</b> and <b>map.yaml</b>
-      together. Temperate maps only, and load the artwork above as well or there is nothing to
-      draw the cliffs with. Generated battles are landlocked — a real map is the only way to get
+      together. Temperate and snow maps work; load the artwork above as well or there is nothing
+      to draw the cliffs with. Generated battles are landlocked — a real map is the only way to get
       water, and loading one tells you whether it has a coast you can build a naval yard on.</span>
   </p>
   <dl class="keys">
@@ -1801,8 +1801,12 @@ function inimapMeta(text, name) {
   }
 
   var theatre = String(ini.get('map', 'Theater') || '').toUpperCase();
+  /* Some shipped scenarios spell "no name" as the literal string <none>, which is worse than an
+     empty one: it survives the || and gets shown to the player as if it were a title. */
+  var nm = String(ini.get('basic', 'Name') || '').trim();
+  if (/^<none>$/i.test(nm)) nm = '';
   return {
-    title:  ini.get('basic', 'Name') || name || 'Untitled',
+    title:  nm || name || 'Untitled',
     author: ini.get('basic', 'Author') || '',
     /* RA spells it TEMPERATE, OpenRA spells it TEMPERAT; downstream only knows the latter. */
     tileset: theatre === 'TEMPERATE' ? 'TEMPERAT' : theatre,
@@ -1949,6 +1953,44 @@ var RA_TILETAB = (function () {
   return out;
 })();
 
+/* ------------------------------------------------------------------ snow --
+   The snow theatre needs almost none of its own table. Comparing OpenRA's snow.yaml against
+   temperat.yaml: all 264 snow templates exist in the temperate set under the SAME image name,
+   and 261 of them classify identically. Snow is a repaint of the same tile geometry, which is
+   why a snow map can be read with the table above and only the artwork swapped.
+
+   Three disagree, and they are listed rather than waved away because one of them changes what
+   you can drive on:
+
+     124  rv13      a cell that is river in temperate is rough in snow - a frozen riverbank is
+                    walkable where the flowing one is not
+     382  bridge1x  bridge cells classify as plain road in snow
+     383  bridge2x  likewise
+
+   The 44 templates in the temperate table but not in snow are left alone: a snow map cannot
+   reference one, having been authored in the snow editor, and if a hand-edited map somehow does
+   then classifying it from the temperate row beats refusing to classify it at all. */
+var RA_TILETAB_SNOW = {
+  124: '--criiiirkikckir',
+  382: '--cddk---------dd-kk',
+  383: 'ddrcr----i-----kkrdd---dd'
+};
+
+/* The table as a given theatre sees it: the shared object for temperate - the common case, and
+   no copy is made - and a patched view for snow, built once and cached. */
+function raTileTab(theatre) {
+  if (String(theatre || '').toUpperCase() !== 'SNOW') return RA_TILETAB;
+  if (raTileTab._snow) return raTileTab._snow;
+  var out = {}, id;
+  for (id in RA_TILETAB) out[id] = RA_TILETAB[id];
+  for (id in RA_TILETAB_SNOW) {
+    if (!out[id]) continue;
+    out[id] = { img: out[id].img, w: out[id].w, h: out[id].h,
+                t: RA_TILETAB_SNOW[id], cat: out[id].cat };
+  }
+  return (raTileTab._snow = out);
+}
+
 /* Dual-mode: a CommonJS module for the test suite, a plain global for the browser bundle,
    which has no loader at all and never will.
 
@@ -1962,8 +2004,11 @@ var RA_TILETAB = (function () {
   /* The browser gets the TABLE, not a wrapper around it - every consumer indexes
      window.RA_TILETAB directly. CommonJS gets the wrapper because require() callers
      destructure it. The two are deliberately different shapes. */
-  else if (typeof window !== 'undefined') window.RA_TILETAB = exp.RA_TILETAB;
-})({ RA_TILETAB: RA_TILETAB });
+  else if (typeof window !== 'undefined') {
+    window.RA_TILETAB = exp.RA_TILETAB;
+    window.raTileTab = exp.raTileTab;
+  }
+})({ RA_TILETAB: RA_TILETAB, RA_TILETAB_SNOW: RA_TILETAB_SNOW, raTileTab: raTileTab });
 </script>
 <script>/* RC COMMAND - a Command & Conquer-style real-time strategy game.
    Build a base, mine Scrap with harvesters, produce units, and fight the Redline faction.
@@ -5477,17 +5522,49 @@ var RTS_MIX = {
   /* the archives worth asking for, and what each is needed for */
   /* sounds/speech carry no artwork - they are here because _mixShp and the sound lookup both
      walk this list, and an archive nobody looks in is an archive nobody can play. */
-  want: ['conquer.mix', 'temperat.mix', 'local.mix', 'hires.mix', 'sounds.mix', 'speech.mix',
-         'scores.mix', 'allies.mix', 'russian.mix'],
+  want: ['conquer.mix', 'temperat.mix', 'snow.mix', 'local.mix', 'hires.mix', 'sounds.mix',
+         'speech.mix', 'scores.mix', 'allies.mix', 'russian.mix'],
   open: {},                     /* name -> parsed archive */
   /* name -> the BYTES that archive was opened from, for the archives the game actually
      consults. Kept so persistence can store what is used rather than what was picked: point
      the loader at a 320 MB MAIN.MIX and this holds the ~16 MB of art archives out of it. */
   bytes: {},
-  pal: null,                    /* the temperate palette, 256 x RGB */
+  pal: null,                    /* the CURRENT theatre's palette, 256 x RGB */
+  pals: {},                     /* theatre id -> palette, both loaded up front */
   ready: false,
   note: ''
 };
+
+/* ------------------------------------------------------------- theatres --
+   A map names a theatre and everything visual follows from it: which archive the tiles come
+   out of, what extension they carry, and which palette the whole screen is drawn with. RA
+   ships the same tile geometry in each - w1.tem and w1.sno are the same water, painted twice -
+   so a theatre is a lookup rather than a code path.
+
+   Only the two are here. Interior is a genuinely different tileset (it shares 2 templates with
+   temperate, not 264) and would need its own classification table, so a map asking for it is
+   still refused rather than drawn wrong. */
+var RTS_THEATRES = {
+  TEMPERAT: { ext: '.tem', pal: 'temperat.pal', mix: 'temperat.mix', name: 'temperate' },
+  SNOW:     { ext: '.sno', pal: 'snow.pal',     mix: 'snow.mix',     name: 'snow' }
+};
+var RTS_THEATRE = 'TEMPERAT';
+
+/* Switching theatres repaints everything, so every cached bake has to go - the same
+   invalidation _mixFinish does when artwork first arrives, and for the same reason: a cache
+   made under the old palette will happily keep drawing summer units on a snow map. */
+function rtsSetTheatre(id) {
+  id = String(id || 'TEMPERAT').toUpperCase();
+  if (!RTS_THEATRES[id]) id = 'TEMPERAT';
+  if (id === RTS_THEATRE) return id;
+  RTS_THEATRE = id;
+  if (RTS_MIX.pals[id]) RTS_MIX.pal = RTS_MIX.pals[id];
+  _RTS_SPR = null; _RTS_UFIT = {}; _RTS_USCALE = {};
+  _RTS_TREES = null; _RTS_MIXTREES = null; _RTS_TILECACHE = null; _RTS_MIXDEBRIS = null;
+  return id;
+}
+/* The file extension the current theatre's tiles carry. */
+function _rtsThExt() { return (RTS_THEATRES[RTS_THEATRE] || RTS_THEATRES.TEMPERAT).ext; }
 
 /* ------------------------------------------------------------------ names --
    Our keys against the originals'. The mapping is the whole reason this file can be short:
@@ -5830,10 +5907,16 @@ function _mixDescend(log) {
 function _mixFinish(log, done) {
   /* one level is enough for MAIN.MIX -> general.mix -> the art archives */
   if (_mixDescend(log)) _mixDescend(log);
+  /* Both theatre palettes, up front. They are 768 bytes each and live in the same archive, so
+     loading only the current one would mean a map switch could find itself without a palette
+     long after the picker has gone. */
   var loc = RTS_MIX.open['local.mix'];
   if (loc && !loc.error) {
-    var p = loc.read('temperat.pal');
-    if (p) RTS_MIX.pal = window.RA_SHP.palOpen(p);
+    for (var th in RTS_THEATRES) {
+      var p = loc.read(RTS_THEATRES[th].pal);
+      if (p) RTS_MIX.pals[th] = window.RA_SHP.palOpen(p);
+    }
+    RTS_MIX.pal = RTS_MIX.pals[RTS_THEATRE] || RTS_MIX.pals.TEMPERAT || RTS_MIX.pal;
   }
   var haveArt = !!(RTS_MIX.open['conquer.mix'] && !RTS_MIX.open['conquer.mix'].error);
   RTS_MIX.ready = !!(haveArt && RTS_MIX.pal);
@@ -5932,7 +6015,8 @@ var _RTS_TILECACHE = null;
 function _mixGround() {
   if (_RTS_TILECACHE) return _RTS_TILECACHE;
   if (!_rtsArtReady()) return null;
-  var clear = _mixTiles('clear1.tem'), water = _mixTiles('w1.tem');
+  var ex = _rtsThExt();
+  var clear = _mixTiles('clear1' + ex), water = _mixTiles('w1' + ex);
   if (!clear) return null;
   return (_RTS_TILECACHE = { clear: clear, water: water });
 }
@@ -5977,7 +6061,7 @@ function _mixTrees() {
   if (!_rtsArtReady()) return null;
   var out = [], i;
   for (i = 0; i < RTS_MIX_TREES.length; i++) {
-    var s = _mixShp(RTS_MIX_TREES[i] + '.tem');
+    var s = _mixShp(RTS_MIX_TREES[i] + _rtsThExt());
     if (!s || s.width !== 48) continue;
     var fr = s.frame(0);
     if (!fr) continue;
@@ -6001,7 +6085,7 @@ function _mixOre(gem) {
   if (!_rtsArtReady()) return null;
   var base = gem ? 'gem' : 'gold', sets = [], i;
   for (i = 1; i <= 4; i++) {
-    var s = _mixShp(base + '0' + i + '.tem');
+    var s = _mixShp(base + '0' + i + _rtsThExt());
     if (s && s.count) sets.push(s);
   }
   if (!sets.length) return null;
@@ -6033,8 +6117,8 @@ function _mixDebris() {
   if (_RTS_MIXDEBRIS) return _RTS_MIXDEBRIS;
   if (!_rtsArtReady()) return null;
   var rock = [], props = [], i, t;
-  for (i = 0; i < RTS_MIX_DEBRIS.length; i++) { t = _mixTiles(RTS_MIX_DEBRIS[i] + '.tem'); if (t && t.tile[0]) rock.push(t.tile[0]); }
-  for (i = 0; i < RTS_MIX_PROPS.length; i++)  { t = _mixTiles(RTS_MIX_PROPS[i] + '.tem');  if (t && t.tile[0]) props.push(t.tile[0]); }
+  for (i = 0; i < RTS_MIX_DEBRIS.length; i++) { t = _mixTiles(RTS_MIX_DEBRIS[i] + _rtsThExt()); if (t && t.tile[0]) rock.push(t.tile[0]); }
+  for (i = 0; i < RTS_MIX_PROPS.length; i++)  { t = _mixTiles(RTS_MIX_PROPS[i] + _rtsThExt());  if (t && t.tile[0]) props.push(t.tile[0]); }
   if (!rock.length) return null;
   return (_RTS_MIXDEBRIS = { rock: rock, props: props });
 }
@@ -6481,11 +6565,14 @@ function rtsMapFromScenario(text, name) {
    and build. Kept in one place so a map cannot be accepted by one route on terms another route
    would have refused. */
 function _rtsMapAssemble(b, y, raw, name) {
-  /* Only the temperate tileset is wired up: it is the one whose classification table is
-     baked in, and the one the artwork loader's temperat.mix draws. Saying so is much more
-     use than rendering a snow map as an unreadable mess. */
-  if (y.tileset && y.tileset !== 'TEMPERAT') {
-    return { error: 'this is a ' + y.tileset + ' map - only temperate maps work so far' };
+  /* Temperate and snow are wired up; interior is not. Snow costs almost nothing because it is
+     the same tile geometry repainted - every one of its 264 templates exists in the temperate
+     classification table under the same name - so only the artwork and palette differ. Interior
+     shares 2 templates with temperate rather than 264, so it needs a table of its own and is
+     still refused, because saying so is more use than rendering it as a mess. */
+  var th = (y.tileset || 'TEMPERAT').toUpperCase();
+  if (!RTS_THEATRES[th]) {
+    return { error: 'this is a ' + th + ' map - only temperate and snow maps work so far' };
   }
   var fit = _rtsMapFit(y);
   if (fit.error) return { error: fit.error };
@@ -6497,6 +6584,8 @@ function _rtsMapAssemble(b, y, raw, name) {
   var prevN = RTS_N;
   RTS_N = fit.n;
   var M = { bin: b, yaml: y, fit: fit, name: name, title: y.title, author: y.author, n: fit.n,
+            /* the theatre this map is drawn in - adopting the map adopts its artwork */
+            theatre: th,
             /* the bytes as they arrived, so rts.store.js can remember the map and re-read it
                through whatever these rules look like on the next visit */
             raw: raw };
@@ -6514,6 +6603,9 @@ function _rtsMapAssemble(b, y, raw, name) {
 function rtsMapClear() {
   window._RTS_MAP = null;
   RTS_N = RTS_MAP_DEFAULT_N;
+  /* Generated battles are temperate, so dropping a snow map has to put the artwork back or the
+     next generated one is drawn with a snow palette. */
+  if (typeof rtsSetTheatre === 'function') rtsSetTheatre('TEMPERAT');
 }
 
 /* ------------------------------------------------------------------- fit --
@@ -6549,9 +6641,10 @@ function _rtsMapFit(y) {
    The land class under one map cell. A template id the table does not know, or a tile index
    past the end of its row, is treated as clear rather than as an error - an unknown piece of
    scenery should not become an invisible wall in the middle of the battlefield. */
-function _rtsMapClass(b, mx, my) {
+function _rtsMapClass(b, mx, my, theatre) {
   var k = my * b.w + mx;
-  var id = b.tmpl[k], rec = window.RA_TILETAB[id];
+  var tab = window.raTileTab ? window.raTileTab(theatre) : window.RA_TILETAB;
+  var id = b.tmpl[k], rec = tab[id];
   if (!rec) return 'c';
   var ch = rec.t.charAt(b.tidx[k]);
   return ch || 'c';
@@ -6585,7 +6678,7 @@ function _rtsMapBuild(M) {
         G.terrain[i] = RTS_T_ROCK; G.blocked[i] = 2; blocked++;
         continue;
       }
-      var L = RTS_MAP_LAND[_rtsMapClass(b, mx, my)] || RTS_MAP_LAND.c;
+      var L = RTS_MAP_LAND[_rtsMapClass(b, mx, my, M.theatre)] || RTS_MAP_LAND.c;
       G.terrain[i] = L.t;
       G.blocked[i] = L.block;
       if (L.block) { blocked++; continue; }
@@ -6807,9 +6900,10 @@ function _rtsMapPaintCell(d, S, tx, tz) {
   var b = M.bin, f = M.fit;
   var mx = f.ox + tx, my = f.oy + tz;
   if (mx < 0 || my < 0 || mx >= b.w || my >= b.h) return false;
-  var k = my * b.w + mx, rec = window.RA_TILETAB[b.tmpl[k]];
+  var tab = window.raTileTab ? window.raTileTab(M.theatre) : window.RA_TILETAB;
+  var k = my * b.w + mx, rec = tab[b.tmpl[k]];
   if (!rec) return false;
-  var set = _mixTiles(rec.img + '.tem');
+  var set = _mixTiles(rec.img + _rtsThExt());
   if (!set) return false;
   var t = set.tile[b.tidx[k]];
   if (!t) return false;                              /* a hole in the template */
@@ -8866,6 +8960,11 @@ function _rtsNewGame(seed, diff) {
      click left RTS_N at the checked map's size for the rest of the session and the next
      generated battle came out 124 wide instead of 128. Nothing reported it. */
   RTS_N = (window._RTS_MAP && window._RTS_MAP.n) ? window._RTS_MAP.n : RTS_MAP_DEFAULT_N;
+  /* Adopting a map adopts its theatre, for the same reason and in the same place as the size
+     above: this is the one point that means "about to play this", so it is the only place the
+     artwork is allowed to change under the renderer. A generated battle is always temperate. */
+  if (typeof rtsSetTheatre === 'function')
+    rtsSetTheatre((window._RTS_MAP && window._RTS_MAP.theatre) || 'TEMPERAT');
 
   var G = {
     t:0, seed:seed || 12345, over:null, msg:null, msgT:0, shake:0,

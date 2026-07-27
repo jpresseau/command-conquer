@@ -18,17 +18,49 @@ var RTS_MIX = {
   /* the archives worth asking for, and what each is needed for */
   /* sounds/speech carry no artwork - they are here because _mixShp and the sound lookup both
      walk this list, and an archive nobody looks in is an archive nobody can play. */
-  want: ['conquer.mix', 'temperat.mix', 'local.mix', 'hires.mix', 'sounds.mix', 'speech.mix',
-         'scores.mix', 'allies.mix', 'russian.mix'],
+  want: ['conquer.mix', 'temperat.mix', 'snow.mix', 'local.mix', 'hires.mix', 'sounds.mix',
+         'speech.mix', 'scores.mix', 'allies.mix', 'russian.mix'],
   open: {},                     /* name -> parsed archive */
   /* name -> the BYTES that archive was opened from, for the archives the game actually
      consults. Kept so persistence can store what is used rather than what was picked: point
      the loader at a 320 MB MAIN.MIX and this holds the ~16 MB of art archives out of it. */
   bytes: {},
-  pal: null,                    /* the temperate palette, 256 x RGB */
+  pal: null,                    /* the CURRENT theatre's palette, 256 x RGB */
+  pals: {},                     /* theatre id -> palette, both loaded up front */
   ready: false,
   note: ''
 };
+
+/* ------------------------------------------------------------- theatres --
+   A map names a theatre and everything visual follows from it: which archive the tiles come
+   out of, what extension they carry, and which palette the whole screen is drawn with. RA
+   ships the same tile geometry in each - w1.tem and w1.sno are the same water, painted twice -
+   so a theatre is a lookup rather than a code path.
+
+   Only the two are here. Interior is a genuinely different tileset (it shares 2 templates with
+   temperate, not 264) and would need its own classification table, so a map asking for it is
+   still refused rather than drawn wrong. */
+var RTS_THEATRES = {
+  TEMPERAT: { ext: '.tem', pal: 'temperat.pal', mix: 'temperat.mix', name: 'temperate' },
+  SNOW:     { ext: '.sno', pal: 'snow.pal',     mix: 'snow.mix',     name: 'snow' }
+};
+var RTS_THEATRE = 'TEMPERAT';
+
+/* Switching theatres repaints everything, so every cached bake has to go - the same
+   invalidation _mixFinish does when artwork first arrives, and for the same reason: a cache
+   made under the old palette will happily keep drawing summer units on a snow map. */
+function rtsSetTheatre(id) {
+  id = String(id || 'TEMPERAT').toUpperCase();
+  if (!RTS_THEATRES[id]) id = 'TEMPERAT';
+  if (id === RTS_THEATRE) return id;
+  RTS_THEATRE = id;
+  if (RTS_MIX.pals[id]) RTS_MIX.pal = RTS_MIX.pals[id];
+  _RTS_SPR = null; _RTS_UFIT = {}; _RTS_USCALE = {};
+  _RTS_TREES = null; _RTS_MIXTREES = null; _RTS_TILECACHE = null; _RTS_MIXDEBRIS = null;
+  return id;
+}
+/* The file extension the current theatre's tiles carry. */
+function _rtsThExt() { return (RTS_THEATRES[RTS_THEATRE] || RTS_THEATRES.TEMPERAT).ext; }
 
 /* ------------------------------------------------------------------ names --
    Our keys against the originals'. The mapping is the whole reason this file can be short:
@@ -371,10 +403,16 @@ function _mixDescend(log) {
 function _mixFinish(log, done) {
   /* one level is enough for MAIN.MIX -> general.mix -> the art archives */
   if (_mixDescend(log)) _mixDescend(log);
+  /* Both theatre palettes, up front. They are 768 bytes each and live in the same archive, so
+     loading only the current one would mean a map switch could find itself without a palette
+     long after the picker has gone. */
   var loc = RTS_MIX.open['local.mix'];
   if (loc && !loc.error) {
-    var p = loc.read('temperat.pal');
-    if (p) RTS_MIX.pal = window.RA_SHP.palOpen(p);
+    for (var th in RTS_THEATRES) {
+      var p = loc.read(RTS_THEATRES[th].pal);
+      if (p) RTS_MIX.pals[th] = window.RA_SHP.palOpen(p);
+    }
+    RTS_MIX.pal = RTS_MIX.pals[RTS_THEATRE] || RTS_MIX.pals.TEMPERAT || RTS_MIX.pal;
   }
   var haveArt = !!(RTS_MIX.open['conquer.mix'] && !RTS_MIX.open['conquer.mix'].error);
   RTS_MIX.ready = !!(haveArt && RTS_MIX.pal);
@@ -473,7 +511,8 @@ var _RTS_TILECACHE = null;
 function _mixGround() {
   if (_RTS_TILECACHE) return _RTS_TILECACHE;
   if (!_rtsArtReady()) return null;
-  var clear = _mixTiles('clear1.tem'), water = _mixTiles('w1.tem');
+  var ex = _rtsThExt();
+  var clear = _mixTiles('clear1' + ex), water = _mixTiles('w1' + ex);
   if (!clear) return null;
   return (_RTS_TILECACHE = { clear: clear, water: water });
 }
@@ -518,7 +557,7 @@ function _mixTrees() {
   if (!_rtsArtReady()) return null;
   var out = [], i;
   for (i = 0; i < RTS_MIX_TREES.length; i++) {
-    var s = _mixShp(RTS_MIX_TREES[i] + '.tem');
+    var s = _mixShp(RTS_MIX_TREES[i] + _rtsThExt());
     if (!s || s.width !== 48) continue;
     var fr = s.frame(0);
     if (!fr) continue;
@@ -542,7 +581,7 @@ function _mixOre(gem) {
   if (!_rtsArtReady()) return null;
   var base = gem ? 'gem' : 'gold', sets = [], i;
   for (i = 1; i <= 4; i++) {
-    var s = _mixShp(base + '0' + i + '.tem');
+    var s = _mixShp(base + '0' + i + _rtsThExt());
     if (s && s.count) sets.push(s);
   }
   if (!sets.length) return null;
@@ -574,8 +613,8 @@ function _mixDebris() {
   if (_RTS_MIXDEBRIS) return _RTS_MIXDEBRIS;
   if (!_rtsArtReady()) return null;
   var rock = [], props = [], i, t;
-  for (i = 0; i < RTS_MIX_DEBRIS.length; i++) { t = _mixTiles(RTS_MIX_DEBRIS[i] + '.tem'); if (t && t.tile[0]) rock.push(t.tile[0]); }
-  for (i = 0; i < RTS_MIX_PROPS.length; i++)  { t = _mixTiles(RTS_MIX_PROPS[i] + '.tem');  if (t && t.tile[0]) props.push(t.tile[0]); }
+  for (i = 0; i < RTS_MIX_DEBRIS.length; i++) { t = _mixTiles(RTS_MIX_DEBRIS[i] + _rtsThExt()); if (t && t.tile[0]) rock.push(t.tile[0]); }
+  for (i = 0; i < RTS_MIX_PROPS.length; i++)  { t = _mixTiles(RTS_MIX_PROPS[i] + _rtsThExt());  if (t && t.tile[0]) props.push(t.tile[0]); }
   if (!rock.length) return null;
   return (_RTS_MIXDEBRIS = { rock: rock, props: props });
 }

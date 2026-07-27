@@ -173,8 +173,12 @@ function inimapMeta(text, name) {
   }
 
   var theatre = String(ini.get('map', 'Theater') || '').toUpperCase();
+  /* Some shipped scenarios spell "no name" as the literal string <none>, which is worse than an
+     empty one: it survives the || and gets shown to the player as if it were a title. */
+  var nm = String(ini.get('basic', 'Name') || '').trim();
+  if (/^<none>$/i.test(nm)) nm = '';
   return {
-    title:  ini.get('basic', 'Name') || name || 'Untitled',
+    title:  nm || name || 'Untitled',
     author: ini.get('basic', 'Author') || '',
     /* RA spells it TEMPERATE, OpenRA spells it TEMPERAT; downstream only knows the latter. */
     tileset: theatre === 'TEMPERATE' ? 'TEMPERAT' : theatre,

@@ -42,6 +42,44 @@ var RA_TILETAB = (function () {
   return out;
 })();
 
+/* ------------------------------------------------------------------ snow --
+   The snow theatre needs almost none of its own table. Comparing OpenRA's snow.yaml against
+   temperat.yaml: all 264 snow templates exist in the temperate set under the SAME image name,
+   and 261 of them classify identically. Snow is a repaint of the same tile geometry, which is
+   why a snow map can be read with the table above and only the artwork swapped.
+
+   Three disagree, and they are listed rather than waved away because one of them changes what
+   you can drive on:
+
+     124  rv13      a cell that is river in temperate is rough in snow - a frozen riverbank is
+                    walkable where the flowing one is not
+     382  bridge1x  bridge cells classify as plain road in snow
+     383  bridge2x  likewise
+
+   The 44 templates in the temperate table but not in snow are left alone: a snow map cannot
+   reference one, having been authored in the snow editor, and if a hand-edited map somehow does
+   then classifying it from the temperate row beats refusing to classify it at all. */
+var RA_TILETAB_SNOW = {
+  124: '--criiiirkikckir',
+  382: '--cddk---------dd-kk',
+  383: 'ddrcr----i-----kkrdd---dd'
+};
+
+/* The table as a given theatre sees it: the shared object for temperate - the common case, and
+   no copy is made - and a patched view for snow, built once and cached. */
+function raTileTab(theatre) {
+  if (String(theatre || '').toUpperCase() !== 'SNOW') return RA_TILETAB;
+  if (raTileTab._snow) return raTileTab._snow;
+  var out = {}, id;
+  for (id in RA_TILETAB) out[id] = RA_TILETAB[id];
+  for (id in RA_TILETAB_SNOW) {
+    if (!out[id]) continue;
+    out[id] = { img: out[id].img, w: out[id].w, h: out[id].h,
+                t: RA_TILETAB_SNOW[id], cat: out[id].cat };
+  }
+  return (raTileTab._snow = out);
+}
+
 /* Dual-mode: a CommonJS module for the test suite, a plain global for the browser bundle,
    which has no loader at all and never will.
 
@@ -55,5 +93,8 @@ var RA_TILETAB = (function () {
   /* The browser gets the TABLE, not a wrapper around it - every consumer indexes
      window.RA_TILETAB directly. CommonJS gets the wrapper because require() callers
      destructure it. The two are deliberately different shapes. */
-  else if (typeof window !== 'undefined') window.RA_TILETAB = exp.RA_TILETAB;
-})({ RA_TILETAB: RA_TILETAB });
+  else if (typeof window !== 'undefined') {
+    window.RA_TILETAB = exp.RA_TILETAB;
+    window.raTileTab = exp.raTileTab;
+  }
+})({ RA_TILETAB: RA_TILETAB, RA_TILETAB_SNOW: RA_TILETAB_SNOW, raTileTab: raTileTab });

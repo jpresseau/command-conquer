@@ -425,11 +425,14 @@ function rtsMapFromScenario(text, name) {
    and build. Kept in one place so a map cannot be accepted by one route on terms another route
    would have refused. */
 function _rtsMapAssemble(b, y, raw, name) {
-  /* Only the temperate tileset is wired up: it is the one whose classification table is
-     baked in, and the one the artwork loader's temperat.mix draws. Saying so is much more
-     use than rendering a snow map as an unreadable mess. */
-  if (y.tileset && y.tileset !== 'TEMPERAT') {
-    return { error: 'this is a ' + y.tileset + ' map - only temperate maps work so far' };
+  /* Temperate and snow are wired up; interior is not. Snow costs almost nothing because it is
+     the same tile geometry repainted - every one of its 264 templates exists in the temperate
+     classification table under the same name - so only the artwork and palette differ. Interior
+     shares 2 templates with temperate rather than 264, so it needs a table of its own and is
+     still refused, because saying so is more use than rendering it as a mess. */
+  var th = (y.tileset || 'TEMPERAT').toUpperCase();
+  if (!RTS_THEATRES[th]) {
+    return { error: 'this is a ' + th + ' map - only temperate and snow maps work so far' };
   }
   var fit = _rtsMapFit(y);
   if (fit.error) return { error: fit.error };
@@ -441,6 +444,8 @@ function _rtsMapAssemble(b, y, raw, name) {
   var prevN = RTS_N;
   RTS_N = fit.n;
   var M = { bin: b, yaml: y, fit: fit, name: name, title: y.title, author: y.author, n: fit.n,
+            /* the theatre this map is drawn in - adopting the map adopts its artwork */
+            theatre: th,
             /* the bytes as they arrived, so rts.store.js can remember the map and re-read it
                through whatever these rules look like on the next visit */
             raw: raw };
@@ -458,6 +463,9 @@ function _rtsMapAssemble(b, y, raw, name) {
 function rtsMapClear() {
   window._RTS_MAP = null;
   RTS_N = RTS_MAP_DEFAULT_N;
+  /* Generated battles are temperate, so dropping a snow map has to put the artwork back or the
+     next generated one is drawn with a snow palette. */
+  if (typeof rtsSetTheatre === 'function') rtsSetTheatre('TEMPERAT');
 }
 
 /* ------------------------------------------------------------------- fit --
@@ -493,9 +501,10 @@ function _rtsMapFit(y) {
    The land class under one map cell. A template id the table does not know, or a tile index
    past the end of its row, is treated as clear rather than as an error - an unknown piece of
    scenery should not become an invisible wall in the middle of the battlefield. */
-function _rtsMapClass(b, mx, my) {
+function _rtsMapClass(b, mx, my, theatre) {
   var k = my * b.w + mx;
-  var id = b.tmpl[k], rec = window.RA_TILETAB[id];
+  var tab = window.raTileTab ? window.raTileTab(theatre) : window.RA_TILETAB;
+  var id = b.tmpl[k], rec = tab[id];
   if (!rec) return 'c';
   var ch = rec.t.charAt(b.tidx[k]);
   return ch || 'c';
@@ -529,7 +538,7 @@ function _rtsMapBuild(M) {
         G.terrain[i] = RTS_T_ROCK; G.blocked[i] = 2; blocked++;
         continue;
       }
-      var L = RTS_MAP_LAND[_rtsMapClass(b, mx, my)] || RTS_MAP_LAND.c;
+      var L = RTS_MAP_LAND[_rtsMapClass(b, mx, my, M.theatre)] || RTS_MAP_LAND.c;
       G.terrain[i] = L.t;
       G.blocked[i] = L.block;
       if (L.block) { blocked++; continue; }
@@ -751,9 +760,10 @@ function _rtsMapPaintCell(d, S, tx, tz) {
   var b = M.bin, f = M.fit;
   var mx = f.ox + tx, my = f.oy + tz;
   if (mx < 0 || my < 0 || mx >= b.w || my >= b.h) return false;
-  var k = my * b.w + mx, rec = window.RA_TILETAB[b.tmpl[k]];
+  var tab = window.raTileTab ? window.raTileTab(M.theatre) : window.RA_TILETAB;
+  var k = my * b.w + mx, rec = tab[b.tmpl[k]];
   if (!rec) return false;
-  var set = _mixTiles(rec.img + '.tem');
+  var set = _mixTiles(rec.img + _rtsThExt());
   if (!set) return false;
   var t = set.tile[b.tidx[k]];
   if (!t) return false;                              /* a hole in the template */

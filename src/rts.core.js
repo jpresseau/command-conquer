@@ -683,6 +683,11 @@ function _rtsNewGame(seed, diff) {
      click left RTS_N at the checked map's size for the rest of the session and the next
      generated battle came out 124 wide instead of 128. Nothing reported it. */
   RTS_N = (window._RTS_MAP && window._RTS_MAP.n) ? window._RTS_MAP.n : RTS_MAP_DEFAULT_N;
+  /* Adopting a map adopts its theatre, for the same reason and in the same place as the size
+     above: this is the one point that means "about to play this", so it is the only place the
+     artwork is allowed to change under the renderer. A generated battle is always temperate. */
+  if (typeof rtsSetTheatre === 'function')
+    rtsSetTheatre((window._RTS_MAP && window._RTS_MAP.theatre) || 'TEMPERAT');
 
   var G = {
     t:0, seed:seed || 12345, over:null, msg:null, msgT:0, shake:0,
