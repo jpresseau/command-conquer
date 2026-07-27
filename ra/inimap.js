@@ -185,7 +185,85 @@ function inimapMeta(text, name) {
   };
 }
 
+/* ------------------------------------------------------------------ write --
+   The map editor's save path: turn a grid back into a scenario file RA's own format, which is
+   also the format the reader above already accepts. That round trip is the point - a map the
+   editor saves is loaded by exactly the same code as a map lifted out of MAIN.MIX, so there is
+   no second, quietly different path for maps this game made itself. */
+function _iniB64Out(bytes) {
+  if (typeof btoa === 'function') {
+    var s = '';
+    /* in chunks: String.fromCharCode.apply blows the stack on a 40 KB argument list */
+    for (var i = 0; i < bytes.length; i += 0x8000) {
+      s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(s);
+  }
+  if (typeof Buffer !== 'undefined') return Buffer.from(bytes).toString('base64');
+  return '';
+}
+
+/* The inverse of _iniUnpack: 8192-byte chunks, each LCW'd behind a u32 header whose low three
+   bytes are the compressed length, then base64 split across numbered lines. */
+function _iniPack(bytes, label) {
+  var parts = [], total = 0, at;
+  for (at = 0; at < bytes.length; at += _RA_CHUNK) {
+    var padded = new Uint8Array(_RA_CHUNK);
+    padded.set(bytes.subarray(at, at + _RA_CHUNK));
+    var enc = _inilcw.lcwCompress(padded);
+    var hdr = new Uint8Array(4);
+    hdr[0] = enc.length & 0xff; hdr[1] = (enc.length >> 8) & 0xff; hdr[2] = (enc.length >> 16) & 0xff;
+    hdr[3] = 0x20;                     /* the format marker, deliberately not part of the length */
+    parts.push(hdr, enc); total += 4 + enc.length;
+  }
+  var flat = new Uint8Array(total), o = 0, i;
+  for (i = 0; i < parts.length; i++) { flat.set(parts[i], o); o += parts[i].length; }
+  var b64 = _iniB64Out(flat), rows = ['[' + label + ']'], line = 1;
+  for (i = 0; i < b64.length; i += 70) rows.push((line++) + '=' + b64.slice(i, i + 70));
+  return rows;
+}
+
+/* grid: {tmpl:Uint16Array, tidx:Uint8Array, resType:Uint8Array} over a 128x128 board.
+   meta:  {title, author, bounds:{x,y,w,h}, spawns:[{x,y}], trees:[{x,y,type}]} */
+function inimapWrite(grid, meta) {
+  var D = RA_INI_DIM, n = D * D, i;
+  var pack = new Uint8Array(n * 3), dv = new DataView(pack.buffer);
+  for (i = 0; i < n; i++) {
+    dv.setUint16(i * 2, grid.tmpl[i] || 0xffff, true);
+    pack[n * 2 + i] = grid.tidx[i] || 0;
+  }
+  var ovr = new Uint8Array(n);
+  for (i = 0; i < n; i++) {
+    var r = grid.resType ? grid.resType[i] : 0;
+    /* the FIRST stage of each - RA recomputes the visual stage from the neighbours anyway */
+    ovr[i] = r === 1 ? RA_OVR_GOLD[0] : r === 2 ? RA_OVR_GEM[0] : r === 3 ? 2 /* BRIK */ : 0xff;
+  }
+
+  var b = meta.bounds || { x: 2, y: 2, w: D - 4, h: D - 4 };
+  var out = ['[Basic]',
+             'Name=' + (meta.title || 'Untitled'),
+             'Author=' + (meta.author || ''),
+             'Player=Greece',
+             '[Map]', 'Theater=TEMPERATE',
+             'X=' + b.x, 'Y=' + b.y, 'Width=' + b.w, 'Height=' + b.h];
+
+  var wps = meta.spawns || [];
+  if (wps.length) {
+    out.push('[Waypoints]');
+    for (i = 0; i < wps.length && i < 8; i++) out.push(i + '=' + (wps[i].y * D + wps[i].x));
+  }
+  var tr = meta.trees || [];
+  if (tr.length) {
+    out.push('[TERRAIN]');
+    for (i = 0; i < tr.length; i++) {
+      out.push((tr[i].y * D + tr[i].x) + '=' + String(tr[i].type || 'T07').toUpperCase());
+    }
+  }
+  out = out.concat(_iniPack(pack, 'MapPack'), _iniPack(ovr, 'OverlayPack'));
+  return out.join('\r\n') + '\r\n';
+}
+
 var _exp = { iniParse: iniParse, inimapRead: inimapRead, inimapMeta: inimapMeta,
-             RA_INI_DIM: RA_INI_DIM };
+             inimapWrite: inimapWrite, RA_INI_DIM: RA_INI_DIM };
 if (typeof module !== 'undefined' && module.exports) module.exports = _exp;
 else if (typeof window !== 'undefined') window.RA_INIMAP = _exp;

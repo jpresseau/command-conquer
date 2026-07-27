@@ -190,6 +190,52 @@
                      letter-spacing: 0.08em; cursor: pointer; }
 #rtsMapList button:hover { background: #2b3d51; }
 #rtsMapList button:disabled { opacity: 0.5; cursor: progress; }
+
+/* ---- the map editor ------------------------------------------------------ */
+#rtsEd { position: fixed; inset: 0; z-index: 2147482800; display: flex; flex-direction: column;
+         background: #0d1117; color: #dfe8f2;
+         font: 13px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+#rtsEd .ed-top { display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+                 background: linear-gradient(180deg, #1b2230, #141a24);
+                 border-bottom: 2px solid #33445c; flex-wrap: wrap; }
+#rtsEd .ed-top > b { color: #ffcf6a; letter-spacing: 2px; font-size: 12px; margin-right: 6px; }
+#rtsEd .ed-sp { flex: 1 1 auto; }
+#rtsEd button { padding: 5px 11px; border: 1px solid #3c4654; border-radius: 3px;
+                background: #1b2027; color: #c8d2dc; font: inherit; font-size: 11px;
+                letter-spacing: .06em; cursor: pointer; }
+#rtsEd button:hover { background: #232a33; border-color: #55637a; }
+#rtsEd button.on { background: #2e6fd0; border-color: #6fb0ff; color: #fff; }
+#rtsEd .ed-tools { display: flex; gap: 3px; }
+#rtsEd .ed-chk { font-size: 11px; opacity: .7; display: flex; align-items: center; gap: 4px; }
+#rtsEd #edPlay { background: #2e6fd0; border-color: #6fb0ff; color: #fff; font-weight: 700; }
+#rtsEd #edX { background: #2a1a1a; border-color: #6b3b34; }
+#rtsEd #edX:hover { background: #c8443a; }
+
+#rtsEd .ed-body { flex: 1 1 auto; display: flex; min-height: 0; }
+#rtsEd .ed-stage { flex: 1 1 auto; overflow: auto; background: #070a0f; padding: 12px;
+                   display: flex; align-items: center; justify-content: safe center; }
+#rtsEd #edCv { display: block; image-rendering: pixelated; cursor: crosshair;
+               box-shadow: 0 0 0 1px #2b3a4d; }
+#rtsEd .ed-side { flex: 0 0 268px; display: flex; flex-direction: column; min-height: 0;
+                  border-left: 2px solid #33445c; background: #131a24; }
+#rtsEd .ed-cats { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 7px; }
+#rtsEd .ed-cats button { font-size: 10.5px; padding: 5px 4px; }
+#rtsEd .ed-pal { flex: 1 1 auto; overflow-y: auto; display: flex; flex-wrap: wrap;
+                 align-content: flex-start; gap: 5px; padding: 0 7px 7px;
+                 scrollbar-width: thin; scrollbar-color: #33445c transparent; }
+#rtsEd .ed-pal::-webkit-scrollbar { width: 7px; }
+#rtsEd .ed-pal::-webkit-scrollbar-thumb { background: #33445c; border-radius: 4px; }
+#rtsEd .ed-tile { border: 1px solid #2b3a4d; border-radius: 3px; padding: 2px; cursor: pointer;
+                  background: #0b0f16; line-height: 0; }
+#rtsEd .ed-tile:hover { border-color: #55637a; }
+#rtsEd .ed-tile.on { border-color: #ffcf6a; box-shadow: 0 0 0 1px rgba(255,207,106,.5); }
+#rtsEd .ed-tile canvas { max-width: 72px; height: auto; image-rendering: pixelated; }
+#rtsEd .ed-info { padding: 7px; font-size: 10.5px; opacity: .5; border-top: 1px solid #263447; }
+#rtsEd .ed-status { padding: 7px 12px; font-size: 12px; background: #0b0f16;
+                    border-top: 1px solid #263447; opacity: .85; }
+#rtsEd .ed-status.ok  { color: #7fc98a; }
+#rtsEd .ed-status.bad { color: #d08a72; }
+#rtsEd .ed-status.warn{ color: #e2b23c; }
 </style>
 <style>
 /* --- standalone shell: the title screen this app boots into --- */
@@ -269,6 +315,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   <p class="diffnote" id="rtsDiffNote"></p>
   <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE</button>
   <button type="button" class="go resume" id="rtsResume" onclick="rtsLoadGame()" hidden>RESUME BATTLE</button>
+  <button type="button" class="go resume" id="rtsEdit" onclick="rtsEdOpen()" hidden>MAP EDITOR<small>draw a battlefield of your own</small></button>
   <p class="artload">
     <label class="artbtn">USE ORIGINAL ARTWORK
       <input type="file" id="rtsMixPick" multiple accept=".mix,.MIX" onchange="rtsMixPicked(this)">
@@ -428,9 +475,51 @@ function xorDelta(src, srcOffset, dest) {
   }
 }
 
+/* ------------------------------------------------------------- compress --
+   The map editor has to WRITE Red Alert's format, and [MapPack] is LCW whether the data
+   compresses well or not. This is deliberately the simplest legal encoder: runs of three or
+   more identical bytes become a fill, everything else becomes a literal block, and there is no
+   back-reference search at all.
+
+   That is a choice rather than an unfinished job. A full LCW encoder spends its effort hunting
+   for repeats it can point back at, which is what pays off on 320x200 artwork; a map's tile
+   grid is mostly long stretches of the same clear-ground template, which the run encoder
+   already catches. The output is larger than Westwood's own packer would manage on the same
+   bytes - tens of kilobytes rather than a handful, on a file the game reads once - and the
+   decoder cannot tell the difference, which is the only correctness at stake.
+
+     11111110 cc cc dd        fill: `count` copies of one byte
+     10nnnnnn <n bytes>       literal: n bytes straight through, n <= 63
+     10000000                 end of stream */
+function lcwCompress(src) {
+  var out = [], i = 0, n = src.length;
+  while (i < n) {
+    var run = 1;
+    while (i + run < n && src[i + run] === src[i] && run < 0xffff) run++;
+    if (run >= 3) {                        /* under 3 the fill costs more than it saves */
+      out.push(0xfe, run & 0xff, (run >> 8) & 0xff, src[i]);
+      i += run;
+      continue;
+    }
+    /* gather literals until a run worth encoding starts, or the 63-byte block is full */
+    var start = i;
+    while (i < n && (i - start) < 63) {
+      var r2 = 1;
+      while (i + r2 < n && src[i + r2] === src[i] && r2 < 3) r2++;
+      if (r2 >= 3 && i > start) break;      /* a fill starts here - close the literal block */
+      i++;
+    }
+    var len = i - start;
+    out.push(0x80 | len);
+    for (var k = 0; k < len; k++) out.push(src[start + k]);
+  }
+  out.push(0x80);
+  return new Uint8Array(out);
+}
+
 /* dual-mode: a CommonJS module for the test suite, a plain global for the browser
    bundle, which has no loader at all and never will. */
-var _exp = { lcwDecompress: lcwDecompress, xorDelta: xorDelta };
+var _exp = { lcwDecompress: lcwDecompress, xorDelta: xorDelta, lcwCompress: lcwCompress };
 if (typeof module !== 'undefined' && module.exports) module.exports = _exp;
 else if (typeof window !== 'undefined') window.RA_LCW = _exp;
 </script>
@@ -1425,8 +1514,86 @@ function inimapMeta(text, name) {
   };
 }
 
+/* ------------------------------------------------------------------ write --
+   The map editor's save path: turn a grid back into a scenario file RA's own format, which is
+   also the format the reader above already accepts. That round trip is the point - a map the
+   editor saves is loaded by exactly the same code as a map lifted out of MAIN.MIX, so there is
+   no second, quietly different path for maps this game made itself. */
+function _iniB64Out(bytes) {
+  if (typeof btoa === 'function') {
+    var s = '';
+    /* in chunks: String.fromCharCode.apply blows the stack on a 40 KB argument list */
+    for (var i = 0; i < bytes.length; i += 0x8000) {
+      s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(s);
+  }
+  if (typeof Buffer !== 'undefined') return Buffer.from(bytes).toString('base64');
+  return '';
+}
+
+/* The inverse of _iniUnpack: 8192-byte chunks, each LCW'd behind a u32 header whose low three
+   bytes are the compressed length, then base64 split across numbered lines. */
+function _iniPack(bytes, label) {
+  var parts = [], total = 0, at;
+  for (at = 0; at < bytes.length; at += _RA_CHUNK) {
+    var padded = new Uint8Array(_RA_CHUNK);
+    padded.set(bytes.subarray(at, at + _RA_CHUNK));
+    var enc = _inilcw.lcwCompress(padded);
+    var hdr = new Uint8Array(4);
+    hdr[0] = enc.length & 0xff; hdr[1] = (enc.length >> 8) & 0xff; hdr[2] = (enc.length >> 16) & 0xff;
+    hdr[3] = 0x20;                     /* the format marker, deliberately not part of the length */
+    parts.push(hdr, enc); total += 4 + enc.length;
+  }
+  var flat = new Uint8Array(total), o = 0, i;
+  for (i = 0; i < parts.length; i++) { flat.set(parts[i], o); o += parts[i].length; }
+  var b64 = _iniB64Out(flat), rows = ['[' + label + ']'], line = 1;
+  for (i = 0; i < b64.length; i += 70) rows.push((line++) + '=' + b64.slice(i, i + 70));
+  return rows;
+}
+
+/* grid: {tmpl:Uint16Array, tidx:Uint8Array, resType:Uint8Array} over a 128x128 board.
+   meta:  {title, author, bounds:{x,y,w,h}, spawns:[{x,y}], trees:[{x,y,type}]} */
+function inimapWrite(grid, meta) {
+  var D = RA_INI_DIM, n = D * D, i;
+  var pack = new Uint8Array(n * 3), dv = new DataView(pack.buffer);
+  for (i = 0; i < n; i++) {
+    dv.setUint16(i * 2, grid.tmpl[i] || 0xffff, true);
+    pack[n * 2 + i] = grid.tidx[i] || 0;
+  }
+  var ovr = new Uint8Array(n);
+  for (i = 0; i < n; i++) {
+    var r = grid.resType ? grid.resType[i] : 0;
+    /* the FIRST stage of each - RA recomputes the visual stage from the neighbours anyway */
+    ovr[i] = r === 1 ? RA_OVR_GOLD[0] : r === 2 ? RA_OVR_GEM[0] : r === 3 ? 2 /* BRIK */ : 0xff;
+  }
+
+  var b = meta.bounds || { x: 2, y: 2, w: D - 4, h: D - 4 };
+  var out = ['[Basic]',
+             'Name=' + (meta.title || 'Untitled'),
+             'Author=' + (meta.author || ''),
+             'Player=Greece',
+             '[Map]', 'Theater=TEMPERATE',
+             'X=' + b.x, 'Y=' + b.y, 'Width=' + b.w, 'Height=' + b.h];
+
+  var wps = meta.spawns || [];
+  if (wps.length) {
+    out.push('[Waypoints]');
+    for (i = 0; i < wps.length && i < 8; i++) out.push(i + '=' + (wps[i].y * D + wps[i].x));
+  }
+  var tr = meta.trees || [];
+  if (tr.length) {
+    out.push('[TERRAIN]');
+    for (i = 0; i < tr.length; i++) {
+      out.push((tr[i].y * D + tr[i].x) + '=' + String(tr[i].type || 'T07').toUpperCase());
+    }
+  }
+  out = out.concat(_iniPack(pack, 'MapPack'), _iniPack(ovr, 'OverlayPack'));
+  return out.join('\r\n') + '\r\n';
+}
+
 var _exp = { iniParse: iniParse, inimapRead: inimapRead, inimapMeta: inimapMeta,
-             RA_INI_DIM: RA_INI_DIM };
+             inimapWrite: inimapWrite, RA_INI_DIM: RA_INI_DIM };
 if (typeof module !== 'undefined' && module.exports) module.exports = _exp;
 else if (typeof window !== 'undefined') window.RA_INIMAP = _exp;
 </script>
@@ -1442,12 +1609,17 @@ else if (typeof window !== 'undefined') window.RA_INIMAP = _exp;
    rts.rules.js - ~300 rows of integers and one letter per cell. It is also inert on its own:
    without the player's own temperat.mix there are no pixels for it to describe.
 
-   Each record is  id image w h classes  and the classes string is one character per tile of
-   the template, in position order:
+   Each record is  id image w h classes category  and the classes string is one character per
+   tile of the template, in position order:
 
      c clear    r rough     d road      b beach/sand   g bridge     <- driveable
      k rock     w water     i river                                 <- not
      - no tile here at all (templates have holes; see _mixTiles)
+
+   The trailing category letter is the tileset's own EditorTemplateOrder grouping, and exists
+   for the map editor's palette: 308 templates in one flat list is not a palette, it is a
+   haystack.
+     T terrain  D debris  R road  C cliffs  W water cliffs  B beach  V river  G bridge
 
    Rock and Rough are separate on purpose. They look alike and RA colours them identically,
    but world.yaml's ground locomotors list Rough among the terrain they have a speed for and
@@ -1456,7 +1628,7 @@ else if (typeof window !== 'undefined') window.RA_INIMAP = _exp;
 
    Trees, ore, gems and walls are NOT here - they are overlay, stored per cell in the map
    rather than baked into a terrain template. */
-var RA_TILETAB_SRC = `1 w1 1 1 w|2 w2 2 2 wwww|3 sh01 4 5 ---k-ccbbwwiww--w---|4 sh02 5 5 ----c---bbbcbbbbrri-wwk--|5 sh03 3 5 --c-bbbbbww-w--|6 sh04 3 3 bbbbbbwww|7 sh05 3 3 bkbbkkkii|8 sh06 3 3 bbbbbbwww|9 sh07 3 3 bbbbbbwww|10 sh08 1 2 bb|11 sh09 3 3 cikcibwww|12 sh10 5 6 c----bc---wbbw---wbb--kkk---ww|13 sh11 4 5 bc--bwb-wwbb--bb--wb|14 sh12 3 5 bc-bbbwbb-wb--w|15 sh13 6 5 wkb----bbb---wbbc--wwrbc---bbb|16 sh14 4 4 bbc-ibb-rbb--wbb|17 sh15 5 3 wwbc--wbb---wbb|18 sh16 3 3 wbcwbcwbc|19 sh17 2 1 bc|20 sh18 3 3 wwrwiiwbr|21 sh19 4 5 -wbc-bbcwbb-wbb-wbc-|22 sh20 5 4 --wbbwbbb-wbb--wbb--|23 sh21 5 3 -wbbcwbbc-wbb--|24 sh22 6 5 w-----ww----bbwwww-cbbwb---bbb|25 sh23 5 5 bww--bbwww-cbiw--cbb--bbb|26 sh24 3 4 bw-bww-cb--c|27 sh25 3 3 wwwkkbkkb|28 sh26 3 3 wwwbbrbbb|29 sh27 3 3 kkkbbbbbr|30 sh28 3 3 -kkbkkbrr|31 sh29 1 2 bc|32 sh30 3 2 biicir|33 sh31 6 5 ---wwb--wwbbwwwbc-bbwbc-ccbbc-|34 sh32 4 4 --wwwwbbbbb-cc--|35 sh33 3 4 -wbwbcbr-bb-|36 sh34 6 5 ---cbw-bbbb--bbw---bbw--bbw---|37 sh35 4 4 --bw-cbr-bbwcbw-|38 sh36 4 3 -bbwbbw-bww-|39 sh37 3 3 -bwcbwrbw|40 sh38 2 1 cb|41 sh39 3 3 kbwiiwcbw|42 sh40 5 5 cbw---bw---bww--cbbw--bbw|43 sh41 4 4 bw--bbw-bbww-cbw|44 sh42 4 3 bbw--bbi-cbw|45 sh43 3 3 bbbbbbbww|46 sh44 2 2 wbiw|47 sh45 3 3 wbwwrbwib|48 sh46 2 2 wiib|49 sh47 3 3 w--bw-bbw|50 sh48 2 2 wwcb|51 sh49 3 3 bwwkkiikk|52 sh50 2 2 bbbw|53 sh51 3 3 cbb-bb-rc|54 sh52 3 3 -cccbb-bw|55 sh53 3 3 bc-bbcwbc|56 sh54 3 3 wbcbb-c--|57 sh55 1 1 k|58 sh56 2 1 kk|59 wc01 2 2 kkkk|60 wc02 2 3 krkkkk|61 wc03 2 2 kkkk|62 wc04 2 2 kkkk|63 wc05 2 2 kkkk|64 wc06 2 3 rkkkk-|65 wc07 2 2 kkkk|66 wc08 2 2 kkkk|67 wc09 3 2 kkkikk|68 wc10 2 2 kkkk|69 wc11 2 2 kkkk|70 wc12 2 2 kkkk|71 wc13 3 2 kkrkkc|72 wc14 2 2 kbbb|73 wc15 2 2 kkkk|74 wc16 2 3 w-kk-k|75 wc17 2 2 kkkk|76 wc18 2 2 kkkk|77 wc19 2 2 kkkk|78 wc20 2 3 -ikkkr|79 wc21 1 2 kk|80 wc22 2 2 kkkk|81 wc23 3 2 kkikkw|82 wc24 2 2 kkkk|83 wc25 2 2 kkkk|84 wc26 2 2 kkkk|85 wc27 3 2 kkwckk|86 wc28 2 2 kk-k|87 wc29 2 2 kkkk|88 wc30 2 2 kkkk|89 wc31 2 2 kikk|90 wc32 2 2 kkw-|91 wc33 2 2 kkkk|92 wc34 2 2 kkkk|93 wc35 2 2 kkkk|94 wc36 2 2 kkkk|95 wc37 2 2 kkkk|96 wc38 2 2 kkkk|97 b1 1 1 k|98 b2 2 1 kk|99 b3 3 1 kkk|103 p01 1 1 k|104 p02 1 1 k|105 p03 1 1 k|106 p04 1 1 k|107 p07 4 2 rccccccc|108 p08 3 2 cccccc|109 p13 3 2 kkkkkk|110 p14 2 1 kk|112 rv01 5 4 kk---kiiiikkkkk-kr--|113 rv02 5 3 kkkrriiiiikkk--|114 rv03 4 4 kr--kkkckkii-cck|115 rv04 4 4 --kr-rkiiiiikkk-|116 rv05 3 3 cikkikkik|117 rv06 3 2 kikkik|118 rv07 3 2 kkikki|119 rv08 2 2 kiii|120 rv09 2 2 ccii|121 rv10 2 2 iiki|122 rv11 2 2 iiik|123 rv12 3 4 cikkikiikrik|124 rv13 4 4 --criiiiikikckir|125 falls1 3 3 kkkikkrkk|126 falls1a 3 3 wikwkkwik|127 falls2 3 2 kkkikk|128 falls2a 3 2 kkkiii|129 ford1 3 3 rirdrdcrr|130 ford2 3 3 rrrkrrcdc|131 bridge1 5 3 -kggkkggkk--k--|132 bridge1d 5 3 -kkkkkkkkk--k--|133 bridge2 5 2 kggk-kkggk|134 bridge2d 5 2 kkkk-kkkkk|135 s01 2 2 kkkk|136 s02 2 3 krkkkk|137 s03 2 2 kkkk|138 s04 2 2 kkkk|139 s05 2 2 kkkk|140 s06 2 3 rkkkk-|141 s07 2 2 kkkk|142 s08 2 2 kkkk|143 s09 3 2 kkkkkk|144 s10 2 2 kkkk|145 s11 2 2 kkkk|146 s12 2 2 kkkk|147 s13 3 2 kkrkkr|148 s14 2 2 krk-|149 s15 2 2 kkkk|150 s16 2 3 r-kk-k|151 s17 2 2 kkkk|152 s18 2 2 kkkk|153 s19 2 2 kkkk|154 s20 2 3 -kkkkr|155 s21 1 2 kk|156 s22 2 1 kk|157 s23 3 2 kkkkkr|158 s24 2 2 kkkk|159 s25 2 2 kkkk|160 s26 2 2 kkkk|161 s27 3 2 kkrrkk|162 s28 2 2 kk-k|163 s29 2 2 kkkk|164 s30 2 2 kkkk|165 s31 2 2 krkk|166 s32 2 2 kkr-|167 s33 2 2 kkkk|168 s34 2 2 kkkk|169 s35 2 2 kkkk|170 s36 2 2 kkkk|171 s37 2 2 kkkk|172 s38 2 2 kkkk|173 d01 2 2 -dcc|174 d02 2 2 cdcc|175 d03 1 2 cd|176 d04 2 2 -cdc|177 d05 3 4 -dcdd-dd-dd-|178 d06 2 3 d-dddc|179 d07 3 2 cdc-dc|180 d08 3 2 -d-cdc|181 d09 4 3 ccccdddd--cc|182 d10 4 2 ck--dddd|183 d11 2 3 -cddc-|184 d12 2 2 c-dd|185 d13 4 3 ddc-cddk--kd|186 d14 3 3 -cdckdddd|187 d15 3 3 dddddcdc-|188 d16 3 3 cdddddddk|189 d17 3 2 dddcdc|190 d18 3 3 cdcddccdk|191 d19 3 3 cdcdddcdc|192 d20 3 3 dc-ddccdd|193 d21 3 2 kddcdr|194 d22 3 3 -c-ddccdc|195 d23 3 3 -dccdcdd-|196 d24 3 3 dd-ddd-dd|197 d25 3 3 dd-ddd-dd|198 d26 2 2 -dd-|199 d27 2 2 -dd-|200 d28 2 2 ddr-|201 d29 2 2 ddd-|202 d30 2 2 ddd-|203 d31 2 2 -ddd|204 d32 2 2 -cdc|205 d33 2 2 -ddd|206 d34 3 3 -ddddddd-|207 d35 3 3 -ddddddd-|208 d36 2 2 d--d|209 d37 2 2 d--d|210 d38 2 2 dd-d|211 d39 2 2 dd-d|212 d40 2 2 dd-d|213 d41 2 2 k-dd|214 d42 2 2 d-dd|215 d43 2 2 c-dd|216 rf01 1 1 k|217 rf02 1 1 k|218 rf03 1 1 k|219 rf04 1 1 k|220 rf05 1 1 k|221 rf06 1 1 k|222 rf07 1 1 k|223 rf08 1 2 kk|224 rf09 1 2 kk|225 rf10 2 1 rr|226 rf11 2 1 kk|227 d44 1 1 d|228 d45 1 1 d|229 rv14 1 2 ki|230 rv15 2 1 ki|231 rc01 2 2 kkkk|232 rc02 2 2 kkkk|233 rc03 2 2 kkkk|234 rc04 2 2 kkkk|235 br1a 4 3 -kg-kggk-gkk|236 br1b 4 3 -kr-krrk-rkk|237 br1c 4 3 -kk-kkkk-kkk|238 br2a 5 3 -kg--kggkk-gkk-|239 br2b 5 3 -kr--krrkk-rkk-|240 br2c 5 3 -ww--kkkkk-kkk-|241 br3a 4 2 kg---gkk|242 br3b 4 2 kg---gkk|243 br3c 4 2 kk---kkk|244 br3d 4 2 ik---iii|245 br3e 4 2 ww---kww|246 br3f 4 2 ww---www|247 f01 3 3 rddbbbbbb|248 f02 3 3 bbbbbbbbb|249 f03 3 3 bbbbbbcdc|250 f04 3 3 cbbdbbcbb|251 f05 3 3 bbbbbbbbb|252 f06 3 3 bbcbbdbbc|255 clear1 1 1 c|378 bridge1h 5 3 -krrkkrrkk--r--|379 bridge2h 5 2 krrk-kkrrk|380 br1x 5 3 k--dc----k----w|381 br2x 5 1 d---b|382 bridge1x 5 4 --cggk---------gg-kk|383 bridge2x 5 5 ggrcr----i-----kkrgg---gg|400 hill01 4 3 rkkkkkrrkkrc|401 cliffsl1 1 2 kk|402 cliffsl2 1 2 kk|403 cliffsl3 2 1 kk|404 cliffsl4 2 1 kk|405 cliffsw1 1 2 kk|406 cliffsw2 1 2 kk|407 cliffsw3 2 1 kk|408 cliffsw4 2 1 kk|500 sh57 1 1 k|502 sh58 2 1 kk|503 sh59 2 1 kk|504 sh60 1 2 kk|505 sh61 1 1 k|506 sh62 1 1 k|507 sh63 2 2 kkkk|508 sh64 1 1 k|519 sbridge1x 3 4 cdc------cdc|520 sbridge1 3 2 igiigi|521 sbridge1h 3 2 igiigi|522 sbridge1d 3 2 ikiiki|523 sbridge3 4 2 -kgkigki|524 sbridge3h 4 2 -kgkigki|525 sbridge3d 4 2 -kkkiiki|526 sbridge3x 4 4 -ccdi-------dcii|527 sbridge4 4 2 kgk-ikgk|528 sbridge4h 4 2 kgk-ikgk|529 sbridge4d 4 2 kkk-ikkk|530 sbridge4x 5 5 dcc-i---ii----iiicdc---cd|531 sbridge2 2 3 iiggkk|532 sbridge2h 2 3 iiggkk|533 sbridge2d 2 3 iiiiii|534 sbridge2x 4 4 r--rd--dr--rciic|550 sccnr 2 3 kkkkkk|551 sccnl 2 3 kkkkkk|552 sccsr 2 3 kkkkkk|553 sccsl 2 3 kkkkkk|554 sccln 3 2 kkkkkk|555 sccls 3 2 kkkkkk|556 sccrn 3 2 kkkkkk|557 sccrs 3 2 kkkkkk|580 deca 1 1 r|581 decb 1 1 r|582 decc 1 1 r|583 decc 1 1 r|584 decd 1 1 r|585 dece 1 1 r|586 decf 1 1 r|587 decg 1 1 r|588 dech 1 1 r|590 fjord1 1 2 rr|591 fjord2 2 1 rr|65535 clear1 1 1 c`;
+var RA_TILETAB_SRC = `1 w1 1 1 w T|2 w2 2 2 wwww T|3 sh01 4 5 ---k-ccbbwwiww--w--- B|4 sh02 5 5 ----c---bbbcbbbbrri-wwk-- B|5 sh03 3 5 --c-bbbbbww-w-- B|6 sh04 3 3 bbbbbbwww B|7 sh05 3 3 bkbbkkkii B|8 sh06 3 3 bbbbbbwww B|9 sh07 3 3 bbbbbbwww B|10 sh08 1 2 bb B|11 sh09 3 3 cikcibwww B|12 sh10 5 6 c----bc---wbbw---wbb--kkk---ww B|13 sh11 4 5 bc--bwb-wwbb--bb--wb B|14 sh12 3 5 bc-bbbwbb-wb--w B|15 sh13 6 5 wkb----bbb---wbbc--wwrbc---bbb B|16 sh14 4 4 bbc-ibb-rbb--wbb B|17 sh15 5 3 wwbc--wbb---wbb B|18 sh16 3 3 wbcwbcwbc B|19 sh17 2 1 bc B|20 sh18 3 3 wwrwiiwbr B|21 sh19 4 5 -wbc-bbcwbb-wbb-wbc- B|22 sh20 5 4 --wbbwbbb-wbb--wbb-- B|23 sh21 5 3 -wbbcwbbc-wbb-- B|24 sh22 6 5 w-----ww----bbwwww-cbbwb---bbb B|25 sh23 5 5 bww--bbwww-cbiw--cbb--bbb B|26 sh24 3 4 bw-bww-cb--c B|27 sh25 3 3 wwwkkbkkb B|28 sh26 3 3 wwwbbrbbb B|29 sh27 3 3 kkkbbbbbr B|30 sh28 3 3 -kkbkkbrr B|31 sh29 1 2 bc B|32 sh30 3 2 biicir B|33 sh31 6 5 ---wwb--wwbbwwwbc-bbwbc-ccbbc- B|34 sh32 4 4 --wwwwbbbbb-cc-- B|35 sh33 3 4 -wbwbcbr-bb- B|36 sh34 6 5 ---cbw-bbbb--bbw---bbw--bbw--- B|37 sh35 4 4 --bw-cbr-bbwcbw- B|38 sh36 4 3 -bbwbbw-bww- B|39 sh37 3 3 -bwcbwrbw B|40 sh38 2 1 cb B|41 sh39 3 3 kbwiiwcbw B|42 sh40 5 5 cbw---bw---bww--cbbw--bbw B|43 sh41 4 4 bw--bbw-bbww-cbw B|44 sh42 4 3 bbw--bbi-cbw B|45 sh43 3 3 bbbbbbbww B|46 sh44 2 2 wbiw B|47 sh45 3 3 wbwwrbwib B|48 sh46 2 2 wiib B|49 sh47 3 3 w--bw-bbw B|50 sh48 2 2 wwcb B|51 sh49 3 3 bwwkkiikk B|52 sh50 2 2 bbbw B|53 sh51 3 3 cbb-bb-rc B|54 sh52 3 3 -cccbb-bw B|55 sh53 3 3 bc-bbcwbc B|56 sh54 3 3 wbcbb-c-- B|57 sh55 1 1 k D|58 sh56 2 1 kk D|59 wc01 2 2 kkkk W|60 wc02 2 3 krkkkk W|61 wc03 2 2 kkkk W|62 wc04 2 2 kkkk W|63 wc05 2 2 kkkk W|64 wc06 2 3 rkkkk- W|65 wc07 2 2 kkkk W|66 wc08 2 2 kkkk W|67 wc09 3 2 kkkikk W|68 wc10 2 2 kkkk W|69 wc11 2 2 kkkk W|70 wc12 2 2 kkkk W|71 wc13 3 2 kkrkkc W|72 wc14 2 2 kbbb W|73 wc15 2 2 kkkk W|74 wc16 2 3 w-kk-k W|75 wc17 2 2 kkkk W|76 wc18 2 2 kkkk W|77 wc19 2 2 kkkk W|78 wc20 2 3 -ikkkr W|79 wc21 1 2 kk W|80 wc22 2 2 kkkk W|81 wc23 3 2 kkikkw W|82 wc24 2 2 kkkk W|83 wc25 2 2 kkkk W|84 wc26 2 2 kkkk W|85 wc27 3 2 kkwckk W|86 wc28 2 2 kk-k W|87 wc29 2 2 kkkk W|88 wc30 2 2 kkkk W|89 wc31 2 2 kikk W|90 wc32 2 2 kkw- W|91 wc33 2 2 kkkk W|92 wc34 2 2 kkkk W|93 wc35 2 2 kkkk W|94 wc36 2 2 kkkk W|95 wc37 2 2 kkkk W|96 wc38 2 2 kkkk W|97 b1 1 1 k D|98 b2 2 1 kk D|99 b3 3 1 kkk D|103 p01 1 1 k D|104 p02 1 1 k D|105 p03 1 1 k D|106 p04 1 1 k D|107 p07 4 2 rccccccc D|108 p08 3 2 cccccc D|109 p13 3 2 kkkkkk D|110 p14 2 1 kk D|112 rv01 5 4 kk---kiiiikkkkk-kr-- V|113 rv02 5 3 kkkrriiiiikkk-- V|114 rv03 4 4 kr--kkkckkii-cck V|115 rv04 4 4 --kr-rkiiiiikkk- V|116 rv05 3 3 cikkikkik V|117 rv06 3 2 kikkik V|118 rv07 3 2 kkikki V|119 rv08 2 2 kiii V|120 rv09 2 2 ccii V|121 rv10 2 2 iiki V|122 rv11 2 2 iiik V|123 rv12 3 4 cikkikiikrik V|124 rv13 4 4 --criiiiikikckir V|125 falls1 3 3 kkkikkrkk V|126 falls1a 3 3 wikwkkwik W|127 falls2 3 2 kkkikk V|128 falls2a 3 2 kkkiii W|129 ford1 3 3 rirdrdcrr G|130 ford2 3 3 rrrkrrcdc G|131 bridge1 5 3 -kggkkggkk--k-- G|132 bridge1d 5 3 -kkkkkkkkk--k-- G|133 bridge2 5 2 kggk-kkggk G|134 bridge2d 5 2 kkkk-kkkkk G|135 s01 2 2 kkkk C|136 s02 2 3 krkkkk C|137 s03 2 2 kkkk C|138 s04 2 2 kkkk C|139 s05 2 2 kkkk C|140 s06 2 3 rkkkk- C|141 s07 2 2 kkkk C|142 s08 2 2 kkkk C|143 s09 3 2 kkkkkk C|144 s10 2 2 kkkk C|145 s11 2 2 kkkk C|146 s12 2 2 kkkk C|147 s13 3 2 kkrkkr C|148 s14 2 2 krk- C|149 s15 2 2 kkkk C|150 s16 2 3 r-kk-k C|151 s17 2 2 kkkk C|152 s18 2 2 kkkk C|153 s19 2 2 kkkk C|154 s20 2 3 -kkkkr C|155 s21 1 2 kk C|156 s22 2 1 kk C|157 s23 3 2 kkkkkr C|158 s24 2 2 kkkk C|159 s25 2 2 kkkk C|160 s26 2 2 kkkk C|161 s27 3 2 kkrrkk C|162 s28 2 2 kk-k C|163 s29 2 2 kkkk C|164 s30 2 2 kkkk C|165 s31 2 2 krkk C|166 s32 2 2 kkr- C|167 s33 2 2 kkkk C|168 s34 2 2 kkkk C|169 s35 2 2 kkkk C|170 s36 2 2 kkkk C|171 s37 2 2 kkkk C|172 s38 2 2 kkkk C|173 d01 2 2 -dcc R|174 d02 2 2 cdcc R|175 d03 1 2 cd R|176 d04 2 2 -cdc R|177 d05 3 4 -dcdd-dd-dd- R|178 d06 2 3 d-dddc R|179 d07 3 2 cdc-dc R|180 d08 3 2 -d-cdc R|181 d09 4 3 ccccdddd--cc R|182 d10 4 2 ck--dddd R|183 d11 2 3 -cddc- R|184 d12 2 2 c-dd R|185 d13 4 3 ddc-cddk--kd R|186 d14 3 3 -cdckdddd R|187 d15 3 3 dddddcdc- R|188 d16 3 3 cdddddddk R|189 d17 3 2 dddcdc R|190 d18 3 3 cdcddccdk R|191 d19 3 3 cdcdddcdc R|192 d20 3 3 dc-ddccdd R|193 d21 3 2 kddcdr R|194 d22 3 3 -c-ddccdc R|195 d23 3 3 -dccdcdd- R|196 d24 3 3 dd-ddd-dd R|197 d25 3 3 dd-ddd-dd R|198 d26 2 2 -dd- R|199 d27 2 2 -dd- R|200 d28 2 2 ddr- R|201 d29 2 2 ddd- R|202 d30 2 2 ddd- R|203 d31 2 2 -ddd R|204 d32 2 2 -cdc R|205 d33 2 2 -ddd R|206 d34 3 3 -ddddddd- R|207 d35 3 3 -ddddddd- R|208 d36 2 2 d--d R|209 d37 2 2 d--d R|210 d38 2 2 dd-d R|211 d39 2 2 dd-d R|212 d40 2 2 dd-d R|213 d41 2 2 k-dd R|214 d42 2 2 d-dd R|215 d43 2 2 c-dd R|216 rf01 1 1 k D|217 rf02 1 1 k D|218 rf03 1 1 k D|219 rf04 1 1 k D|220 rf05 1 1 k D|221 rf06 1 1 k D|222 rf07 1 1 k D|223 rf08 1 2 kk D|224 rf09 1 2 kk D|225 rf10 2 1 rr D|226 rf11 2 1 kk D|227 d44 1 1 d R|228 d45 1 1 d R|229 rv14 1 2 ki V|230 rv15 2 1 ki V|231 rc01 2 2 kkkk V|232 rc02 2 2 kkkk V|233 rc03 2 2 kkkk V|234 rc04 2 2 kkkk V|235 br1a 4 3 -kg-kggk-gkk G|236 br1b 4 3 -kr-krrk-rkk G|237 br1c 4 3 -kk-kkkk-kkk G|238 br2a 5 3 -kg--kggkk-gkk- G|239 br2b 5 3 -kr--krrkk-rkk- G|240 br2c 5 3 -ww--kkkkk-kkk- G|241 br3a 4 2 kg---gkk G|242 br3b 4 2 kg---gkk G|243 br3c 4 2 kk---kkk G|244 br3d 4 2 ik---iii G|245 br3e 4 2 ww---kww G|246 br3f 4 2 ww---www G|247 f01 3 3 rddbbbbbb G|248 f02 3 3 bbbbbbbbb G|249 f03 3 3 bbbbbbcdc G|250 f04 3 3 cbbdbbcbb G|251 f05 3 3 bbbbbbbbb G|252 f06 3 3 bbcbbdbbc G|255 clear1 1 1 c T|378 bridge1h 5 3 -krrkkrrkk--r-- G|379 bridge2h 5 2 krrk-kkrrk G|380 br1x 5 3 k--dc----k----w G|381 br2x 5 1 d---b G|382 bridge1x 5 4 --cggk---------gg-kk G|383 bridge2x 5 5 ggrcr----i-----kkrgg---gg G|400 hill01 4 3 rkkkkkrrkkrc D|401 cliffsl1 1 2 kk C|402 cliffsl2 1 2 kk C|403 cliffsl3 2 1 kk C|404 cliffsl4 2 1 kk C|405 cliffsw1 1 2 kk W|406 cliffsw2 1 2 kk W|407 cliffsw3 2 1 kk W|408 cliffsw4 2 1 kk W|500 sh57 1 1 k D|502 sh58 2 1 kk D|503 sh59 2 1 kk D|504 sh60 1 2 kk D|505 sh61 1 1 k D|506 sh62 1 1 k D|507 sh63 2 2 kkkk D|508 sh64 1 1 k D|519 sbridge1x 3 4 cdc------cdc G|520 sbridge1 3 2 igiigi G|521 sbridge1h 3 2 igiigi G|522 sbridge1d 3 2 ikiiki G|523 sbridge3 4 2 -kgkigki G|524 sbridge3h 4 2 -kgkigki G|525 sbridge3d 4 2 -kkkiiki G|526 sbridge3x 4 4 -ccdi-------dcii G|527 sbridge4 4 2 kgk-ikgk G|528 sbridge4h 4 2 kgk-ikgk G|529 sbridge4d 4 2 kkk-ikkk G|530 sbridge4x 5 5 dcc-i---ii----iiicdc---cd G|531 sbridge2 2 3 iiggkk G|532 sbridge2h 2 3 iiggkk G|533 sbridge2d 2 3 iiiiii G|534 sbridge2x 4 4 r--rd--dr--rciic G|550 sccnr 2 3 kkkkkk W|551 sccnl 2 3 kkkkkk W|552 sccsr 2 3 kkkkkk W|553 sccsl 2 3 kkkkkk W|554 sccln 3 2 kkkkkk W|555 sccls 3 2 kkkkkk W|556 sccrn 3 2 kkkkkk W|557 sccrs 3 2 kkkkkk W|580 deca 1 1 r D|581 decb 1 1 r D|582 decc 1 1 r D|583 decc 1 1 r D|584 decd 1 1 r D|585 dece 1 1 r D|586 decf 1 1 r D|587 decg 1 1 r D|588 dech 1 1 r D|590 fjord1 1 2 rr G|591 fjord2 2 1 rr G|65535 clear1 1 1 c T`;
 
 /* id -> {img, w, h, t} , parsed once. */
 var RA_TILETAB = (function () {
@@ -1464,7 +1636,7 @@ var RA_TILETAB = (function () {
   for (var i = 0; i < recs.length; i++) {
     var f = recs[i].split(' ');
     if (f.length < 5) continue;
-    out[f[0] | 0] = { img: f[1], w: f[2] | 0, h: f[3] | 0, t: f[4] };
+    out[f[0] | 0] = { img: f[1], w: f[2] | 0, h: f[3] | 0, t: f[4], cat: f[5] || 'T' };
   }
   return out;
 })();
@@ -5078,6 +5250,12 @@ function _mixFinish(log, done) {
   if (RTS_MIX.ready) { _RTS_SPR = null; _RTS_UFIT = {}; _RTS_USCALE = {};
                        _RTS_TREES = null; _RTS_MIXTREES = null; _RTS_TILECACHE = null;
                        _RTS_MIXDEBRIS = null; }
+  /* Anything that keys off "is there artwork" is told HERE, at the single point where that
+     becomes true, rather than by each path that might have delivered it. The editor button was
+     hidden the first time round because it was announced from the file picker only, so artwork
+     arriving from IndexedDB - the normal case on every visit after the first - left the button
+     hidden with a full palette sitting behind it. */
+  if (RTS_MIX.ready && typeof rtsShowEditor === 'function') rtsShowEditor();
   done && done(RTS_MIX.ready ? null : RTS_MIX.note, RTS_MIX.note);
 }
 
@@ -6092,6 +6270,472 @@ function rtsStoreRestore(onMix, onMap) {
       return { mix: mix, map: map };
     });
   }).catch(function () { return { mix: null, map: null }; });
+}
+</script>
+<script>/* The map editor - a palette editor, which is the kind Red Alert shipped.
+
+   You pick a template out of the palette and stamp it. There is no auto-tiling, and that is
+   not a missing feature: RA's terrain templates carry no orientation to auto-tile FROM. The
+   enum is SHORE01..SHORE37, numbered rather than oriented; a piece's passability mask says
+   what you can drive on, not which way it faces. MAPEDPLC.CPP in the RA source does exactly
+   this - it stamps whatever the human chose - and every published map I read was built that
+   way. So the palette is the honest tool, and the thing that makes it usable is that the
+   palette is SORTED: 308 templates in one flat list is a haystack, and the tileset's own
+   EditorTemplateOrder grouping is baked into ra/tiletab.js for this.
+
+   The board is always 128x128, because that is what RA's format stores - MAP_CELL_W. The
+   playable rectangle inside it is a separate thing the author sets, and it is what decides how
+   big the battlefield ends up.
+
+   Saving writes a real RA scenario through ra/inimap.js, which means a map made here is opened
+   by exactly the same reader that opens one lifted out of MAIN.MIX. Playing it goes through
+   the file too rather than around it - press Play and what loads is what would have been
+   saved, so the save path cannot rot without the play button noticing. */
+
+var RTS_ED_DIM = 128;                        /* RA_INI_DIM; the format's board size */
+var RTS_ED_CATS = [
+  ['T', 'Terrain'], ['D', 'Debris'], ['R', 'Road'], ['C', 'Cliffs'],
+  ['W', 'Water Cliffs'], ['B', 'Beach'], ['V', 'River'], ['G', 'Bridge']
+];
+var RTS_ED_TOOLS = [
+  ['stamp', 'Stamp'], ['erase', 'Erase'], ['ore', 'Ore'], ['gems', 'Gems'],
+  ['tree', 'Trees'], ['spawn', 'Starts']
+];
+
+window._rtsEd = window._rtsEd || null;
+
+/* ------------------------------------------------------------------ open -- */
+function rtsEdOpen() {
+  if (document.getElementById('rtsEd')) return;
+  if (!_rtsArtReady()) {
+    alert('Load the original artwork first — the editor draws with the real terrain templates, ' +
+          'and without them there is nothing to put in the palette.');
+    return;
+  }
+  var D = RTS_ED_DIM, n = D * D;
+  var E = window._rtsEd = {
+    tmpl: new Uint16Array(n), tidx: new Uint8Array(n), res: new Uint8Array(n),
+    trees: [], spawns: [],
+    sel: 255, tool: 'stamp', cat: 'T',
+    bounds: { x: 2, y: 2, w: D - 4, h: D - 4 },
+    title: 'Untitled', author: '',
+    zoom: 8, panX: 0, panY: 0, grid: true, painting: false, dirty: true
+  };
+  for (var i = 0; i < n; i++) E.tmpl[i] = 255;         /* clear ground everywhere */
+  _rtsEdBuildDom();
+  _rtsEdZoomToFit();
+  _rtsEdPalette();
+  _rtsEdRepaint();
+}
+
+/* Open at whatever zoom shows the whole board. Starting at a fixed zoom left a 512px map
+   marooned in the middle of a 1200px stage, which reads as a broken layout rather than as a
+   small map - and the first thing anyone would have done is hunt for the zoom control. */
+function _rtsEdZoomToFit() {
+  var E = window._rtsEd, stage = document.getElementById('edStage');
+  if (!E || !stage) return;
+  var pad = 28;
+  var fit = Math.min(stage.clientWidth - pad, stage.clientHeight - pad) / RTS_ED_DIM;
+  E.zoom = Math.max(2, Math.min(16, Math.floor(fit)));
+}
+
+function rtsEdClose() {
+  var el = document.getElementById('rtsEd');
+  if (el && el.parentNode) el.parentNode.removeChild(el);
+  window._rtsEd = null;
+}
+
+/* ------------------------------------------------------------------- dom -- */
+function _rtsEdBuildDom() {
+  var w = document.createElement('div');
+  w.id = 'rtsEd';
+  w.innerHTML =
+    '<div class="ed-top">' +
+      '<b>MAP EDITOR</b>' +
+      '<span class="ed-tools" id="edTools"></span>' +
+      '<label class="ed-chk"><input type="checkbox" id="edGrid" checked> grid</label>' +
+      '<span class="ed-sp"></span>' +
+      '<button type="button" id="edLoad">OPEN…</button>' +
+      '<input type="file" id="edFile" accept=".ini,.mpr,.oramap,.bin,.yaml" multiple hidden>' +
+      '<button type="button" id="edCheck">CHECK</button>' +
+      '<button type="button" id="edSave">SAVE .INI</button>' +
+      '<button type="button" id="edPlay">PLAY IT</button>' +
+      '<button type="button" id="edX">✕</button>' +
+    '</div>' +
+    '<div class="ed-body">' +
+      '<div class="ed-stage" id="edStage"><canvas id="edCv"></canvas></div>' +
+      '<div class="ed-side">' +
+        '<div class="ed-cats" id="edCats"></div>' +
+        '<div class="ed-pal" id="edPal"></div>' +
+        '<div class="ed-info" id="edInfo"></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="ed-status" id="edStatus">Pick a piece on the right, then click the map to place it.</div>';
+  document.body.appendChild(w);
+
+  var cats = document.getElementById('edCats');
+  RTS_ED_CATS.forEach(function (c) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.textContent = c[1]; b.setAttribute('data-c', c[0]);
+    if (c[0] === 'T') b.className = 'on';
+    b.onclick = function () { window._rtsEd.cat = c[0]; _rtsEdPalette(); };
+    cats.appendChild(b);
+  });
+  var tools = document.getElementById('edTools');
+  RTS_ED_TOOLS.forEach(function (t) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.textContent = t[1]; b.setAttribute('data-t', t[0]);
+    if (t[0] === 'stamp') b.className = 'on';
+    b.onclick = function () {
+      window._rtsEd.tool = t[0];
+      [].forEach.call(tools.getElementsByTagName('button'), function (x) {
+        x.className = (x.getAttribute('data-t') === t[0]) ? 'on' : '';
+      });
+      _rtsEdSay(_rtsEdToolHelp(t[0]));
+    };
+    tools.appendChild(b);
+  });
+
+  document.getElementById('edX').onclick = rtsEdClose;
+  document.getElementById('edGrid').onchange = function () {
+    window._rtsEd.grid = this.checked; _rtsEdRepaint();
+  };
+  document.getElementById('edCheck').onclick = _rtsEdCheck;
+  document.getElementById('edSave').onclick = _rtsEdSave;
+  document.getElementById('edPlay').onclick = _rtsEdPlay;
+  document.getElementById('edLoad').onclick = function () { document.getElementById('edFile').click(); };
+  document.getElementById('edFile').onchange = function () { _rtsEdLoadFiles(this.files); };
+
+  _rtsEdWireCanvas();
+}
+
+function _rtsEdToolHelp(t) {
+  return {
+    stamp: 'Click or drag to stamp the selected piece. Right-click clears a cell.',
+    erase: 'Click or drag to put cells back to clear ground.',
+    ore:   'Paint ore. Harvesters need it, so put some within reach of both starts.',
+    gems:  'Paint gems — worth far more per scoop, so a small patch goes a long way.',
+    tree:  'Place trees. They block movement and burn.',
+    spawn: 'Place up to 8 start positions. A battle uses the two furthest apart.'
+  }[t] || '';
+}
+function _rtsEdSay(msg, cls) {
+  var el = document.getElementById('edStatus');
+  if (el) { el.textContent = msg; el.className = 'ed-status ' + (cls || ''); }
+}
+
+/* --------------------------------------------------------------- palette --
+   Thumbnails are rendered from the player's own templates, at one screen pixel per source
+   pixel, so what is in the palette is literally what lands on the map. */
+function _rtsEdPalette() {
+  var pal = document.getElementById('edPal');
+  if (!pal) return;
+  pal.innerHTML = '';
+  var E = window._rtsEd, ids = Object.keys(window.RA_TILETAB), shown = 0;
+  ids.sort(function (a, b) { return (a | 0) - (b | 0); });
+  for (var i = 0; i < ids.length; i++) {
+    var id = ids[i] | 0, rec = window.RA_TILETAB[id];
+    if (!rec || rec.cat !== E.cat) continue;
+    var cv = _rtsEdThumb(id, rec);
+    if (!cv) continue;
+    var cell = document.createElement('div');
+    cell.className = 'ed-tile' + (id === E.sel ? ' on' : '');
+    cell.title = rec.img + '  ' + rec.w + '×' + rec.h;
+    cell.appendChild(cv);
+    (function (tid) {
+      cell.onclick = function () {
+        window._rtsEd.sel = tid;
+        window._rtsEd.tool = 'stamp';
+        [].forEach.call(document.getElementById('edTools').getElementsByTagName('button'),
+          function (x) { x.className = (x.getAttribute('data-t') === 'stamp') ? 'on' : ''; });
+        _rtsEdPalette();
+        _rtsEdSay('Selected ' + window.RA_TILETAB[tid].img + '.');
+      };
+    })(id);
+    pal.appendChild(cell);
+    shown++;
+  }
+  var info = document.getElementById('edInfo');
+  if (info) info.textContent = shown + ' pieces in this group';
+}
+
+var _RTS_ED_THUMBS = {};
+function _rtsEdThumb(id, rec) {
+  if (_RTS_ED_THUMBS[id] !== undefined) {
+    return _RTS_ED_THUMBS[id] ? _rtsEdCloneCanvas(_RTS_ED_THUMBS[id]) : null;
+  }
+  var set = _mixTiles(rec.img + '.tem');
+  if (!set) { _RTS_ED_THUMBS[id] = null; return null; }
+  var cv = document.createElement('canvas');
+  cv.width = rec.w * RTS_TS; cv.height = rec.h * RTS_TS;
+  var g = cv.getContext('2d'), img = g.createImageData(cv.width, cv.height), d = img.data;
+  var pal = RTS_MIX.pal;
+  for (var ty = 0; ty < rec.h; ty++) {
+    for (var tx = 0; tx < rec.w; tx++) {
+      var t = set.tile[ty * rec.w + tx];
+      for (var y = 0; y < RTS_TS; y++) {
+        for (var x = 0; x < RTS_TS; x++) {
+          var o = ((ty * RTS_TS + y) * cv.width + tx * RTS_TS + x) * 4;
+          if (!t) { d[o + 3] = 0; continue; }        /* a hole stays transparent */
+          var p = t[y * RTS_TS + x] * 3;
+          d[o] = pal[p]; d[o + 1] = pal[p + 1]; d[o + 2] = pal[p + 2]; d[o + 3] = 255;
+        }
+      }
+    }
+  }
+  g.putImageData(img, 0, 0);
+  _RTS_ED_THUMBS[id] = cv;
+  return _rtsEdCloneCanvas(cv);
+}
+function _rtsEdCloneCanvas(src) {
+  var c = document.createElement('canvas');
+  c.width = src.width; c.height = src.height;
+  c.getContext('2d').drawImage(src, 0, 0);
+  return c;
+}
+
+/* ---------------------------------------------------------------- canvas -- */
+function _rtsEdWireCanvas() {
+  var cv = document.getElementById('edCv'), stage = document.getElementById('edStage');
+  function cellAt(ev) {
+    var r = cv.getBoundingClientRect(), E = window._rtsEd;
+    return { x: Math.floor((ev.clientX - r.left) / E.zoom),
+             y: Math.floor((ev.clientY - r.top) / E.zoom) };
+  }
+  cv.oncontextmenu = function (e) { e.preventDefault(); return false; };
+  cv.onmousedown = function (e) {
+    var E = window._rtsEd; if (!E) return;
+    E.painting = true;
+    var c = cellAt(e);
+    _rtsEdApply(c.x, c.y, e.button === 2);
+    e.preventDefault();
+  };
+  window.addEventListener('mousemove', function (e) {
+    var E = window._rtsEd;
+    if (!E || !E.painting) return;
+    var c = cellAt(e);
+    _rtsEdApply(c.x, c.y, (e.buttons & 2) !== 0);
+  });
+  window.addEventListener('mouseup', function () {
+    if (window._rtsEd) window._rtsEd.painting = false;
+  });
+  stage.addEventListener('wheel', function (e) {
+    var E = window._rtsEd; if (!E) return;
+    E.zoom = Math.max(2, Math.min(16, E.zoom + (e.deltaY < 0 ? 1 : -1)));
+    _rtsEdRepaint();
+    e.preventDefault();
+  }, { passive: false });
+}
+
+/* One edit. Stamping places a template's WHOLE footprint, skipping the holes - a hole is a
+   cell the piece genuinely does not cover, and blanking it would punch a square out of
+   whatever it was laid over. */
+function _rtsEdApply(cx, cy, erase) {
+  var E = window._rtsEd, D = RTS_ED_DIM;
+  if (!E || cx < 0 || cy < 0 || cx >= D || cy >= D) return;
+  var i = cy * D + cx, tool = erase ? 'erase' : E.tool;
+
+  if (tool === 'erase') {
+    E.tmpl[i] = 255; E.tidx[i] = 0; E.res[i] = 0;
+    E.trees = E.trees.filter(function (t) { return t.x !== cx || t.y !== cy; });
+    E.spawns = E.spawns.filter(function (s) { return s.x !== cx || s.y !== cy; });
+  } else if (tool === 'ore')  { E.res[i] = 1; }
+  else if (tool === 'gems')   { E.res[i] = 2; }
+  else if (tool === 'tree') {
+    if (!E.trees.some(function (t) { return t.x === cx && t.y === cy; })) {
+      var kinds = ['t01', 't02', 't03', 't05', 't06', 't07', 't08', 't10', 't11', 't12'];
+      E.trees.push({ x: cx, y: cy, type: kinds[(cx * 7 + cy * 13) % kinds.length] });
+    }
+  } else if (tool === 'spawn') {
+    if (E.spawns.some(function (s) { return s.x === cx && s.y === cy; })) return;
+    if (E.spawns.length >= 8) { _rtsEdSay('Eight starts is the most a map can have.', 'warn'); return; }
+    E.spawns.push({ x: cx, y: cy });
+  } else {
+    var rec = window.RA_TILETAB[E.sel];
+    if (!rec) return;
+    for (var ty = 0; ty < rec.h; ty++) {
+      for (var tx = 0; tx < rec.w; tx++) {
+        var gx = cx + tx, gy = cy + ty;
+        if (gx >= D || gy >= D) continue;
+        if (rec.t.charAt(ty * rec.w + tx) === '-') continue;      /* the piece has a hole here */
+        var gi = gy * D + gx;
+        E.tmpl[gi] = E.sel; E.tidx[gi] = ty * rec.w + tx;
+        E.res[gi] = 0;
+      }
+    }
+  }
+  E.dirty = true;
+  _rtsEdRepaint();
+}
+
+/* The board is redrawn whole. At 128x128 that is 16k cells of drawImage, which is fast enough
+   to keep a drag responsive and avoids a dirty-rectangle scheme that would be its own source
+   of bugs for no visible gain. */
+function _rtsEdRepaint() {
+  var E = window._rtsEd, cv = document.getElementById('edCv');
+  if (!E || !cv) return;
+  var D = RTS_ED_DIM, z = E.zoom;
+  if (cv.width !== D * z) { cv.width = D * z; cv.height = D * z; }
+  var g = cv.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  g.fillStyle = '#0b0f16';
+  g.fillRect(0, 0, cv.width, cv.height);
+
+  for (var y = 0; y < D; y++) {
+    for (var x = 0; x < D; x++) {
+      var rec = window.RA_TILETAB[E.tmpl[y * D + x]];
+      if (!rec) continue;
+      var thumb = _RTS_ED_THUMBS[E.tmpl[y * D + x]] || _rtsEdThumb(E.tmpl[y * D + x], rec);
+      var src = _RTS_ED_THUMBS[E.tmpl[y * D + x]];
+      if (!src) continue;
+      var ti = E.tidx[y * D + x];
+      var sx = (ti % rec.w) * RTS_TS, sy = ((ti / rec.w) | 0) * RTS_TS;
+      g.drawImage(src, sx, sy, RTS_TS, RTS_TS, x * z, y * z, z, z);
+    }
+  }
+  /* overlays, drawn as flat marks rather than art: this is a plan, not a screenshot */
+  for (y = 0; y < D; y++) {
+    for (x = 0; x < D; x++) {
+      var r = E.res[y * D + x];
+      if (!r) continue;
+      g.fillStyle = r === 1 ? 'rgba(255,207,106,.75)' : 'rgba(150,120,255,.8)';
+      g.fillRect(x * z + z * 0.15, y * z + z * 0.15, z * 0.7, z * 0.7);
+    }
+  }
+  g.fillStyle = 'rgba(40,90,40,.95)';
+  E.trees.forEach(function (t) { g.fillRect(t.x * z + z * 0.2, t.y * z + z * 0.2, z * 0.6, z * 0.6); });
+
+  /* the playable rectangle - everything outside it is border the battle never enters */
+  g.strokeStyle = 'rgba(255,255,255,.5)'; g.lineWidth = 1;
+  g.strokeRect(E.bounds.x * z + 0.5, E.bounds.y * z + 0.5, E.bounds.w * z, E.bounds.h * z);
+
+  /* Only once a cell is big enough for the line to read AS a line. At six pixels the grid
+     stops being a guide and turns the ground into hatching, which is worse than no grid. */
+  if (E.grid && z >= 10) {
+    g.strokeStyle = 'rgba(255,255,255,.07)'; g.beginPath();
+    for (var k = 0; k <= D; k += 1) {
+      g.moveTo(k * z + 0.5, 0); g.lineTo(k * z + 0.5, D * z);
+      g.moveTo(0, k * z + 0.5); g.lineTo(D * z, k * z + 0.5);
+    }
+    g.stroke();
+  }
+  E.spawns.forEach(function (s, i) {
+    g.fillStyle = '#2e6fd0';
+    g.beginPath(); g.arc(s.x * z + z / 2, s.y * z + z / 2, Math.max(4, z * 0.6), 0, 6.284); g.fill();
+    g.fillStyle = '#fff'; g.font = 'bold ' + Math.max(8, z) + 'px system-ui';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(String(i + 1), s.x * z + z / 2, s.y * z + z / 2);
+  });
+}
+
+/* ------------------------------------------------------------ save / play --
+   Both go through the file. Play does not hand the editor's arrays to the game directly: it
+   writes the scenario and loads it back, so pressing Play exercises the same save path a
+   player's file would take, and a broken writer cannot hide behind a working in-memory grid. */
+function _rtsEdText() {
+  var E = window._rtsEd;
+  return window.RA_INIMAP.inimapWrite(
+    { tmpl: E.tmpl, tidx: E.tidx, resType: E.res },
+    { title: E.title, author: E.author, bounds: E.bounds, spawns: E.spawns, trees: E.trees });
+}
+
+function _rtsEdCheck() {
+  var M = rtsMapFromScenario(_rtsEdText(), 'editor');
+  if (!M || M.error) { _rtsEdSay('Not playable yet: ' + ((M && M.error) || 'unreadable'), 'bad'); return null; }
+  var s = M.stats || {};
+  _rtsEdSay('Playable — ' + M.n + '×' + M.n + ' battlefield, ' + ((s.ore || 0) + (s.gems || 0)) +
+            ' ore cells, ' + (s.trees || 0) + ' trees, both starts connected.', 'ok');
+  return M;
+}
+
+function _rtsEdSave() {
+  var E = window._rtsEd;
+  var name = prompt('Name this map:', E.title || 'Untitled');
+  if (name === null) return;
+  E.title = name || 'Untitled';
+  var blob = new Blob([_rtsEdText()], { type: 'text/plain' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = E.title.replace(/[^\w\-]+/g, '_').toLowerCase() + '.ini';
+  document.body.appendChild(a); a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  _rtsEdSay('Saved ' + a.download + '. Load it again with OPEN, or from the title screen.', 'ok');
+}
+
+function _rtsEdPlay() {
+  var M = _rtsEdCheck();
+  if (!M) return;
+  window._RTS_MAP = M;
+  if (typeof rtsStoreSaveMap === 'function') rtsStoreSaveMap(M);
+  rtsEdClose();
+  var home = document.getElementById('rtsHome');
+  if (home) home.classList.add('gone');
+  rtsOpen();
+}
+
+/* --------------------------------------------------------------- opening --
+   Any map the game can read can be edited, whichever format it came in - the readers all
+   produce the same shape, so this only has to copy that shape onto the 128x128 board. A map
+   larger than the board is cropped, and says so rather than silently losing its far edge. */
+function _rtsEdLoadFiles(files) {
+  if (!files || !files.length) return;
+  _rtsEdSay('Reading…');
+  var scen = [].slice.call(files).filter(function (f) { return /\.(ini|mpr)$/i.test(f.name); })[0];
+  var got;
+  if (scen) {
+    got = new Promise(function (res) {
+      var r = new FileReader();
+      r.onload = function () { res(rtsMapFromScenario(r.result, scen.name)); };
+      r.onerror = function () { res({ error: 'could not read that file' }); };
+      r.readAsText(scen);
+    });
+  } else {
+    got = rtsMapLoadFiles(files);
+  }
+  got.then(function (M) {
+    if (!M || M.error) { _rtsEdSay((M && M.error) || 'could not read that map', 'bad'); return; }
+    _rtsEdAdopt(M);
+  });
+}
+
+function _rtsEdAdopt(M) {
+  var E = window._rtsEd;
+  /* A map that failed to load has no grid on it. Callers do check, but adopting is also
+     reachable from the editor's own reload path, and half-adopting a failed map leaves the
+     board in a state no undo can get out of. */
+  if (!E) return false;
+  if (!M || M.error || !M.bin || !M.yaml) {
+    _rtsEdSay((M && M.error) || 'that map could not be read', 'bad');
+    return false;
+  }
+  var D = RTS_ED_DIM, b = M.bin, y = M.yaml;
+  var cw = Math.min(D, b.w), ch = Math.min(D, b.h), x, z;
+  E.tmpl = new Uint16Array(D * D); E.tidx = new Uint8Array(D * D); E.res = new Uint8Array(D * D);
+  for (var i = 0; i < D * D; i++) E.tmpl[i] = 255;
+  for (z = 0; z < ch; z++) {
+    for (x = 0; x < cw; x++) {
+      var s = z * b.w + x, d = z * D + x;
+      E.tmpl[d] = b.tmpl[s]; E.tidx[d] = b.tidx[s];
+      E.res[d] = b.resType[s] === 1 ? 1 : b.resType[s] === 2 ? 2 : 0;
+    }
+  }
+  E.trees = (y.actors || []).filter(function (a) { return /^tc?\d\d$/.test(a.type); })
+    .filter(function (a) { return a.x < D && a.y < D; })
+    .map(function (a) { return { x: a.x, y: a.y, type: a.type }; });
+  E.spawns = (y.spawns || []).filter(function (s) { return s.x < D && s.y < D; }).slice(0, 8)
+    .map(function (s) { return { x: s.x, y: s.y }; });
+  E.bounds = {
+    x: Math.min(y.bounds.x, D - 8), y: Math.min(y.bounds.y, D - 8),
+    w: Math.min(y.bounds.w, D - Math.min(y.bounds.x, D - 8)),
+    h: Math.min(y.bounds.h, D - Math.min(y.bounds.y, D - 8))
+  };
+  E.title = M.title || 'Untitled'; E.author = M.author || '';
+  _rtsEdRepaint();
+  var cropped = (b.w > D || b.h > D);
+  _rtsEdSay('Opened “' + E.title + '”' + (E.author ? ' by ' + E.author : '') +
+            (cropped ? ' — cropped from ' + b.w + '×' + b.h + ' to fit the ' + D + '×' + D +
+                       ' board Red Alert’s format stores.' : '.'), 'ok');
+  return true;
 }
 </script>
 <script>/* RC COMMAND - audio. Everything here is SYNTHESIZED at runtime with WebAudio: there is not
@@ -13042,6 +13686,12 @@ function rtsHome(){
 /* Get_Savefile_Info's job: print what is in the save without loading it. The button only
    appears when there is a save this build can actually read - the version stamp does that
    check, so a save from older code shows nothing rather than a button that fails. */
+/* The editor draws with the player's own terrain templates, so it is only worth offering once
+   the artwork is loaded - an empty palette is not a tool. */
+function rtsShowEditor(){
+  var b = document.getElementById('rtsEdit');
+  if (b) b.hidden = !(typeof _rtsArtReady === 'function' && _rtsArtReady());
+}
 function rtsShowResume(){
   var r = document.getElementById('rtsResume');
   if (!r) return;
@@ -13052,6 +13702,7 @@ function rtsShowResume(){
 }
 rtsBuildDiff();
 rtsShowResume();
+rtsShowEditor();
 
 /* Anything the player chose last time loads itself now. This is the whole point of
    src/rts.store.js: picking 13 MB of archives out of a file dialog is a decision, and a
@@ -13071,6 +13722,7 @@ function rtsRestoreSaved() {
       mixNote.className = 'ok';
       rtsAddForget(mixNote);
     } else { mixNote.textContent = before; mixNote.className = ''; }
+    rtsShowEditor();
   }, function (map) {
     if (!mapNote) return;
     if (map) { mapNote.textContent = rtsMapDescribe(map); mapNote.className = 'ok'; }

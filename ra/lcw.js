@@ -102,8 +102,50 @@ function xorDelta(src, srcOffset, dest) {
   }
 }
 
+/* ------------------------------------------------------------- compress --
+   The map editor has to WRITE Red Alert's format, and [MapPack] is LCW whether the data
+   compresses well or not. This is deliberately the simplest legal encoder: runs of three or
+   more identical bytes become a fill, everything else becomes a literal block, and there is no
+   back-reference search at all.
+
+   That is a choice rather than an unfinished job. A full LCW encoder spends its effort hunting
+   for repeats it can point back at, which is what pays off on 320x200 artwork; a map's tile
+   grid is mostly long stretches of the same clear-ground template, which the run encoder
+   already catches. The output is larger than Westwood's own packer would manage on the same
+   bytes - tens of kilobytes rather than a handful, on a file the game reads once - and the
+   decoder cannot tell the difference, which is the only correctness at stake.
+
+     11111110 cc cc dd        fill: `count` copies of one byte
+     10nnnnnn <n bytes>       literal: n bytes straight through, n <= 63
+     10000000                 end of stream */
+function lcwCompress(src) {
+  var out = [], i = 0, n = src.length;
+  while (i < n) {
+    var run = 1;
+    while (i + run < n && src[i + run] === src[i] && run < 0xffff) run++;
+    if (run >= 3) {                        /* under 3 the fill costs more than it saves */
+      out.push(0xfe, run & 0xff, (run >> 8) & 0xff, src[i]);
+      i += run;
+      continue;
+    }
+    /* gather literals until a run worth encoding starts, or the 63-byte block is full */
+    var start = i;
+    while (i < n && (i - start) < 63) {
+      var r2 = 1;
+      while (i + r2 < n && src[i + r2] === src[i] && r2 < 3) r2++;
+      if (r2 >= 3 && i > start) break;      /* a fill starts here - close the literal block */
+      i++;
+    }
+    var len = i - start;
+    out.push(0x80 | len);
+    for (var k = 0; k < len; k++) out.push(src[start + k]);
+  }
+  out.push(0x80);
+  return new Uint8Array(out);
+}
+
 /* dual-mode: a CommonJS module for the test suite, a plain global for the browser
    bundle, which has no loader at all and never will. */
-var _exp = { lcwDecompress: lcwDecompress, xorDelta: xorDelta };
+var _exp = { lcwDecompress: lcwDecompress, xorDelta: xorDelta, lcwCompress: lcwCompress };
 if (typeof module !== 'undefined' && module.exports) module.exports = _exp;
 else if (typeof window !== 'undefined') window.RA_LCW = _exp;

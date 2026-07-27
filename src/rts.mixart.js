@@ -293,6 +293,12 @@ function _mixFinish(log, done) {
   if (RTS_MIX.ready) { _RTS_SPR = null; _RTS_UFIT = {}; _RTS_USCALE = {};
                        _RTS_TREES = null; _RTS_MIXTREES = null; _RTS_TILECACHE = null;
                        _RTS_MIXDEBRIS = null; }
+  /* Anything that keys off "is there artwork" is told HERE, at the single point where that
+     becomes true, rather than by each path that might have delivered it. The editor button was
+     hidden the first time round because it was announced from the file picker only, so artwork
+     arriving from IndexedDB - the normal case on every visit after the first - left the button
+     hidden with a full palette sitting behind it. */
+  if (RTS_MIX.ready && typeof rtsShowEditor === 'function') rtsShowEditor();
   done && done(RTS_MIX.ready ? null : RTS_MIX.note, RTS_MIX.note);
 }
 
