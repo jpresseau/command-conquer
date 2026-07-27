@@ -358,10 +358,10 @@ function _rtsMapAssemble(b, y, raw, name) {
   var fit = _rtsMapFit(y);
   if (fit.error) return { error: fit.error };
 
-  /* The battlefield takes the map's size. RTS_N is read at runtime everywhere - there is no
-     baked 128 anywhere in the grid maths - and rts.save.js already folds it into the save's
-     version stamp, so a size change invalidates old saves by itself instead of loading one
-     at the wrong dimensions. Restored by rtsMapClear when the map is dropped. */
+  /* The grid is BUILT at the map's size, so RTS_N has to be that while the build runs - every
+     helper below reads it. But it is put back afterwards unconditionally, success or not:
+     assembling a map is not the same as adopting one, and the editor assembles maps purely to
+     validate them. _rtsNewGame is the only place that adopts a size, from _RTS_MAP.n. */
   var prevN = RTS_N;
   RTS_N = fit.n;
   var M = { bin: b, yaml: y, fit: fit, name: name, title: y.title, author: y.author, n: fit.n,
@@ -370,7 +370,8 @@ function _rtsMapAssemble(b, y, raw, name) {
             raw: raw };
   /* Build now so an unplayable map is refused at the menu rather than at the battle. */
   var built = _rtsMapBuild(M);
-  if (built.error) { RTS_N = prevN; return { error: built.error }; }
+  RTS_N = prevN;                       /* always - see above */
+  if (built.error) return { error: built.error };
   M.built = built;
   M.stats = built.stats;
   return M;
