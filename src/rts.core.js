@@ -1596,6 +1596,12 @@ function _rtsCombatAnim(dmg, x, z, big, stick) {
     fx.att = stick.id; fx.stick = 1;
   }
   G.fx.push(fx);
+  /* And it makes a noise. There was a sound mapped for this, a synthesized branch for it, and
+     a retrigger gap tuned for it - three places set up for an effect that nothing ever asked
+     to play, so every weapon impact in the game landed in silence. The kind chosen above is
+     the same one the sound wants, and the retrigger gaps in rts.audio.js are what keeps a
+     firefight from becoming a wall of it. */
+  if (typeof _rtsSfx === 'function' && (kind === 'hit' || kind === 'splash')) _rtsSfx(kind, x, z);
   return kind;
 }
 function _rtsAnimMiddle(f, def) {
