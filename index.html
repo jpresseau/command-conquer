@@ -322,8 +322,10 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
     </label>
     <span id="rtsMixNote">Optional. Point this at <b>conquer.mix</b>, <b>local.mix</b>,
       <b>temperat.mix</b> and <b>hires.mix</b> from your own copy of Red Alert and the game will
-      draw with the real sprites instead of its own. Nothing is uploaded — the files are read in
-      your browser.</span>
+      draw with the real sprites instead of its own. Add <b>sounds.mix</b> and <b>speech.mix</b>
+      for the original weapons and EVA's voice, and <b>scores.mix</b> for the soundtrack — that
+      last one lives inside <b>MAIN.MIX</b>, which you can point at directly and let the game
+      find everything itself. Nothing is uploaded — the files are read in your browser.</span>
   </p>
   <p class="artload">
     <label class="artbtn">PLAY A REAL MAP
@@ -1073,6 +1075,171 @@ var _exp = { shpOpen: shpOpen, palOpen: palOpen };
    bundle, which has no loader at all and never will. */
 if (typeof module !== 'undefined' && module.exports) module.exports = _exp;
 else if (typeof window !== 'undefined') window.RA_SHP = _exp;
+</script>
+<script>/* AUD - the format every sound and every music track in Red Alert is stored as.
+
+   A 12-byte header, then a chain of chunks. The header says how the samples were compressed,
+   and RA uses two codecs that have nothing to do with each other:
+
+     1   Westwood's own 8-bit ADPCM, for short effects
+     99  IMA ADPCM, 16-bit, for everything else including the whole soundtrack
+
+   Header:
+     u16  sample rate
+     u32  size of the compressed data
+     u32  size once decompressed
+     u8   flags   bit 0 = stereo, bit 1 = 16-bit
+     u8   compression
+
+   Chunk:
+     u16  compressed size
+     u16  decompressed size
+     u32  0x0000DEAF, which is the only integrity check the format has
+     ...  data
+
+   THE STATE CARRIES ACROSS CHUNKS. Both codecs are differential - every sample is an offset
+   from the one before - and the running sample and step index are NOT reset at a chunk
+   boundary. Resetting them per chunk is the classic mistake: it decodes cleanly, produces
+   audio of exactly the right length, and clicks every 512 samples, which sounds like a bad
+   file rather than a bad decoder.
+
+   What comes out is Float32 in -1..1, ready for an AudioBuffer, because every caller wants
+   that and nobody wants the intermediate. */
+
+var _AUD_MAGIC = 0x0000deaf;
+
+/* ---------------------------------------------------------- IMA ADPCM (99) --
+   The standard tables. `index` walks a step size up and down as the signal gets louder or
+   quieter, which is the whole trick: four bits buy a lot more range than four bits should. */
+var _IMA_STEP = [
+  7,8,9,10,11,12,13,14,16,17,19,21,23,25,28,31,34,37,41,45,50,55,60,66,73,80,88,97,107,118,
+  130,143,157,173,190,209,230,253,279,307,337,371,408,449,494,544,598,658,724,796,876,963,
+  1060,1166,1282,1411,1552,1707,1878,2066,2272,2499,2749,3024,3327,3660,4026,4428,4871,5358,
+  5894,6484,7132,7845,8630,9493,10442,11487,12635,13899,15289,16818,18500,20350,22385,24623,
+  27086,29794,32767];
+var _IMA_INDEX = [-1,-1,-1,-1,2,4,6,8,-1,-1,-1,-1,2,4,6,8];
+
+function _audIma(src, at, len, st, out, o) {
+  for (var i = 0; i < len; i++) {
+    var b = src[at + i];
+    for (var half = 0; half < 2; half++) {
+      var nib = half ? (b >> 4) & 15 : b & 15;
+      var step = _IMA_STEP[st.index];
+      var diff = step >> 3;
+      if (nib & 1) diff += step >> 2;
+      if (nib & 2) diff += step >> 1;
+      if (nib & 4) diff += step;
+      if (nib & 8) diff = -diff;
+      st.sample += diff;
+      if (st.sample > 32767) st.sample = 32767;
+      else if (st.sample < -32768) st.sample = -32768;
+      st.index += _IMA_INDEX[nib];
+      if (st.index < 0) st.index = 0; else if (st.index > 88) st.index = 88;
+      out[o++] = st.sample / 32768;
+    }
+  }
+  return o;
+}
+
+/* ------------------------------------------------- Westwood ADPCM (1) --
+   Byte-oriented and quite unlike IMA: a command byte picks one of four modes, and two of them
+   are escapes for "the signal is not changing smoothly here" - a literal run and a repeat.
+   Output is 8-bit unsigned centred on 128. */
+var _WS_2BIT = [-2, -1, 0, 1];
+var _WS_4BIT = [-9, -8, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 8];
+
+function _audWs(src, at, len, outLen, st, out, o) {
+  var end = at + len, i, cnt;
+  while (at < end && outLen > 0) {
+    var code = src[at++], count = code & 0x3f;
+    switch (code >> 6) {
+      case 0:                                   /* four 2-bit deltas per byte */
+        for (i = count + 1; i > 0 && at < end; i--) {
+          var b0 = src[at++];
+          for (var k = 0; k < 4 && outLen > 0; k++) {
+            st.sample += _WS_2BIT[(b0 >> (k * 2)) & 3];
+            st.sample = st.sample < 0 ? 0 : st.sample > 255 ? 255 : st.sample;
+            out[o++] = (st.sample - 128) / 128; outLen--;
+          }
+        }
+        break;
+      case 1:                                   /* two 4-bit deltas per byte */
+        for (i = count + 1; i > 0 && at < end; i--) {
+          var b1 = src[at++];
+          for (var k2 = 0; k2 < 2 && outLen > 0; k2++) {
+            st.sample += _WS_4BIT[(b1 >> (k2 * 4)) & 15];
+            st.sample = st.sample < 0 ? 0 : st.sample > 255 ? 255 : st.sample;
+            out[o++] = (st.sample - 128) / 128; outLen--;
+          }
+        }
+        break;
+      case 2:
+        if (count & 0x20) {                     /* one 5-bit signed delta, in the count itself */
+          var d = (count & 0x1f);
+          if (d & 0x10) d -= 32;                /* sign-extend from five bits */
+          st.sample += d;
+          st.sample = st.sample < 0 ? 0 : st.sample > 255 ? 255 : st.sample;
+          out[o++] = (st.sample - 128) / 128; outLen--;
+        } else {                                /* a literal run - no delta at all */
+          for (i = count + 1; i > 0 && at < end && outLen > 0; i--) {
+            st.sample = src[at++];
+            out[o++] = (st.sample - 128) / 128; outLen--;
+          }
+        }
+        break;
+      default:                                  /* hold the current sample */
+        for (i = count + 1; i > 0 && outLen > 0; i--) { out[o++] = (st.sample - 128) / 128; outLen--; }
+        break;
+    }
+  }
+  return o;
+}
+
+/* ------------------------------------------------------------------ open --
+   Returns {rate, channels, samples} with samples as Float32 in -1..1, interleaved if stereo,
+   or {error} - never a half-decoded buffer, because a caller that gets one plays it. */
+function audOpen(buf) {
+  if (!buf || buf.length < 12) return { error: 'too small to be an AUD' };
+  var dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  var rate = dv.getUint16(0, true);
+  var size = dv.getUint32(2, true);
+  var outSize = dv.getUint32(6, true);
+  var flags = buf[10], comp = buf[11];
+  if (!rate || rate > 96000) return { error: 'implausible sample rate ' + rate };
+  if (comp !== 1 && comp !== 99) return { error: 'unknown AUD compression ' + comp };
+  var stereo = !!(flags & 1), wide = !!(flags & 2);
+  /* outSize counts BYTES. IMA output is 16-bit whatever the flag claims, and the flag is
+     unreliable on some files, so the sample count comes from the codec rather than the flag. */
+  var perSample = (comp === 99 || wide) ? 2 : 1;
+  var total = Math.floor(outSize / perSample);
+  if (!total || total > 40000000) return { error: 'implausible decoded size ' + outSize };
+
+  var out = new Float32Array(total), o = 0;
+  var st = { sample: comp === 99 ? 0 : 128, index: 0 };
+  var p = 12, guard = 0;
+
+  while (p + 8 <= buf.length && o < total) {
+    if (++guard > 500000) break;
+    var cSize = dv.getUint16(p, true);
+    var uSize = dv.getUint16(p + 2, true);
+    var id = dv.getUint32(p + 4, true);
+    if (id !== _AUD_MAGIC) break;               /* not a chunk header - stop rather than guess */
+    p += 8;
+    if (p + cSize > buf.length) break;
+    if (comp === 99) o = _audIma(buf, p, cSize, st, out, o);
+    else o = _audWs(buf, p, cSize, uSize, st, out, o);
+    p += cSize;
+  }
+  if (!o) return { error: 'no decodable chunks' };
+
+  return { rate: rate, channels: stereo ? 2 : 1, compression: comp,
+           samples: o < total ? out.subarray(0, o) : out,
+           declared: total };
+}
+
+var _exp = { audOpen: audOpen };
+if (typeof module !== 'undefined' && module.exports) module.exports = _exp;
+else if (typeof window !== 'undefined') window.RA_AUD = _exp;
 </script>
 <script>/* The smallest ZIP reader that can open an .oramap.
 
@@ -4973,7 +5140,10 @@ function _rtsSprites() {
 
 var RTS_MIX = {
   /* the archives worth asking for, and what each is needed for */
-  want: ['conquer.mix', 'temperat.mix', 'local.mix', 'hires.mix'],
+  /* sounds/speech carry no artwork - they are here because _mixShp and the sound lookup both
+     walk this list, and an archive nobody looks in is an archive nobody can play. */
+  want: ['conquer.mix', 'temperat.mix', 'local.mix', 'hires.mix', 'sounds.mix', 'speech.mix',
+         'scores.mix'],
   open: {},                     /* name -> parsed archive */
   pal: null,                    /* the temperate palette, 256 x RGB */
   ready: false,
@@ -5207,7 +5377,11 @@ function rtsMixLoadFiles(files, done) {
    copy found inside something else. */
 var RTS_MIX_NEST = ['conquer.mix', 'local.mix', 'temperat.mix', 'hires.mix', 'lores.mix',
                     'snow.mix', 'interior.mix', 'allies.mix', 'russian.mix', 'general.mix',
-                    'redalert.mix', 'expand.mix', 'expand2.mix'];
+                    'redalert.mix', 'expand.mix', 'expand2.mix',
+                    /* the audio: sounds and speech ship loose, the SCORE does not - scores.mix
+                       is inside MAIN.MIX, which is why most players have the effects and not
+                       the music until they point at that one file. */
+                    'sounds.mix', 'speech.mix', 'scores.mix'];
 
 function _mixDescend(log) {
   var outer = Object.keys(RTS_MIX.open), i, j, grew = 0;
@@ -5256,6 +5430,8 @@ function _mixFinish(log, done) {
      arriving from IndexedDB - the normal case on every visit after the first - left the button
      hidden with a full palette sitting behind it. */
   if (RTS_MIX.ready && typeof rtsShowEditor === 'function') rtsShowEditor();
+  /* new archives can only ADD sounds, so the "not found" cache is the one that must go */
+  if (typeof rtsSndReset === 'function') rtsSndReset();
   done && done(RTS_MIX.ready ? null : RTS_MIX.note, RTS_MIX.note);
 }
 
@@ -6852,6 +7028,10 @@ function _rtsSfx(name, x, z) {
 function _rtsSfxPlay(name, t) {
   var A = _rtsA, ctx = A.ctx, out = A.sfx, n, g;
 
+  /* The player's own sound, if they have it and this effect has a counterpart. Everything
+     below stays exactly as it was and is what plays otherwise - see src/rts.sound.js. */
+  if (typeof _rtsSndTry === 'function' && _rtsSndTry(name)) return;
+
   if (name === 'rifle') {                       /* dry snap + a little body */
     n = _rtsNoiseSrc(0.09, 'bandpass', 2400, 900, 1.1);
     g = _rtsEnv(0.09, 0.32); n.node.connect(g); g.connect(out);
@@ -6959,6 +7139,12 @@ var _RTS_LEAD = [                                /* stabs, offsets from E3 */
 function _rtsNote(semi, base) { return (base || 41.2) * Math.pow(2, semi / 12); }
 
 function _rtsMusicStart() {
+  /* The player's own soundtrack takes priority when it is there. It lives in scores.mix, which
+     ships inside MAIN.MIX rather than among the loose archives, so most installs land here
+     with the effects present and no score - and that is a normal state, not a failure: the
+     synthesized sequencer below carries on exactly as it did. */
+  if (typeof rtsSndMusicStart === 'function' && rtsSndMusicStart()) return;
+
   var A = _rtsA;
   if (!A || A.music) return;
   var ctx = A.ctx, out = A.mus;
@@ -7051,11 +7237,201 @@ function _rtsMusicStart() {
   schedule();
 }
 function _rtsMusicStop() {
+  if (typeof rtsSndMusicStop === 'function') rtsSndMusicStop();
+
   var A = _rtsA;
   if (!A || !A.music) return;
   clearInterval(A.music.timer);
   A.music = null;
 }
+</script>
+<script>/* Real Red Alert sound, when the player has it.
+
+   rts.audio.js synthesizes everything - shaped noise and oscillators - and still does. This
+   file sits in front of it: if the player's own archives are loaded and an effect has a real
+   counterpart, the sample plays; otherwise the synthesized version does, unchanged. Every
+   effect keeps working with no game files at all, which is the same arrangement the artwork
+   uses and for the same reason.
+
+   The mapping below only names sounds I confirmed are actually in the archives. A name that
+   is not there costs a failed lookup and a silent fall back to synthesis, so a wrong guess is
+   invisible rather than broken - but it is also a sound nobody ever hears, which is worse than
+   an error because nothing reports it. Hence: measured, not guessed.
+
+   SPEECH IS SEPARATE from effects. EVA's announcements are events the player must not miss -
+   base under attack, construction complete - so they bypass the "is it on screen" test that
+   every battlefield sound goes through, and they get their own retrigger gap, because two
+   announcements on top of each other are worth less than one. */
+
+/* our effect name -> the archive's. Confirmed present in sounds.mix / conquer.mix. */
+var RTS_SND_SFX = {
+  rifle:     'gun11',        /* infantry small arms */
+  mg:        'gun13',
+  cannon:    'cannon2',      /* tank main gun */
+  turretgun: 'cannon1',
+  rocket:    'missile6',
+  boom:      'kaboom25',     /* a structure going up */
+  pop:       'kaboom12',     /* a vehicle going up */
+  hit:       'kaboom1',
+  place:     'placbldg',     /* building slammed down */
+  build:     'build5',
+  select:    'bleep11',
+  order:     'bleep13',
+  click:     'bleep6',
+  deny:      'bleep12',
+  ready:     'rabeep1',
+  alert:     'sonpulse'
+};
+
+/* EVA. These are announcements, not effects. */
+var RTS_SND_EVA = {
+  ready:    'unitrdy1',      /* unit ready */
+  built:    'constru1',
+  newopt:   'newopt1',       /* new construction options */
+  progres:  'progres1',      /* construction complete-ish */
+  reinfor:  'reinfor1',
+  cancel:   'cancld1',
+  captured: 'bldginf1',      /* building infiltrated */
+  attack:   'baseatk1',      /* our base is under attack */
+  lostbldg: 'pribldg1'
+};
+
+/* Decoded AudioBuffers, keyed by archive name. Decoding a 22 kHz clip is cheap but doing it on
+   every shot is not, and a firefight asks for the same four sounds hundreds of times. */
+var _RTS_SNDBUF = {};
+var _RTS_SND_MISS = {};
+
+function _rtsSndReady() {
+  return !!(window.RA_AUD && typeof _rtsArtReady === 'function' && _rtsArtReady() && _rtsA);
+}
+
+/* Find an .aud in any loaded archive and decode it into an AudioBuffer. Returns null once and
+   remembers it: a miss is permanent for the session, and retrying it per shot would mean
+   hashing a name and walking every archive sixty times a second. */
+function _rtsSndBuf(name) {
+  if (!name || !_rtsSndReady()) return null;
+  if (_RTS_SNDBUF[name]) return _RTS_SNDBUF[name];
+  if (_RTS_SND_MISS[name]) return null;
+
+  var file = name + '.aud', raw = null, k;
+  for (k in RTS_MIX.open) {
+    var a = RTS_MIX.open[k];
+    if (a && !a.error && a.has(file)) { raw = a.read(file); break; }
+  }
+  if (!raw) { _RTS_SND_MISS[name] = 1; return null; }
+
+  var d = window.RA_AUD.audOpen(raw);
+  if (d.error || !d.samples.length) { _RTS_SND_MISS[name] = 1; return null; }
+
+  var ctx = _rtsA.ctx, ch = d.channels, frames = Math.floor(d.samples.length / ch);
+  if (!frames) { _RTS_SND_MISS[name] = 1; return null; }
+  var buf;
+  try { buf = ctx.createBuffer(ch, frames, d.rate); }
+  catch (e) { _RTS_SND_MISS[name] = 1; return null; }
+  for (var c = 0; c < ch; c++) {
+    var out = buf.getChannelData(c);
+    /* stereo is interleaved in the file and planar in an AudioBuffer */
+    if (ch === 1) out.set(d.samples.subarray(0, frames));
+    else for (var i = 0; i < frames; i++) out[i] = d.samples[i * ch + c];
+  }
+  return (_RTS_SNDBUF[name] = buf);
+}
+
+/* Play a decoded buffer. `gain` lets the caller balance a sample against the synthesized
+   effects it is replacing, which are not mastered to the same level. */
+function _rtsSndPlay(buf, bus, gain, rate) {
+  if (!buf || !_rtsA) return false;
+  var ctx = _rtsA.ctx;
+  var src = ctx.createBufferSource();
+  src.buffer = buf;
+  if (rate) src.playbackRate.value = rate;
+  var g = ctx.createGain();
+  g.gain.value = gain == null ? 1 : gain;
+  src.connect(g); g.connect(bus || _rtsA.sfx);
+  src.start();
+  return true;
+}
+
+/* The hook rts.audio.js calls before it synthesizes. Returns true if a real sample played, in
+   which case the synthesized version is skipped. A tiny random detune stops twelve rifles
+   firing at once from phase-cancelling into one flat crack - the same problem the synthesized
+   path solves with its retrigger gap. */
+function _rtsSndTry(name) {
+  if (!_rtsSndReady()) return false;
+  var buf = _rtsSndBuf(RTS_SND_SFX[name]);
+  if (!buf) return false;
+  return _rtsSndPlay(buf, _rtsA.sfx, 0.85, 0.97 + Math.random() * 0.06);
+}
+
+/* EVA. Deliberately not routed through _rtsSfx: an announcement is not a battlefield sound and
+   must not be dropped for being off screen. */
+var _RTS_EVA_LAST = 0;
+function rtsEva(key) {
+  if (!_rtsSndReady() || _rtsA.muted) return false;
+  var now = _rtsA.ctx.currentTime;
+  if (now - _RTS_EVA_LAST < 1.6) return false;     /* one voice at a time, or it is noise */
+  var buf = _rtsSndBuf(RTS_SND_EVA[key]);
+  if (!buf) return false;
+  _RTS_EVA_LAST = now;
+  return _rtsSndPlay(buf, _rtsA.master, 0.95);
+}
+
+/* ------------------------------------------------------------------ music --
+   The soundtrack lives in scores.mix, which is inside MAIN.MIX rather than among the loose art
+   archives - so most players will have the effects and not the music, and that has to be a
+   normal state rather than a failure. When there is no score archive the synthesized music in
+   rts.audio.js keeps playing, exactly as before.
+
+   Track names are the score list; only the ones actually found are used, so a partial install
+   yields a shorter playlist rather than silence. */
+var RTS_SND_TRACKS = ['bigfoot','crush','face','fogger1a','hell226m','mud1a','radio2','rollout',
+  'run1','smsh226m','snake','terminat','twin','vector1a','workmen','await','arazoid','backstab',
+  'chaos2','shut_it','twinmix1','under3','vr2','creping','dense_r','fac1226m','fac2226m',
+  'hell227m','run1226m','smsh227m','tren226m','workmn8','2nd_hand','araprowl','bog','float_v2',
+  'gloom','grndwire','rpt','search','traction','wastelnd','map','intro'];
+
+var _RTS_SNDTRACKS = null;
+function rtsSndTracks() {
+  if (_RTS_SNDTRACKS) return _RTS_SNDTRACKS;
+  if (!_rtsSndReady()) return [];
+  var out = [], i, k;
+  for (i = 0; i < RTS_SND_TRACKS.length; i++) {
+    var file = RTS_SND_TRACKS[i] + '.aud';
+    for (k in RTS_MIX.open) {
+      var a = RTS_MIX.open[k];
+      if (a && !a.error && a.has(file)) { out.push(RTS_SND_TRACKS[i]); break; }
+    }
+  }
+  return (_RTS_SNDTRACKS = out);
+}
+
+var _RTS_SNDMUS = null;
+function rtsSndMusicStart() {
+  var list = rtsSndTracks();
+  if (!list.length || !_rtsA) return false;
+  rtsSndMusicStop();
+  var pick = list[(Math.random() * list.length) | 0];
+  var buf = _rtsSndBuf(pick);
+  if (!buf) return false;
+  var src = _rtsA.ctx.createBufferSource();
+  src.buffer = buf;
+  src.connect(_rtsA.mus);
+  /* one track at a time, then roll on to another - the originals do not loop a single track */
+  src.onended = function () { if (_RTS_SNDMUS && _RTS_SNDMUS.src === src) rtsSndMusicStart(); };
+  src.start();
+  _RTS_SNDMUS = { src: src, name: pick };
+  return true;
+}
+function rtsSndMusicStop() {
+  if (!_RTS_SNDMUS) return;
+  try { _RTS_SNDMUS.src.onended = null; _RTS_SNDMUS.src.stop(); } catch (e) {}
+  _RTS_SNDMUS = null;
+}
+function rtsSndMusicPlaying() { return _RTS_SNDMUS ? _RTS_SNDMUS.name : null; }
+
+/* Loading new archives can only ADD sounds, so the misses are the cache that has to go - a
+   name that was absent before may be present now. The decoded buffers stay valid. */
+function rtsSndReset() { _RTS_SND_MISS = {}; _RTS_SNDTRACKS = null; }
 </script>
 <script>/* RC COMMAND - simulation core. Pure game state + logic; no rendering in this file.
    rts.render.js owns every pixel, rts.ui.js owns the DOM. Keeping the sim renderer-free
@@ -9208,6 +9584,10 @@ function _rtsAttacked(side) {
   G.playerHit = G.t;
   _rtsSay('Your base is under attack!');
   if (typeof _rtsSfx === 'function') _rtsSfx('alert');
+  /* EVA says it out loud when the player has the speech archive. Not routed through _rtsSfx:
+     an announcement must not be dropped for happening off screen, which is exactly when the
+     player most needs to hear it. */
+  if (typeof rtsEva === 'function') rtsEva('attack');
 }
 /* TECHNO.CPP Base_Is_Attacked. "This routine will pull units off of the field and send them
    back to defend the base. This routine will make taking an enemy base much more difficult."
@@ -12569,6 +12949,7 @@ function _rtsWatchNewOptions() {
   if (fresh) {
     _rtsSay('New construction options.');
     if (typeof _rtsSfx === 'function') _rtsSfx('ready');
+    if (typeof rtsEva === 'function') rtsEva('ready');
   }
   U.avail = now;
 }

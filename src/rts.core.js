@@ -2149,6 +2149,10 @@ function _rtsAttacked(side) {
   G.playerHit = G.t;
   _rtsSay('Your base is under attack!');
   if (typeof _rtsSfx === 'function') _rtsSfx('alert');
+  /* EVA says it out loud when the player has the speech archive. Not routed through _rtsSfx:
+     an announcement must not be dropped for happening off screen, which is exactly when the
+     player most needs to hear it. */
+  if (typeof rtsEva === 'function') rtsEva('attack');
 }
 /* TECHNO.CPP Base_Is_Attacked. "This routine will pull units off of the field and send them
    back to defend the base. This routine will make taking an enemy base much more difficult."
