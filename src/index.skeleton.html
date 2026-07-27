@@ -88,6 +88,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   <p class="diffnote" id="rtsDiffNote"></p>
   <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE</button>
   <button type="button" class="go resume" id="rtsResume" onclick="rtsLoadGame()" hidden>RESUME BATTLE</button>
+  <button type="button" class="go resume" id="rtsEdit" onclick="rtsEdOpen()" hidden>MAP EDITOR<small>draw a battlefield of your own</small></button>
   <p class="artload">
     <label class="artbtn">USE ORIGINAL ARTWORK
       <input type="file" id="rtsMixPick" multiple accept=".mix,.MIX" onchange="rtsMixPicked(this)">
@@ -157,6 +158,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 <script>//@@INC:rts.mixart.js@@</script>
 <script>//@@INC:rts.map.js@@</script>
 <script>//@@INC:rts.store.js@@</script>
+<script>//@@INC:rts.editor.js@@</script>
 <script>//@@INC:rts.audio.js@@</script>
 <script>//@@INC:rts.core.js@@</script>
 <script>//@@INC:rts.render.js@@</script>
@@ -200,6 +202,12 @@ function rtsHome(){
 /* Get_Savefile_Info's job: print what is in the save without loading it. The button only
    appears when there is a save this build can actually read - the version stamp does that
    check, so a save from older code shows nothing rather than a button that fails. */
+/* The editor draws with the player's own terrain templates, so it is only worth offering once
+   the artwork is loaded - an empty palette is not a tool. */
+function rtsShowEditor(){
+  var b = document.getElementById('rtsEdit');
+  if (b) b.hidden = !(typeof _rtsArtReady === 'function' && _rtsArtReady());
+}
 function rtsShowResume(){
   var r = document.getElementById('rtsResume');
   if (!r) return;
@@ -210,6 +218,7 @@ function rtsShowResume(){
 }
 rtsBuildDiff();
 rtsShowResume();
+rtsShowEditor();
 
 /* Anything the player chose last time loads itself now. This is the whole point of
    src/rts.store.js: picking 13 MB of archives out of a file dialog is a decision, and a
@@ -229,6 +238,7 @@ function rtsRestoreSaved() {
       mixNote.className = 'ok';
       rtsAddForget(mixNote);
     } else { mixNote.textContent = before; mixNote.className = ''; }
+    rtsShowEditor();
   }, function (map) {
     if (!mapNote) return;
     if (map) { mapNote.textContent = rtsMapDescribe(map); mapNote.className = 'ok'; }

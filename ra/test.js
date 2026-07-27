@@ -547,6 +547,88 @@ function raPack(bytes) {
      meta.bounds.x === 0 && meta.bounds.w === 128, JSON.stringify(meta.bounds));
 })();
 
+
+/* ------------------------------------------------- the editor's save path --
+   A map the editor writes must be read back by the SAME reader that opens a scenario lifted
+   out of MAIN.MIX - there is no second path for maps this game made itself. So the test is a
+   round trip, not a check of the bytes: build a grid, write it, read it, and require the grid
+   that comes back to be identical. */
+(function () {
+  var enc = lcw.lcwCompress;
+  /* the compressor must survive the shapes a map actually contains */
+  [[], [7], [7, 7, 7], [1, 2, 3, 4, 5],
+   new Array(300).fill(9),
+   new Array(200).fill(0).map(function (_, i) { return i & 0xff; })
+  ].forEach(function (arr, k) {
+    var src = Uint8Array.from(arr), out = new Uint8Array(src.length);
+    enc(src);
+    lcw.lcwDecompress(enc(src), 0, out);
+    ok('lcwCompress round-trips case ' + k + ' (' + src.length + ' bytes)', eq(out, src));
+  });
+  var big = new Uint8Array(8192);
+  for (var i = 0; i < 8192; i++) big[i] = (i < 6000) ? 255 : (i * 7) & 0xff;
+  var back = new Uint8Array(8192);
+  var packed = enc(big);
+  lcw.lcwDecompress(packed, 0, back);
+  ok('...and a full 8192-byte chunk', eq(back, big),
+     packed.length + ' bytes out of 8192');
+  ok('...compressing a long run actually shrinks it', packed.length < 8192, packed.length);
+})();
+
+(function () {
+  var D = inimap.RA_INI_DIM, n = D * D, i;
+  var tmpl = new Uint16Array(n), tidx = new Uint8Array(n), res = new Uint8Array(n);
+  for (i = 0; i < n; i++) { tmpl[i] = 255; tidx[i] = 0; }
+  /* a 2x2 water-cliff block, some ore, some gems, a wall */
+  var put = function (x, y, id, ti) { tmpl[y * D + x] = id; tidx[y * D + x] = ti; };
+  put(10, 10, 59, 0); put(11, 10, 59, 1); put(10, 11, 59, 2); put(11, 11, 59, 3);
+  put(40, 40, 1, 0);                                   /* open water */
+  res[50 * D + 50] = 1; res[51 * D + 51] = 2; res[52 * D + 52] = 3;
+
+  var text = inimap.inimapWrite(
+    { tmpl: tmpl, tidx: tidx, resType: res },
+    { title: 'Editor Test', author: 'RC Command',
+      bounds: { x: 4, y: 6, w: 100, h: 90 },
+      spawns: [{ x: 20, y: 30 }, { x: 90, y: 80 }],
+      trees: [{ x: 70, y: 70, type: 't05' }] });
+
+  var b = inimap.inimapRead(text);
+  ok('a written scenario reads back', !b.error, b.error || '');
+  var same = true, firstBad = -1;
+  for (i = 0; i < n; i++) {
+    if (b.tmpl[i] !== tmpl[i] || b.tidx[i] !== tidx[i]) { same = false; firstBad = i; break; }
+  }
+  ok('...with an identical terrain grid', same,
+     same ? '' : 'first mismatch at cell ' + firstBad);
+  ok('...and the multi-tile block intact',
+     b.tmpl[10 * D + 10] === 59 && b.tidx[11 * D + 11] === 3);
+  ok('...and the ore, gems and wall in the right cells',
+     b.resType[50 * D + 50] === 1 && b.resType[51 * D + 51] === 2 && b.resType[52 * D + 52] === 3);
+  ok('...and nothing else marked', b.counts.ore === 1 && b.counts.gems === 1 && b.counts.walls === 1,
+     JSON.stringify(b.counts));
+
+  var m = inimap.inimapMeta(text, 'test.ini');
+  ok('...and the metadata survives', m.title === 'Editor Test' && m.author === 'RC Command');
+  ok('...and the bounds', m.bounds.x === 4 && m.bounds.y === 6 && m.bounds.w === 100);
+  ok('...and both spawns, as x,y', m.spawns.length === 2 &&
+     m.spawns[0].x === 20 && m.spawns[0].y === 30 && m.spawns[1].x === 90);
+  ok('...and the tree', m.actors.length === 1 && m.actors[0].type === 't05' && m.actors[0].y === 70);
+  ok('...and it says it is temperate', m.tileset === 'TEMPERAT');
+})();
+
+(function () {
+  /* An empty board is the state the editor starts in, and saving it must not produce a file
+     that the reader then rejects - "new map, save, reload" is the first thing anyone does. */
+  var D = inimap.RA_INI_DIM, n = D * D;
+  var tmpl = new Uint16Array(n).fill(255), tidx = new Uint8Array(n);
+  var text = inimap.inimapWrite({ tmpl: tmpl, tidx: tidx, resType: new Uint8Array(n) },
+                                { title: 'Blank' });
+  var b = inimap.inimapRead(text);
+  ok('a blank board saves and reloads', !b.error && b.tmpl[0] === 255 && b.tmpl[n - 1] === 255,
+     b.error || '');
+  ok('...with no ore anywhere', b.counts.ore === 0 && b.counts.gems === 0);
+})();
+
 console.log("--- " + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
 
