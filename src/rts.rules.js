@@ -112,6 +112,23 @@ var RTS_STRUCTS = [
     needs:['radar'], weapon:'teslazap', side:'soviet', needsPower:true,
     armour:'concrete',
     desc:'Devastating, and dead the moment your power browns out. Soviet.' },
+  /* ------------------------------------------------------------------ naval --
+     Both armies get a shipyard and they are the same building with different names and
+     different hulls coming out of it, which is what RA does too: the Naval Yard and the Sub
+     Pen have identical stats and differ entirely in what they produce.
+
+     `shore:true` is the placement rule - it must touch water. That is the only structure
+     constraint in the game that looks at the terrain rather than at free space, and it is
+     what stops a shipyard being planted in the middle of a field with a fleet appearing
+     inland. See _rtsShoreOk. */
+  { key:'navalyard',name:'Naval Yard',  w:3, h:3, cost:1000, build:14, hp:600,  power:-30, sight:12,
+    needs:['refinery'], side:'allied', shore:true,
+    armour:'wood',
+    desc:'Builds ships. Must be placed against water. Allied.' },
+  { key:'subpen',   name:'Sub Pen',     w:3, h:3, cost:1000, build:14, hp:600,  power:-30, sight:12,
+    needs:['refinery'], side:'soviet', shore:true,
+    armour:'wood',
+    desc:'Builds submarines. Must be placed against water. Soviet.' },
   { key:'flametower',name:'Flame Tower', w:1, h:1, cost:500,  build:11, hp:450,  power:-20,  sight:16,
     needs:['barracks'], weapon:'towerflame', deathBlast:{ dmg:70, radius:RTS_TILE * 2.6 },
     side:'soviet', armour:'concrete',
@@ -249,6 +266,29 @@ var RTS_UNITS = [
     needs:['barracks'], carries:5, crush:true,
     armour:'heavy',
     desc:'Carries five infantry. Fast and tough; its passengers walk away if it dies.' },
+  /* SHIPS. `sea:true` is the whole difference - it flips which half of the map they can move
+     through (see _rtsBlocked). They are otherwise ordinary units: they path, they acquire, they
+     die the same way.
+
+     Deliberately heavy and expensive relative to their land equivalents. A ship cannot take
+     ground and cannot be threatened by most of what the enemy owns, so if it were also cheap
+     there would be no reason to build anything else on a map with water. */
+  { key:'gunboat',  name:'Gunboat',      kind:'ship',     cost:500,  build:8,  hp:400,  speed:13,  turn:1.8,r:2.0, sight:20,
+    weapon:'navalgun', needs:['navalyard'], sea:true, side:'allied',
+    armour:'heavy',
+    desc:'Cheap escort. Shells the shore and anything afloat.' },
+  { key:'destroyer',name:'Destroyer',    kind:'ship',     cost:1000, build:14, hp:700,  speed:11,  turn:1.4,r:2.4, sight:24,
+    weapon:'navalheavy', needs:['navalyard'], sea:true, side:'allied', aaOnly:false,
+    armour:'heavy',
+    desc:'Heavy guns and long reach. The Allied answer to a submarine.' },
+  { key:'sub',      name:'Submarine',    kind:'ship',     cost:950,  build:13, hp:500,  speed:10,  turn:1.3,r:2.0, sight:18,
+    weapon:'torpedo', needs:['subpen'], sea:true, side:'soviet',
+    armour:'heavy',
+    desc:'Torpedoes anything afloat. Cannot touch the shore.' },
+  { key:'missilesub',name:'Missile Sub', kind:'ship',     cost:1500, build:18, hp:450,  speed:9,   turn:1.1,r:2.2, sight:26,
+    weapon:'subrocket', needs:['subpen'], sea:true, side:'soviet',
+    armour:'heavy',
+    desc:'Bombards the shore from further out than anything can answer.' },
   { key:'mcv',      name:'Mobile Yard',   kind:'vehicle',  cost:2500, build:26, hp:600,  speed:5.5, turn:1.2,r:2.2, sight:14, weapon:null,
     needs:['depot'], deploy:'yard', crush:true,
     armour:'light',
@@ -347,6 +387,18 @@ var RTS_WEAPONS = {
      a Tesla hit is a Tesla hit whether it lands on a rifleman or a Mammoth. */
   teslazap:   { dmg:200, range:17, cool:2.6, shot:'tracer', speed:0, splash:0, wall:true,
                 verses:{ none:1, wood:1, light:1, heavy:1, concrete:1 } },
+  /* Naval guns. Long reach is the point of a ship - it is the only thing in the game that can
+     hit a base without being able to be walked up to. */
+  navalgun:   { dmg:30, range:24, cool:1.6, shot:'shell', speed:60, splash:2.0, wall:true, wood:true,
+                verses:{ none:0.7, wood:1.1, light:1.0, heavy:0.9, concrete:0.8 } },
+  navalheavy: { dmg:55, range:30, cool:2.2, shot:'shell', speed:60, splash:3.0, wall:true, wood:true,
+                verses:{ none:0.6, wood:1.2, light:1.1, heavy:1.0, concrete:0.9 } },
+  /* A torpedo cannot climb out of the water, so a submarine is helpless against the shore -
+     which is what makes the Missile Sub worth its price rather than a strictly better one. */
+  torpedo:    { dmg:70, range:22, cool:2.6, shot:'shell', speed:40, splash:1.2, seaOnly:true,
+                verses:{ none:0.5, wood:1.0, light:1.2, heavy:1.3, concrete:0.7 } },
+  subrocket:  { dmg:60, range:34, cool:3.6, burst:2, shot:'missile', speed:34, splash:3.2, wall:true, wood:true,
+                verses:{ none:0.7, wood:1.3, light:1.0, heavy:0.8, concrete:1.0 } },
   towerflame: { dmg:34, range:13, cool:0.75, shot:'tracer',  speed:0,  splash:3.0, wood:true,
                 verses:{ none:1.3,  wood:1.25, light:0.80, heavy:0.60, concrete:0.90 } }
 };
