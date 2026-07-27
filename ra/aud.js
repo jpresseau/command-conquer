@@ -159,6 +159,15 @@ function audOpen(buf) {
            declared: total };
 }
 
-var _exp = { audOpen: audOpen };
-if (typeof module !== 'undefined' && module.exports) module.exports = _exp;
-else if (typeof window !== 'undefined') window.RA_AUD = _exp;
+/* Dual-mode: a CommonJS module for the test suite, a plain global for the browser bundle,
+   which has no loader at all and never will.
+
+   Wrapped rather than assigned to a `var _exp` first, because every file in ra/ used that same
+   name and the browser bundle concatenates them all into ONE global scope - ten declarations of
+   _exp, each overwriting the last. It happened to work only because each is consumed on the
+   very next line, which is the kind of accident that stops being an accident the moment
+   somebody reorders the script tags. */
+(function (exp) {
+  if (typeof module !== 'undefined' && module.exports) module.exports = exp;
+  else if (typeof window !== 'undefined') window.RA_AUD = exp;
+})({ audOpen: audOpen });

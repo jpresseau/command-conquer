@@ -41,11 +41,22 @@ def check_syntax(js, label):
         os.unlink(tmp)
 
 
-GAME_SOURCES = ('rts.rules.js', 'rts.sprites.js', 'rts.audio.js',
-                'rts.core.js', 'rts.render.js', 'rts.ui.js')
+def inlined_sources(skeleton):
+    """Every .js the skeleton inlines, in order, discovered rather than listed.
+
+    This used to be a hand-written tuple of six files while the build inlined twenty-three, so
+    seventeen - every reader in ra/, and the map, store, sound, editor and save subsystems -
+    got neither the syntax check nor the collision check. A parse error in any of them ships as
+    a blank white page, which is the precise failure the gate exists to prevent.
+
+    Discovering the list from the skeleton means it cannot fall behind again: a file that is
+    inlined is a file that is checked, by construction.
+    """
+    return [rel for rel in re.findall(r'@@(?:INC|CSS):([\w./-]+)@@', skeleton)
+            if rel.endswith('.js')]
 
 
-def check_collisions():
+def check_collisions(sources):
     """Fail if two source files define the same top-level name.
 
     Every file is concatenated into one global scope, so a duplicate silently overwrites -
@@ -56,23 +67,24 @@ def check_collisions():
     """
     seen, dupes = {}, []
     pat = re.compile(r'^(?:function|var|const|let)\s+([A-Za-z_$][\w$]*)', re.M)
-    for rel in GAME_SOURCES:
-        for name in set(pat.findall(read(os.path.join(SRC, rel)))):
+    for rel in sources:
+        for name in sorted(set(pat.findall(read(os.path.join(SRC, rel))))):
             if name in seen:
                 dupes.append('%s: defined in both %s and %s' % (name, seen[name], rel))
             else:
                 seen[name] = rel
     if dupes:
-        sys.exit('build_command.py: duplicate top-level definitions -\n  ' + '\n  '.join(dupes))
+        sys.exit('build.py: duplicate top-level definitions -\n  ' + '\n  '.join(dupes))
 
 
 def main():
     page = read(os.path.join(SRC, 'index.skeleton.html'))
-    check_collisions()
+    sources = inlined_sources(page)
+    check_collisions(sources)
 
-    # Syntax-gate the game's own sources before they get buried in a 1.8 MB page, where a
-    # parse error only shows up as a blank screen.
-    for rel in GAME_SOURCES:
+    # Syntax-gate every source before it gets buried in a 1.8 MB page, where a parse error only
+    # shows up as a blank screen.
+    for rel in sources:
         check_syntax(read(os.path.join(SRC, rel)), rel)
 
     page = re.sub(r'(?:/\*|//)@@(?:INC|CSS):([\w./-]+)@@(?:\*/)?',
