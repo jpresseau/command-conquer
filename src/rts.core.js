@@ -650,6 +650,16 @@ function _rtsBaseDropNode(e) {
 }
 
 function _rtsNewGame(seed, diff) {
+  /* THE battlefield size is decided here and only here. It is derived from whether a map is
+     loaded, because every grid below is allocated against it and they must agree.
+
+     It used to be set as a side effect of assembling a map - which was fine when assembling
+     meant "about to play this", and wrong the moment anything assembled a map to ASK A
+     QUESTION. The editor's CHECK button does exactly that and never loads the map, so one
+     click left RTS_N at the checked map's size for the rest of the session and the next
+     generated battle came out 124 wide instead of 128. Nothing reported it. */
+  RTS_N = (window._RTS_MAP && window._RTS_MAP.n) ? window._RTS_MAP.n : RTS_MAP_DEFAULT_N;
+
   var G = {
     t:0, seed:seed || 12345, over:null, msg:null, msgT:0, shake:0,
     /* the whole difficulty system is this one string plus RTS_DIFF; see _rtsBias */
