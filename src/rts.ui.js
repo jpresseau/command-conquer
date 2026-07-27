@@ -283,6 +283,7 @@ function _rtsWatchNewOptions() {
   if (fresh) {
     _rtsSay('New construction options.');
     if (typeof _rtsSfx === 'function') _rtsSfx('ready');
+    if (typeof rtsEva === 'function') rtsEva('ready');
   }
   U.avail = now;
 }

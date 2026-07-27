@@ -95,8 +95,10 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
     </label>
     <span id="rtsMixNote">Optional. Point this at <b>conquer.mix</b>, <b>local.mix</b>,
       <b>temperat.mix</b> and <b>hires.mix</b> from your own copy of Red Alert and the game will
-      draw with the real sprites instead of its own. Nothing is uploaded — the files are read in
-      your browser.</span>
+      draw with the real sprites instead of its own. Add <b>sounds.mix</b> and <b>speech.mix</b>
+      for the original weapons and EVA's voice, and <b>scores.mix</b> for the soundtrack — that
+      last one lives inside <b>MAIN.MIX</b>, which you can point at directly and let the game
+      find everything itself. Nothing is uploaded — the files are read in your browser.</span>
   </p>
   <p class="artload">
     <label class="artbtn">PLAY A REAL MAP
@@ -148,6 +150,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 <script>//@@INC:../ra/blowfish.js@@</script>
 <script>//@@INC:../ra/mix.js@@</script>
 <script>//@@INC:../ra/shp.js@@</script>
+<script>//@@INC:../ra/aud.js@@</script>
 <script>//@@INC:../ra/zip.js@@</script>
 <script>//@@INC:../ra/ramap.js@@</script>
 <script>//@@INC:../ra/inimap.js@@</script>
@@ -160,6 +163,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 <script>//@@INC:rts.store.js@@</script>
 <script>//@@INC:rts.editor.js@@</script>
 <script>//@@INC:rts.audio.js@@</script>
+<script>//@@INC:rts.sound.js@@</script>
 <script>//@@INC:rts.core.js@@</script>
 <script>//@@INC:rts.render.js@@</script>
 <script>//@@INC:rts.ui.js@@</script>

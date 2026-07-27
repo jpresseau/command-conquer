@@ -112,6 +112,10 @@ function _rtsSfx(name, x, z) {
 function _rtsSfxPlay(name, t) {
   var A = _rtsA, ctx = A.ctx, out = A.sfx, n, g;
 
+  /* The player's own sound, if they have it and this effect has a counterpart. Everything
+     below stays exactly as it was and is what plays otherwise - see src/rts.sound.js. */
+  if (typeof _rtsSndTry === 'function' && _rtsSndTry(name)) return;
+
   if (name === 'rifle') {                       /* dry snap + a little body */
     n = _rtsNoiseSrc(0.09, 'bandpass', 2400, 900, 1.1);
     g = _rtsEnv(0.09, 0.32); n.node.connect(g); g.connect(out);
@@ -219,6 +223,12 @@ var _RTS_LEAD = [                                /* stabs, offsets from E3 */
 function _rtsNote(semi, base) { return (base || 41.2) * Math.pow(2, semi / 12); }
 
 function _rtsMusicStart() {
+  /* The player's own soundtrack takes priority when it is there. It lives in scores.mix, which
+     ships inside MAIN.MIX rather than among the loose archives, so most installs land here
+     with the effects present and no score - and that is a normal state, not a failure: the
+     synthesized sequencer below carries on exactly as it did. */
+  if (typeof rtsSndMusicStart === 'function' && rtsSndMusicStart()) return;
+
   var A = _rtsA;
   if (!A || A.music) return;
   var ctx = A.ctx, out = A.mus;
@@ -311,6 +321,8 @@ function _rtsMusicStart() {
   schedule();
 }
 function _rtsMusicStop() {
+  if (typeof rtsSndMusicStop === 'function') rtsSndMusicStop();
+
   var A = _rtsA;
   if (!A || !A.music) return;
   clearInterval(A.music.timer);

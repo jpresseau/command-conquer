@@ -16,7 +16,10 @@
 
 var RTS_MIX = {
   /* the archives worth asking for, and what each is needed for */
-  want: ['conquer.mix', 'temperat.mix', 'local.mix', 'hires.mix'],
+  /* sounds/speech carry no artwork - they are here because _mixShp and the sound lookup both
+     walk this list, and an archive nobody looks in is an archive nobody can play. */
+  want: ['conquer.mix', 'temperat.mix', 'local.mix', 'hires.mix', 'sounds.mix', 'speech.mix',
+         'scores.mix'],
   open: {},                     /* name -> parsed archive */
   pal: null,                    /* the temperate palette, 256 x RGB */
   ready: false,
@@ -250,7 +253,11 @@ function rtsMixLoadFiles(files, done) {
    copy found inside something else. */
 var RTS_MIX_NEST = ['conquer.mix', 'local.mix', 'temperat.mix', 'hires.mix', 'lores.mix',
                     'snow.mix', 'interior.mix', 'allies.mix', 'russian.mix', 'general.mix',
-                    'redalert.mix', 'expand.mix', 'expand2.mix'];
+                    'redalert.mix', 'expand.mix', 'expand2.mix',
+                    /* the audio: sounds and speech ship loose, the SCORE does not - scores.mix
+                       is inside MAIN.MIX, which is why most players have the effects and not
+                       the music until they point at that one file. */
+                    'sounds.mix', 'speech.mix', 'scores.mix'];
 
 function _mixDescend(log) {
   var outer = Object.keys(RTS_MIX.open), i, j, grew = 0;
@@ -299,6 +306,8 @@ function _mixFinish(log, done) {
      arriving from IndexedDB - the normal case on every visit after the first - left the button
      hidden with a full palette sitting behind it. */
   if (RTS_MIX.ready && typeof rtsShowEditor === 'function') rtsShowEditor();
+  /* new archives can only ADD sounds, so the "not found" cache is the one that must go */
+  if (typeof rtsSndReset === 'function') rtsSndReset();
   done && done(RTS_MIX.ready ? null : RTS_MIX.note, RTS_MIX.note);
 }
 
