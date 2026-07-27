@@ -157,6 +157,7 @@ function _rtsModeClick(mx, my) {
   var e = hit && hit.ent;
   if (!e || e.type !== 'struct' || e.side !== 'player') {
     if (typeof _rtsSfx === 'function') _rtsSfx('deny');
+    if (typeof rtsEva === 'function') rtsEva('cantbuild');
     _rtsSay('Pick one of your own buildings.');
     return true;
   }
@@ -235,6 +236,7 @@ function _rtsItemClick(key) {
   else {
     var def = rtsStructDef(key) || rtsUnitDef(key);
     if (typeof _rtsSfx === 'function') _rtsSfx('deny');
+    if (typeof rtsEva === 'function') rtsEva('cantbuild');
     if (!_rtsAvailable('player', def)) _rtsSay('Needs ' + def.needs.map(function (n) { return rtsStructDef(n).name; }).join(' + ') + ' first.');
     else if (cat === 'infantry' && !_rtsHas('player', 'barracks')) _rtsSay('Build a Barracks first.');
     else if (cat === 'vehicle' && !_rtsHas('player', 'factory')) _rtsSay('Build a War Factory first.');
@@ -264,6 +266,7 @@ function _rtsItemCancel(key) {
     if (U.place === key) { U.place = null; _rtsGhostHide(); }
     _rtsSay('Canceled.');
     if (typeof _rtsSfx === 'function') _rtsSfx('deny');
+    if (typeof rtsEva === 'function') rtsEva('cantbuild');
   }
 }
 /* StripClass::Add speaks VOX_NEW_CONSTRUCT when something joins the buildable list. It is
@@ -490,6 +493,8 @@ function _rtsBindInput() {
       _rtsFlash(w.x, w.z, onScrap ? 'harvest' : 'move');
     }
     if (typeof _rtsSfx === 'function') _rtsSfx('order');
+  if (typeof rtsVox === 'function' && window._rtsG && window._rtsG.sel[0]) rtsVox(window._rtsG.sel[0], 'order');
+    if (typeof rtsVox === 'function' && window._rtsG && window._rtsG.sel[0]) rtsVox(window._rtsG.sel[0], 'order');
     return true;
   }
   /* LEFT button only. mousedown fires for every button, so without this guard the
@@ -635,6 +640,8 @@ function _rtsClickSelect(mx, my, add) {
   if (ent) {
     if (G.sel.indexOf(ent) < 0) G.sel.push(ent);
     if (ent.side === 'player' && typeof _rtsSfx === 'function') _rtsSfx('select');
+    /* and the unit itself answers, in its own side's voice - see rtsVox */
+    if (ent.side === 'player' && ent.type === 'unit' && typeof rtsVox === 'function') rtsVox(ent, 'select');
   }
 }
 function _rtsSelectSameType(ent, add) {
@@ -750,6 +757,8 @@ function _rtsRightClick(mx, my) {
     _rtsFlash(tgt.x, tgt.z, special === mine.length ? 'harvest' : 'attack');
     if (special) _rtsSay(special === 1 ? 'Moving in.' : special + ' specialists moving in.');
     if (typeof _rtsSfx === 'function') _rtsSfx('order');
+  if (typeof rtsVox === 'function' && window._rtsG && window._rtsG.sel[0]) rtsVox(window._rtsG.sel[0], 'order');
+    if (typeof rtsVox === 'function' && window._rtsG && window._rtsG.sel[0]) rtsVox(window._rtsG.sel[0], 'order');
     return;
   }
   var tx = _rtsTX(hit.x), tz = _rtsTX(hit.z);
@@ -763,6 +772,7 @@ function _rtsRightClick(mx, my) {
   }
   _rtsFlash(hit.x, hit.z, onScrap ? 'harvest' : 'move');
   if (typeof _rtsSfx === 'function') _rtsSfx('order');
+  if (typeof rtsVox === 'function' && window._rtsG && window._rtsG.sel[0]) rtsVox(window._rtsG.sel[0], 'order');
 }
 /* Spread a group over a loose grid so twelve units do not all path to one tile. */
 function _rtsFormation(n) {

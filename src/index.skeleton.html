@@ -95,10 +95,11 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
     </label>
     <span id="rtsMixNote">Optional. Point this at <b>conquer.mix</b>, <b>local.mix</b>,
       <b>temperat.mix</b> and <b>hires.mix</b> from your own copy of Red Alert and the game will
-      draw with the real sprites instead of its own. Add <b>sounds.mix</b> and <b>speech.mix</b>
-      for the original weapons and EVA's voice, and <b>scores.mix</b> for the soundtrack — that
-      last one lives inside <b>MAIN.MIX</b>, which you can point at directly and let the game
-      find everything itself. Nothing is uploaded — the files are read in your browser.</span>
+      draw with the real sprites instead of its own. Add <b>sounds.mix</b>, <b>speech.mix</b>,
+      <b>allies.mix</b> and <b>russian.mix</b> for the original weapons, EVA and the units'
+      own voices, and <b>scores.mix</b> for the soundtrack. Simplest of all: point this at
+      <b>MAIN.MIX</b> and it finds every one of them itself. Nothing is uploaded — the files
+      are read in your browser.</span>
   </p>
   <p class="artload">
     <label class="artbtn">PLAY A REAL MAP
@@ -151,6 +152,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 <script>//@@INC:../ra/mix.js@@</script>
 <script>//@@INC:../ra/shp.js@@</script>
 <script>//@@INC:../ra/aud.js@@</script>
+<script>//@@INC:../ra/sndtab.js@@</script>
 <script>//@@INC:../ra/zip.js@@</script>
 <script>//@@INC:../ra/ramap.js@@</script>
 <script>//@@INC:../ra/inimap.js@@</script>
