@@ -4576,4 +4576,10 @@ function _rtsTick(dt) {
   }
   if (!pAlive) { G.over = 'lose'; G.sides.player.lost = true; }
   else if (!eAlive) { G.over = 'win'; G.sides.enemy.lost = true; }
+  /* EVA calls the result. Announced here rather than in the UI so it fires however the battle
+     ended, including the scripted paths above that set G.over directly. */
+  if (G.over && !G.overSaid) {
+    G.overSaid = 1;
+    if (typeof rtsEva === 'function') rtsEva(G.over === 'win' ? 'won' : 'lost');
+  }
 }

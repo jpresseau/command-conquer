@@ -16,6 +16,16 @@
    every battlefield sound goes through, and they get their own retrigger gap, because two
    announcements on top of each other are worth less than one. */
 
+/* ------------------------------------------------------------- by hash --
+   Sounds are fetched by INDEX HASH, not by filename. A MIX has no directory, so asking for a
+   name means guessing one, and guessing reached 25 of the 333 sounds a normal install holds.
+   ra/sndtab.js identifies 152 of them by matching their audio against a named set, and what it
+   stores is the hash already sitting in the player's own index - so the lookup is exact and
+   needs no name at all.
+
+   _rtsSndBuf still takes a filename for the handful of effects that were already working that
+   way; _rtsSndById is the path everything new uses. */
+
 /* our effect name -> the archive's. Confirmed present in sounds.mix / conquer.mix. */
 var RTS_SND_SFX = {
   rifle:     'gun11',        /* infantry small arms */
@@ -72,22 +82,55 @@ function _rtsSndBuf(name) {
     if (a && !a.error && a.has(file)) { raw = a.read(file); break; }
   }
   if (!raw) { _RTS_SND_MISS[name] = 1; return null; }
+  var buf = _rtsSndDecode(raw);
+  if (!buf) { _RTS_SND_MISS[name] = 1; return null; }
+  return (_RTS_SNDBUF[name] = buf);
+}
 
+/* AUD bytes -> an AudioBuffer, or null. Shared by both lookup paths so they cannot decode
+   differently. */
+function _rtsSndDecode(raw) {
   var d = window.RA_AUD.audOpen(raw);
-  if (d.error || !d.samples.length) { _RTS_SND_MISS[name] = 1; return null; }
-
+  if (d.error || !d.samples.length) return null;
   var ctx = _rtsA.ctx, ch = d.channels, frames = Math.floor(d.samples.length / ch);
-  if (!frames) { _RTS_SND_MISS[name] = 1; return null; }
+  if (!frames) return null;
   var buf;
-  try { buf = ctx.createBuffer(ch, frames, d.rate); }
-  catch (e) { _RTS_SND_MISS[name] = 1; return null; }
+  try { buf = ctx.createBuffer(ch, frames, d.rate); } catch (e) { return null; }
   for (var c = 0; c < ch; c++) {
     var out = buf.getChannelData(c);
     /* stereo is interleaved in the file and planar in an AudioBuffer */
     if (ch === 1) out.set(d.samples.subarray(0, frames));
     else for (var i = 0; i < frames; i++) out[i] = d.samples[i * ch + c];
   }
-  return (_RTS_SNDBUF[name] = buf);
+  return buf;
+}
+
+/* The same decode, addressed by hash. Cached under the id so the two paths cannot each hold
+   their own copy of the same sound. */
+function _rtsSndById(id) {
+  if (id == null || !_rtsSndReady()) return null;
+  var key = 'id:' + id;
+  if (_RTS_SNDBUF[key]) return _RTS_SNDBUF[key];
+  if (_RTS_SND_MISS[key]) return null;
+
+  var raw = null, k;
+  for (k in RTS_MIX.open) {
+    var a = RTS_MIX.open[k];
+    if (!a || a.error || !a.readId) continue;
+    raw = a.readId(id);
+    if (raw) break;
+  }
+  if (!raw) { _RTS_SND_MISS[key] = 1; return null; }
+  var buf = _rtsSndDecode(raw);
+  if (!buf) { _RTS_SND_MISS[key] = 1; return null; }
+  return (_RTS_SNDBUF[key] = buf);
+}
+
+/* A sound named in ra/sndtab.js. This is the entry point for everything the identity table
+   unlocked - unit voices, EVA, the lot. */
+function rtsSndNamed(name) {
+  if (!window.RA_SNDTAB) return null;
+  return _rtsSndById(window.RA_SNDTAB[name]);
 }
 
 /* Play a decoded buffer. `gain` lets the caller balance a sample against the synthesized
@@ -117,16 +160,105 @@ function _rtsSndTry(name) {
 }
 
 /* EVA. Deliberately not routed through _rtsSfx: an announcement is not a battlefield sound and
-   must not be dropped for being off screen. */
+   must not be dropped for being off screen.
+
+   Two sources, in order: the identity table, which knows these by content, and the older
+   guessed filenames as a fallback for anything the table did not match. */
+var RTS_EVA_NAMED = {
+  ready:     'unit_ready',
+  built:     'construction_complete',
+  building:  'building',
+  newopt:    'new_construction_options',
+  reinfor:   'reinforcements',
+  cancel:    'canceled',
+  attack:    'base_under_attack',
+  primary:   'primary_building_selected',
+  nofunds:   'insufficient_funds',
+  lowpower:  'low_power',
+  cantbuild: 'unable_to_build',
+  lostbldg:  'structure_destroyed',
+  won:       'mission_accomplished',
+  lost:      'mission_failed'
+};
+
 var _RTS_EVA_LAST = 0;
 function rtsEva(key) {
   if (!_rtsSndReady() || _rtsA.muted) return false;
   var now = _rtsA.ctx.currentTime;
   if (now - _RTS_EVA_LAST < 1.6) return false;     /* one voice at a time, or it is noise */
-  var buf = _rtsSndBuf(RTS_SND_EVA[key]);
+  var buf = (RTS_EVA_NAMED[key] && rtsSndNamed(RTS_EVA_NAMED[key])) ||
+            _rtsSndBuf(RTS_SND_EVA[key]);
   if (!buf) return false;
   _RTS_EVA_LAST = now;
   return _rtsSndPlay(buf, _rtsA.master, 0.95);
+}
+
+/* ------------------------------------------------------------ unit voices --
+   The reply when you click a unit or give it an order. RA records these per SIDE and per unit
+   TYPE - an infantryman and a tank crew answer differently, and the Soviets answer differently
+   again - so the pick is (side, kind, what happened) rather than one generic bark.
+
+   The two variants of each line exist to stop repetition wearing thin, and which one plays is
+   chosen from the unit's own id rather than at random: the same soldier answers with the same
+   voice every time, which is what makes a squad sound like people instead of a shuffle. */
+var RTS_VOX_SELECT = {
+  allied:  { infantry: ['yes_sir_allied_infantry', 'reporting_allied_infantry',
+                        'awaiting_orders_allied_infantry', 'ready_allied_infantry'],
+             vehicle:  ['yes_sir_allied_vehicle', 'reporting_allied_vehicle',
+                        'awaiting_orders_allied_vehicle', 'vehicle_reporting_allied_vehicle'] },
+  soviet:  { infantry: ['yes_sir_soviet_infantry', 'reporting_soviet_infantry',
+                        'awaiting_orders_soviet_infantry', 'ready_soviet_infantry'],
+             vehicle:  ['yes_sir_soviet_vehicle', 'reporting_soviet_vehicle',
+                        'awaiting_orders_soviet_vehicle', 'vehicle_reporting_soviet_vehicle'] }
+};
+var RTS_VOX_ORDER = {
+  allied:  { infantry: ['affirmative_allied_infantry', 'acknowledged_allied_infantry',
+                        'at_once_allied_infantry', 'agreed_allied_infantry',
+                        'as_you_wish_allied_infantry', 'of_course_allied_infantry',
+                        'very_well_allied_infantry'],
+             vehicle:  ['affirmative_allied_vehicle', 'acknowledged_allied_vehicle'] },
+  soviet:  { infantry: ['affirmative_soviet_infantry', 'acknowledged_soviet_infantry',
+                        'at_once_soviet_infantry', 'agreed_soviet_infantry',
+                        'as_you_wish_soviet_infantry', 'of_course_soviet_infantry',
+                        'very_well_soviet_infantry'],
+             vehicle:  ['affirmative_soviet_vehicle', 'acknowledged_soviet_vehicle'] }
+};
+
+/* A few units have their own voice actor and should never use the generic pool. */
+var RTS_VOX_SPECIAL = {
+  engineer: ['engineer_yes_sir', 'engineer_affirmative', 'engineer_movin_out', 'engineer_engineering'],
+  thief:    ['thief_yea', 'thief_ok', 'thief_affirmative', 'thief_movin_out', 'thief_what'],
+  medic:    ['medic_yes_sir', 'medic_affirmative', 'medic_reporting', 'medic_movin_out'],
+  tanya:    ['tanya_yes_sir', 'tanya_lets_rock', 'tanya_im_there', 'tanya_whats_up',
+             'tanya_shake_it_baby', 'tanya_give_it_to_me'],
+  dog:      ['dog_bark', 'dog_growl', 'dog_yes_sir']
+};
+
+var _RTS_VOX_LAST = 0;
+function rtsVox(unit, what) {
+  if (!_rtsSndReady() || _rtsA.muted || !unit) return false;
+  var now = _rtsA.ctx.currentTime;
+  /* One reply per action. Selecting twelve units must not play twelve lines on top of each
+     other - the originals answer once, from whichever unit you happen to have picked. */
+  if (now - _RTS_VOX_LAST < 0.9) return false;
+
+  var def = (typeof rtsUnitDef === 'function') ? rtsUnitDef(unit.def) : null;
+  var kind = (def && def.kind === 'infantry') ? 'infantry' : 'vehicle';
+  var side = unit.side === 'enemy' ? 'soviet' : 'allied';
+  var pool = RTS_VOX_SPECIAL[unit.def];
+  if (!pool) {
+    var t = (what === 'order' ? RTS_VOX_ORDER : RTS_VOX_SELECT)[side];
+    pool = t && t[kind];
+  }
+  if (!pool || !pool.length) return false;
+
+  /* Stable per unit: the same soldier keeps the same voice rather than shuffling every click. */
+  var seed = (unit.id != null ? unit.id : 0) | 0;
+  var line = pool[Math.abs(seed) % pool.length];
+  var buf = rtsSndNamed(line) || rtsSndNamed(line + '_1') || rtsSndNamed(line + '_2');
+  if (!buf) return false;
+  _RTS_VOX_LAST = now;
+  return _rtsSndPlay(buf, _rtsA.master, 0.9);
 }
 
 /* ------------------------------------------------------------------ music --

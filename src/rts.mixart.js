@@ -19,7 +19,7 @@ var RTS_MIX = {
   /* sounds/speech carry no artwork - they are here because _mixShp and the sound lookup both
      walk this list, and an archive nobody looks in is an archive nobody can play. */
   want: ['conquer.mix', 'temperat.mix', 'local.mix', 'hires.mix', 'sounds.mix', 'speech.mix',
-         'scores.mix'],
+         'scores.mix', 'allies.mix', 'russian.mix'],
   open: {},                     /* name -> parsed archive */
   pal: null,                    /* the temperate palette, 256 x RGB */
   ready: false,
@@ -257,7 +257,11 @@ var RTS_MIX_NEST = ['conquer.mix', 'local.mix', 'temperat.mix', 'hires.mix', 'lo
                     /* the audio: sounds and speech ship loose, the SCORE does not - scores.mix
                        is inside MAIN.MIX, which is why most players have the effects and not
                        the music until they point at that one file. */
-                    'sounds.mix', 'speech.mix', 'scores.mix'];
+                    'sounds.mix', 'speech.mix', 'scores.mix',
+                    /* allies.mix and russian.mix look like faction data and are almost entirely
+                       AUD - 34 sounds each, the side-specific speech. Measured, not assumed:
+                       reading every entry and checking for an AUD header found them. */
+                    'allies.mix', 'russian.mix'];
 
 function _mixDescend(log) {
   var outer = Object.keys(RTS_MIX.open), i, j, grew = 0;

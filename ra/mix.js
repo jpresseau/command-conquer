@@ -108,7 +108,20 @@ function mixOpen(buf) {
       return new Uint8Array(buf.buffer || buf, (buf.byteOffset || 0) + rec.offset, rec.size);
     },
     has: function (name) { return !!index[mixHash(name)]; },
-    byId: function (id) { return index[id | 0] || null; }
+    byId: function (id) { return index[id | 0] || null; },
+    /* Read an entry by its INDEX RECORD rather than by name. A MIX has no directory, so a
+       caller that already knows an entry's hash - from a table built by identifying the
+       contents - has no name to offer, and hashing one back is not possible. */
+    readRec: function (rec) {
+      if (!rec || rec.offset + rec.size > (buf.byteLength + (buf.byteOffset || 0))) return null;
+      return new Uint8Array(buf.buffer || buf, (buf.byteOffset || 0) + rec.offset, rec.size);
+    },
+    /* Bytes for a hash, in one step - the common case. */
+    readId: function (id) {
+      var rec = index[id | 0];
+      if (!rec) return null;
+      return new Uint8Array(buf.buffer || buf, (buf.byteOffset || 0) + rec.offset, rec.size);
+    }
   };
 }
 
