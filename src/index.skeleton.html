@@ -32,6 +32,20 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
    also keeps the big element the one the layout tests measure. */
 #rtsHome .eyebrow{margin:0 0 -14px;font-size:clamp(11px,2vw,14px);letter-spacing:clamp(3px,1.2vw,7px);
   text-transform:uppercase;color:#cfa445;opacity:.9;font-weight:700}
+/* The original title screen, when the player's own files supply it. Capped at its native 640px
+   rather than stretched: it is 1996 pixel art and scaling it up past 1:1 turns crisp lettering
+   into mush. image-rendering:pixelated keeps the edges hard on high-DPI screens, where the
+   browser would otherwise smooth it back into mush at exactly 1:1. */
+/* border-box matters: the 1px border below is OUTSIDE a content-box width, so `width:100%`
+   plus a border is 100% + 2px and the page scrolls sideways on a phone. */
+#rtsTitleArt{display:block;box-sizing:border-box;width:min(100%,640px);max-width:100%;
+  height:auto;margin:0 auto;
+  image-rendering:pixelated;image-rendering:crisp-edges;
+  border:1px solid #2b3a4d;border-radius:6px;box-shadow:0 14px 40px rgba(0,0,0,.5)}
+/* REQUIRED, not tidiness. The `hidden` attribute works through the UA rule [hidden]{display:none},
+   which an author `display:block` outranks - so without this the element renders as an empty
+   bordered strip for every player who has not loaded their archives, which is most of them. */
+#rtsTitleArt[hidden]{display:none}
 #rtsHome .sub{margin:-12px 0 0;font-size:clamp(12px,2.2vw,15px);letter-spacing:3px;opacity:.62;text-transform:uppercase}
 #rtsHome .vs{font-size:15px;opacity:.9}
 #rtsHome .vs b.p{color:#6fb0ff}
@@ -81,6 +95,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 <body>
 
 <div id="rtsHome">
+  <img id="rtsTitleArt" alt="Command &amp; Conquer: Red Alert" hidden>
   <p class="eyebrow">Command &amp; Conquer</p>
   <h1>RED ALERT</h1>
   <p class="sub">Real-Time Strategy</p>
@@ -104,7 +119,8 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
     </label>
     <span id="rtsMixNote">Optional. Point this at <b>conquer.mix</b>, <b>local.mix</b>,
       <b>temperat.mix</b> and <b>hires.mix</b> from your own copy of Red Alert and the game will
-      draw with the real sprites instead of its own. Add <b>sounds.mix</b>, <b>speech.mix</b>,
+      draw with the real sprites instead of its own — <b>hires.mix</b> also carries the original
+      title screen, which replaces the one above. Add <b>sounds.mix</b>, <b>speech.mix</b>,
       <b>allies.mix</b> and <b>russian.mix</b> for the original weapons, EVA and the units'
       own voices, and <b>scores.mix</b> for the soundtrack. Simplest of all: point this at
       <b>MAIN.MIX</b> and it finds every one of them itself. Nothing is uploaded — the files
@@ -163,6 +179,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 <script>//@@INC:../ra/blowfish.js@@</script>
 <script>//@@INC:../ra/mix.js@@</script>
 <script>//@@INC:../ra/shp.js@@</script>
+<script>//@@INC:../ra/pcx.js@@</script>
 <script>//@@INC:../ra/aud.js@@</script>
 <script>//@@INC:../ra/sndtab.js@@</script>
 <script>//@@INC:../ra/zip.js@@</script>
@@ -260,6 +277,31 @@ function rtsPaintVs(){
   if (!el || typeof rtsArmyName !== 'function') return;
   el.innerHTML = '<b class="p">' + rtsArmyName('player') + '</b>&nbsp;versus&nbsp;<b class="e">' +
                  rtsArmyName('enemy') + '</b>';
+}
+
+/* Swap our own title card for Westwood's, when the player's files supply it.
+
+   title.pcx is 640x400 of 1996 pixel art carrying the real logo, so once it is on screen the
+   text title underneath it is redundant - two wordmarks stacked is worse than either. It is a
+   REPLACEMENT rather than a background: as a background the menu would have to stay legible
+   over whatever happens to be behind it at every viewport, and this screen is far taller than
+   400px once the briefing and both loaders are on it.
+
+   Silent when there is no hires.mix. That is the normal case for anyone who has not pointed the
+   loader at their install, and the drawn title card is not a fallback, it is the default. */
+function rtsShowTitleArt(){
+  var img = document.getElementById('rtsTitleArt');
+  if (!img || img.src) return;                       /* already swapped */
+  if (typeof _mixTitleArt !== 'function') return;
+  var c;
+  try { c = _mixTitleArt(); } catch (e) { return; }
+  if (!c) return;
+  img.src = c.toDataURL('image/png');
+  img.hidden = false;
+  ['.eyebrow', 'h1', '.sub'].forEach(function (sel) {
+    var el = document.querySelector('#rtsHome ' + sel);
+    if (el) el.hidden = true;
+  });
 }
 
 function rtsShowEditor(){

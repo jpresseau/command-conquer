@@ -62,6 +62,37 @@ function rtsSetTheatre(id) {
 /* The file extension the current theatre's tiles carry. */
 function _rtsThExt() { return (RTS_THEATRES[RTS_THEATRE] || RTS_THEATRES.TEMPERAT).ext; }
 
+/* --------------------------------------------------------- full-screen art --
+   The title screen. It is a PCX rather than an SHP or a template, which is why nothing else
+   here could read it; ra/pcx.js exists for this one file and the handful like it.
+
+   Returns a canvas, or null when the player has not supplied hires.mix. Null is the normal
+   case, not an error - the game draws its own title card and always has. */
+function _mixPcx(name) {
+  if (!window.RA_PCX) return null;
+  var i, a, d = null;
+  for (i = 0; i < RTS_MIX.want.length && !d; i++) {
+    a = RTS_MIX.open[RTS_MIX.want[i]];
+    if (a && !a.error && a.has(name)) d = a.read(name);
+  }
+  if (!d) return null;
+  var img = window.RA_PCX.pcxOpen(d);
+  if (!img || img.error || !img.pal) return null;
+  var t = _sprMake(img.w, img.h);
+  var im = t.g.createImageData(img.w, img.h);
+  im.data.set(img.rgba());
+  t.g.putImageData(im, 0, 0);
+  return t.c;
+}
+
+var _RTS_TITLEART;
+/* Cached, because the title screen re-runs this every time artwork arrives and decoding a
+   256 KB image to put back the picture already on screen is pure waste. */
+function _mixTitleArt() {
+  if (_RTS_TITLEART !== undefined) return _RTS_TITLEART;
+  return (_RTS_TITLEART = _mixPcx('title.pcx'));
+}
+
 /* ------------------------------------------------------------------ names --
    Our keys against the originals'. The mapping is the whole reason this file can be short:
    every structure and vehicle we invented was modelled on something real, so almost all of
@@ -435,6 +466,7 @@ function _mixFinish(log, done) {
      hidden with a full palette sitting behind it. */
   if (RTS_MIX.ready && typeof rtsShowEditor === 'function') rtsShowEditor();
   if (RTS_MIX.ready && typeof rtsBuildVoxSide === 'function') rtsBuildVoxSide();
+  if (RTS_MIX.ready && typeof rtsShowTitleArt === 'function') rtsShowTitleArt();
   /* new archives can only ADD sounds, so the "not found" cache is the one that must go */
   if (typeof rtsSndReset === 'function') rtsSndReset();
   done && done(RTS_MIX.ready ? null : RTS_MIX.note, RTS_MIX.note);
