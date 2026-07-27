@@ -24,7 +24,30 @@ function _rtsIdx(tx, tz) { return tz * RTS_N + tx; }
 function _rtsInB(tx, tz) { return tx >= 0 && tz >= 0 && tx < RTS_N && tz < RTS_N; }
 function _rtsWX(tx) { return (tx - RTS_N / 2 + 0.5) * RTS_TILE; }          /* tile -> world centre */
 function _rtsTX(x)  { return Math.floor(x / RTS_TILE + RTS_N / 2); }        /* world -> tile */
-function _rtsBlocked(tx, tz) { var G = window._rtsG; return !_rtsInB(tx, tz) || G.blocked[_rtsIdx(tx, tz)] !== 0; }
+/* ------------------------------------------------------------ passability --
+   Two domains, and they are near-inverses of each other. A tank is stopped by water; a
+   gunboat is stopped by everything that is NOT water. Until there were ships this was one
+   global question with one answer, which is why `blocked` is a single byte per cell: 0 open,
+   1 a structure, 2 the terrain itself.
+
+   `dom` is 'sea' or absent. Absent means land, so every existing caller keeps its meaning
+   without being touched - there are sixteen of them and they are all about land units.
+
+   A structure still blocks a ship: a Naval Yard juts into the water and a boat cannot sail
+   through it. That is why the sea test checks `blocked === 1` as well as the terrain. */
+function _rtsBlocked(tx, tz, dom) {
+  var G = window._rtsG;
+  if (!_rtsInB(tx, tz)) return true;
+  var i = _rtsIdx(tx, tz);
+  if (dom === 'sea') return G.terrain[i] !== RTS_T_WATER || G.blocked[i] === 1;
+  return G.blocked[i] !== 0;
+}
+/* The domain a unit moves in, from its def. Anything not marked `sea` walks. */
+function _rtsDomainOf(e) {
+  if (!e) return null;
+  var d = (e.type === 'unit') ? rtsUnitDef(e.def) : null;
+  return (d && d.sea) ? 'sea' : null;
+}
 
 /* Deterministic PRNG so a given seed always lays out the same battlefield. */
 function _rtsRngMake(seed) {
@@ -87,14 +110,14 @@ function _rtsHeapPop() {
   return top;
 }
 /* Nearest tile that is not blocked, searched as expanding rings. */
-function _rtsNearestOpen(tx, tz, maxR) {
-  if (!_rtsBlocked(tx, tz)) return [tx, tz];
+function _rtsNearestOpen(tx, tz, maxR, dom) {
+  if (!_rtsBlocked(tx, tz, dom)) return [tx, tz];
   for (var r = 1; r <= (maxR || 8); r++) {
     var best = null, bd = 1e9;
     for (var ox = -r; ox <= r; ox++) for (var oz = -r; oz <= r; oz++) {
       if (Math.max(Math.abs(ox), Math.abs(oz)) !== r) continue;
       var cx = tx + ox, cz = tz + oz;
-      if (_rtsBlocked(cx, cz)) continue;
+      if (_rtsBlocked(cx, cz, dom)) continue;
       var d = ox * ox + oz * oz;
       if (d < bd) { bd = d; best = [cx, cz]; }
     }
@@ -102,7 +125,7 @@ function _rtsNearestOpen(tx, tz, maxR) {
   }
   return null;
 }
-function _rtsPath(sx, sz, gx, gz) {
+function _rtsPath(sx, sz, gx, gz, dom) {
   if (!_rtsPF) _rtsPathfindInit();
   var P = _rtsPF, run = ++P.run;
   var stx = _rtsTX(sx), stz = _rtsTX(sz), gtx = _rtsTX(gx), gtz = _rtsTX(gz);
@@ -111,21 +134,21 @@ function _rtsPath(sx, sz, gx, gz) {
      factory's footprint, or a building went up over it. A* from a blocked start dead-ends
      immediately (every neighbour is inside the same footprint), which used to strand the
      unit permanently. Step it out to the nearest open tile first, then path from there. */
-  if (_rtsBlocked(stx, stz)) {
-    var esc = _rtsNearestOpen(stx, stz, 10);
+  if (_rtsBlocked(stx, stz, dom)) {
+    var esc = _rtsNearestOpen(stx, stz, 10, dom);
     if (!esc) return null;
     var ex = _rtsWX(esc[0]), ez = _rtsWX(esc[1]);
-    var rest = _rtsPath(ex, ez, gx, gz);
+    var rest = _rtsPath(ex, ez, gx, gz, dom);
     return [{ x:ex, z:ez }].concat(rest || []);
   }
   /* If the goal tile is blocked (ordered onto a building), walk outwards to the nearest
      open tile so "attack that refinery" still produces a path that arrives beside it. */
-  if (!_rtsInB(gtx, gtz) || _rtsBlocked(gtx, gtz)) {
+  if (!_rtsInB(gtx, gtz) || _rtsBlocked(gtx, gtz, dom)) {
     var best = null, bd = 1e9;
     for (var rr = 1; rr <= 6 && !best; rr++) {
       for (var ox = -rr; ox <= rr; ox++) for (var oz = -rr; oz <= rr; oz++) {
         if (Math.max(Math.abs(ox), Math.abs(oz)) !== rr) continue;
-        var cx = gtx + ox, cz = gtz + oz; if (_rtsBlocked(cx, cz)) continue;
+        var cx = gtx + ox, cz = gtz + oz; if (_rtsBlocked(cx, cz, dom)) continue;
         var d = (cx - gtx) * (cx - gtx) + (cz - gtz) * (cz - gtz);
         if (d < bd) { bd = d; best = [cx, cz]; }
       }
@@ -149,8 +172,9 @@ function _rtsPath(sx, sz, gx, gz) {
     for (var dx = -1; dx <= 1; dx++) for (var dz = -1; dz <= 1; dz++) {
       if (!dx && !dz) continue;
       var nx = cx2 + dx, nz = cz2 + dz;
-      if (_rtsBlocked(nx, nz)) continue;
-      if (dx && dz && (_rtsBlocked(cx2 + dx, cz2) || _rtsBlocked(cx2, cz2 + dz))) continue; /* no corner cutting */
+      if (_rtsBlocked(nx, nz, dom)) continue;
+      if (dx && dz && (_rtsBlocked(cx2 + dx, cz2, dom) ||
+                       _rtsBlocked(cx2, cz2 + dz, dom))) continue;   /* no corner cutting */
       var ni = _rtsIdx(nx, nz);
       if (P.stamp[ni] === run && P.state[ni] === 2) continue;
       var ng = P.g[cur] + ((dx && dz) ? 1.41421 : 1);
@@ -1027,6 +1051,10 @@ function _rtsCanPlace(side, key, tx, tz, anywhere) {
     if (G.blocked[_rtsIdx(ax, az)] !== 0) return false;
     if (G.scrap[_rtsIdx(ax, az)] > 0) return false;
   }
+  /* A shipyard must reach the water. Checked here rather than only at build time so the
+     placement ghost turns red as you drag it inland, which is the only way a player finds out
+     the rule exists. Applies even to `anywhere`: an MCV deploy does not make the sea move. */
+  if (d.shore && !_rtsShoreOk(key, tx, tz)) return false;
   /* Must be within build radius of one of your own structures (classic base-creep rule).
      `anywhere` skips it: BuildingTypeClass::Legal_Placement, which is what an MCV deploy is
      checked against, tests terrain and occupancy only. A vehicle whose entire purpose is to
@@ -1042,6 +1070,34 @@ function _rtsCanPlace(side, key, tx, tz, anywhere) {
   }
   return near;
 }
+/* A shipyard has to touch water, and it is the only structure whose placement asks about the
+   terrain rather than about free space. Checked on the ring OUTSIDE the footprint, not inside
+   it: the building stands on land and reaches into the sea, so a cell of water under it would
+   mean it was floating. */
+function _rtsShoreOk(key, tx, tz) {
+  var d = rtsStructDef(key);
+  if (!d || !d.shore) return true;
+  var G = window._rtsG;
+  for (var ox = -1; ox <= d.w; ox++) {
+    for (var oz = -1; oz <= d.h; oz++) {
+      var inside = (ox >= 0 && ox < d.w && oz >= 0 && oz < d.h);
+      if (inside) continue;
+      var x = tx + ox, z = tz + oz;
+      if (_rtsInB(x, z) && G.terrain[_rtsIdx(x, z)] === RTS_T_WATER) return true;
+    }
+  }
+  return false;
+}
+
+/* Where a ship appears when its yard finishes one: the nearest open water to the yard. A
+   shipyard with no free water beside it produces nothing rather than beaching a hull. */
+function _rtsSeaSpawn(src) {
+  if (!src) return null;
+  var tx = _rtsTX(src.x), tz = _rtsTX(src.z);
+  var spot = _rtsNearestOpen(tx, tz, 12, 'sea');
+  return spot ? { tx: spot[0], tz: spot[1] } : null;
+}
+
 function _rtsPlaceStruct(side, key, tx, tz, instant, paid) {
   var G = window._rtsG, d = rtsStructDef(key);
   var e = { id:G.nextId++, type:'struct', side:side, def:key, tx:tx, tz:tz,
@@ -1692,6 +1748,13 @@ function _rtsCanQueue(side, key) {
     if (have >= def.only) return false;
   }
   if (cat === 'infantry' && !_rtsHas(side, 'barracks')) return false;
+  /* A shipyard with nowhere to launch is not a shipyard. Refusing the queue here rather than
+     failing at delivery means the sidebar greys the ship out instead of taking the credits
+     and producing nothing. */
+  if (cat === 'ship') {
+    var yd = _rtsHas(side, 'navalyard') || _rtsHas(side, 'subpen');
+    if (!yd || !_rtsSeaSpawn(yd)) return false;
+  }
   if (cat === 'vehicle' && !_rtsHas(side, 'factory')) return false;
   if (rtsMoney(S) < _rtsCostOf(side, def)) return false;
   return true;
@@ -1839,6 +1902,14 @@ function _rtsTickProduction(side, dt) {
 function _rtsDeliverUnit(side, key) {
   var G = window._rtsG, u = rtsUnitDef(key);
   if (G.justBuilt) G.justBuilt[side].unit = key;   /* HouseClass::JustBuiltUnit */
+  /* A ship comes out of its shipyard and INTO THE WATER, which is the one delivery that
+     cannot use the generic scan-place: every cell it would pick is land. */
+  if (u.sea) {
+    var yard = _rtsHas(side, 'navalyard') || _rtsHas(side, 'subpen');
+    var at = _rtsSeaSpawn(yard);
+    if (!at) return null;
+    return _rtsSpawnUnit(side, key, _rtsWX(at.tx), _rtsWX(at.tz));
+  }
   var src = _rtsHas(side, u.kind === 'infantry' ? 'barracks' : 'factory') || _rtsHas(side, 'yard');
   if (!src) return null;
   return _rtsSpawnAt(side, key, src);
@@ -1992,6 +2063,9 @@ function _rtsFindTarget(e, range, w) {
     /* "Dogs can only attack infantrymen" - INFANTRY.CPP turns ACTION_ATTACK into ACTION_NONE
        against anything else. Without this a dog with a one-bite kill would delete tanks. */
     if (w && w.maul && !(o.type === 'unit' && (rtsUnitDef(o.def) || {}).kind === 'infantry')) continue;
+    /* A submarine must not sit off a beach acquiring a tank it can never torpedo, refusing to
+       look for a target it CAN hit. Same shape as the aa rule above and for the same reason. */
+    if (!_rtsWeaponReaches(w, o)) continue;
     var dist = _rtsRangeTo(e, o);
     if (dist > range) continue;
     var v = _rtsEvalObject(e, o, dist, w);
@@ -2074,6 +2148,17 @@ function _rtsFireCoord(e, w) {
   }
   return { x:x, z:z };
 }
+/* A torpedo runs in the water and cannot climb out, so a submarine is helpless against
+   anything on land. That single restriction is what makes the Missile Sub worth twice the
+   price instead of being a strictly better hull. */
+function _rtsWeaponReaches(w, tgt) {
+  if (!w || !w.seaOnly) return true;
+  if (!tgt) return false;
+  if (tgt.type === 'struct') return false;
+  var d = rtsUnitDef(tgt.def);
+  return !!(d && d.sea);
+}
+
 function _rtsFire(e, tgt, w) {
   var G = window._rtsG, bias = _rtsBias(e.side);
   /* A structure that needs power does not fire without it. This is the Tesla Coil's whole
@@ -2086,6 +2171,7 @@ function _rtsFire(e, tgt, w) {
     var _sd = rtsStructDef(e.def);
     if (_sd && _sd.needsPower && _rtsPowerFactor(e.side) < 0.999) return;
   }
+  if (!_rtsWeaponReaches(w, tgt)) return;
   /* AIRCRAFT.CPP spends a round per shot and the aircraft is out of the fight when the rack is
      empty. Decremented here rather than in the aircraft's own update so that every route to a
      shot - ordered, acquired, retaliating - pays for it. */
@@ -2518,7 +2604,9 @@ function _rtsAirTick(e, dt, d) {
    which kind of unit it is holding. */
 function _rtsPathFor(e, gx, gz) {
   if (e && e.air) return [{ x:gx, z:gz }];
-  return _rtsPath(e.x, e.z, gx, gz);
+  /* A ship asks the same pathfinder a different question - see _rtsBlocked. Routed through
+     here for the same reason the aircraft case is: no call site should have to know. */
+  return _rtsPath(e.x, e.z, gx, gz, _rtsDomainOf(e));
 }
 
 /* --------------------------------------------------------- unit update */
@@ -2594,13 +2682,18 @@ function _rtsSeparate(dt) {
        separation step shoved it back out to about six world units every time it closed, so it
        hovered just off the apron with an empty rack forever. */
     if (e.air) continue;
-    var k = ((e.x / cell) | 0) + ':' + ((e.z / cell) | 0);
+    /* Ships crowd only with ships. A gunboat and a tank can never occupy the same cell - one
+       is on water and the other cannot be - so putting them in one bucket makes them shove
+       each other through a shoreline they should not be able to cross. Same shape of mistake
+       as leaving aircraft in this pass, which is what kept a helicopter off its own pad. */
+    var dom = _rtsDomainOf(e) || 'land';
+    var k = dom + ':' + ((e.x / cell) | 0) + ':' + ((e.z / cell) | 0);
     (buckets[k] || (buckets[k] = [])).push(e);
   }
   for (var key in buckets) {
-    var parts = key.split(':'), bx = +parts[0], bz = +parts[1], near = [];
+    var parts = key.split(':'), kd = parts[0], bx = +parts[1], bz = +parts[2], near = [];
     for (var ox = -1; ox <= 1; ox++) for (var oz = -1; oz <= 1; oz++) {
-      var b = buckets[(bx + ox) + ':' + (bz + oz)];
+      var b = buckets[kd + ':' + (bx + ox) + ':' + (bz + oz)];
       if (b) near = near.concat(b);
     }
     var mine = buckets[key];

@@ -888,6 +888,26 @@ function _sprBuilding(key, side) {
     _r3Cyl(m, 3, 9, -2, 4.6, 1.4, B.roof, B.roof, 18);                   /* team band */
     _r3Box(m, -1, 6, 1, 6, 1.5, 1.5, S[2], S[1]);                        /* feed pipe */
 
+  } else if (key === 'navalyard' || key === 'subpen') {
+    /* Shipyard. A slipway open on one side with a gantry over it - the silhouette has to say
+       "this end goes in the water", because it is the only building with a placement rule and
+       the shape is the only hint the player gets before they try. The Sub Pen is the same
+       hull with a covered roof, which is what distinguishes them in the original too. */
+    var _cov = (key === 'subpen');
+    _r3Box(m, 0, 0, 0, W - 3, 3, D - 3, C[2], C[0]);                     /* apron */
+    _r3Box(m, -W / 4, 3, 0, W / 2 - 2, 9, D - 6, C[0], C[1]);            /* the shed */
+    _r3Box(m, -W / 4, 12, 0, W / 2, 2, D - 5, C[3], C[3]);               /* its roof */
+    /* the slipway: a channel cut through the apron, open at the seaward end */
+    _r3Box(m, W / 5, 1.5, 0, W / 2.4, 1.5, D / 2.6, S[2], S[3]);
+    if (_cov) _r3Box(m, W / 5, 8, 0, W / 2.2, 2, D / 2.4, C[1], C[0]);   /* pen roof */
+    else {
+      _r3Box(m, W / 5, 10, -D / 5, 1.6, 7, 1.6, S[1], S[2]);             /* gantry legs */
+      _r3Box(m, W / 5, 10, D / 5, 1.6, 7, 1.6, S[1], S[2]);
+      _r3Box(m, W / 5, 17, 0, W / 2.2, 1.6, 2.2, S[0], S[1]);            /* gantry beam */
+    }
+    _r3Cyl(m, -W / 4, 14, -D / 4, 2.2, 5, B.roof, B.roof, 16);           /* team-coloured mast */
+    _r3Box(m, -W / 3, 3.5, -D / 3, 3, 2, 3, RTS_PAL.hazard[0], S[3]);    /* dockside crate */
+
   } else if (key === 'tesla') {
     /* TESLA COIL. Two cells tall and almost nothing wide - the tallest, thinnest thing either
        army builds, which is the whole point: you should be able to pick a Soviet defensive
@@ -1237,6 +1257,45 @@ function _sprUnitModel(key, side, prone, part) {
     _r3Box(m, 2.6, 1.4, -3.6, 4.0, 1.6, 2.0, DK[1], DK[3]);
     _r3Box(m, 2.6, 1.4, 3.6, 4.0, 1.6, 2.0, DK[1], DK[3]);
     _r3Box(m, 0, 0.4, 0, 9.0, 1.0, 6.6, TM[1], TM[3]);             /* skids / team stripe */
+
+  } else if (key === 'gunboat' || key === 'destroyer') {
+    /* SURFACE SHIPS. Long and narrow with a raked bow - a hull has to read as a hull from
+       above or it is just a rectangle in the sea, and the only cues that survive this camera
+       are the taper at the front and the wake-line down the middle. No tracks and no wheels:
+       the underside is never seen, and drawing a keel would only widen the silhouette. */
+    var _big = (key === 'destroyer');
+    var _L = _big ? 26 : 19, _Wd = _big ? 8.5 : 6.5;
+    _r3Slab(m, 0, 0.6, 0, _L, 3.4, _Wd, 1.4, VH[0], VH[1]);              /* hull */
+    _r3Box(m, _L * 0.40, 0.9, 0, _L * 0.22, 2.8, _Wd * 0.55, VH[1], VH[3]);   /* raked bow */
+    _r3Box(m, -_L * 0.06, 4.0, 0, _L * 0.34, 3.2, _Wd * 0.66, VH[2], VH[0]);  /* superstructure */
+    _r3Box(m, -_L * 0.06, 7.2, 0, _L * 0.20, 1.4, _Wd * 0.44, TM[1], TM[3]);  /* team cap */
+    _r3Cyl(m, -_L * 0.18, 7.2, 0, 1.5, 4.5, DK[1], DK[0], 14);           /* funnel */
+    /* the guns: one forward on a gunboat, fore and aft on a destroyer */
+    _r3Cyl(m, _L * 0.16, 4.2, 0, 2.4, 1.8, VH[3], VH[1], 14);
+    _r3Box(m, _L * 0.30, 4.6, 0, _big ? 7 : 5, 1.1, 1.1, GN[0], GN[2]);
+    if (_big) {
+      _r3Cyl(m, -_L * 0.34, 4.2, 0, 2.4, 1.8, VH[3], VH[1], 14);
+      _r3Box(m, -_L * 0.48, 4.6, 0, 6, 1.1, 1.1, GN[0], GN[2]);
+    }
+    _r3Box(m, _L * 0.02, 5.6, 0, 1.0, 1.0, _Wd * 0.9, DK[0], DK[0]);     /* rail */
+
+  } else if (key === 'sub' || key === 'missilesub') {
+    /* SUBMARINES. Almost nothing above the surface, which is the point: a low dark shape with
+       a conning tower is instantly not a surface ship, and that difference has to be legible
+       because the two behave completely differently - one can shell the shore and the other
+       cannot touch it. */
+    var _ms = (key === 'missilesub');
+    _r3Slab(m, 0, 0.4, 0, 22, 2.6, 5.6, 2.2, DK[1], DK[2]);              /* hull, rounded */
+    _r3Box(m, 9.2, 0.6, 0, 3.4, 2.0, 3.0, DK[0], DK[2]);                 /* nose */
+    _r3Box(m, -9.6, 0.6, 0, 3.0, 1.8, 2.6, DK[0], DK[2]);                /* stern */
+    _r3Slab(m, 0.5, 3.0, 0, 6.0, 3.4, 3.0, 1.0, DK[0], DK[1]);           /* conning tower */
+    _r3Box(m, 0.5, 6.4, 0, 2.6, 1.0, 2.2, TM[1], TM[3]);                 /* team cap */
+    _r3Box(m, 0.5, 7.4, 0, 0.7, 3.0, 0.7, GN[2], GN[0]);                 /* periscope */
+    _r3Box(m, 2.6, 4.2, 0, 3.4, 0.8, 5.4, DK[2], DK[2]);                 /* dive planes */
+    if (_ms) {                                                            /* missile hatches */
+      _r3Box(m, -3.6, 3.1, -1.3, 5.0, 0.9, 1.5, RTS_PAL.hazard[0], DK[2]);
+      _r3Box(m, -3.6, 3.1, 1.3, 5.0, 0.9, 1.5, RTS_PAL.hazard[0], DK[2]);
+    }
 
   } else if (key === 'apc') {
     /* A closed box on tracks with a rear ramp and a small cupola gun - no turret (UDATA.CPP

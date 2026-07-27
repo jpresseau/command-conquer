@@ -130,7 +130,7 @@ function _rtsOnResize() {
    Derived from one list now, and _rtsTabsCheck asserts nothing in the roster falls outside it,
    because "a unit exists that you cannot reach" is invisible from inside the game. */
 var RTS_TABS = [['struct', 'Build'], ['infantry', 'Infantry'],
-                ['vehicle', 'Vehicles'], ['air', 'Aircraft']];
+                ['vehicle', 'Vehicles'], ['air', 'Aircraft'], ['ship', 'Ships']];
 
 function _rtsTabButtons() {
   var out = '', i;
