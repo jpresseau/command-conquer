@@ -57,6 +57,7 @@ function rtsSetTheatre(id) {
   if (RTS_MIX.pals[id]) RTS_MIX.pal = RTS_MIX.pals[id];
   _RTS_SPR = null; _RTS_UFIT = {}; _RTS_USCALE = {};
   _RTS_TREES = null; _RTS_MIXTREES = null; _RTS_TILECACHE = null; _RTS_MIXDEBRIS = null;
+  _RTS_MIXBIB = null; _RTS_SHROUDSPR = null;
   return id;
 }
 /* The file extension the current theatre's tiles carry. */
@@ -576,6 +577,45 @@ function _mixPaintCell(d, S, tx, tz, kind, seed) {
   return true;
 }
 
+
+
+/* -------------------------------------------------------------------- bibs --
+   The concrete apron under a building. RA calls it a BIB and ships three, sized to the
+   building above them:
+
+     bib3   2 cells wide   4 frames
+     bib2   3 cells wide   6 frames
+     bib1   4 cells wide   8 frames
+
+   All of them are two cells TALL, and all of them are SHPs carrying a theatre extension rather
+   than terrain templates - the same trick the trees use, and the reason reading them with the
+   template header gives nonsense (a width of 8 and a height of 0).
+
+   Frames run left-to-right, top row then bottom. Our own drawn pad is a pale blob noticeably
+   larger than the building; the original is a tyre-marked strip that lines up with the
+   footprint exactly, which is why a base drawn with these looks built rather than pasted on. */
+var RTS_MIX_BIBS = { 2: 'bib3', 3: 'bib2', 4: 'bib1' };
+var _RTS_MIXBIB = null;
+
+function _mixBib(wCells) {
+  if (!_rtsArtReady()) return null;
+  if (!_RTS_MIXBIB) _RTS_MIXBIB = {};
+  var key = String(wCells);
+  if (_RTS_MIXBIB[key] !== undefined) return _RTS_MIXBIB[key];
+  _RTS_MIXBIB[key] = null;
+  var nm = RTS_MIX_BIBS[wCells];
+  if (!nm) return null;                       /* 1-cell things - walls, turrets - get no bib */
+  var s = _mixShp(nm + _rtsThExt());
+  if (!s || s.width !== RTS_TS || s.height !== RTS_TS) return null;
+  var need = wCells * 2;
+  if (s.count < need) return null;
+  var pal = RTS_MIX.pal, out = [];
+  for (var f = 0; f < need; f++) {
+    var fr = s.frame(f);
+    out.push(fr ? _mixFrameToCanvas(fr, s.width, s.height, pal) : _sprMake(RTS_TS, RTS_TS).c);
+  }
+  return (_RTS_MIXBIB[key] = { w: wCells, h: 2, tile: out });
+}
 
 /* ----------------------------------------------------------------- shroud --
    RA's own shroud tiles. `shadow.shp` in conquer.mix is 48 frames of 24x24 - exactly one
