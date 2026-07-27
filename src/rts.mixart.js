@@ -576,6 +576,72 @@ function _mixPaintCell(d, S, tx, tz, kind, seed) {
   return true;
 }
 
+
+/* ----------------------------------------------------------------- shroud --
+   RA's own shroud tiles. `shadow.shp` in conquer.mix is 48 frames of 24x24 - exactly one
+   tile - and each frame is a SHAPE: the diagonal wedges and corner nibbles that make the
+   explored/unexplored boundary look cut rather than pixel-stepped.
+
+   The frame you want is chosen by which NEIGHBOURS are unexplored, packed into a byte. The
+   mapping from that byte to a frame number is not derivable - it is the order Westwood happened
+   to store the frames in - so it is transcribed from OpenRA's ra/rules/world.yaml, whose
+   ShroudRenderer carries the same list:
+
+     Index: 255, 16, 32, 48, ... 5, 10, 15, 255
+
+   read as "frame 0 covers edge-mask 255, frame 1 covers 16, ...". Inverted here into
+   mask -> frame, which is the direction the renderer asks in.
+
+   The bits, from OpenRA's Edges enum:
+
+     0x01 top-left   0x02 top-right   0x04 bottom-right   0x08 bottom-left     (corners)
+     0x10 top        0x20 right       0x40 bottom         0x80 left            (sides)
+
+   A CORNER bit is only set when neither of its two adjacent sides is - otherwise the side
+   piece already covers that corner, and setting both asks for a frame that does not exist. */
+var RTS_SHROUD_INDEX = [
+  255, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240,
+  20, 40, 56, 65, 97, 130, 148, 194, 24, 33, 66, 132, 28, 41, 67, 134,
+  1, 2, 4, 8, 3, 6, 12, 9, 7, 14, 13, 11, 5, 10, 15, 255
+];
+var _RTS_SHROUDMAP = null;
+function _mixShroudMap() {
+  if (_RTS_SHROUDMAP) return _RTS_SHROUDMAP;
+  var m = new Int16Array(256);
+  for (var i = 0; i < 256; i++) m[i] = -1;
+  /* forwards, so an earlier frame wins a duplicate - 255 appears twice and frame 0 is the
+     one the original uses for a fully-enclosed cell */
+  for (var f = RTS_SHROUD_INDEX.length - 1; f >= 0; f--) m[RTS_SHROUD_INDEX[f]] = f;
+  return (_RTS_SHROUDMAP = m);
+}
+
+/* The 48 frames as canvases, drawn in BLACK at the frame's own alpha. shadow.shp is a mask -
+   its palette indices are shades, not colours - so the useful reading is "how opaque is this
+   pixel", and index 0 is the transparent one. */
+var _RTS_SHROUDSPR = null;
+function _mixShroud() {
+  if (_RTS_SHROUDSPR !== null) return _RTS_SHROUDSPR;
+  _RTS_SHROUDSPR = false;
+  if (!_rtsArtReady()) return false;
+  var s = _mixShp('shadow.shp');
+  if (!s || s.count < 48 || s.width !== RTS_TS || s.height !== RTS_TS) return false;
+  var out = [];
+  for (var f = 0; f < 48; f++) {
+    var fr = s.frame(f);
+    var t = _sprMake(RTS_TS, RTS_TS);
+    if (fr) {
+      var im = t.g.createImageData(RTS_TS, RTS_TS), dd = im.data;
+      for (var k = 0; k < RTS_TS * RTS_TS; k++) {
+        dd[k * 4] = 4; dd[k * 4 + 1] = 6; dd[k * 4 + 2] = 9;
+        dd[k * 4 + 3] = fr[k] ? 255 : 0;
+      }
+      t.g.putImageData(im, 0, 0);
+    }
+    out.push(t.c);
+  }
+  return (_RTS_SHROUDSPR = out);
+}
+
 /* ------------------------------------------------------------------ trees --
    The forest. Trees are `.tem` files - SHPs with a theatre extension rather than templates,
    which is why probing for `t01.shp` found nothing. Frame 0 is the standing tree; the rest are
