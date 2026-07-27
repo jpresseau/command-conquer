@@ -102,6 +102,24 @@
 #rcgRts .rts-ops button[data-mode="sell"].on{background:#9c6a1c;border-color:#ffcf6a;color:#fff;
   animation:rtsPwrPulse 1s ease-in-out infinite}
 
+/* superweapons: the charge is the button's own background, filling left to right, so the state
+   is readable without a separate gauge to find. The row collapses to nothing when empty - a
+   flex container with no children still claims its gap, which would leave a stripe of padding
+   above the power strip for the whole first half of every match. */
+#rcgRts .rts-supers{display:flex;flex-direction:column;gap:3px}
+#rcgRts .rts-supers:empty{display:none}
+#rcgRts .rts-supers button{position:relative;overflow:hidden;padding:5px 0;border:1px solid #2b3a4d;
+  border-radius:3px;background:#131a24;color:#8a9bb0;font-size:10.5px;font-weight:700;
+  letter-spacing:.5px;cursor:pointer;text-align:center}
+#rcgRts .rts-supers button span{position:relative;z-index:1}
+#rcgRts .rts-supers button .sfill{position:absolute;left:0;top:0;bottom:0;width:0;
+  background:linear-gradient(90deg,#1d3352,#2e5f9c);transition:width .2s linear;z-index:0}
+#rcgRts .rts-supers button.ready{color:#fff;border-color:#6fb0ff}
+#rcgRts .rts-supers button.ready .sfill{background:linear-gradient(90deg,#2e6fd0,#5fa8ff)}
+#rcgRts .rts-supers button.armed{color:#fff;border-color:#ff8571;
+  animation:rtsPwrPulse 1s ease-in-out infinite}
+#rcgRts .rts-supers button.armed .sfill{background:linear-gradient(90deg,#8c2f22,#d4503a)}
+
 /* middle: vertical power strip + tile grid */
 #rcgRts .rts-mid{flex:1 1 auto;display:flex;gap:6px;min-height:0}
 #rcgRts .rts-pwr{flex:0 0 20px;display:flex;flex-direction:column;align-items:center;gap:4px;
@@ -2163,7 +2181,43 @@ var RTS_STRUCTS = [
   { key:'silo',     name:'Scrap Silo',   w:2, h:2, cost:150,  build:5,  hp:400,  power:0,    sight:8,
     needs:['refinery'], storage:1500, capturable:false,
     armour:'wood',
-    desc:'Holds 1500 more scrap. Without enough storage, harvested scrap over the cap is lost.' }
+    desc:'Holds 1500 more scrap. Without enough storage, harvested scrap over the cap is lost.' },
+
+  /* ------------------------------------------------------------ superweapons --
+     Four buildings whose entire output is one button on a timer. They share a shape: a `super`
+     block naming the charge, what it wants clicked, and what it does when it goes off.
+
+     The charges are RA's proportions, not RA's numbers. The original runs 8-13 minutes, on
+     matches that run an hour; this game's matches are measured in minutes, so a charge nobody
+     ever sees is the same as no feature. They are scaled to arrive in the back half of a long
+     game and never in a short one - which is also what keeps them out of the ladder, where an
+     idle player is dead well before the first one is ready.
+
+     Each is gated on the Tech Center, so getting one costs the -200 power the tier already
+     charges, and each is faction-locked to the side that had it. */
+  { key:'mslo',     name:'Missile Silo',  w:2, h:2, cost:1750, build:24, hp:400,  power:-150, sight:12,
+    needs:['lab'], side:'soviet', armour:'concrete', capturable:false,
+    super:{ key:'nuke', name:'Atom Bomb', charge:300, target:'cell', icon:'☢',
+            hint:'Atom Bomb ready — click anywhere on the map.' },
+    desc:'Charges an atomic missile. Levels everything within four tiles of where you aim it.' },
+  { key:'iron',     name:'Iron Curtain',  w:2, h:2, cost:1500, build:22, hp:400,  power:-200, sight:12,
+    needs:['lab'], side:'soviet', armour:'concrete', capturable:false,
+    super:{ key:'ironcurtain', name:'Iron Curtain', charge:270, target:'own', icon:'🛡',
+            hint:'Iron Curtain ready — click one of your own units or buildings.' },
+    desc:'Makes what you point it at invulnerable for half a minute. Everything near it too.' },
+  { key:'pdox',     name:'Chronosphere',  w:2, h:2, cost:1750, build:24, hp:400,  power:-200, sight:12,
+    needs:['lab'], side:'allied', armour:'concrete', capturable:false,
+    super:{ key:'chrono', name:'Chronosphere', charge:270, target:'cell', icon:'⌛',
+            hint:'Chronosphere ready — select units, then click where to send them.' },
+    desc:'Teleports your selected units anywhere on the map. Select first, then aim.' },
+  /* GPS fires itself. In the original the satellite launches the moment it is paid for and the
+     map simply stays revealed - there is nothing to aim and no reason to hold it back, so
+     making the player click a button to accept a gift would be ceremony rather than a decision. */
+  { key:'gps',      name:'GPS Uplink',    w:2, h:2, cost:1000, build:18, hp:400,  power:-100, sight:12,
+    needs:['lab'], side:'allied', armour:'concrete', capturable:false,
+    super:{ key:'gps', name:'GPS Satellite', charge:200, target:'none', auto:true, icon:'🛰',
+            hint:'GPS satellite up — the whole map is on the radar.' },
+    desc:'Launches a satellite. Once it is up the entire map is revealed, permanently.' }
 ];
 
 /* ------------------------------------------------------------------- units --
@@ -2653,7 +2707,15 @@ var RTS_IQ = {
   harvester:3,      /* replaces lost harvesters */
   guardArea:4,      /* leaves a garrison at home instead of sending everything */
   refill:3,         /* restarts a production line the instant it frees */
-  production:5      /* full build order and base expansion */
+  production:5,     /* full build order and base expansion */
+  /* Firing a superweapon is its own ability, separate from being able to BUILD one, because
+     the two fail differently: a low-IQ house that builds a missile silo and never fires it is
+     wasting 1750 credits, which is a perfectly good way for a weak opponent to be weak.
+
+     3 rather than 4 deliberately. The difficulties run 2 / 3 / 5, so a gate of 4 would have
+     meant only Commando ever fired one - and a feature two thirds of players never see from
+     the receiving end is not a difficulty distinction, it is a dead branch. */
+  superweapon:3
 };
 
 /* ------------------------------------------------------------- AI base --
@@ -2690,15 +2752,24 @@ var RTS_AI = {
   infantryBaseMult:2,
   attackInterval:3,         /* minutes between attack waves, before difficulty bias */
   attackDelay:5,            /* minutes before the first one */
+  /* The superweapon ratios are the lowest here on purpose. They are the last thing a base
+     should want: 1500-1750 credits and up to -200 power buys nothing you can shoot with for
+     five minutes, so an opponent that reaches for one early has spent its army on a promise.
+     At these weights it builds one only once the rest of the plan is satisfied, which in
+     practice means a long game - exactly when a superweapon is the interesting move. */
   ratio:{ refinery:0.16, barracks:0.16, factory:0.10, radar:0.06, lab:0.05, depot:0.05,
-          apower:0.08, kennel:0.04, silo:0.14, pillbox:0.18, flametower:0.12, turret:0.24, rocketpit:0.12 },
+          apower:0.08, kennel:0.04, silo:0.14, pillbox:0.18, flametower:0.12, turret:0.24, rocketpit:0.12,
+          mslo:0.02, iron:0.02, pdox:0.02, gps:0.02 },
   limit:{ refinery:4,    barracks:2,    factory:2,    radar:1,    lab:1,    depot:1,
   /* The silo limit is high on purpose and is the one number here that was MEASURED rather
      than guessed. At 6 the opponent filled its 17,000 of storage on `normal` and then threw
      away 17,000 more credits over seven minutes - it has the income to overflow and not the
      production lines to spend it down, so a low ceiling turns the storage cap into a straight
      nerf and hands the player about 16 extra seconds of life. RA has no silo limit at all. */
-          apower:2,    kennel:1,    silo:14,   pillbox:4,     flametower:3,     turret:6,     rocketpit:4 },
+          apower:2,    kennel:1,    silo:14,   pillbox:4,     flametower:3,     turret:6,     rocketpit:4,
+  /* One each. A second silo would not charge a second missile - the timer is per house - so
+     building one is pure waste, and the limit says so rather than relying on the ratio. */
+          mslo:1,      iron:1,      pdox:1,    gps:1 },
   /* HOUSE.CPP AI_Building checks Tiberium against Capacity before it checks anything else:
      an overflowing house builds a silo NEXT, whatever else the base plan wanted. Without this
      the storage cap is a pure nerf to the opponent - it loses the income and never buys the
@@ -2712,8 +2783,11 @@ var RTS_AI = {
   /* Both armies' defences are listed. _rtsCanQueue drops whichever belong to the other one, so
      the same plan serves either side and the opponent builds a Tesla wall or a Pillbox line
      depending on which army it ended up with. */
+  /* Superweapons last, after every defence. A base that answers an attack with a Chronosphere
+     instead of a pillbox loses the base. */
   buildOrder:['refinery', 'barracks', 'silo', 'factory', 'radar', 'apower', 'depot', 'lab', 'kennel',
-              'pillbox', 'flametower', 'turret', 'rocketpit', 'tesla'],
+              'pillbox', 'flametower', 'turret', 'rocketpit', 'tesla',
+              'mslo', 'iron', 'pdox', 'gps'],
   /* What to spend a production run on. A table rather than an if-chain: adding a unit to
      RTS_UNITS should not mean editing the opponent's brain, and the hardcoded ladder that used
      to live in _rtsAIUnits is a large part of why the roster sat at five units. Gating is left
@@ -3018,6 +3092,17 @@ var RTS_UNLOAD_RATE = 700;      /* scrap/second poured into the refinery */
    powered feel like a real decision rather than a gradient you can ignore. */
 var RTS_POWER_BAND = 0.75, RTS_POWER_MIN = 0.5;
 var RTS_BUILD_RADIUS = 9;       /* tiles: how far from an existing structure you may build */
+
+/* ------------------------------------------------------------ superweapons --
+   What each one does when it goes off. Kept here with the other tuning rather than buried in
+   the code that applies it, because these five numbers ARE the balance of the feature. */
+var RTS_NUKE_RADIUS  = 4.5;     /* tiles: the blast, against RTS_TILE-scaled world units */
+var RTS_NUKE_DAMAGE  = 1000;    /* at the centre; falls off through the normal splash curve */
+var RTS_NUKE_SPREAD  = 3.2;     /* a wide, shallow curve - a nuke is not a shell */
+var RTS_NUKE_DELAY   = 3.0;     /* seconds between the launch and the hit, so it can be seen */
+var RTS_IRON_TIME    = 30;      /* seconds of invulnerability */
+var RTS_IRON_RADIUS  = 3.0;     /* tiles: everything of yours this close is covered too */
+var RTS_CHRONO_MAX   = 8;       /* units one jump can carry, RA's own ChronoTechLevel feel */
 
 /* Ore regrows and spreads, as it does in the original (RULES.CPP: IsTGrowth, IsTSpread,
    GrowthRate). A field you have worked out slowly comes back, so a long game does not
@@ -4762,6 +4847,81 @@ function _sprBuilding(key, side) {
     _r3Cyl(m, 0, 35.4, 0, 1.3, 3.1, RTS_PAL.spark[2], RTS_PAL.spark[1], 12);  /* the arc */
     _r3Cyl(m, 0, 41, 0, 1.6, 2.2, RTS_PAL.spark[0], RTS_PAL.spark[1], 12);    /* crown */
 
+  } else if (key === 'mslo') {
+    /* MISSILE SILO. A pair of blast doors laid flat with the nose of the missile showing
+       through the open one. Deliberately LOW and horizontal - it is the most dangerous thing
+       on the field and it should not look like a defence tower, it should look like a hatch in
+       the ground that you would walk past. The read is the yellow-black hazard chevrons. */
+    _r3Box(m, 0, 0, 0, W - 4, 3, D - 4, C[2], C[0]);                     /* apron */
+    _r3Box(m, 0, 3, 0, W - 10, 6, D - 10, C[0], C[1]);                   /* silo block */
+    /* the open door, hinged back, and the closed one beside it */
+    _r3Box(m, -7, 9, -2, 12, 1.6, 13, DK[1], DK[2]);
+    _r3Box(m, 6, 9, -8, 12, 1.6, 5, C[3], C[2]);
+    _r3Cyl(m, -7, 9, -2, 4.6, 3, DK[2], DK[3], 16);                      /* the shaft mouth */
+    _r3Cone(m, -7, 12, -2, 3.6, 7, 3, S[0], 16);                         /* the warhead */
+    _r3Box(m, -7, 17.5, -2, 2, 2, 2, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);
+    for (var _mv = 0; _mv < 4; _mv++)                                    /* hazard chevrons */
+      _r3Box(m, -12 + _mv * 8, 9.1, 6, 5, 0.9, 3,
+             _mv % 2 ? RTS_PAL.hazard[0] : DK[2], _mv % 2 ? RTS_PAL.hazard[1] : DK[3]);
+    _r3Box(m, W / 2 - 6, 3, D / 2 - 6, 6, 9, 6, S[2], S[1]);             /* control hut */
+    _r3Box(m, 0, 9.8, -D / 2 + 5, 9, 1.2, 3, B.roof, B.roof);            /* team band */
+
+  } else if (key === 'iron') {
+    /* IRON CURTAIN. A heavy frame holding a lens between two coil banks, aimed sideways. The
+       identity is the FRAME with a gap in the middle - a machine that projects something -
+       against the Chronosphere's sphere. They are the two "field" buildings and must not be
+       confusable at a glance. */
+    _r3Box(m, 0, 0, 0, W - 4, 3, D - 4, C[2], C[0]);
+    _r3Box(m, 0, 3, 0, W - 12, 7, D - 8, C[0], C[1]);                    /* plinth */
+    /* the two uprights and the yoke across the top */
+    _r3Box(m, -10, 10, 0, 4, 18, 7, DK[1], DK[2]);
+    _r3Box(m,  10, 10, 0, 4, 18, 7, DK[1], DK[2]);
+    _r3Box(m, 0, 26, 0, 24, 3.5, 6, C[3], C[2]);
+    /* coil banks on each upright */
+    for (var _iv = 0; _iv < 3; _iv++) {
+      _r3Cyl(m, -10, 13 + _iv * 5, 0, 4.2, 2, C[2], C[3], 16);
+      _r3Cyl(m,  10, 13 + _iv * 5, 0, 4.2, 2, C[2], C[3], 16);
+    }
+    /* the emitter itself, between them - emissive, because a powered field IS the building */
+    _r3Cyl(m, 0, 18, 0, 5, 3.2, RTS_PAL.lit, RTS_PAL.lit, 20);
+    _r3Box(m, 0, 10, 0, 6, 1.4, 4, B.roof, B.roof);
+    _r3Box(m, -W / 2 + 6, 3, D / 2 - 6, 5, 8, 5, S[2], S[1]);            /* transformer */
+
+  } else if (key === 'pdox') {
+    /* CHRONOSPHERE. A SPHERE in a cradle of arms. Round where the Iron Curtain is square, and
+       the only spherical thing in the whole build list, which is the entire reason it reads
+       instantly. */
+    _r3Box(m, 0, 0, 0, W - 4, 3, D - 4, C[2], C[0]);
+    _r3Box(m, 0, 3, 0, W - 12, 6, D - 12, C[0], C[1]);                   /* base drum */
+    for (var _pa = 0; _pa < 4; _pa++) {                                  /* the cradle arms */
+      var _px = (_pa < 2 ? -1 : 1) * 9, _pz = (_pa % 2 ? 1 : -1) * 9;
+      _r3Box(m, _px, 9, _pz, 3, 13, 3, DK[1], DK[2]);
+    }
+    /* the sphere, as a stack of cones - there is no sphere primitive and adding one for a
+       single building would be a worse trade than four rings that read as round from every
+       angle the camera can reach */
+    _r3Cone(m, 0, 15, 0, 3.5, 7.5, 4, S[2], 20);
+    _r3Cone(m, 0, 19, 0, 7.5, 9,   3, S[1], 20);
+    _r3Cone(m, 0, 22, 0, 9,   7.5, 4, S[1], 20);
+    _r3Cone(m, 0, 26, 0, 7.5, 3.5, 4, S[2], 20);
+    _r3Cyl(m, 0, 21.5, 0, 10.5, 1.6, RTS_PAL.spark[1], RTS_PAL.spark[2], 20); /* equator ring */
+    _r3Cyl(m, 0, 30, 0, 1.6, 3, RTS_PAL.lit, RTS_PAL.lit, 12);           /* crown light */
+    _r3Box(m, 0, 9.5, 0, 8, 1.4, 5, B.roof, B.roof);
+    _r3Box(m, W / 2 - 6, 3, -D / 2 + 6, 6, 8, 6, S[2], S[1]);            /* control hut */
+
+  } else if (key === 'gps') {
+    /* GPS UPLINK. A dish on a mast. The most familiar shape in the set and the least
+       threatening, which is right - it is the one superweapon that shoots nothing. */
+    _r3Box(m, 0, 0, 0, W - 6, 3, D - 6, C[2], C[0]);
+    _r3Box(m, 0, 3, 2, W - 14, 8, D - 14, C[0], C[1]);                   /* equipment shed */
+    _r3Box(m, 0, 11, 2, W - 18, 1.6, D - 18, C[3], C[2]);
+    _r3Cyl(m, 0, 12, 2, 2.2, 12, S[2], S[1], 16);                        /* the mast */
+    _r3Cone(m, 0, 22, 2, 11, 6, 9, C[3], 20);                            /* the dish */
+    _r3Cyl(m, 0, 26, 2, 1.2, 4, S[3], S[3], 12);                         /* feed horn */
+    _r3Cyl(m, 0, 29.5, 2, 1.5, 1.5, RTS_PAL.lit, RTS_PAL.lit, 12);
+    _r3Box(m, 0, 12.4, -D / 2 + 6, 8, 1.2, 3, B.roof, B.roof);           /* team band */
+    _r3Box(m, -W / 2 + 6, 3, D / 2 - 6, 5, 6, 5, S[2], S[1]);            /* cable box */
+
   } else if (key === 'wall') {
     /* Concrete Wall. Has to tile with itself edge to edge, so it fills the cell exactly and
        nothing may cross the boundary. Simple by necessity and by choice - a wall that draws
@@ -5575,7 +5735,11 @@ var RTS_MIX_BLD = {
   yard:'fact', power:'powr', apower:'apwr', refinery:'proc', factory:'weap',
   barracks:'barr', radar:'dome', lab:'atek', depot:'fix', silo:'silo',
   helipad:'hpad', turret:'gun', rocketpit:'sam', pillbox:'pbox',
-  flametower:'ftur', kennel:'kenn', wall:'brik'
+  flametower:'ftur', kennel:'kenn', wall:'brik',
+  /* The three superweapons RA actually shipped as buildings. There is no GPS structure in the
+     original - the satellite is a Tech Center power rather than a thing you place - so the
+     uplink keeps its procedural model, which is what a missing entry here means. */
+  mslo:'mslo', iron:'iron', pdox:'pdox'
 };
 var RTS_MIX_UNIT = {
   buggy:'jeep', light:'1tnk', tank:'2tnk', heavy:'4tnk', arty:'arty',
@@ -8054,6 +8218,7 @@ var RTS_EVA_NAMED = {
   lowpower:  'low_power',
   cantbuild: 'unable_to_build',
   lostbldg:  'structure_destroyed',
+  chrono:    'chronosphere_sound',
   won:       'mission_accomplished',
   lost:      'mission_failed'
 };
@@ -8492,6 +8657,10 @@ function _rtsSideNew(key) {
     q:{ struct:null, infantry:null, vehicle:null },   /* one build line per category, like the classic sidebar */
     ready:null, readyTry:0,                            /* finished structure awaiting placement */
     spill:0, spillSaid:0,                              /* scrap lost to a full store, and the warning cooldown */
+    /* superweapon charge, keyed by super key. Held on the SIDE rather than on the building so
+       that selling the silo and rebuilding it does not hand you a fresh missile - the charge
+       belongs to the house, which is also how the original's SuperClass works. */
+    supers:{},
     lost:false };
 }
 /* --------------------------------------------------------------- the treasury --
@@ -9209,6 +9378,238 @@ function _rtsCrateOpen(cr, u) {
     ping('deny');
   }
   return cr.kind;
+}
+
+/* =========================================================== superweapons ==
+   Four buildings whose whole output is one button on a timer.
+
+   The charge lives on the HOUSE, not on the building. That is SuperClass in the original and
+   it matters for a reason you find out by selling things: if the timer belonged to the silo,
+   you could sell it at 99% and rebuild for a fresh missile, or - worse - build two silos and
+   get two nukes on one charge. Owning ONE working example of the building is what makes a
+   super chargeable; owning three is no faster.
+
+   `ready` is separate from `t` rather than derived, because the moment a super becomes ready
+   is an EVENT - it announces itself, and an auto-firing one goes off - and a derived flag
+   would re-fire it on every tick that followed. */
+
+/* Every super the side can charge right now: it owns a finished, undestroyed example of the
+   building, and the building is not browned out. */
+function _rtsSuperSources(side) {
+  var G = window._rtsG, out = {}, i;
+  for (i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.type !== 'struct' || e.side !== side || e.building) continue;
+    var d = rtsStructDef(e.def);
+    if (d && d.super && !out[d.super.key]) out[d.super.key] = { def: d, ent: e };
+  }
+  return out;
+}
+
+/* Low power stalls a charge rather than resetting it - the same treatment a Tesla coil gets,
+   and for the same reason: a brownout should cost you tempo, not the whole investment. */
+function _rtsSupersTick(dt) {
+  var G = window._rtsG, sides = ['player', 'enemy'], k;
+  for (var s = 0; s < sides.length; s++) {
+    var side = sides[s], S = G.sides[side];
+    if (!S) continue;
+    if (!S.supers) S.supers = {};
+    var have = _rtsSuperSources(side);
+
+    /* a super whose building is gone stops charging and loses what it had */
+    for (k in S.supers) if (!have[k]) delete S.supers[k];
+
+    for (k in have) {
+      var sup = have[k].def.super;
+      var st = S.supers[k] || (S.supers[k] = { t: 0, ready: false, said: false });
+      if (st.ready) continue;
+      st.t += dt * (_rtsPowerFactor ? _rtsPowerFactor(side) : 1);
+      if (st.t < sup.charge) continue;
+      st.t = sup.charge;
+      st.ready = true;
+      if (side === 'player') {
+        if (typeof _rtsSay === 'function') _rtsSay(sup.hint);
+        if (typeof rtsEva === 'function') rtsEva('ready');
+      }
+      /* GPS launches itself; see the note on its def. */
+      if (sup.auto) _rtsSuperFire(side, k, 0, 0);
+    }
+  }
+}
+
+function _rtsSuperReady(side, key) {
+  var S = window._rtsG.sides[side];
+  return !!(S && S.supers && S.supers[key] && S.supers[key].ready);
+}
+/* 0..1, for the charge bar on the button. */
+function _rtsSuperProgress(side, key) {
+  var S = window._rtsG.sides[side];
+  var st = S && S.supers && S.supers[key];
+  if (!st) return 0;
+  var d = _rtsSuperDefOf(key);
+  return d ? Math.max(0, Math.min(1, st.t / d.super.charge)) : 0;
+}
+function _rtsSuperDefOf(key) {
+  for (var i = 0; i < RTS_STRUCTS.length; i++)
+    if (RTS_STRUCTS[i].super && RTS_STRUCTS[i].super.key === key) return RTS_STRUCTS[i];
+  return null;
+}
+
+/* Fire. Returns true if it went off; false leaves the charge alone, so a refused shot is not
+   a wasted one. */
+function _rtsSuperFire(side, key, tx, tz, sel) {
+  var G = window._rtsG;
+  if (!_rtsSuperReady(side, key)) return false;
+  var ok = false;
+  if (key === 'nuke')             ok = _rtsFireNuke(side, tx, tz);
+  else if (key === 'ironcurtain') ok = _rtsFireIron(side, tx, tz);
+  else if (key === 'chrono')      ok = _rtsFireChrono(side, tx, tz, sel);
+  else if (key === 'gps')         ok = _rtsFireGps(side);
+  if (!ok) return false;
+  var st = G.sides[side].supers[key];
+  st.t = 0; st.ready = false; st.said = false;
+  return true;
+}
+
+/* ---- the atom bomb. The delay is the point: a nuke you cannot see coming is just a large
+   number appearing in your base, and the three seconds are what make it a moment. */
+function _rtsFireNuke(side, tx, tz) {
+  var G = window._rtsG;
+  if (!_rtsInB(tx, tz)) return false;
+  G.strikes = G.strikes || [];
+  G.strikes.push({ t: RTS_NUKE_DELAY, x: _rtsWX(tx), z: _rtsWX(tz), side: side });
+  if (side === 'player') _rtsSay('Missile away.');
+  /* RA's "nuclear missile launched" line is not among the 152 sounds the identity table
+     recovered, so this borrows the one that fits: something IS about to hit your base. */
+  else if (typeof rtsEva === 'function') rtsEva('attack');
+  if (typeof _rtsSfx === 'function') _rtsSfx('rocket');
+  return true;
+}
+/* Run from the tick so the delay is real time rather than a setTimeout the pause would not
+   stop. A strike whose owner has since lost still lands - it is already in the air. */
+function _rtsStrikesTick(dt) {
+  var G = window._rtsG;
+  if (!G.strikes || !G.strikes.length) return;
+  for (var i = G.strikes.length - 1; i >= 0; i--) {
+    var k = G.strikes[i];
+    k.t -= dt;
+    if (k.t > 0) continue;
+    G.strikes.splice(i, 1);
+    _rtsSplash(k.x, k.z, RTS_NUKE_RADIUS * RTS_TILE, RTS_NUKE_DAMAGE, k.side, RTS_NUKE_SPREAD, null);
+    G.shake = Math.max(G.shake || 0, 1.4);
+    /* One huge boom plus a ring of smaller ones staggered behind it. A single sprite scaled up
+       reads as a big puff; the ring is what makes it look like a blast with an edge. */
+    G.fx.push({ kind:'boom', x:k.x, y:1, z:k.z, t:0, big:7 });
+    for (var r = 0; r < 8; r++) {
+      var ang = r / 8 * Math.PI * 2, rad = RTS_NUKE_RADIUS * RTS_TILE * 0.55;
+      G.fx.push({ kind:'boom', t:-0.08 - r * 0.03, big:2.6,
+                  x:k.x + Math.cos(ang) * rad, y:1, z:k.z + Math.sin(ang) * rad });
+    }
+    if (typeof _rtsSfx === 'function') _rtsSfx('boom', k.x, k.z);
+    if (k.side !== 'player') _rtsSay('Our base has been hit by an atomic strike.');
+  }
+}
+
+/* ---- the iron curtain. Invulnerability is enforced in _rtsDamage, the one choke point every
+   route to hurting something goes through - a flag checked at the call sites would be a flag
+   some new call site forgets. */
+function _rtsFireIron(side, tx, tz) {
+  var G = window._rtsG;
+  if (!_rtsInB(tx, tz)) return false;
+  var wx = _rtsWX(tx), wz = _rtsWX(tz), n = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.side !== side) continue;
+    if (Math.hypot(e.x - wx, e.z - wz) > RTS_IRON_RADIUS * RTS_TILE) continue;
+    e.ironT = RTS_IRON_TIME;
+    n++;
+  }
+  if (!n) return false;                       /* nothing of yours there - do not spend it */
+  if (side === 'player') _rtsSay('Iron Curtain active on ' + n + (n === 1 ? ' unit.' : ' units.'));
+  else _rtsSay('Enemy units are protected by an Iron Curtain.');
+  if (typeof _rtsSfx === 'function') _rtsSfx('build');
+  return true;
+}
+function _rtsIronTick(dt) {
+  var G = window._rtsG;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.ironT > 0) { e.ironT -= dt; if (e.ironT < 0) e.ironT = 0; }
+  }
+}
+
+/* ---- the chronosphere. Teleports what the player has SELECTED, which is why it takes the
+   selection rather than finding its own targets: sending units somewhere is a decision about
+   which units, and the game already has a way to say that. */
+function _rtsFireChrono(side, tx, tz, sel) {
+  var G = window._rtsG;
+  if (!_rtsInB(tx, tz)) return false;
+  var list = (sel && sel.length) ? sel : [];
+  if (!list.length) {
+    /* the AI has no selection - it sends its nearest idle group instead */
+    for (var i = 0; i < G.ents.length && list.length < RTS_CHRONO_MAX; i++) {
+      var e = G.ents[i];
+      if (!e.dead && e.type === 'unit' && e.side === side && !e.inside &&
+          !(rtsUnitDef(e.def) || {}).sea) list.push(e);
+    }
+  }
+  list = list.filter(function (e) {
+    return e && !e.dead && e.type === 'unit' && e.side === side && !e.inside;
+  }).slice(0, RTS_CHRONO_MAX);
+  if (!list.length) return false;
+
+  /* Each unit needs its OWN cell. _rtsNearestOpen has no idea another unit is about to be put
+     where it just pointed - it answers the same question the same way every time - so asking it
+     once per unit lands the whole group on one tile, stacked. The claimed set is what makes a
+     chronoshift arrive as a formation rather than as a pile. */
+  var taken = {}, moved = 0;
+  for (var j = 0; j < list.length; j++) {
+    var u = list[j];
+    var dom = (typeof _rtsDomainOf === 'function') ? _rtsDomainOf(u) : null;
+    var spot = _rtsChronoCell(tx, tz, dom, taken);
+    if (!spot) continue;
+    taken[spot[0] + ',' + spot[1]] = 1;
+    u.x = _rtsWX(spot[0]); u.z = _rtsWX(spot[1]);
+    u.path = null; u.target = null; u.mx = null; u.mz = null;
+    moved++;
+  }
+  if (!moved) return false;
+  if (side === 'player') _rtsSay('Chronoshift complete — ' + moved +
+                                 (moved === 1 ? ' unit moved.' : ' units moved.'));
+  /* the one superweapon whose real sound survived identification - see ra/sndtab.js */
+  if (typeof rtsEva === 'function') rtsEva('chrono');
+  return true;
+}
+
+/* The nearest cell to (tx,tz) that this unit can stand on and no earlier unit in the same jump
+   has claimed. A plain outward ring walk rather than a reuse of _rtsNearestOpen, because the
+   thing that has to vary between calls is exactly what that function has no parameter for. */
+function _rtsChronoCell(tx, tz, dom, taken) {
+  for (var r = 0; r <= 10; r++) {
+    for (var dz = -r; dz <= r; dz++) {
+      for (var dx = -r; dx <= r; dx++) {
+        if (r && Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;   /* ring, not disc */
+        var x = tx + dx, z = tz + dz;
+        if (!_rtsInB(x, z)) continue;
+        if (taken[x + ',' + z]) continue;
+        if (_rtsBlocked(x, z, dom)) continue;
+        return [x, z];
+      }
+    }
+  }
+  return null;
+}
+
+/* ---- GPS. Reveals what has not been explored; it does not make anything currently visible,
+   which is the distinction the shroud already draws between `mapped` and `vis`. */
+function _rtsFireGps(side) {
+  var G = window._rtsG;
+  if (side !== 'player') return true;          /* the AI is not fogged; nothing to reveal */
+  G.mapped.fill(1);
+  G.visDirty = 1;
+  _rtsSay('GPS satellite online — the map is yours.');
+  if (typeof _rtsSfx === 'function') _rtsSfx('ready');
+  return true;
 }
 
 /* ----------------------------------------------------------------- shroud --
@@ -10675,6 +11076,10 @@ function _rtsCanRetaliate(tgt, from) {
 }
 function _rtsDamage(tgt, dmg, from, floor) {
   if (!tgt || tgt.dead) return;
+  /* The Iron Curtain, enforced HERE rather than at the call sites. Every route to hurting
+     something funnels through this function - shells, splash, fire, the dog rule below, a
+     script - so one check covers all of them, and a route added later cannot forget it. */
+  if (tgt.ironT > 0) return;
   /* The dog rule, ahead of every modifier because in the original it replaces the damage
      rather than scaling it. See `maul` on the bite weapon in rts.rules.js. */
   if (from && from.type === 'unit' && !from.dead) {
@@ -11461,8 +11866,18 @@ function _rtsAIWants(S) {
   var order = _rtsIQAt(RTS_IQ.production) ? RTS_AI.buildOrder
             : (_rtsIQAt(RTS_IQ.repairSell) ? ['refinery', 'barracks'] : []);
   var size = Math.max(own, theirs + RTS_AI.baseSizeAdd);
+  var mySide = rtsHouseSide('enemy');
   for (i = 0; i < order.length; i++) {
-    var k = order[i], want = Math.min(RTS_AI.limit[k], Math.ceil(size * RTS_AI.ratio[k]));
+    var k = order[i];
+    /* Skip the other army's buildings. Without this the plan STOPS DEAD on the first one it
+       cannot build: the list is walked in order and returns the first shortfall, so a Soviet
+       house asking for four Pillboxes - an Allied building - demands them forever and never
+       reaches anything after them. That silently killed the entire defensive tail (flame
+       towers, gun turrets, rocket turrets, Tesla coils) the moment factions were added, and
+       nothing reported it because wanting a building is not an error. */
+    var kd = rtsStructDef(k);
+    if (kd && !rtsBuildableBy(kd, mySide)) continue;
+    var want = Math.min(RTS_AI.limit[k], Math.ceil(size * RTS_AI.ratio[k]));
     if ((have[k] || 0) < want) return { key:k, urgent:false };
   }
   return null;
@@ -12405,10 +12820,55 @@ function _rtsAIAttack(urgency) {
   if (typeof _rtsSfx === 'function') _rtsSfx('alert');
   return true;
 }
+
+/* --------------------------------------------------- the opponent's supers --
+   An opponent that builds a missile silo and never fires it is set dressing, so this aims
+   them - but only from IQ 4, because "can build one" and "knows what to do with one" are
+   different abilities and a weak opponent wasting 1750 credits is a fine way to be weak.
+
+   The targeting is deliberately simple and deliberately not optimal. A nuke aimed by a real
+   search would land on the single most expensive cluster the player owns every time, which is
+   not a fight, it is a tax. It aims at the player's centre of mass instead: usually the base,
+   sometimes an army in the field, and always somewhere the player can see coming and rebuild
+   from. */
+function _rtsAISupers(dt) {
+  var G = window._rtsG, S = G.sides.enemy;
+  if (!S.supers) return;
+  if (!_rtsIQAt(RTS_IQ.superweapon)) return;
+  G.ai.superT = (G.ai.superT || 0) - dt;
+  if (G.ai.superT > 0) return;
+  G.ai.superT = 3;                          /* it does not need to re-decide every frame */
+
+  for (var key in S.supers) {
+    if (!_rtsSuperReady('enemy', key)) continue;
+    var aim = null;
+    if (key === 'nuke')            aim = _rtsAIMassOf('player');
+    else if (key === 'ironcurtain') aim = _rtsAIMassOf('enemy');
+    else if (key === 'chrono')      continue;   /* see below */
+    if (!aim) continue;
+    if (_rtsSuperFire('enemy', key, aim.tx, aim.tz)) return;   /* one per decision */
+  }
+}
+/* Where a side's stuff is, in tiles. Buildings weigh more than units so a nuke goes to the
+   base rather than chasing whichever harvester happened to wander furthest out. */
+function _rtsAIMassOf(side) {
+  var G = window._rtsG, sx = 0, sz = 0, w = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.side !== side) continue;
+    var k = (e.type === 'struct') ? 3 : 1;
+    sx += e.x * k; sz += e.z * k; w += k;
+  }
+  if (!w) return null;
+  var tx = _rtsTX(sx / w), tz = _rtsTX(sz / w);
+  return _rtsInB(tx, tz) ? { tx: tx, tz: tz } : null;
+}
+
 function _rtsUpdateAI(dt) {
   var G = window._rtsG, S = G.sides.enemy;
   if (S.lost) return;
   _rtsTeamsTick(dt);
+  _rtsAISupers(dt);
   /* Rich: refill a line as soon as it empties, rather than waiting up to five seconds for
      the next decision. Without this the opponent banks tens of thousands of credits it
      structurally cannot spend, while the human restarts a queue the moment it frees. */
@@ -12937,6 +13397,9 @@ function _rtsTick(dt) {
 
   _rtsTickOre(dt);
   _rtsVisTick(dt);
+  _rtsSupersTick(dt);
+  _rtsStrikesTick(dt);
+  _rtsIronTick(dt);
   _rtsPowerDamage(dt);
   /* Power_Output tracks hit points, so it has to be re-totalled before anything reads it. */
   _rtsRecalcPower('player'); _rtsRecalcPower('enemy');
@@ -13694,6 +14157,9 @@ function rtsOpen(seed) {
     +     '<button type="button" data-mode="sell" onclick="rtsMode(\'sell\')" '
     +       'title="Sell: click one of your buildings to sell it back">💲 SELL</button>'
     +   '</div>'
+    /* Empty until something can charge one. A row of permanently greyed-out superweapons is a
+       list of things you cannot have; a row that appears when you build the silo is news. */
+    +   '<div class="rts-supers" id="rtsSupers"></div>'
     +   '<div class="rts-mid">'
     +     '<div class="rts-pwr" title="Power"><span class="ptxt">P<br>W<br>R</span>'
     +       '<div class="ptrack"><i id="rtsPwrFill"></i><b id="rtsPwrMark"></b></div></div>'
@@ -13819,6 +14285,7 @@ function rtsMode(m) {
   if (!U) return;
   U.mode = (U.mode === m) ? null : m;
   if (U.mode && U.place) { U.place = null; _rtsGhostHide(); }
+  if (U.mode) _rtsSuperDisarm();          /* all of these want the next click */
   var bs = document.querySelectorAll('#rcgRts .rts-ops button');
   for (var i = 0; i < bs.length; i++) bs[i].className = (bs[i].getAttribute('data-mode') === U.mode) ? 'on' : '';
   var cv = document.getElementById('rtsCv');
@@ -13827,6 +14294,112 @@ function rtsMode(m) {
   if (U.mode === 'repair') _rtsSay('Repair: click a damaged building. Click it again to stop.');
   else if (U.mode === 'sell') _rtsSay('Sell: click a building to sell it back.');
 }
+
+/* ----------------------------------------------------- superweapon buttons --
+   One button per superweapon the player can charge, appearing when the building does and
+   carrying its own charge bar. Armed like REPAIR and SELL - the button takes the next click on
+   the map - because that is the interaction the sidebar already teaches.
+
+   Rebuilt only when the SET changes, not every tick: the bar is a style update on a button
+   that stays put, and replacing the innerHTML ten times a second would drop a click that
+   landed between two frames of it. */
+function _rtsSuperRow() {
+  var G = window._rtsG, U = window._rtsUI;
+  var el = document.getElementById('rtsSupers');
+  if (!el || !G) return;
+  var have = _rtsSuperSources('player'), keys = [], k;
+  for (k in have) keys.push(k);
+  keys.sort();
+
+  var sig = keys.join(',');
+  if (sig !== U.superSig) {
+    U.superSig = sig;
+    var html = '';
+    for (var i = 0; i < keys.length; i++) {
+      var sup = have[keys[i]].def.super;
+      if (sup.auto) continue;                  /* fires itself; there is no button to press */
+      html += '<button type="button" data-super="' + keys[i] + '" ' +
+              'onclick="rtsSuperArm(\'' + keys[i] + '\')" title="' + sup.name + '">' +
+              '<i class="sfill"></i><span>' + sup.icon + ' ' + sup.name + '</span></button>';
+    }
+    el.innerHTML = html;
+  }
+
+  var bs = el.querySelectorAll('button');
+  for (var b = 0; b < bs.length; b++) {
+    var key = bs[b].getAttribute('data-super');
+    var p = _rtsSuperProgress('player', key), rdy = _rtsSuperReady('player', key);
+    var fill = bs[b].querySelector('.sfill');
+    if (fill) fill.style.width = Math.round(p * 100) + '%';
+    bs[b].className = (U.superArm === key) ? 'armed' : (rdy ? 'ready' : '');
+  }
+}
+
+/* Arm a superweapon: the next click on the map fires it. Clicking the armed button again
+   disarms, the same toggle REPAIR and SELL use. */
+function rtsSuperArm(key) {
+  var U = window._rtsUI;
+  if (!U) return;
+  if (!_rtsSuperReady('player', key)) {
+    if (typeof _rtsSfx === 'function') _rtsSfx('deny');
+    var d = _rtsSuperDefOf(key);
+    var left = d ? Math.ceil(d.super.charge * (1 - _rtsSuperProgress('player', key))) : 0;
+    _rtsSay((d ? d.super.name : 'That') + ' is still charging — ' + left + 's.');
+    return;
+  }
+  U.superArm = (U.superArm === key) ? null : key;
+  /* arming one cancels a placement and any armed repair/sell - all of them want the next click */
+  if (U.superArm) {
+    if (U.place) { U.place = null; _rtsGhostHide(); }
+    if (U.mode) { U.mode = null;
+      var ms = document.querySelectorAll('#rcgRts .rts-ops button');
+      for (var i = 0; i < ms.length; i++) ms[i].className = '';
+    }
+  }
+  var cv = document.getElementById('rtsCv');
+  if (cv) cv.style.cursor = U.superArm ? 'crosshair' : '';
+  if (typeof _rtsSfx === 'function') _rtsSfx('click');
+  if (U.superArm) {
+    var sd = _rtsSuperDefOf(U.superArm);
+    if (sd) _rtsSay(sd.super.hint);
+  }
+  U.superSig = null;                    /* force the row to restyle now rather than in 100ms */
+  _rtsSuperRow();
+}
+function _rtsSuperDisarm() {
+  var U = window._rtsUI;
+  if (!U || !U.superArm) return;
+  U.superArm = null;
+  U.superSig = null;
+  _rtsSuperRow();
+}
+
+/* Returns true when the click was consumed by an armed superweapon. */
+function _rtsSuperClick(mx, my) {
+  var U = window._rtsUI;
+  if (!U || !U.superArm) return false;
+  var key = U.superArm;
+  var w = _rtsGroundAt(mx, my);
+  if (!w) { _rtsSuperDisarm(); return true; }
+  var tx = _rtsTX(w.x), tz = _rtsTX(w.z);
+  /* The chronosphere carries the selection with it; everything else only wants the spot. */
+  var sel = (key === 'chrono' && window._rtsG.sel) ? window._rtsG.sel.slice() : null;
+  if (key === 'chrono' && (!sel || !sel.length)) {
+    if (typeof _rtsSfx === 'function') _rtsSfx('deny');
+    _rtsSay('Select the units you want to send first, then click the destination.');
+    return true;                        /* stays armed - the player has not spent it */
+  }
+  if (!_rtsSuperFire('player', key, tx, tz, sel)) {
+    if (typeof _rtsSfx === 'function') _rtsSfx('deny');
+    _rtsSay(key === 'ironcurtain' ? 'Nothing of yours is there.' : 'Cannot fire there.');
+    return true;
+  }
+  _rtsSuperDisarm();
+  var cv = document.getElementById('rtsCv');
+  if (cv) cv.style.cursor = '';
+  return true;
+}
+
 /* Returns true when the click was consumed by the armed mode. */
 function _rtsModeClick(mx, my) {
   var U = window._rtsUI;
@@ -14088,6 +14661,7 @@ function _rtsBindInput() {
       if (U.mode) { rtsMode(U.mode); return; }        /* right-click drops the repair/sell cursor */
       _rtsRightClick(mx, my); return;
     }
+    if (U.superArm) { _rtsSuperClick(mx, my); return; }
     if (U.mode) { _rtsModeClick(mx, my); return; }
     if (U.place) { _rtsTryPlace(mx, my); return; }
     U.drag = { x0:mx, y0:my, x1:mx, y1:my, add:e.shiftKey || e.ctrlKey, moved:false };
@@ -14780,7 +15354,7 @@ function _rtsLoop() {
     U.miniT = (U.miniT || 0) + dt;
     if (U.miniT > 0.12) { U.miniT = 0; _rtsDrawMini(); }
     U.uiT = (U.uiT || 0) + dt;
-    if (U.uiT > 0.1) { U.uiT = 0; _rtsSyncSidebar(); }
+    if (U.uiT > 0.1) { U.uiT = 0; _rtsSyncSidebar(); _rtsSuperRow(); }
   } catch (err) {
     /* Surface a persistent failure instead of silently burning frames on it. */
     U.errs = (U.errs || 0) + 1;

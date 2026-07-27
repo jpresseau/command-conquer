@@ -215,6 +215,10 @@ function _rtsSideNew(key) {
     q:{ struct:null, infantry:null, vehicle:null },   /* one build line per category, like the classic sidebar */
     ready:null, readyTry:0,                            /* finished structure awaiting placement */
     spill:0, spillSaid:0,                              /* scrap lost to a full store, and the warning cooldown */
+    /* superweapon charge, keyed by super key. Held on the SIDE rather than on the building so
+       that selling the silo and rebuilding it does not hand you a fresh missile - the charge
+       belongs to the house, which is also how the original's SuperClass works. */
+    supers:{},
     lost:false };
 }
 /* --------------------------------------------------------------- the treasury --
@@ -932,6 +936,238 @@ function _rtsCrateOpen(cr, u) {
     ping('deny');
   }
   return cr.kind;
+}
+
+/* =========================================================== superweapons ==
+   Four buildings whose whole output is one button on a timer.
+
+   The charge lives on the HOUSE, not on the building. That is SuperClass in the original and
+   it matters for a reason you find out by selling things: if the timer belonged to the silo,
+   you could sell it at 99% and rebuild for a fresh missile, or - worse - build two silos and
+   get two nukes on one charge. Owning ONE working example of the building is what makes a
+   super chargeable; owning three is no faster.
+
+   `ready` is separate from `t` rather than derived, because the moment a super becomes ready
+   is an EVENT - it announces itself, and an auto-firing one goes off - and a derived flag
+   would re-fire it on every tick that followed. */
+
+/* Every super the side can charge right now: it owns a finished, undestroyed example of the
+   building, and the building is not browned out. */
+function _rtsSuperSources(side) {
+  var G = window._rtsG, out = {}, i;
+  for (i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.type !== 'struct' || e.side !== side || e.building) continue;
+    var d = rtsStructDef(e.def);
+    if (d && d.super && !out[d.super.key]) out[d.super.key] = { def: d, ent: e };
+  }
+  return out;
+}
+
+/* Low power stalls a charge rather than resetting it - the same treatment a Tesla coil gets,
+   and for the same reason: a brownout should cost you tempo, not the whole investment. */
+function _rtsSupersTick(dt) {
+  var G = window._rtsG, sides = ['player', 'enemy'], k;
+  for (var s = 0; s < sides.length; s++) {
+    var side = sides[s], S = G.sides[side];
+    if (!S) continue;
+    if (!S.supers) S.supers = {};
+    var have = _rtsSuperSources(side);
+
+    /* a super whose building is gone stops charging and loses what it had */
+    for (k in S.supers) if (!have[k]) delete S.supers[k];
+
+    for (k in have) {
+      var sup = have[k].def.super;
+      var st = S.supers[k] || (S.supers[k] = { t: 0, ready: false, said: false });
+      if (st.ready) continue;
+      st.t += dt * (_rtsPowerFactor ? _rtsPowerFactor(side) : 1);
+      if (st.t < sup.charge) continue;
+      st.t = sup.charge;
+      st.ready = true;
+      if (side === 'player') {
+        if (typeof _rtsSay === 'function') _rtsSay(sup.hint);
+        if (typeof rtsEva === 'function') rtsEva('ready');
+      }
+      /* GPS launches itself; see the note on its def. */
+      if (sup.auto) _rtsSuperFire(side, k, 0, 0);
+    }
+  }
+}
+
+function _rtsSuperReady(side, key) {
+  var S = window._rtsG.sides[side];
+  return !!(S && S.supers && S.supers[key] && S.supers[key].ready);
+}
+/* 0..1, for the charge bar on the button. */
+function _rtsSuperProgress(side, key) {
+  var S = window._rtsG.sides[side];
+  var st = S && S.supers && S.supers[key];
+  if (!st) return 0;
+  var d = _rtsSuperDefOf(key);
+  return d ? Math.max(0, Math.min(1, st.t / d.super.charge)) : 0;
+}
+function _rtsSuperDefOf(key) {
+  for (var i = 0; i < RTS_STRUCTS.length; i++)
+    if (RTS_STRUCTS[i].super && RTS_STRUCTS[i].super.key === key) return RTS_STRUCTS[i];
+  return null;
+}
+
+/* Fire. Returns true if it went off; false leaves the charge alone, so a refused shot is not
+   a wasted one. */
+function _rtsSuperFire(side, key, tx, tz, sel) {
+  var G = window._rtsG;
+  if (!_rtsSuperReady(side, key)) return false;
+  var ok = false;
+  if (key === 'nuke')             ok = _rtsFireNuke(side, tx, tz);
+  else if (key === 'ironcurtain') ok = _rtsFireIron(side, tx, tz);
+  else if (key === 'chrono')      ok = _rtsFireChrono(side, tx, tz, sel);
+  else if (key === 'gps')         ok = _rtsFireGps(side);
+  if (!ok) return false;
+  var st = G.sides[side].supers[key];
+  st.t = 0; st.ready = false; st.said = false;
+  return true;
+}
+
+/* ---- the atom bomb. The delay is the point: a nuke you cannot see coming is just a large
+   number appearing in your base, and the three seconds are what make it a moment. */
+function _rtsFireNuke(side, tx, tz) {
+  var G = window._rtsG;
+  if (!_rtsInB(tx, tz)) return false;
+  G.strikes = G.strikes || [];
+  G.strikes.push({ t: RTS_NUKE_DELAY, x: _rtsWX(tx), z: _rtsWX(tz), side: side });
+  if (side === 'player') _rtsSay('Missile away.');
+  /* RA's "nuclear missile launched" line is not among the 152 sounds the identity table
+     recovered, so this borrows the one that fits: something IS about to hit your base. */
+  else if (typeof rtsEva === 'function') rtsEva('attack');
+  if (typeof _rtsSfx === 'function') _rtsSfx('rocket');
+  return true;
+}
+/* Run from the tick so the delay is real time rather than a setTimeout the pause would not
+   stop. A strike whose owner has since lost still lands - it is already in the air. */
+function _rtsStrikesTick(dt) {
+  var G = window._rtsG;
+  if (!G.strikes || !G.strikes.length) return;
+  for (var i = G.strikes.length - 1; i >= 0; i--) {
+    var k = G.strikes[i];
+    k.t -= dt;
+    if (k.t > 0) continue;
+    G.strikes.splice(i, 1);
+    _rtsSplash(k.x, k.z, RTS_NUKE_RADIUS * RTS_TILE, RTS_NUKE_DAMAGE, k.side, RTS_NUKE_SPREAD, null);
+    G.shake = Math.max(G.shake || 0, 1.4);
+    /* One huge boom plus a ring of smaller ones staggered behind it. A single sprite scaled up
+       reads as a big puff; the ring is what makes it look like a blast with an edge. */
+    G.fx.push({ kind:'boom', x:k.x, y:1, z:k.z, t:0, big:7 });
+    for (var r = 0; r < 8; r++) {
+      var ang = r / 8 * Math.PI * 2, rad = RTS_NUKE_RADIUS * RTS_TILE * 0.55;
+      G.fx.push({ kind:'boom', t:-0.08 - r * 0.03, big:2.6,
+                  x:k.x + Math.cos(ang) * rad, y:1, z:k.z + Math.sin(ang) * rad });
+    }
+    if (typeof _rtsSfx === 'function') _rtsSfx('boom', k.x, k.z);
+    if (k.side !== 'player') _rtsSay('Our base has been hit by an atomic strike.');
+  }
+}
+
+/* ---- the iron curtain. Invulnerability is enforced in _rtsDamage, the one choke point every
+   route to hurting something goes through - a flag checked at the call sites would be a flag
+   some new call site forgets. */
+function _rtsFireIron(side, tx, tz) {
+  var G = window._rtsG;
+  if (!_rtsInB(tx, tz)) return false;
+  var wx = _rtsWX(tx), wz = _rtsWX(tz), n = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.side !== side) continue;
+    if (Math.hypot(e.x - wx, e.z - wz) > RTS_IRON_RADIUS * RTS_TILE) continue;
+    e.ironT = RTS_IRON_TIME;
+    n++;
+  }
+  if (!n) return false;                       /* nothing of yours there - do not spend it */
+  if (side === 'player') _rtsSay('Iron Curtain active on ' + n + (n === 1 ? ' unit.' : ' units.'));
+  else _rtsSay('Enemy units are protected by an Iron Curtain.');
+  if (typeof _rtsSfx === 'function') _rtsSfx('build');
+  return true;
+}
+function _rtsIronTick(dt) {
+  var G = window._rtsG;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.ironT > 0) { e.ironT -= dt; if (e.ironT < 0) e.ironT = 0; }
+  }
+}
+
+/* ---- the chronosphere. Teleports what the player has SELECTED, which is why it takes the
+   selection rather than finding its own targets: sending units somewhere is a decision about
+   which units, and the game already has a way to say that. */
+function _rtsFireChrono(side, tx, tz, sel) {
+  var G = window._rtsG;
+  if (!_rtsInB(tx, tz)) return false;
+  var list = (sel && sel.length) ? sel : [];
+  if (!list.length) {
+    /* the AI has no selection - it sends its nearest idle group instead */
+    for (var i = 0; i < G.ents.length && list.length < RTS_CHRONO_MAX; i++) {
+      var e = G.ents[i];
+      if (!e.dead && e.type === 'unit' && e.side === side && !e.inside &&
+          !(rtsUnitDef(e.def) || {}).sea) list.push(e);
+    }
+  }
+  list = list.filter(function (e) {
+    return e && !e.dead && e.type === 'unit' && e.side === side && !e.inside;
+  }).slice(0, RTS_CHRONO_MAX);
+  if (!list.length) return false;
+
+  /* Each unit needs its OWN cell. _rtsNearestOpen has no idea another unit is about to be put
+     where it just pointed - it answers the same question the same way every time - so asking it
+     once per unit lands the whole group on one tile, stacked. The claimed set is what makes a
+     chronoshift arrive as a formation rather than as a pile. */
+  var taken = {}, moved = 0;
+  for (var j = 0; j < list.length; j++) {
+    var u = list[j];
+    var dom = (typeof _rtsDomainOf === 'function') ? _rtsDomainOf(u) : null;
+    var spot = _rtsChronoCell(tx, tz, dom, taken);
+    if (!spot) continue;
+    taken[spot[0] + ',' + spot[1]] = 1;
+    u.x = _rtsWX(spot[0]); u.z = _rtsWX(spot[1]);
+    u.path = null; u.target = null; u.mx = null; u.mz = null;
+    moved++;
+  }
+  if (!moved) return false;
+  if (side === 'player') _rtsSay('Chronoshift complete — ' + moved +
+                                 (moved === 1 ? ' unit moved.' : ' units moved.'));
+  /* the one superweapon whose real sound survived identification - see ra/sndtab.js */
+  if (typeof rtsEva === 'function') rtsEva('chrono');
+  return true;
+}
+
+/* The nearest cell to (tx,tz) that this unit can stand on and no earlier unit in the same jump
+   has claimed. A plain outward ring walk rather than a reuse of _rtsNearestOpen, because the
+   thing that has to vary between calls is exactly what that function has no parameter for. */
+function _rtsChronoCell(tx, tz, dom, taken) {
+  for (var r = 0; r <= 10; r++) {
+    for (var dz = -r; dz <= r; dz++) {
+      for (var dx = -r; dx <= r; dx++) {
+        if (r && Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;   /* ring, not disc */
+        var x = tx + dx, z = tz + dz;
+        if (!_rtsInB(x, z)) continue;
+        if (taken[x + ',' + z]) continue;
+        if (_rtsBlocked(x, z, dom)) continue;
+        return [x, z];
+      }
+    }
+  }
+  return null;
+}
+
+/* ---- GPS. Reveals what has not been explored; it does not make anything currently visible,
+   which is the distinction the shroud already draws between `mapped` and `vis`. */
+function _rtsFireGps(side) {
+  var G = window._rtsG;
+  if (side !== 'player') return true;          /* the AI is not fogged; nothing to reveal */
+  G.mapped.fill(1);
+  G.visDirty = 1;
+  _rtsSay('GPS satellite online — the map is yours.');
+  if (typeof _rtsSfx === 'function') _rtsSfx('ready');
+  return true;
 }
 
 /* ----------------------------------------------------------------- shroud --
@@ -2398,6 +2634,10 @@ function _rtsCanRetaliate(tgt, from) {
 }
 function _rtsDamage(tgt, dmg, from, floor) {
   if (!tgt || tgt.dead) return;
+  /* The Iron Curtain, enforced HERE rather than at the call sites. Every route to hurting
+     something funnels through this function - shells, splash, fire, the dog rule below, a
+     script - so one check covers all of them, and a route added later cannot forget it. */
+  if (tgt.ironT > 0) return;
   /* The dog rule, ahead of every modifier because in the original it replaces the damage
      rather than scaling it. See `maul` on the bite weapon in rts.rules.js. */
   if (from && from.type === 'unit' && !from.dead) {
@@ -3184,8 +3424,18 @@ function _rtsAIWants(S) {
   var order = _rtsIQAt(RTS_IQ.production) ? RTS_AI.buildOrder
             : (_rtsIQAt(RTS_IQ.repairSell) ? ['refinery', 'barracks'] : []);
   var size = Math.max(own, theirs + RTS_AI.baseSizeAdd);
+  var mySide = rtsHouseSide('enemy');
   for (i = 0; i < order.length; i++) {
-    var k = order[i], want = Math.min(RTS_AI.limit[k], Math.ceil(size * RTS_AI.ratio[k]));
+    var k = order[i];
+    /* Skip the other army's buildings. Without this the plan STOPS DEAD on the first one it
+       cannot build: the list is walked in order and returns the first shortfall, so a Soviet
+       house asking for four Pillboxes - an Allied building - demands them forever and never
+       reaches anything after them. That silently killed the entire defensive tail (flame
+       towers, gun turrets, rocket turrets, Tesla coils) the moment factions were added, and
+       nothing reported it because wanting a building is not an error. */
+    var kd = rtsStructDef(k);
+    if (kd && !rtsBuildableBy(kd, mySide)) continue;
+    var want = Math.min(RTS_AI.limit[k], Math.ceil(size * RTS_AI.ratio[k]));
     if ((have[k] || 0) < want) return { key:k, urgent:false };
   }
   return null;
@@ -4128,10 +4378,55 @@ function _rtsAIAttack(urgency) {
   if (typeof _rtsSfx === 'function') _rtsSfx('alert');
   return true;
 }
+
+/* --------------------------------------------------- the opponent's supers --
+   An opponent that builds a missile silo and never fires it is set dressing, so this aims
+   them - but only from IQ 4, because "can build one" and "knows what to do with one" are
+   different abilities and a weak opponent wasting 1750 credits is a fine way to be weak.
+
+   The targeting is deliberately simple and deliberately not optimal. A nuke aimed by a real
+   search would land on the single most expensive cluster the player owns every time, which is
+   not a fight, it is a tax. It aims at the player's centre of mass instead: usually the base,
+   sometimes an army in the field, and always somewhere the player can see coming and rebuild
+   from. */
+function _rtsAISupers(dt) {
+  var G = window._rtsG, S = G.sides.enemy;
+  if (!S.supers) return;
+  if (!_rtsIQAt(RTS_IQ.superweapon)) return;
+  G.ai.superT = (G.ai.superT || 0) - dt;
+  if (G.ai.superT > 0) return;
+  G.ai.superT = 3;                          /* it does not need to re-decide every frame */
+
+  for (var key in S.supers) {
+    if (!_rtsSuperReady('enemy', key)) continue;
+    var aim = null;
+    if (key === 'nuke')            aim = _rtsAIMassOf('player');
+    else if (key === 'ironcurtain') aim = _rtsAIMassOf('enemy');
+    else if (key === 'chrono')      continue;   /* see below */
+    if (!aim) continue;
+    if (_rtsSuperFire('enemy', key, aim.tx, aim.tz)) return;   /* one per decision */
+  }
+}
+/* Where a side's stuff is, in tiles. Buildings weigh more than units so a nuke goes to the
+   base rather than chasing whichever harvester happened to wander furthest out. */
+function _rtsAIMassOf(side) {
+  var G = window._rtsG, sx = 0, sz = 0, w = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.side !== side) continue;
+    var k = (e.type === 'struct') ? 3 : 1;
+    sx += e.x * k; sz += e.z * k; w += k;
+  }
+  if (!w) return null;
+  var tx = _rtsTX(sx / w), tz = _rtsTX(sz / w);
+  return _rtsInB(tx, tz) ? { tx: tx, tz: tz } : null;
+}
+
 function _rtsUpdateAI(dt) {
   var G = window._rtsG, S = G.sides.enemy;
   if (S.lost) return;
   _rtsTeamsTick(dt);
+  _rtsAISupers(dt);
   /* Rich: refill a line as soon as it empties, rather than waiting up to five seconds for
      the next decision. Without this the opponent banks tens of thousands of credits it
      structurally cannot spend, while the human restarts a queue the moment it frees. */
@@ -4660,6 +4955,9 @@ function _rtsTick(dt) {
 
   _rtsTickOre(dt);
   _rtsVisTick(dt);
+  _rtsSupersTick(dt);
+  _rtsStrikesTick(dt);
+  _rtsIronTick(dt);
   _rtsPowerDamage(dt);
   /* Power_Output tracks hit points, so it has to be re-totalled before anything reads it. */
   _rtsRecalcPower('player'); _rtsRecalcPower('enemy');

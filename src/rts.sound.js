@@ -167,6 +167,7 @@ var RTS_EVA_NAMED = {
   lowpower:  'low_power',
   cantbuild: 'unable_to_build',
   lostbldg:  'structure_destroyed',
+  chrono:    'chronosphere_sound',
   won:       'mission_accomplished',
   lost:      'mission_failed'
 };

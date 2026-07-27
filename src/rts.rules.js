@@ -151,7 +151,43 @@ var RTS_STRUCTS = [
   { key:'silo',     name:'Scrap Silo',   w:2, h:2, cost:150,  build:5,  hp:400,  power:0,    sight:8,
     needs:['refinery'], storage:1500, capturable:false,
     armour:'wood',
-    desc:'Holds 1500 more scrap. Without enough storage, harvested scrap over the cap is lost.' }
+    desc:'Holds 1500 more scrap. Without enough storage, harvested scrap over the cap is lost.' },
+
+  /* ------------------------------------------------------------ superweapons --
+     Four buildings whose entire output is one button on a timer. They share a shape: a `super`
+     block naming the charge, what it wants clicked, and what it does when it goes off.
+
+     The charges are RA's proportions, not RA's numbers. The original runs 8-13 minutes, on
+     matches that run an hour; this game's matches are measured in minutes, so a charge nobody
+     ever sees is the same as no feature. They are scaled to arrive in the back half of a long
+     game and never in a short one - which is also what keeps them out of the ladder, where an
+     idle player is dead well before the first one is ready.
+
+     Each is gated on the Tech Center, so getting one costs the -200 power the tier already
+     charges, and each is faction-locked to the side that had it. */
+  { key:'mslo',     name:'Missile Silo',  w:2, h:2, cost:1750, build:24, hp:400,  power:-150, sight:12,
+    needs:['lab'], side:'soviet', armour:'concrete', capturable:false,
+    super:{ key:'nuke', name:'Atom Bomb', charge:300, target:'cell', icon:'☢',
+            hint:'Atom Bomb ready — click anywhere on the map.' },
+    desc:'Charges an atomic missile. Levels everything within four tiles of where you aim it.' },
+  { key:'iron',     name:'Iron Curtain',  w:2, h:2, cost:1500, build:22, hp:400,  power:-200, sight:12,
+    needs:['lab'], side:'soviet', armour:'concrete', capturable:false,
+    super:{ key:'ironcurtain', name:'Iron Curtain', charge:270, target:'own', icon:'🛡',
+            hint:'Iron Curtain ready — click one of your own units or buildings.' },
+    desc:'Makes what you point it at invulnerable for half a minute. Everything near it too.' },
+  { key:'pdox',     name:'Chronosphere',  w:2, h:2, cost:1750, build:24, hp:400,  power:-200, sight:12,
+    needs:['lab'], side:'allied', armour:'concrete', capturable:false,
+    super:{ key:'chrono', name:'Chronosphere', charge:270, target:'cell', icon:'⌛',
+            hint:'Chronosphere ready — select units, then click where to send them.' },
+    desc:'Teleports your selected units anywhere on the map. Select first, then aim.' },
+  /* GPS fires itself. In the original the satellite launches the moment it is paid for and the
+     map simply stays revealed - there is nothing to aim and no reason to hold it back, so
+     making the player click a button to accept a gift would be ceremony rather than a decision. */
+  { key:'gps',      name:'GPS Uplink',    w:2, h:2, cost:1000, build:18, hp:400,  power:-100, sight:12,
+    needs:['lab'], side:'allied', armour:'concrete', capturable:false,
+    super:{ key:'gps', name:'GPS Satellite', charge:200, target:'none', auto:true, icon:'🛰',
+            hint:'GPS satellite up — the whole map is on the radar.' },
+    desc:'Launches a satellite. Once it is up the entire map is revealed, permanently.' }
 ];
 
 /* ------------------------------------------------------------------- units --
@@ -641,7 +677,15 @@ var RTS_IQ = {
   harvester:3,      /* replaces lost harvesters */
   guardArea:4,      /* leaves a garrison at home instead of sending everything */
   refill:3,         /* restarts a production line the instant it frees */
-  production:5      /* full build order and base expansion */
+  production:5,     /* full build order and base expansion */
+  /* Firing a superweapon is its own ability, separate from being able to BUILD one, because
+     the two fail differently: a low-IQ house that builds a missile silo and never fires it is
+     wasting 1750 credits, which is a perfectly good way for a weak opponent to be weak.
+
+     3 rather than 4 deliberately. The difficulties run 2 / 3 / 5, so a gate of 4 would have
+     meant only Commando ever fired one - and a feature two thirds of players never see from
+     the receiving end is not a difficulty distinction, it is a dead branch. */
+  superweapon:3
 };
 
 /* ------------------------------------------------------------- AI base --
@@ -678,15 +722,24 @@ var RTS_AI = {
   infantryBaseMult:2,
   attackInterval:3,         /* minutes between attack waves, before difficulty bias */
   attackDelay:5,            /* minutes before the first one */
+  /* The superweapon ratios are the lowest here on purpose. They are the last thing a base
+     should want: 1500-1750 credits and up to -200 power buys nothing you can shoot with for
+     five minutes, so an opponent that reaches for one early has spent its army on a promise.
+     At these weights it builds one only once the rest of the plan is satisfied, which in
+     practice means a long game - exactly when a superweapon is the interesting move. */
   ratio:{ refinery:0.16, barracks:0.16, factory:0.10, radar:0.06, lab:0.05, depot:0.05,
-          apower:0.08, kennel:0.04, silo:0.14, pillbox:0.18, flametower:0.12, turret:0.24, rocketpit:0.12 },
+          apower:0.08, kennel:0.04, silo:0.14, pillbox:0.18, flametower:0.12, turret:0.24, rocketpit:0.12,
+          mslo:0.02, iron:0.02, pdox:0.02, gps:0.02 },
   limit:{ refinery:4,    barracks:2,    factory:2,    radar:1,    lab:1,    depot:1,
   /* The silo limit is high on purpose and is the one number here that was MEASURED rather
      than guessed. At 6 the opponent filled its 17,000 of storage on `normal` and then threw
      away 17,000 more credits over seven minutes - it has the income to overflow and not the
      production lines to spend it down, so a low ceiling turns the storage cap into a straight
      nerf and hands the player about 16 extra seconds of life. RA has no silo limit at all. */
-          apower:2,    kennel:1,    silo:14,   pillbox:4,     flametower:3,     turret:6,     rocketpit:4 },
+          apower:2,    kennel:1,    silo:14,   pillbox:4,     flametower:3,     turret:6,     rocketpit:4,
+  /* One each. A second silo would not charge a second missile - the timer is per house - so
+     building one is pure waste, and the limit says so rather than relying on the ratio. */
+          mslo:1,      iron:1,      pdox:1,    gps:1 },
   /* HOUSE.CPP AI_Building checks Tiberium against Capacity before it checks anything else:
      an overflowing house builds a silo NEXT, whatever else the base plan wanted. Without this
      the storage cap is a pure nerf to the opponent - it loses the income and never buys the
@@ -700,8 +753,11 @@ var RTS_AI = {
   /* Both armies' defences are listed. _rtsCanQueue drops whichever belong to the other one, so
      the same plan serves either side and the opponent builds a Tesla wall or a Pillbox line
      depending on which army it ended up with. */
+  /* Superweapons last, after every defence. A base that answers an attack with a Chronosphere
+     instead of a pillbox loses the base. */
   buildOrder:['refinery', 'barracks', 'silo', 'factory', 'radar', 'apower', 'depot', 'lab', 'kennel',
-              'pillbox', 'flametower', 'turret', 'rocketpit', 'tesla'],
+              'pillbox', 'flametower', 'turret', 'rocketpit', 'tesla',
+              'mslo', 'iron', 'pdox', 'gps'],
   /* What to spend a production run on. A table rather than an if-chain: adding a unit to
      RTS_UNITS should not mean editing the opponent's brain, and the hardcoded ladder that used
      to live in _rtsAIUnits is a large part of why the roster sat at five units. Gating is left
@@ -1006,6 +1062,17 @@ var RTS_UNLOAD_RATE = 700;      /* scrap/second poured into the refinery */
    powered feel like a real decision rather than a gradient you can ignore. */
 var RTS_POWER_BAND = 0.75, RTS_POWER_MIN = 0.5;
 var RTS_BUILD_RADIUS = 9;       /* tiles: how far from an existing structure you may build */
+
+/* ------------------------------------------------------------ superweapons --
+   What each one does when it goes off. Kept here with the other tuning rather than buried in
+   the code that applies it, because these five numbers ARE the balance of the feature. */
+var RTS_NUKE_RADIUS  = 4.5;     /* tiles: the blast, against RTS_TILE-scaled world units */
+var RTS_NUKE_DAMAGE  = 1000;    /* at the centre; falls off through the normal splash curve */
+var RTS_NUKE_SPREAD  = 3.2;     /* a wide, shallow curve - a nuke is not a shell */
+var RTS_NUKE_DELAY   = 3.0;     /* seconds between the launch and the hit, so it can be seen */
+var RTS_IRON_TIME    = 30;      /* seconds of invulnerability */
+var RTS_IRON_RADIUS  = 3.0;     /* tiles: everything of yours this close is covered too */
+var RTS_CHRONO_MAX   = 8;       /* units one jump can carry, RA's own ChronoTechLevel feel */
 
 /* Ore regrows and spreads, as it does in the original (RULES.CPP: IsTGrowth, IsTSpread,
    GrowthRate). A field you have worked out slowly comes back, so a long game does not

@@ -71,7 +71,11 @@ var RTS_MIX_BLD = {
   yard:'fact', power:'powr', apower:'apwr', refinery:'proc', factory:'weap',
   barracks:'barr', radar:'dome', lab:'atek', depot:'fix', silo:'silo',
   helipad:'hpad', turret:'gun', rocketpit:'sam', pillbox:'pbox',
-  flametower:'ftur', kennel:'kenn', wall:'brik'
+  flametower:'ftur', kennel:'kenn', wall:'brik',
+  /* The three superweapons RA actually shipped as buildings. There is no GPS structure in the
+     original - the satellite is a Tech Center power rather than a thing you place - so the
+     uplink keeps its procedural model, which is what a missing entry here means. */
+  mslo:'mslo', iron:'iron', pdox:'pdox'
 };
 var RTS_MIX_UNIT = {
   buggy:'jeep', light:'1tnk', tank:'2tnk', heavy:'4tnk', arty:'arty',

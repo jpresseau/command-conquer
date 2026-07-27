@@ -931,6 +931,81 @@ function _sprBuilding(key, side) {
     _r3Cyl(m, 0, 35.4, 0, 1.3, 3.1, RTS_PAL.spark[2], RTS_PAL.spark[1], 12);  /* the arc */
     _r3Cyl(m, 0, 41, 0, 1.6, 2.2, RTS_PAL.spark[0], RTS_PAL.spark[1], 12);    /* crown */
 
+  } else if (key === 'mslo') {
+    /* MISSILE SILO. A pair of blast doors laid flat with the nose of the missile showing
+       through the open one. Deliberately LOW and horizontal - it is the most dangerous thing
+       on the field and it should not look like a defence tower, it should look like a hatch in
+       the ground that you would walk past. The read is the yellow-black hazard chevrons. */
+    _r3Box(m, 0, 0, 0, W - 4, 3, D - 4, C[2], C[0]);                     /* apron */
+    _r3Box(m, 0, 3, 0, W - 10, 6, D - 10, C[0], C[1]);                   /* silo block */
+    /* the open door, hinged back, and the closed one beside it */
+    _r3Box(m, -7, 9, -2, 12, 1.6, 13, DK[1], DK[2]);
+    _r3Box(m, 6, 9, -8, 12, 1.6, 5, C[3], C[2]);
+    _r3Cyl(m, -7, 9, -2, 4.6, 3, DK[2], DK[3], 16);                      /* the shaft mouth */
+    _r3Cone(m, -7, 12, -2, 3.6, 7, 3, S[0], 16);                         /* the warhead */
+    _r3Box(m, -7, 17.5, -2, 2, 2, 2, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);
+    for (var _mv = 0; _mv < 4; _mv++)                                    /* hazard chevrons */
+      _r3Box(m, -12 + _mv * 8, 9.1, 6, 5, 0.9, 3,
+             _mv % 2 ? RTS_PAL.hazard[0] : DK[2], _mv % 2 ? RTS_PAL.hazard[1] : DK[3]);
+    _r3Box(m, W / 2 - 6, 3, D / 2 - 6, 6, 9, 6, S[2], S[1]);             /* control hut */
+    _r3Box(m, 0, 9.8, -D / 2 + 5, 9, 1.2, 3, B.roof, B.roof);            /* team band */
+
+  } else if (key === 'iron') {
+    /* IRON CURTAIN. A heavy frame holding a lens between two coil banks, aimed sideways. The
+       identity is the FRAME with a gap in the middle - a machine that projects something -
+       against the Chronosphere's sphere. They are the two "field" buildings and must not be
+       confusable at a glance. */
+    _r3Box(m, 0, 0, 0, W - 4, 3, D - 4, C[2], C[0]);
+    _r3Box(m, 0, 3, 0, W - 12, 7, D - 8, C[0], C[1]);                    /* plinth */
+    /* the two uprights and the yoke across the top */
+    _r3Box(m, -10, 10, 0, 4, 18, 7, DK[1], DK[2]);
+    _r3Box(m,  10, 10, 0, 4, 18, 7, DK[1], DK[2]);
+    _r3Box(m, 0, 26, 0, 24, 3.5, 6, C[3], C[2]);
+    /* coil banks on each upright */
+    for (var _iv = 0; _iv < 3; _iv++) {
+      _r3Cyl(m, -10, 13 + _iv * 5, 0, 4.2, 2, C[2], C[3], 16);
+      _r3Cyl(m,  10, 13 + _iv * 5, 0, 4.2, 2, C[2], C[3], 16);
+    }
+    /* the emitter itself, between them - emissive, because a powered field IS the building */
+    _r3Cyl(m, 0, 18, 0, 5, 3.2, RTS_PAL.lit, RTS_PAL.lit, 20);
+    _r3Box(m, 0, 10, 0, 6, 1.4, 4, B.roof, B.roof);
+    _r3Box(m, -W / 2 + 6, 3, D / 2 - 6, 5, 8, 5, S[2], S[1]);            /* transformer */
+
+  } else if (key === 'pdox') {
+    /* CHRONOSPHERE. A SPHERE in a cradle of arms. Round where the Iron Curtain is square, and
+       the only spherical thing in the whole build list, which is the entire reason it reads
+       instantly. */
+    _r3Box(m, 0, 0, 0, W - 4, 3, D - 4, C[2], C[0]);
+    _r3Box(m, 0, 3, 0, W - 12, 6, D - 12, C[0], C[1]);                   /* base drum */
+    for (var _pa = 0; _pa < 4; _pa++) {                                  /* the cradle arms */
+      var _px = (_pa < 2 ? -1 : 1) * 9, _pz = (_pa % 2 ? 1 : -1) * 9;
+      _r3Box(m, _px, 9, _pz, 3, 13, 3, DK[1], DK[2]);
+    }
+    /* the sphere, as a stack of cones - there is no sphere primitive and adding one for a
+       single building would be a worse trade than four rings that read as round from every
+       angle the camera can reach */
+    _r3Cone(m, 0, 15, 0, 3.5, 7.5, 4, S[2], 20);
+    _r3Cone(m, 0, 19, 0, 7.5, 9,   3, S[1], 20);
+    _r3Cone(m, 0, 22, 0, 9,   7.5, 4, S[1], 20);
+    _r3Cone(m, 0, 26, 0, 7.5, 3.5, 4, S[2], 20);
+    _r3Cyl(m, 0, 21.5, 0, 10.5, 1.6, RTS_PAL.spark[1], RTS_PAL.spark[2], 20); /* equator ring */
+    _r3Cyl(m, 0, 30, 0, 1.6, 3, RTS_PAL.lit, RTS_PAL.lit, 12);           /* crown light */
+    _r3Box(m, 0, 9.5, 0, 8, 1.4, 5, B.roof, B.roof);
+    _r3Box(m, W / 2 - 6, 3, -D / 2 + 6, 6, 8, 6, S[2], S[1]);            /* control hut */
+
+  } else if (key === 'gps') {
+    /* GPS UPLINK. A dish on a mast. The most familiar shape in the set and the least
+       threatening, which is right - it is the one superweapon that shoots nothing. */
+    _r3Box(m, 0, 0, 0, W - 6, 3, D - 6, C[2], C[0]);
+    _r3Box(m, 0, 3, 2, W - 14, 8, D - 14, C[0], C[1]);                   /* equipment shed */
+    _r3Box(m, 0, 11, 2, W - 18, 1.6, D - 18, C[3], C[2]);
+    _r3Cyl(m, 0, 12, 2, 2.2, 12, S[2], S[1], 16);                        /* the mast */
+    _r3Cone(m, 0, 22, 2, 11, 6, 9, C[3], 20);                            /* the dish */
+    _r3Cyl(m, 0, 26, 2, 1.2, 4, S[3], S[3], 12);                         /* feed horn */
+    _r3Cyl(m, 0, 29.5, 2, 1.5, 1.5, RTS_PAL.lit, RTS_PAL.lit, 12);
+    _r3Box(m, 0, 12.4, -D / 2 + 6, 8, 1.2, 3, B.roof, B.roof);           /* team band */
+    _r3Box(m, -W / 2 + 6, 3, D / 2 - 6, 5, 6, 5, S[2], S[1]);            /* cable box */
+
   } else if (key === 'wall') {
     /* Concrete Wall. Has to tile with itself edge to edge, so it fills the cell exactly and
        nothing may cross the boundary. Simple by necessity and by choice - a wall that draws
