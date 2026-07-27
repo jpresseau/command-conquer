@@ -36,11 +36,7 @@ function rtsOpen(seed) {
     +   '<div class="rts-store" id="rtsStore" title="Storage"><i id="rtsStoreFill"></i></div>'
     +   '<div class="rts-radar"><canvas id="rtsMini" width="188" height="188"></canvas>'
     +     '<span class="rlbl">RADAR</span></div>'
-    +   '<div class="rts-tabs">'
-    +     '<button type="button" class="on" data-cat="struct" onclick="rtsTab(\'struct\')">Build</button>'
-    +     '<button type="button" data-cat="infantry" onclick="rtsTab(\'infantry\')">Infantry</button>'
-    +     '<button type="button" data-cat="vehicle" onclick="rtsTab(\'vehicle\')">Vehicles</button>'
-    +   '</div>'
+    +   '<div class="rts-tabs">' + _rtsTabButtons() + '</div>'
     +   '<div class="rts-ops">'
     +     '<button type="button" data-mode="repair" onclick="rtsMode(\'repair\')" '
     +       'title="Repair: click one of your buildings to patch it up for credits">🔧 REPAIR</button>'
@@ -77,6 +73,7 @@ function rtsOpen(seed) {
     icons:_rtsMakeIcons('player') };
   var dl = document.getElementById('rtsDifLbl'), dd = _rtsBias('enemy');
   if (dl) { dl.textContent = dd.name; dl.title = 'Difficulty: ' + dd.name + ' (IQ ' + dd.iq + '/' + RTS_IQ.max + ') — ' + dd.desc; }
+  _rtsSyncTabs();
   _rtsBuildList();
   _rtsBindInput();
   document.addEventListener('keydown', _rtsKeyDown, true);
@@ -125,6 +122,36 @@ function _rtsOnResize() {
 }
 
 /* ------------------------------------------------------------- sidebar */
+/* THE TABS ARE THE ROSTER'S INDEX, and there must be one for every kind of thing that can be
+   produced. There were three - Build, Infantry, Vehicles - and the Attack Heli is kind:'air',
+   so it appeared on no tab at all and could never be bought. Everything else about it worked:
+   the Helipad built, the rearm logic ran, the flight code flew. There was simply no button.
+
+   Derived from one list now, and _rtsTabsCheck asserts nothing in the roster falls outside it,
+   because "a unit exists that you cannot reach" is invisible from inside the game. */
+var RTS_TABS = [['struct', 'Build'], ['infantry', 'Infantry'],
+                ['vehicle', 'Vehicles'], ['air', 'Aircraft']];
+
+function _rtsTabButtons() {
+  var out = '', i;
+  for (i = 0; i < RTS_TABS.length; i++) {
+    out += '<button type="button"' + (i === 0 ? ' class="on"' : '') +
+           ' data-cat="' + RTS_TABS[i][0] + '" onclick="rtsTab(\'' + RTS_TABS[i][0] + '\')">' +
+           RTS_TABS[i][1] + '</button>';
+  }
+  return out;
+}
+
+/* A tab with nothing on it is a dead end - the Soviets field no aircraft, so an Aircraft tab
+   would open onto an empty grid and say nothing about why. Hidden rather than disabled. */
+function _rtsSyncTabs() {
+  var ts = document.querySelectorAll('#rcgRts .rts-tabs button'), i;
+  for (i = 0; i < ts.length; i++) {
+    var cat = ts[i].getAttribute('data-cat');
+    ts[i].hidden = (cat !== 'struct' && _rtsCatItems(cat).length === 0);
+  }
+}
+
 function rtsTab(cat) {
   var U = window._rtsUI;
   if (!U) return;
@@ -286,9 +313,9 @@ function _rtsItemCancel(key) {
    the new options are on a tab you are not looking at. Watches every category, not just the
    visible one, and stays quiet on the first pass so a new game does not announce itself. */
 function _rtsWatchNewOptions() {
-  var U = window._rtsUI, cats = ['struct', 'infantry', 'vehicle'], now = {}, fresh = 0, i, j;
-  for (i = 0; i < cats.length; i++) {
-    var items = _rtsCatItems(cats[i]);
+  var U = window._rtsUI, now = {}, fresh = 0, i, j;
+  for (i = 0; i < RTS_TABS.length; i++) {
+    var items = _rtsCatItems(RTS_TABS[i][0]);
     for (j = 0; j < items.length; j++) {
       if (!_rtsCanProduce('player', items[j].key)) continue;
       now[items[j].key] = 1;
