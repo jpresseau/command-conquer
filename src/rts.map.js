@@ -210,10 +210,17 @@ function _rtsMapListShow(maps, note) {
    they cannot drift into saying different things about the same map. */
 function rtsMapDescribe(M) {
   var s = M.stats || {};
+  /* Whether you can have a navy is the one thing about a map you cannot see from its name, and
+     the ships are useless without it - so it is said outright rather than left to be discovered
+     by building a yard and finding nowhere to put it. Water with no legal yard site is its own
+     answer: the sea is scenery on that map. */
+  var navy = !s.water ? 'landlocked'
+           : s.shore  ? 'coastal — ' + s.water + ' water cells, naval yards buildable'
+                      : 'has water but no shore flat enough for a naval yard';
   return '“' + M.title + '”' + (M.author ? ' by ' + M.author : '') +
          ' — ' + M.n + '×' + M.n + ' of ' + M.yaml.w + '×' + M.yaml.h +
          ', ' + ((s.ore || 0) + (s.gems || 0)) + ' ore cells, ' + (s.trees || 0) +
-         ' trees. Start a battle to play it.';
+         ' trees, ' + navy + '. Start a battle to play it.';
 }
 
 /* The file picker on the title screen. Mirrors rtsMixPicked: read, report in place, and never
@@ -489,8 +496,48 @@ function _rtsMapBuild(M) {
   var bad = _rtsMapCheck(G, starts);
   if (bad) return { error: bad };
 
+  var sea = _rtsMapSea(G, N);
   return { grid: G, starts: starts,
-           stats: { ore: ore, gems: gems, trees: trees, blocked: blocked } };
+           stats: { ore: ore, gems: gems, trees: trees, blocked: blocked,
+                    water: sea.water, shore: sea.shore } };
+}
+
+/* Is there a navy to be had on this map? Two questions, and only the second one matters to a
+   player: a map can be covered in water and still have nowhere to put a shipyard, because every
+   inch of its coast is cliff. So this counts water cells AND the places a yard would actually be
+   legal - a clear footprint whose surrounding ring touches the sea, which is `_rtsCanPlace` plus
+   `_rtsShoreOk` asked of the grid before the game owns it.
+
+   Counted here rather than read off `window._rtsG` because this runs at map-load time, on the
+   title screen, where there is no game yet. The whole point is to answer "can I build ships on
+   this?" BEFORE committing to a battle, since the alternative is loading scenarios one at a time
+   and squinting at them. */
+function _rtsMapSea(G, N) {
+  var water = 0, shore = 0, i, x, z;
+  for (i = 0; i < N * N; i++) if (G.terrain[i] === RTS_T_WATER) water++;
+  if (!water) return { water: 0, shore: 0 };
+
+  var d = (typeof rtsStructDef === 'function') && rtsStructDef('navalyard');
+  var w = (d && d.w) || 3, h = (d && d.h) || 3;
+  for (z = 0; z + h <= N; z++) {
+    for (x = 0; x + w <= N; x++) {
+      var free = true, ax, az;
+      for (ax = x; ax < x + w && free; ax++)
+        for (az = z; az < z + h && free; az++)
+          if (G.blocked[_rtsIdx(ax, az)] !== 0 || G.scrap[_rtsIdx(ax, az)] > 0) free = false;
+      if (!free) continue;
+      var touches = false;
+      for (var ox = -1; ox <= w && !touches; ox++) {
+        for (var oz = -1; oz <= h; oz++) {
+          if (ox >= 0 && ox < w && oz >= 0 && oz < h) continue;   /* inside the footprint */
+          var cx = x + ox, cz = z + oz;
+          if (_rtsInB(cx, cz) && G.terrain[_rtsIdx(cx, cz)] === RTS_T_WATER) { touches = true; break; }
+        }
+      }
+      if (touches) shore++;
+    }
+  }
+  return { water: water, shore: shore };
 }
 
 /* Copy the prepared grids onto a fresh game state, in place of _rtsGenTerrain. Returns the
