@@ -279,6 +279,25 @@ function _rtsRFrame(dt) {
     if (pe.type !== 'struct' || (pe.dead && !(pe.wreck > 0))) continue;
     if (!_rtsEntSeen(pe)) continue;
     var pd = rtsStructDef(pe.def);
+    /* The original's own apron, when the player's files have it. It is a tyre-marked strip
+       lining up with the footprint exactly, where ours is a pale blob noticeably larger than
+       the building - which is what made a base look pasted onto the ground rather than
+       standing on it. Two cells tall, hung off the BOTTOM row of the footprint, which is
+       where RA puts it. */
+    var bib = (typeof _mixBib === 'function') ? _mixBib(pd.w) : null;
+    if (bib) {
+      var bcell = Math.round(RTS_TILE * TSscale) || 1;
+      var bx0 = Math.round(_rtsSX(_rtsWX(pe.tx) - RTS_TILE / 2));
+      var by0 = Math.round(_rtsSY(_rtsWX(pe.tz + pd.h - 2) - RTS_TILE / 2));
+      if (bx0 > R.W || by0 > R.H || bx0 + bcell * bib.w < 0 || by0 + bcell * 2 < 0) continue;
+      for (var br = 0; br < 2; br++) {
+        for (var bc = 0; bc < bib.w; bc++) {
+          var bt = bib.tile[br * bib.w + bc];
+          if (bt) g.drawImage(bt, bx0 + bc * bcell, by0 + br * bcell, bcell + 1, bcell + 1);
+        }
+      }
+      continue;
+    }
     var pad = S.pad[pe.def];
     var pw = Math.round(pad.width * TSscale), ph = Math.round(pad.height * TSscale);
     var ppx = Math.round(_rtsSX(_rtsWX(pe.tx) - RTS_TILE / 2)) - Math.round(10 * TSscale);
@@ -317,6 +336,31 @@ function _rtsRFrame(dt) {
     draw.push(e);
   }
   draw.sort(function (a, b) { return a.z - b.z; });
+
+  /* Ground shadows for the DRAWN units only. The original's sprites carry their shadow inside
+     the frame - palette index 4, which _mixFrameToCanvas already paints as translucent black -
+     so adding one under those would give every tank two. Ours have none at all, which is what
+     makes them look laid on the grass rather than standing on it.
+
+     A separate pass ahead of the units, not per unit inside the loop: drawn inline, a unit's
+     shadow would fall ON TOP of the unit sorted just behind it. */
+  if (!(typeof _rtsArtReady === 'function' && _rtsArtReady())) {
+    g.globalAlpha = 0.28;
+    g.fillStyle = '#0b0f14';
+    for (i = 0; i < draw.length; i++) {
+      var sd = draw[i];
+      if (sd.type !== 'unit') continue;
+      var sdd = rtsUnitDef(sd.def);
+      if (!sdd || sdd.kind === 'air') continue;      /* a helicopter's shadow is not under it */
+      var srx = Math.max(2, Math.round(sd.r * _rtsZoom() * 0.95));
+      var sry = Math.max(1, Math.round(srx * 0.55));
+      g.beginPath();
+      g.ellipse(Math.round(_rtsSX(sd.x)), Math.round(_rtsSY(sd.z)) + Math.round(sry * 0.5),
+                srx, sry, 0, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.globalAlpha = 1;
+  }
 
   for (i = 0; i < draw.length; i++) {
     var d = draw[i];

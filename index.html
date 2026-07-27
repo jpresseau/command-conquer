@@ -5857,6 +5857,7 @@ function rtsSetTheatre(id) {
   if (RTS_MIX.pals[id]) RTS_MIX.pal = RTS_MIX.pals[id];
   _RTS_SPR = null; _RTS_UFIT = {}; _RTS_USCALE = {};
   _RTS_TREES = null; _RTS_MIXTREES = null; _RTS_TILECACHE = null; _RTS_MIXDEBRIS = null;
+  _RTS_MIXBIB = null; _RTS_SHROUDSPR = null;
   return id;
 }
 /* The file extension the current theatre's tiles carry. */
@@ -6376,6 +6377,45 @@ function _mixPaintCell(d, S, tx, tz, kind, seed) {
   return true;
 }
 
+
+
+/* -------------------------------------------------------------------- bibs --
+   The concrete apron under a building. RA calls it a BIB and ships three, sized to the
+   building above them:
+
+     bib3   2 cells wide   4 frames
+     bib2   3 cells wide   6 frames
+     bib1   4 cells wide   8 frames
+
+   All of them are two cells TALL, and all of them are SHPs carrying a theatre extension rather
+   than terrain templates - the same trick the trees use, and the reason reading them with the
+   template header gives nonsense (a width of 8 and a height of 0).
+
+   Frames run left-to-right, top row then bottom. Our own drawn pad is a pale blob noticeably
+   larger than the building; the original is a tyre-marked strip that lines up with the
+   footprint exactly, which is why a base drawn with these looks built rather than pasted on. */
+var RTS_MIX_BIBS = { 2: 'bib3', 3: 'bib2', 4: 'bib1' };
+var _RTS_MIXBIB = null;
+
+function _mixBib(wCells) {
+  if (!_rtsArtReady()) return null;
+  if (!_RTS_MIXBIB) _RTS_MIXBIB = {};
+  var key = String(wCells);
+  if (_RTS_MIXBIB[key] !== undefined) return _RTS_MIXBIB[key];
+  _RTS_MIXBIB[key] = null;
+  var nm = RTS_MIX_BIBS[wCells];
+  if (!nm) return null;                       /* 1-cell things - walls, turrets - get no bib */
+  var s = _mixShp(nm + _rtsThExt());
+  if (!s || s.width !== RTS_TS || s.height !== RTS_TS) return null;
+  var need = wCells * 2;
+  if (s.count < need) return null;
+  var pal = RTS_MIX.pal, out = [];
+  for (var f = 0; f < need; f++) {
+    var fr = s.frame(f);
+    out.push(fr ? _mixFrameToCanvas(fr, s.width, s.height, pal) : _sprMake(RTS_TS, RTS_TS).c);
+  }
+  return (_RTS_MIXBIB[key] = { w: wCells, h: 2, tile: out });
+}
 
 /* ----------------------------------------------------------------- shroud --
    RA's own shroud tiles. `shadow.shp` in conquer.mix is 48 frames of 24x24 - exactly one
@@ -13976,6 +14016,25 @@ function _rtsRFrame(dt) {
     if (pe.type !== 'struct' || (pe.dead && !(pe.wreck > 0))) continue;
     if (!_rtsEntSeen(pe)) continue;
     var pd = rtsStructDef(pe.def);
+    /* The original's own apron, when the player's files have it. It is a tyre-marked strip
+       lining up with the footprint exactly, where ours is a pale blob noticeably larger than
+       the building - which is what made a base look pasted onto the ground rather than
+       standing on it. Two cells tall, hung off the BOTTOM row of the footprint, which is
+       where RA puts it. */
+    var bib = (typeof _mixBib === 'function') ? _mixBib(pd.w) : null;
+    if (bib) {
+      var bcell = Math.round(RTS_TILE * TSscale) || 1;
+      var bx0 = Math.round(_rtsSX(_rtsWX(pe.tx) - RTS_TILE / 2));
+      var by0 = Math.round(_rtsSY(_rtsWX(pe.tz + pd.h - 2) - RTS_TILE / 2));
+      if (bx0 > R.W || by0 > R.H || bx0 + bcell * bib.w < 0 || by0 + bcell * 2 < 0) continue;
+      for (var br = 0; br < 2; br++) {
+        for (var bc = 0; bc < bib.w; bc++) {
+          var bt = bib.tile[br * bib.w + bc];
+          if (bt) g.drawImage(bt, bx0 + bc * bcell, by0 + br * bcell, bcell + 1, bcell + 1);
+        }
+      }
+      continue;
+    }
     var pad = S.pad[pe.def];
     var pw = Math.round(pad.width * TSscale), ph = Math.round(pad.height * TSscale);
     var ppx = Math.round(_rtsSX(_rtsWX(pe.tx) - RTS_TILE / 2)) - Math.round(10 * TSscale);
@@ -14014,6 +14073,31 @@ function _rtsRFrame(dt) {
     draw.push(e);
   }
   draw.sort(function (a, b) { return a.z - b.z; });
+
+  /* Ground shadows for the DRAWN units only. The original's sprites carry their shadow inside
+     the frame - palette index 4, which _mixFrameToCanvas already paints as translucent black -
+     so adding one under those would give every tank two. Ours have none at all, which is what
+     makes them look laid on the grass rather than standing on it.
+
+     A separate pass ahead of the units, not per unit inside the loop: drawn inline, a unit's
+     shadow would fall ON TOP of the unit sorted just behind it. */
+  if (!(typeof _rtsArtReady === 'function' && _rtsArtReady())) {
+    g.globalAlpha = 0.28;
+    g.fillStyle = '#0b0f14';
+    for (i = 0; i < draw.length; i++) {
+      var sd = draw[i];
+      if (sd.type !== 'unit') continue;
+      var sdd = rtsUnitDef(sd.def);
+      if (!sdd || sdd.kind === 'air') continue;      /* a helicopter's shadow is not under it */
+      var srx = Math.max(2, Math.round(sd.r * _rtsZoom() * 0.95));
+      var sry = Math.max(1, Math.round(srx * 0.55));
+      g.beginPath();
+      g.ellipse(Math.round(_rtsSX(sd.x)), Math.round(_rtsSY(sd.z)) + Math.round(sry * 0.5),
+                srx, sry, 0, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.globalAlpha = 1;
+  }
 
   for (i = 0; i < draw.length; i++) {
     var d = draw[i];
