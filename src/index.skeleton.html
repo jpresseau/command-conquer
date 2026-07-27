@@ -86,6 +86,8 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
     across the map — and their first attack wave is already on a timer.</p>
   <div class="diff" id="rtsDiff"></div>
   <p class="diffnote" id="rtsDiffNote"></p>
+  <div class="diff" id="rtsVoxSide" hidden></div>
+  <p class="diffnote" id="rtsVoxNote" hidden></p>
   <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE</button>
   <button type="button" class="go resume" id="rtsResume" onclick="rtsLoadGame()" hidden>RESUME BATTLE</button>
   <button type="button" class="go resume" id="rtsEdit" onclick="rtsEdOpen()" hidden>MAP EDITOR<small>draw a battlefield of your own</small></button>
@@ -143,8 +145,10 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   <div id="rtsErr"></div>
   <p class="foot">An original game in the spirit of the mid-90s base-building RTS. Not affiliated with,
     and containing no assets from, any existing game — everything it ships with is drawn and
-    synthesized in code. The artwork loader above is the one exception, and it reads files you
-    already own, in your browser, without sending or storing them.</p>
+    synthesized in code. The two loaders above are the exception: they read files you already
+    own, in your browser, and nothing is ever uploaded. They <b>are</b> kept, though — the
+    archives and the map you pick are copied into this browser's storage so you only choose them
+    once, and <b>forget these</b> next to the loader erases them again.</p>
 </div>
 
 <script>//@@INC:../ra/lcw.js@@</script>
@@ -210,6 +214,29 @@ function rtsHome(){
    check, so a save from older code shows nothing rather than a button that fails. */
 /* The editor draws with the player's own terrain templates, so it is only worth offering once
    the artwork is loaded - an empty palette is not a tool. */
+/* Which army answers when you click a unit. Only offered once the speech archives are in,
+   because without them there is nothing to choose between. */
+function rtsBuildVoxSide(){
+  var wrap = document.getElementById('rtsVoxSide'), note = document.getElementById('rtsVoxNote');
+  if (!wrap || typeof rtsVoxSide !== 'function') return;
+  var have = typeof rtsSndNamed === 'function' && !!rtsSndNamed('yes_sir_soviet_vehicle_1');
+  wrap.hidden = note.hidden = !have;
+  if (!have) return;
+  if (!wrap.firstChild) {
+    wrap.innerHTML = '<button type="button" data-v="allied">ALLIED</button>' +
+                     '<button type="button" data-v="soviet">SOVIET</button>';
+    [].forEach.call(wrap.getElementsByTagName('button'), function (b) {
+      b.onclick = function () { rtsSetVoxSide(b.getAttribute('data-v')); rtsBuildVoxSide(); };
+    });
+  }
+  var cur = rtsVoxSide();
+  [].forEach.call(wrap.getElementsByTagName('button'), function (b) {
+    b.className = (b.getAttribute('data-v') === cur) ? 'on' : '';
+  });
+  note.textContent = 'Your units answer in ' + (cur === 'soviet' ? 'Soviet' : 'Allied') +
+                     ' voices. Voices only — both armies field the same roster.';
+}
+
 function rtsShowEditor(){
   var b = document.getElementById('rtsEdit');
   if (b) b.hidden = !(typeof _rtsArtReady === 'function' && _rtsArtReady());
@@ -225,6 +252,7 @@ function rtsShowResume(){
 rtsBuildDiff();
 rtsShowResume();
 rtsShowEditor();
+rtsBuildVoxSide();
 
 /* Anything the player chose last time loads itself now. This is the whole point of
    src/rts.store.js: picking 13 MB of archives out of a file dialog is a decision, and a
@@ -244,7 +272,7 @@ function rtsRestoreSaved() {
       mixNote.className = 'ok';
       rtsAddForget(mixNote);
     } else { mixNote.textContent = before; mixNote.className = ''; }
-    rtsShowEditor();
+    rtsShowEditor(); rtsBuildVoxSide();
   }, function (map) {
     if (!mapNote) return;
     if (map) { mapNote.textContent = rtsMapDescribe(map); mapNote.className = 'ok'; }

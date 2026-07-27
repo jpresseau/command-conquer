@@ -236,7 +236,11 @@ function _rtsItemClick(key) {
   else {
     var def = rtsStructDef(key) || rtsUnitDef(key);
     if (typeof _rtsSfx === 'function') _rtsSfx('deny');
-    if (typeof rtsEva === 'function') rtsEva('cantbuild');
+    /* EVA distinguishes "you cannot build that" from "you cannot AFFORD that", and being told
+       the wrong one is worse than being told nothing - the first sends you looking for a
+       prerequisite you already have. */
+    var _broke = rtsMoney(S) < def.cost && _rtsAvailable('player', def);
+    if (typeof rtsEva === 'function') rtsEva(_broke ? 'nofunds' : 'cantbuild');
     if (!_rtsAvailable('player', def)) _rtsSay('Needs ' + def.needs.map(function (n) { return rtsStructDef(n).name; }).join(' + ') + ' first.');
     else if (cat === 'infantry' && !_rtsHas('player', 'barracks')) _rtsSay('Build a Barracks first.');
     else if (cat === 'vehicle' && !_rtsHas('player', 'factory')) _rtsSay('Build a War Factory first.');
@@ -266,7 +270,7 @@ function _rtsItemCancel(key) {
     if (U.place === key) { U.place = null; _rtsGhostHide(); }
     _rtsSay('Canceled.');
     if (typeof _rtsSfx === 'function') _rtsSfx('deny');
-    if (typeof rtsEva === 'function') rtsEva('cantbuild');
+    if (typeof rtsEva === 'function') rtsEva('cancel');
   }
 }
 /* StripClass::Add speaks VOX_NEW_CONSTRUCT when something joins the buildable list. It is
@@ -286,7 +290,7 @@ function _rtsWatchNewOptions() {
   if (fresh) {
     _rtsSay('New construction options.');
     if (typeof _rtsSfx === 'function') _rtsSfx('ready');
-    if (typeof rtsEva === 'function') rtsEva('ready');
+    if (typeof rtsEva === 'function') rtsEva('newopt');
   }
   U.avail = now;
 }
@@ -493,7 +497,6 @@ function _rtsBindInput() {
       _rtsFlash(w.x, w.z, onScrap ? 'harvest' : 'move');
     }
     if (typeof _rtsSfx === 'function') _rtsSfx('order');
-  if (typeof rtsVox === 'function' && window._rtsG && window._rtsG.sel[0]) rtsVox(window._rtsG.sel[0], 'order');
     if (typeof rtsVox === 'function' && window._rtsG && window._rtsG.sel[0]) rtsVox(window._rtsG.sel[0], 'order');
     return true;
   }
@@ -757,7 +760,6 @@ function _rtsRightClick(mx, my) {
     _rtsFlash(tgt.x, tgt.z, special === mine.length ? 'harvest' : 'attack');
     if (special) _rtsSay(special === 1 ? 'Moving in.' : special + ' specialists moving in.');
     if (typeof _rtsSfx === 'function') _rtsSfx('order');
-  if (typeof rtsVox === 'function' && window._rtsG && window._rtsG.sel[0]) rtsVox(window._rtsG.sel[0], 'order');
     if (typeof rtsVox === 'function' && window._rtsG && window._rtsG.sel[0]) rtsVox(window._rtsG.sel[0], 'order');
     return;
   }

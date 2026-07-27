@@ -392,6 +392,7 @@ function _mixFinish(log, done) {
      arriving from IndexedDB - the normal case on every visit after the first - left the button
      hidden with a full palette sitting behind it. */
   if (RTS_MIX.ready && typeof rtsShowEditor === 'function') rtsShowEditor();
+  if (RTS_MIX.ready && typeof rtsBuildVoxSide === 'function') rtsBuildVoxSide();
   /* new archives can only ADD sounds, so the "not found" cache is the one that must go */
   if (typeof rtsSndReset === 'function') rtsSndReset();
   done && done(RTS_MIX.ready ? null : RTS_MIX.note, RTS_MIX.note);
@@ -408,7 +409,12 @@ function rtsMixPicked(input) {
       /* Chosen once, not once per visit. 13 MB of archives is far too much for localStorage,
          so this goes to IndexedDB; see src/rts.store.js. */
       rtsStoreSaveMix().then(function (saved) {
-        if (note && saved) note.textContent += ' Saved — it will load itself next time.';
+        if (note && saved) {
+          note.textContent += ' Kept in this browser — it will load itself next time. ';
+          /* the way out has to be offered here too, not only after a restore: the visit that
+             stores the files is the one where a player might want to undo it */
+          if (typeof rtsAddForget === 'function') rtsAddForget(note);
+        }
       });
     }
     if (!note) return;
