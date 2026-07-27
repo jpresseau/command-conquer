@@ -91,6 +91,24 @@
 #rcgRts .rts-ops button[data-mode="sell"].on{background:#9c6a1c;border-color:#ffcf6a;color:#fff;
   animation:rtsPwrPulse 1s ease-in-out infinite}
 
+/* superweapons: the charge is the button's own background, filling left to right, so the state
+   is readable without a separate gauge to find. The row collapses to nothing when empty - a
+   flex container with no children still claims its gap, which would leave a stripe of padding
+   above the power strip for the whole first half of every match. */
+#rcgRts .rts-supers{display:flex;flex-direction:column;gap:3px}
+#rcgRts .rts-supers:empty{display:none}
+#rcgRts .rts-supers button{position:relative;overflow:hidden;padding:5px 0;border:1px solid #2b3a4d;
+  border-radius:3px;background:#131a24;color:#8a9bb0;font-size:10.5px;font-weight:700;
+  letter-spacing:.5px;cursor:pointer;text-align:center}
+#rcgRts .rts-supers button span{position:relative;z-index:1}
+#rcgRts .rts-supers button .sfill{position:absolute;left:0;top:0;bottom:0;width:0;
+  background:linear-gradient(90deg,#1d3352,#2e5f9c);transition:width .2s linear;z-index:0}
+#rcgRts .rts-supers button.ready{color:#fff;border-color:#6fb0ff}
+#rcgRts .rts-supers button.ready .sfill{background:linear-gradient(90deg,#2e6fd0,#5fa8ff)}
+#rcgRts .rts-supers button.armed{color:#fff;border-color:#ff8571;
+  animation:rtsPwrPulse 1s ease-in-out infinite}
+#rcgRts .rts-supers button.armed .sfill{background:linear-gradient(90deg,#8c2f22,#d4503a)}
+
 /* middle: vertical power strip + tile grid */
 #rcgRts .rts-mid{flex:1 1 auto;display:flex;gap:6px;min-height:0}
 #rcgRts .rts-pwr{flex:0 0 20px;display:flex;flex-direction:column;align-items:center;gap:4px;
