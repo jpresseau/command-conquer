@@ -497,7 +497,7 @@ function _rtsBindInput() {
       _rtsFlash(w.x, w.z, onScrap ? 'harvest' : 'move');
     }
     if (typeof _rtsSfx === 'function') _rtsSfx('order');
-    if (typeof rtsVox === 'function' && window._rtsG && window._rtsG.sel[0]) rtsVox(window._rtsG.sel[0], 'order');
+    if (typeof rtsVox === 'function') _rtsVoxOrder();
     return true;
   }
   /* LEFT button only. mousedown fires for every button, so without this guard the
@@ -647,6 +647,19 @@ function _rtsClickSelect(mx, my, add) {
     if (ent.side === 'player' && ent.type === 'unit' && typeof rtsVox === 'function') rtsVox(ent, 'select');
   }
 }
+/* The unit that answers an order must be one of YOURS. G.sel can hold an enemy unit - clicking
+   one selects it, which is how you inspect it - and slot 0 is whatever was clicked first. So an
+   enemy tank could end up acknowledging your orders, in the other army's voice, if you happened
+   to click it before shift-adding your own. */
+function _rtsVoxOrder() {
+  var G = window._rtsG;
+  if (!G || !G.sel) return;
+  for (var i = 0; i < G.sel.length; i++) {
+    var e = G.sel[i];
+    if (e && !e.dead && e.side === 'player' && e.type === 'unit') { rtsVox(e, 'order'); return; }
+  }
+}
+
 function _rtsSelectSameType(ent, add) {
   var G = window._rtsG, n = 0;
   if (!add) G.sel.length = 0;
@@ -760,7 +773,7 @@ function _rtsRightClick(mx, my) {
     _rtsFlash(tgt.x, tgt.z, special === mine.length ? 'harvest' : 'attack');
     if (special) _rtsSay(special === 1 ? 'Moving in.' : special + ' specialists moving in.');
     if (typeof _rtsSfx === 'function') _rtsSfx('order');
-    if (typeof rtsVox === 'function' && window._rtsG && window._rtsG.sel[0]) rtsVox(window._rtsG.sel[0], 'order');
+    if (typeof rtsVox === 'function') _rtsVoxOrder();
     return;
   }
   var tx = _rtsTX(hit.x), tz = _rtsTX(hit.z);
@@ -774,7 +787,7 @@ function _rtsRightClick(mx, my) {
   }
   _rtsFlash(hit.x, hit.z, onScrap ? 'harvest' : 'move');
   if (typeof _rtsSfx === 'function') _rtsSfx('order');
-  if (typeof rtsVox === 'function' && window._rtsG && window._rtsG.sel[0]) rtsVox(window._rtsG.sel[0], 'order');
+  if (typeof rtsVox === 'function') _rtsVoxOrder();
 }
 /* Spread a group over a loose grid so twelve units do not all path to one tile. */
 function _rtsFormation(n) {
