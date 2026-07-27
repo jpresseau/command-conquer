@@ -54,7 +54,7 @@ var RTS_STRUCTS = [
     desc:'Builds RC combat vehicles and Harvesters.' },
   { key:'turret',   name:'Gun Turret',    w:1, h:1, cost:500,  build:10, hp:520,  power:-20,  sight:18,
     needs:['barracks'], weapon:'turretgun',
-    armour:'concrete',
+    side:'allied', armour:'concrete',
     desc:'Automated base defence. Needs power to fire.' },
   /* --- the tier the roster was missing. `needs` already gated everything, so these are data. --- */
   { key:'radar',    name:'Radar Dome',    w:2, h:2, cost:1000, build:14, hp:600,  power:-40,  sight:26,
@@ -70,7 +70,7 @@ var RTS_STRUCTS = [
     desc:'Unlocks Artillery and the Heavy Tank. Draws as much power as two plants.' },
   { key:'rocketpit',name:'Rocket Turret', w:1, h:1, cost:800,  build:14, hp:480,  power:-30,  sight:22,
     needs:['factory'], weapon:'turretrocket',
-    armour:'concrete',
+    side:'soviet', armour:'concrete',
     desc:'Long-range base defence. Tears up armour, poor against infantry.' },
   /* --- defence you can afford early, and the two structures that do something other than
      shoot. `wall` and `pillbox` are pure data; `depot` carries the repair field below. --- */
@@ -83,7 +83,7 @@ var RTS_STRUCTS = [
   /* Pillbox $400 / -15 / needs Barracks, again straight from the reference. */
   { key:'pillbox',  name:'Pillbox',      w:1, h:1, cost:400,  build:6,  hp:420,  power:-15,  sight:15,
     needs:['barracks'], weapon:'pillboxgun',
-    armour:'concrete',
+    side:'allied', armour:'concrete',
     desc:'Cheap early defence. Shreds infantry, barely scratches armour.' },
   { key:'depot',    name:'Service Depot',w:2, h:2, cost:1200, build:16, hp:700,  power:-30,  sight:12,
     needs:['factory'], repairs:RTS_TILE * 3.2, repairRate:22,
@@ -98,13 +98,23 @@ var RTS_STRUCTS = [
   /* Kennel $200 / -10 / needs Barracks. It exists to gate the Attack Dog. */
   { key:'kennel',   name:'Kennel',       w:1, h:1, cost:200,  build:5,  hp:400,  power:-10,  sight:10,
     needs:['barracks'],
-    armour:'wood',
+    side:'soviet', armour:'wood',
     desc:'Trains Attack Dogs.' },
   /* Flame Tower $500 / -20 / needs Barracks, and "damages nearby units and structures if
      destroyed" - which this game already has a mechanism for, so it actually does. */
+  /* TESLA COIL. The Soviet answer to a Pillbox, and the reason their base defence reads
+     differently from the Allies': it hits far harder than anything else at its price and it
+     STOPS WORKING when the power browns out. That second half is the whole design - a Tesla
+     wall is only as good as the plants behind it, so killing the power is a real strategy
+     rather than an inconvenience. Priced and armed from RULES.INI: 1500, 200 damage, and a
+     draw of 100 which is more than any other defence asks for. */
+  { key:'tesla',    name:'Tesla Coil',   w:1, h:2, cost:1500, build:20, hp:400,  power:-100, sight:20,
+    needs:['radar'], weapon:'teslazap', side:'soviet', needsPower:true,
+    armour:'concrete',
+    desc:'Devastating, and dead the moment your power browns out. Soviet.' },
   { key:'flametower',name:'Flame Tower', w:1, h:1, cost:500,  build:11, hp:450,  power:-20,  sight:16,
     needs:['barracks'], weapon:'towerflame', deathBlast:{ dmg:70, radius:RTS_TILE * 2.6 },
-    armour:'concrete',
+    side:'soviet', armour:'concrete',
     desc:'Burns anything that comes close. Goes up in a fireball when it dies.' },
   /* BDATA.CPP's STRUCT_STORAGE. The silo does nothing but hold scrap - no power to speak of,
      no weapon, no prerequisite past the refinery that fills it - and it is the cheapest
@@ -119,7 +129,7 @@ var RTS_STRUCTS = [
      implemented rather than softened. */
   { key:'helipad',  name:'Helipad',      w:2, h:2, cost:1500, build:14, hp:500,  power:-10,  sight:10,
     needs:['radar'], produces:'air', rearm:true,
-    armour:'concrete',
+    side:'allied', armour:'concrete',
     desc:'Builds and rearms helicopters. Without one, an aircraft out of ammo goes down.' },
   { key:'silo',     name:'Scrap Silo',   w:2, h:2, cost:150,  build:5,  hp:400,  power:0,    sight:8,
     needs:['refinery'], storage:1500, capturable:false,
@@ -158,26 +168,26 @@ var RTS_UNITS = [
     desc:'Mines Scrap fields and unloads at a refinery.' },
   /* --- second tier. `needs` on a unit gates it the same way it gates a structure. --- */
   { key:'grenadier',name:'Grenadier',     kind:'infantry', cost:160,  build:4,  hp:65,   speed:6,   turn:6,  r:1.1, sight:15, weapon:'grenade',
-    armour:'none',
+    side:'soviet', armour:'none',
     crawl:true, fraidy:true,
     desc:'Lobbed charges. Clears infantry and cracks buildings; hopeless against a moving tank.' },
   { key:'light',    name:'Light Tank',    kind:'vehicle',  cost:700,  build:9,  hp:280,  speed:12,  turn:2.6,r:1.8, sight:18, weapon:'cannon',
-    armour:'light',
+    side:'allied', armour:'light',
     desc:'Cheap armour. Faster than a Battle Tank and half the price, with a third of the hull.' },
   /* NoMovingFire, from UnitTypeClass::Read_INI. A gun this size cannot be fired on the move:
      the unit has to come to a stop first, which is what makes artillery a thing you position
      rather than a thing you drive at people. */
   { key:'arty',     name:'Artillery',     kind:'vehicle',  cost:600,  build:11, hp:150,  speed:6,   turn:1.4,r:1.9, sight:16, weapon:'howitzer',
     needs:['radar'], noMovingFire:true,
-    armour:'light',
+    side:'allied', armour:'light',
     desc:'Outranges every base defence in the game. Made of paper — never send it in first.' },
   { key:'heavy',    name:'Mammoth Tank',  kind:'vehicle',  cost:1700, build:20, hp:820,  speed:6.5, turn:1.3,r:2.2, sight:18, weapon:'heavycannon', weapon2:'coax',
     needs:['lab'],
-    armour:'heavy',
+    side:'soviet', armour:'heavy',
     desc:'The heaviest hull on the field. Slow, expensive, and very hard to stop.' },
   { key:'flame',    name:'Flame Squad',   kind:'infantry', cost:300,  build:5,  hp:75,   speed:6,   turn:6,  r:1.1, sight:12, weapon:'flame',
     needs:['lab'],
-    armour:'none',
+    side:'soviet', armour:'none',
     crawl:true, fraidy:true,
     desc:'Walks up and burns things down. Devastating up close, dead at any distance.' },
   /* capture: MISSION_CAPTURE. The unit is spent on arrival - it does not survive the job. */
@@ -191,27 +201,27 @@ var RTS_UNITS = [
      and structures". The `vs` table does that entirely - no special case anywhere in the code. */
   { key:'dog',      name:'Attack Dog',    kind:'infantry', cost:200,  build:3,  hp:40,   speed:13,  turn:8,  r:0.9, sight:14, weapon:'bite',
     needs:['kennel'],
-    armour:'none',
+    side:'soviet', armour:'none',
     crawl:false, fraidy:false,
     desc:'Fast and vicious. Tears infantry apart; cannot scratch a vehicle or a wall.' },
   /* heals: friendly INFANTRY inside this radius are brought back up at healRate hp/sec. The
      same shape as the Service Depot's repair field - one is for people, the other for vehicles. */
   { key:'medic',    name:'Field Medic',   kind:'infantry', cost:800,  build:9,  hp:70,   speed:6.5, turn:6,  r:1.1, sight:12, weapon:null,
     heals:RTS_TILE * 3.0, healRate:9,
-    armour:'none',
+    side:'allied', armour:'none',
     crawl:true, fraidy:false,
     desc:'Heals nearby infantry continuously and for free. Cannot heal himself.' },
   /* steal: walks into an enemy refinery and leaves with a fraction of that side\'s credits.
      Same walk-in as capture, different payload, spent the same way. */
   { key:'thief',    name:'Thief',         kind:'infantry', cost:500,  build:7,  hp:45,   speed:7,   turn:6,  r:1.1, sight:12, weapon:null,
     needs:['lab'], steal:0.5, stealFrom:'refinery',
-    armour:'none',
+    side:'allied', armour:'none',
     crawl:false, fraidy:false,
     desc:'Walks into an enemy refinery and leaves with half their credits. Unarmed.' },
   /* demo: C4. "Can destroy buildings instantly if she is able to get adjacent to them." */
   { key:'tanya',    name:'Commando',      kind:'infantry', cost:1200, build:14, hp:130,  speed:8,   turn:7,  r:1.1, sight:16, weapon:'pistols',
     needs:['lab'], demo:true, only:1,
-    armour:'none',
+    side:'allied', armour:'none',
     crawl:true, fraidy:false,
     desc:'Mows down infantry, and levels any building she can reach. Only one at a time.' },
   /* Mobile Construction Vehicle. UDATA.CPP's UnitMCV is unarmed, IsCrusher, IsGigundo, and can
@@ -228,7 +238,7 @@ var RTS_UNITS = [
      Plus: it flies. Terrain does not block it and only an `aa` weapon can touch it. */
   { key:'heli',     name:'Attack Heli',   kind:'air',      cost:1200, build:15, hp:200,  speed:22,  turn:5.0,r:1.6, sight:20, weapon:'hellfire',
     needs:['helipad'], air:true, ammo:8, rearm:6, alt:14,
-    armour:'light',
+    side:'allied', armour:'light',
     desc:'Flies over anything. Eight missiles, then it must return to a pad to reload.' },
   /* Armoured Personnel Carrier. UDATA.CPP's UnitAPC is IsCrusher with no turret; the transport
      rules are in UNIT.CPP - capacity via Max_Passengers, and, in Death, the half of the branch
@@ -333,6 +343,10 @@ var RTS_WEAPONS = {
   flame:      { dmg:30, range:9,  cool:0.65, shot:'tracer',  speed:0,  splash:2.6, wood:true,
                 verses:{ none:1.3,  wood:1.70, light:0.70, heavy:0.50, concrete:1.20 } },
   /* The Flame Squad's weapon on a fixed mount: a little more reach and a lot more of it. */
+  /* The coil's bolt. Enormous damage, slow, and it ignores armour class the way RA's does -
+     a Tesla hit is a Tesla hit whether it lands on a rifleman or a Mammoth. */
+  teslazap:   { dmg:200, range:17, cool:2.6, shot:'tracer', speed:0, splash:0, wall:true,
+                verses:{ none:1, wood:1, light:1, heavy:1, concrete:1 } },
   towerflame: { dmg:34, range:13, cool:0.75, shot:'tracer',  speed:0,  splash:3.0, wood:true,
                 verses:{ none:1.3,  wood:1.25, light:0.80, heavy:0.60, concrete:0.90 } }
 };
@@ -631,8 +645,11 @@ var RTS_AI = {
      nothing, and the defensive ratios are big enough to soak every spare credit otherwise.
      The pillbox comes first among the defences because it is the one the AI can afford early;
      `wall` is deliberately absent, since an AI that cannot plan a line just scatters concrete. */
+  /* Both armies' defences are listed. _rtsCanQueue drops whichever belong to the other one, so
+     the same plan serves either side and the opponent builds a Tesla wall or a Pillbox line
+     depending on which army it ended up with. */
   buildOrder:['refinery', 'barracks', 'silo', 'factory', 'radar', 'apower', 'depot', 'lab', 'kennel',
-              'pillbox', 'flametower', 'turret', 'rocketpit'],
+              'pillbox', 'flametower', 'turret', 'rocketpit', 'tesla'],
   /* What to spend a production run on. A table rather than an if-chain: adding a unit to
      RTS_UNITS should not mean editing the opponent's brain, and the hardcoded ladder that used
      to live in _rtsAIUnits is a large part of why the roster sat at five units. Gating is left
@@ -851,7 +868,34 @@ var RTS_CRUSH_KILL = 0.9;       /* world units: close enough to actually run the
    starts wounded and runs. Unarmed vehicles produce a technician instead of a soldier. */
 var RTS_CREW_CHANCE = 0.5;
 
-/* Armour class per thing, used with weapon.vs above. */
+/* ------------------------------------------------------------- factions --
+   Red Alert is two asymmetric armies, and this roster was one merged list: the Allies' Pillbox
+   and the Soviets' Flame Tower and Kennel were all buildable by everyone, so there was nothing
+   to choose between and no reason for a faction picker to exist.
+
+   A def now carries an optional `side`. Anything without one is shared - the yard, the economy,
+   the basic infantry - which is also how RA does it. What is tagged is what makes the two play
+   differently:
+
+     Allied   Pillbox, Gun Turret, Medic, Light Tank, Artillery, Helipad + Attack Heli,
+              Commando, Thief
+     Soviet   Flame Tower, Tesla Coil, Rocket Turret, Kennel + Attack Dog, Flame Squad,
+              Grenadier, Mammoth Tank
+
+   The split is RA's own, not invented here. */
+function rtsSideOf(def) { return (def && def.side) || null; }
+function rtsBuildableBy(def, side) {
+  var s = rtsSideOf(def);
+  return !s || s === side;
+}
+/* Which army a house fields. The player's is their choice; the opponent takes the other one,
+   because a mirror match is the one arrangement that makes the whole split pointless. */
+function rtsHouseSide(house) {
+  var mine = (typeof rtsVoxSide === 'function') ? rtsVoxSide() : 'allied';
+  return house === 'player' ? mine : (mine === 'allied' ? 'soviet' : 'allied');
+}
+
+/* Armour class per thing, used with a weapon's `verses` table above. */
 /* ARMOUR — from CONST.CPP's ArmorName[] and WARHEAD.CPP's Modifier[armor].
 
    `ArmorName[ARMOR_COUNT] = { "none", "wood", "light", "heavy", "concrete" }`, and a warhead

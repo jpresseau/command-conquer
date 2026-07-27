@@ -80,10 +80,11 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   <p class="sub">Real-Time Strategy</p>
   <p class="vs"><b class="p">Vanguard</b> &nbsp;versus&nbsp; <b class="e">Redline</b></p>
   <p class="brief">Mine <b>Scrap</b> with harvesters, unload it at a refinery for credits, and spend them
-    on power, production and armour. Build out and the roster opens up — attack dogs, engineers and
-    thieves, an APC to carry them, helicopters that need a pad to rearm, and a Mobile Yard to found a
-    second base. Lose your power plants and the whole base slows down. Redline is doing the same thing
-    across the map — and their first attack wave is already on a timer.</p>
+    on power, production and armour. Pick an army below and it decides what you can build: the
+    <b>Allies</b> get pillboxes, gun turrets, medics, light tanks and helicopters, the <b>Soviets</b>
+    get flame towers, Tesla coils, attack dogs and Mammoth tanks. Lose your power plants and the whole
+    base slows down — and a Tesla coil stops firing altogether. Redline takes the other army and is
+    doing the same thing across the map, with their first attack wave already on a timer.</p>
   <div class="diff" id="rtsDiff"></div>
   <p class="diffnote" id="rtsDiffNote"></p>
   <div class="diff" id="rtsVoxSide" hidden></div>
@@ -214,14 +215,16 @@ function rtsHome(){
    check, so a save from older code shows nothing rather than a button that fails. */
 /* The editor draws with the player's own terrain templates, so it is only worth offering once
    the artwork is loaded - an empty palette is not a tool. */
-/* Which army answers when you click a unit. Only offered once the speech archives are in,
-   because without them there is nothing to choose between. */
+/* WHICH ARMY YOU COMMAND. This began as a voices-only toggle, because the roster was one
+   merged list with both sides' buildings in it and there was genuinely nothing else to choose
+   between. There is now: the Allies get the Pillbox, the Gun Turret, the Medic, the Light Tank,
+   the Artillery and the Helipad; the Soviets get the Flame Tower, the Tesla Coil, the Kennel
+   and its dogs, the Flame Squad and the Mammoth. Always offered - it changes what you can
+   build whether or not the speech archives are loaded. */
 function rtsBuildVoxSide(){
   var wrap = document.getElementById('rtsVoxSide'), note = document.getElementById('rtsVoxNote');
   if (!wrap || typeof rtsVoxSide !== 'function') return;
-  var have = typeof rtsSndNamed === 'function' && !!rtsSndNamed('yes_sir_soviet_vehicle_1');
-  wrap.hidden = note.hidden = !have;
-  if (!have) return;
+  wrap.hidden = note.hidden = false;
   if (!wrap.firstChild) {
     wrap.innerHTML = '<button type="button" data-v="allied">ALLIED</button>' +
                      '<button type="button" data-v="soviet">SOVIET</button>';
@@ -233,8 +236,12 @@ function rtsBuildVoxSide(){
   [].forEach.call(wrap.getElementsByTagName('button'), function (b) {
     b.className = (b.getAttribute('data-v') === cur) ? 'on' : '';
   });
-  note.textContent = 'Your units answer in ' + (cur === 'soviet' ? 'Soviet' : 'Allied') +
-                     ' voices. Voices only — both armies field the same roster.';
+  var have = typeof rtsSndNamed === 'function' && !!rtsSndNamed('yes_sir_soviet_vehicle_1');
+  note.textContent = (cur === 'soviet'
+    ? 'Soviet: Flame Towers, Tesla Coils, attack dogs, Mammoth tanks.'
+    : 'Allied: Pillboxes, gun turrets, medics, light tanks, artillery, helicopters.')
+    + ' Redline takes the other army.'
+    + (have ? ' Your units answer in its voices.' : '');
 }
 
 function rtsShowEditor(){
