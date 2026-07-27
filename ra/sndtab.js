@@ -39,6 +39,18 @@ var RA_SNDTAB = (function () {
   return out;
 })();
 
-var _exp = { RA_SNDTAB: RA_SNDTAB };
-if (typeof module !== 'undefined' && module.exports) module.exports = _exp;
-else if (typeof window !== 'undefined') window.RA_SNDTAB = RA_SNDTAB;
+/* Dual-mode: a CommonJS module for the test suite, a plain global for the browser bundle,
+   which has no loader at all and never will.
+
+   Wrapped rather than assigned to a `var _exp` first, because every file in ra/ used that same
+   name and the browser bundle concatenates them all into ONE global scope - ten declarations of
+   _exp, each overwriting the last. It happened to work only because each is consumed on the
+   very next line, which is the kind of accident that stops being an accident the moment
+   somebody reorders the script tags. */
+(function (exp) {
+  if (typeof module !== 'undefined' && module.exports) module.exports = exp;
+  /* The browser gets the TABLE, not a wrapper around it - every consumer indexes
+     window.RA_SNDTAB directly. CommonJS gets the wrapper because require() callers
+     destructure it. The two are deliberately different shapes. */
+  else if (typeof window !== 'undefined') window.RA_SNDTAB = exp.RA_SNDTAB;
+})({ RA_SNDTAB: RA_SNDTAB });
