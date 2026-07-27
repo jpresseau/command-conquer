@@ -1,8 +1,16 @@
-# RC Command
+# Command & Conquer: Red Alert
 
-A real-time strategy game in the spirit of the mid-90s base-builders. Mine ore with harvesters,
+A rebuild of Westwood's 1996 real-time strategy game for the browser. Mine ore with harvesters,
 unload it at a refinery for credits, climb a power-and-prerequisite tech tree, and fight the
 Redline faction across a 112×112 tile battlefield.
+
+Rules, unit costs, weapon damage and AI behaviour are ported from the Red Alert source release;
+the game can also read your own installed copy for the original artwork, sound and maps.
+
+> An unofficial fan project, not affiliated with or endorsed by Electronic Arts. *Command &
+> Conquer* and *Red Alert* are EA's trademarks. **No game assets are distributed here** — the
+> artwork, audio and maps are read at runtime from a copy of the game you already own, and
+> nothing is uploaded anywhere.
 
 **Play it: https://jpresseau.github.io/command-conquer/**
 

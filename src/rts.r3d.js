@@ -1,4 +1,4 @@
-/* RC COMMAND - the sprite baker: a tiny 3D renderer that runs once, at load.
+/* RED ALERT - the sprite baker: a tiny 3D renderer that runs once, at load.
 
    This is how the games this is modelled on actually made their art. Westwood did not draw
    those units and buildings pixel by pixel - they built them as 3D models, rendered each one

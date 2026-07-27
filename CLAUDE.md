@@ -2,7 +2,8 @@
 
 Guidance for Claude Code (claude.ai/code) working in this repository.
 
-**RC Command** is a browser real-time strategy game, deployed via GitHub Pages from `main`.
+**Command & Conquer: Red Alert** (short name *Red Alert*) is a browser rebuild of Westwood's
+1996 RTS, deployed via GitHub Pages from `main`.
 It ships as one generated, fully self-contained `index.html` (~0.13 MB) — no network calls, no
 asset files, and **no libraries at all**. Every pixel and every sound is generated in code.
 

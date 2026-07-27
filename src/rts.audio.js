@@ -1,4 +1,4 @@
-/* RC COMMAND - audio. Everything here is SYNTHESIZED at runtime with WebAudio: there is not
+/* RED ALERT - audio. Everything here is SYNTHESIZED at runtime with WebAudio: there is not
    a single sampled asset in the app, from any game or anywhere else. Weapons are shaped noise
    and pitch-swept oscillators, the music is a sequenced drum machine plus a bass and lead
    through a waveshaper.

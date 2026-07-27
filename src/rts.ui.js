@@ -1,4 +1,4 @@
-/* RC COMMAND - UI + input + the main loop.
+/* RED ALERT - UI + input + the main loop.
 
    Layout is the classic one: battlefield on the left, a fixed command sidebar on the
    right holding credits, power, radar and the build tiles. Selection brackets, health bars
@@ -18,7 +18,7 @@ function rtsOpen(seed) {
     + '<div class="rts-stage">'
     +   '<canvas id="rtsCv"></canvas>'
     +   '<canvas id="rtsHud"></canvas>'
-    +   '<div class="rts-top"><span class="rts-title">RC COMMAND</span>'
+    +   '<div class="rts-top"><span class="rts-title">RED ALERT</span>'
     +     '<span class="rts-vs"><b class="p">Vanguard</b> vs <b class="e">Redline</b>'
     +       '<i class="dif" id="rtsDifLbl"></i></span>'
     +     '<span class="rts-help">drag select · right-click order · S hold · 1-9 teams (ctrl set, alt jump) · repair/sell · wheel zoom · Esc</span>'
@@ -1246,7 +1246,7 @@ function _rtsLoop() {
     U.errs = (U.errs || 0) + 1;
     if (!U.errShown) {
       U.errShown = true;
-      try { console.error('RC Command:', err); } catch (_c) {}
+      try { console.error('Red Alert:', err); } catch (_c) {}
       _rtsSay('Error: ' + ((err && err.message) || err));
     }
   }

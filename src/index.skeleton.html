@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>RC Command</title>
-<meta name="description" content="RC Command — a real-time strategy game. Mine Scrap, build a base, and take on the Redline faction.">
+<title>Command &amp; Conquer: Red Alert</title>
+<meta name="description" content="Command &amp; Conquer: Red Alert — a real-time strategy game rebuilt for the browser. Mine ore, build a base, and take on the Soviets.">
 <meta name="theme-color" content="#10141a">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -28,6 +28,10 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 #rtsHome.gone{display:none}
 #rtsHome h1{margin:0;font-size:clamp(34px,7vw,62px);font-weight:800;letter-spacing:clamp(6px,2vw,14px);
   color:#ffcf6a;text-shadow:0 0 34px rgba(255,207,106,.28)}
+/* The series name sits ABOVE the title, small - which is the actual branding hierarchy and
+   also keeps the big element the one the layout tests measure. */
+#rtsHome .eyebrow{margin:0 0 -14px;font-size:clamp(11px,2vw,14px);letter-spacing:clamp(3px,1.2vw,7px);
+  text-transform:uppercase;color:#cfa445;opacity:.9;font-weight:700}
 #rtsHome .sub{margin:-12px 0 0;font-size:clamp(12px,2.2vw,15px);letter-spacing:3px;opacity:.62;text-transform:uppercase}
 #rtsHome .vs{font-size:15px;opacity:.9}
 #rtsHome .vs b.p{color:#6fb0ff}
@@ -66,6 +70,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 @media (max-height:520px){
   #rtsHome{gap:10px;padding:12px}
   #rtsHome h1{font-size:clamp(24px,4.2vw,34px);letter-spacing:clamp(4px,1.2vw,8px)}
+  #rtsHome .eyebrow{margin:0 0 -8px;font-size:10px;letter-spacing:3px}
   #rtsHome .sub{margin:-6px 0 0;font-size:11px;letter-spacing:2px}
   #rtsHome .brief,#rtsHome .vs{display:none}
   #rtsHome .diffnote{margin:-6px 0 0}
@@ -76,7 +81,8 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 <body>
 
 <div id="rtsHome">
-  <h1>RC COMMAND</h1>
+  <p class="eyebrow">Command &amp; Conquer</p>
+  <h1>RED ALERT</h1>
   <p class="sub">Real-Time Strategy</p>
   <p class="vs"><b class="p">Vanguard</b> &nbsp;versus&nbsp; <b class="e">Redline</b></p>
   <p class="brief">Mine <b>Scrap</b> with harvesters, unload it at a refinery for credits, and spend them

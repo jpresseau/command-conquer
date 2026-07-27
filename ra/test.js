@@ -587,7 +587,7 @@ function raPack(bytes) {
 
   var text = inimap.inimapWrite(
     { tmpl: tmpl, tidx: tidx, resType: res },
-    { title: 'Editor Test', author: 'RC Command',
+    { title: 'Editor Test', author: 'Red Alert',
       bounds: { x: 4, y: 6, w: 100, h: 90 },
       spawns: [{ x: 20, y: 30 }, { x: 90, y: 80 }],
       trees: [{ x: 70, y: 70, type: 't05' }] });
@@ -608,7 +608,7 @@ function raPack(bytes) {
      JSON.stringify(b.counts));
 
   var m = inimap.inimapMeta(text, 'test.ini');
-  ok('...and the metadata survives', m.title === 'Editor Test' && m.author === 'RC Command');
+  ok('...and the metadata survives', m.title === 'Editor Test' && m.author === 'Red Alert');
   ok('...and the bounds', m.bounds.x === 4 && m.bounds.y === 6 && m.bounds.w === 100);
   ok('...and both spawns, as x,y', m.spawns.length === 2 &&
      m.spawns[0].x === 20 && m.spawns[0].y === 30 && m.spawns[1].x === 90);

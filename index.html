@@ -3,16 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>RC Command</title>
-<meta name="description" content="RC Command — a real-time strategy game. Mine Scrap, build a base, and take on the Redline faction.">
+<title>Command &amp; Conquer: Red Alert</title>
+<meta name="description" content="Command &amp; Conquer: Red Alert — a real-time strategy game rebuilt for the browser. Mine ore, build a base, and take on the Soviets.">
 <meta name="theme-color" content="#10141a">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<style>/* RC COMMAND - RTS mode. Full-screen overlay: battlefield left, command sidebar right.
+<style>/* RED ALERT - RTS mode. Full-screen overlay: battlefield left, command sidebar right.
    Deliberately mid-90s military-console in feel (dark slate, amber/cyan readouts, hard
    edges) without borrowing any actual game's artwork. */
-/* above the welcome launcher (…2500) and the Studio (…2600) - RC Command is a full-screen
+/* above the welcome launcher (…2500) and the Studio (…2600) - Red Alert is a full-screen
    mode of its own and must not end up painted under either. */
 #rcgRts{position:fixed;inset:0;z-index:2147482700;display:flex;background:#10141a;
   font:13px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#dfe8f2;
@@ -273,6 +273,10 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 #rtsHome.gone{display:none}
 #rtsHome h1{margin:0;font-size:clamp(34px,7vw,62px);font-weight:800;letter-spacing:clamp(6px,2vw,14px);
   color:#ffcf6a;text-shadow:0 0 34px rgba(255,207,106,.28)}
+/* The series name sits ABOVE the title, small - which is the actual branding hierarchy and
+   also keeps the big element the one the layout tests measure. */
+#rtsHome .eyebrow{margin:0 0 -14px;font-size:clamp(11px,2vw,14px);letter-spacing:clamp(3px,1.2vw,7px);
+  text-transform:uppercase;color:#cfa445;opacity:.9;font-weight:700}
 #rtsHome .sub{margin:-12px 0 0;font-size:clamp(12px,2.2vw,15px);letter-spacing:3px;opacity:.62;text-transform:uppercase}
 #rtsHome .vs{font-size:15px;opacity:.9}
 #rtsHome .vs b.p{color:#6fb0ff}
@@ -311,6 +315,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 @media (max-height:520px){
   #rtsHome{gap:10px;padding:12px}
   #rtsHome h1{font-size:clamp(24px,4.2vw,34px);letter-spacing:clamp(4px,1.2vw,8px)}
+  #rtsHome .eyebrow{margin:0 0 -8px;font-size:10px;letter-spacing:3px}
   #rtsHome .sub{margin:-6px 0 0;font-size:11px;letter-spacing:2px}
   #rtsHome .brief,#rtsHome .vs{display:none}
   #rtsHome .diffnote{margin:-6px 0 0}
@@ -321,7 +326,8 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 <body>
 
 <div id="rtsHome">
-  <h1>RC COMMAND</h1>
+  <p class="eyebrow">Command &amp; Conquer</p>
+  <h1>RED ALERT</h1>
   <p class="sub">Real-Time Strategy</p>
   <p class="vs"><b class="p">Vanguard</b> &nbsp;versus&nbsp; <b class="e">Redline</b></p>
   <p class="brief">Mine <b>Scrap</b> with harvesters, unload it at a refinery for credits, and spend them
@@ -2028,7 +2034,7 @@ function raTileTab(theatre) {
   }
 })({ RA_TILETAB: RA_TILETAB, RA_TILETAB_SNOW: RA_TILETAB_SNOW, raTileTab: raTileTab });
 </script>
-<script>/* RC COMMAND - a Command & Conquer-style real-time strategy game.
+<script>/* RED ALERT - a rebuild of Command & Conquer: Red Alert for the browser.
    Build a base, mine Scrap with harvesters, produce units, and fight the Redline faction.
    Standalone: the only outside dependency in the whole app is three.js.
 
@@ -3377,7 +3383,7 @@ var RTS_TRIGGERS = [
     action2:['playSound', 'alert'] }
 ];
 </script>
-<script>/* RC COMMAND - the sprite baker: a tiny 3D renderer that runs once, at load.
+<script>/* RED ALERT - the sprite baker: a tiny 3D renderer that runs once, at load.
 
    This is how the games this is modelled on actually made their art. Westwood did not draw
    those units and buildings pixel by pixel - they built them as 3D models, rendered each one
@@ -3914,7 +3920,7 @@ function _r3FitSize(models, margin) {
   return Math.ceil(r * 2) + margin * 2;
 }
 </script>
-<script>/* RC COMMAND - sprite generation: terrain, ore, effects, and the palette everything uses.
+<script>/* RED ALERT - sprite generation: terrain, ore, effects, and the palette everything uses.
 
    The structures and units are NOT drawn here - they are 3D models, defined further down
    and rendered to sprites once at load by rts.r3d.js. That is how the originals were made,
@@ -5662,7 +5668,7 @@ function _rtsSprites() {
   return S;
 }
 </script>
-<script>/* RC COMMAND - real Red Alert artwork, read from the player's own game files.
+<script>/* RED ALERT - real Red Alert artwork, read from the player's own game files.
 
    Everything else in this project draws its own sprites, because there were no originals to
    draw with. There are now: `ra/mix.js`, `lcw.js`, `blowfish.js` and `shp.js` read the shipped
@@ -7718,7 +7724,7 @@ function _rtsEdAdopt(M) {
   return true;
 }
 </script>
-<script>/* RC COMMAND - audio. Everything here is SYNTHESIZED at runtime with WebAudio: there is not
+<script>/* RED ALERT - audio. Everything here is SYNTHESIZED at runtime with WebAudio: there is not
    a single sampled asset in the app, from any game or anywhere else. Weapons are shaped noise
    and pitch-swept oscillators, the music is a sequenced drum machine plus a bass and lead
    through a waveshaper.
@@ -8440,7 +8446,7 @@ function rtsSndMusicPlaying() { return _RTS_SNDMUS ? _RTS_SNDMUS.name : null; }
    name that was absent before may be present now. The decoded buffers stay valid. */
 function rtsSndReset() { _RTS_SND_MISS = {}; _RTS_SNDTRACKS = null; }
 </script>
-<script>/* RC COMMAND - simulation core. Pure game state + logic; no rendering in this file.
+<script>/* RED ALERT - simulation core. Pure game state + logic; no rendering in this file.
    rts.render.js owns every pixel, rts.ui.js owns the DOM. Keeping the sim renderer-free
    means the whole battle can be stepped headlessly (which is how it gets verified) - and it
    is what allowed the renderer to be swapped from three.js to canvas 2D without touching a
@@ -13461,7 +13467,7 @@ function _rtsTick(dt) {
   }
 }
 </script>
-<script>/* RC COMMAND - render layer. Canvas 2D, sprite-based, pure top-down.
+<script>/* RED ALERT - render layer. Canvas 2D, sprite-based, pure top-down.
 
    This replaced a three.js renderer. The 3D version was the wrong medium: the games this
    is modelled on are 2D sprite games, and no amount of flattening the camera or shrinking
@@ -14112,7 +14118,7 @@ function _rtsMakeIcons(side) {
   return out;
 }
 </script>
-<script>/* RC COMMAND - UI + input + the main loop.
+<script>/* RED ALERT - UI + input + the main loop.
 
    Layout is the classic one: battlefield on the left, a fixed command sidebar on the
    right holding credits, power, radar and the build tiles. Selection brackets, health bars
@@ -14132,7 +14138,7 @@ function rtsOpen(seed) {
     + '<div class="rts-stage">'
     +   '<canvas id="rtsCv"></canvas>'
     +   '<canvas id="rtsHud"></canvas>'
-    +   '<div class="rts-top"><span class="rts-title">RC COMMAND</span>'
+    +   '<div class="rts-top"><span class="rts-title">RED ALERT</span>'
     +     '<span class="rts-vs"><b class="p">Vanguard</b> vs <b class="e">Redline</b>'
     +       '<i class="dif" id="rtsDifLbl"></i></span>'
     +     '<span class="rts-help">drag select · right-click order · S hold · 1-9 teams (ctrl set, alt jump) · repair/sell · wheel zoom · Esc</span>'
@@ -15360,13 +15366,13 @@ function _rtsLoop() {
     U.errs = (U.errs || 0) + 1;
     if (!U.errShown) {
       U.errShown = true;
-      try { console.error('RC Command:', err); } catch (_c) {}
+      try { console.error('Red Alert:', err); } catch (_c) {}
       _rtsSay('Error: ' + ((err && err.message) || err));
     }
   }
 }
 </script>
-<script>/* RC COMMAND — saving and loading a battle. From SAVELOAD.CPP.
+<script>/* RED ALERT — saving and loading a battle. From SAVELOAD.CPP.
 
    The original's shape, and the reason for it:
 

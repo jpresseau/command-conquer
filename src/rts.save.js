@@ -1,4 +1,4 @@
-/* RC COMMAND — saving and loading a battle. From SAVELOAD.CPP.
+/* RED ALERT — saving and loading a battle. From SAVELOAD.CPP.
 
    The original's shape, and the reason for it:
 

@@ -1,6 +1,6 @@
 {
-  "name": "RC Command",
-  "short_name": "RC Command",
+  "name": "Command & Conquer: Red Alert",
+  "short_name": "Red Alert",
   "description": "A real-time strategy game — mine Scrap, build a base, and take on the Redline faction.",
   "start_url": "./",
   "scope": "./",
