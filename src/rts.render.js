@@ -69,6 +69,76 @@ function _rtsGroundAt(mx, my) {
 function _rtsWorldToScreen(x, y, z) {
   return { x: _rtsSX(x), y: _rtsSY(z) - (y || 0) * _rtsZoom() * 0.5, behind: false };
 }
+
+/* Stamp RA's shroud tiles over the visible cells.
+
+   Three states per cell, and they are NOT the same thing:
+     unexplored  - never seen; fully black, and its neighbours get a shaped edge against it
+     explored    - seen once, not currently watched; dimmed, no shape
+     visible     - watched right now; nothing drawn
+
+   The shaping is only ever computed against UNEXPLORED, because that is the boundary the eye
+   reads as the edge of the map. Shaping the explored/visible boundary too would put hard
+   diagonal wedges around every unit as it walks, which is noise rather than information. */
+function _rtsDrawShroudTiles(g, G, cell) {
+  var R = _rtsR, spr = _mixShroud(), map = _mixShroudMap();
+  var N = RTS_N;
+  /* which cells are on screen, in cell coordinates */
+  var ox = R.focus.x / RTS_TILE + N / 2 - (R.W / 2) / cell;
+  var oy = R.focus.z / RTS_TILE + N / 2 - (R.H / 2) / cell;
+  var x0 = Math.max(0, Math.floor(ox) - 1), y0 = Math.max(0, Math.floor(oy) - 1);
+  var x1 = Math.min(N - 1, Math.ceil(ox + R.W / cell) + 1);
+  var y1 = Math.min(N - 1, Math.ceil(oy + R.H / cell) + 1);
+
+  /* Off the edge of the MAP counts as unexplored, so the border gets a proper cut edge rather
+     than stopping flat at the last cell. */
+  function dark(x, y) { return (x < 0 || y < 0 || x >= N || y >= N) ? 1 : (G.mapped[y * N + x] ? 0 : 1); }
+
+  var prevA = g.globalAlpha;
+  for (var y = y0; y <= y1; y++) {
+    for (var x = x0; x <= x1; x++) {
+      var i = y * N + x;
+      var sx = Math.round((x - ox) * cell), sy = Math.round((y - oy) * cell);
+      var w = Math.ceil(cell) + 1;
+
+      if (!G.mapped[i]) {
+        /* unexplored: solid, no shape needed - the shape lives on the LIT side of the border */
+        g.globalAlpha = 1;
+        g.fillStyle = '#040609';
+        g.fillRect(sx, sy, w, w);
+        continue;
+      }
+
+      /* explored: dim it, then cut the edge against anything unexplored around it */
+      if (!G.vis[i]) {
+        g.globalAlpha = RTS_FOG_DIM;
+        g.fillStyle = '#040609';
+        g.fillRect(sx, sy, w, w);
+      }
+
+      var u = dark(x, y - 1), d = dark(x, y + 1), l = dark(x - 1, y), r = dark(x + 1, y);
+      var e = 0;
+      if (u) e |= 0x10;
+      if (r) e |= 0x20;
+      if (d) e |= 0x40;
+      if (l) e |= 0x80;
+      /* A corner only counts when neither of its sides does - otherwise the side piece already
+         covers it, and the combined mask names a frame that does not exist. */
+      if (!u && !l && dark(x - 1, y - 1)) e |= 0x01;
+      if (!u && !r && dark(x + 1, y - 1)) e |= 0x02;
+      if (!d && !r && dark(x + 1, y + 1)) e |= 0x04;
+      if (!d && !l && dark(x - 1, y + 1)) e |= 0x08;
+      if (!e) continue;
+
+      var f = map[e];
+      if (f < 0 || !spr[f]) continue;
+      g.globalAlpha = 1;
+      g.drawImage(spr[f], sx, sy, w, w);
+    }
+  }
+  g.globalAlpha = prevA;
+}
+
 function _rtsPickAt(mx, my) {
   var G = window._rtsG, p = _rtsGroundAt(mx, my);
   var best = null, bd = 1e9, i;
@@ -323,7 +393,14 @@ function _rtsRFrame(dt) {
      the whole layer is one drawImage and the edges stay hard and cell-aligned the way the
      original's shroud tiles do. Re-baked only when the visibility sweep says something
      changed, which is at most 15 times a second. --- */
-  if (G.mapped) {
+  /* With the player's archives loaded there is a better shroud available than a grid of
+     squares: RA's own shadow.shp, whose 48 frames are the diagonal wedges and corner nibbles
+     that make the boundary look CUT rather than pixel-stepped. Stamped per cell, and only
+     across the cells actually on screen - a 160x160 map is 25600 cells and perhaps 900 of them
+     are visible, so drawing all of them would be 28x the work for the same picture. */
+  if (G.mapped && typeof _mixShroud === 'function' && _mixShroud()) {
+    _rtsDrawShroudTiles(g, G, cell);
+  } else if (G.mapped) {
     if (!R.fog) {
       R.fog = document.createElement('canvas');
       R.fog.width = RTS_N; R.fog.height = RTS_N;
