@@ -196,8 +196,11 @@
           color: #c8d2dc; font: inherit; font-size: 11px; letter-spacing: 0.08em; }
 .artbtn:hover { background: #232a33; border-color: #55637a; }
 .artbtn input { display: none; }
-#rtsMixNote.ok, #rtsMapNote.ok  { color: #7fc98a; }
-#rtsMixNote.bad, #rtsMapNote.bad { color: #d08a72; white-space: pre-line; }
+#rtsMixNote.ok, #rtsMapNote.ok, #rtsScenNote.ok  { color: #7fc98a; }
+#rtsMixNote.bad, #rtsMapNote.bad, #rtsScenNote.bad { color: #d08a72; white-space: pre-line; }
+/* the remembered scenario list gets its own line: the map note above it is already saying which
+   map was restored, and one element cannot say both */
+#rtsScenNote { margin-top: 6px; }
 /* undoing "remember these files" has to be reachable, or one bad pick is permanent */
 #rtsForget { color: #8fd0ff; margin-left: 4px; }
 

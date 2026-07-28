@@ -207,8 +207,11 @@
           color: #c8d2dc; font: inherit; font-size: 11px; letter-spacing: 0.08em; }
 .artbtn:hover { background: #232a33; border-color: #55637a; }
 .artbtn input { display: none; }
-#rtsMixNote.ok, #rtsMapNote.ok  { color: #7fc98a; }
-#rtsMixNote.bad, #rtsMapNote.bad { color: #d08a72; white-space: pre-line; }
+#rtsMixNote.ok, #rtsMapNote.ok, #rtsScenNote.ok  { color: #7fc98a; }
+#rtsMixNote.bad, #rtsMapNote.bad, #rtsScenNote.bad { color: #d08a72; white-space: pre-line; }
+/* the remembered scenario list gets its own line: the map note above it is already saying which
+   map was restored, and one element cannot say both */
+#rtsScenNote { margin-top: 6px; }
 /* undoing "remember these files" has to be reachable, or one bad pick is permanent */
 #rtsForget { color: #8fd0ff; margin-left: 4px; }
 
@@ -7093,7 +7096,7 @@ function _rtsMapListHide() {
   var el = document.getElementById('rtsMapList');
   if (el && el.parentNode) el.parentNode.removeChild(el);
 }
-function _rtsMapListShow(maps, note) {
+function _rtsMapListShow(maps, note, remember) {
   _rtsMapListHide();
   var wrap = document.createElement('div');
   wrap.id = 'rtsMapList';
@@ -7106,7 +7109,7 @@ function _rtsMapListShow(maps, note) {
   });
   var btn = document.createElement('button');
   /* deliberately after `btn` exists - the labelling pass disables it while it runs */
-  setTimeout(function () { _rtsMapLabel(maps, sel, btn, note); }, 0);
+  setTimeout(function () { _rtsMapLabel(maps, sel, btn, note, remember); }, 0);
   btn.type = 'button'; btn.textContent = 'LOAD';
   btn.onclick = function () {
     var m = maps[sel.value | 0];
@@ -7151,8 +7154,13 @@ function _rtsMapListShow(maps, note) {
    It is careful to touch no global state: `rtsMapFromScenario` saves and restores RTS_N itself,
    and `window._RTS_MAP` is only ever set by LOAD. Scanning the list must not change which map
    you are about to play. */
-function _rtsMapLabel(maps, sel, btn, note) {
+function _rtsMapLabel(maps, sel, btn, note, remember) {
   var good = 0, coastal = 0, bad = 0;
+  /* This pass already holds every scenario's bytes, one at a time, to read its title. KEEPING
+     them costs a few megabytes and buys the whole list back on the next visit with no file
+     dialog and no archive scan - see rtsStoreSaveScen. `remember` is false when the list came
+     FROM the store, so a restore does not rewrite what it has just read. */
+  var keep = remember === false ? null : [];
   btn.disabled = true;
 
   /* Sequential rather than all-at-once. The bytes come from slicing the File, so sixty parallel
@@ -7165,6 +7173,7 @@ function _rtsMapLabel(maps, sel, btn, note) {
       note.className = '';
       return m.get(m.name).then(function (bytes) {
         label(m, sel.options[i], bytes);
+        if (keep && bytes && bytes.length) keep.push({ name: m.name, from: m.from, bytes: bytes });
       }, function () { mark(sel.options[i], m, 'unreadable'); });
     });
   }, Promise.resolve()).then(function () {
@@ -7173,6 +7182,9 @@ function _rtsMapLabel(maps, sel, btn, note) {
       good + ' playable, ' + coastal + ' with a coast for naval yards' +
       (bad ? ', ' + bad + ' unreadable' : '') + '. Choose one:';
     note.className = 'ok';
+    /* After the summary, never before it: remembering is a convenience and must not be able to
+       delay or break the list the player is looking at. */
+    if (keep && keep.length && typeof rtsStoreSaveScen === 'function') rtsStoreSaveScen(keep);
     return { good: good, coastal: coastal, bad: bad };
   });
 
@@ -7216,6 +7228,35 @@ function rtsMapDescribe(M) {
          ' — ' + M.n + '×' + M.n + ' of ' + M.yaml.w + '×' + M.yaml.h +
          ', ' + ((s.ore || 0) + (s.gems || 0)) + ' ore cells, ' + (s.trees || 0) +
          ' trees, ' + navy + '. Start a battle to play it.';
+}
+
+/* Put the remembered scenario list back on the title screen.
+
+   Same UI, same labelling pass, same LOAD button as a fresh scan - the only difference is that
+   the bytes come out of IndexedDB rather than out of a file the player had to find again. It
+   is passed remember=false so the pass does not write back the list it just read.
+
+   Returns false when there is nothing stored, which is the ordinary first-visit case and not
+   an error: the caller simply leaves the picker's own instructions in place. */
+function rtsMapShowStored(rec) {
+  if (!rec || !rec.maps || !rec.maps.length) return false;
+  var note = document.getElementById('rtsMapNote');
+  if (!note || !note.parentNode) return false;
+  _rtsMapListHide();
+  /* THE LIST GETS ITS OWN LINE. The labelling pass ends by overwriting its note with the
+     "N scenarios - X playable. Choose one:" summary, and the map note is already saying which
+     map was restored - sharing one element would mean the list silently erased that. */
+  var sub = document.getElementById('rtsScenNote');
+  if (!sub) {
+    sub = document.createElement('div');
+    sub.id = 'rtsScenNote';
+    note.parentNode.appendChild(sub);
+  }
+  sub.textContent = rec.maps.length + ' scenario' + (rec.maps.length === 1 ? '' : 's') +
+    ' remembered from last time (' + (rec.bytes / 1048576).toFixed(1) + ' MB) — reading…';
+  sub.className = '';
+  _rtsMapListShow(rec.maps, sub, false);
+  return true;
 }
 
 /* The file picker on the title screen. Mirrors rtsMixPicked: read, report in place, and never
@@ -7853,10 +7894,57 @@ function rtsStoreLoadMap() {
   }).catch(function () { return null; });
 }
 
+/* ------------------------------------------------------ the scenario list --
+   The map you played last was already remembered. The list of maps you could CHOOSE from was
+   not, and that is the gap a player actually feels: to play a different scenario you had to
+   find MAIN.MIX in a file dialog again and sit through the name probe again, every visit,
+   even though nothing about your install had changed.
+
+   THE SCENARIOS THEMSELVES ARE STORED, NOT THE LIST. A scenario is a ~50 KB text file, so a
+   full install of sixty-six is a few megabytes - nothing beside the 13 MB of artwork already
+   here - and holding the bytes means the list is not merely displayable but PLAYABLE without
+   the archive present. Storing names alone would rebuild a menu whose every entry then failed.
+
+   The LABELS are deliberately not stored. A scenario's title, its coast and whether it loads
+   at all come from running it through rtsMapFromScenario, which is code that keeps changing;
+   a remembered label would go on asserting last month's answer. So the list comes back
+   instantly and re-labels itself from the stored bytes, which costs no file dialog and no
+   archive scan - the same rule map.v1 follows, for the same reason. */
+var RTS_STORE_SCEN = 'scen.v1';
+
+function rtsStoreSaveScen(list) {
+  if (!list || !list.length) return Promise.resolve(false);
+  var keep = [];
+  for (var i = 0; i < list.length; i++) {
+    var e = list[i];
+    if (!e || !e.bytes || !e.bytes.length) continue;      /* unreadable entries are not worth keeping */
+    keep.push({ name: e.name, from: e.from, buf: e.bytes.slice().buffer });
+  }
+  if (!keep.length) return Promise.resolve(false);
+  return _rtsStorePut(RTS_STORE_SCEN, { at: Date.now(), files: keep })
+    .then(function (r) { return !!r; }).catch(function () { return false; });
+}
+
+/* Returns entries shaped exactly like the ones rtsMapScanMix produces - {name, from, get} -
+   so the list UI cannot tell a remembered scenario from a freshly scanned one. */
+function rtsStoreLoadScen() {
+  return _rtsStoreGet(RTS_STORE_SCEN).then(function (rec) {
+    if (!rec || !rec.files || !rec.files.length) return null;
+    var maps = rec.files.map(function (f) {
+      var bytes = new Uint8Array(f.buf);
+      return { name: f.name, from: f.from || 'remembered',
+               get: function () { return Promise.resolve(bytes); } };
+    });
+    return { maps: maps, bytes: rec.files.reduce(function (a, f) {
+      return a + (f.buf.byteLength || 0); }, 0) };
+  }).catch(function () { return null; });
+}
+
 function rtsStoreForget() {
   rtsMapClear();
   RTS_MIX.open = {}; RTS_MIX.bytes = {}; RTS_MIX.ready = false; RTS_MIX.pal = null;
-  return _rtsStoreDel([RTS_STORE_MIX, RTS_STORE_MAP]).then(function () { return true; });
+  return _rtsStoreDel([RTS_STORE_MIX, RTS_STORE_MAP, RTS_STORE_SCEN])
+    .then(function () { return true; });
 }
 
 /* ------------------------------------------------------------------ boot --
@@ -7864,14 +7952,19 @@ function rtsStoreForget() {
    draw itself, and restoring the map first would briefly leave a battlefield with nothing to
    paint it with. Neither step blocks the START button - the game is playable without either,
    and a slow disk should not hold the menu hostage. */
-function rtsStoreRestore(onMix, onMap) {
+function rtsStoreRestore(onMix, onMap, onScen) {
   return rtsStoreLoadMix().then(function (mix) {
     if (onMix) onMix(mix);
     return rtsStoreLoadMap().then(function (map) {
       if (onMap) onMap(map);
-      return { mix: mix, map: map };
+      /* The list last, and after the map: re-labelling reads every scenario, and the map you
+         were playing should come back before a menu you may not even open. */
+      return rtsStoreLoadScen().then(function (scen) {
+        if (onScen) onScen(scen);
+        return { mix: mix, map: map, scen: scen };
+      });
     });
-  }).catch(function () { return { mix: null, map: null }; });
+  }).catch(function () { return { mix: null, map: null, scen: null }; });
 }
 </script>
 <script>/* The map editor - a palette editor, which is the kind Red Alert shipped.
@@ -16880,6 +16973,10 @@ function rtsRestoreSaved() {
     if (!mapNote) return;
     if (map) { mapNote.textContent = rtsMapDescribe(map); mapNote.className = 'ok'; }
     else { mapNote.textContent = mapBefore; mapNote.className = ''; }
+  }, function (scen) {
+    /* The whole scenario list back without the file dialog. Nothing to do when there is none -
+       that is the first visit, and the picker's own instructions are already on screen. */
+    if (scen && typeof rtsMapShowStored === 'function') rtsMapShowStored(scen);
   });
 }
 /* Remembering has to be undoable, or a bad file becomes permanent. */
