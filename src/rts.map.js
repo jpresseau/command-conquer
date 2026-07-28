@@ -202,6 +202,7 @@ function _rtsMapListShow(maps, note, remember) {
       if (typeof rtsStoreSaveMap === 'function') rtsStoreSaveMap(M);
       note.textContent = rtsMapDescribe(M);
       note.className = 'ok';
+      if (typeof rtsPickDoneMap === 'function') rtsPickDoneMap();
     });
   };
   wrap.appendChild(sel); wrap.appendChild(btn);
@@ -349,6 +350,7 @@ function rtsMapPicked(input) {
       say('Found ' + r.maps.length + ' scenario' + (r.maps.length === 1 ? '' : 's') + ' in ' +
           mixF.name + '. Choose one:', 'ok');
       _rtsMapListShow(r.maps, note);
+      if (typeof rtsPickDoneMap === 'function') rtsPickDoneMap();
     });
     return;
   }
@@ -359,6 +361,7 @@ function rtsMapPicked(input) {
     window._RTS_MAP = M;
     if (typeof rtsStoreSaveMap === 'function') rtsStoreSaveMap(M);   /* chosen once, not every visit */
     say(rtsMapDescribe(M), 'ok');
+    if (typeof rtsPickDoneMap === 'function') rtsPickDoneMap();
   }, function (e) {
     rtsMapClear();
     say('could not read that map: ' + ((e && e.message) || e), 'bad');
