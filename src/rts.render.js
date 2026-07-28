@@ -1058,13 +1058,27 @@ function _rtsRDispose() {
 function _rtsMakeIcons(side) {
   var S = _rtsSprites(), out = {}, i;
   function plate(src, pad) {
-    var n = 64, t = _sprMake(n, n), g = t.g;
+    /* 128, not 64. The tile displays these at about 103px, so a 64px plate was being blown up
+       1.6x by CSS - and worse, the sprite was nearest-neighbour DOWNSCALED into it first (a
+       72px building squeezed to 52), which drops pixels irregularly and is what made the
+       cameos look chewed rather than merely soft. Building at 128 means the sprite is never
+       reduced and the browser's final fit is a downscale, which is the direction that is
+       forgiving. */
+    var n = 160, t = _sprMake(n, n), g = t.g;
     g.imageSmoothingEnabled = false;
     var grd = g.createLinearGradient(0, 0, 0, n);
     grd.addColorStop(0, '#2b3a4c'); grd.addColorStop(1, '#131b25');
     g.fillStyle = grd; g.fillRect(0, 0, n, n);
+    /* 160 is not arbitrary: the largest building sprite is 72px, and 72*2 + 8*2 of padding is
+       exactly 160. One size smaller and the biggest cameos fall back to 1x and end up drawn
+       SMALLER than the 64px plate managed, which is how the first attempt at this traded
+       sharpness for size. */
     var m = n - (pad || 8) * 2;
+    /* Whole-number scaling only. A pixel-art sprite enlarged by 1.7 gives some source pixels two
+       screen pixels and others one, which reads as a wobble along every straight edge; clamping
+       to an integer keeps them uniform. Below 1 there is nothing to clamp to. */
     var sc = Math.min(m / src.width, m / src.height);
+    sc = sc >= 1 ? Math.floor(sc) : sc;
     var w = Math.round(src.width * sc), h = Math.round(src.height * sc);
     g.drawImage(src, Math.round((n - w) / 2), Math.round((n - h) / 2), w, h);
     return t.c.toDataURL('image/png');

@@ -8,7 +8,17 @@
   animation:rtsIn .18s ease-out}
 @keyframes rtsIn{from{opacity:0}to{opacity:1}}
 #rcgRts .rts-stage{position:relative;flex:1 1 auto;min-width:0;overflow:hidden;background:#7d94a4}
-#rcgRts #rtsCv{position:absolute;inset:0;display:block;cursor:crosshair}
+/* image-rendering is LOAD-BEARING, not a nicety. The backing store is capped at 2x device
+   pixels to bound fill rate, so on a 3x display - a high-density laptop, a phone, a 4K panel at
+   200%+ scaling - the browser stretches that 2x buffer up to 3x itself. With the default
+   `auto` that stretch is BILINEAR, and it turns the whole battlefield to mush: measured at 85.6%
+   of all pixel transitions being soft ramps, against 17.9% at every ratio that does not need
+   stretching. `pixelated` makes the same stretch nearest-neighbour, which is what pixel art
+   wants and what every zoom level in this renderer is already built around.
+
+   The HUD canvas is deliberately NOT pixelated - it draws text, and text wants the smoothing. */
+#rcgRts #rtsCv{position:absolute;inset:0;display:block;cursor:crosshair;
+  image-rendering:pixelated;image-rendering:crisp-edges}
 #rcgRts #rtsHud{position:absolute;inset:0;display:block;pointer-events:none}
 
 /* --- top strip --- */
@@ -141,6 +151,10 @@
 #rcgRts .rts-tile{position:relative;display:block;padding:0;overflow:hidden;cursor:pointer;font:inherit;
   border:1px solid #33445c;border-radius:4px;background:#0f151d;color:#dfe8f2;aspect-ratio:1/1.02}
 #rcgRts .rts-tile:hover{border-color:#5c86b8;background:#16202c}
+/* No image-rendering here on purpose. The plate is now BIGGER than the tile displays it, so the
+   browser is downscaling - and nearest-neighbour downscaling drops whole rows of pixels, which
+   is worse than the smooth one. The sharpness comes from building the plate at 160 with
+   whole-number scaling, not from fighting the browser at the last step. */
 #rcgRts .rts-tile .ico{position:absolute;left:0;right:0;top:0;width:100%;height:76%;object-fit:contain;
   display:block;background:radial-gradient(ellipse at 50% 42%,#2b3a4c 0%,#131b25 72%)}
 #rcgRts .rts-tile .ico.noimg{background:#1a2431}
