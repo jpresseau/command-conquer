@@ -323,16 +323,19 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
    also keeps the big element the one the layout tests measure. */
 #rtsHome .eyebrow{margin:0 0 -14px;font-size:clamp(11px,2vw,14px);letter-spacing:clamp(3px,1.2vw,7px);
   text-transform:uppercase;color:#cfa445;opacity:.9;font-weight:700}
-/* The original title screen, when the player's own files supply it. Capped at its native 640px
-   rather than stretched: it is 1996 pixel art and scaling it up past 1:1 turns crisp lettering
-   into mush. image-rendering:pixelated keeps the edges hard on high-DPI screens, where the
-   browser would otherwise smooth it back into mush at exactly 1:1. */
-/* border-box matters: the 1px border below is OUTSIDE a content-box width, so `width:100%`
-   plus a border is 100% + 2px and the page scrolls sideways on a phone. */
-#rtsTitleArt{display:block;box-sizing:border-box;width:min(100%,640px);max-width:100%;
-  height:auto;margin:0 auto;
-  image-rendering:pixelated;image-rendering:crisp-edges;
-  border:1px solid #2b3a4d;border-radius:6px;box-shadow:0 14px 40px rgba(0,0,0,.5)}
+/* The original title screen, when the player's own files supply it. It fills the window rather
+   than sitting at its native 640x400 in the middle of one: this IS the title screen, not an
+   illustration on a page about one.
+
+   Scaled up, not cropped. The plate is 8:5 and a window rarely is, so `cover` would push the
+   red panel - which the menu is positioned inside by percentage - partly off the screen.
+   `min(100vw, 160vh)` on an 8:5 box is the largest whole plate that fits either way round.
+
+   image-rendering:pixelated is what makes enlarging it legitimate: the enlargement is
+   nearest-neighbour, so 1996 pixel art gets bigger pixels rather than a bilinear smear. Without
+   it, upscaling really would turn the lettering to mush, which is why it used to be capped. */
+#rtsTitleArt{display:block;width:100%;height:100%;
+  image-rendering:pixelated;image-rendering:crisp-edges}
 /* REQUIRED, not tidiness. The `hidden` attribute works through the UA rule [hidden]{display:none},
    which an author `display:block` outranks - so without this the element renders as an empty
    bordered strip for every player who has not loaded their archives, which is most of them. */
@@ -354,40 +357,76 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 
    Only when there IS art: without it the menu stays in the ordinary flow it has always been in,
    and #rtsTitleWrap is an empty inline box. */
+/* With art, the plate IS the page: no gap, no padding, nothing scrolling behind it. */
+#rtsHome.hasart{gap:0;padding:0;overflow:hidden}
 #rtsTitleWrap{position:relative;width:min(100%,640px);margin:0 auto}
+#rtsHome.hasart #rtsTitleWrap{
+  width:min(100vw,160vh);aspect-ratio:640/400;max-width:none;margin:auto;
+  /* cqw units below are 1% of THIS box, so everything in the panel scales with the plate
+     instead of with the viewport - the two are no longer the same thing now that the plate is
+     letterboxed on wide windows. */
+  container-type:inline-size}
 #rtsHome.hasart #rtsTitleMenu{
   position:absolute;left:25.31%;top:34.50%;width:49.53%;height:59.00%;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  /* The gap is tight on purpose. Worst case is seven blocks - three difficulty buttons, their
-     note, two army buttons, their note, then START, RESUME and MAP EDITOR - and at a 7px gap
-     that stack measured 256px against a 236px panel, so it centred itself and had its top and
-     bottom clipped by 10px each. Six gaps at 4px instead of 7 buys back the 18px. */
-  gap:clamp(2px,0.6vw,4px);margin:0;padding:0 2%;box-sizing:border-box;overflow:hidden;
-  /* the panel is 317px wide at 1:1 and shrinks with the plate, so everything inside is sized
-     off the viewport rather than fixed - the plate is min(100%,640px), so below 640 the two
-     track each other closely enough */
-  font-size:clamp(7px,1.15vw,11px)}
-#rtsHome.hasart #rtsTitleMenu .diff{margin:0;gap:clamp(2px,0.5vw,5px)}
-#rtsHome.hasart #rtsTitleMenu .diff button{padding:clamp(3px,0.7vw,6px) clamp(4px,1vw,10px);
-  font-size:1em;letter-spacing:.12em}
-#rtsHome.hasart #rtsTitleMenu .diffnote{margin:0;font-size:.92em;line-height:1.15;text-align:center;
-  /* two lines at most: the notes are a sentence and the panel is not tall enough for a paragraph */
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-/* Trimming the three big buttons rather than the type: at a 9px vertical pad the worst-case
-   stack still came out 238px against a 236px panel, and 1px of slack is not slack. 7px gives
-   the same shape with 12px in hand. */
-#rtsHome.hasart #rtsTitleMenu .go{margin:clamp(1px,0.4vw,3px) 0 0;
-  padding:clamp(4px,0.85vw,7px) clamp(10px,2.4vw,22px);font-size:1.15em;letter-spacing:.18em}
+  display:flex;flex-direction:column;align-items:center;
+  /* `safe center` again, and for the same reason as #rtsHome: centred content taller than its
+     box overflows off BOTH ends and the top cannot be scrolled back to. The panel now holds the
+     menu AND both loaders AND the controls tile, so overflowing is the normal case, not the
+     edge case - it centres while it fits and scrolls from the top when it does not. */
+  justify-content:center;justify-content:safe center;
+  gap:1cqw;margin:0;padding:1.5cqw 2cqw;box-sizing:border-box;
+  overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;
+  /* Floor of 9px so the smallest plate is still readable, ceiling of 15px so a 4K window does
+     not render a 40px sentence. Between them it tracks the plate exactly. */
+  font-size:clamp(9px,1.15cqw,15px)}
+/* A cue that the panel scrolls. Its content is taller than it at every window size now, and a
+   hard cut at the panel's bottom edge looks like the end of the list rather than the middle of
+   it - the map loader and the controls sit below that line. A short fade into the panel's own
+   fill colour (27,0,0, straight out of title.pcx) reads as "there is more" without a widget.
+   pointer-events:none or it would eat clicks on whatever it is fading over. */
+#rtsHome.hasart #rtsTitleWrap::after{content:'';position:absolute;pointer-events:none;
+  left:25.31%;width:49.53%;bottom:6.5%;height:4%;
+  background:linear-gradient(rgba(27,0,0,0),rgba(27,0,0,.9))}
+/* a thin scrollbar in the panel's own colours rather than a fat grey system one across the art */
+#rtsHome.hasart #rtsTitleMenu{scrollbar-width:thin;scrollbar-color:#6a2020 transparent}
+#rtsHome.hasart #rtsTitleMenu::-webkit-scrollbar{width:6px}
+#rtsHome.hasart #rtsTitleMenu::-webkit-scrollbar-thumb{background:#6a2020;border-radius:3px}
+#rtsHome.hasart #rtsTitleMenu .diff{margin:0;gap:.7cqw}
+#rtsHome.hasart #rtsTitleMenu .diff button{padding:.55em 1em;font-size:1em;letter-spacing:.12em}
+#rtsHome.hasart #rtsTitleMenu .diffnote{margin:0;font-size:.92em;line-height:1.2;text-align:center}
+#rtsHome.hasart #rtsTitleMenu .go{margin:.3cqw 0 0;padding:.6em 1.8em;font-size:1.15em;
+  letter-spacing:.18em}
 #rtsHome.hasart #rtsTitleMenu .go small{font-size:.72em;letter-spacing:.06em}
 
-/* BELOW ~600px the plate is under 600 CSS px wide, its panel under 300, and five buttons plus
-   two notes stop fitting however small the type gets. Rather than overflow it, the menu drops
-   back out to the ordinary stacked layout under the picture - which is what everyone without
-   the artwork sees anyway, so it is a known-good state rather than a second design. */
+/* The loaders and the controls tile come inside the panel too. They keep their card treatment -
+   it is what makes them read as panels rather than as loose text on the artwork - but they are
+   sized off the plate like everything else in here, and they take the panel's full width rather
+   than their own 560px measure, which the panel may be narrower than. */
+#rtsHome.hasart #rtsTitleMenu .artload,
+#rtsHome.hasart #rtsTitleMenu .keys{width:100%;max-width:none;margin:.6cqw 0 0;
+  font-size:1em;gap:.8em;padding:1em 1.1em;border-radius:.7em}
+#rtsHome.hasart #rtsTitleMenu .artbtn{padding:.6em 1.2em;font-size:.92em}
+#rtsHome.hasart #rtsTitleMenu #rtsMapList select,
+#rtsHome.hasart #rtsTitleMenu #rtsMapList button{font-size:.92em;padding:.5em .8em}
+#rtsHome.hasart #rtsTitleMenu .keys > dl{gap:.55em 1.2em;margin:1em 0 0}
+#rtsHome.hasart #rtsTitleMenu .keys summary{font-size:.92em}
+#rtsHome.hasart #rtsTitleMenu .keys dt.hd{font-size:.92em;margin-top:.7em;padding-top:.7em}
+
+/* BELOW 640px the plate's panel is under 300px across and nothing in here fits at any type
+   size. Rather than overflow it, everything drops back out to the ordinary stacked layout under
+   the picture - which is what a player without the artwork sees anyway, so it is a known-good
+   state rather than a second design to maintain. */
 @media (max-width:640px){
+  #rtsHome.hasart{gap:22px;padding:24px;overflow:auto}
+  #rtsHome.hasart #rtsTitleWrap{width:min(100%,640px);aspect-ratio:auto;container-type:normal}
+  #rtsHome.hasart #rtsTitleArt{height:auto}
   #rtsHome.hasart #rtsTitleMenu{position:static;left:auto;top:auto;width:auto;height:auto;
-    padding:0;font-size:inherit;overflow:visible}
-  #rtsHome.hasart #rtsTitleMenu .diffnote{display:block;-webkit-line-clamp:none}
+    padding:0;font-size:inherit;overflow:visible;gap:14px}
+  #rtsHome.hasart #rtsTitleMenu .artload,
+  #rtsHome.hasart #rtsTitleMenu .keys{width:min(100%,560px);font-size:12px;padding:14px 16px;
+    border-radius:9px;gap:9px}
+  /* nothing is scrolling inside a panel down here, so the cue would be a stray red smear */
+  #rtsHome.hasart #rtsTitleWrap::after{display:none}
 }
 #rtsHome .sub{margin:-12px 0 0;font-size:clamp(12px,2.2vw,15px);letter-spacing:3px;opacity:.62;text-transform:uppercase}
 #rtsHome .go{padding:14px 46px;border:0;border-radius:8px;background:#2e6fd0;color:#fff;font-size:17px;font-weight:700;
@@ -429,8 +468,6 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 #rtsHome .diff button:hover{background:#1d2735}
 #rtsHome .diff button.on{background:#2e6fd0;border-color:#6fb0ff;color:#fff}
 #rtsHome .diffnote{margin:-14px 0 0;font-size:12.5px;opacity:.62;min-height:1.4em}
-#rtsHome .foot{font-size:11px;opacity:.4;max-width:560px;line-height:1.6}
-#rtsHome .foot a{color:#8fd0ff}
 #rtsErr{display:none;max-width:520px;padding:12px 16px;border:1px solid #7d3b34;border-radius:8px;
   background:#251513;color:#ffb4a6;font-size:12.5px;text-align:left;white-space:pre-wrap}
 /* A phone held sideways has ~390px of height and the shell wants ~550px before it reaches the
@@ -526,12 +563,6 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </dl>
   </details>
   <div id="rtsErr"></div>
-  <p class="foot">An original game in the spirit of the mid-90s base-building RTS. Not affiliated with,
-    and containing no assets from, any existing game — everything it ships with is drawn and
-    synthesized in code. The two loaders above are the exception: they read files you already
-    own, in your browser, and nothing is ever uploaded. They <b>are</b> kept, though — the
-    archives and the map you pick are copied into this browser's storage so you only choose them
-    once, and <b>forget these</b> next to the loader erases them again.</p>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -17045,14 +17076,24 @@ function rtsShowTitleArt(){
     var el = document.querySelector('#rtsHome ' + sel);
     if (el) el.hidden = true;
   });
-  /* Move the menu into the plate's empty panel. Done here rather than in the markup so that a
-     player with no artwork keeps the exact layout they had - the overlay only exists when there
-     is a bezel to sit inside. */
+  /* Move the menu into the plate's empty panel, and the loaders and the controls tile in after
+     it - the panel is the whole screen's content area now, not just somewhere to put buttons.
+     Done here rather than in the markup so that a player with no artwork keeps the exact layout
+     they had: the overlay only exists when there is a bezel to sit inside.
+
+     ORDER MATTERS. The menu goes first because it is what the screen is for; the loaders and
+     the reference list follow it, in the order they already appear on the page. Appending each
+     in turn preserves that, and appendChild MOVES a node rather than copying it, so nothing is
+     left behind. */
   var wrap = document.getElementById('rtsTitleWrap');
   var menu = document.getElementById('rtsTitleMenu');
   if (wrap && menu && menu.parentNode !== wrap) {
     wrap.appendChild(menu);
-    document.getElementById('rtsHome').classList.add('hasart');
+    var home = document.getElementById('rtsHome');
+    [].forEach.call(home.querySelectorAll('.artload, #rtsKeys'), function (el) {
+      menu.appendChild(el);
+    });
+    home.classList.add('hasart');
   }
 }
 
