@@ -243,14 +243,51 @@ function _mixBuilding(key, side) {
      damaged frame is taken as the START OF THE SECOND HALF, which is the same rule the yaml
      states for those (`Start: 9` on a 9-long silo stage list). For a plain 2-frame building
      that lands on frame 1, which is the common case. */
-  var dmg = null;
+  var dmg = null, half = s.count >> 1;
   if (s.count >= 2) {
-    var half = s.count >> 1;
     var fr = s.frame(s.count === 2 ? 1 : half);
     if (fr) dmg = _mixFrameToCanvas(fr, s.width, s.height, pal);
   }
-  return { c: c, dmg: dmg, head: Math.max(0, s.height - footD) };
+  var out = { c: c, dmg: dmg, head: Math.max(0, s.height - footD), half: half, n: s.count };
+
+  /* Every frame, for the buildings that use more than two. Baked here rather than on demand
+     because decoding an SHP frame mid-frame is a stall you can see, and the whole set is small:
+     the largest is the Chronosphere at 58 frames of 48x48. Buildings not in the table keep just
+     the two canvases above. */
+  if (RTS_MIX_BLDANIM[key]) {
+    out.frames = [];
+    for (var f = 0; f < s.count; f++) {
+      var ff = s.frame(f);
+      out.frames.push(ff ? _mixFrameToCanvas(ff, s.width, s.height, pal) : c);
+    }
+  }
+  return out;
 }
+
+/* ------------------------------------------------- moving parts, per building --
+   What each animated structure's extra frames ARE. Transcribed from
+   mods/ra/sequences/structures.yaml rather than guessed, because the layouts do not follow one
+   rule - some count from 0, some from 1, and the damaged set is a fixed offset that happens to
+   equal half the frame count in every case here (which is what `half` above already computes).
+
+     loop    cycles forever, whatever the building is doing        (Barracks: 10 frames)
+     active  cycles only while the building is DOING its job       (Depot, Helipad, Tesla, ...)
+     fill    picks a frame by how full the house's stores are      (Silo: 5 stages)
+     facing  picks a frame by where the thing is AIMED             (Gun Turret: 32 facings)
+
+   `active` is the interesting one: a building that animates constantly is wallpaper, while one
+   that starts moving when it goes to work tells you something. */
+var RTS_MIX_BLDANIM = {
+  barracks: { kind: 'loop',   start: 0, len: 10, fps: 8 },
+  depot:    { kind: 'active', start: 1, len: 6,  fps: 10 },
+  helipad:  { kind: 'active', start: 1, len: 6,  fps: 10 },
+  tesla:    { kind: 'active', start: 1, len: 9,  fps: 14 },
+  pdox:     { kind: 'active', start: 0, len: 29, fps: 14 },
+  iron:     { kind: 'active', start: 0, len: 11, fps: 10 },
+  yard:     { kind: 'active', start: 1, len: 25, fps: 12 },
+  silo:     { kind: 'fill',   start: 0, len: 5 },
+  turret:   { kind: 'facing', start: 0, facings: 32 }
+};
 
 /* ----------------------------------------------------------------- units --
    RA stores vehicles at 32 facings, which is what this project already bakes since the facing
