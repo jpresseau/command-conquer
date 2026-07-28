@@ -104,10 +104,14 @@ var RTS_MIX_BLD = {
   barracks:'barr', radar:'dome', lab:'atek', depot:'fix', silo:'silo',
   helipad:'hpad', turret:'gun', rocketpit:'sam', pillbox:'pbox',
   flametower:'ftur', kennel:'kenn', wall:'brik',
-  /* The three superweapons RA actually shipped as buildings. There is no GPS structure in the
-     original - the satellite is a Tech Center power rather than a thing you place - so the
-     uplink keeps its procedural model, which is what a missing entry here means. */
-  mslo:'mslo', iron:'iron', pdox:'pdox'
+  /* The Tesla Coil and the two shipyards, which were drawn procedurally only because nobody had
+     looked for their art: tsla, syrd and spen are all sitting in conquer.mix. */
+  tesla:'tsla', navalyard:'syrd', subpen:'spen',
+  /* Two of the three superweapons RA shipped as buildings. The Missile Silo's art is in the
+     expansion archives rather than conquer.mix, and there is no GPS structure in the original at
+     all - the satellite is a Tech Center power rather than a thing you place. Both keep their
+     procedural models, which is what a missing entry here means. */
+  iron:'iron', pdox:'pdox'
 };
 var RTS_MIX_UNIT = {
   buggy:'jeep', light:'1tnk', tank:'2tnk', heavy:'4tnk', arty:'arty',
@@ -228,7 +232,24 @@ function _mixBuilding(key, side) {
   var pal = _mixTeamPal(RTS_MIX.pal, RTS_PAL.team[side][0]);
   var c = _mixFrameToCanvas(s.frame(0), s.width, s.height, pal);
   var d = rtsStructDef(key), footD = d.h * RTS_TS;
-  return { c: c, head: Math.max(0, s.height - footD) };
+  /* THE SECOND FRAME IS THE DAMAGED BUILDING. Nearly every structure SHP in the game is two
+     frames - scorched, holed, smoking - and drawing only frame 0 meant a base under fire looked
+     untouched right up until it exploded. That is not just plainer, it is less readable: the
+     original tells you which building is about to go at a glance.
+
+     Frame 1 is the convention for a two-frame building, from mods/ra/sequences/structures.yaml
+     (`damaged-idle: Start: 1`). The richer sets are not simply "frame 1" - the Gun Turret's 128
+     frames are 64 facings twice over, the Silo's 10 are five fill levels twice over - so the
+     damaged frame is taken as the START OF THE SECOND HALF, which is the same rule the yaml
+     states for those (`Start: 9` on a 9-long silo stage list). For a plain 2-frame building
+     that lands on frame 1, which is the common case. */
+  var dmg = null;
+  if (s.count >= 2) {
+    var half = s.count >> 1;
+    var fr = s.frame(s.count === 2 ? 1 : half);
+    if (fr) dmg = _mixFrameToCanvas(fr, s.width, s.height, pal);
+  }
+  return { c: c, dmg: dmg, head: Math.max(0, s.height - footD) };
 }
 
 /* ----------------------------------------------------------------- units --
