@@ -18,8 +18,17 @@ var RTS_MIX = {
   /* the archives worth asking for, and what each is needed for */
   /* sounds/speech carry no artwork - they are here because _mixShp and the sound lookup both
      walk this list, and an archive nobody looks in is an archive nobody can play. */
+  /* THE EXPANSIONS COME LAST, DELIBERATELY. Counterstrike and Aftermath were already being
+     opened - RTS_MIX_NEST descends into them, and the map scanner has always read scenarios out
+     of them - but nothing ever looked in them for a sprite, so art that only exists there
+     (mslo.shp, the Missile Silo) had no chance of being found no matter what the player owned.
+     They are appended rather than prepended because _mixShp takes the first archive that has
+     the name: last means "fill the gaps in the base game", not "reskin it". Aftermath does
+     re-ship some base sprites, and quietly swapping those under a player who never installed
+     it would be a change nobody asked for. */
   want: ['conquer.mix', 'temperat.mix', 'snow.mix', 'local.mix', 'hires.mix', 'sounds.mix',
-         'speech.mix', 'scores.mix', 'allies.mix', 'russian.mix'],
+         'speech.mix', 'scores.mix', 'allies.mix', 'russian.mix',
+         'expand.mix', 'expand2.mix', 'hires1.mix', 'lores1.mix', 'nchires.mix'],
   open: {},                     /* name -> parsed archive */
   /* name -> the BYTES that archive was opened from, for the archives the game actually
      consults. Kept so persistence can store what is used rather than what was picked: point
@@ -108,11 +117,13 @@ var RTS_MIX_BLD = {
   /* The Tesla Coil and the two shipyards, which were drawn procedurally only because nobody had
      looked for their art: tsla, syrd and spen are all sitting in conquer.mix. */
   tesla:'tsla', navalyard:'syrd', subpen:'spen',
-  /* Two of the three superweapons RA shipped as buildings. The Missile Silo's art is in the
-     expansion archives rather than conquer.mix, and there is no GPS structure in the original at
-     all - the satellite is a Tech Center power rather than a thing you place. Both keep their
-     procedural models, which is what a missing entry here means. */
-  iron:'iron', pdox:'pdox'
+  /* The superweapons. mslo.shp is in the expansion rather than conquer.mix - measured, not
+     assumed: it is absent from all eleven base archives - so it draws its real sprite only for a
+     player who owns Counterstrike or Aftermath and falls back to the procedural model for
+     everyone else, exactly as an unowned theatre does. There is no GPS structure in the original
+     at all: the satellite is a Tech Center power rather than a thing you place, so `gps` has no
+     entry here and never will. */
+  iron:'iron', pdox:'pdox', mslo:'mslo'
 };
 var RTS_MIX_UNIT = {
   buggy:'jeep', light:'1tnk', tank:'2tnk', heavy:'4tnk', arty:'arty',
@@ -642,7 +653,10 @@ function rtsMixLoadFiles(files, done) {
    copy found inside something else. */
 var RTS_MIX_NEST = ['conquer.mix', 'local.mix', 'temperat.mix', 'hires.mix', 'lores.mix',
                     'snow.mix', 'interior.mix', 'allies.mix', 'russian.mix', 'general.mix',
-                    'redalert.mix', 'expand.mix', 'expand2.mix',
+                    'redalert.mix', 'expand.mix', 'expand2.mix', 'aftrmath.mix',
+                    /* the expansions' own art archives, one level further in: Aftermath keeps
+                       its sprites in expand2.mix but its sidebar cameos in hires1.mix. */
+                    'hires1.mix', 'lores1.mix', 'nchires.mix',
                     /* the audio: sounds and speech ship loose, the SCORE does not - scores.mix
                        is inside MAIN.MIX, which is why most players have the effects and not
                        the music until they point at that one file. */
