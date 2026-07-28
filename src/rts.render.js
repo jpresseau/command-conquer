@@ -484,6 +484,14 @@ function _rtsRFrame(dt) {
 function _rtsDrawStruct(g, e, TSscale, cell) {
   var R = _rtsR, def = rtsStructDef(e.def);
   var spr = R.spr.bld[e.side][e.def];
+  /* Below half strength the original swaps in the damaged artwork - scorched, holed, smoking.
+     RTS_COND_YELLOW is the same threshold the sim already uses for "hurt" everywhere else, so
+     what you see and what the rules think agree rather than being two separate judgements.
+     Only while it is STANDING: a building still going up shows its clean frame, because the
+     build-up reveal is about progress and a half-built ruin reads as a bug. */
+  if (spr.dmg && !e.building && e.hp < e.maxHp * RTS_COND_YELLOW) {
+    spr = { c: spr.dmg, head: spr.head, dmg: spr.dmg };
+  }
   var px = Math.round(_rtsSX(_rtsWX(e.tx) - RTS_TILE / 2));
   var py = Math.round(_rtsSY(_rtsWX(e.tz) - RTS_TILE / 2));
   var w = Math.round(spr.c.width * TSscale), h = Math.round(spr.c.height * TSscale);

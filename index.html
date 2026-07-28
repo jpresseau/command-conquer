@@ -4705,6 +4705,58 @@ function _sprBuilding(key, side) {
     var real = _mixBuilding(key, side);
     if (real) return real;
   }
+  /* The drawn set gets a damaged look too, or "buildings show their wounds" is a feature only
+     the players who loaded their archives ever see. There is no second hand-drawn sprite to
+     switch to, so one is DERIVED: scorch the finished canvas, punch a few dark holes through
+     it, and let the silhouette stand. Built here, after the real-art path has had its chance,
+     so it costs nothing for anyone using the originals. */
+  var made = _sprBuildingClean(key, side);
+  made.dmg = _sprBldDamaged(made.c, key);
+  return made;
+}
+
+/* Take a finished building canvas and make it look hit: darken it unevenly, burn a few holes
+   through the roof, and leave soot around them. Deterministic per key, so a given building
+   always breaks the same way rather than shimmering between frames.
+
+   NOT _sprScorch - that name was already taken further down by the ground scorch marks, and
+   declaring it twice silently replaced one with the other. The only symptom was every
+   procedurally-drawn building handing back an ARRAY where a canvas was expected. */
+function _sprBldDamaged(src, key) {
+  var t = _sprMake(src.width, src.height), g = t.g;
+  g.drawImage(src, 0, 0);
+  var W = src.width, H = src.height, seed = 0;
+  for (var q = 0; q < key.length; q++) seed = (seed * 31 + key.charCodeAt(q)) & 0xffff;
+
+  /* uneven soot, only where the building actually is - composited so it cannot spill onto
+     the transparent surround and give the sprite a square halo */
+  g.globalCompositeOperation = 'source-atop';
+  for (var y = 0; y < H; y += 2) {
+    for (var x = 0; x < W; x += 2) {
+      var n = _sprVN(x, y, 7, seed + 3);
+      if (n < 0.42) continue;
+      g.globalAlpha = 0.16 + (n - 0.42) * 0.5;
+      _sprRect(g, x, y, 2, 2, n > 0.8 ? '#1a1410' : '#2b2420');
+    }
+  }
+  g.globalAlpha = 1;
+
+  /* holes: a handful of dark bites out of the upper half, where a roof would be */
+  for (var i = 0; i < 5; i++) {
+    var hx = W * (0.18 + _sprHash(i, 1, seed) * 0.64);
+    var hy = H * (0.15 + _sprHash(i, 2, seed) * 0.5);
+    var hr = Math.max(2, Math.min(W, H) * (0.05 + _sprHash(i, 3, seed) * 0.06));
+    g.globalAlpha = 0.85;
+    _sprEll(g, hx, hy, hr, hr * 0.7, '#140f0c');
+    g.globalAlpha = 0.4;
+    _sprEll(g, hx + hr * 0.4, hy + hr * 0.5, hr * 0.9, hr * 0.6, '#3a2a1e');
+  }
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'source-over';
+  return t.c;
+}
+
+function _sprBuildingClean(key, side) {
   var def = rtsStructDef(key), TM = RTS_PAL.team[side];
   var W = def.w * RTS_TS, D = def.h * RTS_TS;
   var C = RTS_PAL.conc, S = RTS_PAL.steel, DK = RTS_PAL.dark, B = RTS_PAL.bld[side];
@@ -5904,10 +5956,14 @@ var RTS_MIX_BLD = {
   barracks:'barr', radar:'dome', lab:'atek', depot:'fix', silo:'silo',
   helipad:'hpad', turret:'gun', rocketpit:'sam', pillbox:'pbox',
   flametower:'ftur', kennel:'kenn', wall:'brik',
-  /* The three superweapons RA actually shipped as buildings. There is no GPS structure in the
-     original - the satellite is a Tech Center power rather than a thing you place - so the
-     uplink keeps its procedural model, which is what a missing entry here means. */
-  mslo:'mslo', iron:'iron', pdox:'pdox'
+  /* The Tesla Coil and the two shipyards, which were drawn procedurally only because nobody had
+     looked for their art: tsla, syrd and spen are all sitting in conquer.mix. */
+  tesla:'tsla', navalyard:'syrd', subpen:'spen',
+  /* Two of the three superweapons RA shipped as buildings. The Missile Silo's art is in the
+     expansion archives rather than conquer.mix, and there is no GPS structure in the original at
+     all - the satellite is a Tech Center power rather than a thing you place. Both keep their
+     procedural models, which is what a missing entry here means. */
+  iron:'iron', pdox:'pdox'
 };
 var RTS_MIX_UNIT = {
   buggy:'jeep', light:'1tnk', tank:'2tnk', heavy:'4tnk', arty:'arty',
@@ -6028,7 +6084,24 @@ function _mixBuilding(key, side) {
   var pal = _mixTeamPal(RTS_MIX.pal, RTS_PAL.team[side][0]);
   var c = _mixFrameToCanvas(s.frame(0), s.width, s.height, pal);
   var d = rtsStructDef(key), footD = d.h * RTS_TS;
-  return { c: c, head: Math.max(0, s.height - footD) };
+  /* THE SECOND FRAME IS THE DAMAGED BUILDING. Nearly every structure SHP in the game is two
+     frames - scorched, holed, smoking - and drawing only frame 0 meant a base under fire looked
+     untouched right up until it exploded. That is not just plainer, it is less readable: the
+     original tells you which building is about to go at a glance.
+
+     Frame 1 is the convention for a two-frame building, from mods/ra/sequences/structures.yaml
+     (`damaged-idle: Start: 1`). The richer sets are not simply "frame 1" - the Gun Turret's 128
+     frames are 64 facings twice over, the Silo's 10 are five fill levels twice over - so the
+     damaged frame is taken as the START OF THE SECOND HALF, which is the same rule the yaml
+     states for those (`Start: 9` on a 9-long silo stage list). For a plain 2-frame building
+     that lands on frame 1, which is the common case. */
+  var dmg = null;
+  if (s.count >= 2) {
+    var half = s.count >> 1;
+    var fr = s.frame(s.count === 2 ? 1 : half);
+    if (fr) dmg = _mixFrameToCanvas(fr, s.width, s.height, pal);
+  }
+  return { c: c, dmg: dmg, head: Math.max(0, s.height - footD) };
 }
 
 /* ----------------------------------------------------------------- units --
@@ -14221,6 +14294,14 @@ function _rtsRFrame(dt) {
 function _rtsDrawStruct(g, e, TSscale, cell) {
   var R = _rtsR, def = rtsStructDef(e.def);
   var spr = R.spr.bld[e.side][e.def];
+  /* Below half strength the original swaps in the damaged artwork - scorched, holed, smoking.
+     RTS_COND_YELLOW is the same threshold the sim already uses for "hurt" everywhere else, so
+     what you see and what the rules think agree rather than being two separate judgements.
+     Only while it is STANDING: a building still going up shows its clean frame, because the
+     build-up reveal is about progress and a half-built ruin reads as a bug. */
+  if (spr.dmg && !e.building && e.hp < e.maxHp * RTS_COND_YELLOW) {
+    spr = { c: spr.dmg, head: spr.head, dmg: spr.dmg };
+  }
   var px = Math.round(_rtsSX(_rtsWX(e.tx) - RTS_TILE / 2));
   var py = Math.round(_rtsSY(_rtsWX(e.tz) - RTS_TILE / 2));
   var w = Math.round(spr.c.width * TSscale), h = Math.round(spr.c.height * TSscale);
