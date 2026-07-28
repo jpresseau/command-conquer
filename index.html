@@ -308,6 +308,58 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
    which an author `display:block` outranks - so without this the element renders as an empty
    bordered strip for every player who has not loaded their archives, which is most of them. */
 #rtsTitleArt[hidden]{display:none}
+
+/* THE MENU GOES INSIDE THE PICTURE.
+
+   title.pcx is a menu BEZEL: a moulded frame around a large empty panel, because Red Alert drew
+   its buttons into that panel at runtime from separate art. Showing the plate on its own and
+   stacking our own controls underneath left a conspicuous empty hole where the menu obviously
+   belongs, which is exactly how it was reported - "why is this just an image and not a working
+   menu?". So the controls move into the hole.
+
+   The rectangle is MEASURED from title.pcx rather than eyeballed off a screenshot. The panel is
+   outlined in a brighter red than its 27,0,0 fill, and the outline is the only thing in the
+   image that draws an unbroken 300px+ red run: rows 138-142 and 369-373, x 162..478. In a
+   640x400 plate that is left 25.31%, top 34.50%, 49.53% wide, 59.00% tall. Percentages, so it
+   tracks the plate when the plate is scaled down.
+
+   Only when there IS art: without it the menu stays in the ordinary flow it has always been in,
+   and #rtsTitleWrap is an empty inline box. */
+#rtsTitleWrap{position:relative;width:min(100%,640px);margin:0 auto}
+#rtsHome.hasart #rtsTitleMenu{
+  position:absolute;left:25.31%;top:34.50%;width:49.53%;height:59.00%;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  /* The gap is tight on purpose. Worst case is seven blocks - three difficulty buttons, their
+     note, two army buttons, their note, then START, RESUME and MAP EDITOR - and at a 7px gap
+     that stack measured 256px against a 236px panel, so it centred itself and had its top and
+     bottom clipped by 10px each. Six gaps at 4px instead of 7 buys back the 18px. */
+  gap:clamp(2px,0.6vw,4px);margin:0;padding:0 2%;box-sizing:border-box;overflow:hidden;
+  /* the panel is 317px wide at 1:1 and shrinks with the plate, so everything inside is sized
+     off the viewport rather than fixed - the plate is min(100%,640px), so below 640 the two
+     track each other closely enough */
+  font-size:clamp(7px,1.15vw,11px)}
+#rtsHome.hasart #rtsTitleMenu .diff{margin:0;gap:clamp(2px,0.5vw,5px)}
+#rtsHome.hasart #rtsTitleMenu .diff button{padding:clamp(3px,0.7vw,6px) clamp(4px,1vw,10px);
+  font-size:1em;letter-spacing:.12em}
+#rtsHome.hasart #rtsTitleMenu .diffnote{margin:0;font-size:.92em;line-height:1.15;text-align:center;
+  /* two lines at most: the notes are a sentence and the panel is not tall enough for a paragraph */
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* Trimming the three big buttons rather than the type: at a 9px vertical pad the worst-case
+   stack still came out 238px against a 236px panel, and 1px of slack is not slack. 7px gives
+   the same shape with 12px in hand. */
+#rtsHome.hasart #rtsTitleMenu .go{margin:clamp(1px,0.4vw,3px) 0 0;
+  padding:clamp(4px,0.85vw,7px) clamp(10px,2.4vw,22px);font-size:1.15em;letter-spacing:.18em}
+#rtsHome.hasart #rtsTitleMenu .go small{font-size:.72em;letter-spacing:.06em}
+
+/* BELOW ~600px the plate is under 600 CSS px wide, its panel under 300, and five buttons plus
+   two notes stop fitting however small the type gets. Rather than overflow it, the menu drops
+   back out to the ordinary stacked layout under the picture - which is what everyone without
+   the artwork sees anyway, so it is a known-good state rather than a second design. */
+@media (max-width:640px){
+  #rtsHome.hasart #rtsTitleMenu{position:static;left:auto;top:auto;width:auto;height:auto;
+    padding:0;font-size:inherit;overflow:visible}
+  #rtsHome.hasart #rtsTitleMenu .diffnote{display:block;-webkit-line-clamp:none}
+}
 #rtsHome .sub{margin:-12px 0 0;font-size:clamp(12px,2.2vw,15px);letter-spacing:3px;opacity:.62;text-transform:uppercase}
 #rtsHome .vs{font-size:15px;opacity:.9}
 #rtsHome .vs b.p{color:#6fb0ff}
@@ -357,7 +409,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 <body>
 
 <div id="rtsHome">
-  <img id="rtsTitleArt" alt="Command &amp; Conquer: Red Alert" hidden>
+  <div id="rtsTitleWrap"><img id="rtsTitleArt" alt="Command &amp; Conquer: Red Alert" hidden></div>
   <p class="eyebrow">Command &amp; Conquer</p>
   <h1>RED ALERT</h1>
   <p class="sub">Real-Time Strategy</p>
@@ -368,6 +420,9 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
     get flame towers, Tesla coils, attack dogs and Mammoth tanks. Lose your power plants and the whole
     base slows down — and a Tesla coil stops firing altogether. The enemy takes the other army and is
     doing the same thing across the map, with their first attack wave already on a timer.</p>
+  <!-- The menu, as one block, because when the original title art is loaded it moves bodily
+       INSIDE the picture's empty panel - see rtsShowTitleArt. Left here in the flow otherwise. -->
+  <div id="rtsTitleMenu">
   <div class="diff" id="rtsDiff"></div>
   <p class="diffnote" id="rtsDiffNote"></p>
   <div class="diff" id="rtsVoxSide" hidden></div>
@@ -375,6 +430,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE</button>
   <button type="button" class="go resume" id="rtsResume" onclick="rtsLoadGame()" hidden>RESUME BATTLE</button>
   <button type="button" class="go resume" id="rtsEdit" onclick="rtsEdOpen()" hidden>MAP EDITOR<small>draw a battlefield of your own</small></button>
+  </div>
   <p class="artload">
     <label class="artbtn">USE ORIGINAL ARTWORK
       <input type="file" id="rtsMixPick" multiple accept=".mix,.MIX" onchange="rtsMixPicked(this)">
@@ -16959,6 +17015,15 @@ function rtsShowTitleArt(){
     var el = document.querySelector('#rtsHome ' + sel);
     if (el) el.hidden = true;
   });
+  /* Move the menu into the plate's empty panel. Done here rather than in the markup so that a
+     player with no artwork keeps the exact layout they had - the overlay only exists when there
+     is a bezel to sit inside. */
+  var wrap = document.getElementById('rtsTitleWrap');
+  var menu = document.getElementById('rtsTitleMenu');
+  if (wrap && menu && menu.parentNode !== wrap) {
+    wrap.appendChild(menu);
+    document.getElementById('rtsHome').classList.add('hasart');
+  }
 }
 
 function rtsShowEditor(){
