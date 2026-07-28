@@ -279,7 +279,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   /* `safe` is load-bearing, not a nicety. A centred flex column whose content is taller than
      the box overflows in BOTH directions, and the overflow off the TOP cannot be scrolled to -
      the scroll origin is the container's top edge, which the content already started above. So
-     the title, the briefing and the difficulty picker were unreachable at every viewport size,
+     the title and the difficulty picker were unreachable at every viewport size,
      and on a phone you landed with START BATTLE already half cut off. `safe center` centres
      while it fits and pins to the start when it does not, which is what was meant all along.
      Browsers too old to parse it drop this line and keep the plain `center` above. */
@@ -361,9 +361,6 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   #rtsHome.hasart #rtsTitleMenu .diffnote{display:block;-webkit-line-clamp:none}
 }
 #rtsHome .sub{margin:-12px 0 0;font-size:clamp(12px,2.2vw,15px);letter-spacing:3px;opacity:.62;text-transform:uppercase}
-#rtsHome .vs{font-size:15px;opacity:.9}
-#rtsHome .vs b.p{color:#6fb0ff}
-#rtsHome .vs b.e{color:#ff8571}
 #rtsHome .go{padding:14px 46px;border:0;border-radius:8px;background:#2e6fd0;color:#fff;font-size:17px;font-weight:700;
   letter-spacing:1.5px;cursor:pointer;box-shadow:0 10px 34px rgba(46,111,208,.36);transition:transform .12s,background .12s}
 #rtsHome .go:hover{background:#3d84ee;transform:translateY(-1px)}
@@ -397,7 +394,6 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 #rtsHome .keys dt.hd{grid-column:1/-1;margin-top:9px;color:#ffcf6a;font-size:11px;letter-spacing:2px;
   text-transform:uppercase;opacity:.75;border-top:1px solid #223044;padding-top:9px}
 #rtsHome .keys dt.hd:first-child{margin-top:0;border-top:0;padding-top:0}
-#rtsHome .brief{max-width:520px;font-size:13px;opacity:.72;line-height:1.6}
 #rtsHome .diff{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
 #rtsHome .diff button{padding:9px 20px;border:1px solid #2b3a4d;border-radius:7px;background:#141c27;
   color:#9db0c6;font:inherit;font-weight:700;letter-spacing:1px;cursor:pointer;transition:background .12s,border-color .12s}
@@ -417,7 +413,6 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   #rtsHome h1{font-size:clamp(24px,4.2vw,34px);letter-spacing:clamp(4px,1.2vw,8px)}
   #rtsHome .eyebrow{margin:0 0 -8px;font-size:10px;letter-spacing:3px}
   #rtsHome .sub{margin:-6px 0 0;font-size:11px;letter-spacing:2px}
-  #rtsHome .brief,#rtsHome .vs{display:none}
   #rtsHome .diffnote{margin:-6px 0 0}
   #rtsHome .go{padding:11px 34px;font-size:15px}
 }
@@ -430,13 +425,6 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   <p class="eyebrow">Command &amp; Conquer</p>
   <h1>RED ALERT</h1>
   <p class="sub">Real-Time Strategy</p>
-  <p class="vs" id="rtsVs"></p>
-  <p class="brief">Mine <b>ore</b> with harvesters, unload it at a refinery for credits, and spend them
-    on power, production and armour. Pick an army below and it decides what you can build: the
-    <b>Allies</b> get pillboxes, gun turrets, medics, light tanks and helicopters, the <b>Soviets</b>
-    get flame towers, Tesla coils, attack dogs and Mammoth tanks. Lose your power plants and the whole
-    base slows down — and a Tesla coil stops firing altogether. The enemy takes the other army and is
-    doing the same thing across the map, with their first attack wave already on a timer.</p>
   <!-- The menu, as one block, because when the original title art is loaded it moves bodily
        INSIDE the picture's empty panel - see rtsShowTitleArt. Left here in the flow otherwise. -->
   <div id="rtsTitleMenu">
@@ -16997,23 +16985,12 @@ function rtsBuildVoxSide(){
   [].forEach.call(wrap.getElementsByTagName('button'), function (b) {
     b.className = (b.getAttribute('data-v') === cur) ? 'on' : '';
   });
-  rtsPaintVs();
   var have = typeof rtsSndNamed === 'function' && !!rtsSndNamed('yes_sir_soviet_vehicle_1');
   note.textContent = (cur === 'soviet'
     ? 'Soviet: Flame Towers, Tesla Coils, attack dogs, Mammoth tanks.'
     : 'Allied: Pillboxes, gun turrets, medics, light tanks, artillery, helicopters.')
     + ' The enemy takes the other army.'
     + (have ? ' Your units answer in its voices.' : '');
-}
-
-/* "Allied versus Soviet", or the other way round once you pick the other army. Painted rather
-   than written into the markup because which side you are is a choice, and a fixed pair would be
-   wrong for half the players the moment the picker below it exists. */
-function rtsPaintVs(){
-  var el = document.getElementById('rtsVs');
-  if (!el || typeof rtsArmyName !== 'function') return;
-  el.innerHTML = '<b class="p">' + rtsArmyName('player') + '</b>&nbsp;versus&nbsp;<b class="e">' +
-                 rtsArmyName('enemy') + '</b>';
 }
 
 /* Swap our own title card for Westwood's, when the player's files supply it.
