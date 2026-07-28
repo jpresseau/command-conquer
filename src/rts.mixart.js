@@ -57,7 +57,7 @@ function rtsSetTheatre(id) {
   if (RTS_MIX.pals[id]) RTS_MIX.pal = RTS_MIX.pals[id];
   _RTS_SPR = null; _RTS_UFIT = {}; _RTS_USCALE = {};
   _RTS_TREES = null; _RTS_MIXTREES = null; _RTS_TILECACHE = null; _RTS_MIXDEBRIS = null;
-  _RTS_MIXBIB = null; _RTS_SHROUDSPR = null;
+  _RTS_MIXBIB = null; _RTS_SHROUDSPR = null; _RTS_MIXMAKE = null; _RTS_MIXDIE = null;
   return id;
 }
 /* The file extension the current theatre's tiles carry. */
@@ -262,6 +262,73 @@ function _mixBuilding(key, side) {
     }
   }
   return out;
+}
+
+/* ------------------------------------------------------------ dying infantry --
+   RA gives every foot soldier five ways to fall over. From mods/ra/sequences/infantry.yaml:
+
+     die1  288 +8    die2  296 +8    die3  304 +8    die4  312 +12    die5  324 +18
+
+   Unlike everything else about infantry these are NOT per-facing - a man falls the same way
+   whichever direction he was pointing - so there are 54 frames total and the choice between
+   them is just variety.
+
+   Note die1..die5 start where the file's own numbering says, not at a multiple of anything:
+   die4 is 12 long and die5 is 18, so walking them as five equal blocks lands mid-animation. */
+var RTS_MIX_DIE = [ [288, 8], [296, 8], [304, 8], [312, 12], [324, 18] ];
+var _RTS_MIXDIE = null;
+
+function _mixDeath(key, side, variant) {
+  if (!_rtsArtReady()) return null;
+  var d = rtsUnitDef(key);
+  if (!d || d.kind !== 'infantry') return null;
+  var nm = RTS_MIX_UNIT[key];
+  if (!nm) return null;
+  if (!_RTS_MIXDIE) _RTS_MIXDIE = {};
+  var ck = key + '|' + side + '|' + variant;
+  if (_RTS_MIXDIE[ck] !== undefined) return _RTS_MIXDIE[ck];
+  _RTS_MIXDIE[ck] = null;
+  var s = _mixShp(nm + '.shp');
+  var spec = RTS_MIX_DIE[variant % RTS_MIX_DIE.length];
+  if (!s || s.count < spec[0] + spec[1]) return null;
+  var pal = _mixTeamPal(RTS_MIX.pal, RTS_PAL.team[side][0]);
+  var out = [];
+  for (var f = 0; f < spec[1]; f++) {
+    var fr = s.frame(spec[0] + f);
+    if (fr) out.push(_mixFrameToCanvas(fr, s.width, s.height, pal));
+  }
+  return out.length ? (_RTS_MIXDIE[ck] = out) : null;
+}
+
+/* --------------------------------------------------------- under construction --
+   A structure going up. RA ships this as a SEPARATE FILE per building - factmake.shp,
+   powrmake.shp and so on, 21 of the 22 - drawn at exactly the finished building's dimensions,
+   which makes it a straight substitution for the frames we were faking with a clip rectangle.
+
+   The Concrete Wall is the one without: a wall section appears whole, which is correct, and a
+   missing entry here is how that is expressed rather than a special case.
+
+   Frames run assembled-from-nothing to finished, so progress maps straight onto the index. */
+var _RTS_MIXMAKE = null;
+function _mixMake(key, side) {
+  if (!_rtsArtReady()) return null;
+  if (!_RTS_MIXMAKE) _RTS_MIXMAKE = {};
+  var ck = key + '|' + side;
+  if (_RTS_MIXMAKE[ck] !== undefined) return _RTS_MIXMAKE[ck];
+  _RTS_MIXMAKE[ck] = null;
+  var nm = RTS_MIX_BLD[key];
+  if (!nm) return null;
+  var s = _mixShp(nm + 'make.shp');
+  if (!s || !s.count) return null;
+  var pal = _mixTeamPal(RTS_MIX.pal, RTS_PAL.team[side][0]);
+  var out = [];
+  for (var f = 0; f < s.count; f++) {
+    var fr = s.frame(f);
+    if (fr) out.push(_mixFrameToCanvas(fr, s.width, s.height, pal));
+  }
+  if (!out.length) return null;
+  var d = rtsStructDef(key), footD = d.h * RTS_TS;
+  return (_RTS_MIXMAKE[ck] = { frames: out, head: Math.max(0, s.height - footD) });
 }
 
 /* ------------------------------------------------- moving parts, per building --

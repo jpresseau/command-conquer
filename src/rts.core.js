@@ -1574,8 +1574,19 @@ function _rtsKill(e) {
     G.fx.push({ kind:'pop', x:e.x, y:1, z:e.z, t:0, big:1 });
     var ud = rtsUnitDef(e.def);
     if (ud.kind === 'infantry') {
-      G.corpses.push({ x:e.x, z:e.z, v:(e.id * 5) % 3 });
-      if (G.corpses.length > 220) G.corpses.shift();
+      /* The original's own falling-over animation, as an EFFECT rather than by keeping the
+         soldier alive: he is already off the board as far as the rules are concerned, and
+         extending an entity's life to play a picture is how a corpse ends up blocking a path or
+         soaking a shell. The corpse is stamped when the animation finishes instead of now. */
+      var _dv = (e.id * 7) % 5;
+      var _dseq = (typeof _mixDeath === 'function') ? _mixDeath(e.def, e.side, _dv) : null;
+      if (_dseq) {
+        G.fx.push({ kind:'die', x:e.x, y:0, z:e.z, t:0, seq:_dseq,
+                    corpse:{ x:e.x, z:e.z, v:(e.id * 5) % 3 } });
+      } else {
+        G.corpses.push({ x:e.x, z:e.z, v:(e.id * 5) % 3 });
+        if (G.corpses.length > 220) G.corpses.shift();
+      }
     } else {
       /* Take_Damage: half the time a crew member bails out of a wrecked vehicle, wounded and
          running. Not from one that was crushed - there is nobody left to climb out. */
@@ -1821,6 +1832,13 @@ function _rtsAnimAI(dt) {
     var f = G.fx[i];
     var def = RTS_ANIMS[f.kind];
     if (!def || f.t < 0) continue;
+    /* A finished death animation leaves the body. Stamped HERE rather than at the moment of
+       death so the corpse appears under the soldier as he lands, not before he has fallen. */
+    if (f.kind === 'die' && f.corpse && f.t >= def.dur) {
+      G.corpses.push(f.corpse);
+      if (G.corpses.length > 220) G.corpses.shift();
+      f.corpse = null;
+    }
 
     /* An attached animation rides its object and burns it down. */
     if (f.att) {
