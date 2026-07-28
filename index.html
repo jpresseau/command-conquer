@@ -199,30 +199,59 @@
   #rcgRts .rts-tile .nm{font-size:8.5px}
 }
 
-/* ---- the original-artwork loader on the home screen ---------------------- */
-.artload { margin: 14px auto 0; max-width: 560px; font-size: 12px; line-height: 1.5;
-           color: #8b93a0; text-align: left; }
-.artbtn { display: inline-block; margin: 0 0 6px; padding: 7px 14px; cursor: pointer;
-          border: 1px solid #3c4654; border-radius: 3px; background: #1b2027;
-          color: #c8d2dc; font: inherit; font-size: 11px; letter-spacing: 0.08em; }
+/* ---- the original-artwork loader on the home screen ----------------------
+
+   A CARD, and ONE COLUMN. Before, the button was inline and the note flowed
+   around it: the first line started 150px in and every line after it started at
+   the container's left edge, a ragged block that read as broken rather than as a
+   caption. Stacking them gives every line the same left edge and the full width
+   as a measure.
+
+   Two columns - button beside note - was tried first and is tidier once
+   something is loaded, when the note is one short green sentence. It is worse
+   on the visit that matters: with nothing loaded the note is a nine-line
+   paragraph explaining which archives to pick, and squeezing that into 380px
+   beside a button made a tall thin column of text with an empty half-card
+   under the button. One column is the same shape in both states.
+
+   The card treatment is the controls tile's, deliberately: these are the panels
+   on the screen that are not the game, and three different boxes for the same
+   kind of thing is one design too many. */
+.artload { margin: 12px auto 0; width: min(100%, 560px); box-sizing: border-box;
+           display: grid; grid-template-columns: minmax(0, 1fr); gap: 9px;
+           justify-items: start; font-size: 12px; line-height: 1.55;
+           color: #8b93a0; text-align: left;
+           background: rgba(255, 255, 255, 0.035); border: 1px solid #263447;
+           border-radius: 9px; padding: 14px 16px; }
+.artbtn { display: block; margin: 0; padding: 8px 14px; cursor: pointer; white-space: nowrap;
+          border: 1px solid #3c4654; border-radius: 5px; background: #1b2027;
+          color: #c8d2dc; font: inherit; font-size: 11px; font-weight: 600;
+          letter-spacing: 0.1em; text-align: center; transition: background .12s, border-color .12s; }
 .artbtn:hover { background: #232a33; border-color: #55637a; }
+.artbtn:focus-within { outline: 1px solid #8fd0ff; outline-offset: 2px; }
 .artbtn input { display: none; }
+/* the note is a block in its own right now, and must use the whole card */
+.artload > span, .artload > #rtsMapList, .artload > #rtsScenNote { justify-self: stretch; }
 #rtsMixNote.ok, #rtsMapNote.ok, #rtsScenNote.ok  { color: #7fc98a; }
 #rtsMixNote.bad, #rtsMapNote.bad, #rtsScenNote.bad { color: #d08a72; white-space: pre-line; }
-/* the remembered scenario list gets its own line: the map note above it is already saying which
-   map was restored, and one element cannot say both */
-#rtsScenNote { margin-top: 6px; }
+/* the scenario list and its note are appended at runtime, so their own margins would stack on
+   top of the grid gap */
+.artload > #rtsMapList, .artload > #rtsScenNote { margin: 0; }
 /* undoing "remember these files" has to be reachable, or one bad pick is permanent */
 #rtsForget { color: #8fd0ff; margin-left: 4px; }
 
 /* the scenario chooser that appears after searching a .mix archive */
-#rtsMapList { margin: 8px 0 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-#rtsMapList select { max-width: 340px; padding: 5px 8px; border: 1px solid #3c4654;
-                     border-radius: 3px; background: #1b2027; color: #c8d2dc; font: inherit;
+#rtsMapList { display: flex; gap: 8px; align-items: center; }
+/* `min-width:0` is what actually lets it shrink: a flex item's default min-width is auto, which
+   for a <select> is its widest option - sixty-odd scenario names, several of them a sentence
+   long - so the row overflowed the card instead of the select fitting it. */
+#rtsMapList select { flex: 1 1 auto; min-width: 0; padding: 6px 8px; border: 1px solid #3c4654;
+                     border-radius: 5px; background: #1b2027; color: #c8d2dc; font: inherit;
                      font-size: 11px; }
-#rtsMapList button { padding: 5px 14px; border: 1px solid #3c4654; border-radius: 3px;
+#rtsMapList button { flex: 0 0 auto; padding: 6px 16px; border: 1px solid #3c4654; border-radius: 5px;
                      background: #22303f; color: #cfe0f0; font: inherit; font-size: 11px;
-                     letter-spacing: 0.08em; cursor: pointer; }
+                     font-weight: 600; letter-spacing: 0.1em; cursor: pointer;
+                     transition: background .12s; }
 #rtsMapList button:hover { background: #2b3d51; }
 #rtsMapList button:disabled { opacity: 0.5; cursor: progress; }
 
