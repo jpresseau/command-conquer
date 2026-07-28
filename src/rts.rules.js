@@ -484,6 +484,11 @@ var RTS_ANIMS = {
      because the artwork is per-unit and per-variant; the renderer reads f.seq. RA ticks these
      at 80ms and they run 8 to 18 frames, so 0.9s covers the longest without dragging. */
   die:    { dur:0.90, biggest:0.20, scorch:false, crater:false, chain:null,   loops:1 },
+  /* The atomic strike. Its own animation because nothing else is the right SHAPE: atomsfx is
+     78x121, a column taller than it is wide, where every other effect here is roughly square
+     and scaling one up to stand in for a mushroom cloud is what the strike did before. Long,
+     because a nuke that is over in three quarters of a second is a large firework. */
+  nuke:   { dur:2.60, biggest:0.28, scorch:true,  crater:true,  chain:null,   loops:1 },
   /* ...and its water set. An explosion over water throws a plume, and leaves nothing. */
   splash: { dur:0.55, biggest:0.30, scorch:false, crater:false, chain:null,   loops:1 },
   /* ADATA.CPP's burn ladder. Three sizes of fire, each with its OWN damage rate, and each

@@ -2643,6 +2643,11 @@ var RTS_ANIMS = {
      because the artwork is per-unit and per-variant; the renderer reads f.seq. RA ticks these
      at 80ms and they run 8 to 18 frames, so 0.9s covers the longest without dragging. */
   die:    { dur:0.90, biggest:0.20, scorch:false, crater:false, chain:null,   loops:1 },
+  /* The atomic strike. Its own animation because nothing else is the right SHAPE: atomsfx is
+     78x121, a column taller than it is wide, where every other effect here is roughly square
+     and scaling one up to stand in for a mushroom cloud is what the strike did before. Long,
+     because a nuke that is over in three quarters of a second is a large firework. */
+  nuke:   { dur:2.60, biggest:0.28, scorch:true,  crater:true,  chain:null,   loops:1 },
   /* ...and its water set. An explosion over water throws a plume, and leaves nothing. */
   splash: { dur:0.55, biggest:0.30, scorch:false, crater:false, chain:null,   loops:1 },
   /* ADATA.CPP's burn ladder. Three sizes of fire, each with its OWN damage rate, and each
@@ -5798,7 +5803,14 @@ function _sprFx() {
     }
     smoke.push(mt.c);
   }
-  return { boom: boom, flash: flash, piff: piff, splash: splash, fire: fire, smoke: smoke };
+  var drawn = { boom: boom, flash: flash, piff: piff, splash: splash, fire: fire, smoke: smoke };
+  /* The originals win where they exist, role by role, keeping the drawn one for anything the
+     archives do not cover - so a partial set degrades to a mixture rather than to nothing. */
+  var real = (typeof _mixFx === 'function') ? _mixFx() : null;
+  if (real) {
+    for (var rk in real) if (real[rk]) drawn[rk] = real[rk];
+  }
+  return drawn;
 }
 
 function _rtsSprites() {
@@ -5914,6 +5926,7 @@ function rtsSetTheatre(id) {
   _RTS_SPR = null; _RTS_UFIT = {}; _RTS_USCALE = {};
   _RTS_TREES = null; _RTS_MIXTREES = null; _RTS_TILECACHE = null; _RTS_MIXDEBRIS = null;
   _RTS_MIXBIB = null; _RTS_SHROUDSPR = null; _RTS_MIXMAKE = null; _RTS_MIXDIE = null;
+  _RTS_MIXFX = null;
   return id;
 }
 /* The file extension the current theatre's tiles carry. */
@@ -6118,6 +6131,70 @@ function _mixBuilding(key, side) {
     }
   }
   return out;
+}
+
+/* ------------------------------------------------------------------ effects --
+   Explosions, sparks, plumes and smoke. All of it was drawn here from discs and specks, and
+   all of it is in conquer.mix as real animation - which matters more than the buildings did,
+   because in a fight these are what is moving on screen almost all of the time.
+
+   The mapping is by ROLE rather than by name, since our set and Westwood's do not partition the
+   same way. A shell going off is a fireball; a rifle round hitting a hull is a dirty grey spark
+   and specifically NOT a small fireball; a hit on water throws a column rather than a ball.
+
+     boom    fball1     18   a shell or a vehicle going up
+     hit     veh-hit3   14   a smaller strike - the frames are already the right size
+     pop     piffpiff    8   an infantryman being hit
+     piff    piff        4   a bullet on armour; ours had four frames too
+     splash  h2o_exp2   10   a column of water
+     smoke   smokey      7
+     fire    fire3      15   what burns on a wreck
+
+   `nuke` is separate because nothing here is the right shape for it: atomsfx is 27 frames of
+   78x121, a mushroom cloud taller than it is wide, and scaling any of the others up to stand in
+   for it is what the strike has been doing until now. */
+var RTS_MIX_FX = {
+  boom:   'fball1',   hit:    'veh-hit3', pop:  'piffpiff',
+  piff:   'piff',     splash: 'h2o_exp2', smoke:'smokey',
+  fire:   'fire3',    nuke:   'atomsfx'
+};
+var _RTS_MIXFX = null;
+
+function _mixFxSet(role) {
+  if (!_rtsArtReady()) return null;
+  if (!_RTS_MIXFX) _RTS_MIXFX = {};
+  if (_RTS_MIXFX[role] !== undefined) return _RTS_MIXFX[role];
+  _RTS_MIXFX[role] = null;
+  var nm = RTS_MIX_FX[role];
+  if (!nm) return null;
+  var s = _mixShp(nm + '.shp');
+  if (!s || !s.count) return null;
+  /* Effects are NOT team-coloured - an explosion belongs to nobody - so the plain palette is
+     right here and using a remapped one would tint every fireball with whoever fired it. */
+  var pal = RTS_MIX.pal, out = [];
+  for (var f = 0; f < s.count; f++) {
+    var fr = s.frame(f);
+    if (fr) out.push(_mixFrameToCanvas(fr, s.width, s.height, pal));
+  }
+  return out.length ? (_RTS_MIXFX[role] = out) : null;
+}
+
+/* The whole set, in the shape _sprFx already returns, or null if the archives are absent.
+   `flash` stays drawn: gunfire.shp is three frames of a muzzle bloom that reads as a blob at
+   our zoom, and the drawn one is genuinely clearer. */
+function _mixFx() {
+  if (!_rtsArtReady()) return null;
+  var boom = _mixFxSet('boom');
+  if (!boom) return null;                  /* no artwork - keep the whole drawn set together */
+  return {
+    boom:   boom,
+    piff:   _mixFxSet('piff')   || null,
+    splash: _mixFxSet('splash') || null,
+    smoke:  _mixFxSet('smoke')  || null,
+    fire:   _mixFxSet('fire')   || null,
+    hit:    _mixFxSet('hit')    || null,
+    pop:    _mixFxSet('pop')    || null
+  };
 }
 
 /* ------------------------------------------------------------ dying infantry --
@@ -9952,13 +10029,19 @@ function _rtsStrikesTick(dt) {
     G.strikes.splice(i, 1);
     _rtsSplash(k.x, k.z, RTS_NUKE_RADIUS * RTS_TILE, RTS_NUKE_DAMAGE, k.side, RTS_NUKE_SPREAD, null);
     G.shake = Math.max(G.shake || 0, 1.4);
-    /* One huge boom plus a ring of smaller ones staggered behind it. A single sprite scaled up
-       reads as a big puff; the ring is what makes it look like a blast with an edge. */
-    G.fx.push({ kind:'boom', x:k.x, y:1, z:k.z, t:0, big:7 });
-    for (var r = 0; r < 8; r++) {
-      var ang = r / 8 * Math.PI * 2, rad = RTS_NUKE_RADIUS * RTS_TILE * 0.55;
-      G.fx.push({ kind:'boom', t:-0.08 - r * 0.03, big:2.6,
-                  x:k.x + Math.cos(ang) * rad, y:1, z:k.z + Math.sin(ang) * rad });
+    /* The original's own mushroom cloud where the player has it. The drawn stand-in is one huge
+       boom plus a ring of smaller ones staggered behind it - the ring exists purely to give a
+       scaled-up sprite an EDGE, since a single disc blown up to seven times its size reads as a
+       puff. A real 27-frame cloud does not need propping up, so the ring goes with it. */
+    if (typeof _mixFxSet === 'function' && _mixFxSet('nuke')) {
+      G.fx.push({ kind:'nuke', x:k.x, y:1, z:k.z, t:0, big:3.2 });
+    } else {
+      G.fx.push({ kind:'boom', x:k.x, y:1, z:k.z, t:0, big:7 });
+      for (var r = 0; r < 8; r++) {
+        var ang = r / 8 * Math.PI * 2, rad = RTS_NUKE_RADIUS * RTS_TILE * 0.55;
+        G.fx.push({ kind:'boom', t:-0.08 - r * 0.03, big:2.6,
+                    x:k.x + Math.cos(ang) * rad, y:1, z:k.z + Math.sin(ang) * rad });
+      }
     }
     if (typeof _rtsSfx === 'function') _rtsSfx('boom', k.x, k.z);
     if (k.side !== 'player') _rtsSay('Our base has been hit by an atomic strike.');
@@ -14318,6 +14401,20 @@ function _rtsRFrame(dt) {
   for (i = 0; i < G.fx.length; i++) {
     var f = G.fx[i], k = _rtsAnimQ(f.t) / 0.75;
     if (f.t < 0) continue;                       /* a delayed secondary blast, not started */
+    if (f.kind === 'nuke') {
+      /* Anchored near its BASE, not its centre: a mushroom cloud stands on the ground and grows
+         upward, so centring it would sink the stem below the impact point. */
+      var nz = (typeof _mixFxSet === 'function') ? _mixFxSet('nuke') : null;
+      if (nz) {
+        var ni = Math.min(nz.length - 1, Math.floor((f.t / RTS_ANIMS.nuke.dur) * nz.length));
+        var nc = nz[ni];
+        var nw = Math.round(nc.width * TSscale * (f.big || 1));
+        var nh = Math.round(nc.height * TSscale * (f.big || 1));
+        g.drawImage(nc, Math.round(_rtsSX(f.x) - nw / 2), Math.round(_rtsSY(f.z) - nh * 0.88),
+                    nw, nh);
+        continue;
+      }
+    }
     if (f.kind === 'die') {
       /* A soldier falling over, drawn from his own artwork. Held on the LAST frame once the
          sequence runs out rather than looping - a body that gets back up and dies again is
@@ -14361,10 +14458,14 @@ function _rtsRFrame(dt) {
     } else {
       /* Combat_Anim: which set of frames this is comes from the animation kind, which the
          simulation chose from the damage and the land type. */
+      /* Role-by-role, so `hit` and `pop` use their own artwork where it exists instead of a
+         scaled fireball. Falling back to boom keeps a set that only half-loaded working. */
       var set = f.kind === 'piff' ? S.fx.piff
               : (f.kind === 'splash' ? S.fx.splash
               : (f.kind === 'smoke' ? S.fx.smoke
-              : (RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].size ? S.fx.fire : S.fx.boom)));
+              : (f.kind === 'hit' && S.fx.hit ? S.fx.hit
+              : (f.kind === 'pop' && S.fx.pop ? S.fx.pop
+              : (RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].size ? S.fx.fire : S.fx.boom)))));
       var dur = (RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].dur) || 0.75;
       var fr = Math.min(set.length - 1, Math.floor(_rtsAnimQ(f.t) / dur * set.length));
       var img = set[Math.max(0, fr)];

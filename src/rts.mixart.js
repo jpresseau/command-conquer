@@ -58,6 +58,7 @@ function rtsSetTheatre(id) {
   _RTS_SPR = null; _RTS_UFIT = {}; _RTS_USCALE = {};
   _RTS_TREES = null; _RTS_MIXTREES = null; _RTS_TILECACHE = null; _RTS_MIXDEBRIS = null;
   _RTS_MIXBIB = null; _RTS_SHROUDSPR = null; _RTS_MIXMAKE = null; _RTS_MIXDIE = null;
+  _RTS_MIXFX = null;
   return id;
 }
 /* The file extension the current theatre's tiles carry. */
@@ -262,6 +263,70 @@ function _mixBuilding(key, side) {
     }
   }
   return out;
+}
+
+/* ------------------------------------------------------------------ effects --
+   Explosions, sparks, plumes and smoke. All of it was drawn here from discs and specks, and
+   all of it is in conquer.mix as real animation - which matters more than the buildings did,
+   because in a fight these are what is moving on screen almost all of the time.
+
+   The mapping is by ROLE rather than by name, since our set and Westwood's do not partition the
+   same way. A shell going off is a fireball; a rifle round hitting a hull is a dirty grey spark
+   and specifically NOT a small fireball; a hit on water throws a column rather than a ball.
+
+     boom    fball1     18   a shell or a vehicle going up
+     hit     veh-hit3   14   a smaller strike - the frames are already the right size
+     pop     piffpiff    8   an infantryman being hit
+     piff    piff        4   a bullet on armour; ours had four frames too
+     splash  h2o_exp2   10   a column of water
+     smoke   smokey      7
+     fire    fire3      15   what burns on a wreck
+
+   `nuke` is separate because nothing here is the right shape for it: atomsfx is 27 frames of
+   78x121, a mushroom cloud taller than it is wide, and scaling any of the others up to stand in
+   for it is what the strike has been doing until now. */
+var RTS_MIX_FX = {
+  boom:   'fball1',   hit:    'veh-hit3', pop:  'piffpiff',
+  piff:   'piff',     splash: 'h2o_exp2', smoke:'smokey',
+  fire:   'fire3',    nuke:   'atomsfx'
+};
+var _RTS_MIXFX = null;
+
+function _mixFxSet(role) {
+  if (!_rtsArtReady()) return null;
+  if (!_RTS_MIXFX) _RTS_MIXFX = {};
+  if (_RTS_MIXFX[role] !== undefined) return _RTS_MIXFX[role];
+  _RTS_MIXFX[role] = null;
+  var nm = RTS_MIX_FX[role];
+  if (!nm) return null;
+  var s = _mixShp(nm + '.shp');
+  if (!s || !s.count) return null;
+  /* Effects are NOT team-coloured - an explosion belongs to nobody - so the plain palette is
+     right here and using a remapped one would tint every fireball with whoever fired it. */
+  var pal = RTS_MIX.pal, out = [];
+  for (var f = 0; f < s.count; f++) {
+    var fr = s.frame(f);
+    if (fr) out.push(_mixFrameToCanvas(fr, s.width, s.height, pal));
+  }
+  return out.length ? (_RTS_MIXFX[role] = out) : null;
+}
+
+/* The whole set, in the shape _sprFx already returns, or null if the archives are absent.
+   `flash` stays drawn: gunfire.shp is three frames of a muzzle bloom that reads as a blob at
+   our zoom, and the drawn one is genuinely clearer. */
+function _mixFx() {
+  if (!_rtsArtReady()) return null;
+  var boom = _mixFxSet('boom');
+  if (!boom) return null;                  /* no artwork - keep the whole drawn set together */
+  return {
+    boom:   boom,
+    piff:   _mixFxSet('piff')   || null,
+    splash: _mixFxSet('splash') || null,
+    smoke:  _mixFxSet('smoke')  || null,
+    fire:   _mixFxSet('fire')   || null,
+    hit:    _mixFxSet('hit')    || null,
+    pop:    _mixFxSet('pop')    || null
+  };
 }
 
 /* ------------------------------------------------------------ dying infantry --

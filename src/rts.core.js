@@ -1055,13 +1055,19 @@ function _rtsStrikesTick(dt) {
     G.strikes.splice(i, 1);
     _rtsSplash(k.x, k.z, RTS_NUKE_RADIUS * RTS_TILE, RTS_NUKE_DAMAGE, k.side, RTS_NUKE_SPREAD, null);
     G.shake = Math.max(G.shake || 0, 1.4);
-    /* One huge boom plus a ring of smaller ones staggered behind it. A single sprite scaled up
-       reads as a big puff; the ring is what makes it look like a blast with an edge. */
-    G.fx.push({ kind:'boom', x:k.x, y:1, z:k.z, t:0, big:7 });
-    for (var r = 0; r < 8; r++) {
-      var ang = r / 8 * Math.PI * 2, rad = RTS_NUKE_RADIUS * RTS_TILE * 0.55;
-      G.fx.push({ kind:'boom', t:-0.08 - r * 0.03, big:2.6,
-                  x:k.x + Math.cos(ang) * rad, y:1, z:k.z + Math.sin(ang) * rad });
+    /* The original's own mushroom cloud where the player has it. The drawn stand-in is one huge
+       boom plus a ring of smaller ones staggered behind it - the ring exists purely to give a
+       scaled-up sprite an EDGE, since a single disc blown up to seven times its size reads as a
+       puff. A real 27-frame cloud does not need propping up, so the ring goes with it. */
+    if (typeof _mixFxSet === 'function' && _mixFxSet('nuke')) {
+      G.fx.push({ kind:'nuke', x:k.x, y:1, z:k.z, t:0, big:3.2 });
+    } else {
+      G.fx.push({ kind:'boom', x:k.x, y:1, z:k.z, t:0, big:7 });
+      for (var r = 0; r < 8; r++) {
+        var ang = r / 8 * Math.PI * 2, rad = RTS_NUKE_RADIUS * RTS_TILE * 0.55;
+        G.fx.push({ kind:'boom', t:-0.08 - r * 0.03, big:2.6,
+                    x:k.x + Math.cos(ang) * rad, y:1, z:k.z + Math.sin(ang) * rad });
+      }
     }
     if (typeof _rtsSfx === 'function') _rtsSfx('boom', k.x, k.z);
     if (k.side !== 'player') _rtsSay('Our base has been hit by an atomic strike.');
