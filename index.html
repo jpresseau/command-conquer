@@ -372,8 +372,25 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   box-shadow:none;font-weight:600}
 #rtsHome .go.resume:hover{background:#26344a}
 #rtsHome .go.resume small{display:block;font-size:11px;letter-spacing:.4px;opacity:.6;font-weight:400;margin-top:3px}
-#rtsHome .keys{display:grid;grid-template-columns:auto 1fr;gap:7px 16px;max-width:520px;text-align:left;
+/* The tile chrome is on the <details>; the two-column grid moved onto the <dl> inside it, because
+   a grid container laid out `summary` as a grid item too and put the word "Controls" in the
+   key column beside the first shortcut. */
+#rtsHome .keys{width:min(100%,520px);box-sizing:border-box;text-align:left;
   font-size:12.5px;background:rgba(255,255,255,.035);border:1px solid #263447;border-radius:9px;padding:16px 20px}
+#rtsHome .keys > dl{display:grid;grid-template-columns:auto 1fr;gap:7px 16px;margin:14px 0 0}
+#rtsHome .keys summary{cursor:pointer;list-style:none;color:#ffcf6a;font-size:11px;letter-spacing:2px;
+  text-transform:uppercase;opacity:.8;user-select:none;display:flex;align-items:center;gap:8px}
+#rtsHome .keys summary::-webkit-details-marker{display:none}   /* Safari draws its own triangle */
+/* The marker is drawn rather than left to the UA so it can point the same way in both browsers
+   and sit on the baseline of 11px caps rather than above it. */
+#rtsHome .keys summary::before{content:'';width:0;height:0;flex:0 0 auto;
+  border-left:5px solid currentColor;border-top:4px solid transparent;border-bottom:4px solid transparent;
+  transition:transform .15s ease}
+#rtsHome .keys[open] summary::before{transform:rotate(90deg)}
+#rtsHome .keys summary:hover{opacity:1}
+#rtsHome .keys summary:focus-visible{outline:1px solid #8fd0ff;outline-offset:3px;border-radius:3px}
+/* closed, the tile is one line and the 16px bottom padding reads as a gap under nothing */
+#rtsHome .keys:not([open]){padding-bottom:14px}
 #rtsHome .keys dt{color:#8fd0ff;font-weight:600;white-space:nowrap}
 #rtsHome .keys dd{margin:0;opacity:.78}
 /* a group heading spans both columns; the first one must not push off the padding */
@@ -457,7 +474,13 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
       to draw the cliffs with. Generated battles are landlocked — a real map is the only way to get
       water, and loading one tells you whether it has a coast you can build a naval yard on.</span>
   </p>
-  <dl class="keys">
+  <!-- <details>, not a hand-rolled toggle: it collapses with no script, it is keyboard-operable
+       and screen-reader-labelled for free, and Ctrl+F still finds the text inside a closed one in
+       every browser that matters. Open by default so a first-time player still meets the
+       controls; rtsKeysInit remembers it once you close it. -->
+  <details class="keys" id="rtsKeys" open>
+  <summary>Controls</summary>
+  <dl>
     <dt class="hd">Selecting</dt>
     <dt>Left-drag</dt><dd>select your units</dd>
     <dt>Double-click</dt><dd>select every unit of that type on screen</dd>
@@ -484,6 +507,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
     <dt>Ctrl+S</dt><dd>save — resume it from this screen later</dd>
     <dt>Esc</dt><dd>leave the battle</dd>
   </dl>
+  </details>
   <div id="rtsErr"></div>
   <p class="foot">An original game in the spirit of the mid-90s base-building RTS. Not affiliated with,
     and containing no assets from, any existing game — everything it ships with is drawn and
@@ -17090,6 +17114,28 @@ function rtsPickLabel(inputId, text) {
 }
 function rtsPickDoneArt() { rtsPickLabel('rtsMixPick', 'REPLACE ARTWORK'); }
 function rtsPickDoneMap() { rtsPickLabel('rtsMapPick', 'CHOOSE ANOTHER MAP'); }
+
+/* The controls tile collapses, and stays collapsed. A player who has learnt the shortcuts should
+   not have to scroll past thirty of them on every visit - but a first-time player should still
+   meet them, so the markup ships `open` and only an explicit close is remembered.
+
+   localStorage rather than the IndexedDB store in src/rts.store.js: that one exists to hold
+   megabytes of archives, and this is one boolean. Wrapped because private-browsing modes throw
+   on access rather than returning null, and a disabled store must cost the player a preference,
+   not the title screen. */
+var RTS_KEYS_LS = 'rcc.keysOpen';
+function rtsKeysInit() {
+  var el = document.getElementById('rtsKeys');
+  if (!el) return;
+  try {
+    var saved = window.localStorage.getItem(RTS_KEYS_LS);
+    if (saved === '0') el.open = false;
+  } catch (e) { /* no storage: the markup's own `open` stands */ }
+  el.addEventListener('toggle', function () {
+    try { window.localStorage.setItem(RTS_KEYS_LS, el.open ? '1' : '0'); } catch (e) {}
+  });
+}
+rtsKeysInit();
 
 /* Remembering has to be undoable, or a bad file becomes permanent. */
 function rtsAddForget(host) {
