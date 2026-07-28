@@ -6095,14 +6095,51 @@ function _mixBuilding(key, side) {
      damaged frame is taken as the START OF THE SECOND HALF, which is the same rule the yaml
      states for those (`Start: 9` on a 9-long silo stage list). For a plain 2-frame building
      that lands on frame 1, which is the common case. */
-  var dmg = null;
+  var dmg = null, half = s.count >> 1;
   if (s.count >= 2) {
-    var half = s.count >> 1;
     var fr = s.frame(s.count === 2 ? 1 : half);
     if (fr) dmg = _mixFrameToCanvas(fr, s.width, s.height, pal);
   }
-  return { c: c, dmg: dmg, head: Math.max(0, s.height - footD) };
+  var out = { c: c, dmg: dmg, head: Math.max(0, s.height - footD), half: half, n: s.count };
+
+  /* Every frame, for the buildings that use more than two. Baked here rather than on demand
+     because decoding an SHP frame mid-frame is a stall you can see, and the whole set is small:
+     the largest is the Chronosphere at 58 frames of 48x48. Buildings not in the table keep just
+     the two canvases above. */
+  if (RTS_MIX_BLDANIM[key]) {
+    out.frames = [];
+    for (var f = 0; f < s.count; f++) {
+      var ff = s.frame(f);
+      out.frames.push(ff ? _mixFrameToCanvas(ff, s.width, s.height, pal) : c);
+    }
+  }
+  return out;
 }
+
+/* ------------------------------------------------- moving parts, per building --
+   What each animated structure's extra frames ARE. Transcribed from
+   mods/ra/sequences/structures.yaml rather than guessed, because the layouts do not follow one
+   rule - some count from 0, some from 1, and the damaged set is a fixed offset that happens to
+   equal half the frame count in every case here (which is what `half` above already computes).
+
+     loop    cycles forever, whatever the building is doing        (Barracks: 10 frames)
+     active  cycles only while the building is DOING its job       (Depot, Helipad, Tesla, ...)
+     fill    picks a frame by how full the house's stores are      (Silo: 5 stages)
+     facing  picks a frame by where the thing is AIMED             (Gun Turret: 32 facings)
+
+   `active` is the interesting one: a building that animates constantly is wallpaper, while one
+   that starts moving when it goes to work tells you something. */
+var RTS_MIX_BLDANIM = {
+  barracks: { kind: 'loop',   start: 0, len: 10, fps: 8 },
+  depot:    { kind: 'active', start: 1, len: 6,  fps: 10 },
+  helipad:  { kind: 'active', start: 1, len: 6,  fps: 10 },
+  tesla:    { kind: 'active', start: 1, len: 9,  fps: 14 },
+  pdox:     { kind: 'active', start: 0, len: 29, fps: 14 },
+  iron:     { kind: 'active', start: 0, len: 11, fps: 10 },
+  yard:     { kind: 'active', start: 1, len: 25, fps: 12 },
+  silo:     { kind: 'fill',   start: 0, len: 5 },
+  turret:   { kind: 'facing', start: 0, facings: 32 }
+};
 
 /* ----------------------------------------------------------------- units --
    RA stores vehicles at 32 facings, which is what this project already bakes since the facing
@@ -14291,6 +14328,84 @@ function _rtsRFrame(dt) {
   }
 }
 
+
+/* Which frame of an animated building to draw right now.
+
+   Returns null when there is nothing to choose - no extra frames, or the building is still
+   going up, where the build-up reveal owns the picture and a moving part inside it reads as a
+   glitch. The damaged set is the same frames shifted by `half`, so the choice is made once
+   against the healthy layout and shifted at the end. */
+function _rtsBldFrame(e, spr) {
+  if (!spr || !spr.frames || e.building) return null;
+  var a = RTS_MIX_BLDANIM[e.def];
+  if (!a) return null;
+  var G = window._rtsG, hurt = e.hp < e.maxHp * RTS_COND_YELLOW;
+  var idx = null;
+
+  if (a.kind === 'facing') {
+    /* Same classic facing order the vehicles use - measured once from the artwork, not read off
+       a document - so a turret and a tank pointing the same way agree. */
+    var f32 = Math.round(((-(e.rot || 0) / (Math.PI * 2)) * a.facings + a.facings) % a.facings);
+    idx = a.start + _mixFacing(f32, a.facings);
+
+  } else if (a.kind === 'fill') {
+    /* All of a house's silos show the same level, because the ore is the HOUSE's, not the
+       building's - which is also why selling one does not empty the others. */
+    var cap = (typeof rtsCapacity === 'function') ? rtsCapacity(e.side) : 0;
+    var S = G.sides[e.side];
+    var frac = cap > 0 ? Math.max(0, Math.min(1, (S ? S.ore : 0) / cap)) : 0;
+    idx = a.start + Math.min(a.len - 1, Math.floor(frac * a.len));
+
+  } else if (a.kind === 'loop' || (a.kind === 'active' && _rtsBldBusy(e))) {
+    idx = a.start + (Math.floor(G.t * (a.fps || 10)) % a.len);
+  }
+
+  if (idx === null) return null;
+  if (hurt) idx += spr.half;
+  return (idx >= 0 && idx < spr.frames.length) ? spr.frames[idx] : null;
+}
+
+/* Is this building doing its job? Deliberately a different question per type, because "busy"
+   has a different meaning for each and a single generic flag would be wrong for all of them. */
+function _rtsBldBusy(e) {
+  var G = window._rtsG, S = G.sides[e.side];
+  if (!S) return false;
+  switch (e.def) {
+    case 'yard':
+      return !!S.q.struct;                       /* the yard works while a structure is queued */
+    case 'tesla':
+      return (e.cool || 0) > 0;                  /* the coil discharges, then recovers */
+    case 'pdox': case 'iron': case 'mslo':
+      /* a superweapon building is busy exactly while its charge is climbing */
+      return !!(S.supers && S.supers[_rtsSuperKeyOf(e.def)] &&
+                !S.supers[_rtsSuperKeyOf(e.def)].ready);
+    case 'helipad': {
+      var i, o;
+      for (i = 0; i < G.ents.length; i++) {
+        o = G.ents[i];
+        if (o.dead || o.type !== 'unit' || o.side !== e.side || !o.rearming) continue;
+        if (Math.abs(o.x - e.x) < RTS_TILE && Math.abs(o.z - e.z) < RTS_TILE) return true;
+      }
+      return false;
+    }
+    case 'depot': {
+      var j, u;
+      for (j = 0; j < G.ents.length; j++) {
+        u = G.ents[j];
+        if (u.dead || u.type !== 'unit' || u.side !== e.side) continue;
+        if (u.hp >= u.maxHp) continue;                       /* nothing to mend */
+        if (Math.abs(u.x - e.x) < RTS_TILE * 1.5 && Math.abs(u.z - e.z) < RTS_TILE * 1.5) return true;
+      }
+      return false;
+    }
+  }
+  return false;
+}
+function _rtsSuperKeyOf(defKey) {
+  var d = rtsStructDef(defKey);
+  return (d && d.super) ? d.super.key : '';
+}
+
 function _rtsDrawStruct(g, e, TSscale, cell) {
   var R = _rtsR, def = rtsStructDef(e.def);
   var spr = R.spr.bld[e.side][e.def];
@@ -14299,7 +14414,12 @@ function _rtsDrawStruct(g, e, TSscale, cell) {
      what you see and what the rules think agree rather than being two separate judgements.
      Only while it is STANDING: a building still going up shows its clean frame, because the
      build-up reveal is about progress and a half-built ruin reads as a bug. */
-  if (spr.dmg && !e.building && e.hp < e.maxHp * RTS_COND_YELLOW) {
+  /* An animated building picks its own frame - moving part, aim or fill level - and that frame
+     already accounts for damage, so it is asked FIRST and the plain damaged swap below only
+     runs for the buildings that have no frame set. */
+  var af = _rtsBldFrame(e, spr);
+  if (af) spr = { c: af, head: spr.head, dmg: spr.dmg, half: spr.half, frames: spr.frames };
+  else if (spr.dmg && !e.building && e.hp < e.maxHp * RTS_COND_YELLOW) {
     spr = { c: spr.dmg, head: spr.head, dmg: spr.dmg };
   }
   var px = Math.round(_rtsSX(_rtsWX(e.tx) - RTS_TILE / 2));
