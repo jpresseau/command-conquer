@@ -167,7 +167,7 @@ function _rtsMapListHide() {
   var el = document.getElementById('rtsMapList');
   if (el && el.parentNode) el.parentNode.removeChild(el);
 }
-function _rtsMapListShow(maps, note) {
+function _rtsMapListShow(maps, note, remember) {
   _rtsMapListHide();
   var wrap = document.createElement('div');
   wrap.id = 'rtsMapList';
@@ -180,7 +180,7 @@ function _rtsMapListShow(maps, note) {
   });
   var btn = document.createElement('button');
   /* deliberately after `btn` exists - the labelling pass disables it while it runs */
-  setTimeout(function () { _rtsMapLabel(maps, sel, btn, note); }, 0);
+  setTimeout(function () { _rtsMapLabel(maps, sel, btn, note, remember); }, 0);
   btn.type = 'button'; btn.textContent = 'LOAD';
   btn.onclick = function () {
     var m = maps[sel.value | 0];
@@ -225,8 +225,13 @@ function _rtsMapListShow(maps, note) {
    It is careful to touch no global state: `rtsMapFromScenario` saves and restores RTS_N itself,
    and `window._RTS_MAP` is only ever set by LOAD. Scanning the list must not change which map
    you are about to play. */
-function _rtsMapLabel(maps, sel, btn, note) {
+function _rtsMapLabel(maps, sel, btn, note, remember) {
   var good = 0, coastal = 0, bad = 0;
+  /* This pass already holds every scenario's bytes, one at a time, to read its title. KEEPING
+     them costs a few megabytes and buys the whole list back on the next visit with no file
+     dialog and no archive scan - see rtsStoreSaveScen. `remember` is false when the list came
+     FROM the store, so a restore does not rewrite what it has just read. */
+  var keep = remember === false ? null : [];
   btn.disabled = true;
 
   /* Sequential rather than all-at-once. The bytes come from slicing the File, so sixty parallel
@@ -239,6 +244,7 @@ function _rtsMapLabel(maps, sel, btn, note) {
       note.className = '';
       return m.get(m.name).then(function (bytes) {
         label(m, sel.options[i], bytes);
+        if (keep && bytes && bytes.length) keep.push({ name: m.name, from: m.from, bytes: bytes });
       }, function () { mark(sel.options[i], m, 'unreadable'); });
     });
   }, Promise.resolve()).then(function () {
@@ -247,6 +253,9 @@ function _rtsMapLabel(maps, sel, btn, note) {
       good + ' playable, ' + coastal + ' with a coast for naval yards' +
       (bad ? ', ' + bad + ' unreadable' : '') + '. Choose one:';
     note.className = 'ok';
+    /* After the summary, never before it: remembering is a convenience and must not be able to
+       delay or break the list the player is looking at. */
+    if (keep && keep.length && typeof rtsStoreSaveScen === 'function') rtsStoreSaveScen(keep);
     return { good: good, coastal: coastal, bad: bad };
   });
 
@@ -290,6 +299,35 @@ function rtsMapDescribe(M) {
          ' — ' + M.n + '×' + M.n + ' of ' + M.yaml.w + '×' + M.yaml.h +
          ', ' + ((s.ore || 0) + (s.gems || 0)) + ' ore cells, ' + (s.trees || 0) +
          ' trees, ' + navy + '. Start a battle to play it.';
+}
+
+/* Put the remembered scenario list back on the title screen.
+
+   Same UI, same labelling pass, same LOAD button as a fresh scan - the only difference is that
+   the bytes come out of IndexedDB rather than out of a file the player had to find again. It
+   is passed remember=false so the pass does not write back the list it just read.
+
+   Returns false when there is nothing stored, which is the ordinary first-visit case and not
+   an error: the caller simply leaves the picker's own instructions in place. */
+function rtsMapShowStored(rec) {
+  if (!rec || !rec.maps || !rec.maps.length) return false;
+  var note = document.getElementById('rtsMapNote');
+  if (!note || !note.parentNode) return false;
+  _rtsMapListHide();
+  /* THE LIST GETS ITS OWN LINE. The labelling pass ends by overwriting its note with the
+     "N scenarios - X playable. Choose one:" summary, and the map note is already saying which
+     map was restored - sharing one element would mean the list silently erased that. */
+  var sub = document.getElementById('rtsScenNote');
+  if (!sub) {
+    sub = document.createElement('div');
+    sub.id = 'rtsScenNote';
+    note.parentNode.appendChild(sub);
+  }
+  sub.textContent = rec.maps.length + ' scenario' + (rec.maps.length === 1 ? '' : 's') +
+    ' remembered from last time (' + (rec.bytes / 1048576).toFixed(1) + ' MB) — reading…';
+  sub.className = '';
+  _rtsMapListShow(rec.maps, sub, false);
+  return true;
 }
 
 /* The file picker on the title screen. Mirrors rtsMixPicked: read, report in place, and never

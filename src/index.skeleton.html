@@ -344,6 +344,10 @@ function rtsRestoreSaved() {
     if (!mapNote) return;
     if (map) { mapNote.textContent = rtsMapDescribe(map); mapNote.className = 'ok'; }
     else { mapNote.textContent = mapBefore; mapNote.className = ''; }
+  }, function (scen) {
+    /* The whole scenario list back without the file dialog. Nothing to do when there is none -
+       that is the first visit, and the picker's own instructions are already on screen. */
+    if (scen && typeof rtsMapShowStored === 'function') rtsMapShowStored(scen);
   });
 }
 /* Remembering has to be undoable, or a bad file becomes permanent. */

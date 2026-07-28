@@ -147,10 +147,57 @@ function rtsStoreLoadMap() {
   }).catch(function () { return null; });
 }
 
+/* ------------------------------------------------------ the scenario list --
+   The map you played last was already remembered. The list of maps you could CHOOSE from was
+   not, and that is the gap a player actually feels: to play a different scenario you had to
+   find MAIN.MIX in a file dialog again and sit through the name probe again, every visit,
+   even though nothing about your install had changed.
+
+   THE SCENARIOS THEMSELVES ARE STORED, NOT THE LIST. A scenario is a ~50 KB text file, so a
+   full install of sixty-six is a few megabytes - nothing beside the 13 MB of artwork already
+   here - and holding the bytes means the list is not merely displayable but PLAYABLE without
+   the archive present. Storing names alone would rebuild a menu whose every entry then failed.
+
+   The LABELS are deliberately not stored. A scenario's title, its coast and whether it loads
+   at all come from running it through rtsMapFromScenario, which is code that keeps changing;
+   a remembered label would go on asserting last month's answer. So the list comes back
+   instantly and re-labels itself from the stored bytes, which costs no file dialog and no
+   archive scan - the same rule map.v1 follows, for the same reason. */
+var RTS_STORE_SCEN = 'scen.v1';
+
+function rtsStoreSaveScen(list) {
+  if (!list || !list.length) return Promise.resolve(false);
+  var keep = [];
+  for (var i = 0; i < list.length; i++) {
+    var e = list[i];
+    if (!e || !e.bytes || !e.bytes.length) continue;      /* unreadable entries are not worth keeping */
+    keep.push({ name: e.name, from: e.from, buf: e.bytes.slice().buffer });
+  }
+  if (!keep.length) return Promise.resolve(false);
+  return _rtsStorePut(RTS_STORE_SCEN, { at: Date.now(), files: keep })
+    .then(function (r) { return !!r; }).catch(function () { return false; });
+}
+
+/* Returns entries shaped exactly like the ones rtsMapScanMix produces - {name, from, get} -
+   so the list UI cannot tell a remembered scenario from a freshly scanned one. */
+function rtsStoreLoadScen() {
+  return _rtsStoreGet(RTS_STORE_SCEN).then(function (rec) {
+    if (!rec || !rec.files || !rec.files.length) return null;
+    var maps = rec.files.map(function (f) {
+      var bytes = new Uint8Array(f.buf);
+      return { name: f.name, from: f.from || 'remembered',
+               get: function () { return Promise.resolve(bytes); } };
+    });
+    return { maps: maps, bytes: rec.files.reduce(function (a, f) {
+      return a + (f.buf.byteLength || 0); }, 0) };
+  }).catch(function () { return null; });
+}
+
 function rtsStoreForget() {
   rtsMapClear();
   RTS_MIX.open = {}; RTS_MIX.bytes = {}; RTS_MIX.ready = false; RTS_MIX.pal = null;
-  return _rtsStoreDel([RTS_STORE_MIX, RTS_STORE_MAP]).then(function () { return true; });
+  return _rtsStoreDel([RTS_STORE_MIX, RTS_STORE_MAP, RTS_STORE_SCEN])
+    .then(function () { return true; });
 }
 
 /* ------------------------------------------------------------------ boot --
@@ -158,12 +205,17 @@ function rtsStoreForget() {
    draw itself, and restoring the map first would briefly leave a battlefield with nothing to
    paint it with. Neither step blocks the START button - the game is playable without either,
    and a slow disk should not hold the menu hostage. */
-function rtsStoreRestore(onMix, onMap) {
+function rtsStoreRestore(onMix, onMap, onScen) {
   return rtsStoreLoadMix().then(function (mix) {
     if (onMix) onMix(mix);
     return rtsStoreLoadMap().then(function (map) {
       if (onMap) onMap(map);
-      return { mix: mix, map: map };
+      /* The list last, and after the map: re-labelling reads every scenario, and the map you
+         were playing should come back before a menu you may not even open. */
+      return rtsStoreLoadScen().then(function (scen) {
+        if (onScen) onScen(scen);
+        return { mix: mix, map: map, scen: scen };
+      });
     });
-  }).catch(function () { return { mix: null, map: null }; });
+  }).catch(function () { return { mix: null, map: null, scen: null }; });
 }
