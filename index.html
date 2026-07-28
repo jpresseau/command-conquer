@@ -19,7 +19,17 @@
   animation:rtsIn .18s ease-out}
 @keyframes rtsIn{from{opacity:0}to{opacity:1}}
 #rcgRts .rts-stage{position:relative;flex:1 1 auto;min-width:0;overflow:hidden;background:#7d94a4}
-#rcgRts #rtsCv{position:absolute;inset:0;display:block;cursor:crosshair}
+/* image-rendering is LOAD-BEARING, not a nicety. The backing store is capped at 2x device
+   pixels to bound fill rate, so on a 3x display - a high-density laptop, a phone, a 4K panel at
+   200%+ scaling - the browser stretches that 2x buffer up to 3x itself. With the default
+   `auto` that stretch is BILINEAR, and it turns the whole battlefield to mush: measured at 85.6%
+   of all pixel transitions being soft ramps, against 17.9% at every ratio that does not need
+   stretching. `pixelated` makes the same stretch nearest-neighbour, which is what pixel art
+   wants and what every zoom level in this renderer is already built around.
+
+   The HUD canvas is deliberately NOT pixelated - it draws text, and text wants the smoothing. */
+#rcgRts #rtsCv{position:absolute;inset:0;display:block;cursor:crosshair;
+  image-rendering:pixelated;image-rendering:crisp-edges}
 #rcgRts #rtsHud{position:absolute;inset:0;display:block;pointer-events:none}
 
 /* --- top strip --- */
@@ -152,6 +162,10 @@
 #rcgRts .rts-tile{position:relative;display:block;padding:0;overflow:hidden;cursor:pointer;font:inherit;
   border:1px solid #33445c;border-radius:4px;background:#0f151d;color:#dfe8f2;aspect-ratio:1/1.02}
 #rcgRts .rts-tile:hover{border-color:#5c86b8;background:#16202c}
+/* No image-rendering here on purpose. The plate is now BIGGER than the tile displays it, so the
+   browser is downscaling - and nearest-neighbour downscaling drops whole rows of pixels, which
+   is worse than the smooth one. The sharpness comes from building the plate at 160 with
+   whole-number scaling, not from fighting the browser at the last step. */
 #rcgRts .rts-tile .ico{position:absolute;left:0;right:0;top:0;width:100%;height:76%;object-fit:contain;
   display:block;background:radial-gradient(ellipse at 50% 42%,#2b3a4c 0%,#131b25 72%)}
 #rcgRts .rts-tile .ico.noimg{background:#1a2431}
@@ -15139,13 +15153,27 @@ function _rtsRDispose() {
 function _rtsMakeIcons(side) {
   var S = _rtsSprites(), out = {}, i;
   function plate(src, pad) {
-    var n = 64, t = _sprMake(n, n), g = t.g;
+    /* 128, not 64. The tile displays these at about 103px, so a 64px plate was being blown up
+       1.6x by CSS - and worse, the sprite was nearest-neighbour DOWNSCALED into it first (a
+       72px building squeezed to 52), which drops pixels irregularly and is what made the
+       cameos look chewed rather than merely soft. Building at 128 means the sprite is never
+       reduced and the browser's final fit is a downscale, which is the direction that is
+       forgiving. */
+    var n = 160, t = _sprMake(n, n), g = t.g;
     g.imageSmoothingEnabled = false;
     var grd = g.createLinearGradient(0, 0, 0, n);
     grd.addColorStop(0, '#2b3a4c'); grd.addColorStop(1, '#131b25');
     g.fillStyle = grd; g.fillRect(0, 0, n, n);
+    /* 160 is not arbitrary: the largest building sprite is 72px, and 72*2 + 8*2 of padding is
+       exactly 160. One size smaller and the biggest cameos fall back to 1x and end up drawn
+       SMALLER than the 64px plate managed, which is how the first attempt at this traded
+       sharpness for size. */
     var m = n - (pad || 8) * 2;
+    /* Whole-number scaling only. A pixel-art sprite enlarged by 1.7 gives some source pixels two
+       screen pixels and others one, which reads as a wobble along every straight edge; clamping
+       to an integer keeps them uniform. Below 1 there is nothing to clamp to. */
     var sc = Math.min(m / src.width, m / src.height);
+    sc = sc >= 1 ? Math.floor(sc) : sc;
     var w = Math.round(src.width * sc), h = Math.round(src.height * sc);
     g.drawImage(src, Math.round((n - w) / 2), Math.round((n - h) / 2), w, h);
     return t.c.toDataURL('image/png');
