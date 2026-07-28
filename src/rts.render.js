@@ -382,6 +382,20 @@ function _rtsRFrame(dt) {
   for (i = 0; i < G.fx.length; i++) {
     var f = G.fx[i], k = _rtsAnimQ(f.t) / 0.75;
     if (f.t < 0) continue;                       /* a delayed secondary blast, not started */
+    if (f.kind === 'nuke') {
+      /* Anchored near its BASE, not its centre: a mushroom cloud stands on the ground and grows
+         upward, so centring it would sink the stem below the impact point. */
+      var nz = (typeof _mixFxSet === 'function') ? _mixFxSet('nuke') : null;
+      if (nz) {
+        var ni = Math.min(nz.length - 1, Math.floor((f.t / RTS_ANIMS.nuke.dur) * nz.length));
+        var nc = nz[ni];
+        var nw = Math.round(nc.width * TSscale * (f.big || 1));
+        var nh = Math.round(nc.height * TSscale * (f.big || 1));
+        g.drawImage(nc, Math.round(_rtsSX(f.x) - nw / 2), Math.round(_rtsSY(f.z) - nh * 0.88),
+                    nw, nh);
+        continue;
+      }
+    }
     if (f.kind === 'die') {
       /* A soldier falling over, drawn from his own artwork. Held on the LAST frame once the
          sequence runs out rather than looping - a body that gets back up and dies again is
@@ -425,10 +439,14 @@ function _rtsRFrame(dt) {
     } else {
       /* Combat_Anim: which set of frames this is comes from the animation kind, which the
          simulation chose from the damage and the land type. */
+      /* Role-by-role, so `hit` and `pop` use their own artwork where it exists instead of a
+         scaled fireball. Falling back to boom keeps a set that only half-loaded working. */
       var set = f.kind === 'piff' ? S.fx.piff
               : (f.kind === 'splash' ? S.fx.splash
               : (f.kind === 'smoke' ? S.fx.smoke
-              : (RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].size ? S.fx.fire : S.fx.boom)));
+              : (f.kind === 'hit' && S.fx.hit ? S.fx.hit
+              : (f.kind === 'pop' && S.fx.pop ? S.fx.pop
+              : (RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].size ? S.fx.fire : S.fx.boom)))));
       var dur = (RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].dur) || 0.75;
       var fr = Math.min(set.length - 1, Math.floor(_rtsAnimQ(f.t) / dur * set.length));
       var img = set[Math.max(0, fr)];

@@ -1742,7 +1742,14 @@ function _sprFx() {
     }
     smoke.push(mt.c);
   }
-  return { boom: boom, flash: flash, piff: piff, splash: splash, fire: fire, smoke: smoke };
+  var drawn = { boom: boom, flash: flash, piff: piff, splash: splash, fire: fire, smoke: smoke };
+  /* The originals win where they exist, role by role, keeping the drawn one for anything the
+     archives do not cover - so a partial set degrades to a mixture rather than to nothing. */
+  var real = (typeof _mixFx === 'function') ? _mixFx() : null;
+  if (real) {
+    for (var rk in real) if (real[rk]) drawn[rk] = real[rk];
+  }
+  return drawn;
 }
 
 function _rtsSprites() {
