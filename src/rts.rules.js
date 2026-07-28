@@ -1078,6 +1078,17 @@ var RTS_UNLOAD_RATE = 700;      /* scrap/second poured into the refinery */
    powered feel like a real decision rather than a gradient you can ignore. */
 var RTS_POWER_BAND = 0.75, RTS_POWER_MIN = 0.5;
 var RTS_BUILD_RADIUS = 9;       /* tiles: how far from an existing structure you may build */
+/* CONQUER.CPP's Color_Cycle steps the water band once every TIMER_SECOND/4 - four a second. */
+var RTS_WATER_HZ = 4;
+
+/* The light pass. Restraint is the whole game here: bloom above about 0.5 turns pixel art into
+   soup, and a vignette you can consciously see is one that is too strong. These are the numbers
+   that survived looking at them. */
+var RTS_POST_ON = true;
+var RTS_BLOOM = 0.85;           /* how much of the blurred highlight is added back, per pass */
+var RTS_BLOOM_PASSES = 1;       /* added this many times - gain, separate from the threshold */
+var RTS_BLOOM_BLUR = 2;         /* px, at EIGHTH resolution - so ~16px across the frame */
+var RTS_VIGNETTE = '#d2d7de';   /* the corner multiplier; nearer white is a weaker vignette */
 
 /* ------------------------------------------------------------ superweapons --
    What each one does when it goes off. Kept here with the other tuning rather than buried in

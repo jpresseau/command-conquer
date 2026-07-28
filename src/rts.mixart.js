@@ -58,7 +58,7 @@ function rtsSetTheatre(id) {
   _RTS_SPR = null; _RTS_UFIT = {}; _RTS_USCALE = {};
   _RTS_TREES = null; _RTS_MIXTREES = null; _RTS_TILECACHE = null; _RTS_MIXDEBRIS = null;
   _RTS_MIXBIB = null; _RTS_SHROUDSPR = null; _RTS_MIXMAKE = null; _RTS_MIXDIE = null;
-  _RTS_MIXFX = null;
+  _RTS_MIXFX = null; _RTS_MIXWATER = null;
   return id;
 }
 /* The file extension the current theatre's tiles carry. */
@@ -263,6 +263,57 @@ function _mixBuilding(key, side) {
     }
   }
   return out;
+}
+
+/* ---------------------------------------------------------------- the sea --
+   RA animates water by ROTATING A BAND OF THE PALETTE rather than by holding animation frames -
+   CONQUER.CPP's Color_Cycle steps it once every TIMER_SECOND/4 - which is why a static reading
+   of the tiles produces a dead flat sea however many of them you sample.
+
+   Which band was measured rather than looked up: OpenRA's RotationPaletteEffect names a
+   RotationBase only for DESERT and leaves temperate on its default, so the answer came from
+   asking what w1.tem is actually painted with. Its indices are 46,47,62,64-68,72,99,101 and
+   w2.tem adds 96,98,100 - a run at 96..102, which is 0x60, the default the yaml does not state.
+
+   Baked as RTS_WATER_STEPS complete tile sets, one per rotation position, so animating is
+   picking a set rather than rebuilding anything. Seven sets of a handful of 24x24 tiles is
+   nothing; re-baking the whole terrain canvas four times a second would not be. */
+var RTS_WATER_BASE = 96, RTS_WATER_RANGE = 7, RTS_WATER_STEPS = 7;
+var _RTS_MIXWATER = null;
+
+function _mixWater() {
+  if (!_rtsArtReady()) return null;
+  if (_RTS_MIXWATER !== null) return _RTS_MIXWATER;
+  _RTS_MIXWATER = false;
+  var src = _mixTiles('w1' + _rtsThExt());
+  if (!src || !src.tile || !src.tile.length) return false;
+  var base = RTS_MIX.pal;
+  var steps = [];
+  for (var st = 0; st < RTS_WATER_STEPS; st++) {
+    /* rotate the band by `st`, leaving every other entry alone */
+    var pal = new Uint8Array(base);
+    for (var k = 0; k < RTS_WATER_RANGE; k++) {
+      var from = RTS_WATER_BASE + ((k + st) % RTS_WATER_RANGE);
+      var to = RTS_WATER_BASE + k;
+      pal[to * 3] = base[from * 3];
+      pal[to * 3 + 1] = base[from * 3 + 1];
+      pal[to * 3 + 2] = base[from * 3 + 2];
+    }
+    var set = [];
+    for (var t = 0; t < src.tile.length; t++) {
+      var tile = src.tile[t];
+      if (!tile) { set.push(null); continue; }
+      var cv = _sprMake(RTS_TS, RTS_TS), im = cv.g.createImageData(RTS_TS, RTS_TS), d = im.data;
+      for (var q = 0; q < RTS_TS * RTS_TS; q++) {
+        var v = tile[q] * 3;
+        d[q * 4] = pal[v]; d[q * 4 + 1] = pal[v + 1]; d[q * 4 + 2] = pal[v + 2]; d[q * 4 + 3] = 255;
+      }
+      cv.g.putImageData(im, 0, 0);
+      set.push(cv.c);
+    }
+    steps.push(set);
+  }
+  return (_RTS_MIXWATER = steps);
 }
 
 /* ------------------------------------------------------------------ effects --

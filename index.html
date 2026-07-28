@@ -3237,6 +3237,17 @@ var RTS_UNLOAD_RATE = 700;      /* scrap/second poured into the refinery */
    powered feel like a real decision rather than a gradient you can ignore. */
 var RTS_POWER_BAND = 0.75, RTS_POWER_MIN = 0.5;
 var RTS_BUILD_RADIUS = 9;       /* tiles: how far from an existing structure you may build */
+/* CONQUER.CPP's Color_Cycle steps the water band once every TIMER_SECOND/4 - four a second. */
+var RTS_WATER_HZ = 4;
+
+/* The light pass. Restraint is the whole game here: bloom above about 0.5 turns pixel art into
+   soup, and a vignette you can consciously see is one that is too strong. These are the numbers
+   that survived looking at them. */
+var RTS_POST_ON = true;
+var RTS_BLOOM = 0.85;           /* how much of the blurred highlight is added back, per pass */
+var RTS_BLOOM_PASSES = 1;       /* added this many times - gain, separate from the threshold */
+var RTS_BLOOM_BLUR = 2;         /* px, at EIGHTH resolution - so ~16px across the frame */
+var RTS_VIGNETTE = '#d2d7de';   /* the corner multiplier; nearer white is a weaker vignette */
 
 /* ------------------------------------------------------------ superweapons --
    What each one does when it goes off. Kept here with the other tuning rather than buried in
@@ -5926,7 +5937,7 @@ function rtsSetTheatre(id) {
   _RTS_SPR = null; _RTS_UFIT = {}; _RTS_USCALE = {};
   _RTS_TREES = null; _RTS_MIXTREES = null; _RTS_TILECACHE = null; _RTS_MIXDEBRIS = null;
   _RTS_MIXBIB = null; _RTS_SHROUDSPR = null; _RTS_MIXMAKE = null; _RTS_MIXDIE = null;
-  _RTS_MIXFX = null;
+  _RTS_MIXFX = null; _RTS_MIXWATER = null;
   return id;
 }
 /* The file extension the current theatre's tiles carry. */
@@ -6131,6 +6142,57 @@ function _mixBuilding(key, side) {
     }
   }
   return out;
+}
+
+/* ---------------------------------------------------------------- the sea --
+   RA animates water by ROTATING A BAND OF THE PALETTE rather than by holding animation frames -
+   CONQUER.CPP's Color_Cycle steps it once every TIMER_SECOND/4 - which is why a static reading
+   of the tiles produces a dead flat sea however many of them you sample.
+
+   Which band was measured rather than looked up: OpenRA's RotationPaletteEffect names a
+   RotationBase only for DESERT and leaves temperate on its default, so the answer came from
+   asking what w1.tem is actually painted with. Its indices are 46,47,62,64-68,72,99,101 and
+   w2.tem adds 96,98,100 - a run at 96..102, which is 0x60, the default the yaml does not state.
+
+   Baked as RTS_WATER_STEPS complete tile sets, one per rotation position, so animating is
+   picking a set rather than rebuilding anything. Seven sets of a handful of 24x24 tiles is
+   nothing; re-baking the whole terrain canvas four times a second would not be. */
+var RTS_WATER_BASE = 96, RTS_WATER_RANGE = 7, RTS_WATER_STEPS = 7;
+var _RTS_MIXWATER = null;
+
+function _mixWater() {
+  if (!_rtsArtReady()) return null;
+  if (_RTS_MIXWATER !== null) return _RTS_MIXWATER;
+  _RTS_MIXWATER = false;
+  var src = _mixTiles('w1' + _rtsThExt());
+  if (!src || !src.tile || !src.tile.length) return false;
+  var base = RTS_MIX.pal;
+  var steps = [];
+  for (var st = 0; st < RTS_WATER_STEPS; st++) {
+    /* rotate the band by `st`, leaving every other entry alone */
+    var pal = new Uint8Array(base);
+    for (var k = 0; k < RTS_WATER_RANGE; k++) {
+      var from = RTS_WATER_BASE + ((k + st) % RTS_WATER_RANGE);
+      var to = RTS_WATER_BASE + k;
+      pal[to * 3] = base[from * 3];
+      pal[to * 3 + 1] = base[from * 3 + 1];
+      pal[to * 3 + 2] = base[from * 3 + 2];
+    }
+    var set = [];
+    for (var t = 0; t < src.tile.length; t++) {
+      var tile = src.tile[t];
+      if (!tile) { set.push(null); continue; }
+      var cv = _sprMake(RTS_TS, RTS_TS), im = cv.g.createImageData(RTS_TS, RTS_TS), d = im.data;
+      for (var q = 0; q < RTS_TS * RTS_TS; q++) {
+        var v = tile[q] * 3;
+        d[q * 4] = pal[v]; d[q * 4 + 1] = pal[v + 1]; d[q * 4 + 2] = pal[v + 2]; d[q * 4 + 3] = 255;
+      }
+      cv.g.putImageData(im, 0, 0);
+      set.push(cv.c);
+    }
+    steps.push(set);
+  }
+  return (_RTS_MIXWATER = steps);
 }
 
 /* ------------------------------------------------------------------ effects --
@@ -14099,6 +14161,170 @@ function _rtsWorldToScreen(x, y, z) {
    The shaping is only ever computed against UNEXPLORED, because that is the boundary the eye
    reads as the edge of the map. Shaping the explored/visible boundary too would put hard
    diagonal wedges around every unit as it walks, which is noise rather than information. */
+
+/* Stamp the moving sea over the baked terrain.
+
+   The terrain canvas already holds a still frame of water; this repaints the cells that are
+   water with whichever palette rotation is current. Only the ones on SCREEN - Archipelago has
+   11407 water cells and perhaps 300 of them are in view.
+
+   The tile variant per cell has to match what _mixPaintCell chose when the terrain was baked,
+   or the sea visibly re-shuffles the moment the overlay starts: same hash, same seed, same
+   `+137`. That coupling is the price of not re-baking a 3072x3072 canvas four times a second. */
+
+/* ------------------------------------------------------------ the light pass --
+   Everything above draws flat: each sprite is composited at full opacity over the one behind
+   it, which is exactly what the original did and exactly why a 1996 frame looks like one. This
+   is the only part of the renderer that is NOT trying to be faithful - it is a pass over the
+   finished frame, and it is what makes the picture read as lit rather than as printed.
+
+   Two effects, both cheap, both deliberately restrained:
+
+   BLOOM. The frame is scaled to a quarter, MULTIPLIED BY ITSELF twice - which cubes every
+   channel and so crushes everything dark to nothing while leaving whites alone - then blurred
+   and added back. The multiply is doing the job a threshold would do in a shader; canvas 2D has
+   no threshold, but it does have multiply, and x^3 is a perfectly good soft one. The result is
+   that fire, explosions, muzzle flashes and the Tesla Coil throw light and nothing else does.
+
+   VIGNETTE. A cached radial gradient multiplied over the frame. It costs one drawImage and does
+   more for the sense of depth than anything else here.
+
+   Applied to the BATTLEFIELD canvas only. The HUD is a separate canvas on top, so the sidebar,
+   the text and the health bars stay perfectly sharp - blooming a UI is how you make it look
+   cheap. */
+function _rtsPostInit(R) {
+  /* An EIGHTH, not a quarter. The downscale reads the whole frame either way, but everything
+     downstream - the multiplies, the blur, the composites - is priced on the buffer, and at 1/8
+     that is four times less. The bilinear stretch back up also does more of the softening, so
+     the blur radius drops with it. */
+  var q = 8;
+  R.bloomW = Math.max(1, R.W / q | 0);
+  R.bloomH = Math.max(1, R.H / q | 0);
+  if (!R.bloomCv) R.bloomCv = document.createElement('canvas');
+  R.bloomCv.width = R.bloomW; R.bloomCv.height = R.bloomH;
+  R.bloomG = R.bloomCv.getContext('2d');
+  /* A second small buffer to blur INTO. Blurring at full frame size cost 36 fps of 59 - a
+     canvas-2D filter is priced per pixel, and a quarter-size buffer is a sixteenth of them. */
+  if (!R.blurCv) R.blurCv = document.createElement('canvas');
+  R.blurCv.width = R.bloomW; R.blurCv.height = R.bloomH;
+  R.blurG = R.blurCv.getContext('2d');
+
+  /* the vignette, built once at frame size */
+  if (!R.vigCv) R.vigCv = document.createElement('canvas');
+  R.vigCv.width = R.W; R.vigCv.height = R.H;
+  var vg = R.vigCv.getContext('2d');
+  var cx = R.W / 2, cy = R.H / 2, rad = Math.hypot(cx, cy);
+  var grd = vg.createRadialGradient(cx, cy, rad * 0.42, cx, cy, rad);
+  grd.addColorStop(0, '#ffffff');
+  grd.addColorStop(1, RTS_VIGNETTE);
+  vg.fillStyle = grd;
+  vg.fillRect(0, 0, R.W, R.H);
+  R.vigW = R.W; R.vigH = R.H;
+}
+
+/* Is there anything on screen worth blooming? Almost always no. The threshold is built to pass
+   only fire and explosions, so on a quiet frame the entire bloom - a full-frame downscale, two
+   full-frame additive composites - produces nothing and costs a third of the frame rate doing
+   it. Gating on "is anything burning or exploding" turns that into a cost paid during fights,
+   which is exactly when it is visible. Muzzle flashes are deliberately not counted: they last
+   a couple of frames and are not worth waking the pass for. */
+function _rtsWantBloom(G) {
+  for (var i = 0; i < G.fx.length; i++) {
+    var k = G.fx[i].kind;
+    if (k === 'tracer' || k === 'debris' || k === 'die') continue;
+    if (G.fx[i].t < 0) continue;
+    return true;
+  }
+  return false;
+}
+
+function _rtsPost(g) {
+  var R = _rtsR, G = window._rtsG;
+  if (!R || !RTS_POST_ON || R.W < 8 || R.H < 8) return;
+  if (R.vigW !== R.W || R.vigH !== R.H || !R.bloomG) _rtsPostInit(R);
+
+  /* The vignette is one drawImage and always worth it. The bloom is not. */
+  if (!G || !_rtsWantBloom(G)) {
+    g.save();
+    g.globalCompositeOperation = 'multiply';
+    g.drawImage(R.vigCv, 0, 0);
+    g.restore();
+    return;
+  }
+
+  /* --- bloom --- */
+  var bg = R.bloomG, bw = R.bloomW, bh = R.bloomH;
+  bg.globalCompositeOperation = 'source-over';
+  bg.globalAlpha = 1;
+  bg.clearRect(0, 0, bw, bh);
+  bg.drawImage(g.canvas, 0, 0, bw, bh);
+  /* CUBE for the threshold, then add back MORE THAN ONCE for the gain. The two are separate
+     jobs and conflating them is what went wrong twice:
+
+       cube + one weak add   the midtones vanish and so does the glow - measured as a pass that
+                             only darkened the frame (mean 59 -> 55.9)
+       square + strong add   the highlights glow, but so does everything else, because squaring
+                             leaves plenty of midtone behind - a 19% lift across the whole
+                             frame, which is haze rather than light (mean 59 -> 70.4)
+
+     Cubing kills the midtones properly; adding the result twice puts the intensity back where
+     it belongs, on the pixels that survived. */
+  bg.globalCompositeOperation = 'multiply';
+  bg.drawImage(R.bloomCv, 0, 0);
+  bg.drawImage(R.bloomCv, 0, 0);
+  bg.globalCompositeOperation = 'source-over';
+
+  /* blur once, small */
+  var rg = R.blurG;
+  rg.globalCompositeOperation = 'source-over';
+  rg.clearRect(0, 0, bw, bh);
+  rg.filter = 'blur(' + RTS_BLOOM_BLUR + 'px)';
+  rg.drawImage(R.bloomCv, 0, 0);
+  rg.filter = 'none';
+
+  /* ...then up, with smoothing ON. The renderer runs with it off everywhere else so pixels stay
+     square, but here the bilinear stretch from a quarter-size buffer IS most of the softening -
+     which is why the blur radius above can be small. */
+  g.save();
+  g.globalCompositeOperation = 'lighter';
+  g.globalAlpha = RTS_BLOOM;
+  g.imageSmoothingEnabled = true;
+  for (var bp = 0; bp < RTS_BLOOM_PASSES; bp++) g.drawImage(R.blurCv, 0, 0, R.W, R.H);
+  g.restore();
+
+  /* --- vignette --- */
+  g.save();
+  g.globalCompositeOperation = 'multiply';
+  g.drawImage(R.vigCv, 0, 0);
+  g.restore();
+}
+
+function _rtsDrawWater(g, G, cell) {
+  var steps = _mixWater();
+  if (!steps) return;
+  var R = _rtsR, N = RTS_N;
+  var set = steps[Math.floor(G.t * RTS_WATER_HZ) % steps.length];
+  var ox = R.focus.x / RTS_TILE + N / 2 - (R.W / 2) / cell;
+  var oy = R.focus.z / RTS_TILE + N / 2 - (R.H / 2) / cell;
+  var x0 = Math.max(0, Math.floor(ox)), y0 = Math.max(0, Math.floor(oy));
+  var x1 = Math.min(N - 1, Math.ceil(ox + R.W / cell));
+  var y1 = Math.min(N - 1, Math.ceil(oy + R.H / cell));
+  var seed = (G.seed || 1) | 0, w = Math.ceil(cell) + 1;
+
+  for (var y = y0; y <= y1; y++) {
+    for (var x = x0; x <= x1; x++) {
+      var i = y * N + x;
+      if (G.terrain[i] !== RTS_T_WATER) continue;
+      if (!G.mapped[i]) continue;                    /* never seen - the shroud covers it anyway */
+      var v = (_sprHash(x, y, seed + 137) * set.length) | 0;
+      if (v >= set.length) v = set.length - 1;
+      var tile = set[v];
+      if (!tile) continue;
+      g.drawImage(tile, Math.round((x - ox) * cell), Math.round((y - oy) * cell), w, w);
+    }
+  }
+}
+
 function _rtsDrawShroudTiles(g, G, cell) {
   var R = _rtsR, spr = _mixShroud(), map = _mixShroudMap();
   var N = RTS_N;
@@ -14289,6 +14515,9 @@ function _rtsRFrame(dt) {
       else tg.drawImage(S.scorch[((sv & 7) - 1) % 6], nx, ny);
     }
   }
+
+  /* --- the sea, moving. Over the baked terrain and under everything that stands on it. --- */
+  if (typeof _rtsDrawWater === 'function') _rtsDrawWater(g, G, cell);
 
   /* --- foundation pads. A separate pass before any structure is drawn, so one building's
      pad can never cover its neighbour. Without these a base looks like furniture dropped
@@ -14528,6 +14757,9 @@ function _rtsRFrame(dt) {
     g.lineWidth = 2;
     g.strokeRect(gx + 1, gy + 1, def.w * cell - 2, def.h * cell - 2);
   }
+
+  /* Last, over the finished battlefield and nothing else. */
+  _rtsPost(g);
 }
 
 

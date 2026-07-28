@@ -80,6 +80,170 @@ function _rtsWorldToScreen(x, y, z) {
    The shaping is only ever computed against UNEXPLORED, because that is the boundary the eye
    reads as the edge of the map. Shaping the explored/visible boundary too would put hard
    diagonal wedges around every unit as it walks, which is noise rather than information. */
+
+/* Stamp the moving sea over the baked terrain.
+
+   The terrain canvas already holds a still frame of water; this repaints the cells that are
+   water with whichever palette rotation is current. Only the ones on SCREEN - Archipelago has
+   11407 water cells and perhaps 300 of them are in view.
+
+   The tile variant per cell has to match what _mixPaintCell chose when the terrain was baked,
+   or the sea visibly re-shuffles the moment the overlay starts: same hash, same seed, same
+   `+137`. That coupling is the price of not re-baking a 3072x3072 canvas four times a second. */
+
+/* ------------------------------------------------------------ the light pass --
+   Everything above draws flat: each sprite is composited at full opacity over the one behind
+   it, which is exactly what the original did and exactly why a 1996 frame looks like one. This
+   is the only part of the renderer that is NOT trying to be faithful - it is a pass over the
+   finished frame, and it is what makes the picture read as lit rather than as printed.
+
+   Two effects, both cheap, both deliberately restrained:
+
+   BLOOM. The frame is scaled to a quarter, MULTIPLIED BY ITSELF twice - which cubes every
+   channel and so crushes everything dark to nothing while leaving whites alone - then blurred
+   and added back. The multiply is doing the job a threshold would do in a shader; canvas 2D has
+   no threshold, but it does have multiply, and x^3 is a perfectly good soft one. The result is
+   that fire, explosions, muzzle flashes and the Tesla Coil throw light and nothing else does.
+
+   VIGNETTE. A cached radial gradient multiplied over the frame. It costs one drawImage and does
+   more for the sense of depth than anything else here.
+
+   Applied to the BATTLEFIELD canvas only. The HUD is a separate canvas on top, so the sidebar,
+   the text and the health bars stay perfectly sharp - blooming a UI is how you make it look
+   cheap. */
+function _rtsPostInit(R) {
+  /* An EIGHTH, not a quarter. The downscale reads the whole frame either way, but everything
+     downstream - the multiplies, the blur, the composites - is priced on the buffer, and at 1/8
+     that is four times less. The bilinear stretch back up also does more of the softening, so
+     the blur radius drops with it. */
+  var q = 8;
+  R.bloomW = Math.max(1, R.W / q | 0);
+  R.bloomH = Math.max(1, R.H / q | 0);
+  if (!R.bloomCv) R.bloomCv = document.createElement('canvas');
+  R.bloomCv.width = R.bloomW; R.bloomCv.height = R.bloomH;
+  R.bloomG = R.bloomCv.getContext('2d');
+  /* A second small buffer to blur INTO. Blurring at full frame size cost 36 fps of 59 - a
+     canvas-2D filter is priced per pixel, and a quarter-size buffer is a sixteenth of them. */
+  if (!R.blurCv) R.blurCv = document.createElement('canvas');
+  R.blurCv.width = R.bloomW; R.blurCv.height = R.bloomH;
+  R.blurG = R.blurCv.getContext('2d');
+
+  /* the vignette, built once at frame size */
+  if (!R.vigCv) R.vigCv = document.createElement('canvas');
+  R.vigCv.width = R.W; R.vigCv.height = R.H;
+  var vg = R.vigCv.getContext('2d');
+  var cx = R.W / 2, cy = R.H / 2, rad = Math.hypot(cx, cy);
+  var grd = vg.createRadialGradient(cx, cy, rad * 0.42, cx, cy, rad);
+  grd.addColorStop(0, '#ffffff');
+  grd.addColorStop(1, RTS_VIGNETTE);
+  vg.fillStyle = grd;
+  vg.fillRect(0, 0, R.W, R.H);
+  R.vigW = R.W; R.vigH = R.H;
+}
+
+/* Is there anything on screen worth blooming? Almost always no. The threshold is built to pass
+   only fire and explosions, so on a quiet frame the entire bloom - a full-frame downscale, two
+   full-frame additive composites - produces nothing and costs a third of the frame rate doing
+   it. Gating on "is anything burning or exploding" turns that into a cost paid during fights,
+   which is exactly when it is visible. Muzzle flashes are deliberately not counted: they last
+   a couple of frames and are not worth waking the pass for. */
+function _rtsWantBloom(G) {
+  for (var i = 0; i < G.fx.length; i++) {
+    var k = G.fx[i].kind;
+    if (k === 'tracer' || k === 'debris' || k === 'die') continue;
+    if (G.fx[i].t < 0) continue;
+    return true;
+  }
+  return false;
+}
+
+function _rtsPost(g) {
+  var R = _rtsR, G = window._rtsG;
+  if (!R || !RTS_POST_ON || R.W < 8 || R.H < 8) return;
+  if (R.vigW !== R.W || R.vigH !== R.H || !R.bloomG) _rtsPostInit(R);
+
+  /* The vignette is one drawImage and always worth it. The bloom is not. */
+  if (!G || !_rtsWantBloom(G)) {
+    g.save();
+    g.globalCompositeOperation = 'multiply';
+    g.drawImage(R.vigCv, 0, 0);
+    g.restore();
+    return;
+  }
+
+  /* --- bloom --- */
+  var bg = R.bloomG, bw = R.bloomW, bh = R.bloomH;
+  bg.globalCompositeOperation = 'source-over';
+  bg.globalAlpha = 1;
+  bg.clearRect(0, 0, bw, bh);
+  bg.drawImage(g.canvas, 0, 0, bw, bh);
+  /* CUBE for the threshold, then add back MORE THAN ONCE for the gain. The two are separate
+     jobs and conflating them is what went wrong twice:
+
+       cube + one weak add   the midtones vanish and so does the glow - measured as a pass that
+                             only darkened the frame (mean 59 -> 55.9)
+       square + strong add   the highlights glow, but so does everything else, because squaring
+                             leaves plenty of midtone behind - a 19% lift across the whole
+                             frame, which is haze rather than light (mean 59 -> 70.4)
+
+     Cubing kills the midtones properly; adding the result twice puts the intensity back where
+     it belongs, on the pixels that survived. */
+  bg.globalCompositeOperation = 'multiply';
+  bg.drawImage(R.bloomCv, 0, 0);
+  bg.drawImage(R.bloomCv, 0, 0);
+  bg.globalCompositeOperation = 'source-over';
+
+  /* blur once, small */
+  var rg = R.blurG;
+  rg.globalCompositeOperation = 'source-over';
+  rg.clearRect(0, 0, bw, bh);
+  rg.filter = 'blur(' + RTS_BLOOM_BLUR + 'px)';
+  rg.drawImage(R.bloomCv, 0, 0);
+  rg.filter = 'none';
+
+  /* ...then up, with smoothing ON. The renderer runs with it off everywhere else so pixels stay
+     square, but here the bilinear stretch from a quarter-size buffer IS most of the softening -
+     which is why the blur radius above can be small. */
+  g.save();
+  g.globalCompositeOperation = 'lighter';
+  g.globalAlpha = RTS_BLOOM;
+  g.imageSmoothingEnabled = true;
+  for (var bp = 0; bp < RTS_BLOOM_PASSES; bp++) g.drawImage(R.blurCv, 0, 0, R.W, R.H);
+  g.restore();
+
+  /* --- vignette --- */
+  g.save();
+  g.globalCompositeOperation = 'multiply';
+  g.drawImage(R.vigCv, 0, 0);
+  g.restore();
+}
+
+function _rtsDrawWater(g, G, cell) {
+  var steps = _mixWater();
+  if (!steps) return;
+  var R = _rtsR, N = RTS_N;
+  var set = steps[Math.floor(G.t * RTS_WATER_HZ) % steps.length];
+  var ox = R.focus.x / RTS_TILE + N / 2 - (R.W / 2) / cell;
+  var oy = R.focus.z / RTS_TILE + N / 2 - (R.H / 2) / cell;
+  var x0 = Math.max(0, Math.floor(ox)), y0 = Math.max(0, Math.floor(oy));
+  var x1 = Math.min(N - 1, Math.ceil(ox + R.W / cell));
+  var y1 = Math.min(N - 1, Math.ceil(oy + R.H / cell));
+  var seed = (G.seed || 1) | 0, w = Math.ceil(cell) + 1;
+
+  for (var y = y0; y <= y1; y++) {
+    for (var x = x0; x <= x1; x++) {
+      var i = y * N + x;
+      if (G.terrain[i] !== RTS_T_WATER) continue;
+      if (!G.mapped[i]) continue;                    /* never seen - the shroud covers it anyway */
+      var v = (_sprHash(x, y, seed + 137) * set.length) | 0;
+      if (v >= set.length) v = set.length - 1;
+      var tile = set[v];
+      if (!tile) continue;
+      g.drawImage(tile, Math.round((x - ox) * cell), Math.round((y - oy) * cell), w, w);
+    }
+  }
+}
+
 function _rtsDrawShroudTiles(g, G, cell) {
   var R = _rtsR, spr = _mixShroud(), map = _mixShroudMap();
   var N = RTS_N;
@@ -270,6 +434,9 @@ function _rtsRFrame(dt) {
       else tg.drawImage(S.scorch[((sv & 7) - 1) % 6], nx, ny);
     }
   }
+
+  /* --- the sea, moving. Over the baked terrain and under everything that stands on it. --- */
+  if (typeof _rtsDrawWater === 'function') _rtsDrawWater(g, G, cell);
 
   /* --- foundation pads. A separate pass before any structure is drawn, so one building's
      pad can never cover its neighbour. Without these a base looks like furniture dropped
@@ -509,6 +676,9 @@ function _rtsRFrame(dt) {
     g.lineWidth = 2;
     g.strokeRect(gx + 1, gy + 1, def.w * cell - 2, def.h * cell - 2);
   }
+
+  /* Last, over the finished battlefield and nothing else. */
+  _rtsPost(g);
 }
 
 
