@@ -724,10 +724,22 @@ var RTS_ALERT_DELAY = 25;       /* Rule.SpeakDelay: cooldown on "base under atta
 var RTS_DAMAGE_DELAY = 20;      /* seconds between brownout damage ticks */
 var RTS_POWER_DAMAGE = 6;       /* hit points per tick, on buildings above ConditionYellow */
 
-/* Cap on how many producing buildings the opponent may parallelise; see _rtsLines. Two is
-   its own structure limit for both factories and barracks, so this is a ceiling rather than a
-   constraint today - it exists so raising RTS_AI.limit cannot silently uncap production. */
-var RTS_AI_MAX_LINES = 2;
+/* MULTIPLE FACTORIES BUILD FASTER, and these are RA's own numbers rather than ours - from
+   ClassicProductionQueue@Vehicle in mods/ra/rules/player.yaml:
+
+       BuildTimeSpeedReduction: 100, 75, 60, 50
+
+   Percentages of build TIME for 1, 2, 3 and 4 producing buildings of the type; anything beyond
+   the fourth is the fourth. _rtsBuildRate turns them into rate multipliers (100/pct), so four
+   war factories build at 2x and the ceiling is the same one the old invented linear rule had -
+   it is the curve up to it that is now the game's rather than a guess.
+
+   The one liberty: RA states the table only for the VEHICLE queue and leaves the others on the
+   engine default. Applying it to barracks too is deliberate - the opponent's second barracks
+   already relied on parallel infantry production, and taking it away re-opens a measured
+   failure (28,576 credits it had no line fast enough to spend). Naval yards are not included
+   because nothing here builds ships in parallel yet. */
+var RTS_BUILD_SPEEDUP = [100, 75, 60, 50];
 
 var RTS_AI = {
   baseSizeAdd:3,
