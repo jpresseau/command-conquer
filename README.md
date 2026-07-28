@@ -42,6 +42,11 @@ Power Plant ──┬── Ore Refinery ─── War Factory ── vehicles +
                              └── Gun Turret
 ```
 
+A second **War Factory** makes vehicles come out faster — still one queue, but it runs at 1.33×,
+and a third and fourth take it to 1.67× and 2×. A second **Barracks** does the same for infantry.
+That is Red Alert's own `BuildTimeSpeedReduction` curve (100, 75, 60, 50), and the enemy gets it
+too.
+
 The enemy is doing the same thing on the other side of the map, and its first attack wave is on a
 timer. A player who does nothing is overrun in about four and a half minutes.
 

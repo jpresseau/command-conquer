@@ -2103,26 +2103,37 @@ function _rtsProdRecalc(side) {
 
    Scaling the build RATE by the number of producing buildings keeps the single queue - and
    therefore the whole sidebar model - while making the second factory mean something. Cost
-   scales with rate automatically, so the money is genuinely spent rather than conjured. */
-function _rtsLines(side, cat) {
-  if (side === 'player') return 1;               /* the sidebar is one line per category */
+   scales with rate automatically, so the money is genuinely spent rather than conjured.
+
+   THE PLAYER USED TO BE EXCLUDED FROM THIS, and that was the bug. `if (side === 'player')
+   return 1` confused two different things: RA's sidebar does show one line per category, but
+   that line RUNS FASTER when you own more factories. Building a second war factory did nothing
+   at all for the player while the opponent got the full benefit of its own - an asymmetry the
+   player was on the wrong side of, in a mechanic the original game is well known for.
+
+   The multiplier is RA's own, from ClassicProductionQueue@Vehicle in mods/ra/rules/player.yaml:
+   BuildTimeSpeedReduction 100, 75, 60, 50 - percentages of build TIME for 1, 2, 3 and 4+
+   producing buildings, so the rate multiplier is 100/that. It replaces a linear `n x rate` that
+   was invented here for want of a table. The ceiling is unchanged at 2x; it is now reached at
+   four factories rather than two, which is the curve the data actually describes. */
+function _rtsBuildRate(side, cat) {
   var G = window._rtsG, key = cat === 'infantry' ? 'barracks' : (cat === 'vehicle' ? 'factory' : null);
-  if (!key) return 1;
+  if (!key || !G) return 1;
   var n = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (!e.dead && !e.building && !e.selling && e.side === side && e.def === key) n++;
   }
-  /* Patch 3.03 capped this at two: "speeding production by building multiple factories of the
-     same type has been limited to only 2 factories". RTS_AI_MAX_LINES was already 2, picked
-     independently - which is a pleasant confirmation rather than a change. */
-  return Math.max(1, Math.min(RTS_AI_MAX_LINES, n));
+  if (n < 2) return 1;
+  var tbl = RTS_BUILD_SPEEDUP;
+  var pct = tbl[Math.min(n, tbl.length) - 1];
+  return 100 / pct;
 }
 function _rtsTickProduction(side, dt) {
   var G = window._rtsG, S = G.sides[side], pf = _rtsPowerFactor(side), cat;
   for (cat in S.q) {
     var q = S.q[cat]; if (!q || q.hold) continue;  /* a suspended line spends nothing */
-    var rate = dt / q.total * pf * _rtsLines(side, cat);   /* fraction of the job done this step */
+    var rate = dt / q.total * pf * _rtsBuildRate(side, cat);  /* fraction of the job done this step */
     /* Cost_Per_Tick(): `min(cost, Balance)`. Charging `cost * rate` without that clamp
        systematically OVERCHARGES, because the final tick's rate overshoots the job - measured
        at up to 1.21 credits on an 800-credit tank, always over and never under. Driving the
