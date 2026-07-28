@@ -338,18 +338,37 @@ function rtsRestoreSaved() {
         ' archives, ' + (mix.bytes / 1048576).toFixed(1) + ' MB. ';
       mixNote.className = 'ok';
       rtsAddForget(mixNote);
+      rtsPickDoneArt();
     } else { mixNote.textContent = before; mixNote.className = ''; }
     rtsShowEditor(); rtsBuildVoxSide();
   }, function (map) {
     if (!mapNote) return;
-    if (map) { mapNote.textContent = rtsMapDescribe(map); mapNote.className = 'ok'; }
+    if (map) { mapNote.textContent = rtsMapDescribe(map); mapNote.className = 'ok'; rtsPickDoneMap(); }
     else { mapNote.textContent = mapBefore; mapNote.className = ''; }
   }, function (scen) {
     /* The whole scenario list back without the file dialog. Nothing to do when there is none -
        that is the first visit, and the picker's own instructions are already on screen. */
-    if (scen && typeof rtsMapShowStored === 'function') rtsMapShowStored(scen);
+    if (scen && typeof rtsMapShowStored === 'function' && rtsMapShowStored(scen)) rtsPickDoneMap();
   });
 }
+/* The buttons are imperatives - USE ORIGINAL ARTWORK, PLAY A REAL MAP - and an imperative sat
+   next to a note reading "loaded from last time" says two different things at once: the note
+   says it is done, the button says do it. Once something IS loaded the same control has stopped
+   being an instruction and become a way to change your mind, so it says that instead.
+
+   The text node is edited rather than the label, because the label also contains the <input>
+   that makes the whole thing a file picker; replacing its contents would throw that away. */
+function rtsPickLabel(inputId, text) {
+  var input = document.getElementById(inputId);
+  if (!input || !input.parentNode) return;
+  var kids = input.parentNode.childNodes, i;
+  for (i = 0; i < kids.length; i++) {
+    if (kids[i].nodeType === 3 && kids[i].nodeValue.trim()) { kids[i].nodeValue = text; return; }
+  }
+}
+function rtsPickDoneArt() { rtsPickLabel('rtsMixPick', 'REPLACE ARTWORK'); }
+function rtsPickDoneMap() { rtsPickLabel('rtsMapPick', 'CHOOSE ANOTHER MAP'); }
+
 /* Remembering has to be undoable, or a bad file becomes permanent. */
 function rtsAddForget(host) {
   if (!host || document.getElementById('rtsForget')) return;

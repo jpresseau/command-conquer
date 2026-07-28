@@ -752,6 +752,8 @@ function rtsMixPicked(input) {
       note.textContent = 'Original artwork loaded. ' +
         Object.keys(RTS_MIX.open).length + ' archives read.';
       note.className = 'ok';
+      /* the button stops being an instruction the moment it is obeyed, not on the next visit */
+      if (typeof rtsPickDoneArt === 'function') rtsPickDoneArt();
     } else {
       note.textContent = (log || err || 'Nothing usable in those files.');
       note.className = 'bad';
