@@ -382,6 +382,18 @@ function _rtsRFrame(dt) {
   for (i = 0; i < G.fx.length; i++) {
     var f = G.fx[i], k = _rtsAnimQ(f.t) / 0.75;
     if (f.t < 0) continue;                       /* a delayed secondary blast, not started */
+    if (f.kind === 'die') {
+      /* A soldier falling over, drawn from his own artwork. Held on the LAST frame once the
+         sequence runs out rather than looping - a body that gets back up and dies again is
+         worse than one that lies still. */
+      var dq = RTS_ANIMS.die.dur;
+      var di = Math.min(f.seq.length - 1, Math.floor((f.t / dq) * f.seq.length));
+      var dc = f.seq[di];
+      var dw = Math.round(dc.width * TSscale), dh = Math.round(dc.height * TSscale);
+      g.drawImage(dc, Math.round(_rtsSX(f.x) - dw / 2), Math.round(_rtsSY(f.z) - dh * 0.62),
+                  dw, dh);
+      continue;
+    }
     if (f.kind === 'debris') {
       /* Chunks thrown clear of a dying structure. Height projects upward the same way the
          baked sprites do, so a chunk arcs over the ground rather than sliding along it. */
@@ -580,6 +592,19 @@ function _rtsDrawStruct(g, e, TSscale, cell) {
   var w = Math.round(spr.c.width * TSscale), h = Math.round(spr.c.height * TSscale);
   var top = py - Math.round(spr.head * TSscale);
   if (e.building) {
+    /* The original's own construction sequence, when the player's files have it: RA draws a
+       building assembling itself frame by frame, and 21 of the 22 ship one. That is what the
+       reveal below was standing in for, so where the real thing exists it simply replaces it -
+       no beam, no stipple, because the artwork is already doing the job they were faking. */
+    var mk = (typeof _mixMake === 'function') ? _mixMake(e.def, e.side) : null;
+    if (mk) {
+      var mi = Math.max(0, Math.min(mk.frames.length - 1,
+                        Math.floor(Math.min(1, e.bprog) * (mk.frames.length - 1))));
+      var mc = mk.frames[mi];
+      var mw = Math.round(mc.width * TSscale), mh = Math.round(mc.height * TSscale);
+      g.drawImage(mc, px, py - Math.round(mk.head * TSscale), mw, mh);
+      return;
+    }
     /* Build-up. BUILDING.H drives this off Mission_Construction, and in the originals a
        structure visibly assembles rather than sliding up out of the ground. Here: the
        finished fraction is revealed from the bottom, the leading edge carries a bright

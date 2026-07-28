@@ -480,6 +480,10 @@ var RTS_ANIMS = {
   pop:    { dur:0.40, biggest:0.30, scorch:false, crater:false, chain:null,   loops:1 },
   /* Combat_Anim's PIFF: the little spark a bullet makes. No mark on the ground. */
   piff:   { dur:0.22, biggest:0.30, scorch:false, crater:false, chain:null,   loops:1 },
+  /* A soldier falling over. Carries its own frames rather than using the shared sprite sets,
+     because the artwork is per-unit and per-variant; the renderer reads f.seq. RA ticks these
+     at 80ms and they run 8 to 18 frames, so 0.9s covers the longest without dragging. */
+  die:    { dur:0.90, biggest:0.20, scorch:false, crater:false, chain:null,   loops:1 },
   /* ...and its water set. An explosion over water throws a plume, and leaves nothing. */
   splash: { dur:0.55, biggest:0.30, scorch:false, crater:false, chain:null,   loops:1 },
   /* ADATA.CPP's burn ladder. Three sizes of fire, each with its OWN damage rate, and each
