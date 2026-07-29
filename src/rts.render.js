@@ -126,7 +126,7 @@ function _rtsPostInit(R) {
      canvas-2D filter is priced per pixel, and a quarter-size buffer is a sixteenth of them. */
   if (!R.blurCv) R.blurCv = document.createElement('canvas');
   R.blurCv.width = R.bloomW; R.blurCv.height = R.bloomH;
-  R.blurG = R.blurCv.getContext('2d');
+  R.blurG = R.blurCv.getContext('2d', { willReadFrequently: true });   /* the gain reads it back */
 
   /* The vignette used to be built here as a frame-sized canvas and multiplied over the frame
      every frame. It is now the #rtsVig element, blended once per frame by the COMPOSITOR - see
@@ -195,12 +195,41 @@ function _rtsPost(g) {
   /* ...then up, with smoothing ON. The renderer runs with it off everywhere else so pixels stay
      square, but here the bilinear stretch from a quarter-size buffer IS most of the softening -
      which is why the blur radius above can be small. */
-  g.save();
-  g.globalCompositeOperation = 'lighter';
-  g.globalAlpha = RTS_BLOOM;
-  g.imageSmoothingEnabled = true;
-  for (var bp = 0; bp < RTS_BLOOM_PASSES; bp++) g.drawImage(R.blurCv, 0, 0, R.W, R.H);
-  g.restore();
+  /* THE GAIN STANDS DOWN ON A BRIGHT FIELD, and snow is why. The cube is a threshold built
+     for temperate ground, where everything but fire lands near black and dies. Snow ground is
+     near WHITE: it sails through the cube, and the moment any fx exists the whole field gets
+     added back onto itself at 85% - an intermittent full-screen flash, reported as exactly
+     that. Bloom keyed on brightness cannot tell albedo from light, so on a frame that is
+     bright everywhere the honest move is to not add.
+
+     The statistic is the FRACTION of bright pixels in the cubed buffer, and both simpler
+     ideas were tried and failed by measurement:
+       - a 1x1 drawImage "mean": GPU minification point-samples near the centre - where the
+         fireball is - so the mean came back as the fireball (240,165,65 against a true mean
+         of 4.0) and the gain shut the bloom off on every frame that had something to bloom;
+       - the true mean: the shroud broke it - a half-explored snow map is mostly black, the
+         black dilutes the mean back under the threshold, and the visible white patch flashed
+         exactly as before.
+     Fire is small and bright: the worst battle puts low single-digit percent of the frame
+     over the cube's threshold. Snowfield is bright by the tens of percent however much shroud
+     surrounds it - no amount of black changes how MANY bright pixels there are. Full glow up
+     to 4% of the frame, gone by 14%. Sampling every 4th pixel of the 1/8 buffer is ~2000
+     reads, only on frames with fx. */
+  var md = R.blurG.getImageData(0, 0, R.bloomW, R.bloomH).data;
+  var mbright = 0, mn = 0;
+  for (var mi = 0; mi < md.length; mi += 16) {
+    if (md[mi] + md[mi + 1] + md[mi + 2] > 180) mbright++;
+    mn++;
+  }
+  var gain = RTS_BLOOM * Math.max(0, Math.min(1, 1 - (mbright / mn - 0.04) / 0.10));
+  if (gain > 0.01) {
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = gain;
+    g.imageSmoothingEnabled = true;
+    for (var bp = 0; bp < RTS_BLOOM_PASSES; bp++) g.drawImage(R.blurCv, 0, 0, R.W, R.H);
+    g.restore();
+  }
   /* the vignette multiplies over this on the compositor - #rtsVig sits above the canvas */
 }
 

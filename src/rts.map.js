@@ -883,9 +883,17 @@ function _rtsMapPaintCell(d, S, tx, tz) {
   if (mx < 0 || my < 0 || mx >= b.w || my >= b.h) return false;
   var tab = window.raTileTab ? window.raTileTab(M.theatre) : window.RA_TILETAB;
   var k = my * b.w + mx, rec = tab[b.tmpl[k]];
-  if (!rec) return false;
+  /* EVERY fallback is counted, by template, into the collector the bake hangs out while it
+     runs. This exists because "the terrain is a disaster" is unanswerable from a screenshot:
+     the procedural smears tell you cells fell back, not WHICH templates failed or WHY. The
+     expansion maps (Normandy et al) are built from Counterstrike/Aftermath templates - sh57+,
+     cliffsw*, sbridge*, hill01 - whose art is not in the base archives at all, and whether a
+     given install resolves them from expand.mix cannot be known from here. So the game
+     reports its own misses and the report names the fix. */
+  var MISS = window._RTS_TERRMISS;
+  if (!rec) { if (MISS) MISS['#' + b.tmpl[k]] = (MISS['#' + b.tmpl[k]] || 0) + 1; return false; }
   var set = _mixTiles(rec.img + _rtsThExt());
-  if (!set) return false;
+  if (!set) { if (MISS) MISS[rec.img] = (MISS[rec.img] || 0) + 1; return false; }
   var t = set.tile[b.tidx[k]];
   if (!t) return false;                              /* a hole in the template */
   var pal = RTS_MIX.pal;
