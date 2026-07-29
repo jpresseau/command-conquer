@@ -7,7 +7,10 @@
   font:13px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#dfe8f2;
   animation:rtsIn .18s ease-out}
 @keyframes rtsIn{from{opacity:0}to{opacity:1}}
-#rcgRts .rts-stage{position:relative;flex:1 1 auto;min-width:0;overflow:hidden;background:#7d94a4}
+/* isolation: the vignette below uses mix-blend-mode, which blends with the whole backdrop
+   chain; isolating the stage pins that blend to the battlefield and nothing else */
+#rcgRts .rts-stage{position:relative;flex:1 1 auto;min-width:0;overflow:hidden;background:#7d94a4;
+  isolation:isolate}
 /* image-rendering is LOAD-BEARING, not a nicety. The backing store is capped at 2x device
    pixels to bound fill rate, so on a 3x display - a high-density laptop, a phone, a 4K panel at
    200%+ scaling - the browser stretches that 2x buffer up to 3x itself. With the default
@@ -20,6 +23,16 @@
 #rcgRts #rtsCv{position:absolute;inset:0;display:block;cursor:crosshair;
   image-rendering:pixelated;image-rendering:crisp-edges}
 #rcgRts #rtsHud{position:absolute;inset:0;display:block;pointer-events:none}
+/* The vignette. This used to be a full-frame `multiply` drawImage inside _rtsPost, every frame,
+   priced per pixel on the canvas raster path - measured as the difference between p99 25.9ms and
+   p99 20.1ms with the post-pass off. As an element with mix-blend-mode the same multiply happens
+   once per frame on the COMPOSITOR, which blends layers for a living; the canvas pipeline no
+   longer touches it. Same gradient, same stops, same math: multiply by white is identity, so the
+   middle 42% is untouched and the corners shade to RTS_VIGNETTE (#d2d7de), exactly as before.
+   `circle farthest-corner` is the CSS spelling of the canvas radius, which was hypot(W/2,H/2).
+   The gradient itself is set inline when the stage is built, from RTS_VIGNETTE - the constant
+   stays the one place the colour lives, instead of becoming a knob that silently does nothing. */
+#rcgRts #rtsVig{position:absolute;inset:0;pointer-events:none;mix-blend-mode:multiply}
 
 /* --- top strip --- */
 #rcgRts .rts-top{position:absolute;top:0;left:0;right:0;height:34px;display:flex;align-items:center;gap:14px;
