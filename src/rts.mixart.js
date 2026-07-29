@@ -601,11 +601,60 @@ function _mixLoadBig(file, got) {
 }
 var RTS_MIX_HEAD = 6 << 20;      /* enough index for any real archive */
 
+/* A DISC IMAGE IS A BAG OF ARCHIVES. Anyone who still has their Red Alert CDs has .iso files,
+   not a folder of .mix files, and the archives are inside the image. ra/iso.js reads the disc's
+   directory - a real one, with names in it, unlike a MIX index - so every archive on the disc can
+   be listed rather than guessed at.
+
+   Each one is handed onward as `file.slice(offset, offset + size)` with a name pinned to it. A
+   file in a 2048-byte-sector image is a CONTIGUOUS byte range, so that slice IS the archive, and
+   everything downstream - the small/big split, _mixLoadBig's index-only read of MAIN.MIX,
+   _mixDescend, the IndexedDB persistence - carries on unchanged and unaware. Nothing is read
+   into memory here: slicing a Blob does not copy it.
+
+   Returns the replacement list. An image that will not parse contributes its reason to `got` and
+   nothing else, which is how a DVD of family photos ends up saying so rather than saying
+   nothing. */
+function _mixExpandIso(list, got) {
+  if (!window.RA_ISO) return Promise.resolve(list);
+  var isos = list.filter(_mixIsIsoName), rest = list.filter(function (f) { return !_mixIsIsoName(f); });
+  if (!isos.length) return Promise.resolve(list);
+
+  return isos.reduce(function (chain, file) {
+    return chain.then(function () {
+      var nm = String(file.name || 'disc');
+      return window.RA_ISO.isoOpen(function (from, len) {
+        return _mixSlice(file, from, len);
+      }, file.size).then(function (iso) {
+        if (!iso || iso.error) { got.push(nm + ': ' + ((iso && iso.error) || 'unreadable')); return; }
+        var mixes = iso.files.filter(function (e) { return /\.mix$/i.test(e.name); });
+        if (!mixes.length) {
+          got.push(nm + ': an ISO with ' + iso.files.length + ' files but no .mix archives in it');
+          return;
+        }
+        mixes.forEach(function (e) {
+          var b = file.slice(e.offset, e.offset + e.size);
+          b.name = e.name.toLowerCase();          /* the rest of the loader matches lower-case */
+          rest.push(b);
+        });
+        got.push(nm + (iso.label ? ' (' + iso.label + ')' : '') + ': ' + mixes.length +
+                 ' archives on the disc — ' + mixes.map(function (e) { return e.name; }).join(', '));
+      }, function () { got.push(nm + ': could not be read'); });
+    });
+  }, Promise.resolve()).then(function () { return rest; });
+}
+function _mixIsIsoName(f) { return /\.iso$/i.test(String(f && f.name || '')); }
+
 function rtsMixLoadFiles(files, done) {
   var list = [], i;
   for (i = 0; i < files.length; i++) list.push(files[i]);
   if (!list.length) { done && done('No files chosen.'); return; }
   var got = [];
+  _mixExpandIso(list, got).then(function (expanded) { _mixLoadList(expanded, got, done); });
+}
+
+function _mixLoadList(list, got, done) {
+  if (!list.length) { _mixFinish(got, done); return; }
 
   /* Small archives first and in parallel; big ones one at a time, so two 300 MB files cannot
      both be part-way through a slice at once. */
