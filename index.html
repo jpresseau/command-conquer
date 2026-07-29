@@ -599,7 +599,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">91554c1 · 2026-07-29</div>
+  <div id="rtsBuild" title="build">d7cf5fd · 2026-07-29</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -4729,6 +4729,7 @@ function _rtsBakeTerrain(G) {
      a cliff drawn from the template the map names is a real cliff, not half of one. */
   if (window._RTS_MAP && typeof _rtsMapPaintCell === 'function' &&
       typeof _mixGround === 'function' && _mixGround()) {
+    window._RTS_TERRMISS = {};
     for (var mz = 0; mz < N; mz++) {
       for (var mx2 = 0; mx2 < N; mx2++) {
         if (_rtsMapPaintCell(d, S, mx2, mz)) continue;
@@ -4736,6 +4737,21 @@ function _rtsBakeTerrain(G) {
         _mixPaintCell(d, S, mx2, mz, G.terrain[_rtsIdx(mx2, mz)], seed);
       }
     }
+    /* Say which templates fell back, on screen, once. A player looking at smeared cliffs
+       deserves better than a smear: the list NAMES the missing art files, which is the whole
+       diagnosis - typically the Counterstrike/Aftermath templates (sh57+, cliffsw*, sbridge*,
+       hill01) on an expansion map, which no base archive carries. */
+    var mk = Object.keys(window._RTS_TERRMISS || {});
+    if (mk.length) {
+      var MISS = window._RTS_TERRMISS, mtot = 0;
+      mk.forEach(function (m) { mtot += MISS[m]; });
+      mk.sort(function (a, b) { return MISS[b] - MISS[a]; });
+      var msg = 'terrain: ' + mtot + ' cells have no template art (' +
+                mk.slice(0, 6).join(', ') + (mk.length > 6 ? ' +' + (mk.length - 6) + ' more' : '') + ')';
+      try { console.warn('Red Alert ' + msg, MISS); } catch (_e) {}
+      if (typeof _rtsSay === 'function') setTimeout(function () { _rtsSay(msg); }, 1500);
+    }
+    window._RTS_TERRMISS = null;
   } else if (typeof _mixGround === 'function' && _mixGround()) {
     for (var gz = 0; gz < N; gz++) {
       for (var gx = 0; gx < N; gx++) {
@@ -8247,9 +8263,17 @@ function _rtsMapPaintCell(d, S, tx, tz) {
   if (mx < 0 || my < 0 || mx >= b.w || my >= b.h) return false;
   var tab = window.raTileTab ? window.raTileTab(M.theatre) : window.RA_TILETAB;
   var k = my * b.w + mx, rec = tab[b.tmpl[k]];
-  if (!rec) return false;
+  /* EVERY fallback is counted, by template, into the collector the bake hangs out while it
+     runs. This exists because "the terrain is a disaster" is unanswerable from a screenshot:
+     the procedural smears tell you cells fell back, not WHICH templates failed or WHY. The
+     expansion maps (Normandy et al) are built from Counterstrike/Aftermath templates - sh57+,
+     cliffsw*, sbridge*, hill01 - whose art is not in the base archives at all, and whether a
+     given install resolves them from expand.mix cannot be known from here. So the game
+     reports its own misses and the report names the fix. */
+  var MISS = window._RTS_TERRMISS;
+  if (!rec) { if (MISS) MISS['#' + b.tmpl[k]] = (MISS['#' + b.tmpl[k]] || 0) + 1; return false; }
   var set = _mixTiles(rec.img + _rtsThExt());
-  if (!set) return false;
+  if (!set) { if (MISS) MISS[rec.img] = (MISS[rec.img] || 0) + 1; return false; }
   var t = set.tile[b.tidx[k]];
   if (!t) return false;                              /* a hole in the template */
   var pal = RTS_MIX.pal;
@@ -14857,7 +14881,7 @@ function _rtsPostInit(R) {
      canvas-2D filter is priced per pixel, and a quarter-size buffer is a sixteenth of them. */
   if (!R.blurCv) R.blurCv = document.createElement('canvas');
   R.blurCv.width = R.bloomW; R.blurCv.height = R.bloomH;
-  R.blurG = R.blurCv.getContext('2d');
+  R.blurG = R.blurCv.getContext('2d', { willReadFrequently: true });   /* the gain reads it back */
 
   /* The vignette used to be built here as a frame-sized canvas and multiplied over the frame
      every frame. It is now the #rtsVig element, blended once per frame by the COMPOSITOR - see
@@ -14926,12 +14950,41 @@ function _rtsPost(g) {
   /* ...then up, with smoothing ON. The renderer runs with it off everywhere else so pixels stay
      square, but here the bilinear stretch from a quarter-size buffer IS most of the softening -
      which is why the blur radius above can be small. */
-  g.save();
-  g.globalCompositeOperation = 'lighter';
-  g.globalAlpha = RTS_BLOOM;
-  g.imageSmoothingEnabled = true;
-  for (var bp = 0; bp < RTS_BLOOM_PASSES; bp++) g.drawImage(R.blurCv, 0, 0, R.W, R.H);
-  g.restore();
+  /* THE GAIN STANDS DOWN ON A BRIGHT FIELD, and snow is why. The cube is a threshold built
+     for temperate ground, where everything but fire lands near black and dies. Snow ground is
+     near WHITE: it sails through the cube, and the moment any fx exists the whole field gets
+     added back onto itself at 85% - an intermittent full-screen flash, reported as exactly
+     that. Bloom keyed on brightness cannot tell albedo from light, so on a frame that is
+     bright everywhere the honest move is to not add.
+
+     The statistic is the FRACTION of bright pixels in the cubed buffer, and both simpler
+     ideas were tried and failed by measurement:
+       - a 1x1 drawImage "mean": GPU minification point-samples near the centre - where the
+         fireball is - so the mean came back as the fireball (240,165,65 against a true mean
+         of 4.0) and the gain shut the bloom off on every frame that had something to bloom;
+       - the true mean: the shroud broke it - a half-explored snow map is mostly black, the
+         black dilutes the mean back under the threshold, and the visible white patch flashed
+         exactly as before.
+     Fire is small and bright: the worst battle puts low single-digit percent of the frame
+     over the cube's threshold. Snowfield is bright by the tens of percent however much shroud
+     surrounds it - no amount of black changes how MANY bright pixels there are. Full glow up
+     to 4% of the frame, gone by 14%. Sampling every 4th pixel of the 1/8 buffer is ~2000
+     reads, only on frames with fx. */
+  var md = R.blurG.getImageData(0, 0, R.bloomW, R.bloomH).data;
+  var mbright = 0, mn = 0;
+  for (var mi = 0; mi < md.length; mi += 16) {
+    if (md[mi] + md[mi + 1] + md[mi + 2] > 180) mbright++;
+    mn++;
+  }
+  var gain = RTS_BLOOM * Math.max(0, Math.min(1, 1 - (mbright / mn - 0.04) / 0.10));
+  if (gain > 0.01) {
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = gain;
+    g.imageSmoothingEnabled = true;
+    for (var bp = 0; bp < RTS_BLOOM_PASSES; bp++) g.drawImage(R.blurCv, 0, 0, R.W, R.H);
+    g.restore();
+  }
   /* the vignette multiplies over this on the compositor - #rtsVig sits above the canvas */
 }
 

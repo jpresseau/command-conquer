@@ -301,6 +301,7 @@ function _rtsBakeTerrain(G) {
      a cliff drawn from the template the map names is a real cliff, not half of one. */
   if (window._RTS_MAP && typeof _rtsMapPaintCell === 'function' &&
       typeof _mixGround === 'function' && _mixGround()) {
+    window._RTS_TERRMISS = {};
     for (var mz = 0; mz < N; mz++) {
       for (var mx2 = 0; mx2 < N; mx2++) {
         if (_rtsMapPaintCell(d, S, mx2, mz)) continue;
@@ -308,6 +309,21 @@ function _rtsBakeTerrain(G) {
         _mixPaintCell(d, S, mx2, mz, G.terrain[_rtsIdx(mx2, mz)], seed);
       }
     }
+    /* Say which templates fell back, on screen, once. A player looking at smeared cliffs
+       deserves better than a smear: the list NAMES the missing art files, which is the whole
+       diagnosis - typically the Counterstrike/Aftermath templates (sh57+, cliffsw*, sbridge*,
+       hill01) on an expansion map, which no base archive carries. */
+    var mk = Object.keys(window._RTS_TERRMISS || {});
+    if (mk.length) {
+      var MISS = window._RTS_TERRMISS, mtot = 0;
+      mk.forEach(function (m) { mtot += MISS[m]; });
+      mk.sort(function (a, b) { return MISS[b] - MISS[a]; });
+      var msg = 'terrain: ' + mtot + ' cells have no template art (' +
+                mk.slice(0, 6).join(', ') + (mk.length > 6 ? ' +' + (mk.length - 6) + ' more' : '') + ')';
+      try { console.warn('Red Alert ' + msg, MISS); } catch (_e) {}
+      if (typeof _rtsSay === 'function') setTimeout(function () { _rtsSay(msg); }, 1500);
+    }
+    window._RTS_TERRMISS = null;
   } else if (typeof _mixGround === 'function' && _mixGround()) {
     for (var gz = 0; gz < N; gz++) {
       for (var gx = 0; gx < N; gx++) {
