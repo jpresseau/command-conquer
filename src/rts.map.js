@@ -331,6 +331,61 @@ function rtsMapShowStored(rec) {
   return true;
 }
 
+/* Sort key for "which archive on this disc is worth opening first". Purely an ordering: nothing
+   is EXCLUDED by it, because a name this list has never heard of is exactly the case where
+   guessing has burned us before. */
+function _rtsMapScanRank(name) {
+  var n = String(name).toLowerCase();
+  if (/^(main|redalert)\.mix$/.test(n)) return 0;
+  if (/^(general|missions|mplayer|expand2?|aftrmath)\.mix$/.test(n)) return 1;
+  if (/^movies\d*\.mix$/.test(n)) return 3;      /* hundreds of megabytes, never scenarios */
+  return 2;
+}
+
+/* Scan several archives and show the union. Sequential rather than parallel for the reason the
+   scenario labeller is: the bytes come from slicing a File, so a dozen at once would have a
+   dozen archive buffers alive at the same moment. */
+function _rtsMapScanMany(files, label, note, say) {
+  var all = [], seen = {};
+  return files.reduce(function (chain, f, i) {
+    return chain.then(function () {
+      say('Searching ' + label + ' — ' + f.name + ' (' + (i + 1) + ' of ' + files.length + ')…');
+      return rtsMapScanMix(f, function (p) { say('Searching ' + f.name + '… ' + p); })
+        .then(function (r) {
+          if (!r || r.error || !r.maps) return;
+          r.maps.forEach(function (m) {
+            if (seen[m.name]) return;            /* the same scenario can sit in two archives */
+            seen[m.name] = 1;
+            all.push(m);
+          });
+        }, function () { /* one unreadable archive is not the disc's verdict */ });
+    });
+  }, Promise.resolve()).then(function () {
+    if (!all.length) {
+      say('no scenarios found on ' + label + ' (' + files.length + ' archives searched)', 'bad');
+      return;
+    }
+    say('Found ' + all.length + ' scenario' + (all.length === 1 ? '' : 's') + ' on ' + label +
+        '. Choose one:', 'ok');
+    _rtsMapListShow(all, note);
+    if (typeof rtsPickDoneMap === 'function') rtsPickDoneMap();
+  });
+}
+
+/* Scan one archive for scenarios and put the list on screen. Shared by the two ways of arriving
+   at an archive - the player picking a .mix, or one being sliced out of a disc image - so the
+   two cannot drift into reporting the same result differently. */
+function _rtsMapScanInto(mixF, note, say) {
+  say('Searching ' + mixF.name + ' for scenarios…');
+  return rtsMapScanMix(mixF, function (p) { say('Searching… ' + p); }).then(function (r) {
+    if (r.error) { say(r.error, 'bad'); return; }
+    say('Found ' + r.maps.length + ' scenario' + (r.maps.length === 1 ? '' : 's') + ' in ' +
+        mixF.name + '. Choose one:', 'ok');
+    _rtsMapListShow(r.maps, note);
+    if (typeof rtsPickDoneMap === 'function') rtsPickDoneMap();
+  });
+}
+
 /* The file picker on the title screen. Mirrors rtsMixPicked: read, report in place, and never
    half-apply - a map that fails validation leaves the previous state alone rather than
    dropping the player onto a broken battlefield. */
@@ -340,20 +395,45 @@ function rtsMapPicked(input) {
   if (!input.files || !input.files.length) return;
   _rtsMapListHide();
 
+  /* A disc image goes one level further out than an archive: the scenarios are in a .mix which
+     is on the CD. EVERY .mix is scanned, not one chosen by a rule.
+
+     Picking "the biggest archive on the disc" was the first attempt and it is wrong twice over.
+     It is wrong on a real CD, where the biggest thing by a wide margin is the movie archive and
+     the scenarios are not in it; and it was measured wrong here, on an image holding
+     hires.mix at 5.8 MB against MAIN.MIX at 3.4 MB - the artwork loader had pulled main.mix off
+     the same disc perfectly well while this found nothing at all.
+
+     Scanning them all costs a header read and a run of hash probes each, which is cheap next to
+     being wrong, and it needs no assumption about how any particular pressing was laid out.
+     Known containers go first so the usual case answers immediately; the rest follow smallest
+     first, so a 500 MB movie archive is the last thing tried rather than the first. */
+  var isoF = [].slice.call(input.files).filter(function (f) { return /\.iso$/i.test(f.name); })[0];
+  if (isoF && window.RA_ISO) {
+    say('Reading ' + isoF.name + '…');
+    window.RA_ISO.isoOpen(function (from, len) { return _rtsSliceBytes(isoF, from, len); },
+                          isoF.size).then(function (iso) {
+      if (!iso || iso.error) { say((iso && iso.error) || 'could not read that disc image', 'bad'); return; }
+      var mixes = iso.files.filter(function (e) { return /\.mix$/i.test(e.name); });
+      if (!mixes.length) { say('no .mix archives on ' + isoF.name, 'bad'); return; }
+      mixes.sort(function (a, b) {
+        var pa = _rtsMapScanRank(a.name), pb = _rtsMapScanRank(b.name);
+        return pa !== pb ? pa - pb : a.size - b.size;
+      });
+      var blobs = mixes.map(function (e) {
+        var b = isoF.slice(e.offset, e.offset + e.size);
+        b.name = e.name;
+        return b;
+      });
+      _rtsMapScanMany(blobs, isoF.name, note, say);
+    }, function () { say('could not read that disc image', 'bad'); });
+    return;
+  }
+
   /* A .mix is not a map, it is an archive that may CONTAIN maps - so it gets scanned and the
      player picks from what turned up, rather than the game choosing one for them. */
   var mixF = [].slice.call(input.files).filter(function (f) { return /\.mix$/i.test(f.name); })[0];
-  if (mixF) {
-    say('Searching ' + mixF.name + ' for scenarios…');
-    rtsMapScanMix(mixF, function (p) { say('Searching… ' + p); }).then(function (r) {
-      if (r.error) { say(r.error, 'bad'); return; }
-      say('Found ' + r.maps.length + ' scenario' + (r.maps.length === 1 ? '' : 's') + ' in ' +
-          mixF.name + '. Choose one:', 'ok');
-      _rtsMapListShow(r.maps, note);
-      if (typeof rtsPickDoneMap === 'function') rtsPickDoneMap();
-    });
-    return;
-  }
+  if (mixF) { _rtsMapScanInto(mixF, note, say); return; }
 
   say('Reading...');
   rtsMapLoadFiles(input.files).then(function (M) {

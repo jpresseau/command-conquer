@@ -213,7 +213,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </div>
   <p class="artload">
     <label class="artbtn">USE ORIGINAL ARTWORK
-      <input type="file" id="rtsMixPick" multiple accept=".mix,.MIX" onchange="rtsMixPicked(this)">
+      <input type="file" id="rtsMixPick" multiple accept=".mix,.MIX,.iso,.ISO" onchange="rtsMixPicked(this)">
     </label>
     <span id="rtsMixNote">Optional. Point this at <b>conquer.mix</b>, <b>local.mix</b>,
       <b>temperat.mix</b> and <b>hires.mix</b> from your own copy of Red Alert and the game will
@@ -221,17 +221,18 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
       title screen, which replaces the one above. Add <b>sounds.mix</b>, <b>speech.mix</b>,
       <b>allies.mix</b> and <b>russian.mix</b> for the original weapons, EVA and the units'
       own voices, and <b>scores.mix</b> for the soundtrack. Simplest of all: point this at
-      <b>MAIN.MIX</b> and it finds every one of them itself. Nothing is uploaded — the files
+      your Red Alert <b>CD image</b> — an <b>.iso</b> of either disc — or at <b>MAIN.MIX</b>, and
+      it finds every archive itself. Nothing is uploaded — the files
       are read in your browser.</span>
   </p>
   <p class="artload">
     <label class="artbtn">PLAY A REAL MAP
-      <input type="file" id="rtsMapPick" multiple accept=".oramap,.bin,.yaml,.mpr,.ini,.mix"
+      <input type="file" id="rtsMapPick" multiple accept=".oramap,.bin,.yaml,.mpr,.ini,.mix,.iso,.ISO"
              onchange="rtsMapPicked(this)">
     </label>
     <span id="rtsMapNote">Optional. The battle is fought on a real map's own terrain, ore and
-      start positions instead of a generated one. Point this at your own <b>MAIN.MIX</b> and it
-      will search it for the scenarios Red Alert shipped with; a loose <b>.mpr</b> or <b>.ini</b>
+      start positions instead of a generated one. Point this at a Red Alert <b>.iso</b> or your own
+      <b>MAIN.MIX</b> and it will search for the scenarios Red Alert shipped with; a loose <b>.mpr</b> or <b>.ini</b>
       scenario works too, as does an <b>.oramap</b>, or a map's <b>map.bin</b> and <b>map.yaml</b>
       together. Temperate and snow maps work; load the artwork above as well or there is nothing
       to draw the cliffs with. Generated battles are landlocked — a real map is the only way to get
@@ -279,6 +280,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 <script>//@@INC:../ra/mix.js@@</script>
 <script>//@@INC:../ra/shp.js@@</script>
 <script>//@@INC:../ra/pcx.js@@</script>
+<script>//@@INC:../ra/iso.js@@</script>
 <script>//@@INC:../ra/aud.js@@</script>
 <script>//@@INC:../ra/sndtab.js@@</script>
 <script>//@@INC:../ra/zip.js@@</script>

@@ -6,7 +6,9 @@ opposing army across a 112×112 tile battlefield. Play Allied or Soviet — the 
 what you can build.
 
 Rules, unit costs, weapon damage and AI behaviour are ported from the Red Alert source release;
-the game can also read your own installed copy for the original artwork, sound and maps.
+the game can also read your own copy for the original artwork, sound and maps — an installed
+folder of `.mix` archives, or a **`.iso` of either disc**, which it opens and reads the archives
+straight out of.
 
 > An unofficial fan project, not affiliated with or endorsed by Electronic Arts. *Command &
 > Conquer* and *Red Alert* are EA's trademarks. **No game assets are distributed here** — the
