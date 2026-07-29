@@ -985,6 +985,10 @@ function _rtsDrawHud(dt) {
   for (i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (e.dead || e.inside) continue;      /* no health bar for a passenger */
+    /* The sprite pass culls by visibility; this pass did not, so a damaged enemy under the
+       shroud drew its health bar on top of the black - a floating green stripe that both looks
+       broken and tells you exactly where the hidden attack team is. */
+    if (!_rtsEntSeen(e)) continue;
     var selected = G.sel.indexOf(e) >= 0;
     var hurt = e.hp < e.maxHp - 0.5;
     if (!selected && !hurt) continue;

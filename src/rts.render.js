@@ -863,6 +863,23 @@ function _rtsDrawUnit(g, e, TSscale) {
     var cyc = walk[f];
     img = cyc[(Math.floor(_rtsG.t * 10) + (e.gait || 0)) % cyc.length];
   }
+  /* The harvester AT WORK, from the 79 frames of harv.shp the facing bake does not use.
+     Purely cosmetic - the sim's hstate drives it and is never touched. The dock timer is
+     stamped here in the renderer because it is a drawing concern: the tip-up plays once from
+     the moment unloading is first seen, then the pour loops until the sim moves on. */
+  if (e.def === 'harvester' && typeof _mixHarvAnim === 'function') {
+    var ha = (e.hstate === 'mining' || e.hstate === 'unload') ? _mixHarvAnim(e.side) : null;
+    if (ha && e.hstate === 'mining') {
+      var f8 = ((Math.round(e.rot / (Math.PI * 2) * 8) % 8) + 8) % 8;
+      img = ha.harvest[f8][(Math.floor(_rtsG.t * 10) + (e.gait || 0)) % 8];
+      e.dockT = 0;
+    } else if (ha) {                                   /* unload */
+      if (!e.dockT) e.dockT = _rtsG.t;
+      var dk = Math.floor((_rtsG.t - e.dockT) * 10);
+      img = dk < ha.dock.length ? ha.dock[dk]
+                                : ha.pour[(dk - ha.dock.length) % ha.pour.length];
+    } else e.dockT = 0;
+  }
   var w = Math.round(img.width * TSscale), h = Math.round(img.height * TSscale);
   var px = Math.round(_rtsSX(e.x) - w / 2), py = Math.round(_rtsSY(e.z) - h / 2);
   /* An aircraft is drawn lifted off its own ground position, with a flattened shadow left

@@ -67,7 +67,7 @@ function rtsSetTheatre(id) {
   _RTS_SPR = null; _RTS_UFIT = {}; _RTS_USCALE = {};
   _RTS_TREES = null; _RTS_MIXTREES = null; _RTS_TILECACHE = null; _RTS_MIXDEBRIS = null;
   _RTS_MIXBIB = null; _RTS_SHROUDSPR = null; _RTS_MIXMAKE = null; _RTS_MIXDIE = null;
-  _RTS_MIXFX = null; _RTS_MIXWATER = null;
+  _RTS_MIXFX = null; _RTS_MIXWATER = null; _RTS_HARVANIM = {};
   return id;
 }
 /* The file extension the current theatre's tiles carry. */
@@ -541,6 +541,51 @@ function _mixUnit(key, side, prone, part) {
     out.push(fr ? _mixFrameToCanvas(fr, s.width, s.height, pal) : _sprMake(s.width, s.height).c);
   }
   return out;
+}
+
+/* ------------------------------------------------------- the harvester at work --
+   harv.shp is 111 frames, and the plain facing bake uses 32 of them. The rest are the three
+   working animations, from mods/ra/sequences/vehicles.yaml:
+
+     harvest    Start 32, Length 8, Facings 8   the scoop cycling while it eats a tile,
+                                                facing-major: 8 consecutive frames per facing
+     dock       Start 96, Length 8              tipping up over the refinery, one facing -
+                                                the artwork bakes the pose in
+     dock-loop  Start 104, Length 7             the ore pouring out while tipped
+
+   These are what make the economy loop READ: a harvester that sits motionless in an ore field
+   and then sits motionless beside the refinery looks parked, however often the credits tick.
+
+   The 8-facing block goes through the same _mixFacing transform the infantry's 8-facing
+   sequences do - their yaml is plain `Facings: 8` too, and that order was measured from the
+   artwork rather than taken from a document. */
+var _RTS_HARVANIM = {};
+function _mixHarvAnim(side) {
+  if (!_rtsArtReady()) return null;
+  if (_RTS_HARVANIM[side] !== undefined) return _RTS_HARVANIM[side];
+  _RTS_HARVANIM[side] = null;
+  var s = _mixShp('harv.shp');
+  if (!s || s.count < 111) return null;
+  var pal = _mixTeamPal(RTS_MIX.pal, RTS_PAL.team[side][0]);
+  function bake(idx) {
+    var fr = s.frame(idx);
+    return fr ? _mixFrameToCanvas(fr, s.width, s.height, pal) : null;
+  }
+  var harvest = [], f, t, ok = true;
+  for (f = 0; f < 8 && ok; f++) {
+    var row = [];
+    for (t = 0; t < 8; t++) {
+      var c = bake(32 + _mixFacing(f, 8) * 8 + t);
+      if (!c) { ok = false; break; }
+      row.push(c);
+    }
+    harvest.push(row);
+  }
+  var dock = [], pour = [];
+  for (t = 0; t < 8 && ok; t++) { var cd = bake(96 + t); if (cd) dock.push(cd); else ok = false; }
+  for (t = 0; t < 7 && ok; t++) { var cp = bake(104 + t); if (cp) pour.push(cp); else ok = false; }
+  if (!ok) return null;
+  return (_RTS_HARVANIM[side] = { harvest: harvest, dock: dock, pour: pour });
 }
 
 /* ------------------------------------------------------------------ load --
