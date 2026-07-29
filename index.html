@@ -536,7 +536,9 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   <button type="button" class="go resume" id="rtsResume" onclick="rtsLoadGame()" hidden>RESUME BATTLE</button>
   <button type="button" class="go resume" id="rtsEdit" onclick="rtsEdOpen()" hidden>MAP EDITOR<small>draw a battlefield of your own</small></button>
   <!-- Shown only when the browser says the app can be installed; see rtsInstallInit. -->
-  <button type="button" class="go resume" id="rtsInstall" onclick="rtsInstall()" hidden>INSTALL<small>run it in its own window, off the desktop</small></button>
+  <!-- Always present unless the app IS the installed app; see rtsInstallInit for why. -->
+  <button type="button" class="go resume" id="rtsInstall" onclick="rtsInstall()">INSTALL<small>run it in its own window, off the desktop</small></button>
+  <p class="diffnote" id="rtsInstallNote" hidden></p>
   </div>
   <p class="artload">
     <label class="artbtn">USE ORIGINAL ARTWORK
@@ -601,7 +603,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">660b5d3 · 2026-07-29</div>
+  <div id="rtsBuild" title="build">e2e6ec6 · 2026-07-29</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -17640,13 +17642,18 @@ rtsKeysInit();
    none of it was discoverable. The browser hides its install control in a menu most people
    never open, so the app that could already be installed effectively could not.
 
-   `beforeinstallprompt` is the browser telling us it has decided the app is installable. It
-   must be captured and its default prevented, or Chromium shows nothing; the saved event is
-   then the ONLY way to open the prompt, and it can be used exactly once.
+   THE BUTTON IS ALWAYS THERE, and the first version's was not. It only appeared once the
+   browser fired `beforeinstallprompt` - which is invisible, unreliable and frequently never
+   happens: Chromium suppresses it after a dismissal, Safari and Firefox never send it at all,
+   and it does not fire when the app is already installed. So "your browser is not offering an
+   install right now" and "this feature does not exist" looked exactly the same, and the first
+   thing asked about it was where it had gone.
 
-   Safari and Firefox never fire it. They can still install (Safari: File > Add to Dock,
-   Firefox via an extension), so the button stays hidden there rather than lying about a
-   capability - a dead button is worse than no button. */
+   A control whose absence is indistinguishable from a bug is the wrong control. This one is
+   always shown and always does something: it opens the real prompt when the browser has given
+   us one, and otherwise says how to install by hand in whichever browser is running. The one
+   case it hides in is the app ALREADY being the installed app, where its absence explains
+   itself. */
 var _RTS_INSTALL_EVT = null;
 function rtsInstalled() {
   try {
@@ -17655,33 +17662,57 @@ function rtsInstalled() {
            navigator.standalone === true;
   } catch (e) { return false; }
 }
+/* How to install by hand, per browser. Read off the user agent, which is the wrong tool for
+   feature detection and the right one here - this is a sentence about where a menu item lives
+   in a particular product, and there is nothing to feature-detect. */
+function _rtsInstallHelp() {
+  var ua = navigator.userAgent;
+  if (/Firefox\//.test(ua)) {
+    return 'Firefox cannot install web apps. Chrome, Edge or Safari can — or just play in the tab.';
+  }
+  if (/Edg\//.test(ua)) return 'Edge: ⋯ menu → Apps → Install this site as an app.';
+  /* Safari must be tested before Chrome: every Chromium UA also says "Safari". */
+  if (/Safari\//.test(ua) && !/Chrome\//.test(ua) && !/Chromium\//.test(ua)) {
+    return /iPhone|iPad/.test(ua) ? 'Safari: Share → Add to Home Screen.'
+                                  : 'Safari: File → Add to Dock.';
+  }
+  if (/Chrome\/|Chromium\//.test(ua)) {
+    return 'Chrome: ⋮ menu → Cast, save and share → Install page as app. ' +
+           '(The one-click prompt returns after a few visits.)';
+  }
+  return 'Look for “Install” or “Add to Dock” in your browser’s menu.';
+}
 function rtsInstallInit() {
   var btn = document.getElementById('rtsInstall');
   if (!btn) return;
+  if (rtsInstalled()) { btn.hidden = true; return; }   /* this IS the installed app */
   window.addEventListener('beforeinstallprompt', function (ev) {
     ev.preventDefault();                       /* or nothing is offered at all */
     _RTS_INSTALL_EVT = ev;
-    if (!rtsInstalled()) btn.hidden = false;
+    var note = document.getElementById('rtsInstallNote');
+    if (note) note.hidden = true;              /* one click will do it now */
   });
-  /* Already running as an app: there is nothing to install, and the button would be a puzzle. */
   window.addEventListener('appinstalled', function () {
     _RTS_INSTALL_EVT = null;
     btn.hidden = true;
+    var note = document.getElementById('rtsInstallNote');
+    if (note) note.hidden = true;
   });
 }
 function rtsInstall() {
   var btn = document.getElementById('rtsInstall');
-  if (!_RTS_INSTALL_EVT) { btn.hidden = true; return; }
+  var note = document.getElementById('rtsInstallNote');
+  if (!_RTS_INSTALL_EVT) {
+    /* No prompt to open. Say what to do instead rather than doing nothing, which is what a
+       hidden button amounted to. */
+    if (note) { note.textContent = _rtsInstallHelp(); note.className = 'diffnote'; note.hidden = false; }
+    return;
+  }
   var ev = _RTS_INSTALL_EVT;
   _RTS_INSTALL_EVT = null;                     /* a prompt event is single-use */
-  btn.hidden = true;
   ev.prompt();
-  /* Declining is not failure - the button comes back so the choice is not one-way. */
-  if (ev.userChoice && ev.userChoice.then) {
-    ev.userChoice.then(function (c) {
-      if (c && c.outcome !== 'accepted' && !rtsInstalled()) btn.hidden = false;
-    }, function () {});
-  }
+  /* Declining is not failure: the button stays, and falls back to the instructions. */
+  if (ev.userChoice && ev.userChoice.then) ev.userChoice.then(function () {}, function () {});
 }
 rtsInstallInit();
 
