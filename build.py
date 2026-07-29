@@ -21,6 +21,30 @@ def read(p):
         return f.read()
 
 
+def build_stamp():
+    """A short mark of WHICH build this page is, shown on the title screen.
+
+    There is no way to tell a deployed page apart from the one it replaced. GitHub Pages takes a
+    minute, the browser may hold the old copy, and the difference between "the change did not
+    work" and "the change has not arrived" has cost several rounds of guessing - once with the
+    title screen apparently missing, when the deploy was fine and the window was simply narrow.
+    A commit and a date on screen settles that question by looking at it.
+
+    Falls back to a date alone outside a git checkout, because the build must never fail over a
+    cosmetic label.
+    """
+    import subprocess
+    import datetime
+    sha = ''
+    try:
+        sha = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], cwd=ROOT,
+                             capture_output=True, text=True, timeout=5).stdout.strip()
+    except Exception:
+        pass
+    day = datetime.datetime.utcnow().strftime('%Y-%m-%d')
+    return (sha + ' · ' + day) if sha else day
+
+
 def check_syntax(js, label):
     """Parse a JS fragment with node, if node is available."""
     import subprocess
@@ -89,6 +113,8 @@ def main():
 
     page = re.sub(r'(?:/\*|//)@@(?:INC|CSS):([\w./-]+)@@(?:\*/)?',
                   lambda m: read(os.path.join(SRC, m.group(1))), page)
+
+    page = page.replace('@@BUILD@@', build_stamp())
 
     left = re.findall(r'@@[A-Z]+[^@]*@@', page)
     if left:
