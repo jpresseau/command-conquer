@@ -357,8 +357,13 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 
    Only when there IS art: without it the menu stays in the ordinary flow it has always been in,
    and #rtsTitleWrap is an empty inline box. */
-/* With art, the plate IS the page: no gap, no padding, nothing scrolling behind it. */
-#rtsHome.hasart{gap:0;padding:0;overflow:hidden}
+/* With art, the plate IS the page: no gap, no padding, nothing scrolling behind it.
+
+   Near-black behind it rather than the blue radial gradient the drawn title card sits on. The
+   plate is 8:5 and a window is not, so there are always bands on two sides; against the blue
+   they read as the picture having failed to fit, and against black they read as letterboxing,
+   which is what they are. */
+#rtsHome.hasart{gap:0;padding:0;overflow:hidden;background:#07090c}
 #rtsTitleWrap{position:relative;width:min(100%,640px);margin:0 auto}
 #rtsHome.hasart #rtsTitleWrap{
   width:min(100vw,160vh);aspect-ratio:640/400;max-width:none;margin:auto;
@@ -412,11 +417,21 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 #rtsHome.hasart #rtsTitleMenu .keys summary{font-size:.92em}
 #rtsHome.hasart #rtsTitleMenu .keys dt.hd{font-size:.92em;margin-top:.7em;padding-top:.7em}
 
-/* BELOW 640px the plate's panel is under 300px across and nothing in here fits at any type
-   size. Rather than overflow it, everything drops back out to the ordinary stacked layout under
-   the picture - which is what a player without the artwork sees anyway, so it is a known-good
-   state rather than a second design to maintain. */
-@media (max-width:640px){
+/* WHERE THE FULL-SCREEN LAYOUT GIVES UP, and it is much lower than it was.
+
+   This started at 640px, chosen when the panel had to FIT its contents: below that the panel is
+   under 300px across and the menu could not be squeezed in at any type size. Making the panel a
+   scroll container removed that constraint and the breakpoint was left behind - so a perfectly
+   ordinary 600px-wide browser window got the small stacked picture instead of the full-screen
+   one, which is exactly how it was reported.
+
+   480px is picked from the panel rather than from the window: the panel is 49.53% of a plate
+   that is min(100vw, 160vh), so a 480px window leaves 238px of panel - enough for a card, a
+   sentence and a select at the 9px type floor. Below that the scenario row genuinely stops
+   working, and everything drops back to the ordinary stacked layout under the picture. That is
+   what a player without artwork sees anyway, so it is a known-good state rather than a second
+   design to maintain. */
+@media (max-width:480px){
   #rtsHome.hasart{gap:22px;padding:24px;overflow:auto}
   #rtsHome.hasart #rtsTitleWrap{width:min(100%,640px);aspect-ratio:auto;container-type:normal}
   #rtsHome.hasart #rtsTitleArt{height:auto}
