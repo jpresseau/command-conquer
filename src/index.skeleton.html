@@ -231,6 +231,8 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE</button>
   <button type="button" class="go resume" id="rtsResume" onclick="rtsLoadGame()" hidden>RESUME BATTLE</button>
   <button type="button" class="go resume" id="rtsEdit" onclick="rtsEdOpen()" hidden>MAP EDITOR<small>draw a battlefield of your own</small></button>
+  <!-- Shown only when the browser says the app can be installed; see rtsInstallInit. -->
+  <button type="button" class="go resume" id="rtsInstall" onclick="rtsInstall()" hidden>INSTALL<small>run it in its own window, off the desktop</small></button>
   </div>
   <p class="artload">
     <label class="artbtn">USE ORIGINAL ARTWORK
@@ -522,6 +524,60 @@ function rtsKeysInit() {
   });
 }
 rtsKeysInit();
+
+/* --------------------------------------------------------------- install --
+   Make the app a DESKTOP app: its own window, its own icon in the dock or the Start menu, no
+   browser chrome, launched without going near a URL bar.
+
+   Everything needed for that has been in the repo for months - manifest.webmanifest, two PNG
+   icons, and a service worker whose only stated job is to satisfy the install criteria - and
+   none of it was discoverable. The browser hides its install control in a menu most people
+   never open, so the app that could already be installed effectively could not.
+
+   `beforeinstallprompt` is the browser telling us it has decided the app is installable. It
+   must be captured and its default prevented, or Chromium shows nothing; the saved event is
+   then the ONLY way to open the prompt, and it can be used exactly once.
+
+   Safari and Firefox never fire it. They can still install (Safari: File > Add to Dock,
+   Firefox via an extension), so the button stays hidden there rather than lying about a
+   capability - a dead button is worse than no button. */
+var _RTS_INSTALL_EVT = null;
+function rtsInstalled() {
+  try {
+    return window.matchMedia('(display-mode: standalone)').matches ||
+           window.matchMedia('(display-mode: window-controls-overlay)').matches ||
+           navigator.standalone === true;
+  } catch (e) { return false; }
+}
+function rtsInstallInit() {
+  var btn = document.getElementById('rtsInstall');
+  if (!btn) return;
+  window.addEventListener('beforeinstallprompt', function (ev) {
+    ev.preventDefault();                       /* or nothing is offered at all */
+    _RTS_INSTALL_EVT = ev;
+    if (!rtsInstalled()) btn.hidden = false;
+  });
+  /* Already running as an app: there is nothing to install, and the button would be a puzzle. */
+  window.addEventListener('appinstalled', function () {
+    _RTS_INSTALL_EVT = null;
+    btn.hidden = true;
+  });
+}
+function rtsInstall() {
+  var btn = document.getElementById('rtsInstall');
+  if (!_RTS_INSTALL_EVT) { btn.hidden = true; return; }
+  var ev = _RTS_INSTALL_EVT;
+  _RTS_INSTALL_EVT = null;                     /* a prompt event is single-use */
+  btn.hidden = true;
+  ev.prompt();
+  /* Declining is not failure - the button comes back so the choice is not one-way. */
+  if (ev.userChoice && ev.userChoice.then) {
+    ev.userChoice.then(function (c) {
+      if (c && c.outcome !== 'accepted' && !rtsInstalled()) btn.hidden = false;
+    }, function () {});
+  }
+}
+rtsInstallInit();
 
 /* Remembering has to be undoable, or a bad file becomes permanent. */
 function rtsAddForget(host) {

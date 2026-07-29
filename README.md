@@ -17,8 +17,14 @@ straight out of.
 
 **Play it: https://jpresseau.github.io/command-conquer/**
 
-It runs in a browser with no install, no account and no network calls — the whole game is one
+It runs in a browser with no account and no network calls — the whole game is one
 self-contained `index.html`.
+
+**Or install it as a desktop app.** Open the link and press **INSTALL** on the title screen: it
+gets its own window with no browser chrome, its own icon in the dock or Start menu, and launches
+without going near a URL bar. Chrome and Edge on any platform; Safari does the same thing from
+**File → Add to Dock**. Your artwork and maps stay where they were — the installed app and the
+tab share one browser profile, so you do not pick your files again.
 
 ## Controls
 
