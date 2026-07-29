@@ -17,6 +17,10 @@ function rtsOpen(seed) {
   d.innerHTML = ''
     + '<div class="rts-stage">'
     +   '<canvas id="rtsCv"></canvas>'
+    /* The vignette, as an ELEMENT rather than a per-frame canvas composite - see _rtsPost for
+       why it moved. It sits between the battlefield and the HUD, which is exactly where the
+       old multiply sat in the draw order. */
+    +   '<div id="rtsVig"></div>'
     +   '<canvas id="rtsHud"></canvas>'
     +   '<div class="rts-top"><span class="rts-title">RED ALERT</span>'
     +     '<span class="rts-vs"><b class="p">' + rtsArmyName('player') + '</b> vs <b class="e">' +
@@ -55,6 +59,14 @@ function rtsOpen(seed) {
     +   '<div class="rts-sel" id="rtsSel">Nothing selected</div>'
     + '</div>';
   document.body.appendChild(d);
+
+  /* The vignette gradient, from the constant that has always named its colour - so RTS_VIGNETTE
+     keeps working as the one knob, and the CSS only says where the element sits and how it
+     blends. Same stops as the old canvas gradient: white (identity under multiply) to 42% of
+     the way out, then shading to the corner colour at the farthest corner. */
+  document.getElementById('rtsVig').style.background =
+    'radial-gradient(circle farthest-corner at 50% 50%,#ffffff 0%,#ffffff 42%,' +
+    RTS_VIGNETTE + ' 100%)';
 
   /* A pending load lands BETWEEN the new game and the renderer: _rtsNewGame supplies every
      invariant, the save overwrites the state on top of it, and _rtsRInit then bakes the

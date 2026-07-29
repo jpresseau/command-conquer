@@ -128,16 +128,12 @@ function _rtsPostInit(R) {
   R.blurCv.width = R.bloomW; R.blurCv.height = R.bloomH;
   R.blurG = R.blurCv.getContext('2d');
 
-  /* the vignette, built once at frame size */
-  if (!R.vigCv) R.vigCv = document.createElement('canvas');
-  R.vigCv.width = R.W; R.vigCv.height = R.H;
-  var vg = R.vigCv.getContext('2d');
-  var cx = R.W / 2, cy = R.H / 2, rad = Math.hypot(cx, cy);
-  var grd = vg.createRadialGradient(cx, cy, rad * 0.42, cx, cy, rad);
-  grd.addColorStop(0, '#ffffff');
-  grd.addColorStop(1, RTS_VIGNETTE);
-  vg.fillStyle = grd;
-  vg.fillRect(0, 0, R.W, R.H);
+  /* The vignette used to be built here as a frame-sized canvas and multiplied over the frame
+     every frame. It is now the #rtsVig element, blended once per frame by the COMPOSITOR - see
+     style.css - so nothing per-frame remains of it in the canvas pipeline. That multiply was
+     the only unconditional full-frame cost in the post pass, and it lived in the frame-time
+     tail: p99 25.9ms with the post on, 20.1ms with it off, at zero fx - i.e. the vignette was
+     the difference. RTS_VIGNETTE still names the corner colour; the CSS carries its value. */
   R.vigW = R.W; R.vigH = R.H;
 }
 
@@ -162,14 +158,9 @@ function _rtsPost(g) {
   if (!R || !RTS_POST_ON || R.W < 8 || R.H < 8) return;
   if (R.vigW !== R.W || R.vigH !== R.H || !R.bloomG) _rtsPostInit(R);
 
-  /* The vignette is one drawImage and always worth it. The bloom is not. */
-  if (!G || !_rtsWantBloom(G)) {
-    g.save();
-    g.globalCompositeOperation = 'multiply';
-    g.drawImage(R.vigCv, 0, 0);
-    g.restore();
-    return;
-  }
+  /* The vignette is the #rtsVig element now (see style.css), so a frame with nothing worth
+     blooming - which is most frames - costs the post pass NOTHING at all. */
+  if (!G || !_rtsWantBloom(G)) return;
 
   /* --- bloom --- */
   var bg = R.bloomG, bw = R.bloomW, bh = R.bloomH;
@@ -210,12 +201,7 @@ function _rtsPost(g) {
   g.imageSmoothingEnabled = true;
   for (var bp = 0; bp < RTS_BLOOM_PASSES; bp++) g.drawImage(R.blurCv, 0, 0, R.W, R.H);
   g.restore();
-
-  /* --- vignette --- */
-  g.save();
-  g.globalCompositeOperation = 'multiply';
-  g.drawImage(R.vigCv, 0, 0);
-  g.restore();
+  /* the vignette multiplies over this on the compositor - #rtsVig sits above the canvas */
 }
 
 function _rtsDrawWater(g, G, cell) {
