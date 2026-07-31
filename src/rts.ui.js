@@ -98,6 +98,7 @@ function rtsOpen(seed) {
   document.addEventListener('keydown', _rtsKeyDown, true);
   document.addEventListener('keyup', _rtsKeyUp, true);
   window.addEventListener('resize', _rtsOnResize);
+  _rtsWatchSize();
   /* rtsOpen runs off a real click, so this is a valid gesture to unlock WebAudio */
   if (typeof _rtsAudioInit === 'function') { _rtsAudioInit(); _rtsAudioResume(); _rtsMusicStart(); }
   if (_load) _rtsSay('Battle resumed.');
@@ -114,6 +115,7 @@ function rtsClose() {
   document.removeEventListener('keydown', _rtsKeyDown, true);
   document.removeEventListener('keyup', _rtsKeyUp, true);
   window.removeEventListener('resize', _rtsOnResize);
+  if (U && U.ro) { try { U.ro.disconnect(); } catch (_b) {} U.ro = null; }
   if (typeof _rtsMusicStop === 'function') _rtsMusicStop();
   _rtsRDispose();
   if (typeof _RTS_RICON !== 'undefined') _RTS_RICON = null;
@@ -138,6 +140,33 @@ function _rtsResizeCanvases() {
 function _rtsOnResize() {
   var s = _rtsResizeCanvases();
   if (s) _rtsRResize(s.W, s.H);
+}
+
+/* WATCH THE BOX, NOT THE EVENT. The `resize` listener above is not enough on a phone, and
+   rotating one to landscape was reported as a broken view: the canvas kept its portrait size
+   inside a now-wider stage, leaving the stage's own background showing down the left and
+   along the bottom with the battlefield stranded in the middle.
+
+   iOS fires `resize` while the rotation is still animating, so clientWidth/clientHeight are
+   read at their OLD values and the canvas is resized to the size it already had. Chasing that
+   with orientationchange, visualViewport and a pile of timeouts is guesswork about when the
+   layout settles. A ResizeObserver is not: it reports the element's box AFTER layout, however
+   the change was caused - rotation, the URL bar sliding away, a desktop window drag, entering
+   fullscreen - and it delivers the new size rather than making us measure it.
+
+   The old listener stays for anything without ResizeObserver, where a stale read beats none. */
+function _rtsWatchSize() {
+  var st = document.querySelector('#rcgRts .rts-stage');
+  var U = window._rtsUI;
+  if (!st || !U || typeof ResizeObserver === 'undefined') return;
+  U.ro = new ResizeObserver(function () {
+    if (!window._rtsUI || !_rtsR) return;
+    var s = _rtsResizeCanvases();
+    /* Only when it really changed: the observer also fires on the initial observe, and
+       rebuilding the backing store re-rasterises everything for nothing. */
+    if (s && (s.W !== _rtsR.W || s.H !== _rtsR.H)) _rtsRResize(s.W, s.H);
+  });
+  U.ro.observe(st);
 }
 
 /* ------------------------------------------------------------- sidebar */
