@@ -749,7 +749,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">c607465 · 2026-07-31</div>
+  <div id="rtsBuild" title="build">fd74af0 · 2026-07-31</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -6468,7 +6468,7 @@ function rtsSetTheatre(id) {
   _RTS_SPR = null; _RTS_UFIT = {}; _RTS_USCALE = {};
   _RTS_TREES = null; _RTS_MIXTREES = null; _RTS_TILECACHE = null; _RTS_MIXDEBRIS = null;
   _RTS_MIXBIB = null; _RTS_SHROUDSPR = null; _RTS_MIXMAKE = null; _RTS_MIXDIE = null;
-  _RTS_MIXFX = null; _RTS_MIXWATER = null; _RTS_HARVANIM = {};
+  _RTS_MIXFX = null; _RTS_MIXWATER = null; _RTS_HARVANIM = {}; _RTS_IDLEANIM = {};
   return id;
 }
 /* The file extension the current theatre's tiles carry. */
@@ -6942,6 +6942,48 @@ function _mixUnit(key, side, prone, part) {
     out.push(fr ? _mixFrameToCanvas(fr, s.width, s.height, pal) : _sprMake(s.width, s.height).c);
   }
   return out;
+}
+
+/* ---------------------------------------------------------- infantry fidgets --
+   A soldier standing still in RA is not at attention forever: every so often he shifts his
+   weight, checks his rifle, stretches. The idle1/idle2 sequences carry it, single-facing,
+   ticked at 120ms. Unlike stand/prone there is NO shared layout - every type parks its idles
+   at a different offset - so this table is each type's numbers straight out of
+   mods/ra/sequences/infantry.yaml, keyed by SHP name: [start, length] per variant. */
+var RTS_MIX_IDLE = {
+  e1:   [[256, 16], [272, 16]],
+  e2:   [[384, 14], [399, 16]],
+  e3:   [[272, 14], [287, 16]],
+  e4:   [[384, 14], [399, 16]],
+  e6:   [[121, 8],  [130, 14]],
+  e7:   [[233, 14], [248, 14]],
+  medi: [[178, 14]],
+  thf:  [[120, 19]],
+  dog:  [[216, 7],  [224, 11]]
+};
+var _RTS_IDLEANIM = {};
+function _mixIdleAnim(key, side) {
+  if (!_rtsArtReady()) return null;
+  var ck = key + '|' + side;
+  if (_RTS_IDLEANIM[ck] !== undefined) return _RTS_IDLEANIM[ck];
+  _RTS_IDLEANIM[ck] = null;
+  var nm = RTS_MIX_UNIT[key], tab = nm && RTS_MIX_IDLE[nm];
+  if (!tab) return null;
+  var s = _mixShp(nm + '.shp');
+  if (!s) return null;
+  var pal = _mixTeamPal(RTS_MIX.pal, RTS_PAL.team[side][0]);
+  var out = [];
+  for (var v = 0; v < tab.length; v++) {
+    var run = [], start = tab[v][0], len = tab[v][1];
+    if (start + len > s.count) continue;           /* a cut-down shp: skip the variant */
+    for (var f = 0; f < len; f++) {
+      var fr = s.frame(start + f);
+      if (!fr) { run = null; break; }
+      run.push(_mixFrameToCanvas(fr, s.width, s.height, pal));
+    }
+    if (run && run.length) out.push(run);
+  }
+  return out.length ? (_RTS_IDLEANIM[ck] = out) : null;
 }
 
 /* ------------------------------------------------------- the harvester at work --
@@ -11458,6 +11500,17 @@ function _rtsKill(e) {
       }
       /* "Very strong units that have an explosion will also rock the screen." */
       if (ud.hp > 400) G.shake = Math.min(1, G.shake + 0.12);
+      /* The wreck burns. An UNATTACHED ladder fire - no `att`, so it damages nothing and
+         nothing owns it - that burns itself down through the existing chain: ~4s of flame
+         guttering into ~7s of smoke. It is what makes ground where a battle just happened
+         look like ground where a battle just happened. Land vehicles only: a sinking ship
+         leaves water, and a helicopter dies where it FELL FROM, not where it lands. */
+      if (!e.crushed && !ud.sea && ud.kind !== 'air') {
+        var wkind = (e.r || 1) >= 1.2 ? 'firemed' : 'firesmall';
+        var wbase = 0.55 + (e.r || 1) * 0.28;
+        G.fx.push({ kind:wkind, x:e.x, y:1, z:e.z, t:0, base:wbase,
+                    big:wbase * RTS_ANIMS[wkind].size, loops:RTS_ANIMS[wkind].loops || 1 });
+      }
     }
   }
   if (typeof _rtsSfx === 'function')
@@ -15796,6 +15849,25 @@ function _rtsDrawUnit(g, e, TSscale) {
   if (walk && !e.prone && e.path && e.pi < e.path.length) {
     var cyc = walk[f];
     img = cyc[(Math.floor(_rtsG.t * 10) + (e.gait || 0)) % cyc.length];
+  }
+  /* A SOLDIER STANDING STILL DOES NOT STAND TO ATTENTION FOREVER. Every so often he shifts his
+     weight, checks his weapon, stretches - RA's idle1/idle2, ticked at 120ms.
+
+     Cosmetic, and driven entirely off the clock and the unit's own `gait`, exactly like the
+     walk cycle above: nothing is stored on the entity, so this cannot desynchronise a save, a
+     replay or the sim. gait also staggers WHICH fidget and WHEN, so a squad standing in a line
+     does not twitch in unison - the thing that would make it read as a glitch rather than as
+     life. The period is 9-13s per unit, and each fidget runs a second or two of that.
+
+     Only while genuinely idle: not prone, not walking, and not while the unit has a target,
+     because a man mid-burst rolling his shoulders looks broken rather than relaxed. */
+  var fidg = (!e.prone && d.kind === 'infantry' && !e.target
+              && !(e.path && e.pi < e.path.length)
+              && typeof _mixIdleAnim === 'function') ? _mixIdleAnim(e.def, e.side) : null;
+  if (fidg && fidg.length) {
+    var gt = e.gait || 0, per = 9 + (gt % 5), ph = (_rtsG.t + gt * 0.37) % per;
+    var run = fidg[(gt + Math.floor((_rtsG.t + gt * 0.37) / per)) % fidg.length];
+    if (ph < run.length * 0.12) img = run[Math.floor(ph / 0.12)];
   }
   /* The harvester AT WORK, from the 79 frames of harv.shp the facing bake does not use.
      Purely cosmetic - the sim's hstate drives it and is never touched. The dock timer is
