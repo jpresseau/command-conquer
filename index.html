@@ -55,6 +55,19 @@
 #rcgRts .rts-vs .dif{margin-left:9px;padding:1px 7px;border:1px solid #3a4a5f;border-radius:9px;
   font-style:normal;font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:#ffcf6a;opacity:.85}
 #rcgRts .rts-help{font-size:11px;opacity:.55;margin-left:auto;margin-right:38px}
+/* One hint line, chosen by what the device actually has. `hover: none` and `pointer: coarse`
+   together mean a touchscreen without a mouse - a laptop with a touchscreen still reports a
+   fine pointer and keeps the keyboard hints, which is right, because it has a keyboard. */
+#rcgRts .rts-help.touch{display:none}
+@media (hover: none) and (pointer: coarse){
+  #rcgRts .rts-help.desk{display:none}
+  #rcgRts .rts-help.touch{display:inline}
+}
+/* The battlefield handles its own gestures and calls preventDefault on all of them; this stops
+   the browser ALSO trying to scroll, pinch-zoom the page, or fire a delayed synthetic click,
+   which on iOS is the difference between a drag that pans and a drag that does nothing. */
+#rcgRts #rtsCv,#rcgRts #rtsMini{touch-action:none;-webkit-user-select:none;user-select:none;
+  -webkit-touch-callout:none}
 #rcgRts .rts-x{position:absolute;right:6px;top:5px;width:24px;height:24px;border:0;border-radius:5px;
   background:rgba(255,255,255,.12);color:#fff;font-size:14px;cursor:pointer;pointer-events:auto}
 #rcgRts .rts-x:hover{background:#c8443a}
@@ -603,7 +616,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">e2e6ec6 · 2026-07-29</div>
+  <div id="rtsBuild" title="build">21350db · 2026-07-31</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -15907,7 +15920,10 @@ function rtsOpen(seed) {
     +     '<span class="rts-vs"><b class="p">' + rtsArmyName('player') + '</b> vs <b class="e">' +
           rtsArmyName('enemy') + '</b>'
     +       '<i class="dif" id="rtsDifLbl"></i></span>'
-    +     '<span class="rts-help">drag select · right-click order · S hold · 1-9 teams (ctrl set, alt jump) · repair/sell · wheel zoom · Esc</span>'
+    /* Two hint lines, because the verbs genuinely differ - a phone has no right button and no
+       wheel, and a desktop has no long-press. CSS shows exactly one; see .rts-help. */
+    +     '<span class="rts-help desk">drag select · right-click order · S hold · 1-9 teams (ctrl set, alt jump) · repair/sell · wheel zoom · Esc</span>'
+    +     '<span class="rts-help touch">drag to move · tap to select · hold for orders · pinch to zoom</span>'
     +     '<button type="button" class="rts-mute" id="rtsSaveBtn" title="Save this battle (Ctrl+S)" onclick="rtsSaveGame()">💾</button>'
     +     '<button type="button" class="rts-mute" id="rtsLoadBtn" title="Resume the saved battle" onclick="rtsLoadGame()">📂</button>'
     +     '<button type="button" class="rts-mute" id="rtsMute" title="Sound on" onclick="rtsMuteToggle()">🔊</button>'
@@ -16548,6 +16564,122 @@ function _rtsBindInput() {
   mini.onmousemove = function (e) { if (U.miniDrag) miniGo(e); };
   mini.oncontextmenu = function (e) { e.preventDefault(); miniOrder(e); return false; };
   window.addEventListener('mouseup', function () { if (window._rtsUI) window._rtsUI.miniDrag = false; });
+
+  /* ------------------------------------------------------------------ touch --
+     EVERY WAY OF MOVING THE CAMERA NEEDED HARDWARE A PHONE DOES NOT HAVE. Panning was WASD,
+     the arrow keys, or holding the pointer against a screen edge; zoom was the wheel; and the
+     one order button was the right one. On an iPhone there is no keyboard, nothing hovers, and
+     there is no second button - so the map could not be moved at all. Reported exactly that.
+
+     The gestures are the ones a phone map already uses, so nothing has to be learnt:
+
+       drag one finger      pan the battlefield
+       tap                  select, or place a building / fire a superweapon when one is armed
+       long-press (350ms)   the context order - what right-click does on a desktop
+       pinch two fingers    zoom, stepping through the same fixed levels the wheel uses
+
+     DRAG PANS RATHER THAN BOX-SELECTS, which is the one place this deliberately differs from
+     the mouse. A drag is the only gesture a phone has for moving a map, and a player who
+     cannot move is stuck; box-select has a keyboard-free alternative in Ctrl+A's on-screen
+     equivalents and in tapping units one at a time, so it is the affordance that gives way.
+
+     Written on touch events rather than pointer events on purpose: Safari synthesises a
+     delayed mouse sequence from taps, and the existing mouse handlers would fire a second
+     time from the same finger. Every handler here calls preventDefault, which suppresses that
+     synthesis as well as the page's own scroll and double-tap zoom. */
+  var T = { id: null, x0: 0, y0: 0, lx: 0, ly: 0, moved: false, t0: 0, hold: 0, pinch: 0 };
+  function _tXY(t) { var r = cv.getBoundingClientRect(); return { x: t.clientX - r.left, y: t.clientY - r.top }; }
+  function _tGap(e) {
+    var a = e.touches[0], b = e.touches[1];
+    return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+  }
+  function _tClearHold() { if (T.hold) { clearTimeout(T.hold); T.hold = 0; } }
+
+  cv.addEventListener('touchstart', function (e) {
+    e.preventDefault();
+    if (e.touches.length >= 2) { _tClearHold(); T.id = null; T.pinch = _tGap(e); return; }
+    var t = e.changedTouches[0], p = _tXY(t);
+    T.id = t.identifier; T.x0 = T.lx = p.x; T.y0 = T.ly = p.y;
+    T.moved = false; T.t0 = Date.now(); T.pinch = 0;
+    /* The pointer is parked under the finger so anything that reads U.mouse - the building
+       ghost, the superweapon cursor - lines up with where the player is actually touching. */
+    U.mouse.x = p.x; U.mouse.y = p.y; U.mouse.over = true;
+    /* A press held in one place is the second button. Cancelled by movement below, so a pan
+       never fires an order. */
+    _tClearHold();
+    T.hold = setTimeout(function () {
+      T.hold = 0;
+      if (T.moved || T.id === null) return;
+      T.id = null;                                  /* consumed: touchend must not also select */
+      if (U.mode) { rtsMode(U.mode); return; }
+      _rtsRightClick(T.x0, T.y0);
+      if (typeof _rtsSfx === 'function') _rtsSfx('order');
+    }, 350);
+  }, { passive: false });
+
+  cv.addEventListener('touchmove', function (e) {
+    e.preventDefault();
+    if (e.touches.length >= 2) {
+      /* Pinch, in whole zoom steps. RTS_ZOOMS exists because anything off it resamples 24px
+         art by a fraction; a continuous pinch would soften every sprite on screen. */
+      var gap = _tGap(e);
+      if (!T.pinch) { T.pinch = gap; return; }
+      var ratio = gap / T.pinch;
+      if (ratio > 1.25)      { _rtsZoomStep(1);  _rtsClampFocus(); T.pinch = gap; }
+      else if (ratio < 0.8)  { _rtsZoomStep(-1); _rtsClampFocus(); T.pinch = gap; }
+      return;
+    }
+    if (T.id === null) return;
+    var t = null, i;
+    for (i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === T.id) { t = e.changedTouches[i]; break; }
+    }
+    if (!t) return;
+    var p = _tXY(t);
+    U.mouse.x = p.x; U.mouse.y = p.y;
+    if (!T.moved && Math.abs(p.x - T.x0) + Math.abs(p.y - T.y0) > 8) { T.moved = true; _tClearHold(); }
+    if (T.moved) {
+      /* The finger holds its grip on the ground: dragging left moves the camera right, and
+         the world tracks the fingertip one-for-one at the current zoom. */
+      var z = _rtsZoom();
+      _rtsR.focus.x -= (p.x - T.lx) / z;
+      _rtsR.focus.z -= (p.y - T.ly) / z;
+      _rtsClampFocus();
+    }
+    T.lx = p.x; T.ly = p.y;
+  }, { passive: false });
+
+  function _tEnd(e) {
+    e.preventDefault();
+    if (T.id === null) { T.pinch = 0; return; }
+    var t = null, i;
+    for (i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === T.id) { t = e.changedTouches[i]; break; }
+    }
+    if (!t) return;
+    _tClearHold();
+    var wasMoved = T.moved;
+    T.id = null; T.pinch = 0;
+    U.mouse.over = false;
+    if (wasMoved) return;                           /* that was a pan, not a tap */
+    /* A tap is the left button: the armed cursors first, then plain selection. */
+    if (U.superArm) { _rtsSuperClick(T.x0, T.y0); return; }
+    if (U.mode)     { _rtsModeClick(T.x0, T.y0); return; }
+    if (U.place)    { _rtsTryPlace(T.x0, T.y0); return; }
+    _rtsClickSelect(T.x0, T.y0, false);
+  }
+  cv.addEventListener('touchend', _tEnd, { passive: false });
+  cv.addEventListener('touchcancel', function (e) {
+    e.preventDefault(); _tClearHold(); T.id = null; T.pinch = 0; U.mouse.over = false;
+  }, { passive: false });
+
+  /* The radar takes a finger too: drag to move the view, exactly as the left button does. */
+  mini.addEventListener('touchstart', function (e) {
+    e.preventDefault(); miniGo(e.touches[0]);
+  }, { passive: false });
+  mini.addEventListener('touchmove', function (e) {
+    e.preventDefault(); miniGo(e.touches[0]);
+  }, { passive: false });
 }
 function _rtsKeyDown(e) {
   if (!document.getElementById('rcgRts')) return;

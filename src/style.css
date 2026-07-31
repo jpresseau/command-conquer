@@ -44,6 +44,19 @@
 #rcgRts .rts-vs .dif{margin-left:9px;padding:1px 7px;border:1px solid #3a4a5f;border-radius:9px;
   font-style:normal;font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:#ffcf6a;opacity:.85}
 #rcgRts .rts-help{font-size:11px;opacity:.55;margin-left:auto;margin-right:38px}
+/* One hint line, chosen by what the device actually has. `hover: none` and `pointer: coarse`
+   together mean a touchscreen without a mouse - a laptop with a touchscreen still reports a
+   fine pointer and keeps the keyboard hints, which is right, because it has a keyboard. */
+#rcgRts .rts-help.touch{display:none}
+@media (hover: none) and (pointer: coarse){
+  #rcgRts .rts-help.desk{display:none}
+  #rcgRts .rts-help.touch{display:inline}
+}
+/* The battlefield handles its own gestures and calls preventDefault on all of them; this stops
+   the browser ALSO trying to scroll, pinch-zoom the page, or fire a delayed synthetic click,
+   which on iOS is the difference between a drag that pans and a drag that does nothing. */
+#rcgRts #rtsCv,#rcgRts #rtsMini{touch-action:none;-webkit-user-select:none;user-select:none;
+  -webkit-touch-callout:none}
 #rcgRts .rts-x{position:absolute;right:6px;top:5px;width:24px;height:24px;border:0;border-radius:5px;
   background:rgba(255,255,255,.12);color:#fff;font-size:14px;cursor:pointer;pointer-events:auto}
 #rcgRts .rts-x:hover{background:#c8443a}
