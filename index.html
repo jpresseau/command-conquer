@@ -126,9 +126,20 @@
 #rcgRts .rts-radar .rlbl{position:absolute;left:6px;top:5px;font-size:8.5px;letter-spacing:2px;
   color:#7fd0ff;opacity:.5;pointer-events:none}
 
-/* tabs */
-#rcgRts .rts-tabs{display:flex;gap:3px}
-#rcgRts .rts-tabs button{flex:1;padding:5px 0;border:1px solid #2b3a4d;border-radius:3px;background:#131a24;
+/* tabs
+   WRAP, do not overflow. Five tabs at their natural width need about 220px and the sidebar is
+   190px on a phone, so the row ran off the end and the bar's `overflow:hidden` cut "Ships" down
+   to "Sh" - a tab you cannot read is a tab you do not know is there. Wrapping keeps all five
+   legible and costs a second row only at the widths where they genuinely do not fit; at desktop
+   width they still sit on one line. flex-basis auto rather than 0, so a wrapped line sizes its
+   buttons to their labels instead of splitting the line evenly whatever is in it.
+
+   2px of side padding, measured rather than picked: the five labels come to 235px at 2px and
+   245px at 3px, against the 244px a desktop sidebar has to give them. 3px would wrap the row
+   on the desktop by a single pixel. */
+#rcgRts .rts-tabs{display:flex;flex-wrap:wrap;gap:3px}
+#rcgRts .rts-tabs button{flex:1 1 auto;min-width:0;padding:5px 2px;border:1px solid #2b3a4d;
+  border-radius:3px;background:#131a24;
   color:#9db0c6;font-size:10.5px;font-weight:700;letter-spacing:.5px;cursor:pointer}
 #rcgRts .rts-tabs button.on{background:#2e6fd0;border-color:#4a8ff0;color:#fff}
 #rcgRts .rts-tabs button:hover:not(.on){background:#1c2634}
@@ -176,9 +187,28 @@
 #rcgRts .rts-pwr .ptrack b{position:absolute;left:-2px;right:-2px;height:2px;background:#ffcf6a;
   box-shadow:0 0 5px rgba(255,207,106,.8)}
 
-/* build tiles */
+/* build tiles
+
+   THE ROWS USED TO OVERLAP, and that is what "I can't see any of the buildings" was. The tiles
+   were 69px tall while the rows advanced 28px, so every row of cameos was drawn over the names
+   and prices of the row above it and the panel read as a stack of striped slivers.
+
+   Two things cause it, and both are fixed here:
+
+   - The tile's height came from `aspect-ratio`, and an auto grid row does not size to that. The
+     ratio is resolved from the column width, which is `1fr` - not known when the row track is
+     being measured - so the row fell back to the tile's CONTENT height. Every child of a tile
+     is absolutely positioned, so that content is nothing but the button's own line box: 28px.
+     Percentage padding does not have the problem, because it resolves against the grid AREA,
+     which is settled before rows are sized. So the tile's height is `padding-top:102%` over a
+     zero content height - the same square-ish tile, arrived at by a route the row can see.
+     (No box-sizing here on purpose: content-box is what makes padding add to the height.)
+
+   - align-items:start, because a stretched item would then be given the row's height on TOP of
+     that padding and come out double. Tiles size themselves; the row follows. */
 #rcgRts .rts-grid{flex:1 1 auto;overflow-y:auto;display:grid;grid-template-columns:1fr 1fr;
-  gap:5px;align-content:start;padding-right:2px;scrollbar-width:thin;scrollbar-color:#33445c transparent}
+  gap:5px;align-content:start;align-items:start;padding-right:2px;
+  scrollbar-width:thin;scrollbar-color:#33445c transparent}
 #rcgRts .rts-grid::-webkit-scrollbar{width:7px}
 #rcgRts .rts-grid::-webkit-scrollbar-thumb{background:#33445c;border-radius:4px}
 /* A list that scrolls with no sign that it scrolls reads as a list that has been CUT OFF, which
@@ -187,11 +217,22 @@
 #rcgRts .rts-mid{position:relative}
 #rcgRts .rts-mid::after{content:'';position:absolute;left:0;right:0;bottom:0;height:9px;
   pointer-events:none;background:linear-gradient(to bottom,rgba(10,13,18,0),rgba(10,13,18,.85))}
-/* 1.16 fitted six tiles down the panel and eight did not; 1.05 left it nine pixels short, which
-   is the most annoying possible margin. 1.02 fits the whole eight-tile build list at the sizes
-   this game is played at, and the fade above covers the short windows where it still scrolls. */
-#rcgRts .rts-tile{position:relative;display:block;padding:0;overflow:hidden;cursor:pointer;font:inherit;
-  border:1px solid #33445c;border-radius:4px;background:#0f151d;color:#dfe8f2;aspect-ratio:1/1.02}
+/* 78% tall, as percentage padding over a zero content height - see the grid rule above for why
+   it is not `aspect-ratio`.
+
+   It used to be 102%, a square, and the tuning note behind that number ("1.02 fits the whole
+   eight-tile build list") was measuring the overlap bug: the rows were sitting 28px apart, so
+   of course everything fitted. With the rows honest, a square tile put ten of the sixteen
+   structures below the fold. 78% is close to the shape the original game used for its cameos -
+   64x48, wider than tall - and it is what the artwork is drawn to anyway. It shows half the
+   list at a phone's sidebar height and eight tiles on the desktop, and the fade at the bottom
+   of the panel says there is more below.
+
+   Everything inside the tile is absolutely positioned against this box, so the percentages on
+   .ico and the bottom offsets on .nm/.ct move with it. */
+#rcgRts .rts-tile{position:relative;display:block;height:0;padding:78% 0 0;overflow:hidden;
+  cursor:pointer;font:inherit;
+  border:1px solid #33445c;border-radius:4px;background:#0f151d;color:#dfe8f2}
 #rcgRts .rts-tile:hover{border-color:#5c86b8;background:#16202c}
 /* No image-rendering here on purpose. The plate is now BIGGER than the tile displays it, so the
    browser is downscaling - and nearest-neighbour downscaling drops whole rows of pixels, which
@@ -230,18 +271,52 @@
   #rcgRts .rts-tile .nm{font-size:8.5px}
 }
 
-/* A PHONE HELD SIDEWAYS is about 850x390, and a fixed 244px sidebar takes nearly a third of
-   it - the battlefield ends up the smaller half of the screen, which is the wrong way round
-   for the thing you are actually looking at. Short viewport means landscape phone; the bar
-   gives up its fixed width and takes a share instead, floored so the build tiles still fit.
+/* A PHONE HELD SIDEWAYS gives the sidebar about 340px of height, and the radar was eating 180
+   of it: `width:100%` on a square canvas turns every pixel of bar width into a pixel of bar
+   height. Measured on an iPhone in landscape, the build grid was left with TWENTY-SIX pixels -
+   zero of sixteen cameos fully readable, which is exactly the "I can't see any of the
+   buildings" that was reported.
 
-   Placed HERE, after every rule it overrides, and not beside .rts-bar where it was written:
-   a media query carries no extra specificity, so the later plain rule simply won. */
+   The fix is to stop stacking everything down the one axis that is scarce. In landscape the
+   screen is 750px WIDE, so the bar becomes two columns: the radar and the credits go in a
+   narrow left column, and the tabs, build grid and readout take the rest. The grid then spans
+   the radar's height as well as the leftover, and gets ~215px instead of 26 - three full rows
+   of cameos with their names and prices.
+
+   That costs width: the bar goes from 25% of a landscape phone to ~37%. It is worth it. The
+   25% bar was narrower but nothing in it worked, and the battlefield still keeps the larger
+   share (about 470x340) - better than PORTRAIT gives it today.
+
+   Scoped to viewports at least 560px wide, i.e. actual landscape phones. A window that is both
+   short AND narrow has no good layout; it keeps the single column and just the radar cap below.
+
+   Placed HERE, after every rule it overrides, and not beside .rts-bar where these were first
+   written: a media query carries no extra specificity, so the later plain rule simply won. */
 @media (max-height: 480px){
-  #rcgRts .rts-bar{flex:0 1 clamp(150px, 24vw, 244px);gap:4px;padding:4px}
   #rcgRts .rts-top{height:26px}
-  #rcgRts .rts-credits{padding:3px 8px}
+  /* The radar is square, so capping its WIDTH caps its height - and keeps the element's box
+     the same shape as the map drawn in it. Capping height instead would need object-fit and
+     letterbox the canvas inside a wider box, which would silently break radar clicks: they
+     map through getBoundingClientRect, which would then describe the box and not the map. */
+  #rcgRts #rtsMini{max-width:26vh;margin:0 auto}
+}
+@media (max-height: 480px) and (min-width: 560px){
+  #rcgRts .rts-bar{flex:0 1 clamp(250px, 37vw, 330px);padding:4px;
+    display:grid;grid-template-columns:104px minmax(0,1fr);
+    grid-template-rows:auto auto auto minmax(0,1fr) auto;gap:4px}
+  /* 104px of column is too narrow for CREDITS and a five-figure number side by side, so they
+     stack - which also lines the block up with the two rows of tabs beside it. */
+  #rcgRts .rts-credits{grid-column:1;grid-row:1;flex-direction:column;align-items:center;
+    justify-content:center;gap:1px;padding:3px 4px}
   #rcgRts .rts-credits .val{font-size:17px}
+  #rcgRts .rts-store{grid-column:1;grid-row:2}
+  #rcgRts .rts-radar{grid-column:1;grid-row:3;align-self:start}
+  #rcgRts .rts-supers{grid-column:1;grid-row:4;align-self:start}
+  #rcgRts .rts-tabs{grid-column:2;grid-row:1;align-content:start}
+  #rcgRts .rts-ops{grid-column:2;grid-row:2;align-items:start}
+  /* the whole point: the grid gets the radar's row AND the leftover one */
+  #rcgRts .rts-mid{grid-column:2;grid-row:3 / span 2;min-height:0}
+  #rcgRts .rts-sel{grid-column:1 / -1;grid-row:5}
 }
 
 /* ---- the original-artwork loader on the home screen ----------------------
@@ -635,7 +710,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">2162811 · 2026-07-31</div>
+  <div id="rtsBuild" title="build">85fd2b1 · 2026-07-31</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
