@@ -29,11 +29,16 @@ function rtsOpen(seed) {
     /* Two hint lines, because the verbs genuinely differ - a phone has no right button and no
        wheel, and a desktop has no long-press. CSS shows exactly one; see .rts-help. */
     +     '<span class="rts-help desk">drag select · right-click order · S hold · 1-9 teams (ctrl set, alt jump) · repair/sell · wheel zoom · Esc</span>'
-    +     '<span class="rts-help touch">drag to move · tap to select · hold for orders · pinch to zoom</span>'
     +     '<button type="button" class="rts-mute" id="rtsSaveBtn" title="Save this battle (Ctrl+S)" onclick="rtsSaveGame()">💾</button>'
     +     '<button type="button" class="rts-mute" id="rtsLoadBtn" title="Resume the saved battle" onclick="rtsLoadGame()">📂</button>'
     +     '<button type="button" class="rts-mute" id="rtsMute" title="Sound on" onclick="rtsMuteToggle()">🔊</button>'
     +     '<button type="button" class="rts-x" onclick="rtsClose()">✕</button></div>'
+    /* The touch hint is a SIBLING of the top bar, not a child of it. In that bar it had to share
+       one 34px line with the title, the army names, the difficulty pill and four buttons; on a
+       390px phone there is no room, so it wrapped to three lines, overflowed the bar and ran
+       underneath the close button. Along the bottom of the battlefield it has the full width to
+       itself, and it is nearer the thumb that has to perform what it describes. */
+    +   '<span class="rts-help touch">drag to move · tap to select · hold for orders · pinch to zoom</span>'
     +   '<div class="rts-msg" id="rtsMsg"></div>'
     +   '<div class="rts-over" id="rtsOver"></div>'
     + '</div>'

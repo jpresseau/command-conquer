@@ -66,7 +66,12 @@
 #rcgRts .rts-help.touch{display:none}
 @media (hover: none) and (pointer: coarse){
   #rcgRts .rts-help.desk{display:none}
-  #rcgRts .rts-help.touch{display:inline}
+  /* Along the bottom of the battlefield rather than in the top bar - see the markup for why.
+     pointer-events:none so a line of advice never eats a tap meant for the ground under it. */
+  #rcgRts .rts-help.touch{display:block;position:absolute;left:0;right:0;bottom:0;
+    padding:5px 8px;text-align:center;font-size:11px;line-height:1.25;pointer-events:none;
+    background:linear-gradient(0deg,rgba(10,14,20,.8),rgba(10,14,20,0));
+    margin:0;opacity:.72}
 }
 /* The battlefield handles its own gestures and calls preventDefault on all of them; this stops
    the browser ALSO trying to scroll, pinch-zoom the page, or fire a delayed synthetic click,
@@ -300,12 +305,17 @@
      map through getBoundingClientRect, which would then describe the box and not the map. */
   #rcgRts #rtsMini{max-width:26vh;margin:0 auto}
 }
-@media (max-height: 480px) and (min-width: 560px){
-  #rcgRts .rts-bar{flex:0 1 clamp(250px, 37vw, 330px);padding:4px;
-    display:grid;grid-template-columns:104px minmax(0,1fr);
+/* THE TWO-COLUMN BAR INTERIOR, shared by the two shapes below. Both are the same idea - a bar
+   that is WIDE and SHORT rather than tall and narrow - so they want the same insides: radar and
+   credits stacked in a narrow first column, tabs and build grid in the second, and the grid
+   spanning the radar's row as well as the leftover so it gets the height the radar is not
+   using. Only where the bar SITS differs, and that is the two blocks after this one. */
+@media (max-height: 480px) and (min-width: 560px),
+       (max-width: 560px) and (orientation: portrait){
+  #rcgRts .rts-bar{padding:4px;display:grid;grid-template-columns:92px minmax(0,1fr);
     grid-template-rows:auto auto auto minmax(0,1fr) auto;gap:4px}
-  /* 104px of column is too narrow for CREDITS and a five-figure number side by side, so they
-     stack - which also lines the block up with the two rows of tabs beside it. */
+  /* 92px of column is too narrow for CREDITS and a five-figure number side by side, so they
+     stack - which also lines the block up with the tabs beside it. */
   #rcgRts .rts-credits{grid-column:1;grid-row:1;flex-direction:column;align-items:center;
     justify-content:center;gap:1px;padding:3px 4px}
   #rcgRts .rts-credits .val{font-size:17px}
@@ -317,6 +327,32 @@
   /* the whole point: the grid gets the radar's row AND the leftover one */
   #rcgRts .rts-mid{grid-column:2;grid-row:3 / span 2;min-height:0}
   #rcgRts .rts-sel{grid-column:1 / -1;grid-row:5}
+}
+/* landscape phone: the bar keeps its place down the right-hand side, just wider */
+@media (max-height: 480px) and (min-width: 560px){
+  #rcgRts .rts-bar{flex:0 1 clamp(250px, 37vw, 330px)}
+}
+
+/* A PHONE HELD UPRIGHT has the opposite problem and needs the opposite answer. Here WIDTH is
+   what is scarce - 360 to 430px of it - and a sidebar down the side is competing for exactly
+   that. Measured across five phone profiles, the bar was taking 43-57% of the screen, and on
+   three of the five it was WIDER THAN THE BATTLEFIELD. The game was the smaller half of its
+   own window.
+
+   So in portrait the bar goes along the BOTTOM, full width, and the battlefield gets the whole
+   width of the phone and about two thirds of its height. That also happens to make the bar the
+   same shape as the landscape one - wide and short - which is why the block above is shared
+   between them rather than written twice.
+
+   Height is a share of the viewport with a floor: below about 236px the tabs, the radar, the
+   readout and two rows of cameos stop fitting, and a bar that cannot show two rows is not worth
+   the space it takes. Full width buys back the tiles: four columns instead of two, so the
+   shorter bar still shows MORE of the build list than the tall one did. */
+@media (max-width: 560px) and (orientation: portrait){
+  #rcgRts{flex-direction:column}
+  #rcgRts .rts-bar{flex:0 0 clamp(236px, 36vh, 290px);
+    border-left:0;border-top:2px solid #33445c}
+  #rcgRts .rts-grid{grid-template-columns:repeat(auto-fill, minmax(58px, 1fr))}
 }
 
 /* ---- the original-artwork loader on the home screen ----------------------
@@ -713,7 +749,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">e2ba79c · 2026-07-31</div>
+  <div id="rtsBuild" title="build">c607465 · 2026-07-31</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -16020,11 +16056,16 @@ function rtsOpen(seed) {
     /* Two hint lines, because the verbs genuinely differ - a phone has no right button and no
        wheel, and a desktop has no long-press. CSS shows exactly one; see .rts-help. */
     +     '<span class="rts-help desk">drag select · right-click order · S hold · 1-9 teams (ctrl set, alt jump) · repair/sell · wheel zoom · Esc</span>'
-    +     '<span class="rts-help touch">drag to move · tap to select · hold for orders · pinch to zoom</span>'
     +     '<button type="button" class="rts-mute" id="rtsSaveBtn" title="Save this battle (Ctrl+S)" onclick="rtsSaveGame()">💾</button>'
     +     '<button type="button" class="rts-mute" id="rtsLoadBtn" title="Resume the saved battle" onclick="rtsLoadGame()">📂</button>'
     +     '<button type="button" class="rts-mute" id="rtsMute" title="Sound on" onclick="rtsMuteToggle()">🔊</button>'
     +     '<button type="button" class="rts-x" onclick="rtsClose()">✕</button></div>'
+    /* The touch hint is a SIBLING of the top bar, not a child of it. In that bar it had to share
+       one 34px line with the title, the army names, the difficulty pill and four buttons; on a
+       390px phone there is no room, so it wrapped to three lines, overflowed the bar and ran
+       underneath the close button. Along the bottom of the battlefield it has the full width to
+       itself, and it is nearer the thumb that has to perform what it describes. */
+    +   '<span class="rts-help touch">drag to move · tap to select · hold for orders · pinch to zoom</span>'
     +   '<div class="rts-msg" id="rtsMsg"></div>'
     +   '<div class="rts-over" id="rtsOver"></div>'
     + '</div>'
