@@ -6,6 +6,11 @@
 #rcgRts{position:fixed;inset:0;z-index:2147482700;display:flex;background:#10141a;
   font:13px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#dfe8f2;
   animation:rtsIn .18s ease-out}
+/* `inset:0` is the LAYOUT viewport, and on iOS that is taller than what you can see whenever
+   the URL bar is showing - the bottom of the game sits under it. dvh is the dynamic viewport:
+   it tracks the visible area as the toolbars slide in and out. Declared after the shorthand so
+   browsers that do not know the unit keep the inset:0 height above. */
+#rcgRts{height:100dvh}
 @keyframes rtsIn{from{opacity:0}to{opacity:1}}
 /* isolation: the vignette below uses mix-blend-mode, which blends with the whole backdrop
    chain; isolating the stage pins that blend to the battlefield and nothing else */
@@ -212,6 +217,20 @@
   #rcgRts .rts-bar{flex-basis:190px}
   #rcgRts .rts-help{display:none}
   #rcgRts .rts-tile .nm{font-size:8.5px}
+}
+
+/* A PHONE HELD SIDEWAYS is about 850x390, and a fixed 244px sidebar takes nearly a third of
+   it - the battlefield ends up the smaller half of the screen, which is the wrong way round
+   for the thing you are actually looking at. Short viewport means landscape phone; the bar
+   gives up its fixed width and takes a share instead, floored so the build tiles still fit.
+
+   Placed HERE, after every rule it overrides, and not beside .rts-bar where it was written:
+   a media query carries no extra specificity, so the later plain rule simply won. */
+@media (max-height: 480px){
+  #rcgRts .rts-bar{flex:0 1 clamp(150px, 24vw, 244px);gap:4px;padding:4px}
+  #rcgRts .rts-top{height:26px}
+  #rcgRts .rts-credits{padding:3px 8px}
+  #rcgRts .rts-credits .val{font-size:17px}
 }
 
 /* ---- the original-artwork loader on the home screen ----------------------
