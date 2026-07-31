@@ -226,6 +226,17 @@ function rtsSaveInfo() {
     return info;
   } catch (_e) { return null; }
 }
+/* "There IS a save, but this build cannot read it." rtsSaveInfo returns null for that case,
+   the same as for no save at all, and the title screen needs to tell the two apart: a battle
+   that silently disappears from the menu after an update looks exactly like a battle that was
+   never saved, and the player has no way to know which happened. */
+function rtsSaveStale() {
+  try {
+    var raw = window.localStorage.getItem(RTS_SAVE_INFO);
+    if (!raw) return false;
+    return JSON.parse(raw).v !== _rtsSaveVersion();
+  } catch (_e) { return false; }
+}
 function rtsSaveGame() {
   var G = window._rtsG;
   if (!G) return false;
@@ -253,22 +264,68 @@ function rtsSaveGame() {
 }
 /* Verify everything before touching the running game - version, presence, checksum, parse -
    and only then tear the battle down. Load_Game's whole structure is this precaution. */
+/* SIX WAYS TO HAVE NOTHING TO RESUME, and this used to return the same bare null for all of
+   them. The index and the body live under two different keys, and only the INDEX decides
+   whether RESUME BATTLE appears - so every failure below is the case where the index survived
+   and the body did not, which is precisely when the button is on screen promising something it
+   cannot deliver. Returning the reason costs nothing; the caller decides where to put it. */
 function _rtsReadSave() {
   var info = rtsSaveInfo();
-  if (!info) return null;
+  if (!info) return { body:null, why:'none', msg:'There is no saved battle to resume.' };
   var text;
-  try { text = window.localStorage.getItem(RTS_SAVE_KEY); } catch (_e) { return null; }
-  if (!text || text.length !== info.bytes) return null;
-  if (_rtsHash(text) !== info.hash) return null;
+  try { text = window.localStorage.getItem(RTS_SAVE_KEY); }
+  catch (_e) {
+    return { body:null, why:'blocked',
+      msg:'This browser will not let the game read its own storage, so the save cannot be '
+        + 'opened. Private browsing is the usual cause.' };
+  }
+  if (!text) {
+    return { body:null, why:'gone',
+      msg:'The saved battle itself is gone — the browser cleared its storage, but left the '
+        + 'record of it behind.' };
+  }
+  /* Length before hash: a save cut short by a full quota is a different accident from one that
+     was altered, and "you ran out of room" is something the player can act on. */
+  if (text.length !== info.bytes) {
+    return { body:null, why:'truncated',
+      msg:'The saved battle is incomplete — it was cut short as it was written, which normally '
+        + 'means the browser ran out of storage room.' };
+  }
+  if (_rtsHash(text) !== info.hash) {
+    return { body:null, why:'damaged', msg:'The saved battle is damaged and cannot be trusted.' };
+  }
   var body;
-  try { body = JSON.parse(text); } catch (_e2) { return null; }
-  if (!body || !body.ents || !body.ents.length) return null;
-  return body;
+  try { body = JSON.parse(text); }
+  catch (_e2) {
+    return { body:null, why:'damaged', msg:'The saved battle is damaged and cannot be read.' };
+  }
+  if (!body || !body.ents || !body.ents.length) {
+    return { body:null, why:'empty', msg:'The saved battle has nothing in it.' };
+  }
+  return { body:body, why:'', msg:'' };
+}
+/* Put the reason where the player just clicked. In a match that is the message line; on the
+   TITLE SCREEN there is no match and no message line - which is the whole bug, because the
+   only explanation this function ever had was behind `if (window._rtsG)` and RESUME BATTLE is
+   pressed from a screen where _rtsG is by definition null. The button did nothing, said
+   nothing, and was indistinguishable from a broken button. */
+function _rtsLoadFailed(res) {
+  if (window._rtsG) { _rtsSay(res.msg); return; }
+  var n = document.getElementById('rtsResumeNote');
+  if (n) { n.hidden = false; n.textContent = res.msg; }
+  /* The button has just been shown to be lying, so stop offering it for this visit. Nothing is
+     deleted: a browser that is merely blocked right now may not be blocked next time, and
+     throwing away the player's save on a failed READ is not ours to do. */
+  if (res.why !== 'none') {
+    var r = document.getElementById('rtsResume');
+    if (r) r.hidden = true;
+  }
 }
 function rtsLoadGame() {
-  var body = _rtsReadSave();
+  var res = _rtsReadSave();
+  var body = res.body;
   if (!body) {
-    if (window._rtsG) _rtsSay('No usable save — it is missing, damaged, or from an older build.');
+    _rtsLoadFailed(res);
     if (typeof _rtsSfx === 'function') _rtsSfx('deny');
     return false;
   }

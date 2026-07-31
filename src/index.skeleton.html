@@ -230,6 +230,9 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   <p class="diffnote" id="rtsVoxNote" hidden></p>
   <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE</button>
   <button type="button" class="go resume" id="rtsResume" onclick="rtsLoadGame()" hidden>RESUME BATTLE</button>
+  <!-- Why a resume did not happen, and why one is not on offer. This screen has no message
+       line, so without somewhere to put the reason the button simply did nothing. -->
+  <p class="diffnote" id="rtsResumeNote" hidden></p>
   <button type="button" class="go resume" id="rtsEdit" onclick="rtsEdOpen()" hidden>MAP EDITOR<small>draw a battlefield of your own</small></button>
   <!-- Shown only when the browser says the app can be installed; see rtsInstallInit. -->
   <!-- Always present unless the app IS the installed app; see rtsInstallInit for why. -->
@@ -446,9 +449,22 @@ function rtsShowEditor(){
 }
 function rtsShowResume(){
   var r = document.getElementById('rtsResume');
+  var n = document.getElementById('rtsResumeNote');
   if (!r) return;
+  if (n) { n.hidden = true; n.textContent = ''; }
   var info = (typeof rtsSaveInfo === 'function') ? rtsSaveInfo() : null;
-  if (!info) { r.hidden = true; return; }
+  if (!info) {
+    r.hidden = true;
+    /* A save this build cannot read is still NEWS. Without this the button just quietly stops
+       appearing after an update, which reads as the game having lost the battle rather than as
+       the save format having moved on - and the player cannot tell the difference. */
+    if (n && typeof rtsSaveStale === 'function' && rtsSaveStale()) {
+      n.hidden = false;
+      n.textContent = 'Your saved battle was made by an earlier version of the game and cannot '
+                    + 'be resumed. Starting a new battle will replace it.';
+    }
+    return;
+  }
   r.hidden = false;
   r.innerHTML = 'RESUME BATTLE<small>' + String(info.desc).replace(/[<&]/g, '') + '</small>';
 }
