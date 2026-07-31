@@ -892,6 +892,25 @@ function _rtsDrawUnit(g, e, TSscale) {
     var cyc = walk[f];
     img = cyc[(Math.floor(_rtsG.t * 10) + (e.gait || 0)) % cyc.length];
   }
+  /* A SOLDIER STANDING STILL DOES NOT STAND TO ATTENTION FOREVER. Every so often he shifts his
+     weight, checks his weapon, stretches - RA's idle1/idle2, ticked at 120ms.
+
+     Cosmetic, and driven entirely off the clock and the unit's own `gait`, exactly like the
+     walk cycle above: nothing is stored on the entity, so this cannot desynchronise a save, a
+     replay or the sim. gait also staggers WHICH fidget and WHEN, so a squad standing in a line
+     does not twitch in unison - the thing that would make it read as a glitch rather than as
+     life. The period is 9-13s per unit, and each fidget runs a second or two of that.
+
+     Only while genuinely idle: not prone, not walking, and not while the unit has a target,
+     because a man mid-burst rolling his shoulders looks broken rather than relaxed. */
+  var fidg = (!e.prone && d.kind === 'infantry' && !e.target
+              && !(e.path && e.pi < e.path.length)
+              && typeof _mixIdleAnim === 'function') ? _mixIdleAnim(e.def, e.side) : null;
+  if (fidg && fidg.length) {
+    var gt = e.gait || 0, per = 9 + (gt % 5), ph = (_rtsG.t + gt * 0.37) % per;
+    var run = fidg[(gt + Math.floor((_rtsG.t + gt * 0.37) / per)) % fidg.length];
+    if (ph < run.length * 0.12) img = run[Math.floor(ph / 0.12)];
+  }
   /* The harvester AT WORK, from the 79 frames of harv.shp the facing bake does not use.
      Purely cosmetic - the sim's hstate drives it and is never touched. The dock timer is
      stamped here in the renderer because it is a drawing concern: the tip-up plays once from

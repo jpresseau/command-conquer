@@ -1609,6 +1609,17 @@ function _rtsKill(e) {
       }
       /* "Very strong units that have an explosion will also rock the screen." */
       if (ud.hp > 400) G.shake = Math.min(1, G.shake + 0.12);
+      /* The wreck burns. An UNATTACHED ladder fire - no `att`, so it damages nothing and
+         nothing owns it - that burns itself down through the existing chain: ~4s of flame
+         guttering into ~7s of smoke. It is what makes ground where a battle just happened
+         look like ground where a battle just happened. Land vehicles only: a sinking ship
+         leaves water, and a helicopter dies where it FELL FROM, not where it lands. */
+      if (!e.crushed && !ud.sea && ud.kind !== 'air') {
+        var wkind = (e.r || 1) >= 1.2 ? 'firemed' : 'firesmall';
+        var wbase = 0.55 + (e.r || 1) * 0.28;
+        G.fx.push({ kind:wkind, x:e.x, y:1, z:e.z, t:0, base:wbase,
+                    big:wbase * RTS_ANIMS[wkind].size, loops:RTS_ANIMS[wkind].loops || 1 });
+      }
     }
   }
   if (typeof _rtsSfx === 'function')

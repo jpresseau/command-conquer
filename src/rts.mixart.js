@@ -67,7 +67,7 @@ function rtsSetTheatre(id) {
   _RTS_SPR = null; _RTS_UFIT = {}; _RTS_USCALE = {};
   _RTS_TREES = null; _RTS_MIXTREES = null; _RTS_TILECACHE = null; _RTS_MIXDEBRIS = null;
   _RTS_MIXBIB = null; _RTS_SHROUDSPR = null; _RTS_MIXMAKE = null; _RTS_MIXDIE = null;
-  _RTS_MIXFX = null; _RTS_MIXWATER = null; _RTS_HARVANIM = {};
+  _RTS_MIXFX = null; _RTS_MIXWATER = null; _RTS_HARVANIM = {}; _RTS_IDLEANIM = {};
   return id;
 }
 /* The file extension the current theatre's tiles carry. */
@@ -541,6 +541,48 @@ function _mixUnit(key, side, prone, part) {
     out.push(fr ? _mixFrameToCanvas(fr, s.width, s.height, pal) : _sprMake(s.width, s.height).c);
   }
   return out;
+}
+
+/* ---------------------------------------------------------- infantry fidgets --
+   A soldier standing still in RA is not at attention forever: every so often he shifts his
+   weight, checks his rifle, stretches. The idle1/idle2 sequences carry it, single-facing,
+   ticked at 120ms. Unlike stand/prone there is NO shared layout - every type parks its idles
+   at a different offset - so this table is each type's numbers straight out of
+   mods/ra/sequences/infantry.yaml, keyed by SHP name: [start, length] per variant. */
+var RTS_MIX_IDLE = {
+  e1:   [[256, 16], [272, 16]],
+  e2:   [[384, 14], [399, 16]],
+  e3:   [[272, 14], [287, 16]],
+  e4:   [[384, 14], [399, 16]],
+  e6:   [[121, 8],  [130, 14]],
+  e7:   [[233, 14], [248, 14]],
+  medi: [[178, 14]],
+  thf:  [[120, 19]],
+  dog:  [[216, 7],  [224, 11]]
+};
+var _RTS_IDLEANIM = {};
+function _mixIdleAnim(key, side) {
+  if (!_rtsArtReady()) return null;
+  var ck = key + '|' + side;
+  if (_RTS_IDLEANIM[ck] !== undefined) return _RTS_IDLEANIM[ck];
+  _RTS_IDLEANIM[ck] = null;
+  var nm = RTS_MIX_UNIT[key], tab = nm && RTS_MIX_IDLE[nm];
+  if (!tab) return null;
+  var s = _mixShp(nm + '.shp');
+  if (!s) return null;
+  var pal = _mixTeamPal(RTS_MIX.pal, RTS_PAL.team[side][0]);
+  var out = [];
+  for (var v = 0; v < tab.length; v++) {
+    var run = [], start = tab[v][0], len = tab[v][1];
+    if (start + len > s.count) continue;           /* a cut-down shp: skip the variant */
+    for (var f = 0; f < len; f++) {
+      var fr = s.frame(start + f);
+      if (!fr) { run = null; break; }
+      run.push(_mixFrameToCanvas(fr, s.width, s.height, pal));
+    }
+    if (run && run.length) out.push(run);
+  }
+  return out.length ? (_RTS_IDLEANIM[ck] = out) : null;
 }
 
 /* ------------------------------------------------------- the harvester at work --
