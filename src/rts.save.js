@@ -220,6 +220,11 @@ function _rtsApplyState(G, body) {
   G.zc = null; G.zcT = -99;
   G.newScorch = [];
   for (i = 0; i < G.scorch.length; i++) if (G.scorch[i]) G.newScorch.push(i);
+  /* And the bodies, for exactly the same reason: the terrain bake they were stamped into died
+     with the old battle. G.corpses is a hand-off queue the renderer drains, so it is empty by
+     the frame after a death and a save taken later held nothing - the battlefield came back
+     freshly mown. G.corpseLog is the record; this refills the queue from it. */
+  G.corpses = (G.corpseLog || []).slice();
   G.scrapDirty = true; G.visDirty = 1;
   return G;
 }

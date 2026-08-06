@@ -757,7 +757,15 @@ function _mixLoadList(list, got, done) {
           var raw = new Uint8Array(fr.result);
           var a = window.RA_MIX.mixOpen(raw);
           if (a.error) got.push(name + ': ' + a.error);
-          else {
+          /* SAY IT AT THE PICKER. A truncated archive parses - the index is at the front - so it
+             used to be accepted, reported as "230 files", written to IndexedDB, and only then
+             kill the next START with "Invalid typed array length" from inside sprite baking,
+             every reload, with nothing naming the cause. mixOpen knows where the last entry ends;
+             asking it here costs nothing and turns an unstartable game into one sentence. */
+          else if (typeof a.complete === 'function' && !a.complete()) {
+            got.push(name + ': incomplete — the file is shorter than its own index says. ' +
+                     'Copy it again from your disc or install folder.');
+          } else {
             RTS_MIX.open[name] = a;
             if (RTS_MIX.want.indexOf(name) >= 0) RTS_MIX.bytes[name] = raw;
             got.push(name + ': ' + a.count + ' files');
@@ -850,7 +858,10 @@ function _mixFinish(log, done) {
      the content arrived */
   if (RTS_MIX.ready) { _RTS_SPR = null; _RTS_UFIT = {}; _RTS_USCALE = {};
                        _RTS_TREES = null; _RTS_MIXTREES = null; _RTS_TILECACHE = null;
-                       _RTS_MIXDEBRIS = null; }
+                       /* the shroud belongs on this list too - rtsSetTheatre clears it, but
+                          that returns early when the theatre has not changed, which is the
+                          normal case when artwork arrives mid-session */
+                       _RTS_MIXDEBRIS = null; _RTS_SHROUDSPR = null; }
   /* Anything that keys off "is there artwork" is told HERE, at the single point where that
      becomes true, rather than by each path that might have delivered it. The editor button was
      hidden the first time round because it was announced from the file picker only, so artwork
@@ -1054,8 +1065,14 @@ function _mixShroudMap() {
 var _RTS_SHROUDSPR = null;
 function _mixShroud() {
   if (_RTS_SHROUDSPR !== null) return _RTS_SHROUDSPR;
-  _RTS_SHROUDSPR = false;
+  /* THE ART CHECK COMES FIRST, and it is the only sibling here that had it the other way round.
+     Caching `false` before asking whether there is any artwork meant one frame rendered before
+     the archives arrived poisoned the answer for the whole session: the player loaded their
+     files, every other bake was cleared and redone, and the fog kept its blocky fallback edges
+     instead of shadow.shp's cut diagonals until they reloaded the page. Measured at 3.6% of the
+     screen's pixels. Nothing is cached until there is something real to cache. */
   if (!_rtsArtReady()) return false;
+  _RTS_SHROUDSPR = false;
   var s = _mixShp('shadow.shp');
   if (!s || s.count < 48 || s.width !== RTS_TS || s.height !== RTS_TS) return false;
   var out = [];
