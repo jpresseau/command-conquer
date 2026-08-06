@@ -31,6 +31,7 @@ are genuinely modular:
 | `rules` | invariants over the roster: no orphan unit kinds, every prerequisite and weapon resolves, every unit kind has a building that produces it, no faction needs something it cannot build |
 | `r3d` | the sprite baker's geometry half: the oblique projection (`x` unchanged, `z − K·y`, ground deliberately **not** foreshortened), the shape builders, yaw and scale as pure transforms that must not edit the model handed to them, and the colour ramp — which exists to keep a shadow coloured instead of letting it slide to grey, so the test is "does it stay saturated", not "does it get darker" |
 | `audio` | the sound tables, whose only failure mode is silence: every EVA line, unit voice and death cry resolves in the identity table, every voice pool expands to takes that exist, every effect the game dispatches has something to play, and no retrigger gap or sampled mapping is left pointing at an effect that is gone |
+| `scenario` | the two tables read as scripts — team mission lists and triggers. Every mission, event, action, waypoint, quarry, team and unit name resolves; every argument is the kind its own table's `need` declares; every `loop` jumps inside its own script; and the two invariants the source states in prose hold — the autocreate split has both halves populated, and the shipped trigger list stays balance-neutral, which is what the ladder measurements assume |
 | `sw` | the service worker's contract as stated in its own source — never calls `respondWith`, never touches the Cache API, keeps the fetch handler that makes the app installable — plus a manifest whose every URL is relative, because the app is deployed under a path. A universal claim no finite set of requests can establish, which is the one case where reading the source beats driving it |
 
 `lib/sandbox.js` is what makes those possible. The game is browser globals concatenated
@@ -56,6 +57,13 @@ ask whether a new deploy reaches the player. It alters the deployed build stamp,
 checks which build the player gets; it also serves the app from `/command-conquer/` rather than the
 origin root, because that is where it really lives, and at a root an absolute `/sw.js` and a
 relative `sw.js` behave identically right up until production.
+
+`e2e/scenario` writes its own scenarios rather than testing only what ships. Both of the game's
+`and` triggers combine conditions that only become *more* true, so they would fire with or without
+the latch, and nothing shipped uses `forceTrigger`, `destroyTrigger`, the mission timer, globals, or
+an event that reads its argument's house rather than its owner's. `RTS_TRIGGERS` is a plain array, so
+the spec pushes a trigger, drives it, and takes it away again — which is the only way to reach the
+rules the shipped list never exercises.
 
 `e2e/audio` measures **sound**, not function calls. Headless Chromium runs WebAudio for real, so
 a `ScriptProcessor` is tapped onto the master bus and the samples are read back: every effect the
