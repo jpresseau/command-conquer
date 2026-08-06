@@ -767,7 +767,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">39874fc · 2026-08-06</div>
+  <div id="rtsBuild" title="build">e44db4e · 2026-08-06</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -2768,6 +2768,16 @@ var RTS_STRUCTS = [
     needs:['factory'], weapon:'turretrocket',
     side:'soviet', armour:'concrete',
     desc:'Long-range base defence. Tears up armour, poor against infantry.' },
+  /* THE ALLIED AA GUN, and the reason it had to arrive with the Soviet air force rather than
+     after it. Only two weapons in this game could touch an aircraft - the Rocket Squad's
+     launcher, which both armies field, and the Rocket Turret above, which is Soviet - so the
+     Allies had no anti-air STRUCTURE at all. That was invisible while the Allies were the only
+     side that flew. Priced under the Rocket Turret because it is a specialist that cannot
+     shoot back at anything on the ground; 1x2 cells, matching agun.shp's 24x48. */
+  { key:'aagun',   name:'AA Gun',       w:1, h:2, cost:600,  build:11, hp:420,  power:-30,  sight:22,
+    needs:['radar'], weapon:'flak',
+    side:'allied', armour:'concrete',
+    desc:'Anti-aircraft only. Cannot fire on ground targets — pair it with a Pillbox.' },
   /* --- defence you can afford early, and the two structures that do something other than
      shoot. `wall` and `pillbox` are pure data; `depot` carries the repair field below. --- */
   /* Concrete Wall $50, no power, no prerequisite - the reference's numbers exactly. It is the
@@ -2848,6 +2858,15 @@ var RTS_STRUCTS = [
     needs:['radar'], produces:'air', rearm:true,
     side:'allied', armour:'concrete',
     desc:'Builds and rearms helicopters. Without one, an aircraft out of ammo goes down.' },
+  /* The Soviet Airfield. Same job as the Helipad on the other side of the war - AIRCRAFT.CPP
+     does not care which kind of pad an aircraft rearms at, and neither does _rtsRearmPad - so
+     this is the Helipad's counterpart rather than a new mechanism. It is bigger (3x2, matching
+     afld.shp's 72x48) and cheaper, because a runway takes more room than a helipad and because
+     the aircraft it flies are cheaper and shorter-legged than the Attack Heli. */
+  { key:'afld',     name:'Airfield',     w:3, h:2, cost:1200, build:13, hp:600,  power:-20,  sight:10,
+    needs:['radar'], produces:'air', rearm:true,
+    side:'soviet', armour:'concrete',
+    desc:'Builds and rearms MiGs and Yaks. An aircraft with no airfield left has nowhere to land.' },
   { key:'silo',     name:'Ore Silo',   w:2, h:2, cost:150,  build:5,  hp:400,  power:0,    sight:8,
     needs:['refinery'], storage:1500, capturable:false,
     armour:'wood',
@@ -2993,6 +3012,25 @@ var RTS_UNITS = [
     needs:['helipad'], air:true, ammo:8, rearm:6, alt:14,
     side:'allied', armour:'light',
     desc:'Flies over anything. Eight missiles, then it must return to a pad to reload.' },
+  /* THE TWO SOVIET AIRCRAFT, and they do different jobs on purpose - two planes that both kill
+     tanks would be one plane with two names.
+
+     The MiG is the tank-killer. Faster than the Attack Heli and harder-hitting, but it carries
+     four Mavericks against the Heli's eight missiles, so it lands twice as often and spends more
+     of the match on the ground. Anchored against the Heli it is measured beside: 1400 against
+     1200 buys +36% speed and +20% damage for half the sorties.
+
+     The Yak is the opposite unit. Cheap, fragile, and useless against armour - what it does is
+     strafe massed infantry, which the Soviets otherwise have to answer with a Flame Tower that
+     cannot move. At 900 it is the cheapest thing in the game that flies. */
+  { key:'mig',      name:'MiG',           kind:'air',      cost:1400, build:16, hp:180,  speed:30,  turn:4.0,r:1.5, sight:22, weapon:'maverick',
+    needs:['afld'], air:true, ammo:4, rearm:6, alt:16,
+    side:'soviet', armour:'light',
+    desc:'Fast tank-killer. Four missiles, then back to the airfield — it cannot linger.' },
+  { key:'yak',      name:'Yak',           kind:'air',      cost:900,  build:11, hp:150,  speed:26,  turn:4.5,r:1.3, sight:20, weapon:'strafe',
+    needs:['afld'], air:true, ammo:30, rearm:5, alt:15,
+    side:'soviet', armour:'light',
+    desc:'Strafes infantry. Barely scratches armour — send it at the men, not the tanks.' },
   /* Armoured Personnel Carrier. UDATA.CPP's UnitAPC is IsCrusher with no turret; the transport
      rules are in UNIT.CPP - capacity via Max_Passengers, and, in Death, the half of the branch
      that matters: when a TRANSPORT dies its infantry passengers are unlimboed at the wreck and
@@ -3108,6 +3146,27 @@ var RTS_WEAPONS = {
      what keeps it from being a flying answer to everything. */
   hellfire:   { dmg:55, range:20, cool:1.1, shot:'rocket', speed:34, splash:0.9, ammo:1,
                 verses:{ none:0.35, wood:1.10, light:1.20, heavy:1.30, concrete:0.85 } },
+  /* The MiG's Mavericks. Harder than the Attack Heli's missiles and even more lopsided - it is
+     a tank-killer that cannot hurt the men standing next to the tank - but there are only four
+     of them and the MiG cannot loiter, so the trade is a heavier punch you get to throw half as
+     often. Two per pass at 66 x 1.35 = 89 against heavy armour: a Heavy Tank survives one sortie
+     and not two, which is the shape this is tuned to. */
+  maverick:   { dmg:66, range:18, cool:0.9, shot:'rocket', speed:40, splash:1.0, ammo:1,
+                verses:{ none:0.25, wood:1.05, light:1.25, heavy:1.35, concrete:0.95 } },
+  /* And the Yak's nose guns, which are the mirror image: it strafes people and barely marks
+     armour. Cheap, fast, and the answer to massed infantry that the Soviets otherwise have to
+     solve with a Flame Tower they cannot move. */
+  strafe:     { dmg:16, range:14, cool:0.22, shot:'tracer', speed:0, splash:0.6, ammo:1,
+                verses:{ none:1.15, wood:0.40, light:0.30, heavy:0.10, concrete:0.10 } },
+  /* THE ALLIED ANSWER TO ALL OF THIS. Before the Soviets could fly, the only two weapons in the
+     game that could hit an aircraft at all were the Rocket Squad's launcher (both armies) and
+     the Rocket Turret - which is SOVIET. So the Allies had no anti-air building whatsoever, and
+     it did not show because nothing they could face was in the air. Giving the Soviets an air
+     force without this would have handed one side a weapon the other could only answer with
+     infantry. Deliberately aa-only: it is a specialist, not a second Gun Turret. */
+  flak:       { dmg:22, range:24, cool:0.5, burst:2, shot:'tracer', speed:0, splash:1.4, aa:true,
+                aaOnly:true,
+                verses:{ none:0.9, wood:0.15, light:0.9, heavy:0.35, concrete:0.10 } },
   bite:       { dmg:22, range:5.5,cool:0.55, shot:'tracer',  speed:0,  splash:0, maul:true,
                 verses:{ none:1.4,  wood:0,    light:0,    heavy:0,    concrete:0 } },
   /* Two .45s: shreds infantry, barely marks anything else. The Commando's threat to buildings
@@ -3448,8 +3507,15 @@ var RTS_AI = {
      five minutes, so an opponent that reaches for one early has spent its army on a promise.
      At these weights it builds one only once the rest of the plan is satisfied, which in
      practice means a long game - exactly when a superweapon is the interesting move. */
+  /* Air, and the answer to air. Both armies' entries are listed together and _rtsCanQueue drops
+     whichever belong to the other one, exactly as the defensive block already does - so the same
+     plan gives an Allied opponent a Helipad and a Soviet one an Airfield. The pad ratio is low:
+     one field is enough to keep a flight in the air, and a second buys production speed rather
+     than reach. The AA ratio is deliberately HIGHER than the pad's, because an opponent that
+     flies but cannot be flown against is a worse opponent to play. */
   ratio:{ refinery:0.16, barracks:0.16, factory:0.10, radar:0.06, lab:0.05, depot:0.05,
           apower:0.08, kennel:0.04, silo:0.14, pillbox:0.18, flametower:0.12, turret:0.24, rocketpit:0.12,
+          helipad:0.06, afld:0.06, aagun:0.10,
           mslo:0.02, iron:0.02, pdox:0.02, gps:0.02 },
   limit:{ refinery:4,    barracks:2,    factory:2,    radar:1,    lab:1,    depot:1,
   /* The silo limit is high on purpose and is the one number here that was MEASURED rather
@@ -3458,6 +3524,7 @@ var RTS_AI = {
      production lines to spend it down, so a low ceiling turns the storage cap into a straight
      nerf and hands the player about 16 extra seconds of life. RA has no silo limit at all. */
           apower:2,    kennel:1,    silo:14,   pillbox:4,     flametower:3,     turret:6,     rocketpit:4,
+          helipad:2,   afld:2,      aagun:3,
   /* One each. A second silo would not charge a second missile - the timer is per house - so
      building one is pure waste, and the limit says so rather than relying on the ratio. */
           mslo:1,      iron:1,      pdox:1,    gps:1 },
@@ -3476,8 +3543,13 @@ var RTS_AI = {
      depending on which army it ended up with. */
   /* Superweapons last, after every defence. A base that answers an attack with a Chronosphere
      instead of a pillbox loses the base. */
+  /* The pads sit after the ground production and before the defensive tail: an opponent that
+     buys an airfield before a war factory has no army to protect it, and one that buys it after
+     four turrets never gets there at all. The AA gun goes IN the defensive tail, beside the
+     turrets it stands next to. */
   buildOrder:['refinery', 'barracks', 'silo', 'factory', 'radar', 'apower', 'depot', 'lab', 'kennel',
-              'pillbox', 'flametower', 'turret', 'rocketpit', 'tesla',
+              'helipad', 'afld',
+              'pillbox', 'flametower', 'turret', 'rocketpit', 'tesla', 'aagun',
               'mslo', 'iron', 'pdox', 'gps'],
   /* What to spend a production run on. A table rather than an if-chain: adding a unit to
      RTS_UNITS should not mean editing the opponent's brain, and the hardcoded ladder that used
@@ -3502,7 +3574,14 @@ var RTS_AI = {
        The dog IS in: it needs no plan, it just runs at infantry. */
     infantry:[ { key:'flame', at:1200, w:2 }, { key:'grenadier', at:900, w:2 },
                { key:'rocket', at:500, w:3 }, { key:'dog', at:400, w:2 },
-               { key:'rifle', at:250, w:2 } ]
+               { key:'rifle', at:250, w:2 } ],
+    /* AIRCRAFT, once there is a pad to fly from - _rtsCanQueue gates on `needs`, so these are
+       inert until one exists and there is no separate check to keep in step. Both armies again;
+       the Attack Heli was buildable by the player from the day it shipped and the opponent never
+       once bought one, because this table had no `air` line at all. The bank thresholds are high
+       so a poor AI still buys tanks: an aircraft that dies with no pad to return to is the most
+       expensive way to lose 1400 credits in this game. */
+    air:[ { key:'heli', at:2400, w:3 }, { key:'mig', at:2600, w:3 }, { key:'yak', at:1800, w:2 } ]
   },
   /* Check_Raise_Money / Check_Raise_Power / Check_Lower_Power thresholds. */
   brokeMoney:100,           /* below this, raising cash is urgent */
@@ -5524,6 +5603,42 @@ function _sprBuildingClean(key, side) {
              1.0, 1.8, RTS_PAL.lit, RTS_PAL.lit, 10);
     _r3Cyl(m, W / 2 - 7, 2.5, D / 2 - 7, 2.6, 4.5, RTS_PAL.hazard[0], S[3], 14);    /* fuel drum */
 
+  } else if (key === 'afld') {
+    /* THE AIRFIELD. A runway, which is a thing no other structure in this game is: 3x2 cells of
+       flat dark tarmac with a dashed centreline down the long axis and threshold bars at each
+       end. Almost nothing stands up, for the same reason the Helipad keeps low - aircraft land
+       on it - and the centreline is what stops it reading as a car park. */
+    _r3Box(m, 0, 0, 0, W - 3, 2.2, D - 4, DK[2], DK[0]);            /* the apron */
+    _r3Box(m, 0, 2.2, 0, W - 9, 0.7, D - 13, DK[1], DK[3]);         /* the strip itself */
+    for (var af = 0; af < 6; af++)                                  /* dashed centreline */
+      _r3Box(m, -W / 2 + 8 + af * ((W - 16) / 5), 2.9, 0, 3.6, 0.6, 1.2,
+             RTS_PAL.hazard[0], RTS_PAL.hazard[0]);
+    _r3Box(m,  W / 2 - 6, 2.9, 0, 1.6, 0.6, D - 15, C[0], C[1]);    /* threshold bars */
+    _r3Box(m, -W / 2 + 6, 2.9, 0, 1.6, 0.6, D - 15, C[0], C[1]);
+    _r3Box(m, -W / 2 + 7, 2.2, -D / 2 + 5, 8, 8, 6, C[0], B.roof);  /* control shack, team roof */
+    _r3Box(m, -W / 2 + 7, 10.2, -D / 2 + 5, 1.1, 5, 1.1, S[3], S[3]);  /* its mast */
+    /* the windsock, which is the one silhouette cue that says airfield rather than road */
+    _r3Box(m,  W / 2 - 10, 2.2, -D / 2 + 5, 1.0, 9, 1.0, S[3], S[3]);
+    _r3Cyl(m, W / 2 - 10, 10.5, -D / 2 + 5, 1.6, 3.4, RTS_PAL.hazard[0], S[3], 12);
+    for (var al = 0; al < 4; al++)                                  /* corner lights */
+      _r3Cyl(m, (al < 2 ? -1 : 1) * (W / 2 - 4), 2.2, (al % 2 ? 1 : -1) * (D / 2 - 4),
+             0.9, 1.6, RTS_PAL.lit, RTS_PAL.lit, 10);
+
+  } else if (key === 'aagun') {
+    /* THE AA GUN. One cell wide and two deep, and the read is entirely in the barrels: a pair of
+       long thin tubes ANGLED UP off a small turret. Everything else that shoots in this game
+       points flat along the ground, so elevation is the only cue that says "this one is for the
+       things above you" - and it is why the barrels are drawn tall rather than long. */
+    _r3Box(m, 0, 0, 0, W - 3, 3.0, D - 4, C[2], C[0]);              /* concrete base */
+    _r3Box(m, 0, 3.0, 0, W - 7, 3.0, D - 9, SD[2], SD[0]);          /* the mount */
+    _r3Cyl(m, 0, 6.0, 0, 4.6, 4.0, C[0], C[1], 16);                 /* the turret ring */
+    _r3Box(m, 0, 10.0, 0, 6.0, 1.4, 5.0, B.roof, B.roof);           /* team cap */
+    /* the two barrels, raked back and up - a box that is tall and short reads as elevation */
+    _r3Box(m, -1.2, 10.5, -1.6, 3.0, 11.0, 1.3, DK[0], DK[2]);
+    _r3Box(m, -1.2, 10.5,  1.6, 3.0, 11.0, 1.3, DK[0], DK[2]);
+    _r3Box(m, -2.6, 20.5, 0, 3.6, 1.4, 4.6, DK[1], DK[3]);          /* muzzles */
+    _r3Box(m,  W / 2 - 4, 3.0, D / 2 - 5, 3.0, 4.0, 3.0, S[2], S[1]);  /* ammo locker */
+
   } else if (key === 'silo') {
     /* Ore Silo. The cameo is a LOW RIBBED BUNKER - a wide flat green-grey box with vertical
        ribs down it and an open frame at one end - not the three cylinders that were here,
@@ -6018,6 +6133,42 @@ function _sprUnitModel(key, side, prone, part) {
     _r3Box(m, 2.6, 1.4, -3.6, 4.0, 1.6, 2.0, DK[1], DK[3]);
     _r3Box(m, 2.6, 1.4, 3.6, 4.0, 1.6, 2.0, DK[1], DK[3]);
     _r3Box(m, 0, 0.4, 0, 9.0, 1.0, 6.6, TM[1], TM[3]);             /* skids / team stripe */
+
+  } else if (key === 'mig' || key === 'yak') {
+    /* FIXED WING, and the whole job of these two is to not read as the helicopter above. The
+       Heli is defined by a rotor disc and a long thin tail boom; a plane has neither, and what
+       it does have is WINGS - a span wider than the aircraft is long. At 24px that span is the
+       entire silhouette, so it is drawn first and everything else hangs off it.
+
+       The two are told apart from each other the same way: the MiG is a swept-wing jet with a
+       tapered nose and intakes, the Yak is shorter, straight-winged and carries a propeller.
+       Different silhouettes rather than different colours - both fly for the same army in the
+       same team palette, so colour cannot be the distinguisher. */
+    var _jet = (key === 'mig');
+    var _len = _jet ? 17.0 : 13.5, _span = _jet ? 20.0 : 22.0;
+    if (_jet) {
+      _r3Box(m, 0.5, 3.0, 0, 6.0, 1.3, _span, VH[0], VH[1]);       /* leading edge */
+      _r3Box(m, -2.5, 3.0, 0, 5.0, 1.3, _span * 0.68, VH[1], VH[3]);  /* swept back */
+    } else {
+      _r3Box(m, 0.0, 3.0, 0, 5.4, 1.4, _span, VH[0], VH[1]);       /* straight wing */
+    }
+    _r3Box(m, 0, 3.4, 0, _len, 4.2, 4.6, VH[0], VH[1]);            /* fuselage */
+    _r3Box(m, _len * 0.42, 3.6, 0, _len * 0.30, 3.2, 3.4, VH[1], VH[3]);  /* nose taper */
+    _r3Box(m, 0.6, 6.2, 0, 4.2, 1.8, 3.0, RTS_PAL.glass, RTS_PAL.glass);  /* canopy */
+    _r3Box(m, -_len * 0.46, 3.6, 0, 3.4, 1.2, 8.0, VH[2], VH[1]);  /* tailplane */
+    _r3Box(m, -_len * 0.44, 4.6, 0, 2.6, 4.4, 1.3, VH[1], VH[3]);  /* fin */
+    _r3Box(m, -1.0, 1.9, 0, 7.0, 1.2, 4.0, TM[1], TM[3]);          /* team stripe, underside */
+    if (_jet) {
+      _r3Cyl(m, -_len * 0.50, 3.6, 0, 1.9, 1.6, DK[1], DK[3], 12); /* exhaust */
+      _r3Box(m, 0.5, 1.8, -6.0, 5.0, 1.2, 1.2, GN[1], GN[3]);      /* the Mavericks it carries */
+      _r3Box(m, 0.5, 1.8, 6.0, 5.0, 1.2, 1.2, GN[1], GN[3]);
+    } else {
+      /* the propeller: a thin hub plus two crossed bars, the same trick the Heli's rotor uses
+         and for the same reason - a solid disc at this size is an opaque lid over the aircraft */
+      _r3Cyl(m, _len * 0.56, 3.6, 0, 1.4, 0.6, GN[2], GN[1], 12);
+      _r3Box(m, _len * 0.60, 3.6, 0, 0.5, 11.0, 1.1, DK[1], DK[3]);
+      _r3Box(m, _len * 0.60, 3.6, 0, 0.5, 1.1, 11.0, DK[1], DK[3]);
+    }
 
   } else if (key === 'gunboat' || key === 'destroyer') {
     /* SURFACE SHIPS. Long and narrow with a raked bow - a hull has to read as a hull from
@@ -6554,6 +6705,12 @@ var RTS_MIX_BLD = {
   yard:'fact', power:'powr', apower:'apwr', refinery:'proc', factory:'weap',
   barracks:'barr', radar:'dome', lab:'atek', depot:'fix', silo:'silo',
   helipad:'hpad', turret:'gun', rocketpit:'sam', pillbox:'pbox',
+  /* The Soviet Airfield and the Allied AA Gun. Both measured as present in the BASE conquer.mix
+     rather than assumed: afld.shp is 16 frames of 72x48 (3x2 cells, 8 healthy + 8 damaged, the
+     layout _mixBuilding already expects) and agun.shp is 128 frames of 24x48 (1x2). Probed with
+     the same hash lookup the loader uses, with mslo.shp as the control - it is absent from all
+     eleven archives, exactly as its comment below claims. */
+  afld:'afld', aagun:'agun',
   flametower:'ftur', kennel:'kenn', wall:'brik',
   /* The Tesla Coil and the two shipyards, which were drawn procedurally only because nobody had
      looked for their art: tsla, syrd and spen are all sitting in conquer.mix. */
@@ -6568,7 +6725,7 @@ var RTS_MIX_BLD = {
 };
 var RTS_MIX_UNIT = {
   buggy:'jeep', light:'1tnk', tank:'2tnk', heavy:'4tnk', arty:'arty',
-  harvester:'harv', apc:'apc', mcv:'mcv', heli:'heli',
+  harvester:'harv', apc:'apc', mcv:'mcv', heli:'heli', mig:'mig', yak:'yak',
   rifle:'e1', rocket:'e3', grenadier:'e2', flame:'e4', engineer:'e6',
   medic:'medi', thief:'thf', tanya:'e7', dog:'dog'
 };
@@ -12384,6 +12541,11 @@ function _rtsFindTarget(e, range, w) {
        aircraft's own weapons cannot reach another aircraft either - our helicopter carries no
        air-to-air, exactly as the Longbow does not. */
     if (o.air && !(w && w.aa)) continue;
+    /* ...and the reverse, for a weapon that is ONLY anti-air. A flak gun that can also shell
+       the infantry walking past it is just a Gun Turret with a longer reach, which is not what
+       an AA emplacement is for and would make the Allied one strictly better than the Soviet
+       SAM site it exists to mirror. */
+    if (!o.air && w && w.aaOnly) continue;
     /* "Dogs can only attack infantrymen" - INFANTRY.CPP turns ACTION_ATTACK into ACTION_NONE
        against anything else. Without this a dog with a one-bite kill would delete tanks. */
     if (w && w.maul && !(o.type === 'unit' && (rtsUnitDef(o.def) || {}).kind === 'infantry')) continue;
@@ -13707,6 +13869,26 @@ function _rtsAIUnits(S) {
      over three seeds at eight minutes that gave 461 grenadiers and 14 rocket soldiers: the
      opponent had silently stopped fielding anti-armour infantry. */
   for (var cat in RTS_AI.mix) {
+    /* AS MANY AIRCRAFT AS THERE ARE PLACES TO PUT THEM. Measured over a 900-second match on
+       hard: the opponent reached an Airfield at 257s and finished with THIRTY-FOUR aircraft,
+       almost all Yaks, because it was rich, aircraft are their own production line, and nothing
+       said stop. RA's own rule is one aircraft per pad - an airfield holds one - and applying
+       it here is both faithful and the reason the swarm cannot happen. Two pads, two planes.
+
+       Deliberately on the AI's PURCHASE only. Capping what the player may own is a bigger
+       change to the Helipad that has stood since the Attack Heli shipped, and it is not what
+       an opponent building thirty-four Yaks is asking for. */
+    if (cat === 'air') {
+      var pads = 0, air = 0;
+      for (i = 0; i < G.ents.length; i++) {
+        var pe = G.ents[i];
+        if (pe.dead || pe.side !== 'enemy') continue;
+        if (pe.type === 'struct' && !pe.building && !pe.selling &&
+            (rtsStructDef(pe.def) || {}).produces === 'air') pads++;
+        else if (pe.type === 'unit' && (rtsUnitDef(pe.def) || {}).kind === 'air') air++;
+      }
+      if (air >= pads) continue;
+    }
     var list = RTS_AI.mix[cat], pool = [], total = 0;
     for (i = 0; i < list.length; i++) {
       if (rtsMoney(S) <= list[i].at) continue;

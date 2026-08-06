@@ -2436,6 +2436,11 @@ function _rtsFindTarget(e, range, w) {
        aircraft's own weapons cannot reach another aircraft either - our helicopter carries no
        air-to-air, exactly as the Longbow does not. */
     if (o.air && !(w && w.aa)) continue;
+    /* ...and the reverse, for a weapon that is ONLY anti-air. A flak gun that can also shell
+       the infantry walking past it is just a Gun Turret with a longer reach, which is not what
+       an AA emplacement is for and would make the Allied one strictly better than the Soviet
+       SAM site it exists to mirror. */
+    if (!o.air && w && w.aaOnly) continue;
     /* "Dogs can only attack infantrymen" - INFANTRY.CPP turns ACTION_ATTACK into ACTION_NONE
        against anything else. Without this a dog with a one-bite kill would delete tanks. */
     if (w && w.maul && !(o.type === 'unit' && (rtsUnitDef(o.def) || {}).kind === 'infantry')) continue;
@@ -3759,6 +3764,26 @@ function _rtsAIUnits(S) {
      over three seeds at eight minutes that gave 461 grenadiers and 14 rocket soldiers: the
      opponent had silently stopped fielding anti-armour infantry. */
   for (var cat in RTS_AI.mix) {
+    /* AS MANY AIRCRAFT AS THERE ARE PLACES TO PUT THEM. Measured over a 900-second match on
+       hard: the opponent reached an Airfield at 257s and finished with THIRTY-FOUR aircraft,
+       almost all Yaks, because it was rich, aircraft are their own production line, and nothing
+       said stop. RA's own rule is one aircraft per pad - an airfield holds one - and applying
+       it here is both faithful and the reason the swarm cannot happen. Two pads, two planes.
+
+       Deliberately on the AI's PURCHASE only. Capping what the player may own is a bigger
+       change to the Helipad that has stood since the Attack Heli shipped, and it is not what
+       an opponent building thirty-four Yaks is asking for. */
+    if (cat === 'air') {
+      var pads = 0, air = 0;
+      for (i = 0; i < G.ents.length; i++) {
+        var pe = G.ents[i];
+        if (pe.dead || pe.side !== 'enemy') continue;
+        if (pe.type === 'struct' && !pe.building && !pe.selling &&
+            (rtsStructDef(pe.def) || {}).produces === 'air') pads++;
+        else if (pe.type === 'unit' && (rtsUnitDef(pe.def) || {}).kind === 'air') air++;
+      }
+      if (air >= pads) continue;
+    }
     var list = RTS_AI.mix[cat], pool = [], total = 0;
     for (i = 0; i < list.length; i++) {
       if (rtsMoney(S) <= list[i].at) continue;
