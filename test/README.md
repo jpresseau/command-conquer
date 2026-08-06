@@ -31,6 +31,7 @@ are genuinely modular:
 | `rules` | invariants over the roster: no orphan unit kinds, every prerequisite and weapon resolves, every unit kind has a building that produces it, no faction needs something it cannot build |
 | `r3d` | the sprite baker's geometry half: the oblique projection (`x` unchanged, `z − K·y`, ground deliberately **not** foreshortened), the shape builders, yaw and scale as pure transforms that must not edit the model handed to them, and the colour ramp — which exists to keep a shadow coloured instead of letting it slide to grey, so the test is "does it stay saturated", not "does it get darker" |
 | `audio` | the sound tables, whose only failure mode is silence: every EVA line, unit voice and death cry resolves in the identity table, every voice pool expands to takes that exist, every effect the game dispatches has something to play, and no retrigger gap or sampled mapping is left pointing at an effect that is gone |
+| `sw` | the service worker's contract as stated in its own source — never calls `respondWith`, never touches the Cache API, keeps the fetch handler that makes the app installable — plus a manifest whose every URL is relative, because the app is deployed under a path. A universal claim no finite set of requests can establish, which is the one case where reading the source beats driving it |
 
 `lib/sandbox.js` is what makes those possible. The game is browser globals concatenated
 by `build.py` — there is nothing to `import` — so those files are evaluated in a `vm` context
@@ -48,6 +49,13 @@ alpha is 1-bit so the silhouette never feathers, visibility is a depth buffer an
 painter's algorithm (so shuffling the faces must give a byte-identical picture), backfaces are
 culled by winding, and `_r3FitSize` returns a square that no facing runs out of. It then puts
 the real shipped sprites through the same checks, and confirms a rebake is deterministic.
+
+`e2e/swupdate` is the one spec that does not use the shared server. It runs its own, which counts
+requests and whose **bytes can be changed while the browser is running** — the only honest way to
+ask whether a new deploy reaches the player. It alters the deployed build stamp, reloads, and
+checks which build the player gets; it also serves the app from `/command-conquer/` rather than the
+origin root, because that is where it really lives, and at a root an absolute `/sw.js` and a
+relative `sw.js` behave identically right up until production.
 
 `e2e/audio` measures **sound**, not function calls. Headless Chromium runs WebAudio for real, so
 a `ScriptProcessor` is tapped onto the master bus and the samples are read back: every effect the
