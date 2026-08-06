@@ -86,9 +86,16 @@
 #rcgRts .rts-help{margin-right:122px}
 
 /* --- transient message banner --- */
+/* WRAP. `white-space:nowrap` inside a stage that clips means a long line is cut off at BOTH
+   ends, because the banner is centred with translateX(-50%) - so it loses the beginning as well
+   as the end. On a 320px phone that truncated the line every single match opens with: "Allied
+   command online. Build a Refinery to start earning." rendered as "ed command online. Build a
+   Refinery to start earni". Four of the five common messages clipped at 360px, which is most
+   Android phones. */
 #rcgRts .rts-msg{position:absolute;left:50%;transform:translateX(-50%);top:44px;padding:6px 16px;border-radius:4px;
   background:rgba(8,12,18,.86);border:1px solid rgba(255,207,106,.4);color:#ffd98a;font-size:12.5px;
-  opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
+  opacity:0;transition:opacity .2s;pointer-events:none;
+  white-space:normal;max-width:min(92%,560px);text-align:center}
 #rcgRts .rts-msg.on{opacity:1}
 
 /* --- win/lose card --- */

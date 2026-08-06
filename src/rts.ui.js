@@ -360,7 +360,10 @@ function _rtsModeClick(mx, my) {
     return true;
   }
   if (U.mode === 'sell') {
-    if (_rtsSell(e)) _rtsSay('Sold — ' + Math.round(rtsStructDef(e.def).cost * RTS_REFUND_PCT) + ' credits back.');
+    /* the figure _rtsSell actually granted, not the sticker price - see _rtsSell for what the
+       sticker price was hiding and by how much */
+    var back = _rtsSell(e);
+    if (back !== false) _rtsSay('Sold — ' + back + ' credits back.');
     else { if (typeof _rtsSfx === 'function') _rtsSfx('deny');
       _rtsSay(e.def === 'yard' ? 'The Command Yard cannot be sold.' : 'Cannot sell that.'); }
   } else {

@@ -198,15 +198,49 @@ function _rtsPath(sx, sz, gx, gz, dom) {
   }
   return out;
 }
-/* Bresenham-ish sample along the segment; true when no blocked tile is crossed. */
-function _rtsClearLine(x0, z0, x1, z1) {
-  var d = Math.hypot(x1 - x0, z1 - z0), steps = Math.ceil(d / (RTS_TILE * 0.4));
-  if (steps <= 0) return true;
-  for (var i = 0; i <= steps; i++) {
-    var t = i / steps;
-    if (_rtsBlocked(_rtsTX(x0 + (x1 - x0) * t), _rtsTX(z0 + (z1 - z0) * t))) return false;
+/* SUPERCOVER, NOT A SAMPLER. This walks every cell the segment actually touches. It used to
+   sample the segment every 0.4 of a tile, which is a different thing, and one that quietly lies.
+
+   A segment can cross the CORNER of a blocked cell and spend less than 0.4 tiles inside it, so
+   both neighbouring samples land outside and the line is certified clear. The string-puller then
+   collapses the route to one straight waypoint through that corner - and _rtsSteer, which tests
+   each step against the same grid, can never traverse it. The unit stops dead and stays stopped.
+   Measured on seed 42: the free Harvester wedged at t=8s and was at the same position to three
+   decimals at t=240, zero deliveries, its side's credits never leaving 1000 while 189,397 ore
+   sat on the map. About 7 in 7500 obstacle-adjacent orders - rare, and permanent.
+
+   Amanatides & Woo's grid traversal, in world units. The one addition is the exact-corner case:
+   when the next x boundary and the next z boundary fall at the same t the segment passes through
+   a lattice point, and a diagonal slip between two blocked shoulders is not a route anything can
+   walk - so both shoulders have to be open for the line to count as clear. */
+function _rtsClearLine(x0, z0, x1, z1, dom) {
+  var tx = _rtsTX(x0), tz = _rtsTX(z0);
+  if (_rtsBlocked(tx, tz, dom)) return false;
+  var tx1 = _rtsTX(x1), tz1 = _rtsTX(z1);
+  if (tx === tx1 && tz === tz1) return true;
+
+  var dx = x1 - x0, dz = z1 - z0;
+  var sx = dx > 0 ? 1 : (dx < 0 ? -1 : 0);
+  var sz = dz > 0 ? 1 : (dz < 0 ? -1 : 0);
+  /* the world coordinate of tile boundary `t` - the inverse of _rtsTX */
+  var half = RTS_N / 2;
+  var tMaxX = sx ? ((tx + (sx > 0 ? 1 : 0) - half) * RTS_TILE - x0) / dx : Infinity;
+  var tMaxZ = sz ? ((tz + (sz > 0 ? 1 : 0) - half) * RTS_TILE - z0) / dz : Infinity;
+  var tDX = sx ? Math.abs(RTS_TILE / dx) : Infinity;
+  var tDZ = sz ? Math.abs(RTS_TILE / dz) : Infinity;
+
+  for (var guard = 0; guard < 4096; guard++) {
+    if (tx === tx1 && tz === tz1) return true;
+    if (tMaxX > 1 && tMaxZ > 1) return true;              /* past the far end */
+    if (Math.abs(tMaxX - tMaxZ) < 1e-9) {
+      /* straight through the corner: the two cells it slips between must BOTH be open */
+      if (_rtsBlocked(tx + sx, tz, dom) || _rtsBlocked(tx, tz + sz, dom)) return false;
+      tx += sx; tz += sz; tMaxX += tDX; tMaxZ += tDZ;
+    } else if (tMaxX < tMaxZ) { tx += sx; tMaxX += tDX; }
+    else { tz += sz; tMaxZ += tDZ; }
+    if (_rtsBlocked(tx, tz, dom)) return false;
   }
-  return true;
+  return false;                                            /* absurdly long: refuse to certify */
 }
 
 /* ------------------------------------------------------------------ state */
@@ -703,6 +737,13 @@ function _rtsNewGame(seed, diff) {
     /* BASE.CPP's node list, per side: the ordered (type, cell) plan a base is rebuilt against */
     base:{ player:[], enemy:[] },
     corpses:[],                             /* {x,z,v} the renderer has yet to stamp */
+    /* THE RECORD, as opposed to the hand-off. `corpses` is drained by the renderer - it pops
+       each entry into the terrain bake and the list is empty again by the next frame - so it is
+       a queue, not a memory, and a save taken after the frame that stamped them held nothing.
+       Bodies already on the battlefield vanished across a load and the ground came back freshly
+       mown. G.scorch already had this shape (a persistent grid, with newScorch as its queue);
+       this is the same idea for corpses, and the load rebuilds the queue from it. */
+    corpseLog:[],
     newScorch:[],                           /* cells the renderer has yet to stamp */
     scrap:new Float32Array(RTS_N * RTS_N),
     /* GoldValue 35 / GemValue 110: a flag per tile, not a second resource. Same mining, same
@@ -774,10 +815,17 @@ function _rtsNewGame(seed, diff) {
     ['struct','yard',    0,  0], ['struct','power',   1,  5],
     ['unit',  'rifle',   3, -3], ['unit',  'rifle',   4, -1], ['unit', 'buggy', 1, -4]
   ], 'player');
+  /* The opponent's opening defence is whichever one its OWN army has. This list hardcoded two
+     Gun Turrets, which are Allied - so the default match, where the player is Allied and the
+     opponent is therefore Soviet, opened with a Soviet base defended by two Allied buildings
+     with Allied statistics, and the AI never sold or replaced them. Its build planner already
+     filters on rtsBuildableBy and carries a comment about faction lists breaking exactly this
+     way; the opening layout was the one that had not been told. */
+  var eTurret = rtsBuildableBy(rtsStructDef('turret'), rtsHouseSide('enemy')) ? 'turret' : 'flametower';
   _rtsLayBase(G.starts.enemy, G.starts.player, [
     ['struct','yard',    0,  0], ['struct','power',  -1, -5],
     ['struct','refinery',5,  0], ['struct','barracks',4, -5],
-    ['struct','factory', 4,  5], ['struct','turret',  9, -2], ['struct','turret', 9, 3],
+    ['struct','factory', 4,  5], ['struct',eTurret,   9, -2], ['struct',eTurret, 9, 3],
     ['unit',  'harvester',11, 1], ['unit','rifle',   10, -2], ['unit','tank',   11, 3]
   ], 'enemy');
 
@@ -1590,8 +1638,7 @@ function _rtsKill(e) {
         G.fx.push({ kind:'die', x:e.x, y:0, z:e.z, t:0, seq:_dseq,
                     corpse:{ x:e.x, z:e.z, v:(e.id * 5) % 3 } });
       } else {
-        G.corpses.push({ x:e.x, z:e.z, v:(e.id * 5) % 3 });
-        if (G.corpses.length > 220) G.corpses.shift();
+        _rtsAddCorpse(G, { x:e.x, z:e.z, v:(e.id * 5) % 3 });
       }
     } else {
       /* Take_Damage: half the time a crew member bails out of a wrecked vehicle, wounded and
@@ -1738,10 +1785,17 @@ function _rtsSell(e) {
      a discount cannot be sold back at a profit either. */
   var fd = rtsStructDef(e.def), fu = fd && fd.freeUnit ? rtsUnitDef(fd.freeUnit) : null;
   var raw = Math.max(0, price - (fu ? fu.cost : 0));
-  _rtsGrant(G.sides[e.side], Math.round(raw * RTS_REFUND_PCT
-    * (e.hp / e.maxHp * 0.5 + 0.5)));          /* a wreck is worth less than a clean building */
+  var back = Math.round(raw * RTS_REFUND_PCT
+    * (e.hp / e.maxHp * 0.5 + 0.5));           /* a wreck is worth less than a clean building */
+  _rtsGrant(G.sides[e.side], back);
   if (e.side === 'player' && typeof _rtsSfx === 'function') _rtsSfx('build');
-  return true;
+  /* THE AMOUNT GRANTED, returned, so the message can say what actually happened. The sidebar
+     printed cost x RefundPercent - the sticker price, ignoring both the free unit the building
+     shipped with and the damage multiplier - and was out by up to 3.3x: a full-health Refinery
+     announced 1000 credits back and paid 300, and a wrecked Power Plant quoted the same 150 as
+     a pristine one. Nothing was stolen; what was lost was the ability to trust the number you
+     are deciding on. Callers that only want success still get a truthy value. */
+  return back;
 }
 /* ------------------------------------------------------------------ transport --
    UNIT.CPP's passenger rules. A boarded passenger stays in G.ents - it is NOT spliced out -
@@ -1852,8 +1906,7 @@ function _rtsAnimAI(dt) {
     /* A finished death animation leaves the body. Stamped HERE rather than at the moment of
        death so the corpse appears under the soldier as he lands, not before he has fallen. */
     if (f.kind === 'die' && f.corpse && f.t >= def.dur) {
-      G.corpses.push(f.corpse);
-      if (G.corpses.length > 220) G.corpses.shift();
+      _rtsAddCorpse(G, f.corpse);
       f.corpse = null;
     }
 
@@ -2148,7 +2201,35 @@ function _rtsBuildRate(side, cat) {
   var pct = tbl[Math.min(n, tbl.length) - 1];
   return 100 / pct;
 }
+/* THE CAP IS ENFORCED WHERE IT IS CONSULTED, not only where ore arrives. _rtsHarvested clamps
+   a delivery against capacity, but nothing re-checked when capacity SHRANK - so losing your last
+   Refinery and Silo while holding 3000 ore left the storage bar reading "0%, no capacity, build
+   a Refinery" while that 3000 stayed spendable. The money was real; the readout was not, and a
+   readout that disagrees with the treasury is worse than no readout.
+
+   The overflow goes through the same spill path a full store already uses, so the loss is
+   announced rather than silently deducted. */
+/* One body, onto both the queue the renderer drains and the log that survives a save. Same cap
+   on each, so the oldest bodies fall off together and the two never disagree about which ones
+   the battlefield is carrying. */
+function _rtsAddCorpse(G, c) {
+  G.corpses.push(c);
+  if (G.corpses.length > 220) G.corpses.shift();
+  if (!G.corpseLog) G.corpseLog = [];
+  G.corpseLog.push(c);
+  if (G.corpseLog.length > 220) G.corpseLog.shift();
+}
+function _rtsTickStorage(side) {
+  var G = window._rtsG, S = G.sides[side];
+  if (!S || S.ore <= 0) return;
+  var cap = rtsCapacity(side);
+  if (S.ore <= cap) return;
+  S.spill += S.ore - cap;
+  S.ore = cap;
+  if (side === 'player') _rtsSiloWarn(S);
+}
 function _rtsTickProduction(side, dt) {
+  _rtsTickStorage(side);
   var G = window._rtsG, S = G.sides[side], pf = _rtsPowerFactor(side), cat;
   for (cat in S.q) {
     var q = S.q[cat]; if (!q || q.hold) continue;  /* a suspended line spends nothing */
@@ -2943,7 +3024,25 @@ function _rtsSteer(e, dt, d) {
      hovered there with an empty rack, because the ordinary "is that cell blocked" test was
      refusing to let it over the building. */
   if (!e.air && !freeing && _rtsBlocked(_rtsTX(nx), _rtsTX(nz))) {
+    /* SLIDE ALONG THE WALL BEFORE GIVING UP ON THE STEP. The step is tested as one movement, so
+       a diagonal that clips a blocked cell was refused entirely even when moving along a single
+       axis was perfectly legal - the unit ground to a halt against a corner it could have walked
+       past. Try each axis on its own first; taking the free one is what a unit brushing a wall
+       should do, and it is also the difference between a wedge that recovers and one that lasts
+       the rest of the match. Defence in depth for the clear-line fix above, not a substitute:
+       fixing only this would leave A* still handing out impossible straight lines. */
+    var domS = _rtsDomainOf(e);
+    var slid = false;
+    if (!_rtsBlocked(_rtsTX(nx), _rtsTX(e.z), domS)) { e.x = nx; slid = true; }
+    else if (!_rtsBlocked(_rtsTX(e.x), _rtsTX(nz), domS)) { e.z = nz; slid = true; }
+    /* A SLIDE IS NOT PROGRESS, so the stuck timer keeps running through it. Zeroing it here was
+       a regression of mine that the control assertion in test/e2e/pathing caught: a unit
+       brushing a long wall slid along it happily for ever, never accumulating enough `stuck` to
+       repath, and one ordinary order in four stopped completing - ending 45 world units from a
+       goal it used to reach. Sliding buys a step out of a corner; it must not also buy silence
+       from the repath below. */
     e.stuck = (e.stuck || 0) + dt;
+    if (slid && e.stuck <= 0.5) return true;
     /* Repath to the FINAL destination, not to the waypoint we happen to be blocked on.
        Repathing to the waypoint loses the real goal: a unit whose path was cut short (e.g.
        it started inside a footprint and only got an escape waypoint) would otherwise spend
@@ -3256,7 +3355,26 @@ function _rtsUpdateHarvester(e, dt, d) {
     if (!e.htile || G.scrap[_rtsIdx(e.htile.tx, e.htile.tz)] <= 0) e.htile = _rtsNearestScrap(e);
     if (!e.htile) { e.path = null; return; }                      /* nothing left to mine */
     var wx = _rtsWX(e.htile.tx), wz = _rtsWX(e.htile.tz);
-    if (Math.hypot(e.x - wx, e.z - wz) < RTS_TILE * 1.1) { e.path = null; e.hstate = 'mining'; return; }
+    var away = Math.hypot(e.x - wx, e.z - wz);
+    if (away < RTS_TILE * 1.1) { e.path = null; e.hstate = 'mining'; e.noGain = 0; return; }
+    /* GIVE UP ON ORE YOU CANNOT REACH. The two conditions that clear htile - the tile running
+       dry, and the pathfinder returning nothing - can both stay false for ever while the
+       harvester makes no progress at all: A* keeps handing back a path, the steering keeps
+       failing on the same cell, and the last-resort unstick drops it back where it started. On
+       seed 42 that was 14,762 of 14,769 harvester ticks in 'toField' and zero deliveries in 246
+       seconds, which is the whole economy. Distance closed is the honest measure of progress -
+       not "did we get a path" - so if the gap has not narrowed in eight seconds, write this tile
+       off and pick another. _rtsNearestScrap skips it while `noGo` is set. */
+    if (e.bestGap === undefined || away < e.bestGap - 0.25) { e.bestGap = away; e.noGain = 0; }
+    else {
+      e.noGain = (e.noGain || 0) + dt;
+      if (e.noGain > 8) {
+        e.noGo = e.noGo || {};
+        e.noGo[_rtsIdx(e.htile.tx, e.htile.tz)] = G.t + 90;       /* try it again much later */
+        e.htile = null; e.path = null; e.noGain = 0; e.bestGap = undefined;
+        return;
+      }
+    }
     if (!e.path) { e.goal = { x:wx, z:wz }; e.path = _rtsPathFor(e, wx, wz); e.pi = 0; if (!e.path) { e.htile = null; return; } }
     _rtsSteer(e, dt, d);
   } else if (e.hstate === 'mining') {
@@ -3309,6 +3427,11 @@ function _rtsNearestScrap(e) {
   for (var tz = 0; tz < RTS_N; tz++) for (var tx = 0; tx < RTS_N; tx++) {
     var i = _rtsIdx(tx, tz);
     if (G.scrap[i] <= 0) continue;
+    /* Tiles this harvester has already spent eight seconds failing to reach. Per harvester and
+       time-limited rather than global and permanent: the reason is usually a unit or a building
+       in the way, so the tile is very likely fine again later - and another harvester coming
+       from a different direction may have no trouble with it at all. */
+    if (e.noGo && e.noGo[i] > G.t) continue;
     var wx = _rtsWX(tx), wz = _rtsWX(tz);
     var trip = Math.hypot(wx - e.x, wz - e.z) + Math.hypot(wx - rx, wz - rz);
     /* The detour is weighted by a CAPPED preference, not by the raw value ratio. Once a gem

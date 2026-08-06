@@ -99,28 +99,46 @@ function mixOpen(buf) {
     var rec = { id: id, offset: bodyAt + off, size: len };
     index[id] = rec; list.push(rec);
   }
+  /* A TRUNCATED ARCHIVE IS NOT A SHORTER ARCHIVE. The index sits at the FRONT, so a file cut off
+     part-way still parses perfectly: the header is intact, every record is readable, `has()`
+     answers yes for all 230 entries and the loader reports success. Then the first read past the
+     cut throws `Invalid typed array length` out of `new Uint8Array`, inside sprite baking, inside
+     rtsOpen - and the game will not start. Worse, the picker had already written the archive to
+     IndexedDB, so the same failure came back after every reload with nothing naming the cause.
+     Losing the last 5% of conquer.mix was enough to do it.
+
+     readRec already carried this guard; read() and readId() did not. They share it now, and a
+     record running off the end reads as ABSENT - which every caller already handles, because a
+     MIX is a hash index and "not in here" is its ordinary answer. */
+  var end = (buf.byteOffset || 0) + buf.byteLength;
+  function view(rec) {
+    if (!rec) return null;
+    var at = (buf.byteOffset || 0) + rec.offset;
+    if (rec.offset < 0 || rec.size < 0 || at + rec.size > end) return null;
+    return new Uint8Array(buf.buffer || buf, at, rec.size);
+  }
   return {
     flags: flags, count: count, dataSize: dataSize, files: list,
     /* Look a file up by name. Returns a view into the original buffer - no copy. */
-    read: function (name) {
-      var rec = index[mixHash(name)];
-      if (!rec) return null;
-      return new Uint8Array(buf.buffer || buf, (buf.byteOffset || 0) + rec.offset, rec.size);
-    },
-    has: function (name) { return !!index[mixHash(name)]; },
+    read: function (name) { return view(index[mixHash(name)]); },
+    /* `has` answers about the index AND the bytes together. Answering from the index alone is
+       exactly what let a short file pass inspection and then fail at read time. */
+    has: function (name) { return !!view(index[mixHash(name)]); },
     byId: function (id) { return index[id | 0] || null; },
     /* Read an entry by its INDEX RECORD rather than by name. A MIX has no directory, so a
        caller that already knows an entry's hash - from a table built by identifying the
        contents - has no name to offer, and hashing one back is not possible. */
-    readRec: function (rec) {
-      if (!rec || rec.offset + rec.size > (buf.byteLength + (buf.byteOffset || 0))) return null;
-      return new Uint8Array(buf.buffer || buf, (buf.byteOffset || 0) + rec.offset, rec.size);
-    },
+    readRec: function (rec) { return view(rec); },
     /* Bytes for a hash, in one step - the common case. */
-    readId: function (id) {
-      var rec = index[id | 0];
-      if (!rec) return null;
-      return new Uint8Array(buf.buffer || buf, (buf.byteOffset || 0) + rec.offset, rec.size);
+    readId: function (id) { return view(index[id | 0]); },
+    /* Is the body actually all here? The index knows where every entry ends, so the answer is
+       just the furthest one against the file's real length. The picker calls this so a short
+       archive is reported AT THE PICKER, by name, instead of being accepted and then killing
+       the next start. */
+    complete: function () {
+      var need = 0;
+      for (var i = 0; i < list.length; i++) need = Math.max(need, list[i].offset + list[i].size);
+      return need <= buf.byteLength;
     }
   };
 }

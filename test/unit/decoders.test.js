@@ -733,6 +733,58 @@ function mkAud(comp, rate, chunks, flags) {
   ok('...and the stereo flag is reported', !st.error && st.channels === 2 && st.rate === 11025);
 })();
 
+
+/* ---------------------------------------------------- a TRUNCATED archive ----
+   The index sits at the FRONT of a MIX, so a file cut off part-way still parses perfectly: the
+   header is intact, every record reads back, and `has()` used to answer yes for all of them.
+   Then the first read past the cut threw `Invalid typed array length` out of `new Uint8Array` -
+   inside sprite baking, inside rtsOpen - and the game would not start. The picker had already
+   written the archive to IndexedDB, so it came back after every reload with nothing naming the
+   cause. Losing the last 5% of conquer.mix was enough. */
+(function () {
+  /* build a real two-entry archive, then cut its tail off */
+  function build(entries) {
+    var body = [], recs = [], off = 0;
+    entries.forEach(function (e) {
+      recs.push({ id: mix.mixHash(e[0]), off: off, size: e[1].length });
+      for (var i = 0; i < e[1].length; i++) body.push(e[1][i]);
+      off += e[1].length;
+    });
+    var head = 6 + recs.length * 12;
+    var b = new Uint8Array(head + body.length);
+    var dv = new DataView(b.buffer);
+    dv.setUint16(0, recs.length, true);
+    dv.setUint32(2, body.length, true);
+    recs.forEach(function (r, i) {
+      dv.setInt32(6 + i * 12, r.id, true);
+      dv.setUint32(6 + i * 12 + 4, r.off, true);
+      dv.setUint32(6 + i * 12 + 8, r.size, true);
+    });
+    b.set(body, head);
+    return b;
+  }
+  var full = build([['FIRST.MIX', new Uint8Array(64).fill(0x11)],
+                    ['SECOND.MIX', new Uint8Array(64).fill(0x22)]]);
+  var a = mix.mixOpen(full);
+  ok('an intact archive opens and reads both entries',
+     !a.error && a.count === 2 && a.read('FIRST.MIX').length === 64 && a.read('SECOND.MIX').length === 64);
+  ok('...and reports itself complete', a.complete() === true);
+
+  /* cut off the last 40 bytes: the index still describes a file that is no longer all there */
+  var cut = full.subarray(0, full.length - 40);
+  var t = mix.mixOpen(cut);
+  ok('a truncated archive still parses - which is the whole trap',
+     !t.error && t.count === 2, t.error || ('count ' + t.count));
+  ok('...but it knows it is short', t.complete() === false);
+  ok('...the entry that survived still reads', !!t.read('FIRST.MIX'));
+  ok('...and the one past the cut reads as ABSENT rather than throwing',
+     t.read('SECOND.MIX') === null && t.has('SECOND.MIX') === false);
+  ok('...readId agrees with read', t.readId(mix.mixHash('SECOND.MIX')) === null);
+  var threw = false;
+  try { t.read('SECOND.MIX'); } catch (e) { threw = true; }
+  ok('...and nothing throws on the way', !threw);
+})();
+
 console.log("--- " + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
 
