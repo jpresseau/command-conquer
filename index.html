@@ -81,9 +81,20 @@
 #rcgRts .rts-x{position:absolute;right:6px;top:5px;width:24px;height:24px;border:0;border-radius:5px;
   background:rgba(255,255,255,.12);color:#fff;font-size:14px;cursor:pointer;pointer-events:auto}
 #rcgRts .rts-x:hover{background:#c8443a}
+/* THREE BUTTONS, THREE PLACES. `.rts-mute` is the shared LOOK, and it carried a single absolute
+   `right:34px` - so Save, Load and Mute all landed in the same 24x24 box and composited into one
+   unreadable smudge of floppy, folder and speaker. Whatever the player aimed at, the topmost
+   element took the hit, so pressing 💾 muted the game. On a desktop Ctrl+S was still a way out;
+   on a phone there is no keyboard, no autosave and no second slot, so the battle could not be
+   saved at all. The offsets are per id, 28px apart, right to left in the order they are read. */
 #rcgRts .rts-mute{position:absolute;right:34px;top:5px;width:24px;height:24px;border:0;border-radius:5px;
   background:rgba(255,255,255,.12);color:#fff;font-size:12px;cursor:pointer;pointer-events:auto;line-height:1}
+#rcgRts #rtsMute{right:34px}
+#rcgRts #rtsLoadBtn{right:62px}
+#rcgRts #rtsSaveBtn{right:90px}
 #rcgRts .rts-mute:hover{background:rgba(255,255,255,.24)}
+/* and the hint line has to clear all four buttons now, not the two it was written for */
+#rcgRts .rts-help{margin-right:122px}
 
 /* --- transient message banner --- */
 #rcgRts .rts-msg{position:absolute;left:50%;transform:translateX(-50%);top:44px;padding:6px 16px;border-radius:4px;
@@ -749,7 +760,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">fd74af0 · 2026-07-31</div>
+  <div id="rtsBuild" title="build">50e0685 · 2026-08-06</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -17563,7 +17574,15 @@ var RTS_SAVE_INFO = 'rccmd.save1.info';
    every existing save is rejected without anyone having to remember to bump a number. */
 function _rtsSaveVersion() {
   var w = 0; for (var k in RTS_WEAPONS) w++;
-  return 3 + RTS_N * 31 + RTS_UNITS.length * 7 + RTS_STRUCTS.length * 11 + w * 13
+  /* THE MAP SIZE, FROM THE MAP - not from RTS_N. RTS_N is only the map's size WHILE a battle is
+     running: _rtsNewGame sets it from the map at the start and _rtsMapAssemble deliberately puts
+     it back afterwards. So a stamp folding in the live RTS_N could be written inside a battle
+     and never recomputed outside one, and every save made on a real map was rejected on the
+     next visit - hash intact, body intact, and the title screen blaming a version change that
+     had not happened. Measured on "A Path Beyond" (96x96): 3814 in the battle, 4806 on the
+     title screen. Any map whose smaller playable bound is not exactly 128 was affected. */
+  var n = (window._RTS_MAP && window._RTS_MAP.n) || RTS_N;
+  return 3 + n * 31 + RTS_UNITS.length * 7 + RTS_STRUCTS.length * 11 + w * 13
     + RTS_TEAM_TYPES.length * 17 + RTS_TRIGGERS.length * 19;
 }
 
@@ -17608,6 +17627,13 @@ function _rtsCode(v, ents, statics, seen, path) {
   var t = typeof v;
   if (t === 'number' || t === 'string' || t === 'boolean') return v;
   if (t === 'function') return null;
+  /* A DOM NODE IS NOT STATE. With the player's own artwork loaded, a death effect's `seq` holds
+     baked <canvas> elements, and walking into one reaches canvas.attributes[0].ownerElement -
+     back to the canvas - which trips the cycle detector below and throws mid-save. An infantry
+     death is on screen for about 0.9s, so this fired on roughly 6% of saves during a firefight,
+     and the throw used to take the save already on disk down with it. Dropped the same way a
+     function is: the renderer rebuilds all of it on demand. */
+  if (typeof Node !== 'undefined' && v instanceof Node) return null;
   if (ArrayBuffer.isView(v)) return { __ta:v.constructor.name, d:_rtsB64(v) };
   if (statics.has(v)) return { __s:statics.get(v) };
   if (ents.has(v)) return { __e:v.id };
@@ -17764,24 +17790,41 @@ function rtsSaveStale() {
 function rtsSaveGame() {
   var G = window._rtsG;
   if (!G) return false;
+  /* SERIALISE FIRST, OUTSIDE THE TRY THAT OWNS THE CLEANUP. Both steps could throw and only one
+     of them can leave a half-written pair behind, so they must not share a catch: a serialiser
+     failure used to run the removeItem pair and DELETE THE SAVE ALREADY ON DISK - a save from
+     ten minutes ago destroyed by an attempt to make a new one, with nothing written in its
+     place. Storage is not touched until there is something complete to put in it. */
+  var text, info;
   try {
-    var text = JSON.stringify(_rtsSaveState(G));
+    text = JSON.stringify(_rtsSaveState(G));
     var mins = Math.floor(G.t / 60), secs = Math.floor(G.t % 60);
-    var info = { v:_rtsSaveVersion(), hash:_rtsHash(text), bytes:text.length,
+    info = { v:_rtsSaveVersion(), hash:_rtsHash(text), bytes:text.length,
       diff:G.diff, seed:G.seed, t:Math.round(G.t), when:(new Date()).getTime(),
+      /* WHICH ARMY. rtsHouseSide reads this out of localStorage rather than out of G, so the
+         faction is the one piece of a battle that lives outside the state being written. Left
+         unrecorded, resuming after switching sides loaded the base intact and then refused to
+         build from it: a standing Kennel that cannot make dogs. */
+      side:(typeof rtsVoxSide === 'function') ? rtsVoxSide() : null,
       desc:(RTS_DIFF[G.diff] ? RTS_DIFF[G.diff].name : G.diff) + ' — '
         + mins + ':' + (secs < 10 ? '0' : '') + secs
         + ' — ' + G.ents.filter(function (e) { return !e.dead && e.side === 'player'; }).length + ' units and buildings' };
+  } catch (e) {
+    _rtsSay('Could not save: the battle could not be written down (' + (e && e.message ? e.message : e) + ').');
+    if (typeof _rtsSfx === 'function') _rtsSfx('deny');
+    return false;                                 /* nothing on disk has been touched */
+  }
+  try {
     window.localStorage.setItem(RTS_SAVE_KEY, text);
     window.localStorage.setItem(RTS_SAVE_INFO, JSON.stringify(info));
     _rtsSay('Battle saved.');
     if (typeof _rtsSfx === 'function') _rtsSfx('click');
     return true;
-  } catch (e) {
-    /* A full quota is the realistic failure and it leaves a half-written pair behind, so drop
-       both rather than leave a body with no header or a header with no body. */
+  } catch (e2) {
+    /* A full quota is the realistic failure here and it leaves a half-written pair behind, so
+       drop both rather than leave a body with no header or a header with no body. */
     try { window.localStorage.removeItem(RTS_SAVE_KEY); window.localStorage.removeItem(RTS_SAVE_INFO); } catch (_x) {}
-    _rtsSay('Could not save: ' + (e && e.name === 'QuotaExceededError' ? 'no room left in storage.' : 'storage unavailable.'));
+    _rtsSay('Could not save: ' + (e2 && e2.name === 'QuotaExceededError' ? 'no room left in storage.' : 'storage unavailable.'));
     if (typeof _rtsSfx === 'function') _rtsSfx('deny');
     return false;
   }
@@ -17826,7 +17869,7 @@ function _rtsReadSave() {
   if (!body || !body.ents || !body.ents.length) {
     return { body:null, why:'empty', msg:'The saved battle has nothing in it.' };
   }
-  return { body:body, why:'', msg:'' };
+  return { body:body, why:'', msg:'', info:info };
 }
 /* Put the reason where the player just clicked. In a match that is the message line; on the
    TITLE SCREEN there is no match and no message line - which is the whole bug, because the
@@ -17853,6 +17896,12 @@ function rtsLoadGame() {
     if (typeof _rtsSfx === 'function') _rtsSfx('deny');
     return false;
   }
+  /* Put the army back before anything reads it. rtsHouseSide answers out of the live preference
+     rather than out of G, so resuming a Soviet battle while the title screen says ALLIED used to
+     load the Soviet base and then hand you the Allied roster - a Kennel standing in your base
+     that cannot build a dog. Saves written before this field existed have no `side`, and are
+     left exactly as they were rather than being guessed at. */
+  if (res.info && res.info.side && typeof rtsSetVoxSide === 'function') rtsSetVoxSide(res.info.side);
   /* The load goes through the same door as starting a battle: close, open, and hand the state
      to rtsOpen so it lands after _rtsNewGame and before the renderer bakes the terrain. */
   window._RTS_PENDING_LOAD = body;
@@ -18028,6 +18077,11 @@ function rtsRestoreSaved() {
     if (!mapNote) return;
     if (map) { mapNote.textContent = rtsMapDescribe(map); mapNote.className = 'ok'; rtsPickDoneMap(); }
     else { mapNote.textContent = mapBefore; mapNote.className = ''; }
+    /* ASK AGAIN NOW THE MAP IS BACK. rtsShowResume ran once at parse time, before this async
+       restore landed, and the save's version stamp is computed from the map that will be used -
+       so with a real map stored, the first call read the stamp for the wrong map size and hid
+       the button. Cheap to repeat and it is the only thing that makes the button reappear. */
+    rtsShowResume();
   }, function (scen) {
     /* The whole scenario list back without the file dialog. Nothing to do when there is none -
        that is the first visit, and the picker's own instructions are already on screen. */

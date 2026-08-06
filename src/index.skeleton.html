@@ -497,6 +497,11 @@ function rtsRestoreSaved() {
     if (!mapNote) return;
     if (map) { mapNote.textContent = rtsMapDescribe(map); mapNote.className = 'ok'; rtsPickDoneMap(); }
     else { mapNote.textContent = mapBefore; mapNote.className = ''; }
+    /* ASK AGAIN NOW THE MAP IS BACK. rtsShowResume ran once at parse time, before this async
+       restore landed, and the save's version stamp is computed from the map that will be used -
+       so with a real map stored, the first call read the stamp for the wrong map size and hid
+       the button. Cheap to repeat and it is the only thing that makes the button reappear. */
+    rtsShowResume();
   }, function (scen) {
     /* The whole scenario list back without the file dialog. Nothing to do when there is none -
        that is the first visit, and the picker's own instructions are already on screen. */

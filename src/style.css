@@ -70,9 +70,20 @@
 #rcgRts .rts-x{position:absolute;right:6px;top:5px;width:24px;height:24px;border:0;border-radius:5px;
   background:rgba(255,255,255,.12);color:#fff;font-size:14px;cursor:pointer;pointer-events:auto}
 #rcgRts .rts-x:hover{background:#c8443a}
+/* THREE BUTTONS, THREE PLACES. `.rts-mute` is the shared LOOK, and it carried a single absolute
+   `right:34px` - so Save, Load and Mute all landed in the same 24x24 box and composited into one
+   unreadable smudge of floppy, folder and speaker. Whatever the player aimed at, the topmost
+   element took the hit, so pressing 💾 muted the game. On a desktop Ctrl+S was still a way out;
+   on a phone there is no keyboard, no autosave and no second slot, so the battle could not be
+   saved at all. The offsets are per id, 28px apart, right to left in the order they are read. */
 #rcgRts .rts-mute{position:absolute;right:34px;top:5px;width:24px;height:24px;border:0;border-radius:5px;
   background:rgba(255,255,255,.12);color:#fff;font-size:12px;cursor:pointer;pointer-events:auto;line-height:1}
+#rcgRts #rtsMute{right:34px}
+#rcgRts #rtsLoadBtn{right:62px}
+#rcgRts #rtsSaveBtn{right:90px}
 #rcgRts .rts-mute:hover{background:rgba(255,255,255,.24)}
+/* and the hint line has to clear all four buttons now, not the two it was written for */
+#rcgRts .rts-help{margin-right:122px}
 
 /* --- transient message banner --- */
 #rcgRts .rts-msg{position:absolute;left:50%;transform:translateX(-50%);top:44px;padding:6px 16px;border-radius:4px;
