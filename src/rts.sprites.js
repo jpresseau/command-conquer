@@ -906,6 +906,42 @@ function _sprBuildingClean(key, side) {
              1.0, 1.8, RTS_PAL.lit, RTS_PAL.lit, 10);
     _r3Cyl(m, W / 2 - 7, 2.5, D / 2 - 7, 2.6, 4.5, RTS_PAL.hazard[0], S[3], 14);    /* fuel drum */
 
+  } else if (key === 'afld') {
+    /* THE AIRFIELD. A runway, which is a thing no other structure in this game is: 3x2 cells of
+       flat dark tarmac with a dashed centreline down the long axis and threshold bars at each
+       end. Almost nothing stands up, for the same reason the Helipad keeps low - aircraft land
+       on it - and the centreline is what stops it reading as a car park. */
+    _r3Box(m, 0, 0, 0, W - 3, 2.2, D - 4, DK[2], DK[0]);            /* the apron */
+    _r3Box(m, 0, 2.2, 0, W - 9, 0.7, D - 13, DK[1], DK[3]);         /* the strip itself */
+    for (var af = 0; af < 6; af++)                                  /* dashed centreline */
+      _r3Box(m, -W / 2 + 8 + af * ((W - 16) / 5), 2.9, 0, 3.6, 0.6, 1.2,
+             RTS_PAL.hazard[0], RTS_PAL.hazard[0]);
+    _r3Box(m,  W / 2 - 6, 2.9, 0, 1.6, 0.6, D - 15, C[0], C[1]);    /* threshold bars */
+    _r3Box(m, -W / 2 + 6, 2.9, 0, 1.6, 0.6, D - 15, C[0], C[1]);
+    _r3Box(m, -W / 2 + 7, 2.2, -D / 2 + 5, 8, 8, 6, C[0], B.roof);  /* control shack, team roof */
+    _r3Box(m, -W / 2 + 7, 10.2, -D / 2 + 5, 1.1, 5, 1.1, S[3], S[3]);  /* its mast */
+    /* the windsock, which is the one silhouette cue that says airfield rather than road */
+    _r3Box(m,  W / 2 - 10, 2.2, -D / 2 + 5, 1.0, 9, 1.0, S[3], S[3]);
+    _r3Cyl(m, W / 2 - 10, 10.5, -D / 2 + 5, 1.6, 3.4, RTS_PAL.hazard[0], S[3], 12);
+    for (var al = 0; al < 4; al++)                                  /* corner lights */
+      _r3Cyl(m, (al < 2 ? -1 : 1) * (W / 2 - 4), 2.2, (al % 2 ? 1 : -1) * (D / 2 - 4),
+             0.9, 1.6, RTS_PAL.lit, RTS_PAL.lit, 10);
+
+  } else if (key === 'aagun') {
+    /* THE AA GUN. One cell wide and two deep, and the read is entirely in the barrels: a pair of
+       long thin tubes ANGLED UP off a small turret. Everything else that shoots in this game
+       points flat along the ground, so elevation is the only cue that says "this one is for the
+       things above you" - and it is why the barrels are drawn tall rather than long. */
+    _r3Box(m, 0, 0, 0, W - 3, 3.0, D - 4, C[2], C[0]);              /* concrete base */
+    _r3Box(m, 0, 3.0, 0, W - 7, 3.0, D - 9, SD[2], SD[0]);          /* the mount */
+    _r3Cyl(m, 0, 6.0, 0, 4.6, 4.0, C[0], C[1], 16);                 /* the turret ring */
+    _r3Box(m, 0, 10.0, 0, 6.0, 1.4, 5.0, B.roof, B.roof);           /* team cap */
+    /* the two barrels, raked back and up - a box that is tall and short reads as elevation */
+    _r3Box(m, -1.2, 10.5, -1.6, 3.0, 11.0, 1.3, DK[0], DK[2]);
+    _r3Box(m, -1.2, 10.5,  1.6, 3.0, 11.0, 1.3, DK[0], DK[2]);
+    _r3Box(m, -2.6, 20.5, 0, 3.6, 1.4, 4.6, DK[1], DK[3]);          /* muzzles */
+    _r3Box(m,  W / 2 - 4, 3.0, D / 2 - 5, 3.0, 4.0, 3.0, S[2], S[1]);  /* ammo locker */
+
   } else if (key === 'silo') {
     /* Ore Silo. The cameo is a LOW RIBBED BUNKER - a wide flat green-grey box with vertical
        ribs down it and an open frame at one end - not the three cylinders that were here,
@@ -1400,6 +1436,42 @@ function _sprUnitModel(key, side, prone, part) {
     _r3Box(m, 2.6, 1.4, -3.6, 4.0, 1.6, 2.0, DK[1], DK[3]);
     _r3Box(m, 2.6, 1.4, 3.6, 4.0, 1.6, 2.0, DK[1], DK[3]);
     _r3Box(m, 0, 0.4, 0, 9.0, 1.0, 6.6, TM[1], TM[3]);             /* skids / team stripe */
+
+  } else if (key === 'mig' || key === 'yak') {
+    /* FIXED WING, and the whole job of these two is to not read as the helicopter above. The
+       Heli is defined by a rotor disc and a long thin tail boom; a plane has neither, and what
+       it does have is WINGS - a span wider than the aircraft is long. At 24px that span is the
+       entire silhouette, so it is drawn first and everything else hangs off it.
+
+       The two are told apart from each other the same way: the MiG is a swept-wing jet with a
+       tapered nose and intakes, the Yak is shorter, straight-winged and carries a propeller.
+       Different silhouettes rather than different colours - both fly for the same army in the
+       same team palette, so colour cannot be the distinguisher. */
+    var _jet = (key === 'mig');
+    var _len = _jet ? 17.0 : 13.5, _span = _jet ? 20.0 : 22.0;
+    if (_jet) {
+      _r3Box(m, 0.5, 3.0, 0, 6.0, 1.3, _span, VH[0], VH[1]);       /* leading edge */
+      _r3Box(m, -2.5, 3.0, 0, 5.0, 1.3, _span * 0.68, VH[1], VH[3]);  /* swept back */
+    } else {
+      _r3Box(m, 0.0, 3.0, 0, 5.4, 1.4, _span, VH[0], VH[1]);       /* straight wing */
+    }
+    _r3Box(m, 0, 3.4, 0, _len, 4.2, 4.6, VH[0], VH[1]);            /* fuselage */
+    _r3Box(m, _len * 0.42, 3.6, 0, _len * 0.30, 3.2, 3.4, VH[1], VH[3]);  /* nose taper */
+    _r3Box(m, 0.6, 6.2, 0, 4.2, 1.8, 3.0, RTS_PAL.glass, RTS_PAL.glass);  /* canopy */
+    _r3Box(m, -_len * 0.46, 3.6, 0, 3.4, 1.2, 8.0, VH[2], VH[1]);  /* tailplane */
+    _r3Box(m, -_len * 0.44, 4.6, 0, 2.6, 4.4, 1.3, VH[1], VH[3]);  /* fin */
+    _r3Box(m, -1.0, 1.9, 0, 7.0, 1.2, 4.0, TM[1], TM[3]);          /* team stripe, underside */
+    if (_jet) {
+      _r3Cyl(m, -_len * 0.50, 3.6, 0, 1.9, 1.6, DK[1], DK[3], 12); /* exhaust */
+      _r3Box(m, 0.5, 1.8, -6.0, 5.0, 1.2, 1.2, GN[1], GN[3]);      /* the Mavericks it carries */
+      _r3Box(m, 0.5, 1.8, 6.0, 5.0, 1.2, 1.2, GN[1], GN[3]);
+    } else {
+      /* the propeller: a thin hub plus two crossed bars, the same trick the Heli's rotor uses
+         and for the same reason - a solid disc at this size is an opaque lid over the aircraft */
+      _r3Cyl(m, _len * 0.56, 3.6, 0, 1.4, 0.6, GN[2], GN[1], 12);
+      _r3Box(m, _len * 0.60, 3.6, 0, 0.5, 11.0, 1.1, DK[1], DK[3]);
+      _r3Box(m, _len * 0.60, 3.6, 0, 0.5, 1.1, 11.0, DK[1], DK[3]);
+    }
 
   } else if (key === 'gunboat' || key === 'destroyer') {
     /* SURFACE SHIPS. Long and narrow with a raked bow - a hull has to read as a hull from

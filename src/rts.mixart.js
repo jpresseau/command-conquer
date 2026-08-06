@@ -113,6 +113,12 @@ var RTS_MIX_BLD = {
   yard:'fact', power:'powr', apower:'apwr', refinery:'proc', factory:'weap',
   barracks:'barr', radar:'dome', lab:'atek', depot:'fix', silo:'silo',
   helipad:'hpad', turret:'gun', rocketpit:'sam', pillbox:'pbox',
+  /* The Soviet Airfield and the Allied AA Gun. Both measured as present in the BASE conquer.mix
+     rather than assumed: afld.shp is 16 frames of 72x48 (3x2 cells, 8 healthy + 8 damaged, the
+     layout _mixBuilding already expects) and agun.shp is 128 frames of 24x48 (1x2). Probed with
+     the same hash lookup the loader uses, with mslo.shp as the control - it is absent from all
+     eleven archives, exactly as its comment below claims. */
+  afld:'afld', aagun:'agun',
   flametower:'ftur', kennel:'kenn', wall:'brik',
   /* The Tesla Coil and the two shipyards, which were drawn procedurally only because nobody had
      looked for their art: tsla, syrd and spen are all sitting in conquer.mix. */
@@ -127,7 +133,7 @@ var RTS_MIX_BLD = {
 };
 var RTS_MIX_UNIT = {
   buggy:'jeep', light:'1tnk', tank:'2tnk', heavy:'4tnk', arty:'arty',
-  harvester:'harv', apc:'apc', mcv:'mcv', heli:'heli',
+  harvester:'harv', apc:'apc', mcv:'mcv', heli:'heli', mig:'mig', yak:'yak',
   rifle:'e1', rocket:'e3', grenadier:'e2', flame:'e4', engineer:'e6',
   medic:'medi', thief:'thf', tanya:'e7', dog:'dog'
 };

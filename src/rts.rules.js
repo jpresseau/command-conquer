@@ -79,6 +79,16 @@ var RTS_STRUCTS = [
     needs:['factory'], weapon:'turretrocket',
     side:'soviet', armour:'concrete',
     desc:'Long-range base defence. Tears up armour, poor against infantry.' },
+  /* THE ALLIED AA GUN, and the reason it had to arrive with the Soviet air force rather than
+     after it. Only two weapons in this game could touch an aircraft - the Rocket Squad's
+     launcher, which both armies field, and the Rocket Turret above, which is Soviet - so the
+     Allies had no anti-air STRUCTURE at all. That was invisible while the Allies were the only
+     side that flew. Priced under the Rocket Turret because it is a specialist that cannot
+     shoot back at anything on the ground; 1x2 cells, matching agun.shp's 24x48. */
+  { key:'aagun',   name:'AA Gun',       w:1, h:2, cost:600,  build:11, hp:420,  power:-30,  sight:22,
+    needs:['radar'], weapon:'flak',
+    side:'allied', armour:'concrete',
+    desc:'Anti-aircraft only. Cannot fire on ground targets — pair it with a Pillbox.' },
   /* --- defence you can afford early, and the two structures that do something other than
      shoot. `wall` and `pillbox` are pure data; `depot` carries the repair field below. --- */
   /* Concrete Wall $50, no power, no prerequisite - the reference's numbers exactly. It is the
@@ -159,6 +169,15 @@ var RTS_STRUCTS = [
     needs:['radar'], produces:'air', rearm:true,
     side:'allied', armour:'concrete',
     desc:'Builds and rearms helicopters. Without one, an aircraft out of ammo goes down.' },
+  /* The Soviet Airfield. Same job as the Helipad on the other side of the war - AIRCRAFT.CPP
+     does not care which kind of pad an aircraft rearms at, and neither does _rtsRearmPad - so
+     this is the Helipad's counterpart rather than a new mechanism. It is bigger (3x2, matching
+     afld.shp's 72x48) and cheaper, because a runway takes more room than a helipad and because
+     the aircraft it flies are cheaper and shorter-legged than the Attack Heli. */
+  { key:'afld',     name:'Airfield',     w:3, h:2, cost:1200, build:13, hp:600,  power:-20,  sight:10,
+    needs:['radar'], produces:'air', rearm:true,
+    side:'soviet', armour:'concrete',
+    desc:'Builds and rearms MiGs and Yaks. An aircraft with no airfield left has nowhere to land.' },
   { key:'silo',     name:'Ore Silo',   w:2, h:2, cost:150,  build:5,  hp:400,  power:0,    sight:8,
     needs:['refinery'], storage:1500, capturable:false,
     armour:'wood',
@@ -304,6 +323,25 @@ var RTS_UNITS = [
     needs:['helipad'], air:true, ammo:8, rearm:6, alt:14,
     side:'allied', armour:'light',
     desc:'Flies over anything. Eight missiles, then it must return to a pad to reload.' },
+  /* THE TWO SOVIET AIRCRAFT, and they do different jobs on purpose - two planes that both kill
+     tanks would be one plane with two names.
+
+     The MiG is the tank-killer. Faster than the Attack Heli and harder-hitting, but it carries
+     four Mavericks against the Heli's eight missiles, so it lands twice as often and spends more
+     of the match on the ground. Anchored against the Heli it is measured beside: 1400 against
+     1200 buys +36% speed and +20% damage for half the sorties.
+
+     The Yak is the opposite unit. Cheap, fragile, and useless against armour - what it does is
+     strafe massed infantry, which the Soviets otherwise have to answer with a Flame Tower that
+     cannot move. At 900 it is the cheapest thing in the game that flies. */
+  { key:'mig',      name:'MiG',           kind:'air',      cost:1400, build:16, hp:180,  speed:30,  turn:4.0,r:1.5, sight:22, weapon:'maverick',
+    needs:['afld'], air:true, ammo:4, rearm:6, alt:16,
+    side:'soviet', armour:'light',
+    desc:'Fast tank-killer. Four missiles, then back to the airfield — it cannot linger.' },
+  { key:'yak',      name:'Yak',           kind:'air',      cost:900,  build:11, hp:150,  speed:26,  turn:4.5,r:1.3, sight:20, weapon:'strafe',
+    needs:['afld'], air:true, ammo:30, rearm:5, alt:15,
+    side:'soviet', armour:'light',
+    desc:'Strafes infantry. Barely scratches armour — send it at the men, not the tanks.' },
   /* Armoured Personnel Carrier. UDATA.CPP's UnitAPC is IsCrusher with no turret; the transport
      rules are in UNIT.CPP - capacity via Max_Passengers, and, in Death, the half of the branch
      that matters: when a TRANSPORT dies its infantry passengers are unlimboed at the wreck and
@@ -419,6 +457,27 @@ var RTS_WEAPONS = {
      what keeps it from being a flying answer to everything. */
   hellfire:   { dmg:55, range:20, cool:1.1, shot:'rocket', speed:34, splash:0.9, ammo:1,
                 verses:{ none:0.35, wood:1.10, light:1.20, heavy:1.30, concrete:0.85 } },
+  /* The MiG's Mavericks. Harder than the Attack Heli's missiles and even more lopsided - it is
+     a tank-killer that cannot hurt the men standing next to the tank - but there are only four
+     of them and the MiG cannot loiter, so the trade is a heavier punch you get to throw half as
+     often. Two per pass at 66 x 1.35 = 89 against heavy armour: a Heavy Tank survives one sortie
+     and not two, which is the shape this is tuned to. */
+  maverick:   { dmg:66, range:18, cool:0.9, shot:'rocket', speed:40, splash:1.0, ammo:1,
+                verses:{ none:0.25, wood:1.05, light:1.25, heavy:1.35, concrete:0.95 } },
+  /* And the Yak's nose guns, which are the mirror image: it strafes people and barely marks
+     armour. Cheap, fast, and the answer to massed infantry that the Soviets otherwise have to
+     solve with a Flame Tower they cannot move. */
+  strafe:     { dmg:16, range:14, cool:0.22, shot:'tracer', speed:0, splash:0.6, ammo:1,
+                verses:{ none:1.15, wood:0.40, light:0.30, heavy:0.10, concrete:0.10 } },
+  /* THE ALLIED ANSWER TO ALL OF THIS. Before the Soviets could fly, the only two weapons in the
+     game that could hit an aircraft at all were the Rocket Squad's launcher (both armies) and
+     the Rocket Turret - which is SOVIET. So the Allies had no anti-air building whatsoever, and
+     it did not show because nothing they could face was in the air. Giving the Soviets an air
+     force without this would have handed one side a weapon the other could only answer with
+     infantry. Deliberately aa-only: it is a specialist, not a second Gun Turret. */
+  flak:       { dmg:22, range:24, cool:0.5, burst:2, shot:'tracer', speed:0, splash:1.4, aa:true,
+                aaOnly:true,
+                verses:{ none:0.9, wood:0.15, light:0.9, heavy:0.35, concrete:0.10 } },
   bite:       { dmg:22, range:5.5,cool:0.55, shot:'tracer',  speed:0,  splash:0, maul:true,
                 verses:{ none:1.4,  wood:0,    light:0,    heavy:0,    concrete:0 } },
   /* Two .45s: shreds infantry, barely marks anything else. The Commando's threat to buildings
@@ -759,8 +818,15 @@ var RTS_AI = {
      five minutes, so an opponent that reaches for one early has spent its army on a promise.
      At these weights it builds one only once the rest of the plan is satisfied, which in
      practice means a long game - exactly when a superweapon is the interesting move. */
+  /* Air, and the answer to air. Both armies' entries are listed together and _rtsCanQueue drops
+     whichever belong to the other one, exactly as the defensive block already does - so the same
+     plan gives an Allied opponent a Helipad and a Soviet one an Airfield. The pad ratio is low:
+     one field is enough to keep a flight in the air, and a second buys production speed rather
+     than reach. The AA ratio is deliberately HIGHER than the pad's, because an opponent that
+     flies but cannot be flown against is a worse opponent to play. */
   ratio:{ refinery:0.16, barracks:0.16, factory:0.10, radar:0.06, lab:0.05, depot:0.05,
           apower:0.08, kennel:0.04, silo:0.14, pillbox:0.18, flametower:0.12, turret:0.24, rocketpit:0.12,
+          helipad:0.06, afld:0.06, aagun:0.10,
           mslo:0.02, iron:0.02, pdox:0.02, gps:0.02 },
   limit:{ refinery:4,    barracks:2,    factory:2,    radar:1,    lab:1,    depot:1,
   /* The silo limit is high on purpose and is the one number here that was MEASURED rather
@@ -769,6 +835,7 @@ var RTS_AI = {
      production lines to spend it down, so a low ceiling turns the storage cap into a straight
      nerf and hands the player about 16 extra seconds of life. RA has no silo limit at all. */
           apower:2,    kennel:1,    silo:14,   pillbox:4,     flametower:3,     turret:6,     rocketpit:4,
+          helipad:2,   afld:2,      aagun:3,
   /* One each. A second silo would not charge a second missile - the timer is per house - so
      building one is pure waste, and the limit says so rather than relying on the ratio. */
           mslo:1,      iron:1,      pdox:1,    gps:1 },
@@ -787,8 +854,13 @@ var RTS_AI = {
      depending on which army it ended up with. */
   /* Superweapons last, after every defence. A base that answers an attack with a Chronosphere
      instead of a pillbox loses the base. */
+  /* The pads sit after the ground production and before the defensive tail: an opponent that
+     buys an airfield before a war factory has no army to protect it, and one that buys it after
+     four turrets never gets there at all. The AA gun goes IN the defensive tail, beside the
+     turrets it stands next to. */
   buildOrder:['refinery', 'barracks', 'silo', 'factory', 'radar', 'apower', 'depot', 'lab', 'kennel',
-              'pillbox', 'flametower', 'turret', 'rocketpit', 'tesla',
+              'helipad', 'afld',
+              'pillbox', 'flametower', 'turret', 'rocketpit', 'tesla', 'aagun',
               'mslo', 'iron', 'pdox', 'gps'],
   /* What to spend a production run on. A table rather than an if-chain: adding a unit to
      RTS_UNITS should not mean editing the opponent's brain, and the hardcoded ladder that used
@@ -813,7 +885,14 @@ var RTS_AI = {
        The dog IS in: it needs no plan, it just runs at infantry. */
     infantry:[ { key:'flame', at:1200, w:2 }, { key:'grenadier', at:900, w:2 },
                { key:'rocket', at:500, w:3 }, { key:'dog', at:400, w:2 },
-               { key:'rifle', at:250, w:2 } ]
+               { key:'rifle', at:250, w:2 } ],
+    /* AIRCRAFT, once there is a pad to fly from - _rtsCanQueue gates on `needs`, so these are
+       inert until one exists and there is no separate check to keep in step. Both armies again;
+       the Attack Heli was buildable by the player from the day it shipped and the opponent never
+       once bought one, because this table had no `air` line at all. The bank thresholds are high
+       so a poor AI still buys tanks: an aircraft that dies with no pad to return to is the most
+       expensive way to lose 1400 credits in this game. */
+    air:[ { key:'heli', at:2400, w:3 }, { key:'mig', at:2600, w:3 }, { key:'yak', at:1800, w:2 } ]
   },
   /* Check_Raise_Money / Check_Raise_Power / Check_Lower_Power thresholds. */
   brokeMoney:100,           /* below this, raising cash is urgent */
