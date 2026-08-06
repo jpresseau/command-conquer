@@ -29,8 +29,9 @@ are genuinely modular:
 | `iso` | the ISO 9660 directory walker, against hand-built images containing the awkward cases: records past a sector's zero padding, self-referential entries, a raw 2352-byte rip, an extent pointing off the end |
 | `save` | the checksum, the version stamp, and the encoder that walks live game state into JSON |
 | `rules` | invariants over the roster: no orphan unit kinds, every prerequisite and weapon resolves, every unit kind has a building that produces it, no faction needs something it cannot build |
+| `r3d` | the sprite baker's geometry half: the oblique projection (`x` unchanged, `z − K·y`, ground deliberately **not** foreshortened), the shape builders, yaw and scale as pure transforms that must not edit the model handed to them, and the colour ramp — which exists to keep a shadow coloured instead of letting it slide to grey, so the test is "does it stay saturated", not "does it get darker" |
 
-`lib/sandbox.js` is what makes the last two possible. The game is browser globals concatenated
+`lib/sandbox.js` is what makes those possible. The game is browser globals concatenated
 by `build.py` — there is nothing to `import` — so those files are evaluated in a `vm` context
 with a shim thin enough that anything reaching for a real DOM **throws** instead of quietly
 returning `undefined` and letting a test pass for the wrong reason.
@@ -39,6 +40,13 @@ returning `undefined` and letting a test pass for the wrong reason.
 files into one page, so a spec that read `src/` would prove nothing about the artifact a player
 loads. `run.js` rebuilds first, always: a spec measuring a stale page is worse than no spec,
 because it reports confidently on code that is not there any more.
+
+`e2e/r3d` is the other half of the sprite baker — the part that needs a canvas. It holds the
+renderer to the claims its own source makes: a 3×3 structure covers exactly 72×72 art pixels,
+alpha is 1-bit so the silhouette never feathers, visibility is a depth buffer and not a
+painter's algorithm (so shuffling the faces must give a byte-identical picture), backfaces are
+culled by winding, and `_r3FitSize` returns a square that no facing runs out of. It then puts
+the real shipped sprites through the same checks, and confirms a rebake is deterministic.
 
 ## What these specs will not do
 

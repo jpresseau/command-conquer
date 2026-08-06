@@ -26,10 +26,18 @@ var MIMES = {
 };
 
 /* Ports are handed out rather than chosen per spec, so two specs running in the same process
-   can never collide on one - which used to be managed by hand and by comment. */
-var nextPort = 8600;
+   can never collide on one - which used to be managed by hand and by comment.
 
-function serve() {
+   That counter only settles it WITHIN a process, and run.js gives every spec its own, so each
+   one starts again at 8600. Run a single spec by hand while the suite is going - or leave a
+   server behind from a killed run - and the next spec dies on EADDRINUSE before it has made a
+   single assertion, which reads like a broken test rather than a busy port. So a taken port is
+   stepped over instead of being fatal. */
+var nextPort = 8600;
+var PORT_TRIES = 50;
+
+function serve(tries) {
+  tries = tries == null ? PORT_TRIES : tries;
   var port = nextPort++;
   var srv = http.createServer(function (rq, rs) {
     var p = path.join(ROOT, decodeURIComponent(rq.url.split('?')[0]));
@@ -40,7 +48,11 @@ function serve() {
       rs.end(d);
     });
   });
-  return new Promise(function (res) {
+  return new Promise(function (res, rej) {
+    srv.once('error', function (e) {
+      if (e && e.code === 'EADDRINUSE' && tries > 0) { srv.close(); res(serve(tries - 1)); return; }
+      rej(e);
+    });
     srv.listen(port, function () { res({ srv: srv, url: 'http://127.0.0.1:' + port + '/index.html' }); });
   });
 }
