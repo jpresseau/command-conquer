@@ -30,6 +30,7 @@ are genuinely modular:
 | `save` | the checksum, the version stamp, and the encoder that walks live game state into JSON |
 | `rules` | invariants over the roster: no orphan unit kinds, every prerequisite and weapon resolves, every unit kind has a building that produces it, no faction needs something it cannot build |
 | `r3d` | the sprite baker's geometry half: the oblique projection (`x` unchanged, `z − K·y`, ground deliberately **not** foreshortened), the shape builders, yaw and scale as pure transforms that must not edit the model handed to them, and the colour ramp — which exists to keep a shadow coloured instead of letting it slide to grey, so the test is "does it stay saturated", not "does it get darker" |
+| `audio` | the sound tables, whose only failure mode is silence: every EVA line, unit voice and death cry resolves in the identity table, every voice pool expands to takes that exist, every effect the game dispatches has something to play, and no retrigger gap or sampled mapping is left pointing at an effect that is gone |
 
 `lib/sandbox.js` is what makes those possible. The game is browser globals concatenated
 by `build.py` — there is nothing to `import` — so those files are evaluated in a `vm` context
@@ -47,6 +48,14 @@ alpha is 1-bit so the silhouette never feathers, visibility is a depth buffer an
 painter's algorithm (so shuffling the faces must give a byte-identical picture), backfaces are
 culled by winding, and `_r3FitSize` returns a square that no facing runs out of. It then puts
 the real shipped sprites through the same checks, and confirms a rebake is deterministic.
+
+`e2e/audio` measures **sound**, not function calls. Headless Chromium runs WebAudio for real, so
+a `ScriptProcessor` is tapped onto the master bus and the samples are read back: every effect the
+game dispatches must produce signal, an off-screen shot must produce none, muting must silence
+both the guns and the score, and the music sequencer must still be producing sound after a full
+bar. Measurements wait for silence before starting — an explosion rings for most of a second, and
+without that wait a shot that was correctly culled reads as loud because the tap heard the
+previous one.
 
 ## What these specs will not do
 

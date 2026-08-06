@@ -20,7 +20,12 @@ var S = new Suite('pathing');
 (async function () {
   var browser = await chromium.launch();
   var g = await openPage(browser, { width: 1100, height: 800 });
-  await g.start(7, 15);
+  /* Frozen: every step below counts simulated seconds and judges an outcome against them, so
+     the match must not also be advancing on its own between evaluate calls. Left running, it
+     ordered three units across the map when run alone and four inside the suite - the extra
+     unit existing only because the machine was busier - and the spec's verdict changed with
+     it. See start()/freeze() in lib/game.js. Nothing here measures the running loop. */
+  await g.start(7, 15, { freeze: true });
 
   /* ---------- 1. the geometry, directly ---------- */
   var line = await g.page.evaluate(function () {
@@ -183,23 +188,36 @@ var S = new Suite('pathing');
       u.goal = { x: gx, z: gz }; u.path = _rtsPathFor(u, gx, gz); u.pi = 0; u.order = 'move';
     });
     for (var i = 0; i < 60 * 45; i++) _rtsTick(1 / 60);
-    /* A unit killed on the way did not fail to path - the enemy is live in this match and this
-       is not a combat test. Deaths come out of the denominator, and are reported so a run where
-       everything died cannot look like a run where everything arrived. */
-    var died = 0;
+    /* Two things can end a unit's journey without any pathing being at fault, and BOTH have to
+       come out of the denominator or this measures the war rather than the router:
+
+         - it was killed. The enemy is live in this match and this is not a combat test.
+         - it stopped moving in order to FIGHT. A unit that acquires a target on the way
+           switches itself off the move order, which is correct behaviour and exactly what a
+           player expects - but it is then no longer executing the order being measured. A
+           tank that did this was scored as a unit stranded 43 units from its goal, which
+           read as a routing bug and was a tank doing its job.
+
+       Both are counted and reported, so a run where everybody died or everybody stopped to
+       fight cannot look like a run where everybody arrived. */
+    var died = 0, fought = 0;
     want.forEach(function (w) {
       if (w.u.dead) { died++; return; }
+      if (w.u.order && w.u.order !== 'move') { fought++; return; }
       var d = Math.hypot(w.u.x - w.x, w.u.z - w.z);
       worst = Math.max(worst, d);
       if (d < RTS_TILE * 2) arrived++;
     });
-    return { tried: tried, arrived: arrived, worst: worst, died: died, alive: tried - died };
+    return { tried: tried, arrived: arrived, worst: worst, died: died, fought: fought,
+             judged: tried - died - fought };
   });
-  S.ok('enough units survived the trip to say anything', normal.alive >= 3,
-       normal.alive + ' of ' + normal.tried + ' still alive (' + normal.died + ' killed en route)');
+  S.ok('enough units finished the trip under their own orders to say anything',
+       normal.judged >= 3,
+       normal.judged + ' of ' + normal.tried + ' judged (' + normal.died + ' killed en route, ' +
+       normal.fought + ' broke off to fight)');
   S.ok('ordinary cross-map orders still complete',
-       normal.alive > 0 && normal.arrived >= Math.ceil(normal.alive * 0.8),
-       normal.arrived + '/' + normal.alive + ' arrived, worst remaining gap ' + normal.worst.toFixed(1));
+       normal.judged > 0 && normal.arrived >= Math.ceil(normal.judged * 0.8),
+       normal.arrived + '/' + normal.judged + ' arrived, worst remaining gap ' + normal.worst.toFixed(1));
 
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
   await g.close();

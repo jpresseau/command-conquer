@@ -36,6 +36,11 @@ var RTS_SND_SFX = {
   boom:      'kaboom25',     /* a structure going up */
   pop:       'kaboom12',     /* a vehicle going up */
   hit:       'kaboom1',
+  /* A round landing in water. splash9 rather than h2obomb2 - both are in sounds.mix, but this
+     kind is chosen for ANY shot that lands on water regardless of its damage, so it plays as
+     often as 'hit' does, and h2obomb2 is a 1.86s depth charge against splash9's 0.72s, which
+     is the same length as every other routine impact here. Measured, not picked by name. */
+  splash:    'splash9',
   place:     'placbldg',     /* building slammed down */
   build:     'build5',
   select:    'bleep11',
