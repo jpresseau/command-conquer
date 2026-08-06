@@ -366,11 +366,25 @@ function _rtsEdText() {
 }
 
 function _rtsEdCheck() {
+  var E = window._rtsEd;
   var M = rtsMapFromScenario(_rtsEdText(), 'editor');
   if (!M || M.error) { _rtsEdSay('Not playable yet: ' + ((M && M.error) || 'unreadable'), 'bad'); return null; }
   var s = M.stats || {};
+  /* SAY WHOSE STARTS THOSE ARE. A map with no authored start positions is still playable -
+     _rtsMapStarts hands over to _rtsMapFallbackStarts on purpose, so a campaign map lifted out
+     of MAIN.MIX still works - but telling an author who has placed NONE that "both starts
+     connected" tells them their starts are fine when they have not made any. They ship a map
+     whose two armies appear wherever the fallback ring happened to land, and nothing ever said
+     otherwise. Playable either way; the difference is whether the author chose it. */
+  var placed = (E && E.spawns) ? E.spawns.length : 0;
+  var starts = placed >= 2
+    ? 'both starts connected.'
+    : (placed === 1
+        ? 'only ONE start placed, so the game will choose both for you — add a second with the Starts tool.'
+        : 'no starts placed, so the game will choose two for you — use the Starts tool to decide where.');
   _rtsEdSay('Playable — ' + M.n + '×' + M.n + ' battlefield, ' + ((s.ore || 0) + (s.gems || 0)) +
-            ' ore cells, ' + (s.trees || 0) + ' trees, both starts connected.', 'ok');
+            ' ore cells, ' + (s.trees || 0) + ' trees, ' + starts,
+            placed >= 2 ? 'ok' : 'warn');
   return M;
 }
 
