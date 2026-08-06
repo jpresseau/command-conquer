@@ -121,6 +121,14 @@ function rtsClose() {
   document.removeEventListener('keyup', _rtsKeyUp, true);
   window.removeEventListener('resize', _rtsOnResize);
   if (U && U.ro) { try { U.ro.disconnect(); } catch (_b) {} U.ro = null; }
+  /* The window mouseup, which used to be anonymous and therefore unremovable - see where it is
+     bound for what that cost. Its closure holds U, and U holds the canvases. */
+  if (U && U.onWinUp) { window.removeEventListener('mouseup', U.onWinUp); U.onWinUp = null; }
+  /* And the 350ms touch long-press. Left armed, it outlived the match and reached
+     _rtsRightClick with _rtsUI already null - an uncaught TypeError on the quit path, and on
+     the restart path it landed INSIDE THE NEXT BATTLE about two seconds in, complete with a
+     unit acknowledgement for an order nobody gave. */
+  if (U && U.clearHold) { try { U.clearHold(); } catch (_c) {} U.clearHold = null; }
   if (typeof _rtsMusicStop === 'function') _rtsMusicStop();
   _rtsRDispose();
   if (typeof _RTS_RICON !== 'undefined') _RTS_RICON = null;
@@ -307,6 +315,9 @@ function _rtsSuperDisarm() {
   if (!U || !U.superArm) return;
   U.superArm = null;
   U.superSig = null;
+  /* No cursor reset here on purpose: _rtsDrawHud sets the canvas cursor every frame, so it owns
+     it and anything written from outside the loop is gone by the next one. The armed state
+     shows in the superweapon row, which _rtsSuperRow restyles below. */
   _rtsSuperRow();
 }
 
@@ -409,7 +420,15 @@ function _rtsItemClick(key) {
   var cat = _rtsQueueCat(key);
   if (U.mode) rtsMode(null);            /* building something disarms the repair/sell cursor */
   if (typeof _rtsSfx === 'function') _rtsSfx('click');
-  if (cat === 'struct' && S.ready === key) { U.place = key; _rtsGhostShow(key); return; }
+  if (cat === 'struct' && S.ready === key) {
+    /* AND IT DISARMS THE SUPERWEAPON, which is the other cursor that wants the next click.
+       Arming a superweapon already cancelled a placement; the reverse was missing, and the
+       click handler tests superArm FIRST - so a player who armed the nuke, changed their mind
+       and went to place a finished building dropped the nuke on the spot they picked for it.
+       Inside their own base, because that is where you place buildings. */
+    if (U.superArm) _rtsSuperDisarm();
+    U.place = key; _rtsGhostShow(key); return;
+  }
   /* Left click on the item already on the line: resume it if it is suspended, otherwise
      leave it alone. It used to abandon outright, which meant one stray click threw away a
      nearly-finished war factory and the credits with it. Cancelling is a right-click now,
@@ -703,7 +722,29 @@ function _rtsBindInput() {
   mini.onmousedown = function (e) { if (e.button !== 0) return; U.miniDrag = true; miniGo(e); };
   mini.onmousemove = function (e) { if (U.miniDrag) miniGo(e); };
   mini.oncontextmenu = function (e) { e.preventDefault(); miniOrder(e); return false; };
-  window.addEventListener('mouseup', function () { if (window._rtsUI) window._rtsUI.miniDrag = false; });
+  /* A BUTTON RELEASED ANYWHERE IS A BUTTON RELEASED. cv.onmouseup only fires over the canvas, so
+     dragging a selection box off the edge - onto the sidebar, out of the window - and letting go
+     left U.drag set: the rubber band went on tracking a cursor whose button was no longer down,
+     and nothing was ever selected. This finishes the drag wherever the release happens, which is
+     also what the miniDrag flag below has always needed.
+
+     NAMED AND STORED, because rtsClose has to take it off again. As an anonymous listener this
+     was the one thing rtsClose forgot, and its closure held U, and U held the canvases: measured
+     at +202 DOM nodes, +59 listeners, ~6MB of detached canvas and 27MB of RSS PER MATCH, for
+     ever. Removing only this one listener took the leak to zero - the sprite cache and the
+     ResizeObserver were collecting correctly on their own. */
+  U.onWinUp = function (e) {
+    var UU = window._rtsUI;
+    if (!UU) return;
+    UU.miniDrag = false;
+    if (UU.drag && (!e || e.button !== 2)) {
+      var dg = UU.drag; UU.drag = null;
+      if (dg.moved) _rtsBoxSelect(dg);
+      /* a click that started on the battlefield and ended off it is not a click ON anything,
+         so an unmoved release outside the canvas selects nothing rather than guessing */
+    } else if (UU.drag) UU.drag = null;
+  };
+  window.addEventListener('mouseup', U.onWinUp);
 
   /* ------------------------------------------------------------------ touch --
      EVERY WAY OF MOVING THE CAMERA NEEDED HARDWARE A PHONE DOES NOT HAVE. Panning was WASD,
@@ -734,6 +775,20 @@ function _rtsBindInput() {
     return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
   }
   function _tClearHold() { if (T.hold) { clearTimeout(T.hold); T.hold = 0; } }
+  U.clearHold = _tClearHold;             /* rtsClose has to be able to reach it - see rtsClose */
+  /* THE GHOST HAS TO FOLLOW THE FINGER. _rtsGhostMove keeps its own tile rather than reading
+     U.mouse, and its only caller was cv.onmousemove - which a touchscreen never fires. So the
+     translucent footprint sat at map cell (0,0) for the whole placement while the player
+     dragged around looking for somewhere to put a Power Plant, with nothing on screen showing
+     where it would land or whether the ground was legal. Same three lines the mouse path runs. */
+  function _tGhost(p) {
+    if (!U.place) return;
+    var g = _rtsGroundAt(p.x, p.y);
+    if (!g) return;
+    var def = rtsStructDef(U.place);
+    var tx = _rtsTX(g.x) - ((def.w / 2) | 0), tz = _rtsTX(g.z) - ((def.h / 2) | 0);
+    _rtsGhostMove(tx, tz, _rtsCanPlace('player', U.place, tx, tz));
+  }
 
   cv.addEventListener('touchstart', function (e) {
     e.preventDefault();
@@ -744,12 +799,19 @@ function _rtsBindInput() {
     /* The pointer is parked under the finger so anything that reads U.mouse - the building
        ghost, the superweapon cursor - lines up with where the player is actually touching. */
     U.mouse.x = p.x; U.mouse.y = p.y; U.mouse.over = true;
+    _tGhost(p);
     /* A press held in one place is the second button. Cancelled by movement below, so a pan
        never fires an order. */
     _tClearHold();
     T.hold = setTimeout(function () {
       T.hold = 0;
       if (T.moved || T.id === null) return;
+      /* A STEADY FINGER WHILE PLACING IS STILL A PLACEMENT. _rtsRightClick reads U.place as
+         "cancel", so resting a finger for a third of a second while lining up a building
+         silently threw the placement away and touchend then did nothing - the same tap placed
+         it fine at 120ms and cancelled it at 500ms, with nothing on screen saying why. Leave
+         T.id intact so touchend still places it. */
+      if (U.place) return;
       T.id = null;                                  /* consumed: touchend must not also select */
       if (U.mode) { rtsMode(U.mode); return; }
       _rtsRightClick(T.x0, T.y0);
@@ -777,7 +839,10 @@ function _rtsBindInput() {
     if (!t) return;
     var p = _tXY(t);
     U.mouse.x = p.x; U.mouse.y = p.y;
+    _tGhost(p);
     if (!T.moved && Math.abs(p.x - T.x0) + Math.abs(p.y - T.y0) > 8) { T.moved = true; _tClearHold(); }
+    /* While placing, a drag is aiming the footprint - not panning the map out from under it */
+    if (T.moved && U.place) { T.lx = p.x; T.ly = p.y; return; }
     if (T.moved) {
       /* The finger holds its grip on the ground: dragging left moves the camera right, and
          the world tracks the fingertip one-for-one at the current zoom. */
@@ -791,7 +856,22 @@ function _rtsBindInput() {
 
   function _tEnd(e) {
     e.preventDefault();
-    if (T.id === null) { T.pinch = 0; return; }
+    if (T.id === null) {
+      T.pinch = 0;
+      /* ONE FINGER LEFT IS ONE FINGER DOWN. touchstart drops T.id the moment a second finger
+         lands, so after a pinch the finger still on the glass belonged to nobody: the next
+         drag moved the camera not at all, and zoom-then-look-around - the most natural pair of
+         gestures on a phone - needed both fingers lifted and the whole thing started again.
+         Adopt whatever is still touching, from where it is now. */
+      if (e.touches && e.touches.length === 1) {
+        var rem = _tXY(e.touches[0]);
+        T.id = e.touches[0].identifier;
+        T.x0 = T.lx = rem.x; T.y0 = T.ly = rem.y;
+        T.moved = false; T.t0 = Date.now();
+        U.mouse.x = rem.x; U.mouse.y = rem.y; U.mouse.over = true;
+      }
+      return;
+    }
     var t = null, i;
     for (i = 0; i < e.changedTouches.length; i++) {
       if (e.changedTouches[i].identifier === T.id) { t = e.changedTouches[i]; break; }
@@ -800,12 +880,17 @@ function _rtsBindInput() {
     _tClearHold();
     var wasMoved = T.moved;
     T.id = null; T.pinch = 0;
+    var last = _tXY(t);
     U.mouse.over = false;
+    /* PLACING IS PRESS, DRAG, RELEASE. A phone has no hover, so the only way to see where a
+       building will land before committing is to drag the ghost there and let go - and the
+       drag above aims rather than pans while U.place is set. The release places it at the
+       finger's LAST position, not the first. */
+    if (U.place) { _rtsTryPlace(last.x, last.y); return; }
     if (wasMoved) return;                           /* that was a pan, not a tap */
     /* A tap is the left button: the armed cursors first, then plain selection. */
     if (U.superArm) { _rtsSuperClick(T.x0, T.y0); return; }
     if (U.mode)     { _rtsModeClick(T.x0, T.y0); return; }
-    if (U.place)    { _rtsTryPlace(T.x0, T.y0); return; }
     _rtsClickSelect(T.x0, T.y0, false);
   }
   cv.addEventListener('touchend', _tEnd, { passive: false });
@@ -827,8 +912,13 @@ function _rtsKeyDown(e) {
   if (!U) return;
   var k = e.key;
   if (k === 'Escape') {
+    /* Escape cancels the armed thing, whatever it is, and only leaves the battle when there is
+       nothing armed to cancel. The superweapon was the one armed cursor missing from this list,
+       so a player who had learned Escape-cancels from repair, sell and placement pressed it
+       with the nuke live and QUIT THE MATCH - no confirmation, no autosave. */
     if (U.mode) rtsMode(U.mode);
     else if (U.place) { U.place = null; _rtsGhostHide(); }
+    else if (U.superArm) _rtsSuperDisarm();
     else rtsClose();
     e.preventDefault(); return;
   }
@@ -918,7 +1008,15 @@ function _rtsHandleTeam(team, action) {
     if (G.sel.indexOf(e) < 0) G.sel.push(e);
     n++;
   }
-  if (!n) return;
+  /* An empty team still clears the selection - Handle_Team calls Unselect_All before it selects
+     the members, and that fidelity is kept. What is NOT kept is doing it in silence: the army
+     vanished from the sidebar with no message and no sound, which reads as the game dropping
+     the selection rather than as an empty team slot. */
+  if (!n) {
+    _rtsSay('Team ' + ((team + 1) % 10) + ' is empty — Ctrl+' + ((team + 1) % 10) + ' assigns one.');
+    if (typeof _rtsSfx === 'function') _rtsSfx('deny');
+    return;
+  }
   if (action === 3) _rtsCenterOnSel();                      /* alt: centre on the team */
   if (typeof _rtsSfx === 'function') _rtsSfx('click');
 }
@@ -1371,10 +1469,21 @@ function _rtsDrawMini() {
 function _rtsPanTick(dt) {
   var U = window._rtsUI, R = _rtsR, sp = R.dist * 1.15 * dt, moved = false;
   var k = U.keys;
-  if (k['w'] || k['arrowup'])    { R.focus.z -= sp; moved = true; }
-  if (k['s'] || k['arrowdown'])  { R.focus.z += sp; moved = true; }
-  if (k['a'] || k['arrowleft'])  { R.focus.x -= sp; moved = true; }
-  if (k['d'] || k['arrowright']) { R.focus.x += sp; moved = true; }
+  /* ARROWS, NOT WASD. W/A/S/D used to pan as well, and three of the four are command keys: the
+     Controls list promised "WASD pans" AND "S hold" AND "D deploy" AND "A + right-click
+     attack-move", so it documented a collision into existence. Every one of them fired both
+     jobs at once. Panning right with D DEPLOYED YOUR SELECTED MCV on the very first keydown -
+     2500 credits and a base position, no confirmation and no undo; panning down with S put the
+     whole selection on hold so it stopped chasing; panning left with A latched attack-move so
+     the next right-click was an assault rather than a move.
+
+     The arrow keys already pan, as do the screen edges, the radar and a finger drag, so WASD
+     was the redundant half of every one of those pairs - and the half that was silently
+     destroying things. RA panned with the arrows and the screen edge in the first place. */
+  if (k['arrowup'])    { R.focus.z -= sp; moved = true; }
+  if (k['arrowdown'])  { R.focus.z += sp; moved = true; }
+  if (k['arrowleft'])  { R.focus.x -= sp; moved = true; }
+  if (k['arrowright']) { R.focus.x += sp; moved = true; }
   /* edge scroll, but only while the pointer is genuinely over the battlefield */
   if (U.mouse.over && !U.drag) {
     var m = 26;

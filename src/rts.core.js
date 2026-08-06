@@ -2127,13 +2127,21 @@ function _rtsProdRecalc(side) {
    producing buildings, so the rate multiplier is 100/that. It replaces a linear `n x rate` that
    was invented here for want of a table. The ceiling is unchanged at 2x; it is now reached at
    four factories rather than two, which is the curve the data actually describes. */
+/* COUNTED FROM THE DATA, NOT FROM A HARDCODED PAIR. This mapped 'infantry' to the barracks and
+   'vehicle' to the factory and returned 1 for every other category - so a second Helipad or a
+   second shipyard bought no build speed at all while a second War Factory did. Measured before:
+   1, 2, 3 and 4 helipads all delivered an Attack Heli in 15.017s. The roster already carried the
+   answer - every production building has a `produces` naming its category - and rules.test.js
+   now asserts that every unit kind has one. */
 function _rtsBuildRate(side, cat) {
-  var G = window._rtsG, key = cat === 'infantry' ? 'barracks' : (cat === 'vehicle' ? 'factory' : null);
-  if (!key || !G) return 1;
+  var G = window._rtsG;
+  if (!G || !cat) return 1;
   var n = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (!e.dead && !e.building && !e.selling && e.side === side && e.def === key) n++;
+    if (e.dead || e.building || e.selling || e.side !== side) continue;
+    var sd = rtsStructDef(e.def);
+    if (sd && sd.produces === cat) n++;
   }
   if (n < 2) return 1;
   var tbl = RTS_BUILD_SPEEDUP;
