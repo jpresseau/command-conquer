@@ -19,6 +19,38 @@ asset files, and **no libraries at all**. Every pixel and every sound is generat
 top-level name; or an external resource reference in the page. Do not remove those guards —
 each one is there because the matching bug already shipped once.
 
+## Tests — WRITE ONE
+
+```
+NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node test/run.js
+```
+
+Rebuilds and runs everything; `test/README.md` has the details. **Every change gets a test**, and
+a test that could only have been written after the fix is not good enough — write the one that
+would have caught it, and watch it fail against the old code before you believe it.
+
+Two kinds, and the choice matters:
+
+- `test/unit/` — plain node, no browser, milliseconds. This is where a new test belongs unless it
+  genuinely needs layout, input or rendering. `test/lib/sandbox.js` evaluates game source in a
+  `vm` context, so the rules tables, the save encoder and anything else DOM-free is reachable
+  from here. Its `document` **throws** rather than returning a stub, so a unit test cannot
+  quietly pass by exercising a fake.
+- `test/e2e/` — Playwright against the **built** `index.html`, never `src/`.
+
+Three rules that are load-bearing, every one of them learned from a test that passed while the
+bug was still there:
+
+- **Assert on outcomes, never on a handler having been called.** Where the camera ended up, what
+  is on disk, which element takes a tap, how many credits moved.
+- **Real input only.** Touch through CDP `Input.dispatchTouchEvent`, keys through
+  `page.keyboard`. A hand-built event tests our listeners against our own guess at what a browser
+  sends, which is the assumption most worth checking.
+- **Check the precondition is reachable.** A check that a build tile is "inside the grid" says
+  nothing about the next row being drawn over it; a check that an MCV survives a keypress proves
+  nothing if it was parked where it could never have deployed anyway. If a spec needs a state to
+  exist before it can observe anything, it must establish that state and assert that it did.
+
 ## Layout
 
 - `src/rts.rules.js` — **every balance number**, data only. Retune here.

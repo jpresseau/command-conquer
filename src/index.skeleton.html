@@ -294,7 +294,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
     <dt>Delete</dt><dd>scuttle the selected units</dd>
 
     <dt class="hd">Camera &amp; battle</dt>
-    <dt>WASD / arrows</dt><dd>pan the camera (screen edges work too)</dd>
+    <dt>Arrow keys</dt><dd>pan the camera (screen edges and the radar work too)</dd>
     <dt>Mouse wheel</dt><dd>zoom</dd>
     <dt>Ctrl+S</dt><dd>save — resume it from this screen later</dd>
     <dt>Esc</dt><dd>leave the battle</dd>
@@ -659,10 +659,18 @@ function rtsStart(btn){
     }
   }, 30);
 }
-/* Enter/Space on the title screen starts a battle. */
+/* Enter/Space on the title screen starts a battle - unless the player is ON a control, in which
+   case Enter and Space are that control's own activation and belong to it.
+
+   Without the guard this fired for every Enter and Space anywhere on the screen, and its
+   preventDefault killed the button underneath: tab to SOVIET, press Enter, and an ALLIED battle
+   starts with the choice silently discarded. Same for the difficulty buttons. Worst of all, tab
+   to RESUME BATTLE and press Enter and you got a NEW match at t=0 instead of your save. */
 document.addEventListener('keydown', function(e){
   var h = document.getElementById('rtsHome');
   if (!h || h.classList.contains('gone')) return;
+  var a = document.activeElement;
+  if (a && a !== document.body && /^(BUTTON|INPUT|A|LABEL|SELECT|TEXTAREA|SUMMARY)$/.test(a.tagName)) return;
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); rtsStart(document.getElementById('rtsGo')); }
 });
 if ('serviceWorker' in navigator) {

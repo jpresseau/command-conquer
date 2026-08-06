@@ -3,8 +3,8 @@
    The point of this file is that the decoders can be proven correct BEFORE any game data
    exists, by building the compressed streams and archives here and reading them back. When
    real MIX files do arrive, a failure will be about the data rather than about the code. */
-var lcw = require('./lcw.js');
-var mix = require('./mix.js');
+var lcw = require('../../ra/lcw.js');
+var mix = require('../../ra/mix.js');
 
 var pass = 0, fail = 0;
 function ok(name, cond, detail) {
@@ -176,7 +176,7 @@ function buildMix(entries, withFlags) {
    frame-chain logic without any game data, which matters because two of the three frame formats
    are DELTAS - decoding frame N can require decoding every frame before it, and a reader that
    quietly returns zeroes for those looks fine on frame 0 and produces garbage for the other 31. */
-var shp = require('./shp.js');
+var shp = require('../../ra/shp.js');
 
 function buildShp(w, h, frames) {
   /* frames: [{fmt, data}] where data is already the encoded body */
@@ -251,7 +251,7 @@ function buildShp(w, h, frames) {
    the point: an encryptor with its Feistel halves mirrored wrongly still reproduces every
    published ciphertext - the vectors only ever test one way - and then fails to invert its own
    output. That is exactly how the bug in the first draft here surfaced. */
-var bf = require('./blowfish.js');
+var bf = require('../../ra/blowfish.js');
 
 function hx(s) {
   var a = new Uint8Array(s.length / 2);
@@ -311,8 +311,8 @@ function hx(s) {
    synthetic files so a failure names the bug rather than blaming someone's map. The real
    corpus - 140 published maps - is exercised by the survey harness, not by this file, which
    has to keep running with no assets present. */
-var zip = require('./zip.js');
-var ramap = require('./ramap.js');
+var zip = require('../../ra/zip.js');
+var ramap = require('../../ra/ramap.js');
 
 /* Build a minimal, valid, STORED-entry zip. Stored rather than deflated so this test does not
    depend on a compressor being available. */
@@ -421,7 +421,7 @@ function mkbin(w, h, fill) {
 })();
 
 (function () {
-  var tab = require('./tiletab.js').RA_TILETAB;
+  var tab = require('../../ra/tiletab.js').RA_TILETAB;
   ok('the tile table has the whole temperate tileset', Object.keys(tab).length > 300, Object.keys(tab).length);
   ok('...and clear ground is clear', tab[255] && tab[255].t === 'c');
   ok('...and open water is water', tab[1] && tab[1].t === 'w');
@@ -445,7 +445,7 @@ function mkbin(w, h, fill) {
    fourth byte is a format marker. Here that fourth byte is set to a non-zero value on purpose,
    because a reader that masks with 0xFFFFFFFF still passes every test where it happens to be
    zero - which, in real files, is most of them. */
-var inimap = require('./inimap.js');
+var inimap = require('../../ra/inimap.js');
 
 /* 10nnnnnn literal runs, then the 0x80 terminator. Legal LCW, terrible compression. */
 function lcwLiteral(bytes) {
@@ -639,7 +639,7 @@ function raPack(bytes) {
    The property both codecs share and both can get wrong: the running sample carries ACROSS
    chunk boundaries. A decoder that resets it per chunk still produces audio of the right
    length, and clicks every 512 samples. */
-var aud = require('./aud.js');
+var aud = require('../../ra/aud.js');
 
 function mkAud(comp, rate, chunks, flags) {
   var body = [], total = 0;

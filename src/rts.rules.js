@@ -128,12 +128,16 @@ var RTS_STRUCTS = [
      constraint in the game that looks at the terrain rather than at free space, and it is
      what stops a shipyard being planted in the middle of a field with a fleet appearing
      inland. See _rtsShoreOk. */
+  /* `produces` is not decoration - _rtsBuildRate counts the buildings carrying it to work out
+     the multi-shipyard speedup, so a yard without it was one you could build twice for no
+     gain. The same omission left the Helipad out; test/unit/rules.test.js now asserts that
+     every unit kind has a building claiming to produce it. */
   { key:'navalyard',name:'Naval Yard',  w:3, h:3, cost:1000, build:14, hp:600,  power:-30, sight:12,
-    needs:['refinery'], side:'allied', shore:true,
+    needs:['refinery'], side:'allied', shore:true, produces:'ship',
     armour:'wood',
     desc:'Builds ships. Must be placed against water. Allied.' },
   { key:'subpen',   name:'Sub Pen',     w:3, h:3, cost:1000, build:14, hp:600,  power:-30, sight:12,
-    needs:['refinery'], side:'soviet', shore:true,
+    needs:['refinery'], side:'soviet', shore:true, produces:'ship',
     armour:'wood',
     desc:'Builds submarines. Must be placed against water. Soviet.' },
   { key:'flametower',name:'Flame Tower', w:1, h:1, cost:500,  build:11, hp:450,  power:-20,  sight:16,
