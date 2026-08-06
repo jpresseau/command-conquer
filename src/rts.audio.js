@@ -97,7 +97,7 @@ function _rtsAudible(x, z) {
 }
 
 var _RTS_SFX_GAP = { rifle:0.05, mg:0.04, cannon:0.07, rocket:0.07, turretgun:0.07,
-  hit:0.05, pop:0.06, boom:0.09, select:0.08, order:0.08 };
+  hit:0.05, splash:0.06, pop:0.06, boom:0.09, select:0.08, order:0.08 };
 
 function _rtsSfx(name, x, z) {
   var A = _rtsA;
@@ -161,6 +161,21 @@ function _rtsSfxPlay(name, t) {
     n = _rtsNoiseSrc(0.11, 'bandpass', 1500, 500, 1.6);
     g = _rtsEnv(0.11, 0.18); n.node.connect(g); g.connect(out);
     n.src.start(t); n.src.stop(t + 0.13);
+
+  } else if (name === 'splash') {               /* a round landing in water */
+    /* _rtsImpact picks this kind for ANY shot that lands on water and dispatched it to a name
+       nothing here handled, so it fell through every branch and returned. Every round fired
+       into the sea landed in silence, and nothing reported it - there is no else, no warning
+       and no throw, which is why it survived: naval fights were half mute for one missing
+       branch.
+
+       Water is the opposite shape to an impact on ground - no crack. A low-passed burst that
+       falls away, over a short downward tone for the gulp. The attack is slower than 'hit' and
+       there is no high content to snap. */
+    n = _rtsNoiseSrc(0.30, 'lowpass', 1600, 300, 0.8);
+    g = _rtsEnv(0.30, 0.24, 0.012); n.node.connect(g); g.connect(out);
+    n.src.start(t); n.src.stop(t + 0.32);
+    _rtsTone('sine', 420, 150, 0.16, 0.12).connect(out);
 
   } else if (name === 'select') {               /* crisp UI blip */
     _rtsTone('square', 880, 1320, 0.06, 0.12).connect(out);

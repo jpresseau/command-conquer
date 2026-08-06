@@ -75,14 +75,47 @@ async function openPage(browser, opts) {
   await page.waitForFunction(function () { return typeof window.rtsOpen === 'function'; });
   return {
     page: page, ctx: ctx, errors: errors, url: s.url,
-    /* Start a match and fast-forward it. The ticks are driven synchronously rather than by
-       waiting on the rAF loop, so a spec's timings are deterministic. */
-    start: async function (seed, seconds) {
+    /* Start a match and fast-forward it. The ticks are driven synchronously rather than waiting
+       on the rAF loop, which makes the fast-forward itself exact.
+
+       It does NOT make the spec deterministic, and this comment used to claim it did. The
+       match's own rAF loop is still running the whole time a spec is working, ticking the
+       simulation on wall-clock, so the total simulated time is the explicit ticks PLUS however
+       many frames happened to fire while Playwright was round-tripping. Under load that
+       differs: e2e/pathing ordered three units across the map when run alone and four when run
+       inside the suite, and the fourth - a unit that only existed because the machine was
+       busy - did not complete its order and failed the spec. A test whose subject changes with
+       CPU load reports on the load.
+
+       Call freeze() after start() when a spec wants the simulation to advance only when it
+       says so. It is opt-in because some specs are about the running game - rendering,
+       input, the atmosphere frame table - and stopping the loop would stop what they measure. */
+    start: async function (seed, seconds, opts) {
       await page.evaluate(function (a) {
         rtsOpen(a[0]);
         for (var i = 0; i < 60 * a[1]; i++) _rtsTick(1 / 60);
-      }, [seed === undefined ? 7 : seed, seconds === undefined ? 20 : seconds]);
+        /* Frozen HERE, in the same step that started the match, and not afterwards: the settle
+           below is 200ms of wall-clock during which the loop is free to tick, and that window
+           alone was enough to change how many units a side had built by the time a spec looked. */
+        if (a[2]) {
+          var U = window._rtsUI;
+          if (U) { U.dead = true; try { if (U.raf) cancelAnimationFrame(U.raf); } catch (e) {} }
+        }
+      }, [seed === undefined ? 7 : seed, seconds === undefined ? 20 : seconds,
+          !!(opts && opts.freeze)]);
       await page.waitForTimeout(200);
+    },
+    /* Stop the rAF loop, so from here the simulation advances only on an explicit _rtsTick.
+       The same stop rtsClose uses, without the teardown - the renderer and the game state stay
+       intact, which is what specs go on to measure. */
+    freeze: async function () {
+      return page.evaluate(function () {
+        var U = window._rtsUI;
+        if (!U) return false;
+        U.dead = true;
+        try { if (U.raf) cancelAnimationFrame(U.raf); } catch (e) {}
+        return true;
+      });
     },
     /* Playwright's real touchscreen. Never hand-built TouchEvents: those test our listeners
        against our own guess at what a browser sends, which is the assumption most worth
