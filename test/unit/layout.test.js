@@ -27,6 +27,7 @@ var { sources, ROOT } = require('../lib/sandbox.js');
 
 var S = new Suite('layout');
 var MAX_LINES = 500;
+var MAX_CLAUDE = 400;
 
 var skel = fs.readFileSync(path.join(ROOT, 'src', 'index.skeleton.html'), 'utf8');
 var inlined = sources();                       /* every .js the page includes, in load order */
@@ -90,5 +91,31 @@ S.note('top 5: ' + sized.slice(0, 5).map(function (r) {
 S.note(onDisk.length + ' source files, ' +
        sized.reduce(function (a, r) { return a + r.n; }, 0) + ' lines, median ' +
        sized[Math.floor(sized.length / 2)].n);
+
+/* ------------------------------------------------------- and the docs are wired up ----
+   CLAUDE.md is read in full at the start of every session, so what it costs is not navigation
+   but dilution: rules that must be followed, buried in 2,500 lines of things that merely
+   happened. The reference was split into docs/ for that reason, and the split only holds if
+   two things stay true - CLAUDE.md stays small, and every document it sent away is still
+   reachable from it. An unlinked reference doc is worse than a deleted one: it looks like
+   live guidance and nobody opens it. */
+var claude = fs.readFileSync(path.join(ROOT, 'CLAUDE.md'), 'utf8');
+var docs = fs.readdirSync(path.join(ROOT, 'docs')).filter(function (f) { return f.endsWith('.md'); });
+var linked = (claude.match(/docs\/[\w.-]+\.md/g) || []);
+
+var unlinked = docs.filter(function (d) { return linked.indexOf('docs/' + d) < 0; });
+S.ok('every reference document is linked from CLAUDE.md', !unlinked.length,
+     unlinked.join(', ') || docs.length + ' documents, all linked');
+
+var dangling = linked.filter(function (l) { return !fs.existsSync(path.join(ROOT, l)); });
+S.ok('...and every link in CLAUDE.md resolves', !dangling.length,
+     dangling.join(', ') || linked.length + ' links resolve');
+
+var claudeLines = claude.split('\n').length;
+S.ok('CLAUDE.md stays short enough to be read before every change',
+     claudeLines <= MAX_CLAUDE, claudeLines + ' lines of ' + MAX_CLAUDE + ' (reference: ' +
+     docs.reduce(function (a, d) {
+       return a + fs.readFileSync(path.join(ROOT, 'docs', d), 'utf8').split('\n').length;
+     }, 0) + ' lines across ' + docs.length + ' documents)');
 
 require('../lib/report.js')(S);
