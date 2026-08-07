@@ -106,6 +106,10 @@ so a new file is one `//@@INC:` line and the order is for readability, not corre
 | `src/index.skeleton.html` | The page shell and the include manifest - no JavaScript of its own |
 | `ra/` | The file-format readers: MIX, SHP, LCW, Blowfish, PCX, AUD, ISO, zip |
 
+`CLAUDE.md` is the working guide — build, tests, layout and the presentation rules that are
+load-bearing. `docs/` holds the reference behind it: what was ported from the Red Alert GPL
+source subsystem by subsystem, what was measured, and what was deliberately not done.
+
 `build.py` fails the build on three things worth keeping: a syntax error in any source, two files
 defining the same top-level name (everything shares one global scope, so a duplicate silently
 overwrites), and any external resource reference sneaking into the page.
