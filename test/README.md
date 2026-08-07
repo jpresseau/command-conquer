@@ -25,7 +25,13 @@ are genuinely modular:
 
 | spec | what it holds to account |
 |---|---|
-| `decoders` | LCW, MIX, SHP, Blowfish, ZIP, the map and INI readers, AUD — all against streams and archives built in the test, so a failure is about the code and not about someone's disc |
+| `lcw` | format 80 both ways: one hand-built stream per op-code, so a broken branch is named instead of showing up as "the image looks odd" — including the overlapping back-reference, which is the single most common way a hand-written LCW decoder is subtly wrong. The compressor is checked by round trip, because how well it compressed is not the decoder's business |
+| `mix` | the archive format everything else is read out of: the hash that serves as its only index (there are no names in the file), both header forms, that a read is a *view* and not a copy, and truncation — the trap where a file cut short still parses perfectly and then throws on the first read past the cut |
+| `shp` | shapes and the 6-bit palettes that colour them. Two of the three frame formats are deltas, so the load-bearing assertion is asking for frame 1 *first*: a chain walked lazily and a chain assumed already-walked agree until you skip |
+| `blowfish` | Eric Young's published ECB vectors, in **both** directions — an encryptor with its Feistel halves mirrored wrongly reproduces every published ciphertext and then cannot invert its own output, which is exactly how the first draft here was wrong |
+| `oramap` | the `.oramap` path: a stored-entry zip, `map.bin` (whose column-major-to-row-major transpose is the whole point), `map.yaml` in both tab and space indentation, and the tile table they index into |
+| `inimap` | RA's own `.MPR` scenarios, read and written. No real one is to hand, so a full 128×128 scenario is *built* — which needs an LCW encoder the game does not have — with the chunk header's format marker set non-zero on purpose, because a reader that masks with `0xFFFFFFFF` passes every test where it happens to be zero. The editor's save path is a round trip through the same reader that opens MAIN.MIX, because there is no second path for maps we made ourselves |
+| `aud` | every sound and every music track. The property both codecs share and both can get wrong: the running sample carries *across* chunk boundaries — a decoder that resets per chunk produces audio of exactly the right length that clicks every 512 samples |
 | `iso` | the ISO 9660 directory walker, against hand-built images containing the awkward cases: records past a sector's zero padding, self-referential entries, a raw 2352-byte rip, an extent pointing off the end |
 | `save` | the checksum, the version stamp, and the encoder that walks live game state into JSON |
 | `rules` | invariants over the roster: no orphan unit kinds, every prerequisite and weapon resolves, every unit kind has a building that produces it, no faction needs something it cannot build |
@@ -140,6 +146,15 @@ renders. That is also exactly what a first-time player sees, so it is the primar
 degraded one. Specs that need the artwork path stub `_mixShp` and `_rtsArtReady` themselves —
 `e2e/atmosphere` does this with a synthetic sprite that records which frames get asked for,
 which tests the frame table without claiming anything about how the frames look.
+
+## Size
+
+Source files are capped at 500 lines and `unit/layout` enforces it. Specs are not: a spec file is
+a unit of *reporting* — one line in the run, one narrative — and cutting one in half to hit a
+number splits an argument that was making sense. `decoders` was split because it was seven
+unrelated formats sharing nothing but a file; `e2e/navair` stays at 568 because sea and air are
+one argument made twice, and every section of it builds on the same live battle in the same
+browser. The question to ask is whether the file is one thing or several, not how long it is.
 
 ## Adding one
 

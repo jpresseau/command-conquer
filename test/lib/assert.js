@@ -59,4 +59,13 @@ function fmt(v) {
   return String(v);
 }
 
-module.exports = { Suite: Suite };
+/* A plain byte-equality predicate, for the many assertions that compare buffers as PART of a
+   larger condition rather than as the whole of it. Where the comparison IS the assertion, use
+   S.bytes instead - it names the offset that differs. */
+function sameBytes(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+module.exports = { Suite: Suite, sameBytes: sameBytes };
