@@ -291,20 +291,18 @@ var S = new Suite('crates');
   /* "Damage comes from the crate itself rather than from a side, so it is nobody's kill and
      cannot be farmed for credit."
 
-     True, and worth asserting as an outcome - but the mechanism is broader than the comment
-     suggests, and mutation testing is what showed it. _rtsSplash hands _rtsDamage a null
-     source for EVERY blast, whoever fired it, so no splash in the game credits a kill: not a
-     booby trap, not a shell, not an explosion. The crate passes null in both its side and its
-     source argument, so there is no edit downstream that makes this assertion fail. It records
-     a property that holds rather than one this spec can break, which is the honest way to
-     leave it. See the note below for what that means outside crates. */
+     Still true, and now true for a sharper reason. When this spec was written _rtsSplash
+     never recorded WHO set a blast off, so nothing that died in an explosion had an attacker
+     and this assertion could not have failed whatever was done to it. That turned out to be a
+     defect in its own right - the end-of-match screen was handing the player credit for every
+     splash death on the map, including the opponent's own artillery - and it is fixed in
+     e2e/scoreboard. A blast now records its side; a booby trap still has no side to record,
+     which is what "nobody's kill" means here, and `kills` is still awarded to no one. */
   S.eq('...and no unit is credited with the kill', open.mine.killsAfter, open.mine.killsBefore);
   S.eq('...nor any other unit on the field', open.mine.credited, 0);
-  S.note('kill credit is skipped for ALL splash damage, not only booby traps - _rtsSplash ' +
-         'always passes a null source to _rtsDamage. A unit finished off by a tank shell\'s ' +
-         'blast rather than its direct hit earns its killer nothing, and `kills` feeds the ' +
-         'threat weighting in _rtsEvalObject. Reported, not changed: it is the same for both ' +
-         'sides and the ladder was measured with it.');
+  S.note('a blast still awards no `kills` to the firing unit, only scoreboard attribution - ' +
+         '`kills` feeds the threat weighting in _rtsEvalObject and changing it would move the ' +
+         'difficulty ladder. Unchanged deliberately; see e2e/scoreboard.');
 
   /* ------------------------------------------ and the bonuses actually bite ----
      Storing a multiplier and reading it back proves the crate wrote something down. Whether
