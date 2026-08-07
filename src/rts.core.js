@@ -3019,16 +3019,30 @@ function _rtsSteer(e, dt, d) {
   sp *= rtsCrateMult(e, 'speed');
   if (e.prone) sp *= RTS_PRONE_SPEED;
   var nx = e.x + Math.cos(e.rot) * sp * dt, nz = e.z + Math.sin(e.rot) * sp * dt;
+  /* THE UNIT'S OWN DOMAIN, and both of the tests below have to ask in it. They used to ask in
+     the land domain whatever was moving, and for a ship that is not a small error - it is the
+     whole of naval movement.
+
+     Water carries blocked=2 (terrain), so a hull sitting in open water read as standing on a
+     blocked tile, which set `freeing` and turned the step test off ENTIRELY. A gunboat ordered
+     at the beach sailed up it and parked on dry land; nothing in its way - cliffs, buildings,
+     the shore itself - was ever consulted again. Measured before the fix: ordered from water at
+     87,80 to land at 81,76, it arrived, on the land tile.
+
+     The slide fallback three lines down had the domain right all along, which is what made this
+     survive: the one path that could have caught a ship crossing a coastline was the one path a
+     ship never reached. */
+  var dom = _rtsDomainOf(e);
   /* While standing on a blocked tile, movement is unrestricted - that is how a unit
      extracts itself from a footprint it ended up inside. Blocking it here as well would
      make the escape waypoint unreachable and re-trap it. */
-  var freeing = _rtsBlocked(_rtsTX(e.x), _rtsTX(e.z));
+  var freeing = _rtsBlocked(_rtsTX(e.x), _rtsTX(e.z), dom);
   /* Nothing on the ground is in an aircraft's way - not walls, not cliffs, not the footprint
      of the very pad it is trying to land on. That last one is what actually bit: a helicopter
      flew home, stopped dead 5.9 world units out (the pad's half-width plus its own radius) and
      hovered there with an empty rack, because the ordinary "is that cell blocked" test was
      refusing to let it over the building. */
-  if (!e.air && !freeing && _rtsBlocked(_rtsTX(nx), _rtsTX(nz))) {
+  if (!e.air && !freeing && _rtsBlocked(_rtsTX(nx), _rtsTX(nz), dom)) {
     /* SLIDE ALONG THE WALL BEFORE GIVING UP ON THE STEP. The step is tested as one movement, so
        a diagonal that clips a blocked cell was refused entirely even when moving along a single
        axis was perfectly legal - the unit ground to a halt against a corner it could have walked
@@ -3036,7 +3050,7 @@ function _rtsSteer(e, dt, d) {
        should do, and it is also the difference between a wedge that recovers and one that lasts
        the rest of the match. Defence in depth for the clear-line fix above, not a substitute:
        fixing only this would leave A* still handing out impossible straight lines. */
-    var domS = _rtsDomainOf(e);
+    var domS = dom;
     var slid = false;
     if (!_rtsBlocked(_rtsTX(nx), _rtsTX(e.z), domS)) { e.x = nx; slid = true; }
     else if (!_rtsBlocked(_rtsTX(e.x), _rtsTX(nz), domS)) { e.z = nz; slid = true; }
@@ -3063,7 +3077,14 @@ function _rtsSteer(e, dt, d) {
        match; every real RTS has some version of this. */
     e.jam = (e.jam || 0) + dt;
     if (e.jam > 3) {
-      var open = _rtsNearestOpen(_rtsTX(e.x), _rtsTX(e.z), 6);
+      /* IN THE UNIT'S OWN DOMAIN. Without it this lifted a wedged unit to the nearest tile
+         that was open ON LAND - and for a ship pressed against a coastline, wedged is the
+         normal state of being ordered somewhere it cannot go. It was teleported onto the
+         beach three seconds later. That is how a gunboat ordered at the shore ended up parked
+         on sand even after the step test was taught about water: the step refused every
+         move, the refusals fed the jam timer, and the unstick then did what the step had just
+         forbidden. A rescue hatch has to obey the same rule as the door. */
+      var open = _rtsNearestOpen(_rtsTX(e.x), _rtsTX(e.z), 6, dom);
       if (open) { e.x = _rtsWX(open[0]); e.z = _rtsWX(open[1]); }
       e.jam = 0; e.stuck = 0;
       var g2 = e.goal || wp;
@@ -3112,8 +3133,16 @@ function _rtsSeparate(dt) {
         var ax = a.x + ux, az = a.z + uz;
         /* If a is already standing on a blocked tile, take the push unconditionally - it is
            trying to get out. Refusing it there is what leaves the odd unit jammed inside a
-           footprint while its neighbours shove it back in every frame. */
-        if (_rtsBlocked(_rtsTX(a.x), _rtsTX(a.z)) || !_rtsBlocked(_rtsTX(ax), _rtsTX(az))) { a.x = ax; a.z = az; }
+           footprint while its neighbours shove it back in every frame.
+
+           ASKED IN THE PUSHED UNIT'S OWN DOMAIN, for the same reason _rtsSteer has to: water is
+           blocked ground, so every hull afloat looked to this test like a unit stuck inside a
+           building and took every shove unconditionally - including the ones that put it on the
+           beach. Two ships crowding each other could walk one of them ashore with no order
+           given, and once ashore the same test kept it "escaping" and it never came back. */
+        var domA = _rtsDomainOf(a);
+        if (_rtsBlocked(_rtsTX(a.x), _rtsTX(a.z), domA) ||
+            !_rtsBlocked(_rtsTX(ax), _rtsTX(az), domA)) { a.x = ax; a.z = az; }
       }
     }
   }
