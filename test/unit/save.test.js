@@ -10,7 +10,7 @@ var { Suite } = require('../lib/assert.js');
 var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('save');
-var g = load(['src/rts.rules.js', 'src/rts.save.js']);
+var g = load(['src/rules', 'src/rts.save.js']);
 
 /* ---------------------------------------------------------------- checksum ---- */
 S.ok('hash is stable', g._rtsHash('the quick brown fox') === g._rtsHash('the quick brown fox'),

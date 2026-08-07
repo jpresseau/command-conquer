@@ -26,7 +26,7 @@ var { Suite } = require('../lib/assert.js');
 var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('scenario');
-var g = load(['src/rts.rules.js', 'src/rts.ui.js', 'src/rts.core.js']);
+var g = load(['src/rules', 'src/ui', 'src/core']);
 
 var TEAMS = g.RTS_TEAM_TYPES, TRIGS = g.RTS_TRIGGERS;
 var TMISSIONS = g.RTS_TMISSIONS, TEVENTS = g.RTS_TEVENTS, TACTIONS = g.RTS_TACTIONS;

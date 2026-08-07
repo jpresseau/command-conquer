@@ -13,7 +13,7 @@ var { Suite } = require('../lib/assert.js');
 var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('r3d');
-var g = load(['src/rts.r3d.js']);
+var g = load(['src/r3d']);
 var K = g.R3_K;
 
 /* The projection, restated here rather than imported, so the test disagrees with the source

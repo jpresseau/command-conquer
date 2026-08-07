@@ -103,10 +103,10 @@ if (man) {
 }
 
 /* --------------------------------------------------- and the page registers it ----
-   The registration is one line in the skeleton, and it has to be relative for the same reason
+   The registration is one line in the shell, and it has to be relative for the same reason
    the manifest does. Served from the host root a '/sw.js' works perfectly; on the real deploy
    it 404s and takes installability with it. */
-var skel = fs.readFileSync(path.join(ROOT, 'src', 'index.skeleton.html'), 'utf8');
+var skel = fs.readFileSync(path.join(ROOT, 'src', 'title.js'), 'utf8');
 var m = skel.match(/serviceWorker\.register\(\s*(['"])([^'"]*)\1\s*(?:,\s*\{([^}]*)\})?/);
 S.ok('the page registers a service worker', !!m, m ? m[0].slice(0, 60) : 'no register() call found');
 if (m) {

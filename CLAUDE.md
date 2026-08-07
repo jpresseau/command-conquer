@@ -53,17 +53,37 @@ bug was still there:
 
 ## Layout
 
-- `src/rts.rules.js` — **every balance number**, data only. Retune here.
-- `src/rts.r3d.js` — the **sprite baker**: a small 3D rasteriser that runs once at load.
-- `src/rts.sprites.js` — palette, terrain bake, ore, effects, and the 3D **models** for every
-  structure and unit.
+Each subsystem is a **directory of small files**, one per concern, concatenated by `build.py` in
+the order `index.skeleton.html` lists them. Nothing runs at load — every file is declarations
+only — so the order is for readability, not correctness, and a new file is one `//@@INC:` line.
+Keep them small: if a file passes ~500 lines it wants splitting along its own banner comments.
+
+- `src/rules/` — **every balance number**, data only. Retune here. `structures`, `units`,
+  `weapons`, `missions`, `balance`, `ai`, `crates`, `vehicles`, `factions`, `teams`, `triggers`.
+- `src/r3d/` — the **sprite baker**: a small 3D rasteriser that runs once at load.
+  `primitives` (the solids), `render` (scanline fill + depth buffer), `bake` (fitting a sprite).
+- `src/sprites/` — `bake` (palette + plumbing), `terrain`, `ore`, `models` (structures),
+  `unitmodels`, `props`, `assemble`.
+- `src/mixart/` — real Red Alert artwork read from the player's own files: `theatres`, `remap`,
+  `frames`, `load`, `tiles`.
+- `src/map/` — real Red Alert maps: `mainmix` (template tables), `load`, `build`, `starts`.
+- `src/core/` — the simulation, and by far the largest subsystem. Deliberately renderer-free, so
+  a whole battle can be stepped headlessly; swapping the 3D renderer for the 2D one cost it zero
+  lines. `grid` (tiles, passability, A*, state), `terrain`, `base`, `crates`, `supers`,
+  `entities`, `capture`, `transport`, `production`, `combat` (target + fire), `damage`, `move`,
+  `units`, `ai`, `teams`, `missions`, `aisupers`, `ore`, `triggers`, `tick`.
+- `src/render/` — canvas 2D. Reads the sim, never writes it. `camera`, `post` (light pass, water,
+  shroud), `frame`, `draw`, `icons`.
+- `src/ui/` — `shell` (open/close/resize), `sidebar`, `input`, `select`, `hud`, `camera`
+  (panning + the main loop).
 - `src/rts.audio.js` — all sound, synthesized at runtime with WebAudio. No sampled assets.
-- `src/rts.core.js` — simulation: grid, A* pathfinding, combat, economy, enemy AI. Deliberately
-  renderer-free, so a whole battle can be stepped headlessly. Swapping the 3D renderer for the
-  2D one cost this file zero lines.
-- `src/rts.render.js` — canvas 2D. Reads the sim, never writes it.
-- `src/rts.ui.js` — sidebar, radar, HUD overlay canvas, input, main loop.
-- `src/index.skeleton.html` — page shell + title screen; `src/style.css`.
+  `src/rts.sound.js` maps events to it; `src/rts.store.js`, `src/rts.save.js`, `src/rts.editor.js`.
+- `src/title.js` — the standalone shell: title screen, difficulty picker, file pickers, RESUME
+  BATTLE, install prompt, START. Loads last, after everything it calls.
+- `src/index.skeleton.html` — the page shell and the include manifest, no JavaScript of its own;
+  `src/style.css`.
+- `ra/` — the file-format readers (MIX, SHP, LCW, Blowfish, PCX, AUD, ISO, zip, the INI/map
+  parsers). Standalone and browser-free enough to be unit-tested directly.
 
 ## Presentation rules — these are load-bearing
 

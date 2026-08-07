@@ -767,7 +767,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">1ac5e2f · 2026-08-07</div>
+  <div id="rtsBuild" title="build">af9b23e · 2026-08-07</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -2687,7 +2687,10 @@ function raTileTab(theatre) {
   }
 })({ RA_TILETAB: RA_TILETAB, RA_TILETAB_SNOW: RA_TILETAB_SNOW, raTileTab: raTileTab });
 </script>
-<script>/* RED ALERT - a rebuild of Command & Conquer: Red Alert for the browser.
+<script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
+   Part of rts.rules, the roster. */
+
+/* RED ALERT - a rebuild of Command & Conquer: Red Alert for the browser.
    Build a base, mine ore with harvesters, produce units, and fight the opposing army.
    Standalone: the only outside dependency in the whole app is three.js.
 
@@ -2725,7 +2728,7 @@ function rtsArmyTag(house)  { return rtsHouseSide(house) === 'soviet' ? 'SOV' : 
    power: + supplies, - draws
    needs: structure keys that must already be built and alive
    storage: BDATA.CPP's `Capacity` (RULES.INI `Storage`) - how much HARVESTED scrap this
-            building can hold. See rtsCapacity/_rtsHarvested in rts.core.js: ore unloaded
+            building can hold. See rtsCapacity/_rtsHarvested in src/core: ore unloaded
             above the sum of these is spilled on the ground and lost.
    Numbers are ours, but the shape of the tech tree is the classic one:
    power -> refinery/barracks -> factory -> defences. */
@@ -2909,6 +2912,9 @@ var RTS_STRUCTS = [
     desc:'Launches a satellite. Once it is up the entire map is revealed, permanently.' }
 ];
 
+</script>
+<script>/* rules/units.js - RTS_UNITS: every unit kind. Part of rts.rules, the roster. */
+
 /* ------------------------------------------------------------------- units --
    kind   : 'infantry' | 'vehicle'  (also picks the producing structure)
    speed  : world units / second
@@ -3068,6 +3074,9 @@ var RTS_UNITS = [
     armour:'light',
     desc:'Unarmed. Deploys into a Command Yard - press D, or use the Deploy button.' }
 ];
+
+</script>
+<script>/* rules/weapons.js - weapons and the animation table. Part of rts.rules, the roster. */
 
 /* --------------------------------------------------------------- weapons --
    dmg      : damage per shot
@@ -3281,6 +3290,10 @@ var RTS_ANIM_PIFF = 15;      /* below this, a spark (ExplosionSet 2: PIFF / PIFF
 var RTS_ANIM_BOOM = 40;      /* at or above this, the full fireball */
 var RTS_CRATER_ORE = 6;   /* ANIM.CPP: a crater calls Reduce_Tiberium(6) */
 
+</script>
+<script>/* rules/missions.js - infantry behaviour, MISSION.CPP's mission table, and building rules.
+   Part of rts.rules, the roster. */
+
 /* ------------------------------------------------------------- infantry --
    INFANTRY.CPP. Fear is a counter that decays one step per frame; taking a hit slams it to
    SCARED, and otherwise it climbs by ANXIOUS halved once for each health threshold the
@@ -3369,6 +3382,10 @@ var RTS_DECON_TIME = 0.35;      /* Mission_Deconstruction: build-up run backward
    The wreck stays, burning, and only then is taken off the map. */
 var RTS_WRECK_TIME = 3.0;
 
+</script>
+<script>/* rules/balance.js - the numbers a match is balanced on: blast falloff, economy, the
+   difficulty ladder and IQ. Part of rts.rules, the roster. */
+
 /* --------------------------------------------------------------- combat --
    COMBAT.CPP's Modify_Damage is the whole of the blast model, and its falloff is a DIVISION,
    not a taper:
@@ -3455,6 +3472,9 @@ var RTS_IQ = {
      the receiving end is not a difficulty distinction, it is a dead branch. */
   superweapon:3
 };
+
+</script>
+<script>/* rules/ai.js - RULES.CPP's [AI] section: what the opponent wants to own. Part of rts.rules. */
 
 /* ------------------------------------------------------------- AI base --
    RULES.CPP's [AI] section. The AI does not follow a fixed build order - it holds a target
@@ -3603,6 +3623,9 @@ var RTS_AI = {
   sellForPower:[['turret', 1], ['barracks', 2], ['factory', 2], ['refinery', 3]]
 };
 
+</script>
+<script>/* rules/crates.js - the crate table and the shroud constants. Part of rts.rules. */
+
 /* ---------------------------------------------------------------- crates --
    CRATE.CPP. A crate is a map OVERLAY, not an object: `Put_Crate` stamps one into a cell and
    `Get_Crate` clears it. Crates do not accumulate - each one carries a timer, and when it
@@ -3705,6 +3728,10 @@ function rtsSightTiles(def) {
   return Math.max(3, Math.min(RTS_SIGHT_MAX, Math.round((def.sight || 12) / RTS_TILE) + RTS_SIGHT_BONUS));
 }
 
+</script>
+<script>/* rules/vehicles.js - vehicle facings and turrets, and TECHNO.CPP's threat scan.
+   Part of rts.rules, the roster. */
+
 /* ------------------------------------------------------------- vehicles --
    UNIT.CPP. A vehicle carries two facings: PrimaryFacing is the hull and SecondaryFacing is
    the turret, and they are drawn as separate shapes. Can_Fire refuses with FIRE_FACING until
@@ -3775,6 +3802,10 @@ var RTS_CRUSH_KILL = 0.9;       /* world units: close enough to actually run the
 /* Take_Damage: a destroyed vehicle has a 50% chance of throwing out a crew member, who
    starts wounded and runs. Unarmed vehicles produce a technician instead of a soldier. */
 var RTS_CREW_CHANCE = 0.5;
+
+</script>
+<script>/* rules/factions.js - Allied and Soviet: who may build what, and the superweapons.
+   Part of rts.rules, the roster. */
 
 /* ------------------------------------------------------------- factions --
    Red Alert is two asymmetric armies, and this roster was one merged list: the Allies' Pillbox
@@ -3912,6 +3943,9 @@ var RTS_WAVE_EVERY = 85;
 var RTS_WAVE_FIRST = 150;   /* a refinery costs 1400 and takes 18s - the first wave must not
                                land before a new player has had time to stand up an economy */
 
+</script>
+<script>/* rules/teams.js - TEAM.CPP team types and TEAMTYPE.CPP's mission list. Part of rts.rules. */
+
 /* ---------------------------------------------------------- teams (TEAM.CPP) --
    A TeamTypeClass is a COMPOSITION plus a QUARRY. The team recruits until it is at full
    strength, only then moves out, and picks its target by category rather than by "whatever
@@ -4029,6 +4063,10 @@ var RTS_STRAY = 9 * RTS_TILE;
 
 function rtsStructDef(k) { for (var i=0;i<RTS_STRUCTS.length;i++) if (RTS_STRUCTS[i].key===k) return RTS_STRUCTS[i]; return null; }
 function rtsUnitDef(k)   { for (var i=0;i<RTS_UNITS.length;i++)   if (RTS_UNITS[i].key===k)   return RTS_UNITS[i];   return null; }
+
+</script>
+<script>/* rules/triggers.js - TRIGGER/TEVENT/TACTION.CPP: the event and action tables, and the
+   scenario's trigger list. Part of rts.rules, the roster. */
 
 /* ============================================================ triggers ==
    TRIGGER.CPP + TEVENT.CPP + TACTION.CPP. A trigger is EVENT(s) -> ACTION(s), plus rules for
@@ -4158,7 +4196,11 @@ var RTS_TRIGGERS = [
     action2:['playSound', 'alert'] }
 ];
 </script>
-<script>/* RED ALERT - the sprite baker: a tiny 3D renderer that runs once, at load.
+<script>/* r3d/primitives.js - the projection, the lighting constants, and the solids every model
+   is built from: boxes, slabs, cylinders, cones, roofs, plus yaw/scale/bounds.
+   Part of rts.r3d, the little 3D renderer that bakes the sprites. */
+
+/* RED ALERT - the sprite baker: a tiny 3D renderer that runs once, at load.
 
    This is how the games this is modelled on actually made their art. Westwood did not draw
    those units and buildings pixel by pixel - they built them as 3D models, rendered each one
@@ -4415,6 +4457,10 @@ function _r3Bounds(faces) {
   return b;
 }
 
+</script>
+<script>/* r3d/render.js - scanline fill with a depth buffer, then the shading pass.
+   Part of rts.r3d, the little 3D renderer that bakes the sprites. */
+
 /* ------------------------------------------------------------------- render --
    Scanline fill with a per-pixel depth buffer, then a shading pass over the buffers.
 
@@ -4643,6 +4689,10 @@ function _r3Render(faces, W, H, ox, oy) {
    that was built and simply stops it stacking into a tower. It cannot affect footprint
    alignment: the ground plane is not foreshortened at all, so y scaling moves nothing in x
    or z. */
+</script>
+<script>/* r3d/bake.js - fitting a model into a sprite: footprint, centring and a size no facing
+   overflows. Part of rts.r3d, the little 3D renderer that bakes the sprites. */
+
 /* 1.0 now that the models themselves are built low. The squash was a global rescue for
    sixteen models that had each grown into a tower; once they are authored at the reference's
    proportions it is double-counting, and it was flattening the one feature on each building
@@ -4695,10 +4745,13 @@ function _r3FitSize(models, margin) {
   return Math.ceil(r * 2) + margin * 2;
 }
 </script>
-<script>/* RED ALERT - sprite generation: terrain, ore, effects, and the palette everything uses.
+<script>/* sprites/bake.js - the palette, and the plumbing every baked sprite goes through:
+   canvases, shadows, outlines. Part of rts.sprites, the sprite baker. */
+
+/* RED ALERT - sprite generation: terrain, ore, effects, and the palette everything uses.
 
    The structures and units are NOT drawn here - they are 3D models, defined further down
-   and rendered to sprites once at load by rts.r3d.js. That is how the originals were made,
+   and rendered to sprites once at load by src/r3d. That is how the originals were made,
    and it is the reason they have real volume while hand-drawn pixel art of the same subject
    does not. Ground, ore and explosions are still drawn in 2D, because they are flat things.
 
@@ -4929,6 +4982,9 @@ function _sprShadow(cv, dx, dy) {
   t.g.drawImage(cv, 0, 0);
   return t.c;
 }
+
+</script>
+<script>/* sprites/terrain.js - the baked ground: grass, trees, cliffs, water, roads. Part of rts.sprites. */
 
 /* ============================================================ terrain (baked) ==
    The ground used to be one of six 24x24 tiles picked per cell at random. That is what
@@ -5269,6 +5325,9 @@ function _sprTrees() {
   return out;
 }
 
+</script>
+<script>/* sprites/ore.js - ore, in four density stages. Part of rts.sprites. */
+
 /* ------------------------------------------------------------------------ ore --
    Four density stages. Nuggets are drawn wrapped - every cluster is also painted one cell
    left/right/up/down - so clusters run across cell edges and a worked field reads as
@@ -5351,9 +5410,13 @@ function _sprSandbag() {
   return { c: _sprShadow(r.c, 2, 2), head: r.head };
 }
 
+</script>
+<script>/* sprites/models.js - the 3D models for every structure, rendered to a sprite once at load.
+   Part of rts.sprites, the sprite baker. */
+
 /* ============================================================ 3D MODELS ==
    Every structure and unit is a small 3D model, rendered to a sprite once at load by
-   rts.r3d.js. See that file for why: the originals were made exactly this way, and
+   src/r3d. See there for why: the originals were made exactly this way, and
    hand-drawn pixel art does not reproduce the result.
 
    Coordinates are art pixels. A 3x3 building's footprint is 72x72, centred on the origin,
@@ -5843,6 +5906,9 @@ function _sprBuildingClean(key, side) {
   return { c: _sprShadow(r.c, 3, 3), head: r.head };
 }
 
+</script>
+<script>/* sprites/unitmodels.js - the 3D model for every unit, yawed to each facing. Part of rts.sprites. */
+
 /* ------------------------------------------------------------------- units --
    One model per type, yawed to each of eight facings and rendered separately. Because the
    model is rotated in 3D rather than the canvas being rotated in 2D, a tank at 45 degrees
@@ -6274,6 +6340,10 @@ function _sprUnitModel(key, side, prone, part) {
   var sc = _sprUnitScale(key);
   return sc === 1 ? m : _r3Scale(m, sc);
 }
+</script>
+<script>/* sprites/props.js - unit scaling and fit, pads, corpses, scorch, craters, fire, crates and
+   the effect sheet. Part of rts.sprites, the sprite baker. */
+
 /* How much to shrink a unit to land it on RTS_UNIT_SPAN. Measured once per key from the
    UNSCALED model - the memo is seeded with 1 first, so the _sprUnitModel call below reads that
    and returns raw geometry instead of recursing. The union of every variant is measured, not
@@ -6537,6 +6607,10 @@ function _sprFx() {
   return drawn;
 }
 
+</script>
+<script>/* sprites/assemble.js - _rtsSprites: bakes the whole sheet once and hands it back.
+   Part of rts.sprites, the sprite baker. */
+
 function _rtsSprites() {
   if (_RTS_SPR) return _RTS_SPR;
   var S = { ore: _sprOre(RTS_PAL.ore, false), gem: _sprOre(RTS_PAL.gem, true),
@@ -6590,7 +6664,10 @@ function _rtsSprites() {
   return S;
 }
 </script>
-<script>/* RED ALERT - real Red Alert artwork, read from the player's own game files.
+<script>/* mixart/theatres.js - which archives hold what, the full-screen art, and the SHP names
+   for every structure and unit. Part of rts.mixart, the player's own artwork. */
+
+/* RED ALERT - real Red Alert artwork, read from the player's own game files.
 
    Everything else in this project draws its own sprites, because there were no originals to
    draw with. There are now: `ra/mix.js`, `lcw.js`, `blowfish.js` and `shp.js` read the shipped
@@ -6769,6 +6846,9 @@ function _mixWalk(key, side) {
   return out;
 }
 
+</script>
+<script>/* mixart/remap.js - recolouring a side by rewriting a palette range. Part of rts.mixart. */
+
 /* --------------------------------------------------------------- remapping --
    RA recolours a player's units by rewriting a RANGE of palette entries rather than by tinting
    the sprite - indices 80..95 are the team block, and every unit's artwork is drawn using them
@@ -6829,6 +6909,10 @@ function _mixShp(name) {
 }
 
 function _rtsArtReady() { return !!(RTS_MIX.ready && RTS_MIX.pal); }
+
+</script>
+<script>/* mixart/frames.js - which frame of a SHP to draw: buildings, the sea, effects, dying
+   infantry, build-up, moving parts, units, fidgets, the harvester. Part of rts.mixart. */
 
 /* ------------------------------------------------------------- structures --
    A structure SHP's frame 0 is the finished building. The renderer wants the same shape the
@@ -7228,6 +7312,10 @@ function _mixHarvAnim(side) {
   return (_RTS_HARVANIM[side] = { harvest: harvest, dock: dock, pour: pour });
 }
 
+</script>
+<script>/* mixart/load.js - reading the player's files: MIX archives, the palette, the shapes.
+   Part of rts.mixart, the player's own artwork. */
+
 /* ------------------------------------------------------------------ load --
    Handed a list of File objects from a picker. Each is read, parsed, and kept; the palette is
    pulled out of local.mix. Everything is reported rather than assumed, because a player who
@@ -7473,7 +7561,7 @@ function _mixFinish(log, done) {
   done && done(RTS_MIX.ready ? null : RTS_MIX.note, RTS_MIX.note);
 }
 
-/* The picker's change handler. Kept here rather than in rts.ui.js because everything it talks
+/* The picker's change handler. Kept here rather than in src/ui because everything it talks
    to is in this file, and because the whole feature has to be removable in one piece. */
 function rtsMixPicked(input) {
   var note = document.getElementById('rtsMixNote');
@@ -7505,6 +7593,10 @@ function rtsMixPicked(input) {
     }
   });
 }
+
+</script>
+<script>/* mixart/tiles.js - terrain templates, bibs, shroud, trees, ore and debris.
+   Part of rts.mixart, the player's own artwork. */
 
 /* ------------------------------------------------------------------ tiles --
    Terrain templates (.tem) are a different container again: a short header, then `count` tiles
@@ -7784,7 +7876,10 @@ function _mixStamp(d, S, tile, px, pz) {
   }
 }
 </script>
-<script>/* Play on a real Red Alert map.
+<script>/* map/mainmix.js - the template tables: what each terrain template in MAIN.MIX is, and
+   how it maps onto this game's land types. Part of rts.map. */
+
+/* Play on a real Red Alert map.
 
    Everything else on this battlefield is generated, and for cliffs and coastlines that was
    always going to hit a wall: RA's terrain templates carry no orientation. The enum is
@@ -8254,6 +8349,10 @@ var RTS_MAP_LAND = {
   '-': { t: 0, block: 0 }  /* a hole in the template     */
 };
 
+</script>
+<script>/* map/load.js - reading a map (.oramap zip, or loose map.bin + map.yaml), fitting it to
+   the grid and classifying its cells. Part of rts.map. */
+
 /* ------------------------------------------------------------------ load --
    A map arrives either as an .oramap (a zip) or as the loose map.bin + map.yaml pair that a
    zip would have contained. Both are accepted because both are what people actually have. */
@@ -8417,6 +8516,9 @@ function _rtsMapClass(b, mx, my, theatre) {
   return ch || 'c';
 }
 
+</script>
+<script>/* map/build.js - turning a loaded map into the grids a battle runs on. Part of rts.map. */
+
 /* ------------------------------------------------------------------ build --
    Turn the loaded map into the four grids a battle runs on. This happens at LOAD time, not at
    battle start, for one reason: it is where the map can be found unplayable, and a player who
@@ -8537,6 +8639,10 @@ function _rtsMapApply(G) {
   return { player: { tx: M.built.starts.player.tx, tz: M.built.starts.player.tz },
            enemy:  { tx: M.built.starts.enemy.tx,  tz: M.built.starts.enemy.tz } };
 }
+
+</script>
+<script>/* map/starts.js - spawn points, checking the two sides can reach each other, and painting
+   the map onto the terrain layer. Part of rts.map. */
 
 /* ----------------------------------------------------------------- starts --
    Prefer the spawn points the map's author placed; they are chosen with knowledge of the
@@ -9469,7 +9575,7 @@ function _rtsTone(type, f0, f1, dur, peak) {
   o.start(t); o.stop(t + dur + 0.02);
   return g;
 }
-/* NB: named _rtsWaveShaper, not _rtsDist - rts.core.js already owns _rtsDist (distance
+/* NB: named _rtsWaveShaper, not _rtsDist - src/core already owns _rtsDist (distance
    between two entities). Everything here shares one global namespace, and core loads later,
    so the collision silently replaced this function and killed the music with a type error. */
 function _rtsWaveShaper(amount) {
@@ -10137,11 +10243,14 @@ function rtsSndMusicPlaying() { return _RTS_SNDMUS ? _RTS_SNDMUS.name : null; }
    name that was absent before may be present now. The decoded buffers stay valid. */
 function rtsSndReset() { _RTS_SND_MISS = {}; _RTS_SNDTRACKS = null; }
 </script>
-<script>/* RED ALERT - simulation core. Pure game state + logic; no rendering in this file.
-   rts.render.js owns every pixel, rts.ui.js owns the DOM. Keeping the sim renderer-free
-   means the whole battle can be stepped headlessly (which is how it gets verified) - and it
-   is what allowed the renderer to be swapped from three.js to canvas 2D without touching a
-   line of this file.
+<script>/* RED ALERT - the simulation core. src/core is pure game state + logic; there is no rendering
+   anywhere in it. src/render owns every pixel, src/ui owns the DOM. Keeping the sim
+   renderer-free means the whole battle can be stepped headlessly (which is how it gets
+   verified) - and it is what allowed the renderer to be swapped from three.js to canvas 2D
+   without touching a line of it.
+
+   core/grid.js, the first of the twenty: the world grid - tile <-> world maths, passability,
+   A*, and the game-state and treasury accessors everything else reads.
 
    The world is a fixed grid (RTS_N x RTS_N). Structures occupy whole tiles and block
    them; units move continuously and avoid each other with soft separation rather than
@@ -10455,6 +10564,10 @@ function _rtsHarvested(S, n) {
   if (lost > 0) S.spill += lost;
   return lost;
 }
+</script>
+<script>/* core/terrain.js - generating the ground: land types, ore fields, and where the two sides
+   start (SCENARIO.CPP). Part of rts.core, the simulation. */
+
 /* ------------------------------------------------------------------ terrain --
    An earlier map was 62 random 1-3 tile rock rectangles on otherwise empty ground, and it
    looked like a field with gravel on it. The games this is modelled on put a *landscape*
@@ -10776,6 +10889,9 @@ function _rtsLayBase(start, foe, list, side) {
   }
 }
 
+</script>
+<script>/* core/base.js - BASE.CPP: the opponent's prebuilt base blueprint. Part of rts.core. */
+
 /* ------------------------------------------------------------- BASE.CPP: the base blueprint
 
    A base in the originals is not "n refineries and m turrets somewhere near the yard" - it is
@@ -10920,7 +11036,7 @@ function _rtsNewGame(seed, diff) {
      deposit in the middle of the map. */
   /* A real map, if the player loaded one, replaces this whole section: its terrain, its
      passability, its ore and its author's start positions all arrive together, already
-     checked for connectivity when it was loaded. See src/rts.map.js for why cliffs and
+     checked for connectivity when it was loaded. See src/map for why cliffs and
      coastlines have to come from a map rather than from a generator. */
   var _mapStarts = (typeof _rtsMapApply === 'function') ? _rtsMapApply(G) : null;
   if (_mapStarts) {
@@ -10982,6 +11098,9 @@ function _rtsNewGame(seed, diff) {
   _rtsRecalcPower('player'); _rtsRecalcPower('enemy');
   return G;
 }
+
+</script>
+<script>/* core/crates.js - crates: where they appear and what opening one does. Part of rts.core. */
 
 /* ----------------------------------------------------------------- crates --
    CRATE.CPP. Each crate is a slot with a cell and a timer, and the set of slots is fixed:
@@ -11139,6 +11258,10 @@ function _rtsCrateOpen(cr, u) {
   }
   return cr.kind;
 }
+
+</script>
+<script>/* core/supers.js - superweapons (atom bomb, iron curtain, chronosphere, GPS) and the shroud
+   they lift. Part of rts.core, the simulation. */
 
 /* =========================================================== superweapons ==
    Four buildings whose whole output is one button on a timer.
@@ -11463,6 +11586,9 @@ function _rtsEntSeen(e) {
   return e.type === 'struct' ? _rtsSeen(tx, tz) : _rtsVisible(tx, tz);
 }
 
+</script>
+<script>/* core/entities.js - spawning, placing and removing entities. Part of rts.core. */
+
 /* ------------------------------------------------------------- entities */
 function _rtsFootprint(e, on) {
   var G = window._rtsG, d = rtsStructDef(e.def);
@@ -11635,6 +11761,9 @@ function _rtsSpawnUnit(side, key, x, z) {
   G.ents.push(e); G.byId[e.id] = e;
   return e;
 }
+</script>
+<script>/* core/capture.js - MISSION_CAPTURE, wrecks and survivors, repair and sell. Part of rts.core. */
+
 /* ------------------------------------------------------------ capture — MISSION_CAPTURE
 
    An engineer walks into an enemy building and the building changes hands. The unit is spent
@@ -11964,6 +12093,10 @@ function _rtsSell(e) {
      are deciding on. Callers that only want success still get a truthy value. */
   return back;
 }
+</script>
+<script>/* core/transport.js - carrying units: loading, unloading and the transports themselves.
+   Part of rts.core, the simulation. */
+
 /* ------------------------------------------------------------------ transport --
    UNIT.CPP's passenger rules. A boarded passenger stays in G.ents - it is NOT spliced out -
    and carries `inside`, a reference to its transport. Keeping it in the entity list is what
@@ -12214,6 +12347,10 @@ function _rtsAvailable(side, def) {
   for (var i = 0; i < def.needs.length; i++) if (!_rtsHas(side, def.needs[i])) return false;
   return true;
 }
+
+</script>
+<script>/* core/production.js - build queues, placement, orders and the difficulty multipliers.
+   Part of rts.core, the simulation. */
 
 /* --------------------------------------------------------- production */
 function _rtsQueueCat(key) {
@@ -12525,6 +12662,10 @@ function _rtsIQAt(level) { return _rtsBias('enemy').iq >= level; }
 /* CostBias / BuildSpeedBias, applied wherever a price or a build time is read. */
 function _rtsCostOf(side, def) { return Math.round(def.cost * _rtsBias(side).cost); }
 function _rtsBuildTimeOf(side, def) { return Math.max(0.1, def.build * _rtsBias(side).build); }
+
+</script>
+<script>/* core/combat.js - choosing a target and shooting at it: threat evaluation, weapon pick,
+   firing, fear and retaliation. Part of rts.core, the simulation. */
 
 /* ------------------------------------------------------------- combat */
 function _rtsDist(a, b) { return Math.hypot(a.x - b.x, a.z - b.z); }
@@ -12939,6 +13080,9 @@ function _rtsCanRetaliate(tgt, from) {
   var dn = _rtsRangeTo(tgt, from), dc = _rtsRangeTo(tgt, tgt.target);
   return _rtsEvalObject(tgt, from, dn, w) > _rtsEvalObject(tgt, tgt.target, dc, w);
 }
+</script>
+<script>/* core/damage.js - what a hit does: damage, armour, fire and splash. Part of rts.core. */
+
 function _rtsDamage(tgt, dmg, from, floor) {
   if (!tgt || tgt.dead) return;
   /* The Iron Curtain, enforced HERE rather than at the call sites. Every route to hurting
@@ -12946,7 +13090,7 @@ function _rtsDamage(tgt, dmg, from, floor) {
      script - so one check covers all of them, and a route added later cannot forget it. */
   if (tgt.ironT > 0) return;
   /* The dog rule, ahead of every modifier because in the original it replaces the damage
-     rather than scaling it. See `maul` on the bite weapon in rts.rules.js. */
+     rather than scaling it. See `maul` on the bite weapon in src/rules. */
   if (from && from.type === 'unit' && !from.dead) {
     var _fw = RTS_WEAPONS[(rtsUnitDef(from.def) || {}).weapon];
     if (_fw && _fw.maul) {
@@ -13120,6 +13264,10 @@ function _rtsSplash(x, z, rad, dmg, side, spread, from) {
 
    so a helicopter whose pads have all been destroyed comes down. That is what stops air being
    a free permanent army and makes the pad a target worth defending. */
+</script>
+<script>/* core/move.js - getting there: aircraft, path requests, steering and unit separation.
+   Part of rts.core, the simulation. */
+
 function _rtsRearmPad(e) {
   var G = window._rtsG, best = null, bd = 1e9;
   for (var i = 0; i < G.ents.length; i++) {
@@ -13326,6 +13474,10 @@ function _rtsSeparate(dt) {
     }
   }
 }
+</script>
+<script>/* core/units.js - the per-unit tick, overrun, the harvester loop, and the structure and
+   projectile ticks. Part of rts.core, the simulation. */
+
 function _rtsUpdateUnit(e, dt) {
   /* Cargo rides along. Their coordinates are kept in step with the transport rather than left
      where they boarded, so anything that reads a passenger's position - the unload ring, a
@@ -13776,6 +13928,10 @@ function _rtsUpdateProj(dt) {
   }
 }
 
+</script>
+<script>/* core/ai.js - the opponent: what it builds, when it expands and when it attacks.
+   Part of rts.core, the simulation. */
+
 /* ------------------------------------------------------------ enemy AI --
    The build order comes from RULES.CPP's [AI] section, and the important idea there is that
    the AI does not follow a script - it holds a target base COMPOSITION. Each structure type
@@ -14171,6 +14327,10 @@ function _rtsAIAllToHunt() {
    then moves out, and picks its target by CATEGORY rather than by proximity. Replacing the
    old attack wave - which shoved 60-70% of every idle unit at the player's nearest building
    - with this is what stops the opponent fighting as one undifferentiated blob. */
+
+</script>
+<script>/* core/teams.js - TEAM.CPP / TEAMTYPE.CPP: waypoints, recruiting a team and keeping the
+   opponent's teams stocked. Part of rts.core, the simulation. */
 
 /* ------------------------------------------------------- waypoints (TEAMTYPE.CPP) --
    Every waypoint-taking team mission - MOVE, ATT_WAYPT, PATROL - names a place on the map
@@ -14609,6 +14769,10 @@ function _rtsTeamsTick(dt) {
     if (_rtsTeamDoMission(t, dt) === 'gone') continue;
   }
 }
+</script>
+<script>/* core/missions.js - the team mission list (TEAMTYPE.CPP): the script a team runs.
+   Part of rts.core, the simulation. */
+
 /* ----------------------------------------------------- the mission list (TEAMTYPE.CPP) --
    `MissionList[]` with an index walked down it. Each entry is [mission, argument], and the
    argument's meaning comes from TeamMission_Needs (see RTS_TMISSIONS).
@@ -14789,6 +14953,9 @@ function _rtsAIAttack(urgency) {
   return true;
 }
 
+</script>
+<script>/* core/aisupers.js - the opponent firing its own superweapons, and its turn. Part of rts.core. */
+
 /* --------------------------------------------------- the opponent's supers --
    An opponent that builds a missile silo and never fires it is set dressing, so this aims
    them - but only from IQ 4, because "can build one" and "knows what to do with one" are
@@ -14885,6 +15052,10 @@ function _rtsUpdateAI(dt) {
     }
   }
 }
+</script>
+<script>/* core/ore.js - messages, ore growth (TIBERIUM adjacency) and low-power decay.
+   Part of rts.core, the simulation. */
+
 function _rtsSay(m) { var G = window._rtsG; G.msg = m; G.msgT = 4; }
 
 /* Ore regrows into partly-mined tiles and slowly seeds empty neighbours, so a worked-out
@@ -15053,6 +15224,9 @@ function _rtsPowerDamage(dt) {
     }
   }
 }
+
+</script>
+<script>/* core/triggers.js - TRIGGER.CPP: trigger instances, events and actions. Part of rts.core. */
 
 /* ------------------------------------------------------------ main tick */
 /* ========================================================= triggers (TRIGGER.CPP) --
@@ -15356,6 +15530,9 @@ function _rtsTriggersTick(dt) {
   G.justBuilt.enemy.struct = G.justBuilt.enemy.unit = null;
 }
 
+</script>
+<script>/* core/tick.js - _rtsTick: one step of the whole simulation, in order. Part of rts.core. */
+
 function _rtsTick(dt) {
   var G = window._rtsG;
   if (!G || G.over) return;
@@ -15429,12 +15606,15 @@ function _rtsTick(dt) {
   }
 }
 </script>
-<script>/* RED ALERT - render layer. Canvas 2D, sprite-based, pure top-down.
+<script>/* render/camera.js - the renderer's view: zoom, projection, and world <-> screen.
+   Part of rts.render, which owns every pixel. */
+
+/* RED ALERT - render layer. Canvas 2D, sprite-based, pure top-down.
 
    This replaced a three.js renderer. The 3D version was the wrong medium: the games this
    is modelled on are 2D sprite games, and no amount of flattening the camera or shrinking
    footprints makes lit 3D geometry read as 1996 pixel art. The simulation was written with
-   no renderer dependencies precisely so this swap was possible - rts.core.js did not
+   no renderer dependencies precisely so this swap was possible - src/core did not
    change by a single line.
 
    Everything is drawn at sprite resolution (24px per map cell) and blitted with image
@@ -15521,6 +15701,10 @@ function _rtsWorldToScreen(x, y, z) {
    The tile variant per cell has to match what _mixPaintCell chose when the terrain was baked,
    or the sea visibly re-shuffles the moment the overlay starts: same hash, same seed, same
    `+137`. That coupling is the price of not re-baking a 3072x3072 canvas four times a second. */
+
+</script>
+<script>/* render/post.js - the light pass, water and shroud tiles, picking, and the colour cycle.
+   Part of rts.render, which owns every pixel. */
 
 /* ------------------------------------------------------------ the light pass --
    Everything above draws flat: each sprite is composited at full opacity over the one behind
@@ -15799,6 +15983,10 @@ function _rtsEmber() {
   var k = _rtsPulse();
   return 'rgb(' + Math.round(255 * k) + ',' + Math.round(80 * k) + ',' + Math.round(80 * k) + ')';
 }
+
+</script>
+<script>/* render/frame.js - _rtsRFrame: drawing one frame of the battlefield, back to front.
+   Part of rts.render, which owns every pixel. */
 
 /* --------------------------------------------------------------- the frame */
 function _rtsRFrame(dt) {
@@ -16127,6 +16315,10 @@ function _rtsRFrame(dt) {
   _rtsPost(g);
 }
 
+
+</script>
+<script>/* render/draw.js - drawing one structure or one unit, including their animations.
+   Part of rts.render, which owns every pixel. */
 
 /* Which frame of an animated building to draw right now.
 
@@ -16469,6 +16661,10 @@ function _rtsDrawStructAnim(g, e, def, px, top, w, h, cell) {
   }
 }
 
+</script>
+<script>/* render/icons.js - radar blips, the placement ghost, resize/dispose, and sidebar icons.
+   Part of rts.render, which owns every pixel. */
+
 /* ------------------------------------------------------------ radar icons --
    CONQUER.CPP's Get_Radar_Icon builds a radar blip by DOWNSAMPLING THE REAL SHAPE - three
    samples per map cell, each taking the first non-transparent pixel found across a nine-tap
@@ -16570,7 +16766,10 @@ function _rtsMakeIcons(side) {
   return out;
 }
 </script>
-<script>/* RED ALERT - UI + input + the main loop.
+<script>/* ui/shell.js - opening and closing a battle, and keeping the canvases the right size.
+   Part of rts.ui, which owns the DOM. */
+
+/* RED ALERT - UI + input + the main loop.
 
    Layout is the classic one: battlefield on the left, a fixed command sidebar on the
    right holding credits, power, radar and the build tiles. Selection brackets, health bars
@@ -16753,6 +16952,10 @@ function _rtsWatchSize() {
   });
   U.ro.observe(st);
 }
+
+</script>
+<script>/* ui/sidebar.js - the sidebar: tabs, the build list, and the superweapon buttons.
+   Part of rts.ui, which owns the DOM. */
 
 /* ------------------------------------------------------------- sidebar */
 /* THE TABS ARE THE ROSTER'S INDEX, and there must be one for every kind of thing that can be
@@ -17182,6 +17385,10 @@ function _rtsSyncSidebar(dt) {
 }
 function rtsRestart() { rtsClose(); setTimeout(function () { rtsOpen(); }, 60); }
 
+</script>
+<script>/* ui/input.js - binding pointer, touch and keyboard input, and what each key does.
+   Part of rts.ui, which owns the DOM. */
+
 /* --------------------------------------------------------------- input */
 function _rtsBindInput() {
   var cv = document.getElementById('rtsCv'), U = window._rtsUI;
@@ -17601,6 +17808,10 @@ function _rtsKeyUp(e) {
   U.keys[(e.key || '').toLowerCase()] = false;
   if (e.key === 'a' || e.key === 'A') U.attackMove = false;
 }
+</script>
+<script>/* ui/select.js - selection (band, double-click, hotkeys, cycling), right-click orders and
+   placement. Part of rts.ui, which owns the DOM. */
+
 /* DISPLAY.CPP's Is_Players_Army: player-controlled, selectable, and NOT a building. Every
    bulk selection in the originals is filtered through it, which is why a rubber band dragged
    across your base grabs the tanks parked in it and leaves the barracks alone. One predicate,
@@ -17799,6 +18010,10 @@ function _rtsTryPlace(mx, my) {
   G.sides.player.ready = null; G.sides.player.readyPaid = null;
   U.place = null; _rtsGhostHide();
 }
+
+</script>
+<script>/* ui/hud.js - the HUD overlay: readouts, the action cursor and the radar minimap.
+   Part of rts.ui, which owns the DOM. */
 
 /* ------------------------------------------------------------ HUD draw */
 function _rtsDrawHud(dt) {
@@ -18039,6 +18254,10 @@ function _rtsDrawMini() {
   g.lineWidth = 1.5;
   g.strokeRect((f.x - vw / 2) / span * S + S / 2, (f.z - vh / 2) / span * S + S / 2, vw / span * S, vh / span * S);
 }
+
+</script>
+<script>/* ui/camera.js - panning and clamping the view, and the main loop that drives a frame.
+   Part of rts.ui, which owns the DOM. */
 
 /* -------------------------------------------------------------- camera */
 function _rtsPanTick(dt) {
@@ -18515,7 +18734,14 @@ function rtsLoadGame() {
 }
 </script>
 
-<script>
+<script>/* title.js - the standalone shell around the game: the title screen, the difficulty picker,
+   the file pickers, RESUME BATTLE, the install prompt, and the START button.
+
+   This lived inline in index.skeleton.html, which meant build.py's syntax gate and its
+   duplicate-name check - both of which walk the files the skeleton INCLUDES - never saw a
+   line of it. A parse error in here ships as a blank white page, which is the exact failure
+   that gate exists to prevent. It loads last, after every subsystem it calls. */
+
 /* ---- standalone shell wiring ---- */
 window._RTS_STANDALONE = true;
 

@@ -10,9 +10,11 @@ var { Suite } = require('../lib/assert.js');
 var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('rules');
-/* rts.ui.js is loaded for RTS_TABS alone - the roster's index lives with the sidebar that draws
-   it. Neither file touches the DOM at load time; the sandbox's document throws if either tries. */
-var g = load(['src/rts.rules.js', 'src/rts.ui.js', 'src/rts.core.js']);
+/* src/ui is loaded for RTS_TABS alone - the roster's index lives with the sidebar that draws
+   it. Nothing here touches the DOM at load time; the sandbox's document throws if it tries.
+   These are directories: naming the subsystem gets every part of it in load order, so a spec
+   cannot fall behind a file that was added or split. */
+var g = load(['src/rules', 'src/ui', 'src/core']);
 
 var UNITS = g.RTS_UNITS, STRUCTS = g.RTS_STRUCTS, WEAPONS = g.RTS_WEAPONS;
 var structKeys = {}, unitKeys = {};

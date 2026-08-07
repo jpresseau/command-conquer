@@ -17,6 +17,47 @@ var vm = require('vm');
 
 var ROOT = path.resolve(__dirname, '..', '..');
 
+/* Every source the page inlines, in the order it inlines them - read out of the skeleton
+   rather than listed here, for the same reason build.py discovers its own list: a hand-written
+   copy falls behind the moment a file is added, and the way it fails is a test that quietly
+   stops covering something.
+
+   Subsystems are directories now (src/core, src/rules, ...), so a spec names the directory and
+   gets every part of it, in load order. That is the whole point: splitting rts.core.js into
+   twenty files must not mean twenty paths in twenty specs, each of which can go stale. */
+var _INC = null;
+function sources() {
+  if (_INC) return _INC;
+  var sk = fs.readFileSync(path.join(ROOT, 'src', 'index.skeleton.html'), 'utf8');
+  var re = /@@(?:INC|CSS):([\w./-]+)@@/g, m, out = [];
+  while ((m = re.exec(sk))) {
+    if (!/\.js$/.test(m[1])) continue;
+    out.push(path.relative(ROOT, path.resolve(ROOT, 'src', m[1])));
+  }
+  return (_INC = out);
+}
+
+/* A path that is a directory expands to its sources in load order; a file stays itself. */
+function expand(rel) {
+  var full = path.join(ROOT, rel);
+  if (fs.existsSync(full) && fs.statSync(full).isDirectory()) {
+    var pre = rel.replace(/\/*$/, '') + path.sep;
+    var hit = sources().filter(function (s) { return s.indexOf(pre) === 0; });
+    if (!hit.length) throw new Error(rel + ' is not inlined by the skeleton');
+    return hit;
+  }
+  return [rel];
+}
+
+/* The concatenated text of a source or a whole subsystem. For the handful of assertions that
+   are about what the source SAYS - a name that must appear, a call that must not - rather than
+   about what it does. */
+function read(rel) {
+  return expand(rel).map(function (f) {
+    return fs.readFileSync(path.join(ROOT, f), 'utf8');
+  }).join('\n');
+}
+
 function load(files, extra) {
   var sandbox = {
     console: console, Math: Math, JSON: JSON, Date: Date,
@@ -51,7 +92,9 @@ function load(files, extra) {
   if (extra) for (var k in extra) sandbox[k] = extra[k];
 
   var ctx = vm.createContext(sandbox);
-  files.forEach(function (rel) {
+  var flat = [];
+  files.forEach(function (rel) { flat = flat.concat(expand(rel)); });
+  flat.forEach(function (rel) {
     var src = fs.readFileSync(path.join(ROOT, rel), 'utf8');
     try { vm.runInContext(src, ctx, { filename: rel }); }
     catch (e) { throw new Error('loading ' + rel + ': ' + e.message); }
@@ -59,4 +102,4 @@ function load(files, extra) {
   return sandbox;
 }
 
-module.exports = { load: load, ROOT: ROOT };
+module.exports = { load: load, read: read, sources: sources, expand: expand, ROOT: ROOT };

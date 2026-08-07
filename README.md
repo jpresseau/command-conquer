@@ -88,16 +88,23 @@ python3 build.py      # reassembles index.html from src/
 
 Edit the files under `src/`, run the build, commit the regenerated `index.html`.
 
-| File | What it owns |
+Each subsystem is a directory of small files, concatenated in the order
+`src/index.skeleton.html` lists them. Nothing runs at load - every file is declarations only -
+so a new file is one `//@@INC:` line and the order is for readability, not correctness.
+
+| Where | What it owns |
 | --- | --- |
-| `src/rts.rules.js` | **Every balance number.** Retune the game here and nowhere else. |
-| `src/rts.r3d.js` | The sprite baker: a small 3D rasteriser, run once at load |
-| `src/rts.sprites.js` | Palette, terrain bake, ore, effects, and the 3D models |
+| `src/rules/` | **Every balance number.** Retune the game here and nowhere else. |
+| `src/r3d/` | The sprite baker: a small 3D rasteriser, run once at load |
+| `src/sprites/` | Palette, terrain bake, ore, effects, and the 3D models |
+| `src/mixart/`, `src/map/` | Real Red Alert artwork and maps, read from the player's own files |
 | `src/rts.audio.js` | All sound and music |
-| `src/rts.core.js` | Simulation: grid, A\* pathfinding, combat, economy, enemy AI. Renderer-free, so a battle can be stepped headlessly. |
-| `src/rts.render.js` | Canvas 2D. Reads the sim, never writes it. |
-| `src/rts.ui.js` | Sidebar, radar, HUD overlay, input, main loop |
-| `src/index.skeleton.html` | Page shell and title screen |
+| `src/core/` | Simulation: grid, A\* pathfinding, combat, economy, enemy AI. Renderer-free, so a battle can be stepped headlessly. |
+| `src/render/` | Canvas 2D. Reads the sim, never writes it. |
+| `src/ui/` | Sidebar, radar, HUD overlay, input, main loop |
+| `src/title.js` | Title screen, difficulty picker, file pickers, START |
+| `src/index.skeleton.html` | The page shell and the include manifest - no JavaScript of its own |
+| `ra/` | The file-format readers: MIX, SHP, LCW, Blowfish, PCX, AUD, ISO, zip |
 
 `build.py` fails the build on three things worth keeping: a syntax error in any source, two files
 defining the same top-level name (everything shares one global scope, so a duplicate silently
@@ -105,16 +112,22 @@ overwrites), and any external resource reference sneaking into the page.
 
 ## Testing
 
-There is no test suite; verification is a headless browser. With Playwright installed:
+```sh
+node test/run.js          # rebuilds, then runs everything
+node test/run.js unit     # the fast half - plain node, no browser
+```
+
+`test/unit/` is plain node against the source; `test/e2e/` is Playwright against the **built**
+`index.html`. `test/README.md` has the details.
+
+Because `src/core/` has no rendering in it, a full battle can be simulated far faster than real
+time - which is how the balance claims below are measured:
 
 ```js
-// serve the repo root, load /, then drive the real game:
 await page.click('#rtsGo');
 await page.evaluate(() => { for (let i = 0; i < 60 * 300; i++) _rtsTick(1 / 60); });
 ```
-
-Because `rts.core.js` has no rendering in it, a full battle can be simulated far faster than real
-time. Things worth re-checking after a balance change: a passive player should be overrun in a few
+ Things worth re-checking after a balance change: a passive player should be overrun in a few
 minutes, a player who masses forces should be able to destroy the enemy base, and forty units
 ordered across the map should all arrive.
 

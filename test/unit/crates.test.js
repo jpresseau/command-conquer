@@ -17,11 +17,11 @@
 var fs = require('fs');
 var path = require('path');
 var { Suite } = require('../lib/assert.js');
-var { load } = require('../lib/sandbox.js');
+var { load, read: srcText } = require('../lib/sandbox.js');
 
 var S = new Suite('crates');
 var ROOT = path.resolve(__dirname, '..', '..');
-var g = load(['src/rts.rules.js', 'src/rts.ui.js', 'src/rts.core.js']);
+var g = load(['src/rules', 'src/ui', 'src/core']);
 
 var CR = g.RTS_CRATES, CAP = g.RTS_CRATE_CAP;
 var unitKeys = {};
@@ -115,7 +115,7 @@ S.note(CR.length + ' crate kinds, total weight ' +
    celebrates and does nothing. rtsCrateMult(e, what) is the only reader, so the `what` strings
    it is called with ARE the set of modifiers the game honours. */
 (function () {
-  var src = fs.readFileSync(path.join(ROOT, 'src', 'rts.core.js'), 'utf8');
+  var src = srcText('src/core');
   var read = {};
   (src.match(/rtsCrateMult\(\s*[A-Za-z_$][\w$.]*\s*,\s*'([a-z]+)'/g) || []).forEach(function (m) {
     read[m.replace(/.*'([a-z]+)'.*/, '$1')] = 1;
