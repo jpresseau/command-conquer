@@ -970,7 +970,22 @@ function _rtsCrateOpen(cr, u) {
     say('Map data recovered.');
     ping('place');
   } else if (cr.kind === 'unit') {
-    var key = RTS_CRATE_UNITS[(_rtsCrateRnd(G)() * RTS_CRATE_UNITS.length) | 0];
+    /* FILTERED BY THE ARMY THAT OPENED IT. RTS_CRATE_UNITS is a shared list and the Light Tank
+       on it is Allied-only, so a Soviet player could be handed a hull that is not in their
+       sidebar, that they cannot replace, and that their own army does not field. The same
+       shape as a team type calling for a unit its house cannot raise, and the same fix the
+       AI's base plan already uses: list both armies' entries and drop the other one's at the
+       point of use (see _rtsCanQueue and the note on RTS_AI.buildOrder).
+
+       The draw still consumes exactly one number from the crate stream whatever the pool ends
+       up being, so this cannot shift any other roll in the match. */
+    var army = (typeof rtsHouseSide === 'function') ? rtsHouseSide(u.side) : null;
+    var pool = RTS_CRATE_UNITS.filter(function (k) {
+      var ud = rtsUnitDef(k);
+      return ud && (!army || rtsBuildableBy(ud, army));
+    });
+    if (!pool.length) pool = RTS_CRATE_UNITS;      /* never hand back nothing */
+    var key = pool[(_rtsCrateRnd(G)() * pool.length) | 0];
     var got = _rtsSpawnUnit(u.side, key, _rtsWX(cr.tx), _rtsWX(cr.tz));
     say('Abandoned ' + rtsUnitDef(key).name + ' recovered.');
     ping('unitready');
