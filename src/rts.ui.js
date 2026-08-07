@@ -109,7 +109,7 @@ function rtsOpen(seed) {
   if (_load) _rtsSay('Battle resumed.');
   else _rtsSay(rtsArmyName('player') + ' command online. Build a Refinery to start earning.');
   _rtsUI.last = (new Date()).getTime();
-  _rtsLoop();
+  _rtsLoop(true);        /* paint the first frame; see the note on _rtsLoop */
 }
 
 function rtsClose() {
@@ -1509,7 +1509,11 @@ function _rtsClampFocus() {
 }
 
 /* ----------------------------------------------------------- main loop */
-function _rtsLoop() {
+/* `prime` is passed as the literal `true` by rtsOpen's one hand-made call, and the check below
+   tests for exactly that - NOT for truthiness. requestAnimationFrame hands its callback a
+   timestamp, so every real frame would arrive with a large truthy number in this slot and a
+   loose test would switch the simulation off for the whole match. */
+function _rtsLoop(prime) {
   var U = window._rtsUI;
   if (!U || U.dead) return;
   U.raf = requestAnimationFrame(_rtsLoop);
@@ -1517,7 +1521,28 @@ function _rtsLoop() {
   U.last = now;
   try {
     _rtsPanTick(dt);
-    _rtsTick(dt);
+    /* THE FIRST FRAME PAINTS, IT DOES NOT SIMULATE. rtsOpen calls this once by hand to put an
+       image on screen and start the rAF chain; no game time has passed at that point and the
+       tick has nothing to do.
+
+       Almost everything in a tick is scaled by dt, so a near-zero step is harmless to it. The
+       unit separation pass is not: it shoves overlapping units apart by a fixed distance every
+       time it runs, whatever the clock says. So the priming frame quietly displaced every
+       crowded unit before the player saw anything.
+
+       On a fresh battle that is invisible. On a LOADED one it is not: _rtsApplyState restores
+       every position exactly, and then this frame moved eleven of thirty-four units by up to
+       0.12 world units - measured - so the resumed battle was never quite the battle that was
+       saved, and ninety seconds later it had diverged into a different game.
+
+       Guarding on `dt > 0` alone was not enough, and that is worth keeping in mind: rtsOpen
+       sets U.last and calls straight in, so on an idle machine the two statements land in the
+       same millisecond and dt really is 0 - but on a busy one a millisecond or two elapses
+       between them, dt becomes 0.001, and the frame simulates after all. The suite caught it
+       exactly that way: the spec passed alone and failed inside the full run. Timing is not a
+       guard; saying which call it is, is. The dt test stays as well, because two real frames
+       can share a millisecond on a fast display and that step has nothing to do either. */
+    if (dt > 0 && prime !== true) _rtsTick(dt);
     _rtsRFrame(dt);
     _rtsDrawHud(dt);
     U.miniT = (U.miniT || 0) + dt;

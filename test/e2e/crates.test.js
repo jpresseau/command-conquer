@@ -357,18 +357,32 @@ var S = new Suite('crates');
   /* ------------------------------------------------------------- determinism ----
      Crates draw from their OWN generator, which the source is emphatic about: placing them off
      the main stream is what keeps a seeded match comparable with the run before it. The
-     observable half of that is that the same seed lays out the same crates. */
+     observable half of that is that the same seed lays out the same crates.
+
+     THE MATCH HAS TO BE CLOSED FIRST. rtsOpen returns immediately if a battle is already on
+     screen - `if (document.getElementById('rcgRts')) return;` - so calling it mid-match is a
+     no-op, and the first version of this compared the CURRENT crate list to itself and passed
+     without starting anything. Measured after the fact: seed still 7, t still 10, the same G
+     object back. That is exactly the vacuous pass this suite says it will not do, and the
+     control below is what stops it happening again - if a different seed ever produced the
+     same layout, the comparison above has stopped comparing. */
   var det = await g.page.evaluate(function () {
-    function layout() {
-      rtsOpen(11);
+    function layout(seed) {
+      if (document.getElementById('rcgRts')) rtsClose();
+      rtsOpen(seed);
       var G = window._rtsG;
-      return (G.crates || []).map(function (c) { return c.kind + '@' + c.tx + ',' + c.tz; }).join(' ');
+      return { seed: G.seed, t: +G.t.toFixed(2),
+               crates: (G.crates || []).map(function (c) { return c.kind + '@' + c.tx + ',' + c.tz; }).join(' ') };
     }
-    var a = layout(), b = layout();
-    return { a: a, b: b };
+    return { a: layout(11), b: layout(11), other: layout(12) };
   });
-  S.eq('the same seed lays out the same crates', det.a, det.b);
-  S.ok('...and there is something to compare', det.a.length > 0, det.a);
+  S.eq('opening seed 11 really starts seed 11', det.a.seed, 11);
+  S.eq('...from the beginning of a match', det.a.t, 0);
+  S.ok('...with crates on the map', det.a.crates.length > 0, det.a.crates);
+  S.eq('the same seed lays out the same crates', det.b.crates, det.a.crates);
+  S.ok('...and a different seed does not, so that comparison means something',
+       det.other.crates !== det.a.crates,
+       'seed 12: ' + det.other.crates);
 
   S.ok('the page logged no errors throughout', !g.errors.length,
        g.errors.slice(0, 3).join(' | ') || 'clean');

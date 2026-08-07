@@ -88,6 +88,17 @@ whole match. It checks that a kill goes to whoever caused it, that nobody is cre
 nobody caused (a booby trap, the opponent's own artillery), and that a readout labelled *units*
 counts units.
 
+`e2e/determinism` asks the two questions everything else here assumes an answer to: does the same
+seed play out the same way twice, and does resuming a save give back the battle that was saved?
+Every measurement in the repo rests on the first — the ladder quotes mean survival to the second —
+and nothing was checking it. Both are compared on a hash of the whole live state rather than a
+summary that could agree while the games differ, and a **different** seed is hashed alongside, so
+that if the comparison ever stops comparing anything the spec says so instead of passing.
+
+Note the shape of `_DT.open`: it closes any battle already on screen first. `rtsOpen` returns
+immediately when one is up, so without that close a second run is a no-op handing back the first
+run's state — which is exactly how an assertion in `e2e/crates` came to compare a list to itself.
+
 `e2e/audio` measures **sound**, not function calls. Headless Chromium runs WebAudio for real, so
 a `ScriptProcessor` is tapped onto the master bus and the samples are read back: every effect the
 game dispatches must produce signal, an off-screen shot must produce none, muting must silence
