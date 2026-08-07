@@ -81,6 +81,13 @@ spawn all look identical from outside. It checks the credits, the hit points, th
 entity list and the damage, and then that armour really divides incoming damage and an engine tune
 really covers more ground.
 
+`e2e/scoreboard` holds the two numbers the end screen prints to being true. "Enemy units
+destroyed · Units lost" is the one readout with no way for a player to check it — nobody can count
+what died off-screen — so a wrong number here is not a visible bug but a quiet lie that lasts the
+whole match. It checks that a kill goes to whoever caused it, that nobody is credited for a death
+nobody caused (a booby trap, the opponent's own artillery), and that a readout labelled *units*
+counts units.
+
 `e2e/audio` measures **sound**, not function calls. Headless Chromium runs WebAudio for real, so
 a `ScriptProcessor` is tapped onto the master bus and the samples are read back: every effect the
 game dispatches must produce signal, an off-screen shot must produce none, muting must silence

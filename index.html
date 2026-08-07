@@ -767,7 +767,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">63f7f45 · 2026-08-07</div>
+  <div id="rtsBuild" title="build">c6c1447 · 2026-08-07</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -11833,8 +11833,21 @@ function _rtsKill(e) {
   }
   _rtsTrigNotify('destroyed', e, null);
   /* WhoLastHurtMe: a thing that burns to death is still someone's kill. Scoring it off the
-     victim's side alone credited the player for units the AI's own fires finished off. */
-  if (e.side === 'enemy' && (!e.hurtBy || e.hurtBy === 'player')) G.stats.killed++;
+     victim's side alone credited the player for units the AI's own fires finished off.
+
+     The `!e.hurtBy` half of that test was doing the same damage from the other end, and this
+     is the line the end-of-match screen prints as "Enemy units destroyed". Nothing that died
+     to an explosion recorded an attacker - _rtsSplash never read the side it was handed - so
+     the fallback handed EVERY blast death to the player: a crate booby trap going off under
+     an enemy soldier, the opponent's own artillery splashing its own infantry, an enemy
+     aircraft crashing for want of a pad. All three measured as a player kill. Now that a
+     blast records who set it off, the test can ask the question it meant to.
+
+     And it counts UNITS, the way `lostU` two lines up already did. Without the filter a
+     number labelled "units destroyed" was also counting every enemy building, so the two
+     halves of the same readout were not measuring the same kind of thing. A sold building is
+     not a kill either, which the loss counter above says in its own comment. */
+  if (e.side === 'enemy' && e.type === 'unit' && !e.selling && e.hurtBy === 'player') G.stats.killed++;
   var si = G.sel.indexOf(e); if (si >= 0) G.sel.splice(si, 1);
   /* SIDEBAR.CPP Recalc is only called when a FACTORY is destroyed - it is an exhaustive
      sweep and the comment is explicit that it should not run for every casualty. */
@@ -13076,6 +13089,18 @@ function _rtsSplash(x, z, rad, dmg, side, spread, from) {
     var steps = _rtsSplashSteps(d, spread, o, tx, tz);
     var hit = steps ? dmg / steps : dmg;
     if (steps >= RTS_SPREAD_FLOOR && hit < RTS_MIN_DAMAGE) continue;   /* allowed to be nothing */
+    /* WHO SET THIS OFF. `side` has been a parameter of this function all along and was never
+       read, so no explosion in the game attributed itself to anybody: every splash death was
+       recorded as having no attacker. That is invisible in combat - nothing reads hurtBy but
+       the scoreboard - and it made the scoreboard wrong in both directions at once. Set
+       BEFORE the damage, because a killing blow runs the death handler from inside
+       _rtsDamage and that is what reads it.
+
+       Deliberately not passed as the `from` entity: _rtsDamage would then award `kills`,
+       which feeds the threat weighting in _rtsEvalObject and would move the difficulty
+       ladder. Attribution for the scoreboard is the whole of what is wanted here; a blast
+       staying nobody's KILL is the existing behaviour and stays. */
+    if (side) o.hurtBy = side;
     _rtsDamage(o, hit, null, steps < RTS_SPREAD_FLOOR);
   }
   /* IsTiberiumDestroyer: Reduce_Tiberium(strength / 10). Shelling an ore field destroys it. */
