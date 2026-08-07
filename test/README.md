@@ -65,6 +65,14 @@ an event that reads its argument's house rather than its owner's. `RTS_TRIGGERS`
 the spec pushes a trigger, drives it, and takes it away again — which is the only way to reach the
 rules the shipped list never exercises.
 
+`e2e/navair` covers the two domains together, because sea and air are the same feature twice:
+units that move where nothing else can, held up entirely by restrictions. A ship that could drive
+onto land, a torpedo that could climb a beach, a tank that could shoot down a plane — each of them
+stops being a domain and becomes a strictly better land game. Every restriction is one `continue`
+in a loop or one branch in a passability test, which is to say a line that can be deleted without
+anything failing to run. Naval had no spec at all, and writing one found a ship that sailed onto
+dry land and parked there.
+
 `e2e/audio` measures **sound**, not function calls. Headless Chromium runs WebAudio for real, so
 a `ScriptProcessor` is tapped onto the master bus and the samples are read back: every effect the
 game dispatches must produce signal, an off-screen shot must produce none, muting must silence
