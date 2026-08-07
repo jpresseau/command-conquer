@@ -32,6 +32,7 @@ are genuinely modular:
 | `r3d` | the sprite baker's geometry half: the oblique projection (`x` unchanged, `z − K·y`, ground deliberately **not** foreshortened), the shape builders, yaw and scale as pure transforms that must not edit the model handed to them, and the colour ramp — which exists to keep a shadow coloured instead of letting it slide to grey, so the test is "does it stay saturated", not "does it get darker" |
 | `audio` | the sound tables, whose only failure mode is silence: every EVA line, unit voice and death cry resolves in the identity table, every voice pool expands to takes that exist, every effect the game dispatches has something to play, and no retrigger gap or sampled mapping is left pointing at an effect that is gone |
 | `scenario` | the two tables read as scripts — team mission lists and triggers. Every mission, event, action, waypoint, quarry, team and unit name resolves; every argument is the kind its own table's `need` declares; every `loop` jumps inside its own script; and the two invariants the source states in prose hold — the autocreate split has both halves populated, and the shipped trigger list stays balance-neutral, which is what the ladder measurements assume |
+| `crates` | the crate table: weights, and the caps — whose *direction* is the subtle part, since `rof` is clamped with `Math.max` because lower is faster, so a cap written above 1 turns a bonus into a penalty without failing. Plus the check this file exists for: every modifier a crate grants is read back somewhere, because one that is stored and never consulted still announces itself, plays its sound and does nothing |
 | `sw` | the service worker's contract as stated in its own source — never calls `respondWith`, never touches the Cache API, keeps the fetch handler that makes the app installable — plus a manifest whose every URL is relative, because the app is deployed under a path. A universal claim no finite set of requests can establish, which is the one case where reading the source beats driving it |
 
 `lib/sandbox.js` is what makes those possible. The game is browser globals concatenated
@@ -72,6 +73,13 @@ stops being a domain and becomes a strictly better land game. Every restriction 
 in a loop or one branch in a passability test, which is to say a line that can be deleted without
 anything failing to run. Naval had no spec at all, and writing one found a ship that sailed onto
 dry land and parked there.
+
+`e2e/crates` opens each of the nine kinds and measures the **effect**, not the message. Every
+crate announces itself the same way — a line of text, a sound, the crate gone — so a bonus that
+was stored and never read, a reveal that lifted nobody's shroud and a free vehicle that failed to
+spawn all look identical from outside. It checks the credits, the hit points, the shroud, the
+entity list and the damage, and then that armour really divides incoming damage and an engine tune
+really covers more ground.
 
 `e2e/audio` measures **sound**, not function calls. Headless Chromium runs WebAudio for real, so
 a `ScriptProcessor` is tapped onto the master bus and the samples are read back: every effect the
