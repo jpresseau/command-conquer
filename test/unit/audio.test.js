@@ -23,7 +23,7 @@
 var fs = require('fs');
 var path = require('path');
 var { Suite } = require('../lib/assert.js');
-var { load } = require('../lib/sandbox.js');
+var { load, read: srcText } = require('../lib/sandbox.js');
 
 var S = new Suite('audio');
 var ROOT = path.resolve(__dirname, '..', '..');
@@ -101,11 +101,9 @@ checkNames('the infantry death cries', g.RTS_DEATH_CRIES);
    DISPATCHES has to be a subset of the set the dispatcher HANDLES, and the only honest way to
    know the first set is to read the call sites out of the source. */
 (function () {
-  var srcFiles = ['src/rts.core.js', 'src/rts.ui.js', 'src/rts.render.js', 'src/rts.store.js',
-                  'src/rts.editor.js', 'src/rts.map.js'];
-  var src = srcFiles.map(function (f) {
-    try { return fs.readFileSync(path.join(ROOT, f), 'utf8'); } catch (e) { return ''; }
-  }).join('\n');
+  var srcFiles = ['src/core', 'src/ui', 'src/render', 'src/rts.store.js',
+                  'src/rts.editor.js', 'src/map', 'src/title.js'];
+  var src = srcFiles.map(function (f) { return srcText(f); }).join('\n');
 
   /* Reading the dispatched names off the call sites needs a little care, and getting it wrong
      in either direction makes this check worthless:
@@ -162,7 +160,7 @@ checkNames('the infantry death cries', g.RTS_DEATH_CRIES);
        unresolved.join(', ') + ' - these are checked at runtime by e2e/audio instead')
     : 'every call site names its sound literally');
 
-  var audio = fs.readFileSync(path.join(ROOT, 'src/rts.audio.js'), 'utf8');
+  var audio = srcText('src/rts.audio.js');
   var handled = {};
   (audio.match(/name === '([a-z0-9]+)'/g) || []).forEach(function (s) {
     handled[s.replace(/.*'([a-z0-9]+)'.*/, '$1')] = 1;

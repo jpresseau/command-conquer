@@ -33,12 +33,20 @@ are genuinely modular:
 | `audio` | the sound tables, whose only failure mode is silence: every EVA line, unit voice and death cry resolves in the identity table, every voice pool expands to takes that exist, every effect the game dispatches has something to play, and no retrigger gap or sampled mapping is left pointing at an effect that is gone |
 | `scenario` | the two tables read as scripts — team mission lists and triggers. Every mission, event, action, waypoint, quarry, team and unit name resolves; every argument is the kind its own table's `need` declares; every `loop` jumps inside its own script; and the two invariants the source states in prose hold — the autocreate split has both halves populated, and the shipped trigger list stays balance-neutral, which is what the ladder measurements assume |
 | `crates` | the crate table: weights, and the caps — whose *direction* is the subtle part, since `rof` is clamped with `Math.max` because lower is faster, so a cap written above 1 turns a bonus into a penalty without failing. Plus the check this file exists for: every modifier a crate grants is read back somewhere, because one that is stored and never consulted still announces itself, plays its sound and does nothing |
+| `layout` | the source tree itself, whose two failure modes are both silent: a file in `src/` the skeleton does not include reads like live code and ships nothing, and an inline `<script>` in the skeleton is JavaScript that neither the syntax gate nor the duplicate-name check ever sees - 344 lines of the standalone shell sat in exactly that blind spot until it was lifted into `src/title.js`. Plus the 500-line cap that keeps each subsystem a directory of small files instead of drifting back into one large one |
 | `sw` | the service worker's contract as stated in its own source — never calls `respondWith`, never touches the Cache API, keeps the fetch handler that makes the app installable — plus a manifest whose every URL is relative, because the app is deployed under a path. A universal claim no finite set of requests can establish, which is the one case where reading the source beats driving it |
 
 `lib/sandbox.js` is what makes those possible. The game is browser globals concatenated
 by `build.py` — there is nothing to `import` — so those files are evaluated in a `vm` context
 with a shim thin enough that anything reaching for a real DOM **throws** instead of quietly
 returning `undefined` and letting a test pass for the wrong reason.
+
+`load()` takes **directories** as well as files: `load(['src/rules', 'src/core'])` pulls in every
+part of those subsystems, in the order the skeleton includes them, read out of the skeleton
+rather than listed in the spec. A hand-written list of twenty paths falls behind the first time
+a file is added or split, and it does it quietly - the spec keeps passing on less than it used
+to cover. `read()` does the same for the handful of assertions that are about what the source
+*says* rather than what it does.
 
 **`e2e/`** — Playwright against the **built** `index.html`. The build reassembles ~30 source
 files into one page, so a spec that read `src/` would prove nothing about the artifact a player

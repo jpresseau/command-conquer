@@ -72,7 +72,7 @@ function _rtsTone(type, f0, f1, dur, peak) {
   o.start(t); o.stop(t + dur + 0.02);
   return g;
 }
-/* NB: named _rtsWaveShaper, not _rtsDist - rts.core.js already owns _rtsDist (distance
+/* NB: named _rtsWaveShaper, not _rtsDist - src/core already owns _rtsDist (distance
    between two entities). Everything here shares one global namespace, and core loads later,
    so the collision silently replaced this function and killed the music with a type error. */
 function _rtsWaveShaper(amount) {

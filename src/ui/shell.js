@@ -1,0 +1,187 @@
+/* ui/shell.js - opening and closing a battle, and keeping the canvases the right size.
+   Part of rts.ui, which owns the DOM. */
+
+/* RED ALERT - UI + input + the main loop.
+
+   Layout is the classic one: battlefield on the left, a fixed command sidebar on the
+   right holding credits, power, radar and the build tiles. Selection brackets, health bars
+   and the drag box are drawn on a 2D overlay canvas above the battlefield canvas. */
+
+window._rtsUI = null;
+
+function rtsOpen(seed) {
+  if (document.getElementById('rcgRts')) return;
+  /* hide the title screen while a battle is running */
+  var _home = document.getElementById('rtsHome');
+  if (_home) _home.classList.add('gone');
+
+  var d = document.createElement('div');
+  d.id = 'rcgRts';
+  d.innerHTML = ''
+    + '<div class="rts-stage">'
+    +   '<canvas id="rtsCv"></canvas>'
+    /* The vignette, as an ELEMENT rather than a per-frame canvas composite - see _rtsPost for
+       why it moved. It sits between the battlefield and the HUD, which is exactly where the
+       old multiply sat in the draw order. */
+    +   '<div id="rtsVig"></div>'
+    +   '<canvas id="rtsHud"></canvas>'
+    +   '<div class="rts-top"><span class="rts-title">RED ALERT</span>'
+    +     '<span class="rts-vs"><b class="p">' + rtsArmyName('player') + '</b> vs <b class="e">' +
+          rtsArmyName('enemy') + '</b>'
+    +       '<i class="dif" id="rtsDifLbl"></i></span>'
+    /* Two hint lines, because the verbs genuinely differ - a phone has no right button and no
+       wheel, and a desktop has no long-press. CSS shows exactly one; see .rts-help. */
+    +     '<span class="rts-help desk">drag select · right-click order · S hold · 1-9 teams (ctrl set, alt jump) · repair/sell · wheel zoom · Esc</span>'
+    +     '<button type="button" class="rts-mute" id="rtsSaveBtn" title="Save this battle (Ctrl+S)" onclick="rtsSaveGame()">💾</button>'
+    +     '<button type="button" class="rts-mute" id="rtsLoadBtn" title="Resume the saved battle" onclick="rtsLoadGame()">📂</button>'
+    +     '<button type="button" class="rts-mute" id="rtsMute" title="Sound on" onclick="rtsMuteToggle()">🔊</button>'
+    +     '<button type="button" class="rts-x" onclick="rtsClose()">✕</button></div>'
+    /* The touch hint is a SIBLING of the top bar, not a child of it. In that bar it had to share
+       one 34px line with the title, the army names, the difficulty pill and four buttons; on a
+       390px phone there is no room, so it wrapped to three lines, overflowed the bar and ran
+       underneath the close button. Along the bottom of the battlefield it has the full width to
+       itself, and it is nearer the thumb that has to perform what it describes. */
+    +   '<span class="rts-help touch">drag to move · tap to select · hold for orders · pinch to zoom</span>'
+    +   '<div class="rts-msg" id="rtsMsg"></div>'
+    +   '<div class="rts-over" id="rtsOver"></div>'
+    + '</div>'
+    + '<div class="rts-bar">'
+    +   '<div class="rts-credits"><span class="lbl">CREDITS</span><span class="val" id="rtsCred">0</span></div>'
+    /* Storage: how full the silos are. Without a readout the only sign that scrap is being
+       thrown away is a line of text that has already scrolled off. */
+    +   '<div class="rts-store" id="rtsStore" title="Storage"><i id="rtsStoreFill"></i></div>'
+    +   '<div class="rts-radar"><canvas id="rtsMini" width="188" height="188"></canvas>'
+    +     '<span class="rlbl">RADAR</span></div>'
+    +   '<div class="rts-tabs">' + _rtsTabButtons() + '</div>'
+    +   '<div class="rts-ops">'
+    +     '<button type="button" data-mode="repair" onclick="rtsMode(\'repair\')" '
+    +       'title="Repair: click one of your buildings to patch it up for credits">🔧 REPAIR</button>'
+    +     '<button type="button" data-mode="sell" onclick="rtsMode(\'sell\')" '
+    +       'title="Sell: click one of your buildings to sell it back">💲 SELL</button>'
+    +   '</div>'
+    /* Empty until something can charge one. A row of permanently greyed-out superweapons is a
+       list of things you cannot have; a row that appears when you build the silo is news. */
+    +   '<div class="rts-supers" id="rtsSupers"></div>'
+    +   '<div class="rts-mid">'
+    +     '<div class="rts-pwr" title="Power"><span class="ptxt">P<br>W<br>R</span>'
+    +       '<div class="ptrack"><i id="rtsPwrFill"></i><b id="rtsPwrMark"></b></div></div>'
+    +     '<div class="rts-grid" id="rtsList"></div>'
+    +   '</div>'
+    +   '<div class="rts-sel" id="rtsSel">Nothing selected</div>'
+    + '</div>';
+  document.body.appendChild(d);
+
+  /* The vignette gradient, from the constant that has always named its colour - so RTS_VIGNETTE
+     keeps working as the one knob, and the CSS only says where the element sits and how it
+     blends. Same stops as the old canvas gradient: white (identity under multiply) to 42% of
+     the way out, then shading to the corner colour at the farthest corner. */
+  document.getElementById('rtsVig').style.background =
+    'radial-gradient(circle farthest-corner at 50% 50%,#ffffff 0%,#ffffff 42%,' +
+    RTS_VIGNETTE + ' 100%)';
+
+  /* A pending load lands BETWEEN the new game and the renderer: _rtsNewGame supplies every
+     invariant, the save overwrites the state on top of it, and _rtsRInit then bakes the
+     terrain the save actually carries rather than the one the seed would have produced. */
+  var _load = window._RTS_PENDING_LOAD; window._RTS_PENDING_LOAD = null;
+  _rtsNewGame(_load ? _load.seed : (seed || (((new Date()).getTime()) & 0xffff)),
+              _load ? _load.diff : undefined);
+  if (_load) _rtsApplyState(window._rtsG, _load);
+  var cv = document.getElementById('rtsCv');
+  _rtsResizeCanvases();
+  _rtsRInit(cv);
+  /* The view opens on the player's OWN command yard. It used to open on a fixed corner,
+     which was fine while the start was also fixed; with SCENARIO.CPP's rolled start the
+     match can begin anywhere on the ring and a hardcoded focus looks at empty ground. */
+  var _home = _rtsHas('player', 'yard');
+  if (_home) { _rtsR.focus.x = _home.x; _rtsR.focus.z = _home.z; }
+
+  window._rtsUI = { cat:'struct', place:null, drag:null, keys:{}, last:0, raf:0, dead:false,
+    btns:{}, mouse:{ x:0, y:0, over:false }, miniDrag:false, credShown:0, avail:null,
+    icons:_rtsMakeIcons('player') };
+  var dl = document.getElementById('rtsDifLbl'), dd = _rtsBias('enemy');
+  if (dl) { dl.textContent = dd.name; dl.title = 'Difficulty: ' + dd.name + ' (IQ ' + dd.iq + '/' + RTS_IQ.max + ') — ' + dd.desc; }
+  _rtsSyncTabs();
+  _rtsBuildList();
+  _rtsBindInput();
+  document.addEventListener('keydown', _rtsKeyDown, true);
+  document.addEventListener('keyup', _rtsKeyUp, true);
+  window.addEventListener('resize', _rtsOnResize);
+  _rtsWatchSize();
+  /* rtsOpen runs off a real click, so this is a valid gesture to unlock WebAudio */
+  if (typeof _rtsAudioInit === 'function') { _rtsAudioInit(); _rtsAudioResume(); _rtsMusicStart(); }
+  if (_load) _rtsSay('Battle resumed.');
+  else _rtsSay(rtsArmyName('player') + ' command online. Build a Refinery to start earning.');
+  _rtsUI.last = (new Date()).getTime();
+  _rtsLoop(true);        /* paint the first frame; see the note on _rtsLoop */
+}
+
+function rtsClose() {
+  var d = document.getElementById('rcgRts');
+  if (!d) return;
+  var U = window._rtsUI;
+  if (U) { U.dead = true; try { if (U.raf) cancelAnimationFrame(U.raf); } catch (_a) {} }
+  document.removeEventListener('keydown', _rtsKeyDown, true);
+  document.removeEventListener('keyup', _rtsKeyUp, true);
+  window.removeEventListener('resize', _rtsOnResize);
+  if (U && U.ro) { try { U.ro.disconnect(); } catch (_b) {} U.ro = null; }
+  /* The window mouseup, which used to be anonymous and therefore unremovable - see where it is
+     bound for what that cost. Its closure holds U, and U holds the canvases. */
+  if (U && U.onWinUp) { window.removeEventListener('mouseup', U.onWinUp); U.onWinUp = null; }
+  /* And the 350ms touch long-press. Left armed, it outlived the match and reached
+     _rtsRightClick with _rtsUI already null - an uncaught TypeError on the quit path, and on
+     the restart path it landed INSIDE THE NEXT BATTLE about two seconds in, complete with a
+     unit acknowledgement for an order nobody gave. */
+  if (U && U.clearHold) { try { U.clearHold(); } catch (_c) {} U.clearHold = null; }
+  if (typeof _rtsMusicStop === 'function') _rtsMusicStop();
+  _rtsRDispose();
+  if (typeof _RTS_RICON !== 'undefined') _RTS_RICON = null;
+  window._rtsUI = null; window._rtsG = null;
+  if (d.parentNode) d.parentNode.removeChild(d);
+  /* standalone build: quitting a battle returns to the title screen rather than a blank page */
+  if (window._RTS_STANDALONE && typeof rtsHome === 'function') rtsHome();
+}
+
+function _rtsResizeCanvases() {
+  var st = document.querySelector('#rcgRts .rts-stage');
+  if (!st) return null;
+  var W = st.clientWidth || 900, H = st.clientHeight || 600;
+  var cv = document.getElementById('rtsCv'), hud = document.getElementById('rtsHud');
+  var dpr = Math.min(2, window.devicePixelRatio || 1);
+  cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  hud.style.width = W + 'px'; hud.style.height = H + 'px';
+  hud.width = Math.round(W * dpr); hud.height = Math.round(H * dpr);
+  hud.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { W:W, H:H };
+}
+function _rtsOnResize() {
+  var s = _rtsResizeCanvases();
+  if (s) _rtsRResize(s.W, s.H);
+}
+
+/* WATCH THE BOX, NOT THE EVENT. The `resize` listener above is not enough on a phone, and
+   rotating one to landscape was reported as a broken view: the canvas kept its portrait size
+   inside a now-wider stage, leaving the stage's own background showing down the left and
+   along the bottom with the battlefield stranded in the middle.
+
+   iOS fires `resize` while the rotation is still animating, so clientWidth/clientHeight are
+   read at their OLD values and the canvas is resized to the size it already had. Chasing that
+   with orientationchange, visualViewport and a pile of timeouts is guesswork about when the
+   layout settles. A ResizeObserver is not: it reports the element's box AFTER layout, however
+   the change was caused - rotation, the URL bar sliding away, a desktop window drag, entering
+   fullscreen - and it delivers the new size rather than making us measure it.
+
+   The old listener stays for anything without ResizeObserver, where a stale read beats none. */
+function _rtsWatchSize() {
+  var st = document.querySelector('#rcgRts .rts-stage');
+  var U = window._rtsUI;
+  if (!st || !U || typeof ResizeObserver === 'undefined') return;
+  U.ro = new ResizeObserver(function () {
+    if (!window._rtsUI || !_rtsR) return;
+    var s = _rtsResizeCanvases();
+    /* Only when it really changed: the observer also fires on the initial observe, and
+       rebuilding the backing store re-rasterises everything for nothing. */
+    if (s && (s.W !== _rtsR.W || s.H !== _rtsR.H)) _rtsRResize(s.W, s.H);
+  });
+  U.ro.observe(st);
+}
+
