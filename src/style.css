@@ -386,7 +386,10 @@
            color: #8b93a0; text-align: left;
            background: rgba(255, 255, 255, 0.035); border: 1px solid #263447;
            border-radius: 9px; padding: 14px 16px; }
-.artbtn { display: block; margin: 0; padding: 8px 14px; cursor: pointer; white-space: nowrap;
+/* 12px of vertical padding on 11px type, not 8px. This is a file picker on a phone - the one
+   control on the screen that opens a system dialog - and at 8px it stood 35px tall, under every
+   touch-target guideline going. Nothing else on the title screen was below 40. */
+.artbtn { display: block; margin: 0; padding: 12px 14px; cursor: pointer; white-space: nowrap;
           border: 1px solid #3c4654; border-radius: 5px; background: #1b2027;
           color: #c8d2dc; font: inherit; font-size: 11px; font-weight: 600;
           letter-spacing: 0.1em; text-align: center; transition: background .12s, border-color .12s; }
