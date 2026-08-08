@@ -75,14 +75,20 @@ function _sprBldSuper(X, key) {
   } else if (key === 'gps') {
     /* GPS UPLINK. A dish on a mast. The most familiar shape in the set and the least
        threatening, which is right - it is the one superweapon that shoots nothing. */
+    /* It was concrete end to end - pad, shed, roof - so the dish was the only thing on it
+       with an edge. A brick plinth under a chamfered shed puts two more materials on screen. */
     _r3Box(m, 0, 0, 0, W - 6, 3, D - 6, C[2], C[0]);
-    _r3Box(m, 0, 3, 2, W - 14, 8, D - 14, C[0], C[1]);                   /* equipment shed */
-    _r3Box(m, 0, 11, 2, W - 18, 1.6, D - 18, C[3], C[2]);
-    _r3Cyl(m, 0, 12, 2, 2.2, 12, S[2], S[1], 16);                        /* the mast */
-    _r3Cone(m, 0, 22, 2, 11, 6, 9, C[3], 20);                            /* the dish */
-    _r3Cyl(m, 0, 26, 2, 1.2, 4, S[3], S[3], 12);                         /* feed horn */
-    _r3Cyl(m, 0, 29.5, 2, 1.5, 1.5, RTS_PAL.lit, RTS_PAL.lit, 12);
-    _r3Box(m, 0, 12.4, -D / 2 + 6, 8, 1.2, 3, B.roof, B.roof);           /* team band */
+    _r3Box(m, 0, 3, 2, W - 10, 2.5, D - 10, K[2], K[0]);                 /* brick plinth */
+    _r3Slab(m, 0, 5.5, 2, W - 14, 7, D - 14, 2, C[0], C[1]);             /* equipment shed */
+    _r3Box(m, 0, 12.5, 2, W - 18, 1.6, D - 18, C[3], C[2]);
+    _r3Box(m, -W / 2 + 8, 3, -D / 2 + 8, 6, 7, 6, DK[0], DK[1]);         /* transformer */
+    for (var gv = 0; gv < 3; gv++)
+      _r3Box(m, -W / 2 + 6 + gv * 3, 10, -D / 2 + 8, 1.2, 4, 1.2, S[3], S[3]);
+    _r3Cyl(m, 0, 13.5, 2, 2.2, 11, S[2], S[1], 16);                      /* the mast */
+    _r3Cone(m, 0, 23, 2, 11, 6, 9, C[3], 20);                            /* the dish */
+    _r3Cyl(m, 0, 27, 2, 1.2, 4, S[3], S[3], 12);                         /* feed horn */
+    _r3Cyl(m, 0, 30.5, 2, 1.5, 1.5, RTS_PAL.lit, RTS_PAL.lit, 12);
+    _r3Box(m, 0, 13.9, -D / 2 + 6, 8, 1.2, 3, B.roof, B.roof);           /* team band */
     _r3Box(m, -W / 2 + 6, 3, D / 2 - 6, 5, 6, 5, S[2], S[1]);            /* cable box */
 
   } else if (key === 'wall') {

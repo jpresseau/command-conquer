@@ -82,7 +82,15 @@ var RTS_PAL = {
      that carried no team colour at all. Gunmetal is neutral-warm and leaves the blue budget
      to the parts that are meant to signal ownership. */
   gun:   ['#6e6a60', '#847f72', '#4b4842', '#9b9588'],
-  dark:  ['#31363e', '#3f4650', '#22262c', '#4b5360'],
+  /* DARK spanned luminance 38..82 - a 44-step band, the narrowest ramp in the file, and the
+     War Factory and Airfield are built from almost nothing else. Ribbing the factory's roof
+     moved it from one flat plane to a saw-tooth and its distinct-tone count barely shifted,
+     because every rib was landing in the same two shades. Widened to 31..108.
+     Kept NEUTRAL, and that was a correction: the first widening reached for a bluer top tone
+     and took the War Factory from 34% to 50% blue-dominant pixels. Blue creep is a fault this
+     roster has already been dragged back from once - 66% to 13% - and a wider ramp is not
+     worth reopening it. Same span, almost no hue. */
+  dark:  ['#3a3d40', '#4f545a', '#1d1f22', '#666d75'],
   glass: '#8fbcd4',
   lit:   '#ffd98a',
   hazard:['#c9a227', '#2a2a26'],
