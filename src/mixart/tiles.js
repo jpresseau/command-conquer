@@ -46,8 +46,18 @@ function _mixGround() {
   if (_RTS_TILECACHE) return _RTS_TILECACHE;
   if (!_rtsArtReady()) return null;
   var ex = _rtsThExt();
-  var clear = _mixTiles('clear1' + ex), water = _mixTiles('w1' + ex);
+  var clear = _mixTiles('clear1' + ex);
   if (!clear) return null;
+  /* OPEN WATER IS FIVE TILES, NOT ONE. w1 is a single 24x24 tile and asking for it alone put the
+     same one in every water cell on the map - a lake of one repeating speckle, which is what made
+     the sea read as flat colour once the drawn ripples on top of it were dropped. w2 is a 2x2
+     template whose four tiles are all open water too, so the pool is w1 plus those four. */
+  var w1 = _mixTiles('w1' + ex), w2 = _mixTiles('w2' + ex), pool = [];
+  [w1, w2].forEach(function (t) {
+    if (!t) return;
+    for (var i = 0; i < t.tile.length; i++) if (t.tile[i]) pool.push(t.tile[i]);
+  });
+  var water = pool.length ? { w: RTS_TS, h: RTS_TS, n: pool.length, tile: pool } : null;
   return (_RTS_TILECACHE = { clear: clear, water: water });
 }
 

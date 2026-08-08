@@ -69,7 +69,7 @@ function rtsSetTheatre(id) {
   if (RTS_MIX.pals[id]) RTS_MIX.pal = RTS_MIX.pals[id];
   _RTS_SPR = null; _RTS_UFIT = {}; _RTS_USCALE = {};
   _RTS_TREES = null; _RTS_MIXTREES = null; _RTS_TILECACHE = null; _RTS_MIXDEBRIS = null;
-  _RTS_MIXBIB = null; _RTS_SHROUDSPR = null; _RTS_CLIFFLIB = undefined; _RTS_MIXMAKE = null; _RTS_MIXDIE = null;
+  _RTS_MIXBIB = null; _RTS_SHROUDSPR = null; _RTS_CLIFFLIB = undefined; _RTS_SHORELIB = undefined; _RTS_ROADPAL = undefined; _RTS_MIXMAKE = null; _RTS_MIXDIE = null;
   _RTS_MIXFX = null; _RTS_MIXWATER = null; _RTS_HARVANIM = {}; _RTS_IDLEANIM = {};
   return id;
 }

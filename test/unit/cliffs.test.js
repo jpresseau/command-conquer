@@ -1,8 +1,9 @@
 /* The cliff fitter: which of Red Alert's Cliffs templates go where on a generated map.
 
-   No artwork is involved. _rtsCliffFit takes a library, a map size and two predicates and hands
-   back placements - that is the whole reason it was written as a pure function, because the
-   thing worth testing here is the packing, and the packing does not need a single pixel of
+   No artwork is involved. The packer in mixart/fit.js takes a library, a map size and a set of
+   callbacks; _rtsCliffRules supplies the cliff-specific ones and _rtsCliffFill the mop-up pieces.
+   All three are pure - that is the whole reason they are separate from _mixPaintCliffs, because
+   the thing worth testing here is the packing, and the packing does not need a single pixel of
    anyone's temperat.mix to be checked.
 
    The library below is therefore SYNTHETIC and hand-shaped, so each assertion has one job. A
@@ -25,7 +26,7 @@ var { load } = require('../lib/sandbox.js');
 var S = new Suite('cliffs');
 /* bake.js only for RTS_TS - the fitter's one dependency outside itself, and taken from the
    real source rather than stubbed so the masks here are the size the game actually uses. */
-var box = load(['src/sprites/bake.js', 'src/mixart/cliffs.js']);
+var box = load(['src/sprites/bake.js', 'src/mixart/fit.js', 'src/mixart/cliffs.js']);
 var TS = box.RTS_TS;
 
 /* A cell whose mask is a solid block of `on`, so two neighbours agree exactly when they carry
@@ -37,6 +38,15 @@ function cell(kind, on, cov) {
            m: m, px: new Uint8Array(TS * TS) };
 }
 function tmpl(img, w, h, cells) { return { img: img, w: w, h: h, cells: cells }; }
+
+/* The packer plus the cliff rules - what _mixPaintCliffs assembles. It cannot be called here
+   because it needs a decoded temperat.mix; the two pieces it puts together are pure and can. */
+function fit(lib, N, rockAt, openAt, seed) {
+  var rules = box._rtsCliffRules(rockAt, openAt);
+  return box._rtsTemFit(lib, N, {
+    seed: seed, needs: rules.needs, fits: rules.fits, fill: box._rtsCliffFill(lib)
+  });
+}
 
 /* A map is a string per row: '#' blocked rock, '.' open ground, ' ' neither (a tree, ore, the
    sea) - which no template may cover at all. */
@@ -62,7 +72,7 @@ function world(rows) {
     '.....',
     '.....'
   ]);
-  var r2 = box._rtsCliffFit(lib, narrow.N, narrow.rock, narrow.open, 1);
+  var r2 = fit(lib, narrow.N, narrow.rock, narrow.open, 1);
   S.eq('a 1-wide, 2-tall band takes exactly one piece', r2.place.length, 1);
   S.eq('...with its rock column on the rock', r2.place[0].ox, 1);
   S.eq('...and its grass column on the ground beside it', r2.place[0].oz, 1);
@@ -77,7 +87,7 @@ function world(rows) {
     '.....',
     '.....'
   ]);
-  var r = box._rtsCliffFit(lib, band.N, band.rock, band.open, 1);
+  var r = fit(lib, band.N, band.rock, band.open, 1);
   var whole = r.place.filter(function (p) { return p.only === undefined; });
   S.eq('on a 2-wide band only the outer column can take the piece', whole.length, 1);
   S.eq('...and it is the outer column it takes', whole[0].ox, 2);
@@ -97,7 +107,7 @@ function world(rows) {
   ]);
   /* A solid 2x2 over a rock column one cell wide: half its rock cells would hang over grass. */
   var solid = [tmpl('slab', 2, 2, [cell('R', 1), cell('R', 1), cell('R', 1), cell('R', 1)])];
-  var r = box._rtsCliffFit(solid, w.N, w.rock, w.open, 2);
+  var r = fit(solid, w.N, w.rock, w.open, 2);
   S.eq('rock art is never laid over ground a unit can drive on',
        r.place.filter(function (p) { return p.only === undefined; }).length, 0);
   /* Two rules forbid that, and for a library the classifier actually produces the second one
@@ -117,7 +127,7 @@ function world(rows) {
     '.....',
     '.....'
   ]);
-  var r2 = box._rtsCliffFit(blob, hole.N, hole.rock, hole.open, 2);
+  var r2 = fit(blob, hole.N, hole.rock, hole.open, 2);
   S.eq('no piece covers a cell that is neither rock nor open ground',
        r2.place.filter(function (p) { return p.only === undefined; }).length, 0);
 
@@ -126,10 +136,10 @@ function world(rows) {
   var over  = [tmpl('over',  2, 1, [cell('R', 1), cell('E', 1, 0.45)])];
   var under = [tmpl('under', 2, 1, [cell('R', 1), cell('E', 1, 0.35)])];
   S.eq('a cell carrying more than the spill limit is refused open ground',
-       box._rtsCliffFit(over, w.N, w.rock, w.open, 2)
+       fit(over, w.N, w.rock, w.open, 2)
           .place.filter(function (p) { return p.only === undefined; }).length, 0);
   S.eq('...and one carrying less is not',
-       box._rtsCliffFit(under, w.N, w.rock, w.open, 2)
+       fit(under, w.N, w.rock, w.open, 2)
           .place.filter(function (p) { return p.only === undefined; }).length, 2);
 })();
 
@@ -153,7 +163,7 @@ function world(rows) {
     '.......#..',
     '..........'
   ]);
-  var r = box._rtsCliffFit(lib, w.N, w.rock, w.open, 7);
+  var r = fit(lib, w.N, w.rock, w.open, 7);
   var bad = [], seen = new Uint8Array(w.N * w.N);
   r.place.forEach(function (p) {
     for (var cy = 0; cy < p.t.h; cy++) for (var cx = 0; cx < p.t.w; cx++) {
@@ -185,7 +195,7 @@ function world(rows) {
        only.length + ' single cells of ' + r.place.length + ' placements');
 
   /* --------------------------------------------------------- determinism ---- */
-  var again = box._rtsCliffFit(lib, w.N, w.rock, w.open, 7);
+  var again = fit(lib, w.N, w.rock, w.open, 7);
   S.eq('the same map fits the same way twice',
        JSON.stringify(again.place.map(function (p) { return [p.t.img, p.ox, p.oz, p.only]; })),
        JSON.stringify(r.place.map(function (p) { return [p.t.img, p.ox, p.oz, p.only]; })));
@@ -210,8 +220,8 @@ function world(rows) {
     '.....'
   ]);
   /* solid first in the library, then hollow: order alone must not decide it */
-  var r = box._rtsCliffFit([solid, hollow], w.N, w.rock, w.open, 3);
-  var r2 = box._rtsCliffFit([hollow, solid], w.N, w.rock, w.open, 3);
+  var r = fit([solid, hollow], w.N, w.rock, w.open, 3);
+  var r2 = fit([hollow, solid], w.N, w.rock, w.open, 3);
   function names(res) { return res.place.map(function (p) { return p.t.img; }).join(','); }
   S.eq('four rock cells become two 1x2 columns', r.place.length, 2);
   S.ok('the second column matches the first whichever order the library is in',
@@ -220,10 +230,10 @@ function world(rows) {
 
   /* And the term is doing it, not luck: drop the seam weight to zero and the tie is settled by
      the position hash instead, which is free to disagree. */
-  var keep = box.RTS_CLIFF_SEAMW;
-  box.RTS_CLIFF_SEAMW = 0;
-  var blind = box._rtsCliffFit([solid, hollow], w.N, w.rock, w.open, 3);
-  box.RTS_CLIFF_SEAMW = keep;
+  var keep = box.RTS_TEM_SEAMW;
+  box.RTS_TEM_SEAMW = 0;
+  var blind = fit([solid, hollow], w.N, w.rock, w.open, 3);
+  box.RTS_TEM_SEAMW = keep;
   S.ok('with the seam weight at zero the two columns are free to disagree',
        blind.place[0].t.img !== blind.place[1].t.img,
        names(blind) + ' (seam-weighted: ' + names(r) + ')');
@@ -246,7 +256,7 @@ function world(rows) {
   /* Two rock cells stacked, so nothing whole can sit on one island cell. The top one is nearly
      solid, which is exactly what the mop-up looks for. */
   var solid = [tmpl('post', 1, 2, [cell('R', 1, 0.9), cell('R', 1, 0.9)])];
-  var r = box._rtsCliffFit(solid, w.N, w.rock, w.open, 5);
+  var r = fit(solid, w.N, w.rock, w.open, 5);
   S.eq('a 1x1 island is reached by a single cell of a bigger template', r.place.length, 1);
   S.eq('...and only that one cell of it is painted', r.place[0].only !== undefined, true);
 
@@ -254,7 +264,7 @@ function world(rows) {
      nothing to use. It must return quietly with the cell uncovered - _mixPaintCliffs then
      reports a non-zero remainder and the drawn cliffs stay switched on. */
   var faint = [tmpl('faint', 1, 2, [cell('R', 1, 0.55), cell('R', 1, 0.55)])];
-  var r2 = box._rtsCliffFit(faint, w.N, w.rock, w.open, 5);
+  var r2 = fit(faint, w.N, w.rock, w.open, 5);
   S.eq('a library with no nearly-solid cell leaves the island uncovered', r2.used[2 * w.N + 2], 0);
   S.ok('...and does not invent a mop-up piece to do it', r2.place.length === 0,
        r2.place.length + ' placements');
@@ -263,7 +273,7 @@ function world(rows) {
 /* ----------------------------------------------------------- the constants ----
    Both are tuning numbers with a measurement behind them in the source; they are asserted here
    so a stray edit that zeroes one is a failing test rather than a quietly worse map. */
-S.ok('the seam weight is on', box.RTS_CLIFF_SEAMW > 0, String(box.RTS_CLIFF_SEAMW));
+S.ok('the seam weight is on', box.RTS_TEM_SEAMW > 0, String(box.RTS_TEM_SEAMW));
 S.ok('a template cell may not spill more than 40% rock onto driveable ground',
      box.RTS_CLIFF_MAXOPEN > 0 && box.RTS_CLIFF_MAXOPEN <= 0.4, String(box.RTS_CLIFF_MAXOPEN));
 
