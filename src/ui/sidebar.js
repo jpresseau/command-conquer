@@ -227,8 +227,11 @@ function _rtsBuildList() {
         + '<span class="pct"></span>'
         + '<span class="nm">' + def.name + '</span>'
         + '<span class="ct">' + def.cost + '</span>';
-      b.title = def.name + ' — ' + def.cost + ' credits\n' + def.desc
+      /* Kept on the element so the per-frame pass can append "why it is locked" to it without
+         having to rebuild the sentence, and without the reason accumulating on every frame. */
+      b.dataset.base = def.name + ' — ' + def.cost + ' credits\n' + def.desc
         + '\nRight-click while building: hold, then right-click again to cancel.';
+      b.title = b.dataset.base;
       b.onclick = function () { _rtsItemClick(def.key); };
       /* SelectClass::Action reads RIGHTPRESS as "cancel": hold first, abandon second. */
       b.oncontextmenu = function (ev) { ev.preventDefault(); _rtsItemCancel(def.key); return false; };
@@ -275,14 +278,18 @@ function _rtsItemClick(key) {
     /* EVA distinguishes "you cannot build that" from "you cannot AFFORD that", and being told
        the wrong one is worse than being told nothing - the first sends you looking for a
        prerequisite you already have. */
-    var _broke = rtsMoney(S) < def.cost && _rtsAvailable('player', def);
+    var why = _rtsWhyLocked('player', key);
+    var _broke = !why && rtsMoney(S) < def.cost;
     if (typeof rtsEva === 'function') rtsEva(_broke ? 'nofunds' : 'cantbuild');
-    if (!_rtsAvailable('player', def)) _rtsSay('Needs ' + def.needs.map(function (n) { return rtsStructDef(n).name; }).join(' + ') + ' first.');
-    else if (cat === 'infantry' && !_rtsHas('player', 'barracks')) _rtsSay('Build a Barracks first.');
-    else if (cat === 'vehicle' && !_rtsHas('player', 'factory')) _rtsSay('Build a War Factory first.');
+    /* EVERY refusal says something. This used to be a ladder of its own guesses at why, and it
+       ran out: a Commando at her one-at-a-time cap passed every branch of it and the click
+       produced a beep and an empty message line. `_rtsWhyLocked` is the same answer the tile
+       is greyed from, so what you are told and what you are shown cannot disagree. */
+    if (why) _rtsSay(why);
     else if (rtsMoney(S) < def.cost) _rtsSay('Not enough credits.');
     else if (S.q[cat]) _rtsSay('That production line is busy.');
     else if (S.ready) _rtsSay('Place the finished building first.');
+    else _rtsSay('Cannot build that right now.');
   }
 }
 /* RIGHTPRESS on a cameo. First press suspends, second abandons and refunds. */
@@ -366,9 +373,15 @@ function _rtsSyncSidebar(dt) {
     var b = U.btns[key], def = rtsStructDef(key) || rtsUnitDef(key);
     var cat = _rtsQueueCat(key), q = S.q[cat];
     var pct = b.querySelector('.pct'), wipe = b.querySelector('.wipe');
-    var avail = _rtsAvailable('player', def)
-      && (cat !== 'infantry' || !!_rtsHas('player', 'barracks'))
-      && (cat !== 'vehicle' || !!_rtsHas('player', 'factory'));
+    /* One answer, drawn and spoken. The tooltip carries it too: a greyed cameo used to be
+       silent until you clicked it, so the only way to find out what a locked Refinery wanted
+       was to click a button that visibly does nothing. */
+    var why = _rtsWhyLocked('player', key), avail = !why;
+    var want = b.dataset.why || '';
+    if (want !== (why || '')) {
+      b.dataset.why = why || '';
+      b.title = b.dataset.base + (why ? '\n\n' + why : '');
+    }
     var cls = 'rts-tile';
     if (!avail) cls += ' locked';
     else if (rtsMoney(S) < def.cost && !(q && q.key === key)) cls += ' poor';

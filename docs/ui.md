@@ -115,6 +115,45 @@ waiting to be placed needs a yard to come out of, so it goes too. Without this, 
 barracks left the rifle squad inside it still ticking toward completion and then walking out
 of a building that no longer exists.
 
+### One answer to "why can't I build this?"
+
+`Who_Can_Build_Me` is one question, and it had three implementations here: `_rtsCanQueue`
+refused, `_rtsCanProduce` decided whether the sidebar drew the cameo enabled, and the sidebar's
+per-frame pass carried a third copy as `avail`. They had drifted, and the drift is not visible
+in any of the three — only on screen.
+
+Measured, with the full tech tree and one Commando already alive:
+
+| | says |
+|---|---|
+| `_rtsCanQueue` | no |
+| `_rtsCanProduce` | **yes** |
+| sidebar `avail` | **enabled** |
+| clicking it | deny beep, **empty message line** |
+
+Two rules existed in exactly one of the three. The `only` cap — the Commando is one at a time —
+lived in the queue alone, so it was enforced by a beep and nothing else. The "no Construction
+Yard" rule lived in `_rtsCanProduce` alone, so losing your yard mid-match left you free to go on
+spending credits on buildings; RA takes the whole tab away.
+
+`_rtsWhyLocked(side, key)` is the single answer now — `null`, or the sentence to show the
+player. `_rtsCanProduce` is defined as *"no reason"*, `_rtsCanQueue` delegates everything except
+money and a busy line (which the sidebar draws differently, as `poor` and `busyline`), and the
+cameo's grey, its tooltip and its click message all come from the same string. A rule missing
+from it is missing everywhere rather than in two places out of three, and `test/unit/locked`
+walks six base states × 50 items asserting the three still agree.
+
+**The tooltip carries it**, which is the part that is new rather than merely tidier: a greyed
+cameo used to be silent until clicked, so the only way to learn what a locked Refinery wanted
+was to press a button that visibly does nothing. It now reads *"Needs Ore Refinery first."*
+under the description, appended to a stored base string so five hundred frames do not append it
+five hundred times.
+
+`needs` names a **capability**, not a building (see `docs/core-ai.md`), so the sentence is built
+by `_rtsNeedName`: the namesake building's name if there is one, otherwise every building that
+provides it joined with "or". Without that, the first capability nothing is named after would
+make the sidebar throw while trying to explain itself.
+
 **EVA lines**: `VOX_TRAINING` ("Training") for infantry vs `VOX_BUILDING` ("Building") for
 everything else; `VOX_SUSPENDED` / `VOX_CANCELED`; and `VOX_NEW_CONSTRUCT` ("New construction
 options") from `StripClass::Add` whenever something *joins* the buildable list — the cue that

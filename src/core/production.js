@@ -6,17 +6,58 @@ function _rtsQueueCat(key) {
   var s = rtsStructDef(key); if (s) return 'struct';
   var u = rtsUnitDef(key); return u ? u.kind : null;
 }
-function _rtsCanQueue(side, key) {
+/* What to CALL a prerequisite when telling the player they are missing it. `needs` names a
+   capability rather than a building (see _rtsProvides), so the name cannot simply be looked up
+   as a key: today every capability happens to share a name with a structure, but the moment one
+   does not - `provides:['tech']` on two different labs, say - `rtsStructDef(cap).name` is
+   undefined and the sidebar throws while trying to explain itself.
+
+   So: the namesake building's name if there is one, otherwise everything that provides it,
+   joined with "or", because "Needs Tech Center or Soviet Lab first" is the true sentence. */
+function _rtsNeedName(cap) {
+  var own = rtsStructDef(cap);
+  if (own) return own.name;
+  var from = RTS_STRUCTS.filter(function (d) {
+    return (d.provides || []).indexOf(cap) >= 0;
+  }).map(function (d) { return d.name; });
+  return from.length ? from.join(' or ') : cap;
+}
+
+/* WHY this side cannot produce `key` right now, as a sentence for the player - or null when it
+   can. Structural reasons only: not having the credits and having the line already busy are
+   states the sidebar draws differently (`poor`, `busyline`) and a player reads at a glance.
+
+   This exists because the same rules were written out three times - in _rtsCanQueue, in
+   _rtsCanProduce, and again as `avail` in the sidebar's per-frame pass - and the three had
+   drifted apart. Measured, with the full tech tree and one Commando already alive: _rtsCanQueue
+   said no, _rtsCanProduce said YES, the sidebar drew the cameo enabled, and clicking it played
+   the deny beep and printed NOTHING. The `only` cap and the shipyard-with-no-water rule existed
+   in exactly one of the three. One function now answers for all of them, so a rule that is not
+   in here is not enforced anywhere and a rule that is in here is explained everywhere. */
+function _rtsWhyLocked(side, key) {
   var G = window._rtsG, S = G.sides[side];
-  var cat = _rtsQueueCat(key); if (!cat) return false;
-  if (S.q[cat]) return false;
-  if (cat === 'struct' && S.ready) return false;
   var def = rtsStructDef(key) || rtsUnitDef(key);
-  if (!_rtsAvailable(side, def)) return false;
+  var cat = _rtsQueueCat(key);
+  if (!def || !cat) return 'No such thing.';
   /* The other army's kit. Enforced HERE rather than only in the sidebar, because the sidebar
      is one of several routes to a queue - the opponent's brain is another, and a save from
      before a faction switch is a third. */
-  if (!rtsBuildableBy(def, rtsHouseSide(side))) return false;
+  if (!rtsBuildableBy(def, rtsHouseSide(side))) return 'That is the other army\'s.';
+  if (!_rtsAvailable(side, def))
+    return 'Needs ' + def.needs.map(_rtsNeedName).join(' + ') + ' first.';
+  /* SIDEBAR.CPP's Who_Can_Build_Me: something has to be standing that makes the thing. The
+     yard case was checked by _rtsCanProduce and NOT by the queue, so losing your Construction
+     Yard mid-match left you able to spend credits on buildings; RA takes the whole tab away. */
+  if (cat === 'struct' && !_rtsHas(side, 'yard')) return 'Needs a Construction Yard first.';
+  if (cat === 'infantry' && !_rtsHas(side, 'barracks')) return 'Build a Barracks first.';
+  if (cat === 'vehicle' && !_rtsHas(side, 'factory')) return 'Build a War Factory first.';
+  /* A shipyard with nowhere to launch is not a shipyard. Refusing here rather than failing at
+     delivery means the sidebar greys the ship out instead of taking the credits and producing
+     nothing. The missing yard itself is already covered: every ship `needs` one. */
+  if (cat === 'ship') {
+    var yd = _rtsHas(side, 'navalyard') || _rtsHas(side, 'subpen');
+    if (yd && !_rtsSeaSpawn(yd)) return 'That shipyard has no open water to launch into.';
+  }
   /* `only` is a hard cap on how many of a type may exist at once - the Commando is one at a
      time, as in the reference. Counts what is standing AND what is on the way, or the queue
      lets you stack three of them before the first one appears. */
@@ -27,17 +68,19 @@ function _rtsCanQueue(side, key) {
       if (!oe.dead && oe.side === side && oe.type === 'unit' && oe.def === key) have++;
     }
     for (var qc in S.q) if (S.q[qc] && S.q[qc].key === key) have++;
-    if (have >= def.only) return false;
+    if (have >= def.only)
+      return def.only === 1 ? 'You may only have one at a time.'
+                            : 'You may only have ' + def.only + ' at a time.';
   }
-  if (cat === 'infantry' && !_rtsHas(side, 'barracks')) return false;
-  /* A shipyard with nowhere to launch is not a shipyard. Refusing the queue here rather than
-     failing at delivery means the sidebar greys the ship out instead of taking the credits
-     and producing nothing. */
-  if (cat === 'ship') {
-    var yd = _rtsHas(side, 'navalyard') || _rtsHas(side, 'subpen');
-    if (!yd || !_rtsSeaSpawn(yd)) return false;
-  }
-  if (cat === 'vehicle' && !_rtsHas(side, 'factory')) return false;
+  return null;
+}
+function _rtsCanQueue(side, key) {
+  var S = window._rtsG.sides[side];
+  var cat = _rtsQueueCat(key); if (!cat) return false;
+  if (S.q[cat]) return false;
+  if (cat === 'struct' && S.ready) return false;
+  if (_rtsWhyLocked(side, key)) return false;
+  var def = rtsStructDef(key) || rtsUnitDef(key);
   if (rtsMoney(S) < _rtsCostOf(side, def)) return false;
   return true;
 }
@@ -45,14 +88,7 @@ function _rtsCanQueue(side, key) {
    already busy? This is SIDEBAR.CPP's `Who_Can_Build_Me`: the question Recalc asks of every
    cameo when a factory is lost. */
 function _rtsCanProduce(side, key) {
-  var def = rtsStructDef(key) || rtsUnitDef(key);
-  if (!def) return false;
-  var cat = _rtsQueueCat(key);
-  if (!_rtsAvailable(side, def)) return false;
-  if (cat === 'struct') return !!_rtsHas(side, 'yard');
-  if (cat === 'infantry') return !!_rtsHas(side, 'barracks');
-  if (cat === 'vehicle') return !!_rtsHas(side, 'factory');
-  return true;
+  return !_rtsWhyLocked(side, key);
 }
 function _rtsQueue(side, key) {
   if (!_rtsCanQueue(side, key)) return false;
