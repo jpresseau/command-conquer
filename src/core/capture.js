@@ -15,6 +15,14 @@ function _rtsCapture(eng, b) {
   var G = window._rtsG, from = b.side;
   if (!b || b.dead || b.type !== 'struct' || b.side === eng.side) return false;
   if (!rtsCapturable(b.def)) return false;
+  /* A building that is being SOLD cannot be taken. Mission_Deconstruction is already running:
+     the previous owner has collected the refund, the animation is playing backwards, and the
+     structure removes itself a few seconds later whoever owns it by then. Accepting the capture
+     handed the player a building that died anyway and CONSUMED THE ENGINEER doing it - 600
+     credits and a walk across the map for nothing. Measured: captured mid-sale, dead six
+     seconds later, engineer spent. The AI sells routinely (Repair_AI below ConditionRed, and
+     AI_Raise_Money), so this is reachable by playing normally rather than by contrivance. */
+  if (b.selling) return false;
   _rtsBaseDropNode(b);                       /* off the old owner's plan... */
   b.side = eng.side;
   _rtsBaseAdd(b.side, b.def, b.tx, b.tz);    /* ...and onto the new one's */

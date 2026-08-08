@@ -102,6 +102,16 @@ whole match. It checks that a kill goes to whoever caused it, that nobody is cre
 nobody caused (a booby trap, the opponent's own artillery), and that a readout labelled *units*
 counts units.
 
+`e2e/supers` covers the four superweapons, which had no spec at all — the worst possible shape
+for a bug, since a button that does one thing every five minutes fails at the exact moment you
+were counting on it and cannot be retried. Charging is measured as a **rate** over ten seconds
+rather than by waiting out a 300-second charge, and the nuke is measured on **hit points**: the
+first version of this counted survivors in the blast radius, saw the number not move, and learned
+nothing, because everything in the game has more hit points than the edge of a nuke does damage.
+Writing it found two defects — an engineer accepted onto a building the enemy had already started
+selling (captured a structure that deconstructed anyway, and was spent doing it), and a
+chronoshift with an empty selection that teleported eight units the player never chose.
+
 `e2e/determinism` asks the two questions everything else here assumes an answer to: does the same
 seed play out the same way twice, and does resuming a save give back the battle that was saved?
 Every measurement in the repo rests on the first — the ladder quotes mean survival to the second —

@@ -202,7 +202,16 @@ var RTS_STRUCTS = [
     needs:['lab'], side:'soviet', armour:'concrete', capturable:false,
     super:{ key:'nuke', name:'Atom Bomb', charge:300, target:'cell', icon:'☢',
             hint:'Atom Bomb ready — click anywhere on the map.' },
-    desc:'Charges an atomic missile. Levels everything within four tiles of where you aim it.' },
+    /* This said "levels everything within four tiles", which the blast does not do and cannot:
+       damage falls as 1/steps through the shared splash curve, so a thing four tiles out takes
+       100 of RTS_NUKE_DAMAGE's 1000 and the cheapest structure in the game has 400 hit points.
+       Measured on a real base: a direct hit took an enemy Construction Yard 1400 -> 400, and a
+       Power Plant 4.3 tiles away lost 91 of 500. What it actually is, is an infantry-clearer
+       with a heavy centre - so that is what it now says. Whether it SHOULD hit harder for a
+       2000-credit building behind the tech tier and a five-minute charge is a balance question,
+       and one the ladder cannot answer: measured over three hard seeds, the opponent never
+       builds a superweapon building at all before the match ends. */
+    desc:'Charges an atomic missile. A direct hit guts a building; out to four tiles the blast kills infantry and damages everything else.' },
   { key:'iron',     name:'Iron Curtain',  w:2, h:2, cost:1500, build:22, hp:400,  power:-200, sight:12,
     needs:['lab'], side:'soviet', armour:'concrete', capturable:false,
     super:{ key:'ironcurtain', name:'Iron Curtain', charge:270, target:'own', icon:'🛡',

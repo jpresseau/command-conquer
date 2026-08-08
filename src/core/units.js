@@ -101,8 +101,13 @@ function _rtsUpdateUnit(e, dt) {
      into the "acquire something to shoot" path - it would stand there aiming at a tank. */
   if (d.capture) {
     var cb = e.target;
-    if (e.order === 'capture' && (!cb || cb.dead || cb.type !== 'struct' || cb.side === e.side
-        || !rtsCapturable(cb.def))) {
+    /* `cb.selling` belongs in this list beside `cb.dead`: a building whose sale has started is
+       already gone as far as this order is concerned, and walking the rest of the way to it can
+       only end in _rtsCapture refusing. Dropping the order here is what keeps the engineer -
+       it is free to be sent somewhere else rather than spent on a structure that removes
+       itself. Reachable by playing normally: the AI sells while your engineer is en route. */
+    if (e.order === 'capture' && (!cb || cb.dead || cb.selling || cb.type !== 'struct'
+        || cb.side === e.side || !rtsCapturable(cb.def))) {
       e.order = null; e.target = null; e.path = null;
     } else if (e.order === 'capture') {
       if (_rtsAtStruct(e, cb)) { _rtsCapture(e, cb); return; }
