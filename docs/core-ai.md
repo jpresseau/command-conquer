@@ -23,6 +23,7 @@ The balance database, and three ideas in it are worth more than all its numbers:
   doing less damage: Recruit cannot repair, its infantry do not dodge, and it never expands.
   This is far more legible from the player's chair than a damage multiplier, and it is why
   the difficulty setting changes how the enemy plays rather than how much it hurts.
+  **But `IQProduction 5` was all-or-nothing here, and that broke the middle rung — see below.**
 - **The AI holds a target base COMPOSITION, not a build order.** Each structure type wants
   `ratio` of the base size capped at `limit` (`RefineryRatio .16/limit 4`, `WarRatio .1`,
   `DefenseRatio .5` …), and it builds whatever it is furthest short of. `BaseSizeAdd 3` means
@@ -329,3 +330,71 @@ no duplicate node when a hole is refilled, exactly one node appended per new bui
 vs destroy-keeps, a blocked hole not shadowing a later one, and end to end: after four minutes of
 real play every structure the AI built is a node with no duplicates, and three razed turrets all
 come back in their own cells.
+
+
+## The default opponent never had a tech tree
+
+`_rtsAIWants` handed the whole 23-entry build order to IQ 5 and the two-item list
+`['refinery', 'barracks']` to anything lower. The difficulties are **IQ 2 / 3 / 5**, so
+everything from the war factory onward — the tech tree, both shipyards, the airfield, every
+defence and all four superweapons — was Commando-only.
+
+Measured with the stopping condition removed (the player's structures kept alive, 600 simulated
+seconds, seed 9001) so the question is what the opponent *builds*, not how fast it wins:
+
+| | structures at 600s | distinct types | what it added beyond the six it starts with |
+|---|---|---|---|
+| Recruit | 11 | 7 | a silo |
+| Soldier | 17 | 7 | a silo |
+| Commando | 35 | 16 | the whole tree; missile silo at 581s |
+
+**Recruit and Soldier built the same seven things.** Soldier just built more copies. Two rules
+run before the ordered walk and are not gated — power (`PowerSurplus`) and silo (store nearly
+full) — and those two plus the starting base were the entire repertoire of both.
+
+### The superweapon gate contradicted itself, and its own comment said so
+
+`RTS_IQ.superweapon` was 3, carrying this note:
+
+> *3 rather than 4 deliberately. The difficulties run 2 / 3 / 5, so a gate of 4 would have meant
+> only Commando ever fired one — and a feature two thirds of players never see from the receiving
+> end is not a difficulty distinction, it is a dead branch.*
+
+Every word true, and already defeated: `mslo` is twentieth in the build order, which needed IQ 5.
+**Soldier could fire a superweapon it could never build.** The branch was dead anyway, by the
+other gate, and nothing said so. `guardArea` had the mirror-image problem — a gate at IQ 4 when
+no difficulty is IQ 4, so it was Commando-only however it read.
+
+### What replaced it
+
+The rung is **per building** now (`RTS_AI.buildIQ`, default 3, superweapons 5), so adding a
+building means deciding its rung once. Recruit's order stays empty deliberately — `refinery` and
+`barracks` sit at 3, not 2 — because that rung's ladder position was already measured and this
+change is about the middle one. Firing a superweapon moved to IQ 5 to agree with building one.
+
+| | reachable buildings | structures at 600s | distinct types |
+|---|---|---|---|
+| Recruit | 0 | 11 | 7 |
+| Soldier | **19** | **19** | **10** |
+| Commando | 23 | 35 | 16 |
+
+Soldier now builds a radar (167s), advanced power (179s) and a service depot (244s).
+
+**The ladder did not move**: allied 296/218/172s and soviet 294/220/175s, against 296/218/172 and
+294/219/175 before. That is the desired outcome rather than a lucky one — the extra buildings are
+economy and tech, not offence, so the opponent has a real base without becoming harder to survive.
+
+`test/unit/scenario` now checks the two tables against each other: every gate sits on a level some
+difficulty has, none is above the hardest, firing a superweapon implies being able to build one,
+and each difficulty reaches strictly more buildings than the one below.
+
+### It is still a partial fix
+
+Soldier does not reach the tech lab inside 600s, let alone the airfield or a shipyard, and a real
+match ends around 220s — so in practice the radar is as far as it gets. The remaining limiter is
+**not** the gate: it is that the composition walk returns to economy as the base grows. At 19
+buildings `ceil(19 × 0.16) = 4` refineries are wanted and the limit is 4, so the walk goes back to
+the top of the order before it ever reaches `lab`. That diagnosis is **inferred from the ratios and
+the 600s composition** (Soldier: silo ×5, refinery ×3, barracks ×2, factory ×2, flametower ×2,
+apower ×2, plus one each of yard/radar/depot) — it has not been confirmed by instrumenting what
+the walk returns, and it should be before anything is retuned.

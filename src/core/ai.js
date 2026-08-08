@@ -34,10 +34,14 @@ function _rtsAIWants(S) {
   if (cap > 0 && S.ore >= cap * RTS_AI.siloUrgent && (have.silo || 0) < RTS_AI.limit.silo
       && _rtsCanProduce('enemy', 'silo')) return { key:'silo', urgent:true };
 
-  /* Below IQProduction the opponent keeps a minimal base and never expands - that is the
-     whole difference between the low difficulties and the high one. */
+  /* Below IQProduction the opponent keeps a minimal base and never expands. That used to be
+     one flag between "two buildings" and "all twenty-three", and since the difficulties are
+     IQ 2 / 3 / 5 it meant Soldier and Recruit built the same seven things as each other for
+     the whole match. The rung is per building now - see RTS_AI.buildIQ. */
   var order = _rtsIQAt(RTS_IQ.production) ? RTS_AI.buildOrder
-            : (_rtsIQAt(RTS_IQ.repairSell) ? ['refinery', 'barracks'] : []);
+            : (_rtsIQAt(RTS_IQ.expandBase) ? RTS_AI.buildOrder.filter(function (k) {
+                 return _rtsIQAt(RTS_AI.buildIQ[k] || RTS_AI.buildIQDefault);
+               }) : []);
   var size = Math.max(own, theirs + RTS_AI.baseSizeAdd);
   var mySide = rtsHouseSide('enemy');
   for (i = 0; i < order.length; i++) {

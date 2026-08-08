@@ -75,16 +75,29 @@ var RTS_IQ = {
   repairSell:3,     /* repairs damaged buildings at all */
   scatter:3,        /* its infantry scatter from incoming fire */
   harvester:3,      /* replaces lost harvesters */
-  guardArea:4,      /* leaves a garrison at home instead of sending everything */
+  /* NO DIFFICULTY IS IQ 4. The rungs are 2 / 3 / 5, so a gate at 4 is Commando-only however it
+     reads, and the next person to add a difficulty at 4 would get a surprise. Moved to 5, which
+     is a no-op for every difficulty that exists and says what is actually true. Asserted in
+     test/unit/scenario: every gate here has to be one some difficulty can land on. */
+  guardArea:5,      /* leaves a garrison at home instead of sending everything */
+  /* The rung at which the opponent walks a real build order at all. Everything on it is then
+     gated per building by RTS_AI.buildIQ. */
+  expandBase:3,
   refill:3,         /* restarts a production line the instant it frees */
   production:5,     /* full build order and base expansion */
   /* Firing a superweapon is its own ability, separate from being able to BUILD one, because
      the two fail differently: a low-IQ house that builds a missile silo and never fires it is
      wasting 1750 credits, which is a perfectly good way for a weak opponent to be weak.
 
-     3 rather than 4 deliberately. The difficulties run 2 / 3 / 5, so a gate of 4 would have
-     meant only Commando ever fired one - and a feature two thirds of players never see from
-     the receiving end is not a difficulty distinction, it is a dead branch. */
-  superweapon:3
+     THIS USED TO BE 3, AND THE REASONING WAS ALREADY DEFEATED WHEN IT WAS WRITTEN. The note
+     said a gate of 4 would have meant only Commando ever fired one, and that a feature two
+     thirds of players never see from the receiving end is a dead branch rather than a
+     difficulty distinction. Both true - but `mslo` sits twentieth in the build order, which
+     needed IQ 5, so Soldier could FIRE a superweapon it was never able to BUILD. The branch
+     was dead anyway, by the other gate, and nothing said so.
+
+     Now the two agree: the superweapons are listed at IQ 5 in RTS_AI.buildIQ and firing one is
+     gated at 5 to match. They are the Commando distinction, on purpose and in one place. */
+  superweapon:5
 };
 

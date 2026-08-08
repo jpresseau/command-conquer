@@ -767,7 +767,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">edf296e · 2026-08-08</div>
+  <div id="rtsBuild" title="build">fa83f29 · 2026-08-08</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -3469,17 +3469,30 @@ var RTS_IQ = {
   repairSell:3,     /* repairs damaged buildings at all */
   scatter:3,        /* its infantry scatter from incoming fire */
   harvester:3,      /* replaces lost harvesters */
-  guardArea:4,      /* leaves a garrison at home instead of sending everything */
+  /* NO DIFFICULTY IS IQ 4. The rungs are 2 / 3 / 5, so a gate at 4 is Commando-only however it
+     reads, and the next person to add a difficulty at 4 would get a surprise. Moved to 5, which
+     is a no-op for every difficulty that exists and says what is actually true. Asserted in
+     test/unit/scenario: every gate here has to be one some difficulty can land on. */
+  guardArea:5,      /* leaves a garrison at home instead of sending everything */
+  /* The rung at which the opponent walks a real build order at all. Everything on it is then
+     gated per building by RTS_AI.buildIQ. */
+  expandBase:3,
   refill:3,         /* restarts a production line the instant it frees */
   production:5,     /* full build order and base expansion */
   /* Firing a superweapon is its own ability, separate from being able to BUILD one, because
      the two fail differently: a low-IQ house that builds a missile silo and never fires it is
      wasting 1750 credits, which is a perfectly good way for a weak opponent to be weak.
 
-     3 rather than 4 deliberately. The difficulties run 2 / 3 / 5, so a gate of 4 would have
-     meant only Commando ever fired one - and a feature two thirds of players never see from
-     the receiving end is not a difficulty distinction, it is a dead branch. */
-  superweapon:3
+     THIS USED TO BE 3, AND THE REASONING WAS ALREADY DEFEATED WHEN IT WAS WRITTEN. The note
+     said a gate of 4 would have meant only Commando ever fired one, and that a feature two
+     thirds of players never see from the receiving end is a dead branch rather than a
+     difficulty distinction. Both true - but `mslo` sits twentieth in the build order, which
+     needed IQ 5, so Soldier could FIRE a superweapon it was never able to BUILD. The branch
+     was dead anyway, by the other gate, and nothing said so.
+
+     Now the two agree: the superweapons are listed at IQ 5 in RTS_AI.buildIQ and firing one is
+     gated at 5 to match. They are the Commando distinction, on purpose and in one place. */
+  superweapon:5
 };
 
 </script>
@@ -3589,6 +3602,29 @@ var RTS_AI = {
               'helipad', 'afld', 'navalyard', 'subpen',
               'pillbox', 'flametower', 'turret', 'rocketpit', 'tesla', 'aagun',
               'mslo', 'iron', 'pdox', 'gps'],
+
+  /* WHICH RUNG EACH BUILDING BELONGS TO. The order above says what to build first; this says
+     who gets to build it at all, and it exists because the gate it replaces was all-or-nothing.
+
+     _rtsAIWants used to hand the whole list to IQ 5 and the two-item list ['refinery','barracks']
+     to anything lower. The difficulties are IQ 2 / 3 / 5, so EVERYTHING from the war factory
+     onward - the tech tree, both shipyards, the airfield, every defence and all four
+     superweapons - was Commando-only. Measured at 600s with the player kept alive on seed 9001,
+     the opponent's distinct structure types were: Recruit 7, Soldier 7, Commando 16. The first
+     two are the six it starts with plus a silo. Recruit and Soldier built THE SAME SEVEN THINGS
+     for ten minutes; Soldier just built more copies of them.
+
+     So the rungs are per building now, and adding one means deciding its rung once:
+
+       3  everything through the defensive tail. Soldier is meant to be "an even fight - the
+          enemy expands and repairs", and an opponent with no radar, no factory and no defences
+          is not that.
+       5  the superweapons, which stay the Commando distinction.
+
+     Recruit keeps an EMPTY order deliberately - refinery and barracks are listed at 3, not 2 -
+     because that rung is unchanged by this and its ladder position was already measured. */
+  buildIQ:{ mslo:5, iron:5, pdox:5, gps:5 },
+  buildIQDefault:3,
   /* What to spend a production run on. A table rather than an if-chain: adding a unit to
      RTS_UNITS should not mean editing the opponent's brain, and the hardcoded ladder that used
      to live in _rtsAIUnits is a large part of why the roster sat at five units. Gating is left
@@ -15115,10 +15151,14 @@ function _rtsAIWants(S) {
   if (cap > 0 && S.ore >= cap * RTS_AI.siloUrgent && (have.silo || 0) < RTS_AI.limit.silo
       && _rtsCanProduce('enemy', 'silo')) return { key:'silo', urgent:true };
 
-  /* Below IQProduction the opponent keeps a minimal base and never expands - that is the
-     whole difference between the low difficulties and the high one. */
+  /* Below IQProduction the opponent keeps a minimal base and never expands. That used to be
+     one flag between "two buildings" and "all twenty-three", and since the difficulties are
+     IQ 2 / 3 / 5 it meant Soldier and Recruit built the same seven things as each other for
+     the whole match. The rung is per building now - see RTS_AI.buildIQ. */
   var order = _rtsIQAt(RTS_IQ.production) ? RTS_AI.buildOrder
-            : (_rtsIQAt(RTS_IQ.repairSell) ? ['refinery', 'barracks'] : []);
+            : (_rtsIQAt(RTS_IQ.expandBase) ? RTS_AI.buildOrder.filter(function (k) {
+                 return _rtsIQAt(RTS_AI.buildIQ[k] || RTS_AI.buildIQDefault);
+               }) : []);
   var size = Math.max(own, theirs + RTS_AI.baseSizeAdd);
   var mySide = rtsHouseSide('enemy');
   for (i = 0; i < order.length; i++) {
