@@ -94,9 +94,9 @@ tiles that run off the end of the buffer. It is at **16**.
 all. Frame 0 is the standing tree; the rest are the burning and felled sequence.
 
 Only the base ground is repainted from templates — clear grass (one of sixteen variants per cell,
-the way the original picks them) and water. **Rock, cliffs, ore and the dirt patches' drawn edges
-stay procedural**, because those are multi-tile templates with real placement rules and
-half-applying them looks worse than either end state. Only the 48×48 single trees are used;
+the way the original picks them) and water. Ore and the dirt patches' drawn edges stay
+procedural. **Cliffs used to as well**; they are now fitted from the real Cliffs templates, which
+took throwing away two plans first — see the section at the bottom. Only the 48×48 single trees are used;
 `tc01`–`tc05` are 72×48 and 96×72 clumps that span several cells and would overlap their
 neighbours without the placement rules that go with them.
 
@@ -136,10 +136,10 @@ soldier could walk fourteen tiles east depended on the map. It now pins the seed
 outward for somewhere pathable, so it measures the walk cycle rather than the pathfinder's opinion
 of one particular tile. Three consecutive runs, 5/5.
 
-## Why cliffs are NOT taken from the templates
+## Cliffs, from the templates — and the plan that had to be thrown away
 
-The tileset was surveyed properly before deciding, and the answer is worth writing down so nobody
-repeats the investigation.
+The tileset was surveyed properly before deciding, and both the survey and the two dead ends are
+worth writing down so nobody repeats them.
 
 `mods/ra/tilesets/temperat.yaml` describes 308 templates in eight categories:
 
@@ -154,11 +154,11 @@ repeats the investigation.
 | River | 21 | mixed |
 | Terrain | 4 | clear, water |
 
-2×2 cliff pieces look like an autotile set, and the yaml even gives a per-cell terrain type — so
-the obvious plan is to derive a 4-bit occupancy mask per template and build a bitmask lookup.
+### Dead end 1: the terrain classes are not shapes
 
-**That does not work, and the data says so plainly.** Nearly every 2×2 cliff template masks to
-`1111`:
+2×2 cliff pieces look like an autotile set, and the yaml gives a per-cell terrain type — so the
+obvious plan is a 4-bit occupancy mask per template and a bitmask lookup. **That does not work,
+and the data says so plainly.** Nearly every 2×2 cliff template masks to `1111`:
 
 ```
 135  s01.tem  mask 1111    0=Rock 1=Rock 2=Rock 3=Rock
@@ -167,20 +167,78 @@ the obvious plan is to derive a 4-bit occupancy mask per template and build a bi
 ```
 
 The terrain type encodes **passability, not shape**. Every one of those pieces is impassable rock
-in all four cells; what differs between them is the *artwork* — which edge carries the cliff face,
-which corner turns. Nothing in the tileset says which is which.
+in all four cells; what differs is the *artwork*. Nothing in the tileset says which is which, so
+the shape has to come from the pixels.
 
-So placing them correctly is not a port of anything. RA's cliff templates are a **painter's
-palette for the map editor**, and real RA maps are hand-authored: a person picks the north-east
-corner piece because they can see it. Automating it means classifying 42 templates by analysing
-their pixels to infer where each face lies, then writing a generator that chains them — an
-invention, with a real chance of looking worse than the procedural cliffs already here, which were
-measured (`rockfit.js`: 0 px painted more than one cell from a blocked cell, 4.3% organic spill).
+### Classifying the pixels: rock is an INDEX SET, not a colour
 
-**What IS automatable is the 1×1 set**, and that is what went in: `rf01`–`rf07` loose rock and
-`p01`–`p04` set dressing — fallen logs, a wreck, a crashed aircraft. Self-contained, one cell, no
-placement rules to get wrong.
+A per-pixel colour test does not work either. This tileset dithers its grass with near-black
+neutrals that the rock shadows also use, and a green-versus-not-green test called **65% of a
+mostly-grass cell rock**. What is unambiguous is the palette index set: `clear1.tem` is plain
+ground and nothing else, so an index it never uses cannot be grass. Those seeds are then closed
+over a 5×5 window, which turns "the bright beige pixels" into "the rock". Judged against the art
+side by side, that reads correctly on all 157 cells of the 38 decoded templates.
 
-If the pixel-classification route is ever wanted, the shape of it is: decode each Cliffs template,
-find the shadowed face band per cell, label each piece N/S/E/W/corner, then run a marching-squares
-pass over the rock regions. That is a project, not a change.
+(`temperat.pal` is in **local.mix**, not `temperat.mix`. Four of the 42 Cliffs templates —
+`cliffsl1`–`cliffsl4` — are not in the base archive at all.)
+
+### Dead end 2: they do not chain
+
+With the shapes in hand the plan of record was an autotile chain: a piece that enters from the
+west and leaves to the east, another that turns north. The edge signatures even look promising —
+8 templates carry rock on both the east and west borders, 7 on both north and south, and there
+are end caps for all four directions.
+
+**Measured, chaining is worthless.** For every ordered pair of templates, take the 24 pixels down
+their shared border and count where rock meets rock and grass meets grass:
+
+| pairing | border agreement |
+|---|---|
+| each template's **best** available partner | **78.9%** |
+| a partner picked **at random** | **78.8%** |
+
+There is no join structure in these borders to exploit. Westwood drew 38 rock formations, not 38
+interlocking segments, and a chainer would be inventing a relationship that is not in the data.
+
+### What went in instead: fitting
+
+What the templates actually are is 2×2 and 3×2 lumps of rock with grass baked around the edges,
+so they are **fitted, not chained** — `src/mixart/cliffs.js`, on generated maps only (a real map
+already names its own template per cell). A placement is legal when every rock cell of the
+template lands on blocked rock, every grass cell lands on open ground, and nothing lands on ore,
+a tree or the sea. Then a **seam term** scores each candidate against the pieces already placed
+to its west and north, which is what turns a row of separate lumps into a ridge:
+
+| | border agreement |
+|---|---|
+| greedy fit, no seam term | 88.7% |
+| with the seam term (weight 8) | **91.8%** |
+| + a full four-neighbour relaxation afterwards | 92.1% — **not worth the code** |
+
+**Art versus blocking.** The two errors are not symmetrical, and this takes the kinder one. Rock
+art spilling onto driveable ground makes a route look closed when it is open; a blocked cell
+left looking like grass makes a route look open when it is closed, and a player who orders a unit
+through it watches it refuse. The original takes the second error — RA blocks a cliff template's
+whole footprint, grassy margin cells included. `RTS_CLIFF_MAXOPEN` takes the first:
+
+| spill limit | rock cells covered whole | rock ink on open cells | seam |
+|---|---|---|---|
+| none | 100% | 29% | 91.8% |
+| **0.4** | **99%** | **21%** | **93.0%** |
+| 0.35 | 95% | 17% | 93.0% |
+
+Whatever the whole templates miss is mopped up with a **single cell** lifted out of a nearly-solid
+template — the piece the original itself uses for a lone boulder. With that, every blocked cell on
+every seed measured ends up under cliff art, which is what lets `_sprDrawRock` be skipped
+outright rather than mixed in beside it.
+
+Cost, measured on a 128×128 map with 459 rock cells: library **29 ms** once, fit and paint
+**19–23 ms**, against a terrain bake of **1217 ms**. Skipping the drawn cliffs more than pays it
+back.
+
+**The 1×1 set is still separate and still automatic**: `rf01`–`rf07` loose rock and `p01`–`p04`
+set dressing — fallen logs, a wreck, a crashed aircraft — scattered on open ground.
+
+**Water cliffs (`wc01`–`wc38`) are not done.** They are the same shape of problem against the
+coastline mask rather than the rock mask, and the fitter would take them with a different pair of
+predicates; nobody has measured whether the coastline the generator produces has room for them.

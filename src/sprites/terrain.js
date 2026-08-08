@@ -189,6 +189,87 @@ function _rtsBakeTerrain(G) {
     _sprRect(g, wx + 1, wy + 1, wl - 2, 1, RTS_PAL.water[4]);
   }
 
+  /* --- cliffs. When the player has pointed the game at their own game files, Red Alert's own
+         Cliffs templates are FITTED onto the rock mask instead - see mixart/cliffs.js for why
+         fitted rather than chained, and for the measurement that ruled the alternative out.
+
+         It runs at exactly the point the drawn cliffs would have been composited, so the
+         tufts and debris scattered further up still end up underneath the rock. What comes
+         back is how many blocked cells it could NOT reach: zero on every seed measured, and
+         the drawn cliffs are then skipped outright. Null means there was no artwork, which
+         is the ordinary case and the reason all of _sprDrawRock still exists. --- */
+  var cliffLeft = null;
+  if (typeof _mixPaintCliffs === 'function' && !window._RTS_MAP) {
+    var cimg = g.getImageData(0, 0, S, S);
+    cliffLeft = _mixPaintCliffs(cimg.data, S, G, seed);
+    if (cliffLeft !== null) g.putImageData(cimg, 0, 0);
+  }
+  if (cliffLeft === null || cliffLeft > 0) _sprDrawRock(g, G, S, seed);
+
+  /* --- sandbag emplacements --- */
+  var bagSpr = _sprSandbag();
+  for (tz = 0; tz < N; tz++) {
+    for (tx = 0; tx < N; tx++) {
+      if (G.terrain[_rtsIdx(tx, tz)] !== RTS_T_WALL) continue;
+      g.drawImage(bagSpr.c, tx * TS, tz * TS - bagSpr.head);
+    }
+  }
+
+  /* --- forest. Conifers, drawn back-to-front down the map so a grove overlaps correctly,
+         each one taller than its cell with a cast shadow. This is the single biggest
+         difference between "a field" and "a battlefield". --- */
+  var trees = _sprTrees();
+  for (tz = 0; tz < N; tz++) {
+    for (tx = 0; tx < N; tx++) {
+      if (G.terrain[_rtsIdx(tx, tz)] !== RTS_T_TREE) continue;
+      /* Jitter close to a full cell. One tree per cell nudged a few pixels still lines up
+         into visible rows; a grove has to look sown, not planted. */
+      var jx = (_sprHash(tx, tz, seed + 101) - 0.5) * 17;
+      var jy = (_sprHash(tz, tx, seed + 103) - 0.5) * 15;
+      var tr = trees[(_sprHash(tx, tz, seed + 107) * 3) | 0];
+      g.drawImage(tr.c, Math.round(tx * TS + jx), Math.round(tz * TS + jy - tr.head));
+    }
+  }
+  return t.c;
+}
+
+/* Conifers, baked from 3D like everything else. They were stacked 2D ellipses before, which
+   left the forest looking like flat cut-outs while the buildings beside it had volume - and
+   the forest is a fifth of the map, so it set the tone for the whole picture. Three size
+   variants, picked per cell. */
+var _RTS_TREES = null;
+function _sprTrees() {
+  if (_RTS_TREES) return _RTS_TREES;
+  /* Real trees when the player's own files are loaded. Ours next to the original's ground was
+     the one thing in the first pass that looked plainly wrong - bright cones on RA's dark
+     temperate grass. */
+  if (typeof _mixTrees === 'function') {
+    var real = _mixTrees();
+    if (real) return (_RTS_TREES = real);
+  }
+  var TR = RTS_PAL.tree, out = [];
+  for (var v = 0; v < 3; v++) {
+    var sc = [0.82, 1.0, 1.22][v], m = [];
+    _r3Cyl(m, 0, 0, 0, 1.6 * sc, 5 * sc, TR[4], TR[4], 8);            /* trunk */
+    var tiers = v === 1 ? 4 : 3;
+    for (var i = 0; i < tiers; i++) {
+      var f = i / tiers;
+      var r0 = 8 * sc * (1 - f * 0.55), r1 = r0 * 0.42;
+      var y = (3 + f * 13) * sc, h = 6.5 * sc;
+      _r3Cone(m, 0, y, 0, r0, r1, h, i === tiers - 1 ? TR[1] : TR[0], 12);
+    }
+    var r = _r3BakeFootprint(m, RTS_TS, RTS_TS);
+    out.push({ c: _sprShadow(r.c, 3, 3), head: r.head });
+  }
+  _RTS_TREES = out;
+  return out;
+}
+
+/* The drawn cliffs. Lifted out of _rtsBakeTerrain so the real-artwork path can skip it in one
+   line rather than by threading a flag through a hundred lines of painting. */
+function _sprDrawRock(g, G, S, seed) {
+  var N = RTS_N, TS = RTS_TS, tx, tz;
+  function tileAt(x, z) { return _rtsInB(x, z) ? G.terrain[_rtsIdx(x, z)] : -1; }
   /* --- rock ridges. --------------------------------------------------------------------
      Rewritten off a continuous COVERAGE FIELD rather than per-cell rectangles. The old version
      drew each rock cell as an axis-aligned box clipped against its neighbours, and rendered it
@@ -297,63 +378,4 @@ function _rtsBakeTerrain(G) {
   rg.putImageData(rimg, 0, 0);
   _sprEdge(rockCv.c);
   g.drawImage(rockCv.c, 0, 0);
-
-  /* --- sandbag emplacements --- */
-  var bagSpr = _sprSandbag();
-  for (tz = 0; tz < N; tz++) {
-    for (tx = 0; tx < N; tx++) {
-      if (G.terrain[_rtsIdx(tx, tz)] !== RTS_T_WALL) continue;
-      g.drawImage(bagSpr.c, tx * TS, tz * TS - bagSpr.head);
-    }
-  }
-
-  /* --- forest. Conifers, drawn back-to-front down the map so a grove overlaps correctly,
-         each one taller than its cell with a cast shadow. This is the single biggest
-         difference between "a field" and "a battlefield". --- */
-  var trees = _sprTrees();
-  for (tz = 0; tz < N; tz++) {
-    for (tx = 0; tx < N; tx++) {
-      if (G.terrain[_rtsIdx(tx, tz)] !== RTS_T_TREE) continue;
-      /* Jitter close to a full cell. One tree per cell nudged a few pixels still lines up
-         into visible rows; a grove has to look sown, not planted. */
-      var jx = (_sprHash(tx, tz, seed + 101) - 0.5) * 17;
-      var jy = (_sprHash(tz, tx, seed + 103) - 0.5) * 15;
-      var tr = trees[(_sprHash(tx, tz, seed + 107) * 3) | 0];
-      g.drawImage(tr.c, Math.round(tx * TS + jx), Math.round(tz * TS + jy - tr.head));
-    }
-  }
-  return t.c;
 }
-
-/* Conifers, baked from 3D like everything else. They were stacked 2D ellipses before, which
-   left the forest looking like flat cut-outs while the buildings beside it had volume - and
-   the forest is a fifth of the map, so it set the tone for the whole picture. Three size
-   variants, picked per cell. */
-var _RTS_TREES = null;
-function _sprTrees() {
-  if (_RTS_TREES) return _RTS_TREES;
-  /* Real trees when the player's own files are loaded. Ours next to the original's ground was
-     the one thing in the first pass that looked plainly wrong - bright cones on RA's dark
-     temperate grass. */
-  if (typeof _mixTrees === 'function') {
-    var real = _mixTrees();
-    if (real) return (_RTS_TREES = real);
-  }
-  var TR = RTS_PAL.tree, out = [];
-  for (var v = 0; v < 3; v++) {
-    var sc = [0.82, 1.0, 1.22][v], m = [];
-    _r3Cyl(m, 0, 0, 0, 1.6 * sc, 5 * sc, TR[4], TR[4], 8);            /* trunk */
-    var tiers = v === 1 ? 4 : 3;
-    for (var i = 0; i < tiers; i++) {
-      var f = i / tiers;
-      var r0 = 8 * sc * (1 - f * 0.55), r1 = r0 * 0.42;
-      var y = (3 + f * 13) * sc, h = 6.5 * sc;
-      _r3Cone(m, 0, y, 0, r0, r1, h, i === tiers - 1 ? TR[1] : TR[0], 12);
-    }
-    var r = _r3BakeFootprint(m, RTS_TS, RTS_TS);
-    out.push({ c: _sprShadow(r.c, 3, 3), head: r.head });
-  }
-  _RTS_TREES = out;
-  return out;
-}
-

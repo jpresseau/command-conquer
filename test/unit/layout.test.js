@@ -59,6 +59,25 @@ var twice = Object.keys(listed).filter(function (f) { return listed[f] > 1; });
 S.ok('...exactly once, so nothing is evaluated twice', !twice.length,
      twice.join(', ') || 'no duplicate includes');
 
+/* ------------------------------------------------- every spec can actually fail ----
+   There is no framework here. The runner reads one thing: the exit code. Only two things set
+   it - report(), which every Suite-based spec ends with, and the older specs' own
+   `process.exit(fails.length ? 1 : 0)`. A spec that does NEITHER exits 0 whatever it found and
+   the runner prints PASS, which is what a brand new cliffs spec did while two of its assertions
+   were failing. That is the one failure mode a test suite cannot survive, and nothing else in
+   this arrangement can notice it. */
+['unit', 'e2e'].forEach(function (kind) {
+  var dir = path.join(ROOT, 'test', kind);
+  var all = fs.readdirSync(dir).filter(function (f) { return /\.test\.js$/.test(f); });
+  var silent = all.filter(function (f) {
+    var src = fs.readFileSync(path.join(dir, f), 'utf8');
+    return !/require\(['"][^'"]*lib\/report\.js['"]\)\s*\(/.test(src) &&
+           !/process\.exit(Code)?\b/.test(src);
+  });
+  S.ok('every test/' + kind + ' spec has a path to a non-zero exit code',
+       !silent.length, silent.join(', ') || all.length + ' specs');
+});
+
 /* ------------------------------------------------- the skeleton holds no JavaScript ----
    Every <script> in it must be a marker and nothing else. A block with a body would be code
    that neither the syntax gate nor the duplicate-name check ever sees. */
