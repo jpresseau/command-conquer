@@ -388,13 +388,54 @@ economy and tech, not offence, so the opponent has a real base without becoming 
 difficulty has, none is above the hardest, firing a superweapon implies being able to build one,
 and each difficulty reaches strictly more buildings than the one below.
 
-### It is still a partial fix
+### Why it was still a partial fix
 
-Soldier does not reach the tech lab inside 600s, let alone the airfield or a shipyard, and a real
-match ends around 220s — so in practice the radar is as far as it gets. The remaining limiter is
-**not** the gate: it is that the composition walk returns to economy as the base grows. At 19
-buildings `ceil(19 × 0.16) = 4` refineries are wanted and the limit is 4, so the walk goes back to
-the top of the order before it ever reaches `lab`. That diagnosis is **inferred from the ratios and
-the 600s composition** (Soldier: silo ×5, refinery ×3, barracks ×2, factory ×2, flametower ×2,
-apower ×2, plus one each of yard/radar/depot) — it has not been confirmed by instrumenting what
-the walk returns, and it should be before anything is retuned.
+Soldier did not reach the tech lab inside 600s, let alone the airfield or a shipyard. The remaining
+limiter was **not** the gate. The guess written here was that the composition walk simply returns
+to economy as the base grows — at 19 buildings `ceil(19 × 0.16) = 4` refineries are wanted against
+3 built, so the walk goes back to the top of the order before it ever reaches `lab`. That was
+inferred from the ratios, and the note said it should be instrumented before anything was retuned.
+It was, and the inference was **half right in a way that mattered**: the walk really did sit on
+`refinery`, but not because it was satisfied elsewhere and looping — because it was being refused.
+
+Sampling `G.ai.want` every simulated second, seed 9001, player kept alive, ten minutes:
+
+| | share of the match wanting a refinery |
+|---|---|
+| Soldier | **61.3%** (has 3, wants 4) |
+| Commando | 3.3% |
+
+Three things it was **not**. Placement: **405** legal refinery spots on that map at the moment of
+refusal. Money: 4,343 credits at 300s. Ore: the fields were nowhere near exhausted.
+
+Money did turn out to be a second, independent bug. From 4,343 at 300s it went 896, 257, 842, 497 —
+the unit line was spending it. `RTS_AI.infantryReserve` was a flat 2,000, while a non-urgent build
+needs the building's cost plus `creditReserve` on top: **3,000 for a 2,000-credit refinery**. Money
+could not climb past the lower number without being turned into infantry, so a building not paid for
+inside the early rich window was never paid for at all. `_rtsAISpare` now floors the unit line at
+whichever is higher, and Commando alone went 35 → **41** structures with its missile silo landing at
+420s instead of 581s. Soldier's run was **byte-identical** — so this was real, and it was not the
+thing.
+
+The thing was found by wrapping `_rtsAIDo` and `_rtsQueue` and printing every refusal:
+`refinery -> REFUSED` thirty times, with `_rtsCanProduce('enemy','refinery') === false`, against a
+composition of `power ×0, apower ×2`.
+
+**`needs:['power']` named a key, not a capability.** The opponent builds Advanced Power Plants and
+then sells the basic plants they make redundant — which is exactly what its own `lowerPower`
+strategy is for — and from that moment the Refinery, the Barracks and the next Advanced Power Plant
+are all unbuildable, permanently, with nothing anywhere saying why. **The player had the identical
+trap**, which is why the fix is a `provides` list on the structure table (`_rtsProvides` walks it)
+and the spec is `test/unit/prereq` rather than a note here.
+
+| Soldier at 600s | before | after |
+|---|---|---|
+| distinct structure types | 10 | **15** |
+| structures | 19 | 31 |
+
+Tech lab 290s, kennel 298s, airfield 356s, sub pen 489s, rocket pit 538s — all of which the gate
+work above had already made reachable and which it could never actually get to.
+
+**The ladder still did not move**: allied 296/221/171s and soviet 294/221/172s. Three sessions of AI
+work have now left it inside a couple of seconds of where it started, which is the point — the
+opponent plays a fuller game without becoming harder to survive as an idle player.

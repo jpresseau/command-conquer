@@ -246,9 +246,34 @@ function _rtsHas(side, key) {
   }
   return null;
 }
+/* Does this side own something that satisfies `need`? A prerequisite names a CAPABILITY, not a
+   particular building - the Refinery needs power, and it does not care which plant supplies it.
+
+   Without that distinction an Advanced Power Plant does not count as power, and the consequence
+   is a base that locks itself out of its own tech tree. Measured on the opponent, seed 9001, ten
+   minutes with the player kept alive: it ended with two Advanced Power Plants and ZERO Power
+   Plants - it had built the advanced ones and then sold the basic ones as redundant, which is
+   exactly what its own `lowerPower` strategy is for - and from then on _rtsCanProduce('refinery')
+   was false. It wanted a fourth refinery for 368 of those seconds, had 405 legal places to put
+   one and the money to pay for it, and was refused 30 times in the last five minutes.
+
+   THE PLAYER HAS THE SAME TRAP. Build an Advanced Power Plant, sell your Power Plants because
+   they are now redundant, and the Refinery and Barracks disappear from the sidebar with nothing
+   to say why. */
+function _rtsProvides(side, need) {
+  var G = window._rtsG;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.type !== 'struct' || e.side !== side || e.dead || e.building) continue;
+    if (e.def === need) return e;
+    var d = rtsStructDef(e.def);
+    if (d && d.provides && d.provides.indexOf(need) >= 0) return e;
+  }
+  return null;
+}
 function _rtsAvailable(side, def) {
   if (!def.needs) return true;
-  for (var i = 0; i < def.needs.length; i++) if (!_rtsHas(side, def.needs[i])) return false;
+  for (var i = 0; i < def.needs.length; i++) if (!_rtsProvides(side, def.needs[i])) return false;
   return true;
 }
 

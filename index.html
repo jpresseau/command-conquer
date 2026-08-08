@@ -767,7 +767,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">fa83f29 · 2026-08-08</div>
+  <div id="rtsBuild" title="build">539280f · 2026-08-08</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -2736,7 +2736,11 @@ var RTS_STRUCTS = [
   { key:'yard',     name:'Command Yard',  w:3, h:3, cost:0,    build:0,  hp:1400, power:0,    sight:16,
     armour:'concrete',
     desc:'The heart of your base. Everything you build must sit near it.' },
+  /* `provides` is the prerequisite CLASS this building satisfies, which is not always its own
+     key: the Advanced Power Plant is also power, and everything that needs power should take
+     either. See _rtsProvides for what went wrong without it. */
   { key:'power',    name:'Power Plant',   w:2, h:2, cost:300,  build:7,  hp:500,  power:100,  sight:10,
+    provides:['power'],
     armour:'concrete',
     desc:'Supplies 100 power. Low power slows every production line.' },
   { key:'refinery', name:'Ore Refinery',w:3, h:3, cost:2000, build:18, hp:950,  power:-30,  sight:12,
@@ -2801,7 +2805,7 @@ var RTS_STRUCTS = [
   /* Advanced Power Plant $500 / +200 / needs Power Plant. Twice the output for well under
      twice the price and one footprint instead of two - the correct answer once a base is big. */
   { key:'apower',   name:'Adv. Power Plant', w:3, h:2, cost:500, build:11, hp:600, power:200, sight:10,
-    needs:['power'],
+    needs:['power'], provides:['power'],
     armour:'concrete',
     desc:'Supplies 200 power. Cheaper per unit than two plants, and half the footprint.' },
   /* Kennel $200 / -10 / needs Barracks. It exists to gate the Attack Dog. */
@@ -13523,9 +13527,34 @@ function _rtsHas(side, key) {
   }
   return null;
 }
+/* Does this side own something that satisfies `need`? A prerequisite names a CAPABILITY, not a
+   particular building - the Refinery needs power, and it does not care which plant supplies it.
+
+   Without that distinction an Advanced Power Plant does not count as power, and the consequence
+   is a base that locks itself out of its own tech tree. Measured on the opponent, seed 9001, ten
+   minutes with the player kept alive: it ended with two Advanced Power Plants and ZERO Power
+   Plants - it had built the advanced ones and then sold the basic ones as redundant, which is
+   exactly what its own `lowerPower` strategy is for - and from then on _rtsCanProduce('refinery')
+   was false. It wanted a fourth refinery for 368 of those seconds, had 405 legal places to put
+   one and the money to pay for it, and was refused 30 times in the last five minutes.
+
+   THE PLAYER HAS THE SAME TRAP. Build an Advanced Power Plant, sell your Power Plants because
+   they are now redundant, and the Refinery and Barracks disappear from the sidebar with nothing
+   to say why. */
+function _rtsProvides(side, need) {
+  var G = window._rtsG;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.type !== 'struct' || e.side !== side || e.dead || e.building) continue;
+    if (e.def === need) return e;
+    var d = rtsStructDef(e.def);
+    if (d && d.provides && d.provides.indexOf(need) >= 0) return e;
+  }
+  return null;
+}
 function _rtsAvailable(side, def) {
   if (!def.needs) return true;
-  for (var i = 0; i < def.needs.length; i++) if (!_rtsHas(side, def.needs[i])) return false;
+  for (var i = 0; i < def.needs.length; i++) if (!_rtsProvides(side, def.needs[i])) return false;
   return true;
 }
 
@@ -16265,6 +16294,27 @@ function _rtsAIMassOf(side) {
   return _rtsInB(tx, tz) ? { tx: tx, tz: tz } : null;
 }
 
+/* WHAT THE UNIT LINE IS ALLOWED TO SPEND DOWN TO. It used to be a flat `infantryReserve`, and
+   that number sat BELOW the threshold the base plan needs, which is a ratchet: units start being
+   bought at 2,000 credits and a 2,000-credit refinery needs 3,000 in hand (its cost plus
+   `creditReserve`, because a non-urgent build will not spend the last of the treasury). Money
+   therefore could not climb past 2,000 without being turned into infantry first, and whatever the
+   opponent had not built by the time its early rich window closed, it never built.
+
+   Measured on Soldier, seed 9001, with the player kept alive so the match cannot end: it wanted a
+   fourth refinery for 61.3% of ten minutes - 368 seconds - with 405 legal places to put one, and
+   its bank went 4,343 at 300s, then 896, 257, 842, 497. Never once back above 3,000.
+
+   So the floor is whichever is higher: the infantry reserve, or what the base plan is currently
+   saving for. The unit line spends the SURPLUS, not the building's money. */
+function _rtsAISpare(S) {
+  var G = window._rtsG, w = G.ai && G.ai.want;
+  if (!w) return RTS_AI.infantryReserve;
+  var sd = rtsStructDef(w.key);
+  if (!sd) return RTS_AI.infantryReserve;
+  return Math.max(RTS_AI.infantryReserve, _rtsCostOf('enemy', sd) + RTS_AI.creditReserve);
+}
+
 function _rtsUpdateAI(dt) {
   var G = window._rtsG, S = G.sides.enemy;
   if (S.lost) return;
@@ -16278,7 +16328,7 @@ function _rtsUpdateAI(dt) {
      that cannot expand its base spends its whole income on units, so handing perfect queue
      efficiency to the low difficulties turned Recruit into a unit pump - 53 units against
      Commando's 61, which is not a difficulty ladder, it is one rung. */
-  if (_rtsIQAt(RTS_IQ.refill) && rtsMoney(S) > RTS_AI.infantryReserve) _rtsAIUnits(S);
+  if (_rtsIQAt(RTS_IQ.refill) && rtsMoney(S) > _rtsAISpare(S)) _rtsAIUnits(S);
   G.ai.next -= dt;
   G.ai.build -= dt;
   if (G.ai.build <= 0) {
@@ -16295,7 +16345,7 @@ function _rtsUpdateAI(dt) {
         if (!b.repair && b.hp < b.maxHp * 0.85) { b.repair = 1; b.rtimer = 0; }
       }
     }
-    _rtsAIUnits(S);
+    if (rtsMoney(S) > _rtsAISpare(S)) _rtsAIUnits(S);
     _rtsTeamMaybeRaise();
 
     /* Expert_AI: score every strategy, then act from CRITICAL downward. Note the original

@@ -47,7 +47,11 @@ var RTS_STRUCTS = [
   { key:'yard',     name:'Command Yard',  w:3, h:3, cost:0,    build:0,  hp:1400, power:0,    sight:16,
     armour:'concrete',
     desc:'The heart of your base. Everything you build must sit near it.' },
+  /* `provides` is the prerequisite CLASS this building satisfies, which is not always its own
+     key: the Advanced Power Plant is also power, and everything that needs power should take
+     either. See _rtsProvides for what went wrong without it. */
   { key:'power',    name:'Power Plant',   w:2, h:2, cost:300,  build:7,  hp:500,  power:100,  sight:10,
+    provides:['power'],
     armour:'concrete',
     desc:'Supplies 100 power. Low power slows every production line.' },
   { key:'refinery', name:'Ore Refinery',w:3, h:3, cost:2000, build:18, hp:950,  power:-30,  sight:12,
@@ -112,7 +116,7 @@ var RTS_STRUCTS = [
   /* Advanced Power Plant $500 / +200 / needs Power Plant. Twice the output for well under
      twice the price and one footprint instead of two - the correct answer once a base is big. */
   { key:'apower',   name:'Adv. Power Plant', w:3, h:2, cost:500, build:11, hp:600, power:200, sight:10,
-    needs:['power'],
+    needs:['power'], provides:['power'],
     armour:'concrete',
     desc:'Supplies 200 power. Cheaper per unit than two plants, and half the footprint.' },
   /* Kennel $200 / -10 / needs Barracks. It exists to gate the Attack Dog. */
