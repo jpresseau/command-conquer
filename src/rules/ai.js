@@ -104,6 +104,29 @@ var RTS_AI = {
               'helipad', 'afld', 'navalyard', 'subpen',
               'pillbox', 'flametower', 'turret', 'rocketpit', 'tesla', 'aagun',
               'mslo', 'iron', 'pdox', 'gps'],
+
+  /* WHICH RUNG EACH BUILDING BELONGS TO. The order above says what to build first; this says
+     who gets to build it at all, and it exists because the gate it replaces was all-or-nothing.
+
+     _rtsAIWants used to hand the whole list to IQ 5 and the two-item list ['refinery','barracks']
+     to anything lower. The difficulties are IQ 2 / 3 / 5, so EVERYTHING from the war factory
+     onward - the tech tree, both shipyards, the airfield, every defence and all four
+     superweapons - was Commando-only. Measured at 600s with the player kept alive on seed 9001,
+     the opponent's distinct structure types were: Recruit 7, Soldier 7, Commando 16. The first
+     two are the six it starts with plus a silo. Recruit and Soldier built THE SAME SEVEN THINGS
+     for ten minutes; Soldier just built more copies of them.
+
+     So the rungs are per building now, and adding one means deciding its rung once:
+
+       3  everything through the defensive tail. Soldier is meant to be "an even fight - the
+          enemy expands and repairs", and an opponent with no radar, no factory and no defences
+          is not that.
+       5  the superweapons, which stay the Commando distinction.
+
+     Recruit keeps an EMPTY order deliberately - refinery and barracks are listed at 3, not 2 -
+     because that rung is unchanged by this and its ladder position was already measured. */
+  buildIQ:{ mslo:5, iron:5, pdox:5, gps:5 },
+  buildIQDefault:3,
   /* What to spend a production run on. A table rather than an if-chain: adding a unit to
      RTS_UNITS should not mean editing the opponent's brain, and the hardcoded ladder that used
      to live in _rtsAIUnits is a large part of why the roster sat at five units. Gating is left

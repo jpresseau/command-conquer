@@ -361,4 +361,72 @@ function checkArg(where, need, arg, bad) {
        Object.keys(TACTIONS).length + ' actions needing: ' + Object.keys(needs).sort().join(', '));
 })();
 
+/* --------------------------------------------------- the difficulty ladder ----
+   Two tables that have to agree and are written five hundred lines apart: RTS_IQ says at what
+   level each AI behaviour switches on, RTS_DIFF says what level each difficulty is. Nothing
+   made them meet, and both ways of missing are silent.
+
+   A GATE NO DIFFICULTY REACHES is a rung that reads as a distinction and is not one. guardArea
+   sat at 4 while the difficulties were 2 / 3 / 5, so it was Commando-only however it read, and
+   the next person to add a difficulty at 4 would have got a surprise.
+
+   A GATE THAT DISAGREES WITH THE BUILD ORDER is worse, because it can be self-contradictory:
+   firing a superweapon was gated at IQ 3 with a comment explaining that a higher gate would
+   make it Commando-only - while `mslo` needed IQ 5 to be BUILT, so Soldier could fire one it
+   could never own. Both halves are checked here against each other. */
+(function () {
+  var IQ = g.RTS_IQ, DIFF = g.RTS_DIFF, AI = g.RTS_AI;
+  var levels = Object.keys(DIFF).map(function (k) { return DIFF[k].iq; })
+                     .sort(function (a, b) { return a - b; });
+  var lowest = levels[0], highest = levels[levels.length - 1];
+
+  /* A gate ABOVE the lowest difficulty has to sit on a level some difficulty actually has, or
+     it silently means the next rung up. A gate at or below the lowest is a deliberate floor -
+     "even the weakest opponent does this" - and is fine. */
+  var offRung = Object.keys(IQ).filter(function (k) {
+    return k !== 'max' && IQ[k] > lowest && levels.indexOf(IQ[k]) < 0;
+  });
+  S.ok('every IQ gate sits at a level some difficulty actually has', !offRung.length,
+       offRung.map(function (k) { return k + '@' + IQ[k]; }).join(', ') ||
+       Object.keys(IQ).length - 1 + ' gates against difficulties ' + levels.join('/'));
+
+  var dead = Object.keys(IQ).filter(function (k) { return k !== 'max' && IQ[k] > highest; });
+  S.ok('...and none is above the hardest difficulty, which would switch it off for everyone',
+       !dead.length, dead.map(function (k) { return k + '@' + IQ[k]; }).join(', ') ||
+       'highest gate ' + Math.max.apply(null, Object.keys(IQ)
+         .filter(function (k) { return k !== 'max'; }).map(function (k) { return IQ[k]; })) +
+       ' against a top difficulty of ' + highest);
+
+  /* Firing a superweapon and being able to build one have to agree. */
+  var sw = ['mslo', 'iron', 'pdox', 'gps'];
+  var buildAt = sw.map(function (k) { return AI.buildIQ[k] || AI.buildIQDefault; });
+  S.ok('a house that can fire a superweapon can also build one',
+       buildAt.every(function (b) { return b <= IQ.superweapon; }),
+       'fire at IQ ' + IQ.superweapon + ', build at ' + sw.map(function (k, i) {
+         return k + ' ' + buildAt[i]; }).join(', '));
+
+  /* Every building in the order needs a rung, and the rungs must be reachable too. */
+  var noRung = AI.buildOrder.filter(function (k) {
+    var iq = AI.buildIQ[k] || AI.buildIQDefault;
+    return !levels.some(function (l) { return l >= iq; });
+  });
+  S.ok('every building in the build order is reachable by some difficulty', !noRung.length,
+       noRung.join(', ') || AI.buildOrder.length + ' buildings, rungs ' +
+       [AI.buildIQDefault].concat(Object.keys(AI.buildIQ).map(function (k) { return AI.buildIQ[k]; }))
+         .filter(function (v, i, a) { return a.indexOf(v) === i; }).sort().join('/'));
+
+  /* The middle rung has to be a real one: Soldier must build strictly more than Recruit and
+     strictly less than Commando, or the ladder has two rungs wearing three names. */
+  function reach(iq) {
+    if (!(iq >= IQ.expandBase)) return 0;
+    if (iq >= IQ.production) return AI.buildOrder.length;
+    return AI.buildOrder.filter(function (k) {
+      return iq >= (AI.buildIQ[k] || AI.buildIQDefault);
+    }).length;
+  }
+  var r = ['easy', 'normal', 'hard'].map(function (d) { return reach(DIFF[d].iq); });
+  S.ok('each difficulty can build strictly more than the one below it', r[0] < r[1] && r[1] < r[2],
+       'buildings reachable: easy ' + r[0] + ', normal ' + r[1] + ', hard ' + r[2]);
+})();
+
 require('../lib/report.js')(S);
