@@ -20,7 +20,16 @@ function _sprBldBase(X, key) {
        wide and 15 high, every one of its facets faces almost straight up, the light hits
        them all the same and the whole roof shades as one flat plate. Narrower than the hall
        and half as tall again gives the flanks a real angle to catch. */
-    _r3Vault(m, 0, 12, 0, W - 8, 22, D - 8, C[1], 18, true);             /* the barrel roof */
+    /* CORRUGATED, in slices along the depth. One vault call is one smooth surface, and a
+       smooth surface under this light is a single wide shading gradient: the Construction Yard
+       measured 8.8 distinct tones per thousand pixels, the worst in the game, on the building
+       every base opens with and the largest thing on screen. Sliced and alternated it reads as
+       a corrugated hangar - which is what an arched shed of this size actually is - and the
+       arch itself is untouched, so the silhouette that identifies it survives. */
+    var YR = 6, YRD = (D - 8) / YR;
+    for (var yv = 0; yv < YR; yv++)
+      _r3Vault(m, 0, 12, (yv - (YR - 1) / 2) * YRD, W - 8, 22, YRD - 0.4,
+               (yv & 1) ? C[1] : C[0], 18, true);
     _r3Box(m, 0, 33, 0, 10, 1.6, D - 12, B.roof, B.roof);                /* ridge band - team */
     _r3Box(m, 0, 0, D / 2 - 4, W - 26, 12, 5, DK[2], DK[0]);             /* the opening */
     _r3Box(m, 0, 12, D / 2 - 4, W - 22, 2.5, 6, C[3], C[3]);             /* its lintel */

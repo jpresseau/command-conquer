@@ -37,20 +37,50 @@ function _sprBldWar(X, key) {
        "this end goes in the water", because it is the only building with a placement rule and
        the shape is the only hint the player gets before they try. The Sub Pen is the same
        hull with a covered roof, which is what distinguishes them in the original too. */
+    /* The shed used to be one _r3Box 34 wide and 66 deep. Under a camera this close to
+       overhead that box is mostly its own TOP - a single flat polygon covering about a third
+       of the sprite, in one tone, whatever the palette does. Measured: 62 distinct colours
+       across 5,800 opaque pixels, which is a rectangle with a stripe. Both yards measured the
+       same because they ARE the same box; nothing about the slipway, gantry, mast or crate
+       survived to distinguish them.
+
+       So the shed is a ribbed hall now - _r3Slab for a chamfered base (four planes at four
+       angles, so four tones, which is what the presentation rules ask for instead of a box)
+       and a row of roof ribs over it, the same saw-tooth that fixed the war factory. */
     var _cov = (key === 'subpen');
     _r3Box(m, 0, 0, 0, W - 3, 3, D - 3, C[2], C[0]);                     /* apron */
-    _r3Box(m, -W / 4, 3, 0, W / 2 - 2, 9, D - 6, C[0], C[1]);            /* the shed */
-    _r3Box(m, -W / 4, 12, 0, W / 2, 2, D - 5, C[3], C[3]);               /* its roof */
-    /* the slipway: a channel cut through the apron, open at the seaward end */
-    _r3Box(m, W / 5, 1.5, 0, W / 2.4, 1.5, D / 2.6, S[2], S[3]);
-    if (_cov) _r3Box(m, W / 5, 8, 0, W / 2.2, 2, D / 2.4, C[1], C[0]);   /* pen roof */
-    else {
-      _r3Box(m, W / 5, 10, -D / 5, 1.6, 7, 1.6, S[1], S[2]);             /* gantry legs */
-      _r3Box(m, W / 5, 10, D / 5, 1.6, 7, 1.6, S[1], S[2]);
-      _r3Box(m, W / 5, 17, 0, W / 2.2, 1.6, 2.2, S[0], S[1]);            /* gantry beam */
+    _r3Slab(m, -W / 4, 3, 0, W / 2 - 2, 9, D - 8, 2.5, C[0], C[1]);      /* the hall */
+    var NR = 4, NRD = (D - 10) / NR;
+    for (var nv = 0; nv < NR; nv++)
+      _r3Gable(m, -W / 4, 12, (nv - (NR - 1) / 2) * NRD, W / 2 - 3, 4.5, NRD - 0.5,
+               (nv & 1) ? C[2] : C[0]);
+    _r3Box(m, -W / 4, 11.4, 0, W / 2 - 1, 1.2, D - 7, C[3], C[1]);       /* eaves */
+    _r3Box(m, -W / 4, 16.2, 0, W / 2 - 9, 1.1, 3, B.roof, B.roof);       /* team band, on the ridge */
+    /* The slipway: a real channel, dark and open at the seaward end, with its own kerbs. A
+       dark trough beside a pale hall is the strongest edge on the building and the only hint
+       the player gets that this end goes in the water. */
+    _r3Box(m, W / 5, 1.2, 0, W / 2.4, 1.4, D / 2.4, DK[2], DK[0]);
+    _r3Box(m, W / 5, 1.6, -D / 4.2, W / 2.4, 2.4, 2.5, C[3], C[1]);      /* kerb, landward */
+    for (var ns = 0; ns < 4; ns++)                                        /* slipway rails */
+      _r3Box(m, W / 5, 2.4, -D / 7 + ns * (D / 11), W / 2.8, 0.7, 1.2, S[1], S[3]);
+    if (_cov) {
+      /* The Sub Pen is the same hull under cover, which is what tells them apart in the
+         original too. A vault rather than a flat lid: alongZ, so the curve is in the
+         silhouette and the near cap faces the camera. */
+      _r3Vault(m, W / 5, 3, 0, W / 2.2, 9, D / 2.3, C[1], 16, true);
+      _r3Box(m, W / 5, 12, 0, 4, 1.1, D / 2.4, B.roof, B.roof);
+    } else {
+      _r3Box(m, W / 5, 10, -D / 5, 1.8, 7, 1.8, S[1], S[2]);             /* gantry legs */
+      _r3Box(m, W / 5, 10, D / 5, 1.8, 7, 1.8, S[1], S[2]);
+      _r3Box(m, W / 5, 17, 0, W / 2.2, 1.8, 2.4, S[0], S[1]);            /* gantry beam */
+      _r3Cyl(m, W / 5, 18.8, 0, 1.6, 3, S[2], S[0], 16);                 /* the hoist */
+      _r3Box(m, W / 5, 14, 0, 1.0, 4.5, 1.0, S[3], S[3]);                /* its cable */
     }
-    _r3Cyl(m, -W / 4, 14, -D / 4, 2.2, 5, B.roof, B.roof, 16);           /* team-coloured mast */
-    _r3Box(m, -W / 3, 3.5, -D / 3, 3, 2, 3, RTS_PAL.hazard[0], S[3]);    /* dockside crate */
+    _r3Cyl(m, -W / 4, 17, -D / 3, 2.0, 6, B.roof, B.roof, 16);           /* team-coloured mast */
+    _r3Cyl(m, -W / 2 + 7, 3, D / 3, 3.2, 7, RTS_PAL.hazard[0], S[3], 16);  /* dockside drum */
+    _r3Box(m, -W / 3, 3.5, -D / 3, 4, 2.5, 4, RTS_PAL.hazard[0], S[3]);  /* crate */
+    for (var nb = 0; nb < 3; nb++)                                        /* bollards along the quay */
+      _r3Cyl(m, W / 2 - 5, 3, -D / 3 + nb * (D / 3.2), 1.3, 2.6, S[2], S[0], 12);
 
   } else if (key === 'tesla') {
     /* TESLA COIL. Two cells tall and almost nothing wide - the tallest, thinnest thing either
