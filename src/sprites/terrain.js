@@ -252,12 +252,27 @@ function _rtsBakeTerrain(G) {
   }
   if (cliffLeft === null || cliffLeft > 0) _sprDrawRock(g, G, S, seed);
 
-  /* --- sandbag emplacements --- */
-  var bagSpr = _sprSandbag();
+  /* --- headlands: rock that meets the sea, from RA's 38 Water Cliffs templates. Painted after
+         the land cliffs because it repaints nothing they touched - _rtsCliffRules refuses those
+         cells outright - and before the trees, which stand on top of everything. --- */
+  if (typeof _mixPaintSeaCliffs === 'function' && !window._RTS_MAP) {
+    var wcimg = g.getImageData(0, 0, S, S);
+    if (_mixPaintSeaCliffs(wcimg.data, S, G, seed) !== null) g.putImageData(wcimg, 0, 0);
+  }
+
+  /* --- sandbag emplacements. With the player's own files loaded these come from sbag.shp,
+         which is a real autotile: sixteen frames indexed by which neighbours are also wall, so
+         a run joins up instead of being sixteen copies of one horizontal bag stack laid end to
+         end. See mixart/walls.js. Ours is one sprite and has no notion of a corner, which is
+         why a north-south wall used to read as a ladder. --- */
+  var wallSet = typeof _mixWallSet === 'function' ? _mixWallSet() : null;
+  var bagSpr = wallSet ? null : _sprSandbag();
+  function isWallAt(x, z) { return _rtsInB(x, z) && G.terrain[_rtsIdx(x, z)] === RTS_T_WALL; }
   for (tz = 0; tz < N; tz++) {
     for (tx = 0; tx < N; tx++) {
       if (G.terrain[_rtsIdx(tx, tz)] !== RTS_T_WALL) continue;
-      g.drawImage(bagSpr.c, tx * TS, tz * TS - bagSpr.head);
+      if (wallSet) g.drawImage(wallSet[_rtsWallMask(isWallAt, tx, tz)], tx * TS, tz * TS);
+      else g.drawImage(bagSpr.c, tx * TS, tz * TS - bagSpr.head);
     }
   }
 

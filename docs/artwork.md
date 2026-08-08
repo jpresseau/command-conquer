@@ -323,3 +323,86 @@ luminance from the dirt pixels the Road templates actually use, weighted by how 
 appears. And its tone now comes from a smooth field rather than a per-2px hash — the road had the
 same white-noise bug the grass had, and more visibly, because a road is a solid block of one
 material with nothing else going on in it.
+
+
+## Sandbag walls: the one real autotile
+
+`sbag.shp` is **32 frames of 24×24** — sixteen connection frames then the same sixteen as rubble
+(unused: our walls are terrain, not something with hit points). The frame for a cell is simply
+`frame[mask]` where
+
+```
+N = 1    E = 2    S = 4    W = 8
+```
+
+No fitting, no scoring, no measurement of how well it came out — it either joins or the bit order
+is wrong. The order was established by **building walls out of it and looking**: a cross, two
+corners and a T-junction all come out continuous, and any transposition breaks them into stubs.
+
+This is the only piece of the tileset that works this way. The cliffs had to be classified from
+their pixels because the terrain classes encode passability rather than shape; the shore had to be
+chosen by comparing pictures because whole templates cannot follow a one-cell coastline. A wall is
+indexed art and nothing more. The same 16-frame arrangement covers `cycl`, `brik`, `barb`, `wood`
+and `fenc` and any of them would drop straight in.
+
+It replaces **one horizontal bag stack drawn on every wall cell**, which is why a wall running
+north-south read as a ladder of separate blocks.
+
+Loading it exposed an older hole: `_mixPaintCell` painted grass, trees and water from real
+templates but not `RTS_T_WALL` or `RTS_T_ROAD`, so every wall cell wore a pale square of the
+*procedural* grass against RA's darker real grass all around it. Invisible while one sprite covered
+the whole cell; the road had the same hole showing through its dithered verge the entire time.
+
+## Water cliffs, and the coast that had to be built for them
+
+RA ships 38 templates for rock meeting the sea. **There was nowhere on a generated map to put
+one:** measured across six seeds, the count of rock cells adjacent to water was *zero* on every
+single one. The inlet laid sand over the whole beach band, ridge included, so rock never reached
+the water.
+
+Letting a ridge survive into the beach band fixes that and gives 2–10 cells a map — real, and far
+too few to see. What gives an actual coastline is deciding **stretch by stretch** whether the shore
+is cliff or beach, off a low-frequency noise, which is what RA's own maps look like:
+
+| rocky-shore threshold | mean cliff cells | longest run | sides with no shipyard site |
+|---|---|---|---|
+| ridge only | 5 | 5 | 0 |
+| 0.72 | 32 | 22 | **1 of 12** |
+| 0.66 | 44 | 25 | 1 |
+| 0.60 | 51 | 31 | 1 |
+
+That cost is not acceptable as it stands: coastal rock is blocked, a shipyard needs buildable land
+beside water, and on seed 12345 the opponent went from 20 shipyard sites to **zero** — the whole
+naval half of the roster, gone, on that map. So **each side keeps a beach**: the stretch of shore
+nearest each start stays sand. That is the stretch inside build radius and the only one either side
+can reach anyway. With the guard at threshold 0.72: mean 21.7 cliff cells, longest run 22, and
+**no side without a shipyard site on any seed**.
+
+Two seeds of the six get almost no cliff coast, because their channel is short enough that the two
+keep-a-beach zones cover most of it. That is the honest cost of the guard.
+
+**The ladder did not move.** This is a terrain change - it converts about 20 passable sand cells a
+map into blocked rock - so it was re-measured rather than argued about: allied 296/218/172s and
+soviet 294/219/175s, against 294/215/169 and 292/216/172 before. Every rung is within two or three
+seconds, which is inside the run-to-run noise, and the ordering is untouched.
+
+The art itself needed no new machinery. A headland is the same problem as a beach with rock in the
+middle instead of sand — a strip of something between the sea and the land, with an edge at each
+side — so `_mixPaintCoast` takes the category and a predicate saying which cells it owns, and the
+pixel classification (`2` water, `0` plain ground, `1` everything else) covers both without a
+special case. `_rtsCliffRules` refuses rock that meets the sea so the two passes never paint the
+same ground.
+
+## Repetition, and why the coast looked like a fence
+
+A straight run of coast is the same situation cell after cell, so the same tile wins every time.
+Measured on seed 9001 as the share of neighbouring pairs drawn with the *same* piece:
+
+| repeat penalty | beach | sea cliff | mean match (beach / cliff) |
+|---|---|---|---|
+| 0 | 15.1% | **64.3%** | 0.8994 / 0.7730 |
+| 1 | 0.6% | 46.4% | 0.8980 / 0.7703 |
+| **3** | **0.0%** | **0.0%** | 0.8977 / 0.7717 |
+
+Three costs about a quarter of one sample out of 64 and removes the artefact outright. The sea
+cliff needs all of it — its coast is a short straight run, which is the worst case.

@@ -140,6 +140,19 @@ function _rtsGenTerrain(G, rnd, starts) {
     var q = Math.max(0, Math.min(1, ((x - a[0]) * vx + (z - a[1]) * vz) / L2));
     return Math.hypot(x - (a[0] + vx * q), z - (a[1] + vz * q));
   }
+  /* The point on the channel nearest each start, and a radius around it that stays beach. */
+  function _nearestOnSeg(px, pz, a, b) {
+    var vx = b[0] - a[0], vz = b[1] - a[1], L2 = vx * vx + vz * vz || 1;
+    var q = Math.max(0, Math.min(1, ((px - a[0]) * vx + (pz - a[1]) * vz) / L2));
+    return [a[0] + vx * q, a[1] + vz * q];
+  }
+  var _keepP = _nearestOnSeg(_sp.tx, _sp.tz, _ia, _ib);
+  var _keepE = _nearestOnSeg(_se.tx, _se.tz, _ia, _ib);
+  var SEA_KEEP = 9;
+  function _seaKeep(x, z) {
+    return Math.hypot(x - _keepP[0], z - _keepP[1]) < SEA_KEEP ||
+           Math.hypot(x - _keepE[0], z - _keepE[1]) < SEA_KEEP;
+  }
   for (tx = 0; tx < N; tx++) {
     for (tz = 0; tz < N; tz++) {
       var _si = _rtsIdx(tx, tz);
@@ -153,7 +166,30 @@ function _rtsGenTerrain(G, rnd, starts) {
       var _wob = nz(tx, tz, 11, seed + 31) * 5 - 2.5;
       var _sd = _segD(tx, tz, _ia, _ib) + _wob;
       if (_sd < SEA_R) set(tx, tz, RTS_T_WATER, true);
-      else if (_sd < SEA_R + SEA_BEACH) set(tx, tz, RTS_T_SAND, false);
+      /* A RIDGE THAT REACHES THE SHORE STAYS ROCK - a headland, not a beach. This band used to
+         lay sand over everything, which is why rock never once met water: measured across six
+         seeds before the change, the count of rock cells adjacent to water was ZERO on every
+         one of them. RA ships 38 water-cliff templates for exactly that meeting, and there was
+         nowhere on a generated map to put one.
+
+         Only the BEACH band yields. Inside SEA_R the rock is still drowned, because a ridge
+         left standing across the channel would dam it into two ponds and undo the whole point
+         of placing the water relative to the two starts. */
+      else if (_sd < SEA_R + SEA_BEACH) {
+        /* STRETCHES OF THE COAST ARE CLIFF RATHER THAN BEACH, off a low-frequency noise, which
+           is what RA's own maps look like and what the 38 water-cliff templates are drawn for.
+           A ridge that reaches the shore counts as cliff too.
+
+           BUT EACH SIDE KEEPS A BEACH. Coastal rock is blocked, and a shipyard needs buildable
+           land beside water - so a fully rocky coast can leave a side with nowhere to build a
+           navy at all. Measured: at this threshold and no exception, seed 12345 left the
+           opponent with ZERO shipyard sites where it had 20 before. The nearest stretch of
+           shore to each start is therefore held sandy, which is the stretch inside build
+           radius and the only one either side can reach anyway. */
+        var _rk = G.terrain[_si] === RTS_T_ROCK || nz(tx, tz, 13, seed + 47) > 0.72;
+        if (_rk && !_seaKeep(tx, tz)) set(tx, tz, RTS_T_ROCK, true);
+        else set(tx, tz, RTS_T_SAND, false);
+      }
     }
   }
 

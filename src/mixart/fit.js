@@ -38,14 +38,36 @@
    the seam is scored on - and the rest is whatever the caller's `fits` wants to read. */
 var RTS_TEM_SEAMW = 8;                   /* measured: 3 -> 91.6%, 8 -> 91.8%, 20 -> 91.9% */
 var RTS_TEM_MATCHW = 24;                 /* facing beats seam: see the shoreline note above */
+/* A candidate that repeats the piece already next to it is docked this much. A straight run of
+   coast is the same situation cell after cell, so without this the same tile wins every time and
+   the shore comes out as one motif stamped in a row - a picket fence, not rock.
+
+   Measured on seed 9001, as the share of neighbouring pairs drawn with the SAME piece, against
+   what the accuracy costs:
+
+     weight 0   beach 15.1% identical, sea cliff 64.3%   match 0.8994 / 0.7730
+     weight 1   beach  0.6%,           sea cliff 46.4%   match 0.8980 / 0.7703
+     weight 3   beach  0.0%,           sea cliff  0.0%   match 0.8977 / 0.7717
+
+   Three costs about a quarter of one sample out of 64 and removes the artefact outright. The sea
+   cliff needs the whole of it: its coast is a short straight run, which is the worst case. */
+var RTS_TEM_REPEATW = 3;
 
 function _rtsTemFit(lib, N, opt) {
   var TS = RTS_TS, used = new Uint8Array(N * N), mask = new Array(N * N), out = [];
+  var last = new Array(N * N);             /* map cell -> the template painted there */
   var seed = opt.seed | 0, needs = opt.needs, fits = opt.fits, match = opt.match;
   function hash(a, b, s) {
     var v = Math.imul(a | 0, 374761393) ^ Math.imul(b | 0, 668265263) ^ Math.imul(s | 0, 1442695041);
     v = Math.imul(v ^ (v >>> 13), 1274126177); v ^= v >>> 16;
     return (v >>> 0) / 4294967296;
+  }
+  /* Is this the same piece as the one already beside it? Only west and north exist in raster
+     order, which is enough: a run is broken by breaking every second join. */
+  function repeated(t, ox, oz) {
+    for (var i = 0; i < t.h; i++) if (ox > 0 && last[(oz + i) * N + ox - 1] === t) return true;
+    for (var j = 0; j < t.w; j++) if (oz > 0 && last[(oz - 1) * N + ox + j] === t) return true;
+    return false;
   }
   function seam(t, ox, oz) {
     var same = 0, tot = 0, i, y;
@@ -85,6 +107,7 @@ function _rtsTemFit(lib, N, opt) {
             if (!ok || !gain) continue;
             var score = gain * 4 + seam(t, ox, oz) * RTS_TEM_SEAMW + hash(ox, oz, ti + seed) * 0.5;
             if (nc) score += (agree / nc) * RTS_TEM_MATCHW;
+            if (repeated(t, ox, oz)) score -= RTS_TEM_REPEATW;
             if (!best || score > best.score) best = { score: score, t: t, ox: ox, oz: oz };
           }
         }
@@ -94,6 +117,7 @@ function _rtsTemFit(lib, N, opt) {
         var k = (best.oz + by) * N + best.ox + bx;
         used[k] = 1;
         mask[k] = best.t.cells[by * best.t.w + bx].m;
+        last[k] = best.t;
       }
       out.push({ t: best.t, ox: best.ox, oz: best.oz });
     }

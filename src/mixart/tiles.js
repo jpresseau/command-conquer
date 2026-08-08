@@ -68,7 +68,13 @@ function _mixPaintCell(d, S, tx, tz, kind, seed) {
   if (!g) return false;
   var set = null;
   if (kind === RTS_T_WATER && g.water) set = g.water;
-  else if (kind === RTS_T_GRASS || kind === RTS_T_TREE) set = g.clear;
+  /* A wall and a road stand ON clear ground, and both used to be left out of this - so with the
+     player's files loaded every sandbag cell wore a pale square of the PROCEDURAL grass, one cell
+     exactly, against RA's darker real grass all around it. Invisible until sbag.shp arrived and
+     stopped covering the whole cell; the road had the same hole showing through its dithered
+     verge the entire time. The cell is repainted here and whatever stands on it goes on top. */
+  else if (kind === RTS_T_GRASS || kind === RTS_T_TREE ||
+           kind === RTS_T_WALL || kind === RTS_T_ROAD) set = g.clear;
   if (!set) return false;
   var v = (_sprHash(tx, tz, seed + 137) * set.n) | 0;
   if (v >= set.n) v = set.n - 1;
