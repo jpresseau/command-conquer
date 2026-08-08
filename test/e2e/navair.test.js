@@ -538,26 +538,143 @@ var S = new Suite('navair');
          'it picked ' + airRule.heliGround);
   }
 
-  /* --------------------------------------------------- what the opponent does not do ----
-     Recorded rather than asserted as a fault, because it is a design question and not a
-     defect: the opponent's base plan has no shipyard in its ratio, its limit or its build
-     order, and its production mix has no `ship` category. So the navy is the player's alone,
-     and on a map with water the Missile Sub's reach goes unanswered. Stated here so that
-     whoever changes it knows the ladder measurements move with it. */
-  var aiNavy = await g.page.evaluate(function () {
-    var plan = RTS_AI;
+  /* ------------------------------------------------------ the opponent HAS a navy now ----
+     This section used to be a note recording that it did not: no shipyard in the base plan,
+     no `ship` category in the production mix, naval player-only by omission. Two things had
+     to change to make it real, and the first was the map.
+
+     A generated map put ONE lake at a hardcoded (88,88) while the starts rotate around a ring
+     of eight, so whether anyone could reach the sea was down to which start came up. Measured
+     across eight seeds: the opponent could place a shipyard on two of them, the player on
+     one, and on five neither side could. Four ship types, two shipyards and every naval
+     weapon were unreachable on most maps - for the PLAYER as much as the opponent. */
+  var sea = await g.page.evaluate(function () {
+    var out = { seeds: [] };
+    for (var sd = 9001; sd <= 9006; sd++) {
+      if (document.getElementById('rcgRts')) rtsClose();
+      rtsOpen(sd);
+      var U = window._rtsUI;
+      if (U) { U.dead = true; try { cancelAnimationFrame(U.raf); } catch (e) {} }
+      var G = window._rtsG, i;
+
+      /* a shipyard this side could actually place, found the way _rtsAIPlace finds one */
+      function spots(side) {
+        var yard = rtsHouseSide(side) === 'allied' ? 'navalyard' : 'subpen', n = 0;
+        var anchors = G.ents.filter(function (e) {
+          return !e.dead && e.type === 'struct' && e.side === side; });
+        for (var a = 0; a < anchors.length; a++) {
+          var an = anchors[a], R = RTS_BUILD_RADIUS;
+          for (var tx = an.tx - R; tx <= an.tx + R; tx++)
+            for (var tz = an.tz - R; tz <= an.tz + R; tz++)
+              if (_rtsCanPlace(side, yard, tx, tz)) n++;
+        }
+        return n;
+      }
+      /* the sea has to be ONE body or two fleets can never meet */
+      var seen = new Uint8Array(RTS_N * RTS_N), total = 0, biggest = 0;
+      for (i = 0; i < G.terrain.length; i++) if (G.terrain[i] === RTS_T_WATER) total++;
+      for (i = 0; i < G.terrain.length; i++) {
+        if (G.terrain[i] !== RTS_T_WATER || seen[i]) continue;
+        var st = [i], n = 0; seen[i] = 1;
+        while (st.length) {
+          var c = st.pop(), x = c % RTS_N, z = (c / RTS_N) | 0; n++;
+          for (var d = 0; d < 4; d++) {
+            var nx = x + [1, -1, 0, 0][d], nz = z + [0, 0, 1, -1][d];
+            if (!_rtsInB(nx, nz)) continue;
+            var ni = _rtsIdx(nx, nz);
+            if (seen[ni] || G.terrain[ni] !== RTS_T_WATER) continue;
+            seen[ni] = 1; st.push(ni);
+          }
+        }
+        if (n > biggest) biggest = n;
+      }
+      /* and the land war must be untouched by all that water */
+      var land = new Uint8Array(RTS_N * RTS_N), sp = G.starts.player, se = G.starts.enemy;
+      var ls = [_rtsIdx(sp.tx, sp.tz)]; land[ls[0]] = 1;
+      while (ls.length) {
+        var lc = ls.pop(), lx = lc % RTS_N, lz = (lc / RTS_N) | 0;
+        for (var ld = 0; ld < 4; ld++) {
+          var mx = lx + [1, -1, 0, 0][ld], mz = lz + [0, 0, 1, -1][ld];
+          if (!_rtsInB(mx, mz)) continue;
+          var mi = _rtsIdx(mx, mz);
+          if (land[mi] || G.blocked[mi] === 2) continue;
+          land[mi] = 1; ls.push(mi);
+        }
+      }
+      var oreOut = 0;
+      for (i = 0; i < G.scrap.length; i++) if (G.scrap[i] > 0 && !land[i]) oreOut++;
+
+      out.seeds.push({ seed: sd, player: spots('player'), enemy: spots('enemy'),
+                       water: total, biggest: biggest,
+                       foeReachable: !!land[_rtsIdx(se.tx, se.tz)], oreStranded: oreOut,
+                       seaWaypoint: !!(G.waypt && G.waypt.sea) });
+    }
+    return out;
+  });
+  var S6 = sea.seeds;
+  S.ok('every seed gives the PLAYER a shore it can build a shipyard on',
+       S6.every(function (r) { return r.player > 0; }),
+       S6.map(function (r) { return r.player; }).join(', ') + ' placements');
+  S.ok('...and the opponent one too, or its naval branch is decoration',
+       S6.every(function (r) { return r.enemy > 0; }),
+       S6.map(function (r) { return r.enemy; }).join(', ') + ' placements');
+  S.ok('the sea is ONE body, so two fleets can actually meet',
+       S6.every(function (r) { return r.biggest === r.water; }),
+       S6.map(function (r) { return r.biggest + '/' + r.water; }).join('  '));
+  S.ok('...without cutting the land route between the bases',
+       S6.every(function (r) { return r.foeReachable; }), 'all ' + S6.length + ' seeds');
+  S.ok('...or stranding ore behind it', S6.every(function (r) { return r.oreStranded === 0; }),
+       S6.map(function (r) { return r.oreStranded; }).join(', ') + ' cells cut off');
+  S.ok('and there is a sea waypoint for a fleet to steer at',
+       S6.every(function (r) { return r.seaWaypoint; }),
+       'a land waypoint would have a fleet steering at a beach it cannot reach');
+
+  /* The plan itself, and the two guards that keep it from doing harm. */
+  var plan = await g.page.evaluate(function () {
     var yards = RTS_STRUCTS.filter(function (s) { return s.produces === 'ship'; }).map(function (s) { return s.key; });
+    if (document.getElementById('rcgRts')) rtsClose();
+    window._RTS_DIFF = 'hard';
+    rtsOpen(9001);
+    var U = window._rtsUI;
+    if (U) { U.dead = true; try { cancelAnimationFrame(U.raf); } catch (e) {} }
+    var G = window._rtsG;
+    for (var i = 0; i < 60 * 420; i++) { G.over = null; _rtsTick(1 / 60); }
+    var teams = {};
+    for (var id in G.teams) teams[G.teams[id].type.name] = (teams[G.teams[id].type.name] || 0) + 1;
     return {
-      inRatio: yards.filter(function (k) { return plan.ratio[k] != null; }),
-      inOrder: yards.filter(function (k) { return plan.buildOrder.indexOf(k) >= 0; }),
-      mixKeys: Object.keys(plan.mix)
+      inRatio: yards.filter(function (k) { return RTS_AI.ratio[k] != null; }),
+      inOrder: yards.filter(function (k) { return RTS_AI.buildOrder.indexOf(k) >= 0; }),
+      mixKeys: Object.keys(RTS_AI.mix),
+      house: rtsHouseSide('enemy'),
+      builtYards: G.ents.filter(function (e) { return !e.dead && e.side === 'enemy' && e.type === 'struct' &&
+                    (rtsStructDef(e.def) || {}).produces === 'ship'; }).length,
+      hulls: G.ents.filter(function (e) { return !e.dead && e.side === 'enemy' && e.type === 'unit' &&
+               (rtsUnitDef(e.def) || {}).sea; }).length,
+      cap: RTS_AI.fleetPerYard,
+      teams: teams,
+      /* the gate: on a map with no reachable coast the plan must not demand a yard, or the
+         walk returns it forever and everything after it is never built */
+      shoreSpot: !!_rtsAIShoreSpot(rtsHouseSide('enemy') === 'allied' ? 'navalyard' : 'subpen')
     };
   });
-  S.note('the opponent builds no navy: no shipyard in its ratio (' +
-         (aiNavy.inRatio.join(', ') || 'none') + ') or build order (' +
-         (aiNavy.inOrder.join(', ') || 'none') + '), and its production mix covers ' +
-         aiNavy.mixKeys.join('/') + ' only. Naval is player-only by omission - a design ' +
-         'question, not a defect, but the ladder would move if it changed.');
+  S.ok('the opponent has a shipyard in its base plan', plan.inRatio.length && plan.inOrder.length,
+       'ratio: ' + plan.inRatio.join('/') + ', order: ' + plan.inOrder.join('/'));
+  S.ok('...and a ship line in its production mix', plan.mixKeys.indexOf('ship') >= 0,
+       plan.mixKeys.join('/'));
+  S.ok('...and actually builds one', plan.builtYards > 0,
+       plan.builtYards + ' yards as a ' + plan.house + ' house');
+  S.ok('...and crews it', plan.hulls > 0, plan.hulls + ' hulls');
+  S.ok('...up to the fleet cap and no further', plan.hulls <= plan.builtYards * plan.cap,
+       plan.hulls + ' hulls against ' + plan.builtYards + ' x ' + plan.cap);
+  /* A house builds one side's hulls only, so exactly one of the two naval team types is
+     crewable by it. _rtsSuggestTeam counts IDLE units, not matching ones, so without a
+     buildability check the uncrewable type passes the size test, takes a slot, recruits
+     nobody, never reaches full strength and therefore never marches or frees the slot. */
+  var wrong = plan.house === 'allied' ? 'Wolfpack' : 'Flotilla';
+  var right = plan.house === 'allied' ? 'Flotilla' : 'Wolfpack';
+  S.ok('a house never raises the naval team it cannot crew', !plan.teams[wrong],
+       'as ' + plan.house + ': ' + JSON.stringify(plan.teams));
+  S.ok('...and does raise the one it can', !!plan.teams[right], right + ': ' + (plan.teams[right] || 0));
 
   S.ok('the page logged no errors throughout', !g.errors.length,
        g.errors.slice(0, 3).join(' | ') || 'clean');

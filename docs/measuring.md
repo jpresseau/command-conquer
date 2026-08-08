@@ -58,3 +58,24 @@ flip and asserting on it means nothing. The mission harness had exactly that ass
 been passing on luck; it now samples 400 calls and checks the proportion. If a harness
 assertion starts failing after a change to the random stream, ask whether it was ever really
 testing anything.
+
+## The coastline re-measurement
+
+Every number quoted above and in the other reference documents was measured on a map whose only
+water was a single lake at a hardcoded `(88,88)`. That lake is gone: water is now a channel
+placed relative to the two starts, so both bases have a shore. Terrain feeds everything —
+pathing, ore, where the AI can build — so the whole ladder moved, and the old figures are
+history rather than a baseline to compare against.
+
+| | easy | normal | hard |
+|---|---|---|---|
+| allied, before | 320s | 230s | 197s |
+| allied, after | **294s** | **215s** | **169s** |
+| soviet, before | 309s | 228s | 187s |
+| soviet, after | **292s** | **216s** | **172s** |
+
+Uniformly shorter — an idle player now survives 5-14% less long. The ordering and the spacing
+between the rungs both hold, which is what the ladder is for. Two causes, and neither is the
+opponent getting cleverer: the map carries about 8% less ore (the channel's spine clears what it
+runs over, and anything the water strands is swept rather than bridged), and a base with water
+on one flank has one fewer approach to defend.

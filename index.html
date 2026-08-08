@@ -767,7 +767,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">9903d70 · 2026-08-08</div>
+  <div id="rtsBuild" title="build">3e10854 · 2026-08-08</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -3545,6 +3545,10 @@ var RTS_AI = {
   ratio:{ refinery:0.16, barracks:0.16, factory:0.10, radar:0.06, lab:0.05, depot:0.05,
           apower:0.08, kennel:0.04, silo:0.14, pillbox:0.18, flametower:0.12, turret:0.24, rocketpit:0.12,
           helipad:0.06, afld:0.06, aagun:0.10,
+  /* One shipyard. A second buys nothing but a second production line for a domain
+     the opponent uses to raid a coast, and the ratio has to stay small or a map
+     with a long shoreline turns the whole base plan maritime. */
+          navalyard:0.05, subpen:0.05,
           mslo:0.02, iron:0.02, pdox:0.02, gps:0.02 },
   limit:{ refinery:4,    barracks:2,    factory:2,    radar:1,    lab:1,    depot:1,
   /* The silo limit is high on purpose and is the one number here that was MEASURED rather
@@ -3554,6 +3558,7 @@ var RTS_AI = {
      nerf and hands the player about 16 extra seconds of life. RA has no silo limit at all. */
           apower:2,    kennel:1,    silo:14,   pillbox:4,     flametower:3,     turret:6,     rocketpit:4,
           helipad:2,   afld:2,      aagun:3,
+          navalyard:1, subpen:1,
   /* One each. A second silo would not charge a second missile - the timer is per house - so
      building one is pure waste, and the limit says so rather than relying on the ratio. */
           mslo:1,      iron:1,      pdox:1,    gps:1 },
@@ -3562,6 +3567,10 @@ var RTS_AI = {
      the storage cap is a pure nerf to the opponent - it loses the income and never buys the
      fix. Expressed as the fraction of capacity at which a silo jumps the queue. */
   siloUrgent:0.8,
+  /* Hulls per shipyard. A yard is not consumed by a ship the way a pad is by an aircraft,
+     so this is the ceiling that stops a rich opponent turning its whole surplus into a
+     navy the player may not be contesting at all. */
+  fleetPerYard:5,
   /* The order _rtsAIWants walks. Economy, then production, then tech, then defence - tech
      before defence because a Tech Center that arrives after the match is decided is worth
      nothing, and the defensive ratios are big enough to soak every spare credit otherwise.
@@ -3577,7 +3586,7 @@ var RTS_AI = {
      four turrets never gets there at all. The AA gun goes IN the defensive tail, beside the
      turrets it stands next to. */
   buildOrder:['refinery', 'barracks', 'silo', 'factory', 'radar', 'apower', 'depot', 'lab', 'kennel',
-              'helipad', 'afld',
+              'helipad', 'afld', 'navalyard', 'subpen',
               'pillbox', 'flametower', 'turret', 'rocketpit', 'tesla', 'aagun',
               'mslo', 'iron', 'pdox', 'gps'],
   /* What to spend a production run on. A table rather than an if-chain: adding a unit to
@@ -3601,6 +3610,13 @@ var RTS_AI = {
        specific moment, and an AI that buys them without a plan just donates the credits to
        whatever shoots them first. The Commando is out for the same reason plus her `only` cap.
        The dog IS in: it needs no plan, it just runs at infantry. */
+    /* SHIPS, once there is a yard to build them at - _rtsCanQueue gates on `needs`, so these
+       are inert until one exists. Both armies are listed and _rtsCanQueue drops whichever
+       belong to the other, exactly as the defensive block and the aircraft block already do.
+       The thresholds are high because a hull is worth two tanks and the opponent should not
+       be buying a destroyer while its land army is still five units. */
+    ship:[ { key:'destroyer', at:2600, w:3 }, { key:'missilesub', at:2800, w:2 },
+           { key:'sub', at:1800, w:3 }, { key:'gunboat', at:1100, w:3 } ],
     infantry:[ { key:'flame', at:1200, w:2 }, { key:'grenadier', at:900, w:2 },
                { key:'rocket', at:500, w:3 }, { key:'dog', at:400, w:2 },
                { key:'rifle', at:250, w:2 } ],
@@ -4039,7 +4055,24 @@ var RTS_TEAM_TYPES = [
     /* Straight down the throat and never mind what shoots back. No staging pause and no
        silent approach march: an opening GUARD plus a plain MOVE leg had the heaviest team
        in the game spending its first half-minute not fighting. */
-    missions:[ ['patrol','front'], ['attack','buildings'], ['loop',1] ] }
+    missions:[ ['patrol','front'], ['attack','buildings'], ['loop',1] ] },
+  /* --- and at sea. One per army, because a team only marches at FULL STRENGTH and a house
+     can only build its own side's hulls: a single mixed type listing all four would leave a
+     Soviet flotilla waiting forever for a Gunboat it cannot build. `sea` is the waypoint,
+     which _rtsBuildWaypoints derives as open water off the target's coast - a land waypoint
+     would have the fleet steering at a beach it cannot reach.
+
+     Quarry is `buildings`: what a navy is FOR here is reaching the coastal half of a base
+     that the land army has to cross the map to touch. Not reinforceable, because a hull that
+     goes back for a friend is a hull not shooting. */
+  { name:'Flotilla', priority:3, reinforce:false, quarry:'buildings',
+    members:{ gunboat:2, destroyer:1 },
+    max:1, autocreate:true, suicide:false,
+    missions:[ ['patrol','sea'], ['attack','buildings'], ['tarcom',0] ] },
+  { name:'Wolfpack', priority:3, reinforce:false, quarry:'buildings',
+    members:{ sub:2, missilesub:1 },
+    max:1, autocreate:true, suicide:false,
+    missions:[ ['patrol','sea'], ['attack','buildings'], ['tarcom',0] ] }
 ];
 var RTS_ALERT_TIME = 150;        /* backstop only: the first attack wave normally alerts the house */
 
@@ -10705,9 +10738,17 @@ function _rtsGenTerrain(G, rnd, starts) {
     var p = h(x0, y0), q = h(x0 + 1, y0), r = h(x0, y0 + 1), t = h(x0 + 1, y0 + 1);
     return (p + (q - p) * ax) * (1 - ay) + (r + (t - r) * ax) * ay;
   }
-  /* Base areas and ore stay clear of everything. */
+  /* Base areas and ore stay clear of everything.
+
+     These were the literals (20,90) and (92,22) - the two FIXED starts this game had before
+     SCENARIO.CPP's Create_Units landed and made them a random pick from a ring of eight. The
+     function is handed the real `starts` and was ignoring them, so it reserved two arbitrary
+     circles of pristine grass and left the actual bases to fend for themselves. Not fatal,
+     because _clearStart bulldozes the real ones afterwards - but it meant every map carried
+     two unexplained clearings, and the ore and terrain kept away from the wrong places. */
   function nearBase(x, z) {
-    return Math.hypot(x - 20, z - 90) < 17 || Math.hypot(x - 92, z - 22) < 17;
+    return Math.hypot(x - starts.player.tx, z - starts.player.tz) < 15 ||
+           Math.hypot(x - starts.enemy.tx,  z - starts.enemy.tz)  < 15;
   }
   function free(x, z) {
     return _rtsInB(x, z) && G.scrap[_rtsIdx(x, z)] <= 0 && !nearBase(x, z);
@@ -10718,17 +10759,9 @@ function _rtsGenTerrain(G, rnd, starts) {
     G.blocked[k] = block ? 2 : 0;
   }
 
-  /* --- water: one lake, pushed into a corner away from both starts --- */
-  var lx = 88, lz = 88, lr = 13;
-  for (tx = lx - lr - 4; tx <= lx + lr + 4; tx++) {
-    for (tz = lz - lr - 4; tz <= lz + lr + 4; tz++) {
-      if (!free(tx, tz)) continue;
-      var wob = nz(tx, tz, 9, seed + 3) * 7 - 3.5;
-      var dd = Math.hypot(tx - lx, tz - lz) + wob;
-      if (dd < lr) set(tx, tz, RTS_T_WATER, true);
-      else if (dd < lr + 2.2) set(tx, tz, RTS_T_SAND, false);   /* beach */
-    }
-  }
+  /* --- water. See the INLET further down: it is carved after the roads, because it has to
+         be able to cut one, and because it is placed relative to the two starts rather than
+         at a fixed spot on the map. Nothing to do here. --- */
 
   /* --- rock ridges: high-contrast bands of a low-frequency noise field, which gives
          long connected walls rather than the confetti a per-tile threshold produces --- */
@@ -10789,6 +10822,53 @@ function _rtsGenTerrain(G, rnd, starts) {
   _rtsCarveRoad(G, _sp.tx, _sp.tz, _se.tx, _se.tz, rnd);      /* the main route, base to base */
   _rtsCarveRoad(G, _sp.tx, _sp.tz, _b1[0], _b1[1], rnd);      /* one branch out to each flank */
   _rtsCarveRoad(G, _se.tx, _se.tz, _b2[0], _b2[1], rnd);
+
+  /* --- the inlet ---
+     A COAST EACH, and one body of water rather than two ponds.
+
+     There used to be a single lake at a hardcoded (88,88) while the starts rotated around a
+     ring of eight, so whether anyone could reach the sea was down to which start came up.
+     Measured across eight seeds before this: the opponent could place a shipyard on two of
+     them, the player on one, and on five neither side could. Four ship types, two shipyards
+     and the whole naval half of the roster were unreachable on most maps - for the PLAYER as
+     much as for the opponent.
+
+     So the water is placed relative to the two starts: a channel running PARALLEL to the
+     line between them, offset to one flank. That gives both bases a shore at roughly equal
+     distance, keeps the two fleets in one connected body so a navy has something to fight,
+     and leaves the whole other flank as open land - which is where the main road runs, so
+     the map's land connectivity is untouched by construction.
+
+     Carved AFTER the roads on purpose. _rtsCarveRoad cuts straight through whatever is in
+     its way, so water laid before it would be bridged by the first branch that crossed it
+     and split into two ponds. The main base-to-base road runs down the axis and the channel
+     is off to one side, so it is only ever a flank BRANCH that gets cut - decoration, not
+     the connectivity guarantee. */
+  var _sg = ((seed >>> 3) & 1) ? 1 : -1;          /* which flank, off the scenario seed */
+  var SEA_OFF = 16, SEA_R = 6.2, SEA_BEACH = 2.4;
+  var _ia = [_sp.tx + _px * _sg * SEA_OFF, _sp.tz + _pz * _sg * SEA_OFF];
+  var _ib = [_se.tx + _px * _sg * SEA_OFF, _se.tz + _pz * _sg * SEA_OFF];
+  function _segD(x, z, a, b) {
+    var vx = b[0] - a[0], vz = b[1] - a[1], L2 = vx * vx + vz * vz || 1;
+    var q = Math.max(0, Math.min(1, ((x - a[0]) * vx + (z - a[1]) * vz) / L2));
+    return Math.hypot(x - (a[0] + vx * q), z - (a[1] + vz * q));
+  }
+  for (tx = 0; tx < N; tx++) {
+    for (tz = 0; tz < N; tz++) {
+      var _si = _rtsIdx(tx, tz);
+      if (G.scrap[_si] > 0) continue;               /* never drown an ore field */
+      if (G.blocked[_si] === 1) continue;           /* nor anything already standing */
+      /* Keep clear of the ground each base is actually built on. _clearStart guarantees a
+         radius of about 5.5; this leaves margin on top of it, so the shore lands just
+         outside the base rather than in the middle of it. */
+      if (Math.hypot(tx - _sp.tx, tz - _sp.tz) < 7.5) continue;
+      if (Math.hypot(tx - _se.tx, tz - _se.tz) < 7.5) continue;
+      var _wob = nz(tx, tz, 11, seed + 31) * 5 - 2.5;
+      var _sd = _segD(tx, tz, _ia, _ib) + _wob;
+      if (_sd < SEA_R) set(tx, tz, RTS_T_WATER, true);
+      else if (_sd < SEA_R + SEA_BEACH) set(tx, tz, RTS_T_SAND, false);
+    }
+  }
 
   /* --- sandbag emplacements. Short dog-legged chains of old fortification, left over from
          whoever fought here last. They are scattered all over the reference material and are
@@ -10854,6 +10934,97 @@ function _rtsGenTerrain(G, rnd, starts) {
       }
     }
   }
+
+  /* The spine and the single-sea pass run HERE, at the end, rather than beside the noisy
+     pass that shapes the channel. Two things come after that pass and both can cut water:
+     the ore connectivity carve is explicitly allowed to lay a causeway across it, and a
+     causeway splits the sea in two. Measured with this cleanup in its old position: one
+     connected body on 7 seeds of 16. Re-laying the centreline after everything else has had
+     its turn is what makes it one body every time. */
+  /* A SPINE down the middle of it, forced. The noisy pass above pinches the channel shut
+     wherever the wobble runs against an ore field it is not allowed to drown - measured at a
+     largest-connected-body of 34-65% of all water, which is two or three ponds wearing a
+     channel's shape. Two fleets in separate ponds can never meet, and a navy that cannot be
+     fought is scenery. So the centreline is laid down afterwards at a fixed width, over
+     anything but a standing building: whatever the noise did to the edges, the water is one
+     body. Ore that ends up under it is lost, which is the honest cost of the channel having
+     to be continuous - and the ore layout is mirrored about the midpoint, so it costs both
+     sides the same. */
+  var _steps = Math.ceil(Math.hypot(_ib[0] - _ia[0], _ib[1] - _ia[1]));
+  for (var _s = 0; _s <= _steps; _s++) {
+    var _q = _s / (_steps || 1);
+    var _cx = Math.round(_ia[0] + (_ib[0] - _ia[0]) * _q);
+    var _cz = Math.round(_ia[1] + (_ib[1] - _ia[1]) * _q);
+    for (var _ox = -2; _ox <= 2; _ox++) for (var _oz = -2; _oz <= 2; _oz++) {
+      if (_ox * _ox + _oz * _oz > 5) continue;
+      var _wx = _cx + _ox, _wz = _cz + _oz;
+      if (!_rtsInB(_wx, _wz)) continue;
+      if (G.blocked[_rtsIdx(_wx, _wz)] === 1) continue;      /* never drown a structure */
+      if (Math.hypot(_wx - _sp.tx, _wz - _sp.tz) < 7.5) continue;
+      if (Math.hypot(_wx - _se.tx, _wz - _se.tz) < 7.5) continue;
+      G.scrap[_rtsIdx(_wx, _wz)] = 0;
+      set(_wx, _wz, RTS_T_WATER, true);
+    }
+  }
+  /* ONE SEA, and only one. The noisy pass leaves detached puddles either side of the channel
+     - measured at a largest-connected-body of 51-100% of all water even with the spine down.
+     A puddle is harmless to look at and dangerous to build on: a shipyard placed against one
+     spawns its ships into a pond they can never leave, and _rtsSeaSpawn cannot tell the
+     difference because it only ever asks for the nearest open water. So everything that is
+     not part of the biggest body becomes beach. */
+  var _wseen = new Uint8Array(N * N), _best = null, _bestN = 0;
+  for (i = 0; i < N * N; i++) {
+    if (G.terrain[i] !== RTS_T_WATER || _wseen[i]) continue;
+    var _comp = [i], _st = [i], _n = 0;
+    _wseen[i] = 1;
+    while (_st.length) {
+      var _c = _st.pop(), _cx2 = _c % N, _cz2 = (_c / N) | 0; _n++;
+      for (var _d = 0; _d < 4; _d++) {
+        var _nx = _cx2 + [1, -1, 0, 0][_d], _nz = _cz2 + [0, 0, 1, -1][_d];
+        if (!_rtsInB(_nx, _nz)) continue;
+        var _ni = _rtsIdx(_nx, _nz);
+        if (_wseen[_ni] || G.terrain[_ni] !== RTS_T_WATER) continue;
+        _wseen[_ni] = 1; _comp.push(_ni); _st.push(_ni);
+      }
+    }
+    if (_n > _bestN) { _bestN = _n; _best = _comp; }
+  }
+  if (_best) {
+    var _keep = new Uint8Array(N * N);
+    for (i = 0; i < _best.length; i++) _keep[_best[i]] = 1;
+    for (i = 0; i < N * N; i++) {
+      if (G.terrain[i] !== RTS_T_WATER || _keep[i]) continue;
+      G.terrain[i] = RTS_T_SAND; G.blocked[i] = 0;
+    }
+  }
+
+  /* --- and the ore has to still be reachable ---
+     The two guarantees pull against each other. The ore connectivity carve above is allowed
+     to lay a causeway across water, and a causeway splits the sea; re-laying the spine after
+     it puts the sea back together and cuts the causeway again. Measured: keep the causeways
+     and one seed in two has a sea in two halves, so a fleet can never meet the other side's;
+     re-cut them and twelve seeds of sixteen strand some ore.
+
+     Stranded ore loses. It is 1 to 18 cells of about 930 - under two per cent - and the ore
+     layout is mirrored about the midpoint, so what it costs it costs both sides. A sea in two
+     halves would cost the naval half of the game entirely. Whatever is still cut off after
+     the sea is final simply is not ore. */
+  var _lr = new Uint8Array(N * N), _ls = [_rtsIdx(_sp.tx, _sp.tz)];
+  _lr[_ls[0]] = 1;
+  while (_ls.length) {
+    var _lc = _ls.pop(), _lx = _lc % N, _lz = (_lc / N) | 0;
+    for (var _ld = 0; _ld < 4; _ld++) {
+      var _lnx = _lx + [1, -1, 0, 0][_ld], _lnz = _lz + [0, 0, 1, -1][_ld];
+      if (!_rtsInB(_lnx, _lnz)) continue;
+      var _lni = _rtsIdx(_lnx, _lnz);
+      if (_lr[_lni] || G.blocked[_lni] === 2) continue;
+      _lr[_lni] = 1; _ls.push(_lni);
+    }
+  }
+  for (i = 0; i < N * N; i++) {
+    if (G.scrap[i] > 0 && !_lr[i]) { G.scrap[i] = 0; G.gems[i] = 0; }
+  }
+
 }
 
 /* A wandering 3-tile-wide track between two points. Clears obstacles as it goes. */
@@ -14107,6 +14278,16 @@ function _rtsAIWants(S) {
        nothing reported it because wanting a building is not an error. */
     var kd = rtsStructDef(k);
     if (kd && !rtsBuildableBy(kd, mySide)) continue;
+    /* A SHIPYARD IT CANNOT PLACE MUST NOT BE WANTED. This walk returns the first shortfall,
+       so a building that can never be placed is demanded forever and everything after it in
+       the order - the whole defensive tail, the superweapons - is never reached. That exact
+       failure already happened once here with the other army's buildings, which is what the
+       comment above is about. A shore structure is the same trap by a different route: not
+       every map has a coast the base can reach, and on one that does not, wanting a Naval
+       Yard would silently stop the opponent building anything else for the rest of the
+       match. The `ready` slot has a readyTry bail-out, but that only limits the damage after
+       the money has been spent - this stops it being wanted at all. */
+    if (kd && kd.shore && !_rtsAIShoreSpot(k)) continue;
     var want = Math.min(RTS_AI.limit[k], Math.ceil(size * RTS_AI.ratio[k]));
     if ((have[k] || 0) < want) return { key:k, urgent:false };
   }
@@ -14179,6 +14360,13 @@ function _rtsAIPlace(key) {
   if (node) { _rtsPlaceStruct('enemy', key, node.tx, node.tz, false, G.sides.enemy.readyPaid); return true; }
   if (key === 'refinery') aim = _rtsAIOreSpot();
   else if (key === 'turret') aim = _rtsAIWeakZone();
+  else if ((rtsStructDef(key) || {}).shore) {
+    /* A shipyard has exactly one place it can go, and the search below only accepts cells
+       _rtsCanPlace agrees with - which already applies the shore rule. Aiming at the spot
+       found by the gate above just means the best one wins rather than the first. */
+    var _sh = _rtsAIShoreSpot(key);
+    if (_sh) aim = { x:_rtsWX(_sh[0]), z:_rtsWX(_sh[1]) };
+  }
   var anchors = [];
   for (i = 0; i < G.ents.length; i++) {
     e = G.ents[i];
@@ -14208,6 +14396,31 @@ function _rtsAIPlace(key) {
     if (best) { _rtsPlaceStruct('enemy', key, best[0], best[1], false, G.sides.enemy.readyPaid); return true; }
   }
   return false;
+}
+/* Somewhere the opponent could actually put a shipyard: a cell inside the build radius of
+   one of its buildings that _rtsCanPlace accepts, which is where the `shore` rule is applied.
+   Returns null on a map whose coast the base cannot reach - and null is the whole point, see
+   the caller in _rtsAIWants. */
+function _rtsAIShoreSpot(key) {
+  var G = window._rtsG, R = RTS_BUILD_RADIUS, best = null, bs = 1e9, i;
+  var anchors = [];
+  for (i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.type === 'struct' && e.side === 'enemy' && !e.dead && !e.selling) anchors.push(e);
+  }
+  for (var a = 0; a < anchors.length; a++) {
+    var an = anchors[a];
+    for (var tx = an.tx - R; tx <= an.tx + R; tx++) {
+      for (var tz = an.tz - R; tz <= an.tz + R; tz++) {
+        if (!_rtsCanPlace('enemy', key, tx, tz)) continue;
+        /* Prefer a berth near the middle of the base rather than the first cell scanned:
+           a yard tucked behind the furthest outbuilding is one the defences do not cover. */
+        var s = Math.hypot(_rtsWX(tx) - an.x, _rtsWX(tz) - an.z);
+        if (s < bs) { bs = s; best = [tx, tz]; }
+      }
+    }
+  }
+  return best;
 }
 /* The richest ore nearest to ANY of the AI's buildings - not to its yard. As the base creeps
    outward the frontier is what matters; measuring from the yard sent late refineries back
@@ -14273,6 +14486,22 @@ function _rtsAIUnits(S) {
         else if (pe.type === 'unit' && (rtsUnitDef(pe.def) || {}).kind === 'air') air++;
       }
       if (air >= pads) continue;
+    }
+    /* AS MANY HULLS AS THERE ARE YARDS TO BUILD THEM, times a small factor. Ships are their
+       own production line and the opponent is rich late, so without a cap this is the
+       thirty-four-Yak problem again in a domain the player may not even be contesting. A
+       shipyard is not consumed by a hull the way a pad is by an aircraft, so the cap is a
+       multiple rather than one-for-one. */
+    if (cat === 'ship') {
+      var yards = 0, hulls = 0;
+      for (i = 0; i < G.ents.length; i++) {
+        var se = G.ents[i];
+        if (se.dead || se.side !== 'enemy') continue;
+        if (se.type === 'struct' && !se.building && !se.selling &&
+            (rtsStructDef(se.def) || {}).produces === 'ship') yards++;
+        else if (se.type === 'unit' && (rtsUnitDef(se.def) || {}).sea) hulls++;
+      }
+      if (!yards || hulls >= yards * RTS_AI.fleetPerYard) continue;
     }
     var list = RTS_AI.mix[cat], pool = [], total = 0;
     for (i = 0; i < list.length; i++) {
@@ -14518,6 +14747,14 @@ function _rtsBuildWaypoints(G) {
   }
   W.flank = cand;
 
+  /* `sea` - open WATER off the target's coast. A naval team pointed at a land waypoint
+     steers at a beach it cannot reach and stalls there for the rest of the match, so this is
+     snapped in the sea domain rather than by _rtsWayptSnap, which finds open LAND. Aimed a
+     little short of the enemy base for the same reason `front` is: arriving inside the guns
+     is not an approach. */
+  var _seaAim = _rtsNearestOpen(Math.round(fx - ux * 8), Math.round(fz - uz * 8), 40, 'sea');
+  W.sea = _seaAim ? { tx:_seaAim[0], tz:_seaAim[1] } : null;
+
   var mid = _rtsNearestOre(G, RTS_N >> 1, RTS_N >> 1);
   W.mid = _rtsWayptSnap(mid ? mid.tx : RTS_N >> 1, mid ? mid.tz : RTS_N >> 1);
   var ore = _rtsNearestOre(G, fx, fz);
@@ -14757,8 +14994,18 @@ function _rtsSuggestTeam(spare) {
     /* MaxAllowed, per type - but as a floor that scales with the army; see _rtsTypeCap.
        Without any cap the random pick happily raises every team of one kind. */
     if ((counts[ty.name] || 0) >= _rtsTypeCap(ty, _elig)) continue;
-    var need = 0;
-    for (kk in ty.members) need += ty.members[kk];
+    var need = 0, buildable = true;
+    for (kk in ty.members) {
+      need += ty.members[kk];
+      /* A TYPE THIS ARMY CANNOT CREW IS NOT A CANDIDATE. `spare` counts idle units, not
+         MATCHING ones, so a type whose members this house can never build passes the size
+         check, takes a slot, recruits nobody and never reaches full strength - so it never
+         marches and never frees the slot either. Harmless while every composition was
+         faction-neutral infantry and armour; the moment the two naval types arrived, one of
+         them was always uncrewable, because a house builds one side's hulls only. */
+      if (!_rtsCanProduce('enemy', kk)) buildable = false;
+    }
+    if (!buildable) continue;
     if (spare < need) continue;
     choices.push(ty);
   }

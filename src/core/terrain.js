@@ -25,9 +25,17 @@ function _rtsGenTerrain(G, rnd, starts) {
     var p = h(x0, y0), q = h(x0 + 1, y0), r = h(x0, y0 + 1), t = h(x0 + 1, y0 + 1);
     return (p + (q - p) * ax) * (1 - ay) + (r + (t - r) * ax) * ay;
   }
-  /* Base areas and ore stay clear of everything. */
+  /* Base areas and ore stay clear of everything.
+
+     These were the literals (20,90) and (92,22) - the two FIXED starts this game had before
+     SCENARIO.CPP's Create_Units landed and made them a random pick from a ring of eight. The
+     function is handed the real `starts` and was ignoring them, so it reserved two arbitrary
+     circles of pristine grass and left the actual bases to fend for themselves. Not fatal,
+     because _clearStart bulldozes the real ones afterwards - but it meant every map carried
+     two unexplained clearings, and the ore and terrain kept away from the wrong places. */
   function nearBase(x, z) {
-    return Math.hypot(x - 20, z - 90) < 17 || Math.hypot(x - 92, z - 22) < 17;
+    return Math.hypot(x - starts.player.tx, z - starts.player.tz) < 15 ||
+           Math.hypot(x - starts.enemy.tx,  z - starts.enemy.tz)  < 15;
   }
   function free(x, z) {
     return _rtsInB(x, z) && G.scrap[_rtsIdx(x, z)] <= 0 && !nearBase(x, z);
@@ -38,17 +46,9 @@ function _rtsGenTerrain(G, rnd, starts) {
     G.blocked[k] = block ? 2 : 0;
   }
 
-  /* --- water: one lake, pushed into a corner away from both starts --- */
-  var lx = 88, lz = 88, lr = 13;
-  for (tx = lx - lr - 4; tx <= lx + lr + 4; tx++) {
-    for (tz = lz - lr - 4; tz <= lz + lr + 4; tz++) {
-      if (!free(tx, tz)) continue;
-      var wob = nz(tx, tz, 9, seed + 3) * 7 - 3.5;
-      var dd = Math.hypot(tx - lx, tz - lz) + wob;
-      if (dd < lr) set(tx, tz, RTS_T_WATER, true);
-      else if (dd < lr + 2.2) set(tx, tz, RTS_T_SAND, false);   /* beach */
-    }
-  }
+  /* --- water. See the INLET further down: it is carved after the roads, because it has to
+         be able to cut one, and because it is placed relative to the two starts rather than
+         at a fixed spot on the map. Nothing to do here. --- */
 
   /* --- rock ridges: high-contrast bands of a low-frequency noise field, which gives
          long connected walls rather than the confetti a per-tile threshold produces --- */
@@ -109,6 +109,53 @@ function _rtsGenTerrain(G, rnd, starts) {
   _rtsCarveRoad(G, _sp.tx, _sp.tz, _se.tx, _se.tz, rnd);      /* the main route, base to base */
   _rtsCarveRoad(G, _sp.tx, _sp.tz, _b1[0], _b1[1], rnd);      /* one branch out to each flank */
   _rtsCarveRoad(G, _se.tx, _se.tz, _b2[0], _b2[1], rnd);
+
+  /* --- the inlet ---
+     A COAST EACH, and one body of water rather than two ponds.
+
+     There used to be a single lake at a hardcoded (88,88) while the starts rotated around a
+     ring of eight, so whether anyone could reach the sea was down to which start came up.
+     Measured across eight seeds before this: the opponent could place a shipyard on two of
+     them, the player on one, and on five neither side could. Four ship types, two shipyards
+     and the whole naval half of the roster were unreachable on most maps - for the PLAYER as
+     much as for the opponent.
+
+     So the water is placed relative to the two starts: a channel running PARALLEL to the
+     line between them, offset to one flank. That gives both bases a shore at roughly equal
+     distance, keeps the two fleets in one connected body so a navy has something to fight,
+     and leaves the whole other flank as open land - which is where the main road runs, so
+     the map's land connectivity is untouched by construction.
+
+     Carved AFTER the roads on purpose. _rtsCarveRoad cuts straight through whatever is in
+     its way, so water laid before it would be bridged by the first branch that crossed it
+     and split into two ponds. The main base-to-base road runs down the axis and the channel
+     is off to one side, so it is only ever a flank BRANCH that gets cut - decoration, not
+     the connectivity guarantee. */
+  var _sg = ((seed >>> 3) & 1) ? 1 : -1;          /* which flank, off the scenario seed */
+  var SEA_OFF = 16, SEA_R = 6.2, SEA_BEACH = 2.4;
+  var _ia = [_sp.tx + _px * _sg * SEA_OFF, _sp.tz + _pz * _sg * SEA_OFF];
+  var _ib = [_se.tx + _px * _sg * SEA_OFF, _se.tz + _pz * _sg * SEA_OFF];
+  function _segD(x, z, a, b) {
+    var vx = b[0] - a[0], vz = b[1] - a[1], L2 = vx * vx + vz * vz || 1;
+    var q = Math.max(0, Math.min(1, ((x - a[0]) * vx + (z - a[1]) * vz) / L2));
+    return Math.hypot(x - (a[0] + vx * q), z - (a[1] + vz * q));
+  }
+  for (tx = 0; tx < N; tx++) {
+    for (tz = 0; tz < N; tz++) {
+      var _si = _rtsIdx(tx, tz);
+      if (G.scrap[_si] > 0) continue;               /* never drown an ore field */
+      if (G.blocked[_si] === 1) continue;           /* nor anything already standing */
+      /* Keep clear of the ground each base is actually built on. _clearStart guarantees a
+         radius of about 5.5; this leaves margin on top of it, so the shore lands just
+         outside the base rather than in the middle of it. */
+      if (Math.hypot(tx - _sp.tx, tz - _sp.tz) < 7.5) continue;
+      if (Math.hypot(tx - _se.tx, tz - _se.tz) < 7.5) continue;
+      var _wob = nz(tx, tz, 11, seed + 31) * 5 - 2.5;
+      var _sd = _segD(tx, tz, _ia, _ib) + _wob;
+      if (_sd < SEA_R) set(tx, tz, RTS_T_WATER, true);
+      else if (_sd < SEA_R + SEA_BEACH) set(tx, tz, RTS_T_SAND, false);
+    }
+  }
 
   /* --- sandbag emplacements. Short dog-legged chains of old fortification, left over from
          whoever fought here last. They are scattered all over the reference material and are
@@ -174,6 +221,97 @@ function _rtsGenTerrain(G, rnd, starts) {
       }
     }
   }
+
+  /* The spine and the single-sea pass run HERE, at the end, rather than beside the noisy
+     pass that shapes the channel. Two things come after that pass and both can cut water:
+     the ore connectivity carve is explicitly allowed to lay a causeway across it, and a
+     causeway splits the sea in two. Measured with this cleanup in its old position: one
+     connected body on 7 seeds of 16. Re-laying the centreline after everything else has had
+     its turn is what makes it one body every time. */
+  /* A SPINE down the middle of it, forced. The noisy pass above pinches the channel shut
+     wherever the wobble runs against an ore field it is not allowed to drown - measured at a
+     largest-connected-body of 34-65% of all water, which is two or three ponds wearing a
+     channel's shape. Two fleets in separate ponds can never meet, and a navy that cannot be
+     fought is scenery. So the centreline is laid down afterwards at a fixed width, over
+     anything but a standing building: whatever the noise did to the edges, the water is one
+     body. Ore that ends up under it is lost, which is the honest cost of the channel having
+     to be continuous - and the ore layout is mirrored about the midpoint, so it costs both
+     sides the same. */
+  var _steps = Math.ceil(Math.hypot(_ib[0] - _ia[0], _ib[1] - _ia[1]));
+  for (var _s = 0; _s <= _steps; _s++) {
+    var _q = _s / (_steps || 1);
+    var _cx = Math.round(_ia[0] + (_ib[0] - _ia[0]) * _q);
+    var _cz = Math.round(_ia[1] + (_ib[1] - _ia[1]) * _q);
+    for (var _ox = -2; _ox <= 2; _ox++) for (var _oz = -2; _oz <= 2; _oz++) {
+      if (_ox * _ox + _oz * _oz > 5) continue;
+      var _wx = _cx + _ox, _wz = _cz + _oz;
+      if (!_rtsInB(_wx, _wz)) continue;
+      if (G.blocked[_rtsIdx(_wx, _wz)] === 1) continue;      /* never drown a structure */
+      if (Math.hypot(_wx - _sp.tx, _wz - _sp.tz) < 7.5) continue;
+      if (Math.hypot(_wx - _se.tx, _wz - _se.tz) < 7.5) continue;
+      G.scrap[_rtsIdx(_wx, _wz)] = 0;
+      set(_wx, _wz, RTS_T_WATER, true);
+    }
+  }
+  /* ONE SEA, and only one. The noisy pass leaves detached puddles either side of the channel
+     - measured at a largest-connected-body of 51-100% of all water even with the spine down.
+     A puddle is harmless to look at and dangerous to build on: a shipyard placed against one
+     spawns its ships into a pond they can never leave, and _rtsSeaSpawn cannot tell the
+     difference because it only ever asks for the nearest open water. So everything that is
+     not part of the biggest body becomes beach. */
+  var _wseen = new Uint8Array(N * N), _best = null, _bestN = 0;
+  for (i = 0; i < N * N; i++) {
+    if (G.terrain[i] !== RTS_T_WATER || _wseen[i]) continue;
+    var _comp = [i], _st = [i], _n = 0;
+    _wseen[i] = 1;
+    while (_st.length) {
+      var _c = _st.pop(), _cx2 = _c % N, _cz2 = (_c / N) | 0; _n++;
+      for (var _d = 0; _d < 4; _d++) {
+        var _nx = _cx2 + [1, -1, 0, 0][_d], _nz = _cz2 + [0, 0, 1, -1][_d];
+        if (!_rtsInB(_nx, _nz)) continue;
+        var _ni = _rtsIdx(_nx, _nz);
+        if (_wseen[_ni] || G.terrain[_ni] !== RTS_T_WATER) continue;
+        _wseen[_ni] = 1; _comp.push(_ni); _st.push(_ni);
+      }
+    }
+    if (_n > _bestN) { _bestN = _n; _best = _comp; }
+  }
+  if (_best) {
+    var _keep = new Uint8Array(N * N);
+    for (i = 0; i < _best.length; i++) _keep[_best[i]] = 1;
+    for (i = 0; i < N * N; i++) {
+      if (G.terrain[i] !== RTS_T_WATER || _keep[i]) continue;
+      G.terrain[i] = RTS_T_SAND; G.blocked[i] = 0;
+    }
+  }
+
+  /* --- and the ore has to still be reachable ---
+     The two guarantees pull against each other. The ore connectivity carve above is allowed
+     to lay a causeway across water, and a causeway splits the sea; re-laying the spine after
+     it puts the sea back together and cuts the causeway again. Measured: keep the causeways
+     and one seed in two has a sea in two halves, so a fleet can never meet the other side's;
+     re-cut them and twelve seeds of sixteen strand some ore.
+
+     Stranded ore loses. It is 1 to 18 cells of about 930 - under two per cent - and the ore
+     layout is mirrored about the midpoint, so what it costs it costs both sides. A sea in two
+     halves would cost the naval half of the game entirely. Whatever is still cut off after
+     the sea is final simply is not ore. */
+  var _lr = new Uint8Array(N * N), _ls = [_rtsIdx(_sp.tx, _sp.tz)];
+  _lr[_ls[0]] = 1;
+  while (_ls.length) {
+    var _lc = _ls.pop(), _lx = _lc % N, _lz = (_lc / N) | 0;
+    for (var _ld = 0; _ld < 4; _ld++) {
+      var _lnx = _lx + [1, -1, 0, 0][_ld], _lnz = _lz + [0, 0, 1, -1][_ld];
+      if (!_rtsInB(_lnx, _lnz)) continue;
+      var _lni = _rtsIdx(_lnx, _lnz);
+      if (_lr[_lni] || G.blocked[_lni] === 2) continue;
+      _lr[_lni] = 1; _ls.push(_lni);
+    }
+  }
+  for (i = 0; i < N * N; i++) {
+    if (G.scrap[i] > 0 && !_lr[i]) { G.scrap[i] = 0; G.gems[i] = 0; }
+  }
+
 }
 
 /* A wandering 3-tile-wide track between two points. Clears obstacles as it goes. */

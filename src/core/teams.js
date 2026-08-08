@@ -61,6 +61,14 @@ function _rtsBuildWaypoints(G) {
   }
   W.flank = cand;
 
+  /* `sea` - open WATER off the target's coast. A naval team pointed at a land waypoint
+     steers at a beach it cannot reach and stalls there for the rest of the match, so this is
+     snapped in the sea domain rather than by _rtsWayptSnap, which finds open LAND. Aimed a
+     little short of the enemy base for the same reason `front` is: arriving inside the guns
+     is not an approach. */
+  var _seaAim = _rtsNearestOpen(Math.round(fx - ux * 8), Math.round(fz - uz * 8), 40, 'sea');
+  W.sea = _seaAim ? { tx:_seaAim[0], tz:_seaAim[1] } : null;
+
   var mid = _rtsNearestOre(G, RTS_N >> 1, RTS_N >> 1);
   W.mid = _rtsWayptSnap(mid ? mid.tx : RTS_N >> 1, mid ? mid.tz : RTS_N >> 1);
   var ore = _rtsNearestOre(G, fx, fz);
@@ -300,8 +308,18 @@ function _rtsSuggestTeam(spare) {
     /* MaxAllowed, per type - but as a floor that scales with the army; see _rtsTypeCap.
        Without any cap the random pick happily raises every team of one kind. */
     if ((counts[ty.name] || 0) >= _rtsTypeCap(ty, _elig)) continue;
-    var need = 0;
-    for (kk in ty.members) need += ty.members[kk];
+    var need = 0, buildable = true;
+    for (kk in ty.members) {
+      need += ty.members[kk];
+      /* A TYPE THIS ARMY CANNOT CREW IS NOT A CANDIDATE. `spare` counts idle units, not
+         MATCHING ones, so a type whose members this house can never build passes the size
+         check, takes a slot, recruits nobody and never reaches full strength - so it never
+         marches and never frees the slot either. Harmless while every composition was
+         faction-neutral infantry and armour; the moment the two naval types arrived, one of
+         them was always uncrewable, because a house builds one side's hulls only. */
+      if (!_rtsCanProduce('enemy', kk)) buildable = false;
+    }
+    if (!buildable) continue;
     if (spare < need) continue;
     choices.push(ty);
   }
