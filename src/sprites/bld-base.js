@@ -15,7 +15,14 @@ function _sprBldBase(X, key) {
     /* Construction Yard. The cameo is a VAULTED HANGAR - a barrel roof over a rectangular hall
        with one big opening in the end - and the arch is the identity. Nothing else in a base
        has a curved roofline, so it reads from across the map without a crane arm to help. */
-    _r3Box(m, 0, 0, 0, W - 10, 12, D - 10, C[0], C[2]);                  /* the hall */
+    /* A dark plinth and buttresses under the arch. This is the biggest sprite in the game -
+       6,882 opaque pixels - and it was concrete from the ground to the ridge, so all of that
+       area shaded as one material however good the corrugation above it is. */
+    _r3Box(m, 0, 0, 0, W - 6, 3.5, D - 6, DK[0], DK[1]);                 /* plinth */
+    _r3Box(m, 0, 3.5, 0, W - 10, 9, D - 10, C[0], C[2]);                 /* the hall */
+    for (var yb = 0; yb < 4; yb++)                                       /* buttresses */
+      _r3Box(m, (yb & 1 ? 1 : -1) * (W / 2 - 6), 3.5, (yb & 2 ? 1 : -1) * (D / 2 - 10),
+             3, 9, 5, C[3], C[1]);
     /* The vault has to be TALLER THAN IT IS DEEP or it does not read as an arch: spread 66
        wide and 15 high, every one of its facets faces almost straight up, the light hits
        them all the same and the whole roof shades as one flat plate. Narrower than the hall

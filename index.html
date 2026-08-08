@@ -767,7 +767,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">c654918 · 2026-08-08</div>
+  <div id="rtsBuild" title="build">d4a2d13 · 2026-08-08</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -4871,7 +4871,15 @@ var RTS_PAL = {
      that carried no team colour at all. Gunmetal is neutral-warm and leaves the blue budget
      to the parts that are meant to signal ownership. */
   gun:   ['#6e6a60', '#847f72', '#4b4842', '#9b9588'],
-  dark:  ['#31363e', '#3f4650', '#22262c', '#4b5360'],
+  /* DARK spanned luminance 38..82 - a 44-step band, the narrowest ramp in the file, and the
+     War Factory and Airfield are built from almost nothing else. Ribbing the factory's roof
+     moved it from one flat plane to a saw-tooth and its distinct-tone count barely shifted,
+     because every rib was landing in the same two shades. Widened to 31..108.
+     Kept NEUTRAL, and that was a correction: the first widening reached for a bluer top tone
+     and took the War Factory from 34% to 50% blue-dominant pixels. Blue creep is a fault this
+     roster has already been dragged back from once - 66% to 13% - and a wider ramp is not
+     worth reopening it. Same span, almost no hue. */
+  dark:  ['#3a3d40', '#4f545a', '#1d1f22', '#666d75'],
   glass: '#8fbcd4',
   lit:   '#ffd98a',
   hazard:['#c9a227', '#2a2a26'],
@@ -5484,7 +5492,14 @@ function _sprBldBase(X, key) {
     /* Construction Yard. The cameo is a VAULTED HANGAR - a barrel roof over a rectangular hall
        with one big opening in the end - and the arch is the identity. Nothing else in a base
        has a curved roofline, so it reads from across the map without a crane arm to help. */
-    _r3Box(m, 0, 0, 0, W - 10, 12, D - 10, C[0], C[2]);                  /* the hall */
+    /* A dark plinth and buttresses under the arch. This is the biggest sprite in the game -
+       6,882 opaque pixels - and it was concrete from the ground to the ridge, so all of that
+       area shaded as one material however good the corrugation above it is. */
+    _r3Box(m, 0, 0, 0, W - 6, 3.5, D - 6, DK[0], DK[1]);                 /* plinth */
+    _r3Box(m, 0, 3.5, 0, W - 10, 9, D - 10, C[0], C[2]);                 /* the hall */
+    for (var yb = 0; yb < 4; yb++)                                       /* buttresses */
+      _r3Box(m, (yb & 1 ? 1 : -1) * (W / 2 - 6), 3.5, (yb & 2 ? 1 : -1) * (D / 2 - 10),
+             3, 9, 5, C[3], C[1]);
     /* The vault has to be TALLER THAN IT IS DEEP or it does not read as an arch: spread 66
        wide and 15 high, every one of its facets faces almost straight up, the light hits
        them all the same and the whole roof shades as one flat plate. Narrower than the hall
@@ -5660,13 +5675,22 @@ function _sprBldTech(X, key) {
        windows with a small mast on top - and that verticality is the point: it is the one
        building in a base that is taller than it is wide. The dish that used to be here made it
        a second Radar Dome. */
-    _r3Box(m, 0, 0, 2, W - 12, 30, D - 14, P[0], P[1]);                  /* the tower */
+    /* Three masses, not one. It was a single 30-tall box in one material: whatever the
+       ribbon windows did to its face, the whole silhouette shaded as one plane. A dark plinth,
+       a chamfered tower above it and a narrower setback at the top give three separate things
+       for the light to fall on, and the setback is what makes the height read as storeys. */
+    _r3Slab(m, 0, 0, 2, W - 10, 6, D - 12, 2, DK[0], DK[1]);             /* the plinth */
+    _r3Slab(m, 0, 6, 2, W - 12, 20, D - 14, 2.5, P[0], P[1]);            /* the tower */
+    _r3Slab(m, 0, 26, 2, W - 20, 5, D - 22, 2, P[1], P[3]);              /* the setback */
+    for (var lb = 0; lb < 4; lb++)                                       /* corner piers */
+      _r3Box(m, (lb & 1 ? 1 : -1) * (W / 2 - 7), 6, (lb & 2 ? 1 : -1) * (D / 2 - 8),
+             2.5, 20, 2.5, P[3], P[2]);
     for (var lf = 0; lf < 3; lf++) {                                     /* ribbon windows */
       winRow(D / 2 - 6, 5 + lf * 9, 0, 3, 10, 6, 5);
       _r3Box(m, 0, 3.5 + lf * 9, D / 2 - 6, W - 14, 1.4, 1.5, P[3], P[3]);
     }
-    _r3Box(m, 0, 30, 2, W - 8, 2.5, D - 10, P[3], P[1]);                 /* parapet */
-    _r3Box(m, 0, 32.5, 2, W - 10, 1.2, 4, B.roof, B.roof);               /* team band */
+    _r3Box(m, 0, 31, 2, W - 18, 2, D - 20, P[3], P[1]);                  /* parapet */
+    _r3Box(m, 0, 33, 2, W - 22, 1.2, 4, B.roof, B.roof);                 /* team band */
     _r3Box(m, -W / 2 + 8, 0, D / 2 - 5, 8, 9, 3, DK[0], DK[1]);          /* entrance */
     _r3Box(m, W / 2 - 10, 32, -2, 2, 14, 2, S[3], S[3]);                 /* mast */
     _r3Box(m, W / 2 - 10, 43, -2, 6, 1.5, 1.5, S[1], S[1]);
@@ -5744,10 +5768,15 @@ function _sprBldTech(X, key) {
        ribs down it and an open frame at one end - not the three cylinders that were here,
        which read as a small refinery. Low and wide is the whole identity. */
     _r3Box(m, 0, 0, 0, W - 6, 2, D - 6, C[2], C[0]);                     /* pad */
-    _r3Box(m, 0, 2, -1, W - 12, 13, D - 14, SD[2], SD[0]);               /* the bunker */
+    _r3Box(m, 0, 2, -1, W - 10, 3, D - 12, K[2], K[0]);                  /* brick base course */
+    _r3Slab(m, 0, 5, -1, W - 12, 10, D - 14, 2, SD[2], SD[0]);           /* the bunker */
     for (var sk = 0; sk < 5; sk++)                                       /* the ribs */
-      _r3Box(m, -16 + sk * 8, 2, -1, 2.5, 14, D - 12, C[2], C[0]);
-    _r3Box(m, 0, 15, -1, W - 10, 2, D - 12, C[3], C[1]);                 /* the lid */
+      _r3Box(m, -16 + sk * 8, 5, -1, 2.5, 11, D - 12, C[2], C[0]);
+    /* The lid was one flat box across the whole top, which under this camera is the largest
+       single face on the building. Three shallow ridges instead. */
+    for (var sl = 0; sl < 3; sl++)
+      _r3Gable(m, 0, 15, (sl - 1) * ((D - 12) / 3), W - 10, 3, (D - 12) / 3 - 0.4,
+               (sl & 1) ? C[1] : C[3]);
     _r3Box(m, 0, 17, -1, W - 14, 1.2, 4, B.roof, B.roof);                /* team band */
     _r3Box(m, 0, 2, D / 2 - 5, W - 16, 11, 2.5, DK[2], DK[0]);           /* open end frame */
     _r3Box(m, 0, 2, D / 2 - 4, W - 20, 5, 3, RTS_PAL.ore[0], RTS_PAL.ore[1]);  /* ore inside */
@@ -5958,14 +5987,20 @@ function _sprBldSuper(X, key) {
   } else if (key === 'gps') {
     /* GPS UPLINK. A dish on a mast. The most familiar shape in the set and the least
        threatening, which is right - it is the one superweapon that shoots nothing. */
+    /* It was concrete end to end - pad, shed, roof - so the dish was the only thing on it
+       with an edge. A brick plinth under a chamfered shed puts two more materials on screen. */
     _r3Box(m, 0, 0, 0, W - 6, 3, D - 6, C[2], C[0]);
-    _r3Box(m, 0, 3, 2, W - 14, 8, D - 14, C[0], C[1]);                   /* equipment shed */
-    _r3Box(m, 0, 11, 2, W - 18, 1.6, D - 18, C[3], C[2]);
-    _r3Cyl(m, 0, 12, 2, 2.2, 12, S[2], S[1], 16);                        /* the mast */
-    _r3Cone(m, 0, 22, 2, 11, 6, 9, C[3], 20);                            /* the dish */
-    _r3Cyl(m, 0, 26, 2, 1.2, 4, S[3], S[3], 12);                         /* feed horn */
-    _r3Cyl(m, 0, 29.5, 2, 1.5, 1.5, RTS_PAL.lit, RTS_PAL.lit, 12);
-    _r3Box(m, 0, 12.4, -D / 2 + 6, 8, 1.2, 3, B.roof, B.roof);           /* team band */
+    _r3Box(m, 0, 3, 2, W - 10, 2.5, D - 10, K[2], K[0]);                 /* brick plinth */
+    _r3Slab(m, 0, 5.5, 2, W - 14, 7, D - 14, 2, C[0], C[1]);             /* equipment shed */
+    _r3Box(m, 0, 12.5, 2, W - 18, 1.6, D - 18, C[3], C[2]);
+    _r3Box(m, -W / 2 + 8, 3, -D / 2 + 8, 6, 7, 6, DK[0], DK[1]);         /* transformer */
+    for (var gv = 0; gv < 3; gv++)
+      _r3Box(m, -W / 2 + 6 + gv * 3, 10, -D / 2 + 8, 1.2, 4, 1.2, S[3], S[3]);
+    _r3Cyl(m, 0, 13.5, 2, 2.2, 11, S[2], S[1], 16);                      /* the mast */
+    _r3Cone(m, 0, 23, 2, 11, 6, 9, C[3], 20);                            /* the dish */
+    _r3Cyl(m, 0, 27, 2, 1.2, 4, S[3], S[3], 12);                         /* feed horn */
+    _r3Cyl(m, 0, 30.5, 2, 1.5, 1.5, RTS_PAL.lit, RTS_PAL.lit, 12);
+    _r3Box(m, 0, 13.9, -D / 2 + 6, 8, 1.2, 3, B.roof, B.roof);           /* team band */
     _r3Box(m, -W / 2 + 6, 3, D / 2 - 6, 5, 6, 5, S[2], S[1]);            /* cable box */
 
   } else if (key === 'wall') {

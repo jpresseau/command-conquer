@@ -28,13 +28,22 @@ function _sprBldTech(X, key) {
        windows with a small mast on top - and that verticality is the point: it is the one
        building in a base that is taller than it is wide. The dish that used to be here made it
        a second Radar Dome. */
-    _r3Box(m, 0, 0, 2, W - 12, 30, D - 14, P[0], P[1]);                  /* the tower */
+    /* Three masses, not one. It was a single 30-tall box in one material: whatever the
+       ribbon windows did to its face, the whole silhouette shaded as one plane. A dark plinth,
+       a chamfered tower above it and a narrower setback at the top give three separate things
+       for the light to fall on, and the setback is what makes the height read as storeys. */
+    _r3Slab(m, 0, 0, 2, W - 10, 6, D - 12, 2, DK[0], DK[1]);             /* the plinth */
+    _r3Slab(m, 0, 6, 2, W - 12, 20, D - 14, 2.5, P[0], P[1]);            /* the tower */
+    _r3Slab(m, 0, 26, 2, W - 20, 5, D - 22, 2, P[1], P[3]);              /* the setback */
+    for (var lb = 0; lb < 4; lb++)                                       /* corner piers */
+      _r3Box(m, (lb & 1 ? 1 : -1) * (W / 2 - 7), 6, (lb & 2 ? 1 : -1) * (D / 2 - 8),
+             2.5, 20, 2.5, P[3], P[2]);
     for (var lf = 0; lf < 3; lf++) {                                     /* ribbon windows */
       winRow(D / 2 - 6, 5 + lf * 9, 0, 3, 10, 6, 5);
       _r3Box(m, 0, 3.5 + lf * 9, D / 2 - 6, W - 14, 1.4, 1.5, P[3], P[3]);
     }
-    _r3Box(m, 0, 30, 2, W - 8, 2.5, D - 10, P[3], P[1]);                 /* parapet */
-    _r3Box(m, 0, 32.5, 2, W - 10, 1.2, 4, B.roof, B.roof);               /* team band */
+    _r3Box(m, 0, 31, 2, W - 18, 2, D - 20, P[3], P[1]);                  /* parapet */
+    _r3Box(m, 0, 33, 2, W - 22, 1.2, 4, B.roof, B.roof);                 /* team band */
     _r3Box(m, -W / 2 + 8, 0, D / 2 - 5, 8, 9, 3, DK[0], DK[1]);          /* entrance */
     _r3Box(m, W / 2 - 10, 32, -2, 2, 14, 2, S[3], S[3]);                 /* mast */
     _r3Box(m, W / 2 - 10, 43, -2, 6, 1.5, 1.5, S[1], S[1]);
@@ -112,10 +121,15 @@ function _sprBldTech(X, key) {
        ribs down it and an open frame at one end - not the three cylinders that were here,
        which read as a small refinery. Low and wide is the whole identity. */
     _r3Box(m, 0, 0, 0, W - 6, 2, D - 6, C[2], C[0]);                     /* pad */
-    _r3Box(m, 0, 2, -1, W - 12, 13, D - 14, SD[2], SD[0]);               /* the bunker */
+    _r3Box(m, 0, 2, -1, W - 10, 3, D - 12, K[2], K[0]);                  /* brick base course */
+    _r3Slab(m, 0, 5, -1, W - 12, 10, D - 14, 2, SD[2], SD[0]);           /* the bunker */
     for (var sk = 0; sk < 5; sk++)                                       /* the ribs */
-      _r3Box(m, -16 + sk * 8, 2, -1, 2.5, 14, D - 12, C[2], C[0]);
-    _r3Box(m, 0, 15, -1, W - 10, 2, D - 12, C[3], C[1]);                 /* the lid */
+      _r3Box(m, -16 + sk * 8, 5, -1, 2.5, 11, D - 12, C[2], C[0]);
+    /* The lid was one flat box across the whole top, which under this camera is the largest
+       single face on the building. Three shallow ridges instead. */
+    for (var sl = 0; sl < 3; sl++)
+      _r3Gable(m, 0, 15, (sl - 1) * ((D - 12) / 3), W - 10, 3, (D - 12) / 3 - 0.4,
+               (sl & 1) ? C[1] : C[3]);
     _r3Box(m, 0, 17, -1, W - 14, 1.2, 4, B.roof, B.roof);                /* team band */
     _r3Box(m, 0, 2, D / 2 - 5, W - 16, 11, 2.5, DK[2], DK[0]);           /* open end frame */
     _r3Box(m, 0, 2, D / 2 - 4, W - 20, 5, 3, RTS_PAL.ore[0], RTS_PAL.ore[1]);  /* ore inside */
