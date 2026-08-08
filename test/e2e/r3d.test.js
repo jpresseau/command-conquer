@@ -369,6 +369,44 @@ function readCanvas() {
   }).join(', '));
   S.note('...best five: ' + big.slice(-5).map(function (r) { return r.key + ' ' + r.tones; }).join(', '));
 
+  /* ------------------------------------------- the ground is not television snow ----
+     The terrain bake is one 3072x3072 canvas painted from noise, and the tone for each 2px
+     block used to come from a WHITE-NOISE hash - no spatial correlation at all, so every
+     block was an independent random pick from a five-entry palette. The comment beside it
+     said "clumpy, not TV static"; 2px blocks of white noise are static with bigger pixels.
+
+     Mean absolute luminance step between horizontally adjacent pixels is what catches it.
+     Drawn pixel-art ground is areas of a tone with a few marks in them, so the number is low;
+     per-pixel noise drives it up. Measured at NATIVE resolution, which matters - sampling a
+     downscaled copy aliases the paint blocks back into noise and measures the resampling. */
+  var ground = await g.page.evaluate(function () {
+    if (!document.getElementById('rcgRts')) rtsOpen(9001);
+    var U = window._rtsUI;
+    if (U) { U.dead = true; try { cancelAnimationFrame(U.raf); } catch (e) {} }
+    var src = window._rtsR && window._rtsR.terrain;
+    if (!src) return { error: 'no terrain bake' };
+    var W = 512, cv = document.createElement('canvas');
+    cv.width = W; cv.height = W;
+    var c = cv.getContext('2d');
+    c.imageSmoothingEnabled = false;
+    c.drawImage(src, (src.width >> 1) - 260, (src.height >> 1) - 260, W, W, 0, 0, W, W);
+    var d = c.getImageData(0, 0, W, W).data, e = 0, n = 0, tones = {};
+    function L(o) { return 0.2126 * d[o] + 0.7152 * d[o + 1] + 0.0722 * d[o + 2]; }
+    for (var y = 0; y < W; y++) for (var x = 1; x < W; x++) {
+      var o = (y * W + x) * 4;
+      e += Math.abs(L(o) - L(o - 4)); n++;
+      tones[(d[o] >> 3) + ',' + (d[o + 1] >> 3) + ',' + (d[o + 2] >> 3)] = 1;
+    }
+    return { edge: +(e / n).toFixed(2), tones: Object.keys(tones).length, bake: src.width };
+  });
+  S.ok('the terrain bake exists', !ground.error, ground.error || (ground.bake + 'px square'));
+  if (!ground.error) {
+    S.ok('the ground is not per-pixel noise', ground.edge < 6.5,
+         'mean neighbour step ' + ground.edge + ' (was 7.75 when the grain was a white-noise hash)');
+    S.ok('...and did not get there by going flat', ground.tones >= 60,
+         ground.tones + ' distinct tones in the sample');
+  }
+
   await g.close();
   await browser.close();
   require('../lib/report.js')(S);

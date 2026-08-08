@@ -422,3 +422,34 @@ which is what the original does too and not a defect to be fixed.
 **Terrain remains the largest gap**, as the top of this document has said from the start: the
 ground is continuous noise where the original composes it from drawn 24x24 templates. Nothing in
 these three passes touched it.
+
+## The ground was television snow
+
+The terrain was measured the same way as the sprites, and the result was the opposite of the
+buildings'. They were too flat. The ground was too NOISY - uniformly, at the pixel.
+
+The tone for each 2px paint block came from `_sprHash`, a white-noise hash with no spatial
+correlation at all: every block an independent random pick from a five-entry palette. The comment
+beside it read "paint in 2px blocks: pixel art ground is clumpy, not TV static", which is exactly
+what it was not doing - 2px blocks of white noise are static with bigger pixels.
+
+Mean absolute luminance step between horizontally adjacent pixels, measured at native resolution:
+
+| | edge energy | distinct tones |
+|---|---|---|
+| white-noise grain | 7.75 | 99 |
+| smooth grain + sparse flecks | **4.29** | 83 |
+
+The tone now comes from a smooth field at about seven pixels - patches you can see - with the
+white noise demoted to a fleck on roughly 8% of blocks. Drawn pixel-art ground is areas of one
+tone with a few deliberate marks in them; that is the shape the field has now.
+
+**Measure at native resolution.** The first version of this sampled a 3072 to 512 downscale and
+reported 16.9 falling to 14.1 - it was measuring its own resampling aliasing the paint blocks back
+into noise, and the real change was nearly twice as large as it claimed.
+
+Still not done, and worth being plain about it: the ground has structure now but it is still
+GENERATED. RA composes terrain from drawn 24x24 templates with real cell boundaries, drawn cliff
+faces and shore pieces. `src/mixart` repaints the base ground from those when the player has
+loaded their own files; the procedural path is what everyone else sees, and it has better texture
+than it did rather than a different nature.

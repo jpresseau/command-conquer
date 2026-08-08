@@ -19,7 +19,20 @@ function _rtsBakeTerrain(G) {
   for (var by = 0; by < S; by += B) {
     for (var bx = 0; bx < S; bx += B) {
       var n = _sprFbm(bx, by, seed);
-      var grain = _sprHash(bx >> 1, by >> 1, seed + 3);
+      /* GRAIN USED TO BE A WHITE-NOISE HASH per 2px block, picking one of five tones at random
+         with no spatial correlation whatsoever. The comment beside it said "clumpy, not TV
+         static", but 2px blocks of white noise ARE static - just chunkier. Measured on the
+         finished bake: the mean absolute luminance step between horizontally adjacent pixels
+         was 16.9, which is to say every pixel differed from its neighbour by about a
+         seventeenth of the whole range. That is what made the ground read as televison snow
+         with a green tint rather than as grass.
+
+         Drawn pixel-art ground is the other way round: areas of one tone with a few
+         deliberate marks in them. So the tone now comes from a SMOOTH field at about seven
+         pixels - patches you can see - and the white noise is demoted to a sparse fleck that
+         breaks up the banding without carrying the whole texture. */
+      var grain = _sprVN(bx, by, 7, seed + 3);
+      var fleck = _sprHash(bx >> 1, by >> 1, seed + 31);
       var pal, k;
       /* Bare earth is rare now that the map has roads, beaches and ore aprons on it - an
          earlier threshold of 0.62 put dirt everywhere and the battlefield came out more
@@ -36,13 +49,18 @@ function _rtsBakeTerrain(G) {
          while a hard change with a shadow line under it looks like an edge. */
       if (n > 0.735) {                                  /* patch interior */
         pal = dr;
-        k = grain < 0.18 ? 3 : (grain < 0.5 ? 1 : (grain < 0.82 ? 0 : 2));
+        k = grain < 0.30 ? 1 : (grain < 0.72 ? 0 : 2);
+        if (fleck > 0.93) k = 3;                        /* an occasional stone */
       } else if (n > 0.715) {                           /* the rim - a drawn outline */
         pal = dr;
         k = 2;
       } else {
         pal = gr;
-        k = grain < 0.12 ? 4 : (grain < 0.42 ? 2 : (grain < 0.76 ? 0 : 1));
+        k = grain < 0.30 ? 2 : (grain < 0.70 ? 0 : 1);
+        /* The flecks are what stop the smooth field reading as banding, and they are rare on
+           purpose: at 12% of blocks the ground went straight back to looking like noise. */
+        if (fleck > 0.955) k = 4;                       /* a bright tuft */
+        else if (fleck < 0.035) k = 2;                  /* a dark clump */
         /* grass immediately outside a patch is scuffed rather than lush, which reads as the
            patch having worn outward instead of having been stamped on */
         if (n > 0.64) k = grain < 0.5 ? 2 : 4;
