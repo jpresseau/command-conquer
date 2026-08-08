@@ -63,8 +63,20 @@ var RTS_PAL = {
   /* GemValue 110 vs GoldValue 35: gems are the high-value deposit, and they have to read as
      a different mineral at a glance or the player will never cross the map for one. */
   gem:   ['#6a4bb0', '#8f6ee0', '#c4b0ff', '#3d2a70', '#4a3585'],
-  conc:  ['#8c8c83', '#a3a39a', '#6c6c64', '#b6b6ad'],
-  steel: ['#59616d', '#6d7583', '#424953', '#818a99'],
+  /* CONCRETE, and it is the most load-bearing ramp in the game - about half the roster is
+     built from nothing else. It used to span luminance 107..181 at a saturation of 0.06: a
+     74-step band of dead grey. Every part of a model painted from it landed in the same
+     shading band, so the geometry stopped reading - the shipyards have an apron, a shed, a
+     roof, a slipway, a gantry, a mast and a dockside crate, and measured 62 distinct tones
+     across 5,800 pixels, which is a rectangle. Compare brick (span 68 at saturation 0.45) and
+     sand (82 at 0.30): those two buildings are the ones that read, and it is not because they
+     have more geometry.
+     Now 78..205 with a slight tilt - the shadow side cool and green, the top warm - so a face
+     turned away from the light differs from one facing it by more than a rounding error. */
+  conc:  ['#7e837a', '#a2a89b', '#4a4f48', '#c9cebd'],
+  /* Steel was the same fault in blue: span 92, and everything girder-shaped merged into its
+     own shadow. Widened at both ends, the darks kept cool. */
+  steel: ['#59616d', '#757e8e', '#343a44', '#939db0'],
   /* Gun tubes get their own ramp. `steel` is a blue grey - fine for girders and hubs, but it
      was measurably tinting the guns: an artillery piece came out 45% blue pixels with a hull
      that carried no team colour at all. Gunmetal is neutral-warm and leaves the blue budget
@@ -132,7 +144,9 @@ var RTS_PAL = {
   mat: {
     brick: ['#8f4a36', '#a85c44', '#663324', '#c07257'],
     sand:  ['#ab9b70', '#c2b287', '#857852', '#d6caa2'],
-    pale:  ['#a4a99f', '#bec3b8', '#797e76', '#d4d9cc']
+    /* Pale block: same widening. The Tech Centre is the tallest building in the game and was
+       measuring 0.10 saturation over 70 tones - a white slab with a stripe. */
+    pale:  ['#a0a696', '#c3c9b6', '#6e746a', '#dee3d0']
   }
 };
 

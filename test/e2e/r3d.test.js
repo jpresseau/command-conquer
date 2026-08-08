@@ -319,6 +319,56 @@ function readCanvas() {
 
   S.ok('the page logged no errors while baking', !g.errors.length, g.errors.slice(0, 3).join(' | ') || 'clean');
 
+  /* ------------------------------------------- no structure is a flat slab ----
+     A building made of plain boxes under a camera this close to overhead is mostly its own
+     TOP faces, and a top face is one polygon in one tone however good the palette is. The two
+     shipyards were the proof: an apron, a hall, a roof, a slipway, a gantry, a mast and a
+     crate between them, and 62 distinct colours across 5,800 opaque pixels - a rectangle with
+     a stripe, and both yards identical because they were the same box.
+
+     Distinct tones per thousand opaque pixels is the cheapest number that catches it. It does
+     not say a building looks good; it says the geometry is reaching the screen at all, which
+     is the failure that keeps recurring. The floor is set below today's worst so it flags a
+     regression rather than pinning the current numbers. */
+  var flat = await g.page.evaluate(function () {
+    var S = _rtsSprites(), out = [];
+    RTS_STRUCTS.forEach(function (d) {
+      var sp = S.bld.player[d.key];
+      if (!sp || !sp.c) return;
+      var cv = sp.c, c = cv.getContext('2d');
+      var px = c.getImageData(0, 0, cv.width, cv.height).data;
+      var tones = {}, n = 0;
+      for (var i = 0; i < px.length; i += 4) {
+        if (px[i + 3] < 128) continue;
+        n++;
+        tones[(px[i] >> 3) + ',' + (px[i + 1] >> 3) + ',' + (px[i + 2] >> 3)] = 1;
+      }
+      if (n < 400) return;                       /* a 1x1 needs no silhouette argument */
+      out.push({ key: d.key, px: n, tones: Object.keys(tones).length,
+                 per1k: +(1000 * Object.keys(tones).length / n).toFixed(1) });
+    });
+    out.sort(function (a, b) { return a.per1k - b.per1k; });
+    return out;
+  });
+  /* ABSOLUTE tone count, not tones per pixel. Per-pixel was the first thing tried here and it
+     is the wrong shape: a big smooth surface spends many pixels per tone, so it punishes large
+     buildings for being large. It ranked the Construction Yard worst in the game at 8.8 and the
+     Pillbox best at 174, which is almost entirely a statement about their sizes. What the
+     question actually is - does this thing show more than a couple of faces - is answered by
+     how many distinct tones are on screen at all. Sprites under 1500 px are exempt: a wall is
+     a wall and does not owe anyone a silhouette. */
+  var FLOOR = 50;
+  var big = flat.filter(function (r) { return r.px >= 1500; })
+                .sort(function (a, b) { return a.tones - b.tones; });
+  var slabs = big.filter(function (r) { return r.tones < FLOOR; });
+  S.ok('no structure sprite reads as a flat slab', !slabs.length,
+       slabs.map(function (r) { return r.key + ' ' + r.tones; }).join(', ') ||
+       big.length + ' structures over 1500 px, worst ' + big[0].key + ' at ' + big[0].tones + ' tones');
+  S.note('distinct tones, worst five: ' + big.slice(0, 5).map(function (r) {
+    return r.key + ' ' + r.tones;
+  }).join(', '));
+  S.note('...best five: ' + big.slice(-5).map(function (r) { return r.key + ' ' + r.tones; }).join(', '));
+
   await g.close();
   await browser.close();
   require('../lib/report.js')(S);
