@@ -95,8 +95,12 @@ all. Frame 0 is the standing tree; the rest are the burning and felled sequence.
 
 Only the base ground is repainted from templates — clear grass (one of sixteen variants per cell,
 the way the original picks them) and water. Ore and the dirt patches' drawn edges stay
-procedural. **Cliffs used to as well**; they are now fitted from the real Cliffs templates, which
-took throwing away two plans first — see the section at the bottom. Only the 48×48 single trees are used;
+procedural. **Cliffs and the shoreline used to as well**; both are now taken from the real
+templates, and each took throwing away a plan first — see the two sections at the bottom.
+
+Open water is **five tiles, not one**. `w1` is a single 24×24 tile, and asking for it alone put
+the same speckle in every water cell on the map; `w2` is a 2×2 template whose four tiles are open
+water too, so the pool is w1 plus those four. Only the 48×48 single trees are used;
 `tc01`–`tc05` are 72×48 and 96×72 clumps that span several cells and would overlap their
 neighbours without the placement rules that go with them.
 
@@ -242,3 +246,80 @@ set dressing — fallen logs, a wreck, a crashed aircraft — scattered on open 
 **Water cliffs (`wc01`–`wc38`) are not done.** They are the same shape of problem against the
 coastline mask rather than the rock mask, and the fitter would take them with a different pair of
 predicates; nobody has measured whether the coastline the generator produces has room for them.
+
+
+## The shoreline: single cells, not templates
+
+The sand and the water were the last flat things on the map. With artwork loaded, grass and water
+were painted from real templates and then **painted over** by `RTS_PAL` in 2px noise blocks
+clipped to the cell grid — beside RA's own grass, a 24-pixel staircase of beige and blue.
+
+Fitting whole Beach templates the way the cliffs are fitted **works and still looks wrong.** It
+covers 98% of sand cells, legally, off the tileset's own classes — which unlike the Cliffs table
+say what each cell is and mean it (`sh01` is `---k-ccbbwwiww--w---`). But our sand ring is one or
+two cells wide, so a template with sand on top and water underneath passes every class check while
+putting a south-facing beach on a **west-facing shore**. Stacked up the coast that reads as a
+staircase of little wave lines.
+
+The fix is to stop asking about classes and ask about the picture: does this piece's water lie
+where the water actually is? Measured as the best any candidate can do, averaged over every sand
+cell on seed 31:
+
+| candidate | agreement with the map's waterline |
+|---|---|
+| best whole template | 0.82 (and 0.84 however hard the facing term is weighted) |
+| best **single cell** | **0.96** |
+
+The footprints were the constraint, not the library. So the shore loads one 1×1 entry per cell of
+every Beach template — 516 of them — and hands them to the same packer, which still breaks ties on
+the seam with the neighbour already placed.
+
+### Both edges, and where the waterline runs
+
+A shore cell carries a waterline, a grass line, or — where the ring is one cell wide — both. Each
+edge gets its own field: 1 where the far material is, 0 where the near one is, and **0.5 on the
+shore cells that carry that edge**, so the contour runs *through* those cells rather than along
+their border. Splitting a single field down the middle instead puts each boundary exactly on a
+cell edge, and the coast comes out as the same staircase — which is what the first two attempts
+did, first at the waterline and then, once that was fixed, at the grass line instead.
+
+Asking one question at a time is what makes this answerable:
+
+| question | best available |
+|---|---|
+| where is the waterline | 0.962 |
+| where is the grass line | 0.935 |
+| grass here, sand there, water beyond (one three-way field) | **0.757** |
+| the two edges scored separately and averaged | **0.898** |
+
+The three-way version collapses because the field then asks for 78% sand per cell and RA has no
+wide-sand tile — its beaches are narrow. Two questions, averaged, draws both edges.
+
+Cost: 39 ms to build the library once, **177 ms** to choose and paint 429 sand cells. Written the
+obvious way — sampling the two fields inside the candidate comparison — it was **2038 ms** of a
+3141 ms bake, because the expectation was being recomputed for all 516 candidates instead of once
+per cell.
+
+One thing surfaced the moment the flat blue stopped being painted: the tuft and pebble scatter had
+**always** been landing on the water, invisible under the paint that came after it.
+
+## Roads: three ways of not working
+
+RA's 45 Road templates cannot draw our roads, and it is worth writing down how thoroughly:
+
+| approach | result |
+|---|---|
+| fit them like the cliffs | covers every road cell, and renders as camouflage — disconnected track fragments pointing every way at once |
+| chain them | **35 of the 45** keep their track *inside* the footprint with clear margins all round; there are no ends to join |
+| use them as fill | **no cell in the set is more than 55% packed earth**, against the 100% sand tiles the Beach set has. The best in the whole temperate tileset is `f06#5` at 0.71, a ford approach |
+
+The reason is structural, not a gap in the library. Our roads are **2–4 cell wide carved swathes**
+(most road cells have 3 or 4 road neighbours); RA's road art is a **narrow track with grass either
+side**. They are different things wearing the same name, and the fix is narrower roads — a terrain
+change with pathing consequences, not an art one.
+
+What *can* be taken is the colour. The drawn road stays drawn, painted in three tones lifted by
+luminance from the dirt pixels the Road templates actually use, weighted by how often each index
+appears. And its tone now comes from a smooth field rather than a per-2px hash — the road had the
+same white-noise bug the grass had, and more visibly, because a road is a solid block of one
+material with nothing else going on in it.

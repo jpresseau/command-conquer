@@ -141,10 +141,16 @@ function _rtsBakeTerrain(G) {
     }
   }
 
-  /* Scatter that crosses cell lines: tufts, pebbles and bushes placed in world pixels. */
+  /* Scatter that crosses cell lines: tufts, pebbles and bushes placed in world pixels.
+
+     NOT ON THE WATER. It always landed there - a twentieth of the map is lake - and it never
+     showed because the flat blue below was painted over the top of it afterwards. The moment
+     the real shoreline took that pass away, the tufts and pebbles surfaced, floating. */
   var i, x, y;
   for (i = 0; i < S * S / 900; i++) {
     x = _sprHash(i, 11, seed + 41) * S; y = _sprHash(i, 29, seed + 43) * S;
+    var wet = G.terrain[_rtsIdx(Math.min(N - 1, (x / RTS_TS) | 0), Math.min(N - 1, (y / RTS_TS) | 0))];
+    if (wet === RTS_T_WATER) continue;
     var r = _sprHash(i, 5, seed + 47);
     if (r < 0.55) {                                   /* grass tuft */
       var tc = RTS_PAL.grass[r < 0.28 ? 4 : 3];
@@ -159,29 +165,69 @@ function _rtsBakeTerrain(G) {
     }
   }
 
+  /* --- the shoreline, from the player's own game files. -----------------------------------
+         RA's Beach templates fitted onto the sand ring and the water it surrounds - see
+         mixart/shore.js. Without it the sand and the water are painted flat below, which
+         beside RA's own grass reads as a 24-pixel staircase of beige and blue: the one place
+         on the map where you could count the cells.
+
+         Null means no artwork, the ordinary case. Anything else means the shoreline is real
+         and the flat sand and water are skipped outright. --- */
+  var shore = null;
+  if (typeof _mixPaintShore === 'function' && !window._RTS_MAP) {
+    var shimg = g.getImageData(0, 0, S, S);
+    shore = _mixPaintShore(shimg.data, S, G, seed);
+    if (shore !== null) g.putImageData(shimg, 0, 0);
+  }
+
   /* --- ground cover per tile: sand, road and water are painted flat, under everything --- */
   var TS = RTS_TS, tx, tz, k, cx, cy;
+  var roadPal = typeof _mixRoadPal === 'function' ? _mixRoadPal() : null;
   function tileAt(x, z) { return _rtsInB(x, z) ? G.terrain[_rtsIdx(x, z)] : -1; }
   for (tz = 0; tz < N; tz++) {
     for (tx = 0; tx < N; tx++) {
       k = G.terrain[_rtsIdx(tx, tz)];
       if (k !== RTS_T_SAND && k !== RTS_T_ROAD && k !== RTS_T_WATER) continue;
-      var pal = k === RTS_T_WATER ? RTS_PAL.water : (k === RTS_T_ROAD ? RTS_PAL.road : RTS_PAL.sand);
+      /* ROAD is still drawn here even with artwork loaded, and deliberately: RA's 45 Road
+         templates cannot draw it. Measured three ways - fitting them produces camouflage
+         rather than a road; 35 of the 45 keep their track inside the footprint with clear
+         margins all round, so there is nothing to chain; and NO cell in the whole set is more
+         than 55% packed earth, so there is no fill tile either. The reason is structural: our
+         roads are 2-4 cell wide carved swathes and RA's road art is a narrow track with grass
+         either side. See docs/artwork.md. */
+      if (shore !== null && k !== RTS_T_ROAD) continue;
+      /* The road's COLOURS come from the tileset's own packed earth when there is artwork, even
+         though its shape cannot. Ours beside RA's ground is the same mismatch the drawn trees
+         had before the real ones arrived - and a road is 500 cells of it. */
+      var pal = k === RTS_T_WATER ? RTS_PAL.water
+              : (k === RTS_T_ROAD ? (roadPal || RTS_PAL.road) : RTS_PAL.sand);
       for (var py = 0; py < TS; py += 2) {
         for (var px = 0; px < TS; px += 2) {
           var gx = tx * TS + px, gy = tz * TS + py;
           var hv = _sprHash(gx >> 1, gy >> 1, seed + 91);
-          /* Edges dither into the neighbour so a road has a ragged verge, not a kerb. */
-          var edge = (px < 3 && tileAt(tx - 1, tz) !== k) || (px > TS - 4 && tileAt(tx + 1, tz) !== k) ||
-                     (py < 3 && tileAt(tx, tz - 1) !== k) || (py > TS - 4 && tileAt(tx, tz + 1) !== k);
-          if (edge && hv < 0.45) continue;
-          _sprRect(g, gx, gy, 2, 2, pal[hv < 0.3 ? 2 : (hv < 0.72 ? 0 : 1)]);
+          /* THE TONE COMES FROM A SMOOTH FIELD, not from that hash. Per-2px white noise is what
+             made the grass read as television snow, and the road had exactly the same bug for
+             exactly as long - only more visible, because a road is a solid block of one material
+             with nothing else going on in it. The hash is demoted to a sparse fleck. */
+          var tone = _sprVN(gx, gy, 8, seed + 93);
+          var ki = tone < 0.34 ? 2 : (tone < 0.72 ? 0 : 1);
+          if (hv > 0.955) ki = 1; else if (hv < 0.045) ki = 2;
+          /* Edges dither into the neighbour so a road has a ragged verge, not a kerb. Two blocks
+             deep rather than one and a half, and a coin-flip rather than 45%: at the old width
+             the verge was a dotted line along a straight edge, which reads as a kerb with
+             crumbs on it. */
+          var din = 5;
+          var edge = (px < din && tileAt(tx - 1, tz) !== k) || (px > TS - 1 - din && tileAt(tx + 1, tz) !== k) ||
+                     (py < din && tileAt(tx, tz - 1) !== k) || (py > TS - 1 - din && tileAt(tx, tz + 1) !== k);
+          if (edge && hv < 0.5 + (_sprVN(gx, gy, 5, seed + 94) - 0.5) * 0.7) continue;
+          _sprRect(g, gx, gy, 2, 2, pal[ki]);
         }
       }
     }
   }
-  /* Water gets highlight ripples once the body is down, so they run across tile seams. */
-  for (var w = 0; w < (S * S) / 1400; w++) {
+  /* Water gets highlight ripples once the body is down, so they run across tile seams. Not over
+     the real thing: RA's own water carries its own movement, and ours on top of it is litter. */
+  for (var w = 0; shore === null && w < (S * S) / 1400; w++) {
     var wx = _sprHash(w, 3, seed + 95) * S, wy = _sprHash(3, w, seed + 97) * S;
     if (tileAt((wx / TS) | 0, (wy / TS) | 0) !== RTS_T_WATER) continue;
     var wl = 3 + (_sprHash(w, w, seed + 99) * 6 | 0);

@@ -197,7 +197,7 @@ done. Read the one that covers what you are changing; you do not need to read th
 | `docs/roster.md` | the units and structures beyond the opening set, and the rule each was held to |
 | `docs/ui.md` | selection, the sidebar, radar orders, and the 15 Hz animation cadence |
 | `docs/art.md` | why the art read flat, read dark and read blue — and what the measurements said |
-| `docs/artwork.md` | reading the player's own game files: MIX, SHP, palettes, terrain templates, fitting the cliffs |
+| `docs/artwork.md` | reading the player's own game files: MIX, SHP, palettes, terrain templates, and laying the cliffs and the shoreline |
 | `docs/measuring.md` | the ladder, and how it has been misread |
 
 Two habits run through all of them and are worth stating once here:
