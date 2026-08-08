@@ -50,6 +50,16 @@ function _rtsAIWants(S) {
        nothing reported it because wanting a building is not an error. */
     var kd = rtsStructDef(k);
     if (kd && !rtsBuildableBy(kd, mySide)) continue;
+    /* A SHIPYARD IT CANNOT PLACE MUST NOT BE WANTED. This walk returns the first shortfall,
+       so a building that can never be placed is demanded forever and everything after it in
+       the order - the whole defensive tail, the superweapons - is never reached. That exact
+       failure already happened once here with the other army's buildings, which is what the
+       comment above is about. A shore structure is the same trap by a different route: not
+       every map has a coast the base can reach, and on one that does not, wanting a Naval
+       Yard would silently stop the opponent building anything else for the rest of the
+       match. The `ready` slot has a readyTry bail-out, but that only limits the damage after
+       the money has been spent - this stops it being wanted at all. */
+    if (kd && kd.shore && !_rtsAIShoreSpot(k)) continue;
     var want = Math.min(RTS_AI.limit[k], Math.ceil(size * RTS_AI.ratio[k]));
     if ((have[k] || 0) < want) return { key:k, urgent:false };
   }
@@ -122,6 +132,13 @@ function _rtsAIPlace(key) {
   if (node) { _rtsPlaceStruct('enemy', key, node.tx, node.tz, false, G.sides.enemy.readyPaid); return true; }
   if (key === 'refinery') aim = _rtsAIOreSpot();
   else if (key === 'turret') aim = _rtsAIWeakZone();
+  else if ((rtsStructDef(key) || {}).shore) {
+    /* A shipyard has exactly one place it can go, and the search below only accepts cells
+       _rtsCanPlace agrees with - which already applies the shore rule. Aiming at the spot
+       found by the gate above just means the best one wins rather than the first. */
+    var _sh = _rtsAIShoreSpot(key);
+    if (_sh) aim = { x:_rtsWX(_sh[0]), z:_rtsWX(_sh[1]) };
+  }
   var anchors = [];
   for (i = 0; i < G.ents.length; i++) {
     e = G.ents[i];
@@ -151,6 +168,31 @@ function _rtsAIPlace(key) {
     if (best) { _rtsPlaceStruct('enemy', key, best[0], best[1], false, G.sides.enemy.readyPaid); return true; }
   }
   return false;
+}
+/* Somewhere the opponent could actually put a shipyard: a cell inside the build radius of
+   one of its buildings that _rtsCanPlace accepts, which is where the `shore` rule is applied.
+   Returns null on a map whose coast the base cannot reach - and null is the whole point, see
+   the caller in _rtsAIWants. */
+function _rtsAIShoreSpot(key) {
+  var G = window._rtsG, R = RTS_BUILD_RADIUS, best = null, bs = 1e9, i;
+  var anchors = [];
+  for (i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.type === 'struct' && e.side === 'enemy' && !e.dead && !e.selling) anchors.push(e);
+  }
+  for (var a = 0; a < anchors.length; a++) {
+    var an = anchors[a];
+    for (var tx = an.tx - R; tx <= an.tx + R; tx++) {
+      for (var tz = an.tz - R; tz <= an.tz + R; tz++) {
+        if (!_rtsCanPlace('enemy', key, tx, tz)) continue;
+        /* Prefer a berth near the middle of the base rather than the first cell scanned:
+           a yard tucked behind the furthest outbuilding is one the defences do not cover. */
+        var s = Math.hypot(_rtsWX(tx) - an.x, _rtsWX(tz) - an.z);
+        if (s < bs) { bs = s; best = [tx, tz]; }
+      }
+    }
+  }
+  return best;
 }
 /* The richest ore nearest to ANY of the AI's buildings - not to its yard. As the base creeps
    outward the frontier is what matters; measuring from the yard sent late refineries back
@@ -216,6 +258,22 @@ function _rtsAIUnits(S) {
         else if (pe.type === 'unit' && (rtsUnitDef(pe.def) || {}).kind === 'air') air++;
       }
       if (air >= pads) continue;
+    }
+    /* AS MANY HULLS AS THERE ARE YARDS TO BUILD THEM, times a small factor. Ships are their
+       own production line and the opponent is rich late, so without a cap this is the
+       thirty-four-Yak problem again in a domain the player may not even be contesting. A
+       shipyard is not consumed by a hull the way a pad is by an aircraft, so the cap is a
+       multiple rather than one-for-one. */
+    if (cat === 'ship') {
+      var yards = 0, hulls = 0;
+      for (i = 0; i < G.ents.length; i++) {
+        var se = G.ents[i];
+        if (se.dead || se.side !== 'enemy') continue;
+        if (se.type === 'struct' && !se.building && !se.selling &&
+            (rtsStructDef(se.def) || {}).produces === 'ship') yards++;
+        else if (se.type === 'unit' && (rtsUnitDef(se.def) || {}).sea) hulls++;
+      }
+      if (!yards || hulls >= yards * RTS_AI.fleetPerYard) continue;
     }
     var list = RTS_AI.mix[cat], pool = [], total = 0;
     for (i = 0; i < list.length; i++) {

@@ -84,7 +84,24 @@ var RTS_TEAM_TYPES = [
     /* Straight down the throat and never mind what shoots back. No staging pause and no
        silent approach march: an opening GUARD plus a plain MOVE leg had the heaviest team
        in the game spending its first half-minute not fighting. */
-    missions:[ ['patrol','front'], ['attack','buildings'], ['loop',1] ] }
+    missions:[ ['patrol','front'], ['attack','buildings'], ['loop',1] ] },
+  /* --- and at sea. One per army, because a team only marches at FULL STRENGTH and a house
+     can only build its own side's hulls: a single mixed type listing all four would leave a
+     Soviet flotilla waiting forever for a Gunboat it cannot build. `sea` is the waypoint,
+     which _rtsBuildWaypoints derives as open water off the target's coast - a land waypoint
+     would have the fleet steering at a beach it cannot reach.
+
+     Quarry is `buildings`: what a navy is FOR here is reaching the coastal half of a base
+     that the land army has to cross the map to touch. Not reinforceable, because a hull that
+     goes back for a friend is a hull not shooting. */
+  { name:'Flotilla', priority:3, reinforce:false, quarry:'buildings',
+    members:{ gunboat:2, destroyer:1 },
+    max:1, autocreate:true, suicide:false,
+    missions:[ ['patrol','sea'], ['attack','buildings'], ['tarcom',0] ] },
+  { name:'Wolfpack', priority:3, reinforce:false, quarry:'buildings',
+    members:{ sub:2, missilesub:1 },
+    max:1, autocreate:true, suicide:false,
+    missions:[ ['patrol','sea'], ['attack','buildings'], ['tarcom',0] ] }
 ];
 var RTS_ALERT_TIME = 150;        /* backstop only: the first attack wave normally alerts the house */
 

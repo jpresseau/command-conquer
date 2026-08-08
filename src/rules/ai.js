@@ -60,6 +60,10 @@ var RTS_AI = {
   ratio:{ refinery:0.16, barracks:0.16, factory:0.10, radar:0.06, lab:0.05, depot:0.05,
           apower:0.08, kennel:0.04, silo:0.14, pillbox:0.18, flametower:0.12, turret:0.24, rocketpit:0.12,
           helipad:0.06, afld:0.06, aagun:0.10,
+  /* One shipyard. A second buys nothing but a second production line for a domain
+     the opponent uses to raid a coast, and the ratio has to stay small or a map
+     with a long shoreline turns the whole base plan maritime. */
+          navalyard:0.05, subpen:0.05,
           mslo:0.02, iron:0.02, pdox:0.02, gps:0.02 },
   limit:{ refinery:4,    barracks:2,    factory:2,    radar:1,    lab:1,    depot:1,
   /* The silo limit is high on purpose and is the one number here that was MEASURED rather
@@ -69,6 +73,7 @@ var RTS_AI = {
      nerf and hands the player about 16 extra seconds of life. RA has no silo limit at all. */
           apower:2,    kennel:1,    silo:14,   pillbox:4,     flametower:3,     turret:6,     rocketpit:4,
           helipad:2,   afld:2,      aagun:3,
+          navalyard:1, subpen:1,
   /* One each. A second silo would not charge a second missile - the timer is per house - so
      building one is pure waste, and the limit says so rather than relying on the ratio. */
           mslo:1,      iron:1,      pdox:1,    gps:1 },
@@ -77,6 +82,10 @@ var RTS_AI = {
      the storage cap is a pure nerf to the opponent - it loses the income and never buys the
      fix. Expressed as the fraction of capacity at which a silo jumps the queue. */
   siloUrgent:0.8,
+  /* Hulls per shipyard. A yard is not consumed by a ship the way a pad is by an aircraft,
+     so this is the ceiling that stops a rich opponent turning its whole surplus into a
+     navy the player may not be contesting at all. */
+  fleetPerYard:5,
   /* The order _rtsAIWants walks. Economy, then production, then tech, then defence - tech
      before defence because a Tech Center that arrives after the match is decided is worth
      nothing, and the defensive ratios are big enough to soak every spare credit otherwise.
@@ -92,7 +101,7 @@ var RTS_AI = {
      four turrets never gets there at all. The AA gun goes IN the defensive tail, beside the
      turrets it stands next to. */
   buildOrder:['refinery', 'barracks', 'silo', 'factory', 'radar', 'apower', 'depot', 'lab', 'kennel',
-              'helipad', 'afld',
+              'helipad', 'afld', 'navalyard', 'subpen',
               'pillbox', 'flametower', 'turret', 'rocketpit', 'tesla', 'aagun',
               'mslo', 'iron', 'pdox', 'gps'],
   /* What to spend a production run on. A table rather than an if-chain: adding a unit to
@@ -116,6 +125,13 @@ var RTS_AI = {
        specific moment, and an AI that buys them without a plan just donates the credits to
        whatever shoots them first. The Commando is out for the same reason plus her `only` cap.
        The dog IS in: it needs no plan, it just runs at infantry. */
+    /* SHIPS, once there is a yard to build them at - _rtsCanQueue gates on `needs`, so these
+       are inert until one exists. Both armies are listed and _rtsCanQueue drops whichever
+       belong to the other, exactly as the defensive block and the aircraft block already do.
+       The thresholds are high because a hull is worth two tanks and the opponent should not
+       be buying a destroyer while its land army is still five units. */
+    ship:[ { key:'destroyer', at:2600, w:3 }, { key:'missilesub', at:2800, w:2 },
+           { key:'sub', at:1800, w:3 }, { key:'gunboat', at:1100, w:3 } ],
     infantry:[ { key:'flame', at:1200, w:2 }, { key:'grenadier', at:900, w:2 },
                { key:'rocket', at:500, w:3 }, { key:'dog', at:400, w:2 },
                { key:'rifle', at:250, w:2 } ],

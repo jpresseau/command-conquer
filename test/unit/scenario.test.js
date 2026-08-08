@@ -163,21 +163,34 @@ function checkArg(where, need, arg, bad) {
       n += t.members[k];
       var d = unitKeys[k];
       if (!d) { members.push(t.name + ' wants ' + k + ', which is not a unit'); return; }
-      /* THE OPPONENT'S FACTION IS NOT FIXED - it is the opposite of whatever the player
-         picked, so a team calling for a faction-locked unit can be raised in one match and
-         impossible to fill in the other. The failure is a team type that silently never
-         forms, which looks like an easier opponent rather than a bug. */
-      ['allied', 'soviet'].forEach(function (side) {
-        if (!g.rtsBuildableBy(d, side))
-          factional.push(t.name + ' wants ' + k + ', which ' + side + ' cannot field');
-      });
     });
     if (!n) members.push(t.name + ' has no members at all');
+    /* THE OPPONENT'S FACTION IS NOT FIXED - it is the opposite of whatever the player picked.
+       This used to demand that EVERY member be fieldable by BOTH factions, which held for as
+       long as every composition was faction-neutral infantry and armour. It stopped being the
+       right invariant when the naval types arrived: a house builds one side's hulls only, so
+       Flotilla (gunboat/destroyer) is Allied and Wolfpack (sub/missilesub) is Soviet, and
+       neither can be neutral without asking a Soviet fleet to crew a Gunboat.
+
+       What has to be true instead is that SOME faction can field the whole type. A
+       composition mixing an Allied hull with a Soviet one would be craveable by nobody: it
+       would pass every check here, take a team slot, recruit no one, never reach full
+       strength, and so never march and never free the slot either. That is the failure this
+       assertion exists to catch, and it catches it in both the old shape and the new one.
+       The other half - that a house never RAISES the type it cannot crew - is behaviour
+       rather than data, and e2e/navair asserts it against a running match. */
+    var fieldable = ['allied', 'soviet'].filter(function (side) {
+      return Object.keys(t.members || {}).every(function (k) {
+        var d = unitKeys[k];
+        return d && g.rtsBuildableBy(d, side);
+      });
+    });
+    if (!fieldable.length) factional.push(t.name + ' can be fielded by neither faction');
   });
   S.ok('every team is made of units that exist', !members.length,
        members.join('; ') || TEAMS.length + ' compositions');
-  S.ok('...and that either faction can field, because the opponent\'s side follows the player\'s',
-       !factional.length, factional.join('; ') || 'no faction-locked members');
+  S.ok('...and each is fieldable by at least one faction, so no type is crewable by nobody',
+       !factional.length, factional.join('; ') || TEAMS.length + ' compositions, all crewable');
 
   var quarries = [];
   TEAMS.forEach(function (t) {
