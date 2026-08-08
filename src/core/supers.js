@@ -171,15 +171,15 @@ function _rtsIronTick(dt) {
 function _rtsFireChrono(side, tx, tz, sel) {
   var G = window._rtsG;
   if (!_rtsInB(tx, tz)) return false;
+  /* NO SELECTION IS A REFUSAL, not a licence to pick. There used to be a fallback here that
+     filled the list with the first RTS_CHRONO_MAX units in G.ents "for the AI, which has no
+     selection" - and no caller ever reached it: _rtsAISupers skips chrono outright, and
+     _rtsSuperClick refuses an empty selection before it gets this far. So it was dead code
+     whose comment described a behaviour it did not have (entity order is not "the nearest idle
+     group"), waiting for the first caller who passed an empty list to teleport eight arbitrary
+     units - very likely the harvester and the MCV, since those are early in G.ents. Returning
+     false leaves the charge alone, which is what the sidebar already tells the player. */
   var list = (sel && sel.length) ? sel : [];
-  if (!list.length) {
-    /* the AI has no selection - it sends its nearest idle group instead */
-    for (var i = 0; i < G.ents.length && list.length < RTS_CHRONO_MAX; i++) {
-      var e = G.ents[i];
-      if (!e.dead && e.type === 'unit' && e.side === side && !e.inside &&
-          !(rtsUnitDef(e.def) || {}).sea) list.push(e);
-    }
-  }
   list = list.filter(function (e) {
     return e && !e.dead && e.type === 'unit' && e.side === side && !e.inside;
   }).slice(0, RTS_CHRONO_MAX);

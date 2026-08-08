@@ -767,7 +767,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">7a8e044 · 2026-08-07</div>
+  <div id="rtsBuild" title="build">21feb31 · 2026-08-07</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -2891,7 +2891,16 @@ var RTS_STRUCTS = [
     needs:['lab'], side:'soviet', armour:'concrete', capturable:false,
     super:{ key:'nuke', name:'Atom Bomb', charge:300, target:'cell', icon:'☢',
             hint:'Atom Bomb ready — click anywhere on the map.' },
-    desc:'Charges an atomic missile. Levels everything within four tiles of where you aim it.' },
+    /* This said "levels everything within four tiles", which the blast does not do and cannot:
+       damage falls as 1/steps through the shared splash curve, so a thing four tiles out takes
+       100 of RTS_NUKE_DAMAGE's 1000 and the cheapest structure in the game has 400 hit points.
+       Measured on a real base: a direct hit took an enemy Construction Yard 1400 -> 400, and a
+       Power Plant 4.3 tiles away lost 91 of 500. What it actually is, is an infantry-clearer
+       with a heavy centre - so that is what it now says. Whether it SHOULD hit harder for a
+       2000-credit building behind the tech tier and a five-minute charge is a balance question,
+       and one the ladder cannot answer: measured over three hard seeds, the opponent never
+       builds a superweapon building at all before the match ends. */
+    desc:'Charges an atomic missile. A direct hit guts a building; out to four tiles the blast kills infantry and damages everything else.' },
   { key:'iron',     name:'Iron Curtain',  w:2, h:2, cost:1500, build:22, hp:400,  power:-200, sight:12,
     needs:['lab'], side:'soviet', armour:'concrete', capturable:false,
     super:{ key:'ironcurtain', name:'Iron Curtain', charge:270, target:'own', icon:'🛡',
@@ -11433,15 +11442,15 @@ function _rtsIronTick(dt) {
 function _rtsFireChrono(side, tx, tz, sel) {
   var G = window._rtsG;
   if (!_rtsInB(tx, tz)) return false;
+  /* NO SELECTION IS A REFUSAL, not a licence to pick. There used to be a fallback here that
+     filled the list with the first RTS_CHRONO_MAX units in G.ents "for the AI, which has no
+     selection" - and no caller ever reached it: _rtsAISupers skips chrono outright, and
+     _rtsSuperClick refuses an empty selection before it gets this far. So it was dead code
+     whose comment described a behaviour it did not have (entity order is not "the nearest idle
+     group"), waiting for the first caller who passed an empty list to teleport eight arbitrary
+     units - very likely the harvester and the MCV, since those are early in G.ents. Returning
+     false leaves the charge alone, which is what the sidebar already tells the player. */
   var list = (sel && sel.length) ? sel : [];
-  if (!list.length) {
-    /* the AI has no selection - it sends its nearest idle group instead */
-    for (var i = 0; i < G.ents.length && list.length < RTS_CHRONO_MAX; i++) {
-      var e = G.ents[i];
-      if (!e.dead && e.type === 'unit' && e.side === side && !e.inside &&
-          !(rtsUnitDef(e.def) || {}).sea) list.push(e);
-    }
-  }
   list = list.filter(function (e) {
     return e && !e.dead && e.type === 'unit' && e.side === side && !e.inside;
   }).slice(0, RTS_CHRONO_MAX);
@@ -11779,6 +11788,14 @@ function _rtsCapture(eng, b) {
   var G = window._rtsG, from = b.side;
   if (!b || b.dead || b.type !== 'struct' || b.side === eng.side) return false;
   if (!rtsCapturable(b.def)) return false;
+  /* A building that is being SOLD cannot be taken. Mission_Deconstruction is already running:
+     the previous owner has collected the refund, the animation is playing backwards, and the
+     structure removes itself a few seconds later whoever owns it by then. Accepting the capture
+     handed the player a building that died anyway and CONSUMED THE ENGINEER doing it - 600
+     credits and a walk across the map for nothing. Measured: captured mid-sale, dead six
+     seconds later, engineer spent. The AI sells routinely (Repair_AI below ConditionRed, and
+     AI_Raise_Money), so this is reachable by playing normally rather than by contrivance. */
+  if (b.selling) return false;
   _rtsBaseDropNode(b);                       /* off the old owner's plan... */
   b.side = eng.side;
   _rtsBaseAdd(b.side, b.def, b.tx, b.tz);    /* ...and onto the new one's */
@@ -13578,8 +13595,13 @@ function _rtsUpdateUnit(e, dt) {
      into the "acquire something to shoot" path - it would stand there aiming at a tank. */
   if (d.capture) {
     var cb = e.target;
-    if (e.order === 'capture' && (!cb || cb.dead || cb.type !== 'struct' || cb.side === e.side
-        || !rtsCapturable(cb.def))) {
+    /* `cb.selling` belongs in this list beside `cb.dead`: a building whose sale has started is
+       already gone as far as this order is concerned, and walking the rest of the way to it can
+       only end in _rtsCapture refusing. Dropping the order here is what keeps the engineer -
+       it is free to be sent somewhere else rather than spent on a structure that removes
+       itself. Reachable by playing normally: the AI sells while your engineer is en route. */
+    if (e.order === 'capture' && (!cb || cb.dead || cb.selling || cb.type !== 'struct'
+        || cb.side === e.side || !rtsCapturable(cb.def))) {
       e.order = null; e.target = null; e.path = null;
     } else if (e.order === 'capture') {
       if (_rtsAtStruct(e, cb)) { _rtsCapture(e, cb); return; }
