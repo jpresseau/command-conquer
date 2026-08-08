@@ -187,7 +187,14 @@ var S = new Suite('pathing');
       want.push({ u: u, x: gx, z: gz });
       u.goal = { x: gx, z: gz }; u.path = _rtsPathFor(u, gx, gz); u.pi = 0; u.order = 'move';
     });
-    for (var i = 0; i < 60 * 45; i++) _rtsTick(1 / 60);
+    /* WATCHED WHILE IT HAPPENS, not sampled at the end. See the note below for why the end is
+       the one moment at which this is unanswerable. */
+    for (var i = 0; i < 60 * 45; i++) {
+      _rtsTick(1 / 60);
+      want.forEach(function (w) {
+        if (w.u.order && w.u.order !== 'move') w.fought = true;
+      });
+    }
     /* Two things can end a unit's journey without any pathing being at fault, and BOTH have to
        come out of the denominator or this measures the war rather than the router:
 
@@ -198,12 +205,20 @@ var S = new Suite('pathing');
            tank that did this was scored as a unit stranded 43 units from its goal, which
            read as a routing bug and was a tank doing its job.
 
+       That second one used to be read off `u.order` after the loop, and that only catches a
+       unit STILL SHOOTING at the final tick. A unit that broke off, won its fight and went
+       idle ends on `order === null` - indistinguishable from one that arrived - and was
+       scored as stranded. It is not a hypothetical: a tank switched to `attack` at 7.8s of
+       the 45 and was idle again by 26.1s, having never resumed the move, and the spec called
+       it a 38.7-unit routing failure. The order is watched every tick instead, so breaking
+       off is recorded at the moment it happens rather than guessed at from the wreckage.
+
        Both are counted and reported, so a run where everybody died or everybody stopped to
        fight cannot look like a run where everybody arrived. */
     var died = 0, fought = 0;
     want.forEach(function (w) {
       if (w.u.dead) { died++; return; }
-      if (w.u.order && w.u.order !== 'move') { fought++; return; }
+      if (w.fought) { fought++; return; }
       var d = Math.hypot(w.u.x - w.x, w.u.z - w.z);
       worst = Math.max(worst, d);
       if (d < RTS_TILE * 2) arrived++;

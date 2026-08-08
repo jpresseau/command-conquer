@@ -43,6 +43,27 @@ function _rtsAIMassOf(side) {
   return _rtsInB(tx, tz) ? { tx: tx, tz: tz } : null;
 }
 
+/* WHAT THE UNIT LINE IS ALLOWED TO SPEND DOWN TO. It used to be a flat `infantryReserve`, and
+   that number sat BELOW the threshold the base plan needs, which is a ratchet: units start being
+   bought at 2,000 credits and a 2,000-credit refinery needs 3,000 in hand (its cost plus
+   `creditReserve`, because a non-urgent build will not spend the last of the treasury). Money
+   therefore could not climb past 2,000 without being turned into infantry first, and whatever the
+   opponent had not built by the time its early rich window closed, it never built.
+
+   Measured on Soldier, seed 9001, with the player kept alive so the match cannot end: it wanted a
+   fourth refinery for 61.3% of ten minutes - 368 seconds - with 405 legal places to put one, and
+   its bank went 4,343 at 300s, then 896, 257, 842, 497. Never once back above 3,000.
+
+   So the floor is whichever is higher: the infantry reserve, or what the base plan is currently
+   saving for. The unit line spends the SURPLUS, not the building's money. */
+function _rtsAISpare(S) {
+  var G = window._rtsG, w = G.ai && G.ai.want;
+  if (!w) return RTS_AI.infantryReserve;
+  var sd = rtsStructDef(w.key);
+  if (!sd) return RTS_AI.infantryReserve;
+  return Math.max(RTS_AI.infantryReserve, _rtsCostOf('enemy', sd) + RTS_AI.creditReserve);
+}
+
 function _rtsUpdateAI(dt) {
   var G = window._rtsG, S = G.sides.enemy;
   if (S.lost) return;
@@ -56,7 +77,7 @@ function _rtsUpdateAI(dt) {
      that cannot expand its base spends its whole income on units, so handing perfect queue
      efficiency to the low difficulties turned Recruit into a unit pump - 53 units against
      Commando's 61, which is not a difficulty ladder, it is one rung. */
-  if (_rtsIQAt(RTS_IQ.refill) && rtsMoney(S) > RTS_AI.infantryReserve) _rtsAIUnits(S);
+  if (_rtsIQAt(RTS_IQ.refill) && rtsMoney(S) > _rtsAISpare(S)) _rtsAIUnits(S);
   G.ai.next -= dt;
   G.ai.build -= dt;
   if (G.ai.build <= 0) {
@@ -73,7 +94,7 @@ function _rtsUpdateAI(dt) {
         if (!b.repair && b.hp < b.maxHp * 0.85) { b.repair = 1; b.rtimer = 0; }
       }
     }
-    _rtsAIUnits(S);
+    if (rtsMoney(S) > _rtsAISpare(S)) _rtsAIUnits(S);
     _rtsTeamMaybeRaise();
 
     /* Expert_AI: score every strategy, then act from CRITICAL downward. Note the original
