@@ -23,11 +23,15 @@
    And nothing reads the class letters in the end. The choice is made on what a cell DRAWS against
    what the map says is there, which is why EVERY cell is a candidate rather than only the ones
    the table calls beach: the clear-classed ones are what carry the landward edge. */
-var _RTS_SHORELIB;
+/* Two coasts, one machine. 'B' is the Beach set and its middle material is sand; 'W' is the
+   Water Cliffs set and its middle material is rock. Everything else about them is identical -
+   a strip of something between the sea and the land, with an edge at each side - so they share
+   the library builder, the fields and the picker. */
+var _RTS_COASTLIB = {};
 
-function _mixShoreLib() {
-  if (_RTS_SHORELIB !== undefined) return _RTS_SHORELIB;
-  _RTS_SHORELIB = null;
+function _mixCoastLib(cat) {
+  if (_RTS_COASTLIB[cat] !== undefined) return _RTS_COASTLIB[cat];
+  _RTS_COASTLIB[cat] = null;
   if (!_rtsArtReady() || typeof RA_TILETAB === 'undefined') return null;
   var ex = _rtsThExt(), grass = _rtsTemGrassSet(), wet = _mixWaterSet();
   if (!grass || !wet) return null;
@@ -35,17 +39,19 @@ function _mixShoreLib() {
   var lib = [];
   Object.keys(RA_TILETAB).forEach(function (id) {
     var rec = RA_TILETAB[id];
-    if (rec.cat !== 'B') return;
+    if (rec.cat !== cat) return;
     var tem = _mixTiles(rec.img + ex);
     if (!tem || tem.n < rec.w * rec.h) return;
     var masks = _rtsTemMasks(tem, rec.w, rec.h, grass);
     for (var c = 0; c < rec.w * rec.h; c++) {
       var px = tem.tile[c];
       if (!px) continue;
-      /* What this cell DRAWS, pixel by pixel: 2 water, 0 plain ground, 1 sand for everything
-         else. That is the whole basis of choosing it, and it needs no class letter at all -
-         which is why every cell of every Beach template is a candidate here, not only the ones
-         the table calls beach. The grass-bearing cells are what carry the landward edge. */
+      /* What this cell DRAWS, pixel by pixel: 2 water, 0 plain ground, 1 for everything else -
+         which is sand in the Beach set and rock in the Water Cliffs set, and needs no separate
+         rule because both are simply "not grass and not water". That is the whole basis of
+         choosing a cell, and it needs no class letter at all - which is why EVERY cell of every
+         template is a candidate here, not only the ones the table names. The grass-bearing ones
+         are what carry the landward edge. */
       var cm = new Uint8Array(RTS_TS * RTS_TS);
       for (var i = 0; i < RTS_TS * RTS_TS; i++)
         cm[i] = wet[px[i]] ? 2 : (grass[px[i]] ? 0 : 1);
@@ -57,7 +63,7 @@ function _mixShoreLib() {
   /* Sorted by name so the choice is identical whatever order the keys came back in - a generated
      map has to be the same map on every machine. */
   lib.sort(function (a, b) { return a.img < b.img ? -1 : (a.img > b.img ? 1 : 0); });
-  return (_RTS_SHORELIB = lib);
+  return (_RTS_COASTLIB[cat] = lib);
 }
 
 /* Which palette indices are OPEN WATER. Same trick as the grass set and for the same reason:
@@ -78,14 +84,16 @@ function _mixWaterSet() {
   return any ? out : null;
 }
 
-/* Stamp the shoreline into the baked terrain's pixels. Returns the number of sand cells left
-   without art - zero, since every sand cell takes a 1x1 piece - or null when there was no
-   artwork, which is the ordinary case and what leaves the drawn sand and water switched on. */
-function _mixPaintShore(d, S, G, seed) {
-  var lib = _mixShoreLib();
+/* Stamp one kind of coast into the baked terrain's pixels. `midAt` says which cells this pass
+   owns - the sand ring for a beach, the rock that meets the sea for a headland - and everything
+   else follows from it. Returns the number of those cells left without art (zero, since every one
+   takes a 1x1 piece) or null when there was no artwork, which is the ordinary case and what
+   leaves the drawn sand and water switched on. */
+function _mixPaintCoast(d, S, G, seed, cat, midAt) {
+  var lib = _mixCoastLib(cat);
   if (!lib) return null;
   var N = RTS_N, TS = RTS_TS;
-  function sandAt(x, z) { return _rtsInB(x, z) && G.terrain[_rtsIdx(x, z)] === RTS_T_SAND; }
+  var sandAt = midAt;
 
   /* THE TWO EDGES ARE SCORED SEPARATELY, and that is the whole trick. A shore cell carries a
      waterline, a grass line, or - where the ring is one cell wide - both.
@@ -107,7 +115,9 @@ function _mixPaintShore(d, S, G, seed) {
      those cells 'b' and passable while drawing the waterline straight across them. */
   function terr(x, z) { return _rtsInB(x, z) ? G.terrain[_rtsIdx(x, z)] : -1; }
   function isWater(x, z) { return terr(x, z) === RTS_T_WATER; }
-  function isLand(x, z) { var t = terr(x, z); return t >= 0 && t !== RTS_T_SAND && t !== RTS_T_WATER; }
+  /* The landward side is anything on the map that is neither the sea nor this pass's own
+     material. For a beach that is grass, trees and rock; for a headland it is the beach too. */
+  function isLand(x, z) { return terr(x, z) >= 0 && !isWater(x, z) && !midAt(x, z); }
   function wetF(x, z) {
     if (isWater(x, z)) return 1;
     if (!sandAt(x, z)) return 0;
@@ -159,81 +169,41 @@ function _mixPaintShore(d, S, G, seed) {
 
   var res = _rtsTemFit(lib, N, {
     seed: seed,
-    needs: sandAt,
+    needs: midAt,
     match: match,
-    fits: function (cell, mx, mz) { return sandAt(mx, mz); }
+    fits: function (cell, mx, mz) { return midAt(mx, mz); }
   });
   _rtsTemPaint(d, S, res);
 
   var left = 0;
   for (var z = 0; z < N; z++) for (var x = 0; x < N; x++)
-    if (sandAt(x, z) && !res.used[z * N + x]) left++;
+    if (midAt(x, z) && !res.used[z * N + x]) left++;
   return left;
 }
 
-/* ------------------------------------------------------------------- roads --
-   THE ROAD TEMPLATES CANNOT DRAW OUR ROADS, and this is what is left after establishing that.
-   Measured three ways on the 45 temperate Road templates:
-
-     - fitting them the way the cliffs and the shore are fitted covers every road cell and
-       produces camouflage: a scatter of disconnected track fragments pointing every way at once,
-       because a road's continuity is the whole point and a packer has no notion of it;
-     - chaining is not available either - 35 of the 45 keep their track INSIDE the footprint with
-       clear margins all round, so there are no ends to join;
-     - and there is no fill tile: no cell in the entire Road set is more than 55% packed earth,
-       against the 100% sand tiles the Beach set has. The best in the whole temperate tileset is
-       f06#5 at 0.71, a ford approach.
-
-   The reason is structural, not a gap in the library: our roads are 2-4 cell wide carved swathes
-   and RA's road art is a narrow track with grass either side. They are different things wearing
-   the same name, and the fix for that is narrower roads, which is a terrain change with pathing
-   consequences rather than an art one.
-
-   What CAN be taken is the colour. The drawn road stays drawn, painted in the tileset's own
-   packed earth rather than in ours, which is the same mismatch the drawn trees had beside RA's
-   ground before the real ones arrived - and a road is 500 cells of it.
-
-   Three tones, dark to light, taken by luminance from the dirt pixels the Road templates
-   actually use, weighted by how often each index appears so the road is coloured like a road and
-   not like its rarest speck. */
-var _RTS_ROADPAL;
-
-function _mixRoadPal() {
-  if (_RTS_ROADPAL !== undefined) return _RTS_ROADPAL;
-  _RTS_ROADPAL = null;
-  if (!_rtsArtReady() || typeof RA_TILETAB === 'undefined') return null;
-  var ex = _rtsThExt(), grass = _rtsTemGrassSet(), pal = RTS_MIX.pal;
-  if (!grass || !pal) return null;
-
-  var count = new Float64Array(256), total = 0;
-  Object.keys(RA_TILETAB).forEach(function (id) {
-    var rec = RA_TILETAB[id];
-    if (rec.cat !== 'R') return;
-    var tem = _mixTiles(rec.img + ex);
-    if (!tem) return;
-    for (var c = 0; c < rec.w * rec.h; c++) {
-      var px = tem.tile[c];
-      if (!px || String(rec.t.charAt(c) || '-').toLowerCase() !== 'd') continue;
-      for (var i = 0; i < RTS_TS * RTS_TS; i++) {
-        if (grass[px[i]]) continue;                      /* the verge, not the road */
-        count[px[i]]++; total++;
-      }
-    }
+/* The beach: RA's Beach set over the sand ring. */
+function _mixPaintShore(d, S, G, seed) {
+  return _mixPaintCoast(d, S, G, seed, 'B', function (x, z) {
+    return _rtsInB(x, z) && G.terrain[_rtsIdx(x, z)] === RTS_T_SAND;
   });
-  if (total < 1000) return null;
+}
 
-  /* The commonest indices, then the darkest, the middle and the lightest of those - the same
-     three-tone shape RTS_PAL.road has, so the caller's banding is unchanged. */
-  var idx = [];
-  for (var v = 0; v < 256; v++) if (count[v] / total > 0.01) idx.push(v);
-  if (idx.length < 3) return null;
-  function lum(v) { return pal[v * 3] * 0.30 + pal[v * 3 + 1] * 0.59 + pal[v * 3 + 2] * 0.11; }
-  idx.sort(function (a, b) { return lum(a) - lum(b); });
-  function hex(v) {
-    return '#' + [pal[v * 3], pal[v * 3 + 1], pal[v * 3 + 2]].map(function (c) {
-      return (c < 16 ? '0' : '') + c.toString(16);
-    }).join('');
-  }
-  /* [mid, light, dark] - the order RTS_PAL.road is indexed in: 0 base, 1 light, 2 dark. */
-  return (_RTS_ROADPAL = [hex(idx[(idx.length / 2) | 0]), hex(idx[idx.length - 1]), hex(idx[0])]);
+/* The headland: RA's Water Cliffs set over rock that MEETS THE SEA. Only those cells - a rock
+   cell further inland is an ordinary cliff and mixart/cliffs.js owns it, which is why that fit
+   refuses them rather than both passes painting the same ground.
+
+   There was nowhere to put these until the generator stopped laying sand over every ridge that
+   reached the shore; before that, rock adjacent to water was zero cells on every seed measured.
+   It is still the smallest of the coasts - about 22 cells a map - and on the two seeds whose
+   channel is short enough that both keep-a-beach zones cover it, close to none. */
+function _rtsSeaCliffAt(G, x, z) {
+  if (!_rtsInB(x, z) || G.terrain[_rtsIdx(x, z)] !== RTS_T_ROCK) return false;
+  return (_rtsInB(x - 1, z) && G.terrain[_rtsIdx(x - 1, z)] === RTS_T_WATER) ||
+         (_rtsInB(x + 1, z) && G.terrain[_rtsIdx(x + 1, z)] === RTS_T_WATER) ||
+         (_rtsInB(x, z - 1) && G.terrain[_rtsIdx(x, z - 1)] === RTS_T_WATER) ||
+         (_rtsInB(x, z + 1) && G.terrain[_rtsIdx(x, z + 1)] === RTS_T_WATER);
+}
+
+function _mixPaintSeaCliffs(d, S, G, seed) {
+  return _mixPaintCoast(d, S, G, seed, 'W', function (x, z) { return _rtsSeaCliffAt(G, x, z); });
 }

@@ -58,10 +58,16 @@ var RTS_CLIFF_MAXOPEN = 0.4;
    which pieces are solid enough to serve as a lone boulder. Pulled out as their own functions so
    both stay testable - the packer moved to mixart/fit.js and _mixPaintCliffs below cannot run
    without a decoded temperat.mix, but these are just arithmetic over a library. */
-function _rtsCliffRules(rockAt, openAt) {
+function _rtsCliffRules(rockAt, openAt, seaAt) {
+  /* Rock that MEETS THE SEA belongs to the water-cliff pass in mixart/shore.js, which has the
+     38 templates drawn for that meeting and picks them by where the waterline runs. Excluded
+     here rather than painted twice: a land cliff carries grass margins, and grass against open
+     water is the exact seam those templates exist to remove. */
+  seaAt = seaAt || function () { return false; };
   return {
-    needs: rockAt,
+    needs: function (x, z) { return rockAt(x, z) && !seaAt(x, z); },
     fits: function (cell, mx, mz) {
+      if (seaAt(mx, mz)) return false;
       var r = rockAt(mx, mz);
       if (!r && !openAt(mx, mz)) return false;   /* never over ore, a tree or the sea */
       if (cell.kind === 'R' && !r) return false;
@@ -93,7 +99,8 @@ function _mixPaintCliffs(d, S, G, seed) {
   function rockAt(x, z) { return _rtsInB(x, z) && G.terrain[_rtsIdx(x, z)] === RTS_T_ROCK; }
   function openAt(x, z) { return _rtsInB(x, z) && G.terrain[_rtsIdx(x, z)] === RTS_T_GRASS; }
 
-  var rules = _rtsCliffRules(rockAt, openAt);
+  function seaAt(x, z) { return _rtsSeaCliffAt(G, x, z); }
+  var rules = _rtsCliffRules(rockAt, openAt, seaAt);
   var res = _rtsTemFit(lib, N, {
     seed: seed, needs: rules.needs, fits: rules.fits, fill: _rtsCliffFill(lib)
   });
@@ -101,6 +108,6 @@ function _mixPaintCliffs(d, S, G, seed) {
 
   var left = 0;
   for (var z = 0; z < N; z++) for (var x = 0; x < N; x++)
-    if (rockAt(x, z) && !res.used[z * N + x]) left++;
+    if (rockAt(x, z) && !seaAt(x, z) && !res.used[z * N + x]) left++;
   return left;
 }
