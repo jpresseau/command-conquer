@@ -80,6 +80,25 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
      instead of with the viewport - the two are no longer the same thing now that the plate is
      letterboxed on wide windows. */
   container-type:inline-size}
+/* THE MENU IS A COLUMN IN ITS OWN RIGHT, artwork or no artwork.
+
+   It only became a wrapper so the whole block could be moved bodily inside the original title
+   plate's panel (see rtsShowTitleArt), and it was given a layout only under `.hasart`. Without
+   the artwork it stayed a plain block <div> - and most of what is inside it is `<button>`s,
+   which are INLINE-LEVEL. They flowed as words in a paragraph.
+
+   What made that visible is the negative top margins below: -14px on a note, -10px on a
+   secondary button, each there to cancel #rtsHome's own 22px flex gap. Inside a wrapper with no
+   gap they cancel nothing and simply pull each element up into the one above. Measured before
+   the fix, at every viewport size tried, phone and desktop alike: the difficulty note
+   overlapped the difficulty buttons by 14px, the army note overlapped the army buttons by 14px,
+   and on a desktop INSTALL was drawn ABOVE START BATTLE, across it and both notes. On a phone,
+   where those notes wrap to two and three lines, it reads as a sentence printed straight
+   through the buttons.
+
+   So it lays out the same way in both states now, and the spacing is the column's own gap
+   rather than a stack of negative margins tuned against a gap that is not there. */
+#rtsTitleMenu{display:flex;flex-direction:column;align-items:center;gap:14px;width:100%}
 #rtsHome.hasart #rtsTitleMenu{
   position:absolute;left:25.31%;top:34.50%;width:49.53%;height:59.00%;
   display:flex;flex-direction:column;align-items:center;
@@ -157,7 +176,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   letter-spacing:1.5px;cursor:pointer;box-shadow:0 10px 34px rgba(46,111,208,.36);transition:transform .12s,background .12s}
 #rtsHome .go:hover{background:#3d84ee;transform:translateY(-1px)}
 #rtsHome .go:disabled{background:#3a4658;box-shadow:none;cursor:progress;transform:none}
-#rtsHome .go.resume{margin-top:-10px;padding:11px 34px;font-size:14px;background:#1d2735;border:1px solid #2b3a4d;
+#rtsHome .go.resume{padding:11px 34px;font-size:14px;background:#1d2735;border:1px solid #2b3a4d;
   box-shadow:none;font-weight:600}
 #rtsHome .go.resume:hover{background:#26344a}
 #rtsHome .go.resume small{display:block;font-size:11px;letter-spacing:.4px;opacity:.6;font-weight:400;margin-top:3px}
@@ -191,12 +210,31 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   color:#9db0c6;font:inherit;font-weight:700;letter-spacing:1px;cursor:pointer;transition:background .12s,border-color .12s}
 #rtsHome .diff button:hover{background:#1d2735}
 #rtsHome .diff button.on{background:#2e6fd0;border-color:#6fb0ff;color:#fff}
-#rtsHome .diffnote{margin:-14px 0 0;font-size:12.5px;opacity:.62;min-height:1.4em}
+/* THREE ON ONE ROW. The difficulty picker is a choice between three things, and it only reads
+   as one when they sit side by side - at 20px of side padding the third dropped onto a row of
+   its own on every phone measured, which makes COMMANDO look like a separate control rather
+   than the far end of a scale. The padding is what gives, not the type. */
+@media (max-width:520px){
+  #rtsHome .diff button{padding:9px 11px;letter-spacing:.5px}
+  #rtsHome .diff{gap:6px}
+}
+/* Below ~400px the three still did not fit, and the next thing to give is the page gutter
+   rather than the buttons: 24px a side on a 360px handset is 13% of the screen spent on margin,
+   and taking it back is worth 20px to every row on the screen, not just this one. */
+@media (max-width:420px){ #rtsHome{padding:24px 12px} }
+/* No negative pull: the column above supplies the spacing. `min-height` keeps the line's box
+   reserved so the layout does not jump when a note changes length. */
+#rtsHome .diffnote{margin:0;font-size:12.5px;opacity:.62;min-height:1.4em}
 /* The build mark. Pinned to the window rather than placed in the flow, because with artwork
    loaded the flow is inside the plate's red panel and this belongs to the page, not the game.
    Faint until you look for it, and selectable so it can be quoted back. */
+/* It is pinned over a page that scrolls under it, so on a narrow screen it lands on top of
+   whichever paragraph happens to be there - on a phone that is the middle of the artwork card's
+   prose, two greys on top of each other and neither readable. It carries its own small plate so
+   it sits ON the page rather than IN it, at any size. */
 #rtsBuild{position:fixed;right:8px;bottom:6px;z-index:11;font-size:10px;letter-spacing:.5px;
-  color:#7f8a99;opacity:.45;pointer-events:auto;user-select:text;font-variant-numeric:tabular-nums}
+  color:#7f8a99;opacity:.62;pointer-events:auto;user-select:text;font-variant-numeric:tabular-nums;
+  padding:3px 7px;border-radius:5px;background:rgba(11,15,22,.82);backdrop-filter:blur(2px)}
 #rtsBuild:hover{opacity:.9}
 #rtsErr{display:none;max-width:520px;padding:12px 16px;border:1px solid #7d3b34;border-radius:8px;
   background:#251513;color:#ffb4a6;font-size:12.5px;text-align:left;white-space:pre-wrap}
@@ -209,8 +247,8 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   #rtsHome h1{font-size:clamp(24px,4.2vw,34px);letter-spacing:clamp(4px,1.2vw,8px)}
   #rtsHome .eyebrow{margin:0 0 -8px;font-size:10px;letter-spacing:3px}
   #rtsHome .sub{margin:-6px 0 0;font-size:11px;letter-spacing:2px}
-  #rtsHome .diffnote{margin:-6px 0 0}
-  #rtsHome .go{padding:11px 34px;font-size:15px}
+  #rtsTitleMenu{gap:9px}
+  #rtsHome .go{padding:13px 34px;font-size:15px}
 }
 </style>
 </head>
