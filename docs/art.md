@@ -387,3 +387,38 @@ their Tanya is 1800 against RA's 1200, their Medic 200 against RA's 800. **So th
 transcribed.** What the mod folder *is* good for is anything descriptive of the original data
 rather than tuned on top of it: `sequences/` (facing counts, frame layouts, turret/hull splits)
 and `tilesets/` (terrain type per tile).
+
+## The audit, and what it found
+
+"Improve the graphics" was answered by measuring first: every sprite rendered to a contact sheet,
+then counted for opaque pixels, distinct tones, luminance spread, hue and saturation. Three passes
+followed, each aimed by the ranking rather than by eye. Mean distinct tones across the structures
+went **89 to 103**, and the spread closed from 23-165 to 82-165.
+
+Two hypotheses died on the way, and both are worth keeping:
+
+- **It was not the palette.** Widening `conc`, `steel` and `pale` moved the mean by five tones.
+  Real, and about a fifth of the effect of the form work.
+- **It was not sparse geometry.** The shipyards had an apron, hall, roof, slipway, gantry, mast
+  and crate between them and measured 62 and 49 tones - identical to each other, because they
+  were the same box. The geometry was there and was not reaching the screen.
+
+**The cause is flat top faces.** Under a camera this close to overhead a plain `_r3Box` is mostly
+its own top, and a top face is one polygon in one tone whatever the palette does. Every fix that
+worked was the same shape: break the mass (plinth, setback, chamfer), rib the roof, and put a
+second material on it.
+
+**The metric took two attempts.** Tones per thousand pixels is the obvious normalisation and it is
+wrong: a big smooth surface spends many pixels per tone, so it ranked the Construction Yard worst
+in the game and the Pillbox best, which is almost entirely a statement about their sizes. Absolute
+tone count, with sprites under 1500 px exempt, asks the question that was meant. `e2e/r3d` guards
+it.
+
+**The units are not the problem the buildings were.** Vehicles carry visible turrets, barrels and
+wings that track through their facings; ships have hulls and superstructure. Infantry are 42-66
+opaque pixels - about a third of a cell - and are told apart by kit colour rather than by shape,
+which is what the original does too and not a defect to be fixed.
+
+**Terrain remains the largest gap**, as the top of this document has said from the start: the
+ground is continuous noise where the original composes it from drawn 24x24 templates. Nothing in
+these three passes touched it.

@@ -132,7 +132,15 @@ function _sprBldBase(X, key) {
        field - and a ribbed shed is what a factory roof looks like anyway. The saw-tooth runs
        across the width, so the ribs are perpendicular to the door and the building reads as
        a shed you drive INTO. */
-    _r3Box(m, 0, 0, 0, W - 8, 12, D - 8, C[0], C[2]);
+    /* The walls are a MATERIAL now, not more of the roof. Ribbing the roof last time barely
+       moved the tone count because the whole building - walls, roof, door surround - came out
+       of the `dark` ramp, so every rib landed in the same two shades however many there were.
+       A brick base course under pale walls, with the dark kept for the roof and the bay, is
+       both what a factory shed looks like and three ramps instead of one. */
+    _r3Box(m, 0, 0, 0, W - 6, 3, D - 6, K[2], K[0]);                     /* brick base course */
+    _r3Slab(m, 0, 3, 0, W - 8, 9, D - 8, 2.5, P[0], P[1]);               /* pale walls */
+    for (var fp = 0; fp < 4; fp++)                                       /* wall piers */
+      _r3Box(m, -W / 2 + 9 + fp * ((W - 18) / 3), 3, -D / 2 + 5, 3, 9, 2, P[3], P[2]);
     /* The ribs repeat along the DEPTH, each one spanning the full width. _r3Gable's ridge
        runs along x with its slopes facing +z and -z, so repeating it across the width just
        gives five copies of the same big front slope side by side - vertical stripes, which
@@ -158,6 +166,11 @@ function _sprBldBase(X, key) {
     for (var fd = 0; fd < 5; fd++)
       _r3Box(m, 0, 1.5 + fd * 2.1, D / 2 - 1.6, W - 28, 1.0, 1.5, DK[1], DK[3]);
     _r3Box(m, 0, 11, D / 2 - 3, W - 20, 2.5, 5, C[3], C[3]);             /* header */
+    /* Hazard chevrons on the apron in front of the bay - the one warm accent on an otherwise
+       cold building, and what says "vehicles come out here" from across the map. */
+    for (var fh = 0; fh < 4; fh++)
+      _r3Box(m, -W / 2 + 14 + fh * 8, 3.2, D / 2 - 7, 4, 0.8, 2.5,
+             RTS_PAL.hazard[0], RTS_PAL.hazard[1]);
     pilasters(D / 2 - 3, 0, 0, 2, W - 20, 4, 11);
     /* Two extractors, not one. A single stack was visibly off-centre once the ribs gave the
        roof a centre line to be off it. */
