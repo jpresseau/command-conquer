@@ -69,11 +69,49 @@ function _rtsEvalObject(e, o, dist, w, force) {
      right there in the original, commented out; the shipped line is this one. */
   return Math.max(1, (value * RTS_THREAT_SCALE) / (dist / RTS_TILE + 1));
 }
+/* ------------------------------------------------------------------ cloaking --
+   TECHNO.CPP's Cloaking_AI, run by the cloaked object itself once a tick. It writes one flag,
+   `hidden`, and everything else in the game reads that - target acquisition here, and
+   _rtsEntSeen for everything the player is allowed to see or click. Computing it ON the
+   submarine rather than asking "is this thing hidden from me?" at each of those call sites is
+   what keeps it out of the inner loops: there are a handful of submarines and thousands of
+   acquisition tests.
+
+   Two ways to be visible, and they are the two rules that make a submarine playable against:
+
+     IT SURFACED TO SHOOT. `decloak` is set in _rtsFire and runs down over RTS_SUB_SURFACE
+     seconds. A boat that could fire while submerged would be a gun with no answer.
+     SOMETHING FOUND IT. Anything hostile inside RTS_SUB_DETECT sees it, and a hull carrying
+     `detects` - only the Destroyer - sees it from much further out. That is the difference
+     between owning a Destroyer and owning two Gunboats.
+
+   `hidden` is deliberately about the OBJECT, not about who is looking: both sides see a
+   submerged boat the same way, so the opponent cannot cheat by ignoring the rule and the
+   player's own submarines are hidden from the opponent by the same line of code. */
+function _rtsCloakAI(e, dt, d) {
+  if (!d || !d.cloak) return;
+  if (e.decloak > 0) e.decloak -= dt;
+  var G = window._rtsG, foe = _rtsEnemyOf(e.side), found = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var o = G.ents[i];
+    if (o.dead || o.side !== foe || o.inside) continue;
+    if (o.type === 'struct' && o.building) continue;
+    var od = (o.type === 'struct' ? rtsStructDef(o.def) : rtsUnitDef(o.def)) || {};
+    var r = od.detects || RTS_SUB_DETECT;
+    var dx = o.x - e.x, dz = o.z - e.z;
+    if (dx * dx + dz * dz <= r * r) { found = 1; break; }
+  }
+  e.spotted = found;
+  e.hidden = (e.decloak > 0 || found) ? 0 : 1;
+}
 function _rtsFindTarget(e, range, w) {
   var G = window._rtsG, foe = _rtsEnemyOf(e.side), best = null, bv = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
     if (o.dead || o.side !== foe || o.inside) continue;
+    /* You cannot shoot what is under water. The same flag that hides a submarine from the
+       player's screen hides it from the opponent's target acquisition - see _rtsCloakAI. */
+    if (o.hidden) continue;
     /* The air/ground contract. A weapon without `aa` cannot engage anything flying, and an
        aircraft's own weapons cannot reach another aircraft either - our helicopter carries no
        air-to-air, exactly as the Longbow does not. */
@@ -194,6 +232,12 @@ function _rtsFire(e, tgt, w) {
     var _sd = rtsStructDef(e.def);
     if (_sd && _sd.needsPower && _rtsPowerFactor(e.side) < 0.999) return;
   }
+  /* AND NEVER AT YOUR OWN SIDE. Deliberately a second guard - _rtsUpdateUnit already refuses to
+     AIM at a friendly - because this is the one place every route to a shot passes through, so
+     a future order that parks an ally in `target` cannot quietly become gunfire. Nothing in the
+     game fires on its own side on purpose: the Flame Tower's death blast does hurt friends, and
+     it goes through _rtsDamage rather than through here. */
+  if (tgt && tgt.side === e.side) return;
   if (!_rtsWeaponReaches(w, tgt)) return;
   /* AIRCRAFT.CPP spends a round per shot and the aircraft is out of the fight when the rack is
      empty. Decremented here rather than in the aircraft's own update so that every route to a
@@ -220,6 +264,11 @@ function _rtsFire(e, tgt, w) {
   /* "If a projectile was fired from a unit that is hidden in the darkness, reveal that unit
      and a little area around it." The muzzle flash gives away the shooter. */
   if (e.side !== 'player' && !_rtsVisible(_rtsTX(e.x), _rtsTX(e.z))) e.spot = RTS_MUZZLE_SPOT;
+  /* "A cloaked object that fires will decloak." It has to surface to shoot, and it stays up
+     afterwards for RTS_SUB_SURFACE seconds - the window in which a submarine can be answered.
+     Set at the one place every route to a shot passes through, so there is no way to fire from
+     under water. */
+  if ((rtsUnitDef(e.def) || {}).cloak) e.decloak = RTS_SUB_SURFACE;
   if (typeof _rtsSfx === 'function') _rtsSfx(w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
     : (w.shot === 'missile' ? 'rocket' : (e.type === 'struct' ? 'turretgun' : 'cannon')), e.x, e.z);
   var dmg = w.dmg * rtsVerses(w, tgt) * bias.fire * rtsCrateMult(e, 'fire');

@@ -106,7 +106,8 @@ function _rtsKill(e) {
   /* Infantry cry out when they die - ten recorded takes, and until now not one of them ever
      played: the identification table knew what they were and nothing asked for them. */
   if (e.type === 'unit' && typeof rtsDeathCry === 'function') rtsDeathCry(e);
-  if (e.cargo && e.cargo.length) _rtsSpillCargo(e);   /* the passengers walk away from it */
+  /* the passengers walk away from it - or go down with it, if there is no shore to walk to */
+  if (e.cargo && e.cargo.length) _rtsSpillCargo(e);
   if (e.type === 'struct') { _rtsFootprint(e, false); _rtsRecalcPower(e.side); }
   if (e.type === 'struct' && e.selling) {
     /* Sold, not destroyed: a puff of dust where it stood, and no fireworks. */

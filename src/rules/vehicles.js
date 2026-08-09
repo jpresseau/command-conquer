@@ -56,6 +56,24 @@ var RTS_BASE_DEFENSE_DELAY = 30;
    shooter the player cannot currently see. Here it is a short reveal on the shooter itself,
    since the visibility grid is rebuilt every sweep and a one-shot mark would be erased. */
 var RTS_MUZZLE_SPOT = 1.6;
+/* ------------------------------------------------------------------ cloaking --
+   TECHNO.CPP's Cloaking_AI, and the two rules that make a submarine a submarine rather than a
+   boat that happens to be hard to see:
+
+     IT SURFACES TO SHOOT. "A cloaked object that fires will decloak", and it stays up for a
+     moment afterwards. That window is the entire counterplay - a submarine that could fire from
+     under water would be a gun nothing in the game can answer.
+
+     PROXIMITY REVEALS IT. Anything that gets close enough finds one, and a DESTROYER carries
+     sonar that finds it from further out. That is what makes the Allied answer to a Soviet
+     fleet a particular hull rather than "bring more boats", and it is why the Destroyer's own
+     roster line already promised to be "the Allied answer to a submarine" - a promise nothing
+     in the code kept until now.
+
+   Seconds, and world units. RTS_SUB_DETECT is the FLOOR that every object has; a type carrying
+   its own `detects` uses that instead, and only the Destroyer does. */
+var RTS_SUB_SURFACE = 4.0;
+var RTS_SUB_DETECT = 4 * 2.5;             /* two and a half cells - close enough to see a wake */
 /* Overrun_Square: a tracked vehicle drives over infantry. Approaching one makes them scatter
    (`cellptr->Incoming(0, true)`); actually reaching them kills them. Should_Crush_It refuses
    for HUMAN-controlled vehicles - your own tanks never auto-crush, you have to drive them

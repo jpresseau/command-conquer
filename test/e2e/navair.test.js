@@ -123,9 +123,20 @@ var S = new Suite('navair');
           crossed.push(side + ' can field ' + u.key);
       });
     });
+    /* A prerequisite names a CAPABILITY, not a building - see _rtsProvides. Resolved as a key
+       alone, this reported that the Transport needs no shipyard: what it needs is called
+       `shipyard`, and no structure IS one - the Naval Yard and the Sub Pen both provide it,
+       which is how a single roster entry can be built by both armies. Namesake first, then the
+       `provides` lists, exactly as _rtsProvides resolves it. */
+    function providersOf(cap) {
+      var out = RTS_STRUCTS.filter(function (d) { return (d.provides || []).indexOf(cap) >= 0; });
+      var own = rtsStructDef(cap);
+      if (own && out.indexOf(own) < 0) out.push(own);
+      return out;
+    }
     var noYard = ships.filter(function (u) {
       return !(u.needs || []).some(function (p) {
-        var d = rtsStructDef(p); return d && d.produces === 'ship';
+        return providersOf(p).some(function (d) { return d.produces === 'ship'; });
       });
     }).map(function (u) { return u.key; });
     return {

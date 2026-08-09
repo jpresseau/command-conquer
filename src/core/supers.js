@@ -316,6 +316,16 @@ function _rtsVisible(tx, tz) {
 function _rtsEntSeen(e) {
   if (!e) return false;
   if (e.side === 'player') return true;
+  /* A SUBMERGED BOAT IS NOT SEEN, however well lit the water over it is. This sits ABOVE the
+     muzzle-flash reveal below and below the "it is mine" line above, and both positions are
+     deliberate: your own submarines stay on your screen (drawn awash - see the draw list), and
+     a submarine that has just fired is up on the surface with `hidden` already cleared by
+     _rtsCloakAI, so it does not need the reveal timer to be seen.
+
+     One test, and everything the player is allowed to perceive goes through it - the draw list,
+     the health bars, the radar, and _rtsPickAt. A submarine you cannot see is therefore also a
+     submarine you cannot click on and cannot order an attack against, which is the point. */
+  if (e.hidden) return false;
   /* Fire_At reveals a shooter that was hidden in the darkness. The visibility grid is
      rebuilt from scratch every sweep, so the reveal lives on the shooter as a short timer
      rather than as a mark on the grid that the next sweep would wipe. */

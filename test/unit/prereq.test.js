@@ -58,6 +58,44 @@ function can(key, side) {
   S.eq('...and can still build another advanced plant', can('apower'), true);
 })();
 
+/* ------------------------------------------------- a capability with no namesake ----
+   Power was the capability this model was written for, and it hides the interesting half:
+   there IS a structure keyed `power`, so every lookup happened to work even where it was
+   looking up a key rather than a capability. `shipyard` is the first with no namesake at all -
+   the Naval Yard and the Sub Pen both provide it, nothing is called it - and it is what lets
+   ONE Transport entry be built by both armies rather than two units differing only in whose
+   flag they fly. Every assertion below fails if `shipyard` is ever resolved as a key. */
+(function () {
+  function unitCan(key, side) {
+    return !!g._rtsAvailable(side || 'player', g.rtsUnitDef(key));
+  }
+  S.ok('nothing in the roster is called a shipyard', !g.rtsStructDef('shipyard'),
+       'which is the whole point of the case');
+
+  world([]);
+  S.eq('with no yard at all, no Transport', unitCan('lst'), false);
+
+  world(['navalyard']);
+  S.eq('an Allied Naval Yard is a shipyard', unitCan('lst'), true);
+  world(['subpen']);
+  S.eq('...and so is a Soviet Sub Pen, for the same unit', unitCan('lst'), true);
+
+  /* The edges, which a key lookup gets wrong in both directions. */
+  world(['navalyard!']);
+  S.eq('a yard still under construction is not one yet', unitCan('lst'), false);
+  world(['subpen:enemy']);
+  S.eq('...nor is the other side\'s', unitCan('lst'), false);
+  S.eq('...though it is theirs', unitCan('lst', 'enemy'), true);
+
+  /* The sentence the sidebar puts in front of the player, which is where a capability with no
+     namesake shows up as "Needs undefined first" if _rtsNeedName's fallback is ever dropped. */
+  var say = g._rtsNeedName('shipyard');
+  S.ok('a missing shipyard is explained by naming the buildings that ARE one',
+       /Naval Yard/.test(say) && /Sub Pen/.test(say) && !/undefined/.test(say), say);
+  S.eq('...while a capability that is also a building keeps its own name',
+       g._rtsNeedName('power'), g.rtsStructDef('power').name);
+})();
+
 /* --------------------------------------------------------------- the edges ----*/
 (function () {
   world(['power!']);

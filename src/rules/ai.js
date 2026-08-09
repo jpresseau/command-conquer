@@ -167,7 +167,14 @@ var RTS_AI = {
        are inert until one exists. Both armies are listed and _rtsCanQueue drops whichever
        belong to the other, exactly as the defensive block and the aircraft block already do.
        The thresholds are high because a hull is worth two tanks and the opponent should not
-       be buying a destroyer while its land army is still five units. */
+       be buying a destroyer while its land army is still five units.
+
+       NO TRANSPORT, for the same reason there is no engineer in the vehicle mix: a landing
+       craft is a decision about a specific crossing at a specific moment, and there is nothing
+       in here that makes that decision. An opponent buying them would field unarmed hulls that
+       loaded nothing and ferried no-one - 700 credits donated to whatever shot first. The
+       player builds it; the opponent does not, and that is stated here rather than being an
+       omission somebody has to reverse-engineer. */
     ship:[ { key:'destroyer', at:2600, w:3 }, { key:'missilesub', at:2800, w:2 },
            { key:'sub', at:1800, w:3 }, { key:'gunboat', at:1100, w:3 } ],
     infantry:[ { key:'flame', at:1200, w:2 }, { key:'grenadier', at:900, w:2 },
