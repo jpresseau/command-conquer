@@ -125,6 +125,20 @@ var RTS_WEAPONS = {
                 verses:{ none:0.5, wood:1.0, light:1.2, heavy:1.3, concrete:0.7 } },
   subrocket:  { dmg:60, range:34, cool:3.6, burst:2, shot:'missile', speed:34, splash:3.2, wall:true, wood:true,
                 verses:{ none:0.7, wood:1.3, light:1.0, heavy:0.8, concrete:1.0 } },
+  /* THE V2's WARHEAD. The Soviets had no reach on land at all: their best ground weapon is the
+     Mammoth's 20 and their best base defence the Rocket Turret's 26, against Allied Artillery at
+     34 - whose own roster line reads "Outranges every base defence in the game", and which is
+     Allied-only. The one Soviet weapon that matches it, the Missile Sub's `subrocket`, needs a
+     coast, and a generated battle is landlocked by design.
+
+     So the numbers are `subrocket`'s, which is the Soviets' own long-range profile and already
+     balanced, on a land chassis: same 34 reach and 60 damage, a slower reload, and no burst -
+     one big rocket rather than two. Against Allied artillery that is harder-hitting per shot and
+     slower, and the `verses` table splits their roles rather than cloning them: the howitzer is
+     1.1 against infantry and 0.6 against heavy armour, this is 0.55 against infantry and 1.25
+     against concrete. Artillery clears a position; the V2 takes a building down. */
+  v2rocket:   { dmg:60, range:34, cool:4.2, shot:'missile', speed:34, splash:3.0, wall:true, wood:true,
+                verses:{ none:0.55, wood:1.35, light:0.95, heavy:0.85, concrete:1.25 } },
   towerflame: { dmg:34, range:13, cool:0.75, shot:'tracer',  speed:0,  splash:3.0, wood:true,
                 verses:{ none:1.3,  wood:1.25, light:0.80, heavy:0.60, concrete:0.90 } }
 };

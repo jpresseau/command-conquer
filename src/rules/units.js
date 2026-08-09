@@ -44,6 +44,13 @@ var RTS_UNITS = [
     needs:['radar'], noMovingFire:true,
     side:'allied', armour:'light',
     desc:'Outranges every base defence in the game. Made of paper — never send it in first.' },
+  /* The Soviet answer to the Artillery, and the reason it exists is a measured asymmetry rather
+     than a wish for parity: see `v2rocket` in rules/weapons.js. Dearer, slower and more fragile
+     than the Allied piece, and it hits a building far harder and infantry rather less. */
+  { key:'v2rl',     name:'V2 Rocket',      kind:'vehicle',  cost:900,  build:13, hp:140,  speed:5.5, turn:1.2,r:2.0, sight:16, weapon:'v2rocket',
+    needs:['radar'], noMovingFire:true,
+    side:'soviet', armour:'light',
+    desc:'Outranges every base defence. One rocket, slowly — and it dies to anything that reaches it.' },
   { key:'heavy',    name:'Mammoth Tank',  kind:'vehicle',  cost:1700, build:20, hp:820,  speed:6.5, turn:1.3,r:2.2, sight:18, weapon:'heavycannon', weapon2:'coax',
     needs:['lab'],
     side:'soviet', armour:'heavy',

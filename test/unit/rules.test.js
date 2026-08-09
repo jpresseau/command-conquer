@@ -263,4 +263,64 @@ S.note(UNITS.length + ' units, ' + STRUCTS.length + ' structures, ' +
        weaponed.length > 1, weaponed.join(', '));
 })();
 
+/* --------------------------------------------- reach, per faction ----
+   The Allied Artillery's own roster line reads "Outranges every base defence in the game", and
+   it was Allied-only: measured off these tables, Allied reach on land was 34 against a best
+   Soviet defence of 26 and a best Soviet ground weapon of 20. The Soviets do have a range-34
+   weapon - the Missile Sub - but it needs a coast, and a generated battle is landlocked by
+   design, so on a generated map they had no answer at range at all.
+
+   What is pinned here is the SYMMETRY, not the numbers: each army must have something that
+   outranges the other's base defences, or one of them is besieging and the other is enduring. */
+(function () {
+  var W = g.RTS_WEAPONS;
+  /* RTS_MIX_UNIT lives in src/mixart, which this spec does not otherwise need - loaded on its
+     own so a unit added without artwork is caught here rather than seen as a procedural box
+     standing beside real sprites. */
+  var MIXU = load(['src/mixart/theatres.js']).RTS_MIX_UNIT || {};
+  function reach(list, side, kinds) {
+    return list.filter(function (d) {
+      return d.weapon && W[d.weapon] && (!kinds || kinds.indexOf(d.kind) >= 0) &&
+             g.rtsBuildableBy(d, side) && !d.sea && !d.air;
+    }).reduce(function (m, d) { return Math.max(m, W[d.weapon].range); }, 0);
+  }
+  var defs = {};
+  ['allied', 'soviet'].forEach(function (side) {
+    defs[side] = g.RTS_STRUCTS.filter(function (d) {
+      return d.weapon && W[d.weapon] && g.rtsBuildableBy(d, side);
+    }).reduce(function (m, d) { return Math.max(m, W[d.weapon].range); }, 0);
+  });
+  var land = { allied: reach(g.RTS_UNITS, 'allied', ['vehicle', 'infantry']),
+               soviet: reach(g.RTS_UNITS, 'soviet', ['vehicle', 'infantry']) };
+  S.note('longest land reach — allied ' + land.allied + ', soviet ' + land.soviet +
+         '   best base defence — allied ' + defs.allied + ', soviet ' + defs.soviet);
+
+  ['allied', 'soviet'].forEach(function (side) {
+    var other = side === 'allied' ? 'soviet' : 'allied';
+    S.ok('a ' + side + ' army can outrange the ' + other + '\'s base defences on land',
+         land[side] > defs[other],
+         'reach ' + land[side] + ' against defences at ' + defs[other]);
+  });
+  S.ok('neither army has a longer land reach than the other', land.allied === land.soviet,
+       'allied ' + land.allied + ', soviet ' + land.soviet);
+
+  /* And the siege unit is a real one on both sides: buildable, on a tab, and known to the art
+     table so it does not appear as a procedural box beside real sprites. */
+  ['arty', 'v2rl'].forEach(function (k) {
+    var d = g.rtsUnitDef(k);
+    S.ok(k + ' exists in the roster', !!d, d ? d.name : 'missing');
+    if (!d) return;
+    S.ok('...it belongs to exactly one army', !!d.side, d.side || 'both');
+    S.ok('...it holds its fire while moving, like a siege piece', !!d.noMovingFire, '');
+    S.ok('...and the artwork table knows it', !!MIXU[k], MIXU[k] || 'MISSING');
+  });
+
+  /* The opponent has to be able to field it, or half the point is lost - _rtsCanQueue drops the
+     other army's kit, so one entry in the mix serves both houses. */
+  var mixKeys = g.RTS_AI.mix.vehicle.map(function (m) { return m.key; });
+  ['arty', 'v2rl'].forEach(function (k) {
+    S.ok('the opponent can field ' + k, mixKeys.indexOf(k) >= 0, mixKeys.join(', '));
+  });
+})();
+
 require('../lib/report.js')(S);
