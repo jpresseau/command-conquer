@@ -1,7 +1,11 @@
 /* core/ore.js - messages, ore growth (TIBERIUM adjacency) and low-power decay.
    Part of rts.core, the simulation. */
 
-function _rtsSay(m) { var G = window._rtsG; G.msg = m; G.msgT = 4; }
+/* `secs` is for the one caller that needs a line which does NOT time out: when the simulation
+   has been given up on, its countdown is driven by the very tick that stopped, so a message
+   with an ordinary lifetime would either hang there by accident or vanish depending on where
+   the throw landed. Saying "forever" explicitly is the honest version of both. */
+function _rtsSay(m, secs) { var G = window._rtsG; G.msg = m; G.msgT = secs || 4; }
 
 /* Ore regrows into partly-mined tiles and slowly seeds empty neighbours, so a worked-out
    field recovers instead of leaving a dead map (RULES.CPP: IsTGrowth / IsTSpread). */
