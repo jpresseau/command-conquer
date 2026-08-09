@@ -235,6 +235,127 @@ var S = new Suite('pathing');
        normal.arrived + '/' + normal.judged + ' arrived, worst remaining gap ' + normal.worst.toFixed(1));
 
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
+  /* ---------- 5. ore NOTHING can reach must not be re-searched every frame ---------- */
+  /* Section 3 walls one tile and the harvester finds other ore. This is the case the player's
+     own maps produce: _rtsMapCheck's flood fill is land-only and src/map/starts.js passes a map
+     if even ONE ore cell is reachable, so a map whose fields sit behind water or cliff loads
+     happily and then strands every harvester on it.
+
+     A failed A* is not cheap - a search that finds nothing has expanded every reachable cell
+     before it gives up - and a null path used to clear `htile` without writing anything to the
+     `noGo` blacklist. _rtsNearestScrap then handed back the same nearest cell next tick. The
+     only thing that ever blacklisted anything was an eight-second no-progress timer measuring
+     a different fault: a harvester that is MOVING and not closing.
+
+     Measured, every ore cell on the map walled in, 20 simulated seconds and then 20 more:
+
+                    failed searches      cells written off      cost per tick
+       before          4,033 + 4,792          4 of 25              9.331 ms
+       after              100 +     0         25 of 25             0.563 ms
+       control on an ordinary map                                  0.095 ms
+
+     100 is the whole of it - 25 walled cells times the harvesters that each tried them - and it
+     does not come back: the second window costs nothing, and a sixty-second run is still 100.
+     Before, it was a hundred times a second for as long as the ore existed. */
+  /* ITS OWN MATCH. This section wipes every ore cell on the map, which would leave section 4
+     ordering units around a world that no longer resembles the one it was written for - it
+     scored 0 of 5 arrivals when this ran before it. Isolated rather than ordered carefully,
+     because "run these in this order or one silently lies" is not a property worth relying on. */
+  var g2 = await openPage(browser, { width: 900, height: 700 });
+  await g2.start(7, 15, { freeze: true });
+  var thrash = await g2.page.evaluate(function () {
+    var G = window._rtsG;
+    for (var i = 0; i < G.scrap.length; i++) { G.scrap[i] = 0; G.gems[i] = 0; }
+    var h = G.ents.filter(function (e) { return !e.dead && e.side === 'player' &&
+      rtsUnitDef(e.def) && rtsUnitDef(e.def).harvest; })[0];
+    if (!h) {
+      /* Same reason as section 3: an idle player never builds one, the free harvester comes
+         with a Refinery, and a fresh match has neither. */
+      var yd = _rtsHas('player', 'yard');
+      if (!yd) return { error: 'the player has no command yard' };
+      if (!_rtsHas('player', 'refinery')) {
+        var spot = null;
+        for (var rr = 3; rr <= 14 && !spot; rr++) for (var aa = 0; aa < 20 && !spot; aa++) {
+          var qx = _rtsTX(yd.x + Math.cos(aa / 20 * 6.283) * rr * RTS_TILE) - 1;
+          var qz = _rtsTX(yd.z + Math.sin(aa / 20 * 6.283) * rr * RTS_TILE) - 1;
+          if (_rtsCanPlace('player', 'refinery', qx, qz)) spot = [qx, qz];
+        }
+        if (!spot) return { error: 'nowhere to put a refinery' };
+        _rtsPlaceStruct('player', 'refinery', spot[0], spot[1]);
+      }
+      h = G.ents.filter(function (e) { return !e.dead && e.side === 'player' &&
+        rtsUnitDef(e.def) && rtsUnitDef(e.def).harvest; })[0];
+      if (!h) h = _rtsSpawnUnit('player', 'harvester', yd.x + RTS_TILE * 4, yd.z);
+    }
+    if (!h) return { error: 'no harvester' };
+    /* One 5x5 patch of ore, ringed in rock, well away from anything. */
+    var ctx = _rtsTX(h.x) + 30, ctz = _rtsTX(h.z) + 30;
+    if (ctx > RTS_N - 12) ctx = _rtsTX(h.x) - 30;
+    if (ctz > RTS_N - 12) ctz = _rtsTX(h.z) - 30;
+    var ore = 0;
+    for (var ox = -3; ox <= 3; ox++) for (var oz = -3; oz <= 3; oz++) {
+      var k = _rtsIdx(ctx + ox, ctz + oz);
+      if (Math.max(Math.abs(ox), Math.abs(oz)) === 3) { G.terrain[k] = RTS_T_ROCK; G.blocked[k] = 1; }
+      else { G.terrain[k] = RTS_T_GRASS; G.blocked[k] = 0; G.scrap[k] = 300; ore++; }
+    }
+    G.scrapDirty = true;
+    G.ents.forEach(function (e) {
+      if (e.dead || !rtsUnitDef(e.def) || !rtsUnitDef(e.def).harvest) return;
+      e.htile = null; e.hstate = 'toField'; e.path = null; e.noGo = null;
+      e.noGain = 0; e.bestGap = undefined;
+    });
+
+    /* COUNT THE HARVESTERS' OWN SEARCHES. Wrapping _rtsPath counts every unit on the map -
+       the opponent's army included - and in a live match that is thousands of legitimate calls
+       that have nothing to do with this. Wrapping _rtsPathFor and filtering on the caller is
+       the honest instrument: measured the wrong way, 3,523 calls of which only 175 failed. */
+    var real = window._rtsPathFor, calls = 0, fails = 0;
+    window._rtsPathFor = function (e, gx, gz) {
+      var ud = rtsUnitDef(e.def), mine = ud && ud.harvest;
+      var out = real(e, gx, gz);
+      if (mine) { calls++; if (!out) fails++; }
+      return out;
+    };
+    for (var s = 0; s < 60 * 20; s++) _rtsTick(1 / 60);
+    var harvs = G.ents.filter(function (e) { return !e.dead &&
+      rtsUnitDef(e.def) && rtsUnitDef(e.def).harvest; }).length;
+    /* The union across every harvester, not one of them: the cells are shared, and each
+       harvester keeps its own blacklist on purpose - one approaching from another side may
+       have no trouble with a cell that defeated the first. */
+    var seen = {};
+    G.ents.forEach(function (e) {
+      if (!e.noGo) return;
+      Object.keys(e.noGo).forEach(function (k) { if (e.noGo[k] > G.t) seen[k] = 1; });
+    });
+    var first = { calls: calls, fails: fails, harvs: harvs, blacklisted: Object.keys(seen).length };
+    /* AND IT DOES NOT COME BACK. The blacklist is time-limited on purpose - a wall can be
+       destroyed - but it must outlast the frame that set it by a great deal more than nothing. */
+    calls = 0; fails = 0;
+    for (var s2 = 0; s2 < 60 * 20; s2++) _rtsTick(1 / 60);
+    window._rtsPathFor = real;
+    return { ore: ore, first: first, second: { calls: calls, fails: fails } };
+  });
+  S.ok('a harvester exists for the unreachable-ore case', !thrash.error, thrash.error || '');
+  if (!thrash.error) {
+    /* The bound is the ore, not the clock. Before the fix this was 4,287 for 25 cells. */
+    /* FAILED searches are the measurement. Harvesters go on pathing for perfectly good reasons
+       - a full hopper still has to reach a refinery - and counting those would make this about
+       how busy the map is. The bound is one failure per walled cell per harvester that tries
+       it: nothing more, and emphatically not one per frame. */
+    var bound = thrash.ore * thrash.first.harvs;
+    S.ok('ore nothing can reach costs one failed search per cell, not one per frame',
+         thrash.first.fails <= bound,
+         thrash.first.fails + ' failures for ' + thrash.ore + ' walled cells and ' +
+         thrash.first.harvs + ' harvesters (bound ' + bound + ')');
+    S.ok('...and every walled cell was written off, not two of them',
+         thrash.first.blacklisted >= thrash.ore,
+         thrash.first.blacklisted + ' cells blacklisted of ' + thrash.ore);
+    S.ok('...and the next twenty seconds cost no failed searches at all',
+         thrash.second.fails === 0, thrash.second.fails + ' further failures');
+  }
+
+  await g2.close();
+
   await g.close();
   await browser.close();
   require('../lib/report.js')(S);
