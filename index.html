@@ -873,7 +873,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">617c143 · 2026-08-09</div>
+  <div id="rtsBuild" title="build">b968d12 · 2026-08-09</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -3759,6 +3759,11 @@ var RTS_AI = {
      so this is the ceiling that stops a rich opponent turning its whole surplus into a
      navy the player may not be contesting at all. */
   fleetPerYard:5,
+  /* Landing craft, total. ONE, because one Landing team may exist at a time and it wants one
+     craft: a second is an unarmed 700-credit hull with nothing to carry. Kept apart from
+     fleetPerYard because that number is about how big a navy is worth having and this one is
+     about how many boats a plan needs. */
+  craftCap:1,
   /* The order _rtsAIWants walks. Economy, then production, then tech, then defence - tech
      before defence because a Tech Center that arrives after the match is decided is worth
      nothing, and the defensive ratios are big enough to soak every spare credit otherwise.
@@ -3828,14 +3833,20 @@ var RTS_AI = {
        The thresholds are high because a hull is worth two tanks and the opponent should not
        be buying a destroyer while its land army is still five units.
 
-       NO TRANSPORT, for the same reason there is no engineer in the vehicle mix: a landing
-       craft is a decision about a specific crossing at a specific moment, and there is nothing
-       in here that makes that decision. An opponent buying them would field unarmed hulls that
-       loaded nothing and ferried no-one - 700 credits donated to whatever shot first. The
-       player builds it; the opponent does not, and that is stated here rather than being an
-       omission somebody has to reverse-engineer. */
+       THE TRANSPORT IS IN NOW, AND CONDITIONALLY. This entry used to say there was none, for
+       the same reason there is no engineer in the vehicle mix: a landing craft is a decision
+       about a specific crossing, and there was nothing that made that decision - an opponent
+       buying one would field an unarmed hull that loaded nothing and ferried no-one. There is
+       something now. _rtsAIProduce refuses this key unless _rtsAIWorthCrossing() says the water
+       is worth crossing, and caps it at `craftCap` - the one a Landing team needs. It is the
+       only entry in any mix that is asked about rather than simply rolled, and that asymmetry
+       is the point: every other hull is worth something the moment it floats.
+
+       Weight 4 rather than 1 because the gate has already decided it is wanted; once a
+       crossing is on, the craft is the thing the whole team is waiting for. */
     ship:[ { key:'destroyer', at:2600, w:3 }, { key:'missilesub', at:2800, w:2 },
-           { key:'sub', at:1800, w:3 }, { key:'gunboat', at:1100, w:3 } ],
+           { key:'sub', at:1800, w:3 }, { key:'gunboat', at:1100, w:3 },
+           { key:'lst', at:1400, w:4 } ],
     infantry:[ { key:'flame', at:1200, w:2 }, { key:'grenadier', at:900, w:2 },
                { key:'rocket', at:500, w:3 }, { key:'dog', at:400, w:2 },
                { key:'rifle', at:250, w:2 } ],
@@ -4245,12 +4256,18 @@ var RTS_WAVE_FIRST = 150;   /* a refinery costs 1400 and takes 18s - the first w
      number    NEED_NUMBER      a plain count (guard time in 1/10th minutes, or a line number)
      none      NEED_NONE
 
-   Missions deliberately NOT ported, because the subsystems they drive do not exist here:
-   FORMATION (no formations), UNLOAD/LOAD/DEPLOY (no transports, nothing deploys), SET_GLOBAL
-   (no scenario globals - that is TRIGGER.CPP's world), SPY, HOUND_DOG (follow friendlies),
-   DO (assign a raw unit mission), MOVECELL (a raw cell number, which is the thing waypoints
-   exist to avoid). Stubs for those would be inventing behaviour, not porting it.
-   ATTACKTARCOM is in, because Took_Damage already gives a team a "current target". */
+   LOAD AND UNLOAD ARE IN NOW, and what this list used to say is worth keeping: "UNLOAD/LOAD/
+   DEPLOY (no transports, nothing deploys)". There are transports - the APC always was one, and
+   the landing craft is one - so the stated reason had quietly stopped being true, and with it
+   the only thing keeping the opponent on its own side of the water.
+
+   Missions still deliberately NOT ported, because the subsystems they drive do not exist here:
+   FORMATION (no formations), DEPLOY (a TEAM deploying an MCV - the unit deploys itself, no team
+   drives it), SET_GLOBAL (no scenario globals - that is TRIGGER.CPP's world), SPY, HOUND_DOG
+   (follow friendlies), DO (assign a raw unit mission), MOVECELL (a raw cell number, which is
+   the thing waypoints exist to avoid). Stubs for those would be inventing behaviour, not
+   porting it. ATTACKTARCOM is in, because Took_Damage already gives a team a "current
+   target". */
 var RTS_TMISSIONS = {
   move:     { need:'waypoint' },  /* TMISSION_MOVE       - go to the waypoint, then advance */
   patrol:   { need:'waypoint' },  /* TMISSION_PATROL     - as move, but engaging on the way */
@@ -4258,8 +4275,15 @@ var RTS_TMISSIONS = {
   attack:   { need:'quarry'   },  /* TMISSION_ATTACK     - hunt this category of target */
   tarcom:   { need:'none'     },  /* TMISSION_ATTACKTARCOM - kill whatever the team is fixed on */
   guard:    { need:'number'   },  /* TMISSION_GUARD      - hold station, argument in 1/10th min */
-  loop:     { need:'number'   }   /* TMISSION_LOOP       - jump to this line of the list */
+  loop:     { need:'number'   },  /* TMISSION_LOOP       - jump to this line of the list */
+  load:     { need:'none'     },  /* TMISSION_LOAD       - everyone who can, boards the transport */
+  unload:   { need:'none'     }   /* TMISSION_UNLOAD     - the transport lands what it is carrying */
 };
+/* How long a LOAD leg may take before the team gives up on it. Generous, because the walk to
+   the water is a real march and the craft may still be coming; bounded, because a squad that
+   cannot reach the beach must not hold a team slot for the rest of the match. */
+var RTS_LOAD_TIMEOUT = 90;
+var RTS_UNLOAD_TIMEOUT = 120;    /* and the crossing itself, which is longer */
 /* "Guard area (1/10th min)..." - the editor's own label for that argument's unit. */
 var RTS_GUARD_TICK = 6;          /* seconds per unit of a GUARD mission's argument */
 var RTS_WAYPT_ARRIVE = 5 * RTS_TILE;   /* how close counts as having reached a waypoint */
@@ -4317,8 +4341,34 @@ var RTS_TEAM_TYPES = [
   { name:'Wolfpack', priority:3, reinforce:false, quarry:'buildings',
     members:{ sub:2, missilesub:1 },
     max:1, autocreate:true, suicide:false,
-    missions:[ ['patrol','sea'], ['attack','buildings'], ['tarcom',0] ] }
+    missions:[ ['patrol','sea'], ['attack','buildings'], ['tarcom',0] ] },
+  /* --- AND ACROSS IT. The one team that uses the water to deliver an ARMY rather than to
+     fight on it, and the only one whose composition mixes the two domains.
+
+     `crossing` is the gate, and it is what stops this being the engineer-in-the-mix mistake:
+     a landing party is a decision about a specific piece of GROUND, and raising one on a map
+     where the tanks could simply drive there is 700 credits and five units spent to arrive
+     later than walking. _rtsAIWorthCrossing answers that question - see it for what "worth"
+     means - and a type carrying this flag is not a candidate until it says yes.
+
+     The script is four lines and every one of them is a verb the player has: board the craft,
+     land on the far shore, attack what is there, then stay on whatever the team got fixed on.
+     There is deliberately no MOVE leg between LOAD and UNLOAD - _rtsOrderUnloadAt already
+     sails to the water nearest the place it is aimed at, so a separate waypoint would be a
+     second, worse answer to a question the unload already asks.
+
+     Both armies can crew it: the craft is faction-neutral and so are the Rifle Squad and the
+     Battle Tank, which is why this is one type where the Flotilla and the Wolfpack are two. */
+  { name:'Landing',  priority:3, reinforce:false, quarry:'buildings',
+    members:{ lst:1, tank:2, rifle:2 },
+    max:1, autocreate:true, suicide:false, crossing:true,
+    missions:[ ['load',0], ['unload',0], ['attack','buildings'], ['tarcom',0] ] }
 ];
+/* How much longer the land route has to be than the straight line before sailing is worth it.
+   1.0 would mean "any water at all"; this is "the road goes a long way round". Measured
+   against the alternative rather than chosen: see _rtsAIWorthCrossing. */
+var RTS_AI_DETOUR = 1.7;
+var RTS_AI_CROSS_RECHECK = 30;   /* seconds between re-answering the question - _rtsPath is not free */
 var RTS_ALERT_TIME = 150;        /* backstop only: the first attack wave normally alerts the house */
 
 /* ------------------------------------------------- committing the army (mine, not ported) --
@@ -11699,7 +11749,18 @@ function _rtsPath(sx, sz, gx, gz, dom) {
     if (!esc) return null;
     var ex = _rtsWX(esc[0]), ez = _rtsWX(esc[1]);
     var rest = _rtsPath(ex, ez, gx, gz, dom);
-    return [{ x:ex, z:ez }].concat(rest || []);
+    /* AND IF THERE IS NO ROUTE FROM THE ESCAPE CELL, THERE IS NO ROUTE. This used to read
+       `concat(rest || [])`, which turned a FAILED search into a one-waypoint path: step out of
+       the footprint and stop. Every caller reads a truthy path as "a route exists", so the unit
+       walked one hop, arrived, and reported success - and anything asking the pathfinder a
+       question rather than driving a unit got a confident wrong answer.
+
+       Measured on a map cut in two: _rtsPath from the opponent's Command Yard to the player's
+       returned a path 24 world units long against a straight-line distance of 368, on a map
+       where the two have no land route between them at all. That is what made the opponent
+       decide the water was not worth crossing - it believed there was a road. */
+    if (!rest) return null;
+    return [{ x:ex, z:ez }].concat(rest);
   }
   /* If the goal tile is blocked (ordered onto a building), walk outwards to the nearest
      open tile so "attack that refinery" still produces a path that arrives beside it. */
@@ -16046,6 +16107,21 @@ function _rtsAIUnits(S) {
     for (i = 0; i < list.length; i++) {
       if (rtsMoney(S) <= list[i].at) continue;
       if (!_rtsCanQueue('enemy', list[i].key)) continue;
+      /* THE TRANSPORT IS BOUGHT FOR A REASON OR NOT AT ALL, and it is the only entry in any mix
+         that asks a question before it is offered. An unarmed hull is worth nothing by itself;
+         it is worth something only when there is a crossing to make and a landing party to make
+         it. So it is gated on the same test that decides whether that team may be raised, and
+         capped at the one the team needs. Without the gate this is the engineer in the vehicle
+         mix - credits donated to whatever shoots first. */
+      if (list[i].key === 'lst') {
+        if (!_rtsAIWorthCrossing()) continue;
+        var craft = 0;
+        for (var ci = 0; ci < G.ents.length; ci++) {
+          var ce = G.ents[ci];
+          if (!ce.dead && ce.side === 'enemy' && ce.def === 'lst') craft++;
+        }
+        if (craft >= RTS_AI.craftCap) continue;
+      }
       pool.push(list[i]); total += list[i].w;
     }
     if (!pool.length) continue;
@@ -16233,8 +16309,12 @@ function _rtsAIAllToHunt() {
    - with this is what stops the opponent fighting as one undifferentiated blob. */
 
 </script>
-<script>/* core/teams.js - TEAM.CPP / TEAMTYPE.CPP: waypoints, recruiting a team and keeping the
-   opponent's teams stocked. Part of rts.core, the simulation. */
+<script>/* core/waypoints.js - the named places on the map that a team script steers by (TEAMTYPE.CPP).
+   Part of rts.core, the simulation.
+
+   Split out of core/teams.js when that file passed the 500-line ceiling unit/layout enforces.
+   A clean seam: nothing here knows what a team is, and the only thing teams ask of it is where
+   a name points. */
 
 /* ------------------------------------------------------- waypoints (TEAMTYPE.CPP) --
    Every waypoint-taking team mission - MOVE, ATT_WAYPT, PATROL - names a place on the map
@@ -16318,6 +16398,10 @@ function _rtsWayptPos(name) {
   var w = G.waypt[name] || G.waypt.front;
   return w ? { x:_rtsWX(w.tx), z:_rtsWX(w.tz) } : null;
 }
+</script>
+<script>/* core/teams.js - TEAM.CPP / TEAMTYPE.CPP: recruiting a team, keeping the opponent's teams
+   stocked, and deciding what kind to raise. Part of rts.core, the simulation. The named places
+   a team script steers by live next door in core/waypoints.js. */
 
 /* Quarry: the team leader asks Greatest_Threat for the best target of a KIND, so one team
    hunts harvesters while another goes for the power plants. */
@@ -16555,11 +16639,51 @@ function _rtsSuggestTeam(spare) {
       if (!_rtsCanProduce('enemy', kk)) buildable = false;
     }
     if (!buildable) continue;
+    /* AND A TYPE THAT ONLY MAKES SENSE ACROSS WATER IS NOT A CANDIDATE ON DRY LAND. The same
+       shape as the buildable gate above, for the same reason: a landing party raised where the
+       tanks could simply drive is five units and a boat arriving later than walking. */
+    if (ty.crossing && !_rtsAIWorthCrossing()) continue;
     if (spare < need) continue;
     choices.push(ty);
   }
   if (!choices.length) return null;
   return choices[(_rtsRnd() * choices.length) | 0];
+}
+/* IS SAILING WORTH IT? Asked of the map rather than assumed from it, because the answer decides
+   whether the opponent spends 700 credits and five units on a crossing.
+
+   Two ways for it to be yes, and they are the same question at two extremes: there is NO land
+   route to the enemy at all, or the land route is RTS_AI_DETOUR times longer than the straight
+   line - the road goes a long way round a lake, and the boat does not. A generated map is
+   guaranteed a land route between the starts (see core/terrain.js), so on those this comes down
+   to the detour test alone, and on most of them it is false: that is the intended answer, not a
+   dead feature. It is false without a shipyard too - there is no point wanting a craft that
+   cannot be built.
+
+   Cached for RTS_AI_CROSS_RECHECK seconds. _rtsPath over half a map is not free and the answer
+   moves only when a base does. */
+function _rtsAIWorthCrossing() {
+  var G = window._rtsG;
+  if (!G || !G.ai) return false;
+  if (G.ai.crossT != null && G.t - G.ai.crossT < RTS_AI_CROSS_RECHECK) return !!G.ai.crossOk;
+  G.ai.crossT = G.t;
+  G.ai.crossOk = false;
+  if (!_rtsCanProduce('enemy', 'lst')) return false;
+  var from = _rtsHas('enemy', 'yard') || _rtsHas('enemy', 'factory');
+  var to = _rtsHas('player', 'yard') || _rtsHas('player', 'factory');
+  if (!from || !to) return false;
+  var straight = Math.hypot(to.x - from.x, to.z - from.z);
+  if (straight <= 0) return false;
+  var path = _rtsPath(from.x, from.z, to.x, to.z, null);
+  if (!path) { G.ai.crossOk = true; return true; }        /* no road at all: the boat is the road */
+  var run = 0, px = from.x, pz = from.z;
+  for (var i = 0; i < path.length; i++) {
+    run += Math.hypot(path[i].x - px, path[i].z - pz);
+    px = path[i].x; pz = path[i].z;
+  }
+  G.ai.crossOk = run > straight * RTS_AI_DETOUR;
+  G.ai.crossRun = run; G.ai.crossStraight = straight;     /* kept for the spec to read */
+  return G.ai.crossOk;
 }
 /* Suspend_Teams: when the base is hit, everything below the survival priority is disbanded
    and its members are freed to defend. HOUSE.CPP calls this and it had nothing to call. */
@@ -16668,8 +16792,16 @@ function _rtsTeamsTick(dt) {
        until they do. Without this the fast members arrive alone and die alone.
        IsSuicide - "charge toward target ignoring distractions" - opts out: a suicide team
        does not stop for its stragglers. */
+    /* EXCEPT WHILE EMBARKING OR LANDING, when being spread out IS the manoeuvre: the tanks are
+       walking to the water, the craft is sitting in it, and the whole point of the leg is that
+       they are not together yet. Left in, the lag rule told everyone within range of the centre
+       to HOLD until the stragglers arrived - and the stragglers were trying to board, which is
+       a thing you cannot do while holding. The team stood on the beach until the load timed
+       out, every time. */
+    var _leg = t.type.missions && t.type.missions[t.cur | 0];
+    var _amphib = !!_leg && (_leg[0] === 'load' || _leg[0] === 'unload');
     var lag = false;
-    if (t.zone && !t.type.suicide) {
+    if (t.zone && !t.type.suicide && !_amphib) {
       for (i = 0; i < t.members.length; i++) {
         m = t.members[i];
         if (!m.init || m.dead) continue;
@@ -16705,9 +16837,52 @@ function _rtsTeamOrderAll(t, fn) {
   for (var i = 0; i < t.members.length; i++) {
     var m = t.members[i];
     if (m.dead || !m.init) continue;
+    /* A PASSENGER TAKES NO ORDERS. Cargo is a team member like any other and sits at its
+       transport's coordinates, so without this a landing party's tanks are given attack
+       orders while they are still in the hold - orders nothing will execute, because the tick
+       skips anything flagged `inside`, and which _rtsUnload then clears on the beach anyway.
+       Same rule as the five other places that must ask whether a unit is on the map; see the
+       header of core/transport.js. */
+    if (m.inside) continue;
     if (m.order === 'hold') m.order = null;
     fn(m, i);
   }
+}
+/* WHERE TO PUT AN ARMY ASHORE near something worth attacking: the closest cell to the target
+   that a land unit can stand on AND that a hull can reach the edge of. A beach, in other words,
+   and it is searched for from the TARGET outwards - so the beach it finds is on the target's
+   own side of the water, which is the entire point of going.
+
+   The first version of this asked for the nearest WATER to the target instead, and the
+   difference is not academic. Measured on a channel arena: the nearest water cell to the
+   player's Command Yard was ninety tiles up the coast, the craft dutifully sailed all the way
+   there, and then sat in open water for the rest of the leg because nothing within reach of it
+   was land. A hull cannot land on water; it lands on the shore beside it, so the shore is the
+   thing to look for. */
+function _rtsLandingSpot(aim) {
+  var atx = _rtsTX(aim.x), atz = _rtsTX(aim.z);
+  for (var r = 1; r <= 30; r++) {
+    for (var ox = -r; ox <= r; ox++) {
+      for (var oz = -r; oz <= r; oz++) {
+        if (Math.max(Math.abs(ox), Math.abs(oz)) !== r) continue;
+        var tx = atx + ox, tz = atz + oz;
+        if (!_rtsInB(tx, tz) || _rtsBlocked(tx, tz, null)) continue;    /* must be standable */
+        /* ...and close enough to open water that a hull could put somebody on it. The same
+           reach the unload itself uses, so a spot chosen here is a spot that can be landed on. */
+        if (!_rtsNearestOpen(tx, tz, RTS_UNLOAD_REACH, 'sea')) continue;
+        return { x:_rtsWX(tx), z:_rtsWX(tz) };
+      }
+    }
+  }
+  return null;
+}
+/* The craft a landing party is built around: its one member with a hold. */
+function _rtsTeamTransport(t) {
+  for (var i = 0; i < t.members.length; i++) {
+    var m = t.members[i];
+    if (!m.dead && _rtsIsTransport(m)) return m;
+  }
+  return null;
 }
 /* Spread arrivals out so five units do not path onto one tile and jam the approach. */
 function _rtsTeamSpread(i) {
@@ -16720,6 +16895,7 @@ function _rtsTeamAdvance(t, to) {
   t.guardUntil = 0;
   t.legT = null;
   t.target = null;
+  t.beach = null;                 /* the landing point is chosen per leg - see TMISSION_UNLOAD */
 }
 function _rtsTeamDoMission(t, dt) {
   var G = window._rtsG, list = t.type.missions, i, m;
@@ -16783,6 +16959,69 @@ function _rtsTeamDoMission(t, dt) {
             && Math.hypot(mm.goal.x - (w.x + off.x), mm.goal.z - (w.z + off.z)) < RTS_TILE) return;
         _rtsOrderMove(mm, w.x + off.x, w.z + off.z, amove);
       });
+      return 'ok';
+    }
+
+    /* TMISSION_LOAD. Everyone who can get into the team's transport does; the craft waits.
+       This is the player's own board order, issued once per member, so a landing party loads
+       by exactly the rules a player loads by - including the longer reach that lets a squad
+       board from the beach while the hull sits in the water. */
+    if (mis === 'load') {
+      var tr = _rtsTeamTransport(t);
+      if (!tr) { _rtsTeamAdvance(t); continue; }
+      if (t.legT == null) t.legT = G.t;
+      var waiting = 0, aboard = 0;
+      for (i = 0; i < t.members.length; i++) {
+        m = t.members[i];
+        if (m.dead || m === tr) continue;
+        if (m.inside) { aboard++; continue; }
+        if (!_rtsCanBoard(m, tr)) continue;              /* the hold is full, or it cannot fit */
+        waiting++;
+        if (m.order !== 'board' || m.target !== tr) _rtsOrderBoard(m, tr);
+      }
+      /* The craft holds station while they come to it. It is unarmed, so this is only about
+         not wandering off mid-embarkation. */
+      if (!tr.dead && tr.order !== 'hold') { tr.order = 'hold'; tr.path = null; tr.goal = null; }
+      if (!waiting) { _rtsTeamAdvance(t); continue; }    /* everyone in, or nobody else can be */
+      if (G.t - t.legT > RTS_LOAD_TIMEOUT) {
+        /* Out of time. With somebody aboard the crossing is still worth making; with nobody
+           aboard there is no landing party at all, and leaving it standing would hold a team
+           slot and five units out of the war for the rest of the match. */
+        if (aboard) { _rtsTeamAdvance(t); continue; }
+        _rtsTeamDisband(t);
+        return 'gone';
+      }
+      return 'ok';
+    }
+
+    /* TMISSION_UNLOAD. The craft takes what it is carrying to the far shore and puts it down.
+       _rtsOrderUnloadAt is the player's right-click-the-beach order - it sails to the water
+       nearest the point it is aimed at and lands the cargo there - which is why this leg needs
+       no waypoint of its own, and why a landing arrives where the target is rather than at a
+       spot chosen in advance. */
+    if (mis === 'unload') {
+      var trU = _rtsTeamTransport(t);
+      if (!trU || !_rtsCargoCount(trU)) { _rtsTeamAdvance(t); continue; }
+      if (t.legT == null) t.legT = G.t;
+      if (!t.target || t.target.dead) t.target = _rtsTeamTarget(t, 'buildings');
+      var aim = t.target || _rtsHas('player', 'yard');
+      if (!aim) { _rtsTeamAdvance(t); continue; }
+      /* AIM AT THE BEACH, NOT AT THE BUILDING. A target worth landing against is usually well
+         inland, and _rtsOrderUnloadAt walks an unreachable goal outwards only far enough to
+         find a cell the craft can occupy - six rings. Aimed straight at a Command Yard in the
+         middle of a base that is nowhere near, the search failed, the order was refused, and
+         the craft sat re-issuing it until the leg timed out with everyone still in the hold.
+         So the aim point is the BEACH nearest the target - the closest cell to it a tank can
+         stand on and a hull can reach the edge of. See _rtsLandingSpot; the unload then sails
+         to the water beside that cell and puts the cargo down on it. */
+      if (!t.beach) {
+        t.beach = _rtsLandingSpot(aim);
+        if (!t.beach) { _rtsTeamAdvance(t); continue; }   /* the target has no coast at all */
+      }
+      if (trU.order !== 'unload') _rtsOrderUnloadAt(trU, t.beach.x, t.beach.z);
+      /* A craft that cannot find a route, or cannot land when it arrives, must not strand the
+         team: time out and let the attack leg do what it can with whoever is on the map. */
+      if (G.t - t.legT > RTS_UNLOAD_TIMEOUT) { _rtsTeamAdvance(t); continue; }
       return 'ok';
     }
 

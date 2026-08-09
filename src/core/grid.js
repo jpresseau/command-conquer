@@ -142,7 +142,18 @@ function _rtsPath(sx, sz, gx, gz, dom) {
     if (!esc) return null;
     var ex = _rtsWX(esc[0]), ez = _rtsWX(esc[1]);
     var rest = _rtsPath(ex, ez, gx, gz, dom);
-    return [{ x:ex, z:ez }].concat(rest || []);
+    /* AND IF THERE IS NO ROUTE FROM THE ESCAPE CELL, THERE IS NO ROUTE. This used to read
+       `concat(rest || [])`, which turned a FAILED search into a one-waypoint path: step out of
+       the footprint and stop. Every caller reads a truthy path as "a route exists", so the unit
+       walked one hop, arrived, and reported success - and anything asking the pathfinder a
+       question rather than driving a unit got a confident wrong answer.
+
+       Measured on a map cut in two: _rtsPath from the opponent's Command Yard to the player's
+       returned a path 24 world units long against a straight-line distance of 368, on a map
+       where the two have no land route between them at all. That is what made the opponent
+       decide the water was not worth crossing - it believed there was a road. */
+    if (!rest) return null;
+    return [{ x:ex, z:ez }].concat(rest);
   }
   /* If the goal tile is blocked (ordered onto a building), walk outwards to the nearest
      open tile so "attack that refinery" still produces a path that arrives beside it. */

@@ -1,88 +1,6 @@
-/* core/teams.js - TEAM.CPP / TEAMTYPE.CPP: waypoints, recruiting a team and keeping the
-   opponent's teams stocked. Part of rts.core, the simulation. */
-
-/* ------------------------------------------------------- waypoints (TEAMTYPE.CPP) --
-   Every waypoint-taking team mission - MOVE, ATT_WAYPT, PATROL - names a place on the map
-   rather than a raw cell, and that indirection is the whole reason a team script can be
-   written once and still mean something. In the original a designer drops the waypoints by
-   hand in the scenario editor; this map is generated, so they are DERIVED from it instead.
-
-   Named rather than numbered, which is the same mechanism spelled legibly: what a scenario
-   author means by "waypoint 7" is "the gap in the ridge", and there is no reason to make the
-   team types refer to it as a number here.
-
-     home   the opponent's own command yard - where a team forms up
-     front  the direct approach to the player's base, short of the buildings
-     flank  the same base approached off the diagonal, so an attack does not always
-            arrive up the one corridor the player has learned to defend
-     mid    the contested ore in the middle of the map
-     ore    the field the player's own harvesters are working - a raider's hunting ground */
-function _rtsWayptSnap(tx, tz) {
-  tx = Math.max(1, Math.min(RTS_N - 2, Math.round(tx)));
-  tz = Math.max(1, Math.min(RTS_N - 2, Math.round(tz)));
-  var open = _rtsNearestOpen(tx, tz, 24);
-  return open ? { tx:open[0], tz:open[1] } : { tx:tx, tz:tz };
-}
-/* The ore cell closest to a given point, so "ore" and "mid" name real deposits rather than
-   wherever the field happened to be authored. */
-function _rtsNearestOre(G, tx, tz) {
-  var best = null, bd = 1e9;
-  for (var z = 0; z < RTS_N; z++) for (var x = 0; x < RTS_N; x++) {
-    if (G.scrap[_rtsIdx(x, z)] <= 0) continue;
-    var d = (x - tx) * (x - tx) + (z - tz) * (z - tz);
-    if (d < bd) { bd = d; best = { tx:x, tz:z }; }
-  }
-  return best;
-}
-function _rtsBuildWaypoints(G) {
-  var home = _rtsHas('enemy', 'yard'), foe = _rtsHas('player', 'yard');
-  var W = {};
-  var hx = home ? home.tx : RTS_N - 20, hz = home ? home.tz : 20;
-  var fx = foe ? foe.tx : 20, fz = foe ? foe.tz : RTS_N - 20;
-  W.home = _rtsWayptSnap(hx, hz + 6);
-
-  /* Stand off the target base rather than on top of it: a MOVE mission is an approach, and
-     a team that "arrives" inside the enemy buildings has already blundered into the fight
-     the flank was supposed to avoid. */
-  var dx = fx - hx, dz = fz - hz, len = Math.hypot(dx, dz) || 1;
-  var ux = dx / len, uz = dz / len, STAND = 13;
-  W.front = _rtsWayptSnap(fx - ux * STAND, fz - uz * STAND);
-
-  /* Perpendicular to the line between the two bases, so the flank is derived from the
-     layout rather than from a corner that happens to be right for this one map. Both signs
-     are candidates; take whichever lands on open ground furthest from the direct route. */
-  /* SWING is a real flank, not a trek. At 24 tiles on a 112-tile map this put the waypoint
-     out on the map edge and every team that used it spent most of the match walking. */
-  var px = -uz, pz = ux, SWING = 12, cand = null, cbest = -1;
-  for (var s = -1; s <= 1; s += 2) {
-    var c = _rtsWayptSnap(fx + px * s * SWING - ux * 6, fz + pz * s * SWING - uz * 6);
-    var away = Math.abs((c.tx - fx) * pz - (c.tz - fz) * px) + Math.hypot(c.tx - fx, c.tz - fz);
-    if (away > cbest) { cbest = away; cand = c; }
-  }
-  W.flank = cand;
-
-  /* `sea` - open WATER off the target's coast. A naval team pointed at a land waypoint
-     steers at a beach it cannot reach and stalls there for the rest of the match, so this is
-     snapped in the sea domain rather than by _rtsWayptSnap, which finds open LAND. Aimed a
-     little short of the enemy base for the same reason `front` is: arriving inside the guns
-     is not an approach. */
-  var _seaAim = _rtsNearestOpen(Math.round(fx - ux * 8), Math.round(fz - uz * 8), 40, 'sea');
-  W.sea = _seaAim ? { tx:_seaAim[0], tz:_seaAim[1] } : null;
-
-  var mid = _rtsNearestOre(G, RTS_N >> 1, RTS_N >> 1);
-  W.mid = _rtsWayptSnap(mid ? mid.tx : RTS_N >> 1, mid ? mid.tz : RTS_N >> 1);
-  var ore = _rtsNearestOre(G, fx, fz);
-  W.ore = _rtsWayptSnap(ore ? ore.tx : fx, ore ? ore.tz : fz);
-
-  G.waypt = W;
-  return W;
-}
-function _rtsWayptPos(name) {
-  var G = window._rtsG;
-  if (!G.waypt) _rtsBuildWaypoints(G);
-  var w = G.waypt[name] || G.waypt.front;
-  return w ? { x:_rtsWX(w.tx), z:_rtsWX(w.tz) } : null;
-}
+/* core/teams.js - TEAM.CPP / TEAMTYPE.CPP: recruiting a team, keeping the opponent's teams
+   stocked, and deciding what kind to raise. Part of rts.core, the simulation. The named places
+   a team script steers by live next door in core/waypoints.js. */
 
 /* Quarry: the team leader asks Greatest_Threat for the best target of a KIND, so one team
    hunts harvesters while another goes for the power plants. */
@@ -320,11 +238,51 @@ function _rtsSuggestTeam(spare) {
       if (!_rtsCanProduce('enemy', kk)) buildable = false;
     }
     if (!buildable) continue;
+    /* AND A TYPE THAT ONLY MAKES SENSE ACROSS WATER IS NOT A CANDIDATE ON DRY LAND. The same
+       shape as the buildable gate above, for the same reason: a landing party raised where the
+       tanks could simply drive is five units and a boat arriving later than walking. */
+    if (ty.crossing && !_rtsAIWorthCrossing()) continue;
     if (spare < need) continue;
     choices.push(ty);
   }
   if (!choices.length) return null;
   return choices[(_rtsRnd() * choices.length) | 0];
+}
+/* IS SAILING WORTH IT? Asked of the map rather than assumed from it, because the answer decides
+   whether the opponent spends 700 credits and five units on a crossing.
+
+   Two ways for it to be yes, and they are the same question at two extremes: there is NO land
+   route to the enemy at all, or the land route is RTS_AI_DETOUR times longer than the straight
+   line - the road goes a long way round a lake, and the boat does not. A generated map is
+   guaranteed a land route between the starts (see core/terrain.js), so on those this comes down
+   to the detour test alone, and on most of them it is false: that is the intended answer, not a
+   dead feature. It is false without a shipyard too - there is no point wanting a craft that
+   cannot be built.
+
+   Cached for RTS_AI_CROSS_RECHECK seconds. _rtsPath over half a map is not free and the answer
+   moves only when a base does. */
+function _rtsAIWorthCrossing() {
+  var G = window._rtsG;
+  if (!G || !G.ai) return false;
+  if (G.ai.crossT != null && G.t - G.ai.crossT < RTS_AI_CROSS_RECHECK) return !!G.ai.crossOk;
+  G.ai.crossT = G.t;
+  G.ai.crossOk = false;
+  if (!_rtsCanProduce('enemy', 'lst')) return false;
+  var from = _rtsHas('enemy', 'yard') || _rtsHas('enemy', 'factory');
+  var to = _rtsHas('player', 'yard') || _rtsHas('player', 'factory');
+  if (!from || !to) return false;
+  var straight = Math.hypot(to.x - from.x, to.z - from.z);
+  if (straight <= 0) return false;
+  var path = _rtsPath(from.x, from.z, to.x, to.z, null);
+  if (!path) { G.ai.crossOk = true; return true; }        /* no road at all: the boat is the road */
+  var run = 0, px = from.x, pz = from.z;
+  for (var i = 0; i < path.length; i++) {
+    run += Math.hypot(path[i].x - px, path[i].z - pz);
+    px = path[i].x; pz = path[i].z;
+  }
+  G.ai.crossOk = run > straight * RTS_AI_DETOUR;
+  G.ai.crossRun = run; G.ai.crossStraight = straight;     /* kept for the spec to read */
+  return G.ai.crossOk;
 }
 /* Suspend_Teams: when the base is hit, everything below the survival priority is disbanded
    and its members are freed to defend. HOUSE.CPP calls this and it had nothing to call. */
@@ -433,8 +391,16 @@ function _rtsTeamsTick(dt) {
        until they do. Without this the fast members arrive alone and die alone.
        IsSuicide - "charge toward target ignoring distractions" - opts out: a suicide team
        does not stop for its stragglers. */
+    /* EXCEPT WHILE EMBARKING OR LANDING, when being spread out IS the manoeuvre: the tanks are
+       walking to the water, the craft is sitting in it, and the whole point of the leg is that
+       they are not together yet. Left in, the lag rule told everyone within range of the centre
+       to HOLD until the stragglers arrived - and the stragglers were trying to board, which is
+       a thing you cannot do while holding. The team stood on the beach until the load timed
+       out, every time. */
+    var _leg = t.type.missions && t.type.missions[t.cur | 0];
+    var _amphib = !!_leg && (_leg[0] === 'load' || _leg[0] === 'unload');
     var lag = false;
-    if (t.zone && !t.type.suicide) {
+    if (t.zone && !t.type.suicide && !_amphib) {
       for (i = 0; i < t.members.length; i++) {
         m = t.members[i];
         if (!m.init || m.dead) continue;
