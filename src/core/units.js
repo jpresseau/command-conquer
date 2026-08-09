@@ -263,12 +263,35 @@ function _rtsUpdateHarvester(e, dt, d) {
       e.noGain = (e.noGain || 0) + dt;
       if (e.noGain > 8) {
         e.noGo = e.noGo || {};
-        e.noGo[_rtsIdx(e.htile.tx, e.htile.tz)] = G.t + 90;       /* try it again much later */
+        e.noGo[_rtsIdx(e.htile.tx, e.htile.tz)] = G.t + RTS_HARV_NOGO;
         e.htile = null; e.path = null; e.noGain = 0; e.bestGap = undefined;
         return;
       }
     }
-    if (!e.path) { e.goal = { x:wx, z:wz }; e.path = _rtsPathFor(e, wx, wz); e.pi = 0; if (!e.path) { e.htile = null; return; } }
+    if (!e.path) {
+      e.goal = { x:wx, z:wz }; e.path = _rtsPathFor(e, wx, wz); e.pi = 0;
+      /* A FAILED PATH IS AN ANSWER, not a reason to try again next frame. The eight-second
+         timer above measures a different fault - a harvester that is moving and not closing -
+         and it was the only thing that ever wrote to `noGo`. So a tile the pathfinder had just
+         proved unreachable went straight back into the running: htile cleared, _rtsNearestScrap
+         hands back the same nearest cell, and A* searches the whole map again. Sixty times a
+         second, for eight seconds, per harvester, and again ninety seconds later when the
+         blacklist lapsed.
+
+         Measured on a map whose only ore is a 5x5 patch ringed in rock - which is the
+         player-supplied-map case, since _rtsMapCheck's flood fill is land-only and starts.js
+         passes a map if even ONE ore cell is reachable. A* is not cheap when it FAILS: a search
+         that finds nothing has expanded every reachable cell before it gives up.
+
+         Unreachable now is not unreachable for ever - a building may be sold, a wall killed -
+         so this uses the same time-limited, per-harvester blacklist the timer does. */
+      if (!e.path) {
+        e.noGo = e.noGo || {};
+        e.noGo[_rtsIdx(e.htile.tx, e.htile.tz)] = G.t + RTS_HARV_NOGO;
+        e.htile = null; e.noGain = 0; e.bestGap = undefined;
+        return;
+      }
+    }
     _rtsSteer(e, dt, d);
   } else if (e.hstate === 'mining') {
     var i = _rtsIdx(e.htile.tx, e.htile.tz), take = Math.min(RTS_HARVEST_RATE * dt, G.scrap[i], d.capacity - e.carry);
@@ -313,6 +336,10 @@ function _rtsUpdateHarvester(e, dt, d) {
    pass a nearer ore patch for gems only when the longer haul actually pays. Scoring on the
    one-way distance instead sends harvesters chasing gems across the map and drops income:
    mining takes about four seconds, the drive takes most of a minute. */
+/* How long a harvester writes a tile off for. Time-limited and per harvester rather than global
+   and permanent: the obstruction is often a building or a unit, so the tile is very likely fine
+   again later, and a harvester approaching from another side may have no trouble with it now. */
+var RTS_HARV_NOGO = 90;
 function _rtsNearestScrap(e) {
   var G = window._rtsG, best = null, bs = 1e9;
   var ref = _rtsNearestRefinery(e);
