@@ -145,6 +145,92 @@ var browser = await chromium.launch();
     await cx.close();
   }
 
+  /* ---- writing, not reading: a save that FAILS must not destroy the save on disk ----
+     Every case above breaks a save and then asks whether the reader copes. This one asks the
+     opposite question, and it is the one that loses a battle: rtsSaveGame wrapped both setItem
+     calls in one try and the catch removed BOTH keys whatever had happened. The body is 300KB
+     and the header a few hundred bytes, so a full quota throws on the FIRST call - nothing was
+     written, and then a complete earlier save was deleted to clean up after it. The player is
+     told "no room left in storage" and finds RESUME BATTLE gone, with nothing saying that
+     saving destroyed rather than merely failed to replace.
+
+     localStorage's quota is not settable, so the throw is injected at Storage.prototype - which
+     also lets the two halves be told apart, which is the whole point of the fix. */
+  var qx = await browser.newContext({ viewport: { width: 1100, height: 900 } });
+  var qp = await qx.newPage();
+  qp.on('pageerror', function (e) { errs.push('quota: ' + String(e)); });
+  await qp.goto(PAGE, { waitUntil: 'load' });
+  await qp.waitForFunction(function () { return typeof window.rtsOpen === 'function'; });
+  var q = await qp.evaluate(function () {
+    function quota() { var e = new Error('quota'); e.name = 'QuotaExceededError'; throw e; }
+    rtsOpen(7);
+    for (var i = 0; i < 60 * 20; i++) _rtsTick(1 / 60);
+    if (!rtsSaveGame()) return { error: 'the first save did not work' };
+    var goodBody = localStorage.getItem('rccmd.save1');
+    var goodInfo = localStorage.getItem('rccmd.save1.info');
+    var goodT = Math.round(window._rtsG.t);
+
+    /* Play on, so a successful second save would be a DIFFERENT battle - that is what makes
+       "the old one survived" a real assertion rather than a tautology. */
+    for (var j = 0; j < 60 * 20; j++) _rtsTick(1 / 60);
+
+    var real = Storage.prototype.setItem, calls = [];
+    /* Case A: the body throws. Nothing is written; the earlier save must survive intact. */
+    Storage.prototype.setItem = function (k, v) {
+      calls.push(k);
+      if (k === 'rccmd.save1') quota();
+      return real.call(this, k, v);
+    };
+    var retA = rtsSaveGame();
+    Storage.prototype.setItem = real;
+    var afterA = { body: localStorage.getItem('rccmd.save1'),
+                   info: localStorage.getItem('rccmd.save1.info'),
+                   msg: window._rtsG.msg, calls: calls.slice() };
+
+    /* Case B: the body is written and the HEADER throws. That pair really is half-written -
+       a new body under an old header, whose checksum cannot match - so it is the one case
+       that should be cleared. */
+    calls.length = 0;
+    Storage.prototype.setItem = function (k, v) {
+      calls.push(k);
+      if (k === 'rccmd.save1.info') quota();
+      return real.call(this, k, v);
+    };
+    var retB = rtsSaveGame();
+    Storage.prototype.setItem = real;
+    var afterB = { body: localStorage.getItem('rccmd.save1'),
+                   info: localStorage.getItem('rccmd.save1.info'), calls: calls.slice() };
+    return { retA: retA, retB: retB, afterA: afterA, afterB: afterB,
+             goodBody: goodBody, goodInfo: goodInfo, goodT: goodT,
+             bodyLen: goodBody ? goodBody.length : 0 };
+  });
+  console.log('\nquota  (a save that cannot be written must not delete the one on disk)');
+  if (q.error) fails.push('quota: ' + q.error);
+  else {
+    console.log('  the earlier save is ' + q.bodyLen + ' characters, at t=' + q.goodT + 's');
+    console.log('  body-write fails: setItem calls ' + JSON.stringify(q.afterA.calls));
+    console.log('  ...previous save still on disk: ' + (q.afterA.body === q.goodBody));
+    console.log('  player is told: "' + q.afterA.msg + '"');
+    console.log('  header-write fails: setItem calls ' + JSON.stringify(q.afterB.calls) +
+                ' -> both keys cleared: ' + (!q.afterB.body && !q.afterB.info));
+
+    if (q.retA !== false) fails.push('quota: rtsSaveGame returned ' + q.retA + ' on a failed write');
+    if (q.afterA.body !== q.goodBody)
+      fails.push('quota: a save that could not be written DESTROYED the previous save body');
+    if (q.afterA.info !== q.goodInfo)
+      fails.push('quota: a save that could not be written destroyed the previous save header');
+    if (!/no room left in storage/.test(q.afterA.msg || ''))
+      fails.push('quota: the player is not told the storage is full: "' + q.afterA.msg + '"');
+    if (!/previous save is untouched/i.test(q.afterA.msg || ''))
+      fails.push('quota: the player is not told their old battle survived: "' + q.afterA.msg + '"');
+    /* And the genuinely half-written case is still cleaned up - the fix must not turn into
+       "never clean up anything", which would leave a mismatched pair on disk. */
+    if (q.retB !== false) fails.push('quota: a failed header write returned ' + q.retB);
+    if (q.afterB.body || q.afterB.info)
+      fails.push('quota: a half-written pair (body written, header failed) was left on disk');
+  }
+  await qx.close();
+
   if (errs.length) fails.push('page errors: ' + errs.join(' | '));
   console.log('\n' + (fails.length ? 'FAIL\n  ' + fails.join('\n  ') : 'PASS'));
   await browser.close();

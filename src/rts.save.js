@@ -284,17 +284,40 @@ function rtsSaveGame() {
     if (typeof _rtsSfx === 'function') _rtsSfx('deny');
     return false;                                 /* nothing on disk has been touched */
   }
+  /* CLEAN UP WHAT THIS CALL WROTE, AND ONLY THAT. The paragraph above hoisted serialisation out
+     of the try for exactly this reason, and then the storage half went on doing the thing it
+     describes: one try around both setItem calls, and a catch that removed both keys whatever
+     had actually happened.
+
+     The realistic failure is a full quota, and the body is the big write - 300KB of battle
+     against a header of a few hundred bytes - so it is the FIRST setItem that throws. Measured
+     with the quota exhausted: nothing was written, and then both keys were removed, destroying
+     a complete 315,744-character save from earlier in the session. The player is told "no room
+     left in storage", finds RESUME BATTLE gone from the title screen, and is never told that
+     saving DESTROYED the old battle rather than merely failing to replace it.
+
+     So: the body failing means nothing was written and the pair already on disk is intact and
+     consistent - touch nothing. A body written under a header that failed is the only genuinely
+     half-written outcome, and the only one worth clearing, because a new body under an old
+     header is a pair whose checksum cannot match. */
+  var wroteBody = false;
   try {
     window.localStorage.setItem(RTS_SAVE_KEY, text);
+    wroteBody = true;
     window.localStorage.setItem(RTS_SAVE_INFO, JSON.stringify(info));
     _rtsSay('Battle saved.');
     if (typeof _rtsSfx === 'function') _rtsSfx('click');
     return true;
   } catch (e2) {
-    /* A full quota is the realistic failure here and it leaves a half-written pair behind, so
-       drop both rather than leave a body with no header or a header with no body. */
-    try { window.localStorage.removeItem(RTS_SAVE_KEY); window.localStorage.removeItem(RTS_SAVE_INFO); } catch (_x) {}
-    _rtsSay('Could not save: ' + (e2 && e2.name === 'QuotaExceededError' ? 'no room left in storage.' : 'storage unavailable.'));
+    if (wroteBody) {
+      try { window.localStorage.removeItem(RTS_SAVE_KEY); window.localStorage.removeItem(RTS_SAVE_INFO); } catch (_x) {}
+    }
+    _rtsSay('Could not save: '
+      + (e2 && e2.name === 'QuotaExceededError' ? 'no room left in storage.' : 'storage unavailable.')
+      /* Worth saying out loud rather than leaving to be inferred: the point of the change is
+         that the older battle survives, and a player who has just been refused assumes the
+         worst unless told otherwise. */
+      + (wroteBody ? '' : ' Your previous save is untouched.'));
     if (typeof _rtsSfx === 'function') _rtsSfx('deny');
     return false;
   }
