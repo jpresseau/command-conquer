@@ -91,6 +91,10 @@
 #rcgRts .rts-mute{width:24px;height:24px;border:0;border-radius:5px;
   background:rgba(255,255,255,.12);color:#fff;font-size:12px;cursor:pointer;pointer-events:auto;line-height:1}
 #rcgRts .rts-mute:hover{background:rgba(255,255,255,.24)}
+/* Armed by the first press of ⟳ - see rtsReloadClick. AMBER, not the ✕'s red: the next press
+   loses the battle, which is bad, but it does not also walk out of the game. Two arming colours
+   rather than one so a glance at the bar says WHICH question is outstanding. */
+#rcgRts .rts-mute.arm{background:#c8892a;box-shadow:0 0 0 2px rgba(200,137,42,.45)}
 /* A FINGER, NOT A CURSOR. 24px was under every touch-target guideline going - the same floor
    the file already states for the title screen's file pickers - and the ✕ that ends the match
    sat 4px from the mute button. On a touchscreen they are 40px with real gaps, and the title
