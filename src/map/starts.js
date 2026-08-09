@@ -60,6 +60,14 @@ function _rtsMapFallbackStarts(G) {
    surroundings are mostly buildable; give up rather than return somewhere a yard cannot go. */
 function _rtsMapClearSpot(G, tx, tz) {
   function open(cx, cz) {
+    /* THE SPOT ITSELF, before its surroundings. This asked only whether the 9x9 around a
+       candidate was 80% clear, and 80% of 81 cells leaves room for a 4x4 outcrop with the
+       centre inside it - so a start could be placed IN a cliff. Nothing downstream noticed:
+       _rtsMapReach floods from that cell, cannot leave it, and _rtsMapCheck then rejects the
+       whole map with "the two start positions have no route between them" - blaming the map
+       for a placement fault, on a map that was perfectly playable. Found by walling a 4x4
+       block of rock at exactly the radius the fallback ring lands on. */
+    if (!_rtsInB(cx, cz) || G.blocked[_rtsIdx(cx, cz)]) return -1;
     var free = 0, tot = 0;
     for (var ox = -4; ox <= 4; ox++) {
       for (var oz = -4; oz <= 4; oz++) {

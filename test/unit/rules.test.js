@@ -323,4 +323,75 @@ S.note(UNITS.length + ' units, ' + STRUCTS.length + ' structures, ' +
   });
 })();
 
+/* ------------------------------------------- tables nobody reads, rungs nobody reaches ----
+   Three bugs of one shape have now been found in RTS_AI: `tesla` in the build order with no
+   ratio (NaN, skipped for ever), `guardArea:4` gating on a level no difficulty has, and
+   `sellForMoney`'s last two rungs sitting above the highest urgency that drives them. Each read
+   as a rule and was enforced nowhere, and each was invisible until somebody measured behaviour.
+
+   Two invariants close the class. They are source scans, which is the honest instrument: "is
+   this constant read anywhere" is a question about the program, not about a value. */
+(function () {
+  var fs = require('fs'), path = require('path');
+  var SRC = path.join(__dirname, '..', '..', 'src');
+  function walk(dir, out) {
+    fs.readdirSync(dir).forEach(function (f) {
+      var full = path.join(dir, f);
+      if (fs.statSync(full).isDirectory()) walk(full, out);
+      else if (/\.js$/.test(f)) out.push(full);
+    });
+    return out;
+  }
+  var files = walk(SRC, []);
+  var body = files.filter(function (f) { return !/rules[\\/]ai\.js$/.test(f); })
+    .map(function (f) { return fs.readFileSync(f, 'utf8'); }).join('\n');
+
+  /* Every knob in RTS_AI has to be read by something that is not its own definition. */
+  var unread = Object.keys(g.RTS_AI).filter(function (k) {
+    return body.indexOf('RTS_AI.' + k) < 0 && body.indexOf("RTS_AI['" + k + "']") < 0;
+  });
+  S.ok('every RTS_AI setting is read somewhere outside its own table', !unread.length,
+       unread.join(', ') || Object.keys(g.RTS_AI).length + ' settings, all read');
+
+  /* And every rung of a sell list must be reachable by the urgency that drives it. The urgency
+     is computed, not declared, so the ceiling is read out of the source that computes it -
+     which is exactly where the bug was. */
+  var aiSrc = fs.readFileSync(path.join(SRC, 'core', 'ai.js'), 'utf8');
+  function ceiling(name) {
+    var top = 0;
+    var re = new RegExp('u\\.' + name + '\\s*=\\s*(?:attacked \\? )?U\\.(\\w+)', 'g'), m;
+    while ((m = re.exec(aiSrc))) top = Math.max(top, g.RTS_URGENCY[m[1]] || 0);
+    /* `u.x++` cannot be reasoned about from a name, so it counts as one step above the highest
+       literal assignment - which is how the old code reached MEDIUM and no further. */
+    if (new RegExp('u\\.' + name + '\\+\\+').test(aiSrc)) top += 1;
+    return top;
+  }
+  [['sellForMoney', 'raiseMoney'], ['sellForPower', 'raisePower']].forEach(function (pair) {
+    var list = g.RTS_AI[pair[0]], top = ceiling(pair[1]);
+    var dead = list.filter(function (r) { return r[1] > top; })
+      .map(function (r) { return r[0] + '@' + r[1]; });
+    S.ok('every rung of ' + pair[0] + ' is reachable by ' + pair[1], !dead.length,
+         dead.join(', ') || 'ceiling ' + top + ', deepest rung ' +
+         list.reduce(function (m, r) { return Math.max(m, r[1]); }, 0));
+  });
+})();
+
+/* ------------------------------------------------- every unit the player can build has art ----
+   With the player's own files loaded, a key missing from RTS_MIX_UNIT falls back to the
+   procedural sprite - so a real Naval Yard launched drawn boxes alongside real 2tnk hulls, the
+   one place on the map where the two styles stood side by side. Four ships had no entry. */
+(function () {
+  var MIXU = load(['src/mixart/theatres.js']).RTS_MIX_UNIT || {};
+  var missing = g.RTS_UNITS.filter(function (d) { return !MIXU[d.key]; })
+    .map(function (d) { return d.key; });
+  S.ok('every unit in the roster has an entry in the artwork table', !missing.length,
+       missing.join(', ') || g.RTS_UNITS.length + ' units, all mapped');
+  /* and no entry names a unit that no longer exists */
+  var keys = {};
+  g.RTS_UNITS.forEach(function (d) { keys[d.key] = 1; });
+  var orphan = Object.keys(MIXU).filter(function (k) { return !keys[k]; });
+  S.ok('...and the table names no unit the roster has dropped', !orphan.length,
+       orphan.join(', ') || 'none');
+})();
+
 require('../lib/report.js')(S);

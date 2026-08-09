@@ -138,7 +138,12 @@ var RTS_MIX_UNIT = {
   buggy:'jeep', light:'1tnk', tank:'2tnk', heavy:'4tnk', arty:'arty', v2rl:'v2rl',
   harvester:'harv', apc:'apc', mcv:'mcv', heli:'heli', mig:'mig', yak:'yak',
   rifle:'e1', rocket:'e3', grenadier:'e2', flame:'e4', engineer:'e6',
-  medic:'medi', thief:'thf', tanya:'e7', dog:'dog'
+  medic:'medi', thief:'thf', tanya:'e7', dog:'dog',
+  /* THE FLEET. Absent, so with the player's own files loaded a real Naval Yard launched
+     procedurally-baked boxes alongside real 2tnk and e1 sprites - the one place on the map
+     where the two art styles stood side by side. RA's own names: pt is the gunboat, dd the
+     destroyer, ss the submarine, msub the missile sub. */
+  gunboat:'pt', destroyer:'dd', sub:'ss', missilesub:'msub'
 };
 
 /* Infantry are not a rotation set, they are a sequence table, and the layout comes straight

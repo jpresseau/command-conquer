@@ -43,9 +43,13 @@ var RTS_AI = {
   powerEmergency:0.75,      /* below 3/4 of demand supplied, power is an emergency */
   creditReserve:1000,       /* RepairThreshhold: never spend the last of the treasury */
   infantryReserve:2000,     /* above this it can afford to spend on infantry freely */
-  infantryBaseMult:2,
-  attackInterval:3,         /* minutes between attack waves, before difficulty bias */
-  attackDelay:5,            /* minutes before the first one */
+  /* `attackInterval`, `attackDelay` and `infantryBaseMult` used to sit here and were read by
+     nobody. Worse than dead: the wave timing that IS used lives in src/rules/factions.js as
+     RTS_WAVE_EVERY (85 seconds) and RTS_WAVE_FIRST (150), so these two said "3 minutes" and
+     "5 minutes" in a different file with different values, and anybody tuning how often the
+     opponent attacks would have edited them and watched nothing happen. Deleted rather than
+     wired up: adding a second source of truth with a third set of numbers is not a fix.
+     test/unit/rules now fails on any key here that nothing reads. */
   /* The superweapon ratios are the lowest here on purpose. They are the last thing a base
      should want: 1500-1750 credits and up to -200 power buys nothing you can shoot with for
      five minutes, so an opponent that reaches for one early has spent its army on a promise.
@@ -193,6 +197,14 @@ var RTS_AI = {
      better off spending them. Production goes at MEDIUM, the economy only in a real
      emergency, and the yard is on neither list: selling it is not a recovery, it is a
      surrender. */
+  /* AI_Raise_Money's list, each entry with the urgency at which it becomes sellable. The last
+     two rungs were UNREACHABLE: `u.raiseMoney` starts at NONE, rises to LOW when the house is
+     broke and increments once more when it is desperate AND cannot earn - so it tops out at
+     MEDIUM, and a house could never sell a power plant or a refinery however hopeless it got.
+     Two of five entries in a table that reads as a rule. The urgency ladder is what was wrong,
+     not the rungs: see _rtsAIUrgency, where a house with nothing left to earn WITH now
+     escalates. Selling the refinery is not self-defeating at that point - _rtsAICanEarn is
+     already false, so it is cashing out a building that has stopped paying. */
   sellForMoney:[['turret', 1], ['factory', 2], ['barracks', 2], ['power', 3], ['refinery', 4]],
   sellForPower:[['turret', 1], ['barracks', 2], ['factory', 2], ['refinery', 3]]
 };
