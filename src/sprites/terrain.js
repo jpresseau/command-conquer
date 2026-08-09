@@ -84,12 +84,26 @@ function _rtsBakeTerrain(G) {
      as its author laid it out - including the cliffs and shorelines, which is the entire
      reason for loading a map. That is the one case where RTS_T_ROCK is not skipped below:
      a cliff drawn from the template the map names is a real cliff, not half of one. */
+  /* WHICH CELLS THE MAP'S AUTHOR DREW. Kept because the flat ground-cover pass further down
+     has to leave them alone, and it could not tell: its only escape was `shore !== null`, and
+     the shoreline pass is switched off on a real map (the map draws its own). So every sand,
+     road and water cell the author had laid out from real templates was then repainted flat
+     on top - the beaches, the roads and the river banks, which are most of the reason for
+     loading somebody's map in the first place.
+
+     A per-cell mask rather than "skip these kinds on a real map": _rtsMapPaintCell returns
+     false for a hole in a template or a piece the table does not know, those cells fall through
+     to _mixPaintCell, and _mixPaintCell has no SAND branch at all - so a blanket skip would
+     leave a template-miss sand cell showing bare grass. Only what was actually drawn is
+     protected. */
+  var authored = null;
   if (window._RTS_MAP && typeof _rtsMapPaintCell === 'function' &&
       typeof _mixGround === 'function' && _mixGround()) {
     window._RTS_TERRMISS = {};
+    authored = new Uint8Array(N * N);
     for (var mz = 0; mz < N; mz++) {
       for (var mx2 = 0; mx2 < N; mx2++) {
-        if (_rtsMapPaintCell(d, S, mx2, mz)) continue;
+        if (_rtsMapPaintCell(d, S, mx2, mz)) { authored[mz * N + mx2] = 1; continue; }
         /* a hole in the template, or a piece the table does not know - fill it with ground */
         _mixPaintCell(d, S, mx2, mz, G.terrain[_rtsIdx(mx2, mz)], seed);
       }
@@ -151,6 +165,10 @@ function _rtsBakeTerrain(G) {
     x = _sprHash(i, 11, seed + 41) * S; y = _sprHash(i, 29, seed + 43) * S;
     var wet = G.terrain[_rtsIdx(Math.min(N - 1, (x / RTS_TS) | 0), Math.min(N - 1, (y / RTS_TS) | 0))];
     if (wet === RTS_T_WATER) continue;
+    /* NOR ON GROUND SOMEBODY ELSE DREW. Same reason as the water: on a loaded map the sand is
+       the author's own beach template, and our tufts and pebbles on top of it are litter. */
+    if (authored && authored[_rtsIdx(Math.min(N - 1, (x / RTS_TS) | 0),
+                                     Math.min(N - 1, (y / RTS_TS) | 0))]) continue;
     var r = _sprHash(i, 5, seed + 47);
     if (r < 0.55) {                                   /* grass tuft */
       var tc = RTS_PAL.grass[r < 0.28 ? 4 : 3];
@@ -188,6 +206,10 @@ function _rtsBakeTerrain(G) {
     for (tx = 0; tx < N; tx++) {
       k = G.terrain[_rtsIdx(tx, tz)];
       if (k !== RTS_T_SAND && k !== RTS_T_ROAD && k !== RTS_T_WATER) continue;
+      /* The map's author already drew this one. Before every other rule, including the road
+         exception below - that exception exists because RA's road templates cannot draw OUR
+         generated roads, and on a real map the roads are the map's own. */
+      if (authored && authored[_rtsIdx(tx, tz)]) continue;
       /* ROAD is still drawn here even with artwork loaded, and deliberately: RA's 45 Road
          templates cannot draw it. Measured three ways - fitting them produces camouflage
          rather than a road; 35 of the 45 keep their track inside the footprint with clear
@@ -226,10 +248,16 @@ function _rtsBakeTerrain(G) {
     }
   }
   /* Water gets highlight ripples once the body is down, so they run across tile seams. Not over
-     the real thing: RA's own water carries its own movement, and ours on top of it is litter. */
+     the real thing: RA's own water carries its own movement, and ours on top of it is litter.
+
+     `shore === null` was the whole of that test, and on a LOADED MAP shore is always null - the
+     shoreline pass is skipped there because the map draws its own. So the one case the comment
+     names, RA's own water, was the one case the guard could not catch. The per-cell mask is what
+     actually answers the question it was asking. */
   for (var w = 0; shore === null && w < (S * S) / 1400; w++) {
     var wx = _sprHash(w, 3, seed + 95) * S, wy = _sprHash(3, w, seed + 97) * S;
     if (tileAt((wx / TS) | 0, (wy / TS) | 0) !== RTS_T_WATER) continue;
+    if (authored && authored[_rtsIdx((wx / TS) | 0, (wy / TS) | 0)]) continue;
     var wl = 3 + (_sprHash(w, w, seed + 99) * 6 | 0);
     _sprRect(g, wx, wy, wl, 1, RTS_PAL.water[3]);
     _sprRect(g, wx + 1, wy + 1, wl - 2, 1, RTS_PAL.water[4]);

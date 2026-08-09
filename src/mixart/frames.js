@@ -65,8 +65,13 @@ function _mixWater() {
   if (!_rtsArtReady()) return null;
   if (_RTS_MIXWATER !== null) return _RTS_MIXWATER;
   _RTS_MIXWATER = false;
-  var src = _mixTiles('w1' + _rtsThExt());
-  if (!src || !src.tile || !src.tile.length) return false;
+  /* THE SAME FIVE TILES THE BAKE USED. This asked for w1 alone, which is one tile, so every
+     animated step held a single frame and the overlay's `(hash * set.length) | 0` could only
+     ever be 0 - one tile stamped over every water cell on the map, on top of a bake that had
+     correctly varied across five. See _mixWaterPool in mixart/tiles.js. */
+  var pool = _mixWaterPool();
+  if (!pool.length) return false;
+  var src = { tile: pool };
   var base = RTS_MIX.pal;
   var steps = [];
   for (var st = 0; st < RTS_WATER_STEPS; st++) {

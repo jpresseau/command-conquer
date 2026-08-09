@@ -41,22 +41,36 @@ function _mixTiles(name) {
   return { w: w, h: h, n: n, tile: out };
 }
 
+/* OPEN WATER IS FIVE TILES, AND BOTH PASSES HAVE TO AGREE ON WHICH FIVE. w1 is a single 24x24
+   tile; w2 is a 2x2 template whose four tiles are open water too, so the pool is w1 plus those
+   four.
+
+   Pulled out here because it is read TWICE and the two copies had drifted. _mixGround pools all
+   five for the baked terrain; _mixWater (src/mixart/frames.js) built the animated overlay from
+   w1 alone, so its per-step set held exactly one tile - and the overlay's tile pick,
+   `(_sprHash(x,y,seed+137) * set.length) | 0`, is identically 0 when the length is 1. Measured
+   against the player's own temperat.mix: the bake varied over 5 tiles and the overlay then
+   stamped ONE of them across all 4,096 water cells, which is the flat repeating sea that
+   docs/artwork.md records as already fixed.
+
+   Same list, same ORDER, and both picks use the same hash and the same salt - so the animated
+   tile that lands on a cell is the tile the bake chose for it, rather than merely being drawn
+   from the same set. */
+function _mixWaterPool() {
+  var ex = _rtsThExt(), pool = [];
+  [_mixTiles('w1' + ex), _mixTiles('w2' + ex)].forEach(function (t) {
+    if (!t) return;
+    for (var i = 0; i < t.tile.length; i++) if (t.tile[i]) pool.push(t.tile[i]);
+  });
+  return pool;
+}
 var _RTS_TILECACHE = null;
 function _mixGround() {
   if (_RTS_TILECACHE) return _RTS_TILECACHE;
   if (!_rtsArtReady()) return null;
-  var ex = _rtsThExt();
-  var clear = _mixTiles('clear1' + ex);
+  var clear = _mixTiles('clear1' + _rtsThExt());
   if (!clear) return null;
-  /* OPEN WATER IS FIVE TILES, NOT ONE. w1 is a single 24x24 tile and asking for it alone put the
-     same one in every water cell on the map - a lake of one repeating speckle, which is what made
-     the sea read as flat colour once the drawn ripples on top of it were dropped. w2 is a 2x2
-     template whose four tiles are all open water too, so the pool is w1 plus those four. */
-  var w1 = _mixTiles('w1' + ex), w2 = _mixTiles('w2' + ex), pool = [];
-  [w1, w2].forEach(function (t) {
-    if (!t) return;
-    for (var i = 0; i < t.tile.length; i++) if (t.tile[i]) pool.push(t.tile[i]);
-  });
+  var pool = _mixWaterPool();
   var water = pool.length ? { w: RTS_TS, h: RTS_TS, n: pool.length, tile: pool } : null;
   return (_RTS_TILECACHE = { clear: clear, water: water });
 }
