@@ -100,6 +100,11 @@ var RTS_AI = {
      so this is the ceiling that stops a rich opponent turning its whole surplus into a
      navy the player may not be contesting at all. */
   fleetPerYard:5,
+  /* Landing craft, total. ONE, because one Landing team may exist at a time and it wants one
+     craft: a second is an unarmed 700-credit hull with nothing to carry. Kept apart from
+     fleetPerYard because that number is about how big a navy is worth having and this one is
+     about how many boats a plan needs. */
+  craftCap:1,
   /* The order _rtsAIWants walks. Economy, then production, then tech, then defence - tech
      before defence because a Tech Center that arrives after the match is decided is worth
      nothing, and the defensive ratios are big enough to soak every spare credit otherwise.
@@ -169,14 +174,20 @@ var RTS_AI = {
        The thresholds are high because a hull is worth two tanks and the opponent should not
        be buying a destroyer while its land army is still five units.
 
-       NO TRANSPORT, for the same reason there is no engineer in the vehicle mix: a landing
-       craft is a decision about a specific crossing at a specific moment, and there is nothing
-       in here that makes that decision. An opponent buying them would field unarmed hulls that
-       loaded nothing and ferried no-one - 700 credits donated to whatever shot first. The
-       player builds it; the opponent does not, and that is stated here rather than being an
-       omission somebody has to reverse-engineer. */
+       THE TRANSPORT IS IN NOW, AND CONDITIONALLY. This entry used to say there was none, for
+       the same reason there is no engineer in the vehicle mix: a landing craft is a decision
+       about a specific crossing, and there was nothing that made that decision - an opponent
+       buying one would field an unarmed hull that loaded nothing and ferried no-one. There is
+       something now. _rtsAIProduce refuses this key unless _rtsAIWorthCrossing() says the water
+       is worth crossing, and caps it at `craftCap` - the one a Landing team needs. It is the
+       only entry in any mix that is asked about rather than simply rolled, and that asymmetry
+       is the point: every other hull is worth something the moment it floats.
+
+       Weight 4 rather than 1 because the gate has already decided it is wanted; once a
+       crossing is on, the craft is the thing the whole team is waiting for. */
     ship:[ { key:'destroyer', at:2600, w:3 }, { key:'missilesub', at:2800, w:2 },
-           { key:'sub', at:1800, w:3 }, { key:'gunboat', at:1100, w:3 } ],
+           { key:'sub', at:1800, w:3 }, { key:'gunboat', at:1100, w:3 },
+           { key:'lst', at:1400, w:4 } ],
     infantry:[ { key:'flame', at:1200, w:2 }, { key:'grenadier', at:900, w:2 },
                { key:'rocket', at:500, w:3 }, { key:'dog', at:400, w:2 },
                { key:'rifle', at:250, w:2 } ],

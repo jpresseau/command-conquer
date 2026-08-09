@@ -11,9 +11,52 @@ function _rtsTeamOrderAll(t, fn) {
   for (var i = 0; i < t.members.length; i++) {
     var m = t.members[i];
     if (m.dead || !m.init) continue;
+    /* A PASSENGER TAKES NO ORDERS. Cargo is a team member like any other and sits at its
+       transport's coordinates, so without this a landing party's tanks are given attack
+       orders while they are still in the hold - orders nothing will execute, because the tick
+       skips anything flagged `inside`, and which _rtsUnload then clears on the beach anyway.
+       Same rule as the five other places that must ask whether a unit is on the map; see the
+       header of core/transport.js. */
+    if (m.inside) continue;
     if (m.order === 'hold') m.order = null;
     fn(m, i);
   }
+}
+/* WHERE TO PUT AN ARMY ASHORE near something worth attacking: the closest cell to the target
+   that a land unit can stand on AND that a hull can reach the edge of. A beach, in other words,
+   and it is searched for from the TARGET outwards - so the beach it finds is on the target's
+   own side of the water, which is the entire point of going.
+
+   The first version of this asked for the nearest WATER to the target instead, and the
+   difference is not academic. Measured on a channel arena: the nearest water cell to the
+   player's Command Yard was ninety tiles up the coast, the craft dutifully sailed all the way
+   there, and then sat in open water for the rest of the leg because nothing within reach of it
+   was land. A hull cannot land on water; it lands on the shore beside it, so the shore is the
+   thing to look for. */
+function _rtsLandingSpot(aim) {
+  var atx = _rtsTX(aim.x), atz = _rtsTX(aim.z);
+  for (var r = 1; r <= 30; r++) {
+    for (var ox = -r; ox <= r; ox++) {
+      for (var oz = -r; oz <= r; oz++) {
+        if (Math.max(Math.abs(ox), Math.abs(oz)) !== r) continue;
+        var tx = atx + ox, tz = atz + oz;
+        if (!_rtsInB(tx, tz) || _rtsBlocked(tx, tz, null)) continue;    /* must be standable */
+        /* ...and close enough to open water that a hull could put somebody on it. The same
+           reach the unload itself uses, so a spot chosen here is a spot that can be landed on. */
+        if (!_rtsNearestOpen(tx, tz, RTS_UNLOAD_REACH, 'sea')) continue;
+        return { x:_rtsWX(tx), z:_rtsWX(tz) };
+      }
+    }
+  }
+  return null;
+}
+/* The craft a landing party is built around: its one member with a hold. */
+function _rtsTeamTransport(t) {
+  for (var i = 0; i < t.members.length; i++) {
+    var m = t.members[i];
+    if (!m.dead && _rtsIsTransport(m)) return m;
+  }
+  return null;
 }
 /* Spread arrivals out so five units do not path onto one tile and jam the approach. */
 function _rtsTeamSpread(i) {
@@ -26,6 +69,7 @@ function _rtsTeamAdvance(t, to) {
   t.guardUntil = 0;
   t.legT = null;
   t.target = null;
+  t.beach = null;                 /* the landing point is chosen per leg - see TMISSION_UNLOAD */
 }
 function _rtsTeamDoMission(t, dt) {
   var G = window._rtsG, list = t.type.missions, i, m;
@@ -89,6 +133,69 @@ function _rtsTeamDoMission(t, dt) {
             && Math.hypot(mm.goal.x - (w.x + off.x), mm.goal.z - (w.z + off.z)) < RTS_TILE) return;
         _rtsOrderMove(mm, w.x + off.x, w.z + off.z, amove);
       });
+      return 'ok';
+    }
+
+    /* TMISSION_LOAD. Everyone who can get into the team's transport does; the craft waits.
+       This is the player's own board order, issued once per member, so a landing party loads
+       by exactly the rules a player loads by - including the longer reach that lets a squad
+       board from the beach while the hull sits in the water. */
+    if (mis === 'load') {
+      var tr = _rtsTeamTransport(t);
+      if (!tr) { _rtsTeamAdvance(t); continue; }
+      if (t.legT == null) t.legT = G.t;
+      var waiting = 0, aboard = 0;
+      for (i = 0; i < t.members.length; i++) {
+        m = t.members[i];
+        if (m.dead || m === tr) continue;
+        if (m.inside) { aboard++; continue; }
+        if (!_rtsCanBoard(m, tr)) continue;              /* the hold is full, or it cannot fit */
+        waiting++;
+        if (m.order !== 'board' || m.target !== tr) _rtsOrderBoard(m, tr);
+      }
+      /* The craft holds station while they come to it. It is unarmed, so this is only about
+         not wandering off mid-embarkation. */
+      if (!tr.dead && tr.order !== 'hold') { tr.order = 'hold'; tr.path = null; tr.goal = null; }
+      if (!waiting) { _rtsTeamAdvance(t); continue; }    /* everyone in, or nobody else can be */
+      if (G.t - t.legT > RTS_LOAD_TIMEOUT) {
+        /* Out of time. With somebody aboard the crossing is still worth making; with nobody
+           aboard there is no landing party at all, and leaving it standing would hold a team
+           slot and five units out of the war for the rest of the match. */
+        if (aboard) { _rtsTeamAdvance(t); continue; }
+        _rtsTeamDisband(t);
+        return 'gone';
+      }
+      return 'ok';
+    }
+
+    /* TMISSION_UNLOAD. The craft takes what it is carrying to the far shore and puts it down.
+       _rtsOrderUnloadAt is the player's right-click-the-beach order - it sails to the water
+       nearest the point it is aimed at and lands the cargo there - which is why this leg needs
+       no waypoint of its own, and why a landing arrives where the target is rather than at a
+       spot chosen in advance. */
+    if (mis === 'unload') {
+      var trU = _rtsTeamTransport(t);
+      if (!trU || !_rtsCargoCount(trU)) { _rtsTeamAdvance(t); continue; }
+      if (t.legT == null) t.legT = G.t;
+      if (!t.target || t.target.dead) t.target = _rtsTeamTarget(t, 'buildings');
+      var aim = t.target || _rtsHas('player', 'yard');
+      if (!aim) { _rtsTeamAdvance(t); continue; }
+      /* AIM AT THE BEACH, NOT AT THE BUILDING. A target worth landing against is usually well
+         inland, and _rtsOrderUnloadAt walks an unreachable goal outwards only far enough to
+         find a cell the craft can occupy - six rings. Aimed straight at a Command Yard in the
+         middle of a base that is nowhere near, the search failed, the order was refused, and
+         the craft sat re-issuing it until the leg timed out with everyone still in the hold.
+         So the aim point is the BEACH nearest the target - the closest cell to it a tank can
+         stand on and a hull can reach the edge of. See _rtsLandingSpot; the unload then sails
+         to the water beside that cell and puts the cargo down on it. */
+      if (!t.beach) {
+        t.beach = _rtsLandingSpot(aim);
+        if (!t.beach) { _rtsTeamAdvance(t); continue; }   /* the target has no coast at all */
+      }
+      if (trU.order !== 'unload') _rtsOrderUnloadAt(trU, t.beach.x, t.beach.z);
+      /* A craft that cannot find a route, or cannot land when it arrives, must not strand the
+         team: time out and let the attack leg do what it can with whoever is on the map. */
+      if (G.t - t.legT > RTS_UNLOAD_TIMEOUT) { _rtsTeamAdvance(t); continue; }
       return 'ok';
     }
 

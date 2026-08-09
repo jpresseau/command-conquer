@@ -29,12 +29,18 @@
      number    NEED_NUMBER      a plain count (guard time in 1/10th minutes, or a line number)
      none      NEED_NONE
 
-   Missions deliberately NOT ported, because the subsystems they drive do not exist here:
-   FORMATION (no formations), UNLOAD/LOAD/DEPLOY (no transports, nothing deploys), SET_GLOBAL
-   (no scenario globals - that is TRIGGER.CPP's world), SPY, HOUND_DOG (follow friendlies),
-   DO (assign a raw unit mission), MOVECELL (a raw cell number, which is the thing waypoints
-   exist to avoid). Stubs for those would be inventing behaviour, not porting it.
-   ATTACKTARCOM is in, because Took_Damage already gives a team a "current target". */
+   LOAD AND UNLOAD ARE IN NOW, and what this list used to say is worth keeping: "UNLOAD/LOAD/
+   DEPLOY (no transports, nothing deploys)". There are transports - the APC always was one, and
+   the landing craft is one - so the stated reason had quietly stopped being true, and with it
+   the only thing keeping the opponent on its own side of the water.
+
+   Missions still deliberately NOT ported, because the subsystems they drive do not exist here:
+   FORMATION (no formations), DEPLOY (a TEAM deploying an MCV - the unit deploys itself, no team
+   drives it), SET_GLOBAL (no scenario globals - that is TRIGGER.CPP's world), SPY, HOUND_DOG
+   (follow friendlies), DO (assign a raw unit mission), MOVECELL (a raw cell number, which is
+   the thing waypoints exist to avoid). Stubs for those would be inventing behaviour, not
+   porting it. ATTACKTARCOM is in, because Took_Damage already gives a team a "current
+   target". */
 var RTS_TMISSIONS = {
   move:     { need:'waypoint' },  /* TMISSION_MOVE       - go to the waypoint, then advance */
   patrol:   { need:'waypoint' },  /* TMISSION_PATROL     - as move, but engaging on the way */
@@ -42,8 +48,15 @@ var RTS_TMISSIONS = {
   attack:   { need:'quarry'   },  /* TMISSION_ATTACK     - hunt this category of target */
   tarcom:   { need:'none'     },  /* TMISSION_ATTACKTARCOM - kill whatever the team is fixed on */
   guard:    { need:'number'   },  /* TMISSION_GUARD      - hold station, argument in 1/10th min */
-  loop:     { need:'number'   }   /* TMISSION_LOOP       - jump to this line of the list */
+  loop:     { need:'number'   },  /* TMISSION_LOOP       - jump to this line of the list */
+  load:     { need:'none'     },  /* TMISSION_LOAD       - everyone who can, boards the transport */
+  unload:   { need:'none'     }   /* TMISSION_UNLOAD     - the transport lands what it is carrying */
 };
+/* How long a LOAD leg may take before the team gives up on it. Generous, because the walk to
+   the water is a real march and the craft may still be coming; bounded, because a squad that
+   cannot reach the beach must not hold a team slot for the rest of the match. */
+var RTS_LOAD_TIMEOUT = 90;
+var RTS_UNLOAD_TIMEOUT = 120;    /* and the crossing itself, which is longer */
 /* "Guard area (1/10th min)..." - the editor's own label for that argument's unit. */
 var RTS_GUARD_TICK = 6;          /* seconds per unit of a GUARD mission's argument */
 var RTS_WAYPT_ARRIVE = 5 * RTS_TILE;   /* how close counts as having reached a waypoint */
@@ -101,8 +114,34 @@ var RTS_TEAM_TYPES = [
   { name:'Wolfpack', priority:3, reinforce:false, quarry:'buildings',
     members:{ sub:2, missilesub:1 },
     max:1, autocreate:true, suicide:false,
-    missions:[ ['patrol','sea'], ['attack','buildings'], ['tarcom',0] ] }
+    missions:[ ['patrol','sea'], ['attack','buildings'], ['tarcom',0] ] },
+  /* --- AND ACROSS IT. The one team that uses the water to deliver an ARMY rather than to
+     fight on it, and the only one whose composition mixes the two domains.
+
+     `crossing` is the gate, and it is what stops this being the engineer-in-the-mix mistake:
+     a landing party is a decision about a specific piece of GROUND, and raising one on a map
+     where the tanks could simply drive there is 700 credits and five units spent to arrive
+     later than walking. _rtsAIWorthCrossing answers that question - see it for what "worth"
+     means - and a type carrying this flag is not a candidate until it says yes.
+
+     The script is four lines and every one of them is a verb the player has: board the craft,
+     land on the far shore, attack what is there, then stay on whatever the team got fixed on.
+     There is deliberately no MOVE leg between LOAD and UNLOAD - _rtsOrderUnloadAt already
+     sails to the water nearest the place it is aimed at, so a separate waypoint would be a
+     second, worse answer to a question the unload already asks.
+
+     Both armies can crew it: the craft is faction-neutral and so are the Rifle Squad and the
+     Battle Tank, which is why this is one type where the Flotilla and the Wolfpack are two. */
+  { name:'Landing',  priority:3, reinforce:false, quarry:'buildings',
+    members:{ lst:1, tank:2, rifle:2 },
+    max:1, autocreate:true, suicide:false, crossing:true,
+    missions:[ ['load',0], ['unload',0], ['attack','buildings'], ['tarcom',0] ] }
 ];
+/* How much longer the land route has to be than the straight line before sailing is worth it.
+   1.0 would mean "any water at all"; this is "the road goes a long way round". Measured
+   against the alternative rather than chosen: see _rtsAIWorthCrossing. */
+var RTS_AI_DETOUR = 1.7;
+var RTS_AI_CROSS_RECHECK = 30;   /* seconds between re-answering the question - _rtsPath is not free */
 var RTS_ALERT_TIME = 150;        /* backstop only: the first attack wave normally alerts the house */
 
 /* ------------------------------------------------- committing the army (mine, not ported) --

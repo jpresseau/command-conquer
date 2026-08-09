@@ -292,6 +292,21 @@ function _rtsAIUnits(S) {
     for (i = 0; i < list.length; i++) {
       if (rtsMoney(S) <= list[i].at) continue;
       if (!_rtsCanQueue('enemy', list[i].key)) continue;
+      /* THE TRANSPORT IS BOUGHT FOR A REASON OR NOT AT ALL, and it is the only entry in any mix
+         that asks a question before it is offered. An unarmed hull is worth nothing by itself;
+         it is worth something only when there is a crossing to make and a landing party to make
+         it. So it is gated on the same test that decides whether that team may be raised, and
+         capped at the one the team needs. Without the gate this is the engineer in the vehicle
+         mix - credits donated to whatever shoots first. */
+      if (list[i].key === 'lst') {
+        if (!_rtsAIWorthCrossing()) continue;
+        var craft = 0;
+        for (var ci = 0; ci < G.ents.length; ci++) {
+          var ce = G.ents[ci];
+          if (!ce.dead && ce.side === 'enemy' && ce.def === 'lst') craft++;
+        }
+        if (craft >= RTS_AI.craftCap) continue;
+      }
       pool.push(list[i]); total += list[i].w;
     }
     if (!pool.length) continue;
