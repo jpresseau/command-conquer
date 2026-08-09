@@ -59,6 +59,15 @@ var RTS_AI = {
      flies but cannot be flown against is a worse opponent to play. */
   ratio:{ refinery:0.16, barracks:0.16, factory:0.10, radar:0.06, lab:0.05, depot:0.05,
           apower:0.08, kennel:0.04, silo:0.14, pillbox:0.18, flametower:0.12, turret:0.24, rocketpit:0.12,
+  /* THE SOVIET HEAVY DEFENCE, and it was in buildOrder with no entry in either of these tables -
+     so `want` came out NaN, every comparison against it was false, and the opponent skipped it
+     for ever. Measured before the fix, hard, three seeds, 420s: the Soviet house finished with
+     6.7 defensive buildings and ZERO Tesla Coils, against 10.0 for the Allied house.
+
+     Not turret's 0.24/6. A Coil is 1500 credits and -100 power against a Gun Turret's 500 and
+     -20, so six of them is 9000 credits and 600 power - it is the premium piece, not the line
+     defence, and the flame tower is what fills the wall. */
+          tesla:0.10,
           helipad:0.06, afld:0.06, aagun:0.10,
   /* One shipyard. A second buys nothing but a second production line for a domain
      the opponent uses to raid a coast, and the ratio has to stay small or a map
@@ -72,6 +81,7 @@ var RTS_AI = {
      production lines to spend it down, so a low ceiling turns the storage cap into a straight
      nerf and hands the player about 16 extra seconds of life. RA has no silo limit at all. */
           apower:2,    kennel:1,    silo:14,   pillbox:4,     flametower:3,     turret:6,     rocketpit:4,
+          tesla:3,
           helipad:2,   afld:2,      aagun:3,
           navalyard:1, subpen:1,
   /* One each. A second silo would not charge a second missile - the timer is per house - so
