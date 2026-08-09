@@ -135,7 +135,16 @@ function _rtsAIPlace(key) {
   var node = _rtsNextBuildable('enemy', key);
   if (node) { _rtsPlaceStruct('enemy', key, node.tx, node.tz, false, G.sides.enemy.readyPaid); return true; }
   if (key === 'refinery') aim = _rtsAIOreSpot();
-  else if (key === 'turret') aim = _rtsAIWeakZone();
+  /* ANYTHING THAT SHOOTS, not the one building called 'turret'. The zone routine above already
+     defines a defence as `sd.weapon` when it COUNTS what is where - it was only this call site
+     that named a key, and `turret` is Allied-only, so the entire Which_Zone port ran for one
+     army and never for the other.
+
+     Measured before the fix, hard, three seeds, 420s: the Allied house spread its defences over
+     4 of 4 compass zones on every seed; the Soviet house managed 1, 3 and 2 - on seed 9001 all
+     seven of its defences sat on ONE side of the base. Six structures carry a weapon and all
+     six want aiming. */
+  else if ((rtsStructDef(key) || {}).weapon) aim = _rtsAIWeakZone();
   else if ((rtsStructDef(key) || {}).shore) {
     /* A shipyard has exactly one place it can go, and the search below only accepts cells
        _rtsCanPlace agrees with - which already applies the shore rule. Aiming at the spot

@@ -181,4 +181,86 @@ S.note(UNITS.length + ' units, ' + STRUCTS.length + ' structures, ' +
   });
 })();
 
+/* ---------------------------------------------- the opponent's base plan ----
+   RTS_AI holds the plan as THREE separate tables that have to agree: `buildOrder` says what to
+   build and in what order, `ratio` says how much of the base each type should be, and `limit`
+   caps it. A key present in the order and absent from either of the others is not a smaller
+   plan - it is a NaN.
+
+   `_rtsAIWants` computes `want = ceil(base * ratio[key])` and compares it against what is
+   standing. With no ratio entry that is `ceil(base * undefined)` = NaN, every comparison
+   against NaN is false, and the building is skipped for ever with nothing logged.
+
+   That is not hypothetical: `tesla` sat in buildOrder with no entry in either table, so the
+   Soviet opponent could never build its signature defence. Measured over three seeds at hard,
+   420 seconds: zero Tesla Coils, against 10.0 defensive buildings for the Allied house. */
+(function () {
+  var AI = g.RTS_AI, keys = {};
+  g.RTS_STRUCTS.forEach(function (d) { keys[d.key] = d; });
+
+  var noRatio = AI.buildOrder.filter(function (k) { return AI.ratio[k] === undefined; });
+  var noLimit = AI.buildOrder.filter(function (k) { return AI.limit[k] === undefined; });
+  S.ok('every building in the AI build order has a ratio', !noRatio.length,
+       noRatio.join(', ') || AI.buildOrder.length + ' checked');
+  S.ok('...and a limit', !noLimit.length,
+       noLimit.join(', ') || AI.buildOrder.length + ' checked');
+
+  /* And in the other direction: a ratio for something the order never reaches is a number
+     nobody reads, which is the trap the audit found three more of elsewhere in this table. */
+  var orphanR = Object.keys(AI.ratio).filter(function (k) { return AI.buildOrder.indexOf(k) < 0; });
+  var orphanL = Object.keys(AI.limit).filter(function (k) { return AI.buildOrder.indexOf(k) < 0; });
+  S.ok('no ratio names a building the order never asks for', !orphanR.length, orphanR.join(', ') || 'none');
+  S.ok('no limit does either', !orphanL.length, orphanL.join(', ') || 'none');
+
+  /* Every name is a real structure, and every number is usable. */
+  var unknown = AI.buildOrder.filter(function (k) { return !keys[k]; });
+  S.ok('every building in the order exists in the structure table', !unknown.length,
+       unknown.join(', ') || 'all real');
+  var badN = AI.buildOrder.filter(function (k) {
+    var r = AI.ratio[k], l = AI.limit[k];
+    return !(r > 0 && r <= 1) || !(l >= 1 && l === Math.floor(l));
+  });
+  S.ok('every ratio is a fraction and every limit a whole number of buildings', !badN.length,
+       badN.map(function (k) { return k + ' ' + AI.ratio[k] + '/' + AI.limit[k]; }).join(', ') || 'all sane');
+
+  /* Both armies' defences are in one order and _rtsCanQueue drops the other side's, so each
+     army has to have something left after that filter - the whole arrangement depends on it. */
+  ['allied', 'soviet'].forEach(function (side) {
+    var mine = AI.buildOrder.filter(function (k) {
+      return g.rtsBuildableBy(keys[k], side); });
+    var def = mine.filter(function (k) { return !!keys[k].weapon; });
+    S.ok('a ' + side + ' opponent has defensive buildings it can actually build', def.length >= 2,
+         def.join(', '));
+  });
+})();
+
+/* --------------------------------------- aiming a defence, not aiming "a turret" ----
+   _rtsAIWeakZone counts a zone's defence as "structures with a weapon" - and its ONE call site
+   asked for it by name, `key === 'turret'`, which is Allied-only. So the whole Which_Zone port
+   ran for one army and never for the other: measured over three seeds at hard, the Allied house
+   spread its defences across 4 of 4 compass zones every time and the Soviet house managed 1, 3
+   and 2, with all seven of seed 9001's defences on one side of the base.
+
+   The property worth pinning is that the two halves use the same definition. A source scan is
+   the honest way to check it - the alternative is standing up a whole fake base to call a
+   placement function that wants anchors, terrain and an ore field. */
+(function () {
+  var src = require('fs').readFileSync(
+    require('path').join(__dirname, '..', '..', 'src', 'core', 'ai.js'), 'utf8');
+  var named = src.match(/key === '(\w+)'/g) || [];
+  var defenceNames = named.filter(function (m) {
+    var k = m.replace(/.*'(\w+)'.*/, '$1');
+    var d = g.rtsStructDef(k);
+    return d && d.weapon;
+  });
+  S.ok('no defensive building is singled out by name in the placement code', !defenceNames.length,
+       defenceNames.join(', ') || 'none - aiming is keyed off the weapon');
+  S.ok('...and the weak-zone aim is still wired up at all', /_rtsAIWeakZone\(\)/.test(src),
+       'called');
+
+  var weaponed = g.RTS_STRUCTS.filter(function (d) { return !!d.weapon; }).map(function (d) { return d.key; });
+  S.ok('there is more than one defensive building, so keying off the weapon matters',
+       weaponed.length > 1, weaponed.join(', '));
+})();
+
 require('../lib/report.js')(S);
