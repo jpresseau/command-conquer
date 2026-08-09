@@ -366,9 +366,19 @@ function _rtsAIUrgency(S) {
   u.lowerPower = (slack > RTS_AI.powerWaste) ? U.LOW : U.NONE;
 
   /* Check_Raise_Money */
+  /* THE LADDER HAS TO REACH ITS OWN TOP RUNG. This stopped at MEDIUM - NONE, then LOW when
+     broke, then one increment when desperate and unable to earn - while RTS_AI.sellForMoney
+     lists `power` at 3 and `refinery` at 4. Those two entries could never fire, so a house with
+     no income and no credits sold its turrets and its factory and then simply stood there.
+     A house that cannot earn AND has no production line left is not going to recover: that is
+     the emergency the last rungs were written for. */
   u.raiseMoney = U.NONE;
   if (rtsMoney(S) < RTS_AI.brokeMoney) u.raiseMoney = U.LOW;
-  if (rtsMoney(S) < RTS_AI.desperateMoney && !_rtsAICanEarn()) u.raiseMoney++;
+  if (rtsMoney(S) < RTS_AI.desperateMoney && !_rtsAICanEarn()) {
+    u.raiseMoney = U.MEDIUM;
+    if (!_rtsAIHasFactory()) u.raiseMoney = U.HIGH;
+    if (!_rtsHas('enemy', 'yard')) u.raiseMoney = U.CRITICAL;
+  }
 
   /* Check_Fire_Sale: nothing left that can build. The game is over; go out swinging. */
   u.fireSale = U.NONE;

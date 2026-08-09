@@ -372,8 +372,14 @@
    using. Only where the bar SITS differs, and that is the two blocks after this one. */
 @media (max-height: 480px) and (min-width: 560px),
        (max-width: 560px) and (orientation: portrait){
+  /* SIX ROWS, and the superweapons get one of their own. They used to share row 4 with the
+     flexible `minmax(0,1fr)` that the build grid draws its height from - so on a short screen
+     that row squeezed toward nothing while the buttons kept their size, and two superweapon
+     buttons spilled into row 5 and were drawn across the selection readout. Measured on the
+     three narrowest phones with a Missile Silo and a Chronosphere standing: 24px of overlap at
+     360, 21px at 390, 20px at 375; clear only at 412. An `auto` row cannot be squeezed. */
   #rcgRts .rts-bar{padding:4px;display:grid;grid-template-columns:92px minmax(0,1fr);
-    grid-template-rows:auto auto auto minmax(0,1fr) auto;gap:4px}
+    grid-template-rows:auto auto auto auto minmax(0,1fr) auto;gap:4px}
   /* 92px of column is too narrow for CREDITS and a five-figure number side by side, so they
      stack - which also lines the block up with the tabs beside it. */
   #rcgRts .rts-credits{grid-column:1;grid-row:1;flex-direction:column;align-items:center;
@@ -382,11 +388,13 @@
   #rcgRts .rts-store{grid-column:1;grid-row:2}
   #rcgRts .rts-radar{grid-column:1;grid-row:3;align-self:start}
   #rcgRts .rts-supers{grid-column:1;grid-row:4;align-self:start}
+  /* and it must not grow past its own column either */
+  #rcgRts .rts-supers button{min-width:0}
   #rcgRts .rts-tabs{grid-column:2;grid-row:1;align-content:start}
   #rcgRts .rts-ops{grid-column:2;grid-row:2;align-items:start}
-  /* the whole point: the grid gets the radar's row AND the leftover one */
-  #rcgRts .rts-mid{grid-column:2;grid-row:3 / span 2;min-height:0}
-  #rcgRts .rts-sel{grid-column:1 / -1;grid-row:5}
+  /* the whole point: the grid gets the radar's row, the superweapons' row AND the leftover */
+  #rcgRts .rts-mid{grid-column:2;grid-row:3 / span 3;min-height:0}
+  #rcgRts .rts-sel{grid-column:1 / -1;grid-row:6}
 }
 /* landscape phone: the bar keeps its place down the right-hand side, just wider */
 @media (max-height: 480px) and (min-width: 560px){

@@ -121,6 +121,59 @@ var CONTROLS = ['#rtsSaveBtn', '#rtsLoadBtn', '#rtsMute', '#rcgRts .rts-x'];
     await o.ctx.close();
   }
 
+  /* ------------------------------------- the superweapon row keeps to its own row -------- */
+  /* It shared the sidebar grid's one flexible row - `minmax(0,1fr)`, which the build grid draws
+     its height from - so on a short screen that row squeezed toward nothing while the buttons
+     kept their size and spilled into the row below, drawn across the selection readout.
+     Measured with a Missile Silo and a Chronosphere standing: 24px of overlap at 360, 21px at
+     390, 20px at 375, clear only at 412. It has an `auto` row of its own now, which cannot be
+     squeezed, and the build grid spans one more row to keep the height it lost. */
+  for (var si = 0; si < SHAPES.length; si++) {
+    if (!SHAPES[si].touch) continue;
+    var so = await open(SHAPES[si]);
+    var sup = await so.page.evaluate(function () {
+      var G = window._rtsG, yd = _rtsHas('player', 'yard');
+      /* Stand up enough of a base to charge two superweapons - the row is empty otherwise and
+         a spec that measured an empty row would pass on the broken build too. */
+      ['power', 'refinery', 'barracks', 'factory', 'radar', 'lab', 'mslo', 'pdox'].forEach(function (k) {
+        if (_rtsHas('player', k)) return;
+        var tx = _rtsTX(yd.x), tz = _rtsTX(yd.z);
+        for (var r = 2; r <= 24; r++)
+          for (var ox = -r; ox <= r; ox++) for (var oz = -r; oz <= r; oz++) {
+            if (Math.max(Math.abs(ox), Math.abs(oz)) !== r) continue;
+            if (_rtsCanPlace('player', k, tx + ox, tz + oz)) {
+              _rtsPlaceStruct('player', k, tx + ox, tz + oz, true); return;
+            }
+          }
+      });
+      G.ents.forEach(function (e) {
+        if (e.type === 'struct' && e.side === 'player' && e.building) { e.building = 0; e.bprog = 1; }
+      });
+      _rtsRecalcPower('player'); _rtsSuperRow(); _rtsSyncSidebar(0);
+      function bx(q) {
+        var e = document.querySelector(q);
+        if (!e || !e.getClientRects().length) return null;
+        var r2 = e.getBoundingClientRect();
+        return { t: r2.top, b: r2.bottom, l: r2.left, r: r2.right, h: r2.height, n: e.children.length };
+      }
+      function ov(a, c) {
+        if (!a || !c) return 0;
+        var vy = Math.min(a.b, c.b) - Math.max(a.t, c.t), vx = Math.min(a.r, c.r) - Math.max(a.l, c.l);
+        return (vy > 0.5 && vx > 0.5) ? vy : 0;
+      }
+      var row = bx('#rtsSupers');
+      return { n: row ? row.n : 0, overSel: ov(row, bx('#rtsSel')),
+               overGrid: ov(row, bx('#rcgRts .rts-mid')),
+               gridH: Math.round((bx('#rtsList') || {}).h || 0) };
+    });
+    var st = SHAPES[si].n + ' ' + SHAPES[si].w + 'x' + SHAPES[si].h + ': ';
+    S.ok(st + 'the superweapon row has buttons to place', sup.n >= 2, sup.n + ' buttons');
+    S.eq(st + '...and none of them is drawn over the selection readout', Math.round(sup.overSel), 0);
+    S.eq(st + '...nor over the build grid', Math.round(sup.overGrid), 0);
+    S.ok(st + '...and the build grid still has usable height', sup.gridH > 100, sup.gridH + 'px');
+    await so.ctx.close();
+  }
+
   /* --------------------------------------------- the radar's own placeholder ------------- */
   /* Its backing store is sized to the map (188px) and the element is shown at whatever the
      layout gives it - 84px on a phone. A font set in backing-store units therefore renders at
