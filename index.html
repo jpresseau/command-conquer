@@ -869,7 +869,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">9bf7b06 · 2026-08-09</div>
+  <div id="rtsBuild" title="build">f929b78 · 2026-08-09</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -4283,7 +4283,22 @@ var RTS_TEAM_MAX = 6;            /* floor: concurrent teams when the army is sma
 var RTS_TEAM_MAX_HARD = 22;      /* ceiling: never raise more than this many at once */
 var RTS_TEAM_COMMIT = 0.62;      /* share of the field army that should be on the attack */
 var RTS_TEAM_TYPICAL = 5;        /* typical team size, for turning that share into a count */
-var RTS_SUSPEND_PRIORITY = 3;    /* Rule.SuspendPriority: disband below this when attacked */
+/* Rule.SuspendPriority: when the base is hit, teams BELOW this are disbanded so their members
+   can defend. It was 3, and the authored priorities are Raiders 1, Skirmish 2, Sappers 3,
+   Assault 4 - so it could only ever free Raiders and Skirmish, and those two stop being raised
+   the moment the war proper starts.
+
+   Measured under a real raid, seed 9001, hard, six tanks sent into an undefended Refinery at
+   240s: _rtsBaseIsAttacked fired 80 times, _rtsSuspendTeams was called 5 times, and it
+   disbanded ZERO teams. The field held {priority 3: 4, priority 4: 4} throughout and 39 of the
+   opponent's units stayed away from a base being taken apart, because _rtsBaseIsAttacked skips
+   anything that is not `recruitable` and a team's members are not - which is the whole reason
+   Suspend_Teams exists.
+
+   4 frees the raiding teams - Sappers, Flotilla, Wolfpack - and deliberately not Assault: the
+   main push is not cancelled because somebody poked a refinery, which is both the reference's
+   intent and what stops a player farming the 40-second reform delay with one cheap unit. */
+var RTS_SUSPEND_PRIORITY = 4;
 var RTS_SUSPEND_DELAY = 40;      /* Rule.SuspendDelay, seconds before a suspended type reforms */
 /* Rule.StrayDistance: how far a member may drift from the team centre before it is told to
    regroup, and the radius inside which a new recruit counts as having joined up. */
