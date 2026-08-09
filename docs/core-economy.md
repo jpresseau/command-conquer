@@ -2,7 +2,7 @@
 
 Money, the two pools it lives in, how a production job is charged, where ore comes from and
 what a building does while it stands. Implemented in `src/core/production.js`,
-`src/core/ore.js`, `src/core/crates.js` and `src/core/units.js`.
+`src/core/ore.js`, `src/core/crates.js`, `src/core/harvest.js` and `src/core/units.js`.
 
 > Reference, split out of `CLAUDE.md`. The rules that must be followed before touching
 > anything are still in `CLAUDE.md`; this is the working behind them.

@@ -330,13 +330,19 @@ function _rtsKeyDown(e) {
   if ((k === 's' || k === 'S') && (e.ctrlKey || e.metaKey)) { rtsSaveGame(); e.preventDefault(); return; }
   /* N walks the army, shift+N walks it backwards. */
   if (k === 'n' || k === 'N') { _rtsCycleObject(e.shiftKey ? -1 : 1); e.preventDefault(); }
-  /* U unloads every selected transport that is carrying anything. */
+  /* U unloads every selected transport that is carrying anything - here and now, wherever it is
+     standing. For a landing craft in open water that is nowhere, so the key has to be able to
+     say so: a boat that silently ignores the order reads as a broken key rather than as a boat
+     in the wrong place. Right-clicking the shore is the aimed version - see _rtsOrderUnloadAt. */
   if (k === 'u' || k === 'U') {
-    var Gu = window._rtsG, out = 0;
+    var Gu = window._rtsG, out = 0, held = 0;
     if (Gu && Gu.sel) Gu.sel.forEach(function (t) {
-      if (t.side === 'player' && t.type === 'unit') out += _rtsUnload(t);
+      if (t.side !== 'player' || t.type !== 'unit' || !_rtsCargoCount(t)) return;
+      out += _rtsUnload(t);
+      held += _rtsCargoCount(t);
     });
-    if (out) e.preventDefault();
+    if (held && !out) _rtsSay('Nowhere to unload — bring it closer to shore.');
+    if (out || held) e.preventDefault();
   }
   /* D deploys every selected vehicle that can - an MCV into a Command Yard. */
   if (k === 'd' || k === 'D') {

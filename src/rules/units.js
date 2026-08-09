@@ -134,8 +134,10 @@ var RTS_UNITS = [
      that matters: when a TRANSPORT dies its infantry passengers are unlimboed at the wreck and
      scatter rather than dying with it. That one rule is what makes an APC a good buy instead of
      a coffin, so it is implemented rather than approximated. */
+  /* `takes` is what a hold will accept, and it defaults to infantry when a type does not say.
+     The APC is a battlefield taxi for men; the landing craft below is a ferry for an army. */
   { key:'apc',      name:'APC',           kind:'vehicle',  cost:850,  build:10, hp:350,  speed:14,  turn:2.4,r:1.9, sight:16, weapon:'mg',
-    needs:['barracks'], carries:5, crush:true,
+    needs:['barracks'], carries:5, takes:['infantry'], crush:true,
     armour:'heavy',
     desc:'Carries five infantry. Fast and tough; its passengers walk away if it dies.' },
   /* SHIPS. `sea:true` is the whole difference - it flips which half of the map they can move
@@ -149,18 +151,42 @@ var RTS_UNITS = [
     weapon:'navalgun', needs:['navalyard'], sea:true, side:'allied',
     armour:'heavy',
     desc:'Cheap escort. Shells the shore and anything afloat.' },
+  /* `detects` is SONAR: the radius at which this hull finds a submerged boat, against the
+     RTS_SUB_DETECT floor everything else has. It is the only reason to own a Destroyer rather
+     than two Gunboats, and it is what its own description has always claimed. */
   { key:'destroyer',name:'Destroyer',    kind:'ship',     cost:1000, build:14, hp:700,  speed:11,  turn:1.4,r:2.4, sight:24,
     weapon:'navalheavy', needs:['navalyard'], sea:true, side:'allied', aaOnly:false,
+    detects:RTS_TILE * 9,
     armour:'heavy',
-    desc:'Heavy guns and long reach. The Allied answer to a submarine.' },
+    desc:'Heavy guns and long reach. Its sonar finds submarines — the Allied answer to them.' },
+  /* `cloak` is Cloakable, from the stat block. It submerges, and it has to surface to fire -
+     see RTS_SUB_SURFACE and _rtsCloakAI. */
   { key:'sub',      name:'Submarine',    kind:'ship',     cost:950,  build:13, hp:500,  speed:10,  turn:1.3,r:2.0, sight:18,
-    weapon:'torpedo', needs:['subpen'], sea:true, side:'soviet',
+    weapon:'torpedo', needs:['subpen'], sea:true, side:'soviet', cloak:true,
     armour:'heavy',
-    desc:'Torpedoes anything afloat. Cannot touch the shore.' },
+    desc:'Runs submerged and unseen. Surfaces to fire, and torpedoes anything afloat.' },
   { key:'missilesub',name:'Missile Sub', kind:'ship',     cost:1500, build:18, hp:450,  speed:9,   turn:1.1,r:2.2, sight:26,
-    weapon:'subrocket', needs:['subpen'], sea:true, side:'soviet',
+    weapon:'subrocket', needs:['subpen'], sea:true, side:'soviet', cloak:true,
     armour:'heavy',
-    desc:'Bombards the shore from further out than anything can answer.' },
+    desc:'Bombards the shore from further out than anything can answer, then submerges again.' },
+  /* THE LANDING CRAFT, and it is the only hull BOTH armies build - RA gives the LST to
+     everybody, because a boat that carries your tanks is not a weapon, it is a road.
+     `needs:['shipyard']` rather than a building key is why that works: `shipyard` is a
+     capability the Naval Yard and the Sub Pen both `provide`, so one entry covers both sides
+     without a second unit that differs only in whose flag it flies. See _rtsProvides.
+
+     Unarmed, and priced under a Gunboat, because what it buys is reach rather than force -
+     the whole of the far shore, on a map where your army stops at the water. Five holds, and
+     `takes` lets vehicles in: ferrying five rifle squads across a channel is not what the
+     unit is for.
+
+     RA sinks an LST's whole cargo with it and so do we - see _rtsSpillCargo. That is what
+     keeps it a decision: a loaded transport is five units and 700 credits in one hull with no
+     gun, and the crossing is the risk you are buying. */
+  { key:'lst',      name:'Transport',    kind:'ship',     cost:700,  build:10, hp:400,  speed:12,  turn:1.6,r:2.4, sight:14, weapon:null,
+    needs:['shipyard'], sea:true, carries:5, takes:['infantry', 'vehicle'],
+    armour:'heavy',
+    desc:'Carries five units, tanks included, across water. Unarmed — and everything aboard goes down with it.' },
   { key:'mcv',      name:'Mobile Yard',   kind:'vehicle',  cost:2500, build:26, hp:600,  speed:5.5, turn:1.2,r:2.2, sight:14, weapon:null,
     needs:['depot'], deploy:'yard', crush:true,
     armour:'light',

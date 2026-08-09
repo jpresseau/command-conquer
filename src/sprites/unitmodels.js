@@ -366,6 +366,32 @@ function _sprUnitModel(key, side, prone, part) {
       _r3Box(m, -3.6, 3.1, 1.3, 5.0, 0.9, 1.5, RTS_PAL.hazard[0], DK[2]);
     }
 
+  } else if (key === 'lst') {
+    /* THE LANDING CRAFT, and the whole job of the model is to say "not a warship" at a glance,
+       because it is the one hull on the water that must never be mistaken for something that
+       shoots back. Everything the gunboat has, this deliberately does not: no funnel, no
+       superstructure amidships, no gun anywhere.
+
+       What it has instead is the silhouette of a ferry seen from above - a BROAD flat deck
+       taking up most of the length, a blunt square bow rather than a raked one, a bow ramp
+       laid down over it, and a small wheelhouse pushed right to the stern. The deck is the
+       read: wide, empty and pale against the sea, where every other hull is narrow and dark. */
+    var _dL = 24, _dW = 12.5;
+    _r3Box(m, 0, 0.5, 0, _dL, 3.0, _dW, VH[0], VH[1]);                   /* hull */
+    _r3Box(m, 0, 3.5, 0, _dL * 0.86, 0.9, _dW * 0.80, DK[2], DK[1]);     /* the cargo deck */
+    /* Deck rails down both sides - what stops the deck reading as an empty grey rectangle. */
+    _r3Box(m, -1.0, 4.6, -_dW * 0.44, _dL * 0.70, 2.2, 1.1, VH[2], VH[1]);
+    _r3Box(m, -1.0, 4.6, _dW * 0.44, _dL * 0.70, 2.2, 1.1, VH[2], VH[1]);
+    /* The bow ramp, down and forward: the tell that things drive off the front of it. */
+    _r3Box(m, _dL * 0.46, 1.2, 0, _dL * 0.20, 2.2, _dW * 0.62, GN[1], GN[3]);
+    _r3Box(m, _dL * 0.60, 0.5, 0, _dL * 0.14, 1.0, _dW * 0.56, GN[2], GN[0]);
+    for (i = 0; i < 3; i++)                                              /* ramp ribs */
+      _r3Box(m, _dL * 0.40 + i * 2.2, 2.6, 0, 1.0, 0.8, _dW * 0.56, DK[1], DK[3]);
+    /* Wheelhouse right aft, small and off nothing - the only thing standing up on the boat. */
+    _r3Box(m, -_dL * 0.40, 3.6, 0, _dL * 0.16, 4.6, _dW * 0.42, VH[2], VH[0]);
+    _r3Box(m, -_dL * 0.40, 8.2, 0, _dL * 0.12, 1.3, _dW * 0.30, TM[1], TM[3]);  /* team cap */
+    _r3Box(m, -_dL * 0.33, 6.4, 0, 1.0, 2.0, _dW * 0.34, RTS_PAL.glass, RTS_PAL.glass);
+
   } else if (key === 'apc') {
     /* A closed box on tracks with a rear ramp and a small cupola gun - no turret (UDATA.CPP
        has IsTurretEquipped false), so the read is "a tank with no gun on top", which is

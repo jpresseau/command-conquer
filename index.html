@@ -869,7 +869,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">f929b78 · 2026-08-09</div>
+  <div id="rtsBuild" title="build">94affa7 · 2026-08-09</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -2940,12 +2940,16 @@ var RTS_STRUCTS = [
      the multi-shipyard speedup, so a yard without it was one you could build twice for no
      gain. The same omission left the Helipad out; test/unit/rules.test.js now asserts that
      every unit kind has a building claiming to produce it. */
+  /* Both yards `provide` the same capability, which is how one Transport entry can be built by
+     both armies off `needs:['shipyard']` without there being a structure called a shipyard.
+     This is the case _rtsNeedName was written for: nothing is keyed `shipyard`, so a player
+     without one is told "Needs Naval Yard or Sub Pen first". */
   { key:'navalyard',name:'Naval Yard',  w:3, h:3, cost:1000, build:14, hp:600,  power:-30, sight:12,
-    needs:['refinery'], side:'allied', shore:true, produces:'ship',
+    needs:['refinery'], side:'allied', shore:true, produces:'ship', provides:['shipyard'],
     armour:'wood',
     desc:'Builds ships. Must be placed against water. Allied.' },
   { key:'subpen',   name:'Sub Pen',     w:3, h:3, cost:1000, build:14, hp:600,  power:-30, sight:12,
-    needs:['refinery'], side:'soviet', shore:true, produces:'ship',
+    needs:['refinery'], side:'soviet', shore:true, produces:'ship', provides:['shipyard'],
     armour:'wood',
     desc:'Builds submarines. Must be placed against water. Soviet.' },
   { key:'flametower',name:'Flame Tower', w:1, h:1, cost:500,  build:11, hp:450,  power:-20,  sight:16,
@@ -3164,8 +3168,10 @@ var RTS_UNITS = [
      that matters: when a TRANSPORT dies its infantry passengers are unlimboed at the wreck and
      scatter rather than dying with it. That one rule is what makes an APC a good buy instead of
      a coffin, so it is implemented rather than approximated. */
+  /* `takes` is what a hold will accept, and it defaults to infantry when a type does not say.
+     The APC is a battlefield taxi for men; the landing craft below is a ferry for an army. */
   { key:'apc',      name:'APC',           kind:'vehicle',  cost:850,  build:10, hp:350,  speed:14,  turn:2.4,r:1.9, sight:16, weapon:'mg',
-    needs:['barracks'], carries:5, crush:true,
+    needs:['barracks'], carries:5, takes:['infantry'], crush:true,
     armour:'heavy',
     desc:'Carries five infantry. Fast and tough; its passengers walk away if it dies.' },
   /* SHIPS. `sea:true` is the whole difference - it flips which half of the map they can move
@@ -3179,18 +3185,42 @@ var RTS_UNITS = [
     weapon:'navalgun', needs:['navalyard'], sea:true, side:'allied',
     armour:'heavy',
     desc:'Cheap escort. Shells the shore and anything afloat.' },
+  /* `detects` is SONAR: the radius at which this hull finds a submerged boat, against the
+     RTS_SUB_DETECT floor everything else has. It is the only reason to own a Destroyer rather
+     than two Gunboats, and it is what its own description has always claimed. */
   { key:'destroyer',name:'Destroyer',    kind:'ship',     cost:1000, build:14, hp:700,  speed:11,  turn:1.4,r:2.4, sight:24,
     weapon:'navalheavy', needs:['navalyard'], sea:true, side:'allied', aaOnly:false,
+    detects:RTS_TILE * 9,
     armour:'heavy',
-    desc:'Heavy guns and long reach. The Allied answer to a submarine.' },
+    desc:'Heavy guns and long reach. Its sonar finds submarines — the Allied answer to them.' },
+  /* `cloak` is Cloakable, from the stat block. It submerges, and it has to surface to fire -
+     see RTS_SUB_SURFACE and _rtsCloakAI. */
   { key:'sub',      name:'Submarine',    kind:'ship',     cost:950,  build:13, hp:500,  speed:10,  turn:1.3,r:2.0, sight:18,
-    weapon:'torpedo', needs:['subpen'], sea:true, side:'soviet',
+    weapon:'torpedo', needs:['subpen'], sea:true, side:'soviet', cloak:true,
     armour:'heavy',
-    desc:'Torpedoes anything afloat. Cannot touch the shore.' },
+    desc:'Runs submerged and unseen. Surfaces to fire, and torpedoes anything afloat.' },
   { key:'missilesub',name:'Missile Sub', kind:'ship',     cost:1500, build:18, hp:450,  speed:9,   turn:1.1,r:2.2, sight:26,
-    weapon:'subrocket', needs:['subpen'], sea:true, side:'soviet',
+    weapon:'subrocket', needs:['subpen'], sea:true, side:'soviet', cloak:true,
     armour:'heavy',
-    desc:'Bombards the shore from further out than anything can answer.' },
+    desc:'Bombards the shore from further out than anything can answer, then submerges again.' },
+  /* THE LANDING CRAFT, and it is the only hull BOTH armies build - RA gives the LST to
+     everybody, because a boat that carries your tanks is not a weapon, it is a road.
+     `needs:['shipyard']` rather than a building key is why that works: `shipyard` is a
+     capability the Naval Yard and the Sub Pen both `provide`, so one entry covers both sides
+     without a second unit that differs only in whose flag it flies. See _rtsProvides.
+
+     Unarmed, and priced under a Gunboat, because what it buys is reach rather than force -
+     the whole of the far shore, on a map where your army stops at the water. Five holds, and
+     `takes` lets vehicles in: ferrying five rifle squads across a channel is not what the
+     unit is for.
+
+     RA sinks an LST's whole cargo with it and so do we - see _rtsSpillCargo. That is what
+     keeps it a decision: a loaded transport is five units and 700 credits in one hull with no
+     gun, and the crossing is the risk you are buying. */
+  { key:'lst',      name:'Transport',    kind:'ship',     cost:700,  build:10, hp:400,  speed:12,  turn:1.6,r:2.4, sight:14, weapon:null,
+    needs:['shipyard'], sea:true, carries:5, takes:['infantry', 'vehicle'],
+    armour:'heavy',
+    desc:'Carries five units, tanks included, across water. Unarmed — and everything aboard goes down with it.' },
   { key:'mcv',      name:'Mobile Yard',   kind:'vehicle',  cost:2500, build:26, hp:600,  speed:5.5, turn:1.2,r:2.2, sight:14, weapon:null,
     needs:['depot'], deploy:'yard', crush:true,
     armour:'light',
@@ -3792,7 +3822,14 @@ var RTS_AI = {
        are inert until one exists. Both armies are listed and _rtsCanQueue drops whichever
        belong to the other, exactly as the defensive block and the aircraft block already do.
        The thresholds are high because a hull is worth two tanks and the opponent should not
-       be buying a destroyer while its land army is still five units. */
+       be buying a destroyer while its land army is still five units.
+
+       NO TRANSPORT, for the same reason there is no engineer in the vehicle mix: a landing
+       craft is a decision about a specific crossing at a specific moment, and there is nothing
+       in here that makes that decision. An opponent buying them would field unarmed hulls that
+       loaded nothing and ferried no-one - 700 credits donated to whatever shot first. The
+       player builds it; the opponent does not, and that is stated here rather than being an
+       omission somebody has to reverse-engineer. */
     ship:[ { key:'destroyer', at:2600, w:3 }, { key:'missilesub', at:2800, w:2 },
            { key:'sub', at:1800, w:3 }, { key:'gunboat', at:1100, w:3 } ],
     infantry:[ { key:'flame', at:1200, w:2 }, { key:'grenadier', at:900, w:2 },
@@ -3998,6 +4035,24 @@ var RTS_BASE_DEFENSE_DELAY = 30;
    shooter the player cannot currently see. Here it is a short reveal on the shooter itself,
    since the visibility grid is rebuilt every sweep and a one-shot mark would be erased. */
 var RTS_MUZZLE_SPOT = 1.6;
+/* ------------------------------------------------------------------ cloaking --
+   TECHNO.CPP's Cloaking_AI, and the two rules that make a submarine a submarine rather than a
+   boat that happens to be hard to see:
+
+     IT SURFACES TO SHOOT. "A cloaked object that fires will decloak", and it stays up for a
+     moment afterwards. That window is the entire counterplay - a submarine that could fire from
+     under water would be a gun nothing in the game can answer.
+
+     PROXIMITY REVEALS IT. Anything that gets close enough finds one, and a DESTROYER carries
+     sonar that finds it from further out. That is what makes the Allied answer to a Soviet
+     fleet a particular hull rather than "bring more boats", and it is why the Destroyer's own
+     roster line already promised to be "the Allied answer to a submarine" - a promise nothing
+     in the code kept until now.
+
+   Seconds, and world units. RTS_SUB_DETECT is the FLOOR that every object has; a type carrying
+   its own `detects` uses that instead, and only the Destroyer does. */
+var RTS_SUB_SURFACE = 4.0;
+var RTS_SUB_DETECT = 4 * 2.5;             /* two and a half cells - close enough to see a wake */
 /* Overrun_Square: a tracked vehicle drives over infantry. Approaching one makes them scatter
    (`cellptr->Incoming(0, true)`); actually reaching them kills them. Should_Crush_It refuses
    for HUMAN-controlled vehicles - your own tanks never auto-crush, you have to drive them
@@ -6852,6 +6907,32 @@ function _sprUnitModel(key, side, prone, part) {
       _r3Box(m, -3.6, 3.1, 1.3, 5.0, 0.9, 1.5, RTS_PAL.hazard[0], DK[2]);
     }
 
+  } else if (key === 'lst') {
+    /* THE LANDING CRAFT, and the whole job of the model is to say "not a warship" at a glance,
+       because it is the one hull on the water that must never be mistaken for something that
+       shoots back. Everything the gunboat has, this deliberately does not: no funnel, no
+       superstructure amidships, no gun anywhere.
+
+       What it has instead is the silhouette of a ferry seen from above - a BROAD flat deck
+       taking up most of the length, a blunt square bow rather than a raked one, a bow ramp
+       laid down over it, and a small wheelhouse pushed right to the stern. The deck is the
+       read: wide, empty and pale against the sea, where every other hull is narrow and dark. */
+    var _dL = 24, _dW = 12.5;
+    _r3Box(m, 0, 0.5, 0, _dL, 3.0, _dW, VH[0], VH[1]);                   /* hull */
+    _r3Box(m, 0, 3.5, 0, _dL * 0.86, 0.9, _dW * 0.80, DK[2], DK[1]);     /* the cargo deck */
+    /* Deck rails down both sides - what stops the deck reading as an empty grey rectangle. */
+    _r3Box(m, -1.0, 4.6, -_dW * 0.44, _dL * 0.70, 2.2, 1.1, VH[2], VH[1]);
+    _r3Box(m, -1.0, 4.6, _dW * 0.44, _dL * 0.70, 2.2, 1.1, VH[2], VH[1]);
+    /* The bow ramp, down and forward: the tell that things drive off the front of it. */
+    _r3Box(m, _dL * 0.46, 1.2, 0, _dL * 0.20, 2.2, _dW * 0.62, GN[1], GN[3]);
+    _r3Box(m, _dL * 0.60, 0.5, 0, _dL * 0.14, 1.0, _dW * 0.56, GN[2], GN[0]);
+    for (i = 0; i < 3; i++)                                              /* ramp ribs */
+      _r3Box(m, _dL * 0.40 + i * 2.2, 2.6, 0, 1.0, 0.8, _dW * 0.56, DK[1], DK[3]);
+    /* Wheelhouse right aft, small and off nothing - the only thing standing up on the boat. */
+    _r3Box(m, -_dL * 0.40, 3.6, 0, _dL * 0.16, 4.6, _dW * 0.42, VH[2], VH[0]);
+    _r3Box(m, -_dL * 0.40, 8.2, 0, _dL * 0.12, 1.3, _dW * 0.30, TM[1], TM[3]);  /* team cap */
+    _r3Box(m, -_dL * 0.33, 6.4, 0, 1.0, 2.0, _dW * 0.34, RTS_PAL.glass, RTS_PAL.glass);
+
   } else if (key === 'apc') {
     /* A closed box on tracks with a rear ramp and a small cupola gun - no turret (UDATA.CPP
        has IsTurretEquipped false), so the read is "a tank with no gun on top", which is
@@ -7388,8 +7469,8 @@ var RTS_MIX_UNIT = {
   /* THE FLEET. Absent, so with the player's own files loaded a real Naval Yard launched
      procedurally-baked boxes alongside real 2tnk and e1 sprites - the one place on the map
      where the two art styles stood side by side. RA's own names: pt is the gunboat, dd the
-     destroyer, ss the submarine, msub the missile sub. */
-  gunboat:'pt', destroyer:'dd', sub:'ss', missilesub:'msub'
+     destroyer, ss the submarine, msub the missile sub, lst the landing craft. */
+  gunboat:'pt', destroyer:'dd', sub:'ss', missilesub:'msub', lst:'lst'
 };
 
 /* Infantry are not a rotation set, they are a sequence table, and the layout comes straight
@@ -11618,6 +11699,7 @@ function _rtsPath(sx, sz, gx, gz, dom) {
   }
   /* If the goal tile is blocked (ordered onto a building), walk outwards to the nearest
      open tile so "attack that refinery" still produces a path that arrives beside it. */
+  var moved = false;
   if (!_rtsInB(gtx, gtz) || _rtsBlocked(gtx, gtz, dom)) {
     var best = null, bd = 1e9;
     for (var rr = 1; rr <= 6 && !best; rr++) {
@@ -11629,7 +11711,7 @@ function _rtsPath(sx, sz, gx, gz, dom) {
       }
     }
     if (!best) return null;
-    gtx = best[0]; gtz = best[1];
+    gtx = best[0]; gtz = best[1]; moved = true;
   }
   var start = _rtsIdx(stx, stz), goal = _rtsIdx(gtx, gtz);
   if (start === goal) return [{ x:gx, z:gz }];
@@ -11664,7 +11746,22 @@ function _rtsPath(sx, sz, gx, gz, dom) {
   /* string-pull: drop a waypoint whenever the line to the next-but-one is clear */
   var pts = [];
   for (var i = 0; i < tiles.length; i++) pts.push({ x:_rtsWX(tiles[i] % RTS_N), z:_rtsWX((tiles[i] / RTS_N) | 0) });
-  if (pts.length) { pts[pts.length - 1] = { x:gx, z:gz }; }
+  /* THE LAST WAYPOINT IS THE EXACT SPOT ASKED FOR - unless the spot was not one this unit can
+     occupy, in which case it is the cell the search actually ended on.
+
+     Overwriting it unconditionally is how a boat sent at the beach never arrives. The goal was
+     walked out to open water above, A* found a route there, and then the route's last point was
+     replaced with the land cell the player clicked - which the boat cannot enter, so _rtsSteer
+     never clears the path and the order never completes. Measured, seed 7, a Gunboat given an
+     ordinary move order at a shore point across a channel: 120 simulated seconds later it was
+     parked at the water's edge, still `order:'move'` with a live path. That is worse than it
+     looks, because the acquire branch in _rtsUpdateUnit only runs on `amove` or no order at
+     all - so the boat also stood there refusing to shoot anything for the rest of the match.
+
+     A LAND unit does not show it (a tank ordered onto its own Command Yard completes and clears
+     normally), which is why this survived: the case only bites where the goal is somewhere the
+     unit can never stand, and until there were ships every goal was walkable ground. */
+  if (pts.length && !moved) { pts[pts.length - 1] = { x:gx, z:gz }; }
   var out = [], px = sx, pz = sz, j = 0;
   while (j < pts.length) {
     var far = j;
@@ -12979,6 +13076,16 @@ function _rtsVisible(tx, tz) {
 function _rtsEntSeen(e) {
   if (!e) return false;
   if (e.side === 'player') return true;
+  /* A SUBMERGED BOAT IS NOT SEEN, however well lit the water over it is. This sits ABOVE the
+     muzzle-flash reveal below and below the "it is mine" line above, and both positions are
+     deliberate: your own submarines stay on your screen (drawn awash - see the draw list), and
+     a submarine that has just fired is up on the surface with `hidden` already cleared by
+     _rtsCloakAI, so it does not need the reveal timer to be seen.
+
+     One test, and everything the player is allowed to perceive goes through it - the draw list,
+     the health bars, the radar, and _rtsPickAt. A submarine you cannot see is therefore also a
+     submarine you cannot click on and cannot order an attack against, which is the point. */
+  if (e.hidden) return false;
   /* Fire_At reveals a shooter that was hidden in the darkness. The visibility grid is
      rebuilt from scratch every sweep, so the reveal lives on the shooter as a short timer
      rather than as a mark on the grid that the next sweep would wipe. */
@@ -13271,7 +13378,8 @@ function _rtsKill(e) {
   /* Infantry cry out when they die - ten recorded takes, and until now not one of them ever
      played: the identification table knew what they were and nothing asked for them. */
   if (e.type === 'unit' && typeof rtsDeathCry === 'function') rtsDeathCry(e);
-  if (e.cargo && e.cargo.length) _rtsSpillCargo(e);   /* the passengers walk away from it */
+  /* the passengers walk away from it - or go down with it, if there is no shore to walk to */
+  if (e.cargo && e.cargo.length) _rtsSpillCargo(e);
   if (e.type === 'struct') { _rtsFootprint(e, false); _rtsRecalcPower(e.side); }
   if (e.type === 'struct' && e.selling) {
     /* Sold, not destroyed: a puff of dust where it stood, and no fireworks. */
@@ -13512,14 +13620,44 @@ function _rtsSell(e) {
    makes saving work for nothing: the save encoder walks G.ents and turns entity references
    into ids, so a passenger that had been lifted out of the list would round-trip as an inline
    copy and come back as something that merely looked like a unit. The cost is that every place
-   which treats a unit as being ON THE MAP has to say so, and there are only four: the tick, the
-   draw list, target acquisition and selection. */
+   which treats a unit as being ON THE MAP has to say so - and this comment used to claim there
+   were only four of them (the tick, the draw list, target acquisition and selection), which was
+   the more expensive half of the mistake, because it read as a closed list nobody need re-check.
+
+   There are SIX. The two that were missing both work by walking G.ents and comparing positions,
+   which is exactly how a passenger gets caught: it sits at its transport's coordinates.
+
+     _rtsOverrun  - a tank driving past an APC crushed the squad sealed inside it.
+     _rtsSplash   - a shell landing on a transport hit the hull and then every passenger, at
+                    zero range, through no armour of their own.
+
+   Both were found by a landing craft that kept losing its cargo in open water with nothing near
+   it, and both are much older than the craft: they have been true of the APC all along. */
 function _rtsAboard(e) { return !!(e && e.inside); }
 function _rtsCargoCount(t) { return t && t.cargo ? t.cargo.length : 0; }
+/* "Is this thing a transport?" as one predicate rather than as `carries` read at four call
+   sites. Max_Passengers > 0 is the whole test in UNIT.CPP too. */
+function _rtsIsTransport(e) {
+  return !!(e && e.type === 'unit' && ((rtsUnitDef(e.def) || {}).carries || 0) > 0);
+}
+/* What a hold will accept. `takes` is declared on the type - an APC is a taxi for men, a
+   landing craft is a ferry for an army - and infantry is the default so a type that says
+   nothing keeps the rule it had. */
+function _rtsTakes(t) { return (rtsUnitDef(t.def) || {}).takes || ['infantry']; }
 function _rtsCanBoard(inf, t) {
   if (!inf || !t || inf.dead || t.dead || inf === t) return false;
   if (inf.side !== t.side || inf.inside) return false;
-  if ((rtsUnitDef(inf.def) || {}).kind !== 'infantry') return false;
+  var pd = rtsUnitDef(inf.def) || {};
+  /* Nothing that swims or flies gets into a boat. */
+  if (pd.sea || pd.air) return false;
+  /* AND NO TRANSPORT INSIDE A TRANSPORT, which RA does allow and we deliberately do not. The
+     tick skips anything with `inside` (see core/tick.js), so an APC riding in a landing craft
+     would never run its own update - and it is that update which drags its passengers along.
+     The squads inside it would stay standing on the beach while the craft sailed away, still
+     flagged as cargo of a hull a hundred tiles offshore. Allowing it means making the
+     ride-along recurse and making a sinking cascade; refusing it is one line and no lie. */
+  if (_rtsIsTransport(inf)) return false;
+  if (_rtsTakes(t).indexOf(pd.kind) < 0) return false;
   var cap = (rtsUnitDef(t.def) || {}).carries || 0;
   return cap > 0 && _rtsCargoCount(t) < cap;
 }
@@ -13532,32 +13670,87 @@ function _rtsBoard(inf, t) {
   var si = G.sel.indexOf(inf); if (si >= 0) G.sel.splice(si, 1);
   return true;
 }
+/* How far from the hull a passenger may be set down, in tiles. THREE, and the number is the
+   rule rather than a tolerance: at five, a landing craft sitting in the middle of a five-tile
+   channel found the bank three cells away and put a Battle Tank on it - the tank crossed twelve
+   world units of open water on foot. The craft has to nose in. Small enough that "bring it
+   closer to shore" is a real instruction, large enough that a beach with a cliff a cell behind
+   it still works. */
+var RTS_UNLOAD_REACH = 3;
+/* Where one passenger can be set down.
+
+   THE SPOT IS CHOSEN IN THE PASSENGER'S OWN DOMAIN, not the transport's, and that is the whole
+   difference between an APC and a landing craft. An APC unloads onto the ground it is itself
+   standing on, so the old ring - eight positions at 1.1 tiles, taken on trust - was always
+   right. A landing craft is sitting IN THE WATER: every cell of that ring is sea, and a ring
+   taken on trust would put five tanks in the sea, unable to move, permanently.
+
+   So the ring position is the PREFERENCE and the passenger's own passability is the rule.
+   Null means this one has nowhere to stand, and the caller keeps it aboard rather than
+   deleting it into the water. */
+/* How far from the hull a passenger may be set down, in tiles. THREE, and the number is the
+   rule rather than a tolerance: at five, a landing craft sitting in the middle of a five-tile
+   channel found the bank three cells away and put a Battle Tank on it - the tank crossed twelve
+   world units of open water on foot. The craft has to nose in. Small enough that "bring it
+   closer to shore" is a real instruction, large enough that a beach with a cliff a cell behind
+   it still works. */
+var RTS_UNLOAD_REACH = 3;
+function _rtsUnloadSpot(t, p, n) {
+  var a = (n / 8) * Math.PI * 2 + t.rot, r = RTS_TILE * 1.1;
+  var wx = t.x + Math.cos(a) * r, wz = t.z + Math.sin(a) * r;
+  var dom = _rtsDomainOf(p), tx = _rtsTX(wx), tz = _rtsTX(wz);
+  if (_rtsInB(tx, tz) && !_rtsBlocked(tx, tz, dom)) return { x:wx, z:wz };
+  var open = _rtsNearestOpen(tx, tz, RTS_UNLOAD_REACH, dom);
+  return open ? { x:_rtsWX(open[0]), z:_rtsWX(open[1]) } : null;
+}
 /* Detach_Object + Unlimbo + Scatter: passengers step out around the transport, one per free
-   spot, and are given the guard/hunt behaviour of a unit that has just arrived. */
+   spot, and are given the guard/hunt behaviour of a unit that has just arrived. Returns how
+   many actually got out, which is what lets the caller say "there is nowhere to unload here"
+   instead of appearing to do nothing. */
 function _rtsUnload(t, force) {
   /* `force` is not a nicety. _rtsKill sets dead BEFORE it spills the cargo, so a plain
      "is it alive" guard here rejected the one call this rule exists for and every passenger
      stayed sealed in the wreck. The suite caught it; reading the code did not. */
   if (!t || (t.dead && !force) || !t.cargo || !t.cargo.length) return 0;
-  var G = window._rtsG, n = 0;
+  var n = 0, held = [];
   while (t.cargo.length) {
     var inf = t.cargo.pop();
+    if (inf.dead) { inf.inside = null; continue; }
+    var at = _rtsUnloadSpot(t, inf, n);
+    if (!at) { held.push(inf); continue; }
     inf.inside = null;
-    if (inf.dead) continue;
-    var a = (n / 8) * Math.PI * 2 + t.rot, r = RTS_TILE * 1.1;
-    inf.x = t.x + Math.cos(a) * r; inf.z = t.z + Math.sin(a) * r;
+    inf.x = at.x; inf.z = at.z;
     inf.order = null; inf.path = null; inf.target = null;
-    _rtsScatter(inf);
+    /* Scatter needs to know what to scatter AWAY from. Called with one argument it computed
+       atan2(z - undefined, ...) = NaN, failed its own bounds check and returned having done
+       nothing - so "and scatter" has never happened. The hull is the thing to step away
+       from. */
+    _rtsScatter(inf, t.x, t.z);
     n++;
   }
+  t.cargo = held;
   return n;
 }
-/* UnitClass::Death, the transport half of the branch: infantry passengers survive and scatter,
-   anything else is recorded as a kill and deleted. Ours can only carry infantry, so in practice
-   everyone walks - which is the point of the unit. */
+/* UnitClass::Death, the transport half of the branch.
+
+   An APC's infantry survive the wreck and walk away, and that one rule is what makes an APC a
+   good buy instead of a coffin. A LANDING CRAFT SUNK IN OPEN WATER IS THE OTHER HALF of the
+   same rule, and RA is explicit about it: the cargo goes down with the ship. There is no beach
+   to swim to.
+
+   Both fall out of one sentence - everyone who can be put ashore is put ashore, everyone who
+   cannot drowns - so there is no `if it is a boat` anywhere. A craft wrecked while nosed against
+   the beach lands its cargo; the same craft caught mid-channel takes all five with it, which is
+   what keeps a crossing a decision rather than a formality. */
 function _rtsSpillCargo(t) {
   if (!t || !t.cargo || !t.cargo.length) return 0;
-  return _rtsUnload(t, true);
+  var out = _rtsUnload(t, true);
+  while (t.cargo.length) {
+    var lost = t.cargo.pop();
+    lost.inside = null;
+    if (!lost.dead) _rtsKill(lost);
+  }
+  return out;
 }
 
 /* UNIT.CPP Try_To_Deploy. An MCV becomes a Command Yard, and three details from the original
@@ -14084,6 +14277,21 @@ function _rtsOrderBoard(inf, t) {
   inf.path = _rtsPathFor(inf, t.x, t.z); inf.pi = 0;
   return true;
 }
+/* "Put them down over there." The craft is sent to the spot in ITS OWN domain - _rtsPath walks
+   a goal it cannot occupy out to the nearest cell it can, so a click on the beach becomes the
+   open water closest to that beach - and the cargo steps ashore when it arrives. One order, not
+   a move followed by a keypress, because the point on the map the player clicked is the whole
+   instruction. Returns false when there is no route, which leaves the transport as it was. */
+function _rtsOrderUnloadAt(t, x, z) {
+  if (!t || t.type !== 'unit' || !_rtsCargoCount(t)) return false;
+  t.order = 'unload'; t.target = null; t.hstate = null;
+  t.goal = { x:x, z:z };
+  t.path = _rtsPathFor(t, x, z); t.pi = 0;
+  /* No route at all - unload where it stands, which is what the player asked for as nearly as
+     it can be done, and what the U key would have done anyway. */
+  if (!t.path) { t.order = null; return false; }
+  return true;
+}
 function _rtsOrderAttack(e, tgt) {
   if (e.type !== 'unit') return;
   var d = rtsUnitDef(e.def);
@@ -14205,11 +14413,49 @@ function _rtsEvalObject(e, o, dist, w, force) {
      right there in the original, commented out; the shipped line is this one. */
   return Math.max(1, (value * RTS_THREAT_SCALE) / (dist / RTS_TILE + 1));
 }
+/* ------------------------------------------------------------------ cloaking --
+   TECHNO.CPP's Cloaking_AI, run by the cloaked object itself once a tick. It writes one flag,
+   `hidden`, and everything else in the game reads that - target acquisition here, and
+   _rtsEntSeen for everything the player is allowed to see or click. Computing it ON the
+   submarine rather than asking "is this thing hidden from me?" at each of those call sites is
+   what keeps it out of the inner loops: there are a handful of submarines and thousands of
+   acquisition tests.
+
+   Two ways to be visible, and they are the two rules that make a submarine playable against:
+
+     IT SURFACED TO SHOOT. `decloak` is set in _rtsFire and runs down over RTS_SUB_SURFACE
+     seconds. A boat that could fire while submerged would be a gun with no answer.
+     SOMETHING FOUND IT. Anything hostile inside RTS_SUB_DETECT sees it, and a hull carrying
+     `detects` - only the Destroyer - sees it from much further out. That is the difference
+     between owning a Destroyer and owning two Gunboats.
+
+   `hidden` is deliberately about the OBJECT, not about who is looking: both sides see a
+   submerged boat the same way, so the opponent cannot cheat by ignoring the rule and the
+   player's own submarines are hidden from the opponent by the same line of code. */
+function _rtsCloakAI(e, dt, d) {
+  if (!d || !d.cloak) return;
+  if (e.decloak > 0) e.decloak -= dt;
+  var G = window._rtsG, foe = _rtsEnemyOf(e.side), found = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var o = G.ents[i];
+    if (o.dead || o.side !== foe || o.inside) continue;
+    if (o.type === 'struct' && o.building) continue;
+    var od = (o.type === 'struct' ? rtsStructDef(o.def) : rtsUnitDef(o.def)) || {};
+    var r = od.detects || RTS_SUB_DETECT;
+    var dx = o.x - e.x, dz = o.z - e.z;
+    if (dx * dx + dz * dz <= r * r) { found = 1; break; }
+  }
+  e.spotted = found;
+  e.hidden = (e.decloak > 0 || found) ? 0 : 1;
+}
 function _rtsFindTarget(e, range, w) {
   var G = window._rtsG, foe = _rtsEnemyOf(e.side), best = null, bv = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
     if (o.dead || o.side !== foe || o.inside) continue;
+    /* You cannot shoot what is under water. The same flag that hides a submarine from the
+       player's screen hides it from the opponent's target acquisition - see _rtsCloakAI. */
+    if (o.hidden) continue;
     /* The air/ground contract. A weapon without `aa` cannot engage anything flying, and an
        aircraft's own weapons cannot reach another aircraft either - our helicopter carries no
        air-to-air, exactly as the Longbow does not. */
@@ -14330,6 +14576,12 @@ function _rtsFire(e, tgt, w) {
     var _sd = rtsStructDef(e.def);
     if (_sd && _sd.needsPower && _rtsPowerFactor(e.side) < 0.999) return;
   }
+  /* AND NEVER AT YOUR OWN SIDE. Deliberately a second guard - _rtsUpdateUnit already refuses to
+     AIM at a friendly - because this is the one place every route to a shot passes through, so
+     a future order that parks an ally in `target` cannot quietly become gunfire. Nothing in the
+     game fires on its own side on purpose: the Flame Tower's death blast does hurt friends, and
+     it goes through _rtsDamage rather than through here. */
+  if (tgt && tgt.side === e.side) return;
   if (!_rtsWeaponReaches(w, tgt)) return;
   /* AIRCRAFT.CPP spends a round per shot and the aircraft is out of the fight when the rack is
      empty. Decremented here rather than in the aircraft's own update so that every route to a
@@ -14356,6 +14608,11 @@ function _rtsFire(e, tgt, w) {
   /* "If a projectile was fired from a unit that is hidden in the darkness, reveal that unit
      and a little area around it." The muzzle flash gives away the shooter. */
   if (e.side !== 'player' && !_rtsVisible(_rtsTX(e.x), _rtsTX(e.z))) e.spot = RTS_MUZZLE_SPOT;
+  /* "A cloaked object that fires will decloak." It has to surface to shoot, and it stays up
+     afterwards for RTS_SUB_SURFACE seconds - the window in which a submarine can be answered.
+     Set at the one place every route to a shot passes through, so there is no way to fire from
+     under water. */
+  if ((rtsUnitDef(e.def) || {}).cloak) e.decloak = RTS_SUB_SURFACE;
   if (typeof _rtsSfx === 'function') _rtsSfx(w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
     : (w.shot === 'missile' ? 'rocket' : (e.type === 'struct' ? 'turretgun' : 'cannon')), e.x, e.z);
   var dmg = w.dmg * rtsVerses(w, tgt) * bias.fire * rtsCrateMult(e, 'fire');
@@ -14698,6 +14955,12 @@ function _rtsSplash(x, z, rad, dmg, side, spread, from) {
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
     if (o.dead || o === from) continue;
+    /* THE HULL IS THE POINT OF A TRANSPORT. Cargo is kept at its transport's coordinates, so
+       without this a shell landing on an APC hit the hull AND every man inside it - the
+       passengers standing at the dead centre of the blast, at zero range, taking full damage
+       through no armour of their own. That makes a 350 hp APC a worse place to be than the open
+       ground beside it, which is the opposite of what it is for. What is inside is inside. */
+    if (o.inside) continue;
     var d = Math.hypot(o.x - x, o.z - z);
     if (d > rad) continue;
     var steps = _rtsSplashSteps(d, spread, o, tx, tz);
@@ -14945,8 +15208,9 @@ function _rtsSeparate(dt) {
   }
 }
 </script>
-<script>/* core/units.js - the per-unit tick, overrun, the harvester loop, and the structure and
-   projectile ticks. Part of rts.core, the simulation. */
+<script>/* core/units.js - the per-unit tick, overrun, and the structure and projectile ticks. Part of
+   rts.core, the simulation. The harvester economy the per-unit tick delegates to lives next
+   door in core/harvest.js. */
 
 function _rtsUpdateUnit(e, dt) {
   /* Cargo rides along. Their coordinates are kept in step with the transport rather than left
@@ -14980,6 +15244,10 @@ function _rtsUpdateUnit(e, dt) {
      wrong reason and would have mis-classified the next unit added. The flag is checked INSIDE
      _rtsFearAI rather than here, so that fear still decays for the types that ignore it. */
   if (d.kind === 'infantry') _rtsFearAI(e, dt);
+  /* Cloaking_AI. Before anything that can return, so a submarine's `hidden` flag is refreshed
+     every tick whatever else it is doing - a stale one is a boat that is invisible while parked
+     or visible while running silent. */
+  if (d.cloak) _rtsCloakAI(e, dt, d);
   /* Overrun_Square runs BEFORE the engage logic: a tank that is holding position and firing
      returns early from this function, and hooking the crush on the end meant a stationary
      tank never ran anything over. */
@@ -15080,11 +15348,36 @@ function _rtsUpdateUnit(e, dt) {
      take the whole tick. */
   if (e.air && _rtsAirTick(e, dt, d)) { _rtsSteer(e, dt, d); return; }
 
+  /* ---- unloading ----
+     A transport under an unload order sails/drives to where it was sent and puts its cargo
+     down on arrival. Ahead of the engage block because an unarmed hull must never be pulled
+     into "acquire something to shoot", and ahead of boarding because a transport is not a
+     passenger. */
+  if (e.order === 'unload') {
+    if (!_rtsCargoCount(e)) { e.order = null; e.path = null; }
+    else if (e.path && e.pi < e.path.length) { _rtsSteer(e, dt, d); return; }
+    else {
+      var put = _rtsUnload(e);
+      /* Nothing got out: the hull is somewhere with no ground its cargo can stand on. Say so
+         rather than leave the player watching a boat that has apparently ignored the order -
+         which is the whole reason _rtsUnload returns a count. */
+      if (!put && e.side === 'player') _rtsSay('Nowhere to unload — bring it closer to shore.');
+      e.order = null; e.path = null;
+      return;
+    }
+  }
+
   /* ---- boarding ---- */
   if (e.order === 'board') {
     var tr = e.target;
+    /* A LANDING CRAFT IS BOARDED FROM THE BEACH, so the reach has to be more than the tile and
+       a half that suits walking into an APC. The passenger cannot enter the water at all: its
+       path ends at whatever land cell _rtsPath found nearest the hull, and how far that is from
+       the hull is a property of the coastline, not of the order. Three tiles is what covers a
+       craft nosed against a beach without letting a squad teleport aboard from inland. */
+    var breach = ((rtsUnitDef(tr && tr.def || '') || {}).sea) ? RTS_TILE * 3.0 : RTS_TILE * 1.6;
     if (!tr || tr.dead || !_rtsCanBoard(e, tr)) { e.order = null; e.target = null; e.path = null; }
-    else if (_rtsRangeTo(e, tr) <= RTS_TILE * 1.6) { _rtsBoard(e, tr); return; }
+    else if (_rtsRangeTo(e, tr) <= breach) { _rtsBoard(e, tr); return; }
     else {
       /* the transport moves, so the destination is re-aimed rather than pathed once */
       if (!e.path || Math.hypot(tr.x - e.goal.x, tr.z - e.goal.z) > RTS_TILE) {
@@ -15100,6 +15393,14 @@ function _rtsUpdateUnit(e, dt) {
     tgt = e.target = null;
     if (e.order === 'attack') { if (!_rtsRestoreMission(e)) e.order = null; }
   }
+  /* A FRIENDLY IN e.target IS NOT SOMETHING TO SHOOT AT. The board order puts one there - it
+     has to, the passenger is walking towards a particular transport - and everything below
+     treats e.target as the thing to engage. Measured, seed 7, one rifle squad ordered onto its
+     own APC from ten tiles out: two rounds into its own hull on the walk in, 350 -> 347.9 hp.
+     Trivial with a rifle and an APC; a Battle Tank boarding an unarmed 400 hp landing craft is
+     the same code with a cannon. Cleared LOCALLY, so the order keeps its target and only the
+     gun forgets about it. */
+  if (tgt && tgt.side === e.side) tgt = null;
   /* An overridden mission that has run its course puts the old one back. Without this only
      the attack case ever restores, and the half of the defenders sent to stand guard would
      never resume what they were doing. */
@@ -15172,6 +15473,11 @@ function _rtsOverrun(e) {
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
     if (o.dead || o.type !== 'unit' || o.side === e.side) continue;
+    /* A PASSENGER IS NOT UNDER YOUR TRACKS. Cargo is kept at its transport's coordinates, so
+       without this a tank driving past an APC crushes the squad sealed inside it - the men are
+       standing exactly where the APC is. Found by a landing craft losing its passenger in open
+       water with nothing near it but the opponent's armour on the far bank. */
+    if (o.inside) continue;
     if (rtsUnitDef(o.def).kind !== 'infantry') continue;
     var d = Math.hypot(o.x - e.x, o.z - e.z);
     if (d > RTS_CRUSH_DIST) continue;
@@ -15186,6 +15492,118 @@ function _rtsOverrun(e) {
     }
   }
 }
+/* ------------------------------------------------------- structures */
+function _rtsUpdateStruct(e, dt) {
+  var d = rtsStructDef(e.def);
+  if (e.hitT > 0) e.hitT -= dt;
+  if (e.selling) {
+    /* Mission_Deconstruction: the build-up animation, in reverse. When it reaches the
+       ground the crew comes out and the building is gone. */
+    e.bprog -= dt / Math.max(0.4, d.build * RTS_DECON_TIME);
+    e.hp = Math.max(1, d.hp * Math.max(0, e.bprog));
+    if (e.bprog <= 0) {
+      e.bprog = 0;
+      _rtsEvacuate(e, _rtsSurvivorCount(e), false);
+      _rtsKill(e);
+    }
+    return;
+  }
+  if (e.building) {
+    /* buildings rise out of the ground while they finish, and gain HP as they go */
+    e.bprog += dt / Math.max(0.5, d.build * 0.5) * _rtsPowerFactor(e.side);
+    e.hp = d.hp * (0.15 + 0.85 * Math.min(1, e.bprog));
+    if (e.bprog >= 1) { e.bprog = 1; e.building = 0; e.hp = d.hp; _rtsRecalcPower(e.side);
+      _rtsGrandOpening(e);
+      /* HouseClass::JustBuiltStructure, which TEVENT_BUILD reads. It is a one-frame signal,
+         cleared at the end of the trigger pass that could have seen it. */
+      var _jb = window._rtsG.justBuilt;
+      if (_jb) _jb[e.side].struct = e.def; }
+    return;
+  }
+  if (e.repair) _rtsRepairAI(e, dt);
+  /* Service Depot. Anything of yours with wheels or tracks that is parked on it gets patched
+     up for nothing - the point of the building is that it turns a battered army into a fresh
+     one without a trip through the production queue. Infantry are excluded, as in the
+     original: a depot repairs vehicles, it does not heal people. Needs power like everything
+     else, so browning out the base also stops the repairs. */
+  if (d.repairs && _rtsPowerFactor(e.side) >= 0.999) {
+    var G2 = window._rtsG;
+    for (var ri = 0; ri < G2.ents.length; ri++) {
+      var v = G2.ents[ri];
+      if (v.dead || v.type !== 'unit' || v.side !== e.side || v.hp >= v.maxHp) continue;
+      if (rtsUnitDef(v.def).kind !== 'vehicle') continue;
+      if (!_rtsAtStruct(v, e, d.repairs)) continue;
+      v.hp = Math.min(v.maxHp, v.hp + d.repairRate * dt);
+    }
+  }
+  if (!d.weapon) return;
+  var w = RTS_WEAPONS[d.weapon];
+  if (e.cool > 0) e.cool -= dt;
+  if (e.fire > 0) e.fire -= dt;
+  if (e.recoil > 0) e.recoil -= dt;
+  /* a browned-out base loses its defences - power actually matters */
+  if (_rtsPowerFactor(e.side) < 0.999) return;
+  if (!e.target || e.target.dead || _rtsRangeTo(e, e.target) > w.range) e.target = _rtsFindTarget(e, w.range, w);
+  if (!e.target) return;
+  var ta = Math.atan2(e.target.z - e.z, e.target.x - e.x), td = ta - e.rot;
+  while (td > Math.PI) td -= Math.PI * 2; while (td < -Math.PI) td += Math.PI * 2;
+  e.rot += Math.min(Math.abs(td), 2.6 * dt) * (td < 0 ? -1 : 1);
+  if (e.cool <= 0 && Math.abs(td) < 0.3) _rtsFire(e, e.target, w);
+}
+
+/* --------------------------------------------------------- projectiles --
+   A shot in flight belongs to nobody in particular: it hits the first hostile thing it runs
+   into, which need not be what it was aimed at. An infantry screen in front of a tank column
+   now actually absorbs shells meant for the tanks. Only hostiles are tested - letting shells
+   stop on friendlies as well would block every massed formation's line of fire, which is a
+   different game. Splash still catches friendlies, as Explosion_Damage always did. */
+function _rtsProjHit(p) {
+  var G = window._rtsG, foe = _rtsEnemyOf(p.side), best = null, bd = 1e9;
+  for (var i = 0; i < G.ents.length; i++) {
+    var o = G.ents[i];
+    if (o.dead || o.side !== foe) continue;
+    /* and not a passenger: cargo rides at its transport's coordinates, so without this a shell
+       aimed past an APC stops on a man sealed inside it. Third of the three places that walked
+       G.ents comparing positions and forgot - see the header of core/transport.js. */
+    if (o.inside) continue;
+    var dx = o.x - p.x, dz = o.z - p.z;
+    if (dx > RTS_SHELL_HIT * 6 || dx < -RTS_SHELL_HIT * 6) continue;   /* cheap reject */
+    if (dz > RTS_SHELL_HIT * 6 || dz < -RTS_SHELL_HIT * 6) continue;
+    var d = _rtsRangeTo(p, o);
+    if (d < RTS_SHELL_HIT && d < bd) { bd = d; best = o; }
+  }
+  return best;
+}
+function _rtsUpdateProj(dt) {
+  var G = window._rtsG;
+  for (var i = G.proj.length - 1; i >= 0; i--) {
+    var p = G.proj[i];
+    p.life -= dt;
+    /* missiles home; shells hold the bearing they left the barrel on */
+    if (p.kind === 'missile' && p.tgt && !p.tgt.dead) {
+      var dx = p.tgt.x - p.x, dz = p.tgt.z - p.z, d = Math.hypot(dx, dz) || 1;
+      p.vx += (dx / d * p.speed - p.vx) * Math.min(1, dt * 4);
+      p.vz += (dz / d * p.speed - p.vz) * Math.min(1, dt * 4);
+    }
+    p.x += p.vx * dt; p.z += p.vz * dt;
+    var hit = _rtsProjHit(p);
+    if (hit || p.life <= 0) {
+      if (hit) _rtsDamage(hit, p.dmg, p.from);
+      if (p.splash > 0) _rtsSplash(p.x, p.z, RTS_BLAST_CELLS * RTS_TILE, p.dmg, p.side, p.splash, p.from);
+      _rtsCombatAnim(p.dmg, p.x, p.z, p.splash > 0 ? 1.4 : 0.7, hit);
+      G.proj.splice(i, 1);
+    }
+  }
+}
+
+</script>
+<script>/* core/harvest.js - the harvester economy: the mine/deliver loop, finding the next ore cell,
+   and finding a refinery to unload at. Part of rts.core, the simulation.
+
+   Split out of core/units.js, which had grown past the 500-line ceiling unit/layout enforces.
+   It is a clean seam rather than an arbitrary cut: nothing here is called from the per-unit tick
+   except _rtsUpdateHarvester itself, which that tick delegates to and returns from. */
+
 function _rtsUpdateHarvester(e, dt, d) {
   var G = window._rtsG;
   if (!e.hstate) { if (e.order !== 'move') _rtsOrderHarvest(e, null, null); }
@@ -15329,107 +15747,6 @@ function _rtsNearestRefinery(e) {
   }
   return best;
 }
-
-/* ------------------------------------------------------- structures */
-function _rtsUpdateStruct(e, dt) {
-  var d = rtsStructDef(e.def);
-  if (e.hitT > 0) e.hitT -= dt;
-  if (e.selling) {
-    /* Mission_Deconstruction: the build-up animation, in reverse. When it reaches the
-       ground the crew comes out and the building is gone. */
-    e.bprog -= dt / Math.max(0.4, d.build * RTS_DECON_TIME);
-    e.hp = Math.max(1, d.hp * Math.max(0, e.bprog));
-    if (e.bprog <= 0) {
-      e.bprog = 0;
-      _rtsEvacuate(e, _rtsSurvivorCount(e), false);
-      _rtsKill(e);
-    }
-    return;
-  }
-  if (e.building) {
-    /* buildings rise out of the ground while they finish, and gain HP as they go */
-    e.bprog += dt / Math.max(0.5, d.build * 0.5) * _rtsPowerFactor(e.side);
-    e.hp = d.hp * (0.15 + 0.85 * Math.min(1, e.bprog));
-    if (e.bprog >= 1) { e.bprog = 1; e.building = 0; e.hp = d.hp; _rtsRecalcPower(e.side);
-      _rtsGrandOpening(e);
-      /* HouseClass::JustBuiltStructure, which TEVENT_BUILD reads. It is a one-frame signal,
-         cleared at the end of the trigger pass that could have seen it. */
-      var _jb = window._rtsG.justBuilt;
-      if (_jb) _jb[e.side].struct = e.def; }
-    return;
-  }
-  if (e.repair) _rtsRepairAI(e, dt);
-  /* Service Depot. Anything of yours with wheels or tracks that is parked on it gets patched
-     up for nothing - the point of the building is that it turns a battered army into a fresh
-     one without a trip through the production queue. Infantry are excluded, as in the
-     original: a depot repairs vehicles, it does not heal people. Needs power like everything
-     else, so browning out the base also stops the repairs. */
-  if (d.repairs && _rtsPowerFactor(e.side) >= 0.999) {
-    var G2 = window._rtsG;
-    for (var ri = 0; ri < G2.ents.length; ri++) {
-      var v = G2.ents[ri];
-      if (v.dead || v.type !== 'unit' || v.side !== e.side || v.hp >= v.maxHp) continue;
-      if (rtsUnitDef(v.def).kind !== 'vehicle') continue;
-      if (!_rtsAtStruct(v, e, d.repairs)) continue;
-      v.hp = Math.min(v.maxHp, v.hp + d.repairRate * dt);
-    }
-  }
-  if (!d.weapon) return;
-  var w = RTS_WEAPONS[d.weapon];
-  if (e.cool > 0) e.cool -= dt;
-  if (e.fire > 0) e.fire -= dt;
-  if (e.recoil > 0) e.recoil -= dt;
-  /* a browned-out base loses its defences - power actually matters */
-  if (_rtsPowerFactor(e.side) < 0.999) return;
-  if (!e.target || e.target.dead || _rtsRangeTo(e, e.target) > w.range) e.target = _rtsFindTarget(e, w.range, w);
-  if (!e.target) return;
-  var ta = Math.atan2(e.target.z - e.z, e.target.x - e.x), td = ta - e.rot;
-  while (td > Math.PI) td -= Math.PI * 2; while (td < -Math.PI) td += Math.PI * 2;
-  e.rot += Math.min(Math.abs(td), 2.6 * dt) * (td < 0 ? -1 : 1);
-  if (e.cool <= 0 && Math.abs(td) < 0.3) _rtsFire(e, e.target, w);
-}
-
-/* --------------------------------------------------------- projectiles --
-   A shot in flight belongs to nobody in particular: it hits the first hostile thing it runs
-   into, which need not be what it was aimed at. An infantry screen in front of a tank column
-   now actually absorbs shells meant for the tanks. Only hostiles are tested - letting shells
-   stop on friendlies as well would block every massed formation's line of fire, which is a
-   different game. Splash still catches friendlies, as Explosion_Damage always did. */
-function _rtsProjHit(p) {
-  var G = window._rtsG, foe = _rtsEnemyOf(p.side), best = null, bd = 1e9;
-  for (var i = 0; i < G.ents.length; i++) {
-    var o = G.ents[i];
-    if (o.dead || o.side !== foe) continue;
-    var dx = o.x - p.x, dz = o.z - p.z;
-    if (dx > RTS_SHELL_HIT * 6 || dx < -RTS_SHELL_HIT * 6) continue;   /* cheap reject */
-    if (dz > RTS_SHELL_HIT * 6 || dz < -RTS_SHELL_HIT * 6) continue;
-    var d = _rtsRangeTo(p, o);
-    if (d < RTS_SHELL_HIT && d < bd) { bd = d; best = o; }
-  }
-  return best;
-}
-function _rtsUpdateProj(dt) {
-  var G = window._rtsG;
-  for (var i = G.proj.length - 1; i >= 0; i--) {
-    var p = G.proj[i];
-    p.life -= dt;
-    /* missiles home; shells hold the bearing they left the barrel on */
-    if (p.kind === 'missile' && p.tgt && !p.tgt.dead) {
-      var dx = p.tgt.x - p.x, dz = p.tgt.z - p.z, d = Math.hypot(dx, dz) || 1;
-      p.vx += (dx / d * p.speed - p.vx) * Math.min(1, dt * 4);
-      p.vz += (dz / d * p.speed - p.vz) * Math.min(1, dt * 4);
-    }
-    p.x += p.vx * dt; p.z += p.vz * dt;
-    var hit = _rtsProjHit(p);
-    if (hit || p.life <= 0) {
-      if (hit) _rtsDamage(hit, p.dmg, p.from);
-      if (p.splash > 0) _rtsSplash(p.x, p.z, RTS_BLAST_CELLS * RTS_TILE, p.dmg, p.side, p.splash, p.from);
-      _rtsCombatAnim(p.dmg, p.x, p.z, p.splash > 0 ? 1.4 : 0.7, hit);
-      G.proj.splice(i, 1);
-    }
-  }
-}
-
 </script>
 <script>/* core/ai.js - the opponent: what it builds, when it expands and when it attacks.
    Part of rts.core, the simulation. */
@@ -17791,8 +18108,16 @@ function _rtsRFrame(dt) {
 
   for (i = 0; i < draw.length; i++) {
     var d = draw[i];
+    /* YOUR OWN SUBMARINES, DRAWN AWASH. The draw list only holds what _rtsEntSeen allows, and
+       that refuses a hidden ENEMY boat outright - so the only cloaked thing that reaches here
+       is one of yours, and it has to LOOK submerged or the state is invisible to the player who
+       owns it. Half-transparent is the whole treatment: still selectable, still clearly there,
+       obviously not on the surface. It goes solid the moment it fires, because _rtsCloakAI
+       clears `hidden` for the surfacing window. */
+    if (d.hidden) g.globalAlpha = 0.42;
     if (d.type === 'struct') _rtsDrawStruct(g, d, TSscale, cell);
     else _rtsDrawUnit(g, d, TSscale);
+    if (d.hidden) g.globalAlpha = 1;
   }
 
   /* --- projectiles --- */
@@ -19441,13 +19766,19 @@ function _rtsKeyDown(e) {
   if ((k === 's' || k === 'S') && (e.ctrlKey || e.metaKey)) { rtsSaveGame(); e.preventDefault(); return; }
   /* N walks the army, shift+N walks it backwards. */
   if (k === 'n' || k === 'N') { _rtsCycleObject(e.shiftKey ? -1 : 1); e.preventDefault(); }
-  /* U unloads every selected transport that is carrying anything. */
+  /* U unloads every selected transport that is carrying anything - here and now, wherever it is
+     standing. For a landing craft in open water that is nowhere, so the key has to be able to
+     say so: a boat that silently ignores the order reads as a broken key rather than as a boat
+     in the wrong place. Right-clicking the shore is the aimed version - see _rtsOrderUnloadAt. */
   if (k === 'u' || k === 'U') {
-    var Gu = window._rtsG, out = 0;
+    var Gu = window._rtsG, out = 0, held = 0;
     if (Gu && Gu.sel) Gu.sel.forEach(function (t) {
-      if (t.side === 'player' && t.type === 'unit') out += _rtsUnload(t);
+      if (t.side !== 'player' || t.type !== 'unit' || !_rtsCargoCount(t)) return;
+      out += _rtsUnload(t);
+      held += _rtsCargoCount(t);
     });
-    if (out) e.preventDefault();
+    if (held && !out) _rtsSay('Nowhere to unload — bring it closer to shore.');
+    if (out || held) e.preventDefault();
   }
   /* D deploys every selected vehicle that can - an MCV into a Command Yard. */
   if (k === 'd' || k === 'D') {
@@ -19656,7 +19987,8 @@ function _rtsBoxSelect(dg) {
   }
 }
 /* Right-click is the single context-sensitive order button, exactly as in the originals:
-   enemy -> attack, scrap -> harvest, own refinery -> unload, ground -> move. */
+   own transport -> get in, enemy -> attack, scrap -> harvest, own refinery -> unload,
+   ground -> move. */
 function _rtsRightClick(mx, my) {
   var G = window._rtsG, U = window._rtsUI;
   if (U.place) { U.place = null; _rtsGhostHide(); return; }
@@ -19666,6 +19998,37 @@ function _rtsRightClick(mx, my) {
   for (i = 0; i < G.sel.length; i++) if (G.sel[i].side === 'player' && G.sel[i].type === 'unit') mine.push(G.sel[i]);
   if (!mine.length) return;
   var tgt = hit.ent;
+  /* YOUR OWN TRANSPORT, right-clicked: everything selected that can get in, does.
+     This is the only way to load one, and it has to be tested HERE - before the enemy branch -
+     because that is not where it was. The board check sat inside `if (tgt.side === 'enemy')`,
+     guarded by `tgt.side === mu.side`, and `mine` is filtered to your own units: the two
+     conditions are mutually exclusive, so the branch was unreachable from the moment it was
+     written. Measured, seed 7, a rifle squad right-clicked onto its own APC: the order came out
+     `move`, the squad walked to 0.75 tiles away and stood there, and the APC carried 0 of its 5
+     for the rest of the match. Calling _rtsOrderBoard by hand in the same match loaded it
+     immediately - the transport worked, the one route to it did not. */
+  if (tgt && tgt.type === 'unit' && !tgt.dead && _rtsIsTransport(tgt)) {
+    var got = 0, rest = [];
+    for (i = 0; i < mine.length; i++) {
+      var bu = mine[i];
+      if (bu !== tgt && _rtsCanBoard(bu, tgt) && _rtsOrderBoard(bu, tgt)) got++;
+      else rest.push(bu);
+    }
+    if (got) {
+      /* Whatever cannot get in - the transport itself, a full hold, the wrong kind - still gets
+         the move order it would have got, rather than being silently dropped from the group. */
+      var bsp = _rtsFormation(rest.length);
+      for (i = 0; i < rest.length; i++)
+        if (rest[i] !== tgt) _rtsOrderMove(rest[i], tgt.x + bsp[i].x, tgt.z + bsp[i].z, false);
+      _rtsFlash(tgt.x, tgt.z, 'harvest');
+      _rtsSay(got === 1 ? 'Loading up.' : got + ' units loading up.');
+      if (typeof _rtsSfx === 'function') _rtsSfx('order');
+      if (typeof rtsVox === 'function') _rtsVoxOrder();
+      return;
+    }
+    /* Nobody could board - a full hold, or a group of tanks at an APC. Fall through, so the
+       click still means "go there" instead of meaning nothing. */
+  }
   if (tgt && tgt.side === 'enemy') {
     /* An engineer sent at an enemy BUILDING captures it rather than attacking it - it has no
        weapon, so an attack order would be a walk to the target followed by standing there. It
@@ -19681,11 +20044,7 @@ function _rtsRightClick(mx, my) {
         else if (md.steal && tgt.def === md.stealFrom) job = 'capture';
         else if (md.demo) job = 'demo';
       }
-      /* Infantry sent at one of your own transports get in it. This has to come before the
-         attack order or right-clicking your own APC is an order to shoot it. */
-      if (tgt.side === mu.side && _rtsCanBoard(mu, tgt) && _rtsOrderBoard(mu, tgt)) {
-        special++;
-      } else if (job) {
+      if (job) {
         mu.order = job; mu.target = tgt; mu.path = null; mu.goal = null; mu.susp = null;
         special++; if (job === 'capture') capped++;
       } else _rtsOrderAttack(mu, tgt);
@@ -19698,14 +20057,26 @@ function _rtsRightClick(mx, my) {
   }
   var tx = _rtsTX(hit.x), tz = _rtsTX(hit.z);
   var onScrap = _rtsInB(tx, tz) && G.scrap[_rtsIdx(tx, tz)] > 0;
+  var onWater = _rtsInB(tx, tz) && G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER;
   var spread = _rtsFormation(mine.length);
+  var landed = 0;
   for (i = 0; i < mine.length; i++) {
     var u = mine[i], ud = rtsUnitDef(u.def);
     if (ud.harvest && onScrap) { _rtsOrderHarvest(u, tx, tz); continue; }
+    /* A LOADED LANDING CRAFT SENT AT DRY LAND unloads there. That is the LST's only verb, and
+       right-click is where it belongs: the craft cannot go on land, so a click on land with one
+       selected can only mean "the cargo goes there". Sent at water it is an ordinary move, so
+       the boat is still steerable while loaded.
+
+       An APC is deliberately NOT included. It drives on the ground it would unload onto, so
+       right-clicking land with one is a move order and always was; unloading stays on U. */
+    if (ud.sea && ud.carries && !onWater && _rtsCargoCount(u)
+        && _rtsOrderUnloadAt(u, hit.x + spread[i].x, hit.z + spread[i].z)) { landed++; continue; }
     if (ud.harvest && tgt && tgt.side === 'player' && tgt.def === 'refinery') { u.order = 'harvest'; u.hstate = 'toRef'; u.path = null; continue; }
     _rtsOrderMove(u, hit.x + spread[i].x, hit.z + spread[i].z, !!U.attackMove);
   }
   _rtsFlash(hit.x, hit.z, onScrap ? 'harvest' : 'move');
+  if (landed) _rtsSay(landed === 1 ? 'Making for the shore.' : landed + ' transports making for the shore.');
   if (typeof _rtsSfx === 'function') _rtsSfx('order');
   if (typeof rtsVox === 'function') _rtsVoxOrder();
 }

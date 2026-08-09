@@ -145,6 +145,12 @@ function _rtsSplash(x, z, rad, dmg, side, spread, from) {
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
     if (o.dead || o === from) continue;
+    /* THE HULL IS THE POINT OF A TRANSPORT. Cargo is kept at its transport's coordinates, so
+       without this a shell landing on an APC hit the hull AND every man inside it - the
+       passengers standing at the dead centre of the blast, at zero range, taking full damage
+       through no armour of their own. That makes a 350 hp APC a worse place to be than the open
+       ground beside it, which is the opposite of what it is for. What is inside is inside. */
+    if (o.inside) continue;
     var d = Math.hypot(o.x - x, o.z - z);
     if (d > rad) continue;
     var steps = _rtsSplashSteps(d, spread, o, tx, tz);

@@ -7,14 +7,44 @@
    makes saving work for nothing: the save encoder walks G.ents and turns entity references
    into ids, so a passenger that had been lifted out of the list would round-trip as an inline
    copy and come back as something that merely looked like a unit. The cost is that every place
-   which treats a unit as being ON THE MAP has to say so, and there are only four: the tick, the
-   draw list, target acquisition and selection. */
+   which treats a unit as being ON THE MAP has to say so - and this comment used to claim there
+   were only four of them (the tick, the draw list, target acquisition and selection), which was
+   the more expensive half of the mistake, because it read as a closed list nobody need re-check.
+
+   There are SIX. The two that were missing both work by walking G.ents and comparing positions,
+   which is exactly how a passenger gets caught: it sits at its transport's coordinates.
+
+     _rtsOverrun  - a tank driving past an APC crushed the squad sealed inside it.
+     _rtsSplash   - a shell landing on a transport hit the hull and then every passenger, at
+                    zero range, through no armour of their own.
+
+   Both were found by a landing craft that kept losing its cargo in open water with nothing near
+   it, and both are much older than the craft: they have been true of the APC all along. */
 function _rtsAboard(e) { return !!(e && e.inside); }
 function _rtsCargoCount(t) { return t && t.cargo ? t.cargo.length : 0; }
+/* "Is this thing a transport?" as one predicate rather than as `carries` read at four call
+   sites. Max_Passengers > 0 is the whole test in UNIT.CPP too. */
+function _rtsIsTransport(e) {
+  return !!(e && e.type === 'unit' && ((rtsUnitDef(e.def) || {}).carries || 0) > 0);
+}
+/* What a hold will accept. `takes` is declared on the type - an APC is a taxi for men, a
+   landing craft is a ferry for an army - and infantry is the default so a type that says
+   nothing keeps the rule it had. */
+function _rtsTakes(t) { return (rtsUnitDef(t.def) || {}).takes || ['infantry']; }
 function _rtsCanBoard(inf, t) {
   if (!inf || !t || inf.dead || t.dead || inf === t) return false;
   if (inf.side !== t.side || inf.inside) return false;
-  if ((rtsUnitDef(inf.def) || {}).kind !== 'infantry') return false;
+  var pd = rtsUnitDef(inf.def) || {};
+  /* Nothing that swims or flies gets into a boat. */
+  if (pd.sea || pd.air) return false;
+  /* AND NO TRANSPORT INSIDE A TRANSPORT, which RA does allow and we deliberately do not. The
+     tick skips anything with `inside` (see core/tick.js), so an APC riding in a landing craft
+     would never run its own update - and it is that update which drags its passengers along.
+     The squads inside it would stay standing on the beach while the craft sailed away, still
+     flagged as cargo of a hull a hundred tiles offshore. Allowing it means making the
+     ride-along recurse and making a sinking cascade; refusing it is one line and no lie. */
+  if (_rtsIsTransport(inf)) return false;
+  if (_rtsTakes(t).indexOf(pd.kind) < 0) return false;
   var cap = (rtsUnitDef(t.def) || {}).carries || 0;
   return cap > 0 && _rtsCargoCount(t) < cap;
 }
@@ -27,32 +57,87 @@ function _rtsBoard(inf, t) {
   var si = G.sel.indexOf(inf); if (si >= 0) G.sel.splice(si, 1);
   return true;
 }
+/* How far from the hull a passenger may be set down, in tiles. THREE, and the number is the
+   rule rather than a tolerance: at five, a landing craft sitting in the middle of a five-tile
+   channel found the bank three cells away and put a Battle Tank on it - the tank crossed twelve
+   world units of open water on foot. The craft has to nose in. Small enough that "bring it
+   closer to shore" is a real instruction, large enough that a beach with a cliff a cell behind
+   it still works. */
+var RTS_UNLOAD_REACH = 3;
+/* Where one passenger can be set down.
+
+   THE SPOT IS CHOSEN IN THE PASSENGER'S OWN DOMAIN, not the transport's, and that is the whole
+   difference between an APC and a landing craft. An APC unloads onto the ground it is itself
+   standing on, so the old ring - eight positions at 1.1 tiles, taken on trust - was always
+   right. A landing craft is sitting IN THE WATER: every cell of that ring is sea, and a ring
+   taken on trust would put five tanks in the sea, unable to move, permanently.
+
+   So the ring position is the PREFERENCE and the passenger's own passability is the rule.
+   Null means this one has nowhere to stand, and the caller keeps it aboard rather than
+   deleting it into the water. */
+/* How far from the hull a passenger may be set down, in tiles. THREE, and the number is the
+   rule rather than a tolerance: at five, a landing craft sitting in the middle of a five-tile
+   channel found the bank three cells away and put a Battle Tank on it - the tank crossed twelve
+   world units of open water on foot. The craft has to nose in. Small enough that "bring it
+   closer to shore" is a real instruction, large enough that a beach with a cliff a cell behind
+   it still works. */
+var RTS_UNLOAD_REACH = 3;
+function _rtsUnloadSpot(t, p, n) {
+  var a = (n / 8) * Math.PI * 2 + t.rot, r = RTS_TILE * 1.1;
+  var wx = t.x + Math.cos(a) * r, wz = t.z + Math.sin(a) * r;
+  var dom = _rtsDomainOf(p), tx = _rtsTX(wx), tz = _rtsTX(wz);
+  if (_rtsInB(tx, tz) && !_rtsBlocked(tx, tz, dom)) return { x:wx, z:wz };
+  var open = _rtsNearestOpen(tx, tz, RTS_UNLOAD_REACH, dom);
+  return open ? { x:_rtsWX(open[0]), z:_rtsWX(open[1]) } : null;
+}
 /* Detach_Object + Unlimbo + Scatter: passengers step out around the transport, one per free
-   spot, and are given the guard/hunt behaviour of a unit that has just arrived. */
+   spot, and are given the guard/hunt behaviour of a unit that has just arrived. Returns how
+   many actually got out, which is what lets the caller say "there is nowhere to unload here"
+   instead of appearing to do nothing. */
 function _rtsUnload(t, force) {
   /* `force` is not a nicety. _rtsKill sets dead BEFORE it spills the cargo, so a plain
      "is it alive" guard here rejected the one call this rule exists for and every passenger
      stayed sealed in the wreck. The suite caught it; reading the code did not. */
   if (!t || (t.dead && !force) || !t.cargo || !t.cargo.length) return 0;
-  var G = window._rtsG, n = 0;
+  var n = 0, held = [];
   while (t.cargo.length) {
     var inf = t.cargo.pop();
+    if (inf.dead) { inf.inside = null; continue; }
+    var at = _rtsUnloadSpot(t, inf, n);
+    if (!at) { held.push(inf); continue; }
     inf.inside = null;
-    if (inf.dead) continue;
-    var a = (n / 8) * Math.PI * 2 + t.rot, r = RTS_TILE * 1.1;
-    inf.x = t.x + Math.cos(a) * r; inf.z = t.z + Math.sin(a) * r;
+    inf.x = at.x; inf.z = at.z;
     inf.order = null; inf.path = null; inf.target = null;
-    _rtsScatter(inf);
+    /* Scatter needs to know what to scatter AWAY from. Called with one argument it computed
+       atan2(z - undefined, ...) = NaN, failed its own bounds check and returned having done
+       nothing - so "and scatter" has never happened. The hull is the thing to step away
+       from. */
+    _rtsScatter(inf, t.x, t.z);
     n++;
   }
+  t.cargo = held;
   return n;
 }
-/* UnitClass::Death, the transport half of the branch: infantry passengers survive and scatter,
-   anything else is recorded as a kill and deleted. Ours can only carry infantry, so in practice
-   everyone walks - which is the point of the unit. */
+/* UnitClass::Death, the transport half of the branch.
+
+   An APC's infantry survive the wreck and walk away, and that one rule is what makes an APC a
+   good buy instead of a coffin. A LANDING CRAFT SUNK IN OPEN WATER IS THE OTHER HALF of the
+   same rule, and RA is explicit about it: the cargo goes down with the ship. There is no beach
+   to swim to.
+
+   Both fall out of one sentence - everyone who can be put ashore is put ashore, everyone who
+   cannot drowns - so there is no `if it is a boat` anywhere. A craft wrecked while nosed against
+   the beach lands its cargo; the same craft caught mid-channel takes all five with it, which is
+   what keeps a crossing a decision rather than a formality. */
 function _rtsSpillCargo(t) {
   if (!t || !t.cargo || !t.cargo.length) return 0;
-  return _rtsUnload(t, true);
+  var out = _rtsUnload(t, true);
+  while (t.cargo.length) {
+    var lost = t.cargo.pop();
+    lost.inside = null;
+    if (!lost.dead) _rtsKill(lost);
+  }
+  return out;
 }
 
 /* UNIT.CPP Try_To_Deploy. An MCV becomes a Command Yard, and three details from the original

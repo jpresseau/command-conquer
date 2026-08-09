@@ -70,29 +70,63 @@ S.note(UNITS.length + ' units, ' + STRUCTS.length + ' structures, ' +
 
 /* -------------------------------------------------------------- prerequisites ---- */
 (function () {
+  /* `needs` names a CAPABILITY, not a building. _rtsProvides is written about exactly that, and
+     _rtsNeedName carries the note "today every capability happens to share a name with a
+     structure, but the moment one does not...". The Transport is that moment: it needs
+     `shipyard`, which the Naval Yard and the Sub Pen both provide and neither is called. So
+     "does this name a real structure?" was the right answer to a question that was one
+     coincidence away from being the wrong one. This asks what _rtsProvides asks instead -
+     namesake first, then everything whose `provides` list claims it. */
+  function providersOf(cap) {
+    var out = STRUCTS.filter(function (d) { return (d.provides || []).indexOf(cap) >= 0; });
+    if (structKeys[cap] && out.indexOf(structKeys[cap]) < 0) out.push(structKeys[cap]);
+    return out;
+  }
   var bad = [];
   UNITS.concat(STRUCTS).forEach(function (d) {
     (d.needs || []).forEach(function (n) {
-      if (!structKeys[n]) bad.push(d.key + ' needs "' + n + '", which is not a structure');
+      if (!providersOf(n).length) bad.push(d.key + ' needs "' + n + '", which nothing provides');
     });
   });
-  S.ok('every prerequisite names a real structure', !bad.length, bad.join('; ') || 'all resolve');
+  S.ok('every prerequisite is satisfiable by some building', !bad.length,
+       bad.join('; ') || 'all resolve');
 
-  /* A prerequisite your own faction cannot build is a unit you can never have. */
+  /* A prerequisite your own faction cannot build is a unit you can never have - and for a
+     capability the question is "is there ANY provider on my side", not "is the namesake mine".
+     The Transport belongs to both armies and needs a shipyard: the Allies satisfy that with the
+     Naval Yard and the Soviets with the Sub Pen. A rule keyed to one building would call it
+     unbuildable for whichever side did not own the namesake. */
   var unbuildable = [];
   UNITS.concat(STRUCTS).forEach(function (d) {
     ['allied', 'soviet'].forEach(function (side) {
       if (d.side && d.side !== side) return;
       (d.needs || []).forEach(function (n) {
-        var pre = structKeys[n];
-        if (pre && pre.side && pre.side !== side)
-          unbuildable.push(d.key + ' is ' + (d.side || 'both') + ' but needs ' + n +
-                           ' which is ' + pre.side + '-only');
+        var mine = providersOf(n).filter(function (p) { return !p.side || p.side === side; });
+        if (!mine.length)
+          unbuildable.push(d.key + ' is ' + (d.side || 'both') + ' but nothing ' + side +
+                           ' can build provides ' + n);
       });
     });
   });
   S.ok('no faction needs a prerequisite it cannot build', !unbuildable.length,
        unbuildable.join('; ') || 'none');
+
+  /* And the SENTENCE the sidebar shows for one. _rtsNeedName cannot look a capability up as a
+     structure key, so without its `provides` fallback a greyed cameo explains itself with
+     "Needs undefined first." */
+  var caps = {};
+  UNITS.concat(STRUCTS).forEach(function (d) {
+    (d.needs || []).forEach(function (n) { if (!structKeys[n]) caps[n] = 1; });
+  });
+  var capList = Object.keys(caps);
+  var named = capList.map(function (n) {
+    return n + ' -> "' + providersOf(n).map(function (p) { return p.name; }).join(' or ') + '"';
+  });
+  var mute = capList.filter(function (n) {
+    return !providersOf(n).filter(function (p) { return p.name; }).length;
+  });
+  S.ok('every prerequisite that is a capability rather than a building can be named to the player',
+       !mute.length, mute.join(', ') || (named.join('; ') || 'there are none'));
 })();
 
 /* -------------------------------------------------------------------- weapons ---- */
@@ -392,6 +426,45 @@ S.note(UNITS.length + ' units, ' + STRUCTS.length + ' structures, ' +
   var orphan = Object.keys(MIXU).filter(function (k) { return !keys[k]; });
   S.ok('...and the table names no unit the roster has dropped', !orphan.length,
        orphan.join(', ') || 'none');
+})();
+
+/* ------------------------------------------------------ cloak, and its counter ----
+   A hull that cannot be seen is only a design if the other army owns something that finds it.
+   Both halves are table data - `cloak` on the boat, `detects` on the hunter - and a table that
+   grew one without the other would be a unit with no answer, which is invisible from inside a
+   match: you would simply lose to it and never learn why. */
+(function () {
+  var cloakers = UNITS.filter(function (u) { return u.cloak; });
+  var hunters = UNITS.filter(function (u) { return u.detects; });
+  S.ok('something in the roster cloaks', cloakers.length > 0,
+       cloakers.map(function (u) { return u.key; }).join(', ') || 'nothing');
+  S.ok('...and every one of them is a ship, which is the only domain the rule is written for',
+       cloakers.every(function (u) { return u.kind === 'ship'; }),
+       cloakers.map(function (u) { return u.key + ':' + u.kind; }).join(', '));
+  S.note('cloaked: ' + cloakers.map(function (u) { return u.key + ' (' + (u.side || 'both') + ')'; }).join(', ') +
+         ' — detectors: ' + (hunters.map(function (u) {
+           return u.key + ' (' + (u.side || 'both') + ') at ' + u.detects; }).join(', ') || 'none'));
+  /* THE COUNTER HAS TO BE BUILDABLE BY THE SIDE FACING IT. A Soviet submarine answered only by
+     a Soviet detector is not answered at all. */
+  var unanswered = [];
+  cloakers.forEach(function (c) {
+    ['allied', 'soviet'].forEach(function (side) {
+      if (c.side === side) return;                       /* your own boats are not the problem */
+      var mine = hunters.filter(function (h) { return !h.side || h.side === side; });
+      if (!mine.length) unanswered.push(c.key + ' faces ' + side + ' with nothing that detects');
+    });
+  });
+  S.ok('every cloaked hull has a detector the other army can build', !unanswered.length,
+       unanswered.join('; ') || 'answered');
+  var V = load(['src/rules/vehicles.js']);
+  S.ok('a detector sees further than the floor every object already has',
+       hunters.every(function (h) { return h.detects > V.RTS_SUB_DETECT; }),
+       hunters.map(function (h) { return h.key + ' ' + h.detects; }).join(', ') +
+       ' vs floor ' + V.RTS_SUB_DETECT);
+  /* And the surfacing window has to be long enough to matter: a decloak of zero would mean a
+     boat that fires and is submerged again before anything has taken a frame to react. */
+  S.ok('the surfacing window is long enough to be answered', V.RTS_SUB_SURFACE >= 2,
+       V.RTS_SUB_SURFACE + 's');
 })();
 
 require('../lib/report.js')(S);

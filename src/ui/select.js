@@ -122,7 +122,8 @@ function _rtsBoxSelect(dg) {
   }
 }
 /* Right-click is the single context-sensitive order button, exactly as in the originals:
-   enemy -> attack, scrap -> harvest, own refinery -> unload, ground -> move. */
+   own transport -> get in, enemy -> attack, scrap -> harvest, own refinery -> unload,
+   ground -> move. */
 function _rtsRightClick(mx, my) {
   var G = window._rtsG, U = window._rtsUI;
   if (U.place) { U.place = null; _rtsGhostHide(); return; }
@@ -132,6 +133,37 @@ function _rtsRightClick(mx, my) {
   for (i = 0; i < G.sel.length; i++) if (G.sel[i].side === 'player' && G.sel[i].type === 'unit') mine.push(G.sel[i]);
   if (!mine.length) return;
   var tgt = hit.ent;
+  /* YOUR OWN TRANSPORT, right-clicked: everything selected that can get in, does.
+     This is the only way to load one, and it has to be tested HERE - before the enemy branch -
+     because that is not where it was. The board check sat inside `if (tgt.side === 'enemy')`,
+     guarded by `tgt.side === mu.side`, and `mine` is filtered to your own units: the two
+     conditions are mutually exclusive, so the branch was unreachable from the moment it was
+     written. Measured, seed 7, a rifle squad right-clicked onto its own APC: the order came out
+     `move`, the squad walked to 0.75 tiles away and stood there, and the APC carried 0 of its 5
+     for the rest of the match. Calling _rtsOrderBoard by hand in the same match loaded it
+     immediately - the transport worked, the one route to it did not. */
+  if (tgt && tgt.type === 'unit' && !tgt.dead && _rtsIsTransport(tgt)) {
+    var got = 0, rest = [];
+    for (i = 0; i < mine.length; i++) {
+      var bu = mine[i];
+      if (bu !== tgt && _rtsCanBoard(bu, tgt) && _rtsOrderBoard(bu, tgt)) got++;
+      else rest.push(bu);
+    }
+    if (got) {
+      /* Whatever cannot get in - the transport itself, a full hold, the wrong kind - still gets
+         the move order it would have got, rather than being silently dropped from the group. */
+      var bsp = _rtsFormation(rest.length);
+      for (i = 0; i < rest.length; i++)
+        if (rest[i] !== tgt) _rtsOrderMove(rest[i], tgt.x + bsp[i].x, tgt.z + bsp[i].z, false);
+      _rtsFlash(tgt.x, tgt.z, 'harvest');
+      _rtsSay(got === 1 ? 'Loading up.' : got + ' units loading up.');
+      if (typeof _rtsSfx === 'function') _rtsSfx('order');
+      if (typeof rtsVox === 'function') _rtsVoxOrder();
+      return;
+    }
+    /* Nobody could board - a full hold, or a group of tanks at an APC. Fall through, so the
+       click still means "go there" instead of meaning nothing. */
+  }
   if (tgt && tgt.side === 'enemy') {
     /* An engineer sent at an enemy BUILDING captures it rather than attacking it - it has no
        weapon, so an attack order would be a walk to the target followed by standing there. It
@@ -147,11 +179,7 @@ function _rtsRightClick(mx, my) {
         else if (md.steal && tgt.def === md.stealFrom) job = 'capture';
         else if (md.demo) job = 'demo';
       }
-      /* Infantry sent at one of your own transports get in it. This has to come before the
-         attack order or right-clicking your own APC is an order to shoot it. */
-      if (tgt.side === mu.side && _rtsCanBoard(mu, tgt) && _rtsOrderBoard(mu, tgt)) {
-        special++;
-      } else if (job) {
+      if (job) {
         mu.order = job; mu.target = tgt; mu.path = null; mu.goal = null; mu.susp = null;
         special++; if (job === 'capture') capped++;
       } else _rtsOrderAttack(mu, tgt);
@@ -164,14 +192,26 @@ function _rtsRightClick(mx, my) {
   }
   var tx = _rtsTX(hit.x), tz = _rtsTX(hit.z);
   var onScrap = _rtsInB(tx, tz) && G.scrap[_rtsIdx(tx, tz)] > 0;
+  var onWater = _rtsInB(tx, tz) && G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER;
   var spread = _rtsFormation(mine.length);
+  var landed = 0;
   for (i = 0; i < mine.length; i++) {
     var u = mine[i], ud = rtsUnitDef(u.def);
     if (ud.harvest && onScrap) { _rtsOrderHarvest(u, tx, tz); continue; }
+    /* A LOADED LANDING CRAFT SENT AT DRY LAND unloads there. That is the LST's only verb, and
+       right-click is where it belongs: the craft cannot go on land, so a click on land with one
+       selected can only mean "the cargo goes there". Sent at water it is an ordinary move, so
+       the boat is still steerable while loaded.
+
+       An APC is deliberately NOT included. It drives on the ground it would unload onto, so
+       right-clicking land with one is a move order and always was; unloading stays on U. */
+    if (ud.sea && ud.carries && !onWater && _rtsCargoCount(u)
+        && _rtsOrderUnloadAt(u, hit.x + spread[i].x, hit.z + spread[i].z)) { landed++; continue; }
     if (ud.harvest && tgt && tgt.side === 'player' && tgt.def === 'refinery') { u.order = 'harvest'; u.hstate = 'toRef'; u.path = null; continue; }
     _rtsOrderMove(u, hit.x + spread[i].x, hit.z + spread[i].z, !!U.attackMove);
   }
   _rtsFlash(hit.x, hit.z, onScrap ? 'harvest' : 'move');
+  if (landed) _rtsSay(landed === 1 ? 'Making for the shore.' : landed + ' transports making for the shore.');
   if (typeof _rtsSfx === 'function') _rtsSfx('order');
   if (typeof rtsVox === 'function') _rtsVoxOrder();
 }

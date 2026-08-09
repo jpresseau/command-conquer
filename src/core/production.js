@@ -299,6 +299,21 @@ function _rtsOrderBoard(inf, t) {
   inf.path = _rtsPathFor(inf, t.x, t.z); inf.pi = 0;
   return true;
 }
+/* "Put them down over there." The craft is sent to the spot in ITS OWN domain - _rtsPath walks
+   a goal it cannot occupy out to the nearest cell it can, so a click on the beach becomes the
+   open water closest to that beach - and the cargo steps ashore when it arrives. One order, not
+   a move followed by a keypress, because the point on the map the player clicked is the whole
+   instruction. Returns false when there is no route, which leaves the transport as it was. */
+function _rtsOrderUnloadAt(t, x, z) {
+  if (!t || t.type !== 'unit' || !_rtsCargoCount(t)) return false;
+  t.order = 'unload'; t.target = null; t.hstate = null;
+  t.goal = { x:x, z:z };
+  t.path = _rtsPathFor(t, x, z); t.pi = 0;
+  /* No route at all - unload where it stands, which is what the player asked for as nearly as
+     it can be done, and what the U key would have done anyway. */
+  if (!t.path) { t.order = null; return false; }
+  return true;
+}
 function _rtsOrderAttack(e, tgt) {
   if (e.type !== 'unit') return;
   var d = rtsUnitDef(e.def);

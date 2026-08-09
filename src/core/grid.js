@@ -146,6 +146,7 @@ function _rtsPath(sx, sz, gx, gz, dom) {
   }
   /* If the goal tile is blocked (ordered onto a building), walk outwards to the nearest
      open tile so "attack that refinery" still produces a path that arrives beside it. */
+  var moved = false;
   if (!_rtsInB(gtx, gtz) || _rtsBlocked(gtx, gtz, dom)) {
     var best = null, bd = 1e9;
     for (var rr = 1; rr <= 6 && !best; rr++) {
@@ -157,7 +158,7 @@ function _rtsPath(sx, sz, gx, gz, dom) {
       }
     }
     if (!best) return null;
-    gtx = best[0]; gtz = best[1];
+    gtx = best[0]; gtz = best[1]; moved = true;
   }
   var start = _rtsIdx(stx, stz), goal = _rtsIdx(gtx, gtz);
   if (start === goal) return [{ x:gx, z:gz }];
@@ -192,7 +193,22 @@ function _rtsPath(sx, sz, gx, gz, dom) {
   /* string-pull: drop a waypoint whenever the line to the next-but-one is clear */
   var pts = [];
   for (var i = 0; i < tiles.length; i++) pts.push({ x:_rtsWX(tiles[i] % RTS_N), z:_rtsWX((tiles[i] / RTS_N) | 0) });
-  if (pts.length) { pts[pts.length - 1] = { x:gx, z:gz }; }
+  /* THE LAST WAYPOINT IS THE EXACT SPOT ASKED FOR - unless the spot was not one this unit can
+     occupy, in which case it is the cell the search actually ended on.
+
+     Overwriting it unconditionally is how a boat sent at the beach never arrives. The goal was
+     walked out to open water above, A* found a route there, and then the route's last point was
+     replaced with the land cell the player clicked - which the boat cannot enter, so _rtsSteer
+     never clears the path and the order never completes. Measured, seed 7, a Gunboat given an
+     ordinary move order at a shore point across a channel: 120 simulated seconds later it was
+     parked at the water's edge, still `order:'move'` with a live path. That is worse than it
+     looks, because the acquire branch in _rtsUpdateUnit only runs on `amove` or no order at
+     all - so the boat also stood there refusing to shoot anything for the rest of the match.
+
+     A LAND unit does not show it (a tank ordered onto its own Command Yard completes and clears
+     normally), which is why this survived: the case only bites where the goal is somewhere the
+     unit can never stand, and until there were ships every goal was walkable ground. */
+  if (pts.length && !moved) { pts[pts.length - 1] = { x:gx, z:gz }; }
   var out = [], px = sx, pz = sz, j = 0;
   while (j < pts.length) {
     var far = j;

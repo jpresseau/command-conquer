@@ -149,12 +149,16 @@ var RTS_STRUCTS = [
      the multi-shipyard speedup, so a yard without it was one you could build twice for no
      gain. The same omission left the Helipad out; test/unit/rules.test.js now asserts that
      every unit kind has a building claiming to produce it. */
+  /* Both yards `provide` the same capability, which is how one Transport entry can be built by
+     both armies off `needs:['shipyard']` without there being a structure called a shipyard.
+     This is the case _rtsNeedName was written for: nothing is keyed `shipyard`, so a player
+     without one is told "Needs Naval Yard or Sub Pen first". */
   { key:'navalyard',name:'Naval Yard',  w:3, h:3, cost:1000, build:14, hp:600,  power:-30, sight:12,
-    needs:['refinery'], side:'allied', shore:true, produces:'ship',
+    needs:['refinery'], side:'allied', shore:true, produces:'ship', provides:['shipyard'],
     armour:'wood',
     desc:'Builds ships. Must be placed against water. Allied.' },
   { key:'subpen',   name:'Sub Pen',     w:3, h:3, cost:1000, build:14, hp:600,  power:-30, sight:12,
-    needs:['refinery'], side:'soviet', shore:true, produces:'ship',
+    needs:['refinery'], side:'soviet', shore:true, produces:'ship', provides:['shipyard'],
     armour:'wood',
     desc:'Builds submarines. Must be placed against water. Soviet.' },
   { key:'flametower',name:'Flame Tower', w:1, h:1, cost:500,  build:11, hp:450,  power:-20,  sight:16,

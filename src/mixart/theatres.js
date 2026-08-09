@@ -142,8 +142,8 @@ var RTS_MIX_UNIT = {
   /* THE FLEET. Absent, so with the player's own files loaded a real Naval Yard launched
      procedurally-baked boxes alongside real 2tnk and e1 sprites - the one place on the map
      where the two art styles stood side by side. RA's own names: pt is the gunboat, dd the
-     destroyer, ss the submarine, msub the missile sub. */
-  gunboat:'pt', destroyer:'dd', sub:'ss', missilesub:'msub'
+     destroyer, ss the submarine, msub the missile sub, lst the landing craft. */
+  gunboat:'pt', destroyer:'dd', sub:'ss', missilesub:'msub', lst:'lst'
 };
 
 /* Infantry are not a rotation set, they are a sequence table, and the layout comes straight

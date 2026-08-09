@@ -178,8 +178,16 @@ function _rtsRFrame(dt) {
 
   for (i = 0; i < draw.length; i++) {
     var d = draw[i];
+    /* YOUR OWN SUBMARINES, DRAWN AWASH. The draw list only holds what _rtsEntSeen allows, and
+       that refuses a hidden ENEMY boat outright - so the only cloaked thing that reaches here
+       is one of yours, and it has to LOOK submerged or the state is invisible to the player who
+       owns it. Half-transparent is the whole treatment: still selectable, still clearly there,
+       obviously not on the surface. It goes solid the moment it fires, because _rtsCloakAI
+       clears `hidden` for the surfacing window. */
+    if (d.hidden) g.globalAlpha = 0.42;
     if (d.type === 'struct') _rtsDrawStruct(g, d, TSscale, cell);
     else _rtsDrawUnit(g, d, TSscale);
+    if (d.hidden) g.globalAlpha = 1;
   }
 
   /* --- projectiles --- */

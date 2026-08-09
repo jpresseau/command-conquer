@@ -1,5 +1,6 @@
-/* core/units.js - the per-unit tick, overrun, the harvester loop, and the structure and
-   projectile ticks. Part of rts.core, the simulation. */
+/* core/units.js - the per-unit tick, overrun, and the structure and projectile ticks. Part of
+   rts.core, the simulation. The harvester economy the per-unit tick delegates to lives next
+   door in core/harvest.js. */
 
 function _rtsUpdateUnit(e, dt) {
   /* Cargo rides along. Their coordinates are kept in step with the transport rather than left
@@ -33,6 +34,10 @@ function _rtsUpdateUnit(e, dt) {
      wrong reason and would have mis-classified the next unit added. The flag is checked INSIDE
      _rtsFearAI rather than here, so that fear still decays for the types that ignore it. */
   if (d.kind === 'infantry') _rtsFearAI(e, dt);
+  /* Cloaking_AI. Before anything that can return, so a submarine's `hidden` flag is refreshed
+     every tick whatever else it is doing - a stale one is a boat that is invisible while parked
+     or visible while running silent. */
+  if (d.cloak) _rtsCloakAI(e, dt, d);
   /* Overrun_Square runs BEFORE the engage logic: a tank that is holding position and firing
      returns early from this function, and hooking the crush on the end meant a stationary
      tank never ran anything over. */
@@ -133,11 +138,36 @@ function _rtsUpdateUnit(e, dt) {
      take the whole tick. */
   if (e.air && _rtsAirTick(e, dt, d)) { _rtsSteer(e, dt, d); return; }
 
+  /* ---- unloading ----
+     A transport under an unload order sails/drives to where it was sent and puts its cargo
+     down on arrival. Ahead of the engage block because an unarmed hull must never be pulled
+     into "acquire something to shoot", and ahead of boarding because a transport is not a
+     passenger. */
+  if (e.order === 'unload') {
+    if (!_rtsCargoCount(e)) { e.order = null; e.path = null; }
+    else if (e.path && e.pi < e.path.length) { _rtsSteer(e, dt, d); return; }
+    else {
+      var put = _rtsUnload(e);
+      /* Nothing got out: the hull is somewhere with no ground its cargo can stand on. Say so
+         rather than leave the player watching a boat that has apparently ignored the order -
+         which is the whole reason _rtsUnload returns a count. */
+      if (!put && e.side === 'player') _rtsSay('Nowhere to unload — bring it closer to shore.');
+      e.order = null; e.path = null;
+      return;
+    }
+  }
+
   /* ---- boarding ---- */
   if (e.order === 'board') {
     var tr = e.target;
+    /* A LANDING CRAFT IS BOARDED FROM THE BEACH, so the reach has to be more than the tile and
+       a half that suits walking into an APC. The passenger cannot enter the water at all: its
+       path ends at whatever land cell _rtsPath found nearest the hull, and how far that is from
+       the hull is a property of the coastline, not of the order. Three tiles is what covers a
+       craft nosed against a beach without letting a squad teleport aboard from inland. */
+    var breach = ((rtsUnitDef(tr && tr.def || '') || {}).sea) ? RTS_TILE * 3.0 : RTS_TILE * 1.6;
     if (!tr || tr.dead || !_rtsCanBoard(e, tr)) { e.order = null; e.target = null; e.path = null; }
-    else if (_rtsRangeTo(e, tr) <= RTS_TILE * 1.6) { _rtsBoard(e, tr); return; }
+    else if (_rtsRangeTo(e, tr) <= breach) { _rtsBoard(e, tr); return; }
     else {
       /* the transport moves, so the destination is re-aimed rather than pathed once */
       if (!e.path || Math.hypot(tr.x - e.goal.x, tr.z - e.goal.z) > RTS_TILE) {
@@ -153,6 +183,14 @@ function _rtsUpdateUnit(e, dt) {
     tgt = e.target = null;
     if (e.order === 'attack') { if (!_rtsRestoreMission(e)) e.order = null; }
   }
+  /* A FRIENDLY IN e.target IS NOT SOMETHING TO SHOOT AT. The board order puts one there - it
+     has to, the passenger is walking towards a particular transport - and everything below
+     treats e.target as the thing to engage. Measured, seed 7, one rifle squad ordered onto its
+     own APC from ten tiles out: two rounds into its own hull on the walk in, 350 -> 347.9 hp.
+     Trivial with a rifle and an APC; a Battle Tank boarding an unarmed 400 hp landing craft is
+     the same code with a cannon. Cleared LOCALLY, so the order keeps its target and only the
+     gun forgets about it. */
+  if (tgt && tgt.side === e.side) tgt = null;
   /* An overridden mission that has run its course puts the old one back. Without this only
      the attack case ever restores, and the half of the defenders sent to stand guard would
      never resume what they were doing. */
@@ -225,6 +263,11 @@ function _rtsOverrun(e) {
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
     if (o.dead || o.type !== 'unit' || o.side === e.side) continue;
+    /* A PASSENGER IS NOT UNDER YOUR TRACKS. Cargo is kept at its transport's coordinates, so
+       without this a tank driving past an APC crushes the squad sealed inside it - the men are
+       standing exactly where the APC is. Found by a landing craft losing its passenger in open
+       water with nothing near it but the opponent's armour on the far bank. */
+    if (o.inside) continue;
     if (rtsUnitDef(o.def).kind !== 'infantry') continue;
     var d = Math.hypot(o.x - e.x, o.z - e.z);
     if (d > RTS_CRUSH_DIST) continue;
@@ -239,150 +282,6 @@ function _rtsOverrun(e) {
     }
   }
 }
-function _rtsUpdateHarvester(e, dt, d) {
-  var G = window._rtsG;
-  if (!e.hstate) { if (e.order !== 'move') _rtsOrderHarvest(e, null, null); }
-  if (e.order === 'move' && e.path) { _rtsSteer(e, dt, d); if (!e.path) e.order = null; return; }
-
-  if (e.hstate === 'toField') {
-    if (!e.htile || G.scrap[_rtsIdx(e.htile.tx, e.htile.tz)] <= 0) e.htile = _rtsNearestScrap(e);
-    if (!e.htile) { e.path = null; return; }                      /* nothing left to mine */
-    var wx = _rtsWX(e.htile.tx), wz = _rtsWX(e.htile.tz);
-    var away = Math.hypot(e.x - wx, e.z - wz);
-    if (away < RTS_TILE * 1.1) { e.path = null; e.hstate = 'mining'; e.noGain = 0; return; }
-    /* GIVE UP ON ORE YOU CANNOT REACH. The two conditions that clear htile - the tile running
-       dry, and the pathfinder returning nothing - can both stay false for ever while the
-       harvester makes no progress at all: A* keeps handing back a path, the steering keeps
-       failing on the same cell, and the last-resort unstick drops it back where it started. On
-       seed 42 that was 14,762 of 14,769 harvester ticks in 'toField' and zero deliveries in 246
-       seconds, which is the whole economy. Distance closed is the honest measure of progress -
-       not "did we get a path" - so if the gap has not narrowed in eight seconds, write this tile
-       off and pick another. _rtsNearestScrap skips it while `noGo` is set. */
-    if (e.bestGap === undefined || away < e.bestGap - 0.25) { e.bestGap = away; e.noGain = 0; }
-    else {
-      e.noGain = (e.noGain || 0) + dt;
-      if (e.noGain > 8) {
-        e.noGo = e.noGo || {};
-        e.noGo[_rtsIdx(e.htile.tx, e.htile.tz)] = G.t + RTS_HARV_NOGO;
-        e.htile = null; e.path = null; e.noGain = 0; e.bestGap = undefined;
-        return;
-      }
-    }
-    if (!e.path) {
-      e.goal = { x:wx, z:wz }; e.path = _rtsPathFor(e, wx, wz); e.pi = 0;
-      /* A FAILED PATH IS AN ANSWER, not a reason to try again next frame. The eight-second
-         timer above measures a different fault - a harvester that is moving and not closing -
-         and it was the only thing that ever wrote to `noGo`. So a tile the pathfinder had just
-         proved unreachable went straight back into the running: htile cleared, _rtsNearestScrap
-         hands back the same nearest cell, and A* searches the whole map again. Sixty times a
-         second, for eight seconds, per harvester, and again ninety seconds later when the
-         blacklist lapsed.
-
-         Measured on a map whose only ore is a 5x5 patch ringed in rock - which is the
-         player-supplied-map case, since _rtsMapCheck's flood fill is land-only and starts.js
-         passes a map if even ONE ore cell is reachable. A* is not cheap when it FAILS: a search
-         that finds nothing has expanded every reachable cell before it gives up.
-
-         Unreachable now is not unreachable for ever - a building may be sold, a wall killed -
-         so this uses the same time-limited, per-harvester blacklist the timer does. */
-      if (!e.path) {
-        e.noGo = e.noGo || {};
-        e.noGo[_rtsIdx(e.htile.tx, e.htile.tz)] = G.t + RTS_HARV_NOGO;
-        e.htile = null; e.noGain = 0; e.bestGap = undefined;
-        return;
-      }
-    }
-    _rtsSteer(e, dt, d);
-  } else if (e.hstate === 'mining') {
-    var i = _rtsIdx(e.htile.tx, e.htile.tz), take = Math.min(RTS_HARVEST_RATE * dt, G.scrap[i], d.capacity - e.carry);
-    G.scrap[i] -= take; e.carry += take;
-    /* The hopper holds BAILS; what they are worth depends on what was in the ground. */
-    e.carryVal += take * (G.gems[i] ? RTS_GEM_MULT : 1);
-    if (G.scrap[i] <= 0.5) { G.scrap[i] = 0; G.gems[i] = 0; G.scrapDirty = true; e.htile = null; e.hstate = 'toField'; }
-    if (e.carry >= d.capacity - 0.5) { e.hstate = 'toRef'; e.path = null; }
-  } else if (e.hstate === 'toRef') {
-    var ref = _rtsNearestRefinery(e);
-    if (!ref) { e.path = null; return; }
-    /* Docking_Coord: a harvester drives to the refinery's DOCK, not its centre. Pathing at
-       the centre of a 3x3 building means every harvester aims at a blocked cell, stops
-       wherever the crowd stops, and they pile up on whichever side they arrived from. */
-    var dock = _rtsDockCoord(ref);
-    /* generous docking radius: a harvester that stops one tile short of the strict range
-       would otherwise hover beside the refinery without ever unloading */
-    /* Arrive at the dock, but unload from anywhere alongside the building: four harvesters
-       converging on one point shove each other back out of a strict dock radius, and the one
-       at the back of the queue never finishes its trip. The dock is the destination, not a
-       condition. */
-    if (Math.hypot(e.x - dock.x, e.z - dock.z) < RTS_TILE * 1.6 || _rtsRangeTo(e, ref) < RTS_TILE * 2.2) {
-      e.path = null; e.hstate = 'unload'; e.ref = ref; return;
-    }
-    e.rep = (e.rep || 0) - dt;
-    if (!e.path || e.rep <= 0) { e.goal = { x:dock.x, z:dock.z }; e.path = _rtsPathFor(e, dock.x, dock.z); e.pi = 0; e.rep = 1.5; if (!e.path) return; }
-    _rtsSteer(e, dt, d);
-  } else if (e.hstate === 'unload') {
-    if (!e.ref || e.ref.dead) { e.hstate = 'toRef'; return; }
-    var give = Math.min(RTS_UNLOAD_RATE * dt, e.carry);
-    var pay = e.carry > 0 ? e.carryVal * (give / e.carry) : 0;
-    e.carry -= give; e.carryVal = Math.max(0, e.carryVal - pay);
-    /* Harvested_Money, not a credit deposit: this is the one income in the game that goes
-       into the STORE, so it is the one the Storage cap can refuse. */
-    var lost = _rtsHarvested(G.sides[e.side], pay);
-    if (lost > 0 && e.side === 'player') _rtsSiloWarn(G.sides[e.side]);
-    if (e.carry <= 0.5) { e.carry = 0; e.carryVal = 0; e.hstate = 'toField'; }
-  }
-}
-/* Nearest deposit, with gems worth a detour. The score is the WHOLE trip - out to the tile
-   and back to the refinery - divided by what a load from it is worth, so a harvester will
-   pass a nearer ore patch for gems only when the longer haul actually pays. Scoring on the
-   one-way distance instead sends harvesters chasing gems across the map and drops income:
-   mining takes about four seconds, the drive takes most of a minute. */
-/* How long a harvester writes a tile off for. Time-limited and per harvester rather than global
-   and permanent: the obstruction is often a building or a unit, so the tile is very likely fine
-   again later, and a harvester approaching from another side may have no trouble with it now. */
-var RTS_HARV_NOGO = 90;
-function _rtsNearestScrap(e) {
-  var G = window._rtsG, best = null, bs = 1e9;
-  var ref = _rtsNearestRefinery(e);
-  var rx = ref ? ref.x : e.x, rz = ref ? ref.z : e.z;
-  for (var tz = 0; tz < RTS_N; tz++) for (var tx = 0; tx < RTS_N; tx++) {
-    var i = _rtsIdx(tx, tz);
-    if (G.scrap[i] <= 0) continue;
-    /* Tiles this harvester has already spent eight seconds failing to reach. Per harvester and
-       time-limited rather than global and permanent: the reason is usually a unit or a building
-       in the way, so the tile is very likely fine again later - and another harvester coming
-       from a different direction may have no trouble with it at all. */
-    if (e.noGo && e.noGo[i] > G.t) continue;
-    var wx = _rtsWX(tx), wz = _rtsWX(tz);
-    var trip = Math.hypot(wx - e.x, wz - e.z) + Math.hypot(wx - rx, wz - rz);
-    /* The detour is weighted by a CAPPED preference, not by the raw value ratio. Once a gem
-       step was correctly priced at four times GemValue, dividing the trip by the full 12.6x
-       meant a gem tile twelve times further away scored the same as ore underfoot - every
-       harvester on the map beelined for the middle, stripped it, and got rich. The Recruit
-       AI went from 15 units to 60 and the difficulty ladder collapsed into one rung.
-       Goto_Tiberium in the original just takes the CLOSEST patch; preferring gems at all is
-       this game's idea, so bounding that preference is this game's job. */
-    var s = trip / (G.gems[i] ? RTS_GEM_DETOUR : 1);
-    if (s < bs) { bs = s; best = { tx:tx, tz:tz }; }
-  }
-  return best;
-}
-/* BUILDING.H Docking_Coord: the point a harvester actually parks at. South face of the
-   refinery, one tile clear of the footprint - the same side the free harvester exits from. */
-function _rtsDockCoord(ref) {
-  var d = rtsStructDef(ref.def);
-  return { x:_rtsWX(ref.tx) + (d.w - 1) * RTS_TILE / 2, z:_rtsWX(ref.tz + d.h) };
-}
-function _rtsNearestRefinery(e) {
-  var G = window._rtsG, best = null, bd = 1e9;
-  for (var i = 0; i < G.ents.length; i++) {
-    var o = G.ents[i];
-    if (o.type !== 'struct' || o.def !== 'refinery' || o.side !== e.side || o.dead || o.building) continue;
-    var d = _rtsDist(e, o);
-    if (d < bd) { bd = d; best = o; }
-  }
-  return best;
-}
-
 /* ------------------------------------------------------- structures */
 function _rtsUpdateStruct(e, dt) {
   var d = rtsStructDef(e.def);
@@ -453,6 +352,10 @@ function _rtsProjHit(p) {
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
     if (o.dead || o.side !== foe) continue;
+    /* and not a passenger: cargo rides at its transport's coordinates, so without this a shell
+       aimed past an APC stops on a man sealed inside it. Third of the three places that walked
+       G.ents comparing positions and forgot - see the header of core/transport.js. */
+    if (o.inside) continue;
     var dx = o.x - p.x, dz = o.z - p.z;
     if (dx > RTS_SHELL_HIT * 6 || dx < -RTS_SHELL_HIT * 6) continue;   /* cheap reject */
     if (dz > RTS_SHELL_HIT * 6 || dz < -RTS_SHELL_HIT * 6) continue;
