@@ -192,12 +192,31 @@ function _rtsDrawMini() {
      the whole side is not in deficit; the same condition that stops a turret firing. */
   var dome = _rtsHas('player', 'radar');
   if (!_rtsRadarLit()) {
+    /* IN CSS PIXELS, NOT BACKING-STORE PIXELS. The radar's backing store is sized to the map -
+       188px - and the element is shown at whatever the layout gives it, which on a phone is
+       84px. A font set in backing-store units therefore renders at 84/188 of its nominal size:
+       `bold 11px` drew this label at 4.9 CSS pixels, which is not small type, it is a smudge.
+       Scaled by the ratio the two lines come out at the size they say they are, and then
+       shrunk to fit if the panel is too narrow to hold them - which at 84px it is. */
+    var cssW = mini.getBoundingClientRect().width || S;
+    var k = S / cssW;                             /* backing pixels per CSS pixel */
+    var top = dome ? 'NO POWER' : 'NO RADAR';
+    var sub = dome ? 'restore power' : 'build a Radar Dome';
+    function _fit(txt, wantCss, weight) {
+      var px = wantCss;
+      for (;;) {
+        g.font = weight + (px * k) + 'px ui-monospace,monospace';
+        if (px <= 6 || g.measureText(txt).width <= S * 0.9) return px;
+        px -= 0.5;
+      }
+    }
     g.fillStyle = '#0a0d12'; g.fillRect(0, 0, S, S);
-    g.fillStyle = 'rgba(120,150,190,0.30)';
-    g.font = 'bold 11px ui-monospace,monospace'; g.textAlign = 'center';
-    g.fillText(dome ? 'NO POWER' : 'NO RADAR', S / 2, S / 2 - 4);
-    g.font = '9px ui-monospace,monospace';
-    g.fillText(dome ? 'restore power' : 'build a Radar Dome', S / 2, S / 2 + 10);
+    g.fillStyle = 'rgba(120,150,190,0.42)';
+    g.textAlign = 'center';
+    var t1 = _fit(top, 12, 'bold ');
+    g.fillText(top, S / 2, S / 2 - 3 * k);
+    var t2 = _fit(sub, 9.5, '');
+    g.fillText(sub, S / 2, S / 2 + (t1 + 4) * k);
     g.textAlign = 'left';
     return;
   }

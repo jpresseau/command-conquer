@@ -48,7 +48,10 @@
 #rcgRts .rts-vs b.e{color:#ff8571}
 #rcgRts .rts-vs .dif{margin-left:9px;padding:1px 7px;border:1px solid #3a4a5f;border-radius:9px;
   font-style:normal;font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:#ffcf6a;opacity:.85}
-#rcgRts .rts-help{font-size:11px;opacity:.55;margin-left:auto;margin-right:38px}
+#rcgRts .rts-help{font-size:11px;opacity:.55;margin-left:auto;margin-right:10px}
+/* The army line gives way before the buttons do: it is the only thing in the bar that can be
+   shortened without losing a control, and on a 360px phone something has to. */
+#rcgRts .rts-vs{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* One hint line, chosen by what the device actually has. `hover: none` and `pointer: coarse`
    together mean a touchscreen without a mouse - a laptop with a touchscreen still reports a
    fine pointer and keeps the keyboard hints, which is right, because it has a keyboard. */
@@ -67,23 +70,55 @@
    which on iOS is the difference between a drag that pans and a drag that does nothing. */
 #rcgRts #rtsCv,#rcgRts #rtsMini{touch-action:none;-webkit-user-select:none;user-select:none;
   -webkit-touch-callout:none}
-#rcgRts .rts-x{position:absolute;right:6px;top:5px;width:24px;height:24px;border:0;border-radius:5px;
+/* The four corner controls, as a group in the bar's flow rather than four absolute boxes the
+   flex layout could not see. See src/ui/shell.js for what that cost. */
+#rcgRts .rts-btns{margin-left:auto;display:flex;align-items:center;gap:4px;flex:0 0 auto;
+  pointer-events:auto}
+#rcgRts .rts-x{width:24px;height:24px;border:0;border-radius:5px;
   background:rgba(255,255,255,.12);color:#fff;font-size:14px;cursor:pointer;pointer-events:auto}
+/* THE DESTRUCTIVE ONE, SET APART. It ends the match; mute does not. */
+#rcgRts .rts-x{margin-left:10px}
 #rcgRts .rts-x:hover{background:#c8443a}
+/* Armed by the first press - see rtsQuitClick. Red, because the next press is the one that
+   throws the battle away. */
+#rcgRts .rts-x.arm{background:#c8443a;box-shadow:0 0 0 2px rgba(200,68,58,.45)}
 /* THREE BUTTONS, THREE PLACES. `.rts-mute` is the shared LOOK, and it carried a single absolute
    `right:34px` - so Save, Load and Mute all landed in the same 24x24 box and composited into one
    unreadable smudge of floppy, folder and speaker. Whatever the player aimed at, the topmost
    element took the hit, so pressing 💾 muted the game. On a desktop Ctrl+S was still a way out;
    on a phone there is no keyboard, no autosave and no second slot, so the battle could not be
    saved at all. The offsets are per id, 28px apart, right to left in the order they are read. */
-#rcgRts .rts-mute{position:absolute;right:34px;top:5px;width:24px;height:24px;border:0;border-radius:5px;
+#rcgRts .rts-mute{width:24px;height:24px;border:0;border-radius:5px;
   background:rgba(255,255,255,.12);color:#fff;font-size:12px;cursor:pointer;pointer-events:auto;line-height:1}
-#rcgRts #rtsMute{right:34px}
-#rcgRts #rtsLoadBtn{right:62px}
-#rcgRts #rtsSaveBtn{right:90px}
 #rcgRts .rts-mute:hover{background:rgba(255,255,255,.24)}
-/* and the hint line has to clear all four buttons now, not the two it was written for */
-#rcgRts .rts-help{margin-right:122px}
+/* A FINGER, NOT A CURSOR. 24px was under every touch-target guideline going - the same floor
+   the file already states for the title screen's file pickers - and the ✕ that ends the match
+   sat 4px from the mute button. On a touchscreen they are 40px with real gaps, and the title
+   gives up its space to pay for it: a player knows which game they launched. */
+@media (hover: none) and (pointer: coarse){
+  #rcgRts .rts-top{height:46px}
+  #rcgRts .rts-mute,#rcgRts .rts-x{width:40px;height:40px;font-size:17px;border-radius:7px}
+  #rcgRts .rts-btns{gap:6px}
+  #rcgRts .rts-x{margin-left:12px}
+  #rcgRts .rts-msg{top:56px}
+}
+/* Below 520px the bar is over-subscribed even with the title gone, and a difficulty pill
+   clipped in half by the ellipsis reads as a rendering fault rather than as information. The
+   type gives before the pill does; the pill is dropped only when even that is not enough. */
+@media (max-width:520px){
+  #rcgRts .rts-title{display:none}
+  #rcgRts .rts-vs{font-size:11px}
+  #rcgRts .rts-vs .dif{margin-left:6px;padding:1px 5px;font-size:9.5px;letter-spacing:.5px}
+}
+@media (max-width:380px){ #rcgRts .rts-vs .dif{display:none} }
+/* A SHORT BAR IS AS TIGHT AS A NARROW ONE. Held sideways the top bar is 26px tall and spans
+   only the battlefield, and the title wrapped to two lines inside it - "RED / ALERT" stacked
+   over a 26px row. It goes for the same reason it goes on a narrow screen, and the controls
+   come down to 34px: a landscape phone has 375px of height to spend and a 46px bar is an
+   eighth of it. */
+@media (max-height:480px){
+  #rcgRts .rts-title{display:none}
+}
 
 /* --- transient message banner --- */
 /* WRAP. `white-space:nowrap` inside a stage that clips means a long line is cut off at BOTH
@@ -242,6 +277,13 @@
 
    Everything inside the tile is absolutely positioned against this box, so the percentages on
    .ico and the bottom offsets on .nm/.ct move with it. */
+/* A cameo is press-and-hold now, so iOS must not answer the hold with its own Save Image /
+   Copy sheet over the top of it - the callout is raised by the <img> inside the button, not by
+   the button, so it has to be switched off on both. `touch-action:manipulation` keeps the tap
+   but drops the 300ms double-tap-zoom wait, which on a build grid is just latency. */
+#rcgRts .rts-tile,#rcgRts .rts-tile .ico{-webkit-touch-callout:none;-webkit-user-select:none;
+  user-select:none}
+#rcgRts .rts-tile{touch-action:manipulation}
 #rcgRts .rts-tile{position:relative;display:block;height:0;padding:78% 0 0;overflow:hidden;
   cursor:pointer;font:inherit;
   border:1px solid #33445c;border-radius:4px;background:#0f151d;color:#dfe8f2}
@@ -311,6 +353,17 @@
      letterbox the canvas inside a wider box, which would silently break radar clicks: they
      map through getBoundingClientRect, which would then describe the box and not the map. */
   #rcgRts #rtsMini{max-width:26vh;margin:0 auto}
+}
+/* AFTER the short-screen block above, deliberately - see its own note: a media query carries
+   no extra specificity, so `height:26px` simply won over a rule written earlier. That is how a
+   40px control ended up overflowing a 26px bar on every landscape phone.
+
+   Still 40px, not 34. A control held sideways is no easier to hit than one held upright, and
+   this file already records 35px as "under every touch-target guideline going". The bar pays
+   for the targets out of its own height. */
+@media (hover: none) and (pointer: coarse) and (max-height:480px){
+  #rcgRts .rts-top{height:42px}
+  #rcgRts .rts-msg{top:52px}
 }
 /* THE TWO-COLUMN BAR INTERIOR, shared by the two shapes below. Both are the same idea - a bar
    that is WIDE and SHORT rather than tall and narrow - so they want the same insides: radar and
