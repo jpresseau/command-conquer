@@ -149,7 +149,8 @@ var RTS_AI = {
      opponent quietly stopped fielding anti-armour infantry altogether. Weighted choice keeps a
      combined-arms army, which is the point of having a roster at all. */
   mix:{
-    vehicle:[ { key:'heavy', at:2600, w:3 }, { key:'arty',  at:2000, w:2 }, { key:'tank', at:1600, w:4 },
+    vehicle:[ { key:'heavy', at:2600, w:3 }, { key:'arty',  at:2000, w:2 }, { key:'v2rl', at:2000, w:2 },
+              { key:'tank', at:1600, w:4 },
               { key:'light', at:1100, w:3 }, { key:'buggy', at:900,  w:2 } ],
     /* No engineer in the mix. Capturing is a decision about a specific building at a specific
        moment, and an AI that buys engineers without a plan for them just donates 600 credits

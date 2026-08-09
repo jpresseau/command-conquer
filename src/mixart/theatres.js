@@ -135,7 +135,7 @@ var RTS_MIX_BLD = {
   iron:'iron', pdox:'pdox', mslo:'mslo'
 };
 var RTS_MIX_UNIT = {
-  buggy:'jeep', light:'1tnk', tank:'2tnk', heavy:'4tnk', arty:'arty',
+  buggy:'jeep', light:'1tnk', tank:'2tnk', heavy:'4tnk', arty:'arty', v2rl:'v2rl',
   harvester:'harv', apc:'apc', mcv:'mcv', heli:'heli', mig:'mig', yak:'yak',
   rifle:'e1', rocket:'e3', grenadier:'e2', flame:'e4', engineer:'e6',
   medic:'medi', thief:'thf', tanya:'e7', dog:'dog'
