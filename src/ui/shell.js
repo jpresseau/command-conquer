@@ -39,6 +39,12 @@ function rtsOpen(seed) {
        padding would work until somebody added a fifth button; a flex group reserves exactly
        what it needs. */
     +     '<span class="rts-btns">'
+    /* THE ODD ONE OUT, AND LEFTMOST FOR THAT REASON. Save, Load, Mute and ✕ are all about the
+       BATTLE; this one is about the PAGE - it throws the running build away and fetches
+       whatever is deployed. Putting it at the far end of the group keeps that difference
+       visible, and keeps it as far as the group allows from the ✕, which is the control it
+       would be worst to confuse it with: both end the match, and only one of them is meant to. */
+    +       '<button type="button" class="rts-mute" id="rtsReloadBtn" title="Reload for the latest build" onclick="rtsReloadClick()">⟳</button>'
     +       '<button type="button" class="rts-mute" id="rtsSaveBtn" title="Save this battle (Ctrl+S)" onclick="rtsSaveGame()">💾</button>'
     +       '<button type="button" class="rts-mute" id="rtsLoadBtn" title="Resume the saved battle" onclick="rtsLoadGame()">📂</button>'
     +       '<button type="button" class="rts-mute" id="rtsMute" title="Sound on" onclick="rtsMuteToggle()">🔊</button>'
@@ -148,6 +154,67 @@ function rtsQuitClick() {
     if (bb) bb.classList.remove('arm');
     if (window._rtsUI) window._rtsUI.quitArm = 0;
   }, RTS_QUIT_WINDOW * 1000);
+}
+/* ⟳ RELOAD, AND IT ASKS FIRST FOR THE SAME REASON THE ✕ DOES. Reloading throws the running
+   battle away exactly as quitting does - there is no autosave - so it gets the same
+   press-once-to-arm, press-again-to-commit the game already teaches for quitting and for
+   holding production. Amber rather than red: it is losing the battle, not losing the battle
+   AND leaving.
+
+   WHAT IT ACTUALLY DOES, and it is deliberately more than location.reload(). sw.js is
+   network-only and never calls respondWith(), so a plain reload is already enough to pull a new
+   deploy - but two things can still leave a player looking at an old build, and neither is
+   visible from inside the page:
+
+     a previously-deployed service worker that DID cache, whose Cache Storage entries outlive
+     the worker that wrote them - so every cache is dropped, not just ours;
+     a changed sw.js, which the browser only re-checks on navigation - update() asks now.
+
+   Both are best-effort and neither may block the reload: a hung promise would leave the button
+   looking broken, which is the failure this button exists to avoid. Hence the backstop timer
+   and the `fired` latch, so whichever finishes first reloads and the other does nothing. */
+var RTS_RELOAD_WINDOW = 5;
+var RTS_RELOAD_GIVEUP = 1500;      /* ms to wait on the caches before reloading anyway */
+function rtsReloadClick() {
+  var U = window._rtsUI, G = window._rtsG;
+  if (!U) { _rtsReloadNow(); return; }
+  var now = G ? G.t : 0;
+  if (U.reloadArm && now - U.reloadArm < RTS_RELOAD_WINDOW) { U.reloadArm = 0; _rtsReloadNow(); return; }
+  U.reloadArm = now;
+  var b = document.getElementById('rtsReloadBtn');
+  if (b) b.classList.add('arm');
+  if (typeof _rtsSfx === 'function') _rtsSfx('deny');
+  _rtsSay('Reload for the latest build? Press ⟳ again to confirm — this battle is not saved.',
+          RTS_RELOAD_WINDOW);
+  setTimeout(function () {
+    var bb = document.getElementById('rtsReloadBtn');
+    if (bb) bb.classList.remove('arm');
+    if (window._rtsUI) window._rtsUI.reloadArm = 0;
+  }, RTS_RELOAD_WINDOW * 1000);
+}
+function _rtsReloadNow() {
+  var fired = false;
+  function go() {
+    if (fired) return;
+    fired = true;
+    try { location.reload(); } catch (e) { try { location.href = location.href; } catch (e2) {} }
+  }
+  var jobs = [];
+  try {
+    if (window.caches && caches.keys) jobs.push(caches.keys().then(function (ks) {
+      return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+    }));
+  } catch (e) {}
+  try {
+    if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations)
+      jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+        return Promise.all(rs.map(function (r) { return r.update(); }));
+      }));
+  } catch (e) {}
+  if (!jobs.length) { go(); return; }
+  setTimeout(go, RTS_RELOAD_GIVEUP);
+  Promise.all(jobs.map(function (p) { return Promise.resolve(p).catch(function () {}); }))
+    .then(go, go);
 }
 function rtsClose() {
   var d = document.getElementById('rcgRts');

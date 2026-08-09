@@ -39,7 +39,12 @@ var SHAPES = [
   { n: 'desktop', w: 1280, h: 900, touch: false }
 ];
 
-var CONTROLS = ['#rtsSaveBtn', '#rtsLoadBtn', '#rtsMute', '#rcgRts .rts-x'];
+/* Five now. The reload button is listed FIRST because it is leftmost in the group, and adding
+   it here is the whole of what makes it covered: every measurement below - painted over,
+   buried, overflowing the bar, under 40px for a finger, pushing the page sideways - runs over
+   this list at all eight shapes. A fifth control on a 360px bar is exactly the case the flex
+   group was built for, and this is where that claim gets tested rather than asserted. */
+var CONTROLS = ['#rtsReloadBtn', '#rtsSaveBtn', '#rtsLoadBtn', '#rtsMute', '#rcgRts .rts-x'];
 
 (async function () {
   var srv = await serve();
@@ -102,7 +107,7 @@ var CONTROLS = ['#rtsSaveBtn', '#rtsLoadBtn', '#rtsMute', '#rcgRts .rts-x'];
     }, [CONTROLS]);
 
     var tag = sh.n + ' ' + sh.w + 'x' + sh.h + ': ';
-    S.eq(tag + 'all four corner controls are on screen', r.n, CONTROLS.length);
+    S.eq(tag + 'every corner control is on screen', r.n, CONTROLS.length);
     S.ok(tag + 'nothing in the bar is painted over a control', !r.clash.length,
          r.clash.join('; ') || 'clear');
     S.ok(tag + 'every control is the topmost thing at its own centre', !r.buried.length,
@@ -278,6 +283,96 @@ var CONTROLS = ['#rtsSaveBtn', '#rtsLoadBtn', '#rtsMute', '#rcgRts .rts-x'];
   S.ok('...and the button shows it is armed', quit.armed, '');
   S.eq('a second press does end it', quit.afterTwo, false);
   await x.ctx.close();
+
+  /* ------------------------------------------- ⟳ asks first, and then really reloads ------
+     A reload throws the battle away exactly as quitting does, so it arms the same way. Clicked
+     rather than called, for the reason stated on the quit block above.
+
+     The second half is the interesting one. It is easy to write a spec that proves the button
+     is wired to a function and proves nothing about whether that function does anything, so
+     the caches and the service-worker registry are replaced with fakes that RECORD INTO
+     sessionStorage - which survives the navigation the button then performs. Playwright waits
+     for that navigation, and the markers are read back out of the reloaded page. If the button
+     stopped clearing caches, or stopped reloading at all, this fails. */
+  var rl = await open(SHAPES[2]);
+  await rl.page.evaluate(function () {
+    sessionStorage.clear();
+    /* Two stale caches to find, and a registration to update. defineProperty rather than plain
+       assignment: `caches` is a READ-ONLY attribute on window, so `window.caches = {...}` fails
+       silently in a secure context and the real (empty) store is used - which is exactly how
+       the first run of this block reported zero caches dropped and looked like a product bug. */
+    try {
+      Object.defineProperty(window, 'caches', {
+        configurable: true,
+        value: {
+          keys: function () { return Promise.resolve(['stale-v1', 'stale-v2']); },
+          delete: function (k) {
+            sessionStorage.setItem('killed:' + k, '1');
+            return Promise.resolve(true);
+          }
+        }
+      });
+    } catch (e) { sessionStorage.setItem('nocaches', String(e && e.message)); }
+    try {
+      Object.defineProperty(navigator, 'serviceWorker', {
+        configurable: true,
+        value: { getRegistrations: function () {
+          return Promise.resolve([{ update: function () {
+            sessionStorage.setItem('updated', '1');
+            return Promise.resolve();
+          } }]);
+        } }
+      });
+    } catch (e) { sessionStorage.setItem('nosw', String(e && e.message)); }
+  });
+  await rl.page.click('#rtsReloadBtn');
+  /* GUARDED, because the failure this asserts against DESTROYS THE PAGE. A build that reloaded
+     on the first press navigated here, and every step afterwards - the evaluate, the second
+     click, the wait - failed against a context that no longer existed, so the mutation surfaced
+     as a TimeoutError and a stack trace instead of as the one assertion that describes it.
+     A thrown spec is still a red spec, but it does not say what went wrong. */
+  var rel1;
+  try {
+    rel1 = await rl.page.evaluate(function () {
+      return { still: !!document.getElementById('rcgRts'),
+               msg: window._rtsG ? window._rtsG.msg : '',
+               armed: /arm/.test((document.getElementById('rtsReloadBtn') || {}).className || ''),
+               /* and NOT the quit button's red - two questions, two colours */
+               red: /rts-x/.test((document.getElementById('rtsReloadBtn') || {}).className || '') };
+    });
+  } catch (e) { rel1 = { still: false, msg: 'the page navigated: ' + (e && e.message), armed: false, red: false }; }
+  S.ok('one press on ⟳ does not reload', rel1.still, rel1.still ? '' : rel1.msg);
+  S.ok('...it asks, in words', /press ⟳ again/i.test(rel1.msg || ''), JSON.stringify(rel1.msg));
+  S.ok('...and the button shows it is armed', rel1.armed, '');
+  S.ok('...armed as itself rather than as the quit button', !rel1.red, '');
+
+  var didNav = false;
+  if (rel1.still) {
+    var navigated = rl.page.waitForNavigation({ timeout: 8000 }).then(function () { return true; },
+                                                                      function () { return false; });
+    await rl.page.click('#rtsReloadBtn').catch(function () {});
+    didNav = await navigated;
+    S.ok('a second press really does reload the page', didNav, String(didNav));
+  }
+  if (didNav) {
+    await rl.page.waitForFunction(function () { return typeof window.rtsOpen === 'function'; });
+    var marks = await rl.page.evaluate(function () {
+      return { killed: Object.keys(sessionStorage).filter(function (k) { return /^killed:/.test(k); }).sort(),
+               updated: sessionStorage.getItem('updated'),
+               nosw: sessionStorage.getItem('nosw'), nocaches: sessionStorage.getItem('nocaches') };
+    });
+    /* If a stub could not be installed, say so rather than reporting on the real browser's
+       empty cache store and calling it a pass. */
+    S.ok('the fakes were installed, so this is measuring the button and not the browser',
+         !marks.nocaches && !marks.nosw, (marks.nocaches || '') + ' ' + (marks.nosw || ''));
+    /* THE POINT OF THE BUTTON. sw.js is network-only today, but a service worker deployed
+       BEFORE it was may have left Cache Storage behind, and those entries outlive the worker
+       that wrote them - so EVERY cache is dropped, not just one this build recognises. */
+    S.eq('...having dropped every cache it found, not just its own',
+         marks.killed.join(','), 'killed:stale-v1,killed:stale-v2');
+    S.eq('...and asked the service worker to re-check itself', marks.updated, '1');
+  }
+  await rl.ctx.close();
 
   await browser.close();
   srv.srv.close();
