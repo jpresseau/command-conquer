@@ -32,10 +32,18 @@ function rtsOpen(seed) {
     /* Two hint lines, because the verbs genuinely differ - a phone has no right button and no
        wheel, and a desktop has no long-press. CSS shows exactly one; see .rts-help. */
     +     '<span class="rts-help desk">drag select · right-click order · S hold · 1-9 teams (ctrl set, alt jump) · repair/sell · wheel zoom · Esc</span>'
-    +     '<button type="button" class="rts-mute" id="rtsSaveBtn" title="Save this battle (Ctrl+S)" onclick="rtsSaveGame()">💾</button>'
-    +     '<button type="button" class="rts-mute" id="rtsLoadBtn" title="Resume the saved battle" onclick="rtsLoadGame()">📂</button>'
-    +     '<button type="button" class="rts-mute" id="rtsMute" title="Sound on" onclick="rtsMuteToggle()">🔊</button>'
-    +     '<button type="button" class="rts-x" onclick="rtsClose()">✕</button></div>'
+    /* ONE GROUP, IN THE FLOW. These were four absolutely positioned buttons at right:6/34/62/90,
+       so the bar's flex layout did not know they existed and the army/difficulty text ran
+       underneath them - measured on every phone from 360 to 412px wide, with `.rts-vs` sitting
+       24px under Save, 24px under Load and 4px under Mute at 360. Reserving the space by
+       padding would work until somebody added a fifth button; a flex group reserves exactly
+       what it needs. */
+    +     '<span class="rts-btns">'
+    +       '<button type="button" class="rts-mute" id="rtsSaveBtn" title="Save this battle (Ctrl+S)" onclick="rtsSaveGame()">💾</button>'
+    +       '<button type="button" class="rts-mute" id="rtsLoadBtn" title="Resume the saved battle" onclick="rtsLoadGame()">📂</button>'
+    +       '<button type="button" class="rts-mute" id="rtsMute" title="Sound on" onclick="rtsMuteToggle()">🔊</button>'
+    +       '<button type="button" class="rts-x" id="rtsQuitBtn" title="Leave the battle" onclick="rtsQuitClick()">✕</button>'
+    +     '</span></div>'
     /* The touch hint is a SIBLING of the top bar, not a child of it. In that bar it had to share
        one 34px line with the title, the army names, the difficulty pill and four buttons; on a
        390px phone there is no room, so it wrapped to three lines, overflowed the bar and ran
@@ -115,6 +123,32 @@ function rtsOpen(seed) {
   _rtsLoop(true);        /* paint the first frame; see the note on _rtsLoop */
 }
 
+/* THE ✕ ASKS FIRST. It ends the match with no autosave and no second slot, and it sat four
+   pixels from the mute button a player presses casually - so the most destructive control on
+   the screen was the one most easily hit by accident, and it acted immediately.
+
+   Two presses rather than a browser confirm(): the game already teaches press-once-to-arm,
+   press-again-to-commit for holding and cancelling production, and a modal dialog on a phone
+   is a worse interruption than a line of text. rtsClose itself is left alone - it is called
+   by the game-over path and by the specs, and neither should be made to answer a question. */
+var RTS_QUIT_WINDOW = 5;
+function rtsQuitClick() {
+  var U = window._rtsUI, G = window._rtsG;
+  if (!U) { rtsClose(); return; }
+  var now = G ? G.t : 0;
+  if (U.quitArm && now - U.quitArm < RTS_QUIT_WINDOW) { U.quitArm = 0; rtsClose(); return; }
+  U.quitArm = now;
+  var b = document.getElementById('rtsQuitBtn');
+  if (b) b.classList.add('arm');
+  if (typeof _rtsSfx === 'function') _rtsSfx('deny');
+  _rtsSay('Leave the battle? Press ✕ again to confirm — this battle is not saved.',
+          RTS_QUIT_WINDOW);
+  setTimeout(function () {
+    var bb = document.getElementById('rtsQuitBtn');
+    if (bb) bb.classList.remove('arm');
+    if (window._rtsUI) window._rtsUI.quitArm = 0;
+  }, RTS_QUIT_WINDOW * 1000);
+}
 function rtsClose() {
   var d = document.getElementById('rcgRts');
   if (!d) return;

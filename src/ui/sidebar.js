@@ -9,6 +9,9 @@
 
    Derived from one list now, and _rtsTabsCheck asserts nothing in the roster falls outside it,
    because "a unit exists that you cannot reach" is invisible from inside the game. */
+/* The battlefield's own long-press, so the gesture means the same thing wherever it is used
+   (see the touchstart handler in src/ui/input.js). */
+var RTS_TOUCH_HOLD = 350;
 var RTS_TABS = [['struct', 'Build'], ['infantry', 'Infantry'],
                 ['vehicle', 'Vehicles'], ['air', 'Aircraft'], ['ship', 'Ships']];
 
@@ -193,6 +196,22 @@ function _rtsModeClick(mx, my) {
   }
   return true;
 }
+/* A TOUCHSCREEN WITH NO MOUSE, which is not the same question as "is this small". The same
+   pair the stylesheet uses for the hint line: a laptop with a touchscreen reports a fine
+   pointer and keeps the desktop wording, which is right, because it also has a mouse. */
+function _rtsTouchUI() {
+  try { return window.matchMedia('(hover: none) and (pointer: coarse)').matches; }
+  catch (e) { return false; }
+}
+/* How to hold and cancel a job, in words the device the player is holding can obey. The
+   sidebar used to say "Right-click while building: hold, then right-click again to cancel"
+   on every device, and a phone has no second button - so the one instruction on screen named
+   an input that does not exist there. */
+function _rtsCancelHint() {
+  return _rtsTouchUI()
+    ? 'Press and hold to pause it, hold again to cancel and refund.'
+    : 'Right-click while building: hold, then right-click again to cancel.';
+}
 function _rtsCatItems(cat) {
   var out = [], i, side = rtsHouseSide('player');
   if (cat === 'struct') {
@@ -230,11 +249,41 @@ function _rtsBuildList() {
       /* Kept on the element so the per-frame pass can append "why it is locked" to it without
          having to rebuild the sentence, and without the reason accumulating on every frame. */
       b.dataset.base = def.name + ' — ' + def.cost + ' credits\n' + def.desc
-        + '\nRight-click while building: hold, then right-click again to cancel.';
+        + '\n' + _rtsCancelHint();
       b.title = b.dataset.base;
       b.onclick = function () { _rtsItemClick(def.key); };
       /* SelectClass::Action reads RIGHTPRESS as "cancel": hold first, abandon second. */
       b.oncontextmenu = function (ev) { ev.preventDefault(); _rtsItemCancel(def.key); return false; };
+      /* THE SAME THING FOR A FINGER. Hold/abandon existed only as a context menu, and no touch
+         handler in the app was bound to the sidebar at all - every one of them is on the
+         battlefield canvas or the radar. So on a phone a job could be started and never
+         paused, never cancelled and never refunded, while _rtsQueue charged for it
+         progressively: one mis-tap on a 2,000-credit cameo drained the treasury with no way
+         to stop it. Every other armed cursor - repair, sell, placement, superweapon - already
+         had a touch path; this was the one that did not.
+
+         350ms is the battlefield's own long-press (see src/ui/input.js), so the gesture means
+         the same thing wherever the player uses it. */
+      var _hold = 0, _fired = false;
+      function _holdOff() { if (_hold) { clearTimeout(_hold); _hold = 0; } }
+      b.addEventListener('touchstart', function () {
+        _fired = false;
+        _holdOff();
+        _hold = setTimeout(function () {
+          _hold = 0; _fired = true;
+          _rtsItemCancel(def.key);
+          if (typeof _rtsSfx === 'function') _rtsSfx('click');
+        }, RTS_TOUCH_HOLD);
+      }, { passive: true });
+      /* A finger that slides is scrolling the build list, not holding a cameo. */
+      b.addEventListener('touchmove', _holdOff, { passive: true });
+      b.addEventListener('touchcancel', function () { _holdOff(); _fired = false; }, { passive: true });
+      b.addEventListener('touchend', function (ev) {
+        _holdOff();
+        /* Swallow the synthesized click, or the hold pauses the job and the click that follows
+           it immediately resumes the job - which looks exactly like nothing happening. */
+        if (_fired) { ev.preventDefault(); _fired = false; }
+      }, { passive: false });
       list.appendChild(b);
       U.btns[def.key] = b;
     })(items[i]);
@@ -263,7 +312,8 @@ function _rtsItemClick(key) {
       _rtsSay(cat === 'infantry' ? 'Training.' : 'Building.');
       if (typeof _rtsSfx === 'function') _rtsSfx('build');
     } else {
-      _rtsSay('Already building. Right-click to hold or cancel.');
+      _rtsSay('Already building. ' + (_rtsTouchUI() ? 'Hold to pause or cancel.'
+                                                      : 'Right-click to hold or cancel.'));
     }
     return;
   }
