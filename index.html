@@ -873,7 +873,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">b968d12 · 2026-08-09</div>
+  <div id="rtsBuild" title="build">82b7b15 · 2026-08-10</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -3696,6 +3696,41 @@ var RTS_POWER_DAMAGE = 6;       /* hit points per tick, on buildings above Condi
    because nothing here builds ships in parallel yet. */
 var RTS_BUILD_SPEEDUP = [100, 75, 60, 50];
 
+/* How far a building may sit from the densest point of a side's holdings and still be part of
+   THAT base. Recalc_Center needed no such number - a house's buildings were all in one place,
+   because nothing could move one. An engineer can, so a side can hold two clusters, and a mean
+   taken over both lands between them and describes neither.
+
+   88 world units is 22 tiles, comfortably wider than any base a generated map produces (the
+   widest measured spread from the seed building is 14 tiles) and far narrower than the distance
+   between the two starts, which is what has to be told apart. See _rtsBaseCentre. */
+var RTS_BASE_REACH = 22 * RTS_TILE;
+/* ...and how far past the radius still counts as being AT the base, for "is my base under
+   attack". Deliberately smaller than the c.r*4 _rtsWhichZone uses to decide whether a point is
+   worth reasoning about at all: being somewhere the opponent has an opinion about is not the
+   same as being somewhere it should recall its army to. */
+var RTS_BASE_SPAN = 2.5;
+
+/* ------------------------------------------------- what a capture is worth (mine, not ported) --
+   The original's AI does not use engineers, so there is no table to port here. These are the
+   terms of the decision _rtsAIWorthCapturing makes; see core/capturead.js for what each means. */
+var RTS_CAP_YARD_WORTH = 2500;   /* the Construction Yard's `cost` is 0 - see _rtsCaptureWorth */
+var RTS_CAP_FACTORY_MULT = 1.5;  /* taking a producer takes the line, not just the shell */
+/* Below this, the building is worth less than the engineer plus the walk. An engineer is 500,
+   so a Power Plant at 300 is a straight loss and a Barracks at 400 is not worth a unit and two
+   minutes; a Refinery at 2000 or a War Factory at 1600 plainly is. */
+var RTS_CAP_MIN_WORTH = 800;
+/* Guns covering the target, past which the engineer does not arrive. Two is already generous
+   for a unit with 45 hp and no armour: a single Pillbox kills it in three shots over about a
+   second, against the two-and-a-bit seconds it takes to walk the last fifteen units. */
+var RTS_CAP_MAX_GUNS = 2;
+var RTS_CAP_RECHECK = 20;        /* seconds between re-answering; the walk test is not free */
+/* How much distance discounts the prize. At this many world units away a target is worth half
+   what it is worth next door - 40 tiles, a little under a third of the map, which is about as
+   far as an engineer can walk before the match is decided around it. Not a hard cutoff: a
+   Refinery across the map still beats a Barracks next door, which is the right answer. */
+var RTS_CAP_WALK_SCALE = 40 * RTS_TILE;
+
 var RTS_AI = {
   baseSizeAdd:3,
   powerSurplus:50,          /* keep this much spare power in hand */
@@ -3764,6 +3799,11 @@ var RTS_AI = {
      fleetPerYard because that number is about how big a navy is worth having and this one is
      about how many boats a plan needs. */
   craftCap:1,
+  /* Engineers, total, for the same reason and with a sharper edge: an engineer is spent on
+     arrival, so unlike a hull it is never reusable and a second one is only ever a second
+     500-credit unit standing in the open. One Snatch team wants one engineer; anything past
+     that is the waste the gate exists to prevent. */
+  engCap:1,
   /* The order _rtsAIWants walks. Economy, then production, then tech, then defence - tech
      before defence because a Tech Center that arrives after the match is decided is worth
      nothing, and the defensive ratios are big enough to soak every spare credit otherwise.
@@ -3820,13 +3860,25 @@ var RTS_AI = {
     vehicle:[ { key:'heavy', at:2600, w:3 }, { key:'arty',  at:2000, w:2 }, { key:'v2rl', at:2000, w:2 },
               { key:'tank', at:1600, w:4 },
               { key:'light', at:1100, w:3 }, { key:'buggy', at:900,  w:2 } ],
-    /* No engineer in the mix. Capturing is a decision about a specific building at a specific
-       moment, and an AI that buys engineers without a plan for them just donates 600 credits
-       to whatever shoots them first. Buildable by the player; not spammed by the opponent. */
-    /* No engineer and no thief in the mix. Both are decisions about a specific building at a
-       specific moment, and an AI that buys them without a plan just donates the credits to
-       whatever shoots them first. The Commando is out for the same reason plus her `only` cap.
-       The dog IS in: it needs no plan, it just runs at infantry. */
+    /* No thief in the mix, and no Commando - both are decisions about a specific building at
+       a specific moment, and an AI that buys them without a plan just donates the credits to
+       whatever shoots them first (the Commando also has her `only` cap). The dog IS in: it
+       needs no plan, it just runs at infantry.
+
+       THE ENGINEER IS IN NOW, AND CONDITIONALLY, exactly as the landing craft is. This block
+       used to say there was none, in two separate paragraphs saying the same thing, and the
+       reason given was the true one: there was nothing that made the decision. There is now.
+       _rtsAIProduce refuses this key unless _rtsAIWorthCapturing() has found a player building
+       actually worth taking and actually reachable on foot, and caps it at `engCap`.
+
+       `at` IS 2200 AND THAT NUMBER IS LOAD-BEARING, unlike every other `at` on this line.
+       _rtsAIUnits only runs at all when the bank is above _rtsAISpare, whose floor is
+       infantryReserve = 2000 - so 1200/900/500/400/250 below are compared against a balance
+       guaranteed to be larger and can never skip anything. They are dead thresholds that read
+       as live ones. This one is above the floor deliberately: an engineer is 500 credits that
+       buys no army, and an opponent that cannot also afford to keep fighting should not be
+       making that trade. Weight 2 rather than 4: unlike the craft, whose team is waiting on it
+       and can do nothing else, a capture is opportunistic and the tanks are never wasted. */
     /* SHIPS, once there is a yard to build them at - _rtsCanQueue gates on `needs`, so these
        are inert until one exists. Both armies are listed and _rtsCanQueue drops whichever
        belong to the other, exactly as the defensive block and the aircraft block already do.
@@ -3849,7 +3901,7 @@ var RTS_AI = {
            { key:'lst', at:1400, w:4 } ],
     infantry:[ { key:'flame', at:1200, w:2 }, { key:'grenadier', at:900, w:2 },
                { key:'rocket', at:500, w:3 }, { key:'dog', at:400, w:2 },
-               { key:'rifle', at:250, w:2 } ],
+               { key:'rifle', at:250, w:2 }, { key:'engineer', at:2200, w:2 } ],
     /* AIRCRAFT, once there is a pad to fly from - _rtsCanQueue gates on `needs`, so these are
        inert until one exists and there is no separate check to keep in step. Both armies again;
        the Attack Heli was buildable by the player from the day it shipped and the opponent never
@@ -4277,13 +4329,18 @@ var RTS_TMISSIONS = {
   guard:    { need:'number'   },  /* TMISSION_GUARD      - hold station, argument in 1/10th min */
   loop:     { need:'number'   },  /* TMISSION_LOOP       - jump to this line of the list */
   load:     { need:'none'     },  /* TMISSION_LOAD       - everyone who can, boards the transport */
-  unload:   { need:'none'     }   /* TMISSION_UNLOAD     - the transport lands what it is carrying */
+  unload:   { need:'none'     },  /* TMISSION_UNLOAD     - the transport lands what it is carrying */
+  capture:  { need:'none'     }   /* TMISSION_CAPTURE    - the engineer walks in and takes it */
 };
 /* How long a LOAD leg may take before the team gives up on it. Generous, because the walk to
    the water is a real march and the craft may still be coming; bounded, because a squad that
    cannot reach the beach must not hold a team slot for the rest of the match. */
 var RTS_LOAD_TIMEOUT = 90;
 var RTS_UNLOAD_TIMEOUT = 120;    /* and the crossing itself, which is longer */
+/* A capture leg is a walk across the map by the slowest thing on it, so this is generous - but
+   it is the ONLY thing that ends the leg unsuccessfully, because a capture cannot be detected
+   by the .dead test every other leg completes on. See the TMISSION_CAPTURE branch. */
+var RTS_CAPTURE_TIMEOUT = 150;
 /* "Guard area (1/10th min)..." - the editor's own label for that argument's unit. */
 var RTS_GUARD_TICK = 6;          /* seconds per unit of a GUARD mission's argument */
 var RTS_WAYPT_ARRIVE = 5 * RTS_TILE;   /* how close counts as having reached a waypoint */
@@ -4362,13 +4419,62 @@ var RTS_TEAM_TYPES = [
   { name:'Landing',  priority:3, reinforce:false, quarry:'buildings',
     members:{ lst:1, tank:2, rifle:2 },
     max:1, autocreate:true, suicide:false, crossing:true,
-    missions:[ ['load',0], ['unload',0], ['attack','buildings'], ['tarcom',0] ] }
+    missions:[ ['load',0], ['unload',0], ['attack','buildings'], ['tarcom',0] ] },
+  /* --- AND THE ONE TEAM THAT GOES TO TAKE A BUILDING RATHER THAN TO BREAK IT. ---
+     `capture:true` is the gate, the same shape as Landing's `crossing`: _rtsAIWorthCapturing
+     must have found a player building actually worth taking and actually walkable-to, and it
+     hands over the building it found, so the purchase and the walk can never disagree.
+
+     `suicide:true` IS LOAD-BEARING and is not bravado. It buys two exemptions this team needs
+     and would otherwise have to special-case by name:
+
+       the lag rule, which holds a team while its stragglers catch up. An engineer walking the
+       last stretch into the player's base while the escort fights at the perimeter is exactly
+       the geometry that rule reads as "spread out and waiting", and being held is the one
+       thing that stops a capture happening. The amphibious legs already needed the same
+       exemption and got it as a hardcoded leg-name test; this one gets it from the roster,
+       which is where the original put it.
+
+       Took_Damage's retarget, which swaps a team's target for whoever just shot it. Every
+       building worth capturing is unarmed, so the guard that protects a team already fighting
+       something dangerous does not fire, and the first stray bullet would otherwise replace
+       the Refinery with a rifle squad.
+
+     `reinforce:false` because the engineer DIES ON SUCCESS - it is spent on arrival - and a
+     reinforcing team reads that as dropping under strength, stops, and never runs the rest of
+     its script. The team's job is over at that point; the escort should be attacking.
+
+     ONE TANK AND ONE RIFLEMAN, not two of each, and that is a measured number rather than a
+     taste. The escort cannot screen the engineer at all - at 500 credits it is the most
+     valuable infantry target on the field, so every gun shoots it first whatever stands beside
+     it - and all an escort can really do is kill a pillbox on the way in. What the escort
+     definitely does is cost tempo: every member is a unit not in an Assault team, for the whole
+     length of a walk that is most of the map.
+
+     Traced on seed 7 at normal: the engineer set out at t162 and was still seven tiles short of
+     the player's Command Yard at t218, when the match ended - because the opponent's own tanks
+     had finished the yard off first. It walked the entire way without stalling; it simply lost
+     the race. A five-unit team spent 56 seconds achieving nothing while the war was won without
+     it, and an idle player survived 3-5% longer for exactly that reason. Three units is the
+     smallest party that still has something to shoot with. */
+  { name:'Snatch',   priority:3, reinforce:false, quarry:'buildings',
+    members:{ engineer:1, tank:1, rifle:1 },
+    max:1, autocreate:true, suicide:true, capture:true,
+    missions:[ ['capture',0], ['attack','buildings'], ['tarcom',0] ] }
 ];
 /* How much longer the land route has to be than the straight line before sailing is worth it.
    1.0 would mean "any water at all"; this is "the road goes a long way round". Measured
    against the alternative rather than chosen: see _rtsAIWorthCrossing. */
 var RTS_AI_DETOUR = 1.7;
 var RTS_AI_CROSS_RECHECK = 30;   /* seconds between re-answering the question - _rtsPath is not free */
+/* How long a team may spend trying to reach full strength before it is written off. A team
+   that never fills never marches - it holds a slot against the concurrent-team cap AND holds
+   its recruits out of the war, since a unit with a squad is not `spare` to anything else. That
+   was unreachable while every composition was built from units the opponent produces
+   constantly; it stopped being unreachable with two compositions whose key member is bought
+   only while a gate is open, because the gate can shut between raising the team and filling
+   it. Generous enough that a slow build queue is not a write-off. */
+var RTS_TEAM_FORM_TIMEOUT = 120;
 var RTS_ALERT_TIME = 150;        /* backstop only: the first attack wave normally alerts the house */
 
 /* ------------------------------------------------- committing the army (mine, not ported) --
@@ -13349,8 +13455,12 @@ function _rtsSpawnUnit(side, key, x, z) {
    too, or the previous owner would keep trying to rebuild a building that is standing right
    there in someone else's colours. */
 function _rtsCapture(eng, b) {
-  var G = window._rtsG, from = b.side;
+  var G = window._rtsG;
   if (!b || b.dead || b.type !== 'struct' || b.side === eng.side) return false;
+  /* `from` is read AFTER the guard, not with it. Hoisted into the var line it dereferenced `b`
+     before `!b` had been tested, so the null case threw a TypeError instead of returning false
+     and the `!b` clause was unreachable. */
+  var from = b.side;
   if (!rtsCapturable(b.def)) return false;
   /* A building that is being SOLD cannot be taken. Mission_Deconstruction is already running:
      the previous owner has collected the refund, the animation is playing backwards, and the
@@ -13368,6 +13478,14 @@ function _rtsCapture(eng, b) {
      the pathological case of capturing something with 3 hp that dies before it is any use. */
   b.hp = Math.max(b.hp, b.maxHp * 0.25);
   _rtsRecalcPower(from); _rtsRecalcPower(b.side);
+  /* And the loser's QUEUE, which capture was the one way of leaving unaudited. _rtsProdRecalc
+     runs from _rtsKill for a destroyed structure, so losing a Naval Yard to a shell refunds
+     whatever it was building; losing the same yard to an engineer did not, and the hull was
+     simply never delivered. Measured from the other direction, which is the sharp one now that
+     the opponent captures too: an engineer walks into the player's Naval Yard with a Destroyer
+     at 90%, the player is charged the full 1000 credits over the next second, _rtsDeliverUnit
+     finds no yard to spawn at, and nothing appears - no ship, no refund, no message. */
+  _rtsProdRecalc(from);
   /* Anything that was shooting at it, or was ordered onto it, is now aiming at a friend. */
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
@@ -14357,6 +14475,18 @@ function _rtsOrderUnloadAt(t, x, z) {
   if (!t.path) { t.order = null; return false; }
   return true;
 }
+/* "Go and take that." One definition of what a capture order IS, because there are two callers
+   now - the player's right-click and the opponent's capture leg - and a squad walking in for
+   one side must be walking in on exactly the same terms as for the other. The route is left to
+   the unit tick rather than pathed here: _rtsApproach needs the unit's bearing on the building
+   to pick which side to stand on, and that is only right once it is actually moving. */
+function _rtsOrderCapture(u, b) {
+  if (!u || u.type !== 'unit' || !b || b.type !== 'struct') return false;
+  if (b.dead || b.selling || b.side === u.side || !rtsCapturable(b.def)) return false;
+  u.order = 'capture'; u.target = b; u.hstate = null;
+  u.path = null; u.goal = null; u.susp = null;
+  return true;
+}
 function _rtsOrderAttack(e, tgt) {
   if (e.type !== 'unit') return;
   var d = rtsUnitDef(e.def);
@@ -14772,6 +14902,20 @@ function _rtsBaseIsAttacked(bldg, enemy) {
   if (bldg.side !== 'enemy' || !enemy || enemy.type !== 'unit') return 0;
   if (rtsStructDef(bldg.def).weapon) return 0;     /* it can defend itself */
   if (enemy.baseTimer && G.t < enemy.baseTimer) return 0;
+  /* AND IT HAS TO BE THE BASE. There was no locality test here at all, because until an
+     engineer could move a building between sides, "a building of mine" and "a building in my
+     base" were the same sentence. They stopped being the same sentence: the opponent can now
+     own a Power Plant standing in the middle of the PLAYER's base, and every shot at it ran
+     this routine.
+
+     That made a captured building a switch the player could flip at will. One rifle squad
+     poking it (a) disbanded every team below the survival priority and put each type on a
+     40-second hold, and (b) sent up to RTS_DEFENDERS armed units on an attack-move across the
+     whole map to "guard" a shell sitting inside the player's guns. The routine whose stated
+     purpose is to make taking a base HARDER became a trickle-feed of the opponent's garrison
+     into those guns, on demand, for the price of one rifleman - and two units taking turns
+     dodge the BaseAttackTimer, so it was not even rate-limited. */
+  if (!_rtsInBase('enemy', bldg.x, bldg.z)) return 0;
 
   /* "We will need units to defend our base. We need to suspend teams until the situation has
      been dealt with." Below the survival priority a team is disbanded outright and its
@@ -15813,97 +15957,131 @@ function _rtsNearestRefinery(e) {
   return best;
 }
 </script>
-<script>/* core/ai.js - the opponent: what it builds, when it expands and when it attacks.
-   Part of rts.core, the simulation. */
+<script>/* core/basezone.js - HOUSE.CPP Recalc_Center and Which_Zone, and everything that decides
+   WHERE the opponent puts its next building. Part of rts.core, the simulation.
 
-/* ------------------------------------------------------------ enemy AI --
-   The build order comes from RULES.CPP's [AI] section, and the important idea there is that
-   the AI does not follow a script - it holds a target base COMPOSITION. Each structure type
-   wants `ratio` of the base size capped at `limit`, and the AI builds whatever it is
-   furthest short of. Base size tracks the human's building count plus BaseSizeAdd, so the
-   opponent grows in response to how you are actually playing. */
-function _rtsAIWants(S) {
-  var G = window._rtsG, have = {}, i, e, theirs = 0, own = 0;
-  for (i = 0; i < G.ents.length; i++) {
-    e = G.ents[i];
-    if (e.type !== 'struct' || e.dead || e.selling) continue;
-    if (e.side === 'player') { theirs++; continue; }
-    have[e.def] = (have[e.def] || 0) + 1; own++;
-  }
-  /* count what is already on the way, or the AI queues four refineries in a row */
-  if (S.q.struct) have[S.q.struct.key] = (have[S.q.struct.key] || 0) + 1;
-  if (S.ready) have[S.ready] = (have[S.ready] || 0) + 1;
+   Split out of core/ai.js when that file reached the 500-line ceiling unit/layout enforces.
+   A clean seam: this file answers "where is a side's base, and where in it should this go",
+   and knows nothing about what the opponent is trying to build or why. */
 
-  /* PowerSurplus: keep spare capacity in hand rather than building power only once the
-     lights are already out. Below PowerEmergency it is the only thing worth building. */
-  var slack = S.powerMade - S.powerUsed;
-  if (slack < RTS_AI.powerSurplus) return { key:'power', urgent:slack < 0 ||
-    S.powerMade < S.powerUsed * RTS_AI.powerEmergency };
-
-  /* A house whose store is nearly full is throwing away income right now, and no ratio in the
-     base plan is worth more than that. This has to come BEFORE the ordered walk or the storage
-     cap is a pure nerf: the opponent would lose the credits and never buy the fix, because a
-     silo sits behind the whole defence tier in the build order. Gated on the silo actually
-     being buildable so an AI with no refinery does not sit here demanding one. */
-  var cap = rtsCapacity('enemy');
-  if (cap > 0 && S.ore >= cap * RTS_AI.siloUrgent && (have.silo || 0) < RTS_AI.limit.silo
-      && _rtsCanProduce('enemy', 'silo')) return { key:'silo', urgent:true };
-
-  /* Below IQProduction the opponent keeps a minimal base and never expands. That used to be
-     one flag between "two buildings" and "all twenty-three", and since the difficulties are
-     IQ 2 / 3 / 5 it meant Soldier and Recruit built the same seven things as each other for
-     the whole match. The rung is per building now - see RTS_AI.buildIQ. */
-  var order = _rtsIQAt(RTS_IQ.production) ? RTS_AI.buildOrder
-            : (_rtsIQAt(RTS_IQ.expandBase) ? RTS_AI.buildOrder.filter(function (k) {
-                 return _rtsIQAt(RTS_AI.buildIQ[k] || RTS_AI.buildIQDefault);
-               }) : []);
-  var size = Math.max(own, theirs + RTS_AI.baseSizeAdd);
-  var mySide = rtsHouseSide('enemy');
-  for (i = 0; i < order.length; i++) {
-    var k = order[i];
-    /* Skip the other army's buildings. Without this the plan STOPS DEAD on the first one it
-       cannot build: the list is walked in order and returns the first shortfall, so a Soviet
-       house asking for four Pillboxes - an Allied building - demands them forever and never
-       reaches anything after them. That silently killed the entire defensive tail (flame
-       towers, gun turrets, rocket turrets, Tesla coils) the moment factions were added, and
-       nothing reported it because wanting a building is not an error. */
-    var kd = rtsStructDef(k);
-    if (kd && !rtsBuildableBy(kd, mySide)) continue;
-    /* A SHIPYARD IT CANNOT PLACE MUST NOT BE WANTED. This walk returns the first shortfall,
-       so a building that can never be placed is demanded forever and everything after it in
-       the order - the whole defensive tail, the superweapons - is never reached. That exact
-       failure already happened once here with the other army's buildings, which is what the
-       comment above is about. A shore structure is the same trap by a different route: not
-       every map has a coast the base can reach, and on one that does not, wanting a Naval
-       Yard would silently stop the opponent building anything else for the rest of the
-       match. The `ready` slot has a readyTry bail-out, but that only limits the damage after
-       the money has been spent - this stops it being wanted at all. */
-    if (kd && kd.shore && !_rtsAIShoreSpot(k)) continue;
-    var want = Math.min(RTS_AI.limit[k], Math.ceil(size * RTS_AI.ratio[k]));
-    if ((have[k] || 0) < want) return { key:k, urgent:false };
-  }
-  return null;
-}
 /* HOUSE.CPP Recalc_Center: the base centre is a COST-WEIGHTED average of building positions
    ("give more weight to buildings that cost more"), and the radius is the mean distance from
-   it. Zones follow: CORE inside the radius, then NORTH/EAST/SOUTH/WEST by direction. */
+   it. Zones follow: CORE inside the radius, then NORTH/EAST/SOUTH/WEST by direction.
+
+   ...OVER THE CLUSTER, NOT THE SCATTER, which the original never had to say because in a
+   scenario a house's buildings are all in one place and stay there. They do not here: an
+   engineer moves a building to the other side, and a plain mean has no defence against one
+   outlier. Measured, a captured Refinery (cost 2000, so weight 3) at the far end of the map
+   dragged the centre a tenth of the map and took the radius from ~20 world units to ~65 -
+   and everything downstream reads that radius as "how big is my base":
+
+     _rtsAIWeakZone aims the next defensive building at c.r*2 from the centre, so every
+     Turret and Tesla Coil bought after the capture was sited beside the PLAYER's base
+     rather than covering its own approaches - the exact failure Which_Zone exists to avoid.
+
+     _rtsWhichZone calls anything inside c.r*4 part of the base, so at r=65 almost the whole
+     map counted as "inside the enemy base": the exposed and nervous biases in _rtsEvalObject
+     stopped discriminating and became a constant.
+
+   So the centre is SEEDED ON THE DENSEST BUILDING rather than on the mean, and averaged over
+   what is within a base's reach of it. That is one line different from an outlier rejection and
+   it matters: rejecting outliers around the mean handles one stray building, and the case here
+   is not one stray. An opponent that captures once captures again - the player who lost a
+   Refinery to an engineer is the player whose base is worth walking into - so what the side
+   owns becomes TWO CLUSTERS, and a mean sitting between two clusters rejects neither of them.
+   Measured on the base-defence run, where the player is held alive and never builds a gun: the
+   opponent's mean distance from its own centre was 175 world units on a map 512 across, and
+   every defence it owned scored as "core" because the radius had swallowed the whole base. Two
+   compass zones covered, against four before.
+
+   Seeking the mode instead answers the question the callers are actually asking - "where is
+   this side's base" - for any number of clusters.
+
+   EVERY caller gets it, placement included, and that was checked rather than assumed. Leaving
+   Recalc_Center on the plain mean and giving only the new callers the seeded answer was tried
+   first, on the theory that placement is tuned against the old numbers and should not be
+   disturbed. It is worse, measurably: with the plain mean the opponent's defensive siting
+   collapses the moment it owns a building across the map - 0 of 4 compass zones covered on one
+   army and 2 of 4 on the other, against 4 and 4 with this. The mean between two clusters is
+   not a base and nothing downstream can do anything sensible with it. */
+function _rtsHomeCentre(side) { return _rtsBaseCentre(side); }
 function _rtsBaseCentre(side) {
-  var G = window._rtsG, x = 0, z = 0, n = 0, i, e;
+  var seed = _rtsBaseSeed(side);
+  if (!seed) return null;
+  return _rtsBaseMean(side, seed, RTS_BASE_REACH) || _rtsBaseMean(side, null, 0);
+}
+/* The building with the most company inside a base's reach - the densest point of the side's
+   holdings. Cost-weighted, so a Refinery counts for more than a silo when two groups tie, and
+   ties beyond that fall to entity order, which is stable. */
+function _rtsBaseSeed(side) {
+  var G = window._rtsG, best = null, bv = -1, i, j;
+  for (i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.type !== 'struct' || e.side !== side || e.selling) continue;
+    var v = 0;
+    for (j = 0; j < G.ents.length; j++) {
+      var o = G.ents[j];
+      if (o.dead || o.type !== 'struct' || o.side !== side || o.selling) continue;
+      if (Math.hypot(o.x - e.x, o.z - e.z) > RTS_BASE_REACH) continue;
+      v += ((rtsStructDef(o.def).cost / 1000) | 0) + 1;
+    }
+    if (v > bv) { bv = v; best = e; }
+  }
+  return best;
+}
+/* One weighted pass. `from`/`lim` restrict it to buildings within `lim` of a previous centre;
+   with no limit it is the plain Recalc_Center. Returns null when nothing qualifies, which is
+   why the caller keeps the unrestricted answer as a fallback. */
+function _rtsBaseMean(side, from, lim) {
+  var G = window._rtsG, x = 0, z = 0, n = 0, i, e, k;
+  function counts(o) {
+    if (o.dead || o.type !== 'struct' || o.side !== side || o.selling) return false;
+    return !lim || Math.hypot(o.x - from.x, o.z - from.z) <= lim;
+  }
   for (i = 0; i < G.ents.length; i++) {
     e = G.ents[i];
-    if (e.dead || e.type !== 'struct' || e.side !== side || e.selling) continue;
+    if (!counts(e)) continue;
     var w = ((rtsStructDef(e.def).cost / 1000) | 0) + 1;
-    for (var k = 0; k < w; k++) { x += e.x; z += e.z; n++; }
+    for (k = 0; k < w; k++) { x += e.x; z += e.z; n++; }
   }
   if (!n) return null;
   var c = { x:x / n, z:z / n, r:0 }, rad = 0, cnt = 0;
   for (i = 0; i < G.ents.length; i++) {
     e = G.ents[i];
-    if (e.dead || e.type !== 'struct' || e.side !== side || e.selling) continue;
+    if (!counts(e)) continue;
     rad += Math.hypot(e.x - c.x, e.z - c.z); cnt++;
   }
   c.r = Math.max(cnt ? rad / cnt : 0, RTS_TILE * 2);
   return c;
+}
+/* Is this point part of that side's base? The question every "my base is being attacked"
+   reaction should have been asking and none of them were - see _rtsBaseIsAttacked. */
+function _rtsInBase(side, x, z) {
+  var c = _rtsHomeCentre(side);
+  if (!c) return false;
+  return Math.hypot(x - c.x, z - c.z) <= c.r * RTS_BASE_SPAN;
+}
+/* The side's own `key`, meaning the one at HOME rather than whichever comes first in the
+   entity list. _rtsHas walks G.ents from index 0, and _rtsLayBase lays the player's base
+   before the opponent's, so the player's opening Yard and Power Plant hold the lowest indices
+   on the map for the whole match. The moment the opponent captures either, every
+   _rtsHas('enemy','yard'|'power') silently starts answering with a building standing in the
+   middle of the player's base.
+
+   That is not a theoretical tidy-up. Capturing a Power Plant adds its supply, which pushes
+   the opponent's slack past RTS_AI.powerWaste, which fires `lowerPower`, whose handler sells
+   _rtsHas('enemy','power') - the plant it had just spent an engineer and a walk across the
+   map to take, sold back seconds later for half of what the PLAYER paid for it. */
+function _rtsHasHome(side, key) {
+  var G = window._rtsG, c = _rtsHomeCentre(side), best = null, bd = 1e9;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.type !== 'struct' || e.side !== side || e.def !== key) continue;
+    if (!c) return e;
+    var d = Math.hypot(e.x - c.x, e.z - c.z);
+    if (d < bd) { bd = d; best = e; }
+  }
+  return best;
 }
 /* Which_Zone: 0 core, 1 north, 2 east, 3 south, 4 west, -1 too far to be part of the base. */
 function _rtsWhichZone(c, x, z) {
@@ -16041,6 +16219,90 @@ function _rtsAIOreSpot() {
   }
   return best;
 }
+</script>
+<script>/* core/ai.js - the opponent: what it builds, when it expands and when it attacks.
+   Part of rts.core, the simulation. */
+
+/* ------------------------------------------------------------ enemy AI --
+   The build order comes from RULES.CPP's [AI] section, and the important idea there is that
+   the AI does not follow a script - it holds a target base COMPOSITION. Each structure type
+   wants `ratio` of the base size capped at `limit`, and the AI builds whatever it is
+   furthest short of. Base size tracks the human's building count plus BaseSizeAdd, so the
+   opponent grows in response to how you are actually playing. */
+function _rtsAIWants(S) {
+  var G = window._rtsG, have = {}, i, e, theirs = 0, own = 0;
+  for (i = 0; i < G.ents.length; i++) {
+    e = G.ents[i];
+    if (e.type !== 'struct' || e.dead || e.selling) continue;
+    if (e.side === 'player') { theirs++; continue; }
+    have[e.def] = (have[e.def] || 0) + 1;
+    /* `have` counts everything this side owns - a captured Refinery is a Refinery and the plan
+       must not queue a replacement for it. `own` is a different question: how big is MY BASE,
+       and it is the number every ratio in the plan is multiplied by.
+
+       A captured building must not count towards that, and until one could exist the two were
+       the same number so nothing said so. Capturing moves a building from `theirs` to `own`,
+       which swings `size` by two and lifts the target for every key in the order at once - so
+       the walk keeps finding an early entry short and never reaches the tail. Measured on the
+       base-defence seed: after the opponent took a Command Yard, its plan never asked for a
+       Tesla Coil again, not late but never, still unwanted at 600 seconds. An outpost inside
+       the enemy's base does not mean this house needs another power plant at home. */
+    if (_rtsInBase(e.side, e.x, e.z)) own++;
+  }
+  /* count what is already on the way, or the AI queues four refineries in a row */
+  if (S.q.struct) have[S.q.struct.key] = (have[S.q.struct.key] || 0) + 1;
+  if (S.ready) have[S.ready] = (have[S.ready] || 0) + 1;
+
+  /* PowerSurplus: keep spare capacity in hand rather than building power only once the
+     lights are already out. Below PowerEmergency it is the only thing worth building. */
+  var slack = S.powerMade - S.powerUsed;
+  if (slack < RTS_AI.powerSurplus) return { key:'power', urgent:slack < 0 ||
+    S.powerMade < S.powerUsed * RTS_AI.powerEmergency };
+
+  /* A house whose store is nearly full is throwing away income right now, and no ratio in the
+     base plan is worth more than that. This has to come BEFORE the ordered walk or the storage
+     cap is a pure nerf: the opponent would lose the credits and never buy the fix, because a
+     silo sits behind the whole defence tier in the build order. Gated on the silo actually
+     being buildable so an AI with no refinery does not sit here demanding one. */
+  var cap = rtsCapacity('enemy');
+  if (cap > 0 && S.ore >= cap * RTS_AI.siloUrgent && (have.silo || 0) < RTS_AI.limit.silo
+      && _rtsCanProduce('enemy', 'silo')) return { key:'silo', urgent:true };
+
+  /* Below IQProduction the opponent keeps a minimal base and never expands. That used to be
+     one flag between "two buildings" and "all twenty-three", and since the difficulties are
+     IQ 2 / 3 / 5 it meant Soldier and Recruit built the same seven things as each other for
+     the whole match. The rung is per building now - see RTS_AI.buildIQ. */
+  var order = _rtsIQAt(RTS_IQ.production) ? RTS_AI.buildOrder
+            : (_rtsIQAt(RTS_IQ.expandBase) ? RTS_AI.buildOrder.filter(function (k) {
+                 return _rtsIQAt(RTS_AI.buildIQ[k] || RTS_AI.buildIQDefault);
+               }) : []);
+  var size = Math.max(own, theirs + RTS_AI.baseSizeAdd);
+  var mySide = rtsHouseSide('enemy');
+  for (i = 0; i < order.length; i++) {
+    var k = order[i];
+    /* Skip the other army's buildings. Without this the plan STOPS DEAD on the first one it
+       cannot build: the list is walked in order and returns the first shortfall, so a Soviet
+       house asking for four Pillboxes - an Allied building - demands them forever and never
+       reaches anything after them. That silently killed the entire defensive tail (flame
+       towers, gun turrets, rocket turrets, Tesla coils) the moment factions were added, and
+       nothing reported it because wanting a building is not an error. */
+    var kd = rtsStructDef(k);
+    if (kd && !rtsBuildableBy(kd, mySide)) continue;
+    /* A SHIPYARD IT CANNOT PLACE MUST NOT BE WANTED. This walk returns the first shortfall,
+       so a building that can never be placed is demanded forever and everything after it in
+       the order - the whole defensive tail, the superweapons - is never reached. That exact
+       failure already happened once here with the other army's buildings, which is what the
+       comment above is about. A shore structure is the same trap by a different route: not
+       every map has a coast the base can reach, and on one that does not, wanting a Naval
+       Yard would silently stop the opponent building anything else for the rest of the
+       match. The `ready` slot has a readyTry bail-out, but that only limits the damage after
+       the money has been spent - this stops it being wanted at all. */
+    if (kd && kd.shore && !_rtsAIShoreSpot(k)) continue;
+    var want = Math.min(RTS_AI.limit[k], Math.ceil(size * RTS_AI.ratio[k]));
+    if ((have[k] || 0) < want) return { key:k, urgent:false };
+  }
+  return null;
+}
 /* Keep the production lines fed. Economy first, and crucially the AI SAVES for a harvester
    instead of dribbling its income away on cheap infantry - without that it parks at ~90
    credits forever, never affords the 1200 harvester, and its army stops growing two minutes
@@ -16107,12 +16369,29 @@ function _rtsAIUnits(S) {
     for (i = 0; i < list.length; i++) {
       if (rtsMoney(S) <= list[i].at) continue;
       if (!_rtsCanQueue('enemy', list[i].key)) continue;
-      /* THE TRANSPORT IS BOUGHT FOR A REASON OR NOT AT ALL, and it is the only entry in any mix
-         that asks a question before it is offered. An unarmed hull is worth nothing by itself;
-         it is worth something only when there is a crossing to make and a landing party to make
-         it. So it is gated on the same test that decides whether that team may be raised, and
-         capped at the one the team needs. Without the gate this is the engineer in the vehicle
-         mix - credits donated to whatever shoots first. */
+      /* TWO ENTRIES ARE BOUGHT FOR A REASON OR NOT AT ALL, and they are the only ones in any
+         mix that are asked a question before being offered. Both are unarmed and worth nothing
+         on their own: a hull is worth something only when there is a crossing to make, and an
+         engineer only when there is a building worth taking. Each is gated on the same test
+         that decides whether its team may be raised - so the purchase and the plan can never
+         disagree - and capped at the one that team needs. Every other entry in every mix is
+         worth something the moment it exists, which is why it is simply rolled for. */
+      if (list[i].key === 'engineer') {
+        if (!_rtsAIWorthCapturing()) continue;
+        if (_rtsAIEngineers() >= RTS_AI.engCap) continue;
+        /* AND OUT OF GENUINE SURPLUS ONLY - never out of the building fund. _rtsAIUnits is
+           called with the bank already above _rtsAISpare, which is whatever the base plan is
+           currently saving for; every other unit spends that surplus, which is the point. An
+           engineer is different because it buys no army and no building, so paying for one out
+           of the margin delays the plan by a whole structure.
+
+           Measured: the Soviet opponent stopped reaching the Tesla Coil inside the 420 seconds
+           e2e/basedef watches - the credits that would have become its signature defence went
+           into an engineer instead. Asking for the spare PLUS the price means the plan's money
+           is never touched, and it is the same _rtsAISpare the caller tested, so the two can
+           not drift apart. */
+        if (rtsMoney(S) < _rtsAISpare(S) + _rtsCostOf('enemy', rtsUnitDef('engineer'))) continue;
+      }
       if (list[i].key === 'lst') {
         if (!_rtsAIWorthCrossing()) continue;
         var craft = 0;
@@ -16263,8 +16542,13 @@ function _rtsAIDo(strat, urgency, S) {
 
     case 'lowerPower':
       if (!_rtsIQAt(RTS_IQ.sellBack)) return false;
-      /* only if losing one would not brown the base out */
-      var p = _rtsHas('enemy', 'power');
+      /* only if losing one would not brown the base out - and a plant AT HOME, because
+         _rtsHas answers in entity-creation order and the player's opening Power Plant is one
+         of the two earliest structures on the map. Capturing it is what pushes the surplus
+         past powerWaste and fires this strategy in the first place, so with a plain _rtsHas
+         the opponent sold the very plant it had just spent an engineer taking, seconds later,
+         for half of what the PLAYER paid. See _rtsHasHome. */
+      var p = _rtsHasHome('enemy', 'power');
       if (!p || S.powerMade - rtsStructDef('power').power < S.powerUsed) return false;
       return _rtsSell(p);
 
@@ -16308,6 +16592,155 @@ function _rtsAIAllToHunt() {
    old attack wave - which shoved 60-70% of every idle unit at the player's nearest building
    - with this is what stops the opponent fighting as one undifferentiated blob. */
 
+</script>
+<script>/* core/capturead.js - the opponent's side of MISSION_CAPTURE: is there a building worth
+   taking, and which one. Part of rts.core, the simulation.
+
+   The engineer was a player-only verb. _rtsCapture has always been side-agnostic and the unit
+   tick has always driven a `capture` order for whoever holds it, but nothing ever gave the
+   opponent one, and rules/ai.js said why in as many words: "capturing is a decision about a
+   specific building at a specific moment, and an AI that buys engineers without a plan for
+   them just donates 600 credits to whatever shoots them first". That was true. This file is
+   the plan, and it is the same shape as _rtsAIWorthCrossing next door: a question asked of the
+   map, cached, with the purchase gated on the answer rather than on a die roll. */
+
+/* WHAT A BUILDING IS WORTH TAKING. Not what it is worth SHOOTING - _rtsEvalObject already
+   answers that one, and it answers it wrongly for this question in two ways that matter.
+
+   It scores Math.max(cost, hp), which puts the Missile Silo, the Chronosphere, the Iron
+   Curtain and the GPS Uplink at the top of the player's building list - and all four carry
+   `capturable:false`, so aiming an engineer at any of them ends with the order dropped at the
+   wall and the engineer standing there until something shoots it.
+
+   And it scores the Construction Yard at its `cost`, which is ZERO: it is the one building
+   never bought, so a table keyed on price values the best capture in the game below a Power
+   Plant. Taking the yard takes the player's ability to rebuild anything, which is why it is
+   named here rather than derived. */
+function _rtsCaptureWorth(b) {
+  var d = rtsStructDef(b.def);
+  if (!d) return 0;
+  var w = d.cost || 0;
+  if (b.def === 'yard') w = RTS_CAP_YARD_WORTH;
+  /* A building that produces is worth more than its price says, because taking it takes the
+     line as well as the shell - and the previous owner cannot replace what it can no longer
+     build. Same reasoning the `factories` quarry is built on. */
+  if (d.produces) w *= RTS_CAP_FACTORY_MULT;
+  return w;
+}
+/* ...and what it will COST to get there, in the only currency that matters to an unarmed
+   45-hp walker: guns pointed at the approach. Every player defence whose range covers the
+   building is one more thing that shoots the engineer on the way in, and the engineer cannot
+   shoot back, go prone or step aside (`fraidy:false`, `weapon:null`), so this is not a risk to
+   be balanced against the prize - past a couple of guns it is a certainty. */
+function _rtsCaptureGuns(b) {
+  var G = window._rtsG, n = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.side !== 'player' || e.type !== 'struct') continue;
+    var sd = rtsStructDef(e.def);
+    if (!sd || !sd.weapon) continue;
+    var w = RTS_WEAPONS[sd.weapon];
+    if (!w) continue;
+    if (Math.hypot(e.x - b.x, e.z - b.z) <= w.range + RTS_TILE * 2) n++;
+  }
+  return n;
+}
+/* The best building on the map to send an engineer at, or null when there is not one worth the
+   walk. Every clause here is a way the walk ends with nothing:
+
+     capturable   - the six that are not would drop the order at the wall
+     not selling  - _rtsCapture refuses a sale in progress and the engineer is spent anyway
+     not building - a structure still going up moves no power until it finishes
+     reachable    - on FOOT, from the opponent's own base. _rtsPath answers this honestly now;
+                    before the landing work it returned a one-waypoint path for an unreachable
+                    goal, and every caller read that as "there is a road"
+     guns         - past RTS_CAP_MAX_GUNS the engineer does not arrive, so the prize is moot */
+function _rtsAICaptureTarget() {
+  var G = window._rtsG, best = null, bv = 0;
+  var home = _rtsHasHome('enemy', 'yard') || _rtsHasHome('enemy', 'factory')
+          || _rtsHasHome('enemy', 'barracks');
+  if (!home) return null;
+  for (var i = 0; i < G.ents.length; i++) {
+    var b = G.ents[i];
+    if (b.dead || b.side !== 'player' || b.type !== 'struct') continue;
+    if (b.selling || b.building) continue;
+    if (!rtsCapturable(b.def)) continue;
+    var worth = _rtsCaptureWorth(b);
+    if (worth < RTS_CAP_MIN_WORTH) continue;
+    if (_rtsCaptureGuns(b) > RTS_CAP_MAX_GUNS) continue;
+    /* THE PRIZE IS DISCOUNTED BY THE WALK, because an engineer that does not arrive is worth
+       nothing at all and the walk is where they mostly do not arrive. A capture is the slowest
+       play in the game - one 6.5-speed unit crossing whatever the map puts between the two
+       bases - so a nearer building worth somewhat less is usually the better buy, and the
+       ranking should say so rather than always reaching for the richest thing on the map.
+
+       Traced on seed 7: the richest capturable target was the player's Command Yard, ninety
+       tiles away, and the engineer was still seven tiles short when the match ended. Nothing
+       was broken - it walked the whole way without a stall - it simply lost the race to the
+       opponent's own tanks. */
+    var score = worth / (1 + Math.hypot(b.x - home.x, b.z - home.z) / RTS_CAP_WALK_SCALE);
+    /* Rank before pathing, so the expensive test runs on the leader rather than on every
+       building the player owns. A* over half a map is not free and this runs on a timer. */
+    if (score <= bv) continue;
+    var spot = _rtsNearestOpen(_rtsTX(b.x), _rtsTX(b.z), 6, null);
+    if (!spot) continue;
+    if (!_rtsPath(home.x, home.z, _rtsWX(spot[0]), _rtsWX(spot[1]), null)) continue;
+    bv = score; best = b;
+  }
+  return best;
+}
+/* IS CAPTURING WORTH IT? The gate, cached for RTS_CAP_RECHECK seconds because the answer moves
+   only when a building does and the reachability test walks the map.
+
+   Deliberately NOT cached as a boolean alone: the team's capture leg wants the building the
+   gate found, and re-deriving it there would let the two disagree - the purchase justified by
+   a Refinery, the walk aimed at a Power Plant. One answer, one place. */
+function _rtsAIWorthCapturing() {
+  var G = window._rtsG;
+  if (!G || !G.ai) return false;
+  if (G.ai.capT != null && G.t - G.ai.capT < RTS_CAP_RECHECK) {
+    /* A cached target that has since died, been sold or already changed hands is not an
+       answer, and waiting out the rest of the recheck on it would aim the leg at a corpse. */
+    var c = G.ai.capTgt;
+    if (!c || c.dead || c.selling || c.side !== 'player') { G.ai.capT = null; }
+    else return true;
+  }
+  G.ai.capT = G.t;
+  G.ai.capTgt = null;
+  if (!_rtsCanProduce('enemy', 'engineer')) return false;
+  /* NOT BEFORE THE HOUSE IS AWAKE. The Snatch team is `autocreate`, so Suggested_New_Team will
+     not raise one until the alert - but nothing gated the PURCHASE, and the gate opens in the
+     opening seconds, when the player owns two undefended buildings and nothing is covering
+     anything. So the opponent would buy its engineer minutes before it could field a team to
+     use it, and it would stand in the base until then. Buying a unit for a plan means not
+     buying it before the plan can exist. */
+  if (!_rtsHouseAlerted()) return false;
+  G.ai.capTgt = _rtsAICaptureTarget();
+  return !!G.ai.capTgt;
+}
+/* Engineers the opponent has, ALIVE - not "engineers currently busy", which is the version this
+   started as and which is wrong in a way worth recording, because it looks more careful.
+
+   The reasoning for counting only employed ones was that every path stripping a capture order
+   leaves the engineer alive and idle - a suspended team, a sold target, an unreachable one -
+   so a live count would let one idle engineer hold the cap closed for the rest of the match.
+   True, but the cure is worse: an idle engineer is invisible to a busy count, so the gate
+   simply buys another, and another. The team can only be raised once the house is alerted,
+   which is minutes after the gate first opens, and in that window nothing is employed at all.
+   The cap that was supposed to bound the waste would have been counting zero the whole time.
+
+   Live it is, and the blockage it was supposed to avoid does not happen: _rtsTeamCanAdd takes
+   any loose unit whose def the type wants, so the next Snatch team raised recruits the idle
+   engineer rather than needing a new one. The cap unblocks itself. */
+function _rtsAIEngineers() {
+  var G = window._rtsG, n = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.side !== 'enemy' || e.type !== 'unit' || e.def !== 'engineer') continue;
+    n++;
+  }
+  return n;
+}
 </script>
 <script>/* core/waypoints.js - the named places on the map that a team script steers by (TEAMTYPE.CPP).
    Part of rts.core, the simulation.
@@ -16643,6 +17076,10 @@ function _rtsSuggestTeam(spare) {
        shape as the buildable gate above, for the same reason: a landing party raised where the
        tanks could simply drive is five units and a boat arriving later than walking. */
     if (ty.crossing && !_rtsAIWorthCrossing()) continue;
+    /* ...and one that only makes sense against a building worth taking is not a candidate when
+       there is not one. Same gate the engineer purchase is on, so the team and the unit it is
+       built around are always raised for the same reason. */
+    if (ty.capture && !_rtsAIWorthCapturing()) continue;
     if (spare < need) continue;
     choices.push(ty);
   }
@@ -16669,8 +17106,14 @@ function _rtsAIWorthCrossing() {
   G.ai.crossT = G.t;
   G.ai.crossOk = false;
   if (!_rtsCanProduce('enemy', 'lst')) return false;
-  var from = _rtsHas('enemy', 'yard') || _rtsHas('enemy', 'factory');
-  var to = _rtsHas('player', 'yard') || _rtsHas('player', 'factory');
+  /* BOTH ANCHORS ARE HOME ANCHORS. With a plain _rtsHas, an opponent that had captured the
+     player's Construction Yard measured the crossing FROM that captured yard - which stands in
+     the player's base - TO the player's War Factory a few tiles away. The straight line
+     collapses to single digits while the walked route goes round the player's own buildings,
+     so the detour test flipped true on a map with no water on it, and the opponent bought a
+     700-credit transport for a crossing that did not exist. */
+  var from = _rtsHasHome('enemy', 'yard') || _rtsHasHome('enemy', 'factory');
+  var to = _rtsHasHome('player', 'yard') || _rtsHasHome('player', 'factory');
   if (!from || !to) return false;
   var straight = Math.hypot(to.x - from.x, to.z - from.z);
   if (straight <= 0) return false;
@@ -16752,6 +17195,20 @@ function _rtsTeamsTick(dt) {
 
     var full = (total >= desired);
     if (full) t.hasBeen = true;
+    /* A TEAM THAT NEVER FILLS IS WORSE THAN NO TEAM, and until now nothing ever wrote one off.
+       Below full strength it does not march, so its script never runs; meanwhile it holds a
+       slot against the concurrent-team cap and its recruits are not `spare` to anything else -
+       so the units are out of the war too, standing in the base with a squad id and no job.
+
+       Unreachable while every composition was built from units the opponent produces
+       constantly. It stopped being unreachable with the two gated compositions: the key member
+       of each - the landing craft, the engineer - is bought only while its gate is open, and
+       the gate can shut between raising the team and crewing it. Then the team waits forever
+       for a unit that will never be built. */
+    if (!t.hasBeen) {
+      if (t.formT == null) t.formT = G.t;
+      if (G.t - t.formT > RTS_TEAM_FORM_TIMEOUT) { _rtsTeamDisband(t); continue; }
+    }
     /* Reinforceable teams snap out of under-strength at a third; the rest are never under
        strength again once they have set out. */
     if (t.type.reinforce) t.under = (desired > 2) ? (total <= desired / 3) : (total < desired);
@@ -16896,6 +17353,7 @@ function _rtsTeamAdvance(t, to) {
   t.legT = null;
   t.target = null;
   t.beach = null;                 /* the landing point is chosen per leg - see TMISSION_UNLOAD */
+  t.capt = null;                  /* ...and so is the building to take - see TMISSION_CAPTURE */
 }
 function _rtsTeamDoMission(t, dt) {
   var G = window._rtsG, list = t.type.missions, i, m;
@@ -17025,6 +17483,50 @@ function _rtsTeamDoMission(t, dt) {
       return 'ok';
     }
 
+    /* TMISSION_CAPTURE. The engineers walk in and take the building; everyone else attacks it,
+       which is not a contradiction - what an escort can usefully do is kill the guns covering
+       the approach, and ordering it at the target is how it gets there and finds them.
+
+       THE OBJECTIVE IS NOT `t.target`, and that is the whole design of this branch. Every other
+       leg keeps its objective there, and Took_Damage overwrites `t.target` with whoever last
+       shot the team - guarded only when the current target has a weapon of its own. Every
+       building worth capturing is unarmed, so the guard never fires, and one rifle round into
+       an escort would silently swap the Refinery for a rifle squad. The engineer's order is
+       then dropped on `cb.type !== 'struct'` and 500 credits stand in the open doing nothing.
+       So the capture keeps its own field, and Took_Damage is free to retarget the escort's
+       guns - which is what that mechanism is actually for. */
+    if (mis === 'capture') {
+      if (t.legT == null) t.legT = G.t;
+      /* SUCCESS IS A SIDE FLIP, NOT A DEATH, and nothing else in this file has to notice that.
+         _rtsCapture signals by setting b.side and destroys the engineer that could have
+         reported back; it never sets `dead`, and there is no event. So the .dead idiom every
+         other leg completes on is not merely wrong here, it hangs: a captured building
+         satisfies neither `!t.capt` nor `t.capt.dead`, forever. */
+      if (t.capt && (t.capt.dead || t.capt.selling || t.capt.side !== 'player')) {
+        _rtsTeamAdvance(t); continue;
+      }
+      if (!t.capt) t.capt = (G.ai && G.ai.capTgt) || _rtsAICaptureTarget();
+      if (!t.capt) { _rtsTeamAdvance(t); continue; }
+      /* The timeout is the ONLY unsuccessful ending this leg has. A target that cannot be
+         reached, or an engineer that dies on the way in, both look exactly like one still
+         walking - so without this the team stands in the field for the rest of the match. */
+      if (G.t - t.legT > RTS_CAPTURE_TIMEOUT) { _rtsTeamAdvance(t); continue; }
+      var eng = 0;
+      _rtsTeamOrderAll(t, function (mm) {
+        if (rtsUnitDef(mm.def).capture) {
+          eng++;
+          /* Re-issued only when it is NOT already on the job. The unit tick drops the order by
+             itself when there is no route, so re-issuing unconditionally would be one A* per
+             engineer per frame against a building it cannot reach. */
+          if (mm.order !== 'capture' || mm.target !== t.capt) _rtsOrderCapture(mm, t.capt);
+        } else if (mm.order !== 'attack' || mm.target !== t.capt) _rtsOrderAttack(mm, t.capt);
+      });
+      /* No engineer left: it died on the way, or it arrived and was spent. Either way this
+         leg is over and the escort should be fighting rather than standing at a wall. */
+      if (!eng) { _rtsTeamAdvance(t); continue; }
+      return 'ok';
+    }
+
     if (mis === 'attwaypt') {
       var wp = _rtsWayptPos(arg);
       if (!wp) { _rtsTeamAdvance(t); continue; }
@@ -17039,8 +17541,16 @@ function _rtsTeamDoMission(t, dt) {
     }
 
     if (mis === 'tarcom') {
-      /* ATTACKTARCOM: whatever the team is already fixed on - normally set by Took_Damage. */
-      if (!t.target || t.target.dead) { _rtsTeamAdvance(t); continue; }
+      /* ATTACKTARCOM: whatever the team is already fixed on - normally set by Took_Damage.
+         "No longer ours to shoot at" now includes CHANGED HANDS, not just died: a building
+         this side has captured is alive and friendly, so on the .dead test alone this leg
+         re-issued an attack order at it every tick forever - an order the units cannot even
+         execute, since a gun clears a friendly target - and the team held a slot for the rest
+         of the match. Reachable from either direction, because both sides capture now. */
+      if (!t.target || t.target.dead
+          || (t.target.side !== 'player' && t.target.type === 'struct')) {
+        _rtsTeamAdvance(t); continue;
+      }
       _rtsTeamOrderAll(t, function (mm) {
         if (mm.order !== 'attack' || mm.target !== t.target) _rtsOrderAttack(mm, t.target);
       });
@@ -20354,9 +20864,13 @@ function _rtsRightClick(mx, my) {
         else if (md.steal && tgt.def === md.stealFrom) job = 'capture';
         else if (md.demo) job = 'demo';
       }
-      if (job) {
+      /* The capture order goes through _rtsOrderCapture rather than being written out here, so
+         the player's engineer and the opponent's walk in on identical terms - there is one
+         definition of what the order is. `demo` has no second caller and stays inline. */
+      if (job === 'capture' && _rtsOrderCapture(mu, tgt)) { special++; capped++; }
+      else if (job === 'demo') {
         mu.order = job; mu.target = tgt; mu.path = null; mu.goal = null; mu.susp = null;
-        special++; if (job === 'capture') capped++;
+        special++;
       } else _rtsOrderAttack(mu, tgt);
     }
     _rtsFlash(tgt.x, tgt.z, special === mine.length ? 'harvest' : 'attack');

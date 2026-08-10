@@ -50,13 +50,18 @@ var RTS_TMISSIONS = {
   guard:    { need:'number'   },  /* TMISSION_GUARD      - hold station, argument in 1/10th min */
   loop:     { need:'number'   },  /* TMISSION_LOOP       - jump to this line of the list */
   load:     { need:'none'     },  /* TMISSION_LOAD       - everyone who can, boards the transport */
-  unload:   { need:'none'     }   /* TMISSION_UNLOAD     - the transport lands what it is carrying */
+  unload:   { need:'none'     },  /* TMISSION_UNLOAD     - the transport lands what it is carrying */
+  capture:  { need:'none'     }   /* TMISSION_CAPTURE    - the engineer walks in and takes it */
 };
 /* How long a LOAD leg may take before the team gives up on it. Generous, because the walk to
    the water is a real march and the craft may still be coming; bounded, because a squad that
    cannot reach the beach must not hold a team slot for the rest of the match. */
 var RTS_LOAD_TIMEOUT = 90;
 var RTS_UNLOAD_TIMEOUT = 120;    /* and the crossing itself, which is longer */
+/* A capture leg is a walk across the map by the slowest thing on it, so this is generous - but
+   it is the ONLY thing that ends the leg unsuccessfully, because a capture cannot be detected
+   by the .dead test every other leg completes on. See the TMISSION_CAPTURE branch. */
+var RTS_CAPTURE_TIMEOUT = 150;
 /* "Guard area (1/10th min)..." - the editor's own label for that argument's unit. */
 var RTS_GUARD_TICK = 6;          /* seconds per unit of a GUARD mission's argument */
 var RTS_WAYPT_ARRIVE = 5 * RTS_TILE;   /* how close counts as having reached a waypoint */
@@ -135,13 +140,62 @@ var RTS_TEAM_TYPES = [
   { name:'Landing',  priority:3, reinforce:false, quarry:'buildings',
     members:{ lst:1, tank:2, rifle:2 },
     max:1, autocreate:true, suicide:false, crossing:true,
-    missions:[ ['load',0], ['unload',0], ['attack','buildings'], ['tarcom',0] ] }
+    missions:[ ['load',0], ['unload',0], ['attack','buildings'], ['tarcom',0] ] },
+  /* --- AND THE ONE TEAM THAT GOES TO TAKE A BUILDING RATHER THAN TO BREAK IT. ---
+     `capture:true` is the gate, the same shape as Landing's `crossing`: _rtsAIWorthCapturing
+     must have found a player building actually worth taking and actually walkable-to, and it
+     hands over the building it found, so the purchase and the walk can never disagree.
+
+     `suicide:true` IS LOAD-BEARING and is not bravado. It buys two exemptions this team needs
+     and would otherwise have to special-case by name:
+
+       the lag rule, which holds a team while its stragglers catch up. An engineer walking the
+       last stretch into the player's base while the escort fights at the perimeter is exactly
+       the geometry that rule reads as "spread out and waiting", and being held is the one
+       thing that stops a capture happening. The amphibious legs already needed the same
+       exemption and got it as a hardcoded leg-name test; this one gets it from the roster,
+       which is where the original put it.
+
+       Took_Damage's retarget, which swaps a team's target for whoever just shot it. Every
+       building worth capturing is unarmed, so the guard that protects a team already fighting
+       something dangerous does not fire, and the first stray bullet would otherwise replace
+       the Refinery with a rifle squad.
+
+     `reinforce:false` because the engineer DIES ON SUCCESS - it is spent on arrival - and a
+     reinforcing team reads that as dropping under strength, stops, and never runs the rest of
+     its script. The team's job is over at that point; the escort should be attacking.
+
+     ONE TANK AND ONE RIFLEMAN, not two of each, and that is a measured number rather than a
+     taste. The escort cannot screen the engineer at all - at 500 credits it is the most
+     valuable infantry target on the field, so every gun shoots it first whatever stands beside
+     it - and all an escort can really do is kill a pillbox on the way in. What the escort
+     definitely does is cost tempo: every member is a unit not in an Assault team, for the whole
+     length of a walk that is most of the map.
+
+     Traced on seed 7 at normal: the engineer set out at t162 and was still seven tiles short of
+     the player's Command Yard at t218, when the match ended - because the opponent's own tanks
+     had finished the yard off first. It walked the entire way without stalling; it simply lost
+     the race. A five-unit team spent 56 seconds achieving nothing while the war was won without
+     it, and an idle player survived 3-5% longer for exactly that reason. Three units is the
+     smallest party that still has something to shoot with. */
+  { name:'Snatch',   priority:3, reinforce:false, quarry:'buildings',
+    members:{ engineer:1, tank:1, rifle:1 },
+    max:1, autocreate:true, suicide:true, capture:true,
+    missions:[ ['capture',0], ['attack','buildings'], ['tarcom',0] ] }
 ];
 /* How much longer the land route has to be than the straight line before sailing is worth it.
    1.0 would mean "any water at all"; this is "the road goes a long way round". Measured
    against the alternative rather than chosen: see _rtsAIWorthCrossing. */
 var RTS_AI_DETOUR = 1.7;
 var RTS_AI_CROSS_RECHECK = 30;   /* seconds between re-answering the question - _rtsPath is not free */
+/* How long a team may spend trying to reach full strength before it is written off. A team
+   that never fills never marches - it holds a slot against the concurrent-team cap AND holds
+   its recruits out of the war, since a unit with a squad is not `spare` to anything else. That
+   was unreachable while every composition was built from units the opponent produces
+   constantly; it stopped being unreachable with two compositions whose key member is bought
+   only while a gate is open, because the gate can shut between raising the team and filling
+   it. Generous enough that a slow build queue is not a write-off. */
+var RTS_TEAM_FORM_TIMEOUT = 120;
 var RTS_ALERT_TIME = 150;        /* backstop only: the first attack wave normally alerts the house */
 
 /* ------------------------------------------------- committing the army (mine, not ported) --

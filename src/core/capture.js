@@ -12,8 +12,12 @@
    too, or the previous owner would keep trying to rebuild a building that is standing right
    there in someone else's colours. */
 function _rtsCapture(eng, b) {
-  var G = window._rtsG, from = b.side;
+  var G = window._rtsG;
   if (!b || b.dead || b.type !== 'struct' || b.side === eng.side) return false;
+  /* `from` is read AFTER the guard, not with it. Hoisted into the var line it dereferenced `b`
+     before `!b` had been tested, so the null case threw a TypeError instead of returning false
+     and the `!b` clause was unreachable. */
+  var from = b.side;
   if (!rtsCapturable(b.def)) return false;
   /* A building that is being SOLD cannot be taken. Mission_Deconstruction is already running:
      the previous owner has collected the refund, the animation is playing backwards, and the
@@ -31,6 +35,14 @@ function _rtsCapture(eng, b) {
      the pathological case of capturing something with 3 hp that dies before it is any use. */
   b.hp = Math.max(b.hp, b.maxHp * 0.25);
   _rtsRecalcPower(from); _rtsRecalcPower(b.side);
+  /* And the loser's QUEUE, which capture was the one way of leaving unaudited. _rtsProdRecalc
+     runs from _rtsKill for a destroyed structure, so losing a Naval Yard to a shell refunds
+     whatever it was building; losing the same yard to an engineer did not, and the hull was
+     simply never delivered. Measured from the other direction, which is the sharp one now that
+     the opponent captures too: an engineer walks into the player's Naval Yard with a Destroyer
+     at 90%, the player is charged the full 1000 credits over the next second, _rtsDeliverUnit
+     finds no yard to spawn at, and nothing appears - no ship, no refund, no message. */
+  _rtsProdRecalc(from);
   /* Anything that was shooting at it, or was ordered onto it, is now aiming at a friend. */
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];

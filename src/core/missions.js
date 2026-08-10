@@ -70,6 +70,7 @@ function _rtsTeamAdvance(t, to) {
   t.legT = null;
   t.target = null;
   t.beach = null;                 /* the landing point is chosen per leg - see TMISSION_UNLOAD */
+  t.capt = null;                  /* ...and so is the building to take - see TMISSION_CAPTURE */
 }
 function _rtsTeamDoMission(t, dt) {
   var G = window._rtsG, list = t.type.missions, i, m;
@@ -199,6 +200,50 @@ function _rtsTeamDoMission(t, dt) {
       return 'ok';
     }
 
+    /* TMISSION_CAPTURE. The engineers walk in and take the building; everyone else attacks it,
+       which is not a contradiction - what an escort can usefully do is kill the guns covering
+       the approach, and ordering it at the target is how it gets there and finds them.
+
+       THE OBJECTIVE IS NOT `t.target`, and that is the whole design of this branch. Every other
+       leg keeps its objective there, and Took_Damage overwrites `t.target` with whoever last
+       shot the team - guarded only when the current target has a weapon of its own. Every
+       building worth capturing is unarmed, so the guard never fires, and one rifle round into
+       an escort would silently swap the Refinery for a rifle squad. The engineer's order is
+       then dropped on `cb.type !== 'struct'` and 500 credits stand in the open doing nothing.
+       So the capture keeps its own field, and Took_Damage is free to retarget the escort's
+       guns - which is what that mechanism is actually for. */
+    if (mis === 'capture') {
+      if (t.legT == null) t.legT = G.t;
+      /* SUCCESS IS A SIDE FLIP, NOT A DEATH, and nothing else in this file has to notice that.
+         _rtsCapture signals by setting b.side and destroys the engineer that could have
+         reported back; it never sets `dead`, and there is no event. So the .dead idiom every
+         other leg completes on is not merely wrong here, it hangs: a captured building
+         satisfies neither `!t.capt` nor `t.capt.dead`, forever. */
+      if (t.capt && (t.capt.dead || t.capt.selling || t.capt.side !== 'player')) {
+        _rtsTeamAdvance(t); continue;
+      }
+      if (!t.capt) t.capt = (G.ai && G.ai.capTgt) || _rtsAICaptureTarget();
+      if (!t.capt) { _rtsTeamAdvance(t); continue; }
+      /* The timeout is the ONLY unsuccessful ending this leg has. A target that cannot be
+         reached, or an engineer that dies on the way in, both look exactly like one still
+         walking - so without this the team stands in the field for the rest of the match. */
+      if (G.t - t.legT > RTS_CAPTURE_TIMEOUT) { _rtsTeamAdvance(t); continue; }
+      var eng = 0;
+      _rtsTeamOrderAll(t, function (mm) {
+        if (rtsUnitDef(mm.def).capture) {
+          eng++;
+          /* Re-issued only when it is NOT already on the job. The unit tick drops the order by
+             itself when there is no route, so re-issuing unconditionally would be one A* per
+             engineer per frame against a building it cannot reach. */
+          if (mm.order !== 'capture' || mm.target !== t.capt) _rtsOrderCapture(mm, t.capt);
+        } else if (mm.order !== 'attack' || mm.target !== t.capt) _rtsOrderAttack(mm, t.capt);
+      });
+      /* No engineer left: it died on the way, or it arrived and was spent. Either way this
+         leg is over and the escort should be fighting rather than standing at a wall. */
+      if (!eng) { _rtsTeamAdvance(t); continue; }
+      return 'ok';
+    }
+
     if (mis === 'attwaypt') {
       var wp = _rtsWayptPos(arg);
       if (!wp) { _rtsTeamAdvance(t); continue; }
@@ -213,8 +258,16 @@ function _rtsTeamDoMission(t, dt) {
     }
 
     if (mis === 'tarcom') {
-      /* ATTACKTARCOM: whatever the team is already fixed on - normally set by Took_Damage. */
-      if (!t.target || t.target.dead) { _rtsTeamAdvance(t); continue; }
+      /* ATTACKTARCOM: whatever the team is already fixed on - normally set by Took_Damage.
+         "No longer ours to shoot at" now includes CHANGED HANDS, not just died: a building
+         this side has captured is alive and friendly, so on the .dead test alone this leg
+         re-issued an attack order at it every tick forever - an order the units cannot even
+         execute, since a gun clears a friendly target - and the team held a slot for the rest
+         of the match. Reachable from either direction, because both sides capture now. */
+      if (!t.target || t.target.dead
+          || (t.target.side !== 'player' && t.target.type === 'struct')) {
+        _rtsTeamAdvance(t); continue;
+      }
       _rtsTeamOrderAll(t, function (mm) {
         if (mm.order !== 'attack' || mm.target !== t.target) _rtsOrderAttack(mm, t.target);
       });

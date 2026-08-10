@@ -242,6 +242,10 @@ function _rtsSuggestTeam(spare) {
        shape as the buildable gate above, for the same reason: a landing party raised where the
        tanks could simply drive is five units and a boat arriving later than walking. */
     if (ty.crossing && !_rtsAIWorthCrossing()) continue;
+    /* ...and one that only makes sense against a building worth taking is not a candidate when
+       there is not one. Same gate the engineer purchase is on, so the team and the unit it is
+       built around are always raised for the same reason. */
+    if (ty.capture && !_rtsAIWorthCapturing()) continue;
     if (spare < need) continue;
     choices.push(ty);
   }
@@ -268,8 +272,14 @@ function _rtsAIWorthCrossing() {
   G.ai.crossT = G.t;
   G.ai.crossOk = false;
   if (!_rtsCanProduce('enemy', 'lst')) return false;
-  var from = _rtsHas('enemy', 'yard') || _rtsHas('enemy', 'factory');
-  var to = _rtsHas('player', 'yard') || _rtsHas('player', 'factory');
+  /* BOTH ANCHORS ARE HOME ANCHORS. With a plain _rtsHas, an opponent that had captured the
+     player's Construction Yard measured the crossing FROM that captured yard - which stands in
+     the player's base - TO the player's War Factory a few tiles away. The straight line
+     collapses to single digits while the walked route goes round the player's own buildings,
+     so the detour test flipped true on a map with no water on it, and the opponent bought a
+     700-credit transport for a crossing that did not exist. */
+  var from = _rtsHasHome('enemy', 'yard') || _rtsHasHome('enemy', 'factory');
+  var to = _rtsHasHome('player', 'yard') || _rtsHasHome('player', 'factory');
   if (!from || !to) return false;
   var straight = Math.hypot(to.x - from.x, to.z - from.z);
   if (straight <= 0) return false;
@@ -351,6 +361,20 @@ function _rtsTeamsTick(dt) {
 
     var full = (total >= desired);
     if (full) t.hasBeen = true;
+    /* A TEAM THAT NEVER FILLS IS WORSE THAN NO TEAM, and until now nothing ever wrote one off.
+       Below full strength it does not march, so its script never runs; meanwhile it holds a
+       slot against the concurrent-team cap and its recruits are not `spare` to anything else -
+       so the units are out of the war too, standing in the base with a squad id and no job.
+
+       Unreachable while every composition was built from units the opponent produces
+       constantly. It stopped being unreachable with the two gated compositions: the key member
+       of each - the landing craft, the engineer - is bought only while its gate is open, and
+       the gate can shut between raising the team and crewing it. Then the team waits forever
+       for a unit that will never be built. */
+    if (!t.hasBeen) {
+      if (t.formT == null) t.formT = G.t;
+      if (G.t - t.formT > RTS_TEAM_FORM_TIMEOUT) { _rtsTeamDisband(t); continue; }
+    }
     /* Reinforceable teams snap out of under-strength at a third; the rest are never under
        strength again once they have set out. */
     if (t.type.reinforce) t.under = (desired > 2) ? (total <= desired / 3) : (total < desired);
