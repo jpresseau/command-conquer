@@ -18,7 +18,28 @@
    And then the size cap, which is why the tree looks the way it does. Every subsystem here is a
    directory of small files rather than one large one, and the split only stays split if
    something objects when a file grows back. MAX_LINES is the line at which a file wants breaking
-   up along its own banner comments. */
+   up along its own banner comments.
+
+   WHAT THE CAP COVERS, AND WHAT IT DELIBERATELY DOES NOT. It applies to source under src/ and
+   ra/, and to the reference documents under docs/. It does NOT apply to test/ or to CSS, and
+   both exemptions are choices rather than oversights - they were oversights until somebody
+   ranked the tree by size and found the three largest hand-edited files in the project were all
+   outside a rule that governed nothing bigger than 498 lines.
+
+     docs/ IS covered, because those documents exist for exactly the reason the cap does. They
+     were split out of CLAUDE.md so it could stay small enough to read before every change; a
+     reference that grows past the size at which the source tree is told to split is the same
+     failure one level up, and one of them had reached 506.
+
+     test/ IS NOT, and that is load-bearing. A spec here carries the measurement that justified
+     it - what was tried, what the numbers were, what was rejected and why - and that record is
+     worth more than a line count. Capping specs would push exactly that material out of the
+     file that needs it. The largest spec in the tree is nearly 700 lines and should stay one
+     file.
+
+     CSS IS NOT, because a stylesheet is one cascade rather than a set of subsystems: splitting
+     it changes what order the rules land in, which is a behaviour change dressed up as
+     housekeeping. src/style.css is over MAX_LINES and is meant to be. */
 
 var fs = require('fs');
 var path = require('path');
@@ -136,5 +157,18 @@ S.ok('CLAUDE.md stays short enough to be read before every change',
      docs.reduce(function (a, d) {
        return a + fs.readFileSync(path.join(ROOT, 'docs', d), 'utf8').split('\n').length;
      }, 0) + ' lines across ' + docs.length + ' documents)');
+
+/* ...AND NO SINGLE DOCUMENT GROWS BACK INTO THE THING THE SPLIT WAS FOR. Same cap as the source
+   tree, for the same reason and one level up - see the note at the top for why docs/ is inside
+   the rule and test/ and CSS are outside it. This was not enforced until docs/core-units.md had
+   reached 506 lines, past the number every source file in the project is held to. */
+var docSized = docs.map(function (d) {
+  return { f: 'docs/' + d,
+           n: fs.readFileSync(path.join(ROOT, 'docs', d), 'utf8').split('\n').length };
+}).sort(function (a, b) { return b.n - a.n; });
+var docOver = docSized.filter(function (r) { return r.n > MAX_LINES; });
+S.ok('no reference document is over ' + MAX_LINES + ' lines either', !docOver.length,
+     docOver.length ? docOver.map(function (r) { return r.f + ' (' + r.n + ')'; }).join(', ')
+                    : 'largest is ' + docSized[0].f + ' at ' + docSized[0].n);
 
 require('../lib/report.js')(S);
