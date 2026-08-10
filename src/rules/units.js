@@ -41,14 +41,14 @@ var RTS_UNITS = [
      the unit has to come to a stop first, which is what makes artillery a thing you position
      rather than a thing you drive at people. */
   { key:'arty',     name:'Artillery',     kind:'vehicle',  cost:600,  build:11, hp:150,  speed:6,   turn:1.4,r:1.9, sight:16, weapon:'howitzer',
-    needs:['radar'], noMovingFire:true,
+    needs:['radar'], noMovingFire:true, standoff:true,
     side:'allied', armour:'light',
     desc:'Outranges every base defence in the game. Made of paper — never send it in first.' },
   /* The Soviet answer to the Artillery, and the reason it exists is a measured asymmetry rather
      than a wish for parity: see `v2rocket` in rules/weapons.js. Dearer, slower and more fragile
      than the Allied piece, and it hits a building far harder and infantry rather less. */
   { key:'v2rl',     name:'V2 Rocket',      kind:'vehicle',  cost:900,  build:13, hp:140,  speed:5.5, turn:1.2,r:2.0, sight:16, weapon:'v2rocket',
-    needs:['radar'], noMovingFire:true,
+    needs:['radar'], noMovingFire:true, standoff:true,
     side:'soviet', armour:'light',
     desc:'Outranges every base defence. One rocket, slowly — and it dies to anything that reaches it.' },
   { key:'heavy',    name:'Mammoth Tank',  kind:'vehicle',  cost:1700, build:20, hp:820,  speed:6.5, turn:1.3,r:2.2, sight:18, weapon:'heavycannon', weapon2:'coax',

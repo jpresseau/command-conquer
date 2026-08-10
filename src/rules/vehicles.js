@@ -83,6 +83,32 @@ var RTS_SUB_DETECT = 4 * 2.5;             /* two and a half cells - close enough
    MineLayer and MCV all carry it. The JEEP and the ARTILLERY explicitly do NOT, which is the
    correction this file supplied - `light` and `heavy` were missing from this table, and the
    Scout Buggy was never meant to be here in the first place. */
+/* ------------------------------------------------------------------- SIEGE STANDOFF ----
+   A siege piece is bought for its reach and dies at knife range, and until this existed it did
+   neither. Measured on open ground at 3,000 credits a side, before:
+
+     5 Artillery   vs 3 Battle Tanks -> the artillery is WIPED, 0 of 5, the tanks keep 57%
+     3 V2 Launchers vs 1 Heavy Tank  -> the launchers are WIPED, 0 of 3, the tank keeps 50%
+
+   Two thousand seven hundred credits of rocket artillery losing to one seventeen-hundred credit
+   tank is not a balance question. It is a unit that never gets to use the only thing it is for,
+   and it comes from two places that are really one.
+
+   ACQUISITION IS THE HALF THAT READS AS A BUG ONCE SEEN. A unit on attack-move looks for targets
+   inside `sight`, and the Artillery and the V2 both carry sight 16 against a gun that reaches 34
+   - they cannot see half their own range, so they close to 16 to shoot at all, which is inside a
+   Battle Tank's 18 and a Pillbox's 15. A unit on HOLD already acquires at _rtsReach: the two
+   paths simply disagreed, and the short one is the one every attack uses.
+
+   KEEP IS THE OTHER HALF: the fraction of its own reach a standoff unit tries to hold. Inside
+   that it gives ground instead of trading, because trading is the one thing it cannot win - a
+   howitzer is 0.6 against heavy armour and folds at 150 hit points. Outside it, it stands and
+   fires like anything else. This is deliberately NOT a general retreat-when-hurt rule: it is
+   about range, it fires the whole time it is backing up, and it applies only to the hulls whose
+   entire purpose is the distance. */
+var RTS_STANDOFF_KEEP = 0.75;   /* of reach: closer than this and it gives ground */
+var RTS_STANDOFF_STEP = 5;      /* world units re-planned at a time, so it backs off smoothly */
+var RTS_STANDOFF_RATE = 0.3;    /* seconds between re-plans, rather than every frame */
 var RTS_CRUSHERS = { tank:1, light:1, heavy:1, harvester:1 };
 var RTS_CRUSH_DIST = 1.5 * 4;   /* Rule.CrushDistance 0x0180 = 1.5 cells */
 var RTS_CRUSH_KILL = 0.9;       /* world units: close enough to actually run them down */
