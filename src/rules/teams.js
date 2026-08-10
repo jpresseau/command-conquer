@@ -120,6 +120,27 @@ var RTS_TEAM_TYPES = [
     members:{ sub:2, missilesub:1 },
     max:1, autocreate:true, suicide:false,
     missions:[ ['patrol','sea'], ['attack','buildings'], ['tarcom',0] ] },
+  /* THE SIEGE PAIR, and the reason the Cruiser is not simply another entry in the Flotilla.
+     _rtsAIUnits rolls the ship mix without asking any team whether it wants the hull, so a
+     type nothing lists is a type the opponent buys at 2,000 credits and then never sails
+     anywhere - it would sit at the yard until the base was attacked. Every hull in a mix
+     needs a type that fields it.
+
+     A separate type rather than `cruiser:1` added to the Flotilla, because a team only
+     marches at FULL STRENGTH: folding it in would ground the Gunboats until a Tech Center
+     existed, and the Allied navy would stop leaving harbour for the first half of the match.
+     Kept out of the Flotilla, the two coexist - the escort fleet from the moment there is a
+     yard, this once there is a lab. `_rtsCanProduce` gates candidacy on every member, so the
+     type is simply not a candidate before then, and never is for the Soviets.
+
+     The Destroyer is not decoration. The Cruiser carries no sonar and its reach is worth
+     nothing at knife range, so a submarine that closes on an unescorted one kills it - e2e/navy
+     measures exactly that. Sending it out alone would be spending the dearest hull in the game
+     on a gift, and it is what the unit's own description tells the player not to do. */
+  { name:'Bombard',  priority:3, reinforce:false, quarry:'buildings',
+    members:{ cruiser:1, destroyer:1 },
+    max:1, autocreate:true, suicide:false,
+    missions:[ ['patrol','sea'], ['attack','buildings'], ['tarcom',0] ] },
   /* --- AND ACROSS IT. The one team that uses the water to deliver an ARMY rather than to
      fight on it, and the only one whose composition mixes the two domains.
 
