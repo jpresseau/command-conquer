@@ -40,7 +40,17 @@ var RTS_MISSIONS = {
   harvest: { retaliate:false, scatter:true,  recruitable:false, noThreat:true,  hold:false, rate:0.13 },
   /* STICKY: holds ground. Fires from where it stands, never chases, and the base-defence
      recall leaves it alone. */
-  hold:    { retaliate:true,  scatter:false, recruitable:false, noThreat:false, hold:true,  rate:0.13 }
+  hold:    { retaliate:true,  scatter:false, recruitable:false, noThreat:false, hold:true,  rate:0.13 },
+  /* AN AIRCRAFT ON ITS WAY HOME WITH AN EMPTY RACK IS BUSY, in exactly the sense a harvester
+     carrying ore is busy. _rtsAirTick sets this order and then OWNS the tick - it returns true,
+     so nothing else may steer the hull until it has landed and reloaded.
+
+     It had no entry here at all, so _rtsMission fell through to RTS_MISSION_DEFAULT and reported
+     it recruitable. A team could therefore recruit a plane that is physically unable to obey it
+     and then wait out its form timeout, and the base-defence recall could count on a unit that
+     will not come. Unarmed until it lands, so it cannot retaliate; not a threat for the same
+     reason a loaded harvester is not one. */
+  rearm:   { retaliate:false, scatter:true,  recruitable:false, noThreat:true,  hold:false, rate:0.13 }
 };
 var RTS_MISSION_DEFAULT = { retaliate:true, scatter:true, recruitable:true, noThreat:false, hold:false, rate:0.13 };
 /* RULES.CPP: ConditionYellow = 1/2, ConditionRed = 1/4. These are not cosmetic - they are the

@@ -103,6 +103,41 @@ var RTS_TEAM_TYPES = [
        silent approach march: an opening GUARD plus a plain MOVE leg had the heaviest team
        in the game spending its first half-minute not fighting. */
     missions:[ ['patrol','front'], ['attack','buildings'], ['loop',1] ] },
+  /* --- AND IN THE AIR, which nothing fielded until now. Measured over six matches long enough
+     for a pad to exist: the opponent built NINE aircraft and two of them ever had an attack
+     order, both in the one run where the player came to them. Seven of nine sat on the pad for
+     the whole match. At 900 to 1,400 credits each that is most of a Command Yard, parked.
+
+     ONE AIRCRAFT PER TEAM, and that is forced rather than chosen. A team marches only at full
+     strength, so the composition has to be one the house is certain to be able to fill:
+
+       aircraft are capped at one per pad and the plan allows two pads, so any composition
+       asking for three could never form at all;
+
+       and the Soviets have two air types which _rtsAIUnits rolls between at random, so a
+       `{ mig:1, yak:1 }` team starves outright whenever the rolls happened to give two of the
+       same kind - the trap the Gunline fell into, which cost a whole feature.
+
+     A single-plane type cannot hit either. Every plane that exists is a team that can march.
+
+     `only` for the same reason Snatch and Landing carry it: the limit here comes from the pad
+     count, not from the size of the army, so scaling `max` upward would raise a second team for
+     an aircraft that cannot exist. See _rtsTypeCap.
+
+     Not reinforceable, and the reload is why: a plane that empties its rack flies home, and
+     _rtsAirTick owns it until it has landed. A reinforcing team would read that as dropping
+     under strength and stop to wait for it - the sortie would end every time the guns ran dry
+     rather than resuming after. `rearm` is a non-recruitable mission for the matching reason;
+     see RTS_MISSIONS. */
+  { name:'Sortie',   priority:3, reinforce:false, quarry:'anything', members:{ heli:1 },
+    max:1, only:true, autocreate:true, suicide:false,
+    missions:[ ['attack','anything'], ['loop',0] ] },
+  { name:'Intercept',priority:3, reinforce:false, quarry:'anything', members:{ mig:1 },
+    max:1, only:true, autocreate:true, suicide:false,
+    missions:[ ['attack','anything'], ['loop',0] ] },
+  { name:'Strafe',   priority:3, reinforce:false, quarry:'anything', members:{ yak:1 },
+    max:1, only:true, autocreate:true, suicide:false,
+    missions:[ ['attack','anything'], ['loop',0] ] },
   /* --- and at sea. One per army, because a team only marches at FULL STRENGTH and a house
      can only build its own side's hulls: a single mixed type listing all four would leave a
      Soviet flotilla waiting forever for a Gunboat it cannot build. `sea` is the waypoint,

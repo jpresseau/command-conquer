@@ -98,6 +98,22 @@ S.note(Object.keys(mixKeys).length + ' units in the shopping list, ' +
 
    This is not hypothetical: the Cruiser shipped into the mix at 2,000 credits before any team
    listed it, and would have done exactly that. */
+/* AIRCRAFT ARE THE SAME ARGUMENT AS HULLS, and were the same fault. A plane in no team cannot
+   drive to a building under attack any more than a boat can, so it sits on its pad - and it is
+   capped at one per pad, so the waste is a fixed fraction of the whole air force rather than one
+   unit among many.
+   Measured before the Sortie, Intercept and Strafe types existed, over six matches long enough
+   for a pad to be built: NINE aircraft bought, TWO of which ever had an attack order, and both of
+   those in the single run where the player came to them. Seven of nine spent the match parked at
+   900 to 1,400 credits each. After: twenty-four bought and twenty-two flew. */
+(function () {
+  var planes = (MIX.air || []).map(function (e) { return e.key; });
+  var grounded = planes.filter(function (k) { return !fielded[k]; });
+  S.ok('every aircraft the opponent buys is fielded by some team', !grounded.length,
+       grounded.length ? grounded.join(', ') + ' — bought, and never sent anywhere'
+                       : planes.map(function (k) { return k + '→' + fielded[k].join('+'); }).join('  '));
+})();
+
 (function () {
   var hulls = (MIX.ship || []).map(function (e) { return e.key; });
   var idle = hulls.filter(function (k) { return !fielded[k]; });
