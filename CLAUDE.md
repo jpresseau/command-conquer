@@ -190,7 +190,8 @@ done. Read the one that covers what you are changing; you do not need to read th
 | document | what it covers |
 | --- | --- |
 | `docs/core-combat.md` | the blast model, armour classes, target selection, vehicle facings and fire, burning |
-| `docs/core-units.md` | infantry behaviour and flags, missions, transports, aircraft, what the data files really contain |
+| `docs/core-units.md` | infantry behaviour and flags, missions and action cursors, what the data files really contain |
+| `docs/core-transport.md` | the APC and the landing craft carrying cargo, submarine cloak, the flight layer and its reload |
 | `docs/core-ai.md` | difficulty and IQ, the base blueprint, teams and their mission lists, committing an army |
 | `docs/core-economy.md` | production charging, the two money pools and storage, ore fields, crates, what a building does while it stands |
 | `docs/core-world.md` | shroud, start positions, triggers, saving a battle |
