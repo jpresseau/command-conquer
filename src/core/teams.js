@@ -166,6 +166,21 @@ function _rtsTeamCap() {
    pick first. The authored `max` stays the floor. */
 function _rtsTypeCap(ty, eligible) {
   var cap = _rtsTeamCap();
+  /* `only` MAKES max A CEILING INSTEAD OF A FLOOR, and exactly two types need it: the ones built
+     around a unit the opponent hard-caps. Snatch needs an engineer and RTS_AI.engCap allows one
+     alive; Landing needs a transport and craftCap allows one. Scaling their `max` with the army
+     raises a second team that CANNOT be crewed - the only engineer is already in the first one -
+     so the second recruits its tank and its rifleman, holds them for the whole of
+     RTS_TEAM_FORM_TIMEOUT, and disbands having done nothing.
+
+     Measured over twelve matches, three seeds across both armies at normal and hard: a second
+     Snatch was raised in EVERY ONE and two units sat in it every time. Sixty-six of seventy-eight
+     teams raised ever marched, and all twelve failures were this.
+
+     The floor is right for everything else - see the note above for why a fixed cap collapses the
+     share of the army committed as the opponent gets richer - so this is a flag on the two types
+     whose limit comes from somewhere other than the size of the army. */
+  if (ty.only) return ty.max == null ? 1 : ty.max;
   return Math.max(ty.max == null ? RTS_TEAM_MAX : ty.max,
                   Math.ceil(cap / Math.max(1, eligible)));
 }

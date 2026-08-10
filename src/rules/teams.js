@@ -160,7 +160,7 @@ var RTS_TEAM_TYPES = [
      Battle Tank, which is why this is one type where the Flotilla and the Wolfpack are two. */
   { name:'Landing',  priority:3, reinforce:false, quarry:'buildings',
     members:{ lst:1, tank:2, rifle:2 },
-    max:1, autocreate:true, suicide:false, crossing:true,
+    max:1, only:true, autocreate:true, suicide:false, crossing:true,
     missions:[ ['load',0], ['unload',0], ['attack','buildings'], ['tarcom',0] ] },
   /* --- AND THE ONE TEAM THAT GOES TO TAKE A BUILDING RATHER THAN TO BREAK IT. ---
      `capture:true` is the gate, the same shape as Landing's `crossing`: _rtsAIWorthCapturing
@@ -201,7 +201,7 @@ var RTS_TEAM_TYPES = [
      smallest party that still has something to shoot with. */
   { name:'Snatch',   priority:3, reinforce:false, quarry:'buildings',
     members:{ engineer:1, tank:1, rifle:1 },
-    max:1, autocreate:true, suicide:true, capture:true,
+    max:1, only:true, autocreate:true, suicide:true, capture:true,
     missions:[ ['capture',0], ['attack','buildings'], ['tarcom',0] ] }
 ];
 /* How much longer the land route has to be than the straight line before sailing is worth it.
