@@ -18,7 +18,33 @@
 
    THE SCRIPT LIVES IN THE SPEC, ON PURPOSE. It is a definition of "obvious things" for the
    purpose of measurement, not a feature - the game has no scripted player and should not grow
-   one just so a test has an opponent. Everything it calls is a function the real UI calls. */
+   one just so a test has an opponent. Everything it calls is a function the real UI calls.
+
+   ------------------------------------------------------------------------------------------
+   READ THE MEANS BELOW WITH CARE: THREE SEEDS IS NOT ENOUGH TO DETECT A SMALL CHANGE.
+
+   Measured directly, by running this spec twice on ONE unchanged tree and varying nothing but
+   the seed set:
+
+                          seeds 9001-9003        seeds 9004-9006
+       allied  e/n/h      543 / 387 / 194        524 / 600 / 288
+       soviet  e/n/h      539 / 505 / 199        506 / 600 / 275
+       hard runs with no army    3 of 6                 0 of 6
+       wins                      3 of 18                5 of 18
+
+   Ninety to two hundred and ten seconds of spread from the seeds alone, and on the second set
+   the player rides the cap on normal for both armies. The simulation is deterministic, so this
+   is not run-to-run noise - it is how much three particular maps differ from three others.
+
+   WHAT THAT MEANS IN PRACTICE. The ASSERTIONS are safe: they ask coarse questions (did the
+   script play, did it attack, does easy still outlast hard) and they held on both seed sets.
+   The printed MEANS are not precise enough to attribute a change of less than about a hundred
+   seconds, and they have already been over-read once in this repo's history - a change was
+   rejected partly on movements of 11 to 114 seconds in these numbers, which is inside this
+   band. Direction across all six cells is worth something; any single cell is not.
+
+   Two things would fix it and both cost runtime: more seeds, and a cap the player does not
+   ride (600 is already being hit, so the metric saturates and cannot show an improvement). */
 
 var { chromium } = require('playwright');
 var { Suite } = require('../lib/assert.js');

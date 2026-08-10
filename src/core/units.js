@@ -201,12 +201,25 @@ function _rtsUpdateUnit(e, dt) {
     e.path = null; e.goal = null;
     if (w && (!tgt || _rtsRangeTo(e, tgt) > _rtsReach(e))) e.target = tgt = _rtsFindTarget(e, _rtsReach(e));
   } else if (w && !tgt && (e.order === 'amove' || !e.order)) {
-    /* A SIEGE PIECE LOOKS AS FAR AS IT SHOOTS. Everything else keeps looking only as far as it
-       can see, which is right - but a hull whose gun outreaches its own eyes by eighteen has to
-       walk into everything else's range before it may fire, and that is the whole reason the
-       Artillery and the V2 were worthless. The `hold` branch above already acquires at reach;
-       this is the same rule reaching the path that attacks actually take. */
-    tgt = _rtsFindTarget(e, d.standoff ? Math.max(d.sight, _rtsReach(e)) : d.sight);
+    /* ANYTHING LOOKS AS FAR AS IT SHOOTS. This started as a special case for the two siege
+       hulls, whose guns reach 34 against sight 16 - they had to walk into everything else's
+       range before they could fire, which is why they were worthless. Sweeping the roster
+       afterwards showed they were only the worst of a set, not a pair of oddities:
+
+         cruiser  sees 28, shoots 38      destroyer  sees 24, shoots 30
+         missilesub  26 / 34              gunboat    20 / 24
+         sub         18 / 22              heavy and rocket, 18 / 20
+
+       Every one of those closes to less than its own reach before it may fire, and for the
+       Cruiser that is a quarter of the range it is sold on. There is no spotting model here to
+       justify the shortfall - the `hold` branch six lines up has always acquired at _rtsReach,
+       so the codebase already asserted this rule in one path and simply disagreed with itself in
+       the other. The max keeps the scouts honest the other way round: a Buggy sees 22 and shoots
+       16, and it should still notice something at 22 and go after it.
+
+       `standoff` therefore no longer means "sees further". It means only "gives ground", which
+       is the behaviour it actually names. */
+    tgt = _rtsFindTarget(e, Math.max(d.sight, _rtsReach(e)));
     if (tgt) { e.target = tgt; if (!e.order) { e.order = 'attack'; e.path = null; } }
   }
   if (w) {

@@ -88,14 +88,42 @@ var PURSE = 3000;         /* credits per side - see the header */
         for (var j = 0; j < list.length; j++) { t += list[j].dead ? 0 : list[j].hp; m += list[j].maxHp; }
         return m ? t / m : 0;
       }
-      var t = 0;
+      /* HOW FAR SIDE A ACTUALLY FIGHTS FROM, for the hulls that outreach their own eyes. Every
+         warship in the game does: the Cruiser sees 28 and shoots 38, the Missile Sub 26 and 34,
+         the Destroyer 24 and 30. Acquisition used to be capped at `sight`, so each of them
+         closed to less than its own reach before it could fire and the dearest hull in the game
+         threw away a quarter of the range it is sold on.
+         Sampled only while the two sides are within reach of each other - averaging over the
+         approach mixes in the sail-out, when the fleets are most of a map apart, and turns this
+         into a number that clears any threshold while proving nothing. Selected by the stat
+         block rather than by any flag, so the measurement cannot be deleted by deleting the
+         thing it measures. */
+      function outreaches(key) {
+        var ud = rtsUnitDef(key), uw = ud && RTS_WEAPONS[ud.weapon];
+        return !!(uw && uw.range > ud.sight);
+      }
+      var aReach = outreaches(aKey) ? RTS_WEAPONS[rtsUnitDef(aKey).weapon].range : 0;
+      var distSum = 0, distN = 0, t = 0;
       for (t = 0; t < secs * 60; t++) {
         _rtsTick(1 / 60);
+        if (aReach && (t % 30) === 0) {
+          for (i = 0; i < A.length; i++) {
+            if (A[i].dead) continue;
+            var best = 1e9;
+            for (var q = 0; q < B.length; q++) {
+              if (B[q].dead) continue;
+              var dd = Math.hypot(B[q].x - A[i].x, B[q].z - A[i].z);
+              if (dd < best) best = dd;
+            }
+            if (best <= aReach * 1.2) { distSum += best; distN++; }
+          }
+        }
         if (!alive(A) || !alive(B)) break;
       }
       return { a: alive(A), b: alive(B), an: A.length, bn: B.length,
                ahp: Math.round(hp(A) * 100), bhp: Math.round(hp(B) * 100),
-               secs: Math.round(t / 60) };
+               dist: distN ? distSum / distN : 0, sight: rtsUnitDef(aKey).sight,
+               reach: aReach, secs: Math.round(t / 60) };
     };
     return { ok: true, subDetect: RTS_SUB_DETECT, destroyerSonar: rtsUnitDef('destroyer').detects };
   });
@@ -129,6 +157,8 @@ var PURSE = 3000;         /* credits per side - see the header */
                 aLeft: mean(function (r) { return r.a; }), bLeft: mean(function (r) { return r.b; }),
                 aHp: Math.round(mean(function (r) { return r.ahp; })),
                 bHp: Math.round(mean(function (r) { return r.bhp; })),
+                dist: mean(function (r) { return r.dist; }),
+                sight: rows[0].sight, reach: rows[0].reach,
                 secs: Math.round(mean(function (r) { return r.secs; })) };
     /* Share of the fleet each side kept, which is the comparable number when the counts differ. */
     out.aShare = out.aLeft / aN;
@@ -215,6 +245,32 @@ var PURSE = 3000;         /* credits per side - see the header */
          cruVsSub.bShare > cruVsSub.aShare,
          'subs kept ' + Math.round(cruVsSub.bShare * 100) + '%, cruisers ' +
          Math.round(cruVsSub.aShare * 100) + '%');
+  }
+
+  /* 3c. AND A HULL HAS TO USE THE RANGE IT WAS SOLD ON. Every warship here outreaches its own
+     sight, and acquisition was capped at sight - so each closed to less than its own reach
+     before it could fire, and the Cruiser, whose whole description is "outranges everything
+     afloat", threw away ten of its thirty-eight. Asserted on the Cruiser because it has the
+     largest gap and the most expensive claim; the sample is selected from the stat block, so
+     deleting the behaviour cannot delete the measurement. */
+  if (cruVsMsub) {
+    S.ok('the engagement range was actually sampled', cruVsMsub.dist > 0,
+         cruVsMsub.dist ? cruVsMsub.dist.toFixed(1) : 'no samples inside reach — nothing measured');
+    S.ok('the Cruiser fights from beyond its own sight',
+         cruVsMsub.dist > cruVsMsub.sight,
+         'mean engagement range ' + cruVsMsub.dist.toFixed(1) + ' against sight ' +
+         cruVsMsub.sight + ' and reach ' + cruVsMsub.reach);
+  }
+  /* AND AGAINST SUBMARINES IT DOES NOT, WHICH IS THE DESIGN AND NOT A FAULT. The first version
+     of this asserted the range on both of the Cruiser's matchups and failed on this one at 17.6
+     against a sight of 28 - correctly. A Cruiser carries no sonar, so a submerged boat is not a
+     target at any range: it closes to torpedo range and surfaces, and that is the whole reason
+     the hull's own description says never to sail one alone. Reported, because the number IS the
+     blindness and it is worth being able to see it move. */
+  if (cruVsSub) {
+    S.note('  and against submarines the Cruiser is engaged at ' + cruVsSub.dist.toFixed(1) +
+           ', well inside its sight of ' + cruVsSub.sight + ' — it has no sonar, so a submerged' +
+           ' boat closes to torpedo range before it is a target at all');
   }
 
   /* 4. And the fights actually happen. Two fleets that never met measure nothing, and this is
