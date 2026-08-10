@@ -119,6 +119,18 @@ var RTS_WEAPONS = {
                 verses:{ none:0.7, wood:1.1, light:1.0, heavy:0.9, concrete:0.8 } },
   navalheavy: { dmg:55, range:30, cool:2.2, shot:'shell', speed:60, splash:3.0, wall:true, wood:true,
                 verses:{ none:0.6, wood:1.2, light:1.1, heavy:1.0, concrete:0.9 } },
+  /* THE CRUISER'S MAIN BATTERY, and the longest reach in the game at 38 - past the Missile
+     Sub's 34, which is the point of it. The Allied navy had nothing that could answer a hull
+     shelling its coast from beyond every gun it owned; this is that answer.
+
+     Ruinous against buildings and no better than adequate against ships, which is what stops it
+     being a strictly better Destroyer for a thousand more credits. The `verses` table does that
+     work rather than a special case: 1.4 against wood and 1.3 against concrete make it a siege
+     piece, 0.75 against heavy make it a poor duellist, and a Cruiser that lets submarines close
+     is in real trouble - it carries no sonar and its reach is worth nothing at knife range. */
+  cruisergun: { dmg:90, range:38, cool:3.4, burst:2, shot:'shell', speed:55, splash:4.0,
+                wall:true, wood:true,
+                verses:{ none:0.5, wood:1.4, light:1.0, heavy:0.75, concrete:1.3 } },
   /* A torpedo cannot climb out of the water, so a submarine is helpless against the shore -
      which is what makes the Missile Sub worth its price rather than a strictly better one. */
   torpedo:    { dmg:70, range:22, cool:2.6, shot:'shell', speed:40, splash:1.2, seaOnly:true,

@@ -873,7 +873,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">82b7b15 · 2026-08-10</div>
+  <div id="rtsBuild" title="build">07c2aee · 2026-08-10</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -3191,12 +3191,44 @@ var RTS_UNITS = [
     desc:'Cheap escort. Shells the shore and anything afloat.' },
   /* `detects` is SONAR: the radius at which this hull finds a submerged boat, against the
      RTS_SUB_DETECT floor everything else has. It is the only reason to own a Destroyer rather
-     than two Gunboats, and it is what its own description has always claimed. */
+     than two Gunboats, and it is what its own description has always claimed.
+
+     NINE TILES IS DELIBERATE AND WAS RE-TESTED RATHER THAN ASSUMED. e2e/navy measures three
+     submarines against three Destroyers - 2,850 credits against 3,000 - and the submarines lose
+     all three in about half a minute. That looks like a bug and is not: the Destroyer is the
+     designed submarine-killer, in the original and here, and a navy where the cloaked hull also
+     beat its counter would leave the Allies nothing to do about it.
+
+     It was tried the other way to be sure. Sonar cut to 5 tiles - inside torpedo range, on the
+     theory that the submarine should get its shot away before being found - moved the outcome
+     from 50% of the Destroyer fleet surviving to 46%, and changed nothing else. The submarines
+     were never losing to detection range; they were losing to 1,500 hit points against 2,100
+     while trading damage roughly evenly. The number went back. */
   { key:'destroyer',name:'Destroyer',    kind:'ship',     cost:1000, build:14, hp:700,  speed:11,  turn:1.4,r:2.4, sight:24,
     weapon:'navalheavy', needs:['navalyard'], sea:true, side:'allied', aaOnly:false,
     detects:RTS_TILE * 9,
     armour:'heavy',
     desc:'Heavy guns and long reach. Its sonar finds submarines — the Allied answer to them.' },
+  /* THE CRUISER. The Allied line stopped at the Destroyer, which meant the Soviets owned the
+     long game at sea: a Missile Sub bombards from 34 and submerges, and nothing Allied reached
+     it. This is the counterweight, and it is deliberately not a bigger Destroyer.
+
+     What it is: the longest reach in the game, and a siege piece. What it is not: safe. No
+     sonar, the worst turn rate afloat, and a `verses` table that is poor against `heavy` - so
+     submarines eat it, which is exactly the relationship the two navies should have. Gated
+     behind the Tech Center as well as a yard, because a 2,000-credit hull that arrives at the
+     same time as a Gunboat would end the naval game rather than open it.
+
+     1,400 HIT POINTS AND A 3.4-SECOND GUN ARE MEASURED NUMBERS, not a guess at what a capital
+     ship should feel like. It shipped at 900 and 4.2 and e2e/navy killed it immediately: one
+     Cruiser against two Missile Subs for the same 3,000 credits lost the hull without taking
+     one down, 0% against 100%. At this price a Cruiser is always outnumbered - that is what
+     being the dearest hull in the game MEANS - so it has to be worth the two it faces, or it is
+     a cameo nobody would ever click. */
+  { key:'cruiser',  name:'Cruiser',      kind:'ship',     cost:2000, build:22, hp:1400, speed:8,   turn:0.9,r:2.8, sight:28,
+    weapon:'cruisergun', needs:['navalyard', 'lab'], sea:true, side:'allied',
+    armour:'heavy',
+    desc:'Outranges everything afloat and flattens a shoreline. Blind to submarines — never sail one alone.' },
   /* `cloak` is Cloakable, from the stat block. It submerges, and it has to surface to fire -
      see RTS_SUB_SURFACE and _rtsCloakAI. */
   { key:'sub',      name:'Submarine',    kind:'ship',     cost:950,  build:13, hp:500,  speed:10,  turn:1.3,r:2.0, sight:18,
@@ -3353,6 +3385,18 @@ var RTS_WEAPONS = {
                 verses:{ none:0.7, wood:1.1, light:1.0, heavy:0.9, concrete:0.8 } },
   navalheavy: { dmg:55, range:30, cool:2.2, shot:'shell', speed:60, splash:3.0, wall:true, wood:true,
                 verses:{ none:0.6, wood:1.2, light:1.1, heavy:1.0, concrete:0.9 } },
+  /* THE CRUISER'S MAIN BATTERY, and the longest reach in the game at 38 - past the Missile
+     Sub's 34, which is the point of it. The Allied navy had nothing that could answer a hull
+     shelling its coast from beyond every gun it owned; this is that answer.
+
+     Ruinous against buildings and no better than adequate against ships, which is what stops it
+     being a strictly better Destroyer for a thousand more credits. The `verses` table does that
+     work rather than a special case: 1.4 against wood and 1.3 against concrete make it a siege
+     piece, 0.75 against heavy make it a poor duellist, and a Cruiser that lets submarines close
+     is in real trouble - it carries no sonar and its reach is worth nothing at knife range. */
+  cruisergun: { dmg:90, range:38, cool:3.4, burst:2, shot:'shell', speed:55, splash:4.0,
+                wall:true, wood:true,
+                verses:{ none:0.5, wood:1.4, light:1.0, heavy:0.75, concrete:1.3 } },
   /* A torpedo cannot climb out of the water, so a submarine is helpless against the shore -
      which is what makes the Missile Sub worth its price rather than a strictly better one. */
   torpedo:    { dmg:70, range:22, cool:2.6, shot:'shell', speed:40, splash:1.2, seaOnly:true,
@@ -3898,7 +3942,13 @@ var RTS_AI = {
        crossing is on, the craft is the thing the whole team is waiting for. */
     ship:[ { key:'destroyer', at:2600, w:3 }, { key:'missilesub', at:2800, w:2 },
            { key:'sub', at:1800, w:3 }, { key:'gunboat', at:1100, w:3 },
-           { key:'lst', at:1400, w:4 } ],
+           { key:'lst', at:1400, w:4 },
+           /* The Cruiser is the dearest hull in the game and gated behind the Tech Center on
+              top of a yard, so _rtsCanQueue keeps it inert for most of a match without needing
+              a rule here. Weight 2: it is a siege piece rather than a fleet, and an opponent
+              that spent its whole navy budget on one 2,000-credit hull would own the coastline
+              and lose the water. */
+           { key:'cruiser', at:3200, w:2 } ],
     infantry:[ { key:'flame', at:1200, w:2 }, { key:'grenadier', at:900, w:2 },
                { key:'rocket', at:500, w:3 }, { key:'dog', at:400, w:2 },
                { key:'rifle', at:250, w:2 }, { key:'engineer', at:2200, w:2 } ],
@@ -4397,6 +4447,27 @@ var RTS_TEAM_TYPES = [
     missions:[ ['patrol','sea'], ['attack','buildings'], ['tarcom',0] ] },
   { name:'Wolfpack', priority:3, reinforce:false, quarry:'buildings',
     members:{ sub:2, missilesub:1 },
+    max:1, autocreate:true, suicide:false,
+    missions:[ ['patrol','sea'], ['attack','buildings'], ['tarcom',0] ] },
+  /* THE SIEGE PAIR, and the reason the Cruiser is not simply another entry in the Flotilla.
+     _rtsAIUnits rolls the ship mix without asking any team whether it wants the hull, so a
+     type nothing lists is a type the opponent buys at 2,000 credits and then never sails
+     anywhere - it would sit at the yard until the base was attacked. Every hull in a mix
+     needs a type that fields it.
+
+     A separate type rather than `cruiser:1` added to the Flotilla, because a team only
+     marches at FULL STRENGTH: folding it in would ground the Gunboats until a Tech Center
+     existed, and the Allied navy would stop leaving harbour for the first half of the match.
+     Kept out of the Flotilla, the two coexist - the escort fleet from the moment there is a
+     yard, this once there is a lab. `_rtsCanProduce` gates candidacy on every member, so the
+     type is simply not a candidate before then, and never is for the Soviets.
+
+     The Destroyer is not decoration. The Cruiser carries no sonar and its reach is worth
+     nothing at knife range, so a submarine that closes on an unescorted one kills it - e2e/navy
+     measures exactly that. Sending it out alone would be spending the dearest hull in the game
+     on a gift, and it is what the unit's own description tells the player not to do. */
+  { name:'Bombard',  priority:3, reinforce:false, quarry:'buildings',
+    members:{ cruiser:1, destroyer:1 },
     max:1, autocreate:true, suicide:false,
     missions:[ ['patrol','sea'], ['attack','buildings'], ['tarcom',0] ] },
   /* --- AND ACROSS IT. The one team that uses the water to deliver an ARMY rather than to
@@ -7028,13 +7099,16 @@ function _sprUnitModel(key, side, prone, part) {
       _r3Box(m, _len * 0.60, 3.6, 0, 0.5, 1.1, 11.0, DK[1], DK[3]);
     }
 
-  } else if (key === 'gunboat' || key === 'destroyer') {
+  } else if (key === 'gunboat' || key === 'destroyer' || key === 'cruiser') {
     /* SURFACE SHIPS. Long and narrow with a raked bow - a hull has to read as a hull from
        above or it is just a rectangle in the sea, and the only cues that survive this camera
        are the taper at the front and the wake-line down the middle. No tracks and no wheels:
        the underside is never seen, and drawing a keel would only widen the silhouette. */
-    var _big = (key === 'destroyer');
-    var _L = _big ? 26 : 19, _Wd = _big ? 8.5 : 6.5;
+    /* Three sizes off one hull, because the silhouette IS the difference at this camera: a
+       Cruiser has to read as bigger than a Destroyer at a glance or the player cannot tell what
+       is in their fleet without clicking it. The extra turret aft comes with `_big`. */
+    var _cru = (key === 'cruiser'), _big = (key === 'destroyer' || _cru);
+    var _L = _cru ? 32 : (_big ? 26 : 19), _Wd = _cru ? 10.5 : (_big ? 8.5 : 6.5);
     _r3Slab(m, 0, 0.6, 0, _L, 3.4, _Wd, 1.4, VH[0], VH[1]);              /* hull */
     _r3Box(m, _L * 0.40, 0.9, 0, _L * 0.22, 2.8, _Wd * 0.55, VH[1], VH[3]);   /* raked bow */
     _r3Box(m, -_L * 0.06, 4.0, 0, _L * 0.34, 3.2, _Wd * 0.66, VH[2], VH[0]);  /* superstructure */
@@ -7212,10 +7286,10 @@ function _sprUnit(key, side, prone, part) {
 /* Which units carry a separately-rotating turret. Artillery is deliberately NOT on this list:
    a howitzer traverses on its chassis, and a fixed forward tube is what makes it read as
    artillery rather than as another tank. */
-/* Which hulls carry a turret that aims independently of the body. The two gun ships do - a
-   destroyer and a gunboat both traverse their guns - and their SHPs are laid out that way, so
+/* Which hulls carry a turret that aims independently of the body. The gun ships do - a cruiser,
+   a destroyer and a gunboat all traverse their guns - and their SHPs are laid out that way, so
    leaving them out drew the turret frames as if they were hull facings. */
-var RTS_TURRETED = { tank:1, light:1, heavy:1, destroyer:1, gunboat:1 };
+var RTS_TURRETED = { tank:1, light:1, heavy:1, destroyer:1, gunboat:1, cruiser:1 };
 
 /* The concrete apron a structure stands on. In the reference every building sits on a pale
    irregular pad noticeably larger than itself - it is what stops a base looking like
@@ -7629,8 +7703,8 @@ var RTS_MIX_UNIT = {
   /* THE FLEET. Absent, so with the player's own files loaded a real Naval Yard launched
      procedurally-baked boxes alongside real 2tnk and e1 sprites - the one place on the map
      where the two art styles stood side by side. RA's own names: pt is the gunboat, dd the
-     destroyer, ss the submarine, msub the missile sub, lst the landing craft. */
-  gunboat:'pt', destroyer:'dd', sub:'ss', missilesub:'msub', lst:'lst'
+     destroyer, ss the submarine, msub the missile sub, lst the landing craft, ca the cruiser. */
+  gunboat:'pt', destroyer:'dd', sub:'ss', missilesub:'msub', lst:'lst', cruiser:'ca'
 };
 
 /* Infantry are not a rotation set, they are a sequence table, and the layout comes straight

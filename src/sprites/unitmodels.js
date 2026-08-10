@@ -327,13 +327,16 @@ function _sprUnitModel(key, side, prone, part) {
       _r3Box(m, _len * 0.60, 3.6, 0, 0.5, 1.1, 11.0, DK[1], DK[3]);
     }
 
-  } else if (key === 'gunboat' || key === 'destroyer') {
+  } else if (key === 'gunboat' || key === 'destroyer' || key === 'cruiser') {
     /* SURFACE SHIPS. Long and narrow with a raked bow - a hull has to read as a hull from
        above or it is just a rectangle in the sea, and the only cues that survive this camera
        are the taper at the front and the wake-line down the middle. No tracks and no wheels:
        the underside is never seen, and drawing a keel would only widen the silhouette. */
-    var _big = (key === 'destroyer');
-    var _L = _big ? 26 : 19, _Wd = _big ? 8.5 : 6.5;
+    /* Three sizes off one hull, because the silhouette IS the difference at this camera: a
+       Cruiser has to read as bigger than a Destroyer at a glance or the player cannot tell what
+       is in their fleet without clicking it. The extra turret aft comes with `_big`. */
+    var _cru = (key === 'cruiser'), _big = (key === 'destroyer' || _cru);
+    var _L = _cru ? 32 : (_big ? 26 : 19), _Wd = _cru ? 10.5 : (_big ? 8.5 : 6.5);
     _r3Slab(m, 0, 0.6, 0, _L, 3.4, _Wd, 1.4, VH[0], VH[1]);              /* hull */
     _r3Box(m, _L * 0.40, 0.9, 0, _L * 0.22, 2.8, _Wd * 0.55, VH[1], VH[3]);   /* raked bow */
     _r3Box(m, -_L * 0.06, 4.0, 0, _L * 0.34, 3.2, _Wd * 0.66, VH[2], VH[0]);  /* superstructure */

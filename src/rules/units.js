@@ -153,12 +153,44 @@ var RTS_UNITS = [
     desc:'Cheap escort. Shells the shore and anything afloat.' },
   /* `detects` is SONAR: the radius at which this hull finds a submerged boat, against the
      RTS_SUB_DETECT floor everything else has. It is the only reason to own a Destroyer rather
-     than two Gunboats, and it is what its own description has always claimed. */
+     than two Gunboats, and it is what its own description has always claimed.
+
+     NINE TILES IS DELIBERATE AND WAS RE-TESTED RATHER THAN ASSUMED. e2e/navy measures three
+     submarines against three Destroyers - 2,850 credits against 3,000 - and the submarines lose
+     all three in about half a minute. That looks like a bug and is not: the Destroyer is the
+     designed submarine-killer, in the original and here, and a navy where the cloaked hull also
+     beat its counter would leave the Allies nothing to do about it.
+
+     It was tried the other way to be sure. Sonar cut to 5 tiles - inside torpedo range, on the
+     theory that the submarine should get its shot away before being found - moved the outcome
+     from 50% of the Destroyer fleet surviving to 46%, and changed nothing else. The submarines
+     were never losing to detection range; they were losing to 1,500 hit points against 2,100
+     while trading damage roughly evenly. The number went back. */
   { key:'destroyer',name:'Destroyer',    kind:'ship',     cost:1000, build:14, hp:700,  speed:11,  turn:1.4,r:2.4, sight:24,
     weapon:'navalheavy', needs:['navalyard'], sea:true, side:'allied', aaOnly:false,
     detects:RTS_TILE * 9,
     armour:'heavy',
     desc:'Heavy guns and long reach. Its sonar finds submarines — the Allied answer to them.' },
+  /* THE CRUISER. The Allied line stopped at the Destroyer, which meant the Soviets owned the
+     long game at sea: a Missile Sub bombards from 34 and submerges, and nothing Allied reached
+     it. This is the counterweight, and it is deliberately not a bigger Destroyer.
+
+     What it is: the longest reach in the game, and a siege piece. What it is not: safe. No
+     sonar, the worst turn rate afloat, and a `verses` table that is poor against `heavy` - so
+     submarines eat it, which is exactly the relationship the two navies should have. Gated
+     behind the Tech Center as well as a yard, because a 2,000-credit hull that arrives at the
+     same time as a Gunboat would end the naval game rather than open it.
+
+     1,400 HIT POINTS AND A 3.4-SECOND GUN ARE MEASURED NUMBERS, not a guess at what a capital
+     ship should feel like. It shipped at 900 and 4.2 and e2e/navy killed it immediately: one
+     Cruiser against two Missile Subs for the same 3,000 credits lost the hull without taking
+     one down, 0% against 100%. At this price a Cruiser is always outnumbered - that is what
+     being the dearest hull in the game MEANS - so it has to be worth the two it faces, or it is
+     a cameo nobody would ever click. */
+  { key:'cruiser',  name:'Cruiser',      kind:'ship',     cost:2000, build:22, hp:1400, speed:8,   turn:0.9,r:2.8, sight:28,
+    weapon:'cruisergun', needs:['navalyard', 'lab'], sea:true, side:'allied',
+    armour:'heavy',
+    desc:'Outranges everything afloat and flattens a shoreline. Blind to submarines — never sail one alone.' },
   /* `cloak` is Cloakable, from the stat block. It submerges, and it has to surface to fire -
      see RTS_SUB_SURFACE and _rtsCloakAI. */
   { key:'sub',      name:'Submarine',    kind:'ship',     cost:950,  build:13, hp:500,  speed:10,  turn:1.3,r:2.0, sight:18,

@@ -51,10 +51,10 @@ function _sprUnit(key, side, prone, part) {
 /* Which units carry a separately-rotating turret. Artillery is deliberately NOT on this list:
    a howitzer traverses on its chassis, and a fixed forward tube is what makes it read as
    artillery rather than as another tank. */
-/* Which hulls carry a turret that aims independently of the body. The two gun ships do - a
-   destroyer and a gunboat both traverse their guns - and their SHPs are laid out that way, so
+/* Which hulls carry a turret that aims independently of the body. The gun ships do - a cruiser,
+   a destroyer and a gunboat all traverse their guns - and their SHPs are laid out that way, so
    leaving them out drew the turret frames as if they were hull facings. */
-var RTS_TURRETED = { tank:1, light:1, heavy:1, destroyer:1, gunboat:1 };
+var RTS_TURRETED = { tank:1, light:1, heavy:1, destroyer:1, gunboat:1, cruiser:1 };
 
 /* The concrete apron a structure stands on. In the reference every building sits on a pale
    irregular pad noticeably larger than itself - it is what stops a base looking like
