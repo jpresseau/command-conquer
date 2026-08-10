@@ -1,7 +1,8 @@
 # The world — shroud, start positions, triggers and saves
 
 The map as the players see it and the scenario layer on top of it. Implemented in
-`src/core/supers.js` (shroud), `src/core/terrain.js`, `src/core/triggers.js` and
+`src/core/supers.js` (shroud), `src/core/terrain.js` (the land), `src/core/scenario.js`
+(the two starts, the ore layout and base placement), `src/core/triggers.js` and
 `src/rts.save.js`.
 
 > Reference, split out of `CLAUDE.md`. The rules that must be followed before touching
