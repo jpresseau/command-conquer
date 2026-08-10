@@ -201,7 +201,12 @@ function _rtsUpdateUnit(e, dt) {
     e.path = null; e.goal = null;
     if (w && (!tgt || _rtsRangeTo(e, tgt) > _rtsReach(e))) e.target = tgt = _rtsFindTarget(e, _rtsReach(e));
   } else if (w && !tgt && (e.order === 'amove' || !e.order)) {
-    tgt = _rtsFindTarget(e, d.sight);
+    /* A SIEGE PIECE LOOKS AS FAR AS IT SHOOTS. Everything else keeps looking only as far as it
+       can see, which is right - but a hull whose gun outreaches its own eyes by eighteen has to
+       walk into everything else's range before it may fire, and that is the whole reason the
+       Artillery and the V2 were worthless. The `hold` branch above already acquires at reach;
+       this is the same rule reaching the path that attacks actually take. */
+    tgt = _rtsFindTarget(e, d.standoff ? Math.max(d.sight, _rtsReach(e)) : d.sight);
     if (tgt) { e.target = tgt; if (!e.order) { e.order = 'attack'; e.path = null; } }
   }
   if (w) {
@@ -233,7 +238,15 @@ function _rtsUpdateUnit(e, dt) {
          withholding the shot - which would leave artillery trundling past its target forever -
          a unit in range STOPS, and fires on the tick after it has halted. */
       var inRange = _rtsRangeTo(e, shootAt) <= fw.range;
-      if (d.noMovingFire && inRange && e.path) { e.path = null; e.goal = null; }
+      /* SHOOT AND SCOOT. NoMovingFire stops a hull so it can fire, and _rtsStandoff walks it
+         backwards - left alone the two fight each other every tick and the stop always wins,
+         so a standoff unit would acquire at its full reach (good) and then never actually give
+         any ground (useless). Measured with only the acquisition half working: 5 Artillery
+         still lost 0 of 5 to 3 Battle Tanks, having taken them to 30% instead of 57%.
+         The reload is what settles it. A loaded gun is worth more than a few yards, so the hull
+         plants itself and fires; the moment the shot is away it has 3.4 seconds with nothing to
+         do but reposition, and that is when it backs off. */
+      if (d.noMovingFire && inRange && e.path && !(d.standoff && e.cool > 0)) { e.path = null; e.goal = null; }
       if (e.cool <= 0 && Math.abs(td) < tol && (homing || !e.tRot) && inRange
           && !(d.noMovingFire && e.path)) _rtsFire(e, shootAt, fw);
     } else if (!e.path) {
@@ -244,7 +257,13 @@ function _rtsUpdateUnit(e, dt) {
     }
     if (tgt && !chasing) {
       if (e.order === 'attack' || e.order === 'amove' || !e.order) e.path = null;
-      if (e.order === 'attack') return;      /* in range: hold and keep firing */
+      /* ...and then a standoff hull may put a path BACK, to give ground. It fires while it
+         does: the shot above has already been taken this tick. */
+      if (d.standoff) _rtsStandoff(e, dt);
+      /* `!e.path` keeps the original behaviour exactly for everything else - the line above
+         has just cleared it - while letting a hull that decided to back off fall through to
+         the steering at the bottom instead of standing still with a path it never walks. */
+      if (e.order === 'attack' && !e.path) return;   /* in range: hold and keep firing */
     } else if (chasing && e.order === 'attack') {
       /* close on the ordered target; repath now and then rather than every frame */
       e.rep = (e.rep || 0) - dt;
@@ -253,6 +272,46 @@ function _rtsUpdateUnit(e, dt) {
   } else { e.turret = e.rot; }
 
   if (e.path) { _rtsSteer(e, dt, d); if (!e.path && (e.order === 'move' || e.order === 'amove')) e.order = null; }
+}
+/* GIVE GROUND RATHER THAN TRADE - the movement half of RTS_STANDOFF_KEEP, and see that constant
+   for why it exists at all. Reached only from the in-range branch above, so it can never delay an
+   approach: by the time this runs the hull has already taken its shot this tick and is standing
+   at a distance it is happy with, or too close to one.
+
+   THE THREAT IS THE NEAREST ARMED ENEMY *UNIT*, and both of those words are load-bearing. A
+   building cannot follow, so backing away from the Pillbox a team was sent to demolish would be
+   the siege piece refusing its own order - the one thing it is unambiguously for. And an unarmed
+   vehicle is not a reason to give ground: a harvester wandering past must not be able to walk an
+   artillery battery off its firing position.
+
+   Re-planned on a timer rather than every frame, one short hop at a time, because this competes
+   with the steering: a fresh full-length path every tick is how the harvester thrash bug worked. */
+function _rtsStandoff(e, dt) {
+  /* A LOADED GUN OUTRANKS A FEW YARDS - see the shoot-and-scoot note by NoMovingFire. Backing
+     off is what a siege piece does with its reload, not instead of its shot. */
+  if (e.cool <= 0) return;
+  e.soT = (e.soT || 0) - dt;
+  if (e.soT > 0) return;
+  var G = window._rtsG, keep = _rtsReach(e) * RTS_STANDOFF_KEEP;
+  var near = null, nd = keep;
+  for (var i = 0; i < G.ents.length; i++) {
+    var o = G.ents[i];
+    if (o.dead || o.type !== 'unit' || o.side === e.side || o.inside) continue;
+    var od = rtsUnitDef(o.def);
+    if (!od || !od.weapon) continue;
+    var dd = Math.hypot(o.x - e.x, o.z - e.z);
+    if (dd < nd) { nd = dd; near = o; }
+  }
+  if (!near) return;                                  /* nothing inside the keep distance */
+  e.soT = RTS_STANDOFF_RATE;
+  var a = Math.atan2(e.z - near.z, e.x - near.x);
+  var step = Math.min(RTS_STANDOFF_STEP, keep - nd);
+  var gx = e.x + Math.cos(a) * step, gz = e.z + Math.sin(a) * step;
+  var tx = _rtsTX(gx), tz = _rtsTX(gz);
+  /* CORNERED MEANS STAND AND FIGHT. Failing to find open ground behind must leave the hull
+     firing where it is, not stop it dead with a path it cannot walk. */
+  if (!_rtsInB(tx, tz) || _rtsBlocked(tx, tz)) return;
+  e.path = [{ x:gx, z:gz }]; e.pi = 0; e.goal = { x:gx, z:gz };
 }
 /* UNIT.CPP Overrun_Square. A crusher threatens the ground in front of it: infantry there
    scatter out of the way, and any that are actually under the tracks are killed. The
