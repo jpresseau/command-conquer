@@ -179,9 +179,13 @@ function _rtsRightClick(mx, my) {
         else if (md.steal && tgt.def === md.stealFrom) job = 'capture';
         else if (md.demo) job = 'demo';
       }
-      if (job) {
+      /* The capture order goes through _rtsOrderCapture rather than being written out here, so
+         the player's engineer and the opponent's walk in on identical terms - there is one
+         definition of what the order is. `demo` has no second caller and stays inline. */
+      if (job === 'capture' && _rtsOrderCapture(mu, tgt)) { special++; capped++; }
+      else if (job === 'demo') {
         mu.order = job; mu.target = tgt; mu.path = null; mu.goal = null; mu.susp = null;
-        special++; if (job === 'capture') capped++;
+        special++;
       } else _rtsOrderAttack(mu, tgt);
     }
     _rtsFlash(tgt.x, tgt.z, special === mine.length ? 'harvest' : 'attack');

@@ -314,6 +314,18 @@ function _rtsOrderUnloadAt(t, x, z) {
   if (!t.path) { t.order = null; return false; }
   return true;
 }
+/* "Go and take that." One definition of what a capture order IS, because there are two callers
+   now - the player's right-click and the opponent's capture leg - and a squad walking in for
+   one side must be walking in on exactly the same terms as for the other. The route is left to
+   the unit tick rather than pathed here: _rtsApproach needs the unit's bearing on the building
+   to pick which side to stand on, and that is only right once it is actually moving. */
+function _rtsOrderCapture(u, b) {
+  if (!u || u.type !== 'unit' || !b || b.type !== 'struct') return false;
+  if (b.dead || b.selling || b.side === u.side || !rtsCapturable(b.def)) return false;
+  u.order = 'capture'; u.target = b; u.hstate = null;
+  u.path = null; u.goal = null; u.susp = null;
+  return true;
+}
 function _rtsOrderAttack(e, tgt) {
   if (e.type !== 'unit') return;
   var d = rtsUnitDef(e.def);

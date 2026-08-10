@@ -37,6 +37,41 @@ var RTS_POWER_DAMAGE = 6;       /* hit points per tick, on buildings above Condi
    because nothing here builds ships in parallel yet. */
 var RTS_BUILD_SPEEDUP = [100, 75, 60, 50];
 
+/* How far a building may sit from the densest point of a side's holdings and still be part of
+   THAT base. Recalc_Center needed no such number - a house's buildings were all in one place,
+   because nothing could move one. An engineer can, so a side can hold two clusters, and a mean
+   taken over both lands between them and describes neither.
+
+   88 world units is 22 tiles, comfortably wider than any base a generated map produces (the
+   widest measured spread from the seed building is 14 tiles) and far narrower than the distance
+   between the two starts, which is what has to be told apart. See _rtsBaseCentre. */
+var RTS_BASE_REACH = 22 * RTS_TILE;
+/* ...and how far past the radius still counts as being AT the base, for "is my base under
+   attack". Deliberately smaller than the c.r*4 _rtsWhichZone uses to decide whether a point is
+   worth reasoning about at all: being somewhere the opponent has an opinion about is not the
+   same as being somewhere it should recall its army to. */
+var RTS_BASE_SPAN = 2.5;
+
+/* ------------------------------------------------- what a capture is worth (mine, not ported) --
+   The original's AI does not use engineers, so there is no table to port here. These are the
+   terms of the decision _rtsAIWorthCapturing makes; see core/capturead.js for what each means. */
+var RTS_CAP_YARD_WORTH = 2500;   /* the Construction Yard's `cost` is 0 - see _rtsCaptureWorth */
+var RTS_CAP_FACTORY_MULT = 1.5;  /* taking a producer takes the line, not just the shell */
+/* Below this, the building is worth less than the engineer plus the walk. An engineer is 500,
+   so a Power Plant at 300 is a straight loss and a Barracks at 400 is not worth a unit and two
+   minutes; a Refinery at 2000 or a War Factory at 1600 plainly is. */
+var RTS_CAP_MIN_WORTH = 800;
+/* Guns covering the target, past which the engineer does not arrive. Two is already generous
+   for a unit with 45 hp and no armour: a single Pillbox kills it in three shots over about a
+   second, against the two-and-a-bit seconds it takes to walk the last fifteen units. */
+var RTS_CAP_MAX_GUNS = 2;
+var RTS_CAP_RECHECK = 20;        /* seconds between re-answering; the walk test is not free */
+/* How much distance discounts the prize. At this many world units away a target is worth half
+   what it is worth next door - 40 tiles, a little under a third of the map, which is about as
+   far as an engineer can walk before the match is decided around it. Not a hard cutoff: a
+   Refinery across the map still beats a Barracks next door, which is the right answer. */
+var RTS_CAP_WALK_SCALE = 40 * RTS_TILE;
+
 var RTS_AI = {
   baseSizeAdd:3,
   powerSurplus:50,          /* keep this much spare power in hand */
@@ -105,6 +140,11 @@ var RTS_AI = {
      fleetPerYard because that number is about how big a navy is worth having and this one is
      about how many boats a plan needs. */
   craftCap:1,
+  /* Engineers, total, for the same reason and with a sharper edge: an engineer is spent on
+     arrival, so unlike a hull it is never reusable and a second one is only ever a second
+     500-credit unit standing in the open. One Snatch team wants one engineer; anything past
+     that is the waste the gate exists to prevent. */
+  engCap:1,
   /* The order _rtsAIWants walks. Economy, then production, then tech, then defence - tech
      before defence because a Tech Center that arrives after the match is decided is worth
      nothing, and the defensive ratios are big enough to soak every spare credit otherwise.
@@ -161,13 +201,25 @@ var RTS_AI = {
     vehicle:[ { key:'heavy', at:2600, w:3 }, { key:'arty',  at:2000, w:2 }, { key:'v2rl', at:2000, w:2 },
               { key:'tank', at:1600, w:4 },
               { key:'light', at:1100, w:3 }, { key:'buggy', at:900,  w:2 } ],
-    /* No engineer in the mix. Capturing is a decision about a specific building at a specific
-       moment, and an AI that buys engineers without a plan for them just donates 600 credits
-       to whatever shoots them first. Buildable by the player; not spammed by the opponent. */
-    /* No engineer and no thief in the mix. Both are decisions about a specific building at a
-       specific moment, and an AI that buys them without a plan just donates the credits to
-       whatever shoots them first. The Commando is out for the same reason plus her `only` cap.
-       The dog IS in: it needs no plan, it just runs at infantry. */
+    /* No thief in the mix, and no Commando - both are decisions about a specific building at
+       a specific moment, and an AI that buys them without a plan just donates the credits to
+       whatever shoots them first (the Commando also has her `only` cap). The dog IS in: it
+       needs no plan, it just runs at infantry.
+
+       THE ENGINEER IS IN NOW, AND CONDITIONALLY, exactly as the landing craft is. This block
+       used to say there was none, in two separate paragraphs saying the same thing, and the
+       reason given was the true one: there was nothing that made the decision. There is now.
+       _rtsAIProduce refuses this key unless _rtsAIWorthCapturing() has found a player building
+       actually worth taking and actually reachable on foot, and caps it at `engCap`.
+
+       `at` IS 2200 AND THAT NUMBER IS LOAD-BEARING, unlike every other `at` on this line.
+       _rtsAIUnits only runs at all when the bank is above _rtsAISpare, whose floor is
+       infantryReserve = 2000 - so 1200/900/500/400/250 below are compared against a balance
+       guaranteed to be larger and can never skip anything. They are dead thresholds that read
+       as live ones. This one is above the floor deliberately: an engineer is 500 credits that
+       buys no army, and an opponent that cannot also afford to keep fighting should not be
+       making that trade. Weight 2 rather than 4: unlike the craft, whose team is waiting on it
+       and can do nothing else, a capture is opportunistic and the tanks are never wasted. */
     /* SHIPS, once there is a yard to build them at - _rtsCanQueue gates on `needs`, so these
        are inert until one exists. Both armies are listed and _rtsCanQueue drops whichever
        belong to the other, exactly as the defensive block and the aircraft block already do.
@@ -190,7 +242,7 @@ var RTS_AI = {
            { key:'lst', at:1400, w:4 } ],
     infantry:[ { key:'flame', at:1200, w:2 }, { key:'grenadier', at:900, w:2 },
                { key:'rocket', at:500, w:3 }, { key:'dog', at:400, w:2 },
-               { key:'rifle', at:250, w:2 } ],
+               { key:'rifle', at:250, w:2 }, { key:'engineer', at:2200, w:2 } ],
     /* AIRCRAFT, once there is a pad to fly from - _rtsCanQueue gates on `needs`, so these are
        inert until one exists and there is no separate check to keep in step. Both armies again;
        the Attack Heli was buildable by the player from the day it shipped and the opponent never

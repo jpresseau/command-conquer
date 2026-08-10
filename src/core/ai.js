@@ -13,7 +13,19 @@ function _rtsAIWants(S) {
     e = G.ents[i];
     if (e.type !== 'struct' || e.dead || e.selling) continue;
     if (e.side === 'player') { theirs++; continue; }
-    have[e.def] = (have[e.def] || 0) + 1; own++;
+    have[e.def] = (have[e.def] || 0) + 1;
+    /* `have` counts everything this side owns - a captured Refinery is a Refinery and the plan
+       must not queue a replacement for it. `own` is a different question: how big is MY BASE,
+       and it is the number every ratio in the plan is multiplied by.
+
+       A captured building must not count towards that, and until one could exist the two were
+       the same number so nothing said so. Capturing moves a building from `theirs` to `own`,
+       which swings `size` by two and lifts the target for every key in the order at once - so
+       the walk keeps finding an early entry short and never reaches the tail. Measured on the
+       base-defence seed: after the opponent took a Command Yard, its plan never asked for a
+       Tesla Coil again, not late but never, still unwanted at 600 seconds. An outpost inside
+       the enemy's base does not mean this house needs another power plant at home. */
+    if (_rtsInBase(e.side, e.x, e.z)) own++;
   }
   /* count what is already on the way, or the AI queues four refineries in a row */
   if (S.q.struct) have[S.q.struct.key] = (have[S.q.struct.key] || 0) + 1;
@@ -68,163 +80,6 @@ function _rtsAIWants(S) {
     if ((have[k] || 0) < want) return { key:k, urgent:false };
   }
   return null;
-}
-/* HOUSE.CPP Recalc_Center: the base centre is a COST-WEIGHTED average of building positions
-   ("give more weight to buildings that cost more"), and the radius is the mean distance from
-   it. Zones follow: CORE inside the radius, then NORTH/EAST/SOUTH/WEST by direction. */
-function _rtsBaseCentre(side) {
-  var G = window._rtsG, x = 0, z = 0, n = 0, i, e;
-  for (i = 0; i < G.ents.length; i++) {
-    e = G.ents[i];
-    if (e.dead || e.type !== 'struct' || e.side !== side || e.selling) continue;
-    var w = ((rtsStructDef(e.def).cost / 1000) | 0) + 1;
-    for (var k = 0; k < w; k++) { x += e.x; z += e.z; n++; }
-  }
-  if (!n) return null;
-  var c = { x:x / n, z:z / n, r:0 }, rad = 0, cnt = 0;
-  for (i = 0; i < G.ents.length; i++) {
-    e = G.ents[i];
-    if (e.dead || e.type !== 'struct' || e.side !== side || e.selling) continue;
-    rad += Math.hypot(e.x - c.x, e.z - c.z); cnt++;
-  }
-  c.r = Math.max(cnt ? rad / cnt : 0, RTS_TILE * 2);
-  return c;
-}
-/* Which_Zone: 0 core, 1 north, 2 east, 3 south, 4 west, -1 too far to be part of the base. */
-function _rtsWhichZone(c, x, z) {
-  if (!c) return -1;
-  var d = Math.hypot(x - c.x, z - c.z);
-  if (d <= c.r) return 0;
-  if (d > c.r * 4) return -1;
-  var a = Math.atan2(z - c.z, x - c.x);
-  if (a >= -Math.PI * 0.75 && a < -Math.PI * 0.25) return 1;   /* north (-z) */
-  if (a >= -Math.PI * 0.25 && a < Math.PI * 0.25) return 2;    /* east */
-  if (a >= Math.PI * 0.25 && a < Math.PI * 0.75) return 3;     /* south */
-  return 4;                                                    /* west */
-}
-/* Find_Build_Location: rate each zone by how far its defence sits BELOW the base average,
-   and aim the new defensive building at the weakest one. Putting every turret on the side
-   facing the enemy is exactly the mistake this routine exists to avoid - it leaves the other
-   three approaches open. */
-function _rtsAIWeakZone() {
-  var G = window._rtsG, c = _rtsBaseCentre('enemy');
-  if (!c) return null;
-  var def = [0, 0, 0, 0, 0], i;
-  for (i = 0; i < G.ents.length; i++) {
-    var e = G.ents[i];
-    if (e.dead || e.type !== 'struct' || e.side !== 'enemy' || e.selling) continue;
-    var sd = rtsStructDef(e.def);
-    if (!sd.weapon) continue;
-    var z = _rtsWhichZone(c, e.x, e.z);
-    if (z >= 0) def[z]++;
-  }
-  /* the core counts for half, as in the original's `if (z == ZONE_CORE) diff /= 2` */
-  var best = 1, bestv = 1e9;
-  for (i = 1; i <= 4; i++) if (def[i] < bestv) { bestv = def[i]; best = i; }
-  var ang = [0, -Math.PI / 2, 0, Math.PI / 2, Math.PI][best];
-  return { x:c.x + Math.cos(ang) * c.r * 2, z:c.z + Math.sin(ang) * c.r * 2 };
-}
-/* Where to put it: a refinery hugs the nearest ore, a turret covers the base's weakest
-   approach, everything else clusters. Dropping a refinery on the far side of the base from
-   the ore is the single most common way a build-order AI wastes its money. */
-function _rtsAIPlace(key) {
-  var G = window._rtsG, i, e, aim = null;
-  /* Next_Buildable first. If the plan has a fillable hole of this type, the building goes back
-     into it - that is the whole point of the node list, and it comes before any of the aiming
-     below because the plan already decided where this one belongs. */
-  var node = _rtsNextBuildable('enemy', key);
-  if (node) { _rtsPlaceStruct('enemy', key, node.tx, node.tz, false, G.sides.enemy.readyPaid); return true; }
-  if (key === 'refinery') aim = _rtsAIOreSpot();
-  /* ANYTHING THAT SHOOTS, not the one building called 'turret'. The zone routine above already
-     defines a defence as `sd.weapon` when it COUNTS what is where - it was only this call site
-     that named a key, and `turret` is Allied-only, so the entire Which_Zone port ran for one
-     army and never for the other.
-
-     Measured before the fix, hard, three seeds, 420s: the Allied house spread its defences over
-     4 of 4 compass zones on every seed; the Soviet house managed 1, 3 and 2 - on seed 9001 all
-     seven of its defences sat on ONE side of the base. Six structures carry a weapon and all
-     six want aiming. */
-  else if ((rtsStructDef(key) || {}).weapon) aim = _rtsAIWeakZone();
-  else if ((rtsStructDef(key) || {}).shore) {
-    /* A shipyard has exactly one place it can go, and the search below only accepts cells
-       _rtsCanPlace agrees with - which already applies the shore rule. Aiming at the spot
-       found by the gate above just means the best one wins rather than the first. */
-    var _sh = _rtsAIShoreSpot(key);
-    if (_sh) aim = { x:_rtsWX(_sh[0]), z:_rtsWX(_sh[1]) };
-  }
-  var anchors = [];
-  for (i = 0; i < G.ents.length; i++) {
-    e = G.ents[i];
-    if (e.type === 'struct' && e.side === 'enemy' && !e.dead && !e.selling) anchors.push(e);
-  }
-  if (!anchors.length) return false;
-  if (aim) anchors.sort(function (a, b) {
-    return Math.hypot(a.x - aim.x, a.z - aim.z) - Math.hypot(b.x - aim.x, b.z - aim.z);
-  });
-  /* Try every anchor, best-first. Searching only the nearest one looks fine until that
-     corner of the base fills up - then placement fails forever, the finished building never
-     leaves the "ready" slot, and the AI's whole structure queue is jammed for the rest of
-     the match while its credits pile up. */
-  var R = RTS_BUILD_RADIUS;
-  for (var a = 0; a < anchors.length; a++) {
-    var anchor = anchors[a], best = null, bs = 1e9;
-    for (var tx = anchor.tx - R; tx <= anchor.tx + R; tx++) {
-      for (var tz = anchor.tz - R; tz <= anchor.tz + R; tz++) {
-        if (!_rtsCanPlace('enemy', key, tx, tz)) continue;
-        var wx = _rtsWX(tx), wz = _rtsWX(tz);
-        var s = aim ? Math.hypot(wx - aim.x, wz - aim.z) : Math.hypot(wx - anchor.x, wz - anchor.z);
-        if (s < bs) { bs = s; best = [tx, tz]; }
-      }
-    }
-    /* Anything placed outside the plan becomes part of it (in _rtsPlaceStruct), so the next
-       raid is repaired against the base as it actually stands, not just the opening layout. */
-    if (best) { _rtsPlaceStruct('enemy', key, best[0], best[1], false, G.sides.enemy.readyPaid); return true; }
-  }
-  return false;
-}
-/* Somewhere the opponent could actually put a shipyard: a cell inside the build radius of
-   one of its buildings that _rtsCanPlace accepts, which is where the `shore` rule is applied.
-   Returns null on a map whose coast the base cannot reach - and null is the whole point, see
-   the caller in _rtsAIWants. */
-function _rtsAIShoreSpot(key) {
-  var G = window._rtsG, R = RTS_BUILD_RADIUS, best = null, bs = 1e9, i;
-  var anchors = [];
-  for (i = 0; i < G.ents.length; i++) {
-    var e = G.ents[i];
-    if (e.type === 'struct' && e.side === 'enemy' && !e.dead && !e.selling) anchors.push(e);
-  }
-  for (var a = 0; a < anchors.length; a++) {
-    var an = anchors[a];
-    for (var tx = an.tx - R; tx <= an.tx + R; tx++) {
-      for (var tz = an.tz - R; tz <= an.tz + R; tz++) {
-        if (!_rtsCanPlace('enemy', key, tx, tz)) continue;
-        /* Prefer a berth near the middle of the base rather than the first cell scanned:
-           a yard tucked behind the furthest outbuilding is one the defences do not cover. */
-        var s = Math.hypot(_rtsWX(tx) - an.x, _rtsWX(tz) - an.z);
-        if (s < bs) { bs = s; best = [tx, tz]; }
-      }
-    }
-  }
-  return best;
-}
-/* The richest ore nearest to ANY of the AI's buildings - not to its yard. As the base creeps
-   outward the frontier is what matters; measuring from the yard sent late refineries back
-   toward a field that had already been mined out. */
-function _rtsAIOreSpot() {
-  var G = window._rtsG, structs = [], i, e;
-  for (i = 0; i < G.ents.length; i++) {
-    e = G.ents[i];
-    if (e.type === 'struct' && e.side === 'enemy' && !e.dead && !e.selling) structs.push(e);
-  }
-  if (!structs.length) return null;
-  var best = null, bd = 1e9;
-  for (var tx = 0; tx < RTS_N; tx += 2) for (var tz = 0; tz < RTS_N; tz += 2) {
-    if (G.scrap[_rtsIdx(tx, tz)] < RTS_SCRAP_TILE * 0.4) continue;
-    var wx = _rtsWX(tx), wz = _rtsWX(tz), d = 1e9;
-    for (i = 0; i < structs.length; i++) d = Math.min(d, Math.hypot(wx - structs[i].x, wz - structs[i].z));
-    if (d < bd) { bd = d; best = { x:wx, z:wz }; }
-  }
-  return best;
 }
 /* Keep the production lines fed. Economy first, and crucially the AI SAVES for a harvester
    instead of dribbling its income away on cheap infantry - without that it parks at ~90
@@ -292,12 +147,29 @@ function _rtsAIUnits(S) {
     for (i = 0; i < list.length; i++) {
       if (rtsMoney(S) <= list[i].at) continue;
       if (!_rtsCanQueue('enemy', list[i].key)) continue;
-      /* THE TRANSPORT IS BOUGHT FOR A REASON OR NOT AT ALL, and it is the only entry in any mix
-         that asks a question before it is offered. An unarmed hull is worth nothing by itself;
-         it is worth something only when there is a crossing to make and a landing party to make
-         it. So it is gated on the same test that decides whether that team may be raised, and
-         capped at the one the team needs. Without the gate this is the engineer in the vehicle
-         mix - credits donated to whatever shoots first. */
+      /* TWO ENTRIES ARE BOUGHT FOR A REASON OR NOT AT ALL, and they are the only ones in any
+         mix that are asked a question before being offered. Both are unarmed and worth nothing
+         on their own: a hull is worth something only when there is a crossing to make, and an
+         engineer only when there is a building worth taking. Each is gated on the same test
+         that decides whether its team may be raised - so the purchase and the plan can never
+         disagree - and capped at the one that team needs. Every other entry in every mix is
+         worth something the moment it exists, which is why it is simply rolled for. */
+      if (list[i].key === 'engineer') {
+        if (!_rtsAIWorthCapturing()) continue;
+        if (_rtsAIEngineers() >= RTS_AI.engCap) continue;
+        /* AND OUT OF GENUINE SURPLUS ONLY - never out of the building fund. _rtsAIUnits is
+           called with the bank already above _rtsAISpare, which is whatever the base plan is
+           currently saving for; every other unit spends that surplus, which is the point. An
+           engineer is different because it buys no army and no building, so paying for one out
+           of the margin delays the plan by a whole structure.
+
+           Measured: the Soviet opponent stopped reaching the Tesla Coil inside the 420 seconds
+           e2e/basedef watches - the credits that would have become its signature defence went
+           into an engineer instead. Asking for the spare PLUS the price means the plan's money
+           is never touched, and it is the same _rtsAISpare the caller tested, so the two can
+           not drift apart. */
+        if (rtsMoney(S) < _rtsAISpare(S) + _rtsCostOf('enemy', rtsUnitDef('engineer'))) continue;
+      }
       if (list[i].key === 'lst') {
         if (!_rtsAIWorthCrossing()) continue;
         var craft = 0;
@@ -448,8 +320,13 @@ function _rtsAIDo(strat, urgency, S) {
 
     case 'lowerPower':
       if (!_rtsIQAt(RTS_IQ.sellBack)) return false;
-      /* only if losing one would not brown the base out */
-      var p = _rtsHas('enemy', 'power');
+      /* only if losing one would not brown the base out - and a plant AT HOME, because
+         _rtsHas answers in entity-creation order and the player's opening Power Plant is one
+         of the two earliest structures on the map. Capturing it is what pushes the surplus
+         past powerWaste and fires this strategy in the first place, so with a plain _rtsHas
+         the opponent sold the very plant it had just spent an engineer taking, seconds later,
+         for half of what the PLAYER paid. See _rtsHasHome. */
+      var p = _rtsHasHome('enemy', 'power');
       if (!p || S.powerMade - rtsStructDef('power').power < S.powerUsed) return false;
       return _rtsSell(p);
 

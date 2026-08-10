@@ -56,8 +56,13 @@ S.note(UNITS.length + ' units, ' + STRUCTS.length + ' structures, ' +
   S.ok('the Build tab has structures in it', STRUCTS.length > 0, STRUCTS.length + ' structures');
 
   /* Per faction, since each side sees a different roster - a tab that is empty for one side
-     only is still a dead button for that player. Reported rather than asserted: the Soviets
-     genuinely have no aircraft yet, and that is a known gap, not a regression to fail on. */
+     only is still a dead button for that player. Reported rather than asserted, because a tab
+     one side cannot fill is a design decision rather than a fault.
+
+     This used to add "the Soviets genuinely have no aircraft yet, and that is a known gap",
+     which stopped being true the day the Yak and the MiG shipped - both sides report 5 of 5
+     now. A stale comment naming a gap that has been closed, sitting directly above the line
+     that prints the real number, is worse than no comment: it is read as current. */
   ['allied', 'soviet'].forEach(function (side) {
     var blank = Object.keys(tabKinds).filter(function (k) {
       return k !== 'struct' && !UNITS.some(function (u) { return u.kind === k && (!u.side || u.side === side); });
@@ -279,8 +284,17 @@ S.note(UNITS.length + ' units, ' + STRUCTS.length + ' structures, ' +
    the honest way to check it - the alternative is standing up a whole fake base to call a
    placement function that wants anchors, terrain and an ore field. */
 (function () {
-  var src = require('fs').readFileSync(
-    require('path').join(__dirname, '..', '..', 'src', 'core', 'ai.js'), 'utf8');
+  /* BOTH halves of the AI, because the placement code moved. _rtsBaseCentre, Which_Zone,
+     _rtsAIWeakZone and _rtsAIPlace now live in core/basezone.js, split out when core/ai.js
+     reached the line ceiling. Reading only ai.js would have quietly stopped scanning the very
+     function this exists to scan - and it did: the split turned this from a real check into a
+     green tick, which is exactly the failure mode a source scan is prone to. Named as a list
+     so the next split fails loudly here rather than passing vacuously. */
+  var PLACEMENT = ['ai.js', 'basezone.js'];
+  var src = PLACEMENT.map(function (f) {
+    return require('fs').readFileSync(
+      require('path').join(__dirname, '..', '..', 'src', 'core', f), 'utf8');
+  }).join('\n');
   var named = src.match(/key === '(\w+)'/g) || [];
   var defenceNames = named.filter(function (m) {
     var k = m.replace(/.*'(\w+)'.*/, '$1');
@@ -290,7 +304,7 @@ S.note(UNITS.length + ' units, ' + STRUCTS.length + ' structures, ' +
   S.ok('no defensive building is singled out by name in the placement code', !defenceNames.length,
        defenceNames.join(', ') || 'none - aiming is keyed off the weapon');
   S.ok('...and the weak-zone aim is still wired up at all', /_rtsAIWeakZone\(\)/.test(src),
-       'called');
+       'called, scanning ' + PLACEMENT.join(' + '));
 
   var weaponed = g.RTS_STRUCTS.filter(function (d) { return !!d.weapon; }).map(function (d) { return d.key; });
   S.ok('there is more than one defensive building, so keying off the weapon matters',

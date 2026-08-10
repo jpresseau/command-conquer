@@ -363,6 +363,20 @@ function _rtsBaseIsAttacked(bldg, enemy) {
   if (bldg.side !== 'enemy' || !enemy || enemy.type !== 'unit') return 0;
   if (rtsStructDef(bldg.def).weapon) return 0;     /* it can defend itself */
   if (enemy.baseTimer && G.t < enemy.baseTimer) return 0;
+  /* AND IT HAS TO BE THE BASE. There was no locality test here at all, because until an
+     engineer could move a building between sides, "a building of mine" and "a building in my
+     base" were the same sentence. They stopped being the same sentence: the opponent can now
+     own a Power Plant standing in the middle of the PLAYER's base, and every shot at it ran
+     this routine.
+
+     That made a captured building a switch the player could flip at will. One rifle squad
+     poking it (a) disbanded every team below the survival priority and put each type on a
+     40-second hold, and (b) sent up to RTS_DEFENDERS armed units on an attack-move across the
+     whole map to "guard" a shell sitting inside the player's guns. The routine whose stated
+     purpose is to make taking a base HARDER became a trickle-feed of the opponent's garrison
+     into those guns, on demand, for the price of one rifleman - and two units taking turns
+     dodge the BaseAttackTimer, so it was not even rate-limited. */
+  if (!_rtsInBase('enemy', bldg.x, bldg.z)) return 0;
 
   /* "We will need units to defend our base. We need to suspend teams until the situation has
      been dealt with." Below the survival priority a team is disbanded outright and its
