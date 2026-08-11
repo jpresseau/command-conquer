@@ -873,7 +873,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">2cb3089 · 2026-08-11</div>
+  <div id="rtsBuild" title="build">5283a7a · 2026-08-11</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -7086,6 +7086,33 @@ function _sprUnitModel(key, side, prone, part) {
     }
   }
 
+  /* The chain is three files now - see sprites/unit-*.js. Each arm returns false for a key it
+     does not own. Everything the branches need is handed over in X rather than rebuilt, so a
+     model line reads the same as it did when this was one function. */
+  var X = { m:m, TM:TM, VH:VH, S:S, DK:DK, O:O, C:C, GN:GN,
+            d:d, prone:prone, part:part, side:side, tracks:tracks };
+  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key))) {
+    _r3Box(m, 0, 0, -5, 15, 3.5, 4, DK[0], DK[1]);
+    _r3Box(m, 0, 0, 5, 15, 3.5, 4, DK[0], DK[1]);
+    _r3Box(m, 0, 2.5, 0, 15, 4, 8, TM[0], TM[1]);
+    _r3Box(m, 4, 6, 0, 8, 1.4, 1.4, DK[1], DK[3]);
+  }
+
+  var sc = _sprUnitScale(key);
+  return sc === 1 ? m : _r3Scale(m, sc);
+}
+</script>
+<script>/* sprites/unit-ground.js - infantry and the tracked and wheeled ground vehicles.
+   One arm of the unit model chain; see sprites/unitmodels.js for the dispatch and for the
+   shared locals, which come in through X so that each model line reads exactly as it did when
+   they were all one function. Returns false for a key it does not own, so the next arm can try.
+
+   Split because unitmodels.js reached 506 lines the moment the V2 Rocket Launcher was given a
+   model of its own, and unit/layout holds every source file to 500. Same shape the building
+   models already use (bld-base / bld-tech / bld-war / bld-super). */
+function _sprUnitGround(X, key) {
+  var m = X.m, TM = X.TM, VH = X.VH, S = X.S, DK = X.DK, O = X.O, C = X.C, GN = X.GN,
+      d = X.d, prone = X.prone, part = X.part, side = X.side, tracks = X.tracks, i;
   if (key === 'dog') {
     /* ONE animal, not two. A kennel turns out a single dog, and the pair that used to be drawn
        here read as a squad - which is also why it shared its silhouette with every infantry
@@ -7119,7 +7146,22 @@ function _sprUnitModel(key, side, prone, part) {
     var BD = kit.body ? kit.body[0] : TM[0], BL = kit.body ? kit.body[1] : TM[1];
     var HD = TM[2], HL = kit.top || TM[3];
     var SK = '#c8a882', SKL = '#d8bc96';
-    var men = (key === 'tanya') ? [[0, 0]] : [[2.5, -3], [-2.5, 2.5]];
+    /* THE PAIR IS OFFSET OFF THE FACING GRID, and that angle is load-bearing. The two men used
+       to sit on a ~48 degree diagonal, and infantry bake at EIGHT facings 45 degrees apart - so
+       twice per rotation the separation ran almost exactly along the view, the rear man hid
+       behind the front one, and a squad read as a single column instead of as two soldiers.
+       Sitting the separation at 22.5 degrees puts it exactly BETWEEN two facings, so it is
+       never parallel to the view and every facing shows two figures.
+
+       CHECKED BY EYE, and that is deliberate rather than lazy. The obvious number - how wide the
+       sprite draws - was tried first and is the wrong instrument: it measures HORIZONTAL extent
+       only, so at the facings where the pair separates vertically on screen it reports a narrow
+       sprite whether the two men are cleanly stacked or completely merged. It read 12 px at the
+       two broken facings and 14 px at the two fixed ones, which looks like no improvement and
+       is not what happened. Widening the separation moved the maximum and never the minimum,
+       which is the signature of measuring the wrong axis. Two helmets and a gap between them is
+       the actual question, and it is answered by looking. */
+    var men = (key === 'tanya') ? [[0, 0]] : [[3.6, -1.5], [-3.6, 1.5]];
     for (i = 0; i < men.length; i++) {
       var mx = men[i][0], mz = men[i][1];
       if (prone) {
@@ -7132,9 +7174,33 @@ function _sprUnitModel(key, side, prone, part) {
       /* Four stacked shapes of different widths - legs, a torso, a head, a helmet with a brim.
          The torso and the helmet top carry the unit's colour and are what actually identifies
          it; the props below are secondary. */
-      _r3Box(m, mx, 0, mz - 0.9, 1.7, 2.6, 1.4, DK[1], DK[2]);     /* legs */
-      _r3Box(m, mx, 0, mz + 0.9, 1.7, 2.6, 1.4, DK[1], DK[2]);
+      /* A STRIDE, NOT TWO IDENTICAL POSTS. The legs used to sit level beside each other, which
+         is a tripod rather than a person, and the two men in a squad struck the same pose. One
+         leg forward and the other back - mirrored between the two figures - reads as walking at
+         a glance and stops a squad looking like a single object with several bases.
+
+         Everything added to this figure is here because of RTS_PS. At RA's resolution a limb
+         is under an art pixel wide and a stride of half a unit lands inside one, so none of it
+         survived the bake and the model was authored without it: legs, torso, head, helmet,
+         prop, and the kit note above conceding that "a rifleman and a medic are the same stack
+         of boxes and no amount of modelling changes that". That was true at 22 art pixels. It
+         is not true at twice the bake resolution, which is where these pixels come from. */
+      var _st = (i % 2) ? -0.55 : 0.55;
+      _r3Box(m, mx + _st, 0, mz - 0.9, 1.7, 2.6, 1.4, DK[1], DK[2]);   /* leading leg */
+      _r3Box(m, mx - _st, 0, mz + 0.9, 1.7, 2.6, 1.4, DK[1], DK[2]);   /* trailing leg */
+      _r3Box(m, mx + _st, 0, mz - 0.9, 1.9, 0.7, 1.6, DK[2], DK[0]);   /* boots, grounding it */
+      _r3Box(m, mx - _st, 0, mz + 0.9, 1.9, 0.7, 1.6, DK[2], DK[0]);
       _r3Box(m, mx, 2.4, mz, 3.6, 3.7, 3.6, BD, BL);               /* torso - the colour block */
+      /* ARMS. The torso was a bare block, and a block with a head on it is a bollard. They take
+         the body colour rather than a contrasting one on purpose: the torso is the unit's
+         identity surface and an arm in another tone would compete with it. What they add is
+         SHAPE - two more planes at two more angles down each side, which the shading pass turns
+         into a pair of edges the silhouette did not have. */
+      _r3Box(m, mx - 0.2, 2.8, mz - 2.2, 1.3, 3.0, 1.2, BD, BL);
+      _r3Box(m, mx - 0.2, 2.8, mz + 2.2, 1.3, 3.0, 1.2, BD, BL);
+      /* A pack, which is also the only thing on a soldier the camera looks straight down at
+         besides the helmet - so it is a second surface to break the torso's flat top. */
+      _r3Box(m, mx - 1.9, 3.2, mz, 1.6, 2.6, 2.8, DK[1], DK[0]);
       _r3Box(m, mx, 6.1, mz, 2.2, 1.4, 2.2, SK, SKL);              /* head */
       _r3Box(m, mx - 0.3, 7.1, mz, 3.4, 1.1, 3.4, HD, HL);         /* helmet - the marker */
       if (key === 'rocket') {
@@ -7269,6 +7335,49 @@ function _sprUnitModel(key, side, prone, part) {
     _r3Box(m, -9.0, 0.9, -3.4, 5.2, 1.3, 1.8, S[1], S[0]);         /* recoil spades, splayed */
     _r3Box(m, -9.0, 0.9, 3.4, 5.2, 1.3, 1.8, S[1], S[0]);
 
+  } else if (key === 'v2rl') {
+    /* V2 ROCKET LAUNCHER, and it had no model at all. It fell through to the generic fallback
+       at the bottom of this chain - two dark track boxes and a body in the TEAM COLOUR - which
+       is both the wrong shape and the one thing RTS_PAL.veh exists to forbid: a vehicle painted
+       team colour end to end reads as a coloured lump, which is exactly what the palette note
+       above the veh ramp was written about. Measured against its peers by face count: every
+       other vehicle in the roster carries 110 to 187 faces and the V2 carried 20.
+
+       The identity is the RAISED MISSILE, and it stands VERTICAL rather than lying along the
+       hull. That is a projection decision, not a styling one, and it is the same one the
+       Artillery's comment above records: screen height is z - 1.3y, so a long tube lying along
+       +x cancels itself out at the facings where +x points at the camera and gets swallowed by
+       its own hull. Artillery answers that by raising its tube; a rocket can simply stand up,
+       and then no facing can hide it - the launcher reads identically from all thirty-two.
+       It also separates the two siege units at a glance, which they need: they share a role,
+       a range band and a chassis size, and a low tube against a standing rocket is a
+       difference that survives being half a cell tall.
+
+       A truck, not a tank: six road wheels under a long flat bed, so it reads as wheeled
+       transport carrying something rather than as another turreted chassis. */
+    tracks(19, 5.8, 6, 2.0);
+    _r3Slab(m, -0.5, 2.6, 0, 18.0, 3.0, 9.4, 1.0, VH[0], VH[1]);   /* flat bed */
+    _r3Box(m, 6.4, 2.6, 0, 5.4, 4.6, 8.6, VH[1], VH[3]);           /* cab */
+    _r3Box(m, 8.6, 5.2, 0, 1.2, 2.0, 6.2, RTS_PAL.glass, RTS_PAL.glass);  /* windscreen */
+    _r3Box(m, 3.2, 5.6, 0, 3.0, 1.4, 8.0, VH[2], TM[1]);           /* team cap, behind the cab */
+    /* The launch table the rocket stands on, and the erector arms around it. These used to be
+       two horizontal side rails, which is what a missile lying flat would need - with a
+       standing rocket through them the geometry said two different things at once. */
+    _r3Box(m, -3.6, 5.6, 0, 7.6, 1.6, 8.2, S[2], S[1]);            /* launch table */
+    for (var _vs = -1; _vs <= 1; _vs += 2) {
+      _r3Box(m, -3.6, 7.2, _vs * 3.4, 1.2, 6.4, 1.2, S[1], S[0]);  /* erector arms */
+      _r3Box(m, -3.6, 13.6, _vs * 3.4, 1.2, 1.0, 2.4, S[2], S[1]); /* their tie-bars */
+    }
+    /* THE MISSILE, pale against the khaki so it never merges with the truck under it. */
+    _r3Cyl(m, -3.6, 7.2, 0, 2.3, 11.0, GN[1], GN[3], 16);
+    _r3Cone(m, -3.6, 18.2, 0, 2.3, 0.3, 3.4, GN[0], 16);           /* nose cone */
+    for (var _vf = 0; _vf < 4; _vf++) {                            /* tail fins, at the base */
+      var _fa = _vf * Math.PI / 2 + Math.PI / 4;
+      _r3Box(m, -3.6 + Math.cos(_fa) * 2.6, 8.0, Math.sin(_fa) * 2.6,
+             1.0, 3.2, 1.0, DK[1], DK[3]);
+    }
+    _r3Box(m, -8.6, 3.0, 0, 2.2, 2.0, 5.0, DK[2], DK[1]);          /* blast plate at the tail */
+
   } else if (key === 'buggy') {
     /* Wheels are the buggy's whole identity, so they are proper vertical cylinders standing
        clear of the body with a light hub - four round shapes at the corners read instantly as
@@ -7283,8 +7392,22 @@ function _sprUnitModel(key, side, prone, part) {
     _r3Box(m, -1.5, 6.0, 0, 7.5, 2.8, 7.0, DK[2], DK[1]);          /* open cockpit well */
     _r3Box(m, -4.8, 6.0, 0, 1.0, 4.6, 7.0, TM[1], TM[3]);          /* roll hoop */
     _r3Box(m, 3.2, 8.4, 0, 8.5, 1.3, 1.3, DK[1], DK[3]);           /* pintle gun */
+  } else return false;
+  return true;
+}
+</script>
+<script>/* sprites/unit-airsea.js - aircraft, ships, and the support vehicles (APC, MCV, harvester).
+   One arm of the unit model chain; see sprites/unitmodels.js for the dispatch and for the
+   shared locals, which come in through X so that each model line reads exactly as it did when
+   they were all one function. Returns false for a key it does not own, so the next arm can try.
 
-  } else if (key === 'heli') {
+   Split because unitmodels.js reached 506 lines the moment the V2 Rocket Launcher was given a
+   model of its own, and unit/layout holds every source file to 500. Same shape the building
+   models already use (bld-base / bld-tech / bld-war / bld-super). */
+function _sprUnitAirSea(X, key) {
+  var m = X.m, TM = X.TM, VH = X.VH, S = X.S, DK = X.DK, O = X.O, C = X.C, GN = X.GN,
+      d = X.d, prone = X.prone, part = X.part, side = X.side, tracks = X.tracks, i;
+  if (key === 'heli') {
     /* Attack helicopter. Two things carry it at this size: a long thin tail boom, which no
        ground unit has, and the rotor disc - drawn as a wide, very flat cylinder rather than
        blades, because at 24 px spinning blades are noise and a disc reads instantly. */
@@ -7468,16 +7591,8 @@ function _sprUnitModel(key, side, prone, part) {
     _r3Box(m, 14.5, 0.8, 0, 4.5, 2.6, 15.5, DK[1], DK[3]);         /* intake blade */
     for (i = 0; i < 5; i++)                                        /* cutter teeth */
       _r3Box(m, 16.6, 0.8, -6 + i * 3, 1.6, 2.0, 1.4, S[1], S[0]);
-
-  } else {
-    _r3Box(m, 0, 0, -5, 15, 3.5, 4, DK[0], DK[1]);
-    _r3Box(m, 0, 0, 5, 15, 3.5, 4, DK[0], DK[1]);
-    _r3Box(m, 0, 2.5, 0, 15, 4, 8, TM[0], TM[1]);
-    _r3Box(m, 4, 6, 0, 8, 1.4, 1.4, DK[1], DK[3]);
-  }
-
-  var sc = _sprUnitScale(key);
-  return sc === 1 ? m : _r3Scale(m, sc);
+  } else return false;
+  return true;
 }
 </script>
 <script>/* sprites/props.js - unit scaling and fit, pads, corpses, scorch, craters, fire, crates and
