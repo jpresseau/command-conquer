@@ -40,11 +40,19 @@ function _sprUnit(key, side, prone, part) {
   }
   var m = _sprUnitModel(key, side, prone, part), size = _sprUnitFit(key, side);
   var frames = [], N = _sprFacings(key);
+  /* Same RTS_PS scale-up the structures get - see sprites/bake.js. Applied AFTER the yaw so
+     every facing is scaled identically, and the fit square grows with it so the measurement
+     _r3FitSize made at 1x still holds: it is the worst case over 32 facings, and scaling is
+     uniform, so nothing that fitted before can clip now. A unit is where the extra pixels pay
+     best - an infantryman is about ten art pixels tall, and at that size a rifle is one. */
   for (var f = 0; f < N; f++) {
-    var cv = _r3BakeCentred(_r3Yaw(m, -f / N * Math.PI * 2), size);
+    var ym = _r3Yaw(m, -f / N * Math.PI * 2);
+    var cv = _r3BakeCentred(RTS_PS === 1 ? ym : _r3Scale(ym, RTS_PS), size * RTS_PS);
     _sprEdge(cv);
     /* the turret is drawn ON the hull, so it must not cast a second ground shadow */
-    frames.push(part === 'turret' ? cv : _sprShadow(cv, 1, 2));
+    var done = (part === 'turret') ? cv : _sprShadow(cv, 1 * RTS_PS, 2 * RTS_PS);
+    done.ps = RTS_PS;
+    frames.push(done);
   }
   return frames;
 }

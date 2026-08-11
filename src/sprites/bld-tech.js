@@ -9,6 +9,7 @@
 function _sprBldTech(X, key) {
   var m = X.m, W = X.W, D = X.D, C = X.C, S = X.S, DK = X.DK, B = X.B,
       K = X.K, SD = X.SD, P = X.P, TM = X.TM,
+      AS = X.AS, RU = X.RU, WH = X.WH, CU = X.CU, OL = X.OL,
       winRow = X.winRow, pilasters = X.pilasters;
   if (key === 'radar') {
     /* Radar Dome. The dome IS the building - a pale hemisphere on a small dark base, and the
@@ -16,9 +17,11 @@ function _sprBldTech(X, key) {
     _r3Slab(m, 0, 0, 2, W - 10, 10, D - 12, 3, C[0], C[2]);
     _r3Box(m, 0, 0, D / 2 - 5, 8, 8, 3, DK[0], DK[1]);
     winRow(D / 2 - 4, 3, -11, 2, 8, 4, 4);
-    _r3Cone(m, 0, 10, -1, 15, 13.5, 6, C[3], 22);
-    _r3Cone(m, 0, 16, -1, 13.5, 9.5, 7, C[1], 22);
-    _r3Cone(m, 0, 23, -1, 9.5, 4, 6, C[3], 22);
+    /* WHITEWASH, not concrete. The dome is the most identifiable shape in the game and it
+       was the same grey as the bunker under it, so the two read as one lump. */
+    _r3Cone(m, 0, 10, -1, 15, 13.5, 6, WH[1], 22);
+    _r3Cone(m, 0, 16, -1, 13.5, 9.5, 7, WH[0], 22);
+    _r3Cone(m, 0, 23, -1, 9.5, 4, 6, WH[3], 22);
     _r3Cyl(m, 0, 29, -1, 2, 4, S[1], S[3], 16);
     _r3Cyl(m, 0, 10, -1, 15.6, 1.4, B.roof, B.roof, 22);                 /* team ring at its foot */
     _r3Box(m, W / 2 - 7, 0, 4, 5, 12, 5, S[2], S[1]);                    /* waveguide riser */
@@ -69,8 +72,10 @@ function _sprBldTech(X, key) {
     /* A flat pad, and in the reference it is exactly that: a marked square of apron with a
        yellow cross on it and almost nothing standing up. Keeping it low is the point - the one
        structure a helicopter can sit on top of has to look like it. */
-    _r3Box(m, 0, 0, 0, W - 4, 2.5, D - 4, C[2], C[0]);
-    _r3Box(m, 0, 2.5, 0, W - 12, 0.8, D - 12, C[0], C[1]);         /* the marked square */
+    /* ASPHALT. This is pavement, not a wall - painting it in the concrete used for walls is
+       what made it read as a slab of building rather than as ground. */
+    _r3Box(m, 0, 0, 0, W - 4, 2.5, D - 4, AS[2], AS[0]);
+    _r3Box(m, 0, 2.5, 0, W - 12, 0.8, D - 12, AS[0], AS[1]);       /* the marked square */
     _r3Box(m, 0, 3.3, 0, W - 22, 0.7, 4.5, RTS_PAL.hazard[0], RTS_PAL.hazard[0]);   /* the cross */
     _r3Box(m, 0, 3.3, 0, 4.5, 0.7, D - 22, RTS_PAL.hazard[0], RTS_PAL.hazard[0]);
     _r3Box(m, -W / 2 + 6, 2.5, -D / 2 + 6, 7, 9, 7, C[0], B.roof);  /* control hut, team roof */
@@ -90,7 +95,7 @@ function _sprBldTech(X, key) {
     for (var af = 0; af < 6; af++)                                  /* dashed centreline */
       _r3Box(m, -W / 2 + 8 + af * ((W - 16) / 5), 2.9, 0, 3.6, 0.6, 1.2,
              RTS_PAL.hazard[0], RTS_PAL.hazard[0]);
-    _r3Box(m,  W / 2 - 6, 2.9, 0, 1.6, 0.6, D - 15, C[0], C[1]);    /* threshold bars */
+    _r3Box(m,  W / 2 - 6, 2.9, 0, 1.6, 0.6, D - 15, AS[0], AS[1]);    /* threshold bars */
     _r3Box(m, -W / 2 + 6, 2.9, 0, 1.6, 0.6, D - 15, C[0], C[1]);
     _r3Box(m, -W / 2 + 7, 2.2, -D / 2 + 5, 8, 8, 6, C[0], B.roof);  /* control shack, team roof */
     _r3Box(m, -W / 2 + 7, 10.2, -D / 2 + 5, 1.1, 5, 1.1, S[3], S[3]);  /* its mast */

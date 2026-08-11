@@ -17,6 +17,28 @@
    Nothing here is traced, ripped or copied from any existing game. */
 
 var RTS_TS = 24;                  /* art pixels per map cell */
+/* HOW MUCH FINER THE PROCEDURAL SPRITES ARE BAKED THAN RA'S OWN ART.
+
+   RTS_TS is not a free parameter and must not be raised. It is Red Alert's tile format, and
+   mixart/tiles.js rejects the player's files outright unless every tile is exactly RTS_TS
+   square - `if (w !== RTS_TS || h !== RTS_TS) return null`. Change it and the game silently
+   stops being able to load the artwork it is built to load.
+
+   But nothing forces OUR sprites to be authored at RA's resolution. They are drawn by a
+   renderer, not read off a disk, so they can be baked at any density and simply drawn smaller.
+   At RTS_TS a 1x1 defence is 24x24 pixels, which is not enough room for a window, let alone a
+   roof vent; every model in sprites/ is authored against that budget and hits it.
+
+   So the procedural path bakes at RTS_TS * RTS_PS art pixels per cell and each canvas it
+   produces carries a `ps` telling the renderer what it was baked at. render/draw.js divides by
+   it, so a building still covers exactly its own tiles - same world size, more pixels inside
+   it. Real RA art has no `ps` and reads as 1, so the mixart path is untouched and a player's
+   own files load and draw exactly as before.
+
+   The cost is (RTS_PS^2) in bake time and sprite memory, paid once at load. At 2 that is four
+   times the raster work on a few hundred small sprites; the supersample in r3d/render.js
+   already costs 9x on top and is not noticeable. */
+var RTS_PS = 2;
 var RTS_ZOOMS = [12, 24, 48];     /* screen px per cell: 0.5x, 1x, 2x. Nothing else. */
 var RTS_ZOOM_DEF = 1;             /* index into RTS_ZOOMS - 24 = one art pixel per screen pixel */
 var _RTS_SPR = null;
@@ -154,7 +176,46 @@ var RTS_PAL = {
     sand:  ['#ab9b70', '#c2b287', '#857852', '#d6caa2'],
     /* Pale block: same widening. The Tech Centre is the tallest building in the game and was
        measuring 0.10 saturation over 70 tones - a white slab with a stripe. */
-    pale:  ['#a0a696', '#c3c9b6', '#6e746a', '#dee3d0']
+    pale:  ['#a0a696', '#c3c9b6', '#6e746a', '#dee3d0'],
+
+    /* FOURTEEN OF THE TWENTY-FOUR STRUCTURES USED NONE OF THE ABOVE. Audited by walking every
+       model and collecting which ramps it names: the Construction Yard, Radar Dome, Helipad,
+       Airfield, Rocket Pit, Flame Tower, Naval Yard, Sub Pen, Tesla Coil, Missile Silo, Iron
+       Curtain, Chronosphere, Pillbox and Gun Turret were built entirely from conc, steel and
+       dark - three grey ramps. A base made of those reads as one material with a coloured
+       stripe on it, which is the same fault the vehicles had and the same fault brick, sand and
+       pale were added to fix for the six buildings that got them.
+
+       These five are the rest of the evidence from the same cameo sheets:
+
+       ASPHALT - the Helipad and the Airfield are laid surfaces, not buildings. They are the
+       only structures whose whole footprint is ground, and painting that in the concrete used
+       for walls is what made them read as slabs rather than as pavement. Warmer and darker
+       than concrete, so the markings on top of it carry.
+
+       RUST - the Naval Yard and Sub Pen are working dockyards: gantries, rails and plate that
+       live in salt water. Rust also gives the two largest flat sprites in the game a second
+       material to break against, which is what they most need.
+
+       WHITE - the Radar Dome is white in the cameo and so is the Chronosphere. It is not the
+       same as `pale`: pale is a tinted stone block for the Tech Centre, this is painted
+       whitewash, brighter and cooler, and the difference is what stops the tech buildings all
+       reading as one family.
+
+       COPPER - the Tesla Coil's coils, and the Chronosphere's rings. The one warm metal in the
+       set. Deliberately narrow in range: it is an accent for a few parts, not a wall material.
+
+       OLIVE - painted military steel, for the ordnance: Iron Curtain, Missile Silo, Rocket Pit,
+       Flame Tower. Army equipment is painted, and painting it is what separates a weapon from
+       the concrete it stands on.
+
+       Every ramp keeps the four-entry shape the others use - [base, light, dark, highlight] -
+       so any of them can be dropped into a model where a C or S was without touching the call. */
+    asphalt:['#4c4a46', '#625f59', '#2e2d2b', '#7b776e'],
+    rust:  ['#7a5340', '#96694f', '#4e3427', '#b2836a'],
+    white: ['#bfc4c2', '#dfe4e2', '#8b918f', '#f2f5f4'],
+    copper:['#a06a3c', '#c98a53', '#6b4526', '#e0a86b'],
+    olive: ['#5f6448', '#787e5c', '#3c4030', '#949a76']
   }
 };
 
