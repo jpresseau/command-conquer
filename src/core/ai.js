@@ -362,7 +362,17 @@ function _rtsAIAllToHunt() {
     _rtsOrderMove(u, aim.x + (i % 3 - 1) * 5, aim.z + ((i / 3) | 0 % 3) * 5, true);
   }
 }
-/* AI_Attack. Only a share of the idle army goes; the rest garrisons. */
+/* AI_Attack - see _rtsAIAttack in core/missions.js. This line used to read "only a share of the
+   idle army goes; the rest garrisons", which described that function BEFORE teams landed. It now
+   raises a team and returns, and sends nobody directly.
+
+   The stale sentence is worth replacing rather than deleting, because what it hid is load-bearing:
+   a team and the ENDGAME hunt above are the ONLY two routes out of the base, so a unit no team
+   composition lists never attacks the player at all. Measured, hard, both armies, a player that
+   fights back: 49 Light Tanks, Artillery and V2s bought across eight matches, none of which ever
+   came within 45 of the player's yard or fired a single shot at anything the player owned; on one
+   seed, 17 vehicles built and 17 never given an order in 250 seconds. See unit/aiplan, which
+   reports that list and explains why it is not worth fixing. */
 
 /* ------------------------------------------------------------- teams (TEAM.CPP) --
    A team is a composition plus a mission. It recruits until it is at full strength, only

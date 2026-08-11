@@ -99,8 +99,37 @@
    AND THE SPREAD IS PRINTED BESIDE EVERY MEAN, with every per-seed result above it. A
    measurement that does not report its own precision invites exactly the mistake that was made
    here: the min and max sit next to the mean so a reader can see the wobble before attributing
-   a movement to anything. */
+   a movement to anything.
 
+   ------------------------------------------------------------------------------------------
+   ...AND THE PAIRING IS COMPUTED, BECAUSE PRESCRIBING IT WAS NOT ENOUGH.
+
+   Everything above tells the reader to pair per seed. It then printed thirty lines of text and
+   left them to do the join in their head against thirty lines from another run. That is the
+   step where this instrument actually gets misread - twice in one session: once quoting
+   absolute survival figures across two different seed sets, and once reading a tight
+   within-set spread as precision. Both times the header already said not to. A rule that is
+   documented but not enforced is the one the tired reader breaks.
+
+   So the spec does the join itself. Opt-in and inert by default - with neither variable set
+   nothing is read, nothing is written, and the output is identical to before:
+
+       PUSHBACK_SAVE=/tmp/before.json     node test/run.js pushback     # on the old tree
+       ...make the change...
+       PUSHBACK_BASELINE=/tmp/before.json node test/run.js pushback     # on the new one
+
+   The second run prints one line per seed - before, after, delta - and a per-tier tally of how
+   many seeds moved which way. That is the paired statistic this header has always asked for and
+   the only one the instrument can support. It also ASSERTS that both runs covered the same
+   seeds and the same horizon, because a partial join is worse than none: it looks like a
+   comparison while silently dropping whatever the two runs did not share.
+
+   What it deliberately does NOT do is return a verdict. There is no pass/fail on the delta and
+   there should not be - five seeds wide, with `normal` sitting on a win/lose boundary, any
+   automatic judgement would be exactly the false precision the rest of this header spends forty
+   lines warning about. It reports; a person decides. */
+
+var fs = require('fs');
 var { chromium } = require('playwright');
 var { Suite } = require('../lib/assert.js');
 var { openPage } = require('../lib/game.js');
@@ -114,6 +143,9 @@ var DIFFS = ['easy', 'normal', 'hard'];
 /* The horizon every match is measured at. Long enough for the opponent to have alerted (150s)
    and pushed several times; short enough that thirty matches stay affordable. */
 var HORIZON = 420;
+/* Both empty in a normal run, which is why this costs nothing when nobody is comparing. */
+var PB_SAVE = process.env.PUSHBACK_SAVE || '';
+var PB_BASE = process.env.PUSHBACK_BASELINE || '';
 
 (async function () {
   var browser = await chromium.launch();
@@ -260,7 +292,10 @@ var HORIZON = 420;
         total++;
         if (r.over === 'win') wins++;
         runs.push({ vs: vs, d: d, seed: SEEDS[i], pushes: r.pushes, razed: r.razed,
-                    built: r.built ? r.built.split(',').length : 0 });
+                    built: r.built ? r.built.split(',').length : 0,
+                    /* carried for the paired comparison below, not used by any assertion */
+                    progress: r.progress, fell: r.fell === null ? HORIZON : r.fell,
+                    over: r.over || 'held' });
         S.note(vs.padEnd(7) + d.padEnd(7) + 'seed ' + SEEDS[i] +
                '  progress ' + (r.progress * 100).toFixed(0).padStart(3) + '%' +
                '  ' + String(r.over || 'held').padEnd(6) +
@@ -291,6 +326,63 @@ var HORIZON = 420;
   });
   S.note('mean survival for comparison, NOT asserted on — ' +
          Object.keys(surv).map(function (k) { return k + ' ' + surv[k] + 's'; }).join('   '));
+
+  /* ------------------------------------------------- the paired comparison, computed ----
+     See the header for why this exists and why it returns no verdict. Both branches are
+     skipped entirely unless the caller asked for them. */
+  if (PB_SAVE) {
+    fs.writeFileSync(PB_SAVE, JSON.stringify({ horizon: HORIZON, seeds: SEEDS, runs: runs }, null, 1));
+    S.note('saved ' + runs.length + ' per-seed results to ' + PB_SAVE +
+           ' — re-run with PUSHBACK_BASELINE=' + PB_SAVE + ' after the change');
+  }
+  if (PB_BASE) {
+    var base = JSON.parse(fs.readFileSync(PB_BASE, 'utf8'));
+    var key = function (r) { return r.vs + ':' + r.d + ':' + r.seed; };
+    var was = {};
+    base.runs.forEach(function (r) { was[key(r)] = r; });
+
+    /* THE JOIN HAS TO BE TOTAL OR IT IS NOT A COMPARISON. A seed on one side and not the other
+       would quietly drop out of every tally below and the remaining ones would still print,
+       which is the failure this whole block exists to prevent one level up. */
+    var unmatched = runs.filter(function (r) { return !was[key(r)]; }).map(key);
+    var extra = base.runs.filter(function (r) {
+      return !runs.some(function (n) { return key(n) === key(r); });
+    }).map(key);
+    var mismatch = [];
+    if (unmatched.length) mismatch.push('only in this run: ' + unmatched.join(', '));
+    if (extra.length) mismatch.push('only in the baseline: ' + extra.join(', '));
+    if (base.horizon !== HORIZON) mismatch.push('horizon ' + base.horizon + ' vs ' + HORIZON);
+    S.ok('the baseline covers exactly the same matches as this run', !mismatch.length,
+         mismatch.join('; ') || runs.length + ' matches paired at ' + HORIZON + 's');
+
+    S.note('PAIRED against ' + PB_BASE + ' — same seed, same map, before -> after. The map is the' +
+           ' dominant source of variation and it cancels here; these deltas mean what the means' +
+           ' above do not.');
+    var tiers = {};
+    runs.forEach(function (r) {
+      var b = was[key(r)];
+      if (!b) return;
+      var t = r.vs + ':' + r.d, dp = r.progress - b.progress;
+      (tiers[t] = tiers[t] || []).push(dp);
+      S.note('    ' + t.padEnd(16) + 'seed ' + r.seed + '   ' +
+             (b.progress * 100).toFixed(0).padStart(4) + '% -> ' +
+             (r.progress * 100).toFixed(0).padStart(4) + '%   ' +
+             (dp >= 0 ? '+' : '') + (dp * 100).toFixed(0).padStart(3) + '   ' +
+             (b.over === r.over ? b.over
+                                : b.over + '->' + r.over + '  (' + b.fell + 's -> ' + r.fell + 's)'));
+    });
+    S.note('paired movement per tier — better means the opponent got further:');
+    Object.keys(tiers).forEach(function (t) {
+      var a = tiers[t];
+      var up = a.filter(function (x) { return x > 0.005; }).length;
+      var dn = a.filter(function (x) { return x < -0.005; }).length;
+      var mean = a.reduce(function (x, c) { return x + c; }, 0) / a.length;
+      var big = a.reduce(function (x, c) { return Math.abs(c) > Math.abs(x) ? c : x; }, 0);
+      S.note('    ' + t.padEnd(16) + (mean >= 0 ? '+' : '') + (mean * 100).toFixed(0).padStart(4) +
+             ' mean   ' + up + ' better, ' + dn + ' worse, ' + (a.length - up - dn) + ' unchanged' +
+             '   largest single seed ' + (big >= 0 ? '+' : '') + (big * 100).toFixed(0));
+    });
+  }
 
   /* 1. THE SCRIPT HAS TO ACTUALLY PLAY. A "player" that never built anything or never attacked
      would produce a number indistinguishable from the idle ladder, and the whole spec would be

@@ -354,6 +354,61 @@ var S = new Suite('pathing');
          thrash.second.fails === 0, thrash.second.fails + ' further failures');
   }
 
+  /* ---------------------------------------------------------------------------------------
+     A PATH MUST NEVER END ON A CELL THE UNIT CANNOT ENTER.
+
+     _rtsPath walks a blocked goal out to the nearest open cell before searching, and the path
+     reconstruction is careful not to overwrite the final waypoint when it did so - see the boat
+     comment in core/grid.js. The `start === goal` early-out above it was not: when the nearest
+     open cell to a blocked goal turned out to be the unit's OWN tile, it returned a single
+     waypoint at the original, blocked spot.
+
+     Ordinary mis-click, not a contrivance: click your own Command Yard with a tank standing
+     beside it. Before the fix that returned a one-waypoint path ending on a blocked cell 8 units
+     away, and 20 seconds later the tank had travelled 1.9 units and re-pathed 38 times - still
+     holding `order:'move'`, which by the boat comment's own argument also stops it shooting
+     back, because the acquire branch only runs on `amove` or no order.
+
+     The assertion is on the WAYPOINT rather than on the tank's misery, because that is the
+     invariant: whatever the caller asked for, what comes back has to be somewhere the unit can
+     stand. The behaviour is checked underneath it so a future change cannot satisfy the letter
+     of it and strand the unit anyway. */
+  var mis = await g2.page.evaluate(function () {
+    rtsSetVoxSide('allied');
+    _rtsNewGame(4242, 'easy');
+    var yard = _rtsHas('player', 'yard');
+    if (!yard) return { error: 'no command yard' };
+    var side = _rtsNearestOpen(yard.tx - 1, yard.tz + 1, 6, null);
+    if (!side) return { error: 'nowhere to stand a tank' };
+    var t = _rtsSpawnUnit('player', 'tank', _rtsWX(side[0]), _rtsWX(side[1]));
+    var gx = _rtsWX(yard.tx + 1), gz = _rtsWX(yard.tz + 1);        /* the middle of the yard */
+    if (!_rtsBlocked(_rtsTX(gx), _rtsTX(gz))) return { error: 'the yard is not blocking' };
+    var p = _rtsPath(t.x, t.z, gx, gz, _rtsDomainOf(t));
+    var last = p && p[p.length - 1];
+    var out = { pathLen: p ? p.length : null,
+                lastBlocked: last ? !!_rtsBlocked(_rtsTX(last.x), _rtsTX(last.z)) : null };
+    /* now drive it */
+    _rtsOrderMove(t, gx, gz, false);
+    var x0 = t.x, z0 = t.z, repaths = 0, lastPath = t.path;
+    for (var i = 0; i < 60 * 20; i++) {
+      _rtsTick(1 / 60);
+      if (t.path !== lastPath) { repaths++; lastPath = t.path; }
+    }
+    out.order = t.order || 'none';
+    out.travelled = +Math.hypot(t.x - x0, t.z - z0).toFixed(1);
+    out.repaths = repaths;
+    return out;
+  });
+  S.ok('a tank and a blocking building could be set up', !mis.error, mis.error || 'ready');
+  if (!mis.error) {
+    S.ok('a path to a blocked goal never ends on a blocked cell', mis.lastBlocked === false,
+         'path of ' + mis.pathLen + ' waypoint(s), last one blocked: ' + mis.lastBlocked);
+    S.ok('...so mis-clicking your own building does not grind a unit against it for ever',
+         mis.order === 'none' && mis.repaths <= 3,
+         'after 20s: order ' + mis.order + ', travelled ' + mis.travelled + ', ' +
+         mis.repaths + ' re-paths (it was move / 1.9 / 38 before the fix)');
+  }
+
   await g2.close();
 
   await g.close();
