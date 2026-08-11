@@ -96,8 +96,13 @@ function _rtsDrawStruct(g, e, TSscale, cell) {
   }
   var px = Math.round(_rtsSX(_rtsWX(e.tx) - RTS_TILE / 2));
   var py = Math.round(_rtsSY(_rtsWX(e.tz) - RTS_TILE / 2));
-  var w = Math.round(spr.c.width * TSscale), h = Math.round(spr.c.height * TSscale);
-  var top = py - Math.round(spr.head * TSscale);
+  /* THE SPRITE'S OWN RESOLUTION, not the map's. A procedurally baked sprite carries `ps` - how
+     many of its pixels there are per RA art pixel (sprites/bake.js) - and real RA artwork
+     carries none, so it reads as 1 and this is the arithmetic it always was. Dividing here is
+     what keeps a building covering exactly its own tiles however finely it was baked. */
+  var ps = spr.c.ps || 1, sc = TSscale / ps;
+  var w = Math.round(spr.c.width * sc), h = Math.round(spr.c.height * sc);
+  var top = py - Math.round(spr.head * sc);
   if (e.building) {
     /* The original's own construction sequence, when the player's files have it: RA draws a
        building assembling itself frame by frame, and 21 of the 22 ship one. That is what the
@@ -232,7 +237,9 @@ function _rtsDrawUnit(g, e, TSscale) {
                                 : ha.pour[(dk - ha.dock.length) % ha.pour.length];
     } else e.dockT = 0;
   }
-  var w = Math.round(img.width * TSscale), h = Math.round(img.height * TSscale);
+  /* Same as the structures: divide by the scale the sprite was baked at. See _rtsDrawStruct. */
+  var usc = TSscale / (img.ps || 1);
+  var w = Math.round(img.width * usc), h = Math.round(img.height * usc);
   var px = Math.round(_rtsSX(e.x) - w / 2), py = Math.round(_rtsSY(e.z) - h / 2);
   /* An aircraft is drawn lifted off its own ground position, with a flattened shadow left
      behind on the cell it is actually over. That gap is the only cue that says "this is above

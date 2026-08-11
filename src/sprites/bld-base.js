@@ -10,6 +10,7 @@
 function _sprBldBase(X, key) {
   var m = X.m, W = X.W, D = X.D, C = X.C, S = X.S, DK = X.DK, B = X.B,
       K = X.K, SD = X.SD, P = X.P, TM = X.TM,
+      AS = X.AS, RU = X.RU, WH = X.WH, CU = X.CU, OL = X.OL,
       winRow = X.winRow, pilasters = X.pilasters;
       if (key === 'yard') {
     /* Construction Yard. The cameo is a VAULTED HANGAR - a barrel roof over a rectangular hall
@@ -98,6 +99,12 @@ function _sprBldBase(X, key) {
     _r3Box(m, -10, 0, D / 2 - 9, W - 30, 2.5, 16, C[2], C[0]);           /* the dock */
     _r3Box(m, -10, 2.5, D / 2 - 16, W - 30, 1.2, 3, RTS_PAL.hazard[0], RTS_PAL.hazard[0]);
     _r3Box(m, -W / 2 + 7, 0, D / 2 - 9, 4, 8, 15, DK[1], DK[3]);
+    /* Roofscape. The ore hall is the tallest flat plate in the base and it carried nothing;
+       extraction plant on top of a refinery is also just true. */
+    X.duct(-19, 24, 7, 24, true, 3.4);
+    X.vent(-4, 24, -17, 2.4, 4.4);
+    X.vent(-20, 24, -20, 2.0, 3.4);
+    X.hatch(-5, 24, 17, 5, 5);
 
   } else if (key === 'barracks') {
     /* Barracks. NISSEN HUTS - three sand-coloured barrel-roofed sheds in a row, which is what

@@ -135,15 +135,48 @@ S.note(Object.keys(mixKeys).length + ' units in the shopping list, ' +
                                 .join(', ') || 'no cruiser team');
 })();
 
-/* Reported, not asserted: the land and air units no team lists. Every one of them still has
-   employment - the spare pool and base defence - so this is a design fact rather than a fault,
-   but it is the number that would tell us if teams stopped covering the army altogether. */
+/* Reported, not asserted: the land units no team lists.
+
+   THIS NOTE USED TO SAY THEY WERE "employed by the spare pool and by base defence", AND THAT WAS
+   HALF WRONG - worth saying plainly, because it is exactly the kind of comfortable sentence that
+   stops anybody measuring. Base defence is real employment. Counting toward the spare pool is
+   NOT: `spare` is the number _rtsSuggestTeam checks against a composition's size, so a unit that
+   no type lists inflates the count that raises OTHER teams, and does nothing else.
+
+   There is no second route out of the base. _rtsAIAttack raises a team and returns;
+   _rtsAIAllToHunt is the only other one and it runs in ENDGAME alone, when the opponent is
+   already selling its own buildings. So a vehicle in no composition never attacks. Measured,
+   hard, both armies, against a player that fights back, eight matches:
+
+       tank  (in Assault)    123 bought    48 reached the player    50 ever fired at it
+       light, arty, v2rl      49 bought     0 reached the player     0 ever fired at it
+
+   Per unit on one seed: 17 vehicles built, 17 never given an order in 250 seconds, median drift
+   under ten world units - scatter, not movement - and not one of them died.
+
+   AND IT IS STILL NOT WORTH FIXING, which took longer to establish than the fault did. Both
+   obvious repairs have now been built and measured, and neither is an improvement:
+
+     FIELD THEM. Deleted commit 75ae0a4 added one team type per army per tech tier. It worked -
+     artillery 1 to 6, V2s 1 to 6, the teams marched - and the pushback ladder moved the WRONG
+     way on five of six tiers.
+
+     STOP BUYING THEM. Cutting all four from RTS_AI.mix, measured paired per seed against the
+     same tree, moved 26 of 30 seeds by nothing or by under three points. The one tier that
+     looked like a gain - soviet:normal, +17 mean - was a single seed crossing the win/lose
+     boundary while two others moved the other way, which is the precise misreading
+     e2e/pushback's header warns about. The premise was wrong regardless: peak bank in those
+     matches was 11,499-12,536 credits, so the opponent is not short of money and the parked
+     hulls cost it nothing it could have spent.
+
+   So it is a cosmetic waste in a house that cannot spend what it already has. The list below is
+   here to say if that ever stops being true. */
 (function () {
   var loose = Object.keys(mixKeys).filter(function (k) {
     return mixKeys[k] !== 'ship' && !fielded[k];
   });
-  S.note('bought but in no team composition (land and air, employed by the spare pool and by ' +
-         'base defence rather than by a team): ' + (loose.join(', ') || 'none'));
+  S.note('bought but in no team composition — base defence only, these never attack: ' +
+         (loose.join(', ') || 'none'));
 })();
 
 require('../lib/report.js')(S);

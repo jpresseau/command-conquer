@@ -68,19 +68,56 @@ function _rtsUpdateHarvester(e, dt, d) {
     if (e.carry >= d.capacity - 0.5) { e.hstate = 'toRef'; e.path = null; }
   } else if (e.hstate === 'toRef') {
     var ref = _rtsNearestRefinery(e);
-    if (!ref) { e.path = null; return; }
+    if (!ref) { e.path = null; _rtsDockReset(e); return; }
+    if (e.dockRef !== ref.id) { _rtsDockReset(e); e.dockRef = ref.id; }
     /* Docking_Coord: a harvester drives to the refinery's DOCK, not its centre. Pathing at
        the centre of a 3x3 building means every harvester aims at a blocked cell, stops
-       wherever the crowd stops, and they pile up on whichever side they arrived from. */
-    var dock = _rtsDockCoord(ref);
-    /* generous docking radius: a harvester that stops one tile short of the strict range
-       would otherwise hover beside the refinery without ever unloading */
+       wherever the crowd stops, and they pile up on whichever side they arrived from.
+       `dockGoal` overrides it once the south face has been shown to be unusable - see below. */
+    var dock = e.dockGoal || _rtsDockCoord(ref);
     /* Arrive at the dock, but unload from anywhere alongside the building: four harvesters
        converging on one point shove each other back out of a strict dock radius, and the one
        at the back of the queue never finishes its trip. The dock is the destination, not a
        condition. */
     if (Math.hypot(e.x - dock.x, e.z - dock.z) < RTS_TILE * 1.6 || _rtsRangeTo(e, ref) < RTS_TILE * 2.2) {
-      e.path = null; e.hstate = 'unload'; e.ref = ref; return;
+      e.path = null; e.hstate = 'unload'; e.ref = ref; _rtsDockReset(e); return;
+    }
+    /* THE DOCK IS ONE CELL AND THE PLAYER IS ALLOWED TO BUILD ON IT. All this branch used to do
+       on failure was `if (!e.path) return;`, so a harvester whose refinery had been walled in on
+       its south face queued for that one cell for the rest of the match: full hopper, no
+       delivery, no second refinery, no message. Measured - same map, same harvester, the only
+       difference three silos across the south face - 2,000 ore delivered with the row clear
+       against ZERO with it blocked, every sampled tick of two minutes stuck here.
+
+       AND `!e.path` IS THE WRONG TEST FOR IT, which is the part that took a second attempt.
+       _rtsPathFor does not return null for an unreachable goal - it hands back a single waypoint
+       at the goal itself. _rtsSteer consumes that one waypoint, clears e.path, and the harvester
+       has "arrived" ten units short of a dock it can never reach. So there is no path failure to
+       notice. The toField branch above learned this already and says so: distance closed is the
+       honest measure of progress, not whether a path came back. Same measure here. */
+    var gap = _rtsRangeTo(e, ref);
+    if (e.dockGap === undefined || gap < e.dockGap - 0.25) { e.dockGap = gap; e.dockStall = 0; }
+    else {
+      e.dockStall = (e.dockStall || 0) + dt;
+      if (e.dockStall > RTS_DOCK_STALL) {
+        e.dockStall = 0; e.dockGap = undefined; e.path = null;
+        /* First stall: the south face is not working, so try the nearest free cell on any other
+           face. Unloading never required the dock - the arrival test above already accepts
+           anywhere alongside the building - so the dock is a preference, not a condition. */
+        if (!e.dockGoal) {
+          e.dockGoal = _rtsApproachCell(e, ref);
+          if (e.dockGoal) return;
+        }
+        /* Second stall, or no free cell at all: this refinery is the wrong one to queue for.
+           Same per-harvester, time-limited blacklist the ore tiles use, and for the same reason -
+           what blocks it is usually a building or a unit, so it is very likely fine again later,
+           and a second refinery may be reachable when the nearest is not. If there is no other
+           refinery the harvester waits rather than starving for ever: the entry lapses. */
+        e.noDock = e.noDock || {};
+        e.noDock[ref.id] = window._rtsG.t + RTS_HARV_NOGO;
+        _rtsDockReset(e);
+        return;
+      }
     }
     e.rep = (e.rep || 0) - dt;
     if (!e.path || e.rep <= 0) { e.goal = { x:dock.x, z:dock.z }; e.path = _rtsPathFor(e, dock.x, dock.z); e.pi = 0; e.rep = 1.5; if (!e.path) return; }
@@ -138,11 +175,41 @@ function _rtsDockCoord(ref) {
   var d = rtsStructDef(ref.def);
   return { x:_rtsWX(ref.tx) + (d.w - 1) * RTS_TILE / 2, z:_rtsWX(ref.tz + d.h) };
 }
+/* How long a harvester queues for a dock it is not getting any closer to. The same eight
+   seconds the toField branch allows, for the same reason: long enough that ordinary traffic
+   around a busy refinery does not trip it, short enough that a real obstruction costs one trip
+   rather than the match. */
+var RTS_DOCK_STALL = 8;
+function _rtsDockReset(e) {
+  e.dockGoal = null; e.dockGap = undefined; e.dockStall = 0; e.dockRef = null;
+}
+/* A WAY IN THAT IS NOT THE DOCK. The ring of cells just outside a building's footprint, nearest
+   to the unit first, skipping anything already blocked - the first one is the harvester's next
+   guess at how to get alongside.
+
+   Deliberately NOT verified with the pathfinder before returning: _rtsPathFor answers a single
+   waypoint at the goal for an unreachable target rather than null, so asking it "can I get here"
+   returns yes for cells that are walled off. The stall timer is what actually decides, and a cell
+   that turns out to be no better trips it a second time and blacklists the refinery. */
+function _rtsApproachCell(e, s) {
+  var d = rtsStructDef(s.def), best = null, bd = 1e9, ox, oz;
+  for (ox = -1; ox <= d.w; ox++) for (oz = -1; oz <= d.h; oz++) {
+    if (ox >= 0 && ox < d.w && oz >= 0 && oz < d.h) continue;   /* the perimeter, not the footprint */
+    var tx = s.tx + ox, tz = s.tz + oz;
+    if (!_rtsInB(tx, tz) || _rtsBlocked(tx, tz, e)) continue;
+    var wx = _rtsWX(tx), wz = _rtsWX(tz), dist = Math.hypot(wx - e.x, wz - e.z);
+    if (dist < bd) { bd = dist; best = { x:wx, z:wz }; }
+  }
+  return best;
+}
 function _rtsNearestRefinery(e) {
   var G = window._rtsG, best = null, bd = 1e9;
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
     if (o.type !== 'struct' || o.def !== 'refinery' || o.side !== e.side || o.dead || o.building) continue;
+    /* One this harvester has just proved it cannot reach any face of. Skipped rather than
+       preferred-against, so a second refinery is tried properly; the entry lapses on its own. */
+    if (e.noDock && e.noDock[o.id] > window._rtsG.t) continue;
     var d = _rtsDist(e, o);
     if (d < bd) { bd = d; best = o; }
   }

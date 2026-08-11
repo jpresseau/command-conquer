@@ -172,7 +172,22 @@ function _rtsPath(sx, sz, gx, gz, dom) {
     gtx = best[0]; gtz = best[1]; moved = true;
   }
   var start = _rtsIdx(stx, stz), goal = _rtsIdx(gtx, gtz);
-  if (start === goal) return [{ x:gx, z:gz }];
+  /* THE SAME RULE AS THE LAST WAYPOINT BELOW, and it was missing here. If the goal was walked out
+     to an open cell above, the answer has to BE that cell - not the spot originally asked for,
+     which is by definition one this unit cannot occupy. The reconstruction at the bottom guards
+     that with `!moved`; this early-out did not, so whenever the nearest open cell to a blocked
+     goal turned out to be the unit's OWN tile, the path came back as a single waypoint sitting
+     inside the obstacle.
+
+     Reachable by mis-clicking a building. A tank standing beside its own Command Yard, ordered
+     onto it: a one-waypoint path ending on a blocked cell 8 units away, and 20 seconds later the
+     tank had moved 1.9 units and re-pathed 38 times. Worse than it looks, for exactly the reason
+     the boat comment below gives - it keeps `order:'move'`, and the acquire branch in
+     _rtsUpdateUnit only runs on `amove` or no order at all, so the tank stops shooting back too.
+
+     Returning the relocated cell says the honest thing: the unit is already standing at the
+     closest it can get. _rtsSteer completes that path at once and the order clears. */
+  if (start === goal) return [moved ? { x:_rtsWX(gtx), z:_rtsWX(gtz) } : { x:gx, z:gz }];
   P.hn = 0;
   function H(i) { var ax = Math.abs((i % RTS_N) - gtx), az = Math.abs(((i / RTS_N) | 0) - gtz);
     return (ax > az) ? (ax - az) + 1.41421 * az : (az - ax) + 1.41421 * ax; }

@@ -873,7 +873,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">14366d7 · 2026-08-10</div>
+  <div id="rtsBuild" title="build">2cb3089 · 2026-08-11</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -5364,6 +5364,28 @@ function _r3FitSize(models, margin) {
    Nothing here is traced, ripped or copied from any existing game. */
 
 var RTS_TS = 24;                  /* art pixels per map cell */
+/* HOW MUCH FINER THE PROCEDURAL SPRITES ARE BAKED THAN RA'S OWN ART.
+
+   RTS_TS is not a free parameter and must not be raised. It is Red Alert's tile format, and
+   mixart/tiles.js rejects the player's files outright unless every tile is exactly RTS_TS
+   square - `if (w !== RTS_TS || h !== RTS_TS) return null`. Change it and the game silently
+   stops being able to load the artwork it is built to load.
+
+   But nothing forces OUR sprites to be authored at RA's resolution. They are drawn by a
+   renderer, not read off a disk, so they can be baked at any density and simply drawn smaller.
+   At RTS_TS a 1x1 defence is 24x24 pixels, which is not enough room for a window, let alone a
+   roof vent; every model in sprites/ is authored against that budget and hits it.
+
+   So the procedural path bakes at RTS_TS * RTS_PS art pixels per cell and each canvas it
+   produces carries a `ps` telling the renderer what it was baked at. render/draw.js divides by
+   it, so a building still covers exactly its own tiles - same world size, more pixels inside
+   it. Real RA art has no `ps` and reads as 1, so the mixart path is untouched and a player's
+   own files load and draw exactly as before.
+
+   The cost is (RTS_PS^2) in bake time and sprite memory, paid once at load. At 2 that is four
+   times the raster work on a few hundred small sprites; the supersample in r3d/render.js
+   already costs 9x on top and is not noticeable. */
+var RTS_PS = 2;
 var RTS_ZOOMS = [12, 24, 48];     /* screen px per cell: 0.5x, 1x, 2x. Nothing else. */
 var RTS_ZOOM_DEF = 1;             /* index into RTS_ZOOMS - 24 = one art pixel per screen pixel */
 var _RTS_SPR = null;
@@ -5501,7 +5523,46 @@ var RTS_PAL = {
     sand:  ['#ab9b70', '#c2b287', '#857852', '#d6caa2'],
     /* Pale block: same widening. The Tech Centre is the tallest building in the game and was
        measuring 0.10 saturation over 70 tones - a white slab with a stripe. */
-    pale:  ['#a0a696', '#c3c9b6', '#6e746a', '#dee3d0']
+    pale:  ['#a0a696', '#c3c9b6', '#6e746a', '#dee3d0'],
+
+    /* FOURTEEN OF THE TWENTY-FOUR STRUCTURES USED NONE OF THE ABOVE. Audited by walking every
+       model and collecting which ramps it names: the Construction Yard, Radar Dome, Helipad,
+       Airfield, Rocket Pit, Flame Tower, Naval Yard, Sub Pen, Tesla Coil, Missile Silo, Iron
+       Curtain, Chronosphere, Pillbox and Gun Turret were built entirely from conc, steel and
+       dark - three grey ramps. A base made of those reads as one material with a coloured
+       stripe on it, which is the same fault the vehicles had and the same fault brick, sand and
+       pale were added to fix for the six buildings that got them.
+
+       These five are the rest of the evidence from the same cameo sheets:
+
+       ASPHALT - the Helipad and the Airfield are laid surfaces, not buildings. They are the
+       only structures whose whole footprint is ground, and painting that in the concrete used
+       for walls is what made them read as slabs rather than as pavement. Warmer and darker
+       than concrete, so the markings on top of it carry.
+
+       RUST - the Naval Yard and Sub Pen are working dockyards: gantries, rails and plate that
+       live in salt water. Rust also gives the two largest flat sprites in the game a second
+       material to break against, which is what they most need.
+
+       WHITE - the Radar Dome is white in the cameo and so is the Chronosphere. It is not the
+       same as `pale`: pale is a tinted stone block for the Tech Centre, this is painted
+       whitewash, brighter and cooler, and the difference is what stops the tech buildings all
+       reading as one family.
+
+       COPPER - the Tesla Coil's coils, and the Chronosphere's rings. The one warm metal in the
+       set. Deliberately narrow in range: it is an accent for a few parts, not a wall material.
+
+       OLIVE - painted military steel, for the ordnance: Iron Curtain, Missile Silo, Rocket Pit,
+       Flame Tower. Army equipment is painted, and painting it is what separates a weapon from
+       the concrete it stands on.
+
+       Every ramp keeps the four-entry shape the others use - [base, light, dark, highlight] -
+       so any of them can be dropped into a model where a C or S was without touching the call. */
+    asphalt:['#4c4a46', '#625f59', '#2e2d2b', '#7b776e'],
+    rust:  ['#7a5340', '#96694f', '#4e3427', '#b2836a'],
+    white: ['#bfc4c2', '#dfe4e2', '#8b918f', '#f2f5f4'],
+    copper:['#a06a3c', '#c98a53', '#6b4526', '#e0a86b'],
+    olive: ['#5f6448', '#787e5c', '#3c4030', '#949a76']
   }
 };
 
@@ -6174,6 +6235,7 @@ function _sprSandbag() {
 function _sprBldBase(X, key) {
   var m = X.m, W = X.W, D = X.D, C = X.C, S = X.S, DK = X.DK, B = X.B,
       K = X.K, SD = X.SD, P = X.P, TM = X.TM,
+      AS = X.AS, RU = X.RU, WH = X.WH, CU = X.CU, OL = X.OL,
       winRow = X.winRow, pilasters = X.pilasters;
       if (key === 'yard') {
     /* Construction Yard. The cameo is a VAULTED HANGAR - a barrel roof over a rectangular hall
@@ -6262,6 +6324,12 @@ function _sprBldBase(X, key) {
     _r3Box(m, -10, 0, D / 2 - 9, W - 30, 2.5, 16, C[2], C[0]);           /* the dock */
     _r3Box(m, -10, 2.5, D / 2 - 16, W - 30, 1.2, 3, RTS_PAL.hazard[0], RTS_PAL.hazard[0]);
     _r3Box(m, -W / 2 + 7, 0, D / 2 - 9, 4, 8, 15, DK[1], DK[3]);
+    /* Roofscape. The ore hall is the tallest flat plate in the base and it carried nothing;
+       extraction plant on top of a refinery is also just true. */
+    X.duct(-19, 24, 7, 24, true, 3.4);
+    X.vent(-4, 24, -17, 2.4, 4.4);
+    X.vent(-20, 24, -20, 2.0, 3.4);
+    X.hatch(-5, 24, 17, 5, 5);
 
   } else if (key === 'barracks') {
     /* Barracks. NISSEN HUTS - three sand-coloured barrel-roofed sheds in a row, which is what
@@ -6356,6 +6424,7 @@ function _sprBldBase(X, key) {
 function _sprBldTech(X, key) {
   var m = X.m, W = X.W, D = X.D, C = X.C, S = X.S, DK = X.DK, B = X.B,
       K = X.K, SD = X.SD, P = X.P, TM = X.TM,
+      AS = X.AS, RU = X.RU, WH = X.WH, CU = X.CU, OL = X.OL,
       winRow = X.winRow, pilasters = X.pilasters;
   if (key === 'radar') {
     /* Radar Dome. The dome IS the building - a pale hemisphere on a small dark base, and the
@@ -6363,9 +6432,11 @@ function _sprBldTech(X, key) {
     _r3Slab(m, 0, 0, 2, W - 10, 10, D - 12, 3, C[0], C[2]);
     _r3Box(m, 0, 0, D / 2 - 5, 8, 8, 3, DK[0], DK[1]);
     winRow(D / 2 - 4, 3, -11, 2, 8, 4, 4);
-    _r3Cone(m, 0, 10, -1, 15, 13.5, 6, C[3], 22);
-    _r3Cone(m, 0, 16, -1, 13.5, 9.5, 7, C[1], 22);
-    _r3Cone(m, 0, 23, -1, 9.5, 4, 6, C[3], 22);
+    /* WHITEWASH, not concrete. The dome is the most identifiable shape in the game and it
+       was the same grey as the bunker under it, so the two read as one lump. */
+    _r3Cone(m, 0, 10, -1, 15, 13.5, 6, WH[1], 22);
+    _r3Cone(m, 0, 16, -1, 13.5, 9.5, 7, WH[0], 22);
+    _r3Cone(m, 0, 23, -1, 9.5, 4, 6, WH[3], 22);
     _r3Cyl(m, 0, 29, -1, 2, 4, S[1], S[3], 16);
     _r3Cyl(m, 0, 10, -1, 15.6, 1.4, B.roof, B.roof, 22);                 /* team ring at its foot */
     _r3Box(m, W / 2 - 7, 0, 4, 5, 12, 5, S[2], S[1]);                    /* waveguide riser */
@@ -6416,8 +6487,10 @@ function _sprBldTech(X, key) {
     /* A flat pad, and in the reference it is exactly that: a marked square of apron with a
        yellow cross on it and almost nothing standing up. Keeping it low is the point - the one
        structure a helicopter can sit on top of has to look like it. */
-    _r3Box(m, 0, 0, 0, W - 4, 2.5, D - 4, C[2], C[0]);
-    _r3Box(m, 0, 2.5, 0, W - 12, 0.8, D - 12, C[0], C[1]);         /* the marked square */
+    /* ASPHALT. This is pavement, not a wall - painting it in the concrete used for walls is
+       what made it read as a slab of building rather than as ground. */
+    _r3Box(m, 0, 0, 0, W - 4, 2.5, D - 4, AS[2], AS[0]);
+    _r3Box(m, 0, 2.5, 0, W - 12, 0.8, D - 12, AS[0], AS[1]);       /* the marked square */
     _r3Box(m, 0, 3.3, 0, W - 22, 0.7, 4.5, RTS_PAL.hazard[0], RTS_PAL.hazard[0]);   /* the cross */
     _r3Box(m, 0, 3.3, 0, 4.5, 0.7, D - 22, RTS_PAL.hazard[0], RTS_PAL.hazard[0]);
     _r3Box(m, -W / 2 + 6, 2.5, -D / 2 + 6, 7, 9, 7, C[0], B.roof);  /* control hut, team roof */
@@ -6437,7 +6510,7 @@ function _sprBldTech(X, key) {
     for (var af = 0; af < 6; af++)                                  /* dashed centreline */
       _r3Box(m, -W / 2 + 8 + af * ((W - 16) / 5), 2.9, 0, 3.6, 0.6, 1.2,
              RTS_PAL.hazard[0], RTS_PAL.hazard[0]);
-    _r3Box(m,  W / 2 - 6, 2.9, 0, 1.6, 0.6, D - 15, C[0], C[1]);    /* threshold bars */
+    _r3Box(m,  W / 2 - 6, 2.9, 0, 1.6, 0.6, D - 15, AS[0], AS[1]);    /* threshold bars */
     _r3Box(m, -W / 2 + 6, 2.9, 0, 1.6, 0.6, D - 15, C[0], C[1]);
     _r3Box(m, -W / 2 + 7, 2.2, -D / 2 + 5, 8, 8, 6, C[0], B.roof);  /* control shack, team roof */
     _r3Box(m, -W / 2 + 7, 10.2, -D / 2 + 5, 1.1, 5, 1.1, S[3], S[3]);  /* its mast */
@@ -6509,12 +6582,13 @@ function _sprBldTech(X, key) {
 function _sprBldWar(X, key) {
   var m = X.m, W = X.W, D = X.D, C = X.C, S = X.S, DK = X.DK, B = X.B,
       K = X.K, SD = X.SD, P = X.P, TM = X.TM,
+      AS = X.AS, RU = X.RU, WH = X.WH, CU = X.CU, OL = X.OL,
       winRow = X.winRow, pilasters = X.pilasters;
   if (key === 'rocketpit') {
     /* Rocket Turret. TUBES, angled up - a stepped bank so the silhouette is a wedge rather
        than the Gun Turret's single spike. The two must not be confusable. */
     _r3Box(m, 0, 0, 0, W - 4, 3, D - 4, C[2], C[0]);
-    _r3Box(m, 0, 3, 0, 15, 6, 13, C[0], C[2]);
+    _r3Box(m, 0, 3, 0, 15, 6, 13, OL[0], OL[2]);                         /* painted mount */
     for (var rt = 0; rt < 3; rt++) {
       _r3Cyl(m, -4 + rt * 4, 9 + rt * 2.5, -1, 1.8, 11 - rt, S[0], S[3], 16);
       _r3Cyl(m, -4 + rt * 4, 20 - rt + (rt * 2.5), -1, 2.1, 1.5, DK[1], DK[3], 16);
@@ -6527,8 +6601,11 @@ function _sprBldWar(X, key) {
        identity - it is the only defence with a vertical silhouette. */
     _r3Box(m, 0, 0, 0, W - 5, 2.5, D - 5, C[2], C[0]);
     _r3Cyl(m, -5, 2.5, 4, 5, 7, RTS_PAL.hazard[0], S[3], 18);            /* fuel drum */
-    _r3Cyl(m, 3, 2.5, -2, 4, 20, C[0], C[2], 18);                        /* the column */
-    _r3Cone(m, 3, 22.5, -2, 4, 6.5, 4, C[1], 18);                        /* flared head */
+    /* SAND, because the model's own note calls this a STONE column and stone is not concrete.
+       It also puts the one vertical Soviet defence in a different material from the Tesla Coil
+       beside it, which is the pair most often built together. */
+    _r3Cyl(m, 3, 2.5, -2, 4, 20, SD[0], SD[2], 18);                      /* the column */
+    _r3Cone(m, 3, 22.5, -2, 4, 6.5, 4, SD[1], 18);                       /* flared head */
     _r3Cyl(m, 3, 26.5, -2, 2, 4, RTS_PAL.hazard[0], S[3], 16);           /* pilot */
     _r3Cyl(m, 3, 9, -2, 4.6, 1.4, B.roof, B.roof, 18);                   /* team band */
     _r3Box(m, -1, 6, 1, 6, 1.5, 1.5, S[2], S[1]);                        /* feed pipe */
@@ -6557,13 +6634,22 @@ function _sprBldWar(X, key) {
                (nv & 1) ? C[2] : C[0]);
     _r3Box(m, -W / 4, 11.4, 0, W / 2 - 1, 1.2, D - 7, C[3], C[1]);       /* eaves */
     _r3Box(m, -W / 4, 16.2, 0, W / 2 - 9, 1.1, 3, B.roof, B.roof);       /* team band, on the ridge */
+    /* ROOFSCAPE on the hall. The ribs give the roof a saw-tooth but every tooth is the same
+       tone as the last; plant on top of them is what breaks the repeat. Kept to the landward
+       half so the slipway side stays legible as the open end. */
+    X.duct(-W / 4, 15.5, D / 5, D / 3.4, true, 3.6);
+    X.vent(-W / 4 - 5, 15.5, -D / 5.5, 2.4, 4.2);
+    X.vent(-W / 4 + 5, 15.5, -D / 4.2, 2.0, 3.4);
+    X.hatch(-W / 4 + 6, 15.5, D / 3.2, 5, 4);
     /* The slipway: a real channel, dark and open at the seaward end, with its own kerbs. A
        dark trough beside a pale hall is the strongest edge on the building and the only hint
        the player gets that this end goes in the water. */
     _r3Box(m, W / 5, 1.2, 0, W / 2.4, 1.4, D / 2.4, DK[2], DK[0]);
     _r3Box(m, W / 5, 1.6, -D / 4.2, W / 2.4, 2.4, 2.5, C[3], C[1]);      /* kerb, landward */
+    /* RUSTED PLATE on everything that lives in the water. Two of the three largest flat
+       sprites in the game are these yards, and a second material is what they most need. */
     for (var ns = 0; ns < 4; ns++)                                        /* slipway rails */
-      _r3Box(m, W / 5, 2.4, -D / 7 + ns * (D / 11), W / 2.8, 0.7, 1.2, S[1], S[3]);
+      _r3Box(m, W / 5, 2.4, -D / 7 + ns * (D / 11), W / 2.8, 0.7, 1.2, RU[0], RU[2]);
     if (_cov) {
       /* The Sub Pen is the same hull under cover, which is what tells them apart in the
          original too. A vault rather than a flat lid: alongZ, so the curve is in the
@@ -6571,9 +6657,9 @@ function _sprBldWar(X, key) {
       _r3Vault(m, W / 5, 3, 0, W / 2.2, 9, D / 2.3, C[1], 16, true);
       _r3Box(m, W / 5, 12, 0, 4, 1.1, D / 2.4, B.roof, B.roof);
     } else {
-      _r3Box(m, W / 5, 10, -D / 5, 1.8, 7, 1.8, S[1], S[2]);             /* gantry legs */
-      _r3Box(m, W / 5, 10, D / 5, 1.8, 7, 1.8, S[1], S[2]);
-      _r3Box(m, W / 5, 17, 0, W / 2.2, 1.8, 2.4, S[0], S[1]);            /* gantry beam */
+      _r3Box(m, W / 5, 10, -D / 5, 1.8, 7, 1.8, RU[0], RU[2]);           /* gantry legs */
+      _r3Box(m, W / 5, 10, D / 5, 1.8, 7, 1.8, RU[0], RU[2]);
+      _r3Box(m, W / 5, 17, 0, W / 2.2, 1.8, 2.4, RU[1], RU[0]);          /* gantry beam */
       _r3Cyl(m, W / 5, 18.8, 0, 1.6, 3, S[2], S[0], 16);                 /* the hoist */
       _r3Box(m, W / 5, 14, 0, 1.0, 4.5, 1.0, S[3], S[3]);                /* its cable */
     }
@@ -6596,13 +6682,16 @@ function _sprBldWar(X, key) {
     _r3Box(m, 0, 0, 0, W - 6, 4, D - 6, C[2], C[0]);                     /* concrete footing */
     _r3Box(m, 0, 4, 0, 9, 3, 9, C[0], C[1]);                             /* transformer block */
     _r3Cyl(m, 0, 7, 0, 2.6, 26, C[1], C[0], 16);                         /* the mast */
+    /* COPPER rings and head. A Tesla Coil made of concrete from footing to crown was the
+       clearest case in the audit: the three greys were doing the work of an insulator, a
+       winding and a toroid, and none of those is grey. */
     for (var _ti = 0; _ti < 3; _ti++) {                                  /* insulator rings */
-      _r3Cyl(m, 0, 11 + _ti * 7, 0, 4.2, 1.6, C[3], C[2], 16);
+      _r3Cyl(m, 0, 11 + _ti * 7, 0, 4.2, 1.6, CU[2], CU[0], 16);
     }
     _r3Cyl(m, 0, 9, 0, 3.4, 1.5, B.roof, B.roof, 16);                    /* team band */
     /* the head: two toroids with the arc gap between them */
-    _r3Cyl(m, 0, 33, 0, 7, 2.4, S[1], S[2], 20);
-    _r3Cyl(m, 0, 38.5, 0, 5.2, 2, S[1], S[2], 20);
+    _r3Cyl(m, 0, 33, 0, 7, 2.4, CU[0], CU[3], 20);
+    _r3Cyl(m, 0, 38.5, 0, 5.2, 2, CU[0], CU[3], 20);
     _r3Cyl(m, 0, 35.4, 0, 1.3, 3.1, RTS_PAL.spark[2], RTS_PAL.spark[1], 12);  /* the arc */
     _r3Cyl(m, 0, 41, 0, 1.6, 2.2, RTS_PAL.spark[0], RTS_PAL.spark[1], 12);    /* crown */
 
@@ -6621,6 +6710,7 @@ function _sprBldWar(X, key) {
 function _sprBldSuper(X, key) {
   var m = X.m, W = X.W, D = X.D, C = X.C, S = X.S, DK = X.DK, B = X.B,
       K = X.K, SD = X.SD, P = X.P, TM = X.TM,
+      AS = X.AS, RU = X.RU, WH = X.WH, CU = X.CU, OL = X.OL,
       winRow = X.winRow, pilasters = X.pilasters;
   if (key === 'mslo') {
     /* MISSILE SILO. A pair of blast doors laid flat with the nose of the missile showing
@@ -6628,7 +6718,10 @@ function _sprBldSuper(X, key) {
        on the field and it should not look like a defence tower, it should look like a hatch in
        the ground that you would walk past. The read is the yellow-black hazard chevrons. */
     _r3Box(m, 0, 0, 0, W - 4, 3, D - 4, C[2], C[0]);                     /* apron */
-    _r3Box(m, 0, 3, 0, W - 10, 6, D - 10, C[0], C[1]);                   /* silo block */
+    /* OLIVE. The apron stays concrete - it is ground - but the silo itself is equipment, and
+       army equipment is painted. The chevrons read far better against paint than against the
+       same grey the apron is. */
+    _r3Box(m, 0, 3, 0, W - 10, 6, D - 10, OL[0], OL[1]);                 /* silo block */
     /* the open door, hinged back, and the closed one beside it */
     _r3Box(m, -7, 9, -2, 12, 1.6, 13, DK[1], DK[2]);
     _r3Box(m, 6, 9, -8, 12, 1.6, 5, C[3], C[2]);
@@ -6647,15 +6740,17 @@ function _sprBldSuper(X, key) {
        against the Chronosphere's sphere. They are the two "field" buildings and must not be
        confusable at a glance. */
     _r3Box(m, 0, 0, 0, W - 4, 3, D - 4, C[2], C[0]);
-    _r3Box(m, 0, 3, 0, W - 12, 7, D - 8, C[0], C[1]);                    /* plinth */
+    _r3Box(m, 0, 3, 0, W - 12, 7, D - 8, OL[0], OL[1]);                  /* plinth, painted */
     /* the two uprights and the yoke across the top */
     _r3Box(m, -10, 10, 0, 4, 18, 7, DK[1], DK[2]);
     _r3Box(m,  10, 10, 0, 4, 18, 7, DK[1], DK[2]);
     _r3Box(m, 0, 26, 0, 24, 3.5, 6, C[3], C[2]);
     /* coil banks on each upright */
     for (var _iv = 0; _iv < 3; _iv++) {
-      _r3Cyl(m, -10, 13 + _iv * 5, 0, 4.2, 2, C[2], C[3], 16);
-      _r3Cyl(m,  10, 13 + _iv * 5, 0, 4.2, 2, C[2], C[3], 16);
+      /* COPPER. These are coils. They were concrete, which is the one material a coil
+         cannot be made of, and they are the part the eye goes to. */
+      _r3Cyl(m, -10, 13 + _iv * 5, 0, 4.2, 2, CU[0], CU[3], 16);
+      _r3Cyl(m,  10, 13 + _iv * 5, 0, 4.2, 2, CU[0], CU[3], 16);
     }
     /* the emitter itself, between them - emissive, because a powered field IS the building */
     _r3Cyl(m, 0, 18, 0, 5, 3.2, RTS_PAL.lit, RTS_PAL.lit, 20);
@@ -6675,10 +6770,13 @@ function _sprBldSuper(X, key) {
     /* the sphere, as a stack of cones - there is no sphere primitive and adding one for a
        single building would be a worse trade than four rings that read as round from every
        angle the camera can reach */
-    _r3Cone(m, 0, 15, 0, 3.5, 7.5, 4, S[2], 20);
-    _r3Cone(m, 0, 19, 0, 7.5, 9,   3, S[1], 20);
-    _r3Cone(m, 0, 22, 0, 9,   7.5, 4, S[1], 20);
-    _r3Cone(m, 0, 26, 0, 7.5, 3.5, 4, S[2], 20);
+    /* WHITEWASH. The two field buildings must not be confusable, and they were both built
+       from the same greys - the shape was carrying the whole distinction. Now the Chronosphere
+       is a white sphere and the Iron Curtain is a painted frame with copper coils. */
+    _r3Cone(m, 0, 15, 0, 3.5, 7.5, 4, WH[2], 20);
+    _r3Cone(m, 0, 19, 0, 7.5, 9,   3, WH[0], 20);
+    _r3Cone(m, 0, 22, 0, 9,   7.5, 4, WH[1], 20);
+    _r3Cone(m, 0, 26, 0, 7.5, 3.5, 4, WH[0], 20);
     _r3Cyl(m, 0, 21.5, 0, 10.5, 1.6, RTS_PAL.spark[1], RTS_PAL.spark[2], 20); /* equator ring */
     _r3Cyl(m, 0, 30, 0, 1.6, 3, RTS_PAL.lit, RTS_PAL.lit, 12);           /* crown light */
     _r3Box(m, 0, 9.5, 0, 8, 1.4, 5, B.roof, B.roof);
@@ -6728,8 +6826,8 @@ function _sprBldSuper(X, key) {
     /* Gun Turret. A single BARREL on a low armoured base, lying almost flat - the barrel is
        the read, so it is long and sits clear of everything else. */
     _r3Box(m, 0, 0, 0, W - 4, 3, D - 4, C[2], C[0]);
-    _r3Cone(m, 0, 3, 0, 9, 7.5, 6, C[0], 20);                            /* sloped base */
-    _r3Cyl(m, 0, 9, 0, 7, 5, C[2], B.roof, 20);                          /* turret, team roof */
+    _r3Cone(m, 0, 3, 0, 9, 7.5, 6, OL[0], 20);                           /* sloped base, painted */
+    _r3Cyl(m, 0, 9, 0, 7, 5, OL[2], B.roof, 20);                         /* turret, team roof */
     _r3Box(m, 0, 10, 8, 3, 3, 13, S[0], S[1]);                           /* barrel */
     _r3Box(m, 0, 10, 15, 4, 4, 3, S[2], S[3]);                           /* muzzle */
     _r3Box(m, -7, 3, -6, 4, 3, 4, RTS_PAL.bag[0], RTS_PAL.bag[1]);
@@ -6762,6 +6860,9 @@ function _sprBuilding(key, side) {
      so it costs nothing for anyone using the originals. */
   var made = _sprBuildingClean(key, side);
   made.dmg = _sprBldDamaged(made.c, key);
+  /* Derived from the clean canvas, so it is the same size and must report the same scale -
+     otherwise a building would jump in size the moment it took damage. */
+  made.dmg.ps = made.c.ps;
   return made;
 }
 
@@ -6814,6 +6915,11 @@ function _sprBuildingClean(key, side) {
      from several materials, and painting all of it in one team-tinted grey-blue is what made
      ours read as a set of blue boxes. */
   var K = RTS_PAL.mat.brick, SD = RTS_PAL.mat.sand, P = RTS_PAL.mat.pale;
+  /* AS = asphalt, RU = rust, WH = whitewash, CU = copper, OL = painted olive. The fourteen
+     structures that were built entirely from the three grey ramps now have somewhere to go;
+     see RTS_PAL.mat for what each is evidence for. */
+  var AS = RTS_PAL.mat.asphalt, RU = RTS_PAL.mat.rust, WH = RTS_PAL.mat.white,
+      CU = RTS_PAL.mat.copper, OL = RTS_PAL.mat.olive;
   var m = [], i;
   /* Facade detail. In the reference a wall is never one flat colour - it carries pale
      pilasters and rows of lit windows, and that is a lot of what separates a building from
@@ -6829,15 +6935,85 @@ function _sprBuildingClean(key, side) {
     }
   }
 
+  /* ------------------------------------------------------------------ ROOFSCAPE --
+     THE CAMERA LOOKS DOWN AT THESE. R3_K is 1.3, so a building does show a real front
+     elevation - but the roof is still the largest unbroken area on almost every sprite, and it
+     was a flat plate carrying one team band. The exception is the Construction Yard, whose
+     vault is corrugated for exactly this reason and which is the best-reading building in the
+     set. That is the whole argument: do everywhere what already fixed the yard.
+
+     These are deliberately SMALL HARD-EDGED OBJECTS rather than surface texture. The shading
+     pass already puts a smooth ramp across a flat plane; what a plane cannot produce is a cast
+     edge, an occluded crease, or a second material meeting the first. Each of these gives all
+     three, and the depth-buffer AO in r3d/render.js darkens every join for free.
+
+     Placed in roof-plane coordinates - (x, z) across the roof, `y` the height of the surface
+     they stand on - so callers position furniture the same way whatever is underneath. */
+
+  /* A drum vent or extractor housing: cylinder with a darker cap, so it reads as a hole. */
+  function vent(x, y, z, r, h) {
+    _r3Cyl(m, x, y, z, r, h, S[1], S[3], 16);
+    _r3Cyl(m, x, y + h, z, r * 0.82, 0.8, DK[1], DK[0], 16);
+  }
+  /* A boxed duct run. `alongZ` lays it down the depth instead of across the width: ducts on a
+     real roof run one way and turn, and alternating them is what stops a roof reading as a
+     grid of identical lumps. */
+  function duct(x, y, z, len, alongZ, w) {
+    var t = w || 3.2;
+    _r3Box(m, x, y, z, alongZ ? t : len, 2.6, alongZ ? len : t, S[2], S[0]);
+    var n = Math.max(2, Math.round(len / 5));                 /* seam ribs along its length */
+    for (var q = 0; q < n; q++) {
+      var f = (q - (n - 1) / 2) * (len / n);
+      _r3Box(m, x + (alongZ ? 0 : f), y + 2.6, z + (alongZ ? f : 0),
+             alongZ ? t + 0.6 : 1.0, 0.5, alongZ ? 1.0 : t + 0.6, S[3], S[1]);
+    }
+  }
+  /* A glazed panel let INTO the roof. Same glass the window rows use, so a base reads as lit
+     from above as well as from its faces - and unlike a wall window it is visible from every
+     direction at this camera angle. */
+  function skylight(x, y, z, w, d) {
+    _r3Box(m, x, y, z, w + 1.4, 0.9, d + 1.4, B.trim, B.trim);           /* frame */
+    _r3Box(m, x, y + 0.9, z, w, 0.5, d, RTS_PAL.glass, RTS_PAL.glass);
+  }
+  /* An access hatch or plant housing - a low block with a lid a shade darker. */
+  function hatch(x, y, z, w, d, h) {
+    _r3Box(m, x, y, z, w, h || 2.2, d, C[1], C[3]);
+    _r3Box(m, x, y + (h || 2.2), z, w * 0.9, 0.6, d * 0.9, DK[1], DK[2]);
+  }
+  /* A thin mast with a cross-piece. Cheap silhouette above the roofline, which is how a
+     building is read when it is half behind another one. */
+  function aerial(x, y, z, h) {
+    _r3Box(m, x, y, z, 0.9, h, 0.9, S[3], S[2]);
+    _r3Box(m, x, y + h * 0.72, z, 4.4, 0.7, 0.7, S[2], S[1]);
+  }
+  /* A parapet: posts along two roof edges. Breaks the silhouette against the ground behind it,
+     which is the one place the rim light in r3d/render.js has nothing to work with. */
+  function parapet(y, z0, z1, x0, x1, step) {
+    for (var px = x0; px <= x1 + 0.01; px += (step || 6)) {
+      _r3Box(m, px, y, z0, 1.1, 2.4, 1.1, C[3], C[1]);
+      _r3Box(m, px, y, z1, 1.1, 2.4, 1.1, C[3], C[1]);
+    }
+  }
+
   /* The chain is four files now - see sprites/bld-*.js. It was one 500-line function, and
      the size guard in unit/layout caught it the first time a model needed a paragraph of
      explanation. Each arm returns false for a key it does not own. */
   var X = { m:m, W:W, D:D, C:C, S:S, DK:DK, B:B, K:K, SD:SD, P:P, TM:TM,
-            winRow:winRow, pilasters:pilasters };
+            winRow:winRow, pilasters:pilasters,
+            AS:AS, RU:RU, WH:WH, CU:CU, OL:OL,
+            vent:vent, duct:duct, skylight:skylight, hatch:hatch,
+            aerial:aerial, parapet:parapet };
   _sprBldBase(X, key) || _sprBldTech(X, key) || _sprBldWar(X, key) || _sprBldSuper(X, key);
-  var r = _r3BakeFootprint(m, W, D);
+  /* Baked at RTS_PS times RA's resolution - see RTS_PS in sprites/bake.js for why that is a
+     separate number from RTS_TS rather than a bigger RTS_TS. The MODEL is authored in art
+     pixels and scaled here rather than every model being rewritten: _r3Scale already exists
+     for exactly this, the footprint grows with it, and `head` comes back in the same units the
+     canvas is in, so the renderer's one division by `ps` corrects all three together. */
+  var r = _r3BakeFootprint(RTS_PS === 1 ? m : _r3Scale(m, RTS_PS), W * RTS_PS, D * RTS_PS);
   _sprEdge(r.c);
-  return { c: _sprShadow(r.c, 3, 3), head: r.head };
+  var out = _sprShadow(r.c, 3 * RTS_PS, 3 * RTS_PS);
+  out.ps = RTS_PS;
+  return { c: out, head: r.head };
 }
 
 </script>
@@ -7346,11 +7522,19 @@ function _sprUnit(key, side, prone, part) {
   }
   var m = _sprUnitModel(key, side, prone, part), size = _sprUnitFit(key, side);
   var frames = [], N = _sprFacings(key);
+  /* Same RTS_PS scale-up the structures get - see sprites/bake.js. Applied AFTER the yaw so
+     every facing is scaled identically, and the fit square grows with it so the measurement
+     _r3FitSize made at 1x still holds: it is the worst case over 32 facings, and scaling is
+     uniform, so nothing that fitted before can clip now. A unit is where the extra pixels pay
+     best - an infantryman is about ten art pixels tall, and at that size a rifle is one. */
   for (var f = 0; f < N; f++) {
-    var cv = _r3BakeCentred(_r3Yaw(m, -f / N * Math.PI * 2), size);
+    var ym = _r3Yaw(m, -f / N * Math.PI * 2);
+    var cv = _r3BakeCentred(RTS_PS === 1 ? ym : _r3Scale(ym, RTS_PS), size * RTS_PS);
     _sprEdge(cv);
     /* the turret is drawn ON the hull, so it must not cast a second ground shadow */
-    frames.push(part === 'turret' ? cv : _sprShadow(cv, 1, 2));
+    var done = (part === 'turret') ? cv : _sprShadow(cv, 1 * RTS_PS, 2 * RTS_PS);
+    done.ps = RTS_PS;
+    frames.push(done);
   }
   return frames;
 }
@@ -12030,7 +12214,22 @@ function _rtsPath(sx, sz, gx, gz, dom) {
     gtx = best[0]; gtz = best[1]; moved = true;
   }
   var start = _rtsIdx(stx, stz), goal = _rtsIdx(gtx, gtz);
-  if (start === goal) return [{ x:gx, z:gz }];
+  /* THE SAME RULE AS THE LAST WAYPOINT BELOW, and it was missing here. If the goal was walked out
+     to an open cell above, the answer has to BE that cell - not the spot originally asked for,
+     which is by definition one this unit cannot occupy. The reconstruction at the bottom guards
+     that with `!moved`; this early-out did not, so whenever the nearest open cell to a blocked
+     goal turned out to be the unit's OWN tile, the path came back as a single waypoint sitting
+     inside the obstacle.
+
+     Reachable by mis-clicking a building. A tank standing beside its own Command Yard, ordered
+     onto it: a one-waypoint path ending on a blocked cell 8 units away, and 20 seconds later the
+     tank had moved 1.9 units and re-pathed 38 times. Worse than it looks, for exactly the reason
+     the boat comment below gives - it keeps `order:'move'`, and the acquire branch in
+     _rtsUpdateUnit only runs on `amove` or no order at all, so the tank stops shooting back too.
+
+     Returning the relocated cell says the honest thing: the unit is already standing at the
+     closest it can get. _rtsSteer completes that path at once and the order clears. */
+  if (start === goal) return [moved ? { x:_rtsWX(gtx), z:_rtsWX(gtz) } : { x:gx, z:gz }];
   P.hn = 0;
   function H(i) { var ax = Math.abs((i % RTS_N) - gtx), az = Math.abs(((i / RTS_N) | 0) - gtz);
     return (ax > az) ? (ax - az) + 1.41421 * az : (az - ax) + 1.41421 * ax; }
@@ -16105,19 +16304,56 @@ function _rtsUpdateHarvester(e, dt, d) {
     if (e.carry >= d.capacity - 0.5) { e.hstate = 'toRef'; e.path = null; }
   } else if (e.hstate === 'toRef') {
     var ref = _rtsNearestRefinery(e);
-    if (!ref) { e.path = null; return; }
+    if (!ref) { e.path = null; _rtsDockReset(e); return; }
+    if (e.dockRef !== ref.id) { _rtsDockReset(e); e.dockRef = ref.id; }
     /* Docking_Coord: a harvester drives to the refinery's DOCK, not its centre. Pathing at
        the centre of a 3x3 building means every harvester aims at a blocked cell, stops
-       wherever the crowd stops, and they pile up on whichever side they arrived from. */
-    var dock = _rtsDockCoord(ref);
-    /* generous docking radius: a harvester that stops one tile short of the strict range
-       would otherwise hover beside the refinery without ever unloading */
+       wherever the crowd stops, and they pile up on whichever side they arrived from.
+       `dockGoal` overrides it once the south face has been shown to be unusable - see below. */
+    var dock = e.dockGoal || _rtsDockCoord(ref);
     /* Arrive at the dock, but unload from anywhere alongside the building: four harvesters
        converging on one point shove each other back out of a strict dock radius, and the one
        at the back of the queue never finishes its trip. The dock is the destination, not a
        condition. */
     if (Math.hypot(e.x - dock.x, e.z - dock.z) < RTS_TILE * 1.6 || _rtsRangeTo(e, ref) < RTS_TILE * 2.2) {
-      e.path = null; e.hstate = 'unload'; e.ref = ref; return;
+      e.path = null; e.hstate = 'unload'; e.ref = ref; _rtsDockReset(e); return;
+    }
+    /* THE DOCK IS ONE CELL AND THE PLAYER IS ALLOWED TO BUILD ON IT. All this branch used to do
+       on failure was `if (!e.path) return;`, so a harvester whose refinery had been walled in on
+       its south face queued for that one cell for the rest of the match: full hopper, no
+       delivery, no second refinery, no message. Measured - same map, same harvester, the only
+       difference three silos across the south face - 2,000 ore delivered with the row clear
+       against ZERO with it blocked, every sampled tick of two minutes stuck here.
+
+       AND `!e.path` IS THE WRONG TEST FOR IT, which is the part that took a second attempt.
+       _rtsPathFor does not return null for an unreachable goal - it hands back a single waypoint
+       at the goal itself. _rtsSteer consumes that one waypoint, clears e.path, and the harvester
+       has "arrived" ten units short of a dock it can never reach. So there is no path failure to
+       notice. The toField branch above learned this already and says so: distance closed is the
+       honest measure of progress, not whether a path came back. Same measure here. */
+    var gap = _rtsRangeTo(e, ref);
+    if (e.dockGap === undefined || gap < e.dockGap - 0.25) { e.dockGap = gap; e.dockStall = 0; }
+    else {
+      e.dockStall = (e.dockStall || 0) + dt;
+      if (e.dockStall > RTS_DOCK_STALL) {
+        e.dockStall = 0; e.dockGap = undefined; e.path = null;
+        /* First stall: the south face is not working, so try the nearest free cell on any other
+           face. Unloading never required the dock - the arrival test above already accepts
+           anywhere alongside the building - so the dock is a preference, not a condition. */
+        if (!e.dockGoal) {
+          e.dockGoal = _rtsApproachCell(e, ref);
+          if (e.dockGoal) return;
+        }
+        /* Second stall, or no free cell at all: this refinery is the wrong one to queue for.
+           Same per-harvester, time-limited blacklist the ore tiles use, and for the same reason -
+           what blocks it is usually a building or a unit, so it is very likely fine again later,
+           and a second refinery may be reachable when the nearest is not. If there is no other
+           refinery the harvester waits rather than starving for ever: the entry lapses. */
+        e.noDock = e.noDock || {};
+        e.noDock[ref.id] = window._rtsG.t + RTS_HARV_NOGO;
+        _rtsDockReset(e);
+        return;
+      }
     }
     e.rep = (e.rep || 0) - dt;
     if (!e.path || e.rep <= 0) { e.goal = { x:dock.x, z:dock.z }; e.path = _rtsPathFor(e, dock.x, dock.z); e.pi = 0; e.rep = 1.5; if (!e.path) return; }
@@ -16175,11 +16411,41 @@ function _rtsDockCoord(ref) {
   var d = rtsStructDef(ref.def);
   return { x:_rtsWX(ref.tx) + (d.w - 1) * RTS_TILE / 2, z:_rtsWX(ref.tz + d.h) };
 }
+/* How long a harvester queues for a dock it is not getting any closer to. The same eight
+   seconds the toField branch allows, for the same reason: long enough that ordinary traffic
+   around a busy refinery does not trip it, short enough that a real obstruction costs one trip
+   rather than the match. */
+var RTS_DOCK_STALL = 8;
+function _rtsDockReset(e) {
+  e.dockGoal = null; e.dockGap = undefined; e.dockStall = 0; e.dockRef = null;
+}
+/* A WAY IN THAT IS NOT THE DOCK. The ring of cells just outside a building's footprint, nearest
+   to the unit first, skipping anything already blocked - the first one is the harvester's next
+   guess at how to get alongside.
+
+   Deliberately NOT verified with the pathfinder before returning: _rtsPathFor answers a single
+   waypoint at the goal for an unreachable target rather than null, so asking it "can I get here"
+   returns yes for cells that are walled off. The stall timer is what actually decides, and a cell
+   that turns out to be no better trips it a second time and blacklists the refinery. */
+function _rtsApproachCell(e, s) {
+  var d = rtsStructDef(s.def), best = null, bd = 1e9, ox, oz;
+  for (ox = -1; ox <= d.w; ox++) for (oz = -1; oz <= d.h; oz++) {
+    if (ox >= 0 && ox < d.w && oz >= 0 && oz < d.h) continue;   /* the perimeter, not the footprint */
+    var tx = s.tx + ox, tz = s.tz + oz;
+    if (!_rtsInB(tx, tz) || _rtsBlocked(tx, tz, e)) continue;
+    var wx = _rtsWX(tx), wz = _rtsWX(tz), dist = Math.hypot(wx - e.x, wz - e.z);
+    if (dist < bd) { bd = dist; best = { x:wx, z:wz }; }
+  }
+  return best;
+}
 function _rtsNearestRefinery(e) {
   var G = window._rtsG, best = null, bd = 1e9;
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
     if (o.type !== 'struct' || o.def !== 'refinery' || o.side !== e.side || o.dead || o.building) continue;
+    /* One this harvester has just proved it cannot reach any face of. Skipped rather than
+       preferred-against, so a second refinery is tried properly; the entry lapses on its own. */
+    if (e.noDock && e.noDock[o.id] > window._rtsG.t) continue;
     var d = _rtsDist(e, o);
     if (d < bd) { bd = d; best = o; }
   }
@@ -16813,7 +17079,17 @@ function _rtsAIAllToHunt() {
     _rtsOrderMove(u, aim.x + (i % 3 - 1) * 5, aim.z + ((i / 3) | 0 % 3) * 5, true);
   }
 }
-/* AI_Attack. Only a share of the idle army goes; the rest garrisons. */
+/* AI_Attack - see _rtsAIAttack in core/missions.js. This line used to read "only a share of the
+   idle army goes; the rest garrisons", which described that function BEFORE teams landed. It now
+   raises a team and returns, and sends nobody directly.
+
+   The stale sentence is worth replacing rather than deleting, because what it hid is load-bearing:
+   a team and the ENDGAME hunt above are the ONLY two routes out of the base, so a unit no team
+   composition lists never attacks the player at all. Measured, hard, both armies, a player that
+   fights back: 49 Light Tanks, Artillery and V2s bought across eight matches, none of which ever
+   came within 45 of the player's yard or fired a single shot at anything the player owned; on one
+   seed, 17 vehicles built and 17 never given an order in 250 seconds. See unit/aiplan, which
+   reports that list and explains why it is not worth fixing. */
 
 /* ------------------------------------------------------------- teams (TEAM.CPP) --
    A team is a composition plus a mission. It recruits until it is at full strength, only
@@ -19363,8 +19639,13 @@ function _rtsDrawStruct(g, e, TSscale, cell) {
   }
   var px = Math.round(_rtsSX(_rtsWX(e.tx) - RTS_TILE / 2));
   var py = Math.round(_rtsSY(_rtsWX(e.tz) - RTS_TILE / 2));
-  var w = Math.round(spr.c.width * TSscale), h = Math.round(spr.c.height * TSscale);
-  var top = py - Math.round(spr.head * TSscale);
+  /* THE SPRITE'S OWN RESOLUTION, not the map's. A procedurally baked sprite carries `ps` - how
+     many of its pixels there are per RA art pixel (sprites/bake.js) - and real RA artwork
+     carries none, so it reads as 1 and this is the arithmetic it always was. Dividing here is
+     what keeps a building covering exactly its own tiles however finely it was baked. */
+  var ps = spr.c.ps || 1, sc = TSscale / ps;
+  var w = Math.round(spr.c.width * sc), h = Math.round(spr.c.height * sc);
+  var top = py - Math.round(spr.head * sc);
   if (e.building) {
     /* The original's own construction sequence, when the player's files have it: RA draws a
        building assembling itself frame by frame, and 21 of the 22 ship one. That is what the
@@ -19499,7 +19780,9 @@ function _rtsDrawUnit(g, e, TSscale) {
                                 : ha.pour[(dk - ha.dock.length) % ha.pour.length];
     } else e.dockT = 0;
   }
-  var w = Math.round(img.width * TSscale), h = Math.round(img.height * TSscale);
+  /* Same as the structures: divide by the scale the sprite was baked at. See _rtsDrawStruct. */
+  var usc = TSscale / (img.ps || 1);
+  var w = Math.round(img.width * usc), h = Math.round(img.height * usc);
   var px = Math.round(_rtsSX(e.x) - w / 2), py = Math.round(_rtsSY(e.z) - h / 2);
   /* An aircraft is drawn lifted off its own ground position, with a flattened shadow left
      behind on the cell it is actually over. That gap is the only cue that says "this is above

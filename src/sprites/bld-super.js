@@ -9,6 +9,7 @@
 function _sprBldSuper(X, key) {
   var m = X.m, W = X.W, D = X.D, C = X.C, S = X.S, DK = X.DK, B = X.B,
       K = X.K, SD = X.SD, P = X.P, TM = X.TM,
+      AS = X.AS, RU = X.RU, WH = X.WH, CU = X.CU, OL = X.OL,
       winRow = X.winRow, pilasters = X.pilasters;
   if (key === 'mslo') {
     /* MISSILE SILO. A pair of blast doors laid flat with the nose of the missile showing
@@ -16,7 +17,10 @@ function _sprBldSuper(X, key) {
        on the field and it should not look like a defence tower, it should look like a hatch in
        the ground that you would walk past. The read is the yellow-black hazard chevrons. */
     _r3Box(m, 0, 0, 0, W - 4, 3, D - 4, C[2], C[0]);                     /* apron */
-    _r3Box(m, 0, 3, 0, W - 10, 6, D - 10, C[0], C[1]);                   /* silo block */
+    /* OLIVE. The apron stays concrete - it is ground - but the silo itself is equipment, and
+       army equipment is painted. The chevrons read far better against paint than against the
+       same grey the apron is. */
+    _r3Box(m, 0, 3, 0, W - 10, 6, D - 10, OL[0], OL[1]);                 /* silo block */
     /* the open door, hinged back, and the closed one beside it */
     _r3Box(m, -7, 9, -2, 12, 1.6, 13, DK[1], DK[2]);
     _r3Box(m, 6, 9, -8, 12, 1.6, 5, C[3], C[2]);
@@ -35,15 +39,17 @@ function _sprBldSuper(X, key) {
        against the Chronosphere's sphere. They are the two "field" buildings and must not be
        confusable at a glance. */
     _r3Box(m, 0, 0, 0, W - 4, 3, D - 4, C[2], C[0]);
-    _r3Box(m, 0, 3, 0, W - 12, 7, D - 8, C[0], C[1]);                    /* plinth */
+    _r3Box(m, 0, 3, 0, W - 12, 7, D - 8, OL[0], OL[1]);                  /* plinth, painted */
     /* the two uprights and the yoke across the top */
     _r3Box(m, -10, 10, 0, 4, 18, 7, DK[1], DK[2]);
     _r3Box(m,  10, 10, 0, 4, 18, 7, DK[1], DK[2]);
     _r3Box(m, 0, 26, 0, 24, 3.5, 6, C[3], C[2]);
     /* coil banks on each upright */
     for (var _iv = 0; _iv < 3; _iv++) {
-      _r3Cyl(m, -10, 13 + _iv * 5, 0, 4.2, 2, C[2], C[3], 16);
-      _r3Cyl(m,  10, 13 + _iv * 5, 0, 4.2, 2, C[2], C[3], 16);
+      /* COPPER. These are coils. They were concrete, which is the one material a coil
+         cannot be made of, and they are the part the eye goes to. */
+      _r3Cyl(m, -10, 13 + _iv * 5, 0, 4.2, 2, CU[0], CU[3], 16);
+      _r3Cyl(m,  10, 13 + _iv * 5, 0, 4.2, 2, CU[0], CU[3], 16);
     }
     /* the emitter itself, between them - emissive, because a powered field IS the building */
     _r3Cyl(m, 0, 18, 0, 5, 3.2, RTS_PAL.lit, RTS_PAL.lit, 20);
@@ -63,10 +69,13 @@ function _sprBldSuper(X, key) {
     /* the sphere, as a stack of cones - there is no sphere primitive and adding one for a
        single building would be a worse trade than four rings that read as round from every
        angle the camera can reach */
-    _r3Cone(m, 0, 15, 0, 3.5, 7.5, 4, S[2], 20);
-    _r3Cone(m, 0, 19, 0, 7.5, 9,   3, S[1], 20);
-    _r3Cone(m, 0, 22, 0, 9,   7.5, 4, S[1], 20);
-    _r3Cone(m, 0, 26, 0, 7.5, 3.5, 4, S[2], 20);
+    /* WHITEWASH. The two field buildings must not be confusable, and they were both built
+       from the same greys - the shape was carrying the whole distinction. Now the Chronosphere
+       is a white sphere and the Iron Curtain is a painted frame with copper coils. */
+    _r3Cone(m, 0, 15, 0, 3.5, 7.5, 4, WH[2], 20);
+    _r3Cone(m, 0, 19, 0, 7.5, 9,   3, WH[0], 20);
+    _r3Cone(m, 0, 22, 0, 9,   7.5, 4, WH[1], 20);
+    _r3Cone(m, 0, 26, 0, 7.5, 3.5, 4, WH[0], 20);
     _r3Cyl(m, 0, 21.5, 0, 10.5, 1.6, RTS_PAL.spark[1], RTS_PAL.spark[2], 20); /* equator ring */
     _r3Cyl(m, 0, 30, 0, 1.6, 3, RTS_PAL.lit, RTS_PAL.lit, 12);           /* crown light */
     _r3Box(m, 0, 9.5, 0, 8, 1.4, 5, B.roof, B.roof);
@@ -116,8 +125,8 @@ function _sprBldSuper(X, key) {
     /* Gun Turret. A single BARREL on a low armoured base, lying almost flat - the barrel is
        the read, so it is long and sits clear of everything else. */
     _r3Box(m, 0, 0, 0, W - 4, 3, D - 4, C[2], C[0]);
-    _r3Cone(m, 0, 3, 0, 9, 7.5, 6, C[0], 20);                            /* sloped base */
-    _r3Cyl(m, 0, 9, 0, 7, 5, C[2], B.roof, 20);                          /* turret, team roof */
+    _r3Cone(m, 0, 3, 0, 9, 7.5, 6, OL[0], 20);                           /* sloped base, painted */
+    _r3Cyl(m, 0, 9, 0, 7, 5, OL[2], B.roof, 20);                         /* turret, team roof */
     _r3Box(m, 0, 10, 8, 3, 3, 13, S[0], S[1]);                           /* barrel */
     _r3Box(m, 0, 10, 15, 4, 4, 3, S[2], S[3]);                           /* muzzle */
     _r3Box(m, -7, 3, -6, 4, 3, 4, RTS_PAL.bag[0], RTS_PAL.bag[1]);

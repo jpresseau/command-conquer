@@ -252,7 +252,7 @@ function readCanvas() {
           if (x < low) low = x; if (x > high) high = x;
         }
       }
-      out.struct.push({ k: k, w: s.c.width, h: s.c.height, head: s.head,
+      out.struct.push({ k: k, w: s.c.width, h: s.c.height, head: s.head, ps: s.c.ps || 1,
                         cells: d.w + 'x' + d.h, wantW: d.w * TS, wantH: d.h * TS,
                         partial: partial, inkW: high - low + 1 });
     });
@@ -271,17 +271,24 @@ function readCanvas() {
         if (w > maxInk) maxInk = w;
       });
       out.units.push({ k: k, frames: fr.length, sizes: Object.keys(sizes), empty: empty,
-                       widest: maxInk, span: span, canvas: fr[0] ? fr[0].width : 0 });
+                       widest: maxInk, span: span, canvas: fr[0] ? fr[0].width : 0,
+                       ps: (fr[0] && fr[0].ps) || 1 });
     });
     return out;
   });
 
   real.struct.forEach(function (s) {
     if (s.error) { S.ok('the ' + s.k + ' bakes a sprite', false, s.error); return; }
-    S.eq('the ' + s.k + ' (' + s.cells + ' cells) bakes exactly ' + s.wantW + ' px wide', s.w, s.wantW);
-    S.eq('...its footprint plus its headroom is its height', s.h, s.wantH + s.head);
-    S.ok('...it fills the width it claims', s.inkW >= s.wantW * 0.6,
-         'drawn across ' + s.inkW + ' of ' + s.wantW + ' px');
+    /* IN ART PIXELS, NOT CANVAS PIXELS. The procedural path bakes at RTS_PS times RA's
+       resolution (sprites/bake.js), so a canvas is ps times wider than the footprint it
+       covers - which is the whole point, and is corrected once in render/draw.js. The claim
+       being made here is unchanged: the sprite covers exactly its own tiles. It just has to
+       be asked in the units the tiles are measured in. */
+    S.eq('the ' + s.k + ' (' + s.cells + ' cells) bakes exactly ' + s.wantW + ' art px wide',
+         s.w / s.ps, s.wantW);
+    S.eq('...its footprint plus its headroom is its height', s.h, s.wantH * s.ps + s.head);
+    S.ok('...it fills the width it claims', s.inkW / s.ps >= s.wantW * 0.6,
+         'drawn across ' + Math.round(s.inkW / s.ps) + ' of ' + s.wantW + ' art px');
   });
   real.units.forEach(function (u) {
     S.ok('the ' + u.k + ' bakes 8 or 32 facings', u.frames === 8 || u.frames === 32, u.frames + ' frames');
@@ -292,9 +299,10 @@ function readCanvas() {
        and swallowing a 2x2 building. _sprShadow pads the canvas beyond the fitted square, so
        the check is that it is not SMALLER than the span and not wildly larger. */
     S.ok('...on the size ladder RTS_UNIT_SPAN sets',
-         u.canvas >= u.span && u.canvas <= u.span + 12,
-         'baked at ' + u.canvas + ' px for a span of ' + u.span +
-         ', widest facing draws ' + u.widest + ' px of ink');
+         u.canvas / u.ps >= u.span && u.canvas / u.ps <= u.span + 12,
+         'baked at ' + u.canvas + ' px / ps ' + u.ps + ' = ' + (u.canvas / u.ps) +
+         ' art px for a span of ' + u.span +
+         ', widest facing draws ' + Math.round(u.widest / u.ps) + ' art px of ink');
     S.ok('...and actually fills a fair part of that canvas', u.widest >= u.canvas * 0.35,
          u.widest + ' of ' + u.canvas + ' px');
   });
@@ -343,6 +351,14 @@ function readCanvas() {
         n++;
         tones[(px[i] >> 3) + ',' + (px[i + 1] >> 3) + ',' + (px[i + 2] >> 3)] = 1;
       }
+      /* AREA IN ART PIXELS, not in canvas pixels. The procedural bake is RTS_PS times RA's
+         resolution, so every count here is ps^2 too large - and the exemption below is a
+         statement about how big a thing is in the WORLD ("a wall is a wall"), which does not
+         change because we chose to bake it more finely. Without this the wall sprite crossed
+         the 1500 threshold purely by being rendered at 2x and was suddenly asked to justify a
+         silhouette it never needed. */
+      var psq = ((cv.ps || 1) * (cv.ps || 1));
+      n = Math.round(n / psq);
       if (n < 400) return;                       /* a 1x1 needs no silhouette argument */
       out.push({ key: d.key, px: n, tones: Object.keys(tones).length,
                  per1k: +(1000 * Object.keys(tones).length / n).toFixed(1) });
@@ -406,6 +422,58 @@ function readCanvas() {
     S.ok('...and did not get there by going flat', ground.tones >= 60,
          ground.tones + ' distinct tones in the sample');
   }
+
+  /* ------------------------------------------- the sprite reports its own resolution ----
+     The procedural path bakes at RTS_PS times RA's tile resolution (see sprites/bake.js), and
+     the ONLY thing keeping a building on its tiles afterwards is that the canvas carries a `ps`
+     and render/draw.js divides by it. Every part of that is silent when wrong: forget the tag
+     and every structure draws RTS_PS times too big; forget the division and the same; tag it
+     and bake at a different number and buildings drift off their footprints by a fraction that
+     grows with the base.
+
+     So the invariant is asserted as the renderer uses it - canvas width over `ps` is exactly
+     the footprint in RA art pixels - across every structure rather than a sample, because it
+     is per-key model code that could get it wrong one building at a time.
+
+     Real RA artwork carries no `ps` at all and reads as 1. That is deliberate and is what keeps
+     mixart untouched, so it is checked here too rather than assumed. */
+  var scale = await g.page.evaluate(function () {
+    var bad = [], seen = 0, tags = {};
+    RTS_STRUCTS.forEach(function (d) {
+      var spr;
+      try { spr = _sprBuilding(d.key, 'player'); } catch (e) { bad.push(d.key + ' threw'); return; }
+      if (!spr || !spr.c) { bad.push(d.key + ' produced nothing'); return; }
+      seen++;
+      var ps = spr.c.ps || 1;
+      tags[ps] = (tags[ps] || 0) + 1;
+      if (spr.c.width / ps !== d.w * RTS_TS) {
+        bad.push(d.key + ' ' + spr.c.width + '/' + ps + ' != ' + (d.w * RTS_TS));
+      }
+      /* the damaged derivative must agree, or a building resizes when it is hit */
+      if (spr.dmg && (spr.dmg.ps || 1) !== ps) bad.push(d.key + ' damaged frame ps ' + (spr.dmg.ps || 1));
+    });
+    return { bad: bad, seen: seen, tags: tags, ps: RTS_PS, ts: RTS_TS };
+  });
+  S.ok('every structure sprite covers exactly its footprint once divided by its own scale',
+       !scale.bad.length && scale.seen > 0,
+       scale.bad.join(', ') || scale.seen + ' structures at RTS_PS=' + scale.ps +
+       ' (' + scale.ts * scale.ps + ' baked pixels per cell, drawn as ' + scale.ts + ')');
+
+  var uscale = await g.page.evaluate(function () {
+    var bad = [], n = 0;
+    ['tank', 'harvester', 'rifle'].forEach(function (k) {
+      var fr = _sprUnit(k, 'player', false, null);
+      if (!fr || !fr.length) { bad.push(k + ' produced no frames'); return; }
+      fr.forEach(function (c, i) {
+        n++;
+        if ((c.ps || 1) !== RTS_PS) bad.push(k + ' facing ' + i + ' ps ' + (c.ps || 1));
+        if (c.width !== fr[0].width) bad.push(k + ' facing ' + i + ' is a different size');
+      });
+    });
+    return { bad: bad, n: n };
+  });
+  S.ok('...and every unit facing is baked at that same scale and size', !uscale.bad.length,
+       uscale.bad.slice(0, 4).join(', ') || uscale.n + ' facings checked');
 
   await g.close();
   await browser.close();
