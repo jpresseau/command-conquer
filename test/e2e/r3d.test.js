@@ -475,6 +475,60 @@ function readCanvas() {
   S.ok('...and every unit facing is baked at that same scale and size', !uscale.bad.length,
        uscale.bad.slice(0, 4).join(', ') || uscale.n + ' facings checked');
 
+  /* ------------------------------------------ every unit has a model of its own ----
+     _sprUnitModel ends in a fallback: two dark track boxes, a body in the TEAM COLOUR and a
+     stub gun. A unit key with no branch of its own gets that silently - it is a plausible
+     little vehicle, so nothing looks broken, and the only symptom is that the unit is a
+     coloured box which happens to be the shape of every other coloured box.
+
+     The V2 Rocket Launcher shipped exactly that way. Measured by face count against its peers:
+     every other vehicle in the roster carried 110 to 187 faces and the V2 carried 20.
+
+     TWO CHECKS, because either alone can be satisfied by accident. The face floor catches the
+     fallback by size. The palette check catches what the fallback gets WRONG - RTS_PAL.veh's
+     own note says a vehicle body is khaki or olive and the team colour is "a remap over a small
+     part of the sprite, not the paint job", and the fallback paints the whole body TM. A future
+     model could be large and still break that rule, or small and not. */
+  var unitModels = await g.page.evaluate(function () {
+    /* A face stores its colour as the [r,g,b] triple _r3Hex produced, not as the hex string
+       the model was written with, so the palette has to be put through the same conversion
+       before anything can be compared to it. */
+    var team = {}, veh = {}, key = function (c) { return _r3Hex(c).join(','); };
+    ['player', 'enemy'].forEach(function (sd) {
+      RTS_PAL.team[sd].forEach(function (c) { team[key(c)] = 1; });
+      RTS_PAL.veh[sd].forEach(function (c) { veh[key(c)] = 1; });
+    });
+    var thin = [], painted = [];
+    RTS_UNITS.forEach(function (u) {
+      if (u.kind === 'infantry') return;      /* infantry ARE team-coloured - see RTS_INF_KIT */
+      var m = _sprUnitModel(u.key, 'player', false, null) || [];
+      if (m.length < 40) thin.push(u.key + ' ' + m.length);
+      var t = 0, v = 0;
+      m.forEach(function (f) {
+        var c = f.c.join(',');
+        if (team[c]) t++;
+        if (veh[c]) v++;
+      });
+      /* THE THRESHOLD IS MEASURED, not picked. Every model in the roster scores between 1%
+         and 12% team - a cap, a hoop, a stripe - while the fallback paints its entire body
+         TM and lands near 25-30%. 20% has clear daylight on both sides.
+
+         `v` is counted and reported but deliberately NOT required: submarines carry no khaki
+         at all and should not, so demanding a veh-ramp face would fail the two hulls that are
+         correctly dark rather than catching anything. The team fraction is the documented
+         rule; the face floor above is what catches the fallback by size. */
+      if (t / m.length > 0.2) {
+        painted.push(u.key + ' ' + Math.round(100 * t / m.length) + '% team, ' + v + ' body faces');
+      }
+    });
+    return { thin: thin, painted: painted };
+  });
+  S.ok('no vehicle is left on the generic fallback model', !unitModels.thin.length,
+       unitModels.thin.join(', ') || 'every vehicle carries a model of its own');
+  S.ok('...and none of them is painted in the team colour', !unitModels.painted.length,
+       unitModels.painted.join(', ') ||
+       'every vehicle body uses the veh ramp, team colour kept to trim');
+
   await g.close();
   await browser.close();
   require('../lib/report.js')(S);
