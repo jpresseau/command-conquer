@@ -62,14 +62,28 @@ function _rtsViewSpan() {
   var R = _rtsR, z = _rtsZoom();
   return { w: R.W / z, h: R.H / z };
 }
+/* THE PROJECTION CONTRACT, in both modes. Every input path and every overlay - picking,
+   drag select, health bars, effects, the ghost - goes through these four functions and
+   nothing else, which is what makes the 3D mode possible as a branch rather than a rewrite:
+   the north-up tilted camera keeps all four closed-form (see render3d/gl3d.js), with the 2D
+   renderer as the special case tilt = 0. If the GL shader and these ever disagree, clicks
+   land beside units - e2e/r3dlive asserts the round trip. */
 function _rtsSX(wx) { return (wx - _rtsR.focus.x) * _rtsZoom() + _rtsR.W / 2; }
-function _rtsSY(wz) { return (wz - _rtsR.focus.z) * _rtsZoom() + _rtsR.H / 2; }
+function _rtsSY(wz) {
+  var R3 = window._R3D;
+  if (R3 && R3.on) return _r3dSY(wz);
+  return (wz - _rtsR.focus.z) * _rtsZoom() + _rtsR.H / 2;
+}
 
 function _rtsGroundAt(mx, my) {
+  var R3 = window._R3D;
+  if (R3 && R3.on) return _r3dGroundAt(mx, my);
   var R = _rtsR, z = _rtsZoom();
   return { x: (mx - R.W / 2) / z + R.focus.x, z: (my - R.H / 2) / z + R.focus.z };
 }
 function _rtsWorldToScreen(x, y, z) {
+  var R3 = window._R3D;
+  if (R3 && R3.on) return _r3dWorldToScreen(x, y, z);
   return { x: _rtsSX(x), y: _rtsSY(z) - (y || 0) * _rtsZoom() * 0.5, behind: false };
 }
 

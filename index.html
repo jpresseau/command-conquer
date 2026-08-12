@@ -36,6 +36,9 @@
    wants and what every zoom level in this renderer is already built around.
 
    The HUD canvas is deliberately NOT pixelated - it draws text, and text wants the smoothing. */
+#rcgRts #rtsCv3d{position:absolute;inset:0;display:block}
+#rcgRts .rts-btns #rts3dBtn{font-size:10px;font-weight:700;letter-spacing:.5px}
+#rcgRts .rts-btns #rts3dBtn.on{color:#7fd0ff;border-color:#3f7fd0}
 #rcgRts #rtsCv{position:absolute;inset:0;display:block;cursor:crosshair;
   image-rendering:pixelated;image-rendering:crisp-edges}
 #rcgRts #rtsHud{position:absolute;inset:0;display:block;pointer-events:none}
@@ -873,7 +876,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">5283a7a · 2026-08-11</div>
+  <div id="rtsBuild" title="build">ed3febe · 2026-08-12</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -6907,7 +6910,11 @@ function _sprBldDamaged(src, key) {
   return t.c;
 }
 
-function _sprBuildingClean(key, side) {
+/* The building's raw 3D model, as the face list the chain produces - separated from the bake
+   so the live 3D renderer can draw the same geometry the sprite baker flattens. Coordinates
+   are art pixels, unscaled: the sprite path applies RTS_PS on its way into the bake and the
+   3D path applies its own world scale, so the model itself stays neutral. */
+function _sprBuildingModel(key, side) {
   var def = rtsStructDef(key), TM = RTS_PAL.team[side];
   var W = def.w * RTS_TS, D = def.h * RTS_TS;
   var C = RTS_PAL.conc, S = RTS_PAL.steel, DK = RTS_PAL.dark, B = RTS_PAL.bld[side];
@@ -7004,6 +7011,12 @@ function _sprBuildingClean(key, side) {
             vent:vent, duct:duct, skylight:skylight, hatch:hatch,
             aerial:aerial, parapet:parapet };
   _sprBldBase(X, key) || _sprBldTech(X, key) || _sprBldWar(X, key) || _sprBldSuper(X, key);
+  return m;
+}
+function _sprBuildingClean(key, side) {
+  var def = rtsStructDef(key);
+  var W = def.w * RTS_TS, D = def.h * RTS_TS;
+  var m = _sprBuildingModel(key, side);
   /* Baked at RTS_PS times RA's resolution - see RTS_PS in sprites/bake.js for why that is a
      separate number from RTS_TS rather than a bigger RTS_TS. The MODEL is authored in art
      pixels and scaled here rather than every model being rewritten: _r3Scale already exists
@@ -19001,14 +19014,28 @@ function _rtsViewSpan() {
   var R = _rtsR, z = _rtsZoom();
   return { w: R.W / z, h: R.H / z };
 }
+/* THE PROJECTION CONTRACT, in both modes. Every input path and every overlay - picking,
+   drag select, health bars, effects, the ghost - goes through these four functions and
+   nothing else, which is what makes the 3D mode possible as a branch rather than a rewrite:
+   the north-up tilted camera keeps all four closed-form (see render3d/gl3d.js), with the 2D
+   renderer as the special case tilt = 0. If the GL shader and these ever disagree, clicks
+   land beside units - e2e/r3dlive asserts the round trip. */
 function _rtsSX(wx) { return (wx - _rtsR.focus.x) * _rtsZoom() + _rtsR.W / 2; }
-function _rtsSY(wz) { return (wz - _rtsR.focus.z) * _rtsZoom() + _rtsR.H / 2; }
+function _rtsSY(wz) {
+  var R3 = window._R3D;
+  if (R3 && R3.on) return _r3dSY(wz);
+  return (wz - _rtsR.focus.z) * _rtsZoom() + _rtsR.H / 2;
+}
 
 function _rtsGroundAt(mx, my) {
+  var R3 = window._R3D;
+  if (R3 && R3.on) return _r3dGroundAt(mx, my);
   var R = _rtsR, z = _rtsZoom();
   return { x: (mx - R.W / 2) / z + R.focus.x, z: (my - R.H / 2) / z + R.focus.z };
 }
 function _rtsWorldToScreen(x, y, z) {
+  var R3 = window._R3D;
+  if (R3 && R3.on) return _r3dWorldToScreen(x, y, z);
   return { x: _rtsSX(x), y: _rtsSY(z) - (y || 0) * _rtsZoom() * 0.5, behind: false };
 }
 
@@ -19316,6 +19343,378 @@ function _rtsEmber() {
 }
 
 </script>
+<script>/* render3d/gl3d.js - the live 3D mode: camera, projection contract, and GL plumbing.
+   Part of rts.render3d, which draws the battlefield as real-time 3D.
+
+   WHAT THIS MODE IS. Every building and unit in the game is authored as a genuine 3D model -
+   a face list of boxes, cylinders and cones - which the sprite baker flattens into 2D art once
+   at load. This mode skips the flattening and draws the same models live: a tilted camera, a
+   directional light, a depth buffer, the terrain canvas draped on a ground plane. No second
+   set of art exists or is needed; the sprite pipeline and this one share their geometry.
+
+   THE CAMERA IS NORTH-UP TILTED ORTHOGRAPHIC, AND THAT IS A CONTRACT, NOT A TASTE. The whole
+   2D game - input picking, selection brackets, health bars, effects, the placement ghost -
+   talks to the screen through four functions (_rtsSX, _rtsSY, _rtsGroundAt, _rtsWorldToScreen).
+   For a north-up tilted ortho camera those stay CLOSED-FORM:
+
+       screenX = (wx - focus.x) * zoom + W/2                       (identical to 2D)
+       screenY = ((wz - focus.z) * cos(tilt) - y * sin(tilt)) * zoom + H/2
+
+   so the 2D renderer turns out to be the special case tilt = 0 with height drawn at y*0.5.
+   Every overlay and input path therefore works in 3D by branching those four functions on
+   R3.on - no rewrite, no drift between what is drawn and what is clicked. A yawed or
+   perspective camera breaks the closed form (screenX would depend on z), which is why both are
+   follow-ups behind depth-aware overlays, not defaults.
+
+   The light is the sprite baker's own R3_LIGHT and the shading ramp approximates _r3Ramp's
+   cool-shadow / warm-highlight curve, so 3D mode reads as the same game, not a reskin. */
+
+window._R3D = null;
+
+/* Tilt: 0 is straight down (the 2D view); this leans the camera until walls and chimneys
+   show real elevation. cos 0.62 rad = 0.81, so ground depth compresses to 81% - enough lean
+   to read as 3D, mild enough that the map stays readable as a map. */
+var R3D_TILT = 0.62;
+var R3D_DEPTH_RANGE = 900;     /* world units mapped into the depth buffer; the map is ~640 */
+
+function _r3dShader(gl, type, src) {
+  var sh = gl.createShader(type);
+  gl.shaderSource(sh, src); gl.compileShader(sh);
+  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+    throw new Error('shader: ' + gl.getShaderInfoLog(sh));
+  }
+  return sh;
+}
+function _r3dProgram(gl, vs, fs) {
+  var p = gl.createProgram();
+  gl.attachShader(p, _r3dShader(gl, gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, _r3dShader(gl, gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+    throw new Error('link: ' + gl.getProgramInfoLog(p));
+  }
+  return p;
+}
+
+/* NO MATRICES. The camera above is five numbers, so the projection is done longhand in the
+   vertex shader from uniforms - uCam packs focus and scale, uTilt the lean. Every mesh is
+   drawn in MODEL space and placed by uPos/uRot/uScale, so one buffer per model serves every
+   entity of that type. */
+var R3D_MESH_VS =
+  'attribute vec3 aP; attribute vec3 aN; attribute vec3 aC;' +
+  'uniform vec4 uCam;' +        /* focus.x, focus.z, 2*zoom/W, 2*zoom/H */
+  'uniform vec2 uTilt;' +       /* cos(tilt), sin(tilt) */
+  'uniform vec3 uPos; uniform vec2 uRot; uniform float uScale; uniform vec3 uTint;' +
+  'varying vec3 vC;' +
+  'void main(){' +
+  '  vec3 p = aP * uScale;' +
+  '  vec3 wp = vec3(uPos.x + p.x*uRot.x - p.z*uRot.y, uPos.y + p.y, uPos.z + p.x*uRot.y + p.z*uRot.x);' +
+  '  vec3 n = vec3(aN.x*uRot.x - aN.z*uRot.y, aN.y, aN.x*uRot.y + aN.z*uRot.x);' +
+  /* the sprite baker's light, so the two pipelines agree about which face is lit */
+  '  vec3 L = normalize(vec3(-0.38, 0.76, 0.53));' +
+  '  float lam = max(dot(normalize(n), L), 0.0);' +
+  '  float v = 0.40 + 0.74 * lam;' +
+  /* _r3Ramp in one line: shadows slide toward a cool blue floor instead of black */
+  '  vec3 shade = mix(vec3(0.03, 0.04, 0.08), aC, min(v, 1.0));' +
+  '  vC = (shade + max(v - 1.0, 0.0) * (vec3(1.0, 0.98, 0.9) - aC) * 0.6) * uTint;' +
+  '  float sx = (wp.x - uCam.x) * uCam.z;' +
+  '  float sy = ((wp.z - uCam.y) * uTilt.x - wp.y * uTilt.y) * uCam.w;' +
+  '  float d  = ((wp.z - uCam.y) * uTilt.y + wp.y * uTilt.x);' +
+  '  gl_Position = vec4(sx, -sy, -d / ' + R3D_DEPTH_RANGE.toFixed(1) + ', 1.0);' +
+  '}';
+var R3D_MESH_FS =
+  'precision mediump float; varying vec3 vC;' +
+  'void main(){ gl_FragColor = vec4(vC, 1.0); }';
+
+/* Ground and fog share one textured program; fog just samples a different texture with
+   blending on and the depth test off. */
+var R3D_TEX_VS =
+  'attribute vec2 aXZ; attribute vec2 aT;' +
+  'uniform vec4 uCam; uniform vec2 uTilt;' +
+  'varying vec2 vT;' +
+  'void main(){' +
+  '  vT = aT;' +
+  '  float sx = (aXZ.x - uCam.x) * uCam.z;' +
+  '  float sy = (aXZ.y - uCam.y) * uTilt.x * uCam.w;' +
+  '  float d  = (aXZ.y - uCam.y) * uTilt.y;' +
+  '  gl_Position = vec4(sx, -sy, -d / ' + R3D_DEPTH_RANGE.toFixed(1) + ', 1.0);' +
+  '}';
+var R3D_TEX_FS =
+  'precision mediump float; varying vec2 vT; uniform sampler2D uS; uniform float uA;' +
+  'void main(){ vec4 c = texture2D(uS, vT); gl_FragColor = vec4(c.rgb, c.a * uA); }';
+
+function _r3dInit() {
+  var cv = document.getElementById('rtsCv3d');
+  if (!cv) return null;
+  /* preserveDrawingBuffer, deliberately. Without it the buffer is discarded after each
+     composite, which is invisible to a player but reads back BLACK in any capture - and this
+     project verifies its rendering with headless screenshots, so a renderer that cannot be
+     screenshotted cannot be tested. The cost is a buffer copy per frame instead of a swap,
+     which at this scene's ~11k triangles is not measurable. */
+  var gl = cv.getContext('webgl', { antialias: true, alpha: false, preserveDrawingBuffer: true });
+  if (!gl) return null;
+  var R3;
+  try {
+    R3 = {
+      on: false, cv: cv, gl: gl,
+      meshP: _r3dProgram(gl, R3D_MESH_VS, R3D_MESH_FS),
+      texP: _r3dProgram(gl, R3D_TEX_VS, R3D_TEX_FS),
+      mesh: {}, terrainTex: null, terrainDirty: true,
+      fogCv: null, fogTex: null, fogDirty: true,
+      cp: Math.cos(R3D_TILT), sp: Math.sin(R3D_TILT)
+    };
+  } catch (e) { return null; }
+  window._R3D = R3;
+  return R3;
+}
+
+/* The toggle the button calls. Lazy init so a machine without WebGL pays nothing and is told
+   plainly rather than shown a black screen. */
+function rts3dToggle() {
+  var R3 = window._R3D;
+  if (!R3) R3 = _r3dInit();
+  if (!R3) { _rtsSay('3D needs WebGL, which this browser did not provide.'); return; }
+  R3.on = !R3.on;
+  /* the canvas stays hidden either way - it is a buffer the 2D frame blits, not a layer the
+     compositor stacks; see the note at the blit in render/frame.js */
+  /* the world moved between canvases, so both need a clean slate */
+  R3.terrainDirty = true; R3.fogDirty = true;
+  var btn = document.getElementById('rts3dBtn');
+  if (btn) { btn.classList.toggle('on', R3.on); btn.title = R3.on ? 'Back to classic 2D' : 'Switch to 3D'; }
+  _r3dResize();
+  if (typeof _rtsSfx === 'function') _rtsSfx('click');
+}
+
+function _r3dResize() {
+  var R3 = window._R3D, main = document.getElementById('rtsCv');
+  if (!R3 || !main) return;
+  if (R3.cv.width !== main.width || R3.cv.height !== main.height) {
+    R3.cv.width = main.width; R3.cv.height = main.height;
+  }
+  R3.gl.viewport(0, 0, R3.cv.width, R3.cv.height);
+}
+
+/* The four-function projection contract, used by camera.js when the mode is on. Kept beside
+   the shader that must agree with it: if these two ever disagree, clicks land beside units. */
+function _r3dSY(wz) {
+  var R = _rtsR;
+  return (wz - R.focus.z) * window._R3D.cp * _rtsZoom() + R.H / 2;
+}
+function _r3dGroundAt(mx, my) {
+  var R = _rtsR, z = _rtsZoom();
+  return { x: (mx - R.W / 2) / z + R.focus.x,
+           z: (my - R.H / 2) / (z * window._R3D.cp) + R.focus.z };
+}
+function _r3dWorldToScreen(x, y, z) {
+  var R3 = window._R3D;
+  return { x: _rtsSX(x), y: _r3dSY(z) - (y || 0) * R3.sp * _rtsZoom(), behind: false };
+}
+</script>
+<script>/* render3d/scene3d.js - what the 3D mode draws each frame: the mesh cache, the ground and
+   fog textures, and the frame walk. Part of rts.render3d.
+
+   ONE BUFFER PER MODEL, ONE DRAW PER ENTITY. A model is fetched once - buildings through
+   _sprBuildingModel, units through _sprUnitModel, the same functions the sprite baker uses -
+   fan-triangulated with per-face normals, and uploaded. Every entity of that type then draws
+   the shared buffer with its own position, yaw and tint as uniforms. A battle is a few hundred
+   entities of a few dozen types, so the geometry cost is paid once at first sight of a type
+   and the per-frame cost is uniform uploads. */
+
+function _r3dBuildMesh(gl, faces) {
+  var pos = [], nrm = [], col = [];
+  for (var fi = 0; fi < faces.length; fi++) {
+    var f = faces[fi], v = f.v;
+    var r = f.c[0] / 255, gc = f.c[1] / 255, b = f.c[2] / 255;
+    /* face normal from the first three vertices - the primitives emit planar faces */
+    var ax = v[1][0] - v[0][0], ay = v[1][1] - v[0][1], az = v[1][2] - v[0][2];
+    var bx = v[2][0] - v[0][0], by = v[2][1] - v[0][1], bz = v[2][2] - v[0][2];
+    var nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+    for (var k = 2; k < v.length; k++) {
+      var tri = [v[0], v[k - 1], v[k]];
+      for (var t = 0; t < 3; t++) {
+        pos.push(tri[t][0], tri[t][1], tri[t][2]);
+        nrm.push(nx, ny, nz);
+        col.push(r, gc, b);
+      }
+    }
+  }
+  function buf(a) {
+    var b2 = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, b2);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(a), gl.STATIC_DRAW);
+    return b2;
+  }
+  return { p: buf(pos), n: buf(nrm), c: buf(col), verts: pos.length / 3 };
+}
+
+/* The cache key carries everything that changes the geometry or its colours: type, side,
+   turret half, prone. A miss builds the model through the same functions the baker uses, so
+   the two pipelines cannot drift apart - there is no second copy of any shape. */
+function _r3dMesh(kind, def, side, part, prone) {
+  var R3 = window._R3D, key = kind + ':' + def + ':' + side + ':' + (part || '') + ':' + (prone ? 1 : 0);
+  var m = R3.mesh[key];
+  if (m !== undefined) return m;
+  var faces = null;
+  try {
+    faces = (kind === 'b') ? _sprBuildingModel(def, side)
+                           : _sprUnitModel(def, side, !!prone, part || null);
+  } catch (e) { faces = null; }
+  m = (faces && faces.length) ? _r3dBuildMesh(R3.gl, faces) : null;
+  R3.mesh[key] = m;
+  return m;
+}
+
+/* ------------------------------------------------------------------ textures --
+   The ground texture IS the 2D renderer's baked terrain canvas, so scorch marks, craters and
+   corpses stamped into it appear in 3D too - frame.js sets terrainDirty when it stamps.
+   The fog is rebuilt every frame: RTS_N^2 pixels is a 160x160 image, far below the cost of
+   worrying about dirty flags, and sampling it LINEAR is what turns the 2D mode's hard black
+   cell-steps into a soft-edged boundary for free. */
+function _r3dTexture(gl, old) {
+  var t = old || gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return t;
+}
+function _r3dFog(G) {
+  var R3 = window._R3D, gl = R3.gl, N = RTS_N;
+  if (!R3.fogCv) {
+    R3.fogCv = document.createElement('canvas');
+    R3.fogCv.width = N; R3.fogCv.height = N;
+    R3.fogG = R3.fogCv.getContext('2d');
+    R3.fogIm = R3.fogG.createImageData(N, N);
+  }
+  var d = R3.fogIm.data;
+  for (var i = 0; i < N * N; i++) {
+    var a = G.mapped[i] ? (G.vis[i] ? 0 : Math.round(255 * RTS_FOG_DIM)) : 255;
+    d[i * 4] = 4; d[i * 4 + 1] = 6; d[i * 4 + 2] = 9; d[i * 4 + 3] = a;
+  }
+  R3.fogG.putImageData(R3.fogIm, 0, 0);
+  R3.fogTex = _r3dTexture(gl, R3.fogTex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, R3.fogCv);
+}
+
+/* ------------------------------------------------------------------ the frame --
+   Ground, then every entity, then the fog over the lot - the same order the 2D painter uses,
+   with the depth buffer replacing the painter's sort for everything solid. */
+function _r3dFrame(G) {
+  var R3 = window._R3D, gl = R3.gl, R = _rtsR;
+  _r3dResize();
+
+  /* uniforms shared by both programs */
+  /* _rtsZoom is screen px per world unit in CSS pixels; the canvas backing store is device
+     pixels, so the clip-space scale carries R.dpr - drop it and the two renderers disagree by
+     exactly the device pixel ratio, which reads as clicks landing beside units on any laptop
+     with display scaling. */
+  var z = _rtsZoom();
+  var cam = [R.focus.x, R.focus.z, 2 * z * R.dpr / R3.cv.width, 2 * z * R.dpr / R3.cv.height];
+
+  if (R3.terrainDirty && R.terrain) {
+    R3.terrainTex = _r3dTexture(gl, R3.terrainTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, R.terrain);
+    R3.terrainDirty = false;
+  }
+  _r3dFog(G);
+
+  if (!R3.groundBuf) {
+    var EXT = RTS_N * RTS_TILE / 2;
+    var xz = [-EXT, -EXT, EXT, -EXT, EXT, EXT, -EXT, -EXT, EXT, EXT, -EXT, EXT];
+    var uv = [0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1];
+    function buf(a) {
+      var b = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, b);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(a), gl.STATIC_DRAW);
+      return b;
+    }
+    R3.groundBuf = buf(xz); R3.groundUV = buf(uv);
+  }
+
+  gl.clearColor(0.016, 0.024, 0.035, 1);
+  gl.enable(gl.DEPTH_TEST);
+  gl.disable(gl.BLEND);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+  /* --- ground --- */
+  gl.useProgram(R3.texP);
+  gl.uniform4fv(gl.getUniformLocation(R3.texP, 'uCam'), cam);
+  gl.uniform2f(gl.getUniformLocation(R3.texP, 'uTilt'), R3.cp, R3.sp);
+  gl.uniform1f(gl.getUniformLocation(R3.texP, 'uA'), 1);
+  var aXZ = gl.getAttribLocation(R3.texP, 'aXZ'), aT = gl.getAttribLocation(R3.texP, 'aT');
+  gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundBuf);
+  gl.enableVertexAttribArray(aXZ); gl.vertexAttribPointer(aXZ, 2, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundUV);
+  gl.enableVertexAttribArray(aT); gl.vertexAttribPointer(aT, 2, gl.FLOAT, false, 0, 0);
+  gl.bindTexture(gl.TEXTURE_2D, R3.terrainTex);
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+  /* --- entities --- */
+  gl.useProgram(R3.meshP);
+  gl.uniform4fv(gl.getUniformLocation(R3.meshP, 'uCam'), cam);
+  gl.uniform2f(gl.getUniformLocation(R3.meshP, 'uTilt'), R3.cp, R3.sp);
+  var uPos = gl.getUniformLocation(R3.meshP, 'uPos');
+  var uRot = gl.getUniformLocation(R3.meshP, 'uRot');
+  var uScale = gl.getUniformLocation(R3.meshP, 'uScale');
+  var uTint = gl.getUniformLocation(R3.meshP, 'uTint');
+  var aP = gl.getAttribLocation(R3.meshP, 'aP');
+  var aN = gl.getAttribLocation(R3.meshP, 'aN');
+  var aC = gl.getAttribLocation(R3.meshP, 'aC');
+  var ART2W = RTS_TILE / RTS_TS;
+
+  function draw(mesh, x, y2, zz, rot, scale, dim) {
+    if (!mesh) return;
+    gl.uniform3f(uPos, x, y2, zz);
+    gl.uniform2f(uRot, Math.cos(rot), Math.sin(rot));
+    gl.uniform1f(uScale, scale);
+    gl.uniform3f(uTint, dim ? 0.62 : 1, dim ? 0.55 : 1, dim ? 0.55 : 1);
+    gl.bindBuffer(gl.ARRAY_BUFFER, mesh.p);
+    gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, mesh.n);
+    gl.enableVertexAttribArray(aN); gl.vertexAttribPointer(aN, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, mesh.c);
+    gl.enableVertexAttribArray(aC); gl.vertexAttribPointer(aC, 3, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, mesh.verts);
+  }
+
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead) continue;
+    if (e.type === 'struct') {
+      /* a building going up shows at reduced height via scale-y? No: the 2D reveal is a wipe,
+         which has no 3D analogue - a rising build is honest and cheap, scaling y alone would
+         need a second scale uniform. Slice one: draw it dim until it stands. */
+      var dmg = !e.building && e.hp < e.maxHp * RTS_COND_YELLOW;
+      draw(_r3dMesh('b', e.def, e.side), e.x, 0, e.z, 0, ART2W, dmg || e.building);
+    } else if (e.type === 'unit') {
+      var turret = R.spr.turret && R.spr.turret[e.side] && R.spr.turret[e.side][e.def];
+      var y = e.air ? ((e.rearming > 0 ? 2 : (e.alt || 12)) * 0.35) : 0;
+      draw(_r3dMesh('u', e.def, e.side, turret ? 'hull' : null, e.prone),
+           e.x, y, e.z, -e.rot, ART2W, false);
+      if (turret) {
+        draw(_r3dMesh('u', e.def, e.side, 'turret', false), e.x, y, e.z, -(e.turret || 0), ART2W, false);
+      }
+    }
+  }
+
+  /* --- fog, over everything, depth ignored --- */
+  gl.useProgram(R3.texP);
+  gl.uniform4fv(gl.getUniformLocation(R3.texP, 'uCam'), cam);
+  gl.uniform2f(gl.getUniformLocation(R3.texP, 'uTilt'), R3.cp, R3.sp);
+  gl.uniform1f(gl.getUniformLocation(R3.texP, 'uA'), 1);
+  gl.disable(gl.DEPTH_TEST);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundBuf);
+  gl.enableVertexAttribArray(aXZ); gl.vertexAttribPointer(aXZ, 2, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundUV);
+  gl.enableVertexAttribArray(aT); gl.vertexAttribPointer(aT, 2, gl.FLOAT, false, 0, 0);
+  gl.bindTexture(gl.TEXTURE_2D, R3.fogTex);
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+  gl.disable(gl.BLEND);
+}
+</script>
 <script>/* render/frame.js - _rtsRFrame: drawing one frame of the battlefield, back to front.
    Part of rts.render, which owns every pixel. */
 
@@ -19335,8 +19734,29 @@ function _rtsRFrame(dt) {
   }
   g.setTransform(R.dpr, 0, 0, R.dpr, shx * R.dpr, shy * R.dpr);
   g.imageSmoothingEnabled = false;
-  g.fillStyle = '#1a1d16';
-  g.fillRect(-8, -8, R.W + 16, R.H + 16);
+  /* 3D MODE: the world - ground, entities, fog - is drawn by the GL canvas underneath this
+     one (_r3dFrame), and this canvas becomes a transparent overlay carrying only what stays
+     2D: ore and wave decals, effects, the ghost, the message line. Everything positions
+     itself through _rtsSX/_rtsSY, which camera.js makes projection-aware, so the overlay and
+     the meshes cannot drift apart. */
+  var r3on = window._R3D && window._R3D.on;
+  if (r3on) {
+    _r3dFrame(G);
+    /* The GL canvas is BLITTED here rather than stacked under this one and left to the
+       compositor. Stacking worked in every reduced test and still composited black inside the
+       real page in headless capture - and a renderer this project cannot screenshot is one it
+       cannot verify, so the compositor was fired from the job. The blit costs one full-frame
+       drawImage, buys identical behaviour everywhere, and gets screen shake for free because
+       it happens under the same transform as everything else. */
+    g.clearRect(-8, -8, R.W + 16, R.H + 16);
+    g.drawImage(window._R3D.cv, 0, 0, R.W, R.H);
+  } else {
+    g.fillStyle = '#1a1d16';
+    g.fillRect(-8, -8, R.W + 16, R.H + 16);
+  }
+  /* ground decals squash by the camera lean so they hug the terrain instead of shingling
+     over the row below - 1 in 2D, cos(tilt) in 3D */
+  var ys = r3on ? window._R3D.cp : 1;
 
   /* visible cell range, padded so half-on-screen sprites still draw */
   var tx0 = Math.max(0, _rtsTX(R.focus.x - R.W / 2 / z) - 1);
@@ -19350,9 +19770,11 @@ function _rtsRFrame(dt) {
      patches are continuous noise instead of per-cell stamps, so there is no grid. */
   var srcX = (R.focus.x / RTS_TILE + RTS_N / 2) * RTS_TS - (R.W / 2) / TSscale;
   var srcY = (R.focus.z / RTS_TILE + RTS_N / 2) * RTS_TS - (R.H / 2) / TSscale;
-  g.drawImage(R.terrain,
-    srcX, srcY, R.W / TSscale, R.H / TSscale,
-    0, 0, R.W, R.H);
+  if (!r3on) {
+    g.drawImage(R.terrain,
+      srcX, srcY, R.W / TSscale, R.H / TSscale,
+      0, 0, R.W, R.H);
+  }
 
   for (var tz = tz0; tz <= tz1; tz++) {
     for (var tx = tx0; tx <= tx1; tx++) {
@@ -19364,7 +19786,7 @@ function _rtsRFrame(dt) {
       var py = Math.round(_rtsSY(_rtsWX(tz) - RTS_TILE / 2));
       if (isWater) {
         /* The crest highlights step round a four-frame cycle, so the lake moves. */
-        g.drawImage(S.wave[(_RTS_PULSE.wf + tx + tz) & 3], px, py, cell, cell);
+        g.drawImage(S.wave[(_RTS_PULSE.wf + tx + tz) & 3], px, py, cell, cell * ys);
         continue;
       }
       /* The number of density steps comes from the sprite set, not from a literal: ours has
@@ -19373,13 +19795,14 @@ function _rtsRFrame(dt) {
       var set = (G.gems && G.gems[idx] ? S.gem : S.ore);
       var stage = Math.min(set.length - 1, Math.floor(ore / RTS_SCRAP_TILE * set.length));
       var vari = (tx * 7 + tz * 13) % set[stage].length;
-      g.drawImage(set[stage][vari], px, py, cell, cell);
+      g.drawImage(set[stage][vari], px, py, cell, cell * ys);
     }
   }
 
   /* --- new scorch marks and craters, stamped once into the baked terrain. Because the
      ground is a single canvas, a smudge costs nothing after the frame it appears on. --- */
   if (G.corpses && G.corpses.length) {
+    if (window._R3D) window._R3D.terrainDirty = true;   /* the GL ground shares this canvas */
     var cg = R.terrain.getContext('2d');
     cg.imageSmoothingEnabled = false;
     while (G.corpses.length) {
@@ -19408,6 +19831,8 @@ function _rtsRFrame(dt) {
      on a lawn; a scuffed earth apron is what makes it look built. --- */
   for (i = 0; i < G.ents.length; i++) {
     var pe = G.ents[i];
+    if (r3on) break;                 /* 3D buildings model their own ground - a flat pad sprite
+                                        drawn on the overlay would float above the mesh */
     if (pe.type !== 'struct' || (pe.dead && !(pe.wreck > 0))) continue;
     if (!_rtsEntSeen(pe)) continue;
     var pd = rtsStructDef(pe.def);
@@ -19503,6 +19928,7 @@ function _rtsRFrame(dt) {
        obviously not on the surface. It goes solid the moment it fires, because _rtsCloakAI
        clears `hidden` for the surfacing window. */
     if (d.hidden) g.globalAlpha = 0.42;
+    if (r3on) continue;                    /* drawn as meshes by _r3dFrame */
     if (d.type === 'struct') _rtsDrawStruct(g, d, TSscale, cell);
     else _rtsDrawUnit(g, d, TSscale);
     if (d.hidden) g.globalAlpha = 1;
@@ -19612,7 +20038,8 @@ function _rtsRFrame(dt) {
      that make the boundary look CUT rather than pixel-stepped. Stamped per cell, and only
      across the cells actually on screen - a 160x160 map is 25600 cells and perhaps 900 of them
      are visible, so drawing all of them would be 28x the work for the same picture. */
-  if (G.mapped && typeof _mixShroud === 'function' && _mixShroud()) {
+  if (r3on) { /* fog drawn by the GL pass, soft-sampled */ }
+  else if (G.mapped && typeof _mixShroud === 'function' && _mixShroud()) {
     _rtsDrawShroudTiles(g, G, cell);
   } else if (G.mapped) {
     if (!R.fog) {
@@ -20133,6 +20560,10 @@ function rtsOpen(seed) {
   d.id = 'rcgRts';
   d.innerHTML = ''
     + '<div class="rts-stage">'
+    /* The 3D mode's canvas, UNDER the 2D one: when the mode is on, rtsCv becomes a
+       transparent overlay (effects, decals, ghost) and this carries the world. Hidden rather
+       than absent when the mode is off, so toggling is a style flip, not a DOM rebuild. */
+    +   '<canvas id="rtsCv3d" style="display:none"></canvas>'
     +   '<canvas id="rtsCv"></canvas>'
     /* The vignette, as an ELEMENT rather than a per-frame canvas composite - see _rtsPost for
        why it moved. It sits between the battlefield and the HUD, which is exactly where the
@@ -20158,6 +20589,7 @@ function rtsOpen(seed) {
        whatever is deployed. Putting it at the far end of the group keeps that difference
        visible, and keeps it as far as the group allows from the ✕, which is the control it
        would be worst to confuse it with: both end the match, and only one of them is meant to. */
+    +       '<button type="button" class="rts-mute" id="rts3dBtn" title="Switch to 3D" onclick="rts3dToggle()">3D</button>'
     +       '<button type="button" class="rts-mute" id="rtsReloadBtn" title="Reload for the latest build" onclick="rtsReloadClick()">⟳</button>'
     +       '<button type="button" class="rts-mute" id="rtsSaveBtn" title="Save this battle (Ctrl+S)" onclick="rtsSaveGame()">💾</button>'
     +       '<button type="button" class="rts-mute" id="rtsLoadBtn" title="Resume the saved battle" onclick="rtsLoadGame()">📂</button>'
@@ -20363,6 +20795,8 @@ function _rtsResizeCanvases() {
   var cv = document.getElementById('rtsCv'), hud = document.getElementById('rtsHud');
   var dpr = Math.min(2, window.devicePixelRatio || 1);
   cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  var c3 = document.getElementById('rtsCv3d');
+  if (c3) { c3.style.width = W + 'px'; c3.style.height = H + 'px'; }
   hud.style.width = W + 'px'; hud.style.height = H + 'px';
   hud.width = Math.round(W * dpr); hud.height = Math.round(H * dpr);
   hud.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);

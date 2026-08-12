@@ -17,8 +17,29 @@ function _rtsRFrame(dt) {
   }
   g.setTransform(R.dpr, 0, 0, R.dpr, shx * R.dpr, shy * R.dpr);
   g.imageSmoothingEnabled = false;
-  g.fillStyle = '#1a1d16';
-  g.fillRect(-8, -8, R.W + 16, R.H + 16);
+  /* 3D MODE: the world - ground, entities, fog - is drawn by the GL canvas underneath this
+     one (_r3dFrame), and this canvas becomes a transparent overlay carrying only what stays
+     2D: ore and wave decals, effects, the ghost, the message line. Everything positions
+     itself through _rtsSX/_rtsSY, which camera.js makes projection-aware, so the overlay and
+     the meshes cannot drift apart. */
+  var r3on = window._R3D && window._R3D.on;
+  if (r3on) {
+    _r3dFrame(G);
+    /* The GL canvas is BLITTED here rather than stacked under this one and left to the
+       compositor. Stacking worked in every reduced test and still composited black inside the
+       real page in headless capture - and a renderer this project cannot screenshot is one it
+       cannot verify, so the compositor was fired from the job. The blit costs one full-frame
+       drawImage, buys identical behaviour everywhere, and gets screen shake for free because
+       it happens under the same transform as everything else. */
+    g.clearRect(-8, -8, R.W + 16, R.H + 16);
+    g.drawImage(window._R3D.cv, 0, 0, R.W, R.H);
+  } else {
+    g.fillStyle = '#1a1d16';
+    g.fillRect(-8, -8, R.W + 16, R.H + 16);
+  }
+  /* ground decals squash by the camera lean so they hug the terrain instead of shingling
+     over the row below - 1 in 2D, cos(tilt) in 3D */
+  var ys = r3on ? window._R3D.cp : 1;
 
   /* visible cell range, padded so half-on-screen sprites still draw */
   var tx0 = Math.max(0, _rtsTX(R.focus.x - R.W / 2 / z) - 1);
@@ -32,9 +53,11 @@ function _rtsRFrame(dt) {
      patches are continuous noise instead of per-cell stamps, so there is no grid. */
   var srcX = (R.focus.x / RTS_TILE + RTS_N / 2) * RTS_TS - (R.W / 2) / TSscale;
   var srcY = (R.focus.z / RTS_TILE + RTS_N / 2) * RTS_TS - (R.H / 2) / TSscale;
-  g.drawImage(R.terrain,
-    srcX, srcY, R.W / TSscale, R.H / TSscale,
-    0, 0, R.W, R.H);
+  if (!r3on) {
+    g.drawImage(R.terrain,
+      srcX, srcY, R.W / TSscale, R.H / TSscale,
+      0, 0, R.W, R.H);
+  }
 
   for (var tz = tz0; tz <= tz1; tz++) {
     for (var tx = tx0; tx <= tx1; tx++) {
@@ -46,7 +69,7 @@ function _rtsRFrame(dt) {
       var py = Math.round(_rtsSY(_rtsWX(tz) - RTS_TILE / 2));
       if (isWater) {
         /* The crest highlights step round a four-frame cycle, so the lake moves. */
-        g.drawImage(S.wave[(_RTS_PULSE.wf + tx + tz) & 3], px, py, cell, cell);
+        g.drawImage(S.wave[(_RTS_PULSE.wf + tx + tz) & 3], px, py, cell, cell * ys);
         continue;
       }
       /* The number of density steps comes from the sprite set, not from a literal: ours has
@@ -55,13 +78,14 @@ function _rtsRFrame(dt) {
       var set = (G.gems && G.gems[idx] ? S.gem : S.ore);
       var stage = Math.min(set.length - 1, Math.floor(ore / RTS_SCRAP_TILE * set.length));
       var vari = (tx * 7 + tz * 13) % set[stage].length;
-      g.drawImage(set[stage][vari], px, py, cell, cell);
+      g.drawImage(set[stage][vari], px, py, cell, cell * ys);
     }
   }
 
   /* --- new scorch marks and craters, stamped once into the baked terrain. Because the
      ground is a single canvas, a smudge costs nothing after the frame it appears on. --- */
   if (G.corpses && G.corpses.length) {
+    if (window._R3D) window._R3D.terrainDirty = true;   /* the GL ground shares this canvas */
     var cg = R.terrain.getContext('2d');
     cg.imageSmoothingEnabled = false;
     while (G.corpses.length) {
@@ -90,6 +114,8 @@ function _rtsRFrame(dt) {
      on a lawn; a scuffed earth apron is what makes it look built. --- */
   for (i = 0; i < G.ents.length; i++) {
     var pe = G.ents[i];
+    if (r3on) break;                 /* 3D buildings model their own ground - a flat pad sprite
+                                        drawn on the overlay would float above the mesh */
     if (pe.type !== 'struct' || (pe.dead && !(pe.wreck > 0))) continue;
     if (!_rtsEntSeen(pe)) continue;
     var pd = rtsStructDef(pe.def);
@@ -185,6 +211,7 @@ function _rtsRFrame(dt) {
        obviously not on the surface. It goes solid the moment it fires, because _rtsCloakAI
        clears `hidden` for the surfacing window. */
     if (d.hidden) g.globalAlpha = 0.42;
+    if (r3on) continue;                    /* drawn as meshes by _r3dFrame */
     if (d.type === 'struct') _rtsDrawStruct(g, d, TSscale, cell);
     else _rtsDrawUnit(g, d, TSscale);
     if (d.hidden) g.globalAlpha = 1;
@@ -294,7 +321,8 @@ function _rtsRFrame(dt) {
      that make the boundary look CUT rather than pixel-stepped. Stamped per cell, and only
      across the cells actually on screen - a 160x160 map is 25600 cells and perhaps 900 of them
      are visible, so drawing all of them would be 28x the work for the same picture. */
-  if (G.mapped && typeof _mixShroud === 'function' && _mixShroud()) {
+  if (r3on) { /* fog drawn by the GL pass, soft-sampled */ }
+  else if (G.mapped && typeof _mixShroud === 'function' && _mixShroud()) {
     _rtsDrawShroudTiles(g, G, cell);
   } else if (G.mapped) {
     if (!R.fog) {
