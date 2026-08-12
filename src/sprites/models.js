@@ -70,7 +70,11 @@ function _sprBldDamaged(src, key) {
   return t.c;
 }
 
-function _sprBuildingClean(key, side) {
+/* The building's raw 3D model, as the face list the chain produces - separated from the bake
+   so the live 3D renderer can draw the same geometry the sprite baker flattens. Coordinates
+   are art pixels, unscaled: the sprite path applies RTS_PS on its way into the bake and the
+   3D path applies its own world scale, so the model itself stays neutral. */
+function _sprBuildingModel(key, side) {
   var def = rtsStructDef(key), TM = RTS_PAL.team[side];
   var W = def.w * RTS_TS, D = def.h * RTS_TS;
   var C = RTS_PAL.conc, S = RTS_PAL.steel, DK = RTS_PAL.dark, B = RTS_PAL.bld[side];
@@ -167,6 +171,12 @@ function _sprBuildingClean(key, side) {
             vent:vent, duct:duct, skylight:skylight, hatch:hatch,
             aerial:aerial, parapet:parapet };
   _sprBldBase(X, key) || _sprBldTech(X, key) || _sprBldWar(X, key) || _sprBldSuper(X, key);
+  return m;
+}
+function _sprBuildingClean(key, side) {
+  var def = rtsStructDef(key);
+  var W = def.w * RTS_TS, D = def.h * RTS_TS;
+  var m = _sprBuildingModel(key, side);
   /* Baked at RTS_PS times RA's resolution - see RTS_PS in sprites/bake.js for why that is a
      separate number from RTS_TS rather than a bigger RTS_TS. The MODEL is authored in art
      pixels and scaled here rather than every model being rewritten: _r3Scale already exists

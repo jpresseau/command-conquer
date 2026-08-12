@@ -19,6 +19,10 @@ function rtsOpen(seed) {
   d.id = 'rcgRts';
   d.innerHTML = ''
     + '<div class="rts-stage">'
+    /* The 3D mode's canvas, UNDER the 2D one: when the mode is on, rtsCv becomes a
+       transparent overlay (effects, decals, ghost) and this carries the world. Hidden rather
+       than absent when the mode is off, so toggling is a style flip, not a DOM rebuild. */
+    +   '<canvas id="rtsCv3d" style="display:none"></canvas>'
     +   '<canvas id="rtsCv"></canvas>'
     /* The vignette, as an ELEMENT rather than a per-frame canvas composite - see _rtsPost for
        why it moved. It sits between the battlefield and the HUD, which is exactly where the
@@ -44,6 +48,7 @@ function rtsOpen(seed) {
        whatever is deployed. Putting it at the far end of the group keeps that difference
        visible, and keeps it as far as the group allows from the ✕, which is the control it
        would be worst to confuse it with: both end the match, and only one of them is meant to. */
+    +       '<button type="button" class="rts-mute" id="rts3dBtn" title="Switch to 3D" onclick="rts3dToggle()">3D</button>'
     +       '<button type="button" class="rts-mute" id="rtsReloadBtn" title="Reload for the latest build" onclick="rtsReloadClick()">⟳</button>'
     +       '<button type="button" class="rts-mute" id="rtsSaveBtn" title="Save this battle (Ctrl+S)" onclick="rtsSaveGame()">💾</button>'
     +       '<button type="button" class="rts-mute" id="rtsLoadBtn" title="Resume the saved battle" onclick="rtsLoadGame()">📂</button>'
@@ -249,6 +254,8 @@ function _rtsResizeCanvases() {
   var cv = document.getElementById('rtsCv'), hud = document.getElementById('rtsHud');
   var dpr = Math.min(2, window.devicePixelRatio || 1);
   cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  var c3 = document.getElementById('rtsCv3d');
+  if (c3) { c3.style.width = W + 'px'; c3.style.height = H + 'px'; }
   hud.style.width = W + 'px'; hud.style.height = H + 'px';
   hud.width = Math.round(W * dpr); hud.height = Math.round(H * dpr);
   hud.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
