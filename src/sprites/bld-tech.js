@@ -95,8 +95,16 @@ function _sprBldTech(X, key) {
     for (var af = 0; af < 6; af++)                                  /* dashed centreline */
       _r3Box(m, -W / 2 + 8 + af * ((W - 16) / 5), 2.9, 0, 3.6, 0.6, 1.2,
              RTS_PAL.hazard[0], RTS_PAL.hazard[0]);
-    _r3Box(m,  W / 2 - 6, 2.9, 0, 1.6, 0.6, D - 15, AS[0], AS[1]);    /* threshold bars */
-    _r3Box(m, -W / 2 + 6, 2.9, 0, 1.6, 0.6, D - 15, C[0], C[1]);
+    /* PALE threshold bars, both of them. The material sweep recoloured one to asphalt -
+       a marking the colour of the surface it marks - and left the other concrete, so the two
+       ends of the runway disagreed. Markings are paint, and paint on tarmac is pale. */
+    _r3Box(m,  W / 2 - 6, 2.9, 0, 1.6, 0.6, D - 15, C[3], C[1]);      /* threshold bars */
+    _r3Box(m, -W / 2 + 6, 2.9, 0, 1.6, 0.6, D - 15, C[3], C[1]);
+    for (var ae = 0; ae < 5; ae++) {                                  /* runway edge lights */
+      var aex = -W / 2 + 10 + ae * ((W - 20) / 4);
+      _r3Cyl(m, aex, 2.9, -D / 2 + 8, 0.7, 1.0, RTS_PAL.lit, RTS_PAL.lit, 8);
+      _r3Cyl(m, aex, 2.9, D / 2 - 8, 0.7, 1.0, RTS_PAL.lit, RTS_PAL.lit, 8);
+    }
     _r3Box(m, -W / 2 + 7, 2.2, -D / 2 + 5, 8, 8, 6, C[0], B.roof);  /* control shack, team roof */
     _r3Box(m, -W / 2 + 7, 10.2, -D / 2 + 5, 1.1, 5, 1.1, S[3], S[3]);  /* its mast */
     /* the windsock, which is the one silhouette cue that says airfield rather than road */

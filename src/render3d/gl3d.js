@@ -59,10 +59,10 @@ var R3D_MESH_VS =
   'attribute vec3 aP; attribute vec3 aN; attribute vec3 aC;' +
   'uniform vec4 uCam;' +        /* focus.x, focus.z, 2*zoom/W, 2*zoom/H */
   'uniform vec2 uTilt;' +       /* cos(tilt), sin(tilt) */
-  'uniform vec3 uPos; uniform vec2 uRot; uniform float uScale; uniform vec3 uTint;' +
+  'uniform vec3 uPos; uniform vec2 uRot; uniform float uScale; uniform float uScaleY; uniform vec3 uTint;' +
   'varying vec3 vC;' +
   'void main(){' +
-  '  vec3 p = aP * uScale;' +
+  '  vec3 p = vec3(aP.x * uScale, aP.y * uScale * uScaleY, aP.z * uScale);' +
   '  vec3 wp = vec3(uPos.x + p.x*uRot.x - p.z*uRot.y, uPos.y + p.y, uPos.z + p.x*uRot.y + p.z*uRot.x);' +
   '  vec3 n = vec3(aN.x*uRot.x - aN.z*uRot.y, aN.y, aN.x*uRot.y + aN.z*uRot.x);' +
   /* the sprite baker's light, so the two pipelines agree about which face is lit */

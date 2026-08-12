@@ -26,13 +26,34 @@ function _r3dBuildMesh(gl, faces) {
       }
     }
   }
-  function buf(a) {
+  /* Positions stay float; normals and colours pack to bytes. At this system's scale - the
+     world batches alone are several hundred thousand triangles - attribute width is the real
+     budget: floats everywhere is 36 bytes a vertex and packing the two attributes that never
+     needed the precision brings it to 18, which is the difference between a phone keeping the
+     3D mode and dropping the tab. Normals are normalised here because Int8 cannot carry the
+     unnormalised cross products the emitter produces; the shader normalises anyway, so
+     nothing downstream changes. */
+  function fbuf(a) {
     var b2 = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, b2);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(a), gl.STATIC_DRAW);
     return b2;
   }
-  return { p: buf(pos), n: buf(nrm), c: buf(col), verts: pos.length / 3 };
+  var nrm8 = new Int8Array(nrm.length), col8 = new Uint8Array(col.length);
+  for (var ni = 0; ni < nrm.length; ni += 3) {
+    var nl = Math.hypot(nrm[ni], nrm[ni + 1], nrm[ni + 2]) || 1;
+    nrm8[ni] = Math.round(nrm[ni] / nl * 127);
+    nrm8[ni + 1] = Math.round(nrm[ni + 1] / nl * 127);
+    nrm8[ni + 2] = Math.round(nrm[ni + 2] / nl * 127);
+  }
+  for (var ci = 0; ci < col.length; ci++) col8[ci] = Math.round(col[ci] * 255);
+  function bbuf(a) {
+    var b3 = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, b3);
+    gl.bufferData(gl.ARRAY_BUFFER, a, gl.STATIC_DRAW);
+    return b3;
+  }
+  return { p: fbuf(pos), n: bbuf(nrm8), c: bbuf(col8), verts: pos.length / 3 };
 }
 
 /* The cache key carries everything that changes the geometry or its colours: type, side,
@@ -145,39 +166,112 @@ function _r3dFrame(G) {
   var uPos = gl.getUniformLocation(R3.meshP, 'uPos');
   var uRot = gl.getUniformLocation(R3.meshP, 'uRot');
   var uScale = gl.getUniformLocation(R3.meshP, 'uScale');
+  var uScaleY = gl.getUniformLocation(R3.meshP, 'uScaleY');
   var uTint = gl.getUniformLocation(R3.meshP, 'uTint');
   var aP = gl.getAttribLocation(R3.meshP, 'aP');
   var aN = gl.getAttribLocation(R3.meshP, 'aN');
   var aC = gl.getAttribLocation(R3.meshP, 'aC');
   var ART2W = RTS_TILE / RTS_TS;
 
-  function draw(mesh, x, y2, zz, rot, scale, dim) {
+  function draw(mesh, x, y2, zz, rot, scale, dim, sy) {
     if (!mesh) return;
     gl.uniform3f(uPos, x, y2, zz);
     gl.uniform2f(uRot, Math.cos(rot), Math.sin(rot));
     gl.uniform1f(uScale, scale);
+    gl.uniform1f(uScaleY, sy || 1);
     gl.uniform3f(uTint, dim ? 0.62 : 1, dim ? 0.55 : 1, dim ? 0.55 : 1);
     gl.bindBuffer(gl.ARRAY_BUFFER, mesh.p);
     gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 0, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, mesh.n);
-    gl.enableVertexAttribArray(aN); gl.vertexAttribPointer(aN, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(aN); gl.vertexAttribPointer(aN, 3, gl.BYTE, true, 0, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, mesh.c);
-    gl.enableVertexAttribArray(aC); gl.vertexAttribPointer(aC, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(aC); gl.vertexAttribPointer(aC, 3, gl.UNSIGNED_BYTE, true, 0, 0);
     gl.drawArrays(gl.TRIANGLES, 0, mesh.verts);
   }
+
+  /* --- the world's own geometry: forests, ridges, ore crystals, grass - see world3d.js ---
+     The static world is ~1M triangles in per-chunk buffers; only the chunks whose AABB
+     intersects the view are drawn, so the vertex stage pays for what is on screen, not for
+     the map. The view rect inverts the shader's projection: half-extents in world units,
+     with the z range widened downward by the tallest geometry's screen lift (a tree just
+     below the bottom edge still shows its crown) plus a lean margin on x. */
+  _r3dWorldTick(G);
+  if (R3.world) {
+    /* identity placement: the batches are baked in world space, so they draw as-is */
+    gl.uniform3f(uPos, 0, 0, 0);
+    gl.uniform2f(uRot, 1, 0);
+    gl.uniform1f(uScale, 1);
+    gl.uniform1f(uScaleY, 1);
+    gl.uniform3f(uTint, 1, 1, 1);
+    var vhx = R3.cv.width / (2 * z * R.dpr) + 4;
+    var vhz = R3.cv.height / (2 * z * R.dpr * R3.cp);
+    var lift = R3D_WORLD_YMAX * R3.sp / R3.cp;
+    var batches = R3.world.concat([R3.oreMesh]);
+    for (var wb = 0; wb < batches.length; wb++) {
+      var bm = batches[wb];
+      if (!bm || !bm.verts) continue;
+      if (bm.x1 !== undefined &&
+          (bm.x1 < R.focus.x - vhx || bm.x0 > R.focus.x + vhx ||
+           bm.z1 < R.focus.z - vhz || bm.z0 > R.focus.z + vhz + lift)) continue;
+      gl.bindBuffer(gl.ARRAY_BUFFER, bm.p);
+      gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, bm.n);
+      gl.enableVertexAttribArray(aN); gl.vertexAttribPointer(aN, 3, gl.BYTE, true, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, bm.c);
+      gl.enableVertexAttribArray(aC); gl.vertexAttribPointer(aC, 3, gl.UNSIGNED_BYTE, true, 0, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, bm.verts);
+    }
+  }
+
+  /* BLOB SHADOWS FIRST, under every unit. A mesh floating on flat ground has no contact cue
+     at all, and aircraft in particular read as decals without one; a soft dark disc at y~0 is
+     the cheapest grounding there is, and it is drawn for units only - buildings sit on their
+     own modelled plinths and the terrain bake already darkens under them. Drawn before the
+     units with depth WRITES off, so the discs never punch holes in the depth buffer that the
+     meshes above them would then fail against. */
+  if (!R3.shadowMesh) {
+    var sm = [], SEG = 14, ring = [];
+    for (var sv = 0; sv < SEG; sv++) {
+      var sa = sv / SEG * Math.PI * 2;
+      ring.push([Math.cos(sa) * 3, 0.05, Math.sin(sa) * 3]);
+    }
+    /* Ground-dark, not black: the mesh program draws opaque, so a black disc reads as a hole
+       punched in the terrain rather than as shade on it. This is the baked dirt's own dark
+       tone, which is what a hard shadow on that ground would actually be. */
+    sm.push({ v: ring, c: [38, 41, 32] });
+    R3.shadowMesh = _r3dBuildMesh(gl, sm);
+  }
+  gl.depthMask(false);
+  for (var si2 = 0; si2 < G.ents.length; si2++) {
+    var se = G.ents[si2];
+    if (se.dead || se.type !== 'unit') continue;
+    var sr = (rtsUnitDef(se.def).r || 1.5) * 0.9;
+    draw(R3.shadowMesh, se.x, 0, se.z, 0, sr / 3, false);
+  }
+  gl.depthMask(true);
 
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (e.dead) continue;
     if (e.type === 'struct') {
-      /* a building going up shows at reduced height via scale-y? No: the 2D reveal is a wipe,
-         which has no 3D analogue - a rising build is honest and cheap, scaling y alone would
-         need a second scale uniform. Slice one: draw it dim until it stands. */
+      /* A BUILDING UNDER CONSTRUCTION RISES OUT OF THE GROUND. The 2D reveal is a wipe, which
+         has no 3D analogue; height is the 3D-native equivalent, and it reads instantly as
+         "being built" from any distance. Slightly dim while rising so a half-built structure
+         is not mistaken for a finished one at full height's last moment. */
       var dmg = !e.building && e.hp < e.maxHp * RTS_COND_YELLOW;
-      draw(_r3dMesh('b', e.def, e.side), e.x, 0, e.z, 0, ART2W, dmg || e.building);
+      var rise = e.building ? 0.12 + 0.88 * Math.max(0, Math.min(1, e.bprog || 0)) : 1;
+      draw(_r3dMesh('b', e.def, e.side), e.x, 0, e.z, 0, ART2W, dmg || e.building, rise);
     } else if (e.type === 'unit') {
       var turret = R.spr.turret && R.spr.turret[e.side] && R.spr.turret[e.side][e.def];
       var y = e.air ? ((e.rearming > 0 ? 2 : (e.alt || 12)) * 0.35) : 0;
+      /* A MARCHING SOLDIER BOBS. There is no walk cycle in 3D - the mesh is one pose - so the
+         walk reads through a small vertical bob instead, phased by the same `gait` offset that
+         desynchronises the 2D walk frames, so a squad does not pogo in unison. Vehicles do not
+         bob; tracks do not walk. */
+      var d2 = rtsUnitDef(e.def);
+      if (d2.kind === 'infantry' && e.path && !e.prone) {
+        y += Math.abs(Math.sin(G.t * 9 + (e.gait || 0) * 0.8)) * 0.45;
+      }
       draw(_r3dMesh('u', e.def, e.side, turret ? 'hull' : null, e.prone),
            e.x, y, e.z, -e.rot, ART2W, false);
       if (turret) {
