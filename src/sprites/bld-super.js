@@ -31,6 +31,16 @@ function _sprBldSuper(X, key) {
       _r3Box(m, -12 + _mv * 8, 9.1, 6, 5, 0.9, 3,
              _mv % 2 ? RTS_PAL.hazard[0] : DK[2], _mv % 2 ? RTS_PAL.hazard[1] : DK[3]);
     _r3Box(m, W / 2 - 6, 3, D / 2 - 6, 6, 9, 6, S[2], S[1]);             /* control hut */
+    _r3Box(m, W / 2 - 6, 12, D / 2 - 6, 1.0, 4, 1.0, S[3], S[2]);        /* its antenna */
+    /* Surface detail that keeps the building LOW - it measured 98 distinct tones, worst in
+       the game, and being a hatch in the ground is its identity, so the interest has to come
+       from what is bolted to the apron rather than from anything standing up. */
+    _r3Box(m, 5, 3, D / 2 - 8, 14, 1.2, 2.2, DK[1], DK[0]);              /* cable trench */
+    _r3Box(m, W / 2 - 9, 3, D / 2 - 10, 2.2, 1.2, 5, DK[1], DK[0]);
+    for (var _mk = 0; _mk < 4; _mk++)                                    /* apron kerbs */
+      _r3Box(m, (_mk & 1 ? 1 : -1) * (W / 2 - 5), 3, (_mk & 2 ? 1 : -1) * (D / 2 - 5),
+             4, 1.6, 4, C[3], C[1]);
+    _r3Cyl(m, -W / 2 + 6, 3, -D / 2 + 6, 1.2, 4.5, S[2], RTS_PAL.lit, 12);  /* beacon */
     _r3Box(m, 0, 9.8, -D / 2 + 5, 9, 1.2, 3, B.roof, B.roof);            /* team band */
 
   } else if (key === 'iron') {

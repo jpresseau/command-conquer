@@ -186,10 +186,32 @@ function _sprCrate() {
 function _sprFx() {
   var boom = [], i;
   var cols = ['#fff4cc', '#ffd070', '#ff9a2e', '#e0561c', '#8a3410', '#3a2418'];
+  /* A FIREBALL, NOT A BULLSEYE. The first version drew each frame as two concentric filled
+     circles, and in play that read as a flat white disc punched into the picture - the palette
+     ramp was right and the SHAPE was wrong, because nothing that explodes is round. Each frame
+     is now a cluster of overlapping lobes: dark rim lobes first, then hot lobes drawn smaller
+     and biased UP-CENTRE, so every frame has an irregular silhouette, a bright core that sits
+     above centre the way a real fireball lifts, and a dark fringe for the hot colours to read
+     against. Late frames pull the hot lobes apart and let the soot dominate, which is the
+     collapse into smoke. Deterministic per frame - explosions must not shimmer between bakes. */
   for (i = 0; i < 6; i++) {
     var s = 20 + i * 13, t = _sprMake(s, s), g = t.g, c = s / 2;
-    _sprDisc(g, c, c, c - 1 - i * 0.5, cols[Math.min(5, i)]);
-    if (i < 4) _sprDisc(g, c, c, (c - 1) * 0.55, cols[Math.max(0, i - 1)]);
+    var rim = cols[Math.min(5, i + 2)], hot = cols[Math.min(5, i)], core = cols[Math.max(0, i - 1)];
+    var spread = 0.30 + i * 0.09;                 /* lobes drift apart as the ball collapses */
+    for (var lb = 0; lb < 7; lb++) {
+      var la = lb / 7 * 6.283 + i * 0.9;
+      var lr = c * spread * (0.5 + _sprHash(lb, i, 31) * 0.8);
+      var lx = c + Math.cos(la) * lr, ly = c + Math.sin(la) * lr;
+      _sprDisc(g, lx, ly, c * (0.42 - i * 0.03) * (0.7 + _sprHash(i, lb, 37) * 0.5), rim);
+    }
+    for (var lh = 0; lh < 5; lh++) {
+      var ha = lh / 5 * 6.283 + i * 1.7;
+      var hr = c * spread * 0.7 * (0.4 + _sprHash(lh, i, 41) * 0.8);
+      /* biased up: heat rises, so the bright side of the ball is the top */
+      var hx = c + Math.cos(ha) * hr, hy = c - c * 0.08 + Math.sin(ha) * hr * 0.8;
+      _sprDisc(g, hx, hy, c * (0.30 - i * 0.025) * (0.7 + _sprHash(lh, i, 43) * 0.5), hot);
+    }
+    if (i < 4) _sprDisc(g, c, c - c * 0.12, c * (0.16 - i * 0.02), core);
     if (i < 3) for (var k = 0; k < 6; k++) {                     /* debris specks */
       var a = k / 6 * 6.283 + i;
       _sprRect(g, c + Math.cos(a) * c * 0.8, c + Math.sin(a) * c * 0.8, 2, 2, cols[i + 1]);

@@ -16,6 +16,25 @@ function _sprOre(P, gem) {
     var variants = [];
     for (var v = 0; v < 3; v++) {
       var t = _sprMake(TS, TS), g = t.g, seed = st * 977 + v * 131 + 17;
+      /* THE GROUND GOES GOLD UNDER A DEPOSIT. The nuggets alone read as orange confetti
+         scattered on grass, because grass shows between them at every density - in the
+         reference a worked field is a stained patch of ground with crystals ON it, and the
+         stain is most of what makes a field read as one deposit instead of speckle. Painted
+         first, wrapped exactly like the nuggets so the stain also runs across cell edges,
+         and scaled by stage so a nearly-mined cell fades back toward bare ground. */
+      var blobs = [3, 5, 8, 11][st];
+      g.globalAlpha = 0.34;
+      for (var ub = 0; ub < blobs; ub++) {
+        var ux = _sprHash(ub, 7, seed + 41) * TS, uy = _sprHash(7, ub, seed + 43) * TS;
+        var ur = 4 + _sprHash(ub, ub, seed + 47) * 5;
+        for (var uo = 0; uo < 9; uo++) {
+          var wx2 = ux + (uo % 3 - 1) * TS, wy2 = uy + ((uo / 3 | 0) - 1) * TS;
+          if (wx2 < -ur - 1 || wx2 > TS + ur || wy2 < -ur - 1 || wy2 > TS + ur) continue;
+          _sprDisc(g, wx2, wy2, ur, P[3]);
+          _sprDisc(g, wx2 - 1, wy2 - 1, ur * 0.6, P[4] || P[0]);
+        }
+      }
+      g.globalAlpha = 1;
       var n = [8, 17, 30, 44][st];
       for (var i = 0; i < n; i++) {
         var x = _sprHash(i, v, seed) * TS, y = _sprHash(v, i, seed + 5) * TS;
