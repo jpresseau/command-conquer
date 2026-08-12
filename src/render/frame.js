@@ -342,7 +342,17 @@ function _rtsRFrame(dt) {
     }
     var fsx = R.focus.x / RTS_TILE + RTS_N / 2 - (R.W / 2) / cell;
     var fsy = R.focus.z / RTS_TILE + RTS_N / 2 - (R.H / 2) / cell;
+    /* SMOOTHED, deliberately, and only for this one draw. The comment above says hard edges
+       are "the way the original's shroud tiles do" it - but RA's shadow.shp frames are
+       diagonal wedges and corner nibbles, a CUT edge; the hard cell-aligned square was this
+       fallback's approximation of that, and blown up it read as a black staircase, the
+       loudest wrong note in the frame. A half-cell soft edge is the other honest
+       approximation, it is what the 3D mode's LINEAR-sampled fog already does, and using it
+       here means the two modes agree about what the boundary looks like. Players with their
+       archives loaded still get the real wedges - this branch is the fallback only. */
+    g.imageSmoothingEnabled = true;
     g.drawImage(R.fog, fsx, fsy, R.W / cell, R.H / cell, 0, 0, R.W, R.H);
+    g.imageSmoothingEnabled = false;
   }
 
   /* --- placement ghost --- */

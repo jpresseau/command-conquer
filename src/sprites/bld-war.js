@@ -53,20 +53,25 @@ function _sprBldWar(X, key) {
        and a row of roof ribs over it, the same saw-tooth that fixed the war factory. */
     var _cov = (key === 'subpen');
     _r3Box(m, 0, 0, 0, W - 3, 3, D - 3, C[2], C[0]);                     /* apron */
-    _r3Slab(m, -W / 4, 3, 0, W / 2 - 2, 9, D - 8, 2.5, C[0], C[1]);      /* the hall */
+    /* RUST for the hall itself, not just the rails and gantry. The audit that recoloured
+       fourteen buildings left these halls concrete, and they are the largest flat areas in
+       the whole set - the one place the second material was needed most and not applied. */
+    _r3Slab(m, -W / 4, 3, 0, W / 2 - 2, 9, D - 8, 2.5, RU[0], RU[1]);    /* the hall */
     var NR = 4, NRD = (D - 10) / NR;
     for (var nv = 0; nv < NR; nv++)
       _r3Gable(m, -W / 4, 12, (nv - (NR - 1) / 2) * NRD, W / 2 - 3, 4.5, NRD - 0.5,
-               (nv & 1) ? C[2] : C[0]);
+               (nv & 1) ? RU[2] : RU[0]);
     _r3Box(m, -W / 4, 11.4, 0, W / 2 - 1, 1.2, D - 7, C[3], C[1]);       /* eaves */
     _r3Box(m, -W / 4, 16.2, 0, W / 2 - 9, 1.1, 3, B.roof, B.roof);       /* team band, on the ridge */
     /* ROOFSCAPE on the hall. The ribs give the roof a saw-tooth but every tooth is the same
        tone as the last; plant on top of them is what breaks the repeat. Kept to the landward
        half so the slipway side stays legible as the open end. */
-    X.duct(-W / 4, 15.5, D / 5, D / 3.4, true, 3.6);
-    X.vent(-W / 4 - 5, 15.5, -D / 5.5, 2.4, 4.2);
-    X.vent(-W / 4 + 5, 15.5, -D / 4.2, 2.0, 3.4);
-    X.hatch(-W / 4 + 6, 15.5, D / 3.2, 5, 4);
+    /* Along the roof EDGE, like the refinery's - the first placement bisected the hall roof
+       and cut the team band, the exact fault on all three of the buildings that got roof
+       plant in that pass. */
+    X.duct(-W / 4 - 8, 15.5, D / 8, D / 4.2, true, 3.0);
+    X.vent(-W / 4 + 7, 15.5, -D / 4.4, 2.2, 4.0);
+    X.hatch(-W / 4 + 7, 15.5, D / 3.4, 4, 4);
     /* The slipway: a real channel, dark and open at the seaward end, with its own kerbs. A
        dark trough beside a pale hall is the strongest edge on the building and the only hint
        the player gets that this end goes in the water. */

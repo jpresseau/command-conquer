@@ -247,6 +247,11 @@ function _rtsBakeTerrain(G) {
       }
     }
   }
+  /* The coastline pass lives in sprites/coast.js - it was written here and pushed this file
+     past the 500-line cap the layout spec holds every source file to. Procedural maps only:
+     on a real map the author drew the shore and `shore !== null` skips it. */
+  if (shore === null) _sprCoast(g, G, seed, authored, tileAt);
+
   /* Water gets highlight ripples once the body is down, so they run across tile seams. Not over
      the real thing: RA's own water carries its own movement, and ours on top of it is litter.
 

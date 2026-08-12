@@ -101,10 +101,13 @@ function _sprBldBase(X, key) {
     _r3Box(m, -W / 2 + 7, 0, D / 2 - 9, 4, 8, 15, DK[1], DK[3]);
     /* Roofscape. The ore hall is the tallest flat plate in the base and it carried nothing;
        extraction plant on top of a refinery is also just true. */
-    X.duct(-19, 24, 7, 24, true, 3.4);
-    X.vent(-4, 24, -17, 2.4, 4.4);
-    X.vent(-20, 24, -20, 2.0, 3.4);
-    X.hatch(-5, 24, 17, 5, 5);
+    /* Roof plant sits along the EDGE of the rust deck, not across its middle - the first
+       placement ran the duct down the centre, which bisected the roof and cut straight
+       through the team band, unmaking both of the reads the roof exists for. */
+    X.duct(-26, 24, -6, 16, true, 3.2);
+    X.vent(-26, 24, 8, 2.4, 4.4);
+    X.vent(2, 24, -18, 2.0, 3.4);
+    X.hatch(-5, 24, 15, 5, 4);
 
   } else if (key === 'barracks') {
     /* Barracks. NISSEN HUTS - three sand-coloured barrel-roofed sheds in a row, which is what
