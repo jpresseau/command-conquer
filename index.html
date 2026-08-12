@@ -876,7 +876,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">0f66944 · 2026-08-12</div>
+  <div id="rtsBuild" title="build">b8ab1eb · 2026-08-12</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -6365,6 +6365,29 @@ function _sprBldBase(X, key) {
     pilasters(D / 2 - 3, 0, 0, 2, W - 22, 4, 12);
     _r3Box(m, 0, 0, -D / 2 + 4, W - 26, 3, 5, C[2], C[0]);               /* apron kerb */
     _r3Cyl(m, W / 2 - 11, 13, -D / 2 + 11, 4.5, 9, S[0], S[3], 18);      /* one vent */
+    /* The flanks were bare planes the full depth of the biggest sprite in the game - the
+       vault above them earns its 100-tone count alone. Lit windows down both sides, and a
+       second vent to pair the first, kept below the springing line so the arch silhouette
+       stays untouched. */
+    /* THE FLANK WINDOWS ARE FOR THE 3D MODE ONLY, and that is now a measured statement, not a
+       hope: under the sprite camera the vault overhangs both flanks completely - the baked
+       yard did not gain a single tone from these, and a render of the sprite shows why: the
+       vault IS the whole visible building from overhead. The tilted 3D camera sees the flanks;
+       the sprite never will. What the SPRITE needed was detail on the vault itself, which is
+       what the stacks below are. */
+    winRow(32, 5, 0, 4, 12, 4, 4);
+    winRow(-32, 5, 0, 4, 12, 4, 4);
+    /* Vent stacks PIERCING the vault, staggered down its slopes. Surface-matching a curve is
+       fiddly and unnecessary - a cylinder pushed up through the shell from inside meets it
+       wherever it meets it, the depth buffer cuts the join, and what shows is a roof stack
+       with a dark cap: a silhouette break and a second material on the one surface the
+       camera actually sees. */
+    for (var yv2 = 0; yv2 < 3; yv2++) {
+      var yvx = (yv2 & 1 ? -1 : 1) * 15, yvz = -18 + yv2 * 14;
+      _r3Cyl(m, yvx, 24, yvz, 2.6, 12, S[1], S[3], 14);
+      _r3Cyl(m, yvx, 36, yvz, 2.9, 1.4, DK[1], DK[0], 14);
+    }
+    _r3Cyl(m, -W / 2 + 11, 13, -D / 2 + 11, 3.6, 7, S[0], S[3], 18);
 
   } else if (key === 'power') {
     /* Power Plant. RED BRICK with two tall brick chimneys - that is what the cameo shows on
@@ -6374,6 +6397,8 @@ function _sprBldBase(X, key) {
     _r3Box(m, 0, 13, 4, W - 18, 2, D - 24, K[2], K[3]);                  /* roof */
     _r3Box(m, 0, 15, 4, W - 20, 1.2, 4, B.roof, B.roof);                 /* team band */
     winRow(D / 2 - 6, 3, 0, 3, 11, 5, 5);
+    X.skylight(-6, 15, 6, 7, 5);
+    X.hatch(8, 15, 7, 4, 4);
     _r3Box(m, 0, 0, D / 2 - 6, 10, 8, 4, DK[0], DK[1]);                  /* door */
     for (var pk = 0; pk < 2; pk++) {
       var pxx = -9 + pk * 18;
@@ -6472,6 +6497,9 @@ function _sprBldBase(X, key) {
     _r3Slab(m, 0, 3, 0, W - 8, 9, D - 8, 2.5, P[0], P[1]);               /* pale walls */
     for (var fp = 0; fp < 4; fp++)                                       /* wall piers */
       _r3Box(m, -W / 2 + 9 + fp * ((W - 18) / 3), 3, -D / 2 + 5, 3, 9, 2, P[3], P[2]);
+    winRow(-D / 2 + 6, 5, 0, 4, 13, 5, 4);                               /* back wall, lit */
+    X.vent(-W / 2 + 8, 12, -D / 2 + 9, 2.2, 3.6);
+    X.hatch(W / 2 - 10, 12, -D / 2 + 9, 5, 4);
     /* The ribs repeat along the DEPTH, each one spanning the full width. _r3Gable's ridge
        runs along x with its slopes facing +z and -z, so repeating it across the width just
        gives five copies of the same big front slope side by side - vertical stripes, which
@@ -6609,8 +6637,16 @@ function _sprBldTech(X, key) {
     for (var af = 0; af < 6; af++)                                  /* dashed centreline */
       _r3Box(m, -W / 2 + 8 + af * ((W - 16) / 5), 2.9, 0, 3.6, 0.6, 1.2,
              RTS_PAL.hazard[0], RTS_PAL.hazard[0]);
-    _r3Box(m,  W / 2 - 6, 2.9, 0, 1.6, 0.6, D - 15, AS[0], AS[1]);    /* threshold bars */
-    _r3Box(m, -W / 2 + 6, 2.9, 0, 1.6, 0.6, D - 15, C[0], C[1]);
+    /* PALE threshold bars, both of them. The material sweep recoloured one to asphalt -
+       a marking the colour of the surface it marks - and left the other concrete, so the two
+       ends of the runway disagreed. Markings are paint, and paint on tarmac is pale. */
+    _r3Box(m,  W / 2 - 6, 2.9, 0, 1.6, 0.6, D - 15, C[3], C[1]);      /* threshold bars */
+    _r3Box(m, -W / 2 + 6, 2.9, 0, 1.6, 0.6, D - 15, C[3], C[1]);
+    for (var ae = 0; ae < 5; ae++) {                                  /* runway edge lights */
+      var aex = -W / 2 + 10 + ae * ((W - 20) / 4);
+      _r3Cyl(m, aex, 2.9, -D / 2 + 8, 0.7, 1.0, RTS_PAL.lit, RTS_PAL.lit, 8);
+      _r3Cyl(m, aex, 2.9, D / 2 - 8, 0.7, 1.0, RTS_PAL.lit, RTS_PAL.lit, 8);
+    }
     _r3Box(m, -W / 2 + 7, 2.2, -D / 2 + 5, 8, 8, 6, C[0], B.roof);  /* control shack, team roof */
     _r3Box(m, -W / 2 + 7, 10.2, -D / 2 + 5, 1.1, 5, 1.1, S[3], S[3]);  /* its mast */
     /* the windsock, which is the one silhouette cue that says airfield rather than road */
@@ -19537,10 +19573,10 @@ var R3D_MESH_VS =
   'attribute vec3 aP; attribute vec3 aN; attribute vec3 aC;' +
   'uniform vec4 uCam;' +        /* focus.x, focus.z, 2*zoom/W, 2*zoom/H */
   'uniform vec2 uTilt;' +       /* cos(tilt), sin(tilt) */
-  'uniform vec3 uPos; uniform vec2 uRot; uniform float uScale; uniform vec3 uTint;' +
+  'uniform vec3 uPos; uniform vec2 uRot; uniform float uScale; uniform float uScaleY; uniform vec3 uTint;' +
   'varying vec3 vC;' +
   'void main(){' +
-  '  vec3 p = aP * uScale;' +
+  '  vec3 p = vec3(aP.x * uScale, aP.y * uScale * uScaleY, aP.z * uScale);' +
   '  vec3 wp = vec3(uPos.x + p.x*uRot.x - p.z*uRot.y, uPos.y + p.y, uPos.z + p.x*uRot.y + p.z*uRot.x);' +
   '  vec3 n = vec3(aN.x*uRot.x - aN.z*uRot.y, aN.y, aN.x*uRot.y + aN.z*uRot.x);' +
   /* the sprite baker's light, so the two pipelines agree about which face is lit */
@@ -19671,13 +19707,34 @@ function _r3dBuildMesh(gl, faces) {
       }
     }
   }
-  function buf(a) {
+  /* Positions stay float; normals and colours pack to bytes. At this system's scale - the
+     world batches alone are several hundred thousand triangles - attribute width is the real
+     budget: floats everywhere is 36 bytes a vertex and packing the two attributes that never
+     needed the precision brings it to 18, which is the difference between a phone keeping the
+     3D mode and dropping the tab. Normals are normalised here because Int8 cannot carry the
+     unnormalised cross products the emitter produces; the shader normalises anyway, so
+     nothing downstream changes. */
+  function fbuf(a) {
     var b2 = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, b2);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(a), gl.STATIC_DRAW);
     return b2;
   }
-  return { p: buf(pos), n: buf(nrm), c: buf(col), verts: pos.length / 3 };
+  var nrm8 = new Int8Array(nrm.length), col8 = new Uint8Array(col.length);
+  for (var ni = 0; ni < nrm.length; ni += 3) {
+    var nl = Math.hypot(nrm[ni], nrm[ni + 1], nrm[ni + 2]) || 1;
+    nrm8[ni] = Math.round(nrm[ni] / nl * 127);
+    nrm8[ni + 1] = Math.round(nrm[ni + 1] / nl * 127);
+    nrm8[ni + 2] = Math.round(nrm[ni + 2] / nl * 127);
+  }
+  for (var ci = 0; ci < col.length; ci++) col8[ci] = Math.round(col[ci] * 255);
+  function bbuf(a) {
+    var b3 = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, b3);
+    gl.bufferData(gl.ARRAY_BUFFER, a, gl.STATIC_DRAW);
+    return b3;
+  }
+  return { p: fbuf(pos), n: bbuf(nrm8), c: bbuf(col8), verts: pos.length / 3 };
 }
 
 /* The cache key carries everything that changes the geometry or its colours: type, side,
@@ -19790,39 +19847,112 @@ function _r3dFrame(G) {
   var uPos = gl.getUniformLocation(R3.meshP, 'uPos');
   var uRot = gl.getUniformLocation(R3.meshP, 'uRot');
   var uScale = gl.getUniformLocation(R3.meshP, 'uScale');
+  var uScaleY = gl.getUniformLocation(R3.meshP, 'uScaleY');
   var uTint = gl.getUniformLocation(R3.meshP, 'uTint');
   var aP = gl.getAttribLocation(R3.meshP, 'aP');
   var aN = gl.getAttribLocation(R3.meshP, 'aN');
   var aC = gl.getAttribLocation(R3.meshP, 'aC');
   var ART2W = RTS_TILE / RTS_TS;
 
-  function draw(mesh, x, y2, zz, rot, scale, dim) {
+  function draw(mesh, x, y2, zz, rot, scale, dim, sy) {
     if (!mesh) return;
     gl.uniform3f(uPos, x, y2, zz);
     gl.uniform2f(uRot, Math.cos(rot), Math.sin(rot));
     gl.uniform1f(uScale, scale);
+    gl.uniform1f(uScaleY, sy || 1);
     gl.uniform3f(uTint, dim ? 0.62 : 1, dim ? 0.55 : 1, dim ? 0.55 : 1);
     gl.bindBuffer(gl.ARRAY_BUFFER, mesh.p);
     gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 0, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, mesh.n);
-    gl.enableVertexAttribArray(aN); gl.vertexAttribPointer(aN, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(aN); gl.vertexAttribPointer(aN, 3, gl.BYTE, true, 0, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, mesh.c);
-    gl.enableVertexAttribArray(aC); gl.vertexAttribPointer(aC, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(aC); gl.vertexAttribPointer(aC, 3, gl.UNSIGNED_BYTE, true, 0, 0);
     gl.drawArrays(gl.TRIANGLES, 0, mesh.verts);
   }
+
+  /* --- the world's own geometry: forests, ridges, ore crystals, grass - see world3d.js ---
+     The static world is ~1M triangles in per-chunk buffers; only the chunks whose AABB
+     intersects the view are drawn, so the vertex stage pays for what is on screen, not for
+     the map. The view rect inverts the shader's projection: half-extents in world units,
+     with the z range widened downward by the tallest geometry's screen lift (a tree just
+     below the bottom edge still shows its crown) plus a lean margin on x. */
+  _r3dWorldTick(G);
+  if (R3.world) {
+    /* identity placement: the batches are baked in world space, so they draw as-is */
+    gl.uniform3f(uPos, 0, 0, 0);
+    gl.uniform2f(uRot, 1, 0);
+    gl.uniform1f(uScale, 1);
+    gl.uniform1f(uScaleY, 1);
+    gl.uniform3f(uTint, 1, 1, 1);
+    var vhx = R3.cv.width / (2 * z * R.dpr) + 4;
+    var vhz = R3.cv.height / (2 * z * R.dpr * R3.cp);
+    var lift = R3D_WORLD_YMAX * R3.sp / R3.cp;
+    var batches = R3.world.concat([R3.oreMesh]);
+    for (var wb = 0; wb < batches.length; wb++) {
+      var bm = batches[wb];
+      if (!bm || !bm.verts) continue;
+      if (bm.x1 !== undefined &&
+          (bm.x1 < R.focus.x - vhx || bm.x0 > R.focus.x + vhx ||
+           bm.z1 < R.focus.z - vhz || bm.z0 > R.focus.z + vhz + lift)) continue;
+      gl.bindBuffer(gl.ARRAY_BUFFER, bm.p);
+      gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, bm.n);
+      gl.enableVertexAttribArray(aN); gl.vertexAttribPointer(aN, 3, gl.BYTE, true, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, bm.c);
+      gl.enableVertexAttribArray(aC); gl.vertexAttribPointer(aC, 3, gl.UNSIGNED_BYTE, true, 0, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, bm.verts);
+    }
+  }
+
+  /* BLOB SHADOWS FIRST, under every unit. A mesh floating on flat ground has no contact cue
+     at all, and aircraft in particular read as decals without one; a soft dark disc at y~0 is
+     the cheapest grounding there is, and it is drawn for units only - buildings sit on their
+     own modelled plinths and the terrain bake already darkens under them. Drawn before the
+     units with depth WRITES off, so the discs never punch holes in the depth buffer that the
+     meshes above them would then fail against. */
+  if (!R3.shadowMesh) {
+    var sm = [], SEG = 14, ring = [];
+    for (var sv = 0; sv < SEG; sv++) {
+      var sa = sv / SEG * Math.PI * 2;
+      ring.push([Math.cos(sa) * 3, 0.05, Math.sin(sa) * 3]);
+    }
+    /* Ground-dark, not black: the mesh program draws opaque, so a black disc reads as a hole
+       punched in the terrain rather than as shade on it. This is the baked dirt's own dark
+       tone, which is what a hard shadow on that ground would actually be. */
+    sm.push({ v: ring, c: [38, 41, 32] });
+    R3.shadowMesh = _r3dBuildMesh(gl, sm);
+  }
+  gl.depthMask(false);
+  for (var si2 = 0; si2 < G.ents.length; si2++) {
+    var se = G.ents[si2];
+    if (se.dead || se.type !== 'unit') continue;
+    var sr = (rtsUnitDef(se.def).r || 1.5) * 0.9;
+    draw(R3.shadowMesh, se.x, 0, se.z, 0, sr / 3, false);
+  }
+  gl.depthMask(true);
 
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (e.dead) continue;
     if (e.type === 'struct') {
-      /* a building going up shows at reduced height via scale-y? No: the 2D reveal is a wipe,
-         which has no 3D analogue - a rising build is honest and cheap, scaling y alone would
-         need a second scale uniform. Slice one: draw it dim until it stands. */
+      /* A BUILDING UNDER CONSTRUCTION RISES OUT OF THE GROUND. The 2D reveal is a wipe, which
+         has no 3D analogue; height is the 3D-native equivalent, and it reads instantly as
+         "being built" from any distance. Slightly dim while rising so a half-built structure
+         is not mistaken for a finished one at full height's last moment. */
       var dmg = !e.building && e.hp < e.maxHp * RTS_COND_YELLOW;
-      draw(_r3dMesh('b', e.def, e.side), e.x, 0, e.z, 0, ART2W, dmg || e.building);
+      var rise = e.building ? 0.12 + 0.88 * Math.max(0, Math.min(1, e.bprog || 0)) : 1;
+      draw(_r3dMesh('b', e.def, e.side), e.x, 0, e.z, 0, ART2W, dmg || e.building, rise);
     } else if (e.type === 'unit') {
       var turret = R.spr.turret && R.spr.turret[e.side] && R.spr.turret[e.side][e.def];
       var y = e.air ? ((e.rearming > 0 ? 2 : (e.alt || 12)) * 0.35) : 0;
+      /* A MARCHING SOLDIER BOBS. There is no walk cycle in 3D - the mesh is one pose - so the
+         walk reads through a small vertical bob instead, phased by the same `gait` offset that
+         desynchronises the 2D walk frames, so a squad does not pogo in unison. Vehicles do not
+         bob; tracks do not walk. */
+      var d2 = rtsUnitDef(e.def);
+      if (d2.kind === 'infantry' && e.path && !e.prone) {
+        y += Math.abs(Math.sin(G.t * 9 + (e.gait || 0) * 0.8)) * 0.45;
+      }
       draw(_r3dMesh('u', e.def, e.side, turret ? 'hull' : null, e.prone),
            e.x, y, e.z, -e.rot, ART2W, false);
       if (turret) {
@@ -19846,6 +19976,190 @@ function _r3dFrame(G) {
   gl.bindTexture(gl.TEXTURE_2D, R3.fogTex);
   gl.drawArrays(gl.TRIANGLES, 0, 6);
   gl.disable(gl.BLEND);
+}
+</script>
+<script>/* render3d/world3d.js - the map itself as geometry: forests, rock ridges, ore crystals and
+   grass cover, batched and chunked. Part of rts.render3d.
+
+   Until this, the 3D mode's world was one flat textured plane: every forest, ridge and ore
+   field the generator laid down existed only as paint. This walks the terrain grid once and
+   emits real geometry for it - a CLUSTER of trees per forest cell (RA's forest cells hold
+   several trunks, not one), boulders and crags per rock cell, crystal clusters over the ore,
+   grass tufts scattered on open ground - which is what makes the tilted camera worth having:
+   a forest you can see INTO the edge of, ridges with sides, ore that glitters above the stain.
+
+   THE BUDGET GOES TO THE FOREST, BY DESIGN. An earlier cut of this file spent two thirds of
+   its ~640k triangles on grass tufts - exactly the ground-cover padding the graphics rules
+   forbid: the count went up, the picture did not. This mix inverts that: the forest - the
+   thing the player actually looks at and fights around - carries most of the ~1M triangles
+   (2-3 full trees per forest cell), tufts are a sparse flatness-breaker, and the rest is rock
+   and ore. Raising a number here must make the MAP richer, not the floor busier.
+
+   CHUNKED, PRE-TRANSFORMED, ONE DRAW PER VISIBLE CHUNK. A million static triangles is a
+   light BUILD load, but pushing all of them through the vertex stage every frame is not free
+   on integrated GPUs - so the world is baked into world space once (the primitive builders
+   emit at absolute coordinates and are reused unchanged) and split into a grid of
+   R3D_CHUNK-cell chunks, each one buffer with a world AABB. The frame draws only the chunks
+   whose AABB intersects the view (scene3d.js), which at normal zoom is a small fraction of
+   the map - the million is affordable BECAUSE most of it is culled, cheaply, per chunk.
+   Memory is the honest cost: ~1M triangles at the byte-packed 18B/vertex is ~54MB of GPU
+   buffers, which is why the attributes were packed before the density was raised.
+
+   Everything is HASH-PLACED, never random: the same seed must produce the same forest on
+   every machine and after every save-load, and the bake must not shimmer between toggles.
+
+   THE ORE BATCH ALONE IS DYNAMIC. Trees and rock are immutable in this engine, but ore
+   depletes and spreads, so its crystal batch follows the field - polled cheaply per frame
+   and rebuilt only when the total actually changed. */
+
+/* Density and size knobs, in one place. Trees dominate the budget - see the note above. */
+var R3D_CHUNK = 32;            /* cells per chunk side; 128-cell map -> 4x4 chunks */
+var R3D_TREE_SEG = 10;
+var R3D_TUFTS_PER_CELL = 4;
+var R3D_TUFT_ODDS = 0.62;      /* share of grass cells that carry tufts at all */
+var R3D_CRYSTALS_PER_CELL = 7;
+var R3D_WORLD_YMAX = 14;       /* tallest world geometry; the cull margin hangs on it */
+
+/* One tree: trunk and three or four foliage tiers, sized and leaned by hash so a forest is
+   a population rather than an array. Heights run 5-9 world units - a cell and a bit to two
+   cells - which is the reference's tree-to-tank proportion. */
+function _r3dTree(out, x, z, h1, h2, h3) {
+  var th = 5 + h1 * 4, tr = 1.2 + h2 * 0.9;
+  _r3Cyl(out, x, 0, z, 0.45 + h3 * 0.2, th * 0.35, '#5a4630', '#463620', 6);
+  var tiers = h3 > 0.45 ? 4 : 3;
+  for (var ti = 0; ti < tiers; ti++) {
+    var ty = th * (0.18 + 0.2 * ti), trr = tr * (1 - ti * 0.22);
+    _r3Cone(out, x, ty, z, trr, trr * 0.1, th * 0.32,
+            (ti + ((h1 * 97) | 0)) & 1 ? '#3d5b2e' : '#456936', R3D_TREE_SEG);
+  }
+}
+
+function _r3dWorldBuild(G) {
+  var R3 = window._R3D, gl = R3.gl;
+  var N = RTS_N, half = RTS_TILE / 2;
+  var C = Math.ceil(N / R3D_CHUNK);
+
+  /* a rebuild (new game, new map) frees the old map's buffers first */
+  if (R3.world) {
+    for (var od = 0; od < R3.world.length; od++) {
+      var om = R3.world[od];
+      gl.deleteBuffer(om.p); gl.deleteBuffer(om.n); gl.deleteBuffer(om.c);
+    }
+  }
+  R3.world = []; R3.worldTris = 0; R3.worldG = G;
+
+  for (var cz = 0; cz < C; cz++) {
+    for (var cx = 0; cx < C; cx++) {
+      var faces = [];
+      var z0 = cz * R3D_CHUNK, z1 = Math.min(N, z0 + R3D_CHUNK);
+      var x0 = cx * R3D_CHUNK, x1 = Math.min(N, x0 + R3D_CHUNK);
+
+      for (var tz = z0; tz < z1; tz++) {
+        for (var tx = x0; tx < x1; tx++) {
+          var k = G.terrain[_rtsIdx(tx, tz)];
+          var wx = _rtsWX(tx), wz = _rtsWX(tz);
+          var h1 = _sprHash(tx, tz, 331), h2 = _sprHash(tz, tx, 337), h3 = _sprHash(tx * 3, tz * 7, 341);
+
+          if (k === RTS_T_TREE) {
+            /* a forest cell is a CLUSTER - two or three trees, spread across the cell */
+            var nt = h1 > 0.5 ? 3 : 2;
+            for (var tn = 0; tn < nt; tn++) {
+              var ox = (_sprHash(tn, tx, 401) - 0.5) * (RTS_TILE - 1.6);
+              var oz = (_sprHash(tz, tn, 409) - 0.5) * (RTS_TILE - 1.6);
+              _r3dTree(faces, wx + ox, wz + oz,
+                       _sprHash(tx + tn, tz, 419), _sprHash(tz, tx + tn, 421), _sprHash(tn, tx + tz, 431));
+            }
+          } else if (k === RTS_T_ROCK) {
+            /* A ridge cell: stacked slabs of differing greys plus a crag spike or two. There
+               is no rotation in the batch, so the tilt is faked the way the buildings fake
+               it - offset stacked boxes, which under this light shade as separate facets. */
+            for (var rb = 0; rb < 3; rb++) {
+              var rh = 2.2 + _sprHash(tx + rb, tz, 347) * 3.4;
+              var rw = 1.6 + _sprHash(tz, tx + rb, 349) * 2.2;
+              _r3Box(faces, wx + (_sprHash(rb, tx, 353) - 0.5) * 2.4, rb * 0.5,
+                     wz + (_sprHash(rb, tz, 359) - 0.5) * 2.4,
+                     rw, rh, rw * (0.8 + h1 * 0.5),
+                     rb & 1 ? '#6a6f66' : '#7e837a', rb & 1 ? '#575b54' : '#8d9289');
+            }
+            for (var cg = 0; cg < 2; cg++) {
+              var gh = 3 + _sprHash(tx, tz + cg, 433) * 3;
+              _r3Cone(faces, wx + (_sprHash(cg, tx, 439) - 0.5) * 3,
+                      0, wz + (_sprHash(cg, tz, 443) - 0.5) * 3,
+                      0.9 + _sprHash(tx + cg, tz, 449) * 0.6, 0.1, gh,
+                      cg & 1 ? '#757a71' : '#888d84', 6);
+            }
+          } else if (k === RTS_T_GRASS) {
+            /* Sparse tufts, and only where a hash says so - covering every grass cell would
+               be the ground-cover padding the graphics rules forbid; a scatter at this
+               density is what breaks the plane's perfect flatness without carpeting it. */
+            if (h1 < R3D_TUFT_ODDS) {
+              for (var tf = 0; tf < R3D_TUFTS_PER_CELL; tf++) {
+                var fx = wx + (_sprHash(tf, tx, 367) - 0.5) * RTS_TILE;
+                var fz = wz + (_sprHash(tz, tf, 373) - 0.5) * RTS_TILE;
+                var fh = 0.5 + _sprHash(tf + tx, tz, 379) * 0.7;
+                _r3Cone(faces, fx, 0, fz, 0.32, 0.02, fh,
+                        (tf & 1) ? '#4e6b3a' : '#5a7a44', 5);
+              }
+            }
+          }
+        }
+      }
+
+      if (!faces.length) continue;
+      var m = _r3dBuildMesh(gl, faces);
+      /* the chunk's world AABB, for the per-frame cull in scene3d.js */
+      m.x0 = _rtsWX(x0) - half; m.x1 = _rtsWX(x1 - 1) + half;
+      m.z0 = _rtsWX(z0) - half; m.z1 = _rtsWX(z1 - 1) + half;
+      R3.world.push(m);
+      R3.worldTris += m.verts / 3;
+    }
+  }
+}
+
+/* The crystals over the ore, rebuilt when the field actually changes. The stain in the
+   terrain bake says WHERE ore is; these say it is a mineral, standing proud enough to catch
+   the light. Height scales with what is left in the cell, so a field visibly wears down as
+   the harvesters work it. */
+function _r3dOreBuild(G) {
+  var R3 = window._R3D, gl = R3.gl;
+  var faces = [], N = RTS_N, sum = 0;
+  for (var tz = 0; tz < N; tz++) {
+    for (var tx = 0; tx < N; tx++) {
+      var i = tz * N + tx, ore = G.scrap[i];
+      if (ore <= 0) continue;
+      sum += ore;
+      var gem = G.gems && G.gems[i];
+      var P = gem ? RTS_PAL.gem : RTS_PAL.ore;
+      var frac = Math.min(1, ore / RTS_SCRAP_TILE);
+      var wx = _rtsWX(tx), wz = _rtsWX(tz);
+      for (var c = 0; c < R3D_CRYSTALS_PER_CELL; c++) {
+        var cx = wx + (_sprHash(c, tx, 383) - 0.5) * RTS_TILE;
+        var cz = wz + (_sprHash(tz, c, 389) - 0.5) * RTS_TILE;
+        var ch = (0.5 + _sprHash(c + tx, tz, 397) * 1.1) * (0.35 + frac);
+        _r3Cone(faces, cx, 0, cz, 0.42, 0.05, ch, (c & 1) ? P[0] : P[1], 4);
+      }
+    }
+  }
+  if (R3.oreMesh) {
+    gl.deleteBuffer(R3.oreMesh.p); gl.deleteBuffer(R3.oreMesh.n); gl.deleteBuffer(R3.oreMesh.c);
+  }
+  R3.oreMesh = _r3dBuildMesh(gl, faces);
+  R3.oreSum = sum;
+}
+
+/* Change detection: the static world is keyed to the game OBJECT - a new game is a new map,
+   and without the key the mode would keep drawing the previous map's forests over the new
+   terrain. The ore batch keys on total ore, sampled cheaply. G.scrapDirty is set by every
+   depletion and spread site but is a shared flag other consumers reset, so relying on
+   reading it exactly once is a race; summing 16k floats every 30 frames is not. */
+function _r3dWorldTick(G) {
+  var R3 = window._R3D;
+  if (!R3.world || R3.worldG !== G) { _r3dWorldBuild(G); _r3dOreBuild(G); return; }
+  R3.oreCheck = (R3.oreCheck || 0) + 1;
+  if (R3.oreCheck % 30 !== 0) return;
+  var sum = 0;
+  for (var i = 0; i < RTS_N * RTS_N; i++) sum += G.scrap[i];
+  if (Math.abs(sum - R3.oreSum) > 0.5) _r3dOreBuild(G);
 }
 </script>
 <script>/* render/frame.js - _rtsRFrame: drawing one frame of the battlefield, back to front.

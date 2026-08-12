@@ -44,6 +44,29 @@ function _sprBldBase(X, key) {
     pilasters(D / 2 - 3, 0, 0, 2, W - 22, 4, 12);
     _r3Box(m, 0, 0, -D / 2 + 4, W - 26, 3, 5, C[2], C[0]);               /* apron kerb */
     _r3Cyl(m, W / 2 - 11, 13, -D / 2 + 11, 4.5, 9, S[0], S[3], 18);      /* one vent */
+    /* The flanks were bare planes the full depth of the biggest sprite in the game - the
+       vault above them earns its 100-tone count alone. Lit windows down both sides, and a
+       second vent to pair the first, kept below the springing line so the arch silhouette
+       stays untouched. */
+    /* THE FLANK WINDOWS ARE FOR THE 3D MODE ONLY, and that is now a measured statement, not a
+       hope: under the sprite camera the vault overhangs both flanks completely - the baked
+       yard did not gain a single tone from these, and a render of the sprite shows why: the
+       vault IS the whole visible building from overhead. The tilted 3D camera sees the flanks;
+       the sprite never will. What the SPRITE needed was detail on the vault itself, which is
+       what the stacks below are. */
+    winRow(32, 5, 0, 4, 12, 4, 4);
+    winRow(-32, 5, 0, 4, 12, 4, 4);
+    /* Vent stacks PIERCING the vault, staggered down its slopes. Surface-matching a curve is
+       fiddly and unnecessary - a cylinder pushed up through the shell from inside meets it
+       wherever it meets it, the depth buffer cuts the join, and what shows is a roof stack
+       with a dark cap: a silhouette break and a second material on the one surface the
+       camera actually sees. */
+    for (var yv2 = 0; yv2 < 3; yv2++) {
+      var yvx = (yv2 & 1 ? -1 : 1) * 15, yvz = -18 + yv2 * 14;
+      _r3Cyl(m, yvx, 24, yvz, 2.6, 12, S[1], S[3], 14);
+      _r3Cyl(m, yvx, 36, yvz, 2.9, 1.4, DK[1], DK[0], 14);
+    }
+    _r3Cyl(m, -W / 2 + 11, 13, -D / 2 + 11, 3.6, 7, S[0], S[3], 18);
 
   } else if (key === 'power') {
     /* Power Plant. RED BRICK with two tall brick chimneys - that is what the cameo shows on
@@ -53,6 +76,8 @@ function _sprBldBase(X, key) {
     _r3Box(m, 0, 13, 4, W - 18, 2, D - 24, K[2], K[3]);                  /* roof */
     _r3Box(m, 0, 15, 4, W - 20, 1.2, 4, B.roof, B.roof);                 /* team band */
     winRow(D / 2 - 6, 3, 0, 3, 11, 5, 5);
+    X.skylight(-6, 15, 6, 7, 5);
+    X.hatch(8, 15, 7, 4, 4);
     _r3Box(m, 0, 0, D / 2 - 6, 10, 8, 4, DK[0], DK[1]);                  /* door */
     for (var pk = 0; pk < 2; pk++) {
       var pxx = -9 + pk * 18;
@@ -151,6 +176,9 @@ function _sprBldBase(X, key) {
     _r3Slab(m, 0, 3, 0, W - 8, 9, D - 8, 2.5, P[0], P[1]);               /* pale walls */
     for (var fp = 0; fp < 4; fp++)                                       /* wall piers */
       _r3Box(m, -W / 2 + 9 + fp * ((W - 18) / 3), 3, -D / 2 + 5, 3, 9, 2, P[3], P[2]);
+    winRow(-D / 2 + 6, 5, 0, 4, 13, 5, 4);                               /* back wall, lit */
+    X.vent(-W / 2 + 8, 12, -D / 2 + 9, 2.2, 3.6);
+    X.hatch(W / 2 - 10, 12, -D / 2 + 9, 5, 4);
     /* The ribs repeat along the DEPTH, each one spanning the full width. _r3Gable's ridge
        runs along x with its slopes facing +z and -z, so repeating it across the width just
        gives five copies of the same big front slope side by side - vertical stripes, which

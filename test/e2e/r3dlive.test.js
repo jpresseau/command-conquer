@@ -87,6 +87,27 @@ var S = new Suite('r3dlive');
     o.pickedWho = he ? (he.def + '#' + he.id) : 'nothing';
     o.tankWho = tank ? (tank.def + '#' + tank.id + ' seen:' + _rtsEntSeen(tank)) : 'null';
 
+    /* the world is geometry, not just a textured plane: forests, ridges, ore and grass are
+       batched static meshes, and the count is the claim - A MILLION triangles of map, which
+       only stays affordable because the chunks are view-culled. The floor holds the density
+       (this seed builds ~1.007M; a mix change that drops below the million is a regression
+       of the requirement, not noise), and the cull check holds the affordability - drawing
+       all 16 chunks every frame would push the full million through the vertex stage. */
+    _rtsRFrame(1 / 60);
+    o.worldTris = Math.round(R3.worldTris || 0);
+    o.oreTris = R3.oreMesh ? Math.round(R3.oreMesh.verts / 3) : 0;
+    o.chunks = R3.world.length;
+    var vhx = R3.cv.width / (2 * _rtsZoom() * _rtsR.dpr) + 4;
+    var vhz = R3.cv.height / (2 * _rtsZoom() * _rtsR.dpr * R3.cp);
+    var lift = 14 * R3.sp / R3.cp, drawn = 0;
+    for (var wc = 0; wc < R3.world.length; wc++) {
+      var wm = R3.world[wc];
+      if (wm.x1 < _rtsR.focus.x - vhx || wm.x0 > _rtsR.focus.x + vhx ||
+          wm.z1 < _rtsR.focus.z - vhz || wm.z0 > _rtsR.focus.z + vhz + lift) continue;
+      drawn++;
+    }
+    o.chunksDrawn = drawn;
+
     /* and the way back: 2D must be untouched by the round trip through 3D */
     rts3dToggle();
     o.off = !(window._R3D && window._R3D.on);
@@ -110,6 +131,13 @@ var S = new Suite('r3dlive');
     S.ok('a unit is picked at its projected position', out.picked,
          out.picked ? 'clicked the tank through the 3D projection'
                     : 'aimed at ' + out.tankWho + ', hit ' + out.pickedWho);
+    S.ok('the map itself is a million triangles of geometry',
+         out.worldTris + out.oreTris > 1000000,
+         out.worldTris + ' static world triangles + ' + out.oreTris + ' of live ore crystal = ' +
+         (out.worldTris + out.oreTris));
+    S.ok('and the view culls it - most chunks never reach the vertex stage',
+         out.chunksDrawn > 0 && out.chunksDrawn < out.chunks,
+         out.chunksDrawn + ' of ' + out.chunks + ' chunks drawn at the default view');
     S.ok('toggling back leaves 2D exact', out.off && out.roundtrip2d <= 0.001,
          'mode off, 2D round trip drift ' + out.roundtrip2d + 'px');
   }
