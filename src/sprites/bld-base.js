@@ -34,10 +34,28 @@ function _sprBldBase(X, key) {
        every base opens with and the largest thing on screen. Sliced and alternated it reads as
        a corrugated hangar - which is what an arched shed of this size actually is - and the
        arch itself is untouched, so the silhouette that identifies it survives. */
-    var YR = 6, YRD = (D - 8) / YR;
-    for (var yv = 0; yv < YR; yv++)
-      _r3Vault(m, 0, 12, (yv - (YR - 1) / 2) * YRD, W - 8, 22, YRD - 0.4,
-               (yv & 1) ? C[1] : C[0], 18, true);
+    /* FOURTEEN RIBS, AND THEY HAVE A DEPTH. The first cut was six slices that differed only in
+       COLOUR - every one the same width and the same height - so it was not corrugation at
+       all, it was six painted stripes on one smooth vault. At the top zoom each stripe is
+       around sixty device pixels of flat tone with a hard edge between: a staircase down the
+       roof rather than a fluted shed.
+
+       Corrugation is a SHAPE. Alternate ribs are narrower and a little lower, so each presents
+       its own angle and the shading does the work the colour was being asked to fake; the tone
+       alternation stays, but it now agrees with the geometry instead of standing in for it.
+       Fourteen at this depth is a rib about every two art pixels, fine enough to read as a
+       surface rather than as bands.
+
+       Raising _r3Vault's segment count would have been the wrong knob, and was measured as
+       such: 18 to 72 segments moves 6,102 of the yard's 27,780 pixels at a mean delta of
+       4.63/255, with the silhouette shifting two pixels at most. Invisible, and pure cost. */
+    var YR = 14, YRD = (D - 8) / YR;
+    for (var yv = 0; yv < YR; yv++) {
+      var rib = yv & 1;
+      _r3Vault(m, 0, 12, (yv - (YR - 1) / 2) * YRD,
+               W - 8 - (rib ? 1.7 : 0), 22 - (rib ? 0.9 : 0), YRD - 0.25,
+               rib ? C[1] : C[0], 18, true);
+    }
     _r3Box(m, 0, 33, 0, 10, 1.6, D - 12, B.roof, B.roof);                /* ridge band - team */
     _r3Box(m, 0, 0, D / 2 - 4, W - 26, 12, 5, DK[2], DK[0]);             /* the opening */
     _r3Box(m, 0, 12, D / 2 - 4, W - 22, 2.5, 6, C[3], C[3]);             /* its lintel */

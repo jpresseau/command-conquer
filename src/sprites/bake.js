@@ -305,13 +305,42 @@ function _sprCol(hex) {
   var n = parseInt(hex.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
-/* Soft drop shadow under a finished silhouette, offset down-right like the whole genre. */
-function _sprShadow(cv, dx, dy) {
+/* Drop shadow under a finished silhouette, offset down-right like the whole genre - and now
+   actually SOFT, which the comment here claimed for a long time while the code drew a 1-bit
+   copy of the silhouette flat black at 30%.
+
+   This is the only object shadow anywhere in the 2D game: the ground has no lighting model
+   that could cast one, so contact between a building and the dirt is entirely this. Hard-edged
+   it read as a second black sprite lying beside the first rather than as shade, most obviously
+   at the top zoom, where the 6-pixel offset on a structure is a dozen device pixels of pure
+   black step.
+
+   BLURRED BY SUPERPOSITION rather than by ctx.filter. A stack of copies over a small disc is
+   arithmetic every canvas implementation has had for a decade; `filter: blur()` on a 2D
+   context is comparatively recent and is exactly the kind of thing an older phone browser
+   ignores in silence - and an ignored blur is the old hard shadow back with nothing to say it
+   failed. The cost is bake-time only, paid once at load.
+
+   The taps COMPOSE rather than add, so a fully covered pixel reaches 1 - (1 - a)^n; `a` is
+   solved from that so the core still lands on the 0.30 this always used, and the rim, which
+   only some of the taps reach, falls away from there. */
+function _sprShadow(cv, dx, dy, soft) {
   var W = cv.width, H = cv.height;
   var t = _sprMake(W, H);
-  t.g.globalAlpha = 0.30;
-  t.g.drawImage(cv, dx, dy);
+  var r = soft == null ? RTS_PS : soft;          /* penumbra radius, in baked pixels */
+  var taps = [];
+  for (var oy = -r; oy <= r; oy++) {
+    for (var ox = -r; ox <= r; ox++) {
+      if (ox * ox + oy * oy > r * r + 0.01) continue;    /* a disc, not a square */
+      taps.push([ox, oy]);
+    }
+  }
+  var a = taps.length > 1 ? 1 - Math.pow(0.70, 1 / taps.length) : 0.30;
+  t.g.globalAlpha = a;
+  for (var i = 0; i < taps.length; i++) t.g.drawImage(cv, dx + taps[i][0], dy + taps[i][1]);
   t.g.globalAlpha = 1;
+  /* source-in keeps the accumulated ALPHA and replaces only the colour, so the falloff the
+     taps just built survives being turned black */
   t.g.globalCompositeOperation = 'source-in';
   t.g.fillStyle = '#000'; t.g.fillRect(0, 0, W, H);
   t.g.globalCompositeOperation = 'source-over';
