@@ -11,31 +11,56 @@
 
 /* Conifers, baked from 3D like everything else. They were stacked 2D ellipses before, which
    left the forest looking like flat cut-outs while the buildings beside it had volume - and
-   the forest is a fifth of the map, so it set the tone for the whole picture. Three size
-   variants, picked per cell. */
+   the forest is a fifth of the map, so it set the tone for the whole picture.
+
+   BAKED AT RTS_PS AND DRAWN PER FRAME, not stamped into the ground canvas. Until this, one
+   tree per forest cell was painted into the 3072-square terrain bake, and the result was that
+   a forest did not read as a forest at all. Measured on that canvas, a cell entirely enclosed
+   by forest against a cell entirely enclosed by grass: 60 tones against 74, mean luminance
+   81.9 against 76.9 - the FOREST WAS BRIGHTER - and a narrower range at that. A quarter of the
+   map was drawn as mottled green.
+
+   The arithmetic says why. One sprite per cell, 24 art pixels wide against a 24-pixel cell,
+   only 289 of its 816 pixels opaque, jittered by up to eight pixels so each tree half-leaves
+   its own cell: canopy coverage lands around a third, and a third of a canopy over grass is
+   grass. The 3D mode reads as forest from the same terrain data because world3d.js puts two
+   or three full-height trees on every forest cell.
+
+   The bake could not be fixed in place. The terrain canvas is RTS_N * RTS_TS = 3072 square and
+   cannot double - 6144 square is 144 MB of RGBA, which is a dead tab on a phone - so anything
+   stamped into it is capped at Red Alert's 24 pixels a cell no matter how good the sprite is.
+   Drawn per frame instead, a tree is an ordinary sprite: it can be baked at RTS_PS like every
+   other model, several can stand on one cell, and the 3D mode can skip them because it has
+   real geometry for the same trees. (It did not skip them before: the flat baked trees were
+   sitting under the 3D conifers, which is the same doubling the ore had.)
+
+   FIVE VARIANTS, not three - a forest at two or three trees a cell shows its repeats far more
+   readily than one at one. */
 var _RTS_TREES = null;
 function _sprTrees() {
   if (_RTS_TREES) return _RTS_TREES;
   /* Real trees when the player's own files are loaded. Ours next to the original's ground was
      the one thing in the first pass that looked plainly wrong - bright cones on RA's dark
-     temperate grass. */
+     temperate grass. Those carry no `ps` and read as 1, so they draw at their own size. */
   if (typeof _mixTrees === 'function') {
     var real = _mixTrees();
     if (real) return (_RTS_TREES = real);
   }
-  var TR = RTS_PAL.tree, out = [];
-  for (var v = 0; v < 3; v++) {
-    var sc = [0.82, 1.0, 1.22][v], m = [];
+  var TR = RTS_PAL.tree, out = [], PS = RTS_PS;
+  for (var v = 0; v < 5; v++) {
+    var sc = [0.74, 0.86, 1.0, 1.13, 1.28][v], m = [];
     _r3Cyl(m, 0, 0, 0, 1.6 * sc, 5 * sc, TR[4], TR[4], 8);            /* trunk */
-    var tiers = v === 1 ? 4 : 3;
+    var tiers = (v & 1) ? 4 : 3;
     for (var i = 0; i < tiers; i++) {
       var f = i / tiers;
       var r0 = 8 * sc * (1 - f * 0.55), r1 = r0 * 0.42;
       var y = (3 + f * 13) * sc, h = 6.5 * sc;
       _r3Cone(m, 0, y, 0, r0, r1, h, i === tiers - 1 ? TR[1] : TR[0], 12);
     }
-    var r = _r3BakeFootprint(m, RTS_TS, RTS_TS);
-    out.push({ c: _sprShadow(r.c, 3, 3), head: r.head });
+    var r = _r3BakeFootprint(PS === 1 ? m : _r3Scale(m, PS), RTS_TS * PS, RTS_TS * PS);
+    var cc = _sprShadow(r.c, 3 * PS, 3 * PS);
+    cc.ps = PS;
+    out.push({ c: cc, head: r.head });
   }
   _RTS_TREES = out;
   return out;
