@@ -128,6 +128,11 @@ function rtsOpen(seed) {
   _rtsWatchSize();
   /* rtsOpen runs off a real click, so this is a valid gesture to unlock WebAudio */
   if (typeof _rtsAudioInit === 'function') { _rtsAudioInit(); _rtsAudioResume(); _rtsMusicStart(); }
+  /* A player who chose 3D chose it for the game, not for one match: without this the mode came
+     back off after every reload and every new battle, which reads as the toggle having been
+     ignored rather than as a default. Restored here because it needs the canvases and the
+     button to exist, and before the first frame so nothing paints in the wrong mode. */
+  if (typeof rts3dRestore === 'function') rts3dRestore();
   if (_load) _rtsSay('Battle resumed.');
   else _rtsSay(rtsArmyName('player') + ' command online. Build a Refinery to start earning.');
   _rtsUI.last = (new Date()).getTime();

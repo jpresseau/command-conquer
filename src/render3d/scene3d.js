@@ -76,14 +76,33 @@ function _r3dMesh(kind, def, side, part, prone) {
 /* ------------------------------------------------------------------ textures --
    The ground texture IS the 2D renderer's baked terrain canvas, so scorch marks, craters and
    corpses stamped into it appear in 3D too - frame.js sets terrainDirty when it stamps.
-   The fog is rebuilt every frame: RTS_N^2 pixels is a 160x160 image, far below the cost of
-   worrying about dirty flags, and sampling it LINEAR is what turns the 2D mode's hard black
-   cell-steps into a soft-edged boundary for free. */
-function _r3dTexture(gl, old) {
+   The fog is rebuilt every frame: RTS_N^2 pixels is a 128x128 image, far below the cost of
+   worrying about dirty flags.
+
+   THE TWO TEXTURES WANT OPPOSITE MAGNIFICATION FILTERS, and sharing one setting made the
+   ground the blurriest thing in the mode that is supposed to look better.
+
+   The ground is PIXEL ART. The 2D renderer draws it with imageSmoothingEnabled = false, on
+   purpose and at length: art at 24 px a cell magnified to 48 or 144 device pixels has to land
+   on hard pixel blocks, because the alternative is not more detail, it is the same detail
+   smeared. Sampling it LINEAR here did exactly that smearing - at max zoom the ground is
+   magnified about six times, so every baked pixel became a six-pixel gradient and the 3D
+   ground read as mud while the 2D ground beside it read as ground. MAG is NEAREST now, which
+   is the same picture the 2D mode draws.
+
+   MINIFICATION is the other way round: zoomed out, one screen pixel covers several baked
+   pixels, and NEAREST there drops whichever texel it happens to land on and shimmers as the
+   camera pans. So MIN stays LINEAR. (No mipmaps: the terrain canvas is 3072 square, which is
+   not a power of two, and WebGL1 will not mip an NPOT texture.)
+
+   The fog is NOT pixel art - it is one texel per CELL, a signal at 1/24th the ground's
+   resolution, and its whole job is to be a soft boundary. LINEAR magnification is what turns
+   the 2D mode's hard black cell-steps into a soft edge for free, so it keeps it. */
+function _r3dTexture(gl, old, mag) {
   var t = old || gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, t);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, mag || gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   return t;
@@ -122,7 +141,7 @@ function _r3dFrame(G) {
   var cam = [R.focus.x, R.focus.z, 2 * z * R.dpr / R3.cv.width, 2 * z * R.dpr / R3.cv.height];
 
   if (R3.terrainDirty && R.terrain) {
-    R3.terrainTex = _r3dTexture(gl, R3.terrainTex);
+    R3.terrainTex = _r3dTexture(gl, R3.terrainTex, gl.NEAREST);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, R.terrain);
     R3.terrainDirty = false;
   }
@@ -168,6 +187,8 @@ function _r3dFrame(G) {
   var uScale = gl.getUniformLocation(R3.meshP, 'uScale');
   var uScaleY = gl.getUniformLocation(R3.meshP, 'uScaleY');
   var uTint = gl.getUniformLocation(R3.meshP, 'uTint');
+  var uA = gl.getUniformLocation(R3.meshP, 'uA');
+  gl.uniform1f(uA, 1);
   var aP = gl.getAttribLocation(R3.meshP, 'aP');
   var aN = gl.getAttribLocation(R3.meshP, 'aN');
   var aC = gl.getAttribLocation(R3.meshP, 'aC');
@@ -230,24 +251,36 @@ function _r3dFrame(G) {
      units with depth WRITES off, so the discs never punch holes in the depth buffer that the
      meshes above them would then fail against. */
   if (!R3.shadowMesh) {
-    var sm = [], SEG = 14, ring = [];
+    var sm = [], SEG = 20, ring = [];
     for (var sv = 0; sv < SEG; sv++) {
       var sa = sv / SEG * Math.PI * 2;
       ring.push([Math.cos(sa) * 3, 0.05, Math.sin(sa) * 3]);
     }
-    /* Ground-dark, not black: the mesh program draws opaque, so a black disc reads as a hole
-       punched in the terrain rather than as shade on it. This is the baked dirt's own dark
-       tone, which is what a hard shadow on that ground would actually be. */
-    sm.push({ v: ring, c: [38, 41, 32] });
+    /* BLENDED, not opaque. This disc used to be drawn solid in the baked dirt's dark tone, on
+       the reasoning that a hard shadow on that ground would be that colour - but an opaque
+       disc does not darken the ground, it REPLACES it, so it read as a hole cut in the map
+       rather than as shade, and under infantry (whose disc came out wider than the figure) as
+       a soldier standing in a puddle of void. It multiplies now: a neutral dark at a third
+       alpha, which darkens grass, dirt, ore and road alike and keeps whatever detail is
+       underneath - which is the whole difference between a shadow and a hole. */
+    sm.push({ v: ring, c: [16, 18, 14] });
     R3.shadowMesh = _r3dBuildMesh(gl, sm);
   }
   gl.depthMask(false);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.uniform1f(uA, 0.34);
   for (var si2 = 0; si2 < G.ents.length; si2++) {
     var se = G.ents[si2];
     if (se.dead || se.type !== 'unit') continue;
-    var sr = (rtsUnitDef(se.def).r || 1.5) * 0.9;
+    /* 0.62, not 0.9. A shadow the size of the unit's own collision radius is wider than the
+       thing casting it for anything small - infantry sat inside a disc noticeably bigger than
+       they were - and reads as a pad rather than as contact. */
+    var sr = (rtsUnitDef(se.def).r || 1.5) * 0.62;
     draw(R3.shadowMesh, se.x, 0, se.z, 0, sr / 3, false);
   }
+  gl.uniform1f(uA, 1);
+  gl.disable(gl.BLEND);
   gl.depthMask(true);
 
   for (var i = 0; i < G.ents.length; i++) {

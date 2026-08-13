@@ -77,9 +77,15 @@ var R3D_MESH_VS =
   '  float d  = ((wp.z - uCam.y) * uTilt.y + wp.y * uTilt.x);' +
   '  gl_Position = vec4(sx, -sy, -d / ' + R3D_DEPTH_RANGE.toFixed(1) + ', 1.0);' +
   '}';
+/* uA exists for the contact shadows and for nothing else. They are flat discs drawn through
+   this same program, and drawn OPAQUE they were not shadows at all - they were holes cut in
+   the ground, which under infantry (whose disc came out wider than the figure) read as a unit
+   standing in a puddle of void. A shadow has to darken what is under it rather than replace
+   it, and that needs blending, which needs an alpha the fragment shader can write. Every
+   other draw sets it to 1 and is unchanged. */
 var R3D_MESH_FS =
-  'precision mediump float; varying vec3 vC;' +
-  'void main(){ gl_FragColor = vec4(vC, 1.0); }';
+  'precision mediump float; varying vec3 vC; uniform float uA;' +
+  'void main(){ gl_FragColor = vec4(vC, uA); }';
 
 /* Ground and fog share one textured program; fog just samples a different texture with
    blending on and the depth test off. */
@@ -123,13 +129,25 @@ function _r3dInit() {
   return R3;
 }
 
-/* The toggle the button calls. Lazy init so a machine without WebGL pays nothing and is told
-   plainly rather than shown a black screen. */
-function rts3dToggle() {
+/* Which mode the player last chose. localStorage rather than the IndexedDB store in
+   rts.store.js, for the same reason the title screen's controls panel uses it: that store
+   exists to hold megabytes of archives and this is one boolean. Wrapped because private
+   browsing throws on access rather than returning null, and a disabled store must cost a
+   preference, not the battle. */
+var RTS_3D_LS = 'rcc.mode3d';
+
+/* Lazy init so a machine without WebGL pays nothing and is told plainly rather than shown a
+   black screen. `quiet` is for restoring the saved choice at match start: no click sound for
+   something the player did not just click, and no complaint about WebGL on a machine that
+   never had it - it simply stays in 2D. */
+function _r3dApply(on, quiet) {
   var R3 = window._R3D;
   if (!R3) R3 = _r3dInit();
-  if (!R3) { _rtsSay('3D needs WebGL, which this browser did not provide.'); return; }
-  R3.on = !R3.on;
+  if (!R3) {
+    if (!quiet) _rtsSay('3D needs WebGL, which this browser did not provide.');
+    return false;
+  }
+  R3.on = !!on;
   /* the canvas stays hidden either way - it is a buffer the 2D frame blits, not a layer the
      compositor stacks; see the note at the blit in render/frame.js */
   /* the world moved between canvases, so both need a clean slate */
@@ -137,7 +155,23 @@ function rts3dToggle() {
   var btn = document.getElementById('rts3dBtn');
   if (btn) { btn.classList.toggle('on', R3.on); btn.title = R3.on ? 'Back to classic 2D' : 'Switch to 3D'; }
   _r3dResize();
-  if (typeof _rtsSfx === 'function') _rtsSfx('click');
+  if (!quiet && typeof _rtsSfx === 'function') _rtsSfx('click');
+  return true;
+}
+
+/* The toggle the button calls. */
+function rts3dToggle() {
+  var R3 = window._R3D;
+  if (!_r3dApply(!(R3 && R3.on), false)) return;
+  try { window.localStorage.setItem(RTS_3D_LS, window._R3D.on ? '1' : '0'); } catch (e) {}
+}
+
+/* Called once per match from rtsOpen. Only ever turns the mode ON: 2D is the default and an
+   absent or unreadable preference must land there. */
+function rts3dRestore() {
+  var want = null;
+  try { want = window.localStorage.getItem(RTS_3D_LS); } catch (e) { return; }
+  if (want === '1') _r3dApply(true, true);
 }
 
 function _r3dResize() {
