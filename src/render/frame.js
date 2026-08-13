@@ -68,16 +68,36 @@ function _rtsRFrame(dt) {
       var px = Math.round(_rtsSX(_rtsWX(tx) - RTS_TILE / 2));
       var py = Math.round(_rtsSY(_rtsWX(tz) - RTS_TILE / 2));
       if (isWater) {
-        /* The crest highlights step round a four-frame cycle, so the lake moves. */
+        /* The crest highlights step round a four-frame cycle, so the lake moves. Still drawn
+           in 3D: the GL side has no water surface of its own yet, so without this the sea is
+           a flat painted colour. It is the one world overlay that still covers the buffer. */
         g.drawImage(S.wave[(_RTS_PULSE.wf + tx + tz) & 3], px, py, cell, cell * ys);
         continue;
       }
+      /* IN 3D THE ORE IS REAL GEOMETRY, so this flat tile must not be painted over it. Every
+         other 2D world layer is already gated on r3on - the terrain blit above, the pads, the
+         sprites, the shroud - and this loop was missed. Measured over a full field at max
+         zoom, the composited frame differed from the raw GL buffer in 77.2% of its pixels
+         (50.0% of them by more than 60 levels); with the ore skipped it is 0.1%. This single
+         ungated loop was burying the ~47k crystal triangles world3d.js builds every frame,
+         and it is most of why the 3D toggle "looked exactly the same" as 2D. */
+      if (r3on) continue;
       /* The number of density steps comes from the sprite set, not from a literal: ours has
          four, the original's gold has TWELVE and its gems three. Hard-coding 4 here worked
          until real art arrived and then quietly showed a third of a field. */
       var set = (G.gems && G.gems[idx] ? S.gem : S.ore);
-      var stage = Math.min(set.length - 1, Math.floor(ore / RTS_SCRAP_TILE * set.length));
-      var vari = (tx * 7 + tz * 13) % set[stage].length;
+      /* A FULL CELL IS RICHNESS-SCALED, not RTS_SCRAP_TILE. core/ore.js seeds a cell with
+         `(lvl+1)/LEVELS * RTS_SCRAP_TILE * RTS_ORE_RICHNESS`, so at richness 0.51 the richest
+         cell on the map holds 255 of a nominal 500 - and dividing by the nominal value asked
+         the last stage for ore that cannot exist. Measured over a seeded map the stage
+         histogram was [86, 300, 411, 0]: a quarter of the ore artwork was dead. */
+      var full = RTS_SCRAP_TILE * (typeof RTS_ORE_RICHNESS === 'number' ? RTS_ORE_RICHNESS : 1);
+      var stage = Math.min(set.length - 1, Math.floor(ore / full * set.length));
+      /* Hashed, not arithmetic. `(tx*7 + tz*13) % 3` collapses to `(tx + tz) % 3`, because 7
+         and 13 are both 1 mod 3 - verified identical for all 797 ore cells of a seeded map -
+         so the three anti-repetition variants laid out as diagonal ribbons on a three-cell
+         lattice instead of breaking the field up. */
+      var vari = Math.floor(_sprHash(tx, tz, 6101) * set[stage].length) % set[stage].length;
       g.drawImage(set[stage][vari], px, py, cell, cell * ys);
     }
   }
@@ -362,8 +382,17 @@ function _rtsRFrame(dt) {
     var gx = Math.round(_rtsSX(_rtsWX(R.ghost.tx) - RTS_TILE / 2));
     var gy = Math.round(_rtsSY(_rtsWX(R.ghost.tz) - RTS_TILE / 2));
     g.globalAlpha = 0.55;
-    g.drawImage(gspr.c, gx, gy - Math.round(gspr.head * TSscale),
-      Math.round(gspr.c.width * TSscale), Math.round(gspr.c.height * TSscale));
+    /* DIVIDE BY THE SCALE THE SPRITE WAS BAKED AT, exactly as _rtsDrawStruct does. This was
+       the one draw site that missed it, so the ghost came out at RTS_PS times its real size -
+       measured at zoom 48, the Construction Yard ghost was drawn 288x448 with its head offset
+       at 160 where 144x224 and 80 are correct, inside a footprint box the very next statement
+       strokes correctly at 144x144. On a 390 CSS px phone that is a translucent building 74%
+       of the screen wide, floating above and beside the green box telling you where it will
+       actually land. Procedural art only: real Red Alert art carries no `ps` and reads as 1,
+       so a player with their own archives loaded never saw this. */
+    var gsc = TSscale / (gspr.c.ps || 1);
+    g.drawImage(gspr.c, gx, gy - Math.round(gspr.head * gsc),
+      Math.round(gspr.c.width * gsc), Math.round(gspr.c.height * gsc));
     g.globalAlpha = 1;
     g.strokeStyle = R.ghost.ok ? '#7fe07f' : '#e05a4a';
     g.lineWidth = 2;

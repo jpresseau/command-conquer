@@ -126,6 +126,90 @@ var S = new Suite('cameo');
   S.ok('...leaving the ordinary description behind', /Commando/.test(cleared.after),
        JSON.stringify(cleared.after));
 
+  /* ---------- 4. no cameo is nearest-neighbour DOWNSCALED onto its plate ----------
+
+     A cameo is composited with imageSmoothingEnabled = false so the artwork keeps its hard
+     pixel edges, and under that flag a reduction drops source pixels irregularly - the
+     "chewed" look, which is a different fault from merely soft. The plate therefore has to be
+     at least as large as the largest sprite it must hold.
+
+     It was a literal, justified in its own comment by "the largest building sprite is 72px".
+     RTS_PS then doubled every procedural bake underneath it and nothing recomputed the
+     literal, so a third of the cameos quietly went back onto the reduction path the literal
+     existed to escape - the Construction Yard at 0.661. The plate is measured from the sprites
+     now, and this asserts the PROPERTY (nothing reduces) rather than a number, so the same rot
+     cannot recur through a future density change. */
+  var plates = await g.page.evaluate(async function () {
+    /* The plate size is read off a REAL cameo - the PNG _rtsMakeIcons produced - not from the
+       sizing helper, so reverting the helper to a literal fails this rather than being
+       recomputed identically on both sides. */
+    var S = _rtsSprites(), side = 'player', icons = _rtsMakeIcons(side);
+    var probe = await new Promise(function (res) {
+      var im = new Image();
+      im.onload = function () { res(im.naturalWidth); };
+      im.onerror = function () { res(0); };
+      im.src = icons[RTS_STRUCTS[0].key];
+    });
+    var down = [], worst = 1, i, c;
+    function chk(key, src, pad) {
+      if (!src) return;
+      var sc = Math.min((probe - pad * 2) / src.width, (probe - pad * 2) / src.height);
+      if (sc < 1) { down.push(key + ' @' + sc.toFixed(3)); worst = Math.min(worst, sc); }
+    }
+    for (i = 0; i < RTS_STRUCTS.length; i++) {
+      c = S.bld[side][RTS_STRUCTS[i].key]; chk(RTS_STRUCTS[i].key, c && c.c, 6);
+    }
+    for (i = 0; i < RTS_UNITS.length; i++) {
+      c = S.unit[side][RTS_UNITS[i].key]; chk(RTS_UNITS[i].key, c && c[6], 14);
+    }
+    return { plate: probe, down: down, worst: worst,
+             total: RTS_STRUCTS.length + RTS_UNITS.length };
+  });
+  S.ok('no cameo is squeezed onto its plate', plates.down.length === 0,
+       plates.total + ' cameos on a ' + plates.plate + 'px plate, none reduced' +
+       (plates.down.length ? ' - except ' + plates.down.slice(0, 6).join(', ') : '') +
+       ' (the stale 160px literal reduced ten of them, worst 0.661)');
+
+  /* ---------- 5. the placement ghost is drawn at its real size ----------
+     Every sprite draw divides by the density its canvas was baked at; this one site did not,
+     so the translucent preview came out RTS_PS times too large and floated above and beside
+     the footprint box that the very next statement strokes correctly. */
+  var ghost = await g.page.evaluate(function () {
+    var R = _rtsR, S = _rtsSprites(), G = window._rtsG;
+    R.zi = RTS_ZOOMS.length - 1; R.cell = RTS_ZOOMS[R.zi];
+    /* Ghost a structure the player has NOT built, so the only draw of that canvas in the
+       frame is the ghost itself and there is no real building to confuse it with. */
+    var key = null;
+    for (var i = 0; i < RTS_STRUCTS.length; i++) {
+      var k = RTS_STRUCTS[i].key;
+      if (!_rtsHas('player', k) && S.bld.player[k]) { key = k; break; }
+    }
+    if (!key) return { key: null };
+    var def = rtsStructDef(key), spr = S.bld.player[key];
+    _rtsGhostShow(key);
+    _rtsGhostMove(_rtsTX(R.focus.x), _rtsTX(R.focus.z), true);
+
+    /* observe the actual draw, exactly as the ore spec does */
+    var got = null, orig = R.g.drawImage;
+    R.g.drawImage = function (img) {
+      if (img === spr.c) got = { w: arguments[3], h: arguments[4] };
+      return orig.apply(this, arguments);
+    };
+    _rtsRFrame(1 / 60);
+    R.g.drawImage = orig;
+    _rtsGhostHide();
+    return { key: key, drawnW: got && got.w, boxW: def.w * R.cell,
+             srcW: spr.c.width, ps: spr.c.ps || 1, cell: R.cell };
+  });
+  S.ok('a structure the player has not built was available to ghost', !!ghost.key,
+       ghost.key || 'none');
+  S.eq('the ghost is drawn exactly as wide as the footprint it will occupy',
+       ghost.drawnW, ghost.boxW);
+  S.ok('...which an undivided draw could not be', ghost.ps > 1,
+       'the ' + ghost.key + ' sprite is baked at ps=' + ghost.ps + ' (' + ghost.srcW +
+       'px), so skipping the divide would draw ' + (ghost.srcW * ghost.cell / 24) +
+       'px into a ' + ghost.boxW + 'px box');
+
   S.ok('the page logged no errors', !g.errors.length, g.errors.slice(0, 3).join(' | ') || 'clean');
 
   await g.close();

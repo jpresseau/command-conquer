@@ -69,24 +69,52 @@ function _rtsRDispose() {
 
 /* ------------------------------------------------------------- sidebar icons --
    The sprites already are the artwork, so an icon is just the sprite on a dark plate. */
+
+/* The plate size, MEASURED from the sprites rather than written down. A literal here has gone
+   stale once already - it was derived from a 72px largest building and RTS_PS then doubled
+   every procedural bake under it, which silently put ten of twenty-six cameos back onto the
+   nearest-neighbour downscale path the literal existed to escape. Reading the sprites means
+   the plate follows the art, whatever density it is baked at.
+
+   Rounded up to a multiple of 16 so the value moves in visible steps rather than jittering by
+   a pixel whenever a model's silhouette changes, and floored at the old 160 so a hypothetical
+   small-sprite set cannot shrink the cameos. */
+function _rtsIconPlate(S, side) {
+  var big = 0, i, c;
+  for (i = 0; i < RTS_STRUCTS.length; i++) {
+    c = S.bld[side][RTS_STRUCTS[i].key];
+    if (c && c.c) big = Math.max(big, c.c.width, c.c.height);
+  }
+  for (i = 0; i < RTS_UNITS.length; i++) {
+    c = S.unit[side][RTS_UNITS[i].key];
+    if (c && c[6]) big = Math.max(big, c[6].width, c[6].height);
+  }
+  return Math.max(160, Math.ceil((big + 16) / 16) * 16);
+}
+
 function _rtsMakeIcons(side) {
   var S = _rtsSprites(), out = {}, i;
   function plate(src, pad) {
-    /* 128, not 64. The tile displays these at about 103px, so a 64px plate was being blown up
-       1.6x by CSS - and worse, the sprite was nearest-neighbour DOWNSCALED into it first (a
-       72px building squeezed to 52), which drops pixels irregularly and is what made the
-       cameos look chewed rather than merely soft. Building at 128 means the sprite is never
-       reduced and the browser's final fit is a downscale, which is the direction that is
-       forgiving. */
-    var n = 160, t = _sprMake(n, n), g = t.g;
+    /* The plate must never REDUCE the sprite. A cameo is drawn with smoothing off so the
+       artwork keeps its hard pixel edges, and nearest-neighbour reduction drops source pixels
+       irregularly - which is the "chewed" look, distinct from merely soft.
+
+       This has now been wrong twice for the same reason, and the sizing is derived rather than
+       chosen so it cannot rot a third time. The note that replaced 64 with 160 justified it as
+       "the largest building sprite is 72px, and 72*2 + 8*2 = 160" - true when it was written,
+       and stale the moment RTS_PS doubled every procedural bake. Measured against the actual
+       sprites afterwards, ten of twenty-six cameos were being downscaled: the Construction
+       Yard at 0.661, Advanced Power 0.712, Power 0.751, Refinery 0.800.
+
+       So the plate is sized from the sprites themselves at load. `_rtsIconPlate` walks every
+       structure and unit sprite this side will show, takes the largest dimension, and returns
+       a plate big enough to hold it at 1:1 with padding - so the scale below can never fall
+       under 1 no matter what RTS_PS becomes. */
+    var n = _rtsIconPlate(S, side), t = _sprMake(n, n), g = t.g;
     g.imageSmoothingEnabled = false;
     var grd = g.createLinearGradient(0, 0, 0, n);
     grd.addColorStop(0, '#2b3a4c'); grd.addColorStop(1, '#131b25');
     g.fillStyle = grd; g.fillRect(0, 0, n, n);
-    /* 160 is not arbitrary: the largest building sprite is 72px, and 72*2 + 8*2 of padding is
-       exactly 160. One size smaller and the biggest cameos fall back to 1x and end up drawn
-       SMALLER than the 64px plate managed, which is how the first attempt at this traded
-       sharpness for size. */
     var m = n - (pad || 8) * 2;
     /* Whole-number scaling only. A pixel-art sprite enlarged by 1.7 gives some source pixels two
        screen pixels and others one, which reads as a wobble along every straight edge; clamping
