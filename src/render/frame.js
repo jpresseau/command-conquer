@@ -102,6 +102,48 @@ function _rtsRFrame(dt) {
     }
   }
 
+  /* --- the forest, drawn rather than baked ---------------------------------------------
+     These used to be stamped into the terrain canvas at one 24-pixel tree a cell, and a
+     forest measured BRIGHTER than bare grass because a single 35%-opaque sprite jittered off
+     its own cell covers about a third of it. That canvas is capped at Red Alert's tile
+     density and cannot grow, so the trees came out of it: as sprites they bake at RTS_PS and
+     several can stand on one cell, which is what makes a grove close up.
+
+     SKIPPED IN 3D, like the ore - render3d/world3d.js grows real conifers from the same cells,
+     and until the trees left the bake the flat ones were sitting underneath them.
+
+     TREES PER CELL TAPERS WITH ZOOM. It is not a performance dodge, it is what the picture
+     wants: zoomed out a cell is twelve pixels and three overlapping canopies are one dark
+     blob, so the extra two cost time and show nothing. Zoomed in they are the difference
+     between a wood and a lawn. The count is also what bounds the cost - at the widest zoom
+     the most forest is on screen and the fewest trees are drawn per cell.
+
+     Drawn back to front so a grove overlaps correctly, and before the units, which keeps the
+     old behaviour of a unit never being hidden by a tree it is standing behind. Depth-sorting
+     trees into the entity pass is a separate change; doing it here would silently alter what
+     the player can see. */
+  if (!r3on && S.tree) {
+    var TPC = cell >= 48 ? 3 : (cell >= 24 ? 2 : 1);
+    var tsc = TSscale / (S.tree[0].c.ps || 1);
+    for (var ftz = tz0; ftz <= tz1; ftz++) {
+      for (var ftx = tx0; ftx <= tx1; ftx++) {
+        if (G.terrain[_rtsIdx(ftx, ftz)] !== RTS_T_TREE) continue;
+        for (var ti = 0; ti < TPC; ti++) {
+          /* hash-placed, never random: the same seed must grow the same wood every frame,
+             and a tree that moved between frames would read as the map shimmering */
+          var jx = (_sprHash(ftx * 3 + ti, ftz, 101) - 0.5) * RTS_TILE * 0.78;
+          var jz = (_sprHash(ftz, ftx * 3 + ti, 103) - 0.5) * RTS_TILE * 0.78;
+          var tv = S.tree[Math.floor(_sprHash(ftx + ti, ftz * 2 + ti, 107) * S.tree.length)
+                          % S.tree.length];
+          var tw = Math.round(tv.c.width * tsc), th = Math.round(tv.c.height * tsc);
+          var tpx = Math.round(_rtsSX(_rtsWX(ftx) + jx) - tw / 2);
+          var tpy = Math.round(_rtsSY(_rtsWX(ftz) + jz) - Math.round(tv.head * tsc) - th / 2);
+          g.drawImage(tv.c, tpx, tpy, tw, th);
+        }
+      }
+    }
+  }
+
   /* --- new scorch marks and craters, stamped once into the baked terrain. Because the
      ground is a single canvas, a smudge costs nothing after the frame it appears on. --- */
   if (G.corpses && G.corpses.length) {

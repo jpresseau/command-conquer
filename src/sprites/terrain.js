@@ -380,20 +380,17 @@ function _rtsBakeTerrain(G) {
     }
   }
 
-  /* --- forest. Conifers, drawn back-to-front down the map so a grove overlaps correctly,
-         each one taller than its cell with a cast shadow. This is the single biggest
-         difference between "a field" and "a battlefield". --- */
-  var trees = _sprTrees();
-  for (tz = 0; tz < N; tz++) {
-    for (tx = 0; tx < N; tx++) {
-      if (G.terrain[_rtsIdx(tx, tz)] !== RTS_T_TREE) continue;
-      /* Jitter close to a full cell. One tree per cell nudged a few pixels still lines up
-         into visible rows; a grove has to look sown, not planted. */
-      var jx = (_sprHash(tx, tz, seed + 101) - 0.5) * 17;
-      var jy = (_sprHash(tz, tx, seed + 103) - 0.5) * 15;
-      var tr = trees[(_sprHash(tx, tz, seed + 107) * 3) | 0];
-      g.drawImage(tr.c, Math.round(tx * TS + jx), Math.round(tz * TS + jy - tr.head));
-    }
-  }
+  /* --- forest. NOT PAINTED HERE ANY MORE.
+
+     The conifers used to be stamped into this canvas, one to a cell. Measured on the finished
+     bake, a cell entirely enclosed by forest against one entirely enclosed by grass came out
+     at 60 tones against 74 and mean luminance 81.9 against 76.9 - the forest was BRIGHTER, and
+     over a narrower range. A quarter of the map was being drawn as mottled green.
+
+     It could not be fixed in place: this canvas is RTS_TS art pixels a cell and cannot grow
+     (6144 square is 144 MB of RGBA), so no better tree fits in it. They are drawn per frame as
+     ordinary sprites now, at RTS_PS and several to a cell, which also lets the 3D mode skip
+     them in favour of its own geometry. See _sprTrees in sprites/scenery.js and the forest
+     pass in render/frame.js. --- */
   return t.c;
 }

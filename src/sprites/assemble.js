@@ -7,6 +7,9 @@ function _rtsSprites() {
     bld: {}, unit: {}, prone: {}, fx: _sprFx(), pad: {} };
   RTS_STRUCTS.forEach(function (d) { S.pad[d.key] = _sprPad(d.w, d.h); });
   S.bag = _sprSandbag();
+  /* The forest. In the sheet rather than stamped into the ground canvas since the trees left
+     the terrain bake - see the note on _sprTrees in sprites/scenery.js. */
+  S.tree = _sprTrees();
   S.wave = _sprWaterCycle();
   S.scorch = _sprScorch();
   S.crater = _sprCrater();
