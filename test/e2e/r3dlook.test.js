@@ -136,6 +136,28 @@ var S = new Suite('r3dlook');
       o.sdRatio = o.sdBare > 0.5 ? +(o.sdShaded / o.sdBare).toFixed(3) : -1;
     }
 
+    /* --- the shader is the baker's shading, not a second copy of it ---
+
+       gl3d.js and r3d/render.js light the same models for two different outputs, and the only
+       thing keeping them agreeing is that the shader reads its constants from the baker rather
+       than repeating them. It used to repeat them, and had drifted: its own 0.40/0.74 ambient
+       and diffuse against the baker's 0.34/0.70, no specular and no sky term at all. This
+       asserts the mechanism that stops it drifting again - the numbers in the compiled shader
+       source ARE R3_AMB, R3_DIF, R3_LIGHT and the baker's half-vector - rather than asserting
+       any particular value, which would just be the drift written down twice more. */
+    var vs = R3D_MESH_VS;
+    o.hasAmb = vs.indexOf(R3_AMB.toFixed(4)) >= 0;
+    o.hasDif = vs.indexOf(R3_DIF.toFixed(4)) >= 0;
+    o.hasLight = vs.indexOf(R3_LIGHT[0].toFixed(6)) >= 0;
+    var half = (function () {
+      var h = [R3_LIGHT[0] + R3_VIEW[0], R3_LIGHT[1] + R3_VIEW[1], R3_LIGHT[2] + R3_VIEW[2]];
+      var m = Math.hypot(h[0], h[1], h[2]);
+      return [h[0] / m, h[1] / m, h[2] / m];
+    })();
+    o.hasHalf = vs.indexOf(half[0].toFixed(6)) >= 0;
+    o.hasSky = vs.indexOf('sky') >= 0;
+    o.strayLiterals = (vs.indexOf('0.40 + 0.74') >= 0) || (vs.indexOf('-0.38, 0.76, 0.53') >= 0);
+
     /* --- the preference survives a fresh match --- */
     o.stored = null;
     try { o.stored = window.localStorage.getItem('rcc.mode3d'); } catch (e) {}
@@ -173,6 +195,16 @@ var S = new Suite('r3dlook');
            'spread over the footprint ' + out.sdBare + ' -> ' + out.sdShaded +
            ' (ratio ' + out.sdRatio + '; an opaque disc is one flat colour, ratio 0)');
     }
+
+    S.ok('the shader takes its light from the sprite baker rather than repeating it',
+         out.hasAmb && out.hasDif && out.hasLight,
+         'ambient/diffuse/light constants of r3d/primitives.js found in the compiled shader');
+    S.ok('...including the specular half-vector and the sky bounce the baker uses',
+         out.hasHalf && out.hasSky,
+         'half-vector ' + (out.hasHalf ? 'present' : 'MISSING') +
+         ', sky term ' + (out.hasSky ? 'present' : 'MISSING'));
+    S.ok('...and carries no hand-copied light of its own to drift', !out.strayLiterals,
+         out.strayLiterals ? 'found the old inline constants' : 'no duplicated constants');
 
     S.ok('the chosen mode is remembered', out.stored === '1', 'stored ' + JSON.stringify(out.stored));
     S.ok('...and a fresh battle opens in it', out.reopened,
