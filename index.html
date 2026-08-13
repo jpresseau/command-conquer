@@ -876,7 +876,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">b8ab1eb · 2026-08-12</div>
+  <div id="rtsBuild" title="build">1a8f7eb · 2026-08-13</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -5686,11 +5686,79 @@ function _rtsBakeTerrain(G) {
   var t = _sprMake(S, S), g = t.g;
   var img = g.createImageData(S, S), d = img.data;
   var gr = RTS_PAL.grass.map(_sprCol), dr = RTS_PAL.dirt.map(_sprCol);
-  var B = 2;                       /* paint in 2px blocks: pixel art ground is clumpy, not TV static */
+  /* PAINT PER PIXEL, NOT IN 2px BLOCKS.
+
+     `B = 2` predates the smooth tone field. It was there because the grain used to be a white
+     noise hash, and 2px blocks made the static clumpier - but the grain is now `_sprVN` at
+     about seven pixels, which does that job properly, and the block was left behind quantising
+     everything laid on top of it. Measured on the finished 3072 bake: 92.7% of horizontally
+     adjacent pixels INSIDE a block were byte-identical against 61.6% across a boundary, and
+     the run-length histogram peaked hard on even lengths (len 2: 17020, len 3: 1096). That is
+     a 12x12 effective texel per cell where there was room for 24x24 - the ground carried half
+     the detail it had space for, and at max zoom on a phone one tone covered a 12px square.
+
+     B = 1 costs NO memory: the canvas is the same 3072 square either way. It costs bake time,
+     which the three dead getImageData calls further down hand back. */
+  var B = 1;
+
+  /* RELIEF, from the field that already shapes the patches.
+
+     There was no lighting model on the ground at all - eight flat tones indexed off noise,
+     measured at a p05-to-p95 luminance span of 39.8 points against 171.5 for the buildings
+     standing on it. The ground read as a flat pattern under objects that had form.
+
+     `_sprFbm` is a height field, and the gradient of a height field is a surface normal, so
+     shading is a two-term dot product against a light from the upper left - the direction the
+     sprite shadows are already cast in, so ground and objects agree about where the sun is.
+     The gradient is FREE: the sample to the left is the previous iteration's and the sample
+     above is one row of cache, so no noise is evaluated twice.
+
+     Quantised to three levels rather than applied continuously. This ground is drawn pixel
+     art - areas of one tone with deliberate marks in them - and a smooth multiply would turn
+     every patch into an airbrushed gradient. Three levels is what an artist does: the tone, a
+     highlight down its lit flank, a shadow down the other. */
+  function _shaded(cols, f) {
+    return cols.map(function (c) {
+      return [Math.min(255, Math.round(c[0] * f)),
+              Math.min(255, Math.round(c[1] * f)),
+              Math.min(255, Math.round(c[2] * f))];
+    });
+  }
+  var grL = _shaded(gr, 1.13), grD = _shaded(gr, 0.86);
+  var drL = _shaded(dr, 1.13), drD = _shaded(dr, 0.86);
+  var RELIEF = 0.004;              /* slope that counts as a face; tuned to the fbm's own scale */
+  var prevRow = new Float32Array(S), leftN = 0;
+
+  /* THE FLECK IS CACHED, THE GRAIN IS NOT, AND THE DIFFERENCE IS NOT A JUDGEMENT CALL.
+
+     `fleck` is hashed on `bx >> 1, by >> 1`, so it is CONSTANT across each 2px block by
+     construction: evaluating it on a 2px lattice and reusing it returns bit-for-bit the same
+     value to every pixel. That is free.
+
+     `grain` is `_sprVN` at ~7px, so caching it the same way LOOKS free and is not - it
+     re-quantises the tone selection to the very lattice this change exists to remove. Caching
+     both measured 1556 ms against 1746 ms, and the identical-adjacent-pixel share barely moved
+     (63.5% -> 63.8%) which is what made it look harmless; but the run-length histogram tells
+     the truth, with even-run dominance going 2.21 -> 2.95 against 15.53 for the old 2px bake.
+     190 ms of one-time bake is not worth putting a third of the block signature back, so the
+     grain stays per-pixel.
+
+     The small saving is itself the finding: `_sprFbm` dominates this loop, not the cheap
+     fields. The honest cost of per-pixel ground is ~600 ms of one-time bake (941 ms at B = 2
+     -> ~1700 ms), and there is nothing more to reclaim here without sampling `n` coarsely -
+     which is the one thing that would put the quantisation back properly. */
+  var fleckRow = new Float32Array(S), gx2;
 
   for (var by = 0; by < S; by += B) {
+    leftN = 0;
+    if ((by & 1) === 0) {
+      for (gx2 = 0; gx2 < S; gx2 += 2) fleckRow[gx2] = _sprHash(gx2 >> 1, by >> 1, seed + 31);
+    }
     for (var bx = 0; bx < S; bx += B) {
       var n = _sprFbm(bx, by, seed);
+      /* slope in +x and +y; a light from the upper left lights whatever rises toward it */
+      var lam = (bx ? n - leftN : 0) + (by ? n - prevRow[bx] : 0);
+      leftN = n; prevRow[bx] = n;
       /* GRAIN USED TO BE A WHITE-NOISE HASH per 2px block, picking one of five tones at random
          with no spatial correlation whatsoever. The comment beside it said "clumpy, not TV
          static", but 2px blocks of white noise ARE static - just chunkier. Measured on the
@@ -5704,8 +5772,8 @@ function _rtsBakeTerrain(G) {
          pixels - patches you can see - and the white noise is demoted to a sparse fleck that
          breaks up the banding without carrying the whole texture. */
       var grain = _sprVN(bx, by, 7, seed + 3);
-      var fleck = _sprHash(bx >> 1, by >> 1, seed + 31);
-      var pal, k;
+      var fleck = fleckRow[bx & ~1];
+      var pal, palL, palD, k;
       /* Bare earth is rare now that the map has roads, beaches and ore aprons on it - an
          earlier threshold of 0.62 put dirt everywhere and the battlefield came out more
          tan than green, which is the opposite of the reference. */
@@ -5720,14 +5788,14 @@ function _rtsBakeTerrain(G) {
          The rim is what sells it - a hard colour change alone still looks like a threshold,
          while a hard change with a shadow line under it looks like an edge. */
       if (n > 0.735) {                                  /* patch interior */
-        pal = dr;
+        pal = dr; palL = drL; palD = drD;
         k = grain < 0.30 ? 1 : (grain < 0.72 ? 0 : 2);
         if (fleck > 0.93) k = 3;                        /* an occasional stone */
       } else if (n > 0.715) {                           /* the rim - a drawn outline */
-        pal = dr;
+        pal = dr; palL = drL; palD = drD;
         k = 2;
       } else {
-        pal = gr;
+        pal = gr; palL = grL; palD = grD;
         k = grain < 0.30 ? 2 : (grain < 0.70 ? 0 : 1);
         /* The flecks are what stop the smooth field reading as banding, and they are rare on
            purpose: at 12% of blocks the ground went straight back to looking like noise. */
@@ -5737,7 +5805,10 @@ function _rtsBakeTerrain(G) {
            patch having worn outward instead of having been stamped on */
         if (n > 0.64) k = grain < 0.5 ? 2 : 4;
       }
-      var c = pal[k];
+      /* The rim keeps its authored tone: it is a drawn outline, and letting the relief lighten
+         part of it would break the one hard edge that makes a patch read as drawn. */
+      var c = (n > 0.715 && n <= 0.735) ? pal[k]
+            : (lam > RELIEF ? palL[k] : (lam < -RELIEF ? palD[k] : pal[k]));
       for (var yy = 0; yy < B; yy++) {
         var row = (by + yy) * S;
         for (var xx = 0; xx < B; xx++) {
@@ -5864,7 +5935,7 @@ function _rtsBakeTerrain(G) {
          Null means no artwork, the ordinary case. Anything else means the shoreline is real
          and the flat sand and water are skipped outright. --- */
   var shore = null;
-  if (typeof _mixPaintShore === 'function' && !window._RTS_MAP) {
+  if (typeof _mixPaintShore === 'function' && !window._RTS_MAP && _rtsArtReady()) {
     var shimg = g.getImageData(0, 0, S, S);
     shore = _mixPaintShore(shimg.data, S, G, seed);
     if (shore !== null) g.putImageData(shimg, 0, 0);
@@ -5950,7 +6021,7 @@ function _rtsBakeTerrain(G) {
          the drawn cliffs are then skipped outright. Null means there was no artwork, which
          is the ordinary case and the reason all of _sprDrawRock still exists. --- */
   var cliffLeft = null;
-  if (typeof _mixPaintCliffs === 'function' && !window._RTS_MAP) {
+  if (typeof _mixPaintCliffs === 'function' && !window._RTS_MAP && _rtsArtReady()) {
     var cimg = g.getImageData(0, 0, S, S);
     cliffLeft = _mixPaintCliffs(cimg.data, S, G, seed);
     if (cliffLeft !== null) g.putImageData(cimg, 0, 0);
@@ -5960,7 +6031,7 @@ function _rtsBakeTerrain(G) {
   /* --- headlands: rock that meets the sea, from RA's 38 Water Cliffs templates. Painted after
          the land cliffs because it repaints nothing they touched - _rtsCliffRules refuses those
          cells outright - and before the trees, which stand on top of everything. --- */
-  if (typeof _mixPaintSeaCliffs === 'function' && !window._RTS_MAP) {
+  if (typeof _mixPaintSeaCliffs === 'function' && !window._RTS_MAP && _rtsArtReady()) {
     var wcimg = g.getImageData(0, 0, S, S);
     if (_mixPaintSeaCliffs(wcimg.data, S, G, seed) !== null) g.putImageData(wcimg, 0, 0);
   }
@@ -5998,6 +6069,17 @@ function _rtsBakeTerrain(G) {
   }
   return t.c;
 }
+</script>
+<script>/* sprites/scenery.js - the things that STAND on the baked ground: forests and rock ridges.
+   Part of rts.sprites. Split from sprites/terrain.js, which it pushed past the 500-line cap -
+   the same reason coast.js came out of it.
+
+   The seam is deliberate rather than arbitrary. What stays in terrain.js paints the SURFACE,
+   pixel by pixel, into one canvas: ground tone, relief, dirt patches, roads, water, shore.
+   What lives here stamps an OBJECT onto that finished surface from a baked 3D model, at cell
+   positions. The two halves share only the canvas context and the seed, which is why the cut
+   is clean; and _sprDrawRock is called from terrain.js while _sprTrees is called from both,
+   so both stay global exactly as they were. */
 
 /* Conifers, baked from 3D like everything else. They were stacked 2D ellipses before, which
    left the forest looking like flat cut-outs while the buildings beside it had volume - and
@@ -6217,6 +6299,38 @@ function _sprCoast(g, G, seed, authored, tileAt) {
 </script>
 <script>/* sprites/ore.js - ore, in four density stages. Part of rts.sprites. */
 
+/* THE GROUND IS BAKED AT RTS_PS, LIKE EVERYTHING STANDING ON IT.
+
+   RTS_PS was introduced for the things that stand up - models.js and props.js scale their
+   models by it and tag the canvas - and was never applied to anything the ground is made of.
+   Measured, that left the two halves of the same frame at different densities: at max zoom on
+   a 3x phone one BUILDING art pixel covered 9 device pixels of area and one ORE art pixel
+   covered 36. The ground was four times coarser than the tank parked on it, and it is ~100%
+   of the frame behind ~10% sprite coverage. That is what "chunky yellow squares" means.
+
+   Ore is the cheap half of the fix: the whole ore and gem set is 24 canvases - 0.06 MB of a
+   58 MB sprite budget - so baking it at RTS_PS costs about 83 KB. And it needs NO renderer
+   change, because render/frame.js already draws ore with an explicit destination size of one
+   cell rather than through the TSscale path, so a finer canvas simply lands with more pixels
+   inside the same world square. The canvas is tagged `ps` anyway, so anything that later
+   routes ore through the sprite path divides correctly.
+
+   The nuggets keep their COUNT and their fraction of a cell - the field must not get denser
+   or coarser, it must get finer - so the extra pixels are spent on structure the 2px nugget
+   had no room for: a cast shadow, a lit facet, a dark side and a glint. */
+
+/* One crystal. Written to degrade: at RTS_PS = 1 the facets collapse to the 1px features the
+   original had, so this is the same picture at 24px and a faceted lump at 48. Light comes
+   from the upper left, matching R3_LIGHT, so ore agrees with the buildings around it. */
+function _sprCrystal(g, x, y, w, h, P) {
+  var lit = Math.max(1, Math.round(w * 0.6)), dark = Math.max(1, Math.round(w * 0.25));
+  _sprRect(g, x, y + Math.max(1, Math.round(h * 0.45)), w, h, P[3]);   /* cast shadow */
+  _sprRect(g, x, y, w, h, P[0]);                                       /* body */
+  _sprRect(g, x + w - dark, y, dark, h, P[3]);                         /* shaded right face */
+  _sprRect(g, x, y, lit, Math.max(1, Math.round(h * 0.5)), P[1]);      /* lit top facet */
+  _sprRect(g, x, y, Math.max(1, Math.round(w * 0.3)), 1, P[2]);        /* glint */
+}
+
 /* ------------------------------------------------------------------------ ore --
    Four density stages. Nuggets are drawn wrapped - every cluster is also painted one cell
    left/right/up/down - so clusters run across cell edges and a worked field reads as
@@ -6227,7 +6341,7 @@ function _sprOre(P, gem) {
     var real = _mixOre(gem);
     if (real) return real;
   }
-  var out = [], TS = RTS_TS;
+  var out = [], PS = RTS_PS, TS = RTS_TS * PS;
   P = P || RTS_PAL.ore;
   for (var st = 0; st < 4; st++) {
     var variants = [];
@@ -6243,33 +6357,34 @@ function _sprOre(P, gem) {
       g.globalAlpha = 0.34;
       for (var ub = 0; ub < blobs; ub++) {
         var ux = _sprHash(ub, 7, seed + 41) * TS, uy = _sprHash(7, ub, seed + 43) * TS;
-        var ur = 4 + _sprHash(ub, ub, seed + 47) * 5;
+        var ur = (4 + _sprHash(ub, ub, seed + 47) * 5) * PS;
         for (var uo = 0; uo < 9; uo++) {
           var wx2 = ux + (uo % 3 - 1) * TS, wy2 = uy + ((uo / 3 | 0) - 1) * TS;
           if (wx2 < -ur - 1 || wx2 > TS + ur || wy2 < -ur - 1 || wy2 > TS + ur) continue;
           _sprDisc(g, wx2, wy2, ur, P[3]);
-          _sprDisc(g, wx2 - 1, wy2 - 1, ur * 0.6, P[4] || P[0]);
+          _sprDisc(g, wx2 - PS, wy2 - PS, ur * 0.6, P[4] || P[0]);
         }
       }
       g.globalAlpha = 1;
+      /* COUNT is per cell and stays fixed - the field must get finer, not denser. Only the
+         crystals' pixel size scales, so each one covers the same fraction of a cell as before
+         and simply has room for facets. */
       var n = [8, 17, 30, 44][st];
       for (var i = 0; i < n; i++) {
         var x = _sprHash(i, v, seed) * TS, y = _sprHash(v, i, seed + 5) * TS;
         var big = _sprHash(i, i, seed + 9) < 0.35;
-        var w = big ? 3 : 2, h = big ? 3 : 2;
+        var w = (big ? 3 : 2) * PS, h = (big ? 3 : 2) * PS;
         /* Drawn wrapped, so a cluster runs across the cell edge and a worked field reads
            as one continuous deposit instead of a grid of identical stamps. */
         for (var oy = -1; oy <= 1; oy++) {
           for (var ox = -1; ox <= 1; ox++) {
             var px = x + ox * TS, py = y + oy * TS;
-            if (px < -4 || px > TS + 1 || py < -4 || py > TS + 1) continue;
-            _sprRect(g, px, py + 1, w, h, P[3]);            /* the crystal's own shadow */
-            _sprRect(g, px, py, w, h, P[0]);
-            _sprRect(g, px, py, w - 1, 1, P[1]);            /* lit facet */
-            _sprRect(g, px, py, 1, 1, P[2]);                /* glint */
+            if (px < -4 * PS || px > TS + PS || py < -4 * PS || py > TS + PS) continue;
+            _sprCrystal(g, px, py, w, h, P);
           }
         }
       }
+      t.c.ps = PS;
       variants.push(t.c);
     }
     out.push(variants);
@@ -6285,7 +6400,7 @@ function _sprOre(P, gem) {
    baked water: same effect, same cadence. A static lake is one of the deadest things on a
    map, and mine was static. */
 function _sprWaterCycle() {
-  var out = [], TS = RTS_TS, W = RTS_PAL.water, n;
+  var out = [], PS = RTS_PS, TS = RTS_TS * PS, W = RTS_PAL.water, n;
   for (var f = 0; f < 4; f++) {
     var t = _sprMake(TS, TS), g = t.g;
     for (n = 0; n < 22; n++) {
@@ -6293,10 +6408,11 @@ function _sprWaterCycle() {
       /* The highlight walks along each crest rather than blinking on and off. */
       var ph = (n + f) & 3;
       if (ph > 1) continue;
-      var len = 3 + (_sprHash(n, n, 53) * 5 | 0);
-      _sprRect(g, x + f, y, len, 1, ph === 0 ? W[3] : W[4]);
-      _sprRect(g, x + f + 1, y + 1, Math.max(1, len - 2), 1, W[1]);
+      var len = (3 + (_sprHash(n, n, 53) * 5 | 0)) * PS;
+      _sprRect(g, x + f * PS, y, len, PS, ph === 0 ? W[3] : W[4]);
+      _sprRect(g, x + (f + 1) * PS, y + PS, Math.max(PS, len - 2 * PS), PS, W[1]);
     }
+    t.c.ps = PS;
     out.push(t.c);
   }
   return out;
@@ -20232,16 +20348,36 @@ function _rtsRFrame(dt) {
       var px = Math.round(_rtsSX(_rtsWX(tx) - RTS_TILE / 2));
       var py = Math.round(_rtsSY(_rtsWX(tz) - RTS_TILE / 2));
       if (isWater) {
-        /* The crest highlights step round a four-frame cycle, so the lake moves. */
+        /* The crest highlights step round a four-frame cycle, so the lake moves. Still drawn
+           in 3D: the GL side has no water surface of its own yet, so without this the sea is
+           a flat painted colour. It is the one world overlay that still covers the buffer. */
         g.drawImage(S.wave[(_RTS_PULSE.wf + tx + tz) & 3], px, py, cell, cell * ys);
         continue;
       }
+      /* IN 3D THE ORE IS REAL GEOMETRY, so this flat tile must not be painted over it. Every
+         other 2D world layer is already gated on r3on - the terrain blit above, the pads, the
+         sprites, the shroud - and this loop was missed. Measured over a full field at max
+         zoom, the composited frame differed from the raw GL buffer in 77.2% of its pixels
+         (50.0% of them by more than 60 levels); with the ore skipped it is 0.1%. This single
+         ungated loop was burying the ~47k crystal triangles world3d.js builds every frame,
+         and it is most of why the 3D toggle "looked exactly the same" as 2D. */
+      if (r3on) continue;
       /* The number of density steps comes from the sprite set, not from a literal: ours has
          four, the original's gold has TWELVE and its gems three. Hard-coding 4 here worked
          until real art arrived and then quietly showed a third of a field. */
       var set = (G.gems && G.gems[idx] ? S.gem : S.ore);
-      var stage = Math.min(set.length - 1, Math.floor(ore / RTS_SCRAP_TILE * set.length));
-      var vari = (tx * 7 + tz * 13) % set[stage].length;
+      /* A FULL CELL IS RICHNESS-SCALED, not RTS_SCRAP_TILE. core/ore.js seeds a cell with
+         `(lvl+1)/LEVELS * RTS_SCRAP_TILE * RTS_ORE_RICHNESS`, so at richness 0.51 the richest
+         cell on the map holds 255 of a nominal 500 - and dividing by the nominal value asked
+         the last stage for ore that cannot exist. Measured over a seeded map the stage
+         histogram was [86, 300, 411, 0]: a quarter of the ore artwork was dead. */
+      var full = RTS_SCRAP_TILE * (typeof RTS_ORE_RICHNESS === 'number' ? RTS_ORE_RICHNESS : 1);
+      var stage = Math.min(set.length - 1, Math.floor(ore / full * set.length));
+      /* Hashed, not arithmetic. `(tx*7 + tz*13) % 3` collapses to `(tx + tz) % 3`, because 7
+         and 13 are both 1 mod 3 - verified identical for all 797 ore cells of a seeded map -
+         so the three anti-repetition variants laid out as diagonal ribbons on a three-cell
+         lattice instead of breaking the field up. */
+      var vari = Math.floor(_sprHash(tx, tz, 6101) * set[stage].length) % set[stage].length;
       g.drawImage(set[stage][vari], px, py, cell, cell * ys);
     }
   }
@@ -20526,8 +20662,17 @@ function _rtsRFrame(dt) {
     var gx = Math.round(_rtsSX(_rtsWX(R.ghost.tx) - RTS_TILE / 2));
     var gy = Math.round(_rtsSY(_rtsWX(R.ghost.tz) - RTS_TILE / 2));
     g.globalAlpha = 0.55;
-    g.drawImage(gspr.c, gx, gy - Math.round(gspr.head * TSscale),
-      Math.round(gspr.c.width * TSscale), Math.round(gspr.c.height * TSscale));
+    /* DIVIDE BY THE SCALE THE SPRITE WAS BAKED AT, exactly as _rtsDrawStruct does. This was
+       the one draw site that missed it, so the ghost came out at RTS_PS times its real size -
+       measured at zoom 48, the Construction Yard ghost was drawn 288x448 with its head offset
+       at 160 where 144x224 and 80 are correct, inside a footprint box the very next statement
+       strokes correctly at 144x144. On a 390 CSS px phone that is a translucent building 74%
+       of the screen wide, floating above and beside the green box telling you where it will
+       actually land. Procedural art only: real Red Alert art carries no `ps` and reads as 1,
+       so a player with their own archives loaded never saw this. */
+    var gsc = TSscale / (gspr.c.ps || 1);
+    g.drawImage(gspr.c, gx, gy - Math.round(gspr.head * gsc),
+      Math.round(gspr.c.width * gsc), Math.round(gspr.c.height * gsc));
     g.globalAlpha = 1;
     g.strokeStyle = R.ghost.ok ? '#7fe07f' : '#e05a4a';
     g.lineWidth = 2;
@@ -20963,24 +21108,52 @@ function _rtsRDispose() {
 
 /* ------------------------------------------------------------- sidebar icons --
    The sprites already are the artwork, so an icon is just the sprite on a dark plate. */
+
+/* The plate size, MEASURED from the sprites rather than written down. A literal here has gone
+   stale once already - it was derived from a 72px largest building and RTS_PS then doubled
+   every procedural bake under it, which silently put ten of twenty-six cameos back onto the
+   nearest-neighbour downscale path the literal existed to escape. Reading the sprites means
+   the plate follows the art, whatever density it is baked at.
+
+   Rounded up to a multiple of 16 so the value moves in visible steps rather than jittering by
+   a pixel whenever a model's silhouette changes, and floored at the old 160 so a hypothetical
+   small-sprite set cannot shrink the cameos. */
+function _rtsIconPlate(S, side) {
+  var big = 0, i, c;
+  for (i = 0; i < RTS_STRUCTS.length; i++) {
+    c = S.bld[side][RTS_STRUCTS[i].key];
+    if (c && c.c) big = Math.max(big, c.c.width, c.c.height);
+  }
+  for (i = 0; i < RTS_UNITS.length; i++) {
+    c = S.unit[side][RTS_UNITS[i].key];
+    if (c && c[6]) big = Math.max(big, c[6].width, c[6].height);
+  }
+  return Math.max(160, Math.ceil((big + 16) / 16) * 16);
+}
+
 function _rtsMakeIcons(side) {
   var S = _rtsSprites(), out = {}, i;
   function plate(src, pad) {
-    /* 128, not 64. The tile displays these at about 103px, so a 64px plate was being blown up
-       1.6x by CSS - and worse, the sprite was nearest-neighbour DOWNSCALED into it first (a
-       72px building squeezed to 52), which drops pixels irregularly and is what made the
-       cameos look chewed rather than merely soft. Building at 128 means the sprite is never
-       reduced and the browser's final fit is a downscale, which is the direction that is
-       forgiving. */
-    var n = 160, t = _sprMake(n, n), g = t.g;
+    /* The plate must never REDUCE the sprite. A cameo is drawn with smoothing off so the
+       artwork keeps its hard pixel edges, and nearest-neighbour reduction drops source pixels
+       irregularly - which is the "chewed" look, distinct from merely soft.
+
+       This has now been wrong twice for the same reason, and the sizing is derived rather than
+       chosen so it cannot rot a third time. The note that replaced 64 with 160 justified it as
+       "the largest building sprite is 72px, and 72*2 + 8*2 = 160" - true when it was written,
+       and stale the moment RTS_PS doubled every procedural bake. Measured against the actual
+       sprites afterwards, ten of twenty-six cameos were being downscaled: the Construction
+       Yard at 0.661, Advanced Power 0.712, Power 0.751, Refinery 0.800.
+
+       So the plate is sized from the sprites themselves at load. `_rtsIconPlate` walks every
+       structure and unit sprite this side will show, takes the largest dimension, and returns
+       a plate big enough to hold it at 1:1 with padding - so the scale below can never fall
+       under 1 no matter what RTS_PS becomes. */
+    var n = _rtsIconPlate(S, side), t = _sprMake(n, n), g = t.g;
     g.imageSmoothingEnabled = false;
     var grd = g.createLinearGradient(0, 0, 0, n);
     grd.addColorStop(0, '#2b3a4c'); grd.addColorStop(1, '#131b25');
     g.fillStyle = grd; g.fillRect(0, 0, n, n);
-    /* 160 is not arbitrary: the largest building sprite is 72px, and 72*2 + 8*2 of padding is
-       exactly 160. One size smaller and the biggest cameos fall back to 1x and end up drawn
-       SMALLER than the 64px plate managed, which is how the first attempt at this traded
-       sharpness for size. */
     var m = n - (pad || 8) * 2;
     /* Whole-number scaling only. A pixel-art sprite enlarged by 1.7 gives some source pixels two
        screen pixels and others one, which reads as a wobble along every straight edge; clamping
