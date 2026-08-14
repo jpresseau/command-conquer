@@ -108,9 +108,56 @@ function _rtsZoomStep(dir) {
   R.zi = Math.max(0, Math.min(RTS_ZOOMS.length - 1, R.zi + (dir > 0 ? 1 : -1)));
   _rtsApplyCam();
 }
+/* HOW MUCH WORLD IS ON SCREEN, which is not W/zoom by H/zoom in every camera. The focus
+   clamp, the radar's view box and the audibility test all ask this, and all three were given
+   the flat top-down answer even in 3D - where the tilt alone already made the visible strip
+   1/cos(tilt) taller than they were told, and perspective widens the far end on top of that.
+   The radar box was drawn a fifth short, the clamp let the map slide further off the top edge
+   than it meant to, and distant fighting fell silent slightly too early. */
+/* `cx`/`cz` are the CENTRE of what is visible, which is the focus under both orthographic
+   cameras and is not under a perspective one: the trapezoid reaches 1.47 half-heights up the
+   screen and 1.06 down it, so its middle sits a fifth of a half-height beyond the focus. A
+   caller that wants a rectangle - the radar box is the one - must hang it there rather than on
+   the focus, or it reports the view as looking further south than it is. */
 function _rtsViewSpan() {
-  var R = _rtsR, z = _rtsZoom();
-  return { w: R.W / z, h: R.H / z };
+  var R = _rtsR, R3 = window._R3D, z = _rtsZoom();
+  if (R3 && R3.on) {
+    var vb = _r3dViewBounds();
+    return { w: vb.x1 - vb.x0, h: vb.z1 - vb.z0,
+             cx: (vb.x0 + vb.x1) / 2, cz: (vb.z0 + vb.z1) / 2 };
+  }
+  return { w: R.W / z, h: R.H / z, cx: R.focus.x, cz: R.focus.z };
+}
+
+/* WHICH CELLS THE CAMERA CAN SEE, as an index window with padding for sprites hanging over
+   the edge. The 2D overlays that still run in 3D - the sea, the ore field - used to derive
+   this from the zoom alone, which is the right answer for a top-down camera and for no other:
+   under the tilt the strip is 1/cos(tilt) taller than that, and under perspective the far end
+   is wider again. The visible sea was measured a row short at the top at the middle zoom and
+   four rows short at the widest, and the missing rows were exactly the ones furthest from the
+   camera - where a hole in the sea is least likely to be read as a bug and most likely to be
+   read as the map just ending.
+
+   Taken through the projection's own inverse at the four screen corners, so it is correct for
+   whatever camera is mounted. In 2D that reduces to exactly the arithmetic it replaces, to the
+   last bit - _rtsGroundAt at a corner IS focus +/- half the span - so nothing about the 2D
+   frame moves. A corner past the horizon (which the shipped camera cannot produce, but a
+   future one could) falls back to the whole map rather than to a wrong window. */
+function _rtsCellWindow(padX, padZ) {
+  var R = _rtsR, i, x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+  var corners = [[0, 0], [R.W, 0], [0, R.H], [R.W, R.H]];
+  for (i = 0; i < 4; i++) {
+    var p = _rtsGroundAt(corners[i][0], corners[i][1]);
+    if (!p) { x0 = z0 = -1e9; x1 = z1 = 1e9; break; }
+    if (p.x < x0) x0 = p.x;
+    if (p.x > x1) x1 = p.x;
+    if (p.z < z0) z0 = p.z;
+    if (p.z > z1) z1 = p.z;
+  }
+  return {
+    tx0: Math.max(0, _rtsTX(x0) - padX), tx1: Math.min(RTS_N - 1, _rtsTX(x1) + padX),
+    tz0: Math.max(0, _rtsTX(z0) - padZ), tz1: Math.min(RTS_N - 1, _rtsTX(z1) + padZ)
+  };
 }
 /* THE PROJECTION CONTRACT, in both modes. Every input path and every overlay - picking,
    drag select, health bars, effects, the ghost - goes through these functions and nothing
@@ -122,15 +169,15 @@ function _rtsViewSpan() {
    orthographic camera and of nothing else. That held for as long as the 3D camera was welded
    north-up and flat-projected, which is exactly why the mode looked two-dimensional: no
    perspective divide, no yaw, a 35 degree lean and nothing else to tell a player the world
-   has depth.
+   has depth. The 3D camera has perspective now (render3d/gl3d.js), so screenX genuinely
+   depends on z there and _rtsSX is the 2D form only.
 
    So the pair is no longer the interface. Every drawing site takes both coordinates through
-   _rtsWorldToScreen, which returns a screen point AND the scale to draw at, and is free to
-   make screenX depend on z. The 2D renderer keeps the closed form below - it is genuinely
-   orthographic and must not move a pixel - and the 3D one is free to stop being separable.
+   _rtsWorldToScreen, which returns a screen point AND the scale to draw at. The 2D renderer
+   keeps the closed form below - it is genuinely orthographic and must not move a pixel.
 
-   `scale` is 1 under any orthographic camera and is what an overlay must multiply its size
-   by under a perspective one: a health bar over a unit at the back of the view is smaller
+   `scale` is 1 under the orthographic 2D camera and is what an overlay must multiply its size
+   by under the perspective one: a health bar over a unit at the back of the view is smaller
    than the same bar at the front, and a caller that ignores it will draw bars that all match
    while the units under them do not. `behind` marks a point the camera cannot see, which an
    orthographic camera never produces and a perspective one does. */

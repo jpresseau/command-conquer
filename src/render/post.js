@@ -157,21 +157,17 @@ function _rtsPost(g) {
 function _rtsDrawWater(g, G, cell) {
   var steps = _mixWater();
   if (!steps) return;
-  var R = _rtsR, N = RTS_N;
+  var N = RTS_N;
   var set = steps[Math.floor(G.t * RTS_WATER_HZ) % steps.length];
-  var ox = R.focus.x / RTS_TILE + N / 2 - (R.W / 2) / cell;
-  var oy = R.focus.z / RTS_TILE + N / 2 - (R.H / 2) / cell;
-  var x0 = Math.max(0, Math.floor(ox)), y0 = Math.max(0, Math.floor(oy));
-  var x1 = Math.min(N - 1, Math.ceil(ox + R.W / cell));
-  var y1 = Math.min(N - 1, Math.ceil(oy + R.H / cell));
-  var seed = (G.seed || 1) | 0, w = Math.ceil(cell) + 1;
-  /* the same lean the ground decals use, so the sea hugs the terrain rather than shingling */
-  var R3 = window._R3D;
-  var ys = (R3 && R3.on) ? R3.cp : 1;
-  var wh = Math.ceil(cell * ys) + 1;
+  /* The window comes from the projection's inverse for the same reason the placement does:
+     the flat cell arithmetic this replaces is the top-down answer, and under the tilt it fell
+     a row short at the far edge - which is where a missing row of sea reads as the map ending
+     rather than as a bug. */
+  var cw = _rtsCellWindow(1, 2);
+  var seed = (G.seed || 1) | 0;
 
-  for (var y = y0; y <= y1; y++) {
-    for (var x = x0; x <= x1; x++) {
+  for (var y = cw.tz0; y <= cw.tz1; y++) {
+    for (var x = cw.tx0; x <= cw.tx1; x++) {
       var i = y * N + x;
       if (G.terrain[i] !== RTS_T_WATER) continue;
       if (!G.mapped[i]) continue;                    /* never seen - the shroud covers it anyway */
@@ -179,8 +175,14 @@ function _rtsDrawWater(g, G, cell) {
       if (v >= set.length) v = set.length - 1;
       var tile = set[v];
       if (!tile) continue;
+      /* Corner to corner, so each tile reaches its neighbour under any projection - a fixed
+         size only abuts while every cell projects to the same rectangle, which stopped being
+         true the moment the 3D camera gained a perspective divide. */
       var sp = _rtsGroundToScreen(_rtsWX(x) - RTS_TILE / 2, _rtsWX(y) - RTS_TILE / 2);
-      g.drawImage(tile, Math.round(sp.x), Math.round(sp.y), w, wh);
+      var sq = _rtsGroundToScreen(_rtsWX(x) + RTS_TILE / 2, _rtsWX(y) + RTS_TILE / 2);
+      var px = Math.round(sp.x), py = Math.round(sp.y);
+      g.drawImage(tile, px, py, Math.max(1, Math.round(sq.x) - px + 1),
+                  Math.max(1, Math.round(sq.y) - py + 1));
     }
   }
 }
@@ -244,8 +246,18 @@ function _rtsDrawShroudTiles(g, G, cell) {
   g.globalAlpha = prevA;
 }
 
+/* NULL WHEN THE POINTER IS NOT ON THE GROUND. Under both orthographic cameras every screen
+   pixel maps to a ground point, so this dereferenced _rtsGroundAt's result without asking - and
+   it runs inside the DRAW half of the loop, through _rtsActionAt, on every frame the pointer
+   moves. A perspective camera has a horizon: above it the view ray never meets the ground plane
+   and the inverse has no answer to give. Reaching that line with this unguarded throws inside
+   the render loop, which ui/camera.js turns into 'The display has stopped' after 60 frames.
+
+   Every caller already copes with a null - `if (!hit) return`, or `hit && hit.ent` - so the
+   guard belongs here and costs them nothing. */
 function _rtsPickAt(mx, my) {
   var G = window._rtsG, p = _rtsGroundAt(mx, my);
+  if (!p) return null;
   var best = null, bd = 1e9, i;
   for (i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];

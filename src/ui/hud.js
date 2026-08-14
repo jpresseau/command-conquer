@@ -260,13 +260,17 @@ function _rtsDrawMini() {
       g.fillRect(mx - 1.5, mz - 1.5, 3, 3);
     }
   }
-  /* camera viewport box */
-  var f = _rtsR.focus, span = RTS_N * RTS_TILE;
+  /* CAMERA VIEWPORT BOX, hung on the centre of what is visible rather than on the focus. The
+     two are the same point under both orthographic cameras and are not under the perspective
+     one - the visible ground reaches further up the screen than down it - so this asked
+     _rtsViewSpan for the centre as well as the size. */
+  var span = RTS_N * RTS_TILE;
   var vs = _rtsViewSpan(), vw = vs.w, vh = vs.h;
   /* CONQUER.CPP pulses the radar box on CC_PULSE_COLOR rather than drawing it flat white. */
   var pv = (typeof _rtsPulse === 'function') ? _rtsPulse() : 0.6;
   g.strokeStyle = 'rgba(255,255,255,' + (0.45 + pv * 0.75).toFixed(2) + ')';
   g.lineWidth = 1.5;
-  g.strokeRect((f.x - vw / 2) / span * S + S / 2, (f.z - vh / 2) / span * S + S / 2, vw / span * S, vh / span * S);
+  g.strokeRect((vs.cx - vw / 2) / span * S + S / 2, (vs.cz - vh / 2) / span * S + S / 2,
+               vw / span * S, vh / span * S);
 }
 
