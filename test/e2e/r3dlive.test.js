@@ -97,13 +97,15 @@ var S = new Suite('r3dlive');
     o.worldTris = Math.round(R3.worldTris || 0);
     o.oreTris = R3.oreMesh ? Math.round(R3.oreMesh.verts / 3) : 0;
     o.chunks = R3.world.length;
-    var vhx = R3.cv.width / (2 * _rtsZoom() * _rtsR.dpr) + 4;
-    var vhz = R3.cv.height / (2 * _rtsZoom() * _rtsR.dpr * R3.cp);
+    /* the renderer's own view rectangle, not a copy of its arithmetic - _r3dViewBounds is
+       where the cull, the radar box and the overlay cell window all read it from, so a camera
+       change moves this with them instead of leaving a stale replica here */
+    var vb = _r3dViewBounds();
     var lift = 14 * R3.sp / R3.cp, drawn = 0;
     for (var wc = 0; wc < R3.world.length; wc++) {
       var wm = R3.world[wc];
-      if (wm.x1 < _rtsR.focus.x - vhx || wm.x0 > _rtsR.focus.x + vhx ||
-          wm.z1 < _rtsR.focus.z - vhz || wm.z0 > _rtsR.focus.z + vhz + lift) continue;
+      if (wm.x1 < vb.x0 - 4 || wm.x0 > vb.x1 + 4 ||
+          wm.z1 < vb.z0 || wm.z0 > vb.z1 + lift) continue;
       drawn++;
     }
     o.chunksDrawn = drawn;

@@ -139,6 +139,8 @@ function _r3dFrame(G) {
      with display scaling. */
   var z = _rtsZoom();
   var cam = [R.focus.x, R.focus.z, 2 * z * R.dpr / R3.cv.width, 2 * z * R.dpr / R3.cv.height];
+  var invD = 1 / _r3dEyeDist();
+  var vb = _r3dViewBounds();
 
   if (R3.terrainDirty && R.terrain) {
     R3.terrainTex = _r3dTexture(gl, R3.terrainTex, gl.NEAREST);
@@ -147,6 +149,21 @@ function _r3dFrame(G) {
   }
   _r3dFog(G);
 
+  /* THE GROUND STAYS ONE STATIC QUAD OVER THE WHOLE MAP, and under a perspective camera that
+     is a claim worth measuring rather than assuming: with the eye a couple of screen-heights
+     in front of the focus, a good part of a 512-unit plane is BEHIND it. At the top zoom the
+     eye plane cuts the map 242 world units south of the focus, and with the camera against the
+     north edge the quad reaches 478 past that.
+
+     A vertex behind the eye is the classic way to smear a triangle across the screen - but
+     only if something clamps w, and nothing here does (see the note above R3D_MESH_VS). The
+     hardware's own homogeneous clipping cuts the quad at the eye plane instead, which is
+     exact. Rebuilding the quad per frame from the visible patch was written and measured
+     against this: at the map centre, at the north edge, at the top zoom, the two versions
+     differ on 0.26% to 1.4% of pixels and every bit of it is sub-texel rounding - the ground
+     texture lands within one texel of where the projection says in 99.2% of samples against
+     98.3% - and the clipped quad IS the visible patch, so it rasterises the same area either
+     way. The rebuild bought a rounding difference and an upload per frame, so it went. */
   if (!R3.groundBuf) {
     var EXT = RTS_N * RTS_TILE / 2;
     var xz = [-EXT, -EXT, EXT, -EXT, EXT, EXT, -EXT, -EXT, EXT, EXT, -EXT, EXT];
@@ -169,6 +186,7 @@ function _r3dFrame(G) {
   gl.useProgram(R3.texP);
   gl.uniform4fv(gl.getUniformLocation(R3.texP, 'uCam'), cam);
   gl.uniform2f(gl.getUniformLocation(R3.texP, 'uTilt'), R3.cp, R3.sp);
+  gl.uniform1f(gl.getUniformLocation(R3.texP, 'uInvD'), invD);
   gl.uniform1f(gl.getUniformLocation(R3.texP, 'uA'), 1);
   var aXZ = gl.getAttribLocation(R3.texP, 'aXZ'), aT = gl.getAttribLocation(R3.texP, 'aT');
   gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundBuf);
@@ -182,6 +200,7 @@ function _r3dFrame(G) {
   gl.useProgram(R3.meshP);
   gl.uniform4fv(gl.getUniformLocation(R3.meshP, 'uCam'), cam);
   gl.uniform2f(gl.getUniformLocation(R3.meshP, 'uTilt'), R3.cp, R3.sp);
+  gl.uniform1f(gl.getUniformLocation(R3.meshP, 'uInvD'), invD);
   var uPos = gl.getUniformLocation(R3.meshP, 'uPos');
   var uRot = gl.getUniformLocation(R3.meshP, 'uRot');
   var uScale = gl.getUniformLocation(R3.meshP, 'uScale');
@@ -213,9 +232,10 @@ function _r3dFrame(G) {
   /* --- the world's own geometry: forests, ridges, ore crystals, grass - see world3d.js ---
      The static world is ~1M triangles in per-chunk buffers; only the chunks whose AABB
      intersects the view are drawn, so the vertex stage pays for what is on screen, not for
-     the map. The view rect inverts the shader's projection: half-extents in world units,
-     with the z range widened downward by the tallest geometry's screen lift (a tree just
-     below the bottom edge still shows its crown) plus a lean margin on x. */
+     the map. The view rect comes from _r3dViewBounds - the same inverse of the shader's
+     projection that sizes the ground quad, so a camera change moves both together - widened
+     on the near side by the tallest geometry's screen lift, because a tree just past the
+     bottom edge still shows its crown. */
   _r3dWorldTick(G);
   if (R3.world) {
     /* identity placement: the batches are baked in world space, so they draw as-is */
@@ -224,16 +244,14 @@ function _r3dFrame(G) {
     gl.uniform1f(uScale, 1);
     gl.uniform1f(uScaleY, 1);
     gl.uniform3f(uTint, 1, 1, 1);
-    var vhx = R3.cv.width / (2 * z * R.dpr) + 4;
-    var vhz = R3.cv.height / (2 * z * R.dpr * R3.cp);
     var lift = R3D_WORLD_YMAX * R3.sp / R3.cp;
     var batches = R3.world.concat([R3.oreMesh]);
     for (var wb = 0; wb < batches.length; wb++) {
       var bm = batches[wb];
       if (!bm || !bm.verts) continue;
       if (bm.x1 !== undefined &&
-          (bm.x1 < R.focus.x - vhx || bm.x0 > R.focus.x + vhx ||
-           bm.z1 < R.focus.z - vhz || bm.z0 > R.focus.z + vhz + lift)) continue;
+          (bm.x1 < vb.x0 - 4 || bm.x0 > vb.x1 + 4 ||
+           bm.z1 < vb.z0 || bm.z0 > vb.z1 + lift)) continue;
       gl.bindBuffer(gl.ARRAY_BUFFER, bm.p);
       gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 0, 0);
       gl.bindBuffer(gl.ARRAY_BUFFER, bm.n);
@@ -317,6 +335,7 @@ function _r3dFrame(G) {
   gl.useProgram(R3.texP);
   gl.uniform4fv(gl.getUniformLocation(R3.texP, 'uCam'), cam);
   gl.uniform2f(gl.getUniformLocation(R3.texP, 'uTilt'), R3.cp, R3.sp);
+  gl.uniform1f(gl.getUniformLocation(R3.texP, 'uInvD'), invD);
   gl.uniform1f(gl.getUniformLocation(R3.texP, 'uA'), 1);
   gl.disable(gl.DEPTH_TEST);
   gl.enable(gl.BLEND);

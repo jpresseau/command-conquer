@@ -41,11 +41,13 @@ function _rtsRFrame(dt) {
      over the row below - 1 in 2D, cos(tilt) in 3D */
   var ys = r3on ? window._R3D.cp : 1;
 
-  /* visible cell range, padded so half-on-screen sprites still draw */
-  var tx0 = Math.max(0, _rtsTX(R.focus.x - R.W / 2 / z) - 1);
-  var tx1 = Math.min(RTS_N - 1, _rtsTX(R.focus.x + R.W / 2 / z) + 1);
-  var tz0 = Math.max(0, _rtsTX(R.focus.z - R.H / 2 / z) - 2);
-  var tz1 = Math.min(RTS_N - 1, _rtsTX(R.focus.z + R.H / 2 / z) + 2);
+  /* Visible cell range, padded so half-on-screen sprites still draw. Through the projection's
+     own inverse rather than through the zoom: the tilted camera sees 1/cos(tilt) further up
+     the screen than W/zoom by H/zoom says, and the perspective one further again at the far
+     end, so the flat arithmetic this replaces left the top rows of the sea undrawn. In 2D it
+     reduces to exactly the same four numbers. */
+  var cw = _rtsCellWindow(1, 2);
+  var tx0 = cw.tx0, tx1 = cw.tx1, tz0 = cw.tz0, tz1 = cw.tz1;
 
   /* --- terrain: one blit of the baked map, plus ore on top ---
      The ground is a single pre-painted canvas, so the visible window is one drawImage
@@ -73,8 +75,18 @@ function _rtsRFrame(dt) {
       if (isWater) {
         /* The crest highlights step round a four-frame cycle, so the lake moves. Still drawn
            in 3D: the GL side has no water surface of its own yet, so without this the sea is
-           a flat painted colour. It is the one world overlay that still covers the buffer. */
-        g.drawImage(S.wave[(_RTS_PULSE.wf + tx + tz) & 3], px, py, cell, cell * ys);
+           a flat painted colour. It is the one world overlay that still covers the buffer.
+
+           SIZED CORNER TO CORNER, not by `cell` and a lean factor. A tile drawn at a fixed
+           size abuts its neighbour only while every cell projects to the same rectangle -
+           true of both orthographic cameras and of nothing else. Under perspective the near
+           rows are larger than the far ones, so a fixed size opens a hairline of dark ground
+           between every row at one end of the screen and overlaps them at the other. Asking
+           the projection where the OPPOSITE corner lands makes each tile exactly reach its
+           neighbour whatever the camera, and in 2D it is the same integer it always was. */
+        var pq = _rtsGroundToScreen(_rtsWX(tx) + RTS_TILE / 2, _rtsWX(tz) + RTS_TILE / 2);
+        g.drawImage(S.wave[(_RTS_PULSE.wf + tx + tz) & 3], px, py,
+                    Math.max(1, Math.round(pq.x) - px), Math.max(1, Math.round(pq.y) - py));
         continue;
       }
       /* IN 3D THE ORE IS REAL GEOMETRY, so this flat tile must not be painted over it. Every

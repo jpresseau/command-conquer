@@ -7,19 +7,49 @@
    directional light, a depth buffer, the terrain canvas draped on a ground plane. No second
    set of art exists or is needed; the sprite pipeline and this one share their geometry.
 
-   THE CAMERA IS NORTH-UP TILTED ORTHOGRAPHIC, AND THAT IS A CONTRACT, NOT A TASTE. The whole
-   2D game - input picking, selection brackets, health bars, effects, the placement ghost -
-   talks to the screen through four functions (_rtsSX, _rtsSY, _rtsGroundAt, _rtsWorldToScreen).
-   For a north-up tilted ortho camera those stay CLOSED-FORM:
+   THE CAMERA IS NORTH-UP TILTED PERSPECTIVE. It used to be orthographic, and that is most of
+   why the mode read as "2D with taller sprites": an orthographic camera has no convergence at
+   all, so two identical tanks a hundred units apart in depth drew at exactly the same size and
+   every vertical edge in the scene stayed exactly vertical. Lean alone does not say depth. A
+   perspective divide does, and it is the one cue the picture had none of.
 
-       screenX = (wx - focus.x) * zoom + W/2                       (identical to 2D)
-       screenY = ((wz - focus.z) * cos(tilt) - y * sin(tilt)) * zoom + H/2
+   THE PROJECTION, AS THREE STEPS. Take a world point to camera space first - which is what the
+   orthographic camera already did, and is unchanged:
 
-   so the 2D renderer turns out to be the special case tilt = 0 with height drawn at y*0.5.
-   Every overlay and input path therefore works in 3D by branching those four functions on
-   R3.on - no rewrite, no drift between what is drawn and what is clicked. A yawed or
-   perspective camera breaks the closed form (screenX would depend on z), which is why both are
-   follow-ups behind depth-aware overlays, not defaults.
+       u  = wx - focus.x                                   (across the screen)
+       sy = (wz - focus.z) * cos(tilt) - y * sin(tilt)     (down the screen)
+       d  = (wz - focus.z) * sin(tilt) + y * cos(tilt)     (toward the eye)
+
+   then put the eye a distance D in FRONT of the focal plane and divide by how far the point
+   is from it:
+
+       w = (D - d) / D                                     (1 at the focus, <1 nearer, >1 further)
+       screenX = u  / w * zoom + W/2
+       screenY = sy / w * zoom + H/2
+
+   D = R3D_FOVK screen-heights of world, so it moves with the zoom and the FIELD OF VIEW is the
+   same at every zoom - only the eye's distance changes, which is what a real camera does. The
+   old orthographic camera is exactly the limit D -> infinity, so nothing about the tilt, the
+   depth buffer or the shading had to move.
+
+   THE CONTRACT IS _rtsWorldToScreen AND _rtsGroundAt, and it is what makes this a branch
+   rather than a rewrite. The whole 2D game - input picking, selection brackets, health bars,
+   effects, the placement ghost - reaches the screen through those two, and they now carry two
+   things an orthographic camera never needed: `scale` (= 1/w, the factor an overlay must
+   multiply its size by, because a bar over a unit at the back of the view is smaller than the
+   same bar at the front) and `behind` (a point the eye cannot see, which an orthographic
+   camera cannot produce). Every draw site was already reading `scale`; this is the camera that
+   finally makes it something other than 1.
+
+   The inverse is still closed-form for the ground plane, which is the only plane input needs:
+
+       v = syo / (cos(tilt) + syo * sin(tilt) / D)        with syo = (my - H/2) / zoom
+
+   and it returns NULL past the horizon, where the view ray never meets the ground at all. The
+   horizon cannot appear on screen while D is proportional to the view height - the denominator
+   above works out to cos(tilt) - sin(tilt)/(2*FOVK), a constant, and it is positive - but a
+   caller can still ask about a pixel above the canvas, so the null is real and every caller
+   handles it.
 
    The light is the sprite baker's own R3_LIGHT and the shading is _r3Ramp PORTED rather than
    approximated - same ambient split, same sky bounce, same specular, same per-channel ramp -
@@ -32,6 +62,31 @@ window._R3D = null;
    to read as 3D, mild enough that the map stays readable as a map. */
 var R3D_TILT = 0.62;
 var R3D_DEPTH_RANGE = 900;     /* world units mapped into the depth buffer; the map is ~640 */
+
+/* HOW MUCH PERSPECTIVE. The eye sits this many screen-heights of world in front of the focal
+   plane, so the field of view is fixed and only the eye's distance moves with the zoom.
+
+   2.2 is a half-angle of about 13 degrees, which works out to a 39% size difference between
+   the top of the screen and the bottom - and that difference is the number worth arguing
+   about, because an RTS wants identical units to LOOK identical and every degree of field of
+   view trades some of that away for depth. Chosen by rendering a grid of power plants across
+   the screen at 1.7, 2.2 and 2.6 and looking: at 2.6 the corner buildings barely lean, at 1.7
+   the far row is visibly a different size from the near row of the same building, and 2.2 has
+   the lean without the size argument. */
+var R3D_FOVK = 2.2;
+
+/* The eye distance, in world units. R.H / zoom is the world height of the screen, so this is
+   FOVK of those - and because it moves WITH the zoom, every quantity derived from the ratio
+   (half-view-height / D) is a pure constant, which is what keeps the horizon off screen at
+   every zoom rather than only at the ones that were tried. */
+function _r3dEyeDist() { return R3D_FOVK * _rtsR.H / _rtsZoom(); }
+
+/* A point closer to the eye than this fraction of D is not drawable - 1/w has run away. The
+   GL side needs no such floor (the hardware clips against w properly, and a triangle that
+   straddles the eye plane is cut at it rather than smeared across the screen); this exists so
+   the JS side returns finite numbers next to its `behind` flag instead of infinities that a
+   caller might quietly draw with. */
+var R3D_WMIN = 0.02;
 
 function _r3dShader(gl, type, src) {
   var sh = gl.createShader(type);
@@ -77,14 +132,27 @@ var R3D_HALF = (function () {
   return [h[0] / m, h[1] / m, h[2] / m];
 })();
 
-/* NO MATRICES. The camera above is five numbers, so the projection is done longhand in the
-   vertex shader from uniforms - uCam packs focus and scale, uTilt the lean. Every mesh is
-   drawn in MODEL space and placed by uPos/uRot/uScale, so one buffer per model serves every
-   entity of that type. */
+/* NO MATRICES. The camera above is six numbers, so the projection is done longhand in the
+   vertex shader from uniforms - uCam packs focus and scale, uTilt the lean, uInvD the eye.
+   Every mesh is drawn in MODEL space and placed by uPos/uRot/uScale, so one buffer per model
+   serves every entity of that type.
+
+   THE PERSPECTIVE DIVIDE IS gl_Position.w AND NOTHING ELSE IS TOUCHED. sx, sy and d are the
+   camera-space numbers the orthographic version already computed; w = 1 - d/D is the divide,
+   and the depth term is pre-multiplied by w so that after the hardware divides, the value
+   landing in the depth buffer is STILL the linear -d/RANGE it always was. That matters:
+   depth here spans a third of the buffer's range because it is linear in world depth, where
+   the textbook 1/z mapping over the same scene would crowd the whole battlefield into the
+   last 1% of it. Nothing about the depth test, the sort, or the shading moved.
+
+   No clamp on w, deliberately. Clamping is what produces the smeared triangle everyone
+   associates with geometry behind the camera - the hardware's own homogeneous clipping cuts
+   the primitive at the eye plane and is exact, and a clamp is what stops it from running. */
 var R3D_MESH_VS =
   'attribute vec3 aP; attribute vec3 aN; attribute vec3 aC;' +
   'uniform vec4 uCam;' +        /* focus.x, focus.z, 2*zoom/W, 2*zoom/H */
   'uniform vec2 uTilt;' +       /* cos(tilt), sin(tilt) */
+  'uniform float uInvD;' +      /* 1 / eye distance; 0 is the orthographic camera */
   'uniform vec3 uPos; uniform vec2 uRot; uniform float uScale; uniform float uScaleY; uniform vec3 uTint;' +
   'varying vec3 vC;' +
   'void main(){' +
@@ -110,7 +178,8 @@ var R3D_MESH_VS =
   '  float sx = (wp.x - uCam.x) * uCam.z;' +
   '  float sy = ((wp.z - uCam.y) * uTilt.x - wp.y * uTilt.y) * uCam.w;' +
   '  float d  = ((wp.z - uCam.y) * uTilt.y + wp.y * uTilt.x);' +
-  '  gl_Position = vec4(sx, -sy, -d / ' + R3D_DEPTH_RANGE.toFixed(1) + ', 1.0);' +
+  '  float pw = 1.0 - d * uInvD;' +
+  '  gl_Position = vec4(sx, -sy, -d / ' + R3D_DEPTH_RANGE.toFixed(1) + ' * pw, pw);' +
   '}';
 /* uA exists for the contact shadows and for nothing else. They are flat discs drawn through
    this same program, and drawn OPAQUE they were not shadows at all - they were holes cut in
@@ -126,14 +195,15 @@ var R3D_MESH_FS =
    blending on and the depth test off. */
 var R3D_TEX_VS =
   'attribute vec2 aXZ; attribute vec2 aT;' +
-  'uniform vec4 uCam; uniform vec2 uTilt;' +
+  'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' +
   'varying vec2 vT;' +
   'void main(){' +
   '  vT = aT;' +
   '  float sx = (aXZ.x - uCam.x) * uCam.z;' +
   '  float sy = (aXZ.y - uCam.y) * uTilt.x * uCam.w;' +
   '  float d  = (aXZ.y - uCam.y) * uTilt.y;' +
-  '  gl_Position = vec4(sx, -sy, -d / ' + R3D_DEPTH_RANGE.toFixed(1) + ', 1.0);' +
+  '  float pw = 1.0 - d * uInvD;' +
+  '  gl_Position = vec4(sx, -sy, -d / ' + R3D_DEPTH_RANGE.toFixed(1) + ' * pw, pw);' +
   '}';
 var R3D_TEX_FS =
   'precision mediump float; varying vec2 vT; uniform sampler2D uS; uniform float uA;' +
@@ -218,19 +288,66 @@ function _r3dResize() {
   R3.gl.viewport(0, 0, R3.cv.width, R3.cv.height);
 }
 
-/* The four-function projection contract, used by camera.js when the mode is on. Kept beside
-   the shader that must agree with it: if these two ever disagree, clicks land beside units. */
-function _r3dSY(wz) {
-  var R = _rtsR;
-  return (wz - R.focus.z) * window._R3D.cp * _rtsZoom() + R.H / 2;
-}
-function _r3dGroundAt(mx, my) {
-  var R = _rtsR, z = _rtsZoom();
-  return { x: (mx - R.W / 2) / z + R.focus.x,
-           z: (my - R.H / 2) / (z * window._R3D.cp) + R.focus.z };
+/* The projection contract, used by camera.js when the mode is on. Kept beside the shader that
+   must agree with it: if these two ever disagree, clicks land beside units. */
+
+/* Forward, from offsets already taken relative to the focus - which is where both the shader
+   and the inverse below do their arithmetic, so all three share one form of the expression. */
+function _r3dProject(u, y, v) {
+  var R3 = window._R3D, R = _rtsR, zm = _rtsZoom();
+  var sy = v * R3.cp - y * R3.sp;
+  var d = v * R3.sp + y * R3.cp;
+  var w = 1 - d / _r3dEyeDist();
+  /* Behind the eye the divide has no answer, but a caller reading `.x` before it reads
+     `.behind` must not get an infinity - so the returned numbers are computed against the
+     floor and the flag is what says not to trust them. */
+  var behind = !(w > R3D_WMIN), ws = behind ? R3D_WMIN : w;
+  return { x: u / ws * zm + R.W / 2, y: sy / ws * zm + R.H / 2,
+           scale: 1 / ws, behind: behind };
 }
 function _r3dWorldToScreen(x, y, z) {
-  var R3 = window._R3D;
-  return { x: _rtsSX(x), y: _r3dSY(z) - (y || 0) * R3.sp * _rtsZoom(),
-           scale: 1, behind: false };
+  var R = _rtsR;
+  return _r3dProject(x - R.focus.x, y || 0, z - R.focus.z);
+}
+/* Screen y of a point on the ground. x cannot affect it under a north-up camera - the divide
+   is a function of depth alone - so this stays a one-argument question even with perspective. */
+function _r3dSY(wz) { return _r3dProject(0, 0, wz - _rtsR.focus.z).y; }
+
+/* The inverse, on the ground plane, which is the only plane input ever asks about. Solving
+   syo = v*cp / (1 - v*sp/D) for v gives the closed form below; the denominator vanishing is
+   the HORIZON, where the view ray runs parallel to the ground and there is no answer to give.
+   Null rather than a wrong number: every caller checks, and _rtsPickAt runs inside the draw
+   half of the loop, where a NaN would surface as "the display has stopped" rather than as a
+   misplaced click. */
+function _r3dGroundAt(mx, my) {
+  var R = _rtsR, R3 = window._R3D, zm = _rtsZoom(), D = _r3dEyeDist();
+  var sxo = (mx - R.W / 2) / zm, syo = (my - R.H / 2) / zm;
+  var den = R3.cp + syo * R3.sp / D;
+  if (den <= 1e-6) return null;
+  var v = syo / den, w = 1 - v * R3.sp / D;
+  if (!(w > R3D_WMIN)) return null;
+  return { x: R.focus.x + sxo * w, z: R.focus.z + v };
+}
+
+/* THE GROUND RECTANGLE THE CAMERA CAN SEE, which under perspective is not the view span.
+   The visible ground is a TRAPEZOID - narrow at the bottom of the screen where the eye is
+   close, wide at the top where it is far - and three separate things need its bounding box:
+   the world chunk cull, the radar's view rectangle and the focus clamp (both through
+   _rtsViewSpan), and the cell window the 2D overlays iterate. All three used to work it out
+   from the zoom, which is the top-down answer and wrong for either 3D camera; deriving it
+   once here is what stops them drifting apart again.
+
+   Setting the projected edge equal to the screen edge and solving gives the two z limits; the
+   ratio (half-view-height / D) is a constant because D moves with the zoom, so the far limit
+   is a fixed multiple of the half-height rather than something that can degenerate at one end
+   of the ladder. The x limit is taken at the FAR edge, where the trapezoid is widest. */
+function _r3dViewBounds() {
+  var R = _rtsR, R3 = window._R3D, zm = _rtsZoom(), D = _r3dEyeDist();
+  var hx = R.W / 2 / zm, hz = R.H / 2 / zm;
+  var conv = hz * R3.sp / D;
+  var vFar = -hz / Math.max(1e-3, R3.cp - conv);      /* up the screen, away from the eye */
+  var vNear = hz / (R3.cp + conv);                    /* down the screen, toward it */
+  var wFar = 1 - vFar * R3.sp / D;
+  return { x0: R.focus.x - hx * wFar, x1: R.focus.x + hx * wFar,
+           z0: R.focus.z + vFar, z1: R.focus.z + vNear };
 }
