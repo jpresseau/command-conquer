@@ -22,7 +22,14 @@ function _rtsDrawHud(dt) {
     var top = (e.type === 'struct') ? rtsStructDef(e.def).h * 0.9 + 5 : 3.4;
     var s = _rtsWorldToScreen(e.x, top, e.z);
     if (s.behind || s.x < -60 || s.x > W + 60 || s.y < -40 || s.y > H + 40) continue;
-    var bw = e.type === 'struct' ? 46 : 26, bh = 4;
+    /* SIZED BY THE PROJECTION, NOT BY A LITERAL. _rtsWorldToScreen returns the scale to draw
+       at as well as the point to draw at, and this pass read the point and ignored the scale -
+       so a health bar was the same 46 pixels wide wherever the unit was, while the unit under
+       it was not. It is invisible today because the scale is 1 under both orthographic
+       cameras, and it is exactly the kind of thing that stays invisible until a perspective
+       camera makes every bar on screen the wrong size at once. */
+    var sc = s.scale || 1;
+    var bw = (e.type === 'struct' ? 46 : 26) * sc, bh = 4 * sc;
     var frac = Math.max(0, e.hp / e.maxHp);
     g.fillStyle = 'rgba(0,0,0,0.55)';
     g.fillRect(s.x - bw / 2 - 1, s.y - bh - 1, bw + 2, bh + 2);
@@ -30,10 +37,10 @@ function _rtsDrawHud(dt) {
     g.fillRect(s.x - bw / 2, s.y - bh, bw * frac, bh);
     /* BUILDING.CPP toggles IsWrenchVisible on the repair timer - the wrench blinks on a
        building under repair so you can see at a glance where your credits are going. */
-    if (e.repair && (typeof _rtsPulse !== 'function' || _rtsPulse() > 0.45)) _rtsDrawWrench(g, s.x, s.y - bh - 9);
+    if (e.repair && (typeof _rtsPulse !== 'function' || _rtsPulse() > 0.45)) _rtsDrawWrench(g, s.x, s.y - bh - 9 * sc);
     if (selected) {
       /* corner brackets, the classic selection look */
-      var r = (e.type === 'struct' ? rtsStructDef(e.def).w * _rtsR.cell * 0.5 : _rtsR.cell * 0.42);
+      var r = (e.type === 'struct' ? rtsStructDef(e.def).w * _rtsR.cell * 0.5 : _rtsR.cell * 0.42) * sc;
       r = Math.max(10, Math.min(70, r));
       var cy = s.y + r * 0.55, L = Math.max(5, r * 0.42);
       g.strokeStyle = e.side === 'player' ? '#8ef07a' : '#ff8a7a';
@@ -61,9 +68,12 @@ function _rtsDrawHud(dt) {
     else {
       var f = U.flash, sp = _rtsWorldToScreen(f.x, 0.5, f.z), k = f.t / 0.55;
       if (!sp.behind) {
+        var fsc = sp.scale || 1;                 /* the ping is on the ground, so it scales too */
         g.strokeStyle = f.kind === 'attack' ? '#ff6a52' : (f.kind === 'harvest' ? '#6fe3b8' : '#8ef07a');
-        g.lineWidth = 2.5 * (1 - k);
-        g.beginPath(); g.ellipse(sp.x, sp.y, 26 * k + 5, 14 * k + 3, 0, 0, 6.2832); g.stroke();
+        g.lineWidth = 2.5 * (1 - k) * fsc;
+        g.beginPath();
+        g.ellipse(sp.x, sp.y, (26 * k + 5) * fsc, (14 * k + 3) * fsc, 0, 0, 6.2832);
+        g.stroke();
       }
     }
   }

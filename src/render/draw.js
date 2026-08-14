@@ -163,8 +163,9 @@ function _rtsDrawStruct(g, e, TSscale, cell) {
     g.globalAlpha = 1;
     var ffr = _rtsAnimFrame() % R.spr.fire.length, fimg = R.spr.fire[ffr];
     var fp = _rtsGroundToScreen(e.x, e.z);
-    var fws = Math.round(fimg.width * TSscale * fp.scale * (0.9 + def.w * 0.35));
-    var fhs = Math.round(fimg.height * TSscale * fp.scale * (0.9 + def.w * 0.35));
+    var rsc = TSscale * fp.scale / (fimg.ps || 1);
+    var fws = Math.round(fimg.width * rsc * (0.9 + def.w * 0.35));
+    var fhs = Math.round(fimg.height * rsc * (0.9 + def.w * 0.35));
     g.globalAlpha = Math.min(1, k * 1.6);
     g.drawImage(fimg, Math.round(fp.x - fws / 2), Math.round(fp.y - fhs * 0.75), fws, fhs);
     g.globalAlpha = 1;
@@ -280,7 +281,7 @@ function _rtsDrawUnit(g, e, TSscale) {
     var mz = _rtsFireCoord(e, e.type === 'struct' ? null : RTS_WEAPONS[d.weapon]);
     var mp = _rtsGroundToScreen(mz.x, mz.z);
     var fx = mp.x, fy = mp.y;
-    var fs = fl.width * TSscale * mp.scale;
+    var fs = fl.width * TSscale * mp.scale / (fl.ps || 1);
     g.drawImage(fl, Math.round(fx - fs / 2), Math.round(fy - fs / 2), fs, fs);
   }
   /* a loaded harvester shows its ore */

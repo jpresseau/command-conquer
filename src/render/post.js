@@ -143,6 +143,17 @@ function _rtsPost(g) {
   /* the vignette multiplies over this on the compositor - #rtsVig sits above the canvas */
 }
 
+/* THROUGH THE PROJECTION, LIKE EVERY OTHER WORLD DRAW. This placed each tile at
+   `(x - ox) * cell` - a flat top-down projection written out by hand - and it is called
+   ungated, in both modes. In 3D the world is tilted: a cell's screen height is cell * cos(tilt)
+   and its row position compresses with it, so the sea was laid over the tilted map on a grid
+   that was not, drifting further out of register with every row from the camera. It is the one
+   world overlay that still has to run in 3D - the GL side has no water surface of its own, so
+   without it the sea is a flat painted colour - which is exactly why it has to be in the right
+   place rather than merely present.
+
+   Only players who have loaded their own Red Alert archives ever saw it: _mixWater returns
+   null without them and this returns immediately, which is also why no spec caught it. */
 function _rtsDrawWater(g, G, cell) {
   var steps = _mixWater();
   if (!steps) return;
@@ -154,6 +165,10 @@ function _rtsDrawWater(g, G, cell) {
   var x1 = Math.min(N - 1, Math.ceil(ox + R.W / cell));
   var y1 = Math.min(N - 1, Math.ceil(oy + R.H / cell));
   var seed = (G.seed || 1) | 0, w = Math.ceil(cell) + 1;
+  /* the same lean the ground decals use, so the sea hugs the terrain rather than shingling */
+  var R3 = window._R3D;
+  var ys = (R3 && R3.on) ? R3.cp : 1;
+  var wh = Math.ceil(cell * ys) + 1;
 
   for (var y = y0; y <= y1; y++) {
     for (var x = x0; x <= x1; x++) {
@@ -164,7 +179,8 @@ function _rtsDrawWater(g, G, cell) {
       if (v >= set.length) v = set.length - 1;
       var tile = set[v];
       if (!tile) continue;
-      g.drawImage(tile, Math.round((x - ox) * cell), Math.round((y - oy) * cell), w, w);
+      var sp = _rtsGroundToScreen(_rtsWX(x) - RTS_TILE / 2, _rtsWX(y) - RTS_TILE / 2);
+      g.drawImage(tile, Math.round(sp.x), Math.round(sp.y), w, wh);
     }
   }
 }

@@ -252,6 +252,24 @@ function _sprVN(x, y, scale, seed) {
   var c = _sprHash(x0, y0 + 1, seed), d = _sprHash(x0 + 1, y0 + 1, seed);
   return (a + (b - a) * tx) * (1 - ty) + (c + (d - c) * tx) * ty;
 }
+/* Value noise on a TORUS: the lattice coordinates wrap at `period / scale`, so a tile sampled
+   over [0, period) meets itself exactly at the edges. _sprVN cannot do this - its lattice runs
+   off to infinity - and a tile built from it has a visible seam wherever it repeats, which for
+   a 128px tile across a phone is eight seams. `period / scale` must be a whole number, and the
+   caller is responsible for that; the wrap is silently wrong otherwise, so it is asserted at
+   the one call site by choosing scales that divide the tile. */
+function _sprVNWrap(x, y, scale, seed, period) {
+  var m = Math.round(period / scale);
+  var fx = x / scale, fy = y / scale;
+  var x0 = Math.floor(fx), y0 = Math.floor(fy);
+  var tx = fx - x0, ty = fy - y0;
+  tx = tx * tx * (3 - 2 * tx); ty = ty * ty * (3 - 2 * ty);
+  function w(v) { return ((v % m) + m) % m; }
+  var wx0 = w(x0), wy0 = w(y0), wx1 = w(x0 + 1), wy1 = w(y0 + 1);
+  var a = _sprHash(wx0, wy0, seed), b = _sprHash(wx1, wy0, seed);
+  var c = _sprHash(wx0, wy1, seed), d = _sprHash(wx1, wy1, seed);
+  return (a + (b - a) * tx) * (1 - ty) + (c + (d - c) * tx) * ty;
+}
 function _sprFbm(x, y, seed) {
   return _sprVN(x, y, 48, seed) * 0.55 + _sprVN(x, y, 16, seed + 7) * 0.30 + _sprVN(x, y, 6, seed + 19) * 0.15;
 }

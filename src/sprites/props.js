@@ -68,21 +68,30 @@ var RTS_TURRETED = { tank:1, light:1, heavy:1, destroyer:1, gunboat:1, cruiser:1
    irregular pad noticeably larger than itself - it is what stops a base looking like
    furniture set down on a lawn. Baked per footprint size and reused. */
 function _sprPad(wCells, hCells) {
-  var W = wCells * RTS_TS + 20, H = hCells * RTS_TS + 16;
+  /* At the procedural density, like the building standing on it. A pad is one of the largest
+     unbroken areas on the map - a 3x3 footprint is 92x88 pixels of it - and baked at RTS_TS it
+     magnified six times on a dpr-3 phone while the building it belongs to magnified three. The
+     ragged verge is the whole point of the shape, and a verge quantised to 12-pixel blocks is
+     not ragged. Every length below is in pad pixels and scales with K; the noise is sampled at
+     K times the frequency so the wobble keeps its size in ART pixels rather than becoming
+     twice as fine and reading as a straight edge. */
+  var K = RTS_PS;
+  var W = (wCells * RTS_TS + 20) * K, H = (hCells * RTS_TS + 16) * K;
   var t = _sprMake(W, H), g = t.g, P = RTS_PAL.conc, seed = wCells * 31 + hCells * 7;
   for (var y = 0; y < H; y += 2) {
     for (var x = 0; x < W; x += 2) {
       /* Distance to the edge of a rounded rect, wobbled by noise, gives a ragged verge. */
-      var dx = Math.max(0, Math.abs(x - W / 2) - (W / 2 - 11));
-      var dy = Math.max(0, Math.abs(y - H / 2) - (H / 2 - 9));
-      var e = Math.hypot(dx, dy) + (_sprVN(x, y, 9, seed) - 0.5) * 9;
-      if (e > 5) continue;
+      var dx = Math.max(0, Math.abs(x - W / 2) - (W / 2 - 11 * K));
+      var dy = Math.max(0, Math.abs(y - H / 2) - (H / 2 - 9 * K));
+      var e = Math.hypot(dx, dy) + (_sprVN(x, y, 9 * K, seed) - 0.5) * 9 * K;
+      if (e > 5 * K) continue;
       var h = _sprHash(x >> 1, y >> 1, seed + 5);
-      g.globalAlpha = e > 3 ? 0.5 : 1;
+      g.globalAlpha = e > 3 * K ? 0.5 : 1;
       _sprRect(g, x, y, 2, 2, h < 0.18 ? P[2] : (h < 0.66 ? P[0] : P[1]));
     }
   }
   g.globalAlpha = 1;
+  t.c.ps = K;
   return t.c;
 }
 
@@ -169,17 +178,61 @@ function _sprCrater() {
 /* Flame frames. ANIM_FIRE_SMALL is what an explosion chains into and what rides a burning
    unit; it has to read at a glance without drowning the sprite underneath. */
 function _sprFire() {
-  var out = [], n = 5;
+  /* A TONGUE, NOT A STACK OF BARS. The previous generator drew sixteen horizontal bars up a
+     wobbling axis, 5 pixels wide at the bottom and 1 at the top, each 2 tall and stepping up by
+     1.1 - so they OVERLAPPED into a solid slab at the base and separated into a thin stalk at
+     the tip. Rendered, that is a wide white splash with an orange stick out of the top of it;
+     it reads as a candle, or as spilled paint, and it is the sprite a burning building wears
+     for as long as it burns. Doubling its density made it a smoother version of the same wrong
+     shape, which is what sent this back for a rewrite rather than a rescale.
+
+     A flame is a FIELD, so this evaluates one. Height runs 0 at the fuel to 1 at the tip; the
+     half-width pinches to nothing at the very base (fire necks where it leaves what it is
+     burning), swells through the lower third and tapers to a point. Colour comes from a
+     temperature that falls both with height and with distance from the axis, which is what puts
+     a white core inside a yellow body inside an orange edge - a bar chart cannot do that,
+     because every pixel in a bar is the same colour. The axis snakes, the tip height varies per
+     frame, and both are hashed, so five frames flicker instead of pulsing.
+
+     Authored in art pixels and scaled by K on the way in, like everything else here. */
+  var K = RTS_PS, out = [], n = 5;
+  var W = 16 * K, H = 20 * K;
   for (var f = 0; f < n; f++) {
-    var t = _sprMake(16, 20), g = t.g, seed = f * 97 + 11;
-    for (var i = 0; i < 16; i++) {
-      var yy = 19 - (i * 1.1 + _sprHash(i, f, seed) * 5);
-      var wob = Math.sin((i / 16) * 3.1 + f * 1.3) * 3;
-      var wx = 8 + wob - 2, w = Math.max(1, 5 - i * 0.25);
-      var k = i / 16;
-      var col = k < 0.32 ? '#fff2c0' : (k < 0.55 ? '#ffcf6a' : (k < 0.78 ? '#ff9a2e' : '#e0561c'));
-      _sprRect(g, wx, yy, w, 2, col);
+    var t = _sprMake(W, H), seed = f * 97 + 11;
+    var img = t.g.createImageData(W, H), d = img.data;
+    /* how far up the canvas this frame's tip reaches - the flicker */
+    var top = 0.78 + _sprHash(f, 3, seed) * 0.22;
+    for (var y = 0; y < H; y++) {
+      var h = (H - 1 - y) / (H - 1);                 /* 0 at the base, 1 at the top */
+      if (h > top) continue;
+      var hn = h / top;                              /* 0..1 within this frame's flame */
+      /* the axis snakes, more freely the higher it gets */
+      var ax = W / 2 + Math.sin(hn * 3.4 + f * 1.9) * W * 0.15 * hn;
+      /* pinched at the fuel, widest in the lower third, pointed at the tip */
+      var hw = W * 0.44 * Math.pow(1 - hn, 0.62) * Math.min(1, 0.18 + hn * 7);
+      if (hw < 0.6) continue;
+      for (var x = 0; x < W; x++) {
+        var dd = Math.abs(x + 0.5 - ax) / hw;
+        if (dd > 1) continue;
+        /* temperature: hottest on the axis and low down, with a little noise so the edge of
+           the tongue is ragged rather than a clean parabola */
+        var temp = (1 - dd * dd * 0.85) * (1 - hn * 0.72)
+                 + (_sprVN(x * 2, y * 2 + f * 40, 3 * K, seed) - 0.5) * 0.22;
+        var col;
+        if (temp > 0.74) col = [255, 246, 214];
+        else if (temp > 0.52) col = [255, 214, 122];
+        else if (temp > 0.32) col = [255, 150, 48];
+        else if (temp > 0.14) col = [220, 84, 26];
+        else col = [140, 46, 18];
+        /* the outer millimetre fades, so the tongue has an edge rather than a cutout */
+        var a = dd > 0.86 ? Math.max(0, (1 - dd) / 0.14) : 1;
+        var o = (y * W + x) * 4;
+        d[o] = col[0]; d[o + 1] = col[1]; d[o + 2] = col[2];
+        d[o + 3] = Math.round(255 * a);
+      }
     }
+    t.g.putImageData(img, 0, 0);
+    t.c.ps = K;
     out.push(t.c);
   }
   return out;
@@ -193,19 +246,45 @@ function _sprFire() {
    for SPEED_FLOAT - but that is collectable in the original because RA has ships, and this
    game has none. See the note on RTS_CRATES. */
 function _sprCrate() {
-  var t = _sprMake(RTS_TS, RTS_TS), g = t.g, c = RTS_TS / 2;
-  _sprRect(g, c - 7, c - 2, 14, 4, '#2b2117');           /* shadow under it */
-  _sprRect(g, c - 7, c - 8, 14, 11, '#9c7038');          /* crate body */
-  _sprRect(g, c - 7, c - 8, 14, 2, '#c08f4c');           /* lit top edge */
-  _sprRect(g, c - 7, c + 1, 14, 2, '#6b4a22');           /* shaded bottom edge */
-  _sprRect(g, c - 7, c - 4, 14, 1, '#c9a05a');           /* slat lines */
-  _sprRect(g, c - 7, c - 1, 14, 1, '#c9a05a');
-  _sprRect(g, c - 1, c - 8, 2, 11, '#6b4a22');           /* upright brace */
-  _sprRect(g, c - 4, c - 6, 3, 3, '#e8c661');            /* stencil mark */
+  /* At the procedural density, like everything else the player looks AT rather than walks on.
+     Every length here is in art pixels and carries K, so the crate is the same size on screen
+     and its slats and stencil land on a grid K times finer. */
+  var K = RTS_PS, TS = RTS_TS * K;
+  var t = _sprMake(TS, TS), g = t.g, c = TS / 2;
+  _sprRect(g, c - 7 * K, c - 2 * K, 14 * K, 4 * K, '#2b2117');    /* shadow under it */
+  _sprRect(g, c - 7 * K, c - 8 * K, 14 * K, 11 * K, '#9c7038');   /* crate body */
+  _sprRect(g, c - 7 * K, c - 8 * K, 14 * K, 2 * K, '#c08f4c');    /* lit top edge */
+  _sprRect(g, c - 7 * K, c + 1 * K, 14 * K, 2 * K, '#6b4a22');    /* shaded bottom edge */
+  _sprRect(g, c - 7 * K, c - 4 * K, 14 * K, K, '#c9a05a');        /* slat lines */
+  _sprRect(g, c - 7 * K, c - 1 * K, 14 * K, K, '#c9a05a');
+  _sprRect(g, c - 1 * K, c - 8 * K, 2 * K, 11 * K, '#6b4a22');    /* upright brace */
+  _sprRect(g, c - 4 * K, c - 6 * K, 3 * K, 3 * K, '#e8c661');     /* stencil mark */
+  t.c.ps = K;
   return t.c;
 }
+/* BAKED AT THE PROCEDURAL DENSITY, like everything else that stands on the map.
+
+   These were the last sprites still authored one-to-one against RA's 24-pixel cell, and the
+   only reason nobody noticed is that an explosion is over in half a second. Measured on a dpr-3
+   phone at the top zoom, where a cell covers 144 device pixels: buildings and units are baked
+   at RTS_TS * RTS_PS and magnify 3x, while every fireball, muzzle flash, bullet strike, splash
+   and smoke puff magnified SIX times. The blockiest thing on the screen was the thing a
+   firefight makes you look at.
+
+   Every size here is a seed that the rest of the frame derives from - `s` and `c` for the
+   fireball, `ps`/`pc`, `ss`/`sc`, `ms`/`mc` for the others - so scaling the seed scales the
+   whole construction, and the discs are then rasterised on the finer grid rather than being
+   blown up afterwards. That is the difference between more pixels and more detail: the lobes
+   come out round instead of stepped. Only the handful of absolute feature sizes - a 2-pixel
+   debris speck, a 1-pixel spark - need the factor written on them, and they carry it so they
+   stay the same size ON SCREEN rather than shrinking to nothing.
+
+   Each canvas is tagged with the density it was baked at, and every draw site divides by that
+   tag, exactly as the building and unit paths already do. Real Red Alert artwork carries no
+   tag, reads as 1, and is untouched - which matters here because `_mixFx` replaces these
+   role by role, so a mixed set has both densities in it at once. */
 function _sprFx() {
-  var boom = [], i;
+  var boom = [], i, K = RTS_PS;
   var cols = ['#fff4cc', '#ffd070', '#ff9a2e', '#e0561c', '#8a3410', '#3a2418'];
   /* A FIREBALL, NOT A BULLSEYE. The first version drew each frame as two concentric filled
      circles, and in play that read as a flat white disc punched into the picture - the palette
@@ -216,7 +295,7 @@ function _sprFx() {
      against. Late frames pull the hot lobes apart and let the soot dominate, which is the
      collapse into smoke. Deterministic per frame - explosions must not shimmer between bakes. */
   for (i = 0; i < 6; i++) {
-    var s = 20 + i * 13, t = _sprMake(s, s), g = t.g, c = s / 2;
+    var s = (20 + i * 13) * K, t = _sprMake(s, s), g = t.g, c = s / 2;
     var rim = cols[Math.min(5, i + 2)], hot = cols[Math.min(5, i)], core = cols[Math.max(0, i - 1)];
     var spread = 0.30 + i * 0.09;                 /* lobes drift apart as the ball collapses */
     for (var lb = 0; lb < 7; lb++) {
@@ -235,26 +314,27 @@ function _sprFx() {
     if (i < 4) _sprDisc(g, c, c - c * 0.12, c * (0.16 - i * 0.02), core);
     if (i < 3) for (var k = 0; k < 6; k++) {                     /* debris specks */
       var a = k / 6 * 6.283 + i;
-      _sprRect(g, c + Math.cos(a) * c * 0.8, c + Math.sin(a) * c * 0.8, 2, 2, cols[i + 1]);
+      _sprRect(g, c + Math.cos(a) * c * 0.8, c + Math.sin(a) * c * 0.8, 2 * K, 2 * K, cols[i + 1]);
     }
     boom.push(t.c);
   }
   var flash = [];
   for (i = 0; i < 3; i++) {
-    var f = _sprMake(9, 9);
-    _sprDisc(f.g, 4.5, 4.5, 4 - i, i === 0 ? '#fff6d0' : (i === 1 ? '#ffd070' : '#ff9a30'));
+    var f = _sprMake(9 * K, 9 * K);
+    _sprDisc(f.g, 4.5 * K, 4.5 * K, (4 - i) * K,
+             i === 0 ? '#fff6d0' : (i === 1 ? '#ffd070' : '#ff9a30'));
     flash.push(f.c);
   }
   /* Combat_Anim's PIFF: a small dirty spark, for a bullet strike. Grey-white, not fire -
      a rifle round hitting a hull does not look like a shell going off. */
   var piff = [];
   for (i = 0; i < 4; i++) {
-    var ps = 8 + i * 4, pt = _sprMake(ps, ps), pg = pt.g, pc = ps / 2;
+    var ps = (8 + i * 4) * K, pt = _sprMake(ps, ps), pg = pt.g, pc = ps / 2;
     var pcol = ['#ffffff', '#dfe6ee', '#9fadbb', '#6b7784'][i];
-    _sprDisc(pg, pc, pc, Math.max(1, (ps / 2 - 1) * (i < 2 ? 0.55 : 0.8)), pcol);
+    _sprDisc(pg, pc, pc, Math.max(K, (ps / 2 - K) * (i < 2 ? 0.55 : 0.8)), pcol);
     for (var pk = 0; pk < 4; pk++) {
       var pa = pk / 4 * 6.283 + i * 0.7;
-      _sprRect(pg, pc + Math.cos(pa) * pc * 0.7, pc + Math.sin(pa) * pc * 0.7, 1, 1, '#f2f6fa');
+      _sprRect(pg, pc + Math.cos(pa) * pc * 0.7, pc + Math.sin(pa) * pc * 0.7, K, K, '#f2f6fa');
     }
     piff.push(pt.c);
   }
@@ -264,26 +344,26 @@ function _sprFx() {
      SQUARE: the effect renderer draws every frame at width x width. */
   var splash = [];
   for (i = 0; i < 5; i++) {
-    var ss = 20 + i * 9, st = _sprMake(ss, ss), sg = st.g, sc = ss / 2;
+    var ss = (20 + i * 9) * K, st = _sprMake(ss, ss), sg = st.g, sc = ss / 2;
     var kk = i / 4;
     /* the ring, flattened because the camera looks along the ground plane */
-    var rr = (sc - 2) * (0.28 + kk * 0.72);
+    var rr = (sc - 2 * K) * (0.28 + kk * 0.72);
     for (var sk = 0; sk < 22; sk++) {
       var sa = sk / 22 * 6.283;
-      _sprRect(sg, sc + Math.cos(sa) * rr, sc + Math.sin(sa) * rr * 0.42, 2, 2,
+      _sprRect(sg, sc + Math.cos(sa) * rr, sc + Math.sin(sa) * rr * 0.42, 2 * K, 2 * K,
         i < 3 ? '#eaf6fc' : '#b6d6e6');
     }
     /* the column: tall and bright at first, collapsing back into the ring */
     if (i < 3) {
-      var cw = 5 - i, ch = ss * 0.5 * (1 - kk * 0.7);
+      var cw = (5 - i) * K, ch = ss * 0.5 * (1 - kk * 0.7);
       _sprRect(sg, sc - cw / 2, sc - ch, cw, ch, '#dff0f8');
-      _sprRect(sg, sc - cw / 2, sc - ch, cw, Math.max(2, ch * 0.35), '#ffffff');
+      _sprRect(sg, sc - cw / 2, sc - ch, cw, Math.max(2 * K, ch * 0.35), '#ffffff');
     }
     /* droplets, thrown up and out */
     for (var dk = 0; dk < 9; dk++) {
       var da = dk / 9 * 6.283 + i, dd = rr * (0.7 + _sprHash(dk, i, 7) * 0.6);
-      _sprRect(sg, sc + Math.cos(da) * dd, sc + Math.sin(da) * dd * 0.42 - (2 - kk * 2) * 3,
-        2, 2, '#ffffff');
+      _sprRect(sg, sc + Math.cos(da) * dd, sc + Math.sin(da) * dd * 0.42 - (2 - kk * 2) * 3 * K,
+        2 * K, 2 * K, '#ffffff');
     }
     splash.push(st.c);
   }
@@ -296,7 +376,7 @@ function _sprFx() {
      with the same square-canvas rule the effect renderer needs. */
   var smoke = [];
   for (i = 0; i < 6; i++) {
-    var ms = 30, mt = _sprMake(ms, ms), mg = mt.g, mc = ms / 2, mu = i / 5;
+    var ms = 30 * K, mt = _sprMake(ms, ms), mg = mt.g, mc = ms / 2, mu = i / 5;
     var puffs = [[0.00, 0.16, '#6b6560'], [0.30, 0.22, '#7b746e'],
                  [0.62, 0.26, '#8a837c'], [0.92, 0.30, '#98918a']];
     for (var pk2 = 0; pk2 < puffs.length; pk2++) {
@@ -304,10 +384,14 @@ function _sprFx() {
       if (rise > 1.15) continue;
       var rad = ms * puffs[pk2][1] * (0.45 + rise * 0.85) * (1 - mu * 0.25);
       _sprDisc(mg, mc + Math.sin(rise * 4.1 + i) * ms * 0.10,
-        ms - 3 - rise * (ms - 6), Math.max(1, rad), puffs[pk2][2]);
+        ms - 3 * K - rise * (ms - 6 * K), Math.max(K, rad), puffs[pk2][2]);
     }
     smoke.push(mt.c);
   }
+  /* Tag before the real-art override, so a mixed set keeps each role's own density. */
+  [boom, flash, piff, splash, smoke].forEach(function (set) {
+    for (var q = 0; q < set.length; q++) set[q].ps = K;
+  });
   var drawn = { boom: boom, flash: flash, piff: piff, splash: splash, fire: fire, smoke: smoke };
   /* The originals win where they exist, role by role, keeping the drawn one for anything the
      archives do not cover - so a partial set degrades to a mixture rather than to nothing. */
