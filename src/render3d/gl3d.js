@@ -88,6 +88,32 @@ function _r3dEyeDist() { return R3D_FOVK * _rtsR.H / _rtsZoom(); }
    caller might quietly draw with. */
 var R3D_WMIN = 0.02;
 
+/* ------------------------------------------------------------- cast shadows --
+   THE SHADOW LIGHT IS THE SHADING LIGHT WITH ITS Z FLIPPED, and that is not a shortcut - it is
+   the only direction that produces a shadow anyone can see.
+
+   R3_LIGHT is the sprite baker's, and the baker chose it to light the face the camera sees
+   most: upper-left and IN FRONT, +z, so that a front elevation does not sit at flat ambient.
+   That puts it 22 degrees off the camera's own axis, which is very nearly a headlight.
+   Measured, the true shadow of a point at height h lands at screen dy -0.568h while the
+   object's own top lands at -0.581h - the shadow would be hidden behind the object casting
+   it, to within 2%, at every zoom and every position on screen.
+
+   Flipping z swings the source behind the scene and throws the shadow DOWN and to the right,
+   which is exactly where the rest of the game already puts it: _sprShadow offsets every baked
+   sprite by a positive dx and dy, and so does the original's artwork. The two modes agree with
+   each other, and the shading keeps the light the baker picked for it.
+
+   The two numbers are the ground offset per unit of HEIGHT - a point at height y casts to
+   (x + y*SX, 0, z + y*SZ), the standard projection onto the plane y=0 along the light. */
+var R3D_SHADOW_SX = -R3_LIGHT[0] / R3_LIGHT[1];
+var R3D_SHADOW_SZ = R3_LIGHT[2] / R3_LIGHT[1];
+/* Lifted off the ground so it wins the depth test against the plane it is cast on. A 24-bit
+   depth buffer would not need this much; 16-bit ones exist. 0.12 of a world unit is a
+   thirty-third of a cell, which is under a pixel at every zoom, so it cannot read as float. */
+var R3D_SHADOW_Y = 0.12;
+var R3D_SHADOW_A = 0.34;
+
 function _r3dShader(gl, type, src) {
   var sh = gl.createShader(type);
   gl.shaderSource(sh, src); gl.compileShader(sh);
@@ -154,10 +180,19 @@ var R3D_MESH_VS =
   'uniform vec2 uTilt;' +       /* cos(tilt), sin(tilt) */
   'uniform float uInvD;' +      /* 1 / eye distance; 0 is the orthographic camera */
   'uniform vec3 uPos; uniform vec2 uRot; uniform float uScale; uniform float uScaleY; uniform vec3 uTint;' +
+  'uniform vec3 uShadow;' +     /* ground offset per unit height (x, z), and 1 = cast mode */
   'varying vec3 vC;' +
   'void main(){' +
   '  vec3 p = vec3(aP.x * uScale, aP.y * uScale * uScaleY, aP.z * uScale);' +
   '  vec3 wp = vec3(uPos.x + p.x*uRot.x - p.z*uRot.y, uPos.y + p.y, uPos.z + p.x*uRot.y + p.z*uRot.x);' +
+  /* THE CAST SHADOW IS THE SAME MESH, SQUASHED ONTO THE GROUND. Every vertex slides along the
+     light onto y=0 - the standard planar projection - so a tank's shadow is tank-shaped and a
+     power plant's has its chimneys, which is the whole reason this is geometry rather than the
+     blob disc it replaces. uShadow.z is 0 for a normal draw and 1 for a shadow, and uTint is
+     set to zero for the shadow draw, which takes the shading below to black without needing a
+     second program or a branch around it. */
+  '  wp = mix(wp, vec3(wp.x + wp.y * uShadow.x, ' + R3D_SHADOW_Y.toFixed(3) +
+      ', wp.z + wp.y * uShadow.y), uShadow.z);' +
   '  vec3 n = normalize(vec3(aN.x*uRot.x - aN.z*uRot.y, aN.y, aN.x*uRot.y + aN.z*uRot.x));' +
   /* the sprite baker's own light and half-vector, so the two pipelines agree face for face */
   '  float lam = max(dot(n, ' + _r3dGlsl3(R3_LIGHT) + '), 0.0);' +
@@ -217,7 +252,14 @@ function _r3dInit() {
      project verifies its rendering with headless screenshots, so a renderer that cannot be
      screenshotted cannot be tested. The cost is a buffer copy per frame instead of a swap,
      which at this scene's ~11k triangles is not measurable. */
-  var gl = cv.getContext('webgl', { antialias: true, alpha: false, preserveDrawingBuffer: true });
+  /* STENCIL, for the cast shadows. A planar shadow is the whole mesh squashed flat, so every
+     face of it lands on the same patch of ground - a six-sided box blends six times over and
+     comes out a solid black blot instead of a shadow. The stencil is what makes each pixel
+     take the shade exactly once. Asked for here rather than assumed: _r3dFrame checks
+     STENCIL_BITS and falls back to drawing the shadows unmasked, which is darker where a
+     model overlaps itself but is still a shadow. */
+  var gl = cv.getContext('webgl', { antialias: true, alpha: false, preserveDrawingBuffer: true,
+                                    stencil: true });
   if (!gl) return null;
   var R3;
   try {
@@ -227,6 +269,7 @@ function _r3dInit() {
       texP: _r3dProgram(gl, R3D_TEX_VS, R3D_TEX_FS),
       mesh: {}, terrainTex: null, terrainDirty: true,
       fogCv: null, fogTex: null, fogDirty: true,
+      stencil: gl.getParameter(gl.STENCIL_BITS) > 0,
       cp: Math.cos(R3D_TILT), sp: Math.sin(R3D_TILT)
     };
   } catch (e) { return null; }

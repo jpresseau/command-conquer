@@ -876,7 +876,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">5df1f8b · 2026-08-14</div>
+  <div id="rtsBuild" title="build">6d4f40a · 2026-08-14</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -20168,6 +20168,32 @@ function _r3dEyeDist() { return R3D_FOVK * _rtsR.H / _rtsZoom(); }
    caller might quietly draw with. */
 var R3D_WMIN = 0.02;
 
+/* ------------------------------------------------------------- cast shadows --
+   THE SHADOW LIGHT IS THE SHADING LIGHT WITH ITS Z FLIPPED, and that is not a shortcut - it is
+   the only direction that produces a shadow anyone can see.
+
+   R3_LIGHT is the sprite baker's, and the baker chose it to light the face the camera sees
+   most: upper-left and IN FRONT, +z, so that a front elevation does not sit at flat ambient.
+   That puts it 22 degrees off the camera's own axis, which is very nearly a headlight.
+   Measured, the true shadow of a point at height h lands at screen dy -0.568h while the
+   object's own top lands at -0.581h - the shadow would be hidden behind the object casting
+   it, to within 2%, at every zoom and every position on screen.
+
+   Flipping z swings the source behind the scene and throws the shadow DOWN and to the right,
+   which is exactly where the rest of the game already puts it: _sprShadow offsets every baked
+   sprite by a positive dx and dy, and so does the original's artwork. The two modes agree with
+   each other, and the shading keeps the light the baker picked for it.
+
+   The two numbers are the ground offset per unit of HEIGHT - a point at height y casts to
+   (x + y*SX, 0, z + y*SZ), the standard projection onto the plane y=0 along the light. */
+var R3D_SHADOW_SX = -R3_LIGHT[0] / R3_LIGHT[1];
+var R3D_SHADOW_SZ = R3_LIGHT[2] / R3_LIGHT[1];
+/* Lifted off the ground so it wins the depth test against the plane it is cast on. A 24-bit
+   depth buffer would not need this much; 16-bit ones exist. 0.12 of a world unit is a
+   thirty-third of a cell, which is under a pixel at every zoom, so it cannot read as float. */
+var R3D_SHADOW_Y = 0.12;
+var R3D_SHADOW_A = 0.34;
+
 function _r3dShader(gl, type, src) {
   var sh = gl.createShader(type);
   gl.shaderSource(sh, src); gl.compileShader(sh);
@@ -20234,10 +20260,19 @@ var R3D_MESH_VS =
   'uniform vec2 uTilt;' +       /* cos(tilt), sin(tilt) */
   'uniform float uInvD;' +      /* 1 / eye distance; 0 is the orthographic camera */
   'uniform vec3 uPos; uniform vec2 uRot; uniform float uScale; uniform float uScaleY; uniform vec3 uTint;' +
+  'uniform vec3 uShadow;' +     /* ground offset per unit height (x, z), and 1 = cast mode */
   'varying vec3 vC;' +
   'void main(){' +
   '  vec3 p = vec3(aP.x * uScale, aP.y * uScale * uScaleY, aP.z * uScale);' +
   '  vec3 wp = vec3(uPos.x + p.x*uRot.x - p.z*uRot.y, uPos.y + p.y, uPos.z + p.x*uRot.y + p.z*uRot.x);' +
+  /* THE CAST SHADOW IS THE SAME MESH, SQUASHED ONTO THE GROUND. Every vertex slides along the
+     light onto y=0 - the standard planar projection - so a tank's shadow is tank-shaped and a
+     power plant's has its chimneys, which is the whole reason this is geometry rather than the
+     blob disc it replaces. uShadow.z is 0 for a normal draw and 1 for a shadow, and uTint is
+     set to zero for the shadow draw, which takes the shading below to black without needing a
+     second program or a branch around it. */
+  '  wp = mix(wp, vec3(wp.x + wp.y * uShadow.x, ' + R3D_SHADOW_Y.toFixed(3) +
+      ', wp.z + wp.y * uShadow.y), uShadow.z);' +
   '  vec3 n = normalize(vec3(aN.x*uRot.x - aN.z*uRot.y, aN.y, aN.x*uRot.y + aN.z*uRot.x));' +
   /* the sprite baker's own light and half-vector, so the two pipelines agree face for face */
   '  float lam = max(dot(n, ' + _r3dGlsl3(R3_LIGHT) + '), 0.0);' +
@@ -20297,7 +20332,14 @@ function _r3dInit() {
      project verifies its rendering with headless screenshots, so a renderer that cannot be
      screenshotted cannot be tested. The cost is a buffer copy per frame instead of a swap,
      which at this scene's ~11k triangles is not measurable. */
-  var gl = cv.getContext('webgl', { antialias: true, alpha: false, preserveDrawingBuffer: true });
+  /* STENCIL, for the cast shadows. A planar shadow is the whole mesh squashed flat, so every
+     face of it lands on the same patch of ground - a six-sided box blends six times over and
+     comes out a solid black blot instead of a shadow. The stencil is what makes each pixel
+     take the shade exactly once. Asked for here rather than assumed: _r3dFrame checks
+     STENCIL_BITS and falls back to drawing the shadows unmasked, which is darker where a
+     model overlaps itself but is still a shadow. */
+  var gl = cv.getContext('webgl', { antialias: true, alpha: false, preserveDrawingBuffer: true,
+                                    stencil: true });
   if (!gl) return null;
   var R3;
   try {
@@ -20307,6 +20349,7 @@ function _r3dInit() {
       texP: _r3dProgram(gl, R3D_TEX_VS, R3D_TEX_FS),
       mesh: {}, terrainTex: null, terrainDirty: true,
       fogCv: null, fogTex: null, fogDirty: true,
+      stencil: gl.getParameter(gl.STENCIL_BITS) > 0,
       cp: Math.cos(R3D_TILT), sp: Math.sin(R3D_TILT)
     };
   } catch (e) { return null; }
@@ -20614,7 +20657,7 @@ function _r3dFrame(G) {
   gl.clearColor(0.016, 0.024, 0.035, 1);
   gl.enable(gl.DEPTH_TEST);
   gl.disable(gl.BLEND);
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
 
   /* --- ground --- */
   gl.useProgram(R3.texP);
@@ -20641,7 +20684,10 @@ function _r3dFrame(G) {
   var uScaleY = gl.getUniformLocation(R3.meshP, 'uScaleY');
   var uTint = gl.getUniformLocation(R3.meshP, 'uTint');
   var uA = gl.getUniformLocation(R3.meshP, 'uA');
+  var uShadow = gl.getUniformLocation(R3.meshP, 'uShadow');
   gl.uniform1f(uA, 1);
+  gl.uniform3f(uShadow, 0, 0, 0);
+  var shadowMode = 0;
   var aP = gl.getAttribLocation(R3.meshP, 'aP');
   var aN = gl.getAttribLocation(R3.meshP, 'aN');
   var aC = gl.getAttribLocation(R3.meshP, 'aC');
@@ -20653,7 +20699,8 @@ function _r3dFrame(G) {
     gl.uniform2f(uRot, Math.cos(rot), Math.sin(rot));
     gl.uniform1f(uScale, scale);
     gl.uniform1f(uScaleY, sy || 1);
-    gl.uniform3f(uTint, dim ? 0.62 : 1, dim ? 0.55 : 1, dim ? 0.55 : 1);
+    if (shadowMode) gl.uniform3f(uTint, 0, 0, 0);
+    else gl.uniform3f(uTint, dim ? 0.62 : 1, dim ? 0.55 : 1, dim ? 0.55 : 1);
     gl.bindBuffer(gl.ARRAY_BUFFER, mesh.p);
     gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 0, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, mesh.n);
@@ -20696,45 +20743,48 @@ function _r3dFrame(G) {
     }
   }
 
-  /* BLOB SHADOWS FIRST, under every unit. A mesh floating on flat ground has no contact cue
-     at all, and aircraft in particular read as decals without one; a soft dark disc at y~0 is
-     the cheapest grounding there is, and it is drawn for units only - buildings sit on their
-     own modelled plinths and the terrain bake already darkens under them. Drawn before the
-     units with depth WRITES off, so the discs never punch holes in the depth buffer that the
-     meshes above them would then fail against. */
-  if (!R3.shadowMesh) {
-    var sm = [], SEG = 20, ring = [];
-    for (var sv = 0; sv < SEG; sv++) {
-      var sa = sv / SEG * Math.PI * 2;
-      ring.push([Math.cos(sa) * 3, 0.05, Math.sin(sa) * 3]);
-    }
-    /* BLENDED, not opaque. This disc used to be drawn solid in the baked dirt's dark tone, on
-       the reasoning that a hard shadow on that ground would be that colour - but an opaque
-       disc does not darken the ground, it REPLACES it, so it read as a hole cut in the map
-       rather than as shade, and under infantry (whose disc came out wider than the figure) as
-       a soldier standing in a puddle of void. It multiplies now: a neutral dark at a third
-       alpha, which darkens grass, dirt, ore and road alike and keeps whatever detail is
-       underneath - which is the whole difference between a shadow and a hole. */
-    sm.push({ v: ring, c: [16, 18, 14] });
-    R3.shadowMesh = _r3dBuildMesh(gl, sm);
-  }
+  /* CAST SHADOWS, under everything the player put on the map. These were BLOB DISCS - one
+     flat circle per unit, sized off its collision radius - which grounds a mesh and says
+     nothing else: every unit had the same round shadow, buildings had none at all, and an
+     aircraft's disc sat directly under it as though it were parked.
+
+     They are the real mesh now, squashed onto the ground along the light (see R3D_SHADOW_SX
+     in gl3d.js). A tank's shadow is tank-shaped and turns with its hull, a power plant's has
+     its chimneys, a helicopter's lies away from it by its altitude - which is the cue that
+     says "flying" rather than "drawn slightly larger". It is one extra draw per entity through
+     the program that was already bound, with uShadow doing the flattening in the vertex stage,
+     so no second mesh is built and no second program is compiled.
+
+     THE STENCIL IS NOT OPTIONAL WHERE IT EXISTS. A planar shadow puts every face of a model on
+     the same patch of ground, so a six-sided box blends six times over and comes out a solid
+     black blot with the silhouette lost inside it. Stamping each pixel once is what leaves a
+     shadow. Where the buffer is missing the pass still runs unmasked - darker where a model
+     overlaps itself, but a shadow rather than nothing.
+
+     Depth WRITES off, so the shadows never punch holes in the buffer that the meshes standing
+     on them would then fail against; depth TEST on, so a shadow cast behind a ridge is hidden
+     by it. The world's own trees and rock do not cast: they are ~1M triangles behind a chunk
+     cull and drawing them twice is the one thing here that would not fit the frame budget. */
   gl.depthMask(false);
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-  gl.uniform1f(uA, 0.34);
-  for (var si2 = 0; si2 < G.ents.length; si2++) {
-    var se = G.ents[si2];
-    if (se.dead || se.type !== 'unit') continue;
-    /* 0.62, not 0.9. A shadow the size of the unit's own collision radius is wider than the
-       thing casting it for anything small - infantry sat inside a disc noticeably bigger than
-       they were - and reads as a pad rather than as contact. */
-    var sr = (rtsUnitDef(se.def).r || 1.5) * 0.62;
-    draw(R3.shadowMesh, se.x, 0, se.z, 0, sr / 3, false);
+  if (R3.stencil) {
+    gl.enable(gl.STENCIL_TEST);
+    gl.stencilFunc(gl.EQUAL, 0, 0xFF);
+    gl.stencilOp(gl.KEEP, gl.KEEP, gl.INCR);
   }
+  gl.uniform1f(uA, R3D_SHADOW_A);
+  gl.uniform3f(uShadow, R3D_SHADOW_SX, R3D_SHADOW_SZ, 1);
+  shadowMode = 1;
+  paintEntities();
+  shadowMode = 0;
+  gl.uniform3f(uShadow, 0, 0, 0);
   gl.uniform1f(uA, 1);
+  if (R3.stencil) gl.disable(gl.STENCIL_TEST);
   gl.disable(gl.BLEND);
   gl.depthMask(true);
 
+  function paintEntities() {
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (e.dead) continue;
@@ -20764,6 +20814,8 @@ function _r3dFrame(G) {
       }
     }
   }
+  }
+  paintEntities();
 
   /* --- fog, over everything, depth ignored --- */
   gl.useProgram(R3.texP);
