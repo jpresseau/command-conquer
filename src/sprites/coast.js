@@ -41,9 +41,23 @@ function _sprCoast(g, G, seed, authored, tileAt) {
             var wob = (_sprVN(gx2, gy2, 6, seed + 171) - 0.5) * 5;
             var d2 = dd + wob;
             if (d2 < 1.6) {
-              if (_sprHash(gx2, gy2, seed + 173) > 0.4) _sprRect(g, gx2, gy2, 1, 1, _foam);
+              /* Foam in CLUMPS. A per-pixel coin flip is white noise, and white noise
+                 magnified four times at the top zoom is a band of hard speckle rather than
+                 surf. Hashing the 2x2 block gives lumps with gaps between them - the same
+                 demotion the ground grain went through when it stopped being TV static. */
+              if (_sprHash(gx2 >> 1, gy2 >> 1, seed + 173) > 0.4) {
+                _sprRect(g, gx2, gy2, 1, 1, _foam);
+              }
             } else if (d2 < 7) {
-              _sprRect(g, gx2, gy2, 1, 1, _shal[(gx2 + gy2) & 1]);
+              /* NOT A CHECKERBOARD. This chose between the two shallow tones on
+                 `(gx + gy) & 1` - a perfect one-pixel lattice, which is the most artificial
+                 pattern there is. At the default zoom it passes for a dither blending the pair
+                 into an intermediate tone; magnified four times at the top zoom the lattice
+                 itself is what you see, and it runs the entire length of every coast on the
+                 map. A smooth field at about five pixels mixes the same two tones into patches
+                 instead, which is how the ground already solves exactly this. */
+              _sprRect(g, gx2, gy2, 1, 1,
+                       _shal[_sprVN(gx2, gy2, 5, seed + 181) < 0.5 ? 0 : 1]);
             }
           }
         }
@@ -59,7 +73,12 @@ function _sprCoast(g, G, seed, authored, tileAt) {
             if (wl) ds = Math.min(ds, sx2);
             if (wr) ds = Math.min(ds, TS - 1 - sx2);
             var wob2 = (_sprVN(gx3, gy3, 6, seed + 177) - 0.5) * 4;
-            if (ds + wob2 < 5) _sprRect(g, gx3, gy3, 1, 1, _wet[(gx3 + gy3) & 1]);
+            /* the same lattice as the shallow band above, and the same fix - wet sand is two
+               tones apart, so a one-pixel checkerboard of them reads as a woven mat at zoom */
+            if (ds + wob2 < 5) {
+              _sprRect(g, gx3, gy3, 1, 1,
+                       _wet[_sprVN(gx3, gy3, 4, seed + 187) < 0.5 ? 0 : 1]);
+            }
           }
         }
       }

@@ -876,7 +876,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">4adb090 · 2026-08-14</div>
+  <div id="rtsBuild" title="build">5eb3df5 · 2026-08-14</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -6083,16 +6083,16 @@ function _rtsBakeTerrain(G) {
 
   /* --- forest. NOT PAINTED HERE ANY MORE.
 
-     The conifers used to be stamped into this canvas, one to a cell. Measured on the finished
-     bake, a cell entirely enclosed by forest against one entirely enclosed by grass came out
-     at 60 tones against 74 and mean luminance 81.9 against 76.9 - the forest was BRIGHTER, and
-     over a narrower range. A quarter of the map was being drawn as mottled green.
+     The conifers used to be stamped into this canvas, one to a cell, and that read perfectly
+     well - re-measured properly, forest 74.4 against grass 100.8 and 89 tones against 12. (The
+     commit that moved them cited the opposite, 81.9 against 76.9, from a harness that had
+     re-generated the map without re-baking the ground; see the correction on _sprTrees.)
 
-     It could not be fixed in place: this canvas is RTS_TS art pixels a cell and cannot grow
-     (6144 square is 144 MB of RGBA), so no better tree fits in it. They are drawn per frame as
-     ordinary sprites now, at RTS_PS and several to a cell, which also lets the 3D mode skip
-     them in favour of its own geometry. See _sprTrees in sprites/scenery.js and the forest
-     pass in render/frame.js. --- */
+     They moved because this canvas is RTS_TS art pixels a cell and cannot grow - 6144 square
+     is 144 MB of RGBA - so no finer tree fits in it, and because a texture cannot be skipped
+     when the 3D mode wants to grow its own trees on the same cells. Drawn per frame as
+     ordinary sprites they get RTS_PS, several to a cell, and a 3D gate. See _sprTrees in
+     sprites/scenery.js and the forest pass in render/frame.js. --- */
   return t.c;
 }
 </script>
@@ -6111,26 +6111,27 @@ function _rtsBakeTerrain(G) {
    left the forest looking like flat cut-outs while the buildings beside it had volume - and
    the forest is a fifth of the map, so it set the tone for the whole picture.
 
-   BAKED AT RTS_PS AND DRAWN PER FRAME, not stamped into the ground canvas. Until this, one
-   tree per forest cell was painted into the 3072-square terrain bake, and the result was that
-   a forest did not read as a forest at all. Measured on that canvas, a cell entirely enclosed
-   by forest against a cell entirely enclosed by grass: 60 tones against 74, mean luminance
-   81.9 against 76.9 - the FOREST WAS BRIGHTER - and a narrower range at that. A quarter of the
-   map was drawn as mottled green.
+   BAKED AT RTS_PS AND DRAWN PER FRAME, not stamped into the ground canvas.
 
-   The arithmetic says why. One sprite per cell, 24 art pixels wide against a 24-pixel cell,
-   only 289 of its 816 pixels opaque, jittered by up to eight pixels so each tree half-leaves
-   its own cell: canopy coverage lands around a third, and a third of a canopy over grass is
-   grass. The 3D mode reads as forest from the same terrain data because world3d.js puts two
-   or three full-height trees on every forest cell.
+   A CORRECTION FIRST, because the commit that made this change justified it with a measurement
+   that was wrong. It claimed a forest cell in the old bake measured BRIGHTER than bare grass -
+   81.9 against 76.9 - and therefore that a quarter of the map was not being drawn. That number
+   came from a harness that called _rtsNewGame into a live renderer without re-baking, so it
+   was comparing one map's paint against another map's grid. Re-measured with that fixed (see
+   the note at the end of _rtsNewGame), the old bake gave forest 74.4 against grass 100.8 and
+   89 tones against 12: the one-tree-per-cell forest was perfectly legible, just sparse and
+   regular. Nothing was missing.
 
-   The bake could not be fixed in place. The terrain canvas is RTS_N * RTS_TS = 3072 square and
-   cannot double - 6144 square is 144 MB of RGBA, which is a dead tab on a phone - so anything
-   stamped into it is capped at Red Alert's 24 pixels a cell no matter how good the sprite is.
-   Drawn per frame instead, a tree is an ordinary sprite: it can be baked at RTS_PS like every
-   other model, several can stand on one cell, and the 3D mode can skip them because it has
-   real geometry for the same trees. (It did not skip them before: the flat baked trees were
-   sitting under the 3D conifers, which is the same doubling the ore had.)
+   WHAT THIS CHANGE ACTUALLY BUYS, then, is quality rather than rescue: trees bake at RTS_PS
+   instead of RTS_TS, two or three stand on a cell instead of one, and there are five variants
+   instead of three, so a wood stops being a lattice of identical cones. It costs 2.3-4.7 ms a
+   frame that the baked version did not, measured over the densest forest on the map.
+
+   It also removes a real double-draw. The bake could not be improved in place - the terrain
+   canvas is RTS_N * RTS_TS = 3072 square and cannot double, since 6144 square is 144 MB of
+   RGBA and a dead tab on a phone - and while the trees lived in it the 3D mode drew them
+   TWICE: flat ones in the ground texture underneath the conifers world3d.js grows from the
+   same cells. Sprites can be skipped when the 3D mode is on; a baked texture cannot.
 
    FIVE VARIANTS, not three - a forest at two or three trees a cell shows its repeats far more
    readily than one at one. */
@@ -6322,9 +6323,23 @@ function _sprCoast(g, G, seed, authored, tileAt) {
             var wob = (_sprVN(gx2, gy2, 6, seed + 171) - 0.5) * 5;
             var d2 = dd + wob;
             if (d2 < 1.6) {
-              if (_sprHash(gx2, gy2, seed + 173) > 0.4) _sprRect(g, gx2, gy2, 1, 1, _foam);
+              /* Foam in CLUMPS. A per-pixel coin flip is white noise, and white noise
+                 magnified four times at the top zoom is a band of hard speckle rather than
+                 surf. Hashing the 2x2 block gives lumps with gaps between them - the same
+                 demotion the ground grain went through when it stopped being TV static. */
+              if (_sprHash(gx2 >> 1, gy2 >> 1, seed + 173) > 0.4) {
+                _sprRect(g, gx2, gy2, 1, 1, _foam);
+              }
             } else if (d2 < 7) {
-              _sprRect(g, gx2, gy2, 1, 1, _shal[(gx2 + gy2) & 1]);
+              /* NOT A CHECKERBOARD. This chose between the two shallow tones on
+                 `(gx + gy) & 1` - a perfect one-pixel lattice, which is the most artificial
+                 pattern there is. At the default zoom it passes for a dither blending the pair
+                 into an intermediate tone; magnified four times at the top zoom the lattice
+                 itself is what you see, and it runs the entire length of every coast on the
+                 map. A smooth field at about five pixels mixes the same two tones into patches
+                 instead, which is how the ground already solves exactly this. */
+              _sprRect(g, gx2, gy2, 1, 1,
+                       _shal[_sprVN(gx2, gy2, 5, seed + 181) < 0.5 ? 0 : 1]);
             }
           }
         }
@@ -6340,7 +6355,12 @@ function _sprCoast(g, G, seed, authored, tileAt) {
             if (wl) ds = Math.min(ds, sx2);
             if (wr) ds = Math.min(ds, TS - 1 - sx2);
             var wob2 = (_sprVN(gx3, gy3, 6, seed + 177) - 0.5) * 4;
-            if (ds + wob2 < 5) _sprRect(g, gx3, gy3, 1, 1, _wet[(gx3 + gy3) & 1]);
+            /* the same lattice as the shallow band above, and the same fix - wet sand is two
+               tones apart, so a one-pixel checkerboard of them reads as a woven mat at zoom */
+            if (ds + wob2 < 5) {
+              _sprRect(g, gx3, gy3, 1, 1,
+                       _wet[_sprVN(gx3, gy3, 4, seed + 187) < 0.5 ? 0 : 1]);
+            }
           }
         }
       }
@@ -13639,6 +13659,30 @@ function _rtsNewGame(seed, diff) {
   _rtsCrateInit(G);           /* after the map is finished: a crate needs clear ground */
 
   _rtsRecalcPower('player'); _rtsRecalcPower('enemy');
+
+  /* THE BAKED GROUND BELONGS TO THIS MAP, and until now that held only by call order.
+     _rtsBakeTerrain runs inside _rtsRInit and rtsOpen happens to call _rtsNewGame first, so
+     the shipped path is right - measured, the bake agrees with the terrain grid on 100% of
+     sampled cells. But nothing enforced it. Generate a second map into a live renderer and the
+     ground on screen stays the FIRST map's while every cell lookup answers for the second:
+     measured that way agreement collapses to 26.8%, which on screen is shoreline painted
+     across passable sand, forest painted over open ground, and ore fields sitting on water.
+
+     That is not hypothetical. Every harness written against this game opens a match through
+     the page's own flow and then calls _rtsNewGame again to pin a seed, and each one has been
+     quietly measuring one map's paint against another map's grid. Re-baking here makes the
+     invariant hold by construction rather than by convention, which is what it should always
+     have been: a new map cannot inherit the old map's ground.
+
+     IT COSTS THE SHIPPED GAME NOTHING, which is the obvious question to ask of a second bake.
+     Every path a player can take goes through rtsClose, and rtsClose calls _rtsRDispose, which
+     nulls _rtsR - so on a restart, a quit-and-start and a save load alike this guard is false
+     and the only bake is the one _rtsRInit does. It fires exactly when _rtsNewGame is called
+     into a renderer that is already live, and nothing but a test does that. */
+  if (window._rtsR && typeof _rtsBakeTerrain === 'function') {
+    window._rtsR.terrain = _rtsBakeTerrain(G);
+    if (window._R3D) window._R3D.terrainDirty = true;    /* the GL ground shares this canvas */
+  }
   return G;
 }
 
@@ -20590,11 +20634,12 @@ function _rtsRFrame(dt) {
   }
 
   /* --- the forest, drawn rather than baked ---------------------------------------------
-     These used to be stamped into the terrain canvas at one 24-pixel tree a cell, and a
-     forest measured BRIGHTER than bare grass because a single 35%-opaque sprite jittered off
-     its own cell covers about a third of it. That canvas is capped at Red Alert's tile
-     density and cannot grow, so the trees came out of it: as sprites they bake at RTS_PS and
-     several can stand on one cell, which is what makes a grove close up.
+     These used to be stamped into the terrain canvas at one 24-pixel tree a cell, which read
+     as a legible but sparse and very regular wood. (The commit that moved them claimed the old
+     forest measured brighter than bare grass; that was a stale-bake artifact and is corrected
+     on _sprTrees.) That canvas is capped at Red Alert's tile density and cannot grow, so the
+     trees came out of it: as sprites they bake at RTS_PS, several stand on one cell, and there
+     are five variants, which is what makes a grove read as one close up.
 
      SKIPPED IN 3D, like the ore - render3d/world3d.js grows real conifers from the same cells,
      and until the trees left the bake the flat ones were sitting underneath them.

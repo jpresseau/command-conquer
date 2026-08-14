@@ -204,6 +204,30 @@ function _rtsNewGame(seed, diff) {
   _rtsCrateInit(G);           /* after the map is finished: a crate needs clear ground */
 
   _rtsRecalcPower('player'); _rtsRecalcPower('enemy');
+
+  /* THE BAKED GROUND BELONGS TO THIS MAP, and until now that held only by call order.
+     _rtsBakeTerrain runs inside _rtsRInit and rtsOpen happens to call _rtsNewGame first, so
+     the shipped path is right - measured, the bake agrees with the terrain grid on 100% of
+     sampled cells. But nothing enforced it. Generate a second map into a live renderer and the
+     ground on screen stays the FIRST map's while every cell lookup answers for the second:
+     measured that way agreement collapses to 26.8%, which on screen is shoreline painted
+     across passable sand, forest painted over open ground, and ore fields sitting on water.
+
+     That is not hypothetical. Every harness written against this game opens a match through
+     the page's own flow and then calls _rtsNewGame again to pin a seed, and each one has been
+     quietly measuring one map's paint against another map's grid. Re-baking here makes the
+     invariant hold by construction rather than by convention, which is what it should always
+     have been: a new map cannot inherit the old map's ground.
+
+     IT COSTS THE SHIPPED GAME NOTHING, which is the obvious question to ask of a second bake.
+     Every path a player can take goes through rtsClose, and rtsClose calls _rtsRDispose, which
+     nulls _rtsR - so on a restart, a quit-and-start and a save load alike this guard is false
+     and the only bake is the one _rtsRInit does. It fires exactly when _rtsNewGame is called
+     into a renderer that is already live, and nothing but a test does that. */
+  if (window._rtsR && typeof _rtsBakeTerrain === 'function') {
+    window._rtsR.terrain = _rtsBakeTerrain(G);
+    if (window._R3D) window._R3D.terrainDirty = true;    /* the GL ground shares this canvas */
+  }
   return G;
 }
 

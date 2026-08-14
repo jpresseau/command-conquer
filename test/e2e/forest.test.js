@@ -1,22 +1,26 @@
-/* THE FOREST, WHICH WAS NOT ONE.
+/* THE FOREST.
 
-   A quarter of every generated map is RTS_T_TREE, and until the trees came out of the terrain
-   bake that quarter was drawn as mottled green. The measurement that found it compares a cell
-   entirely enclosed by forest against one entirely enclosed by grass, on the finished bake:
-   60 tones against 74, mean luminance 81.9 against 76.9. The forest was BRIGHTER than bare
-   grass, over a narrower range - which is what "the trees are not really there" looks like as
-   a number.
+   A CORRECTION AT THE TOP, because this spec shipped with a false premise. It was written to
+   pin a fix for a forest that "was not being drawn at all" - a cell enclosed by forest
+   measuring BRIGHTER than one enclosed by grass, 81.9 against 76.9, on the baked ground. That
+   measurement was taken through a harness that called _rtsNewGame into a live renderer without
+   re-baking the terrain, so it compared one map's paint against another map's cell grid. With
+   that fixed (see the note at the end of _rtsNewGame) the old bake measures forest 74.4
+   against grass 100.8, and 89 tones against 12. The one-tree-per-cell forest was legible. It
+   was sparse and very regular, and that is all.
 
-   The arithmetic behind it: one sprite per cell, 24 art pixels wide against a 24-pixel cell,
-   289 of its 816 pixels opaque, jittered by up to eight pixels so each tree half-leaves its
-   own cell. Canopy coverage lands near a third, and a third of a canopy over grass is grass.
+   What the change actually buys is quality: trees bake at RTS_PS rather than RTS_TS, two or
+   three stand on a cell rather than one, and five variants replace three, so a wood stops
+   being a lattice of identical cones. It costs 2.3-4.7 ms a frame that the baked version did
+   not. It also removes a genuine double-draw - while the trees lived in the ground texture the
+   3D mode drew them twice, flat ones underneath the conifers world3d.js grows from the same
+   cells - and that one could not be fixed any other way, because a texture cannot be gated on
+   the render mode the way a sprite pass can.
 
-   It could not be fixed where it was. The terrain canvas is RTS_N * RTS_TS = 3072 square and
-   cannot double - 6144 square is 144 MB of RGBA, a dead tab on a phone - so a tree stamped
-   into it is capped at Red Alert's tile density however good the sprite is. Drawn per frame
-   the tree is an ordinary sprite: RTS_PS like every other model, several to a cell.
+   The thresholds below are therefore about the CURRENT picture being a good forest, not about
+   rescuing a missing one.
 
-   SO THE SPEC MEASURES THE FRAME, NOT THE BAKE. "Is the forest in the terrain canvas" is now
+   IT MEASURES THE FRAME, NOT THE BAKE. "Is the forest in the terrain canvas" is now
    the wrong question - it deliberately is not. The question is whether a player looking at
    forest sees something different from a player looking at grass, and that is answered on the
    canvas the player is shown.
@@ -145,12 +149,15 @@ var S = new Suite('forest');
        out.haveBoth ? 'found both' : 'no solid 5x5 of forest and grass on this seed');
 
   if (out.haveBoth) {
-    /* The defect was that these two were the same picture. Forest is a canopy: it must be
-       clearly DARKER than open grass, and carry more structure. */
+    /* Forest is a canopy: it must be clearly DARKER than open grass and carry more structure.
+       That was true of the one-tree-per-cell bake too - the claim that it was not is corrected
+       at the top of this file - so this is a floor on the picture staying good, not evidence
+       that it was ever broken. */
     S.ok('a forest looks different from a lawn',
          out.forest.mean < out.grass.mean - 12,
          'mean luminance forest ' + out.forest.mean + ' vs grass ' + out.grass.mean +
-         ' (it used to be 81.9 vs 76.9 - the forest was BRIGHTER)');
+         ' (the one-tree-per-cell bake measured 74.4 vs 100.8 - also a forest, just a sparser ' +
+         'and more regular one)');
     /* Tones, not spread. Spread came out 14.88 against 14.76 - all but a tie, because an open
        patch with one dirt scar in it has as wide a luminance range as a canopy. What separates
        a wood from a lawn is how many DIFFERENT surfaces are in it, and there the two are not
