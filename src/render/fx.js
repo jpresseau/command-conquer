@@ -75,8 +75,10 @@ function _rtsDrawFx(g, G, S, TSscale, cell) {
     if (f.kind === 'fire') {
       var ff = S.fire[_rtsAnimFrame() % S.fire.length];
       var fp = _rtsGroundToScreen(f.x, f.z);
-      var fw = Math.round(ff.width * TSscale * fp.scale * (f.big || 1));
-      var fh = Math.round(ff.height * TSscale * fp.scale * (f.big || 1));
+      /* divided by the density the flame was baked at, like every other sprite draw */
+      var fsc = TSscale * fp.scale / (ff.ps || 1);
+      var fw = Math.round(ff.width * fsc * (f.big || 1));
+      var fh = Math.round(ff.height * fsc * (f.big || 1));
       g.drawImage(ff, Math.round(fp.x - fw / 2), Math.round(fp.y - fh * 0.8), fw, fh);
       continue;
     }
@@ -122,7 +124,10 @@ function _rtsDrawFx(g, G, S, TSscale, cell) {
       var fr = Math.min(set.length - 1, Math.floor(_rtsAnimQ(f.t) / dur * set.length));
       var img = set[Math.max(0, fr)];
       var xp = _rtsGroundToScreen(f.x, f.z);
-      var sz = img.width * TSscale * xp.scale * (f.big || 1) * 0.9;
+      /* Divided by the density the frame was baked at. The drawn set bakes at RTS_PS and
+         says so; real Red Alert artwork carries no tag and reads as 1, which matters here
+         because _mixFx replaces these role by role and a mixed set holds both at once. */
+      var sz = img.width * TSscale * xp.scale / (img.ps || 1) * (f.big || 1) * 0.9;
       /* Draw at the frame's OWN aspect ratio. This used to force every effect square, which
          is harmless for a fireball or a spark but squashes a flame - and a flame is taller
          than it is wide. Every pre-existing effect set is square, so this changes none of

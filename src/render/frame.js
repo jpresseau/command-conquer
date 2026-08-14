@@ -57,6 +57,9 @@ function _rtsRFrame(dt) {
     g.drawImage(R.terrain,
       srcX, srcY, R.W / TSscale, R.H / TSscale,
       0, 0, R.W, R.H);
+    /* and the grain the magnification just destroyed, put back at device resolution - see
+       render/detail.js. Under everything that stands on the ground, because it IS the ground. */
+    _rtsGroundDetail(g, R, TSscale);
   }
 
   for (var tz = tz0; tz <= tz1; tz++) {
@@ -205,10 +208,16 @@ function _rtsRFrame(dt) {
     }
     var pad = S.pad[pe.def];
     var pp2 = _rtsGroundToScreen(_rtsWX(pe.tx) - RTS_TILE / 2, _rtsWX(pe.tz) - RTS_TILE / 2);
-    var psc = TSscale * pp2.scale;
+    /* TWO SCALES, AND THEY ARE NOT THE SAME ONE. `psc` turns PAD pixels into screen pixels and
+       so divides by the density the pad was baked at. The 10 and 8 below are the pad's
+       overhang beyond the footprint measured in ART pixels - a fixed part of the shape, not of
+       the raster - so they convert with `pofs` and must NOT pick up the divide, or the apron
+       shifts under every building by half its own overhang the moment the density changes. */
+    var pofs = TSscale * pp2.scale;
+    var psc = pofs / (pad.ps || 1);
     var pw = Math.round(pad.width * psc), ph = Math.round(pad.height * psc);
-    var ppx = Math.round(pp2.x) - Math.round(10 * psc);
-    var ppy = Math.round(pp2.y) - Math.round(8 * psc);
+    var ppx = Math.round(pp2.x) - Math.round(10 * pofs);
+    var ppy = Math.round(pp2.y) - Math.round(8 * pofs);
     if (ppx > R.W || ppy > R.H || ppx + pw < 0 || ppy + ph < 0) continue;
     g.drawImage(pad, ppx, ppy, pw, ph);
   }
@@ -223,7 +232,8 @@ function _rtsRFrame(dt) {
       if (!_rtsVisible(cr.tx, cr.tz)) continue;
       var cimg = S.crate;
       var crp = _rtsGroundToScreen(_rtsWX(cr.tx), _rtsWX(cr.tz));
-      var cw = Math.round(cimg.width * TSscale * crp.scale), ch = Math.round(cimg.height * TSscale * crp.scale);
+      var csc = TSscale * crp.scale / (cimg.ps || 1);
+      var cw = Math.round(cimg.width * csc), ch = Math.round(cimg.height * csc);
       var cpx = Math.round(crp.x - cw / 2), cpy = Math.round(crp.y - ch / 2);
       if (cpx > R.W || cpy > R.H || cpx + cw < 0 || cpy + ch < 0) continue;
       g.drawImage(cimg, cpx, cpy, cw, ch);

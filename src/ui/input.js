@@ -238,12 +238,27 @@ function _rtsBindInput() {
     /* While placing, a drag is aiming the footprint - not panning the map out from under it */
     if (T.moved && U.place) { T.lx = p.x; T.ly = p.y; return; }
     if (T.moved) {
-      /* The finger holds its grip on the ground: dragging left moves the camera right, and
-         the world tracks the fingertip one-for-one at the current zoom. */
-      var z = _rtsZoom();
-      _rtsR.focus.x -= (p.x - T.lx) / z;
-      _rtsR.focus.z -= (p.y - T.ly) / z;
-      _rtsClampFocus();
+      /* The finger holds its grip on the ground: dragging moves the camera the opposite way
+         and the world tracks the fingertip one-for-one.
+
+         THROUGH THE PROJECTION'S OWN INVERSE, NOT THROUGH THE ZOOM. This divided the pixel
+         delta by _rtsZoom() on both axes, which is the right answer only for a camera looking
+         straight down. In 3D the view is tilted - screenY is (wz - focus.z) * cos(tilt) * zoom
+         - so a vertical drag of N pixels is N / (zoom * cos(tilt)) world units, not N / zoom.
+         At R3D_TILT = 0.62 that cosine is 0.8139, so every vertical pan in 3D moved the ground
+         18.6% less than the finger asked for: the map slid out from under the fingertip, on a
+         phone, where this control is the only way to move the camera at all.
+
+         Asking _rtsGroundAt where each fingertip is and taking the world difference is correct
+         for ANY projection, because it is the projection's own inverse doing the arithmetic.
+         Both calls read the same focus, so their difference is the true ground displacement -
+         and this keeps working unchanged if the camera ever gains perspective or yaw. */
+      var from = _rtsGroundAt(T.lx, T.ly), to = _rtsGroundAt(p.x, p.y);
+      if (from && to) {
+        _rtsR.focus.x -= (to.x - from.x);
+        _rtsR.focus.z -= (to.z - from.z);
+        _rtsClampFocus();
+      }
     }
     T.lx = p.x; T.ly = p.y;
   }, { passive: false });
