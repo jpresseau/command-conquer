@@ -58,6 +58,38 @@ var S = new Suite('shading');
     o.aMin = ks.length ? ks[0] : 0;
     o.aMax = ks.length ? ks[ks.length - 1] : 0;
 
+    /* --- the ground decals must not be cut off square ---
+
+       Scorch marks and craters are stamped PERMANENTLY into the baked terrain, so a shape
+       fault in them is not a frame of bad art, it is a mark the battlefield keeps. Both were
+       radial blobs whose cutoff was applied to a radius with a large noise term added, which
+       let pixels out at the true canvas edge pass the test and be drawn - so the mark was
+       clipped flat where it ran out of canvas. Measured, the scorches reached alpha 103 of 255
+       on their own border and the crater 153, the latter because its alpha was a step (0.6 out
+       to the cutoff) rather than a falloff. Under every firefight that left a hard dark
+       RECTANGLE about a cell across.
+
+       Border alpha is the whole property: a blob that fades out inside its canvas cannot have
+       a straight edge, whatever shape the noise gives it. Coverage is checked alongside it
+       because the cheap way to pass is to shrink the mark until there is nothing left. */
+    function decalEdge(cv) {
+      var dd = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+      var W2 = cv.width, H2 = cv.height, mx = 0, op = 0;
+      for (var q = 0; q < dd.length; q += 4) if (dd[q + 3] >= 8) op++;
+      for (var bx = 0; bx < W2; bx++) {
+        mx = Math.max(mx, dd[bx * 4 + 3], dd[((H2 - 1) * W2 + bx) * 4 + 3]);
+      }
+      for (var by = 0; by < H2; by++) {
+        mx = Math.max(mx, dd[(by * W2) * 4 + 3], dd[(by * W2 + W2 - 1) * 4 + 3]);
+      }
+      return { border: mx, coverage: +(100 * op / (W2 * H2)).toFixed(1) };
+    }
+    var scorches = SP.scorch.map(decalEdge);
+    o.scorchBorder = Math.max.apply(null, scorches.map(function (s) { return s.border; }));
+    o.scorchCover = Math.min.apply(null, scorches.map(function (s) { return s.coverage; }));
+    var cr = decalEdge(SP.crater);
+    o.craterBorder = cr.border; o.craterCover = cr.coverage;
+
     /* --- the corrugation, measured by what it BUYS ---
 
        NO GEOMETRY ASSERTION HERE, and that is deliberate. Two attempts at one were written and
@@ -95,6 +127,18 @@ var S = new Suite('shading');
        out.aMax >= 68 && out.aMax <= 92,
        'core alpha ' + out.aMax + ' of 255, against the 77 the flat shadow used' +
        ' - fading it would pass the test above for the wrong reason');
+
+  S.ok('a scorch mark fades out before its canvas does',
+       out.scorchBorder === 0,
+       'worst border alpha across the six scorches: ' + out.scorchBorder +
+       ' of 255 (it was 103, which is a burn with a straight edge)');
+  S.ok('...and so does a crater', out.craterBorder === 0,
+       'crater border alpha ' + out.craterBorder + ' of 255 (it was 153 - its alpha was a ' +
+       'step, 0.6 all the way out to the cutoff)');
+  S.ok('...and neither was simply shrunk away to pass that',
+       out.scorchCover > 40 && out.craterCover > 40,
+       'coverage: scorch ' + out.scorchCover + '%, crater ' + out.craterCover +
+       '% of the tile (they were 61-76% and 60% with the clipped square included)');
 
   S.ok('the yard roof corrugation earns its keep in tone density',
        out.per1000 >= 15.5,
