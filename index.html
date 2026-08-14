@@ -876,7 +876,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">82ea23f · 2026-08-14</div>
+  <div id="rtsBuild" title="build">be0c693 · 2026-08-14</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -19460,9 +19460,59 @@ function _rtsTick(dt) {
 
 var _rtsR = null;
 
+/* THE DEVICE PIXEL RATIO WAS CAPPED AT 2, AND THE REASON WAS NEVER WRITTEN DOWN.
+
+   It is not performance - measured on an emulated iPhone 15 Pro, a frame at the top zoom costs
+   3.92 ms against a 16.7 ms budget. It is the integer-scaling rule this file already states:
+   art at a fixed density magnified by anything but a whole number of pixels resamples and the
+   picture goes soft. The zoom ladder [12, 24, 48] multiplied by a dpr of 2 gives 24/48/96
+   device pixels per cell, and against the 48-pixel sprite bake that is exactly 0.5x, 1x and
+   2x - every zoom clean. At a dpr of 3 the same ladder gives 36/72/144, which is 0.75x, 1.5x
+   and 3x: two of the three fractional. Capping at 2 kept the rule; it just did it by throwing
+   away the display.
+
+   And it throws away a lot of it. A 393x852 iPhone has a 1179x2556 panel; capping at 2 draws
+   786x1104 and lets the browser stretch it 1.5x to fit, so every pixel on that phone is
+   already blurred before any art is involved - 44% of the panel actually rendered.
+
+   SO THE LADDER MOVES WITH THE DEVICE INSTEAD OF THE DEVICE BEING TRUNCATED TO THE LADDER.
+   What has to hold is that `cell * dpr` divided by the sprite bake density (RTS_TS * RTS_PS)
+   and by the terrain density (RTS_TS) is a whole number, or a clean half. A ladder is chosen
+   per dpr so that it does, and e2e/resolution asserts it for every combination the game can
+   produce rather than trusting this comment.
+
+   At a dpr of 3 that is [16, 32, 48]: 48/96/144 device pixels per cell, so sprites land on
+   1x/2x/3x and terrain on 2x/4x/6x. The top zoom keeps its apparent size exactly and carries
+   1.5x more real pixels inside it; the widest zoom gives up a little map to stay sharp.
+
+   The ladders for dpr 1 and 2 are the shipped [12, 24, 48] UNCHANGED, and deliberately so:
+   both were already clean (12/24/48 device pixels at dpr 1 is 0.25x/0.5x/1x of the sprite bake,
+   24/48/96 at dpr 2 is 0.5x/1x/2x - every one an exact power of two), so there is nothing to
+   fix there and no reason to move a picture that is already right. Only dpr 3 and above, which
+   could not be reached at all before, get a ladder of their own. */
+var RTS_ZOOM_LADDERS = {
+  1: [12, 24, 48],      /* 12/24/48 device px per cell - sprites 0.25x/0.5x/1x */
+  2: [12, 24, 48],      /* 24/48/96 - sprites 0.5x/1x/2x. The shipped ladder. */
+  3: [16, 32, 48],      /* 48/96/144 - sprites 1x/2x/3x, terrain 2x/4x/6x */
+  4: [12, 24, 36]       /* 48/96/144 - the same densities, for a dpr-4 panel */
+};
+/* Whole ratios only, so `dpr` is rounded rather than trusted: a browser reporting 2.625 gets
+   the dpr-3 ladder and renders at 3, which is sharper than 2 and still lands on whole pixels.
+   Capped at 4 because beyond that the buffers stop being worth the pixels. */
+function _rtsPickDpr() {
+  var raw = window.devicePixelRatio || 1;
+  return Math.max(1, Math.min(4, Math.round(raw)));
+}
+function _rtsZoomLadder(dpr) {
+  return RTS_ZOOM_LADDERS[dpr] || RTS_ZOOM_LADDERS[2];
+}
+
 function _rtsRInit(cv) {
   var W = cv.clientWidth || 960, H = cv.clientHeight || 620;
-  var dpr = Math.min(2, window.devicePixelRatio || 1);
+  var dpr = _rtsPickDpr();
+  /* The ladder is global because everything from the sidebar to the specs reads RTS_ZOOMS, and
+     it is settled here because this is the first point at which the device is known. */
+  RTS_ZOOMS = _rtsZoomLadder(dpr);
   cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
   var g = cv.getContext('2d', { alpha: false });
   g.imageSmoothingEnabled = false;
@@ -21942,7 +21992,12 @@ function _rtsResizeCanvases() {
   if (!st) return null;
   var W = st.clientWidth || 900, H = st.clientHeight || 600;
   var cv = document.getElementById('rtsCv'), hud = document.getElementById('rtsHud');
-  var dpr = Math.min(2, window.devicePixelRatio || 1);
+  /* The HUD overlay must sit at the SAME device resolution as the battlefield under it, or
+     health bars and selection brackets are drawn at a different sharpness from the units they
+     belong to. This carried its own copy of the old `Math.min(2, ...)` cap, so raising it in
+     render/camera.js and not here would have left the overlay soft on exactly the phones the
+     change is for. One source of truth now. */
+  var dpr = _rtsPickDpr();
   cv.style.width = W + 'px'; cv.style.height = H + 'px';
   var c3 = document.getElementById('rtsCv3d');
   if (c3) { c3.style.width = W + 'px'; c3.style.height = H + 'px'; }

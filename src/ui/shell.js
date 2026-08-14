@@ -257,7 +257,12 @@ function _rtsResizeCanvases() {
   if (!st) return null;
   var W = st.clientWidth || 900, H = st.clientHeight || 600;
   var cv = document.getElementById('rtsCv'), hud = document.getElementById('rtsHud');
-  var dpr = Math.min(2, window.devicePixelRatio || 1);
+  /* The HUD overlay must sit at the SAME device resolution as the battlefield under it, or
+     health bars and selection brackets are drawn at a different sharpness from the units they
+     belong to. This carried its own copy of the old `Math.min(2, ...)` cap, so raising it in
+     render/camera.js and not here would have left the overlay soft on exactly the phones the
+     change is for. One source of truth now. */
+  var dpr = _rtsPickDpr();
   cv.style.width = W + 'px'; cv.style.height = H + 'px';
   var c3 = document.getElementById('rtsCv3d');
   if (c3) { c3.style.width = W + 'px'; c3.style.height = H + 'px'; }
