@@ -116,11 +116,24 @@ function _sprScorch() {
     var t = _sprMake(TS, TS), g = t.g, seed = v * 313 + 29;
     for (var y = 0; y < TS; y += 2) {
       for (var x = 0; x < TS; x += 2) {
-        var dx = (x - TS / 2) / (TS / 2), dy = (y - TS / 2) / (TS / 2);
-        var d = Math.hypot(dx, dy) + (_sprVN(x, y, 7, seed) - 0.5) * 0.75;
+        /* THE BLOCK CENTRE, not its corner: _sprRect covers x..x+2, so measuring from the
+           corner lets a block sit half over the border while still reporting a radius inside
+           it. And `fade` is keyed to the TRUE geometric radius rather than the noisy one - the
+           cutoff below is applied to a radius with a large noise term added, so a pixel out at
+           the canvas edge could pass it and be drawn at whatever alpha the noise gave. Measured
+           on the finished sprites, the six scorches carried up to alpha 103 of 255 ON their own
+           border: the mark was cut off flat where it ran out of canvas, and since these are
+           stamped permanently into the terrain, that left a hard dark RECTANGLE about a cell
+           across under every firefight. The ragged outline the noise buys is unchanged; the
+           alpha simply reaches zero before the edge now. */
+        var dx = (x + 1 - TS / 2) / (TS / 2), dy = (y + 1 - TS / 2) / (TS / 2);
+        var rr = Math.hypot(dx, dy);
+        var fade = Math.max(0, Math.min(1, (0.86 - rr) / 0.26));
+        if (fade <= 0.02) continue;
+        var d = rr + (_sprVN(x, y, 7, seed) - 0.5) * 0.75;
         if (d > 0.92) continue;
         var h = _sprHash(x >> 1, y >> 1, seed);
-        g.globalAlpha = (1 - d) * 0.85;
+        g.globalAlpha = (1 - d) * 0.85 * fade;
         _sprRect(g, x, y, 2, 2, h < 0.4 ? '#141210' : (h < 0.78 ? '#241f19' : '#312a22'));
       }
     }
@@ -133,10 +146,18 @@ function _sprCrater() {
   var TS = RTS_TS, t = _sprMake(TS, TS), g = t.g;
   for (var y = 0; y < TS; y += 2) {
     for (var x = 0; x < TS; x += 2) {
-      var dx = (x - TS / 2) / (TS / 2), dy = (y - TS / 2) / (TS / 2);
-      var d = Math.hypot(dx, dy) + (_sprVN(x, y, 6, 71) - 0.5) * 0.5;
+      /* The same clipped-square fault as the scorch, and worse here: the alpha was a STEP -
+         0.6 all the way out to the cutoff rather than a falloff - so the crater's border alpha
+         measured 153 of 255, which is 0.6 exactly. A hole in the ground with four straight
+         sides. The rim and bowl structure below is untouched; `fade` only guarantees the mark
+         runs out before the canvas does. */
+      var dx = (x + 1 - TS / 2) / (TS / 2), dy = (y + 1 - TS / 2) / (TS / 2);
+      var rr = Math.hypot(dx, dy);
+      var fade = Math.max(0, Math.min(1, (0.84 - rr) / 0.24));
+      if (fade <= 0.02) continue;
+      var d = rr + (_sprVN(x, y, 6, 71) - 0.5) * 0.5;
       if (d > 0.88) continue;
-      g.globalAlpha = d > 0.6 ? 0.6 : 0.95;
+      g.globalAlpha = (d > 0.6 ? 0.6 : 0.95) * fade;
       /* Lit north rim, dark bowl, so it reads as a hole rather than a stain. */
       var col = (d > 0.62 && dy < 0) ? '#6b6252' : (d < 0.35 ? '#171410' : '#2c261e');
       _sprRect(g, x, y, 2, 2, col);
