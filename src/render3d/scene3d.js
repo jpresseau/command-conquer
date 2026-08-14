@@ -180,7 +180,7 @@ function _r3dFrame(G) {
   gl.clearColor(0.016, 0.024, 0.035, 1);
   gl.enable(gl.DEPTH_TEST);
   gl.disable(gl.BLEND);
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
 
   /* --- ground --- */
   gl.useProgram(R3.texP);
@@ -207,7 +207,10 @@ function _r3dFrame(G) {
   var uScaleY = gl.getUniformLocation(R3.meshP, 'uScaleY');
   var uTint = gl.getUniformLocation(R3.meshP, 'uTint');
   var uA = gl.getUniformLocation(R3.meshP, 'uA');
+  var uShadow = gl.getUniformLocation(R3.meshP, 'uShadow');
   gl.uniform1f(uA, 1);
+  gl.uniform3f(uShadow, 0, 0, 0);
+  var shadowMode = 0;
   var aP = gl.getAttribLocation(R3.meshP, 'aP');
   var aN = gl.getAttribLocation(R3.meshP, 'aN');
   var aC = gl.getAttribLocation(R3.meshP, 'aC');
@@ -219,7 +222,8 @@ function _r3dFrame(G) {
     gl.uniform2f(uRot, Math.cos(rot), Math.sin(rot));
     gl.uniform1f(uScale, scale);
     gl.uniform1f(uScaleY, sy || 1);
-    gl.uniform3f(uTint, dim ? 0.62 : 1, dim ? 0.55 : 1, dim ? 0.55 : 1);
+    if (shadowMode) gl.uniform3f(uTint, 0, 0, 0);
+    else gl.uniform3f(uTint, dim ? 0.62 : 1, dim ? 0.55 : 1, dim ? 0.55 : 1);
     gl.bindBuffer(gl.ARRAY_BUFFER, mesh.p);
     gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 0, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, mesh.n);
@@ -262,45 +266,48 @@ function _r3dFrame(G) {
     }
   }
 
-  /* BLOB SHADOWS FIRST, under every unit. A mesh floating on flat ground has no contact cue
-     at all, and aircraft in particular read as decals without one; a soft dark disc at y~0 is
-     the cheapest grounding there is, and it is drawn for units only - buildings sit on their
-     own modelled plinths and the terrain bake already darkens under them. Drawn before the
-     units with depth WRITES off, so the discs never punch holes in the depth buffer that the
-     meshes above them would then fail against. */
-  if (!R3.shadowMesh) {
-    var sm = [], SEG = 20, ring = [];
-    for (var sv = 0; sv < SEG; sv++) {
-      var sa = sv / SEG * Math.PI * 2;
-      ring.push([Math.cos(sa) * 3, 0.05, Math.sin(sa) * 3]);
-    }
-    /* BLENDED, not opaque. This disc used to be drawn solid in the baked dirt's dark tone, on
-       the reasoning that a hard shadow on that ground would be that colour - but an opaque
-       disc does not darken the ground, it REPLACES it, so it read as a hole cut in the map
-       rather than as shade, and under infantry (whose disc came out wider than the figure) as
-       a soldier standing in a puddle of void. It multiplies now: a neutral dark at a third
-       alpha, which darkens grass, dirt, ore and road alike and keeps whatever detail is
-       underneath - which is the whole difference between a shadow and a hole. */
-    sm.push({ v: ring, c: [16, 18, 14] });
-    R3.shadowMesh = _r3dBuildMesh(gl, sm);
-  }
+  /* CAST SHADOWS, under everything the player put on the map. These were BLOB DISCS - one
+     flat circle per unit, sized off its collision radius - which grounds a mesh and says
+     nothing else: every unit had the same round shadow, buildings had none at all, and an
+     aircraft's disc sat directly under it as though it were parked.
+
+     They are the real mesh now, squashed onto the ground along the light (see R3D_SHADOW_SX
+     in gl3d.js). A tank's shadow is tank-shaped and turns with its hull, a power plant's has
+     its chimneys, a helicopter's lies away from it by its altitude - which is the cue that
+     says "flying" rather than "drawn slightly larger". It is one extra draw per entity through
+     the program that was already bound, with uShadow doing the flattening in the vertex stage,
+     so no second mesh is built and no second program is compiled.
+
+     THE STENCIL IS NOT OPTIONAL WHERE IT EXISTS. A planar shadow puts every face of a model on
+     the same patch of ground, so a six-sided box blends six times over and comes out a solid
+     black blot with the silhouette lost inside it. Stamping each pixel once is what leaves a
+     shadow. Where the buffer is missing the pass still runs unmasked - darker where a model
+     overlaps itself, but a shadow rather than nothing.
+
+     Depth WRITES off, so the shadows never punch holes in the buffer that the meshes standing
+     on them would then fail against; depth TEST on, so a shadow cast behind a ridge is hidden
+     by it. The world's own trees and rock do not cast: they are ~1M triangles behind a chunk
+     cull and drawing them twice is the one thing here that would not fit the frame budget. */
   gl.depthMask(false);
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-  gl.uniform1f(uA, 0.34);
-  for (var si2 = 0; si2 < G.ents.length; si2++) {
-    var se = G.ents[si2];
-    if (se.dead || se.type !== 'unit') continue;
-    /* 0.62, not 0.9. A shadow the size of the unit's own collision radius is wider than the
-       thing casting it for anything small - infantry sat inside a disc noticeably bigger than
-       they were - and reads as a pad rather than as contact. */
-    var sr = (rtsUnitDef(se.def).r || 1.5) * 0.62;
-    draw(R3.shadowMesh, se.x, 0, se.z, 0, sr / 3, false);
+  if (R3.stencil) {
+    gl.enable(gl.STENCIL_TEST);
+    gl.stencilFunc(gl.EQUAL, 0, 0xFF);
+    gl.stencilOp(gl.KEEP, gl.KEEP, gl.INCR);
   }
+  gl.uniform1f(uA, R3D_SHADOW_A);
+  gl.uniform3f(uShadow, R3D_SHADOW_SX, R3D_SHADOW_SZ, 1);
+  shadowMode = 1;
+  paintEntities();
+  shadowMode = 0;
+  gl.uniform3f(uShadow, 0, 0, 0);
   gl.uniform1f(uA, 1);
+  if (R3.stencil) gl.disable(gl.STENCIL_TEST);
   gl.disable(gl.BLEND);
   gl.depthMask(true);
 
+  function paintEntities() {
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (e.dead) continue;
@@ -330,6 +337,8 @@ function _r3dFrame(G) {
       }
     }
   }
+  }
+  paintEntities();
 
   /* --- fog, over everything, depth ignored --- */
   gl.useProgram(R3.texP);
