@@ -13,26 +13,27 @@
    left the forest looking like flat cut-outs while the buildings beside it had volume - and
    the forest is a fifth of the map, so it set the tone for the whole picture.
 
-   BAKED AT RTS_PS AND DRAWN PER FRAME, not stamped into the ground canvas. Until this, one
-   tree per forest cell was painted into the 3072-square terrain bake, and the result was that
-   a forest did not read as a forest at all. Measured on that canvas, a cell entirely enclosed
-   by forest against a cell entirely enclosed by grass: 60 tones against 74, mean luminance
-   81.9 against 76.9 - the FOREST WAS BRIGHTER - and a narrower range at that. A quarter of the
-   map was drawn as mottled green.
+   BAKED AT RTS_PS AND DRAWN PER FRAME, not stamped into the ground canvas.
 
-   The arithmetic says why. One sprite per cell, 24 art pixels wide against a 24-pixel cell,
-   only 289 of its 816 pixels opaque, jittered by up to eight pixels so each tree half-leaves
-   its own cell: canopy coverage lands around a third, and a third of a canopy over grass is
-   grass. The 3D mode reads as forest from the same terrain data because world3d.js puts two
-   or three full-height trees on every forest cell.
+   A CORRECTION FIRST, because the commit that made this change justified it with a measurement
+   that was wrong. It claimed a forest cell in the old bake measured BRIGHTER than bare grass -
+   81.9 against 76.9 - and therefore that a quarter of the map was not being drawn. That number
+   came from a harness that called _rtsNewGame into a live renderer without re-baking, so it
+   was comparing one map's paint against another map's grid. Re-measured with that fixed (see
+   the note at the end of _rtsNewGame), the old bake gave forest 74.4 against grass 100.8 and
+   89 tones against 12: the one-tree-per-cell forest was perfectly legible, just sparse and
+   regular. Nothing was missing.
 
-   The bake could not be fixed in place. The terrain canvas is RTS_N * RTS_TS = 3072 square and
-   cannot double - 6144 square is 144 MB of RGBA, which is a dead tab on a phone - so anything
-   stamped into it is capped at Red Alert's 24 pixels a cell no matter how good the sprite is.
-   Drawn per frame instead, a tree is an ordinary sprite: it can be baked at RTS_PS like every
-   other model, several can stand on one cell, and the 3D mode can skip them because it has
-   real geometry for the same trees. (It did not skip them before: the flat baked trees were
-   sitting under the 3D conifers, which is the same doubling the ore had.)
+   WHAT THIS CHANGE ACTUALLY BUYS, then, is quality rather than rescue: trees bake at RTS_PS
+   instead of RTS_TS, two or three stand on a cell instead of one, and there are five variants
+   instead of three, so a wood stops being a lattice of identical cones. It costs 2.3-4.7 ms a
+   frame that the baked version did not, measured over the densest forest on the map.
+
+   It also removes a real double-draw. The bake could not be improved in place - the terrain
+   canvas is RTS_N * RTS_TS = 3072 square and cannot double, since 6144 square is 144 MB of
+   RGBA and a dead tab on a phone - and while the trees lived in it the 3D mode drew them
+   TWICE: flat ones in the ground texture underneath the conifers world3d.js grows from the
+   same cells. Sprites can be skipped when the 3D mode is on; a baked texture cannot.
 
    FIVE VARIANTS, not three - a forest at two or three trees a cell shows its repeats far more
    readily than one at one. */

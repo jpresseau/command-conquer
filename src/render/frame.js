@@ -103,11 +103,12 @@ function _rtsRFrame(dt) {
   }
 
   /* --- the forest, drawn rather than baked ---------------------------------------------
-     These used to be stamped into the terrain canvas at one 24-pixel tree a cell, and a
-     forest measured BRIGHTER than bare grass because a single 35%-opaque sprite jittered off
-     its own cell covers about a third of it. That canvas is capped at Red Alert's tile
-     density and cannot grow, so the trees came out of it: as sprites they bake at RTS_PS and
-     several can stand on one cell, which is what makes a grove close up.
+     These used to be stamped into the terrain canvas at one 24-pixel tree a cell, which read
+     as a legible but sparse and very regular wood. (The commit that moved them claimed the old
+     forest measured brighter than bare grass; that was a stale-bake artifact and is corrected
+     on _sprTrees.) That canvas is capped at Red Alert's tile density and cannot grow, so the
+     trees came out of it: as sprites they bake at RTS_PS, several stand on one cell, and there
+     are five variants, which is what makes a grove read as one close up.
 
      SKIPPED IN 3D, like the ore - render3d/world3d.js grows real conifers from the same cells,
      and until the trees left the bake the flat ones were sitting underneath them.

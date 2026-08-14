@@ -382,15 +382,15 @@ function _rtsBakeTerrain(G) {
 
   /* --- forest. NOT PAINTED HERE ANY MORE.
 
-     The conifers used to be stamped into this canvas, one to a cell. Measured on the finished
-     bake, a cell entirely enclosed by forest against one entirely enclosed by grass came out
-     at 60 tones against 74 and mean luminance 81.9 against 76.9 - the forest was BRIGHTER, and
-     over a narrower range. A quarter of the map was being drawn as mottled green.
+     The conifers used to be stamped into this canvas, one to a cell, and that read perfectly
+     well - re-measured properly, forest 74.4 against grass 100.8 and 89 tones against 12. (The
+     commit that moved them cited the opposite, 81.9 against 76.9, from a harness that had
+     re-generated the map without re-baking the ground; see the correction on _sprTrees.)
 
-     It could not be fixed in place: this canvas is RTS_TS art pixels a cell and cannot grow
-     (6144 square is 144 MB of RGBA), so no better tree fits in it. They are drawn per frame as
-     ordinary sprites now, at RTS_PS and several to a cell, which also lets the 3D mode skip
-     them in favour of its own geometry. See _sprTrees in sprites/scenery.js and the forest
-     pass in render/frame.js. --- */
+     They moved because this canvas is RTS_TS art pixels a cell and cannot grow - 6144 square
+     is 144 MB of RGBA - so no finer tree fits in it, and because a texture cannot be skipped
+     when the 3D mode wants to grow its own trees on the same cells. Drawn per frame as
+     ordinary sprites they get RTS_PS, several to a cell, and a 3D gate. See _sprTrees in
+     sprites/scenery.js and the forest pass in render/frame.js. --- */
   return t.c;
 }
