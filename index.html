@@ -876,7 +876,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">5eb3df5 · 2026-08-14</div>
+  <div id="rtsBuild" title="build">bc49872 · 2026-08-14</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -20375,6 +20375,19 @@ function _r3dFrame(G) {
    Everything is HASH-PLACED, never random: the same seed must produce the same forest on
    every machine and after every save-load, and the bake must not shimmer between toggles.
 
+   AND EVERY PER-INSTANCE HASH TAKES BOTH CELL COORDINATES. The first cut of this file
+   scattered with separable pairs - the x offset hashed on (index, tx) and the z offset on
+   (tz, index) - so the x offsets were identical down every column and the z offsets identical
+   along every row. That is not a scatter, it is the outer product of two one-dimensional
+   patterns, and at the scale of a forest it reads as a lattice with the cells jittered rather
+   than as trees.
+
+   The SIZE hashes had the same defect in an additive form: `_sprHash(tx + tn, ...)` gives tree
+   1 on a cell the height of tree 0 on the next cell along, and `_sprHash(tn, tx + tz, ...)` is
+   constant along a whole anti-diagonal. Every per-instance hash in the file - the five
+   scatters and the eight size hashes - now folds tx, tz and the sub-index with `*31 +`, which
+   is injective here because no sub-index reaches 31.
+
    THE ORE BATCH ALONE IS DYNAMIC. Trees and rock are immutable in this engine, but ore
    depletes and spreads, so its crystal batch follows the field - polled cheaply per frame
    and rebuilt only when the total actually changed. */
@@ -20387,9 +20400,12 @@ var R3D_TUFT_ODDS = 0.62;      /* share of grass cells that carry tufts at all *
 var R3D_CRYSTALS_PER_CELL = 7;
 var R3D_WORLD_YMAX = 14;       /* tallest world geometry; the cull margin hangs on it */
 
-/* One tree: trunk and three or four foliage tiers, sized and leaned by hash so a forest is
-   a population rather than an array. Heights run 5-9 world units - a cell and a bit to two
-   cells - which is the reference's tree-to-tank proportion. */
+/* One tree: trunk and three or four foliage tiers, SIZED by hash - not leaned, whatever an
+   earlier version of this comment claimed. There is no rotation anywhere in the world batch;
+   the geometry is baked straight to world space and drawn with an identity placement, which
+   is the whole reason it can be one buffer per chunk. What varies between trees is height,
+   canopy radius, tier count and tier colour. Heights run 5-9 world units - a cell and a bit
+   to two cells - which is the reference's tree-to-tank proportion. */
 function _r3dTree(out, x, z, h1, h2, h3) {
   var th = 5 + h1 * 4, tr = 1.2 + h2 * 0.9;
   _r3Cyl(out, x, 0, z, 0.45 + h3 * 0.2, th * 0.35, '#5a4630', '#463620', 6);
@@ -20431,28 +20447,32 @@ function _r3dWorldBuild(G) {
             /* a forest cell is a CLUSTER - two or three trees, spread across the cell */
             var nt = h1 > 0.5 ? 3 : 2;
             for (var tn = 0; tn < nt; tn++) {
-              var ox = (_sprHash(tn, tx, 401) - 0.5) * (RTS_TILE - 1.6);
-              var oz = (_sprHash(tz, tn, 409) - 0.5) * (RTS_TILE - 1.6);
+              var ox = (_sprHash(tx * 31 + tn, tz, 401) - 0.5) * (RTS_TILE - 1.6);
+              var oz = (_sprHash(tz * 31 + tn, tx, 409) - 0.5) * (RTS_TILE - 1.6);
+              /* the SIZE hashes carried the same defect, and one carried it worse:
+                 `_sprHash(tn, tx + tz, 431)` is CONSTANT along an entire anti-diagonal, so
+                 tier count and trunk girth ran in diagonal stripes across every wood. */
               _r3dTree(faces, wx + ox, wz + oz,
-                       _sprHash(tx + tn, tz, 419), _sprHash(tz, tx + tn, 421), _sprHash(tn, tx + tz, 431));
+                       _sprHash(tx * 31 + tn, tz, 419), _sprHash(tz * 31 + tn, tx, 421),
+                       _sprHash(tx * 31 + tn, tz * 31 + tn, 431));
             }
           } else if (k === RTS_T_ROCK) {
             /* A ridge cell: stacked slabs of differing greys plus a crag spike or two. There
                is no rotation in the batch, so the tilt is faked the way the buildings fake
                it - offset stacked boxes, which under this light shade as separate facets. */
             for (var rb = 0; rb < 3; rb++) {
-              var rh = 2.2 + _sprHash(tx + rb, tz, 347) * 3.4;
-              var rw = 1.6 + _sprHash(tz, tx + rb, 349) * 2.2;
-              _r3Box(faces, wx + (_sprHash(rb, tx, 353) - 0.5) * 2.4, rb * 0.5,
-                     wz + (_sprHash(rb, tz, 359) - 0.5) * 2.4,
+              var rh = 2.2 + _sprHash(tx * 31 + rb, tz, 347) * 3.4;
+              var rw = 1.6 + _sprHash(tz * 31 + rb, tx, 349) * 2.2;
+              _r3Box(faces, wx + (_sprHash(tx * 31 + rb, tz, 353) - 0.5) * 2.4, rb * 0.5,
+                     wz + (_sprHash(tz * 31 + rb, tx, 359) - 0.5) * 2.4,
                      rw, rh, rw * (0.8 + h1 * 0.5),
                      rb & 1 ? '#6a6f66' : '#7e837a', rb & 1 ? '#575b54' : '#8d9289');
             }
             for (var cg = 0; cg < 2; cg++) {
-              var gh = 3 + _sprHash(tx, tz + cg, 433) * 3;
-              _r3Cone(faces, wx + (_sprHash(cg, tx, 439) - 0.5) * 3,
-                      0, wz + (_sprHash(cg, tz, 443) - 0.5) * 3,
-                      0.9 + _sprHash(tx + cg, tz, 449) * 0.6, 0.1, gh,
+              var gh = 3 + _sprHash(tx * 31 + cg, tz * 31 + cg, 433) * 3;
+              _r3Cone(faces, wx + (_sprHash(tx * 31 + cg, tz, 439) - 0.5) * 3,
+                      0, wz + (_sprHash(tz * 31 + cg, tx, 443) - 0.5) * 3,
+                      0.9 + _sprHash(tx * 31 + cg, tz, 449) * 0.6, 0.1, gh,
                       cg & 1 ? '#757a71' : '#888d84', 6);
             }
           } else if (k === RTS_T_GRASS) {
@@ -20461,9 +20481,9 @@ function _r3dWorldBuild(G) {
                density is what breaks the plane's perfect flatness without carpeting it. */
             if (h1 < R3D_TUFT_ODDS) {
               for (var tf = 0; tf < R3D_TUFTS_PER_CELL; tf++) {
-                var fx = wx + (_sprHash(tf, tx, 367) - 0.5) * RTS_TILE;
-                var fz = wz + (_sprHash(tz, tf, 373) - 0.5) * RTS_TILE;
-                var fh = 0.5 + _sprHash(tf + tx, tz, 379) * 0.7;
+                var fx = wx + (_sprHash(tx * 31 + tf, tz, 367) - 0.5) * RTS_TILE;
+                var fz = wz + (_sprHash(tz * 31 + tf, tx, 373) - 0.5) * RTS_TILE;
+                var fh = 0.5 + _sprHash(tx * 31 + tf, tz, 379) * 0.7;
                 _r3Cone(faces, fx, 0, fz, 0.32, 0.02, fh,
                         (tf & 1) ? '#4e6b3a' : '#5a7a44', 5);
               }
@@ -20483,10 +20503,15 @@ function _r3dWorldBuild(G) {
   }
 }
 
-/* The crystals over the ore, rebuilt when the field actually changes. The stain in the
-   terrain bake says WHERE ore is; these say it is a mineral, standing proud enough to catch
-   the light. Height scales with what is left in the cell, so a field visibly wears down as
-   the harvesters work it. */
+/* The crystals over the ore, rebuilt when the field actually changes. These are the ONLY ore
+   the 3D mode draws: the golden stain belongs to the 2D ore tile, which render/frame.js skips
+   when the mode is on, so there is no painted deposit underneath them the way there is in 2D.
+   (An earlier version of this comment credited the stain to the terrain bake. It was never
+   there.) Height scales with what is left in the cell, so a field visibly wears down as the
+   harvesters work it - against the RICHNESS-SCALED cell capacity, not the nominal one, which
+   is the same divisor bug the 2D draw carried: cells are seeded
+   `(lvl+1)/LEVELS * RTS_SCRAP_TILE * RTS_ORE_RICHNESS`, so dividing by RTS_SCRAP_TILE alone
+   caps `frac` at the richness and the crystals never reach full height. */
 function _r3dOreBuild(G) {
   var R3 = window._R3D, gl = R3.gl;
   var faces = [], N = RTS_N, sum = 0;
@@ -20497,12 +20522,13 @@ function _r3dOreBuild(G) {
       sum += ore;
       var gem = G.gems && G.gems[i];
       var P = gem ? RTS_PAL.gem : RTS_PAL.ore;
-      var frac = Math.min(1, ore / RTS_SCRAP_TILE);
+      var frac = Math.min(1, ore / (RTS_SCRAP_TILE *
+                     (typeof RTS_ORE_RICHNESS === 'number' ? RTS_ORE_RICHNESS : 1)));
       var wx = _rtsWX(tx), wz = _rtsWX(tz);
       for (var c = 0; c < R3D_CRYSTALS_PER_CELL; c++) {
-        var cx = wx + (_sprHash(c, tx, 383) - 0.5) * RTS_TILE;
-        var cz = wz + (_sprHash(tz, c, 389) - 0.5) * RTS_TILE;
-        var ch = (0.5 + _sprHash(c + tx, tz, 397) * 1.1) * (0.35 + frac);
+        var cx = wx + (_sprHash(tx * 31 + c, tz, 383) - 0.5) * RTS_TILE;
+        var cz = wz + (_sprHash(tz * 31 + c, tx, 389) - 0.5) * RTS_TILE;
+        var ch = (0.5 + _sprHash(tx * 31 + c, tz, 397) * 1.1) * (0.35 + frac);
         _r3Cone(faces, cx, 0, cz, 0.42, 0.05, ch, (c & 1) ? P[0] : P[1], 4);
       }
     }
