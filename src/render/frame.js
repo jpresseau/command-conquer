@@ -340,12 +340,31 @@ function _rtsRFrame(dt) {
       continue;
     }
     if (f.kind === 'tracer') {
-      if (f.t > 0.06) continue;
-      g.strokeStyle = 'rgba(255,242,192,0.9)';
-      g.lineWidth = Math.max(1, cell * 0.04);
+      /* A ROUND IN FLIGHT, NOT A BEAM. This drew the whole muzzle-to-target line at 90%
+         opacity for its entire life, which at the top zoom is a hard cream stroke running the
+         width of the battlefield - it read as a scratch on the screen rather than as gunfire,
+         and every machine-gun burst drew several at once.
+
+         The weapon really is hitscan (w.speed <= 0 applies its damage on the spot), so there
+         is no projectile to follow; what the effect has to sell is the ROUND, and a round is
+         a short bright dash somewhere along the line. It advances over the effect's 0.06s and
+         fades as it goes, so a burst reads as a stream of them leaving the barrel instead of
+         as a solid rod connecting shooter to victim. */
+      var TRL = 0.06;
+      if (f.t > TRL) continue;
+      var ax = _rtsSX(f.x), ay = _rtsSY(f.z);
+      var bx2 = _rtsSX(f.x2), by2 = _rtsSY(f.z2);
+      var vx = bx2 - ax, vy = by2 - ay, flen = Math.hypot(vx, vy) || 1;
+      var u = Math.min(1, f.t / TRL + 0.28);          /* the head, already clear of the barrel */
+      var hx = ax + vx * u, hy = ay + vy * u;
+      /* the dash is a fraction of the flight, so a point-blank shot does not overshoot its
+         own target, and capped in cells so a long shot is still a dash and not a line */
+      var dash = Math.min(flen * 0.34, cell * 1.1);
+      g.strokeStyle = 'rgba(255,242,192,' + (0.85 * (1 - f.t / TRL)).toFixed(3) + ')';
+      g.lineWidth = Math.max(1, cell * 0.035);
       g.beginPath();
-      g.moveTo(_rtsSX(f.x), _rtsSY(f.z));
-      g.lineTo(_rtsSX(f.x2), _rtsSY(f.z2));
+      g.moveTo(hx - vx / flen * dash, hy - vy / flen * dash);
+      g.lineTo(hx, hy);
       g.stroke();
     } else {
       /* Combat_Anim: which set of frames this is comes from the animation kind, which the
