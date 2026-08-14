@@ -1,4 +1,4 @@
-/* sprites/ore.js - ore, in four density stages. Part of rts.sprites. */
+/* sprites/ore.js - ore, in eight density stages. Part of rts.sprites. */
 
 /* THE GROUND IS BAKED AT RTS_PS, LIKE EVERYTHING STANDING ON IT.
 
@@ -33,7 +33,7 @@ function _sprCrystal(g, x, y, w, h, P) {
 }
 
 /* ------------------------------------------------------------------------ ore --
-   Four density stages. Nuggets are drawn wrapped - every cluster is also painted one cell
+   Nuggets are drawn wrapped - every cluster is also painted one cell
    left/right/up/down - so clusters run across cell edges and a worked field reads as
    continuous ground rather than a grid of identical stamps. Three variants per stage,
    chosen by a hash of the cell, kill the last of the repetition. */
@@ -42,9 +42,21 @@ function _sprOre(P, gem) {
     var real = _mixOre(gem);
     if (real) return real;
   }
-  var out = [], PS = RTS_PS, TS = RTS_TS * PS;
+  /* EIGHT DENSITY STAGES, NOT FOUR. The simulation tracks twelve ore levels per cell
+     (RTS_ORE_LEVELS) and the field was being displayed at four, so a third of what the
+     harvesters actually do to a deposit was invisible - and, worse, the quantisation IS the
+     seam: neighbouring cells one step apart differ by a quarter of the whole range, which at
+     the top zoom is a hard-edged 48-pixel rectangle of different ground tone. Twice the
+     stages halves the step and halves the seam with it, for 110 KB.
+
+     The two density curves are the same curves, sampled finer rather than re-tuned. The old
+     literals - blobs [3,5,8,11] and nuggets [8,17,30,44] - are both `base + span * u^1.25`
+     over u = st/(stages-1), which reproduces all four originals exactly and interpolates
+     between them for the stages in between. */
+  var out = [], PS = RTS_PS, TS = RTS_TS * PS, NS = 8;
   P = P || RTS_PAL.ore;
-  for (var st = 0; st < 4; st++) {
+  for (var st = 0; st < NS; st++) {
+    var uc = Math.pow(NS > 1 ? st / (NS - 1) : 1, 1.25);
     var variants = [];
     for (var v = 0; v < 3; v++) {
       var t = _sprMake(TS, TS), g = t.g, seed = st * 977 + v * 131 + 17;
@@ -54,7 +66,7 @@ function _sprOre(P, gem) {
          stain is most of what makes a field read as one deposit instead of speckle. Painted
          first, wrapped exactly like the nuggets so the stain also runs across cell edges,
          and scaled by stage so a nearly-mined cell fades back toward bare ground. */
-      var blobs = [3, 5, 8, 11][st];
+      var blobs = Math.round(3 + 8 * uc);
       g.globalAlpha = 0.34;
       for (var ub = 0; ub < blobs; ub++) {
         var ux = _sprHash(ub, 7, seed + 41) * TS, uy = _sprHash(7, ub, seed + 43) * TS;
@@ -70,7 +82,7 @@ function _sprOre(P, gem) {
       /* COUNT is per cell and stays fixed - the field must get finer, not denser. Only the
          crystals' pixel size scales, so each one covers the same fraction of a cell as before
          and simply has room for facets. */
-      var n = [8, 17, 30, 44][st];
+      var n = Math.round(8 + 36 * uc);
       for (var i = 0; i < n; i++) {
         var x = _sprHash(i, v, seed) * TS, y = _sprHash(v, i, seed + 5) * TS;
         var big = _sprHash(i, i, seed + 9) < 0.35;

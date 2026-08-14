@@ -1,7 +1,7 @@
 /* THE ORE FIELD, AND THE 3D MODE IT WAS PAINTING OVER.
 
    Ore is the largest single thing on a Red Alert map after the ground itself, and it carried
-   four separate faults at once - three of them invisible to every other spec because they
+   five separate faults at once - four of them invisible to every other spec because they
    were all "the picture is worse than it should be" rather than "the game is wrong".
 
    DENSITY. RTS_PS was introduced so procedural art could be authored finer than Red Alert's
@@ -23,6 +23,14 @@
    three-cell lattice, which is a repeating pattern rather than a fix for one. The spec pins
    the property that survives a re-tuning: all variants get real use, and the choice is not a
    function of (tx + tz).
+
+   THE SEAM. A tile is stamped per cell at a QUANTISED density, and the simulation tracks
+   twelve ore levels per cell (RTS_ORE_LEVELS) while the artwork had four. Two neighbouring
+   cells one step apart therefore met along a hard 48-pixel edge of different ground tone, and
+   at the top zoom a worked field read as a grid of rectangles. Doubling the stages halves the
+   size of a one-step difference; the spec measures the luminance step across columns that
+   fall on a cell boundary against the step across columns that do not, from the INTERIOR of a
+   field, because at a field's edge that step is supposed to be there.
 
    THE OVERLAY. Every other 2D world layer is gated on 3D being off - the terrain blit, the
    pads, the sprites, the shroud - and this loop was missed, so flat ore tiles were painted
@@ -114,10 +122,52 @@ var S = new Suite('orefield');
 
     /* --- the overlay: what the player is shown must be what the GL renderer drew --- */
     R.zi = RTS_ZOOMS.length - 1; R.cell = RTS_ZOOMS[R.zi];
-    var best = -1, bi = 0;
-    for (i = 0; i < RTS_N * RTS_N; i++) if (G.scrap[i] > best) { best = G.scrap[i]; bi = i; }
-    R.focus.x = _rtsWX(bi % RTS_N); R.focus.z = _rtsWX((bi / RTS_N) | 0);
+    /* THE INTERIOR of the biggest field, not the single richest cell. The richest cell is
+       often on a field's edge, and a window centred there is half bare ground - which makes
+       the seam measurement below report the boundary between ore and dirt, a step that is
+       supposed to be there, instead of the boundary between one ore cell and the next. */
+    var bestN = -1, bcx = 0, bcz = 0;
+    for (var cz2 = 4; cz2 < RTS_N - 4; cz2++) {
+      for (var cx2 = 4; cx2 < RTS_N - 4; cx2++) {
+        var cnt = 0;
+        for (var dz2 = -3; dz2 <= 3; dz2++) {
+          for (var dx2 = -3; dx2 <= 3; dx2++) if (G.scrap[_rtsIdx(cx2 + dx2, cz2 + dz2)] > 0) cnt++;
+        }
+        if (cnt > bestN) { bestN = cnt; bcx = cx2; bcz = cz2; }
+      }
+    }
+    o.fieldCells = bestN;
+    var bi = bcz * RTS_N + bcx;
+    R.focus.x = _rtsWX(bcx); R.focus.z = _rtsWX(bcz);
     for (var t = 0; t < 30; t++) _rtsTick(1 / 60);
+
+    /* --- CELL SEAMS. Ore is stamped one tile per cell at a quantised density, so two
+       neighbouring cells a step apart meet along a hard 48-pixel edge of different ground
+       tone - the field reads as a grid of rectangles rather than as a deposit. The measure is
+       the luminance step ACROSS columns that fall on a cell boundary against the step across
+       columns that do not: a seamless field scores near 1, and every extra display stage
+       halves the size of a one-step difference. Sampled with the camera already parked on the
+       densest ore, so the whole window is field. */
+    _rtsRFrame(1 / 60);
+    var scv = document.getElementById('rtsCv'), sctx = scv.getContext('2d');
+    var sd = sctx.getImageData(0, 0, scv.width, scv.height).data, SW = scv.width, SH = scv.height;
+    var lum = function (x, y) { var p = (y * SW + x) * 4;
+      return 0.299 * sd[p] + 0.587 * sd[p + 1] + 0.114 * sd[p + 2]; };
+    var cellPx = R.cell * R.dpr;
+    var ex0 = Math.round(_rtsSX(_rtsWX(bcx) - RTS_TILE / 2) * R.dpr);
+    var eS = 0, eN = 0, iS = 0, iN = 0;
+    for (var sx2 = 2; sx2 < SW - 2; sx2++) {
+      var s2 = 0, n2 = 0;
+      for (var sy2 = Math.round(SH * 0.3); sy2 < Math.round(SH * 0.7); sy2++) {
+        s2 += Math.abs(lum(sx2, sy2) - lum(sx2 - 1, sy2)); n2++;
+      }
+      if (!n2) continue;
+      if ((((sx2 - ex0) % cellPx) + cellPx) % cellPx === 0) { eS += s2 / n2; eN++; }
+      else { iS += s2 / n2; iN++; }
+    }
+    o.edgeStep = +(eS / Math.max(1, eN)).toFixed(2);
+    o.interiorStep = +(iS / Math.max(1, iN)).toFixed(2);
+    o.seamRatio = +(o.edgeStep / Math.max(0.01, o.interiorStep)).toFixed(3);
 
     rts3dToggle();
     o.on = !!(window._R3D && window._R3D.on);
@@ -167,6 +217,13 @@ var S = new Suite('orefield');
        out.diagonalShare + ' of drawn cells match (tx+tz)%n' +
        ' - an arithmetic rule congruent to it matches 1.0, a hash about ' +
        (1 / out.nVariants).toFixed(2));
+
+  S.ok('the field does not break into per-cell rectangles',
+       out.seamRatio < 2.0,
+       out.fieldCells + '/49 cells of ore around the sample point; luminance step across ' +
+       'cell boundaries ' + out.edgeStep + ' vs ' + out.interiorStep +
+       ' inside a cell, ratio ' + out.seamRatio +
+       ' - at four display stages it was 2.467 (20.26 vs 8.21)');
 
   S.ok('the 3D mode turns on for the overlay check', out.on, out.on ? 'on' : 'no WebGL');
   if (out.on) {
