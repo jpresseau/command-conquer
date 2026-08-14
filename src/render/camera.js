@@ -63,11 +63,27 @@ function _rtsViewSpan() {
   return { w: R.W / z, h: R.H / z };
 }
 /* THE PROJECTION CONTRACT, in both modes. Every input path and every overlay - picking,
-   drag select, health bars, effects, the ghost - goes through these four functions and
-   nothing else, which is what makes the 3D mode possible as a branch rather than a rewrite:
-   the north-up tilted camera keeps all four closed-form (see render3d/gl3d.js), with the 2D
-   renderer as the special case tilt = 0. If the GL shader and these ever disagree, clicks
-   land beside units - e2e/r3dlive asserts the round trip. */
+   drag select, health bars, effects, the ghost - goes through these functions and nothing
+   else, which is what makes the 3D mode a branch rather than a rewrite. If the GL shader and
+   these ever disagree, clicks land beside units - e2e/r3dlive asserts the round trip.
+
+   _rtsWorldToScreen IS THE CONTRACT. _rtsSX and _rtsSY are the SEPARABLE special case, and
+   they are only sound while screenX depends on nothing but wx - true of a north-up
+   orthographic camera and of nothing else. That held for as long as the 3D camera was welded
+   north-up and flat-projected, which is exactly why the mode looked two-dimensional: no
+   perspective divide, no yaw, a 35 degree lean and nothing else to tell a player the world
+   has depth.
+
+   So the pair is no longer the interface. Every drawing site takes both coordinates through
+   _rtsWorldToScreen, which returns a screen point AND the scale to draw at, and is free to
+   make screenX depend on z. The 2D renderer keeps the closed form below - it is genuinely
+   orthographic and must not move a pixel - and the 3D one is free to stop being separable.
+
+   `scale` is 1 under any orthographic camera and is what an overlay must multiply its size
+   by under a perspective one: a health bar over a unit at the back of the view is smaller
+   than the same bar at the front, and a caller that ignores it will draw bars that all match
+   while the units under them do not. `behind` marks a point the camera cannot see, which an
+   orthographic camera never produces and a perspective one does. */
 function _rtsSX(wx) { return (wx - _rtsR.focus.x) * _rtsZoom() + _rtsR.W / 2; }
 function _rtsSY(wz) {
   var R3 = window._R3D;
@@ -84,8 +100,12 @@ function _rtsGroundAt(mx, my) {
 function _rtsWorldToScreen(x, y, z) {
   var R3 = window._R3D;
   if (R3 && R3.on) return _r3dWorldToScreen(x, y, z);
-  return { x: _rtsSX(x), y: _rtsSY(z) - (y || 0) * _rtsZoom() * 0.5, behind: false };
+  return { x: (x - _rtsR.focus.x) * _rtsZoom() + _rtsR.W / 2,
+           y: (z - _rtsR.focus.z) * _rtsZoom() + _rtsR.H / 2 - (y || 0) * _rtsZoom() * 0.5,
+           scale: 1, behind: false };
 }
+/* The ground-level case, which is most of them: a point on the map with no height. */
+function _rtsGroundToScreen(x, z) { return _rtsWorldToScreen(x, 0, z); }
 
 /* Stamp RA's shroud tiles over the visible cells.
 

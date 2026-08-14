@@ -8,26 +8,48 @@
    are recognisable on the original's radar instead of being coloured blocks, which is what
    these were.
 
-   Built once per structure type on first use. */
+   Built once per structure type on first use.
+
+   IT MUST WALK THE WHOLE SPRITE. The step was `RTS_TS / Z` - art pixels per sample - but the
+   sprite it reads is baked at RTS_TS * RTS_PS per cell, so the sampler crossed only 1/RTS_PS
+   of the footprint and then stopped. Measured, it reached 47.2% of the way across every
+   structure in each axis: about a fifth of the building's area, and always the same fifth.
+   Every blip on the radar was the building's TOP-LEFT QUADRANT stretched over the whole
+   footprint - a refinery and a war factory read as near-identical smears of their upper-left
+   corners, which is the exact failure the downsample-the-real-shape port exists to avoid. The
+   step is in canvas pixels now, taken from the sprite's own `ps` tag rather than assumed.
+
+   AND THE NINE-TAP KERNEL WAS THREE TAPS. OFFY was a byte-for-byte copy of OFFX, so the nine
+   (dx,dy) pairs collapsed to three distinct offsets - (0,0), (-1,-1) and (1,1) - every one of
+   them on the main diagonal. A kernel whose whole job is to catch a thin feature that falls
+   between samples cannot catch a thin HORIZONTAL or VERTICAL one if it only ever looks along
+   a diagonal, and walls, gantries and roof ridges are mostly axis-aligned. It is a real 3x3
+   now: centre first so an exact hit always wins, then the four edge neighbours, then the
+   corners - and the offsets scale with `ps`, because a one-art-pixel neighbour is `ps` canvas
+   pixels away. */
 var _RTS_RICON = null;
 function _rtsRadarIcon(key, side) {
   if (!_RTS_RICON) _RTS_RICON = {};
   var ck = key + ':' + side;
   if (_RTS_RICON[ck]) return _RTS_RICON[ck];
-  var OFFX = [0, 0, -1, 1, 0, -1, 1, -1, 1], OFFY = [0, 0, -1, 1, 0, -1, 1, -1, 1];
+  var OFFX = [0, -1, 1, 0, 0, -1, 1, -1, 1], OFFY = [0, 0, 0, -1, 1, -1, -1, 1, 1];
   var def = rtsStructDef(key), spr = _rtsSprites().bld[side][key];
   var Z = 3, W = def.w * Z, H = def.h * Z;
   var src = spr.c.getContext('2d').getImageData(0, 0, spr.c.width, spr.c.height).data;
-  var sw = spr.c.width;
+  var sw = spr.c.width, sh = spr.c.height, PS = spr.c.ps || 1;
   var t = _sprMake(W, H), g = t.g;
   for (var iy = 0; iy < H; iy++) {
     for (var ix = 0; ix < W; ix++) {
-      /* Sample the footprint only - the headroom above it belongs to no tile. */
-      var bx = Math.round((ix + 0.5) * RTS_TS / Z);
-      var by = spr.head + Math.round((iy + 0.5) * RTS_TS / Z);
+      /* Sample the footprint only - the headroom above it belongs to no tile. `head` is
+         already in canvas pixels, which is why it needs no scaling and the step does. */
+      var bx = Math.round((ix + 0.5) * RTS_TS * PS / Z);
+      var by = spr.head + Math.round((iy + 0.5) * RTS_TS * PS / Z);
       for (var n = 0; n < 9; n++) {
-        var qx = bx - OFFX[n], qy = by - OFFY[n];
-        if (qx < 0 || qy < 0 || qx >= sw) continue;
+        var qx = bx - OFFX[n] * PS, qy = by - OFFY[n] * PS;
+        /* the bottom bound was missing: past the end of the array `src[o+3]` is undefined,
+           `undefined < 128` is false, so it fell through to fillStyle = 'rgb(undefined,...)',
+           which the canvas rejects - leaving the PREVIOUS pixel's colour to be painted here */
+        if (qx < 0 || qy < 0 || qx >= sw || qy >= sh) continue;
         var o = (qy * sw + qx) * 4;
         if (src[o + 3] < 128) continue;
         g.fillStyle = 'rgb(' + src[o] + ',' + src[o + 1] + ',' + src[o + 2] + ')';

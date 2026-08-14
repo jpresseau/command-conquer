@@ -323,7 +323,26 @@ function _sprCol(hex) {
 
    The taps COMPOSE rather than add, so a fully covered pixel reaches 1 - (1 - a)^n; `a` is
    solved from that so the core still lands on the 0.30 this always used, and the rim, which
-   only some of the taps reach, falls away from there. */
+   only some of the taps reach, falls away from there.
+
+   AND IT FADES OUT BEFORE THE CANVAS DOES. Softening the shadow was only half the job: it was
+   still composed into a canvas the size of the silhouette while being drawn `dx + r` right and
+   down, so everything past the edge was discarded - measured, 2.2% of the construction yard's
+   shadow ink and 5.1% of the refinery's, ending in a perfectly straight line. A straight line
+   is the one shape a soft shadow must never have; a blurred rim on three sides and a
+   guillotine cut on the other two is worse than the honest hard shadow this replaced.
+
+   GROWING THE CANVAS WAS THE WRONG FIX, and the suite said so twice. A building sprite is
+   EXACTLY its footprint wide - e2e/r3d asserts it for all 26 structures and e2e/cameo asserts
+   the placement ghost against it - and it is the same contract the real Red Alert artwork
+   satisfies, so padding the procedural canvases would have made the two art paths structurally
+   different for the sake of 5% of a shadow. The invariant is worth more than the ink.
+
+   So the last `dx + r` pixels of the shadow are RAMPED TO NOTHING instead, in the two
+   directions it is offset toward. The mark still ends inside the footprint, which it must; it
+   just stops being cut there. Applied before the silhouette goes back on top, so it thins only
+   the shade and never the building. Where the shadow does not reach the edge - trees, ore -
+   there is nothing in the band to remove and this costs a no-op fill. */
 function _sprShadow(cv, dx, dy, soft) {
   var W = cv.width, H = cv.height;
   var t = _sprMake(W, H);
@@ -343,6 +362,21 @@ function _sprShadow(cv, dx, dy, soft) {
      taps just built survives being turned black */
   t.g.globalCompositeOperation = 'source-in';
   t.g.fillStyle = '#000'; t.g.fillRect(0, 0, W, H);
+  /* destination-out removes destination in proportion to the source alpha, and only inside the
+     rectangle it is given - so a ramp from transparent to opaque across the last band takes the
+     shadow smoothly to nothing at the edge and leaves the rest of the canvas alone */
+  t.g.globalCompositeOperation = 'destination-out';
+  var fw = Math.min(W, Math.max(0, dx + r)), fh = Math.min(H, Math.max(0, dy + r));
+  if (fw > 0) {
+    var gx = t.g.createLinearGradient(W - fw, 0, W, 0);
+    gx.addColorStop(0, 'rgba(0,0,0,0)'); gx.addColorStop(1, 'rgba(0,0,0,1)');
+    t.g.fillStyle = gx; t.g.fillRect(W - fw, 0, fw, H);
+  }
+  if (fh > 0) {
+    var gy = t.g.createLinearGradient(0, H - fh, 0, H);
+    gy.addColorStop(0, 'rgba(0,0,0,0)'); gy.addColorStop(1, 'rgba(0,0,0,1)');
+    t.g.fillStyle = gy; t.g.fillRect(0, H - fh, W, fh);
+  }
   t.g.globalCompositeOperation = 'source-over';
   t.g.drawImage(cv, 0, 0);
   return t.c;

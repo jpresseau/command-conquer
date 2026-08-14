@@ -227,6 +227,15 @@ function _rtsNewGame(seed, diff) {
   if (window._rtsR && typeof _rtsBakeTerrain === 'function') {
     window._rtsR.terrain = _rtsBakeTerrain(G);
     if (window._R3D) window._R3D.terrainDirty = true;    /* the GL ground shares this canvas */
+    /* AND THE SHROUD BELONGS TO THIS MAP TOO - the same hole, one layer up. The fog canvas
+       lives on the renderer and is rebuilt only when G.visDirty says the visibility sweep
+       changed something. A brand new game has revealed NOTHING yet (the sweep runs in the
+       tick, not at creation), so nothing marks the fog stale, and the previous map's revealed
+       blob stays on screen over ground it has no relationship to. Measured: 281 cells where
+       the fog and the new G.mapped disagreed, which is the whole of the old base's vision.
+       Dropping the canvas forces the next frame to rebuild it, and costs the shipped game the
+       same nothing the re-bake above does, for the same reason. */
+    window._rtsR.fog = null;
   }
   return G;
 }

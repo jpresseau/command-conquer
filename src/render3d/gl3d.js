@@ -231,5 +231,6 @@ function _r3dGroundAt(mx, my) {
 }
 function _r3dWorldToScreen(x, y, z) {
   var R3 = window._R3D;
-  return { x: _rtsSX(x), y: _r3dSY(z) - (y || 0) * R3.sp * _rtsZoom(), behind: false };
+  return { x: _rtsSX(x), y: _r3dSY(z) - (y || 0) * R3.sp * _rtsZoom(),
+           scale: 1, behind: false };
 }
