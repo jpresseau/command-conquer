@@ -876,7 +876,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">bc49872 · 2026-08-14</div>
+  <div id="rtsBuild" title="build">82ea23f · 2026-08-14</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -5673,7 +5673,26 @@ function _sprCol(hex) {
 
    The taps COMPOSE rather than add, so a fully covered pixel reaches 1 - (1 - a)^n; `a` is
    solved from that so the core still lands on the 0.30 this always used, and the rim, which
-   only some of the taps reach, falls away from there. */
+   only some of the taps reach, falls away from there.
+
+   AND IT FADES OUT BEFORE THE CANVAS DOES. Softening the shadow was only half the job: it was
+   still composed into a canvas the size of the silhouette while being drawn `dx + r` right and
+   down, so everything past the edge was discarded - measured, 2.2% of the construction yard's
+   shadow ink and 5.1% of the refinery's, ending in a perfectly straight line. A straight line
+   is the one shape a soft shadow must never have; a blurred rim on three sides and a
+   guillotine cut on the other two is worse than the honest hard shadow this replaced.
+
+   GROWING THE CANVAS WAS THE WRONG FIX, and the suite said so twice. A building sprite is
+   EXACTLY its footprint wide - e2e/r3d asserts it for all 26 structures and e2e/cameo asserts
+   the placement ghost against it - and it is the same contract the real Red Alert artwork
+   satisfies, so padding the procedural canvases would have made the two art paths structurally
+   different for the sake of 5% of a shadow. The invariant is worth more than the ink.
+
+   So the last `dx + r` pixels of the shadow are RAMPED TO NOTHING instead, in the two
+   directions it is offset toward. The mark still ends inside the footprint, which it must; it
+   just stops being cut there. Applied before the silhouette goes back on top, so it thins only
+   the shade and never the building. Where the shadow does not reach the edge - trees, ore -
+   there is nothing in the band to remove and this costs a no-op fill. */
 function _sprShadow(cv, dx, dy, soft) {
   var W = cv.width, H = cv.height;
   var t = _sprMake(W, H);
@@ -5693,6 +5712,21 @@ function _sprShadow(cv, dx, dy, soft) {
      taps just built survives being turned black */
   t.g.globalCompositeOperation = 'source-in';
   t.g.fillStyle = '#000'; t.g.fillRect(0, 0, W, H);
+  /* destination-out removes destination in proportion to the source alpha, and only inside the
+     rectangle it is given - so a ramp from transparent to opaque across the last band takes the
+     shadow smoothly to nothing at the edge and leaves the rest of the canvas alone */
+  t.g.globalCompositeOperation = 'destination-out';
+  var fw = Math.min(W, Math.max(0, dx + r)), fh = Math.min(H, Math.max(0, dy + r));
+  if (fw > 0) {
+    var gx = t.g.createLinearGradient(W - fw, 0, W, 0);
+    gx.addColorStop(0, 'rgba(0,0,0,0)'); gx.addColorStop(1, 'rgba(0,0,0,1)');
+    t.g.fillStyle = gx; t.g.fillRect(W - fw, 0, fw, H);
+  }
+  if (fh > 0) {
+    var gy = t.g.createLinearGradient(0, H - fh, 0, H);
+    gy.addColorStop(0, 'rgba(0,0,0,0)'); gy.addColorStop(1, 'rgba(0,0,0,1)');
+    t.g.fillStyle = gy; t.g.fillRect(0, H - fh, W, fh);
+  }
   t.g.globalCompositeOperation = 'source-over';
   t.g.drawImage(cv, 0, 0);
   return t.c;
@@ -13682,6 +13716,15 @@ function _rtsNewGame(seed, diff) {
   if (window._rtsR && typeof _rtsBakeTerrain === 'function') {
     window._rtsR.terrain = _rtsBakeTerrain(G);
     if (window._R3D) window._R3D.terrainDirty = true;    /* the GL ground shares this canvas */
+    /* AND THE SHROUD BELONGS TO THIS MAP TOO - the same hole, one layer up. The fog canvas
+       lives on the renderer and is rebuilt only when G.visDirty says the visibility sweep
+       changed something. A brand new game has revealed NOTHING yet (the sweep runs in the
+       tick, not at creation), so nothing marks the fog stale, and the previous map's revealed
+       blob stays on screen over ground it has no relationship to. Measured: 281 cells where
+       the fog and the new G.mapped disagreed, which is the whole of the old base's vision.
+       Dropping the canvas forces the next frame to rebuild it, and costs the shipped game the
+       same nothing the re-bake above does, for the same reason. */
+    window._rtsR.fog = null;
   }
   return G;
 }
@@ -17638,7 +17681,18 @@ function _rtsAIAllToHunt() {
     var u = G.ents[i];
     if (u.dead || u.side !== 'enemy' || u.type !== 'unit') continue;
     if (rtsUnitDef(u.def).harvest) continue;
-    _rtsOrderMove(u, aim.x + (i % 3 - 1) * 5, aim.z + ((i / 3) | 0 % 3) * 5, true);
+    /* A 3x3 spread around the target, so the hunt arrives on a frontage instead of funnelling
+       every unit into one cell.
+
+       THE Z TERM WAS `((i / 3) | 0 % 3)`, WHICH IS NOT WHAT IT LOOKS LIKE. `%` binds tighter
+       than `|`, so it parsed as `(i / 3) | (0 % 3)` - that is `(i / 3) | 0`, with the `% 3`
+       evaluated on its own, to zero, and OR-ed in where it changed nothing. The offset was
+       therefore unbounded rather than cycling -5/0/+5: it grew with the entity index, so on a
+       late-game field the tail of the list was sent to points a hundred world units south of
+       the player's base and spent the endgame walking away from the fight. The x term beside
+       it, written with the parentheses this one was missing, is what both were meant to be. */
+    _rtsOrderMove(u, aim.x + (i % 3 - 1) * 5,
+                     aim.z + ((((i / 3) | 0) % 3) - 1) * 5, true);
   }
 }
 /* AI_Attack - see _rtsAIAttack in core/missions.js. This line used to read "only a share of the
@@ -19449,11 +19503,27 @@ function _rtsViewSpan() {
   return { w: R.W / z, h: R.H / z };
 }
 /* THE PROJECTION CONTRACT, in both modes. Every input path and every overlay - picking,
-   drag select, health bars, effects, the ghost - goes through these four functions and
-   nothing else, which is what makes the 3D mode possible as a branch rather than a rewrite:
-   the north-up tilted camera keeps all four closed-form (see render3d/gl3d.js), with the 2D
-   renderer as the special case tilt = 0. If the GL shader and these ever disagree, clicks
-   land beside units - e2e/r3dlive asserts the round trip. */
+   drag select, health bars, effects, the ghost - goes through these functions and nothing
+   else, which is what makes the 3D mode a branch rather than a rewrite. If the GL shader and
+   these ever disagree, clicks land beside units - e2e/r3dlive asserts the round trip.
+
+   _rtsWorldToScreen IS THE CONTRACT. _rtsSX and _rtsSY are the SEPARABLE special case, and
+   they are only sound while screenX depends on nothing but wx - true of a north-up
+   orthographic camera and of nothing else. That held for as long as the 3D camera was welded
+   north-up and flat-projected, which is exactly why the mode looked two-dimensional: no
+   perspective divide, no yaw, a 35 degree lean and nothing else to tell a player the world
+   has depth.
+
+   So the pair is no longer the interface. Every drawing site takes both coordinates through
+   _rtsWorldToScreen, which returns a screen point AND the scale to draw at, and is free to
+   make screenX depend on z. The 2D renderer keeps the closed form below - it is genuinely
+   orthographic and must not move a pixel - and the 3D one is free to stop being separable.
+
+   `scale` is 1 under any orthographic camera and is what an overlay must multiply its size
+   by under a perspective one: a health bar over a unit at the back of the view is smaller
+   than the same bar at the front, and a caller that ignores it will draw bars that all match
+   while the units under them do not. `behind` marks a point the camera cannot see, which an
+   orthographic camera never produces and a perspective one does. */
 function _rtsSX(wx) { return (wx - _rtsR.focus.x) * _rtsZoom() + _rtsR.W / 2; }
 function _rtsSY(wz) {
   var R3 = window._R3D;
@@ -19470,8 +19540,12 @@ function _rtsGroundAt(mx, my) {
 function _rtsWorldToScreen(x, y, z) {
   var R3 = window._R3D;
   if (R3 && R3.on) return _r3dWorldToScreen(x, y, z);
-  return { x: _rtsSX(x), y: _rtsSY(z) - (y || 0) * _rtsZoom() * 0.5, behind: false };
+  return { x: (x - _rtsR.focus.x) * _rtsZoom() + _rtsR.W / 2,
+           y: (z - _rtsR.focus.z) * _rtsZoom() + _rtsR.H / 2 - (y || 0) * _rtsZoom() * 0.5,
+           scale: 1, behind: false };
 }
+/* The ground-level case, which is most of them: a point on the map with no height. */
+function _rtsGroundToScreen(x, z) { return _rtsWorldToScreen(x, 0, z); }
 
 /* Stamp RA's shroud tiles over the visible cells.
 
@@ -20010,7 +20084,8 @@ function _r3dGroundAt(mx, my) {
 }
 function _r3dWorldToScreen(x, y, z) {
   var R3 = window._R3D;
-  return { x: _rtsSX(x), y: _r3dSY(z) - (y || 0) * R3.sp * _rtsZoom(), behind: false };
+  return { x: _rtsSX(x), y: _r3dSY(z) - (y || 0) * R3.sp * _rtsZoom(),
+           scale: 1, behind: false };
 }
 </script>
 <script>/* render3d/scene3d.js - what the 3D mode draws each frame: the mesh cache, the ground and
@@ -20622,8 +20697,8 @@ function _rtsRFrame(dt) {
       var ore = G.scrap[idx];
       var isWater = G.terrain && G.terrain[idx] === RTS_T_WATER;
       if (ore <= 0 && !isWater) continue;
-      var px = Math.round(_rtsSX(_rtsWX(tx) - RTS_TILE / 2));
-      var py = Math.round(_rtsSY(_rtsWX(tz) - RTS_TILE / 2));
+      var pp = _rtsGroundToScreen(_rtsWX(tx) - RTS_TILE / 2, _rtsWX(tz) - RTS_TILE / 2);
+      var px = Math.round(pp.x), py = Math.round(pp.y);
       if (isWater) {
         /* The crest highlights step round a four-frame cycle, so the lake moves. Still drawn
            in 3D: the GL side has no water surface of its own yet, so without this the sea is
@@ -20693,9 +20768,10 @@ function _rtsRFrame(dt) {
           var jz = (_sprHash(ftz, ftx * 3 + ti, 103) - 0.5) * RTS_TILE * 0.78;
           var tv = S.tree[Math.floor(_sprHash(ftx + ti, ftz * 2 + ti, 107) * S.tree.length)
                           % S.tree.length];
-          var tw = Math.round(tv.c.width * tsc), th = Math.round(tv.c.height * tsc);
-          var tpx = Math.round(_rtsSX(_rtsWX(ftx) + jx) - tw / 2);
-          var tpy = Math.round(_rtsSY(_rtsWX(ftz) + jz) - Math.round(tv.head * tsc) - th / 2);
+          var tp = _rtsGroundToScreen(_rtsWX(ftx) + jx, _rtsWX(ftz) + jz);
+          var tw = Math.round(tv.c.width * tsc * tp.scale), th = Math.round(tv.c.height * tsc * tp.scale);
+          var tpx = Math.round(tp.x - tw / 2);
+          var tpy = Math.round(tp.y - Math.round(tv.head * tsc * tp.scale) - th / 2);
           g.drawImage(tv.c, tpx, tpy, tw, th);
         }
       }
@@ -20747,8 +20823,9 @@ function _rtsRFrame(dt) {
     var bib = (typeof _mixBib === 'function') ? _mixBib(pd.w) : null;
     if (bib) {
       var bcell = Math.round(RTS_TILE * TSscale) || 1;
-      var bx0 = Math.round(_rtsSX(_rtsWX(pe.tx) - RTS_TILE / 2));
-      var by0 = Math.round(_rtsSY(_rtsWX(pe.tz + pd.h - 2) - RTS_TILE / 2));
+      var bp = _rtsGroundToScreen(_rtsWX(pe.tx) - RTS_TILE / 2,
+                                  _rtsWX(pe.tz + pd.h - 2) - RTS_TILE / 2);
+      var bx0 = Math.round(bp.x), by0 = Math.round(bp.y);
       if (bx0 > R.W || by0 > R.H || bx0 + bcell * bib.w < 0 || by0 + bcell * 2 < 0) continue;
       for (var br = 0; br < 2; br++) {
         for (var bc = 0; bc < bib.w; bc++) {
@@ -20759,9 +20836,11 @@ function _rtsRFrame(dt) {
       continue;
     }
     var pad = S.pad[pe.def];
-    var pw = Math.round(pad.width * TSscale), ph = Math.round(pad.height * TSscale);
-    var ppx = Math.round(_rtsSX(_rtsWX(pe.tx) - RTS_TILE / 2)) - Math.round(10 * TSscale);
-    var ppy = Math.round(_rtsSY(_rtsWX(pe.tz) - RTS_TILE / 2)) - Math.round(8 * TSscale);
+    var pp2 = _rtsGroundToScreen(_rtsWX(pe.tx) - RTS_TILE / 2, _rtsWX(pe.tz) - RTS_TILE / 2);
+    var psc = TSscale * pp2.scale;
+    var pw = Math.round(pad.width * psc), ph = Math.round(pad.height * psc);
+    var ppx = Math.round(pp2.x) - Math.round(10 * psc);
+    var ppy = Math.round(pp2.y) - Math.round(8 * psc);
     if (ppx > R.W || ppy > R.H || ppx + pw < 0 || ppy + ph < 0) continue;
     g.drawImage(pad, ppx, ppy, pw, ph);
   }
@@ -20775,8 +20854,9 @@ function _rtsRFrame(dt) {
       var cr = G.crates[i];
       if (!_rtsVisible(cr.tx, cr.tz)) continue;
       var cimg = S.crate;
-      var cw = Math.round(cimg.width * TSscale), ch = Math.round(cimg.height * TSscale);
-      var cpx = Math.round(_rtsSX(_rtsWX(cr.tx)) - cw / 2), cpy = Math.round(_rtsSY(_rtsWX(cr.tz)) - ch / 2);
+      var crp = _rtsGroundToScreen(_rtsWX(cr.tx), _rtsWX(cr.tz));
+      var cw = Math.round(cimg.width * TSscale * crp.scale), ch = Math.round(cimg.height * TSscale * crp.scale);
+      var cpx = Math.round(crp.x - cw / 2), cpy = Math.round(crp.y - ch / 2);
       if (cpx > R.W || cpy > R.H || cpx + cw < 0 || cpy + ch < 0) continue;
       g.drawImage(cimg, cpx, cpy, cw, ch);
     }
@@ -20812,10 +20892,11 @@ function _rtsRFrame(dt) {
       if (sd.type !== 'unit') continue;
       var sdd = rtsUnitDef(sd.def);
       if (!sdd || sdd.kind === 'air') continue;      /* a helicopter's shadow is not under it */
-      var srx = Math.max(2, Math.round(sd.r * _rtsZoom() * 0.95));
+      var sp2 = _rtsGroundToScreen(sd.x, sd.z);
+      var srx = Math.max(2, Math.round(sd.r * _rtsZoom() * 0.95 * sp2.scale));
       var sry = Math.max(1, Math.round(srx * 0.55));
       g.beginPath();
-      g.ellipse(Math.round(_rtsSX(sd.x)), Math.round(_rtsSY(sd.z)) + Math.round(sry * 0.5),
+      g.ellipse(Math.round(sp2.x), Math.round(sp2.y) + Math.round(sry * 0.5),
                 srx, sry, 0, 0, Math.PI * 2);
       g.fill();
     }
@@ -20837,118 +20918,8 @@ function _rtsRFrame(dt) {
     if (d.hidden) g.globalAlpha = 1;
   }
 
-  /* --- projectiles --- */
-  for (i = 0; i < G.proj.length; i++) {
-    var p = G.proj[i];
-    if (!_rtsVisible(_rtsTX(p.x), _rtsTX(p.z))) continue;
-    var sx = Math.round(_rtsSX(p.x)), sy = Math.round(_rtsSY(p.z));
-    g.fillStyle = p.kind === 'missile' ? '#ffd070' : '#fff2c0';
-    var r = Math.max(2, Math.round(cell * (p.kind === 'missile' ? 0.09 : 0.06)));
-    g.fillRect(sx - r, sy - r, r * 2, r * 2);
-  }
+  _rtsDrawFx(g, G, S, TSscale, cell);
 
-  /* --- explosions, tracers, muzzle flashes --- */
-  for (i = 0; i < G.fx.length; i++) {
-    var f = G.fx[i], k = _rtsAnimQ(f.t) / 0.75;
-    if (f.t < 0) continue;                       /* a delayed secondary blast, not started */
-    if (f.kind === 'nuke') {
-      /* Anchored near its BASE, not its centre: a mushroom cloud stands on the ground and grows
-         upward, so centring it would sink the stem below the impact point. */
-      var nz = (typeof _mixFxSet === 'function') ? _mixFxSet('nuke') : null;
-      if (nz) {
-        var ni = Math.min(nz.length - 1, Math.floor((f.t / RTS_ANIMS.nuke.dur) * nz.length));
-        var nc = nz[ni];
-        var nw = Math.round(nc.width * TSscale * (f.big || 1));
-        var nh = Math.round(nc.height * TSscale * (f.big || 1));
-        g.drawImage(nc, Math.round(_rtsSX(f.x) - nw / 2), Math.round(_rtsSY(f.z) - nh * 0.88),
-                    nw, nh);
-        continue;
-      }
-    }
-    if (f.kind === 'die') {
-      /* A soldier falling over, drawn from his own artwork. Held on the LAST frame once the
-         sequence runs out rather than looping - a body that gets back up and dies again is
-         worse than one that lies still. */
-      var dq = RTS_ANIMS.die.dur;
-      var di = Math.min(f.seq.length - 1, Math.floor((f.t / dq) * f.seq.length));
-      var dc = f.seq[di];
-      var dw = Math.round(dc.width * TSscale), dh = Math.round(dc.height * TSscale);
-      g.drawImage(dc, Math.round(_rtsSX(f.x) - dw / 2), Math.round(_rtsSY(f.z) - dh * 0.62),
-                  dw, dh);
-      continue;
-    }
-    if (f.kind === 'debris') {
-      /* Chunks thrown clear of a dying structure. Height projects upward the same way the
-         baked sprites do, so a chunk arcs over the ground rather than sliding along it. */
-      var ds = Math.max(1, Math.round(cell * 0.07 * (f.big || 1)));
-      var dxp = Math.round(_rtsSX(f.x)), dyp = Math.round(_rtsSY(f.z) - f.y * _rtsZoom() * 0.8);
-      g.globalAlpha = f.t > 1.2 ? Math.max(0, (1.6 - f.t) / 0.4) : 1;
-      g.fillStyle = '#15171b';
-      g.fillRect(dxp - ds, Math.round(_rtsSY(f.z)) - 1, ds * 2, 2);     /* ground shadow */
-      g.fillStyle = f.t < 0.35 ? '#e0561c' : RTS_PAL.dark[1];
-      g.fillRect(dxp - ds, dyp - ds, ds * 2, ds * 2);
-      g.globalAlpha = 1;
-      continue;
-    }
-    if (f.kind === 'fire') {
-      var ff = S.fire[_rtsAnimFrame() % S.fire.length];
-      var fw = Math.round(ff.width * TSscale * (f.big || 1));
-      var fh = Math.round(ff.height * TSscale * (f.big || 1));
-      g.drawImage(ff, Math.round(_rtsSX(f.x) - fw / 2), Math.round(_rtsSY(f.z) - fh * 0.8), fw, fh);
-      continue;
-    }
-    if (f.kind === 'tracer') {
-      /* A ROUND IN FLIGHT, NOT A BEAM. This drew the whole muzzle-to-target line at 90%
-         opacity for its entire life, which at the top zoom is a hard cream stroke running the
-         width of the battlefield - it read as a scratch on the screen rather than as gunfire,
-         and every machine-gun burst drew several at once.
-
-         The weapon really is hitscan (w.speed <= 0 applies its damage on the spot), so there
-         is no projectile to follow; what the effect has to sell is the ROUND, and a round is
-         a short bright dash somewhere along the line. It advances over the effect's 0.06s and
-         fades as it goes, so a burst reads as a stream of them leaving the barrel instead of
-         as a solid rod connecting shooter to victim. */
-      var TRL = 0.06;
-      if (f.t > TRL) continue;
-      var ax = _rtsSX(f.x), ay = _rtsSY(f.z);
-      var bx2 = _rtsSX(f.x2), by2 = _rtsSY(f.z2);
-      var vx = bx2 - ax, vy = by2 - ay, flen = Math.hypot(vx, vy) || 1;
-      var u = Math.min(1, f.t / TRL + 0.28);          /* the head, already clear of the barrel */
-      var hx = ax + vx * u, hy = ay + vy * u;
-      /* the dash is a fraction of the flight, so a point-blank shot does not overshoot its
-         own target, and capped in cells so a long shot is still a dash and not a line */
-      var dash = Math.min(flen * 0.34, cell * 1.1);
-      g.strokeStyle = 'rgba(255,242,192,' + (0.85 * (1 - f.t / TRL)).toFixed(3) + ')';
-      g.lineWidth = Math.max(1, cell * 0.035);
-      g.beginPath();
-      g.moveTo(hx - vx / flen * dash, hy - vy / flen * dash);
-      g.lineTo(hx, hy);
-      g.stroke();
-    } else {
-      /* Combat_Anim: which set of frames this is comes from the animation kind, which the
-         simulation chose from the damage and the land type. */
-      /* Role-by-role, so `hit` and `pop` use their own artwork where it exists instead of a
-         scaled fireball. Falling back to boom keeps a set that only half-loaded working. */
-      var set = f.kind === 'piff' ? S.fx.piff
-              : (f.kind === 'splash' ? S.fx.splash
-              : (f.kind === 'smoke' ? S.fx.smoke
-              : (f.kind === 'hit' && S.fx.hit ? S.fx.hit
-              : (f.kind === 'pop' && S.fx.pop ? S.fx.pop
-              : (RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].size ? S.fx.fire : S.fx.boom)))));
-      var dur = (RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].dur) || 0.75;
-      var fr = Math.min(set.length - 1, Math.floor(_rtsAnimQ(f.t) / dur * set.length));
-      var img = set[Math.max(0, fr)];
-      var sz = img.width * TSscale * (f.big || 1) * 0.9;
-      /* Draw at the frame's OWN aspect ratio. This used to force every effect square, which
-         is harmless for a fireball or a spark but squashes a flame - and a flame is taller
-         than it is wide. Every pre-existing effect set is square, so this changes none of
-         them. A fire is also anchored near its BASE rather than its centre, because it
-         stands on the ground rather than hanging in the air around it. */
-      var szh = sz * (img.height / img.width);
-      var anchor = RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].size ? 0.72 : 0.5;
-      g.drawImage(img, Math.round(_rtsSX(f.x) - sz / 2), Math.round(_rtsSY(f.z) - szh * anchor), sz, szh);
-    }
-  }
 
   /* --- shroud. MAP.CPP keeps IsMapped and IsVisible per cell; this paints them.
      Baked into a 112x112 canvas (one pixel per cell) and blown up with smoothing off, so
@@ -20960,6 +20931,32 @@ function _rtsRFrame(dt) {
      that make the boundary look CUT rather than pixel-stepped. Stamped per cell, and only
      across the cells actually on screen - a 160x160 map is 25600 cells and perhaps 900 of them
      are visible, so drawing all of them would be 28x the work for the same picture. */
+  /* OFF THE MAP IS NOT UNSHROUDED, and it used to be. Both branches below paint only cells
+     that exist - the tile stamper walks the visible cells, the fallback blits a canvas that is
+     exactly RTS_N square - so wherever the view runs past the edge of the world neither one
+     painted anything, and whatever the terrain pass had left there stayed.
+
+     That is not an edge case at the widest zoom, it is the normal state: a 1660px battlefield
+     at 12px cells is 138 cells across against a 128-cell map, so the view is ALWAYS wider than
+     the world and there is always a band down each side carrying no shroud. What showed
+     through it was the ore-and-water overlay, which draws without asking whether the player
+     has seen the cell - so unexplored lakes came out as fields of blue speckle on the black,
+     inside a hard straight-edged band, on every desktop window. Filled here, once, for both
+     branches, because "there is no map here" is the same answer in both. */
+  if (!r3on && G.mapped) {
+    var mfx = R.focus.x / RTS_TILE + RTS_N / 2 - (R.W / 2) / cell;
+    var mfy = R.focus.z / RTS_TILE + RTS_N / 2 - (R.H / 2) / cell;
+    var mdx = -mfx * cell, mdy = -mfy * cell, mds = RTS_N * cell;
+    /* Outward-rounded, so the fill never leaves a gap at the seam; the sliver it can overlap
+       is the outermost column of the map, under which there is nothing to hide. */
+    var ex0 = Math.max(0, Math.ceil(mdx)), ey0 = Math.max(0, Math.ceil(mdy));
+    var ex1 = Math.min(R.W, Math.floor(mdx + mds)), ey1 = Math.min(R.H, Math.floor(mdy + mds));
+    g.fillStyle = 'rgb(4,6,9)';                     /* the unexplored colour, fully opaque */
+    if (ex0 > 0) g.fillRect(0, 0, ex0, R.H);
+    if (ex1 < R.W) g.fillRect(ex1, 0, R.W - ex1, R.H);
+    if (ey0 > 0) g.fillRect(0, 0, R.W, ey0);
+    if (ey1 < R.H) g.fillRect(0, ey1, R.W, R.H - ey1);
+  }
   if (r3on) { /* fog drawn by the GL pass, soft-sampled */ }
   else if (G.mapped && typeof _mixShroud === 'function' && _mixShroud()) {
     _rtsDrawShroudTiles(g, G, cell);
@@ -20979,8 +20976,21 @@ function _rtsRFrame(dt) {
       }
       R.fogG.putImageData(fim, 0, 0);
     }
-    var fsx = R.focus.x / RTS_TILE + RTS_N / 2 - (R.W / 2) / cell;
-    var fsy = R.focus.z / RTS_TILE + RTS_N / 2 - (R.H / 2) / cell;
+    /* POSITION THE WHOLE CANVAS RATHER THAN CROPPING IT TO THE SCREEN. This is a
+       simplification, NOT the fix for the missing shroud - the fill above is that, and this
+       was written first on the assumption that the crop was also landing the fog in the wrong
+       place. It was not: asking for a source rectangle that overruns the image is well
+       defined, and drawImage clips the source and the destination IN THE SAME PROPORTION, so
+       the scale and the position both survive. Reverting this line alone and re-running the
+       alignment check in e2e/shroud finds zero misplaced cells, which is the measurement that
+       settled it.
+
+       What it buys is not depending on that rule. The destination the map occupies is
+       something this code can state directly, and stating it removes the only place where the
+       picture rested on a subtlety of how a source rectangle gets clipped. Destination
+       clipping, which is what happens instead, is the ordinary case. */
+    var mapDX = -(R.focus.x / RTS_TILE + RTS_N / 2 - (R.W / 2) / cell) * cell;
+    var mapDY = -(R.focus.z / RTS_TILE + RTS_N / 2 - (R.H / 2) / cell) * cell;
     /* SMOOTHED, deliberately, and only for this one draw. The comment above says hard edges
        are "the way the original's shroud tiles do" it - but RA's shadow.shp frames are
        diagonal wedges and corner nibbles, a CUT edge; the hard cell-aligned square was this
@@ -20990,7 +21000,8 @@ function _rtsRFrame(dt) {
        here means the two modes agree about what the boundary looks like. Players with their
        archives loaded still get the real wedges - this branch is the fallback only. */
     g.imageSmoothingEnabled = true;
-    g.drawImage(R.fog, fsx, fsy, R.W / cell, R.H / cell, 0, 0, R.W, R.H);
+    g.drawImage(R.fog, 0, 0, RTS_N, RTS_N,
+                mapDX, mapDY, RTS_N * cell, RTS_N * cell);
     g.imageSmoothingEnabled = false;
   }
 
@@ -20998,8 +21009,9 @@ function _rtsRFrame(dt) {
   if (R.ghost) {
     var def = rtsStructDef(R.ghostKey);
     var gspr = S.bld[R.ghost.side][R.ghostKey];
-    var gx = Math.round(_rtsSX(_rtsWX(R.ghost.tx) - RTS_TILE / 2));
-    var gy = Math.round(_rtsSY(_rtsWX(R.ghost.tz) - RTS_TILE / 2));
+    var gp = _rtsGroundToScreen(_rtsWX(R.ghost.tx) - RTS_TILE / 2,
+                                _rtsWX(R.ghost.tz) - RTS_TILE / 2);
+    var gx = Math.round(gp.x), gy = Math.round(gp.y);
     g.globalAlpha = 0.55;
     /* DIVIDE BY THE SCALE THE SPRITE WAS BAKED AT, exactly as _rtsDrawStruct does. This was
        the one draw site that missed it, so the ghost came out at RTS_PS times its real size -
@@ -21009,13 +21021,13 @@ function _rtsRFrame(dt) {
        of the screen wide, floating above and beside the green box telling you where it will
        actually land. Procedural art only: real Red Alert art carries no `ps` and reads as 1,
        so a player with their own archives loaded never saw this. */
-    var gsc = TSscale / (gspr.c.ps || 1);
+    var gsc = TSscale * gp.scale / (gspr.c.ps || 1);
     g.drawImage(gspr.c, gx, gy - Math.round(gspr.head * gsc),
       Math.round(gspr.c.width * gsc), Math.round(gspr.c.height * gsc));
     g.globalAlpha = 1;
     g.strokeStyle = R.ghost.ok ? '#7fe07f' : '#e05a4a';
     g.lineWidth = 2;
-    g.strokeRect(gx + 1, gy + 1, def.w * cell - 2, def.h * cell - 2);
+    g.strokeRect(gx + 1, gy + 1, def.w * cell * gp.scale - 2, def.h * cell * gp.scale - 2);
   }
 
   /* Last, over the finished battlefield and nothing else. */
@@ -21023,6 +21035,143 @@ function _rtsRFrame(dt) {
 }
 
 
+</script>
+<script>/* render/fx.js - projectiles, explosions, tracers, muzzle flashes and debris.
+   Part of rts.render, which owns every pixel. Split out of render/frame.js, which it pushed
+   past the 500-line cap.
+
+   THE SEAM IS "TRANSIENT" AGAINST "STANDING". Everything render/frame.js keeps is either the
+   map itself or an object that occupies cells and sorts into the depth pass. Everything here
+   lasts a fraction of a second, belongs to no cell, and is painted over the finished
+   battlefield in whatever order the simulation holds it - which is why it needs no depth sort,
+   and why lifting it out changes nothing about what is drawn or in what order.
+
+   Every draw goes through the projection contract in render/camera.js and multiplies its size
+   by the `scale` that comes back, so an effect on the far side of the view is sized to the
+   ground under it. Under today's orthographic camera that scale is 1 and the arithmetic is
+   what it always was. */
+function _rtsDrawFx(g, G, S, TSscale, cell) {
+  var i;
+  /* --- projectiles --- */
+  for (i = 0; i < G.proj.length; i++) {
+    var p = G.proj[i];
+    if (!_rtsVisible(_rtsTX(p.x), _rtsTX(p.z))) continue;
+    var pj = _rtsGroundToScreen(p.x, p.z);
+    var sx = Math.round(pj.x), sy = Math.round(pj.y);
+    g.fillStyle = p.kind === 'missile' ? '#ffd070' : '#fff2c0';
+    var r = Math.max(2, Math.round(cell * pj.scale * (p.kind === 'missile' ? 0.09 : 0.06)));
+    g.fillRect(sx - r, sy - r, r * 2, r * 2);
+  }
+
+  /* --- explosions, tracers, muzzle flashes --- */
+  for (i = 0; i < G.fx.length; i++) {
+    var f = G.fx[i], k = _rtsAnimQ(f.t) / 0.75;
+    if (f.t < 0) continue;                       /* a delayed secondary blast, not started */
+    if (f.kind === 'nuke') {
+      /* Anchored near its BASE, not its centre: a mushroom cloud stands on the ground and grows
+         upward, so centring it would sink the stem below the impact point. */
+      var nz = (typeof _mixFxSet === 'function') ? _mixFxSet('nuke') : null;
+      if (nz) {
+        var ni = Math.min(nz.length - 1, Math.floor((f.t / RTS_ANIMS.nuke.dur) * nz.length));
+        var nc = nz[ni];
+        var np = _rtsGroundToScreen(f.x, f.z);
+        var nw = Math.round(nc.width * TSscale * np.scale * (f.big || 1));
+        var nh = Math.round(nc.height * TSscale * np.scale * (f.big || 1));
+        g.drawImage(nc, Math.round(np.x - nw / 2), Math.round(np.y - nh * 0.88),
+                    nw, nh);
+        continue;
+      }
+    }
+    if (f.kind === 'die') {
+      /* A soldier falling over, drawn from his own artwork. Held on the LAST frame once the
+         sequence runs out rather than looping - a body that gets back up and dies again is
+         worse than one that lies still. */
+      var dq = RTS_ANIMS.die.dur;
+      var di = Math.min(f.seq.length - 1, Math.floor((f.t / dq) * f.seq.length));
+      var dc = f.seq[di];
+      var dp = _rtsGroundToScreen(f.x, f.z);
+      var dw = Math.round(dc.width * TSscale * dp.scale), dh = Math.round(dc.height * TSscale * dp.scale);
+      g.drawImage(dc, Math.round(dp.x - dw / 2), Math.round(dp.y - dh * 0.62),
+                  dw, dh);
+      continue;
+    }
+    if (f.kind === 'debris') {
+      /* Chunks thrown clear of a dying structure. Height projects upward the same way the
+         baked sprites do, so a chunk arcs over the ground rather than sliding along it. */
+      var dg = _rtsGroundToScreen(f.x, f.z);
+      var dr = _rtsWorldToScreen(f.x, f.y * 1.6, f.z);   /* the chunk's own height */
+      var ds = Math.max(1, Math.round(cell * 0.07 * dg.scale * (f.big || 1)));
+      var dxp = Math.round(dr.x), dyp = Math.round(dr.y);
+      g.globalAlpha = f.t > 1.2 ? Math.max(0, (1.6 - f.t) / 0.4) : 1;
+      g.fillStyle = '#15171b';
+      g.fillRect(Math.round(dg.x) - ds, Math.round(dg.y) - 1, ds * 2, 2);   /* ground shadow */
+      g.fillStyle = f.t < 0.35 ? '#e0561c' : RTS_PAL.dark[1];
+      g.fillRect(dxp - ds, dyp - ds, ds * 2, ds * 2);
+      g.globalAlpha = 1;
+      continue;
+    }
+    if (f.kind === 'fire') {
+      var ff = S.fire[_rtsAnimFrame() % S.fire.length];
+      var fp = _rtsGroundToScreen(f.x, f.z);
+      var fw = Math.round(ff.width * TSscale * fp.scale * (f.big || 1));
+      var fh = Math.round(ff.height * TSscale * fp.scale * (f.big || 1));
+      g.drawImage(ff, Math.round(fp.x - fw / 2), Math.round(fp.y - fh * 0.8), fw, fh);
+      continue;
+    }
+    if (f.kind === 'tracer') {
+      /* A ROUND IN FLIGHT, NOT A BEAM. This drew the whole muzzle-to-target line at 90%
+         opacity for its entire life, which at the top zoom is a hard cream stroke running the
+         width of the battlefield - it read as a scratch on the screen rather than as gunfire,
+         and every machine-gun burst drew several at once.
+
+         The weapon really is hitscan (w.speed <= 0 applies its damage on the spot), so there
+         is no projectile to follow; what the effect has to sell is the ROUND, and a round is
+         a short bright dash somewhere along the line. It advances over the effect's 0.06s and
+         fades as it goes, so a burst reads as a stream of them leaving the barrel instead of
+         as a solid rod connecting shooter to victim. */
+      var TRL = 0.06;
+      if (f.t > TRL) continue;
+      var ta = _rtsGroundToScreen(f.x, f.z), tb = _rtsGroundToScreen(f.x2, f.z2);
+      var ax = ta.x, ay = ta.y, bx2 = tb.x, by2 = tb.y;
+      var vx = bx2 - ax, vy = by2 - ay, flen = Math.hypot(vx, vy) || 1;
+      var u = Math.min(1, f.t / TRL + 0.28);          /* the head, already clear of the barrel */
+      var hx = ax + vx * u, hy = ay + vy * u;
+      /* the dash is a fraction of the flight, so a point-blank shot does not overshoot its
+         own target, and capped in cells so a long shot is still a dash and not a line */
+      var dash = Math.min(flen * 0.34, cell * ta.scale * 1.1);
+      g.strokeStyle = 'rgba(255,242,192,' + (0.85 * (1 - f.t / TRL)).toFixed(3) + ')';
+      g.lineWidth = Math.max(1, cell * ta.scale * 0.035);
+      g.beginPath();
+      g.moveTo(hx - vx / flen * dash, hy - vy / flen * dash);
+      g.lineTo(hx, hy);
+      g.stroke();
+    } else {
+      /* Combat_Anim: which set of frames this is comes from the animation kind, which the
+         simulation chose from the damage and the land type. */
+      /* Role-by-role, so `hit` and `pop` use their own artwork where it exists instead of a
+         scaled fireball. Falling back to boom keeps a set that only half-loaded working. */
+      var set = f.kind === 'piff' ? S.fx.piff
+              : (f.kind === 'splash' ? S.fx.splash
+              : (f.kind === 'smoke' ? S.fx.smoke
+              : (f.kind === 'hit' && S.fx.hit ? S.fx.hit
+              : (f.kind === 'pop' && S.fx.pop ? S.fx.pop
+              : (RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].size ? S.fx.fire : S.fx.boom)))));
+      var dur = (RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].dur) || 0.75;
+      var fr = Math.min(set.length - 1, Math.floor(_rtsAnimQ(f.t) / dur * set.length));
+      var img = set[Math.max(0, fr)];
+      var xp = _rtsGroundToScreen(f.x, f.z);
+      var sz = img.width * TSscale * xp.scale * (f.big || 1) * 0.9;
+      /* Draw at the frame's OWN aspect ratio. This used to force every effect square, which
+         is harmless for a fireball or a spark but squashes a flame - and a flame is taller
+         than it is wide. Every pre-existing effect set is square, so this changes none of
+         them. A fire is also anchored near its BASE rather than its centre, because it
+         stands on the ground rather than hanging in the air around it. */
+      var szh = sz * (img.height / img.width);
+      var anchor = RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].size ? 0.72 : 0.5;
+      g.drawImage(img, Math.round(xp.x - sz / 2), Math.round(xp.y - szh * anchor), sz, szh);
+    }
+  }
+}
 </script>
 <script>/* render/draw.js - drawing one structure or one unit, including their animations.
    Part of rts.render, which owns every pixel. */
@@ -21120,8 +21269,8 @@ function _rtsDrawStruct(g, e, TSscale, cell) {
   else if (spr.dmg && !e.building && e.hp < e.maxHp * RTS_COND_YELLOW) {
     spr = { c: spr.dmg, head: spr.head, dmg: spr.dmg };
   }
-  var px = Math.round(_rtsSX(_rtsWX(e.tx) - RTS_TILE / 2));
-  var py = Math.round(_rtsSY(_rtsWX(e.tz) - RTS_TILE / 2));
+  var bp = _rtsGroundToScreen(_rtsWX(e.tx) - RTS_TILE / 2, _rtsWX(e.tz) - RTS_TILE / 2);
+  var px = Math.round(bp.x), py = Math.round(bp.y);
   /* THE SPRITE'S OWN RESOLUTION, not the map's. A procedurally baked sprite carries `ps` - how
      many of its pixels there are per RA art pixel (sprites/bake.js) - and real RA artwork
      carries none, so it reads as 1 and this is the arithmetic it always was. Dividing here is
@@ -21188,10 +21337,11 @@ function _rtsDrawStruct(g, e, TSscale, cell) {
     g.restore();
     g.globalAlpha = 1;
     var ffr = _rtsAnimFrame() % R.spr.fire.length, fimg = R.spr.fire[ffr];
-    var fws = Math.round(fimg.width * TSscale * (0.9 + def.w * 0.35));
-    var fhs = Math.round(fimg.height * TSscale * (0.9 + def.w * 0.35));
+    var fp = _rtsGroundToScreen(e.x, e.z);
+    var fws = Math.round(fimg.width * TSscale * fp.scale * (0.9 + def.w * 0.35));
+    var fhs = Math.round(fimg.height * TSscale * fp.scale * (0.9 + def.w * 0.35));
     g.globalAlpha = Math.min(1, k * 1.6);
-    g.drawImage(fimg, Math.round(_rtsSX(e.x) - fws / 2), Math.round(_rtsSY(e.z) - fhs * 0.75), fws, fhs);
+    g.drawImage(fimg, Math.round(fp.x - fws / 2), Math.round(fp.y - fhs * 0.75), fws, fhs);
     g.globalAlpha = 1;
     return;
   }
@@ -21201,9 +21351,10 @@ function _rtsDrawStruct(g, e, TSscale, cell) {
   _rtsDrawStructAnim(g, e, def, px, top, w, h, cell);
   /* turret barrel tracks its target */
   if (def.weapon) {
-    var cx = _rtsSX(e.x), cy = _rtsSY(e.z) - cell * 0.25, L = cell * 0.55;
+    var tp = _rtsGroundToScreen(e.x, e.z);
+    var cx = tp.x, cy = tp.y - cell * tp.scale * 0.25, L = cell * tp.scale * 0.55;
     g.strokeStyle = RTS_PAL.dark[0];
-    g.lineWidth = Math.max(2, cell * 0.08);
+    g.lineWidth = Math.max(2, cell * tp.scale * 0.08);
     g.beginPath(); g.moveTo(cx, cy);
     g.lineTo(cx + Math.cos(e.rot) * L, cy + Math.sin(e.rot) * L);
     g.stroke();
@@ -21264,15 +21415,16 @@ function _rtsDrawUnit(g, e, TSscale) {
     } else e.dockT = 0;
   }
   /* Same as the structures: divide by the scale the sprite was baked at. See _rtsDrawStruct. */
-  var usc = TSscale / (img.ps || 1);
+  var up = _rtsGroundToScreen(e.x, e.z);
+  var usc = TSscale * up.scale / (img.ps || 1);
   var w = Math.round(img.width * usc), h = Math.round(img.height * usc);
-  var px = Math.round(_rtsSX(e.x) - w / 2), py = Math.round(_rtsSY(e.z) - h / 2);
+  var px = Math.round(up.x - w / 2), py = Math.round(up.y - h / 2);
   /* An aircraft is drawn lifted off its own ground position, with a flattened shadow left
      behind on the cell it is actually over. That gap is the only cue that says "this is above
      the battlefield rather than on it" - without it a helicopter reads as a fast, oddly
      invulnerable jeep. It shrinks to nothing while the machine is sitting on a pad rearming. */
   if (e.air) {
-    var lift = Math.round((e.rearming > 0 ? 2 : (e.alt || 12)) * TSscale);
+    var lift = Math.round((e.rearming > 0 ? 2 : (e.alt || 12)) * TSscale * up.scale);
     g.save();
     g.globalAlpha = 0.28;
     g.drawImage(img, px, py + Math.round(h * 0.06), w, Math.max(1, Math.round(h * 0.55)));
@@ -21301,15 +21453,16 @@ function _rtsDrawUnit(g, e, TSscale) {
        turret's bearing even for a hull-mounted gun like the buggy's, so the flash and its own
        tracer came off the vehicle at different angles. */
     var mz = _rtsFireCoord(e, e.type === 'struct' ? null : RTS_WEAPONS[d.weapon]);
-    var fx = _rtsSX(mz.x), fy = _rtsSY(mz.z);
-    var fs = fl.width * TSscale;
+    var mp = _rtsGroundToScreen(mz.x, mz.z);
+    var fx = mp.x, fy = mp.y;
+    var fs = fl.width * TSscale * mp.scale;
     g.drawImage(fl, Math.round(fx - fs / 2), Math.round(fy - fs / 2), fs, fs);
   }
   /* a loaded harvester shows its ore */
   if (d.harvest && e.carry > 1) {
     g.fillStyle = RTS_PAL.ore[1];
     var s = Math.max(2, Math.round(w * 0.16));
-    g.fillRect(Math.round(_rtsSX(e.x) - s / 2), Math.round(_rtsSY(e.z) - h * 0.42), s, s);
+    g.fillRect(Math.round(up.x - s / 2), Math.round(up.y - h * 0.42), s, s);
   }
 }
 
@@ -21386,26 +21539,48 @@ function _rtsDrawStructAnim(g, e, def, px, top, w, h, cell) {
    are recognisable on the original's radar instead of being coloured blocks, which is what
    these were.
 
-   Built once per structure type on first use. */
+   Built once per structure type on first use.
+
+   IT MUST WALK THE WHOLE SPRITE. The step was `RTS_TS / Z` - art pixels per sample - but the
+   sprite it reads is baked at RTS_TS * RTS_PS per cell, so the sampler crossed only 1/RTS_PS
+   of the footprint and then stopped. Measured, it reached 47.2% of the way across every
+   structure in each axis: about a fifth of the building's area, and always the same fifth.
+   Every blip on the radar was the building's TOP-LEFT QUADRANT stretched over the whole
+   footprint - a refinery and a war factory read as near-identical smears of their upper-left
+   corners, which is the exact failure the downsample-the-real-shape port exists to avoid. The
+   step is in canvas pixels now, taken from the sprite's own `ps` tag rather than assumed.
+
+   AND THE NINE-TAP KERNEL WAS THREE TAPS. OFFY was a byte-for-byte copy of OFFX, so the nine
+   (dx,dy) pairs collapsed to three distinct offsets - (0,0), (-1,-1) and (1,1) - every one of
+   them on the main diagonal. A kernel whose whole job is to catch a thin feature that falls
+   between samples cannot catch a thin HORIZONTAL or VERTICAL one if it only ever looks along
+   a diagonal, and walls, gantries and roof ridges are mostly axis-aligned. It is a real 3x3
+   now: centre first so an exact hit always wins, then the four edge neighbours, then the
+   corners - and the offsets scale with `ps`, because a one-art-pixel neighbour is `ps` canvas
+   pixels away. */
 var _RTS_RICON = null;
 function _rtsRadarIcon(key, side) {
   if (!_RTS_RICON) _RTS_RICON = {};
   var ck = key + ':' + side;
   if (_RTS_RICON[ck]) return _RTS_RICON[ck];
-  var OFFX = [0, 0, -1, 1, 0, -1, 1, -1, 1], OFFY = [0, 0, -1, 1, 0, -1, 1, -1, 1];
+  var OFFX = [0, -1, 1, 0, 0, -1, 1, -1, 1], OFFY = [0, 0, 0, -1, 1, -1, -1, 1, 1];
   var def = rtsStructDef(key), spr = _rtsSprites().bld[side][key];
   var Z = 3, W = def.w * Z, H = def.h * Z;
   var src = spr.c.getContext('2d').getImageData(0, 0, spr.c.width, spr.c.height).data;
-  var sw = spr.c.width;
+  var sw = spr.c.width, sh = spr.c.height, PS = spr.c.ps || 1;
   var t = _sprMake(W, H), g = t.g;
   for (var iy = 0; iy < H; iy++) {
     for (var ix = 0; ix < W; ix++) {
-      /* Sample the footprint only - the headroom above it belongs to no tile. */
-      var bx = Math.round((ix + 0.5) * RTS_TS / Z);
-      var by = spr.head + Math.round((iy + 0.5) * RTS_TS / Z);
+      /* Sample the footprint only - the headroom above it belongs to no tile. `head` is
+         already in canvas pixels, which is why it needs no scaling and the step does. */
+      var bx = Math.round((ix + 0.5) * RTS_TS * PS / Z);
+      var by = spr.head + Math.round((iy + 0.5) * RTS_TS * PS / Z);
       for (var n = 0; n < 9; n++) {
-        var qx = bx - OFFX[n], qy = by - OFFY[n];
-        if (qx < 0 || qy < 0 || qx >= sw) continue;
+        var qx = bx - OFFX[n] * PS, qy = by - OFFY[n] * PS;
+        /* the bottom bound was missing: past the end of the array `src[o+3]` is undefined,
+           `undefined < 128` is false, so it fell through to fillStyle = 'rgb(undefined,...)',
+           which the canvas rejects - leaving the PREVIOUS pixel's colour to be painted here */
+        if (qx < 0 || qy < 0 || qx >= sw || qy >= sh) continue;
         var o = (qy * sw + qx) * 4;
         if (src[o + 3] < 128) continue;
         g.fillStyle = 'rgb(' + src[o] + ',' + src[o + 1] + ',' + src[o + 2] + ')';

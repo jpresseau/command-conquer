@@ -94,8 +94,8 @@ function _rtsDrawStruct(g, e, TSscale, cell) {
   else if (spr.dmg && !e.building && e.hp < e.maxHp * RTS_COND_YELLOW) {
     spr = { c: spr.dmg, head: spr.head, dmg: spr.dmg };
   }
-  var px = Math.round(_rtsSX(_rtsWX(e.tx) - RTS_TILE / 2));
-  var py = Math.round(_rtsSY(_rtsWX(e.tz) - RTS_TILE / 2));
+  var bp = _rtsGroundToScreen(_rtsWX(e.tx) - RTS_TILE / 2, _rtsWX(e.tz) - RTS_TILE / 2);
+  var px = Math.round(bp.x), py = Math.round(bp.y);
   /* THE SPRITE'S OWN RESOLUTION, not the map's. A procedurally baked sprite carries `ps` - how
      many of its pixels there are per RA art pixel (sprites/bake.js) - and real RA artwork
      carries none, so it reads as 1 and this is the arithmetic it always was. Dividing here is
@@ -162,10 +162,11 @@ function _rtsDrawStruct(g, e, TSscale, cell) {
     g.restore();
     g.globalAlpha = 1;
     var ffr = _rtsAnimFrame() % R.spr.fire.length, fimg = R.spr.fire[ffr];
-    var fws = Math.round(fimg.width * TSscale * (0.9 + def.w * 0.35));
-    var fhs = Math.round(fimg.height * TSscale * (0.9 + def.w * 0.35));
+    var fp = _rtsGroundToScreen(e.x, e.z);
+    var fws = Math.round(fimg.width * TSscale * fp.scale * (0.9 + def.w * 0.35));
+    var fhs = Math.round(fimg.height * TSscale * fp.scale * (0.9 + def.w * 0.35));
     g.globalAlpha = Math.min(1, k * 1.6);
-    g.drawImage(fimg, Math.round(_rtsSX(e.x) - fws / 2), Math.round(_rtsSY(e.z) - fhs * 0.75), fws, fhs);
+    g.drawImage(fimg, Math.round(fp.x - fws / 2), Math.round(fp.y - fhs * 0.75), fws, fhs);
     g.globalAlpha = 1;
     return;
   }
@@ -175,9 +176,10 @@ function _rtsDrawStruct(g, e, TSscale, cell) {
   _rtsDrawStructAnim(g, e, def, px, top, w, h, cell);
   /* turret barrel tracks its target */
   if (def.weapon) {
-    var cx = _rtsSX(e.x), cy = _rtsSY(e.z) - cell * 0.25, L = cell * 0.55;
+    var tp = _rtsGroundToScreen(e.x, e.z);
+    var cx = tp.x, cy = tp.y - cell * tp.scale * 0.25, L = cell * tp.scale * 0.55;
     g.strokeStyle = RTS_PAL.dark[0];
-    g.lineWidth = Math.max(2, cell * 0.08);
+    g.lineWidth = Math.max(2, cell * tp.scale * 0.08);
     g.beginPath(); g.moveTo(cx, cy);
     g.lineTo(cx + Math.cos(e.rot) * L, cy + Math.sin(e.rot) * L);
     g.stroke();
@@ -238,15 +240,16 @@ function _rtsDrawUnit(g, e, TSscale) {
     } else e.dockT = 0;
   }
   /* Same as the structures: divide by the scale the sprite was baked at. See _rtsDrawStruct. */
-  var usc = TSscale / (img.ps || 1);
+  var up = _rtsGroundToScreen(e.x, e.z);
+  var usc = TSscale * up.scale / (img.ps || 1);
   var w = Math.round(img.width * usc), h = Math.round(img.height * usc);
-  var px = Math.round(_rtsSX(e.x) - w / 2), py = Math.round(_rtsSY(e.z) - h / 2);
+  var px = Math.round(up.x - w / 2), py = Math.round(up.y - h / 2);
   /* An aircraft is drawn lifted off its own ground position, with a flattened shadow left
      behind on the cell it is actually over. That gap is the only cue that says "this is above
      the battlefield rather than on it" - without it a helicopter reads as a fast, oddly
      invulnerable jeep. It shrinks to nothing while the machine is sitting on a pad rearming. */
   if (e.air) {
-    var lift = Math.round((e.rearming > 0 ? 2 : (e.alt || 12)) * TSscale);
+    var lift = Math.round((e.rearming > 0 ? 2 : (e.alt || 12)) * TSscale * up.scale);
     g.save();
     g.globalAlpha = 0.28;
     g.drawImage(img, px, py + Math.round(h * 0.06), w, Math.max(1, Math.round(h * 0.55)));
@@ -275,15 +278,16 @@ function _rtsDrawUnit(g, e, TSscale) {
        turret's bearing even for a hull-mounted gun like the buggy's, so the flash and its own
        tracer came off the vehicle at different angles. */
     var mz = _rtsFireCoord(e, e.type === 'struct' ? null : RTS_WEAPONS[d.weapon]);
-    var fx = _rtsSX(mz.x), fy = _rtsSY(mz.z);
-    var fs = fl.width * TSscale;
+    var mp = _rtsGroundToScreen(mz.x, mz.z);
+    var fx = mp.x, fy = mp.y;
+    var fs = fl.width * TSscale * mp.scale;
     g.drawImage(fl, Math.round(fx - fs / 2), Math.round(fy - fs / 2), fs, fs);
   }
   /* a loaded harvester shows its ore */
   if (d.harvest && e.carry > 1) {
     g.fillStyle = RTS_PAL.ore[1];
     var s = Math.max(2, Math.round(w * 0.16));
-    g.fillRect(Math.round(_rtsSX(e.x) - s / 2), Math.round(_rtsSY(e.z) - h * 0.42), s, s);
+    g.fillRect(Math.round(up.x - s / 2), Math.round(up.y - h * 0.42), s, s);
   }
 }
 

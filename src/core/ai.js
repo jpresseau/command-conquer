@@ -359,7 +359,18 @@ function _rtsAIAllToHunt() {
     var u = G.ents[i];
     if (u.dead || u.side !== 'enemy' || u.type !== 'unit') continue;
     if (rtsUnitDef(u.def).harvest) continue;
-    _rtsOrderMove(u, aim.x + (i % 3 - 1) * 5, aim.z + ((i / 3) | 0 % 3) * 5, true);
+    /* A 3x3 spread around the target, so the hunt arrives on a frontage instead of funnelling
+       every unit into one cell.
+
+       THE Z TERM WAS `((i / 3) | 0 % 3)`, WHICH IS NOT WHAT IT LOOKS LIKE. `%` binds tighter
+       than `|`, so it parsed as `(i / 3) | (0 % 3)` - that is `(i / 3) | 0`, with the `% 3`
+       evaluated on its own, to zero, and OR-ed in where it changed nothing. The offset was
+       therefore unbounded rather than cycling -5/0/+5: it grew with the entity index, so on a
+       late-game field the tail of the list was sent to points a hundred world units south of
+       the player's base and spent the endgame walking away from the fight. The x term beside
+       it, written with the parentheses this one was missing, is what both were meant to be. */
+    _rtsOrderMove(u, aim.x + (i % 3 - 1) * 5,
+                     aim.z + ((((i / 3) | 0) % 3) - 1) * 5, true);
   }
 }
 /* AI_Attack - see _rtsAIAttack in core/missions.js. This line used to read "only a share of the
