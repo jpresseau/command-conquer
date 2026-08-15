@@ -207,6 +207,24 @@ function _r3dFrame(G) {
   var invD = 1 / _r3dEyeDist();
   var vb = _r3dViewBounds();
 
+  /* The two programs the world can be drawn through: the one the player sees, and the sun's.
+     Looked up here so the shadow pass below and the main pass below that share one walk. */
+  function ctx(P) {
+    return { P: P,
+      uPos: gl.getUniformLocation(P, 'uPos'), uRot: gl.getUniformLocation(P, 'uRot'),
+      uScale: gl.getUniformLocation(P, 'uScale'), uScaleY: gl.getUniformLocation(P, 'uScaleY'),
+      uTint: gl.getUniformLocation(P, 'uTint'), uA: gl.getUniformLocation(P, 'uA'),
+      uWave: gl.getUniformLocation(P, 'uWave'),
+      aP: gl.getAttribLocation(P, 'aP'), aN: gl.getAttribLocation(P, 'aN'),
+      aC: gl.getAttribLocation(P, 'aC') };
+  }
+  var MC = ctx(R3.meshP);
+  /* ART pixels to world units. Declared HERE rather than beside the entity walk it feeds,
+     because the sun's pass runs that walk before the main pass reaches it - and a `var`
+     assigned later is `undefined` when the earlier caller reads it, which reaches the shader
+     as a NaN scale and drops every entity out of the shadow map without an error anywhere. */
+  var ART2W = RTS_TILE / RTS_TS;
+
   if (R3.terrainDirty && R.terrain) {
     R3.terrainTex = _r3dTexture(gl, R3.terrainTex, gl.NEAREST);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, R.terrain);
@@ -242,10 +260,46 @@ function _r3dFrame(G) {
     R3.groundBuf = buf(xz); R3.groundUV = buf(uv);
   }
 
+  /* THE WORLD IS BUILT BEFORE THE SUN LOOKS AT IT. _r3dWorldTick used to run in the middle of
+     the frame, which was fine while nothing read the geometry before the main pass; the shadow
+     pass does, and a first frame with no buffers casts no shadows. */
+  _r3dWorldTick(G);
+
+  /* --- the sun's view --- */
+  /* Everything that stands up casts: the world's forests and ridges, the ore crystals, and
+     every building and unit. The ground and the sea do not - both are effectively flat, and a
+     flat surface's shadow is itself, which only feeds the bias. */
+  if (R3.shadowReady) {
+    _r3dShadowPass(G, function (P) {
+      var SC = ctx(P);
+      gl.uniform2f(SC.uWave, 0, 0);
+      if (R3.world) {
+        gl.uniform3f(SC.uPos, 0, 0, 0);
+        gl.uniform2f(SC.uRot, 1, 0);
+        gl.uniform1f(SC.uScale, 1);
+        gl.uniform1f(SC.uScaleY, 1);
+        var sb = R3.world.concat([R3.oreMesh]);
+        for (var si = 0; si < sb.length; si++) {
+          var sm = sb[si];
+          if (!sm || !sm.verts) continue;
+          /* culled against the SUN's span, not the camera's: a tree off the left of the screen
+             can still throw its shadow into it */
+          if (sm.x1 !== undefined &&
+              (sm.x1 < R3.sunC[0] - R3.sunSpan || sm.x0 > R3.sunC[0] + R3.sunSpan ||
+               sm.z1 < R3.sunC[2] - R3.sunSpan || sm.z0 > R3.sunC[2] + R3.sunSpan)) continue;
+          bindMesh(SC, sm);
+          gl.drawArrays(gl.TRIANGLES, 0, sm.verts);
+        }
+      }
+      /* the sun's span plus the tallest thing that could lean into it */
+      paintEntities(SC, [R3.sunC[0], R3.sunC[2], R3.sunSpan + R3D_WORLD_YMAX]);
+    });
+  }
+
   gl.clearColor(0.016, 0.024, 0.035, 1);
   gl.enable(gl.DEPTH_TEST);
   gl.disable(gl.BLEND);
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
   /* --- ground --- */
   gl.useProgram(R3.texP);
@@ -253,6 +307,9 @@ function _r3dFrame(G) {
   gl.uniform2f(gl.getUniformLocation(R3.texP, 'uTilt'), R3.cp, R3.sp);
   gl.uniform1f(gl.getUniformLocation(R3.texP, 'uInvD'), invD);
   gl.uniform1f(gl.getUniformLocation(R3.texP, 'uA'), 1);
+  var uRecv = gl.getUniformLocation(R3.texP, 'uRecv');
+  gl.uniform1f(uRecv, 1);                       /* the ground takes the world's shadows */
+  _r3dShadowBind(R3.texP, 1);
   var aXZ = gl.getAttribLocation(R3.texP, 'aXZ'), aT = gl.getAttribLocation(R3.texP, 'aT');
   gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundBuf);
   gl.enableVertexAttribArray(aXZ); gl.vertexAttribPointer(aXZ, 2, gl.FLOAT, false, 0, 0);
@@ -282,38 +339,44 @@ function _r3dFrame(G) {
   gl.uniform4fv(gl.getUniformLocation(R3.meshP, 'uCam'), cam);
   gl.uniform2f(gl.getUniformLocation(R3.meshP, 'uTilt'), R3.cp, R3.sp);
   gl.uniform1f(gl.getUniformLocation(R3.meshP, 'uInvD'), invD);
-  var uPos = gl.getUniformLocation(R3.meshP, 'uPos');
-  var uRot = gl.getUniformLocation(R3.meshP, 'uRot');
-  var uScale = gl.getUniformLocation(R3.meshP, 'uScale');
-  var uScaleY = gl.getUniformLocation(R3.meshP, 'uScaleY');
-  var uTint = gl.getUniformLocation(R3.meshP, 'uTint');
-  var uA = gl.getUniformLocation(R3.meshP, 'uA');
-  var uShadow = gl.getUniformLocation(R3.meshP, 'uShadow');
-  var uWave = gl.getUniformLocation(R3.meshP, 'uWave');
+  _r3dShadowBind(R3.meshP, 1);
+  var uPos = MC.uPos, uRot = MC.uRot, uScale = MC.uScale, uScaleY = MC.uScaleY;
+  var uTint = MC.uTint, uA = MC.uA, uWave = MC.uWave;
   gl.uniform1f(uA, 1);
-  gl.uniform3f(uShadow, 0, 0, 0);
   gl.uniform2f(uWave, 0, 0);
-  var shadowMode = 0;
-  var aP = gl.getAttribLocation(R3.meshP, 'aP');
-  var aN = gl.getAttribLocation(R3.meshP, 'aN');
-  var aC = gl.getAttribLocation(R3.meshP, 'aC');
-  var ART2W = RTS_TILE / RTS_TS;
+  var aP = MC.aP, aN = MC.aN, aC = MC.aC;
 
-  function draw(mesh, x, y2, zz, rot, scale, dim, sy) {
-    if (!mesh) return;
-    gl.uniform3f(uPos, x, y2, zz);
-    gl.uniform2f(uRot, Math.cos(rot), Math.sin(rot));
-    gl.uniform1f(uScale, scale);
-    gl.uniform1f(uScaleY, sy || 1);
-    if (shadowMode) gl.uniform3f(uTint, 0, 0, 0);
-    else gl.uniform3f(uTint, dim ? 0.62 : 1, dim ? 0.55 : 1, dim ? 0.55 : 1);
+  /* THE SAME WALK FEEDS TWO PROGRAMS. Everything drawn in the main pass has to be drawn again
+     from the sun, or its shadow is missing; and it has to be drawn the SAME WAY, or its shadow
+     is somewhere else. Rather than keep two copies of the entity walk in step by hand, the
+     placement uniforms and the position attribute are looked up per program into a context and
+     the walk takes one. The sun's program has no normals, no colours and no tint - it only
+     records how far away a thing is - so those locations come back null or -1 and the binder
+     skips them, which is the only difference between the two passes. */
+  function bindMesh(C, mesh) {
     gl.bindBuffer(gl.ARRAY_BUFFER, mesh.p);
-    gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 0, 0);
-    gl.bindBuffer(gl.ARRAY_BUFFER, mesh.n);
-    gl.enableVertexAttribArray(aN); gl.vertexAttribPointer(aN, 3, gl.BYTE, true, 0, 0);
-    gl.bindBuffer(gl.ARRAY_BUFFER, mesh.c);
-    gl.enableVertexAttribArray(aC); gl.vertexAttribPointer(aC, 3, gl.UNSIGNED_BYTE, true, 0, 0);
+    gl.enableVertexAttribArray(C.aP); gl.vertexAttribPointer(C.aP, 3, gl.FLOAT, false, 0, 0);
+    if (C.aN >= 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.n);
+      gl.enableVertexAttribArray(C.aN); gl.vertexAttribPointer(C.aN, 3, gl.BYTE, true, 0, 0);
+    }
+    if (C.aC >= 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.c);
+      gl.enableVertexAttribArray(C.aC); gl.vertexAttribPointer(C.aC, 3, gl.UNSIGNED_BYTE, true, 0, 0);
+    }
+  }
+  function drawIn(C, mesh, x, y2, zz, rot, scale, dim, sy) {
+    if (!mesh) return;
+    gl.uniform3f(C.uPos, x, y2, zz);
+    gl.uniform2f(C.uRot, Math.cos(rot), Math.sin(rot));
+    gl.uniform1f(C.uScale, scale);
+    gl.uniform1f(C.uScaleY, sy || 1);
+    if (C.uTint) gl.uniform3f(C.uTint, dim ? 0.62 : 1, dim ? 0.55 : 1, dim ? 0.55 : 1);
+    bindMesh(C, mesh);
     gl.drawArrays(gl.TRIANGLES, 0, mesh.verts);
+  }
+  function draw(mesh, x, y2, zz, rot, scale, dim, sy) {
+    drawIn(MC, mesh, x, y2, zz, rot, scale, dim, sy);
   }
 
   /* --- the world's own geometry: forests, ridges, ore crystals, grass - see world3d.js ---
@@ -323,7 +386,6 @@ function _r3dFrame(G) {
      projection that sizes the ground quad, so a camera change moves both together - widened
      on the near side by the tallest geometry's screen lift, because a tree just past the
      bottom edge still shows its crown. */
-  _r3dWorldTick(G);
   if (R3.world) {
     /* identity placement: the batches are baked in world space, so they draw as-is */
     gl.uniform3f(uPos, 0, 0, 0);
@@ -369,51 +431,22 @@ function _r3dFrame(G) {
     gl.uniform2f(uWave, 0, 0);
   }
 
-  /* CAST SHADOWS, under everything the player put on the map. These were BLOB DISCS - one
-     flat circle per unit, sized off its collision radius - which grounds a mesh and says
-     nothing else: every unit had the same round shadow, buildings had none at all, and an
-     aircraft's disc sat directly under it as though it were parked.
+  /* The planar cast-shadow pass stood here: every entity's mesh squashed flat onto the ground
+     along the light, stencilled so each pixel took the shade once. The shadow MAP subsumes it
+     and does more - a planar shadow only ever lands on the plane, so it put nothing on a
+     ridge, nothing on another building, and nothing under a tree. What survives of it is the
+     LIGHT DIRECTION it worked out, which render3d/shadow3d.js builds the sun's basis from. */
 
-     They are the real mesh now, squashed onto the ground along the light (see R3D_SHADOW_SX
-     in gl3d.js). A tank's shadow is tank-shaped and turns with its hull, a power plant's has
-     its chimneys, a helicopter's lies away from it by its altitude - which is the cue that
-     says "flying" rather than "drawn slightly larger". It is one extra draw per entity through
-     the program that was already bound, with uShadow doing the flattening in the vertex stage,
-     so no second mesh is built and no second program is compiled.
-
-     THE STENCIL IS NOT OPTIONAL WHERE IT EXISTS. A planar shadow puts every face of a model on
-     the same patch of ground, so a six-sided box blends six times over and comes out a solid
-     black blot with the silhouette lost inside it. Stamping each pixel once is what leaves a
-     shadow. Where the buffer is missing the pass still runs unmasked - darker where a model
-     overlaps itself, but a shadow rather than nothing.
-
-     Depth WRITES off, so the shadows never punch holes in the buffer that the meshes standing
-     on them would then fail against; depth TEST on, so a shadow cast behind a ridge is hidden
-     by it. The world's own trees and rock do not cast: they are ~1M triangles behind a chunk
-     cull and drawing them twice is the one thing here that would not fit the frame budget. */
-  gl.depthMask(false);
-  gl.enable(gl.BLEND);
-  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-  if (R3.stencil) {
-    gl.enable(gl.STENCIL_TEST);
-    gl.stencilFunc(gl.EQUAL, 0, 0xFF);
-    gl.stencilOp(gl.KEEP, gl.KEEP, gl.INCR);
-  }
-  gl.uniform1f(uA, R3D_SHADOW_A);
-  gl.uniform3f(uShadow, R3D_SHADOW_SX, R3D_SHADOW_SZ, 1);
-  shadowMode = 1;
-  paintEntities();
-  shadowMode = 0;
-  gl.uniform3f(uShadow, 0, 0, 0);
-  gl.uniform1f(uA, 1);
-  if (R3.stencil) gl.disable(gl.STENCIL_TEST);
-  gl.disable(gl.BLEND);
-  gl.depthMask(true);
-
-  function paintEntities() {
+  /* `bound` culls to the sun's square. The main pass takes everything - the camera's own cull
+     happens further up, per chunk - but the shadow pass covers a square about ninety world
+     units across and was being handed EVERY entity in the match, the enemy base included.
+     Those draws cannot mark a texel of the map and cost a full submission each; at a hundred
+     units a side it is most of the roster once a game is under way. */
+  function paintEntities(C, bound) {
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (e.dead) continue;
+    if (bound && (Math.abs(e.x - bound[0]) > bound[2] || Math.abs(e.z - bound[1]) > bound[2])) continue;
     if (e.type === 'struct') {
       /* A BUILDING UNDER CONSTRUCTION RISES OUT OF THE GROUND. The 2D reveal is a wipe, which
          has no 3D analogue; height is the 3D-native equivalent, and it reads instantly as
@@ -421,7 +454,7 @@ function _r3dFrame(G) {
          is not mistaken for a finished one at full height's last moment. */
       var dmg = !e.building && e.hp < e.maxHp * RTS_COND_YELLOW;
       var rise = e.building ? 0.12 + 0.88 * Math.max(0, Math.min(1, e.bprog || 0)) : 1;
-      draw(_r3dMesh('b', e.def, e.side), e.x, 0, e.z, 0, ART2W, dmg || e.building, rise);
+      drawIn(C, _r3dMesh('b', e.def, e.side), e.x, 0, e.z, 0, ART2W, dmg || e.building, rise);
     } else if (e.type === 'unit') {
       var turret = R.spr.turret && R.spr.turret[e.side] && R.spr.turret[e.side][e.def];
       var y = e.air ? ((e.rearming > 0 ? 2 : (e.alt || 12)) * 0.35) : 0;
@@ -433,15 +466,15 @@ function _r3dFrame(G) {
       if (d2.kind === 'infantry' && e.path && !e.prone) {
         y += Math.abs(Math.sin(G.t * 9 + (e.gait || 0) * 0.8)) * 0.45;
       }
-      draw(_r3dMesh('u', e.def, e.side, turret ? 'hull' : null, e.prone),
-           e.x, y, e.z, -e.rot, ART2W, false);
+      drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : null, e.prone),
+             e.x, y, e.z, -e.rot, ART2W, false);
       if (turret) {
-        draw(_r3dMesh('u', e.def, e.side, 'turret', false), e.x, y, e.z, -(e.turret || 0), ART2W, false);
+        drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false), e.x, y, e.z, -(e.turret || 0), ART2W, false);
       }
     }
   }
   }
-  paintEntities();
+  paintEntities(MC);
 
   /* --- fog, over everything, depth ignored --- */
   gl.useProgram(R3.texP);
@@ -449,6 +482,7 @@ function _r3dFrame(G) {
   gl.uniform2f(gl.getUniformLocation(R3.texP, 'uTilt'), R3.cp, R3.sp);
   gl.uniform1f(gl.getUniformLocation(R3.texP, 'uInvD'), invD);
   gl.uniform1f(gl.getUniformLocation(R3.texP, 'uA'), 1);
+  gl.uniform1f(gl.getUniformLocation(R3.texP, 'uRecv'), 0);   /* the shroud is not a surface */
   gl.disable(gl.DEPTH_TEST);
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

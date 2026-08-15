@@ -88,31 +88,8 @@ function _r3dEyeDist() { return R3D_FOVK * _rtsR.H / _rtsZoom(); }
    caller might quietly draw with. */
 var R3D_WMIN = 0.02;
 
-/* ------------------------------------------------------------- cast shadows --
-   THE SHADOW LIGHT IS THE SHADING LIGHT WITH ITS Z FLIPPED, and that is not a shortcut - it is
-   the only direction that produces a shadow anyone can see.
-
-   R3_LIGHT is the sprite baker's, and the baker chose it to light the face the camera sees
-   most: upper-left and IN FRONT, +z, so that a front elevation does not sit at flat ambient.
-   That puts it 22 degrees off the camera's own axis, which is very nearly a headlight.
-   Measured, the true shadow of a point at height h lands at screen dy -0.568h while the
-   object's own top lands at -0.581h - the shadow would be hidden behind the object casting
-   it, to within 2%, at every zoom and every position on screen.
-
-   Flipping z swings the source behind the scene and throws the shadow DOWN and to the right,
-   which is exactly where the rest of the game already puts it: _sprShadow offsets every baked
-   sprite by a positive dx and dy, and so does the original's artwork. The two modes agree with
-   each other, and the shading keeps the light the baker picked for it.
-
-   The two numbers are the ground offset per unit of HEIGHT - a point at height y casts to
-   (x + y*SX, 0, z + y*SZ), the standard projection onto the plane y=0 along the light. */
-var R3D_SHADOW_SX = -R3_LIGHT[0] / R3_LIGHT[1];
-var R3D_SHADOW_SZ = R3_LIGHT[2] / R3_LIGHT[1];
-/* Lifted off the ground so it wins the depth test against the plane it is cast on. A 24-bit
-   depth buffer would not need this much; 16-bit ones exist. 0.12 of a world unit is a
-   thirty-third of a cell, which is under a pixel at every zoom, so it cannot read as float. */
-var R3D_SHADOW_Y = 0.12;
-var R3D_SHADOW_A = 0.34;
+/* Shadows are cast by the sun's depth map - see render3d/shadow3d.js, which owns the light
+   direction, the basis and the comparison. This file only samples it. */
 
 /* How far the sea heaves, in world units. Small on purpose: most of what makes water read as
    water is the specular sliding over a moving NORMAL, and the normal comes from the slope, so
@@ -186,20 +163,27 @@ var R3D_MESH_VS =
   'uniform vec2 uTilt;' +       /* cos(tilt), sin(tilt) */
   'uniform float uInvD;' +      /* 1 / eye distance; 0 is the orthographic camera */
   'uniform vec3 uPos; uniform vec2 uRot; uniform float uScale; uniform float uScaleY; uniform vec3 uTint;' +
-  'uniform vec3 uShadow;' +     /* ground offset per unit height (x, z), and 1 = cast mode */
   'uniform vec2 uWave;' +       /* wave amplitude (0 = not water) and the clock */
-  'varying vec3 vC;' +
+  R3D_SHADOW_VGLSL +
+  /* The ramp, as a function, because it is now evaluated TWICE per vertex - once with
+     the sun and once without it. That is what lets the fragment stage put a shadow on
+     a surface: it has the same surface lit and unlit to choose between, so a shadow is
+     the shading this material would have in shade rather than a multiply on top of it.
+     Multiplying instead is the usual shortcut and it is wrong here for a measurable
+     reason - this ramp does not pass through the origin. Its floor is per-channel and
+     COOL, so shade slides toward blue-grey; a scalar multiply drags it toward black and
+     takes the sky out of every shadow on the map. */
+  'vec3 _ramp(vec3 col, float v){' +
+  '  float k = clamp(v, 0.0, 1.0);' +
+  '  vec3 shade = col * (vec3(0.30, 0.32, 0.38) + vec3(0.70, 0.68, 0.62) * k)' +
+  '             + vec3(7.0, 10.0, 21.0) / 255.0 * (1.0 - k);' +
+  '  shade += (vec3(255.0, 250.0, 228.0) / 255.0 - col) * clamp(v - 1.0, 0.0, 1.0) * 0.60;' +
+  '  return shade;' +
+  '}' +
+  'varying vec3 vC; varying vec3 vCs;' +
   'void main(){' +
   '  vec3 p = vec3(aP.x * uScale, aP.y * uScale * uScaleY, aP.z * uScale);' +
   '  vec3 wp = vec3(uPos.x + p.x*uRot.x - p.z*uRot.y, uPos.y + p.y, uPos.z + p.x*uRot.y + p.z*uRot.x);' +
-  /* THE CAST SHADOW IS THE SAME MESH, SQUASHED ONTO THE GROUND. Every vertex slides along the
-     light onto y=0 - the standard planar projection - so a tank's shadow is tank-shaped and a
-     power plant's has its chimneys, which is the whole reason this is geometry rather than the
-     blob disc it replaces. uShadow.z is 0 for a normal draw and 1 for a shadow, and uTint is
-     set to zero for the shadow draw, which takes the shading below to black without needing a
-     second program or a branch around it. */
-  '  wp = mix(wp, vec3(wp.x + wp.y * uShadow.x, ' + R3D_SHADOW_Y.toFixed(3) +
-      ', wp.z + wp.y * uShadow.y), uShadow.z);' +
   '  vec3 n = normalize(vec3(aN.x*uRot.x - aN.z*uRot.y, aN.y, aN.x*uRot.y + aN.z*uRot.x));' +
   /* WATER IS THIS SAME PROGRAM WITH THE SURFACE MOVING UNDER IT. Three travelling waves,
      summed: two long ones that give the sheet its roll, and a short fast one that does almost
@@ -246,14 +230,15 @@ var R3D_MESH_VS =
   '  float sky = 0.10 * max(n.y, 0.0);' +
   '  float v = min(' + R3_AMB.toFixed(4) + ' + ' + R3_DIF.toFixed(4) +
       ' * lam + sky + 0.16 * sp, 1.10);' +
-  /* _r3Ramp, ported term for term. The floor is per-channel and COOL - shadows slide toward
-     a blue-grey rather than to black - and the shadowed end keeps 30-38% of the surface's own
-     colour instead of losing it, which is what stops dark faces reading as holes. */
-  '  float k = clamp(v, 0.0, 1.0);' +
-  '  vec3 shade = col * (vec3(0.30, 0.32, 0.38) + vec3(0.70, 0.68, 0.62) * k)' +
-  '             + vec3(7.0, 10.0, 21.0) / 255.0 * (1.0 - k);' +
-  '  shade += (vec3(255.0, 250.0, 228.0) / 255.0 - col) * clamp(v - 1.0, 0.0, 1.0) * 0.60;' +
-  '  vC = shade * uTint;' +
+  /* AND THE SAME SURFACE WITH THE SUN TAKEN OUT of it - ambient and the sky bounce only. The
+     fragment stage picks between the two by how much of the sun actually reaches this pixel,
+     which is what a shadow map is for. _r3Ramp is ported term for term either way: its floor
+     is per-channel and COOL, so shade slides toward blue-grey rather than to black, and the
+     shadowed end keeps 30-38% of the surface's own colour instead of losing it. */
+  '  float vs = min(' + R3_AMB.toFixed(4) + ' + sky, 1.10);' +
+  '  vC  = _ramp(col, v) * uTint;' +
+  '  vCs = _ramp(col, vs) * uTint;' +
+  '  _shadowFrom(wp);' +
   '  float sx = (wp.x - uCam.x) * uCam.z;' +
   '  float sy = ((wp.z - uCam.y) * uTilt.x - wp.y * uTilt.y) * uCam.w;' +
   '  float d  = ((wp.z - uCam.y) * uTilt.y + wp.y * uTilt.x);' +
@@ -266,27 +251,57 @@ var R3D_MESH_VS =
    standing in a puddle of void. A shadow has to darken what is under it rather than replace
    it, and that needs blending, which needs an alpha the fragment shader can write. Every
    other draw sets it to 1 and is unchanged. */
+/* THE FRAGMENT STAGE FINALLY DOES SOMETHING. It was `gl_FragColor = vec4(vC, uA)` - every
+   light calculation in the game happened per VERTEX and the fragment shader interpolated a
+   colour and stopped. A shadow map cannot work that way: shadow is a property of the PIXEL,
+   not of the corner of a triangle, and a per-vertex test on a 4-unit slab would put the edge
+   of a tree's shadow at the nearest corner of whatever it lands on.
+
+   So the vertex stage hands over the same surface twice - lit and in shade - and this picks
+   between them per pixel. highp, because the comparison is against a depth packed into eight
+   bits and change, and mediump has neither the range nor the precision to hold it. */
 var R3D_MESH_FS =
-  'precision mediump float; varying vec3 vC; uniform float uA;' +
-  'void main(){ gl_FragColor = vec4(vC, uA); }';
+  'precision highp float; varying vec3 vC; varying vec3 vCs; uniform float uA;' +
+  R3D_SHADOW_GLSL +
+  'void main(){ gl_FragColor = vec4(mix(vCs, vC, _shadowAt()), uA); }';
 
 /* Ground and fog share one textured program; fog just samples a different texture with
    blending on and the depth test off. */
 var R3D_TEX_VS =
   'attribute vec2 aXZ; attribute vec2 aT;' +
   'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' +
+  R3D_SHADOW_VGLSL +
   'varying vec2 vT;' +
   'void main(){' +
   '  vT = aT;' +
+  '  _shadowFrom(vec3(aXZ.x, 0.0, aXZ.y));' +
   '  float sx = (aXZ.x - uCam.x) * uCam.z;' +
   '  float sy = (aXZ.y - uCam.y) * uTilt.x * uCam.w;' +
   '  float d  = (aXZ.y - uCam.y) * uTilt.y;' +
   '  float pw = 1.0 - d * uInvD;' +
   '  gl_Position = vec4(sx, -sy, -d / ' + R3D_DEPTH_RANGE.toFixed(1) + ' * pw, pw);' +
   '}';
+/* THE GROUND RECEIVES, and it is the surface that matters most - a shadow map that shades
+   every mesh but not the floor puts a tree's shade on the tree beside it and none on the grass
+   underneath, which is worse than no shadows at all.
+
+   uRecv is 0 for the fog, which is drawn through this same program and is not a surface: it is
+   the unexplored map laid over the finished picture, and shading it would darken the shroud in
+   the shape of trees the player cannot see.
+
+   The shade is a COOL MULTIPLY rather than a scalar one, matched to the mesh ramp's own floor -
+   a shadow on grass and a shadow on a slab beside it have to be the same colour of shade or
+   the two read as different times of day. */
 var R3D_TEX_FS =
-  'precision mediump float; varying vec2 vT; uniform sampler2D uS; uniform float uA;' +
-  'void main(){ vec4 c = texture2D(uS, vT); gl_FragColor = vec4(c.rgb, c.a * uA); }';
+  'precision highp float; varying vec2 vT; uniform sampler2D uS; uniform float uA;' +
+  'uniform float uRecv;' +
+  R3D_SHADOW_GLSL +
+  'void main(){' +
+  '  vec4 c = texture2D(uS, vT);' +
+  '  float s = mix(1.0, _shadowAt(), uRecv);' +
+  '  vec3 lit = c.rgb * mix(vec3(0.575, 0.600, 0.655), vec3(1.0), s);' +
+  '  gl_FragColor = vec4(lit, c.a * uA);' +
+  '}';
 
 function _r3dInit() {
   var cv = document.getElementById('rtsCv3d');
@@ -296,14 +311,12 @@ function _r3dInit() {
      project verifies its rendering with headless screenshots, so a renderer that cannot be
      screenshotted cannot be tested. The cost is a buffer copy per frame instead of a swap,
      which at this scene's ~11k triangles is not measurable. */
-  /* STENCIL, for the cast shadows. A planar shadow is the whole mesh squashed flat, so every
-     face of it lands on the same patch of ground - a six-sided box blends six times over and
-     comes out a solid black blot instead of a shadow. The stencil is what makes each pixel
-     take the shade exactly once. Asked for here rather than assumed: _r3dFrame checks
-     STENCIL_BITS and falls back to drawing the shadows unmasked, which is darker where a
-     model overlaps itself but is still a shadow. */
-  var gl = cv.getContext('webgl', { antialias: true, alpha: false, preserveDrawingBuffer: true,
-                                    stencil: true });
+  /* No stencil. The pass that needed one - a planar shadow, the whole mesh squashed flat, whose
+     faces all land on the same patch of ground and blend over each other into a blot - has been
+     replaced by the sun's depth map, which answers "is this pixel in shade" once by
+     construction. */
+  var gl = cv.getContext('webgl', { antialias: true, alpha: false,
+                                    preserveDrawingBuffer: true });
   if (!gl) return null;
   var R3;
   try {
@@ -313,10 +326,13 @@ function _r3dInit() {
       texP: _r3dProgram(gl, R3D_TEX_VS, R3D_TEX_FS),
       mesh: {}, terrainTex: null, terrainDirty: true,
       fogCv: null, fogTex: null, fogDirty: true,
-      stencil: gl.getParameter(gl.STENCIL_BITS) > 0,
+      shadowReady: false,
       cp: Math.cos(R3D_TILT), sp: Math.sin(R3D_TILT)
     };
   } catch (e) { return null; }
+  /* The shadow map is the one part of the mode that is allowed to fail on its own: a driver
+     that cannot give a 1024 render target still gets the world, just unshaded. */
+  try { R3.shadowReady = _r3dShadowInit(R3); } catch (e) { R3.shadowReady = false; }
   window._R3D = R3;
   return R3;
 }
