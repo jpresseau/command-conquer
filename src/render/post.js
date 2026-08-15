@@ -78,18 +78,30 @@ function _rtsPost(g) {
   bg.globalAlpha = 1;
   bg.clearRect(0, 0, bw, bh);
   bg.drawImage(g.canvas, 0, 0, bw, bh);
-  /* CUBE for the threshold, then add back MORE THAN ONCE for the gain. The two are separate
-     jobs and conflating them is what went wrong twice:
+  /* A POWER CURVE FOR THE THRESHOLD, then the gain separately. The two are separate jobs and
+     conflating them is what went wrong twice:
 
-       cube + one weak add   the midtones vanish and so does the glow - measured as a pass that
+       one weak add          the midtones vanish and so does the glow - measured as a pass that
                              only darkened the frame (mean 59 -> 55.9)
        square + strong add   the highlights glow, but so does everything else, because squaring
                              leaves plenty of midtone behind - a 19% lift across the whole
                              frame, which is haze rather than light (mean 59 -> 70.4)
 
-     Cubing kills the midtones properly; adding the result twice puts the intensity back where
-     it belongs, on the pixels that survived. */
+     Drawing the buffer into ITSELF with multiply squares it, so each of these lines doubles
+     the exponent: x, x^2, x^4, x^8. Three of them, and the third is what makes the glow LOCAL.
+
+     At x^4 a midtone of 0.5 still comes through at 0.0625, which is 16 levels before the gain
+     and enough - once blurred over the whole frame and added back - to warm everything. That
+     is not a hypothetical: measured on one explosion, the pass lifted 99.8% of the frame by a
+     mean of 7.2 levels. A glow that reaches every pixel of the map is haze by another route,
+     just a milder one than the version already rejected above.
+
+     x^8 collapses that midtone to 0.004 - one level, below anything the eye or an 8-bit buffer
+     can carry - while a fireball at 0.95 only falls from 0.81 to 0.66. So the bright end keeps
+     its glow, and the rest of the frame stops receiving one. RTS_BLOOM carries that 0.81->0.66
+     back so the fireball's own halo is no weaker than before. */
   bg.globalCompositeOperation = 'multiply';
+  bg.drawImage(R.bloomCv, 0, 0);
   bg.drawImage(R.bloomCv, 0, 0);
   bg.drawImage(R.bloomCv, 0, 0);
   bg.globalCompositeOperation = 'source-over';

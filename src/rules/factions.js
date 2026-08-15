@@ -94,7 +94,14 @@ var RTS_WATER_HZ = 4;
    soup, and a vignette you can consciously see is one that is too strong. These are the numbers
    that survived looking at them. */
 var RTS_POST_ON = true;
-var RTS_BLOOM = 0.85;           /* how much of the blurred highlight is added back, per pass */
+var RTS_BLOOM = 1.0;            /* how much of the blurred highlight is added back, per pass.
+                                   Raised with the threshold, which squares once more (see
+                                   render/post.js) and costs the fireball itself 0.81 -> 0.66.
+                                   ONE is the ceiling and not a tuning choice: this is a canvas
+                                   globalAlpha, and the spec says a value outside [0,1] is
+                                   IGNORED rather than clamped - so 1.05 here does not mean 1.05,
+                                   it means whatever alpha was already set. More gain than this
+                                   has to come from RTS_BLOOM_PASSES. */
 var RTS_BLOOM_PASSES = 1;       /* added this many times - gain, separate from the threshold */
 var RTS_BLOOM_BLUR = 2;         /* px, at EIGHTH resolution - so ~16px across the frame */
 var RTS_VIGNETTE = '#d2d7de';   /* the corner multiplier; nearer white is a weaker vignette */
