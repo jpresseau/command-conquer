@@ -876,7 +876,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">3e77118 · 2026-08-15</div>
+  <div id="rtsBuild" title="build">e43ca24 · 2026-08-15</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -21058,6 +21058,79 @@ function _r3dTree(out, x, z, h1, h2, h3) {
   }
 }
 
+/* A TURNED, TAPERED, LEANING SLAB - which is the whole difference between rock and rubble.
+
+   The ridges were _r3Box stacks, and _r3Box is axis-aligned: every face of every slab on the
+   map ran parallel to x or z, at four greys a hair apart, with a flat horizontal top. A ridge
+   came out as a demolished city block rather than as stone.
+
+   "There is no rotation anywhere in the world batch" is true of the DRAW - the batch is baked
+   to world space and drawn with an identity placement, which is what lets it be one buffer per
+   chunk - and says nothing about the geometry. A yaw baked into the vertices costs a sine and
+   a cosine at build time and nothing at all per frame.
+
+   Three shape knobs, and each does something the others cannot: `ang` turns the slab so its
+   edges stop agreeing with every other slab's, `taper` shrinks the top face so it reads as a
+   weathered block rather than a crate, and `lx`/`lz` slide that top sideways so the sides lean
+   and the top is not a horizontal plane. Wound face by face like _r3Box so every normal points
+   out of the solid; the rotation carries the normals with it. */
+function _r3dSlab(out, x, y, z, w, d, h, ang, taper, lx, lz, col, topCol) {
+  var C = Math.cos(ang), S = Math.sin(ang);
+  function pt(u, v, up) {
+    var k = up ? taper : 1;
+    var uu = u * w * 0.5 * k, vv = v * d * 0.5 * k;
+    return [x + uu * C - vv * S + (up ? lx : 0), y + (up ? h : 0),
+            z + uu * S + vv * C + (up ? lz : 0)];
+  }
+  var b00 = pt(-1, -1, 0), b01 = pt(-1, 1, 0), b11 = pt(1, 1, 0), b10 = pt(1, -1, 0);
+  var t00 = pt(-1, -1, 1), t01 = pt(-1, 1, 1), t11 = pt(1, 1, 1), t10 = pt(1, -1, 1);
+  _r3F(out, [t00, t01, t11, t10], topCol || col);
+  _r3F(out, [b01, b11, t11, t01], col);
+  _r3F(out, [b10, b00, t00, t10], col);
+  _r3F(out, [b11, b10, t10, t11], col);
+  _r3F(out, [b00, b01, t01, t00], col);
+}
+
+/* Six greys rather than four, and not all neutral: real stone reads warm on the faces the sun
+   reaches and cold in the shade, and a ridge built from one hue is a silhouette with nothing
+   inside it however well it is lit. */
+var R3D_ROCK = ['#7c8177', '#8e948a', '#6a6f66', '#9a9d92', '#585c54', '#83887c'];
+var R3D_ROCK_TOP = ['#969b8f', '#a6aa9d', '#82877c', '#b0b3a6', '#6d7268', '#9ba095'];
+
+/* ONE RIDGE CELL: four turned slabs and a pair of crags. Its own function rather than a block
+   inside the terrain walk, so that a spec can emit the real thing and measure it - the
+   interesting claim here is about the geometry (that a ridge runs in every direction, not just
+   along x and z), and a spec that re-derived the angles from its own copy of the hashes would
+   pass whatever the builder actually did. */
+function _r3dRockCell(out, tx, tz) {
+  var wx = _rtsWX(tx), wz = _rtsWX(tz);
+  var h1 = _sprHash(tx, tz, 331);
+  var nb = h1 > 0.55 ? 4 : 3;
+  for (var rb = 0; rb < nb; rb++) {
+    var ci = ((_sprHash(tz * 31 + rb, tx, 373) * 6) | 0) % 6;
+    _r3dSlab(out,
+             wx + (_sprHash(tx * 31 + rb, tz, 367) - 0.5) * 2.6, 0,
+             wz + (_sprHash(tz * 31 + rb, tx, 379) - 0.5) * 2.6,
+             1.5 + _sprHash(tz * 31 + rb, tx, 349) * 2.4,
+             1.2 + _sprHash(tx * 31 + rb, tz * 31 + rb, 353) * 2.1,
+             1.6 + _sprHash(tz * 31 + rb, tx * 31 + rb, 359) * 3.8,
+             _sprHash(tx * 31 + rb, tz, 347) * Math.PI,
+             0.42 + _sprHash(tx * 31 + rb, tz, 361) * 0.46,
+             (_sprHash(tx * 31 + rb, tz, 383) - 0.5) * 1.4,
+             (_sprHash(tz * 31 + rb, tx, 389) - 0.5) * 1.4,
+             R3D_ROCK[ci], R3D_ROCK_TOP[ci]);
+  }
+  /* and the spikes that break the skyline - seven-sided, because at the top zoom a six-sided
+     cone this size still reads as a pyramid */
+  for (var cg = 0; cg < 2; cg++) {
+    _r3Cone(out, wx + (_sprHash(tx * 31 + cg, tz, 439) - 0.5) * 3, 0,
+            wz + (_sprHash(tz * 31 + cg, tx, 443) - 0.5) * 3,
+            0.75 + _sprHash(tx * 31 + cg, tz, 449) * 0.7, 0.08,
+            3.2 + _sprHash(tx * 31 + cg, tz * 31 + cg, 433) * 3.4,
+            R3D_ROCK[cg ? 1 : 4], 7);
+  }
+}
+
 function _r3dWorldBuild(G) {
   var R3 = window._R3D, gl = R3.gl;
   var N = RTS_N, half = RTS_TILE / 2;
@@ -21098,24 +21171,7 @@ function _r3dWorldBuild(G) {
                        _sprHash(tx * 31 + tn, tz * 31 + tn, 431));
             }
           } else if (k === RTS_T_ROCK) {
-            /* A ridge cell: stacked slabs of differing greys plus a crag spike or two. There
-               is no rotation in the batch, so the tilt is faked the way the buildings fake
-               it - offset stacked boxes, which under this light shade as separate facets. */
-            for (var rb = 0; rb < 3; rb++) {
-              var rh = 2.2 + _sprHash(tx * 31 + rb, tz, 347) * 3.4;
-              var rw = 1.6 + _sprHash(tz * 31 + rb, tx, 349) * 2.2;
-              _r3Box(faces, wx + (_sprHash(tx * 31 + rb, tz, 353) - 0.5) * 2.4, rb * 0.5,
-                     wz + (_sprHash(tz * 31 + rb, tx, 359) - 0.5) * 2.4,
-                     rw, rh, rw * (0.8 + h1 * 0.5),
-                     rb & 1 ? '#6a6f66' : '#7e837a', rb & 1 ? '#575b54' : '#8d9289');
-            }
-            for (var cg = 0; cg < 2; cg++) {
-              var gh = 3 + _sprHash(tx * 31 + cg, tz * 31 + cg, 433) * 3;
-              _r3Cone(faces, wx + (_sprHash(tx * 31 + cg, tz, 439) - 0.5) * 3,
-                      0, wz + (_sprHash(tz * 31 + cg, tx, 443) - 0.5) * 3,
-                      0.9 + _sprHash(tx * 31 + cg, tz, 449) * 0.6, 0.1, gh,
-                      cg & 1 ? '#757a71' : '#888d84', 6);
-            }
+            _r3dRockCell(faces, tx, tz);
           } else if (k === RTS_T_GRASS) {
             /* Sparse tufts, and only where a hash says so - covering every grass cell would
                be the ground-cover padding the graphics rules forbid; a scatter at this
