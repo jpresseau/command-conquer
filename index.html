@@ -876,7 +876,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">563bc7e · 2026-08-15</div>
+  <div id="rtsBuild" title="build">5b9ceb6 · 2026-08-15</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -20551,10 +20551,34 @@ function _r3dShadowBind(P, unit) {
 
 window._R3D = null;
 
-/* Tilt: 0 is straight down (the 2D view); this leans the camera until walls and chimneys
-   show real elevation. cos 0.62 rad = 0.81, so ground depth compresses to 81% - enough lean
-   to read as 3D, mild enough that the map stays readable as a map. */
-var R3D_TILT = 0.62;
+/* HOW FAR THE CAMERA LEANS, in radians from straight down. 0 is the 2D view.
+
+   This was 0.62 - 36 degrees - which is Red Alert's own near-top-down angle, and at that angle
+   most of what this renderer does cannot be seen. A building shows its roof and almost no wall;
+   an ore field reads as a gold texture rather than as a field of standing crystals; a forest
+   reads as dark speckle. Smooth curved surfaces, cast shadows, contact occlusion and effects
+   standing in the world are all things you look at a scene from the SIDE to see, and 36 degrees
+   is not the side.
+
+   0.855 is 49 degrees, which is roughly where a modern RTS puts its camera. The war factory
+   shows its flank and its roof reads as the barrel it is, the crystals stand up, the trees are
+   trees. Nothing else changed to get that.
+
+   WHAT IT COSTS, measured rather than guessed, at the top zoom:
+
+     the view reaches 65 world units up-screen instead of 46, and 38 down instead of 33
+     the sun's shadow map covers 70 world units instead of 54, at the same 1024 - so its
+       texel grows from 0.105 to 0.137 world units, still finer than the 3x3 kernel over it
+     picking round-trips to 0 error, as it does at every angle: world -> screen -> world is
+       the projection's own inverse and carries the tilt for free
+
+   AND WHAT IT DOES NOT COST. The horizon stays off screen. gl3d's own guard for that is
+   cos(tilt) - sin(tilt)/(2*FOVK) > 0, which is 0.485 here against 0.682 before, and does not
+   reach zero until tan(tilt) = 2*FOVK - about 77 degrees. There is a long way to go before the
+   projection has anything to complain about; the limits that bite first are how much map the
+   camera can see past (see _rtsClampFocus) and how much of the battlefield a building can
+   hide. */
+var R3D_TILT = 0.855;
 var R3D_DEPTH_RANGE = 900;     /* world units mapped into the depth buffer; the map is ~640 */
 
 /* HOW MUCH PERSPECTIVE. The eye sits this many screen-heights of world in front of the focal
@@ -24787,8 +24811,9 @@ function _rtsBindInput() {
          delta by _rtsZoom() on both axes, which is the right answer only for a camera looking
          straight down. In 3D the view is tilted - screenY is (wz - focus.z) * cos(tilt) * zoom
          - so a vertical drag of N pixels is N / (zoom * cos(tilt)) world units, not N / zoom.
-         At R3D_TILT = 0.62 that cosine is 0.8139, so every vertical pan in 3D moved the ground
-         18.6% less than the finger asked for: the map slid out from under the fingertip, on a
+         At the tilt in force when this was found - 0.62, since leaned further - that cosine was
+         0.8139, so every vertical pan in 3D moved the ground 18.6% less than the finger asked
+         for: the map slid out from under the fingertip, on a
          phone, where this control is the only way to move the camera at all.
 
          Asking _rtsGroundAt where each fingertip is and taking the world difference is correct
@@ -25542,12 +25567,32 @@ function _rtsPanTick(dt) {
 }
 /* Keep the view on the battlefield. The old fixed clamp was tuned for a perspective camera
    and let the ortho view slide far enough that the off-map background filled a third of the
-   screen. Derive the limit from what is actually visible at the current zoom. */
+   screen. Derive the limit from what is actually visible at the current zoom.
+
+   AND CLAMP THE VIEW'S CENTRE RATHER THAN THE FOCUS, because under a tilted perspective camera
+   those are not the same point. The visible ground is a TRAPEZOID: it reaches further up the
+   screen than down it, because the far edge is further from the eye. So a focus sitting exactly
+   `half a view` inside the map edge still has a view that runs past it, by however much the
+   trapezoid is lopsided - which is half the difference between the two reaches.
+
+   Measured at the top zoom, with the camera panned as far north as it would go: the view
+   overshot the map's edge by 6.5 world units and put 45 rows of off-map background across the
+   top of the screen, 5.9% of it. That is with the 36-degree camera this shipped with for a
+   long time; leaning the camera further makes the trapezoid more lopsided and roughly doubles
+   it, to 13.5 units and 8%.
+
+   _rtsViewSpan already reports the trapezoid's true centre - the radar box needed it for the
+   same reason - and this was the one caller still assuming the focus was it. Clamping the
+   centre puts the view's far edge exactly on the map's, at any tilt. In 2D the centre IS the
+   focus, so the offsets are zero and this is the same clamp it always was. */
 function _rtsClampFocus() {
   var R = _rtsR, span = RTS_N * RTS_TILE, vs = _rtsViewSpan();
   var lx = Math.max(0, span / 2 - vs.w * 0.5), lz = Math.max(0, span / 2 - vs.h * 0.5);
-  R.focus.x = Math.max(-lx, Math.min(lx, R.focus.x));
-  R.focus.z = Math.max(-lz, Math.min(lz, R.focus.z));
+  /* how far the visible centre sits from the focus - a property of the tilt and zoom, not of
+     where the camera happens to be, so it stays correct as the focus below moves */
+  var ox = vs.cx - R.focus.x, oz = vs.cz - R.focus.z;
+  R.focus.x = Math.max(-lx - ox, Math.min(lx - ox, R.focus.x));
+  R.focus.z = Math.max(-lz - oz, Math.min(lz - oz, R.focus.z));
   _rtsApplyCam();
 }
 

@@ -57,10 +57,34 @@
 
 window._R3D = null;
 
-/* Tilt: 0 is straight down (the 2D view); this leans the camera until walls and chimneys
-   show real elevation. cos 0.62 rad = 0.81, so ground depth compresses to 81% - enough lean
-   to read as 3D, mild enough that the map stays readable as a map. */
-var R3D_TILT = 0.62;
+/* HOW FAR THE CAMERA LEANS, in radians from straight down. 0 is the 2D view.
+
+   This was 0.62 - 36 degrees - which is Red Alert's own near-top-down angle, and at that angle
+   most of what this renderer does cannot be seen. A building shows its roof and almost no wall;
+   an ore field reads as a gold texture rather than as a field of standing crystals; a forest
+   reads as dark speckle. Smooth curved surfaces, cast shadows, contact occlusion and effects
+   standing in the world are all things you look at a scene from the SIDE to see, and 36 degrees
+   is not the side.
+
+   0.855 is 49 degrees, which is roughly where a modern RTS puts its camera. The war factory
+   shows its flank and its roof reads as the barrel it is, the crystals stand up, the trees are
+   trees. Nothing else changed to get that.
+
+   WHAT IT COSTS, measured rather than guessed, at the top zoom:
+
+     the view reaches 65 world units up-screen instead of 46, and 38 down instead of 33
+     the sun's shadow map covers 70 world units instead of 54, at the same 1024 - so its
+       texel grows from 0.105 to 0.137 world units, still finer than the 3x3 kernel over it
+     picking round-trips to 0 error, as it does at every angle: world -> screen -> world is
+       the projection's own inverse and carries the tilt for free
+
+   AND WHAT IT DOES NOT COST. The horizon stays off screen. gl3d's own guard for that is
+   cos(tilt) - sin(tilt)/(2*FOVK) > 0, which is 0.485 here against 0.682 before, and does not
+   reach zero until tan(tilt) = 2*FOVK - about 77 degrees. There is a long way to go before the
+   projection has anything to complain about; the limits that bite first are how much map the
+   camera can see past (see _rtsClampFocus) and how much of the battlefield a building can
+   hide. */
+var R3D_TILT = 0.855;
 var R3D_DEPTH_RANGE = 900;     /* world units mapped into the depth buffer; the map is ~640 */
 
 /* HOW MUCH PERSPECTIVE. The eye sits this many screen-heights of world in front of the focal
