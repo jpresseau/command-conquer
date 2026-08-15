@@ -19,12 +19,17 @@
    frames that actually differ - rather than grading the picture.
 
    AND THE SEA WAS DRAWN WITH A FLAT PROJECTION IN A TILTED WORLD. _rtsDrawWater placed each
-   tile at `(x - ox) * cell` - a top-down projection written out by hand - and it is called in
-   both modes, ungated, because the GL side has no water surface of its own and without it the
-   sea is a flat painted colour. In 3D the world is tilted, so the sea was laid over the map on
-   a grid that was not, drifting further out of register with every row. Only players who load
-   their own Red Alert archives ever saw it - _mixWater returns null without them - which is why
-   no spec caught it, and why this one stubs the archive path to look. */
+   tile at `(x - ox) * cell` - a top-down projection written out by hand - so in 3D the sea was
+   laid over a tilted map on a grid that was not, drifting further out of register with every
+   row. Only players who load their own Red Alert archives ever saw it - _mixWater returns null
+   without them - which is why no spec caught it, and why this one stubs the archive path.
+
+   IT IS A 2D PASS NOW, and that is the second half of the claim. The GL side has a real water
+   surface (render3d/world3d.js): geometry with a travelling swell, a moving normal and a tone
+   that lifts on the crests. A sheet of flat authored tiles laid over that hides every bit of
+   it - the same mistake the ore tile made over the ore crystals, measured and fixed once
+   already. So the assertion below is the reverse of what it was: 2D draws the sea through the
+   projection, and 3D draws none of it, because 3D has its own. */
 
 var { chromium } = require('playwright');
 var { Suite } = require('../lib/assert.js');
@@ -177,9 +182,10 @@ var S = new Suite('flame');
          'expected a tile at ' + out.water2d.expect + ' among ' + out.water2d.drew + ' drawn');
     S.ok('the 3D mode is available to check', out.on3d, out.on3d ? 'on' : 'no WebGL');
     if (out.on3d) {
-      S.ok('...and in 3D, where a flat projection drifts a row at a time', out.water3d.hit,
-           'expected a tile at ' + out.water3d.expect + ' among ' + out.water3d.drew +
-           ' drawn - the hand-written flat projection put it somewhere else entirely');
+      S.ok('...and in 3D it stands aside for the surface that has real waves on it',
+           out.water3d.drew === 0,
+           out.water3d.drew + ' authored tiles drawn in 3D - the GL sea is geometry with a ' +
+           'swell and a moving normal, and a flat sheet over it hides all of it');
     }
   }
 
