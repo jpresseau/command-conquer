@@ -114,6 +114,12 @@ var R3D_SHADOW_SZ = R3_LIGHT[2] / R3_LIGHT[1];
 var R3D_SHADOW_Y = 0.12;
 var R3D_SHADOW_A = 0.34;
 
+/* How far the sea heaves, in world units. Small on purpose: most of what makes water read as
+   water is the specular sliding over a moving NORMAL, and the normal comes from the slope, so
+   the short fast wave in the sum does most of the work at a fifth of the amplitude. Push this
+   much past a third of a unit and a harbour starts to look like open ocean. */
+var R3D_WAVE_AMP = 0.42;
+
 function _r3dShader(gl, type, src) {
   var sh = gl.createShader(type);
   gl.shaderSource(sh, src); gl.compileShader(sh);
@@ -181,6 +187,7 @@ var R3D_MESH_VS =
   'uniform float uInvD;' +      /* 1 / eye distance; 0 is the orthographic camera */
   'uniform vec3 uPos; uniform vec2 uRot; uniform float uScale; uniform float uScaleY; uniform vec3 uTint;' +
   'uniform vec3 uShadow;' +     /* ground offset per unit height (x, z), and 1 = cast mode */
+  'uniform vec2 uWave;' +       /* wave amplitude (0 = not water) and the clock */
   'varying vec3 vC;' +
   'void main(){' +
   '  vec3 p = vec3(aP.x * uScale, aP.y * uScale * uScaleY, aP.z * uScale);' +
@@ -194,6 +201,43 @@ var R3D_MESH_VS =
   '  wp = mix(wp, vec3(wp.x + wp.y * uShadow.x, ' + R3D_SHADOW_Y.toFixed(3) +
       ', wp.z + wp.y * uShadow.y), uShadow.z);' +
   '  vec3 n = normalize(vec3(aN.x*uRot.x - aN.z*uRot.y, aN.y, aN.x*uRot.y + aN.z*uRot.x));' +
+  /* WATER IS THIS SAME PROGRAM WITH THE SURFACE MOVING UNDER IT. Three travelling waves,
+     summed: two long ones that give the sheet its roll, and a short fast one that does almost
+     nothing to the height and most of the work on the NORMAL - which is what the specular
+     reads, and the specular is what makes water look wet rather than blue.
+
+     The normal is the analytic slope of that sum, not a baked attribute, so it is exact at
+     every vertex and costs three cosines. The alternative was a second program, and this file
+     is emphatic that there must be exactly one copy of the light (see the note above): a
+     second program means a second copy of the ramp and the projection, which is the drift the
+     specular constants were consolidated to prevent.
+
+     uWave.x is 0 for everything that is not water, and the branch is on a UNIFORM, so it is
+     the same decision for every vertex in a draw. */
+  '  vec3 col = aC;' +
+  '  if (uWave.x > 0.0) {' +
+  '    float q1 = wp.x * 0.34 + wp.z * 0.22 + uWave.y * 1.15;' +
+  '    float q2 = wp.x * 0.19 - wp.z * 0.41 + uWave.y * 0.85;' +
+  '    float q3 = wp.x * 1.35 + wp.z * 0.95 + uWave.y * 2.40;' +
+  '    wp.y += uWave.x * (sin(q1) + 0.7 * sin(q2) + 0.45 * sin(q3));' +
+  '    float dx = uWave.x * (0.34 * cos(q1) + 0.7 * 0.19 * cos(q2) + 0.45 * 1.35 * cos(q3));' +
+  '    float dz = uWave.x * (0.22 * cos(q1) - 0.7 * 0.41 * cos(q2) + 0.45 * 0.95 * cos(q3));' +
+  '    n = normalize(vec3(-dx, 1.0, -dz));' +
+  /* AND THE SWELL IS CARRIED BY THE COLOUR, not by the light - which is not a stylistic
+     choice, it is what the ramp leaves room for. An up-facing surface takes very nearly the
+     most lambert this light can give: v works out at 0.96 for a flat sheet against a ceiling
+     of 1.0, so the whole bright half of the wave's swing is clipped off and the dark half
+     compresses into a 22% band. Measured, the entire sea came out in 79 tones and read as a
+     slab. There is no headroom up there for water to use.
+
+     So the height itself moves the tone - dark in the troughs, bright and whitening on the
+     crests, which is what the 2D wave tiles have always drawn and what the reference art
+     does. The moving normal above is still worth having: it is what breaks the bands up and
+     glints as the swell travels. */
+  '    float hh = (sin(q1) + 0.7 * sin(q2) + 0.45 * sin(q3)) / 2.15;' +
+  '    col *= 0.70 + 0.52 * (hh * 0.5 + 0.5);' +
+  '    col += vec3(0.10, 0.13, 0.15) * smoothstep(0.45, 1.0, hh);' +
+  '  }' +
   /* the sprite baker's own light and half-vector, so the two pipelines agree face for face */
   '  float lam = max(dot(n, ' + _r3dGlsl3(R3_LIGHT) + '), 0.0);' +
   '  float sp = max(dot(n, ' + _r3dGlsl3(R3D_HALF) + '), 0.0);' +
@@ -206,9 +250,9 @@ var R3D_MESH_VS =
      a blue-grey rather than to black - and the shadowed end keeps 30-38% of the surface's own
      colour instead of losing it, which is what stops dark faces reading as holes. */
   '  float k = clamp(v, 0.0, 1.0);' +
-  '  vec3 shade = aC * (vec3(0.30, 0.32, 0.38) + vec3(0.70, 0.68, 0.62) * k)' +
+  '  vec3 shade = col * (vec3(0.30, 0.32, 0.38) + vec3(0.70, 0.68, 0.62) * k)' +
   '             + vec3(7.0, 10.0, 21.0) / 255.0 * (1.0 - k);' +
-  '  shade += (vec3(255.0, 250.0, 228.0) / 255.0 - aC) * clamp(v - 1.0, 0.0, 1.0) * 0.60;' +
+  '  shade += (vec3(255.0, 250.0, 228.0) / 255.0 - col) * clamp(v - 1.0, 0.0, 1.0) * 0.60;' +
   '  vC = shade * uTint;' +
   '  float sx = (wp.x - uCam.x) * uCam.z;' +
   '  float sy = ((wp.z - uCam.y) * uTilt.x - wp.y * uTilt.y) * uCam.w;' +

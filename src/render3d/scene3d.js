@@ -289,8 +289,10 @@ function _r3dFrame(G) {
   var uTint = gl.getUniformLocation(R3.meshP, 'uTint');
   var uA = gl.getUniformLocation(R3.meshP, 'uA');
   var uShadow = gl.getUniformLocation(R3.meshP, 'uShadow');
+  var uWave = gl.getUniformLocation(R3.meshP, 'uWave');
   gl.uniform1f(uA, 1);
   gl.uniform3f(uShadow, 0, 0, 0);
+  gl.uniform2f(uWave, 0, 0);
   var shadowMode = 0;
   var aP = gl.getAttribLocation(R3.meshP, 'aP');
   var aN = gl.getAttribLocation(R3.meshP, 'aN');
@@ -345,6 +347,26 @@ function _r3dFrame(G) {
       gl.enableVertexAttribArray(aC); gl.vertexAttribPointer(aC, 3, gl.UNSIGNED_BYTE, true, 0, 0);
       gl.drawArrays(gl.TRIANGLES, 0, bm.verts);
     }
+  }
+
+  /* --- the sea --- */
+  /* Drawn with the world's identity placement, and with the clock in uWave. G.t rather than a
+     frame counter: the swell has to run at the same speed however fast the machine draws. */
+  if (R3.waterMesh) {
+    gl.uniform3f(uPos, 0, 0, 0);
+    gl.uniform2f(uRot, 1, 0);
+    gl.uniform1f(uScale, 1);
+    gl.uniform1f(uScaleY, 1);
+    gl.uniform3f(uTint, 1, 1, 1);
+    gl.uniform2f(uWave, R3D_WAVE_AMP, G.t);
+    gl.bindBuffer(gl.ARRAY_BUFFER, R3.waterMesh.p);
+    gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, R3.waterMesh.n);
+    gl.enableVertexAttribArray(aN); gl.vertexAttribPointer(aN, 3, gl.BYTE, true, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, R3.waterMesh.c);
+    gl.enableVertexAttribArray(aC); gl.vertexAttribPointer(aC, 3, gl.UNSIGNED_BYTE, true, 0, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, R3.waterMesh.verts);
+    gl.uniform2f(uWave, 0, 0);
   }
 
   /* CAST SHADOWS, under everything the player put on the map. These were BLOB DISCS - one

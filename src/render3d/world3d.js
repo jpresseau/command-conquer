@@ -163,6 +163,79 @@ function _r3dWorldBuild(G) {
   }
 }
 
+/* THE SEA, AS A SURFACE RATHER THAN AS PAINT.
+
+   Everything else on the map became geometry - forests, ridges, ore - and the water stayed a
+   picture: render/frame.js drew the 2D wave tiles over the GL buffer because "the GL side has
+   no water surface of its own yet", and its own comment said so. Next to a tilted, perspective
+   world with cast shadows it was the flattest thing on screen and, on a coastal map, a third
+   of it.
+
+   The surface is flat geometry that the vertex shader moves - see the uWave block in gl3d.js.
+   That is where the wet look comes from: the shader's specular is the sprite baker's own tight
+   Blinn-Phong, and a moving normal under a fixed light is exactly what makes a sheet of water
+   glitter instead of sitting there blue.
+
+   SUBDIVIDED, BECAUSE THE WAVES ARE SHORTER THAN A CELL. The shortest of the three has a
+   wavelength of about 3.8 world units, just under a cell, and a surface sampled once per cell
+   cannot show a wave it is the same size as - it aliases into a slow wobble. R3D_WATER_SUB
+   quarters each cell in both directions, which puts a vertex every world unit.
+
+   INSET AT THE SHORE, PER SIDE. The mesh covers water cells, so its outer boundary would be a
+   staircase of cell-sized steps - and the terrain bake underneath already has a proper
+   coastline on it, with surf and a sand edge. Rather than lay a square-edged sheet over that,
+   a sub-quad that sits against a cell which is not water drops out: the geometry stops short
+   of the land and the painted shore is what the player sees meeting it.
+
+   Per SIDE is the whole of it. Insetting every side of any cell that has a land neighbour also
+   opens a gap between two ADJACENT shore cells, and a coastline is made of adjacent shore
+   cells - the sea came out framed in a dark lattice of the paint underneath. */
+var R3D_WATER_SUB = 6;
+var R3D_WATER_Y = 0.10;        /* clear of the ground plane, under the cast shadows at 0.12 */
+
+function _r3dWaterBuild(G) {
+  var R3 = window._R3D, gl = R3.gl, N = RTS_N, faces = [];
+  var half = RTS_TILE / 2, step = RTS_TILE / R3D_WATER_SUB;
+  var P = RTS_PAL.water;
+  function isWater(x, z) {
+    return x >= 0 && z >= 0 && x < N && z < N && G.terrain[z * N + x] === RTS_T_WATER;
+  }
+  for (var tz = 0; tz < N; tz++) {
+    for (var tx = 0; tx < N; tx++) {
+      if (!isWater(tx, tz)) continue;
+      var ox = _rtsWX(tx) - half, oz = _rtsWX(tz) - half;
+      var S1 = R3D_WATER_SUB - 1;
+      for (var j = 0; j < R3D_WATER_SUB; j++) {
+        for (var k2 = 0; k2 < R3D_WATER_SUB; k2++) {
+          /* THE INSET IS PER SIDE, and only on sides that actually face land. A first cut
+             insets every side of any cell with a land neighbour, which also opens a gap
+             between two ADJACENT shore cells - and a coastline is made of adjacent shore
+             cells, so the sea came out framed in a dark lattice of the paint underneath. A
+             sub-quad drops out only when it sits against a cell that is not water. */
+          if (k2 === 0 && !isWater(tx - 1, tz)) continue;
+          if (k2 === S1 && !isWater(tx + 1, tz)) continue;
+          if (j === 0 && !isWater(tx, tz - 1)) continue;
+          if (j === S1 && !isWater(tx, tz + 1)) continue;
+          if (k2 === 0 && j === 0 && !isWater(tx - 1, tz - 1)) continue;
+          if (k2 === S1 && j === 0 && !isWater(tx + 1, tz - 1)) continue;
+          if (k2 === 0 && j === S1 && !isWater(tx - 1, tz + 1)) continue;
+          if (k2 === S1 && j === S1 && !isWater(tx + 1, tz + 1)) continue;
+          var x0 = ox + k2 * step, x1 = x0 + step;
+          var z0 = oz + j * step, z1 = z0 + step;
+          _r3F(faces, [[x0, R3D_WATER_Y, z0], [x0, R3D_WATER_Y, z1],
+                       [x1, R3D_WATER_Y, z1], [x1, R3D_WATER_Y, z0]], P[0]);
+        }
+      }
+    }
+  }
+  if (R3.waterMesh) {
+    gl.deleteBuffer(R3.waterMesh.p); gl.deleteBuffer(R3.waterMesh.n);
+    gl.deleteBuffer(R3.waterMesh.c);
+  }
+  R3.waterMesh = faces.length ? _r3dBuildMesh(gl, faces) : null;
+  R3.waterTris = faces.length * 2;
+}
+
 /* THE CRYSTALS THAT STAND IN AN ORE FIELD. The field's colour is not here - it is a texture,
    _r3dOreTex in scene3d.js, for the same reason the fog is one: it is a signal at one value
    per CELL that has to fade smoothly at its edges and track a number that changes as the
@@ -220,7 +293,9 @@ function _r3dOreBuild(G) {
    reading it exactly once is a race; summing 16k floats every 30 frames is not. */
 function _r3dWorldTick(G) {
   var R3 = window._R3D;
-  if (!R3.world || R3.worldG !== G) { _r3dWorldBuild(G); _r3dOreBuild(G); return; }
+  if (!R3.world || R3.worldG !== G) {
+    _r3dWorldBuild(G); _r3dOreBuild(G); _r3dWaterBuild(G); return;
+  }
   R3.oreCheck = (R3.oreCheck || 0) + 1;
   if (R3.oreCheck % 30 !== 0) return;
   var sum = 0;

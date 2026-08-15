@@ -72,10 +72,13 @@ function _rtsRFrame(dt) {
       if (ore <= 0 && !isWater) continue;
       var pp = _rtsGroundToScreen(_rtsWX(tx) - RTS_TILE / 2, _rtsWX(tz) - RTS_TILE / 2);
       var px = Math.round(pp.x), py = Math.round(pp.y);
-      if (isWater) {
-        /* The crest highlights step round a four-frame cycle, so the lake moves. Still drawn
-           in 3D: the GL side has no water surface of its own yet, so without this the sea is
-           a flat painted colour. It is the one world overlay that still covers the buffer.
+      if (isWater && !r3on) {
+        /* The crest highlights step round a four-frame cycle, so the lake moves.
+           2D ONLY, now that the GL side has a sea of its own (render3d/world3d.js). This used
+           to run in both modes - the comment here said so - because without it 3D had nothing
+           but a flat painted colour where the water was. It was then the last thing painting
+           over a surface that has real geometry, a moving normal and a specular, which is the
+           same mistake the ore tile made and was fixed for.
 
            SIZED CORNER TO CORNER, not by `cell` and a lean factor. A tile drawn at a fixed
            size abuts its neighbour only while every cell projects to the same rectangle -

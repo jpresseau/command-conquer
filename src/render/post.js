@@ -155,6 +155,10 @@ function _rtsPost(g) {
    Only players who have loaded their own Red Alert archives ever saw it: _mixWater returns
    null without them and this returns immediately, which is also why no spec caught it. */
 function _rtsDrawWater(g, G, cell) {
+  /* 2D ONLY. In 3D the sea is geometry with a moving normal and a specular on it
+     (render3d/world3d.js), and a flat sheet of authored tiles laid over that hides every bit
+     of it - the same mistake the ore tile made over the ore crystals. */
+  if (window._R3D && window._R3D.on) return;
   var steps = _mixWater();
   if (!steps) return;
   var N = RTS_N;
