@@ -73,123 +73,6 @@ function _r3dMesh(kind, def, side, part, prone) {
   return m;
 }
 
-/* ------------------------------------------------------------------ textures --
-   The ground texture IS the 2D renderer's baked terrain canvas, so scorch marks, craters and
-   corpses stamped into it appear in 3D too - frame.js sets terrainDirty when it stamps.
-   The fog is rebuilt every frame: RTS_N^2 pixels is a 128x128 image, far below the cost of
-   worrying about dirty flags.
-
-   THE TWO TEXTURES WANT OPPOSITE MAGNIFICATION FILTERS, and sharing one setting made the
-   ground the blurriest thing in the mode that is supposed to look better.
-
-   The ground is PIXEL ART. The 2D renderer draws it with imageSmoothingEnabled = false, on
-   purpose and at length: art at 24 px a cell magnified to 48 or 144 device pixels has to land
-   on hard pixel blocks, because the alternative is not more detail, it is the same detail
-   smeared. Sampling it LINEAR here did exactly that smearing - at max zoom the ground is
-   magnified about six times, so every baked pixel became a six-pixel gradient and the 3D
-   ground read as mud while the 2D ground beside it read as ground. MAG is NEAREST now, which
-   is the same picture the 2D mode draws.
-
-   MINIFICATION is the other way round: zoomed out, one screen pixel covers several baked
-   pixels, and NEAREST there drops whichever texel it happens to land on and shimmers as the
-   camera pans. So MIN stays LINEAR. (No mipmaps: the terrain canvas is 3072 square, which is
-   not a power of two, and WebGL1 will not mip an NPOT texture.)
-
-   The fog is NOT pixel art - it is one texel per CELL, a signal at 1/24th the ground's
-   resolution, and its whole job is to be a soft boundary. LINEAR magnification is what turns
-   the 2D mode's hard black cell-steps into a soft edge for free, so it keeps it. */
-function _r3dTexture(gl, old, mag) {
-  var t = old || gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, t);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, mag || gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  return t;
-}
-function _r3dFog(G) {
-  var R3 = window._R3D, gl = R3.gl, N = RTS_N;
-  if (!R3.fogCv) {
-    R3.fogCv = document.createElement('canvas');
-    R3.fogCv.width = N; R3.fogCv.height = N;
-    R3.fogG = R3.fogCv.getContext('2d');
-    R3.fogIm = R3.fogG.createImageData(N, N);
-  }
-  var d = R3.fogIm.data;
-  for (var i = 0; i < N * N; i++) {
-    var a = G.mapped[i] ? (G.vis[i] ? 0 : Math.round(255 * RTS_FOG_DIM)) : 255;
-    d[i * 4] = 4; d[i * 4 + 1] = 6; d[i * 4 + 2] = 9; d[i * 4 + 3] = a;
-  }
-  R3.fogG.putImageData(R3.fogIm, 0, 0);
-  R3.fogTex = _r3dTexture(gl, R3.fogTex);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, R3.fogCv);
-}
-
-/* THE ORE FIELD'S COLOUR, as a texture rather than as geometry.
-
-   In 2D the deposit is a painted tile; render/frame.js skips that in 3D because the crystals
-   are real there, which left the crystals standing on plain grass with nothing to say a
-   deposit was underneath them. Drawing the bed as flat quads was tried and looked like a heap
-   of overlapping paper squares - a quad's hard straight edge reads louder than the colour it
-   carries, however the colour is varied.
-
-   This is the fog's own trick, which is the right one for the job: ONE TEXEL PER CELL,
-   magnified LINEAR. The interpolation is what turns a grid of cells into a field that fades
-   out over its last cell instead of ending on a square, and the alpha follows what is left in
-   each cell, so a worked-out patch thins back to grass on its own.
-
-   EVERY TEXEL CARRIES A COLOUR EVEN WHERE THERE IS NO ORE, and that is not wasted work. The
-   blend interpolates rgb and alpha together, so a gold texel next to a BLACK transparent one
-   averages to half-gold at the boundary and rings the whole field in a dark fringe. Empty
-   cells take the colour of an ore neighbour where they have one and the field's own base gold
-   otherwise, which leaves nothing for the interpolation to darken toward. */
-var RTS_ORE_TEX_A = 0.82;      /* how much of the ground a full cell covers - not 1, so the
-                                  terrain's own dirt and grass still read through the field */
-function _r3dOreTex(G) {
-  var R3 = window._R3D, gl = R3.gl, N = RTS_N, i;
-  if (!R3.oreCv) {
-    R3.oreCv = document.createElement('canvas');
-    R3.oreCv.width = N; R3.oreCv.height = N;
-    R3.oreG = R3.oreCv.getContext('2d');
-    R3.oreIm = R3.oreG.createImageData(N, N);
-    R3.oreGold = _r3Hex(RTS_PAL.ore[0]);
-    R3.oreGem = _r3Hex(RTS_PAL.gem[0]);
-  }
-  var d = R3.oreIm.data, gold = R3.oreGold, gemc = R3.oreGem;
-  var full = RTS_SCRAP_TILE * (typeof RTS_ORE_RICHNESS === 'number' ? RTS_ORE_RICHNESS : 1);
-  var any = false;
-  for (i = 0; i < N * N; i++) {
-    var ore = G.scrap[i], p = i * 4;
-    if (ore > 0) {
-      var c = (G.gems && G.gems[i]) ? gemc : gold;
-      var frac = Math.min(1, ore / full);
-      d[p] = c[0]; d[p + 1] = c[1]; d[p + 2] = c[2];
-      /* a shallow curve: a half-worked cell should still look like a deposit, and only the
-         last of it should fade out */
-      d[p + 3] = Math.round(255 * RTS_ORE_TEX_A * Math.pow(frac, 0.55));
-      any = true;
-    } else {
-      d[p] = gold[0]; d[p + 1] = gold[1]; d[p + 2] = gold[2]; d[p + 3] = 0;
-    }
-  }
-  /* an empty cell beside a gem field takes the gem's colour, so the fringe has nothing to
-     average toward - see the note above */
-  for (i = 0; i < N * N; i++) {
-    if (G.scrap[i] > 0 || !G.gems) continue;
-    var x = i % N, y = (i / N) | 0, q = i * 4;
-    if ((x > 0 && G.gems[i - 1] && G.scrap[i - 1] > 0) ||
-        (x < N - 1 && G.gems[i + 1] && G.scrap[i + 1] > 0) ||
-        (y > 0 && G.gems[i - N] && G.scrap[i - N] > 0) ||
-        (y < N - 1 && G.gems[i + N] && G.scrap[i + N] > 0)) {
-      d[q] = gemc[0]; d[q + 1] = gemc[1]; d[q + 2] = gemc[2];
-    }
-  }
-  R3.oreAny = any;
-  R3.oreG.putImageData(R3.oreIm, 0, 0);
-  R3.oreTex = _r3dTexture(gl, R3.oreTex);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, R3.oreCv);
-}
-
 /* ------------------------------------------------------------------ the frame --
    Ground, then every entity, then the fog over the lot - the same order the 2D painter uses,
    with the depth buffer replacing the painter's sort for everything solid. */
@@ -232,32 +115,74 @@ function _r3dFrame(G) {
   }
   _r3dFog(G);
 
-  /* THE GROUND STAYS ONE STATIC QUAD OVER THE WHOLE MAP, and under a perspective camera that
-     is a claim worth measuring rather than assuming: with the eye a couple of screen-heights
-     in front of the focus, a good part of a 512-unit plane is BEHIND it. At the top zoom the
-     eye plane cuts the map 242 world units south of the focus, and with the camera against the
-     north edge the quad reaches 478 past that.
+  /* THE GROUND IS THE VISIBLE PATCH, REBUILT EACH FRAME, AND THE REASON IS DEPTH.
 
-     A vertex behind the eye is the classic way to smear a triangle across the screen - but
-     only if something clamps w, and nothing here does (see the note above R3D_MESH_VS). The
-     hardware's own homogeneous clipping cuts the quad at the eye plane instead, which is
-     exact. Rebuilding the quad per frame from the visible patch was written and measured
-     against this: at the map centre, at the north edge, at the top zoom, the two versions
-     differ on 0.26% to 1.4% of pixels and every bit of it is sub-texel rounding - the ground
-     texture lands within one texel of where the projection says in 99.2% of samples against
-     98.3% - and the clipped quad IS the visible patch, so it rasterises the same area either
-     way. The rebuild bought a rounding difference and an upload per frame, so it went. */
+     It used to be one static quad over the whole map, on a measurement that was real but
+     answered the wrong question. With the eye a couple of screen-heights in front of the
+     focus, a good part of a 512-unit plane is BEHIND it: at the top zoom the eye plane cuts
+     the map 242 units south of the focus, and against the north edge the quad reaches 478
+     past that. The hardware's homogeneous clipping cuts such a quad at the eye plane, and the
+     COLOUR that comes out is right - measured, the static quad and the rebuilt one differ on
+     0.26% to 1.4% of pixels and all of it is sub-texel rounding. So the rebuild looked like an
+     upload per frame bought for nothing, and it was removed.
+
+     The colour is not the only thing a triangle carries. Once clipped at w = 0, the surviving
+     vertices sit at enormous screen coordinates, and the perspective-correct interpolation of
+     z/w and 1/w across them loses all its precision - so the DEPTH the ground writes is
+     garbage. Measured on a bare map: the ground should span d = -14 to +11 across the screen
+     and instead writes a near-constant -88, which is off the map's whole depth range. Nothing
+     read the ground's depth before, so nothing noticed; the moment anything does - occlusion,
+     depth fog, anything sampling the buffer - the entire floor of the world is missing from
+     it, which is most of the frame.
+
+     The visible patch cannot have this problem, because by construction it stops where the
+     ground stops being visible: its near edge sits at d = 18 against an eye distance of 128,
+     so no vertex comes near the eye plane. Clamped to the map, so the area beyond the map's
+     edge shows the background exactly as it did before.
+
+     AND IT IS TESSELLATED, for a second reason that only shows up in the depth buffer. This
+     renderer writes LINEAR depth on purpose - gl_Position.z is -d/RANGE premultiplied by w, so
+     the buffer holds -d/RANGE rather than the usual function of 1/d. The usual one is chosen
+     precisely because it is linear in SCREEN space, which is the space the rasteriser
+     interpolates in; -d/RANGE is not, so depth is exact at a vertex and drifts between them,
+     by more the bigger the triangle. Measured at the screen centre, where the ground point is
+     the focus and d must be exactly 0: the map-sized quad wrote -88, the untessellated visible
+     patch -4.7, and an 8x8 patch 0.06. Small triangles have always hidden this - every mesh in
+     the scene is centimetres across - which is why it survived until something read the floor.
+
+     The cost is 384 vertices of a buffer that is rewritten anyway, against a frame that draws
+     tens of thousands. */
+  var EXT = RTS_N * RTS_TILE / 2;
   if (!R3.groundBuf) {
-    var EXT = RTS_N * RTS_TILE / 2;
-    var xz = [-EXT, -EXT, EXT, -EXT, EXT, EXT, -EXT, -EXT, EXT, EXT, -EXT, EXT];
-    var uv = [0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1];
-    function buf(a) {
-      var b = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, b);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(a), gl.STATIC_DRAW);
-      return b;
+    R3.groundBuf = gl.createBuffer();
+    R3.groundUV = gl.createBuffer();
+    R3.groundXZ = new Float32Array(R3D_GROUND_SUB * R3D_GROUND_SUB * 12);
+    R3.groundT = new Float32Array(R3D_GROUND_SUB * R3D_GROUND_SUB * 12);
+  }
+  {
+    var GM = RTS_TILE * 2;                  /* a two-cell margin, well clear of the eye plane */
+    var gx0 = Math.max(-EXT, vb.x0 - GM), gx1 = Math.min(EXT, vb.x1 + GM);
+    var gz0 = Math.max(-EXT, vb.z0 - GM), gz1 = Math.min(EXT, vb.z1 + GM);
+    var q = R3.groundXZ, t = R3.groundT, k = 0, gi, gj;
+    var gdx = (gx1 - gx0) / R3D_GROUND_SUB, gdz = (gz1 - gz0) / R3D_GROUND_SUB;
+    function gv(x, zz) {
+      q[k] = x; q[k + 1] = zz;
+      t[k] = (x + EXT) / (2 * EXT); t[k + 1] = (zz + EXT) / (2 * EXT);
+      k += 2;
     }
-    R3.groundBuf = buf(xz); R3.groundUV = buf(uv);
+    for (gj = 0; gj < R3D_GROUND_SUB; gj++) {
+      for (gi = 0; gi < R3D_GROUND_SUB; gi++) {
+        var ax = gx0 + gi * gdx, bx = ax + gdx;
+        var az = gz0 + gj * gdz, bz = az + gdz;
+        gv(ax, az); gv(bx, az); gv(bx, bz);
+        gv(ax, az); gv(bx, bz); gv(ax, bz);
+      }
+    }
+    R3.groundVerts = k / 2;
+    gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, q, gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundUV);
+    gl.bufferData(gl.ARRAY_BUFFER, t, gl.DYNAMIC_DRAW);
   }
 
   /* THE WORLD IS BUILT BEFORE THE SUN LOOKS AT IT. _r3dWorldTick used to run in the middle of
@@ -296,6 +221,13 @@ function _r3dFrame(G) {
     });
   }
 
+  /* THE FRAME GOES INTO A BUFFER, NOT ONTO THE CANVAS - see post3d.js. A canvas's depth
+     buffer cannot be sampled, and the ambient occlusion is computed from depth, so the world
+     and everything standing on it are drawn offscreen and composited at the end. A driver that
+     will not give the attachments leaves postReady false and everything below draws straight
+     to the canvas exactly as it did before. */
+  var post = R3.postReady && _r3dPostBegin(R3);
+
   gl.clearColor(0.016, 0.024, 0.035, 1);
   gl.enable(gl.DEPTH_TEST);
   gl.disable(gl.BLEND);
@@ -316,7 +248,7 @@ function _r3dFrame(G) {
   gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundUV);
   gl.enableVertexAttribArray(aT); gl.vertexAttribPointer(aT, 2, gl.FLOAT, false, 0, 0);
   gl.bindTexture(gl.TEXTURE_2D, R3.terrainTex);
-  gl.drawArrays(gl.TRIANGLES, 0, 6);
+  gl.drawArrays(gl.TRIANGLES, 0, R3.groundVerts);
 
   /* --- the ore stain, straight onto the ground it lies on ---
      The depth TEST is off for this, which also turns depth writing off: at this point the
@@ -329,7 +261,7 @@ function _r3dFrame(G) {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.bindTexture(gl.TEXTURE_2D, R3.oreTex);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.drawArrays(gl.TRIANGLES, 0, R3.groundVerts);
     gl.disable(gl.BLEND);
     gl.enable(gl.DEPTH_TEST);
   }
@@ -476,6 +408,12 @@ function _r3dFrame(G) {
   }
   paintEntities(MC);
 
+  /* THE OCCLUSION, AND BACK TO THE CANVAS. Everything with a surface has now been drawn, so
+     this is the last moment the depth buffer describes the world and nothing else. The fog
+     below deliberately lands AFTER it: the shroud is not a surface, so it must neither be
+     occluded nor occlude anything. */
+  if (post) _r3dPostEnd(R3, cam, invD);
+
   /* --- fog, over everything, depth ignored --- */
   gl.useProgram(R3.texP);
   gl.uniform4fv(gl.getUniformLocation(R3.texP, 'uCam'), cam);
@@ -491,6 +429,6 @@ function _r3dFrame(G) {
   gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundUV);
   gl.enableVertexAttribArray(aT); gl.vertexAttribPointer(aT, 2, gl.FLOAT, false, 0, 0);
   gl.bindTexture(gl.TEXTURE_2D, R3.fogTex);
-  gl.drawArrays(gl.TRIANGLES, 0, 6);
+  gl.drawArrays(gl.TRIANGLES, 0, R3.groundVerts);
   gl.disable(gl.BLEND);
 }

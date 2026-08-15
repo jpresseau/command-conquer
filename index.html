@@ -876,7 +876,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">c201b54 · 2026-08-15</div>
+  <div id="rtsBuild" title="build">c839c0b · 2026-08-15</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -20417,6 +20417,12 @@ var R3D_WMIN = 0.02;
    water is the specular sliding over a moving NORMAL, and the normal comes from the slope, so
    the short fast wave in the sum does most of the work at a fifth of the amplitude. Push this
    much past a third of a unit and a harbour starts to look like open ocean. */
+/* How finely the ground patch is cut up. See the note at the ground buffer in scene3d.js:
+   this renderer's depth is linear in view depth rather than in screen space, so it is exact at
+   a vertex and drifts across a triangle. 8x8 takes the drift at the screen centre from 4.7
+   world units to 0.06. */
+var R3D_GROUND_SUB = 8;
+
 var R3D_WAVE_AMP = 0.42;
 
 function _r3dShader(gl, type, src) {
@@ -20637,24 +20643,33 @@ function _r3dInit() {
      faces all land on the same patch of ground and blend over each other into a blot - has been
      replaced by the sun's depth map, which answers "is this pixel in shade" once by
      construction. */
-  var gl = cv.getContext('webgl', { antialias: true, alpha: false,
-                                    preserveDrawingBuffer: true });
+  /* WEBGL2 FIRST, WEBGL1 IF THERE IS NO 2. What 2 is wanted for is a depth TEXTURE, which the
+     ambient occlusion in post3d.js reads and which is core there and an extension here. Nothing
+     else in the mode had to move for it: every shader in this renderer is GLSL ES 1.00, and a
+     WebGL2 context compiles those unchanged. So this is one line, not a second pipeline, and a
+     browser with only WebGL1 still gets the whole mode - with the occlusion if it has
+     WEBGL_depth_texture, and without it if it does not. */
+  var opts = { antialias: true, alpha: false, preserveDrawingBuffer: true };
+  var gl = cv.getContext('webgl2', opts), gl2 = !!gl;
+  if (!gl) { gl = cv.getContext('webgl', opts); gl2 = false; }
   if (!gl) return null;
   var R3;
   try {
     R3 = {
-      on: false, cv: cv, gl: gl,
+      on: false, cv: cv, gl: gl, gl2: gl2,
       meshP: _r3dProgram(gl, R3D_MESH_VS, R3D_MESH_FS),
       texP: _r3dProgram(gl, R3D_TEX_VS, R3D_TEX_FS),
       mesh: {}, terrainTex: null, terrainDirty: true,
       fogCv: null, fogTex: null, fogDirty: true,
-      shadowReady: false,
+      shadowReady: false, postReady: false,
       cp: Math.cos(R3D_TILT), sp: Math.sin(R3D_TILT)
     };
   } catch (e) { return null; }
-  /* The shadow map is the one part of the mode that is allowed to fail on its own: a driver
-     that cannot give a 1024 render target still gets the world, just unshaded. */
+  /* The shadow map and the occlusion are the two parts of the mode allowed to fail on their
+     own: a driver that will not give a render target still gets the world, just unshaded and
+     unoccluded. */
   try { R3.shadowReady = _r3dShadowInit(R3); } catch (e) { R3.shadowReady = false; }
+  try { R3.postReady = _r3dPostInit(R3); } catch (e) { R3.postReady = false; }
   window._R3D = R3;
   return R3;
 }
@@ -20777,80 +20792,441 @@ function _r3dViewBounds() {
            z0: R.focus.z + vFar, z1: R.focus.z + vNear };
 }
 </script>
-<script>/* render3d/scene3d.js - what the 3D mode draws each frame: the mesh cache, the ground and
-   fog textures, and the frame walk. Part of rts.render3d.
+<script>/* render3d/post3d.js - the offscreen buffer the frame is drawn into, and the ambient occlusion
+   computed from its depth. Part of rts.render3d.
 
-   ONE BUFFER PER MODEL, ONE DRAW PER ENTITY. A model is fetched once - buildings through
-   _sprBuildingModel, units through _sprUnitModel, the same functions the sprite baker uses -
-   fan-triangulated with per-face normals, and uploaded. Every entity of that type then draws
-   the shared buffer with its own position, yaw and tint as uniforms. A battle is a few hundred
-   entities of a few dozen types, so the geometry cost is paid once at first sight of a type
-   and the per-frame cost is uniform uploads. */
+   WHAT THIS IS FOR. The sun's shadow map answers "does the sun reach this pixel", and it
+   transformed the map. It cannot answer the other question light asks, which is "how much of
+   the SKY can this pixel see" - and that is the one that makes things sit in a scene rather
+   than float on top of it. Every inside corner, every place a wall meets the ground, the gap
+   under a tank, the seam where a chimney leaves a roof: all of those see less sky than open
+   ground does, and all of them were rendered at exactly the same ambient as open ground. That
+   flat ambient constant is most of what still read as "flat" after the shadows landed.
 
-function _r3dBuildMesh(gl, faces) {
-  var pos = [], nrm = [], col = [];
-  for (var fi = 0; fi < faces.length; fi++) {
-    var f = faces[fi], v = f.v;
-    var r = f.c[0] / 255, gc = f.c[1] / 255, b = f.c[2] / 255;
-    /* face normal from the first three vertices - the primitives emit planar faces */
-    var ax = v[1][0] - v[0][0], ay = v[1][1] - v[0][1], az = v[1][2] - v[0][2];
-    var bx = v[2][0] - v[0][0], by = v[2][1] - v[0][1], bz = v[2][2] - v[0][2];
-    var nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
-    for (var k = 2; k < v.length; k++) {
-      var tri = [v[0], v[k - 1], v[k]];
-      for (var t = 0; t < 3; t++) {
-        pos.push(tri[t][0], tri[t][1], tri[t][2]);
-        nrm.push(nx, ny, nz);
-        col.push(r, gc, b);
-      }
-    }
+   Screen-space ambient occlusion approximates the answer from the depth buffer: around each
+   pixel, sample a hemisphere of points facing away from the surface, and count how many of
+   them are BEHIND something the camera can see. A point in an open field occludes nothing; a
+   point in a corner has half its hemisphere buried in wall.
+
+   THIS NEEDS THE FRAME IN A BUFFER IT CAN READ, which the mode did not have - it drew straight
+   to the canvas, and a canvas's depth buffer cannot be sampled. So the frame now goes to an
+   offscreen colour target with a depth TEXTURE attached, the occlusion is computed from that
+   depth, and the two are composited to the canvas at the end. The same buffer is what a
+   tonemap, a bloom and an FXAA pass would all read, so this is the plumbing for the rest of it
+   as much as it is this effect.
+
+   NO MATRICES, AGAIN, and here that is not just consistency - it falls out unusually well.
+   This renderer writes LINEAR depth: gl_Position.z is -d/RANGE premultiplied by w, so after
+   the hardware divide the depth buffer holds -d/RANGE exactly, and
+
+       d = (0.5 - texel) * 2 * RANGE
+
+   recovers camera depth with one subtract. The rest of the position comes back the same way
+   the vertex shader put it there, run backwards:
+
+       pw = 1 - d/D            u  = ndc.x * pw / uCam.z          sv = -ndc.y * pw / uCam.w
+
+   and (u, sv, d) is worth naming: sv and d are a plain ROTATION of world (z, y) by the camera
+   tilt, and u is world x untouched. So the three are an orthonormal frame of world space, and
+   a distance measured in them is a distance in WORLD UNITS. The occlusion radius below is
+   therefore in the same units as everything else on the map - it is a third of a cell, not a
+   tuned screen-space fudge that changes meaning with the zoom.
+
+   NORMALS COME FROM THE DEPTH, NOT FROM A G-BUFFER. Two neighbouring depths reconstruct two
+   more positions, and their cross product is the surface normal - no second attachment, no
+   second pass over the geometry. Sampled on BOTH sides and the nearer difference kept, because
+   at a silhouette the far side straddles two surfaces and its cross product is garbage; that
+   is the difference between clean edges and a dark halo around every unit.
+
+   WHY WEBGL2 IS TRIED FIRST. Sampling a depth attachment needs a depth texture, which is core
+   in WebGL2 and an extension on WebGL1. The context request now asks for WebGL2 and falls back
+   to WebGL1, and every existing shader in this renderer is GLSL ES 1.00 - which a WebGL2
+   context compiles unchanged, so nothing else in the mode had to move. Where neither a WebGL2
+   context nor WEBGL_depth_texture is available, R3.postReady stays false and the frame is
+   drawn exactly as it was before this file existed. */
+
+/* Half resolution. Occlusion is a low-frequency signal - it is blurred immediately afterwards
+   anyway - and this is the difference between a pass that costs a quarter of the frame and one
+   that costs most of it. */
+var R3D_AO_DIV = 2;
+/* The hemisphere radius, IN WORLD UNITS (see the note above - the reconstruction frame is
+   orthonormal, so this is a real distance). A cell is RTS_TILE across, so 1.6 is about a
+   three quarters of one: wide enough that the darkening at a wall's foot READS at the zoom the
+   game is played at, narrow enough that a building does not shade the road on the far side of
+   itself. Tried at 1.6 first, which is correct-looking in the occlusion buffer and invisible in
+   the frame - it moved 0.55% of pixels by an average of 4 levels. */
+var R3D_AO_RADIUS = 3.0;
+/* How far a surface may be from a sample before the sample stops counting - without this a
+   building occludes ground a hundred units behind it, which reads as a dark smear following
+   every silhouette. In world units, like the radius, and it has to clear the height of the
+   things that do the occluding: a war factory's roof is about seven units above the ground it
+   should be darkening, so a range of 3.2 was attenuating exactly the case this is for. */
+var R3D_AO_RANGE = 8.0;
+/* Lifted off the surface so it does not occlude itself, the same failure the shadow map's bias
+   answers. Small: the reconstruction is exact rather than interpolated, so this only has to
+   cover the depth buffer's own quantisation. */
+var R3D_AO_BIAS = 0.045;
+/* How dark a fully enclosed pixel goes. Occlusion is not a shadow and must not read as one -
+   the sun's map draws those, and an AO strong enough to be noticed on its own is the effect
+   everyone recognises as "the screen-space AO is turned up too high". */
+var R3D_AO_STRENGTH = 1.6;
+var R3D_AO_SAMPLES = 12;
+
+/* THE HEMISPHERE, as a fixed set of offsets rather than a random one per pixel. A golden-angle
+   spiral over the disc, lifted onto the hemisphere, with the radius growing as a power so the
+   samples bunch toward the centre - which is where occlusion actually varies. Fixed means the
+   pattern is the same every frame, so the AO does not crawl when the camera stands still. */
+var R3D_AO_KERNEL = (function () {
+  var k = [], i, GA = Math.PI * (3 - Math.sqrt(5));
+  for (i = 0; i < R3D_AO_SAMPLES; i++) {
+    var t = (i + 0.5) / R3D_AO_SAMPLES;
+    /* Cosine-weighted over the hemisphere: dense near the normal, thinning toward the tangent
+       plane, which is how a surface actually gathers light. */
+    var cy = Math.sqrt(1 - t), sy = Math.sqrt(t);
+    var a = i * GA;
+    /* THE RADIUS IS DECORRELATED FROM THE DIRECTION, and that is the whole point of the golden
+       ratio here rather than another function of i. Tie the two together - short samples near
+       the normal, long ones near the tangent - and every short sample points straight up, where
+       nothing is ever in the way, while every long one lies flat on the surface, where nothing
+       is either. Measured, that kernel found almost no occlusion at all outside the concave
+       detail of a roof. Walking the radius by the golden ratio puts long samples along the
+       normal and short ones along the tangent as well. */
+    var s = 0.30 + 0.70 * ((i * 0.6180339887) % 1);
+    k.push(Math.cos(a) * sy * s, cy * s, Math.sin(a) * sy * s);
   }
-  /* Positions stay float; normals and colours pack to bytes. At this system's scale - the
-     world batches alone are several hundred thousand triangles - attribute width is the real
-     budget: floats everywhere is 36 bytes a vertex and packing the two attributes that never
-     needed the precision brings it to 18, which is the difference between a phone keeping the
-     3D mode and dropping the tab. Normals are normalised here because Int8 cannot carry the
-     unnormalised cross products the emitter produces; the shader normalises anyway, so
-     nothing downstream changes. */
-  function fbuf(a) {
-    var b2 = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, b2);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(a), gl.STATIC_DRAW);
-    return b2;
-  }
-  var nrm8 = new Int8Array(nrm.length), col8 = new Uint8Array(col.length);
-  for (var ni = 0; ni < nrm.length; ni += 3) {
-    var nl = Math.hypot(nrm[ni], nrm[ni + 1], nrm[ni + 2]) || 1;
-    nrm8[ni] = Math.round(nrm[ni] / nl * 127);
-    nrm8[ni + 1] = Math.round(nrm[ni + 1] / nl * 127);
-    nrm8[ni + 2] = Math.round(nrm[ni + 2] / nl * 127);
-  }
-  for (var ci = 0; ci < col.length; ci++) col8[ci] = Math.round(col[ci] * 255);
-  function bbuf(a) {
-    var b3 = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, b3);
-    gl.bufferData(gl.ARRAY_BUFFER, a, gl.STATIC_DRAW);
-    return b3;
-  }
-  return { p: fbuf(pos), n: bbuf(nrm8), c: bbuf(col8), verts: pos.length / 3 };
+  return k;
+})();
+
+/* Reconstruction, shared by the occlusion pass and its blur. uProj packs the four numbers the
+   vertex shader used - the two clip scales, 1/eye distance, and the depth range - so this is
+   the same arithmetic run backwards rather than a second opinion about the camera. */
+var R3D_AO_RECON =
+  'uniform sampler2D uDepth; uniform vec4 uProj;' +
+  'float _aoD(vec2 uv){ return (0.5 - texture2D(uDepth, uv).r) * 2.0 * uProj.w; }' +
+  /* the full position, in the orthonormal (across, down-screen, into-screen) frame */
+  'vec3 _aoP(vec2 uv, float d){' +
+  '  float pw = 1.0 - d * uProj.z;' +
+  '  return vec3((uv.x * 2.0 - 1.0) * pw / uProj.x,' +
+  '              -(uv.y * 2.0 - 1.0) * pw / uProj.y, d);' +
+  '}' +
+  /* and the inverse - a point in that frame back to a texture coordinate */
+  'vec2 _aoUV(vec3 p){' +
+  '  float pw = 1.0 - p.z * uProj.z;' +
+  '  return vec2(p.x * uProj.x / pw * 0.5 + 0.5, -p.y * uProj.y / pw * 0.5 + 0.5);' +
+  '}';
+
+var R3D_QUAD_VS =
+  'attribute vec2 aP; varying vec2 vT;' +
+  'void main(){ vT = aP * 0.5 + 0.5; gl_Position = vec4(aP, 0.0, 1.0); }';
+
+var R3D_AO_FS =
+  'precision highp float; varying vec2 vT; uniform vec2 uTexel;' +
+  R3D_AO_RECON +
+  'uniform vec3 uK[' + R3D_AO_SAMPLES + '];' +
+  /* THE NORMAL, FROM THE NEARER NEIGHBOUR ON EACH AXIS. Taking the forward difference alone
+     puts a one-pixel band of the wrong surface along every silhouette, and its cross product
+     points somewhere arbitrary - which shows up as a dark outline around every unit. Comparing
+     the forward and backward depths and keeping whichever is closer to this pixel's own keeps
+     the difference on THIS surface. */
+  'vec3 _aoN(vec2 uv, vec3 P){' +
+  '  float dxp = _aoD(uv + vec2(uTexel.x, 0.0)), dxm = _aoD(uv - vec2(uTexel.x, 0.0));' +
+  '  float dyp = _aoD(uv + vec2(0.0, uTexel.y)), dym = _aoD(uv - vec2(0.0, uTexel.y));' +
+  '  vec3 ex = abs(dxp - P.z) < abs(dxm - P.z)' +
+  '          ? _aoP(uv + vec2(uTexel.x, 0.0), dxp) - P' +
+  '          : P - _aoP(uv - vec2(uTexel.x, 0.0), dxm);' +
+  '  vec3 ey = abs(dyp - P.z) < abs(dym - P.z)' +
+  '          ? _aoP(uv + vec2(0.0, uTexel.y), dyp) - P' +
+  '          : P - _aoP(uv - vec2(0.0, uTexel.y), dym);' +
+  '  vec3 n = cross(ex, ey);' +
+  '  float m = length(n);' +
+  '  if (m < 1e-8) return vec3(0.0, 0.0, 1.0);' +
+  '  n /= m;' +
+  /* AND TURNED TO FACE THE EYE. Which way round the cross product comes out depends on the
+     handedness of the frame and on which neighbour each difference happened to pick, and a
+     normal pointing INTO the surface buries the whole hemisphere in solid geometry - every
+     sample reads as occluded and the entire frame goes dark. (Measured: 98% of pixels
+     darkened, by an average of 17 levels.) A surface the camera can see always faces the eye,
+     which sits at (0, 0, D) in this frame, so the test needs nothing else to be known. */
+  '  return dot(n, vec3(0.0, 0.0, 1.0 / uProj.z) - P) < 0.0 ? -n : n;' +
+  '}' +
+  'void main(){' +
+  '  float raw = texture2D(uDepth, vT).r;' +
+  /* nothing was drawn here - the clear value. Sky occludes nothing. */
+  '  if (raw > 0.99999) { gl_FragColor = vec4(1.0); return; }' +
+  '  float d = (0.5 - raw) * 2.0 * uProj.w;' +
+  '  vec3 P = _aoP(vT, d);' +
+  '  vec3 N = _aoN(vT, P);' +
+  /* A PER-PIXEL TURN OF THE PATTERN. Twelve fixed samples on their own tile visibly - the
+     same twelve directions at every pixel put a repeating rosette over the whole frame. Turning
+     the kernel by a hash of the pixel trades that for noise, and noise is what the blur below
+     is for. */
+  '  float a = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) * 6.2831853;' +
+  '  float ca = cos(a), sa = sin(a);' +
+  /* the hemisphere basis: any tangent will do, so build one that cannot degenerate */
+  '  vec3 T = abs(N.y) < 0.9 ? normalize(cross(vec3(0.0, 1.0, 0.0), N))' +
+  '                          : normalize(cross(vec3(1.0, 0.0, 0.0), N));' +
+  '  vec3 B = cross(N, T);' +
+  '  float occ = 0.0;' +
+  '  for (int i = 0; i < ' + R3D_AO_SAMPLES + '; i++) {' +
+  '    vec3 k = uK[i];' +
+  '    vec3 kr = vec3(k.x * ca - k.z * sa, k.y, k.x * sa + k.z * ca);' +
+  '    vec3 S = P + (T * kr.x + N * kr.y + B * kr.z) * ' + R3D_AO_RADIUS.toFixed(3) + ';' +
+  '    vec2 su = _aoUV(S);' +
+  '    if (su.x < 0.0 || su.x > 1.0 || su.y < 0.0 || su.y > 1.0) continue;' +
+  '    float sraw = texture2D(uDepth, su).r;' +
+  '    if (sraw > 0.99999) continue;' +
+  '    float sd = (0.5 - sraw) * 2.0 * uProj.w;' +
+  /* d grows TOWARD the eye, so the surface hides the sample when its depth is the larger */
+  '    float hidden = step(S.z + ' + R3D_AO_BIAS.toFixed(3) + ', sd);' +
+  /* and it only counts if it is near enough to be the same piece of world */
+  '    float near = smoothstep(0.0, 1.0, ' + R3D_AO_RANGE.toFixed(3) +
+       ' / max(abs(sd - P.z), 0.0001));' +
+  '    occ += hidden * near;' +
+  '  }' +
+  '  occ = occ / float(' + R3D_AO_SAMPLES + ') * ' + R3D_AO_STRENGTH.toFixed(3) + ';' +
+  '  gl_FragColor = vec4(clamp(1.0 - occ, 0.0, 1.0));' +
+  '}';
+
+/* THE BLUR IS DEPTH-AWARE, and it has to be. A plain box blur pulls the dark of a tank's
+   underside out across the ground beside it, which is the halo that makes screen-space AO look
+   like a sticker. Weighting each tap by how close its depth is to the centre's keeps the blur
+   inside one surface. Separable: this program runs twice, with uDir picking the axis. */
+var R3D_AO_BLUR_FS =
+  'precision highp float; varying vec2 vT; uniform sampler2D uAO;' +
+  'uniform vec2 uTexel; uniform vec2 uDir;' +
+  R3D_AO_RECON +
+  'void main(){' +
+  '  float c = _aoD(vT), s = 0.0, w = 0.0;' +
+  '  for (int i = -3; i <= 3; i++) {' +
+  '    vec2 o = uDir * uTexel * float(i);' +
+  '    float wd = 1.0 / (1.0 + abs(_aoD(vT + o) - c) * 4.0);' +
+  '    s += texture2D(uAO, vT + o).r * wd;' +
+  '    w += wd;' +
+  '  }' +
+  '  gl_FragColor = vec4(s / w);' +
+  '}';
+
+/* THE COMPOSITE, WHICH ALSO HAS TO PUT THE ANTIALIASING BACK.
+
+   Drawing into a buffer costs the canvas's multisampling: the canvas was created with
+   antialias:true and an offscreen colour texture has no such thing, so every silhouette in the
+   scene came back a stair. Measured against the direct-to-canvas frame, that is about 2% of
+   pixels moving by up to 88 levels - small in count, and exactly the pixels an eye follows.
+
+   Multisampling the offscreen target instead is the obvious repair and it is not available
+   here: the occlusion needs a depth TEXTURE, and resolving a multisampled depth buffer into
+   one is not something WebGL2 will do. So the edges are put back in this pass, by FXAA, which
+   is the standard answer for precisely this situation - a pipeline that renders through a
+   buffer cannot use MSAA and reconstructs its edges from the finished image instead.
+
+   It runs on the SCENE, before the occlusion is applied, not after. The occlusion is a
+   half-resolution, twice-blurred signal with no edges of its own to find; running the edge
+   filter over the composite would only let it smear the AO across silhouettes it should stop
+   at.
+
+   Occlusion multiplies the frame COOL rather than toward black, for the reason the mesh shader
+   spells out about its shading ramp: this scene's shade is blue-grey, not absence of light, and
+   darkening straight down the channels takes the sky back out of every corner the AO found. */
+var R3D_AO_RESOLVE_FS =
+  'precision highp float; varying vec2 vT;' +
+  'uniform sampler2D uScene; uniform sampler2D uAO; uniform float uAOAmt;' +
+  'uniform vec2 uTexel; uniform float uAA;' +
+  'float _lum(vec3 c){ return dot(c, vec3(0.299, 0.587, 0.114)); }' +
+  'vec3 _fxaa(vec2 uv){' +
+  '  vec3 mC = texture2D(uScene, uv).rgb;' +
+  '  vec3 nw = texture2D(uScene, uv + vec2(-1.0, -1.0) * uTexel).rgb;' +
+  '  vec3 ne = texture2D(uScene, uv + vec2( 1.0, -1.0) * uTexel).rgb;' +
+  '  vec3 sw = texture2D(uScene, uv + vec2(-1.0,  1.0) * uTexel).rgb;' +
+  '  vec3 se = texture2D(uScene, uv + vec2( 1.0,  1.0) * uTexel).rgb;' +
+  '  float lnw = _lum(nw), lne = _lum(ne), lsw = _lum(sw), lse = _lum(se), lm = _lum(mC);' +
+  '  float lo = min(lm, min(min(lnw, lne), min(lsw, lse)));' +
+  '  float hi = max(lm, max(max(lnw, lne), max(lsw, lse)));' +
+  /* a flat neighbourhood has no edge to find, and blurring it is pure loss on pixel art */
+  '  if (hi - lo < max(0.1600, hi * 0.400)) return mC;' +
+  '  vec2 dir = vec2(-((lnw + lne) - (lsw + lse)), ((lnw + lsw) - (lne + lse)));' +
+  '  float red = max((lnw + lne + lsw + lse) * 0.03125, 0.0078125);' +
+  '  float rcp = 1.0 / (min(abs(dir.x), abs(dir.y)) + red);' +
+  '  dir = clamp(dir * rcp, -8.0, 8.0) * uTexel;' +
+  '  vec3 a = 0.5 * (texture2D(uScene, uv + dir * (1.0 / 3.0 - 0.5)).rgb +' +
+  '                  texture2D(uScene, uv + dir * (2.0 / 3.0 - 0.5)).rgb);' +
+  '  vec3 b = a * 0.5 + 0.25 * (texture2D(uScene, uv - dir * 0.5).rgb +' +
+  '                             texture2D(uScene, uv + dir * 0.5).rgb);' +
+  '  float lb = _lum(b);' +
+  '  return (lb < lo || lb > hi) ? a : b;' +
+  '}' +
+  'void main(){' +
+  '  vec3 c = mix(texture2D(uScene, vT).rgb, _fxaa(vT), uAA);' +
+  '  float ao = mix(1.0, texture2D(uAO, vT).r, uAOAmt);' +
+  '  gl_FragColor = vec4(c * mix(vec3(0.62, 0.66, 0.78), vec3(1.0), ao), 1.0);' +
+  '}';
+
+/* --------------------------------------------------------------------------- setup -- */
+
+function _r3dPostTex(gl, w, h, internal, format, type, filter) {
+  var t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, format, type, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return t;
 }
 
-/* The cache key carries everything that changes the geometry or its colours: type, side,
-   turret half, prone. A miss builds the model through the same functions the baker uses, so
-   the two pipelines cannot drift apart - there is no second copy of any shape. */
-function _r3dMesh(kind, def, side, part, prone) {
-  var R3 = window._R3D, key = kind + ':' + def + ':' + side + ':' + (part || '') + ':' + (prone ? 1 : 0);
-  var m = R3.mesh[key];
-  if (m !== undefined) return m;
-  var faces = null;
-  try {
-    faces = (kind === 'b') ? _sprBuildingModel(def, side)
-                           : _sprUnitModel(def, side, !!prone, part || null);
-  } catch (e) { faces = null; }
-  m = (faces && faces.length) ? _r3dBuildMesh(R3.gl, faces) : null;
-  R3.mesh[key] = m;
-  return m;
+/* Sized to the canvas, so this reruns whenever the canvas does. Returns false rather than
+   throwing on an incomplete framebuffer - a driver that will not give one of these attachments
+   gets the mode without the effect, not a black screen. */
+function _r3dPostSize(R3) {
+  var gl = R3.gl, w = R3.cv.width, h = R3.cv.height;
+  if (!w || !h) return false;
+  if (R3.postW === w && R3.postH === h) return true;
+  var aw = Math.max(1, w / R3D_AO_DIV | 0), ah = Math.max(1, h / R3D_AO_DIV | 0);
+
+  ['sceneTex', 'sceneDepth', 'aoTex', 'aoTex2'].forEach(function (k) {
+    if (R3[k]) { gl.deleteTexture(R3[k]); R3[k] = null; }
+  });
+  R3.sceneTex = _r3dPostTex(gl, w, h, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR);
+  R3.sceneDepth = _r3dPostTex(gl, w, h, R3.depthInternal, gl.DEPTH_COMPONENT,
+                              R3.depthType, gl.NEAREST);
+  R3.aoTex = _r3dPostTex(gl, aw, ah, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR);
+  R3.aoTex2 = _r3dPostTex(gl, aw, ah, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR);
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, R3.sceneFbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, R3.sceneTex, 0);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, R3.sceneDepth, 0);
+  var ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  if (!ok) return false;
+
+  R3.postW = w; R3.postH = h; R3.aoW = aw; R3.aoH = ah;
+  return true;
 }
+
+function _r3dPostInit(R3) {
+  var gl = R3.gl;
+  /* WebGL2 has depth textures in core. On WebGL1 the extension provides the same enums, and
+     its 24-bit-in-an-int form is what this asks for either way. */
+  if (R3.gl2) {
+    R3.depthInternal = gl.DEPTH_COMPONENT24;
+    R3.depthType = gl.UNSIGNED_INT;
+  } else {
+    if (!gl.getExtension('WEBGL_depth_texture')) return false;
+    R3.depthInternal = gl.DEPTH_COMPONENT;
+    R3.depthType = gl.UNSIGNED_INT;
+  }
+  R3.aoP = _r3dProgram(gl, R3D_QUAD_VS, R3D_AO_FS);
+  R3.aoBlurP = _r3dProgram(gl, R3D_QUAD_VS, R3D_AO_BLUR_FS);
+  R3.aoResolveP = _r3dProgram(gl, R3D_QUAD_VS, R3D_AO_RESOLVE_FS);
+  R3.sceneFbo = gl.createFramebuffer();
+  R3.aoFbo = gl.createFramebuffer();
+  R3.quadBuf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, R3.quadBuf);
+  gl.bufferData(gl.ARRAY_BUFFER,
+                new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  return _r3dPostSize(R3);
+}
+
+/* ---------------------------------------------------------------------------- pass -- */
+
+/* One triangle rather than two, which is the usual way to cover a viewport: the shared edge of
+   a quad is rasterised twice, and there is no seam to get wrong when there is no seam. */
+function _r3dQuad(R3, P) {
+  var gl = R3.gl;
+  gl.useProgram(P);
+  gl.bindBuffer(gl.ARRAY_BUFFER, R3.quadBuf);
+  var a = gl.getAttribLocation(P, 'aP');
+  gl.enableVertexAttribArray(a);
+  gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+/* Everything the reconstruction needs, from the same numbers the vertex shader was given. */
+function _r3dPostProj(R3, P, cam, invD) {
+  R3.gl.uniform4f(R3.gl.getUniformLocation(P, 'uProj'),
+                  cam[2], cam[3], invD, R3D_DEPTH_RANGE);
+}
+
+/* Redirect the frame into the offscreen buffer. Called where the frame used to clear. */
+function _r3dPostBegin(R3) {
+  var gl = R3.gl;
+  if (!_r3dPostSize(R3)) { R3.postReady = false; return false; }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, R3.sceneFbo);
+  gl.viewport(0, 0, R3.postW, R3.postH);
+  return true;
+}
+
+/* Occlude, blur it twice, and put the result on the canvas. Leaves the default framebuffer
+   bound and the full viewport set, so the fog pass that follows draws straight to the screen -
+   the shroud is not a surface and must not be occluded, nor occlude anything. */
+function _r3dPostEnd(R3, cam, invD) {
+  var gl = R3.gl, i;
+  gl.disable(gl.DEPTH_TEST);
+  gl.disable(gl.BLEND);
+  gl.depthMask(false);
+
+  /* --- occlusion, at half resolution --- */
+  gl.bindFramebuffer(gl.FRAMEBUFFER, R3.aoFbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, R3.aoTex, 0);
+  gl.viewport(0, 0, R3.aoW, R3.aoH);
+  gl.useProgram(R3.aoP);
+  _r3dPostProj(R3, R3.aoP, cam, invD);
+  gl.uniform2f(gl.getUniformLocation(R3.aoP, 'uTexel'), 1 / R3.aoW, 1 / R3.aoH);
+  gl.uniform3fv(gl.getUniformLocation(R3.aoP, 'uK'), R3D_AO_KERNEL);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, R3.sceneDepth);
+  gl.uniform1i(gl.getUniformLocation(R3.aoP, 'uDepth'), 0);
+  _r3dQuad(R3, R3.aoP);
+
+  /* --- the two blur axes, ping-ponging between the pair of half-res targets --- */
+  gl.useProgram(R3.aoBlurP);
+  _r3dPostProj(R3, R3.aoBlurP, cam, invD);
+  gl.uniform2f(gl.getUniformLocation(R3.aoBlurP, 'uTexel'), 1 / R3.aoW, 1 / R3.aoH);
+  gl.uniform1i(gl.getUniformLocation(R3.aoBlurP, 'uDepth'), 0);
+  gl.uniform1i(gl.getUniformLocation(R3.aoBlurP, 'uAO'), 1);
+  gl.activeTexture(gl.TEXTURE1);
+  for (i = 0; i < 2; i++) {
+    var src = i ? R3.aoTex2 : R3.aoTex, dst = i ? R3.aoTex : R3.aoTex2;
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, dst, 0);
+    gl.uniform2f(gl.getUniformLocation(R3.aoBlurP, 'uDir'), i ? 0 : 1, i ? 1 : 0);
+    gl.bindTexture(gl.TEXTURE_2D, src);
+    _r3dQuad(R3, R3.aoBlurP);
+  }
+
+  /* --- and onto the canvas --- */
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, R3.postW, R3.postH);
+  gl.useProgram(R3.aoResolveP);
+  gl.uniform1i(gl.getUniformLocation(R3.aoResolveP, 'uScene'), 0);
+  gl.uniform1i(gl.getUniformLocation(R3.aoResolveP, 'uAO'), 1);
+  /* R3.aoAmt exists so the occlusion can be taken out WITHOUT taking the offscreen buffer out
+     with it. Turning postReady off does both at once, and the two have separate effects on the
+     picture - the buffer has no multisampling, so a postReady A/B measures the occlusion and
+     the lost antialiasing added together and cannot tell which is which. */
+  gl.uniform1f(gl.getUniformLocation(R3.aoResolveP, 'uAOAmt'),
+               R3.aoAmt === undefined ? 1 : R3.aoAmt);
+  /* R3.aaAmt, for the same reason as R3.aoAmt: the edge filter and the occlusion are separate
+     claims and a spec has to be able to grade one without the other moving. */
+  gl.uniform1f(gl.getUniformLocation(R3.aoResolveP, 'uAA'),
+               R3.aaAmt === undefined ? 1 : R3.aaAmt);
+  gl.uniform2f(gl.getUniformLocation(R3.aoResolveP, 'uTexel'), 1 / R3.postW, 1 / R3.postH);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, R3.sceneTex);
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, R3.aoTex);
+  _r3dQuad(R3, R3.aoResolveP);
+
+  gl.activeTexture(gl.TEXTURE0);
+  gl.depthMask(true);
+  gl.enable(gl.DEPTH_TEST);
+}
+</script>
+<script>/* render3d/ground3d.js - the textures the ground is draped in: the terrain canvas, the
+   shroud, and the ore field's colour. Part of rts.render3d.
+
+   Split out of scene3d.js, which was over this project's per-file limit; the frame walk and
+   the mesh cache stayed there. These three share one idea and nothing else in the file needs
+   them: each is a texture rebuilt from game state and drawn on the same ground patch.
+*/
 
 /* ------------------------------------------------------------------ textures --
    The ground texture IS the 2D renderer's baked terrain canvas, so scorch marks, craters and
@@ -20968,6 +21344,81 @@ function _r3dOreTex(G) {
   R3.oreTex = _r3dTexture(gl, R3.oreTex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, R3.oreCv);
 }
+</script>
+<script>/* render3d/scene3d.js - what the 3D mode draws each frame: the mesh cache, the ground and
+   fog textures, and the frame walk. Part of rts.render3d.
+
+   ONE BUFFER PER MODEL, ONE DRAW PER ENTITY. A model is fetched once - buildings through
+   _sprBuildingModel, units through _sprUnitModel, the same functions the sprite baker uses -
+   fan-triangulated with per-face normals, and uploaded. Every entity of that type then draws
+   the shared buffer with its own position, yaw and tint as uniforms. A battle is a few hundred
+   entities of a few dozen types, so the geometry cost is paid once at first sight of a type
+   and the per-frame cost is uniform uploads. */
+
+function _r3dBuildMesh(gl, faces) {
+  var pos = [], nrm = [], col = [];
+  for (var fi = 0; fi < faces.length; fi++) {
+    var f = faces[fi], v = f.v;
+    var r = f.c[0] / 255, gc = f.c[1] / 255, b = f.c[2] / 255;
+    /* face normal from the first three vertices - the primitives emit planar faces */
+    var ax = v[1][0] - v[0][0], ay = v[1][1] - v[0][1], az = v[1][2] - v[0][2];
+    var bx = v[2][0] - v[0][0], by = v[2][1] - v[0][1], bz = v[2][2] - v[0][2];
+    var nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+    for (var k = 2; k < v.length; k++) {
+      var tri = [v[0], v[k - 1], v[k]];
+      for (var t = 0; t < 3; t++) {
+        pos.push(tri[t][0], tri[t][1], tri[t][2]);
+        nrm.push(nx, ny, nz);
+        col.push(r, gc, b);
+      }
+    }
+  }
+  /* Positions stay float; normals and colours pack to bytes. At this system's scale - the
+     world batches alone are several hundred thousand triangles - attribute width is the real
+     budget: floats everywhere is 36 bytes a vertex and packing the two attributes that never
+     needed the precision brings it to 18, which is the difference between a phone keeping the
+     3D mode and dropping the tab. Normals are normalised here because Int8 cannot carry the
+     unnormalised cross products the emitter produces; the shader normalises anyway, so
+     nothing downstream changes. */
+  function fbuf(a) {
+    var b2 = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, b2);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(a), gl.STATIC_DRAW);
+    return b2;
+  }
+  var nrm8 = new Int8Array(nrm.length), col8 = new Uint8Array(col.length);
+  for (var ni = 0; ni < nrm.length; ni += 3) {
+    var nl = Math.hypot(nrm[ni], nrm[ni + 1], nrm[ni + 2]) || 1;
+    nrm8[ni] = Math.round(nrm[ni] / nl * 127);
+    nrm8[ni + 1] = Math.round(nrm[ni + 1] / nl * 127);
+    nrm8[ni + 2] = Math.round(nrm[ni + 2] / nl * 127);
+  }
+  for (var ci = 0; ci < col.length; ci++) col8[ci] = Math.round(col[ci] * 255);
+  function bbuf(a) {
+    var b3 = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, b3);
+    gl.bufferData(gl.ARRAY_BUFFER, a, gl.STATIC_DRAW);
+    return b3;
+  }
+  return { p: fbuf(pos), n: bbuf(nrm8), c: bbuf(col8), verts: pos.length / 3 };
+}
+
+/* The cache key carries everything that changes the geometry or its colours: type, side,
+   turret half, prone. A miss builds the model through the same functions the baker uses, so
+   the two pipelines cannot drift apart - there is no second copy of any shape. */
+function _r3dMesh(kind, def, side, part, prone) {
+  var R3 = window._R3D, key = kind + ':' + def + ':' + side + ':' + (part || '') + ':' + (prone ? 1 : 0);
+  var m = R3.mesh[key];
+  if (m !== undefined) return m;
+  var faces = null;
+  try {
+    faces = (kind === 'b') ? _sprBuildingModel(def, side)
+                           : _sprUnitModel(def, side, !!prone, part || null);
+  } catch (e) { faces = null; }
+  m = (faces && faces.length) ? _r3dBuildMesh(R3.gl, faces) : null;
+  R3.mesh[key] = m;
+  return m;
+}
 
 /* ------------------------------------------------------------------ the frame --
    Ground, then every entity, then the fog over the lot - the same order the 2D painter uses,
@@ -21011,32 +21462,74 @@ function _r3dFrame(G) {
   }
   _r3dFog(G);
 
-  /* THE GROUND STAYS ONE STATIC QUAD OVER THE WHOLE MAP, and under a perspective camera that
-     is a claim worth measuring rather than assuming: with the eye a couple of screen-heights
-     in front of the focus, a good part of a 512-unit plane is BEHIND it. At the top zoom the
-     eye plane cuts the map 242 world units south of the focus, and with the camera against the
-     north edge the quad reaches 478 past that.
+  /* THE GROUND IS THE VISIBLE PATCH, REBUILT EACH FRAME, AND THE REASON IS DEPTH.
 
-     A vertex behind the eye is the classic way to smear a triangle across the screen - but
-     only if something clamps w, and nothing here does (see the note above R3D_MESH_VS). The
-     hardware's own homogeneous clipping cuts the quad at the eye plane instead, which is
-     exact. Rebuilding the quad per frame from the visible patch was written and measured
-     against this: at the map centre, at the north edge, at the top zoom, the two versions
-     differ on 0.26% to 1.4% of pixels and every bit of it is sub-texel rounding - the ground
-     texture lands within one texel of where the projection says in 99.2% of samples against
-     98.3% - and the clipped quad IS the visible patch, so it rasterises the same area either
-     way. The rebuild bought a rounding difference and an upload per frame, so it went. */
+     It used to be one static quad over the whole map, on a measurement that was real but
+     answered the wrong question. With the eye a couple of screen-heights in front of the
+     focus, a good part of a 512-unit plane is BEHIND it: at the top zoom the eye plane cuts
+     the map 242 units south of the focus, and against the north edge the quad reaches 478
+     past that. The hardware's homogeneous clipping cuts such a quad at the eye plane, and the
+     COLOUR that comes out is right - measured, the static quad and the rebuilt one differ on
+     0.26% to 1.4% of pixels and all of it is sub-texel rounding. So the rebuild looked like an
+     upload per frame bought for nothing, and it was removed.
+
+     The colour is not the only thing a triangle carries. Once clipped at w = 0, the surviving
+     vertices sit at enormous screen coordinates, and the perspective-correct interpolation of
+     z/w and 1/w across them loses all its precision - so the DEPTH the ground writes is
+     garbage. Measured on a bare map: the ground should span d = -14 to +11 across the screen
+     and instead writes a near-constant -88, which is off the map's whole depth range. Nothing
+     read the ground's depth before, so nothing noticed; the moment anything does - occlusion,
+     depth fog, anything sampling the buffer - the entire floor of the world is missing from
+     it, which is most of the frame.
+
+     The visible patch cannot have this problem, because by construction it stops where the
+     ground stops being visible: its near edge sits at d = 18 against an eye distance of 128,
+     so no vertex comes near the eye plane. Clamped to the map, so the area beyond the map's
+     edge shows the background exactly as it did before.
+
+     AND IT IS TESSELLATED, for a second reason that only shows up in the depth buffer. This
+     renderer writes LINEAR depth on purpose - gl_Position.z is -d/RANGE premultiplied by w, so
+     the buffer holds -d/RANGE rather than the usual function of 1/d. The usual one is chosen
+     precisely because it is linear in SCREEN space, which is the space the rasteriser
+     interpolates in; -d/RANGE is not, so depth is exact at a vertex and drifts between them,
+     by more the bigger the triangle. Measured at the screen centre, where the ground point is
+     the focus and d must be exactly 0: the map-sized quad wrote -88, the untessellated visible
+     patch -4.7, and an 8x8 patch 0.06. Small triangles have always hidden this - every mesh in
+     the scene is centimetres across - which is why it survived until something read the floor.
+
+     The cost is 384 vertices of a buffer that is rewritten anyway, against a frame that draws
+     tens of thousands. */
+  var EXT = RTS_N * RTS_TILE / 2;
   if (!R3.groundBuf) {
-    var EXT = RTS_N * RTS_TILE / 2;
-    var xz = [-EXT, -EXT, EXT, -EXT, EXT, EXT, -EXT, -EXT, EXT, EXT, -EXT, EXT];
-    var uv = [0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1];
-    function buf(a) {
-      var b = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, b);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(a), gl.STATIC_DRAW);
-      return b;
+    R3.groundBuf = gl.createBuffer();
+    R3.groundUV = gl.createBuffer();
+    R3.groundXZ = new Float32Array(R3D_GROUND_SUB * R3D_GROUND_SUB * 12);
+    R3.groundT = new Float32Array(R3D_GROUND_SUB * R3D_GROUND_SUB * 12);
+  }
+  {
+    var GM = RTS_TILE * 2;                  /* a two-cell margin, well clear of the eye plane */
+    var gx0 = Math.max(-EXT, vb.x0 - GM), gx1 = Math.min(EXT, vb.x1 + GM);
+    var gz0 = Math.max(-EXT, vb.z0 - GM), gz1 = Math.min(EXT, vb.z1 + GM);
+    var q = R3.groundXZ, t = R3.groundT, k = 0, gi, gj;
+    var gdx = (gx1 - gx0) / R3D_GROUND_SUB, gdz = (gz1 - gz0) / R3D_GROUND_SUB;
+    function gv(x, zz) {
+      q[k] = x; q[k + 1] = zz;
+      t[k] = (x + EXT) / (2 * EXT); t[k + 1] = (zz + EXT) / (2 * EXT);
+      k += 2;
     }
-    R3.groundBuf = buf(xz); R3.groundUV = buf(uv);
+    for (gj = 0; gj < R3D_GROUND_SUB; gj++) {
+      for (gi = 0; gi < R3D_GROUND_SUB; gi++) {
+        var ax = gx0 + gi * gdx, bx = ax + gdx;
+        var az = gz0 + gj * gdz, bz = az + gdz;
+        gv(ax, az); gv(bx, az); gv(bx, bz);
+        gv(ax, az); gv(bx, bz); gv(ax, bz);
+      }
+    }
+    R3.groundVerts = k / 2;
+    gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, q, gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundUV);
+    gl.bufferData(gl.ARRAY_BUFFER, t, gl.DYNAMIC_DRAW);
   }
 
   /* THE WORLD IS BUILT BEFORE THE SUN LOOKS AT IT. _r3dWorldTick used to run in the middle of
@@ -21075,6 +21568,13 @@ function _r3dFrame(G) {
     });
   }
 
+  /* THE FRAME GOES INTO A BUFFER, NOT ONTO THE CANVAS - see post3d.js. A canvas's depth
+     buffer cannot be sampled, and the ambient occlusion is computed from depth, so the world
+     and everything standing on it are drawn offscreen and composited at the end. A driver that
+     will not give the attachments leaves postReady false and everything below draws straight
+     to the canvas exactly as it did before. */
+  var post = R3.postReady && _r3dPostBegin(R3);
+
   gl.clearColor(0.016, 0.024, 0.035, 1);
   gl.enable(gl.DEPTH_TEST);
   gl.disable(gl.BLEND);
@@ -21095,7 +21595,7 @@ function _r3dFrame(G) {
   gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundUV);
   gl.enableVertexAttribArray(aT); gl.vertexAttribPointer(aT, 2, gl.FLOAT, false, 0, 0);
   gl.bindTexture(gl.TEXTURE_2D, R3.terrainTex);
-  gl.drawArrays(gl.TRIANGLES, 0, 6);
+  gl.drawArrays(gl.TRIANGLES, 0, R3.groundVerts);
 
   /* --- the ore stain, straight onto the ground it lies on ---
      The depth TEST is off for this, which also turns depth writing off: at this point the
@@ -21108,7 +21608,7 @@ function _r3dFrame(G) {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.bindTexture(gl.TEXTURE_2D, R3.oreTex);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.drawArrays(gl.TRIANGLES, 0, R3.groundVerts);
     gl.disable(gl.BLEND);
     gl.enable(gl.DEPTH_TEST);
   }
@@ -21255,6 +21755,12 @@ function _r3dFrame(G) {
   }
   paintEntities(MC);
 
+  /* THE OCCLUSION, AND BACK TO THE CANVAS. Everything with a surface has now been drawn, so
+     this is the last moment the depth buffer describes the world and nothing else. The fog
+     below deliberately lands AFTER it: the shroud is not a surface, so it must neither be
+     occluded nor occlude anything. */
+  if (post) _r3dPostEnd(R3, cam, invD);
+
   /* --- fog, over everything, depth ignored --- */
   gl.useProgram(R3.texP);
   gl.uniform4fv(gl.getUniformLocation(R3.texP, 'uCam'), cam);
@@ -21270,7 +21776,7 @@ function _r3dFrame(G) {
   gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundUV);
   gl.enableVertexAttribArray(aT); gl.vertexAttribPointer(aT, 2, gl.FLOAT, false, 0, 0);
   gl.bindTexture(gl.TEXTURE_2D, R3.fogTex);
-  gl.drawArrays(gl.TRIANGLES, 0, 6);
+  gl.drawArrays(gl.TRIANGLES, 0, R3.groundVerts);
   gl.disable(gl.BLEND);
 }
 </script>

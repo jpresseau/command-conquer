@@ -95,6 +95,12 @@ var R3D_WMIN = 0.02;
    water is the specular sliding over a moving NORMAL, and the normal comes from the slope, so
    the short fast wave in the sum does most of the work at a fifth of the amplitude. Push this
    much past a third of a unit and a harbour starts to look like open ocean. */
+/* How finely the ground patch is cut up. See the note at the ground buffer in scene3d.js:
+   this renderer's depth is linear in view depth rather than in screen space, so it is exact at
+   a vertex and drifts across a triangle. 8x8 takes the drift at the screen centre from 4.7
+   world units to 0.06. */
+var R3D_GROUND_SUB = 8;
+
 var R3D_WAVE_AMP = 0.42;
 
 function _r3dShader(gl, type, src) {
@@ -315,24 +321,33 @@ function _r3dInit() {
      faces all land on the same patch of ground and blend over each other into a blot - has been
      replaced by the sun's depth map, which answers "is this pixel in shade" once by
      construction. */
-  var gl = cv.getContext('webgl', { antialias: true, alpha: false,
-                                    preserveDrawingBuffer: true });
+  /* WEBGL2 FIRST, WEBGL1 IF THERE IS NO 2. What 2 is wanted for is a depth TEXTURE, which the
+     ambient occlusion in post3d.js reads and which is core there and an extension here. Nothing
+     else in the mode had to move for it: every shader in this renderer is GLSL ES 1.00, and a
+     WebGL2 context compiles those unchanged. So this is one line, not a second pipeline, and a
+     browser with only WebGL1 still gets the whole mode - with the occlusion if it has
+     WEBGL_depth_texture, and without it if it does not. */
+  var opts = { antialias: true, alpha: false, preserveDrawingBuffer: true };
+  var gl = cv.getContext('webgl2', opts), gl2 = !!gl;
+  if (!gl) { gl = cv.getContext('webgl', opts); gl2 = false; }
   if (!gl) return null;
   var R3;
   try {
     R3 = {
-      on: false, cv: cv, gl: gl,
+      on: false, cv: cv, gl: gl, gl2: gl2,
       meshP: _r3dProgram(gl, R3D_MESH_VS, R3D_MESH_FS),
       texP: _r3dProgram(gl, R3D_TEX_VS, R3D_TEX_FS),
       mesh: {}, terrainTex: null, terrainDirty: true,
       fogCv: null, fogTex: null, fogDirty: true,
-      shadowReady: false,
+      shadowReady: false, postReady: false,
       cp: Math.cos(R3D_TILT), sp: Math.sin(R3D_TILT)
     };
   } catch (e) { return null; }
-  /* The shadow map is the one part of the mode that is allowed to fail on its own: a driver
-     that cannot give a 1024 render target still gets the world, just unshaded. */
+  /* The shadow map and the occlusion are the two parts of the mode allowed to fail on their
+     own: a driver that will not give a render target still gets the world, just unshaded and
+     unoccluded. */
   try { R3.shadowReady = _r3dShadowInit(R3); } catch (e) { R3.shadowReady = false; }
+  try { R3.postReady = _r3dPostInit(R3); } catch (e) { R3.postReady = false; }
   window._R3D = R3;
   return R3;
 }
