@@ -47,10 +47,10 @@
 
 /* Density and size knobs, in one place. Trees dominate the budget - see the note above. */
 var R3D_CHUNK = 32;            /* cells per chunk side; 128-cell map -> 4x4 chunks */
-var R3D_TREE_SEG = 10;
+var R3D_TREE_SEG = 12;
 var R3D_TUFTS_PER_CELL = 4;
 var R3D_TUFT_ODDS = 0.62;      /* share of grass cells that carry tufts at all */
-var R3D_CRYSTALS_PER_CELL = 7;
+var R3D_CRYSTALS_PER_CELL = 5;
 var R3D_WORLD_YMAX = 14;       /* tallest world geometry; the cull margin hangs on it */
 
 /* One tree: trunk and three or four foliage tiers, SIZED by hash - not leaned, whatever an
@@ -131,8 +131,15 @@ function _r3dWorldBuild(G) {
           } else if (k === RTS_T_GRASS) {
             /* Sparse tufts, and only where a hash says so - covering every grass cell would
                be the ground-cover padding the graphics rules forbid; a scatter at this
-               density is what breaks the plane's perfect flatness without carpeting it. */
-            if (h1 < R3D_TUFT_ODDS) {
+               density is what breaks the plane's perfect flatness without carpeting it.
+
+               NOT WHERE THE ORE IS. An ore field sits on grass cells, so the tuft scatter ran
+               straight through it and put dark green spikes between the crystals - grass
+               growing out of a mineral deposit, which is the one place it should not be. The
+               static batch is baked once and the field moves as it is worked, so this is the
+               field as the map was GENERATED; ground that is mined out later keeps its bare
+               scar, which is the right way round for it to be wrong. */
+            if (h1 < R3D_TUFT_ODDS && !(G.scrap && G.scrap[_rtsIdx(tx, tz)] > 0)) {
               for (var tf = 0; tf < R3D_TUFTS_PER_CELL; tf++) {
                 var fx = wx + (_sprHash(tx * 31 + tf, tz, 367) - 0.5) * RTS_TILE;
                 var fz = wz + (_sprHash(tz * 31 + tf, tx, 373) - 0.5) * RTS_TILE;
@@ -156,15 +163,26 @@ function _r3dWorldBuild(G) {
   }
 }
 
-/* The crystals over the ore, rebuilt when the field actually changes. These are the ONLY ore
-   the 3D mode draws: the golden stain belongs to the 2D ore tile, which render/frame.js skips
-   when the mode is on, so there is no painted deposit underneath them the way there is in 2D.
-   (An earlier version of this comment credited the stain to the terrain bake. It was never
-   there.) Height scales with what is left in the cell, so a field visibly wears down as the
-   harvesters work it - against the RICHNESS-SCALED cell capacity, not the nominal one, which
-   is the same divisor bug the 2D draw carried: cells are seeded
+/* THE CRYSTALS THAT STAND IN AN ORE FIELD. The field's colour is not here - it is a texture,
+   _r3dOreTex in scene3d.js, for the same reason the fog is one: it is a signal at one value
+   per CELL that has to fade smoothly at its edges and track a number that changes as the
+   harvesters work. An earlier cut of this drew the bed as flat quads of the palette lying on
+   the ground, and a field came out as a heap of overlapping paper squares - the hard straight
+   edge of every quad read louder than the colour it was carrying.
+
+   What is left here is the part that genuinely wants to be geometry: things standing UP out of
+   the deposit, which is the whole reason to draw ore in 3D rather than paint it. Five per cell
+   rather than seven, differing in height, girth and colour across the whole five-entry
+   palette, on seven sides rather than four - at the top zoom a cell is 144 device pixels and a
+   four-sided cone is unmistakably a pyramid.
+
+   Height scales with what is left, against the RICHNESS-SCALED cell capacity, not the nominal
+   one - the same divisor bug the 2D draw carried: cells are seeded
    `(lvl+1)/LEVELS * RTS_SCRAP_TILE * RTS_ORE_RICHNESS`, so dividing by RTS_SCRAP_TILE alone
-   caps `frac` at the richness and the crystals never reach full height. */
+   caps `frac` at the richness and the crystals never reach full height.
+
+   THIS BATCH ALONE IS DYNAMIC among the world's geometry. Trees and rock are immutable in this
+   engine; ore depletes and spreads, so it is rebuilt when the total actually changes. */
 function _r3dOreBuild(G) {
   var R3 = window._R3D, gl = R3.gl;
   var faces = [], N = RTS_N, sum = 0;
@@ -181,8 +199,10 @@ function _r3dOreBuild(G) {
       for (var c = 0; c < R3D_CRYSTALS_PER_CELL; c++) {
         var cx = wx + (_sprHash(tx * 31 + c, tz, 383) - 0.5) * RTS_TILE;
         var cz = wz + (_sprHash(tz * 31 + c, tx, 389) - 0.5) * RTS_TILE;
-        var ch = (0.5 + _sprHash(tx * 31 + c, tz, 397) * 1.1) * (0.35 + frac);
-        _r3Cone(faces, cx, 0, cz, 0.42, 0.05, ch, (c & 1) ? P[0] : P[1], 4);
+        var g2 = _sprHash(tx * 31 + c, tz * 31 + c, 391);
+        var ch = (0.45 + _sprHash(tx * 31 + c, tz, 397) * 1.25) * (0.35 + frac);
+        _r3Cone(faces, cx, 0, cz, 0.28 + g2 * 0.26, 0.04, ch,
+                [P[1], P[2], P[0], P[1], P[2]][c % 5], 7);
       }
     }
   }
