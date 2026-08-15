@@ -122,31 +122,6 @@ function _r3dProgram(gl, vs, fs) {
   return p;
 }
 
-/* THE SHADING IS THE SPRITE BAKER'S, PORTED - not an approximation of it.
-
-   This shader used to carry a loose imitation of r3d/render.js: one lambert term, its own
-   ambient and diffuse constants, and a two-colour mix for the ramp. Measured, that cost the
-   3D mode most of its form. The baker computes ambient + diffuse + a sky bounce + a tight
-   Blinn-Phong specular and then runs the result through _r3Ramp, whose shadow floor and warm
-   highlight are per-channel; the shader had neither the specular nor the sky term, so an
-   axis-aligned box resolved to exactly FOUR tones (the four values lambert can take for six
-   axis normals) while the same model baked to a sprite carried hundreds. That is why extra
-   resolution in 3D did not read as extra detail - there was nothing in the shading for the
-   pixels to show.
-
-   Every constant below is read from r3d/primitives.js rather than copied, so the two
-   pipelines cannot drift: primitives.js loads first (see the include order in the skeleton),
-   and if the light or the ambient split is ever retuned, both renderers move together. */
-function _r3dGlsl3(v) {
-  return 'vec3(' + v[0].toFixed(6) + ',' + v[1].toFixed(6) + ',' + v[2].toFixed(6) + ')';
-}
-/* The half-vector the baker builds at r3d/render.js:78, for the same specular. */
-var R3D_HALF = (function () {
-  var h = [R3_LIGHT[0] + R3_VIEW[0], R3_LIGHT[1] + R3_VIEW[1], R3_LIGHT[2] + R3_VIEW[2]];
-  var m = Math.hypot(h[0], h[1], h[2]);
-  return [h[0] / m, h[1] / m, h[2] / m];
-})();
-
 /* NO MATRICES. The camera above is six numbers, so the projection is done longhand in the
    vertex shader from uniforms - uCam packs focus and scale, uTilt the lean, uInvD the eye.
    Every mesh is drawn in MODEL space and placed by uPos/uRot/uScale, so one buffer per model
@@ -171,22 +146,7 @@ var R3D_MESH_VS =
   'uniform vec3 uPos; uniform vec2 uRot; uniform float uScale; uniform float uScaleY; uniform vec3 uTint;' +
   'uniform vec2 uWave;' +       /* wave amplitude (0 = not water) and the clock */
   R3D_SHADOW_VGLSL +
-  /* The ramp, as a function, because it is now evaluated TWICE per vertex - once with
-     the sun and once without it. That is what lets the fragment stage put a shadow on
-     a surface: it has the same surface lit and unlit to choose between, so a shadow is
-     the shading this material would have in shade rather than a multiply on top of it.
-     Multiplying instead is the usual shortcut and it is wrong here for a measurable
-     reason - this ramp does not pass through the origin. Its floor is per-channel and
-     COOL, so shade slides toward blue-grey; a scalar multiply drags it toward black and
-     takes the sky out of every shadow on the map. */
-  'vec3 _ramp(vec3 col, float v){' +
-  '  float k = clamp(v, 0.0, 1.0);' +
-  '  vec3 shade = col * (vec3(0.30, 0.32, 0.38) + vec3(0.70, 0.68, 0.62) * k)' +
-  '             + vec3(7.0, 10.0, 21.0) / 255.0 * (1.0 - k);' +
-  '  shade += (vec3(255.0, 250.0, 228.0) / 255.0 - col) * clamp(v - 1.0, 0.0, 1.0) * 0.60;' +
-  '  return shade;' +
-  '}' +
-  'varying vec3 vC; varying vec3 vCs;' +
+  'varying vec3 vN; varying vec3 vCol;' +
   'void main(){' +
   '  vec3 p = vec3(aP.x * uScale, aP.y * uScale * uScaleY, aP.z * uScale);' +
   '  vec3 wp = vec3(uPos.x + p.x*uRot.x - p.z*uRot.y, uPos.y + p.y, uPos.z + p.x*uRot.y + p.z*uRot.x);' +
@@ -229,21 +189,12 @@ var R3D_MESH_VS =
   '    col += vec3(0.10, 0.13, 0.15) * smoothstep(0.45, 1.0, hh);' +
   '  }' +
   /* the sprite baker's own light and half-vector, so the two pipelines agree face for face */
-  '  float lam = max(dot(n, ' + _r3dGlsl3(R3_LIGHT) + '), 0.0);' +
-  '  float sp = max(dot(n, ' + _r3dGlsl3(R3D_HALF) + '), 0.0);' +
-  '  sp *= sp; sp *= sp; sp *= sp; sp *= sp;' +      /* ^16, the baker's tight highlight */
-  /* a touch of sky bounce so upward faces do not go dead in shadow - r3d/render.js:97 */
-  '  float sky = 0.10 * max(n.y, 0.0);' +
-  '  float v = min(' + R3_AMB.toFixed(4) + ' + ' + R3_DIF.toFixed(4) +
-      ' * lam + sky + 0.16 * sp, 1.10);' +
-  /* AND THE SAME SURFACE WITH THE SUN TAKEN OUT of it - ambient and the sky bounce only. The
-     fragment stage picks between the two by how much of the sun actually reaches this pixel,
-     which is what a shadow map is for. _r3Ramp is ported term for term either way: its floor
-     is per-channel and COOL, so shade slides toward blue-grey rather than to black, and the
-     shadowed end keeps 30-38% of the surface's own colour instead of losing it. */
-  '  float vs = min(' + R3_AMB.toFixed(4) + ' + sky, 1.10);' +
-  '  vC  = _ramp(col, v) * uTint;' +
-  '  vCs = _ramp(col, vs) * uTint;' +
+  /* THE SHADING ITSELF HAPPENS PER FRAGMENT NOW - see R3D_MESH_LIGHT. All this stage does is
+     hand on the surface: its normal and its colour. Doing it here instead meant a curve was
+     shaded once per vertex, which on a face whose vertices all carry the same normal is once
+     per FACET, and no amount of smoothing the normals would have shown through that. */
+  '  vN = n;' +
+  '  vCol = col;' +
   '  _shadowFrom(wp);' +
   '  float sx = (wp.x - uCam.x) * uCam.z;' +
   '  float sy = ((wp.z - uCam.y) * uTilt.x - wp.y * uTilt.y) * uCam.w;' +
@@ -267,9 +218,13 @@ var R3D_MESH_VS =
    between them per pixel. highp, because the comparison is against a depth packed into eight
    bits and change, and mediump has neither the range nor the precision to hold it. */
 var R3D_MESH_FS =
-  'precision highp float; varying vec3 vC; varying vec3 vCs; uniform float uA;' +
-  R3D_SHADOW_GLSL +
-  'void main(){ gl_FragColor = vec4(mix(vCs, vC, _shadowAt()), uA); }';
+  'precision highp float; varying vec3 vN; varying vec3 vCol;' +
+  'uniform float uA; uniform vec3 uTint;' +
+  R3D_SHADOW_GLSL + R3D_MESH_LIGHT +
+  /* NORMALISED HERE, NOT IN THE VERTEX SHADER. A varying is interpolated linearly, and the
+     linear blend of two unit vectors is shorter than one - which is exactly the case on the
+     curves this is for, and would read as a dark seam down the middle of every one. */
+  'void main(){ gl_FragColor = vec4(_shade(normalize(vN), vCol) * uTint, uA); }';
 
 /* Ground and fog share one textured program; fog just samples a different texture with
    blending on and the depth test off. */

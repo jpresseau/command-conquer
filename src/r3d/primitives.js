@@ -78,12 +78,23 @@ var R3_VIEW = (function () {
   return [0, 1 / m, R3_K / m];
 })();
 
+function _r3Norm(v) {
+  var m = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / m, v[1] / m, v[2] / m];
+}
 function _r3Hex(h) {
   var n = parseInt(h.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 /* A face is a convex polygon of 3D points plus a base colour. */
-function _r3F(out, verts, col) { out.push({ v: verts, c: _r3Hex(col) }); }
+/* A face. `nrm`, when given, is one normal per vertex - see the note above _r3Cyl: it is how a
+   round primitive says that its sides are a CURVE rather than a ring of flat strips. Faces
+   without it are flat, which is what a box wants. */
+function _r3F(out, verts, col, nrm) {
+  var f = { v: verts, c: _r3Hex(col) };
+  if (nrm) f.n = nrm;
+  out.push(f);
+}
 
 /* --------------------------------------------------------------- primitives --
    All take the centre of the footprint and the BASE height, because everything in these
@@ -121,9 +132,29 @@ function _r3Slab(out, x, y, z, w, h, d, bev, col, topCol) {
 
 /* Upright cylinder. Enough segments that it reads round rather than faceted, but the flat
    shading still bands it, which is exactly the period look. */
+/* A CYLINDER IS ROUND, AND SAYS SO. Its sides are emitted as flat strips because that is what
+   a triangle is, but the SURFACE they approximate is a curve, and the difference shows in the
+   shading: given one normal per face, a 14-sided drum lights as 14 flat bands, and measured
+   that way a whole lit power plant resolved to 39 distinct tones. Each side carries the true
+   radial normal at each of its corners instead, so the renderer that interpolates them gets a
+   curve. The caps do not: a cap meets the side at a right angle and is meant to look it.
+
+   Emitted here rather than recovered later. A renderer can find shared corners and average
+   their faces, and the first version of this did exactly that - but it costs a spatial hash
+   over every vertex of every face, which on the world batch's hundreds of thousands of faces
+   measured almost two seconds added to entering 3D mode. The primitive already knows the
+   answer exactly; nobody downstream has to work it out. */
 function _r3Cyl(out, x, y, z, r, h, col, topCol, seg) {
   seg = seg || 14;
   var top = [], i, a, b;
+  /* the ring of normals, built once and SHARED by the faces on either side of each edge - two
+     adjacent strips meet along one radius and want the same vector there, so this is both
+     fewer allocations and the thing that makes the seam continuous */
+  var ring = [];
+  for (i = 0; i < seg; i++) {
+    var ta = (i / seg) * Math.PI * 2;
+    ring.push([Math.cos(ta), 0, Math.sin(ta)]);
+  }
   for (i = 0; i < seg; i++) {
     a = (i / seg) * Math.PI * 2; b = ((i + 1) / seg) * Math.PI * 2;
     var ax = x + Math.cos(a) * r, az = z + Math.sin(a) * r;
@@ -131,7 +162,9 @@ function _r3Cyl(out, x, y, z, r, h, col, topCol, seg) {
     /* b before a: the other winding makes every side normal point INWARD, which survives
        backface culling by showing the far wall of the cylinder's interior. Stacks came out
        as dark discs because of exactly that. */
-    _r3F(out, [[bx, y, bz], [ax, y, az], [ax, y + h, az], [bx, y + h, bz]], col);
+    var na = ring[i], nb = ring[(i + 1) % seg];
+    _r3F(out, [[bx, y, bz], [ax, y, az], [ax, y + h, az], [bx, y + h, bz]], col,
+         [nb, na, na, nb]);
     top.push([ax, y + h, az]);
   }
   top.reverse();
@@ -141,13 +174,22 @@ function _r3Cyl(out, x, y, z, r, h, col, topCol, seg) {
 function _r3Cone(out, x, y, z, r0, r1, h, col, seg) {
   seg = seg || 12;
   var top = [], i;
+  /* the slant's own normal ring: radial scaled by the height, tilted out by how fast the
+     radius falls away. With r0 == r1 this is the cylinder's radial normal exactly. */
+  var ring = [];
+  for (i = 0; i < seg; i++) {
+    var tc = (i / seg) * Math.PI * 2;
+    ring.push(_r3Norm([Math.cos(tc) * h, r0 - r1, Math.sin(tc) * h]));
+  }
   for (i = 0; i < seg; i++) {
     var a = (i / seg) * Math.PI * 2, b = ((i + 1) / seg) * Math.PI * 2;
     var ax = x + Math.cos(a) * r0, az = z + Math.sin(a) * r0;
     var bx = x + Math.cos(b) * r0, bz = z + Math.sin(b) * r0;
     var cx2 = x + Math.cos(b) * r1, cz2 = z + Math.sin(b) * r1;
     var dx2 = x + Math.cos(a) * r1, dz2 = z + Math.sin(a) * r1;
-    _r3F(out, [[bx, y, bz], [ax, y, az], [dx2, y + h, dz2], [cx2, y + h, cz2]], col);
+    var nA = ring[i], nB = ring[(i + 1) % seg];
+    _r3F(out, [[bx, y, bz], [ax, y, az], [dx2, y + h, dz2], [cx2, y + h, cz2]], col,
+         [nB, nA, nA, nB]);
     top.push([dx2, y + h, dz2]);
   }
   if (r1 > 0.4) { top.reverse(); _r3F(out, top, col); }
@@ -192,9 +234,16 @@ function _r3Vault(out, x, y, z, w, h, d, col, seg, alongZ) {
       var a = Math.PI * i / seg;                     /* 0 = the +x springing, PI = the -x one */
       pts.push([x + Math.cos(a) * rx, y + Math.sin(a) * h]);
     }
+    var an = [];
+    for (i = 0; i <= seg; i++) {
+      var aq = Math.PI * i / seg;
+      an.push(_r3Norm([Math.cos(aq) / rx, Math.sin(aq) / h, 0]));
+    }
     for (i = 0; i < seg; i++) {
       q = pts[i]; r = pts[i + 1];
-      _r3F(out, [[q[0], q[1], z1], [q[0], q[1], z0], [r[0], r[1], z0], [r[0], r[1], z1]], col);
+      var nq = an[i], nr = an[i + 1];
+      _r3F(out, [[q[0], q[1], z1], [q[0], q[1], z0], [r[0], r[1], z0], [r[0], r[1], z1]], col,
+           [nq, nq, nr, nr]);
     }
     for (i = 0; i <= seg; i++) {
       cA.push([pts[i][0], pts[i][1], z1]);
@@ -206,9 +255,16 @@ function _r3Vault(out, x, y, z, w, h, d, col, seg, alongZ) {
       var b = Math.PI * i / seg;
       pts.push([z + Math.cos(b) * rz, y + Math.sin(b) * h]);
     }
+    var bn = [];
+    for (i = 0; i <= seg; i++) {
+      var bq = Math.PI * i / seg;
+      bn.push(_r3Norm([0, Math.sin(bq) / h, Math.cos(bq) / rz]));
+    }
     for (i = 0; i < seg; i++) {
       q = pts[i]; r = pts[i + 1];
-      _r3F(out, [[x0, q[1], q[0]], [x1, q[1], q[0]], [x1, r[1], r[0]], [x0, r[1], r[0]]], col);
+      var mq = bn[i], mr = bn[i + 1];
+      _r3F(out, [[x0, q[1], q[0]], [x1, q[1], q[0]], [x1, r[1], r[0]], [x0, r[1], r[0]]], col,
+           [mq, mq, mr, mr]);
     }
     for (i = 0; i <= seg; i++) {
       cA.push([x1, pts[i][1], pts[i][0]]);
@@ -228,7 +284,16 @@ function _r3Yaw(faces, ang) {
       var p = f.v[j];
       nv.push([p[0] * c - p[2] * s, p[1], p[0] * s + p[2] * c]);
     }
-    out.push({ v: nv, c: f.c });
+    var g2 = { v: nv, c: f.c };
+    /* a rotation carries normals unchanged in form - the same turn applies to them */
+    if (f.n) {
+      g2.n = [];
+      for (j = 0; j < f.n.length; j++) {
+        var q2 = f.n[j];
+        g2.n.push([q2[0] * c - q2[2] * s, q2[1], q2[0] * s + q2[2] * c]);
+      }
+    }
+    out.push(g2);
   }
   return out;
 }
@@ -241,7 +306,8 @@ function _r3Scale(faces, s) {
   for (i = 0; i < faces.length; i++) {
     var f = faces[i], nv = [];
     for (j = 0; j < f.v.length; j++) nv.push([f.v[j][0] * s, f.v[j][1] * s, f.v[j][2] * s]);
-    out.push({ v: nv, c: f.c });
+    /* a UNIFORM scale leaves normals alone; that is the whole reason this one is uniform */
+    out.push(f.n ? { v: nv, c: f.c, n: f.n } : { v: nv, c: f.c });
   }
   return out;
 }

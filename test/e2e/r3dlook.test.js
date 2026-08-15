@@ -148,8 +148,13 @@ var S = new Suite('r3dlook');
        and diffuse against the baker's 0.34/0.70, no specular and no sky term at all. This
        asserts the mechanism that stops it drifting again - the numbers in the compiled shader
        source ARE R3_AMB, R3_DIF, R3_LIGHT and the baker's half-vector - rather than asserting
-       any particular value, which would just be the drift written down twice more. */
-    var vs = R3D_MESH_VS;
+       any particular value, which would just be the drift written down twice more.
+
+       BOTH STAGES, because which one does the shading is an implementation detail and has
+       already changed once: it moved to the fragment shader so that a curve could be lit
+       across a face rather than at its corners. What must not change is that the numbers come
+       from the baker, and that is true wherever they are evaluated. */
+    var vs = R3D_MESH_VS + R3D_MESH_FS;
     o.hasAmb = vs.indexOf(R3_AMB.toFixed(4)) >= 0;
     o.hasDif = vs.indexOf(R3_DIF.toFixed(4)) >= 0;
     o.hasLight = vs.indexOf(R3_LIGHT[0].toFixed(6)) >= 0;
