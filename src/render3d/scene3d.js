@@ -9,19 +9,26 @@
    and the per-frame cost is uniform uploads. */
 
 function _r3dBuildMesh(gl, faces) {
-  var pos = [], nrm = [], col = [];
-  for (var fi = 0; fi < faces.length; fi++) {
+  var pos = [], nrm = [], col = [], fi;
+  for (fi = 0; fi < faces.length; fi++) {
     var f = faces[fi], v = f.v;
     var r = f.c[0] / 255, gc = f.c[1] / 255, b = f.c[2] / 255;
     /* face normal from the first three vertices - the primitives emit planar faces */
     var ax = v[1][0] - v[0][0], ay = v[1][1] - v[0][1], az = v[1][2] - v[0][2];
     var bx = v[2][0] - v[0][0], by = v[2][1] - v[0][1], bz = v[2][2] - v[0][2];
     var nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+    /* UNLESS THE FACE CAME WITH ITS OWN. A cylinder, cone or vault emits one normal per corner
+       (see _r3Cyl in r3d/primitives.js), which is what turns a ring of flat strips into a
+       curve once the fragment stage interpolates them. Everything else - every box, slab,
+       gable and cap - has no such field and is flat, which is what it should be. */
+    var fnv = f.n;
     for (var k = 2; k < v.length; k++) {
-      var tri = [v[0], v[k - 1], v[k]];
+      var idx = [0, k - 1, k];
       for (var t = 0; t < 3; t++) {
-        pos.push(tri[t][0], tri[t][1], tri[t][2]);
-        nrm.push(nx, ny, nz);
+        var vi = idx[t], p = v[vi];
+        pos.push(p[0], p[1], p[2]);
+        if (fnv) nrm.push(fnv[vi][0], fnv[vi][1], fnv[vi][2]);
+        else nrm.push(nx, ny, nz);
         col.push(r, gc, b);
       }
     }

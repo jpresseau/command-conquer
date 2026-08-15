@@ -876,7 +876,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">c839c0b · 2026-08-15</div>
+  <div id="rtsBuild" title="build">ab39012 · 2026-08-15</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -4879,12 +4879,23 @@ var R3_VIEW = (function () {
   return [0, 1 / m, R3_K / m];
 })();
 
+function _r3Norm(v) {
+  var m = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / m, v[1] / m, v[2] / m];
+}
 function _r3Hex(h) {
   var n = parseInt(h.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 /* A face is a convex polygon of 3D points plus a base colour. */
-function _r3F(out, verts, col) { out.push({ v: verts, c: _r3Hex(col) }); }
+/* A face. `nrm`, when given, is one normal per vertex - see the note above _r3Cyl: it is how a
+   round primitive says that its sides are a CURVE rather than a ring of flat strips. Faces
+   without it are flat, which is what a box wants. */
+function _r3F(out, verts, col, nrm) {
+  var f = { v: verts, c: _r3Hex(col) };
+  if (nrm) f.n = nrm;
+  out.push(f);
+}
 
 /* --------------------------------------------------------------- primitives --
    All take the centre of the footprint and the BASE height, because everything in these
@@ -4922,9 +4933,29 @@ function _r3Slab(out, x, y, z, w, h, d, bev, col, topCol) {
 
 /* Upright cylinder. Enough segments that it reads round rather than faceted, but the flat
    shading still bands it, which is exactly the period look. */
+/* A CYLINDER IS ROUND, AND SAYS SO. Its sides are emitted as flat strips because that is what
+   a triangle is, but the SURFACE they approximate is a curve, and the difference shows in the
+   shading: given one normal per face, a 14-sided drum lights as 14 flat bands, and measured
+   that way a whole lit power plant resolved to 39 distinct tones. Each side carries the true
+   radial normal at each of its corners instead, so the renderer that interpolates them gets a
+   curve. The caps do not: a cap meets the side at a right angle and is meant to look it.
+
+   Emitted here rather than recovered later. A renderer can find shared corners and average
+   their faces, and the first version of this did exactly that - but it costs a spatial hash
+   over every vertex of every face, which on the world batch's hundreds of thousands of faces
+   measured almost two seconds added to entering 3D mode. The primitive already knows the
+   answer exactly; nobody downstream has to work it out. */
 function _r3Cyl(out, x, y, z, r, h, col, topCol, seg) {
   seg = seg || 14;
   var top = [], i, a, b;
+  /* the ring of normals, built once and SHARED by the faces on either side of each edge - two
+     adjacent strips meet along one radius and want the same vector there, so this is both
+     fewer allocations and the thing that makes the seam continuous */
+  var ring = [];
+  for (i = 0; i < seg; i++) {
+    var ta = (i / seg) * Math.PI * 2;
+    ring.push([Math.cos(ta), 0, Math.sin(ta)]);
+  }
   for (i = 0; i < seg; i++) {
     a = (i / seg) * Math.PI * 2; b = ((i + 1) / seg) * Math.PI * 2;
     var ax = x + Math.cos(a) * r, az = z + Math.sin(a) * r;
@@ -4932,7 +4963,9 @@ function _r3Cyl(out, x, y, z, r, h, col, topCol, seg) {
     /* b before a: the other winding makes every side normal point INWARD, which survives
        backface culling by showing the far wall of the cylinder's interior. Stacks came out
        as dark discs because of exactly that. */
-    _r3F(out, [[bx, y, bz], [ax, y, az], [ax, y + h, az], [bx, y + h, bz]], col);
+    var na = ring[i], nb = ring[(i + 1) % seg];
+    _r3F(out, [[bx, y, bz], [ax, y, az], [ax, y + h, az], [bx, y + h, bz]], col,
+         [nb, na, na, nb]);
     top.push([ax, y + h, az]);
   }
   top.reverse();
@@ -4942,13 +4975,22 @@ function _r3Cyl(out, x, y, z, r, h, col, topCol, seg) {
 function _r3Cone(out, x, y, z, r0, r1, h, col, seg) {
   seg = seg || 12;
   var top = [], i;
+  /* the slant's own normal ring: radial scaled by the height, tilted out by how fast the
+     radius falls away. With r0 == r1 this is the cylinder's radial normal exactly. */
+  var ring = [];
+  for (i = 0; i < seg; i++) {
+    var tc = (i / seg) * Math.PI * 2;
+    ring.push(_r3Norm([Math.cos(tc) * h, r0 - r1, Math.sin(tc) * h]));
+  }
   for (i = 0; i < seg; i++) {
     var a = (i / seg) * Math.PI * 2, b = ((i + 1) / seg) * Math.PI * 2;
     var ax = x + Math.cos(a) * r0, az = z + Math.sin(a) * r0;
     var bx = x + Math.cos(b) * r0, bz = z + Math.sin(b) * r0;
     var cx2 = x + Math.cos(b) * r1, cz2 = z + Math.sin(b) * r1;
     var dx2 = x + Math.cos(a) * r1, dz2 = z + Math.sin(a) * r1;
-    _r3F(out, [[bx, y, bz], [ax, y, az], [dx2, y + h, dz2], [cx2, y + h, cz2]], col);
+    var nA = ring[i], nB = ring[(i + 1) % seg];
+    _r3F(out, [[bx, y, bz], [ax, y, az], [dx2, y + h, dz2], [cx2, y + h, cz2]], col,
+         [nB, nA, nA, nB]);
     top.push([dx2, y + h, dz2]);
   }
   if (r1 > 0.4) { top.reverse(); _r3F(out, top, col); }
@@ -4993,9 +5035,16 @@ function _r3Vault(out, x, y, z, w, h, d, col, seg, alongZ) {
       var a = Math.PI * i / seg;                     /* 0 = the +x springing, PI = the -x one */
       pts.push([x + Math.cos(a) * rx, y + Math.sin(a) * h]);
     }
+    var an = [];
+    for (i = 0; i <= seg; i++) {
+      var aq = Math.PI * i / seg;
+      an.push(_r3Norm([Math.cos(aq) / rx, Math.sin(aq) / h, 0]));
+    }
     for (i = 0; i < seg; i++) {
       q = pts[i]; r = pts[i + 1];
-      _r3F(out, [[q[0], q[1], z1], [q[0], q[1], z0], [r[0], r[1], z0], [r[0], r[1], z1]], col);
+      var nq = an[i], nr = an[i + 1];
+      _r3F(out, [[q[0], q[1], z1], [q[0], q[1], z0], [r[0], r[1], z0], [r[0], r[1], z1]], col,
+           [nq, nq, nr, nr]);
     }
     for (i = 0; i <= seg; i++) {
       cA.push([pts[i][0], pts[i][1], z1]);
@@ -5007,9 +5056,16 @@ function _r3Vault(out, x, y, z, w, h, d, col, seg, alongZ) {
       var b = Math.PI * i / seg;
       pts.push([z + Math.cos(b) * rz, y + Math.sin(b) * h]);
     }
+    var bn = [];
+    for (i = 0; i <= seg; i++) {
+      var bq = Math.PI * i / seg;
+      bn.push(_r3Norm([0, Math.sin(bq) / h, Math.cos(bq) / rz]));
+    }
     for (i = 0; i < seg; i++) {
       q = pts[i]; r = pts[i + 1];
-      _r3F(out, [[x0, q[1], q[0]], [x1, q[1], q[0]], [x1, r[1], r[0]], [x0, r[1], r[0]]], col);
+      var mq = bn[i], mr = bn[i + 1];
+      _r3F(out, [[x0, q[1], q[0]], [x1, q[1], q[0]], [x1, r[1], r[0]], [x0, r[1], r[0]]], col,
+           [mq, mq, mr, mr]);
     }
     for (i = 0; i <= seg; i++) {
       cA.push([x1, pts[i][1], pts[i][0]]);
@@ -5029,7 +5085,16 @@ function _r3Yaw(faces, ang) {
       var p = f.v[j];
       nv.push([p[0] * c - p[2] * s, p[1], p[0] * s + p[2] * c]);
     }
-    out.push({ v: nv, c: f.c });
+    var g2 = { v: nv, c: f.c };
+    /* a rotation carries normals unchanged in form - the same turn applies to them */
+    if (f.n) {
+      g2.n = [];
+      for (j = 0; j < f.n.length; j++) {
+        var q2 = f.n[j];
+        g2.n.push([q2[0] * c - q2[2] * s, q2[1], q2[0] * s + q2[2] * c]);
+      }
+    }
+    out.push(g2);
   }
   return out;
 }
@@ -5042,7 +5107,8 @@ function _r3Scale(faces, s) {
   for (i = 0; i < faces.length; i++) {
     var f = faces[i], nv = [];
     for (j = 0; j < f.v.length; j++) nv.push([f.v[j][0] * s, f.v[j][1] * s, f.v[j][2] * s]);
-    out.push({ v: nv, c: f.c });
+    /* a UNIFORM scale leaves normals alone; that is the whole reason this one is uniform */
+    out.push(f.n ? { v: nv, c: f.c, n: f.n } : { v: nv, c: f.c });
   }
   return out;
 }
@@ -20082,6 +20148,93 @@ function _rtsEmber() {
 }
 
 </script>
+<script>/* render3d/light3d.js - the light every mesh in the 3D mode is shaded by, as GLSL.
+   Part of rts.render3d.
+
+   Split out of gl3d.js, which the shading pushed past this project's per-file limit. It sits in
+   its own file for a better reason than that, though: this IS the one copy of the light, and
+   the note below is emphatic that there must not be a second. A file of its own makes that
+   harder to undo by accident.
+
+   Loaded BEFORE gl3d.js - the strings here are spliced into the mesh shaders at load time, the
+   same arrangement shadow3d.js has.
+*/
+
+/* THE SHADING IS THE SPRITE BAKER'S, PORTED - not an approximation of it.
+
+   This shader used to carry a loose imitation of r3d/render.js: one lambert term, its own
+   ambient and diffuse constants, and a two-colour mix for the ramp. Measured, that cost the
+   3D mode most of its form. The baker computes ambient + diffuse + a sky bounce + a tight
+   Blinn-Phong specular and then runs the result through _r3Ramp, whose shadow floor and warm
+   highlight are per-channel; the shader had neither the specular nor the sky term, so an
+   axis-aligned box resolved to exactly FOUR tones (the four values lambert can take for six
+   axis normals) while the same model baked to a sprite carried hundreds. That is why extra
+   resolution in 3D did not read as extra detail - there was nothing in the shading for the
+   pixels to show.
+
+   Every constant below is read from r3d/primitives.js rather than copied, so the two
+   pipelines cannot drift: primitives.js loads first (see the include order in the skeleton),
+   and if the light or the ambient split is ever retuned, both renderers move together. */
+function _r3dGlsl3(v) {
+  return 'vec3(' + v[0].toFixed(6) + ',' + v[1].toFixed(6) + ',' + v[2].toFixed(6) + ')';
+}
+/* The half-vector the baker builds at r3d/render.js:78, for the same specular. */
+var R3D_HALF = (function () {
+  var h = [R3_LIGHT[0] + R3_VIEW[0], R3_LIGHT[1] + R3_VIEW[1], R3_LIGHT[2] + R3_VIEW[2]];
+  var m = Math.hypot(h[0], h[1], h[2]);
+  return [h[0] / m, h[1] / m, h[2] / m];
+})();
+
+/* THE SHADING, AS ONE STRING, EVALUATED PER FRAGMENT.
+
+   It used to live in the vertex shader, and that was the ceiling on how round anything in this
+   game could look. Two separate reasons, and both had to go:
+
+   The normals were per FACE - every vertex of a face carried that face's own normal - so a
+   cylinder was not being interpolated across at all. Shading it once per vertex was shading it
+   once per facet. That is fixed where the meshes are built (see R3D_SMOOTH_COS in scene3d.js),
+   and once a corner can carry an averaged normal, the shader has to be the thing that reads it
+   somewhere other than the corners.
+
+   And the specular is a ^16 Blinn-Phong lobe. A highlight that tight is narrower than the
+   faces it lands on, so sampling it at the corners either misses it entirely or smears a whole
+   facet with it - it cannot land where the surface actually points at the light.
+
+   The ramp is the sprite baker's _r3Ramp, ported term for term, and it is evaluated TWICE per
+   fragment: once with the sun and once without. The fragment picks between them by how much of
+   the sun reaches this pixel, which is what the shadow map is for. Multiplying a lit colour
+   down instead is the usual shortcut and it is wrong here for a measurable reason - this ramp
+   does not pass through the origin. Its floor is per-channel and COOL, so shade slides toward
+   blue-grey; a scalar multiply drags it toward black and takes the sky out of every shadow. */
+var R3D_MESH_LIGHT =
+  /* The ramp itself, because it is now evaluated TWICE per vertex - once with
+     the sun and once without it. That is what lets the fragment stage put a shadow on
+     a surface: it has the same surface lit and unlit to choose between, so a shadow is
+     the shading this material would have in shade rather than a multiply on top of it.
+     Multiplying instead is the usual shortcut and it is wrong here for a measurable
+     reason - this ramp does not pass through the origin. Its floor is per-channel and
+     COOL, so shade slides toward blue-grey; a scalar multiply drags it toward black and
+     takes the sky out of every shadow on the map. */
+  'vec3 _ramp(vec3 col, float v){' +
+  '  float k = clamp(v, 0.0, 1.0);' +
+  '  vec3 shade = col * (vec3(0.30, 0.32, 0.38) + vec3(0.70, 0.68, 0.62) * k)' +
+  '             + vec3(7.0, 10.0, 21.0) / 255.0 * (1.0 - k);' +
+  '  shade += (vec3(255.0, 250.0, 228.0) / 255.0 - col) * clamp(v - 1.0, 0.0, 1.0) * 0.60;' +
+  '  return shade;' +
+  '}' +
+  'vec3 _shade(vec3 n, vec3 col){' +
+  /* the sprite baker's own light and half-vector, so the two pipelines agree face for face */
+  '  float lam = max(dot(n, ' + _r3dGlsl3(R3_LIGHT) + '), 0.0);' +
+  '  float sp = max(dot(n, ' + _r3dGlsl3(R3D_HALF) + '), 0.0);' +
+  '  sp *= sp; sp *= sp; sp *= sp; sp *= sp;' +      /* ^16, the baker's tight highlight */
+  /* a touch of sky bounce so upward faces do not go dead in shadow - r3d/render.js:97 */
+  '  float sky = 0.10 * max(n.y, 0.0);' +
+  '  float v = min(' + R3_AMB.toFixed(4) + ' + ' + R3_DIF.toFixed(4) +
+      ' * lam + sky + 0.16 * sp, 1.10);' +
+  '  float vs = min(' + R3_AMB.toFixed(4) + ' + sky, 1.10);' +
+  '  return mix(_ramp(col, vs), _ramp(col, v), _shadowAt());' +
+  '}';
+</script>
 <script>/* render3d/shadow3d.js - the sun's own view of the map, and the depth map it leaves behind.
    Part of rts.render3d.
 
@@ -20444,31 +20597,6 @@ function _r3dProgram(gl, vs, fs) {
   return p;
 }
 
-/* THE SHADING IS THE SPRITE BAKER'S, PORTED - not an approximation of it.
-
-   This shader used to carry a loose imitation of r3d/render.js: one lambert term, its own
-   ambient and diffuse constants, and a two-colour mix for the ramp. Measured, that cost the
-   3D mode most of its form. The baker computes ambient + diffuse + a sky bounce + a tight
-   Blinn-Phong specular and then runs the result through _r3Ramp, whose shadow floor and warm
-   highlight are per-channel; the shader had neither the specular nor the sky term, so an
-   axis-aligned box resolved to exactly FOUR tones (the four values lambert can take for six
-   axis normals) while the same model baked to a sprite carried hundreds. That is why extra
-   resolution in 3D did not read as extra detail - there was nothing in the shading for the
-   pixels to show.
-
-   Every constant below is read from r3d/primitives.js rather than copied, so the two
-   pipelines cannot drift: primitives.js loads first (see the include order in the skeleton),
-   and if the light or the ambient split is ever retuned, both renderers move together. */
-function _r3dGlsl3(v) {
-  return 'vec3(' + v[0].toFixed(6) + ',' + v[1].toFixed(6) + ',' + v[2].toFixed(6) + ')';
-}
-/* The half-vector the baker builds at r3d/render.js:78, for the same specular. */
-var R3D_HALF = (function () {
-  var h = [R3_LIGHT[0] + R3_VIEW[0], R3_LIGHT[1] + R3_VIEW[1], R3_LIGHT[2] + R3_VIEW[2]];
-  var m = Math.hypot(h[0], h[1], h[2]);
-  return [h[0] / m, h[1] / m, h[2] / m];
-})();
-
 /* NO MATRICES. The camera above is six numbers, so the projection is done longhand in the
    vertex shader from uniforms - uCam packs focus and scale, uTilt the lean, uInvD the eye.
    Every mesh is drawn in MODEL space and placed by uPos/uRot/uScale, so one buffer per model
@@ -20493,22 +20621,7 @@ var R3D_MESH_VS =
   'uniform vec3 uPos; uniform vec2 uRot; uniform float uScale; uniform float uScaleY; uniform vec3 uTint;' +
   'uniform vec2 uWave;' +       /* wave amplitude (0 = not water) and the clock */
   R3D_SHADOW_VGLSL +
-  /* The ramp, as a function, because it is now evaluated TWICE per vertex - once with
-     the sun and once without it. That is what lets the fragment stage put a shadow on
-     a surface: it has the same surface lit and unlit to choose between, so a shadow is
-     the shading this material would have in shade rather than a multiply on top of it.
-     Multiplying instead is the usual shortcut and it is wrong here for a measurable
-     reason - this ramp does not pass through the origin. Its floor is per-channel and
-     COOL, so shade slides toward blue-grey; a scalar multiply drags it toward black and
-     takes the sky out of every shadow on the map. */
-  'vec3 _ramp(vec3 col, float v){' +
-  '  float k = clamp(v, 0.0, 1.0);' +
-  '  vec3 shade = col * (vec3(0.30, 0.32, 0.38) + vec3(0.70, 0.68, 0.62) * k)' +
-  '             + vec3(7.0, 10.0, 21.0) / 255.0 * (1.0 - k);' +
-  '  shade += (vec3(255.0, 250.0, 228.0) / 255.0 - col) * clamp(v - 1.0, 0.0, 1.0) * 0.60;' +
-  '  return shade;' +
-  '}' +
-  'varying vec3 vC; varying vec3 vCs;' +
+  'varying vec3 vN; varying vec3 vCol;' +
   'void main(){' +
   '  vec3 p = vec3(aP.x * uScale, aP.y * uScale * uScaleY, aP.z * uScale);' +
   '  vec3 wp = vec3(uPos.x + p.x*uRot.x - p.z*uRot.y, uPos.y + p.y, uPos.z + p.x*uRot.y + p.z*uRot.x);' +
@@ -20551,21 +20664,12 @@ var R3D_MESH_VS =
   '    col += vec3(0.10, 0.13, 0.15) * smoothstep(0.45, 1.0, hh);' +
   '  }' +
   /* the sprite baker's own light and half-vector, so the two pipelines agree face for face */
-  '  float lam = max(dot(n, ' + _r3dGlsl3(R3_LIGHT) + '), 0.0);' +
-  '  float sp = max(dot(n, ' + _r3dGlsl3(R3D_HALF) + '), 0.0);' +
-  '  sp *= sp; sp *= sp; sp *= sp; sp *= sp;' +      /* ^16, the baker's tight highlight */
-  /* a touch of sky bounce so upward faces do not go dead in shadow - r3d/render.js:97 */
-  '  float sky = 0.10 * max(n.y, 0.0);' +
-  '  float v = min(' + R3_AMB.toFixed(4) + ' + ' + R3_DIF.toFixed(4) +
-      ' * lam + sky + 0.16 * sp, 1.10);' +
-  /* AND THE SAME SURFACE WITH THE SUN TAKEN OUT of it - ambient and the sky bounce only. The
-     fragment stage picks between the two by how much of the sun actually reaches this pixel,
-     which is what a shadow map is for. _r3Ramp is ported term for term either way: its floor
-     is per-channel and COOL, so shade slides toward blue-grey rather than to black, and the
-     shadowed end keeps 30-38% of the surface's own colour instead of losing it. */
-  '  float vs = min(' + R3_AMB.toFixed(4) + ' + sky, 1.10);' +
-  '  vC  = _ramp(col, v) * uTint;' +
-  '  vCs = _ramp(col, vs) * uTint;' +
+  /* THE SHADING ITSELF HAPPENS PER FRAGMENT NOW - see R3D_MESH_LIGHT. All this stage does is
+     hand on the surface: its normal and its colour. Doing it here instead meant a curve was
+     shaded once per vertex, which on a face whose vertices all carry the same normal is once
+     per FACET, and no amount of smoothing the normals would have shown through that. */
+  '  vN = n;' +
+  '  vCol = col;' +
   '  _shadowFrom(wp);' +
   '  float sx = (wp.x - uCam.x) * uCam.z;' +
   '  float sy = ((wp.z - uCam.y) * uTilt.x - wp.y * uTilt.y) * uCam.w;' +
@@ -20589,9 +20693,13 @@ var R3D_MESH_VS =
    between them per pixel. highp, because the comparison is against a depth packed into eight
    bits and change, and mediump has neither the range nor the precision to hold it. */
 var R3D_MESH_FS =
-  'precision highp float; varying vec3 vC; varying vec3 vCs; uniform float uA;' +
-  R3D_SHADOW_GLSL +
-  'void main(){ gl_FragColor = vec4(mix(vCs, vC, _shadowAt()), uA); }';
+  'precision highp float; varying vec3 vN; varying vec3 vCol;' +
+  'uniform float uA; uniform vec3 uTint;' +
+  R3D_SHADOW_GLSL + R3D_MESH_LIGHT +
+  /* NORMALISED HERE, NOT IN THE VERTEX SHADER. A varying is interpolated linearly, and the
+     linear blend of two unit vectors is shorter than one - which is exactly the case on the
+     curves this is for, and would read as a dark seam down the middle of every one. */
+  'void main(){ gl_FragColor = vec4(_shade(normalize(vN), vCol) * uTint, uA); }';
 
 /* Ground and fog share one textured program; fog just samples a different texture with
    blending on and the depth test off. */
@@ -21356,19 +21464,26 @@ function _r3dOreTex(G) {
    and the per-frame cost is uniform uploads. */
 
 function _r3dBuildMesh(gl, faces) {
-  var pos = [], nrm = [], col = [];
-  for (var fi = 0; fi < faces.length; fi++) {
+  var pos = [], nrm = [], col = [], fi;
+  for (fi = 0; fi < faces.length; fi++) {
     var f = faces[fi], v = f.v;
     var r = f.c[0] / 255, gc = f.c[1] / 255, b = f.c[2] / 255;
     /* face normal from the first three vertices - the primitives emit planar faces */
     var ax = v[1][0] - v[0][0], ay = v[1][1] - v[0][1], az = v[1][2] - v[0][2];
     var bx = v[2][0] - v[0][0], by = v[2][1] - v[0][1], bz = v[2][2] - v[0][2];
     var nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+    /* UNLESS THE FACE CAME WITH ITS OWN. A cylinder, cone or vault emits one normal per corner
+       (see _r3Cyl in r3d/primitives.js), which is what turns a ring of flat strips into a
+       curve once the fragment stage interpolates them. Everything else - every box, slab,
+       gable and cap - has no such field and is flat, which is what it should be. */
+    var fnv = f.n;
     for (var k = 2; k < v.length; k++) {
-      var tri = [v[0], v[k - 1], v[k]];
+      var idx = [0, k - 1, k];
       for (var t = 0; t < 3; t++) {
-        pos.push(tri[t][0], tri[t][1], tri[t][2]);
-        nrm.push(nx, ny, nz);
+        var vi = idx[t], p = v[vi];
+        pos.push(p[0], p[1], p[2]);
+        if (fnv) nrm.push(fnv[vi][0], fnv[vi][1], fnv[vi][2]);
+        else nrm.push(nx, ny, nz);
         col.push(r, gc, b);
       }
     }
