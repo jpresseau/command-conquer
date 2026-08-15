@@ -32,12 +32,32 @@ function _rtsPanTick(dt) {
 }
 /* Keep the view on the battlefield. The old fixed clamp was tuned for a perspective camera
    and let the ortho view slide far enough that the off-map background filled a third of the
-   screen. Derive the limit from what is actually visible at the current zoom. */
+   screen. Derive the limit from what is actually visible at the current zoom.
+
+   AND CLAMP THE VIEW'S CENTRE RATHER THAN THE FOCUS, because under a tilted perspective camera
+   those are not the same point. The visible ground is a TRAPEZOID: it reaches further up the
+   screen than down it, because the far edge is further from the eye. So a focus sitting exactly
+   `half a view` inside the map edge still has a view that runs past it, by however much the
+   trapezoid is lopsided - which is half the difference between the two reaches.
+
+   Measured at the top zoom, with the camera panned as far north as it would go: the view
+   overshot the map's edge by 6.5 world units and put 45 rows of off-map background across the
+   top of the screen, 5.9% of it. That is with the 36-degree camera this shipped with for a
+   long time; leaning the camera further makes the trapezoid more lopsided and roughly doubles
+   it, to 13.5 units and 8%.
+
+   _rtsViewSpan already reports the trapezoid's true centre - the radar box needed it for the
+   same reason - and this was the one caller still assuming the focus was it. Clamping the
+   centre puts the view's far edge exactly on the map's, at any tilt. In 2D the centre IS the
+   focus, so the offsets are zero and this is the same clamp it always was. */
 function _rtsClampFocus() {
   var R = _rtsR, span = RTS_N * RTS_TILE, vs = _rtsViewSpan();
   var lx = Math.max(0, span / 2 - vs.w * 0.5), lz = Math.max(0, span / 2 - vs.h * 0.5);
-  R.focus.x = Math.max(-lx, Math.min(lx, R.focus.x));
-  R.focus.z = Math.max(-lz, Math.min(lz, R.focus.z));
+  /* how far the visible centre sits from the focus - a property of the tilt and zoom, not of
+     where the camera happens to be, so it stays correct as the focus below moves */
+  var ox = vs.cx - R.focus.x, oz = vs.cz - R.focus.z;
+  R.focus.x = Math.max(-lx - ox, Math.min(lx - ox, R.focus.x));
+  R.focus.z = Math.max(-lz - oz, Math.min(lz - oz, R.focus.z));
   _rtsApplyCam();
 }
 

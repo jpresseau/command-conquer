@@ -245,8 +245,9 @@ function _rtsBindInput() {
          delta by _rtsZoom() on both axes, which is the right answer only for a camera looking
          straight down. In 3D the view is tilted - screenY is (wz - focus.z) * cos(tilt) * zoom
          - so a vertical drag of N pixels is N / (zoom * cos(tilt)) world units, not N / zoom.
-         At R3D_TILT = 0.62 that cosine is 0.8139, so every vertical pan in 3D moved the ground
-         18.6% less than the finger asked for: the map slid out from under the fingertip, on a
+         At the tilt in force when this was found - 0.62, since leaned further - that cosine was
+         0.8139, so every vertical pan in 3D moved the ground 18.6% less than the finger asked
+         for: the map slid out from under the fingertip, on a
          phone, where this control is the only way to move the camera at all.
 
          Asking _rtsGroundAt where each fingertip is and taking the world difference is correct
