@@ -105,12 +105,33 @@ function clean(v) {
   /* The shipped ladder must not move for the devices that already had it right. */
   S.eq('the dpr-2 ladder is untouched', two.ladder.join(','), '12,24,48');
 
-  /* 2.25x the pixels is 2.25x the fill, and a phone has 16.7ms. Headless Chromium is not an
-     iPhone, so this is a smoke alarm rather than a benchmark - it fires if the rise cost an
-     order of magnitude rather than a factor. */
-  S.ok('the extra resolution is affordable', three.msPerFrame < 16.7,
-       'dpr 3 costs ' + three.msPerFrame + ' ms a frame at the top zoom against ' +
-       two.msPerFrame + ' ms at dpr 2, budget 16.7');
+  /* THE COST OF THE RESOLUTION IS A RATIO, NOT A CLOCK READING.
+
+     This used to assert dpr-3 under 16.7ms, on the reasoning that a phone has a 16.7ms frame.
+     Headless Chromium rasterises on the CPU through SwiftShader and is not a phone, so the
+     number measured the HOST, and the host does not hold still: six runs of one unchanged
+     build spread 15.55, 16.34, 16.98, 16.31, 18.85, 18.08 - straddling the threshold, one
+     failure in three, drifting upward within a single sitting. It had been failing
+     intermittently for reasons that had nothing to do with any change under test.
+
+     What the comment always claimed - 2.25x the pixels costs about 2.25x the fill - is scale
+     free, and it is the quantity that does hold still. Across those six runs the ratio was
+     2.25; across six runs of the build that added the sun's shadow pass, 2.26. So the ratio is
+     the assertion, and it fires on anything SUPERLINEAR in resolution: a full-screen pass that
+     went per-pixel instead of per-frame, a readback, a per-pixel allocation.
+
+     The clock reading is kept as a backstop against a total collapse, set clear of the
+     measured envelope rather than at a phone budget it cannot represent. */
+  var fillRatio = +(three.msPerFrame / two.msPerFrame).toFixed(2);
+  S.ok('the extra resolution costs about what its extra pixels cost',
+       fillRatio < 3.0,
+       'dpr 3 costs ' + fillRatio + 'x dpr 2 for 2.25x the pixels (' + three.msPerFrame +
+       ' ms against ' + two.msPerFrame + ' ms) - past 3.0 the rise is superlinear in ' +
+       'resolution, which is a per-pixel pass where there should be a per-frame one');
+
+  S.ok('...and the frame has not collapsed outright', three.msPerFrame < 25,
+       three.msPerFrame + ' ms a frame at dpr 3, top zoom - a backstop, not a phone budget; ' +
+       'SwiftShader on this host measures 15.5-18.9 for a build that is fine');
 
   S.ok('no page errors', !two.errors.length && !three.errors.length,
        two.errors.concat(three.errors).join(' | ') || 'none');

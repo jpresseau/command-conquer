@@ -18,9 +18,9 @@
    opaque - it did not darken the ground, it replaced it, and read as a hole cut in the map
    rather than as shade. Asserted as a property of the picture: under a shadow the ground must
    still be VARIED, because a hole is one flat colour and shade over textured ground is not.
-   (What casts has since changed from a blob disc to the entity's own mesh squashed onto the
-   ground - see e2e/shadows - but this claim is about the blend, not about the shape, and it
-   holds for whatever is being blended.)
+   (What casts has been through three forms since - a blob disc, the entity's own mesh squashed
+   flat, and now a shadow map, see e2e/shadows - but this claim is about the BLEND, not about
+   what is casting, and it holds for whatever is.)
 
    THE SAVED MODE. A player who picks 3D picks it for the game. It survives a fresh rtsOpen. */
 
@@ -86,15 +86,16 @@ var S = new Suite('r3dlook');
     var cv = document.getElementById('rtsCv'), ctx = cv.getContext('2d');
     function grab() { return ctx.getImageData(0, 0, cv.width, cv.height).data; }
     var withS = grab();
-    /* SUPPRESSED BY ITS ALPHA, which is the one knob that takes the pass to a no-op without
-       changing anything else about the frame. (This used to swap R3.shadowMesh for a
-       zero-vertex stand-in; the discs are gone - shadows are the entity meshes squashed onto
-       the ground now - and there is no separate mesh left to swap.) */
-    var keep = window.R3D_SHADOW_A;
-    window.R3D_SHADOW_A = 0;
+    /* SUPPRESSED BY R3.shadowReady, which gates both halves of the shadow map at once - the
+       sun's pass does not run and the shading programs are told to skip the lookup - and
+       changes nothing else about the frame. (This has been through two earlier forms: a
+       zero-vertex stand-in for the blob-disc mesh, then the planar pass's alpha. Both of those
+       shadow systems are gone; the map subsumed them.) */
+    var keep = R3.shadowReady;
+    R3.shadowReady = false;
     _rtsRFrame(1 / 60);
     var noS = grab();
-    window.R3D_SHADOW_A = keep;
+    R3.shadowReady = keep;
     _rtsRFrame(1 / 60);
 
     var lum = function (d, p) { return 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2]; };

@@ -1,38 +1,40 @@
-/* WHAT CASTS A SHADOW, WHERE IT FALLS, AND WHY IT IS NOT BLACK.
+/* THE SUN SEES THE MAP, AND EVERYTHING SHADES EVERYTHING.
 
-   The 3D mode's shadows were BLOB DISCS: one flat circle per unit, sized off its collision
-   radius. That grounds a mesh and says nothing else - every unit had the same round shadow
-   whatever its shape, buildings had none at all, and an aircraft's disc sat directly under it
-   as though it were parked. Under a camera that now has perspective, a round smudge under a
-   tank is the last thing in the frame still pretending to be 2D.
+   This is the third shadow system in the 3D mode and the first that is one. The first was a
+   BLOB DISC per unit - a flat circle sized off its collision radius, which grounds a mesh and
+   says nothing else. The second squashed each entity's own mesh onto the ground along the
+   light, which is tank-shaped and turns with the hull, and still could not put shade anywhere
+   but on the plane: a forest stood on ground as bright as the clearing beside it, a ridge threw
+   nothing across the grass, and no building shaded its own courtyard.
 
-   They are the entity's own mesh now, squashed onto the ground along the light. Three things
-   have to be true of that, and each of them fails in a different way:
+   A shadow MAP has no such limit. Render the scene from the sun, keep the distance to the
+   nearest surface it can see in every direction, and anything further from the sun than that
+   is in shade - whatever it is standing on and whatever is standing on it. Measured against
+   the pass it replaces: the planar shadows moved 2,714 pixels of a base view, this moves
+   67,739 of the same one.
 
-   THE DIRECTION HAD TO STOP BEING THE SHADING LIGHT'S. R3_LIGHT is the sprite baker's, chosen
-   to light the face the camera sees most - upper-left and IN FRONT - which puts it 22 degrees
-   off the camera's own axis. Its true shadow of a point at height h lands at screen dy -0.568h
-   while the object's own top lands at -0.581h: a shadow hidden behind the object casting it,
-   to within 2%, everywhere on screen and at every zoom. Flipping the light's z throws it down
-   and to the right instead, which is where _sprShadow already puts the 2D game's. This spec
-   pins the geometry rather than the constants - it flies a helicopter and measures where its
-   shadow lands relative to it, which is a number only the real projection can produce.
+   WHAT FAILS, AND HOW EACH FAILURE LOOKS:
 
-   THE STENCIL IS THE DIFFERENCE BETWEEN A SHADOW AND A BLOT. A planar shadow puts every face
-   of a model on the same patch of ground, so a six-sided box blends six times over. Measured
-   both ways on the same frame: with the stencil, 89% of shadow pixels sit at exactly the
-   single-blend alpha and NONE are darker than it; without it, 92% are over-blended and the
-   commonest level is 0.99 - a black silhouette with all the shape lost inside it. The
-   assertion is the share of over-blended pixels, because that is the number that separates
-   them by a factor of a hundred.
+   - THE WORLD STOPS CASTING. Trees and rock are the map's own geometry, drawn from per-chunk
+     buffers rather than from the entity walk, and it is entirely possible to wire the entity
+     half of the pass and forget them. Graded with every entity removed, at the edge of a
+     forest, where every shadow in the frame must therefore come from the world.
 
-   AND IT HAS TO DARKEN THE GROUND RATHER THAN REPLACE IT, which e2e/r3dlook already grades as
-   a property of the picture and is not repeated here.
+   - THE ENTITIES STOP CASTING, silently. This one has already happened once: paintEntities
+     reads ART2W, which was assigned further down _r3dFrame than the sun's pass runs, so every
+     entity went into the shadow map with an undefined scale - a NaN that drops the geometry
+     without raising anything anywhere. The frame looked almost right, because the world still
+     cast. Graded on a lone aircraft, high up, where a building's shadow would hide under its
+     own footprint and prove nothing.
 
-   HOW THE PASS IS SUPPRESSED FOR MEASUREMENT: R3D_SHADOW_A, its alpha. Zero makes the pass a
-   no-op without changing a single other thing about the frame - not the draw order, not the
-   depth buffer, not what geometry is submitted - so the difference between the two frames is
-   the shadows and nothing else. */
+   - THE DIRECTION GOES BACK TO THE SHADING LIGHT'S. R3_LIGHT is the sprite baker's and sits 22
+     degrees off the camera axis, so its shadows fall behind the things casting them - measured,
+     within 2% of the object's own top. The sun's basis is built from the z-flipped light for
+     that reason, and the assertion is a SIGN: down the screen and to the right.
+
+   - IT ACNES. A lit surface samples its own depth, half the texels come back "further", and
+     the whole map stipples. Graded on an empty map with nothing to cast at all, where any
+     shaded pixel is the ground shadowing itself. */
 
 var { chromium } = require('playwright');
 var { Suite } = require('../lib/assert.js');
@@ -42,7 +44,7 @@ var S = new Suite('shadows');
 
 (async function () {
   var browser = await chromium.launch();
-  var g = await openPage(browser, { width: 900, height: 650, dpr: 1 });
+  var g = await openPage(browser, { width: 900, height: 700, dpr: 1 });
   await g.start(7, 1);
 
   var out = await g.page.evaluate(function () {
@@ -57,170 +59,112 @@ var S = new Suite('shadows');
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;
-    o.stencilBits = R3.gl.getParameter(R3.gl.STENCIL_BITS);
-    o.sx = +R3D_SHADOW_SX.toFixed(4);
-    o.sz = +R3D_SHADOW_SZ.toFixed(4);
-    o.alpha = R3D_SHADOW_A;
-
-    var yard = _rtsHas('player', 'yard');
-    R.focus.x = yard.x; R.focus.z = yard.z;
-    R.zi = RTS_ZOOMS.length - 1; _rtsApplyCam();
-
-    /* Build the world once, then take it out of the frame. Trees and tufts do not cast (a
-       million triangles drawn twice is the one thing that would not fit the budget) but they
-       DO stand in front of shadows and change pixels for their own reasons, and every
-       measurement below is a difference between two frames. */
-    _rtsRFrame(1 / 60);
-    R3.world = []; R3.oreMesh = null; R3.worldG = G;
+    o.ready = !!R3.shadowReady;
+    o.size = R3D_SHADOW_SIZE;
 
     var gl = R3.gl, CW = R3.cv.width, CH = R3.cv.height;
+    gl.bindTexture(gl.TEXTURE_2D, R3.shadowTex);
+    o.mag = gl.getTexParameter(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER);
+    o.NEAREST = gl.NEAREST;
+
+    /* ANYTHING THAT MOVES IN THE MAIN PASS HAS TO MOVE IN THE SUN'S. The sea's swell is a
+       vertex displacement, and it is written out in both shaders; if they ever drift, the
+       water's shadow stands still while the water rolls under it. Checked as a text property
+       of the two compiled sources, the way e2e/r3dlook checks the light constants. */
+    var waveTerms = ['0.34', '0.22', '1.15', '0.19', '0.41', '0.85', '1.35', '0.95', '2.40'];
+    o.waveShared = waveTerms.filter(function (t) {
+      return R3D_MESH_VS.indexOf(t) >= 0 && R3D_SHADOW_VS.indexOf(t) >= 0;
+    }).length;
+    o.waveTerms = waveTerms.length;
+
     function shot() {
       _rtsRFrame(1 / 60);
       var b = new Uint8Array(CW * CH * 4);
       gl.readPixels(0, 0, CW, CH, gl.RGBA, gl.UNSIGNED_BYTE, b);
       return b;
     }
-    /* The frame with shadows and the frame without, and what the pass did between them. */
-    function shadowDiff() {
+    /* R3.shadowReady gates both halves at once - the sun's pass does not run and the shading
+       programs are told to skip the lookup - and changes nothing else about the frame. */
+    function withAndWithout() {
       var A = shot();
-      var keep = window.R3D_SHADOW_A;
-      window.R3D_SHADOW_A = 0;
+      var keep = R3.shadowReady;
+      R3.shadowReady = false;
       var B = shot();
-      window.R3D_SHADOW_A = keep;
+      R3.shadowReady = keep;
       return { on: A, off: B };
     }
-    /* every pixel the pass darkened, its blend ratio against the ground it fell on, and the
-       centroid of the lot */
-    function analyse(d) {
-      var A = d.on, B = d.off, ratios = {}, n = 0, sx = 0, sy = 0;
+    function shaded(d) {
+      var A = d.on, B = d.off, n = 0, sx = 0, sy = 0, tot = 0;
       for (var p = 0; p < A.length; p += 4) {
-        var delta = (B[p] - A[p]) + (B[p + 1] - A[p + 1]) + (B[p + 2] - A[p + 2]);
-        if (delta <= 6) continue;
-        var sum = B[p] + B[p + 1] + B[p + 2];
-        if (sum < 40) continue;                       /* nothing to darken - skip near-black */
-        var r = Math.round((1 - (A[p] + A[p + 1] + A[p + 2]) / sum) * 100) / 100;
-        ratios[r] = (ratios[r] || 0) + 1;
-        var px = (p >> 2) % CW, py = (p >> 2) / CW | 0;
-        sx += px; sy += py; n++;
+        tot++;
+        if ((B[p] - A[p]) + (B[p + 1] - A[p + 1]) + (B[p + 2] - A[p + 2]) <= 8) continue;
+        sx += (p >> 2) % CW; sy += (p >> 2) / CW | 0; n++;
       }
-      if (!n) return { px: 0 };
-      var keys = Object.keys(ratios).map(Number);
-      keys.sort(function (a, b) { return ratios[b] - ratios[a]; });
-      var over = 0;
-      keys.forEach(function (k) { if (k > window.R3D_SHADOW_A + 0.08) over += ratios[k]; });
-      return {
-        px: n, mode: keys[0],
-        dominant: +(ratios[keys[0]] / n * 100).toFixed(1),
-        over: +(over / n * 100).toFixed(1),
-        /* readPixels is bottom-up; hand back CSS pixels the projection can be compared to */
-        cx: (sx / n) / R.dpr, cy: (CH - 1 - sy / n) / R.dpr
-      };
+      return { px: n, pct: +(n / tot * 100).toFixed(1),
+               cx: n ? (sx / n) / R.dpr : 0, cy: n ? (CH - 1 - sy / n) / R.dpr : 0 };
     }
 
-    /* ---------- 1. a BUILDING casts, which a units-only disc never did ---------- */
-    var keepEnts = G.ents;
-    G.ents = [yard];
-    o.building = analyse(shadowDiff());
-
-    /* WHERE THE SHADOW SITS RELATIVE TO THE THING CASTING IT, which is the whole reason the
-       shadow light is not the shading light. Height lifts a model UP the screen, so a shadow
-       thrown up the screen lands behind the model's own body and is not a shadow anyone sees.
-       Measured against the model's own drawn centroid rather than against a constant: take the
-       frame with the yard and shadows off, take the frame with nothing on the map at all, and
-       the pixels between them are the building. */
-    var withB = shot();
-    G.ents = [];
-    var noB = shot();
-    G.ents = [yard];
-    var mx = 0, my = 0, mn = 0;
-    for (var mp = 0; mp < withB.length; mp += 4) {
-      if (Math.abs(withB[mp] - noB[mp]) + Math.abs(withB[mp + 1] - noB[mp + 1]) +
-          Math.abs(withB[mp + 2] - noB[mp + 2]) <= 8) continue;
-      mx += (mp >> 2) % CW; my += (mp >> 2) / CW | 0; mn++;
-    }
-    o.model = mn ? { x: +((mx / mn) / R.dpr).toFixed(1),
-                     y: +((CH - 1 - my / mn) / R.dpr).toFixed(1), px: mn } : null;
-    o.dropY = (o.model && o.building.px)
-      ? +(o.building.cy - o.model.y).toFixed(1) : 0;
-
-    /* ---------- 2. the stencil: one blend per pixel ---------- */
-    o.stencilOn = { dominant: o.building.dominant, over: o.building.over, mode: o.building.mode };
-    R3.stencil = false;
-    var bad = analyse(shadowDiff());
-    R3.stencil = o.stencilBits > 0;
-    o.stencilOff = { dominant: bad.dominant, over: bad.over, mode: bad.mode };
-
-    /* ---------- 3. a flying unit's shadow is displaced BY ITS ALTITUDE ---------- */
-    G.ents = keepEnts;
-    var heli = null;
-    var spot = _rtsNearestOpen(yard.tx + 4, yard.tz + 4, 12, null);
-    if (spot) heli = _rtsSpawnUnit('player', 'heli', _rtsWX(spot[0]), _rtsWX(spot[1]));
-    if (!heli) {
-      /* whatever this side's air unit is called, take the first that flies */
-      var keys2 = Object.keys(RTS_UNITS || {});
-      for (i = 0; i < keys2.length && !heli; i++) {
-        var ud = rtsUnitDef(keys2[i]);
-        if (ud && (ud.air || ud.kind === 'air') && spot) {
-          heli = _rtsSpawnUnit('player', keys2[i], _rtsWX(spot[0]), _rtsWX(spot[1]));
+    /* ---------- 1. the WORLD casts, with no entity anywhere ---------- */
+    var best = null, bs = 0;
+    for (var tz = 6; tz < RTS_N - 6; tz += 2) {
+      for (var tx = 6; tx < RTS_N - 6; tx += 2) {
+        var s = 0;
+        for (var dz = -3; dz <= 3; dz++) {
+          for (var dx = -3; dx <= 3; dx++) {
+            if (G.terrain[_rtsIdx(tx + dx, tz + dz)] === RTS_T_TREE) s++;
+          }
         }
+        if (s > bs) { bs = s; best = [tx, tz]; }
       }
     }
+    o.woodAt = best; o.woodDensity = bs;
+    /* looked up BEFORE the entity list is emptied - _rtsHas walks it */
+    var yard = _rtsHas('player', 'yard');
+    var keepEnts = G.ents;
+    G.ents = [];
+    R.focus.x = _rtsWX(best[0] + 4); R.focus.z = _rtsWX(best[1] + 4);
+    R.zi = RTS_ZOOMS.length - 1; _rtsApplyCam();
+    _rtsRFrame(1 / 60);
+    o.world = shaded(withAndWithout());
+
+    /* ---------- 2. acne: an empty map shadows nothing ---------- */
+    var keepWorld = R3.world, keepOre = R3.oreMesh, keepWater = R3.waterMesh;
+    R3.world = []; R3.oreMesh = null; R3.waterMesh = null; R3.worldG = G;
+    R.focus.x = yard.x; R.focus.z = yard.z; _rtsApplyCam();
+    o.acne = shaded(withAndWithout());
+
+    /* ---------- 3. every ENTITY casts, and down-right ---------- */
+    /* A lone aircraft, high up. A building's shadow lands under its own footprint at this sun
+       angle and proves nothing about whether it was drawn into the map at all. */
+    var spot = _rtsNearestOpen(yard.tx + 3, yard.tz + 3, 12, null);
+    var heli = spot ? _rtsSpawnUnit('player', 'heli', _rtsWX(spot[0]), _rtsWX(spot[1])) : null;
     o.flew = !!heli;
     if (heli) {
-      heli.air = 1; heli.alt = 12; heli.rearming = 0;
-      R.focus.x = heli.x; R.focus.z = heli.z;
+      heli.air = 1; heli.alt = 40; heli.rearming = 0;
+      R.focus.x = heli.x; R.focus.z = heli.z; _rtsApplyCam();
       G.ents = [heli];
-      var hy = (heli.alt || 12) * 0.35;               /* the frame's own altitude scaling */
-      var d3 = analyse(shadowDiff());
-      o.heli = d3;
-      /* where the unit is, and where the documented projection says its shadow goes */
-      var self = _rtsWorldToScreen(heli.x, hy, heli.z);
-      var cast = _rtsGroundToScreen(heli.x + hy * R3D_SHADOW_SX, heli.z + hy * R3D_SHADOW_SZ);
-      o.heliSelf = { x: +self.x.toFixed(1), y: +self.y.toFixed(1) };
-      o.heliCast = { x: +cast.x.toFixed(1), y: +cast.y.toFixed(1) };
-      o.heliMeasured = { x: +d3.cx.toFixed(1), y: +d3.cy.toFixed(1) };
-      o.castErr = d3.px ? +Math.hypot(d3.cx - cast.x, d3.cy - cast.y).toFixed(1) : -1;
-      o.selfErr = d3.px ? +Math.hypot(d3.cx - self.x, d3.cy - self.y).toFixed(1) : -1;
-      G.ents = keepEnts;
-    }
-
-    /* ---------- 4. the shadow has the SHAPE of the thing casting it ---------- */
-    /* A disc is a disc whichever way the tank points. A real silhouette is not: turning the
-       hull a quarter turn has to change the outline the shadow makes on the ground. */
-    var tank = null, tspot = _rtsNearestOpen(yard.tx + 6, yard.tz + 2, 12, null);
-    if (tspot) tank = _rtsSpawnUnit('player', 'tank', _rtsWX(tspot[0]), _rtsWX(tspot[1]));
-    o.hasTank = !!tank;
-    if (tank) {
-      R.focus.x = tank.x; R.focus.z = tank.z;
-      G.ents = [tank];
-      function silhouette(rot) {
-        tank.rot = rot; tank.turret = rot;
-        var A = shot();
-        var keep2 = window.R3D_SHADOW_A;
-        window.R3D_SHADOW_A = 0;
-        var B = shot();
-        window.R3D_SHADOW_A = keep2;
-        var x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, n = 0;
-        for (var p = 0; p < A.length; p += 4) {
-          if ((B[p] - A[p]) + (B[p + 1] - A[p + 1]) + (B[p + 2] - A[p + 2]) <= 6) continue;
-          var px = (p >> 2) % CW, py = (p >> 2) / CW | 0;
-          if (px < x0) x0 = px;
-          if (px > x1) x1 = px;
-          if (py < y0) y0 = py;
-          if (py > y1) y1 = py;
-          n++;
-        }
-        return n ? { w: x1 - x0 + 1, h: y1 - y0 + 1, px: n } : null;
+      var d3 = withAndWithout();
+      var sh = shaded(d3);
+      o.heliShadow = sh;
+      /* the aircraft's own drawn centroid, from the unshadowed frame against an empty one */
+      G.ents = [];
+      var bare = shot();
+      G.ents = [heli];
+      var mx = 0, my = 0, mn = 0;
+      for (var q = 0; q < d3.off.length; q += 4) {
+        if (Math.abs(d3.off[q] - bare[q]) + Math.abs(d3.off[q + 1] - bare[q + 1]) +
+            Math.abs(d3.off[q + 2] - bare[q + 2]) <= 8) continue;
+        mx += (q >> 2) % CW; my += (q >> 2) / CW | 0; mn++;
       }
-      var s0 = silhouette(0), s90 = silhouette(Math.PI / 2);
-      o.rot0 = s0; o.rot90 = s90;
-      if (s0 && s90) {
-        o.aspect0 = +(s0.w / s0.h).toFixed(3);
-        o.aspect90 = +(s90.w / s90.h).toFixed(3);
-        o.aspectShift = +Math.abs(o.aspect0 - o.aspect90).toFixed(3);
+      o.heliSelf = mn ? { x: +((mx / mn) / R.dpr).toFixed(1),
+                          y: +((CH - 1 - my / mn) / R.dpr).toFixed(1) } : null;
+      if (o.heliSelf && sh.px) {
+        o.dx = +(sh.cx - o.heliSelf.x).toFixed(1);
+        o.dy = +(sh.cy - o.heliSelf.y).toFixed(1);
       }
-      G.ents = keepEnts;
     }
+    R3.world = keepWorld; R3.oreMesh = keepOre; R3.waterMesh = keepWater;
+    G.ents = keepEnts;
     return o;
   });
 
@@ -231,60 +175,53 @@ var S = new Suite('shadows');
     return require('../lib/report.js')(S);
   }
 
-  S.ok('the context carries a stencil buffer', out.stencilBits > 0,
-       out.stencilBits + ' stencil bits - asked for in the context attributes, not assumed');
+  S.ok('the sun has a depth map to draw into', out.ready && out.size >= 1024,
+       out.size + ' square');
 
-  /* Buildings had NO shadow at all under the blob discs, which were drawn for units only. */
-  S.ok('a building casts a shadow', out.building.px > 400,
-       out.building.px + ' pixels darkened by a lone construction yard (the blob discs it ' +
-       'replaces were drawn for units only, so this was exactly 0)');
+  /* Two channels of an RGBA8 target hold one number. Filtering them averages the high byte
+     with its neighbour's and the low byte with its neighbour's SEPARATELY, which is not the
+     average of the two depths and is not any depth at all. */
+  S.ok('...sampled NEAREST, because its two channels are one packed number',
+       out.mag === out.NEAREST,
+       out.mag === out.NEAREST ? 'NEAREST' : 'LINEAR - which averages a high byte against a ' +
+       'low byte and returns a depth that was never written');
 
-  S.ok('the stencil gives each pixel one blend, not one per face',
-       out.stencilOn.over < 2 && out.stencilOn.dominant > 70,
-       out.stencilOn.dominant + '% of shadow pixels sit at the single-blend alpha ' +
-       out.alpha + ' and ' + out.stencilOn.over + '% are darker than it');
+  S.ok('the two passes displace the sea by the same wave',
+       out.waveShared === out.waveTerms,
+       out.waveShared + ' of ' + out.waveTerms + ' wave terms appear in BOTH the mesh shader ' +
+       'and the sun\'s - drift here leaves the water\'s shadow standing still while the water ' +
+       'rolls under it');
 
-  S.ok('...which is worth having: without it the silhouette fills in solid',
-       out.stencilOff.over > 50 && out.stencilOff.mode > 0.9,
-       'the same frame with the stencil off is ' + out.stencilOff.over +
-       '% over-blended, commonest level ' + out.stencilOff.mode + ' against ' +
-       out.stencilOn.mode + ' - a black blot rather than a shadow');
+  S.ok('the map has a wood to look at', out.woodDensity > 20,
+       out.woodDensity + ' of 49 cells around ' + out.woodAt + ' are forest');
 
-  /* THE DESIGN CLAIM, and the one the constants alone cannot carry: flipping the light's z
-     back would move the shader AND the expected position together, so a spec that only
-     compares the two would pass with the shadow hidden. This compares the shadow to the
-     BUILDING, and a shadow thrown up the screen lands behind the body that threw it. */
-  S.ok('the shadow falls clear of the model, down the screen rather than behind it',
-       out.model && out.dropY > 8,
-       'the shadow centroid sits ' + out.dropY + 'px below the building\'s own centroid (' +
-       (out.model ? out.model.y : '?') + ' -> ' + (out.building.px ? out.building.cy.toFixed(1) : '?') +
-       ') - with the shading light\'s own direction this is NEGATIVE, because that light is 22 ' +
-       'degrees off the camera axis and its shadow hides behind the thing casting it');
+  /* The capability the planar pass never had: this frame contains no entity at all, so every
+     shadow in it was cast by the map's own geometry. */
+  S.ok('the world shades itself and the ground under it',
+       out.world.pct > 12,
+       out.world.pct + '% of a forest-edge frame changes when the sun\'s pass is suppressed, ' +
+       'with every entity removed - the planar shadows that preceded this drew entities only, ' +
+       'so the same measurement on them is exactly 0');
 
-  S.ok('an air unit was put in the air to check', out.flew,
-       out.flew ? 'flying' : 'no air unit could be spawned');
+  /* Acne: nothing on the map, so nothing may be in shade. */
+  S.ok('...and bare ground does not shadow itself', out.acne.pct < 0.5,
+       out.acne.pct + '% of an empty map is shaded (' + out.acne.px + ' pixels) - a lit ' +
+       'surface sampling its own depth is what stipples a shadow map');
+
+  S.ok('an air unit was put up to check', out.flew, out.flew ? 'flying' : 'no air unit');
   if (out.flew) {
-    /* The whole of the direction claim, as a measurement: the shadow is NOT under the
-       aircraft, and it is where the projection along the shadow light says it is. */
-    S.ok('a flying unit\'s shadow lies away from it, by its altitude',
-         out.castErr >= 0 && out.castErr < 12 && out.selfErr > out.castErr * 2,
-         'shadow centroid ' + out.heliMeasured.x + ',' + out.heliMeasured.y +
-         ' - ' + out.castErr + 'px from where the projection along the shadow light puts it (' +
-         out.heliCast.x + ',' + out.heliCast.y + ') and ' + out.selfErr +
-         'px from the aircraft itself (' + out.heliSelf.x + ',' + out.heliSelf.y +
-         '), which is where a blob disc sat');
-  }
+    /* The regression that has already happened once, and left no error anywhere. */
+    S.ok('entities are drawn into the map at all',
+         out.heliShadow && out.heliShadow.px > 100,
+         (out.heliShadow ? out.heliShadow.px : 0) + ' pixels shaded by a lone aircraft - ' +
+         'paintEntities reads ART2W, which used to be assigned further down the frame than ' +
+         'the sun\'s pass runs, so every entity went in at an undefined scale and vanished');
 
-  S.ok('a tank is on the ground to check', out.hasTank && out.rot0 && out.rot90,
-       out.rot0 ? (out.rot0.px + ' and ' + out.rot90.px + ' shadow pixels') : 'no tank');
-  if (out.rot0 && out.rot90) {
-    /* A disc is a disc whichever way the hull points. */
-    S.ok('the shadow has the shape of the thing casting it, not a disc',
-         out.aspectShift > 0.15,
-         'turning the hull a quarter turn takes the shadow from ' + out.rot0.w + 'x' +
-         out.rot0.h + ' (aspect ' + out.aspect0 + ') to ' + out.rot90.w + 'x' + out.rot90.h +
-         ' (aspect ' + out.aspect90 + ') - a shift of ' + out.aspectShift +
-         '; a disc does not change shape when the thing above it turns');
+    S.ok('...and the shadow falls down the screen and to the right',
+         out.dx > 20 && out.dy > 20,
+         'the shadow sits ' + out.dx + 'px right and ' + out.dy + 'px below the aircraft - ' +
+         'with the shading light\'s own direction both of these go the other way, and the ' +
+         'shadow hides behind the thing casting it');
   }
 
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
