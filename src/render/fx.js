@@ -12,6 +12,35 @@
    by the `scale` that comes back, so an effect on the far side of the view is sized to the
    ground under it. Under today's orthographic camera that scale is 1 and the arithmetic is
    what it always was. */
+/* WHICH FRAME AN EFFECT IS SHOWING, AND HOW BIG IT IS, factored out because the 3D mode draws
+   these as billboards in its own pass (render3d/fx3d.js) and the two must not drift. Everything
+   about the choice - which set the kind maps to, the fallbacks when a set only half-loaded, the
+   frame index, and whether the sprite hangs around its anchor or stands on it - lives here and
+   nowhere else. */
+function _rtsFxFrame(f, S) {
+  var set = f.kind === 'piff' ? S.fx.piff
+          : (f.kind === 'splash' ? S.fx.splash
+          : (f.kind === 'smoke' ? S.fx.smoke
+          : (f.kind === 'hit' && S.fx.hit ? S.fx.hit
+          : (f.kind === 'pop' && S.fx.pop ? S.fx.pop
+          : (RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].size ? S.fx.fire : S.fx.boom)))));
+  var dur = (RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].dur) || 0.75;
+  var fr = Math.min(set.length - 1, Math.floor(_rtsAnimQ(f.t) / dur * set.length));
+  /* A fire is anchored near its BASE rather than its centre, because it stands on the ground
+     rather than hanging in the air around it. */
+  return { img: set[Math.max(0, fr)],
+           anchor: RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].size ? 0.72 : 0.5 };
+}
+
+/* The sprite's width with NO perspective in it. The 2D path multiplies by the projection's
+   own scale; the 3D path divides by the zoom to get world units, which is the same number
+   arriving from the other side. Divided by the density the frame was baked at: the drawn set
+   bakes at RTS_PS and says so, real Red Alert artwork carries no tag and reads as 1, and
+   _mixFx replaces these role by role so a mixed set holds both at once. */
+function _rtsFxSize(img, TSscale, big) {
+  return img.width * TSscale / (img.ps || 1) * (big || 1) * 0.9;
+}
+
 function _rtsDrawFx(g, G, S, TSscale, cell) {
   var i;
   /* --- projectiles --- */
@@ -112,29 +141,24 @@ function _rtsDrawFx(g, G, S, TSscale, cell) {
     } else {
       /* Combat_Anim: which set of frames this is comes from the animation kind, which the
          simulation chose from the damage and the land type. */
-      /* Role-by-role, so `hit` and `pop` use their own artwork where it exists instead of a
-         scaled fireball. Falling back to boom keeps a set that only half-loaded working. */
-      var set = f.kind === 'piff' ? S.fx.piff
-              : (f.kind === 'splash' ? S.fx.splash
-              : (f.kind === 'smoke' ? S.fx.smoke
-              : (f.kind === 'hit' && S.fx.hit ? S.fx.hit
-              : (f.kind === 'pop' && S.fx.pop ? S.fx.pop
-              : (RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].size ? S.fx.fire : S.fx.boom)))));
-      var dur = (RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].dur) || 0.75;
-      var fr = Math.min(set.length - 1, Math.floor(_rtsAnimQ(f.t) / dur * set.length));
-      var img = set[Math.max(0, fr)];
+      /* 3D DRAWS THESE ITSELF, as camera-facing quads inside the world pass rather than as
+         decals laid over the finished picture - so they stand at the right height and a
+         building in front of one hides it. See render3d/fx3d.js. */
+      if (window._R3D && window._R3D.on) continue;
+      var pick = _rtsFxFrame(f, S);
+      var img = pick.img;
       var xp = _rtsGroundToScreen(f.x, f.z);
       /* Divided by the density the frame was baked at. The drawn set bakes at RTS_PS and
          says so; real Red Alert artwork carries no tag and reads as 1, which matters here
          because _mixFx replaces these role by role and a mixed set holds both at once. */
-      var sz = img.width * TSscale * xp.scale / (img.ps || 1) * (f.big || 1) * 0.9;
+      var sz = _rtsFxSize(img, TSscale, f.big) * xp.scale;
       /* Draw at the frame's OWN aspect ratio. This used to force every effect square, which
          is harmless for a fireball or a spark but squashes a flame - and a flame is taller
          than it is wide. Every pre-existing effect set is square, so this changes none of
          them. A fire is also anchored near its BASE rather than its centre, because it
          stands on the ground rather than hanging in the air around it. */
       var szh = sz * (img.height / img.width);
-      var anchor = RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].size ? 0.72 : 0.5;
+      var anchor = pick.anchor;
       g.drawImage(img, Math.round(xp.x - sz / 2), Math.round(xp.y - szh * anchor), sz, szh);
     }
   }
