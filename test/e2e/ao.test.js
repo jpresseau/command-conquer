@@ -154,6 +154,39 @@ var S = new Suite('ao');
     o.aoMax = +mx.toFixed(1);
     o.aoBrighter = +(brighter / tot * 100).toFixed(2);
 
+    /* ---------- 3b. THE SHAPE OF IT, not just the amount ----------
+       The occlusion has to be deep where things MEET and absent where they do not, and those
+       two are separate claims that a single average cannot tell apart: turning the gain up
+       raises both and the average looks better while the frame looks worse.
+
+       So the pixels are split by how much the pass darkens them and each half is graded on its
+       own. The deep end is the contacts - a trunk's foot, a wall meeting the ground. The floor
+       of the split is open ground, which the pass should barely touch, and it is the half that
+       goes wrong first: raising the gain alone from 1.6 to 2.6 took the contacts from 21.5 to
+       29.9 levels and the open ground from 0.51 to 0.86 - the deep end up 39%, the part that
+       should be clean up 69%. That is the smear everyone recognises as the AO turned up.
+
+       Graded as the RATIO, because that is the thing the shaping buys and the gain cannot. */
+    var deepSum = 0, deepN = 0, openSum = 0, openN = 0;
+    for (i = 0; i < aoOn.length; i += 4) {
+      var d4 = ((aoOff[i] - aoOn[i]) + (aoOff[i + 1] - aoOn[i + 1]) +
+                (aoOff[i + 2] - aoOn[i + 2])) / 3;
+      if (d4 >= 18) { deepSum += d4; deepN++; } else if (d4 <= 3) { openSum += Math.max(0, d4); openN++; }
+    }
+    o.aoDeep = deepN ? +(deepSum / deepN).toFixed(1) : 0;
+    o.aoDeepN = deepN;
+    o.aoDeepPct = +(deepN / tot * 100).toFixed(2);
+    o.aoOpen = openN ? +(openSum / openN).toFixed(2) : 0;
+    o.aoRatio = o.aoOpen > 0 ? +(o.aoDeep / o.aoOpen).toFixed(0) : 0;
+    o.aoCurve = R3D_AO_CURVE;
+    o.aoGain = R3D_AO_STRENGTH;
+    o.aoFloor = R3D_AO_FLOOR[0];
+    /* the curve has to actually be in the compiled source, and before the gain - see the note
+       in post3d.js for why that order is not interchangeable */
+    o.curveInFS = R3D_AO_FS.indexOf('pow(occ / float(' + R3D_AO_SAMPLES + '), ' +
+                                    R3D_AO_CURVE.toFixed(3) + ') * ' +
+                                    R3D_AO_STRENGTH.toFixed(3)) >= 0;
+
     /* ---------- 4. WHAT is doing the occluding, and how far away it is ----------
        The measurement that separates ambient occlusion from silhouette halo. For every sample
        the pass counts as hidden, reconstruct the occluder's own position and take the real 3D
@@ -253,6 +286,35 @@ var S = new Suite('ao');
          out.aoTouched + '% of the frame darkens when the occlusion is mixed out, by ' +
          out.aoMean + ' levels on average and up to ' + out.aoMax + ' - tree bases, crystal ' +
          'bases, and the ground around every building');
+
+    /* THE SHAPE, WHICH IS WHAT THE TUNING IS ABOUT - see the note at the measurement. Deep in
+       the contacts, near-nothing on open ground, and it is the RATIO between them that the
+       curve buys, because the gain moves both together. */
+    /* BOUNDED ON BOTH SIDES, and the upper bound is the one that took a mutation to find.
+       Graded only as "enough of the frame goes deep", every knob that darkens harder scores
+       better and the assertion becomes an argument for the smear it is supposed to forbid:
+       dropping the curve alone takes this from 2.2% of the frame to 8.1%, and passes. Contact
+       shading is a THIN band where surfaces meet - a twentieth of the frame is not contact,
+       it is the whole picture going dark. */
+    S.ok('...deeply where they meet, and hardly at all on open ground',
+         out.aoDeepPct > 0.7 && out.aoDeepPct < 4 && out.aoOpen < 0.68 && out.aoRatio > 36,
+         out.aoDeepPct + '% of this frame reaches contact depth (' + out.aoDeepN + ' pixels, ' +
+         'averaging ' + out.aoDeep + ' levels down) while open ground moves ' + out.aoOpen +
+         ' - a ratio of ' + out.aoRatio + '. Three tunings bracket that, all on this frame: ' +
+         'the linear one this shipped with reaches contact depth on 0.28% at 21.0 levels, ' +
+         'open 0.66 - a sixth as many pixels reading as contact, and DIRTIER open ground than ' +
+         'now. The same gain and floor with the curve taken out reaches 8.09%, open 0.70 - ' +
+         'four times too much of the frame gone dark, which is the smear. Only the three ' +
+         'together land in between: the curve (' + out.aoCurve + ') suppresses shallow ' +
+         'occlusion so the gain (' + out.aoGain + ') can be spent where things actually ' +
+         'touch, and the floor (' + out.aoFloor + ') lets the deep end past the 57 levels it ' +
+         'clamped at however hard the gain was pushed');
+
+    S.ok('...with the curve applied before the gain, in the compiled shader',
+         out.curveInFS,
+         out.curveInFS ? 'pow() runs on the normalised occlusion, then the gain scales it'
+           : 'the shaping is not in R3D_AO_FS - clipping first and curving the clipped value ' +
+             'throws the deep end away, which is the whole point of it');
 
     /* Occlusion only darkens. Anything brighter is the pass writing something it should not. */
     S.ok('...and the occlusion never brightens anything', out.aoBrighter < 0.1,

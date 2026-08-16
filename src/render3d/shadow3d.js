@@ -33,13 +33,35 @@
    depth range is about a centimetre - far finer than the bias the comparison needs anyway. One
    code path, no extensions, works everywhere the mode already works. */
 
-var R3D_SHADOW_SIZE = 1024;    /* the map is square. 1024 over a view a few dozen cells across
-                                  is about a texel per 6cm of ground at the top zoom, which is
-                                  finer than the 3x3 PCF kernel that samples it. 2048 was tried
-                                  and is not visibly different. */
-/* How much of the world the sun's view covers, as a multiple of the camera's own view radius.
-   Bigger wastes resolution on ground nobody is looking at; smaller and things just off screen
-   stop casting into the frame, which reads as shadows switching on as you pan. */
+/* The map is square. At the top zoom the sun's span works out around 83 world units either
+   way, so 1024 is a texel every 0.16 world units - a twenty-fifth of a cell - and the 3x3 PCF
+   kernel over it spans about 0.43 world units, four screen pixels. The KERNEL sets the
+   softness, not the texel, which is why more resolution buys so little: 2048 and 4096 were
+   both rendered against 1024 at the current camera and the frames are indistinguishable, at
+   four and sixteen times the memory.
+
+   (Re-measured after the lean went from 36 degrees to 49. That widened the span by half, so
+   the texel figure this comment used to carry - and the claim about 2048 resting on it - were
+   both from a camera that no longer exists. The conclusion survived; the numbers did not.) */
+var R3D_SHADOW_SIZE = 1024;
+/* How much of the world the sun's view covers, as a multiple of HALF THE LONGER SIDE of what
+   the camera can see. Bigger wastes resolution on ground nobody is looking at; smaller and the
+   corners of the screen fall outside the map, sample a clamped edge texel, come back unshaded,
+   and take no shadows at all.
+
+   1.35 IS VERY NEARLY THE MINIMUM, and how nearly depends on the viewport's ASPECT - the span
+   comes off the longer side while the ground that reaches furthest is a corner. Measured, the
+   furthest visible ground uses 62% of the span at 600x1000, 79% at 800x800, 88% at 900x700
+   and 99.2% at 1280x900. A widescreen laptop has under one percent in hand, and 1.25 overruns
+   to 107%. e2e/shadows measures this on a second page at 1280x900 for exactly that reason: at
+   its own 900x700 the same 1.25 reads 95% and sails through.
+
+   What binds is not the obvious thing. The `across` axis is cross(worldUp, forward), so its y
+   component is zero by construction and no amount of height moves a point along it - it is
+   pure ground extent, and it is the axis at 99.2%. The `down` axis carries y at 0.651, and
+   raising a caster to R3D_WORLD_YMAX moves it TOWARDS the centre there rather than away,
+   because the sun sits behind the scene. The tight case is flat ground at a corner, not a
+   tall building at the edge. */
 var R3D_SHADOW_SPAN = 1.35;
 /* The depth range the pass spans, in world units, and the bias that stops a surface shadowing
    itself. Acne is the classic failure - a lit surface samples its own depth, half its texels
