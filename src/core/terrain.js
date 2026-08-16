@@ -354,6 +354,68 @@ function _rtsGenTerrain(G, rnd, starts) {
     if (G.scrap[i] > 0 && !_lr[i]) { G.scrap[i] = 0; G.gems[i] = 0; }
   }
 
+  /* --- AND THE GROUND ITSELF RISES, on the far side of the ridges' own contour ---
+
+     Last, because it has to see the finished map: the sea and its beaches are carved after the
+     roads, and a shoreline that climbed away from the water would leave the surface standing
+     over its own coast.
+
+     The rock ridges above are a band around where nz(...,19,seed+11) crosses 0.5, and the
+     boundary between two levels is exactly a contour - so reading the height off the SAME
+     field puts the top of the slope under the wall that was already built, with neither pass
+     told about the other. The band is |nz - 0.5| < 0.016 and the ramp here runs 0.484 to
+     0.516, the same width, so the rock sits ON the slope rather than beside it: a plateau edge
+     with a wall on it reads as a cliff face and not as a fence at the top of a bank.
+
+     SMOOTHSTEP RATHER THAN A STEP, so the tops are flat and only the boundary leans. The
+     ground has to be a surface a unit can stand anywhere on, not a staircase, and it is a
+     smooth function of a smooth field so no seam can appear inside a plateau.
+
+     NOTHING BECOMES IMPASSABLE HERE, and nothing about the sim is read or written. Where the
+     ridge mask denied a wall the ground still rises, and that stretch is a RAMP - which is the
+     whole reason the two passes are allowed to disagree. See RTS_ELEV_MAX in core/grid.js. */
+  for (tx = 0; tx < N; tx++) {
+    for (tz = 0; tz < N; tz++) {
+      var _hv = (nz(tx, tz, 19, seed + 11) - 0.484) / 0.032;
+      _hv = _hv < 0 ? 0 : (_hv > 1 ? 1 : _hv);
+      _hv = _hv * _hv * (3 - 2 * _hv);
+      var _hi = _rtsIdx(tx, tz), _ht = G.terrain[_hi];
+      if (_ht === RTS_T_WATER || _ht === RTS_T_SAND) _hv = 0;   /* sea level, and its beaches */
+      /* AND THE MAP'S OWN RIM IS AT SEA LEVEL. The focus clamp puts the map's edge exactly on
+         the screen's edge, and it derives that from the flat-plane projection; raised ground
+         at the rim lifts UP the screen and uncovers the nothing behind it. Measured at every
+         zoom against every edge, with and without the relief: 0.7% of the frame comes back as
+         clear colour without this, 0.01% with it, and 0% is what the flat map gives. Four
+         cells of a 128-cell map, which the camera can only ever see edge-on.
+
+         (0.7%, not the 21% a first measurement claimed. That probe set the zoom and clamped
+         without calling _rtsApplyCam in between, so the clamp sized itself for the PREVIOUS
+         zoom and let the view run 80 units off the map on its own - the same mistake, in the
+         same function, that e2e/tilt already carries a note about.) */
+      var _edge = Math.min(Math.min(tx, tz), Math.min(N - 1 - tx, N - 1 - tz)) / 4;
+      if (_edge < 1) _hv *= _edge < 0 ? 0 : _edge * _edge * (3 - 2 * _edge);
+      G.height[_hi] = Math.round(_hv * 255);
+    }
+  }
+  /* The shore is let down rather than dropped. A cell of sand pinned at 0 beside a cell of
+     grass at full height is a wall of the whole elevation range along every beach, and the
+     same happens wherever
+     the smoothstep meets water mid-slope. Four passes of "no cell may stand more than a third
+     of the range above its lowest neighbour" spread that over three or four cells inland,
+     which is a bank. Iterated rather than solved because each pass only lowers, so it
+     converges, and four is enough to reach from the water to full height. */
+  for (var _pass = 0; _pass < 4; _pass++) {
+    for (tx = 0; tx < N; tx++) {
+      for (tz = 0; tz < N; tz++) {
+        var _ci = _rtsIdx(tx, tz), _lo = 255;
+        for (var _hd = 0; _hd < 4; _hd++) {
+          var _hx = tx + [1, -1, 0, 0][_hd], _hz = tz + [0, 0, 1, -1][_hd];
+          if (_rtsInB(_hx, _hz)) _lo = Math.min(_lo, G.height[_rtsIdx(_hx, _hz)]);
+        }
+        if (G.height[_ci] > _lo + 85) G.height[_ci] = _lo + 85;
+      }
+    }
+  }
 }
 
 /* A wandering 3-tile-wide track between two points. Clears obstacles as it goes. */

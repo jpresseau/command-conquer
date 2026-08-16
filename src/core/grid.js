@@ -26,6 +26,73 @@ var RTS_ORE_GROUND = [true, false, false, false, false, true, false];
 function _rtsIdx(tx, tz) { return tz * RTS_N + tx; }
 function _rtsInB(tx, tz) { return tx >= 0 && tz >= 0 && tx < RTS_N && tz < RTS_N; }
 function _rtsWX(tx) { return (tx - RTS_N / 2 + 0.5) * RTS_TILE; }          /* tile -> world centre */
+
+/* ------------------------------------------------------------------- relief --
+   HOW HIGH THE GROUND GETS, in world units, where G.height reads 255. Red Alert's battlefield
+   is flat and its cliffs are drawn rather than modelled; this is the one place the rebuild
+   departs from that, because a camera leaning 49 degrees can see relief and a flat plane
+   wastes it.
+
+   THE SIMULATION DOES NOT READ THIS, and that is the whole design. Height is a property of the
+   map the way G.terrain is - something both renderers agree about - and passability is left
+   exactly as it was. Nothing in pathing, combat, harvesting or line-of-sight changed, so no
+   balance moved, and no generated map can be cut in two by relief that was not there before.
+
+   That falls out of WHERE the height comes from. The rock ridges core/terrain.js already lays
+   down are a narrow band either side of a contour of a smooth noise field - and the boundary
+   between two levels is exactly a contour. So the height is read from the SAME field: the
+   plateau edge lands under the wall the generator already built, and the two agree without
+   either being told about the other.
+
+   Which hands the map its RAMPS for free. That ridge only exists where a second mask allows
+   it, so a stretch of plateau edge with no wall on it is a slope a unit can drive up, and a
+   stretch with a wall is a cliff it cannot. Red Alert's own arrangement, arrived at by not
+   interfering rather than by building it.
+
+   5 units is a cell and a quarter - still well under the height of a war factory, and the
+   contour takes a cell and a half to cross, so the steepest ground on the map runs at 0.42,
+   about 23 degrees. A tank driving up a ramp leans; it does not climb a wall.
+
+   It was 3.2 first, which is what "shallow enough for a ramp" alone argues for, and at that
+   height the relief was there in the measurements and barely there in the picture - about
+   24 screen pixels between valley floor and plateau top. 5 is what makes it read. The one
+   thing that has to be re-checked when this moves is _r3dGroundAt: raising it made the ground
+   half again as steep, which is what broke the fixed point that used to walk the picking ray
+   and is why that is a bisection now. */
+var RTS_ELEV_MAX = 5.0;
+
+/* The ground's height at a TILE, in world units. Out of bounds reads as sea level, so a caller
+   sampling past the edge gets the flat map it always used to get. */
+function _rtsTileElev(tx, tz) {
+  var G = window._rtsG;
+  if (!G || !G.height || !_rtsInB(tx, tz)) return 0;
+  return G.height[_rtsIdx(tx, tz)] / 255 * RTS_ELEV_MAX;
+}
+
+/* The ground's height at a WORLD point, bilinear between the four tile centres around it.
+
+   Smooth on purpose, and that is the difference between relief and a staircase. The levels are
+   flat-topped by construction, so all the interpolation has to do is turn the one-cell boundary
+   into a continuous slope; a nearest-tile lookup would step the whole range at a cell edge
+   and every unit crossing it would jump.
+
+   The ground mesh, everything standing on it, and the picking ray all come through here, so
+   there is one definition of where the ground is and they cannot drift apart. */
+function _rtsElev(x, z) {
+  var G = window._rtsG;
+  if (!G || !G.height) return 0;
+  var fx = x / RTS_TILE + RTS_N / 2 - 0.5, fz = z / RTS_TILE + RTS_N / 2 - 0.5;
+  var x0 = Math.floor(fx), z0 = Math.floor(fz);
+  var ax = fx - x0, az = fz - z0;
+  function at(a, b) {
+    if (a < 0) a = 0; else if (a > RTS_N - 1) a = RTS_N - 1;
+    if (b < 0) b = 0; else if (b > RTS_N - 1) b = RTS_N - 1;
+    return G.height[b * RTS_N + a];
+  }
+  var h = (at(x0, z0) * (1 - ax) + at(x0 + 1, z0) * ax) * (1 - az) +
+          (at(x0, z0 + 1) * (1 - ax) + at(x0 + 1, z0 + 1) * ax) * az;
+  return h / 255 * RTS_ELEV_MAX;
+}
 function _rtsTX(x)  { return Math.floor(x / RTS_TILE + RTS_N / 2); }        /* world -> tile */
 /* ------------------------------------------------------------ passability --
    Two domains, and they are near-inverses of each other. A tank is stopped by water; a

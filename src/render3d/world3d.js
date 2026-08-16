@@ -143,6 +143,26 @@ function _r3dRockCell(out, tx, tz) {
   }
 }
 
+/* STAND WHAT WAS JUST EMITTED ON THE GROUND. Every builder in this file draws from y = 0,
+   which was the only ground there was until the terrain got relief. Rather than thread a base
+   height through _r3dTree, _r3dRockCell, the crystal cone and the tuft cone - four signatures,
+   and every future one - the walk records how long the face list was before a cell and lifts
+   everything added since.
+
+   A pure translation, so the NORMALS are untouched and do not need recomputing; and it lifts
+   by the height at the cell CENTRE rather than under each piece, so a tree cluster sits level
+   with itself instead of shearing across a slope. Over one cell of a field whose steepest step
+   is about a third of the range, that is under a unit of error at the corners and invisible.
+
+   The cost is one pass over the cell's own vertices, which is the same order as emitting them. */
+function _r3dLiftFrom(out, from, dy) {
+  if (!dy) return;
+  for (var i = from; i < out.length; i++) {
+    var v = out[i].v;
+    for (var j = 0; j < v.length; j++) v[j][1] += dy;
+  }
+}
+
 function _r3dWorldBuild(G) {
   var R3 = window._R3D, gl = R3.gl;
   var N = RTS_N, half = RTS_TILE / 2;
@@ -168,6 +188,7 @@ function _r3dWorldBuild(G) {
           var k = G.terrain[_rtsIdx(tx, tz)];
           var wx = _rtsWX(tx), wz = _rtsWX(tz);
           var h1 = _sprHash(tx, tz, 331), h2 = _sprHash(tz, tx, 337), h3 = _sprHash(tx * 3, tz * 7, 341);
+          var _lift0 = faces.length, _liftY = _rtsTileElev(tx, tz);
 
           if (k === RTS_T_TREE) {
             /* a forest cell is a CLUSTER - two or three trees, spread across the cell */
@@ -205,6 +226,7 @@ function _r3dWorldBuild(G) {
               }
             }
           }
+          _r3dLiftFrom(faces, _lift0, _liftY);
         }
       }
 
@@ -325,6 +347,7 @@ function _r3dOreBuild(G) {
       var frac = Math.min(1, ore / (RTS_SCRAP_TILE *
                      (typeof RTS_ORE_RICHNESS === 'number' ? RTS_ORE_RICHNESS : 1)));
       var wx = _rtsWX(tx), wz = _rtsWX(tz);
+      var _o0 = faces.length, _oy = _rtsTileElev(tx, tz);
       for (var c = 0; c < R3D_CRYSTALS_PER_CELL; c++) {
         var cx = wx + (_sprHash(tx * 31 + c, tz, 383) - 0.5) * RTS_TILE;
         var cz = wz + (_sprHash(tz * 31 + c, tx, 389) - 0.5) * RTS_TILE;
@@ -333,6 +356,7 @@ function _r3dOreBuild(G) {
         _r3Cone(faces, cx, 0, cz, 0.28 + g2 * 0.26, 0.04, ch,
                 [P[1], P[2], P[0], P[1], P[2]][c % 5], 7);
       }
+      _r3dLiftFrom(faces, _o0, _oy);
     }
   }
   if (R3.oreMesh) {

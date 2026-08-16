@@ -97,12 +97,21 @@ var S = new Suite('ao');
       return b;
     }
 
-    /* ---------- 1. the ground's depth, against the plane it is known to be ----------
-       Everything standing up is removed, so every pixel with depth in it IS the ground, and
-       the ground is at y = 0 by construction. y comes back out of the reconstructed frame as
-       -sv*sin(tilt) + d*cos(tilt), which is the vertex shader's own rotation inverted. */
+    /* ---------- 1. the ground's depth, against the height it is known to be ----------
+       Everything standing up is removed, so every pixel with depth in it IS the ground.
+
+       IT USED TO BE ZERO BY CONSTRUCTION, and that is no longer true: the terrain has relief
+       (see RTS_ELEV_MAX). Flattening the height field for this measurement keeps the claim the
+       one it was written to make - that the ground writes a USABLE depth at all, which a
+       map-sized quad does not - and part 1b below then asks the harder question, whether the
+       depth follows the terrain once there is terrain to follow.
+
+       y comes back out of the reconstructed frame as -sv*sin(tilt) + d*cos(tilt), which is the
+       vertex shader's own rotation inverted. */
     var kw = R3.world, ko = R3.oreMesh, kwa = R3.waterMesh, ke = G.ents;
     R3.world = []; R3.oreMesh = null; R3.waterMesh = null; G.ents = [];
+    var keepH = G.height;
+    G.height = new Uint8Array(RTS_N * RTS_N);
     _rtsRFrame(1 / 60);
     var by = probe(
       '  float raw = texture2D(uDepth, vT).r;' +
@@ -119,6 +128,56 @@ var S = new Suite('ao');
     }
     o.groundYerr = yn ? +(ys / yn / 255 * 8).toFixed(3) : -1;
     o.groundPx = yn;
+    G.height = keepH;
+
+    /* ---------- 1b. AND IT FOLLOWS THE TERRAIN, once the terrain is back ----------
+       The flat check above cannot see a heightfield that renders but writes the OLD depth -
+       the picture would have hills in it and every effect reading the buffer would still be
+       working against a plane. So: put the relief back, reconstruct the height the depth
+       buffer implies at a spread of pixels, and compare it with the height the game itself
+       says is there, sampled through the same _rtsElev the mesh was built from.
+
+       Read at PIXELS rather than averaged over the frame, because an average would let a
+       buffer that is too high in one place and too low in another look correct. */
+    _rtsRFrame(1 / 60);
+    var byH = probe(
+      '  float raw = texture2D(uDepth, vT).r;' +
+      '  if (raw > 0.99999) { gl_FragColor = vec4(0.0); return; }' +
+      '  float d = (0.5 - raw) * 2.0 * uProj.w;' +
+      '  vec3 P = _aoP(vT, d);' +
+      '  float y = -P.y * ' + R3.sp.toFixed(6) + ' + P.z * ' + R3.cp.toFixed(6) + ';' +
+      '  gl_FragColor = vec4(vec3(clamp(y / 8.0, 0.0, 1.0)), 1.0);');
+    var hN = 0, hWorst = 0, hLo = 99, hHi = -99;
+    var flatN = 0, flatWorst = 0, slopeN = 0, slopeWorst = 0;
+    for (var py = 40; py < CH - 40; py += 37) {
+      for (var px = 40; px < CW - 40; px += 41) {
+        var q = ((CH - 1 - py) * CW + px) * 4;
+        if (byH[q + 3] === 0) continue;
+        var gotY = byH[q] / 255 * 8;
+        var gp = _rtsGroundAt(px, py);
+        if (!gp) continue;
+        var wantY = _rtsElev(gp.x, gp.z);
+        var err = Math.abs(gotY - wantY);
+        hN++;
+        hWorst = Math.max(hWorst, err);
+        if (wantY < hLo) hLo = wantY;
+        if (wantY > hHi) hHi = wantY;
+        /* SPLIT BY WHETHER THE GROUND IS LEANING. If the residual is the mesh's triangles
+           disagreeing with _rtsElev's bilinear - the two differ inside a cell by up to a
+           quarter of that cell's own step - then it must vanish where the ground is level and
+           appear only on slopes. If instead it is spread evenly, the buffer is wrong. */
+        var lean = Math.hypot(_rtsElev(gp.x + RTS_TILE, gp.z) - _rtsElev(gp.x - RTS_TILE, gp.z),
+                              _rtsElev(gp.x, gp.z + RTS_TILE) - _rtsElev(gp.x, gp.z - RTS_TILE));
+        if (lean < 0.05) { flatN++; flatWorst = Math.max(flatWorst, err); }
+        else { slopeN++; slopeWorst = Math.max(slopeWorst, err); }
+      }
+    }
+    o.hSamples = hN;
+    o.hWorst = +hWorst.toFixed(2);
+    o.hRange = hN ? +(hHi - hLo).toFixed(2) : 0;
+    o.hFlatN = flatN; o.hFlatWorst = +flatWorst.toFixed(2);
+    o.hSlopeN = slopeN; o.hSlopeWorst = +slopeWorst.toFixed(2);
+    o.elevMax = RTS_ELEV_MAX;
 
     /* ---------- 2. and bare ground occludes nothing ----------
        Still the empty map. A flat plane sees the whole sky, so any occlusion here is the
@@ -272,10 +331,27 @@ var S = new Suite('ao');
        known independently of anything the renderer says. */
     S.ok('the ground is in the depth buffer, at the height it actually is',
          out.groundYerr >= 0 && out.groundYerr < 0.35,
-         'reconstructing the world from the depth buffer on a bare map puts the ground at y = ' +
-         out.groundYerr + ' world units, over ' + out.groundPx + ' pixels - it is 0 by ' +
-         'construction. One quad over the whole map scores 88, an untessellated visible patch ' +
-         '4.7, and a cell is 4 units wide');
+         'reconstructing the world from the depth buffer on a bare map, with the relief ' +
+         'flattened for the measurement, puts the ground at y = ' + out.groundYerr +
+         ' world units over ' + out.groundPx + ' pixels - flat, it is 0 by construction. One ' +
+         'quad over the whole map scores 88, an untessellated visible patch 4.7, and a cell ' +
+         'is 4 units wide');
+
+    /* THE SAME BUFFER, ASKED THE HARDER QUESTION. Flat ground cannot tell a heightfield that
+       renders from one that renders and writes the old depth. */
+    S.ok('...and it follows the terrain, not a plane under it',
+         out.hSamples > 100 && out.hRange > 1.5 && out.hFlatWorst < 0.12 &&
+         out.hSlopeWorst < out.elevMax * 0.15,
+         'over ' + out.hSamples + ' pixels spanning ' + out.hRange + ' world units of relief, ' +
+         'the height the depth buffer implies sits ' + out.hFlatWorst + ' from the height ' +
+         '_rtsElev says is there on the ' + out.hFlatN + ' level samples, and ' +
+         out.hSlopeWorst + ' on the ' + out.hSlopeN + ' leaning ones. THE SPLIT IS THE POINT: ' +
+         'a buffer that was still writing the plane would be wrong by the full height of the ' +
+         'ground everywhere, level or not. Being right on the flats and out by a fraction of a ' +
+         'cell only where the ground leans is the mesh\'s TRIANGLES disagreeing with ' +
+         '_rtsElev\'s bilinear inside a cell - two ways of filling in the same four corners, ' +
+         'which differ by at most a quarter of that cell\'s own step and agree exactly at ' +
+         'every corner. It scales with the elevation range, so the bound does too');
 
     S.ok('...and a flat plane does not occlude itself', out.flatGroundAO < 1,
          out.flatGroundAO + '% of a bare map is darkened - a plane sees the whole sky, so ' +

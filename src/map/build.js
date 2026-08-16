@@ -16,6 +16,13 @@ function _rtsMapBuild(M) {
   var G = {
     terrain: new Uint8Array(N * N),
     blocked: new Uint8Array(N * N),
+    /* A REAL MAP IS FLAT, and left that way on purpose. Relief is read off the generator's own
+       noise field (see _rtsGenTerrain), and a map authored in 1996 has no such field - nor any
+       elevation of its own, since Red Alert draws its cliffs rather than modelling them. There
+       is nothing here to infer height FROM that would not be invention, and inventing it would
+       put slopes through bases and chokepoints the author placed on flat ground. Zero
+       everywhere is exactly the map the author drew. */
+    height:  new Uint8Array(N * N),
     scrap:   new Float32Array(N * N),
     gems:    new Uint8Array(N * N)
   };

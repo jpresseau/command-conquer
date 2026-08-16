@@ -163,7 +163,10 @@ function _r3dFxDraw(G, cam, invD) {
     /* the anchor sits `anchor` of the way DOWN the sprite, so the centre is above it by
        h * (anchor - 0.5) along the screen's up */
     var off = h * (pick.anchor - 0.5);
-    var cxw = f.x, cyw = (f.y || 0) + off * sp, czw = f.z - off * cp;
+    /* f.y is a height above the GROUND - a blast across a roof, a shell burst in the air -
+       so the terrain under it comes first, or an explosion on a hilltop goes off at the
+       height the valley floor would have put it. */
+    var cxw = f.x, cyw = _rtsElev(f.x, f.z) + (f.y || 0) + off * sp, czw = f.z - off * cp;
 
     var rx = w / 2;
     var ux = 0, uy = (h / 2) * sp, uz = -(h / 2) * cp;

@@ -160,37 +160,11 @@ function _r3dFrame(G) {
      The cost is 384 vertices of a buffer that is rewritten anyway, against a frame that draws
      tens of thousands. */
   var EXT = RTS_N * RTS_TILE / 2;
-  if (!R3.groundBuf) {
-    R3.groundBuf = gl.createBuffer();
-    R3.groundUV = gl.createBuffer();
-    R3.groundXZ = new Float32Array(R3D_GROUND_SUB * R3D_GROUND_SUB * 12);
-    R3.groundT = new Float32Array(R3D_GROUND_SUB * R3D_GROUND_SUB * 12);
-  }
-  {
-    var GM = RTS_TILE * 2;                  /* a two-cell margin, well clear of the eye plane */
-    var gx0 = Math.max(-EXT, vb.x0 - GM), gx1 = Math.min(EXT, vb.x1 + GM);
-    var gz0 = Math.max(-EXT, vb.z0 - GM), gz1 = Math.min(EXT, vb.z1 + GM);
-    var q = R3.groundXZ, t = R3.groundT, k = 0, gi, gj;
-    var gdx = (gx1 - gx0) / R3D_GROUND_SUB, gdz = (gz1 - gz0) / R3D_GROUND_SUB;
-    function gv(x, zz) {
-      q[k] = x; q[k + 1] = zz;
-      t[k] = (x + EXT) / (2 * EXT); t[k + 1] = (zz + EXT) / (2 * EXT);
-      k += 2;
-    }
-    for (gj = 0; gj < R3D_GROUND_SUB; gj++) {
-      for (gi = 0; gi < R3D_GROUND_SUB; gi++) {
-        var ax = gx0 + gi * gdx, bx = ax + gdx;
-        var az = gz0 + gj * gdz, bz = az + gdz;
-        gv(ax, az); gv(bx, az); gv(bx, bz);
-        gv(ax, az); gv(bx, bz); gv(ax, bz);
-      }
-    }
-    R3.groundVerts = k / 2;
-    gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, q, gl.DYNAMIC_DRAW);
-    gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundUV);
-    gl.bufferData(gl.ARRAY_BUFFER, t, gl.DYNAMIC_DRAW);
-  }
+  /* The visible ground patch - cut on the tile grid, carrying the terrain's height and its
+     slope - is built by _r3dGroundMesh in render3d/ground3d.js, beside the textures draped
+     over it. It moved there when the relief work took this file over the line limit. */
+  _r3dGroundMesh(R3, gl, vb, EXT);
+
 
   /* THE WORLD IS BUILT BEFORE THE SUN LOOKS AT IT. _r3dWorldTick used to run in the middle of
      the frame, which was fine while nothing read the geometry before the main pass; the shadow
@@ -249,9 +223,12 @@ function _r3dFrame(G) {
   var uRecv = gl.getUniformLocation(R3.texP, 'uRecv');
   gl.uniform1f(uRecv, 1);                       /* the ground takes the world's shadows */
   _r3dShadowBind(R3.texP, 1);
-  var aXZ = gl.getAttribLocation(R3.texP, 'aXZ'), aT = gl.getAttribLocation(R3.texP, 'aT');
+  var aXZ = gl.getAttribLocation(R3.texP, 'aP'), aT = gl.getAttribLocation(R3.texP, 'aT');
+  var aGN = gl.getAttribLocation(R3.texP, 'aN');
   gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundBuf);
-  gl.enableVertexAttribArray(aXZ); gl.vertexAttribPointer(aXZ, 2, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(aXZ); gl.vertexAttribPointer(aXZ, 3, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundNB);
+  gl.enableVertexAttribArray(aGN); gl.vertexAttribPointer(aGN, 3, gl.FLOAT, false, 0, 0);
   gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundUV);
   gl.enableVertexAttribArray(aT); gl.vertexAttribPointer(aT, 2, gl.FLOAT, false, 0, 0);
   gl.bindTexture(gl.TEXTURE_2D, R3.terrainTex);
@@ -424,10 +401,14 @@ function _r3dFrame(G) {
          is not mistaken for a finished one at full height's last moment. */
       var dmg = !e.building && e.hp < e.maxHp * RTS_COND_YELLOW;
       var rise = e.building ? 0.12 + 0.88 * Math.max(0, Math.min(1, e.bprog || 0)) : 1;
-      drawIn(C, _r3dMesh('b', e.def, e.side), e.x, 0, e.z, 0, ART2W, dmg || e.building, rise);
+      drawIn(C, _r3dMesh('b', e.def, e.side), e.x, _rtsElev(e.x, e.z), e.z, 0, ART2W,
+             dmg || e.building, rise);
     } else if (e.type === 'unit') {
       var turret = R.spr.turret && R.spr.turret[e.side] && R.spr.turret[e.side][e.def];
-      var y = e.air ? ((e.rearming > 0 ? 2 : (e.alt || 12)) * 0.35) : 0;
+      /* THE GROUND UNDER IT, not zero. An aircraft's altitude is measured from the ground it
+         is over as well - it flies at a height, not at a level - so both take the terrain and
+         only the flier adds to it. */
+      var y = _rtsElev(e.x, e.z) + (e.air ? ((e.rearming > 0 ? 2 : (e.alt || 12)) * 0.35) : 0);
       /* A MARCHING SOLDIER BOBS. There is no walk cycle in 3D - the mesh is one pose - so the
          walk reads through a small vertical bob instead, phased by the same `gait` offset that
          desynchronises the 2D walk frames, so a squad does not pogo in unison. Vehicles do not
@@ -471,7 +452,9 @@ function _r3dFrame(G) {
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundBuf);
-  gl.enableVertexAttribArray(aXZ); gl.vertexAttribPointer(aXZ, 2, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(aXZ); gl.vertexAttribPointer(aXZ, 3, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundNB);
+  gl.enableVertexAttribArray(aGN); gl.vertexAttribPointer(aGN, 3, gl.FLOAT, false, 0, 0);
   gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundUV);
   gl.enableVertexAttribArray(aT); gl.vertexAttribPointer(aT, 2, gl.FLOAT, false, 0, 0);
   gl.bindTexture(gl.TEXTURE_2D, R3.fogTex);
