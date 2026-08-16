@@ -79,7 +79,7 @@ var S = new Suite('sea');
     for (i = 0; i < RTS_N * RTS_N; i++) { G.mapped[i] = 1; G.vis[i] = 1; }
     G.visDirty = 1;
 
-    rts3dToggle();
+    rts3dSet(true);
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;
@@ -242,7 +242,7 @@ var S = new Suite('sea');
     _rtsRFrame(1 / 60);
     R.g.drawImage = origDraw;
     o.waveTiles3d = wave;
-    rts3dToggle();
+    rts3dSet(false);
     wave = 0;
     R.g.drawImage = function (img) {
       if (R.spr.wave && R.spr.wave.indexOf(img) >= 0) wave++;

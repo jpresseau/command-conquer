@@ -42,7 +42,7 @@ var S = new Suite('r3dlive');
     o.tank = !!(tank && !tank.dead);
 
     o.button = !!document.getElementById('rts3dBtn');
-    rts3dToggle();
+    rts3dSet(true);
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;
@@ -111,7 +111,7 @@ var S = new Suite('r3dlive');
     o.chunksDrawn = drawn;
 
     /* and the way back: 2D must be untouched by the round trip through 3D */
-    rts3dToggle();
+    rts3dSet(false);
     o.off = !(window._R3D && window._R3D.on);
     var p2 = _rtsGroundAt(450, 325), s2 = _rtsWorldToScreen(p2.x, 0, p2.z);
     o.roundtrip2d = +Math.max(Math.abs(s2.x - 450), Math.abs(s2.y - 325)).toFixed(3);

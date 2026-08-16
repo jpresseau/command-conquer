@@ -52,7 +52,7 @@ var S = new Suite('scatter');
     _rtsNewGame(4242, 'easy');
     var G = window._rtsG;
 
-    rts3dToggle();
+    rts3dSet(true);
     o.on = !!(window._R3D && window._R3D.gl);
     if (!o.on) return o;
 

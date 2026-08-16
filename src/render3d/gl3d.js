@@ -334,17 +334,40 @@ function _r3dApply(on, quiet) {
 
 /* The toggle the button calls. */
 function rts3dToggle() {
-  var R3 = window._R3D;
-  if (!_r3dApply(!(R3 && R3.on), false)) return;
-  try { window.localStorage.setItem(RTS_3D_LS, window._R3D.on ? '1' : '0'); } catch (e) {}
+  rts3dSet(!(window._R3D && window._R3D.on));
 }
 
-/* Called once per match from rtsOpen. Only ever turns the mode ON: 2D is the default and an
-   absent or unreadable preference must land there. */
+/* SET IT, RATHER THAN FLIP IT. A toggle is the right thing for a button and the wrong thing
+   for everybody else: every caller that wanted the mode ON said `toggle` and meant it, which
+   was only true while 2D was the default. It is not any more, so a caller that means "on" has
+   to say so. Returns whether the mode ended up where it was asked to go. */
+function rts3dSet(on) {
+  on = !!on;
+  if (!_r3dApply(on, false)) return false;
+  try { window.localStorage.setItem(RTS_3D_LS, on ? '1' : '0'); } catch (e) {}
+  return true;
+}
+
+/* Called once per match from rtsOpen.
+
+   3D IS THE DEFAULT NOW, which inverts what this used to do. It only ever turned the mode ON
+   and let an absent preference fall through to 2D, so a new player never saw the renderer at
+   all - the shadows, the occlusion, the swell, the lean, the effects standing in the world -
+   unless they found a two-character button in the top bar and pressed it.
+
+   So an ABSENT or unreadable preference lands in 3D now, and only an explicit '0' keeps it in
+   2D. Nothing writes that '0' except rts3dSet, which is to say except somebody pressing the
+   button to leave, so the only way to get the 2D game is to have asked for it. Treating
+   unreadable as 3D is deliberate too: a browser refusing localStorage should get the mode the
+   game is built around rather than the fallback.
+
+   2D IS STILL THE FLOOR, and that is why this cannot just force the mode on. _r3dApply returns
+   false when there is no WebGL context to be had; nothing has changed then, and the 2D painter
+   draws the match exactly as it always did. */
 function rts3dRestore() {
   var want = null;
-  try { want = window.localStorage.getItem(RTS_3D_LS); } catch (e) { return; }
-  if (want === '1') _r3dApply(true, true);
+  try { want = window.localStorage.getItem(RTS_3D_LS); } catch (e) { want = null; }
+  if (want !== '0') _r3dApply(true, true);
 }
 
 function _r3dResize() {

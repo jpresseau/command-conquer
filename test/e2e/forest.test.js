@@ -134,9 +134,9 @@ var S = new Suite('forest');
 
     /* --- 3D must not draw them: it grows its own --- */
     R.zi = RTS_ZOOMS.length - 1; R.cell = RTS_ZOOMS[R.zi];
-    rts3dToggle();
+    rts3dSet(true);
     o.on = !!(window._R3D && window._R3D.on);
-    if (o.on) { o.stamps3d = stamps(); rts3dToggle(); }
+    if (o.on) { o.stamps3d = stamps(); rts3dSet(false); }
     o.stamps2d = stamps();
     return o;
   });

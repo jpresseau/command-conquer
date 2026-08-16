@@ -72,13 +72,13 @@ var S = new Suite('pan');
     centre();
     o.slip2d = drag(430, 300, 330, 180);
 
-    rts3dToggle();
+    rts3dSet(true);
     o.on3d = !!(window._R3D && window._R3D.on);
     if (o.on3d) {
       o.cp = +window._R3D.cp.toFixed(4);
       centre();
       o.slip3d = drag(430, 300, 330, 180);
-      rts3dToggle();
+      rts3dSet(false);
     }
 
     /* --- the HUD's use of `scale` --- */

@@ -68,7 +68,7 @@ var S = new Suite('perspective');
     var zm = _rtsZoom();
     o.flatRows = Math.round(R.H / zm / RTS_TILE);
 
-    rts3dToggle();
+    rts3dSet(true);
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;
@@ -185,7 +185,7 @@ var S = new Suite('perspective');
     o.bareShare = +(bare / tot * 100).toFixed(2);
     o.sampled = tot;
 
-    rts3dToggle();
+    rts3dSet(false);
     o.off = !(window._R3D && window._R3D.on);
     /* and 2D is untouched - same closed form, same pixel */
     var p2 = _rtsGroundAt(450, 325), s2 = _rtsWorldToScreen(p2.x, 0, p2.z);

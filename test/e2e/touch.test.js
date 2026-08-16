@@ -26,6 +26,22 @@ var browser = await chromium.launch();
   await page.waitForFunction(function () { return typeof window.rtsOpen === 'function'; });
 
   await page.evaluate(function () {
+    /* PINNED TO 2D, like every other spec - and this file has to do it by hand because it is
+       the one that never took the shared harness (it keeps its own page setup for the iPhone
+       profile and only borrows `serve`), so test/lib/game.js's pin never reaches it.
+
+       This is a spec about the INPUT layer: whether a finger drag pans, a tap selects, a hold
+       orders and two fingers zoom. The renderer under it is not the subject, and e2e/pan
+       already grades dragging in 3D, where the vertical component carries a cos(tilt) the flat
+       camera does not.
+
+       Left unpinned it did not fail honestly, either - it failed by being SLOW. When 3D became
+       the default this ran the whole GL renderer at iPhone 13 resolution and 3x DPR through a
+       software rasteriser: the spec went from 10.8s to 37.9s, and every single-finger gesture
+       came back dead - drag 0.0 world units, tap selected nothing, hold issued no order -
+       while the pinch, which needs no frames in between, still worked. That is a starved rAF
+       loop reported as broken input. */
+    try { window.localStorage.setItem(RTS_3D_LS, '0'); } catch (e) {}
     rtsOpen(7);
     for (var i = 0; i < 60 * 25; i++) _rtsTick(1 / 60);
   });

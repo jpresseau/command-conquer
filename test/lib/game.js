@@ -71,6 +71,22 @@ async function openPage(browser, opts) {
   var page = await ctx.newPage();
   var errors = [];
   page.on('pageerror', function (e) { errors.push(String(e)); });
+  /* A BROWSER WITH NO WEBGL, for the specs that grade the 2D fallback. Installed BEFORE the
+     page loads, so the refusal is in place the first time anything asks - stubbing afterwards
+     tests a renderer that already has its context. Every GL flavour is refused, including the
+     experimental spellings, because _r3dInit tries webgl2 and then webgl and a stub that only
+     covers one of them proves nothing. 2D contexts pass straight through: the game is drawn on
+     one, so breaking it would test a blank page rather than a fallback. */
+  if (opts.noWebGL) {
+    await page.addInitScript(function () {
+      var real = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function (kind) {
+        if (/webgl|experimental-webgl/i.test(String(kind))) return null;
+        return real.apply(this, arguments);
+      };
+      window.__glStubbed = true;
+    });
+  }
   await page.goto(s.url, { waitUntil: 'load' });
   await page.waitForFunction(function () { return typeof window.rtsOpen === 'function'; });
   return {
@@ -92,6 +108,20 @@ async function openPage(browser, opts) {
        input, the atmosphere frame table - and stopping the loop would stop what they measure. */
     start: async function (seed, seconds, opts) {
       await page.evaluate(function (a) {
+        /* PIN THE RENDERER, because a spec must not inherit a default it never mentions.
+           3D is what a player gets now (see rts3dRestore), and flipping that default silently
+           rewrote what much of this suite measures: e2e/forest counts the flat trees the 2D
+           painter stamps, the 3D mode grows its own instead, and the spec went from a real
+           measurement to "0 stamps" at every zoom while still reading as though it were about
+           tree density. Nothing in that file mentions 3D at all.
+
+           So every match starts in the mode its spec was written against, and the seventeen
+           that want the other one say rts3dSet(true) for themselves. Pass {mode3d: 'default'}
+           to start the way a new player does - e2e/default3d is the one place that wants the
+           default itself under test, and pinning it there would only measure this line. */
+        if (a[3] !== 'default') {
+          try { window.localStorage.setItem(RTS_3D_LS, a[3] ? '1' : '0'); } catch (e) {}
+        }
         rtsOpen(a[0]);
         for (var i = 0; i < 60 * a[1]; i++) _rtsTick(1 / 60);
         /* Frozen HERE, in the same step that started the match, and not afterwards: the settle
@@ -102,7 +132,7 @@ async function openPage(browser, opts) {
           if (U) { U.dead = true; try { if (U.raf) cancelAnimationFrame(U.raf); } catch (e) {} }
         }
       }, [seed === undefined ? 7 : seed, seconds === undefined ? 20 : seconds,
-          !!(opts && opts.freeze)]);
+          !!(opts && opts.freeze), (opts && opts.mode3d) || false]);
       await page.waitForTimeout(200);
     },
     /* Stop the rAF loop, so from here the simulation advances only on an explicit _rtsTick.
