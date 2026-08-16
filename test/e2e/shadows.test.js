@@ -68,14 +68,35 @@ var S = new Suite('shadows');
     o.NEAREST = gl.NEAREST;
 
     /* ANYTHING THAT MOVES IN THE MAIN PASS HAS TO MOVE IN THE SUN'S. The sea's swell is a
-       vertex displacement, and it is written out in both shaders; if they ever drift, the
-       water's shadow stands still while the water rolls under it. Checked as a text property
-       of the two compiled sources, the way e2e/r3dlook checks the light constants. */
-    var waveTerms = ['0.34', '0.22', '1.15', '0.19', '0.41', '0.85', '1.35', '0.95', '2.40'];
-    o.waveShared = waveTerms.filter(function (t) {
-      return R3D_MESH_VS.indexOf(t) >= 0 && R3D_SHADOW_VS.indexOf(t) >= 0;
-    }).length;
-    o.waveTerms = waveTerms.length;
+       vertex displacement, and if the two shaders ever disagree about it the water's shadow
+       stands still while the water rolls under it.
+
+       This used to hold nine constants of its own and check that both sources mentioned all
+       nine - which is the spec keeping a third copy of the very thing whose copies are the
+       hazard, and would pass on two shaders that used the same numbers differently. The waves
+       are one table now (render3d/wave3d.js) and both programs SPLICE the emitted GLSL, so
+       the honest claim is that neither carries its own: the shared block appears verbatim in
+       each compiled source, and the phase lines and the height sum inside the main pass's
+       block are character-for-character the sun's. */
+    o.waveN = R3D_WAVE.length;
+    o.spliced = (R3D_SHADOW_VS.indexOf(R3D_WAVE_VGLSL) >= 0 ? 1 : 0) +
+                (R3D_MESH_VS.indexOf(R3D_WAVE_VGLSL_LIT) >= 0 ? 1 : 0);
+    function stmt(src, head) {
+      var a = src.indexOf(head);
+      return a < 0 ? null : src.slice(a, src.indexOf(';', a));
+    }
+    o.qShared = 0;
+    for (var wi = 0; wi < R3D_WAVE.length; wi++) {
+      var q1 = stmt(R3D_WAVE_VGLSL, 'float q' + wi + ' =');
+      var q2 = stmt(R3D_WAVE_VGLSL_LIT, 'float q' + wi + ' =');
+      if (q1 && q1 === q2) o.qShared++;
+    }
+    /* the sun's pass adds the sum straight into wp.y; the main pass keeps it in `hs` because
+       the tone reads it again, so the two are compared as expressions rather than as lines */
+    var sunSum = stmt(R3D_WAVE_VGLSL, 'wp.y += uWave.x * (');
+    var litSum = stmt(R3D_WAVE_VGLSL_LIT, 'float hs =');
+    o.sumSun = sunSum ? sunSum.slice(sunSum.indexOf('(') + 1, sunSum.lastIndexOf(')')) : 'a';
+    o.sumLit = litSum ? litSum.slice(litSum.indexOf('=') + 1).trim() : 'b';
 
     function shot() {
       _rtsRFrame(1 / 60);
@@ -187,10 +208,14 @@ var S = new Suite('shadows');
        'low byte and returns a depth that was never written');
 
   S.ok('the two passes displace the sea by the same wave',
-       out.waveShared === out.waveTerms,
-       out.waveShared + ' of ' + out.waveTerms + ' wave terms appear in BOTH the mesh shader ' +
-       'and the sun\'s - drift here leaves the water\'s shadow standing still while the water ' +
-       'rolls under it');
+       out.spliced === 2 && out.qShared === out.waveN && out.sumSun === out.sumLit,
+       (out.spliced === 2 ? 'both shaders splice the one wave block' : 'a shader has its own ' +
+        'copy of the swell (' + out.spliced + ' of 2 splice the shared one)') + ', ' +
+       out.qShared + ' of ' + out.waveN + ' phase lines are character-for-character the same, ' +
+       'and the height sum is "' + out.sumSun + '" on both sides' +
+       ' - drift here leaves the water\'s shadow standing still while the water rolls under ' +
+       'it. Held as nine constants copied into this spec before, which would pass on two ' +
+       'shaders that used the same numbers differently');
 
   S.ok('the map has a wood to look at', out.woodDensity > 20,
        out.woodDensity + ' of 49 cells around ' + out.woodAt + ' are forest');

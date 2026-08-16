@@ -115,17 +115,14 @@ var R3D_WMIN = 0.02;
 /* Shadows are cast by the sun's depth map - see render3d/shadow3d.js, which owns the light
    direction, the basis and the comparison. This file only samples it. */
 
-/* How far the sea heaves, in world units. Small on purpose: most of what makes water read as
-   water is the specular sliding over a moving NORMAL, and the normal comes from the slope, so
-   the short fast wave in the sum does most of the work at a fifth of the amplitude. Push this
-   much past a third of a unit and a harbour starts to look like open ocean. */
+/* The sea's swell - its amplitude, its shape and the GLSL both this program and the sun's
+   depth pass displace with - lives in render3d/wave3d.js. This file only splices it in. */
+
 /* How finely the ground patch is cut up. See the note at the ground buffer in scene3d.js:
    this renderer's depth is linear in view depth rather than in screen space, so it is exact at
    a vertex and drifts across a triangle. 8x8 takes the drift at the screen centre from 4.7
    world units to 0.06. */
 var R3D_GROUND_SUB = 8;
-
-var R3D_WAVE_AMP = 0.42;
 
 function _r3dShader(gl, type, src) {
   var sh = gl.createShader(type);
@@ -175,43 +172,17 @@ var R3D_MESH_VS =
   '  vec3 p = vec3(aP.x * uScale, aP.y * uScale * uScaleY, aP.z * uScale);' +
   '  vec3 wp = vec3(uPos.x + p.x*uRot.x - p.z*uRot.y, uPos.y + p.y, uPos.z + p.x*uRot.y + p.z*uRot.x);' +
   '  vec3 n = normalize(vec3(aN.x*uRot.x - aN.z*uRot.y, aN.y, aN.x*uRot.y + aN.z*uRot.x));' +
-  /* WATER IS THIS SAME PROGRAM WITH THE SURFACE MOVING UNDER IT. Three travelling waves,
-     summed: two long ones that give the sheet its roll, and a short fast one that does almost
-     nothing to the height and most of the work on the NORMAL - which is what the specular
-     reads, and the specular is what makes water look wet rather than blue.
-
-     The normal is the analytic slope of that sum, not a baked attribute, so it is exact at
-     every vertex and costs three cosines. The alternative was a second program, and this file
-     is emphatic that there must be exactly one copy of the light (see the note above): a
-     second program means a second copy of the ramp and the projection, which is the drift the
-     specular constants were consolidated to prevent.
+  /* WATER IS THIS SAME PROGRAM WITH THE SURFACE MOVING UNDER IT - the height, the analytic
+     normal and the tone, all spliced in from the one wave table in render3d/wave3d.js, which
+     the sun's depth pass builds its own displacement from too. The alternative was a second
+     program, and this file is emphatic that there must be exactly one copy of the light (see
+     the note above): a second program means a second copy of the ramp and the projection,
+     which is the drift the specular constants were consolidated to prevent.
 
      uWave.x is 0 for everything that is not water, and the branch is on a UNIFORM, so it is
      the same decision for every vertex in a draw. */
   '  vec3 col = aC;' +
-  '  if (uWave.x > 0.0) {' +
-  '    float q1 = wp.x * 0.34 + wp.z * 0.22 + uWave.y * 1.15;' +
-  '    float q2 = wp.x * 0.19 - wp.z * 0.41 + uWave.y * 0.85;' +
-  '    float q3 = wp.x * 1.35 + wp.z * 0.95 + uWave.y * 2.40;' +
-  '    wp.y += uWave.x * (sin(q1) + 0.7 * sin(q2) + 0.45 * sin(q3));' +
-  '    float dx = uWave.x * (0.34 * cos(q1) + 0.7 * 0.19 * cos(q2) + 0.45 * 1.35 * cos(q3));' +
-  '    float dz = uWave.x * (0.22 * cos(q1) - 0.7 * 0.41 * cos(q2) + 0.45 * 0.95 * cos(q3));' +
-  '    n = normalize(vec3(-dx, 1.0, -dz));' +
-  /* AND THE SWELL IS CARRIED BY THE COLOUR, not by the light - which is not a stylistic
-     choice, it is what the ramp leaves room for. An up-facing surface takes very nearly the
-     most lambert this light can give: v works out at 0.96 for a flat sheet against a ceiling
-     of 1.0, so the whole bright half of the wave's swing is clipped off and the dark half
-     compresses into a 22% band. Measured, the entire sea came out in 79 tones and read as a
-     slab. There is no headroom up there for water to use.
-
-     So the height itself moves the tone - dark in the troughs, bright and whitening on the
-     crests, which is what the 2D wave tiles have always drawn and what the reference art
-     does. The moving normal above is still worth having: it is what breaks the bands up and
-     glints as the swell travels. */
-  '    float hh = (sin(q1) + 0.7 * sin(q2) + 0.45 * sin(q3)) / 2.15;' +
-  '    col *= 0.70 + 0.52 * (hh * 0.5 + 0.5);' +
-  '    col += vec3(0.10, 0.13, 0.15) * smoothstep(0.45, 1.0, hh);' +
-  '  }' +
+  R3D_WAVE_VGLSL_LIT +
   /* the sprite baker's own light and half-vector, so the two pipelines agree face for face */
   /* THE SHADING ITSELF HAPPENS PER FRAGMENT NOW - see R3D_MESH_LIGHT. All this stage does is
      hand on the surface: its normal and its colour. Doing it here instead meant a curve was
