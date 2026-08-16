@@ -66,8 +66,20 @@ var S = new Suite('elevation');
     }
     o.worstStep = +(worst / 255 * RTS_ELEV_MAX).toFixed(2);
     o.elevMax = RTS_ELEV_MAX;
-    /* the slope that governs both the ground mesh and the picking bisection */
-    o.worstSlope = +(worst / 255 * RTS_ELEV_MAX / RTS_TILE).toFixed(2);
+    /* THE GRADIENT THE BISECTION ACTUALLY DEPENDS ON, sampled the way the renderer samples it.
+       This used to be derived from the worst neighbour STEP, which is a proxy that understates
+       it by root two: a step is measured along one axis, a gradient combines both, so ground
+       falling diagonally is 0.59 across where either axis alone reads 0.42. A bound on the
+       wrong number is not a bound - and the number the bisection cares about is this one. */
+    var gmax = 0;
+    for (tz = 2; tz < N - 2; tz += 2) {
+      for (tx = 2; tx < N - 2; tx += 2) {
+        var gn2 = _rtsElevNormal(_rtsWX(tx), _rtsWX(tz));
+        var gs = Math.hypot(gn2[0], gn2[2]) / gn2[1];
+        if (gs > gmax) gmax = gs;
+      }
+    }
+    o.worstSlope = +gmax.toFixed(2);
 
     /* ---------- 2. the ridges found the same contour ---------- */
     var rock = 0, rockOnSlope = 0;
@@ -166,6 +178,79 @@ var S = new Suite('elevation');
         if (flat) wFlat = Math.max(wFlat, Math.hypot(flat.x - wx, flat.z - wz));
       }
     }
+    /* ---------- 6. AND WHAT STANDS ON THE GROUND LEANS WITH IT ----------
+       Relief without this is worse than no relief: a hull three units wide on the steepest
+       slope under a unit has one side 0.69 world units clear of the ground and the other
+       buried, about a third of a tank's height, and 19% of the map's open ground is steep
+       enough to show it.
+
+       GRADED BY TAKING THE LEAN OUT AND NOTHING ELSE. R3.leanAmt blends the ground normal back
+       toward up, so the terrain, the shadows and the picking all stay exactly where they were
+       and the only thing that can move is the model's attitude. Flattening G.height instead
+       would move four things at once and a frame that differs for four reasons says nothing
+       about any of them.
+
+       AND THE BUILDING IS THE CONTROL. A structure must NOT lean - a tilted factory reads as
+       wrong as a floating one - so the same toggle over a frame with only a building in it has
+       to change nothing at all. Without that half, "the lean is wired up" and "the lean is
+       wired to everything" score the same. */
+    var lean = { unit: 0, unitPx: 0, struct: 0, slope: 0 };
+    (function () {
+      var keepEnts = G.ents;
+      /* the steepest ground the camera can actually be put over - not the map's rim, where
+         the clamp pulls the focus away and the subject leaves the frame entirely */
+      var bx = 0, bz = 0, best = 0;
+      for (var tz2 = 24; tz2 < RTS_N - 24; tz2++) {
+        for (var tx2 = 24; tx2 < RTS_N - 24; tx2++) {
+          if (_rtsBlocked(tx2, tz2)) continue;
+          var nn = _rtsElevNormal(_rtsWX(tx2), _rtsWX(tz2));
+          var sl = Math.hypot(nn[0], nn[2]) / nn[1];
+          if (sl > best) { best = sl; bx = tx2; bz = tz2; }
+        }
+      }
+      lean.slope = +best.toFixed(3);
+      var u = null, st = null;
+      for (var k = 0; k < keepEnts.length; k++) {
+        if (!u && keepEnts[k].type === 'unit' && !keepEnts[k].air) u = keepEnts[k];
+        if (!st && keepEnts[k].type === 'struct') st = keepEnts[k];
+      }
+      if (!u || !st) { G.ents = keepEnts; return; }
+      var CW2 = R3.cv.width, CH2 = R3.cv.height;
+      function shot2() {
+        for (var f = 0; f < 3; f++) _rtsRFrame(0);
+        var bb = new Uint8Array(CW2 * CH2 * 4);
+        R3.gl.readPixels(0, 0, CW2, CH2, R3.gl.RGBA, R3.gl.UNSIGNED_BYTE, bb);
+        return bb;
+      }
+      function moved(a2, b2) {
+        var c = 0;
+        for (var q2 = 0; q2 < a2.length; q2 += 4) {
+          if (Math.abs(a2[q2] - b2[q2]) + Math.abs(a2[q2 + 1] - b2[q2 + 1]) +
+              Math.abs(a2[q2 + 2] - b2[q2 + 2]) > 12) c++;
+        }
+        return c;
+      }
+      u.x = _rtsWX(bx); u.z = _rtsWX(bz); u.rot = 0;
+      G.ents = [u];
+      R.focus.x = u.x; R.focus.z = u.z; _rtsClampFocus();
+      G.ents = []; var bare = shot2(); G.ents = [u];
+      R3.leanAmt = 1; var on = shot2();
+      lean.unitPx = moved(on, bare);
+      R3.leanAmt = 0; var off = shot2();
+      R3.leanAmt = 1;
+      lean.unit = moved(on, off);
+      G.ents = [st];
+      R.focus.x = st.x; R.focus.z = st.z; _rtsClampFocus();
+      R3.leanAmt = 1; var son = shot2();
+      R3.leanAmt = 0; var soff = shot2();
+      R3.leanAmt = 1;
+      lean.struct = moved(son, soff);
+      G.ents = keepEnts;
+    })();
+    o.lean = lean;
+    o.leanSpliced = (R3D_MESH_VS.indexOf(R3D_LEAN_GLSL) >= 0 ? 1 : 0) +
+                    (R3D_SHADOW_VS.indexOf(R3D_LEAN_GLSL) >= 0 ? 1 : 0);
+
     o.pickPts = n;
     o.pickMeanH = +(sumH / n).toFixed(2);
     o.pickErr = +wTerr.toFixed(4);
@@ -195,11 +280,16 @@ var S = new Suite('elevation');
   S.ok('...and it is a surface, not a staircase, and shallower than the camera looks',
        out.worstStep > 0 && out.worstStep < out.elevMax * 0.4 && out.worstSlope * 1.15 < 0.8,
        'the steepest step between two neighbouring cells anywhere on the map is ' +
-       out.worstStep + ' world units over a 4-unit cell, a slope of ' + out.worstSlope +
-       ' - so a unit crossing it walks up rather than jumping, the ground mesh has no vertical ' +
-       'face in it to leave a seam, and slope x tan(tilt) is ' +
+       out.worstStep + ' world units over a 4-unit cell, and the steepest GRADIENT anywhere - ' +
+       'read through _rtsElevNormal, which is what the mesh shades by and the units lean by - ' +
+       'is ' + out.worstSlope + '. So a unit crossing it walks up rather than jumping, the ' +
+       'ground mesh has no vertical face in it to leave a seam, and gradient x tan(tilt) is ' +
        (out.worstSlope * 1.15).toFixed(2) + ', under the 1 that picking needs to have a single ' +
-       'answer at all');
+       'answer at all. Bounded on the GRADIENT rather than on the neighbour step, and the two ' +
+       'are not the same number: the step is measured along one axis at a time, the gradient ' +
+       'combines both, so ground that falls diagonally is root-two steeper than either step ' +
+       'suggests - 0.42 per axis is 0.59 across. Bounding on the step would have left a third ' +
+       'of the real slope out of the margin that keeps picking single-valued');
 
   /* The whole reason this was cheap to build. */
   S.ok('the rock ridges sit on the slopes, because both came off one contour',
@@ -237,6 +327,32 @@ var S = new Suite('elevation');
          ' cells - over the same points. Every selection, move order, drag-pan and building ' +
          'placement goes through that inverse, so on high ground all of them were landing a ' +
          'cell and a half from where the player pointed');
+  }
+
+  if (out.on && out.lean) {
+    S.ok('a unit standing on a slope leans with the ground',
+         out.lean.unitPx > 60 && out.lean.unit > out.lean.unitPx * 0.5,
+         'on ground sloping ' + out.lean.slope + ', taking the lean out and changing nothing ' +
+         'else moves ' + out.lean.unit + ' of the unit\'s ' + out.lean.unitPx + ' pixels. ' +
+         'Upright on that slope a three-unit hull has one side 0.69 world units off the ground ' +
+         'and the other buried - a third of a tank\'s height - and 19% of the map\'s open ' +
+         'ground is steep enough to show it');
+
+    /* THE CONTROL. Without it, "wired up" and "wired to everything" score the same. */
+    S.ok('...and a building does not',
+         out.lean.struct === 0,
+         out.lean.struct === 0
+           ? 'the same toggle over a frame with only a building in it moves nothing - a tilted '
+             + 'factory reads as wrong as a floating one, so structures stay square to the world'
+           : out.lean.struct + ' pixels of a building move when the lean is taken out');
+
+    S.ok('...and the sun\'s pass leans it the same way',
+         out.leanSpliced === 2,
+         out.leanSpliced === 2
+           ? 'both programs splice the one _lean, so a shadow cannot stand up while its caster '
+             + 'leans over'
+           : 'only ' + out.leanSpliced + ' of the two programs carries the lean - the other '
+             + 'draws the unit somewhere else, and the shadow detaches from what casts it');
   }
 
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');

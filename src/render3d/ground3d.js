@@ -224,19 +224,12 @@ function _r3dGroundMesh(R3, gl, vb, EXT) {
   var q = R3.groundXZ, nb = R3.groundN, t = R3.groundT, k = 0, kt = 0, gi, gj;
   /* the world coordinate of a tile's low CORNER - _rtsWX gives the centre */
   function gcx(tx) { return _rtsWX(tx) - RTS_TILE / 2; }
-  /* THE SLOPE, BY CENTRAL DIFFERENCE OVER ONE CELL. Sampled from _rtsElev rather than from
-     the quad's own corners, so it is the terrain's slope and not the mesh's: at gstep 4 the
-     quad spans four cells and its corners would flatten everything between them. A cell is
-     the finest the height field actually carries, so that is the width to difference over. */
-  function gnorm(x, zz) {
-    var h = RTS_TILE;
-    var dx = (_rtsElev(x + h, zz) - _rtsElev(x - h, zz)) / (2 * h);
-    var dz = (_rtsElev(x, zz + h) - _rtsElev(x, zz - h)) / (2 * h);
-    var l = Math.hypot(dx, 1, dz) || 1;
-    return [-dx / l, 1 / l, -dz / l];
-  }
+  /* The slope comes from _rtsElevNormal - the terrain's, not the mesh's. At gstep 4 a quad
+     spans four cells and its own corners would flatten everything between them, and it is the
+     same normal the units standing here lean by, so the surface and what stands on it cannot
+     disagree. */
   function gv(x, zz) {
-    var n = gnorm(x, zz);
+    var n = _rtsElevNormal(x, zz);
     q[k] = x; q[k + 1] = _rtsElev(x, zz); q[k + 2] = zz;
     nb[k] = n[0]; nb[k + 1] = n[1]; nb[k + 2] = n[2];
     k += 3;
