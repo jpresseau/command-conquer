@@ -4,11 +4,17 @@
    right call for a near-top-down 2D game and it is a waste of a camera leaning 49 degrees, so
    the terrain has relief: G.height, a byte a cell, scaled by RTS_ELEV_MAX.
 
-   THE SIMULATION DOES NOT READ IT, AND THAT IS THE DESIGN. Height is map data like G.terrain -
-   something both renderers agree about - and passability is untouched, so pathing, combat,
-   harvesting and line-of-sight are the code they were and no balance moved. This spec grades
-   that as hard as it grades the relief itself, because "the ground has hills now" would be a
-   very expensive way to break a working game.
+   PASSABILITY DOES NOT READ IT, AND THAT IS THE DESIGN. No cell is blocked by its height, so
+   no generated map can be cut in two by ground that was not there before. This spec grades that
+   as hard as it grades the relief itself, because "the ground has hills now" would be a very
+   expensive way to break a working game - and it is measured by asking the sim the same three
+   passability questions with the field flattened underneath it.
+
+   THE REST OF THE SIMULATION DOES read it now: a climb costs speed and costs A*, a ridge takes
+   a bite out of what an observer can see, and height is worth a little sight and reach. That
+   arrived after this spec and lives in core/relief.js, graded by e2e/highground. The assertion
+   below used to be worded as "nothing in the sim reads G.height", which was always a bigger
+   claim than the three counts underneath it could support; it now says what it measures.
 
    IT COSTS NOTHING TO GENERATE because it is READ OFF A FIELD THAT WAS ALREADY THERE. The rock
    ridges are a narrow band either side of a contour of a smooth noise field, and the boundary
@@ -305,15 +311,17 @@ var S = new Suite('elevation');
        'away from the water would leave the surface standing over its own coast');
 
   /* THE ONE THAT MATTERS MOST. */
-  S.ok('and the simulation cannot tell the terrain has height',
+  S.ok('and no cell is blocked by how high it is',
        out.fpRelief === out.fpFlat,
        out.fpRelief === out.fpFlat
          ? 'blocked cells / ore cells / cells reachable from the player yard come to ' +
            out.fpRelief + ' with the relief and ' + out.fpFlat + ' with the field flattened ' +
-           'under it - identical, because nothing in the sim reads G.height. That is what ' +
-           'keeps pathing, combat, harvesting and line-of-sight the code they already were'
+           'under it - identical, because passability never consults G.height. That is what ' +
+           'stops relief cutting a generated map in two. What the height DOES reach - speed, ' +
+           'route cost, sight - is graded in e2e/highground'
          : 'the sim answers differently with relief (' + out.fpRelief + ') than without (' +
-           out.fpFlat + ') - height has leaked into the simulation and the balance with it');
+           out.fpFlat + ') - height has leaked into PASSABILITY, and a map can now be cut in ' +
+           'two by ground that used to be crossable');
 
   if (out.on) {
     S.ok('the camera can see enough relief to be worth picking over', out.pickMeanH > 0.5,

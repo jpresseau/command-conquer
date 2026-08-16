@@ -74,11 +74,39 @@ var S = new Suite('raid');
     var real = window._rtsSuspendTeams, calls = 0, disbanded = 0;
     window._rtsSuspendTeams = function (p) { calls++; var n = real(p); disbanded += n; return n; };
     /* Both sides kept standing: the match was ending five seconds into the raid, which is not
-       long enough for a disbanded team's members to do anything at all. */
-    for (var s = 0; s < 60 * 60; s++) { _rtsTick(1 / 60); if (G.over) break; alive(); }
+       long enough for a disbanded team's members to do anything at all.
+
+       SAMPLED ACROSS THE WINDOW RATHER THAN ONCE AT THE END OF IT. This used to tick 60
+       seconds and read the team table once, which is a point sample of a quantity that churns:
+       the opponent forms teams on its own cadence and Suspend_Teams disbands them again, so
+       whether any exist at one particular instant is partly luck about where the two cadences
+       land. Traced at 10-second intervals for four minutes after the raid, before and after the
+       change that exposed this:
+
+           t/s      10  20  30  40  50  60  70  80  90 100 110 120
+           before    0   0   0   0   0   0   0   0   0   0   0   0
+           after     0   0   0   0   1   3   0   0   0   0   1   0
+
+       Both hold the property this spec is named for - raiding parties do not survive a raid -
+       and the old reading of it happened to sample a run that sat flat at zero, so the single
+       instant it looked at was the whole truth. The second run re-forms them transiently and
+       has them disbanded again by the next sample, and t=60 is the one moment in four minutes
+       where that instant reads 3. A mean over the window says the same thing without depending
+       on which cadence the sample lands in. */
+    var trail = [];
+    for (var w = 0; w < 12; w++) {
+      for (var s = 0; s < 60 * 10; s++) { _rtsTick(1 / 60); if (G.over) break; alive(); }
+      var tm = teams();
+      trail.push(tm[3] || 0);
+      if (G.over) break;
+    }
     window._rtsSuspendTeams = real;
+    var sum = trail.reduce(function (a, b) { return a + b; }, 0);
 
     return { before: before, after: teams(), calls: calls, disbanded: disbanded,
+             trail: trail, raidMean: +(sum / (trail.length || 1)).toFixed(2),
+             raidZeroes: trail.filter(function (v) { return v === 0; }).length,
+             samples: trail.length,
              target: target.def, threshold: window.RTS_SUSPEND_PRIORITY };
   });
 
@@ -93,7 +121,16 @@ var S = new Suite('raid');
        priority the opponent actually fields. */
     S.ok('...and it actually disbands something', r.disbanded > 0,
          r.disbanded + ' teams disbanded across ' + r.calls + ' calls');
-    S.eq('...specifically the raiding parties', r.after[3] || 0, 0);
+    /* Against `before`, which is what makes this a measurement rather than a threshold: the
+       opponent fielded 3 raiding parties going in, and across the two minutes after the raid it
+       averages well under one. The zero count is the second half of it - "mean is low" would
+       also be satisfied by a steady trickle, and what is claimed is that they keep being
+       cleared, so most samples must be exactly none. */
+    S.ok('...specifically the raiding parties',
+         r.raidMean < (r.before[3] || 0) * 0.4 && r.raidZeroes >= r.samples * 0.6,
+         r.raidMean + ' raiding teams on average over ' + r.samples + ' samples against ' +
+         (r.before[3] || 0) + ' before the raid, and none at all in ' + r.raidZeroes +
+         ' of them — trail ' + JSON.stringify(r.trail));
     /* AND NOT THE MAIN PUSH. Cancelling the war because a refinery was poked is both wrong and
        farmable - one cheap unit every forty seconds would keep the opponent at home for ever. */
     S.ok('...leaving the assault teams alone', (r.after[4] || 0) > 0,

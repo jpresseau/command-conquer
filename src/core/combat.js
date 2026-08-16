@@ -128,7 +128,13 @@ function _rtsFindTarget(e, range, w) {
        look for a target it CAN hit. Same shape as the aa rule above and for the same reason. */
     if (!_rtsWeaponReaches(w, o)) continue;
     var dist = _rtsRangeTo(e, o);
-    if (dist > range) continue;
+    /* Standing above what you are shooting at is worth a little reach - see RTS_ELEV_RANGE in
+       core/relief.js. Applied to the RANGE rather than to the distance, deliberately:
+       _rtsRangeTo is plain geometry and half its callers ask it questions with nothing to do
+       with shooting - how far to the refinery, which of two threats is nearer, is the transport
+       close enough to board. An asymmetric distance would have quietly answered all of those
+       differently too, and none of them are about height. */
+    if (dist > _rtsElevReach(e, o, range)) continue;
     var v = _rtsEvalObject(e, o, dist, w);
     if (v > bv) { bv = v; best = o; }
   }
@@ -155,7 +161,7 @@ function _rtsPickWeapon(e, tgt) {
   for (var i = 0; i < ws.length; i++) {
     var w = ws[i], mod = rtsVerses(w, tgt);
     var v = mod * 1000;
-    if (dist <= w.range) v *= 2;
+    if (dist <= _rtsElevReach(e, tgt, w.range)) v *= 2;
     if (!mod) v = 0;                                  /* FIRE_CANT */
     if (v > bv) { bv = v; best = w; }
   }

@@ -33,10 +33,18 @@ function _rtsWX(tx) { return (tx - RTS_N / 2 + 0.5) * RTS_TILE; }          /* ti
    departs from that, because a camera leaning 49 degrees can see relief and a flat plane
    wastes it.
 
-   THE SIMULATION DOES NOT READ THIS, and that is the whole design. Height is a property of the
-   map the way G.terrain is - something both renderers agree about - and passability is left
-   exactly as it was. Nothing in pathing, combat, harvesting or line-of-sight changed, so no
-   balance moved, and no generated map can be cut in two by relief that was not there before.
+   THE SIMULATION READS THIS NOW, and core/relief.js is the whole of what it does with it:
+   a climb costs speed, a climb costs A* more than flat ground, a ridge takes a bite out of what
+   an observer can see, and standing above your target is worth a little sight and a little
+   reach. Read that file before changing anything here - every one of those numbers came off a
+   measurement, and the rule that is NOT there (steep ground is impassable) is absent because it
+   was measured and it cuts the maps into quarters.
+
+   WHAT IS STILL TRUE is the important half: PASSABILITY IS UNTOUCHED. No cell is blocked by its
+   height, so no generated map can be cut in two by relief that was not there before, and a map
+   with no relief - every real RA map, which is flat by construction - behaves exactly as it did
+   before any of this existed. Every rule in relief.js is written to vanish identically at zero
+   height rather than merely to become small.
 
    That falls out of WHERE the height comes from. The rock ridges core/terrain.js already lays
    down are a narrow band either side of a contour of a smooth noise field - and the boundary
@@ -271,6 +279,16 @@ function _rtsPath(sx, sz, gx, gz, dom) {
      closest it can get. _rtsSteer completes that path at once and the order clears. */
   if (start === goal) return [moved ? { x:_rtsWX(gtx), z:_rtsWX(gtz) } : { x:gx, z:gz }];
   P.hn = 0;
+  /* NOTHING IN THE SEA DOMAIN CLIMBS, so nothing in it reads the height field - the same rule
+     _rtsStandHeight applies to reach, applied to movement. The byte under a water cell is the
+     seabed and a hull is not on it.
+
+     Left in, this routes fleets around UNDERWATER hills. It cannot show on a generated map,
+     where core/terrain.js pins water to zero, and it showed immediately on water that something
+     else made: e2e/navy cuts its duel arena over whatever terrain was there, and the
+     submarine-versus-gunboat result went from +33 to -33 as hulls sailed around scenery they
+     should never have noticed. Any map this game did not generate can do the same. */
+  var HGT = (dom === 'sea') ? null : ((window._rtsG && window._rtsG.height) || null);
   function H(i) { var ax = Math.abs((i % RTS_N) - gtx), az = Math.abs(((i / RTS_N) | 0) - gtz);
     return (ax > az) ? (ax - az) + 1.41421 * az : (az - ax) + 1.41421 * ax; }
   P.g[start] = 0; P.f[start] = H(start); P.stamp[start] = run; P.state[start] = 1; _rtsHeapPush(start);
@@ -289,7 +307,17 @@ function _rtsPath(sx, sz, gx, gz, dom) {
                        _rtsBlocked(cx2, cz2 + dz, dom))) continue;   /* no corner cutting */
       var ni = _rtsIdx(nx, nz);
       if (P.stamp[ni] === run && P.state[ni] === 2) continue;
-      var ng = P.g[cur] + ((dx && dz) ? 1.41421 : 1);
+      /* A STEP UPHILL COSTS MORE THAN A STEP ON THE FLAT - see RTS_CLIMB_COST in
+         core/relief.js, which is what sends a column along to a ramp instead of straight over
+         a knoll. Read out of G.height directly rather than through _rtsTileElev: both cells
+         cleared _rtsBlocked above so both are in bounds, and this is the innermost loop of the
+         hottest function in the simulation.
+
+         ONLY THE RISE IS CHARGED, never the descent, and that is what lets the octile
+         heuristic below stay untouched: every extra cost is non-negative, so H can still not
+         overestimate and A* is still admissible. A downhill DISCOUNT would break it. */
+      var rise = HGT ? (HGT[ni] - HGT[cur]) * (RTS_ELEV_MAX / 255) : 0;
+      var ng = P.g[cur] + ((dx && dz) ? 1.41421 : 1) + (rise > 0 ? RTS_CLIMB_COST * rise : 0);
       if (P.stamp[ni] !== run) { P.stamp[ni] = run; P.state[ni] = 0; P.g[ni] = 1e9; }
       if (ng < P.g[ni]) { P.g[ni] = ng; P.f[ni] = ng + H(ni); P.came[ni] = cur; P.state[ni] = 1; _rtsHeapPush(ni); }
     }
@@ -317,11 +345,36 @@ function _rtsPath(sx, sz, gx, gz, dom) {
      normally), which is why this survived: the case only bites where the goal is somewhere the
      unit can never stand, and until there were ships every goal was walkable ground. */
   if (pts.length && !moved) { pts[pts.length - 1] = { x:gx, z:gz }; }
-  var out = [], px = sx, pz = sz, j = 0;
+  /* THE PULL MUST NOT UNDO THE CLIMB THE SEARCH JUST PAID FOR, and left alone it does. The
+     search routes a column round a knoll and along to a ramp; the puller then asks only
+     "is the straight line to that far waypoint PASSABLE", which over a knoll it is, collapses
+     the whole detour to one segment, and drives the column straight up the thing it went round.
+     The climb cost would have been spent for nothing and no test would have noticed, because
+     every unit still arrives.
+
+     So a shortcut has to be no worse UPHILL than the route it replaces, within a tolerance
+     (RTS_PULL_SLACK) that exists only so the bilinear's own wobble across nominally flat ground
+     cannot refuse a pull. The chain's climb is accumulated once, up front, in the same
+     half-tile sampling the shortcut is measured with - comparing a sampled line against summed
+     cell-to-cell deltas would be comparing two different quantities. On a flat map every term
+     here is zero and the loop is exactly the one it always was. */
+  var cum = null, pcx = sx, pcz = sz, acc = 0;
+  if (HGT) {                       /* null for a boat - see the note on HGT above */
+    cum = [];
+    for (var ci = 0; ci < pts.length; ci++) {
+      acc += _rtsLineClimb(pcx, pcz, pts[ci].x, pts[ci].z);
+      cum.push(acc); pcx = pts[ci].x; pcz = pts[ci].z;
+    }
+  }
+  var out = [], px = sx, pz = sz, j = 0, pc = 0;
   while (j < pts.length) {
     var far = j;
-    for (var k = pts.length - 1; k > j; k--) { if (_rtsClearLine(px, pz, pts[k].x, pts[k].z)) { far = k; break; } }
-    out.push(pts[far]); px = pts[far].x; pz = pts[far].z; j = far + 1;
+    for (var k = pts.length - 1; k > j; k--) {
+      if (!_rtsClearLine(px, pz, pts[k].x, pts[k].z)) continue;
+      if (cum && _rtsLineClimb(px, pz, pts[k].x, pts[k].z) > cum[k] - pc + RTS_PULL_SLACK) continue;
+      far = k; break;
+    }
+    out.push(pts[far]); px = pts[far].x; pz = pts[far].z; pc = cum ? cum[far] : 0; j = far + 1;
   }
   return out;
 }
