@@ -876,7 +876,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">0f78011 · 2026-08-16</div>
+  <div id="rtsBuild" title="build">d1cb1a3 · 2026-08-16</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -12874,6 +12874,21 @@ function _rtsTileElev(tx, tz) {
 
    The ground mesh, everything standing on it, and the picking ray all come through here, so
    there is one definition of where the ground is and they cannot drift apart. */
+/* WHICH WAY THE GROUND FACES at a world point, as a unit normal.
+
+   Central difference over one CELL, which is the finest the height field actually carries -
+   differencing tighter than that just reads the bilinear's own interpolation back. The ground
+   mesh shades its slopes with this and every unit standing on the ground leans by it, so the
+   surface you see and the thing standing on it agree by construction rather than by two
+   similar-looking derivations. */
+function _rtsElevNormal(x, z) {
+  var h = RTS_TILE;
+  var dx = (_rtsElev(x + h, z) - _rtsElev(x - h, z)) / (2 * h);
+  var dz = (_rtsElev(x, z + h) - _rtsElev(x, z - h)) / (2 * h);
+  var l = Math.sqrt(dx * dx + 1 + dz * dz);
+  return [-dx / l, 1 / l, -dz / l];
+}
+
 function _rtsElev(x, z) {
   var G = window._rtsG;
   if (!G || !G.height) return 0;
@@ -20441,6 +20456,42 @@ var R3D_WAVE_VGLSL_LIT = (function () {
     '  }';
 })();
 </script>
+<script>/* render3d/place3d.js - how a model is stood in the world: the ground it leans on.
+   Part of rts.render3d.
+
+   The terrain got relief and everything on it kept standing bolt upright. Measured over a
+   running match, the steepest ground under a unit runs at 0.228 - so a hull three units wide
+   has one side 0.69 world units off the ground and the other buried by the same, about a third
+   of a tank's own height - and 19% of the map's open, passable ground is steep enough to
+   matter. A tank on a ramp had one track in the air.
+
+   SHARED BY THE MAIN PASS AND THE SUN'S, for exactly the reason the swell is (see wave3d.js):
+   anything that moves a vertex in one program and not the other detaches a shadow from the
+   thing casting it. Both splice this same text, and e2e/shadows checks that they do.
+
+   THE MINIMAL ROTATION, not a basis built from an arbitrary reference direction. Taking the
+   model's up to the ground's normal has a one-parameter family of answers - any of them
+   followed by a spin about the normal - and picking one by crossing with a fixed axis makes
+   the model YAW as it drives across a slope, which reads as the turret slewing on its own.
+   Rodrigues' formula about the axis up x n turns through the smallest angle that does the job
+   and adds no spin at all:
+
+       v' = v cos + (k x v) + k (k.v)/(1 + cos)     k = up x n,  cos = n.y
+
+   With n = up this is k = 0, cos = 1, and v' = v exactly, so anything handed a flat normal is
+   untouched to the last bit rather than to within rounding - which is what lets the same
+   program draw the buildings, the world batch and the sea without a branch.
+
+   The guard on 1 + n.y is for a normal pointing straight down, where the rotation is a half
+   turn about an undetermined axis. No ground here comes near it - the steepest slope on the
+   map is 0.42, which is n.y = 0.92 - but a uniform is a uniform and a NaN would take the whole
+   draw with it. */
+var R3D_LEAN_GLSL =
+  'vec3 _lean(vec3 v, vec3 n){' +
+  '  vec3 k = vec3(n.z, 0.0, -n.x);' +           /* cross(vec3(0,1,0), n) */
+  '  return v * n.y + cross(k, v) + k * (dot(k, v) / max(1.0 + n.y, 0.0001));' +
+  '}';
+</script>
 <script>/* render3d/light3d.js - the light every mesh in the 3D mode is shaded by, as GLSL.
    Part of rts.render3d.
 
@@ -20641,13 +20692,17 @@ var R3D_SUN = (function () {
 var R3D_SHADOW_VS =
   'attribute vec3 aP;' +
   'uniform vec3 uPos; uniform vec2 uRot; uniform float uScale; uniform float uScaleY;' +
-  'uniform vec2 uWave;' +
+  'uniform vec2 uWave; uniform vec3 uNrm;' +
+  R3D_LEAN_GLSL +
   'uniform vec3 uSunR; uniform vec3 uSunU; uniform vec3 uSunF; uniform vec3 uSunC;' +
   'uniform vec2 uSunSpan;' +      /* half-extent across, and the depth range */
   'varying float vD;' +
   'void main(){' +
   '  vec3 p = vec3(aP.x * uScale, aP.y * uScale * uScaleY, aP.z * uScale);' +
-  '  vec3 wp = vec3(uPos.x + p.x*uRot.x - p.z*uRot.y, uPos.y + p.y, uPos.z + p.x*uRot.y + p.z*uRot.x);' +
+  /* the same yaw-then-lean the main pass uses, spliced from the same place - a vertex that
+     moves in one program and not the other detaches the shadow from its caster */
+  '  vec3 ry = vec3(p.x*uRot.x - p.z*uRot.y, p.y, p.x*uRot.y + p.z*uRot.x);' +
+  '  vec3 wp = uPos + _lean(ry, uNrm);' +
   R3D_WAVE_VGLSL +
   '  vec3 d = wp - uSunC;' +
   '  float lx = dot(d, uSunR), ly = dot(d, uSunU), lz = dot(d, uSunF);' +
@@ -20954,12 +21009,20 @@ var R3D_MESH_VS =
   'uniform float uInvD;' +      /* 1 / eye distance; 0 is the orthographic camera */
   'uniform vec3 uPos; uniform vec2 uRot; uniform float uScale; uniform float uScaleY; uniform vec3 uTint;' +
   'uniform vec2 uWave;' +       /* wave amplitude (0 = not water) and the clock */
+  'uniform vec3 uNrm;' +        /* the ground's normal under it; (0,1,0) leaves it upright */
   R3D_SHADOW_VGLSL +
+  R3D_LEAN_GLSL +
   'varying vec3 vN; varying vec3 vCol;' +
   'void main(){' +
   '  vec3 p = vec3(aP.x * uScale, aP.y * uScale * uScaleY, aP.z * uScale);' +
-  '  vec3 wp = vec3(uPos.x + p.x*uRot.x - p.z*uRot.y, uPos.y + p.y, uPos.z + p.x*uRot.y + p.z*uRot.x);' +
-  '  vec3 n = normalize(vec3(aN.x*uRot.x - aN.z*uRot.y, aN.y, aN.x*uRot.y + aN.z*uRot.x));' +
+  /* YAW FIRST, THEN LEAN. The yaw is about the model's own up, which is what "facing" means;
+     the lean then takes that up to the ground's. Doing it the other way round would turn the
+     model about the hill's normal instead of its own axis, so a tank on a slope would face
+     somewhere other than where it is driving. */
+  '  vec3 ry = vec3(p.x*uRot.x - p.z*uRot.y, p.y, p.x*uRot.y + p.z*uRot.x);' +
+  '  vec3 wp = uPos + _lean(ry, uNrm);' +
+  '  vec3 rn = vec3(aN.x*uRot.x - aN.z*uRot.y, aN.y, aN.x*uRot.y + aN.z*uRot.x);' +
+  '  vec3 n = normalize(_lean(rn, uNrm));' +
   /* WATER IS THIS SAME PROGRAM WITH THE SURFACE MOVING UNDER IT - the height, the analytic
      normal and the tone, all spliced in from the one wave table in render3d/wave3d.js, which
      the sun's depth pass builds its own displacement from too. The alternative was a second
@@ -21955,19 +22018,12 @@ function _r3dGroundMesh(R3, gl, vb, EXT) {
   var q = R3.groundXZ, nb = R3.groundN, t = R3.groundT, k = 0, kt = 0, gi, gj;
   /* the world coordinate of a tile's low CORNER - _rtsWX gives the centre */
   function gcx(tx) { return _rtsWX(tx) - RTS_TILE / 2; }
-  /* THE SLOPE, BY CENTRAL DIFFERENCE OVER ONE CELL. Sampled from _rtsElev rather than from
-     the quad's own corners, so it is the terrain's slope and not the mesh's: at gstep 4 the
-     quad spans four cells and its corners would flatten everything between them. A cell is
-     the finest the height field actually carries, so that is the width to difference over. */
-  function gnorm(x, zz) {
-    var h = RTS_TILE;
-    var dx = (_rtsElev(x + h, zz) - _rtsElev(x - h, zz)) / (2 * h);
-    var dz = (_rtsElev(x, zz + h) - _rtsElev(x, zz - h)) / (2 * h);
-    var l = Math.hypot(dx, 1, dz) || 1;
-    return [-dx / l, 1 / l, -dz / l];
-  }
+  /* The slope comes from _rtsElevNormal - the terrain's, not the mesh's. At gstep 4 a quad
+     spans four cells and its own corners would flatten everything between them, and it is the
+     same normal the units standing here lean by, so the surface and what stands on it cannot
+     disagree. */
   function gv(x, zz) {
-    var n = gnorm(x, zz);
+    var n = _rtsElevNormal(x, zz);
     q[k] = x; q[k + 1] = _rtsElev(x, zz); q[k + 2] = zz;
     nb[k] = n[0]; nb[k + 1] = n[1]; nb[k + 2] = n[2];
     k += 3;
@@ -22188,8 +22244,11 @@ function _r3dFxDraw(G, cam, invD) {
   return drawn;
 }
 </script>
-<script>/* render3d/scene3d.js - what the 3D mode draws each frame: the mesh cache, the ground and
-   fog textures, and the frame walk. Part of rts.render3d.
+<script>/* render3d/mesh3d.js - turning a model into GL buffers, and keeping them. Part of rts.render3d.
+
+   Split out of scene3d.js, which was over this project's per-file limit once the terrain grew
+   relief. Nothing here has anything to do with the frame walk that used to sit under it: this
+   is the cache between a face list and a buffer, and the frame is what draws them.
 
    ONE BUFFER PER MODEL, ONE DRAW PER ENTITY. A model is fetched once - buildings through
    _sprBuildingModel, units through _sprUnitModel, the same functions the sprite baker uses -
@@ -22269,6 +22328,16 @@ function _r3dMesh(kind, def, side, part, prone) {
   R3.mesh[key] = m;
   return m;
 }
+</script>
+<script>/* render3d/scene3d.js - the frame walk: what the 3D mode draws, and in what order.
+   Part of rts.render3d.
+
+   What it no longer holds, because the relief work took it over the per-file limit twice: the
+   ground's textures, mesh and shader are render3d/ground3d.js, and the cache from a face list
+   to GL buffers is render3d/mesh3d.js. Both were separable without argument - one is what the
+   ground is made of and the other is how a model becomes a buffer, and neither has anything to
+   say about the order the frame is drawn in, which is what is left here. */
+
 
 /* ------------------------------------------------------------------ the frame --
    Ground, then every entity, then the fog over the lot - the same order the 2D painter uses,
@@ -22295,6 +22364,7 @@ function _r3dFrame(G) {
       uScale: gl.getUniformLocation(P, 'uScale'), uScaleY: gl.getUniformLocation(P, 'uScaleY'),
       uTint: gl.getUniformLocation(P, 'uTint'), uA: gl.getUniformLocation(P, 'uA'),
       uWave: gl.getUniformLocation(P, 'uWave'),
+      uNrm: gl.getUniformLocation(P, 'uNrm'),
       aP: gl.getAttribLocation(P, 'aP'), aN: gl.getAttribLocation(P, 'aN'),
       aC: gl.getAttribLocation(P, 'aC') };
   }
@@ -22371,6 +22441,7 @@ function _r3dFrame(G) {
       gl.uniform2f(SC.uWave, 0, 0);
       if (R3.world) {
         gl.uniform3f(SC.uPos, 0, 0, 0);
+        if (SC.uNrm) gl.uniform3f(SC.uNrm, 0, 1, 0);
         gl.uniform2f(SC.uRot, 1, 0);
         gl.uniform1f(SC.uScale, 1);
         gl.uniform1f(SC.uScaleY, 1);
@@ -22480,6 +22551,7 @@ function _r3dFrame(G) {
      margin is a factor of 1.9 in slope, and e2e/sea guards it. */
   if (R3.waterMesh) {
     gl.uniform3f(uPos, 0, 0, 0);
+    if (MC.uNrm) gl.uniform3f(MC.uNrm, 0, 1, 0);
     gl.uniform2f(uRot, 1, 0);
     gl.uniform1f(uScale, 1);
     gl.uniform1f(uScaleY, 1);
@@ -22516,8 +22588,35 @@ function _r3dFrame(G) {
       gl.enableVertexAttribArray(C.aC); gl.vertexAttribPointer(C.aC, 3, gl.UNSIGNED_BYTE, true, 0, 0);
     }
   }
-  function drawIn(C, mesh, x, y2, zz, rot, scale, dim, sy) {
+  /* UPRIGHT UNLESS TOLD OTHERWISE. `nrm` is the ground's normal under the thing being drawn;
+     absent, it is world up and _lean is the identity (see place3d.js), which is what the world
+     batch, the sea and every building want. It is set on EVERY draw rather than only when it
+     changes, because the alternative is a leaked uniform: one unit on a slope followed by a
+     building would put the building on the unit's hill. */
+  function drawIn(C, mesh, x, y2, zz, rot, scale, dim, sy, nrm) {
     if (!mesh) return;
+    if (C.uNrm) {
+      /* R3.leanAmt exists so a spec can take the lean out WITHOUT taking the relief out - the
+         same reason R3.aoAmt exists. Flattening G.height instead moves the ground, the
+         shadows and the picking at the same time, and a frame that differs for four reasons
+         says nothing about any of them. Blended toward up rather than switched, so 0 is
+         exactly the upright draw this replaced.
+
+         APPLIED HERE, where the normal is consumed, rather than at the one call site that
+         passes one. It sat in the unit branch first, which made e2e/elevation's building
+         CONTROL unfalsifiable: a building wrongly given a normal would have leaned at every
+         setting of the knob, so the toggle moved nothing and "structures stay square" passed
+         on a frame where they did not. A knob that only reaches the code you remembered to
+         put it in cannot grade the code you forgot. */
+      var lx = nrm ? nrm[0] : 0, ly = nrm ? nrm[1] : 1, lz2 = nrm ? nrm[2] : 0;
+      var la = R3.leanAmt;
+      if (la !== undefined && la !== 1) {
+        var bx2 = lx * la, by2 = ly * la + (1 - la), bz2 = lz2 * la;
+        var bl = Math.sqrt(bx2 * bx2 + by2 * by2 + bz2 * bz2) || 1;
+        lx = bx2 / bl; ly = by2 / bl; lz2 = bz2 / bl;
+      }
+      gl.uniform3f(C.uNrm, lx, ly, lz2);
+    }
     gl.uniform3f(C.uPos, x, y2, zz);
     gl.uniform2f(C.uRot, Math.cos(rot), Math.sin(rot));
     gl.uniform1f(C.uScale, scale);
@@ -22526,8 +22625,8 @@ function _r3dFrame(G) {
     bindMesh(C, mesh);
     gl.drawArrays(gl.TRIANGLES, 0, mesh.verts);
   }
-  function draw(mesh, x, y2, zz, rot, scale, dim, sy) {
-    drawIn(MC, mesh, x, y2, zz, rot, scale, dim, sy);
+  function draw(mesh, x, y2, zz, rot, scale, dim, sy, nrm) {
+    drawIn(MC, mesh, x, y2, zz, rot, scale, dim, sy, nrm);
   }
 
   /* --- the world's own geometry: forests, ridges, ore crystals, grass - see world3d.js ---
@@ -22540,6 +22639,7 @@ function _r3dFrame(G) {
   if (R3.world) {
     /* identity placement: the batches are baked in world space, so they draw as-is */
     gl.uniform3f(uPos, 0, 0, 0);
+    if (MC.uNrm) gl.uniform3f(MC.uNrm, 0, 1, 0);
     gl.uniform2f(uRot, 1, 0);
     gl.uniform1f(uScale, 1);
     gl.uniform1f(uScaleY, 1);
@@ -22607,10 +22707,24 @@ function _r3dFrame(G) {
       if (d2.kind === 'infantry' && e.path && !e.prone) {
         y += Math.abs(Math.sin(G.t * 9 + (e.gait || 0) * 0.8)) * 0.45;
       }
+      /* AND IT LEANS ON THE GROUND IT IS STANDING ON. Measured over a running match, the
+         steepest slope under a unit is 0.228: a hull three units wide had one side 0.69 world
+         units clear of the ground and the other buried, about a third of a tank's height, and
+         19% of the map's open ground is steep enough to show it.
+
+         NOT WHAT IS FLYING. An aircraft's attitude is its own business and the hill it
+         happens to be over is nothing to do with it; passing no normal leaves it upright.
+         Boats likewise sit on water, which is level by construction.
+
+         The TURRET takes the same lean as the hull rather than staying level, because it is
+         bolted to the hull - it rotates in the hull's plane, and a turret that stayed
+         world-level would shear out of its own ring on any slope. */
+      var gn = (e.air || (d2 && d2.sea)) ? null : _rtsElevNormal(e.x, e.z);
       drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : null, e.prone),
-             e.x, y, e.z, -e.rot, ART2W, false);
+             e.x, y, e.z, -e.rot, ART2W, false, 1, gn);
       if (turret) {
-        drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false), e.x, y, e.z, -(e.turret || 0), ART2W, false);
+        drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false), e.x, y, e.z, -(e.turret || 0),
+               ART2W, false, 1, gn);
       }
     }
   }

@@ -1,84 +1,12 @@
-/* render3d/scene3d.js - what the 3D mode draws each frame: the mesh cache, the ground and
-   fog textures, and the frame walk. Part of rts.render3d.
+/* render3d/scene3d.js - the frame walk: what the 3D mode draws, and in what order.
+   Part of rts.render3d.
 
-   ONE BUFFER PER MODEL, ONE DRAW PER ENTITY. A model is fetched once - buildings through
-   _sprBuildingModel, units through _sprUnitModel, the same functions the sprite baker uses -
-   fan-triangulated with per-face normals, and uploaded. Every entity of that type then draws
-   the shared buffer with its own position, yaw and tint as uniforms. A battle is a few hundred
-   entities of a few dozen types, so the geometry cost is paid once at first sight of a type
-   and the per-frame cost is uniform uploads. */
+   What it no longer holds, because the relief work took it over the per-file limit twice: the
+   ground's textures, mesh and shader are render3d/ground3d.js, and the cache from a face list
+   to GL buffers is render3d/mesh3d.js. Both were separable without argument - one is what the
+   ground is made of and the other is how a model becomes a buffer, and neither has anything to
+   say about the order the frame is drawn in, which is what is left here. */
 
-function _r3dBuildMesh(gl, faces) {
-  var pos = [], nrm = [], col = [], fi;
-  for (fi = 0; fi < faces.length; fi++) {
-    var f = faces[fi], v = f.v;
-    var r = f.c[0] / 255, gc = f.c[1] / 255, b = f.c[2] / 255;
-    /* face normal from the first three vertices - the primitives emit planar faces */
-    var ax = v[1][0] - v[0][0], ay = v[1][1] - v[0][1], az = v[1][2] - v[0][2];
-    var bx = v[2][0] - v[0][0], by = v[2][1] - v[0][1], bz = v[2][2] - v[0][2];
-    var nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
-    /* UNLESS THE FACE CAME WITH ITS OWN. A cylinder, cone or vault emits one normal per corner
-       (see _r3Cyl in r3d/primitives.js), which is what turns a ring of flat strips into a
-       curve once the fragment stage interpolates them. Everything else - every box, slab,
-       gable and cap - has no such field and is flat, which is what it should be. */
-    var fnv = f.n;
-    for (var k = 2; k < v.length; k++) {
-      var idx = [0, k - 1, k];
-      for (var t = 0; t < 3; t++) {
-        var vi = idx[t], p = v[vi];
-        pos.push(p[0], p[1], p[2]);
-        if (fnv) nrm.push(fnv[vi][0], fnv[vi][1], fnv[vi][2]);
-        else nrm.push(nx, ny, nz);
-        col.push(r, gc, b);
-      }
-    }
-  }
-  /* Positions stay float; normals and colours pack to bytes. At this system's scale - the
-     world batches alone are several hundred thousand triangles - attribute width is the real
-     budget: floats everywhere is 36 bytes a vertex and packing the two attributes that never
-     needed the precision brings it to 18, which is the difference between a phone keeping the
-     3D mode and dropping the tab. Normals are normalised here because Int8 cannot carry the
-     unnormalised cross products the emitter produces; the shader normalises anyway, so
-     nothing downstream changes. */
-  function fbuf(a) {
-    var b2 = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, b2);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(a), gl.STATIC_DRAW);
-    return b2;
-  }
-  var nrm8 = new Int8Array(nrm.length), col8 = new Uint8Array(col.length);
-  for (var ni = 0; ni < nrm.length; ni += 3) {
-    var nl = Math.hypot(nrm[ni], nrm[ni + 1], nrm[ni + 2]) || 1;
-    nrm8[ni] = Math.round(nrm[ni] / nl * 127);
-    nrm8[ni + 1] = Math.round(nrm[ni + 1] / nl * 127);
-    nrm8[ni + 2] = Math.round(nrm[ni + 2] / nl * 127);
-  }
-  for (var ci = 0; ci < col.length; ci++) col8[ci] = Math.round(col[ci] * 255);
-  function bbuf(a) {
-    var b3 = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, b3);
-    gl.bufferData(gl.ARRAY_BUFFER, a, gl.STATIC_DRAW);
-    return b3;
-  }
-  return { p: fbuf(pos), n: bbuf(nrm8), c: bbuf(col8), verts: pos.length / 3 };
-}
-
-/* The cache key carries everything that changes the geometry or its colours: type, side,
-   turret half, prone. A miss builds the model through the same functions the baker uses, so
-   the two pipelines cannot drift apart - there is no second copy of any shape. */
-function _r3dMesh(kind, def, side, part, prone) {
-  var R3 = window._R3D, key = kind + ':' + def + ':' + side + ':' + (part || '') + ':' + (prone ? 1 : 0);
-  var m = R3.mesh[key];
-  if (m !== undefined) return m;
-  var faces = null;
-  try {
-    faces = (kind === 'b') ? _sprBuildingModel(def, side)
-                           : _sprUnitModel(def, side, !!prone, part || null);
-  } catch (e) { faces = null; }
-  m = (faces && faces.length) ? _r3dBuildMesh(R3.gl, faces) : null;
-  R3.mesh[key] = m;
-  return m;
-}
 
 /* ------------------------------------------------------------------ the frame --
    Ground, then every entity, then the fog over the lot - the same order the 2D painter uses,
@@ -105,6 +33,7 @@ function _r3dFrame(G) {
       uScale: gl.getUniformLocation(P, 'uScale'), uScaleY: gl.getUniformLocation(P, 'uScaleY'),
       uTint: gl.getUniformLocation(P, 'uTint'), uA: gl.getUniformLocation(P, 'uA'),
       uWave: gl.getUniformLocation(P, 'uWave'),
+      uNrm: gl.getUniformLocation(P, 'uNrm'),
       aP: gl.getAttribLocation(P, 'aP'), aN: gl.getAttribLocation(P, 'aN'),
       aC: gl.getAttribLocation(P, 'aC') };
   }
@@ -181,6 +110,7 @@ function _r3dFrame(G) {
       gl.uniform2f(SC.uWave, 0, 0);
       if (R3.world) {
         gl.uniform3f(SC.uPos, 0, 0, 0);
+        if (SC.uNrm) gl.uniform3f(SC.uNrm, 0, 1, 0);
         gl.uniform2f(SC.uRot, 1, 0);
         gl.uniform1f(SC.uScale, 1);
         gl.uniform1f(SC.uScaleY, 1);
@@ -290,6 +220,7 @@ function _r3dFrame(G) {
      margin is a factor of 1.9 in slope, and e2e/sea guards it. */
   if (R3.waterMesh) {
     gl.uniform3f(uPos, 0, 0, 0);
+    if (MC.uNrm) gl.uniform3f(MC.uNrm, 0, 1, 0);
     gl.uniform2f(uRot, 1, 0);
     gl.uniform1f(uScale, 1);
     gl.uniform1f(uScaleY, 1);
@@ -326,8 +257,35 @@ function _r3dFrame(G) {
       gl.enableVertexAttribArray(C.aC); gl.vertexAttribPointer(C.aC, 3, gl.UNSIGNED_BYTE, true, 0, 0);
     }
   }
-  function drawIn(C, mesh, x, y2, zz, rot, scale, dim, sy) {
+  /* UPRIGHT UNLESS TOLD OTHERWISE. `nrm` is the ground's normal under the thing being drawn;
+     absent, it is world up and _lean is the identity (see place3d.js), which is what the world
+     batch, the sea and every building want. It is set on EVERY draw rather than only when it
+     changes, because the alternative is a leaked uniform: one unit on a slope followed by a
+     building would put the building on the unit's hill. */
+  function drawIn(C, mesh, x, y2, zz, rot, scale, dim, sy, nrm) {
     if (!mesh) return;
+    if (C.uNrm) {
+      /* R3.leanAmt exists so a spec can take the lean out WITHOUT taking the relief out - the
+         same reason R3.aoAmt exists. Flattening G.height instead moves the ground, the
+         shadows and the picking at the same time, and a frame that differs for four reasons
+         says nothing about any of them. Blended toward up rather than switched, so 0 is
+         exactly the upright draw this replaced.
+
+         APPLIED HERE, where the normal is consumed, rather than at the one call site that
+         passes one. It sat in the unit branch first, which made e2e/elevation's building
+         CONTROL unfalsifiable: a building wrongly given a normal would have leaned at every
+         setting of the knob, so the toggle moved nothing and "structures stay square" passed
+         on a frame where they did not. A knob that only reaches the code you remembered to
+         put it in cannot grade the code you forgot. */
+      var lx = nrm ? nrm[0] : 0, ly = nrm ? nrm[1] : 1, lz2 = nrm ? nrm[2] : 0;
+      var la = R3.leanAmt;
+      if (la !== undefined && la !== 1) {
+        var bx2 = lx * la, by2 = ly * la + (1 - la), bz2 = lz2 * la;
+        var bl = Math.sqrt(bx2 * bx2 + by2 * by2 + bz2 * bz2) || 1;
+        lx = bx2 / bl; ly = by2 / bl; lz2 = bz2 / bl;
+      }
+      gl.uniform3f(C.uNrm, lx, ly, lz2);
+    }
     gl.uniform3f(C.uPos, x, y2, zz);
     gl.uniform2f(C.uRot, Math.cos(rot), Math.sin(rot));
     gl.uniform1f(C.uScale, scale);
@@ -336,8 +294,8 @@ function _r3dFrame(G) {
     bindMesh(C, mesh);
     gl.drawArrays(gl.TRIANGLES, 0, mesh.verts);
   }
-  function draw(mesh, x, y2, zz, rot, scale, dim, sy) {
-    drawIn(MC, mesh, x, y2, zz, rot, scale, dim, sy);
+  function draw(mesh, x, y2, zz, rot, scale, dim, sy, nrm) {
+    drawIn(MC, mesh, x, y2, zz, rot, scale, dim, sy, nrm);
   }
 
   /* --- the world's own geometry: forests, ridges, ore crystals, grass - see world3d.js ---
@@ -350,6 +308,7 @@ function _r3dFrame(G) {
   if (R3.world) {
     /* identity placement: the batches are baked in world space, so they draw as-is */
     gl.uniform3f(uPos, 0, 0, 0);
+    if (MC.uNrm) gl.uniform3f(MC.uNrm, 0, 1, 0);
     gl.uniform2f(uRot, 1, 0);
     gl.uniform1f(uScale, 1);
     gl.uniform1f(uScaleY, 1);
@@ -417,10 +376,24 @@ function _r3dFrame(G) {
       if (d2.kind === 'infantry' && e.path && !e.prone) {
         y += Math.abs(Math.sin(G.t * 9 + (e.gait || 0) * 0.8)) * 0.45;
       }
+      /* AND IT LEANS ON THE GROUND IT IS STANDING ON. Measured over a running match, the
+         steepest slope under a unit is 0.228: a hull three units wide had one side 0.69 world
+         units clear of the ground and the other buried, about a third of a tank's height, and
+         19% of the map's open ground is steep enough to show it.
+
+         NOT WHAT IS FLYING. An aircraft's attitude is its own business and the hill it
+         happens to be over is nothing to do with it; passing no normal leaves it upright.
+         Boats likewise sit on water, which is level by construction.
+
+         The TURRET takes the same lean as the hull rather than staying level, because it is
+         bolted to the hull - it rotates in the hull's plane, and a turret that stayed
+         world-level would shear out of its own ring on any slope. */
+      var gn = (e.air || (d2 && d2.sea)) ? null : _rtsElevNormal(e.x, e.z);
       drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : null, e.prone),
-             e.x, y, e.z, -e.rot, ART2W, false);
+             e.x, y, e.z, -e.rot, ART2W, false, 1, gn);
       if (turret) {
-        drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false), e.x, y, e.z, -(e.turret || 0), ART2W, false);
+        drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false), e.x, y, e.z, -(e.turret || 0),
+               ART2W, false, 1, gn);
       }
     }
   }

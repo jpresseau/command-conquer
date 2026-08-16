@@ -166,12 +166,20 @@ var R3D_MESH_VS =
   'uniform float uInvD;' +      /* 1 / eye distance; 0 is the orthographic camera */
   'uniform vec3 uPos; uniform vec2 uRot; uniform float uScale; uniform float uScaleY; uniform vec3 uTint;' +
   'uniform vec2 uWave;' +       /* wave amplitude (0 = not water) and the clock */
+  'uniform vec3 uNrm;' +        /* the ground's normal under it; (0,1,0) leaves it upright */
   R3D_SHADOW_VGLSL +
+  R3D_LEAN_GLSL +
   'varying vec3 vN; varying vec3 vCol;' +
   'void main(){' +
   '  vec3 p = vec3(aP.x * uScale, aP.y * uScale * uScaleY, aP.z * uScale);' +
-  '  vec3 wp = vec3(uPos.x + p.x*uRot.x - p.z*uRot.y, uPos.y + p.y, uPos.z + p.x*uRot.y + p.z*uRot.x);' +
-  '  vec3 n = normalize(vec3(aN.x*uRot.x - aN.z*uRot.y, aN.y, aN.x*uRot.y + aN.z*uRot.x));' +
+  /* YAW FIRST, THEN LEAN. The yaw is about the model's own up, which is what "facing" means;
+     the lean then takes that up to the ground's. Doing it the other way round would turn the
+     model about the hill's normal instead of its own axis, so a tank on a slope would face
+     somewhere other than where it is driving. */
+  '  vec3 ry = vec3(p.x*uRot.x - p.z*uRot.y, p.y, p.x*uRot.y + p.z*uRot.x);' +
+  '  vec3 wp = uPos + _lean(ry, uNrm);' +
+  '  vec3 rn = vec3(aN.x*uRot.x - aN.z*uRot.y, aN.y, aN.x*uRot.y + aN.z*uRot.x);' +
+  '  vec3 n = normalize(_lean(rn, uNrm));' +
   /* WATER IS THIS SAME PROGRAM WITH THE SURFACE MOVING UNDER IT - the height, the analytic
      normal and the tone, all spliced in from the one wave table in render3d/wave3d.js, which
      the sun's depth pass builds its own displacement from too. The alternative was a second

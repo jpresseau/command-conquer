@@ -78,6 +78,21 @@ function _rtsTileElev(tx, tz) {
 
    The ground mesh, everything standing on it, and the picking ray all come through here, so
    there is one definition of where the ground is and they cannot drift apart. */
+/* WHICH WAY THE GROUND FACES at a world point, as a unit normal.
+
+   Central difference over one CELL, which is the finest the height field actually carries -
+   differencing tighter than that just reads the bilinear's own interpolation back. The ground
+   mesh shades its slopes with this and every unit standing on the ground leans by it, so the
+   surface you see and the thing standing on it agree by construction rather than by two
+   similar-looking derivations. */
+function _rtsElevNormal(x, z) {
+  var h = RTS_TILE;
+  var dx = (_rtsElev(x + h, z) - _rtsElev(x - h, z)) / (2 * h);
+  var dz = (_rtsElev(x, z + h) - _rtsElev(x, z - h)) / (2 * h);
+  var l = Math.sqrt(dx * dx + 1 + dz * dz);
+  return [-dx / l, 1 / l, -dz / l];
+}
+
 function _rtsElev(x, z) {
   var G = window._rtsG;
   if (!G || !G.height) return 0;

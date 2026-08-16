@@ -111,13 +111,17 @@ var R3D_SUN = (function () {
 var R3D_SHADOW_VS =
   'attribute vec3 aP;' +
   'uniform vec3 uPos; uniform vec2 uRot; uniform float uScale; uniform float uScaleY;' +
-  'uniform vec2 uWave;' +
+  'uniform vec2 uWave; uniform vec3 uNrm;' +
+  R3D_LEAN_GLSL +
   'uniform vec3 uSunR; uniform vec3 uSunU; uniform vec3 uSunF; uniform vec3 uSunC;' +
   'uniform vec2 uSunSpan;' +      /* half-extent across, and the depth range */
   'varying float vD;' +
   'void main(){' +
   '  vec3 p = vec3(aP.x * uScale, aP.y * uScale * uScaleY, aP.z * uScale);' +
-  '  vec3 wp = vec3(uPos.x + p.x*uRot.x - p.z*uRot.y, uPos.y + p.y, uPos.z + p.x*uRot.y + p.z*uRot.x);' +
+  /* the same yaw-then-lean the main pass uses, spliced from the same place - a vertex that
+     moves in one program and not the other detaches the shadow from its caster */
+  '  vec3 ry = vec3(p.x*uRot.x - p.z*uRot.y, p.y, p.x*uRot.y + p.z*uRot.x);' +
+  '  vec3 wp = uPos + _lean(ry, uNrm);' +
   R3D_WAVE_VGLSL +
   '  vec3 d = wp - uSunC;' +
   '  float lx = dot(d, uSunR), ly = dot(d, uSunU), lz = dot(d, uSunF);' +
