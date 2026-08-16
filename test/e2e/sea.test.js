@@ -40,7 +40,25 @@
    the surface is the same dark blue the troughs are, so in a trough the difference falls under
    any sane threshold and the surface reads as absent. Measured that way, cells with water on
    all eight sides came out 85.9% covered by a mesh that covers them entirely. Rebuilding the
-   surface in a colour nothing else on the map wears removes the question. */
+   surface in a colour nothing else on the map wears removes the question.
+
+   AND IT ASKS THAT TWICE - ONCE FLAT AND ONCE WITH THE SWELL RUNNING - because the flat
+   answer is the easy one, and for a long time it was the only one asked. Flattening the
+   surface separates "where the mesh is" from "where it draws", which is what the coverage
+   check above wants. It also removes the trough. And the trough was a hole: the sheet sits
+   0.10 world units over the ground and heaves 0.90 either way, so every trough dipped below
+   the ground plane, lost the depth test to it, and let the painted seabed through. A THIRD of
+   the open sea was ground - 65.8% of these very samples, and 72% of the frame over open water
+   at the top zoom when it was chased down separately - hard-edged blue-grey blotches lying in
+   the dark bands between the crests, on every coastal map, for as long as the surface has
+   existed. The spec asserting "the surface covers the open sea" was passing at 100% the whole
+   time, because it was looking at a sea with the waves switched off.
+
+   The fix is that the sea lays its DEPTH down over the ground rather than competing with it -
+   drawn while the ground is the only thing in the buffer, with the comparison off. Which buys
+   one obligation, and the last assertion here is it: with no comparison the triangles land in
+   mesh order, so the surface must never occlude itself. It cannot at any slope shallower than
+   the line of sight, and both numbers are read from the source rather than re-derived. */
 
 var { chromium } = require('playwright');
 var { Suite } = require('../lib/assert.js');
@@ -110,12 +128,22 @@ var S = new Suite('sea');
     window.R3D_WAVE_AMP = 0;              /* flat, so where the mesh IS is where it DRAWS */
     _r3dWaterBuild(G);
     var marked = shot();
-    RTS_PAL.water[0] = keepCol;
+    /* AND THE SAME MARK WITH THE SWELL RUNNING, which is the sea the player is actually
+       looking at. The line above flattens the surface to separate "where the mesh is" from
+       "where it draws" - and flattening is precisely what removed the bug this pair now
+       measures, so the flat mark can only ever answer the easier question. Magenta survives
+       the swell: the tone term scales the colour and the crest term adds a little of each
+       channel, so red and blue stay together and green stays far below both. */
     window.R3D_WAVE_AMP = keepA;
     _r3dWaterBuild(G);
-    function isMesh(q) {
-      return marked[q] > 90 && marked[q + 2] > 90 && marked[q + 1] < marked[q] - 40;
+    var markedWavy = shot();
+    RTS_PAL.water[0] = keepCol;
+    _r3dWaterBuild(G);
+    function isMark(b, q) {
+      return b[q] > 90 && b[q + 2] > 90 && b[q + 1] < b[q] - 40;
     }
+    function isMesh(q) { return isMark(marked, q); }
+    function isMeshWavy(q) { return isMark(markedWavy, q); }
     /* and the same surface with the swell flattened */
     var keepAmp = window.R3D_WAVE_AMP;
     window.R3D_WAVE_AMP = 0;
@@ -138,7 +166,7 @@ var S = new Suite('sea');
        eight sides - no coast, no inset - project their centres, and ask whether the mesh is
        what is on screen there. The per-side inset bug leaves a lattice of paint through the
        middle of that, so the share drops. */
-    var open = 0, covered = 0;
+    var open = 0, covered = 0, coveredWavy = 0;
     function isW(x, z) {
       return x >= 0 && z >= 0 && x < RTS_N && z < RTS_N &&
              G.terrain[z * RTS_N + x] === RTS_T_WATER;
@@ -158,12 +186,22 @@ var S = new Suite('sea');
             var q = ((CH - 1 - py) * CW + px) * 4;
             open++;
             if (isMesh(q)) covered++;
+            if (isMeshWavy(q)) coveredWavy++;
           }
         }
       }
     }
     o.openSamples = open;
     o.openCovered = open ? +(covered / open * 100).toFixed(1) : 0;
+    o.openCoveredWavy = open ? +(coveredWavy / open * 100).toFixed(1) : 0;
+
+    /* THE SLOPE THE DRAW ORDER IS ALLOWED TO ASSUME. Read off the wave table itself rather
+       than re-derived here from a copy of the constants - that is what wave3d.js exists for. */
+    o.slope = +R3D_WAVE_SLOPE.toFixed(4);
+    o.cot = +(Math.cos(R3D_TILT) / Math.sin(R3D_TILT)).toFixed(4);
+    o.sightDeg = +(90 - R3D_TILT * 180 / Math.PI).toFixed(0);
+    o.peakDrop = +(R3D_WAVE_AMP * R3D_WAVE_PEAK).toFixed(3);
+    o.waterY = R3D_WATER_Y;
 
     /* THE SEAM BETWEEN TWO ADJACENT SHORE CELLS, which is the one place the whole-cell inset
        differs from the per-side one - and a coastline is nothing but a run of those seams. The
@@ -241,10 +279,34 @@ var S = new Suite('sea');
        ' with the swell flattened - leaning on the light alone gave 79, because a flat sheet ' +
        'already sits at v=0.96 of a ceiling of 1.0');
 
-  /* The per-side inset. Insetting whole shore cells leaves gaps between adjacent ones. */
+  /* The per-side inset. Insetting whole shore cells leaves gaps between adjacent ones.
+     Measured on a FLATTENED surface, so this is the mesh's footprint and nothing else. */
   S.ok('the surface covers the open sea', out.openCovered > 97,
        out.openCovered + '% of ' + out.openSamples + ' samples over cells with water on all ' +
-       'eight sides are the mesh');
+       'eight sides are the mesh, with the swell flattened - so this is where the geometry ' +
+       'IS, which is a different question from what survives to the screen');
+
+  /* THE SAME QUESTION ASKED OF THE SEA THE PLAYER SEES, which is the one that was wrong. */
+  S.ok('...and still covers it once the swell is running',
+       out.openCoveredWavy > 97,
+       out.openCoveredWavy + '% of the same samples are the mesh with the real swell, against ' +
+       out.openCovered + '% flat. It was 65.8%: the surface heaves ' + out.peakDrop +
+       ' world units either way about a sheet ' + out.waterY + ' above the ground, so every ' +
+       'TROUGH dipped under the ground plane, lost the depth test to it and let the painted ' +
+       'seabed through - hard-edged blotches lying in the dark bands between the crests, on ' +
+       'every coastal map. The sea lays its depth down over the ground now rather than ' +
+       'competing with it');
+
+  /* WHAT THAT FIX COSTS, and the one thing that has to stay true for it. */
+  S.ok('...and the swell is too shallow to hide itself from this camera',
+       out.slope < out.cot,
+       'the steepest the three waves can sum to is ' + out.slope + ', against ' + out.cot +
+       ' for a line of sight ' + out.sightDeg + ' degrees above ' +
+       'the horizontal - a factor of ' + (out.cot / out.slope).toFixed(2) + ' in hand. The sea ' +
+       'draws with the depth comparison off, so its triangles land in mesh order rather than ' +
+       'back to front, and a heightfield steeper than the view would sort a far crest over a ' +
+       'near trough. Raising R3D_WAVE_AMP or R3D_TILT far enough breaks that, and nothing ' +
+       'else in the renderer would say so');
 
   /* The per-side inset, measured where it is the only thing that differs. */
   S.ok('...and does not break at the seam between two shore cells',

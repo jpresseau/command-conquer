@@ -285,6 +285,51 @@ function _r3dFrame(G) {
   gl.uniform2f(uWave, 0, 0);
   var aP = MC.aP, aN = MC.aN, aC = MC.aC;
 
+  /* --- the sea, before anything else that stands in it ---
+     Drawn with the world's identity placement, and with the clock in uWave. G.t rather than a
+     frame counter: the swell has to run at the same speed however fast the machine draws.
+
+     AND IT OVERWRITES THE GROUND'S DEPTH RATHER THAN COMPETING WITH IT. This is the fix for
+     a hole that riddled every coastal map: the surface heaves +-0.90 world units about a
+     sheet sitting 0.10 above the ground, so every TROUGH dipped below the ground plane, lost
+     the depth test to it, and let the painted seabed through. Measured over open water at the
+     top zoom, 28% of the sea was ground - and the fraction tracked the trough exactly: half
+     the amplitude gave 14.5%, a flat sheet 0.08%, and lifting the sheet clear of the trough
+     at 1.0 gave 0.83%. It read as hard-edged blue-grey blotches lying in the dark bands
+     between the crests, which is where the troughs are.
+
+     Lifting the sheet is not the fix, because it only moves the coupling: the sea would then
+     float a world unit over the beach it meets, and the amplitude could never be raised again
+     without the holes coming back. There is nothing under the sea that anyone should ever
+     see, so the surface simply takes the depth: drawn HERE, where the ground and the ore stain
+     are the only things in the buffer, with the comparison turned off so a trough wins as
+     surely as a crest, and writing its own depth so the ships, the shore geometry and the
+     effects that follow all sort against the water rather than against the seabed.
+
+     ONE THING THAT HAS TO STAY TRUE: the surface must not occlude ITSELF, because with the
+     comparison off the triangles land in mesh order rather than back to front. It cannot at
+     this camera - the steepest slope the three waves can sum to is 0.454, which is 24.4
+     degrees, against a line of sight 41 degrees above the horizontal (90 - R3D_TILT). The
+     margin is a factor of 1.9 in slope, and e2e/sea guards it. */
+  if (R3.waterMesh) {
+    gl.uniform3f(uPos, 0, 0, 0);
+    gl.uniform2f(uRot, 1, 0);
+    gl.uniform1f(uScale, 1);
+    gl.uniform1f(uScaleY, 1);
+    gl.uniform3f(uTint, 1, 1, 1);
+    gl.uniform2f(uWave, R3D_WAVE_AMP, G.t);
+    gl.depthFunc(gl.ALWAYS);
+    gl.bindBuffer(gl.ARRAY_BUFFER, R3.waterMesh.p);
+    gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, R3.waterMesh.n);
+    gl.enableVertexAttribArray(aN); gl.vertexAttribPointer(aN, 3, gl.BYTE, true, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, R3.waterMesh.c);
+    gl.enableVertexAttribArray(aC); gl.vertexAttribPointer(aC, 3, gl.UNSIGNED_BYTE, true, 0, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, R3.waterMesh.verts);
+    gl.depthFunc(gl.LESS);
+    gl.uniform2f(uWave, 0, 0);
+  }
+
   /* THE SAME WALK FEEDS TWO PROGRAMS. Everything drawn in the main pass has to be drawn again
      from the sun, or its shadow is missing; and it has to be drawn the SAME WAY, or its shadow
      is somewhere else. Rather than keep two copies of the entity walk in step by hand, the
@@ -350,25 +395,11 @@ function _r3dFrame(G) {
     }
   }
 
-  /* --- the sea --- */
-  /* Drawn with the world's identity placement, and with the clock in uWave. G.t rather than a
-     frame counter: the swell has to run at the same speed however fast the machine draws. */
-  if (R3.waterMesh) {
-    gl.uniform3f(uPos, 0, 0, 0);
-    gl.uniform2f(uRot, 1, 0);
-    gl.uniform1f(uScale, 1);
-    gl.uniform1f(uScaleY, 1);
-    gl.uniform3f(uTint, 1, 1, 1);
-    gl.uniform2f(uWave, R3D_WAVE_AMP, G.t);
-    gl.bindBuffer(gl.ARRAY_BUFFER, R3.waterMesh.p);
-    gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 0, 0);
-    gl.bindBuffer(gl.ARRAY_BUFFER, R3.waterMesh.n);
-    gl.enableVertexAttribArray(aN); gl.vertexAttribPointer(aN, 3, gl.BYTE, true, 0, 0);
-    gl.bindBuffer(gl.ARRAY_BUFFER, R3.waterMesh.c);
-    gl.enableVertexAttribArray(aC); gl.vertexAttribPointer(aC, 3, gl.UNSIGNED_BYTE, true, 0, 0);
-    gl.drawArrays(gl.TRIANGLES, 0, R3.waterMesh.verts);
-    gl.uniform2f(uWave, 0, 0);
-  }
+  /* The sea used to be drawn HERE, after the world batch. It is drawn before both now - see
+     the note where it went: it has to lay down its depth while the ground is the only thing
+     in the buffer. Nothing about the picture depended on it being late; opaque geometry with
+     an honest depth sorts the same in any order, and its depth was the one thing that was
+     not honest. */
 
   /* The planar cast-shadow pass stood here: every entity's mesh squashed flat onto the ground
      along the light, stencilled so each pixel took the shade once. The shadow MAP subsumes it

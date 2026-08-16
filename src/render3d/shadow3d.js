@@ -82,7 +82,10 @@ var R3D_SUN = (function () {
 
 /* The depth-only pass. Positions come in exactly as the mesh program takes them - the same
    attribute, the same placement uniforms, the same wave displacement - because anything that
-   moves in the main pass has to move here too or its shadow stands still while it walks. */
+   moves in the main pass has to move here too or its shadow stands still while it walks. The
+   swell is R3D_WAVE_VGLSL, the height half of the one wave table in wave3d.js, which is what
+   makes "the same displacement" a fact rather than a hope: this pass wants the height and not
+   the normal, because a depth map records where a thing is and not which way it faces. */
 var R3D_SHADOW_VS =
   'attribute vec3 aP;' +
   'uniform vec3 uPos; uniform vec2 uRot; uniform float uScale; uniform float uScaleY;' +
@@ -93,12 +96,7 @@ var R3D_SHADOW_VS =
   'void main(){' +
   '  vec3 p = vec3(aP.x * uScale, aP.y * uScale * uScaleY, aP.z * uScale);' +
   '  vec3 wp = vec3(uPos.x + p.x*uRot.x - p.z*uRot.y, uPos.y + p.y, uPos.z + p.x*uRot.y + p.z*uRot.x);' +
-  '  if (uWave.x > 0.0) {' +
-  '    float q1 = wp.x * 0.34 + wp.z * 0.22 + uWave.y * 1.15;' +
-  '    float q2 = wp.x * 0.19 - wp.z * 0.41 + uWave.y * 0.85;' +
-  '    float q3 = wp.x * 1.35 + wp.z * 0.95 + uWave.y * 2.40;' +
-  '    wp.y += uWave.x * (sin(q1) + 0.7 * sin(q2) + 0.45 * sin(q3));' +
-  '  }' +
+  R3D_WAVE_VGLSL +
   '  vec3 d = wp - uSunC;' +
   '  float lx = dot(d, uSunR), ly = dot(d, uSunU), lz = dot(d, uSunF);' +
   '  vD = lz / uSunSpan.y * 0.5 + 0.5;' +
