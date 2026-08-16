@@ -169,7 +169,7 @@ var S = new Suite('orefield');
     o.interiorStep = +(iS / Math.max(1, iN)).toFixed(2);
     o.seamRatio = +(o.edgeStep / Math.max(0.01, o.interiorStep)).toFixed(3);
 
-    rts3dToggle();
+    rts3dSet(true);
     o.on = !!(window._R3D && window._R3D.on);
     if (o.on) {
       _rtsRFrame(1 / 60);
@@ -188,7 +188,7 @@ var S = new Suite('orefield');
       }
       o.differ = +(100 * differ / tot).toFixed(1);
       o.strong = +(100 * strong / tot).toFixed(1);
-      rts3dToggle();
+      rts3dSet(false);
     }
     return o;
   });

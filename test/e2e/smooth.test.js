@@ -99,7 +99,7 @@ var S = new Suite('smooth');
     o.turnedCarried = carried; o.turnedOk = turnedOk;
 
     /* ---------- 2. the picture ---------- */
-    rts3dToggle();
+    rts3dSet(true);
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;

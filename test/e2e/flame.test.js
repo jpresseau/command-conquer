@@ -145,12 +145,12 @@ var S = new Suite('flame');
       var e2 = expect(), p2 = allDrawn();
       o.water2d = { expect: e2.x + ',' + e2.y, drew: p2.length, hit: p2.indexOf(e2.x + ',' + e2.y) >= 0 };
 
-      rts3dToggle();
+      rts3dSet(true);
       o.on3d = !!(window._R3D && window._R3D.on);
       if (o.on3d) {
         var e3 = expect(), p3 = allDrawn();
         o.water3d = { expect: e3.x + ',' + e3.y, drew: p3.length, hit: p3.indexOf(e3.x + ',' + e3.y) >= 0 };
-        rts3dToggle();
+        rts3dSet(false);
       }
     }
     return o;
