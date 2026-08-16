@@ -122,3 +122,140 @@ function _r3dOreTex(G) {
   R3.oreTex = _r3dTexture(gl, R3.oreTex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, R3.oreCv);
 }
+
+
+/* THE GROUND CARRIES A HEIGHT NOW. This attribute was aXZ, two floats, with y taken as zero
+   everywhere - which was true of the map until the terrain got relief (see RTS_ELEV_MAX in
+   core/grid.js). It is aP, and y goes through the same two lines every other program projects
+   with: up the screen by y*sin(tilt), and TOWARD THE EYE by y*cos(tilt), because a hilltop is
+   nearer the camera than the ground beside it and has to sort that way against everything
+   standing on it. */
+var R3D_TEX_VS =
+  'attribute vec3 aP; attribute vec2 aT; attribute vec3 aN;' +
+  'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' +
+  R3D_SHADOW_VGLSL +
+  'varying vec2 vT; varying float vShade;' +
+  'void main(){' +
+  '  vT = aT;' +
+  /* HOW MUCH LIGHT THIS PATCH OF GROUND TAKES, RELATIVE TO FLAT. The terrain texture is the
+     2D renderer's baked canvas and already carries its own lighting for a level surface, so
+     shading it again with the full lambert would light it twice. What the relief needs is the
+     DIFFERENCE: dot(n,L) over what a flat surface would have taken, which is exactly 1.0 on
+     the flats - leaving them the picture they always were - and rises or falls only where the
+     ground leans. Without this the heightfield is invisible: it moves the pixels around and
+     every one of them keeps the colour it had, so a hillside reads as a smear rather than as
+     a slope. */
+  '  vShade = clamp(dot(normalize(aN), vec3(' +
+       R3_LIGHT[0].toFixed(4) + ', ' + R3_LIGHT[1].toFixed(4) + ', ' + R3_LIGHT[2].toFixed(4) +
+       ')) / ' + R3_LIGHT[1].toFixed(4) + ', 0.35, 1.55);' +
+  '  _shadowFrom(aP);' +
+  '  float sx = (aP.x - uCam.x) * uCam.z;' +
+  '  float sy = ((aP.z - uCam.y) * uTilt.x - aP.y * uTilt.y) * uCam.w;' +
+  '  float d  = ((aP.z - uCam.y) * uTilt.y + aP.y * uTilt.x);' +
+  '  float pw = 1.0 - d * uInvD;' +
+  '  gl_Position = vec4(sx, -sy, -d / ' + R3D_DEPTH_RANGE.toFixed(1) + ' * pw, pw);' +
+  '}';
+/* THE GROUND RECEIVES, and it is the surface that matters most - a shadow map that shades
+   every mesh but not the floor puts a tree's shade on the tree beside it and none on the grass
+   underneath, which is worse than no shadows at all.
+
+   uRecv is 0 for the fog, which is drawn through this same program and is not a surface: it is
+   the unexplored map laid over the finished picture, and shading it would darken the shroud in
+   the shape of trees the player cannot see.
+
+   The shade is a COOL MULTIPLY rather than a scalar one, matched to the mesh ramp's own floor -
+   a shadow on grass and a shadow on a slab beside it have to be the same colour of shade or
+   the two read as different times of day. */
+var R3D_TEX_FS =
+  'precision highp float; varying vec2 vT; varying float vShade;' +
+  'uniform sampler2D uS; uniform float uA;' +
+  'uniform float uRecv;' +
+  R3D_SHADOW_GLSL +
+  'void main(){' +
+  '  vec4 c = texture2D(uS, vT);' +
+  '  float s = mix(1.0, _shadowAt(), uRecv);' +
+  '  vec3 lit = c.rgb * mix(vec3(0.575, 0.600, 0.655), vec3(1.0), s);' +
+  /* uRecv is 0 for the fog, which is a signal painted over the world rather than a surface in
+     it - leaning it toward the sun would make the shroud brighter on a hillside. */
+  '  gl_FragColor = vec4(lit * mix(1.0, vShade, uRecv), c.a * uA);' +
+  '}';
+
+
+/* ------------------------------------------------------------- the ground mesh --
+   Built here rather than in the frame walk because it belongs with the textures draped over
+   it and the shader that samples them; it also took scene3d.js over the per-file limit.
+   Everything it needs comes in: the visible bounds, and the map's half-extent for the UVs. */
+function _r3dGroundMesh(R3, gl, vb, EXT) {
+/* THE PATCH IS CUT ON THE TILE GRID, not on the view, and that is what stops the relief
+   shimmering. A uniform subdivision of the visible rectangle moves its vertices every time
+   the camera pans by less than a quad, so each one slides across the height field and the
+   whole surface crawls. Cutting on the grid pins every vertex to a tile CORNER, where the
+   bilinear height is exact and, more to the point, the same from one frame to the next: the
+   patch gains and loses whole cells at its edges and never moves the ones in the middle.
+
+   The step coarsens when the view is wide, and coarsens by whole CELLS so the vertices stay
+   on corners and the surface still cannot crawl. At the top zoom the view is about 29 cells
+   across and every cell gets its own quad; zoomed all the way out it is 115, and four cells
+   to a quad keeps the count near four thousand. Relief that fine is not readable from out
+   there anyway.
+
+   THE MARGIN CARRIES THE HEIGHT. It used to be two cells, which is what a flat plane needs
+   to clear the eye plane. A hilltop is nearer the eye than the ground under it, so it can be
+   on screen while its cell is not: the extra reach is the full elevation times tan(tilt),
+   the same lift the world batch widens its cull by. */
+  var GM = RTS_TILE * 2 + RTS_ELEV_MAX * R3.sp / R3.cp;
+  var t0x = _rtsTX(Math.max(-EXT, vb.x0 - GM)), t1x = _rtsTX(Math.min(EXT, vb.x1 + GM));
+  var t0z = _rtsTX(Math.max(-EXT, vb.z0 - GM)), t1z = _rtsTX(Math.min(EXT, vb.z1 + GM));
+  t0x = Math.max(0, t0x - 1); t0z = Math.max(0, t0z - 1);
+  t1x = Math.min(RTS_N, t1x + 2); t1z = Math.min(RTS_N, t1z + 2);
+  var gstep = 1;
+  while ((t1x - t0x) / gstep * ((t1z - t0z) / gstep) > 4200 && gstep < 8) gstep *= 2;
+  /* snap the origin to the step so the quads keep their phase as the camera pans */
+  t0x -= t0x % gstep; t0z -= t0z % gstep;
+  var nqx = Math.ceil((t1x - t0x) / gstep), nqz = Math.ceil((t1z - t0z) / gstep);
+  var need = nqx * nqz * 18;
+  if (!R3.groundBuf) { R3.groundBuf = gl.createBuffer(); R3.groundUV = gl.createBuffer(); }
+  if (!R3.groundXZ || R3.groundXZ.length < need) {
+    R3.groundXZ = new Float32Array(need);
+    R3.groundN = new Float32Array(need);
+    R3.groundT = new Float32Array(need / 3 * 2);
+    if (!R3.groundNB) R3.groundNB = gl.createBuffer();
+  }
+  var q = R3.groundXZ, nb = R3.groundN, t = R3.groundT, k = 0, kt = 0, gi, gj;
+  /* the world coordinate of a tile's low CORNER - _rtsWX gives the centre */
+  function gcx(tx) { return _rtsWX(tx) - RTS_TILE / 2; }
+  /* THE SLOPE, BY CENTRAL DIFFERENCE OVER ONE CELL. Sampled from _rtsElev rather than from
+     the quad's own corners, so it is the terrain's slope and not the mesh's: at gstep 4 the
+     quad spans four cells and its corners would flatten everything between them. A cell is
+     the finest the height field actually carries, so that is the width to difference over. */
+  function gnorm(x, zz) {
+    var h = RTS_TILE;
+    var dx = (_rtsElev(x + h, zz) - _rtsElev(x - h, zz)) / (2 * h);
+    var dz = (_rtsElev(x, zz + h) - _rtsElev(x, zz - h)) / (2 * h);
+    var l = Math.hypot(dx, 1, dz) || 1;
+    return [-dx / l, 1 / l, -dz / l];
+  }
+  function gv(x, zz) {
+    var n = gnorm(x, zz);
+    q[k] = x; q[k + 1] = _rtsElev(x, zz); q[k + 2] = zz;
+    nb[k] = n[0]; nb[k + 1] = n[1]; nb[k + 2] = n[2];
+    k += 3;
+    t[kt] = (x + EXT) / (2 * EXT); t[kt + 1] = (zz + EXT) / (2 * EXT); kt += 2;
+  }
+  for (gj = 0; gj < nqz; gj++) {
+    var az = gcx(t0z + gj * gstep), bz = gcx(Math.min(t1z, t0z + (gj + 1) * gstep));
+    for (gi = 0; gi < nqx; gi++) {
+      var ax = gcx(t0x + gi * gstep), bx = gcx(Math.min(t1x, t0x + (gi + 1) * gstep));
+      gv(ax, az); gv(bx, az); gv(bx, bz);
+      gv(ax, az); gv(bx, bz); gv(ax, bz);
+    }
+  }
+  R3.groundVerts = k / 3;
+  R3.groundStep = gstep;
+  gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, q, gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundNB);
+  gl.bufferData(gl.ARRAY_BUFFER, nb, gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundUV);
+  gl.bufferData(gl.ARRAY_BUFFER, t, gl.DYNAMIC_DRAW);
+}

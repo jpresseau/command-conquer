@@ -98,7 +98,10 @@ var S = new Suite('tilt');
     var worst = 0;
     for (i = 0; i < 25; i++) {
       var wx = (i % 5 - 2) * 24, wz = ((i / 5 | 0) - 2) * 24;
-      var s = _rtsWorldToScreen(wx, 0, wz);
+      /* through the pair that are inverses of each other. _rtsGroundAt lands on the terrain
+         now, so the forward map has to read the terrain too; against y=0 this measured 5.6
+         world units of error, which is the relief and not the projection. */
+      var s = _rtsGroundToScreen(wx, wz);
       if (s.behind) continue;
       var back = _rtsGroundAt(s.x, s.y);
       if (!back) { worst = 1e9; break; }

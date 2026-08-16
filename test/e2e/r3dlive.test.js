@@ -70,7 +70,8 @@ var S = new Suite('r3dlive');
     var worst = 0;
     [[200, 150], [450, 325], [700, 500], [333, 444]].forEach(function (pt) {
       var p = _rtsGroundAt(pt[0], pt[1]);
-      var s = _rtsWorldToScreen(p.x, 0, p.z);
+      /* the forward map that matches the inverse - both read the terrain; see e2e/perspective */
+      var s = _rtsGroundToScreen(p.x, p.z);
       worst = Math.max(worst, Math.abs(s.x - pt[0]), Math.abs(s.y - pt[1]));
     });
     o.roundtrip = +worst.toFixed(3);

@@ -93,7 +93,10 @@ var S = new Suite('perspective');
     [[40, 30], [860, 30], [40, 620], [860, 620], [450, 325]].forEach(function (pt) {
       var p = _rtsGroundAt(pt[0], pt[1]);
       if (!p) { worst = 1e9; return; }
-      var s = _rtsWorldToScreen(p.x, 0, p.z);
+      /* _rtsGroundToScreen, not y=0: the inverse lands on the TERRAIN now, and the forward
+         map that matches it is the one that also reads the terrain. Against y=0 this drifts
+         by whatever the ground is doing under the pixel - measured, 14.9px at the corners. */
+      var s = _rtsGroundToScreen(p.x, p.z);
       worst = Math.max(worst, Math.abs(s.x - pt[0]), Math.abs(s.y - pt[1]));
     });
     o.roundtrip = +worst.toFixed(3);
@@ -106,11 +109,17 @@ var S = new Suite('perspective');
     o.ladder = [];
     for (var li = 0; li < RTS_ZOOMS.length; li++) {
       R.zi = li; _rtsApplyCam();
-      var lt = _rtsGroundAt(R.W / 2, 0), lb = _rtsGroundAt(R.W / 2, R.H);
+      /* AGAINST THE PLANE, NOT THE GROUND. This measures the LENS - how much the view
+         converges between the top of the screen and the bottom - and it used the ground as
+         a stand-in for the projection because the two were the same thing. They are not
+         since the terrain got relief: _rtsGroundAt lands on whatever hill is at the top of
+         the screen, so the range picked up the map instead of the camera and read 1.690 to
+         1.743 across the ladder. _r3dPlaneAt is the projection's own plane inverse. */
+      var lt = _r3dPlaneAt(R.W / 2, 0, 0), lb = _r3dPlaneAt(R.W / 2, R.H, 0);
       o.ladder.push({
         cell: R.cell, eye: +_r3dEyeDist().toFixed(1),
         range: (lt && lb)
-          ? +(_rtsGroundToScreen(lb.x, lb.z).scale / _rtsGroundToScreen(lt.x, lt.z).scale).toFixed(4)
+          ? +(_rtsWorldToScreen(lb.x, 0, lb.z).scale / _rtsWorldToScreen(lt.x, 0, lt.z).scale).toFixed(4)
           : null
       });
     }

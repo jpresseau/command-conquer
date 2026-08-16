@@ -223,41 +223,10 @@ var R3D_MESH_FS =
 
 /* Ground and fog share one textured program; fog just samples a different texture with
    blending on and the depth test off. */
-var R3D_TEX_VS =
-  'attribute vec2 aXZ; attribute vec2 aT;' +
-  'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' +
-  R3D_SHADOW_VGLSL +
-  'varying vec2 vT;' +
-  'void main(){' +
-  '  vT = aT;' +
-  '  _shadowFrom(vec3(aXZ.x, 0.0, aXZ.y));' +
-  '  float sx = (aXZ.x - uCam.x) * uCam.z;' +
-  '  float sy = (aXZ.y - uCam.y) * uTilt.x * uCam.w;' +
-  '  float d  = (aXZ.y - uCam.y) * uTilt.y;' +
-  '  float pw = 1.0 - d * uInvD;' +
-  '  gl_Position = vec4(sx, -sy, -d / ' + R3D_DEPTH_RANGE.toFixed(1) + ' * pw, pw);' +
-  '}';
-/* THE GROUND RECEIVES, and it is the surface that matters most - a shadow map that shades
-   every mesh but not the floor puts a tree's shade on the tree beside it and none on the grass
-   underneath, which is worse than no shadows at all.
-
-   uRecv is 0 for the fog, which is drawn through this same program and is not a surface: it is
-   the unexplored map laid over the finished picture, and shading it would darken the shroud in
-   the shape of trees the player cannot see.
-
-   The shade is a COOL MULTIPLY rather than a scalar one, matched to the mesh ramp's own floor -
-   a shadow on grass and a shadow on a slab beside it have to be the same colour of shade or
-   the two read as different times of day. */
-var R3D_TEX_FS =
-  'precision highp float; varying vec2 vT; uniform sampler2D uS; uniform float uA;' +
-  'uniform float uRecv;' +
-  R3D_SHADOW_GLSL +
-  'void main(){' +
-  '  vec4 c = texture2D(uS, vT);' +
-  '  float s = mix(1.0, _shadowAt(), uRecv);' +
-  '  vec3 lit = c.rgb * mix(vec3(0.575, 0.600, 0.655), vec3(1.0), s);' +
-  '  gl_FragColor = vec4(lit, c.a * uA);' +
-  '}';
+/* The ground's own program - its vertex and fragment shaders - moved to render3d/ground3d.js
+   when the terrain got relief and this file went over the project's per-file limit. It sits
+   beside the textures it samples and the mesh it draws, which is where it belonged anyway;
+   _r3dInit below still builds it, because that is where every program is built. */
 
 function _r3dInit() {
   var cv = document.getElementById('rtsCv3d');
@@ -410,14 +379,71 @@ function _r3dSY(wz) { return _r3dProject(0, 0, wz - _rtsR.focus.z).y; }
    Null rather than a wrong number: every caller checks, and _rtsPickAt runs inside the draw
    half of the loop, where a NaN would surface as "the display has stopped" rather than as a
    misplaced click. */
-function _r3dGroundAt(mx, my) {
+/* WHERE A PIXEL MEETS A PLANE AT HEIGHT h. The closed form the file's header gives is this
+   with h = 0; carrying the height through costs two terms and is what lets the ray be walked
+   against relief rather than against a floor. Solved the same way - set the projected sy equal
+   to the pixel's and solve for the depth offset v:
+
+       v = [ syo * (1 - h*cos/D) + h*sin ] / ( cos + syo*sin/D )
+
+   and w falls out of v and h together, because a point that is both further away and higher up
+   is nearer the eye by the height's own cosine. */
+function _r3dPlaneAt(mx, my, h) {
   var R = _rtsR, R3 = window._R3D, zm = _rtsZoom(), D = _r3dEyeDist();
   var sxo = (mx - R.W / 2) / zm, syo = (my - R.H / 2) / zm;
   var den = R3.cp + syo * R3.sp / D;
   if (den <= 1e-6) return null;
-  var v = syo / den, w = 1 - v * R3.sp / D;
+  var v = (syo * (1 - h * R3.cp / D) + h * R3.sp) / den;
+  var w = 1 - (v * R3.sp + h * R3.cp) / D;
   if (!(w > R3D_WMIN)) return null;
   return { x: R.focus.x + sxo * w, z: R.focus.z + v };
+}
+
+/* WHERE A PIXEL MEETS THE GROUND, which is no longer a plane.
+
+   Every click, every move order, every drag of the map and every building placed goes through
+   here, so this is the one piece of the relief work that is not about how the game looks. Get
+   it wrong and a unit ordered onto a hillside walks somewhere else.
+
+   BY BISECTION, and the reason is that the obvious method has a cliff edge in it. Walking the
+   ray by FIXED POINT - guess a height, ask where the pixel meets that plane, ask the terrain
+   how high it is there, repeat - converges by a factor of (terrain slope) x tan(tilt) each
+   pass. At an elevation range of 3.2 that measured 0.57 and fourteen passes were plenty. The
+   range went to 5, the slopes got half again as steep, the factor went to about 0.89, and the
+   same fourteen passes left the answer 0.92 world units out - a quarter of a cell, on the
+   function every order in the game is aimed through. Steeper still and the factor reaches 1
+   and it stops converging at all. A method that degrades quietly as a constant is tuned is the
+   wrong method.
+
+   Bisection does not care how steep the ground is. Let f(h) be "how far the terrain at the
+   point this pixel hits a plane at height h sits ABOVE h". f(0) is at least zero, because no
+   ground is below sea level; f(RTS_ELEV_MAX) is at most zero, because none is above the top of
+   the range - so a root is bracketed before the first step. And f is strictly DECREASING,
+   because raising the plane slides the intersection away by tan(tilt) = 1.15 per unit while
+   the terrain under it can only climb by its own slope, at most 0.42 here: 0.42 x 1.15 = 0.48,
+   comfortably under 1. So the root is unique and each pass halves the bracket, whatever the
+   map does.
+
+   That is the same condition the sea's draw order rests on - the ground being shallower than
+   the line of sight - and it holds for the same reason. Twenty passes take 5 world units to
+   five thousandths of one; the cost is twenty bilinear samples on a mouse move.
+
+   It converges to the LAST crossing rather than the first, which differs only where a hill
+   hides ground behind it - and there the pixel is showing the hill, so the near answer is the
+   one the player means. */
+function _r3dGroundAt(mx, my) {
+  var lo = 0, hi = RTS_ELEV_MAX, p = _r3dPlaneAt(mx, my, 0);
+  if (!p) return null;
+  for (var i = 0; i < 20; i++) {
+    var mid = (lo + hi) * 0.5;
+    var q = _r3dPlaneAt(mx, my, mid);
+    if (!q) break;
+    p = q;
+    if (_rtsElev(q.x, q.z) > mid) lo = mid; else hi = mid;
+  }
+  /* the bracket has closed; answer at its centre rather than at whichever side was tried last */
+  var f = _r3dPlaneAt(mx, my, (lo + hi) * 0.5);
+  return f || p;
 }
 
 /* THE GROUND RECTANGLE THE CAMERA CAN SEE, which under perspective is not the view span.

@@ -876,7 +876,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">512fdec · 2026-08-16</div>
+  <div id="rtsBuild" title="build">0f78011 · 2026-08-16</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -11071,6 +11071,13 @@ function _rtsMapBuild(M) {
   var G = {
     terrain: new Uint8Array(N * N),
     blocked: new Uint8Array(N * N),
+    /* A REAL MAP IS FLAT, and left that way on purpose. Relief is read off the generator's own
+       noise field (see _rtsGenTerrain), and a map authored in 1996 has no such field - nor any
+       elevation of its own, since Red Alert draws its cliffs rather than modelling them. There
+       is nothing here to infer height FROM that would not be invention, and inventing it would
+       put slopes through bases and chokepoints the author placed on flat ground. Zero
+       everywhere is exactly the map the author drew. */
+    height:  new Uint8Array(N * N),
     scrap:   new Float32Array(N * N),
     gems:    new Uint8Array(N * N)
   };
@@ -12815,6 +12822,73 @@ var RTS_ORE_GROUND = [true, false, false, false, false, true, false];
 function _rtsIdx(tx, tz) { return tz * RTS_N + tx; }
 function _rtsInB(tx, tz) { return tx >= 0 && tz >= 0 && tx < RTS_N && tz < RTS_N; }
 function _rtsWX(tx) { return (tx - RTS_N / 2 + 0.5) * RTS_TILE; }          /* tile -> world centre */
+
+/* ------------------------------------------------------------------- relief --
+   HOW HIGH THE GROUND GETS, in world units, where G.height reads 255. Red Alert's battlefield
+   is flat and its cliffs are drawn rather than modelled; this is the one place the rebuild
+   departs from that, because a camera leaning 49 degrees can see relief and a flat plane
+   wastes it.
+
+   THE SIMULATION DOES NOT READ THIS, and that is the whole design. Height is a property of the
+   map the way G.terrain is - something both renderers agree about - and passability is left
+   exactly as it was. Nothing in pathing, combat, harvesting or line-of-sight changed, so no
+   balance moved, and no generated map can be cut in two by relief that was not there before.
+
+   That falls out of WHERE the height comes from. The rock ridges core/terrain.js already lays
+   down are a narrow band either side of a contour of a smooth noise field - and the boundary
+   between two levels is exactly a contour. So the height is read from the SAME field: the
+   plateau edge lands under the wall the generator already built, and the two agree without
+   either being told about the other.
+
+   Which hands the map its RAMPS for free. That ridge only exists where a second mask allows
+   it, so a stretch of plateau edge with no wall on it is a slope a unit can drive up, and a
+   stretch with a wall is a cliff it cannot. Red Alert's own arrangement, arrived at by not
+   interfering rather than by building it.
+
+   5 units is a cell and a quarter - still well under the height of a war factory, and the
+   contour takes a cell and a half to cross, so the steepest ground on the map runs at 0.42,
+   about 23 degrees. A tank driving up a ramp leans; it does not climb a wall.
+
+   It was 3.2 first, which is what "shallow enough for a ramp" alone argues for, and at that
+   height the relief was there in the measurements and barely there in the picture - about
+   24 screen pixels between valley floor and plateau top. 5 is what makes it read. The one
+   thing that has to be re-checked when this moves is _r3dGroundAt: raising it made the ground
+   half again as steep, which is what broke the fixed point that used to walk the picking ray
+   and is why that is a bisection now. */
+var RTS_ELEV_MAX = 5.0;
+
+/* The ground's height at a TILE, in world units. Out of bounds reads as sea level, so a caller
+   sampling past the edge gets the flat map it always used to get. */
+function _rtsTileElev(tx, tz) {
+  var G = window._rtsG;
+  if (!G || !G.height || !_rtsInB(tx, tz)) return 0;
+  return G.height[_rtsIdx(tx, tz)] / 255 * RTS_ELEV_MAX;
+}
+
+/* The ground's height at a WORLD point, bilinear between the four tile centres around it.
+
+   Smooth on purpose, and that is the difference between relief and a staircase. The levels are
+   flat-topped by construction, so all the interpolation has to do is turn the one-cell boundary
+   into a continuous slope; a nearest-tile lookup would step the whole range at a cell edge
+   and every unit crossing it would jump.
+
+   The ground mesh, everything standing on it, and the picking ray all come through here, so
+   there is one definition of where the ground is and they cannot drift apart. */
+function _rtsElev(x, z) {
+  var G = window._rtsG;
+  if (!G || !G.height) return 0;
+  var fx = x / RTS_TILE + RTS_N / 2 - 0.5, fz = z / RTS_TILE + RTS_N / 2 - 0.5;
+  var x0 = Math.floor(fx), z0 = Math.floor(fz);
+  var ax = fx - x0, az = fz - z0;
+  function at(a, b) {
+    if (a < 0) a = 0; else if (a > RTS_N - 1) a = RTS_N - 1;
+    if (b < 0) b = 0; else if (b > RTS_N - 1) b = RTS_N - 1;
+    return G.height[b * RTS_N + a];
+  }
+  var h = (at(x0, z0) * (1 - ax) + at(x0 + 1, z0) * ax) * (1 - az) +
+          (at(x0, z0 + 1) * (1 - ax) + at(x0 + 1, z0 + 1) * ax) * az;
+  return h / 255 * RTS_ELEV_MAX;
+}
 function _rtsTX(x)  { return Math.floor(x / RTS_TILE + RTS_N / 2); }        /* world -> tile */
 /* ------------------------------------------------------------ passability --
    Two domains, and they are near-inverses of each other. A tank is stopped by water; a
@@ -13507,6 +13581,68 @@ function _rtsGenTerrain(G, rnd, starts) {
     if (G.scrap[i] > 0 && !_lr[i]) { G.scrap[i] = 0; G.gems[i] = 0; }
   }
 
+  /* --- AND THE GROUND ITSELF RISES, on the far side of the ridges' own contour ---
+
+     Last, because it has to see the finished map: the sea and its beaches are carved after the
+     roads, and a shoreline that climbed away from the water would leave the surface standing
+     over its own coast.
+
+     The rock ridges above are a band around where nz(...,19,seed+11) crosses 0.5, and the
+     boundary between two levels is exactly a contour - so reading the height off the SAME
+     field puts the top of the slope under the wall that was already built, with neither pass
+     told about the other. The band is |nz - 0.5| < 0.016 and the ramp here runs 0.484 to
+     0.516, the same width, so the rock sits ON the slope rather than beside it: a plateau edge
+     with a wall on it reads as a cliff face and not as a fence at the top of a bank.
+
+     SMOOTHSTEP RATHER THAN A STEP, so the tops are flat and only the boundary leans. The
+     ground has to be a surface a unit can stand anywhere on, not a staircase, and it is a
+     smooth function of a smooth field so no seam can appear inside a plateau.
+
+     NOTHING BECOMES IMPASSABLE HERE, and nothing about the sim is read or written. Where the
+     ridge mask denied a wall the ground still rises, and that stretch is a RAMP - which is the
+     whole reason the two passes are allowed to disagree. See RTS_ELEV_MAX in core/grid.js. */
+  for (tx = 0; tx < N; tx++) {
+    for (tz = 0; tz < N; tz++) {
+      var _hv = (nz(tx, tz, 19, seed + 11) - 0.484) / 0.032;
+      _hv = _hv < 0 ? 0 : (_hv > 1 ? 1 : _hv);
+      _hv = _hv * _hv * (3 - 2 * _hv);
+      var _hi = _rtsIdx(tx, tz), _ht = G.terrain[_hi];
+      if (_ht === RTS_T_WATER || _ht === RTS_T_SAND) _hv = 0;   /* sea level, and its beaches */
+      /* AND THE MAP'S OWN RIM IS AT SEA LEVEL. The focus clamp puts the map's edge exactly on
+         the screen's edge, and it derives that from the flat-plane projection; raised ground
+         at the rim lifts UP the screen and uncovers the nothing behind it. Measured at every
+         zoom against every edge, with and without the relief: 0.7% of the frame comes back as
+         clear colour without this, 0.01% with it, and 0% is what the flat map gives. Four
+         cells of a 128-cell map, which the camera can only ever see edge-on.
+
+         (0.7%, not the 21% a first measurement claimed. That probe set the zoom and clamped
+         without calling _rtsApplyCam in between, so the clamp sized itself for the PREVIOUS
+         zoom and let the view run 80 units off the map on its own - the same mistake, in the
+         same function, that e2e/tilt already carries a note about.) */
+      var _edge = Math.min(Math.min(tx, tz), Math.min(N - 1 - tx, N - 1 - tz)) / 4;
+      if (_edge < 1) _hv *= _edge < 0 ? 0 : _edge * _edge * (3 - 2 * _edge);
+      G.height[_hi] = Math.round(_hv * 255);
+    }
+  }
+  /* The shore is let down rather than dropped. A cell of sand pinned at 0 beside a cell of
+     grass at full height is a wall of the whole elevation range along every beach, and the
+     same happens wherever
+     the smoothstep meets water mid-slope. Four passes of "no cell may stand more than a third
+     of the range above its lowest neighbour" spread that over three or four cells inland,
+     which is a bank. Iterated rather than solved because each pass only lowers, so it
+     converges, and four is enough to reach from the water to full height. */
+  for (var _pass = 0; _pass < 4; _pass++) {
+    for (tx = 0; tx < N; tx++) {
+      for (tz = 0; tz < N; tz++) {
+        var _ci = _rtsIdx(tx, tz), _lo = 255;
+        for (var _hd = 0; _hd < 4; _hd++) {
+          var _hx = tx + [1, -1, 0, 0][_hd], _hz = tz + [0, 0, 1, -1][_hd];
+          if (_rtsInB(_hx, _hz)) _lo = Math.min(_lo, G.height[_rtsIdx(_hx, _hz)]);
+        }
+        if (G.height[_ci] > _lo + 85) G.height[_ci] = _lo + 85;
+      }
+    }
+  }
 }
 
 /* A wandering 3-tile-wide track between two points. Clears obstacles as it goes. */
@@ -13760,6 +13896,7 @@ function _rtsNewGame(seed, diff) {
     diff:(RTS_DIFF[diff] ? diff : (RTS_DIFF[window._RTS_DIFF] ? window._RTS_DIFF : RTS_DIFF_DEFAULT)),
     blocked:new Uint8Array(RTS_N * RTS_N),
     terrain:new Uint8Array(RTS_N * RTS_N),  /* RTS_T_* - what the ground IS, for the renderer */
+    height:new Uint8Array(RTS_N * RTS_N),   /* how high it is; see _rtsElev in core/grid.js */
     scorch:new Uint8Array(RTS_N * RTS_N),   /* 0 none, 1-6 scorch variant, +8 bit = crater */
     /* BASE.CPP's node list, per side: the ordered (type, cell) plan a base is rebuilt against */
     base:{ player:[], enemy:[] },
@@ -19816,8 +19953,21 @@ function _rtsWorldToScreen(x, y, z) {
            y: (z - _rtsR.focus.z) * _rtsZoom() + _rtsR.H / 2 - (y || 0) * _rtsZoom() * 0.5,
            scale: 1, behind: false };
 }
-/* The ground-level case, which is most of them: a point on the map with no height. */
-function _rtsGroundToScreen(x, z) { return _rtsWorldToScreen(x, 0, z); }
+/* The ground-level case, which is most of them: a point on the map with no height of its own.
+
+   "No height of its own" stopped meaning y = 0 when the terrain got relief. Every overlay the
+   2D painter lays over the world arrives through here - selection brackets, health bars, the
+   placement ghost, the effects the 3D pass does not own - and each is positioned by a point ON
+   THE GROUND. Left at zero they would sit at sea level while the thing they belong to stood on
+   a hill, and the further the hill the wider the gap.
+
+   ONLY IN 3D. The 2D painter draws the terrain bake, which is flat and always was, and its own
+   branch of _rtsWorldToScreen does lift by y - so handing it an elevation would slide every
+   bracket up the screen away from the unit it belongs to. Relief is something the 3D mode has. */
+function _rtsGroundToScreen(x, z) {
+  var R3 = window._R3D;
+  return _rtsWorldToScreen(x, (R3 && R3.on) ? _rtsElev(x, z) : 0, z);
+}
 
 /* Stamp RA's shroud tiles over the visible cells.
 
@@ -20861,41 +21011,10 @@ var R3D_MESH_FS =
 
 /* Ground and fog share one textured program; fog just samples a different texture with
    blending on and the depth test off. */
-var R3D_TEX_VS =
-  'attribute vec2 aXZ; attribute vec2 aT;' +
-  'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' +
-  R3D_SHADOW_VGLSL +
-  'varying vec2 vT;' +
-  'void main(){' +
-  '  vT = aT;' +
-  '  _shadowFrom(vec3(aXZ.x, 0.0, aXZ.y));' +
-  '  float sx = (aXZ.x - uCam.x) * uCam.z;' +
-  '  float sy = (aXZ.y - uCam.y) * uTilt.x * uCam.w;' +
-  '  float d  = (aXZ.y - uCam.y) * uTilt.y;' +
-  '  float pw = 1.0 - d * uInvD;' +
-  '  gl_Position = vec4(sx, -sy, -d / ' + R3D_DEPTH_RANGE.toFixed(1) + ' * pw, pw);' +
-  '}';
-/* THE GROUND RECEIVES, and it is the surface that matters most - a shadow map that shades
-   every mesh but not the floor puts a tree's shade on the tree beside it and none on the grass
-   underneath, which is worse than no shadows at all.
-
-   uRecv is 0 for the fog, which is drawn through this same program and is not a surface: it is
-   the unexplored map laid over the finished picture, and shading it would darken the shroud in
-   the shape of trees the player cannot see.
-
-   The shade is a COOL MULTIPLY rather than a scalar one, matched to the mesh ramp's own floor -
-   a shadow on grass and a shadow on a slab beside it have to be the same colour of shade or
-   the two read as different times of day. */
-var R3D_TEX_FS =
-  'precision highp float; varying vec2 vT; uniform sampler2D uS; uniform float uA;' +
-  'uniform float uRecv;' +
-  R3D_SHADOW_GLSL +
-  'void main(){' +
-  '  vec4 c = texture2D(uS, vT);' +
-  '  float s = mix(1.0, _shadowAt(), uRecv);' +
-  '  vec3 lit = c.rgb * mix(vec3(0.575, 0.600, 0.655), vec3(1.0), s);' +
-  '  gl_FragColor = vec4(lit, c.a * uA);' +
-  '}';
+/* The ground's own program - its vertex and fragment shaders - moved to render3d/ground3d.js
+   when the terrain got relief and this file went over the project's per-file limit. It sits
+   beside the textures it samples and the mesh it draws, which is where it belonged anyway;
+   _r3dInit below still builds it, because that is where every program is built. */
 
 function _r3dInit() {
   var cv = document.getElementById('rtsCv3d');
@@ -21048,14 +21167,71 @@ function _r3dSY(wz) { return _r3dProject(0, 0, wz - _rtsR.focus.z).y; }
    Null rather than a wrong number: every caller checks, and _rtsPickAt runs inside the draw
    half of the loop, where a NaN would surface as "the display has stopped" rather than as a
    misplaced click. */
-function _r3dGroundAt(mx, my) {
+/* WHERE A PIXEL MEETS A PLANE AT HEIGHT h. The closed form the file's header gives is this
+   with h = 0; carrying the height through costs two terms and is what lets the ray be walked
+   against relief rather than against a floor. Solved the same way - set the projected sy equal
+   to the pixel's and solve for the depth offset v:
+
+       v = [ syo * (1 - h*cos/D) + h*sin ] / ( cos + syo*sin/D )
+
+   and w falls out of v and h together, because a point that is both further away and higher up
+   is nearer the eye by the height's own cosine. */
+function _r3dPlaneAt(mx, my, h) {
   var R = _rtsR, R3 = window._R3D, zm = _rtsZoom(), D = _r3dEyeDist();
   var sxo = (mx - R.W / 2) / zm, syo = (my - R.H / 2) / zm;
   var den = R3.cp + syo * R3.sp / D;
   if (den <= 1e-6) return null;
-  var v = syo / den, w = 1 - v * R3.sp / D;
+  var v = (syo * (1 - h * R3.cp / D) + h * R3.sp) / den;
+  var w = 1 - (v * R3.sp + h * R3.cp) / D;
   if (!(w > R3D_WMIN)) return null;
   return { x: R.focus.x + sxo * w, z: R.focus.z + v };
+}
+
+/* WHERE A PIXEL MEETS THE GROUND, which is no longer a plane.
+
+   Every click, every move order, every drag of the map and every building placed goes through
+   here, so this is the one piece of the relief work that is not about how the game looks. Get
+   it wrong and a unit ordered onto a hillside walks somewhere else.
+
+   BY BISECTION, and the reason is that the obvious method has a cliff edge in it. Walking the
+   ray by FIXED POINT - guess a height, ask where the pixel meets that plane, ask the terrain
+   how high it is there, repeat - converges by a factor of (terrain slope) x tan(tilt) each
+   pass. At an elevation range of 3.2 that measured 0.57 and fourteen passes were plenty. The
+   range went to 5, the slopes got half again as steep, the factor went to about 0.89, and the
+   same fourteen passes left the answer 0.92 world units out - a quarter of a cell, on the
+   function every order in the game is aimed through. Steeper still and the factor reaches 1
+   and it stops converging at all. A method that degrades quietly as a constant is tuned is the
+   wrong method.
+
+   Bisection does not care how steep the ground is. Let f(h) be "how far the terrain at the
+   point this pixel hits a plane at height h sits ABOVE h". f(0) is at least zero, because no
+   ground is below sea level; f(RTS_ELEV_MAX) is at most zero, because none is above the top of
+   the range - so a root is bracketed before the first step. And f is strictly DECREASING,
+   because raising the plane slides the intersection away by tan(tilt) = 1.15 per unit while
+   the terrain under it can only climb by its own slope, at most 0.42 here: 0.42 x 1.15 = 0.48,
+   comfortably under 1. So the root is unique and each pass halves the bracket, whatever the
+   map does.
+
+   That is the same condition the sea's draw order rests on - the ground being shallower than
+   the line of sight - and it holds for the same reason. Twenty passes take 5 world units to
+   five thousandths of one; the cost is twenty bilinear samples on a mouse move.
+
+   It converges to the LAST crossing rather than the first, which differs only where a hill
+   hides ground behind it - and there the pixel is showing the hill, so the near answer is the
+   one the player means. */
+function _r3dGroundAt(mx, my) {
+  var lo = 0, hi = RTS_ELEV_MAX, p = _r3dPlaneAt(mx, my, 0);
+  if (!p) return null;
+  for (var i = 0; i < 20; i++) {
+    var mid = (lo + hi) * 0.5;
+    var q = _r3dPlaneAt(mx, my, mid);
+    if (!q) break;
+    p = q;
+    if (_rtsElev(q.x, q.z) > mid) lo = mid; else hi = mid;
+  }
+  /* the bracket has closed; answer at its centre rather than at whichever side was tried last */
+  var f = _r3dPlaneAt(mx, my, (lo + hi) * 0.5);
+  return f || p;
 }
 
 /* THE GROUND RECTANGLE THE CAMERA CAN SEE, which under perspective is not the view span.
@@ -21677,6 +21853,143 @@ function _r3dOreTex(G) {
   R3.oreTex = _r3dTexture(gl, R3.oreTex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, R3.oreCv);
 }
+
+
+/* THE GROUND CARRIES A HEIGHT NOW. This attribute was aXZ, two floats, with y taken as zero
+   everywhere - which was true of the map until the terrain got relief (see RTS_ELEV_MAX in
+   core/grid.js). It is aP, and y goes through the same two lines every other program projects
+   with: up the screen by y*sin(tilt), and TOWARD THE EYE by y*cos(tilt), because a hilltop is
+   nearer the camera than the ground beside it and has to sort that way against everything
+   standing on it. */
+var R3D_TEX_VS =
+  'attribute vec3 aP; attribute vec2 aT; attribute vec3 aN;' +
+  'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' +
+  R3D_SHADOW_VGLSL +
+  'varying vec2 vT; varying float vShade;' +
+  'void main(){' +
+  '  vT = aT;' +
+  /* HOW MUCH LIGHT THIS PATCH OF GROUND TAKES, RELATIVE TO FLAT. The terrain texture is the
+     2D renderer's baked canvas and already carries its own lighting for a level surface, so
+     shading it again with the full lambert would light it twice. What the relief needs is the
+     DIFFERENCE: dot(n,L) over what a flat surface would have taken, which is exactly 1.0 on
+     the flats - leaving them the picture they always were - and rises or falls only where the
+     ground leans. Without this the heightfield is invisible: it moves the pixels around and
+     every one of them keeps the colour it had, so a hillside reads as a smear rather than as
+     a slope. */
+  '  vShade = clamp(dot(normalize(aN), vec3(' +
+       R3_LIGHT[0].toFixed(4) + ', ' + R3_LIGHT[1].toFixed(4) + ', ' + R3_LIGHT[2].toFixed(4) +
+       ')) / ' + R3_LIGHT[1].toFixed(4) + ', 0.35, 1.55);' +
+  '  _shadowFrom(aP);' +
+  '  float sx = (aP.x - uCam.x) * uCam.z;' +
+  '  float sy = ((aP.z - uCam.y) * uTilt.x - aP.y * uTilt.y) * uCam.w;' +
+  '  float d  = ((aP.z - uCam.y) * uTilt.y + aP.y * uTilt.x);' +
+  '  float pw = 1.0 - d * uInvD;' +
+  '  gl_Position = vec4(sx, -sy, -d / ' + R3D_DEPTH_RANGE.toFixed(1) + ' * pw, pw);' +
+  '}';
+/* THE GROUND RECEIVES, and it is the surface that matters most - a shadow map that shades
+   every mesh but not the floor puts a tree's shade on the tree beside it and none on the grass
+   underneath, which is worse than no shadows at all.
+
+   uRecv is 0 for the fog, which is drawn through this same program and is not a surface: it is
+   the unexplored map laid over the finished picture, and shading it would darken the shroud in
+   the shape of trees the player cannot see.
+
+   The shade is a COOL MULTIPLY rather than a scalar one, matched to the mesh ramp's own floor -
+   a shadow on grass and a shadow on a slab beside it have to be the same colour of shade or
+   the two read as different times of day. */
+var R3D_TEX_FS =
+  'precision highp float; varying vec2 vT; varying float vShade;' +
+  'uniform sampler2D uS; uniform float uA;' +
+  'uniform float uRecv;' +
+  R3D_SHADOW_GLSL +
+  'void main(){' +
+  '  vec4 c = texture2D(uS, vT);' +
+  '  float s = mix(1.0, _shadowAt(), uRecv);' +
+  '  vec3 lit = c.rgb * mix(vec3(0.575, 0.600, 0.655), vec3(1.0), s);' +
+  /* uRecv is 0 for the fog, which is a signal painted over the world rather than a surface in
+     it - leaning it toward the sun would make the shroud brighter on a hillside. */
+  '  gl_FragColor = vec4(lit * mix(1.0, vShade, uRecv), c.a * uA);' +
+  '}';
+
+
+/* ------------------------------------------------------------- the ground mesh --
+   Built here rather than in the frame walk because it belongs with the textures draped over
+   it and the shader that samples them; it also took scene3d.js over the per-file limit.
+   Everything it needs comes in: the visible bounds, and the map's half-extent for the UVs. */
+function _r3dGroundMesh(R3, gl, vb, EXT) {
+/* THE PATCH IS CUT ON THE TILE GRID, not on the view, and that is what stops the relief
+   shimmering. A uniform subdivision of the visible rectangle moves its vertices every time
+   the camera pans by less than a quad, so each one slides across the height field and the
+   whole surface crawls. Cutting on the grid pins every vertex to a tile CORNER, where the
+   bilinear height is exact and, more to the point, the same from one frame to the next: the
+   patch gains and loses whole cells at its edges and never moves the ones in the middle.
+
+   The step coarsens when the view is wide, and coarsens by whole CELLS so the vertices stay
+   on corners and the surface still cannot crawl. At the top zoom the view is about 29 cells
+   across and every cell gets its own quad; zoomed all the way out it is 115, and four cells
+   to a quad keeps the count near four thousand. Relief that fine is not readable from out
+   there anyway.
+
+   THE MARGIN CARRIES THE HEIGHT. It used to be two cells, which is what a flat plane needs
+   to clear the eye plane. A hilltop is nearer the eye than the ground under it, so it can be
+   on screen while its cell is not: the extra reach is the full elevation times tan(tilt),
+   the same lift the world batch widens its cull by. */
+  var GM = RTS_TILE * 2 + RTS_ELEV_MAX * R3.sp / R3.cp;
+  var t0x = _rtsTX(Math.max(-EXT, vb.x0 - GM)), t1x = _rtsTX(Math.min(EXT, vb.x1 + GM));
+  var t0z = _rtsTX(Math.max(-EXT, vb.z0 - GM)), t1z = _rtsTX(Math.min(EXT, vb.z1 + GM));
+  t0x = Math.max(0, t0x - 1); t0z = Math.max(0, t0z - 1);
+  t1x = Math.min(RTS_N, t1x + 2); t1z = Math.min(RTS_N, t1z + 2);
+  var gstep = 1;
+  while ((t1x - t0x) / gstep * ((t1z - t0z) / gstep) > 4200 && gstep < 8) gstep *= 2;
+  /* snap the origin to the step so the quads keep their phase as the camera pans */
+  t0x -= t0x % gstep; t0z -= t0z % gstep;
+  var nqx = Math.ceil((t1x - t0x) / gstep), nqz = Math.ceil((t1z - t0z) / gstep);
+  var need = nqx * nqz * 18;
+  if (!R3.groundBuf) { R3.groundBuf = gl.createBuffer(); R3.groundUV = gl.createBuffer(); }
+  if (!R3.groundXZ || R3.groundXZ.length < need) {
+    R3.groundXZ = new Float32Array(need);
+    R3.groundN = new Float32Array(need);
+    R3.groundT = new Float32Array(need / 3 * 2);
+    if (!R3.groundNB) R3.groundNB = gl.createBuffer();
+  }
+  var q = R3.groundXZ, nb = R3.groundN, t = R3.groundT, k = 0, kt = 0, gi, gj;
+  /* the world coordinate of a tile's low CORNER - _rtsWX gives the centre */
+  function gcx(tx) { return _rtsWX(tx) - RTS_TILE / 2; }
+  /* THE SLOPE, BY CENTRAL DIFFERENCE OVER ONE CELL. Sampled from _rtsElev rather than from
+     the quad's own corners, so it is the terrain's slope and not the mesh's: at gstep 4 the
+     quad spans four cells and its corners would flatten everything between them. A cell is
+     the finest the height field actually carries, so that is the width to difference over. */
+  function gnorm(x, zz) {
+    var h = RTS_TILE;
+    var dx = (_rtsElev(x + h, zz) - _rtsElev(x - h, zz)) / (2 * h);
+    var dz = (_rtsElev(x, zz + h) - _rtsElev(x, zz - h)) / (2 * h);
+    var l = Math.hypot(dx, 1, dz) || 1;
+    return [-dx / l, 1 / l, -dz / l];
+  }
+  function gv(x, zz) {
+    var n = gnorm(x, zz);
+    q[k] = x; q[k + 1] = _rtsElev(x, zz); q[k + 2] = zz;
+    nb[k] = n[0]; nb[k + 1] = n[1]; nb[k + 2] = n[2];
+    k += 3;
+    t[kt] = (x + EXT) / (2 * EXT); t[kt + 1] = (zz + EXT) / (2 * EXT); kt += 2;
+  }
+  for (gj = 0; gj < nqz; gj++) {
+    var az = gcx(t0z + gj * gstep), bz = gcx(Math.min(t1z, t0z + (gj + 1) * gstep));
+    for (gi = 0; gi < nqx; gi++) {
+      var ax = gcx(t0x + gi * gstep), bx = gcx(Math.min(t1x, t0x + (gi + 1) * gstep));
+      gv(ax, az); gv(bx, az); gv(bx, bz);
+      gv(ax, az); gv(bx, bz); gv(ax, bz);
+    }
+  }
+  R3.groundVerts = k / 3;
+  R3.groundStep = gstep;
+  gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, q, gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundNB);
+  gl.bufferData(gl.ARRAY_BUFFER, nb, gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundUV);
+  gl.bufferData(gl.ARRAY_BUFFER, t, gl.DYNAMIC_DRAW);
+}
 </script>
 <script>/* render3d/fx3d.js - explosions and their kin, drawn INTO the world rather than over it.
    Part of rts.render3d.
@@ -21843,7 +22156,10 @@ function _r3dFxDraw(G, cam, invD) {
     /* the anchor sits `anchor` of the way DOWN the sprite, so the centre is above it by
        h * (anchor - 0.5) along the screen's up */
     var off = h * (pick.anchor - 0.5);
-    var cxw = f.x, cyw = (f.y || 0) + off * sp, czw = f.z - off * cp;
+    /* f.y is a height above the GROUND - a blast across a roof, a shell burst in the air -
+       so the terrain under it comes first, or an explosion on a hilltop goes off at the
+       height the valley floor would have put it. */
+    var cxw = f.x, cyw = _rtsElev(f.x, f.z) + (f.y || 0) + off * sp, czw = f.z - off * cp;
 
     var rx = w / 2;
     var ux = 0, uy = (h / 2) * sp, uz = -(h / 2) * cp;
@@ -22034,37 +22350,11 @@ function _r3dFrame(G) {
      The cost is 384 vertices of a buffer that is rewritten anyway, against a frame that draws
      tens of thousands. */
   var EXT = RTS_N * RTS_TILE / 2;
-  if (!R3.groundBuf) {
-    R3.groundBuf = gl.createBuffer();
-    R3.groundUV = gl.createBuffer();
-    R3.groundXZ = new Float32Array(R3D_GROUND_SUB * R3D_GROUND_SUB * 12);
-    R3.groundT = new Float32Array(R3D_GROUND_SUB * R3D_GROUND_SUB * 12);
-  }
-  {
-    var GM = RTS_TILE * 2;                  /* a two-cell margin, well clear of the eye plane */
-    var gx0 = Math.max(-EXT, vb.x0 - GM), gx1 = Math.min(EXT, vb.x1 + GM);
-    var gz0 = Math.max(-EXT, vb.z0 - GM), gz1 = Math.min(EXT, vb.z1 + GM);
-    var q = R3.groundXZ, t = R3.groundT, k = 0, gi, gj;
-    var gdx = (gx1 - gx0) / R3D_GROUND_SUB, gdz = (gz1 - gz0) / R3D_GROUND_SUB;
-    function gv(x, zz) {
-      q[k] = x; q[k + 1] = zz;
-      t[k] = (x + EXT) / (2 * EXT); t[k + 1] = (zz + EXT) / (2 * EXT);
-      k += 2;
-    }
-    for (gj = 0; gj < R3D_GROUND_SUB; gj++) {
-      for (gi = 0; gi < R3D_GROUND_SUB; gi++) {
-        var ax = gx0 + gi * gdx, bx = ax + gdx;
-        var az = gz0 + gj * gdz, bz = az + gdz;
-        gv(ax, az); gv(bx, az); gv(bx, bz);
-        gv(ax, az); gv(bx, bz); gv(ax, bz);
-      }
-    }
-    R3.groundVerts = k / 2;
-    gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, q, gl.DYNAMIC_DRAW);
-    gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundUV);
-    gl.bufferData(gl.ARRAY_BUFFER, t, gl.DYNAMIC_DRAW);
-  }
+  /* The visible ground patch - cut on the tile grid, carrying the terrain's height and its
+     slope - is built by _r3dGroundMesh in render3d/ground3d.js, beside the textures draped
+     over it. It moved there when the relief work took this file over the line limit. */
+  _r3dGroundMesh(R3, gl, vb, EXT);
+
 
   /* THE WORLD IS BUILT BEFORE THE SUN LOOKS AT IT. _r3dWorldTick used to run in the middle of
      the frame, which was fine while nothing read the geometry before the main pass; the shadow
@@ -22123,9 +22413,12 @@ function _r3dFrame(G) {
   var uRecv = gl.getUniformLocation(R3.texP, 'uRecv');
   gl.uniform1f(uRecv, 1);                       /* the ground takes the world's shadows */
   _r3dShadowBind(R3.texP, 1);
-  var aXZ = gl.getAttribLocation(R3.texP, 'aXZ'), aT = gl.getAttribLocation(R3.texP, 'aT');
+  var aXZ = gl.getAttribLocation(R3.texP, 'aP'), aT = gl.getAttribLocation(R3.texP, 'aT');
+  var aGN = gl.getAttribLocation(R3.texP, 'aN');
   gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundBuf);
-  gl.enableVertexAttribArray(aXZ); gl.vertexAttribPointer(aXZ, 2, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(aXZ); gl.vertexAttribPointer(aXZ, 3, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundNB);
+  gl.enableVertexAttribArray(aGN); gl.vertexAttribPointer(aGN, 3, gl.FLOAT, false, 0, 0);
   gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundUV);
   gl.enableVertexAttribArray(aT); gl.vertexAttribPointer(aT, 2, gl.FLOAT, false, 0, 0);
   gl.bindTexture(gl.TEXTURE_2D, R3.terrainTex);
@@ -22298,10 +22591,14 @@ function _r3dFrame(G) {
          is not mistaken for a finished one at full height's last moment. */
       var dmg = !e.building && e.hp < e.maxHp * RTS_COND_YELLOW;
       var rise = e.building ? 0.12 + 0.88 * Math.max(0, Math.min(1, e.bprog || 0)) : 1;
-      drawIn(C, _r3dMesh('b', e.def, e.side), e.x, 0, e.z, 0, ART2W, dmg || e.building, rise);
+      drawIn(C, _r3dMesh('b', e.def, e.side), e.x, _rtsElev(e.x, e.z), e.z, 0, ART2W,
+             dmg || e.building, rise);
     } else if (e.type === 'unit') {
       var turret = R.spr.turret && R.spr.turret[e.side] && R.spr.turret[e.side][e.def];
-      var y = e.air ? ((e.rearming > 0 ? 2 : (e.alt || 12)) * 0.35) : 0;
+      /* THE GROUND UNDER IT, not zero. An aircraft's altitude is measured from the ground it
+         is over as well - it flies at a height, not at a level - so both take the terrain and
+         only the flier adds to it. */
+      var y = _rtsElev(e.x, e.z) + (e.air ? ((e.rearming > 0 ? 2 : (e.alt || 12)) * 0.35) : 0);
       /* A MARCHING SOLDIER BOBS. There is no walk cycle in 3D - the mesh is one pose - so the
          walk reads through a small vertical bob instead, phased by the same `gait` offset that
          desynchronises the 2D walk frames, so a squad does not pogo in unison. Vehicles do not
@@ -22345,7 +22642,9 @@ function _r3dFrame(G) {
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundBuf);
-  gl.enableVertexAttribArray(aXZ); gl.vertexAttribPointer(aXZ, 2, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(aXZ); gl.vertexAttribPointer(aXZ, 3, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundNB);
+  gl.enableVertexAttribArray(aGN); gl.vertexAttribPointer(aGN, 3, gl.FLOAT, false, 0, 0);
   gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundUV);
   gl.enableVertexAttribArray(aT); gl.vertexAttribPointer(aT, 2, gl.FLOAT, false, 0, 0);
   gl.bindTexture(gl.TEXTURE_2D, R3.fogTex);
@@ -22498,6 +22797,26 @@ function _r3dRockCell(out, tx, tz) {
   }
 }
 
+/* STAND WHAT WAS JUST EMITTED ON THE GROUND. Every builder in this file draws from y = 0,
+   which was the only ground there was until the terrain got relief. Rather than thread a base
+   height through _r3dTree, _r3dRockCell, the crystal cone and the tuft cone - four signatures,
+   and every future one - the walk records how long the face list was before a cell and lifts
+   everything added since.
+
+   A pure translation, so the NORMALS are untouched and do not need recomputing; and it lifts
+   by the height at the cell CENTRE rather than under each piece, so a tree cluster sits level
+   with itself instead of shearing across a slope. Over one cell of a field whose steepest step
+   is about a third of the range, that is under a unit of error at the corners and invisible.
+
+   The cost is one pass over the cell's own vertices, which is the same order as emitting them. */
+function _r3dLiftFrom(out, from, dy) {
+  if (!dy) return;
+  for (var i = from; i < out.length; i++) {
+    var v = out[i].v;
+    for (var j = 0; j < v.length; j++) v[j][1] += dy;
+  }
+}
+
 function _r3dWorldBuild(G) {
   var R3 = window._R3D, gl = R3.gl;
   var N = RTS_N, half = RTS_TILE / 2;
@@ -22523,6 +22842,7 @@ function _r3dWorldBuild(G) {
           var k = G.terrain[_rtsIdx(tx, tz)];
           var wx = _rtsWX(tx), wz = _rtsWX(tz);
           var h1 = _sprHash(tx, tz, 331), h2 = _sprHash(tz, tx, 337), h3 = _sprHash(tx * 3, tz * 7, 341);
+          var _lift0 = faces.length, _liftY = _rtsTileElev(tx, tz);
 
           if (k === RTS_T_TREE) {
             /* a forest cell is a CLUSTER - two or three trees, spread across the cell */
@@ -22560,6 +22880,7 @@ function _r3dWorldBuild(G) {
               }
             }
           }
+          _r3dLiftFrom(faces, _lift0, _liftY);
         }
       }
 
@@ -22680,6 +23001,7 @@ function _r3dOreBuild(G) {
       var frac = Math.min(1, ore / (RTS_SCRAP_TILE *
                      (typeof RTS_ORE_RICHNESS === 'number' ? RTS_ORE_RICHNESS : 1)));
       var wx = _rtsWX(tx), wz = _rtsWX(tz);
+      var _o0 = faces.length, _oy = _rtsTileElev(tx, tz);
       for (var c = 0; c < R3D_CRYSTALS_PER_CELL; c++) {
         var cx = wx + (_sprHash(tx * 31 + c, tz, 383) - 0.5) * RTS_TILE;
         var cz = wz + (_sprHash(tz * 31 + c, tx, 389) - 0.5) * RTS_TILE;
@@ -22688,6 +23010,7 @@ function _r3dOreBuild(G) {
         _r3Cone(faces, cx, 0, cz, 0.28 + g2 * 0.26, 0.04, ch,
                 [P[1], P[2], P[0], P[1], P[2]][c % 5], 7);
       }
+      _r3dLiftFrom(faces, _o0, _oy);
     }
   }
   if (R3.oreMesh) {

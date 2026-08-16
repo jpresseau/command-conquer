@@ -201,8 +201,21 @@ function _rtsWorldToScreen(x, y, z) {
            y: (z - _rtsR.focus.z) * _rtsZoom() + _rtsR.H / 2 - (y || 0) * _rtsZoom() * 0.5,
            scale: 1, behind: false };
 }
-/* The ground-level case, which is most of them: a point on the map with no height. */
-function _rtsGroundToScreen(x, z) { return _rtsWorldToScreen(x, 0, z); }
+/* The ground-level case, which is most of them: a point on the map with no height of its own.
+
+   "No height of its own" stopped meaning y = 0 when the terrain got relief. Every overlay the
+   2D painter lays over the world arrives through here - selection brackets, health bars, the
+   placement ghost, the effects the 3D pass does not own - and each is positioned by a point ON
+   THE GROUND. Left at zero they would sit at sea level while the thing they belong to stood on
+   a hill, and the further the hill the wider the gap.
+
+   ONLY IN 3D. The 2D painter draws the terrain bake, which is flat and always was, and its own
+   branch of _rtsWorldToScreen does lift by y - so handing it an elevation would slide every
+   bracket up the screen away from the unit it belongs to. Relief is something the 3D mode has. */
+function _rtsGroundToScreen(x, z) {
+  var R3 = window._R3D;
+  return _rtsWorldToScreen(x, (R3 && R3.on) ? _rtsElev(x, z) : 0, z);
+}
 
 /* Stamp RA's shroud tiles over the visible cells.
 
