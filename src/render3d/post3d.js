@@ -72,10 +72,47 @@ var R3D_AO_RANGE = 8.0;
    answers. Small: the reconstruction is exact rather than interpolated, so this only has to
    cover the depth buffer's own quantisation. */
 var R3D_AO_BIAS = 0.045;
-/* How dark a fully enclosed pixel goes. Occlusion is not a shadow and must not read as one -
-   the sun's map draws those, and an AO strong enough to be noticed on its own is the effect
-   everyone recognises as "the screen-space AO is turned up too high". */
-var R3D_AO_STRENGTH = 1.6;
+/* HOW HARD THE OCCLUSION IS PUSHED, and there are three knobs rather than one because the
+   obvious single knob does the wrong thing.
+
+   The occlusion this pass finds is real and lands where it should - at the foot of every
+   trunk, crystal and wall - but it was too faint to read: measured over a base, the deepest
+   contacts came out 21.5 levels darker than they would be with the pass off, against the sun's
+   own 21.3 over a far smaller share of the frame. Ambient occlusion that nobody notices is a
+   pass being paid for and not delivered.
+
+   THE GAIN ALONE CANNOT FIX THAT. occ maps to darkening LINEARLY, so raising the gain lifts
+   the shallow end as fast as the deep one, and the shallow end is open ground: measured, gain
+   1.6 -> 2.6 took the deep contacts from 21.5 to 29.9 (+39%) and the OPEN GROUND from 0.51 to
+   0.86 (+69%), with coverage going 23.6% to 29.9%. That is the smear everyone recognises as
+   the AO being turned up, and it is what "just turn it up" gets you.
+
+   So the response is SHAPED first. Raising occ to a power greater than one leaves a fully
+   occluded pixel where it was and pushes a barely occluded one down hard, which is exactly the
+   right way round: deep contacts keep everything, the haze over open ground goes.
+
+   AND THE FLOOR HAD TO MOVE, because it - not the gain - was the real ceiling. A fully
+   occluded pixel is multiplied by R3D_AO_FLOOR, so no amount of gain darkens anything past
+   it; the deep end clamped around 57 levels however hard the gain was pushed.
+
+   Measured together, over a base at the top zoom, against the pass switched off:
+
+     curve  gain  floor | deep contacts   open ground   coverage
+       1     1.6   0.62 |     21.5            0.51        23.6%      <- what shipped
+       1     2.6   0.62 |     29.9            0.86        29.9%      <- gain alone
+       1.5   3.4   0.44 |     35.6            0.65        27.8%      <- this
+
+   Two thirds deeper in the contacts for a quarter more on open ground; the same depth reached
+   by gain alone would need about 3.9 and put open ground near 1.2. Deeper was tried and is
+   where it turns: at a 0.36 floor the grass around every object goes muddy and the ore field
+   loses its gold, for 40.7 against 35.6. */
+var R3D_AO_STRENGTH = 3.4;
+/* The exponent on the normalised occlusion. 1.0 is the linear response this shipped with. */
+var R3D_AO_CURVE = 1.5;
+/* What a fully occluded pixel is multiplied by. COOL rather than neutral, and that is not
+   decoration: what reaches a pixel the sun cannot is skylight, which is blue, so the blue
+   channel keeps most of its value while red loses over half. */
+var R3D_AO_FLOOR = [0.44, 0.50, 0.66];
 var R3D_AO_SAMPLES = 12;
 
 /* THE HEMISPHERE, as a fixed set of offsets rather than a random one per pixel. A golden-angle
@@ -189,7 +226,12 @@ var R3D_AO_FS =
        ' / max(abs(sd - P.z), 0.0001));' +
   '    occ += hidden * near;' +
   '  }' +
-  '  occ = occ / float(' + R3D_AO_SAMPLES + ') * ' + R3D_AO_STRENGTH.toFixed(3) + ';' +
+  /* SHAPED, THEN SCALED - see the note on R3D_AO_CURVE. The exponent runs on the normalised
+     occlusion, before the gain, so a fully occluded pixel keeps everything and a barely
+     occluded one is pushed toward nothing. Doing it the other way round would clip first and
+     curve the clipped value, which throws the deep end away. */
+  '  occ = pow(occ / float(' + R3D_AO_SAMPLES + '), ' + R3D_AO_CURVE.toFixed(3) + ') * ' +
+       R3D_AO_STRENGTH.toFixed(3) + ';' +
   '  gl_FragColor = vec4(clamp(1.0 - occ, 0.0, 1.0));' +
   '}';
 
@@ -263,7 +305,9 @@ var R3D_AO_RESOLVE_FS =
   'void main(){' +
   '  vec3 c = mix(texture2D(uScene, vT).rgb, _fxaa(vT), uAA);' +
   '  float ao = mix(1.0, texture2D(uAO, vT).r, uAOAmt);' +
-  '  gl_FragColor = vec4(c * mix(vec3(0.62, 0.66, 0.78), vec3(1.0), ao), 1.0);' +
+  '  gl_FragColor = vec4(c * mix(vec3(' + R3D_AO_FLOOR[0].toFixed(3) + ', ' +
+       R3D_AO_FLOOR[1].toFixed(3) + ', ' + R3D_AO_FLOOR[2].toFixed(3) +
+       '), vec3(1.0), ao), 1.0);' +
   '}';
 
 /* --------------------------------------------------------------------------- setup -- */

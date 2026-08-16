@@ -67,6 +67,53 @@ var S = new Suite('shadows');
     o.mag = gl.getTexParameter(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER);
     o.NEAREST = gl.NEAREST;
 
+    /* THE SUN HAS TO COVER WHAT THE CAMERA CAN SEE, and R3D_SHADOW_SPAN is within one percent
+       of the smallest value that does. Ground outside the sun's square samples a clamped edge
+       texel and comes back unshaded, so the failure is not subtle once it starts: a band of
+       the screen simply stops taking shadows.
+
+       Every visible ground point is pushed through the sun's own basis and measured against
+       the sun's own span - both read from the renderer, not rebuilt here - at every zoom. The
+       margin is not a constant: it depends on the viewport's ASPECT, because the span is
+       derived from the LONGER of the view's two sides while the point that reaches furthest
+       is a corner. Measured across seven viewports it runs from 62% of the span at 600x1000
+       to 99.2% at 1280x900, which is the one this repo's specs mostly run at.
+
+       Which axis binds is worth recording, because it is not the obvious one. The sun's
+       `across` axis is built as cross(worldUp, forward) and therefore has NO y component at
+       all, so height cannot move a point along it - that axis is pure ground extent, and it
+       is the one at 99.2%. The `down` axis carries y at 0.651, and raising a caster to the
+       tallest thing the world builds moves it TOWARDS the centre there, 81.9% to 70.9%,
+       because the sun sits behind the scene. So the binding case is flat ground at a corner,
+       not a tall caster. */
+    o.fit = [];
+    var keepZi = R.zi, keepFx = R.focus.x, keepFz = R.focus.z;
+    R.focus.x = 0; R.focus.z = 0;
+    for (var fz = 0; fz < RTS_ZOOMS.length; fz++) {
+      R.zi = fz; _rtsApplyCam(); _rtsRFrame(0);
+      var C = R3.sunC, sp = R3.sunSpan, B = R3D_SUN, wAcross = 0, wDown = 0, wTop = 0, seen = 0;
+      for (var fy = 0; fy < CH; fy += 5) {
+        for (var fx2 = 0; fx2 < CW; fx2 += 5) {
+          var gp = _rtsGroundAt(fx2, fy);
+          if (!gp) continue;
+          seen++;
+          var dx = gp.x - C[0], dz = gp.z - C[2];
+          wAcross = Math.max(wAcross, Math.abs(dx * B.r[0] + dz * B.r[2]));
+          wDown = Math.max(wDown, Math.abs(dx * B.u[0] - C[1] * B.u[1] + dz * B.u[2]));
+          wTop = Math.max(wTop,
+                 Math.abs(dx * B.u[0] + (R3D_WORLD_YMAX - C[1]) * B.u[1] + dz * B.u[2]));
+        }
+      }
+      o.fit.push({ zi: fz, seen: seen, span: +sp.toFixed(1),
+                   across: +(wAcross / sp * 100).toFixed(1),
+                   down: +(wDown / sp * 100).toFixed(1),
+                   top: +(wTop / sp * 100).toFixed(1) });
+    }
+    o.rY = R3D_SUN.r[1];
+    o.uY = +R3D_SUN.u[1].toFixed(3);
+    o.spanK = R3D_SHADOW_SPAN;
+    R.zi = keepZi; R.focus.x = keepFx; R.focus.z = keepFz; _rtsApplyCam();
+
     /* ANYTHING THAT MOVES IN THE MAIN PASS HAS TO MOVE IN THE SUN'S. The sea's swell is a
        vertex displacement, and if the two shaders ever disagree about it the water's shadow
        stands still while the water rolls under it.
@@ -206,6 +253,70 @@ var S = new Suite('shadows');
        out.mag === out.NEAREST,
        out.mag === out.NEAREST ? 'NEAREST' : 'LINEAR - which averages a high byte against a ' +
        'low byte and returns a depth that was never written');
+
+  /* MEASURED AGAIN AT THE ASPECT THAT BINDS, on a second page, because this spec's own
+     900x700 viewport is not the hard case and an assertion made only there would sail past a
+     regression that bites on a widescreen laptop. The span comes off the LONGER of the view's
+     two sides while the point reaching furthest is a corner, so the margin is a function of
+     the aspect: 62% at 600x1000, 79% at 800x800, 88% here, 99.2% at 1280x900. */
+  var wide = await openPage(browser, { width: 1280, height: 900, dpr: 1 });
+  await wide.start(7, 1);
+  var out2 = await wide.page.evaluate(function () {
+    var o = {}, R = _rtsR, i;
+    rtsSetVoxSide('allied');
+    _rtsNewGame(4242, 'easy');
+    var G = window._rtsG;
+    for (i = 0; i < RTS_N * RTS_N; i++) { G.mapped[i] = 1; G.vis[i] = 1; }
+    G.visDirty = 1;
+    rts3dToggle();
+    var R3 = window._R3D;
+    o.on = !!(R3 && R3.on);
+    if (!o.on) return o;
+    var CW = R3.cv.width, CH = R3.cv.height;
+    o.fit = [];
+    R.focus.x = 0; R.focus.z = 0;
+    for (var zi = 0; zi < RTS_ZOOMS.length; zi++) {
+      R.zi = zi; _rtsApplyCam(); _rtsRFrame(0);
+      var C = R3.sunC, sp = R3.sunSpan, B = R3D_SUN, wa = 0, wd = 0, wt = 0, seen = 0;
+      for (var y = 0; y < CH; y += 5) for (var x = 0; x < CW; x += 5) {
+        var gp = _rtsGroundAt(x, y);
+        if (!gp) continue;
+        seen++;
+        var dx = gp.x - C[0], dz = gp.z - C[2];
+        wa = Math.max(wa, Math.abs(dx * B.r[0] + dz * B.r[2]));
+        wd = Math.max(wd, Math.abs(dx * B.u[0] - C[1] * B.u[1] + dz * B.u[2]));
+        wt = Math.max(wt, Math.abs(dx * B.u[0] + (R3D_WORLD_YMAX - C[1]) * B.u[1] +
+                                   dz * B.u[2]));
+      }
+      o.fit.push({ zi: zi, seen: seen, across: +(wa / sp * 100).toFixed(1),
+                   down: +(wd / sp * 100).toFixed(1), top: +(wt / sp * 100).toFixed(1) });
+    }
+    return o;
+  });
+  await wide.close();
+
+  function worstOf(fit) {
+    return Math.max.apply(null, fit.map(function (f) {
+      return Math.max(f.across, f.down, f.top);
+    }));
+  }
+  var worstHere = worstOf(out.fit), worstWide = out2.on ? worstOf(out2.fit) : 0;
+  S.ok('the sun\'s square covers every bit of ground the camera can see',
+       out.fit.every(function (f) { return f.seen > 1000; }) && out2.on &&
+       out2.fit.every(function (f) { return f.seen > 1000; }) &&
+       worstHere <= 100 && worstWide <= 100,
+       'the furthest visible ground reaches ' + worstWide.toFixed(1) + '% of the sun\'s span at ' +
+       '1280x900 and ' + worstHere.toFixed(1) + '% at this spec\'s own 900x700 - past 100% it ' +
+       'samples a clamped edge texel, comes back unshaded, and puts a band of screen that ' +
+       'simply takes no shadows. R3D_SHADOW_SPAN is ' + out.spanK + ', which leaves ' +
+       (100 - worstWide).toFixed(1) + '% in hand on the widescreen case - at the shipped 1.35 ' +
+       'that is under one percent, so the constant is very nearly its own minimum, and 1.25 ' +
+       'overruns to 107%. The binding axis is not ' +
+       'the obvious one: `across` is cross(worldUp, forward) so it carries no y at all ' +
+       '(r.y = ' + out.rY + ') and is pure ground extent, while `down` carries y at ' + out.uY +
+       ' and a tall caster moves TOWARDS the centre there (' +
+       out.fit[out.fit.length - 1].down + '% to ' + out.fit[out.fit.length - 1].top +
+       '%) because the sun sits behind the scene - so what binds is flat ground at a corner');
 
   S.ok('the two passes displace the sea by the same wave',
        out.spliced === 2 && out.qShared === out.waveN && out.sumSun === out.sumLit,
