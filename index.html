@@ -876,7 +876,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">9bd9615 · 2026-08-16</div>
+  <div id="rtsBuild" title="build">42a4f21 · 2026-08-17</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -22155,8 +22155,42 @@ function _r3dTexture(gl, old, mag) {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   return t;
 }
+/* REBUILT ONLY WHEN THE SHROUD ACTUALLY CHANGED, decided by HASHING THE SOURCE rather than by
+   trusting a signal. This ran every frame - 16k cells rewritten, a putImageData and a 64 KB
+   texImage2D - and on an emulated iPhone 13 this and _r3dOreTex together were pushing 128 KB a
+   frame, about 7.7 MB a second at 60 fps, nearly all of it byte-identical to the frame before.
+   Texture bandwidth is what a phone has least of.
+
+   TWO SIGNAL-KEYED VERSIONS WERE TRIED FIRST AND BOTH WENT STALE, which is the whole reason
+   this hashes. G.visDirty is no good because it has an owner: render/frame.js clears it when it
+   re-bakes the 2D fog, so a second reader is told "nothing changed" for every change the first
+   one saw first. A generation counter bumped at the sweep and at the reveal sites fixed that and
+   was still wrong, because it only covers the writes that go through those sites - anything
+   setting G.mapped or G.vis directly (a save being restored, the editor, a spec driving the
+   renderer) would render a shroud frozen at whatever it last agreed with. e2e/perspective caught
+   exactly that.
+
+   A hash cannot have that failure mode: it is keyed on the bytes themselves, so every change
+   invalidates and no change does. 32k reads against a 16k-pixel rebuild plus a 64 KB upload, so
+   it is still roughly thirty times cheaper than what it replaces, and it is CORRECT, which the
+   cheaper versions were not. */
+/* SEEDED WITH THE CONSTANTS THE TEXTURE ALSO DEPENDS ON, not just the game state. The dimming
+   factor is as much an input to these pixels as the shroud bytes are, and a cache keyed on only
+   some of its inputs is stale for the rest - e2e/ore3d changes RTS_ORE_TEX_A to render a frame
+   without the stain and got the cached one back. */
+function _r3dFogHash(G) {
+  var h = (2166136261 ^ Math.round(RTS_FOG_DIM * 1e6)) >>> 0, m = G.mapped, v = G.vis, n = RTS_N * RTS_N;
+  for (var i = 0; i < n; i++) {
+    h = (h ^ (m[i] | (v[i] << 1))) >>> 0;
+    h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+  }
+  return h;
+}
 function _r3dFog(G) {
   var R3 = window._R3D, gl = R3.gl, N = RTS_N;
+  var fh = _r3dFogHash(G);
+  if (R3.fogTex && R3.fogHash === fh && R3.fogFor === G) return;
+  R3.fogHash = fh; R3.fogFor = G;
   if (!R3.fogCv) {
     R3.fogCv = document.createElement('canvas');
     R3.fogCv.width = N; R3.fogCv.height = N;
@@ -22193,8 +22227,25 @@ function _r3dFog(G) {
    otherwise, which leaves nothing for the interpolation to darken toward. */
 var RTS_ORE_TEX_A = 0.82;      /* how much of the ground a full cell covers - not 1, so the
                                   terrain's own dirt and grass still read through the field */
+/* AND THE SAME TREATMENT FOR THE BED'S COLOUR, hashed for the same reason and over the two
+   arrays that decide it. Keying this on R3.oreSum was tried and was wrong twice over: that
+   total is refreshed by _r3dWorldTick's sampler, which runs once every thirty frames because
+   rebuilding the crystal GEOMETRY is expensive and half a second of lag there is invisible - but
+   colour is not geometry, and a cell mined out has to stop being gold at once. e2e/ore3d caught
+   all three of its stain assertions reading the frame before. */
+function _r3dOreHash(G) {
+  var h = (2166136261 ^ Math.round(RTS_ORE_TEX_A * 1e6)) >>> 0, sc = G.scrap, gm = G.gems, n = RTS_N * RTS_N;
+  for (var i = 0; i < n; i++) {
+    h = (h ^ ((sc[i] * 4) | 0) ^ ((gm && gm[i]) ? 0x5a5a : 0)) >>> 0;
+    h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+  }
+  return h;
+}
 function _r3dOreTex(G) {
   var R3 = window._R3D, gl = R3.gl, N = RTS_N, i;
+  var oh = _r3dOreHash(G);
+  if (R3.oreTex && R3.oreHash === oh && R3.oreTexFor === G) return;
+  R3.oreHash = oh; R3.oreTexFor = G;
   if (!R3.oreCv) {
     R3.oreCv = document.createElement('canvas');
     R3.oreCv.width = N; R3.oreCv.height = N;
