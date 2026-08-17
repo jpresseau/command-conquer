@@ -25,7 +25,16 @@
    wants and what every zoom level in this renderer is already built around.
 
    The HUD canvas is deliberately NOT pixelated - it draws text, and text wants the smoothing. */
-#rcgRts #rtsCv3d{position:absolute;inset:0;display:block}
+/* THE GL CANVAS IS A BUFFER, NOT A LAYER. render/frame.js blits it onto #rtsCv and draws the
+   overlay on top of that, so it is never presented directly - ui/shell.js creates it with an
+   inline display:none, and that is what actually holds, because an inline style beats this file.
+
+   So this rule saying `display:block` did nothing at all while the inline style existed, and
+   would have turned a 1.46-megapixel offscreen buffer into a second composited full-screen
+   layer on every phone the moment anyone removed it. Measured on an emulated iPhone 13: 5.6 MB
+   a copy, and the compositor would have carried two of them to show one picture. Kept in sync
+   with the inline style rather than deleted, so the two cannot disagree again. */
+#rcgRts #rtsCv3d{position:absolute;inset:0;display:none}
 #rcgRts .rts-btns #rts3dBtn{font-size:10px;font-weight:700;letter-spacing:.5px}
 #rcgRts .rts-btns #rts3dBtn.on{color:#7fd0ff;border-color:#3f7fd0}
 #rcgRts #rtsCv{position:absolute;inset:0;display:block;cursor:crosshair;
