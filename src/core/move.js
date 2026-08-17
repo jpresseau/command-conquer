@@ -77,6 +77,11 @@ function _rtsSteer(e, dt, d) {
   var sp = d.speed * (d.kind === 'infantry' ? Math.max(0.35, align) : align * align);
   sp *= _rtsBias(e.side).speed;                    /* GroundspeedBias */
   sp *= rtsCrateMult(e, 'speed');
+  /* A CLIMB COSTS SPEED - see core/relief.js. Asked about the direction the hull is actually
+     pointing rather than at the waypoint, because that is the direction it is about to move:
+     the step below is taken along e.rot, and a unit still swinging round is not yet climbing
+     anything. */
+  sp *= _rtsClimbSpeed(e, e.x, e.z, Math.cos(e.rot), Math.sin(e.rot));
   if (e.prone) sp *= RTS_PRONE_SPEED;
   var nx = e.x + Math.cos(e.rot) * sp * dt, nz = e.z + Math.sin(e.rot) * sp * dt;
   /* THE UNIT'S OWN DOMAIN, and both of the tests below have to ask in it. They used to ask in

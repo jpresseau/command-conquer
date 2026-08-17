@@ -267,16 +267,22 @@ function _rtsRadiusTable() {
   _RTS_RAD = { off:off, count:count };
   return _RTS_RAD;
 }
-/* Sight_From: mark everything within `range` cells as seen now and explored forever. */
+/* Sight_From: mark everything within `range` cells as seen now and explored forever - except
+   what the ground itself hides. The disc is still a disc; _rtsHorizon (core/relief.js) takes
+   the bites out of it where a ridge stands between the eye and the cell. On flat ground it
+   takes none - slope from the eye rises toward zero with distance, so every cell clears the
+   one before it - which is what makes this the loop it always was on a map without relief. */
 function _rtsSightFrom(tx, tz, range) {
   var G = window._rtsG, T = _rtsRadiusTable();
   range = Math.max(0, Math.min(RTS_SIGHT_MAX, range | 0));
   var n = T.count[range] * 2, off = T.off, rr = range * range;
+  var seen = _rtsHorizon(tx, tz, range);
   for (var i = 0; i < n; i += 2) {
     var dx = off[i], dz = off[i + 1];
     /* Sight_From filters the ring list by TRUE distance as well - the offset table is a
        superset, and this is what makes the revealed area an exact circle. */
     if (dx * dx + dz * dz > rr) continue;
+    if (!_rtsHorizonAt(seen, dx, dz)) continue;
     var x = tx + dx, z = tz + dz;
     if (x < 0 || z < 0 || x >= RTS_N || z >= RTS_N) continue;
     var c = z * RTS_N + x;
@@ -296,7 +302,9 @@ function _rtsVisTick(dt) {
     if (e.dead || e.side !== 'player') continue;
     var def = e.type === 'struct' ? rtsStructDef(e.def) : rtsUnitDef(e.def);
     if (!def) continue;
-    _rtsSightFrom(_rtsTX(e.x), _rtsTX(e.z), rtsSightTiles(def));
+    /* Standing high is worth a wider disc - see RTS_ELEV_SIGHT. _rtsSightFrom clamps to
+       RTS_SIGHT_MAX, so the original's own ten-cell ceiling still holds over the bonus. */
+    _rtsSightFrom(_rtsTX(e.x), _rtsTX(e.z), rtsSightTiles(def) + _rtsSightBonus(e));
   }
   G.visDirty = 1;                 /* the renderer only re-bakes the shroud when this is set */
 }

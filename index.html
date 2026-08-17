@@ -876,7 +876,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">d1cb1a3 · 2026-08-16</div>
+  <div id="rtsBuild" title="build">9bd9615 · 2026-08-16</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -12829,10 +12829,18 @@ function _rtsWX(tx) { return (tx - RTS_N / 2 + 0.5) * RTS_TILE; }          /* ti
    departs from that, because a camera leaning 49 degrees can see relief and a flat plane
    wastes it.
 
-   THE SIMULATION DOES NOT READ THIS, and that is the whole design. Height is a property of the
-   map the way G.terrain is - something both renderers agree about - and passability is left
-   exactly as it was. Nothing in pathing, combat, harvesting or line-of-sight changed, so no
-   balance moved, and no generated map can be cut in two by relief that was not there before.
+   THE SIMULATION READS THIS NOW, and core/relief.js is the whole of what it does with it:
+   a climb costs speed, a climb costs A* more than flat ground, a ridge takes a bite out of what
+   an observer can see, and standing above your target is worth a little sight and a little
+   reach. Read that file before changing anything here - every one of those numbers came off a
+   measurement, and the rule that is NOT there (steep ground is impassable) is absent because it
+   was measured and it cuts the maps into quarters.
+
+   WHAT IS STILL TRUE is the important half: PASSABILITY IS UNTOUCHED. No cell is blocked by its
+   height, so no generated map can be cut in two by relief that was not there before, and a map
+   with no relief - every real RA map, which is flat by construction - behaves exactly as it did
+   before any of this existed. Every rule in relief.js is written to vanish identically at zero
+   height rather than merely to become small.
 
    That falls out of WHERE the height comes from. The rock ridges core/terrain.js already lays
    down are a narrow band either side of a contour of a smooth noise field - and the boundary
@@ -13067,6 +13075,16 @@ function _rtsPath(sx, sz, gx, gz, dom) {
      closest it can get. _rtsSteer completes that path at once and the order clears. */
   if (start === goal) return [moved ? { x:_rtsWX(gtx), z:_rtsWX(gtz) } : { x:gx, z:gz }];
   P.hn = 0;
+  /* NOTHING IN THE SEA DOMAIN CLIMBS, so nothing in it reads the height field - the same rule
+     _rtsStandHeight applies to reach, applied to movement. The byte under a water cell is the
+     seabed and a hull is not on it.
+
+     Left in, this routes fleets around UNDERWATER hills. It cannot show on a generated map,
+     where core/terrain.js pins water to zero, and it showed immediately on water that something
+     else made: e2e/navy cuts its duel arena over whatever terrain was there, and the
+     submarine-versus-gunboat result went from +33 to -33 as hulls sailed around scenery they
+     should never have noticed. Any map this game did not generate can do the same. */
+  var HGT = (dom === 'sea') ? null : ((window._rtsG && window._rtsG.height) || null);
   function H(i) { var ax = Math.abs((i % RTS_N) - gtx), az = Math.abs(((i / RTS_N) | 0) - gtz);
     return (ax > az) ? (ax - az) + 1.41421 * az : (az - ax) + 1.41421 * ax; }
   P.g[start] = 0; P.f[start] = H(start); P.stamp[start] = run; P.state[start] = 1; _rtsHeapPush(start);
@@ -13085,7 +13103,17 @@ function _rtsPath(sx, sz, gx, gz, dom) {
                        _rtsBlocked(cx2, cz2 + dz, dom))) continue;   /* no corner cutting */
       var ni = _rtsIdx(nx, nz);
       if (P.stamp[ni] === run && P.state[ni] === 2) continue;
-      var ng = P.g[cur] + ((dx && dz) ? 1.41421 : 1);
+      /* A STEP UPHILL COSTS MORE THAN A STEP ON THE FLAT - see RTS_CLIMB_COST in
+         core/relief.js, which is what sends a column along to a ramp instead of straight over
+         a knoll. Read out of G.height directly rather than through _rtsTileElev: both cells
+         cleared _rtsBlocked above so both are in bounds, and this is the innermost loop of the
+         hottest function in the simulation.
+
+         ONLY THE RISE IS CHARGED, never the descent, and that is what lets the octile
+         heuristic below stay untouched: every extra cost is non-negative, so H can still not
+         overestimate and A* is still admissible. A downhill DISCOUNT would break it. */
+      var rise = HGT ? (HGT[ni] - HGT[cur]) * (RTS_ELEV_MAX / 255) : 0;
+      var ng = P.g[cur] + ((dx && dz) ? 1.41421 : 1) + (rise > 0 ? RTS_CLIMB_COST * rise : 0);
       if (P.stamp[ni] !== run) { P.stamp[ni] = run; P.state[ni] = 0; P.g[ni] = 1e9; }
       if (ng < P.g[ni]) { P.g[ni] = ng; P.f[ni] = ng + H(ni); P.came[ni] = cur; P.state[ni] = 1; _rtsHeapPush(ni); }
     }
@@ -13113,11 +13141,36 @@ function _rtsPath(sx, sz, gx, gz, dom) {
      normally), which is why this survived: the case only bites where the goal is somewhere the
      unit can never stand, and until there were ships every goal was walkable ground. */
   if (pts.length && !moved) { pts[pts.length - 1] = { x:gx, z:gz }; }
-  var out = [], px = sx, pz = sz, j = 0;
+  /* THE PULL MUST NOT UNDO THE CLIMB THE SEARCH JUST PAID FOR, and left alone it does. The
+     search routes a column round a knoll and along to a ramp; the puller then asks only
+     "is the straight line to that far waypoint PASSABLE", which over a knoll it is, collapses
+     the whole detour to one segment, and drives the column straight up the thing it went round.
+     The climb cost would have been spent for nothing and no test would have noticed, because
+     every unit still arrives.
+
+     So a shortcut has to be no worse UPHILL than the route it replaces, within a tolerance
+     (RTS_PULL_SLACK) that exists only so the bilinear's own wobble across nominally flat ground
+     cannot refuse a pull. The chain's climb is accumulated once, up front, in the same
+     half-tile sampling the shortcut is measured with - comparing a sampled line against summed
+     cell-to-cell deltas would be comparing two different quantities. On a flat map every term
+     here is zero and the loop is exactly the one it always was. */
+  var cum = null, pcx = sx, pcz = sz, acc = 0;
+  if (HGT) {                       /* null for a boat - see the note on HGT above */
+    cum = [];
+    for (var ci = 0; ci < pts.length; ci++) {
+      acc += _rtsLineClimb(pcx, pcz, pts[ci].x, pts[ci].z);
+      cum.push(acc); pcx = pts[ci].x; pcz = pts[ci].z;
+    }
+  }
+  var out = [], px = sx, pz = sz, j = 0, pc = 0;
   while (j < pts.length) {
     var far = j;
-    for (var k = pts.length - 1; k > j; k--) { if (_rtsClearLine(px, pz, pts[k].x, pts[k].z)) { far = k; break; } }
-    out.push(pts[far]); px = pts[far].x; pz = pts[far].z; j = far + 1;
+    for (var k = pts.length - 1; k > j; k--) {
+      if (!_rtsClearLine(px, pz, pts[k].x, pts[k].z)) continue;
+      if (cum && _rtsLineClimb(px, pz, pts[k].x, pts[k].z) > cum[k] - pc + RTS_PULL_SLACK) continue;
+      far = k; break;
+    }
+    out.push(pts[far]); px = pts[far].x; pz = pts[far].z; pc = cum ? cum[far] : 0; j = far + 1;
   }
   return out;
 }
@@ -13238,6 +13291,251 @@ function _rtsHarvested(S, n) {
   var lost = n - kept;
   if (lost > 0) S.spill += lost;
   return lost;
+}
+</script>
+<script>/* core/relief.js - what the height of the ground MEANS to the simulation. Part of rts.core.
+
+   The battlefield got relief, and for two changes the sim could not tell. Height was a
+   property of the map that only the renderer read - which was deliberate, and is written up
+   at length in core/grid.js: nothing in pathing, combat, harvesting or sight consulted it, so
+   no balance could move and no generated map could be cut in two by ground that had not been
+   there before. This file is where that stops being true, on purpose, and every number in it
+   was picked off a measurement rather than off taste.
+
+   ------------------------------------------------------------------------------------------
+   WHAT THE MEASUREMENTS SAID, INCLUDING THE RULE THEY KILLED.
+
+   The obvious first rule - STEEP GROUND IS IMPASSABLE, so ramps become the only way up - is
+   not here, and cannot be. core/terrain.js finishes with four passes that stop any cell
+   standing more than 85/255 above its lowest neighbour, which QUANTISES the slope: measured
+   over eight seeds, the 90th percentile of slope on open ground is 0.417 and the maximum is
+   0.589, on every single seed. There are essentially two slopes on the map, flat and the cap.
+   So no threshold separates a cliff from a ramp - a ramp IS ground at the cap - and blocking
+   above 0.30, 0.35 and 0.40 all block the same cells. What that does to the map:
+
+       reachable ground from the player's start, as a share of what it was
+       slope > 0.30   15% .. 35%      slope > 0.35   15% .. 35%      slope > 0.40   15% .. 35%
+
+   The map cut into quarters, identically at every threshold. The generator ALREADY draws the
+   distinction properly and does it with rock: the ridge is laid along the plateau contour only
+   where a second mask allows, so a walled stretch is a cliff and a bare stretch is a ramp.
+   That rule exists, it works, and a slope test would only fight it.
+
+   WHAT DOES HAVE REACH IS THE GROUND UNITS CROSS. Sampling every unit every ten seconds of a
+   match, the share standing on ground above half height ran 2.9%, 4.5%, 13.3% and 32.8% on
+   four seeds - relief is not scenery the army walks past, it is ground the army is on. But
+   fighting is not: bases are placed on the flat (seven of eight base sites at height zero),
+   the opponent walks at the base, and 90% of all shots fired were between two things at
+   EXACTLY the same height. So the rules that bite are about crossing terrain, and a rule about
+   shooting across it is nearly a no-op. Both are here, sized accordingly.
+
+   AND ONE WARNING ABOUT THAT LAST FIGURE, because it was nearly read the wrong way round. The
+   first engagement probe reported that no shot in 729 was ever fired by the HIGHER of the two
+   parties - 0.0%, not "rare" - which looked like a fact about terrain and was a fact about the
+   harness: it drove the idle ladder, where the player builds nothing, so only the opponent
+   ever fires. Level ground is real; the perfect asymmetry was the probe. */
+
+/* How high an observer's eye sits above the ground it stands on. Only sight uses it, and it is
+   what stops a unit being blinded by the cell it is standing on: at eye level 0 every slope
+   above the observer occludes everything behind it including its own far side. 1.5 is a little
+   under half a tile - a tank commander's head, not a spotter tower. */
+var RTS_EYE = 1.5;
+
+/* ------------------------------------------------------------------- climbing --
+   The uphill component of a step, in world units, and the two things it is spent on.
+
+   RTS_CLIMB_SLOW is how much a climb costs a unit's speed. A unit crossing the cap slope
+   (0.417) climbs 1.67 world units per cell, and at 1.6 that lands it at 1/(1+0.667) = 0.60 of
+   its rated speed - a ramp is visibly a ramp. The floor stops the sum running away on the one
+   diagonal corner case the terrain allows (0.589, which would otherwise reach 0.51).
+
+   DOWNHILL IS NOT A BONUS, and that is not an oversight. Free speed downhill makes a unit
+   oscillate at the crest - fast into the dip, slow out of it - and, worse, makes the fastest
+   route between two points on the flat a detour through a hollow. Uphill only is monotone:
+   the flat route is never slower than a route with climb in it.
+
+   RTS_CLIMB_COST is the same idea inside A*, in units of "how many flat cells is one world
+   unit of climb worth". At 0.6, one full step up (1.67 units) costs 1.0 - a climbed cell costs
+   what two flat cells cost. That is enough to send a unit round a knoll or along to a ramp,
+   and far too little to send it round the map: the longest detour it can ever justify is two
+   cells per cell of climb avoided. */
+var RTS_CLIMB_SLOW = 1.6;
+var RTS_CLIMB_MIN  = 0.55;
+var RTS_CLIMB_COST = 0.6;
+
+/* The climb from one world point to another: the rise, or zero if it falls. */
+function _rtsClimb(x0, z0, x1, z1) {
+  return Math.max(0, _rtsElev(x1, z1) - _rtsElev(x0, z0));
+}
+
+/* The speed multiplier for a unit at (x,z) heading in direction (dx,dz), which need not be
+   normalised. Sea and air are exempt: a boat has no ground under it and _rtsElev would hand it
+   the seabed, and an aircraft is not on the ground at all. */
+function _rtsClimbSpeed(e, x, z, dx, dz) {
+  if (!e || e.air) return 1;
+  var d = (e.type === 'unit') ? rtsUnitDef(e.def) : null;
+  if (d && d.sea) return 1;
+  var l = Math.hypot(dx, dz);
+  if (!l) return 1;
+  /* Sampled a whole cell ahead rather than at the sub-step the unit is about to take: a step
+     is a few hundredths of a tile, and a difference read over that distance is the bilinear's
+     own interpolation, not the shape of the ground. */
+  var rise = _rtsClimb(x, z, x + dx / l * RTS_TILE, z + dz / l * RTS_TILE);
+  return Math.max(RTS_CLIMB_MIN, 1 / (1 + RTS_CLIMB_SLOW * rise / RTS_TILE));
+}
+
+/* ---------------------------------------------------------------- the horizon --
+   Whether an observer at (tx,tz) can see each cell around it, as a flat Uint8Array over the
+   (2r+1) square. The ground itself is the only occluder - a building is not tall enough to
+   hide a hillside behind it and RA never had one hide anything.
+
+   ONE PASS, OUTWARDS, each cell inheriting the steepest slope its ray has climbed so far. The
+   alternative - walking a fresh ray to every cell - is the same answer for ten times the work,
+   and this runs on every unit and every structure the player owns at 15 Hz. A cell's PARENT is
+   the cell one step closer to the observer along its own ray: its offset scaled by (r-1)/r and
+   rounded. WHICH ORDER "outwards" MEANS is the whole correctness of the pass and is not the
+   obvious choice - see the note above _rtsHorizon.
+
+   The test is the classic horizon: the cell is seen if the slope from the eye to its GROUND is
+   at least the steepest slope already climbed on that ray. Flat ground never occludes itself -
+   slope rises from -eye/d toward zero as distance grows, so each cell beats the last - which
+   is what makes a flat map read exactly as it did before this file existed.
+
+   IT IS NOT SYMMETRIC WITH BEING SEEN, and the interesting case is the one that surprised the
+   probe: an observer in the middle of a plateau is occluded MORE than one in a valley (17-30%
+   of its disc against 11-17%), because its own plateau lip hides the ground below and beyond.
+   That is right, and it is the tactical content of the rule - to see down off high ground you
+   have to go to the edge of it. The compensation for standing high is RTS_ELEV_SIGHT below,
+   which is a bigger disc, not a clearer one. */
+/* ONE BUFFER AT THE MAXIMUM RANGE, indexed off a fixed centre rather than off the range of the
+   sweep currently running. Sizing it per call is the obvious thing and it is a trap: the stride
+   would change with the range, so a short-sighted infantryman sweeping after a Cruiser would
+   read the Cruiser's slopes through its own arithmetic. RTS_SIGHT_MAX caps every range, so one
+   21x21 buffer serves them all and the stride is a constant.
+
+   IT IS NEVER CLEARED, because it never needs to be: every cell is written before anything
+   reads it. That rests entirely on the walk order below, which is the part that was wrong the
+   first time and is worth stating precisely. */
+var _RTS_HZ = null, _RTS_HZ_V = null;
+
+/* One cell of the sweep: inherit the ray's steepest slope so far from the parent, decide, pass
+   it on. Kept out of the loop rather than inlined so the walk below reads as a walk. */
+function _rtsHzStep(hz, vis, w, c, tx, tz, eye, dx, dz) {
+  var k = (dz + c) * w + (dx + c);
+  var r = (Math.abs(dx) > Math.abs(dz)) ? Math.abs(dx) : Math.abs(dz);
+  var px = Math.round(dx * (r - 1) / r), pz = Math.round(dz * (r - 1) / r);
+  var ph = hz[(pz + c) * w + (px + c)];
+  var s = (_rtsTileElev(tx + dx, tz + dz) - eye) / (Math.sqrt(dx * dx + dz * dz) * RTS_TILE);
+  vis[k] = (s >= ph - 1e-6) ? 1 : 0;
+  hz[k] = (s > ph) ? s : ph;
+}
+
+/* CHEBYSHEV RINGS - square rings, one cell wide, walked outwards - and NOT the ring table
+   _rtsSightFrom uses. That table is ordered by ROUNDED EUCLIDEAN distance, and a parent is
+   picked by Chebyshev radius, so the two orders disagree: (2,-4) is at Euclidean 4.47 and its
+   parent (2,-3) at 3.61, which both round to ring 4, and within ring 4 the table emits the
+   child first. Brute-forced over every offset at every range: 16 of 1196 parent lookups read a
+   cell the sweep had not written yet. The failure was quiet - those cells fell back to "nothing
+   occluding" and leaked about 1% of the disc visible - which is exactly why it survived being
+   reasoned about instead of checked.
+
+   A Chebyshev walk cannot have that problem. The parent of a cell at ring r is that cell scaled
+   by (r-1)/r, whose dominant axis is exactly r-1 - so the parent is always in the ring
+   immediately inside, always already written, for every cell and every range. e2e/highground
+   asserts it directly rather than trusting this paragraph.
+
+   The whole SQUARE is swept, not just the disc, because the caller does the circular filtering
+   and a square has no cells to special-case. 441 cells at the maximum range against 317 for the
+   circle: the sweep costs about 6us either way and this way there is nothing to get wrong. */
+function _rtsHorizon(tx, tz, range) {
+  var w = RTS_SIGHT_MAX * 2 + 1, c = RTS_SIGHT_MAX;
+  if (!_RTS_HZ) { _RTS_HZ = new Float32Array(w * w); _RTS_HZ_V = new Uint8Array(w * w); }
+  var hz = _RTS_HZ, vis = _RTS_HZ_V;
+  var eye = _rtsTileElev(tx, tz) + RTS_EYE;
+  hz[c * w + c] = -1e9; vis[c * w + c] = 1;          /* the cell underfoot occludes nothing */
+  for (var r = 1; r <= range; r++) {
+    for (var i = -r; i <= r; i++) {
+      _rtsHzStep(hz, vis, w, c, tx, tz, eye, i, -r);
+      _rtsHzStep(hz, vis, w, c, tx, tz, eye, i, r);
+      if (i > -r && i < r) {
+        _rtsHzStep(hz, vis, w, c, tx, tz, eye, -r, i);
+        _rtsHzStep(hz, vis, w, c, tx, tz, eye, r, i);
+      }
+    }
+  }
+  return vis;
+}
+/* Where a (dx,dz) offset lands in the buffer above. Callers must not do this arithmetic
+   themselves - the stride is the whole reason the buffer is a fixed size. */
+function _rtsHorizonAt(vis, dx, dz) {
+  return vis[(dz + RTS_SIGHT_MAX) * (RTS_SIGHT_MAX * 2 + 1) + (dx + RTS_SIGHT_MAX)];
+}
+
+/* The total CLIMB along a straight line, in world units - every rise summed, falls ignored.
+   Sampled half a tile at a time, which is fine enough to catch a ridge crossed at a corner and
+   coarse enough that the string-puller can afford to ask about it. */
+function _rtsLineClimb(x0, z0, x1, z1) {
+  var n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, z1 - z0) / (RTS_TILE * 0.5)));
+  var acc = 0, ph = _rtsElev(x0, z0);
+  for (var i = 1; i <= n; i++) {
+    var t = i / n, h = _rtsElev(x0 + (x1 - x0) * t, z0 + (z1 - z0) * t);
+    if (h > ph) acc += h - ph;
+    ph = h;
+  }
+  return acc;
+}
+/* How much extra climb a straightened shortcut may carry before it is refused. A tenth of a
+   step: enough that the bilinear's own wobble across a flat cell never blocks a pull, far less
+   than the 1.67 a real level costs. */
+var RTS_PULL_SLACK = 0.17;
+
+/* ------------------------------------------------------------- height in a fight --
+   Extra sight, in CELLS, for standing high: the full height of the map is worth two more
+   cells of disc, and RTS_SIGHT_MAX still caps the result, so this widens the view without
+   letting anything see further than the original's own limit.
+
+   And extra weapon reach, in WORLD UNITS per world unit of height advantage over the target.
+   Measured, this fires on about one shot in ten and never in a base assault, because bases sit
+   on the flat - it is worth having for the fight over a ramp and it is deliberately too small
+   to move a base fight, which is also why the ladder did not notice it. Advantage only: being
+   below does not shorten your reach, or a unit shelling uphill would be unable to answer
+   something it can plainly see. */
+var RTS_ELEV_SIGHT = 2;
+var RTS_ELEV_RANGE = 0.9;
+
+/* HOW HIGH A THING IS STANDING, which is not the same question as how high the ground is.
+
+   A BOAT FLOATS. It is at sea level whatever byte G.height happens to carry for the cell it is
+   on, and reading the ground under it is reading the seabed. On a generated map that never
+   showed, because core/terrain.js pins water to zero - measured, 0 of 3187 water cells across
+   three seeds carry any height at all. It shows the moment water exists that the generator did
+   not put there: e2e/navy cuts its duel arena by overwriting G.terrain and G.blocked and NOT
+   G.height, so its open sea lies over whatever hills were there, and submarines lost their whole
+   advantage over gunboats - 67% of the fleet against 33% before this file, 56% against 61%
+   after - because hulls were being handed reach for standing on underwater hills.
+
+   The same will be true of any map this game did not generate: a player's own RA scenario, or
+   anything the editor saves. Fixing the arena would have fixed the spec and left the bug.
+
+   Air is at its own altitude for the same reason and has been from the start. */
+function _rtsStandHeight(e) {
+  if (!e || e.air) return 0;
+  if (_rtsDomainOf(e) === 'sea') return 0;
+  return _rtsElev(e.x, e.z);
+}
+
+function _rtsSightBonus(e) {
+  if (!e || e.air) return 0;
+  return Math.round(_rtsStandHeight(e) / RTS_ELEV_MAX * RTS_ELEV_SIGHT);
+}
+/* The reach `a` has against `b`, given a weapon range. Air at either end opts out entirely - an
+   aircraft is not shooting from the ground under it. A boat does NOT opt out, it simply stands
+   at zero: a coastal gun on a bluff really should outrange the hull it is shelling, and that
+   falls out of the same subtraction rather than needing a rule of its own. */
+function _rtsElevReach(a, b, range) {
+  if (!a || !b || a.air || b.air) return range;
+  var adv = _rtsStandHeight(a) - _rtsStandHeight(b);
+  return adv > 0 ? range + adv * RTS_ELEV_RANGE : range;
 }
 </script>
 <script>/* core/terrain.js - generating the ground: rock ridges, forest, roads and the inlet, plus the
@@ -14486,16 +14784,22 @@ function _rtsRadiusTable() {
   _RTS_RAD = { off:off, count:count };
   return _RTS_RAD;
 }
-/* Sight_From: mark everything within `range` cells as seen now and explored forever. */
+/* Sight_From: mark everything within `range` cells as seen now and explored forever - except
+   what the ground itself hides. The disc is still a disc; _rtsHorizon (core/relief.js) takes
+   the bites out of it where a ridge stands between the eye and the cell. On flat ground it
+   takes none - slope from the eye rises toward zero with distance, so every cell clears the
+   one before it - which is what makes this the loop it always was on a map without relief. */
 function _rtsSightFrom(tx, tz, range) {
   var G = window._rtsG, T = _rtsRadiusTable();
   range = Math.max(0, Math.min(RTS_SIGHT_MAX, range | 0));
   var n = T.count[range] * 2, off = T.off, rr = range * range;
+  var seen = _rtsHorizon(tx, tz, range);
   for (var i = 0; i < n; i += 2) {
     var dx = off[i], dz = off[i + 1];
     /* Sight_From filters the ring list by TRUE distance as well - the offset table is a
        superset, and this is what makes the revealed area an exact circle. */
     if (dx * dx + dz * dz > rr) continue;
+    if (!_rtsHorizonAt(seen, dx, dz)) continue;
     var x = tx + dx, z = tz + dz;
     if (x < 0 || z < 0 || x >= RTS_N || z >= RTS_N) continue;
     var c = z * RTS_N + x;
@@ -14515,7 +14819,9 @@ function _rtsVisTick(dt) {
     if (e.dead || e.side !== 'player') continue;
     var def = e.type === 'struct' ? rtsStructDef(e.def) : rtsUnitDef(e.def);
     if (!def) continue;
-    _rtsSightFrom(_rtsTX(e.x), _rtsTX(e.z), rtsSightTiles(def));
+    /* Standing high is worth a wider disc - see RTS_ELEV_SIGHT. _rtsSightFrom clamps to
+       RTS_SIGHT_MAX, so the original's own ten-cell ceiling still holds over the bonus. */
+    _rtsSightFrom(_rtsTX(e.x), _rtsTX(e.z), rtsSightTiles(def) + _rtsSightBonus(e));
   }
   G.visDirty = 1;                 /* the renderer only re-bakes the shroud when this is set */
 }
@@ -15955,7 +16261,13 @@ function _rtsFindTarget(e, range, w) {
        look for a target it CAN hit. Same shape as the aa rule above and for the same reason. */
     if (!_rtsWeaponReaches(w, o)) continue;
     var dist = _rtsRangeTo(e, o);
-    if (dist > range) continue;
+    /* Standing above what you are shooting at is worth a little reach - see RTS_ELEV_RANGE in
+       core/relief.js. Applied to the RANGE rather than to the distance, deliberately:
+       _rtsRangeTo is plain geometry and half its callers ask it questions with nothing to do
+       with shooting - how far to the refinery, which of two threats is nearer, is the transport
+       close enough to board. An asymmetric distance would have quietly answered all of those
+       differently too, and none of them are about height. */
+    if (dist > _rtsElevReach(e, o, range)) continue;
     var v = _rtsEvalObject(e, o, dist, w);
     if (v > bv) { bv = v; best = o; }
   }
@@ -15982,7 +16294,7 @@ function _rtsPickWeapon(e, tgt) {
   for (var i = 0; i < ws.length; i++) {
     var w = ws[i], mod = rtsVerses(w, tgt);
     var v = mod * 1000;
-    if (dist <= w.range) v *= 2;
+    if (dist <= _rtsElevReach(e, tgt, w.range)) v *= 2;
     if (!mod) v = 0;                                  /* FIRE_CANT */
     if (v > bv) { bv = v; best = w; }
   }
@@ -16574,6 +16886,11 @@ function _rtsSteer(e, dt, d) {
   var sp = d.speed * (d.kind === 'infantry' ? Math.max(0.35, align) : align * align);
   sp *= _rtsBias(e.side).speed;                    /* GroundspeedBias */
   sp *= rtsCrateMult(e, 'speed');
+  /* A CLIMB COSTS SPEED - see core/relief.js. Asked about the direction the hull is actually
+     pointing rather than at the waypoint, because that is the direction it is about to move:
+     the step below is taken along e.rot, and a unit still swinging round is not yet climbing
+     anything. */
+  sp *= _rtsClimbSpeed(e, e.x, e.z, Math.cos(e.rot), Math.sin(e.rot));
   if (e.prone) sp *= RTS_PRONE_SPEED;
   var nx = e.x + Math.cos(e.rot) * sp * dt, nz = e.z + Math.sin(e.rot) * sp * dt;
   /* THE UNIT'S OWN DOMAIN, and both of the tests below have to ask in it. They used to ask in
@@ -16936,7 +17253,7 @@ function _rtsUpdateUnit(e, dt) {
        an assault lose fifty tanks while killing one defender. */
     var shootAt = null, chasing = false;
     if (tgt) {
-      if (_rtsRangeTo(e, tgt) <= _rtsReach(e)) shootAt = tgt;
+      if (_rtsRangeTo(e, tgt) <= _rtsElevReach(e, tgt, _rtsReach(e))) shootAt = tgt;
       else { chasing = true; shootAt = _rtsFindTarget(e, _rtsReach(e)); }
     }
     if (shootAt) {
@@ -16957,7 +17274,7 @@ function _rtsUpdateUnit(e, dt) {
       /* NoMovingFire (UDATA.CPP): some hulls cannot fire on the move. Rather than simply
          withholding the shot - which would leave artillery trundling past its target forever -
          a unit in range STOPS, and fires on the tick after it has halted. */
-      var inRange = _rtsRangeTo(e, shootAt) <= fw.range;
+      var inRange = _rtsRangeTo(e, shootAt) <= _rtsElevReach(e, shootAt, fw.range);
       /* SHOOT AND SCOOT. NoMovingFire stops a hull so it can fire, and _rtsStandoff walks it
          backwards - left alone the two fight each other every tick and the stop always wins,
          so a standoff unit would acquire at its full reach (good) and then never actually give
@@ -17112,7 +17429,11 @@ function _rtsUpdateStruct(e, dt) {
   if (e.recoil > 0) e.recoil -= dt;
   /* a browned-out base loses its defences - power actually matters */
   if (_rtsPowerFactor(e.side) < 0.999) return;
-  if (!e.target || e.target.dead || _rtsRangeTo(e, e.target) > w.range) e.target = _rtsFindTarget(e, w.range, w);
+  /* The drop test has to ask with the SAME reach the acquire did. A turret on high ground can
+     acquire past w.range; if this line still dropped at w.range it would let go of that target
+     and immediately re-acquire it every tick, and a gun that re-acquires every tick is a gun
+     whose barrel never finishes swinging round. */
+  if (!e.target || e.target.dead || _rtsRangeTo(e, e.target) > _rtsElevReach(e, e.target, w.range)) e.target = _rtsFindTarget(e, w.range, w);
   if (!e.target) return;
   var ta = Math.atan2(e.target.z - e.z, e.target.x - e.x), td = ta - e.rot;
   while (td > Math.PI) td -= Math.PI * 2; while (td < -Math.PI) td += Math.PI * 2;

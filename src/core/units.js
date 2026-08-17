@@ -229,7 +229,7 @@ function _rtsUpdateUnit(e, dt) {
        an assault lose fifty tanks while killing one defender. */
     var shootAt = null, chasing = false;
     if (tgt) {
-      if (_rtsRangeTo(e, tgt) <= _rtsReach(e)) shootAt = tgt;
+      if (_rtsRangeTo(e, tgt) <= _rtsElevReach(e, tgt, _rtsReach(e))) shootAt = tgt;
       else { chasing = true; shootAt = _rtsFindTarget(e, _rtsReach(e)); }
     }
     if (shootAt) {
@@ -250,7 +250,7 @@ function _rtsUpdateUnit(e, dt) {
       /* NoMovingFire (UDATA.CPP): some hulls cannot fire on the move. Rather than simply
          withholding the shot - which would leave artillery trundling past its target forever -
          a unit in range STOPS, and fires on the tick after it has halted. */
-      var inRange = _rtsRangeTo(e, shootAt) <= fw.range;
+      var inRange = _rtsRangeTo(e, shootAt) <= _rtsElevReach(e, shootAt, fw.range);
       /* SHOOT AND SCOOT. NoMovingFire stops a hull so it can fire, and _rtsStandoff walks it
          backwards - left alone the two fight each other every tick and the stop always wins,
          so a standoff unit would acquire at its full reach (good) and then never actually give
@@ -405,7 +405,11 @@ function _rtsUpdateStruct(e, dt) {
   if (e.recoil > 0) e.recoil -= dt;
   /* a browned-out base loses its defences - power actually matters */
   if (_rtsPowerFactor(e.side) < 0.999) return;
-  if (!e.target || e.target.dead || _rtsRangeTo(e, e.target) > w.range) e.target = _rtsFindTarget(e, w.range, w);
+  /* The drop test has to ask with the SAME reach the acquire did. A turret on high ground can
+     acquire past w.range; if this line still dropped at w.range it would let go of that target
+     and immediately re-acquire it every tick, and a gun that re-acquires every tick is a gun
+     whose barrel never finishes swinging round. */
+  if (!e.target || e.target.dead || _rtsRangeTo(e, e.target) > _rtsElevReach(e, e.target, w.range)) e.target = _rtsFindTarget(e, w.range, w);
   if (!e.target) return;
   var ta = Math.atan2(e.target.z - e.z, e.target.x - e.x), td = ta - e.rot;
   while (td > Math.PI) td -= Math.PI * 2; while (td < -Math.PI) td += Math.PI * 2;
