@@ -272,6 +272,10 @@ function _rtsResizeCanvases() {
   return { W:W, H:H };
 }
 function _rtsOnResize() {
+  /* The readout button is built here rather than in the markup because it belongs to the
+     renderer, not to the shell: it is only meaningful once there is a canvas to describe. The
+     call is idempotent - see _rtsGfxInit - so running it on every resize costs nothing. */
+  if (typeof _rtsGfxInit === 'function') _rtsGfxInit();
   var s = _rtsResizeCanvases();
   if (s) _rtsRResize(s.W, s.H);
 }

@@ -554,6 +554,16 @@
 #rtsEd .ed-status.ok  { color: #7fc98a; }
 #rtsEd .ed-status.bad { color: #d08a72; }
 #rtsEd .ed-status.warn{ color: #e2b23c; }
+
+/* The render readout (ui/gfxstat.js). Pinned to a corner of the stage, pointer-transparent so
+   it can never eat a click meant for the battlefield under it, and tabular figures so the
+   numbers do not jitter sideways while they update. */
+#rcgRts #rtsGfxOut{position:absolute;left:6px;top:6px;z-index:9;display:none;pointer-events:none;
+  font:11px/1.4 ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums;
+  color:#bfe9ff;background:rgba(6,10,14,.72);border:1px solid #2b4657;border-radius:4px;
+  padding:3px 6px;white-space:nowrap}
+#rcgRts .rts-btns #rtsGfxBtn{font-size:10px;font-weight:700;letter-spacing:.5px}
+#rcgRts .rts-btns #rtsGfxBtn.on{color:#7fd0ff;border-color:#3f7fd0}
 </style>
 <style>
 /* --- standalone shell: the title screen this app boots into --- */
@@ -885,7 +895,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">4f470a3 · 2026-08-17</div>
+  <div id="rtsBuild" title="build">9ef970f · 2026-08-17</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -21520,12 +21530,30 @@ function rts3dRestore() {
   if (want !== '0') _r3dApply(true, true);
 }
 
+/* HOW MANY DEVICE PIXELS THE 3D BUFFER GETS PER CSS PIXEL, capped independently of the 2D
+   renderer's dpr. camera.js picks up to 4 and must - the 2D mode stamps pixel art onto whole
+   device pixels - but this mode draws meshes, so its size is a pure fill-rate knob and the blit
+   in render/frame.js scales it up to the presentation canvas anyway. Measured, a dpr-3 phone
+   carried 1.46M pixels and a dpr-4 one 2.10M against the 816k of the 1280x800 desktop this game
+   is judged on; at 2 they become 647k and 526k. 2 rather than 1 because the shadow map, the
+   occlusion and the sea's specular all read as edges and stair-step at 1. The full table, what
+   this does NOT yet prove, and the on-device control are in e2e/renderscale and ui/gfxstat.js. */
+var R3D_MAX_SCALE = 2;
+
 function _r3dResize() {
-  var R3 = window._R3D, main = document.getElementById('rtsCv');
+  var R3 = window._R3D, main = document.getElementById('rtsCv'), R = window._rtsR;
   if (!R3 || !main) return;
-  if (R3.cv.width !== main.width || R3.cv.height !== main.height) {
-    R3.cv.width = main.width; R3.cv.height = main.height;
-  }
+  /* The 2D canvas is the reference for CSS size because it is the one being presented, and its
+     backing store is cssPx * R.dpr - so this recovers the CSS box without reading layout. */
+  var dpr = (R && R.dpr) || 1;
+  /* A pinned scale from the GFX control wins over the cap, so a player can measure their own
+     device at every resolution it can show - see ui/gfxstat.js. Still bounded by dpr: a buffer
+     larger than the screen is pure cost. */
+  var pin = (typeof _rtsGfxWant === 'function') ? _rtsGfxWant() : null;
+  R3.scale = pin ? Math.min(dpr, pin) : Math.min(dpr, R3D_MAX_SCALE);
+  var w = Math.max(1, Math.round(main.width / dpr * R3.scale));
+  var h = Math.max(1, Math.round(main.height / dpr * R3.scale));
+  if (R3.cv.width !== w || R3.cv.height !== h) { R3.cv.width = w; R3.cv.height = h; }
   R3.gl.viewport(0, 0, R3.cv.width, R3.cv.height);
 }
 
@@ -22733,7 +22761,14 @@ function _r3dFrame(G) {
      exactly the device pixel ratio, which reads as clicks landing beside units on any laptop
      with display scaling. */
   var z = _rtsZoom();
-  var cam = [R.focus.x, R.focus.z, 2 * z * R.dpr / R3.cv.width, 2 * z * R.dpr / R3.cv.height];
+  /* R3.scale, NOT R.dpr. The two were the same number until the 3D buffer got its own cap
+     (R3D_MAX_SCALE in gl3d.js), and the identity is what this line was written against: the
+     product below is 2*z*scale / (cssPx*scale) = 2*z/cssPx, so it is invariant to the buffer's
+     resolution ONLY while the numerator names the buffer's own scale. Leave R.dpr here with a
+     capped buffer and the world is drawn dpr/scale too large - on a Galaxy S9+ that is twice
+     over - while camera.js goes on projecting clicks at the right size, which is the exact
+     "clicks land beside units" failure the note above warns about. */
+  var cam = [R.focus.x, R.focus.z, 2 * z * R3.scale / R3.cv.width, 2 * z * R3.scale / R3.cv.height];
   var invD = 1 / _r3dEyeDist();
   var vb = _r3dViewBounds();
 
@@ -24099,6 +24134,9 @@ function _rtsRFrame(dt) {
 
   /* Last, over the finished battlefield and nothing else. */
   _rtsPost(g);
+  /* The render readout samples here, at the end of the frame walk, so what it times is a
+     whole frame of this renderer - see ui/gfxstat.js. It throttles its own repaint. */
+  if (typeof _rtsGfxFrame === 'function') _rtsGfxFrame();
 }
 
 
@@ -25054,6 +25092,10 @@ function _rtsResizeCanvases() {
   return { W:W, H:H };
 }
 function _rtsOnResize() {
+  /* The readout button is built here rather than in the markup because it belongs to the
+     renderer, not to the shell: it is only meaningful once there is a canvas to describe. The
+     call is idempotent - see _rtsGfxInit - so running it on every resize costs nothing. */
+  if (typeof _rtsGfxInit === 'function') _rtsGfxInit();
   var s = _rtsResizeCanvases();
   if (s) _rtsRResize(s.W, s.H);
 }
@@ -25085,6 +25127,120 @@ function _rtsWatchSize() {
   U.ro.observe(st);
 }
 
+</script>
+<script>/* ui/gfxstat.js - the render readout and the manual scale control.
+
+   THIS EXISTS BECAUSE THIS PROJECT CANNOT MEASURE A PHONE. The only GPU the test machine has is
+   SwiftShader, which renders this scene at about two frames a second, so every frame time ever
+   quoted from it is a fact about a software rasteriser and nothing else. Every performance claim
+   in the 3D renderer has therefore had to be made in pixel counts, draw calls and uploaded
+   bytes - real quantities, but not the one that decides whether the game feels good in a hand.
+
+   So the instrument goes to the device. GFX cycles the 3D buffer's resolution and the readout
+   says what that costs, which turns "is 2.6 megapixels too many for this phone" from a guess
+   into a thing a player can read off the screen in ten seconds.
+
+   THE SCALE IS THE 3D BUFFER'S ALONE. render/camera.js picks a device pixel ratio of up to 4
+   for the 2D renderer and must, because that mode stamps pixel art onto whole device pixels;
+   the 3D mode draws meshes and render/frame.js blits its buffer up to the presentation canvas
+   whatever size it is. See R3D_MAX_SCALE in render3d/gl3d.js. `auto` means that cap. */
+
+var RTS_GFX_LS = 'rtsGfxScale';        /* '' = auto, or '1' / '2' / '3' / '4' */
+
+/* What the player asked for, or null for auto. Read through here rather than off the key so a
+   corrupted or hand-edited value cannot wedge the renderer at a size it cannot draw. */
+function _rtsGfxWant() {
+  var v = null;
+  try { v = window.localStorage.getItem(RTS_GFX_LS); } catch (e) { v = null; }
+  var n = parseInt(v, 10);
+  return (n >= 1 && n <= 4) ? n : null;
+}
+function rtsGfxSet(n) {
+  try {
+    if (n) window.localStorage.setItem(RTS_GFX_LS, String(n));
+    else window.localStorage.removeItem(RTS_GFX_LS);
+  } catch (e) {}
+  /* Force the next _r3dResize to notice: it only re-sizes when the numbers differ, and the
+     numbers it compares are the ones it is about to recompute. */
+  var R3 = window._R3D;
+  if (R3 && R3.cv) { R3.scale = -1; if (typeof _r3dResize === 'function') _r3dResize(); }
+  _rtsGfxSync();
+}
+/* auto -> 1 -> 2 -> 3 -> 4 -> auto, skipping anything above the device's own dpr, which would
+   be a buffer larger than the screen can show. */
+function rtsGfxCycle() {
+  var R = window._rtsR, dpr = (R && R.dpr) || 1, cur = _rtsGfxWant();
+  var n = cur ? cur + 1 : 1;
+  if (n > dpr) n = null;
+  rtsGfxSet(n);
+}
+
+/* The readout. Frame time as a MEDIAN over the last second rather than a mean: one long frame
+   from a garbage collection or a texture upload drags a mean around and tells the reader
+   nothing about how the game feels. */
+var _RTS_GFX = { t: [], last: 0, on: false };
+function _rtsGfxFrame() {
+  var S = _RTS_GFX;
+  /* BUILT FROM HERE rather than from the shell's resize handler, which is where this started
+     and which does not run when a match opens - so the control only appeared if the window
+     happened to be resized, and on a phone it never appeared at all. The frame walk is the one
+     thing guaranteed to run, and _rtsGfxInit early-outs once the button exists, so the cost is
+     a single getElementById per frame. */
+  if (!S.built) { _rtsGfxInit(); S.built = !!document.getElementById('rtsGfxBtn'); }
+  if (!S.on) return;
+  var now = (window.performance || Date).now();
+  if (S.last) S.t.push(now - S.last);
+  S.last = now;
+  if (S.t.length > 90) S.t.shift();
+  if (now - (S.paint || 0) < 400) return;         /* the readout itself must not cost a frame */
+  S.paint = now;
+  var el = document.getElementById('rtsGfxOut');
+  if (!el) return;
+  var a = S.t.slice().sort(function (x, y) { return x - y; });
+  var med = a.length ? a[a.length >> 1] : 0;
+  var R3 = window._R3D, R = window._rtsR;
+  var px = (R3 && R3.cv) ? R3.cv.width * R3.cv.height : 0;
+  var want = _rtsGfxWant();
+  el.textContent = med.toFixed(1) + 'ms  ' + (med > 0 ? (1000 / med).toFixed(0) : '0') + 'fps' +
+    '   ' + (R3 && R3.cv ? R3.cv.width + 'x' + R3.cv.height : '-') +
+    ' (' + (px / 1e6).toFixed(2) + 'MP)' +
+    '   scale ' + ((R3 && R3.scale) || '-') + '/' + ((R && R.dpr) || '-') +
+    (want ? ' pinned' : ' auto');
+}
+function _rtsGfxSync() {
+  var b = document.getElementById('rtsGfxBtn');
+  if (b) {
+    var w = _rtsGfxWant();
+    b.textContent = 'GFX ' + (w ? w + 'x' : 'AUTO');
+    b.className = _RTS_GFX.on ? 'on' : '';
+  }
+  var el = document.getElementById('rtsGfxOut');
+  if (el) el.style.display = _RTS_GFX.on ? 'block' : 'none';
+}
+/* Long-press or right-click shows and hides the readout; a tap cycles the scale. One control,
+   because the top bar is already tight on a 360px phone - see the note in ui/topbar. */
+function _rtsGfxInit() {
+  var row = document.querySelector('#rcgRts .rts-btns');
+  if (!row || document.getElementById('rtsGfxBtn')) return;
+  var b = document.createElement('button');
+  b.id = 'rtsGfxBtn';
+  b.title = 'Tap: 3D render scale. Hold: show the frame readout.';
+  b.onclick = function () { rtsGfxCycle(); };
+  b.oncontextmenu = function (e) { e.preventDefault(); _RTS_GFX.on = !_RTS_GFX.on; _rtsGfxSync(); return false; };
+  var held = null;
+  b.addEventListener('touchstart', function () {
+    held = setTimeout(function () { _RTS_GFX.on = !_RTS_GFX.on; _rtsGfxSync(); held = null; }, 500);
+  }, { passive: true });
+  b.addEventListener('touchend', function (e) {
+    if (held) { clearTimeout(held); held = null; }
+    else { e.preventDefault(); }        /* the hold already acted - do not also cycle */
+  });
+  row.appendChild(b);
+  var out = document.createElement('div');
+  out.id = 'rtsGfxOut';
+  document.querySelector('#rcgRts .rts-stage').appendChild(out);
+  _rtsGfxSync();
+}
 </script>
 <script>/* ui/sidebar.js - the sidebar: tabs, the build list, and the per-frame readouts.
    Part of rts.ui, which owns the DOM.

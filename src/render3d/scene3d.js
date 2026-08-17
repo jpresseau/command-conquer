@@ -21,7 +21,14 @@ function _r3dFrame(G) {
      exactly the device pixel ratio, which reads as clicks landing beside units on any laptop
      with display scaling. */
   var z = _rtsZoom();
-  var cam = [R.focus.x, R.focus.z, 2 * z * R.dpr / R3.cv.width, 2 * z * R.dpr / R3.cv.height];
+  /* R3.scale, NOT R.dpr. The two were the same number until the 3D buffer got its own cap
+     (R3D_MAX_SCALE in gl3d.js), and the identity is what this line was written against: the
+     product below is 2*z*scale / (cssPx*scale) = 2*z/cssPx, so it is invariant to the buffer's
+     resolution ONLY while the numerator names the buffer's own scale. Leave R.dpr here with a
+     capped buffer and the world is drawn dpr/scale too large - on a Galaxy S9+ that is twice
+     over - while camera.js goes on projecting clicks at the right size, which is the exact
+     "clicks land beside units" failure the note above warns about. */
+  var cam = [R.focus.x, R.focus.z, 2 * z * R3.scale / R3.cv.width, 2 * z * R3.scale / R3.cv.height];
   var invD = 1 / _r3dEyeDist();
   var vb = _r3dViewBounds();
 
