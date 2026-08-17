@@ -425,6 +425,9 @@ function _rtsRFrame(dt) {
 
   /* Last, over the finished battlefield and nothing else. */
   _rtsPost(g);
+  /* The render readout samples here, at the end of the frame walk, so what it times is a
+     whole frame of this renderer - see ui/gfxstat.js. It throttles its own repaint. */
+  if (typeof _rtsGfxFrame === 'function') _rtsGfxFrame();
 }
 
 

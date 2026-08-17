@@ -543,3 +543,13 @@
 #rtsEd .ed-status.ok  { color: #7fc98a; }
 #rtsEd .ed-status.bad { color: #d08a72; }
 #rtsEd .ed-status.warn{ color: #e2b23c; }
+
+/* The render readout (ui/gfxstat.js). Pinned to a corner of the stage, pointer-transparent so
+   it can never eat a click meant for the battlefield under it, and tabular figures so the
+   numbers do not jitter sideways while they update. */
+#rcgRts #rtsGfxOut{position:absolute;left:6px;top:6px;z-index:9;display:none;pointer-events:none;
+  font:11px/1.4 ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums;
+  color:#bfe9ff;background:rgba(6,10,14,.72);border:1px solid #2b4657;border-radius:4px;
+  padding:3px 6px;white-space:nowrap}
+#rcgRts .rts-btns #rtsGfxBtn{font-size:10px;font-weight:700;letter-spacing:.5px}
+#rcgRts .rts-btns #rtsGfxBtn.on{color:#7fd0ff;border-color:#3f7fd0}

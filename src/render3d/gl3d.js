@@ -347,12 +347,30 @@ function rts3dRestore() {
   if (want !== '0') _r3dApply(true, true);
 }
 
+/* HOW MANY DEVICE PIXELS THE 3D BUFFER GETS PER CSS PIXEL, capped independently of the 2D
+   renderer's dpr. camera.js picks up to 4 and must - the 2D mode stamps pixel art onto whole
+   device pixels - but this mode draws meshes, so its size is a pure fill-rate knob and the blit
+   in render/frame.js scales it up to the presentation canvas anyway. Measured, a dpr-3 phone
+   carried 1.46M pixels and a dpr-4 one 2.10M against the 816k of the 1280x800 desktop this game
+   is judged on; at 2 they become 647k and 526k. 2 rather than 1 because the shadow map, the
+   occlusion and the sea's specular all read as edges and stair-step at 1. The full table, what
+   this does NOT yet prove, and the on-device control are in e2e/renderscale and ui/gfxstat.js. */
+var R3D_MAX_SCALE = 2;
+
 function _r3dResize() {
-  var R3 = window._R3D, main = document.getElementById('rtsCv');
+  var R3 = window._R3D, main = document.getElementById('rtsCv'), R = window._rtsR;
   if (!R3 || !main) return;
-  if (R3.cv.width !== main.width || R3.cv.height !== main.height) {
-    R3.cv.width = main.width; R3.cv.height = main.height;
-  }
+  /* The 2D canvas is the reference for CSS size because it is the one being presented, and its
+     backing store is cssPx * R.dpr - so this recovers the CSS box without reading layout. */
+  var dpr = (R && R.dpr) || 1;
+  /* A pinned scale from the GFX control wins over the cap, so a player can measure their own
+     device at every resolution it can show - see ui/gfxstat.js. Still bounded by dpr: a buffer
+     larger than the screen is pure cost. */
+  var pin = (typeof _rtsGfxWant === 'function') ? _rtsGfxWant() : null;
+  R3.scale = pin ? Math.min(dpr, pin) : Math.min(dpr, R3D_MAX_SCALE);
+  var w = Math.max(1, Math.round(main.width / dpr * R3.scale));
+  var h = Math.max(1, Math.round(main.height / dpr * R3.scale));
+  if (R3.cv.width !== w || R3.cv.height !== h) { R3.cv.width = w; R3.cv.height = h; }
   R3.gl.viewport(0, 0, R3.cv.width, R3.cv.height);
 }
 
