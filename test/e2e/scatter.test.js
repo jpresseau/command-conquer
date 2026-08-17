@@ -20,8 +20,15 @@
 
    IT MEASURES THE EMITTED GEOMETRY, NOT THE ARITHMETIC. Re-deriving the offset expressions in
    the spec and checking they look scattered would pass with the fix reverted, because the spec
-   would be grading its own copy of the formula. So this hooks _r3Box/_r3Cone/_r3Cyl through a
+   would be grading its own copy of the formula. So this hooks the placement builders through a
    real _r3dWorldBuild and reads the placements that came out.
+
+   WHICH BUILDERS THOSE ARE moved when the forest was rebuilt into forest3d.js, and the hook
+   list moved with them. A canopy used to be a stack of _r3Cone tiers and is now _r3dSkirt
+   whorls or an _r3dCrown, so a hook list of the three original primitives would have gone on
+   reporting - truthfully, and uselessly - on trunks alone: the tier-profile check below would
+   then compare "one trunk" against "one trunk" for every tree on the map and pass on a forest
+   with no variety in it at all. The claims here are unchanged; only the names are.
 
    The diagonal test carries its own CONTROL: the same profile comparison against an ORTHOGONAL
    neighbour, which was never expected to repeat. Before, the diagonal ran 51.6% against the
@@ -59,11 +66,15 @@ var S = new Suite('scatter');
     /* --- run the REAL builder, recording what it places --- */
     var log = [];
     var oc = window._r3Cone, ob = window._r3Box, oy = window._r3Cyl;
+    var os = window._r3dSkirt, ow = window._r3dCrown;
     window._r3Cone = function (out, x, y, z) { log.push({ k: 'cone', x: x, z: z }); return oc.apply(this, arguments); };
     window._r3Box = function (out, x, y, z) { log.push({ k: 'box', x: x, z: z }); return ob.apply(this, arguments); };
     window._r3Cyl = function (out, x, y, z) { log.push({ k: 'cyl', x: x, z: z }); return oy.apply(this, arguments); };
+    window._r3dSkirt = function (out, x, y, z) { log.push({ k: 'whorl', x: x, z: z }); return os.apply(this, arguments); };
+    window._r3dCrown = function (out, x, y, z) { log.push({ k: 'crown', x: x, z: z }); return ow.apply(this, arguments); };
     _r3dWorldBuild(G);
     window._r3Cone = oc; window._r3Box = ob; window._r3Cyl = oy;
+    window._r3dSkirt = os; window._r3dCrown = ow;
     o.prims = log.length;
 
     /* A placement's offset never leaves its own cell, so bucketing by nearest cell centre
@@ -110,13 +121,18 @@ var S = new Suite('scatter');
 
     /* --- the anti-diagonal canopy stripe. It is the TIER COUNT that repeated, not the
        height: h3 chose the tiers and was constant on the diagonal, h1 chose the height and
-       was not. Split a cell into trees on the trunk cylinders and read the counts. --- */
+       was not. Split a cell into trees on the trunk cylinders and read the counts.
+
+       A tree's profile is now its species AND its whorl count - a conifer's whorls are
+       _r3dSkirt calls and a broadleaf is a single _r3dCrown - which is the same quantity the
+       original tier count was, over a shape that now has two forms to choose between. --- */
     function prof(tx, tz) {
       var L = byCell[tx + ',' + tz]; if (!L) return null;
       var v = [], cur = -1;
       for (var j = 0; j < L.length; j++) {
-        if (L[j].k === 'cyl') { v.push(0); cur++; }
-        else if (L[j].k === 'cone' && cur >= 0) v[cur]++;
+        if (L[j].k === 'cyl') { v.push(''); cur++; }
+        else if (cur >= 0 && L[j].k === 'whorl') v[cur] += 'w';
+        else if (cur >= 0 && L[j].k === 'crown') v[cur] += 'c';
       }
       return v.length ? v.join('|') : null;
     }

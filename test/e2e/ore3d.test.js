@@ -35,10 +35,15 @@
      world with the field zeroed and count the triangles that come back. Those are the tufts
      that used to stand between the crystals.
 
-   THE BUDGET IS PART OF THE CLAIM. e2e/r3dlive holds the map to a million triangles of
-   geometry; taking tufts out of the ore fields spends ~70k of that, and it goes to the forest
-   - which is where world3d.js's own note says the budget belongs - rather than back onto the
-   floor. Checked here so the two moves are measured together. */
+   THE BUDGET IS PART OF THE CLAIM. e2e/r3dlive holds the map to a MINIMUM of a million
+   triangles of geometry - it is a floor on the density, not a ceiling on the cost - and the
+   tufts this takes out of the ore fields have to come back somewhere rather than land on the
+   floor. They go to the forest, which is where world3d.js's own note says the budget belongs.
+   Checked here so the two moves are measured together.
+
+   The "~70k" this note used to quote for those tufts was never right and is not worth
+   preserving: the spec prints the figure it actually measures, which on this seed is 16k with
+   the scatter at three tufts a cell. Read the assertion, not the prose. */
 
 var { chromium } = require('playwright');
 var { Suite } = require('../lib/assert.js');

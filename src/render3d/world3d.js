@@ -11,9 +11,16 @@
    THE BUDGET GOES TO THE FOREST, BY DESIGN. An earlier cut of this file spent two thirds of
    its ~640k triangles on grass tufts - exactly the ground-cover padding the graphics rules
    forbid: the count went up, the picture did not. This mix inverts that: the forest - the
-   thing the player actually looks at and fights around - carries most of the ~1M triangles
-   (2-3 full trees per forest cell), tufts are a sparse flatness-breaker, and the rest is rock
-   and ore. Raising a number here must make the MAP richer, not the floor busier.
+   thing the player actually looks at and fights around - carries most of the ~1M triangles,
+   tufts are a sparse flatness-breaker, and the rest is rock and ore. Raising a number here
+   must make the MAP richer, not the floor busier.
+
+   AND THE SAME ARGUMENT APPLIES INSIDE THE FOREST. The forest's share was being spent on
+   COUNT rather than on shape - 7,639 trees at 101 triangles, and the tiers those triangles
+   drew were invisible because each sat inside the flare of the one below it. forest3d.js
+   holds the rebuilt tree; the trade it makes is fewer trees, each worth about twice the
+   geometry, at a flat total. Density is emphatically not a substitute for shape here: a wood
+   at three trees a cell had no ground and no trunk visible anywhere in it.
 
    CHUNKED, PRE-TRANSFORMED, ONE DRAW PER VISIBLE CHUNK. A million static triangles is a
    light BUILD load, but pushing all of them through the vertex stage every frame is not free
@@ -45,30 +52,19 @@
    depletes and spreads, so its crystal batch follows the field - polled cheaply per frame
    and rebuilt only when the total actually changed. */
 
-/* Density and size knobs, in one place. Trees dominate the budget - see the note above. */
+/* Density and size knobs, in one place. Trees dominate the budget - see the note above, and
+   see forest3d.js for where a tree's own triangles go and what they had to buy to be worth it.
+
+   TUFTS ARE THREE PER CELL, NOT FOUR. The forest's rebuild bought its per-tree detail partly
+   out of its own tree count and partly out of here: four tufts on 6,167 grass cells was
+   246,680 triangles - a quarter of the entire world - spent on ground cover a player never
+   looks at, which is exactly the padding the note at the top of this file was written about.
+   Three still scatters; the freed 60k went into canopies. */
 var R3D_CHUNK = 32;            /* cells per chunk side; 128-cell map -> 4x4 chunks */
-var R3D_TREE_SEG = 12;
-var R3D_TUFTS_PER_CELL = 4;
+var R3D_TUFTS_PER_CELL = 3;
 var R3D_TUFT_ODDS = 0.62;      /* share of grass cells that carry tufts at all */
 var R3D_CRYSTALS_PER_CELL = 5;
 var R3D_WORLD_YMAX = 14;       /* tallest world geometry; the cull margin hangs on it */
-
-/* One tree: trunk and three or four foliage tiers, SIZED by hash - not leaned, whatever an
-   earlier version of this comment claimed. There is no rotation anywhere in the world batch;
-   the geometry is baked straight to world space and drawn with an identity placement, which
-   is the whole reason it can be one buffer per chunk. What varies between trees is height,
-   canopy radius, tier count and tier colour. Heights run 5-9 world units - a cell and a bit
-   to two cells - which is the reference's tree-to-tank proportion. */
-function _r3dTree(out, x, z, h1, h2, h3) {
-  var th = 5 + h1 * 4, tr = 1.2 + h2 * 0.9;
-  _r3Cyl(out, x, 0, z, 0.45 + h3 * 0.2, th * 0.35, '#5a4630', '#463620', 6);
-  var tiers = h3 > 0.45 ? 4 : 3;
-  for (var ti = 0; ti < tiers; ti++) {
-    var ty = th * (0.18 + 0.2 * ti), trr = tr * (1 - ti * 0.22);
-    _r3Cone(out, x, ty, z, trr, trr * 0.1, th * 0.32,
-            (ti + ((h1 * 97) | 0)) & 1 ? '#3d5b2e' : '#456936', R3D_TREE_SEG);
-  }
-}
 
 /* A TURNED, TAPERED, LEANING SLAB - which is the whole difference between rock and rubble.
 
@@ -187,21 +183,28 @@ function _r3dWorldBuild(G) {
         for (var tx = x0; tx < x1; tx++) {
           var k = G.terrain[_rtsIdx(tx, tz)];
           var wx = _rtsWX(tx), wz = _rtsWX(tz);
-          var h1 = _sprHash(tx, tz, 331), h2 = _sprHash(tz, tx, 337), h3 = _sprHash(tx * 3, tz * 7, 341);
+          /* the walk's own hash, and the only one left in it: h2 and h3 sized the old tree and
+             went with it into _r3dTree, which needs the cell coordinates for its per-segment
+             jitter anyway. This one chooses how many trees stand on a forest cell and whether a
+             grass cell carries tufts at all - the two decisions that are the WALK's to make. */
+          var h1 = _sprHash(tx, tz, 331);
           var _lift0 = faces.length, _liftY = _rtsTileElev(tx, tz);
 
           if (k === RTS_T_TREE) {
-            /* a forest cell is a CLUSTER - two or three trees, spread across the cell */
-            var nt = h1 > 0.5 ? 3 : 2;
+            /* ONE OR TWO TREES, not two or three. A cell is four world units across and a
+               canopy is up to two units in radius, so a single tree already closes the canopy
+               over its own cell and a dense wood still reads solid from above - what the third
+               tree bought was a wall with no ground, no trunk and no gap anywhere in it, at
+               the price of the detail on the two in front of it. The size hashes live in
+               _r3dTree now; only the placement is left here.
+
+               The offsets still take BOTH cell coordinates and the sub-index - see the note at
+               the top of this file for what the separable version drew. */
+            var nt = h1 > 0.44 ? 2 : 1;
             for (var tn = 0; tn < nt; tn++) {
               var ox = (_sprHash(tx * 31 + tn, tz, 401) - 0.5) * (RTS_TILE - 1.6);
               var oz = (_sprHash(tz * 31 + tn, tx, 409) - 0.5) * (RTS_TILE - 1.6);
-              /* the SIZE hashes carried the same defect, and one carried it worse:
-                 `_sprHash(tn, tx + tz, 431)` is CONSTANT along an entire anti-diagonal, so
-                 tier count and trunk girth ran in diagonal stripes across every wood. */
-              _r3dTree(faces, wx + ox, wz + oz,
-                       _sprHash(tx * 31 + tn, tz, 419), _sprHash(tz * 31 + tn, tx, 421),
-                       _sprHash(tx * 31 + tn, tz * 31 + tn, 431));
+              _r3dTree(faces, wx + ox, wz + oz, tx, tz, tn);
             }
           } else if (k === RTS_T_ROCK) {
             _r3dRockCell(faces, tx, tz);
