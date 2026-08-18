@@ -10,7 +10,13 @@ function _sprBldSuper(X, key) {
   var m = X.m, W = X.W, D = X.D, C = X.C, S = X.S, DK = X.DK, B = X.B,
       K = X.K, SD = X.SD, P = X.P, TM = X.TM,
       AS = X.AS, RU = X.RU, WH = X.WH, CU = X.CU, OL = X.OL,
-      winRow = X.winRow, pilasters = X.pilasters;
+      winRow = X.winRow, pilasters = X.pilasters, winSide = X.winSide, facade = X.facade,
+      vent = X.vent, duct = X.duct, skylight = X.skylight, hatch = X.hatch,
+      aerial = X.aerial, parapet = X.parapet,
+      roofscape = X.roofscape,
+      pipe = X.pipe, ladder = X.ladder, rail = X.rail, steps = X.steps,
+      drum = X.drum, crates = X.crates, floodlight = X.floodlight, plant = X.plant,
+      sandbags = X.sandbags, ammo = X.ammo;
   if (key === 'mslo') {
     /* MISSILE SILO. A pair of blast doors laid flat with the nose of the missile showing
        through the open one. Deliberately LOW and horizontal - it is the most dangerous thing
@@ -43,6 +49,14 @@ function _sprBldSuper(X, key) {
     _r3Cyl(m, -W / 2 + 6, 3, -D / 2 + 6, 1.2, 4.5, S[2], RTS_PAL.lit, 12);  /* beacon */
     _r3Box(m, 0, 9.8, -D / 2 + 5, 9, 1.2, 3, B.roof, B.roof);            /* team band */
 
+    /* A missile silo is a hardened cap over a shaft: blast doors, hydraulics, plant. */
+    for (var mb = 0; mb < 2; mb++)
+      _r3Box(m, (mb ? 1 : -1) * (W / 4 + 1), 2, 0, W / 3.2, 3.4, D - 8, C[3], C[1]);
+    _r3Cyl(m, -W / 4 - 1, 5.4, D / 2 - 8, 1.2, 5.0, S[2], S[1], 16);
+    _r3Cyl(m, W / 4 + 1, 5.4, D / 2 - 8, 1.2, 5.0, S[2], S[1], 16);
+    plant(0, 2, -D / 2 + 7, 10, 5);
+    floodlight(-W / 2 + 5, 2, D / 2 - 5, 12);
+
   } else if (key === 'iron') {
     /* IRON CURTAIN. A heavy frame holding a lens between two coil banks, aimed sideways. The
        identity is the FRAME with a gap in the middle - a machine that projects something -
@@ -65,6 +79,15 @@ function _sprBldSuper(X, key) {
     _r3Cyl(m, 0, 18, 0, 5, 3.2, RTS_PAL.lit, RTS_PAL.lit, 20);
     _r3Box(m, 0, 10, 0, 6, 1.4, 4, B.roof, B.roof);
     _r3Box(m, -W / 2 + 6, 3, D / 2 - 6, 5, 8, 5, S[2], S[1]);            /* transformer */
+
+    /* The iron curtain is an emitter bank: capacitors, bus work, glazing. */
+    for (var ic = 0; ic < 4; ic++)
+      _r3Cyl(m, (ic & 1 ? 1 : -1) * (W / 2 - 6), 2, (ic & 2 ? 1 : -1) * (D / 2 - 6),
+             2.2, 8.0, CU[1], CU[0], 18);
+    _r3Box(m, 0, 10, 0, W - 10, 0.8, 0.8, CU[2], CU[2]);
+    facade(6, 3.4, W / 2 - 4, D / 2 - 4);
+    roofscape(11.5, W / 2 - 5, D / 2 - 5);
+    ladder(W / 2 - 4, 2, D / 2 - 4, 11);
 
   } else if (key === 'pdox') {
     /* CHRONOSPHERE. A SPHERE in a cradle of arms. Round where the Iron Curtain is square, and
@@ -91,6 +114,17 @@ function _sprBldSuper(X, key) {
     _r3Box(m, 0, 9.5, 0, 8, 1.4, 5, B.roof, B.roof);
     _r3Box(m, W / 2 - 6, 3, -D / 2 + 6, 6, 8, 6, S[2], S[1]);            /* control hut */
 
+    /* The chronosphere is a ring rig: coils on posts, cabinets, a trench. */
+    for (var pc = 0; pc < 6; pc++) {
+      var pang = pc / 6 * Math.PI * 2;
+      _r3Cyl(m, Math.cos(pang) * (W / 2 - 6), 2, Math.sin(pang) * (D / 2 - 6),
+             1.4, 9.0, S[2], S[1], 16);
+      _r3Cyl(m, Math.cos(pang) * (W / 2 - 6), 11, Math.sin(pang) * (D / 2 - 6),
+             2.2, 1.6, CU[1], CU[0], 16);
+    }
+    _r3Box(m, 0, 2, -D / 2 + 6, 7.0, 5.0, 4.0, S[1], S[0]);
+    facade(6, 3.2, W / 2 - 4, D / 2 - 4);
+
   } else if (key === 'gps') {
     /* GPS UPLINK. A dish on a mast. The most familiar shape in the set and the least
        threatening, which is right - it is the one superweapon that shoots nothing. */
@@ -110,6 +144,13 @@ function _sprBldSuper(X, key) {
     _r3Box(m, 0, 13.9, -D / 2 + 6, 8, 1.2, 3, B.roof, B.roof);           /* team band */
     _r3Box(m, -W / 2 + 6, 3, D / 2 - 6, 5, 6, 5, S[2], S[1]);            /* cable box */
 
+    /* GPS is a ground station: equipment shed, cable run, glazing. */
+    _r3Box(m, -W / 2 + 8, 2, D / 2 - 7, 7.0, 5.0, 5.0, C[1], C[3]);
+    roofscape(11.0, W / 2 - 5, D / 2 - 5);
+    pipe(W / 2 - 7, 2, D / 2 - 7, 9, 'y', 1.2);
+    facade(6, 3.2, W / 2 - 4, D / 2 - 4);
+    floodlight(W / 2 - 5, 2, -D / 2 + 5, 11);
+
   } else if (key === 'wall') {
     /* Concrete Wall. Has to tile with itself edge to edge, so it fills the cell exactly and
        nothing may cross the boundary. Simple by necessity and by choice - a wall that draws
@@ -118,6 +159,17 @@ function _sprBldSuper(X, key) {
     _r3Box(m, 0, 9, 0, RTS_TS, 2, RTS_TS, C[3], C[3]);                   /* capping course */
     _r3Box(m, 0, 4.5, 0, RTS_TS, 1, RTS_TS, C[2], C[2]);                 /* joint line */
     _r3Box(m, 0, 0, RTS_TS / 2 - 1, 3, 9, 2, C[2], C[2]);                /* form-tie marks */
+
+    /* A wall section gets a footing and a cap, so a RUN of them reads as coursed masonry
+       rather than as one long extruded bar - which is what a wall is mostly seen as. */
+    _r3Box(m, 0, 0, 0, W - 1, 1.2, D - 1, DK[1], DK[0]);
+    _r3Box(m, 0, 7.0, 0, W - 2.5, 1.0, D - 2.5, C[3], C[1]);
+    /* COURSES. A wall is the most repeated object a base has, so a flat slab is a flat slab
+       twenty times over; three courses with a set-back give a run of them a horizontal line
+       to catch the light along and a shadow under each lip. */
+    for (var wc = 0; wc < 3; wc++)
+      _r3Box(m, 0, 1.2 + wc * 1.9, 0, W - 1.6 - wc * 0.5, 1.7, D - 1.6 - wc * 0.5,
+             wc & 1 ? C[1] : C[2], C[3]);
 
   } else if (key === 'pillbox') {
     /* Pillbox. A small concrete dome with a slit. Low and rounded on purpose: it is the one
@@ -131,6 +183,19 @@ function _sprBldSuper(X, key) {
     for (var pb = 0; pb < 3; pb++)
       _r3Box(m, -8 + pb * 8, 2.5, -8, 6, 3, 4, RTS_PAL.bag[0], RTS_PAL.bag[1]);
 
+    /* A pillbox sits in its own sandbag ring, with a firing slit and a periscope. The ring was
+       five bags evenly spaced, which at sprite size is a dotted line rather than a wall - the
+       shared builder lays two staggered courses instead, so the joints break up and it stacks. */
+    sandbags(1.2, W / 2 - 3, D / 2 - 3, 13);
+    ammo(-W / 2 + 5, 1.2, D / 2 - 6);
+    _r3Box(m, 0, 5.0, D / 2 - 3.2, W - 9, 1.4, 0.8, DK[0], DK[0]);
+    _r3Cyl(m, W / 2 - 5, 6.2, -D / 2 + 5, 0.7, 2.6, S[3], S[2], 16);
+    /* A sloped concrete apron round the dome, and the embrasure hood over the slit. */
+    for (var pa2 = 0; pa2 < 4; pa2++)
+      _r3Box(m, (pa2 & 1 ? 1 : -1) * (W / 2 - 2.2), 1.0, (pa2 & 2 ? 1 : -1) * (D / 2 - 2.2),
+             3.4, 2.2, 3.4, C[3], C[1]);
+    _r3Box(m, 0, 6.6, D / 2 - 3.6, W - 8, 1.0, 2.0, C[3], C[1]);
+
   } else if (key === 'turret') {
     /* Gun Turret. A single BARREL on a low armoured base, lying almost flat - the barrel is
        the read, so it is long and sits clear of everything else. */
@@ -139,7 +204,13 @@ function _sprBldSuper(X, key) {
     _r3Cyl(m, 0, 9, 0, 7, 5, OL[2], B.roof, 20);                         /* turret, team roof */
     _r3Box(m, 0, 10, 8, 3, 3, 13, S[0], S[1]);                           /* barrel */
     _r3Box(m, 0, 10, 15, 4, 4, 3, S[2], S[3]);                           /* muzzle */
-    _r3Box(m, -7, 3, -6, 4, 3, 4, RTS_PAL.bag[0], RTS_PAL.bag[1]);
+    /* A gun turret gets its mounting: a ring base, a revetment, ready ammunition, a scope. */
+    _r3Cyl(m, 0, 1.2, 0, W / 2 - 2.5, 1.6, C[3], C[1], 20);
+    sandbags(2.8, W / 2 - 2.5, D / 2 - 2.5, 13);
+    ammo(-W / 2 + 5, 2.8, -D / 2 + 6);
+    crates(W / 2 - 5, 1.2, D / 2 - 5);
+    _r3Cyl(m, -W / 2 + 4, 4.0, -D / 2 + 4, 0.7, 2.4, S[3], S[2], 16);
+
   } else return false;
   return true;
 }

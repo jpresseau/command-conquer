@@ -895,7 +895,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">f29a6cb · 2026-08-18</div>
+  <div id="rtsBuild" title="build">1a4698b · 2026-08-18</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -6675,7 +6675,14 @@ function _sprBldBase(X, key) {
   var m = X.m, W = X.W, D = X.D, C = X.C, S = X.S, DK = X.DK, B = X.B,
       K = X.K, SD = X.SD, P = X.P, TM = X.TM,
       AS = X.AS, RU = X.RU, WH = X.WH, CU = X.CU, OL = X.OL,
-      winRow = X.winRow, pilasters = X.pilasters;
+      winRow = X.winRow, pilasters = X.pilasters,
+      vent = X.vent, duct = X.duct, skylight = X.skylight, hatch = X.hatch,
+      aerial = X.aerial, parapet = X.parapet,
+      winSide = X.winSide, facade = X.facade,
+      roofscape = X.roofscape,
+      pipe = X.pipe, ladder = X.ladder, rail = X.rail, steps = X.steps,
+      drum = X.drum, crates = X.crates, floodlight = X.floodlight, plant = X.plant,
+      sandbags = X.sandbags, ammo = X.ammo;
       if (key === 'yard') {
     /* Construction Yard. The cameo is a VAULTED HANGAR - a barrel roof over a rectangular hall
        with one big opening in the end - and the arch is the identity. Nothing else in a base
@@ -6750,6 +6757,22 @@ function _sprBldBase(X, key) {
     }
     _r3Cyl(m, -W / 2 + 11, 13, -D / 2 + 11, 3.6, 7, S[0], S[3], 18);
 
+    /* A CONSTRUCTION YARD IS A SITE. The vault is the identity and it is untouched; what was
+       missing is everything a yard does - a crane, a materials stack, a lit office. */
+    _r3Box(m, W / 2 - 9, 12.5, D / 2 - 12, 2.0, 26, 2.0, S[3], S[2]);      /* crane mast */
+    _r3Box(m, W / 2 - 20, 37, D / 2 - 12, 24, 1.6, 1.6, S[2], S[1]);       /* jib */
+    _r3Box(m, W / 2 - 30, 30, D / 2 - 12, 0.5, 7, 0.5, DK[0], DK[0]);      /* the fall */
+    _r3Box(m, W / 2 - 30, 27, D / 2 - 12, 3.0, 2.6, 3.0, S[3], S[1]);      /* the hook block */
+    ladder(W / 2 - 11.5, 12.5, D / 2 - 12, 24);
+    crates(-W / 2 + 12, 3.5, D / 2 - 13); crates(-W / 2 + 19, 3.5, D / 2 - 12);
+    drum(-W / 2 + 12, 3.5, -D / 2 + 13, 2.2, 4.6, RU);
+    drum(-W / 2 + 17, 3.5, -D / 2 + 12, 2.2, 4.6, OL);
+    floodlight(-W / 2 + 7, 3.5, D / 2 - 7, 15);
+    floodlight(W / 2 - 7, 3.5, -D / 2 + 7, 15);
+    plant(0, 12.5, -D / 2 + 14, 12, 7);
+    winRow(D / 2 - 6.5, 7, -W / 2 + 22, 4, 7, 3.0, 3.4);                   /* site office */
+    facade(6, 4.0, W / 2 - 5, D / 2 - 5);
+
   } else if (key === 'power') {
     /* Power Plant. RED BRICK with two tall brick chimneys - that is what the cameo shows on
        both faction sheets, and the chimneys are how you find it in a base. Everything else is
@@ -6770,6 +6793,25 @@ function _sprBldBase(X, key) {
     _r3Box(m, W / 2 - 10, 0, 2, 8, 7, 12, S[2], S[1]);                   /* transformer */
     for (var pt = 0; pt < 3; pt++) _r3Box(m, W / 2 - 12 + pt * 3, 7, 2, 1.5, 5, 1.5, S[3], S[3]);
 
+    /* A POWER PLANT SHOULD LOOK LIKE ONE: transformers, bus bars, cooling, cable runs. It was
+       a shed with two stacks. */
+    for (var pt = 0; pt < 3; pt++) {
+      var px2 = (pt - 1) * 11;
+      _r3Box(m, px2, 2, D / 2 - 9, 7.0, 7.5, 6.0, S[1], S[0]);             /* transformer */
+      _r3Box(m, px2, 9.5, D / 2 - 9, 5.2, 1.4, 4.6, CU[1], CU[0]);         /* its lid */
+      _r3Cyl(m, px2 - 2, 10.9, D / 2 - 9, 0.8, 4.0, WH[0], WH[1], 16);     /* bushings */
+      _r3Cyl(m, px2 + 2, 10.9, D / 2 - 9, 0.8, 4.0, WH[0], WH[1], 16);
+    }
+    _r3Box(m, 0, 15.5, D / 2 - 9, W - 14, 0.6, 0.6, CU[2], CU[2]);         /* bus bar */
+    pipe(-W / 2 + 10, 2, -D / 2 + 10, 14, 'y', 1.6);
+    pipe(W / 2 - 10, 2, -D / 2 + 10, 14, 'y', 1.6);
+    plant(0, 13, -D / 2 + 12, 14, 8);
+    ladder(W / 2 - 6, 2, D / 2 - 4, 12);
+    rail(0, 13, D / 2 - 5, W - 12, false);
+    floodlight(-W / 2 + 5, 2, -D / 2 + 5, 12);
+    facade(6, 3.6, W / 2 - 4, D / 2 - 4);
+    roofscape(13.2, W / 2 - 5, D / 2 - 5);
+
   } else if (key === 'apower') {
     /* Advanced Power Plant. Same brick vocabulary so the pair read as a family, but FOUR
        chimneys on a longer hall. The cooling tower that used to be here is not in the
@@ -6786,6 +6828,25 @@ function _sprBldBase(X, key) {
       _r3Cyl(m, axx, 36 + (ak % 2) * 6, -D / 2 + 9, 5.6, 3, DK[1], DK[3], 18);
     }
     _r3Box(m, 0, 0, -D / 2 + 4, W - 30, 3, 4, C[2], C[0]);
+
+    /* The advanced plant earns its cost with COOLING: two draught towers and a condenser deck.
+       Same vocabulary as the basic plant so they read as a family, at a different scale. */
+    for (var ct = 0; ct < 2; ct++) {
+      var cx2 = (ct ? 1 : -1) * (W / 4 - 1);
+      _r3Cone(m, cx2, 2, -D / 2 + 13, 7.5, 5.2, 15, C[1], 20);            /* tower waist */
+      _r3Cone(m, cx2, 17, -D / 2 + 13, 5.2, 6.4, 4, C[3], 20);            /* its lip */
+      _r3Cyl(m, cx2, 21, -D / 2 + 13, 6.4, 0.8, DK[0], DK[1], 20);        /* the dark mouth */
+    }
+    plant(0, 13, D / 2 - 12, 16, 9);
+    pipe(-W / 2 + 9, 2, 0, 13, 'y', 1.8);
+    pipe(W / 2 - 9, 2, 0, 13, 'y', 1.8);
+    drum(-W / 2 + 8, 2, D / 2 - 8, 2.4, 5.0, OL);
+    drum(-W / 2 + 13, 2, D / 2 - 7, 2.4, 5.0, OL);
+    rail(0, 13, D / 2 - 4, W - 14, false);
+    ladder(W / 2 - 5, 2, D / 2 - 3, 13);
+    floodlight(W / 2 - 6, 2, -D / 2 + 6, 14);
+    facade(6, 3.8, W / 2 - 4, D / 2 - 4);
+    roofscape(13.2, W / 2 - 5, D / 2 - 5);
 
   } else if (key === 'refinery') {
     /* Ore Refinery. The cameo is a dark industrial block with a RUST-coloured upper stage and
@@ -6816,6 +6877,25 @@ function _sprBldBase(X, key) {
     X.vent(2, 24, -18, 2.0, 3.4);
     X.hatch(-5, 24, 15, 5, 4);
 
+    /* A REFINERY PROCESSES SOMETHING, and none of that was on it: no silo, no conveyor, no
+       ducting between the two. The dock end is where a harvester pulls in, so the plant is
+       massed at the other end where it does not fight the vehicle for room. */
+    _r3Cyl(m, -W / 2 + 13, 2, -D / 2 + 13, 6.5, 17, P[1], P[0], 20);      /* holding silo */
+    _r3Cone(m, -W / 2 + 13, 19, -D / 2 + 13, 6.5, 2.0, 4.5, P[2], 20);    /* its cap */
+    _r3Cyl(m, -W / 2 + 13, 23.5, -D / 2 + 13, 1.2, 3.0, S[3], S[2], 16);  /* vent stack */
+    _r3Box(m, -W / 2 + 22, 14, -D / 2 + 13, 16, 2.2, 4.0, S[1], S[0]);    /* conveyor gantry */
+    for (var cv = 0; cv < 5; cv++)                                        /* its trestles */
+      _r3Box(m, -W / 2 + 16 + cv * 4, 2, -D / 2 + 13, 0.8, 12, 0.8, S[3], S[3]);
+    pipe(W / 2 - 11, 2, -D / 2 + 11, 15, 'y', 1.7);
+    plant(4, 13, -D / 2 + 10, 12, 7);
+    drum(W / 2 - 8, 2, D / 2 - 9, 2.3, 4.8, RU);
+    drum(W / 2 - 13, 2, D / 2 - 8, 2.3, 4.8, RU);
+    ladder(-W / 2 + 20, 2, -D / 2 + 8, 13);
+    rail(0, 13, D / 2 - 6, W - 18, false);
+    floodlight(W / 2 - 6, 2, -D / 2 + 6, 13);
+    facade(6, 3.6, W / 2 - 4, D / 2 - 4);
+    roofscape(13.2, W / 2 - 6, D / 2 - 6);
+
   } else if (key === 'barracks') {
     /* Barracks. NISSEN HUTS - three sand-coloured barrel-roofed sheds in a row, which is what
        the cameo shows and is nothing like the pitched hall that used to be here. Three curved
@@ -6831,6 +6911,24 @@ function _sprBldBase(X, key) {
     _r3Box(m, -W / 2 + 8, 15, -D / 2 + 7, 1.6, 15, 1.6, S[3], S[3]);     /* the flag */
     _r3Box(m, -W / 2 + 12, 25, -D / 2 + 7, 7, 5, 1, TM[0], TM[0]);
     _r3Box(m, -W / 2 + 9, 2, D / 2 - 6, 12, 4, 5, RTS_PAL.bag[0], RTS_PAL.bag[1]);
+    /* A BARRACKS IS A CAMP, not three sheds on a slab. Each hut gets its stovepipe and a
+       lit window; the yard in front gets the kit a camp actually has. Twelve calls became
+       forty and the silhouette above the roofline is now chimneys rather than one flag. */
+    for (var bs = 0; bs < 3; bs++) {
+      var bx = -W / 2 + 9 + bs * ((W - 18) / 2);
+      _r3Cyl(m, bx + 4, 13, -D / 2 + 9, 0.9, 6, S[2], DK[0], 16);        /* stovepipe */
+      _r3Cyl(m, bx + 4, 19, -D / 2 + 9, 1.5, 1.2, DK[1], DK[0], 16);     /* its cowl */
+      _r3Box(m, bx - 4.5, 7, D / 2 - 4.2, 2.6, 3.0, 0.6, RTS_PAL.glass, RTS_PAL.glass);
+      _r3Box(m, bx + 4.5, 7, D / 2 - 4.2, 2.6, 3.0, 0.6, RTS_PAL.glass, RTS_PAL.glass);
+      _r3Box(m, bx, 1.6, D / 2 - 8, 9, 0.5, 3.4, RTS_PAL.dirt[0], RTS_PAL.dirt[1]);  /* duckboard */
+    }
+    steps(0, 2, D / 2 - 2.5, 7);
+    crates(W / 2 - 8, 2, D / 2 - 9);
+    drum(W / 2 - 6, 2, -D / 2 + 8, 2.0, 4.2, RU);
+    drum(W / 2 - 11, 2, -D / 2 + 7, 2.0, 4.2, OL);
+    floodlight(-W / 2 + 5, 2, -D / 2 + 5, 12);
+    rail(0, 2, D / 2 - 11, W - 16, false);
+    facade(6.5, 3.2, W / 2 - 3, D / 2 - 4);
 
   } else if (key === 'factory') {
     /* War Factory. The cameo's dominant feature is a big dark roof over an open bay, and
@@ -6896,6 +6994,23 @@ function _sprBldBase(X, key) {
        roof a centre line to be off it. */
     _r3Cyl(m, -W / 2 + 13, 17, -D / 2 + 10, 4.0, 8, S[0], S[3], 18);
     _r3Cyl(m, W / 2 - 13, 17, -D / 2 + 10, 4.0, 8, S[0], S[3], 18);
+    /* A WAR FACTORY IS A WORKS. The saw-tooth roof is the identity; what it needed is the
+       yard around it - the gantry vehicles roll out under, the stock, the services. */
+    _r3Box(m, 0, 2, D / 2 - 5, W - 10, 1.0, 5.0, AS[1], AS[0]);           /* the apron */
+    for (var fg = 0; fg < 2; fg++) {                                      /* door gantry */
+      _r3Box(m, (fg ? 1 : -1) * (W / 2 - 9), 2, D / 2 - 7, 2.4, 15, 2.4, S[2], S[1]);
+    }
+    _r3Box(m, 0, 17, D / 2 - 7, W - 14, 2.0, 2.4, S[1], S[0]);
+    _r3Box(m, 0, 15.4, D / 2 - 7, W - 16, 1.6, 1.0, TM[0], TM[0]);        /* team lintel */
+    plant(-W / 4, 17.5, D / 2 - 14, 11, 7);
+    plant(W / 4, 17.5, D / 2 - 14, 11, 7);
+    pipe(-W / 2 + 8, 2, -D / 2 + 9, 15, 'y', 1.7);
+    crates(W / 2 - 9, 2, -D / 2 + 10); crates(W / 2 - 15, 2, -D / 2 + 9);
+    drum(-W / 2 + 9, 2, D / 2 - 12, 2.2, 4.6, OL);
+    ladder(-W / 2 + 5, 2, 0, 15);
+    rail(0, 17.5, -D / 2 + 6, W - 14, false);
+    floodlight(W / 2 - 5, 2, D / 2 - 4, 14);
+    facade(6, 4.0, W / 2 - 3, D / 2 - 3);
 
   } else return false;
   return true;
@@ -6913,7 +7028,13 @@ function _sprBldTech(X, key) {
   var m = X.m, W = X.W, D = X.D, C = X.C, S = X.S, DK = X.DK, B = X.B,
       K = X.K, SD = X.SD, P = X.P, TM = X.TM,
       AS = X.AS, RU = X.RU, WH = X.WH, CU = X.CU, OL = X.OL,
-      winRow = X.winRow, pilasters = X.pilasters;
+      winRow = X.winRow, pilasters = X.pilasters, winSide = X.winSide, facade = X.facade,
+      vent = X.vent, duct = X.duct, skylight = X.skylight, hatch = X.hatch,
+      aerial = X.aerial, parapet = X.parapet,
+      roofscape = X.roofscape,
+      pipe = X.pipe, ladder = X.ladder, rail = X.rail, steps = X.steps,
+      drum = X.drum, crates = X.crates, floodlight = X.floodlight, plant = X.plant,
+      sandbags = X.sandbags, ammo = X.ammo;
   if (key === 'radar') {
     /* Radar Dome. The dome IS the building - a pale hemisphere on a small dark base, and the
        most instantly identifiable structure in the game. Everything else stays low. */
@@ -6928,6 +7049,17 @@ function _sprBldTech(X, key) {
     _r3Cyl(m, 0, 29, -1, 2, 4, S[1], S[3], 16);
     _r3Cyl(m, 0, 10, -1, 15.6, 1.4, B.roof, B.roof, 22);                 /* team ring at its foot */
     _r3Box(m, W / 2 - 7, 0, 4, 5, 12, 5, S[2], S[1]);                    /* waveguide riser */
+
+    /* A radar station is an INSTRUMENT: the dish is the identity, the rest is the equipment
+       that feeds it - cable trays, a generator set, a lit control room. */
+    facade(6, 3.6, W / 2 - 4, D / 2 - 4);
+    plant(-W / 4, 12, -D / 2 + 8, 9, 6);
+    drum(W / 2 - 7, 2, D / 2 - 8, 2.0, 4.2, OL);
+    pipe(W / 2 - 8, 2, -D / 2 + 9, 11, 'y', 1.4);
+    ladder(-W / 2 + 5, 2, D / 2 - 4, 11);
+    rail(0, 12, D / 2 - 5, W - 12, false);
+    roofscape(12.2, W / 2 - 5, D / 2 - 5);
+    floodlight(-W / 2 + 5, 2, -D / 2 + 5, 12);
 
   } else if (key === 'lab') {
     /* Tech Center. In the cameo this is a TALL PALE OFFICE BLOCK - several storeys of ribbon
@@ -6953,7 +7085,17 @@ function _sprBldTech(X, key) {
     _r3Box(m, -W / 2 + 8, 0, D / 2 - 5, 8, 9, 3, DK[0], DK[1]);          /* entrance */
     _r3Box(m, W / 2 - 10, 32, -2, 2, 14, 2, S[3], S[3]);                 /* mast */
     _r3Box(m, W / 2 - 10, 43, -2, 6, 1.5, 1.5, S[1], S[1]);
-    _r3Cyl(m, 8, 32, 4, 4, 4, S[2], S[1], 16);                           /* rooftop plant */
+    _r3Cyl(m, 8, 32, 4, 4, 4, S[2], S[1], 26);                           /* rooftop plant */
+
+    /* The lab reads as a lab when it has GLASS and services. */
+    facade(6, 4.2, W / 2 - 4, D / 2 - 4);
+    skylight(0, 12.4, 0, W - 16, D - 16);
+    plant(W / 4, 12, -D / 2 + 8, 9, 6);
+    pipe(-W / 2 + 8, 2, -D / 2 + 9, 11, 'y', 1.4);
+    drum(-W / 2 + 7, 2, D / 2 - 8, 2.0, 4.2, WH);
+    ladder(W / 2 - 5, 2, D / 2 - 4, 11);
+    roofscape(12.6, W / 2 - 5, D / 2 - 5);
+    floodlight(W / 2 - 5, 2, -D / 2 + 5, 12);
 
   } else if (key === 'depot') {
     /* Service Depot. The cameo is almost entirely a flat pale OVAL APRON with a small hut at
@@ -6971,6 +7113,28 @@ function _sprBldTech(X, key) {
       _r3Cyl(m, W / 2 - 9, 2, -8 + db * 8, 2.6, 5, RTS_PAL.hazard[0], S[3], 16);
     _r3Box(m, 6, 2, -D / 2 + 7, 12, 4, 4, S[2], S[1]);                   /* toolrack */
 
+    /* A service depot is a workshop YARD, and the detail has to respect what the model above
+       says it is: an apron with a hut at one edge. The first pass at this put a four-wall
+       facade, a roof beam across the middle and a full roofscape on it - windows and roof
+       plant on a building whose roof is the ground. On the contact sheet it read as a comb of
+       trim standing in mid-air over an empty pad, and it contradicted the note two paragraphs
+       up that says keeping the middle empty is the whole point of the shape.
+
+       So the stock goes round the RIM, where a yard keeps it, and the middle stays clear for
+       the vehicle that drives onto it. */
+    crates(-W / 2 + 9, 2, D / 2 - 9); crates(-W / 2 + 15, 2, D / 2 - 8);
+    drum(W / 2 - 8, 2, D / 2 - 8, 2.2, 4.6, RU);
+    drum(W / 2 - 13, 2, D / 2 - 7, 2.2, 4.6, OL);
+    ladder(-W / 2 + 3.5, 2, -2, 10);                        /* up the hut, not up thin air */
+    winSide(-W / 2 + 3.2, 6, -2, 3, 5, 3.0, 3.4);           /* the hut's own glazing */
+    _r3Box(m, -W / 2 + 8, 13.6, -2, 4.5, 2.0, 4.5, S[2], S[1]);   /* its vent */
+    /* jack stands and a tyre stack - the things a depot has that nothing else does */
+    for (var dj = 0; dj < 3; dj++)
+      _r3Box(m, 4 + dj * 7, 2.8, D / 2 - 12, 2.2, 3.4, 2.2, S[3], S[2]);
+    for (var dt = 0; dt < 3; dt++)
+      _r3Cyl(m, W / 2 - 12, 2.8 + dt * 1.5, -D / 2 + 11, 3.0, 1.5, DK[1], DK[2], 16);
+    floodlight(-W / 2 + 5, 2, -D / 2 + 5, 12);
+
   } else if (key === 'helipad') {
     /* A flat pad, and in the reference it is exactly that: a marked square of apron with a
        yellow cross on it and almost nothing standing up. Keeping it low is the point - the one
@@ -6987,6 +7151,18 @@ function _sprBldTech(X, key) {
       _r3Cyl(m, (hp < 2 ? -1 : 1) * (W / 2 - 5), 2.5, (hp % 2 ? 1 : -1) * (D / 2 - 5),
              1.0, 1.8, RTS_PAL.lit, RTS_PAL.lit, 10);
     _r3Cyl(m, W / 2 - 7, 2.5, D / 2 - 7, 2.6, 4.5, RTS_PAL.hazard[0], S[3], 14);    /* fuel drum */
+
+    /* A pad needs its ground support - fuel, a windsock, lights round the circle. */
+    drum(-W / 2 + 7, 1.6, -D / 2 + 7, 2.2, 4.6, RU);
+    drum(-W / 2 + 12, 1.6, -D / 2 + 6, 2.2, 4.6, RU);
+    _r3Box(m, W / 2 - 6, 1.6, -D / 2 + 6, 0.9, 12, 0.9, S[3], S[2]);
+    _r3Cone(m, W / 2 - 6, 13.6, -D / 2 + 6, 1.0, 2.4, 5.0, RTS_PAL.bag[0], 16);
+    for (var pl = 0; pl < 8; pl++) {
+      var pa = pl / 8 * Math.PI * 2;
+      _r3Box(m, Math.cos(pa) * (W / 2 - 4), 1.6, Math.sin(pa) * (D / 2 - 4),
+             1.2, 1.2, 1.2, pl & 1 ? WH[0] : DK[1], WH[1]);
+    }
+    floodlight(W / 2 - 5, 1.6, D / 2 - 5, 11);
 
   } else if (key === 'afld') {
     /* THE AIRFIELD. A runway, which is a thing no other structure in this game is: 3x2 cells of
@@ -7017,6 +7193,31 @@ function _sprBldTech(X, key) {
       _r3Cyl(m, (al < 2 ? -1 : 1) * (W / 2 - 4), 2.2, (al % 2 ? 1 : -1) * (D / 2 - 4),
              0.9, 1.6, RTS_PAL.lit, RTS_PAL.lit, 10);
 
+    /* An airfield is a STRIP with a tower and a fuel farm beside it - and a strip has no roof,
+       which the first pass at this forgot. It carried a facade, roof plant, a handrail and a
+       roofscape at y=12, all of it hanging over open tarmac with nothing underneath. Same
+       mistake as the depot: helpers that suit a box applied to something that is a surface.
+
+       What a strip actually has stands ON it, at deck height. */
+    drum(-W / 2 + 8, 2, -D / 2 + 8, 2.6, 5.4, RU);
+    drum(-W / 2 + 14, 2, -D / 2 + 7, 2.6, 5.4, RU);
+    pipe(-W / 2 + 11, 2, D / 2 - 10, 12, 'y', 1.6);
+    winSide(-W / 2 + 3.2, 5.5, -D / 2 + 5, 2, 4, 2.6, 3.0);       /* the control shack's glass */
+    /* a fuel bowser parked off the threshold, and a ground-power cart beside it */
+    _r3Box(m, W / 2 - 13, 3.0, D / 2 - 9, 12, 3.2, 5.0, OL[1], OL[0]);
+    _r3Cyl(m, W / 2 - 13, 6.2, D / 2 - 9, 2.4, 3.0, OL[2], OL[3], 16);
+    for (var aw = 0; aw < 4; aw++)
+      _r3Cyl(m, W / 2 - 18 + aw * 3.4, 2.9, D / 2 - 9 + (aw & 1 ? 2.6 : -2.6),
+             1.0, 1.2, DK[1], DK[2], 12);
+    _r3Box(m, W / 2 - 21, 3.0, D / 2 - 9, 3.6, 2.6, 3.6, S[2], S[1]);
+    /* marshalling boards down the strip edge - flat, and the only thing tall is the sign */
+    for (var am = 0; am < 4; am++) {
+      var amz = -D / 2 + 12 + am * ((D - 24) / 3);
+      _r3Box(m, -W / 2 + 4, 2.9, amz, 1.0, 3.4, 1.0, S[3], S[3]);
+      _r3Box(m, -W / 2 + 4, 6.3, amz, 0.6, 2.0, 3.2, C[3], C[1]);
+    }
+    floodlight(W / 2 - 5, 2, D / 2 - 5, 13);
+
   } else if (key === 'aagun') {
     /* THE AA GUN. One cell wide and two deep, and the read is entirely in the barrels: a pair of
        long thin tubes ANGLED UP off a small turret. Everything else that shoots in this game
@@ -7031,6 +7232,12 @@ function _sprBldTech(X, key) {
     _r3Box(m, -1.2, 10.5,  1.6, 3.0, 11.0, 1.3, DK[0], DK[2]);
     _r3Box(m, -2.6, 20.5, 0, 3.6, 1.4, 4.6, DK[1], DK[3]);          /* muzzles */
     _r3Box(m,  W / 2 - 4, 3.0, D / 2 - 5, 3.0, 4.0, 3.0, S[2], S[1]);  /* ammo locker */
+
+    /* An emplacement: a revetment, a ready-rack, a light. */
+    sandbags(1.4, W / 2 - 3, D / 2 - 3, 15);
+    ammo(0, 1.4, -D / 2 + 6);
+    crates(W / 2 - 7, 1.4, D / 2 - 7);
+    drum(-W / 2 + 6, 1.4, D / 2 - 6, 1.8, 3.6, OL);
 
   } else if (key === 'silo') {
     /* Ore Silo. The cameo is a LOW RIBBED BUNKER - a wide flat green-grey box with vertical
@@ -7052,6 +7259,12 @@ function _sprBldTech(X, key) {
     _r3Box(m, -W / 2 + 7, 2, -D / 2 + 6, 4, 16, 4, S[3], S[3]);          /* fill pipe */
     _r3Box(m, -W / 2 + 13, 17, -D / 2 + 6, 12, 2, 3, S[2], S[1]);
 
+    /* A silo is a vessel: ladder, cap, pressure pipework. */
+    ladder(W / 2 - 4, 2, 0, 13);
+    pipe(-W / 2 + 6, 2, 0, 10, 'y', 1.4);
+    _r3Cyl(m, 0, 15.5, 0, 1.4, 3.4, S[3], S[2], 16);
+    drum(W / 2 - 6, 2, -D / 2 + 6, 1.8, 3.6, RU);
+
   } else if (key === 'kennel') {
     /* Attack Dog Kennel. Literally a doghouse in the cameo - a red-brown box with a barrel
        roof and an arched black entrance. Tiny, and nothing on it could be mistaken for a
@@ -7063,6 +7276,16 @@ function _sprBldTech(X, key) {
     _r3Box(m, -3, 14, -1, 9, 1.2, 4, B.roof, B.roof);                    /* team band */
     _r3Box(m, 8, 1.5, 2, 5, 2, 4, S[2], S[1]);                           /* feed trough */
     _r3Box(m, 8, 1.5, -6, 1, 8, 1, S[3], S[3]);                          /* post */
+
+    /* A kennel is a run: pens, a wire fence, a water trough. */
+    for (var kp = 0; kp < 3; kp++) {
+      _r3Box(m, (kp - 1) * (W / 3.4), 2, D / 2 - 7, W / 4.2, 5.0, 5.0, SD[kp & 1], SD[2]);
+      _r3Box(m, (kp - 1) * (W / 3.4), 7, D / 2 - 7, W / 4.4, 0.8, 5.4, DK[1], DK[0]);
+    }
+    for (var kf = 0; kf < 7; kf++)
+      _r3Box(m, -W / 2 + 3 + kf * ((W - 6) / 6), 2, -D / 2 + 4, 0.5, 7.0, 0.5, S[3], S[3]);
+    _r3Box(m, 0, 8.6, -D / 2 + 4, W - 5, 0.4, 0.4, S[2], S[2]);
+    _r3Box(m, W / 2 - 7, 2, -D / 2 + 9, 5.0, 1.4, 3.0, C[1], C[3]);
 
   } else return false;
   return true;
@@ -7079,7 +7302,12 @@ function _sprBldWar(X, key) {
   var m = X.m, W = X.W, D = X.D, C = X.C, S = X.S, DK = X.DK, B = X.B,
       K = X.K, SD = X.SD, P = X.P, TM = X.TM,
       AS = X.AS, RU = X.RU, WH = X.WH, CU = X.CU, OL = X.OL,
-      winRow = X.winRow, pilasters = X.pilasters;
+      winRow = X.winRow, pilasters = X.pilasters, winSide = X.winSide, facade = X.facade,
+      vent = X.vent, duct = X.duct, skylight = X.skylight, hatch = X.hatch,
+      aerial = X.aerial, parapet = X.parapet,
+      pipe = X.pipe, ladder = X.ladder, rail = X.rail, steps = X.steps,
+      drum = X.drum, crates = X.crates, floodlight = X.floodlight, plant = X.plant,
+      sandbags = X.sandbags, ammo = X.ammo;
   if (key === 'rocketpit') {
     /* Rocket Turret. TUBES, angled up - a stepped bank so the silhouette is a wedge rather
        than the Gun Turret's single spike. The two must not be confusable. */
@@ -7092,11 +7320,21 @@ function _sprBldWar(X, key) {
     _r3Box(m, 0, 9, 5, 13, 1.5, 3, B.roof, B.roof);
     _r3Box(m, 6, 3, 6, 4, 6, 4, S[2], S[1]);                             /* guidance box */
 
+    /* A rocket pit is a silo in the ground: blast walls, cable runs, service gear. */
+    for (var rb = 0; rb < 4; rb++)
+      _r3Box(m, (rb & 1 ? 1 : -1) * (W / 2 - 4), 2, (rb & 2 ? 1 : -1) * (D / 2 - 4),
+             5.0, 6.5, 5.0, C[3], C[1]);
+    pipe(-W / 2 + 7, 2, D / 2 - 7, 9, 'y', 1.3);
+    drum(W / 2 - 7, 2, D / 2 - 7, 2.0, 4.2, OL);
+    floodlight(W / 2 - 5, 2, -D / 2 + 5, 11);
+    sandbags(0.6, W / 2 - 1.5, D / 2 - 1.5, 16);
+    ammo(-W / 2 + 6, 2, -D / 2 + 7);
+
   } else if (key === 'flametower') {
     /* Flame Tower. A stone column with a flared head on a fuel drum. Tall and narrow is the
        identity - it is the only defence with a vertical silhouette. */
     _r3Box(m, 0, 0, 0, W - 5, 2.5, D - 5, C[2], C[0]);
-    _r3Cyl(m, -5, 2.5, 4, 5, 7, RTS_PAL.hazard[0], S[3], 18);            /* fuel drum */
+    _r3Cyl(m, -5, 2.5, 4, 5, 7, RTS_PAL.hazard[0], S[3], 26);            /* fuel drum */
     /* SAND, because the model's own note calls this a STONE column and stone is not concrete.
        It also puts the one vertical Soviet defence in a different material from the Tesla Coil
        beside it, which is the pair most often built together. */
@@ -7105,6 +7343,13 @@ function _sprBldWar(X, key) {
     _r3Cyl(m, 3, 26.5, -2, 2, 4, RTS_PAL.hazard[0], S[3], 16);           /* pilot */
     _r3Cyl(m, 3, 9, -2, 4.6, 1.4, B.roof, B.roof, 18);                   /* team band */
     _r3Box(m, -1, 6, 1, 6, 1.5, 1.5, S[2], S[1]);                        /* feed pipe */
+
+    /* A flame tower needs its fuel: tank, feed line, valve gear. */
+    _r3Cyl(m, -W / 2 + 6, 2, D / 2 - 6, 2.6, 6.0, RU[1], RU[0], 16);
+    pipe(-W / 2 + 6, 8, D / 2 - 11, 10, 'z', 1.0);   /* the feed line, running out to the tank */
+    _r3Box(m, -W / 2 + 6, 2, -D / 2 + 6, 3.0, 3.0, 3.0, S[2], S[1]);
+    crates(W / 2 - 6, 2, D / 2 - 6);
+    sandbags(0.5, W / 2 - 1.5, D / 2 - 1.5, 14);
 
   } else if (key === 'navalyard' || key === 'subpen') {
     /* Shipyard. A slipway open on one side with a gantry over it - the silhouette has to say
@@ -7170,6 +7415,31 @@ function _sprBldWar(X, key) {
     for (var nb = 0; nb < 3; nb++)                                        /* bollards along the quay */
       _r3Cyl(m, W / 2 - 5, 3, -D / 3 + nb * (D / 3.2), 1.3, 2.6, S[2], S[0], 12);
 
+    /* A yard is a quay: bollards, a crane, stock along the hard. */
+    for (var qb = 0; qb < 4; qb++)
+      _r3Cyl(m, -W / 2 + 8 + qb * ((W - 16) / 3), 2, D / 2 - 4, 1.3, 3.0, S[3], S[2], 16);
+    _r3Box(m, W / 2 - 10, 2, -D / 2 + 9, 1.8, 17, 1.8, S[3], S[2]);
+    _r3Box(m, W / 2 - 18, 19, -D / 2 + 9, 17, 1.4, 1.4, S[2], S[1]);
+    crates(-W / 2 + 9, 2, -D / 2 + 9); crates(-W / 2 + 15, 2, -D / 2 + 8);
+    drum(-W / 2 + 8, 2, D / 2 - 10, 2.2, 4.6, RU);
+    floodlight(W / 2 - 5, 2, D / 2 - 6, 14);
+
+    /* A HULL ON THE STOCKS. This is the one thing a shipyard has that nothing else in the game
+       does, and neither yard had it: the identifying read for a slipway is a ship sitting in it,
+       half-built, propped on blocks. Ribs rather than a solid boat - an open frame says "under
+       construction", and a closed one would just look like a vessel that had run aground in the
+       middle of the base. Kept forward of the gantry so the hoist reads as hanging over it. */
+    _r3Box(m, W / 5, 4.5, 0, 7.0, 2.2, D / 2.6, RU[1], RU[0]);            /* the keel */
+    for (var nh = 0; nh < 7; nh++) {
+      var nz = (nh - 3) * (D / 18), nr = 7.5 - Math.abs(nh - 3) * 1.1;    /* ribs, tapering fore and aft */
+      _r3Box(m, W / 5 - nr / 2, 6.7, nz, 1.1, 5.2, 1.4, RU[2], RU[1]);
+      _r3Box(m, W / 5 + nr / 2, 6.7, nz, 1.1, 5.2, 1.4, RU[2], RU[1]);
+      _r3Box(m, W / 5, 6.7, nz, nr, 1.0, 1.4, RU[0], RU[2]);              /* the frame across */
+      _r3Box(m, W / 5, 2.6, nz, 3.2, 1.9, 2.0, DK[1], DK[2]);             /* keel blocks under it */
+    }
+    ladder(W / 2 - 4, 2, D / 2 - 12, 9);
+    rail(0, 2, -D / 2 + 4, W - 14, false);
+
   } else if (key === 'tesla') {
     /* TESLA COIL. Two cells tall and almost nothing wide - the tallest, thinnest thing either
        army builds, which is the whole point: you should be able to pick a Soviet defensive
@@ -7196,6 +7466,24 @@ function _sprBldWar(X, key) {
     _r3Cyl(m, 0, 35.4, 0, 1.3, 3.1, RTS_PAL.spark[2], RTS_PAL.spark[1], 12);  /* the arc */
     _r3Cyl(m, 0, 41, 0, 1.6, 2.2, RTS_PAL.spark[0], RTS_PAL.spark[1], 12);    /* crown */
 
+    /* A tesla coil is a machine: transformer housing, insulator stack, cable trench. */
+    _r3Box(m, 0, 2, D / 2 - 6, 8.0, 5.0, 5.0, S[1], S[0]);
+    _r3Cyl(m, -2.4, 7, D / 2 - 6, 0.9, 3.4, WH[0], WH[1], 16);
+    _r3Cyl(m, 2.4, 7, D / 2 - 6, 0.9, 3.4, WH[0], WH[1], 16);
+    _r3Box(m, 0, 1.6, 0, 3.0, 0.7, D - 6, DK[1], DK[0]);
+    drum(W / 2 - 6, 2, -D / 2 + 6, 2.0, 4.2, OL);
+    /* THE COIL ITSELF. A tesla coil whose mast is a smooth pole is the one building in the set
+       where the machinery IS the silhouette - so it gets its windings, an insulator stack of
+       stacked discs, and guy wires down to the pad. */
+    for (var tw = 0; tw < 9; tw++)
+      _r3Cyl(m, 0, 9 + tw * 1.5, 0, 2.6 - tw * 0.09, 0.9, CU[tw & 1 ? 1 : 0], CU[2], 20);
+    for (var ti = 0; ti < 4; ti++)
+      _r3Cyl(m, 0, 23.5 + ti * 1.3, 0, 2.0 - ti * 0.18, 0.8, WH[0], WH[1], 18);
+    for (var tg = 0; tg < 3; tg++) {
+      var tga = tg / 3 * Math.PI * 2 + 0.5;
+      _r3Box(m, Math.cos(tga) * (W / 2 - 4), 2, Math.sin(tga) * (D / 2 - 4), 0.6, 9.0, 0.6, S[3], S[2]);
+    }
+
   } else return false;
   return true;
 }
@@ -7212,7 +7500,13 @@ function _sprBldSuper(X, key) {
   var m = X.m, W = X.W, D = X.D, C = X.C, S = X.S, DK = X.DK, B = X.B,
       K = X.K, SD = X.SD, P = X.P, TM = X.TM,
       AS = X.AS, RU = X.RU, WH = X.WH, CU = X.CU, OL = X.OL,
-      winRow = X.winRow, pilasters = X.pilasters;
+      winRow = X.winRow, pilasters = X.pilasters, winSide = X.winSide, facade = X.facade,
+      vent = X.vent, duct = X.duct, skylight = X.skylight, hatch = X.hatch,
+      aerial = X.aerial, parapet = X.parapet,
+      roofscape = X.roofscape,
+      pipe = X.pipe, ladder = X.ladder, rail = X.rail, steps = X.steps,
+      drum = X.drum, crates = X.crates, floodlight = X.floodlight, plant = X.plant,
+      sandbags = X.sandbags, ammo = X.ammo;
   if (key === 'mslo') {
     /* MISSILE SILO. A pair of blast doors laid flat with the nose of the missile showing
        through the open one. Deliberately LOW and horizontal - it is the most dangerous thing
@@ -7245,6 +7539,14 @@ function _sprBldSuper(X, key) {
     _r3Cyl(m, -W / 2 + 6, 3, -D / 2 + 6, 1.2, 4.5, S[2], RTS_PAL.lit, 12);  /* beacon */
     _r3Box(m, 0, 9.8, -D / 2 + 5, 9, 1.2, 3, B.roof, B.roof);            /* team band */
 
+    /* A missile silo is a hardened cap over a shaft: blast doors, hydraulics, plant. */
+    for (var mb = 0; mb < 2; mb++)
+      _r3Box(m, (mb ? 1 : -1) * (W / 4 + 1), 2, 0, W / 3.2, 3.4, D - 8, C[3], C[1]);
+    _r3Cyl(m, -W / 4 - 1, 5.4, D / 2 - 8, 1.2, 5.0, S[2], S[1], 16);
+    _r3Cyl(m, W / 4 + 1, 5.4, D / 2 - 8, 1.2, 5.0, S[2], S[1], 16);
+    plant(0, 2, -D / 2 + 7, 10, 5);
+    floodlight(-W / 2 + 5, 2, D / 2 - 5, 12);
+
   } else if (key === 'iron') {
     /* IRON CURTAIN. A heavy frame holding a lens between two coil banks, aimed sideways. The
        identity is the FRAME with a gap in the middle - a machine that projects something -
@@ -7267,6 +7569,15 @@ function _sprBldSuper(X, key) {
     _r3Cyl(m, 0, 18, 0, 5, 3.2, RTS_PAL.lit, RTS_PAL.lit, 20);
     _r3Box(m, 0, 10, 0, 6, 1.4, 4, B.roof, B.roof);
     _r3Box(m, -W / 2 + 6, 3, D / 2 - 6, 5, 8, 5, S[2], S[1]);            /* transformer */
+
+    /* The iron curtain is an emitter bank: capacitors, bus work, glazing. */
+    for (var ic = 0; ic < 4; ic++)
+      _r3Cyl(m, (ic & 1 ? 1 : -1) * (W / 2 - 6), 2, (ic & 2 ? 1 : -1) * (D / 2 - 6),
+             2.2, 8.0, CU[1], CU[0], 18);
+    _r3Box(m, 0, 10, 0, W - 10, 0.8, 0.8, CU[2], CU[2]);
+    facade(6, 3.4, W / 2 - 4, D / 2 - 4);
+    roofscape(11.5, W / 2 - 5, D / 2 - 5);
+    ladder(W / 2 - 4, 2, D / 2 - 4, 11);
 
   } else if (key === 'pdox') {
     /* CHRONOSPHERE. A SPHERE in a cradle of arms. Round where the Iron Curtain is square, and
@@ -7293,6 +7604,17 @@ function _sprBldSuper(X, key) {
     _r3Box(m, 0, 9.5, 0, 8, 1.4, 5, B.roof, B.roof);
     _r3Box(m, W / 2 - 6, 3, -D / 2 + 6, 6, 8, 6, S[2], S[1]);            /* control hut */
 
+    /* The chronosphere is a ring rig: coils on posts, cabinets, a trench. */
+    for (var pc = 0; pc < 6; pc++) {
+      var pang = pc / 6 * Math.PI * 2;
+      _r3Cyl(m, Math.cos(pang) * (W / 2 - 6), 2, Math.sin(pang) * (D / 2 - 6),
+             1.4, 9.0, S[2], S[1], 16);
+      _r3Cyl(m, Math.cos(pang) * (W / 2 - 6), 11, Math.sin(pang) * (D / 2 - 6),
+             2.2, 1.6, CU[1], CU[0], 16);
+    }
+    _r3Box(m, 0, 2, -D / 2 + 6, 7.0, 5.0, 4.0, S[1], S[0]);
+    facade(6, 3.2, W / 2 - 4, D / 2 - 4);
+
   } else if (key === 'gps') {
     /* GPS UPLINK. A dish on a mast. The most familiar shape in the set and the least
        threatening, which is right - it is the one superweapon that shoots nothing. */
@@ -7312,6 +7634,13 @@ function _sprBldSuper(X, key) {
     _r3Box(m, 0, 13.9, -D / 2 + 6, 8, 1.2, 3, B.roof, B.roof);           /* team band */
     _r3Box(m, -W / 2 + 6, 3, D / 2 - 6, 5, 6, 5, S[2], S[1]);            /* cable box */
 
+    /* GPS is a ground station: equipment shed, cable run, glazing. */
+    _r3Box(m, -W / 2 + 8, 2, D / 2 - 7, 7.0, 5.0, 5.0, C[1], C[3]);
+    roofscape(11.0, W / 2 - 5, D / 2 - 5);
+    pipe(W / 2 - 7, 2, D / 2 - 7, 9, 'y', 1.2);
+    facade(6, 3.2, W / 2 - 4, D / 2 - 4);
+    floodlight(W / 2 - 5, 2, -D / 2 + 5, 11);
+
   } else if (key === 'wall') {
     /* Concrete Wall. Has to tile with itself edge to edge, so it fills the cell exactly and
        nothing may cross the boundary. Simple by necessity and by choice - a wall that draws
@@ -7320,6 +7649,17 @@ function _sprBldSuper(X, key) {
     _r3Box(m, 0, 9, 0, RTS_TS, 2, RTS_TS, C[3], C[3]);                   /* capping course */
     _r3Box(m, 0, 4.5, 0, RTS_TS, 1, RTS_TS, C[2], C[2]);                 /* joint line */
     _r3Box(m, 0, 0, RTS_TS / 2 - 1, 3, 9, 2, C[2], C[2]);                /* form-tie marks */
+
+    /* A wall section gets a footing and a cap, so a RUN of them reads as coursed masonry
+       rather than as one long extruded bar - which is what a wall is mostly seen as. */
+    _r3Box(m, 0, 0, 0, W - 1, 1.2, D - 1, DK[1], DK[0]);
+    _r3Box(m, 0, 7.0, 0, W - 2.5, 1.0, D - 2.5, C[3], C[1]);
+    /* COURSES. A wall is the most repeated object a base has, so a flat slab is a flat slab
+       twenty times over; three courses with a set-back give a run of them a horizontal line
+       to catch the light along and a shadow under each lip. */
+    for (var wc = 0; wc < 3; wc++)
+      _r3Box(m, 0, 1.2 + wc * 1.9, 0, W - 1.6 - wc * 0.5, 1.7, D - 1.6 - wc * 0.5,
+             wc & 1 ? C[1] : C[2], C[3]);
 
   } else if (key === 'pillbox') {
     /* Pillbox. A small concrete dome with a slit. Low and rounded on purpose: it is the one
@@ -7333,6 +7673,19 @@ function _sprBldSuper(X, key) {
     for (var pb = 0; pb < 3; pb++)
       _r3Box(m, -8 + pb * 8, 2.5, -8, 6, 3, 4, RTS_PAL.bag[0], RTS_PAL.bag[1]);
 
+    /* A pillbox sits in its own sandbag ring, with a firing slit and a periscope. The ring was
+       five bags evenly spaced, which at sprite size is a dotted line rather than a wall - the
+       shared builder lays two staggered courses instead, so the joints break up and it stacks. */
+    sandbags(1.2, W / 2 - 3, D / 2 - 3, 13);
+    ammo(-W / 2 + 5, 1.2, D / 2 - 6);
+    _r3Box(m, 0, 5.0, D / 2 - 3.2, W - 9, 1.4, 0.8, DK[0], DK[0]);
+    _r3Cyl(m, W / 2 - 5, 6.2, -D / 2 + 5, 0.7, 2.6, S[3], S[2], 16);
+    /* A sloped concrete apron round the dome, and the embrasure hood over the slit. */
+    for (var pa2 = 0; pa2 < 4; pa2++)
+      _r3Box(m, (pa2 & 1 ? 1 : -1) * (W / 2 - 2.2), 1.0, (pa2 & 2 ? 1 : -1) * (D / 2 - 2.2),
+             3.4, 2.2, 3.4, C[3], C[1]);
+    _r3Box(m, 0, 6.6, D / 2 - 3.6, W - 8, 1.0, 2.0, C[3], C[1]);
+
   } else if (key === 'turret') {
     /* Gun Turret. A single BARREL on a low armoured base, lying almost flat - the barrel is
        the read, so it is long and sits clear of everything else. */
@@ -7341,7 +7694,13 @@ function _sprBldSuper(X, key) {
     _r3Cyl(m, 0, 9, 0, 7, 5, OL[2], B.roof, 20);                         /* turret, team roof */
     _r3Box(m, 0, 10, 8, 3, 3, 13, S[0], S[1]);                           /* barrel */
     _r3Box(m, 0, 10, 15, 4, 4, 3, S[2], S[3]);                           /* muzzle */
-    _r3Box(m, -7, 3, -6, 4, 3, 4, RTS_PAL.bag[0], RTS_PAL.bag[1]);
+    /* A gun turret gets its mounting: a ring base, a revetment, ready ammunition, a scope. */
+    _r3Cyl(m, 0, 1.2, 0, W / 2 - 2.5, 1.6, C[3], C[1], 20);
+    sandbags(2.8, W / 2 - 2.5, D / 2 - 2.5, 13);
+    ammo(-W / 2 + 5, 2.8, -D / 2 + 6);
+    crates(W / 2 - 5, 1.2, D / 2 - 5);
+    _r3Cyl(m, -W / 2 + 4, 4.0, -D / 2 + 4, 0.7, 2.4, S[3], S[2], 16);
+
   } else return false;
   return true;
 }
@@ -7444,6 +7803,29 @@ function _sprBuildingModel(key, side) {
       _r3Box(m, cx + (k - (count - 1) / 2) * gap, y, z, w, h, 1.5, RTS_PAL.glass, RTS_PAL.glass);
     }
   }
+  /* The same row on a side wall - boxes laid along z instead of x. winRow only ever put
+     windows on the two faces that happen to point up and down the screen, so every structure
+     in the game had two blank flanks, and at a 49-degree camera a flank is most of what you
+     see of a building standing to your left or right. */
+  function winSide(x, y, cz, count, gap, w, h) {
+    for (var k = 0; k < count; k++) {
+      _r3Box(m, x, y, cz + (k - (count - 1) / 2) * gap, 1.5, h, w, RTS_PAL.glass, RTS_PAL.glass);
+    }
+  }
+  /* ALL FOUR WALLS AT ONCE: pilasters and two rows of glazing round the whole box. One call
+     where a model used to carry none, and it is the cheapest legibility in the set - a lit
+     window is the thing that says "building" at any distance, and these had blank concrete.
+     Sized off the footprint so every structure gets a row that fits it. */
+  function facade(y, h, hw, hd) {
+    var nW = Math.max(2, Math.round(hw / 5)), nD = Math.max(2, Math.round(hd / 5));
+    var gw = (hw * 2 - 6) / nW, gd = (hd * 2 - 6) / nD;
+    winRow(hd, y, 0, nW, gw, 2.8, h);
+    winRow(-hd, y, 0, nW, gw, 2.8, h);
+    winSide(hw, y, 0, nD, gd, 2.8, h);
+    winSide(-hw, y, 0, nD, gd, 2.8, h);
+    pilasters(hd, y - 1.2, 0, nW + 1, gw, 1.3, h + 3.0);
+    pilasters(-hd, y - 1.2, 0, nW + 1, gw, 1.3, h + 3.0);
+  }
   function pilasters(z, y, cx, count, gap, w, h) {
     for (var k = 0; k < count; k++) {
       _r3Box(m, cx + (k - (count - 1) / 2) * gap, y, z, w, h, 1.5, B.trim, B.trim);
@@ -7510,14 +7892,159 @@ function _sprBuildingModel(key, side) {
     }
   }
 
+  /* A ROOF, FURNISHED. The note above the roofscape helpers says the roof is the largest
+     unbroken area on almost every building and that the camera looks down at it - and then
+     most models called none of them. This is that argument applied to the whole roster in one
+     call: a deterministic spread of vents, ducts, hatches and a parapet, laid out from the
+     roof's own footprint so it fits whatever it is put on.
+
+     Deterministic from (hw, hd) rather than random: the same building must bake to the same
+     sprite every run, or the 2D art changes between loads. */
+  function roofscape(y, hw, hd) {
+    var i, sx = hw * 0.55, sz = hd * 0.55;
+    vent(-sx, y, -sz, 2.2, 3.0);
+    vent(sx, y, sz * 0.2, 1.9, 2.6);
+    duct(0, y, -sz * 0.55, hw * 1.1, false, 3.0);
+    duct(sx * 0.55, y, sz * 0.8, hd * 0.8, true, 2.6);
+    hatch(-sx * 0.6, y, sz * 0.75, 5.0, 4.4, 1.8);
+    for (i = 0; i < 3; i++)
+      _r3Box(m, (i - 1) * (hw * 0.5), y, sz * 0.35, 2.0, 1.2, 2.0, S[2], S[1]);
+    parapet(y, -hd + 1.5, hd - 1.5, -hw + 1.5, hw - 1.5, Math.max(5, hw / 2.2));
+  }
+
+  /* ---------------------------------------------------------------- GROUND CLUTTER --
+     A building at 382 triangles was eight boxes and a cylinder, which is what a base of them
+     read as: clean geometric solids sitting on clean ground. Measured across the roster before
+     this, the mean was 382 triangles a structure against 175 for a single TREE - the thing the
+     player looks at all match had less shape in it than the scenery.
+
+     These are the cheap, repeatable pieces that make a structure look OCCUPIED. Each is one to
+     four primitives, and the point of having them here rather than inline in each model is that
+     six calls in a model file buy twenty primitives of detail - so the files stay readable while
+     the geometry gets five times denser.
+
+     They are DELIBERATELY NOT ground cover. Nothing here scatters gravel or paints the floor: a
+     pipe run, a ladder and a stair are structure, they occlude each other, they cast, and the
+     depth-buffer AO darkens where they meet the wall. That is the difference between detail and
+     padding, and this project's graphics rules draw exactly that line. */
+
+  /* A pipe run with end flanges. Reads as plant even at two pixels wide, because the flanges
+     break the tube into segments that catch the light separately.
+
+     THE AXIS IS REAL, and it was not the first time. This took an `alongZ` flag and ignored it:
+     _r3Cyl builds along Y and only along Y, so every call - including the one that asked for a
+     horizontal feed line - drew the same vertical riser. A flag a helper accepts and discards is
+     worse than no flag, because the call site reads as if it said something. So a horizontal run
+     is built here out of a box tube with collar rings, which is what the shape needs anyway: at
+     the size these are drawn a square section and a round one are the same two pixels, and the
+     collars are the part that reads.
+
+     axis: 'y' (default) rises from y; 'x' and 'z' run centred on (x,y,z) along that axis. */
+  function pipe(x, y, z, len, axis, r) {
+    var rr = r || 1.3, fr = rr * 1.45;
+    if (!axis || axis === 'y') {
+      _r3Cyl(m, x, y, z, rr, len, S[1], S[2], 16);
+      _r3Cyl(m, x, y, z, fr, 1.0, S[3], S[3], 16);
+      _r3Cyl(m, x, y + len - 1.0, z, fr, 1.0, S[3], S[3], 16);
+      return;
+    }
+    var aZ = (axis === 'z'), d = rr * 2;
+    _r3Box(m, x, y - rr, z, aZ ? d : len, d, aZ ? len : d, S[1], S[2]);
+    for (var e = 0; e < 2; e++) {
+      var f = (e ? 0.5 : -0.5) * len + (e ? -0.5 : 0.5);
+      _r3Box(m, x + (aZ ? 0 : f), y - fr, z + (aZ ? f : 0),
+             aZ ? fr * 2 : 1.0, fr * 2, aZ ? 1.0 : fr * 2, S[3], S[3]);
+    }
+  }
+  /* A wall ladder: two stiles and rungs. The rungs are what read - a row of hard little
+     shadows up an otherwise flat face. */
+  function ladder(x, y, z, h) {
+    _r3Box(m, x - 1.5, y, z, 0.5, h, 0.5, S[2], S[2]);
+    _r3Box(m, x + 1.5, y, z, 0.5, h, 0.5, S[2], S[2]);
+    for (var r = 2; r < h; r += 3) _r3Box(m, x, y + r, z, 3.4, 0.4, 0.4, S[3], S[3]);
+  }
+  /* A handrail along a roof edge or catwalk: posts plus a top rail. */
+  function rail(x, y, z, len, alongZ) {
+    var n = Math.max(2, Math.round(len / 5));
+    for (var q = 0; q <= n; q++) {
+      var f = (q / n - 0.5) * len;
+      _r3Box(m, x + (alongZ ? 0 : f), y, z + (alongZ ? f : 0), 0.5, 3.2, 0.5, S[3], S[3]);
+    }
+    _r3Box(m, x, y + 3.2, z, alongZ ? 0.5 : len, 0.4, alongZ ? len : 0.5, S[2], S[2]);
+  }
+  /* Entrance steps, descending out from a front wall along +z. Three treads, each a shade
+     darker as it drops into the shadow of the one above - the AO pass deepens that join for
+     free. No orientation flag: the version that had one carried a branch nothing called, which
+     is a branch nobody has ever seen drawn. Add the other axis when a building wants it. */
+  function steps(x, y, z, w) {
+    for (var t = 0; t < 3; t++) {
+      _r3Box(m, x, y - t * 1.1, z + t * 1.5, w, 1.1, 1.6 + t * 1.5, C[t === 2 ? 3 : 1], C[1]);
+    }
+  }
+  /* A drum: fuel, water or waste, depending on what it stands next to. Two tones so the band
+     round its middle reads at distance. */
+  function drum(x, y, z, r, h, col) {
+    var c = col || RU;
+    _r3Cyl(m, x, y, z, r || 2.2, h || 4.5, c[1], c[0], 16);
+    _r3Cyl(m, x, y + (h || 4.5) * 0.45, z, (r || 2.2) * 1.08, 0.7, c[3], c[3], 16);
+  }
+  /* A stack of crates. Offset on purpose - a neat stack reads as one box. */
+  function crates(x, y, z) {
+    _r3Box(m, x, y, z, 4.2, 3.4, 4.2, SD[1], SD[0]);
+    _r3Box(m, x + 1.1, y + 3.4, z - 0.8, 3.4, 2.8, 3.4, SD[2], SD[1]);
+  }
+  /* A floodlight on a pole, angled in. Every base in the reference has these and they are the
+     tallest thin thing on the site, so they carry the silhouette above the roofline. */
+  function floodlight(x, y, z, h) {
+    _r3Box(m, x, y, z, 1.0, h || 13, 1.0, S[3], S[2]);
+    _r3Box(m, x, y + (h || 13), z, 3.2, 2.2, 2.4, DK[1], DK[0]);
+    _r3Box(m, x, y + (h || 13) + 0.4, z + 1.3, 2.6, 1.6, 0.5, RTS_PAL.glass, RTS_PAL.glass);
+  }
+  /* A SANDBAG REVETMENT: two staggered courses of bags ringing a gun position. Every defence
+     in the reference sits in one, and ours sat on bare concrete - which is most of why the
+     turret and the pillbox read as garden ornaments next to a power plant.
+
+     Staggered on purpose. One course of evenly spaced boxes reads as a dotted line; offsetting
+     the upper course by half a bag makes the joints break up and the row reads as stacked. The
+     ring is elliptical so it fits a rectangular footprint rather than only a square one. */
+  function sandbags(y, rx, rz, n) {
+    var cnt = n || 14;
+    for (var q = 0; q < cnt; q++) {
+      for (var c = 0; c < 2; c++) {
+        var a = ((q + c * 0.5) / cnt) * Math.PI * 2;
+        _r3Box(m, Math.cos(a) * rx, y + c * 1.7, Math.sin(a) * rz,
+               3.0, 1.8, 3.0, RTS_PAL.bag[(q + c) & 1], RTS_PAL.bag[1]);
+      }
+    }
+  }
+  /* An ammunition point: a low box of shells beside the gun it feeds. Three rounds standing in
+     a crate, which is the smallest thing on a defence that still says what the defence eats. */
+  function ammo(x, y, z) {
+    _r3Box(m, x, y, z, 5.0, 2.2, 3.6, OL[0], OL[1]);
+    for (var q = 0; q < 3; q++)
+      _r3Cyl(m, x + (q - 1) * 1.5, y + 2.2, z, 0.6, 2.6, CU[1], CU[0], 16);
+  }
+
+  /* Roof plant: a finned condenser unit. The fins are the whole point - six thin slabs give a
+     roof something that shades as a row rather than as a plate. */
+  function plant(x, y, z, w, d) {
+    _r3Box(m, x, y, z, w, 3.2, d, S[1], S[0]);
+    for (var f = 0; f < 6; f++)
+      _r3Box(m, x + (f - 2.5) * (w / 6.5), y + 3.2, z, w / 12, 1.6, d * 0.86, S[3], S[2]);
+  }
+
   /* The chain is four files now - see sprites/bld-*.js. It was one 500-line function, and
      the size guard in unit/layout caught it the first time a model needed a paragraph of
      explanation. Each arm returns false for a key it does not own. */
   var X = { m:m, W:W, D:D, C:C, S:S, DK:DK, B:B, K:K, SD:SD, P:P, TM:TM,
-            winRow:winRow, pilasters:pilasters,
+            winRow:winRow, pilasters:pilasters, winSide:winSide, facade:facade,
             AS:AS, RU:RU, WH:WH, CU:CU, OL:OL,
             vent:vent, duct:duct, skylight:skylight, hatch:hatch,
-            aerial:aerial, parapet:parapet };
+            aerial:aerial, parapet:parapet,
+            roofscape:roofscape,
+            pipe:pipe, ladder:ladder, rail:rail, steps:steps, drum:drum,
+            crates:crates, floodlight:floodlight, plant:plant,
+            sandbags:sandbags, ammo:ammo };
   _sprBldBase(X, key) || _sprBldTech(X, key) || _sprBldWar(X, key) || _sprBldSuper(X, key);
   return m;
 }
