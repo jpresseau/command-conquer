@@ -1,36 +1,30 @@
-/* THE 3D BUFFER'S RESOLUTION IS ITS OWN, AND SMALLER THAN THE SCREEN'S ON A PHONE.
+/* THE 3D BUFFER RENDERS AT NATIVE RESOLUTION, AND THE PLAYER CAN LOWER IT.
 
-   render/camera.js picks a device pixel ratio of up to 4 and builds a zoom ladder around it,
-   because the 2D mode STAMPS PIXEL ART and a cell has to land on whole device pixels or the
-   sprites smear. None of that reasoning applies to the 3D mode, which draws meshes - so its
-   buffer is a pure fill-rate knob, and render/frame.js already blits whatever size it is up to
-   the presentation canvas. R3D_MAX_SCALE caps it at 2.
+   It was capped at 2 device pixels per CSS pixel for a while, as a fill-rate saving, and the
+   device said no. The premise looked solid - a dpr-3 phone carried 1.46M pixels and a dpr-4 one
+   2.10M against the 816k of the 1280x800 desktop this game is judged on - and then the frame
+   rate was read off an actual iPhone 17 Pro Max through the GFX readout, at every scale its
+   screen can show:
 
-   Measured, backing store per canvas:
+       1x  0.29 MP -> ~30 fps     2x  1.15 MP -> ~30 fps     3x  2.60 MP -> ~30-40 fps
 
-       desktop 1280x800  dpr 1    816k -> 816k     unchanged
-       iPhone 13         dpr 3   1.46M -> 647k     56% of the fill gone
-       Galaxy S9+        dpr 4   2.10M -> 526k     75% of the fill gone
+   A ninefold range in pixels moved nothing. Not fill-bound; the cap bought no frames and cost
+   sharpness on every dense screen. So AUTO is native again and this spec grades what survived:
+   the KNOB. A player on a device that really is fill-bound pins a lower scale and reads the
+   result off the screen, which is the only way this project has ever measured real hardware.
 
-   WHAT THIS FILE DOES NOT YET PROVE, stated first because it is the risk that matters. The
+   WHAT IS STILL NOT PROVEN, kept from the capped version because the risk did not go away. The
    clip-space scale in scene3d.js is 2*z*scale / bufferWidth, which reduces to 2*z/cssWidth and
-   is invariant to the buffer's resolution - but ONLY while the numerator names the BUFFER's
-   scale. Left as R.dpr, as it was while the two were always equal, the world is DRAWN
-   dpr/scale too large (twice over on a Galaxy S9+) while camera.js goes on projecting clicks
-   at the right size: the "clicks land beside units" failure gl3d.js warns about, and a silent
-   one, because the picture still looks like a battlefield.
+   is invariant to the buffer's resolution - but only while the numerator names the BUFFER's
+   scale. Left as R.dpr it draws the world dpr/scale too large while camera.js goes on projecting
+   clicks at the right size: clicks landing beside units, silently. The round trip below does NOT
+   catch that, and this was checked rather than assumed - putting R.dpr back leaves every
+   assertion here green, because _rtsWorldToScreen and _rtsGroundAt are exact inverses of each
+   other whatever the shader does. Catching it needs a pixel cross-check: render a unit at a
+   known world point, find it in the frame, compare. Not written yet.
 
-   The round trip below does NOT catch it, and this was checked rather than assumed: putting
-   R.dpr back leaves every assertion here green. _rtsWorldToScreen and _rtsGroundAt both live in
-   camera.js and are exact inverses of each other whatever the shader is doing, so a projection
-   that agrees with itself proves only that camera.js is self-consistent. Catching a shader that
-   disagrees with camera.js needs a PIXEL cross-check - render a unit at a known world point,
-   find it in the frame, and compare against _rtsWorldToScreen - which is not written yet.
-
-   So what follows grades the cap's arithmetic and its blast radius, and the round trip is kept
-   as a regression net for camera.js itself. The shader agreement is verified by hand for now:
-   worst error 0 world units over 88 sampled points on three devices, and e2e/perspective,
-   e2e/ground, e2e/default3d and e2e/resolution all pass at every scale. */
+   It matters less at native than it did under the cap - at AUTO the two scales are equal again,
+   so the bug can only appear for a player who has pinned one - but it is still there. */
 
 var { chromium, devices } = require('playwright');
 var { Suite } = require('../lib/assert.js');
@@ -38,9 +32,9 @@ var { openPage } = require('../lib/game.js');
 
 var S = new Suite('renderscale');
 var TARGETS = [
-  { name: 'desktop dpr1', opts: { width: 1280, height: 800, dpr: 1 }, capped: false },
-  { name: 'iPhone 13', opts: { device: devices['iPhone 13'] }, capped: true },
-  { name: 'Galaxy S9+', opts: { device: devices['Galaxy S9+'] }, capped: true }
+  { name: 'desktop dpr1', opts: { width: 1280, height: 800, dpr: 1 } },
+  { name: 'iPhone 13', opts: { device: devices['iPhone 13'] } },
+  { name: 'Galaxy S9+', opts: { device: devices['Galaxy S9+'] } }
 ];
 
 (async function () {
@@ -64,11 +58,15 @@ var TARGETS = [
         var e = Math.hypot(gp.x - wx, gp.z - wz);
         if (e > worst) worst = e;
       }
+      var nativePx = R3.cv.width * R3.cv.height;
+      rtsGfxSet(1);                                   /* pin the lowest the knob offers */
+      var pinnedPx = R3.cv.width * R3.cv.height;
+      rtsGfxSet(null);                                /* and back to AUTO for the next target */
       return { on: !!(R3 && R3.on), dpr: R.dpr, scale: R3.scale, cap: window.R3D_MAX_SCALE,
-               mainPx: main.width * main.height, glPx: R3.cv.width * R3.cv.height,
+               mainPx: main.width * main.height, glPx: nativePx, pinnedPx: pinnedPx,
                samples: n, worstErr: +worst.toFixed(3) };
     });
-    r.target = T.name; r.capped = T.capped;
+    r.target = T.name;
     rows.push(r);
     errors = errors.concat(g.errors.filter(function (e) { return !/ServiceWorker/.test(e); }));
     await g.close();
@@ -85,19 +83,20 @@ var TARGETS = [
        rows.every(function (p) { return p.samples >= 10 && p.worstErr < 0.05; }),
        show(function (p) { return p.worstErr + ' world units over ' + p.samples + ' points'; }));
 
-  S.ok('the buffer is capped where the screen is denser than the cap',
-       rows.filter(function (p) { return p.capped; })
-           .every(function (p) { return p.scale === p.cap && p.glPx < p.mainPx * 0.7; }),
-       show(function (p) { return 'dpr ' + p.dpr + ' -> scale ' + p.scale + ', ' +
-            (p.glPx / 1000).toFixed(0) + 'k of ' + (p.mainPx / 1000).toFixed(0) + 'k px'; }));
+  S.ok('the buffer renders at native resolution by default',
+       rows.every(function (p) { return p.scale === p.dpr && p.glPx === p.mainPx; }),
+       show(function (p) { return 'dpr ' + p.dpr + ', scale ' + p.scale + ', ' +
+            (p.glPx / 1000).toFixed(0) + 'k px' +
+            (p.glPx === p.mainPx ? ' = the screen' : ' != the screen ' + (p.mainPx / 1000).toFixed(0) + 'k'); }));
 
-  /* ...AND LEFT ALONE WHERE IT IS NOT, which is the control: a cap that fired everywhere would
-     pass the line above and quietly halve the desktop picture nobody asked it to touch. */
-  S.ok('...and untouched where the screen is no denser than the cap',
-       rows.filter(function (p) { return !p.capped; })
-           .every(function (p) { return p.scale === p.dpr && p.glPx === p.mainPx; }),
-       show(function (p) { return p.capped ? 'capped' : 'scale ' + p.scale + ' = dpr ' + p.dpr +
-            ', ' + (p.glPx === p.mainPx ? 'buffer unchanged' : 'BUFFER MOVED'); }));
+  /* AND THE KNOB STILL LOWERS IT, which is the half worth keeping - and the control that stops
+     the line above passing for the wrong reason. "Native by default" is also what a knob that
+     does nothing at all would report. */
+  S.ok('...and a pinned scale really does shrink it',
+       rows.every(function (p) { return p.dpr === 1 ? p.pinnedPx === p.mainPx
+                                                    : p.pinnedPx < p.mainPx * 0.6; }),
+       show(function (p) { return 'pinned 1x -> ' + (p.pinnedPx / 1000).toFixed(0) + 'k of ' +
+            (p.mainPx / 1000).toFixed(0) + 'k'; }));
 
   S.ok('no page errors', !errors.length, errors.join(' | ') || 'none');
   require('../lib/report.js')(S);

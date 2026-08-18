@@ -895,7 +895,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">decc57b · 2026-08-17</div>
+  <div id="rtsBuild" title="build">f29a6cb · 2026-08-18</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -21530,15 +21530,18 @@ function rts3dRestore() {
   if (want !== '0') _r3dApply(true, true);
 }
 
-/* HOW MANY DEVICE PIXELS THE 3D BUFFER GETS PER CSS PIXEL, capped independently of the 2D
-   renderer's dpr. camera.js picks up to 4 and must - the 2D mode stamps pixel art onto whole
-   device pixels - but this mode draws meshes, so its size is a pure fill-rate knob and the blit
-   in render/frame.js scales it up to the presentation canvas anyway. Measured, a dpr-3 phone
+/* HOW MANY DEVICE PIXELS THE 3D BUFFER GETS PER CSS PIXEL. Native by default; this ceiling
+   exists so ui/gfxstat.js has something to clamp a pinned value against.
+
+   IT WAS 2, AS A FILL-RATE CAP, AND THE DEVICE SAID NO. The premise looked solid - a dpr-3 phone
    carried 1.46M pixels and a dpr-4 one 2.10M against the 816k of the 1280x800 desktop this game
-   is judged on; at 2 they become 647k and 526k. 2 rather than 1 because the shadow map, the
-   occlusion and the sea's specular all read as edges and stair-step at 1. The full table, what
-   this does NOT yet prove, and the on-device control are in e2e/renderscale and ui/gfxstat.js. */
-var R3D_MAX_SCALE = 2;
+   is judged on - then the frame rate was read off a real iPhone 17 Pro Max through the GFX
+   readout: 0.29 MP gave ~30 fps, 1.15 MP ~30, 2.60 MP ~30-40. A ninefold range in pixels moved
+   nothing, so that phone is not fill-bound: the cap bought no frames and cost sharpness on every
+   dense screen. The knob stays (ui/gfxstat.js) for devices that ARE fill-bound. Why 30 and not
+   60 is still open - the 2D renderer has not been read, and a frame-rate cap and a slow 3D path
+   look identical from here. */
+var R3D_MAX_SCALE = 4;   /* = the dpr ceiling in camera.js, so AUTO is native */
 
 function _r3dResize() {
   var R3 = window._R3D, main = document.getElementById('rtsCv'), R = window._rtsR;
