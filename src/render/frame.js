@@ -25,14 +25,27 @@ function _rtsRFrame(dt) {
   var r3on = window._R3D && window._R3D.on;
   if (r3on) {
     _r3dFrame(G);
-    /* The GL canvas is BLITTED here rather than stacked under this one and left to the
-       compositor. Stacking worked in every reduced test and still composited black inside the
-       real page in headless capture - and a renderer this project cannot screenshot is one it
-       cannot verify, so the compositor was fired from the job. The blit costs one full-frame
-       drawImage, buys identical behaviour everywhere, and gets screen shake for free because
-       it happens under the same transform as everything else. */
+    /* The GL canvas is STACKED under this one - _r3dApply flips it visible - and this canvas
+       only CLEARS, so the compositor shows the world through it. It was a per-frame blit for a
+       long time, because stacking once composited black in headless capture and a renderer
+       this project cannot capture is one it cannot verify. Two things changed the answer. The
+       context now carries preserveDrawingBuffer:true, so the GL buffer reads back correctly at
+       any time and every capture path works against the layers themselves (_rtsCompose below
+       rebuilds the exact composited frame on demand - it IS the old blit, kept for the
+       harness). And the blit itself became the suspect for the phone frame rate: an iPhone
+       17 Pro Max held ~30fps at 0.29, 1.15 and 2.60 megapixels alike, so it is not fill-bound
+       in the shader - but a full-resolution drawImage of a WebGL canvas into a 2D canvas every
+       frame forces a GPU sync on exactly that class of device, and it is the one full-frame
+       cost the scale knob cannot touch. Presenting the canvas directly deletes it.
+
+       Screen shake moved with it: the world layer shakes by a compositor transform (below),
+       the overlay through the same setTransform it always used, so the two cannot part. */
     g.clearRect(-8, -8, R.W + 16, R.H + 16);
-    g.drawImage(window._R3D.cv, 0, 0, R.W, R.H);
+    var shT = (shx || shy) ? 'translate(' + shx + 'px,' + shy + 'px)' : '';
+    if (window._R3D.shakeT !== shT) {
+      window._R3D.shakeT = shT;
+      window._R3D.cv.style.transform = shT;
+    }
   } else {
     g.fillStyle = '#1a1d16';
     g.fillRect(-8, -8, R.W + 16, R.H + 16);
@@ -431,3 +444,29 @@ function _rtsRFrame(dt) {
 }
 
 
+
+/* The composited frame, on demand: the GL world with the 2D overlay over it - exactly what
+   the compositor is showing the player, rebuilt as one readable canvas. This is the per-frame
+   blit that used to live in the frame walk, demoted to a capture tool: the harness reads
+   pixels, and layered canvases have no readable composite except through something like this.
+   In 2D the presentation canvas already IS the frame, so it comes back untouched. */
+function _rtsCompose() {
+  var R = _rtsR, R3 = window._R3D;
+  if (!(R3 && R3.on)) return R.cv;
+  var out = document.createElement('canvas');
+  out.width = R.cv.width; out.height = R.cv.height;
+  var og = out.getContext('2d');
+  og.imageSmoothingEnabled = false;
+  og.drawImage(R3.cv, 0, 0, out.width, out.height);
+  og.drawImage(R.cv, 0, 0);
+  /* The glow element too, with the same screen blend the compositor applies - canvas2d
+     carries the operator, so the harness's frame and the player's agree about explosions. */
+  var glow = document.getElementById('rtsGlow');
+  if (glow && glow.width > 1 && R.glowLit) {
+    og.globalCompositeOperation = 'screen';
+    og.imageSmoothingEnabled = true;
+    og.drawImage(glow, 0, 0, out.width, out.height);
+    og.globalCompositeOperation = 'source-over';
+  }
+  return out;
+}

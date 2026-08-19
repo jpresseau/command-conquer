@@ -11,12 +11,17 @@
    because the 2D mode's identity projection cannot produce it. So the round trip is asserted
    exactly: ground -> screen -> ground must return the pixel it started from.
 
-   THE BLIT is the other seam. The GL canvas is drawn into the 2D frame rather than stacked
-   under it, because compositor stacking rendered black in headless capture while the buffer
-   provably held the scene (the reduced cases all passed; the real page did not - environment
-   compositing of a stacked GL layer is exactly the kind of thing this project cannot rely on
-   if it wants its renderer testable). The spec therefore checks the SCENE ARRIVES ON THE 2D
-   CANVAS, which is what a player sees, not just that GL drew into its own buffer. */
+   THE PRESENTATION is the other seam. The GL canvas is a visible layer under a transparent
+   2D overlay now - it was a per-frame blit into the overlay for a long time, because stacking
+   once composited black in headless capture; preserveDrawingBuffer:true is what changed the
+   answer, making the GL buffer readable at any time, and the blit survives only as
+   _rtsCompose(), the harness's on-demand rebuild of the frame the compositor shows. Three
+   things have to hold for the player to see a picture, and each has actually failed once
+   while this was built: the element in the document must BE the canvas the renderer draws
+   (the shell rebuilds its DOM each match - unadopted, match two presents a blank detached
+   twin), it must be display:block, and the overlay context must carry alpha (created
+   alpha:false it clears to opaque black and blacks out everything underneath). The spec
+   checks each, then that the composite carries a scene and not one flat colour. */
 
 var { chromium } = require('playwright');
 var { Suite } = require('../lib/assert.js');
@@ -47,13 +52,25 @@ var S = new Suite('r3dlive');
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;
 
-    /* one real frame through the real frame function, so the blit path is what is tested */
+    /* one real frame through the real frame function, so the presented path is what is tested */
     _rtsRFrame(1 / 60);
     o.meshes = Object.keys(R3.mesh).length;
 
-    /* the scene reaches the canvas the player sees: sample the 2D canvas across a grid and
-       count distinct colours - a failed blit is one flat colour, a scene is many */
-    var cv = document.getElementById('rtsCv');
+    /* THE SCENE REACHES THE PLAYER through a presented GL layer under a transparent overlay
+       now, so "did the picture arrive" is two separate claims. First the stack itself: the
+       element in the document must BE the canvas the renderer draws (the shell rebuilds its
+       DOM every match, and before adoption was written the second match presented a blank
+       detached twin - that is a bug this actually caught), it must be visible, and the
+       overlay above it must actually be transparent - a context created alpha:false clears
+       to opaque black and blacks out the world, which is the other failure this run into. */
+    var el3 = document.getElementById('rtsCv3d');
+    o.adopted = el3 === R3.cv;
+    o.presented = R3.cv.style.display === 'block';
+    o.overlayAlpha = !!document.getElementById('rtsCv').getContext('2d').getContextAttributes().alpha;
+
+    /* ...and then the picture: sample the COMPOSITED frame across a grid and count distinct
+       colours - a blank layer is one flat colour, a scene is many */
+    var cv = _rtsCompose();
     var ctx = cv.getContext('2d');
     var seen = {}, n = 0;
     for (var gy = 0.2; gy < 0.9; gy += 0.1) {
@@ -124,7 +141,12 @@ var S = new Suite('r3dlive');
   S.ok('a tank stood on open ground for the pick', out.tank, out.tank ? 'spawned' : 'spawn refused');
   if (out.on) {
     S.ok('models become meshes on first sight', out.meshes > 0, out.meshes + ' meshes cached');
-    S.ok('the scene reaches the canvas the player actually sees', out.tones >= 8,
+    S.ok('the document element is the renderer\'s own canvas, presented', out.adopted && out.presented,
+         (out.adopted ? 'adopted' : 'DETACHED - the DOM holds a blank twin') + ', display:' +
+         (out.presented ? 'block' : 'hidden'));
+    S.ok('the overlay above it can actually be transparent', out.overlayAlpha,
+         out.overlayAlpha ? 'alpha context' : 'alpha:false - the overlay is an opaque black sheet');
+    S.ok('the scene reaches the frame the player actually sees', out.tones >= 8,
          out.tones + ' distinct colours across ' + out.sampled + ' samples' +
          ' (a failed blit is 1)');
     S.ok('screen -> ground -> screen returns the same pixel', out.roundtrip <= 1,

@@ -25,21 +25,30 @@
    wants and what every zoom level in this renderer is already built around.
 
    The HUD canvas is deliberately NOT pixelated - it draws text, and text wants the smoothing. */
-/* THE GL CANVAS IS A BUFFER, NOT A LAYER. render/frame.js blits it onto #rtsCv and draws the
-   overlay on top of that, so it is never presented directly - ui/shell.js creates it with an
-   inline display:none, and that is what actually holds, because an inline style beats this file.
+/* THE GL CANVAS IS A LAYER when the mode is on. _r3dApply flips its inline display, which
+   beats this file, so the none here is only the resting state: hidden in 2D, where the overlay
+   paints everything and a second composited full-screen layer would be pure cost (measured on
+   an emulated iPhone 13: 5.6 MB a copy). In 3D it is presented directly under the transparent
+   overlay instead of being blitted onto it - the blit was a full-resolution drawImage of a
+   WebGL canvas every frame, which is a GPU sync on exactly the phones the mode struggles on;
+   see the note in render/frame.js.
 
-   So this rule saying `display:block` did nothing at all while the inline style existed, and
-   would have turned a 1.46-megapixel offscreen buffer into a second composited full-screen
-   layer on every phone the moment anyone removed it. Measured on an emulated iPhone 13: 5.6 MB
-   a copy, and the compositor would have carried two of them to show one picture. Kept in sync
-   with the inline style rather than deleted, so the two cannot disagree again. */
-#rcgRts #rtsCv3d{position:absolute;inset:0;display:none}
+   pixelated for the same reason as #rtsCv below: with a pinned render scale the buffer is
+   smaller than the screen and the compositor stretch must stay nearest-neighbour, which is
+   what the blit's imageSmoothingEnabled=false used to guarantee. */
+#rcgRts #rtsCv3d{position:absolute;inset:0;display:none;
+  image-rendering:pixelated;image-rendering:crisp-edges}
 #rcgRts .rts-btns #rts3dBtn{font-size:10px;font-weight:700;letter-spacing:.5px}
 #rcgRts .rts-btns #rts3dBtn.on{color:#7fd0ff;border-color:#3f7fd0}
 #rcgRts #rtsCv{position:absolute;inset:0;display:block;cursor:crosshair;
   image-rendering:pixelated;image-rendering:crisp-edges}
 #rcgRts #rtsHud{position:absolute;inset:0;display:block;pointer-events:none}
+/* The glow layer: screen = a + b - ab, true addition over the dark ground a halo lives on and
+   a soft clamp on the bright core it must not darken. The buffer inside is eighth-scale; this
+   stretch is the same bilinear step the old full-frame drawImage relied on, so it stays the
+   softening. */
+#rcgRts #rtsGlow{position:absolute;inset:0;display:block;pointer-events:none;
+  mix-blend-mode:screen}
 /* The vignette. This used to be a full-frame `multiply` drawImage inside _rtsPost, every frame,
    priced per pixel on the canvas raster path - measured as the difference between p99 25.9ms and
    p99 20.1ms with the post-pass off. As an element with mix-blend-mode the same multiply happens

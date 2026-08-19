@@ -74,7 +74,13 @@ function _rtsRInit(cv) {
      it is settled here because this is the first point at which the device is known. */
   RTS_ZOOMS = _rtsZoomLadder(dpr);
   cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
-  var g = cv.getContext('2d', { alpha: false });
+  /* WITH ALPHA, and it is load-bearing: in 3D this canvas is a transparent overlay above the
+     presented GL layer, and a context created alpha:false can never be transparent - clearRect
+     leaves opaque black, which put a black sheet over the whole world the moment the blit
+     stopped. Context attributes are fixed at first getContext, so the one canvas must carry
+     the attribute both modes can live with. 2D pays nothing for it: its frame paints every
+     pixel opaquely before anything reads or composites the canvas. */
+  var g = cv.getContext('2d', { alpha: true });
   g.imageSmoothingEnabled = false;
 
   _rtsR = {
