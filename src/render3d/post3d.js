@@ -279,6 +279,10 @@ var R3D_AO_RESOLVE_FS =
   'precision highp float; varying vec2 vT;' +
   'uniform sampler2D uScene; uniform sampler2D uAO; uniform float uAOAmt;' +
   'uniform vec2 uTexel; uniform float uAA;' +
+  /* The glow, added after the occlusion rather than before it: light in the air is not a
+     surface and must not be darkened by how much sky that surface can see. See bloom3d.js -
+     uBloomAmt is 0 on every frame with nothing burning, which is most of them. */
+  'uniform sampler2D uBloom; uniform float uBloomAmt;' +
   'float _lum(vec3 c){ return dot(c, vec3(0.299, 0.587, 0.114)); }' +
   'vec3 _fxaa(vec2 uv){' +
   '  vec3 mC = texture2D(uScene, uv).rgb;' +
@@ -305,9 +309,11 @@ var R3D_AO_RESOLVE_FS =
   'void main(){' +
   '  vec3 c = mix(texture2D(uScene, vT).rgb, _fxaa(vT), uAA);' +
   '  float ao = mix(1.0, texture2D(uAO, vT).r, uAOAmt);' +
-  '  gl_FragColor = vec4(c * mix(vec3(' + R3D_AO_FLOOR[0].toFixed(3) + ', ' +
+  '  vec3 lit = c * mix(vec3(' + R3D_AO_FLOOR[0].toFixed(3) + ', ' +
        R3D_AO_FLOOR[1].toFixed(3) + ', ' + R3D_AO_FLOOR[2].toFixed(3) +
-       '), vec3(1.0), ao), 1.0);' +
+       '), vec3(1.0), ao);' +
+  '  lit += texture2D(uBloom, vT).rgb * uBloomAmt;' +
+  '  gl_FragColor = vec4(lit, 1.0);' +
   '}';
 
 /* --------------------------------------------------------------------------- setup -- */
@@ -459,6 +465,14 @@ function _r3dPostEnd(R3, cam, invD) {
   gl.uniform1f(gl.getUniformLocation(R3.aoResolveP, 'uAA'),
                R3.aaAmt === undefined ? 1 : R3.aaAmt);
   gl.uniform2f(gl.getUniformLocation(R3.aoResolveP, 'uTexel'), 1 / R3.postW, 1 / R3.postH);
+  /* The glow. R3.bloomOn is set by _r3dBloomPass for this frame only; with nothing burning the
+     amount is zero and the sampler still needs a bound texture, so it gets the AO one - a
+     texture multiplied by zero, rather than a branch in the shader every pixel. */
+  var bloomAmt = R3.bloomOn ? (R3.bloomAmt === undefined ? R3D_BLOOM_AMT : R3.bloomAmt) : 0;
+  gl.uniform1f(gl.getUniformLocation(R3.aoResolveP, 'uBloomAmt'), bloomAmt);
+  gl.uniform1i(gl.getUniformLocation(R3.aoResolveP, 'uBloom'), 2);
+  gl.activeTexture(gl.TEXTURE2);
+  gl.bindTexture(gl.TEXTURE_2D, (R3.bloomOn && R3.bloomTex) ? R3.bloomTex : R3.aoTex);
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, R3.sceneTex);
   gl.activeTexture(gl.TEXTURE1);

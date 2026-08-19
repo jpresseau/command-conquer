@@ -63,15 +63,11 @@ var S = new Suite('present3d');
     o.overlayAlpha = !!R.cv.getContext('2d').getContextAttributes().alpha;
     o.cssMatches = R3.cv.style.width === R.cv.style.width &&
                    R3.cv.style.height === R.cv.style.height;
-    /* The glow element's box must be stated too: `inset:0` does NOT stretch a replaced
-       element, so an unstyled glow canvas renders its eighth-scale buffer at intrinsic size
-       in the corner - which put every explosion's halo at the top-left of the map at 1:1,
-       while the harness composite (which stretches the buffer itself) stayed correct. This
-       is the one place the page can be wrong while every pixel measurement passes, so the
-       geometry is pinned directly. */
-    var glowCv = document.getElementById('rtsGlow');
-    o.glowCss = !!glowCv && glowCv.style.width === R.cv.style.width &&
-                glowCv.style.height === R.cv.style.height && glowCv.width === R.bloomW;
+    /* The glow used to be a third element here, screen-blended by the compositor. It is a GPU
+       pass inside the GL renderer now (render3d/bloom3d.js), so the stage is back to three
+       canvases and the element must be GONE - a leftover would composite stale pixels over
+       the world with nothing left to clear it. */
+    o.noGlowEl = !document.getElementById('rtsGlow');
     o.gl = stats(R3.cv);
     o.overlay = stats(R.cv);
     var comp = _rtsCompose();
@@ -131,10 +127,9 @@ var S = new Suite('present3d');
          'message pixels are allowed; a sheet is not)');
     S.ok('...and its CSS box tracks the presentation canvas',
          out.cssMatches, out.cssMatches ? 'same inline size' : 'boxes diverge');
-    S.ok('the glow layer is stretched over the stage, not sitting at intrinsic size',
-         out.glowCss,
-         out.glowCss ? 'explicit CSS box, eighth-scale buffer' :
-         'unstyled - halos render 1:1 in the corner while the composite stays right');
+    S.ok('the retired glow element is gone from the stage', out.noGlowEl,
+         out.noGlowEl ? 'absent - the glow is a GL pass now' :
+         '#rtsGlow still in the DOM with nothing painting or clearing it');
     S.ok('the composite the harness reads carries the scene at presentation size',
          out.compSized && out.comp.opaquePct === 100 && out.comp.tones >= 8,
          out.comp.tones + ' tones, ' + out.comp.opaquePct + '% opaque' +

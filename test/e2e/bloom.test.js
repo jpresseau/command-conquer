@@ -1,29 +1,34 @@
 /* A GLOW IS LOCAL, OR IT IS HAZE.
 
    The post pass had no spec at all, which is how it has already shipped a full-screen flash
-   that reached a bug report. This is the first one, and it grades the property that separates
-   bloom from a wash: light added AROUND something bright, and nowhere else.
+   that reached a bug report. This grades the property that separates bloom from a wash: light
+   added AROUND something bright, and nowhere else.
 
-   HOW THE PASS WORKS, because the measurement depends on it. The frame is downscaled to an
-   eighth, run through a power curve to throw away everything that is not bright, blurred, and
-   added back. The curve is built by drawing the buffer into ITSELF with multiply, so each such
-   line squares it: x, x^2, x^4, x^8.
+   HOW THE PASS WORKS, because the measurement depends on it - AND IT IS NOW TWO PASSES, one
+   per renderer. In 2D the frame is downscaled to an eighth, run through a power curve built by
+   drawing the buffer into itself with multiply (x, x^2, x^4, x^8), blurred and added back,
+   with a guard that counts bright pixels and fades the gain out on a pale map. In 3D none of
+   that exists: render3d/bloom3d.js re-draws the fx billboards ALONE into a quarter-scale
+   buffer on the GPU, blurs it and adds it in the resolve shader.
 
-   It stopped at x^4, and that is not a hard enough threshold. A midtone of 0.5 survives x^4 at
-   0.0625 - sixteen levels before any gain - and once that is blurred across the frame and added
-   back, every pixel of the map receives some. Measured on a single explosion: 99.8% of the
-   frame lifted, by a mean of 7.2 levels. Milder than the 19% haze this file's own comments
-   record rejecting, and the same mistake.
+   WHY THEY DIVERGED, and it is the finding that decides what this file can assert. Thresholding
+   was measured against the thing it is supposed to reject, on the GL buffer:
 
-   x^8 takes that midtone to 0.004 - one level, which an 8-bit buffer cannot even carry - while
-   a fireball at 0.95 falls only from 0.81 to 0.66. The measurements below are what that buys.
+       temperate, one blast     max luminance 0.897,  0.01% of the frame over 0.8
+       snowfield, NOTHING lit   max luminance 1.000, 51.5% of the frame over 0.9
 
-   AND THE GAIN STANDS DOWN ON A BRIGHT FIELD. Bloom keyed on brightness cannot tell albedo
-   from light, so a snowfield sails through any threshold and the whole map flashes the moment
-   anything explodes. That is the bug that reached a report. The guard counts bright pixels in
-   the thresholded buffer and fades the gain out - and since this change alters exactly that
-   buffer, the guard has to be re-graded against it rather than assumed. Snow itself needs the
-   player's archives, which do not ship, so the field here is made bright by hand. */
+   A fireball is DIMMER than snow. No threshold passes the first row and rejects the second, so
+   the 2D pass's guard was never a refinement - it was the only thing between the effect and a
+   full-screen flash, and it cost a getImageData readback every burning frame. The 3D pass asks
+   the other question instead: not what is BRIGHT but what EMITS. Ground cannot enter a buffer
+   that only fx billboards are drawn into, so the threshold, the power curve and the guard all
+   cease to exist rather than being tuned.
+
+   THE SNOW LEG THEREFORE CHANGED WHAT IT ASKS. It used to bound how much a bright field lifts,
+   which was the right shape of question for a guard that could fail by degrees. Against an
+   emitter pass the sharper claim is available and is asserted instead: the field the fire
+   stands on must not change the glow AT ALL. Snow itself needs the player's archives, which do
+   not ship, so the field here is made bright by hand. */
 
 var { chromium } = require('playwright');
 var { Suite } = require('../lib/assert.js');
@@ -192,11 +197,18 @@ var S = new Suite('bloom');
   if (out.snowTested) {
     /* The regression that reached a bug report, re-graded because this change alters the very
        buffer the guard measures. */
-    S.ok('a bright field does not flash when something explodes',
-         out.snow.pct < 25 && out.snow.mean < 12,
-         'on a white field one blast lifts ' + out.snow.pct + '% of the frame by a mean of ' +
-         out.snow.mean + ' - bloom keyed on brightness cannot tell albedo from light, so ' +
-         'without the guard the whole snowfield adds onto itself and flashes');
+    /* THE CLAIM, sharpened: not "the field lifts a little" but "the field does not matter".
+       An emitter pass cannot see the ground, so painting it white must move nothing - and the
+       control that stops this passing for the wrong reason is the temperate figure beside it,
+       which is non-zero. Two ways to fail: the glow spreads over the field (pct climbs), or
+       the guard-free pass turns out to be reading brightness after all (pct diverges from
+       temperate). The absolute bound stays as the backstop against a full-screen flash. */
+    S.ok('the field the fire stands on does not change the glow',
+         out.snow.pct < 8 && Math.abs(out.snow.pct - out.glow.pct) < 1.5,
+         'a white field lifts ' + out.snow.pct + '% of the frame against the same blast\'s ' +
+         out.glow.pct + '% on temperate - the ground is not in the emitter buffer, so it ' +
+         'cannot flash; a brightness threshold measured 51.5% of a snowfield over 0.9 with ' +
+         'nothing burning at all');
   }
 
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');

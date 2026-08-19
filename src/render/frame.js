@@ -459,14 +459,5 @@ function _rtsCompose() {
   og.imageSmoothingEnabled = false;
   og.drawImage(R3.cv, 0, 0, out.width, out.height);
   og.drawImage(R.cv, 0, 0);
-  /* The glow element too, with the same screen blend the compositor applies - canvas2d
-     carries the operator, so the harness's frame and the player's agree about explosions. */
-  var glow = document.getElementById('rtsGlow');
-  if (glow && glow.width > 1 && R.glowLit) {
-    og.globalCompositeOperation = 'screen';
-    og.imageSmoothingEnabled = true;
-    og.drawImage(glow, 0, 0, out.width, out.height);
-    og.globalCompositeOperation = 'source-over';
-  }
   return out;
 }
