@@ -170,10 +170,13 @@ var S = new Suite('canopy');
     o.haveBoth = !!(fc && gc);
     if (!o.haveBoth) return o;
     R.zi = RTS_ZOOMS.length - 1; R.cell = RTS_ZOOMS[R.zi];
-    var cv = document.getElementById('rtsCv'), ctx = cv.getContext('2d');
+    /* Through the COMPOSITE: in 3D the world is presented on the GL layer under a transparent
+       overlay, so reading the overlay alone reads a pane of glass. _rtsCompose() is the frame
+       the player sees. */
     function look(c) {
       R.focus.x = _rtsWX(c[0]); R.focus.z = _rtsWX(c[1]);
       _rtsRFrame(1 / 60); _rtsRFrame(1 / 60);
+      var cv = _rtsCompose(), ctx = cv.getContext('2d');
       var half = Math.round(1.5 * R.cell * R.dpr);
       var d = ctx.getImageData(Math.round(cv.width / 2) - half, Math.round(cv.height / 2) - half,
                                half * 2, half * 2).data;

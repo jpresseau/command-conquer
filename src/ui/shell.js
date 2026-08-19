@@ -24,6 +24,11 @@ function rtsOpen(seed) {
        than absent when the mode is off, so toggling is a style flip, not a DOM rebuild. */
     +   '<canvas id="rtsCv3d" style="display:none"></canvas>'
     +   '<canvas id="rtsCv"></canvas>'
+    /* The bloom's glow, as an ELEMENT the compositor screen-blends - in 3D the world is on
+       the presented GL layer and additive light cannot be pushed through source-over from a
+       transparent overlay; see the composite-back in _rtsPost. Holds the eighth-scale bloom
+       buffer, stretched by CSS. Transparent (= invisible) except while something burns. */
+    +   '<canvas id="rtsGlow"></canvas>'
     /* The vignette, as an ELEMENT rather than a per-frame canvas composite - see _rtsPost for
        why it moved. It sits between the battlefield and the HUD, which is exactly where the
        old multiply sat in the draw order. */
@@ -266,6 +271,12 @@ function _rtsResizeCanvases() {
   cv.style.width = W + 'px'; cv.style.height = H + 'px';
   var c3 = document.getElementById('rtsCv3d');
   if (c3) { c3.style.width = W + 'px'; c3.style.height = H + 'px'; }
+  /* The glow canvas needs the same explicit box as every other canvas here: `inset:0` does
+     NOT stretch an absolutely positioned REPLACED element - auto width on a canvas resolves
+     to its intrinsic size, so without this the eighth-scale buffer sat 105px wide in the
+     corner, and the fireball's halo rendered as a dim red smear at the top-left of the map. */
+  var gcv = document.getElementById('rtsGlow');
+  if (gcv) { gcv.style.width = W + 'px'; gcv.style.height = H + 'px'; }
   hud.style.width = W + 'px'; hud.style.height = H + 'px';
   hud.width = Math.round(W * dpr); hud.height = Math.round(H * dpr);
   hud.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);

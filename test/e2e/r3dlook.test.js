@@ -83,8 +83,14 @@ var S = new Suite('r3dlook');
        leaves (1 - alpha) of whatever the ground was doing, so the spread survives roughly in
        proportion. Mean brightness is checked too, because a "shadow" that darkens nothing
        would also preserve the spread perfectly. */
-    var cv = document.getElementById('rtsCv'), ctx = cv.getContext('2d');
-    function grab() { return ctx.getImageData(0, 0, cv.width, cv.height).data; }
+    /* The composite, not the overlay: the world is presented on the GL layer underneath.
+       cv keeps the presentation canvas for the frame's dimensions - the composite matches it
+       by construction. */
+    var cv = document.getElementById('rtsCv');
+    function grab() {
+      var cc = _rtsCompose();
+      return cc.getContext('2d').getImageData(0, 0, cc.width, cc.height).data;
+    }
     var withS = grab();
     /* SUPPRESSED BY R3.shadowReady, which gates both halves of the shadow map at once - the
        sun's pass does not run and the shading programs are told to skip the lookup - and

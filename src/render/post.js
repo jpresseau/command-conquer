@@ -45,6 +45,28 @@ function _rtsPostInit(R) {
      tail: p99 25.9ms with the post on, 20.1ms with it off, at zero fx - i.e. the vignette was
      the difference. RTS_VIGNETTE still names the corner colour; the CSS carries its value. */
   R.vigW = R.W; R.vigH = R.H;
+  /* The glow element is sized HERE, with the buffers, and cleared at once - never lazily in
+     the first burning frame. A canvas that has never been painted composites from
+     never-written texture memory, and with mix-blend-mode in front of the compositor that
+     showed up as a red smear of stale garbage in the off-map corner of a headless capture -
+     content getImageData could not see, because the canvas itself was genuinely blank. An
+     explicit clear makes the texture defined everywhere the compositor can look. */
+  var glowEl = document.getElementById('rtsGlow');
+  if (glowEl && (glowEl.width !== R.bloomW || glowEl.height !== R.bloomH)) {
+    glowEl.width = R.bloomW; glowEl.height = R.bloomH;
+    glowEl.getContext('2d').clearRect(0, 0, R.bloomW, R.bloomH);
+    R.glowLit = false;
+  }
+}
+
+/* Putting the glow element out, once: cheap enough to call on every quiet frame because it
+   early-outs on the flag, and the flag exists so a 60Hz game does not clearRect an empty
+   canvas 60 times a second. */
+function _rtsGlowOut(R) {
+  if (!R || !R.glowLit) return;
+  R.glowLit = false;
+  var el = document.getElementById('rtsGlow');
+  if (el) el.getContext('2d').clearRect(0, 0, el.width, el.height);
 }
 
 /* Is there anything on screen worth blooming? Almost always no. The threshold is built to pass
@@ -65,18 +87,30 @@ function _rtsWantBloom(G) {
 
 function _rtsPost(g) {
   var R = _rtsR, G = window._rtsG;
-  if (!R || !RTS_POST_ON || R.W < 8 || R.H < 8) return;
+  if (!R || !RTS_POST_ON || R.W < 8 || R.H < 8) { _rtsGlowOut(R); return; }
   if (R.vigW !== R.W || R.vigH !== R.H || !R.bloomG) _rtsPostInit(R);
 
   /* The vignette is the #rtsVig element now (see style.css), so a frame with nothing worth
-     blooming - which is most frames - costs the post pass NOTHING at all. */
-  if (!G || !_rtsWantBloom(G)) return;
+     blooming - which is most frames - costs the post pass NOTHING at all. The glow element
+     does have to be told the fire is out, though - it lives outside the canvas, so nothing
+     else ever paints over it, and the last explosion's halo would hang on screen forever. */
+  if (!G || !_rtsWantBloom(G)) { _rtsGlowOut(R); return; }
 
   /* --- bloom --- */
   var bg = R.bloomG, bw = R.bloomW, bh = R.bloomH;
   bg.globalCompositeOperation = 'source-over';
   bg.globalAlpha = 1;
   bg.clearRect(0, 0, bw, bh);
+  /* THE SOURCE IS THE COMPOSITE, built here at an eighth scale. In 3D the world - and the
+     FIREBALLS, which are GL billboards (render3d/fx3d.js) - live on the presented GL layer,
+     and the 2D canvas above it is a mostly-transparent overlay. While the frame walk blitted
+     the GL buffer into this canvas the distinction was invisible, and the day the blit went
+     the bloom silently lost every bright thing it exists to find: measured on one explosion,
+     the overlay's brightest pixel was 39 of 765 and the glow gained nothing. Downscaling the
+     GL layer first costs one drawImage at 1/64 of the old blit's pixels, and only on frames
+     _rtsWantBloom already said are burning. */
+  var R3b = window._R3D;
+  if (R3b && R3b.on) bg.drawImage(R3b.cv, 0, 0, bw, bh);
   bg.drawImage(g.canvas, 0, 0, bw, bh);
   /* A POWER CURVE FOR THE THRESHOLD, then the gain separately. The two are separate jobs and
      conflating them is what went wrong twice:
@@ -145,12 +179,47 @@ function _rtsPost(g) {
   }
   var gain = RTS_BLOOM * Math.max(0, Math.min(1, 1 - (mbright / mn - 0.04) / 0.10));
   if (gain > 0.01) {
-    g.save();
-    g.globalCompositeOperation = 'lighter';
-    g.globalAlpha = gain;
-    g.imageSmoothingEnabled = true;
-    for (var bp = 0; bp < RTS_BLOOM_PASSES; bp++) g.drawImage(R.blurCv, 0, 0, R.W, R.H);
-    g.restore();
+    /* HOW THE GLOW REACHES THE PICTURE depends on what the canvas under it is. In 2D the
+       canvas is the whole opaque frame and 'lighter' onto it is true addition, exactly as it
+       always was. In 3D the world is on the presented GL layer and this canvas is a
+       transparent overlay - and an additive effect CANNOT be pushed through the compositor's
+       source-over from there: a semi-transparent glow pixel INTERPOLATES the backdrop toward
+       its own colour, so the halo lit the dark ground and visibly dimmed the fireball's own
+       core (the glow's 40 replacing 16% of the core's 240). Tried and measured before this:
+       'lighter' with the buffer's own alpha laid a 96%-alpha black sheet over the world,
+       because the buffer inherits opaque alpha from the GL source.
+
+       So in 3D the glow rides its own element, #rtsGlow, and the COMPOSITOR blends it with
+       mix-blend-mode:screen - the same move that took the vignette out of the canvas pipeline
+       (#rtsVig, multiply). Screen is a + b - ab: true addition over the dark ground where a
+       halo lives, soft-clamping on the bright core it must not darken. The element holds the
+       eighth-scale buffer and CSS stretches it, which is the same bilinear step the drawImage
+       here always relied on. Transparent pixels leave the backdrop untouched, so an empty
+       glow canvas costs the compositor nothing to speak of and 2D never paints it. */
+    var R3g = window._R3D, glowEl = (R3g && R3g.on) ? document.getElementById('rtsGlow') : null;
+    if (glowEl) {
+      var gg = glowEl.getContext('2d');
+      gg.clearRect(0, 0, R.bloomW, R.bloomH);
+      gg.globalCompositeOperation = 'lighter';
+      gg.globalAlpha = gain;
+      /* TWICE the passes, and it is compensation rather than a fudge: 'lighter' delivered the
+         buffer b in full, screen delivers b*(1 - back/255) - half of it on mid ground, which
+         measured as the glow dropping from ~13 mean levels to 7.3 at its brightest. Doubling
+         the buffer makes screen(2b) equal lighter(b) exactly at mid-grey, stronger only over
+         dark ground (where a halo belongs) and still soft-clamped on the bright core screen
+         exists to protect. */
+      for (var gp = 0; gp < RTS_BLOOM_PASSES * 2; gp++) gg.drawImage(R.blurCv, 0, 0);
+      gg.globalCompositeOperation = 'source-over';
+      gg.globalAlpha = 1;
+      R.glowLit = true;
+    } else {
+      g.save();
+      g.globalCompositeOperation = 'lighter';
+      g.globalAlpha = gain;
+      g.imageSmoothingEnabled = true;
+      for (var bp = 0; bp < RTS_BLOOM_PASSES; bp++) g.drawImage(R.blurCv, 0, 0, R.W, R.H);
+      g.restore();
+    }
   }
   /* the vignette multiplies over this on the compositor - #rtsVig sits above the canvas */
 }

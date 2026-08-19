@@ -174,12 +174,18 @@ var S = new Suite('orefield');
     if (o.on) {
       _rtsRFrame(1 / 60);
       o.oreTris = window._R3D.oreMesh ? Math.round(window._R3D.oreMesh.verts / 3) : 0;
-      var glc = window._R3D.cv, main = document.getElementById('rtsCv');
+      /* The raw GL buffer against the COMPOSITED frame (GL layer + 2D overlay - the world is
+         presented now, not blitted into the overlay). If the flat 2D ore pass were still
+         painting, it would land on the overlay and the composite would differ from the buffer
+         across the whole field - which is exactly the 77.2% this caught when the loop was
+         ungated. Gated, the overlay adds nothing over an ore field and the two agree. */
+      var glc = window._R3D.cv;
       var tmp = document.createElement('canvas');
       tmp.width = glc.width; tmp.height = glc.height;
       tmp.getContext('2d').drawImage(glc, 0, 0);
+      var comp = _rtsCompose();
       var A = tmp.getContext('2d').getImageData(0, 0, tmp.width, tmp.height).data;
-      var B = main.getContext('2d').getImageData(0, 0, main.width, main.height).data;
+      var B = comp.getContext('2d').getImageData(0, 0, comp.width, comp.height).data;
       var differ = 0, strong = 0, tot = A.length / 4;
       for (var p = 0; p < A.length; p += 4) {
         var d = Math.abs(A[p] - B[p]) + Math.abs(A[p + 1] - B[p + 1]) + Math.abs(A[p + 2] - B[p + 2]);

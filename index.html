@@ -36,21 +36,30 @@
    wants and what every zoom level in this renderer is already built around.
 
    The HUD canvas is deliberately NOT pixelated - it draws text, and text wants the smoothing. */
-/* THE GL CANVAS IS A BUFFER, NOT A LAYER. render/frame.js blits it onto #rtsCv and draws the
-   overlay on top of that, so it is never presented directly - ui/shell.js creates it with an
-   inline display:none, and that is what actually holds, because an inline style beats this file.
+/* THE GL CANVAS IS A LAYER when the mode is on. _r3dApply flips its inline display, which
+   beats this file, so the none here is only the resting state: hidden in 2D, where the overlay
+   paints everything and a second composited full-screen layer would be pure cost (measured on
+   an emulated iPhone 13: 5.6 MB a copy). In 3D it is presented directly under the transparent
+   overlay instead of being blitted onto it - the blit was a full-resolution drawImage of a
+   WebGL canvas every frame, which is a GPU sync on exactly the phones the mode struggles on;
+   see the note in render/frame.js.
 
-   So this rule saying `display:block` did nothing at all while the inline style existed, and
-   would have turned a 1.46-megapixel offscreen buffer into a second composited full-screen
-   layer on every phone the moment anyone removed it. Measured on an emulated iPhone 13: 5.6 MB
-   a copy, and the compositor would have carried two of them to show one picture. Kept in sync
-   with the inline style rather than deleted, so the two cannot disagree again. */
-#rcgRts #rtsCv3d{position:absolute;inset:0;display:none}
+   pixelated for the same reason as #rtsCv below: with a pinned render scale the buffer is
+   smaller than the screen and the compositor stretch must stay nearest-neighbour, which is
+   what the blit's imageSmoothingEnabled=false used to guarantee. */
+#rcgRts #rtsCv3d{position:absolute;inset:0;display:none;
+  image-rendering:pixelated;image-rendering:crisp-edges}
 #rcgRts .rts-btns #rts3dBtn{font-size:10px;font-weight:700;letter-spacing:.5px}
 #rcgRts .rts-btns #rts3dBtn.on{color:#7fd0ff;border-color:#3f7fd0}
 #rcgRts #rtsCv{position:absolute;inset:0;display:block;cursor:crosshair;
   image-rendering:pixelated;image-rendering:crisp-edges}
 #rcgRts #rtsHud{position:absolute;inset:0;display:block;pointer-events:none}
+/* The glow layer: screen = a + b - ab, true addition over the dark ground a halo lives on and
+   a soft clamp on the bright core it must not darken. The buffer inside is eighth-scale; this
+   stretch is the same bilinear step the old full-frame drawImage relied on, so it stays the
+   softening. */
+#rcgRts #rtsGlow{position:absolute;inset:0;display:block;pointer-events:none;
+  mix-blend-mode:screen}
 /* The vignette. This used to be a full-frame `multiply` drawImage inside _rtsPost, every frame,
    priced per pixel on the canvas raster path - measured as the difference between p99 25.9ms and
    p99 20.1ms with the post-pass off. As an element with mix-blend-mode the same multiply happens
@@ -895,7 +904,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">1a4698b · 2026-08-18</div>
+  <div id="rtsBuild" title="build">f8ae9c7 · 2026-08-19</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -20708,7 +20717,13 @@ function _rtsRInit(cv) {
      it is settled here because this is the first point at which the device is known. */
   RTS_ZOOMS = _rtsZoomLadder(dpr);
   cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
-  var g = cv.getContext('2d', { alpha: false });
+  /* WITH ALPHA, and it is load-bearing: in 3D this canvas is a transparent overlay above the
+     presented GL layer, and a context created alpha:false can never be transparent - clearRect
+     leaves opaque black, which put a black sheet over the whole world the moment the blit
+     stopped. Context attributes are fixed at first getContext, so the one canvas must carry
+     the attribute both modes can live with. 2D pays nothing for it: its frame paints every
+     pixel opaquely before anything reads or composites the canvas. */
+  var g = cv.getContext('2d', { alpha: true });
   g.imageSmoothingEnabled = false;
 
   _rtsR = {
@@ -20920,6 +20935,28 @@ function _rtsPostInit(R) {
      tail: p99 25.9ms with the post on, 20.1ms with it off, at zero fx - i.e. the vignette was
      the difference. RTS_VIGNETTE still names the corner colour; the CSS carries its value. */
   R.vigW = R.W; R.vigH = R.H;
+  /* The glow element is sized HERE, with the buffers, and cleared at once - never lazily in
+     the first burning frame. A canvas that has never been painted composites from
+     never-written texture memory, and with mix-blend-mode in front of the compositor that
+     showed up as a red smear of stale garbage in the off-map corner of a headless capture -
+     content getImageData could not see, because the canvas itself was genuinely blank. An
+     explicit clear makes the texture defined everywhere the compositor can look. */
+  var glowEl = document.getElementById('rtsGlow');
+  if (glowEl && (glowEl.width !== R.bloomW || glowEl.height !== R.bloomH)) {
+    glowEl.width = R.bloomW; glowEl.height = R.bloomH;
+    glowEl.getContext('2d').clearRect(0, 0, R.bloomW, R.bloomH);
+    R.glowLit = false;
+  }
+}
+
+/* Putting the glow element out, once: cheap enough to call on every quiet frame because it
+   early-outs on the flag, and the flag exists so a 60Hz game does not clearRect an empty
+   canvas 60 times a second. */
+function _rtsGlowOut(R) {
+  if (!R || !R.glowLit) return;
+  R.glowLit = false;
+  var el = document.getElementById('rtsGlow');
+  if (el) el.getContext('2d').clearRect(0, 0, el.width, el.height);
 }
 
 /* Is there anything on screen worth blooming? Almost always no. The threshold is built to pass
@@ -20940,18 +20977,30 @@ function _rtsWantBloom(G) {
 
 function _rtsPost(g) {
   var R = _rtsR, G = window._rtsG;
-  if (!R || !RTS_POST_ON || R.W < 8 || R.H < 8) return;
+  if (!R || !RTS_POST_ON || R.W < 8 || R.H < 8) { _rtsGlowOut(R); return; }
   if (R.vigW !== R.W || R.vigH !== R.H || !R.bloomG) _rtsPostInit(R);
 
   /* The vignette is the #rtsVig element now (see style.css), so a frame with nothing worth
-     blooming - which is most frames - costs the post pass NOTHING at all. */
-  if (!G || !_rtsWantBloom(G)) return;
+     blooming - which is most frames - costs the post pass NOTHING at all. The glow element
+     does have to be told the fire is out, though - it lives outside the canvas, so nothing
+     else ever paints over it, and the last explosion's halo would hang on screen forever. */
+  if (!G || !_rtsWantBloom(G)) { _rtsGlowOut(R); return; }
 
   /* --- bloom --- */
   var bg = R.bloomG, bw = R.bloomW, bh = R.bloomH;
   bg.globalCompositeOperation = 'source-over';
   bg.globalAlpha = 1;
   bg.clearRect(0, 0, bw, bh);
+  /* THE SOURCE IS THE COMPOSITE, built here at an eighth scale. In 3D the world - and the
+     FIREBALLS, which are GL billboards (render3d/fx3d.js) - live on the presented GL layer,
+     and the 2D canvas above it is a mostly-transparent overlay. While the frame walk blitted
+     the GL buffer into this canvas the distinction was invisible, and the day the blit went
+     the bloom silently lost every bright thing it exists to find: measured on one explosion,
+     the overlay's brightest pixel was 39 of 765 and the glow gained nothing. Downscaling the
+     GL layer first costs one drawImage at 1/64 of the old blit's pixels, and only on frames
+     _rtsWantBloom already said are burning. */
+  var R3b = window._R3D;
+  if (R3b && R3b.on) bg.drawImage(R3b.cv, 0, 0, bw, bh);
   bg.drawImage(g.canvas, 0, 0, bw, bh);
   /* A POWER CURVE FOR THE THRESHOLD, then the gain separately. The two are separate jobs and
      conflating them is what went wrong twice:
@@ -21020,12 +21069,47 @@ function _rtsPost(g) {
   }
   var gain = RTS_BLOOM * Math.max(0, Math.min(1, 1 - (mbright / mn - 0.04) / 0.10));
   if (gain > 0.01) {
-    g.save();
-    g.globalCompositeOperation = 'lighter';
-    g.globalAlpha = gain;
-    g.imageSmoothingEnabled = true;
-    for (var bp = 0; bp < RTS_BLOOM_PASSES; bp++) g.drawImage(R.blurCv, 0, 0, R.W, R.H);
-    g.restore();
+    /* HOW THE GLOW REACHES THE PICTURE depends on what the canvas under it is. In 2D the
+       canvas is the whole opaque frame and 'lighter' onto it is true addition, exactly as it
+       always was. In 3D the world is on the presented GL layer and this canvas is a
+       transparent overlay - and an additive effect CANNOT be pushed through the compositor's
+       source-over from there: a semi-transparent glow pixel INTERPOLATES the backdrop toward
+       its own colour, so the halo lit the dark ground and visibly dimmed the fireball's own
+       core (the glow's 40 replacing 16% of the core's 240). Tried and measured before this:
+       'lighter' with the buffer's own alpha laid a 96%-alpha black sheet over the world,
+       because the buffer inherits opaque alpha from the GL source.
+
+       So in 3D the glow rides its own element, #rtsGlow, and the COMPOSITOR blends it with
+       mix-blend-mode:screen - the same move that took the vignette out of the canvas pipeline
+       (#rtsVig, multiply). Screen is a + b - ab: true addition over the dark ground where a
+       halo lives, soft-clamping on the bright core it must not darken. The element holds the
+       eighth-scale buffer and CSS stretches it, which is the same bilinear step the drawImage
+       here always relied on. Transparent pixels leave the backdrop untouched, so an empty
+       glow canvas costs the compositor nothing to speak of and 2D never paints it. */
+    var R3g = window._R3D, glowEl = (R3g && R3g.on) ? document.getElementById('rtsGlow') : null;
+    if (glowEl) {
+      var gg = glowEl.getContext('2d');
+      gg.clearRect(0, 0, R.bloomW, R.bloomH);
+      gg.globalCompositeOperation = 'lighter';
+      gg.globalAlpha = gain;
+      /* TWICE the passes, and it is compensation rather than a fudge: 'lighter' delivered the
+         buffer b in full, screen delivers b*(1 - back/255) - half of it on mid ground, which
+         measured as the glow dropping from ~13 mean levels to 7.3 at its brightest. Doubling
+         the buffer makes screen(2b) equal lighter(b) exactly at mid-grey, stronger only over
+         dark ground (where a halo belongs) and still soft-clamped on the bright core screen
+         exists to protect. */
+      for (var gp = 0; gp < RTS_BLOOM_PASSES * 2; gp++) gg.drawImage(R.blurCv, 0, 0);
+      gg.globalCompositeOperation = 'source-over';
+      gg.globalAlpha = 1;
+      R.glowLit = true;
+    } else {
+      g.save();
+      g.globalCompositeOperation = 'lighter';
+      g.globalAlpha = gain;
+      g.imageSmoothingEnabled = true;
+      for (var bp = 0; bp < RTS_BLOOM_PASSES; bp++) g.drawImage(R.blurCv, 0, 0, R.W, R.H);
+      g.restore();
+    }
   }
   /* the vignette multiplies over this on the compositor - #rtsVig sits above the canvas */
 }
@@ -21989,104 +22073,6 @@ function _r3dInit() {
   return R3;
 }
 
-/* Which mode the player last chose. localStorage rather than the IndexedDB store in
-   rts.store.js, for the same reason the title screen's controls panel uses it: that store
-   exists to hold megabytes of archives and this is one boolean. Wrapped because private
-   browsing throws on access rather than returning null, and a disabled store must cost a
-   preference, not the battle. */
-var RTS_3D_LS = 'rcc.mode3d';
-
-/* Lazy init so a machine without WebGL pays nothing and is told plainly rather than shown a
-   black screen. `quiet` is for restoring the saved choice at match start: no click sound for
-   something the player did not just click, and no complaint about WebGL on a machine that
-   never had it - it simply stays in 2D. */
-function _r3dApply(on, quiet) {
-  var R3 = window._R3D;
-  if (!R3) R3 = _r3dInit();
-  if (!R3) {
-    if (!quiet) _rtsSay('3D needs WebGL, which this browser did not provide.');
-    return false;
-  }
-  R3.on = !!on;
-  /* the canvas stays hidden either way - it is a buffer the 2D frame blits, not a layer the
-     compositor stacks; see the note at the blit in render/frame.js */
-  /* the world moved between canvases, so both need a clean slate */
-  R3.terrainDirty = true; R3.fogDirty = true;
-  var btn = document.getElementById('rts3dBtn');
-  if (btn) { btn.classList.toggle('on', R3.on); btn.title = R3.on ? 'Back to classic 2D' : 'Switch to 3D'; }
-  _r3dResize();
-  if (!quiet && typeof _rtsSfx === 'function') _rtsSfx('click');
-  return true;
-}
-
-/* The toggle the button calls. */
-function rts3dToggle() {
-  rts3dSet(!(window._R3D && window._R3D.on));
-}
-
-/* SET IT, RATHER THAN FLIP IT. A toggle is the right thing for a button and the wrong thing
-   for everybody else: every caller that wanted the mode ON said `toggle` and meant it, which
-   was only true while 2D was the default. It is not any more, so a caller that means "on" has
-   to say so. Returns whether the mode ended up where it was asked to go. */
-function rts3dSet(on) {
-  on = !!on;
-  if (!_r3dApply(on, false)) return false;
-  try { window.localStorage.setItem(RTS_3D_LS, on ? '1' : '0'); } catch (e) {}
-  return true;
-}
-
-/* Called once per match from rtsOpen.
-
-   3D IS THE DEFAULT NOW, which inverts what this used to do. It only ever turned the mode ON
-   and let an absent preference fall through to 2D, so a new player never saw the renderer at
-   all - the shadows, the occlusion, the swell, the lean, the effects standing in the world -
-   unless they found a two-character button in the top bar and pressed it.
-
-   So an ABSENT or unreadable preference lands in 3D now, and only an explicit '0' keeps it in
-   2D. Nothing writes that '0' except rts3dSet, which is to say except somebody pressing the
-   button to leave, so the only way to get the 2D game is to have asked for it. Treating
-   unreadable as 3D is deliberate too: a browser refusing localStorage should get the mode the
-   game is built around rather than the fallback.
-
-   2D IS STILL THE FLOOR, and that is why this cannot just force the mode on. _r3dApply returns
-   false when there is no WebGL context to be had; nothing has changed then, and the 2D painter
-   draws the match exactly as it always did. */
-function rts3dRestore() {
-  var want = null;
-  try { want = window.localStorage.getItem(RTS_3D_LS); } catch (e) { want = null; }
-  if (want !== '0') _r3dApply(true, true);
-}
-
-/* HOW MANY DEVICE PIXELS THE 3D BUFFER GETS PER CSS PIXEL. Native by default; this ceiling
-   exists so ui/gfxstat.js has something to clamp a pinned value against.
-
-   IT WAS 2, AS A FILL-RATE CAP, AND THE DEVICE SAID NO. The premise looked solid - a dpr-3 phone
-   carried 1.46M pixels and a dpr-4 one 2.10M against the 816k of the 1280x800 desktop this game
-   is judged on - then the frame rate was read off a real iPhone 17 Pro Max through the GFX
-   readout: 0.29 MP gave ~30 fps, 1.15 MP ~30, 2.60 MP ~30-40. A ninefold range in pixels moved
-   nothing, so that phone is not fill-bound: the cap bought no frames and cost sharpness on every
-   dense screen. The knob stays (ui/gfxstat.js) for devices that ARE fill-bound. Why 30 and not
-   60 is still open - the 2D renderer has not been read, and a frame-rate cap and a slow 3D path
-   look identical from here. */
-var R3D_MAX_SCALE = 4;   /* = the dpr ceiling in camera.js, so AUTO is native */
-
-function _r3dResize() {
-  var R3 = window._R3D, main = document.getElementById('rtsCv'), R = window._rtsR;
-  if (!R3 || !main) return;
-  /* The 2D canvas is the reference for CSS size because it is the one being presented, and its
-     backing store is cssPx * R.dpr - so this recovers the CSS box without reading layout. */
-  var dpr = (R && R.dpr) || 1;
-  /* A pinned scale from the GFX control wins over the cap, so a player can measure their own
-     device at every resolution it can show - see ui/gfxstat.js. Still bounded by dpr: a buffer
-     larger than the screen is pure cost. */
-  var pin = (typeof _rtsGfxWant === 'function') ? _rtsGfxWant() : null;
-  R3.scale = pin ? Math.min(dpr, pin) : Math.min(dpr, R3D_MAX_SCALE);
-  var w = Math.max(1, Math.round(main.width / dpr * R3.scale));
-  var h = Math.max(1, Math.round(main.height / dpr * R3.scale));
-  if (R3.cv.width !== w || R3.cv.height !== h) { R3.cv.width = w; R3.cv.height = h; }
-  R3.gl.viewport(0, 0, R3.cv.width, R3.cv.height);
-}
-
 /* The projection contract, used by camera.js when the mode is on. Kept beside the shader that
    must agree with it: if these two ever disagree, clicks land beside units. */
 
@@ -22206,6 +22192,137 @@ function _r3dViewBounds() {
   var wFar = 1 - vFar * R3.sp / D;
   return { x0: R.focus.x - hx * wFar, x1: R.focus.x + hx * wFar,
            z0: R.focus.z + vFar, z1: R.focus.z + vNear };
+}
+</script>
+<script>/* render3d/present3d.js - the 3D mode's lifecycle: turning it on and off, presenting its
+   canvas, remembering the choice, and sizing the buffer.
+
+   Split out of gl3d.js, which owns the GL context, the programs and the projection contract -
+   this file owns whether and how the rendered buffer reaches the SCREEN. That stopped being
+   one line when the canvas became a presented layer: the blit that used to copy the buffer
+   into the 2D frame is gone (see render/frame.js), so presentation now means adoption into
+   the shell's rebuilt DOM, a display flip, a CSS box, and a scale - all of which live here. */
+
+/* Which mode the player last chose. localStorage rather than the IndexedDB store in
+   rts.store.js, for the same reason the title screen's controls panel uses it: that store
+   exists to hold megabytes of archives and this is one boolean. Wrapped because private
+   browsing throws on access rather than returning null, and a disabled store must cost a
+   preference, not the battle. */
+var RTS_3D_LS = 'rcc.mode3d';
+
+/* Lazy init so a machine without WebGL pays nothing and is told plainly rather than shown a
+   black screen. `quiet` is for restoring the saved choice at match start: no click sound for
+   something the player did not just click, and no complaint about WebGL on a machine that
+   never had it - it simply stays in 2D. */
+function _r3dApply(on, quiet) {
+  var R3 = window._R3D;
+  if (!R3) R3 = _r3dInit();
+  if (!R3) {
+    if (!quiet) _rtsSay('3D needs WebGL, which this browser did not provide.');
+    return false;
+  }
+  R3.on = !!on;
+  /* ADOPTION, because the shell rebuilds its DOM every match while this canvas - and the GL
+     context, buffers and textures that live on it - persists across them. From the second
+     match on, R3.cv is a DETACHED element and the #rtsCv3d in the document is a fresh blank
+     one. The old blit never noticed, because drawImage reads the reference and not the DOM;
+     a presented layer is the DOM, so the persistent canvas is swapped back into the fresh
+     shell's slot. A context cannot move between canvases - this is the only direction the
+     repair can run. */
+  var slot = document.getElementById('rtsCv3d');
+  if (slot && slot !== R3.cv && slot.parentNode) slot.parentNode.replaceChild(R3.cv, slot);
+  /* The canvas is a LAYER now, not a buffer: visible under the 2D overlay when the mode is
+     on, so the compositor presents the world directly instead of the frame walk copying it
+     out with a full-resolution drawImage every frame - see the note where that blit used to
+     live in render/frame.js. Hidden again in 2D, where the overlay paints everything and an
+     opaque world layer underneath it would just be pinned memory. */
+  R3.cv.style.display = R3.on ? 'block' : 'none';
+  if (!R3.on) { R3.shakeT = ''; R3.cv.style.transform = ''; }
+  /* And the glow layer goes out with the mode: it belongs to the 3D presentation (in 2D the
+     bloom composites into the opaque frame directly), and a switch mid-explosion would leave
+     the last halo floating over the other renderer until the next quiet frame cleared it. */
+  if (typeof _rtsGlowOut === 'function') _rtsGlowOut(window._rtsR);
+  /* the world moved between canvases, so both need a clean slate */
+  R3.terrainDirty = true; R3.fogDirty = true;
+  var btn = document.getElementById('rts3dBtn');
+  if (btn) { btn.classList.toggle('on', R3.on); btn.title = R3.on ? 'Back to classic 2D' : 'Switch to 3D'; }
+  _r3dResize();
+  if (!quiet && typeof _rtsSfx === 'function') _rtsSfx('click');
+  return true;
+}
+
+/* The toggle the button calls. */
+function rts3dToggle() {
+  rts3dSet(!(window._R3D && window._R3D.on));
+}
+
+/* SET IT, RATHER THAN FLIP IT. A toggle is the right thing for a button and the wrong thing
+   for everybody else: every caller that wanted the mode ON said `toggle` and meant it, which
+   was only true while 2D was the default. It is not any more, so a caller that means "on" has
+   to say so. Returns whether the mode ended up where it was asked to go. */
+function rts3dSet(on) {
+  on = !!on;
+  if (!_r3dApply(on, false)) return false;
+  try { window.localStorage.setItem(RTS_3D_LS, on ? '1' : '0'); } catch (e) {}
+  return true;
+}
+
+/* Called once per match from rtsOpen.
+
+   3D IS THE DEFAULT NOW, which inverts what this used to do. It only ever turned the mode ON
+   and let an absent preference fall through to 2D, so a new player never saw the renderer at
+   all - the shadows, the occlusion, the swell, the lean, the effects standing in the world -
+   unless they found a two-character button in the top bar and pressed it.
+
+   So an ABSENT or unreadable preference lands in 3D now, and only an explicit '0' keeps it in
+   2D. Nothing writes that '0' except rts3dSet, which is to say except somebody pressing the
+   button to leave, so the only way to get the 2D game is to have asked for it. Treating
+   unreadable as 3D is deliberate too: a browser refusing localStorage should get the mode the
+   game is built around rather than the fallback.
+
+   2D IS STILL THE FLOOR, and that is why this cannot just force the mode on. _r3dApply returns
+   false when there is no WebGL context to be had; nothing has changed then, and the 2D painter
+   draws the match exactly as it always did. */
+function rts3dRestore() {
+  var want = null;
+  try { want = window.localStorage.getItem(RTS_3D_LS); } catch (e) { want = null; }
+  if (want !== '0') _r3dApply(true, true);
+}
+
+/* HOW MANY DEVICE PIXELS THE 3D BUFFER GETS PER CSS PIXEL. Native by default; this ceiling
+   exists so ui/gfxstat.js has something to clamp a pinned value against.
+
+   IT WAS 2, AS A FILL-RATE CAP, AND THE DEVICE SAID NO. The premise looked solid - a dpr-3 phone
+   carried 1.46M pixels and a dpr-4 one 2.10M against the 816k of the 1280x800 desktop this game
+   is judged on - then the frame rate was read off a real iPhone 17 Pro Max through the GFX
+   readout: 0.29 MP gave ~30 fps, 1.15 MP ~30, 2.60 MP ~30-40. A ninefold range in pixels moved
+   nothing, so that phone is not fill-bound: the cap bought no frames and cost sharpness on every
+   dense screen. The knob stays (ui/gfxstat.js) for devices that ARE fill-bound. Why 30 and not
+   60 is still open - the 2D renderer has not been read, and a frame-rate cap and a slow 3D path
+   look identical from here. */
+var R3D_MAX_SCALE = 4;   /* = the dpr ceiling in camera.js, so AUTO is native */
+
+function _r3dResize() {
+  var R3 = window._R3D, main = document.getElementById('rtsCv'), R = window._rtsR;
+  if (!R3 || !main) return;
+  /* The 2D canvas is the reference for CSS size because it is the one being presented, and its
+     backing store is cssPx * R.dpr - so this recovers the CSS box without reading layout. */
+  var dpr = (R && R.dpr) || 1;
+  /* A pinned scale from the GFX control wins over the cap, so a player can measure their own
+     device at every resolution it can show - see ui/gfxstat.js. Still bounded by dpr: a buffer
+     larger than the screen is pure cost. */
+  var pin = (typeof _rtsGfxWant === 'function') ? _rtsGfxWant() : null;
+  R3.scale = pin ? Math.min(dpr, pin) : Math.min(dpr, R3D_MAX_SCALE);
+  /* The CSS box tracks the presentation canvas's, so the presented layer always fills the
+     stage whatever the buffer scale. Off the overlay's inline style rather than layout, for
+     the same reason as the buffer size above - and string-compared, because this runs every
+     frame and assigning an unchanged style still costs a recalc. */
+  if (R3.cv.style.width !== main.style.width) R3.cv.style.width = main.style.width;
+  if (R3.cv.style.height !== main.style.height) R3.cv.style.height = main.style.height;
+  var w = Math.max(1, Math.round(main.width / dpr * R3.scale));
+  var h = Math.max(1, Math.round(main.height / dpr * R3.scale));
+  if (R3.cv.width !== w || R3.cv.height !== h) { R3.cv.width = w; R3.cv.height = h; }
+  R3.gl.viewport(0, 0, R3.cv.width, R3.cv.height);
 }
 </script>
 <script>/* render3d/post3d.js - the offscreen buffer the frame is drawn into, and the ambient occlusion
@@ -24573,14 +24690,27 @@ function _rtsRFrame(dt) {
   var r3on = window._R3D && window._R3D.on;
   if (r3on) {
     _r3dFrame(G);
-    /* The GL canvas is BLITTED here rather than stacked under this one and left to the
-       compositor. Stacking worked in every reduced test and still composited black inside the
-       real page in headless capture - and a renderer this project cannot screenshot is one it
-       cannot verify, so the compositor was fired from the job. The blit costs one full-frame
-       drawImage, buys identical behaviour everywhere, and gets screen shake for free because
-       it happens under the same transform as everything else. */
+    /* The GL canvas is STACKED under this one - _r3dApply flips it visible - and this canvas
+       only CLEARS, so the compositor shows the world through it. It was a per-frame blit for a
+       long time, because stacking once composited black in headless capture and a renderer
+       this project cannot capture is one it cannot verify. Two things changed the answer. The
+       context now carries preserveDrawingBuffer:true, so the GL buffer reads back correctly at
+       any time and every capture path works against the layers themselves (_rtsCompose below
+       rebuilds the exact composited frame on demand - it IS the old blit, kept for the
+       harness). And the blit itself became the suspect for the phone frame rate: an iPhone
+       17 Pro Max held ~30fps at 0.29, 1.15 and 2.60 megapixels alike, so it is not fill-bound
+       in the shader - but a full-resolution drawImage of a WebGL canvas into a 2D canvas every
+       frame forces a GPU sync on exactly that class of device, and it is the one full-frame
+       cost the scale knob cannot touch. Presenting the canvas directly deletes it.
+
+       Screen shake moved with it: the world layer shakes by a compositor transform (below),
+       the overlay through the same setTransform it always used, so the two cannot part. */
     g.clearRect(-8, -8, R.W + 16, R.H + 16);
-    g.drawImage(window._R3D.cv, 0, 0, R.W, R.H);
+    var shT = (shx || shy) ? 'translate(' + shx + 'px,' + shy + 'px)' : '';
+    if (window._R3D.shakeT !== shT) {
+      window._R3D.shakeT = shT;
+      window._R3D.cv.style.transform = shT;
+    }
   } else {
     g.fillStyle = '#1a1d16';
     g.fillRect(-8, -8, R.W + 16, R.H + 16);
@@ -24979,6 +25109,32 @@ function _rtsRFrame(dt) {
 }
 
 
+
+/* The composited frame, on demand: the GL world with the 2D overlay over it - exactly what
+   the compositor is showing the player, rebuilt as one readable canvas. This is the per-frame
+   blit that used to live in the frame walk, demoted to a capture tool: the harness reads
+   pixels, and layered canvases have no readable composite except through something like this.
+   In 2D the presentation canvas already IS the frame, so it comes back untouched. */
+function _rtsCompose() {
+  var R = _rtsR, R3 = window._R3D;
+  if (!(R3 && R3.on)) return R.cv;
+  var out = document.createElement('canvas');
+  out.width = R.cv.width; out.height = R.cv.height;
+  var og = out.getContext('2d');
+  og.imageSmoothingEnabled = false;
+  og.drawImage(R3.cv, 0, 0, out.width, out.height);
+  og.drawImage(R.cv, 0, 0);
+  /* The glow element too, with the same screen blend the compositor applies - canvas2d
+     carries the operator, so the harness's frame and the player's agree about explosions. */
+  var glow = document.getElementById('rtsGlow');
+  if (glow && glow.width > 1 && R.glowLit) {
+    og.globalCompositeOperation = 'screen';
+    og.imageSmoothingEnabled = true;
+    og.drawImage(glow, 0, 0, out.width, out.height);
+    og.globalCompositeOperation = 'source-over';
+  }
+  return out;
+}
 </script>
 <script>/* render/fx.js - projectiles, explosions, tracers, muzzle flashes and debris.
    Part of rts.render, which owns every pixel. Split out of render/frame.js, which it pushed
@@ -25683,6 +25839,11 @@ function rtsOpen(seed) {
        than absent when the mode is off, so toggling is a style flip, not a DOM rebuild. */
     +   '<canvas id="rtsCv3d" style="display:none"></canvas>'
     +   '<canvas id="rtsCv"></canvas>'
+    /* The bloom's glow, as an ELEMENT the compositor screen-blends - in 3D the world is on
+       the presented GL layer and additive light cannot be pushed through source-over from a
+       transparent overlay; see the composite-back in _rtsPost. Holds the eighth-scale bloom
+       buffer, stretched by CSS. Transparent (= invisible) except while something burns. */
+    +   '<canvas id="rtsGlow"></canvas>'
     /* The vignette, as an ELEMENT rather than a per-frame canvas composite - see _rtsPost for
        why it moved. It sits between the battlefield and the HUD, which is exactly where the
        old multiply sat in the draw order. */
@@ -25925,6 +26086,12 @@ function _rtsResizeCanvases() {
   cv.style.width = W + 'px'; cv.style.height = H + 'px';
   var c3 = document.getElementById('rtsCv3d');
   if (c3) { c3.style.width = W + 'px'; c3.style.height = H + 'px'; }
+  /* The glow canvas needs the same explicit box as every other canvas here: `inset:0` does
+     NOT stretch an absolutely positioned REPLACED element - auto width on a canvas resolves
+     to its intrinsic size, so without this the eighth-scale buffer sat 105px wide in the
+     corner, and the fireball's halo rendered as a dim red smear at the top-left of the map. */
+  var gcv = document.getElementById('rtsGlow');
+  if (gcv) { gcv.style.width = W + 'px'; gcv.style.height = H + 'px'; }
   hud.style.width = W + 'px'; hud.style.height = H + 'px';
   hud.width = Math.round(W * dpr); hud.height = Math.round(H * dpr);
   hud.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);

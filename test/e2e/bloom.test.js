@@ -53,10 +53,11 @@ var S = new Suite('bloom');
     R.focus.x = yard.x; R.focus.z = yard.z;
     R.zi = RTS_ZOOMS.length - 1; _rtsApplyCam();
 
-    /* The 3D canvas is blitted onto the 2D one before the post pass, so this canvas carries
-       the finished picture - world, effects and all - and is what the pass actually works on. */
-    var cv2 = document.getElementById('rtsCv');
-    var ctx = cv2.getContext('2d');
+    /* The GL world is PRESENTED under the 2D overlay now, not blitted into it, so no single
+       canvas carries the finished picture any more - _rtsCompose() rebuilds it (GL layer plus
+       overlay), which is the frame the compositor is showing the player and the picture the
+       post pass's output lands on. */
+    var cv2 = _rtsCompose();
     var BX = yard.x + 4, BZ = yard.z + 6;
 
     /* TIME FROZEN, at dt = 0. Stepping the clock lets the sea swell and everything else move,
@@ -68,7 +69,8 @@ var S = new Suite('bloom');
       G.fx.length = 0;
       if (fire) G.fx.push({ kind: 'boom', x: BX, y: 1, z: BZ, t: 0.18, big: 1.0 });
       _rtsRFrame(0);
-      return ctx.getImageData(0, 0, cv2.width, cv2.height).data;
+      var cc = _rtsCompose();
+      return cc.getContext('2d').getImageData(0, 0, cc.width, cc.height).data;
     }
     frame(true, true);                       /* settle */
 
