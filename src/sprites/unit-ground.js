@@ -150,6 +150,12 @@ function _sprUnitGround(X, key) {
       _r3Hip(m, -1, 7.0, 0, 17, 1.9, 10.5, 2.6, VH[3]);
       _r3Box(m, 7.6, 3.4, 0, 3.2, 3.4, 9.4, VH[1], VH[3]);         /* glacis plate */
       _r3Box(m, -7.4, 5.0, 3.2, 3.4, 2.0, 3.0, S[2], S[1]);        /* stowage box */
+      /* Fittings that read from above: headlights at the glacis corners, an exhaust on the
+         rear deck, jerrycans on the far fender balancing the stowage box. */
+      _r3Box(m, 9.0, 5.6, -3.6, 1.0, 1.1, 1.8, GN[3], GN[3]);
+      _r3Box(m, 9.0, 5.6, 3.6, 1.0, 1.1, 1.8, GN[3], GN[3]);
+      _r3Box(m, -8.2, 7.4, -1.8, 2.6, 1.2, 1.4, DK[1], DK[2]);     /* exhaust */
+      _r3Box(m, -7.4, 5.0, -3.4, 1.6, 2.2, 2.6, RTS_PAL.hazard[1] || S[0], S[1]);
     }
     if (part !== 'hull') {
       /* One heavy barrel with a muzzle brake, on a tapered housing. The Light Tank's is thin
@@ -168,6 +174,8 @@ function _sprUnitGround(X, key) {
       _r3Box(m, 12.0, 8.8, 0, 12.0, 2.1, 2.1, DK[1], DK[3]);       /* barrel, along +x */
       _r3Box(m, 19.2, 8.6, 0, 2.8, 2.8, 2.8, GN[0], GN[3]);        /* muzzle brake, pale */
       _r3Box(m, -4.6, 12.8, -2.6, 0.6, 4.5, 0.6, DK[1], DK[3]);    /* aerial */
+      _r3Cyl(m, -2.4, 12.8, 2.4, 1.6, 1.1, VH[2], VH[3], 12);      /* commander's cupola */
+      _r3Box(m, -0.6, 13.0, 2.4, 2.8, 0.6, 0.6, DK[1], DK[3]);     /* its MG */
     }
 
   } else if (key === 'light') {
@@ -179,6 +187,11 @@ function _sprUnitGround(X, key) {
       _r3Slab(m, 0, 2.9, 0, 14.5, 3.0, 8.6, 1.0, VH[0], VH[1]);
       _r3Hip(m, -0.8, 5.9, 0, 13.5, 1.6, 8.6, 2.2, VH[3]);         /* deck */
       _r3Box(m, 6.2, 2.9, 0, 2.6, 2.8, 7.6, VH[1], VH[3]);         /* glacis */
+      /* Headlights and an exhaust, and deliberately NOTHING more: no stowage and no clutter
+         is this model's identity - it must read as the cheap one at a glance. */
+      _r3Box(m, 7.4, 4.6, -3.0, 0.9, 1.0, 1.5, GN[3], GN[3]);
+      _r3Box(m, 7.4, 4.6, 3.0, 0.9, 1.0, 1.5, GN[3], GN[3]);
+      _r3Box(m, -7.2, 6.4, -1.6, 2.2, 1.0, 1.2, DK[1], DK[2]);
     }
     if (part !== 'hull') {
       _r3Slab(m, -0.5, 6.9, 0, 7.6, 2.8, 6.6, 0.9, VH[1], TM[1]);  /* turret, team roof */
@@ -198,6 +211,10 @@ function _sprUnitGround(X, key) {
       _r3Hip(m, -1, 8.6, 0, 20, 2.2, 12.5, 3.0, VH[3]);            /* deck */
       _r3Box(m, 9.0, 4.2, 0, 3.6, 4.2, 11.0, VH[1], VH[3]);        /* glacis */
       _r3Box(m, -8.5, 6.2, 4.0, 4.0, 2.6, 3.4, S[2], S[1]);        /* stowage */
+      _r3Box(m, 10.6, 6.8, -4.4, 1.1, 1.2, 2.0, GN[3], GN[3]);     /* headlights */
+      _r3Box(m, 10.6, 6.8, 4.4, 1.1, 1.2, 2.0, GN[3], GN[3]);
+      _r3Box(m, -9.6, 8.9, -2.2, 3.0, 1.3, 1.5, DK[1], DK[2]);     /* twin exhausts */
+      _r3Box(m, -9.6, 8.9, 2.2, 3.0, 1.3, 1.5, DK[1], DK[2]);
     }
     if (part !== 'hull') {
       _r3Slab(m, -0.6, 10.0, 0, 12.5, 4.2, 11.0, 1.2, VH[1], VH[3]);   /* turret */
@@ -208,6 +225,14 @@ function _sprUnitGround(X, key) {
       _r3Box(m, 20.6, 10.8, -3.2, 2.4, 2.4, 2.4, GN[0], GN[3]);    /* pale muzzles */
       _r3Box(m, 20.6, 10.8, 3.2, 2.4, 2.4, 2.4, GN[0], GN[3]);
       _r3Box(m, -5.4, 15.8, -3.0, 0.6, 5.0, 0.6, DK[1], DK[3]);    /* aerial */
+      /* THE TUSKS. The Mammoth's other weapon is the missile rack on each turret flank, and
+         it is also the strongest identity feature the reference gives this silhouette - a
+         boxy pod outboard of each barrel, with pale tips showing in the muzzle direction. */
+      for (var _hp = -1; _hp <= 1; _hp += 2) {
+        _r3Box(m, -3.2, 11.6, _hp * 6.6, 5.2, 2.6, 2.6, VH[2], VH[1]);
+        _r3Box(m, -0.4, 11.8, _hp * 6.6, 1.0, 1.8, 1.8, GN[0], GN[3]);
+      }
+      _r3Cyl(m, -3.2, 15.8, 2.6, 1.7, 1.1, VH[2], TM[1], 12);      /* cupola */
     }
 
   } else if (key === 'arty') {
@@ -230,6 +255,11 @@ function _sprUnitGround(X, key) {
     _r3Box(m, -3.6, 8.2, 0, 4.0, 2.4, 4.6, DK[1], DK[3]);          /* breech */
     _r3Box(m, -9.0, 0.9, -3.4, 5.2, 1.3, 1.8, S[1], S[0]);         /* recoil spades, splayed */
     _r3Box(m, -9.0, 0.9, 3.4, 5.2, 1.3, 1.8, S[1], S[0]);
+    /* A ready rack of shells on the chassis flank and the travel lock the tube rests in -
+       a gun carriage carries its ammunition where the crew can reach it. */
+    for (i = 0; i < 3; i++)
+      _r3Cyl(m, -3.4 + i * 2.2, 4.2, -3.9, 0.8, 2.4, GN[1], GN[0], 8);
+    _r3Box(m, 5.8, 4.2, 3.6, 1.1, 2.6, 1.1, S[2], S[0]);           /* travel lock post */
 
   } else if (key === 'v2rl') {
     /* V2 ROCKET LAUNCHER, and it had no model at all. It fell through to the generic fallback
@@ -273,6 +303,12 @@ function _sprUnitGround(X, key) {
              1.0, 3.2, 1.0, DK[1], DK[3]);
     }
     _r3Box(m, -8.6, 3.0, 0, 2.2, 2.0, 5.0, DK[2], DK[1]);          /* blast plate at the tail */
+    /* Launch support riding the bed: a fuel drum and a cable spool by the erector, and the
+       cab's mirrors - the truck fittings that separate it from an armoured chassis. */
+    _r3Cyl(m, 0.6, 4.2, -3.6, 1.4, 3.0, RTS_PAL.hazard[0], RTS_PAL.hazard[1], 10);
+    _r3Cyl(m, 0.6, 4.4, 3.6, 1.7, 1.4, DK[1], DK[3], 10);          /* spool */
+    _r3Box(m, 9.4, 6.4, -4.6, 0.6, 1.4, 0.9, S[2], S[3]);          /* mirrors */
+    _r3Box(m, 9.4, 6.4, 4.6, 0.6, 1.4, 0.9, S[2], S[3]);
 
   } else if (key === 'buggy') {
     /* Wheels are the buggy's whole identity, so they are proper vertical cylinders standing
@@ -288,6 +324,13 @@ function _sprUnitGround(X, key) {
     _r3Box(m, -1.5, 6.0, 0, 7.5, 2.8, 7.0, DK[2], DK[1]);          /* open cockpit well */
     _r3Box(m, -4.8, 6.0, 0, 1.0, 4.6, 7.0, TM[1], TM[3]);          /* roll hoop */
     _r3Box(m, 3.2, 8.4, 0, 8.5, 1.3, 1.3, DK[1], DK[3]);           /* pintle gun */
+    /* Scout kit: a spare wheel standing on the tail, a jerrycan beside it, headlight pair
+       and a whip aerial - the loose stowage that says "raider" against a tank's plating. */
+    _r3Cyl(m, -8.0, 3.4, 0, 2.6, 2.6, DK[0], DK[1], 12);           /* spare wheel */
+    _r3Box(m, -7.6, 3.4, 4.2, 1.6, 2.2, 2.4, RTS_PAL.hazard[0], S[1]);
+    _r3Box(m, 8.6, 3.6, -2.6, 0.9, 1.0, 1.4, GN[3], GN[3]);
+    _r3Box(m, 8.6, 3.6, 2.6, 0.9, 1.0, 1.4, GN[3], GN[3]);
+    _r3Box(m, -3.6, 8.8, -3.2, 0.5, 4.4, 0.5, DK[1], DK[3]);       /* whip aerial */
   } else return false;
   return true;
 }
