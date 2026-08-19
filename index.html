@@ -54,12 +54,6 @@
 #rcgRts #rtsCv{position:absolute;inset:0;display:block;cursor:crosshair;
   image-rendering:pixelated;image-rendering:crisp-edges}
 #rcgRts #rtsHud{position:absolute;inset:0;display:block;pointer-events:none}
-/* The glow layer: screen = a + b - ab, true addition over the dark ground a halo lives on and
-   a soft clamp on the bright core it must not darken. The buffer inside is eighth-scale; this
-   stretch is the same bilinear step the old full-frame drawImage relied on, so it stays the
-   softening. */
-#rcgRts #rtsGlow{position:absolute;inset:0;display:block;pointer-events:none;
-  mix-blend-mode:screen}
 /* The vignette. This used to be a full-frame `multiply` drawImage inside _rtsPost, every frame,
    priced per pixel on the canvas raster path - measured as the difference between p99 25.9ms and
    p99 20.1ms with the post-pass off. As an element with mix-blend-mode the same multiply happens
@@ -904,7 +898,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">9d17375 · 2026-08-19</div>
+  <div id="rtsBuild" title="build">d8c2a8d · 2026-08-19</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -21075,28 +21069,6 @@ function _rtsPostInit(R) {
      tail: p99 25.9ms with the post on, 20.1ms with it off, at zero fx - i.e. the vignette was
      the difference. RTS_VIGNETTE still names the corner colour; the CSS carries its value. */
   R.vigW = R.W; R.vigH = R.H;
-  /* The glow element is sized HERE, with the buffers, and cleared at once - never lazily in
-     the first burning frame. A canvas that has never been painted composites from
-     never-written texture memory, and with mix-blend-mode in front of the compositor that
-     showed up as a red smear of stale garbage in the off-map corner of a headless capture -
-     content getImageData could not see, because the canvas itself was genuinely blank. An
-     explicit clear makes the texture defined everywhere the compositor can look. */
-  var glowEl = document.getElementById('rtsGlow');
-  if (glowEl && (glowEl.width !== R.bloomW || glowEl.height !== R.bloomH)) {
-    glowEl.width = R.bloomW; glowEl.height = R.bloomH;
-    glowEl.getContext('2d').clearRect(0, 0, R.bloomW, R.bloomH);
-    R.glowLit = false;
-  }
-}
-
-/* Putting the glow element out, once: cheap enough to call on every quiet frame because it
-   early-outs on the flag, and the flag exists so a 60Hz game does not clearRect an empty
-   canvas 60 times a second. */
-function _rtsGlowOut(R) {
-  if (!R || !R.glowLit) return;
-  R.glowLit = false;
-  var el = document.getElementById('rtsGlow');
-  if (el) el.getContext('2d').clearRect(0, 0, el.width, el.height);
 }
 
 /* Is there anything on screen worth blooming? Almost always no. The threshold is built to pass
@@ -21117,30 +21089,27 @@ function _rtsWantBloom(G) {
 
 function _rtsPost(g) {
   var R = _rtsR, G = window._rtsG;
-  if (!R || !RTS_POST_ON || R.W < 8 || R.H < 8) { _rtsGlowOut(R); return; }
+  if (!R || !RTS_POST_ON || R.W < 8 || R.H < 8) return;
+  /* 2D ONLY, NOW. In 3D the glow is computed on the GPU from the emitters - see
+     render3d/bloom3d.js - and this pass was measured as the entire cost of a combat frame
+     there: one getImageData of the blur buffer plus eight drawImage calls per burning frame,
+     one of them dragging the whole WebGL canvas into a 2D context. Two GPU->CPU syncs, on a
+     device that was missing vsync by a millisecond. The canvas path stays for the 2D renderer,
+     which has no GL to do it in and no sync to pay: there the frame IS this canvas. */
+  if (window._R3D && window._R3D.on) return;
   if (R.vigW !== R.W || R.vigH !== R.H || !R.bloomG) _rtsPostInit(R);
 
   /* The vignette is the #rtsVig element now (see style.css), so a frame with nothing worth
      blooming - which is most frames - costs the post pass NOTHING at all. The glow element
      does have to be told the fire is out, though - it lives outside the canvas, so nothing
      else ever paints over it, and the last explosion's halo would hang on screen forever. */
-  if (!G || !_rtsWantBloom(G)) { _rtsGlowOut(R); return; }
+  if (!G || !_rtsWantBloom(G)) return;
 
   /* --- bloom --- */
   var bg = R.bloomG, bw = R.bloomW, bh = R.bloomH;
   bg.globalCompositeOperation = 'source-over';
   bg.globalAlpha = 1;
   bg.clearRect(0, 0, bw, bh);
-  /* THE SOURCE IS THE COMPOSITE, built here at an eighth scale. In 3D the world - and the
-     FIREBALLS, which are GL billboards (render3d/fx3d.js) - live on the presented GL layer,
-     and the 2D canvas above it is a mostly-transparent overlay. While the frame walk blitted
-     the GL buffer into this canvas the distinction was invisible, and the day the blit went
-     the bloom silently lost every bright thing it exists to find: measured on one explosion,
-     the overlay's brightest pixel was 39 of 765 and the glow gained nothing. Downscaling the
-     GL layer first costs one drawImage at 1/64 of the old blit's pixels, and only on frames
-     _rtsWantBloom already said are burning. */
-  var R3b = window._R3D;
-  if (R3b && R3b.on) bg.drawImage(R3b.cv, 0, 0, bw, bh);
   bg.drawImage(g.canvas, 0, 0, bw, bh);
   /* A POWER CURVE FOR THE THRESHOLD, then the gain separately. The two are separate jobs and
      conflating them is what went wrong twice:
@@ -21209,47 +21178,12 @@ function _rtsPost(g) {
   }
   var gain = RTS_BLOOM * Math.max(0, Math.min(1, 1 - (mbright / mn - 0.04) / 0.10));
   if (gain > 0.01) {
-    /* HOW THE GLOW REACHES THE PICTURE depends on what the canvas under it is. In 2D the
-       canvas is the whole opaque frame and 'lighter' onto it is true addition, exactly as it
-       always was. In 3D the world is on the presented GL layer and this canvas is a
-       transparent overlay - and an additive effect CANNOT be pushed through the compositor's
-       source-over from there: a semi-transparent glow pixel INTERPOLATES the backdrop toward
-       its own colour, so the halo lit the dark ground and visibly dimmed the fireball's own
-       core (the glow's 40 replacing 16% of the core's 240). Tried and measured before this:
-       'lighter' with the buffer's own alpha laid a 96%-alpha black sheet over the world,
-       because the buffer inherits opaque alpha from the GL source.
-
-       So in 3D the glow rides its own element, #rtsGlow, and the COMPOSITOR blends it with
-       mix-blend-mode:screen - the same move that took the vignette out of the canvas pipeline
-       (#rtsVig, multiply). Screen is a + b - ab: true addition over the dark ground where a
-       halo lives, soft-clamping on the bright core it must not darken. The element holds the
-       eighth-scale buffer and CSS stretches it, which is the same bilinear step the drawImage
-       here always relied on. Transparent pixels leave the backdrop untouched, so an empty
-       glow canvas costs the compositor nothing to speak of and 2D never paints it. */
-    var R3g = window._R3D, glowEl = (R3g && R3g.on) ? document.getElementById('rtsGlow') : null;
-    if (glowEl) {
-      var gg = glowEl.getContext('2d');
-      gg.clearRect(0, 0, R.bloomW, R.bloomH);
-      gg.globalCompositeOperation = 'lighter';
-      gg.globalAlpha = gain;
-      /* TWICE the passes, and it is compensation rather than a fudge: 'lighter' delivered the
-         buffer b in full, screen delivers b*(1 - back/255) - half of it on mid ground, which
-         measured as the glow dropping from ~13 mean levels to 7.3 at its brightest. Doubling
-         the buffer makes screen(2b) equal lighter(b) exactly at mid-grey, stronger only over
-         dark ground (where a halo belongs) and still soft-clamped on the bright core screen
-         exists to protect. */
-      for (var gp = 0; gp < RTS_BLOOM_PASSES * 2; gp++) gg.drawImage(R.blurCv, 0, 0);
-      gg.globalCompositeOperation = 'source-over';
-      gg.globalAlpha = 1;
-      R.glowLit = true;
-    } else {
-      g.save();
-      g.globalCompositeOperation = 'lighter';
-      g.globalAlpha = gain;
-      g.imageSmoothingEnabled = true;
-      for (var bp = 0; bp < RTS_BLOOM_PASSES; bp++) g.drawImage(R.blurCv, 0, 0, R.W, R.H);
-      g.restore();
-    }
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = gain;
+    g.imageSmoothingEnabled = true;
+    for (var bp = 0; bp < RTS_BLOOM_PASSES; bp++) g.drawImage(R.blurCv, 0, 0, R.W, R.H);
+    g.restore();
   }
   /* the vignette multiplies over this on the compositor - #rtsVig sits above the canvas */
 }
@@ -22378,10 +22312,6 @@ function _r3dApply(on, quiet) {
      opaque world layer underneath it would just be pinned memory. */
   R3.cv.style.display = R3.on ? 'block' : 'none';
   if (!R3.on) { R3.shakeT = ''; R3.cv.style.transform = ''; }
-  /* And the glow layer goes out with the mode: it belongs to the 3D presentation (in 2D the
-     bloom composites into the opaque frame directly), and a switch mid-explosion would leave
-     the last halo floating over the other renderer until the next quiet frame cleared it. */
-  if (typeof _rtsGlowOut === 'function') _rtsGlowOut(window._rtsR);
   /* the world moved between canvases, so both need a clean slate */
   R3.terrainDirty = true; R3.fogDirty = true;
   var btn = document.getElementById('rts3dBtn');
@@ -22746,6 +22676,10 @@ var R3D_AO_RESOLVE_FS =
   'precision highp float; varying vec2 vT;' +
   'uniform sampler2D uScene; uniform sampler2D uAO; uniform float uAOAmt;' +
   'uniform vec2 uTexel; uniform float uAA;' +
+  /* The glow, added after the occlusion rather than before it: light in the air is not a
+     surface and must not be darkened by how much sky that surface can see. See bloom3d.js -
+     uBloomAmt is 0 on every frame with nothing burning, which is most of them. */
+  'uniform sampler2D uBloom; uniform float uBloomAmt;' +
   'float _lum(vec3 c){ return dot(c, vec3(0.299, 0.587, 0.114)); }' +
   'vec3 _fxaa(vec2 uv){' +
   '  vec3 mC = texture2D(uScene, uv).rgb;' +
@@ -22772,9 +22706,11 @@ var R3D_AO_RESOLVE_FS =
   'void main(){' +
   '  vec3 c = mix(texture2D(uScene, vT).rgb, _fxaa(vT), uAA);' +
   '  float ao = mix(1.0, texture2D(uAO, vT).r, uAOAmt);' +
-  '  gl_FragColor = vec4(c * mix(vec3(' + R3D_AO_FLOOR[0].toFixed(3) + ', ' +
+  '  vec3 lit = c * mix(vec3(' + R3D_AO_FLOOR[0].toFixed(3) + ', ' +
        R3D_AO_FLOOR[1].toFixed(3) + ', ' + R3D_AO_FLOOR[2].toFixed(3) +
-       '), vec3(1.0), ao), 1.0);' +
+       '), vec3(1.0), ao);' +
+  '  lit += texture2D(uBloom, vT).rgb * uBloomAmt;' +
+  '  gl_FragColor = vec4(lit, 1.0);' +
   '}';
 
 /* --------------------------------------------------------------------------- setup -- */
@@ -22926,6 +22862,14 @@ function _r3dPostEnd(R3, cam, invD) {
   gl.uniform1f(gl.getUniformLocation(R3.aoResolveP, 'uAA'),
                R3.aaAmt === undefined ? 1 : R3.aaAmt);
   gl.uniform2f(gl.getUniformLocation(R3.aoResolveP, 'uTexel'), 1 / R3.postW, 1 / R3.postH);
+  /* The glow. R3.bloomOn is set by _r3dBloomPass for this frame only; with nothing burning the
+     amount is zero and the sampler still needs a bound texture, so it gets the AO one - a
+     texture multiplied by zero, rather than a branch in the shader every pixel. */
+  var bloomAmt = R3.bloomOn ? (R3.bloomAmt === undefined ? R3D_BLOOM_AMT : R3.bloomAmt) : 0;
+  gl.uniform1f(gl.getUniformLocation(R3.aoResolveP, 'uBloomAmt'), bloomAmt);
+  gl.uniform1i(gl.getUniformLocation(R3.aoResolveP, 'uBloom'), 2);
+  gl.activeTexture(gl.TEXTURE2);
+  gl.bindTexture(gl.TEXTURE_2D, (R3.bloomOn && R3.bloomTex) ? R3.bloomTex : R3.aoTex);
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, R3.sceneTex);
   gl.activeTexture(gl.TEXTURE1);
@@ -22935,6 +22879,178 @@ function _r3dPostEnd(R3, cam, invD) {
   gl.activeTexture(gl.TEXTURE0);
   gl.depthMask(true);
   gl.enable(gl.DEPTH_TEST);
+}
+</script>
+<script>/* render3d/bloom3d.js - the glow around fire, computed on the GPU from the things that EMIT
+   light rather than from the things that are bright. Part of rts.render3d.
+
+   WHY THIS EXISTS AT ALL, twice over.
+
+   FIRST, THE COST. The bloom used to run on the 2D canvas, and in 3D that made it the single
+   most expensive thing in a combat frame. Counted per frame with the sim frozen, a burning
+   frame carried one getImageData of the blur buffer and eight drawImage calls over a quiet
+   frame's none - and one of those eight pulled the whole 2.35-megapixel WebGL canvas into a
+   2D context. Both are GPU->CPU syncs. A real iPhone 17 Pro Max read 59fps out of combat and
+   32.0ms - 31fps - during an attack, and 32.0 is almost exactly twice 16.7: the frame was
+   missing vsync by a hair and being halved. The target was never sixteen milliseconds, it was
+   one or two, and the syncs were all of it. Nothing here reads a pixel back.
+
+   SECOND, AND THE REASON IT IS AN EMITTER PASS: BRIGHTNESS CANNOT FIND FIRE IN THIS RENDERER.
+   The old pass thresholded the frame - x^8 on a downscaled copy - and needed a second guard on
+   top, a global "what fraction of the buffer is bright" statistic that stood the whole effect
+   down on a pale map, because a snowfield sails through any threshold. That guard was the
+   readback. Measured on the GL buffer, the premise turns out to be worse than "needs a guard":
+
+       temperate, one blast    max luminance 0.897, 0.01% of the frame over 0.8
+       snowfield, NOTHING lit  max luminance 1.000, 51.5% of the frame over 0.9
+
+   A fireball is DIMMER than snow. There is no threshold anywhere that passes the explosion on
+   the first row and rejects the field on the second, so no amount of tuning could have made the
+   old approach right - the guard was not a refinement, it was the only thing standing between
+   the effect and a full-screen flash.
+
+   Light is not brightness, so this pass asks the other question. The fx billboards are the
+   things in this scene that EMIT - fire, explosions, the muzzle-flash set render/fx.js owns -
+   and they are re-drawn here, alone, into a small buffer. Nothing else can enter it. Snow
+   cannot flash because snow is never in the source, and the threshold, the power curve and the
+   stand-down statistic all cease to exist rather than being tuned.
+
+   THE EMITTERS ARE DEPTH TESTED, and the first version of this was not - it drew them straight
+   into the quarter-scale buffer, which cannot share the full-resolution depth attachment. The
+   argument for skipping the test was that a halo around a light source spilling over a roofline
+   is what light does. e2e/tilt disagreed, with a number: that spec exists because leaning the
+   camera to 49 degrees makes buildings hide more of what is behind them, and it measures the
+   war factory concealing an explosion. Undepthed, the glow leaked over the roof and the factory
+   hid 9% of the blast where it had hidden a third of it - the lean's whole visible benefit,
+   erased by a halo. A building has to occlude what is behind it or the camera angle means
+   nothing.
+
+   So the emitters are drawn at FULL resolution with the scene's own depth texture attached -
+   tested, never written - and downsampled on the way into the blur. The cost is one more
+   full-resolution RGBA target (9.4MB at 2.35 megapixels) and one extra quad; the emitter draw
+   itself is six small quads that the depth test mostly rejects. */
+
+/* A QUARTER, not the eighth the canvas pass used. The old buffer was sized against a full-frame
+   drawImage that had to be kept cheap; this one is filled by six quads. A quarter blurs to a
+   tighter, better-placed halo and still costs a sixteenth of the pixels. */
+var R3D_BLOOM_DIV = 4;
+/* How much of the blurred emitter buffer is added back. Additive, so this is in the frame's own
+   units: 1.0 doubles the brightness at the heart of a fireball. */
+var R3D_BLOOM_AMT = 0.85;
+/* The blur radius in buffer texels, spent as a 9-tap gaussian on each axis. At quarter
+   resolution 2.0 reaches about eight screen pixels, which is a halo rather than a haze. */
+var R3D_BLOOM_RADIUS = 2.0;
+
+/* A separable gaussian. Two passes of this over the emitter buffer is the whole blur - the
+   canvas path needed a CSS filter and a bilinear stretch to get here. */
+var R3D_BLOOM_BLUR_FS =
+  'precision mediump float; varying vec2 vT;' +
+  'uniform sampler2D uSrc; uniform vec2 uStep;' +
+  'void main(){' +
+  '  vec3 s = texture2D(uSrc, vT).rgb * 0.2270270270;' +
+  '  s += (texture2D(uSrc, vT + uStep * 1.3846153846).rgb +' +
+  '        texture2D(uSrc, vT - uStep * 1.3846153846).rgb) * 0.3162162162;' +
+  '  s += (texture2D(uSrc, vT + uStep * 3.2307692308).rgb +' +
+  '        texture2D(uSrc, vT - uStep * 3.2307692308).rgb) * 0.0702702703;' +
+  '  gl_FragColor = vec4(s, 1.0);' +
+  '}';
+
+function _r3dBloomInit(R3) {
+  var gl = R3.gl;
+  R3.bloomP = _r3dProgram(gl, R3D_QUAD_VS, R3D_BLOOM_BLUR_FS);
+  R3.bloomFbo = gl.createFramebuffer();
+  return !!R3.bloomP;
+}
+
+/* Sized off the scene buffer, so it tracks the render scale the player picked. */
+function _r3dBloomSize(R3) {
+  var gl = R3.gl;
+  var w = Math.max(1, R3.postW / R3D_BLOOM_DIV | 0), h = Math.max(1, R3.postH / R3D_BLOOM_DIV | 0);
+  if (R3.bloomW === w && R3.bloomH === h && R3.bloomTex) return true;
+  ['bloomTex', 'bloomTex2', 'emitTex'].forEach(function (k) {
+    if (R3[k]) { gl.deleteTexture(R3[k]); R3[k] = null; }
+  });
+  R3.bloomTex = _r3dPostTex(gl, w, h, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR);
+  R3.bloomTex2 = _r3dPostTex(gl, w, h, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR);
+  /* Full resolution, because it is depth tested against the scene's depth and an attachment
+     can only be tested against one the same size. Downsampled into the blur immediately. */
+  R3.emitTex = _r3dPostTex(gl, R3.postW, R3.postH, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR);
+  R3.bloomW = w; R3.bloomH = h;
+  return !!(R3.bloomTex && R3.bloomTex2 && R3.emitTex);
+}
+
+/* Draw the emitters and blur them. Returns true when there is a glow to composite, false when
+   nothing is burning - and false is the common case, so the resolve is told to skip the
+   lookup entirely rather than sampling a black texture on every quiet frame.
+
+   Called from _r3dFrame with the scene FBO still bound, immediately before _r3dPostEnd. */
+function _r3dBloomPass(R3, G, cam, invD) {
+  /* RTS_POST_ON gates this exactly as it gates the 2D pass: it is the same effect, and a spec
+     that A/Bs the post pass has to be able to take the glow out from one switch in either
+     renderer. R3.bloomAmt is the finer control - see R3.aoAmt in post3d.js for the precedent -
+     which removes the glow from the picture while still paying for the pass, so the cost and
+     the appearance can be graded separately. */
+  if (typeof RTS_POST_ON !== 'undefined' && !RTS_POST_ON) return false;
+  if (!R3.postReady || !G || !G.fx || !G.fx.length) return false;
+  if (!R3.bloomP && !_r3dBloomInit(R3)) return false;
+  if (!_r3dBloomSize(R3)) return false;
+  var gl = R3.gl, i;
+
+  /* --- the emitters, alone, at full resolution and behind the world's own depth --- */
+  gl.bindFramebuffer(gl.FRAMEBUFFER, R3.bloomFbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, R3.emitTex, 0);
+  /* The SCENE's depth, tested and never written - depthMask stays false through the draw, so
+     nothing here can disturb the buffer the occlusion pass is about to read. */
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, R3.sceneDepth, 0);
+  if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, null, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, R3.sceneFbo);
+    gl.viewport(0, 0, R3.postW, R3.postH);
+    return false;
+  }
+  gl.viewport(0, 0, R3.postW, R3.postH);
+  gl.clearColor(0, 0, 0, 1);
+  gl.depthMask(false);
+  gl.clear(gl.COLOR_BUFFER_BIT);          /* colour only - the depth is the world's */
+  gl.enable(gl.DEPTH_TEST);
+  var drawn = 0;
+  try { drawn = _r3dFxDraw(G, cam, invD) || 0; } catch (e) { drawn = 0; }
+  /* the depth goes back before anything else binds this FBO */
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, null, 0);
+  /* _r3dFxDraw reports what it actually put on screen, and the set it owns is narrower than
+     G.fx - a frame carrying only tracers has fx but no emitters, and blurring an empty buffer
+     to composite nothing is pure cost. */
+  if (!drawn) {
+    gl.depthMask(true);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, R3.sceneFbo);
+    gl.viewport(0, 0, R3.postW, R3.postH);
+    return false;
+  }
+
+  /* --- the two blur axes, which also do the downscale: the first samples the full-resolution
+         emitter target and writes a quarter-scale one, and because the sampler works in
+         normalised uv the step is in destination units either way --- */
+  gl.disable(gl.DEPTH_TEST);
+  gl.disable(gl.BLEND);
+  gl.useProgram(R3.bloomP);
+  gl.uniform1i(gl.getUniformLocation(R3.bloomP, 'uSrc'), 0);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.viewport(0, 0, R3.bloomW, R3.bloomH);
+  for (i = 0; i < 2; i++) {
+    var src = i ? R3.bloomTex2 : R3.emitTex, dst = i ? R3.bloomTex : R3.bloomTex2;
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, dst, 0);
+    gl.uniform2f(gl.getUniformLocation(R3.bloomP, 'uStep'),
+                 i ? 0 : R3D_BLOOM_RADIUS / R3.bloomW, i ? R3D_BLOOM_RADIUS / R3.bloomH : 0);
+    gl.bindTexture(gl.TEXTURE_2D, src);
+    _r3dQuad(R3, R3.bloomP);
+  }
+  gl.depthMask(true);
+  gl.enable(gl.DEPTH_TEST);
+
+  /* back to the scene buffer, exactly as this pass found it */
+  gl.bindFramebuffer(gl.FRAMEBUFFER, R3.sceneFbo);
+  gl.viewport(0, 0, R3.postW, R3.postH);
+  return true;
 }
 </script>
 <script>/* render3d/ground3d.js - the textures the ground is draped in: the terrain canvas, the
@@ -23941,6 +24057,11 @@ function _r3dFrame(G) {
   if (G.fx && G.fx.length) {
     try { _r3dFxDraw(G, cam, invD); } catch (e) { R3.fxDrawn = -1; }
   }
+
+  /* THE GLOW, from the emitters only - see render3d/bloom3d.js for why it is drawn from what
+     emits light rather than thresholded out of what is bright. Here, after the effects exist
+     and before the resolve that composites it, and it leaves the scene buffer bound. */
+  R3.bloomOn = post ? _r3dBloomPass(R3, G, cam, invD) : false;
 
   /* THE OCCLUSION, AND BACK TO THE CANVAS. Everything with a surface has now been drawn, so
      this is the last moment the depth buffer describes the world and nothing else. The fog
@@ -25264,15 +25385,6 @@ function _rtsCompose() {
   og.imageSmoothingEnabled = false;
   og.drawImage(R3.cv, 0, 0, out.width, out.height);
   og.drawImage(R.cv, 0, 0);
-  /* The glow element too, with the same screen blend the compositor applies - canvas2d
-     carries the operator, so the harness's frame and the player's agree about explosions. */
-  var glow = document.getElementById('rtsGlow');
-  if (glow && glow.width > 1 && R.glowLit) {
-    og.globalCompositeOperation = 'screen';
-    og.imageSmoothingEnabled = true;
-    og.drawImage(glow, 0, 0, out.width, out.height);
-    og.globalCompositeOperation = 'source-over';
-  }
   return out;
 }
 </script>
@@ -25979,11 +26091,6 @@ function rtsOpen(seed) {
        than absent when the mode is off, so toggling is a style flip, not a DOM rebuild. */
     +   '<canvas id="rtsCv3d" style="display:none"></canvas>'
     +   '<canvas id="rtsCv"></canvas>'
-    /* The bloom's glow, as an ELEMENT the compositor screen-blends - in 3D the world is on
-       the presented GL layer and additive light cannot be pushed through source-over from a
-       transparent overlay; see the composite-back in _rtsPost. Holds the eighth-scale bloom
-       buffer, stretched by CSS. Transparent (= invisible) except while something burns. */
-    +   '<canvas id="rtsGlow"></canvas>'
     /* The vignette, as an ELEMENT rather than a per-frame canvas composite - see _rtsPost for
        why it moved. It sits between the battlefield and the HUD, which is exactly where the
        old multiply sat in the draw order. */
@@ -26226,12 +26333,6 @@ function _rtsResizeCanvases() {
   cv.style.width = W + 'px'; cv.style.height = H + 'px';
   var c3 = document.getElementById('rtsCv3d');
   if (c3) { c3.style.width = W + 'px'; c3.style.height = H + 'px'; }
-  /* The glow canvas needs the same explicit box as every other canvas here: `inset:0` does
-     NOT stretch an absolutely positioned REPLACED element - auto width on a canvas resolves
-     to its intrinsic size, so without this the eighth-scale buffer sat 105px wide in the
-     corner, and the fireball's halo rendered as a dim red smear at the top-left of the map. */
-  var gcv = document.getElementById('rtsGlow');
-  if (gcv) { gcv.style.width = W + 'px'; gcv.style.height = H + 'px'; }
   hud.style.width = W + 'px'; hud.style.height = H + 'px';
   hud.width = Math.round(W * dpr); hud.height = Math.round(H * dpr);
   hud.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);

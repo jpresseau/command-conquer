@@ -42,10 +42,6 @@ function _r3dApply(on, quiet) {
      opaque world layer underneath it would just be pinned memory. */
   R3.cv.style.display = R3.on ? 'block' : 'none';
   if (!R3.on) { R3.shakeT = ''; R3.cv.style.transform = ''; }
-  /* And the glow layer goes out with the mode: it belongs to the 3D presentation (in 2D the
-     bloom composites into the opaque frame directly), and a switch mid-explosion would leave
-     the last halo floating over the other renderer until the next quiet frame cleared it. */
-  if (typeof _rtsGlowOut === 'function') _rtsGlowOut(window._rtsR);
   /* the world moved between canvases, so both need a clean slate */
   R3.terrainDirty = true; R3.fogDirty = true;
   var btn = document.getElementById('rts3dBtn');

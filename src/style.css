@@ -43,12 +43,6 @@
 #rcgRts #rtsCv{position:absolute;inset:0;display:block;cursor:crosshair;
   image-rendering:pixelated;image-rendering:crisp-edges}
 #rcgRts #rtsHud{position:absolute;inset:0;display:block;pointer-events:none}
-/* The glow layer: screen = a + b - ab, true addition over the dark ground a halo lives on and
-   a soft clamp on the bright core it must not darken. The buffer inside is eighth-scale; this
-   stretch is the same bilinear step the old full-frame drawImage relied on, so it stays the
-   softening. */
-#rcgRts #rtsGlow{position:absolute;inset:0;display:block;pointer-events:none;
-  mix-blend-mode:screen}
 /* The vignette. This used to be a full-frame `multiply` drawImage inside _rtsPost, every frame,
    priced per pixel on the canvas raster path - measured as the difference between p99 25.9ms and
    p99 20.1ms with the post-pass off. As an element with mix-blend-mode the same multiply happens

@@ -415,6 +415,11 @@ function _r3dFrame(G) {
     try { _r3dFxDraw(G, cam, invD); } catch (e) { R3.fxDrawn = -1; }
   }
 
+  /* THE GLOW, from the emitters only - see render3d/bloom3d.js for why it is drawn from what
+     emits light rather than thresholded out of what is bright. Here, after the effects exist
+     and before the resolve that composites it, and it leaves the scene buffer bound. */
+  R3.bloomOn = post ? _r3dBloomPass(R3, G, cam, invD) : false;
+
   /* THE OCCLUSION, AND BACK TO THE CANVAS. Everything with a surface has now been drawn, so
      this is the last moment the depth buffer describes the world and nothing else. The fog
      below deliberately lands AFTER it: the shroud is not a surface, so it must neither be

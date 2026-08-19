@@ -120,6 +120,15 @@ var S = new Suite('tilt');
       var keep = G.ents;
       G.ents = [wf];
       R.focus.x = wf.x; R.focus.z = wf.z; _rtsApplyCam();
+      /* THE GLOW IS OFF FOR THIS MEASUREMENT, the same way R3.aoAmt and R3.aaAmt exist so the
+         occlusion and the edge filter can be graded without each other moving. The claim here
+         is geometric - a building stands between the camera and what is behind it - and the
+         bloom adds lit pixels AROUND the blast in both the clear and the occluded case, which
+         moves the ratio without saying anything about the camera angle. Measured both ways on
+         one scenario: 0.462/0.269 with it off against 0.441/0.179 with it on. The effect is
+         real either way; it is just not what this line is about. */
+      var keepBloom = R3.bloomAmt;
+      R3.bloomAmt = 0;
       /* how much of a blast standing BEHIND the factory the factory manages to hide */
       function hidden(t) {
         R3.cp = Math.cos(t); R3.sp = Math.sin(t);
@@ -149,6 +158,7 @@ var S = new Suite('tilt');
       }
       o.hidNew = +hidden(R3D_TILT).toFixed(3);
       o.hidOld = +hidden(0.62).toFixed(3);
+      R3.bloomAmt = keepBloom;
       R3.cp = Math.cos(R3D_TILT); R3.sp = Math.sin(R3D_TILT);
       G.ents = keep;
       _rtsApplyCam();
