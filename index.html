@@ -904,7 +904,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">f8ae9c7 · 2026-08-19</div>
+  <div id="rtsBuild" title="build">9d17375 · 2026-08-19</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -8311,6 +8311,12 @@ function _sprUnitGround(X, key) {
       _r3Hip(m, -1, 7.0, 0, 17, 1.9, 10.5, 2.6, VH[3]);
       _r3Box(m, 7.6, 3.4, 0, 3.2, 3.4, 9.4, VH[1], VH[3]);         /* glacis plate */
       _r3Box(m, -7.4, 5.0, 3.2, 3.4, 2.0, 3.0, S[2], S[1]);        /* stowage box */
+      /* Fittings that read from above: headlights at the glacis corners, an exhaust on the
+         rear deck, jerrycans on the far fender balancing the stowage box. */
+      _r3Box(m, 9.0, 5.6, -3.6, 1.0, 1.1, 1.8, GN[3], GN[3]);
+      _r3Box(m, 9.0, 5.6, 3.6, 1.0, 1.1, 1.8, GN[3], GN[3]);
+      _r3Box(m, -8.2, 7.4, -1.8, 2.6, 1.2, 1.4, DK[1], DK[2]);     /* exhaust */
+      _r3Box(m, -7.4, 5.0, -3.4, 1.6, 2.2, 2.6, RTS_PAL.hazard[1] || S[0], S[1]);
     }
     if (part !== 'hull') {
       /* One heavy barrel with a muzzle brake, on a tapered housing. The Light Tank's is thin
@@ -8329,6 +8335,8 @@ function _sprUnitGround(X, key) {
       _r3Box(m, 12.0, 8.8, 0, 12.0, 2.1, 2.1, DK[1], DK[3]);       /* barrel, along +x */
       _r3Box(m, 19.2, 8.6, 0, 2.8, 2.8, 2.8, GN[0], GN[3]);        /* muzzle brake, pale */
       _r3Box(m, -4.6, 12.8, -2.6, 0.6, 4.5, 0.6, DK[1], DK[3]);    /* aerial */
+      _r3Cyl(m, -2.4, 12.8, 2.4, 1.6, 1.1, VH[2], VH[3], 12);      /* commander's cupola */
+      _r3Box(m, -0.6, 13.0, 2.4, 2.8, 0.6, 0.6, DK[1], DK[3]);     /* its MG */
     }
 
   } else if (key === 'light') {
@@ -8340,6 +8348,11 @@ function _sprUnitGround(X, key) {
       _r3Slab(m, 0, 2.9, 0, 14.5, 3.0, 8.6, 1.0, VH[0], VH[1]);
       _r3Hip(m, -0.8, 5.9, 0, 13.5, 1.6, 8.6, 2.2, VH[3]);         /* deck */
       _r3Box(m, 6.2, 2.9, 0, 2.6, 2.8, 7.6, VH[1], VH[3]);         /* glacis */
+      /* Headlights and an exhaust, and deliberately NOTHING more: no stowage and no clutter
+         is this model's identity - it must read as the cheap one at a glance. */
+      _r3Box(m, 7.4, 4.6, -3.0, 0.9, 1.0, 1.5, GN[3], GN[3]);
+      _r3Box(m, 7.4, 4.6, 3.0, 0.9, 1.0, 1.5, GN[3], GN[3]);
+      _r3Box(m, -7.2, 6.4, -1.6, 2.2, 1.0, 1.2, DK[1], DK[2]);
     }
     if (part !== 'hull') {
       _r3Slab(m, -0.5, 6.9, 0, 7.6, 2.8, 6.6, 0.9, VH[1], TM[1]);  /* turret, team roof */
@@ -8359,6 +8372,10 @@ function _sprUnitGround(X, key) {
       _r3Hip(m, -1, 8.6, 0, 20, 2.2, 12.5, 3.0, VH[3]);            /* deck */
       _r3Box(m, 9.0, 4.2, 0, 3.6, 4.2, 11.0, VH[1], VH[3]);        /* glacis */
       _r3Box(m, -8.5, 6.2, 4.0, 4.0, 2.6, 3.4, S[2], S[1]);        /* stowage */
+      _r3Box(m, 10.6, 6.8, -4.4, 1.1, 1.2, 2.0, GN[3], GN[3]);     /* headlights */
+      _r3Box(m, 10.6, 6.8, 4.4, 1.1, 1.2, 2.0, GN[3], GN[3]);
+      _r3Box(m, -9.6, 8.9, -2.2, 3.0, 1.3, 1.5, DK[1], DK[2]);     /* twin exhausts */
+      _r3Box(m, -9.6, 8.9, 2.2, 3.0, 1.3, 1.5, DK[1], DK[2]);
     }
     if (part !== 'hull') {
       _r3Slab(m, -0.6, 10.0, 0, 12.5, 4.2, 11.0, 1.2, VH[1], VH[3]);   /* turret */
@@ -8369,6 +8386,14 @@ function _sprUnitGround(X, key) {
       _r3Box(m, 20.6, 10.8, -3.2, 2.4, 2.4, 2.4, GN[0], GN[3]);    /* pale muzzles */
       _r3Box(m, 20.6, 10.8, 3.2, 2.4, 2.4, 2.4, GN[0], GN[3]);
       _r3Box(m, -5.4, 15.8, -3.0, 0.6, 5.0, 0.6, DK[1], DK[3]);    /* aerial */
+      /* THE TUSKS. The Mammoth's other weapon is the missile rack on each turret flank, and
+         it is also the strongest identity feature the reference gives this silhouette - a
+         boxy pod outboard of each barrel, with pale tips showing in the muzzle direction. */
+      for (var _hp = -1; _hp <= 1; _hp += 2) {
+        _r3Box(m, -3.2, 11.6, _hp * 6.6, 5.2, 2.6, 2.6, VH[2], VH[1]);
+        _r3Box(m, -0.4, 11.8, _hp * 6.6, 1.0, 1.8, 1.8, GN[0], GN[3]);
+      }
+      _r3Cyl(m, -3.2, 15.8, 2.6, 1.7, 1.1, VH[2], TM[1], 12);      /* cupola */
     }
 
   } else if (key === 'arty') {
@@ -8391,6 +8416,11 @@ function _sprUnitGround(X, key) {
     _r3Box(m, -3.6, 8.2, 0, 4.0, 2.4, 4.6, DK[1], DK[3]);          /* breech */
     _r3Box(m, -9.0, 0.9, -3.4, 5.2, 1.3, 1.8, S[1], S[0]);         /* recoil spades, splayed */
     _r3Box(m, -9.0, 0.9, 3.4, 5.2, 1.3, 1.8, S[1], S[0]);
+    /* A ready rack of shells on the chassis flank and the travel lock the tube rests in -
+       a gun carriage carries its ammunition where the crew can reach it. */
+    for (i = 0; i < 3; i++)
+      _r3Cyl(m, -3.4 + i * 2.2, 4.2, -3.9, 0.8, 2.4, GN[1], GN[0], 8);
+    _r3Box(m, 5.8, 4.2, 3.6, 1.1, 2.6, 1.1, S[2], S[0]);           /* travel lock post */
 
   } else if (key === 'v2rl') {
     /* V2 ROCKET LAUNCHER, and it had no model at all. It fell through to the generic fallback
@@ -8434,6 +8464,12 @@ function _sprUnitGround(X, key) {
              1.0, 3.2, 1.0, DK[1], DK[3]);
     }
     _r3Box(m, -8.6, 3.0, 0, 2.2, 2.0, 5.0, DK[2], DK[1]);          /* blast plate at the tail */
+    /* Launch support riding the bed: a fuel drum and a cable spool by the erector, and the
+       cab's mirrors - the truck fittings that separate it from an armoured chassis. */
+    _r3Cyl(m, 0.6, 4.2, -3.6, 1.4, 3.0, RTS_PAL.hazard[0], RTS_PAL.hazard[1], 10);
+    _r3Cyl(m, 0.6, 4.4, 3.6, 1.7, 1.4, DK[1], DK[3], 10);          /* spool */
+    _r3Box(m, 9.4, 6.4, -4.6, 0.6, 1.4, 0.9, S[2], S[3]);          /* mirrors */
+    _r3Box(m, 9.4, 6.4, 4.6, 0.6, 1.4, 0.9, S[2], S[3]);
 
   } else if (key === 'buggy') {
     /* Wheels are the buggy's whole identity, so they are proper vertical cylinders standing
@@ -8449,6 +8485,13 @@ function _sprUnitGround(X, key) {
     _r3Box(m, -1.5, 6.0, 0, 7.5, 2.8, 7.0, DK[2], DK[1]);          /* open cockpit well */
     _r3Box(m, -4.8, 6.0, 0, 1.0, 4.6, 7.0, TM[1], TM[3]);          /* roll hoop */
     _r3Box(m, 3.2, 8.4, 0, 8.5, 1.3, 1.3, DK[1], DK[3]);           /* pintle gun */
+    /* Scout kit: a spare wheel standing on the tail, a jerrycan beside it, headlight pair
+       and a whip aerial - the loose stowage that says "raider" against a tank's plating. */
+    _r3Cyl(m, -8.0, 3.4, 0, 2.6, 2.6, DK[0], DK[1], 12);           /* spare wheel */
+    _r3Box(m, -7.6, 3.4, 4.2, 1.6, 2.2, 2.4, RTS_PAL.hazard[0], S[1]);
+    _r3Box(m, 8.6, 3.6, -2.6, 0.9, 1.0, 1.4, GN[3], GN[3]);
+    _r3Box(m, 8.6, 3.6, 2.6, 0.9, 1.0, 1.4, GN[3], GN[3]);
+    _r3Box(m, -3.6, 8.8, -3.2, 0.5, 4.4, 0.5, DK[1], DK[3]);       /* whip aerial */
   } else return false;
   return true;
 }
@@ -8489,6 +8532,16 @@ function _sprUnitAirSea(X, key) {
     _r3Box(m, 2.6, 1.4, -3.6, 4.0, 1.6, 2.0, DK[1], DK[3]);
     _r3Box(m, 2.6, 1.4, 3.6, 4.0, 1.6, 2.0, DK[1], DK[3]);
     _r3Box(m, 0, 0.4, 0, 9.0, 1.0, 6.6, TM[1], TM[3]);             /* skids / team stripe */
+    /* The mechanicals: engine cowls flanking the rotor head with exhaust stubs behind them,
+       a chin sensor ball, and the skid cross-tubes - the camera looks straight down at a
+       helicopter's back, so the cowls are the second-largest surface it ever shows. */
+    _r3Box(m, -0.6, 5.6, -2.0, 6.0, 1.9, 1.6, VH[2], VH[1]);       /* engine cowls */
+    _r3Box(m, -0.6, 5.6, 2.0, 6.0, 1.9, 1.6, VH[2], VH[1]);
+    _r3Cyl(m, -3.6, 6.2, -2.0, 0.7, 1.6, DK[1], DK[3], 8);         /* exhaust stubs */
+    _r3Cyl(m, -3.6, 6.2, 2.0, 0.7, 1.6, DK[1], DK[3], 8);
+    _r3Cyl(m, 6.8, 1.6, 0, 1.2, 1.6, DK[0], DK[2], 10);            /* chin sensor ball */
+    _r3Box(m, 2.6, 1.2, 0, 1.1, 1.2, 6.6, S[1], S[0]);             /* skid cross-tubes */
+    _r3Box(m, -2.6, 1.2, 0, 1.1, 1.2, 6.6, S[1], S[0]);
 
   } else if (key === 'mig' || key === 'yak') {
     /* FIXED WING, and the whole job of these two is to not read as the helicopter above. The
@@ -8518,12 +8571,25 @@ function _sprUnitAirSea(X, key) {
       _r3Cyl(m, -_len * 0.50, 3.6, 0, 1.9, 1.6, DK[1], DK[3], 12); /* exhaust */
       _r3Box(m, 0.5, 1.8, -6.0, 5.0, 1.2, 1.2, GN[1], GN[3]);      /* the Mavericks it carries */
       _r3Box(m, 0.5, 1.8, 6.0, 5.0, 1.2, 1.2, GN[1], GN[3]);
+      /* Wing-root intakes and a pitot: the jet's engine has a mouth, and the dark pair
+         either side of the nose is what says so from above. */
+      _r3Box(m, _len * 0.24, 3.2, -3.1, 3.4, 2.2, 1.5, DK[0], DK[2]);
+      _r3Box(m, _len * 0.24, 3.2, 3.1, 3.4, 2.2, 1.5, DK[0], DK[2]);
+      _r3Box(m, _len * 0.62, 3.8, 0, 3.0, 0.6, 0.6, S[2], S[3]);
     } else {
       /* the propeller: a thin hub plus two crossed bars, the same trick the Heli's rotor uses
          and for the same reason - a solid disc at this size is an opaque lid over the aircraft */
       _r3Cyl(m, _len * 0.56, 3.6, 0, 1.4, 0.6, GN[2], GN[1], 12);
       _r3Box(m, _len * 0.60, 3.6, 0, 0.5, 11.0, 1.1, DK[1], DK[3]);
       _r3Box(m, _len * 0.60, 3.6, 0, 0.5, 1.1, 11.0, DK[1], DK[3]);
+      /* Fixed gear under the wings and exhaust stubs down the cowling - the Yak is the
+         WW2-era airframe of the pair and wears its machinery outside. */
+      for (var _yg = -1; _yg <= 1; _yg += 2) {
+        _r3Box(m, 1.2, 1.2, _yg * 4.2, 1.0, 2.0, 1.0, VH[2], VH[1]);
+        _r3Cyl(m, 1.2, 0.2, _yg * 4.2, 1.1, 1.1, DK[0], DK[1], 10);
+      }
+      for (var _ye = 0; _ye < 3; _ye++)
+        _r3Box(m, _len * 0.30 - _ye * 1.6, 4.6, -2.5, 1.0, 0.6, 0.8, DK[1], DK[3]);
     }
 
   } else if (key === 'gunboat' || key === 'destroyer' || key === 'cruiser') {
@@ -8550,6 +8616,40 @@ function _sprUnitAirSea(X, key) {
     }
     _r3Box(m, _L * 0.02, 5.6, 0, 1.0, 1.0, _Wd * 0.9, DK[0], DK[0]);     /* rail */
 
+    /* A WARSHIP IS RIGGED, and these were bare hulls with a box and a funnel: at 198 triangles
+       the Cruiser - the most expensive thing the player can float - carried less shape than a
+       Ranger. What a hull shows this camera is its DECK, so the additions live there: a lattice
+       mast with a radar bar (the tallest thing aboard, and the first thing that reads as
+       "warship" from above), bridge glass, bollard pairs at bow and stern, and boats in davits
+       along the big hulls' sides - the classic white pips that break a grey deck line. */
+    _r3Box(m, -_L * 0.14, 7.0, 0, 0.9, 6.0, 0.9, S[1], S[0]);            /* mast */
+    _r3Box(m, -_L * 0.14, 12.6, 0, 0.7, 0.9, _Wd * 0.52, S[2], S[3]);    /* radar bar */
+    _r3Box(m, _L * 0.045, 6.2, 0, 1.2, 1.6, _Wd * 0.5, RTS_PAL.glass, RTS_PAL.glass);
+    for (var _bl = -1; _bl <= 1; _bl += 2) {
+      _r3Box(m, _L * 0.42, 4.0, _bl * _Wd * 0.22, 1.0, 1.1, 1.0, DK[0], DK[2]);
+      _r3Box(m, -_L * 0.44, 4.0, _bl * _Wd * 0.22, 1.0, 1.1, 1.0, DK[0], DK[2]);
+    }
+    if (_big) {
+      for (var _dv = -1; _dv <= 1; _dv += 2) {                            /* boats in davits */
+        _r3Box(m, -_L * 0.20, 4.6, _dv * _Wd * 0.42, 4.6, 1.3, 1.6, GN[0], GN[2]);
+        _r3Box(m, _L * 0.06, 4.6, _dv * _Wd * 0.42, 4.6, 1.3, 1.6, GN[0], GN[2]);
+      }
+      _r3Box(m, -_L * 0.46, 4.4, 0, 2.6, 1.2, _Wd * 0.5, DK[1], DK[3]);  /* depth-charge rack */
+      for (var _dc = 0; _dc < 3; _dc++)
+        _r3Cyl(m, -_L * 0.46, 5.4, (_dc - 1) * _Wd * 0.17, 0.7, 1.3, DK[2], DK[0], 8);
+    }
+    if (_cru) {
+      /* THE CRUISER'S OWN TELL: twin barrels in BOTH mounts - it is the shore-bombardment
+         ship and its guns are its identity - plus a second funnel and a higher bridge tier,
+         so it out-silhouettes the Destroyer instead of just out-measuring it. */
+      _r3Box(m, _L * 0.30, 4.6, -1.4, 7, 1.1, 1.1, GN[0], GN[2]);
+      _r3Box(m, _L * 0.30, 4.6, 1.4, 7, 1.1, 1.1, GN[0], GN[2]);
+      _r3Box(m, -_L * 0.48, 4.6, -1.4, 6, 1.1, 1.1, GN[0], GN[2]);
+      _r3Box(m, -_L * 0.48, 4.6, 1.4, 6, 1.1, 1.1, GN[0], GN[2]);
+      _r3Cyl(m, -_L * 0.26, 7.2, 0, 1.5, 3.8, DK[1], DK[0], 14);         /* second funnel */
+      _r3Box(m, -_L * 0.02, 8.6, 0, _L * 0.16, 1.8, _Wd * 0.4, VH[1], VH[3]);
+    }
+
   } else if (key === 'sub' || key === 'missilesub') {
     /* SUBMARINES. Almost nothing above the surface, which is the point: a low dark shape with
        a conning tower is instantly not a surface ship, and that difference has to be legible
@@ -8566,6 +8666,15 @@ function _sprUnitAirSea(X, key) {
     if (_ms) {                                                            /* missile hatches */
       _r3Box(m, -3.6, 3.1, -1.3, 5.0, 0.9, 1.5, RTS_PAL.hazard[0], DK[2]);
       _r3Box(m, -3.6, 3.1, 1.3, 5.0, 0.9, 1.5, RTS_PAL.hazard[0], DK[2]);
+    }
+    /* The stern says "boat" rather than "log": a rudder fin, stern planes, and a shrouded
+       screw. Flooding ports pock the casing sides - the one texture a submarine hull has. */
+    _r3Box(m, -11.4, 1.2, 0, 1.0, 3.4, 0.9, DK[0], DK[2]);               /* rudder */
+    _r3Box(m, -10.6, 1.0, 0, 2.4, 0.7, 4.6, DK[2], DK[2]);               /* stern planes */
+    _r3Cyl(m, -11.8, 0.4, 0, 1.2, 1.0, DK[2], DK[0], 10);                /* screw shroud */
+    for (var _fp = 0; _fp < 4; _fp++) {
+      _r3Box(m, -4 + _fp * 3.0, 1.7, -2.9, 1.5, 0.6, 0.4, DK[0], DK[0]);
+      _r3Box(m, -4 + _fp * 3.0, 1.7, 2.9, 1.5, 0.6, 0.4, DK[0], DK[0]);
     }
 
   } else if (key === 'lst') {
@@ -8593,6 +8702,13 @@ function _sprUnitAirSea(X, key) {
     _r3Box(m, -_dL * 0.40, 3.6, 0, _dL * 0.16, 4.6, _dW * 0.42, VH[2], VH[0]);
     _r3Box(m, -_dL * 0.40, 8.2, 0, _dL * 0.12, 1.3, _dW * 0.30, TM[1], TM[3]);  /* team cap */
     _r3Box(m, -_dL * 0.33, 6.4, 0, 1.0, 2.0, _dW * 0.34, RTS_PAL.glass, RTS_PAL.glass);
+    /* Mooring bitts at the corners and a stern anchor davit - ON THE GUNWALES, never the deck:
+       the wide empty deck IS this model's identity and stays clear. */
+    for (i = 0; i < 4; i++)
+      _r3Box(m, (i < 2 ? 1 : -1) * _dL * 0.34, 3.8, (i % 2 ? 1 : -1) * _dW * 0.44,
+             1.1, 1.4, 1.1, DK[0], DK[2]);
+    _r3Box(m, -_dL * 0.47, 4.2, _dW * 0.28, 1.0, 2.6, 1.0, S[1], S[0]);
+    _r3Box(m, -_dL * 0.47, 6.6, _dW * 0.36, 1.0, 0.8, 2.6, S[2], S[1]);
 
   } else if (key === 'apc') {
     /* A closed box on tracks with a rear ramp and a small cupola gun - no turret (UDATA.CPP
@@ -8612,6 +8728,15 @@ function _sprUnitAirSea(X, key) {
        longer and darker than the little pintle it started as. */
     _r3Box(m, 8.0, 11.4, -2.4, 10.0, 1.3, 1.3, DK[1], DK[3]);      /* its gun */
     _r3Box(m, 12.6, 11.3, -2.4, 1.6, 1.6, 1.6, GN[0], GN[3]);      /* muzzle */
+    /* Smoke launchers on the nose corners, headlights, and an exhaust on the flank - the
+       fittings a battle taxi carries. */
+    for (i = 0; i < 3; i++) {
+      _r3Cyl(m, 8.6, 8.6, -3.6 + i * 0.9, 0.5, 1.5, DK[0], DK[2], 8);
+      _r3Cyl(m, 8.6, 8.6, 2.0 + i * 0.9, 0.5, 1.5, DK[0], DK[2], 8);
+    }
+    _r3Box(m, 9.2, 4.6, -3.4, 1.0, 1.2, 1.6, GN[3], GN[3]);        /* headlights */
+    _r3Box(m, 9.2, 4.6, 3.4, 1.0, 1.2, 1.6, GN[3], GN[3]);
+    _r3Box(m, -6.0, 9.2, 5.0, 4.6, 1.3, 1.2, DK[1], DK[2]);        /* exhaust */
 
   } else if (key === 'mcv') {
     /* A slab-sided transporter with the yard's gantry folded flat along its back - IsGigundo
@@ -8632,6 +8757,13 @@ function _sprUnitAirSea(X, key) {
     _r3Box(m, 14.6, 7.6, 0, 1.6, 3.2, 8.0, RTS_PAL.glass, RTS_PAL.glass);
     _r3Cyl(m, 8.0, 13.2, -4.2, 1.0, 3.4, DK[1], DK[3], 10);        /* stack */
     _r3Box(m, -13.8, 2.0, 0, 3.0, 3.0, 10.0, GN[2], GN[1]);        /* rear jack beam */
+    /* Site kit: hazard beacons on the cab, toolboxes along the skirt, a second stack -
+       a construction vehicle reads by its fittings, and this one had only the gantry. */
+    _r3Cyl(m, 13.0, 13.8, -3.4, 0.8, 1.5, RTS_PAL.hazard[0], RTS_PAL.hazard[1], 8);
+    _r3Cyl(m, 13.0, 13.8, 3.4, 0.8, 1.5, RTS_PAL.hazard[0], RTS_PAL.hazard[1], 8);
+    _r3Box(m, 0, 2.6, -7.0, 5.0, 2.4, 1.3, S[2], S[1]);            /* toolboxes */
+    _r3Box(m, -7.0, 2.6, 7.0, 5.0, 2.4, 1.3, S[2], S[1]);
+    _r3Cyl(m, 5.4, 13.2, -4.2, 1.0, 2.8, DK[1], DK[3], 10);        /* second stack */
 
   } else if (key === 'harvester') {
     /* The only gold on the board that moves. The heaped ore is the identity and it sits on the
@@ -8648,6 +8780,14 @@ function _sprUnitAirSea(X, key) {
     _r3Box(m, 14.5, 0.8, 0, 4.5, 2.6, 15.5, DK[1], DK[3]);         /* intake blade */
     for (i = 0; i < 5; i++)                                        /* cutter teeth */
       _r3Box(m, 16.6, 0.8, -6 + i * 3, 1.6, 2.0, 1.4, S[1], S[0]);
+    /* Working plant: hydraulic rams down to the blade, an exhaust stack, a beacon on the cab
+       and rungs up the hopper - the fittings that say "mining machine" instead of "van". */
+    _r3Box(m, 12.6, 3.2, -4.6, 4.6, 1.4, 1.4, S[1], S[3]);         /* rams to the blade */
+    _r3Box(m, 12.6, 3.2, 4.6, 4.6, 1.4, 1.4, S[1], S[3]);
+    _r3Cyl(m, 4.6, 12.9, -4.0, 1.0, 3.2, DK[1], DK[3], 10);        /* stack */
+    _r3Cyl(m, 10.4, 13.5, 3.2, 0.8, 1.4, RTS_PAL.hazard[0], RTS_PAL.hazard[1], 8);
+    for (i = 0; i < 3; i++)
+      _r3Box(m, 3.4, 2.4 + i * 2.6, -7.2, 2.2, 0.7, 0.7, GN[2], GN[1]);
   } else return false;
   return true;
 }
