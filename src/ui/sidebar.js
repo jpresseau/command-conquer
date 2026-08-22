@@ -201,18 +201,32 @@ function _rtsItemClick(key) {
     if (U.superArm) _rtsSuperDisarm();
     U.place = key; _rtsGhostShow(key); return;
   }
-  /* Left click on the item already on the line: resume it if it is suspended, otherwise
-     leave it alone. It used to abandon outright, which meant one stray click threw away a
-     nearly-finished war factory and the credits with it. Cancelling is a right-click now,
-     and it takes two. */
+  /* Left click on the item already on the line. A SUSPENDED job resumes - that press means
+     "carry on", not "build another". Anything else STACKS one more, which is the press this
+     screen used to answer with "Already building": RA's line holds a queue of the same item
+     and the count on the cameo is what shows it. Cancelling is still a right-click and still
+     takes two, so a stray tap here can never destroy a nearly-finished job. */
   if (S.q[cat] && S.q[cat].key === key) {
     if (_rtsResume('player', cat)) {
       _rtsSay(cat === 'infantry' ? 'Training.' : 'Building.');
       if (typeof _rtsSfx === 'function') _rtsSfx('build');
-    } else {
-      _rtsSay('Already building. ' + (_rtsTouchUI() ? 'Hold to pause or cancel.'
-                                                      : 'Right-click to hold or cancel.'));
+      return;
     }
+    if (_rtsQueue('player', key, true)) {          /* the deliberate second tap */
+      _rtsSay((cat === 'infantry' ? 'Training' : 'Building') + ' ×' +
+              (1 + (S.q[cat].n || 0)) + '.');
+      if (typeof _rtsSfx === 'function') _rtsSfx('build');
+      return;
+    }
+    /* Refused: the only reasons left are the depth cap, a structure line (one placement
+       cursor, so it cannot stack), an `only` cap already reached, or no money for another. */
+    if (typeof _rtsSfx === 'function') _rtsSfx('deny');
+    var qwhy = _rtsWhyLocked('player', key);
+    if (qwhy) _rtsSay(qwhy);
+    else if (cat === 'struct') _rtsSay('Place the finished building first.');
+    else if (rtsMoney(S) < (rtsStructDef(key) || rtsUnitDef(key)).cost)
+      _rtsSay('Not enough credits for another.');
+    else _rtsSay('That line is full.');
     return;
   }
   if (_rtsQueue('player', key)) {
@@ -340,12 +354,29 @@ function _rtsSyncSidebar(dt) {
       /* PIP_HOLDING: a suspended job shows that it is held, not how far along it is. */
       if (q.hold) { cls += ' hold'; pct.textContent = 'HOLD'; }
       else pct.textContent = Math.floor(q.prog * 100) + '%';
+      /* HOW MANY ARE COMING, in the corner - the whole point of being able to stack is that
+         you can walk away from the sidebar, and you cannot do that if the screen only ever
+         says what it is building right now. Hidden at one, so a single job looks exactly as
+         it always did. */
+      var qn = 1 + (q.n || 0);
+      var nEl = b.querySelector('.qn');
+      if (!nEl && qn > 1) {
+        nEl = document.createElement('span');
+        nEl.className = 'qn';
+        b.appendChild(nEl);
+      }
+      if (nEl) {
+        var txt = qn > 1 ? '×' + qn : '';
+        if (nEl.textContent !== txt) nEl.textContent = txt;
+      }
       /* clock wipe: the built portion is revealed clockwise from the top */
       var deg = Math.max(0, Math.min(360, q.prog * 360));
       wipe.style.background = 'conic-gradient(from 0deg, rgba(0,0,0,0) 0deg, rgba(0,0,0,0) '
         + deg + 'deg, rgba(4,7,11,0.74) ' + deg + 'deg, rgba(4,7,11,0.74) 360deg)';
     } else {
       pct.textContent = '';
+      var nOff = b.querySelector('.qn');
+      if (nOff && nOff.textContent) nOff.textContent = '';
       /* "If there is already a factory producing this kind of object, then all objects of
          this type are displayed in a disabled state" - the whole column greys out, so it is
          obvious at a glance that the line is taken rather than that you cannot afford it. */
