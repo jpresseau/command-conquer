@@ -327,6 +327,11 @@
 #rcgRts .rts-tile.busy{border-color:#4a8ff0;box-shadow:0 0 0 1px rgba(74,143,240,.35) inset}
 #rcgRts .rts-tile.ready{border-color:#5fdc7a;box-shadow:0 0 10px rgba(95,220,122,.3)}
 #rcgRts .rts-tile.ready .pct{color:#8ef07a;font-size:11px}
+/* How many are stacked behind the one building now. Bottom-left, clear of the .pct percentage
+   in the middle and of the cost in the corner opposite. */
+#rcgRts .rts-tile .qn{position:absolute;left:3px;bottom:2px;pointer-events:none;
+  font:700 10px/1 ui-monospace,Menlo,Consolas,monospace;color:#ffd76e;
+  text-shadow:0 1px 2px #000,0 0 3px #000}
 #rcgRts .rts-tile.placing{outline:2px solid #8ef07a;outline-offset:-2px}
 /* PIP_HOLDING - suspended production. Amber, so it reads as "waiting on you", not "broken". */
 #rcgRts .rts-tile.hold{border-color:#d9a441;box-shadow:0 0 0 1px rgba(217,164,65,.35) inset}

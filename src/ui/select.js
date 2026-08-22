@@ -131,6 +131,25 @@ function _rtsRightClick(mx, my) {
   if (!hit) return;
   var mine = [], i;
   for (i = 0; i < G.sel.length; i++) if (G.sel[i].side === 'player' && G.sel[i].type === 'unit') mine.push(G.sel[i]);
+  /* A SELECTED PRODUCTION BUILDING TAKES THE ORDER AS A RALLY POINT. This used to be the line
+     that returned: `mine` holds units only, so with a war factory selected the right-click -
+     and the touch hold, which comes through here too - reached the end of the function and did
+     nothing at all. Handled before the unit paths because a building is never in `mine`, so
+     the two cannot compete for the same click.
+
+     Ordered ONTO something rather than at bare ground still counts: "rally on that refinery" is
+     a thing players mean, and the pick's ground point is where the click landed either way. */
+  var makers = [];
+  for (i = 0; i < G.sel.length; i++)
+    if (G.sel[i].side === 'player' && _rtsCanRally(G.sel[i])) makers.push(G.sel[i]);
+  if (makers.length) {
+    for (i = 0; i < makers.length; i++) _rtsSetRally(makers[i], hit.x, hit.z);
+    _rtsFlash(hit.x, hit.z, 'move');
+    _rtsSay(makers.length === 1 ? 'Rally point set.'
+                                : 'Rally point set for ' + makers.length + ' buildings.');
+    if (typeof _rtsSfx === 'function') _rtsSfx('order');
+    if (!mine.length) return;      /* buildings only - done */
+  }
   if (!mine.length) return;
   var tgt = hit.ent;
   /* YOUR OWN TRANSPORT, right-clicked: everything selected that can get in, does.

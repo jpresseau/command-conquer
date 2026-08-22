@@ -38,6 +38,34 @@ function _rtsDrawHud(dt) {
     /* BUILDING.CPP toggles IsWrenchVisible on the repair timer - the wrench blinks on a
        building under repair so you can see at a glance where your credits are going. */
     if (e.repair && (typeof _rtsPulse !== 'function' || _rtsPulse() > 0.45)) _rtsDrawWrench(g, s.x, s.y - bh - 9 * sc);
+    /* THE RALLY POINT, drawn only while its building is selected. A rally you cannot see is a
+       rally you cannot trust - you set it once and then have no way to check where it is, or
+       whether the click landed at all. Shown for the selected building only, because a base of
+       six producers would otherwise be a permanent cat's cradle across the map. */
+    if (selected && e.rally && _rtsCanRally(e)) {
+      var rp = _rtsWorldToScreen(e.rally.x, _rtsElev(e.rally.x, e.rally.z), e.rally.z);
+      if (!rp.behind) {
+        g.save();
+        g.strokeStyle = 'rgba(142,240,122,0.55)';
+        g.lineWidth = 1.5;
+        g.setLineDash([5, 4]);
+        g.beginPath(); g.moveTo(s.x, s.y); g.lineTo(rp.x, rp.y); g.stroke();
+        g.setLineDash([]);
+        /* a flag, not a dot: at the far end of a dashed line a dot reads as an artefact */
+        var fh = 13 * (rp.scale || 1);
+        g.strokeStyle = 'rgba(0,0,0,0.75)'; g.lineWidth = 3.5;
+        g.beginPath(); g.moveTo(rp.x, rp.y); g.lineTo(rp.x, rp.y - fh); g.stroke();
+        g.strokeStyle = '#8ef07a'; g.lineWidth = 1.6;
+        g.beginPath(); g.moveTo(rp.x, rp.y); g.lineTo(rp.x, rp.y - fh); g.stroke();
+        g.fillStyle = '#8ef07a';
+        g.beginPath();
+        g.moveTo(rp.x, rp.y - fh);
+        g.lineTo(rp.x + fh * 0.62, rp.y - fh * 0.74);
+        g.lineTo(rp.x, rp.y - fh * 0.48);
+        g.closePath(); g.fill();
+        g.restore();
+      }
+    }
     if (selected) {
       /* corner brackets, the classic selection look */
       var r = (e.type === 'struct' ? rtsStructDef(e.def).w * _rtsR.cell * 0.5 : _rtsR.cell * 0.42) * sc;
@@ -120,6 +148,12 @@ function _rtsActionAt(mx, my) {
     var sv = G.sel[i];
     if (sv && !sv.dead && !sv.inside && sv.side === 'player' && sv.type === 'unit') mine.push(sv);
   }
+  /* With a producer selected the right button sets a rally point, so the cursor has to say so
+     - otherwise the one control that has no other feedback also has no cursor. */
+  var anyMaker = false;
+  for (i = 0; i < G.sel.length; i++)
+    if (G.sel[i] && G.sel[i].side === 'player' && _rtsCanRally(G.sel[i])) { anyMaker = true; break; }
+  if (anyMaker && !mine.length) return 'rally';
   if (!mine.length) return (tgt && !tgt.dead) ? 'select' : null;
   if (tgt && tgt.side === 'enemy') return 'attack';
   var tx = _rtsTX(hit.x), tz = _rtsTX(hit.z);
@@ -136,7 +170,8 @@ function _rtsDrawCursor(g, x, y, kind) {
   if (!kind) return;
   g.save(); g.translate(x, y); g.lineCap = 'round'; g.lineJoin = 'round';
   var col = { move:'#8ef07a', amove:'#ffd473', attack:'#ff6a5a', harvest:'#ffd473',
-    deliver:'#8ef07a', select:'#9fd0ff', repair:'#ffd473', sell:'#ff9a4a', no:'#ff6a5a' }[kind] || '#8ef07a';
+    deliver:'#8ef07a', select:'#9fd0ff', repair:'#ffd473', sell:'#ff9a4a', no:'#ff6a5a',
+    rally:'#8ef07a' }[kind] || '#8ef07a';
   /* every shape is stroked twice: a fat dark pass first so it stays legible on pale ore */
   for (var pass = 0; pass < 2; pass++) {
     g.strokeStyle = pass ? col : 'rgba(0,0,0,0.75)';
@@ -146,6 +181,9 @@ function _rtsDrawCursor(g, x, y, kind) {
       [[0, -1], [0, 1], [-1, 0], [1, 0]].forEach(function (d) {
         g.beginPath(); g.moveTo(d[0] * 5, d[1] * 5); g.lineTo(d[0] * 12, d[1] * 12); g.stroke();
       });
+    } else if (kind === 'rally') {                 /* the same flag the marker uses */
+      g.beginPath(); g.moveTo(0, 8); g.lineTo(0, -9); g.stroke();
+      g.beginPath(); g.moveTo(0, -9); g.lineTo(7, -6); g.lineTo(0, -3); g.closePath(); g.stroke();
     } else if (kind === 'no') {                    /* circle with a bar through it */
       g.beginPath(); g.arc(0, 0, 8, 0, Math.PI * 2); g.stroke();
       g.beginPath(); g.moveTo(-5.7, -5.7); g.lineTo(5.7, 5.7); g.stroke();

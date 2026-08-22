@@ -67,18 +67,50 @@ function _rtsWhyLocked(side, key) {
       var oe = G.ents[oi];
       if (!oe.dead && oe.side === side && oe.type === 'unit' && oe.def === key) have++;
     }
-    for (var qc in S.q) if (S.q[qc] && S.q[qc].key === key) have++;
+    /* The head AND everything stacked behind it: a one-at-a-time unit must not be queued
+       five deep and then delivered five times. */
+    for (var qc in S.q) if (S.q[qc] && S.q[qc].key === key) have += 1 + (S.q[qc].n || 0);
     if (have >= def.only)
       return def.only === 1 ? 'You may only have one at a time.'
                             : 'You may only have ' + def.only + ' at a time.';
   }
   return null;
 }
-function _rtsCanQueue(side, key) {
+/* HOW DEEP A LINE STACKS. RA's sidebar shows one line per category and that is what this
+   model already had - but the line in the original holds a STACK of the same item, which is
+   what the count on the cameo is counting, and this held exactly one. So a player with the
+   income to run a war factory flat out had to sit and watch it, re-clicking after every tank,
+   and the credits piled up in the treasury instead of on the map. Reported as exactly that:
+   "why can't I queue more than 1 at a time if I have the available credits".
+
+   99 because that is the original's own ceiling and because nothing here needs a smaller one:
+   only the head of the stack is ever charged, so a deep queue costs nothing until it is
+   reached, and the money check below still refuses a copy you cannot pay for today. */
+var RTS_QUEUE_MAX = 99;
+
+/* STACKING IS OPT-IN, and that is not tidiness - it is a regression this cost once. The buy
+   loop in core/ai.js calls _rtsQueue every pass with whatever it rolled, and never checks
+   whether the line is free: for as long as a busy line refused, that call was harmless. The
+   moment a busy line started ACCEPTING a second copy, the opponent stopped buying one of a
+   thing and started piling up however many its dice handed it, and five balance specs moved -
+   airforce, ladder, navair, pushback, teamsupply.
+
+   So `stack` defaults off and _rtsQueue(side, key) means exactly what it has always meant. The
+   sidebar - a player deliberately tapping a cameo a second time - is the only caller that asks
+   for the new behaviour. */
+function _rtsCanQueue(side, key, stack) {
   var S = window._rtsG.sides[side];
   var cat = _rtsQueueCat(key); if (!cat) return false;
-  if (S.q[cat]) return false;
-  if (cat === 'struct' && S.ready) return false;
+  var q = S.q[cat];
+  /* A DIFFERENT item on a busy line is still refused - the sidebar has one line per category
+     and no way to show a queue of mixed types, so accepting it would take the money and build
+     something the player cannot see coming. Stacking MORE OF THE SAME is the case that was
+     wrong, and it is the one the cameo can show a number for. */
+  if (q && (!stack || q.key !== key)) return false;
+  if (q && (q.n || 0) + 1 >= RTS_QUEUE_MAX) return false;
+  /* A structure line stops at the one waiting to be placed: there is a single placement
+     cursor, so a second finished building would have nowhere to wait. */
+  if (cat === 'struct' && (S.ready || q)) return false;
   if (_rtsWhyLocked(side, key)) return false;
   var def = rtsStructDef(key) || rtsUnitDef(key);
   if (rtsMoney(S) < _rtsCostOf(side, def)) return false;
@@ -90,15 +122,27 @@ function _rtsCanQueue(side, key) {
 function _rtsCanProduce(side, key) {
   return !_rtsWhyLocked(side, key);
 }
-function _rtsQueue(side, key) {
-  if (!_rtsCanQueue(side, key)) return false;
-  var S = window._rtsG.sides[side], def = rtsStructDef(key) || rtsUnitDef(key);
+function _rtsQueue(side, key, stack) {
+  if (!_rtsCanQueue(side, key, stack)) return false;
+  var S = window._rtsG.sides[side], cat = _rtsQueueCat(key);
+  /* ALREADY RUNNING THIS ONE: add to the stack rather than starting a second job. `n` counts
+     what is waiting BEHIND the head - nothing is charged for it until it becomes the head, so
+     queuing deep never takes money for a unit that has not started. */
+  if (S.q[cat]) { S.q[cat].n = (S.q[cat].n || 0) + 1; return true; }
+  S.q[cat] = _rtsJob(side, key, 0);
+  return true;
+}
+/* One job on a line. Split out because the head is now built twice - once when the line
+   starts and once each time a stacked copy is promoted - and the price and the build time have
+   to be taken FRESH both times: a factory finished or lost in between changes _rtsBuildRate and
+   _rtsCostOf, and a promoted copy that carried the old numbers would be quietly mispriced. */
+function _rtsJob(side, key, n) {
+  var def = rtsStructDef(key) || rtsUnitDef(key);
   /* FactoryClass::Set: `Balance = Cost_Of() * CostBias`, and the job is driven by that
      outstanding balance rather than by re-deriving a charge from the price each tick. */
   var price = _rtsCostOf(side, def);
-  S.q[_rtsQueueCat(key)] = { key:key, prog:0, total:_rtsBuildTimeOf(side, def),
-    cost:price, bal:price, paid:0, hold:0 };
-  return true;
+  return { key:key, prog:0, total:_rtsBuildTimeOf(side, def),
+    cost:price, bal:price, paid:0, hold:0, n:n || 0 };
 }
 /* SIDEBAR.CPP SelectClass::Action, RIGHTPRESS: "If production is in progress, put it on
    hold. If production is already on hold, then abandon it." Two distinct presses, and the
@@ -120,8 +164,20 @@ function _rtsResume(side, cat) {
 function _rtsCancel(side, cat) {
   var S = window._rtsG.sides[side], q = S.q[cat];
   if (!q) return;
+  /* TAKE ONE OFF THE BACK FIRST. A stacked copy has been charged nothing, so removing it
+     refunds nothing and - more to the point - it must not throw away the job in progress:
+     cancelling the fifth tank should not destroy the one that is nearly out of the door. Only
+     when the stack is empty does the head itself go, with its refund. */
+  if (q.n > 0) { q.n--; return; }
   _rtsGrant(S, q.paid);        /* refund what was actually spent */
   S.q[cat] = null;
+}
+/* Everything on the line, head and stack together - for when the line stops being legal at
+   all rather than the player changing their mind. */
+function _rtsCancelAll(side, cat) {
+  var S = window._rtsG.sides[side];
+  if (S.q[cat]) S.q[cat].n = 0;
+  _rtsCancel(side, cat);
 }
 /* SIDEBAR.CPP Recalc: called when a factory is destroyed. Anything that can no longer be
    built by anybody is dropped, and its production abandoned. Without this, blowing up a
@@ -131,7 +187,10 @@ function _rtsProdRecalc(side) {
   var G = window._rtsG, S = G.sides[side], lost = [], cat;
   for (cat in S.q) {
     var q = S.q[cat];
-    if (q && !_rtsCanProduce(side, q.key)) { lost.push(q.key); _rtsCancel(side, cat); }
+    /* The whole line, stack included: if the thing cannot be built any more, the copies
+       waiting behind it cannot either, and leaving them would resume a dead line the moment a
+       replacement factory went up. */
+    if (q && !_rtsCanProduce(side, q.key)) { lost.push(q.key); _rtsCancelAll(side, cat); }
   }
   /* A finished building still waiting to be placed needs a yard to come out of. */
   if (S.ready && !_rtsHas(side, 'yard')) {
@@ -249,7 +308,9 @@ function _rtsTickProduction(side, dt) {
          rounding residue is settled at the end so the job costs exactly what it was priced
          at, however the rate wandered on the way. */
       if (q.bal > 0) { var last = _rtsSpend(S, q.bal); q.paid += last; q.bal = 0; }
-      S.q[cat] = null;
+      /* PROMOTE THE NEXT COPY, priced and timed afresh - see _rtsJob. A struct line never
+         stacks (there is one placement cursor), so this only ever runs for units. */
+      S.q[cat] = q.n > 0 ? _rtsJob(side, q.key, q.n - 1) : null;
       /* PurchasePrice: what was ACTUALLY paid follows the building, so a refund later is not
          computed from a sticker price the buyer never paid. It matters because CostBias is
          real - an opponent on `hard` pays 0.8x - and refunding half of full price handed it a
@@ -264,6 +325,45 @@ function _rtsTickProduction(side, dt) {
     }
   }
 }
+/* WHERE NEWLY BUILT UNITS GO. Nothing had one: _rtsDeliverUnit put the unit down beside the
+   building that made it and gave it no order, so every tank, squad, helicopter and boat parked
+   on the factory door until the player noticed and dragged a box round it. Reported as "how do
+   I set a waypoint for vehicles, troops, aircraft and boats once they are done building?" - and
+   the answer was that you could not.
+
+   The point is kept ON THE BUILDING rather than per side or per category, which is what makes
+   it worth having: a barracks feeding the front and a war factory feeding a different flank are
+   the normal case, and one point per army cannot express it. It dies with the building, which
+   is correct and free - the entity goes, the point goes with it - and the save encodes entities
+   generically, so it round-trips without a line of save code.
+
+   Only buildings that MAKE something can hold one. A power plant with a rally point would be a
+   control that silently does nothing. */
+function _rtsCanRally(e) {
+  if (!e || e.dead || e.type !== 'struct' || e.building) return false;
+  var d = rtsStructDef(e.def);
+  return !!(d && (d.produces || d.freeUnit));
+}
+/* Set, cleared by passing null. Stored as plain numbers so the save's generic encoder handles
+   it and nothing has to know the shape. */
+function _rtsSetRally(e, x, z) {
+  if (!_rtsCanRally(e)) return false;
+  if (x == null) { e.rally = null; return true; }
+  e.rally = { x: x, z: z };
+  return true;
+}
+/* Send a freshly delivered unit to its maker's rally point.
+
+   A SHIP CANNOT WALK TO A FIELD. The rally is one point and a naval yard's is likely to be set
+   on land - the player drags it to where the army is going - so a boat asks the pathfinder
+   first and simply stays put if the answer is no, rather than being handed an order it can
+   never complete and sitting at the dock in a permanent 'move' state. */
+function _rtsRallyOut(u, src) {
+  if (!u || !src || !src.rally) return false;
+  var r = src.rally;
+  _rtsOrderMove(u, r.x, r.z, false);
+  return !!u.path;
+}
 function _rtsDeliverUnit(side, key) {
   var G = window._rtsG, u = rtsUnitDef(key);
   if (G.justBuilt) G.justBuilt[side].unit = key;   /* HouseClass::JustBuiltUnit */
@@ -273,11 +373,15 @@ function _rtsDeliverUnit(side, key) {
     var yard = _rtsHas(side, 'navalyard') || _rtsHas(side, 'subpen');
     var at = _rtsSeaSpawn(yard);
     if (!at) return null;
-    return _rtsSpawnUnit(side, key, _rtsWX(at.tx), _rtsWX(at.tz));
+    var boat = _rtsSpawnUnit(side, key, _rtsWX(at.tx), _rtsWX(at.tz));
+    if (boat) _rtsRallyOut(boat, yard);
+    return boat;
   }
   var src = _rtsHas(side, u.kind === 'infantry' ? 'barracks' : 'factory') || _rtsHas(side, 'yard');
   if (!src) return null;
-  return _rtsSpawnAt(side, key, src);
+  var made = _rtsSpawnAt(side, key, src);
+  if (made) _rtsRallyOut(made, src);
+  return made;
 }
 
 /* ------------------------------------------------------------- orders */
