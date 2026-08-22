@@ -240,8 +240,12 @@ the original the order cannot be given; here both routes are closed.
 
 ### The MCV — `UNIT.CPP::Try_To_Deploy`
 
-Three details worth having exactly: the yard lands on the cell **adjacent** to the vehicle, not
-under it; placement is checked with `Legal_Placement`, which does **not** apply the build-radius
+Three details worth having exactly: the yard is **centred on** the vehicle — `Adjacent_Cell(Coord,
+FACING_NW)` is the footprint's origin, one step north-west, which for a 3x3 leaves the MCV in the
+middle cell. (This page said "adjacent to the vehicle, not under it" for a long time, and the code
+subtracted `w-1` — two cells — putting the vehicle at the south-east corner and growing the yard
+up and to the left. Three places repeated the sentence and none of them matched what ran; measured
+and corrected.) Placement is checked with `Legal_Placement`, which does **not** apply the build-radius
 rule (hence `_rtsCanPlace(..., anywhere)`) — a vehicle whose purpose is to found a base where you
 own nothing cannot be held to a rule about being near something you own; and
 

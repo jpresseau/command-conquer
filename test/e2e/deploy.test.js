@@ -40,8 +40,7 @@ var S = new Suite('deploy');
     /* Put an MCV somewhere it can ACTUALLY deploy. Searched rather than guessed: a fixed offset
        from the yard lands wherever the map generator happens to have put trees, ore or a slope,
        and a spec that fails because it picked bad ground is a spec that will be edited until it
-       lies. _rtsDeploy sites the yard at the vehicle's tile minus (w-1), so that is the
-       placement asked about here. */
+       lies. _rtsDeploy centres the yard on the vehicle, so that is the placement asked here. */
     var yard = _rtsHas('player', 'yard'), sd = rtsStructDef('yard');
     window._rtsFindDeploySpot = function (skipTiles) {
       for (var rad = 4; rad <= 20; rad += 2)
@@ -50,7 +49,7 @@ var S = new Suite('deploy');
             var tx = _rtsTX(yard.x) + dx, tz = _rtsTX(yard.z) + dz;
             if (skipTiles && skipTiles.some(function (t) {
               return Math.abs(t[0] - tx) < sd.w + 2 && Math.abs(t[1] - tz) < sd.h + 2; })) continue;
-            if (_rtsCanPlace('player', 'yard', tx - (sd.w - 1), tz - (sd.h - 1), true))
+            if (_rtsCanPlace('player', 'yard', tx - ((sd.w - 1) >> 1), tz - ((sd.h - 1) >> 1), true))
               return { tx: tx, tz: tz, x: _rtsWX(tx), z: _rtsWX(tz) };
           }
       return null;
@@ -85,6 +84,12 @@ var S = new Suite('deploy');
                         !document.getElementById('rtsDeployBtn').hidden;
     o.textStillWritten = /Mobile|MCV/i.test(document.getElementById('rtsSelTxt').textContent);
 
+    /* WHERE the yard lands, because three places described this and none of them matched the
+       code: the comment in core/transport.js, docs/core-units.md and the answer given to a
+       player all said "adjacent to the vehicle, not under it" while the arithmetic subtracted
+       w-1 and put the vehicle at the south-east corner. Recorded here so the claim is a
+       measurement rather than a sentence. */
+    window._rtsMcvTile = [_rtsTX(mcv.x), _rtsTX(mcv.z)];
     o.yardsBefore = G.ents.filter(function (e) {
       return !e.dead && e.type === 'struct' && e.def === 'yard' && e.side === 'player';
     }).length;
@@ -96,11 +101,19 @@ var S = new Suite('deploy');
     await g.page.locator('#rtsDeployBtn').tap();
     Object.assign(out, await g.page.evaluate(function () {
       var G = window._rtsG;
+      var sd = rtsStructDef('yard'), mt = window._rtsMcvTile, made = null;
+      G.ents.forEach(function (e) {
+        if (!e.dead && e.type === 'struct' && e.def === 'yard' && e.side === 'player' &&
+            Math.abs(e.tx - mt[0]) <= sd.w && Math.abs(e.tz - mt[1]) <= sd.h) made = e;
+      });
       return {
         yardsAfter: G.ents.filter(function (e) {
           return !e.dead && e.type === 'struct' && e.def === 'yard' && e.side === 'player';
         }).length,
-        mcvGone: !G.ents.some(function (e) { return !e.dead && e.def === 'mcv'; })
+        mcvGone: !G.ents.some(function (e) { return !e.dead && e.def === 'mcv'; }),
+        /* the vehicle's own cell against the footprint's middle cell */
+        centreOff: made ? [made.tx + ((sd.w - 1) >> 1) - mt[0],
+                           made.tz + ((sd.h - 1) >> 1) - mt[1]] : null
       };
     }));
 
@@ -148,6 +161,12 @@ var S = new Suite('deploy');
          out.yardsAfter === out.yardsBefore + 1 && out.mcvGone,
          'yards ' + out.yardsBefore + ' -> ' + out.yardsAfter +
          ', the MCV ' + (out.mcvGone ? 'became it' : 'is STILL THERE - the button did nothing'));
+    S.ok('...and it lands CENTRED on the vehicle, not offset into a corner',
+         !!out.centreOff && out.centreOff[0] === 0 && out.centreOff[1] === 0,
+         out.centreOff ? 'footprint centre is ' + out.centreOff[0] + ',' + out.centreOff[1] +
+         ' cells from where the MCV stood - Adjacent_Cell(NW) is one step, and subtracting ' +
+         'w-1 (two, for a 3x3) put the vehicle at the south-east corner and grew the yard up ' +
+         'and to the left' : 'no yard found near the vehicle');
     if (out.keyTested) {
       S.ok('...and the key gives the same order through the same path',
            out.keyDid === 1 && out.keyGained === 1,
