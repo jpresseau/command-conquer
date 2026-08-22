@@ -909,7 +909,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">5d44b69 · 2026-08-22</div>
+  <div id="rtsBuild" title="build">b346003 · 2026-08-22</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -16233,8 +16233,15 @@ function _rtsSpillCargo(t) {
 /* UNIT.CPP Try_To_Deploy. An MCV becomes a Command Yard, and three details from the original
    are worth having exactly:
 
-   - the yard lands on the cell ADJACENT to the vehicle, not under it (`Adjacent_Cell(Coord,
-     FACING_NW)`), so the footprint grows away from where the vehicle was standing;
+   - the yard is CENTRED ON the vehicle, from `Adjacent_Cell(Coord, FACING_NW)`: one step
+     north-west is the footprint's origin, which for a 3x3 puts the MCV in the middle cell.
+     This said "adjacent to the vehicle, not under it" for a long time and the arithmetic said
+     something else again - it subtracted w-1, two cells for a 3x3, which made the vehicle's
+     cell the SOUTH-EAST CORNER and grew the whole yard up and to the left. Nobody had measured
+     it; the comment, docs/core-units.md and the answer given to a player all repeated the same
+     unchecked sentence. The cost was not cosmetic: you park where you want the base, and the
+     building lands two cells off in a direction nothing told you about - so a blocked patch
+     up-left refuses the deploy while the ground you are looking at is clear;
    - placement is checked with Legal_Placement, which does NOT apply the build-radius rule -
      see the `anywhere` argument to _rtsCanPlace;
    - `building->Strength = Health_Ratio() * building->Class->MaxStrength`, so a wreck of an MCV
@@ -16250,7 +16257,10 @@ function _rtsDeploy(e) {
   if (!d || !d.deploy) return false;
   var sd = rtsStructDef(d.deploy);
   if (!sd) return false;
-  var tx = _rtsTX(e.x) - (sd.w - 1), tz = _rtsTX(e.z) - (sd.h - 1);
+  /* One step north-west, as Adjacent_Cell gives it - NOT w-1, which is two for a 3x3. An even
+     footprint has no middle cell, so the halving rounds down and the vehicle sits just past
+     centre rather than at a corner; only the 3x3 yard deploys today, where it is exact. */
+  var tx = _rtsTX(e.x) - ((sd.w - 1) >> 1), tz = _rtsTX(e.z) - ((sd.h - 1) >> 1);
   if (!_rtsCanPlace(e.side, d.deploy, tx, tz, true)) {
     if (e.side === 'player') _rtsSay('Cannot deploy here.');
     return false;
