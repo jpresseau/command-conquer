@@ -370,7 +370,19 @@ function _rtsSyncSidebar(dt) {
     for (var n2 in counts) parts.push(counts[n2] + '× ' + n2);
     txt = parts.join(', ');
   }
-  document.getElementById('rtsSel').textContent = txt;
+  document.getElementById('rtsSelTxt').textContent = txt;
+
+  /* THE DEPLOY BUTTON, and it is the only way to deploy without a keyboard. It appears exactly
+     when the order would do something - the selection holds one of your units with a `deploy`
+     in its rules - so it is not a permanent control taking space in a sidebar that is already
+     tight on a 360px phone, and it cannot be tapped into a "nothing happened".
+     See _rtsDeploySelected in core/transport.js: the D key gives the same order. */
+  var dep = document.getElementById('rtsDeployBtn');
+  if (dep) {
+    var can = false;
+    for (var di = 0; di < sel.length; di++) if (_rtsCanDeploy(sel[di])) { can = true; break; }
+    if (dep.hidden === can) dep.hidden = !can;
+  }
 
   var msg = document.getElementById('rtsMsg');
   msg.textContent = G.msgT > 0 ? (G.msg || '') : '';

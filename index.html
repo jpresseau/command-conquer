@@ -347,7 +347,18 @@
 
 /* selection readout */
 #rcgRts .rts-sel{flex:0 0 auto;padding:5px 8px;border:1px solid #2b3a4d;border-radius:4px;background:#080c11;
-  font-size:11px;color:#9db0c6;min-height:15px}
+  font-size:11px;color:#9db0c6;min-height:15px;
+  display:flex;align-items:center;gap:8px}
+#rcgRts .rts-sel #rtsSelTxt{flex:1 1 auto;min-width:0}
+/* The deploy order, for the hands that have no D key. Sized for a finger rather than for the
+   11px text beside it - it is a one-shot, irreversible order on a 2500-credit unit, and the
+   thing it must never be is a near-miss. It is hidden unless the selection can actually take
+   the order, so this width costs the readout nothing the rest of the time. */
+#rcgRts .rts-sel #rtsDeployBtn{flex:0 0 auto;min-height:34px;padding:0 12px;
+  border:1px solid #3f7fd0;border-radius:4px;background:#12243a;color:#8fd0ff;
+  font:700 11px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.5px;cursor:pointer}
+#rcgRts .rts-sel #rtsDeployBtn:active{background:#1d3a5c}
+#rcgRts .rts-sel #rtsDeployBtn[hidden]{display:none}
 
 @media (max-width:820px){
   #rcgRts .rts-bar{flex-basis:190px}
@@ -898,7 +909,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">d8c2a8d · 2026-08-19</div>
+  <div id="rtsBuild" title="build">5d44b69 · 2026-08-22</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -16252,6 +16263,30 @@ function _rtsDeploy(e) {
   if (e.side === 'player' && typeof _rtsSfx === 'function') _rtsSfx('place', b.x, b.z);
   return true;
 }
+/* WHAT THE PLAYER'S DEPLOY ORDER DOES, in one place, because there is more than one way to
+   give it. The D key had the loop inlined and the touch button did not exist at all, so on a
+   phone the MCV - a unit whose entire purpose is to found a base where you have no yard - could
+   not be deployed by any means, while rules/units.js told the player to "press D, or use the
+   Deploy button" and no such button had ever been built. A second copy of this loop beside the
+   first would only let the two drift, so both callers land here.
+
+   Returns how many actually deployed. Zero is a real answer: every candidate refused, and
+   _rtsDeploy has already said why on the message line. */
+function _rtsDeploySelected() {
+  var G = window._rtsG, did = 0;
+  if (!G || !G.sel) return 0;
+  G.sel.slice().forEach(function (u) {
+    if (_rtsCanDeploy(u) && _rtsDeploy(u)) did++;
+  });
+  return did;
+}
+/* Is this one of the player's units that can turn into a building? The button asks so it can
+   show itself, and the order asks so it can skip everything else in a mixed selection. */
+function _rtsCanDeploy(e) {
+  return !!(e && !e.dead && e.side === 'player' && e.type === 'unit' &&
+            (rtsUnitDef(e.def) || {}).deploy);
+}
+
 /* Removing the vehicle without the wreck, the explosion or the kill credit - it was not
    destroyed, it turned into something. */
 function _rtsKillQuiet(e) {
@@ -26153,7 +26188,12 @@ function rtsOpen(seed) {
     +       '<div class="ptrack"><i id="rtsPwrFill"></i><b id="rtsPwrMark"></b></div></div>'
     +     '<div class="rts-grid" id="rtsList"></div>'
     +   '</div>'
-    +   '<div class="rts-sel" id="rtsSel">Nothing selected</div>'
+    /* The readout carries its text in a SPAN of its own: the sidebar writes that span rather
+       than the row, because assigning textContent to the row would delete the Deploy button
+       beside it on the next frame. */
+    +   '<div class="rts-sel" id="rtsSel"><span id="rtsSelTxt">Nothing selected</span>'
+    +     '<button id="rtsDeployBtn" type="button" hidden ' +
+              'onclick="_rtsDeploySelected()">DEPLOY</button></div>'
     + '</div>';
   document.body.appendChild(d);
 
@@ -26861,7 +26901,19 @@ function _rtsSyncSidebar(dt) {
     for (var n2 in counts) parts.push(counts[n2] + '× ' + n2);
     txt = parts.join(', ');
   }
-  document.getElementById('rtsSel').textContent = txt;
+  document.getElementById('rtsSelTxt').textContent = txt;
+
+  /* THE DEPLOY BUTTON, and it is the only way to deploy without a keyboard. It appears exactly
+     when the order would do something - the selection holds one of your units with a `deploy`
+     in its rules - so it is not a permanent control taking space in a sidebar that is already
+     tight on a 360px phone, and it cannot be tapped into a "nothing happened".
+     See _rtsDeploySelected in core/transport.js: the D key gives the same order. */
+  var dep = document.getElementById('rtsDeployBtn');
+  if (dep) {
+    var can = false;
+    for (var di = 0; di < sel.length; di++) if (_rtsCanDeploy(sel[di])) { can = true; break; }
+    if (dep.hidden === can) dep.hidden = !can;
+  }
 
   var msg = document.getElementById('rtsMsg');
   msg.textContent = G.msgT > 0 ? (G.msg || '') : '';
@@ -27360,14 +27412,11 @@ function _rtsKeyDown(e) {
     if (held && !out) _rtsSay('Nowhere to unload — bring it closer to shore.');
     if (out || held) e.preventDefault();
   }
-  /* D deploys every selected vehicle that can - an MCV into a Command Yard. */
+  /* D deploys every selected vehicle that can - an MCV into a Command Yard. The loop itself
+     lives in core/transport.js, because the sidebar's Deploy button gives the same order and a
+     keyboard-only path is how a phone ended up unable to deploy at all. */
   if (k === 'd' || k === 'D') {
-    var G = window._rtsG, did = 0;
-    if (G && G.sel) G.sel.slice().forEach(function (u) {
-      if (u.side === 'player' && u.type === 'unit' && (rtsUnitDef(u.def) || {}).deploy
-          && _rtsDeploy(u)) did++;
-    });
-    if (did) e.preventDefault();
+    if (_rtsDeploySelected()) e.preventDefault();
   }
   /* Home centres on the selection; with nothing selected it falls back to your command yard,
      which is the "where was I" key when you have chased a raid across the map. */
