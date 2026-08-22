@@ -173,6 +173,30 @@ function _rtsDeploy(e) {
   if (e.side === 'player' && typeof _rtsSfx === 'function') _rtsSfx('place', b.x, b.z);
   return true;
 }
+/* WHAT THE PLAYER'S DEPLOY ORDER DOES, in one place, because there is more than one way to
+   give it. The D key had the loop inlined and the touch button did not exist at all, so on a
+   phone the MCV - a unit whose entire purpose is to found a base where you have no yard - could
+   not be deployed by any means, while rules/units.js told the player to "press D, or use the
+   Deploy button" and no such button had ever been built. A second copy of this loop beside the
+   first would only let the two drift, so both callers land here.
+
+   Returns how many actually deployed. Zero is a real answer: every candidate refused, and
+   _rtsDeploy has already said why on the message line. */
+function _rtsDeploySelected() {
+  var G = window._rtsG, did = 0;
+  if (!G || !G.sel) return 0;
+  G.sel.slice().forEach(function (u) {
+    if (_rtsCanDeploy(u) && _rtsDeploy(u)) did++;
+  });
+  return did;
+}
+/* Is this one of the player's units that can turn into a building? The button asks so it can
+   show itself, and the order asks so it can skip everything else in a mixed selection. */
+function _rtsCanDeploy(e) {
+  return !!(e && !e.dead && e.side === 'player' && e.type === 'unit' &&
+            (rtsUnitDef(e.def) || {}).deploy);
+}
+
 /* Removing the vehicle without the wreck, the explosion or the kill credit - it was not
    destroyed, it turned into something. */
 function _rtsKillQuiet(e) {

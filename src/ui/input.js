@@ -360,14 +360,11 @@ function _rtsKeyDown(e) {
     if (held && !out) _rtsSay('Nowhere to unload — bring it closer to shore.');
     if (out || held) e.preventDefault();
   }
-  /* D deploys every selected vehicle that can - an MCV into a Command Yard. */
+  /* D deploys every selected vehicle that can - an MCV into a Command Yard. The loop itself
+     lives in core/transport.js, because the sidebar's Deploy button gives the same order and a
+     keyboard-only path is how a phone ended up unable to deploy at all. */
   if (k === 'd' || k === 'D') {
-    var G = window._rtsG, did = 0;
-    if (G && G.sel) G.sel.slice().forEach(function (u) {
-      if (u.side === 'player' && u.type === 'unit' && (rtsUnitDef(u.def) || {}).deploy
-          && _rtsDeploy(u)) did++;
-    });
-    if (did) e.preventDefault();
+    if (_rtsDeploySelected()) e.preventDefault();
   }
   /* Home centres on the selection; with nothing selected it falls back to your command yard,
      which is the "where was I" key when you have chased a raid across the map. */

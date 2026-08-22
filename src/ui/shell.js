@@ -86,7 +86,12 @@ function rtsOpen(seed) {
     +       '<div class="ptrack"><i id="rtsPwrFill"></i><b id="rtsPwrMark"></b></div></div>'
     +     '<div class="rts-grid" id="rtsList"></div>'
     +   '</div>'
-    +   '<div class="rts-sel" id="rtsSel">Nothing selected</div>'
+    /* The readout carries its text in a SPAN of its own: the sidebar writes that span rather
+       than the row, because assigning textContent to the row would delete the Deploy button
+       beside it on the next frame. */
+    +   '<div class="rts-sel" id="rtsSel"><span id="rtsSelTxt">Nothing selected</span>'
+    +     '<button id="rtsDeployBtn" type="button" hidden ' +
+              'onclick="_rtsDeploySelected()">DEPLOY</button></div>'
     + '</div>';
   document.body.appendChild(d);
 
