@@ -929,7 +929,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">a75f3b1 · 2026-08-23</div>
+  <div id="rtsBuild" title="build">3587e50 · 2026-08-23</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -7722,12 +7722,45 @@ function _sprBldSuper(X, key) {
 
   } else if (key === 'turret') {
     /* Gun Turret. A single BARREL on a low armoured base, lying almost flat - the barrel is
-       the read, so it is long and sits clear of everything else. */
+       the read, so it is long and sits clear of everything else.
+
+       THE GUN HOUSE IS A HOUSE, NOT A LID. It was one cylinder, radius 7 on a 24-unit
+       footprint, carrying the team colour as its TOP face - and this camera looks down at 49
+       degrees, so that top face is most of what the building ever shows. The most-built
+       defence in the game rendered as a flat blue disc filling half its own pad: no shape, no
+       shading, nothing to say which way the gun pointed except the barrel sticking out of it.
+       Caught by eye on the roster contact sheet.
+
+       Built the way the tank turrets in sprites/unit-ground.js are built instead - a chamfered
+       _r3Slab body under an _r3Hip roof. The slab gives four wall planes at four angles and
+       the hip gives two more sloping the other way, so the same light lands on six tones where
+       it used to land on one.
+
+       AND THE ROOF IS THE BUILDING'S OWN PAINT, not the team colour. Putting the hip in
+       B.roof was the first attempt and it only traded a flat blue disc for a flat blue tent -
+       still half the footprint in one hue, because the area was the problem and the shape was
+       only half of it. The team colour is a marker on the ridge now, the way the power plant
+       and the barracks carry a band rather than a lid.
+
+       (_r3Hip's ridge runs along X, across the barrel rather than along it - the ridge line is
+       (rx0..rx1, y1, z) at the footprint's centre in z. An earlier draft of this note claimed
+       the opposite and was wrong; the roof says nothing about facing, and the barrel and the
+       mantlet already do.) */
     _r3Box(m, 0, 0, 0, W - 4, 3, D - 4, C[2], C[0]);
-    _r3Cone(m, 0, 3, 0, 9, 7.5, 6, OL[0], 20);                           /* sloped base, painted */
-    _r3Cyl(m, 0, 9, 0, 7, 5, OL[2], B.roof, 20);                         /* turret, team roof */
-    _r3Box(m, 0, 10, 8, 3, 3, 13, S[0], S[1]);                           /* barrel */
-    _r3Box(m, 0, 10, 15, 4, 4, 3, S[2], S[3]);                           /* muzzle */
+    _r3Cone(m, 0, 3, 0, 9, 7.5, 5, OL[0], 20);                           /* sloped base, painted */
+    _r3Cyl(m, 0, 8, 0, 6.4, 1.6, S[1], S[0], 20);                        /* the traverse ring */
+    /* the gun house: chamfered walls, hipped roof, ridge along the barrel */
+    _r3Slab(m, 0, 9.6, 0, 11.5, 3.6, 12.5, 1.3, OL[1], OL[2]);
+    _r3Hip(m, 0, 13.2, 0, 10.5, 1.7, 11.5, 3.6, OL[3]);
+    _r3Box(m, 0, 14.5, 0, 6.4, 0.9, 2.6, B.roof, B.roof);                /* team marker, on the ridge */
+    _r3Box(m, 0, 10.2, 6.6, 4.6, 3.0, 2.2, DK[1], DK[3]);                /* mantlet */
+    _r3Box(m, 0, 10.4, 8, 3, 3, 13, S[0], S[1]);                         /* barrel */
+    _r3Box(m, 0, 10.4, 15, 4, 4, 3, S[2], S[3]);                         /* muzzle */
+    /* What a gun house carries on top, and the reason the roof is worth having: a hatch and a
+       periscope break the ridge, so even head-on there are three heights up there. */
+    _r3Box(m, -2.6, 14.4, -1.6, 3.4, 0.9, 3.4, S[2], S[1]);              /* hatch */
+    _r3Cyl(m, 2.4, 14.4, -2.2, 0.7, 2.2, S[3], S[2], 12);                /* periscope */
+    _r3Box(m, 0, 11.0, -6.4, 5.0, 2.2, 1.6, S[2], S[1]);                 /* stowage bin, aft */
     /* A gun turret gets its mounting: a ring base, a revetment, ready ammunition, a scope. */
     _r3Cyl(m, 0, 1.2, 0, W / 2 - 2.5, 1.6, C[3], C[1], 20);
     sandbags(2.8, W / 2 - 2.5, D / 2 - 2.5, 13);
