@@ -441,6 +441,9 @@ function _rtsRFrame(dt) {
   /* The render readout samples here, at the end of the frame walk, so what it times is a
      whole frame of this renderer - see ui/gfxstat.js. It throttles its own repaint. */
   if (typeof _rtsGfxFrame === 'function') _rtsGfxFrame();
+  /* The touch command bar builds itself from here for the same reason the readout does - see
+     ui/touchcmd.js - and early-outs once its buttons exist. */
+  if (typeof _rtsTouchCmdFrame === 'function') _rtsTouchCmdFrame();
 }
 
 
