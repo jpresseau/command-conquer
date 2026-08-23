@@ -377,14 +377,10 @@ function _rtsKeyDown(e) {
   }
   /* MISSION_STICKY. Hold position: fire from where you stand, never chase, and the AI's
      base-defence recall leaves you alone. */
+  /* The loop lives in core/production.js, because the touch bar gives the same order and a
+     keyboard-only path is how a phone ended up unable to stop its army at all. */
   if (k === 's' || k === 'S') {
-    var held = 0;
-    for (var hi = 0; hi < G.sel.length; hi++) {
-      var hu = G.sel[hi];
-      if (!hu || hu.dead || hu.side !== 'player' || hu.type !== 'unit') continue;
-      if (rtsUnitDef(hu.def).harvest) continue;      /* a harvester on hold is just idle */
-      hu.order = 'hold'; hu.path = null; hu.goal = null; hu.susp = null; held++;
-    }
+    var held = _rtsHoldSelected();
     if (held) { _rtsSay(held + ' holding position.'); if (typeof _rtsSfx === 'function') _rtsSfx('order'); }
   }
 
