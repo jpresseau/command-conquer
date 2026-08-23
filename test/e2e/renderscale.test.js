@@ -13,18 +13,19 @@
    the KNOB. A player on a device that really is fill-bound pins a lower scale and reads the
    result off the screen, which is the only way this project has ever measured real hardware.
 
-   WHAT IS STILL NOT PROVEN, kept from the capped version because the risk did not go away. The
-   clip-space scale in scene3d.js is 2*z*scale / bufferWidth, which reduces to 2*z/cssWidth and
-   is invariant to the buffer's resolution - but only while the numerator names the BUFFER's
-   scale. Left as R.dpr it draws the world dpr/scale too large while camera.js goes on projecting
-   clicks at the right size: clicks landing beside units, silently. The round trip below does NOT
-   catch that, and this was checked rather than assumed - putting R.dpr back leaves every
-   assertion here green, because _rtsWorldToScreen and _rtsGroundAt are exact inverses of each
-   other whatever the shader does. Catching it needs a pixel cross-check: render a unit at a
-   known world point, find it in the frame, compare. Not written yet.
+   WHAT THIS FILE STILL CANNOT PROVE, and where the proof now lives. The clip-space scale in
+   scene3d.js is 2*z*scale / bufferWidth, which reduces to 2*z/cssWidth and is invariant to the
+   buffer's resolution - but only while the numerator names the BUFFER's scale. Left as R.dpr it
+   draws the world dpr/scale too large while camera.js goes on projecting clicks at the right
+   size: clicks landing beside units, silently. Nothing below catches that, and it was checked
+   rather than assumed - putting R.dpr back leaves every assertion HERE green, because
+   _rtsWorldToScreen and _rtsGroundAt are exact inverses of each other whatever the shader does.
 
-   It matters less at native than it did under the cap - at AUTO the two scales are equal again,
-   so the bug can only appear for a player who has pinned one - but it is still there. */
+   e2e/scalepixels is that missing check, and it earns its place: with R.dpr restored this file
+   still reports 5 of 5 passing while scalepixels reads the drawn separation between two units
+   at 2.98x the projected one. It has to run at dpr 3 with a PINNED scale to do it - at AUTO the
+   two numbers are equal and the bug is genuinely invisible, which is why scalepixels' own AUTO
+   row passes under the broken code too. */
 
 var { chromium, devices } = require('playwright');
 var { Suite } = require('../lib/assert.js');
