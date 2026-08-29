@@ -51,8 +51,9 @@ function _rtsUpdateUnit(e, dt) {
      while it walks is a medic nobody uses. "Cannot heal himself" comes straight from the
      reference and stops a pair of medics being an immortal blob. */
   if (d.heals) {
-    for (var hi = 0; hi < G.ents.length; hi++) {
-      var pt = G.ents[hi];
+    var hl = _rtsSpNear(e.x, e.z, d.heals) || G.ents;
+    for (var hi = 0; hi < hl.length; hi++) {
+      var pt = hl[hi];
       if (pt === e || pt.dead || pt.type !== 'unit' || pt.side !== e.side) continue;
       if (pt.hp >= pt.maxHp || rtsUnitDef(pt.def).kind !== 'infantry') continue;
       if (Math.hypot(pt.x - e.x, pt.z - e.z) > d.heals) continue;
@@ -332,8 +333,13 @@ function _rtsStandoff(e, dt) {
    which is why your own tanks never mow down the enemy infantry they are shooting at. */
 function _rtsOverrun(e) {
   var G = window._rtsG, foe = _rtsEnemyOf(e.side);
-  for (var i = 0; i < G.ents.length; i++) {
-    var o = G.ents[i];
+  /* Bucketed - see core/spatial.js. This ran for every crusher every tick over the whole
+     entity list to find the handful of men within a cell and a half, and was the second
+     biggest cost in the simulation behind target acquisition. The list is in entity order, so
+     a crowd is still run down in the same sequence and the same man dies first. */
+  var list = _rtsSpNear(e.x, e.z, RTS_CRUSH_DIST) || G.ents;
+  for (var i = 0; i < list.length; i++) {
+    var o = list[i];
     if (o.dead || o.type !== 'unit' || o.side === e.side) continue;
     /* A PASSENGER IS NOT UNDER YOUR TRACKS. Cargo is kept at its transport's coordinates, so
        without this a tank driving past an APC crushes the squad sealed inside it - the men are

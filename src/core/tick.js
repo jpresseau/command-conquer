@@ -5,6 +5,11 @@ function _rtsTick(dt) {
   if (!G || G.over) return;
   if (dt > 0.1) dt = 0.1;                        /* never let a stall fast-forward the battle */
   G.t += dt;
+  /* File everything into buckets before anything scans. See core/spatial.js: the target scan
+     used to walk the whole entity list per unit per tick, which cost 27ms a frame at 320
+     units. Rebuilt here rather than kept up to date incrementally, because one pass over the
+     list is what a SINGLE one of those scans used to cost. */
+  _rtsSpBuild();
   if (G.msgT > 0) G.msgT -= dt;
 
   _rtsTickOre(dt);

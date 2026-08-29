@@ -93,7 +93,7 @@ function _rtsPlaceStruct(side, key, tx, tz, instant, paid) {
     /* PurchasePrice. A structure placed straight onto the map at match start was never
        bought, so it is worth what it would have cost this side to buy. */
     paid:paid == null ? _rtsCostOf(side, d) : paid };
-  G.ents.push(e); G.byId[e.id] = e;
+  G.ents.push(e); G.byId[e.id] = e; _rtsSpAdd(e);
   _rtsFootprint(e, true);
   _rtsFlushForPlacement(e);
   _rtsRecalcPower(side);
@@ -169,6 +169,6 @@ function _rtsSpawnUnit(side, key, x, z) {
     /* MasterDoControls marks DO_WALK and DO_CRAWL 'randomstart'. That is why a squad does
        not march in lockstep - each soldier's walk cycle begins on a different frame. */
     gait:(G.nextId * 7) % 8 };
-  G.ents.push(e); G.byId[e.id] = e;
+  G.ents.push(e); G.byId[e.id] = e; _rtsSpAdd(e);
   return e;
 }
