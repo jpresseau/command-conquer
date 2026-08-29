@@ -88,7 +88,10 @@ Keep them small: if a file passes ~500 lines it wants splitting along its own ba
   a whole battle can be stepped headlessly; swapping the 3D renderer for the 2D one cost it zero
   lines. `grid` (tiles, passability, A*, state), `terrain`, `base`, `crates`, `supers`,
   `entities`, `capture`, `transport`, `production`, `combat` (target + fire), `damage`, `move`,
-  `units`, `ai`, `teams`, `missions`, `aisupers`, `ore`, `triggers`, `tick`.
+  `units`, `ai`, `teams`, `missions`, `aisupers`, `ore`, `triggers`, `tick`, and `spatial` — the
+  per-tick bucket index the target scan and the crush check run over instead of the whole entity
+  list. It shortens a scan's candidate list and changes no candidate test, so the property that
+  makes it safe is that the two agree; see `docs/core-combat.md` and `test/*/spatial`.
 - `src/render/` — canvas 2D. Reads the sim, never writes it. `camera`, `post` (light pass, water,
   shroud), `frame`, `draw`, `icons`.
 - `src/ui/` — `shell` (open/close/resize), `sidebar`, `input`, `select`, `hud`, `camera`

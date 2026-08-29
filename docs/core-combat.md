@@ -178,6 +178,58 @@ working correctly.
 binds — every sight radius in this game is already inside it. It is kept because the clamp is
 the rule, not the current unit table.
 
+### What the scan runs over — `src/core/spatial.js`
+
+The scoring above is unchanged; what changed is the list it runs over. `_rtsFindTarget` walked
+every entity in the game, for every armed unit, every tick — O(n²), and measured with two
+armies in front of each other it *was* the simulation:
+
+| units | `_rtsTick` | `_rtsFindTarget` | `_rtsOverrun` |
+|------:|-----------:|-----------------:|--------------:|
+|    43 |     0.82ms |    0.51ms  (63%) | 0.09ms  (10%) |
+|   166 |     7.76ms |    5.84ms  (75%) | 0.93ms  (12%) |
+|   320 |    27.16ms |   21.29ms  (78%) | 3.76ms  (14%) |
+
+Doubling the army very nearly quadrupled the cost. At 320 units — a big battle, not an absurd
+one — the simulation alone took **27ms of a 16.7ms frame** on a desktop-class CPU, before a
+pixel was drawn.
+
+So entities are filed into 8-unit buckets once per tick and a scan asks for the buckets covering
+its own reach. **The per-candidate test is untouched**: a caller can only be shown fewer
+candidates, never different ones, which is what makes the whole thing checkable by one question
+— does the bucketed scan return the same object the full one would have? `test/e2e/spatial`
+asks it every tick of a real battle (62,176 scans, 2,817 of which found something) and
+`test/unit/spatial` takes the property apart into the ways it can break.
+
+Packed a tile apart, which is the worst case a grid can be handed — every candidate a scan
+collects really is inside its reach, so no bucketing can make the list shorter: **21.33ms →
+13.37ms**, and a scan still reads 64% of the entity list. At the spacing a formation on the move
+actually holds: **22.98ms → 4.42ms**, and a scan reads 12%.
+
+Three things let a candidate matter from outside the radius a caller asked for, and getting any
+of them wrong is a unit that quietly stops shooting back rather than an error:
+
+- **Elevation.** `_rtsElevReach` hands a unit standing high up to `RTS_ELEV_MAX ×
+  RTS_ELEV_RANGE` of extra reach. `RTS_SP_ELEV` covers it.
+- **Movement.** The index is built at the top of the tick and entities move during it, so
+  `RTS_SP_MOVE` covers the fastest thing in the roster for one clamped `dt` plus a separation
+  shove. It was 5 in the first draft, and the MiG needs 5.8.
+- **Building size.** `_rtsRangeTo` measures to a structure's *edge*. Not padded for at all:
+  structures are filed into every bucket their footprint covers, which is exact and free
+  because they never move.
+
+Buckets hold **ordinals** — positions in `G.ents` — not references, so a query can hand its
+candidates back in entity-list order with a plain numeric sort. That order is load-bearing:
+`_rtsFindTarget` keeps the first candidate of the best score and `_rtsScatter` draws on the
+shared random stream, so a scan that met the same objects in a different sequence would pull the
+whole simulation onto a different path. Sorting references through a `Map` instead cost more
+than the bucketing saved — 13.6ms against 5.4ms at 320 units.
+
+The flip side of ordinals is that one `splice` invalidates every one past it. `_rtsTick` reaps
+its dead at the very bottom, after every scan has run, so this never bites mid-tick; it bites
+the moment anything asks *between* ticks, and `_rtsSpNear` returns `null` (every caller falls
+back to the full list) as soon as `G.ents.length` no longer matches what was filed.
+
 ## Vehicles — from UNIT.CPP
 
 **A vehicle carries two facings.** `PrimaryFacing` is the hull, `SecondaryFacing` is the

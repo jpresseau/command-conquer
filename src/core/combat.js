@@ -92,8 +92,12 @@ function _rtsCloakAI(e, dt, d) {
   if (!d || !d.cloak) return;
   if (e.decloak > 0) e.decloak -= dt;
   var G = window._rtsG, foe = _rtsEnemyOf(e.side), found = 0;
-  for (var i = 0; i < G.ents.length; i++) {
-    var o = G.ents[i];
+  /* Bucketed on the widest detection radius in the roster rather than on RTS_SUB_DETECT: the
+     radius that matters here belongs to the OBSERVER, not to the submarine, so a scan narrowed
+     to the default would stop a Destroyer noticing anything from its own longer reach. */
+  var list = _rtsSpNear(e.x, e.z, _rtsSpDetectMax()) || G.ents;
+  for (var i = 0; i < list.length; i++) {
+    var o = list[i];
     if (o.dead || o.side !== foe || o.inside) continue;
     if (o.type === 'struct' && o.building) continue;
     var od = (o.type === 'struct' ? rtsStructDef(o.def) : rtsUnitDef(o.def)) || {};
@@ -106,8 +110,14 @@ function _rtsCloakAI(e, dt, d) {
 }
 function _rtsFindTarget(e, range, w) {
   var G = window._rtsG, foe = _rtsEnemyOf(e.side), best = null, bv = 0;
-  for (var i = 0; i < G.ents.length; i++) {
-    var o = G.ents[i];
+  /* The candidate list, not the candidate test. core/spatial.js hands back the entities whose
+     buckets touch our own reach, in entity-list order, so everything below runs exactly as it
+     did over a shorter list - and falls back to the whole list when there is no index. The
+     reach it is asked for is the same max() the caller used, plus spatial's own pad for the
+     elevation bonus _rtsElevReach can add further down. */
+  var list = _rtsSpNear(e.x, e.z, range, RTS_SP_ELEV) || G.ents;
+  for (var i = 0; i < list.length; i++) {
+    var o = list[i];
     if (o.dead || o.side !== foe || o.inside) continue;
     /* You cannot shoot what is under water. The same flag that hides a submarine from the
        player's screen hides it from the opponent's target acquisition - see _rtsCloakAI. */
