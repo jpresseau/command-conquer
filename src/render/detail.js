@@ -39,6 +39,18 @@ var RTS_DETAIL_TILE = 128;        /* pixels square; 9 repeats across a phone, 65
 var RTS_DETAIL_SCALE = 4;         /* feature size in tile pixels; MUST divide the tile */
 var RTS_DETAIL_MIN_MAG = 1.5;     /* below this the ground is not magnified enough to need it */
 var RTS_DETAIL_ALPHA = 0.22;      /* grain, not pattern - see the note on the weave below */
+/* HOW THE TILE IS COMPOSITED, and the reason it is a variable rather than a literal.
+
+   `overlay` is the natural blend for grain and it is the expensive one. This tile does not need
+   it: it encodes lighten-or-darken per pixel in its own colour and strength in its alpha, so a
+   plain source-over produces the same picture for a fraction of the fill cost. That claim used
+   to be defended by two numbers written into a comment - overlay 7.06 ms, soft-light 10.38 -
+   measured once, on a machine nobody has any more, and no longer checkable by anything.
+
+   e2e/grain now prices the alternative itself by pointing this at 'overlay' for a few frames
+   and timing both. A number a test can re-measure is worth more than a number a comment
+   remembers. Nothing in the game ever assigns to it. */
+var RTS_DETAIL_OP = 'source-over';
 var _RTS_DETAIL = null;
 var _RTS_DETAIL_PAT = null;      /* {g, pat} - a pattern belongs to the context that made it */
 
@@ -101,11 +113,19 @@ function _rtsGroundDetail(g, R, TSscale) {
   /* device pixels per baked terrain pixel - the magnification this exists to answer */
   var mag = TSscale * R.dpr;
   if (mag < RTS_DETAIL_MIN_MAG) return 0;
-  /* THE PATTERN IS BUILT ONCE, NOT ONCE A FRAME. createPattern allocates, and calling it every
-     frame cost a measured 8.3 ms - it took the frame from 8.8 ms to 17.1 and straight through
-     the 16.7 ms budget, while the composite itself benchmarks at hundredths of a millisecond.
-     It is cached against the context it was made for, because a pattern belongs to its context
-     and the context is replaced whenever the canvas is resized. */
+  /* THE PATTERN IS BUILT ONCE, NOT ONCE A FRAME. It is cached against the context it was made
+     for, because a pattern belongs to its context and the context is replaced whenever the
+     canvas is resized.
+
+     THE NUMBER THAT USED TO BE HERE IS GONE, because it is no longer true. This said
+     createPattern cost a measured 8.3 ms a frame - 8.8 ms to 17.1, straight through the
+     budget. Re-measured through e2e/grain with the cache defeated, it now costs nothing that
+     rises out of the noise: 3.32 ms against 3.51 for the pass as a whole, which is a difference
+     in the wrong direction. The tile itself is cached separately in _RTS_DETAIL, so what was
+     being timed was createPattern alone, and whatever made it expensive in that browser is not
+     doing so in this one. The cache stays - allocating an object per frame to hand it straight
+     back is pointless whatever it costs - but it is no longer load-bearing, and a comment
+     asserting 8.3 ms would send the next reader looking for a regression that is not there. */
   if (!_RTS_DETAIL_PAT || _RTS_DETAIL_PAT.g !== g) {
     var made = g.createPattern(_rtsDetailTile(), 'repeat');
     if (!made) return 0;
@@ -127,8 +147,8 @@ function _rtsGroundDetail(g, R, TSscale) {
 
   g.save();
   /* Plain source-over: the tile already encodes lighten-or-darken per pixel in its own colour
-     and alpha, so no blend mode is needed and none of their cost is paid. */
-  g.globalCompositeOperation = 'source-over';
+     and alpha, so no blend mode is needed and none of their cost is paid. See RTS_DETAIL_OP. */
+  g.globalCompositeOperation = RTS_DETAIL_OP;
   g.globalAlpha = RTS_DETAIL_ALPHA;
   g.setTransform(1, 0, 0, 1, 0, 0);            /* device pixels: one tile pixel per screen pixel */
   g.translate(ox, oy);
