@@ -39,10 +39,20 @@
    IT MUST WRAP. Sampled on a torus so the tile meets itself; a seam every 128 pixels would be
    the wallpaper this is avoiding, eight times over.
 
-   AND IT MUST BE AFFORDABLE. `overlay` is the natural blend and costs 7.06 ms in a real frame
-   at 1179x1656, against a 16.7 ms budget already carrying 8 ms of game; multiply 8.48,
-   soft-light 10.38. The tile encodes lighten-or-darken in its own colour and strength in its
-   alpha instead, so the composite is a plain source-over at 3.74. */
+   AND IT MUST BE AFFORDABLE. `overlay` is the natural blend for grain and the expensive one.
+   The tile encodes lighten-or-darken in its own colour and strength in its alpha instead, so
+   the composite is a plain source-over.
+
+   THAT IS MEASURED HERE RATHER THAN REMEMBERED, and the difference matters. This used to assert
+   that a whole frame came in under 16.7 ms, and quote 7.06 ms for overlay and 10.38 for
+   soft-light from a comment. Both were claims about a machine, not about the grain: three runs
+   of identical code measured the frame at 18.96, 14.88 and 11.10 ms and the bar sat inside that
+   spread, so the spec failed a run in which nothing had changed. What the spec asks now is what
+   the pass costs RELATIVE to the frame the game draws anyway, and how that compares to the
+   blend mode it exists to avoid - both priced in the same run, seconds apart, through the
+   RTS_DETAIL_OP seam. Across seven runs, four of them with the box deliberately loaded, those
+   came out at 45-49% and 1.80-2.00x. (The live overlay figure, 5.45-7.71 ms, does corroborate
+   the 7.06 the comment remembered.) */
 
 var { chromium } = require('playwright');
 var { Suite } = require('../lib/assert.js');
@@ -149,19 +159,56 @@ var S = new Suite('grain');
       return { mag: m, drew: _rtsGroundDetail(ctx, R, m / R.dpr) === 1 };
     });
 
-    /* --- cost, in a real frame at the zoom that needs it --- */
+    /* --- cost, in a real frame at the zoom that needs it ---
+
+       MEASURED AGAINST ITSELF. This used to assert a whole frame came in under 16.7 ms, which
+       is a claim about whatever machine happens to be running the suite rather than about the
+       grain: three runs of identical code measured 18.96, 14.88 and 11.10 ms, and the bar sat
+       inside that spread, so the spec failed a run that had changed nothing. What is stable is
+       what the pass costs RELATIVE to the frame the game draws anyway - 0.53, 0.52 and 0.46
+       across those same three runs - and how it compares to the blend mode it exists to avoid.
+
+       The three are interleaved rather than run in three blocks: the box drifts over the tens
+       of seconds this takes, and whichever went last would carry the drift on its own. */
     R.zi = RTS_ZOOMS.length - 1; _rtsApplyCam();
-    function bench() {
-      for (var w = 0; w < 6; w++) _rtsRFrame(1 / 60);
-      var t0 = performance.now(), m = 30;
+    function bench(m) {
+      var t0 = performance.now();
       for (var q = 0; q < m; q++) _rtsRFrame(1 / 60);
-      return +((performance.now() - t0) / m).toFixed(2);
+      return performance.now() - t0;
     }
-    o.msWith = bench();
-    var keep2 = RTS_DETAIL_MIN_MAG; RTS_DETAIL_MIN_MAG = 1e9;
-    o.msWithout = bench();
-    RTS_DETAIL_MIN_MAG = keep2;
-    o.msCost = +(o.msWith - o.msWithout).toFixed(2);
+    var keepMag = RTS_DETAIL_MIN_MAG, keepOp = RTS_DETAIL_OP;
+    var ROUNDS = 9, M = 10, rounds = [];
+    bench(6);                                                    /* warm */
+    for (var rd = 0; rd < ROUNDS; rd++) {
+      RTS_DETAIL_MIN_MAG = keepMag; RTS_DETAIL_OP = keepOp;
+      var wi = bench(M) / M;
+      RTS_DETAIL_MIN_MAG = 1e9;                                  /* the pass gated off entirely */
+      var wo = bench(M) / M;
+      /* ...and the same pass through the blend mode it was written to avoid. RTS_DETAIL_OP is
+         a seam for exactly this: the alternative is priced here, on this machine, in this run,
+         instead of being quoted from a comment. */
+      RTS_DETAIL_MIN_MAG = keepMag; RTS_DETAIL_OP = 'overlay';
+      var ov = bench(M) / M;
+      rounds.push({ wi: wi, wo: wo, ov: ov });
+    }
+    RTS_DETAIL_MIN_MAG = keepMag; RTS_DETAIL_OP = keepOp;
+
+    /* MEDIAN OF PER-ROUND RATIOS, not a ratio of pooled means. A round is a tenth of a second
+       of SwiftShader and any one of them can be swallowed by something else on the box; pooled,
+       a single bad round moves the answer, and the pooled version of this measured a cost
+       between 3.15 and 4.98 ms across four runs of identical code. The median throws that round
+       away instead. */
+    function med(f) {
+      var v = rounds.map(f).sort(function (a, b) { return a - b; });
+      return v[v.length >> 1];
+    }
+    o.msWith = +med(function (r) { return r.wi; }).toFixed(2);
+    o.msWithout = +med(function (r) { return r.wo; }).toFixed(2);
+    o.msOverlay = +med(function (r) { return r.ov; }).toFixed(2);
+    o.msCost = +med(function (r) { return r.wi - r.wo; }).toFixed(2);
+    o.msOverCost = +med(function (r) { return r.ov - r.wo; }).toFixed(2);
+    o.share = +med(function (r) { return (r.wi - r.wo) / r.wo; }).toFixed(3);
+    o.vsOverlay = +med(function (r) { return (r.ov - r.wo) / (r.wi - r.wo); }).toFixed(2);
     return o;
   });
 
@@ -197,9 +244,24 @@ var S = new Suite('grain');
          return r.mag + 'x ' + (r.drew ? 'drew' : 'skipped');
        }).join(', ') + ' - at dpr 2 the widest zoom is 1.0x and pays nothing');
 
-  S.ok('the grain fits the frame budget', out.msWith < 16.7,
-       out.msWith + ' ms a frame with it against ' + out.msWithout + ' without, a cost of ' +
-       out.msCost + ' ms (overlay as a blend mode cost 7.06, soft-light 10.38)');
+  S.ok('the grain costs less than the frame it is added to', out.share < 0.75,
+       'a frame is ' + out.msWithout + ' ms without it and ' + out.msWith + ' ms with, so the ' +
+       'pass costs ' + out.msCost + ' ms — ' + (100 * out.share).toFixed(0) + '% of what the ' +
+       'game draws anyway');
+
+  /* THE DESIGN DECISION, priced rather than remembered. The tile carries lighten-or-darken in
+     its own colour so the composite can be a plain fill; if it ever needs a blend mode again,
+     this is what that costs. */
+  S.ok('...and materially less than the blend mode it exists to avoid', out.vsOverlay >= 1.4,
+       'through `overlay` the same pass costs ' + out.msOverCost + ' ms against ' + out.msCost +
+       ' — ' + out.vsOverlay + 'x');
+
+  /* A clock reading kept as a backstop against a total collapse, set clear of the measured
+     envelope rather than at a phone budget headless Chromium cannot represent - the same shape
+     e2e/resolution settled on for the same reason. With-grain frames measured 9.8 to 14.4 ms
+     across seven runs here, so this fires only on something an order of magnitude wrong. */
+  S.ok('...and the frame has not collapsed outright', out.msWith < 45,
+       out.msWith + ' ms a frame; measured 9.8-14.4 across seven runs, four of them loaded');
 
   S.ok('the tile is small', out.tile.kb <= 128, out.tile.size + ', ' + out.tile.kb + ' KB');
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
