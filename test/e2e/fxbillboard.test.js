@@ -54,7 +54,12 @@ var S = new Suite('fxbillboard');
     o.found = !!wf;
     if (!wf) return o;
     R.focus.x = wf.x; R.focus.z = wf.z;
-    R.zi = RTS_ZOOMS.length - 1; _rtsApplyCam();
+/* the closest rung the SHIPPED 2D ladder has, which is what this spec's numbers were
+       calibrated against. 3D reaches two rungs further in now (RTS_ZOOM_3D_EXTRA), and
+       "RTS_ZOOMS.length - 1" quietly became a different magnification - a four-times
+       narrower view, with every tolerance and sample position here still sized for the
+       old one. e2e/zoom3d covers the new rungs for the things that can break silently. */
+    R.zi = RTS_ZOOM_2D_STEPS - 1; _rtsApplyCam();
     window.RTS_POST_ON = false;              /* the bloom would spread every footprint */
     var CW = R3.cv.width, CH = R3.cv.height;
 

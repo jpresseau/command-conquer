@@ -70,7 +70,7 @@ var S = new Suite('tilt');
        it - so the zoom has to be applied BEFORE clamping or the limit is computed for whatever
        zoom was in force before, which is a smaller view, a tighter clamp, and a measurement
        that hides the overshoot entirely. That mistake is why this was first measured as clean. */
-    R.zi = RTS_ZOOMS.length - 1;
+    R.zi = RTS_ZOOM_2D_STEPS - 1;
     R.focus.x = 0; R.focus.z = 0; _rtsApplyCam();
     var HALF = RTS_N * RTS_TILE / 2;
     o.edges = [];

@@ -44,6 +44,10 @@ function _r3dApply(on, quiet) {
   if (!R3.on) { R3.shakeT = ''; R3.cv.style.transform = ''; }
   /* the world moved between canvases, so both need a clean slate */
   R3.terrainDirty = true; R3.fogDirty = true;
+  /* 3D reaches further in than 2D can - see RTS_ZOOM_3D_EXTRA. The ladder is a global that
+     everything from the sidebar to the specs reads, so it is re-derived here, on the one
+     event that changes which ladder applies. */
+  if (typeof _rtsZoomLadderSync === 'function') _rtsZoomLadderSync();
   var btn = document.getElementById('rts3dBtn');
   if (btn) { btn.classList.toggle('on', R3.on); btn.title = R3.on ? 'Back to classic 2D' : 'Switch to 3D'; }
   _r3dResize();
