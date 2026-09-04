@@ -185,9 +185,11 @@ var R3D_TEX_VS =
   'attribute vec3 aP; attribute vec2 aT; attribute vec3 aN;' +
   'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' +
   R3D_SHADOW_VGLSL +
-  'varying vec2 vT; varying float vShade;' +
+  'varying vec2 vT; varying float vShade; varying vec2 vW;' +
   'void main(){' +
   '  vT = aT;' +
+  /* the world position under this fragment, for the grain below - see R3D_TEX_FS */
+  '  vW = aP.xz;' +
   /* HOW MUCH LIGHT THIS PATCH OF GROUND TAKES, RELATIVE TO FLAT. The terrain texture is the
      2D renderer's baked canvas and already carries its own lighting for a level surface, so
      shading it again with the full lambert would light it twice. What the relief needs is the
@@ -217,13 +219,39 @@ var R3D_TEX_VS =
    The shade is a COOL MULTIPLY rather than a scalar one, matched to the mesh ramp's own floor -
    a shadow on grass and a shadow on a slab beside it have to be the same colour of shade or
    the two read as different times of day. */
+/* THE GRAIN, AND WHY IT IS HERE RATHER THAN ONLY IN THE 2D FRAME.
+
+   The terrain is a baked canvas in both renderers - RTS_TS pixels a cell - so both magnify it,
+   and magnifying a texture destroys the frequencies above its own resolution. render/detail.js
+   is the answer to that and has been for a long time: a wrapping, high-passed, three-octave
+   tile laid over the ground at DEVICE resolution, putting back what the stretch took out. The
+   spec for it measures one colour running 12 device pixels without and 1 with.
+
+   It ran only in 2D. The line that calls it sits inside `if (!r3on)` in render/frame.js,
+   because the 3D ground is this program and not a drawImage - so in 3D the ground had no grain
+   at all, and nobody noticed while the closest zoom was 48 pixels a cell. Two rungs further in
+   (RTS_ZOOM_3D_EXTRA) it is the first thing you see.
+
+   THE SAME TILE, not a second one. It is uploaded once from _rtsDetailTile, sampled here in
+   WORLD space scaled to device pixels - one tile pixel on one screen pixel, exactly as the 2D
+   pass places it - so the grain is anchored to the ground and does not swim when the camera
+   pans. uGrain carries the strength and is zero below RTS_DETAIL_MIN_MAG, where there is
+   nothing to put back and a full-screen fetch would be a pure loss. */
 var R3D_TEX_FS =
-  'precision highp float; varying vec2 vT; varying float vShade;' +
+  'precision highp float; varying vec2 vT; varying float vShade; varying vec2 vW;' +
   'uniform sampler2D uS; uniform float uA;' +
   'uniform float uRecv;' +
+  'uniform sampler2D uGrainTex; uniform vec2 uGrain;' +   /* strength, world->tile scale */
   R3D_SHADOW_GLSL +
   'void main(){' +
   '  vec4 c = texture2D(uS, vT);' +
+  /* Composited the way the 2D pass composites it: the tile carries lighten-or-darken in its
+     own colour and the strength in its alpha, so this is a plain source-over and none of a
+     blend mode's cost is paid. */
+  '  if (uGrain.x > 0.0) {' +
+  '    vec4 gt = texture2D(uGrainTex, vW * uGrain.y);' +
+  '    c.rgb = mix(c.rgb, gt.rgb, gt.a * uGrain.x);' +
+  '  }' +
   '  float s = mix(1.0, _shadowAt(), uRecv);' +
   '  vec3 lit = c.rgb * mix(vec3(0.575, 0.600, 0.655), vec3(1.0), s);' +
   /* uRecv is 0 for the fog, which is a signal painted over the world rather than a surface in
@@ -302,4 +330,51 @@ function _r3dGroundMesh(R3, gl, vb, EXT) {
   gl.bufferData(gl.ARRAY_BUFFER, nb, gl.DYNAMIC_DRAW);
   gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundUV);
   gl.bufferData(gl.ARRAY_BUFFER, t, gl.DYNAMIC_DRAW);
+}
+
+
+/* The detail tile as a GL texture, built once from the same canvas the 2D pass uses. REPEAT,
+   because the tile wraps by construction and the whole point is that it tiles across the
+   ground without a seam - render/detail.js says so and e2e/grain measures it. */
+function _r3dGrainTex(gl, R3) {
+  if (R3.grainTex) return R3.grainTex;
+  if (typeof _rtsDetailTile !== 'function') return null;
+  var src = null;
+  try { src = _rtsDetailTile(); } catch (e) { src = null; }
+  if (!src) return null;
+  var t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+  R3.grainTex = t;
+  return t;
+}
+
+/* How hard the grain goes, and how it is scaled, for the ground program.
+
+   `mag` is device pixels per baked terrain pixel - the same quantity render/detail.js gates on,
+   arrived at the same way: the ground is RTS_TS pixels a cell and RTS_TILE world units a cell,
+   so a world unit is RTS_TS/RTS_TILE baked pixels, and the view draws `px` device pixels to the
+   world unit. Below RTS_DETAIL_MIN_MAG nothing has been stretched and there is nothing to
+   restore. The scale puts one tile pixel on one device pixel, so the grain is the same size on
+   screen at every zoom - it is screen-resolution detail, not a texture on the map. */
+function _r3dGrainSet(gl, R3, P) {
+  var uG = gl.getUniformLocation(P, 'uGrain');
+  if (!uG) return 0;
+  var px = (typeof _rtsZoom === 'function' ? _rtsZoom() : 0) * (R3.scale || 1);
+  var mag = px * RTS_TILE / RTS_TS;
+  if (!(mag >= RTS_DETAIL_MIN_MAG) || !_r3dGrainTex(gl, R3)) {
+    gl.uniform2f(uG, 0, 0);
+    return 0;
+  }
+  gl.activeTexture(gl.TEXTURE0 + 3);
+  gl.bindTexture(gl.TEXTURE_2D, R3.grainTex);
+  gl.uniform1i(gl.getUniformLocation(P, 'uGrainTex'), 3);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.uniform2f(uG, RTS_DETAIL_ALPHA, px / RTS_DETAIL_TILE);
+  return mag;
 }

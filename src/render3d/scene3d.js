@@ -167,6 +167,10 @@ function _r3dFrame(G) {
   gl.uniform1f(gl.getUniformLocation(R3.texP, 'uA'), 1);
   var uRecv = gl.getUniformLocation(R3.texP, 'uRecv');
   gl.uniform1f(uRecv, 1);                       /* the ground takes the world's shadows */
+  /* ...and the grain the magnification destroyed, put back at device resolution. The 2D frame
+     has done this for a long time; this pass never did, because the line that calls
+     _rtsGroundDetail sits inside `if (!r3on)` in render/frame.js. See R3D_TEX_FS. */
+  R3.grainMag = _r3dGrainSet(gl, R3, R3.texP);
   _r3dShadowBind(R3.texP, 1);
   var aXZ = gl.getAttribLocation(R3.texP, 'aP'), aT = gl.getAttribLocation(R3.texP, 'aT');
   var aGN = gl.getAttribLocation(R3.texP, 'aN');
@@ -462,6 +466,10 @@ function _r3dFrame(G) {
   gl.uniform1f(gl.getUniformLocation(R3.texP, 'uInvD'), invD);
   gl.uniform1f(gl.getUniformLocation(R3.texP, 'uA'), 1);
   gl.uniform1f(gl.getUniformLocation(R3.texP, 'uRecv'), 0);   /* the shroud is not a surface */
+  /* AND NO GRAIN ON THE SHROUD, for the same reason it takes no shading: it is a signal
+     painted over the world rather than a surface in it, and texturing it would put grass
+     detail on the unexplored map. */
+  gl.uniform2f(gl.getUniformLocation(R3.texP, 'uGrain'), 0, 0);
   gl.disable(gl.DEPTH_TEST);
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
