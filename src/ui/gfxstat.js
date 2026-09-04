@@ -34,6 +34,11 @@ function rtsGfxSet(n) {
      numbers it compares are the ones it is about to recompute. */
   var R3 = window._R3D;
   if (R3 && R3.cv) { R3.scale = -1; if (typeof _r3dResize === 'function') _r3dResize(); }
+  /* THE MESH CACHE IS KEYED ON THE MODEL, NOT ON THE DETAIL LEVEL, so it has to be dropped
+     when the level changes or the buffers already built stay at the old tessellation - a base
+     built before the pin and a tank built after it would be drawn at two different densities.
+     They rebuild on first sight, which is the same cost as entering 3D. */
+  if (R3) R3.mesh = {};
   _rtsGfxSync();
 }
 /* auto -> 1 -> 2 -> 3 -> 4 -> auto, skipping anything above the device's own dpr, which would
@@ -75,7 +80,10 @@ function _rtsGfxFrame() {
     '   ' + (R3 && R3.cv ? R3.cv.width + 'x' + R3.cv.height : '-') +
     ' (' + (px / 1e6).toFixed(2) + 'MP)' +
     '   scale ' + ((R3 && R3.scale) || '-') + '/' + ((R && R.dpr) || '-') +
-    (want ? ' pinned' : ' auto');
+    (want ? ' pinned' : ' auto') +
+    /* so the geometry half of the ask is visible too, rather than being a silent consequence
+       of a control that reads as being about resolution */
+    '   mesh ' + (typeof _r3dDetailLevel === 'function' ? _r3dDetailLevel() : '-') + 'x';
 }
 function _rtsGfxSync() {
   var b = document.getElementById('rtsGfxBtn');
