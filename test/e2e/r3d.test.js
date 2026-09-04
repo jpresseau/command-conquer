@@ -160,11 +160,22 @@ function readCanvas() {
      the picture usually still comes out right, so the symptom is not a wrong image - it is a
      bake that costs twice what it should, or an interior surface poking through a seam.
 
-     _r3Box emits its faces in a known order (top, front, back, right, left), so each can be
-     baked ALONE and checked against which way it faces. That is the culling decision itself,
-     rather than a whole-model proxy that a depth buffer would mask. */
+     The five walls are built HERE rather than taken from _r3Box, and by index rather than by
+     name. This used to read m[0..4] as top, front, back, right, left - _r3Box's emission order
+     - which is a private detail of a primitive being borrowed as a public one. _r3Box chamfers
+     now and emits seventeen faces in a different order, so every index moved and the spec
+     started reporting that the front wall was invisible and the left wall was not. What is
+     under test is the CULL, so the spec should own the geometry it culls. */
   var cull = await g.page.evaluate(function () {
-    var m = []; _r3Box(m, 0, 0, 0, 40, 40, 40, '#808080', '#c0c0c0');
+    var h = 20;                                   /* a 40-cube, centred in x and z, base at 0 */
+    function q(v) { return { v: v, c: [128, 128, 128] }; }
+    var m = [
+      q([[-h, 40, -h], [-h, 40, h], [h, 40, h], [h, 40, -h]]),          /* top */
+      q([[-h, 0, h], [h, 0, h], [h, 40, h], [-h, 40, h]]),              /* front */
+      q([[h, 0, -h], [-h, 0, -h], [-h, 40, -h], [h, 40, -h]]),          /* back */
+      q([[h, 0, h], [h, 0, -h], [h, 40, -h], [h, 40, h]]),              /* right */
+      q([[-h, 0, -h], [-h, 0, h], [-h, 40, h], [-h, 40, -h]])           /* left */
+    ];
     function drawn(faces) {
       var c = _r3BakeCentred(faces, 140), d = c.getContext('2d').getImageData(0, 0, 140, 140).data, n = 0;
       for (var q = 3; q < d.length; q += 4) if (d[q]) n++;

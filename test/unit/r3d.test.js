@@ -30,18 +30,40 @@ S.note('K = ' + K + ' (screen rise per unit of model height), supersample ' + g.
   S.eq('...and white', JSON.stringify(g._r3Hex('#ffffff')), '[255,255,255]');
 })();
 
+/* A PLAIN BOX, the five quads _r3Box emitted before it learned to chamfer.
+
+   The projection assertions below are about the PROJECTION - that height goes straight up the
+   screen and depth does not foreshorten - and they used _r3Box as the thing to project. That
+   stopped being a box: it cuts its top edges back now, so the topmost corner sits a bevel
+   further forward and the screen height comes up exactly one bevel short. The identity is
+   fine; the vehicle was wrong. Anything about _r3Box's own shape is unit/geometry's job. */
+function plainBox(out, x, y, z, w, h, d) {
+  var x0 = x - w / 2, x1 = x + w / 2, y0 = y, y1 = y + h, z0 = z - d / 2, z1 = z + d / 2;
+  out.push({ v: [[x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0]], c: [128, 128, 128] });
+  out.push({ v: [[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], c: [128, 128, 128] });
+  out.push({ v: [[x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0]], c: [128, 128, 128] });
+  return out;
+}
+
 /* ------------------------------------------------------------------- a box ----
-   With no yaw the +x and -x faces are exactly edge-on and never visible, which the header
-   states outright - so a box is top and front only, not six faces. If that ever became six,
-   every model would pay for geometry that cannot be seen. */
+   THE BOTTOM IS NEVER DRAWN. This asked for "not six faces", on the reasoning that with no yaw
+   the +x and -x faces are edge-on and invisible - but _r3Box always emitted those two anyway,
+   and units yaw in 3D, so what the count was really pinning is the one face that genuinely
+   cannot be seen: the camera sits 49 degrees off vertical and never looks under anything. The
+   chamfer took the count from 5 to 17 and that assertion had nothing left to say; this is what
+   it was protecting. */
 (function () {
   var f = [];
   g._r3Box(f, 0, 0, 0, 10, 20, 30, '#804020', '#a06030');
-  S.ok('a box makes a handful of faces, not six', f.length <= 5, f.length + ' faces');
+  var floors = f.filter(function (face) {
+    return face.v.every(function (v) { return Math.abs(v[1]) < 1e-9; });
+  }).length;
+  S.eq('a box has no bottom face, which is the one nothing can ever see', floors, 0);
+  S.note(f.length + ' faces, of which none lie flat on the ground plane');
   f.forEach(function (face, i) {
     S.ok('face ' + i + ' is a polygon with at least 3 points', face.v.length >= 3, face.v.length + ' points');
   });
-  var b = g._r3Bounds(f);
+  var b = g._r3Bounds(plainBox([], 0, 0, 0, 10, 20, 30));
   /* the box is centred on x, so its screen width is exactly its w */
   S.near('a 10-wide box is 10 screen pixels wide', b.x1 - b.x0, 10, 0.001);
   /* and its screen height is its depth plus its height times K */
@@ -55,14 +77,14 @@ S.note('K = ' + K + ' (screen rise per unit of model height), supersample ' + g.
 (function () {
   var flat = [];
   /* a zero-height slab covering a 3x3 footprint at 24 art pixels per cell */
-  g._r3Box(flat, 0, 0, 0, 72, 0.0001, 72, '#404040', '#404040');
+  plainBox(flat, 0, 0, 0, 72, 0.0001, 72);
   var b = g._r3Bounds(flat);
   S.near('a 72-wide footprint is 72 pixels wide on screen', b.x1 - b.x0, 72, 0.01);
   S.near('...and 72 deep is 72 pixels tall, with no foreshortening', b.y1 - b.y0, 72, 0.01);
 
   /* height goes straight up, and ONLY up */
   var tall = [];
-  g._r3Box(tall, 0, 25, 0, 72, 50, 72, '#404040', '#404040');
+  plainBox(tall, 0, 25, 0, 72, 50, 72);
   var t = g._r3Bounds(tall);
   S.near('height does not change the screen WIDTH at all', t.x1 - t.x0, 72, 0.01);
   S.near('...it adds exactly K x height to the screen height', t.y1 - t.y0, 72 + K * 50, 0.01);

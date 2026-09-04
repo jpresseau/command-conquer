@@ -228,25 +228,29 @@ function _sprBuildingModel(key, side) {
      _r3Cyl builds along Y and only along Y, so every call - including the one that asked for a
      horizontal feed line - drew the same vertical riser. A flag a helper accepts and discards is
      worse than no flag, because the call site reads as if it said something. So a horizontal run
-     is built here out of a box tube with collar rings, which is what the shape needs anyway: at
-     the size these are drawn a square section and a round one are the same two pixels, and the
-     collars are the part that reads.
+     was built out of a BOX tube with collar rings, with a note conceding that at the size these
+     draw, a square section and a round one are the same two pixels.
+
+     That concession is withdrawn. _r3Wheel is a cylinder lying on its side, which is what a
+     horizontal pipe is, so both axes are round now and both carry the same collars - and at the
+     resolution this bakes at, the difference between a round tube and a square one is the
+     highlight running along the top of it.
 
      axis: 'y' (default) rises from y; 'x' and 'z' run centred on (x,y,z) along that axis. */
   function pipe(x, y, z, len, axis, r) {
     var rr = r || 1.3, fr = rr * 1.45;
     if (!axis || axis === 'y') {
-      _r3Cyl(m, x, y, z, rr, len, S[1], S[2], 16);
-      _r3Cyl(m, x, y, z, fr, 1.0, S[3], S[3], 16);
-      _r3Cyl(m, x, y + len - 1.0, z, fr, 1.0, S[3], S[3], 16);
+      _r3Cyl(m, x, y, z, rr, len, S[1], S[2], 20);
+      _r3Cyl(m, x, y, z, fr, 1.0, S[3], S[3], 20);
+      _r3Cyl(m, x, y + len - 1.0, z, fr, 1.0, S[3], S[3], 20);
       return;
     }
-    var aZ = (axis === 'z'), d = rr * 2;
-    _r3Box(m, x, y - rr, z, aZ ? d : len, d, aZ ? len : d, S[1], S[2]);
+    var aZ = (axis === 'z');
+    _r3Wheel(m, x, y, z, rr, len, aZ ? 'z' : 'x', S[1], S[2], 20);
     for (var e = 0; e < 2; e++) {
-      var f = (e ? 0.5 : -0.5) * len + (e ? -0.5 : 0.5);
-      _r3Box(m, x + (aZ ? 0 : f), y - fr, z + (aZ ? f : 0),
-             aZ ? fr * 2 : 1.0, fr * 2, aZ ? 1.0 : fr * 2, S[3], S[3]);
+      var f = (e ? 0.5 : -0.5) * (len - 1.0);
+      _r3Wheel(m, x + (aZ ? 0 : f), y, z + (aZ ? f : 0), fr, 1.0, aZ ? 'z' : 'x',
+               S[3], S[3], 20);
     }
   }
   /* A wall ladder: two stiles and rungs. The rungs are what read - a row of hard little
