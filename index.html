@@ -929,7 +929,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">0126408 · 2026-09-03</div>
+  <div id="rtsBuild" title="build">4ae427c · 2026-09-04</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -21801,6 +21801,144 @@ function _rtsEmber() {
 }
 
 </script>
+<script>/* render3d/inst3d.js - drawing many copies of one mesh in one call. Part of rts.render3d.
+
+   WHY. Every entity was its own draw: placement went in as uniforms, the mesh was bound, and
+   drawArrays ran. Measured at a fixed camera, with the bloom pass off:
+
+     units on screen      0     10     20     40     80    160
+     drawArrays          26     56     81    136    246    466
+
+   1.50 calls per unit in the main pass and 1.25 more in the sun's, dead linear, carrying about
+   1,370 vertices each. A phone's GL driver pays per CALL - state validation, a command buffer
+   entry - largely regardless of how much geometry rides on it, so a battle was spending its
+   frame on submission overhead while the vertex stage idled. That matches the report this came
+   from: the frame rate halves when the enemy attacks and recovers when they are beaten, which
+   is exactly the shape of "more units on screen".
+
+   HOW. The placement that used to be uniforms is now three vertex attributes stepped once per
+   INSTANCE rather than once per vertex, so every entity sharing a mesh draws together. The
+   shader body is untouched: R3D_INST_GLSL declares the attributes and then unpacks them into
+   locals with the same names the uniforms had - uPos, uRot, uScale, uScaleY, uNrm - so the
+   maths below it reads exactly as it did, and the two programs stay spliced from one source
+   the way the shadow pass requires.
+
+   THE PICTURE MUST NOT CHANGE. That is the whole safety argument, and it is what e2e/instanced
+   grades: the same frame, pixel for pixel, with far fewer calls. Batching does reorder the
+   draws - entities come out grouped by mesh instead of in entity order - which is invisible
+   only because every one of them is opaque and depth-tested. Nothing alpha-blended may be
+   added to that walk without sorting it again. */
+
+/* x, y, z, scaleY | cos, sin, scale, dim | nx, ny, nz */
+var R3D_INST_FLOATS = 11;
+
+/* Declared once and spliced into both vertex programs, immediately before their main(). The
+   unpacking is the point: the uniforms it replaces had these names, so no line below it moved. */
+var R3D_INST_GLSL =
+  'attribute vec4 aI0; attribute vec4 aI1; attribute vec3 aI2;';
+var R3D_INST_UNPACK =
+  '  vec3 uPos = aI0.xyz; float uScaleY = aI0.w;' +
+  '  vec2 uRot = aI1.xy; float uScale = aI1.z; float uDim = aI1.w;' +
+  '  vec3 uNrm = aI2;';
+
+/* WebGL2 has this in core; WebGL1 has it as an extension that has been effectively universal
+   for a decade. If neither is there, every field below stays null and the callers fall back to
+   the one-draw-per-entity path they always had - so this file can be absent and the game still
+   renders, just with the draw counts above. */
+function _r3dInstInit(gl, gl2) {
+  if (gl2 && gl.drawArraysInstanced) {
+    return { on: true,
+      draw: function (m, f, c, n) { gl.drawArraysInstanced(m, f, c, n); },
+      divisor: function (l, d) { gl.vertexAttribDivisor(l, d); } };
+  }
+  var ext = gl.getExtension('ANGLE_instanced_arrays');
+  if (!ext) return { on: false, draw: null, divisor: null };
+  return { on: true,
+    draw: function (m, f, c, n) { ext.drawArraysInstancedANGLE(m, f, c, n); },
+    divisor: function (l, d) { ext.vertexAttribDivisorANGLE(l, d); } };
+}
+
+/* One GL buffer for every batch, rewritten per batch per pass. STREAM_DRAW because it is
+   replaced whole each time and never read back. Each bucket keeps its rows in a Float32Array
+   of its own, so the upload is a subarray of that with no copy and no allocation in the frame. */
+function _r3dInstBuffer(gl, R3) {
+  if (!R3.instBuf) R3.instBuf = gl.createBuffer();
+  return R3.instBuf;
+}
+
+/* THE CONSTANT PATH. A disabled attribute array supplies a fixed value to every vertex, which
+   is how everything that is NOT an entity - the world batches, the ground, the sea, the
+   contact discs - goes through the same shader without an instance buffer. It must be called
+   before any such draw: leave the arrays enabled and the next non-instanced draw reads
+   whatever the last batch left in them, which puts the terrain at a tank's position. */
+function _r3dInstConst(gl, I, C, x, y, z, sy, cs, sn, sc, dim, nx, ny, nz) {
+  if (C.aI0 >= 0) {
+    gl.disableVertexAttribArray(C.aI0);
+    if (I.on) I.divisor(C.aI0, 0);
+    gl.vertexAttrib4f(C.aI0, x, y, z, sy);
+  }
+  if (C.aI1 >= 0) {
+    gl.disableVertexAttribArray(C.aI1);
+    if (I.on) I.divisor(C.aI1, 0);
+    gl.vertexAttrib4f(C.aI1, cs, sn, sc, dim);
+  }
+  if (C.aI2 >= 0) {
+    gl.disableVertexAttribArray(C.aI2);
+    if (I.on) I.divisor(C.aI2, 0);
+    gl.vertexAttrib3f(C.aI2, nx, ny, nz);
+  }
+}
+
+/* Point the three attributes at the packed rows and step them once per instance. */
+function _r3dInstBind(gl, I, C, buf) {
+  var S = R3D_INST_FLOATS * 4;
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  if (C.aI0 >= 0) {
+    gl.enableVertexAttribArray(C.aI0);
+    gl.vertexAttribPointer(C.aI0, 4, gl.FLOAT, false, S, 0);
+    I.divisor(C.aI0, 1);
+  }
+  if (C.aI1 >= 0) {
+    gl.enableVertexAttribArray(C.aI1);
+    gl.vertexAttribPointer(C.aI1, 4, gl.FLOAT, false, S, 16);
+    I.divisor(C.aI1, 1);
+  }
+  if (C.aI2 >= 0) {
+    gl.enableVertexAttribArray(C.aI2);
+    gl.vertexAttribPointer(C.aI2, 3, gl.FLOAT, false, S, 32);
+    I.divisor(C.aI2, 1);
+  }
+}
+
+/* A frame's worth of placements, bucketed by the mesh they belong to.
+
+   Kept on _R3D and reused rather than rebuilt, because this runs twice a frame and a Map of
+   arrays allocated per pass is exactly the per-frame garbage the 3D mode cannot afford. The
+   buckets are emptied by setting `n` to 0; the arrays keep their capacity. */
+function _r3dInstBatch(R3) {
+  var B = R3.instB;
+  if (!B) B = R3.instB = { by: new Map(), order: [] };
+  for (var i = 0; i < B.order.length; i++) B.order[i].n = 0;
+  B.order.length = 0;
+  return B;
+}
+function _r3dInstPush(B, mesh, x, y, z, sy, cs, sn, sc, dim, nx, ny, nz) {
+  var b = B.by.get(mesh);
+  if (!b) { b = { mesh: mesh, n: 0, cap: 0, a: null }; B.by.set(mesh, b); }
+  if (!b.n) B.order.push(b);
+  if (b.n >= b.cap) {
+    b.cap = Math.max(b.n + 1, b.cap * 2, 32);
+    var grown = new Float32Array(b.cap * R3D_INST_FLOATS);
+    if (b.a) grown.set(b.a);
+    b.a = grown;
+  }
+  var a = b.a, o = b.n * R3D_INST_FLOATS;
+  a[o] = x; a[o + 1] = y; a[o + 2] = z; a[o + 3] = sy;
+  a[o + 4] = cs; a[o + 5] = sn; a[o + 6] = sc; a[o + 7] = dim;
+  a[o + 8] = nx; a[o + 9] = ny; a[o + 10] = nz;
+  b.n++;
+}
+</script>
 <script>/* render3d/wave3d.js - the sea's swell, in one place. Part of rts.render3d.
 
    Three travelling sine waves, summed: two long ones that give the sheet its roll, and a short
@@ -22160,13 +22298,17 @@ var R3D_SUN = (function () {
    the normal, because a depth map records where a thing is and not which way it faces. */
 var R3D_SHADOW_VS =
   'attribute vec3 aP;' +
-  'uniform vec3 uPos; uniform vec2 uRot; uniform float uScale; uniform float uScaleY;' +
-  'uniform vec2 uWave; uniform vec3 uNrm;' +
+  /* the same per-instance placement the main pass takes - see render3d/inst3d.js. A vertex
+     that moves in one program and not the other detaches the shadow from its caster, so both
+     unpack from one source. */
+  R3D_INST_GLSL +
+  'uniform vec2 uWave;' +
   R3D_LEAN_GLSL +
   'uniform vec3 uSunR; uniform vec3 uSunU; uniform vec3 uSunF; uniform vec3 uSunC;' +
   'uniform vec2 uSunSpan;' +      /* half-extent across, and the depth range */
   'varying float vD;' +
   'void main(){' +
+  R3D_INST_UNPACK +
   '  vec3 p = vec3(aP.x * uScale, aP.y * uScale * uScaleY, aP.z * uScale);' +
   /* the same yaw-then-lean the main pass uses, spliced from the same place - a vertex that
      moves in one program and not the other detaches the shadow from its caster */
@@ -22476,13 +22618,16 @@ var R3D_MESH_VS =
   'uniform vec4 uCam;' +        /* focus.x, focus.z, 2*zoom/W, 2*zoom/H */
   'uniform vec2 uTilt;' +       /* cos(tilt), sin(tilt) */
   'uniform float uInvD;' +      /* 1 / eye distance; 0 is the orthographic camera */
-  'uniform vec3 uPos; uniform vec2 uRot; uniform float uScale; uniform float uScaleY; uniform vec3 uTint;' +
+  /* PLACEMENT COMES IN PER INSTANCE, not per draw - see render3d/inst3d.js. The unpack below
+     defines uPos, uRot, uScale, uScaleY and uNrm as locals with exactly the names the uniforms
+     had, so every line of the maths under it is the line that was here before. */
+  R3D_INST_GLSL +
   'uniform vec2 uWave;' +       /* wave amplitude (0 = not water) and the clock */
-  'uniform vec3 uNrm;' +        /* the ground's normal under it; (0,1,0) leaves it upright */
   R3D_SHADOW_VGLSL +
   R3D_LEAN_GLSL +
-  'varying vec3 vN; varying vec3 vCol;' +
+  'varying vec3 vN; varying vec4 vCol;' +
   'void main(){' +
+  R3D_INST_UNPACK +
   '  vec3 p = vec3(aP.x * uScale, aP.y * uScale * uScaleY, aP.z * uScale);' +
   /* YAW FIRST, THEN LEAN. The yaw is about the model's own up, which is what "facing" means;
      the lean then takes that up to the ground's. Doing it the other way round would turn the
@@ -22509,7 +22654,11 @@ var R3D_MESH_VS =
      shaded once per vertex, which on a face whose vertices all carry the same normal is once
      per FACET, and no amount of smoothing the normals would have shown through that. */
   '  vN = n;' +
-  '  vCol = col;' +
+  /* THE DIM FLAG RIDES IN vCol.w rather than in a varying of its own. It has to reach the
+     fragment stage - the ramp _shade runs is not linear in the colour, so a damaged building
+     cannot be tinted by pre-multiplying aC and getting the same picture - and a vec3 varying
+     and a vec4 one occupy the same slot, so this costs nothing where slots are scarce. */
+  '  vCol = vec4(col, uDim);' +
   '  _shadowFrom(wp);' +
   '  float sx = (wp.x - uCam.x) * uCam.z;' +
   '  float sy = ((wp.z - uCam.y) * uTilt.x - wp.y * uTilt.y) * uCam.w;' +
@@ -22533,13 +22682,15 @@ var R3D_MESH_VS =
    between them per pixel. highp, because the comparison is against a depth packed into eight
    bits and change, and mediump has neither the range nor the precision to hold it. */
 var R3D_MESH_FS =
-  'precision highp float; varying vec3 vN; varying vec3 vCol;' +
-  'uniform float uA; uniform vec3 uTint;' +
+  'precision highp float; varying vec3 vN; varying vec4 vCol;' +
+  'uniform float uA;' +
   R3D_SHADOW_GLSL + R3D_MESH_LIGHT +
   /* NORMALISED HERE, NOT IN THE VERTEX SHADER. A varying is interpolated linearly, and the
      linear blend of two unit vectors is shorter than one - which is exactly the case on the
      curves this is for, and would read as a dark seam down the middle of every one. */
-  'void main(){ gl_FragColor = vec4(_shade(normalize(vN), vCol) * uTint, uA); }';
+  'void main(){' +
+  '  vec3 tint = mix(vec3(1.0), vec3(0.62, 0.55, 0.55), vCol.w);' +
+  '  gl_FragColor = vec4(_shade(normalize(vN), vCol.rgb) * tint, uA); }';
 
 /* Ground and fog share one textured program; fog just samples a different texture with
    blending on and the depth test off. */
@@ -24100,6 +24251,18 @@ function _r3dMesh(kind, def, side, part, prone) {
    with the depth buffer replacing the painter's sort for everything solid. */
 function _r3dFrame(G) {
   var R3 = window._R3D, gl = R3.gl, R = _rtsR;
+  /* Resolved HERE and not beside the entity walk that uses it: the sun's pass runs a hundred
+     lines earlier and sets the constant placement attributes through this, and a `var`
+     assigned later is `undefined` when the earlier caller reads it. Same trap ART2W carries a
+     note about below, and it fails the same way - at the first frame, in the shadow pass. */
+  var I = R3.inst || (R3.inst = _r3dInstInit(gl, R3.gl2));
+  /* How many placements this frame handed to the GPU, over both passes. Not used by the
+     renderer at all - it is here because the one way this can go wrong WITHOUT changing the
+     picture is for the buckets to stop being emptied, and drawing the same instances again
+     and again is invisible on opaque depth-tested geometry. e2e/instanced watches it hold
+     steady; the leak that prompted this made a spec take 113 seconds instead of 17 and passed
+     every assertion about the frame. */
+  R3.instDrawn = 0;
   _r3dResize();
 
   /* uniforms shared by both programs */
@@ -24123,13 +24286,13 @@ function _r3dFrame(G) {
      Looked up here so the shadow pass below and the main pass below that share one walk. */
   function ctx(P) {
     return { P: P,
-      uPos: gl.getUniformLocation(P, 'uPos'), uRot: gl.getUniformLocation(P, 'uRot'),
-      uScale: gl.getUniformLocation(P, 'uScale'), uScaleY: gl.getUniformLocation(P, 'uScaleY'),
-      uTint: gl.getUniformLocation(P, 'uTint'), uA: gl.getUniformLocation(P, 'uA'),
+      uA: gl.getUniformLocation(P, 'uA'),
       uWave: gl.getUniformLocation(P, 'uWave'),
-      uNrm: gl.getUniformLocation(P, 'uNrm'),
       aP: gl.getAttribLocation(P, 'aP'), aN: gl.getAttribLocation(P, 'aN'),
-      aC: gl.getAttribLocation(P, 'aC') };
+      aC: gl.getAttribLocation(P, 'aC'),
+      /* placement, per instance now rather than per draw - render3d/inst3d.js */
+      aI0: gl.getAttribLocation(P, 'aI0'), aI1: gl.getAttribLocation(P, 'aI1'),
+      aI2: gl.getAttribLocation(P, 'aI2') };
   }
   var MC = ctx(R3.meshP);
   /* ART pixels to world units. Declared HERE rather than beside the entity walk it feeds,
@@ -24203,11 +24366,7 @@ function _r3dFrame(G) {
       var SC = ctx(P);
       gl.uniform2f(SC.uWave, 0, 0);
       if (R3.world) {
-        gl.uniform3f(SC.uPos, 0, 0, 0);
-        if (SC.uNrm) gl.uniform3f(SC.uNrm, 0, 1, 0);
-        gl.uniform2f(SC.uRot, 1, 0);
-        gl.uniform1f(SC.uScale, 1);
-        gl.uniform1f(SC.uScaleY, 1);
+        _r3dInstConst(gl, I, SC, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0);
         var sb = R3.world.concat([R3.oreMesh]);
         for (var si = 0; si < sb.length; si++) {
           var sm = sb[si];
@@ -24280,8 +24439,7 @@ function _r3dFrame(G) {
   gl.uniform2f(gl.getUniformLocation(R3.meshP, 'uTilt'), R3.cp, R3.sp);
   gl.uniform1f(gl.getUniformLocation(R3.meshP, 'uInvD'), invD);
   _r3dShadowBind(R3.meshP, 1);
-  var uPos = MC.uPos, uRot = MC.uRot, uScale = MC.uScale, uScaleY = MC.uScaleY;
-  var uTint = MC.uTint, uA = MC.uA, uWave = MC.uWave;
+  var uA = MC.uA, uWave = MC.uWave;
   gl.uniform1f(uA, 1);
   gl.uniform2f(uWave, 0, 0);
   var aP = MC.aP, aN = MC.aN, aC = MC.aC;
@@ -24313,12 +24471,7 @@ function _r3dFrame(G) {
      degrees, against a line of sight 41 degrees above the horizontal (90 - R3D_TILT). The
      margin is a factor of 1.9 in slope, and e2e/sea guards it. */
   if (R3.waterMesh) {
-    gl.uniform3f(uPos, 0, 0, 0);
-    if (MC.uNrm) gl.uniform3f(MC.uNrm, 0, 1, 0);
-    gl.uniform2f(uRot, 1, 0);
-    gl.uniform1f(uScale, 1);
-    gl.uniform1f(uScaleY, 1);
-    gl.uniform3f(uTint, 1, 1, 1);
+    _r3dInstConst(gl, I, MC, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0);
     gl.uniform2f(uWave, R3D_WAVE_AMP, G.t);
     gl.depthFunc(gl.ALWAYS);
     gl.bindBuffer(gl.ARRAY_BUFFER, R3.waterMesh.p);
@@ -24356,37 +24509,65 @@ function _r3dFrame(G) {
      batch, the sea and every building want. It is set on EVERY draw rather than only when it
      changes, because the alternative is a leaked uniform: one unit on a slope followed by a
      building would put the building on the unit's hill. */
+  var BATCH = null;
   function drawIn(C, mesh, x, y2, zz, rot, scale, dim, sy, nrm) {
     if (!mesh) return;
-    if (C.uNrm) {
-      /* R3.leanAmt exists so a spec can take the lean out WITHOUT taking the relief out - the
-         same reason R3.aoAmt exists. Flattening G.height instead moves the ground, the
-         shadows and the picking at the same time, and a frame that differs for four reasons
-         says nothing about any of them. Blended toward up rather than switched, so 0 is
-         exactly the upright draw this replaced.
+    /* R3.leanAmt exists so a spec can take the lean out WITHOUT taking the relief out - the
+       same reason R3.aoAmt exists. Flattening G.height instead moves the ground, the shadows
+       and the picking at the same time, and a frame that differs for four reasons says
+       nothing about any of them. Blended toward up rather than switched, so 0 is exactly the
+       upright draw this replaced.
 
-         APPLIED HERE, where the normal is consumed, rather than at the one call site that
-         passes one. It sat in the unit branch first, which made e2e/elevation's building
-         CONTROL unfalsifiable: a building wrongly given a normal would have leaned at every
-         setting of the knob, so the toggle moved nothing and "structures stay square" passed
-         on a frame where they did not. A knob that only reaches the code you remembered to
-         put it in cannot grade the code you forgot. */
-      var lx = nrm ? nrm[0] : 0, ly = nrm ? nrm[1] : 1, lz2 = nrm ? nrm[2] : 0;
-      var la = R3.leanAmt;
-      if (la !== undefined && la !== 1) {
-        var bx2 = lx * la, by2 = ly * la + (1 - la), bz2 = lz2 * la;
-        var bl = Math.sqrt(bx2 * bx2 + by2 * by2 + bz2 * bz2) || 1;
-        lx = bx2 / bl; ly = by2 / bl; lz2 = bz2 / bl;
-      }
-      gl.uniform3f(C.uNrm, lx, ly, lz2);
+       APPLIED HERE, where the normal is consumed, rather than at the one call site that
+       passes one. It sat in the unit branch first, which made e2e/elevation's building
+       CONTROL unfalsifiable: a building wrongly given a normal would have leaned at every
+       setting of the knob, so the toggle moved nothing and "structures stay square" passed on
+       a frame where they did not. A knob that only reaches the code you remembered to put it
+       in cannot grade the code you forgot. */
+    var lx = nrm ? nrm[0] : 0, ly = nrm ? nrm[1] : 1, lz2 = nrm ? nrm[2] : 0;
+    var la = R3.leanAmt;
+    if (la !== undefined && la !== 1) {
+      var bx2 = lx * la, by2 = ly * la + (1 - la), bz2 = lz2 * la;
+      var bl = Math.sqrt(bx2 * bx2 + by2 * by2 + bz2 * bz2) || 1;
+      lx = bx2 / bl; ly = by2 / bl; lz2 = bz2 / bl;
     }
-    gl.uniform3f(C.uPos, x, y2, zz);
-    gl.uniform2f(C.uRot, Math.cos(rot), Math.sin(rot));
-    gl.uniform1f(C.uScale, scale);
-    gl.uniform1f(C.uScaleY, sy || 1);
-    if (C.uTint) gl.uniform3f(C.uTint, dim ? 0.62 : 1, dim ? 0.55 : 1, dim ? 0.55 : 1);
-    bindMesh(C, mesh);
-    gl.drawArrays(gl.TRIANGLES, 0, mesh.verts);
+    /* COLLECTED, NOT DRAWN. The placement goes into the batch for this mesh and the whole
+       batch leaves in one instanced call at the end of the walk - see render3d/inst3d.js.
+       Where instancing is unavailable the batch is flushed one instance at a time through the
+       same constant-attribute path everything else uses, which is the draw this replaced. */
+    _r3dInstPush(BATCH, mesh, x, y2, zz, sy || 1,
+                 Math.cos(rot), Math.sin(rot), scale, dim ? 1 : 0, lx, ly, lz2);
+  }
+  /* Hand every collected batch to the GPU. Grouping reorders the draws - entities come out by
+     mesh rather than in entity order - which is invisible only because all of this is opaque
+     and depth-tested. See the note at the top of inst3d.js before adding anything blended. */
+  function flushBatch(C) {
+    var B = BATCH, i, j;
+    for (i = 0; i < B.order.length; i++) {
+      var b = B.order[i];
+      if (!b.n) continue;
+      bindMesh(C, b.mesh);
+      if (I.on) {
+        var buf = _r3dInstBuffer(gl, R3);
+        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+        gl.bufferData(gl.ARRAY_BUFFER, b.a.subarray(0, b.n * R3D_INST_FLOATS), gl.STREAM_DRAW);
+        _r3dInstBind(gl, I, C, buf);
+        I.draw(gl.TRIANGLES, 0, b.mesh.verts, b.n);
+        R3.instDrawn += b.n;
+      } else {
+        for (j = 0; j < b.n; j++) {
+          var o = j * R3D_INST_FLOATS, a = b.a;
+          _r3dInstConst(gl, I, C, a[o], a[o + 1], a[o + 2], a[o + 3],
+                        a[o + 4], a[o + 5], a[o + 6], a[o + 7], a[o + 8], a[o + 9], a[o + 10]);
+          gl.drawArrays(gl.TRIANGLES, 0, b.mesh.verts);
+          R3.instDrawn++;
+        }
+      }
+    }
+    /* Leave the arrays off and the divisors at zero, or the next thing drawn through this
+       program - the world batches, the sea, the ground - reads a tank's placement out of a
+       buffer that is no longer bound to it. */
+    _r3dInstConst(gl, I, C, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0);
   }
   function draw(mesh, x, y2, zz, rot, scale, dim, sy, nrm) {
     drawIn(MC, mesh, x, y2, zz, rot, scale, dim, sy, nrm);
@@ -24401,12 +24582,7 @@ function _r3dFrame(G) {
      bottom edge still shows its crown. */
   if (R3.world) {
     /* identity placement: the batches are baked in world space, so they draw as-is */
-    gl.uniform3f(uPos, 0, 0, 0);
-    if (MC.uNrm) gl.uniform3f(MC.uNrm, 0, 1, 0);
-    gl.uniform2f(uRot, 1, 0);
-    gl.uniform1f(uScale, 1);
-    gl.uniform1f(uScaleY, 1);
-    gl.uniform3f(uTint, 1, 1, 1);
+    _r3dInstConst(gl, I, MC, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0);
     var lift = R3D_WORLD_YMAX * R3.sp / R3.cp;
     var batches = R3.world.concat([R3.oreMesh]);
     for (var wb = 0; wb < batches.length; wb++) {
@@ -24443,6 +24619,9 @@ function _r3dFrame(G) {
      Those draws cannot mark a texel of the map and cost a full submission each; at a hundred
      units a side it is most of the roster once a game is under way. */
   function paintEntities(C, bound) {
+  /* A fresh set of buckets for this pass. Both passes walk the same entities, but each has to
+     leave its own batches on its own program - the sun's has no colour attribute and no tint. */
+  BATCH = _r3dInstBatch(R3);
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (e.dead) continue;
@@ -24491,6 +24670,7 @@ function _r3dFrame(G) {
       }
     }
   }
+  flushBatch(C);
   }
   paintEntities(MC);
 

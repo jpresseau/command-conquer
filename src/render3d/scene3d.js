@@ -13,6 +13,18 @@
    with the depth buffer replacing the painter's sort for everything solid. */
 function _r3dFrame(G) {
   var R3 = window._R3D, gl = R3.gl, R = _rtsR;
+  /* Resolved HERE and not beside the entity walk that uses it: the sun's pass runs a hundred
+     lines earlier and sets the constant placement attributes through this, and a `var`
+     assigned later is `undefined` when the earlier caller reads it. Same trap ART2W carries a
+     note about below, and it fails the same way - at the first frame, in the shadow pass. */
+  var I = R3.inst || (R3.inst = _r3dInstInit(gl, R3.gl2));
+  /* How many placements this frame handed to the GPU, over both passes. Not used by the
+     renderer at all - it is here because the one way this can go wrong WITHOUT changing the
+     picture is for the buckets to stop being emptied, and drawing the same instances again
+     and again is invisible on opaque depth-tested geometry. e2e/instanced watches it hold
+     steady; the leak that prompted this made a spec take 113 seconds instead of 17 and passed
+     every assertion about the frame. */
+  R3.instDrawn = 0;
   _r3dResize();
 
   /* uniforms shared by both programs */
@@ -36,13 +48,13 @@ function _r3dFrame(G) {
      Looked up here so the shadow pass below and the main pass below that share one walk. */
   function ctx(P) {
     return { P: P,
-      uPos: gl.getUniformLocation(P, 'uPos'), uRot: gl.getUniformLocation(P, 'uRot'),
-      uScale: gl.getUniformLocation(P, 'uScale'), uScaleY: gl.getUniformLocation(P, 'uScaleY'),
-      uTint: gl.getUniformLocation(P, 'uTint'), uA: gl.getUniformLocation(P, 'uA'),
+      uA: gl.getUniformLocation(P, 'uA'),
       uWave: gl.getUniformLocation(P, 'uWave'),
-      uNrm: gl.getUniformLocation(P, 'uNrm'),
       aP: gl.getAttribLocation(P, 'aP'), aN: gl.getAttribLocation(P, 'aN'),
-      aC: gl.getAttribLocation(P, 'aC') };
+      aC: gl.getAttribLocation(P, 'aC'),
+      /* placement, per instance now rather than per draw - render3d/inst3d.js */
+      aI0: gl.getAttribLocation(P, 'aI0'), aI1: gl.getAttribLocation(P, 'aI1'),
+      aI2: gl.getAttribLocation(P, 'aI2') };
   }
   var MC = ctx(R3.meshP);
   /* ART pixels to world units. Declared HERE rather than beside the entity walk it feeds,
@@ -116,11 +128,7 @@ function _r3dFrame(G) {
       var SC = ctx(P);
       gl.uniform2f(SC.uWave, 0, 0);
       if (R3.world) {
-        gl.uniform3f(SC.uPos, 0, 0, 0);
-        if (SC.uNrm) gl.uniform3f(SC.uNrm, 0, 1, 0);
-        gl.uniform2f(SC.uRot, 1, 0);
-        gl.uniform1f(SC.uScale, 1);
-        gl.uniform1f(SC.uScaleY, 1);
+        _r3dInstConst(gl, I, SC, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0);
         var sb = R3.world.concat([R3.oreMesh]);
         for (var si = 0; si < sb.length; si++) {
           var sm = sb[si];
@@ -193,8 +201,7 @@ function _r3dFrame(G) {
   gl.uniform2f(gl.getUniformLocation(R3.meshP, 'uTilt'), R3.cp, R3.sp);
   gl.uniform1f(gl.getUniformLocation(R3.meshP, 'uInvD'), invD);
   _r3dShadowBind(R3.meshP, 1);
-  var uPos = MC.uPos, uRot = MC.uRot, uScale = MC.uScale, uScaleY = MC.uScaleY;
-  var uTint = MC.uTint, uA = MC.uA, uWave = MC.uWave;
+  var uA = MC.uA, uWave = MC.uWave;
   gl.uniform1f(uA, 1);
   gl.uniform2f(uWave, 0, 0);
   var aP = MC.aP, aN = MC.aN, aC = MC.aC;
@@ -226,12 +233,7 @@ function _r3dFrame(G) {
      degrees, against a line of sight 41 degrees above the horizontal (90 - R3D_TILT). The
      margin is a factor of 1.9 in slope, and e2e/sea guards it. */
   if (R3.waterMesh) {
-    gl.uniform3f(uPos, 0, 0, 0);
-    if (MC.uNrm) gl.uniform3f(MC.uNrm, 0, 1, 0);
-    gl.uniform2f(uRot, 1, 0);
-    gl.uniform1f(uScale, 1);
-    gl.uniform1f(uScaleY, 1);
-    gl.uniform3f(uTint, 1, 1, 1);
+    _r3dInstConst(gl, I, MC, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0);
     gl.uniform2f(uWave, R3D_WAVE_AMP, G.t);
     gl.depthFunc(gl.ALWAYS);
     gl.bindBuffer(gl.ARRAY_BUFFER, R3.waterMesh.p);
@@ -269,37 +271,65 @@ function _r3dFrame(G) {
      batch, the sea and every building want. It is set on EVERY draw rather than only when it
      changes, because the alternative is a leaked uniform: one unit on a slope followed by a
      building would put the building on the unit's hill. */
+  var BATCH = null;
   function drawIn(C, mesh, x, y2, zz, rot, scale, dim, sy, nrm) {
     if (!mesh) return;
-    if (C.uNrm) {
-      /* R3.leanAmt exists so a spec can take the lean out WITHOUT taking the relief out - the
-         same reason R3.aoAmt exists. Flattening G.height instead moves the ground, the
-         shadows and the picking at the same time, and a frame that differs for four reasons
-         says nothing about any of them. Blended toward up rather than switched, so 0 is
-         exactly the upright draw this replaced.
+    /* R3.leanAmt exists so a spec can take the lean out WITHOUT taking the relief out - the
+       same reason R3.aoAmt exists. Flattening G.height instead moves the ground, the shadows
+       and the picking at the same time, and a frame that differs for four reasons says
+       nothing about any of them. Blended toward up rather than switched, so 0 is exactly the
+       upright draw this replaced.
 
-         APPLIED HERE, where the normal is consumed, rather than at the one call site that
-         passes one. It sat in the unit branch first, which made e2e/elevation's building
-         CONTROL unfalsifiable: a building wrongly given a normal would have leaned at every
-         setting of the knob, so the toggle moved nothing and "structures stay square" passed
-         on a frame where they did not. A knob that only reaches the code you remembered to
-         put it in cannot grade the code you forgot. */
-      var lx = nrm ? nrm[0] : 0, ly = nrm ? nrm[1] : 1, lz2 = nrm ? nrm[2] : 0;
-      var la = R3.leanAmt;
-      if (la !== undefined && la !== 1) {
-        var bx2 = lx * la, by2 = ly * la + (1 - la), bz2 = lz2 * la;
-        var bl = Math.sqrt(bx2 * bx2 + by2 * by2 + bz2 * bz2) || 1;
-        lx = bx2 / bl; ly = by2 / bl; lz2 = bz2 / bl;
-      }
-      gl.uniform3f(C.uNrm, lx, ly, lz2);
+       APPLIED HERE, where the normal is consumed, rather than at the one call site that
+       passes one. It sat in the unit branch first, which made e2e/elevation's building
+       CONTROL unfalsifiable: a building wrongly given a normal would have leaned at every
+       setting of the knob, so the toggle moved nothing and "structures stay square" passed on
+       a frame where they did not. A knob that only reaches the code you remembered to put it
+       in cannot grade the code you forgot. */
+    var lx = nrm ? nrm[0] : 0, ly = nrm ? nrm[1] : 1, lz2 = nrm ? nrm[2] : 0;
+    var la = R3.leanAmt;
+    if (la !== undefined && la !== 1) {
+      var bx2 = lx * la, by2 = ly * la + (1 - la), bz2 = lz2 * la;
+      var bl = Math.sqrt(bx2 * bx2 + by2 * by2 + bz2 * bz2) || 1;
+      lx = bx2 / bl; ly = by2 / bl; lz2 = bz2 / bl;
     }
-    gl.uniform3f(C.uPos, x, y2, zz);
-    gl.uniform2f(C.uRot, Math.cos(rot), Math.sin(rot));
-    gl.uniform1f(C.uScale, scale);
-    gl.uniform1f(C.uScaleY, sy || 1);
-    if (C.uTint) gl.uniform3f(C.uTint, dim ? 0.62 : 1, dim ? 0.55 : 1, dim ? 0.55 : 1);
-    bindMesh(C, mesh);
-    gl.drawArrays(gl.TRIANGLES, 0, mesh.verts);
+    /* COLLECTED, NOT DRAWN. The placement goes into the batch for this mesh and the whole
+       batch leaves in one instanced call at the end of the walk - see render3d/inst3d.js.
+       Where instancing is unavailable the batch is flushed one instance at a time through the
+       same constant-attribute path everything else uses, which is the draw this replaced. */
+    _r3dInstPush(BATCH, mesh, x, y2, zz, sy || 1,
+                 Math.cos(rot), Math.sin(rot), scale, dim ? 1 : 0, lx, ly, lz2);
+  }
+  /* Hand every collected batch to the GPU. Grouping reorders the draws - entities come out by
+     mesh rather than in entity order - which is invisible only because all of this is opaque
+     and depth-tested. See the note at the top of inst3d.js before adding anything blended. */
+  function flushBatch(C) {
+    var B = BATCH, i, j;
+    for (i = 0; i < B.order.length; i++) {
+      var b = B.order[i];
+      if (!b.n) continue;
+      bindMesh(C, b.mesh);
+      if (I.on) {
+        var buf = _r3dInstBuffer(gl, R3);
+        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+        gl.bufferData(gl.ARRAY_BUFFER, b.a.subarray(0, b.n * R3D_INST_FLOATS), gl.STREAM_DRAW);
+        _r3dInstBind(gl, I, C, buf);
+        I.draw(gl.TRIANGLES, 0, b.mesh.verts, b.n);
+        R3.instDrawn += b.n;
+      } else {
+        for (j = 0; j < b.n; j++) {
+          var o = j * R3D_INST_FLOATS, a = b.a;
+          _r3dInstConst(gl, I, C, a[o], a[o + 1], a[o + 2], a[o + 3],
+                        a[o + 4], a[o + 5], a[o + 6], a[o + 7], a[o + 8], a[o + 9], a[o + 10]);
+          gl.drawArrays(gl.TRIANGLES, 0, b.mesh.verts);
+          R3.instDrawn++;
+        }
+      }
+    }
+    /* Leave the arrays off and the divisors at zero, or the next thing drawn through this
+       program - the world batches, the sea, the ground - reads a tank's placement out of a
+       buffer that is no longer bound to it. */
+    _r3dInstConst(gl, I, C, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0);
   }
   function draw(mesh, x, y2, zz, rot, scale, dim, sy, nrm) {
     drawIn(MC, mesh, x, y2, zz, rot, scale, dim, sy, nrm);
@@ -314,12 +344,7 @@ function _r3dFrame(G) {
      bottom edge still shows its crown. */
   if (R3.world) {
     /* identity placement: the batches are baked in world space, so they draw as-is */
-    gl.uniform3f(uPos, 0, 0, 0);
-    if (MC.uNrm) gl.uniform3f(MC.uNrm, 0, 1, 0);
-    gl.uniform2f(uRot, 1, 0);
-    gl.uniform1f(uScale, 1);
-    gl.uniform1f(uScaleY, 1);
-    gl.uniform3f(uTint, 1, 1, 1);
+    _r3dInstConst(gl, I, MC, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0);
     var lift = R3D_WORLD_YMAX * R3.sp / R3.cp;
     var batches = R3.world.concat([R3.oreMesh]);
     for (var wb = 0; wb < batches.length; wb++) {
@@ -356,6 +381,9 @@ function _r3dFrame(G) {
      Those draws cannot mark a texel of the map and cost a full submission each; at a hundred
      units a side it is most of the roster once a game is under way. */
   function paintEntities(C, bound) {
+  /* A fresh set of buckets for this pass. Both passes walk the same entities, but each has to
+     leave its own batches on its own program - the sun's has no colour attribute and no tint. */
+  BATCH = _r3dInstBatch(R3);
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (e.dead) continue;
@@ -404,6 +432,7 @@ function _r3dFrame(G) {
       }
     }
   }
+  flushBatch(C);
   }
   paintEntities(MC);
 

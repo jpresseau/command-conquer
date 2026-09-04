@@ -110,13 +110,17 @@ var R3D_SUN = (function () {
    the normal, because a depth map records where a thing is and not which way it faces. */
 var R3D_SHADOW_VS =
   'attribute vec3 aP;' +
-  'uniform vec3 uPos; uniform vec2 uRot; uniform float uScale; uniform float uScaleY;' +
-  'uniform vec2 uWave; uniform vec3 uNrm;' +
+  /* the same per-instance placement the main pass takes - see render3d/inst3d.js. A vertex
+     that moves in one program and not the other detaches the shadow from its caster, so both
+     unpack from one source. */
+  R3D_INST_GLSL +
+  'uniform vec2 uWave;' +
   R3D_LEAN_GLSL +
   'uniform vec3 uSunR; uniform vec3 uSunU; uniform vec3 uSunF; uniform vec3 uSunC;' +
   'uniform vec2 uSunSpan;' +      /* half-extent across, and the depth range */
   'varying float vD;' +
   'void main(){' +
+  R3D_INST_UNPACK +
   '  vec3 p = vec3(aP.x * uScale, aP.y * uScale * uScaleY, aP.z * uScale);' +
   /* the same yaw-then-lean the main pass uses, spliced from the same place - a vertex that
      moves in one program and not the other detaches the shadow from its caster */
