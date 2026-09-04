@@ -164,13 +164,16 @@ var R3D_MESH_VS =
   'uniform vec4 uCam;' +        /* focus.x, focus.z, 2*zoom/W, 2*zoom/H */
   'uniform vec2 uTilt;' +       /* cos(tilt), sin(tilt) */
   'uniform float uInvD;' +      /* 1 / eye distance; 0 is the orthographic camera */
-  'uniform vec3 uPos; uniform vec2 uRot; uniform float uScale; uniform float uScaleY; uniform vec3 uTint;' +
+  /* PLACEMENT COMES IN PER INSTANCE, not per draw - see render3d/inst3d.js. The unpack below
+     defines uPos, uRot, uScale, uScaleY and uNrm as locals with exactly the names the uniforms
+     had, so every line of the maths under it is the line that was here before. */
+  R3D_INST_GLSL +
   'uniform vec2 uWave;' +       /* wave amplitude (0 = not water) and the clock */
-  'uniform vec3 uNrm;' +        /* the ground's normal under it; (0,1,0) leaves it upright */
   R3D_SHADOW_VGLSL +
   R3D_LEAN_GLSL +
-  'varying vec3 vN; varying vec3 vCol;' +
+  'varying vec3 vN; varying vec4 vCol;' +
   'void main(){' +
+  R3D_INST_UNPACK +
   '  vec3 p = vec3(aP.x * uScale, aP.y * uScale * uScaleY, aP.z * uScale);' +
   /* YAW FIRST, THEN LEAN. The yaw is about the model's own up, which is what "facing" means;
      the lean then takes that up to the ground's. Doing it the other way round would turn the
@@ -197,7 +200,11 @@ var R3D_MESH_VS =
      shaded once per vertex, which on a face whose vertices all carry the same normal is once
      per FACET, and no amount of smoothing the normals would have shown through that. */
   '  vN = n;' +
-  '  vCol = col;' +
+  /* THE DIM FLAG RIDES IN vCol.w rather than in a varying of its own. It has to reach the
+     fragment stage - the ramp _shade runs is not linear in the colour, so a damaged building
+     cannot be tinted by pre-multiplying aC and getting the same picture - and a vec3 varying
+     and a vec4 one occupy the same slot, so this costs nothing where slots are scarce. */
+  '  vCol = vec4(col, uDim);' +
   '  _shadowFrom(wp);' +
   '  float sx = (wp.x - uCam.x) * uCam.z;' +
   '  float sy = ((wp.z - uCam.y) * uTilt.x - wp.y * uTilt.y) * uCam.w;' +
@@ -221,13 +228,15 @@ var R3D_MESH_VS =
    between them per pixel. highp, because the comparison is against a depth packed into eight
    bits and change, and mediump has neither the range nor the precision to hold it. */
 var R3D_MESH_FS =
-  'precision highp float; varying vec3 vN; varying vec3 vCol;' +
-  'uniform float uA; uniform vec3 uTint;' +
+  'precision highp float; varying vec3 vN; varying vec4 vCol;' +
+  'uniform float uA;' +
   R3D_SHADOW_GLSL + R3D_MESH_LIGHT +
   /* NORMALISED HERE, NOT IN THE VERTEX SHADER. A varying is interpolated linearly, and the
      linear blend of two unit vectors is shorter than one - which is exactly the case on the
      curves this is for, and would read as a dark seam down the middle of every one. */
-  'void main(){ gl_FragColor = vec4(_shade(normalize(vN), vCol) * uTint, uA); }';
+  'void main(){' +
+  '  vec3 tint = mix(vec3(1.0), vec3(0.62, 0.55, 0.55), vCol.w);' +
+  '  gl_FragColor = vec4(_shade(normalize(vN), vCol.rgb) * tint, uA); }';
 
 /* Ground and fog share one textured program; fog just samples a different texture with
    blending on and the depth test off. */
