@@ -31,6 +31,22 @@
    e2e/instanced holds the resulting per-frame vertex count under a ceiling, the way e2e/canopy
    holds the world batch under one - so raising this is not a decision anyone can make quietly. */
 var R3_DETAIL_3D = 2;
+
+/* ...UNLESS THE PLAYER HAS SAID THIS DEVICE IS STRUGGLING, which they already have a control
+   for. The GFX button pins the render scale, and pinning it BELOW what the device could do is
+   the one thing in this game that means "you are asking too much of me". Model tessellation is
+   the other half of that ask, so it follows the same signal rather than needing a control of
+   its own: pinned at 1 or 2, the 3D view builds models at the sprite's tessellation.
+
+   Why it is worth having at all: measured on a software rasteriser at 120 units, the frame went
+   from 149ms before this session's geometry to 270 after it and 367 with this level on. That
+   machine has no vertex hardware and is not a phone, so the ratio does not transfer - but the
+   vertex load is real, it is the half of the frame no measurement here can price, and a player
+   whose device cannot take it should not have to edit a constant to say so. */
+function _r3dDetailLevel() {
+  var want = (typeof _rtsGfxWant === 'function') ? _rtsGfxWant() : null;
+  return (want && want <= 2) ? 1 : R3_DETAIL_3D;
+}
 var _R3_DETAIL = 1;
 /* THE SEGMENT MULTIPLIER IS NOT THE DETAIL LEVEL, and separating them is worth a third of the
    cost. Doubling _r3Seg puts 48 sides on every cylinder in the game, and a 24-sided one is
@@ -41,7 +57,7 @@ var _R3_DETAIL = 1;
 var R3_DETAIL_SEG = 1;
 function _r3DetailHigh(fn) {
   var keep = _R3_DETAIL;
-  _R3_DETAIL = R3_DETAIL_3D;
+  _R3_DETAIL = _r3dDetailLevel();
   try { return fn(); } finally { _R3_DETAIL = keep; }
 }
 

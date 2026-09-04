@@ -234,6 +234,47 @@ var SCENE = function (n) {
        'a Battle Tank is ' + budget.view + ' triangles for this view against ' + budget.bake +
        ' for the bake - the same model, tessellated twice');
 
+  /* ---------- 4. and the player can decline the geometry ----------
+
+     The tessellation above is affordable inside the budget measured on this machine, but this
+     machine has no vertex hardware and is not a phone: the half of the frame it cannot price
+     is exactly the half the extra geometry lands in. So it follows a signal the player already
+     has. Pinning the render scale BELOW what the device could do is the one control in this
+     game that means "you are asking too much of me", and model detail is the other half of
+     that ask. */
+  var pin = await g.page.evaluate(function () {
+    var R3 = window._R3D;
+    /* THE CACHE IS NOT CLEARED HERE, deliberately. Dropping it in this helper would make the
+       measurement work whether or not rtsGfxSet drops it - and a mutation that removed that
+       line passed exactly that way. The only thing between one reading and the next is the
+       pin, so a stale cache shows up as an unchanged triangle count. */
+    function tankTris() {
+      var m = _r3dMesh('u', 'tank', 'player', null, false);
+      return m ? m.verts / 3 : 0;
+    }
+    rtsGfxSet(null);
+    var auto = { level: _r3dDetailLevel(), tris: tankTris() };
+    rtsGfxSet(1);
+    var low = { level: _r3dDetailLevel(), tris: tankTris() };
+    rtsGfxSet(4);
+    var high = { level: _r3dDetailLevel(), tris: tankTris() };
+    rtsGfxSet(null);
+    var back = { level: _r3dDetailLevel(), tris: tankTris() };
+    return { auto: auto, low: low, high: high, back: back };
+  });
+
+  S.ok('pinning the render scale down drops the models to sprite tessellation',
+       pin.low.level === 1 && pin.low.tris < pin.auto.tris * 0.7,
+       'a Battle Tank is ' + pin.auto.tris + ' triangles on auto and ' + pin.low.tris +
+       ' pinned at scale 1');
+  S.ok('...and a high pin, or none, keeps the full geometry',
+       pin.high.tris === pin.auto.tris && pin.back.tris === pin.auto.tris,
+       'auto ' + pin.auto.tris + ', pinned 4 ' + pin.high.tris + ', back to auto ' + pin.back.tris);
+  S.ok('...which means the mesh cache is dropped when the pin changes, not left stale',
+       pin.low.tris !== pin.auto.tris,
+       'the cache is keyed on the model and not on the level, so a base built before the pin ' +
+       'and a tank built after it would otherwise be drawn at two different densities');
+
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
 
   await g.close();
