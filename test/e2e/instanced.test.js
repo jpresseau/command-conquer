@@ -178,6 +178,62 @@ var SCENE = function (n) {
        steady.first > steady.live && steady.first <= steady.live * 4,
        steady.first + ' placements a frame for ' + steady.live + ' live entities, over two passes');
 
+  /* ---------- 3. what the 3D view spends its geometry budget on ----------
+
+     The models are tessellated richer for this view than for the sprite baker - see _R3_DETAIL
+     in r3d/curves.js: a sprite is 22 to 44 art pixels across and cannot show a rounded edge,
+     while this draws the same model at 100 to 200 and, since instancing, draws every copy of it
+     in one call. That is only affordable inside a budget, and the budget is triangles submitted
+     per frame, which is the number that transfers off a machine whose GPU is SwiftShader.
+
+     THE CEILING IS THE POINT. Raising the detail level is one constant, and the effect is
+     invisible until a phone drops frames; this makes it visible here instead. The numbers below
+     are a 160-unit battle - far past what a real skirmish reaches, which is nearer 64 - with
+     both passes running, so it is the worst case rather than the usual one. */
+  var budget = await g.page.evaluate(function (src) {
+    var R3 = window._R3D, gl = R3.gl, scene = eval('(' + src + ')');
+    var acc = null;
+    var oDA = gl.drawArrays;
+    gl.drawArrays = function (m, f, c) { if (acc) acc.t += c / 3; return oDA.apply(gl, arguments); };
+    if (gl.drawArraysInstanced) {
+      var oDI = gl.drawArraysInstanced;
+      gl.drawArraysInstanced = function (m, f, c, n) { if (acc) acc.t += c / 3 * n; return oDI.apply(gl, arguments); };
+    }
+    var ext = gl.getExtension('ANGLE_instanced_arrays');
+    if (ext && ext.drawArraysInstancedANGLE) {
+      var oE = ext.drawArraysInstancedANGLE;
+      ext.drawArraysInstancedANGLE = function (m, f, c, n) { if (acc) acc.t += c / 3 * n; return oE.apply(ext, arguments); };
+    }
+    window.RTS_POST_ON = false;
+    function tri(n) {
+      scene(n);
+      for (var w = 0; w < 4; w++) _rtsRFrame(1 / 60);
+      acc = { t: 0 };
+      for (var i = 0; i < 10; i++) _rtsRFrame(1 / 60);
+      var r = acc.t / 10; acc = null;
+      return Math.round(r);
+    }
+    var full = tri(160), world = tri(0);
+    /* and the same model as the baker builds it, to show the two levels really do differ */
+    function tris(f) { var t = 0; for (var i = 0; i < f.length; i++) t += Math.max(0, f[i].v.length - 2); return t; }
+    var bake = tris(_sprUnitModel('tank', 'player', false, null));
+    var view = _r3DetailHigh(function () { return tris(_sprUnitModel('tank', 'player', false, null)); });
+    return { full: full, world: world, bake: bake, view: view };
+  }, SCENE);
+
+  S.ok('a 160-unit battle stays inside the per-frame triangle budget', budget.full <= 3200000,
+       budget.full.toLocaleString() + ' triangles a frame over both passes, of which ' +
+       budget.world.toLocaleString() + ' is the visible world and ' +
+       (budget.full - budget.world).toLocaleString() + ' the entities');
+  S.ok('...and the entities do not dwarf the ground they stand on',
+       (budget.full - budget.world) <= budget.world * 4,
+       'entities are ' + ((budget.full - budget.world) / budget.world).toFixed(2) +
+       'x the visible world batch');
+  S.ok('the 3D view really does build a richer model than the sprite baker',
+       budget.view > budget.bake * 1.5,
+       'a Battle Tank is ' + budget.view + ' triangles for this view against ' + budget.bake +
+       ' for the bake - the same model, tessellated twice');
+
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
 
   await g.close();

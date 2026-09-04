@@ -131,6 +131,7 @@ function _r3Box(out, x, y, z, w, h, d, col, topCol) {
     _r3F(out, [[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]], col);           /* left */
     return;
   }
+  if (_R3_DETAIL > 1) { _r3RoundBox(out, x0, x1, y0, y1, z0, z1, b, col, topCol); return; }
   var ax0 = x0 + b, ax1 = x1 - b, az0 = z0 + b, az1 = z1 - b, yw = y1 - b;
   /* the four walls, each pulled in by the bevel along the edges it meets */
   _r3F(out, [[ax0, y0, z1], [ax1, y0, z1], [ax1, yw, z1], [ax0, yw, z1]], col);         /* front */
@@ -199,7 +200,11 @@ var R3_SEG_MIN = 24;
    would have caught this either way - it did catch it. A model is drawn at a hundred pixels
    and there are a hundred of them; a tree is drawn at ten and there are ten thousand. */
 var _R3_SEG_FLOOR = R3_SEG_MIN;
-function _r3Seg(n) { return Math.max(n || 0, _R3_SEG_FLOOR); }
+
+function _r3Seg(n) {
+  return Math.round(Math.max(n || 0, _R3_SEG_FLOOR) *
+                    (_R3_DETAIL > 1 ? R3_DETAIL_SEG : 1));
+}
 /* Run `fn` with the floor lifted, for geometry that is bulk rather than model. */
 function _r3SegBulk(fn) {
   var keep = _R3_SEG_FLOOR;
@@ -403,32 +408,3 @@ function _r3Bounds(faces) {
 }
 
 
-/* A WHEEL - a cylinder lying on its side, which _r3Cyl cannot be: it is upright by
-   construction, so every road wheel, drive sprocket, idler and roadwheel hub in the game was a
-   BOX. That is the single most conspicuous thing left after the chamfer: a tank rolling on
-   eight cubes.
-
-   `axis` is 'x' or 'z' - the direction the axle points. The rim carries per-corner radial
-   normals for the same reason _r3Cyl's sides do, so it shades as a curve rather than as a ring
-   of flat strips; the two faces do not, because a wheel face meets its rim at a right angle and
-   should look it. */
-function _r3Wheel(out, x, y, z, r, thick, axis, col, faceCol, seg) {
-  seg = _r3Seg(seg);
-  var alongX = (axis === 'x'), h = thick / 2, i, a, b;
-  var A = [], B = [], ring = [];
-  for (i = 0; i < seg; i++) {
-    a = (i / seg) * Math.PI * 2;
-    var ca = Math.cos(a), sa = Math.sin(a);
-    ring.push(alongX ? [0, sa, ca] : [ca, sa, 0]);
-    A.push(alongX ? [x - h, y + sa * r, z + ca * r] : [x + ca * r, y + sa * r, z - h]);
-    B.push(alongX ? [x + h, y + sa * r, z + ca * r] : [x + ca * r, y + sa * r, z + h]);
-  }
-  for (i = 0; i < seg; i++) {
-    b = (i + 1) % seg;
-    var na = ring[i], nb = ring[b];
-    _r3F(out, [A[i], A[b], B[b], B[i]], col, [na, nb, nb, na]);
-  }
-  /* the two faces, wound opposite ways so both point outward */
-  _r3F(out, A.slice().reverse(), faceCol || col);
-  _r3F(out, B.slice(), faceCol || col);
-}

@@ -75,8 +75,17 @@ function _r3dMesh(kind, def, side, part, prone) {
   if (m !== undefined) return m;
   var faces = null;
   try {
-    faces = (kind === 'b') ? _sprBuildingModel(def, side)
-                           : _sprUnitModel(def, side, !!prone, part || null);
+    /* BUILT RICHER THAN THE SPRITE. The model functions are the baker's own - one copy of every
+       shape, which is the point of calling them from here at all - but the two consumers want
+       different tessellations of it. A sprite is 22 to 44 art pixels across and cannot show a
+       rounded edge; this draws the same model at 100 to 200 and, since inst3d.js, draws every
+       copy of it in one call, so the vertex stage has room the baker does not. _r3DetailHigh
+       raises the segment counts and turns every box's flat chamfer into a rounded edge with a
+       normal per corner, for the duration of this build and no longer. See _R3_DETAIL. */
+    faces = _r3DetailHigh(function () {
+      return (kind === 'b') ? _sprBuildingModel(def, side)
+                            : _sprUnitModel(def, side, !!prone, part || null);
+    });
   } catch (e) { faces = null; }
   m = (faces && faces.length) ? _r3dBuildMesh(R3.gl, faces) : null;
   R3.mesh[key] = m;
