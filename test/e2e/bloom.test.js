@@ -56,7 +56,12 @@ var S = new Suite('bloom');
 
     var yard = _rtsHas('player', 'yard');
     R.focus.x = yard.x; R.focus.z = yard.z;
-    R.zi = RTS_ZOOMS.length - 1; _rtsApplyCam();
+/* the closest rung the SHIPPED 2D ladder has, which is what this spec's numbers were
+       calibrated against. 3D reaches two rungs further in now (RTS_ZOOM_3D_EXTRA), and
+       "RTS_ZOOMS.length - 1" quietly became a different magnification - a four-times
+       narrower view, with every tolerance and sample position here still sized for the
+       old one. e2e/zoom3d covers the new rungs for the things that can break silently. */
+    R.zi = RTS_ZOOM_2D_STEPS - 1; _rtsApplyCam();
 
     /* The GL world is PRESENTED under the 2D overlay now, not blitted into it, so no single
        canvas carries the finished picture any more - _rtsCompose() rebuilds it (GL layer plus

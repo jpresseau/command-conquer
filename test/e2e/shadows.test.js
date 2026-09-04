@@ -191,7 +191,7 @@ var S = new Suite('shadows');
     var keepEnts = G.ents;
     G.ents = [];
     R.focus.x = _rtsWX(best[0] + 4); R.focus.z = _rtsWX(best[1] + 4);
-    R.zi = RTS_ZOOMS.length - 1; _rtsApplyCam();
+    R.zi = RTS_ZOOM_2D_STEPS - 1; _rtsApplyCam();
     _rtsRFrame(1 / 60);
     o.world = shaded(withAndWithout());
 

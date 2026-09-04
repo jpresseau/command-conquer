@@ -100,7 +100,12 @@ var S = new Suite('sea');
     o.seaAt = best; o.seaDensity = bs;
     if (!best) return o;
     R.focus.x = _rtsWX(best[0]); R.focus.z = _rtsWX(best[1]);
-    R.zi = RTS_ZOOMS.length - 1; _rtsApplyCam();
+/* the closest rung the SHIPPED 2D ladder has, which is what this spec's numbers were
+       calibrated against. 3D reaches two rungs further in now (RTS_ZOOM_3D_EXTRA), and
+       "RTS_ZOOMS.length - 1" quietly became a different magnification - a four-times
+       narrower view, with every tolerance and sample position here still sized for the
+       old one. e2e/zoom3d covers the new rungs for the things that can break silently. */
+    R.zi = RTS_ZOOM_2D_STEPS - 1; _rtsApplyCam();
     _rtsRFrame(1 / 60);
 
     o.mesh = !!R3.waterMesh;

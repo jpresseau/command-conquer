@@ -168,7 +168,12 @@ var S = new Suite('elevation');
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;
-    R.zi = RTS_ZOOMS.length - 1; R.focus.x = 0; R.focus.z = 0; _rtsApplyCam();
+/* the closest rung the SHIPPED 2D ladder has, which is what this spec's numbers were
+       calibrated against. 3D reaches two rungs further in now (RTS_ZOOM_3D_EXTRA), and
+       "RTS_ZOOMS.length - 1" quietly became a different magnification - a four-times
+       narrower view, with every tolerance and sample position here still sized for the
+       old one. e2e/zoom3d covers the new rungs for the things that can break silently. */
+    R.zi = RTS_ZOOM_2D_STEPS - 1; R.focus.x = 0; R.focus.z = 0; _rtsApplyCam();
     _rtsRFrame(0);
     var n = 0, sumH = 0, wTerr = 0, wFlat = 0;
     for (var ax = -8; ax <= 8; ax++) {

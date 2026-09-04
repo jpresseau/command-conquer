@@ -60,7 +60,7 @@ var S = new Suite('ao');
     var gl = R3.gl;
     var yard = _rtsHas('player', 'yard');
     R.focus.x = yard.x; R.focus.z = yard.z;
-    R.zi = RTS_ZOOMS.length - 1; _rtsApplyCam();
+    R.zi = RTS_ZOOM_2D_STEPS - 1; _rtsApplyCam();
     _rtsRFrame(1 / 60);
     var CW = R3.cv.width, CH = R3.cv.height;
     o.sub = R3D_GROUND_SUB;

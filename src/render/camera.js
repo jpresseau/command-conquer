@@ -63,8 +63,53 @@ function _rtsPickDpr() {
   var raw = window.devicePixelRatio || 1;
   return Math.max(1, Math.min(4, Math.round(raw)));
 }
-function _rtsZoomLadder(dpr) {
-  return RTS_ZOOM_LADDERS[dpr] || RTS_ZOOM_LADDERS[2];
+
+/* IN 3D THE LADDER GOES FURTHER IN, and the reason the 2D one stops where it does is a 2D
+   reason: every step above has to land the SPRITE on a whole multiple of its bake, or the
+   whole picture resamples and goes soft. That is the constraint the comment above is about,
+   and it is real - for sprites.
+
+   In 3D there are no sprites for the things you would zoom in to look at. A unit is geometry:
+   its edges are rounded, its wheels turn on their axles and its running gear is modelled (see
+   r3d/curves.js), and none of that survives being drawn at 48 pixels a cell. The models were
+   made denser and there was no way to see it, which is the complaint this answers.
+
+   WHAT DOES SOFTEN IS THE GROUND, because the terrain really is a texture in both modes. That
+   is not a new problem and it is already answered: render/detail.js restores the frequencies
+   magnification loses, gated at RTS_DETAIL_MIN_MAG, and these steps are squarely inside what
+   that pass was built for. Whole multiples of the top 2D step, so the terrain magnifies by a
+   clean factor at every one of them. */
+var RTS_ZOOM_3D_EXTRA = [2, 4];
+/* HOW MANY RUNGS THE SHIPPED 2D LADDER HAS, so that "the closest zoom" can be said two
+   different ways and mean the right one each time. RTS_ZOOMS.length - 1 is the closest rung
+   THERE IS, which is what a player's pinch should reach; several specs used it to mean the
+   magnification their numbers were calibrated at, which was the top of this ladder and is no
+   longer the same thing in 3D. A proxy that silently changes meaning is the failure this
+   project keeps finding, so both readings get a name. */
+var RTS_ZOOM_2D_STEPS = 3;
+function _rtsZoomLadder(dpr, threeD) {
+  var base = RTS_ZOOM_LADDERS[dpr] || RTS_ZOOM_LADDERS[2];
+  /* the constant above is a claim about these tables; unit/zoom holds them to it */
+  if (!threeD) return base;
+  var top = base[base.length - 1], out = base.slice(), i;
+  for (i = 0; i < RTS_ZOOM_3D_EXTRA.length; i++) out.push(top * RTS_ZOOM_3D_EXTRA[i]);
+  return out;
+}
+function _rtsIn3D() { return !!(window._R3D && window._R3D.on); }
+
+/* Re-derive the ladder when the renderer changes under it, keeping the magnification the
+   player is actually looking at rather than the index they got there by. Leaving 3D from one
+   of the close steps has to land somewhere the 2D ladder has - and it must be the CLOSEST one
+   it has, not wherever the old index happens to point, or stepping out of 3D would silently
+   zoom the map out to a third of what was on screen. */
+function _rtsZoomLadderSync() {
+  var R = _rtsR;
+  if (!R) return;
+  var was = RTS_ZOOMS[R.zi];
+  RTS_ZOOMS = _rtsZoomLadder(R.dpr, _rtsIn3D());
+  var at = RTS_ZOOMS.indexOf(was);
+  R.zi = at >= 0 ? at : RTS_ZOOMS.length - 1;
+  _rtsApplyCam();
 }
 
 function _rtsRInit(cv) {
@@ -72,7 +117,7 @@ function _rtsRInit(cv) {
   var dpr = _rtsPickDpr();
   /* The ladder is global because everything from the sidebar to the specs reads RTS_ZOOMS, and
      it is settled here because this is the first point at which the device is known. */
-  RTS_ZOOMS = _rtsZoomLadder(dpr);
+  RTS_ZOOMS = _rtsZoomLadder(dpr, _rtsIn3D());
   cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
   /* WITH ALPHA, and it is load-bearing: in 3D this canvas is a transparent overlay above the
      presented GL layer, and a context created alpha:false can never be transparent - clearRect
