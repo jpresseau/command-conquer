@@ -73,6 +73,52 @@ function bounds(faces) {
   S.eq('the top face still takes topCol', top.c.join(','), g._r3Hex('#a0a0a0').join(','));
 })();
 
+/* ------------------------------------------------------- the 3D detail level ----
+   The 3D view and the sprite baker share these primitives on purpose - one copy of every shape
+   - but they do different things with the result. A sprite is 22 to 44 art pixels across and
+   cannot show a rounded edge; the 3D view draws the same model at 100 to 200 and, since
+   render3d/inst3d.js, draws every copy of it in one call. So the shape is one shape and the
+   tessellation is two, and _r3dMesh raises the level only while it builds its buffers.
+
+   THE INVARIANT THAT MATTERS is that a rounder edge is cut from the SAME box. If the extents
+   moved with the detail level, a building would stop filling its own cells the moment the 3D
+   view drew it, and the 3D and 2D pipelines would disagree about how big everything is. */
+(function () {
+  var W = 10, H = 6, D = 8;
+  var lo = [], hi = [];
+  g._r3Box(lo, 0, 0, 0, W, H, D, '#808080', '#a0a0a0');
+  g._r3DetailHigh(function () { g._r3Box(hi, 0, 0, 0, W, H, D, '#808080', '#a0a0a0'); });
+
+  S.ok('the 3D level spends a lot more geometry on a box', tris(hi) > tris(lo) * 2,
+       tris(hi) + ' triangles against ' + tris(lo) + ' - and 10 before any of this');
+
+  var a = bounds(lo), b = bounds(hi);
+  ['x', 'y', 'z'].forEach(function (ax, k) {
+    S.near('...cut from the same box, ' + ax, b.hi[k] - b.lo[k], a.hi[k] - a.lo[k], 1e-9);
+  });
+  S.near('...standing on the same ground', b.lo[1], 0, 1e-9);
+
+  /* A ROUNDED EDGE ONLY LOOKS ROUND IF IT SAYS SO. Flat faces would give the same silhouette
+     and a ring of hard tone steps - the segments would be spent on nothing the shading can
+     use, which is the exact trap this project's own graphics rules name. */
+  var curved = hi.filter(function (f) { return !!f.n; }).length;
+  S.ok('and its faces carry a normal per corner, so the highlight moves along them',
+       curved > hi.length * 0.8,
+       curved + ' of ' + hi.length + ' faces are shaded as curves');
+  S.eq('...the flat top is not one of them',
+       hi[hi.length - 1].n === undefined, true);
+
+  /* THE BAKER MUST NOT SEE ANY OF IT. Its output is a sprite, its cost is start-up time, and
+     the whole point of scoping the level is that neither moves. */
+  var after = [];
+  g._r3Box(after, 0, 0, 0, W, H, D, '#808080', '#a0a0a0');
+  S.eq('the level is put back afterwards, so the baker is untouched', after.length, lo.length);
+  try { g._r3DetailHigh(function () { throw new Error('x'); }); } catch (e) {}
+  var thrown = [];
+  g._r3Box(thrown, 0, 0, 0, W, H, D, '#808080', '#a0a0a0');
+  S.eq('...even when the build throws', thrown.length, lo.length);
+})();
+
 /* ------------------------------------------------------------- the segment floor ----*/
 (function () {
   S.ok('there is a floor at all', g.R3_SEG_MIN >= 20, 'R3_SEG_MIN = ' + g.R3_SEG_MIN);
