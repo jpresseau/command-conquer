@@ -183,12 +183,25 @@ var CLEAN = ['grenadier', 'flame', 'engineer', 'medic'];
        ' of the drawn soldier at the worst facing');
 
   /* THE CONTROL AGAINST A BAD INSTINCT. "Infantry look poor, give them more mesh" is wrong and
-     was measured to be wrong; this keeps the measurement rather than the conclusion. */
-  S.ok('infantry are not under-meshed against the vehicles beside them',
-       out.rifleDensity >= out.tankDensity,
-       'a rifle squad carries ' + out.rifleDensity + ' triangles per drawn pixel against the ' +
-       'Battle Tank\'s ' + out.tankDensity + ' - more geometry is not what a one-cell unit ' +
-       'needs, and their own file said so first');
+     was measured to be wrong; this keeps the measurement rather than the conclusion.
+
+     IT USED TO SAY "at least as dense as the Battle Tank", and that was a proxy rather than
+     the claim. It held while the tank was a hull, a turret and two slabs for tracks; the tank
+     has a suspension now - road wheels, a sprocket, return rollers - and went to 6.404
+     triangles a pixel, so the rifle squad fell below it at 5.801 while nobody had taken a
+     single triangle off a soldier. A comparison that moves when the OTHER side of it changes
+     grades the wrong thing.
+
+     What the measurement was always saying stands on its own: a rifle squad carries several
+     triangles for every pixel that survives the bake. The geometry is already finer than the
+     sprite can show, so the next triangle added to a soldier cannot appear - whatever any
+     vehicle happens to carry. The floor is well under the 5.8 measured, because this is a
+     rebuttal to an instinct, not a target to hit. */
+  S.ok('infantry already carry more geometry than the sprite can show',
+       out.rifleDensity >= 3,
+       'a rifle squad carries ' + out.rifleDensity + ' triangles per drawn pixel - more ' +
+       'geometry is not what a one-cell unit needs, and their own file said so first ' +
+       '(the Battle Tank, for scale, is at ' + out.tankDensity + ')');
 
   S.ok('no page errors', !errs.length, errs.join(' | ') || 'none');
   require('../lib/report.js')(S);

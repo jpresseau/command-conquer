@@ -54,16 +54,79 @@ function _sprUnitModel(key, side, prone, part) {
      _r3Cyl is a VERTICAL cylinder - its h runs along y - so anything lying along the ground has
      to be built from boxes. The road wheels are therefore a row of small blocks stepped proud of
      the track run rather than actual discs, which at this size reads the same and costs less. */
-  function tracks(len, zoff, wheels, rad) {
+  /* THE RUNNING GEAR, and every tracked vehicle in the game gets it - which is why it is worth
+     building properly here rather than eight times over in the model files.
+
+     It used to be three boxes a side: a slab for the track run, a row of cubes for road wheels,
+     and a fender. The cubes were the problem. _r3Cyl is upright by construction so nothing in
+     this game could draw a wheel, and a tank rolled on eight blocks - the most conspicuous
+     thing left in the silhouette once boxes were chamfered. _r3Wheel exists for that.
+
+     What a real suspension shows from this camera, front to back: an idler, a run of road
+     wheels on their arms, a toothed drive sprocket, return rollers carrying the top run, and
+     the track itself as LINKS rather than as a smooth belt. All of it is here, and it costs
+     nothing per frame - a model's buffers are built once and instanced (render3d/inst3d.js). */
+  function tracks(len, zoff, wheels, rad, wheeled) {
     for (var s = -1; s <= 1; s += 2) {
-      var z = s * zoff;
-      _r3Slab(m, 0, 0, z, len, rad * 2.1, rad * 2.0, 0.9, DK[0], DK[1]);      /* track run */
-      for (var k = 0; k < wheels; k++) {
-        var wx = (k - (wheels - 1) / 2) * (len - rad * 2.4) / (wheels - 1);
-        _r3Box(m, wx, rad * 0.45, z + s * rad * 0.5, rad * 1.5, rad * 1.2, rad * 1.1,
-               (k % 2) ? DK[2] : DK[1], DK[2]);
+      var z = s * zoff, k, wx, ta;
+      var span = len - rad * 2.4, step = span / Math.max(1, wheels - 1);
+      if (!wheeled) {
+        /* the track as a closed belt: a bottom run under the wheels and a top run over them */
+        _r3Box(m, 0, rad * 0.1, z, len, rad * 0.55, rad * 2.0, DK[0], DK[1]);
+        _r3Box(m, 0, rad * 1.62, z, len - rad * 0.8, rad * 0.42, rad * 1.86, DK[1], DK[2]);
+        /* LINKS, not a belt. A row of narrow plates across the bottom run is what tells the
+           eye this is a track and not a skid, and it reads at any zoom. */
+        var links = Math.max(8, Math.round(len / (rad * 0.72)));
+        for (k = 0; k < links; k++) {
+          wx = -len / 2 + (k + 0.5) * (len / links);
+          _r3Box(m, wx, rad * 0.02, z, len / links * 0.62, rad * 0.62, rad * 2.16,
+                 (k % 2) ? DK[1] : DK[0], DK[2]);
+        }
+        /* idler at the back, toothed drive sprocket at the front */
+        _r3Wheel(m, -len / 2 + rad * 1.05, rad * 1.0, z, rad * 1.02, rad * 1.7, 'z',
+                 DK[1], DK[2], 22);
+        _r3Wheel(m, len / 2 - rad * 1.05, rad * 1.05, z, rad * 1.08, rad * 1.7, 'z',
+                 DK[2], DK[3], 22);
+        for (k = 0; k < 9; k++) {                                            /* sprocket teeth */
+          ta = (k / 9) * Math.PI * 2;
+          _r3Box(m, len / 2 - rad * 1.05 + Math.cos(ta) * rad * 1.12,
+                 rad * 1.05 + Math.sin(ta) * rad * 1.12,
+                 z, rad * 0.32, rad * 0.32, rad * 1.8, DK[3], DK[2]);
+        }
+        /* return rollers under the top run */
+        var rollers = Math.max(2, (wheels >> 1));
+        for (k = 0; k < rollers; k++) {
+          wx = (k - (rollers - 1) / 2) * (span / Math.max(1, rollers - 1)) * 0.86;
+          _r3Wheel(m, wx, rad * 1.62, z, rad * 0.36, rad * 1.2, 'z', DK[1], DK[3], 16);
+        }
       }
-      _r3Box(m, 0, rad * 2.0, z, len - 1, 1.2, rad * 2.4, VH[2], VH[1]);      /* fender skirt */
+      /* the road wheels themselves - bigger and tyred on a wheeled hull, small and steel on a
+         tracked one, which is most of what separates a truck from a tank at a glance */
+      var wr = wheeled ? rad * 1.35 : rad * 0.95, wt = wheeled ? rad * 1.5 : rad * 1.68;
+      for (k = 0; k < wheels; k++) {
+        wx = (k - (wheels - 1) / 2) * step;
+        _r3Wheel(m, wx, wr * 0.92, z, wr, wt, 'z', wheeled ? DK[0] : ((k % 2) ? DK[2] : DK[1]),
+                 wheeled ? DK[1] : DK[3], 20);
+        _r3Wheel(m, wx, wr * 0.92, z, wr * (wheeled ? 0.52 : 0.42), wt * 1.1, 'z', S[1], S[2], 16);
+        if (wheeled) for (var b2 = 0; b2 < 5; b2++) {                        /* wheel nuts */
+          ta = (b2 / 5) * Math.PI * 2;
+          _r3Box(m, wx + Math.cos(ta) * wr * 0.3, wr * 0.92 + Math.sin(ta) * wr * 0.3, z,
+                 wr * 0.13, wr * 0.13, wt * 1.14, S[2], S[3]);
+        }
+        else _r3Box(m, wx, rad * 1.25, z + s * rad * 0.42, rad * 0.34, rad * 0.7, rad * 0.5,
+                    DK[0], DK[1]);                                           /* swing arm */
+      }
+      /* THE FENDER MUST NOT EAT THE SUSPENSION. The first version of this overhung the track by
+         a fifth of its width and hung a skirt down the outside, and rendered at the closest
+         zoom the result was worse than the boxes it replaced: the wheels, the sprocket and the
+         links were all under it, and the tank lost the dark banded strip along its flank that
+         the old flat track run had given it. Everything below is drawn ABOVE the top run and
+         flush with its outer face, so the running gear is what you see from this camera and
+         the fender is a rim on top of it. */
+      _r3Box(m, 0, rad * 2.05, z, len - 1, 1.0, rad * 2.0, VH[2], VH[1]);
+      _r3Box(m, 0, rad * 2.05, z + s * rad * 0.92, len - 1, 1.5, rad * 0.22, VH[1], VH[2]);
+      _r3Box(m, -len / 2 + rad * 0.7, rad * 2.3, z, rad * 1.1, 1.0, rad * 1.9, VH[1], VH[2]);
+      _r3Box(m, len / 2 - rad * 0.7, rad * 2.3, z, rad * 1.1, 1.0, rad * 1.9, VH[1], VH[2]);
     }
   }
 

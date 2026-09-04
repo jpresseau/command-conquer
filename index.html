@@ -929,7 +929,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">4ae427c · 2026-09-04</div>
+  <div id="rtsBuild" title="build">0406a64 · 2026-09-04</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -4960,13 +4960,59 @@ function _r3F(out, verts, col, nrm) {
 /* --------------------------------------------------------------- primitives --
    All take the centre of the footprint and the BASE height, because everything in these
    models sits on something else - working from centres in y makes every offset a sum. */
+/* HOW MUCH OF A BOX IS ITS EDGES. _r3Slab was written because a plain box presents two faces
+   to this camera - top and front - so its whole roof is one flat polygon of one colour and the
+   thing reads as a shed. That argument was never limited to buildings: it is true of a tank
+   hull, an oil drum and a soldier's helmet, and every one of those was a plain box.
+
+   So the chamfer is the box now. The vertical edges and the top edges are cut back, which
+   turns two visible faces into ten and lets the light grade them - front bright, back dim, the
+   two sides between, and a rim of narrow facets picking out every edge. It is the single
+   biggest change to how this game's models read, and it costs 30 triangles where there were
+   10, on geometry that is uploaded once per model and instanced thereafter.
+
+   THE BOTTOM IS NOT CHAMFERED and has no face at all, as before: the camera sits 49 degrees
+   off vertical and never sees under anything.
+
+   R3_BEVEL is a FRACTION OF THE SMALLEST DIMENSION, so it scales with whatever it is cutting -
+   a helmet gets a helmet's chamfer. Below R3_BEVEL_MIN the cut would be thinner than the
+   sprite baker's own pixel, so the plain box is emitted instead: sub-pixel facets are not
+   detail, they are noise with a triangle count. */
+var R3_BEVEL = 0.16;
+var R3_BEVEL_MIN = 0.06;
+var R3_BEVEL_MAX = 1.2;
 function _r3Box(out, x, y, z, w, h, d, col, topCol) {
   var x0 = x - w / 2, x1 = x + w / 2, y0 = y, y1 = y + h, z0 = z - d / 2, z1 = z + d / 2;
-  _r3F(out, [[x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0]], topCol || col);   /* top */
-  _r3F(out, [[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], col);             /* front */
-  _r3F(out, [[x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0]], col);             /* back */
-  _r3F(out, [[x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1]], col);             /* right */
-  _r3F(out, [[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]], col);             /* left */
+  var b = Math.min(Math.min(w, Math.min(h, d)) * R3_BEVEL, R3_BEVEL_MAX);
+  if (!(b > R3_BEVEL_MIN)) {
+    _r3F(out, [[x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0]], topCol || col); /* top */
+    _r3F(out, [[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], col);           /* front */
+    _r3F(out, [[x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0]], col);           /* back */
+    _r3F(out, [[x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1]], col);           /* right */
+    _r3F(out, [[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]], col);           /* left */
+    return;
+  }
+  var ax0 = x0 + b, ax1 = x1 - b, az0 = z0 + b, az1 = z1 - b, yw = y1 - b;
+  /* the four walls, each pulled in by the bevel along the edges it meets */
+  _r3F(out, [[ax0, y0, z1], [ax1, y0, z1], [ax1, yw, z1], [ax0, yw, z1]], col);         /* front */
+  _r3F(out, [[ax1, y0, z0], [ax0, y0, z0], [ax0, yw, z0], [ax1, yw, z0]], col);         /* back */
+  _r3F(out, [[x1, y0, az1], [x1, y0, az0], [x1, yw, az0], [x1, yw, az1]], col);         /* right */
+  _r3F(out, [[x0, y0, az0], [x0, y0, az1], [x0, yw, az1], [x0, yw, az0]], col);         /* left */
+  /* the four vertical corner cuts */
+  _r3F(out, [[ax1, y0, z1], [x1, y0, az1], [x1, yw, az1], [ax1, yw, z1]], col);
+  _r3F(out, [[x1, y0, az0], [ax1, y0, z0], [ax1, yw, z0], [x1, yw, az0]], col);
+  _r3F(out, [[ax0, y0, z0], [x0, y0, az0], [x0, yw, az0], [ax0, yw, z0]], col);
+  _r3F(out, [[x0, y0, az1], [ax0, y0, z1], [ax0, yw, z1], [x0, yw, az1]], col);
+  /* the top rim: four slopes and four corner triangles running in to the inset top */
+  _r3F(out, [[ax0, yw, z1], [ax1, yw, z1], [ax1, y1, az1], [ax0, y1, az1]], col);
+  _r3F(out, [[ax1, yw, z0], [ax0, yw, z0], [ax0, y1, az0], [ax1, y1, az0]], col);
+  _r3F(out, [[x1, yw, az1], [x1, yw, az0], [ax1, y1, az0], [ax1, y1, az1]], col);
+  _r3F(out, [[x0, yw, az0], [x0, yw, az1], [ax0, y1, az1], [ax0, y1, az0]], col);
+  _r3F(out, [[ax1, yw, z1], [x1, yw, az1], [ax1, y1, az1]], col);
+  _r3F(out, [[x1, yw, az0], [ax1, yw, z0], [ax1, y1, az0]], col);
+  _r3F(out, [[ax0, yw, z0], [x0, yw, az0], [ax0, y1, az0]], col);
+  _r3F(out, [[x0, yw, az1], [ax0, yw, z1], [ax0, y1, az1]], col);
+  _r3F(out, [[ax0, y1, az0], [ax0, y1, az1], [ax1, y1, az1], [ax1, y1, az0]], topCol || col);
 }
 /* A block with a CHAMFERED top - vertical walls, then four slopes running inward to an
    inset roof. This is the workhorse for structures and it exists for one reason: with no
@@ -4991,6 +5037,37 @@ function _r3Slab(out, x, y, z, w, h, d, bev, col, topCol) {
   _r3F(out, [[ix0, yt, iz0], [ix0, yt, iz1], [ix1, yt, iz1], [ix1, yt, iz0]], topCol || col);
 }
 
+/* HOW MANY SIDES A ROUND THING GETS, as one floor rather than a number at every call site.
+
+   The models named their own segment counts and the roster had drifted to eight different
+   values - 8, 10, 12, 14, 16, 18, 20, 22, 26 - each chosen by eye for one shape. Eight sides
+   is an octagon, and no amount of interpolated normals hides an octagonal silhouette. Every
+   call now gets at least R3_SEG_MIN, and a call asking for more still gets more, so a barrel
+   somebody deliberately made 26-sided keeps them.
+
+   This is only affordable because entities no longer cost a draw call each (render3d/inst3d.js)
+   and a model's buffers are built once and instanced thereafter: the segments are paid in
+   vertices, which is the stage that was idling. */
+var R3_SEG_MIN = 24;
+/* ...FOR MODELS. Not for the static world, and the difference is a factor of two on the whole
+   map: the forest, the ridges and the ore are hundreds of thousands of tiny primitives baked
+   into one batch that is drawn every frame and again from the sun, and a tree canopy going
+   from 10 sides to 24 took the world batch from 1,049,608 triangles to 2,112,650 - for shapes
+   a few pixels across which were chosen at 10 sides by eye, in a file that explains why.
+
+   So the floor is scoped rather than global. _r3dWorldBuild and its neighbours drop it for the
+   duration of their build and put it back; e2e/canopy holds the batch under its ceiling and
+   would have caught this either way - it did catch it. A model is drawn at a hundred pixels
+   and there are a hundred of them; a tree is drawn at ten and there are ten thousand. */
+var _R3_SEG_FLOOR = R3_SEG_MIN;
+function _r3Seg(n) { return Math.max(n || 0, _R3_SEG_FLOOR); }
+/* Run `fn` with the floor lifted, for geometry that is bulk rather than model. */
+function _r3SegBulk(fn) {
+  var keep = _R3_SEG_FLOOR;
+  _R3_SEG_FLOOR = 0;
+  try { return fn(); } finally { _R3_SEG_FLOOR = keep; }
+}
+
 /* Upright cylinder. Enough segments that it reads round rather than faceted, but the flat
    shading still bands it, which is exactly the period look. */
 /* A CYLINDER IS ROUND, AND SAYS SO. Its sides are emitted as flat strips because that is what
@@ -5006,7 +5083,7 @@ function _r3Slab(out, x, y, z, w, h, d, bev, col, topCol) {
    measured almost two seconds added to entering 3D mode. The primitive already knows the
    answer exactly; nobody downstream has to work it out. */
 function _r3Cyl(out, x, y, z, r, h, col, topCol, seg) {
-  seg = seg || 14;
+  seg = _r3Seg(seg);
   var top = [], i, a, b;
   /* the ring of normals, built once and SHARED by the faces on either side of each edge - two
      adjacent strips meet along one radius and want the same vector there, so this is both
@@ -5033,7 +5110,7 @@ function _r3Cyl(out, x, y, z, r, h, col, topCol, seg) {
 }
 /* A cone / tapered drum - used for tree canopies and turret housings. */
 function _r3Cone(out, x, y, z, r0, r1, h, col, seg) {
-  seg = seg || 12;
+  seg = _r3Seg(seg);
   var top = [], i;
   /* the slant's own normal ring: radial scaled by the height, tilted out by how fast the
      radius falls away. With r0 == r1 this is the cylinder's radial normal exactly. */
@@ -5083,7 +5160,7 @@ function _r3Hip(out, x, y, z, w, h, d, inset, col) {
 
    `alongZ` picks which way the axis runs, and it is not a detail - see the comment inside. */
 function _r3Vault(out, x, y, z, w, h, d, col, seg, alongZ) {
-  seg = Math.max(seg || 12, 8);
+  seg = _r3Seg(seg);
   var i, pts = [], q, r, cA = [], cB = [];
   if (alongZ) {
     /* Arch profile in x-y, extruded along z - so the CURVE is in the silhouette. Under this
@@ -5186,6 +5263,36 @@ function _r3Bounds(faces) {
   return b;
 }
 
+
+/* A WHEEL - a cylinder lying on its side, which _r3Cyl cannot be: it is upright by
+   construction, so every road wheel, drive sprocket, idler and roadwheel hub in the game was a
+   BOX. That is the single most conspicuous thing left after the chamfer: a tank rolling on
+   eight cubes.
+
+   `axis` is 'x' or 'z' - the direction the axle points. The rim carries per-corner radial
+   normals for the same reason _r3Cyl's sides do, so it shades as a curve rather than as a ring
+   of flat strips; the two faces do not, because a wheel face meets its rim at a right angle and
+   should look it. */
+function _r3Wheel(out, x, y, z, r, thick, axis, col, faceCol, seg) {
+  seg = _r3Seg(seg);
+  var alongX = (axis === 'x'), h = thick / 2, i, a, b;
+  var A = [], B = [], ring = [];
+  for (i = 0; i < seg; i++) {
+    a = (i / seg) * Math.PI * 2;
+    var ca = Math.cos(a), sa = Math.sin(a);
+    ring.push(alongX ? [0, sa, ca] : [ca, sa, 0]);
+    A.push(alongX ? [x - h, y + sa * r, z + ca * r] : [x + ca * r, y + sa * r, z - h]);
+    B.push(alongX ? [x + h, y + sa * r, z + ca * r] : [x + ca * r, y + sa * r, z + h]);
+  }
+  for (i = 0; i < seg; i++) {
+    b = (i + 1) % seg;
+    var na = ring[i], nb = ring[b];
+    _r3F(out, [A[i], A[b], B[b], B[i]], col, [na, nb, nb, na]);
+  }
+  /* the two faces, wound opposite ways so both point outward */
+  _r3F(out, A.slice().reverse(), faceCol || col);
+  _r3F(out, B.slice(), faceCol || col);
+}
 </script>
 <script>/* r3d/render.js - scanline fill with a depth buffer, then the shading pass.
    Part of rts.r3d, the little 3D renderer that bakes the sprites. */
@@ -8002,25 +8109,29 @@ function _sprBuildingModel(key, side) {
      _r3Cyl builds along Y and only along Y, so every call - including the one that asked for a
      horizontal feed line - drew the same vertical riser. A flag a helper accepts and discards is
      worse than no flag, because the call site reads as if it said something. So a horizontal run
-     is built here out of a box tube with collar rings, which is what the shape needs anyway: at
-     the size these are drawn a square section and a round one are the same two pixels, and the
-     collars are the part that reads.
+     was built out of a BOX tube with collar rings, with a note conceding that at the size these
+     draw, a square section and a round one are the same two pixels.
+
+     That concession is withdrawn. _r3Wheel is a cylinder lying on its side, which is what a
+     horizontal pipe is, so both axes are round now and both carry the same collars - and at the
+     resolution this bakes at, the difference between a round tube and a square one is the
+     highlight running along the top of it.
 
      axis: 'y' (default) rises from y; 'x' and 'z' run centred on (x,y,z) along that axis. */
   function pipe(x, y, z, len, axis, r) {
     var rr = r || 1.3, fr = rr * 1.45;
     if (!axis || axis === 'y') {
-      _r3Cyl(m, x, y, z, rr, len, S[1], S[2], 16);
-      _r3Cyl(m, x, y, z, fr, 1.0, S[3], S[3], 16);
-      _r3Cyl(m, x, y + len - 1.0, z, fr, 1.0, S[3], S[3], 16);
+      _r3Cyl(m, x, y, z, rr, len, S[1], S[2], 20);
+      _r3Cyl(m, x, y, z, fr, 1.0, S[3], S[3], 20);
+      _r3Cyl(m, x, y + len - 1.0, z, fr, 1.0, S[3], S[3], 20);
       return;
     }
-    var aZ = (axis === 'z'), d = rr * 2;
-    _r3Box(m, x, y - rr, z, aZ ? d : len, d, aZ ? len : d, S[1], S[2]);
+    var aZ = (axis === 'z');
+    _r3Wheel(m, x, y, z, rr, len, aZ ? 'z' : 'x', S[1], S[2], 20);
     for (var e = 0; e < 2; e++) {
-      var f = (e ? 0.5 : -0.5) * len + (e ? -0.5 : 0.5);
-      _r3Box(m, x + (aZ ? 0 : f), y - fr, z + (aZ ? f : 0),
-             aZ ? fr * 2 : 1.0, fr * 2, aZ ? 1.0 : fr * 2, S[3], S[3]);
+      var f = (e ? 0.5 : -0.5) * (len - 1.0);
+      _r3Wheel(m, x + (aZ ? 0 : f), y, z + (aZ ? f : 0), fr, 1.0, aZ ? 'z' : 'x',
+               S[3], S[3], 20);
     }
   }
   /* A wall ladder: two stiles and rungs. The rungs are what read - a row of hard little
@@ -8188,16 +8299,79 @@ function _sprUnitModel(key, side, prone, part) {
      _r3Cyl is a VERTICAL cylinder - its h runs along y - so anything lying along the ground has
      to be built from boxes. The road wheels are therefore a row of small blocks stepped proud of
      the track run rather than actual discs, which at this size reads the same and costs less. */
-  function tracks(len, zoff, wheels, rad) {
+  /* THE RUNNING GEAR, and every tracked vehicle in the game gets it - which is why it is worth
+     building properly here rather than eight times over in the model files.
+
+     It used to be three boxes a side: a slab for the track run, a row of cubes for road wheels,
+     and a fender. The cubes were the problem. _r3Cyl is upright by construction so nothing in
+     this game could draw a wheel, and a tank rolled on eight blocks - the most conspicuous
+     thing left in the silhouette once boxes were chamfered. _r3Wheel exists for that.
+
+     What a real suspension shows from this camera, front to back: an idler, a run of road
+     wheels on their arms, a toothed drive sprocket, return rollers carrying the top run, and
+     the track itself as LINKS rather than as a smooth belt. All of it is here, and it costs
+     nothing per frame - a model's buffers are built once and instanced (render3d/inst3d.js). */
+  function tracks(len, zoff, wheels, rad, wheeled) {
     for (var s = -1; s <= 1; s += 2) {
-      var z = s * zoff;
-      _r3Slab(m, 0, 0, z, len, rad * 2.1, rad * 2.0, 0.9, DK[0], DK[1]);      /* track run */
-      for (var k = 0; k < wheels; k++) {
-        var wx = (k - (wheels - 1) / 2) * (len - rad * 2.4) / (wheels - 1);
-        _r3Box(m, wx, rad * 0.45, z + s * rad * 0.5, rad * 1.5, rad * 1.2, rad * 1.1,
-               (k % 2) ? DK[2] : DK[1], DK[2]);
+      var z = s * zoff, k, wx, ta;
+      var span = len - rad * 2.4, step = span / Math.max(1, wheels - 1);
+      if (!wheeled) {
+        /* the track as a closed belt: a bottom run under the wheels and a top run over them */
+        _r3Box(m, 0, rad * 0.1, z, len, rad * 0.55, rad * 2.0, DK[0], DK[1]);
+        _r3Box(m, 0, rad * 1.62, z, len - rad * 0.8, rad * 0.42, rad * 1.86, DK[1], DK[2]);
+        /* LINKS, not a belt. A row of narrow plates across the bottom run is what tells the
+           eye this is a track and not a skid, and it reads at any zoom. */
+        var links = Math.max(8, Math.round(len / (rad * 0.72)));
+        for (k = 0; k < links; k++) {
+          wx = -len / 2 + (k + 0.5) * (len / links);
+          _r3Box(m, wx, rad * 0.02, z, len / links * 0.62, rad * 0.62, rad * 2.16,
+                 (k % 2) ? DK[1] : DK[0], DK[2]);
+        }
+        /* idler at the back, toothed drive sprocket at the front */
+        _r3Wheel(m, -len / 2 + rad * 1.05, rad * 1.0, z, rad * 1.02, rad * 1.7, 'z',
+                 DK[1], DK[2], 22);
+        _r3Wheel(m, len / 2 - rad * 1.05, rad * 1.05, z, rad * 1.08, rad * 1.7, 'z',
+                 DK[2], DK[3], 22);
+        for (k = 0; k < 9; k++) {                                            /* sprocket teeth */
+          ta = (k / 9) * Math.PI * 2;
+          _r3Box(m, len / 2 - rad * 1.05 + Math.cos(ta) * rad * 1.12,
+                 rad * 1.05 + Math.sin(ta) * rad * 1.12,
+                 z, rad * 0.32, rad * 0.32, rad * 1.8, DK[3], DK[2]);
+        }
+        /* return rollers under the top run */
+        var rollers = Math.max(2, (wheels >> 1));
+        for (k = 0; k < rollers; k++) {
+          wx = (k - (rollers - 1) / 2) * (span / Math.max(1, rollers - 1)) * 0.86;
+          _r3Wheel(m, wx, rad * 1.62, z, rad * 0.36, rad * 1.2, 'z', DK[1], DK[3], 16);
+        }
       }
-      _r3Box(m, 0, rad * 2.0, z, len - 1, 1.2, rad * 2.4, VH[2], VH[1]);      /* fender skirt */
+      /* the road wheels themselves - bigger and tyred on a wheeled hull, small and steel on a
+         tracked one, which is most of what separates a truck from a tank at a glance */
+      var wr = wheeled ? rad * 1.35 : rad * 0.95, wt = wheeled ? rad * 1.5 : rad * 1.68;
+      for (k = 0; k < wheels; k++) {
+        wx = (k - (wheels - 1) / 2) * step;
+        _r3Wheel(m, wx, wr * 0.92, z, wr, wt, 'z', wheeled ? DK[0] : ((k % 2) ? DK[2] : DK[1]),
+                 wheeled ? DK[1] : DK[3], 20);
+        _r3Wheel(m, wx, wr * 0.92, z, wr * (wheeled ? 0.52 : 0.42), wt * 1.1, 'z', S[1], S[2], 16);
+        if (wheeled) for (var b2 = 0; b2 < 5; b2++) {                        /* wheel nuts */
+          ta = (b2 / 5) * Math.PI * 2;
+          _r3Box(m, wx + Math.cos(ta) * wr * 0.3, wr * 0.92 + Math.sin(ta) * wr * 0.3, z,
+                 wr * 0.13, wr * 0.13, wt * 1.14, S[2], S[3]);
+        }
+        else _r3Box(m, wx, rad * 1.25, z + s * rad * 0.42, rad * 0.34, rad * 0.7, rad * 0.5,
+                    DK[0], DK[1]);                                           /* swing arm */
+      }
+      /* THE FENDER MUST NOT EAT THE SUSPENSION. The first version of this overhung the track by
+         a fifth of its width and hung a skirt down the outside, and rendered at the closest
+         zoom the result was worse than the boxes it replaced: the wheels, the sprocket and the
+         links were all under it, and the tank lost the dark banded strip along its flank that
+         the old flat track run had given it. Everything below is drawn ABOVE the top run and
+         flush with its outer face, so the running gear is what you see from this camera and
+         the fender is a rim on top of it. */
+      _r3Box(m, 0, rad * 2.05, z, len - 1, 1.0, rad * 2.0, VH[2], VH[1]);
+      _r3Box(m, 0, rad * 2.05, z + s * rad * 0.92, len - 1, 1.5, rad * 0.22, VH[1], VH[2]);
+      _r3Box(m, -len / 2 + rad * 0.7, rad * 2.3, z, rad * 1.1, 1.0, rad * 1.9, VH[1], VH[2]);
+      _r3Box(m, len / 2 - rad * 0.7, rad * 2.3, z, rad * 1.1, 1.0, rad * 1.9, VH[1], VH[2]);
     }
   }
 
@@ -8316,8 +8490,32 @@ function _sprUnitGround(X, key) {
       /* A pack, which is also the only thing on a soldier the camera looks straight down at
          besides the helmet - so it is a second surface to break the torso's flat top. */
       _r3Box(m, mx - 1.9, 3.2, mz, 1.6, 2.6, 2.8, DK[1], DK[0]);
-      _r3Box(m, mx, 6.1, mz, 2.2, 1.4, 2.2, SK, SKL);              /* head */
-      _r3Box(m, mx - 0.3, 7.1, mz, 3.4, 1.1, 3.4, HD, HL);         /* helmet - the marker */
+      /* WEBBING. Two straps over the shoulders and a belt at the waist: three narrow bands
+         across the one surface the camera looks straight at, which break the torso's flat
+         front into panels without touching the colour that identifies the unit. */
+      _r3Box(m, mx + 0.1, 2.6, mz - 1.15, 3.2, 3.2, 0.55, DK[2], DK[1]);
+      _r3Box(m, mx + 0.1, 2.6, mz + 1.15, 3.2, 3.2, 0.55, DK[2], DK[1]);
+      _r3Box(m, mx, 3.1, mz, 3.8, 0.7, 3.8, DK[2], DK[0]);         /* belt */
+      _r3Box(m, mx + 1.0, 3.1, mz, 0.9, 0.9, 1.2, S[2], S[3]);     /* buckle */
+      /* A HEAD IS NOT A CUBE, and a helmet is not a plate. Both were boxes because nothing in
+         this game could draw a dome; the crown is a taper now with the unit's marker as its
+         cap, over a brim that oversails it. The marker stays on the topmost surface, which is
+         the one the camera actually sees and the whole reason the helmet is drawn at all. */
+      _r3Cyl(m, mx, 6.0, mz, 1.0, 1.4, SK, SKL, 18);               /* head */
+      /* SIZED TO THE PLATE IT REPLACED, 3.4 across. The first dome was 3.9 and it dominated
+         the figure - wider than the man's own shoulders, which is a helmet you notice instead
+         of a soldier wearing one.
+
+         AND THE MARKER KEEPS ITS AREA, which the second attempt did not. Rounding the crown
+         down to a 2.0-wide cap left the unit's colour at 28% of the flat plate's area, and
+         e2e/infantry measures exactly that: the marker fell to 1.7-3.7% of the drawn soldier
+         against a floor of 3, and the pair-detection that looks for two marker patches stopped
+         finding them at all. The taper is shallow now - 1.7 to 1.5 over a third of a unit - so
+         the top is a broad disc carrying the colour and only the RIM is rounded off. That is
+         the shape a helmet has anyway; the first version was a bullet. */
+      _r3Cyl(m, mx - 0.3, 7.0, mz, 1.72, 0.3, HD, HD, 20);         /* helmet brim */
+      _r3Cone(m, mx - 0.3, 7.2, mz, 1.7, 1.5, 0.36, HD, 20);       /* the rounded rim */
+      _r3Cyl(m, mx - 0.3, 7.5, mz, 1.5, 0.26, HL, HL, 20);         /* the marker itself */
       if (key === 'rocket') {
         /* One fat tube carried across the shoulders, long enough to stand proud at BOTH ends.
            The old one pointed forward only and vanished at the facings where forward was
@@ -8500,7 +8698,7 @@ function _sprUnitGround(X, key) {
 
        A truck, not a tank: six road wheels under a long flat bed, so it reads as wheeled
        transport carrying something rather than as another turreted chassis. */
-    tracks(19, 5.8, 6, 2.0);
+    tracks(19, 5.8, 3, 2.0, true);
     _r3Slab(m, -0.5, 2.6, 0, 18.0, 3.0, 9.4, 1.0, VH[0], VH[1]);   /* flat bed */
     _r3Box(m, 6.4, 2.6, 0, 5.4, 4.6, 8.6, VH[1], VH[3]);           /* cab */
     _r3Box(m, 8.6, 5.2, 0, 1.2, 2.0, 6.2, RTS_PAL.glass, RTS_PAL.glass);  /* windscreen */
@@ -8530,13 +8728,20 @@ function _sprUnitGround(X, key) {
     _r3Box(m, 9.4, 6.4, 4.6, 0.6, 1.4, 0.9, S[2], S[3]);
 
   } else if (key === 'buggy') {
-    /* Wheels are the buggy's whole identity, so they are proper vertical cylinders standing
-       clear of the body with a light hub - four round shapes at the corners read instantly as
-       "wheeled" against every tank's four square track runs. */
+    /* Wheels are the buggy's whole identity, and until _r3Wheel existed they could not be
+       drawn: _r3Cyl is upright by construction, so these were four drums standing on their
+       ends - round from above and wrong from anywhere else. They turn on their axles now,
+       with a tyre, a bright hub and five nuts, which is what reads as "wheeled" against every
+       tank's track runs. */
     for (i = 0; i < 4; i++) {
       var bx = i < 2 ? 6.2 : -6.2, bz = (i % 2) ? 6.0 : -6.0;
-      _r3Cyl(m, bx, 0, bz, 3.1, 3.4, DK[0], DK[1], 12);
-      _r3Cyl(m, bx, 1.0, bz, 1.4, 2.6, S[2], S[1], 10);            /* hub */
+      _r3Wheel(m, bx, 3.1, bz, 3.1, 3.4, 'z', DK[0], DK[1], 22);
+      _r3Wheel(m, bx, 3.1, bz, 1.5, 3.7, 'z', S[2], S[1], 16);     /* hub */
+      for (var bn = 0; bn < 5; bn++) {
+        var bna = (bn / 5) * Math.PI * 2;
+        _r3Box(m, bx + Math.cos(bna) * 0.95, 3.1 + Math.sin(bna) * 0.95, bz,
+               0.42, 0.42, 3.9, S[3], S[2]);
+      }
     }
     _r3Slab(m, 0, 2.8, 0, 17, 3.2, 8.2, 1.0, VH[0], VH[3]);        /* body tub */
     _r3Box(m, 6.6, 3.2, 0, 3.6, 2.2, 7.6, VH[1], VH[3]);           /* sloped nose */
@@ -8545,7 +8750,7 @@ function _sprUnitGround(X, key) {
     _r3Box(m, 3.2, 8.4, 0, 8.5, 1.3, 1.3, DK[1], DK[3]);           /* pintle gun */
     /* Scout kit: a spare wheel standing on the tail, a jerrycan beside it, headlight pair
        and a whip aerial - the loose stowage that says "raider" against a tank's plating. */
-    _r3Cyl(m, -8.0, 3.4, 0, 2.6, 2.6, DK[0], DK[1], 12);           /* spare wheel */
+    _r3Wheel(m, -8.0, 4.4, 0, 2.6, 2.2, 'x', DK[0], DK[1], 20);    /* spare wheel, on its side */
     _r3Box(m, -7.6, 3.4, 4.2, 1.6, 2.2, 2.4, RTS_PAL.hazard[0], S[1]);
     _r3Box(m, 8.6, 3.6, -2.6, 0.9, 1.0, 1.4, GN[3], GN[3]);
     _r3Box(m, 8.6, 3.6, 2.6, 0.9, 1.0, 1.4, GN[3], GN[3]);
@@ -25181,7 +25386,11 @@ function _r3dLiftFrom(out, from, dy) {
   }
 }
 
-function _r3dWorldBuild(G) {
+function _r3dWorldBuild(G) { return _r3SegBulk(function () {
+  /* BULK GEOMETRY, so the model segment floor is lifted for the duration - see
+     _r3SegBulk in r3d/primitives.js. A tree canopy at 24 sides instead of 10 took
+     the static world from 1,049,608 triangles to 2,112,650, for shapes a few pixels
+     across, on a batch that is drawn every frame and again from the sun. */
   var R3 = window._R3D, gl = R3.gl;
   var N = RTS_N, half = RTS_TILE / 2;
   var C = Math.ceil(N / R3D_CHUNK);
@@ -25264,6 +25473,7 @@ function _r3dWorldBuild(G) {
       R3.worldTris += m.verts / 3;
     }
   }
+});
 }
 
 /* THE SEA, AS A SURFACE RATHER THAN AS PAINT.
@@ -25296,7 +25506,11 @@ function _r3dWorldBuild(G) {
 var R3D_WATER_SUB = 6;
 var R3D_WATER_Y = 0.10;        /* clear of the ground plane, under the cast shadows at 0.12 */
 
-function _r3dWaterBuild(G) {
+function _r3dWaterBuild(G) { return _r3SegBulk(function () {
+  /* BULK GEOMETRY, so the model segment floor is lifted for the duration - see
+     _r3SegBulk in r3d/primitives.js. A tree canopy at 24 sides instead of 10 took
+     the static world from 1,049,608 triangles to 2,112,650, for shapes a few pixels
+     across, on a batch that is drawn every frame and again from the sun. */
   var R3 = window._R3D, gl = R3.gl, N = RTS_N, faces = [];
   var half = RTS_TILE / 2, step = RTS_TILE / R3D_WATER_SUB;
   var P = RTS_PAL.water;
@@ -25337,6 +25551,7 @@ function _r3dWaterBuild(G) {
   }
   R3.waterMesh = faces.length ? _r3dBuildMesh(gl, faces) : null;
   R3.waterTris = faces.length * 2;
+});
 }
 
 /* THE CRYSTALS THAT STAND IN AN ORE FIELD. The field's colour is not here - it is a texture,
@@ -25359,7 +25574,11 @@ function _r3dWaterBuild(G) {
 
    THIS BATCH ALONE IS DYNAMIC among the world's geometry. Trees and rock are immutable in this
    engine; ore depletes and spreads, so it is rebuilt when the total actually changes. */
-function _r3dOreBuild(G) {
+function _r3dOreBuild(G) { return _r3SegBulk(function () {
+  /* BULK GEOMETRY, so the model segment floor is lifted for the duration - see
+     _r3SegBulk in r3d/primitives.js. A tree canopy at 24 sides instead of 10 took
+     the static world from 1,049,608 triangles to 2,112,650, for shapes a few pixels
+     across, on a batch that is drawn every frame and again from the sun. */
   var R3 = window._R3D, gl = R3.gl;
   var faces = [], N = RTS_N, sum = 0;
   for (var tz = 0; tz < N; tz++) {
@@ -25389,6 +25608,7 @@ function _r3dOreBuild(G) {
   }
   R3.oreMesh = _r3dBuildMesh(gl, faces);
   R3.oreSum = sum;
+});
 }
 
 /* Change detection: the static world is keyed to the game OBJECT - a new game is a new map,

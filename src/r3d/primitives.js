@@ -99,13 +99,59 @@ function _r3F(out, verts, col, nrm) {
 /* --------------------------------------------------------------- primitives --
    All take the centre of the footprint and the BASE height, because everything in these
    models sits on something else - working from centres in y makes every offset a sum. */
+/* HOW MUCH OF A BOX IS ITS EDGES. _r3Slab was written because a plain box presents two faces
+   to this camera - top and front - so its whole roof is one flat polygon of one colour and the
+   thing reads as a shed. That argument was never limited to buildings: it is true of a tank
+   hull, an oil drum and a soldier's helmet, and every one of those was a plain box.
+
+   So the chamfer is the box now. The vertical edges and the top edges are cut back, which
+   turns two visible faces into ten and lets the light grade them - front bright, back dim, the
+   two sides between, and a rim of narrow facets picking out every edge. It is the single
+   biggest change to how this game's models read, and it costs 30 triangles where there were
+   10, on geometry that is uploaded once per model and instanced thereafter.
+
+   THE BOTTOM IS NOT CHAMFERED and has no face at all, as before: the camera sits 49 degrees
+   off vertical and never sees under anything.
+
+   R3_BEVEL is a FRACTION OF THE SMALLEST DIMENSION, so it scales with whatever it is cutting -
+   a helmet gets a helmet's chamfer. Below R3_BEVEL_MIN the cut would be thinner than the
+   sprite baker's own pixel, so the plain box is emitted instead: sub-pixel facets are not
+   detail, they are noise with a triangle count. */
+var R3_BEVEL = 0.16;
+var R3_BEVEL_MIN = 0.06;
+var R3_BEVEL_MAX = 1.2;
 function _r3Box(out, x, y, z, w, h, d, col, topCol) {
   var x0 = x - w / 2, x1 = x + w / 2, y0 = y, y1 = y + h, z0 = z - d / 2, z1 = z + d / 2;
-  _r3F(out, [[x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0]], topCol || col);   /* top */
-  _r3F(out, [[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], col);             /* front */
-  _r3F(out, [[x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0]], col);             /* back */
-  _r3F(out, [[x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1]], col);             /* right */
-  _r3F(out, [[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]], col);             /* left */
+  var b = Math.min(Math.min(w, Math.min(h, d)) * R3_BEVEL, R3_BEVEL_MAX);
+  if (!(b > R3_BEVEL_MIN)) {
+    _r3F(out, [[x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0]], topCol || col); /* top */
+    _r3F(out, [[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], col);           /* front */
+    _r3F(out, [[x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0]], col);           /* back */
+    _r3F(out, [[x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1]], col);           /* right */
+    _r3F(out, [[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]], col);           /* left */
+    return;
+  }
+  var ax0 = x0 + b, ax1 = x1 - b, az0 = z0 + b, az1 = z1 - b, yw = y1 - b;
+  /* the four walls, each pulled in by the bevel along the edges it meets */
+  _r3F(out, [[ax0, y0, z1], [ax1, y0, z1], [ax1, yw, z1], [ax0, yw, z1]], col);         /* front */
+  _r3F(out, [[ax1, y0, z0], [ax0, y0, z0], [ax0, yw, z0], [ax1, yw, z0]], col);         /* back */
+  _r3F(out, [[x1, y0, az1], [x1, y0, az0], [x1, yw, az0], [x1, yw, az1]], col);         /* right */
+  _r3F(out, [[x0, y0, az0], [x0, y0, az1], [x0, yw, az1], [x0, yw, az0]], col);         /* left */
+  /* the four vertical corner cuts */
+  _r3F(out, [[ax1, y0, z1], [x1, y0, az1], [x1, yw, az1], [ax1, yw, z1]], col);
+  _r3F(out, [[x1, y0, az0], [ax1, y0, z0], [ax1, yw, z0], [x1, yw, az0]], col);
+  _r3F(out, [[ax0, y0, z0], [x0, y0, az0], [x0, yw, az0], [ax0, yw, z0]], col);
+  _r3F(out, [[x0, y0, az1], [ax0, y0, z1], [ax0, yw, z1], [x0, yw, az1]], col);
+  /* the top rim: four slopes and four corner triangles running in to the inset top */
+  _r3F(out, [[ax0, yw, z1], [ax1, yw, z1], [ax1, y1, az1], [ax0, y1, az1]], col);
+  _r3F(out, [[ax1, yw, z0], [ax0, yw, z0], [ax0, y1, az0], [ax1, y1, az0]], col);
+  _r3F(out, [[x1, yw, az1], [x1, yw, az0], [ax1, y1, az0], [ax1, y1, az1]], col);
+  _r3F(out, [[x0, yw, az0], [x0, yw, az1], [ax0, y1, az1], [ax0, y1, az0]], col);
+  _r3F(out, [[ax1, yw, z1], [x1, yw, az1], [ax1, y1, az1]], col);
+  _r3F(out, [[x1, yw, az0], [ax1, yw, z0], [ax1, y1, az0]], col);
+  _r3F(out, [[ax0, yw, z0], [x0, yw, az0], [ax0, y1, az0]], col);
+  _r3F(out, [[x0, yw, az1], [ax0, yw, z1], [ax0, y1, az1]], col);
+  _r3F(out, [[ax0, y1, az0], [ax0, y1, az1], [ax1, y1, az1], [ax1, y1, az0]], topCol || col);
 }
 /* A block with a CHAMFERED top - vertical walls, then four slopes running inward to an
    inset roof. This is the workhorse for structures and it exists for one reason: with no
@@ -130,6 +176,37 @@ function _r3Slab(out, x, y, z, w, h, d, bev, col, topCol) {
   _r3F(out, [[ix0, yt, iz0], [ix0, yt, iz1], [ix1, yt, iz1], [ix1, yt, iz0]], topCol || col);
 }
 
+/* HOW MANY SIDES A ROUND THING GETS, as one floor rather than a number at every call site.
+
+   The models named their own segment counts and the roster had drifted to eight different
+   values - 8, 10, 12, 14, 16, 18, 20, 22, 26 - each chosen by eye for one shape. Eight sides
+   is an octagon, and no amount of interpolated normals hides an octagonal silhouette. Every
+   call now gets at least R3_SEG_MIN, and a call asking for more still gets more, so a barrel
+   somebody deliberately made 26-sided keeps them.
+
+   This is only affordable because entities no longer cost a draw call each (render3d/inst3d.js)
+   and a model's buffers are built once and instanced thereafter: the segments are paid in
+   vertices, which is the stage that was idling. */
+var R3_SEG_MIN = 24;
+/* ...FOR MODELS. Not for the static world, and the difference is a factor of two on the whole
+   map: the forest, the ridges and the ore are hundreds of thousands of tiny primitives baked
+   into one batch that is drawn every frame and again from the sun, and a tree canopy going
+   from 10 sides to 24 took the world batch from 1,049,608 triangles to 2,112,650 - for shapes
+   a few pixels across which were chosen at 10 sides by eye, in a file that explains why.
+
+   So the floor is scoped rather than global. _r3dWorldBuild and its neighbours drop it for the
+   duration of their build and put it back; e2e/canopy holds the batch under its ceiling and
+   would have caught this either way - it did catch it. A model is drawn at a hundred pixels
+   and there are a hundred of them; a tree is drawn at ten and there are ten thousand. */
+var _R3_SEG_FLOOR = R3_SEG_MIN;
+function _r3Seg(n) { return Math.max(n || 0, _R3_SEG_FLOOR); }
+/* Run `fn` with the floor lifted, for geometry that is bulk rather than model. */
+function _r3SegBulk(fn) {
+  var keep = _R3_SEG_FLOOR;
+  _R3_SEG_FLOOR = 0;
+  try { return fn(); } finally { _R3_SEG_FLOOR = keep; }
+}
+
 /* Upright cylinder. Enough segments that it reads round rather than faceted, but the flat
    shading still bands it, which is exactly the period look. */
 /* A CYLINDER IS ROUND, AND SAYS SO. Its sides are emitted as flat strips because that is what
@@ -145,7 +222,7 @@ function _r3Slab(out, x, y, z, w, h, d, bev, col, topCol) {
    measured almost two seconds added to entering 3D mode. The primitive already knows the
    answer exactly; nobody downstream has to work it out. */
 function _r3Cyl(out, x, y, z, r, h, col, topCol, seg) {
-  seg = seg || 14;
+  seg = _r3Seg(seg);
   var top = [], i, a, b;
   /* the ring of normals, built once and SHARED by the faces on either side of each edge - two
      adjacent strips meet along one radius and want the same vector there, so this is both
@@ -172,7 +249,7 @@ function _r3Cyl(out, x, y, z, r, h, col, topCol, seg) {
 }
 /* A cone / tapered drum - used for tree canopies and turret housings. */
 function _r3Cone(out, x, y, z, r0, r1, h, col, seg) {
-  seg = seg || 12;
+  seg = _r3Seg(seg);
   var top = [], i;
   /* the slant's own normal ring: radial scaled by the height, tilted out by how fast the
      radius falls away. With r0 == r1 this is the cylinder's radial normal exactly. */
@@ -222,7 +299,7 @@ function _r3Hip(out, x, y, z, w, h, d, inset, col) {
 
    `alongZ` picks which way the axis runs, and it is not a detail - see the comment inside. */
 function _r3Vault(out, x, y, z, w, h, d, col, seg, alongZ) {
-  seg = Math.max(seg || 12, 8);
+  seg = _r3Seg(seg);
   var i, pts = [], q, r, cA = [], cB = [];
   if (alongZ) {
     /* Arch profile in x-y, extruded along z - so the CURVE is in the silhouette. Under this
@@ -325,3 +402,33 @@ function _r3Bounds(faces) {
   return b;
 }
 
+
+/* A WHEEL - a cylinder lying on its side, which _r3Cyl cannot be: it is upright by
+   construction, so every road wheel, drive sprocket, idler and roadwheel hub in the game was a
+   BOX. That is the single most conspicuous thing left after the chamfer: a tank rolling on
+   eight cubes.
+
+   `axis` is 'x' or 'z' - the direction the axle points. The rim carries per-corner radial
+   normals for the same reason _r3Cyl's sides do, so it shades as a curve rather than as a ring
+   of flat strips; the two faces do not, because a wheel face meets its rim at a right angle and
+   should look it. */
+function _r3Wheel(out, x, y, z, r, thick, axis, col, faceCol, seg) {
+  seg = _r3Seg(seg);
+  var alongX = (axis === 'x'), h = thick / 2, i, a, b;
+  var A = [], B = [], ring = [];
+  for (i = 0; i < seg; i++) {
+    a = (i / seg) * Math.PI * 2;
+    var ca = Math.cos(a), sa = Math.sin(a);
+    ring.push(alongX ? [0, sa, ca] : [ca, sa, 0]);
+    A.push(alongX ? [x - h, y + sa * r, z + ca * r] : [x + ca * r, y + sa * r, z - h]);
+    B.push(alongX ? [x + h, y + sa * r, z + ca * r] : [x + ca * r, y + sa * r, z + h]);
+  }
+  for (i = 0; i < seg; i++) {
+    b = (i + 1) % seg;
+    var na = ring[i], nb = ring[b];
+    _r3F(out, [A[i], A[b], B[b], B[i]], col, [na, nb, nb, na]);
+  }
+  /* the two faces, wound opposite ways so both point outward */
+  _r3F(out, A.slice().reverse(), faceCol || col);
+  _r3F(out, B.slice(), faceCol || col);
+}

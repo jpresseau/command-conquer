@@ -159,7 +159,11 @@ function _r3dLiftFrom(out, from, dy) {
   }
 }
 
-function _r3dWorldBuild(G) {
+function _r3dWorldBuild(G) { return _r3SegBulk(function () {
+  /* BULK GEOMETRY, so the model segment floor is lifted for the duration - see
+     _r3SegBulk in r3d/primitives.js. A tree canopy at 24 sides instead of 10 took
+     the static world from 1,049,608 triangles to 2,112,650, for shapes a few pixels
+     across, on a batch that is drawn every frame and again from the sun. */
   var R3 = window._R3D, gl = R3.gl;
   var N = RTS_N, half = RTS_TILE / 2;
   var C = Math.ceil(N / R3D_CHUNK);
@@ -242,6 +246,7 @@ function _r3dWorldBuild(G) {
       R3.worldTris += m.verts / 3;
     }
   }
+});
 }
 
 /* THE SEA, AS A SURFACE RATHER THAN AS PAINT.
@@ -274,7 +279,11 @@ function _r3dWorldBuild(G) {
 var R3D_WATER_SUB = 6;
 var R3D_WATER_Y = 0.10;        /* clear of the ground plane, under the cast shadows at 0.12 */
 
-function _r3dWaterBuild(G) {
+function _r3dWaterBuild(G) { return _r3SegBulk(function () {
+  /* BULK GEOMETRY, so the model segment floor is lifted for the duration - see
+     _r3SegBulk in r3d/primitives.js. A tree canopy at 24 sides instead of 10 took
+     the static world from 1,049,608 triangles to 2,112,650, for shapes a few pixels
+     across, on a batch that is drawn every frame and again from the sun. */
   var R3 = window._R3D, gl = R3.gl, N = RTS_N, faces = [];
   var half = RTS_TILE / 2, step = RTS_TILE / R3D_WATER_SUB;
   var P = RTS_PAL.water;
@@ -315,6 +324,7 @@ function _r3dWaterBuild(G) {
   }
   R3.waterMesh = faces.length ? _r3dBuildMesh(gl, faces) : null;
   R3.waterTris = faces.length * 2;
+});
 }
 
 /* THE CRYSTALS THAT STAND IN AN ORE FIELD. The field's colour is not here - it is a texture,
@@ -337,7 +347,11 @@ function _r3dWaterBuild(G) {
 
    THIS BATCH ALONE IS DYNAMIC among the world's geometry. Trees and rock are immutable in this
    engine; ore depletes and spreads, so it is rebuilt when the total actually changes. */
-function _r3dOreBuild(G) {
+function _r3dOreBuild(G) { return _r3SegBulk(function () {
+  /* BULK GEOMETRY, so the model segment floor is lifted for the duration - see
+     _r3SegBulk in r3d/primitives.js. A tree canopy at 24 sides instead of 10 took
+     the static world from 1,049,608 triangles to 2,112,650, for shapes a few pixels
+     across, on a batch that is drawn every frame and again from the sun. */
   var R3 = window._R3D, gl = R3.gl;
   var faces = [], N = RTS_N, sum = 0;
   for (var tz = 0; tz < N; tz++) {
@@ -367,6 +381,7 @@ function _r3dOreBuild(G) {
   }
   R3.oreMesh = _r3dBuildMesh(gl, faces);
   R3.oreSum = sum;
+});
 }
 
 /* Change detection: the static world is keyed to the game OBJECT - a new game is a new map,

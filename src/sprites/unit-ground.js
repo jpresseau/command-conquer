@@ -97,8 +97,32 @@ function _sprUnitGround(X, key) {
       /* A pack, which is also the only thing on a soldier the camera looks straight down at
          besides the helmet - so it is a second surface to break the torso's flat top. */
       _r3Box(m, mx - 1.9, 3.2, mz, 1.6, 2.6, 2.8, DK[1], DK[0]);
-      _r3Box(m, mx, 6.1, mz, 2.2, 1.4, 2.2, SK, SKL);              /* head */
-      _r3Box(m, mx - 0.3, 7.1, mz, 3.4, 1.1, 3.4, HD, HL);         /* helmet - the marker */
+      /* WEBBING. Two straps over the shoulders and a belt at the waist: three narrow bands
+         across the one surface the camera looks straight at, which break the torso's flat
+         front into panels without touching the colour that identifies the unit. */
+      _r3Box(m, mx + 0.1, 2.6, mz - 1.15, 3.2, 3.2, 0.55, DK[2], DK[1]);
+      _r3Box(m, mx + 0.1, 2.6, mz + 1.15, 3.2, 3.2, 0.55, DK[2], DK[1]);
+      _r3Box(m, mx, 3.1, mz, 3.8, 0.7, 3.8, DK[2], DK[0]);         /* belt */
+      _r3Box(m, mx + 1.0, 3.1, mz, 0.9, 0.9, 1.2, S[2], S[3]);     /* buckle */
+      /* A HEAD IS NOT A CUBE, and a helmet is not a plate. Both were boxes because nothing in
+         this game could draw a dome; the crown is a taper now with the unit's marker as its
+         cap, over a brim that oversails it. The marker stays on the topmost surface, which is
+         the one the camera actually sees and the whole reason the helmet is drawn at all. */
+      _r3Cyl(m, mx, 6.0, mz, 1.0, 1.4, SK, SKL, 18);               /* head */
+      /* SIZED TO THE PLATE IT REPLACED, 3.4 across. The first dome was 3.9 and it dominated
+         the figure - wider than the man's own shoulders, which is a helmet you notice instead
+         of a soldier wearing one.
+
+         AND THE MARKER KEEPS ITS AREA, which the second attempt did not. Rounding the crown
+         down to a 2.0-wide cap left the unit's colour at 28% of the flat plate's area, and
+         e2e/infantry measures exactly that: the marker fell to 1.7-3.7% of the drawn soldier
+         against a floor of 3, and the pair-detection that looks for two marker patches stopped
+         finding them at all. The taper is shallow now - 1.7 to 1.5 over a third of a unit - so
+         the top is a broad disc carrying the colour and only the RIM is rounded off. That is
+         the shape a helmet has anyway; the first version was a bullet. */
+      _r3Cyl(m, mx - 0.3, 7.0, mz, 1.72, 0.3, HD, HD, 20);         /* helmet brim */
+      _r3Cone(m, mx - 0.3, 7.2, mz, 1.7, 1.5, 0.36, HD, 20);       /* the rounded rim */
+      _r3Cyl(m, mx - 0.3, 7.5, mz, 1.5, 0.26, HL, HL, 20);         /* the marker itself */
       if (key === 'rocket') {
         /* One fat tube carried across the shoulders, long enough to stand proud at BOTH ends.
            The old one pointed forward only and vanished at the facings where forward was
@@ -281,7 +305,7 @@ function _sprUnitGround(X, key) {
 
        A truck, not a tank: six road wheels under a long flat bed, so it reads as wheeled
        transport carrying something rather than as another turreted chassis. */
-    tracks(19, 5.8, 6, 2.0);
+    tracks(19, 5.8, 3, 2.0, true);
     _r3Slab(m, -0.5, 2.6, 0, 18.0, 3.0, 9.4, 1.0, VH[0], VH[1]);   /* flat bed */
     _r3Box(m, 6.4, 2.6, 0, 5.4, 4.6, 8.6, VH[1], VH[3]);           /* cab */
     _r3Box(m, 8.6, 5.2, 0, 1.2, 2.0, 6.2, RTS_PAL.glass, RTS_PAL.glass);  /* windscreen */
@@ -311,13 +335,20 @@ function _sprUnitGround(X, key) {
     _r3Box(m, 9.4, 6.4, 4.6, 0.6, 1.4, 0.9, S[2], S[3]);
 
   } else if (key === 'buggy') {
-    /* Wheels are the buggy's whole identity, so they are proper vertical cylinders standing
-       clear of the body with a light hub - four round shapes at the corners read instantly as
-       "wheeled" against every tank's four square track runs. */
+    /* Wheels are the buggy's whole identity, and until _r3Wheel existed they could not be
+       drawn: _r3Cyl is upright by construction, so these were four drums standing on their
+       ends - round from above and wrong from anywhere else. They turn on their axles now,
+       with a tyre, a bright hub and five nuts, which is what reads as "wheeled" against every
+       tank's track runs. */
     for (i = 0; i < 4; i++) {
       var bx = i < 2 ? 6.2 : -6.2, bz = (i % 2) ? 6.0 : -6.0;
-      _r3Cyl(m, bx, 0, bz, 3.1, 3.4, DK[0], DK[1], 12);
-      _r3Cyl(m, bx, 1.0, bz, 1.4, 2.6, S[2], S[1], 10);            /* hub */
+      _r3Wheel(m, bx, 3.1, bz, 3.1, 3.4, 'z', DK[0], DK[1], 22);
+      _r3Wheel(m, bx, 3.1, bz, 1.5, 3.7, 'z', S[2], S[1], 16);     /* hub */
+      for (var bn = 0; bn < 5; bn++) {
+        var bna = (bn / 5) * Math.PI * 2;
+        _r3Box(m, bx + Math.cos(bna) * 0.95, 3.1 + Math.sin(bna) * 0.95, bz,
+               0.42, 0.42, 3.9, S[3], S[2]);
+      }
     }
     _r3Slab(m, 0, 2.8, 0, 17, 3.2, 8.2, 1.0, VH[0], VH[3]);        /* body tub */
     _r3Box(m, 6.6, 3.2, 0, 3.6, 2.2, 7.6, VH[1], VH[3]);           /* sloped nose */
@@ -326,7 +357,7 @@ function _sprUnitGround(X, key) {
     _r3Box(m, 3.2, 8.4, 0, 8.5, 1.3, 1.3, DK[1], DK[3]);           /* pintle gun */
     /* Scout kit: a spare wheel standing on the tail, a jerrycan beside it, headlight pair
        and a whip aerial - the loose stowage that says "raider" against a tank's plating. */
-    _r3Cyl(m, -8.0, 3.4, 0, 2.6, 2.6, DK[0], DK[1], 12);           /* spare wheel */
+    _r3Wheel(m, -8.0, 4.4, 0, 2.6, 2.2, 'x', DK[0], DK[1], 20);    /* spare wheel, on its side */
     _r3Box(m, -7.6, 3.4, 4.2, 1.6, 2.2, 2.4, RTS_PAL.hazard[0], S[1]);
     _r3Box(m, 8.6, 3.6, -2.6, 0.9, 1.0, 1.4, GN[3], GN[3]);
     _r3Box(m, 8.6, 3.6, 2.6, 0.9, 1.0, 1.4, GN[3], GN[3]);

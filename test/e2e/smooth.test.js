@@ -47,7 +47,13 @@ var S = new Suite('smooth');
 
     /* ---------- 1. the primitives, with no renderer involved ---------- */
     var cyl = [];
+    /* 14 is what this call asked for and it is NOT what it gets: _r3Seg floors every model
+       primitive at R3_SEG_MIN, because the roster had drifted to eight different hand-picked
+       counts and the smallest was an octagon. The spec asks for the old number on purpose -
+       the floor is the thing under test, so hard-coding 24 here would pass whether it applied
+       or not. */
     _r3Cyl(cyl, 3, 0, -2, 1.5, 4, '#808080', '#909090', 14);
+    o.cylSeg = R3_SEG_MIN;
     o.cylFaces = cyl.length;
     /* the sides carry normals, the cap does not - a cap meets the side at a right angle */
     var withN = 0, flat = 0;
@@ -146,11 +152,12 @@ var S = new Suite('smooth');
     return o;
   });
 
-  S.ok('a cylinder is emitted as sides plus a cap', out.cylFaces === 15,
-       out.cylFaces + ' faces for a 14-sided drum');
+  S.ok('a cylinder is emitted as sides plus a cap', out.cylFaces === out.cylSeg + 1,
+       out.cylFaces + ' faces for a drum that asked for 14 sides and was floored at ' +
+       out.cylSeg);
 
   S.ok('...whose sides carry a normal per corner and whose cap does not',
-       out.cylSmooth === 14 && out.cylFlat === 1,
+       out.cylSmooth === out.cylSeg && out.cylFlat === 1,
        out.cylSmooth + ' faces with per-corner normals, ' + out.cylFlat + ' without - the cap ' +
        'meets the side at a right angle and is meant to look like it does');
 
