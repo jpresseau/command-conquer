@@ -171,6 +171,7 @@ function _r3dFrame(G) {
      has done this for a long time; this pass never did, because the line that calls
      _rtsGroundDetail sits inside `if (!r3on)` in render/frame.js. See R3D_TEX_FS. */
   R3.grainMag = _r3dGrainSet(gl, R3, R3.texP);
+  R3.pixMag = _r3dPixSet(gl, R3, R3.texP, true);    /* its staircases redrawn - see R3D_PIX_GLSL */
   _r3dShadowBind(R3.texP, 1);
   var aXZ = gl.getAttribLocation(R3.texP, 'aP'), aT = gl.getAttribLocation(R3.texP, 'aT');
   var aGN = gl.getAttribLocation(R3.texP, 'aN');
@@ -189,6 +190,7 @@ function _r3dFrame(G) {
      leaving the ground's own depth untouched is what lets the crystals, the units and the
      cast shadows sort against the GROUND rather than against a film floating over it. */
   _r3dOreTex(G);
+  _r3dPixSet(gl, R3, R3.texP, false);               /* the stain is a signal, not pixel art */
   if (R3.oreAny) {
     gl.disable(gl.DEPTH_TEST);
     gl.enable(gl.BLEND);

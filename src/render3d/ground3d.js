@@ -237,14 +237,79 @@ var R3D_TEX_VS =
    pass places it - so the grain is anchored to the ground and does not swim when the camera
    pans. uGrain carries the strength and is zero below RTS_DETAIL_MIN_MAG, where there is
    nothing to put back and a full-screen fetch would be a pure loss. */
+/* THE STAIRCASE, AND THE ONE THING THAT MAY BE DONE ABOUT IT.
+
+   The ground is pixel art and is magnified NEAREST, on purpose - see _r3dTexture. At the
+   closest 3D zooms a baked pixel is eight device pixels or more, and every edge between two
+   kinds of ground that is not horizontal or vertical comes out as a staircase of big squares:
+   a dirt patch is a heap of blocks, a road's shoulder a flight of stairs. Smoothing it would be
+   the blur that note forbids, and a finer texture would not fit a phone.
+
+   What pixel-art scalers do instead is REDRAW THE EDGE, and the oldest rule for it is EPX
+   (Scale2x): a corner of a pixel takes its neighbours' colour when the two neighbours toward
+   that corner agree with each other and not with the pixel, and the edge they make is not a
+   straight run. This is that rule made continuous: instead of repainting a quarter of the
+   pixel, it cuts the corner along a 45-degree line, so a staircase between two regions becomes
+   one straight diagonal. No colour is ever averaged with another - a fragment is the pixel's own
+   colour or its neighbours' - except across that cut line itself, over one device pixel, which
+   is antialiasing a geometric edge exactly as multisampling would.
+
+   And what the rule leaves alone is what makes it safe on this art: an isolated speck (all four
+   neighbours agree, so the "not a straight run" test fails), a one-pixel line, a checkerboard
+   dither, and every straight border. e2e/pixedge measures each.
+
+   Neighbours "agree" within R3D_PIX_T, not exactly: the baked ground carries its own noise, and
+   exact equality would find no edges in grass at all. uPix is (texel w, texel h, device pixels
+   per texel); z is 0 below R3D_PIX_MIN_MAG and for the ore stain and the fog, which share this
+   program and are not pixel art. */
+var R3D_PIX_T = 0.1;          /* colour distance, per channel on 0..1, under which two agree */
+var R3D_PIX_MIN_MAG = 3;      /* device pixels per baked pixel before any of this is worth it */
+var R3D_PIX_GLSL =
+  'uniform vec3 uPix;' +
+  'bool _pxNear(vec3 a, vec3 b){ vec3 d = a - b; return dot(d, d) < ' +
+     (R3D_PIX_T * R3D_PIX_T * 3).toFixed(4) + '; }' +
+  'vec4 _pxSample(sampler2D s, vec2 uv){' +
+  '  if (uPix.z <= 0.0) return texture2D(s, uv);' +
+  '  vec2 tc = uv / uPix.xy, bs = floor(tc), f = tc - bs;' +
+  '  vec2 c0 = (bs + 0.5) * uPix.xy;' +
+  '  vec4 C = texture2D(s, c0);' +
+  /* the corner this fragment is in, and the neighbours toward it and away from it */
+  '  vec2 sg = vec2(f.x < 0.5 ? -1.0 : 1.0, f.y < 0.5 ? -1.0 : 1.0);' +
+  '  vec3 H  = texture2D(s, c0 + vec2(sg.x, 0.0) * uPix.xy).rgb;' +
+  '  vec3 V  = texture2D(s, c0 + vec2(0.0, sg.y) * uPix.xy).rgb;' +
+  '  vec3 H2 = texture2D(s, c0 - vec2(sg.x, 0.0) * uPix.xy).rgb;' +
+  '  vec3 V2 = texture2D(s, c0 - vec2(0.0, sg.y) * uPix.xy).rgb;' +
+  '  if (!_pxNear(H, V) || _pxNear(H, C.rgb) || _pxNear(H, V2) || _pxNear(V, H2)) return C;' +
+  /* distance past the cut line u + v = 0.5, measured from the corner, in device pixels */
+  '  vec2 uv2 = vec2(sg.x < 0.0 ? f.x : 1.0 - f.x, sg.y < 0.0 ? f.y : 1.0 - f.y);' +
+  '  float a = clamp((0.5 - uv2.x - uv2.y) * 0.7071 * uPix.z + 0.5, 0.0, 1.0);' +
+  '  return vec4(mix(C.rgb, 0.5 * (H + V), a), C.a);' +
+  '}';
+/* Switch it on for the ground draw, at the magnification the grain uses, and off for anything
+   else this program draws. */
+function _r3dPixSet(gl, R3, P, on) {
+  var u = gl.getUniformLocation(P, 'uPix');
+  if (!u) return 0;
+  var cv = window._rtsR && _rtsR.terrain;
+  var px = (typeof _rtsZoom === 'function' ? _rtsZoom() : 0) * (R3.scale || 1);
+  var mag = px * RTS_TILE / RTS_TS;
+  if (!on || !cv || !(mag >= R3D_PIX_MIN_MAG) || window.RTS_PIX_OFF) {
+    gl.uniform3f(u, 0, 0, 0);
+    return 0;
+  }
+  gl.uniform3f(u, 1 / cv.width, 1 / cv.height, mag);
+  return mag;
+}
+
 var R3D_TEX_FS =
   'precision highp float; varying vec2 vT; varying float vShade; varying vec2 vW;' +
   'uniform sampler2D uS; uniform float uA;' +
+  R3D_PIX_GLSL +
   'uniform float uRecv;' +
   'uniform sampler2D uGrainTex; uniform vec2 uGrain;' +   /* strength, world->tile scale */
   R3D_SHADOW_GLSL +
   'void main(){' +
-  '  vec4 c = texture2D(uS, vT);' +
+  '  vec4 c = _pxSample(uS, vT);' +
   /* Composited the way the 2D pass composites it: the tile carries lighten-or-darken in its
      own colour and the strength in its alpha, so this is a plain source-over and none of a
      blend mode's cost is paid. */
