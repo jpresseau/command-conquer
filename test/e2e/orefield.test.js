@@ -173,7 +173,7 @@ var S = new Suite('orefield');
     o.on = !!(window._R3D && window._R3D.on);
     if (o.on) {
       _rtsRFrame(1 / 60);
-      o.oreTris = window._R3D.oreMesh ? Math.round(window._R3D.oreMesh.verts / 3) : 0;
+      o.oreTris = window._R3D.oreTris || 0;
       /* The raw GL buffer against the COMPOSITED frame (GL layer + 2D overlay - the world is
          presented now, not blitted into the overlay). If the flat 2D ore pass were still
          painting, it would land on the overlay and the composite would differ from the buffer

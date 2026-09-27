@@ -113,7 +113,7 @@ var S = new Suite('r3dlive');
        all 16 chunks every frame would push the full million through the vertex stage. */
     _rtsRFrame(1 / 60);
     o.worldTris = Math.round(R3.worldTris || 0);
-    o.oreTris = R3.oreMesh ? Math.round(R3.oreMesh.verts / 3) : 0;
+    o.oreTris = R3.oreTris || 0;
     o.chunks = R3.world.length;
     /* the renderer's own view rectangle, not a copy of its arithmetic - _r3dViewBounds is
        where the cull, the radar box and the overlay cell window all read it from, so a camera

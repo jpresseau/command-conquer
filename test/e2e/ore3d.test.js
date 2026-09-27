@@ -1,5 +1,9 @@
 /* AN ORE FIELD IS GROUND, NOT A SCATTER OF CONES.
 
+   (The cones themselves are gone - a field grows faceted crystal clusters now, r3d/crystal.js,
+   and unit/crystal holds their shape. What follows is about the ground they stand on, and at
+   the end, the chunks they are built in.)
+
    In 2D the deposit is a painted tile. render/frame.js skips that tile in 3D on purpose - the
    crystals there are real geometry and a flat gold tile drawn over them buries ~50k triangles
    of them, which was measured and fixed once already. What nobody then put back was the
@@ -150,7 +154,7 @@ var S = new Suite('ore3d');
     _r3dWorldBuild(G); _r3dOreBuild(G);
     o.tuftTrisSaved = Math.round(noOre - withOre);
     o.worldTris = Math.round(R3.worldTris);
-    o.oreTris = R3.oreMesh ? Math.round(R3.oreMesh.verts / 3) : 0;
+    o.oreTris = R3.oreTris || 0;
     o.totalTris = o.worldTris + o.oreTris;
 
     /* ---------- 5. gems read as a different mineral ---------- */
@@ -171,6 +175,33 @@ var S = new Suite('ore3d');
     o.gem = meanIn(gemShot, (CW >> 1) - 40, (CH >> 1) - 40, 80, 80);
     o.gemBlueLead = +(o.gem.b - o.gem.g).toFixed(1);
     o.oreBlueLead = +(o.stained.b - o.stained.g).toFixed(1);
+
+    /* ---------- 6. a harvester's cell rebuilds its chunk, not the map ---------- */
+    _r3dOreBuild(G);
+    o.chunks = R3.ore.length;
+    o.oreChunks = R3.ore.filter(Boolean).length;
+    o.bounded = R3.ore.filter(function (m) { return m && m.x1 > m.x0 && m.z1 > m.z0; }).length;
+    var C = Math.ceil(RTS_N / R3D_CHUNK);
+    var k0 = (best[1] / R3D_CHUNK | 0) * C + (best[0] / R3D_CHUNK | 0);
+    var before6 = R3.ore.slice(), vBefore = R3.ore[k0] ? R3.ore[k0].verts : 0;
+    var builds0 = R3.oreBuilds;
+    var wi = _rtsIdx(best[0], best[1]), wKeep = G.scrap[wi];
+    G.scrap[wi] = 0;
+    for (i = 0; i < 30; i++) _r3dOreTick(G);
+    o.rebuilt = R3.oreBuilds - builds0;
+    o.lostVerts = vBefore - (R3.ore[k0] ? R3.ore[k0].verts : 0);
+    o.othersKept = R3.ore.every(function (m, k) { return k === k0 || m === before6[k]; });
+    o.oreTrisAfter = R3.oreTris;
+    G.scrap[wi] = wKeep;
+    for (i = 0; i < 30; i++) _r3dOreTick(G);
+
+    /* ---------- 7. and a frame draws the chunks it can see ---------- */
+    var bound = new Set(), oreP = new Map();
+    R3.ore.forEach(function (m, k) { if (m) oreP.set(m.p, k); });
+    var bb = gl.bindBuffer;
+    gl.bindBuffer = function (t, b) { if (oreP.has(b)) bound.add(oreP.get(b)); return bb.call(gl, t, b); };
+    try { _rtsRFrame(1 / 60); } finally { gl.bindBuffer = bb; }
+    o.drawnChunks = bound.size;
     return o;
   });
 
@@ -223,6 +254,22 @@ var S = new Suite('ore3d');
        out.gemBlueLead > 20 && out.oreBlueLead < 0,
        'over gems blue leads green by ' + out.gemBlueLead + ' (' + out.gem.r + ',' +
        out.gem.g + ',' + out.gem.b + '); over ore it trails by ' + (-out.oreBlueLead));
+
+  /* THE FIELD IS CHUNKED. It was one buffer over the whole map, rebuilt from nothing whenever
+     the map's total moved - every poll, with a harvester working - and drawn whole at every
+     zoom. Chunked on the world's own grid, a worked cell costs its own chunk and a frame
+     culls the rest; that is what pays for crystals worth twice the old cones' geometry. */
+  S.ok('the field is split on the world\'s chunk grid, and this map has ore in several',
+       out.chunks >= 4 && out.oreChunks >= 2,
+       out.oreChunks + ' of ' + out.chunks + ' chunks carry crystals');
+  S.eq('...each with a box the frame can cull it by', out.bounded, out.oreChunks);
+  S.eq('working one cell rebuilds exactly one chunk', out.rebuilt, 1);
+  S.ok('...the one the cell is in, which lost that cell\'s crystals', out.lostVerts > 0,
+       out.lostVerts + ' vertices fewer');
+  S.ok('...and leaves every other chunk\'s buffers alone', out.othersKept, String(out.othersKept));
+  S.ok('a frame close over one field draws only the chunks near it',
+       out.drawnChunks >= 1 && out.drawnChunks < out.oreChunks,
+       out.drawnChunks + ' of ' + out.oreChunks + ' ore chunks bound, sun pass included');
 
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
 
