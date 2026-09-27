@@ -155,6 +155,10 @@ breaking it shipped once.
 - **Nothing natural is a smooth cone.** Grass tufts are leaning blades (`r3d/tuft.js`) and a
   ridge's spires are `_r3Crystal`; a smooth cone read as a sapling on a lawn and as a traffic
   cone on a ridge. Slabs take a broken top (`peak` in `_r3dSlab`), not a flat quad.
+- **The 3D ground's staircases are redrawn, never blurred** (`R3D_PIX_GLSL`, EPX made
+  continuous, on from 3 device px a texel). It must leave specks, dithers and straight borders
+  pixel-identical; `e2e/pixedge` paints a test card and checks each. Anything else drawn with
+  the ground program (ore stain, fog) sets `uPix` to zero.
 - **Structures are faction-coloured, not concrete** (`RTS_PAL.bld`): coloured walls under
   maroon roofs, on a pale irregular concrete pad drawn by `_sprPad`. An all-grey pass read
   as an industrial estate, and buildings straight on grass read as furniture on a lawn.
