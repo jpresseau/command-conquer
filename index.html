@@ -89,7 +89,22 @@
 #rcgRts .rts-vs b.e{color:#ff8571}
 #rcgRts .rts-vs .dif{margin-left:9px;padding:1px 7px;border:1px solid #3a4a5f;border-radius:9px;
   font-style:normal;font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:#ffcf6a;opacity:.85}
-#rcgRts .rts-help{font-size:11px;opacity:.55;margin-left:auto;margin-right:10px}
+/* THE HINT GIVES WAY FIRST. It is a reminder at 55% opacity; the army line beside it carries
+   the difficulty the player chose, which is the one thing in the bar they cannot find anywhere
+   else. With no shrink rule of its own the hint kept its full width, wrapped onto two lines, and
+   left the army line to be ellipsised - on a 1280px desktop the badge read "SO..." rather than
+   "SOLDIER". The rule below that lets the army line shrink is for a 360px phone, where the hint
+   is not shown at all; on a desktop the hint should run out of room long before it does. */
+#rcgRts .rts-help{font-size:11px;opacity:.55;margin-left:auto;margin-right:10px;
+  flex:0 1000 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+/* ...AND ON A SCREEN WITH ROOM, THE ARMY LINE DOES NOT SHRINK AT ALL. A 1000:1 shrink ratio still
+   hands it a sliver of the overflow - measured, a fraction of a pixel at 1280 - and text-overflow
+   fires on any overflow whatever, so the badge read "SOLDIE..." with the hint already cut to a
+   third of its length. Flexbox has no strict "this one first"; a ratio only approximates it. Above
+   900px the title, the army line and the buttons fit with the hint gone entirely (measured: 579px
+   of a 594px bar at 800), so the army line can simply hold its width there and let the hint take
+   every pixel. Below it the rule above still applies, which is the phone case it was written for. */
+@media (min-width: 900px){ #rcgRts .rts-vs{flex-shrink:0} }
 /* The army line gives way before the buttons do: it is the only thing in the bar that can be
    shortened without losing a control, and on a 360px phone something has to. */
 #rcgRts .rts-vs{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -929,7 +944,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">c744c6c · 2026-09-27</div>
+  <div id="rtsBuild" title="build">c83f850 · 2026-09-27</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
