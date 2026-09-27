@@ -944,7 +944,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">e099717 · 2026-09-27</div>
+  <div id="rtsBuild" title="build">cd9c42c · 2026-09-27</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -5569,6 +5569,52 @@ function _r3OreCell(out, cx, cz, tx, tz, frac, gem, P) {
                0.16 + _sprHash(tx, tz * 17 + m, 719) * 0.1, (0.4 + 0.3 * grow) * 0.7,
                Math.cos(ra) * 1.6, Math.sin(ra) * 1.6,
                [P[3], P[4], P[0]], 5, 0.4, (tx * 977 + tz) * 5 + m);
+  }
+}
+</script>
+<script>/* r3d/tuft.js - a clump of grass, as blades. Part of the r3d model kit.
+
+   The grass tuft was _r3Cone: five sides, a point, a dark green, a little under a unit tall.
+   On a map that also grows conifers, that is a conifer. From the game's camera a lawn came out
+   as a nursery of pine saplings, three to a cell, and nothing about them said "grass".
+
+   Grass is BLADES: thin, pointed, leaning out from the clump in every direction, with light
+   passing between them. So a tuft is a ring of single triangles, each a blade rising from a
+   narrow base to a point, leaning away from the clump's centre, in two greens. A blade is one
+   triangle where a cone side was two, so the clump costs LESS than the cone it replaces while
+   carrying more shape.
+
+   ONE TRIANGLE IS SEEN FROM BOTH SIDES AND LIT FROM ONE. This renderer does not cull, so a
+   blade shows from behind - but its flat normal points one way, and every blade facing away
+   from the sun would draw as a black sliver. Each corner therefore carries a normal tilted up
+   from the blade's own facing, the standard trick for grass: the clump lights like the ground
+   it grows from, with a little shading across it from the lean. The unit test holds the tilt.
+
+   EVERY CORNER IS ITS OWN ARRAY, for the reason crystal.js gives: _r3dLiftFrom lifts the cell
+   in place, and a shared vertex goes up twice. */
+
+var R3_TUFT_BLADES = 7;
+var R3_TUFT_UP = 0.8;          /* how far a blade's normal is turned toward straight up */
+
+/* A tuft at (x, y, z), `h` tall, in cols = [blade, blade2]. `seed` makes it repeatable. */
+function _r3Tuft(out, x, y, z, h, cols, seed) {
+  seed = seed | 0;
+  var n = R3_TUFT_BLADES, a0 = _sprHash(seed, 0, 811) * Math.PI * 2;
+  for (var i = 0; i < n; i++) {
+    var a = a0 + (i + (_sprHash(seed, i, 821) - 0.5) * 0.6) / n * Math.PI * 2;
+    var ca = Math.cos(a), sa = Math.sin(a);
+    var bh = h * (0.55 + _sprHash(seed, i, 823) * 0.6);
+    var lean = bh * (0.25 + _sprHash(seed, i, 827) * 0.45);
+    var r = 0.05 + _sprHash(seed, i, 829) * 0.1;          /* where the blade leaves the clump */
+    var w = 0.08 + _sprHash(seed, i, 839) * 0.06;         /* half its width at the base */
+    var bx = x + ca * r, bz = z + sa * r;
+    /* the base runs ACROSS the lean, so the blade presents its face to the way it leans */
+    var p = [bx - sa * w, y, bz + ca * w], q = [bx + sa * w, y, bz - ca * w];
+    var t = [bx + ca * lean, y + bh, bz + sa * lean];
+    /* its facing, tilted up: the outward lean direction, blended toward +y */
+    var nx = ca * (1 - R3_TUFT_UP), nz = sa * (1 - R3_TUFT_UP);
+    var nn = [nx, R3_TUFT_UP, nz];
+    _r3F(out, [p, q, t], cols[i & 1], [nn.slice(), nn.slice(), nn.slice()]);
   }
 }
 </script>
@@ -25726,8 +25772,14 @@ var R3D_WORLD_YMAX = 14;       /* tallest world geometry; the cull margin hangs 
    edges stop agreeing with every other slab's, `taper` shrinks the top face so it reads as a
    weathered block rather than a crate, and `lx`/`lz` slide that top sideways so the sides lean
    and the top is not a horizontal plane. Wound face by face like _r3Box so every normal points
-   out of the solid; the rotation carries the normals with it. */
-function _r3dSlab(out, x, y, z, w, d, h, ang, taper, lx, lz, col, topCol) {
+   out of the solid; the rotation carries the normals with it.
+
+   AND THE TOP IS BROKEN. With one flat quad for a top, a lit ridge read up close as a heap of
+   sugar cubes: every slab's brightest face was a clean square. `peak` raises a point off the
+   top's centre by (px, pz) of its half-extent, and the top becomes four facets running up to
+   it, so the light breaks across it the way it does across split stone. Without `peak` the
+   top is the flat quad it was. */
+function _r3dSlab(out, x, y, z, w, d, h, ang, taper, lx, lz, col, topCol, peak, px, pz) {
   var C = Math.cos(ang), S = Math.sin(ang);
   function pt(u, v, up) {
     var k = up ? taper : 1;
@@ -25737,7 +25789,18 @@ function _r3dSlab(out, x, y, z, w, d, h, ang, taper, lx, lz, col, topCol) {
   }
   var b00 = pt(-1, -1, 0), b01 = pt(-1, 1, 0), b11 = pt(1, 1, 0), b10 = pt(1, -1, 0);
   var t00 = pt(-1, -1, 1), t01 = pt(-1, 1, 1), t11 = pt(1, 1, 1), t10 = pt(1, -1, 1);
-  _r3F(out, [t00, t01, t11, t10], topCol || col);
+  if (peak) {
+    var ap = pt(px || 0, pz || 0, 1);
+    ap[1] += peak;
+    var tc = topCol || col;
+    /* each facet wound as the quad it replaces was, so its normal points up and out */
+    _r3F(out, [t00, t01, ap.slice()], tc);
+    _r3F(out, [t01, t11, ap.slice()], tc);
+    _r3F(out, [t11, t10, ap.slice()], tc);
+    _r3F(out, [t10, t00, ap.slice()], tc);
+  } else {
+    _r3F(out, [t00, t01, t11, t10], topCol || col);
+  }
   _r3F(out, [b01, b11, t11, t01], col);
   _r3F(out, [b10, b00, t00, t10], col);
   _r3F(out, [b11, b10, t10, t11], col);
@@ -25748,7 +25811,10 @@ function _r3dSlab(out, x, y, z, w, d, h, ang, taper, lx, lz, col, topCol) {
    reaches and cold in the shade, and a ridge built from one hue is a silhouette with nothing
    inside it however well it is lit. */
 var R3D_ROCK = ['#7c8177', '#8e948a', '#6a6f66', '#9a9d92', '#585c54', '#83887c'];
-var R3D_ROCK_TOP = ['#969b8f', '#a6aa9d', '#82877c', '#b0b3a6', '#6d7268', '#9ba095'];
+/* The tops sit HALFWAY to the sides rather than a full step above them. A top faces the sun
+   and the ramp already lifts it; a lighter base colour on top of that turned a lit ridge into a
+   glare of white squares. */
+var R3D_ROCK_TOP = ['#898e83', '#9a9f93', '#767b71', '#a5a89c', '#62675e', '#8f9488'];
 
 /* ONE RIDGE CELL: four turned slabs and a pair of crags. Its own function rather than a block
    inside the terrain walk, so that a spec can emit the real thing and measure it - the
@@ -25771,16 +25837,24 @@ function _r3dRockCell(out, tx, tz) {
              0.42 + _sprHash(tx * 31 + rb, tz, 361) * 0.46,
              (_sprHash(tx * 31 + rb, tz, 383) - 0.5) * 1.4,
              (_sprHash(tz * 31 + rb, tx, 389) - 0.5) * 1.4,
-             R3D_ROCK[ci], R3D_ROCK_TOP[ci]);
+             R3D_ROCK[ci], R3D_ROCK_TOP[ci],
+             0.25 + _sprHash(tx * 31 + rb, tz * 31 + rb, 397) * 0.7,
+             (_sprHash(tz * 31 + rb, tx, 401) - 0.5) * 1.1,
+             (_sprHash(tx * 31 + rb, tz, 409) - 0.5) * 1.1);
   }
-  /* and the spikes that break the skyline - seven-sided, because at the top zoom a six-sided
-     cone this size still reads as a pyramid */
+  /* and the spires that break the skyline. They were smooth seven-sided cones, and a smooth
+     cone is a traffic cone however grey it is: stone breaks along planes. A spire is a crystal
+     now (r3d/crystal.js) - five jittered flat facets, most of its length in the point, leaning a
+     little - which reads as a shard of split rock for one triangle more. */
   for (var cg = 0; cg < 2; cg++) {
-    _r3Cone(out, wx + (_sprHash(tx * 31 + cg, tz, 439) - 0.5) * 3, 0,
-            wz + (_sprHash(tz * 31 + cg, tx, 443) - 0.5) * 3,
-            0.75 + _sprHash(tx * 31 + cg, tz, 449) * 0.7, 0.08,
-            3.2 + _sprHash(tx * 31 + cg, tz * 31 + cg, 433) * 3.4,
-            R3D_ROCK[cg ? 1 : 4], 7);
+    var sr = 0.9 + _sprHash(tx * 31 + cg, tz, 449) * 0.7;
+    _r3Crystal(out, wx + (_sprHash(tx * 31 + cg, tz, 439) - 0.5) * 3, 0,
+               wz + (_sprHash(tz * 31 + cg, tx, 443) - 0.5) * 3,
+               sr, 3.2 + _sprHash(tx * 31 + cg, tz * 31 + cg, 433) * 3.4,
+               (_sprHash(tx * 31 + cg, tz, 457) - 0.5) * 0.35,
+               (_sprHash(tz * 31 + cg, tx, 461) - 0.5) * 0.35,
+               [R3D_ROCK[cg ? 1 : 4], R3D_ROCK[cg ? 5 : 2], R3D_ROCK_TOP[cg ? 1 : 4]],
+               5, 0.7, (tx * 131 + tz) * 2 + cg);
   }
 }
 
@@ -25873,8 +25947,10 @@ function _r3dWorldBuild(G) { return _r3SegBulk(function () {
                 var fx = wx + (_sprHash(tx * 31 + tf, tz, 367) - 0.5) * RTS_TILE;
                 var fz = wz + (_sprHash(tz * 31 + tf, tx, 373) - 0.5) * RTS_TILE;
                 var fh = 0.5 + _sprHash(tx * 31 + tf, tz, 379) * 0.7;
-                _r3Cone(faces, fx, 0, fz, 0.32, 0.02, fh,
-                        (tf & 1) ? '#4e6b3a' : '#5a7a44', 5);
+                /* blades, not a cone - a cone on a map of conifers is a sapling; r3d/tuft.js */
+                _r3Tuft(faces, fx, 0, fz, fh,
+                        (tf & 1) ? ['#56773f', '#739450'] : ['#62844a', '#4f7040'],
+                        (tx * 131 + tz) * 3 + tf);
               }
             }
           }

@@ -153,6 +153,9 @@ var S = new Suite('ore3d');
     G.scrap.set(keepScrap);
     _r3dWorldBuild(G); _r3dOreBuild(G);
     o.tuftTrisSaved = Math.round(noOre - withOre);
+    /* in TUFTS, which is what the claim is about - a tuft's triangle count is r3d/tuft.js's
+       business, and it fell from ten to seven when the cone became blades */
+    o.tuftsSaved = Math.round(o.tuftTrisSaved / R3_TUFT_BLADES);
     o.worldTris = Math.round(R3.worldTris);
     o.oreTris = R3.oreTris || 0;
     o.totalTris = o.worldTris + o.oreTris;
@@ -241,8 +244,9 @@ var S = new Suite('ore3d');
        ' with the field at 12% - the map has to say where the ore still is');
 
   S.ok('no grass grows through the deposit',
-       out.tuftTrisSaved > 10000,
-       out.tuftTrisSaved + ' triangles of grass tuft used to stand between the crystals ' +
+       out.tuftsSaved > 1000,
+       out.tuftsSaved + ' grass tufts (' + out.tuftTrisSaved + ' triangles) used to stand ' +
+       'between the crystals ' +
        '(the scatter runs on grass cells, and an ore field sits on grass cells)');
 
   S.ok('...and the budget it frees goes to the forest, not back onto the floor',

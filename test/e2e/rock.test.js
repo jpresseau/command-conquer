@@ -58,8 +58,19 @@ var S = new Suite('rock');
        _r3dSlab writes into a face list, so the faces can be read without a renderer at all.
        This builds one cell's worth the way _r3dWorldBuild does and inspects it. */
     var faces = [];
-    _r3dSlab(faces, 0, 0, 0, 3, 2, 4, 0.9, 0.6, 0.4, -0.3, '#7c8177', '#969b8f');
+    /* with a broken top, as _r3dRockCell builds every slab now - and the flat one beside it,
+       so the count below tells the two apart */
+    _r3dSlab(faces, 0, 0, 0, 3, 2, 4, 0.9, 0.6, 0.4, -0.3, '#7c8177', '#969b8f', 0.6, 0.3, -0.2);
     o.slabFaces = faces.length;
+    var flat = [];
+    _r3dSlab(flat, 0, 0, 0, 3, 2, 4, 0.9, 0.6, 0.4, -0.3, '#7c8177', '#969b8f');
+    o.flatFaces = flat.length;
+    /* the peak really is above the plane the flat top lies in */
+    var topY = -1e9, peakY = -1e9;
+    flat.forEach(function (f) { f.v.forEach(function (p) { topY = Math.max(topY, p[1]); }); });
+    faces.forEach(function (f) { f.v.forEach(function (p) { peakY = Math.max(peakY, p[1]); }); });
+    o.peakRise = +(peakY - topY).toFixed(3);
+    /* and the ridge's own slabs are built that way, counted off one real cell below */
 
     /* every face's normal, and whether it points AWAY from the slab's centre - a winding put
        in backwards lights the inside of the stone */
@@ -127,6 +138,12 @@ var S = new Suite('rock');
       }
     }
     o.edgeBins = Object.keys(bins).length;
+    /* triangles whose third corner is the highest - the facets of a broken top */
+    o.ridgeTris = rf.filter(function (f) { return f.v.length === 3; }).length;
+    o.ridgeTopFacets = rf.filter(function (f) {
+      return f.v.length === 3 && f.v[2][1] > f.v[0][1] && f.v[2][1] > f.v[1][1] &&
+             Math.abs(f.v[0][1] - f.v[1][1]) < 1e-9 && !f.n;
+    }).length;
     o.edges = edges;
     o.slabsSampled = rf.length;
 
@@ -181,9 +198,15 @@ var S = new Suite('rock');
     return require('../lib/report.js')(S);
   }
 
-  S.ok('a slab is a closed solid', out.slabFaces === 5,
-       out.slabFaces + ' faces - a top and four sides; the underside is never seen and is not ' +
-       'emitted');
+  S.ok('a slab is a closed solid', out.slabFaces === 8 && out.flatFaces === 5,
+       out.slabFaces + ' faces - four top facets and four sides; ' + out.flatFaces + ' with the ' +
+       'flat top it had. The underside is never seen and is not emitted');
+  /* A FLAT TOP IS A SUGAR CUBE. Up close a lit ridge read as a heap of them - every slab's
+     brightest face a clean square - so the top rises to a point off its centre. */
+  S.ok('...whose top rises to a broken point rather than lying flat', out.peakRise > 0.5,
+       'the peak stands ' + out.peakRise + ' above where the flat top was');
+  S.ok('...and the ridge\'s own stones are built with it', out.ridgeTris > 0 && out.ridgeTopFacets > 0,
+       out.ridgeTopFacets + ' top facets meeting at a point across ' + out.slabsSampled + ' faces');
 
   /* Rotating a box by hand is exactly where a winding goes in backwards. */
   S.ok('...with every face wound so its normal points out of the stone',

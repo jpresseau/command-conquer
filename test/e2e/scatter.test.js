@@ -66,15 +66,23 @@ var S = new Suite('scatter');
     /* --- run the REAL builder, recording what it places --- */
     var log = [];
     var oc = window._r3Cone, ob = window._r3Box, oy = window._r3Cyl;
-    var os = window._r3dSkirt, ow = window._r3dCrown;
+    var os = window._r3dSkirt, ow = window._r3dCrown, ot2 = window._r3Tuft;
+    var osl = window._r3dSlab, ocr = window._r3Crystal;
     window._r3Cone = function (out, x, y, z) { log.push({ k: 'cone', x: x, z: z }); return oc.apply(this, arguments); };
     window._r3Box = function (out, x, y, z) { log.push({ k: 'box', x: x, z: z }); return ob.apply(this, arguments); };
     window._r3Cyl = function (out, x, y, z) { log.push({ k: 'cyl', x: x, z: z }); return oy.apply(this, arguments); };
     window._r3dSkirt = function (out, x, y, z) { log.push({ k: 'whorl', x: x, z: z }); return os.apply(this, arguments); };
     window._r3dCrown = function (out, x, y, z) { log.push({ k: 'crown', x: x, z: z }); return ow.apply(this, arguments); };
+    /* the grass tuft is blades now (r3d/tuft.js), not a cone - without this hook the grass
+       rows below would bucket nothing, and `null < 0.2` passes */
+    window._r3Tuft = function (out, x, y, z) { log.push({ k: 'tuft', x: x, z: z }); return ot2.apply(this, arguments); };
+    /* a ridge's stones and its spires - the spires were cones until they became crystals */
+    window._r3dSlab = function (out, x, y, z) { log.push({ k: 'slab', x: x, z: z }); return osl.apply(this, arguments); };
+    window._r3Crystal = function (out, x, y, z) { log.push({ k: 'spire', x: x, z: z }); return ocr.apply(this, arguments); };
     _r3dWorldBuild(G);
     window._r3Cone = oc; window._r3Box = ob; window._r3Cyl = oy;
-    window._r3dSkirt = os; window._r3dCrown = ow;
+    window._r3dSkirt = os; window._r3dCrown = ow; window._r3Tuft = ot2;
+    window._r3dSlab = osl; window._r3Crystal = ocr;
     o.prims = log.length;
 
     /* A placement's offset never leaves its own cell, so bucketing by nearest cell centre
@@ -184,6 +192,8 @@ var S = new Suite('scatter');
        which measured 0 on all three kinds. */
     ['rock', 'grass', 'tree'].forEach(function (kind) {
       var m = out[kind];
+      S.ok('there are ' + kind + ' neighbours to compare at all', m.colTot > 100 && m.rowTot > 100,
+           m.colTot + ' vertical and ' + m.rowTot + ' horizontal pairs');
       S.ok('the ' + kind + ' scatter is not a column of copies', m.col < 0.2,
            m.colTot + ' vertically adjacent ' + kind + ' pairs, ' + (m.col * 100).toFixed(1) +
            '% with identical x offsets (separable hashing gave 100% on rock and grass, ' +
