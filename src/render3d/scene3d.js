@@ -129,7 +129,7 @@ function _r3dFrame(G) {
       gl.uniform2f(SC.uWave, 0, 0);
       if (R3.world) {
         _r3dInstConst(gl, I, SC, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0);
-        var sb = R3.world.concat([R3.oreMesh]);
+        var sb = R3.world.concat(R3.ore || []);
         for (var si = 0; si < sb.length; si++) {
           var sm = sb[si];
           if (!sm || !sm.verts) continue;
@@ -350,7 +350,7 @@ function _r3dFrame(G) {
     /* identity placement: the batches are baked in world space, so they draw as-is */
     _r3dInstConst(gl, I, MC, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0);
     var lift = R3D_WORLD_YMAX * R3.sp / R3.cp;
-    var batches = R3.world.concat([R3.oreMesh]);
+    var batches = R3.world.concat(R3.ore || []);
     for (var wb = 0; wb < batches.length; wb++) {
       var bm = batches[wb];
       if (!bm || !bm.verts) continue;

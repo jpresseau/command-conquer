@@ -108,8 +108,8 @@ var S = new Suite('ao');
 
        y comes back out of the reconstructed frame as -sv*sin(tilt) + d*cos(tilt), which is the
        vertex shader's own rotation inverted. */
-    var kw = R3.world, ko = R3.oreMesh, kwa = R3.waterMesh, ke = G.ents;
-    R3.world = []; R3.oreMesh = null; R3.waterMesh = null; G.ents = [];
+    var kw = R3.world, ko = R3.ore, kwa = R3.waterMesh, ke = G.ents;
+    R3.world = []; R3.ore = ko.map(function () { return null; }); R3.waterMesh = null; G.ents = [];
     var keepH = G.height;
     G.height = new Uint8Array(RTS_N * RTS_N);
     _rtsRFrame(1 / 60);
@@ -191,7 +191,7 @@ var S = new Suite('ao');
     }
     o.flatGroundAO = +(flat / (eOn.length / 4) * 100).toFixed(2);
 
-    R3.world = kw; R3.oreMesh = ko; R3.waterMesh = kwa; G.ents = ke;
+    R3.world = kw; R3.ore = ko; R3.waterMesh = kwa; G.ents = ke;
     _rtsRFrame(1 / 60);
 
     /* ---------- 3. the occlusion, on the real map ---------- */
@@ -289,11 +289,27 @@ var S = new Suite('ao');
        postReady false draws straight to the canvas, which was created with antialias:true, so
        that frame IS the reference. Harshness is the mean absolute neighbour difference over
        the frame: aliasing raises it, and blurring lowers it past the reference. */
-    R3.aoAmt = 0;
-    R3.aaAmt = 0; var raw = shot();
-    R3.aaAmt = 1; var aa = shot();
-    R3.postReady = false; var msaa = shot();
-    R3.postReady = true; R3.aoAmt = 1; R3.aaAmt = 1;
+    function three() {
+      R3.aoAmt = 0;
+      R3.aaAmt = 0; var r0 = shot();
+      R3.aaAmt = 1; var a0 = shot();
+      R3.postReady = false; var m0 = shot();
+      R3.postReady = true; R3.aoAmt = 1; R3.aaAmt = 1;
+      return [r0, a0, m0];
+    }
+    /* WITHOUT THE ORE'S CRYSTALS for the claim itself, which is about the ground. A crystal is
+       faceted on purpose - flat planes, bright one side of an edge and dark the other - and a
+       post-process edge filter smooths an interior tone step like that a little further than
+       multisampling does, which is what FXAA is. With the field in frame that moved this
+       frame's overshoot from 0.09 to 0.25 while the frame without it stayed at 0.09: the
+       ground had not changed, the metric had started reading the crystals. So the ground is
+       measured on its own, and the crystals get a bound of their own below. */
+    var keepOre5 = R3.ore;
+    R3.ore = keepOre5.map(function () { return null; });
+    var bare5 = three();
+    R3.ore = keepOre5;
+    var withOre5 = three();
+    var raw = bare5[0], aa = bare5[1], msaa = bare5[2];
     function harsh(X) {
       var s = 0, n = 0;
       for (var y = 1; y < CH - 1; y += 2) {
@@ -306,6 +322,8 @@ var S = new Suite('ao');
       return +(s / n).toFixed(2);
     }
     o.harshRaw = harsh(raw); o.harshAA = harsh(aa); o.harshMsaa = harsh(msaa);
+    o.oreHarshAA = harsh(withOre5[1]); o.oreHarshMsaa = harsh(withOre5[2]);
+    o.oreChunks5 = keepOre5.filter(Boolean).length;
     return o;
   });
 
@@ -413,6 +431,11 @@ var S = new Suite('ao');
          ' filtered, against ' + out.harshMsaa + ' for the multisampled frame - the filter has ' +
          'to close that gap without crossing it, because the ground is pixel art drawn NEAREST ' +
          'on purpose and blurring it is the thing this game must not do');
+    S.ok('...and with the ore\'s faceted crystals in frame it softens them by little more',
+         out.oreHarshAA > out.harshAA + 0.5 && out.oreHarshAA >= out.oreHarshMsaa - 0.4,
+         out.oreHarshAA + ' filtered against ' + out.oreHarshMsaa + ' multisampled, the ' +
+         'crystals in frame (' + out.harshAA + ' without them) - measured 0.25 below; a filter that ' +
+         'had started blurring would be several times that');
   }
 
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');

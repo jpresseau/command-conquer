@@ -1,4 +1,4 @@
-/* render3d/world3d.js - the map itself as geometry: forests, rock ridges, ore crystals and
+/* render3d/world3d.js - the map itself as geometry: forests, rock ridges and
    grass cover, batched and chunked. Part of rts.render3d.
 
    Until this, the 3D mode's world was one flat textured plane: every forest, ridge and ore
@@ -48,9 +48,9 @@
    scatters and the eight size hashes - now folds tx, tz and the sub-index with `*31 +`, which
    is injective here because no sub-index reaches 31.
 
-   THE ORE BATCH ALONE IS DYNAMIC. Trees and rock are immutable in this engine, but ore
-   depletes and spreads, so its crystal batch follows the field - polled cheaply per frame
-   and rebuilt only when the total actually changed. */
+   THE ORE IS NOT HERE. Trees and rock are immutable in this engine, but ore depletes and
+   spreads, so its crystals are a batch of their own that follows the field, chunk by chunk:
+   render3d/ore3d.js, standing on the crystal in r3d/crystal.js. */
 
 /* Density and size knobs, in one place. Trees dominate the budget - see the note above, and
    see forest3d.js for where a tree's own triangles go and what they had to buy to be worth it.
@@ -63,7 +63,6 @@
 var R3D_CHUNK = 32;            /* cells per chunk side; 128-cell map -> 4x4 chunks */
 var R3D_TUFTS_PER_CELL = 3;
 var R3D_TUFT_ODDS = 0.62;      /* share of grass cells that carry tufts at all */
-var R3D_CRYSTALS_PER_CELL = 5;
 var R3D_WORLD_YMAX = 14;       /* tallest world geometry; the cull margin hangs on it */
 
 /* A TURNED, TAPERED, LEANING SLAB - which is the whole difference between rock and rubble.
@@ -327,76 +326,13 @@ function _r3dWaterBuild(G) { return _r3SegBulk(function () {
 });
 }
 
-/* THE CRYSTALS THAT STAND IN AN ORE FIELD. The field's colour is not here - it is a texture,
-   _r3dOreTex in scene3d.js, for the same reason the fog is one: it is a signal at one value
-   per CELL that has to fade smoothly at its edges and track a number that changes as the
-   harvesters work. An earlier cut of this drew the bed as flat quads of the palette lying on
-   the ground, and a field came out as a heap of overlapping paper squares - the hard straight
-   edge of every quad read louder than the colour it was carrying.
-
-   What is left here is the part that genuinely wants to be geometry: things standing UP out of
-   the deposit, which is the whole reason to draw ore in 3D rather than paint it. Five per cell
-   rather than seven, differing in height, girth and colour across the whole five-entry
-   palette, on seven sides rather than four - at the top zoom a cell is 144 device pixels and a
-   four-sided cone is unmistakably a pyramid.
-
-   Height scales with what is left, against the RICHNESS-SCALED cell capacity, not the nominal
-   one - the same divisor bug the 2D draw carried: cells are seeded
-   `(lvl+1)/LEVELS * RTS_SCRAP_TILE * RTS_ORE_RICHNESS`, so dividing by RTS_SCRAP_TILE alone
-   caps `frac` at the richness and the crystals never reach full height.
-
-   THIS BATCH ALONE IS DYNAMIC among the world's geometry. Trees and rock are immutable in this
-   engine; ore depletes and spreads, so it is rebuilt when the total actually changes. */
-function _r3dOreBuild(G) { return _r3SegBulk(function () {
-  /* BULK GEOMETRY, so the model segment floor is lifted for the duration - see
-     _r3SegBulk in r3d/primitives.js. A tree canopy at 24 sides instead of 10 took
-     the static world from 1,049,608 triangles to 2,112,650, for shapes a few pixels
-     across, on a batch that is drawn every frame and again from the sun. */
-  var R3 = window._R3D, gl = R3.gl;
-  var faces = [], N = RTS_N, sum = 0;
-  for (var tz = 0; tz < N; tz++) {
-    for (var tx = 0; tx < N; tx++) {
-      var i = tz * N + tx, ore = G.scrap[i];
-      if (ore <= 0) continue;
-      sum += ore;
-      var gem = G.gems && G.gems[i];
-      var P = gem ? RTS_PAL.gem : RTS_PAL.ore;
-      var frac = Math.min(1, ore / (RTS_SCRAP_TILE *
-                     (typeof RTS_ORE_RICHNESS === 'number' ? RTS_ORE_RICHNESS : 1)));
-      var wx = _rtsWX(tx), wz = _rtsWX(tz);
-      var _o0 = faces.length, _oy = _rtsTileElev(tx, tz);
-      for (var c = 0; c < R3D_CRYSTALS_PER_CELL; c++) {
-        var cx = wx + (_sprHash(tx * 31 + c, tz, 383) - 0.5) * RTS_TILE;
-        var cz = wz + (_sprHash(tz * 31 + c, tx, 389) - 0.5) * RTS_TILE;
-        var g2 = _sprHash(tx * 31 + c, tz * 31 + c, 391);
-        var ch = (0.45 + _sprHash(tx * 31 + c, tz, 397) * 1.25) * (0.35 + frac);
-        _r3Cone(faces, cx, 0, cz, 0.28 + g2 * 0.26, 0.04, ch,
-                [P[1], P[2], P[0], P[1], P[2]][c % 5], 7);
-      }
-      _r3dLiftFrom(faces, _o0, _oy);
-    }
-  }
-  if (R3.oreMesh) {
-    gl.deleteBuffer(R3.oreMesh.p); gl.deleteBuffer(R3.oreMesh.n); gl.deleteBuffer(R3.oreMesh.c);
-  }
-  R3.oreMesh = _r3dBuildMesh(gl, faces);
-  R3.oreSum = sum;
-});
-}
-
 /* Change detection: the static world is keyed to the game OBJECT - a new game is a new map,
    and without the key the mode would keep drawing the previous map's forests over the new
-   terrain. The ore batch keys on total ore, sampled cheaply. G.scrapDirty is set by every
-   depletion and spread site but is a shared flag other consumers reset, so relying on
-   reading it exactly once is a race; summing 16k floats every 30 frames is not. */
+   terrain. The ore field keeps its own watch, chunk by chunk - see _r3dOreTick in ore3d.js. */
 function _r3dWorldTick(G) {
   var R3 = window._R3D;
   if (!R3.world || R3.worldG !== G) {
     _r3dWorldBuild(G); _r3dOreBuild(G); _r3dWaterBuild(G); return;
   }
-  R3.oreCheck = (R3.oreCheck || 0) + 1;
-  if (R3.oreCheck % 30 !== 0) return;
-  var sum = 0;
-  for (var i = 0; i < RTS_N * RTS_N; i++) sum += G.scrap[i];
-  if (Math.abs(sum - R3.oreSum) > 0.5) _r3dOreBuild(G);
+  _r3dOreTick(G);
 }

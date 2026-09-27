@@ -148,6 +148,10 @@ breaking it shipped once.
   box, however good its roof is.
 - **Ore is discrete crystals with ground showing between them**, not a solid fill. A stain
   layer was tried and a rich field came out as a flat gold carpet with no texture at all.
+- **In 3D a crystal is flat facets** (`r3d/crystal.js`, held by `unit/crystal`). Per-corner
+  normals turned the field into smooth cones that read as stubble. The field is built in
+  chunks (`render3d/ore3d.js`); to hide it in a spec, null `R3.ore`'s entries rather than the
+  list, or its watch rebuilds them.
 - **Structures are faction-coloured, not concrete** (`RTS_PAL.bld`): coloured walls under
   maroon roofs, on a pale irregular concrete pad drawn by `_sprPad`. An all-grey pass read
   as an industrial estate, and buildings straight on grass read as furniture on a lawn.

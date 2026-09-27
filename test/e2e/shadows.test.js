@@ -196,8 +196,11 @@ var S = new Suite('shadows');
     o.world = shaded(withAndWithout());
 
     /* ---------- 2. acne: an empty map shadows nothing ---------- */
-    var keepWorld = R3.world, keepOre = R3.oreMesh, keepWater = R3.waterMesh;
-    R3.world = []; R3.oreMesh = null; R3.waterMesh = null; R3.worldG = G;
+    /* the ore's chunks are emptied, not dropped: its watch rebuilds a missing list, but not
+       a list whose sums still match the field */
+    var keepWorld = R3.world, keepOre = R3.ore, keepWater = R3.waterMesh;
+    R3.world = []; R3.ore = keepOre.map(function () { return null; }); R3.waterMesh = null;
+    R3.worldG = G;
     R.focus.x = yard.x; R.focus.z = yard.z; _rtsApplyCam();
     o.acne = shaded(withAndWithout());
 
@@ -231,7 +234,7 @@ var S = new Suite('shadows');
         o.dy = +(sh.cy - o.heliSelf.y).toFixed(1);
       }
     }
-    R3.world = keepWorld; R3.oreMesh = keepOre; R3.waterMesh = keepWater;
+    R3.world = keepWorld; R3.ore = keepOre; R3.waterMesh = keepWater;
     G.ents = keepEnts;
     return o;
   });

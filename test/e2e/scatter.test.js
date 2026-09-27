@@ -154,15 +154,19 @@ var S = new Suite('scatter');
     o.orthoTot = ot; o.ortho = ot ? +(os / ot).toFixed(4) : null;
 
     /* --- the crystals reach the top of their height range --- */
-    var ore = [];
-    window._r3Cone = function (out, x, y, z, r0, r1, h) { ore.push(h); return oc.apply(this, arguments); };
-    _r3dOreBuild(G);
-    window._r3Cone = oc;
+    /* Measured at the one number the divisor decides - the share of a full cell each cell is
+       grown at - rather than at a crystal's height, which r3d/crystal.js composes from that
+       share and a dozen hashes. unit/crystal holds that a smaller share grows a shorter cell;
+       this holds that the richest cell on the map is handed the whole of it. */
+    var ore = [], ocell = window._r3OreCell;
+    window._r3OreCell = function (out, cx, cz, tx, tz, frac) {
+      ore.push(frac); return ocell.apply(this, arguments);
+    };
+    try { _r3dOreBuild(G); } finally { window._r3OreCell = ocell; }
     var mx = 0;
     for (var w = 0; w < ore.length; w++) if (ore[w] > mx) mx = ore[w];
-    o.oreCones = ore.length;
-    /* the ceiling of `(0.5 + h*1.1) * (0.35 + frac)` at h = frac = 1 */
-    o.reach = +(mx / ((0.5 + 1.1) * (0.35 + 1))).toFixed(3);
+    o.oreCells = ore.length;
+    o.reach = +mx.toFixed(3);
     var best = 0;
     for (var y2 = 0; y2 < RTS_N * RTS_N; y2++) if (G.scrap[y2] > best) best = G.scrap[y2];
     o.richest = +best.toFixed(1);
@@ -197,9 +201,10 @@ var S = new Suite('scatter');
 
     /* The richest cell the generator can seed is RICHNESS of the nominal capacity, so
        dividing by the nominal capacity alone pins the tallest crystal at RICHNESS of full. */
-    S.ok('ore crystals reach full height on the richest cell', out.reach > 0.95,
-         'tallest crystal is ' + (out.reach * 100).toFixed(1) + '% of the height expression\'s ' +
-         'ceiling, from a richest cell of ' + out.richest + ' against a nominal ' +
+    S.ok('ore crystals reach full height on the richest cell',
+         out.oreCells > 100 && out.reach > 0.95,
+         'the richest of ' + out.oreCells + ' cells grows at ' + (out.reach * 100).toFixed(1) +
+         '% of a full one, from a richest cell of ' + out.richest + ' against a nominal ' +
          out.nominalCap + ' at richness ' + out.richness + ' (dividing by the nominal ' +
          'capacity alone capped it at 63.7%)');
   }

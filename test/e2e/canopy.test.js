@@ -49,7 +49,7 @@ var S = new Suite('canopy');
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;
     /* a real frame first: the world and ore batches are built by _r3dWorldTick off the frame
-       walk, and reading R3.oreMesh before one has run reports a map with no ore in it */
+       walk, and reading R3.oreTris before one has run reports a map with no ore in it */
     _rtsRFrame(1 / 60);
 
     /* ---------- 1. the trees themselves, off the real builder ---------- */
@@ -149,7 +149,7 @@ var S = new Suite('canopy');
     o.trees = per.n || 0;
     o.perCell = +(o.trees / Math.max(1, treeCells)).toFixed(3);
     o.worldTris = Math.round(R3.worldTris);
-    o.oreTris = R3.oreMesh ? Math.round(R3.oreMesh.verts / 3) : 0;
+    o.oreTris = R3.oreTris || 0;
 
     /* ---------- 3. and it still reads as forest on the frame ---------- */
     function solid(kind) {
