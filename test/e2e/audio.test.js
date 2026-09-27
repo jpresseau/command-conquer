@@ -130,7 +130,14 @@ function installProbe() {
          every weapon in the game untested. So a fight is arranged rather than waited for:
          two sides put within reach of each other, and ticked until they have killed each
          other. That covers the guns, the impacts and the deaths. */
-      var f = _rtsR ? _rtsR.focus : { x: 40, z: 40 };
+      /* AT THE PLAYER'S YARD, named - not at the camera. This used _rtsR.focus, which stood in
+         for the base only because the opening view used to be centred on the yard and nothing
+         clamped it. The view is held on the map now (ui/camera.js), and on this seed the yard is
+         near the north edge, so the focus moved 60 world units south onto open ground: the fight
+         there dispatched 6 effects instead of 9, because the base never joined in - no `alert`,
+         no `mg` from its defences, no `boom` from a building going up. The fight was always
+         meant to be in the base; this says so. */
+      var f = _rtsHas('player', 'yard') || (_rtsR ? _rtsR.focus : { x: 40, z: 40 });
       ['rifle', 'rocket', 'tank', 'heavy'].forEach(function (k, n) {
         _rtsSpawnUnit('player', k, f.x - 3 + n, f.z);
         _rtsSpawnUnit('enemy', k, f.x + 3 + n, f.z);

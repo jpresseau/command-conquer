@@ -74,6 +74,25 @@ function _rtsLoop(prime) {
   U.last = now;
   try {
     _rtsPanTick(dt);
+    /* THE VIEW STAYS ON THE MAP, EVERY FRAME, and it is held here rather than at each place that
+       moves the camera because the places kept outnumbering the clamps. Scrolling, the wheel,
+       the pinch, a radar click and a team jump all clamped; the OPENING did not, and neither did
+       the 3D toggle or a resize, each of which changes what the camera can see without moving
+       its focus. The opening was the one that showed: the view is centred on the player's own
+       yard, and since SCENARIO.CPP's rolled start the yard can sit anywhere on the ring - two
+       seeds in four put it near enough an edge that the first screen of the match was 18% void.
+       Measured, seed 7 opened 59.5 world units past the north edge and seed 9001 37.1 past the
+       west, and it stayed that way until the player happened to scroll.
+
+       It was worse than wasted screen. The shroud is draped over the GROUND, so anything standing
+       up at the map's far edge poked up into rows with no ground left to fog: seed 7's first
+       frame showed two unexplored rock formations in full colour, on a line across the top of
+       the screen.
+
+       Clamping a view that is already on the map changes nothing, so this costs a few projections
+       a frame and nothing else. It is in the live loop and not in _rtsRFrame on purpose: the
+       frame is also what specs drive by hand, some of them to look at the edge on purpose. */
+    _rtsClampFocus();
     /* THE FIRST FRAME PAINTS, IT DOES NOT SIMULATE. rtsOpen calls this once by hand to put an
        image on screen and start the rAF chain; no game time has passed at that point and the
        tick has nothing to do.
