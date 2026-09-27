@@ -103,7 +103,15 @@ var CONTROLS = ['#rtsReloadBtn', '#rtsSaveBtn', '#rtsLoadBtn', '#rtsMute', '#rcg
       return { n: btns.length, sizes: btns.map(function (b2) { return b2.w + 'x' + b2.h; }),
                min: Math.min.apply(null, btns.map(function (b2) { return Math.min(b2.w, b2.h); })),
                clash: clash, buried: buried, quitGap: quitGap, overflow: over,
-               docW: document.documentElement.scrollWidth };
+               docW: document.documentElement.scrollWidth,
+               vs: (function () {
+                 var v = document.querySelector('#rcgRts .rts-vs'),
+                     h = document.querySelector('#rcgRts .rts-help'),
+                     d = document.querySelector('#rcgRts .rts-vs .dif');
+                 return { over: v ? v.scrollWidth - v.clientWidth : -1,
+                          dif: d ? d.textContent : '',
+                          help: !!(h && h.getClientRects().length && h.textContent.trim()) };
+               })() };
     }, [CONTROLS]);
 
     var tag = sh.n + ' ' + sh.w + 'x' + sh.h + ': ';
@@ -123,6 +131,17 @@ var CONTROLS = ['#rtsReloadBtn', '#rtsSaveBtn', '#rtsLoadBtn', '#rtsMute', '#rcg
            r.quitGap.toFixed(0) + 'px from its neighbour');
     }
     S.ok(tag + 'the page does not scroll sideways', r.docW <= sh.w, r.docW + 'px wide');
+    /* THE DIFFICULTY BADGE READS IN FULL WHERE THERE IS ROOM. The hint beside it had no shrink
+       rule, so on a 1280px desktop it kept its width and the army line was ellipsised instead:
+       the badge read "SO..." and then, with a 1000:1 ratio, "SOLDIE...". Population first: the
+       badge and the hint must both be in the bar, or a clean army line proves nothing. On a
+       phone the army line is allowed to give way, which is what it is there for. */
+    if (sh.w >= 900) {
+      S.ok(tag + 'the difficulty badge is in the army line', !!r.vs.dif, JSON.stringify(r.vs.dif));
+      S.ok(tag + '...beside the hint it competes with', r.vs.help, String(r.vs.help));
+      S.ok(tag + '...and the army line is not cut short', r.vs.over <= 0,
+           r.vs.over + 'px clipped, badge "' + r.vs.dif + '"');
+    }
     await o.ctx.close();
   }
 
