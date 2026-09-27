@@ -152,6 +152,9 @@ breaking it shipped once.
   normals turned the field into smooth cones that read as stubble. The field is built in
   chunks (`render3d/ore3d.js`); to hide it in a spec, null `R3.ore`'s entries rather than the
   list, or its watch rebuilds them.
+- **Nothing natural is a smooth cone.** Grass tufts are leaning blades (`r3d/tuft.js`) and a
+  ridge's spires are `_r3Crystal`; a smooth cone read as a sapling on a lawn and as a traffic
+  cone on a ridge. Slabs take a broken top (`peak` in `_r3dSlab`), not a flat quad.
 - **Structures are faction-coloured, not concrete** (`RTS_PAL.bld`): coloured walls under
   maroon roofs, on a pale irregular concrete pad drawn by `_sprPad`. An all-grey pass read
   as an industrial estate, and buildings straight on grass read as furniture on a lawn.
