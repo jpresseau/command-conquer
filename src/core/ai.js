@@ -106,7 +106,21 @@ function _rtsAIUnits(S) {
      first hit is degenerate - whatever sits at the top is the only thing ever built. Measured
      over three seeds at eight minutes that gave 461 grenadiers and 14 rocket soldiers: the
      opponent had silently stopped fielding anti-armour infantry. */
+  /* THE FIELD ARMY'S CEILING, per difficulty - RTS_DIFF `army`. Counted once: the opponent's
+     ground fighters, harvesters and aircraft and hulls excluded (those have caps of their own
+     below). See the note on RTS_DIFF for why the size of the army, not how much of it marches,
+     is what sets a difficulty now that the army marches. */
+  var armyCap = _rtsBias('enemy').army, fighters = 0;
+  if (armyCap != null) {
+    for (i = 0; i < G.ents.length; i++) {
+      var fe = G.ents[i];
+      if (fe.dead || fe.side !== 'enemy' || fe.type !== 'unit' || fe.air) continue;
+      var fd = rtsUnitDef(fe.def);
+      if (fd && !fd.harvest && !fd.sea) fighters++;
+    }
+  }
   for (var cat in RTS_AI.mix) {
+    if (armyCap != null && fighters >= armyCap && (cat === 'infantry' || cat === 'vehicle')) continue;
     /* AS MANY AIRCRAFT AS THERE ARE PLACES TO PUT THEM. Measured over a 900-second match on
        hard: the opponent reached an Airfield at 257s and finished with THIRTY-FOUR aircraft,
        almost all Yaks, because it was rich, aircraft are their own production line, and nothing

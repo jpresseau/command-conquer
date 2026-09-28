@@ -944,7 +944,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">910e060 · 2026-09-28</div>
+  <div id="rtsBuild" title="build">db94f6b · 2026-09-28</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -3736,11 +3736,25 @@ var RTS_GEM_DETOUR = 3;
    cost  : CostBias             build : BuildSpeedBias (higher = slower)
    wall  : IsWallDestroyer      scan  : IsContentScan (looks inside transports/buildings)
    keep  : idle fighters held at home when the rest go out as escorts - see core/escorts.js
-   commit: the share of what is left over that marches with a team */
+   commit: the share of what is left over that marches with a team
+   army  : the field army's ceiling - no more infantry or vehicles once this many ground
+           fighters stand (absent = no ceiling; aircraft and hulls have caps of their own)
+
+   THE CEILING IS THE KNOB THAT MATTERS, now that the army marches. With escorts on and nothing
+   else changed, the scripted player of e2e/pushback held 0 of 10 matches on normal, where it held
+   5 of 10 before escorts existed. Measured on those ten matches (both armies, seeds 9001-9005,
+   420s), and in this order:
+     - the shares do nothing: normal at 50% or 40%, with a garrison of 8 to 12, still held 0.
+       The opponent fields 90-170 units, so any share of that is a flood.
+     - capping escorts per team balances it and undoes the point: two per team held 5 of 10, and
+       70% of the army went back to standing at home.
+     - a ceiling on the army's SIZE does both. 25 held 10 of 10, 35 held 8, 40 held 6, 42 held 6,
+       45 held 4, 50 held 4, 70 held 0. At 42 the opponent is an even fight and still marches
+       what it has. Easy stands below it; hard has no ceiling and sends everything. */
 var RTS_DIFF = {
-  easy:   { name:'Recruit',  iq:2, fire:0.75, speed:0.85, armor:0.7, rof:1.3,  cost:1.2, build:1.4, wall:false, scan:false, keep:8, commit:0.5,
+  easy:   { name:'Recruit',  iq:2, fire:0.75, speed:0.85, armor:0.7, rof:1.3,  cost:1.2, build:1.4, wall:false, scan:false, keep:8, commit:0.5, army:30,
             desc:'The enemy attacks late, builds little and hits softly.' },
-  normal: { name:'Soldier',  iq:3, fire:1,    speed:1,    armor:1,   rof:1,    cost:1,   build:1,   wall:true,  scan:false, keep:6, commit:0.75,
+  normal: { name:'Soldier',  iq:3, fire:1,    speed:1,    armor:1,   rof:1,    cost:1,   build:1,   wall:true,  scan:false, keep:6, commit:0.75, army:42,
             desc:'An even fight. The enemy expands and repairs.' },
   hard:   { name:'Commando', iq:5, fire:1.15, speed:1.1,  armor:1.2, rof:0.85, cost:0.8, build:0.7, wall:true,  scan:true, keep:4, commit:1,
             desc:'The enemy builds a real base, defends it and comes early.' }
@@ -19907,7 +19921,21 @@ function _rtsAIUnits(S) {
      first hit is degenerate - whatever sits at the top is the only thing ever built. Measured
      over three seeds at eight minutes that gave 461 grenadiers and 14 rocket soldiers: the
      opponent had silently stopped fielding anti-armour infantry. */
+  /* THE FIELD ARMY'S CEILING, per difficulty - RTS_DIFF `army`. Counted once: the opponent's
+     ground fighters, harvesters and aircraft and hulls excluded (those have caps of their own
+     below). See the note on RTS_DIFF for why the size of the army, not how much of it marches,
+     is what sets a difficulty now that the army marches. */
+  var armyCap = _rtsBias('enemy').army, fighters = 0;
+  if (armyCap != null) {
+    for (i = 0; i < G.ents.length; i++) {
+      var fe = G.ents[i];
+      if (fe.dead || fe.side !== 'enemy' || fe.type !== 'unit' || fe.air) continue;
+      var fd = rtsUnitDef(fe.def);
+      if (fd && !fd.harvest && !fd.sea) fighters++;
+    }
+  }
   for (var cat in RTS_AI.mix) {
+    if (armyCap != null && fighters >= armyCap && (cat === 'infantry' || cat === 'vehicle')) continue;
     /* AS MANY AIRCRAFT AS THERE ARE PLACES TO PUT THEM. Measured over a 900-second match on
        hard: the opponent reached an Airfield at 257s and finished with THIRTY-FOUR aircraft,
        almost all Yaks, because it was rich, aircraft are their own production line, and nothing
@@ -20919,7 +20947,10 @@ function _rtsTeamsTick(dt) {
    HOW MUCH, BY DIFFICULTY. Every difficulty uses its army now; how much of it is the ladder.
    `keep` fighters stay at home as a garrison, closest to the base first, and `commit` of the rest
    march - see RTS_DIFF. Recruit keeps a large garrison and sends half of the remainder; Commando
-   keeps a handful and sends everything.
+   keeps a handful and sends everything. What sets a
+   difficulty's strength is the SIZE of its army (`army`), not how much of it marches - see the
+   measurements on RTS_DIFF. An optional `escorts` caps the escorts with any one team; no
+   difficulty uses it, because capping them sent the army back to standing at home.
 
    WHAT AN ESCORT DOES. It attack-moves to its team: to the team's target when it has one, else to
    the team's centre, spread over a frontage so a column does not funnel into one cell. It is
@@ -20956,6 +20987,14 @@ function _rtsEscortsTick(dt) {
   if (G.ai.escT < RTS_ESCORT_EVERY) return;
   G.ai.escT = 0;
   var B = _rtsBias('enemy'), i, u, tid, t;
+  /* KEEP THE MUSTER POINTS GOOD, on this tick rather than only at delivery. Production stops at
+     the army's ceiling (RTS_DIFF `army`), and a point checked only when a unit comes out was
+     never checked again after that: a refinery built beside it, or ore spreading to its edge,
+     left the waiting army standing in the harvest - e2e/basespace caught exactly one. */
+  for (i = 0; i < G.ents.length; i++) {
+    var pb = G.ents[i];
+    if (!pb.dead && pb.side === 'enemy' && pb.type === 'struct' && pb.muster) _rtsAIMuster(pb);
+  }
   var teams = [];
   for (tid in (G.teams || {})) if (_rtsEscortWorthy(G.teams[tid])) teams.push(G.teams[tid]);
 
@@ -20982,6 +21021,7 @@ function _rtsEscortsTick(dt) {
     return Math.hypot(a.x - c.x, a.z - c.z) - Math.hypot(b.x - c.x, b.z - c.z) || a.id - b.id;
   });
   var keep = B.keep == null ? 6 : B.keep, commit = B.commit == null ? 0.75 : B.commit;
+  var per = B.escorts == null ? 1e9 : B.escorts;
   var free = loose.slice(keep);
   var go = Math.floor(free.length * commit);
   /* the furthest-out go first: they are the ones already at the muster points on the base's edge */
@@ -20993,6 +21033,7 @@ function _rtsEscortsTick(dt) {
       var n = count[teams[k].id] || 0;
       if (n < bn) { bn = n; best = teams[k]; }
     }
+    if (bn >= per) break;                          /* every marching team has its escort */
     u.escort = best.id;
     count[best.id] = bn + 1;
     _rtsEscortAim(u, best, count[best.id]);

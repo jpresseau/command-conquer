@@ -56,11 +56,25 @@ var RTS_GEM_DETOUR = 3;
    cost  : CostBias             build : BuildSpeedBias (higher = slower)
    wall  : IsWallDestroyer      scan  : IsContentScan (looks inside transports/buildings)
    keep  : idle fighters held at home when the rest go out as escorts - see core/escorts.js
-   commit: the share of what is left over that marches with a team */
+   commit: the share of what is left over that marches with a team
+   army  : the field army's ceiling - no more infantry or vehicles once this many ground
+           fighters stand (absent = no ceiling; aircraft and hulls have caps of their own)
+
+   THE CEILING IS THE KNOB THAT MATTERS, now that the army marches. With escorts on and nothing
+   else changed, the scripted player of e2e/pushback held 0 of 10 matches on normal, where it held
+   5 of 10 before escorts existed. Measured on those ten matches (both armies, seeds 9001-9005,
+   420s), and in this order:
+     - the shares do nothing: normal at 50% or 40%, with a garrison of 8 to 12, still held 0.
+       The opponent fields 90-170 units, so any share of that is a flood.
+     - capping escorts per team balances it and undoes the point: two per team held 5 of 10, and
+       70% of the army went back to standing at home.
+     - a ceiling on the army's SIZE does both. 25 held 10 of 10, 35 held 8, 40 held 6, 42 held 6,
+       45 held 4, 50 held 4, 70 held 0. At 42 the opponent is an even fight and still marches
+       what it has. Easy stands below it; hard has no ceiling and sends everything. */
 var RTS_DIFF = {
-  easy:   { name:'Recruit',  iq:2, fire:0.75, speed:0.85, armor:0.7, rof:1.3,  cost:1.2, build:1.4, wall:false, scan:false, keep:8, commit:0.5,
+  easy:   { name:'Recruit',  iq:2, fire:0.75, speed:0.85, armor:0.7, rof:1.3,  cost:1.2, build:1.4, wall:false, scan:false, keep:8, commit:0.5, army:30,
             desc:'The enemy attacks late, builds little and hits softly.' },
-  normal: { name:'Soldier',  iq:3, fire:1,    speed:1,    armor:1,   rof:1,    cost:1,   build:1,   wall:true,  scan:false, keep:6, commit:0.75,
+  normal: { name:'Soldier',  iq:3, fire:1,    speed:1,    armor:1,   rof:1,    cost:1,   build:1,   wall:true,  scan:false, keep:6, commit:0.75, army:42,
             desc:'An even fight. The enemy expands and repairs.' },
   hard:   { name:'Commando', iq:5, fire:1.15, speed:1.1,  armor:1.2, rof:0.85, cost:0.8, build:0.7, wall:true,  scan:true, keep:4, commit:1,
             desc:'The enemy builds a real base, defends it and comes early.' }

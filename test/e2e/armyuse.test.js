@@ -87,13 +87,19 @@ var SECS = 360;
     var n = rows[vs + ':normal'], b = rows[vs + ':before'];
     S.ok(vs + ': there is an army to measure, after a first wave', n.army > 1000 && b.army > 1000 && n.wave > 0,
          n.army + ' unit-samples with escorts, ' + b.army + ' without');
-    S.ok(vs + ': without escorts most of it stands idle at home', share(b) > 0.7,
+    /* 0.5, not the 0.7 this was written with: the before-picture shrank when the army got a
+       ceiling (RTS_DIFF `army`). Measured at normal's 42: 59% and 63% idle without escorts,
+       against 77% and 81% with no ceiling. A smaller army has less to leave standing. */
+    S.ok(vs + ': without escorts most of it stands idle at home', share(b) > 0.5,
          Math.round(share(b) * 100) + '%');
     S.ok(vs + ': with them, most of it is at work', share(n) < 0.5 && share(n) < share(b) - 0.25,
          Math.round(share(n) * 100) + '% idle against ' + Math.round(share(b) * 100) + '%');
     S.ok(vs + ': the units no team lists used to never leave the base', b.reachedN <= 2,
          b.reachedN + ' reached the player without escorts');
-    S.ok(vs + ': ...and now they go to the fight', n.reachedN >= 5,
+    /* 3, not 5, for the same reason: under the ceiling there are fewer of them to send.
+       Measured at normal's 42: 6 and 3, against 22 and 10 with no ceiling - and 0 without
+       escorts either way. */
+    S.ok(vs + ': ...and now they go to the fight', n.reachedN >= 3 && n.reachedN > b.reachedN,
          n.reachedN + ' reached the player (' + n.reached + ')');
     var e = rows[vs + ':easy'], h = rows[vs + ':hard'];
     /* EASY AGAINST HARD, not every adjacent pair. Measured on both armies: allied easy 22%,
@@ -102,7 +108,7 @@ var SECS = 360;
        eight to ten points apart on both. Survival-time ordering across all three rungs is
        e2e/ladder's to hold. */
     S.ok(vs + ': every difficulty uses its army, and hard clearly more of it than easy',
-         Math.max(share(e), share(n), share(h)) < share(b) - 0.4 && share(h) < share(e) - 0.05,
+         Math.max(share(e), share(n), share(h)) < share(b) - 0.3 && share(h) < share(e) - 0.05,
          'idle: easy ' + Math.round(share(e) * 100) + '%, normal ' + Math.round(share(n) * 100) +
          '%, hard ' + Math.round(share(h) * 100) + '% (normal without escorts ' + Math.round(share(b) * 100) + '%)');
   });
