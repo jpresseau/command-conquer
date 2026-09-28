@@ -158,6 +158,60 @@ function _rtsAIWeakZone() {
   var ang = [0, -Math.PI / 2, 0, Math.PI / 2, Math.PI][best];
   return { x:c.x + Math.cos(ang) * c.r * 2, z:c.z + Math.sin(ang) * c.r * 2 };
 }
+/* A BUILDING MAY NOT WALL OFF THE GROUND AROUND IT.
+
+   The placement below takes the legal cell nearest its anchor, which packs a base tight - and
+   nothing asked what the new footprint closed off. Measured over ten matches (both armies,
+   seeds 9001-9005, normal): six ended with free cells inside the opponent's base that no unit
+   could reach any more, and on seed 9004 the sealed pocket was the one its barracks delivers
+   into. Eighteen to twenty infantry came out of that barracks into a four-cell hole between a
+   silo, two refineries and the barracks itself, and stood there for the rest of the match,
+   squad orders and all, with no path to anywhere.
+
+   So a candidate is refused if blocking its footprint leaves more free ground cut off than
+   was cut off before. Asked over a window a few cells round the footprint, flooding in from
+   the window's edge: anything the new building can seal lies next to it, and ground that was
+   already enclosed (a pocket in the rocks) is counted on both sides and cancels. Four-way
+   connectivity, which is the cautious reading - a gap that is only open across two building
+   corners is not counted as open.
+
+   Only the opponent is held to this. Walling in your own factory is a mistake a player is
+   allowed to make. */
+var RTS_OPEN_MARGIN = 6;
+function _rtsSealsGround(tx, tz, w, h) {
+  if (window.RTS_OPEN_OFF) return false;          /* e2e/basespace's before-picture */
+  var M = RTS_OPEN_MARGIN, N = RTS_N;
+  var x0 = Math.max(0, tx - M), z0 = Math.max(0, tz - M);
+  var x1 = Math.min(N - 1, tx + w - 1 + M), z1 = Math.min(N - 1, tz + h - 1 + M);
+  var W = x1 - x0 + 1, H = z1 - z0 + 1;
+  function foot(x, z) { return x >= tx && x < tx + w && z >= tz && z < tz + h; }
+  function cutOff(withFoot) {
+    var seen = new Uint8Array(W * H), q = [], x, z, k, n = 0;
+    function open(x2, z2) { return !(withFoot && foot(x2, z2)) && !_rtsBlocked(x2, z2, null); }
+    for (x = x0; x <= x1; x++) for (z = z0; z <= z1; z++) {
+      if (x !== x0 && x !== x1 && z !== z0 && z !== z1) continue;
+      k = (z - z0) * W + (x - x0);
+      if (!seen[k] && open(x, z)) { seen[k] = 1; q.push(x, z); }
+    }
+    for (var h2 = 0; h2 < q.length; h2 += 2) {
+      var cx = q[h2], cz = q[h2 + 1];
+      for (var d = 0; d < 4; d++) {
+        var nx = cx + (d === 0 ? 1 : d === 1 ? -1 : 0), nz = cz + (d === 2 ? 1 : d === 3 ? -1 : 0);
+        if (nx < x0 || nx > x1 || nz < z0 || nz > z1) continue;
+        k = (nz - z0) * W + (nx - x0);
+        if (!seen[k] && open(nx, nz)) { seen[k] = 1; q.push(nx, nz); }
+      }
+    }
+    /* free ground the flood never reached - the footprint itself is not counted either way */
+    for (x = x0; x <= x1; x++) for (z = z0; z <= z1; z++) {
+      if (foot(x, z) || _rtsBlocked(x, z, null)) continue;
+      if (!seen[(z - z0) * W + (x - x0)]) n++;
+    }
+    return n;
+  }
+  return cutOff(true) > cutOff(false);
+}
+
 /* Where to put it: a refinery hugs the nearest ore, a turret covers the base's weakest
    approach, everything else clusters. Dropping a refinery on the far side of the base from
    the ore is the single most common way a build-order AI wastes its money. */
@@ -166,8 +220,12 @@ function _rtsAIPlace(key) {
   /* Next_Buildable first. If the plan has a fillable hole of this type, the building goes back
      into it - that is the whole point of the node list, and it comes before any of the aiming
      below because the plan already decided where this one belongs. */
-  var node = _rtsNextBuildable('enemy', key);
-  if (node) { _rtsPlaceStruct('enemy', key, node.tx, node.tz, false, G.sides.enemy.readyPaid); return true; }
+  var node = _rtsNextBuildable('enemy', key), kd = rtsStructDef(key);
+  /* ...unless the hole has been closed in since: the plan was open when it was laid out, but a
+     building put up beside the gap afterwards may have leaned on it to keep a lane clear */
+  if (node && !_rtsSealsGround(node.tx, node.tz, kd.w, kd.h)) {
+    _rtsPlaceStruct('enemy', key, node.tx, node.tz, false, G.sides.enemy.readyPaid); return true;
+  }
   if (key === 'refinery') aim = _rtsAIOreSpot();
   /* ANYTHING THAT SHOOTS, not the one building called 'turret'. The zone routine above already
      defines a defence as `sd.weapon` when it COUNTS what is where - it was only this call site
@@ -201,14 +259,20 @@ function _rtsAIPlace(key) {
      the match while its credits pile up. */
   var R = RTS_BUILD_RADIUS;
   for (var a = 0; a < anchors.length; a++) {
-    var anchor = anchors[a], best = null, bs = 1e9;
+    var anchor = anchors[a], best = null, cand = [];
     for (var tx = anchor.tx - R; tx <= anchor.tx + R; tx++) {
       for (var tz = anchor.tz - R; tz <= anchor.tz + R; tz++) {
         if (!_rtsCanPlace('enemy', key, tx, tz)) continue;
         var wx = _rtsWX(tx), wz = _rtsWX(tz);
-        var s = aim ? Math.hypot(wx - aim.x, wz - aim.z) : Math.hypot(wx - anchor.x, wz - anchor.z);
-        if (s < bs) { bs = s; best = [tx, tz]; }
+        cand.push([aim ? Math.hypot(wx - aim.x, wz - aim.z) : Math.hypot(wx - anchor.x, wz - anchor.z), tx, tz]);
       }
+    }
+    /* best-first, and the first that leaves the ground around it open - see _rtsSealsGround.
+       The flood runs only on the few candidates that get this far, not on every legal cell. */
+    cand.sort(function (p, q) { return p[0] - q[0] || p[1] - q[1] || p[2] - q[2]; });
+    for (var c = 0; c < cand.length && !best; c++) {
+      if (_rtsOnMuster(cand[c][1], cand[c][2], kd.w, kd.h)) continue;
+      if (!_rtsSealsGround(cand[c][1], cand[c][2], kd.w, kd.h)) best = [cand[c][1], cand[c][2]];
     }
     /* Anything placed outside the plan becomes part of it (in _rtsPlaceStruct), so the next
        raid is repaired against the base as it actually stands, not just the opening layout. */
@@ -259,4 +323,110 @@ function _rtsAIOreSpot() {
     if (d < bd) { bd = d; best = { x:wx, z:wz }; }
   }
   return best;
+}
+
+/* WHERE THE OPPONENT'S NEW UNITS GO TO WAIT: OUT OF THE DOORWAY.
+
+   A player sets a rally point; the opponent never had one, so every unit it built stopped on the
+   cell it was delivered to and stood there until a team took it. Most never were taken - the
+   team cap and the garrison it keeps back leave the rest where they fell. Measured across eight
+   matches (both armies, normal and hard, seeds 9001 and 9006): 35 to 74 per cent of the
+   opponent's army, averaged over the match, was standing within two cells of a factory or a
+   barracks. On hard, seed 9006, that doorway was a three-cell lane between the War Factory and
+   a power plant, and tanks with real attack orders sat behind the idle ones for up to a minute,
+   three of them still there when the match ended.
+
+   So each production building gets a muster point: the nearest spot with clear ground round it,
+   leaning away from the base's centre so the waiting army stands at the edge of the base rather
+   than in its streets, and one the door can actually reach. Kept on the building and re-found
+   only if something is built over it. Delivered units attack-move there - a unit walking out
+   while the base is under attack should fight on the way, not stroll past it - and teams recruit
+   them from there exactly as they did from the doorway. */
+var RTS_MUSTER_CLEAR = 2;       /* cells of open ground on every side of the point */
+var RTS_MUSTER_REACH = 14;      /* how far from the building to look */
+var RTS_MUSTER_ORE = 4;         /* cells kept between the patch and any ore */
+var RTS_MUSTER_REF = 5;         /* ...and between it and any refinery */
+function _rtsMusterClear(tx, tz) {
+  for (var ox = -RTS_MUSTER_CLEAR; ox <= RTS_MUSTER_CLEAR; ox++)
+    for (var oz = -RTS_MUSTER_CLEAR; oz <= RTS_MUSTER_CLEAR; oz++)
+      if (_rtsBlocked(tx + ox, tz + oz, null)) return false;
+  return true;
+}
+/* OUT OF THE HARVEST, TOO. The first cut only asked for clear ground, and clear ground is often
+   the ore field's edge: refineries are placed hugging the ore, and "away from the base centre"
+   from a factory frequently points the same way. The waiting army stood across the harvesters'
+   road. Measured with basedef's setup, ten matches: the opponent's harvesters unloaded 8% less,
+   down 27% on the worst seed, and three of its bases ended with a third of their defences - and
+   switching the muster off alone put every figure back. */
+function _rtsMusterAwayFromHarvest(tx, tz) {
+  var G = window._rtsG, r = RTS_MUSTER_ORE + RTS_MUSTER_CLEAR, a, b;
+  for (a = -r; a <= r; a++) for (b = -r; b <= r; b++) {
+    if (_rtsInB(tx + a, tz + b) && G.scrap[_rtsIdx(tx + a, tz + b)] > 0) return false;
+  }
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.type !== 'struct' || e.def !== 'refinery') continue;
+    var d = rtsStructDef(e.def);
+    if (tx >= e.tx - RTS_MUSTER_REF && tx < e.tx + d.w + RTS_MUSTER_REF &&
+        tz >= e.tz - RTS_MUSTER_REF && tz < e.tz + d.h + RTS_MUSTER_REF) return false;
+  }
+  return true;
+}
+function _rtsAIMuster(src) {
+  /* kept while it is still good - re-found if the base has grown onto it, or the harvest has
+     come to it: a refinery built nearby, or ore spreading to its edge */
+  if (src.muster && _rtsMusterClear(src.muster.tx, src.muster.tz) &&
+      _rtsMusterAwayFromHarvest(src.muster.tx, src.muster.tz)) return src.muster;
+  var d = rtsStructDef(src.def), cx = src.tx + (d.w - 1) / 2, cz = src.tz + (d.h - 1) / 2;
+  var c = _rtsBaseCentre(src.side);
+  var ux = c ? cx - _rtsTX(c.x) : 0, uz = c ? cz - _rtsTX(c.z) : 0;
+  var ul = Math.hypot(ux, uz);
+  if (ul < 0.5) { ux = RTS_N / 2 - cx; uz = RTS_N / 2 - cz; ul = Math.hypot(ux, uz) || 1; }
+  ux /= ul; uz /= ul;
+  /* far enough out that the patch, and the units spread across it, clear the doorway: the
+     clear radius plus two cells beyond the footprint's edge */
+  var cand = [], R = RTS_MUSTER_REACH, near = Math.max(d.w, d.h) / 2 + RTS_MUSTER_CLEAR + 2;
+  for (var tx = Math.round(cx) - R; tx <= Math.round(cx) + R; tx++) {
+    for (var tz = Math.round(cz) - R; tz <= Math.round(cz) + R; tz++) {
+      var dx = tx - cx, dz = tz - cz, dist = Math.hypot(dx, dz);
+      if (dist < near || dist > R || !_rtsMusterClear(tx, tz) || !_rtsMusterAwayFromHarvest(tx, tz)) continue;
+      cand.push([dist - (dx * ux + dz * uz) * 0.8, tx, tz]);
+    }
+  }
+  cand.sort(function (p, q) { return p[0] - q[0] || p[1] - q[1] || p[2] - q[2]; });
+  /* reachable from the door - a clear patch across a river is no use. A handful of tries, each
+     one A* search, and the answer is kept, so this is paid once per building. */
+  var door = _rtsExitCell(src, 0, 1);
+  for (var i = 0; i < cand.length && i < 6; i++) {
+    if (!door || _rtsPath(_rtsWX(door[0]), _rtsWX(door[1]), _rtsWX(cand[i][1]), _rtsWX(cand[i][2]), null)) {
+      src.muster = { tx:cand[i][1], tz:cand[i][2] };
+      return src.muster;
+    }
+  }
+  return null;
+}
+/* THE MUSTER PATCH IS KEPT CLEAR. Without this the base grew over it: the army walked out of
+   the doorway, and the next building went up beside the patch and made it a doorway again -
+   measured on seed 9003, most of the Soviet army ended up waiting next to a factory that had
+   not been there when it arrived. A footprint may not come within the patch's clear radius
+   plus two cells of a production building's muster point. */
+function _rtsOnMuster(tx, tz, w, h) {
+  var G = window._rtsG, m = RTS_MUSTER_CLEAR + 2;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.type !== 'struct' || e.side !== 'enemy' || !e.muster) continue;
+    if (e.muster.tx >= tx - m && e.muster.tx < tx + w + m &&
+        e.muster.tz >= tz - m && e.muster.tz < tz + h + m) return true;
+  }
+  return false;
+}
+/* Walk a freshly delivered unit out to it, spread over the clear patch so a stream of them does
+   not pile onto one cell. */
+function _rtsAIMusterOut(u, src) {
+  if (window.RTS_MUSTER_OFF) return false;       /* e2e/basespace's before-picture */
+  var m = _rtsAIMuster(src);
+  if (!m) return false;
+  var k = u.id % 9;
+  _rtsOrderMove(u, _rtsWX(m.tx) + ((k % 3) - 1) * RTS_TILE, _rtsWX(m.tz) + (((k / 3) | 0) - 1) * RTS_TILE, true);
+  return !!u.path;
 }

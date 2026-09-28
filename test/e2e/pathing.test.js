@@ -174,6 +174,14 @@ var S = new Suite('pathing');
   /* ---------- 4. and none of this broke ordinary movement ---------- */
   var normal = await g.page.evaluate(function () {
     var G = window._rtsG, arrived = 0, tried = 0, worst = 0;
+    /* THE OPPONENT'S ARMY LEAVES THE BOARD FOR THIS ONE. Everything below already treats a fight
+       as noise - a unit that dies or breaks off is taken out of the count - and that stopped
+       being enough once the opponent's waiting army moved from inside its base to a muster
+       point at the base's edge (core/basezone.js _rtsAIMuster): three of four units met it and
+       only one was left to judge. Its buildings stay, because they are part of what a route has
+       to get round; its units are not, and this is not a combat test. */
+    G.ents.forEach(function (e) { if (e.side === 'enemy' && e.type === 'unit') e.dead = true; });
+    G.ents = G.ents.filter(function (e) { return !(e.side === 'enemy' && e.type === 'unit'); });
     var units = G.ents.filter(function (e) { return !e.dead && e.type === 'unit' &&
       e.side === 'player' && !rtsUnitDef(e.def).harvest && !e.air; }).slice(0, 6);
     /* Held HERE, not read back off the entity: arriving clears u.goal, so a spec that checks
