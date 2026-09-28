@@ -18,7 +18,10 @@
    HOW MUCH, BY DIFFICULTY. Every difficulty uses its army now; how much of it is the ladder.
    `keep` fighters stay at home as a garrison, closest to the base first, and `commit` of the rest
    march - see RTS_DIFF. Recruit keeps a large garrison and sends half of the remainder; Commando
-   keeps a handful and sends everything.
+   keeps a handful and sends everything. What sets a
+   difficulty's strength is the SIZE of its army (`army`), not how much of it marches - see the
+   measurements on RTS_DIFF. An optional `escorts` caps the escorts with any one team; no
+   difficulty uses it, because capping them sent the army back to standing at home.
 
    WHAT AN ESCORT DOES. It attack-moves to its team: to the team's target when it has one, else to
    the team's centre, spread over a frontage so a column does not funnel into one cell. It is
@@ -55,6 +58,14 @@ function _rtsEscortsTick(dt) {
   if (G.ai.escT < RTS_ESCORT_EVERY) return;
   G.ai.escT = 0;
   var B = _rtsBias('enemy'), i, u, tid, t;
+  /* KEEP THE MUSTER POINTS GOOD, on this tick rather than only at delivery. Production stops at
+     the army's ceiling (RTS_DIFF `army`), and a point checked only when a unit comes out was
+     never checked again after that: a refinery built beside it, or ore spreading to its edge,
+     left the waiting army standing in the harvest - e2e/basespace caught exactly one. */
+  for (i = 0; i < G.ents.length; i++) {
+    var pb = G.ents[i];
+    if (!pb.dead && pb.side === 'enemy' && pb.type === 'struct' && pb.muster) _rtsAIMuster(pb);
+  }
   var teams = [];
   for (tid in (G.teams || {})) if (_rtsEscortWorthy(G.teams[tid])) teams.push(G.teams[tid]);
 
@@ -81,6 +92,7 @@ function _rtsEscortsTick(dt) {
     return Math.hypot(a.x - c.x, a.z - c.z) - Math.hypot(b.x - c.x, b.z - c.z) || a.id - b.id;
   });
   var keep = B.keep == null ? 6 : B.keep, commit = B.commit == null ? 0.75 : B.commit;
+  var per = B.escorts == null ? 1e9 : B.escorts;
   var free = loose.slice(keep);
   var go = Math.floor(free.length * commit);
   /* the furthest-out go first: they are the ones already at the muster points on the base's edge */
@@ -92,6 +104,7 @@ function _rtsEscortsTick(dt) {
       var n = count[teams[k].id] || 0;
       if (n < bn) { bn = n; best = teams[k]; }
     }
+    if (bn >= per) break;                          /* every marching team has its escort */
     u.escort = best.id;
     count[best.id] = bn + 1;
     _rtsEscortAim(u, best, count[best.id]);
