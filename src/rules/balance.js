@@ -54,13 +54,15 @@ var RTS_GEM_DETOUR = 3;
    fire  : FirepowerBias        speed : GroundspeedBias
    armor : ArmorBias            rof   : ROFBias (higher = slower reload)
    cost  : CostBias             build : BuildSpeedBias (higher = slower)
-   wall  : IsWallDestroyer      scan  : IsContentScan (looks inside transports/buildings) */
+   wall  : IsWallDestroyer      scan  : IsContentScan (looks inside transports/buildings)
+   keep  : idle fighters held at home when the rest go out as escorts - see core/escorts.js
+   commit: the share of what is left over that marches with a team */
 var RTS_DIFF = {
-  easy:   { name:'Recruit',  iq:2, fire:0.75, speed:0.85, armor:0.7, rof:1.3,  cost:1.2, build:1.4, wall:false, scan:false,
+  easy:   { name:'Recruit',  iq:2, fire:0.75, speed:0.85, armor:0.7, rof:1.3,  cost:1.2, build:1.4, wall:false, scan:false, keep:8, commit:0.5,
             desc:'The enemy attacks late, builds little and hits softly.' },
-  normal: { name:'Soldier',  iq:3, fire:1,    speed:1,    armor:1,   rof:1,    cost:1,   build:1,   wall:true,  scan:false,
+  normal: { name:'Soldier',  iq:3, fire:1,    speed:1,    armor:1,   rof:1,    cost:1,   build:1,   wall:true,  scan:false, keep:6, commit:0.75,
             desc:'An even fight. The enemy expands and repairs.' },
-  hard:   { name:'Commando', iq:5, fire:1.15, speed:1.1,  armor:1.2, rof:0.85, cost:0.8, build:0.7, wall:true,  scan:true,
+  hard:   { name:'Commando', iq:5, fire:1.15, speed:1.1,  armor:1.2, rof:0.85, cost:0.8, build:0.7, wall:true,  scan:true, keep:4, commit:1,
             desc:'The enemy builds a real base, defends it and comes early.' }
 };
 var RTS_DIFF_DEFAULT = 'normal';

@@ -44,6 +44,9 @@ var H = 300;
     return g.page.evaluate(function (a) {
       window.RTS_OPEN_OFF = a[2];
       window.RTS_MUSTER_OFF = a[4];
+      /* the before-picture is the code as it was, escorts included: with them on, the opponent
+         walks its idle units out before the pocket seals and fewer are left to be trapped */
+      window.RTS_ESCORT_OFF = a[4];
       if (typeof rtsSetVoxSide === 'function') rtsSetVoxSide(a[0]);
       _rtsNewGame(a[1], 'normal');
       var G = window._rtsG, N = RTS_N, i;
@@ -115,7 +118,7 @@ var H = 300;
         musters++;
         if (!_rtsMusterAwayFromHarvest(b.muster.tx, b.muster.tz)) inHarvest++;
       });
-      window.RTS_OPEN_OFF = false; window.RTS_MUSTER_OFF = false;
+      window.RTS_OPEN_OFF = false; window.RTS_MUSTER_OFF = false; window.RTS_ESCORT_OFF = false;
       return { musters: musters, inHarvest: inHarvest, sealed: sealed, trapped: trapped, t: Math.round(G.t), idle: idle, door: door,
                structs: G.ents.filter(function (e) { return !e.dead && e.side === 'enemy' && e.type === 'struct'; }).length };
     }, [vs, seed, off, H, !!musterOff]);

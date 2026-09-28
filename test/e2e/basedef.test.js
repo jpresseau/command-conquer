@@ -54,6 +54,15 @@ var SECS = 420;
     var r = await g.page.evaluate(function (a) {
       var vs = a[0], SECS = a[1];
       if (typeof rtsSetVoxSide === 'function') rtsSetVoxSide(vs);
+      /* ESCORTS OFF, because this harness makes the player unkillable and escorts would make that
+         the whole match. With them on, the opponent's spare army marched out and shelled a player
+         building that cannot fall - for three minutes, from beside buildings the opponent had put
+         up next to it after an engineer took one of the player's. Its own splash did 21,000
+         damage to its own base, every new barracks fell within ten seconds, and it finished
+         with 1-2 defences instead of 6-13. A real building falls in seconds. This spec is about
+         the base plan, which escorts do not touch: a unit costs the same idle or marching.
+         e2e/armyuse measures the escorts themselves. */
+      window.RTS_ESCORT_OFF = true;
       _rtsNewGame(9001, 'hard');
       var G = window._rtsG, wanted = {};
       for (var t = 0; t < SECS * 60; t++) {
@@ -67,6 +76,7 @@ var SECS = 420;
         }
         if (G.ai && G.ai.want) wanted[G.ai.want.key] = 1;
       }
+      window.RTS_ESCORT_OFF = false;
       var counts = {}, zones = {}, defences = 0, c = _rtsBaseCentre('enemy');
       for (var j = 0; j < G.ents.length; j++) {
         var s = G.ents[j];
