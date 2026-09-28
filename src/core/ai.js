@@ -382,8 +382,11 @@ function _rtsAIAllToHunt() {
    composition lists never attacks the player at all. Measured, hard, both armies, a player that
    fights back: 49 Light Tanks, Artillery and V2s bought across eight matches, none of which ever
    came within 45 of the player's yard or fired a single shot at anything the player owned; on one
-   seed, 17 vehicles built and 17 never given an order in 250 seconds. See unit/aiplan, which
-   reports that list and explains why it is not worth fixing. */
+   seed, 17 vehicles built and 17 never given an order in 250 seconds.
+
+   THERE IS A THIRD ROUTE NOW: core/escorts.js sends idle fighters out with whichever team is on
+   the march, so those units reach the fight inside a working composition. unit/aiplan still
+   reports the list of units no team names; e2e/armyuse measures that they now leave the base. */
 
 /* ------------------------------------------------------------- teams (TEAM.CPP) --
    A team is a composition plus a mission. It recruits until it is at full strength, only

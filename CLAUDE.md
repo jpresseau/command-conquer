@@ -96,6 +96,9 @@ Keep them small: if a file passes ~500 lines it wants splitting along its own ba
   (`_rtsSealsGround`), and its units walk out of the factory to a muster point it keeps clear
   (`_rtsAIMuster`) - and out of the harvest: a muster on the ore's edge cost the AI 8% of its
   income and most of its defences on some seeds. `test/*/basespace` holds all three.
+  `escorts`: idle AI fighters march with whichever team is on the move, graded by `keep`/`commit`
+  in `RTS_DIFF`. Separate teams for the unlisted units were tried and made the AI weaker (see
+  `unit/aiplan`); `e2e/armyuse` holds it.
 - `src/render/` — canvas 2D. Reads the sim, never writes it. `camera`, `post` (light pass, water,
   shroud), `frame`, `draw`, `icons`.
 - `src/ui/` — `shell` (open/close/resize), `sidebar`, `input`, `select`, `hud`, `camera`

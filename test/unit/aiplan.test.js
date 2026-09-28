@@ -170,12 +170,20 @@ S.note(Object.keys(mixKeys).length + ' units in the shopping list, ' +
      hulls cost it nothing it could have spent.
 
    So it is a cosmetic waste in a house that cannot spend what it already has. The list below is
-   here to say if that ever stops being true. */
+   here to say if that ever stops being true.
+
+   IT STOPPED BEING A WASTE, BY A THIRD ROUTE. Neither repair above - but core/escorts.js: idle
+   fighters march as escorts with whichever TEAM is already on the move, so these units fight
+   inside the compositions that work instead of forming ones that do not. Measured by
+   e2e/armyuse, normal, one seed per army: units of the types below that ever came within
+   striking distance of the player went from 0 to 11-19 a match, and the idle share of the
+   army after the first wave from 77-81% to 11-20%. They are still in no composition, which is
+   what this list reports; "never attack" is no longer true of them. */
 (function () {
   var loose = Object.keys(mixKeys).filter(function (k) {
     return mixKeys[k] !== 'ship' && !fielded[k];
   });
-  S.note('bought but in no team composition — base defence only, these never attack: ' +
+  S.note('bought but in no team composition — they fight as escorts (core/escorts.js): ' +
          (loose.join(', ') || 'none'));
 })();
 
