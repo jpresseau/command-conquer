@@ -92,6 +92,10 @@ Keep them small: if a file passes ~500 lines it wants splitting along its own ba
   per-tick bucket index the target scan and the crush check run over instead of the whole entity
   list. It shortens a scan's candidate list and changes no candidate test, so the property that
   makes it safe is that the two agree; see `docs/core-combat.md` and `test/*/spatial`.
+  The AI's base geometry is `basezone`: it may not place a building that walls off open ground
+  (`_rtsSealsGround`), and its units walk out of the factory to a muster point it keeps clear
+  (`_rtsAIMuster`) - and out of the harvest: a muster on the ore's edge cost the AI 8% of its
+  income and most of its defences on some seeds. `test/*/basespace` holds all three.
 - `src/render/` — canvas 2D. Reads the sim, never writes it. `camera`, `post` (light pass, water,
   shroud), `frame`, `draw`, `icons`.
 - `src/ui/` — `shell` (open/close/resize), `sidebar`, `input`, `select`, `hud`, `camera`

@@ -380,7 +380,9 @@ function _rtsDeliverUnit(side, key) {
   var src = _rtsHas(side, u.kind === 'infantry' ? 'barracks' : 'factory') || _rtsHas(side, 'yard');
   if (!src) return null;
   var made = _rtsSpawnAt(side, key, src);
-  if (made) _rtsRallyOut(made, src);
+  /* the player's rally point if one is set; the opponent's units walk out of the doorway to a
+     muster point instead of standing in it - see _rtsAIMuster */
+  if (made && !_rtsRallyOut(made, src) && side === 'enemy' && !u.harvest && !u.air) _rtsAIMusterOut(made, src);
   return made;
 }
 
