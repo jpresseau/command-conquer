@@ -944,7 +944,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">823a325 · 2026-09-29</div>
+  <div id="rtsBuild" title="build">1516373 · 2026-09-29</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -22960,12 +22960,13 @@ function _r3dFxLightOf(f, V) {
   var A = RTS_ANIMS[f.kind], big = f.big || 1;
   if (!A || f.t < 0) return null;
   var gy = V.ground(f.x, f.z), R = R3D_FX_R * big;
-  if (f.kind === 'boom') return [f.x, gy + (f.y || 0) + R * 0.5, f.z, R * 5, 2.4 * Math.exp(-f.t * 5)];
-  if (f.kind === 'pop') return [f.x, gy + (f.y || 0) + R * 0.4, f.z, R * 3.5, 1.5 * Math.exp(-f.t * 9)];
-  if (f.kind === 'hit') return [f.x, gy + (f.y || 0), f.z, R * 2.2, 1.0 * Math.exp(-f.t / A.dur * 5)];
+  /* the sixth: how wide a column of heat it sends up, in world units (the haze, resolve3d.js) */
+  if (f.kind === 'boom') return [f.x, gy + (f.y || 0) + R * 0.5, f.z, R * 5, 2.4 * Math.exp(-f.t * 5), R * 1.3];
+  if (f.kind === 'pop') return [f.x, gy + (f.y || 0) + R * 0.4, f.z, R * 3.5, 1.5 * Math.exp(-f.t * 9), R * 0.8];
+  if (f.kind === 'hit') return [f.x, gy + (f.y || 0), f.z, R * 2.2, 1.0 * Math.exp(-f.t / A.dur * 5), 0];
   if (f.kind.indexOf('fire') === 0) {         /* the burn ladder's flames - smoke has a size too */
     var H = 3.0 * big, host = _r3dFxHost(f, gy), T = V.t + _r3dFxSeed(f) * 10;
-    return [f.x, host.y + H * 0.4, f.z, H * 2.6 + host.w, 0.75 + 0.12 * Math.sin(T * 9.1) + 0.06 * Math.sin(T * 17.3)];
+    return [f.x, host.y + H * 0.4, f.z, H * 2.6 + host.w, 0.75 + 0.12 * Math.sin(T * 9.1) + 0.06 * Math.sin(T * 17.3), H * 0.45];
   }
   return null;
 }
@@ -22987,6 +22988,7 @@ function _r3dFxLightSet(gl, R3, G, P) {
     for (var c = 0; c < 3; c++) col[i * 3 + c] = s ? R3D_PLIGHT_WARM[c] * s[4] * amt : 0;
   }
   R3.plights = Math.min(L.length, R3D_PLIGHTS);
+  R3.plList = L.slice(0, R3D_PLIGHTS);                  /* the heat haze reads them too */
   gl.uniform4fv(gl.getUniformLocation(P, 'uPL'), pos);
   gl.uniform3fv(gl.getUniformLocation(P, 'uPC'), col);
 }
@@ -24565,6 +24567,64 @@ function _r3dPostEnd(R3, cam, invD) {
   gl.enable(gl.DEPTH_TEST);
 }
 </script>
+<script>/* render3d/heat3d.js - the air shimmering over what burns. Part of rts.render3d.
+
+   A burning refinery threw light (fxlight3d.js) and smoke (fxemit3d.js) and the air over it was
+   as still and clear as the air anywhere else. Now a column of heat rises over every fire and
+   every fresh fireball, and whatever is seen through it wavers - the heat haze the later 3D RTS
+   games hang over their fires. It is done where the finished picture is put together
+   (resolve3d.js): inside each column, the scene is read a couple of pixels off where it
+   should be, the offset rippling up the column as the clock runs.
+
+   The sources are the effect lights, the strongest R3D_PLIGHTS already picked for the mesh
+   program, each carrying how wide a column it sends up; a round striking armour sends none.
+   Part of the light pass, so RTS_POST_ON takes it out with the bloom and the grade;
+   R3.heatAmt takes it out alone. */
+
+var R3D_HEAT_N = 4;
+var R3D_HEAT_PX = 2.2;          /* how far the picture wavers, in device pixels, at full heat */
+
+var R3D_HEAT_GLSL =
+  'uniform vec4 uHeat[' + R3D_HEAT_N + '];' +   /* centre (texture space), half-width across, reach */
+  'uniform vec2 uHeatK;' +                      /* width over height of the buffer, the clock */
+  'vec2 _heat(vec2 uv){' +
+  '  vec2 off = vec2(0.0);' +
+  '  for (int i = 0; i < ' + R3D_HEAT_N + '; i++) {' +
+  '    vec4 h = uHeat[i];' +
+  /* in half-widths of the column, both ways; the column stands on its source and is twice as
+     tall as it is wide */
+  '    vec2 d = vec2(uv.x - h.x, (uv.y - h.y) / uHeatK.x) / h.z;' +
+  '    d.y = (d.y - 1.4) * 0.5;' +
+  '    float w = max(0.0, 1.0 - dot(d, d)); w *= w;' +
+  '    off += w * h.w * vec2(sin(uv.y * 190.0 + uHeatK.y * 8.0 + uv.x * 30.0),' +
+  '                          0.6 * sin(uv.y * 150.0 - uHeatK.y * 6.0 + uv.x * 50.0));' +
+  '  }' +
+  '  return off; }';
+
+/* The columns, onto the composite's program. `on` is the light pass's switch. */
+function _r3dHeatSet(gl, R3, P, on) {
+  var u = gl.getUniformLocation(P, 'uHeat');
+  if (!u) return 0;
+  var a = R3.heatU || (R3.heatU = new Float32Array(R3D_HEAT_N * 4)), n = 0, G = window._rtsG;
+  var amt = on ? (R3.heatAmt === undefined ? 1 : R3.heatAmt) : 0, L = R3.plList || [], W = R3.postW, H = R3.postH;
+  var sc = R3.scale || 1, zm = _rtsZoom();
+  for (var i = 0; i < R3D_HEAT_N; i++) {
+    var l = L[i], o = i * 4;
+    a[o] = 0; a[o + 1] = 0; a[o + 2] = 1; a[o + 3] = 0;
+    if (!l || !(l[5] > 0) || !(amt > 0)) continue;
+    var p = _rtsWorldToScreen(l[0], l[1], l[2]);
+    if (p.behind) continue;
+    a[o] = p.x * sc / W; a[o + 1] = 1 - p.y * sc / H;
+    a[o + 2] = Math.max(1e-3, l[5] * zm * (p.scale || 1) * sc / W);
+    a[o + 3] = Math.min(1, l[4]) * R3D_HEAT_PX * amt / W;
+    n++;
+  }
+  gl.uniform4fv(u, a);
+  gl.uniform2f(gl.getUniformLocation(P, 'uHeatK'), W / H, (G && G.t) || 0);
+  R3.heats = n;
+  return n;
+}
+</script>
 <script>/* render3d/resolve3d.js - the composite: the finished frame, its occlusion and its glow, put
    onto the canvas with the antialiasing put back. Part of rts.render3d. Split out of post3d.js,
    which owns the offscreen buffer and the occlusion this reads; this is the one pass that turns
@@ -24608,6 +24668,7 @@ var R3D_AO_RESOLVE_FS =
      Part of the light pass, so RTS_POST_ON takes it out with the bloom; R3.gradeAmt (0 to 1)
      takes it out alone, as R3.aoAmt does the occlusion. e2e/grade holds what it does. */
   'uniform float uGrade;' +
+  R3D_HEAT_GLSL +                    /* the air over what burns - heat3d.js */
   'vec3 _grade(vec3 c, vec2 uv){' +
   '  float l = dot(c, vec3(0.299, 0.587, 0.114));' +
   '  c *= mix(vec3(0.94, 0.97, 1.06), vec3(1.05, 1.02, 0.93), smoothstep(0.12, 0.72, l));' +
@@ -24650,7 +24711,8 @@ var R3D_AO_RESOLVE_FS =
   '  return (lb < lo || lb > hi) ? a : b;' +
   '}' +
   'void main(){' +
-  '  vec3 c = mix(texture2D(uScene, vT).rgb, _fxaa(vT), uAA);' +
+  '  vec2 hv = vT + _heat(vT);' +
+  '  vec3 c = mix(texture2D(uScene, hv).rgb, _fxaa(hv), uAA);' +
   '  float ao = mix(1.0, texture2D(uAO, vT).r, uAOAmt);' +
   '  vec3 lit = c * mix(vec3(' + R3D_AO_FLOOR[0].toFixed(3) + ', ' +
        R3D_AO_FLOOR[1].toFixed(3) + ', ' + R3D_AO_FLOOR[2].toFixed(3) +
@@ -24682,6 +24744,7 @@ function _r3dResolve(R3) {
   var postOn = typeof RTS_POST_ON === 'undefined' || RTS_POST_ON;
   gl.uniform1f(gl.getUniformLocation(R3.aoResolveP, 'uGrade'),
                postOn ? (R3.gradeAmt === undefined ? 1 : R3.gradeAmt) : 0);
+  _r3dHeatSet(gl, R3, R3.aoResolveP, postOn);
   /* The glow. R3.bloomOn is set by _r3dBloomPass for this frame only; with nothing burning the
      amount is zero and the sampler still needs a bound texture, so it gets the AO one - a
      texture multiplied by zero, rather than a branch in the shader every pixel. */

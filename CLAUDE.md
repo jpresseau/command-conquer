@@ -216,6 +216,11 @@ breaking it shipped once.
   treads and before the entities so a unit stands in its ring. `ui/hud.js` skips the brackets
   while the 3D mode is on; 2D keeps them. `R3.selAmt`. `e2e/selring`. A check's expected
   number must be the test's own: reading `R3D_RING_UNIT` back let a ring drawn anywhere pass.
+- **The air shimmers over what burns** (`render3d/heat3d.js`, read by the composite): a column of
+  heat over each of the strongest effect lights that sends one (the sixth element of
+  `_r3dFxLightOf`), where the scene is read a couple of pixels off. Part of the light pass
+  (`RTS_POST_ON`); `R3.heatAmt`. A fire's heat flickers with the clock, so a spec about the
+  ripple's own motion watches a fireball held at one age. `e2e/heat`.
 - **The harness's SwiftShader runs every branch of a shader.** A per-pixel `if` saves a GPU the
   untaken side and SwiftShader nothing, so eight per-kind material branches evaluated at four
   corners cost the harness their full sum: a frame went 1.1s -> 2.3s and real clicks and

@@ -29,12 +29,13 @@ function _r3dFxLightOf(f, V) {
   var A = RTS_ANIMS[f.kind], big = f.big || 1;
   if (!A || f.t < 0) return null;
   var gy = V.ground(f.x, f.z), R = R3D_FX_R * big;
-  if (f.kind === 'boom') return [f.x, gy + (f.y || 0) + R * 0.5, f.z, R * 5, 2.4 * Math.exp(-f.t * 5)];
-  if (f.kind === 'pop') return [f.x, gy + (f.y || 0) + R * 0.4, f.z, R * 3.5, 1.5 * Math.exp(-f.t * 9)];
-  if (f.kind === 'hit') return [f.x, gy + (f.y || 0), f.z, R * 2.2, 1.0 * Math.exp(-f.t / A.dur * 5)];
+  /* the sixth: how wide a column of heat it sends up, in world units (the haze, resolve3d.js) */
+  if (f.kind === 'boom') return [f.x, gy + (f.y || 0) + R * 0.5, f.z, R * 5, 2.4 * Math.exp(-f.t * 5), R * 1.3];
+  if (f.kind === 'pop') return [f.x, gy + (f.y || 0) + R * 0.4, f.z, R * 3.5, 1.5 * Math.exp(-f.t * 9), R * 0.8];
+  if (f.kind === 'hit') return [f.x, gy + (f.y || 0), f.z, R * 2.2, 1.0 * Math.exp(-f.t / A.dur * 5), 0];
   if (f.kind.indexOf('fire') === 0) {         /* the burn ladder's flames - smoke has a size too */
     var H = 3.0 * big, host = _r3dFxHost(f, gy), T = V.t + _r3dFxSeed(f) * 10;
-    return [f.x, host.y + H * 0.4, f.z, H * 2.6 + host.w, 0.75 + 0.12 * Math.sin(T * 9.1) + 0.06 * Math.sin(T * 17.3)];
+    return [f.x, host.y + H * 0.4, f.z, H * 2.6 + host.w, 0.75 + 0.12 * Math.sin(T * 9.1) + 0.06 * Math.sin(T * 17.3), H * 0.45];
   }
   return null;
 }
@@ -56,6 +57,7 @@ function _r3dFxLightSet(gl, R3, G, P) {
     for (var c = 0; c < 3; c++) col[i * 3 + c] = s ? R3D_PLIGHT_WARM[c] * s[4] * amt : 0;
   }
   R3.plights = Math.min(L.length, R3D_PLIGHTS);
+  R3.plList = L.slice(0, R3D_PLIGHTS);                  /* the heat haze reads them too */
   gl.uniform4fv(gl.getUniformLocation(P, 'uPL'), pos);
   gl.uniform3fv(gl.getUniformLocation(P, 'uPC'), col);
 }

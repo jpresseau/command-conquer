@@ -276,6 +276,11 @@ function boom(t, big) { return { kind: 'boom', x: 10, y: 1, z: 20, t: t, big: bi
   for (var t = 0; t < 2; t += 0.05) { V.t = t; var fl = g._r3dFxLightOf(fire, V)[4]; lo = Math.min(lo, fl); hi = Math.max(hi, fl); }
   S.ok('a fire burns steadily, flickering', lo > 0.5 && hi < 1.0 && hi - lo > 0.1, 'strength ' + lo.toFixed(2) + ' to ' + hi.toFixed(2));
   S.eq('smoke gives no light', g._r3dFxLightOf({ kind: 'smoke', x: 0, y: 1, z: 20, t: 0.3, big: 1, loops: 3 }, V), null);
+  /* the heat haze's columns (heat3d.js) ride on the same list, in the sixth place */
+  var hit = g._r3dFxLightOf({ kind: 'hit', x: 0, y: 1, z: 20, t: 0.02, big: 1 }, V);
+  S.ok('a fireball and a fire send a column of heat up, a round striking armour none',
+       fresh[5] > 1 && g._r3dFxLightOf(fire, V)[5] > 1 && hit && hit[5] === 0,
+       'fireball ' + fresh[5].toFixed(2) + ', fire ' + g._r3dFxLightOf(fire, V)[5].toFixed(2) + ', hit ' + (hit && hit[5]));
 
   var pos, col, P = 'prog', gl = { getUniformLocation: function (p, n) { return n; },
     uniform4fv: function (n, a) { pos = Array.prototype.slice.call(a); }, uniform3fv: function (n, a) { col = Array.prototype.slice.call(a); } };
@@ -286,6 +291,8 @@ function boom(t, big) { return { kind: 'boom', x: 10, y: 1, z: 20, t: t, big: bi
        'slots at x ' + [pos[0], pos[4], pos[8]].join(', ') + ', red ' + [col[0], col[3], col[6]].map(function (v) { return v.toFixed(2); }).join(', '));
   S.ok('...and a slot with nothing to light has no reach, and sits far below the map', pos[15] === 0 && pos[13] < -1000 && col[9] === 0,
        'slot 4: reach ' + pos[15] + ', y ' + pos[13]);
+  S.ok('...and the haze is handed the same lights, strongest first', R3.plList && R3.plList.length === 3 && R3.plList[0][0] === 30,
+       (R3.plList || []).length + ' in the list, the first at x ' + (R3.plList && R3.plList[0][0]));
   R3.plightAmt = 0; g._r3dFxLightSet(gl, R3, G, P);
   S.ok('R3.plightAmt 0 puts every light out', col.every(function (v) { return v === 0; }), col.slice(0, 3).join(','));
 })();
