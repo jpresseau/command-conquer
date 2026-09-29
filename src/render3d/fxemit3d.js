@@ -292,9 +292,14 @@ function _r3dFxProj(G, V) {
     if (vis && !_rtsVisible(_rtsTX(p.x), _rtsTX(p.z))) continue;
     var sp = Math.sqrt(p.vx * p.vx + p.vz * p.vz) || 1, dx = p.vx / sp, dz = p.vz / sp;
     var y = V.ground(p.x, p.z) + (p.y || 1.4), seed = _r3dFxH(p.from && p.from.id || 1, 11);
+    var fx = p.from ? p.x - p.from.x : 9, fz = p.from ? p.z - p.from.z : 0;
+    var flown = Math.sqrt(fx * fx + fz * fz);
+    /* THE MUZZLE: a round barely out of the barrel lights it up - three frames of a cannon's
+       flash, a little more of a launcher's - and the flash is where the barrel is, not the round */
+    if (p.from && flown < 3) _r3dFxBill(V.M, V, p.from.x + dx * 1.2, y, p.from.z + dz * 1.2, 1.2, 1.2, 1,
+                                        R3D_FXT_FLASH, 0, seed, 1 - flown / 3, 0, R3D_FX_SPARKC);
     if (p.kind === 'missile' || p.kind === 'rocket') {
-      var fx = p.from ? p.x - p.from.x : 9, fz = p.from ? p.z - p.from.z : 0;
-      var flown = Math.sqrt(fx * fx + fz * fz), L = Math.max(0.5, Math.min(9, flown));
+      var L = Math.max(0.5, Math.min(9, flown));
       _r3dFxStreak(V.M, V, p.x - dx * L, y, p.z - dz * L, p.x, y, p.z, 1.1, 0.8, R3D_FXT_TRAIL, flown, seed, 0.75, L, R3D_FX_TRAILC);
       _r3dFxBill(V.M, V, p.x, y, p.z, 0.75, 0.75, 0.8, R3D_FXT_FLASH, 0, seed, 1, 0, R3D_FX_SPARKC);
     } else {
@@ -304,10 +309,12 @@ function _r3dFxProj(G, V) {
   }
 }
 
-/* Everything G.fx and G.proj hold that this pass owns, into the two batches. */
+/* Everything G.fx and G.proj hold that this pass owns, and what moving things leave behind them,
+   into the two batches. */
 function _r3dFxEmit(G, V) {
   var A = RTS_ANIMS, i;
   _r3dFxProj(G, V);
+  if (typeof _r3dFxWakes === 'function') _r3dFxWakes(G, V);     /* dust and wakes - fxwake3d.js */
   for (i = 0; i < G.fx.length; i++) {
     var f = G.fx[i];
     if (f.t < 0 || !_r3dFxOwns(f.kind)) continue;

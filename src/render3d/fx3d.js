@@ -190,7 +190,6 @@ function _r3dFxDrawSprites(G, cam, invD) {
 function _r3dFxDraw(G, cam, invD) {
   if (typeof RTS_FX_SPRITES !== 'undefined' && RTS_FX_SPRITES) return _r3dFxDrawSprites(G, cam, invD);
   var R3 = window._R3D, gl = R3.gl, V, i;
-  if (!G.fx.length && !(G.proj && G.proj.length)) return 0;
   if (!R3.fx2P) {
     if (R3.fx2Fail) return _r3dFxDrawSprites(G, cam, invD);
     try {

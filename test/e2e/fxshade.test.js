@@ -16,6 +16,7 @@
      THE GLOW       the bloom's emitter pass draws only what gives off light, so a frame of
                     nothing but smoke has no glow to blur
      THE ROUNDS     a rocket flies at its height trailing smoke; a rifle round is a dash
+     THE DUST       a vehicle on the move raises dust behind it
      THE DRAWS      no draw is refused, in either path */
 
 var { chromium } = require('playwright');
@@ -188,6 +189,43 @@ var S = new Suite('fxshade');
     o.roundPx = rn; o.roundSpan = rn ? x1 - x0 : 0; o.flightPx = +(44 * zoom).toFixed(0);
     window.RTS_POST_ON = true;
 
+    /* ---------- 9. dust ----------
+       The same tank on the same loose ground, once with somewhere to go and once parked: what
+       changes is its dust, and it lies behind it (render3d/fxwake3d.js). */
+    var dz = null, dd = 1e9;
+    for (var sz = 8; sz < RTS_N - 8; sz++) for (var sx2 = 8; sx2 < RTS_N - 8; sx2++) {
+      var loose = true;
+      for (var ea = -3; ea <= 3 && loose; ea++) for (var eb = -2; eb <= 2 && loose; eb++) {
+        var tj = _rtsIdx(sx2 + ea, sz + eb), tk = G.terrain[tj];
+        if ((tk !== RTS_T_SAND && tk !== RTS_T_ROAD) || G.blocked[tj]) loose = false;
+      }
+      var dist2 = Math.abs(sx2 - best[0]) + Math.abs(sz - best[1]);
+      if (loose && dist2 < dd) { dd = dist2; dz = [sx2, sz]; }
+    }
+    o.dustAt = dz;
+    if (dz) {
+      window.RTS_POST_ON = false;
+      var DX = _rtsWX(dz[0]), DZ = _rtsWX(dz[1]);
+      R.focus.x = DX; R.focus.z = DZ; _rtsApplyCam();
+      G.fx.length = 0; G.proj.length = 0;
+      var tank = _rtsSpawnUnit('player', 'tank', DX, DZ);
+      tank.rot = 0; tank.path = [{ x: DX + 60, z: DZ }]; tank.pi = 0;
+      _rtsRFrame(0);
+      var mv = new Uint8Array(CW * CH * 4); gl.readPixels(0, 0, CW, CH, gl.RGBA, gl.UNSIGNED_BYTE, mv);
+      tank.path = null;
+      _rtsRFrame(0);
+      var pk = new Uint8Array(CW * CH * 4); gl.readPixels(0, 0, CW, CH, gl.RGBA, gl.UNSIGNED_BYTE, pk);
+      tank.dead = true; G.ents = G.ents.filter(function (e) { return e !== tank; });
+      var tp = _rtsGroundToScreen(DX, DZ), dn = 0, dxs = 0;
+      for (q = 0; q < mv.length; q += 4) {
+        if (Math.abs(mv[q] - pk[q]) + Math.abs(mv[q + 1] - pk[q + 1]) + Math.abs(mv[q + 2] - pk[q + 2]) < 8) continue;
+        dn++; dxs += (q >> 2) % CW;
+      }
+      o.dustPx = dn; o.dustBehind = dn ? +(tp.x * R.dpr - dxs / dn).toFixed(1) : 0;
+      window.RTS_POST_ON = true;
+      R.focus.x = X; R.focus.z = Z; _rtsApplyCam();
+    }
+
     /* ---------- 7. the draws ---------- */
     gl.getError();
     var kinds = ['boom', 'pop', 'hit', 'piff', 'splash', 'smoke', 'firebig', 'firemed', 'firesmall'], errs = [];
@@ -252,6 +290,12 @@ var S = new Suite('fxshade');
   S.ok('...and a rifle round is a dash racing along its line, not the line',
        out.roundPx > 20 && out.roundPx < 5000 && out.roundSpan < out.flightPx * 0.5,
        out.roundPx + ' pixels spanning ' + out.roundSpan + 'px of a ' + out.flightPx + 'px flight');
+  S.ok('loose ground is found to drive a tank over', !!out.dustAt, String(out.dustAt));
+  if (out.dustAt) {
+    S.ok('...and a tank on the move raises dust that a parked one does not, behind it',
+         out.dustPx > 300 && out.dustBehind > 10,
+         out.dustPx + ' pixels of dust, centred ' + out.dustBehind + 'px behind the tank');
+  }
   S.eq('no draw is refused, for any kind, in either path, with or without the post buffer', out.glErrs.join('; '), '');
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
 

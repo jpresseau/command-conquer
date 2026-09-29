@@ -11,7 +11,8 @@ var { Suite } = require('../lib/assert.js');
 var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('fxemit');
-var g = load(['src/rules', 'src/core', 'src/sprites/bake.js', 'src/render3d/fxemit3d.js']);
+var g = load(['src/rules', 'src/core', 'src/sprites/bake.js', 'src/render3d/fxemit3d.js', 'src/render3d/fxwake3d.js']);
+g.R3D_WATER_Y = 0.10;       /* render3d/world3d.js's, which this sandbox does not load */
 var A = g.RTS_ANIMS, F = g.R3D_FX_STRIDE, Q = g.R3D_FX_QUAD;
 
 /* a view the way fx3d.js builds one, over flat ground with a strip of sea at z < -40 */
@@ -193,6 +194,12 @@ function boom(t, big) { return { kind: 'boom', x: 10, y: 1, z: 20, t: t, big: bi
   var old = trailLen(flying({ kind: 'missile', x: 30, y: 1.4, z: 20, vx: 34, vz: 0, from: shooter }));
   S.ok('a rocket leaves a smoke trail that reaches back to its launcher and no further', young > 2.9 && young < 3.1 && old > 8.9 && old < 9.1,
        'trail ' + young.toFixed(2) + ' long three units out, ' + old.toFixed(2) + ' thirty units out (capped at 9)');
+  var leaving = quads(flying({ kind: 'shell', x: 1.5, y: 1.4, z: 20, vx: 60, vz: 0, from: shooter }).M, g.R3D_FXT_FLASH);
+  var away = quads(flying({ kind: 'shell', x: 12, y: 1.4, z: 20, vx: 60, vz: 0, from: shooter }).M, g.R3D_FXT_FLASH);
+  var muzzle = leaving.filter(function (f) { return Math.abs(f.x - 1.2) < 0.01; });
+  S.ok('a shell just out of the barrel flashes at the muzzle, and only then',
+       muzzle.length === 1 && muzzle[0].op > 0.4 && away.every(function (f) { return Math.abs(f.x - 1.2) > 0.01; }),
+       leaving.length + ' flashes leaving the barrel, ' + away.length + ' twelve units out');
   g._rtsVisible = function () { return false; };
   S.eq('...and nothing in flight is drawn where the player cannot see', flying({ kind: 'shell', x: 12, y: 1.4, z: 20, vx: 60, vz: 0, from: shooter }).M.n, 0);
   g._rtsVisible = function () { return true; };
@@ -213,6 +220,47 @@ function boom(t, big) { return { kind: 'boom', x: 10, y: 1, z: 20, t: t, big: bi
   S.ok('a chunk of a building flies at its own height, glowing at first and dark once it cools',
        hot && Math.abs(hot.y - 3.15) < 0.01 && hot.heat > 0.8 && cold.heat === 0,
        'at y ' + (hot && hot.y.toFixed(2)) + ', heat ' + (hot && hot.heat.toFixed(2)) + ' -> ' + (cold && cold.heat));
+})();
+
+/* ---- what moving things leave behind: dust off the tracks, a wake off the hull ---- */
+(function () {
+  var N = g.RTS_N;
+  function ground(kind) {
+    var t = new Uint8Array(N * N); t.fill(kind);
+    return t;
+  }
+  function moving(def, kind, extra) {
+    var u = Object.assign({ id: 12, type: 'unit', def: def, side: 'player', x: 20, z: 20, rot: 0, path: [{ x: 60, z: 20 }] }, extra || {});
+    g.window._rtsG = { fx: [], proj: [], ents: [u], byId: {}, terrain: ground(kind) };
+    var V = view();
+    g._r3dFxEmit(g.window._rtsG, V);
+    return quads(V.M, g.R3D_FXT_BLOB);
+  }
+  g._rtsVisible = function () { return true; };
+  var sand = moving('tank', g.RTS_T_SAND), grass = moving('tank', g.RTS_T_GRASS);
+  var behind = sand.every(function (b) { return b.x < 20; });
+  var opS = sand.reduce(function (a, b) { return a + b.op; }, 0), opG = grass.reduce(function (a, b) { return a + b.op; }, 0);
+  S.ok('a tank on the move over sand throws dust, and all of it behind it', sand.length === 4 && behind && opS > 0.5,
+       sand.length + ' puffs, opacity ' + opS.toFixed(2) + ', behind: ' + behind);
+  S.ok('...less off grass', opG > 0 && opG < opS * 0.5, 'opacity ' + opG.toFixed(2) + ' against ' + opS.toFixed(2));
+  S.eq('...and none when it is parked', moving('tank', g.RTS_T_SAND, { path: null }).length, 0);
+  S.eq('...nor off soldiers\' boots, nor from anything in the air',
+       moving('rifle', g.RTS_T_SAND).length + moving('tank', g.RTS_T_SAND, { air: true }).length, 0);
+  g._rtsVisible = function () { return false; };
+  S.eq('...nor where the player cannot see', moving('tank', g.RTS_T_SAND).length, 0);
+  g._rtsVisible = function () { return true; };
+  var u = { id: 13, type: 'unit', def: 'gunboat', side: 'player', x: 20, z: -60, rot: 0, path: [{ x: 60, z: -60 }] };
+  g.window._rtsG = { fx: [], proj: [], ents: [u], byId: {}, terrain: ground(g.RTS_T_WATER) };
+  var V = view();
+  g._r3dFxEmit(g.window._rtsG, V);
+  var wake = null;
+  for (var q = 0; q < V.M.n; q++) if (V.M.a[q * Q + 6] === g.R3D_FXT_TRAIL) wake = q * Q;
+  var ys = [], xs = [];
+  if (wake !== null) for (var v = 0; v < 6; v++) { ys.push(V.M.a[wake + v * F + 1]); xs.push(V.M.a[wake + v * F]); }
+  S.ok('a ship under way lays a wake on the water behind it, lifted clear of the swell',
+       wake !== null && ys.every(function (y) { return Math.abs(y - 0.24) < 1e-4; }) && Math.max.apply(null, xs) < 20 &&
+       V.M.a[wake + 5] >= g.R3D_FX_SEA_LIFT,
+       wake === null ? 'no wake' : 'at y ' + ys[0].toFixed(2) + ', from x ' + Math.min.apply(null, xs).toFixed(1) + ' to ' + Math.max.apply(null, xs).toFixed(1));
 })();
 
 /* ---- back to front ---- */
