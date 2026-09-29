@@ -187,6 +187,7 @@ function _r3dFrame(G) {
   gl.uniform2f(gl.getUniformLocation(R3.meshP, 'uTilt'), R3.cp, R3.sp);
   gl.uniform1f(gl.getUniformLocation(R3.meshP, 'uInvD'), invD);
   _r3dShadowBind(R3.meshP, 1);
+  _r3dFxLightSet(gl, R3, G, R3.meshP);              /* what is burning lights its neighbours */
   var uA = MC.uA, uWave = MC.uWave;
   gl.uniform1f(uA, 1);
   gl.uniform2f(uWave, 0, 0);

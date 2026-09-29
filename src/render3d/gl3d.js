@@ -241,7 +241,7 @@ var R3D_MESH_FS =
   'uniform vec4 uSea; uniform sampler2D uSeaM;' +
   'uniform vec2 uWave;' +               /* the swell's own clock, shared with the vertex stage */
   'uniform float uRip;' +               /* the chop's strength: R3.rippleAmt, 1 unless a spec says */
-  R3D_NOISE_GLSL + R3D_WEATHER_GLSL +
+  R3D_NOISE_GLSL + R3D_WEATHER_GLSL + R3D_PLIGHT_GLSL +
   R3D_SHADOW_GLSL + R3D_MESH_LIGHT +
   /* NORMALISED HERE, NOT IN THE VERTEX SHADER. A varying is interpolated linearly, and the
      linear blend of two unit vectors is shorter than one - which is exactly the case on the
@@ -275,6 +275,8 @@ var R3D_MESH_FS =
   '    c = mix(c, vec3(0.92, 0.95, 0.93), clamp(fo * 1.4, 0.0, 0.85));' +               /* foam */
   '    a = uA * mix(0.45, 1.0, smoothstep(0.46, 0.74, wm));' +
   '  }' +
+  /* what is burning near it lights it - render3d/fxlight3d.js */
+  '  c += _plight(vCol.rgb * tint, normalize(vN), vec3(vWxz.x, vHY.y, vWxz.y));' +
   '  gl_FragColor = vec4(c, a); }';
 
 /* Ground and fog share one textured program; fog just samples a different texture with

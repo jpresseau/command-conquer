@@ -184,6 +184,11 @@ breaking it shipped once.
 - **What was built weathers** (`render3d/weather3d.js`): stains, rain streaks and grime at the
   foot, per pixel in the mesh program. `uWeather` is set per batch from `mesh.weather` (1 for a
   building, 0.5 for a unit) and reset to 0 after, so trees, rock and the sea never weather.
+- **What burns lights what stands near it** (`render3d/fxlight3d.js`): the four strongest
+  fireballs, pops, hits and fires are point lights in the mesh program (`uPL`/`uPC`), warm,
+  falling off with distance and brightest on the faces toward them. `R3.plightAmt`. A spec that
+  measures the light takes the effect's own quads out (stub `_r3dFxDraw`): a blast's smoke
+  hides the wall it lights, and a light that never faded passed as cooled. `e2e/fxlight`.
 - **The harness's SwiftShader runs every branch of a shader.** A per-pixel `if` saves a GPU the
   untaken side and SwiftShader nothing, so eight per-kind material branches evaluated at four
   corners cost the harness their full sum: a frame went 1.1s -> 2.3s and real clicks and
