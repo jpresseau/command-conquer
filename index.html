@@ -944,7 +944,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">04ecc2f · 2026-09-29</div>
+  <div id="rtsBuild" title="build">1a43b3f · 2026-09-29</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -26283,6 +26283,7 @@ function _r3dFxEmit(G, V) {
   var A = RTS_ANIMS, i;
   _r3dFxProj(G, V);
   if (typeof _r3dFxWakes === 'function') _r3dFxWakes(G, V);     /* dust and wakes - fxwake3d.js */
+  if (typeof _r3dFxAlive === 'function') _r3dFxAlive(G, V);     /* stacks, beacons - alive3d.js */
   for (i = 0; i < G.fx.length; i++) {
     var f = G.fx[i];
     if (f.t < 0 || !_r3dFxOwns(f.kind)) continue;
@@ -26809,6 +26810,142 @@ function _r3dHuskTurret(h) {
   return !!(R && R.spr && R.spr.turret && R.spr.turret[h.side] && R.spr.turret[h.side][h.def]);
 }
 </script>
+<script>/* render3d/alive3d.js - a base that is running. Part of rts.render3d.
+
+   Every building was a still model: a radar station that looked at nothing, a power plant whose
+   chimneys never smoked, a skyline with no light on it, and a building that was destroyed
+   simply went - three seconds of wreck time and then clean ground under the craters. The bases
+   of the later 3D RTS games are MACHINES that are visibly working, and they go down in ruins.
+   So in the 3D mode:
+
+     THE RADAR TURNS   an antenna on the dome, sweeping round (its own small mesh, drawn over the
+                       building's, so the building's model is untouched)
+     CHIMNEYS SMOKE    a pale plume off every power plant stack (the effects pass's smoke)
+     BEACONS BLINK     red lights on the tall things - the stacks, the dome, the tech centre's
+                       mast - each on its own beat
+     RUINS STAND       a destroyed building slumps into a charred heap as it goes, and the heap
+                       stays for R3D_RUBBLE_LIFE seconds after the rules have taken it off the map,
+                       settling into the ground at the end. The one piece of state here: the
+                       renderer remembers what it saw die (R3.rubble), keyed to the game.
+
+   Model coordinates are the building model's own (sprites/models.js: art pixels about the
+   footprint's centre), turned into the world by the same ART2W every building is drawn at.
+   Cosmetic, all of it: nothing here blocks a path or takes a hit. R3.aliveAmt 0 takes it out. */
+
+var R3D_RUBBLE_LIFE = 30;       /* seconds a ruin stands after its building is gone */
+var R3D_BEACON_C = [1.0, 0.22, 0.16];
+var R3D_STACK_SMOKE = [0.80, 0.80, 0.79];
+
+/* Where the working parts are, per building, in model units: chimney tops that smoke, beacons,
+   and the point the radar's antenna turns about. */
+function _r3dAliveSpots(key) {
+  var d = rtsStructDef(key);
+  if (!d) return null;
+  var D = d.h * RTS_TS, W = d.w * RTS_TS, zb = -D / 2 + 9, s = { smoke: [], beacon: [], spin: null };
+  if (key === 'power') {
+    s.smoke = [[-9, 41, zb], [9, 41, zb]];
+    s.beacon = [[-9, 42.2, zb + 6.4]];
+  } else if (key === 'apower') {
+    for (var k = 0; k < 4; k++) s.smoke.push([-25 + k * 16.5, 39 + (k % 2) * 6, zb]);
+    s.beacon = [[-8.5, 45.2, zb + 6]];
+  } else if (key === 'radar') {
+    s.spin = [0, 33, -1];
+    s.beacon = [[0, 44.2, -1]];
+  } else if (key === 'lab') {
+    s.beacon = [[W / 2 - 10, 45.6, -2]];
+  } else return null;
+  return s;
+}
+
+/* The radar's antenna, in model units about its own foot: a mast, a head, a boom carrying a
+   row of elements under a bar in the house's colour, and a counterweight. */
+function _r3dAntennaModel(side) {
+  var m = [], S = RTS_PAL.steel, DK = RTS_PAL.dark, TM = RTS_PAL.team[side];
+  _r3Cyl(m, 0, 0, 0, 1.1, 3.4, S[2], S[1], 16);
+  _r3Box(m, 0, 3.4, 0, 2.8, 1.3, 2.8, DK[1], DK[2]);
+  _r3Box(m, 0, 4.7, 0, 18, 1.0, 1.4, S[1], S[3]);
+  for (var k = -3; k <= 3; k++) _r3Box(m, k * 2.4, 5.7, 0.2, 1.2, 3.4, 0.6, S[2], S[3]);
+  _r3Box(m, 0, 9.1, 0.2, 17, 0.7, 1.0, TM[1], TM[3]);
+  _r3Box(m, 0, 3.6, -2.4, 3.2, 2.2, 2.6, DK[0], DK[1]);
+  return m;
+}
+function _r3dAntenna(R3, side) {
+  var k = 'antenna:' + side;
+  if (R3.mesh[k] === undefined) {
+    var f = null;
+    try { f = _r3DetailHigh(function () { return _r3dAntennaModel(side); }); } catch (e) { f = null; }
+    R3.mesh[k] = (f && f.length) ? _r3dBuildMesh(R3.gl, f) : null;
+  }
+  return R3.mesh[k];
+}
+
+/* Remember what has just been destroyed, and forget what has stood its time. */
+function _r3dRubbleTick(G, R3) {
+  if (R3.rubbleG !== G) { R3.rubbleG = G; R3.rubble = {}; }
+  var t = G.t || 0, R = R3.rubble, i;
+  for (i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.type !== 'struct' || !e.dead || e.selling || R[e.id]) continue;
+    var d = rtsStructDef(e.def);
+    if (!d || d.wall) continue;
+    R[e.id] = { def: e.def, side: e.side, x: e.x, z: e.z, t0: t };
+  }
+  for (var id in R) if (t - R[id].t0 > R3D_RUBBLE_LIFE || t < R[id].t0) delete R[id];
+}
+
+/* The antennas and the ruins, handed to `draw(mesh, x, y, z, rot, dim, sy)`. */
+function _r3dAliveDraw(G, R3, draw) {
+  if (R3.aliveAmt === 0) { R3.rubbleN = 0; return; }
+  var A2W = RTS_TILE / RTS_TS, t = G.t || 0, i;
+  for (i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.type !== 'struct' || e.building) continue;
+    var sp = e.def === 'radar' ? _r3dAliveSpots('radar') : null;
+    if (!sp || !sp.spin) continue;
+    draw(_r3dAntenna(R3, e.side), e.x + sp.spin[0] * A2W, _rtsElev(e.x, e.z) + sp.spin[1] * A2W,
+         e.z + sp.spin[2] * A2W, t * 1.1 + e.id, 0, 1);
+  }
+  _r3dRubbleTick(G, R3);
+  var n = 0;
+  for (var id in R3.rubble) {
+    var r = R3.rubble[id], age = t - r.t0;
+    /* it slumps as it goes, to a quarter of its height, and settles out of sight at the end */
+    var k = Math.min(1, age / 1.1), sy = 1 - 0.74 * k * k;
+    var sink = Math.max(0, age - (R3D_RUBBLE_LIFE - 3)) / 3 * 12 * A2W;
+    draw(_r3dMesh('b', r.def, r.side), r.x, _rtsElev(r.x, r.z) - sink, r.z, 0, 2, sy);
+    n++;
+  }
+  R3.rubbleN = n;
+}
+
+/* The smoke off the stacks and the beacons, into the effects pass (fxemit3d.js). */
+function _r3dFxAlive(G, V) {
+  var R3 = window._R3D;
+  if (!R3 || R3.aliveAmt === 0) return;
+  var A2W = RTS_TILE / RTS_TS, vb = _r3dViewBounds(), E = G.ents || [];
+  for (var i = 0; i < E.length; i++) {
+    var e = E[i];
+    if (e.dead || e.type !== 'struct' || e.building) continue;
+    if (e.x < vb.x0 - 30 || e.x > vb.x1 + 30 || e.z < vb.z0 - 10 || e.z > vb.z1 + 40) continue;
+    var sp = _r3dAliveSpots(e.def);
+    if (!sp) continue;
+    var gy = _rtsElev(e.x, e.z), seed = _r3dFxH(e.id, 7.7), j, p;
+    for (j = 0; j < sp.smoke.length; j++) {
+      p = sp.smoke[j];
+      _r3dFxColumn(V, e.x + p[0] * A2W, gy + p[1] * A2W, e.z + p[2] * A2W, 1.4, seed + j,
+                   V.t + seed * 7 + j * 1.3, 0.42, R3D_STACK_SMOKE);
+    }
+    /* on for a fifth of every 1.4 seconds, each building on its own beat */
+    var beat = (V.t + seed * 1.4) % 1.4;
+    if (beat > 0.28) continue;
+    for (j = 0; j < sp.beacon.length; j++) {
+      p = sp.beacon[j];
+      _r3dFxBill(V.M, V, e.x + p[0] * A2W, gy + p[1] * A2W, e.z + p[2] * A2W, 0.42, 0.42, 0.6,
+                 R3D_FXT_FLASH, 0, seed, 1 - beat / 0.28 * 0.4, 0, R3D_BEACON_C);
+    }
+  }
+}
+</script>
 <script>/* render3d/dress3d.js - what a base keeps lying about. Part of rts.render3d.
 
    A base was its buildings standing on a clean plaza, like models set out on a table. The
@@ -27261,8 +27398,8 @@ function _r3dBuildMesh(gl, faces) {
 /* The cache key carries everything that changes the geometry or its colours: type, side,
    turret half, prone. A miss builds the model through the same functions the baker uses, so
    the two pipelines cannot drift apart - there is no second copy of any shape. */
-function _r3dMesh(kind, def, side, part, prone) {
-  var R3 = window._R3D, key = kind + ':' + def + ':' + side + ':' + (part || '') + ':' + (prone ? 1 : 0);
+function _r3dMesh(kind, def, side, part, prone, pose) {
+  var R3 = window._R3D, key = kind + ':' + def + ':' + side + ':' + (part || '') + ':' + (prone ? 1 : 0) + ':' + (pose || 0) + (R3.soldierOff ? ':s' : '');
   var m = R3.mesh[key];
   if (m !== undefined) return m;
   var faces = null;
@@ -27275,8 +27412,12 @@ function _r3dMesh(kind, def, side, part, prone) {
        raises the segment counts and turns every box's flat chamfer into a rounded edge with a
        normal per corner, for the duration of this build and no longer. See _R3_DETAIL. */
     faces = _r3DetailHigh(function () {
-      return (kind === 'b') ? _sprBuildingModel(def, side)
-                            : _sprUnitModel(def, side, !!prone, part || null);
+      if (kind === 'b') return _sprBuildingModel(def, side);
+      /* a soldier has a model of his own in 3D, in walking poses (render3d/soldier3d.js); the
+         sprite's is the fallback, and still what a prone squad and a dog are drawn as */
+      var ud = rtsUnitDef(def), sm = (ud && ud.kind === 'infantry' && !part && !R3.soldierOff)
+        ? _r3dSoldierModel(def, side, !!prone, pose || 0) : null;
+      return sm || _sprUnitModel(def, side, !!prone, part || null);
     });
   } catch (e) { faces = null; }
   m = (faces && faces.length) ? _r3dBuildMesh(R3.gl, faces) : null;
@@ -27695,9 +27836,12 @@ function _r3dFrame(G) {
          walk reads through a small vertical bob instead, phased by the same `gait` offset that
          desynchronises the 2D walk frames, so a squad does not pogo in unison. Vehicles do not
          bob; tracks do not walk. */
-      var d2 = rtsUnitDef(e.def);
+      var d2 = rtsUnitDef(e.def), pose = 0;
+      /* now it WALKS: a stride pose by its own gait (soldier3d.js); the bob is what is left of
+         the old suggestion of a march, much smaller, in step with the stride */
       if (d2.kind === 'infantry' && e.path && !e.prone) {
-        y += Math.abs(Math.sin(G.t * 9 + (e.gait || 0) * 0.8)) * 0.45;
+        pose = R3.soldierOff ? 0 : _r3dSoldierPose(e, G.t);
+        y += Math.abs(Math.sin(G.t * 9 + (e.gait || 0) * 0.8)) * (pose ? 0.08 : 0.45);
       }
       /* AND IT LEANS ON THE GROUND IT IS STANDING ON. Measured over a running match, the
          steepest slope under a unit is 0.228: a hull three units wide had one side 0.69 world
@@ -27712,7 +27856,7 @@ function _r3dFrame(G) {
          bolted to the hull - it rotates in the hull's plane, and a turret that stayed
          world-level would shear out of its own ring on any slope. */
       var gn = (e.air || (d2 && d2.sea)) ? null : _rtsElevNormal(e.x, e.z);
-      drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : null, e.prone),
+      drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : null, e.prone, pose),
              e.x, y, e.z, -e.rot, ART2W, false, 1, gn);
       if (turret) {
         drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false), e.x, y, e.z, -(e.turret || 0),
@@ -27722,6 +27866,8 @@ function _r3dFrame(G) {
   }
   /* and the burnt-out hulls of the vehicles that died, charred (render3d/husk3d.js) */
   if (!only) _r3dHusks(G, R3, function (m, x, y, z, rot, n) { drawIn(C, m, x, y, z, rot, ART2W, 2, 1, n); });
+  /* the radar turning, and the ruins of what was destroyed (render3d/alive3d.js) */
+  if (!only) _r3dAliveDraw(G, R3, function (m, x, y, z, rot, dim, sy) { drawIn(C, m, x, y, z, rot, ART2W, dim, sy, null); });
   flushBatch(C);
   }
   paintEntities(MC);
@@ -28071,6 +28217,169 @@ function _r3dTree(out, x, z, tx, tz, tn) {
   } else {
     _r3dConifer(out, x, z, tx, tz, tn, h1, h2, h3);
   }
+}
+</script>
+<script>/* render3d/soldier3d.js - a soldier worth zooming in on. Part of rts.render3d.
+
+   The infantry model is the sprite baker's (sprites/unit-ground.js): a stack of boxes authored
+   to read at twenty-two art pixels, where a limb is under a pixel wide and nothing finer
+   survives the bake. The 3D mode draws the same man a hundred and more pixels tall, and there
+   he was a bollard with a hat - so this is a second model of him for the 3D mode alone, built
+   from the rounded parts this renderer can draw: limbs as tapered tubes between joints
+   (_r3dLimb, forest3d.js), a head, a helmet, webbing over a torso that narrows to the waist, a
+   pack, and a rifle held across the body in both hands. The sprite model is untouched, so the
+   2D mode and everything measured on its sprites stay exactly as they were.
+
+   THE SAME MAN, NOT A NEW ONE. Same size (_sprUnitScale, the sprite model's own fit), same
+   pair offset off the facing grid, same identity colours: the helmet's crown is the unit's
+   marker and the uniform the team colour or the kit's (RTS_INF_KIT), so a medic is still the
+   white one and a flamer still carries two bright tanks.
+
+   AND HE WALKS. The sprite mesh is one pose and the 3D mode bobbed it up and down to suggest a
+   march. There are four stride poses here - legs swinging, arms following, the back knee
+   bending - and scene3d.js picks one by the unit's own gait while it is on the move, so a squad
+   crossing the field is two men walking rather than two statues hopping. */
+
+var R3D_STRIDE = 0.46;          /* how far a leg swings from upright at full stride, radians */
+
+/* A ball, for joints and heads: rings of latitude, a normal straight out from the centre. */
+function _r3dBall(out, x, y, z, r, col, seg, rings) {
+  seg = seg || 12; rings = rings || 8;
+  for (var j = 0; j < rings; j++) {
+    var a0 = (j / rings - 0.5) * Math.PI, a1 = ((j + 1) / rings - 0.5) * Math.PI;
+    for (var i = 0; i < seg; i++) {
+      var b0 = i / seg * Math.PI * 2, b1 = (i + 1) / seg * Math.PI * 2, P = [], k;
+      var pts = [[a0, b1], [a0, b0], [a1, b0], [a1, b1]];
+      for (k = 0; k < 4; k++) {
+        var ca = Math.cos(pts[k][0]);
+        P.push([ca * Math.cos(pts[k][1]), Math.sin(pts[k][0]), ca * Math.sin(pts[k][1])]);
+      }
+      _r3F(out, P.map(function (n) { return [x + n[0] * r, y + n[1] * r, z + n[2] * r]; }), col, P);
+    }
+  }
+}
+
+/* One man at (mx, mz), facing +x. `pose` 0 stands; 1 to 4 are the stride, a quarter cycle
+   apart. */
+function _r3dSoldierMan(m, key, mx, mz, pose, lead, K) {
+  var BD = K.BD, BL = K.BL, HD = K.HD, HL = K.HL, SK = K.SK, DK = K.DK, S = K.S, kit = K.kit;
+  var ph = pose ? (pose - 1) / 4 * Math.PI * 2 : 0;
+  var sw = pose ? Math.cos(ph) * R3D_STRIDE * lead : 0.12 * lead;       /* + swings the near leg on */
+  var lift = pose ? Math.max(0, Math.sin(ph)) : 0;
+  var hipY = 3.05 - (pose ? 0.12 * Math.abs(Math.cos(ph)) : 0);        /* lower at full stride */
+  /* LEGS: thigh and shin as tubes, a knee between, a boot at the end */
+  for (var s = -1; s <= 1; s += 2) {
+    var th = sw * s, z = mz + s * 0.72;
+    var bend = (th < 0 ? 0.55 : 0.15) + lift * 0.35 * (s > 0 ? 1 : 0);
+    var kx = mx + Math.sin(th) * 1.55, ky = hipY - Math.cos(th) * 1.55;
+    var fx = kx + Math.sin(th - bend) * 1.5, fy = Math.max(0.28, ky - Math.cos(th - bend) * 1.5);
+    _r3dLimb(m, mx, hipY, z, kx, ky, z, 0.74, 0.6, 10, DK[1]);
+    _r3dBall(m, kx, ky, z, 0.6, DK[1], 8, 5);
+    _r3dLimb(m, kx, ky, z, fx, fy, z, 0.6, 0.48, 10, DK[1]);
+    _r3Box(m, fx + 0.3, fy - 0.3, z, 1.4, 0.62, 0.78, DK[2], DK[0]);     /* boot */
+  }
+  /* TORSO: a waist narrower than the chest, the unit's colour, leaning a little into the walk */
+  var lean = pose ? 0.35 : 0.15, cx = mx + lean, cy = 5.45;
+  _r3dLimb(m, mx, hipY - 0.2, mz, cx, cy, mz, 1.32, 1.66, 14, BD);
+  _r3Cyl(m, cx, cy - 0.05, mz, 1.66, 0.25, BL, BL, 14);                  /* shoulders' top */
+  _r3dLimb(m, mx, hipY - 0.05, mz, mx + 0.02, hipY + 0.45, mz, 1.44, 1.44, 14, DK[2]);   /* belt */
+  _r3Box(m, mx + 1.3, hipY + 0.15, mz, 0.35, 0.5, 0.6, S[2], S[3]);     /* buckle */
+  /* webbing: two straps and pouches on the chest, where the camera sees them */
+  _r3Box(m, cx - 0.1, hipY + 0.5, mz - 0.72, 2.9, 2.0, 0.36, DK[2], DK[1]);
+  _r3Box(m, cx - 0.1, hipY + 0.5, mz + 0.72, 2.9, 2.0, 0.36, DK[2], DK[1]);
+  _r3Box(m, cx + 1.2, hipY + 0.7, mz - 0.6, 0.55, 0.8, 0.7, DK[1], DK[0]);
+  _r3Box(m, cx + 1.2, hipY + 0.7, mz + 0.6, 0.55, 0.8, 0.7, DK[1], DK[0]);
+  _r3Slab(m, mx - 1.65, hipY + 0.6, mz, 1.4, 2.4, 2.6, 0.35, DK[1], DK[0]);  /* pack */
+  /* NECK, HEAD, HELMET. The helmet is wide and the crown is the unit's marker, as on the
+     sprite: it is the patch the camera looks straight down on */
+  _r3dLimb(m, cx, cy, mz, cx + 0.05, cy + 0.55, mz, 0.42, 0.4, 10, SK);
+  _r3dBall(m, cx + 0.12, cy + 1.05, mz, 0.8, SK, 12, 8);
+  _r3Cyl(m, cx, cy + 1.25, mz, 1.45, 0.24, HD, HD, 20);                  /* brim */
+  _r3Cone(m, cx, cy + 1.49, mz, 1.34, 1.12, 0.44, HD, 20);               /* the rounded crown */
+  _r3Cyl(m, cx, cy + 1.92, mz, 1.13, 0.18, HL, HL, 20);                  /* the marker */
+  /* ARMS and what they carry */
+  var arm = pose ? Math.cos(ph) * 0.35 * lead : 0;
+  function armTo(zs, ex, ey, ez, hx, hy, hz) {
+    var sx = cx - 0.05, sy = cy - 0.25, sz = mz + zs * 1.55;
+    _r3dBall(m, sx, sy, sz, 0.66, BD, 10, 6);
+    _r3dLimb(m, sx, sy, sz, ex, ey, ez, 0.55, 0.45, 10, BD);
+    _r3dLimb(m, ex, ey, ez, hx, hy, hz, 0.45, 0.36, 10, BD);
+    _r3dBall(m, hx, hy, hz, 0.4, SK, 8, 5);
+  }
+  if (key === 'rocket') {
+    /* the launcher on the right shoulder, long enough to stand proud both ends */
+    armTo(-1, cx + 0.9, cy - 0.6, mz - 1.5, cx + 1.9, cy + 0.2, mz - 1.3);
+    armTo(1, cx + 1.0, cy - 1.0, mz + 1.2, cx + 1.6, cy - 0.4, mz + 0.2);
+    _r3dLimb(m, cx - 4.2, cy + 0.55, mz - 1.3, cx + 4.6, cy + 0.55, mz - 1.3, 0.62, 0.62, 16, S[1]);
+    _r3dLimb(m, cx - 4.6, cy + 0.55, mz - 1.3, cx - 3.8, cy + 0.55, mz - 1.3, 0.8, 0.72, 16, DK[0]);
+    _r3Box(m, cx + 1.4, cy + 1.0, mz - 1.3, 1.0, 0.6, 0.4, DK[2], DK[1]);    /* sight */
+  } else if (key === 'flame') {
+    armTo(-1, cx + 0.9, cy - 1.3 + arm * 0.3, mz - 1.2, cx + 2.0, cy - 1.0, mz - 0.6);
+    armTo(1, cx + 0.8, cy - 1.4, mz + 1.2, cx + 1.9, cy - 1.1, mz + 0.2);
+    _r3Cyl(m, mx - 1.9, hipY, mz - 0.75, 0.72, 4.4, kit.prop, '#f7c93a', 16);
+    _r3Cyl(m, mx - 1.9, hipY, mz + 0.75, 0.72, 4.4, kit.prop, '#f7c93a', 16);
+    _r3dLimb(m, cx + 1.4, cy - 1.1, mz - 0.4, cx + 4.6, cy - 0.8, mz - 0.2, 0.3, 0.24, 10, DK[1]);
+    _r3dBall(m, cx + 4.7, cy - 0.78, mz - 0.2, 0.3, '#e8531c', 8, 5);
+  } else if (key === 'engineer') {
+    armTo(-1, cx + 0.5 + arm, cy - 1.5, mz - 1.5, cx + 0.9 + arm, cy - 2.6, mz - 1.6);
+    armTo(1, cx - 0.2 - arm, cy - 1.5, mz + 1.5, cx - 0.1 - arm, cy - 2.7, mz + 1.6);
+    _r3Box(m, cx + 0.9 + arm, cy - 4.4, mz - 1.6, 2.0, 1.5, 1.0, kit.prop, S[1]);   /* toolbox */
+    _r3Box(m, cx + 0.9 + arm, cy - 2.95, mz - 1.6, 1.2, 0.25, 0.3, S[1], S[3]);    /* handle */
+  } else if (key === 'medic') {
+    armTo(-1, cx + 0.5 + arm, cy - 1.5, mz - 1.5, cx + 1.0 + arm, cy - 2.5, mz - 1.5);
+    armTo(1, cx - 0.2 - arm, cy - 1.5, mz + 1.5, cx - 0.1 - arm, cy - 2.7, mz + 1.6);
+    _r3Box(m, cx + 1.0 + arm, cy - 4.0, mz - 1.5, 1.6, 1.2, 1.0, '#eaeae0', '#ffffff');  /* bag */
+    /* the red cross, flat on the pack, where the camera sees it */
+    _r3Box(m, mx - 1.35, hipY + 2.85, mz, 0.9, 0.2, 2.2, kit.prop, kit.prop);
+    _r3Box(m, mx - 1.35, hipY + 2.85, mz, 2.2, 0.2, 0.9, kit.prop, kit.prop);
+  } else if (key === 'thief') {
+    armTo(-1, cx + 0.5 + arm, cy - 1.5, mz - 1.5, cx + 1.0 + arm, cy - 2.5, mz - 1.5);
+    armTo(1, cx - 0.2 - arm, cy - 1.5, mz + 1.5, cx - 0.1 - arm, cy - 2.7, mz + 1.6);
+    _r3Box(m, mx + 0.6, hipY - 0.6, mz + 1.5, 1.8, 1.6, 1.0, kit.prop, S[1]);       /* satchel */
+  } else if (key === 'tanya') {
+    armTo(-1, cx + 1.2, cy - 0.8, mz - 1.4, cx + 2.4, cy - 0.5, mz - 1.3);
+    armTo(1, cx + 1.2, cy - 0.8, mz + 1.4, cx + 2.4, cy - 0.5, mz + 1.3);
+    _r3Box(m, cx + 3.0, cy - 0.65, mz - 1.3, 1.4, 0.5, 0.35, kit.prop, DK[3]);    /* pistols */
+    _r3Box(m, cx + 3.0, cy - 0.65, mz + 1.3, 1.4, 0.5, 0.35, kit.prop, DK[3]);
+  } else if (key === 'grenadier') {
+    armTo(-1, cx - 1.0, cy + 0.4, mz - 1.5, cx - 1.6, cy + 1.5, mz - 1.3);           /* cocked */
+    armTo(1, cx + 1.1, cy - 1.0, mz + 1.3, cx + 1.9, cy - 0.6, mz + 0.6);
+    _r3dBall(m, cx - 1.75, cy + 1.95, mz - 1.3, 0.55, kit.prop, 10, 6);
+    for (var g = 0; g < 3; g++) _r3dBall(m, mx + 0.9, hipY + 0.25, mz - 0.8 + g * 0.8, 0.3, '#d9a13c', 8, 5);
+  } else {
+    /* THE RIFLE, held across the body in both hands: stock at the right shoulder, the muzzle
+       forward and down a little, a magazine under it */
+    var r0x = cx + 0.4, r0y = cy - 0.55, r0z = mz - 0.95, r1x = cx + 4.2, r1y = cy - 0.95, r1z = mz - 0.05;
+    armTo(-1, cx + 0.7, cy - 1.5, mz - 1.5, cx + 1.25, cy - 0.85, mz - 0.75);
+    armTo(1, cx + 1.9, cy - 1.2, mz + 1.0, cx + 2.75, cy - 0.85, mz - 0.35);
+    _r3dLimb(m, r0x - 0.6, r0y + 0.05, r0z - 0.1, r1x, r1y, r1z, 0.36, 0.28, 8, kit.prop);
+    _r3dLimb(m, r1x, r1y, r1z, r1x + 1.5, r1y - 0.15, r1z + 0.05, 0.14, 0.14, 8, DK[3]);  /* barrel */
+    _r3Box(m, cx + 2.0, cy - 1.65, mz - 0.5, 0.45, 0.8, 0.3, DK[2], DK[1]);          /* magazine */
+  }
+}
+
+/* The squad as the sprite model lays it out - two men off the facing grid, a hero alone - at
+   the sprite model's own scale. Prone is the sprite's pose: low, long, and not walking. */
+function _r3dSoldierModel(key, side, prone, pose) {
+  if (key === 'dog' || prone) return null;
+  var TM = RTS_PAL.team[side], kit = RTS_INF_KIT[key] || RTS_INF_KIT.rifle;
+  var K = { kit: kit, DK: RTS_PAL.dark, S: RTS_PAL.steel, SK: '#c8a882',
+            BD: kit.body ? kit.body[0] : TM[0], BL: kit.body ? kit.body[1] : TM[1],
+            HD: TM[2], HL: kit.top || TM[3] };
+  var m = [], men = (key === 'tanya') ? [[0, 0]] : [[3.6, -1.5], [-3.6, 1.5]];
+  for (var i = 0; i < men.length; i++) {
+    /* the two men step off on opposite feet, so a squad does not march in lockstep */
+    _r3dSoldierMan(m, key, men[i][0], men[i][1], pose ? ((pose - 1 + i * 2) % 4) + 1 : 0, i ? -1 : 1, K);
+  }
+  var sc = _sprUnitScale(key);
+  return sc === 1 ? m : _r3Scale(m, sc);
+}
+
+/* The pose a soldier is drawn in: 0 standing, 1 to 4 through the stride while it moves - a
+   full stride about every 0.8 seconds, started at its own gait so a squad is out of step. */
+function _r3dSoldierPose(e, t) {
+  if (!e.path || e.prone) return 0;
+  return 1 + (Math.floor(t * 5 + (e.gait || 0) * 0.5) & 3);
 }
 </script>
 <script>/* render3d/world3d.js - the map itself as geometry: forests, rock ridges and

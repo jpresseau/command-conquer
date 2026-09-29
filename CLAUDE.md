@@ -229,6 +229,15 @@ breaking it shipped once.
   building's paved ring, sides and back only (never the front, where units come out), one static
   batch keyed on the standing buildings and drawn with the world's. Cosmetic: blocks nothing.
   `R3.dressAmt`. `e2e/dress`.
+- **In 3D a soldier has a model of his own** (`render3d/soldier3d.js`): rounded limbs, and four
+  stride poses picked by his gait (`_r3dSoldierPose`) in place of the bob. The sprite's model
+  stays for 2D, for prone squads and for the dog; the mesh cache key carries the pose.
+  `R3.soldierOff`. `test/*/soldier`.
+- **The bases are working** (`render3d/alive3d.js`): the radar's antenna turns, the stacks
+  smoke, beacons blink, and a destroyed building slumps into a charred ruin that stands for
+  `R3D_RUBBLE_LIFE`. The renderer must SEE it dead during its wreck time (`R3.rubble`), so a
+  spec that kills one draws frames as the sim runs. A sold building leaves none.
+  `R3.aliveAmt`. `e2e/alive`.
 - **The harness's SwiftShader runs every branch of a shader.** A per-pixel `if` saves a GPU the
   untaken side and SwiftShader nothing, so eight per-kind material branches evaluated at four
   corners cost the harness their full sum: a frame went 1.1s -> 2.3s and real clicks and

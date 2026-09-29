@@ -407,9 +407,12 @@ function _r3dFrame(G) {
          walk reads through a small vertical bob instead, phased by the same `gait` offset that
          desynchronises the 2D walk frames, so a squad does not pogo in unison. Vehicles do not
          bob; tracks do not walk. */
-      var d2 = rtsUnitDef(e.def);
+      var d2 = rtsUnitDef(e.def), pose = 0;
+      /* now it WALKS: a stride pose by its own gait (soldier3d.js); the bob is what is left of
+         the old suggestion of a march, much smaller, in step with the stride */
       if (d2.kind === 'infantry' && e.path && !e.prone) {
-        y += Math.abs(Math.sin(G.t * 9 + (e.gait || 0) * 0.8)) * 0.45;
+        pose = R3.soldierOff ? 0 : _r3dSoldierPose(e, G.t);
+        y += Math.abs(Math.sin(G.t * 9 + (e.gait || 0) * 0.8)) * (pose ? 0.08 : 0.45);
       }
       /* AND IT LEANS ON THE GROUND IT IS STANDING ON. Measured over a running match, the
          steepest slope under a unit is 0.228: a hull three units wide had one side 0.69 world
@@ -424,7 +427,7 @@ function _r3dFrame(G) {
          bolted to the hull - it rotates in the hull's plane, and a turret that stayed
          world-level would shear out of its own ring on any slope. */
       var gn = (e.air || (d2 && d2.sea)) ? null : _rtsElevNormal(e.x, e.z);
-      drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : null, e.prone),
+      drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : null, e.prone, pose),
              e.x, y, e.z, -e.rot, ART2W, false, 1, gn);
       if (turret) {
         drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false), e.x, y, e.z, -(e.turret || 0),
@@ -434,6 +437,8 @@ function _r3dFrame(G) {
   }
   /* and the burnt-out hulls of the vehicles that died, charred (render3d/husk3d.js) */
   if (!only) _r3dHusks(G, R3, function (m, x, y, z, rot, n) { drawIn(C, m, x, y, z, rot, ART2W, 2, 1, n); });
+  /* the radar turning, and the ruins of what was destroyed (render3d/alive3d.js) */
+  if (!only) _r3dAliveDraw(G, R3, function (m, x, y, z, rot, dim, sy) { drawIn(C, m, x, y, z, rot, ART2W, dim, sy, null); });
   flushBatch(C);
   }
   paintEntities(MC);
