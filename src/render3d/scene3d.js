@@ -181,6 +181,9 @@ function _r3dFrame(G) {
     gl.enable(gl.DEPTH_TEST);
   }
 
+  /* --- the marks vehicles have left in it, before anything stands on it (tread3d.js) --- */
+  _r3dTreadDraw(gl, R3, G, cam, invD);
+
   /* --- entities --- */
   gl.useProgram(R3.meshP);
   gl.uniform4fv(gl.getUniformLocation(R3.meshP, 'uCam'), cam);

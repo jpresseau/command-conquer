@@ -195,6 +195,11 @@ breaking it shipped once.
   takes them out, and a spec comparing brightness across game time or a pan needs it. A mesh
   moves a few levels where the ground moves twenty: measure meshes against a take-away mask with
   the shadow map and AO off, not a difference map scaled for the ground. `test/*/clouds`.
+- **Vehicles leave tread and tyre marks** (`render3d/tread3d.js`), the one effect with state:
+  a ring of `R3D_TREAD_MAX` quads on the GPU, each stamped with the moment it was laid, faded by
+  the shader, so a frame uploads only the new ones. Multiplied onto the ground straight after it
+  is drawn. Marks are laid as frames are DRAWN, so a spec that drives units renders as the sim
+  runs. `R3.treadAmt`. `test/*/treads`.
 - **The harness's SwiftShader runs every branch of a shader.** A per-pixel `if` saves a GPU the
   untaken side and SwiftShader nothing, so eight per-kind material branches evaluated at four
   corners cost the harness their full sum: a frame went 1.1s -> 2.3s and real clicks and
