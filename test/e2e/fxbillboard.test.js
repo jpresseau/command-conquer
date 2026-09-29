@@ -102,11 +102,13 @@ var S = new Suite('fxbillboard');
     /* ---------- 3. f.y is read, and by the right amount ----------
        Up the screen is y * sin(tilt) world units, and the zoom turns that into pixels. */
     /* the blast itself, without the glare and the ring it throws on the ground below it: those
-       stay on the ground wherever the blast is, which is right, and is not this claim */
-    R3.fxGroundAmt = 0;
+       stay on the ground wherever the blast is, which is right, and is not this claim - and
+       without the light it throws (fxlight3d.js), which lit the factory's roof, and the top of
+       what the blast changed was the roof and not its crown */
+    R3.fxGroundAmt = 0; R3.plightAmt = 0;
     var low = drawnPx(frame([{ kind: 'boom', x: wf.x, y: 0, z: wf.z + 9, t: 0.18, big: 1.0 }]));
     var high = drawnPx(frame([{ kind: 'boom', x: wf.x, y: 8, z: wf.z + 9, t: 0.18, big: 1.0 }]));
-    R3.fxGroundAmt = 1;
+    R3.fxGroundAmt = 1; R3.plightAmt = undefined;
     o.rosePx = high.top - low.top;
     o.expectRise = +(8 * R3.sp * _rtsZoom()).toFixed(1);
 

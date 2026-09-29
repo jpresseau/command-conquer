@@ -184,6 +184,51 @@ breaking it shipped once.
 - **What was built weathers** (`render3d/weather3d.js`): stains, rain streaks and grime at the
   foot, per pixel in the mesh program. `uWeather` is set per batch from `mesh.weather` (1 for a
   building, 0.5 for a unit) and reset to 0 after, so trees, rock and the sea never weather.
+- **What burns lights what stands near it** (`render3d/fxlight3d.js`): the four strongest
+  fireballs, pops, hits and fires are point lights in the mesh program (`uPL`/`uPC`), warm,
+  falling off with distance and brightest on the faces toward them. `R3.plightAmt`. A spec that
+  measures the light takes the effect's own quads out (stub `_r3dFxDraw`): a blast's smoke
+  hides the wall it lights, and a light that never faded passed as cooled. `e2e/fxlight`.
+- **Clouds pass over the map** (`render3d/cloud3d.js`): a term in `_shadowAt`, so the ground,
+  the meshes and the sea darken under them alike. Laid out in the sun's frame and pinned to the
+  world by the view's offset (`uCloud.xy`); they drift on the game clock. `R3.cloudAmt = 0`
+  takes them out, and a spec comparing brightness across game time or a pan needs it. A mesh
+  moves a few levels where the ground moves twenty: measure meshes against a take-away mask with
+  the shadow map and AO off, not a difference map scaled for the ground. `test/*/clouds`.
+- **Vehicles leave tread and tyre marks** (`render3d/tread3d.js`), the one effect with state:
+  a ring of `R3D_TREAD_MAX` quads on the GPU, each stamped with the moment it was laid, faded by
+  the shader, so a frame uploads only the new ones. Multiplied onto the ground straight after it
+  is drawn. Marks are laid as frames are DRAWN, so a spec that drives units renders as the sim
+  runs. `R3.treadAmt`. `test/*/treads`.
+- **A hidden unit shows through what hides it** (`render3d/sil3d.js`): the units drawn again
+  after everything with a surface, depth test GREATER, pulled `R3D_SIL_BIAS` toward the eye so a
+  unit never shows through its own hull, flat in its house's colour. ONLY units with a building,
+  tree, rock or rising ground just in front of them (`_r3dSilCover`): the whole army a third time
+  took the entities past their budget (`e2e/instanced`). `R3.silAmt`, `R3.silAll`.
+  `e2e/silhouette`.
+- **The map moves a little on its own.** Surf rolls in to every shore (the sea's shader, `uSurf`,
+  broken along its length at FIXED places, as over a bar), and the wind sways what is green in
+  the world batch (`uSway`, set for the world loop and reset after it). `R3.surfAmt`,
+  `R3.swayAmt`. To watch foam over time, hold the swell (`R3D_WAVE_AMP`) and the chop still and
+  recover the foam's own mix: the water under it changes colour with the swell. `e2e/ambient`.
+- **In 3D a selection is a ring on the ground** (`render3d/ring3d.js`), not Red Alert's corner
+  brackets: a band round a unit, a rounded box round a building's footprint, drawn after the
+  treads and before the entities so a unit stands in its ring. `ui/hud.js` skips the brackets
+  while the 3D mode is on; 2D keeps them. `R3.selAmt`. `e2e/selring`. A check's expected
+  number must be the test's own: reading `R3D_RING_UNIT` back let a ring drawn anywhere pass.
+- **The air shimmers over what burns** (`render3d/heat3d.js`, read by the composite): a column of
+  heat over each of the strongest effect lights that sends one (the sixth element of
+  `_r3dFxLightOf`), where the scene is read a couple of pixels off. Part of the light pass
+  (`RTS_POST_ON`); `R3.heatAmt`. A fire's heat flickers with the clock, so a spec about the
+  ripple's own motion watches a fireball held at one age. `e2e/heat`.
+- **A dead vehicle leaves its hull in its fire** (`render3d/husk3d.js`): the wreck fire's record
+  carries `husk` (what burned, `core/capture.js`) and is the husk's whole life; drawn charred
+  (instance dim 2) and settling in the smoke's last loop. No state of its own, blocks nothing.
+  `R3.huskAmt`. `e2e/husk`.
+- **The bases are dressed** (`render3d/dress3d.js`): crates, drums, sandbags and lamps on each
+  building's paved ring, sides and back only (never the front, where units come out), one static
+  batch keyed on the standing buildings and drawn with the world's. Cosmetic: blocks nothing.
+  `R3.dressAmt`. `e2e/dress`.
 - **The harness's SwiftShader runs every branch of a shader.** A per-pixel `if` saves a GPU the
   untaken side and SwiftShader nothing, so eight per-kind material branches evaluated at four
   corners cost the harness their full sum: a frame went 1.1s -> 2.3s and real clicks and

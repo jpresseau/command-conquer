@@ -130,7 +130,7 @@ function _r3dFrame(G) {
       gl.uniform2f(SC.uWave, 0, 0);
       if (R3.world) {
         _r3dInstConst(gl, I, SC, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0);
-        var sb = R3.world.concat(R3.ore || []);
+        var sb = R3.world.concat(R3.ore || [], _r3dDressBatches(R3));
         for (var si = 0; si < sb.length; si++) {
           var sm = sb[si];
           if (!sm || !sm.verts) continue;
@@ -181,12 +181,18 @@ function _r3dFrame(G) {
     gl.enable(gl.DEPTH_TEST);
   }
 
+  /* --- the marks vehicles have left in it, before anything stands on it (tread3d.js) --- */
+  _r3dTreadDraw(gl, R3, G, cam, invD);
+  /* --- and what is selected, ringed on the ground under it (ring3d.js) --- */
+  _r3dRingDraw(gl, R3, G, cam, invD);
+
   /* --- entities --- */
   gl.useProgram(R3.meshP);
   gl.uniform4fv(gl.getUniformLocation(R3.meshP, 'uCam'), cam);
   gl.uniform2f(gl.getUniformLocation(R3.meshP, 'uTilt'), R3.cp, R3.sp);
   gl.uniform1f(gl.getUniformLocation(R3.meshP, 'uInvD'), invD);
   _r3dShadowBind(R3.meshP, 1);
+  _r3dFxLightSet(gl, R3, G, R3.meshP);              /* what is burning lights its neighbours */
   var uA = MC.uA, uWave = MC.uWave;
   gl.uniform1f(uA, 1);
   gl.uniform2f(uWave, 0, 0);
@@ -286,7 +292,7 @@ function _r3dFrame(G) {
        Where instancing is unavailable the batch is flushed one instance at a time through the
        same constant-attribute path everything else uses, which is the draw this replaced. */
     _r3dInstPush(BATCH, mesh, x, y2, zz, sy || 1,
-                 Math.cos(rot), Math.sin(rot), scale, dim ? 1 : 0, lx, ly, lz2);
+                 Math.cos(rot), Math.sin(rot), scale, dim === 2 ? 2 : dim ? 1 : 0, lx, ly, lz2);
   }
   /* Hand every collected batch to the GPU. Grouping reorders the draws - entities come out by
      mesh rather than in entity order - which is invisible only because all of this is opaque
@@ -335,8 +341,11 @@ function _r3dFrame(G) {
   if (R3.world) {
     /* identity placement: the batches are baked in world space, so they draw as-is */
     _r3dInstConst(gl, I, MC, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0);
+    /* the wind in the canopies and the grass (R3D_MESH_VS); R3.swayAmt 0 holds them still */
+    var uSw = gl.getUniformLocation(MC.P, 'uSway');
+    gl.uniform2f(uSw, R3D_SWAY * (R3.swayAmt === undefined ? 1 : R3.swayAmt), G.t || 0);
     var lift = R3D_WORLD_YMAX * R3.sp / R3.cp;
-    var batches = R3.world.concat(R3.ore || []);
+    var batches = R3.world.concat(R3.ore || [], _r3dDressBatches(R3));
     for (var wb = 0; wb < batches.length; wb++) {
       var bm = batches[wb];
       if (!bm || !bm.verts) continue;
@@ -351,6 +360,7 @@ function _r3dFrame(G) {
       gl.enableVertexAttribArray(aC); gl.vertexAttribPointer(aC, 3, gl.UNSIGNED_BYTE, true, 0, 0);
       gl.drawArrays(gl.TRIANGLES, 0, bm.verts);
     }
+    gl.uniform2f(uSw, 0, 0);
   }
 
   /* The sea used to be drawn HERE, after the world batch. It is drawn before both now - see
@@ -370,13 +380,13 @@ function _r3dFrame(G) {
      units across and was being handed EVERY entity in the match, the enemy base included.
      Those draws cannot mark a texel of the map and cost a full submission each; at a hundred
      units a side it is most of the roster once a game is under way. */
-  function paintEntities(C, bound) {
+  function paintEntities(C, bound, only, side, keep) {
   /* A fresh set of buckets for this pass. Both passes walk the same entities, but each has to
      leave its own batches on its own program - the sun's has no colour attribute and no tint. */
   BATCH = _r3dInstBatch(R3);
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.dead) continue;
+    if (e.dead || (only && e.type !== only) || (side && e.side !== side) || (keep && !keep(e))) continue;
     if (bound && (Math.abs(e.x - bound[0]) > bound[2] || Math.abs(e.z - bound[1]) > bound[2])) continue;
     if (e.type === 'struct') {
       /* A BUILDING UNDER CONSTRUCTION RISES OUT OF THE GROUND. The 2D reveal is a wipe, which
@@ -422,9 +432,13 @@ function _r3dFrame(G) {
       }
     }
   }
+  /* and the burnt-out hulls of the vehicles that died, charred (render3d/husk3d.js) */
+  if (!only) _r3dHusks(G, R3, function (m, x, y, z, rot, n) { drawIn(C, m, x, y, z, rot, ART2W, 2, 1, n); });
   flushBatch(C);
   }
   paintEntities(MC);
+  /* a unit hidden behind a building, a wood or a hill shows through it (render3d/sil3d.js) */
+  _r3dSilPass(gl, R3, MC.P, function (side, keep) { paintEntities(MC, null, 'unit', side, keep); });
 
   /* THE EFFECTS, as quads standing in the world - see render3d/fx3d.js. Here, after everything
      with a surface and before the occlusion resolves, because they are the last thing that has

@@ -41,6 +41,7 @@ var R3D_AO_RESOLVE_FS =
      Part of the light pass, so RTS_POST_ON takes it out with the bloom; R3.gradeAmt (0 to 1)
      takes it out alone, as R3.aoAmt does the occlusion. e2e/grade holds what it does. */
   'uniform float uGrade;' +
+  R3D_HEAT_GLSL +                    /* the air over what burns - heat3d.js */
   'vec3 _grade(vec3 c, vec2 uv){' +
   '  float l = dot(c, vec3(0.299, 0.587, 0.114));' +
   '  c *= mix(vec3(0.94, 0.97, 1.06), vec3(1.05, 1.02, 0.93), smoothstep(0.12, 0.72, l));' +
@@ -83,7 +84,8 @@ var R3D_AO_RESOLVE_FS =
   '  return (lb < lo || lb > hi) ? a : b;' +
   '}' +
   'void main(){' +
-  '  vec3 c = mix(texture2D(uScene, vT).rgb, _fxaa(vT), uAA);' +
+  '  vec2 hv = vT + _heat(vT);' +
+  '  vec3 c = mix(texture2D(uScene, hv).rgb, _fxaa(hv), uAA);' +
   '  float ao = mix(1.0, texture2D(uAO, vT).r, uAOAmt);' +
   '  vec3 lit = c * mix(vec3(' + R3D_AO_FLOOR[0].toFixed(3) + ', ' +
        R3D_AO_FLOOR[1].toFixed(3) + ', ' + R3D_AO_FLOOR[2].toFixed(3) +
@@ -115,6 +117,7 @@ function _r3dResolve(R3) {
   var postOn = typeof RTS_POST_ON === 'undefined' || RTS_POST_ON;
   gl.uniform1f(gl.getUniformLocation(R3.aoResolveP, 'uGrade'),
                postOn ? (R3.gradeAmt === undefined ? 1 : R3.gradeAmt) : 0);
+  _r3dHeatSet(gl, R3, R3.aoResolveP, postOn);
   /* The glow. R3.bloomOn is set by _r3dBloomPass for this frame only; with nothing burning the
      amount is zero and the sampler still needs a bound texture, so it gets the AO one - a
      texture multiplied by zero, rather than a branch in the shader every pixel. */

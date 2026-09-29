@@ -8,6 +8,8 @@ function _rtsDrawHud(dt) {
   var W = _rtsR.W, H = _rtsR.H;
   g.clearRect(0, 0, W, H);
   var i;
+  /* in 3D a selection is a ring on the ground (render3d/ring3d.js), not these brackets */
+  var ringed = !!(window._R3D && window._R3D.on && typeof _r3dRingDraw === 'function');
   /* health bars: always for selected, and for anything damaged */
   for (i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
@@ -66,7 +68,7 @@ function _rtsDrawHud(dt) {
         g.restore();
       }
     }
-    if (selected) {
+    if (selected && !ringed) {
       /* corner brackets, the classic selection look */
       var r = (e.type === 'struct' ? rtsStructDef(e.def).w * _rtsR.cell * 0.5 : _rtsR.cell * 0.42) * sc;
       r = Math.max(10, Math.min(70, r));

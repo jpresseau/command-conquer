@@ -404,6 +404,7 @@ function _r3dSeaSet(gl, R3, P, on) {
   gl.uniform4f(u, 1, 1 / RTS_N, RTS_N / 2 - 0.5, 1 / RTS_TILE);
   /* R3.rippleAmt takes the chop out and leaves the swell, so e2e/sea can still see the swell */
   gl.uniform1f(gl.getUniformLocation(P, 'uRip'), R3.rippleAmt === undefined ? 1 : R3.rippleAmt);
+  gl.uniform1f(gl.getUniformLocation(P, 'uSurf'), R3.surfAmt === undefined ? 1 : R3.surfAmt);
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 }
