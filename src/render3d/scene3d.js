@@ -49,7 +49,7 @@ function _r3dFrame(G) {
   function ctx(P) {
     return { P: P,
       uA: gl.getUniformLocation(P, 'uA'),
-      uWave: gl.getUniformLocation(P, 'uWave'),
+      uWave: gl.getUniformLocation(P, 'uWave'), uW: gl.getUniformLocation(P, 'uWeather'),
       aP: gl.getAttribLocation(P, 'aP'), aN: gl.getAttribLocation(P, 'aN'),
       aC: gl.getAttribLocation(P, 'aC'),
       /* placement, per instance now rather than per draw - render3d/inst3d.js */
@@ -62,6 +62,7 @@ function _r3dFrame(G) {
      assigned later is `undefined` when the earlier caller reads it, which reaches the shader
      as a NaN scale and drops every entity out of the shadow map without an error anywhere. */
   var ART2W = RTS_TILE / RTS_TS;
+  var WEAR = R3.wear = Math.min(1, _rtsZoom() * (R3.scale || 1) / R3D_WEATHER_PX);   /* weather3d.js, same reason */
 
   if (R3.terrainDirty && R.terrain) {
     R3.terrainTex = _r3dTexture(gl, R3.terrainTex, gl.NEAREST);
@@ -296,6 +297,7 @@ function _r3dFrame(G) {
       var b = B.order[i];
       if (!b.n) continue;
       bindMesh(C, b.mesh);
+      if (C.uW) gl.uniform1f(C.uW, (b.mesh.weather || 0) * WEAR);
       if (I.on) {
         var buf = _r3dInstBuffer(gl, R3);
         gl.bindBuffer(gl.ARRAY_BUFFER, buf);
@@ -317,6 +319,7 @@ function _r3dFrame(G) {
        program - the world batches, the sea, the ground - reads a tank's placement out of a
        buffer that is no longer bound to it. */
     _r3dInstConst(gl, I, C, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0);
+    if (C.uW) gl.uniform1f(C.uW, 0);                 /* nothing drawn after has been built */
   }
   function draw(mesh, x, y2, zz, rot, scale, dim, sy, nrm) {
     drawIn(MC, mesh, x, y2, zz, rot, scale, dim, sy, nrm);

@@ -171,7 +171,7 @@ var R3D_MESH_VS =
   'uniform vec2 uWave;' +       /* wave amplitude (0 = not water) and the clock */
   R3D_SHADOW_VGLSL +
   R3D_LEAN_GLSL +
-  'varying vec3 vN; varying vec4 vCol; varying vec2 vWxz;' +
+  'varying vec3 vN; varying vec4 vCol; varying vec2 vWxz; varying vec2 vHY;' +
   'void main(){' +
   R3D_INST_UNPACK +
   '  vec3 p = vec3(aP.x * uScale, aP.y * uScale * uScaleY, aP.z * uScale);' +
@@ -206,6 +206,7 @@ var R3D_MESH_VS =
      and a vec4 one occupy the same slot, so this costs nothing where slots are scarce. */
   '  vCol = vec4(col, uDim);' +
   '  vWxz = wp.xz;' +                 /* the world position, for the sea's shoreline */
+  '  vHY = vec2(wp.y - uPos.y, wp.y);' +   /* ...and its height, for the wear (weather3d.js) */
   '  _shadowFrom(wp);' +
   '  float sx = (wp.x - uCam.x) * uCam.z;' +
   '  float sy = ((wp.z - uCam.y) * uTilt.x - wp.y * uTilt.y) * uCam.w;' +
@@ -240,7 +241,7 @@ var R3D_MESH_FS =
   'uniform vec4 uSea; uniform sampler2D uSeaM;' +
   'uniform vec2 uWave;' +               /* the swell's own clock, shared with the vertex stage */
   'uniform float uRip;' +               /* the chop's strength: R3.rippleAmt, 1 unless a spec says */
-  R3D_NOISE_GLSL +
+  R3D_NOISE_GLSL + R3D_WEATHER_GLSL +
   R3D_SHADOW_GLSL + R3D_MESH_LIGHT +
   /* NORMALISED HERE, NOT IN THE VERTEX SHADER. A varying is interpolated linearly, and the
      linear blend of two unit vectors is shorter than one - which is exactly the case on the
@@ -248,6 +249,7 @@ var R3D_MESH_FS =
   'void main(){' +
   '  vec3 tint = mix(vec3(1.0), vec3(0.62, 0.55, 0.55), vCol.w);' +
   '  vec3 c = _shade(normalize(vN), vCol.rgb) * tint; float a = uA;' +
+  '  if (uWeather > 0.0) c = _weather(c, normalize(vN), vec3(vWxz.x, vHY.y, vWxz.y));' +
   '  if (uSea.x > 0.5) {' +
   '    vec2 cc = vWxz * uSea.w + uSea.z + _gwarp(vWxz);' +
   '    float wm = texture2D(uSeaM, (cc + 0.5) * uSea.y).r;' +
