@@ -206,6 +206,11 @@ breaking it shipped once.
   tree, rock or rising ground just in front of them (`_r3dSilCover`): the whole army a third time
   took the entities past their budget (`e2e/instanced`). `R3.silAmt`, `R3.silAll`.
   `e2e/silhouette`.
+- **The map moves a little on its own.** Surf rolls in to every shore (the sea's shader, `uSurf`,
+  broken along its length at FIXED places, as over a bar), and the wind sways what is green in
+  the world batch (`uSway`, set for the world loop and reset after it). `R3.surfAmt`,
+  `R3.swayAmt`. To watch foam over time, hold the swell (`R3D_WAVE_AMP`) and the chop still and
+  recover the foam's own mix: the water under it changes colour with the swell. `e2e/ambient`.
 - **The harness's SwiftShader runs every branch of a shader.** A per-pixel `if` saves a GPU the
   untaken side and SwiftShader nothing, so eight per-kind material branches evaluated at four
   corners cost the harness their full sum: a frame went 1.1s -> 2.3s and real clicks and

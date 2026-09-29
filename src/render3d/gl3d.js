@@ -170,6 +170,7 @@ var R3D_MESH_VS =
   R3D_INST_GLSL +
   'uniform vec2 uWave;' +       /* wave amplitude (0 = not water) and the clock */
   'uniform float uDBias;' +     /* depth pulled toward the eye: the silhouette pass (sil3d.js) */
+  'uniform vec2 uSway;' +       /* the wind in the world batch: reach, clock - 0 elsewhere */
   R3D_SHADOW_VGLSL +
   R3D_LEAN_GLSL +
   'varying vec3 vN; varying vec4 vCol; varying vec2 vWxz; varying vec2 vHY;' +
@@ -194,6 +195,16 @@ var R3D_MESH_VS =
      uWave.x is 0 for everything that is not water, and the branch is on a UNIFORM, so it is
      the same decision for every vertex in a draw. */
   '  vec3 col = aC;' +
+  /* THE WIND. Only the world batch sets uSway, and only what is GREEN in it moves - canopies,
+     leaves and grass, never bark or rock - by a few hands' breadth, on a phase that runs across
+     the map so a gust travels through a wood rather than every tree nodding at once. Slow
+     across a single canopy, so a crown sways as a crown rather than wobbling. */
+  '  if (uSway.x > 0.0) {' +
+  '    float gr = clamp((aC.g - max(aC.r, aC.b)) * 6.0, 0.0, 1.0);' +
+  '    float ph = dot(wp.xz, vec2(0.071, 0.043));' +
+  '    float gust = 0.55 + 0.45 * sin(uSway.y * 0.37 + ph * 0.6);' +
+  '    wp.xz += gr * uSway.x * gust * vec2(sin(uSway.y * 1.9 + ph * 1.5), 0.6 * sin(uSway.y * 1.4 + ph * 1.2 + 1.3));' +
+  '  }' +
   R3D_WAVE_VGLSL_LIT +
   /* the sprite baker's own light and half-vector, so the two pipelines agree face for face */
   /* THE SHADING ITSELF HAPPENS PER FRAGMENT NOW - see R3D_MESH_LIGHT. All this stage does is
@@ -242,6 +253,7 @@ var R3D_MESH_FS =
   'uniform vec4 uSea; uniform sampler2D uSeaM;' +
   'uniform vec2 uWave;' +               /* the swell's own clock, shared with the vertex stage */
   'uniform float uRip;' +               /* the chop's strength: R3.rippleAmt, 1 unless a spec says */
+  'uniform float uSurf;' +              /* the surf rolling in: R3.surfAmt, 1 unless a spec says */
   R3D_NOISE_GLSL + R3D_WEATHER_GLSL + R3D_PLIGHT_GLSL +
   R3D_SHADOW_GLSL + R3D_MESH_LIGHT +
   /* NORMALISED HERE, NOT IN THE VERTEX SHADER. A varying is interpolated linearly, and the
@@ -276,6 +288,14 @@ var R3D_MESH_FS =
   '    float fo = edge * edge * smoothstep(0.3, 0.7, _vn(vWxz * 1.6 + vec2(t * 0.2, 0.0)));' +
   '    c = mix(c, vec3(0.16, 0.50, 0.50) + c * 0.35, edge * 0.45);' +   /* turquoise shallows */
   '    c = mix(c, vec3(0.92, 0.95, 0.93), clamp(fo * 1.4, 0.0, 0.85));' +               /* foam */
+  /* THE SURF. Lines of foam roll in to every shore, a few seconds apart: sd is how far out
+     the water is by the same mask the coast is cut from - 0 at the waterline, 1 about a cell
+     out - so each line follows the coast's own shape, and it breaks as it arrives. */
+  '    float sd = clamp((wm - 0.46) / 0.5, 0.0, 1.0);' +
+  '    float wv = fract(sd * 1.6 + t * 0.22 + _vn(vWxz * 0.35) * 0.8);' +
+  '    float brk = smoothstep(0.3, 0.65, _vn(vWxz * 0.9));' +   /* broken where it breaks, as over a bar */
+  '    float roll = smoothstep(0.0, 0.05, wv) * (1.0 - smoothstep(0.05, 0.4, wv)) * (1.0 - sd) * (0.35 + 0.65 * brk);' +
+  '    c = mix(c, vec3(0.93, 0.96, 0.95), clamp(roll * 0.75 * uSurf, 0.0, 0.75));' +
   '    a = uA * mix(0.45, 1.0, smoothstep(0.46, 0.74, wm));' +
   '  }' +
   /* what is burning near it lights it - render3d/fxlight3d.js */

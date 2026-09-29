@@ -339,6 +339,9 @@ function _r3dFrame(G) {
   if (R3.world) {
     /* identity placement: the batches are baked in world space, so they draw as-is */
     _r3dInstConst(gl, I, MC, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0);
+    /* the wind in the canopies and the grass (R3D_MESH_VS); R3.swayAmt 0 holds them still */
+    var uSw = gl.getUniformLocation(MC.P, 'uSway');
+    gl.uniform2f(uSw, R3D_SWAY * (R3.swayAmt === undefined ? 1 : R3.swayAmt), G.t || 0);
     var lift = R3D_WORLD_YMAX * R3.sp / R3.cp;
     var batches = R3.world.concat(R3.ore || []);
     for (var wb = 0; wb < batches.length; wb++) {
@@ -355,6 +358,7 @@ function _r3dFrame(G) {
       gl.enableVertexAttribArray(aC); gl.vertexAttribPointer(aC, 3, gl.UNSIGNED_BYTE, true, 0, 0);
       gl.drawArrays(gl.TRIANGLES, 0, bm.verts);
     }
+    gl.uniform2f(uSw, 0, 0);
   }
 
   /* The sea used to be drawn HERE, after the world batch. It is drawn before both now - see

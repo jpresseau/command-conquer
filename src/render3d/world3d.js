@@ -64,6 +64,7 @@ var R3D_CHUNK = 32;            /* cells per chunk side; 128-cell map -> 4x4 chun
 var R3D_TUFTS_PER_CELL = 3;
 var R3D_TUFT_ODDS = 0.62;      /* share of grass cells that carry tufts at all */
 var R3D_WORLD_YMAX = 14;       /* tallest world geometry; the cull margin hangs on it */
+var R3D_SWAY = 0.09;           /* world units the wind moves a canopy or a tuft (R3D_MESH_VS) */
 
 /* A TURNED, TAPERED, LEANING SLAB - which is the whole difference between rock and rubble.
 

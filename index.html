@@ -944,7 +944,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">988bcaa · 2026-09-29</div>
+  <div id="rtsBuild" title="build">e88a8f0 · 2026-09-29</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -23735,6 +23735,7 @@ var R3D_MESH_VS =
   R3D_INST_GLSL +
   'uniform vec2 uWave;' +       /* wave amplitude (0 = not water) and the clock */
   'uniform float uDBias;' +     /* depth pulled toward the eye: the silhouette pass (sil3d.js) */
+  'uniform vec2 uSway;' +       /* the wind in the world batch: reach, clock - 0 elsewhere */
   R3D_SHADOW_VGLSL +
   R3D_LEAN_GLSL +
   'varying vec3 vN; varying vec4 vCol; varying vec2 vWxz; varying vec2 vHY;' +
@@ -23759,6 +23760,16 @@ var R3D_MESH_VS =
      uWave.x is 0 for everything that is not water, and the branch is on a UNIFORM, so it is
      the same decision for every vertex in a draw. */
   '  vec3 col = aC;' +
+  /* THE WIND. Only the world batch sets uSway, and only what is GREEN in it moves - canopies,
+     leaves and grass, never bark or rock - by a few hands' breadth, on a phase that runs across
+     the map so a gust travels through a wood rather than every tree nodding at once. Slow
+     across a single canopy, so a crown sways as a crown rather than wobbling. */
+  '  if (uSway.x > 0.0) {' +
+  '    float gr = clamp((aC.g - max(aC.r, aC.b)) * 6.0, 0.0, 1.0);' +
+  '    float ph = dot(wp.xz, vec2(0.071, 0.043));' +
+  '    float gust = 0.55 + 0.45 * sin(uSway.y * 0.37 + ph * 0.6);' +
+  '    wp.xz += gr * uSway.x * gust * vec2(sin(uSway.y * 1.9 + ph * 1.5), 0.6 * sin(uSway.y * 1.4 + ph * 1.2 + 1.3));' +
+  '  }' +
   R3D_WAVE_VGLSL_LIT +
   /* the sprite baker's own light and half-vector, so the two pipelines agree face for face */
   /* THE SHADING ITSELF HAPPENS PER FRAGMENT NOW - see R3D_MESH_LIGHT. All this stage does is
@@ -23807,6 +23818,7 @@ var R3D_MESH_FS =
   'uniform vec4 uSea; uniform sampler2D uSeaM;' +
   'uniform vec2 uWave;' +               /* the swell's own clock, shared with the vertex stage */
   'uniform float uRip;' +               /* the chop's strength: R3.rippleAmt, 1 unless a spec says */
+  'uniform float uSurf;' +              /* the surf rolling in: R3.surfAmt, 1 unless a spec says */
   R3D_NOISE_GLSL + R3D_WEATHER_GLSL + R3D_PLIGHT_GLSL +
   R3D_SHADOW_GLSL + R3D_MESH_LIGHT +
   /* NORMALISED HERE, NOT IN THE VERTEX SHADER. A varying is interpolated linearly, and the
@@ -23841,6 +23853,14 @@ var R3D_MESH_FS =
   '    float fo = edge * edge * smoothstep(0.3, 0.7, _vn(vWxz * 1.6 + vec2(t * 0.2, 0.0)));' +
   '    c = mix(c, vec3(0.16, 0.50, 0.50) + c * 0.35, edge * 0.45);' +   /* turquoise shallows */
   '    c = mix(c, vec3(0.92, 0.95, 0.93), clamp(fo * 1.4, 0.0, 0.85));' +               /* foam */
+  /* THE SURF. Lines of foam roll in to every shore, a few seconds apart: sd is how far out
+     the water is by the same mask the coast is cut from - 0 at the waterline, 1 about a cell
+     out - so each line follows the coast's own shape, and it breaks as it arrives. */
+  '    float sd = clamp((wm - 0.46) / 0.5, 0.0, 1.0);' +
+  '    float wv = fract(sd * 1.6 + t * 0.22 + _vn(vWxz * 0.35) * 0.8);' +
+  '    float brk = smoothstep(0.3, 0.65, _vn(vWxz * 0.9));' +   /* broken where it breaks, as over a bar */
+  '    float roll = smoothstep(0.0, 0.05, wv) * (1.0 - smoothstep(0.05, 0.4, wv)) * (1.0 - sd) * (0.35 + 0.65 * brk);' +
+  '    c = mix(c, vec3(0.93, 0.96, 0.95), clamp(roll * 0.75 * uSurf, 0.0, 0.75));' +
   '    a = uA * mix(0.45, 1.0, smoothstep(0.46, 0.74, wm));' +
   '  }' +
   /* what is burning near it lights it - render3d/fxlight3d.js */
@@ -25267,6 +25287,7 @@ function _r3dSeaSet(gl, R3, P, on) {
   gl.uniform4f(u, 1, 1 / RTS_N, RTS_N / 2 - 0.5, 1 / RTS_TILE);
   /* R3.rippleAmt takes the chop out and leaves the swell, so e2e/sea can still see the swell */
   gl.uniform1f(gl.getUniformLocation(P, 'uRip'), R3.rippleAmt === undefined ? 1 : R3.rippleAmt);
+  gl.uniform1f(gl.getUniformLocation(P, 'uSurf'), R3.surfAmt === undefined ? 1 : R3.surfAmt);
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 }
@@ -27262,6 +27283,9 @@ function _r3dFrame(G) {
   if (R3.world) {
     /* identity placement: the batches are baked in world space, so they draw as-is */
     _r3dInstConst(gl, I, MC, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0);
+    /* the wind in the canopies and the grass (R3D_MESH_VS); R3.swayAmt 0 holds them still */
+    var uSw = gl.getUniformLocation(MC.P, 'uSway');
+    gl.uniform2f(uSw, R3D_SWAY * (R3.swayAmt === undefined ? 1 : R3.swayAmt), G.t || 0);
     var lift = R3D_WORLD_YMAX * R3.sp / R3.cp;
     var batches = R3.world.concat(R3.ore || []);
     for (var wb = 0; wb < batches.length; wb++) {
@@ -27278,6 +27302,7 @@ function _r3dFrame(G) {
       gl.enableVertexAttribArray(aC); gl.vertexAttribPointer(aC, 3, gl.UNSIGNED_BYTE, true, 0, 0);
       gl.drawArrays(gl.TRIANGLES, 0, bm.verts);
     }
+    gl.uniform2f(uSw, 0, 0);
   }
 
   /* The sea used to be drawn HERE, after the world batch. It is drawn before both now - see
@@ -27766,6 +27791,7 @@ var R3D_CHUNK = 32;            /* cells per chunk side; 128-cell map -> 4x4 chun
 var R3D_TUFTS_PER_CELL = 3;
 var R3D_TUFT_ODDS = 0.62;      /* share of grass cells that carry tufts at all */
 var R3D_WORLD_YMAX = 14;       /* tallest world geometry; the cull margin hangs on it */
+var R3D_SWAY = 0.09;           /* world units the wind moves a canopy or a tuft (R3D_MESH_VS) */
 
 /* A TURNED, TAPERED, LEANING SLAB - which is the whole difference between rock and rubble.
 
