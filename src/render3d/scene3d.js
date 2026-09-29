@@ -159,39 +159,18 @@ function _r3dFrame(G) {
   gl.disable(gl.BLEND);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-  /* --- ground --- */
-  gl.useProgram(R3.texP);
-  gl.uniform4fv(gl.getUniformLocation(R3.texP, 'uCam'), cam);
-  gl.uniform2f(gl.getUniformLocation(R3.texP, 'uTilt'), R3.cp, R3.sp);
-  gl.uniform1f(gl.getUniformLocation(R3.texP, 'uInvD'), invD);
-  gl.uniform1f(gl.getUniformLocation(R3.texP, 'uA'), 1);
-  var uRecv = gl.getUniformLocation(R3.texP, 'uRecv');
-  gl.uniform1f(uRecv, 1);                       /* the ground takes the world's shadows */
-  /* ...and the grain the magnification destroyed, put back at device resolution. The 2D frame
-     has done this for a long time; this pass never did, because the line that calls
-     _rtsGroundDetail sits inside `if (!r3on)` in render/frame.js. See R3D_TEX_FS. */
-  R3.grainMag = _r3dGrainSet(gl, R3, R3.texP);
-  R3.pixMag = _r3dPixSet(gl, R3, R3.texP, true);    /* its staircases redrawn - see R3D_PIX_GLSL */
-  _r3dShadowBind(R3.texP, 1);
-  var aXZ = gl.getAttribLocation(R3.texP, 'aP'), aT = gl.getAttribLocation(R3.texP, 'aT');
-  var aGN = gl.getAttribLocation(R3.texP, 'aN');
-  gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundBuf);
-  gl.enableVertexAttribArray(aXZ); gl.vertexAttribPointer(aXZ, 3, gl.FLOAT, false, 0, 0);
-  gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundNB);
-  gl.enableVertexAttribArray(aGN); gl.vertexAttribPointer(aGN, 3, gl.FLOAT, false, 0, 0);
-  gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundUV);
-  gl.enableVertexAttribArray(aT); gl.vertexAttribPointer(aT, 2, gl.FLOAT, false, 0, 0);
-  gl.bindTexture(gl.TEXTURE_2D, R3.terrainTex);
-  gl.drawArrays(gl.TRIANGLES, 0, R3.groundVerts);
+  /* --- ground: the materials, or the baked picture (render3d/terrain3d.js) --- */
+  _r3dGroundDraw(gl, R3, G, cam, invD);
 
   /* --- the ore stain, straight onto the ground it lies on ---
      The depth TEST is off for this, which also turns depth writing off: at this point the
      only thing in the buffer is the ground, so there is nothing for it to sort against, and
      leaving the ground's own depth untouched is what lets the crystals, the units and the
      cast shadows sort against the GROUND rather than against a film floating over it. */
-  _r3dOreTex(G);
-  _r3dPixSet(gl, R3, R3.texP, false);               /* the stain is a signal, not pixel art */
-  if (R3.oreAny) {
+  /* with the materials on, the ore is IN the ground (ore soil, terrain3d.js) - no stain on top;
+     with them off, the textured program that drew the ground is still bound */
+  if (R3.oreAny && !R3.matOn) {
+    _r3dPixSet(gl, R3, R3.texP, false);             /* the stain is a signal, not pixel art */
     gl.disable(gl.DEPTH_TEST);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -241,6 +220,7 @@ function _r3dFrame(G) {
   if (R3.waterMesh) {
     _r3dInstConst(gl, I, MC, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0);
     gl.uniform2f(uWave, R3D_WAVE_AMP, G.t);
+    _r3dSeaSet(gl, R3, R3.meshP, true);             /* the shoreline, per pixel - terrain3d.js */
     gl.depthFunc(gl.ALWAYS);
     gl.bindBuffer(gl.ARRAY_BUFFER, R3.waterMesh.p);
     gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 0, 0);
@@ -250,6 +230,7 @@ function _r3dFrame(G) {
     gl.enableVertexAttribArray(aC); gl.vertexAttribPointer(aC, 3, gl.UNSIGNED_BYTE, true, 0, 0);
     gl.drawArrays(gl.TRIANGLES, 0, R3.waterMesh.verts);
     gl.depthFunc(gl.LESS);
+    _r3dSeaSet(gl, R3, R3.meshP, false);
     gl.uniform2f(uWave, 0, 0);
   }
 
@@ -472,15 +453,11 @@ function _r3dFrame(G) {
      painted over the world rather than a surface in it, and texturing it would put grass
      detail on the unexplored map. */
   gl.uniform2f(gl.getUniformLocation(R3.texP, 'uGrain'), 0, 0);
+  _r3dPixSet(gl, R3, R3.texP, false);
   gl.disable(gl.DEPTH_TEST);
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-  gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundBuf);
-  gl.enableVertexAttribArray(aXZ); gl.vertexAttribPointer(aXZ, 3, gl.FLOAT, false, 0, 0);
-  gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundNB);
-  gl.enableVertexAttribArray(aGN); gl.vertexAttribPointer(aGN, 3, gl.FLOAT, false, 0, 0);
-  gl.bindBuffer(gl.ARRAY_BUFFER, R3.groundUV);
-  gl.enableVertexAttribArray(aT); gl.vertexAttribPointer(aT, 2, gl.FLOAT, false, 0, 0);
+  _r3dGroundBind(gl, R3, R3.texP);
   gl.bindTexture(gl.TEXTURE_2D, R3.fogTex);
   gl.drawArrays(gl.TRIANGLES, 0, R3.groundVerts);
   gl.disable(gl.BLEND);

@@ -39,6 +39,10 @@ var S = new Suite('pixedge');
     var o = {}, R = _rtsR, G = window._rtsG, i;
     for (i = 0; i < RTS_N * RTS_N; i++) { G.mapped[i] = 1; G.vis[i] = 1; }
     G.visDirty = 1;
+    /* ON THE LEGACY GROUND: the staircase redraw exists to live with the magnified Red Alert
+       picture, which the materials (render3d/terrain3d.js) replaced. It still serves the baked
+       ground behind RTS_GROUND_LEGACY, and that is what this measures. */
+    window.RTS_GROUND_LEGACY = true;
     rts3dSet(true);
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
@@ -165,6 +169,7 @@ var S = new Suite('pixedge');
     for (i = 0; i < farOff.length; i += 4) if (farOff[i] !== farOn[i] || farOff[i + 1] !== farOn[i + 1] || farOff[i + 2] !== farOn[i + 2]) fd++;
     o.farDiff = fd;
     window.RTS_POST_ON = true;
+    window.RTS_GROUND_LEGACY = false;
     return o;
   });
 

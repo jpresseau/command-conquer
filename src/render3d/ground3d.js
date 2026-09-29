@@ -309,6 +309,8 @@ var R3D_TEX_FS =
   'uniform sampler2D uGrainTex; uniform vec2 uGrain;' +   /* strength, world->tile scale */
   R3D_SHADOW_GLSL +
   'void main(){' +
+  /* THE GROUND IS MATERIALS NOW, in a program of their own (render3d/terrain3d.js). This one
+     draws the baked picture - the legacy ground - and what the ore stain and the fog sample */
   '  vec4 c = _pxSample(uS, vT);' +
   /* Composited the way the 2D pass composites it: the tile carries lighten-or-darken in its
      own colour and the strength in its alpha, so this is a plain source-over and none of a

@@ -429,8 +429,8 @@ var S = new Suite('ao');
          out.harshAA < out.harshRaw && out.harshAA >= out.harshMsaa - 0.15,
          'mean neighbour difference: ' + out.harshRaw + ' unfiltered, ' + out.harshAA +
          ' filtered, against ' + out.harshMsaa + ' for the multisampled frame - the filter has ' +
-         'to close that gap without crossing it, because the ground is pixel art drawn NEAREST ' +
-         'on purpose and blurring it is the thing this game must not do');
+         'to close that gap without crossing it: the ground is fine procedural detail now ' +
+         '(render3d/terrain3d.js), not aliasing, and the filter touches only geometric edges');
     S.ok('...and with the ore\'s faceted crystals in frame it softens them by little more',
          out.oreHarshAA > out.harshAA + 0.5 && out.oreHarshAA >= out.oreHarshMsaa - 0.4,
          out.oreHarshAA + ' filtered against ' + out.oreHarshMsaa + ' multisampled, the ' +

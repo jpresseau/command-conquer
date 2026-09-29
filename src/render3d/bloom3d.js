@@ -104,7 +104,7 @@ function _r3dBloomSize(R3) {
 function _r3dBloomPass(R3, G, cam, invD) {
   /* RTS_POST_ON gates this exactly as it gates the 2D pass: it is the same effect, and a spec
      that A/Bs the post pass has to be able to take the glow out from one switch in either
-     renderer. R3.bloomAmt is the finer control - see R3.aoAmt in post3d.js for the precedent -
+     renderer. R3.bloomAmt is the finer control - see R3.aoAmt in resolve3d.js for the precedent -
      which removes the glow from the picture while still paying for the pass, so the cost and
      the appearance can be graded separately. */
   if (typeof RTS_POST_ON !== 'undefined' && !RTS_POST_ON) return false;

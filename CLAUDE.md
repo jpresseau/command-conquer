@@ -163,10 +163,22 @@ breaking it shipped once.
 - **Nothing natural is a smooth cone.** Grass tufts are leaning blades (`r3d/tuft.js`) and a
   ridge's spires are `_r3Crystal`; a smooth cone read as a sapling on a lawn and as a traffic
   cone on a ridge. Slabs take a broken top (`peak` in `_r3dSlab`), not a flat quad.
-- **The 3D ground's staircases are redrawn, never blurred** (`R3D_PIX_GLSL`, EPX made
-  continuous, on from 3 device px a texel). It must leave specks, dithers and straight borders
-  pixel-identical; `e2e/pixedge` paints a test card and checks each. Anything else drawn with
-  the ground program (ore stain, fog) sets `uPix` to zero.
+- **The 3D ground is materials, not Red Alert's picture** (`render3d/terrain3d.js`): grass, dirt
+  tracks, sand, rock, forest floor, concrete and cobbled PAVING round every building, computed
+  per pixel in world space from a one-texel-per-cell ground map, height-blended at borders; ore
+  is a soil in the ground, not a stain on it. The sea's coast is cut per pixel from a smooth mask
+  with the same warp (`noise3d.js`). The baked ground, its grain and the EPX staircase redraw
+  (`R3D_PIX_GLSL`) survive behind `RTS_GROUND_LEGACY`. `test/*/paving`, `e2e/terrainmat`.
+  A bump is built on gradient noise (`_gnd`, slope worked out), never value noise, which lights
+  as streaks. Every material is mixes of noise evaluated ONCE per pixel in `_groundAt`.
+- **The harness's SwiftShader runs every branch of a shader.** A per-pixel `if` saves a GPU the
+  untaken side and SwiftShader nothing, so eight per-kind material branches evaluated at four
+  corners cost the harness their full sum: a frame went 1.1s -> 2.3s and real clicks and
+  screenshots (`savebuttons`, `landscape`) timed out. Share the expensive work, don't branch it.
+- **Unbind a render target's texture when a pass is done with it.** A program with a sampler on
+  a unit still holding the depth or colour of the framebuffer it draws into is a feedback loop,
+  and WebGL refuses the whole draw (INVALID_OPERATION): the material ground went black that way.
+  `_r3dResolve` (`render3d/resolve3d.js`, the composite) takes its depth back off unit 3.
 - **Structures are faction-coloured, not concrete** (`RTS_PAL.bld`): coloured walls under
   maroon roofs, on a pale irregular concrete pad drawn by `_sprPad`. An all-grey pass read
   as an industrial estate, and buildings straight on grass read as furniture on a lawn.

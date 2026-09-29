@@ -48,7 +48,14 @@ var b=await chromium.launch();var fails=[];var errs=[];
      var pt={x:bb.x+bb.width/2,y:bb.y+bb.height/2,radiusX:8,radiusY:8,force:1};
      await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[pt]});
      await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
-   } else { await p.click('#rtsSaveBtn'); }
+   } else {
+     /* A REAL CLICK WAITS ON THE FRAME: Playwright checks the button is stable across animation
+        frames before it presses, which is sixteen to twenty of them - 17s at the harness's 1.1s
+        frame, 21s at the 1.4s the per-pixel material ground takes, and 45s while that ground
+        briefly cost SwiftShader 2.4s (it runs every branch of a shader; a GPU takes one). The
+        default 30s is too close to that to hold; the press is the claim, not the wait. */
+     await p.click('#rtsSaveBtn', { timeout: 120000 });
+   }
    await p.waitForTimeout(200);
    var after=await p.evaluate(function(){return {saved:!!localStorage.getItem('rccmd.save1'),
      muted:document.getElementById('rtsMute').title};});
