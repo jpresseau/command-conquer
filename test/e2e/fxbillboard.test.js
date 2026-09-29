@@ -11,7 +11,8 @@
    And nothing could ever be in front of one. The decal is applied last, so a blast two cells
    behind a war factory painted straight over the roof.
 
-   These are the same sprites drawn as camera-facing quads inside the world pass, so they stand
+   They are drawn inside the world pass now, as camera-facing quads - shaded fire, smoke and
+   spray (render3d/fxglsl3d.js), with the old sprite quads kept as the fallback - so they stand
    at their own height and the depth buffer decides what covers what.
 
    WHY THE SIZE IS CHECKED AGAINST A FORMULA RATHER THAN AGAINST THE 2D MODE. The obvious test
@@ -75,14 +76,17 @@ var S = new Suite('fxbillboard');
     var bare = frame(null);
 
     function drawnPx(A) {
-      var n = 0, cy = 0;
+      var n = 0, cy = 0, ys = [];
       for (var p = 0; p < A.length; p += 4) {
         if (Math.abs(A[p] - bare[p]) + Math.abs(A[p + 1] - bare[p + 1]) +
             Math.abs(A[p + 2] - bare[p + 2]) < 12) continue;
-        n++; cy += (p >> 2) / CW | 0;
+        n++; cy += (p >> 2) / CW | 0; ys.push((p >> 2) / CW | 0);
       }
-      /* readPixels counts rows from the BOTTOM, so a larger y is higher on screen */
-      return { px: n, y: n ? +(cy / n).toFixed(0) : 0 };
+      /* readPixels counts rows from the BOTTOM, so a larger y is higher on screen. `top` is the
+         row only 2% of the blast rises above: its crown, which the glare it throws on the
+         ground below cannot pull down the way it pulls down a centroid */
+      ys.sort(function (a, b) { return a - b; });
+      return { px: n, y: n ? +(cy / n).toFixed(0) : 0, top: n ? ys[Math.floor(n * 0.98)] : 0 };
     }
 
     /* ---------- 1. the pass runs at all ---------- */
@@ -97,14 +101,20 @@ var S = new Suite('fxbillboard');
 
     /* ---------- 3. f.y is read, and by the right amount ----------
        Up the screen is y * sin(tilt) world units, and the zoom turns that into pixels. */
+    /* the blast itself, without the glare and the ring it throws on the ground below it: those
+       stay on the ground wherever the blast is, which is right, and is not this claim */
+    R3.fxGroundAmt = 0;
     var low = drawnPx(frame([{ kind: 'boom', x: wf.x, y: 0, z: wf.z + 9, t: 0.18, big: 1.0 }]));
     var high = drawnPx(frame([{ kind: 'boom', x: wf.x, y: 8, z: wf.z + 9, t: 0.18, big: 1.0 }]));
-    o.rosePx = high.y - low.y;
+    R3.fxGroundAmt = 1;
+    o.rosePx = high.top - low.top;
     o.expectRise = +(8 * R3.sp * _rtsZoom()).toFixed(1);
 
     /* ---------- 4. the quad projects to the size the sizing rule asks for ----------
        Run the shader's own arithmetic in JS against the 2D path's number, at one projection,
-       which is the only comparison that means anything (see the note at the top). */
+       which is the only comparison that means anything (see the note at the top). The sprite
+       quads are the fallback now (RTS_FX_SPRITES, and a device that cannot build the effects
+       program), so it is their size that is held here. */
     var f0 = { kind: 'boom', x: wf.x, y: 0, z: wf.z + 9, t: 0.18, big: 1.0 };
     var pick = _rtsFxFrame(f0, R.spr);
     var TSscale = R.cell / RTS_TS, zoom = _rtsZoom();
@@ -135,19 +145,27 @@ var S = new Suite('fxbillboard');
     sc.width = R.W * R.dpr; sc.height = R.H * R.dpr;
     var sg = sc.getContext('2d');
     sg.setTransform(R.dpr, 0, 0, R.dpr, 0, 0);
-    var kinds = ['boom', 'pop', 'hit', 'piff', 'splash', 'smoke'];
-    var painted = [];
-    for (i = 0; i < kinds.length; i++) {
+    /* ...and, with the effects shaded, the rounds and chunks the sprite quads never could draw:
+       a tracer, flying debris, a shell in G.proj. Under RTS_FX_SPRITES those go back to the 2D
+       painter, and it has to be seen to draw them, or "stood down" proves nothing. */
+    var kinds = ['boom', 'pop', 'hit', 'piff', 'splash', 'smoke', 'tracer', 'debris', 'shell'];
+    function paints(k) {
       sg.clearRect(0, 0, R.W, R.H);
-      G.fx.length = 0;
-      G.fx.push({ kind: kinds[i], x: R.focus.x, y: 0, z: R.focus.z, t: 0.18, big: 1.0 });
+      G.fx.length = 0; G.proj.length = 0;
+      var fx = { kind: k, x: R.focus.x, y: 0, z: R.focus.z, t: 0.02, big: 1.0,
+                 x2: R.focus.x + 20, y2: 1.3, z2: R.focus.z + 8, vx: 3, vy: 5, vz: 2 };
+      if (k === 'shell') G.proj.push({ kind: 'shell', x: R.focus.x, y: 1.4, z: R.focus.z, vx: 60, vz: 0 });
+      else G.fx.push(fx);
       try { _rtsDrawFx(sg, G, R.spr, TSscale, R.cell); } catch (e) { }
-      var d = sg.getImageData(0, 0, sc.width, sc.height).data, any = 0;
-      for (var p2 = 3; p2 < d.length; p2 += 4) if (d[p2] > 8) { any = 1; break; }
-      if (any) painted.push(kinds[i]);
+      var d = sg.getImageData(0, 0, sc.width, sc.height).data;
+      for (var p2 = 3; p2 < d.length; p2 += 4) if (d[p2] > 8) return true;
+      return false;
     }
-    o.doubleDrawn = painted;
-    G.fx.length = 0;
+    o.doubleDrawn = kinds.filter(paints);
+    window.RTS_FX_SPRITES = true;
+    o.spritePaints2D = ['tracer', 'debris', 'shell'].filter(paints);
+    window.RTS_FX_SPRITES = false;
+    G.fx.length = 0; G.proj.length = 0;
     return o;
   });
 
@@ -161,7 +179,7 @@ var S = new Suite('fxbillboard');
 
   if (out.found) {
     S.ok('an explosion is drawn by the world pass', out.drawnFront === 1 && out.front.px > 300,
-         out.front.px + ' pixels from one blast, ' + out.drawnFront + ' quad submitted');
+         out.front.px + ' pixels from one blast, ' + out.drawnFront + ' effect drawn');
 
     /* THE CLAIM THE DECAL COULD NEVER MAKE. */
     S.ok('...and a building in front of one hides part of it',
@@ -173,7 +191,7 @@ var S = new Suite('fxbillboard');
     /* The other one: f.y is set by every caller and was read by nobody. */
     S.ok('an explosion happens at the height it happened at',
          Math.abs(out.rosePx - out.expectRise) < 6,
-         'raising a blast 8 world units moves it ' + out.rosePx + 'px up the screen, against ' +
+         'raising a blast 8 world units moves its crown ' + out.rosePx + 'px up the screen, against ' +
          out.expectRise + 'px of tilt and zoom - anchored through the ground, as the 2D path ' +
          'does, it does not move at all');
 
@@ -187,7 +205,9 @@ var S = new Suite('fxbillboard');
          out.doubleDrawn.length === 0,
          out.doubleDrawn.length ? 'still drawn in 2D as well: ' + out.doubleDrawn.join(', ') +
          ' - which paints each of them twice, once in the world and once over it'
-         : 'none of boom/pop/hit/piff/splash/smoke paint twice');
+         : 'none of boom/pop/hit/piff/splash/smoke/tracer/debris, nor a shell in flight, paint twice');
+    S.eq('...and takes back the rounds and chunks when the sprite quads are drawing instead',
+         out.spritePaints2D.join(','), 'tracer,debris,shell');
   }
 
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');

@@ -43,8 +43,14 @@ function _rtsFxSize(img, TSscale, big) {
 
 function _rtsDrawFx(g, G, S, TSscale, cell) {
   var i;
+  /* 3D DRAWS WHAT IT OWNS ITSELF, inside the world pass rather than as decals laid over the
+     finished picture - so it stands at its height and a building in front of it hides it.
+     render3d/fxemit3d.js says which: _r3dFxOwns for G.fx, and the rounds in G.proj whenever
+     the effects are shaded. Asking it is what keeps the two painters from both drawing one. */
+  var r3on = !!(window._R3D && window._R3D.on) && typeof _r3dFxOwns === 'function';
+  var r3proj = r3on && _r3dFxShaded();
   /* --- projectiles --- */
-  for (i = 0; i < G.proj.length; i++) {
+  for (i = 0; i < G.proj.length && !r3proj; i++) {
     var p = G.proj[i];
     if (!_rtsVisible(_rtsTX(p.x), _rtsTX(p.z))) continue;
     var pj = _rtsGroundToScreen(p.x, p.z);
@@ -58,6 +64,7 @@ function _rtsDrawFx(g, G, S, TSscale, cell) {
   for (i = 0; i < G.fx.length; i++) {
     var f = G.fx[i], k = _rtsAnimQ(f.t) / 0.75;
     if (f.t < 0) continue;                       /* a delayed secondary blast, not started */
+    if (r3on && _r3dFxOwns(f.kind)) continue;    /* the world pass has it - see above */
     if (f.kind === 'nuke') {
       /* Anchored near its BASE, not its centre: a mushroom cloud stands on the ground and grows
          upward, so centring it would sink the stem below the impact point. */
@@ -141,10 +148,6 @@ function _rtsDrawFx(g, G, S, TSscale, cell) {
     } else {
       /* Combat_Anim: which set of frames this is comes from the animation kind, which the
          simulation chose from the damage and the land type. */
-      /* 3D DRAWS THESE ITSELF, as camera-facing quads inside the world pass rather than as
-         decals laid over the finished picture - so they stand at the right height and a
-         building in front of one hides it. See render3d/fx3d.js. */
-      if (window._R3D && window._R3D.on) continue;
       var pick = _rtsFxFrame(f, S);
       var img = pick.img;
       var xp = _rtsGroundToScreen(f.x, f.z);

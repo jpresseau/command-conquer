@@ -108,7 +108,7 @@ function _r3dBloomPass(R3, G, cam, invD) {
      which removes the glow from the picture while still paying for the pass, so the cost and
      the appearance can be graded separately. */
   if (typeof RTS_POST_ON !== 'undefined' && !RTS_POST_ON) return false;
-  if (!R3.postReady || !G || !G.fx || !G.fx.length) return false;
+  if (!R3.postReady || !G || !((G.fx && G.fx.length) || (G.proj && G.proj.length))) return false;
   if (!R3.bloomP && !_r3dBloomInit(R3)) return false;
   if (!_r3dBloomSize(R3)) return false;
   var gl = R3.gl, i;
@@ -131,7 +131,9 @@ function _r3dBloomPass(R3, G, cam, invD) {
   gl.clear(gl.COLOR_BUFFER_BIT);          /* colour only - the depth is the world's */
   gl.enable(gl.DEPTH_TEST);
   var drawn = 0;
+  R3.fxEmitPass = true;
   try { drawn = _r3dFxDraw(G, cam, invD) || 0; } catch (e) { drawn = 0; }
+  R3.fxEmitPass = false;
   /* the depth goes back before anything else binds this FBO */
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, null, 0);
   /* _r3dFxDraw reports what it actually put on screen, and the set it owns is narrower than

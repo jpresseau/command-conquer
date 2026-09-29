@@ -171,6 +171,12 @@ breaking it shipped once.
   (`R3D_PIX_GLSL`) survive behind `RTS_GROUND_LEGACY`. `test/*/paving`, `e2e/terrainmat`.
   A bump is built on gradient noise (`_gnd`, slope worked out), never value noise, which lights
   as streaks. Every material is mixes of noise evaluated ONCE per pixel in `_groundAt`.
+- **Explosions, fire, smoke, spray and rounds in flight are shaded, not sprites.**
+  `render3d/fxemit3d.js` places the quads, `fxglsl3d.js` shades them, `fx3d.js` draws them.
+  STATELESS: every quad is a function of its record's age and the game clock, and a fireball's
+  billows roll on in the first loop of the small fire it chains into (same record, same seed).
+  `_r3dFxOwns` is the one list of what 3D draws; `render/fx.js` asks it. `RTS_FX_SPRITES` is the
+  before-picture; `R3.fxGroundAmt` takes the glare and rings out. `test/*/fxemit`, `e2e/fxshade`.
 - **The harness's SwiftShader runs every branch of a shader.** A per-pixel `if` saves a GPU the
   untaken side and SwiftShader nothing, so eight per-kind material branches evaluated at four
   corners cost the harness their full sum: a frame went 1.1s -> 2.3s and real clicks and

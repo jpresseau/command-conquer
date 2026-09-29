@@ -63,7 +63,10 @@ function _r3dBuildMesh(gl, faces) {
     gl.bufferData(gl.ARRAY_BUFFER, a, gl.STATIC_DRAW);
     return b3;
   }
-  return { p: fbuf(pos), n: bbuf(nrm8), c: bbuf(col8), verts: pos.length / 3 };
+  /* its top, in model units: where a fire on its roof stands (render3d/fxemit3d.js) */
+  var top = 0;
+  for (fi = 1; fi < pos.length; fi += 3) if (pos[fi] > top) top = pos[fi];
+  return { p: fbuf(pos), n: bbuf(nrm8), c: bbuf(col8), verts: pos.length / 3, top: top };
 }
 
 /* The cache key carries everything that changes the geometry or its colours: type, side,

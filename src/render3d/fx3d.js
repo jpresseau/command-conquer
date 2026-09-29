@@ -40,9 +40,8 @@
    about six world units tall, so its bottom corner sits ~1.7 below its anchor, while a war
    factory stands eight or more. */
 
-/* In world units of DEPTH. See the note above: over half of a large sprite's height, under a
-   building's, and the gap between those is wide enough that this needs no tuning. */
-var R3D_FX_LIFT = 2.2;
+/* R3D_FX_LIFT, and _r3dFxOwns below it, live in fxemit3d.js: it places every quad this file
+   draws, and it is the half a unit test can load without a GL context. */
 
 var R3D_FX_VS =
   'attribute vec3 aP; attribute vec2 aT;' +
@@ -104,16 +103,7 @@ function _r3dFxInit(R3) {
   return true;
 }
 
-/* Which effects this pass owns. The rest - tracers, debris, the nuke's own mushroom, the death
-   animation - keep their 2D path: they are lines and single chunks rather than sprite quads,
-   or one-offs with their own anchoring, and moving them buys nothing. render/fx.js skips
-   exactly this set when 3D is on, and the two lists have to agree. */
-function _r3dFxOwns(kind) {
-  return kind !== 'tracer' && kind !== 'debris' && kind !== 'nuke' && kind !== 'die' &&
-         kind !== 'fire';
-}
-
-function _r3dFxDraw(G, cam, invD) {
+function _r3dFxDrawSprites(G, cam, invD) {
   var R3 = window._R3D, gl = R3.gl, R = _rtsR;
   var S = R.spr;                          /* the sprite bank, exactly as render/frame.js takes it */
   if (!S || !S.fx || !S.fx.boom || !G.fx.length) return 0;
@@ -193,4 +183,89 @@ function _r3dFxDraw(G, cam, invD) {
   gl.depthMask(true);
   R3.fxDrawn = drawn;
   return drawn;
+}
+
+/* THE SHADED PATH - see fxglsl3d.js and fxemit3d.js. RTS_FX_SPRITES puts the sprite quads back,
+   which is the before-picture every effects spec measures against. */
+function _r3dFxDraw(G, cam, invD) {
+  if (typeof RTS_FX_SPRITES !== 'undefined' && RTS_FX_SPRITES) return _r3dFxDrawSprites(G, cam, invD);
+  var R3 = window._R3D, gl = R3.gl, V, i;
+  if (!G.fx.length && !(G.proj && G.proj.length)) return 0;
+  if (!R3.fx2P) {
+    if (R3.fx2Fail) return _r3dFxDrawSprites(G, cam, invD);
+    try {
+      R3.fx2P = _r3dProgram(gl, R3D_FX2_VS, R3D_FX2_FS);
+      R3.fx2BufM = gl.createBuffer(); R3.fx2BufL = gl.createBuffer();
+      R3.fxV = _r3dFxView();
+    } catch (e) { R3.fx2P = null; R3.fx2Fail = 1; return _r3dFxDrawSprites(G, cam, invD); }
+    if (!R3.fx2P) { R3.fx2Fail = 1; return _r3dFxDrawSprites(G, cam, invD); }
+  }
+  var P = R3.fx2P, emit = !!R3.fxEmitPass;
+  V = R3.fxV;
+
+  /* BUILT ONCE A FRAME, by the world pass. The bloom's emitter pass draws the same quads again,
+     so it reuses the upload rather than walking G.fx twice. */
+  if (!emit) {
+    V.sp = R3.sp; V.cp = R3.cp; V.t = G.t || 0; V.M.n = 0; V.L.n = 0; V.M.lit = 0;
+    V.gnd = R3.fxGroundAmt === undefined ? 1 : R3.fxGroundAmt;
+    V.ground = _rtsElev;
+    V.water = function (x, z) {
+      var tx = _rtsTX(x), tz = _rtsTX(z);
+      return _rtsInB(tx, tz) && G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER;
+    };
+    _r3dFxEmit(G, V);
+    gl.bindBuffer(gl.ARRAY_BUFFER, R3.fx2BufM);
+    gl.bufferData(gl.ARRAY_BUFFER, _r3dFxOrder(V), gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, R3.fx2BufL);
+    gl.bufferData(gl.ARRAY_BUFFER, V.L.a.subarray(0, V.L.n * R3D_FX_QUAD), gl.DYNAMIC_DRAW);
+  }
+  if (emit ? !V.M.lit : (!V.M.n && !V.L.n)) { if (!emit) R3.fxDrawn = 0; return 0; }
+
+  gl.useProgram(P);
+  gl.uniform4fv(gl.getUniformLocation(P, 'uCam'), cam);
+  gl.uniform2f(gl.getUniformLocation(P, 'uTilt'), R3.cp, R3.sp);
+  gl.uniform1f(gl.getUniformLocation(P, 'uInvD'), invD);
+  gl.uniform1f(gl.getUniformLocation(P, 'uEmit'), emit ? 1 : 0);
+  /* the scene's sun, turned into the quad's frame: across, up the screen, toward the eye */
+  var L = R3_LIGHT;
+  gl.uniform3f(gl.getUniformLocation(P, 'uSunV'), L[0], L[1] * R3.sp - L[2] * R3.cp, L[1] * R3.cp + L[2] * R3.sp);
+  var at = [['aP', 3, 0], ['aQ', 4, 12], ['aA', 4, 28], ['aB', 3, 44]], loc = [];
+  for (i = 0; i < at.length; i++) loc.push(gl.getAttribLocation(P, at[i][0]));
+  function bind(buf) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    for (var j = 0; j < at.length; j++) {
+      if (loc[j] < 0) continue;
+      gl.enableVertexAttribArray(loc[j]);
+      /* the instanced passes leave their divisors behind, and a divisor on one of these would
+         hand every vertex of the batch the first vertex's value */
+      if (R3.inst && R3.inst.on) R3.inst.divisor(loc[j], 0);
+      gl.vertexAttribPointer(loc[j], at[j][1], gl.FLOAT, false, R3D_FX_STRIDE * 4, at[j][2]);
+    }
+  }
+  gl.enable(gl.DEPTH_TEST);
+  gl.depthMask(false);
+  gl.enable(gl.BLEND);
+  /* the glare first, MULTIPLYING what is there: dst + dst * src */
+  if (!emit && V.L.n) {
+    bind(R3.fx2BufL);
+    gl.blendFunc(gl.DST_COLOR, gl.ONE);
+    gl.drawArrays(gl.TRIANGLES, 0, V.L.n * 6);
+  }
+  if (V.M.n) {
+    bind(R3.fx2BufM);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.drawArrays(gl.TRIANGLES, 0, V.M.n * 6);
+  }
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.disable(gl.BLEND);
+  gl.depthMask(true);
+  for (i = 0; i < loc.length; i++) if (loc[i] >= 0) gl.disableVertexAttribArray(loc[i]);
+  /* the emitter pass reports what gave off light, so a frame of nothing but smoke is not
+     blurred into a glow of nothing (bloom3d.js stands down on zero) */
+  if (emit) return V.M.lit;
+  R3.fxQuads = V.M.n + V.L.n;
+  var n = 0;
+  for (i = 0; i < G.fx.length; i++) if (G.fx[i].t >= 0 && _r3dFxOwns(G.fx[i].kind)) n++;
+  R3.fxDrawn = n;
+  return n;
 }
