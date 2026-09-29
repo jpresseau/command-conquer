@@ -321,24 +321,17 @@ function _r3dWaterBuild(G) { return _r3SegBulk(function () {
   }
   for (var tz = 0; tz < N; tz++) {
     for (var tx = 0; tx < N; tx++) {
-      if (!isWater(tx, tz)) continue;
+      /* THE SHEET REACHES A CELL PAST THE SHORE, and the shoreline itself is cut per pixel
+         (R3D_MESH_FS, uSea): the water mask decides what is sea, round and in step with the
+         ground's own border. It used to be cut here, cell by cell - sub-quads dropped wherever
+         they touched land - and a coast built out of cells is a staircase however it is
+         inset; at a middle zoom every lake was a flight of stairs. */
+      var near = isWater(tx, tz);
+      for (var ny = -1; ny <= 1 && !near; ny++) for (var nx = -1; nx <= 1 && !near; nx++) near = isWater(tx + nx, tz + ny);
+      if (!near) continue;
       var ox = _rtsWX(tx) - half, oz = _rtsWX(tz) - half;
-      var S1 = R3D_WATER_SUB - 1;
       for (var j = 0; j < R3D_WATER_SUB; j++) {
         for (var k2 = 0; k2 < R3D_WATER_SUB; k2++) {
-          /* THE INSET IS PER SIDE, and only on sides that actually face land. A first cut
-             insets every side of any cell with a land neighbour, which also opens a gap
-             between two ADJACENT shore cells - and a coastline is made of adjacent shore
-             cells, so the sea came out framed in a dark lattice of the paint underneath. A
-             sub-quad drops out only when it sits against a cell that is not water. */
-          if (k2 === 0 && !isWater(tx - 1, tz)) continue;
-          if (k2 === S1 && !isWater(tx + 1, tz)) continue;
-          if (j === 0 && !isWater(tx, tz - 1)) continue;
-          if (j === S1 && !isWater(tx, tz + 1)) continue;
-          if (k2 === 0 && j === 0 && !isWater(tx - 1, tz - 1)) continue;
-          if (k2 === S1 && j === 0 && !isWater(tx + 1, tz - 1)) continue;
-          if (k2 === 0 && j === S1 && !isWater(tx - 1, tz + 1)) continue;
-          if (k2 === S1 && j === S1 && !isWater(tx + 1, tz + 1)) continue;
           var x0 = ox + k2 * step, x1 = x0 + step;
           var z0 = oz + j * step, z1 = z0 + step;
           _r3F(faces, [[x0, R3D_WATER_Y, z0], [x0, R3D_WATER_Y, z1],
@@ -351,6 +344,20 @@ function _r3dWaterBuild(G) { return _r3SegBulk(function () {
     gl.deleteBuffer(R3.waterMesh.p); gl.deleteBuffer(R3.waterMesh.n);
     gl.deleteBuffer(R3.waterMesh.c);
   }
+  /* the water mask the shoreline is cut from: one texel per cell, 255 on water, LINEAR */
+  var wm = new Uint8Array(N * N * 4);
+  for (var mi = 0; mi < N * N; mi++) {
+    var wv = G.terrain[mi] === RTS_T_WATER ? 255 : 0;
+    wm[mi * 4] = wv; wm[mi * 4 + 1] = wv; wm[mi * 4 + 2] = wv; wm[mi * 4 + 3] = 255;
+  }
+  R3.seaMaskTex = R3.seaMaskTex || gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, R3.seaMaskTex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, N, N, 0, gl.RGBA, gl.UNSIGNED_BYTE, wm);
   R3.waterMesh = faces.length ? _r3dBuildMesh(gl, faces) : null;
   R3.waterTris = faces.length * 2;
 });

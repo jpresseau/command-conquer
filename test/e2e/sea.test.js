@@ -120,6 +120,10 @@ var S = new Suite('sea');
       gl.readPixels(0, 0, CW, CH, gl.RGBA, gl.UNSIGNED_BYTE, b);
       return b;
     }
+    /* THE SWELL ALONE: the per-pixel chop (R3.rippleAmt) is off for the frames compared below, or
+       a still sheet carries the chop's own thousands of tones and the swell's are lost in them -
+       measured with it on, 11731 tones against 6573 flat. The chop has its own claim further down. */
+    R3.rippleAmt = 0;
     var A = shot();
 
     /* WHERE THE SURFACE IS, MARKED RATHER THAN INFERRED. Asking "does this pixel differ from
@@ -153,15 +157,38 @@ var S = new Suite('sea');
     var keepAmp = window.R3D_WAVE_AMP;
     window.R3D_WAVE_AMP = 0;
     var flat = shot();
+    /* ...and the same still sheet WITH the chop: the ripples and glints drawn per pixel */
+    R3.rippleAmt = 1;
+    var flatChop = shot();
     window.R3D_WAVE_AMP = keepAmp;
 
-    var tones = {}, flatTones = {}, n = 0;
-    for (var p = 0; p < A.length; p += 4) {
-      if (!isMesh(p)) continue;
-      tones[A[p] + ',' + A[p + 1] + ',' + A[p + 2]] = 1;
-      flatTones[flat[p] + ',' + flat[p + 1] + ',' + flat[p + 2]] = 1;
-      n++;
+    var tones = {}, flatTones = {}, chopTones = {}, n = 0, p;
+    for (p = 0; p < A.length; p += 4) if (isMesh(p)) n++;
+    /* THE TONES ARE COUNTED ON OPEN WATER - cells with water on all eight sides, sampled on a
+       grid across each. The shoreline has a look of its own now (foam, turquoise shallows, the
+       seabed's sand through the thin water: render3d/gl3d.js), which is the same with the
+       swell flat or running, and counted along with the open sea it swamped the comparison:
+       5605 tones on a flat sheet, most of them the coast's. */
+    function wet(x, z) { return x >= 0 && z >= 0 && x < RTS_N && z < RTS_N && G.terrain[z * RTS_N + x] === RTS_T_WATER; }
+    var seen = {};
+    for (var oz = best[1] - 14; oz <= best[1] + 14; oz++) for (var ox = best[0] - 14; ox <= best[0] + 14; ox++) {
+      var allWet = true;
+      for (var ez = -1; ez <= 1 && allWet; ez++) for (var ex = -1; ex <= 1 && allWet; ex++) if (!wet(ox + ex, oz + ez)) allWet = false;
+      if (!allWet) continue;
+      for (var gy = 0; gy < 8; gy++) for (var gx = 0; gx < 8; gx++) {
+        var gp = _rtsGroundToScreen(_rtsWX(ox) + (gx / 8 - 0.4375) * RTS_TILE, _rtsWX(oz) + (gy / 8 - 0.4375) * RTS_TILE);
+        var qx = Math.round(gp.x * R.dpr), qy = Math.round(gp.y * R.dpr);
+        if (qx < 0 || qy < 0 || qx >= CW || qy >= CH) continue;
+        p = ((CH - 1 - qy) * CW + qx) * 4;
+        if (seen[p] || !isMesh(p)) continue;
+        seen[p] = 1;
+        tones[A[p] + ',' + A[p + 1] + ',' + A[p + 2]] = 1;
+        flatTones[flat[p] + ',' + flat[p + 1] + ',' + flat[p + 2]] = 1;
+        chopTones[flatChop[p] + ',' + flatChop[p + 1] + ',' + flatChop[p + 2]] = 1;
+      }
     }
+    o.openPx = Object.keys(seen).length;
+    o.chopTones = Object.keys(chopTones).length;
     o.seaPx = n;
     o.seaShare = +(n / (CW * CH) * 100).toFixed(1);
     o.tones = Object.keys(tones).length;
@@ -280,9 +307,16 @@ var S = new Suite('sea');
      sea, because an up-facing surface has no headroom left in this light's ramp. */
   S.ok('the swell is in the picture, not just in the geometry',
        out.tones > out.flatTones * 3 && out.tones > 250,
-       out.tones + ' distinct tones across the sea against ' + out.flatTones +
+       out.tones + ' distinct tones across ' + out.openPx + ' samples of open sea against ' + out.flatTones +
        ' with the swell flattened - leaning on the light alone gave 79, because a flat sheet ' +
        'already sits at v=0.96 of a ceiling of 1.0');
+
+  /* THE CHOP. What makes water read as water up close is the fine chop over the swell - two
+     layers of noise differenced into a normal, and the sun caught in it (render3d/gl3d.js). On a
+     still sheet it is all there is, so it is measured there, against the same sheet without it. */
+  S.ok('...and the chop is in it too, over a still sea: ripples and glints drawn per pixel',
+       out.chopTones > out.flatTones * 3,
+       out.chopTones + ' distinct tones on a still sheet with the chop, against ' + out.flatTones + ' without');
 
   /* The per-side inset. Insetting whole shore cells leaves gaps between adjacent ones.
      Measured on a FLATTENED surface, so this is the mesh's footprint and nothing else. */

@@ -254,68 +254,6 @@ var R3D_AO_BLUR_FS =
   '  gl_FragColor = vec4(s / w);' +
   '}';
 
-/* THE COMPOSITE, WHICH ALSO HAS TO PUT THE ANTIALIASING BACK.
-
-   Drawing into a buffer costs the canvas's multisampling: the canvas was created with
-   antialias:true and an offscreen colour texture has no such thing, so every silhouette in the
-   scene came back a stair. Measured against the direct-to-canvas frame, that is about 2% of
-   pixels moving by up to 88 levels - small in count, and exactly the pixels an eye follows.
-
-   Multisampling the offscreen target instead is the obvious repair and it is not available
-   here: the occlusion needs a depth TEXTURE, and resolving a multisampled depth buffer into
-   one is not something WebGL2 will do. So the edges are put back in this pass, by FXAA, which
-   is the standard answer for precisely this situation - a pipeline that renders through a
-   buffer cannot use MSAA and reconstructs its edges from the finished image instead.
-
-   It runs on the SCENE, before the occlusion is applied, not after. The occlusion is a
-   half-resolution, twice-blurred signal with no edges of its own to find; running the edge
-   filter over the composite would only let it smear the AO across silhouettes it should stop
-   at.
-
-   Occlusion multiplies the frame COOL rather than toward black, for the reason the mesh shader
-   spells out about its shading ramp: this scene's shade is blue-grey, not absence of light, and
-   darkening straight down the channels takes the sky back out of every corner the AO found. */
-var R3D_AO_RESOLVE_FS =
-  'precision highp float; varying vec2 vT;' +
-  'uniform sampler2D uScene; uniform sampler2D uAO; uniform float uAOAmt;' +
-  'uniform vec2 uTexel; uniform float uAA;' +
-  /* The glow, added after the occlusion rather than before it: light in the air is not a
-     surface and must not be darkened by how much sky that surface can see. See bloom3d.js -
-     uBloomAmt is 0 on every frame with nothing burning, which is most of them. */
-  'uniform sampler2D uBloom; uniform float uBloomAmt;' +
-  'float _lum(vec3 c){ return dot(c, vec3(0.299, 0.587, 0.114)); }' +
-  'vec3 _fxaa(vec2 uv){' +
-  '  vec3 mC = texture2D(uScene, uv).rgb;' +
-  '  vec3 nw = texture2D(uScene, uv + vec2(-1.0, -1.0) * uTexel).rgb;' +
-  '  vec3 ne = texture2D(uScene, uv + vec2( 1.0, -1.0) * uTexel).rgb;' +
-  '  vec3 sw = texture2D(uScene, uv + vec2(-1.0,  1.0) * uTexel).rgb;' +
-  '  vec3 se = texture2D(uScene, uv + vec2( 1.0,  1.0) * uTexel).rgb;' +
-  '  float lnw = _lum(nw), lne = _lum(ne), lsw = _lum(sw), lse = _lum(se), lm = _lum(mC);' +
-  '  float lo = min(lm, min(min(lnw, lne), min(lsw, lse)));' +
-  '  float hi = max(lm, max(max(lnw, lne), max(lsw, lse)));' +
-  /* a flat neighbourhood has no edge to find, and blurring it is pure loss on pixel art */
-  '  if (hi - lo < max(0.1600, hi * 0.400)) return mC;' +
-  '  vec2 dir = vec2(-((lnw + lne) - (lsw + lse)), ((lnw + lsw) - (lne + lse)));' +
-  '  float red = max((lnw + lne + lsw + lse) * 0.03125, 0.0078125);' +
-  '  float rcp = 1.0 / (min(abs(dir.x), abs(dir.y)) + red);' +
-  '  dir = clamp(dir * rcp, -8.0, 8.0) * uTexel;' +
-  '  vec3 a = 0.5 * (texture2D(uScene, uv + dir * (1.0 / 3.0 - 0.5)).rgb +' +
-  '                  texture2D(uScene, uv + dir * (2.0 / 3.0 - 0.5)).rgb);' +
-  '  vec3 b = a * 0.5 + 0.25 * (texture2D(uScene, uv - dir * 0.5).rgb +' +
-  '                             texture2D(uScene, uv + dir * 0.5).rgb);' +
-  '  float lb = _lum(b);' +
-  '  return (lb < lo || lb > hi) ? a : b;' +
-  '}' +
-  'void main(){' +
-  '  vec3 c = mix(texture2D(uScene, vT).rgb, _fxaa(vT), uAA);' +
-  '  float ao = mix(1.0, texture2D(uAO, vT).r, uAOAmt);' +
-  '  vec3 lit = c * mix(vec3(' + R3D_AO_FLOOR[0].toFixed(3) + ', ' +
-       R3D_AO_FLOOR[1].toFixed(3) + ', ' + R3D_AO_FLOOR[2].toFixed(3) +
-       '), vec3(1.0), ao);' +
-  '  lit += texture2D(uBloom, vT).rgb * uBloomAmt;' +
-  '  gl_FragColor = vec4(lit, 1.0);' +
-  '}';
-
 /* --------------------------------------------------------------------------- setup -- */
 
 function _r3dPostTex(gl, w, h, internal, format, type, filter) {
@@ -448,36 +386,8 @@ function _r3dPostEnd(R3, cam, invD) {
     _r3dQuad(R3, R3.aoBlurP);
   }
 
-  /* --- and onto the canvas --- */
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  gl.viewport(0, 0, R3.postW, R3.postH);
-  gl.useProgram(R3.aoResolveP);
-  gl.uniform1i(gl.getUniformLocation(R3.aoResolveP, 'uScene'), 0);
-  gl.uniform1i(gl.getUniformLocation(R3.aoResolveP, 'uAO'), 1);
-  /* R3.aoAmt exists so the occlusion can be taken out WITHOUT taking the offscreen buffer out
-     with it. Turning postReady off does both at once, and the two have separate effects on the
-     picture - the buffer has no multisampling, so a postReady A/B measures the occlusion and
-     the lost antialiasing added together and cannot tell which is which. */
-  gl.uniform1f(gl.getUniformLocation(R3.aoResolveP, 'uAOAmt'),
-               R3.aoAmt === undefined ? 1 : R3.aoAmt);
-  /* R3.aaAmt, for the same reason as R3.aoAmt: the edge filter and the occlusion are separate
-     claims and a spec has to be able to grade one without the other moving. */
-  gl.uniform1f(gl.getUniformLocation(R3.aoResolveP, 'uAA'),
-               R3.aaAmt === undefined ? 1 : R3.aaAmt);
-  gl.uniform2f(gl.getUniformLocation(R3.aoResolveP, 'uTexel'), 1 / R3.postW, 1 / R3.postH);
-  /* The glow. R3.bloomOn is set by _r3dBloomPass for this frame only; with nothing burning the
-     amount is zero and the sampler still needs a bound texture, so it gets the AO one - a
-     texture multiplied by zero, rather than a branch in the shader every pixel. */
-  var bloomAmt = R3.bloomOn ? (R3.bloomAmt === undefined ? R3D_BLOOM_AMT : R3.bloomAmt) : 0;
-  gl.uniform1f(gl.getUniformLocation(R3.aoResolveP, 'uBloomAmt'), bloomAmt);
-  gl.uniform1i(gl.getUniformLocation(R3.aoResolveP, 'uBloom'), 2);
-  gl.activeTexture(gl.TEXTURE2);
-  gl.bindTexture(gl.TEXTURE_2D, (R3.bloomOn && R3.bloomTex) ? R3.bloomTex : R3.aoTex);
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, R3.sceneTex);
-  gl.activeTexture(gl.TEXTURE1);
-  gl.bindTexture(gl.TEXTURE_2D, R3.aoTex);
-  _r3dQuad(R3, R3.aoResolveP);
+  /* --- and onto the canvas: render3d/resolve3d.js --- */
+  _r3dResolve(R3);
 
   gl.activeTexture(gl.TEXTURE0);
   gl.depthMask(true);

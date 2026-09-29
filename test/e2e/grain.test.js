@@ -283,7 +283,12 @@ var S = new Suite('grain');
      are one pixel long whether the grain is there or not, and a run-length test would pass on
      a frame with no grain in it at all. What magnification actually costs there is fine
      variation, so that is what is counted. */
+  /* ON THE LEGACY GROUND. The 3D ground is materials now (render3d/terrain3d.js): detail is
+     computed per pixel in world space, so there is no magnified picture for the grain to put
+     anything back into, and the materials switch it off. The grain still serves the baked
+     ground behind RTS_GROUND_LEGACY, and that is what this measures. */
   var three = await g3d.page.evaluate(function () {
+    window.RTS_GROUND_LEGACY = true;
     var G = window._rtsG, R = _rtsR, R3 = window._R3D, gl = R3.gl;
     for (var j = G.ents.length - 1; j >= 0; j--)
       if (G.ents[j].type === 'unit') { delete G.byId[G.ents[j].id]; G.ents.splice(j, 1); }
@@ -329,6 +334,7 @@ var S = new Suite('grain');
     _rtsRFrame(1 / 60);
     var magWide = R3.grainMag;
     var wide = look();
+    window.RTS_GROUND_LEGACY = false;
     return { on: on, off: off, wide: wide, magClose: magClose, magWide: magWide,
              gate: RTS_DETAIL_MIN_MAG, cell: RTS_ZOOMS[RTS_ZOOMS.length - 1] };
   });

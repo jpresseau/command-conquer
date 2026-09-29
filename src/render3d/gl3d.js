@@ -171,7 +171,7 @@ var R3D_MESH_VS =
   'uniform vec2 uWave;' +       /* wave amplitude (0 = not water) and the clock */
   R3D_SHADOW_VGLSL +
   R3D_LEAN_GLSL +
-  'varying vec3 vN; varying vec4 vCol;' +
+  'varying vec3 vN; varying vec4 vCol; varying vec2 vWxz;' +
   'void main(){' +
   R3D_INST_UNPACK +
   '  vec3 p = vec3(aP.x * uScale, aP.y * uScale * uScaleY, aP.z * uScale);' +
@@ -205,6 +205,7 @@ var R3D_MESH_VS =
      cannot be tinted by pre-multiplying aC and getting the same picture - and a vec3 varying
      and a vec4 one occupy the same slot, so this costs nothing where slots are scarce. */
   '  vCol = vec4(col, uDim);' +
+  '  vWxz = wp.xz;' +                 /* the world position, for the sea's shoreline */
   '  _shadowFrom(wp);' +
   '  float sx = (wp.x - uCam.x) * uCam.z;' +
   '  float sy = ((wp.z - uCam.y) * uTilt.x - wp.y * uTilt.y) * uCam.w;' +
@@ -228,15 +229,51 @@ var R3D_MESH_VS =
    between them per pixel. highp, because the comparison is against a depth packed into eight
    bits and change, and mediump has neither the range nor the precision to hold it. */
 var R3D_MESH_FS =
-  'precision highp float; varying vec3 vN; varying vec4 vCol;' +
+  'precision highp float; varying vec3 vN; varying vec4 vCol; varying vec2 vWxz;' +
   'uniform float uA;' +
+  /* THE SEA'S SHORELINE, per pixel. uSea is (on, 1/N, N/2 - 0.5, 1/tile) and uSeaM the water
+     mask - one texel per cell, LINEAR, so it is the bilinear "how much water" the ground's own
+     borders are built from. Read at the same warped position the ground uses (_gwarp in
+     noise3d.js), the coast is the mask's half-way line: round where the cells were a staircase,
+     and in step with the sand under it. Toward the line the water thins to let the shallows'
+     sand through and a foam line runs along it; past it, the pixel is land and is not drawn. */
+  'uniform vec4 uSea; uniform sampler2D uSeaM;' +
+  'uniform vec2 uWave;' +               /* the swell's own clock, shared with the vertex stage */
+  'uniform float uRip;' +               /* the chop's strength: R3.rippleAmt, 1 unless a spec says */
+  R3D_NOISE_GLSL +
   R3D_SHADOW_GLSL + R3D_MESH_LIGHT +
   /* NORMALISED HERE, NOT IN THE VERTEX SHADER. A varying is interpolated linearly, and the
      linear blend of two unit vectors is shorter than one - which is exactly the case on the
      curves this is for, and would read as a dark seam down the middle of every one. */
   'void main(){' +
   '  vec3 tint = mix(vec3(1.0), vec3(0.62, 0.55, 0.55), vCol.w);' +
-  '  gl_FragColor = vec4(_shade(normalize(vN), vCol.rgb) * tint, uA); }';
+  '  vec3 c = _shade(normalize(vN), vCol.rgb) * tint; float a = uA;' +
+  '  if (uSea.x > 0.5) {' +
+  '    vec2 cc = vWxz * uSea.w + uSea.z + _gwarp(vWxz);' +
+  '    float wm = texture2D(uSeaM, (cc + 0.5) * uSea.y).r;' +
+  '    if (wm < 0.46) discard;' +
+  /* RIPPLES AND GLINTS. The swell (wave3d.js) is geometry - metres long, and smooth. What makes
+     water read as water up close is the fine chop on top of it: two layers of noise drifting
+     across each other, differenced into a normal, and the sun caught in it as a tight, bright
+     highlight - so the sea sparkles where it faces the sun and stays deep blue where it does
+     not. Per pixel and only on water, so it costs nothing anywhere else. */
+  '    float t = uWave.y;' +
+  '    vec2 p1 = vWxz * 0.9 + vec2(t * 0.35, t * 0.21), p2 = vWxz * vec2(1.6, 1.9) - vec2(t * 0.27, -t * 0.33);' +
+  '    float r0 = _vn(p1) + _vn(p2) * 0.6;' +
+  '    float rx = _vn(p1 + vec2(0.07, 0.0)) + _vn(p2 + vec2(0.07, 0.0)) * 0.6 - r0;' +
+  '    float rz = _vn(p1 + vec2(0.0, 0.07)) + _vn(p2 + vec2(0.0, 0.07)) * 0.6 - r0;' +
+  '    vec3 np = normalize(normalize(vN) + vec3(-rx, 0.0, -rz) * 5.0 * uRip);' +
+  '    c = _shade(np, vCol.rgb) * tint;' +
+  '    float gl = max(dot(np, ' + _r3dGlsl3(R3D_HALF) + '), 0.0);' +
+  '    gl = pow(gl, 48.0) * _shadowAt();' +
+  '    c += vec3(1.0, 0.96, 0.86) * gl * 1.1;' +
+  '    float edge = 1.0 - smoothstep(0.46, 0.66, wm);' +
+  '    float fo = edge * edge * smoothstep(0.3, 0.7, _vn(vWxz * 1.6 + vec2(t * 0.2, 0.0)));' +
+  '    c = mix(c, vec3(0.16, 0.50, 0.50) + c * 0.35, edge * 0.45);' +   /* turquoise shallows */
+  '    c = mix(c, vec3(0.92, 0.95, 0.93), clamp(fo * 1.4, 0.0, 0.85));' +               /* foam */
+  '    a = uA * mix(0.45, 1.0, smoothstep(0.46, 0.74, wm));' +
+  '  }' +
+  '  gl_FragColor = vec4(c, a); }';
 
 /* Ground and fog share one textured program; fog just samples a different texture with
    blending on and the depth test off. */

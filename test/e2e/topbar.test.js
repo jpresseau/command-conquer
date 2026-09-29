@@ -237,7 +237,12 @@ var CONTROLS = ['#rtsReloadBtn', '#rtsSaveBtn', '#rtsLoadBtn', '#rtsMute', '#rcg
     window._rtsG.sides.player.credits = 20000;
     rtsTab('struct'); _rtsSyncSidebar(0);
     var U = window._rtsUI;
-    var k = Object.keys(U.btns).filter(function (x) { return !_rtsWhyLocked('player', x); })[0];
+    /* THE LONGEST BUILD ON OFFER, so the job is still running when the holds land. The match runs
+       in real time while the harness delivers each touch - a second or more a frame on
+       SwiftShader - and a short one finished between the presses: "Place the finished building
+       first." instead of a hold, on a slow frame. */
+    var k = Object.keys(U.btns).filter(function (x) { return !_rtsWhyLocked('player', x) && rtsStructDef(x); })
+      .sort(function (a, b) { return (rtsStructDef(b).build || 0) - (rtsStructDef(a).build || 0); })[0];
     U.btns[k].id = 'probeTile';
     window.__k = k;
   });
@@ -293,7 +298,14 @@ var CONTROLS = ['#rtsReloadBtn', '#rtsSaveBtn', '#rtsLoadBtn', '#rtsMute', '#rcg
   });
   var gone = false;
   if (quit1.still) {
-    await x.page.click('#rtsQuitBtn');
+    /* THE SECOND PRESS GOES THROUGH THE BUTTON'S OWN click(), not the harness's pointer. The
+       window it has to land in is five seconds of a person's time, and at this screen size a
+       real press takes the harness 7 to 9s to deliver - it waits on frames SwiftShader draws
+       at 1-2s each - so it arrived after the button had disarmed, on main as well, and this
+       passed or failed on the frame rate. The first press above is the real one and proves the
+       button is reachable; this one still runs the markup's wiring, which is the point of not
+       calling rtsQuitClick() directly. */
+    await x.page.evaluate(function () { document.getElementById('rtsQuitBtn').click(); });
     gone = await x.page.evaluate(function () { return !document.getElementById('rcgRts'); });
   }
   var quit = { afterOne: quit1.still, msg: quit1.msg, armed: quit1.armed, afterTwo: !gone };
@@ -369,7 +381,8 @@ var CONTROLS = ['#rtsReloadBtn', '#rtsSaveBtn', '#rtsLoadBtn', '#rtsMute', '#rcg
   if (rel1.still) {
     var navigated = rl.page.waitForNavigation({ timeout: 8000 }).then(function () { return true; },
                                                                       function () { return false; });
-    await rl.page.click('#rtsReloadBtn').catch(function () {});
+    /* through the button's own click(), for the reason the second ✕ press gives above */
+    await rl.page.evaluate(function () { document.getElementById('rtsReloadBtn').click(); }).catch(function () {});
     didNav = await navigated;
     S.ok('a second press really does reload the page', didNav, String(didNav));
   }
