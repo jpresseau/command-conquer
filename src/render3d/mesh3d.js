@@ -72,8 +72,8 @@ function _r3dBuildMesh(gl, faces) {
 /* The cache key carries everything that changes the geometry or its colours: type, side,
    turret half, prone. A miss builds the model through the same functions the baker uses, so
    the two pipelines cannot drift apart - there is no second copy of any shape. */
-function _r3dMesh(kind, def, side, part, prone) {
-  var R3 = window._R3D, key = kind + ':' + def + ':' + side + ':' + (part || '') + ':' + (prone ? 1 : 0);
+function _r3dMesh(kind, def, side, part, prone, pose) {
+  var R3 = window._R3D, key = kind + ':' + def + ':' + side + ':' + (part || '') + ':' + (prone ? 1 : 0) + ':' + (pose || 0) + (R3.soldierOff ? ':s' : '');
   var m = R3.mesh[key];
   if (m !== undefined) return m;
   var faces = null;
@@ -86,8 +86,12 @@ function _r3dMesh(kind, def, side, part, prone) {
        raises the segment counts and turns every box's flat chamfer into a rounded edge with a
        normal per corner, for the duration of this build and no longer. See _R3_DETAIL. */
     faces = _r3DetailHigh(function () {
-      return (kind === 'b') ? _sprBuildingModel(def, side)
-                            : _sprUnitModel(def, side, !!prone, part || null);
+      if (kind === 'b') return _sprBuildingModel(def, side);
+      /* a soldier has a model of his own in 3D, in walking poses (render3d/soldier3d.js); the
+         sprite's is the fallback, and still what a prone squad and a dog are drawn as */
+      var ud = rtsUnitDef(def), sm = (ud && ud.kind === 'infantry' && !part && !R3.soldierOff)
+        ? _r3dSoldierModel(def, side, !!prone, pose || 0) : null;
+      return sm || _sprUnitModel(def, side, !!prone, part || null);
     });
   } catch (e) { faces = null; }
   m = (faces && faces.length) ? _r3dBuildMesh(R3.gl, faces) : null;
