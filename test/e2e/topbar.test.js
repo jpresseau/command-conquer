@@ -256,6 +256,22 @@ var CONTROLS = ['#rtsReloadBtn', '#rtsSaveBtn', '#rtsLoadBtn', '#rtsMute', '#rcg
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     await t.page.waitForTimeout(120);
   }
+  /* A HOLD LASTS UNTIL IT HAS TAKEN, not a fixed 600ms. The cameo starts a 350ms timer on
+     touchstart and clears it on touchend (src/ui/sidebar.js); on a frame SwiftShader takes a
+     second or two to draw, both events can queue behind that frame, the touchend run first, and
+     the timer never fire - a "hold" the page saw as a tap. So the finger stays down until the
+     game says the hold happened, and a hold that never happens runs out the wait and fails the
+     assertion after it, which is what a check should do. */
+  async function hold(sel, took) {
+    var b = await t.page.evaluate(function (q) {
+      var r2 = document.querySelector(q).getBoundingClientRect();
+      return { x: r2.left + r2.width / 2, y: r2.top + r2.height / 2 };
+    }, sel);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: b.x, y: b.y }] });
+    await t.page.waitForFunction(took, null, { timeout: 30000 }).catch(function () {});
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await t.page.waitForTimeout(120);
+  }
   function q() {
     return t.page.evaluate(function () {
       var j = window._rtsG.sides.player.q.struct;
@@ -272,11 +288,11 @@ var CONTROLS = ['#rtsReloadBtn', '#rtsSaveBtn', '#rtsLoadBtn', '#rtsMute', '#rcg
   var q2 = await q();
   S.ok('...and it charges as it builds, which is why stopping it matters', q2.paid > 0,
        q2.paid + ' credits spent so far');
-  await press('#probeTile', 600);
+  await hold('#probeTile', function () { var j = window._rtsG.sides.player.q.struct; return !!(j && j.hold); });
   var q3 = await q();
   S.ok('a press and hold puts it on hold', q3.hold, '"' + q3.msg + '"');
   var moneyHeld = q3.money;
-  await press('#probeTile', 600);
+  await hold('#probeTile', function () { return !window._rtsG.sides.player.q.struct; });
   var q4 = await q();
   S.eq('...and holding again abandons it', q4.key, null);
   S.ok('...refunding what had been paid', q4.money > moneyHeld,
