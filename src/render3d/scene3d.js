@@ -183,6 +183,8 @@ function _r3dFrame(G) {
 
   /* --- the marks vehicles have left in it, before anything stands on it (tread3d.js) --- */
   _r3dTreadDraw(gl, R3, G, cam, invD);
+  /* --- and what is selected, ringed on the ground under it (ring3d.js) --- */
+  _r3dRingDraw(gl, R3, G, cam, invD);
 
   /* --- entities --- */
   gl.useProgram(R3.meshP);

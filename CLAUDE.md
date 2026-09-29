@@ -211,6 +211,11 @@ breaking it shipped once.
   the world batch (`uSway`, set for the world loop and reset after it). `R3.surfAmt`,
   `R3.swayAmt`. To watch foam over time, hold the swell (`R3D_WAVE_AMP`) and the chop still and
   recover the foam's own mix: the water under it changes colour with the swell. `e2e/ambient`.
+- **In 3D a selection is a ring on the ground** (`render3d/ring3d.js`), not Red Alert's corner
+  brackets: a band round a unit, a rounded box round a building's footprint, drawn after the
+  treads and before the entities so a unit stands in its ring. `ui/hud.js` skips the brackets
+  while the 3D mode is on; 2D keeps them. `R3.selAmt`. `e2e/selring`. A check's expected
+  number must be the test's own: reading `R3D_RING_UNIT` back let a ring drawn anywhere pass.
 - **The harness's SwiftShader runs every branch of a shader.** A per-pixel `if` saves a GPU the
   untaken side and SwiftShader nothing, so eight per-kind material branches evaluated at four
   corners cost the harness their full sum: a frame went 1.1s -> 2.3s and real clicks and
