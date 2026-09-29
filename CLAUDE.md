@@ -180,6 +180,9 @@ breaking it shipped once.
 - **The 3D frame is graded last** (`_grade`, `render3d/resolve3d.js`): warm highlights, cool
   shade, an S-curve, the far edge hazed. `RTS_POST_ON` takes it out with the bloom and
   `R3.gradeAmt = 0` alone; a spec about raw colour turns it off. `e2e/grade`.
+- **What was built weathers** (`render3d/weather3d.js`): stains, rain streaks and grime at the
+  foot, per pixel in the mesh program. `uWeather` is set per batch from `mesh.weather` (1 for a
+  building, 0.5 for a unit) and reset to 0 after, so trees, rock and the sea never weather.
 - **The harness's SwiftShader runs every branch of a shader.** A per-pixel `if` saves a GPU the
   untaken side and SwiftShader nothing, so eight per-kind material branches evaluated at four
   corners cost the harness their full sum: a frame went 1.1s -> 2.3s and real clicks and

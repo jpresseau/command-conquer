@@ -91,6 +91,8 @@ function _r3dMesh(kind, def, side, part, prone) {
     });
   } catch (e) { faces = null; }
   m = (faces && faces.length) ? _r3dBuildMesh(R3.gl, faces) : null;
+  /* how much it weathers (weather3d.js): a building fully, a vehicle or a soldier less */
+  if (m) m.weather = kind === 'b' ? 1 : 0.5;
   R3.mesh[key] = m;
   return m;
 }
