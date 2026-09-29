@@ -53,6 +53,10 @@ var S = new Suite('bloom');
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;
+    /* THE GLOW ALONE. RTS_POST_ON is the whole light pass, and the 3D grade is part of it now
+       (render3d/resolve3d.js) - with the grade in, switching the pass moves every pixel on the
+       screen and "a quiet frame is not touched" read 40.4%. e2e/grade measures the grade. */
+    R3.gradeAmt = 0;
 
     var yard = _rtsHas('player', 'yard');
     R.focus.x = yard.x; R.focus.z = yard.z;
@@ -163,6 +167,7 @@ var S = new Suite('bloom');
       o.snow = diff(w2, w1);
       o.snowTested = true;
     }
+    R3.gradeAmt = undefined;
     return o;
   });
 

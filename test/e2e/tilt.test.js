@@ -59,6 +59,10 @@ var S = new Suite('tilt');
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;
+    /* the camera, not the colour: "background" below is anything darker than the clear colour,
+       and the grade's S-curve (render3d/resolve3d.js) takes the deepest shade on the map under
+       that line - 0.7% of the west edge, with the view overshooting by nothing */
+    R3.gradeAmt = 0;
     var gl = R3.gl, CW = R3.cv.width, CH = R3.cv.height;
     o.tilt = R3D_TILT;
     o.deg = +(R3D_TILT * 180 / Math.PI).toFixed(1);
@@ -163,6 +167,7 @@ var S = new Suite('tilt');
       G.ents = keep;
       _rtsApplyCam();
     }
+    R3.gradeAmt = undefined;
     return o;
   });
 
