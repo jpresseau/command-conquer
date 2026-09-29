@@ -127,6 +127,12 @@ var S = new Suite('perspective');
 
     /* ---------------- the same thing, measured off the frame ---------------- */
     var gl = R3.gl, CW = R3.cv.width, CH = R3.cv.height;
+    /* GEOMETRY, NOT COLOUR: the grade (render3d/resolve3d.js) is taken out, and the centroid
+       below counts each changed pixel once rather than by how much it changed. Weighted, the
+       shroud's soft edge was weighed by whatever the ground under it looks like - the textured
+       material ground put the near cell at exactly the 2.5px limit, the grade at 3.15, with the
+       camera unchanged. Counted, it reads 1.3. */
+    R3.gradeAmt = 0;
     function shot() {
       _rtsRFrame(1 / 60);
       var b = new Uint8Array(CW * CH * 4);
@@ -134,7 +140,7 @@ var S = new Suite('perspective');
       return b;
     }
     /* Where the SHADER puts a cell: flip its fog on, diff the two frames, take the centroid of
-       what changed. readPixels is bottom-up, and in device pixels. */
+       what changed. readPixels is bottom-up, and in device pixels. `mass` is how many changed. */
     function shaderPos(tx, tz) {
       var k = _rtsIdx(tx, tz);
       G.mapped[k] = 1;
@@ -148,7 +154,7 @@ var S = new Suite('perspective');
           var p = (y * CW + x) * 4;
           var d = Math.abs(A[p] - B[p]) + Math.abs(A[p + 1] - B[p + 1]) +
                   Math.abs(A[p + 2] - B[p + 2]);
-          if (d > 8) { sx += x * d; sy += y * d; sw += d; }
+          if (d > 8) { sx += x; sy += y; sw += 1; }
         }
       }
       if (!sw) return null;
@@ -206,6 +212,7 @@ var S = new Suite('perspective');
       tz0: Math.max(0, _rtsTX(R.focus.z - R.H / 2 / _rtsZoom()) - 2),
       tz1: Math.min(RTS_N - 1, _rtsTX(R.focus.z + R.H / 2 / _rtsZoom()) + 2)
     };
+    R3.gradeAmt = undefined;
     return o;
   });
 

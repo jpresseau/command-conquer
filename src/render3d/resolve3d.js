@@ -34,6 +34,19 @@ var R3D_AO_RESOLVE_FS =
      surface and must not be darkened by how much sky that surface can see. See bloom3d.js -
      uBloomAmt is 0 on every frame with nothing burning, which is most of them. */
   'uniform sampler2D uBloom; uniform float uBloomAmt;' +
+  /* THE GRADE - the game's own light, applied last, to the whole picture: warm in the highlights
+     and cool in the shade, a little more colour, a gentle S-curve, and the far edge of the frame
+     hazed toward a pale sky - the sunlit, lived-in look of the later 3D RTS games rather than
+     the flat palette of the 2D one. No vignette: #rtsVig already lays one over both modes.
+     Part of the light pass, so RTS_POST_ON takes it out with the bloom; R3.gradeAmt (0 to 1)
+     takes it out alone, as R3.aoAmt does the occlusion. e2e/grade holds what it does. */
+  'uniform float uGrade;' +
+  'vec3 _grade(vec3 c, vec2 uv){' +
+  '  float l = dot(c, vec3(0.299, 0.587, 0.114));' +
+  '  c *= mix(vec3(0.94, 0.97, 1.06), vec3(1.05, 1.02, 0.93), smoothstep(0.12, 0.72, l));' +
+  '  c = clamp(mix(vec3(l), c, 1.06), 0.0, 1.0);' +
+  '  c = mix(c, c * c * (3.0 - 2.0 * c), 0.32);' +
+  '  return mix(c, vec3(0.83, 0.86, 0.87), smoothstep(0.55, 1.0, uv.y) * 0.22); }' +
   'float _lum(vec3 c){ return dot(c, vec3(0.299, 0.587, 0.114)); }' +
   /* ONLY WHERE THERE IS GEOMETRY'S EDGE. FXAA reads colour, so it cannot tell a silhouette
      from detail painted on a surface - and the ground is detail now (render3d/terrain3d.js):
@@ -76,6 +89,7 @@ var R3D_AO_RESOLVE_FS =
        R3D_AO_FLOOR[1].toFixed(3) + ', ' + R3D_AO_FLOOR[2].toFixed(3) +
        '), vec3(1.0), ao);' +
   '  lit += texture2D(uBloom, vT).rgb * uBloomAmt;' +
+  '  lit = mix(lit, _grade(lit, vT), uGrade);' +
   '  gl_FragColor = vec4(lit, 1.0);' +
   '}';
 
@@ -98,6 +112,9 @@ function _r3dResolve(R3) {
   gl.uniform1f(gl.getUniformLocation(R3.aoResolveP, 'uAA'),
                R3.aaAmt === undefined ? 1 : R3.aaAmt);
   gl.uniform2f(gl.getUniformLocation(R3.aoResolveP, 'uTexel'), 1 / R3.postW, 1 / R3.postH);
+  var postOn = typeof RTS_POST_ON === 'undefined' || RTS_POST_ON;
+  gl.uniform1f(gl.getUniformLocation(R3.aoResolveP, 'uGrade'),
+               postOn ? (R3.gradeAmt === undefined ? 1 : R3.gradeAmt) : 0);
   /* The glow. R3.bloomOn is set by _r3dBloomPass for this frame only; with nothing burning the
      amount is zero and the sampler still needs a bound texture, so it gets the AO one - a
      texture multiplied by zero, rather than a branch in the shader every pixel. */

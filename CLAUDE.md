@@ -177,6 +177,9 @@ breaking it shipped once.
   billows roll on in the first loop of the small fire it chains into (same record, same seed).
   `_r3dFxOwns` is the one list of what 3D draws; `render/fx.js` asks it. `RTS_FX_SPRITES` is the
   before-picture; `R3.fxGroundAmt` takes the glare and rings out. `test/*/fxemit`, `e2e/fxshade`.
+- **The 3D frame is graded last** (`_grade`, `render3d/resolve3d.js`): warm highlights, cool
+  shade, an S-curve, the far edge hazed. `RTS_POST_ON` takes it out with the bloom and
+  `R3.gradeAmt = 0` alone; a spec about raw colour turns it off. `e2e/grade`.
 - **The harness's SwiftShader runs every branch of a shader.** A per-pixel `if` saves a GPU the
   untaken side and SwiftShader nothing, so eight per-kind material branches evaluated at four
   corners cost the harness their full sum: a frame went 1.1s -> 2.3s and real clicks and
