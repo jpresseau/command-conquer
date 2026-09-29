@@ -200,6 +200,12 @@ breaking it shipped once.
   the shader, so a frame uploads only the new ones. Multiplied onto the ground straight after it
   is drawn. Marks are laid as frames are DRAWN, so a spec that drives units renders as the sim
   runs. `R3.treadAmt`. `test/*/treads`.
+- **A hidden unit shows through what hides it** (`render3d/sil3d.js`): the units drawn again
+  after everything with a surface, depth test GREATER, pulled `R3D_SIL_BIAS` toward the eye so a
+  unit never shows through its own hull, flat in its house's colour. ONLY units with a building,
+  tree, rock or rising ground just in front of them (`_r3dSilCover`): the whole army a third time
+  took the entities past their budget (`e2e/instanced`). `R3.silAmt`, `R3.silAll`.
+  `e2e/silhouette`.
 - **The harness's SwiftShader runs every branch of a shader.** A per-pixel `if` saves a GPU the
   untaken side and SwiftShader nothing, so eight per-kind material branches evaluated at four
   corners cost the harness their full sum: a frame went 1.1s -> 2.3s and real clicks and

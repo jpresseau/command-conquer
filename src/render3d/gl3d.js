@@ -169,6 +169,7 @@ var R3D_MESH_VS =
      had, so every line of the maths under it is the line that was here before. */
   R3D_INST_GLSL +
   'uniform vec2 uWave;' +       /* wave amplitude (0 = not water) and the clock */
+  'uniform float uDBias;' +     /* depth pulled toward the eye: the silhouette pass (sil3d.js) */
   R3D_SHADOW_VGLSL +
   R3D_LEAN_GLSL +
   'varying vec3 vN; varying vec4 vCol; varying vec2 vWxz; varying vec2 vHY;' +
@@ -212,7 +213,7 @@ var R3D_MESH_VS =
   '  float sy = ((wp.z - uCam.y) * uTilt.x - wp.y * uTilt.y) * uCam.w;' +
   '  float d  = ((wp.z - uCam.y) * uTilt.y + wp.y * uTilt.x);' +
   '  float pw = 1.0 - d * uInvD;' +
-  '  gl_Position = vec4(sx, -sy, -d / ' + R3D_DEPTH_RANGE.toFixed(1) + ' * pw, pw);' +
+  '  gl_Position = vec4(sx, -sy, -(d + uDBias) / ' + R3D_DEPTH_RANGE.toFixed(1) + ' * pw, pw);' +
   '}';
 /* uA exists for the contact shadows and for nothing else. They are flat discs drawn through
    this same program, and drawn OPAQUE they were not shadows at all - they were holes cut in
@@ -246,7 +247,9 @@ var R3D_MESH_FS =
   /* NORMALISED HERE, NOT IN THE VERTEX SHADER. A varying is interpolated linearly, and the
      linear blend of two unit vectors is shorter than one - which is exactly the case on the
      curves this is for, and would read as a dark seam down the middle of every one. */
+  'uniform vec4 uSil;' +                /* a unit seen through what hides it - sil3d.js */
   'void main(){' +
+  '  if (uSil.a > 0.0) { gl_FragColor = uSil; return; }' +
   '  vec3 tint = mix(vec3(1.0), vec3(0.62, 0.55, 0.55), vCol.w);' +
   '  vec3 c = _shade(normalize(vN), vCol.rgb) * tint; float a = uA;' +
   '  if (uWeather > 0.0) c = _weather(c, normalize(vN), vec3(vWxz.x, vHY.y, vWxz.y));' +

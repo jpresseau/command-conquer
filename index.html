@@ -944,7 +944,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">7985167 · 2026-09-29</div>
+  <div id="rtsBuild" title="build">988bcaa · 2026-09-29</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -23734,6 +23734,7 @@ var R3D_MESH_VS =
      had, so every line of the maths under it is the line that was here before. */
   R3D_INST_GLSL +
   'uniform vec2 uWave;' +       /* wave amplitude (0 = not water) and the clock */
+  'uniform float uDBias;' +     /* depth pulled toward the eye: the silhouette pass (sil3d.js) */
   R3D_SHADOW_VGLSL +
   R3D_LEAN_GLSL +
   'varying vec3 vN; varying vec4 vCol; varying vec2 vWxz; varying vec2 vHY;' +
@@ -23777,7 +23778,7 @@ var R3D_MESH_VS =
   '  float sy = ((wp.z - uCam.y) * uTilt.x - wp.y * uTilt.y) * uCam.w;' +
   '  float d  = ((wp.z - uCam.y) * uTilt.y + wp.y * uTilt.x);' +
   '  float pw = 1.0 - d * uInvD;' +
-  '  gl_Position = vec4(sx, -sy, -d / ' + R3D_DEPTH_RANGE.toFixed(1) + ' * pw, pw);' +
+  '  gl_Position = vec4(sx, -sy, -(d + uDBias) / ' + R3D_DEPTH_RANGE.toFixed(1) + ' * pw, pw);' +
   '}';
 /* uA exists for the contact shadows and for nothing else. They are flat discs drawn through
    this same program, and drawn OPAQUE they were not shadows at all - they were holes cut in
@@ -23811,7 +23812,9 @@ var R3D_MESH_FS =
   /* NORMALISED HERE, NOT IN THE VERTEX SHADER. A varying is interpolated linearly, and the
      linear blend of two unit vectors is shorter than one - which is exactly the case on the
      curves this is for, and would read as a dark seam down the middle of every one. */
+  'uniform vec4 uSil;' +                /* a unit seen through what hides it - sil3d.js */
   'void main(){' +
+  '  if (uSil.a > 0.0) { gl_FragColor = uSil; return; }' +
   '  vec3 tint = mix(vec3(1.0), vec3(0.62, 0.55, 0.55), vCol.w);' +
   '  vec3 c = _shade(normalize(vN), vCol.rgb) * tint; float a = uA;' +
   '  if (uWeather > 0.0) c = _weather(c, normalize(vN), vec3(vWxz.x, vHY.y, vWxz.y));' +
@@ -26471,6 +26474,83 @@ function _r3dTreadDraw(gl, R3, G, cam, invD) {
   return R3.treadN;
 }
 </script>
+<script>/* render3d/sil3d.js - units seen through what hides them. Part of rts.render3d.
+
+   The camera is tilted, so whatever stands south of a unit stands between it and the player: a
+   tank parked behind the war factory, a squad in the lee of a refinery or under the canopy of a
+   wood was simply gone, and the player's own army went missing inside their own base. So a unit
+   that something hides shows through it as a glow in its house's colour - the way the later 3D
+   RTS games do it - and stays exactly where it was in the picture.
+
+   A SECOND DRAW OF THE UNITS, AFTER EVERYTHING WITH A SURFACE, WITH THE DEPTH TEST TURNED ROUND:
+   only the fragments that are BEHIND something already drawn are coloured, flat, and blended over
+   what hides them. The draw is pulled R3D_SIL_BIAS world units toward the eye first, which is
+   what keeps a unit from showing through ITSELF - its own far side is behind its near side, but
+   by less than its own size, so the pull brings it back in front. Something has to be more than
+   that in front of a unit to hide it, which a wall, a canopy or a crest is and a unit's own
+   hull is not.
+
+   R3.silAmt takes the glow out and leaves the rest, as R3.aoAmt does the occlusion. */
+
+var R3D_SIL_BIAS = 3.0;     /* world units toward the eye - more than a unit is deep */
+/* how strongly a hidden unit shows through. Its hidden faces all draw, two to four deep, so
+   this is one layer of it and the unit reads a good deal stronger. */
+var R3D_SIL_A = 0.3;
+
+/* COULD ANYTHING STAND BETWEEN THIS UNIT AND THE CAMERA? Only a building, a tree, rock or a
+   wall in the three cells across it and two in front of it - toward the camera, +z - or ground
+   rising over it there: the camera leans 35 degrees, so nothing further off can hide a unit.
+   Everything else is left out of the pass, because drawing a 160-unit battle a third time for
+   the handful standing behind something took the entities past their budget (e2e/instanced). */
+function _r3dSilCover(G, e) {
+  if (e.air) return false;
+  var tx = _rtsTX(e.x), tz = _rtsTX(e.z), h0 = _rtsTileElev(tx, tz) + 1.5;
+  for (var dz = 0; dz <= 2; dz++) for (var dx = -1; dx <= 1; dx++) {
+    var cx = tx + dx, cz = tz + dz;
+    if (!_rtsInB(cx, cz)) continue;
+    var i = _rtsIdx(cx, cz), k = G.terrain[i];
+    if (G.blocked[i] === 1 || k === RTS_T_TREE || k === RTS_T_ROCK || k === RTS_T_WALL) return true;
+    if (dz > 0 && _rtsTileElev(cx, cz) > h0) return true;
+  }
+  return false;
+}
+
+/* `paint(side, keep)` draws that house's units that `keep` passes through program P.
+   R3.silAll draws every unit, covered or not - for the spec that checks a unit never shows
+   through its own hull, which needs one in the pass with nothing in front of it. */
+function _r3dSilPass(gl, R3, P, paint) {
+  var amt = R3.silAmt === undefined ? 1 : R3.silAmt;
+  var uS = gl.getUniformLocation(P, 'uSil'), uB = gl.getUniformLocation(P, 'uDBias');
+  R3.silDrawn = 0; R3.silUnits = 0;
+  if (!(amt > 0) || !uS || !uB) return 0;
+  var G = window._rtsG;
+  function keep(e) {
+    var c = !!(R3.silAll || _r3dSilCover(G, e));
+    if (c) R3.silUnits++;
+    return c;
+  }
+  gl.depthFunc(gl.GREATER);
+  gl.depthMask(false);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.uniform1f(uB, R3D_SIL_BIAS);
+  for (var side in RTS_SIDES) {
+    /* half way between the house's colour and its glow: pale enough to read over a dark roof,
+       strong enough to say whose it is */
+    var c = RTS_SIDES[side].color, w = RTS_SIDES[side].glow, rgb = [];
+    for (var k = 16; k >= 0; k -= 8) rgb.push((((c >> k) & 255) + ((w >> k) & 255)) / 510);
+    gl.uniform4f(uS, rgb[0], rgb[1], rgb[2], R3D_SIL_A * Math.min(1, amt));
+    paint(side, keep);
+  }
+  gl.uniform4f(uS, 0, 0, 0, 0);
+  gl.uniform1f(uB, 0);
+  gl.depthFunc(gl.LESS);
+  gl.depthMask(true);
+  gl.disable(gl.BLEND);
+  R3.silDrawn = 1;
+  return 1;
+}
+</script>
 <script>/* render3d/fx3d.js - explosions and their kin, drawn INTO the world rather than over it.
    Part of rts.render3d.
 
@@ -27217,13 +27297,13 @@ function _r3dFrame(G) {
      units across and was being handed EVERY entity in the match, the enemy base included.
      Those draws cannot mark a texel of the map and cost a full submission each; at a hundred
      units a side it is most of the roster once a game is under way. */
-  function paintEntities(C, bound) {
+  function paintEntities(C, bound, only, side, keep) {
   /* A fresh set of buckets for this pass. Both passes walk the same entities, but each has to
      leave its own batches on its own program - the sun's has no colour attribute and no tint. */
   BATCH = _r3dInstBatch(R3);
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.dead) continue;
+    if (e.dead || (only && e.type !== only) || (side && e.side !== side) || (keep && !keep(e))) continue;
     if (bound && (Math.abs(e.x - bound[0]) > bound[2] || Math.abs(e.z - bound[1]) > bound[2])) continue;
     if (e.type === 'struct') {
       /* A BUILDING UNDER CONSTRUCTION RISES OUT OF THE GROUND. The 2D reveal is a wipe, which
@@ -27272,6 +27352,8 @@ function _r3dFrame(G) {
   flushBatch(C);
   }
   paintEntities(MC);
+  /* a unit hidden behind a building, a wood or a hill shows through it (render3d/sil3d.js) */
+  _r3dSilPass(gl, R3, MC.P, function (side, keep) { paintEntities(MC, null, 'unit', side, keep); });
 
   /* THE EFFECTS, as quads standing in the world - see render3d/fx3d.js. Here, after everything
      with a surface and before the occlusion resolves, because they are the last thing that has
