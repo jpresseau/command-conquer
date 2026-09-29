@@ -430,9 +430,8 @@ function _r3dFrame(G) {
      with a surface and before the occlusion resolves, because they are the last thing that has
      a place in the scene and the first that must not contribute depth to it: a fireball is not
      a surface for the occlusion to find corners against. */
-  if ((G.fx && G.fx.length) || (G.proj && G.proj.length)) {    /* rounds in flight are effects too */
-    try { _r3dFxDraw(G, cam, invD); } catch (e) { R3.fxDrawn = -1; }
-  }
+  /* every frame: rounds in flight, and the dust and wakes of anything moving, are effects too */
+  try { _r3dFxDraw(G, cam, invD); } catch (e) { R3.fxDrawn = -1; }
 
   /* THE GLOW, from the emitters only - see render3d/bloom3d.js for why it is drawn from what
      emits light rather than thresholded out of what is bright. Here, after the effects exist
