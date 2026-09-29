@@ -148,14 +148,16 @@ var R3D_SHADOW_FS =
 var R3D_SHADOW_GLSL =
   'uniform sampler2D uShadowMap; uniform vec2 uSunSpan; uniform float uShadowOn;' +
   'varying vec3 vL;' +
+  R3D_CLOUD_GLSL +                  /* the clouds are a shade of the sun's too - cloud3d.js */
   'float _shUnpack(vec2 rg){ return rg.x + rg.y / 255.0; }' +
   /* One tap, and then eight more around it. A single tap gives a hard aliased edge a couple of
      texels wide, which at this shadow-map scale is a visible staircase on every tree; nine taps
      over a texel radius is a soft edge for eight extra samples. */
   'float _shadowAt(){' +
-  '  if (uShadowOn < 0.5) return 1.0;' +
+  '  float cl = _cloudAt();' +
+  '  if (uShadowOn < 0.5) return cl;' +
   '  vec2 uv = vL.xy * 0.5 + 0.5;' +
-  '  if (uv.x < 0.001 || uv.x > 0.999 || uv.y < 0.001 || uv.y > 0.999) return 1.0;' +
+  '  if (uv.x < 0.001 || uv.x > 0.999 || uv.y < 0.001 || uv.y > 0.999) return cl;' +
   '  float me = vL.z - ' + R3D_SHADOW_BIAS.toFixed(6) + ';' +
   '  float s = 0.0;' +
   '  float t = 1.0 / ' + R3D_SHADOW_SIZE.toFixed(1) + ';' +
@@ -165,7 +167,7 @@ var R3D_SHADOW_GLSL =
   '      s += _shUnpack(texture2D(uShadowMap, uv + o).rg) < me ? 0.0 : 1.0;' +
   '    }' +
   '  }' +
-  '  return s / 9.0;' +
+  '  return s / 9.0 * cl;' +
   '}';
 /* And the vertex-side half: where this fragment sits in the sun's view. */
 var R3D_SHADOW_VGLSL =
@@ -258,6 +260,7 @@ function _r3dShadowBind(P, unit) {
   gl.uniform3fv(gl.getUniformLocation(P, 'uSunC'), R3.sunC || [0, 0, 0]);
   gl.uniform2f(gl.getUniformLocation(P, 'uSunSpan'), R3.sunSpan || 64, R3D_SHADOW_RANGE);
   gl.uniform1f(gl.getUniformLocation(P, 'uShadowOn'), R3.shadowReady ? 1 : 0);
+  _r3dCloudSet(gl, R3, P);
   gl.activeTexture(gl.TEXTURE0 + unit);
   gl.bindTexture(gl.TEXTURE_2D, R3.shadowTex);
   gl.uniform1i(gl.getUniformLocation(P, 'uShadowMap'), unit);
