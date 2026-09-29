@@ -262,7 +262,8 @@ var R3D_MESH_FS =
   'uniform vec4 uSil;' +                /* a unit seen through what hides it - sil3d.js */
   'void main(){' +
   '  if (uSil.a > 0.0) { gl_FragColor = uSil; return; }' +
-  '  vec3 tint = mix(vec3(1.0), vec3(0.62, 0.55, 0.55), vCol.w);' +
+  /* vCol.w: 0 whole, 1 damaged or rising, 2 a burnt-out husk (husk3d.js) */
+  '  vec3 tint = vCol.w > 1.5 ? vec3(0.2, 0.18, 0.17) : mix(vec3(1.0), vec3(0.62, 0.55, 0.55), vCol.w);' +
   '  vec3 c = _shade(normalize(vN), vCol.rgb) * tint; float a = uA;' +
   '  if (uWeather > 0.0) c = _weather(c, normalize(vN), vec3(vWxz.x, vHY.y, vWxz.y));' +
   '  if (uSea.x > 0.5) {' +

@@ -221,6 +221,14 @@ breaking it shipped once.
   `_r3dFxLightOf`), where the scene is read a couple of pixels off. Part of the light pass
   (`RTS_POST_ON`); `R3.heatAmt`. A fire's heat flickers with the clock, so a spec about the
   ripple's own motion watches a fireball held at one age. `e2e/heat`.
+- **A dead vehicle leaves its hull in its fire** (`render3d/husk3d.js`): the wreck fire's record
+  carries `husk` (what burned, `core/capture.js`) and is the husk's whole life; drawn charred
+  (instance dim 2) and settling in the smoke's last loop. No state of its own, blocks nothing.
+  `R3.huskAmt`. `e2e/husk`.
+- **The bases are dressed** (`render3d/dress3d.js`): crates, drums, sandbags and lamps on each
+  building's paved ring, sides and back only (never the front, where units come out), one static
+  batch keyed on the standing buildings and drawn with the world's. Cosmetic: blocks nothing.
+  `R3.dressAmt`. `e2e/dress`.
 - **The harness's SwiftShader runs every branch of a shader.** A per-pixel `if` saves a GPU the
   untaken side and SwiftShader nothing, so eight per-kind material branches evaluated at four
   corners cost the harness their full sum: a frame went 1.1s -> 2.3s and real clicks and

@@ -130,7 +130,7 @@ function _r3dFrame(G) {
       gl.uniform2f(SC.uWave, 0, 0);
       if (R3.world) {
         _r3dInstConst(gl, I, SC, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0);
-        var sb = R3.world.concat(R3.ore || []);
+        var sb = R3.world.concat(R3.ore || [], _r3dDressBatches(R3));
         for (var si = 0; si < sb.length; si++) {
           var sm = sb[si];
           if (!sm || !sm.verts) continue;
@@ -292,7 +292,7 @@ function _r3dFrame(G) {
        Where instancing is unavailable the batch is flushed one instance at a time through the
        same constant-attribute path everything else uses, which is the draw this replaced. */
     _r3dInstPush(BATCH, mesh, x, y2, zz, sy || 1,
-                 Math.cos(rot), Math.sin(rot), scale, dim ? 1 : 0, lx, ly, lz2);
+                 Math.cos(rot), Math.sin(rot), scale, dim === 2 ? 2 : dim ? 1 : 0, lx, ly, lz2);
   }
   /* Hand every collected batch to the GPU. Grouping reorders the draws - entities come out by
      mesh rather than in entity order - which is invisible only because all of this is opaque
@@ -345,7 +345,7 @@ function _r3dFrame(G) {
     var uSw = gl.getUniformLocation(MC.P, 'uSway');
     gl.uniform2f(uSw, R3D_SWAY * (R3.swayAmt === undefined ? 1 : R3.swayAmt), G.t || 0);
     var lift = R3D_WORLD_YMAX * R3.sp / R3.cp;
-    var batches = R3.world.concat(R3.ore || []);
+    var batches = R3.world.concat(R3.ore || [], _r3dDressBatches(R3));
     for (var wb = 0; wb < batches.length; wb++) {
       var bm = batches[wb];
       if (!bm || !bm.verts) continue;
@@ -432,6 +432,8 @@ function _r3dFrame(G) {
       }
     }
   }
+  /* and the burnt-out hulls of the vehicles that died, charred (render3d/husk3d.js) */
+  if (!only) _r3dHusks(G, R3, function (m, x, y, z, rot, n) { drawIn(C, m, x, y, z, rot, ART2W, 2, 1, n); });
   flushBatch(C);
   }
   paintEntities(MC);

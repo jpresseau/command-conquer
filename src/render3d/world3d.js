@@ -370,7 +370,8 @@ function _r3dWaterBuild(G) { return _r3SegBulk(function () {
 function _r3dWorldTick(G) {
   var R3 = window._R3D;
   if (!R3.world || R3.worldG !== G) {
-    _r3dWorldBuild(G); _r3dOreBuild(G); _r3dWaterBuild(G); return;
+    _r3dWorldBuild(G); _r3dOreBuild(G); _r3dWaterBuild(G); _r3dDressTick(G); return;
   }
   _r3dOreTick(G);
+  _r3dDressTick(G);                 /* what the bases keep lying about - dress3d.js */
 }

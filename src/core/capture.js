@@ -204,8 +204,11 @@ function _rtsKill(e) {
       if (!e.crushed && !ud.sea && ud.kind !== 'air') {
         var wkind = (e.r || 1) >= 1.2 ? 'firemed' : 'firesmall';
         var wbase = 0.55 + (e.r || 1) * 0.28;
+        /* `husk`: what burned, for the 3D mode to leave its hull standing in the fire until
+           the fire is out (render3d/husk3d.js). Nothing in the rules reads it. */
         G.fx.push({ kind:wkind, x:e.x, y:1, z:e.z, t:0, base:wbase,
-                    big:wbase * RTS_ANIMS[wkind].size, loops:RTS_ANIMS[wkind].loops || 1 });
+                    big:wbase * RTS_ANIMS[wkind].size, loops:RTS_ANIMS[wkind].loops || 1,
+                    husk:{ def:e.def, side:e.side, rot:e.rot || 0, tur:e.turret || 0 } });
       }
     }
   }
