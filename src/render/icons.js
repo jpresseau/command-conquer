@@ -79,7 +79,7 @@ function _rtsRResize(W, H) {
   R.W = W; R.H = H;
   R.cv.width = Math.round(W * R.dpr); R.cv.height = Math.round(H * R.dpr);
   R.g.imageSmoothingEnabled = false;
-  _rtsApplyCam();
+  _rtsReapplyCam();                /* a smooth 3D zoom is not snapped by a resize */
 }
 function _rtsRDispose() {
   if (_rtsR && _rtsR.terrain) { _rtsR.terrain.width = 1; _rtsR.terrain.height = 1; }  /* 2688^2 is ~29 MB */

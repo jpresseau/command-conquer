@@ -35,7 +35,7 @@ function rtsOpen(seed) {
     +       '<i class="dif" id="rtsDifLbl"></i></span>'
     /* Two hint lines, because the verbs genuinely differ - a phone has no right button and no
        wheel, and a desktop has no long-press. CSS shows exactly one; see .rts-help. */
-    +     '<span class="rts-help desk">drag select · right-click order · S hold · 1-9 teams (ctrl set, alt jump) · repair/sell · wheel zoom · Esc</span>'
+    +     '<span class="rts-help desk">drag select · right-click order · right-drag pan · wheel zoom · S hold · 1-9 teams (ctrl set, alt jump) · repair/sell · Esc</span>'
     /* ONE GROUP, IN THE FLOW. These were four absolutely positioned buttons at right:6/34/62/90,
        so the bar's flex layout did not know they existed and the army/difficulty text ran
        underneath them - measured on every phone from 360 to 412px wide, with `.rts-vs` sitting
@@ -243,6 +243,7 @@ function rtsClose() {
   /* The window mouseup, which used to be anonymous and therefore unremovable - see where it is
      bound for what that cost. Its closure holds U, and U holds the canvases. */
   if (U && U.onWinUp) { window.removeEventListener('mouseup', U.onWinUp); U.onWinUp = null; }
+  if (U && U.winL) { U.winL.forEach(function (l) { window.removeEventListener(l[0], l[1], l[2]); }); U.winL = null; }
   /* And the 350ms touch long-press. Left armed, it outlived the match and reached
      _rtsRightClick with _rtsUI already null - an uncaught TypeError on the quit path, and on
      the restart path it landed INSIDE THE NEXT BATTLE about two seconds in, complete with a

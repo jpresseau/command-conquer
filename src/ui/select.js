@@ -123,11 +123,13 @@ function _rtsBoxSelect(dg) {
 }
 /* Right-click is the single context-sensitive order button, exactly as in the originals:
    own transport -> get in, enemy -> attack, scrap -> harvest, own refinery -> unload,
-   ground -> move. */
-function _rtsRightClick(mx, my) {
+   ground -> move. `hit0`, when given, is what was under the cursor when the button went down
+   (ui/navigate.js _rtsGrabClick); something it named that has died since is just its ground. */
+function _rtsRightClick(mx, my, hit0) {
   var G = window._rtsG, U = window._rtsUI;
   if (U.place) { U.place = null; _rtsGhostHide(); return; }
-  var hit = _rtsPickAt(mx, my);
+  var hit = hit0 !== undefined ? hit0 : _rtsPickAt(mx, my);
+  if (hit && hit.ent && hit.ent.dead) hit = { ent: null, x: hit.x, z: hit.z };
   if (!hit) return;
   var mine = [], i;
   for (i = 0; i < G.sel.length; i++) if (G.sel[i].side === 'player' && G.sel[i].type === 'unit') mine.push(G.sel[i]);
