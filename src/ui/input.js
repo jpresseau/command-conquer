@@ -7,18 +7,36 @@ function _rtsBindInput() {
   cv.oncontextmenu = function (e) { e.preventDefault(); return false; };
   cv.onmousedown = function (e) {
     var r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
-    if (e.button === 2) {
-      if (U.mode) { rtsMode(U.mode); return; }        /* right-click drops the repair/sell cursor */
-      _rtsRightClick(mx, my); return;
-    }
+    /* the order - or, with the repair/sell cursor up, dropping it - waits for the release: a
+       right button that DRAGS is grabbing the map (ui/navigate.js), and only the release can
+       tell the two apart */
+    if (e.button === 2) { _rtsGrabStart(2, mx, my); return; }
+    if (e.button === 1) { e.preventDefault(); _rtsGrabStart(1, mx, my); return; }  /* middle: grab */
+    /* a left press while a grab holds the pointer may be anywhere - over the sidebar, off the
+       battlefield - and still arrive here: it is not a click on the ground at those numbers */
+    if (U.grab) return;
     if (U.superArm) { _rtsSuperClick(mx, my); return; }
     if (U.mode) { _rtsModeClick(mx, my); return; }
     if (U.place) { _rtsTryPlace(mx, my); return; }
     U.drag = { x0:mx, y0:my, x1:mx, y1:my, add:e.shiftKey || e.ctrlKey, moved:false };
   };
+  /* A GRAB KEEPS THE POINTER: with it captured, the drag goes on over the sidebar and the
+     release comes back here, instead of the view stopping dead at the canvas's edge. Letting go
+     out there, the browser sends the mouseleave it held back, so the edge scroll stays off
+     (e2e/navigate). */
+  cv.onpointerdown = function (e) {
+    if (e.pointerType === 'mouse' && (e.button === 1 || e.button === 2)) {
+      try { cv.setPointerCapture(e.pointerId); } catch (_e) {}
+    }
+  };
   cv.onmousemove = function (e) {
     var r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
     U.mouse.x = mx; U.mouse.y = my; U.mouse.over = true;
+    if (U.grab) {
+      /* a release the page never heard (the window lost focus mid-drag) is still a release */
+      if (e.buttons !== undefined && !(e.buttons & (U.grab.button === 2 ? 2 : 4))) _rtsGrabEnd();
+      else _rtsGrabMove(mx, my);
+    }
     if (U.drag) { U.drag.x1 = mx; U.drag.y1 = my;
       if (Math.abs(mx - U.drag.x0) > 4 || Math.abs(my - U.drag.y0) > 4) U.drag.moved = true; }
     if (U.place) {
@@ -30,18 +48,43 @@ function _rtsBindInput() {
   };
   cv.onmouseleave = function () { U.mouse.over = false; };
   cv.onmouseup = function (e) {
-    if (e.button === 2 || !U.drag) { U.drag = null; return; }
+    if (e.button === 1 || e.button === 2) {
+      var gb = U.grab && U.grab.button === e.button ? _rtsGrabEnd() : null;
+      /* a right press that never dragged is the order it always was, as it was pressed */
+      if (gb && gb.button === 2 && !gb.moved) _rtsGrabClick(gb);
+      if (e.button === 2) U.drag = null;
+      return;
+    }
+    if (!U.drag) return;
     var dg = U.drag; U.drag = null;
     if (dg.moved) _rtsBoxSelect(dg);
     else _rtsClickSelect(dg.x0, dg.y0, dg.add);
   };
   cv.onwheel = function (e) {
     e.preventDefault();
-    /* Zoom steps between fixed levels. See _rtsApplyCam: anything off RTS_ZOOMS resamples
-       24px-per-cell art by a fraction and softens every sprite on screen. */
-    _rtsZoomStep(e.deltaY > 0 ? -1 : 1);
-    _rtsClampFocus();
+    /* Toward the point under the cursor. 2D steps between fixed levels (see _rtsApplyCam:
+       anything off RTS_ZOOMS resamples 24px-per-cell art by a fraction and softens every
+       sprite on screen); 3D glides between them - ui/navigate.js. */
+    var r = cv.getBoundingClientRect(), quiet = !(e.timeStamp - (U.wheelT || -1e9) < RTS_WHEEL_QUIET);
+    U.wheelT = e.timeStamp;
+    if (quiet) U.zAcc = 0;           /* a 2D remainder belongs to one gesture, not to the next */
+    if (e.ctrlKey) U.ctrlWheelT = e.timeStamp;
+    var md = e.deltaMode, dy = Math.abs(e.deltaY);    /* the mode read first: see _rtsWheelRungs */
+    _rtsZoomToward(_rtsWheelRungs(e, quiet, U.wheelNotch), e.clientX - r.left, e.clientY - r.top);
+    if (quiet) U.wheelNotch = md === 0 && dy >= RTS_WHEEL_MIN ? dy : 0;   /* this gesture's click size */
   };
+  /* SAFARI ON A MAC pinches with GestureEvents, and left alone they magnify the whole page. A
+     touchscreen has its pinch in the touch handlers below, and a browser that also sends the
+     pinch as a ctrl-wheel has it there, so this acts only when neither did. */
+  var gs = 1;
+  cv.addEventListener('gesturestart', function (e) { e.preventDefault(); gs = e.scale || 1; });
+  cv.addEventListener('gesturechange', function (e) {
+    e.preventDefault();
+    var sc = e.scale || 1, r = cv.getBoundingClientRect();
+    if ('ontouchstart' in window || e.timeStamp - (U.ctrlWheelT || -1e9) < 250) { gs = sc; return; }
+    _rtsZoomToward(Math.log(sc / gs) / Math.LN2, e.clientX - r.left, e.clientY - r.top);
+    gs = sc;
+  });
   var mini = document.getElementById('rtsMini');
   function miniWorld(e) {
     var r = mini.getBoundingClientRect();
@@ -131,6 +174,8 @@ function _rtsBindInput() {
     var UU = window._rtsUI;
     if (!UU) return;
     UU.miniDrag = false;
+    /* a grab let go off the battlefield pans no further and orders nothing */
+    if (UU.grab && (!e || e.button === UU.grab.button)) _rtsGrabEnd();
     if (UU.drag && (!e || e.button !== 2)) {
       var dg = UU.drag; UU.drag = null;
       if (dg.moved) _rtsBoxSelect(dg);
@@ -139,6 +184,7 @@ function _rtsBindInput() {
     } else if (UU.drag) UU.drag = null;
   };
   window.addEventListener('mouseup', U.onWinUp);
+  _rtsNavBindWindow(U);            /* the menu after a right drag, keys across a lost focus */
 
   /* ------------------------------------------------------------------ touch --
      EVERY WAY OF MOVING THE CAMERA NEEDED HARDWARE A PHONE DOES NOT HAVE. Panning was WASD,
@@ -151,7 +197,8 @@ function _rtsBindInput() {
        drag one finger      pan the battlefield
        tap                  select, or place a building / fire a superweapon when one is armed
        long-press (350ms)   the context order - what right-click does on a desktop
-       pinch two fingers    zoom, stepping through the same fixed levels the wheel uses
+       pinch two fingers    zoom about the fingers, and move them together to pan; in whole
+                            steps in 2D, continuously in 3D (ui/navigate.js)
 
      DRAG PANS RATHER THAN BOX-SELECTS, which is the one place this deliberately differs from
      the mouse. A drag is the only gesture a phone has for moving a map, and a player who
@@ -162,12 +209,15 @@ function _rtsBindInput() {
      delayed mouse sequence from taps, and the existing mouse handlers would fire a second
      time from the same finger. Every handler here calls preventDefault, which suppresses that
      synthesis as well as the page's own scroll and double-tap zoom. */
-  var T = { id: null, x0: 0, y0: 0, lx: 0, ly: 0, moved: false, t0: 0, hold: 0, pinch: 0 };
+  var T = { id: null, x0: 0, y0: 0, lx: 0, ly: 0, moved: false, t0: 0, hold: 0, pinch: 0, mid: null };
   function _tXY(t) { var r = cv.getBoundingClientRect(); return { x: t.clientX - r.left, y: t.clientY - r.top }; }
+  /* FINGERS ON THE BATTLEFIELD, not every finger on the glass: e.touches counts one resting on
+     the sidebar too, which made a one-finger drag a pinch against a finger that never moves */
   function _tGap(e) {
-    var a = e.touches[0], b = e.touches[1];
+    var a = e.targetTouches[0], b = e.targetTouches[1];
     return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
   }
+  function _tMid(e) { var a = _tXY(e.targetTouches[0]), b = _tXY(e.targetTouches[1]); return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
   function _tClearHold() { if (T.hold) { clearTimeout(T.hold); T.hold = 0; } }
   U.clearHold = _tClearHold;             /* rtsClose has to be able to reach it - see rtsClose */
   /* THE GHOST HAS TO FOLLOW THE FINGER. _rtsGhostMove keeps its own tile rather than reading
@@ -186,7 +236,7 @@ function _rtsBindInput() {
 
   cv.addEventListener('touchstart', function (e) {
     e.preventDefault();
-    if (e.touches.length >= 2) { _tClearHold(); T.id = null; T.pinch = _tGap(e); return; }
+    if (e.targetTouches.length >= 2) { _tClearHold(); T.id = null; T.pinch = _tGap(e); T.mid = _tMid(e); return; }
     var t = e.changedTouches[0], p = _tXY(t);
     T.id = t.identifier; T.x0 = T.lx = p.x; T.y0 = T.ly = p.y;
     T.moved = false; T.t0 = Date.now(); T.pinch = 0;
@@ -215,14 +265,19 @@ function _rtsBindInput() {
 
   cv.addEventListener('touchmove', function (e) {
     e.preventDefault();
-    if (e.touches.length >= 2) {
-      /* Pinch, in whole zoom steps. RTS_ZOOMS exists because anything off it resamples 24px
-         art by a fraction; a continuous pinch would soften every sprite on screen. */
-      var gap = _tGap(e);
-      if (!T.pinch) { T.pinch = gap; return; }
+    if (e.targetTouches.length >= 2) {
+      /* Pinch, about the fingers. In 2D in whole zoom steps: RTS_ZOOMS exists because anything
+         off it resamples 24px art by a fraction, and a continuous pinch would soften every
+         sprite on screen. In 3D it follows the fingers, a doubling of their spread a rung. */
+      var gap = _tGap(e), mid = _tMid(e);
+      if (!T.pinch) { T.pinch = gap; T.mid = mid; return; }
+      /* the midpoint keeps its grip on the ground, as one finger does: two fingers pan too */
+      if (T.mid) _rtsHoldGround(_rtsGroundAt(T.mid.x, T.mid.y), mid.x, mid.y);
+      T.mid = mid;
       var ratio = gap / T.pinch;
-      if (ratio > 1.25)      { _rtsZoomStep(1);  _rtsClampFocus(); T.pinch = gap; }
-      else if (ratio < 0.8)  { _rtsZoomStep(-1); _rtsClampFocus(); T.pinch = gap; }
+      if (_rtsIn3D())        { _rtsZoomToward(Math.log(ratio) / Math.LN2, mid.x, mid.y); T.pinch = gap; }
+      else if (ratio > 1.25) { _rtsZoomToward(1, mid.x, mid.y);  T.pinch = gap; }
+      else if (ratio < 0.8)  { _rtsZoomToward(-1, mid.x, mid.y); T.pinch = gap; }
       return;
     }
     if (T.id === null) return;
@@ -254,12 +309,8 @@ function _rtsBindInput() {
          for ANY projection, because it is the projection's own inverse doing the arithmetic.
          Both calls read the same focus, so their difference is the true ground displacement -
          and this keeps working unchanged if the camera ever gains perspective or yaw. */
-      var from = _rtsGroundAt(T.lx, T.ly), to = _rtsGroundAt(p.x, p.y);
-      if (from && to) {
-        _rtsR.focus.x -= (to.x - from.x);
-        _rtsR.focus.z -= (to.z - from.z);
-        _rtsClampFocus();
-      }
+      _rtsHoldGround(_rtsGroundAt(T.lx, T.ly), p.x, p.y);   /* exact on slopes: ui/navigate.js */
+      if (_rtsR.zAnchor) _rtsR.zAnchor = { x: p.x, y: p.y };  /* a pinch's glide left over pivots on the finger */
     }
     T.lx = p.x; T.ly = p.y;
   }, { passive: false });
@@ -273,9 +324,9 @@ function _rtsBindInput() {
          drag moved the camera not at all, and zoom-then-look-around - the most natural pair of
          gestures on a phone - needed both fingers lifted and the whole thing started again.
          Adopt whatever is still touching, from where it is now. */
-      if (e.touches && e.touches.length === 1) {
-        var rem = _tXY(e.touches[0]);
-        T.id = e.touches[0].identifier;
+      if (e.targetTouches && e.targetTouches.length === 1) {
+        var rem = _tXY(e.targetTouches[0]);
+        T.id = e.targetTouches[0].identifier;
         T.x0 = T.lx = rem.x; T.y0 = T.ly = rem.y;
         T.moved = false; T.t0 = Date.now();
         U.mouse.x = rem.x; U.mouse.y = rem.y; U.mouse.over = true;
@@ -333,6 +384,7 @@ function _rtsKeyDown(e) {
     e.preventDefault(); return;
   }
   U.keys[k.toLowerCase()] = true;
+  if (_rtsZoomKeyDown(e, U)) return;   /* + and - : ui/navigate.js */
   if (k === 'Delete' || k === 'Backspace') { /* scuttle selected own units */
     for (var i = G.sel.length - 1; i >= 0; i--) if (G.sel[i].side === 'player' && G.sel[i].type === 'unit') _rtsKill(G.sel[i]);
     e.preventDefault();
@@ -433,5 +485,6 @@ function _rtsKeyUp(e) {
   var U = window._rtsUI;
   if (!U) return;
   U.keys[(e.key || '').toLowerCase()] = false;
+  _rtsZoomKeyUp(e, U);
   if (e.key === 'a' || e.key === 'A') U.attackMove = false;
 }

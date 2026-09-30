@@ -20,8 +20,16 @@ function _rtsPanTick(dt) {
   if (k['arrowdown'])  { R.focus.z += sp; moved = true; }
   if (k['arrowleft'])  { R.focus.x -= sp; moved = true; }
   if (k['arrowright']) { R.focus.x += sp; moved = true; }
+  /* +/- held (ui/input.js): the press was a notch; past RTS_ZOOM_HOLD it glides on */
+  var zd = (k['zoom+'] ? 1 : 0) - (k['zoom-'] ? 1 : 0);
+  if (k['zoom+'] || k['zoom-']) {
+    U.zkHeld = (U.zkHeld || 0) + dt;
+    var over = Math.min(dt, U.zkHeld - RTS_ZOOM_HOLD);      /* only the time held PAST the delay */
+    var pv = _rtsZoomPivot();
+    if (zd && over > 0) _rtsZoomToward(zd * over * 2.4, pv.x, pv.y);
+  }
   /* edge scroll, but only while the pointer is genuinely over the battlefield */
-  if (U.mouse.over && !U.drag) {
+  if (U.mouse.over && !U.drag && !U.grab) {
     var m = 26;
     if (U.mouse.x < m) { R.focus.x -= sp; moved = true; }
     if (U.mouse.x > R.W - m) { R.focus.x += sp; moved = true; }
@@ -58,7 +66,7 @@ function _rtsClampFocus() {
   var ox = vs.cx - R.focus.x, oz = vs.cz - R.focus.z;
   R.focus.x = Math.max(-lx - ox, Math.min(lx - ox, R.focus.x));
   R.focus.z = Math.max(-lz - oz, Math.min(lz - oz, R.focus.z));
-  _rtsApplyCam();
+  _rtsReapplyCam();                /* a smooth 3D zoom in flight survives the clamp */
 }
 
 /* ----------------------------------------------------------- main loop */
@@ -74,6 +82,7 @@ function _rtsLoop(prime) {
   U.last = now;
   try {
     _rtsPanTick(dt);
+    _rtsZoomTick(dt);                  /* the smooth zoom gliding in - ui/navigate.js */
     /* THE VIEW STAYS ON THE MAP, EVERY FRAME, and it is held here rather than at each place that
        moves the camera because the places kept outnumbering the clamps. Scrolling, the wheel,
        the pinch, a radar click and a team jump all clamped; the OPENING did not, and neither did

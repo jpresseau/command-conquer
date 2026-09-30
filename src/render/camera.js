@@ -151,7 +151,33 @@ function _rtsApplyCam() {
   var R = _rtsR;
   R.zi = Math.max(0, Math.min(RTS_ZOOMS.length - 1, R.zi | 0));
   R.cell = RTS_ZOOMS[R.zi];
+  R.zf = R.zt = R.zi;            /* snapped: no smooth zoom in flight (ui/navigate.js) */
   R.dist = R.H / _rtsZoom();
+}
+/* BETWEEN THE RUNGS, IN 3D ONLY. The rungs exist because 2D art resamples badly off them; the
+   3D mode draws geometry, so the wheel there glides through the ladder instead of jumping it
+   in doublings. `f` is a fractional index into RTS_ZOOMS, interpolated geometrically, so each
+   step of it is the same ratio of magnification wherever it is. */
+function _rtsCellAt(f) {
+  var n = RTS_ZOOMS.length, i0 = Math.max(0, Math.min(n - 1, Math.floor(f))), i1 = Math.min(n - 1, i0 + 1);
+  var k = Math.max(0, Math.min(1, f - i0));
+  return RTS_ZOOMS[i0] * Math.pow(RTS_ZOOMS[i1] / RTS_ZOOMS[i0], k);
+}
+function _rtsApplyCamF() {
+  var R = _rtsR, n = RTS_ZOOMS.length;
+  R.zf = Math.max(0, Math.min(n - 1, R.zf));
+  R.zi = Math.round(R.zf);
+  R.cell = _rtsCellAt(R.zf);
+  R.dist = R.H / _rtsZoom();
+}
+/* Re-derive the camera after something changed under it - the focus clamp every frame, a
+   resize - WITHOUT snapping a smooth 3D zoom to its rung: its place between the rungs and where
+   it is headed survive. It is only its own while the rung it rounds to is still R.zi; anything
+   that set the zoom some other way has changed R.zi, and is snapped to as it always was. */
+function _rtsReapplyCam() {
+  var R = _rtsR, own = _rtsIn3D() && R.zf !== undefined && Math.round(R.zf) === R.zi, zt = R.zt;
+  if (own && R.zf !== R.zi) _rtsApplyCamF(); else _rtsApplyCam();
+  if (own && zt !== undefined) R.zt = zt;
 }
 function _rtsZoomStep(dir) {
   var R = _rtsR;

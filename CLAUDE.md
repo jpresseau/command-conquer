@@ -103,7 +103,11 @@ Keep them small: if a file passes ~500 lines it wants splitting along its own ba
 - `src/render/` — canvas 2D. Reads the sim, never writes it. `camera`, `post` (light pass, water,
   shroud), `frame`, `draw`, `icons`.
 - `src/ui/` — `shell` (open/close/resize), `sidebar`, `input`, `select`, `hud`, `camera`
-  (panning + the main loop).
+  (panning + the main loop), `navigate` (right/middle-drag grabs the map, a still right-click
+  orders on release but as pressed; wheel and pinch zoom toward the pointer, `+`/`-` about the
+  centre; `e2e/navigate`, `e2e/navtouch`). Keep a ground point under the cursor with
+  `_rtsHoldGround` (closed form at the point's height), never by differencing `_rtsGroundAt`: the pick bisects
+  on height and is not an inverse on steep ground.
 - `src/rts.audio.js` — all sound, synthesized at runtime with WebAudio. No sampled assets.
   `src/rts.sound.js` maps events to it; `src/rts.store.js`, `src/rts.save.js`, `src/rts.editor.js`.
 - `src/title.js` — the standalone shell: title screen, difficulty picker, file pickers, RESUME
@@ -123,6 +127,8 @@ breaking it shipped once.
   and two art-pixels per screen pixel. A build that drew 24px art at 40px cells resampled every
   sprite by 1.667× and the whole picture went soft, with pixels of two different sizes side by
   side. `_rtsApplyCam` enforces this; do not reintroduce a free-running `cell`.
+  The one exception is 3D, which draws geometry: its zoom glides between rungs (`R.zf`,
+  `_rtsApplyCamF`, `ui/navigate.js`). 2D never leaves a rung.
 - **Structures and units are pre-rendered 3D, not drawn.** Westwood modelled them, rendered
   each to a bitmap at a fixed camera and light, and shipped the bitmaps — which is why the
   originals have volume and flat facets. `rts.r3d.js` does the same at load: models in 3D,
