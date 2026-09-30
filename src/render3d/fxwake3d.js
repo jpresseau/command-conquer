@@ -29,7 +29,7 @@ function _r3dFxDustOf(G, x, z) {
    1 at the head, q.y across. */
 function _r3dFxFlat(B, V, t0, t1, h0, h1, y, lift, type, k, s, op, heat, c) {
   if (op <= 0.002) return;
-  _r3dFxQuad(B, (t0[1] + h1[1]) * 0.5 * V.sp + y * V.cp);
+  _r3dFxQuad(B, _r3dFxKey(V, (t0[0] + h1[0]) * 0.5, y, (t0[1] + h1[1]) * 0.5));
   var P = [[t0, -1, -1], [h0, 1, -1], [h1, 1, 1], [t0, -1, -1], [h1, 1, 1], [t1, -1, 1]];
   for (var i = 0; i < 6; i++) _r3dFxV(B, P[i][0][0], y, P[i][0][1], P[i][1], P[i][2], lift, type, k, s, op, heat, c);
 }

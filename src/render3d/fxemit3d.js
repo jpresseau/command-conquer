@@ -102,18 +102,24 @@ function _r3dFxV(B, x, y, z, qx, qy, lift, type, k, s, op, heat, c) {
   B.v += R3D_FX_STRIDE;
 }
 
-/* A quad facing the camera, centred at (x, y, z), hw across and hh up the screen. Across is
-   world x and up is (0, sin, -cos): see fx3d.js for why those are exact under this camera. */
+/* A quad facing the camera, centred at (x, y, z), hw across and hh up the screen. Across is the
+   camera's right, R = (cos yaw, 0, sin yaw), and up the screen is UP = (cos tilt * sin yaw,
+   sin tilt, -cos tilt * cos yaw) - at yaw 0 world x and (0, sin, -cos), which is what these were
+   written as while the camera faced north (see fx3d.js, and cam3d.js for the yaw). The blended
+   quads are sorted by how far toward the eye they are, along the camera's own depth. */
+function _r3dFxYaw(V) { return V.cy === undefined ? [1, 0] : [V.cy, V.sy]; }
+function _r3dFxKey(V, x, y, z) { var w = _r3dFxYaw(V); return (-x * w[1] + z * w[0]) * V.sp + y * V.cp; }
 var R3D_FX_CORNERS = [-1, 1, 1, 1, 1, -1, -1, 1, 1, -1, -1, -1];
 function _r3dFxBill(B, V, x, y, z, hw, hh, lift, type, k, s, op, heat, c) {
   if (op <= 0.002) return;
   /* counted, so the bloom's emitter pass can stand down when nothing here gives off light */
   if (type === R3D_FXT_FLASH || type === R3D_FXT_SPARK || type === R3D_FXT_FLAME || (type === R3D_FXT_BLOB && heat > 0.12)) B.lit = (B.lit || 0) + 1;
-  _r3dFxQuad(B, z * V.sp + y * V.cp);
-  var uy = V.sp * hh, uz = -V.cp * hh;
+  _r3dFxQuad(B, _r3dFxKey(V, x, y, z));
+  var w = _r3dFxYaw(V), rx = hw * w[0], rz = hw * w[1];
+  var ux = V.cp * w[1] * hh, uy = V.sp * hh, uz = -V.cp * w[0] * hh;
   for (var i = 0; i < 12; i += 2) {
     var qx = R3D_FX_CORNERS[i], qy = R3D_FX_CORNERS[i + 1];
-    _r3dFxV(B, x + hw * qx, y + uy * qy, z + uz * qy, qx, qy, lift, type, k, s, op, heat, c);
+    _r3dFxV(B, x + rx * qx + ux * qy, y + uy * qy, z + rz * qx + uz * qy, qx, qy, lift, type, k, s, op, heat, c);
   }
 }
 /* A quad from one point to another, w wide across the screen - a round in flight, a trail. q.x
@@ -122,18 +128,21 @@ function _r3dFxBill(B, V, x, y, z, hw, hh, lift, type, k, s, op, heat, c) {
 function _r3dFxStreak(B, V, x0, y0, z0, x1, y1, z1, w, lift, type, k, s, op, heat, c) {
   if (op <= 0.002) return;
   /* the run across and up the screen, and the screen's perpendicular to it, in world terms */
-  var ax = x1 - x0, au = (y1 - y0) * V.sp - (z1 - z0) * V.cp, al = Math.sqrt(ax * ax + au * au) || 1;
+  var yw = _r3dFxYaw(V), dx = x1 - x0, dy = y1 - y0, dz = z1 - z0;
+  var ax = dx * yw[0] + dz * yw[1], au = dx * V.cp * yw[1] + dy * V.sp - dz * V.cp * yw[0];
+  var al = Math.sqrt(ax * ax + au * au) || 1;
   var px = -au / al * w * 0.5, pu = ax / al * w * 0.5;
-  var ox = px, oy = pu * V.sp, oz = -pu * V.cp;
+  var ox = px * yw[0] + pu * V.cp * yw[1], oy = pu * V.sp, oz = px * yw[1] - pu * V.cp * yw[0];
   if (type === R3D_FXT_STREAK) B.lit = (B.lit || 0) + 1;
-  _r3dFxQuad(B, (z0 + z1) * 0.5 * V.sp + (y0 + y1) * 0.5 * V.cp);
+  _r3dFxQuad(B, _r3dFxKey(V, (x0 + x1) * 0.5, (y0 + y1) * 0.5, (z0 + z1) * 0.5));
   var P = [[x0 - ox, y0 - oy, z0 - oz, -1, -1], [x1 - ox, y1 - oy, z1 - oz, 1, -1], [x1 + ox, y1 + oy, z1 + oz, 1, 1],
            [x0 - ox, y0 - oy, z0 - oz, -1, -1], [x1 + ox, y1 + oy, z1 + oz, 1, 1], [x0 + ox, y0 + oy, z0 + oz, -1, 1]];
   for (var i = 0; i < 6; i++) _r3dFxV(B, P[i][0], P[i][1], P[i][2], P[i][3], P[i][4], lift, type, k, s, op, heat, c);
 }
 /* The same, standing on its base rather than hanging round its centre - a flame, a plume. */
 function _r3dFxStand(B, V, x, y, z, hw, hh, lift, type, k, s, op, heat, c) {
-  _r3dFxBill(B, V, x, y + V.sp * hh, z - V.cp * hh, hw, hh, lift, type, k, s, op, heat, c);
+  var w = _r3dFxYaw(V);
+  _r3dFxBill(B, V, x + V.cp * w[1] * hh, y + V.sp * hh, z - V.cp * w[0] * hh, hw, hh, lift, type, k, s, op, heat, c);
 }
 /* A patch lying ON the ground, r in radius, over an n x n grid that follows the terrain: one
    flat quad on a slope sinks into the uphill side and floats off the downhill one. */
@@ -148,8 +157,8 @@ function _r3dFxDecal(B, V, x, z, r, n, lift, type, k, s, op, c) {
   }
   for (j = 0; j < n; j++) for (i = 0; i < n; i++) {
     u0 = -1 + 2 * i / n; u1 = -1 + 2 * (i + 1) / n; v0 = -1 + 2 * j / n; v1 = -1 + 2 * (j + 1) / n;
-    var mz = z + (v0 + v1) * 0.5 * r;
-    _r3dFxQuad(B, mz * V.sp + V.ground(x + (u0 + u1) * 0.5 * r, mz) * V.cp - 50);
+    var mz = z + (v0 + v1) * 0.5 * r, mx = x + (u0 + u1) * 0.5 * r;
+    _r3dFxQuad(B, _r3dFxKey(V, mx, V.ground(mx, mz), mz) - 50);
     corner(u0, v0); corner(u1, v0); corner(u1, v1); corner(u0, v0); corner(u1, v1); corner(u0, v1);
   }
 }
@@ -223,10 +232,13 @@ function _r3dFxFire(V, x, y0, z, big, w, seed, nt, fade) {
   var H = 3.0 * big, T = V.t + seed * 10, M = V.M, j;
   var sw = Math.max(w, H * 0.45);
   for (j = 0; j < nt; j++) {
-    var ox = j ? (_r3dFxH(seed, j + 11) - 0.5) * sw : 0, oz = j ? (_r3dFxH(seed, j + 17) - 0.5) * sw * 0.6 : 0;
+    /* spread across the screen more than into it, and tied apart toward the eye: the camera's
+       right and its depth, whichever way it faces */
+    var oa = j ? (_r3dFxH(seed, j + 11) - 0.5) * sw : 0, od = (j ? (_r3dFxH(seed, j + 17) - 0.5) * sw * 0.6 : 0) + 0.01 * j;
+    var fw = _r3dFxYaw(V), ox = oa * fw[0] - od * fw[1], oz = oa * fw[1] + od * fw[0];
     var fl = 0.8 + 0.12 * Math.sin(T * 7.3 + j * 2.1) + 0.08 * Math.sin(T * 13.1 + j * 4.7);
     var hh = H * fl * (j ? 0.5 + 0.35 * _r3dFxH(seed, j + 23) : 1) * 0.5;
-    _r3dFxStand(M, V, x + ox, y0 - hh * 0.08, z + oz + 0.01 * j, hh * 0.8, hh, _r3dFxLift(hh), R3D_FXT_FLAME,
+    _r3dFxStand(M, V, x + ox, y0 - hh * 0.08, z + oz, hh * 0.8, hh, _r3dFxLift(hh), R3D_FXT_FLAME,
                 T + j * 1.7, _r3dFxH(seed, j + 29), fade, 1.0, R3D_FX_SPARKC);
   }
   _r3dFxDecal(V.L, V, x, z, Math.max(3, H * 2.2 + w), 3, 0.6, R3D_FXT_LIGHT, 0, seed,

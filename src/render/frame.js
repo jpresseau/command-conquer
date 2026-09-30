@@ -270,7 +270,10 @@ function _rtsRFrame(dt) {
 
   /* --- everything that stands up, painted back to front --- */
   var draw = [];
-  for (i = 0; i < G.ents.length; i++) {
+  /* IN 3D NOTHING HERE IS DRAWN: the meshes are _r3dFrame's, and so are their shadows - the blob
+     shadows below were painted over the GL scene on top of its real ones, and the box this list
+     is culled by is a north-up one the turning camera (cam3d.js) no longer fits. */
+  for (i = 0; !r3on && i < G.ents.length; i++) {
     var e = G.ents[i];
     /* CountDown: a destroyed structure is still on the map, burning, for a moment. Dropping
        it on the frame it died left its own explosion hanging over bare grass. */
@@ -428,12 +431,24 @@ function _rtsRFrame(dt) {
        actually land. Procedural art only: real Red Alert art carries no `ps` and reads as 1,
        so a player with their own archives loaded never saw this. */
     var gsc = TSscale * gp.scale / (gspr.c.ps || 1);
-    g.drawImage(gspr.c, gx, gy - Math.round(gspr.head * gsc),
+    /* in 3D the building is its own mesh, drawn by _r3dFrame (render3d/place3d.js) */
+    if (!r3on) g.drawImage(gspr.c, gx, gy - Math.round(gspr.head * gsc),
       Math.round(gspr.c.width * gsc), Math.round(gspr.c.height * gsc));
     g.globalAlpha = 1;
     g.strokeStyle = R.ghost.ok ? '#7fe07f' : '#e05a4a';
     g.lineWidth = 2;
-    g.strokeRect(gx + 1, gy + 1, def.w * cell * gp.scale - 2, def.h * cell * gp.scale - 2);
+    if (r3on) {
+      /* the footprint as the ground shows it: four corners, projected at their own heights, so
+         it is the right shape at any lean and faces the right way at any turn */
+      var gx0 = _rtsWX(R.ghost.tx) - RTS_TILE / 2, gz0 = _rtsWX(R.ghost.tz) - RTS_TILE / 2;
+      var fw = def.w * RTS_TILE, fh = def.h * RTS_TILE, cs = [[0, 0], [fw, 0], [fw, fh], [0, fh]];
+      g.beginPath();
+      for (var gi = 0; gi < 4; gi++) {
+        var gq = _rtsGroundToScreen(gx0 + cs[gi][0], gz0 + cs[gi][1]);
+        if (gi) g.lineTo(gq.x, gq.y); else g.moveTo(gq.x, gq.y);
+      }
+      g.closePath(); g.stroke();
+    } else g.strokeRect(gx + 1, gy + 1, def.w * cell * gp.scale - 2, def.h * cell * gp.scale - 2);
   }
 
   /* Last, over the finished battlefield and nothing else. */

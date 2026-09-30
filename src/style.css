@@ -602,3 +602,12 @@
   padding:3px 6px;white-space:nowrap}
 #rcgRts .rts-btns #rtsGfxBtn{font-size:10px;font-weight:700;letter-spacing:.5px}
 #rcgRts .rts-btns #rtsGfxBtn.on{color:#7fd0ff;border-color:#3f7fd0}
+/* The 3D camera's compass (ui/orbit.js): top right of the battlefield, under the top bar. Its
+   needle is turned by the camera's yaw so the N always points at north. */
+#rcgRts #rtsCompass{position:absolute;right:8px;top:44px;z-index:8;width:40px;height:40px;border-radius:50%;
+  border:1px solid rgba(255,255,255,.35);background:rgba(10,14,20,.55);color:#e8eef5;padding:0;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font:700 12px/1 sans-serif}
+#rcgRts #rtsCompass i{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-style:normal;padding-top:6px;box-sizing:border-box}
+#rcgRts #rtsCompass i::before{content:'';position:absolute;left:50%;top:3px;margin-left:-5px;
+  border:5px solid transparent;border-bottom:9px solid #e8544a;border-top:0}

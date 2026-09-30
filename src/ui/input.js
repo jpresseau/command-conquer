@@ -10,8 +10,9 @@ function _rtsBindInput() {
     /* the order - or, with the repair/sell cursor up, dropping it - waits for the release: a
        right button that DRAGS is grabbing the map (ui/navigate.js), and only the release can
        tell the two apart */
-    if (e.button === 2) { _rtsGrabStart(2, mx, my); return; }
-    if (e.button === 1) { e.preventDefault(); _rtsGrabStart(1, mx, my); return; }  /* middle: grab */
+    /* in 3D the middle button, or Alt with the right, turns the camera instead (ui/orbit.js) */
+    if (e.button === 2) { _rtsGrabStart(2, mx, my, e.altKey && _rtsIn3D()); return; }
+    if (e.button === 1) { e.preventDefault(); _rtsGrabStart(1, mx, my, _rtsIn3D()); return; }
     /* a left press while a grab holds the pointer may be anywhere - over the sidebar, off the
        battlefield - and still arrive here: it is not a click on the ground at those numbers */
     if (U.grab) return;
@@ -52,6 +53,7 @@ function _rtsBindInput() {
       var gb = U.grab && U.grab.button === e.button ? _rtsGrabEnd() : null;
       /* a right press that never dragged is the order it always was, as it was pressed */
       if (gb && gb.button === 2 && !gb.moved) _rtsGrabClick(gb);
+      else if (gb && gb.button === 1 && !gb.moved && gb.orbit) _rtsOrbitReset();   /* middle-click */
       if (e.button === 2) U.drag = null;
       return;
     }
@@ -236,7 +238,7 @@ function _rtsBindInput() {
 
   cv.addEventListener('touchstart', function (e) {
     e.preventDefault();
-    if (e.targetTouches.length >= 2) { _tClearHold(); T.id = null; T.pinch = _tGap(e); T.mid = _tMid(e); return; }
+    if (e.targetTouches.length >= 2) { _tClearHold(); T.id = null; T.pinch = _tGap(e); T.mid = _tMid(e); T.ang = null; _rtsTwist(e, T); return; }
     var t = e.changedTouches[0], p = _tXY(t);
     T.id = t.identifier; T.x0 = T.lx = p.x; T.y0 = T.ly = p.y;
     T.moved = false; T.t0 = Date.now(); T.pinch = 0;
@@ -274,6 +276,7 @@ function _rtsBindInput() {
       /* the midpoint keeps its grip on the ground, as one finger does: two fingers pan too */
       if (T.mid) _rtsHoldGround(_rtsGroundAt(T.mid.x, T.mid.y), mid.x, mid.y);
       T.mid = mid;
+      _rtsTwist(e, T, mid);                /* two fingers twisted turn the 3D camera: ui/orbit.js */
       var ratio = gap / T.pinch;
       if (_rtsIn3D())        { _rtsZoomToward(Math.log(ratio) / Math.LN2, mid.x, mid.y); T.pinch = gap; }
       else if (ratio > 1.25) { _rtsZoomToward(1, mid.x, mid.y);  T.pinch = gap; }

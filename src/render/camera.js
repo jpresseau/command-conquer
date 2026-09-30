@@ -200,8 +200,12 @@ function _rtsViewSpan() {
   var R = _rtsR, R3 = window._R3D, z = _rtsZoom();
   if (R3 && R3.on) {
     var vb = _r3dViewBounds();
+    /* w/h are the box the turned trapezoid fills in the WORLD, which is exactly what the clamp
+       needs (a shape moved without turning is inside the map when its box is); `poly` is the
+       trapezoid itself for the radar, and `cw` its width across the camera, for audibility */
     return { w: vb.x1 - vb.x0, h: vb.z1 - vb.z0,
-             cx: (vb.x0 + vb.x1) / 2, cz: (vb.z0 + vb.z1) / 2 };
+             cx: (vb.x0 + vb.x1) / 2, cz: (vb.z0 + vb.z1) / 2,
+             poly: vb.poly, cw: vb.cw, ch: vb.cv1 - vb.cv0 };
   }
   return { w: R.W / z, h: R.H / z, cx: R.focus.x, cz: R.focus.z };
 }
@@ -260,8 +264,6 @@ function _rtsCellWindow(padX, padZ) {
    orthographic camera never produces and a perspective one does. */
 function _rtsSX(wx) { return (wx - _rtsR.focus.x) * _rtsZoom() + _rtsR.W / 2; }
 function _rtsSY(wz) {
-  var R3 = window._R3D;
-  if (R3 && R3.on) return _r3dSY(wz);
   return (wz - _rtsR.focus.z) * _rtsZoom() + _rtsR.H / 2;
 }
 

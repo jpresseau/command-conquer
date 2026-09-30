@@ -183,7 +183,7 @@ function _r3dOreTex(G) {
    standing on it. */
 var R3D_TEX_VS =
   'attribute vec3 aP; attribute vec2 aT; attribute vec3 aN;' +
-  'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' +
+  'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' + R3D_CAM_GLSL +
   R3D_SHADOW_VGLSL +
   'varying vec2 vT; varying float vShade; varying vec2 vW;' +
   'void main(){' +
@@ -202,9 +202,9 @@ var R3D_TEX_VS =
        R3_LIGHT[0].toFixed(4) + ', ' + R3_LIGHT[1].toFixed(4) + ', ' + R3_LIGHT[2].toFixed(4) +
        ')) / ' + R3_LIGHT[1].toFixed(4) + ', 0.35, 1.55);' +
   '  _shadowFrom(aP);' +
-  '  float sx = (aP.x - uCam.x) * uCam.z;' +
-  '  float sy = ((aP.z - uCam.y) * uTilt.x - aP.y * uTilt.y) * uCam.w;' +
-  '  float d  = ((aP.z - uCam.y) * uTilt.y + aP.y * uTilt.x);' +
+  '  float sx = camUV(aP).x * uCam.z;' +
+  '  float sy = (camUV(aP).y * uTilt.x - aP.y * uTilt.y) * uCam.w;' +
+  '  float d  = (camUV(aP).y * uTilt.y + aP.y * uTilt.x);' +
   '  float pw = 1.0 - d * uInvD;' +
   '  gl_Position = vec4(sx, -sy, -d / ' + R3D_DEPTH_RANGE.toFixed(1) + ' * pw, pw);' +
   '}';

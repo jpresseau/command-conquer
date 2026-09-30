@@ -189,7 +189,7 @@ function _r3dFrame(G) {
   /* --- entities --- */
   gl.useProgram(R3.meshP);
   gl.uniform4fv(gl.getUniformLocation(R3.meshP, 'uCam'), cam);
-  gl.uniform2f(gl.getUniformLocation(R3.meshP, 'uTilt'), R3.cp, R3.sp);
+  _r3dCamU(gl, R3.meshP);
   gl.uniform1f(gl.getUniformLocation(R3.meshP, 'uInvD'), invD);
   _r3dShadowBind(R3.meshP, 1);
   _r3dFxLightSet(gl, R3, G, R3.meshP);              /* what is burning lights its neighbours */
@@ -344,14 +344,13 @@ function _r3dFrame(G) {
     /* the wind in the canopies and the grass (R3D_MESH_VS); R3.swayAmt 0 holds them still */
     var uSw = gl.getUniformLocation(MC.P, 'uSway');
     gl.uniform2f(uSw, R3D_SWAY * (R3.swayAmt === undefined ? 1 : R3.swayAmt), G.t || 0);
-    var lift = R3D_WORLD_YMAX * R3.sp / R3.cp;
+    var lift = R3D_WORLD_YMAX * R3.sp / R3.cp, cb = _r3dBoundsNear(vb, lift, 4);
     var batches = R3.world.concat(R3.ore || [], _r3dDressBatches(R3));
     for (var wb = 0; wb < batches.length; wb++) {
       var bm = batches[wb];
       if (!bm || !bm.verts) continue;
       if (bm.x1 !== undefined &&
-          (bm.x1 < vb.x0 - 4 || bm.x0 > vb.x1 + 4 ||
-           bm.z1 < vb.z0 || bm.z0 > vb.z1 + lift)) continue;
+          (bm.x1 < cb.x0 || bm.x0 > cb.x1 || bm.z1 < cb.z0 || bm.z0 > cb.z1)) continue;
       gl.bindBuffer(gl.ARRAY_BUFFER, bm.p);
       gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 0, 0);
       gl.bindBuffer(gl.ARRAY_BUFFER, bm.n);
@@ -442,6 +441,13 @@ function _r3dFrame(G) {
   flushBatch(C);
   }
   paintEntities(MC);
+  /* the building about to be placed, as itself and translucent (render3d/place3d.js) */
+  var gh = _r3dGhostAt();
+  if (gh) {
+    BATCH = _r3dInstBatch(R3);
+    drawIn(MC, _r3dMesh('b', gh.key, gh.side), gh.x, gh.y, gh.z, 0, ART2W, 0, 1, null);
+    _r3dGhostBlend(gl, MC.P, true); flushBatch(MC); _r3dGhostBlend(gl, MC.P, false);
+  }
   /* a unit hidden behind a building, a wood or a hill shows through it (render3d/sil3d.js) */
   _r3dSilPass(gl, R3, MC.P, function (side, keep) { paintEntities(MC, null, 'unit', side, keep); });
 
@@ -466,7 +472,7 @@ function _r3dFrame(G) {
   /* --- fog, over everything, depth ignored --- */
   gl.useProgram(R3.texP);
   gl.uniform4fv(gl.getUniformLocation(R3.texP, 'uCam'), cam);
-  gl.uniform2f(gl.getUniformLocation(R3.texP, 'uTilt'), R3.cp, R3.sp);
+  _r3dCamU(gl, R3.texP);
   gl.uniform1f(gl.getUniformLocation(R3.texP, 'uInvD'), invD);
   gl.uniform1f(gl.getUniformLocation(R3.texP, 'uA'), 1);
   gl.uniform1f(gl.getUniformLocation(R3.texP, 'uRecv'), 0);   /* the shroud is not a surface */

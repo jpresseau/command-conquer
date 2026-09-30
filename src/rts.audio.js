@@ -93,6 +93,11 @@ function _rtsAudible(x, z) {
   if (!R) return true;
   if (x == null) return true;
   var vs = _rtsViewSpan();
+  /* in the camera's own frame when it has one: across it and into it, whichever way it faces */
+  if (vs.cw) {
+    var c = _r3dToCam(x - R.focus.x, z - R.focus.z);
+    return Math.abs(c.u) < vs.cw * 0.75 && Math.abs(c.v) < vs.ch * 0.85;
+  }
   return Math.abs(x - R.focus.x) < vs.w * 0.75 && Math.abs(z - R.focus.z) < vs.h * 0.85;
 }
 

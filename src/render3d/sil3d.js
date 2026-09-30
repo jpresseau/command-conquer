@@ -22,15 +22,18 @@ var R3D_SIL_BIAS = 3.0;     /* world units toward the eye - more than a unit is 
 var R3D_SIL_A = 0.3;
 
 /* COULD ANYTHING STAND BETWEEN THIS UNIT AND THE CAMERA? Only a building, a tree, rock or a
-   wall in the three cells across it and two in front of it - toward the camera, +z - or ground
-   rising over it there: the camera leans 35 degrees, so nothing further off can hide a unit.
+   wall in the three cells across it and a few in front of it - toward the camera, along its F
+   (cam3d.js), which was +z while it faced north - or ground rising over it there. Two cells at
+   the default lean; the more the camera leans over, the further off a roof can hide a unit.
    Everything else is left out of the pass, because drawing a 160-unit battle a third time for
    the handful standing behind something took the entities past their budget (e2e/instanced). */
 function _r3dSilCover(G, e) {
   if (e.air) return false;
-  var tx = _rtsTX(e.x), tz = _rtsTX(e.z), h0 = _rtsTileElev(tx, tz) + 1.5;
-  for (var dz = 0; dz <= 2; dz++) for (var dx = -1; dx <= 1; dx++) {
-    var cx = tx + dx, cz = tz + dz;
+  var tx = _rtsTX(e.x), tz = _rtsTX(e.z), h0 = _rtsTileElev(tx, tz) + 1.5, R3 = window._R3D;
+  var cy = R3 ? R3.cy : 1, sy = R3 ? R3.sy : 0, sp = R3 ? R3.sp : Math.sin(R3D_TILT), cp = R3 ? R3.cp : Math.cos(R3D_TILT);
+  var reach = Math.max(2, Math.ceil(2 * (sp / cp) / Math.tan(R3D_TILT) - 1e-9));
+  for (var dz = 0; dz <= reach; dz++) for (var dx = -1; dx <= 1; dx++) {
+    var cx = tx + Math.round(dx * cy - dz * sy), cz = tz + Math.round(dx * sy + dz * cy);
     if (!_rtsInB(cx, cz)) continue;
     var i = _rtsIdx(cx, cz), k = G.terrain[i];
     if (G.blocked[i] === 1 || k === RTS_T_TREE || k === RTS_T_ROCK || k === RTS_T_WALL) return true;

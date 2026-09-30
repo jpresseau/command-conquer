@@ -613,6 +613,15 @@
   padding:3px 6px;white-space:nowrap}
 #rcgRts .rts-btns #rtsGfxBtn{font-size:10px;font-weight:700;letter-spacing:.5px}
 #rcgRts .rts-btns #rtsGfxBtn.on{color:#7fd0ff;border-color:#3f7fd0}
+/* The 3D camera's compass (ui/orbit.js): top right of the battlefield, under the top bar. Its
+   needle is turned by the camera's yaw so the N always points at north. */
+#rcgRts #rtsCompass{position:absolute;right:8px;top:44px;z-index:8;width:40px;height:40px;border-radius:50%;
+  border:1px solid rgba(255,255,255,.35);background:rgba(10,14,20,.55);color:#e8eef5;padding:0;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font:700 12px/1 sans-serif}
+#rcgRts #rtsCompass i{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-style:normal;padding-top:6px;box-sizing:border-box}
+#rcgRts #rtsCompass i::before{content:'';position:absolute;left:50%;top:3px;margin-left:-5px;
+  border:5px solid transparent;border-bottom:9px solid #e8544a;border-top:0}
 </style>
 <style>
 /* --- standalone shell: the title screen this app boots into --- */
@@ -940,13 +949,15 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
     <dt>Arrow keys</dt><dd>pan the camera (screen edges and the radar work too)</dd>
     <dt>Mouse wheel</dt><dd>zoom toward the cursor — smoothly in 3D</dd>
     <dt>+ / −</dt><dd>zoom in / out; hold to keep going</dd>
+    <dt>Middle-drag</dt><dd>3D: turn the camera (across) and lean it (up / down) — or Alt + right-drag; middle-click faces north again</dd>
+    <dt>Q / E, PgUp / PgDn</dt><dd>3D: turn, lean; the compass on the battlefield turns you back to north</dd>
     <dt>Ctrl+S</dt><dd>save — resume it from this screen later</dd>
     <dt>Esc</dt><dd>leave the battle</dd>
   </dl>
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">ded5ea6 · 2026-09-30</div>
+  <div id="rtsBuild" title="build">a434bd7 · 2026-09-30</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -13447,6 +13458,11 @@ function _rtsAudible(x, z) {
   if (!R) return true;
   if (x == null) return true;
   var vs = _rtsViewSpan();
+  /* in the camera's own frame when it has one: across it and into it, whichever way it faces */
+  if (vs.cw) {
+    var c = _r3dToCam(x - R.focus.x, z - R.focus.z);
+    return Math.abs(c.u) < vs.cw * 0.75 && Math.abs(c.v) < vs.ch * 0.85;
+  }
   return Math.abs(x - R.focus.x) < vs.w * 0.75 && Math.abs(z - R.focus.z) < vs.h * 0.85;
 }
 
@@ -22290,8 +22306,12 @@ function _rtsViewSpan() {
   var R = _rtsR, R3 = window._R3D, z = _rtsZoom();
   if (R3 && R3.on) {
     var vb = _r3dViewBounds();
+    /* w/h are the box the turned trapezoid fills in the WORLD, which is exactly what the clamp
+       needs (a shape moved without turning is inside the map when its box is); `poly` is the
+       trapezoid itself for the radar, and `cw` its width across the camera, for audibility */
     return { w: vb.x1 - vb.x0, h: vb.z1 - vb.z0,
-             cx: (vb.x0 + vb.x1) / 2, cz: (vb.z0 + vb.z1) / 2 };
+             cx: (vb.x0 + vb.x1) / 2, cz: (vb.z0 + vb.z1) / 2,
+             poly: vb.poly, cw: vb.cw, ch: vb.cv1 - vb.cv0 };
   }
   return { w: R.W / z, h: R.H / z, cx: R.focus.x, cz: R.focus.z };
 }
@@ -22350,8 +22370,6 @@ function _rtsCellWindow(padX, padZ) {
    orthographic camera never produces and a perspective one does. */
 function _rtsSX(wx) { return (wx - _rtsR.focus.x) * _rtsZoom() + _rtsR.W / 2; }
 function _rtsSY(wz) {
-  var R3 = window._R3D;
-  if (R3 && R3.on) return _r3dSY(wz);
   return (wz - _rtsR.focus.z) * _rtsZoom() + _rtsR.H / 2;
 }
 
@@ -23183,6 +23201,26 @@ var R3D_LEAN_GLSL =
   '  vec3 k = vec3(n.z, 0.0, -n.x);' +           /* cross(vec3(0,1,0), n) */
   '  return v * n.y + cross(k, v) + k * (dot(k, v) / max(1.0 + n.y, 0.0001));' +
   '}';
+
+/* THE BUILDING ABOUT TO BE PLACED, as itself. The 2D renderer's ghost is the building's sprite -
+   drawn north up, from the sprite baker's one angle - and over the 3D view it was the wrong
+   picture as soon as the camera leaned differently, and faced the wrong way as soon as it
+   turned (cam3d.js). So in 3D the ghost is the building's own mesh, where it would stand, drawn
+   translucent after everything solid: `blend(true)` before, `blend(false)` after. The footprint's
+   green or red outline stays with the 2D overlay (render/frame.js). Returns where it stands. */
+function _r3dGhostAt() {
+  var R = window._rtsR, gh = R && R.ghost;
+  if (!gh || !R.ghostKey) return null;
+  var d = rtsStructDef(R.ghostKey);
+  if (!d) return null;
+  var x = _rtsWX(gh.tx) + (d.w - 1) * RTS_TILE / 2, z = _rtsWX(gh.tz) + (d.h - 1) * RTS_TILE / 2;
+  return { key: R.ghostKey, side: gh.side || 'player', x: x, y: _rtsElev(x, z), z: z };
+}
+function _r3dGhostBlend(gl, P, on) {
+  if (on) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); }
+  else { gl.disable(gl.BLEND); gl.depthMask(true); }
+  gl.uniform1f(gl.getUniformLocation(P, 'uA'), on ? 0.55 : 1);
+}
 </script>
 <script>/* render3d/light3d.js - the light every mesh in the 3D mode is shaded by, as GLSL.
    Part of rts.render3d.
@@ -23243,6 +23281,7 @@ var R3D_HALF = (function () {
    does not pass through the origin. Its floor is per-channel and COOL, so shade slides toward
    blue-grey; a scalar multiply drags it toward black and takes the sky out of every shadow. */
 var R3D_MESH_LIGHT =
+  'uniform vec3 uHalf;' +          /* the specular's half-vector, per frame: cam3d.js */
   /* The ramp itself, because it is now evaluated TWICE per vertex - once with
      the sun and once without it. That is what lets the fragment stage put a shadow on
      a surface: it has the same surface lit and unlit to choose between, so a shadow is
@@ -23261,7 +23300,7 @@ var R3D_MESH_LIGHT =
   'vec3 _shade(vec3 n, vec3 col){' +
   /* the sprite baker's own light and half-vector, so the two pipelines agree face for face */
   '  float lam = max(dot(n, ' + _r3dGlsl3(R3_LIGHT) + '), 0.0);' +
-  '  float sp = max(dot(n, ' + _r3dGlsl3(R3D_HALF) + '), 0.0);' +
+  '  float sp = max(dot(n, uHalf), 0.0);' +      /* R3D_HALF, turned with the camera: cam3d.js */
   '  sp *= sp; sp *= sp; sp *= sp; sp *= sp;' +      /* ^16, the baker's tight highlight */
   /* a touch of sky bounce so upward faces do not go dead in shadow - r3d/render.js:97 */
   '  float sky = 0.10 * max(n.y, 0.0);' +
@@ -23596,6 +23635,102 @@ function _r3dShadowBind(P, unit) {
   gl.activeTexture(gl.TEXTURE0);
 }
 </script>
+<script>/* render3d/cam3d.js - which way the 3D camera faces, and how far it leans. Part of
+   rts.render3d; loads before gl3d.js, whose shaders splice R3D_CAM_GLSL in at load.
+
+   THE CAMERA USED TO FACE NORTH, ALWAYS, AT ONE LEAN. That is the 2D game's camera carried into
+   3D, and it is the one thing the later 3D RTS games changed first: you swing the view round to
+   see behind the war factory, down the valley the enemy is coming up, and you lean it further
+   over or stand it more upright. So the camera has two numbers of its own now:
+
+     YAW    about the vertical, 0 = north up. ui/orbit.js turns it.
+     TILT   from straight down, R3D_TILT by default, held inside [R3D_TILT_MIN, R3D_TILT_MAX].
+
+   HOW THE YAW ENTERS. Everything in this renderer already works in the camera's own frame -
+   u across the screen, v down it on the ground, then the lean and the perspective divide on
+   top (gl3d.js). Yaw is one more step at the very front: the world offset from the focus is
+   turned into that frame before anything else happens,
+
+       u =  dx*cos(yaw) + dz*sin(yaw)          (the camera's right, R = (cos, 0, sin))
+       v = -dx*sin(yaw) + dz*cos(yaw)          (down the screen,   F = (-sin, 0, cos))
+
+   and turned back on the way out of every inverse. At yaw 0 both are the identity, so a
+   north-up camera draws exactly the picture it drew before any of this existed.
+
+   THE TILT'S CEILING IS THE SEA'S. The water is laid down with the depth test off and relies on
+   its waves never being steeper than the line of sight (wave3d.js: R3D_WAVE_SLOPE < cot(tilt)),
+   which gives out at about 58 degrees; the ground pick's bisection holds to about 67. 56 degrees
+   keeps both with room. The floor is where the buildings start to show only their roofs again. */
+
+var R3D_TILT_MIN = 0.45;         /* 26 degrees from straight down */
+var R3D_TILT_MAX = 0.98;         /* 56 degrees: the sea's draw order holds to about 58 */
+
+/* One copy of the camera's first step, for every vertex shader that projects: the offset from
+   the focus, turned into the camera's frame. The shaders then read .x where they read the world
+   x and .y where they read the world z, and nothing after that line knows the yaw exists. */
+var R3D_CAM_GLSL =
+  'uniform vec2 uYaw;' +          /* cos(yaw), sin(yaw) */
+  'vec2 camUV(vec3 p){' +
+  '  vec2 o = vec2(p.x - uCam.x, p.z - uCam.y);' +
+  '  return vec2(o.x * uYaw.x + o.y * uYaw.y, -o.x * uYaw.y + o.y * uYaw.x);' +
+  '}';
+
+/* The camera's uniforms for a program that projects - the lean, the yaw, and the specular's
+   half-vector for the one that shades. Set wherever uCam is. */
+function _r3dCamU(gl, P) {
+  var R3 = window._R3D;
+  gl.uniform2f(gl.getUniformLocation(P, 'uTilt'), R3.cp, R3.sp);
+  gl.uniform2f(gl.getUniformLocation(P, 'uYaw'), R3.cy, R3.sy);
+  var h = R3.half || R3D_HALF;
+  gl.uniform3f(gl.getUniformLocation(P, 'uHalf'), h[0], h[1], h[2]);
+}
+
+/* Set the camera's facing and lean. Yaw is kept in (-PI, PI]; tilt is clamped. */
+function _r3dCamSet(yaw, tilt) {
+  var R3 = window._R3D;
+  if (!R3) return;
+  if (typeof yaw === 'number' && isFinite(yaw)) {
+    yaw = Math.atan2(Math.sin(yaw), Math.cos(yaw));
+    R3.yaw = Math.abs(yaw) < 1e-9 ? 0 : yaw;
+  }
+  if (typeof tilt === 'number' && isFinite(tilt)) R3.tilt = Math.max(R3D_TILT_MIN, Math.min(R3D_TILT_MAX, tilt));
+  R3.cy = Math.cos(R3.yaw || 0); R3.sy = Math.sin(R3.yaw || 0);
+  R3.cp = Math.cos(R3.tilt); R3.sp = Math.sin(R3.tilt);
+  /* THE HIGHLIGHT TURNS WITH THE CAMERA. The specular's half-vector was the sprite baker's,
+     built from a viewer standing south of the model; the viewer now stands wherever the yaw puts
+     them, at the baker's own elevation - so at yaw 0 it is exactly R3D_HALF, and a glint on a
+     hull stays where the eye would see one as the camera swings. The light stays in the world. */
+  var hv = R3_VIEW[1], hh = R3_VIEW[2], L = R3_LIGHT;
+  var h = [L[0] - R3.sy * hh, L[1] + hv, L[2] + R3.cy * hh], m = Math.hypot(h[0], h[1], h[2]);
+  R3.half = [h[0] / m, h[1] / m, h[2] / m];
+}
+
+/* World offset from the focus -> the camera's frame, and back. */
+function _r3dToCam(dx, dz) {
+  var R3 = window._R3D;
+  return { u: dx * R3.cy + dz * R3.sy, v: -dx * R3.sy + dz * R3.cy };
+}
+function _r3dFromCam(u, v) {
+  var R3 = window._R3D;
+  return { x: u * R3.cy - v * R3.sy, z: u * R3.sy + v * R3.cy };
+}
+
+/* The view's box grown by `pad` all round and by `near` more on the side nearest the eye - where
+   something tall standing just off the bottom of the screen still reaches up into it. That side
+   was +z while the camera faced north; it is the camera's F = (-sin yaw, 0, cos yaw) now. */
+function _r3dBoundsNear(vb, near, pad) {
+  var R3 = window._R3D, fx = -R3.sy, fz = R3.cy;
+  return { x0: vb.x0 - pad - Math.max(0, -fx) * near, x1: vb.x1 + pad + Math.max(0, fx) * near,
+           z0: vb.z0 - pad - Math.max(0, -fz) * near, z1: vb.z1 + pad + Math.max(0, fz) * near };
+}
+
+/* How far a world point is toward the eye, in the camera's own depth (larger = nearer): the
+   key the blended effects are sorted by. The world z did this job while the camera faced north. */
+function _r3dDepthKey(x, y, z) {
+  var R3 = window._R3D;
+  return (-x * R3.sy + z * R3.cy) * R3.sp + y * R3.cp;
+}
+</script>
 <script>/* render3d/gl3d.js - the live 3D mode: camera, projection contract, and GL plumbing.
    Part of rts.render3d, which draws the battlefield as real-time 3D.
 
@@ -23762,6 +23897,7 @@ var R3D_MESH_VS =
   'uniform vec4 uCam;' +        /* focus.x, focus.z, 2*zoom/W, 2*zoom/H */
   'uniform vec2 uTilt;' +       /* cos(tilt), sin(tilt) */
   'uniform float uInvD;' +      /* 1 / eye distance; 0 is the orthographic camera */
+  R3D_CAM_GLSL +
   /* PLACEMENT COMES IN PER INSTANCE, not per draw - see render3d/inst3d.js. The unpack below
      defines uPos, uRot, uScale, uScaleY and uNrm as locals with exactly the names the uniforms
      had, so every line of the maths under it is the line that was here before. */
@@ -23818,9 +23954,9 @@ var R3D_MESH_VS =
   '  vWxz = wp.xz;' +                 /* the world position, for the sea's shoreline */
   '  vHY = vec2(wp.y - uPos.y, wp.y);' +   /* ...and its height, for the wear (weather3d.js) */
   '  _shadowFrom(wp);' +
-  '  float sx = (wp.x - uCam.x) * uCam.z;' +
-  '  float sy = ((wp.z - uCam.y) * uTilt.x - wp.y * uTilt.y) * uCam.w;' +
-  '  float d  = ((wp.z - uCam.y) * uTilt.y + wp.y * uTilt.x);' +
+  '  float sx = camUV(wp).x * uCam.z;' +
+  '  float sy = (camUV(wp).y * uTilt.x - wp.y * uTilt.y) * uCam.w;' +
+  '  float d  = (camUV(wp).y * uTilt.y + wp.y * uTilt.x);' +
   '  float pw = 1.0 - d * uInvD;' +
   '  gl_Position = vec4(sx, -sy, -(d + uDBias) / ' + R3D_DEPTH_RANGE.toFixed(1) + ' * pw, pw);' +
   '}';
@@ -23880,7 +24016,7 @@ var R3D_MESH_FS =
   '    float rz = _vn(p1 + vec2(0.0, 0.07)) + _vn(p2 + vec2(0.0, 0.07)) * 0.6 - r0;' +
   '    vec3 np = normalize(normalize(vN) + vec3(-rx, 0.0, -rz) * 5.0 * uRip);' +
   '    c = _shade(np, vCol.rgb) * tint;' +
-  '    float gl = max(dot(np, ' + _r3dGlsl3(R3D_HALF) + '), 0.0);' +
+  '    float gl = max(dot(np, uHalf), 0.0);' +
   '    gl = pow(gl, 48.0) * _shadowAt();' +
   '    c += vec3(1.0, 0.96, 0.86) * gl * 1.1;' +
   '    float edge = 1.0 - smoothstep(0.46, 0.66, wm);' +
@@ -23939,7 +24075,8 @@ function _r3dInit() {
       mesh: {}, terrainTex: null, terrainDirty: true,
       fogCv: null, fogTex: null, fogDirty: true,
       shadowReady: false, postReady: false,
-      cp: Math.cos(R3D_TILT), sp: Math.sin(R3D_TILT)
+      cp: Math.cos(R3D_TILT), sp: Math.sin(R3D_TILT),
+      yaw: 0, tilt: R3D_TILT, cy: 1, sy: 0         /* the camera's facing and lean: cam3d.js */
     };
   } catch (e) { return null; }
   /* The shadow map and the occlusion are the two parts of the mode allowed to fail on their
@@ -23969,12 +24106,9 @@ function _r3dProject(u, y, v) {
            scale: 1 / ws, behind: behind };
 }
 function _r3dWorldToScreen(x, y, z) {
-  var R = _rtsR;
-  return _r3dProject(x - R.focus.x, y || 0, z - R.focus.z);
+  var R = _rtsR, c = _r3dToCam(x - R.focus.x, z - R.focus.z);      /* the yaw: cam3d.js */
+  return _r3dProject(c.u, y || 0, c.v);
 }
-/* Screen y of a point on the ground. x cannot affect it under a north-up camera - the divide
-   is a function of depth alone - so this stays a one-argument question even with perspective. */
-function _r3dSY(wz) { return _r3dProject(0, 0, wz - _rtsR.focus.z).y; }
 
 /* The inverse, on the ground plane, which is the only plane input ever asks about. Solving
    syo = v*cp / (1 - v*sp/D) for v gives the closed form below; the denominator vanishing is
@@ -23999,7 +24133,8 @@ function _r3dPlaneAt(mx, my, h) {
   var v = (syo * (1 - h * R3.cp / D) + h * R3.sp) / den;
   var w = 1 - (v * R3.sp + h * R3.cp) / D;
   if (!(w > R3D_WMIN)) return null;
-  return { x: R.focus.x + sxo * w, z: R.focus.z + v };
+  var o = _r3dFromCam(sxo * w, v);                    /* back out of the camera's yaw */
+  return { x: R.focus.x + o.x, z: R.focus.z + o.z };
 }
 
 /* WHERE A PIXEL MEETS THE GROUND, which is no longer a plane.
@@ -24060,16 +24195,27 @@ function _r3dGroundAt(mx, my) {
    Setting the projected edge equal to the screen edge and solving gives the two z limits; the
    ratio (half-view-height / D) is a constant because D moves with the zoom, so the far limit
    is a fixed multiple of the half-height rather than something that can degenerate at one end
-   of the ladder. The x limit is taken at the FAR edge, where the trapezoid is widest. */
+   of the ladder. The x limit is taken at the FAR edge, where the trapezoid is widest.
+
+   THE CORNERS COME FROM THE CAMERA'S FRAME and are turned into the world by its yaw (cam3d.js),
+   so the box is the turned trapezoid's bounding box, and `poly` is the trapezoid itself - far
+   left, far right, near right, near left - for what wants the true shape: the radar's frame. */
 function _r3dViewBounds() {
   var R = _rtsR, R3 = window._R3D, zm = _rtsZoom(), D = _r3dEyeDist();
   var hx = R.W / 2 / zm, hz = R.H / 2 / zm;
   var conv = hz * R3.sp / D;
   var vFar = -hz / Math.max(1e-3, R3.cp - conv);      /* up the screen, away from the eye */
   var vNear = hz / (R3.cp + conv);                    /* down the screen, toward it */
-  var wFar = 1 - vFar * R3.sp / D;
-  return { x0: R.focus.x - hx * wFar, x1: R.focus.x + hx * wFar,
-           z0: R.focus.z + vFar, z1: R.focus.z + vNear };
+  var wFar = 1 - vFar * R3.sp / D, wNear = 1 - vNear * R3.sp / D;
+  var cs = [[-hx * wFar, vFar], [hx * wFar, vFar], [hx * wNear, vNear], [-hx * wNear, vNear]];
+  var b = { x0: 1e9, x1: -1e9, z0: 1e9, z1: -1e9, poly: [], cw: 2 * hx * wFar, cv0: vFar, cv1: vNear };
+  for (var i = 0; i < 4; i++) {
+    var o = _r3dFromCam(cs[i][0], cs[i][1]), px = R.focus.x + o.x, pz = R.focus.z + o.z;
+    b.poly.push({ x: px, z: pz });
+    if (px < b.x0) b.x0 = px; if (px > b.x1) b.x1 = px;
+    if (pz < b.z0) b.z0 = pz; if (pz > b.z1) b.z1 = pz;
+  }
+  return b;
 }
 </script>
 <script>/* render3d/present3d.js - the 3D mode's lifecycle: turning it on and off, presenting its
@@ -25328,7 +25474,7 @@ function _r3dGroundDraw(gl, R3, G, cam, invD) {
   R3.matOn = !!M;
   gl.useProgram(P);
   gl.uniform4fv(gl.getUniformLocation(P, 'uCam'), cam);
-  gl.uniform2f(gl.getUniformLocation(P, 'uTilt'), R3.cp, R3.sp);
+  _r3dCamU(gl, P);
   gl.uniform1f(gl.getUniformLocation(P, 'uInvD'), invD);
   if (M) {
     _r3dMatSet(gl, R3, M, G);
@@ -25572,7 +25718,7 @@ function _r3dOreTex(G) {
    standing on it. */
 var R3D_TEX_VS =
   'attribute vec3 aP; attribute vec2 aT; attribute vec3 aN;' +
-  'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' +
+  'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' + R3D_CAM_GLSL +
   R3D_SHADOW_VGLSL +
   'varying vec2 vT; varying float vShade; varying vec2 vW;' +
   'void main(){' +
@@ -25591,9 +25737,9 @@ var R3D_TEX_VS =
        R3_LIGHT[0].toFixed(4) + ', ' + R3_LIGHT[1].toFixed(4) + ', ' + R3_LIGHT[2].toFixed(4) +
        ')) / ' + R3_LIGHT[1].toFixed(4) + ', 0.35, 1.55);' +
   '  _shadowFrom(aP);' +
-  '  float sx = (aP.x - uCam.x) * uCam.z;' +
-  '  float sy = ((aP.z - uCam.y) * uTilt.x - aP.y * uTilt.y) * uCam.w;' +
-  '  float d  = ((aP.z - uCam.y) * uTilt.y + aP.y * uTilt.x);' +
+  '  float sx = camUV(aP).x * uCam.z;' +
+  '  float sy = (camUV(aP).y * uTilt.x - aP.y * uTilt.y) * uCam.w;' +
+  '  float d  = (camUV(aP).y * uTilt.y + aP.y * uTilt.x);' +
   '  float pw = 1.0 - d * uInvD;' +
   '  gl_Position = vec4(sx, -sy, -d / ' + R3D_DEPTH_RANGE.toFixed(1) + ' * pw, pw);' +
   '}';
@@ -25859,15 +26005,15 @@ function _r3dGrainSet(gl, R3, P) {
 
 var R3D_FX2_VS =
   'attribute vec3 aP; attribute vec4 aQ; attribute vec4 aA; attribute vec3 aB;' +
-  'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' +
+  'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' + R3D_CAM_GLSL +
   'varying vec2 vQ; varying vec4 vA; varying vec3 vB; varying float vY;' +
   'void main(){' +
   '  vQ = aQ.xy; vA = aA; vB = aB; vY = aQ.w;' +
-  '  float sx = (aP.x - uCam.x) * uCam.z;' +
-  '  float sy = ((aP.z - uCam.y) * uTilt.x - aP.y * uTilt.y) * uCam.w;' +
+  '  float sx = camUV(aP).x * uCam.z;' +
+  '  float sy = (camUV(aP).y * uTilt.x - aP.y * uTilt.y) * uCam.w;' +
   /* the same projection as every other program here, with each quad's own lift toward the eye
      in aQ.z: a tall fireball needs more of it than a ring lying on the ground */
-  '  float d  = ((aP.z - uCam.y) * uTilt.y + aP.y * uTilt.x) + aQ.z;' +
+  '  float d  = (camUV(aP).y * uTilt.y + aP.y * uTilt.x) + aQ.z;' +
   '  float pw = 1.0 - d * uInvD;' +
   '  gl_Position = vec4(sx, -sy, -d / ' + R3D_DEPTH_RANGE.toFixed(1) + ' * pw, pw);' +
   '}';
@@ -26098,18 +26244,24 @@ function _r3dFxV(B, x, y, z, qx, qy, lift, type, k, s, op, heat, c) {
   B.v += R3D_FX_STRIDE;
 }
 
-/* A quad facing the camera, centred at (x, y, z), hw across and hh up the screen. Across is
-   world x and up is (0, sin, -cos): see fx3d.js for why those are exact under this camera. */
+/* A quad facing the camera, centred at (x, y, z), hw across and hh up the screen. Across is the
+   camera's right, R = (cos yaw, 0, sin yaw), and up the screen is UP = (cos tilt * sin yaw,
+   sin tilt, -cos tilt * cos yaw) - at yaw 0 world x and (0, sin, -cos), which is what these were
+   written as while the camera faced north (see fx3d.js, and cam3d.js for the yaw). The blended
+   quads are sorted by how far toward the eye they are, along the camera's own depth. */
+function _r3dFxYaw(V) { return V.cy === undefined ? [1, 0] : [V.cy, V.sy]; }
+function _r3dFxKey(V, x, y, z) { var w = _r3dFxYaw(V); return (-x * w[1] + z * w[0]) * V.sp + y * V.cp; }
 var R3D_FX_CORNERS = [-1, 1, 1, 1, 1, -1, -1, 1, 1, -1, -1, -1];
 function _r3dFxBill(B, V, x, y, z, hw, hh, lift, type, k, s, op, heat, c) {
   if (op <= 0.002) return;
   /* counted, so the bloom's emitter pass can stand down when nothing here gives off light */
   if (type === R3D_FXT_FLASH || type === R3D_FXT_SPARK || type === R3D_FXT_FLAME || (type === R3D_FXT_BLOB && heat > 0.12)) B.lit = (B.lit || 0) + 1;
-  _r3dFxQuad(B, z * V.sp + y * V.cp);
-  var uy = V.sp * hh, uz = -V.cp * hh;
+  _r3dFxQuad(B, _r3dFxKey(V, x, y, z));
+  var w = _r3dFxYaw(V), rx = hw * w[0], rz = hw * w[1];
+  var ux = V.cp * w[1] * hh, uy = V.sp * hh, uz = -V.cp * w[0] * hh;
   for (var i = 0; i < 12; i += 2) {
     var qx = R3D_FX_CORNERS[i], qy = R3D_FX_CORNERS[i + 1];
-    _r3dFxV(B, x + hw * qx, y + uy * qy, z + uz * qy, qx, qy, lift, type, k, s, op, heat, c);
+    _r3dFxV(B, x + rx * qx + ux * qy, y + uy * qy, z + rz * qx + uz * qy, qx, qy, lift, type, k, s, op, heat, c);
   }
 }
 /* A quad from one point to another, w wide across the screen - a round in flight, a trail. q.x
@@ -26118,18 +26270,21 @@ function _r3dFxBill(B, V, x, y, z, hw, hh, lift, type, k, s, op, heat, c) {
 function _r3dFxStreak(B, V, x0, y0, z0, x1, y1, z1, w, lift, type, k, s, op, heat, c) {
   if (op <= 0.002) return;
   /* the run across and up the screen, and the screen's perpendicular to it, in world terms */
-  var ax = x1 - x0, au = (y1 - y0) * V.sp - (z1 - z0) * V.cp, al = Math.sqrt(ax * ax + au * au) || 1;
+  var yw = _r3dFxYaw(V), dx = x1 - x0, dy = y1 - y0, dz = z1 - z0;
+  var ax = dx * yw[0] + dz * yw[1], au = dx * V.cp * yw[1] + dy * V.sp - dz * V.cp * yw[0];
+  var al = Math.sqrt(ax * ax + au * au) || 1;
   var px = -au / al * w * 0.5, pu = ax / al * w * 0.5;
-  var ox = px, oy = pu * V.sp, oz = -pu * V.cp;
+  var ox = px * yw[0] + pu * V.cp * yw[1], oy = pu * V.sp, oz = px * yw[1] - pu * V.cp * yw[0];
   if (type === R3D_FXT_STREAK) B.lit = (B.lit || 0) + 1;
-  _r3dFxQuad(B, (z0 + z1) * 0.5 * V.sp + (y0 + y1) * 0.5 * V.cp);
+  _r3dFxQuad(B, _r3dFxKey(V, (x0 + x1) * 0.5, (y0 + y1) * 0.5, (z0 + z1) * 0.5));
   var P = [[x0 - ox, y0 - oy, z0 - oz, -1, -1], [x1 - ox, y1 - oy, z1 - oz, 1, -1], [x1 + ox, y1 + oy, z1 + oz, 1, 1],
            [x0 - ox, y0 - oy, z0 - oz, -1, -1], [x1 + ox, y1 + oy, z1 + oz, 1, 1], [x0 + ox, y0 + oy, z0 + oz, -1, 1]];
   for (var i = 0; i < 6; i++) _r3dFxV(B, P[i][0], P[i][1], P[i][2], P[i][3], P[i][4], lift, type, k, s, op, heat, c);
 }
 /* The same, standing on its base rather than hanging round its centre - a flame, a plume. */
 function _r3dFxStand(B, V, x, y, z, hw, hh, lift, type, k, s, op, heat, c) {
-  _r3dFxBill(B, V, x, y + V.sp * hh, z - V.cp * hh, hw, hh, lift, type, k, s, op, heat, c);
+  var w = _r3dFxYaw(V);
+  _r3dFxBill(B, V, x + V.cp * w[1] * hh, y + V.sp * hh, z - V.cp * w[0] * hh, hw, hh, lift, type, k, s, op, heat, c);
 }
 /* A patch lying ON the ground, r in radius, over an n x n grid that follows the terrain: one
    flat quad on a slope sinks into the uphill side and floats off the downhill one. */
@@ -26144,8 +26299,8 @@ function _r3dFxDecal(B, V, x, z, r, n, lift, type, k, s, op, c) {
   }
   for (j = 0; j < n; j++) for (i = 0; i < n; i++) {
     u0 = -1 + 2 * i / n; u1 = -1 + 2 * (i + 1) / n; v0 = -1 + 2 * j / n; v1 = -1 + 2 * (j + 1) / n;
-    var mz = z + (v0 + v1) * 0.5 * r;
-    _r3dFxQuad(B, mz * V.sp + V.ground(x + (u0 + u1) * 0.5 * r, mz) * V.cp - 50);
+    var mz = z + (v0 + v1) * 0.5 * r, mx = x + (u0 + u1) * 0.5 * r;
+    _r3dFxQuad(B, _r3dFxKey(V, mx, V.ground(mx, mz), mz) - 50);
     corner(u0, v0); corner(u1, v0); corner(u1, v1); corner(u0, v0); corner(u1, v1); corner(u0, v1);
   }
 }
@@ -26219,10 +26374,13 @@ function _r3dFxFire(V, x, y0, z, big, w, seed, nt, fade) {
   var H = 3.0 * big, T = V.t + seed * 10, M = V.M, j;
   var sw = Math.max(w, H * 0.45);
   for (j = 0; j < nt; j++) {
-    var ox = j ? (_r3dFxH(seed, j + 11) - 0.5) * sw : 0, oz = j ? (_r3dFxH(seed, j + 17) - 0.5) * sw * 0.6 : 0;
+    /* spread across the screen more than into it, and tied apart toward the eye: the camera's
+       right and its depth, whichever way it faces */
+    var oa = j ? (_r3dFxH(seed, j + 11) - 0.5) * sw : 0, od = (j ? (_r3dFxH(seed, j + 17) - 0.5) * sw * 0.6 : 0) + 0.01 * j;
+    var fw = _r3dFxYaw(V), ox = oa * fw[0] - od * fw[1], oz = oa * fw[1] + od * fw[0];
     var fl = 0.8 + 0.12 * Math.sin(T * 7.3 + j * 2.1) + 0.08 * Math.sin(T * 13.1 + j * 4.7);
     var hh = H * fl * (j ? 0.5 + 0.35 * _r3dFxH(seed, j + 23) : 1) * 0.5;
-    _r3dFxStand(M, V, x + ox, y0 - hh * 0.08, z + oz + 0.01 * j, hh * 0.8, hh, _r3dFxLift(hh), R3D_FXT_FLAME,
+    _r3dFxStand(M, V, x + ox, y0 - hh * 0.08, z + oz, hh * 0.8, hh, _r3dFxLift(hh), R3D_FXT_FLAME,
                 T + j * 1.7, _r3dFxH(seed, j + 29), fade, 1.0, R3D_FX_SPARKC);
   }
   _r3dFxDecal(V.L, V, x, z, Math.max(3, H * 2.2 + w), 3, 0.6, R3D_FXT_LIGHT, 0, seed,
@@ -26373,7 +26531,7 @@ function _r3dFxDustOf(G, x, z) {
    1 at the head, q.y across. */
 function _r3dFxFlat(B, V, t0, t1, h0, h1, y, lift, type, k, s, op, heat, c) {
   if (op <= 0.002) return;
-  _r3dFxQuad(B, (t0[1] + h1[1]) * 0.5 * V.sp + y * V.cp);
+  _r3dFxQuad(B, _r3dFxKey(V, (t0[0] + h1[0]) * 0.5, y, (t0[1] + h1[1]) * 0.5));
   var P = [[t0, -1, -1], [h0, 1, -1], [h1, 1, 1], [t0, -1, -1], [h1, 1, 1], [t1, -1, 1]];
   for (var i = 0; i < 6; i++) _r3dFxV(B, P[i][0][0], y, P[i][0][1], P[i][1], P[i][2], lift, type, k, s, op, heat, c);
 }
@@ -26517,13 +26675,13 @@ function _r3dTreadTick(G, R3) {
    they read constants from gl3d.js, which loads after this file. */
 function _r3dTreadVS() {
   return 'attribute vec3 aP; attribute vec2 aU; attribute vec3 aB;' +
-  'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' +
+  'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' + R3D_CAM_GLSL +
   'varying vec2 vU; varying vec3 vB;' +
   'void main(){' +
   '  vU = aU; vB = aB;' +
-  '  float sx = (aP.x - uCam.x) * uCam.z;' +
-  '  float sy = ((aP.z - uCam.y) * uTilt.x - aP.y * uTilt.y) * uCam.w;' +
-  '  float d  = ((aP.z - uCam.y) * uTilt.y + aP.y * uTilt.x);' +
+  '  float sx = camUV(aP).x * uCam.z;' +
+  '  float sy = (camUV(aP).y * uTilt.x - aP.y * uTilt.y) * uCam.w;' +
+  '  float d  = (camUV(aP).y * uTilt.y + aP.y * uTilt.x);' +
   '  float pw = 1.0 - d * uInvD;' +
   '  gl_Position = vec4(sx, -sy, -(d + ' + R3D_TREAD_LIFT.toFixed(2) + ') / ' + R3D_DEPTH_RANGE.toFixed(1) + ' * pw, pw);' +
   '}';
@@ -26567,7 +26725,7 @@ function _r3dTreadDraw(gl, R3, G, cam, invD) {
   }
   gl.useProgram(P);
   gl.uniform4fv(gl.getUniformLocation(P, 'uCam'), cam);
-  gl.uniform2f(gl.getUniformLocation(P, 'uTilt'), R3.cp, R3.sp);
+  _r3dCamU(gl, P);
   gl.uniform1f(gl.getUniformLocation(P, 'uInvD'), invD);
   gl.uniform1f(gl.getUniformLocation(P, 'uNow'), G.t || 0);
   gl.uniform1f(gl.getUniformLocation(P, 'uAmt'), R3.treadAmt === undefined ? 1 : R3.treadAmt);
@@ -26615,15 +26773,18 @@ var R3D_SIL_BIAS = 3.0;     /* world units toward the eye - more than a unit is 
 var R3D_SIL_A = 0.3;
 
 /* COULD ANYTHING STAND BETWEEN THIS UNIT AND THE CAMERA? Only a building, a tree, rock or a
-   wall in the three cells across it and two in front of it - toward the camera, +z - or ground
-   rising over it there: the camera leans 35 degrees, so nothing further off can hide a unit.
+   wall in the three cells across it and a few in front of it - toward the camera, along its F
+   (cam3d.js), which was +z while it faced north - or ground rising over it there. Two cells at
+   the default lean; the more the camera leans over, the further off a roof can hide a unit.
    Everything else is left out of the pass, because drawing a 160-unit battle a third time for
    the handful standing behind something took the entities past their budget (e2e/instanced). */
 function _r3dSilCover(G, e) {
   if (e.air) return false;
-  var tx = _rtsTX(e.x), tz = _rtsTX(e.z), h0 = _rtsTileElev(tx, tz) + 1.5;
-  for (var dz = 0; dz <= 2; dz++) for (var dx = -1; dx <= 1; dx++) {
-    var cx = tx + dx, cz = tz + dz;
+  var tx = _rtsTX(e.x), tz = _rtsTX(e.z), h0 = _rtsTileElev(tx, tz) + 1.5, R3 = window._R3D;
+  var cy = R3 ? R3.cy : 1, sy = R3 ? R3.sy : 0, sp = R3 ? R3.sp : Math.sin(R3D_TILT), cp = R3 ? R3.cp : Math.cos(R3D_TILT);
+  var reach = Math.max(2, Math.ceil(2 * (sp / cp) / Math.tan(R3D_TILT) - 1e-9));
+  for (var dz = 0; dz <= reach; dz++) for (var dx = -1; dx <= 1; dx++) {
+    var cx = tx + Math.round(dx * cy - dz * sy), cz = tz + Math.round(dx * sy + dz * cy);
     if (!_rtsInB(cx, cz)) continue;
     var i = _rtsIdx(cx, cz), k = G.terrain[i];
     if (G.blocked[i] === 1 || k === RTS_T_TREE || k === RTS_T_ROCK || k === RTS_T_WALL) return true;
@@ -26693,13 +26854,13 @@ var R3D_RING_COL = { player: [0.557, 0.941, 0.478], enemy: [1.0, 0.541, 0.478] }
 
 function _r3dRingVS() {
   return 'attribute vec3 aP; attribute vec4 aL; attribute vec4 aK;' +
-    'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' +
+    'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' + R3D_CAM_GLSL +
     'varying vec4 vL; varying vec4 vK;' +
     'void main(){' +
     '  vL = aL; vK = aK;' +
-    '  float sx = (aP.x - uCam.x) * uCam.z;' +
-    '  float sy = ((aP.z - uCam.y) * uTilt.x - aP.y * uTilt.y) * uCam.w;' +
-    '  float d  = ((aP.z - uCam.y) * uTilt.y + aP.y * uTilt.x);' +
+    '  float sx = camUV(aP).x * uCam.z;' +
+    '  float sy = (camUV(aP).y * uTilt.x - aP.y * uTilt.y) * uCam.w;' +
+    '  float d  = (camUV(aP).y * uTilt.y + aP.y * uTilt.x);' +
     '  float pw = 1.0 - d * uInvD;' +
     '  gl_Position = vec4(sx, -sy, -(d + ' + R3D_RING_LIFT.toFixed(2) + ') / ' + R3D_DEPTH_RANGE.toFixed(1) + ' * pw, pw);' +
     '}';
@@ -26771,7 +26932,7 @@ function _r3dRingDraw(gl, R3, G, cam, invD) {
   gl.bufferData(gl.ARRAY_BUFFER, R3.ringA.subarray(0, n * 6 * R3D_RING_F), gl.DYNAMIC_DRAW);
   gl.useProgram(P);
   gl.uniform4fv(gl.getUniformLocation(P, 'uCam'), cam);
-  gl.uniform2f(gl.getUniformLocation(P, 'uTilt'), R3.cp, R3.sp);
+  _r3dCamU(gl, P);
   gl.uniform1f(gl.getUniformLocation(P, 'uInvD'), invD);
   gl.uniform1f(gl.getUniformLocation(P, 'uT'), G.t || 0);
   gl.uniform1f(gl.getUniformLocation(P, 'uAmt'), Math.min(1, amt));
@@ -26950,11 +27111,11 @@ function _r3dAliveDraw(G, R3, draw) {
 function _r3dFxAlive(G, V) {
   var R3 = window._R3D;
   if (!R3 || R3.aliveAmt === 0) return;
-  var A2W = RTS_TILE / RTS_TS, vb = _r3dViewBounds(), E = G.ents || [];
+  var A2W = RTS_TILE / RTS_TS, vb = _r3dBoundsNear(_r3dViewBounds(), 10, 30), E = G.ents || [];
   for (var i = 0; i < E.length; i++) {
     var e = E[i];
     if (e.dead || e.type !== 'struct' || e.building) continue;
-    if (e.x < vb.x0 - 30 || e.x > vb.x1 + 30 || e.z < vb.z0 - 10 || e.z > vb.z1 + 40) continue;
+    if (e.x < vb.x0 || e.x > vb.x1 || e.z < vb.z0 || e.z > vb.z1) continue;
     var sp = _r3dAliveSpots(e.def);
     if (!sp) continue;
     var gy = _rtsElev(e.x, e.z), seed = _r3dFxH(e.id, 7.7), j, p;
@@ -27128,14 +27289,14 @@ function _r3dDressBatches(R3) {
 
 var R3D_FX_VS =
   'attribute vec3 aP; attribute vec2 aT;' +
-  'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD; uniform float uLift;' +
+  'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD; uniform float uLift;' + R3D_CAM_GLSL +
   'varying vec2 vT;' +
   'void main(){' +
   '  vT = aT;' +
-  '  float sx = (aP.x - uCam.x) * uCam.z;' +
-  '  float sy = ((aP.z - uCam.y) * uTilt.x - aP.y * uTilt.y) * uCam.w;' +
+  '  float sx = camUV(aP).x * uCam.z;' +
+  '  float sy = (camUV(aP).y * uTilt.x - aP.y * uTilt.y) * uCam.w;' +
   /* the same three lines every other program in this renderer projects with */
-  '  float d  = ((aP.z - uCam.y) * uTilt.y + aP.y * uTilt.x) + uLift;' +
+  '  float d  = (camUV(aP).y * uTilt.y + aP.y * uTilt.x) + uLift;' +
   '  float pw = 1.0 - d * uInvD;' +
   '  gl_Position = vec4(sx, -sy, -d / ' + R3D_DEPTH_RANGE.toFixed(1) + ' * pw, pw);' +
   '}';
@@ -27193,12 +27354,12 @@ function _r3dFxDrawSprites(G, cam, invD) {
   if (!R3.fxP) { try { _r3dFxInit(R3); } catch (e) { return 0; } }
 
   var zoom = _rtsZoom(), TSscale = R.cell / RTS_TS;
-  var sp = R3.sp, cp = R3.cp;
+  var sp = R3.sp, cp = R3.cp, cy = R3.cy, sy = R3.sy;     /* the lean and the yaw: cam3d.js */
   var drawn = 0, i;
 
   gl.useProgram(R3.fxP);
   gl.uniform4fv(gl.getUniformLocation(R3.fxP, 'uCam'), cam);
-  gl.uniform2f(gl.getUniformLocation(R3.fxP, 'uTilt'), cp, sp);
+  _r3dCamU(gl, R3.fxP);
   gl.uniform1f(gl.getUniformLocation(R3.fxP, 'uInvD'), invD);
   gl.uniform1f(gl.getUniformLocation(R3.fxP, 'uLift'), R3D_FX_LIFT);
   gl.uniform1i(gl.getUniformLocation(R3.fxP, 'uS'), 0);
@@ -27239,15 +27400,17 @@ function _r3dFxDrawSprites(G, cam, invD) {
     /* f.y is a height above the GROUND - a blast across a roof, a shell burst in the air -
        so the terrain under it comes first, or an explosion on a hilltop goes off at the
        height the valley floor would have put it. */
-    var cxw = f.x, cyw = _rtsElev(f.x, f.z) + (f.y || 0) + off * sp, czw = f.z - off * cp;
+    /* along the screen's up, UP = (cos tilt * sin yaw, sin tilt, -cos tilt * cos yaw), and its
+       right, R = (cos yaw, 0, sin yaw) */
+    var cxw = f.x + off * cp * sy, cyw = _rtsElev(f.x, f.z) + (f.y || 0) + off * sp, czw = f.z - off * cp * cy;
 
-    var rx = w / 2;
-    var ux = 0, uy = (h / 2) * sp, uz = -(h / 2) * cp;
+    var rx = (w / 2) * cy, rz = (w / 2) * sy;
+    var ux = (h / 2) * cp * sy, uy = (h / 2) * sp, uz = -(h / 2) * cp * cy;
     /* corners: top-left, top-right, bottom-right / top-left, bottom-right, bottom-left */
     function put(k, sx2, sy2) {
       q[k] = cxw + rx * sx2 + ux * sy2;
       q[k + 1] = cyw + uy * sy2;
-      q[k + 2] = czw + uz * sy2;
+      q[k + 2] = czw + rz * sx2 + uz * sy2;
     }
     put(0, -1, 1); put(3, 1, 1); put(6, 1, -1);
     put(9, -1, 1); put(12, 1, -1); put(15, -1, -1);
@@ -27288,7 +27451,7 @@ function _r3dFxDraw(G, cam, invD) {
   /* BUILT ONCE A FRAME, by the world pass. The bloom's emitter pass draws the same quads again,
      so it reuses the upload rather than walking G.fx twice. */
   if (!emit) {
-    V.sp = R3.sp; V.cp = R3.cp; V.t = G.t || 0; V.M.n = 0; V.L.n = 0; V.M.lit = 0;
+    V.sp = R3.sp; V.cp = R3.cp; V.cy = R3.cy; V.sy = R3.sy; V.t = G.t || 0; V.M.n = 0; V.L.n = 0; V.M.lit = 0;
     V.gnd = R3.fxGroundAmt === undefined ? 1 : R3.fxGroundAmt;
     V.ground = _rtsElev;
     V.water = function (x, z) {
@@ -27305,12 +27468,14 @@ function _r3dFxDraw(G, cam, invD) {
 
   gl.useProgram(P);
   gl.uniform4fv(gl.getUniformLocation(P, 'uCam'), cam);
-  gl.uniform2f(gl.getUniformLocation(P, 'uTilt'), R3.cp, R3.sp);
+  _r3dCamU(gl, P);
   gl.uniform1f(gl.getUniformLocation(P, 'uInvD'), invD);
   gl.uniform1f(gl.getUniformLocation(P, 'uEmit'), emit ? 1 : 0);
-  /* the scene's sun, turned into the quad's frame: across, up the screen, toward the eye */
-  var L = R3_LIGHT;
-  gl.uniform3f(gl.getUniformLocation(P, 'uSunV'), L[0], L[1] * R3.sp - L[2] * R3.cp, L[1] * R3.cp + L[2] * R3.sp);
+  /* the scene's sun, turned into the quad's frame: across, up the screen, toward the eye - the
+     camera's R, UP and E (cam3d.js), which at yaw 0 are the three this was written with */
+  var L = R3_LIGHT, cy = R3.cy, sy = R3.sy;
+  var lr = L[0] * cy + L[2] * sy, lf = -L[0] * sy + L[2] * cy;
+  gl.uniform3f(gl.getUniformLocation(P, 'uSunV'), lr, L[1] * R3.sp - lf * R3.cp, L[1] * R3.cp + lf * R3.sp);
   var at = [['aP', 3, 0], ['aQ', 4, 12], ['aA', 4, 28], ['aB', 3, 44]], loc = [];
   for (i = 0; i < at.length; i++) loc.push(gl.getAttribLocation(P, at[i][0]));
   function bind(buf) {
@@ -27646,7 +27811,7 @@ function _r3dFrame(G) {
   /* --- entities --- */
   gl.useProgram(R3.meshP);
   gl.uniform4fv(gl.getUniformLocation(R3.meshP, 'uCam'), cam);
-  gl.uniform2f(gl.getUniformLocation(R3.meshP, 'uTilt'), R3.cp, R3.sp);
+  _r3dCamU(gl, R3.meshP);
   gl.uniform1f(gl.getUniformLocation(R3.meshP, 'uInvD'), invD);
   _r3dShadowBind(R3.meshP, 1);
   _r3dFxLightSet(gl, R3, G, R3.meshP);              /* what is burning lights its neighbours */
@@ -27801,14 +27966,13 @@ function _r3dFrame(G) {
     /* the wind in the canopies and the grass (R3D_MESH_VS); R3.swayAmt 0 holds them still */
     var uSw = gl.getUniformLocation(MC.P, 'uSway');
     gl.uniform2f(uSw, R3D_SWAY * (R3.swayAmt === undefined ? 1 : R3.swayAmt), G.t || 0);
-    var lift = R3D_WORLD_YMAX * R3.sp / R3.cp;
+    var lift = R3D_WORLD_YMAX * R3.sp / R3.cp, cb = _r3dBoundsNear(vb, lift, 4);
     var batches = R3.world.concat(R3.ore || [], _r3dDressBatches(R3));
     for (var wb = 0; wb < batches.length; wb++) {
       var bm = batches[wb];
       if (!bm || !bm.verts) continue;
       if (bm.x1 !== undefined &&
-          (bm.x1 < vb.x0 - 4 || bm.x0 > vb.x1 + 4 ||
-           bm.z1 < vb.z0 || bm.z0 > vb.z1 + lift)) continue;
+          (bm.x1 < cb.x0 || bm.x0 > cb.x1 || bm.z1 < cb.z0 || bm.z0 > cb.z1)) continue;
       gl.bindBuffer(gl.ARRAY_BUFFER, bm.p);
       gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 0, 0);
       gl.bindBuffer(gl.ARRAY_BUFFER, bm.n);
@@ -27899,6 +28063,13 @@ function _r3dFrame(G) {
   flushBatch(C);
   }
   paintEntities(MC);
+  /* the building about to be placed, as itself and translucent (render3d/place3d.js) */
+  var gh = _r3dGhostAt();
+  if (gh) {
+    BATCH = _r3dInstBatch(R3);
+    drawIn(MC, _r3dMesh('b', gh.key, gh.side), gh.x, gh.y, gh.z, 0, ART2W, 0, 1, null);
+    _r3dGhostBlend(gl, MC.P, true); flushBatch(MC); _r3dGhostBlend(gl, MC.P, false);
+  }
   /* a unit hidden behind a building, a wood or a hill shows through it (render3d/sil3d.js) */
   _r3dSilPass(gl, R3, MC.P, function (side, keep) { paintEntities(MC, null, 'unit', side, keep); });
 
@@ -27923,7 +28094,7 @@ function _r3dFrame(G) {
   /* --- fog, over everything, depth ignored --- */
   gl.useProgram(R3.texP);
   gl.uniform4fv(gl.getUniformLocation(R3.texP, 'uCam'), cam);
-  gl.uniform2f(gl.getUniformLocation(R3.texP, 'uTilt'), R3.cp, R3.sp);
+  _r3dCamU(gl, R3.texP);
   gl.uniform1f(gl.getUniformLocation(R3.texP, 'uInvD'), invD);
   gl.uniform1f(gl.getUniformLocation(R3.texP, 'uA'), 1);
   gl.uniform1f(gl.getUniformLocation(R3.texP, 'uRecv'), 0);   /* the shroud is not a surface */
@@ -29335,7 +29506,10 @@ function _rtsRFrame(dt) {
 
   /* --- everything that stands up, painted back to front --- */
   var draw = [];
-  for (i = 0; i < G.ents.length; i++) {
+  /* IN 3D NOTHING HERE IS DRAWN: the meshes are _r3dFrame's, and so are their shadows - the blob
+     shadows below were painted over the GL scene on top of its real ones, and the box this list
+     is culled by is a north-up one the turning camera (cam3d.js) no longer fits. */
+  for (i = 0; !r3on && i < G.ents.length; i++) {
     var e = G.ents[i];
     /* CountDown: a destroyed structure is still on the map, burning, for a moment. Dropping
        it on the frame it died left its own explosion hanging over bare grass. */
@@ -29493,12 +29667,24 @@ function _rtsRFrame(dt) {
        actually land. Procedural art only: real Red Alert art carries no `ps` and reads as 1,
        so a player with their own archives loaded never saw this. */
     var gsc = TSscale * gp.scale / (gspr.c.ps || 1);
-    g.drawImage(gspr.c, gx, gy - Math.round(gspr.head * gsc),
+    /* in 3D the building is its own mesh, drawn by _r3dFrame (render3d/place3d.js) */
+    if (!r3on) g.drawImage(gspr.c, gx, gy - Math.round(gspr.head * gsc),
       Math.round(gspr.c.width * gsc), Math.round(gspr.c.height * gsc));
     g.globalAlpha = 1;
     g.strokeStyle = R.ghost.ok ? '#7fe07f' : '#e05a4a';
     g.lineWidth = 2;
-    g.strokeRect(gx + 1, gy + 1, def.w * cell * gp.scale - 2, def.h * cell * gp.scale - 2);
+    if (r3on) {
+      /* the footprint as the ground shows it: four corners, projected at their own heights, so
+         it is the right shape at any lean and faces the right way at any turn */
+      var gx0 = _rtsWX(R.ghost.tx) - RTS_TILE / 2, gz0 = _rtsWX(R.ghost.tz) - RTS_TILE / 2;
+      var fw = def.w * RTS_TILE, fh = def.h * RTS_TILE, cs = [[0, 0], [fw, 0], [fw, fh], [0, fh]];
+      g.beginPath();
+      for (var gi = 0; gi < 4; gi++) {
+        var gq = _rtsGroundToScreen(gx0 + cs[gi][0], gz0 + cs[gi][1]);
+        if (gi) g.lineTo(gq.x, gq.y); else g.moveTo(gq.x, gq.y);
+      }
+      g.closePath(); g.stroke();
+    } else g.strokeRect(gx + 1, gy + 1, def.w * cell * gp.scale - 2, def.h * cell * gp.scale - 2);
   }
 
   /* Last, over the finished battlefield and nothing else. */
@@ -30247,7 +30433,7 @@ function rtsOpen(seed) {
     +       '<i class="dif" id="rtsDifLbl"></i></span>'
     /* Two hint lines, because the verbs genuinely differ - a phone has no right button and no
        wheel, and a desktop has no long-press. CSS shows exactly one; see .rts-help. */
-    +     '<span class="rts-help desk">drag select · right-click order · right-drag pan · wheel zoom · S hold · 1-9 teams (ctrl set, alt jump) · repair/sell · Esc</span>'
+    +     '<span class="rts-help desk">drag select · right-click order · right-drag pan · wheel zoom · middle-drag turn · S hold · 1-9 teams (ctrl set, alt jump) · repair/sell · Esc</span>'
     /* ONE GROUP, IN THE FLOW. These were four absolutely positioned buttons at right:6/34/62/90,
        so the bar's flex layout did not know they existed and the army/difficulty text ran
        underneath them - measured on every phone from 360 to 412px wide, with `.rts-vs` sitting
@@ -30272,7 +30458,9 @@ function rtsOpen(seed) {
        390px phone there is no room, so it wrapped to three lines, overflowed the bar and ran
        underneath the close button. Along the bottom of the battlefield it has the full width to
        itself, and it is nearer the thumb that has to perform what it describes. */
-    +   '<span class="rts-help touch">drag to move · tap to select · hold for orders · pinch to zoom</span>'
+    +   '<span class="rts-help touch">drag to move · tap to select · hold for orders · pinch to zoom · twist to turn</span>'
+    /* the 3D camera's compass: its needle points north, and a tap turns the view back to it */
+    +   '<button type="button" id="rtsCompass" title="Face north (middle-click)" onclick="_rtsOrbitReset()" style="display:none"><i>N</i></button>'
     +   '<div class="rts-msg" id="rtsMsg"></div>'
     +   '<div class="rts-over" id="rtsOver"></div>'
     + '</div>'
@@ -31476,10 +31664,11 @@ function _rtsWheelRungs(e, quiet, unit) {
    What the order would be is settled AT THE PRESS - the thing under the cursor and the attack-
    move key - because the old order was given on mousedown, and in the tenth of a second a click
    takes, a held arrow key scrolls the view the width of a tank and A can already be up. */
-function _rtsGrabStart(button, mx, my) {
+function _rtsGrabStart(button, mx, my, orbit) {
   var U = window._rtsUI;
   if (U.grab) return;              /* a second button while one grab is live: the first keeps it */
-  U.grab = { button: button, x0: mx, y0: my, lx: mx, ly: my, moved: false,
+  /* `orbit`: this drag turns and leans the 3D camera instead of moving it (ui/orbit.js) */
+  U.grab = { button: button, x0: mx, y0: my, lx: mx, ly: my, moved: false, orbit: !!orbit,
              hit: button === 2 ? _rtsPickAt(mx, my) : null, am: !!U.attackMove };
 }
 function _rtsGrabMove(mx, my) {
@@ -31487,6 +31676,12 @@ function _rtsGrabMove(mx, my) {
   if (!g) return false;
   if (!g.moved && Math.hypot(mx - g.x0, my - g.y0) <= RTS_GRAB_SLOP) return false;
   g.moved = true;
+  if (g.orbit) {
+    /* across turns - the world under the cursor going the way it is dragged - and up leans over */
+    _rtsOrbitBy(-(mx - g.lx) * RTS_ORBIT_YAW, -(my - g.ly) * RTS_ORBIT_TILT);
+    g.lx = mx; g.ly = my; U.orbitTo = null;
+    return true;
+  }
   /* the ground under the last point is brought under this one: the grip is kept, and at the
      map's edge, where the clamp stops the view, dragging back moves it again at once */
   _rtsHoldGround(_rtsGroundAt(g.lx, g.ly), mx, my);
@@ -31501,7 +31696,7 @@ function _rtsGrabEnd() {
      context menu AFTER the release, on whatever is under the pointer: a build cameo went on
      hold, the radar sent the army across the map. ui/input.js eats that one menu. */
   if (U && g && g.moved && g.button === 2) U.eatCtx = true;
-  return g ? { moved: g.moved, button: g.button, x0: g.x0, y0: g.y0, hit: g.hit, am: g.am } : null;
+  return g ? { moved: g.moved, button: g.button, x0: g.x0, y0: g.y0, hit: g.hit, am: g.am, orbit: g.orbit } : null;
 }
 /* A right press that did not drag: the repair/sell cursor dropped, or the order, as pressed. */
 function _rtsGrabClick(g) {
@@ -31580,6 +31775,92 @@ function _rtsNavBindWindow(U) {
   U.winL.forEach(function (l) { window.addEventListener(l[0], l[1], l[2]); });
 }
 </script>
+<script>/* ui/orbit.js - turning and leaning the 3D camera. Part of rts.ui; the camera's side of it is
+   render3d/cam3d.js.
+
+   The 3D camera faced north at one lean for as long as it existed, so there was no looking
+   behind the war factory or down the valley the enemy was coming up. The later RTS games let
+   you swing it round and lean it over; so does this, in the 3D mode:
+
+     MIDDLE-DRAG        across turns the camera, up and down leans it - or ALT + RIGHT-DRAG, for
+                        a mouse or a trackpad without a middle button (a still Alt+right-click is
+                        still the order). It is a grab of the ordinary kind (ui/navigate.js), so
+                        the pointer is captured and the menu after a right drag is eaten the same.
+     MIDDLE-CLICK       or the compass: back to north up at the usual lean, gliding there.
+     Q / E              turn, held; PAGE UP / PAGE DOWN lean.
+     TWO FINGERS        twisted, on a phone - past a small threshold, so a pinch does not wander.
+
+   Every turn and lean pivots on the ground under a screen point - the middle of the screen, or
+   the fingers - and holds it there (_rtsHoldGround), so the thing being looked at stays put.
+   In 2D there is nothing to turn: the middle button pans there as it did. */
+
+var RTS_ORBIT_YAW = 0.0065;      /* radians of turn a pixel of drag */
+var RTS_ORBIT_TILT = 0.004;      /* radians of lean a pixel of drag */
+var RTS_ORBIT_KEY = 1.6;         /* radians a second of turn, Q or E held */
+var RTS_ORBIT_LEANKEY = 0.7;     /* radians a second of lean, Page Up or Page Down held */
+var RTS_TWIST_START = 0.15;      /* radians two fingers must twist before the map turns */
+
+/* Turn by dyaw and lean by dtilt, holding the ground under (sx, sy) - the middle by default. */
+function _rtsOrbitBy(dyaw, dtilt, sx, sy) {
+  var R3 = window._R3D, R = _rtsR;
+  if (!R3 || !R || !_rtsIn3D() || (!dyaw && !dtilt)) return;
+  if (sx === undefined) { sx = R.W / 2; sy = R.H / 2; }
+  var W = _rtsGroundAt(sx, sy);
+  _r3dCamSet(R3.yaw + dyaw, R3.tilt + dtilt);
+  _rtsHoldGround(W, sx, sy);
+}
+
+/* Back to north up at the usual lean, gliding (_rtsOrbitTick). */
+function _rtsOrbitReset() {
+  var U = window._rtsUI;
+  if (U && _rtsIn3D()) U.orbitTo = { yaw: 0, tilt: R3D_TILT };
+}
+
+/* A frame: the glide back, the keys, and the compass's needle. */
+function _rtsOrbitTick(dt) {
+  var U = window._rtsUI, R3 = window._R3D, k = U && U.keys;
+  if (!U || !R3) return;
+  var on = _rtsIn3D();
+  if (on && k) {
+    var dy = ((k.q ? 1 : 0) - (k.e ? 1 : 0)) * RTS_ORBIT_KEY * dt;
+    var dl = ((k.pageup ? 1 : 0) - (k.pagedown ? 1 : 0)) * RTS_ORBIT_LEANKEY * dt;
+    if (dy || dl) { U.orbitTo = null; _rtsOrbitBy(dy, dl); }
+  }
+  if (on && U.orbitTo) {
+    var t = U.orbitTo, a = Math.min(1, dt * 10);
+    var ey = Math.atan2(Math.sin(t.yaw - R3.yaw), Math.cos(t.yaw - R3.yaw)), et = t.tilt - R3.tilt;
+    if (Math.abs(ey) < 1e-3 && Math.abs(et) < 1e-3) { _rtsOrbitBy(ey, et); U.orbitTo = null; }
+    else _rtsOrbitBy(ey * a, et * a);
+  }
+  /* the needle points where north is on screen: the yaw's own angle, turned back */
+  var c = document.getElementById('rtsCompass');
+  if (c) {
+    var show = on ? '' : 'none';
+    if (c.style.display !== show) c.style.display = show;
+    /* compared against what was last written, not read back: the browser normalises the string */
+    var tr = 'rotate(' + (-(R3.yaw || 0)).toFixed(4) + 'rad)', n = c.firstChild;
+    if (n && c._tr !== tr) { n.style.transform = tr; c._tr = tr; }
+  }
+}
+
+/* Two fingers twisting, from the pinch in ui/input.js: T carries the gesture's state, `mid` is
+   the fingers' midpoint. The map turns with the fingers once they have twisted far enough. */
+function _rtsTwist(e, T, mid) {
+  if (!_rtsIn3D() || e.targetTouches.length < 2) return;
+  var a = e.targetTouches[0], b = e.targetTouches[1];
+  var ang = Math.atan2(b.clientY - a.clientY, b.clientX - a.clientX);
+  if (T.ang === undefined || T.ang === null) { T.ang = ang; T.tw = 0; T.twOn = false; return; }
+  var d = Math.atan2(Math.sin(ang - T.ang), Math.cos(ang - T.ang));
+  T.ang = ang;
+  T.tw = (T.tw || 0) + d;
+  if (!T.twOn && Math.abs(T.tw) < RTS_TWIST_START) return;
+  /* the whole twist so far the moment it starts, so the map catches up with the fingers */
+  var turn = T.twOn ? d : T.tw;
+  T.twOn = true;
+  /* fingers turning clockwise on screen turn the map clockwise under them */
+  _rtsOrbitBy(-turn, 0, mid.x, mid.y);
+}
+</script>
 <script>/* ui/input.js - binding pointer, touch and keyboard input, and what each key does.
    Part of rts.ui, which owns the DOM. */
 
@@ -31592,8 +31873,9 @@ function _rtsBindInput() {
     /* the order - or, with the repair/sell cursor up, dropping it - waits for the release: a
        right button that DRAGS is grabbing the map (ui/navigate.js), and only the release can
        tell the two apart */
-    if (e.button === 2) { _rtsGrabStart(2, mx, my); return; }
-    if (e.button === 1) { e.preventDefault(); _rtsGrabStart(1, mx, my); return; }  /* middle: grab */
+    /* in 3D the middle button, or Alt with the right, turns the camera instead (ui/orbit.js) */
+    if (e.button === 2) { _rtsGrabStart(2, mx, my, e.altKey && _rtsIn3D()); return; }
+    if (e.button === 1) { e.preventDefault(); _rtsGrabStart(1, mx, my, _rtsIn3D()); return; }
     /* a left press while a grab holds the pointer may be anywhere - over the sidebar, off the
        battlefield - and still arrive here: it is not a click on the ground at those numbers */
     if (U.grab) return;
@@ -31634,6 +31916,7 @@ function _rtsBindInput() {
       var gb = U.grab && U.grab.button === e.button ? _rtsGrabEnd() : null;
       /* a right press that never dragged is the order it always was, as it was pressed */
       if (gb && gb.button === 2 && !gb.moved) _rtsGrabClick(gb);
+      else if (gb && gb.button === 1 && !gb.moved && gb.orbit) _rtsOrbitReset();   /* middle-click */
       if (e.button === 2) U.drag = null;
       return;
     }
@@ -31818,7 +32101,7 @@ function _rtsBindInput() {
 
   cv.addEventListener('touchstart', function (e) {
     e.preventDefault();
-    if (e.targetTouches.length >= 2) { _tClearHold(); T.id = null; T.pinch = _tGap(e); T.mid = _tMid(e); return; }
+    if (e.targetTouches.length >= 2) { _tClearHold(); T.id = null; T.pinch = _tGap(e); T.mid = _tMid(e); T.ang = null; _rtsTwist(e, T); return; }
     var t = e.changedTouches[0], p = _tXY(t);
     T.id = t.identifier; T.x0 = T.lx = p.x; T.y0 = T.ly = p.y;
     T.moved = false; T.t0 = Date.now(); T.pinch = 0;
@@ -31856,6 +32139,7 @@ function _rtsBindInput() {
       /* the midpoint keeps its grip on the ground, as one finger does: two fingers pan too */
       if (T.mid) _rtsHoldGround(_rtsGroundAt(T.mid.x, T.mid.y), mid.x, mid.y);
       T.mid = mid;
+      _rtsTwist(e, T, mid);                /* two fingers twisted turn the 3D camera: ui/orbit.js */
       var ratio = gap / T.pinch;
       if (_rtsIn3D())        { _rtsZoomToward(Math.log(ratio) / Math.LN2, mid.x, mid.y); T.pinch = gap; }
       else if (ratio > 1.25) { _rtsZoomToward(1, mid.x, mid.y);  T.pinch = gap; }
@@ -32651,8 +32935,18 @@ function _rtsDrawMini() {
   var pv = (typeof _rtsPulse === 'function') ? _rtsPulse() : 0.6;
   g.strokeStyle = 'rgba(255,255,255,' + (0.45 + pv * 0.75).toFixed(2) + ')';
   g.lineWidth = 1.5;
-  g.strokeRect((vs.cx - vw / 2) / span * S + S / 2, (vs.cz - vh / 2) / span * S + S / 2,
-               vw / span * S, vh / span * S);
+  if (vs.poly) {
+    /* the 3D camera's view is a trapezoid, turned however the camera faces (cam3d.js) */
+    g.beginPath();
+    for (var q = 0; q < vs.poly.length; q++) {
+      var qx = vs.poly[q].x / span * S + S / 2, qz = vs.poly[q].z / span * S + S / 2;
+      if (q) g.lineTo(qx, qz); else g.moveTo(qx, qz);
+    }
+    g.closePath(); g.stroke();
+  } else {
+    g.strokeRect((vs.cx - vw / 2) / span * S + S / 2, (vs.cz - vh / 2) / span * S + S / 2,
+                 vw / span * S, vh / span * S);
+  }
 }
 
 </script>
@@ -32674,10 +32968,14 @@ function _rtsPanTick(dt) {
      The arrow keys already pan, as do the screen edges, the radar and a finger drag, so WASD
      was the redundant half of every one of those pairs - and the half that was silently
      destroying things. RA panned with the arrows and the screen edge in the first place. */
-  if (k['arrowup'])    { R.focus.z -= sp; moved = true; }
-  if (k['arrowdown'])  { R.focus.z += sp; moved = true; }
-  if (k['arrowleft'])  { R.focus.x -= sp; moved = true; }
-  if (k['arrowright']) { R.focus.x += sp; moved = true; }
+  /* along the SCREEN's axes on the ground, which are the world's while the camera faces north:
+     right is the camera's R = (cos yaw, sin yaw), up is -F = (sin yaw, -cos yaw) - cam3d.js */
+  var R3 = _rtsIn3D() ? window._R3D : null, cy = R3 ? R3.cy : 1, sy = R3 ? R3.sy : 0;
+  function pan(a, b) { R.focus.x += (a * cy + b * sy) * sp; R.focus.z += (a * sy - b * cy) * sp; moved = true; }
+  if (k['arrowup'])    pan(0, 1);
+  if (k['arrowdown'])  pan(0, -1);
+  if (k['arrowleft'])  pan(-1, 0);
+  if (k['arrowright']) pan(1, 0);
   /* +/- held (ui/input.js): the press was a notch; past RTS_ZOOM_HOLD it glides on */
   var zd = (k['zoom+'] ? 1 : 0) - (k['zoom-'] ? 1 : 0);
   if (k['zoom+'] || k['zoom-']) {
@@ -32689,10 +32987,10 @@ function _rtsPanTick(dt) {
   /* edge scroll, but only while the pointer is genuinely over the battlefield */
   if (U.mouse.over && !U.drag && !U.grab) {
     var m = 26;
-    if (U.mouse.x < m) { R.focus.x -= sp; moved = true; }
-    if (U.mouse.x > R.W - m) { R.focus.x += sp; moved = true; }
-    if (U.mouse.y < m) { R.focus.z -= sp; moved = true; }
-    if (U.mouse.y > R.H - m) { R.focus.z += sp; moved = true; }
+    if (U.mouse.x < m) pan(-1, 0);
+    if (U.mouse.x > R.W - m) pan(1, 0);
+    if (U.mouse.y < m) pan(0, 1);
+    if (U.mouse.y > R.H - m) pan(0, -1);
   }
   if (moved) _rtsClampFocus();
 }
@@ -32741,6 +33039,7 @@ function _rtsLoop(prime) {
   try {
     _rtsPanTick(dt);
     _rtsZoomTick(dt);                  /* the smooth zoom gliding in - ui/navigate.js */
+    _rtsOrbitTick(dt);                 /* turning and leaning the 3D camera - ui/orbit.js */
     /* THE VIEW STAYS ON THE MAP, EVERY FRAME, and it is held here rather than at each place that
        moves the camera because the places kept outnumbering the clamps. Scrolling, the wheel,
        the pinch, a radar click and a team jump all clamped; the OPENING did not, and neither did

@@ -35,7 +35,7 @@ function rtsOpen(seed) {
     +       '<i class="dif" id="rtsDifLbl"></i></span>'
     /* Two hint lines, because the verbs genuinely differ - a phone has no right button and no
        wheel, and a desktop has no long-press. CSS shows exactly one; see .rts-help. */
-    +     '<span class="rts-help desk">drag select · right-click order · right-drag pan · wheel zoom · S hold · 1-9 teams (ctrl set, alt jump) · repair/sell · Esc</span>'
+    +     '<span class="rts-help desk">drag select · right-click order · right-drag pan · wheel zoom · middle-drag turn · S hold · 1-9 teams (ctrl set, alt jump) · repair/sell · Esc</span>'
     /* ONE GROUP, IN THE FLOW. These were four absolutely positioned buttons at right:6/34/62/90,
        so the bar's flex layout did not know they existed and the army/difficulty text ran
        underneath them - measured on every phone from 360 to 412px wide, with `.rts-vs` sitting
@@ -60,7 +60,9 @@ function rtsOpen(seed) {
        390px phone there is no room, so it wrapped to three lines, overflowed the bar and ran
        underneath the close button. Along the bottom of the battlefield it has the full width to
        itself, and it is nearer the thumb that has to perform what it describes. */
-    +   '<span class="rts-help touch">drag to move · tap to select · hold for orders · pinch to zoom</span>'
+    +   '<span class="rts-help touch">drag to move · tap to select · hold for orders · pinch to zoom · twist to turn</span>'
+    /* the 3D camera's compass: its needle points north, and a tap turns the view back to it */
+    +   '<button type="button" id="rtsCompass" title="Face north (middle-click)" onclick="_rtsOrbitReset()" style="display:none"><i>N</i></button>'
     +   '<div class="rts-msg" id="rtsMsg"></div>'
     +   '<div class="rts-over" id="rtsOver"></div>'
     + '</div>'

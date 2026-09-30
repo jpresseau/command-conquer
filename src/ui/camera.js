@@ -16,10 +16,14 @@ function _rtsPanTick(dt) {
      The arrow keys already pan, as do the screen edges, the radar and a finger drag, so WASD
      was the redundant half of every one of those pairs - and the half that was silently
      destroying things. RA panned with the arrows and the screen edge in the first place. */
-  if (k['arrowup'])    { R.focus.z -= sp; moved = true; }
-  if (k['arrowdown'])  { R.focus.z += sp; moved = true; }
-  if (k['arrowleft'])  { R.focus.x -= sp; moved = true; }
-  if (k['arrowright']) { R.focus.x += sp; moved = true; }
+  /* along the SCREEN's axes on the ground, which are the world's while the camera faces north:
+     right is the camera's R = (cos yaw, sin yaw), up is -F = (sin yaw, -cos yaw) - cam3d.js */
+  var R3 = _rtsIn3D() ? window._R3D : null, cy = R3 ? R3.cy : 1, sy = R3 ? R3.sy : 0;
+  function pan(a, b) { R.focus.x += (a * cy + b * sy) * sp; R.focus.z += (a * sy - b * cy) * sp; moved = true; }
+  if (k['arrowup'])    pan(0, 1);
+  if (k['arrowdown'])  pan(0, -1);
+  if (k['arrowleft'])  pan(-1, 0);
+  if (k['arrowright']) pan(1, 0);
   /* +/- held (ui/input.js): the press was a notch; past RTS_ZOOM_HOLD it glides on */
   var zd = (k['zoom+'] ? 1 : 0) - (k['zoom-'] ? 1 : 0);
   if (k['zoom+'] || k['zoom-']) {
@@ -31,10 +35,10 @@ function _rtsPanTick(dt) {
   /* edge scroll, but only while the pointer is genuinely over the battlefield */
   if (U.mouse.over && !U.drag && !U.grab) {
     var m = 26;
-    if (U.mouse.x < m) { R.focus.x -= sp; moved = true; }
-    if (U.mouse.x > R.W - m) { R.focus.x += sp; moved = true; }
-    if (U.mouse.y < m) { R.focus.z -= sp; moved = true; }
-    if (U.mouse.y > R.H - m) { R.focus.z += sp; moved = true; }
+    if (U.mouse.x < m) pan(-1, 0);
+    if (U.mouse.x > R.W - m) pan(1, 0);
+    if (U.mouse.y < m) pan(0, 1);
+    if (U.mouse.y > R.H - m) pan(0, -1);
   }
   if (moved) _rtsClampFocus();
 }
@@ -83,6 +87,7 @@ function _rtsLoop(prime) {
   try {
     _rtsPanTick(dt);
     _rtsZoomTick(dt);                  /* the smooth zoom gliding in - ui/navigate.js */
+    _rtsOrbitTick(dt);                 /* turning and leaning the 3D camera - ui/orbit.js */
     /* THE VIEW STAYS ON THE MAP, EVERY FRAME, and it is held here rather than at each place that
        moves the camera because the places kept outnumbering the clamps. Scrolling, the wheel,
        the pinch, a radar click and a team jump all clamped; the OPENING did not, and neither did

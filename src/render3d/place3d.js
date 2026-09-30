@@ -33,3 +33,23 @@ var R3D_LEAN_GLSL =
   '  vec3 k = vec3(n.z, 0.0, -n.x);' +           /* cross(vec3(0,1,0), n) */
   '  return v * n.y + cross(k, v) + k * (dot(k, v) / max(1.0 + n.y, 0.0001));' +
   '}';
+
+/* THE BUILDING ABOUT TO BE PLACED, as itself. The 2D renderer's ghost is the building's sprite -
+   drawn north up, from the sprite baker's one angle - and over the 3D view it was the wrong
+   picture as soon as the camera leaned differently, and faced the wrong way as soon as it
+   turned (cam3d.js). So in 3D the ghost is the building's own mesh, where it would stand, drawn
+   translucent after everything solid: `blend(true)` before, `blend(false)` after. The footprint's
+   green or red outline stays with the 2D overlay (render/frame.js). Returns where it stands. */
+function _r3dGhostAt() {
+  var R = window._rtsR, gh = R && R.ghost;
+  if (!gh || !R.ghostKey) return null;
+  var d = rtsStructDef(R.ghostKey);
+  if (!d) return null;
+  var x = _rtsWX(gh.tx) + (d.w - 1) * RTS_TILE / 2, z = _rtsWX(gh.tz) + (d.h - 1) * RTS_TILE / 2;
+  return { key: R.ghostKey, side: gh.side || 'player', x: x, y: _rtsElev(x, z), z: z };
+}
+function _r3dGhostBlend(gl, P, on) {
+  if (on) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); }
+  else { gl.disable(gl.BLEND); gl.depthMask(true); }
+  gl.uniform1f(gl.getUniformLocation(P, 'uA'), on ? 0.55 : 1);
+}

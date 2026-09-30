@@ -23,13 +23,13 @@ var R3D_RING_COL = { player: [0.557, 0.941, 0.478], enemy: [1.0, 0.541, 0.478] }
 
 function _r3dRingVS() {
   return 'attribute vec3 aP; attribute vec4 aL; attribute vec4 aK;' +
-    'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' +
+    'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' + R3D_CAM_GLSL +
     'varying vec4 vL; varying vec4 vK;' +
     'void main(){' +
     '  vL = aL; vK = aK;' +
-    '  float sx = (aP.x - uCam.x) * uCam.z;' +
-    '  float sy = ((aP.z - uCam.y) * uTilt.x - aP.y * uTilt.y) * uCam.w;' +
-    '  float d  = ((aP.z - uCam.y) * uTilt.y + aP.y * uTilt.x);' +
+    '  float sx = camUV(aP).x * uCam.z;' +
+    '  float sy = (camUV(aP).y * uTilt.x - aP.y * uTilt.y) * uCam.w;' +
+    '  float d  = (camUV(aP).y * uTilt.y + aP.y * uTilt.x);' +
     '  float pw = 1.0 - d * uInvD;' +
     '  gl_Position = vec4(sx, -sy, -(d + ' + R3D_RING_LIFT.toFixed(2) + ') / ' + R3D_DEPTH_RANGE.toFixed(1) + ' * pw, pw);' +
     '}';
@@ -101,7 +101,7 @@ function _r3dRingDraw(gl, R3, G, cam, invD) {
   gl.bufferData(gl.ARRAY_BUFFER, R3.ringA.subarray(0, n * 6 * R3D_RING_F), gl.DYNAMIC_DRAW);
   gl.useProgram(P);
   gl.uniform4fv(gl.getUniformLocation(P, 'uCam'), cam);
-  gl.uniform2f(gl.getUniformLocation(P, 'uTilt'), R3.cp, R3.sp);
+  _r3dCamU(gl, P);
   gl.uniform1f(gl.getUniformLocation(P, 'uInvD'), invD);
   gl.uniform1f(gl.getUniformLocation(P, 'uT'), G.t || 0);
   gl.uniform1f(gl.getUniformLocation(P, 'uAmt'), Math.min(1, amt));

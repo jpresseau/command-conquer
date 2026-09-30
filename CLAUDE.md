@@ -103,11 +103,17 @@ Keep them small: if a file passes ~500 lines it wants splitting along its own ba
 - `src/render/` — canvas 2D. Reads the sim, never writes it. `camera`, `post` (light pass, water,
   shroud), `frame`, `draw`, `icons`.
 - `src/ui/` — `shell` (open/close/resize), `sidebar`, `input`, `select`, `hud`, `camera`
-  (panning + the main loop), `navigate` (right/middle-drag grabs the map, a still right-click
+  (panning + the main loop), `navigate` (right-drag grabs the map - middle too in 2D; a still right-click
   orders on release but as pressed; wheel and pinch zoom toward the pointer, `+`/`-` about the
   centre; `e2e/navigate`, `e2e/navtouch`). Keep a ground point under the cursor with
   `_rtsHoldGround` (closed form at the point's height), never by differencing `_rtsGroundAt`: the pick bisects
-  on height and is not an inverse on steep ground.
+  on height and is not an inverse on steep ground. `orbit` turns and leans the 3D camera
+  (middle-drag, Alt+right-drag, Q/E, PgUp/PgDn, two-finger twist, the compass; `e2e/orbit`).
+- **The 3D camera has a yaw and a tilt (`render3d/cam3d.js`), so screen axes are not world
+  axes.** Every projecting vertex shader splices `R3D_CAM_GLSL` and is set up by `_r3dCamU`;
+  on the CPU go through `_rtsWorldToScreen`/`_rtsGroundAt`, `_r3dToCam`/`_r3dFromCam`, and
+  `_r3dBoundsNear`/`_r3dDepthKey` for "near" and "far". Never read world z as depth or world x
+  as across.
 - `src/rts.audio.js` — all sound, synthesized at runtime with WebAudio. No sampled assets.
   `src/rts.sound.js` maps events to it; `src/rts.store.js`, `src/rts.save.js`, `src/rts.editor.js`.
 - `src/title.js` — the standalone shell: title screen, difficulty picker, file pickers, RESUME
