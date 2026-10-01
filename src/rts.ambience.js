@@ -5,7 +5,7 @@
    effects, every voice of it a few nodes built once and only ever turned up or down:
 
      RAIN      hiss, as heavy as the rain is
-     WIND      a low gusting roar in snow and fog
+     WIND      a low gusting roar in snow and fog, a howl in a sandstorm
      NIGHT     insects, at night and dusk, hushed by rain
      ENGINES   one engine note for everything on tracks or wheels that is moving in view - louder
                the more there are, higher the faster they go
@@ -94,7 +94,7 @@ function _rtsAmbWant(G) {
   var S = typeof _rtsSkyNow === 'function' ? _rtsSkyNow(G) : null, w = {};
   var rain = S ? S.rain || 0 : 0, night = S ? S.night || 0 : 0;
   w.rain = 0.11 * rain;
-  w.wind = 0.15 * Math.min(1, (S ? (S.snow || 0) + (S.banks || 0) : 0));
+  w.wind = Math.min(0.26, 0.15 * Math.min(1, (S ? (S.snow || 0) + (S.banks || 0) : 0)) + 0.24 * (S ? S.sand || 0 : 0));
   w.ins = 0.035 * night * (1 - rain);
   w.echo = 0.28 * night + (S && S.banks ? 0.08 : 0);
   var moving = 0, speed = 0, decks = 0, E = (G && G.ents) || [];

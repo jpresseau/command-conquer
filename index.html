@@ -958,7 +958,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">30b0203 · 2026-10-01</div>
+  <div id="rtsBuild" title="build">b034851 · 2026-10-01</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -14247,7 +14247,7 @@ function rtsSndReset() { _RTS_SND_MISS = {}; _RTS_SNDTRACKS = null; }
    effects, every voice of it a few nodes built once and only ever turned up or down:
 
      RAIN      hiss, as heavy as the rain is
-     WIND      a low gusting roar in snow and fog
+     WIND      a low gusting roar in snow and fog, a howl in a sandstorm
      NIGHT     insects, at night and dusk, hushed by rain
      ENGINES   one engine note for everything on tracks or wheels that is moving in view - louder
                the more there are, higher the faster they go
@@ -14336,7 +14336,7 @@ function _rtsAmbWant(G) {
   var S = typeof _rtsSkyNow === 'function' ? _rtsSkyNow(G) : null, w = {};
   var rain = S ? S.rain || 0 : 0, night = S ? S.night || 0 : 0;
   w.rain = 0.11 * rain;
-  w.wind = 0.15 * Math.min(1, (S ? (S.snow || 0) + (S.banks || 0) : 0));
+  w.wind = Math.min(0.26, 0.15 * Math.min(1, (S ? (S.snow || 0) + (S.banks || 0) : 0)) + 0.24 * (S ? S.sand || 0 : 0));
   w.ins = 0.035 * night * (1 - rain);
   w.echo = 0.28 * night + (S && S.banks ? 0.08 : 0);
   var moving = 0, speed = 0, decks = 0, E = (G && G.ents) || [];
@@ -23965,7 +23965,7 @@ var R3D_MESH_LIGHT =
   'uniform vec3 uHalf;' +          /* the specular's half-vector, per frame: cam3d.js */
   /* THE HOUR (sky3d.js): how much darker than day the lit and the shaded sides are, so a program
      whose uniforms were never set draws day; and how wet everything is, with the clock */
-  'uniform vec3 uDarkL; uniform vec3 uDarkS; uniform vec2 uWet;' +
+  'uniform vec3 uDarkL; uniform vec3 uDarkS; uniform vec3 uWet;' +
   /* ...and where the sun has moved to, as an offset from the baker's: unset, the baker's sun */
   'uniform vec3 uSunD;' +
   /* The ramp itself, because it is now evaluated TWICE per vertex - once with
@@ -26397,7 +26397,7 @@ function _r3dMatFS() {
     R3D_MAT_GLSL +
     R3D_SHADOW_GLSL + R3D_PLIGHT_GLSL +
     /* the hour and the weather (sky3d.js): darker than day by uDarkL/uDarkS - unset, day */
-    'uniform vec3 uDarkL; uniform vec3 uDarkS; uniform vec4 uHaze; uniform vec2 uWet; uniform float uGndL; uniform vec3 uSunD;' +
+    'uniform vec3 uDarkL; uniform vec3 uDarkS; uniform vec4 uHaze; uniform vec3 uWet; uniform float uGndL; uniform vec3 uSunD;' +
     'void main(){' +
     '  vec4 c = _groundLit(vW, vec3(' + R3_LIGHT[0].toFixed(4) + ', ' + R3_LIGHT[1].toFixed(4) + ', ' +
          R3_LIGHT[2].toFixed(4) + ') + uSunD);' +
@@ -26405,14 +26405,16 @@ function _r3dMatFS() {
     '  vec3 lit = c.rgb * mix(vec3(0.575, 0.600, 0.655) * (vec3(1.0) - uDarkS), vec3(1.0) - uDarkL, _shadowAt());' +
     '  lit *= vShade;' +
     /* WET: the ground darkens as it soaks, and the hollows hold water - a puddle is the sky,
-       dimmed, with the rain ringing it */
+       dimmed, with the rain ringing it while it rains (uWet.z). Drying, the puddles shrink back
+       into the deepest hollows before they go (uWet.x, the showers in sky3d.js) */
     '  if (uWet.x > 0.0) {' +
     '    lit *= 1.0 - 0.2 * uWet.x;' +
-    '    float pm = smoothstep(0.6, 0.67, _fbm(vW * 0.08 + vec2(13.0, 4.0))) * uWet.x;' +
+    '    float dry = 0.22 * (1.0 - uWet.x);' +
+    '    float pm = smoothstep(0.6 + dry, 0.67 + dry, _fbm(vW * 0.08 + vec2(13.0, 4.0))) * min(1.0, uWet.x * 1.5);' +
     '    if (pm > 0.0) {' +
     '      vec2 gc = floor(vW * 0.8), gf = fract(vW * 0.8) - 0.5;' +
     '      float ph = fract(uWet.y * 1.3 + _h2(gc));' +
-    '      float ring = smoothstep(0.06, 0.0, abs(length(gf) - ph * 0.45)) * (1.0 - ph) * step(0.35, _h2(gc + 7.0));' +
+    '      float ring = smoothstep(0.06, 0.0, abs(length(gf) - ph * 0.45)) * (1.0 - ph) * step(0.35, _h2(gc + 7.0)) * uWet.z;' +
     '      vec3 sky = uHaze.rgb * 0.55 + vec3(0.16, 0.18, 0.22);' +
     '      lit = mix(lit, lit * 0.3 + sky * 0.55 + ring * 0.22, pm * 0.85);' +
     '    }' +
@@ -30773,8 +30775,24 @@ var R3D_SKIES = {
   rain:  { L: [0.64, 0.68, 0.74], S: [0.57, 0.61, 0.69], haze: [0.52, 0.57, 0.63, 0.20], night: 0.35, wet: 1, rain: 1, banks: 0 },
   fog:   { L: [0.86, 0.88, 0.91], S: [0.75, 0.78, 0.83], haze: [0.76, 0.79, 0.82, 0.32], night: 0.15, wet: 0, rain: 0, banks: 1 },
   /* bright, and cold in the shade: the ground white, snow on every roof, the shore frozen */
-  snow:  { L: [0.93, 0.95, 1.0],  S: [0.66, 0.72, 0.86], haze: [0.86, 0.89, 0.94, 0.14], night: 0.15, wet: 0, rain: 0, banks: 0, snow: 1 }
+  snow:  { L: [0.93, 0.95, 1.0],  S: [0.66, 0.72, 0.86], haze: [0.86, 0.89, 0.94, 0.14], night: 0.15, wet: 0, rain: 0, banks: 0, snow: 1 },
+  /* a sandstorm: the light gone ochre, the distance swallowed, sand driving across the ground */
+  sand:  { L: [0.92, 0.74, 0.52], S: [0.62, 0.50, 0.40], haze: [0.80, 0.62, 0.40, 0.36], night: 0.3,  wet: 0, rain: 0, banks: 0, sand: 1 }
 };
+/* Between showers: still overcast, lighter than the rain, the lamps half on. */
+var R3D_SKY_LULL = { L: [0.8, 0.83, 0.88], S: [0.7, 0.74, 0.8], haze: [0.62, 0.66, 0.7, 0.12], night: 0.2, wet: 0, rain: 0, banks: 0 };
+/* SHOWERS. The rain sky rains steadily for its first RTS_SHOWER_FIRST seconds, then comes and
+   goes: a dry spell, a shower, a dry spell - each a fixed length plus up to as much again,
+   hashed from its index, on the game's clock, so a battle's weather is the same every time it
+   is played. The ground soaks while it rains and dries after, never at once: wet comes up on
+   RTS_WET_FILL and goes on RTS_WET_DRY, so the puddles linger and shrink through a dry spell. */
+var RTS_SHOWER_FIRST = 240;
+var RTS_SHOWER_DRY = 45;         /* a dry spell, at the least, and up to as much again */
+var RTS_SHOWER_WET = 90;         /* a shower likewise */
+var RTS_SHOWER_RAMP = 8;         /* seconds the rain takes to come on or die away */
+var RTS_WET_FILL = 20, RTS_WET_DRY = 80;
+/* AUTO goes to a sandstorm on a map with this much of its land sand */
+var RTS_SKY_SANDY = 0.15;
 /* THE CYCLE: a day passes over the battle. The hour runs from RTS_DAY_START through a whole day
    in RTS_DAY_LEN seconds of game time; the sky is the presets blended at their hours, and the
    sun itself moves - round the map and up and down the sky - so the shadows swing. */
@@ -30783,7 +30801,7 @@ var RTS_DAY_START = 8;           /* the hour a battle starts at */
 var RTS_DAY_NOON = 11;           /* the hour the sun stands where the sprite baker put it */
 var RTS_DAY_KEYS = [[0, 'night'], [5, 'night'], [6.5, 'dusk'], [8, 'day'], [17, 'day'], [18.5, 'dusk'], [20, 'night'], [24, 'night']];
 var RTS_SKY_LS = 'rtsSky';
-var RTS_SKY_KEYS = ['auto', 'day', 'dusk', 'night', 'rain', 'fog', 'snow', 'cycle'];
+var RTS_SKY_KEYS = ['auto', 'day', 'dusk', 'night', 'rain', 'fog', 'snow', 'sand', 'cycle'];
 
 /* What the player chose: one of RTS_SKY_KEYS. */
 /* Read from storage once and then kept: it is asked every frame. */
@@ -30815,10 +30833,55 @@ function rtsSkySync() {
   wrap.firstChild.textContent = 'SKY: ' + w.toUpperCase();
   wrap.firstChild.title = w === 'auto' ? 'The time of day and the weather, picked by the map' : 'Every battle under this sky - tap to change';
 }
-/* AUTO: from the seed - mostly day, and every other sky about one battle in six or seven */
-function _rtsSkyOfSeed(seed) {
+/* AUTO: from the seed - mostly day, and every other sky about one battle in six or seven; a
+   sandstorm now and then, and on a sandy map one battle in two */
+function _rtsSkyOfSeed(seed, sandy) {
   var h = _sprHash((seed | 0) % 9973, 17, 977);
-  return h < 0.36 ? 'day' : h < 0.48 ? 'dusk' : h < 0.6 ? 'night' : h < 0.72 ? 'rain' : h < 0.82 ? 'fog' : h < 0.91 ? 'snow' : 'cycle';
+  if (sandy && h >= 0.5) return 'sand';
+  return h < 0.36 ? 'day' : h < 0.48 ? 'dusk' : h < 0.6 ? 'night' : h < 0.72 ? 'rain' : h < 0.82 ? 'fog' : h < 0.91 ? 'snow' : h < 0.96 ? 'cycle' : 'sand';
+}
+/* How much of a map's land is sand - asked once a map, and kept beside it rather than on it,
+   since everything on G is saved. */
+var _RTS_SANDY = typeof WeakMap === 'function' ? new WeakMap() : null;
+function _rtsSandShare(G) {
+  if (!G || !G.terrain) return 0;
+  var c = _RTS_SANDY && _RTS_SANDY.get(G.terrain);
+  if (c !== undefined) return c;
+  var n = 0, land = 0;
+  for (var i = 0; i < G.terrain.length; i++) { var t = G.terrain[i]; if (t === RTS_T_SAND) n++; if (t !== RTS_T_WATER) land++; }
+  c = land ? n / land : 0;
+  if (_RTS_SANDY) _RTS_SANDY.set(G.terrain, c);
+  return c;
+}
+/* The rain sky's weather at game time t: how hard it is raining and how wet the ground is. */
+function _rtsShower(t) {
+  if (t < RTS_SHOWER_FIRST) return { rain: 1, wet: 1 };
+  var T = RTS_SHOWER_FIRST, wet = 1, i = 0, raining = false;
+  for (;;) {
+    var len = (raining ? RTS_SHOWER_WET : RTS_SHOWER_DRY) * (1 + _sprHash(i, raining ? 3 : 5, 883));
+    var u = Math.min(t, T + len) - T;
+    wet = raining ? 1 - (1 - wet) * Math.exp(-u / RTS_WET_FILL) : wet * Math.exp(-u / RTS_WET_DRY);
+    if (t < T + len) {
+      var ramp = Math.min(1, Math.min(u, len - u) / RTS_SHOWER_RAMP);
+      return { rain: raining ? ramp : 0, wet: wet };
+    }
+    T += len; if (raining) i++; raining = !raining;
+  }
+}
+/* A LIGHTNING BOLT, strike n's: where it comes down, as fractions of the view across and into
+   it, and the jagged path it takes from the cloud - [x, y, z] offsets from the foot, top first. */
+function _rtsBoltAt(n) {
+  var pts = [], H = 26, seg = 9, x = 0, z = 0;
+  for (var i = 0; i <= seg; i++) {
+    var y = H * (1 - i / seg);
+    pts.push([x, y, z]);
+    x += (_sprHash(n, i, 461) - 0.5) * 3.2; z += (_sprHash(n, i, 467) - 0.5) * 2.2;
+  }
+  /* the last step lands on the foot */
+  var ex = pts[seg][0], ez = pts[seg][2];
+  pts = pts.map(function (p, k) { return [p[0] - ex * k / seg, p[1], p[2] - ez * k / seg]; });
+  /* the foot low in the view, so the bolt stands up through it rather than off its top */
+  return { u: 0.2 + 0.6 * _sprHash(n, 31, 463), v: 0.5 + 0.35 * _sprHash(n, 37, 467), pts: pts };
 }
 /* The hour of a CYCLE battle, 0..24. */
 function _rtsSkyHour(G) { return (RTS_DAY_START + ((G && G.t) || 0) / RTS_DAY_LEN * 24) % 24; }
@@ -30858,6 +30921,11 @@ function _rtsSunAt(h) {
 function _rtsSkyNow(G) {
   var n = window.RTS_SKY_FORCE || _rtsSkyName(G);
   var S = n === 'cycle' ? _rtsSkyAt(_rtsSkyHour(G)) : (R3D_SKIES[n] || R3D_SKIES.day);
+  if (n === 'rain' && ((G && G.t) || 0) >= RTS_SHOWER_FIRST) {
+    var sh = _rtsShower(G.t);
+    S = _rtsSkyMix(R3D_SKY_LULL, R3D_SKIES.rain, sh.rain);
+    S.rain = sh.rain; S.wet = sh.wet;
+  }
   /* LIGHTNING, in the rain: for its instant the whole field is lit near to day - the strike's
      schedule is the thunder's (rts.ambience.js), on the game's clock */
   if (S.rain > 0 && typeof _rtsLightning === 'function' && window.RTS_FLASH_OFF !== true) {
@@ -30869,7 +30937,7 @@ function _rtsSkyNow(G) {
 /* The sky this battle is under: its name. */
 function _rtsSkyName(G) {
   var w = _rtsSkyWant();
-  return w !== 'auto' ? w : _rtsSkyOfSeed(G ? G.seed : 0);
+  return w !== 'auto' ? w : _rtsSkyOfSeed(G ? G.seed : 0, _rtsSandShare(G) >= RTS_SKY_SANDY);
 }
 /* ...and its settings, held on R3 for the frame. */
 function _r3dSky(G) {
@@ -30890,7 +30958,7 @@ function _r3dSkyU(gl, P) {
   gl.uniform3f(gl.getUniformLocation(P, 'uDarkL'), 1 - S.L[0], 1 - S.L[1], 1 - S.L[2]);
   gl.uniform3f(gl.getUniformLocation(P, 'uDarkS'), 1 - S.S[0], 1 - S.S[1], 1 - S.S[2]);
   gl.uniform4f(gl.getUniformLocation(P, 'uHaze'), S.haze[0], S.haze[1], S.haze[2], S.haze[3]);
-  gl.uniform2f(gl.getUniformLocation(P, 'uWet'), S.wet, (window._rtsG && window._rtsG.t) || 0);
+  gl.uniform3f(gl.getUniformLocation(P, 'uWet'), S.wet, (window._rtsG && window._rtsG.t) || 0, S.rain || 0);
   /* the ground takes the point lights only when the lamps are on: by day it was lit by an
      explosion's glare on the ground alone (fxemit3d.js), and still is */
   gl.uniform1f(gl.getUniformLocation(P, 'uGndL'), S.night > 0 ? 1 : 0);
@@ -30908,6 +30976,9 @@ function _r3dSkyLights(G, R3) {
   var S = R3.sky || R3D_SKIES.day, out = [];
   if (!(S.night > 0) || R3.lampAmt === 0) return out;
   var vb = _r3dBoundsNear(_r3dViewBounds(), 10, 20), n = S.night, i;
+  /* the strike lights the ground round where it comes down, brightest of all for its instant */
+  var bolt = typeof _r3dBoltFoot === 'function' ? _r3dBoltFoot(G) : null;
+  if (bolt) out.push([bolt[0], bolt[1] + 4, bolt[2], 36, 3.2 * S.flash, 0, 0.85, 0.9, 1.0, 9]);
   function inV(x, z) { return x > vb.x0 && x < vb.x1 && z > vb.z0 && z < vb.z1; }
   /* [9] how much a light counts for its slot beyond its brightness: a headlight follows the action */
   function lamp(p, reach, s, c, pri) { if (inV(p[0], p[2])) out.push([p[0], p[1], p[2], reach, s * n, 0, c[0], c[1], c[2], pri || 1]); }
@@ -30933,13 +31004,15 @@ function _r3dSkyLights(G, R3) {
   return out;
 }
 </script>
-<script>/* render3d/skyfx3d.js - what the sky puts in the effects pass: the lamps' glows, the rain and
-   the fog banks. Part of rts.render3d; the sky itself is sky3d.js.
+<script>/* render3d/skyfx3d.js - what the sky puts in the effects pass: the lamps' glows, the rain, the
+   snow, a sandstorm's driven sand, the lightning's bolt and the fog banks. Part of
+   rts.render3d; the sky itself is sky3d.js.
 
    All of it is laid round the VIEW each frame, from hashes, and nothing is kept: a raindrop is a
    position and a phase in its fall worked out from its index and the clock, so the rain costs
    no state, cannot drift out of step with the frame, and is the same on every frame drawn at
-   the same moment. R3.rainAmt / R3.bankAmt / R3.lampAmt take each out for a spec's A/B. */
+   the same moment. R3.rainAmt / R3.bankAmt / R3.lampAmt / R3.snowAmt / R3.sandAmt and
+   R3.boltOff take each out for a spec's A/B. */
 
 var R3D_RAIN_N = 360;            /* streaks at once, at most */
 var R3D_RAIN_FALL = 0.55;        /* seconds from the top of a streak's fall to the ground */
@@ -30951,6 +31024,22 @@ var R3D_FXT_RAIN = 10, R3D_FXT_GLOW = 11, R3D_FXT_FLAKE = 12;
 var R3D_SNOW_N = 420;            /* flakes at once, at most */
 var R3D_SNOW_FALL = 3.2;         /* seconds a flake takes to come down */
 var R3D_SNOW_C = [0.95, 0.96, 0.98];
+var R3D_SAND_N = 380;            /* grains of driven sand at once, at most */
+var R3D_SAND_FLY = 0.7;          /* seconds a grain takes to cross its run */
+var R3D_SAND_RUN = 14;           /* world units it is blown */
+var R3D_SAND_C = [0.86, 0.68, 0.44];
+var R3D_BOLT_C = [0.86, 0.9, 1.0];
+
+/* Where strike n of the lightning comes down this frame: its place in the view (_rtsBoltAt,
+   sky3d.js) on the ground there - [x, y, z, n] - or null when nothing is striking. Read by the
+   bolt below and by the light it throws (_r3dSkyLights). */
+function _r3dBoltFoot(G) {
+  var R3 = window._R3D, S = R3 && R3.sky;
+  if (!S || !(S.flash > 0.05) || R3.boltOff === true || typeof _rtsLightning !== 'function') return null;
+  var n = _rtsLightning((G && G.t) || 0).n, b = _rtsBoltAt(n), vb = _r3dViewBounds();
+  var x = vb.x0 + b.u * (vb.x1 - vb.x0), z = vb.z0 + b.v * (vb.z1 - vb.z0);
+  return [x, _rtsElev(x, z), z, n];
+}
 
 function _r3dFxSky(G, V) {
   var R3 = window._R3D, S = R3 && R3.sky;
@@ -31013,6 +31102,42 @@ function _r3dFxSky(G, V) {
       var fy = V.ground(fx, fz) + 18 * (1 - fp), fr = 0.1 + _r3dFxH(i, 8.3) * 0.1;
       _r3dFxBill(V.M, V, fx, fy, fz, fr, fr, 0.2, R3D_FXT_FLAKE, 0, i, 0.85 * S.snow * Math.min(1, (1 - fp) * 8), 0, R3D_SNOW_C);
     }
+  }
+
+  /* THE SANDSTORM: sand driven low across the view on the wind, and clouds of it rolling by */
+  if (S.sand > 0 && R3.sandAmt !== 0) {
+    var ns = Math.min(R3D_SAND_N, Math.round(W * D / 18));
+    R3.sandN = ns;
+    for (i = 0; i < ns; i++) {
+      var sp = _r3dFxH(i, 6.1), sc = V.t / R3D_SAND_FLY + sp, se = Math.floor(sc), sq = sc - se;
+      var sx = vb.x0 - R3D_SAND_RUN + _r3dFxH(i * 1.9 + se * 0.37, 2.3) * (W + R3D_SAND_RUN) + sq * R3D_SAND_RUN;
+      var sz = vb.z0 + _r3dFxH(i * 2.7 + se * 0.61, 5.9) * D + sq * R3D_SAND_RUN * 0.3;
+      var sy = V.ground(sx, sz) + 0.3 + _r3dFxH(i, 9.7) * 2.6;
+      _r3dFxStreak(V.M, V, sx - 2.4, sy + 0.08, sz - 0.7, sx, sy, sz, 0.09, 0, R3D_FXT_RAIN, 0, i, 0.75 * S.sand * Math.sin(sq * Math.PI), 0, R3D_SAND_C);
+    }
+    var sspan = Math.max(W, D) + 60;
+    for (i = 0; i < R3D_BANK_N; i++) {
+      var cx = vb.x0 - 30 + ((_r3dFxH(i, 3.5) * sspan + V.t * 7) % sspan), cz = vb.z0 - 30 + ((_r3dFxH(i, 6.6) * sspan + V.t * 2) % sspan);
+      var cr = 10 + _r3dFxH(i, 4.2) * 10;
+      _r3dFxBill(V.M, V, cx, V.ground(cx, cz) + cr * 0.3, cz, cr, cr * 0.5, 0.4, R3D_FXT_BLOB, 0.4, i * 0.53, 0.4 * S.sand, 0, R3D_SAND_C);
+    }
+  }
+
+  /* THE BOLT: the strike itself, a jagged line of light from the cloud to the ground, forked,
+     and a glare where it lands. A streak is a tracer's, bright at its head and faint at its
+     tail, so each piece is laid both ways to burn evenly along its length. */
+  var foot = _r3dBoltFoot(G);
+  if (foot) {
+    var bp = _rtsBoltAt(foot[3]).pts, bw = 1.1, bop = Math.min(1, S.flash * 1.4);
+    var seg = function (a, b, w2, op) {
+      _r3dFxStreak(V.M, V, a[0], a[1], a[2], b[0], b[1], b[2], w2, 0.6, R3D_FXT_STREAK, 0, 0, op, 0, R3D_BOLT_C);
+      _r3dFxStreak(V.M, V, b[0], b[1], b[2], a[0], a[1], a[2], w2, 0.6, R3D_FXT_STREAK, 0, 0, op, 0, R3D_BOLT_C);
+    };
+    var at3 = function (p) { return [foot[0] + p[0], foot[1] + p[1], foot[2] + p[2]]; };
+    for (i = 1; i < bp.length; i++) seg(at3(bp[i - 1]), at3(bp[i]), bw, bop);
+    var fk = at3(bp[3]);
+    seg(fk, [fk[0] + 4, fk[1] - 7, fk[2] + 1.5], bw * 0.6, bop * 0.7);
+    _r3dFxBill(V.M, V, foot[0], foot[1] + 1, foot[2], 4, 4, 0.6, R3D_FXT_GLOW, 0, 0.5, bop, 0, R3D_BOLT_C);
   }
 
   /* THE FOG BANKS: low, wide, slow, drifting on the wind across the view */
@@ -31444,6 +31569,28 @@ function _rtsSky2D(g, G) {
       var x0 = _sprHash(i, ep, 993) * W, y0 = (_sprHash(ep, i, 997) * 1.2 - 0.2) * H + p * H * 0.25;
       g.moveTo(x0, y0); g.lineTo(x0 - 4 * dpr, y0 + 16 * dpr);
     }
+    g.stroke();
+  }
+  /* the sandstorm: ochre streaks driven across the screen on the wind */
+  if (S.sand > 0) {
+    var td = G.t || 0, nd = Math.round(W * H / 3000);
+    g.strokeStyle = 'rgba(222,176,112,0.45)';
+    g.lineWidth = Math.max(1, dpr);
+    g.beginPath();
+    for (i = 0; i < nd; i++) {
+      var dp = _sprHash(i, 9, 971), dc = td / 0.7 + dp, de = Math.floor(dc), dq = dc - de;
+      var dx = (_sprHash(i, de, 973) * 1.3 - 0.3) * W + dq * W * 0.3, dy = _sprHash(de, i, 977) * H;
+      g.moveTo(dx, dy); g.lineTo(dx + 22 * dpr, dy + 3 * dpr);
+    }
+    g.stroke();
+  }
+  /* the lightning: the bolt, from the top of the screen to where it strikes (_rtsBoltAt) */
+  if (S.flash > 0.05 && typeof _rtsLightning === 'function') {
+    var bolt = _rtsBoltAt(_rtsLightning(G.t || 0).n), fx0 = bolt.u * W, fy0 = bolt.v * H, bs = fy0 / 26;
+    g.strokeStyle = 'rgba(225,232,255,' + Math.min(1, S.flash * 1.4).toFixed(3) + ')';
+    g.lineWidth = 3 * dpr;
+    g.beginPath();
+    bolt.pts.forEach(function (p, k) { var px = fx0 + p[0] * bs * 2, py = fy0 - p[1] * bs; if (k) g.lineTo(px, py); else g.moveTo(px, py); });
     g.stroke();
   }
   /* the snow: soft white flakes drifting down */

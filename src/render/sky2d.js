@@ -63,6 +63,28 @@ function _rtsSky2D(g, G) {
     }
     g.stroke();
   }
+  /* the sandstorm: ochre streaks driven across the screen on the wind */
+  if (S.sand > 0) {
+    var td = G.t || 0, nd = Math.round(W * H / 3000);
+    g.strokeStyle = 'rgba(222,176,112,0.45)';
+    g.lineWidth = Math.max(1, dpr);
+    g.beginPath();
+    for (i = 0; i < nd; i++) {
+      var dp = _sprHash(i, 9, 971), dc = td / 0.7 + dp, de = Math.floor(dc), dq = dc - de;
+      var dx = (_sprHash(i, de, 973) * 1.3 - 0.3) * W + dq * W * 0.3, dy = _sprHash(de, i, 977) * H;
+      g.moveTo(dx, dy); g.lineTo(dx + 22 * dpr, dy + 3 * dpr);
+    }
+    g.stroke();
+  }
+  /* the lightning: the bolt, from the top of the screen to where it strikes (_rtsBoltAt) */
+  if (S.flash > 0.05 && typeof _rtsLightning === 'function') {
+    var bolt = _rtsBoltAt(_rtsLightning(G.t || 0).n), fx0 = bolt.u * W, fy0 = bolt.v * H, bs = fy0 / 26;
+    g.strokeStyle = 'rgba(225,232,255,' + Math.min(1, S.flash * 1.4).toFixed(3) + ')';
+    g.lineWidth = 3 * dpr;
+    g.beginPath();
+    bolt.pts.forEach(function (p, k) { var px = fx0 + p[0] * bs * 2, py = fy0 - p[1] * bs; if (k) g.lineTo(px, py); else g.moveTo(px, py); });
+    g.stroke();
+  }
   /* the snow: soft white flakes drifting down */
   if (S.snow > 0) {
     var ts = G.t || 0, ns = Math.round(W * H / 4200);

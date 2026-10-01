@@ -60,7 +60,7 @@ var R3D_MESH_LIGHT =
   'uniform vec3 uHalf;' +          /* the specular's half-vector, per frame: cam3d.js */
   /* THE HOUR (sky3d.js): how much darker than day the lit and the shaded sides are, so a program
      whose uniforms were never set draws day; and how wet everything is, with the clock */
-  'uniform vec3 uDarkL; uniform vec3 uDarkS; uniform vec2 uWet;' +
+  'uniform vec3 uDarkL; uniform vec3 uDarkS; uniform vec3 uWet;' +
   /* ...and where the sun has moved to, as an offset from the baker's: unset, the baker's sun */
   'uniform vec3 uSunD;' +
   /* The ramp itself, because it is now evaluated TWICE per vertex - once with

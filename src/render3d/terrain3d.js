@@ -326,7 +326,7 @@ function _r3dMatFS() {
     R3D_MAT_GLSL +
     R3D_SHADOW_GLSL + R3D_PLIGHT_GLSL +
     /* the hour and the weather (sky3d.js): darker than day by uDarkL/uDarkS - unset, day */
-    'uniform vec3 uDarkL; uniform vec3 uDarkS; uniform vec4 uHaze; uniform vec2 uWet; uniform float uGndL; uniform vec3 uSunD;' +
+    'uniform vec3 uDarkL; uniform vec3 uDarkS; uniform vec4 uHaze; uniform vec3 uWet; uniform float uGndL; uniform vec3 uSunD;' +
     'void main(){' +
     '  vec4 c = _groundLit(vW, vec3(' + R3_LIGHT[0].toFixed(4) + ', ' + R3_LIGHT[1].toFixed(4) + ', ' +
          R3_LIGHT[2].toFixed(4) + ') + uSunD);' +
@@ -334,14 +334,16 @@ function _r3dMatFS() {
     '  vec3 lit = c.rgb * mix(vec3(0.575, 0.600, 0.655) * (vec3(1.0) - uDarkS), vec3(1.0) - uDarkL, _shadowAt());' +
     '  lit *= vShade;' +
     /* WET: the ground darkens as it soaks, and the hollows hold water - a puddle is the sky,
-       dimmed, with the rain ringing it */
+       dimmed, with the rain ringing it while it rains (uWet.z). Drying, the puddles shrink back
+       into the deepest hollows before they go (uWet.x, the showers in sky3d.js) */
     '  if (uWet.x > 0.0) {' +
     '    lit *= 1.0 - 0.2 * uWet.x;' +
-    '    float pm = smoothstep(0.6, 0.67, _fbm(vW * 0.08 + vec2(13.0, 4.0))) * uWet.x;' +
+    '    float dry = 0.22 * (1.0 - uWet.x);' +
+    '    float pm = smoothstep(0.6 + dry, 0.67 + dry, _fbm(vW * 0.08 + vec2(13.0, 4.0))) * min(1.0, uWet.x * 1.5);' +
     '    if (pm > 0.0) {' +
     '      vec2 gc = floor(vW * 0.8), gf = fract(vW * 0.8) - 0.5;' +
     '      float ph = fract(uWet.y * 1.3 + _h2(gc));' +
-    '      float ring = smoothstep(0.06, 0.0, abs(length(gf) - ph * 0.45)) * (1.0 - ph) * step(0.35, _h2(gc + 7.0));' +
+    '      float ring = smoothstep(0.06, 0.0, abs(length(gf) - ph * 0.45)) * (1.0 - ph) * step(0.35, _h2(gc + 7.0)) * uWet.z;' +
     '      vec3 sky = uHaze.rgb * 0.55 + vec3(0.16, 0.18, 0.22);' +
     '      lit = mix(lit, lit * 0.3 + sky * 0.55 + ring * 0.22, pm * 0.85);' +
     '    }' +

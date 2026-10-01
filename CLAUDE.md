@@ -266,8 +266,11 @@ breaking it shipped once.
   rain and banks in `skyfx3d.js`; 2D is `render/sky2d.js`. `RTS_SKY_FORCE` pins it for a spec.
   CYCLE moves the sun (`_rtsSunAt`; shaders take `uSunD`, its offset from `R3_LIGHT`, and the shadow
   frame is `_r3dSunB()`), exactly the baker's sun at `RTS_DAY_NOON`. SNOW (`uSnow`) whitens the
-  ground before the road paint, settles on upward faces and freezes the shallows.
-  `unit/sky`, `e2e/sky`.
+  ground before the road paint, settles on upward faces and freezes the shallows. SAND is a
+  sandstorm (AUTO picks it on a map with `RTS_SKY_SANDY` of its land sand). RAIN comes and goes
+  after `RTS_SHOWER_FIRST` (`_rtsShower`: showers, dry spells, the ground soaking and drying;
+  `uWet` is wet, clock, rain). A strike draws a bolt (`_rtsBoltAt`, `_r3dBoltFoot`) that lights
+  the ground. `R3.sandAmt/boltOff`. `unit/sky`, `unit/weather`, `e2e/sky`, `e2e/weather`.
 - **A gun going off** (`render3d/combat3d.js`): recoil off `e.recoil` (`_r3dRecoil`: turret and hull
   back along `_rtsMuzzleAngle`, hull rocked; land vehicles only) and a flash plus light off
   `e.fire` at the barrel tip. A dying vehicle throws `debris` from its own id-seeded generator,
