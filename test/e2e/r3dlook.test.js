@@ -169,7 +169,12 @@ var S = new Suite('r3dlook');
       var m = Math.hypot(h[0], h[1], h[2]);
       return [h[0] / m, h[1] / m, h[2] / m];
     })();
-    o.hasHalf = vs.indexOf(half[0].toFixed(6)) >= 0;
+    /* THE HALF-VECTOR IS A UNIFORM NOW, because it turns with the camera (render3d/cam3d.js) - so
+       what is held is that the shader reads it and that, facing north as the baker does, the
+       value fed is the baker's own to the last digit */
+    var fed = (window._R3D && window._R3D.half) || R3D_HALF;
+    o.hasHalf = vs.indexOf('uHalf') >= 0 && window._R3D && window._R3D.yaw === 0 &&
+                Math.abs(fed[0] - half[0]) < 1e-9 && Math.abs(fed[1] - half[1]) < 1e-9 && Math.abs(fed[2] - half[2]) < 1e-9;
     o.hasSky = vs.indexOf('sky') >= 0;
     o.strayLiterals = (vs.indexOf('0.40 + 0.74') >= 0) || (vs.indexOf('-0.38, 0.76, 0.53') >= 0);
 
