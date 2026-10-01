@@ -141,10 +141,8 @@ function _r3dSceneryFree(G, k) { return !G.blocked[k] && !(G.scrap && G.scrap[k]
 function _r3dSceneryTick(G) {
   var R3 = window._R3D;
   if (!R3 || !R3.gl) return;
-  if (R3.scnFor !== G) { R3.scnPlan = R3.scnPlan && R3.scnPlanFor === G ? R3.scnPlan : _r3dSceneryPlan(G); R3.scnPlanFor = G; R3.scnFor = G; R3.scnKey = null; R3.scnT = -1; }
-  var t = G.t || 0;
-  if (R3.scnKey !== null && t - R3.scnT < 0.5 && t >= R3.scnT) return;
-  R3.scnT = t;
+  if (R3.scnFor !== G) { R3.scnPlan = R3.scnPlan && R3.scnPlanFor === G ? R3.scnPlan : _r3dSceneryPlan(G); R3.scnPlanFor = G; R3.scnFor = G; R3.scnKey = null; }
+  /* every frame: a few hundred cells, and game time stands still while paused */
   var cells = R3.scnCells || (R3.scnCells = _r3dSceneryCells(R3.scnPlan)), key = 0;
   if (R3.scnCellsFor !== R3.scnPlan) { cells = R3.scnCells = _r3dSceneryCells(R3.scnPlan); R3.scnCellsFor = R3.scnPlan; }
   for (var i = 0; i < cells.length; i++) if (!_r3dSceneryFree(G, cells[i])) key = (Math.imul(key, 31) + cells[i] + 1) | 0;

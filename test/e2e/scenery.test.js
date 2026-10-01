@@ -92,17 +92,17 @@ var S = new Suite('scenery');
     o.box = [bx0, bx1, by0, by1].map(Math.round); o.inside = inside; o.outside = outside;
     o.fieldPx = Math.max(1, (bx1 - bx0) * (by1 - by0) * sc * sc);
 
-    /* FOLLOWS: a building on a wreck */
+    /* FOLLOWS: a building on a wreck - with the game's clock standing still, as it does paused */
     var w = P.wrecks[0], wk = w.tz * RTS_N + w.tx, t0 = R3.sceneryTris;
-    G.blocked[wk] = 1; G.t += 1; _rtsRFrame(0);
+    G.blocked[wk] = 1; _rtsRFrame(0);
     o.wreckGone = t0 - R3.sceneryTris;
-    G.blocked[wk] = 0; G.t += 1; _rtsRFrame(0);
+    G.blocked[wk] = 0; _rtsRFrame(0);
     o.wreckBack = R3.sceneryTris === t0;
     /* ...and ore under a field */
     var fk = f.tz * RTS_N + f.tx, s0 = G.scrap[fk];
-    G.scrap[fk] = 40; G.t += 1; _rtsRFrame(0);
+    G.scrap[fk] = 40; _rtsRFrame(0);
     o.fieldGone = t0 - R3.sceneryTris;
-    G.scrap[fk] = s0; G.t += 1; _rtsRFrame(0);
+    G.scrap[fk] = s0; _rtsRFrame(0);
     o.fieldBack = R3.sceneryTris === t0;
     /* a spec that clears the world for bare ground clears this too */
     var keepW = R3.world; R3.world = []; o.bareEmpty = _r3dSceneryBatches(R3).length === 0; R3.world = keepW;

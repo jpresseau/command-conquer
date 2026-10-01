@@ -118,11 +118,21 @@ var S = new Suite('quality');
     });
     var gm = window._r3dGroundMesh, calls = 0, rebuilt = 0;
     /* a rebuild is the patch's key changing; counted by watching it */
-    function frames(k) { for (var f = 0; f < k; f++) { var was = R3.groundKey; _rtsTick(1 / 30); _rtsRFrame(1 / 30); if (R3.groundKey !== was) rebuilt++; } }
+    /* the ore texture's throttle runs on the clock, and a frame here takes the better part of a
+       second - so the clock is the page's own, stepped a thirtieth of a second a frame */
+    var realNow = performance.now, clk = realNow.call(performance);
+    performance.now = function () { return clk; };
+    function frames(k) { for (var f = 0; f < k; f++) { var was = R3.groundKey; clk += 1000 / 30; _rtsTick(1 / 30); _rtsRFrame(1 / 30); if (R3.groundKey !== was) rebuilt++; } }
     frames(3); bytes = 0; rebuilt = 0; ore = 0;
-    var t0 = G.t;
-    frames(15);
-    o.kbFrame = +(bytes / 15 / 1024).toFixed(1); o.stillRebuilt = rebuilt; o.orePerSec = +(ore / (G.t - t0)).toFixed(2);
+    /* a field that changes every frame, so the throttle has something to hold back */
+    var oreK = []; for (var q = 0; q < RTS_N * RTS_N && oreK.length < 40; q++) if (G.scrap[q] > 0) oreK.push(q);
+    var c0 = clk;
+    for (var f2 = 0; f2 < 30; f2++) {
+      oreK.forEach(function (k) { G.scrap[k] = Math.max(1, G.scrap[k] - 1); });
+      frames(1);
+    }
+    o.kbFrame = +(bytes / 30 / 1024).toFixed(1); o.stillRebuilt = rebuilt; o.oreN = ore; o.orePerSec = +(ore / ((clk - c0) / 1000)).toFixed(2);
+    performance.now = realNow;
     rebuilt = 0;
     R.focus.x += RTS_TILE * 1.5; _rtsClampFocus();
     frames(1);
@@ -132,7 +142,8 @@ var S = new Suite('quality');
   });
   S.ok('with the camera still, the ground is not rebuilt', up.stillRebuilt === 0, up.stillRebuilt + ' rebuilds over 15 frames');
   S.ok('...and a frame uploads little: under 250 KB (the ground alone was 740)', up.kbFrame < 250, up.kbFrame + ' KB a frame');
-  S.ok('...the ore field at most four times a second, however busy the harvesters', up.orePerSec <= 4.01, up.orePerSec + ' a second');
+  S.ok('...the ore field at most four times a second, however busy the harvesters', up.oreN > 0 && up.orePerSec <= 4.01,
+       up.oreN + ' uploads over a second of a field changing every frame: ' + up.orePerSec + ' a second');
   S.ok('moving the camera a cell and a half does rebuild the ground', up.panRebuilt === 1, up.panRebuilt + ' rebuild');
 
   /* ---------------- AUTO, fed frame times ---------------- */

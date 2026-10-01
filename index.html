@@ -957,7 +957,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">aee3595 · 2026-10-01</div>
+  <div id="rtsBuild" title="build">79f49e7 · 2026-10-01</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -25784,9 +25784,11 @@ function _r3dOreTex(G) {
   if (R3.oreTex && R3.oreHash === oh && R3.oreTexFor === G) return;
   /* A HARVESTER CHANGES THE FIELD EVERY TICK IT MINES, and each change was a 64 KB upload -
      every frame of a match with a harvester working. The stain fades over seconds, so four
-     times a second shows every step of it; a new match still uploads at once. */
-  var now = G.t || 0;
-  if (R3.oreTex && R3.oreTexFor === G && now >= (R3.oreT || 0) && now - (R3.oreT || 0) < 0.25) return;
+     times a second shows every step of it; a new match still uploads at once. By the clock,
+     not G.t: game time stands still while paused or in the editor, and a change made then
+     would never have reached the texture. */
+  var now = (window.performance || Date).now();
+  if (R3.oreTex && R3.oreTexFor === G && now >= (R3.oreT || 0) && now - (R3.oreT || 0) < 250) return;
   R3.oreT = now;
   R3.oreHash = oh; R3.oreTexFor = G;
   if (!R3.oreCv) {
@@ -26022,8 +26024,9 @@ function _r3dGroundMesh(R3, gl, vb, EXT) {
      writes them once), so the patch only changes when the cells it spans or its step do, or the
      match does. On a phone that upload was a steady tax on the bus and on the CPU building it. */
   var key = t0x + ',' + t1x + ',' + t0z + ',' + t1z + ',' + gstep, Gm = window._rtsG;
-  if (R3.groundKey === key && R3.groundFor === Gm && R3.groundVerts) return;
-  R3.groundKey = key; R3.groundFor = Gm;
+  /* ...and the height field itself: a map load or a spec can swap G.height for another array */
+  if (R3.groundKey === key && R3.groundFor === Gm && R3.groundH === (Gm && Gm.height) && R3.groundVerts) return;
+  R3.groundKey = key; R3.groundFor = Gm; R3.groundH = Gm && Gm.height;
   var nqx = Math.ceil((t1x - t0x) / gstep), nqz = Math.ceil((t1z - t0z) / gstep);
   var need = nqx * nqz * 18;
   if (!R3.groundBuf) { R3.groundBuf = gl.createBuffer(); R3.groundUV = gl.createBuffer(); }
@@ -29236,10 +29239,8 @@ function _r3dSceneryFree(G, k) { return !G.blocked[k] && !(G.scrap && G.scrap[k]
 function _r3dSceneryTick(G) {
   var R3 = window._R3D;
   if (!R3 || !R3.gl) return;
-  if (R3.scnFor !== G) { R3.scnPlan = R3.scnPlan && R3.scnPlanFor === G ? R3.scnPlan : _r3dSceneryPlan(G); R3.scnPlanFor = G; R3.scnFor = G; R3.scnKey = null; R3.scnT = -1; }
-  var t = G.t || 0;
-  if (R3.scnKey !== null && t - R3.scnT < 0.5 && t >= R3.scnT) return;
-  R3.scnT = t;
+  if (R3.scnFor !== G) { R3.scnPlan = R3.scnPlan && R3.scnPlanFor === G ? R3.scnPlan : _r3dSceneryPlan(G); R3.scnPlanFor = G; R3.scnFor = G; R3.scnKey = null; }
+  /* every frame: a few hundred cells, and game time stands still while paused */
   var cells = R3.scnCells || (R3.scnCells = _r3dSceneryCells(R3.scnPlan)), key = 0;
   if (R3.scnCellsFor !== R3.scnPlan) { cells = R3.scnCells = _r3dSceneryCells(R3.scnPlan); R3.scnCellsFor = R3.scnPlan; }
   for (var i = 0; i < cells.length; i++) if (!_r3dSceneryFree(G, cells[i])) key = (Math.imul(key, 31) + cells[i] + 1) | 0;
