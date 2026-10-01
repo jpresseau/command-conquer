@@ -292,6 +292,11 @@ breaking it shipped once.
   windows (faces in `RTS_PAL.glass`) blow out past `R3D_GLASS_OUT`, in the mesh program's `_tint`
   (weather3d.js; the dim value carries 3 + damage). Below yellow the thing smokes, below red it
   burns. `R3.scorchOff/hurtOff`; `unit/hurt`, `e2e/hurt`. hurt3d.js loads before weather3d.js.
+- **The fog of war in 3D** (`render3d/shroud3d.js`): a unit `_rtsEntSeen` refuses is not drawn
+  (nor its shadow) - it dissolves out over `R3D_FADE_T`, the fade riding the dim value as tens
+  (`_tint` discards). The shroud is read through a drifting noise warp with a mist in its
+  half-light (`uFog`, set only for the fog draw and reset after). `R3.shroudOff/fadeOff`;
+  `unit/shroud`, `e2e/shroud3d`.
 - **The world's own sound** (`rts.ambience.js`): rain, wind, insects, one engine note, bridge
   rumble, thunder and a night echo, each a few nodes built once and only turned by `setTargetAtTime`
   (`_rtsAmbWant` is the pure half). Lightning keeps the GAME's clock on a fixed schedule

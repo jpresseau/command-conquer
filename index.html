@@ -958,7 +958,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">b034851 · 2026-10-01</div>
+  <div id="rtsBuild" title="build">e5be722 · 2026-10-01</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -23574,6 +23574,62 @@ function _r3dFxHurt(G, V) {
   }
 }
 </script>
+<script>/* render3d/shroud3d.js - the fog of war, as fog. Part of rts.render3d.
+
+   The shroud is one texel a cell (_r3dFog, ground3d.js), and drawn straight it is a grid: the
+   linear filter softens each cell into a diamond and the edge of what you can see runs in
+   steps along the map's own lines. And what moved out of sight vanished on the frame it went,
+   and appeared on the frame it came back - in 3D it did not even vanish: a unit nobody could
+   see was drawn anyway, under the dimmed shroud, shadow and all. Now:
+
+     DRIFTING EDGES  the shroud is read through a slow noise that wanders a cell either way, so
+                     its edge billows and drifts rather than stepping along the grid, and the
+                     dimmed half-light of ground you have seen and cannot see now carries a
+                     mottle of mist moving through it (R3D_SHROUD_GLSL, in the ground texture
+                     program while it draws the fog; uFog is on, clock, 1/RTS_N)
+     OUT OF SIGHT    a unit the player cannot see (_rtsEntSeen, the same test the 2D draw list,
+                     the radar and picking use) is not drawn, nor its shadow
+     FADING          and it dissolves out over R3D_FADE_T as it leaves sight, and in as it comes
+                     back: drawn with a screen-door of discarded pixels, the fade riding in the
+                     instance's dim value as tens (_tint, weather3d.js)
+
+   R3.shroudOff draws the old shroud; R3.fadeOff pops units in and out as before (but still
+   hides what cannot be seen). */
+
+var R3D_SHROUD_WARP = 0.9;       /* cells the shroud's edge wanders either way */
+var R3D_FADE_T = 0.45;           /* seconds a unit takes to dissolve in or out */
+
+var R3D_SHROUD_GLSL =
+  'uniform vec3 uFog;' +
+  'vec4 _shroud(sampler2D s, vec2 uv, vec2 w){' +
+  '  float t = uFog.y;' +
+  '  vec2 q = w * 0.11 + vec2(t * 0.045, t * 0.02);' +
+  '  vec2 d = vec2(_vn(q) - 0.5, _vn(q + vec2(17.3, 5.1)) - 0.5) * (2.0 * ' + R3D_SHROUD_WARP.toFixed(2) + ' * uFog.z);' +
+  '  vec4 c = texture2D(s, uv + d);' +
+  /* mist: only where the shroud is neither clear nor solid - its edges and the half-light */
+  '  float n = _vn(w * 0.35 + vec2(-t * 0.08, t * 0.05)) * 0.6 + _vn(w * 0.9 - vec2(t * 0.11, 0.0)) * 0.4;' +
+  '  c.a = clamp(c.a + (n - 0.5) * 0.9 * c.a * (1.0 - c.a), 0.0, 1.0);' +
+  '  c.rgb += vec3(0.02, 0.025, 0.035) * n;' +
+  '  return c; }';
+
+/* How much of a unit is drawn this frame, 0 gone to 1 whole: easing toward whether the player
+   can see it, R3D_FADE_T for the whole way. A unit met for the first time is simply what it is,
+   so nothing fades in at the start of a match. */
+function _r3dSeenFade(R3, e, mo, t) {
+  var want = typeof _rtsEntSeen !== 'function' || _rtsEntSeen(e) ? 1 : 0;
+  if (R3.fadeOff || mo.seen === undefined) { mo.seen = want; mo.ft = t; return want; }
+  var dt = t - mo.ft;
+  mo.ft = t;
+  if (dt > 0 && dt < 1) mo.seen += Math.max(-dt / R3D_FADE_T, Math.min(dt / R3D_FADE_T, want - mo.seen));
+  else if (dt !== 0) mo.seen = want;
+  return mo.seen;
+}
+/* The dim value with the fade on it: tens of how much is gone, 1 to 9, over the tint it had. */
+function _r3dFadeDim(dim, fade) {
+  if (fade >= 1) return dim;
+  return (dim || 0) + 10 * Math.max(1, Math.min(9, Math.round((1 - fade) * 9)));
+}
+</script>
 <script>/* render3d/weather3d.js - wear on everything that was built: stains, streaks and grime. Part of
    rts.render3d.
 
@@ -23618,6 +23674,13 @@ var R3D_WEATHER_GLSL =
      blotches spreading as s grows, laid on in world space so they hold still on the model, and
      past R3D_GLASS_OUT the windows - faces in the palette's glass - blown out dark */
   'vec3 _tint(float w, vec3 wp, vec3 col){' +
+  /* FADING, in tens over everything else (shroud3d.js): that many tenths of its pixels dropped,
+     a different scatter of them at every pixel of the screen */
+  '  float fd = floor(w * 0.1 + 0.001);' +
+  '  if (fd > 0.0) {' +
+  '    if (fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) * 43758.5453) < fd * 0.1) discard;' +
+  '    w -= fd * 10.0;' +
+  '  }' +
   '  if (w > 2.5) {' +
   '    float s = w - 3.0;' +
   '    float b = _vn(vec2(wp.x + wp.z * 0.7, wp.y * 0.6) * 2.2) * 0.5 + _vn(wp.xz * 4.6 + wp.y * 1.7) * 0.3 + _vn(wp.xz * 9.0 - wp.y * 3.1) * 0.2;' +
@@ -26834,11 +26897,11 @@ var R3D_TEX_FS =
   R3D_PIX_GLSL +
   'uniform float uRecv;' +
   'uniform sampler2D uGrainTex; uniform vec2 uGrain;' +   /* strength, world->tile scale */
-  R3D_SHADOW_GLSL +
+  R3D_SHADOW_GLSL + R3D_NOISE_GLSL + R3D_SHROUD_GLSL +
   'void main(){' +
   /* THE GROUND IS MATERIALS NOW, in a program of their own (render3d/terrain3d.js). This one
      draws the baked picture - the legacy ground - and what the ore stain and the fog sample */
-  '  vec4 c = _pxSample(uS, vT);' +
+  '  vec4 c = uFog.x > 0.0 ? _shroud(uS, vT, vW) : _pxSample(uS, vT);' +   /* the shroud drifts: shroud3d.js */
   /* Composited the way the 2D pass composites it: the tile carries lighten-or-darken in its
      own colour and the strength in its alpha, so this is a plain source-over and none of a
      blend mode's cost is paid. */
@@ -29104,7 +29167,10 @@ function _r3dFrame(G) {
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   _r3dGroundBind(gl, R3, R3.texP);
   gl.bindTexture(gl.TEXTURE_2D, R3.fogTex);
+  var uFog = gl.getUniformLocation(R3.texP, 'uFog');                  /* drifting: shroud3d.js */
+  gl.uniform3f(uFog, R3.shroudOff ? 0 : 1, G.t || 0, 1 / RTS_N);
   gl.drawArrays(gl.TRIANGLES, 0, R3.groundVerts);
+  gl.uniform3f(uFog, 0, 0, 0);
   gl.disable(gl.BLEND); _r3dMark(R3, 'post');
 }
 </script>
@@ -29754,6 +29820,9 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W) {
   var R = _rtsR, t = G.t || 0;
   var turret = R.spr.turret && R.spr.turret[e.side] && R.spr.turret[e.side][e.def];
   var d2 = rtsUnitDef(e.def), pose = 0, mo = _r3dUnitMotion(R3, e, t);
+  /* OUT OF SIGHT, OUT OF THE PICTURE - dissolving as it goes (shroud3d.js) */
+  var fade = _r3dSeenFade(R3, e, mo, t);
+  if (fade <= 0) return;
   /* THE GROUND UNDER IT, not zero. An aircraft's altitude is measured from the ground it
      is over as well - it flies at a height, not at a level - so both take the terrain and
      only the flier adds to it. */
@@ -29786,7 +29855,7 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W) {
   var AP = RTS_AIR_PARTS[e.def], rotor = AP && (AP.rotor || AP.prop) && !R3.rotorOff;
   mo.y = y;                                   /* where it was drawn, for its smoke (hurt3d.js) */
   if (e.air) { mo.n = rk.n; _r3dAirTrail(mo, e, y, t); }
-  var hd = _r3dHurtDim(e, R3);                /* scorched as it is damaged - hurt3d.js */
+  var hd = _r3dFadeDim(_r3dHurtDim(e, R3), fade);   /* scorched as it is damaged (hurt3d.js), fading (shroud3d.js) */
   var roll = d2.kind === 'vehicle' && !d2.sea && !e.air ? _r3dRollPhase(R3, e.def, mo.d) : 0;
   drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : (rotor ? 'body' : null), e.prone, pose, roll),
          e.x + rk.hx, y, e.z + rk.hz, -e.rot, ART2W, hd, 1, rk.n);
@@ -29794,8 +29863,8 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W) {
     drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false), e.x + rk.tx, y, e.z + rk.tz, -(e.turret || 0),
            ART2W, hd, 1, rk.n);
   }
-  if (rotor && AP.rotor) drawIn(C, _r3dMesh('u', e.def, e.side, 'rotor', false), e.x, y, e.z, -e.rot - mo.spin, ART2W, false, 1, rk.n);
-  if (rotor && AP.prop) drawIn(C, _r3dMesh('u', e.def, e.side, 'prop' + _r3dPropPhase(mo.spin), false), e.x, y, e.z, -e.rot, ART2W, false, 1, rk.n);
+  if (rotor && AP.rotor) drawIn(C, _r3dMesh('u', e.def, e.side, 'rotor', false), e.x, y, e.z, -e.rot - mo.spin, ART2W, hd, 1, rk.n);
+  if (rotor && AP.prop) drawIn(C, _r3dMesh('u', e.def, e.side, 'prop' + _r3dPropPhase(mo.spin), false), e.x, y, e.z, -e.rot, ART2W, hd, 1, rk.n);
 }
 </script>
 <script>/* render3d/air3d.js - aircraft that fly like aircraft. Part of rts.render3d.

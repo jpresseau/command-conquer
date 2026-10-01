@@ -42,6 +42,13 @@ var R3D_WEATHER_GLSL =
      blotches spreading as s grows, laid on in world space so they hold still on the model, and
      past R3D_GLASS_OUT the windows - faces in the palette's glass - blown out dark */
   'vec3 _tint(float w, vec3 wp, vec3 col){' +
+  /* FADING, in tens over everything else (shroud3d.js): that many tenths of its pixels dropped,
+     a different scatter of them at every pixel of the screen */
+  '  float fd = floor(w * 0.1 + 0.001);' +
+  '  if (fd > 0.0) {' +
+  '    if (fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) * 43758.5453) < fd * 0.1) discard;' +
+  '    w -= fd * 10.0;' +
+  '  }' +
   '  if (w > 2.5) {' +
   '    float s = w - 3.0;' +
   '    float b = _vn(vec2(wp.x + wp.z * 0.7, wp.y * 0.6) * 2.2) * 0.5 + _vn(wp.xz * 4.6 + wp.y * 1.7) * 0.3 + _vn(wp.xz * 9.0 - wp.y * 3.1) * 0.2;' +
