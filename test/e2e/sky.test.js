@@ -27,7 +27,7 @@ var S = new Suite('sky');
     var b = document.querySelector('#rtsSky button'), o = { before: b && b.textContent };
     if (!b) return o;
     b.click(); o.after = b.textContent; o.stored = window.localStorage.getItem('rtsSky');
-    for (var i = 0; i < 7; i++) b.click();
+    for (var i = 0; i < RTS_SKY_KEYS.length - 1; i++) b.click();      /* the rest of the way round */
     o.back = b.textContent; o.storedBack = window.localStorage.getItem('rtsSky');
     return o;
   });
@@ -217,7 +217,7 @@ var S = new Suite('sky');
 
   S.ok('the title has a SKY button, AUTO to begin with', title.before === 'SKY: AUTO', String(title.before));
   S.ok('...a tap moves it on to DAY and keeps the choice', title.after === 'SKY: DAY' && title.stored === 'day', title.after + ' / ' + title.stored);
-  S.ok('...and round the six back to AUTO, which keeps nothing', title.back === 'SKY: AUTO' && title.storedBack === null, title.back + ' / ' + title.storedBack);
+  S.ok('...and round them all back to AUTO, which keeps nothing', title.back === 'SKY: AUTO' && title.storedBack === null, title.back + ' / ' + title.storedBack);
   S.ok('the 3D mode is available to check', out.on, String(out.on));
   if (out.on) {
     S.ok('by day nothing of the night is drawn: lamps, rain and banks off leave the frame as it was', out.dayOff === 0, (out.dayOff * 100).toFixed(2) + '% changed');

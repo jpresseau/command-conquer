@@ -292,7 +292,7 @@ function _r3dFrame(G) {
        Where instancing is unavailable the batch is flushed one instance at a time through the
        same constant-attribute path everything else uses, which is the draw this replaced. */
     _r3dInstPush(BATCH, mesh, x, y2, zz, sy || 1,
-                 Math.cos(rot), Math.sin(rot), scale, dim === 2 ? 2 : dim ? 1 : 0, lx, ly, lz2);
+                 Math.cos(rot), Math.sin(rot), scale, dim >= 3 ? dim : dim === 2 ? 2 : dim ? 1 : 0, lx, ly, lz2);
   }
   /* Hand every collected batch to the GPU. Grouping reorders the draws - entities come out by
      mesh rather than in entity order - which is invisible only because all of this is opaque
@@ -395,7 +395,7 @@ function _r3dFrame(G) {
       var dmg = !e.building && e.hp < e.maxHp * RTS_COND_YELLOW;
       var rise = e.building ? 0.12 + 0.88 * Math.max(0, Math.min(1, e.bprog || 0)) : 1;
       drawIn(C, _r3dMesh('b', e.def, e.side), e.x, _rtsElev(e.x, e.z), e.z, 0, ART2W,
-             dmg || e.building, rise);
+             e.building ? 1 : _r3dHurtDim(e, R3) || (dmg ? 1 : 0), rise);   /* scorched: hurt3d.js */
     } else if (e.type === 'unit') _r3dPaintUnit(C, e, G, R3, drawIn, ART2W);   /* render3d/unit3d.js */
   }
   /* and the burnt-out hulls of the vehicles that died, charred (render3d/husk3d.js) */
@@ -450,6 +450,9 @@ function _r3dFrame(G) {
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   _r3dGroundBind(gl, R3, R3.texP);
   gl.bindTexture(gl.TEXTURE_2D, R3.fogTex);
+  var uFog = gl.getUniformLocation(R3.texP, 'uFog');                  /* drifting: shroud3d.js */
+  gl.uniform3f(uFog, R3.shroudOff ? 0 : 1, G.t || 0, 1 / RTS_N);
   gl.drawArrays(gl.TRIANGLES, 0, R3.groundVerts);
+  gl.uniform3f(uFog, 0, 0, 0);
   gl.disable(gl.BLEND); _r3dMark(R3, 'post');
 }

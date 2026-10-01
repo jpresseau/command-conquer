@@ -59,7 +59,11 @@ var S = new Suite('orbit');
       /* THE GROUND SHADER: a cell off to one side, its fog flipped */
       var c = _rtsGroundToScreen(R.focus.x, R.focus.z), probe = { x: R.W * 0.72, y: R.H * 0.34 };
       var w = _rtsGroundAt(probe.x, probe.y), tx = _rtsTX(w.x), tz = _rtsTX(w.z), k = _rtsIdx(tx, tz);
+      /* the shroud's drift (shroud3d.js) moves its edge a cell either way on purpose - the
+         marker is read without it, since this measures the projection and not the fog */
+      R3.shroudOff = true;
       var A = shot(); G.mapped[k] = 0; G.visDirty = 1; var B = shot(); G.mapped[k] = 1; G.visDirty = 1;
+      R3.shroudOff = false;
       var m = centroid(A, B), cpu = _rtsGroundToScreen(_rtsWX(tx), _rtsWX(tz));
       r.cell = m ? +Math.hypot(m.x - cpu.x, m.y - cpu.y).toFixed(2) : null;
       /* THE RING SHADER: the unit selected and not */

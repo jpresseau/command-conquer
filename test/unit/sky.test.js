@@ -25,7 +25,7 @@ var dim = Object.keys(K).filter(function (k) { return k !== 'day' && k !== 'snow
   /* overall: dusk's shade is BLUER than its light, which is the look - warm light, cool shade */
   return L[0] + L[1] + L[2] < 3 * 0.92 && S2[0] + S2[1] + S2[2] < L[0] + L[1] + L[2];
 });
-S.ok('every other sky is darker than day, and its shade darker than its light', dim.length === 4, dim.join(','));
+S.ok('every other sky is darker than day, and its shade darker than its light', dim.length === Object.keys(K).length - 2 && dim.length >= 5, dim.join(','));
 S.ok('night is the darkest of them', Object.keys(K).every(function (k) { var a = K[k].L, b = K.night.L; return a[0] + a[1] + a[2] >= b[0] + b[1] + b[2]; }));
 
 /* AUTO */
@@ -35,8 +35,10 @@ for (var s = 1; s <= 3000; s++) {
   count[k] = (count[k] || 0) + 1;
   if (g._rtsSkyOfSeed(s * 37) !== k) again = false;
 }
-S.ok('AUTO picks every sky from the seed - the passing day too - day the most often', Object.keys(K).concat(['cycle']).every(function (k2) { return count[k2] > 150; }) &&
+S.ok('AUTO picks every sky from the seed - the passing day too - day the most often', Object.keys(K).concat(['cycle']).every(function (k2) { return k2 === 'sand' || count[k2] > 100; }) &&
      Object.keys(K).every(function (k2) { return count.day >= count[k2]; }), JSON.stringify(count));
+/* a sandstorm is for sandy maps (unit/weather): on any other, now and then */
+S.ok('...and a sandstorm only now and then', count.sand > 30 && count.sand < count.day / 5, count.sand + ' of 3000');
 S.ok('...and the same seed always the same sky', again);
 
 /* CHOICE */
@@ -46,8 +48,8 @@ g.window._RTS_SKY_W = null;
 S.eq('with nothing chosen it is AUTO', g._rtsSkyWant(), 'auto');
 g.rtsSkySync = function () {};                /* the title button: e2e/sky */
 var seen = [];
-for (var i = 0; i < 8; i++) { g.rtsSkyCycle(); seen.push(g._rtsSkyWant()); }
-S.eq('the button cycles DAY, DUSK, NIGHT, RAIN, FOG, SNOW, CYCLE and back to AUTO', seen.join(','), 'day,dusk,night,rain,fog,snow,cycle,auto');
+for (var i = 0; i < g.RTS_SKY_KEYS.length; i++) { g.rtsSkyCycle(); seen.push(g._rtsSkyWant()); }
+S.eq('the button cycles DAY, DUSK, NIGHT, RAIN, FOG, SNOW, SAND, CYCLE and back to AUTO', seen.join(','), 'day,dusk,night,rain,fog,snow,sand,cycle,auto');
 g._rtsSkySetWant('night');
 g.window._RTS_SKY_W = null;
 S.ok('a choice is kept across a reload, and AUTO is kept as nothing', g._rtsSkyWant() === 'night' && store.rtsSky === 'night' &&

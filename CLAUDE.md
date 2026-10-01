@@ -266,8 +266,11 @@ breaking it shipped once.
   rain and banks in `skyfx3d.js`; 2D is `render/sky2d.js`. `RTS_SKY_FORCE` pins it for a spec.
   CYCLE moves the sun (`_rtsSunAt`; shaders take `uSunD`, its offset from `R3_LIGHT`, and the shadow
   frame is `_r3dSunB()`), exactly the baker's sun at `RTS_DAY_NOON`. SNOW (`uSnow`) whitens the
-  ground before the road paint, settles on upward faces and freezes the shallows.
-  `unit/sky`, `e2e/sky`.
+  ground before the road paint, settles on upward faces and freezes the shallows. SAND is a
+  sandstorm (AUTO picks it on a map with `RTS_SKY_SANDY` of its land sand). RAIN comes and goes
+  after `RTS_SHOWER_FIRST` (`_rtsShower`: showers, dry spells, the ground soaking and drying;
+  `uWet` is wet, clock, rain). A strike draws a bolt (`_rtsBoltAt`, `_r3dBoltFoot`) that lights
+  the ground. `R3.sandAmt/boltOff`. `unit/sky`, `unit/weather`, `e2e/sky`, `e2e/weather`.
 - **A gun going off** (`render3d/combat3d.js`): recoil off `e.recoil` (`_r3dRecoil`: turret and hull
   back along `_rtsMuzzleAngle`, hull rocked; land vehicles only) and a flash plus light off
   `e.fire` at the barrel tip. A dying vehicle throws `debris` from its own id-seeded generator,
@@ -279,9 +282,21 @@ breaking it shipped once.
 - **What moves on a unit** (`render3d/unit3d.js`, which draws every unit for scene3d.js): tracks
   and wheels roll by a renderer-side odometer (`R3.motion`, never the game's) through
   `R3D_ROLL_N` builds of the model (`_SPR_ROLL`, null for sprites; a 3D build evens the links),
-  held under one step a frame against the wagon wheel. `RTS_ROTOR_UNITS` draw part 'rotor' turning
-  over part 'body'. Ships ride `_r3dSwellAt` (wave3d.js). A prone squad crawls (`crawl3d.js`).
-  Kill switches `R3.rollOff/rotorOff/swellOff`. `unit/motion`, `e2e/motion`.
+  held under one step a frame against the wagon wheel. `RTS_AIR_PARTS` (sprites/unit-airsea.js)
+  names the rotor, propeller, burner and wingtips; air3d.js banks and pitches aircraft off the
+  motion record's turn rate and speed, turns props (part `prop<k>`) and lays contrails.
+  `R3.airOff/trailOff`; `unit/air`, `e2e/air`. Ships ride `_r3dSwellAt` (wave3d.js). A prone
+  squad crawls (`crawl3d.js`). Kill switches `R3.rollOff/rotorOff/swellOff`. `unit/motion`,
+  `e2e/motion`.
+- **Damage you can see** (`render3d/hurt3d.js`): soot spreads below `R3D_SCORCH_FROM` and the
+  windows (faces in `RTS_PAL.glass`) blow out past `R3D_GLASS_OUT`, in the mesh program's `_tint`
+  (weather3d.js; the dim value carries 3 + damage). Below yellow the thing smokes, below red it
+  burns. `R3.scorchOff/hurtOff`; `unit/hurt`, `e2e/hurt`. hurt3d.js loads before weather3d.js.
+- **The fog of war in 3D** (`render3d/shroud3d.js`): a unit `_rtsEntSeen` refuses is not drawn
+  (nor its shadow) - it dissolves out over `R3D_FADE_T`, the fade riding the dim value as tens
+  (`_tint` discards). The shroud is read through a drifting noise warp with a mist in its
+  half-light (`uFog`, set only for the fog draw and reset after). `R3.shroudOff/fadeOff`;
+  `unit/shroud`, `e2e/shroud3d`.
 - **The world's own sound** (`rts.ambience.js`): rain, wind, insects, one engine note, bridge
   rumble, thunder and a night echo, each a few nodes built once and only turned by `setTargetAtTime`
   (`_rtsAmbWant` is the pure half). Lightning keeps the GAME's clock on a fixed schedule

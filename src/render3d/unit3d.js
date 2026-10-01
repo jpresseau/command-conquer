@@ -11,6 +11,8 @@
                         the odometer below picks one, so a tank that stops stops its tracks
      ROTORS             spin: the blades are a part of their own, turned over the airframe -
                         flat out in the air, idling on the pad
+     AIRCRAFT           bank into their turns, a helicopter noses down to fly, a Yak's
+                        propeller turns, and a jet lays contrails and burns (air3d.js)
      SHIPS              ride the swell they sit in (_r3dSwellAt, wave3d.js): up and down with
                         it, pitching and rolling with its slope along and across the hull
      CRAWLING           a prone squad on the move crawls (crawl3d.js)
@@ -29,7 +31,7 @@ var R3D_SHIP_REACH = 2.6;        /* world units fore and aft the swell is read a
    a frame moves anything - a unit that has not moved has nothing to add. */
 function _r3dUnitMotion(R3, e, t) {
   var M = R3.motion || (R3.motion = {}), r = M[e.id];
-  if (!r) r = M[e.id] = { x: e.x, z: e.z, d: 0, t: t, spin: (e.id * 2.39) % 6.283 };
+  if (!r) r = M[e.id] = { x: e.x, z: e.z, d: 0, t: t, spin: (e.id * 2.39) % 6.283, rot: e.rot || 0, w: 0, v: 0 };
   /* NEVER MORE THAN A STEP ROUND A FRAME. A link is about a seventh of a world unit and a tank
      covers more than that in a frame, so the true roll would step the running gear half a
      turn a frame - and half a turn is the wagon wheel: the track stands still or runs
@@ -39,8 +41,14 @@ function _r3dUnitMotion(R3, e, t) {
   if (step < 4) r.d += len ? Math.min(step, len / R3D_ROLL_N * 0.95) : step;   /* a jump (unloaded, placed) is not rolled */
   r.x = e.x; r.z = e.z;
   var dt = t - r.t;
-  if (dt > 0 && dt < 1) r.spin += dt * (e.rearming > 0 ? R3D_ROTOR_IDLE : R3D_ROTOR_SPIN);
-  r.t = t;
+  if (dt > 0 && dt < 1) {
+    r.spin += dt * (e.rearming > 0 ? R3D_ROTOR_IDLE : R3D_ROTOR_SPIN);
+    /* how fast it is turning and going, eased - what an aircraft banks and pitches to (air3d.js) */
+    var dr = (e.rot || 0) - r.rot, ease = Math.min(1, dt * 4);
+    dr = Math.atan2(Math.sin(dr), Math.cos(dr));
+    r.w += (dr / dt - r.w) * ease; r.v += ((step < 4 ? step : 0) / dt - r.v) * ease;
+  }
+  r.rot = e.rot || 0; r.t = t;
   /* forget the dead now and then */
   if ((R3.motionN = (R3.motionN || 0) + 1) > 4000) {
     R3.motionN = 0;
@@ -75,6 +83,9 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W) {
   var R = _rtsR, t = G.t || 0;
   var turret = R.spr.turret && R.spr.turret[e.side] && R.spr.turret[e.side][e.def];
   var d2 = rtsUnitDef(e.def), pose = 0, mo = _r3dUnitMotion(R3, e, t);
+  /* OUT OF SIGHT, OUT OF THE PICTURE - dissolving as it goes (shroud3d.js) */
+  var fade = _r3dSeenFade(R3, e, mo, t);
+  if (fade <= 0) return;
   /* THE GROUND UNDER IT, not zero. An aircraft's altitude is measured from the ground it
      is over as well - it flies at a height, not at a level - so both take the terrain and
      only the flier adds to it. */
@@ -95,22 +106,26 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W) {
      19% of the map's open ground is steep enough to show it.
 
      NOT WHAT IS FLYING. An aircraft's attitude is its own business and the hill it
-     happens to be over is nothing to do with it; passing no normal leaves it upright.
-     A ship leans on the swell instead.
+     happens to be over is nothing to do with it: it leans into its turn (air3d.js). A ship
+     leans on the swell instead.
 
      The TURRET takes the same lean as the hull rather than staying level, because it is
      bolted to the hull - it rotates in the hull's plane, and a turret that stayed
      world-level would shear out of its own ring on any slope. */
-  var gn = (e.air || d2.sea) ? null : _rtsElevNormal(e.x, e.z);
+  var gn = d2.sea ? null : e.air ? _r3dAirLean(R3, e, mo, d2) : _rtsElevNormal(e.x, e.z);
   if (d2.sea && !R3.swellOff) { var sw = _r3dShipSwell(e, t); y += sw.y; gn = sw.n; }
   var rk = _r3dRecoil(e, gn) || { hx: 0, hz: 0, tx: 0, tz: 0, n: gn };   /* the kick: combat3d.js */
-  var rotor = RTS_ROTOR_UNITS[e.def] && !R3.rotorOff;
+  var AP = RTS_AIR_PARTS[e.def], rotor = AP && (AP.rotor || AP.prop) && !R3.rotorOff;
+  mo.y = y;                                   /* where it was drawn, for its smoke (hurt3d.js) */
+  if (e.air) { mo.n = rk.n; _r3dAirTrail(mo, e, y, t); }
+  var hd = _r3dFadeDim(_r3dHurtDim(e, R3), fade);   /* scorched as it is damaged (hurt3d.js), fading (shroud3d.js) */
   var roll = d2.kind === 'vehicle' && !d2.sea && !e.air ? _r3dRollPhase(R3, e.def, mo.d) : 0;
   drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : (rotor ? 'body' : null), e.prone, pose, roll),
-         e.x + rk.hx, y, e.z + rk.hz, -e.rot, ART2W, false, 1, rk.n);
+         e.x + rk.hx, y, e.z + rk.hz, -e.rot, ART2W, hd, 1, rk.n);
   if (turret) {
     drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false), e.x + rk.tx, y, e.z + rk.tz, -(e.turret || 0),
-           ART2W, false, 1, rk.n);
+           ART2W, hd, 1, rk.n);
   }
-  if (rotor) drawIn(C, _r3dMesh('u', e.def, e.side, 'rotor', false), e.x, y, e.z, -e.rot - mo.spin, ART2W, false, 1, null);
+  if (rotor && AP.rotor) drawIn(C, _r3dMesh('u', e.def, e.side, 'rotor', false), e.x, y, e.z, -e.rot - mo.spin, ART2W, hd, 1, rk.n);
+  if (rotor && AP.prop) drawIn(C, _r3dMesh('u', e.def, e.side, 'prop' + _r3dPropPhase(mo.spin), false), e.x, y, e.z, -e.rot, ART2W, hd, 1, rk.n);
 }

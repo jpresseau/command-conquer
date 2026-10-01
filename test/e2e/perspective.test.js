@@ -142,12 +142,16 @@ var S = new Suite('perspective');
     /* Where the SHADER puts a cell: flip its fog on, diff the two frames, take the centroid of
        what changed. readPixels is bottom-up, and in device pixels. `mass` is how many changed. */
     function shaderPos(tx, tz) {
-      var k = _rtsIdx(tx, tz);
+      var k = _rtsIdx(tx, tz), R3s = window._R3D;
+      /* the shroud's drift (shroud3d.js) moves its edge a cell either way on purpose - the
+         marker is read without it, since this measures the projection and not the fog */
+      R3s.shroudOff = true;
       G.mapped[k] = 1;
       var A = shot();
       G.mapped[k] = 0;
       var B = shot();
       G.mapped[k] = 1;
+      R3s.shroudOff = false;
       var sx = 0, sy = 0, sw = 0;
       for (var y = 0; y < CH; y++) {
         for (var x = 0; x < CW; x++) {

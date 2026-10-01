@@ -90,6 +90,7 @@ function _r3dMesh(kind, def, side, part, prone, pose, roll) {
        normal per corner, for the duration of this build and no longer. See _R3_DETAIL. */
     faces = _r3DetailHigh(function () {
       if (kind === 'b') return _sprBuildingModel(def, side);
+      if (part && part.slice(0, 4) === 'prop') return _r3dPropModel(def, side, +part.slice(4));   /* air3d.js */
       /* a soldier has a model of his own in 3D, walking (render3d/soldier3d.js) or crawling
          (crawl3d.js); the sprite's is the fallback, and still what a dog is drawn as */
       var ud = rtsUnitDef(def), sm = (ud && ud.kind === 'infantry' && !part && !R3.soldierOff)

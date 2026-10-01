@@ -958,7 +958,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">a6293da · 2026-10-01</div>
+  <div id="rtsBuild" title="build">e5be722 · 2026-10-01</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -9199,9 +9199,16 @@ function _sprUnitGround(X, key) {
    Split because unitmodels.js reached 506 lines the moment the V2 Rocket Launcher was given a
    model of its own, and unit/layout holds every source file to 500. Same shape the building
    models already use (bld-base / bld-tech / bld-war / bld-super). */
-/* The units whose rotor the 3D renderer turns: their model builds part 'rotor' as the blades
-   alone and part 'body' as the rest. */
-var RTS_ROTOR_UNITS = { heli: true };
+/* WHAT THE 3D RENDERER MOVES ON AN AIRCRAFT (render3d/air3d.js), in model units before
+   _sprUnitScale. `rotor`: the model builds part 'rotor' as the blades alone and part 'body' as
+   the rest. `prop`: [x, y, z, radius] of a propeller the 3D mode draws turning, which part
+   'body' leaves off. `burner`: [x, y, z] of a jet's exhaust. `tips`: half the wingspan, where
+   the contrails come off. */
+var RTS_AIR_PARTS = {
+  heli: { rotor: true },
+  mig:  { burner: [-9.6, 4.4, 0], tips: 9.6, trail: true },
+  yak:  { prop: [8.4, 4.1, 0, 5.4], tips: 10.6 }
+};
 function _sprUnitAirSea(X, key) {
   var m = X.m, TM = X.TM, VH = X.VH, S = X.S, DK = X.DK, O = X.O, C = X.C, GN = X.GN,
       d = X.d, prone = X.prone, part = X.part, side = X.side, tracks = X.tracks, i;
@@ -9284,8 +9291,10 @@ function _sprUnitAirSea(X, key) {
       /* the propeller: a thin hub plus two crossed bars, the same trick the Heli's rotor uses
          and for the same reason - a solid disc at this size is an opaque lid over the aircraft */
       _r3Cyl(m, _len * 0.56, 3.6, 0, 1.4, 0.6, GN[2], GN[1], 12);
-      _r3Box(m, _len * 0.60, 3.6, 0, 0.5, 11.0, 1.1, DK[1], DK[3]);
-      _r3Box(m, _len * 0.60, 3.6, 0, 0.5, 1.1, 11.0, DK[1], DK[3]);
+      if (part !== 'body') {
+        _r3Box(m, _len * 0.60, 3.6, 0, 0.5, 11.0, 1.1, DK[1], DK[3]);
+        _r3Box(m, _len * 0.60, 3.6, 0, 0.5, 1.1, 11.0, DK[1], DK[3]);
+      }
       /* Fixed gear under the wings and exhaust stubs down the cowling - the Yak is the
          WW2-era airframe of the pair and wears its machinery outside. */
       for (var _yg = -1; _yg <= 1; _yg += 2) {
@@ -14238,7 +14247,7 @@ function rtsSndReset() { _RTS_SND_MISS = {}; _RTS_SNDTRACKS = null; }
    effects, every voice of it a few nodes built once and only ever turned up or down:
 
      RAIN      hiss, as heavy as the rain is
-     WIND      a low gusting roar in snow and fog
+     WIND      a low gusting roar in snow and fog, a howl in a sandstorm
      NIGHT     insects, at night and dusk, hushed by rain
      ENGINES   one engine note for everything on tracks or wheels that is moving in view - louder
                the more there are, higher the faster they go
@@ -14327,7 +14336,7 @@ function _rtsAmbWant(G) {
   var S = typeof _rtsSkyNow === 'function' ? _rtsSkyNow(G) : null, w = {};
   var rain = S ? S.rain || 0 : 0, night = S ? S.night || 0 : 0;
   w.rain = 0.11 * rain;
-  w.wind = 0.15 * Math.min(1, (S ? (S.snow || 0) + (S.banks || 0) : 0));
+  w.wind = Math.min(0.26, 0.15 * Math.min(1, (S ? (S.snow || 0) + (S.banks || 0) : 0)) + 0.24 * (S ? S.sand || 0 : 0));
   w.ins = 0.035 * night * (1 - rain);
   w.echo = 0.28 * night + (S && S.banks ? 0.08 : 0);
   var moving = 0, speed = 0, decks = 0, E = (G && G.ents) || [];
@@ -23491,6 +23500,136 @@ var R3D_NOISE_GLSL =
   '  vec2 g = ga + u.x * (gb - ga) + u.y * (gc - ga) + u.x * u.y * (ga - gb - gc + gd) + du * (u.yx * k + vec2(b, c) - a);' +
   '  return vec3(a + u.x * (b - a) + u.y * (c - a) + u.x * u.y * k + 0.5, g); }';
 </script>
+<script>/* render3d/hurt3d.js - damage you can see. Part of rts.render3d.
+
+   A tank at a tenth of its health looked exactly like a new one in 3D, and a building at the
+   point of collapse had only a dull red cast over it. The 2D art has damaged frames - scorched,
+   holed, smoking - so the 3D mode shows the same, all of it read off hp against maxHp:
+
+     SCORCH   soot blotches spreading over the paint as the damage mounts, from R3D_SCORCH_FROM
+              of full health down, and a building's windows blown out past R3D_GLASS_OUT of the
+              way down. Drawn by the mesh program (_tint, weather3d.js): the damage rides in the
+              instance's dim value as 3 + how far gone it is
+     SMOKE    below RTS_COND_YELLOW a vehicle trails a thin smoke from its engine deck and a
+              building smokes from its roof, thicker the worse it is
+     FIRE     below RTS_COND_RED the smoke turns black and the thing is on fire
+
+   A building with its own fire (a flame weapon lit it - e.burning) is left to that fire. The
+   roof spots are hashed from the building's id, so a building smokes from the same places
+   every frame. R3.scorchOff takes the scorch out and leaves the old dull cast; R3.hurtOff takes
+   the smoke and fire out. */
+
+var R3D_SCORCH_FROM = 0.75;      /* the fraction of full health the scorch starts below */
+var R3D_GLASS_OUT = 0.35;        /* how far gone before the windows go (the scorch's own 0-1) */
+
+/* How far gone a thing is, 0 untouched to 1 at death, as the scorch measures it. A building
+   still going up is not damaged; it is rising. */
+function _r3dHurtAmt(e) {
+  if (!e || !e.maxHp || e.building) return 0;
+  return Math.max(0, Math.min(1, (R3D_SCORCH_FROM - e.hp / e.maxHp) / R3D_SCORCH_FROM));
+}
+/* The dim value an entity is drawn with: 3 + how far gone, or 0 - and 0 with R3.scorchOff, so
+   the caller's own old dull cast stands. */
+function _r3dHurtDim(e, R3) {
+  var s = R3 && R3.scorchOff ? 0 : _r3dHurtAmt(e);
+  return s > 0 ? 3 + s : 0;
+}
+
+/* Where on a building's roof it smokes and burns from: one spot, two on a big one. */
+function _r3dHurtSpots(e, d) {
+  var n = d.w * d.h >= 4 ? 2 : 1, out = [];
+  for (var j = 0; j < n; j++) {
+    out.push([e.x + (_r3dFxH(e.id * 3 + j, 1.7) - 0.5) * d.w * RTS_TILE * 0.55,
+              e.z + (_r3dFxH(e.id * 5 + j, 2.9) - 0.5) * d.h * RTS_TILE * 0.55]);
+  }
+  return out;
+}
+
+/* Into the effects pass: the smoke and fire of everything hurt and in sight. */
+function _r3dFxHurt(G, V) {
+  var R3 = window._R3D, E = G.ents || [], vis = typeof _rtsVisible === 'function';
+  if (!R3 || R3.hurtOff) return;
+  for (var i = 0; i < E.length; i++) {
+    var e = E[i];
+    if (e.dead || e.building || e.burning || !e.maxHp || e.hp >= e.maxHp * RTS_COND_YELLOW) continue;
+    if (e.type === 'unit' && rtsUnitDef(e.def).kind === 'infantry') continue;
+    if (vis && !_rtsVisible(_rtsTX(e.x), _rtsTX(e.z))) continue;
+    var f = e.hp / e.maxHp, k = (RTS_COND_YELLOW - f) / RTS_COND_YELLOW, red = f < RTS_COND_RED;
+    var seed = _r3dFxH(e.id, 9.1), tint = red ? R3D_FX_SOOT : R3D_FX_SMOKE;
+    if (e.type === 'struct') {
+      var d = rtsStructDef(e.def), m = _r3dMesh('b', e.def, e.side);
+      var top = V.ground(e.x, e.z) + (m && m.top ? m.top * RTS_TILE / RTS_TS : 2) * 0.85;
+      _r3dHurtSpots(e, d).forEach(function (p, j) {
+        var sj = _r3dFxH(seed * 7 + j, 4.4);
+        _r3dFxColumn(V, p[0], top, p[1], 1.6 + 1.8 * k, sj, V.t + sj * 10, 0.3 + 0.45 * k, tint);
+        if (red) _r3dFxFire(V, p[0], top, p[1], 0.45 + 0.3 * d.w * 0.5, 0, sj, 3, 1);
+      });
+    } else {
+      var mo = R3.motion && R3.motion[e.id], y = mo && mo.y !== undefined ? mo.y : V.ground(e.x, e.z);
+      var fx = Math.cos(e.rot || 0), fz = Math.sin(e.rot || 0), r = (e.r || 1.6) * 0.45;
+      var ex = e.x - fx * r, ez = e.z - fz * r, ey = y + 1.5;
+      _r3dFxColumn(V, ex, ey, ez, 0.8 + 0.9 * k, seed, V.t + seed * 10, 0.25 + 0.4 * k, tint);
+      if (red) _r3dFxFire(V, ex, ey - 0.3, ez, 0.3, 0, seed, 3, 1);
+    }
+  }
+}
+</script>
+<script>/* render3d/shroud3d.js - the fog of war, as fog. Part of rts.render3d.
+
+   The shroud is one texel a cell (_r3dFog, ground3d.js), and drawn straight it is a grid: the
+   linear filter softens each cell into a diamond and the edge of what you can see runs in
+   steps along the map's own lines. And what moved out of sight vanished on the frame it went,
+   and appeared on the frame it came back - in 3D it did not even vanish: a unit nobody could
+   see was drawn anyway, under the dimmed shroud, shadow and all. Now:
+
+     DRIFTING EDGES  the shroud is read through a slow noise that wanders a cell either way, so
+                     its edge billows and drifts rather than stepping along the grid, and the
+                     dimmed half-light of ground you have seen and cannot see now carries a
+                     mottle of mist moving through it (R3D_SHROUD_GLSL, in the ground texture
+                     program while it draws the fog; uFog is on, clock, 1/RTS_N)
+     OUT OF SIGHT    a unit the player cannot see (_rtsEntSeen, the same test the 2D draw list,
+                     the radar and picking use) is not drawn, nor its shadow
+     FADING          and it dissolves out over R3D_FADE_T as it leaves sight, and in as it comes
+                     back: drawn with a screen-door of discarded pixels, the fade riding in the
+                     instance's dim value as tens (_tint, weather3d.js)
+
+   R3.shroudOff draws the old shroud; R3.fadeOff pops units in and out as before (but still
+   hides what cannot be seen). */
+
+var R3D_SHROUD_WARP = 0.9;       /* cells the shroud's edge wanders either way */
+var R3D_FADE_T = 0.45;           /* seconds a unit takes to dissolve in or out */
+
+var R3D_SHROUD_GLSL =
+  'uniform vec3 uFog;' +
+  'vec4 _shroud(sampler2D s, vec2 uv, vec2 w){' +
+  '  float t = uFog.y;' +
+  '  vec2 q = w * 0.11 + vec2(t * 0.045, t * 0.02);' +
+  '  vec2 d = vec2(_vn(q) - 0.5, _vn(q + vec2(17.3, 5.1)) - 0.5) * (2.0 * ' + R3D_SHROUD_WARP.toFixed(2) + ' * uFog.z);' +
+  '  vec4 c = texture2D(s, uv + d);' +
+  /* mist: only where the shroud is neither clear nor solid - its edges and the half-light */
+  '  float n = _vn(w * 0.35 + vec2(-t * 0.08, t * 0.05)) * 0.6 + _vn(w * 0.9 - vec2(t * 0.11, 0.0)) * 0.4;' +
+  '  c.a = clamp(c.a + (n - 0.5) * 0.9 * c.a * (1.0 - c.a), 0.0, 1.0);' +
+  '  c.rgb += vec3(0.02, 0.025, 0.035) * n;' +
+  '  return c; }';
+
+/* How much of a unit is drawn this frame, 0 gone to 1 whole: easing toward whether the player
+   can see it, R3D_FADE_T for the whole way. A unit met for the first time is simply what it is,
+   so nothing fades in at the start of a match. */
+function _r3dSeenFade(R3, e, mo, t) {
+  var want = typeof _rtsEntSeen !== 'function' || _rtsEntSeen(e) ? 1 : 0;
+  if (R3.fadeOff || mo.seen === undefined) { mo.seen = want; mo.ft = t; return want; }
+  var dt = t - mo.ft;
+  mo.ft = t;
+  if (dt > 0 && dt < 1) mo.seen += Math.max(-dt / R3D_FADE_T, Math.min(dt / R3D_FADE_T, want - mo.seen));
+  else if (dt !== 0) mo.seen = want;
+  return mo.seen;
+}
+/* The dim value with the fade on it: tens of how much is gone, 1 to 9, over the tint it had. */
+function _r3dFadeDim(dim, fade) {
+  if (fade >= 1) return dim;
+  return (dim || 0) + 10 * Math.max(1, Math.min(9, Math.round((1 - fade) * 9)));
+}
+</script>
 <script>/* render3d/weather3d.js - wear on everything that was built: stains, streaks and grime. Part of
    rts.render3d.
 
@@ -23529,7 +23668,28 @@ var R3D_WEATHER_GLSL =
   /* grime is mud, not shadow: browner as well as darker */
   '  vec3 w = c * k;' +
   '  w = mix(w, w * vec3(0.86, 0.76, 0.64), grime * 0.5);' +
-  '  return mix(c, w, uWeather); }';
+  '  return mix(c, w, uWeather); }' +
+  /* THE TINT A DRAW CARRIES in its dim value: 1 the dull cast of a building rising, 2 a
+     burnt-out husk, and 3 + s SCORCHED, s of the way from untouched to dead (hurt3d.js) - soot
+     blotches spreading as s grows, laid on in world space so they hold still on the model, and
+     past R3D_GLASS_OUT the windows - faces in the palette's glass - blown out dark */
+  'vec3 _tint(float w, vec3 wp, vec3 col){' +
+  /* FADING, in tens over everything else (shroud3d.js): that many tenths of its pixels dropped,
+     a different scatter of them at every pixel of the screen */
+  '  float fd = floor(w * 0.1 + 0.001);' +
+  '  if (fd > 0.0) {' +
+  '    if (fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) * 43758.5453) < fd * 0.1) discard;' +
+  '    w -= fd * 10.0;' +
+  '  }' +
+  '  if (w > 2.5) {' +
+  '    float s = w - 3.0;' +
+  '    float b = _vn(vec2(wp.x + wp.z * 0.7, wp.y * 0.6) * 2.2) * 0.5 + _vn(wp.xz * 4.6 + wp.y * 1.7) * 0.3 + _vn(wp.xz * 9.0 - wp.y * 3.1) * 0.2;' +
+  '    float m = smoothstep(1.25 - 0.8 * s, 1.6 - 0.8 * s, b + 0.3);' +
+  '    vec3 t = mix(vec3(1.0), vec3(0.30, 0.26, 0.23), m * 0.8);' +
+  '    float gl = 1.0 - smoothstep(0.03, 0.07, distance(col, vec3(0.561, 0.737, 0.831)));' +
+  '    return mix(t, vec3(0.12, 0.13, 0.15), gl * step(' + R3D_GLASS_OUT.toFixed(2) + ', s));' +
+  '  }' +
+  '  return w > 1.5 ? vec3(0.2, 0.18, 0.17) : mix(vec3(1.0), vec3(0.62, 0.55, 0.55), w); }';
 </script>
 <script>/* render3d/fxlight3d.js - explosions and fires LIGHT what stands near them. Part of rts.render3d.
 
@@ -23868,7 +24028,7 @@ var R3D_MESH_LIGHT =
   'uniform vec3 uHalf;' +          /* the specular's half-vector, per frame: cam3d.js */
   /* THE HOUR (sky3d.js): how much darker than day the lit and the shaded sides are, so a program
      whose uniforms were never set draws day; and how wet everything is, with the clock */
-  'uniform vec3 uDarkL; uniform vec3 uDarkS; uniform vec2 uWet;' +
+  'uniform vec3 uDarkL; uniform vec3 uDarkS; uniform vec3 uWet;' +
   /* ...and where the sun has moved to, as an offset from the baker's: unset, the baker's sun */
   'uniform vec3 uSunD;' +
   /* The ramp itself, because it is now evaluated TWICE per vertex - once with
@@ -24696,8 +24856,8 @@ var R3D_MESH_FS =
   'uniform float uSnow;' +              /* the SNOW sky: on every roof, and the shore frozen */
   'void main(){' +
   '  if (uSil.a > 0.0) { gl_FragColor = uSil; return; }' +
-  /* vCol.w: 0 whole, 1 damaged or rising, 2 a burnt-out husk (husk3d.js) */
-  '  vec3 tint = vCol.w > 1.5 ? vec3(0.2, 0.18, 0.17) : mix(vec3(1.0), vec3(0.62, 0.55, 0.55), vCol.w);' +
+  /* vCol.w: 0 whole, 1 rising, 2 a burnt-out husk (husk3d.js), 3 + damage scorched (hurt3d.js) */
+  '  vec3 tint = _tint(vCol.w, vec3(vWxz.x, vHY.y, vWxz.y), vCol.rgb);' +
   '  vec3 c = _shade(normalize(vN), vCol.rgb) * tint; float a = uA;' +
   '  if (uWeather > 0.0) c = _weather(c, normalize(vN), vec3(vWxz.x, vHY.y, vWxz.y));' +
   /* snow settles on whatever faces up - roofs, hulls, canopies - and not on the sea */
@@ -26300,7 +26460,7 @@ function _r3dMatFS() {
     R3D_MAT_GLSL +
     R3D_SHADOW_GLSL + R3D_PLIGHT_GLSL +
     /* the hour and the weather (sky3d.js): darker than day by uDarkL/uDarkS - unset, day */
-    'uniform vec3 uDarkL; uniform vec3 uDarkS; uniform vec4 uHaze; uniform vec2 uWet; uniform float uGndL; uniform vec3 uSunD;' +
+    'uniform vec3 uDarkL; uniform vec3 uDarkS; uniform vec4 uHaze; uniform vec3 uWet; uniform float uGndL; uniform vec3 uSunD;' +
     'void main(){' +
     '  vec4 c = _groundLit(vW, vec3(' + R3_LIGHT[0].toFixed(4) + ', ' + R3_LIGHT[1].toFixed(4) + ', ' +
          R3_LIGHT[2].toFixed(4) + ') + uSunD);' +
@@ -26308,14 +26468,16 @@ function _r3dMatFS() {
     '  vec3 lit = c.rgb * mix(vec3(0.575, 0.600, 0.655) * (vec3(1.0) - uDarkS), vec3(1.0) - uDarkL, _shadowAt());' +
     '  lit *= vShade;' +
     /* WET: the ground darkens as it soaks, and the hollows hold water - a puddle is the sky,
-       dimmed, with the rain ringing it */
+       dimmed, with the rain ringing it while it rains (uWet.z). Drying, the puddles shrink back
+       into the deepest hollows before they go (uWet.x, the showers in sky3d.js) */
     '  if (uWet.x > 0.0) {' +
     '    lit *= 1.0 - 0.2 * uWet.x;' +
-    '    float pm = smoothstep(0.6, 0.67, _fbm(vW * 0.08 + vec2(13.0, 4.0))) * uWet.x;' +
+    '    float dry = 0.22 * (1.0 - uWet.x);' +
+    '    float pm = smoothstep(0.6 + dry, 0.67 + dry, _fbm(vW * 0.08 + vec2(13.0, 4.0))) * min(1.0, uWet.x * 1.5);' +
     '    if (pm > 0.0) {' +
     '      vec2 gc = floor(vW * 0.8), gf = fract(vW * 0.8) - 0.5;' +
     '      float ph = fract(uWet.y * 1.3 + _h2(gc));' +
-    '      float ring = smoothstep(0.06, 0.0, abs(length(gf) - ph * 0.45)) * (1.0 - ph) * step(0.35, _h2(gc + 7.0));' +
+    '      float ring = smoothstep(0.06, 0.0, abs(length(gf) - ph * 0.45)) * (1.0 - ph) * step(0.35, _h2(gc + 7.0)) * uWet.z;' +
     '      vec3 sky = uHaze.rgb * 0.55 + vec3(0.16, 0.18, 0.22);' +
     '      lit = mix(lit, lit * 0.3 + sky * 0.55 + ring * 0.22, pm * 0.85);' +
     '    }' +
@@ -26735,11 +26897,11 @@ var R3D_TEX_FS =
   R3D_PIX_GLSL +
   'uniform float uRecv;' +
   'uniform sampler2D uGrainTex; uniform vec2 uGrain;' +   /* strength, world->tile scale */
-  R3D_SHADOW_GLSL +
+  R3D_SHADOW_GLSL + R3D_NOISE_GLSL + R3D_SHROUD_GLSL +
   'void main(){' +
   /* THE GROUND IS MATERIALS NOW, in a program of their own (render3d/terrain3d.js). This one
      draws the baked picture - the legacy ground - and what the ore stain and the fog sample */
-  '  vec4 c = _pxSample(uS, vT);' +
+  '  vec4 c = uFog.x > 0.0 ? _shroud(uS, vT, vW) : _pxSample(uS, vT);' +   /* the shroud drifts: shroud3d.js */
   /* Composited the way the 2D pass composites it: the tile carries lighten-or-darken in its
      own colour and the strength in its alpha, so this is a plain source-over and none of a
      blend mode's cost is paid. */
@@ -27391,6 +27553,8 @@ function _r3dFxEmit(G, V) {
   if (typeof _r3dFxAlive === 'function') _r3dFxAlive(G, V);     /* stacks, beacons - alive3d.js */
   if (typeof _r3dFxSky === 'function') _r3dFxSky(G, V);         /* lamps, rain, fog - skyfx3d.js */
   if (typeof _r3dFxMuzzle === 'function') _r3dFxMuzzle(G, V);   /* guns going off - combat3d.js */
+  if (typeof _r3dFxAir === 'function') _r3dFxAir(G, V);         /* contrails, afterburners - air3d.js */
+  if (typeof _r3dFxHurt === 'function') _r3dFxHurt(G, V);       /* the smoke of the damaged - hurt3d.js */
   for (i = 0; i < G.fx.length; i++) {
     var f = G.fx[i];
     if (f.t < 0 || !_r3dFxOwns(f.kind)) continue;
@@ -28534,6 +28698,7 @@ function _r3dMesh(kind, def, side, part, prone, pose, roll) {
        normal per corner, for the duration of this build and no longer. See _R3_DETAIL. */
     faces = _r3DetailHigh(function () {
       if (kind === 'b') return _sprBuildingModel(def, side);
+      if (part && part.slice(0, 4) === 'prop') return _r3dPropModel(def, side, +part.slice(4));   /* air3d.js */
       /* a soldier has a model of his own in 3D, walking (render3d/soldier3d.js) or crawling
          (crawl3d.js); the sprite's is the fallback, and still what a dog is drawn as */
       var ud = rtsUnitDef(def), sm = (ud && ud.kind === 'infantry' && !part && !R3.soldierOff)
@@ -28844,7 +29009,7 @@ function _r3dFrame(G) {
        Where instancing is unavailable the batch is flushed one instance at a time through the
        same constant-attribute path everything else uses, which is the draw this replaced. */
     _r3dInstPush(BATCH, mesh, x, y2, zz, sy || 1,
-                 Math.cos(rot), Math.sin(rot), scale, dim === 2 ? 2 : dim ? 1 : 0, lx, ly, lz2);
+                 Math.cos(rot), Math.sin(rot), scale, dim >= 3 ? dim : dim === 2 ? 2 : dim ? 1 : 0, lx, ly, lz2);
   }
   /* Hand every collected batch to the GPU. Grouping reorders the draws - entities come out by
      mesh rather than in entity order - which is invisible only because all of this is opaque
@@ -28947,7 +29112,7 @@ function _r3dFrame(G) {
       var dmg = !e.building && e.hp < e.maxHp * RTS_COND_YELLOW;
       var rise = e.building ? 0.12 + 0.88 * Math.max(0, Math.min(1, e.bprog || 0)) : 1;
       drawIn(C, _r3dMesh('b', e.def, e.side), e.x, _rtsElev(e.x, e.z), e.z, 0, ART2W,
-             dmg || e.building, rise);
+             e.building ? 1 : _r3dHurtDim(e, R3) || (dmg ? 1 : 0), rise);   /* scorched: hurt3d.js */
     } else if (e.type === 'unit') _r3dPaintUnit(C, e, G, R3, drawIn, ART2W);   /* render3d/unit3d.js */
   }
   /* and the burnt-out hulls of the vehicles that died, charred (render3d/husk3d.js) */
@@ -29002,7 +29167,10 @@ function _r3dFrame(G) {
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   _r3dGroundBind(gl, R3, R3.texP);
   gl.bindTexture(gl.TEXTURE_2D, R3.fogTex);
+  var uFog = gl.getUniformLocation(R3.texP, 'uFog');                  /* drifting: shroud3d.js */
+  gl.uniform3f(uFog, R3.shroudOff ? 0 : 1, G.t || 0, 1 / RTS_N);
   gl.drawArrays(gl.TRIANGLES, 0, R3.groundVerts);
+  gl.uniform3f(uFog, 0, 0, 0);
   gl.disable(gl.BLEND); _r3dMark(R3, 'post');
 }
 </script>
@@ -29580,6 +29748,8 @@ function _r3dCrawlPose(e, t) {
                         the odometer below picks one, so a tank that stops stops its tracks
      ROTORS             spin: the blades are a part of their own, turned over the airframe -
                         flat out in the air, idling on the pad
+     AIRCRAFT           bank into their turns, a helicopter noses down to fly, a Yak's
+                        propeller turns, and a jet lays contrails and burns (air3d.js)
      SHIPS              ride the swell they sit in (_r3dSwellAt, wave3d.js): up and down with
                         it, pitching and rolling with its slope along and across the hull
      CRAWLING           a prone squad on the move crawls (crawl3d.js)
@@ -29598,7 +29768,7 @@ var R3D_SHIP_REACH = 2.6;        /* world units fore and aft the swell is read a
    a frame moves anything - a unit that has not moved has nothing to add. */
 function _r3dUnitMotion(R3, e, t) {
   var M = R3.motion || (R3.motion = {}), r = M[e.id];
-  if (!r) r = M[e.id] = { x: e.x, z: e.z, d: 0, t: t, spin: (e.id * 2.39) % 6.283 };
+  if (!r) r = M[e.id] = { x: e.x, z: e.z, d: 0, t: t, spin: (e.id * 2.39) % 6.283, rot: e.rot || 0, w: 0, v: 0 };
   /* NEVER MORE THAN A STEP ROUND A FRAME. A link is about a seventh of a world unit and a tank
      covers more than that in a frame, so the true roll would step the running gear half a
      turn a frame - and half a turn is the wagon wheel: the track stands still or runs
@@ -29608,8 +29778,14 @@ function _r3dUnitMotion(R3, e, t) {
   if (step < 4) r.d += len ? Math.min(step, len / R3D_ROLL_N * 0.95) : step;   /* a jump (unloaded, placed) is not rolled */
   r.x = e.x; r.z = e.z;
   var dt = t - r.t;
-  if (dt > 0 && dt < 1) r.spin += dt * (e.rearming > 0 ? R3D_ROTOR_IDLE : R3D_ROTOR_SPIN);
-  r.t = t;
+  if (dt > 0 && dt < 1) {
+    r.spin += dt * (e.rearming > 0 ? R3D_ROTOR_IDLE : R3D_ROTOR_SPIN);
+    /* how fast it is turning and going, eased - what an aircraft banks and pitches to (air3d.js) */
+    var dr = (e.rot || 0) - r.rot, ease = Math.min(1, dt * 4);
+    dr = Math.atan2(Math.sin(dr), Math.cos(dr));
+    r.w += (dr / dt - r.w) * ease; r.v += ((step < 4 ? step : 0) / dt - r.v) * ease;
+  }
+  r.rot = e.rot || 0; r.t = t;
   /* forget the dead now and then */
   if ((R3.motionN = (R3.motionN || 0) + 1) > 4000) {
     R3.motionN = 0;
@@ -29644,6 +29820,9 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W) {
   var R = _rtsR, t = G.t || 0;
   var turret = R.spr.turret && R.spr.turret[e.side] && R.spr.turret[e.side][e.def];
   var d2 = rtsUnitDef(e.def), pose = 0, mo = _r3dUnitMotion(R3, e, t);
+  /* OUT OF SIGHT, OUT OF THE PICTURE - dissolving as it goes (shroud3d.js) */
+  var fade = _r3dSeenFade(R3, e, mo, t);
+  if (fade <= 0) return;
   /* THE GROUND UNDER IT, not zero. An aircraft's altitude is measured from the ground it
      is over as well - it flies at a height, not at a level - so both take the terrain and
      only the flier adds to it. */
@@ -29664,24 +29843,141 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W) {
      19% of the map's open ground is steep enough to show it.
 
      NOT WHAT IS FLYING. An aircraft's attitude is its own business and the hill it
-     happens to be over is nothing to do with it; passing no normal leaves it upright.
-     A ship leans on the swell instead.
+     happens to be over is nothing to do with it: it leans into its turn (air3d.js). A ship
+     leans on the swell instead.
 
      The TURRET takes the same lean as the hull rather than staying level, because it is
      bolted to the hull - it rotates in the hull's plane, and a turret that stayed
      world-level would shear out of its own ring on any slope. */
-  var gn = (e.air || d2.sea) ? null : _rtsElevNormal(e.x, e.z);
+  var gn = d2.sea ? null : e.air ? _r3dAirLean(R3, e, mo, d2) : _rtsElevNormal(e.x, e.z);
   if (d2.sea && !R3.swellOff) { var sw = _r3dShipSwell(e, t); y += sw.y; gn = sw.n; }
   var rk = _r3dRecoil(e, gn) || { hx: 0, hz: 0, tx: 0, tz: 0, n: gn };   /* the kick: combat3d.js */
-  var rotor = RTS_ROTOR_UNITS[e.def] && !R3.rotorOff;
+  var AP = RTS_AIR_PARTS[e.def], rotor = AP && (AP.rotor || AP.prop) && !R3.rotorOff;
+  mo.y = y;                                   /* where it was drawn, for its smoke (hurt3d.js) */
+  if (e.air) { mo.n = rk.n; _r3dAirTrail(mo, e, y, t); }
+  var hd = _r3dFadeDim(_r3dHurtDim(e, R3), fade);   /* scorched as it is damaged (hurt3d.js), fading (shroud3d.js) */
   var roll = d2.kind === 'vehicle' && !d2.sea && !e.air ? _r3dRollPhase(R3, e.def, mo.d) : 0;
   drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : (rotor ? 'body' : null), e.prone, pose, roll),
-         e.x + rk.hx, y, e.z + rk.hz, -e.rot, ART2W, false, 1, rk.n);
+         e.x + rk.hx, y, e.z + rk.hz, -e.rot, ART2W, hd, 1, rk.n);
   if (turret) {
     drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false), e.x + rk.tx, y, e.z + rk.tz, -(e.turret || 0),
-           ART2W, false, 1, rk.n);
+           ART2W, hd, 1, rk.n);
   }
-  if (rotor) drawIn(C, _r3dMesh('u', e.def, e.side, 'rotor', false), e.x, y, e.z, -e.rot - mo.spin, ART2W, false, 1, null);
+  if (rotor && AP.rotor) drawIn(C, _r3dMesh('u', e.def, e.side, 'rotor', false), e.x, y, e.z, -e.rot - mo.spin, ART2W, hd, 1, rk.n);
+  if (rotor && AP.prop) drawIn(C, _r3dMesh('u', e.def, e.side, 'prop' + _r3dPropPhase(mo.spin), false), e.x, y, e.z, -e.rot, ART2W, hd, 1, rk.n);
+}
+</script>
+<script>/* render3d/air3d.js - aircraft that fly like aircraft. Part of rts.render3d.
+
+   An aircraft was drawn level and square to the map whatever it did: a MiG pulling round onto a
+   target turned like a weathervane, a helicopter crossing the map at full speed hung as if
+   parked on a hook. Now, all of it read off what the aircraft is doing (the motion record,
+   render3d/unit3d.js), so the game knows nothing about it:
+
+     BANKING     anything that flies leans into its turn, as far as it is turning hard - a jet
+                 most, a helicopter less - and rolls level as it straightens out
+     PITCH       a helicopter tips its nose down to fly, as far as it is going fast
+     PROPELLER   a Yak's propeller turns: part 'prop<k>', built at R3D_PROP_N angles round
+                 its hub and stepped through by the rotor's own spin
+     CONTRAILS   a jet in flight draws two white lines off its wingtips that hang where it has
+                 been and spread and fade - the one effect here that remembers, because a
+                 trail has to follow the path rather than the heading
+     AFTERBURNER a jet's exhaust burns: a hot glow that flickers
+
+   On the pad (rearming) everything sits level. R3.airOff takes the banking and pitch out, and
+   R3.trailOff the contrails, for a spec's A/B; R3.rotorOff stops the propeller as it stops the
+   rotor. */
+
+var R3D_BANK_K = 0.45;           /* radians of bank for each radian a second of turn */
+var R3D_BANK_MAX = 0.6;          /* the most anything banks, radians */
+var R3D_HELI_BANK = 0.5;         /* a helicopter banks this much of what a jet would */
+var R3D_HELI_PITCH = 0.22;       /* how far a helicopter noses down at full speed, radians */
+var R3D_PROP_N = 4;              /* angles the propeller is built at, across its quarter turn */
+var R3D_TRAIL_EVERY = 0.07;      /* seconds between the points a contrail is laid through */
+var R3D_TRAIL_LIFE = 2.4;        /* seconds a contrail hangs */
+var R3D_TRAIL_C = [0.96, 0.97, 0.99];
+var R3D_BURN_C = [1.0, 0.62, 0.3];
+
+/* The normal an aircraft leans to: up, tipped toward the inside of its turn by the bank and
+   forward by the pitch. null - upright - on the pad, or with R3.airOff. */
+function _r3dAirLean(R3, e, mo, d) {
+  if (R3.airOff || e.rearming > 0) return null;
+  var heli = RTS_AIR_PARTS[e.def] && RTS_AIR_PARTS[e.def].rotor;
+  var bank = Math.max(-R3D_BANK_MAX, Math.min(R3D_BANK_MAX, mo.w * R3D_BANK_K)) * (heli ? R3D_HELI_BANK : 1);
+  var pitch = heli ? R3D_HELI_PITCH * Math.min(1, mo.v / ((d && d.speed) || 20)) : 0;
+  if (Math.abs(bank) < 1e-3 && pitch < 1e-3) return null;
+  var fx = Math.cos(e.rot), fz = Math.sin(e.rot), sb = Math.sin(bank), sp = Math.sin(pitch), cu = Math.cos(bank) * Math.cos(pitch);
+  var nx = -fz * sb + fx * sp, nz = fx * sb + fz * sp, l = Math.hypot(nx, cu, nz);
+  return [nx / l, cu / l, nz / l];
+}
+
+/* Which of the propeller's angles its spin is at. The blades cross, so a quarter turn brings
+   them back onto themselves; the spin runs fast enough that this steps on most frames. */
+function _r3dPropPhase(spin) {
+  var q = Math.PI / 2, a = ((spin % q) + q) % q;
+  return Math.floor(a / q * R3D_PROP_N) % R3D_PROP_N;
+}
+
+/* The propeller at angle k of R3D_PROP_N: a hub and two crossed blades, in the plane across
+   the nose, built where the model's own propeller sits. Tubes, not boxes - _r3dLimb runs
+   between any two points, which is what lets a blade stand at an angle a box cannot. */
+function _r3dPropModel(def, side, k) {
+  var P = RTS_AIR_PARTS[def] && RTS_AIR_PARTS[def].prop;
+  if (!P) return null;
+  var m = [], DK = RTS_PAL.dark, GN = RTS_PAL.gun, a0 = k / R3D_PROP_N * Math.PI / 2;
+  for (var b = 0; b < 2; b++) {
+    var a = a0 + b * Math.PI / 2, cy = Math.cos(a) * P[3], cz = Math.sin(a) * P[3];
+    _r3dLimb(m, P[0], P[1] - cy, P[2] - cz, P[0], P[1] + cy, P[2] + cz, 0.32, 0.32, 8, DK[1]);
+  }
+  _r3dBall(m, P[0] + 0.3, P[1], P[2], 0.7, GN[2], 10, 6);                 /* spinner */
+  var sc = _sprUnitScale(def);
+  return sc === 1 ? m : _r3Scale(m, sc);
+}
+
+/* A JET'S CONTRAIL: where it has been, every R3D_TRAIL_EVERY seconds, for as long as a trail
+   hangs. Called by every pass, so it lays a point only when one is due. */
+function _r3dAirTrail(mo, e, y, t) {
+  var AP = RTS_AIR_PARTS[e.def];
+  if (!AP || !AP.trail) return;
+  var T = mo.trail || (mo.trail = []);
+  if (e.rearming > 0) { T.length = 0; return; }
+  if (T.length && t - T[T.length - 1][3] < R3D_TRAIL_EVERY && t >= T[T.length - 1][3]) return;
+  if (T.length && t < T[T.length - 1][3]) T.length = 0;          /* the clock went back: a spec */
+  T.push([e.x, y, e.z, t, -Math.sin(e.rot), Math.cos(e.rot)]);
+  while (T.length && t - T[0][3] > R3D_TRAIL_LIFE) T.shift();
+}
+
+/* Into the effects pass: the contrails and the afterburners of whatever is flying in sight. */
+function _r3dFxAir(G, V) {
+  var R3 = window._R3D, M = R3 && R3.motion, E = G.ents || [], vis = typeof _rtsVisible === 'function';
+  if (!M) return;
+  var w2 = RTS_TILE / RTS_TS;
+  for (var i = 0; i < E.length; i++) {
+    var e = E[i], AP = RTS_AIR_PARTS[e.def], mo = M[e.id];
+    if (e.dead || !e.air || !AP || !mo || mo.y === undefined || e.rearming > 0) continue;
+    if (vis && !_rtsVisible(_rtsTX(e.x), _rtsTX(e.z))) continue;
+    var sc = _sprUnitScale(e.def) * w2, fx = Math.cos(e.rot), fz = Math.sin(e.rot);
+    if (AP.trail && mo.trail && R3.trailOff !== true) {
+      var T = mo.trail, tip = AP.tips * sc;
+      for (var j = 1; j < T.length; j++) {
+        var p0 = T[j - 1], p1 = T[j], age = V.t - p1[3];
+        if (age < 0 || age > R3D_TRAIL_LIFE) continue;
+        var u = age / R3D_TRAIL_LIFE, op = 0.8 * (1 - u) * Math.min(1, age * 6 + 0.3), wd = 0.25 + u * 1.1;
+        /* each piece reaches back over the one before: a streak fades in along its first half,
+           so laid end to end they would come out as dashes, and overlapped they are one line */
+        for (var s = -1; s <= 1; s += 2) {
+          var ax = p1[0] + p1[4] * tip * s, az = p1[2] + p1[5] * tip * s, bx0 = p0[0] + p0[4] * tip * s, bz0 = p0[2] + p0[5] * tip * s;
+          _r3dFxStreak(V.M, V, 2 * bx0 - ax, 2 * p0[1] - p1[1], 2 * bz0 - az, ax, p1[1], az, wd, 0.6, R3D_FXT_RAIN, 0, i + s, op, 0, R3D_TRAIL_C);
+        }
+      }
+    }
+    if (AP.burner) {
+      var B = AP.burner, bx = e.x + fx * B[0] * sc, bz = e.z + fz * B[0] * sc, by = mo.y + B[1] * sc;
+      var fl = 0.8 + 0.2 * Math.sin(V.t * 37 + i) * Math.sin(V.t * 23 + i * 2);
+      _r3dFxBill(V.M, V, bx, by, bz, 0.55 * fl, 0.55 * fl, 0.6, R3D_FXT_GLOW, 0, 0.5, 1.0, 0, R3D_BURN_C);
+      _r3dFxStreak(V.M, V, bx, by, bz, bx - fx * 1.6 * fl, by, bz - fz * 1.6 * fl, 0.4, 0.6, R3D_FXT_STREAK, 0, i, 0.8, 0, R3D_BURN_C);
+    }
+  }
 }
 </script>
 <script>/* render3d/world3d.js - the map itself as geometry: forests, rock ridges and
@@ -30548,8 +30844,24 @@ var R3D_SKIES = {
   rain:  { L: [0.64, 0.68, 0.74], S: [0.57, 0.61, 0.69], haze: [0.52, 0.57, 0.63, 0.20], night: 0.35, wet: 1, rain: 1, banks: 0 },
   fog:   { L: [0.86, 0.88, 0.91], S: [0.75, 0.78, 0.83], haze: [0.76, 0.79, 0.82, 0.32], night: 0.15, wet: 0, rain: 0, banks: 1 },
   /* bright, and cold in the shade: the ground white, snow on every roof, the shore frozen */
-  snow:  { L: [0.93, 0.95, 1.0],  S: [0.66, 0.72, 0.86], haze: [0.86, 0.89, 0.94, 0.14], night: 0.15, wet: 0, rain: 0, banks: 0, snow: 1 }
+  snow:  { L: [0.93, 0.95, 1.0],  S: [0.66, 0.72, 0.86], haze: [0.86, 0.89, 0.94, 0.14], night: 0.15, wet: 0, rain: 0, banks: 0, snow: 1 },
+  /* a sandstorm: the light gone ochre, the distance swallowed, sand driving across the ground */
+  sand:  { L: [0.92, 0.74, 0.52], S: [0.62, 0.50, 0.40], haze: [0.80, 0.62, 0.40, 0.36], night: 0.3,  wet: 0, rain: 0, banks: 0, sand: 1 }
 };
+/* Between showers: still overcast, lighter than the rain, the lamps half on. */
+var R3D_SKY_LULL = { L: [0.8, 0.83, 0.88], S: [0.7, 0.74, 0.8], haze: [0.62, 0.66, 0.7, 0.12], night: 0.2, wet: 0, rain: 0, banks: 0 };
+/* SHOWERS. The rain sky rains steadily for its first RTS_SHOWER_FIRST seconds, then comes and
+   goes: a dry spell, a shower, a dry spell - each a fixed length plus up to as much again,
+   hashed from its index, on the game's clock, so a battle's weather is the same every time it
+   is played. The ground soaks while it rains and dries after, never at once: wet comes up on
+   RTS_WET_FILL and goes on RTS_WET_DRY, so the puddles linger and shrink through a dry spell. */
+var RTS_SHOWER_FIRST = 240;
+var RTS_SHOWER_DRY = 45;         /* a dry spell, at the least, and up to as much again */
+var RTS_SHOWER_WET = 90;         /* a shower likewise */
+var RTS_SHOWER_RAMP = 8;         /* seconds the rain takes to come on or die away */
+var RTS_WET_FILL = 20, RTS_WET_DRY = 80;
+/* AUTO goes to a sandstorm on a map with this much of its land sand */
+var RTS_SKY_SANDY = 0.15;
 /* THE CYCLE: a day passes over the battle. The hour runs from RTS_DAY_START through a whole day
    in RTS_DAY_LEN seconds of game time; the sky is the presets blended at their hours, and the
    sun itself moves - round the map and up and down the sky - so the shadows swing. */
@@ -30558,7 +30870,7 @@ var RTS_DAY_START = 8;           /* the hour a battle starts at */
 var RTS_DAY_NOON = 11;           /* the hour the sun stands where the sprite baker put it */
 var RTS_DAY_KEYS = [[0, 'night'], [5, 'night'], [6.5, 'dusk'], [8, 'day'], [17, 'day'], [18.5, 'dusk'], [20, 'night'], [24, 'night']];
 var RTS_SKY_LS = 'rtsSky';
-var RTS_SKY_KEYS = ['auto', 'day', 'dusk', 'night', 'rain', 'fog', 'snow', 'cycle'];
+var RTS_SKY_KEYS = ['auto', 'day', 'dusk', 'night', 'rain', 'fog', 'snow', 'sand', 'cycle'];
 
 /* What the player chose: one of RTS_SKY_KEYS. */
 /* Read from storage once and then kept: it is asked every frame. */
@@ -30590,10 +30902,55 @@ function rtsSkySync() {
   wrap.firstChild.textContent = 'SKY: ' + w.toUpperCase();
   wrap.firstChild.title = w === 'auto' ? 'The time of day and the weather, picked by the map' : 'Every battle under this sky - tap to change';
 }
-/* AUTO: from the seed - mostly day, and every other sky about one battle in six or seven */
-function _rtsSkyOfSeed(seed) {
+/* AUTO: from the seed - mostly day, and every other sky about one battle in six or seven; a
+   sandstorm now and then, and on a sandy map one battle in two */
+function _rtsSkyOfSeed(seed, sandy) {
   var h = _sprHash((seed | 0) % 9973, 17, 977);
-  return h < 0.36 ? 'day' : h < 0.48 ? 'dusk' : h < 0.6 ? 'night' : h < 0.72 ? 'rain' : h < 0.82 ? 'fog' : h < 0.91 ? 'snow' : 'cycle';
+  if (sandy && h >= 0.5) return 'sand';
+  return h < 0.36 ? 'day' : h < 0.48 ? 'dusk' : h < 0.6 ? 'night' : h < 0.72 ? 'rain' : h < 0.82 ? 'fog' : h < 0.91 ? 'snow' : h < 0.96 ? 'cycle' : 'sand';
+}
+/* How much of a map's land is sand - asked once a map, and kept beside it rather than on it,
+   since everything on G is saved. */
+var _RTS_SANDY = typeof WeakMap === 'function' ? new WeakMap() : null;
+function _rtsSandShare(G) {
+  if (!G || !G.terrain) return 0;
+  var c = _RTS_SANDY && _RTS_SANDY.get(G.terrain);
+  if (c !== undefined) return c;
+  var n = 0, land = 0;
+  for (var i = 0; i < G.terrain.length; i++) { var t = G.terrain[i]; if (t === RTS_T_SAND) n++; if (t !== RTS_T_WATER) land++; }
+  c = land ? n / land : 0;
+  if (_RTS_SANDY) _RTS_SANDY.set(G.terrain, c);
+  return c;
+}
+/* The rain sky's weather at game time t: how hard it is raining and how wet the ground is. */
+function _rtsShower(t) {
+  if (t < RTS_SHOWER_FIRST) return { rain: 1, wet: 1 };
+  var T = RTS_SHOWER_FIRST, wet = 1, i = 0, raining = false;
+  for (;;) {
+    var len = (raining ? RTS_SHOWER_WET : RTS_SHOWER_DRY) * (1 + _sprHash(i, raining ? 3 : 5, 883));
+    var u = Math.min(t, T + len) - T;
+    wet = raining ? 1 - (1 - wet) * Math.exp(-u / RTS_WET_FILL) : wet * Math.exp(-u / RTS_WET_DRY);
+    if (t < T + len) {
+      var ramp = Math.min(1, Math.min(u, len - u) / RTS_SHOWER_RAMP);
+      return { rain: raining ? ramp : 0, wet: wet };
+    }
+    T += len; if (raining) i++; raining = !raining;
+  }
+}
+/* A LIGHTNING BOLT, strike n's: where it comes down, as fractions of the view across and into
+   it, and the jagged path it takes from the cloud - [x, y, z] offsets from the foot, top first. */
+function _rtsBoltAt(n) {
+  var pts = [], H = 26, seg = 9, x = 0, z = 0;
+  for (var i = 0; i <= seg; i++) {
+    var y = H * (1 - i / seg);
+    pts.push([x, y, z]);
+    x += (_sprHash(n, i, 461) - 0.5) * 3.2; z += (_sprHash(n, i, 467) - 0.5) * 2.2;
+  }
+  /* the last step lands on the foot */
+  var ex = pts[seg][0], ez = pts[seg][2];
+  pts = pts.map(function (p, k) { return [p[0] - ex * k / seg, p[1], p[2] - ez * k / seg]; });
+  /* the foot low in the view, so the bolt stands up through it rather than off its top */
+  return { u: 0.2 + 0.6 * _sprHash(n, 31, 463), v: 0.5 + 0.35 * _sprHash(n, 37, 467), pts: pts };
 }
 /* The hour of a CYCLE battle, 0..24. */
 function _rtsSkyHour(G) { return (RTS_DAY_START + ((G && G.t) || 0) / RTS_DAY_LEN * 24) % 24; }
@@ -30633,6 +30990,11 @@ function _rtsSunAt(h) {
 function _rtsSkyNow(G) {
   var n = window.RTS_SKY_FORCE || _rtsSkyName(G);
   var S = n === 'cycle' ? _rtsSkyAt(_rtsSkyHour(G)) : (R3D_SKIES[n] || R3D_SKIES.day);
+  if (n === 'rain' && ((G && G.t) || 0) >= RTS_SHOWER_FIRST) {
+    var sh = _rtsShower(G.t);
+    S = _rtsSkyMix(R3D_SKY_LULL, R3D_SKIES.rain, sh.rain);
+    S.rain = sh.rain; S.wet = sh.wet;
+  }
   /* LIGHTNING, in the rain: for its instant the whole field is lit near to day - the strike's
      schedule is the thunder's (rts.ambience.js), on the game's clock */
   if (S.rain > 0 && typeof _rtsLightning === 'function' && window.RTS_FLASH_OFF !== true) {
@@ -30644,7 +31006,7 @@ function _rtsSkyNow(G) {
 /* The sky this battle is under: its name. */
 function _rtsSkyName(G) {
   var w = _rtsSkyWant();
-  return w !== 'auto' ? w : _rtsSkyOfSeed(G ? G.seed : 0);
+  return w !== 'auto' ? w : _rtsSkyOfSeed(G ? G.seed : 0, _rtsSandShare(G) >= RTS_SKY_SANDY);
 }
 /* ...and its settings, held on R3 for the frame. */
 function _r3dSky(G) {
@@ -30665,7 +31027,7 @@ function _r3dSkyU(gl, P) {
   gl.uniform3f(gl.getUniformLocation(P, 'uDarkL'), 1 - S.L[0], 1 - S.L[1], 1 - S.L[2]);
   gl.uniform3f(gl.getUniformLocation(P, 'uDarkS'), 1 - S.S[0], 1 - S.S[1], 1 - S.S[2]);
   gl.uniform4f(gl.getUniformLocation(P, 'uHaze'), S.haze[0], S.haze[1], S.haze[2], S.haze[3]);
-  gl.uniform2f(gl.getUniformLocation(P, 'uWet'), S.wet, (window._rtsG && window._rtsG.t) || 0);
+  gl.uniform3f(gl.getUniformLocation(P, 'uWet'), S.wet, (window._rtsG && window._rtsG.t) || 0, S.rain || 0);
   /* the ground takes the point lights only when the lamps are on: by day it was lit by an
      explosion's glare on the ground alone (fxemit3d.js), and still is */
   gl.uniform1f(gl.getUniformLocation(P, 'uGndL'), S.night > 0 ? 1 : 0);
@@ -30683,6 +31045,9 @@ function _r3dSkyLights(G, R3) {
   var S = R3.sky || R3D_SKIES.day, out = [];
   if (!(S.night > 0) || R3.lampAmt === 0) return out;
   var vb = _r3dBoundsNear(_r3dViewBounds(), 10, 20), n = S.night, i;
+  /* the strike lights the ground round where it comes down, brightest of all for its instant */
+  var bolt = typeof _r3dBoltFoot === 'function' ? _r3dBoltFoot(G) : null;
+  if (bolt) out.push([bolt[0], bolt[1] + 4, bolt[2], 36, 3.2 * S.flash, 0, 0.85, 0.9, 1.0, 9]);
   function inV(x, z) { return x > vb.x0 && x < vb.x1 && z > vb.z0 && z < vb.z1; }
   /* [9] how much a light counts for its slot beyond its brightness: a headlight follows the action */
   function lamp(p, reach, s, c, pri) { if (inV(p[0], p[2])) out.push([p[0], p[1], p[2], reach, s * n, 0, c[0], c[1], c[2], pri || 1]); }
@@ -30708,13 +31073,15 @@ function _r3dSkyLights(G, R3) {
   return out;
 }
 </script>
-<script>/* render3d/skyfx3d.js - what the sky puts in the effects pass: the lamps' glows, the rain and
-   the fog banks. Part of rts.render3d; the sky itself is sky3d.js.
+<script>/* render3d/skyfx3d.js - what the sky puts in the effects pass: the lamps' glows, the rain, the
+   snow, a sandstorm's driven sand, the lightning's bolt and the fog banks. Part of
+   rts.render3d; the sky itself is sky3d.js.
 
    All of it is laid round the VIEW each frame, from hashes, and nothing is kept: a raindrop is a
    position and a phase in its fall worked out from its index and the clock, so the rain costs
    no state, cannot drift out of step with the frame, and is the same on every frame drawn at
-   the same moment. R3.rainAmt / R3.bankAmt / R3.lampAmt take each out for a spec's A/B. */
+   the same moment. R3.rainAmt / R3.bankAmt / R3.lampAmt / R3.snowAmt / R3.sandAmt and
+   R3.boltOff take each out for a spec's A/B. */
 
 var R3D_RAIN_N = 360;            /* streaks at once, at most */
 var R3D_RAIN_FALL = 0.55;        /* seconds from the top of a streak's fall to the ground */
@@ -30726,6 +31093,22 @@ var R3D_FXT_RAIN = 10, R3D_FXT_GLOW = 11, R3D_FXT_FLAKE = 12;
 var R3D_SNOW_N = 420;            /* flakes at once, at most */
 var R3D_SNOW_FALL = 3.2;         /* seconds a flake takes to come down */
 var R3D_SNOW_C = [0.95, 0.96, 0.98];
+var R3D_SAND_N = 380;            /* grains of driven sand at once, at most */
+var R3D_SAND_FLY = 0.7;          /* seconds a grain takes to cross its run */
+var R3D_SAND_RUN = 14;           /* world units it is blown */
+var R3D_SAND_C = [0.86, 0.68, 0.44];
+var R3D_BOLT_C = [0.86, 0.9, 1.0];
+
+/* Where strike n of the lightning comes down this frame: its place in the view (_rtsBoltAt,
+   sky3d.js) on the ground there - [x, y, z, n] - or null when nothing is striking. Read by the
+   bolt below and by the light it throws (_r3dSkyLights). */
+function _r3dBoltFoot(G) {
+  var R3 = window._R3D, S = R3 && R3.sky;
+  if (!S || !(S.flash > 0.05) || R3.boltOff === true || typeof _rtsLightning !== 'function') return null;
+  var n = _rtsLightning((G && G.t) || 0).n, b = _rtsBoltAt(n), vb = _r3dViewBounds();
+  var x = vb.x0 + b.u * (vb.x1 - vb.x0), z = vb.z0 + b.v * (vb.z1 - vb.z0);
+  return [x, _rtsElev(x, z), z, n];
+}
 
 function _r3dFxSky(G, V) {
   var R3 = window._R3D, S = R3 && R3.sky;
@@ -30788,6 +31171,42 @@ function _r3dFxSky(G, V) {
       var fy = V.ground(fx, fz) + 18 * (1 - fp), fr = 0.1 + _r3dFxH(i, 8.3) * 0.1;
       _r3dFxBill(V.M, V, fx, fy, fz, fr, fr, 0.2, R3D_FXT_FLAKE, 0, i, 0.85 * S.snow * Math.min(1, (1 - fp) * 8), 0, R3D_SNOW_C);
     }
+  }
+
+  /* THE SANDSTORM: sand driven low across the view on the wind, and clouds of it rolling by */
+  if (S.sand > 0 && R3.sandAmt !== 0) {
+    var ns = Math.min(R3D_SAND_N, Math.round(W * D / 18));
+    R3.sandN = ns;
+    for (i = 0; i < ns; i++) {
+      var sp = _r3dFxH(i, 6.1), sc = V.t / R3D_SAND_FLY + sp, se = Math.floor(sc), sq = sc - se;
+      var sx = vb.x0 - R3D_SAND_RUN + _r3dFxH(i * 1.9 + se * 0.37, 2.3) * (W + R3D_SAND_RUN) + sq * R3D_SAND_RUN;
+      var sz = vb.z0 + _r3dFxH(i * 2.7 + se * 0.61, 5.9) * D + sq * R3D_SAND_RUN * 0.3;
+      var sy = V.ground(sx, sz) + 0.3 + _r3dFxH(i, 9.7) * 2.6;
+      _r3dFxStreak(V.M, V, sx - 2.4, sy + 0.08, sz - 0.7, sx, sy, sz, 0.09, 0, R3D_FXT_RAIN, 0, i, 0.75 * S.sand * Math.sin(sq * Math.PI), 0, R3D_SAND_C);
+    }
+    var sspan = Math.max(W, D) + 60;
+    for (i = 0; i < R3D_BANK_N; i++) {
+      var cx = vb.x0 - 30 + ((_r3dFxH(i, 3.5) * sspan + V.t * 7) % sspan), cz = vb.z0 - 30 + ((_r3dFxH(i, 6.6) * sspan + V.t * 2) % sspan);
+      var cr = 10 + _r3dFxH(i, 4.2) * 10;
+      _r3dFxBill(V.M, V, cx, V.ground(cx, cz) + cr * 0.3, cz, cr, cr * 0.5, 0.4, R3D_FXT_BLOB, 0.4, i * 0.53, 0.4 * S.sand, 0, R3D_SAND_C);
+    }
+  }
+
+  /* THE BOLT: the strike itself, a jagged line of light from the cloud to the ground, forked,
+     and a glare where it lands. A streak is a tracer's, bright at its head and faint at its
+     tail, so each piece is laid both ways to burn evenly along its length. */
+  var foot = _r3dBoltFoot(G);
+  if (foot) {
+    var bp = _rtsBoltAt(foot[3]).pts, bw = 1.1, bop = Math.min(1, S.flash * 1.4);
+    var seg = function (a, b, w2, op) {
+      _r3dFxStreak(V.M, V, a[0], a[1], a[2], b[0], b[1], b[2], w2, 0.6, R3D_FXT_STREAK, 0, 0, op, 0, R3D_BOLT_C);
+      _r3dFxStreak(V.M, V, b[0], b[1], b[2], a[0], a[1], a[2], w2, 0.6, R3D_FXT_STREAK, 0, 0, op, 0, R3D_BOLT_C);
+    };
+    var at3 = function (p) { return [foot[0] + p[0], foot[1] + p[1], foot[2] + p[2]]; };
+    for (i = 1; i < bp.length; i++) seg(at3(bp[i - 1]), at3(bp[i]), bw, bop);
+    var fk = at3(bp[3]);
+    seg(fk, [fk[0] + 4, fk[1] - 7, fk[2] + 1.5], bw * 0.6, bop * 0.7);
+    _r3dFxBill(V.M, V, foot[0], foot[1] + 1, foot[2], 4, 4, 0.6, R3D_FXT_GLOW, 0, 0.5, bop, 0, R3D_BOLT_C);
   }
 
   /* THE FOG BANKS: low, wide, slow, drifting on the wind across the view */
@@ -31219,6 +31638,28 @@ function _rtsSky2D(g, G) {
       var x0 = _sprHash(i, ep, 993) * W, y0 = (_sprHash(ep, i, 997) * 1.2 - 0.2) * H + p * H * 0.25;
       g.moveTo(x0, y0); g.lineTo(x0 - 4 * dpr, y0 + 16 * dpr);
     }
+    g.stroke();
+  }
+  /* the sandstorm: ochre streaks driven across the screen on the wind */
+  if (S.sand > 0) {
+    var td = G.t || 0, nd = Math.round(W * H / 3000);
+    g.strokeStyle = 'rgba(222,176,112,0.45)';
+    g.lineWidth = Math.max(1, dpr);
+    g.beginPath();
+    for (i = 0; i < nd; i++) {
+      var dp = _sprHash(i, 9, 971), dc = td / 0.7 + dp, de = Math.floor(dc), dq = dc - de;
+      var dx = (_sprHash(i, de, 973) * 1.3 - 0.3) * W + dq * W * 0.3, dy = _sprHash(de, i, 977) * H;
+      g.moveTo(dx, dy); g.lineTo(dx + 22 * dpr, dy + 3 * dpr);
+    }
+    g.stroke();
+  }
+  /* the lightning: the bolt, from the top of the screen to where it strikes (_rtsBoltAt) */
+  if (S.flash > 0.05 && typeof _rtsLightning === 'function') {
+    var bolt = _rtsBoltAt(_rtsLightning(G.t || 0).n), fx0 = bolt.u * W, fy0 = bolt.v * H, bs = fy0 / 26;
+    g.strokeStyle = 'rgba(225,232,255,' + Math.min(1, S.flash * 1.4).toFixed(3) + ')';
+    g.lineWidth = 3 * dpr;
+    g.beginPath();
+    bolt.pts.forEach(function (p, k) { var px = fx0 + p[0] * bs * 2, py = fy0 - p[1] * bs; if (k) g.lineTo(px, py); else g.moveTo(px, py); });
     g.stroke();
   }
   /* the snow: soft white flakes drifting down */
