@@ -17,7 +17,7 @@ var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('motion');
 var g = load(['src/rules', 'src/core', 'src/map', 'src/r3d', 'src/sprites', 'src/render3d/forest3d.js', 'src/render3d/soldier3d.js',
-              'src/render3d/crawl3d.js', 'src/render3d/wave3d.js', 'src/render3d/combat3d.js', 'src/render3d/unit3d.js']);
+              'src/render3d/crawl3d.js', 'src/render3d/wave3d.js', 'src/render3d/combat3d.js', 'src/render3d/unit3d.js', 'src/render3d/air3d.js']);
 
 function sig(faces) {
   return faces.map(function (f) { return f.v.map(function (p) { return p.map(function (v) { return (Math.round(v * 1000) / 1000).toFixed(3); }).join(','); }).join(';') + '|' + f.c; }).sort();
@@ -117,7 +117,7 @@ R3.rollOff = true;
 S.eq('R3.rollOff holds every vehicle at the first point', g._r3dRollPhase(R3, 'tank', 0.5), 0);
 
 /* ---- ROTOR ---- */
-var keys = Object.keys(g.RTS_ROTOR_UNITS);
+var keys = Object.keys(g.RTS_AIR_PARTS).filter(function (k) { return g.RTS_AIR_PARTS[k].rotor; });
 S.ok('there are rotors to turn', keys.length >= 1, keys.join(', '));
 keys.forEach(function (key) {
   var whole = g._sprUnitModel(key, 'player', false, null), body = g._sprUnitModel(key, 'player', false, 'body'), blades = g._sprUnitModel(key, 'player', false, 'rotor');

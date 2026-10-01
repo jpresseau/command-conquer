@@ -6,9 +6,16 @@
    Split because unitmodels.js reached 506 lines the moment the V2 Rocket Launcher was given a
    model of its own, and unit/layout holds every source file to 500. Same shape the building
    models already use (bld-base / bld-tech / bld-war / bld-super). */
-/* The units whose rotor the 3D renderer turns: their model builds part 'rotor' as the blades
-   alone and part 'body' as the rest. */
-var RTS_ROTOR_UNITS = { heli: true };
+/* WHAT THE 3D RENDERER MOVES ON AN AIRCRAFT (render3d/air3d.js), in model units before
+   _sprUnitScale. `rotor`: the model builds part 'rotor' as the blades alone and part 'body' as
+   the rest. `prop`: [x, y, z, radius] of a propeller the 3D mode draws turning, which part
+   'body' leaves off. `burner`: [x, y, z] of a jet's exhaust. `tips`: half the wingspan, where
+   the contrails come off. */
+var RTS_AIR_PARTS = {
+  heli: { rotor: true },
+  mig:  { burner: [-9.6, 4.4, 0], tips: 9.6, trail: true },
+  yak:  { prop: [8.4, 4.1, 0, 5.4], tips: 10.6 }
+};
 function _sprUnitAirSea(X, key) {
   var m = X.m, TM = X.TM, VH = X.VH, S = X.S, DK = X.DK, O = X.O, C = X.C, GN = X.GN,
       d = X.d, prone = X.prone, part = X.part, side = X.side, tracks = X.tracks, i;
@@ -91,8 +98,10 @@ function _sprUnitAirSea(X, key) {
       /* the propeller: a thin hub plus two crossed bars, the same trick the Heli's rotor uses
          and for the same reason - a solid disc at this size is an opaque lid over the aircraft */
       _r3Cyl(m, _len * 0.56, 3.6, 0, 1.4, 0.6, GN[2], GN[1], 12);
-      _r3Box(m, _len * 0.60, 3.6, 0, 0.5, 11.0, 1.1, DK[1], DK[3]);
-      _r3Box(m, _len * 0.60, 3.6, 0, 0.5, 1.1, 11.0, DK[1], DK[3]);
+      if (part !== 'body') {
+        _r3Box(m, _len * 0.60, 3.6, 0, 0.5, 11.0, 1.1, DK[1], DK[3]);
+        _r3Box(m, _len * 0.60, 3.6, 0, 0.5, 1.1, 11.0, DK[1], DK[3]);
+      }
       /* Fixed gear under the wings and exhaust stubs down the cowling - the Yak is the
          WW2-era airframe of the pair and wears its machinery outside. */
       for (var _yg = -1; _yg <= 1; _yg += 2) {

@@ -279,9 +279,12 @@ breaking it shipped once.
 - **What moves on a unit** (`render3d/unit3d.js`, which draws every unit for scene3d.js): tracks
   and wheels roll by a renderer-side odometer (`R3.motion`, never the game's) through
   `R3D_ROLL_N` builds of the model (`_SPR_ROLL`, null for sprites; a 3D build evens the links),
-  held under one step a frame against the wagon wheel. `RTS_ROTOR_UNITS` draw part 'rotor' turning
-  over part 'body'. Ships ride `_r3dSwellAt` (wave3d.js). A prone squad crawls (`crawl3d.js`).
-  Kill switches `R3.rollOff/rotorOff/swellOff`. `unit/motion`, `e2e/motion`.
+  held under one step a frame against the wagon wheel. `RTS_AIR_PARTS` (sprites/unit-airsea.js)
+  names the rotor, propeller, burner and wingtips; air3d.js banks and pitches aircraft off the
+  motion record's turn rate and speed, turns props (part `prop<k>`) and lays contrails.
+  `R3.airOff/trailOff`; `unit/air`, `e2e/air`. Ships ride `_r3dSwellAt` (wave3d.js). A prone
+  squad crawls (`crawl3d.js`). Kill switches `R3.rollOff/rotorOff/swellOff`. `unit/motion`,
+  `e2e/motion`.
 - **The world's own sound** (`rts.ambience.js`): rain, wind, insects, one engine note, bridge
   rumble, thunder and a night echo, each a few nodes built once and only turned by `setTargetAtTime`
   (`_rtsAmbWant` is the pure half). Lightning keeps the GAME's clock on a fixed schedule

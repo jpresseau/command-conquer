@@ -958,7 +958,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">a6293da · 2026-10-01</div>
+  <div id="rtsBuild" title="build">00a7491 · 2026-10-01</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -9199,9 +9199,16 @@ function _sprUnitGround(X, key) {
    Split because unitmodels.js reached 506 lines the moment the V2 Rocket Launcher was given a
    model of its own, and unit/layout holds every source file to 500. Same shape the building
    models already use (bld-base / bld-tech / bld-war / bld-super). */
-/* The units whose rotor the 3D renderer turns: their model builds part 'rotor' as the blades
-   alone and part 'body' as the rest. */
-var RTS_ROTOR_UNITS = { heli: true };
+/* WHAT THE 3D RENDERER MOVES ON AN AIRCRAFT (render3d/air3d.js), in model units before
+   _sprUnitScale. `rotor`: the model builds part 'rotor' as the blades alone and part 'body' as
+   the rest. `prop`: [x, y, z, radius] of a propeller the 3D mode draws turning, which part
+   'body' leaves off. `burner`: [x, y, z] of a jet's exhaust. `tips`: half the wingspan, where
+   the contrails come off. */
+var RTS_AIR_PARTS = {
+  heli: { rotor: true },
+  mig:  { burner: [-9.6, 4.4, 0], tips: 9.6, trail: true },
+  yak:  { prop: [8.4, 4.1, 0, 5.4], tips: 10.6 }
+};
 function _sprUnitAirSea(X, key) {
   var m = X.m, TM = X.TM, VH = X.VH, S = X.S, DK = X.DK, O = X.O, C = X.C, GN = X.GN,
       d = X.d, prone = X.prone, part = X.part, side = X.side, tracks = X.tracks, i;
@@ -9284,8 +9291,10 @@ function _sprUnitAirSea(X, key) {
       /* the propeller: a thin hub plus two crossed bars, the same trick the Heli's rotor uses
          and for the same reason - a solid disc at this size is an opaque lid over the aircraft */
       _r3Cyl(m, _len * 0.56, 3.6, 0, 1.4, 0.6, GN[2], GN[1], 12);
-      _r3Box(m, _len * 0.60, 3.6, 0, 0.5, 11.0, 1.1, DK[1], DK[3]);
-      _r3Box(m, _len * 0.60, 3.6, 0, 0.5, 1.1, 11.0, DK[1], DK[3]);
+      if (part !== 'body') {
+        _r3Box(m, _len * 0.60, 3.6, 0, 0.5, 11.0, 1.1, DK[1], DK[3]);
+        _r3Box(m, _len * 0.60, 3.6, 0, 0.5, 1.1, 11.0, DK[1], DK[3]);
+      }
       /* Fixed gear under the wings and exhaust stubs down the cowling - the Yak is the
          WW2-era airframe of the pair and wears its machinery outside. */
       for (var _yg = -1; _yg <= 1; _yg += 2) {
@@ -27391,6 +27400,7 @@ function _r3dFxEmit(G, V) {
   if (typeof _r3dFxAlive === 'function') _r3dFxAlive(G, V);     /* stacks, beacons - alive3d.js */
   if (typeof _r3dFxSky === 'function') _r3dFxSky(G, V);         /* lamps, rain, fog - skyfx3d.js */
   if (typeof _r3dFxMuzzle === 'function') _r3dFxMuzzle(G, V);   /* guns going off - combat3d.js */
+  if (typeof _r3dFxAir === 'function') _r3dFxAir(G, V);         /* contrails, afterburners - air3d.js */
   for (i = 0; i < G.fx.length; i++) {
     var f = G.fx[i];
     if (f.t < 0 || !_r3dFxOwns(f.kind)) continue;
@@ -28534,6 +28544,7 @@ function _r3dMesh(kind, def, side, part, prone, pose, roll) {
        normal per corner, for the duration of this build and no longer. See _R3_DETAIL. */
     faces = _r3DetailHigh(function () {
       if (kind === 'b') return _sprBuildingModel(def, side);
+      if (part && part.slice(0, 4) === 'prop') return _r3dPropModel(def, side, +part.slice(4));   /* air3d.js */
       /* a soldier has a model of his own in 3D, walking (render3d/soldier3d.js) or crawling
          (crawl3d.js); the sprite's is the fallback, and still what a dog is drawn as */
       var ud = rtsUnitDef(def), sm = (ud && ud.kind === 'infantry' && !part && !R3.soldierOff)
@@ -29580,6 +29591,8 @@ function _r3dCrawlPose(e, t) {
                         the odometer below picks one, so a tank that stops stops its tracks
      ROTORS             spin: the blades are a part of their own, turned over the airframe -
                         flat out in the air, idling on the pad
+     AIRCRAFT           bank into their turns, a helicopter noses down to fly, a Yak's
+                        propeller turns, and a jet lays contrails and burns (air3d.js)
      SHIPS              ride the swell they sit in (_r3dSwellAt, wave3d.js): up and down with
                         it, pitching and rolling with its slope along and across the hull
      CRAWLING           a prone squad on the move crawls (crawl3d.js)
@@ -29598,7 +29611,7 @@ var R3D_SHIP_REACH = 2.6;        /* world units fore and aft the swell is read a
    a frame moves anything - a unit that has not moved has nothing to add. */
 function _r3dUnitMotion(R3, e, t) {
   var M = R3.motion || (R3.motion = {}), r = M[e.id];
-  if (!r) r = M[e.id] = { x: e.x, z: e.z, d: 0, t: t, spin: (e.id * 2.39) % 6.283 };
+  if (!r) r = M[e.id] = { x: e.x, z: e.z, d: 0, t: t, spin: (e.id * 2.39) % 6.283, rot: e.rot || 0, w: 0, v: 0 };
   /* NEVER MORE THAN A STEP ROUND A FRAME. A link is about a seventh of a world unit and a tank
      covers more than that in a frame, so the true roll would step the running gear half a
      turn a frame - and half a turn is the wagon wheel: the track stands still or runs
@@ -29608,8 +29621,14 @@ function _r3dUnitMotion(R3, e, t) {
   if (step < 4) r.d += len ? Math.min(step, len / R3D_ROLL_N * 0.95) : step;   /* a jump (unloaded, placed) is not rolled */
   r.x = e.x; r.z = e.z;
   var dt = t - r.t;
-  if (dt > 0 && dt < 1) r.spin += dt * (e.rearming > 0 ? R3D_ROTOR_IDLE : R3D_ROTOR_SPIN);
-  r.t = t;
+  if (dt > 0 && dt < 1) {
+    r.spin += dt * (e.rearming > 0 ? R3D_ROTOR_IDLE : R3D_ROTOR_SPIN);
+    /* how fast it is turning and going, eased - what an aircraft banks and pitches to (air3d.js) */
+    var dr = (e.rot || 0) - r.rot, ease = Math.min(1, dt * 4);
+    dr = Math.atan2(Math.sin(dr), Math.cos(dr));
+    r.w += (dr / dt - r.w) * ease; r.v += ((step < 4 ? step : 0) / dt - r.v) * ease;
+  }
+  r.rot = e.rot || 0; r.t = t;
   /* forget the dead now and then */
   if ((R3.motionN = (R3.motionN || 0) + 1) > 4000) {
     R3.motionN = 0;
@@ -29664,16 +29683,17 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W) {
      19% of the map's open ground is steep enough to show it.
 
      NOT WHAT IS FLYING. An aircraft's attitude is its own business and the hill it
-     happens to be over is nothing to do with it; passing no normal leaves it upright.
-     A ship leans on the swell instead.
+     happens to be over is nothing to do with it: it leans into its turn (air3d.js). A ship
+     leans on the swell instead.
 
      The TURRET takes the same lean as the hull rather than staying level, because it is
      bolted to the hull - it rotates in the hull's plane, and a turret that stayed
      world-level would shear out of its own ring on any slope. */
-  var gn = (e.air || d2.sea) ? null : _rtsElevNormal(e.x, e.z);
+  var gn = d2.sea ? null : e.air ? _r3dAirLean(R3, e, mo, d2) : _rtsElevNormal(e.x, e.z);
   if (d2.sea && !R3.swellOff) { var sw = _r3dShipSwell(e, t); y += sw.y; gn = sw.n; }
   var rk = _r3dRecoil(e, gn) || { hx: 0, hz: 0, tx: 0, tz: 0, n: gn };   /* the kick: combat3d.js */
-  var rotor = RTS_ROTOR_UNITS[e.def] && !R3.rotorOff;
+  var AP = RTS_AIR_PARTS[e.def], rotor = AP && (AP.rotor || AP.prop) && !R3.rotorOff;
+  if (e.air) { mo.y = y; mo.n = rk.n; _r3dAirTrail(mo, e, y, t); }
   var roll = d2.kind === 'vehicle' && !d2.sea && !e.air ? _r3dRollPhase(R3, e.def, mo.d) : 0;
   drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : (rotor ? 'body' : null), e.prone, pose, roll),
          e.x + rk.hx, y, e.z + rk.hz, -e.rot, ART2W, false, 1, rk.n);
@@ -29681,7 +29701,121 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W) {
     drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false), e.x + rk.tx, y, e.z + rk.tz, -(e.turret || 0),
            ART2W, false, 1, rk.n);
   }
-  if (rotor) drawIn(C, _r3dMesh('u', e.def, e.side, 'rotor', false), e.x, y, e.z, -e.rot - mo.spin, ART2W, false, 1, null);
+  if (rotor && AP.rotor) drawIn(C, _r3dMesh('u', e.def, e.side, 'rotor', false), e.x, y, e.z, -e.rot - mo.spin, ART2W, false, 1, rk.n);
+  if (rotor && AP.prop) drawIn(C, _r3dMesh('u', e.def, e.side, 'prop' + _r3dPropPhase(mo.spin), false), e.x, y, e.z, -e.rot, ART2W, false, 1, rk.n);
+}
+</script>
+<script>/* render3d/air3d.js - aircraft that fly like aircraft. Part of rts.render3d.
+
+   An aircraft was drawn level and square to the map whatever it did: a MiG pulling round onto a
+   target turned like a weathervane, a helicopter crossing the map at full speed hung as if
+   parked on a hook. Now, all of it read off what the aircraft is doing (the motion record,
+   render3d/unit3d.js), so the game knows nothing about it:
+
+     BANKING     anything that flies leans into its turn, as far as it is turning hard - a jet
+                 most, a helicopter less - and rolls level as it straightens out
+     PITCH       a helicopter tips its nose down to fly, as far as it is going fast
+     PROPELLER   a Yak's propeller turns: part 'prop<k>', built at R3D_PROP_N angles round
+                 its hub and stepped through by the rotor's own spin
+     CONTRAILS   a jet in flight draws two white lines off its wingtips that hang where it has
+                 been and spread and fade - the one effect here that remembers, because a
+                 trail has to follow the path rather than the heading
+     AFTERBURNER a jet's exhaust burns: a hot glow that flickers
+
+   On the pad (rearming) everything sits level. R3.airOff takes the banking and pitch out, and
+   R3.trailOff the contrails, for a spec's A/B; R3.rotorOff stops the propeller as it stops the
+   rotor. */
+
+var R3D_BANK_K = 0.45;           /* radians of bank for each radian a second of turn */
+var R3D_BANK_MAX = 0.6;          /* the most anything banks, radians */
+var R3D_HELI_BANK = 0.5;         /* a helicopter banks this much of what a jet would */
+var R3D_HELI_PITCH = 0.22;       /* how far a helicopter noses down at full speed, radians */
+var R3D_PROP_N = 4;              /* angles the propeller is built at, across its quarter turn */
+var R3D_TRAIL_EVERY = 0.07;      /* seconds between the points a contrail is laid through */
+var R3D_TRAIL_LIFE = 2.4;        /* seconds a contrail hangs */
+var R3D_TRAIL_C = [0.96, 0.97, 0.99];
+var R3D_BURN_C = [1.0, 0.62, 0.3];
+
+/* The normal an aircraft leans to: up, tipped toward the inside of its turn by the bank and
+   forward by the pitch. null - upright - on the pad, or with R3.airOff. */
+function _r3dAirLean(R3, e, mo, d) {
+  if (R3.airOff || e.rearming > 0) return null;
+  var heli = RTS_AIR_PARTS[e.def] && RTS_AIR_PARTS[e.def].rotor;
+  var bank = Math.max(-R3D_BANK_MAX, Math.min(R3D_BANK_MAX, mo.w * R3D_BANK_K)) * (heli ? R3D_HELI_BANK : 1);
+  var pitch = heli ? R3D_HELI_PITCH * Math.min(1, mo.v / ((d && d.speed) || 20)) : 0;
+  if (Math.abs(bank) < 1e-3 && pitch < 1e-3) return null;
+  var fx = Math.cos(e.rot), fz = Math.sin(e.rot), sb = Math.sin(bank), sp = Math.sin(pitch), cu = Math.cos(bank) * Math.cos(pitch);
+  var nx = -fz * sb + fx * sp, nz = fx * sb + fz * sp, l = Math.hypot(nx, cu, nz);
+  return [nx / l, cu / l, nz / l];
+}
+
+/* Which of the propeller's angles its spin is at. The blades cross, so a quarter turn brings
+   them back onto themselves; the spin runs fast enough that this steps on most frames. */
+function _r3dPropPhase(spin) {
+  var q = Math.PI / 2, a = ((spin % q) + q) % q;
+  return Math.floor(a / q * R3D_PROP_N) % R3D_PROP_N;
+}
+
+/* The propeller at angle k of R3D_PROP_N: a hub and two crossed blades, in the plane across
+   the nose, built where the model's own propeller sits. Tubes, not boxes - _r3dLimb runs
+   between any two points, which is what lets a blade stand at an angle a box cannot. */
+function _r3dPropModel(def, side, k) {
+  var P = RTS_AIR_PARTS[def] && RTS_AIR_PARTS[def].prop;
+  if (!P) return null;
+  var m = [], DK = RTS_PAL.dark, GN = RTS_PAL.gun, a0 = k / R3D_PROP_N * Math.PI / 2;
+  for (var b = 0; b < 2; b++) {
+    var a = a0 + b * Math.PI / 2, cy = Math.cos(a) * P[3], cz = Math.sin(a) * P[3];
+    _r3dLimb(m, P[0], P[1] - cy, P[2] - cz, P[0], P[1] + cy, P[2] + cz, 0.32, 0.32, 8, DK[1]);
+  }
+  _r3dBall(m, P[0] + 0.3, P[1], P[2], 0.7, GN[2], 10, 6);                 /* spinner */
+  var sc = _sprUnitScale(def);
+  return sc === 1 ? m : _r3Scale(m, sc);
+}
+
+/* A JET'S CONTRAIL: where it has been, every R3D_TRAIL_EVERY seconds, for as long as a trail
+   hangs. Called by every pass, so it lays a point only when one is due. */
+function _r3dAirTrail(mo, e, y, t) {
+  var AP = RTS_AIR_PARTS[e.def];
+  if (!AP || !AP.trail) return;
+  var T = mo.trail || (mo.trail = []);
+  if (e.rearming > 0) { T.length = 0; return; }
+  if (T.length && t - T[T.length - 1][3] < R3D_TRAIL_EVERY && t >= T[T.length - 1][3]) return;
+  if (T.length && t < T[T.length - 1][3]) T.length = 0;          /* the clock went back: a spec */
+  T.push([e.x, y, e.z, t, -Math.sin(e.rot), Math.cos(e.rot)]);
+  while (T.length && t - T[0][3] > R3D_TRAIL_LIFE) T.shift();
+}
+
+/* Into the effects pass: the contrails and the afterburners of whatever is flying in sight. */
+function _r3dFxAir(G, V) {
+  var R3 = window._R3D, M = R3 && R3.motion, E = G.ents || [], vis = typeof _rtsVisible === 'function';
+  if (!M) return;
+  var w2 = RTS_TILE / RTS_TS;
+  for (var i = 0; i < E.length; i++) {
+    var e = E[i], AP = RTS_AIR_PARTS[e.def], mo = M[e.id];
+    if (e.dead || !e.air || !AP || !mo || mo.y === undefined || e.rearming > 0) continue;
+    if (vis && !_rtsVisible(_rtsTX(e.x), _rtsTX(e.z))) continue;
+    var sc = _sprUnitScale(e.def) * w2, fx = Math.cos(e.rot), fz = Math.sin(e.rot);
+    if (AP.trail && mo.trail && R3.trailOff !== true) {
+      var T = mo.trail, tip = AP.tips * sc;
+      for (var j = 1; j < T.length; j++) {
+        var p0 = T[j - 1], p1 = T[j], age = V.t - p1[3];
+        if (age < 0 || age > R3D_TRAIL_LIFE) continue;
+        var u = age / R3D_TRAIL_LIFE, op = 0.8 * (1 - u) * Math.min(1, age * 6 + 0.3), wd = 0.25 + u * 1.1;
+        /* each piece reaches back over the one before: a streak fades in along its first half,
+           so laid end to end they would come out as dashes, and overlapped they are one line */
+        for (var s = -1; s <= 1; s += 2) {
+          var ax = p1[0] + p1[4] * tip * s, az = p1[2] + p1[5] * tip * s, bx0 = p0[0] + p0[4] * tip * s, bz0 = p0[2] + p0[5] * tip * s;
+          _r3dFxStreak(V.M, V, 2 * bx0 - ax, 2 * p0[1] - p1[1], 2 * bz0 - az, ax, p1[1], az, wd, 0.6, R3D_FXT_RAIN, 0, i + s, op, 0, R3D_TRAIL_C);
+        }
+      }
+    }
+    if (AP.burner) {
+      var B = AP.burner, bx = e.x + fx * B[0] * sc, bz = e.z + fz * B[0] * sc, by = mo.y + B[1] * sc;
+      var fl = 0.8 + 0.2 * Math.sin(V.t * 37 + i) * Math.sin(V.t * 23 + i * 2);
+      _r3dFxBill(V.M, V, bx, by, bz, 0.55 * fl, 0.55 * fl, 0.6, R3D_FXT_GLOW, 0, 0.5, 1.0, 0, R3D_BURN_C);
+      _r3dFxStreak(V.M, V, bx, by, bz, bx - fx * 1.6 * fl, by, bz - fz * 1.6 * fl, 0.4, 0.6, R3D_FXT_STREAK, 0, i, 0.8, 0, R3D_BURN_C);
+    }
+  }
 }
 </script>
 <script>/* render3d/world3d.js - the map itself as geometry: forests, rock ridges and
