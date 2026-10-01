@@ -81,7 +81,7 @@ function _rtsRFrame(dt) {
     for (var tx = tx0; tx <= tx1; tx++) {
       var idx = _rtsIdx(tx, tz);
       var ore = G.scrap[idx];
-      var isWater = G.terrain && G.terrain[idx] === RTS_T_WATER;
+      var isWater = G.terrain && G.terrain[idx] === RTS_T_WATER && !_rtsIsBridgeCell(idx);   /* under a deck: the bake's bridge */
       if (ore <= 0 && !isWater) continue;
       var pp = _rtsGroundToScreen(_rtsWX(tx) - RTS_TILE / 2, _rtsWX(tz) - RTS_TILE / 2);
       var px = Math.round(pp.x), py = Math.round(pp.y);

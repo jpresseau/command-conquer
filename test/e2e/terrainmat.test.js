@@ -9,7 +9,8 @@
      THE COAST     the sea's edge is cut per pixel from a smooth water mask, so a coastline has no
                    straight cell-length edges - the old sheet was built from cells, a staircase
      THE PLAZA     a building stands on paving, not on grass - the base's own ground
-     THE TRACKS    a road out in the country is a dirt track, not paving
+     THE ROADS     a road out in the country is metalled - grey asphalt down its line (road3d.js) -
+                   not paving and no longer a dirt track
      THE SCARS     a scorch mark rebuilds the ground map once and darkens its cell
      THE COST      the ground map is rebuilt only when what it encodes changes
      THE RELIEF    the bump is gradient noise, so up close the grass is lumps, not streaks
@@ -230,8 +231,8 @@ var S = new Suite('terrainmat');
        pz && pz[1] <= Math.max(pz[0], pz[2]) + 4 && Math.max(pz[0], pz[1], pz[2]) - Math.min(pz[0], pz[1], pz[2]) < 70,
        'rgb ' + pz + ' (the baked ground there: ' + out.plazaLegacy + ')');
   S.ok('a country road is found to look at', !!out.roadAt, String(out.roadAt));
-  S.ok('...and it is a dirt track: brown, red over green over blue',
-       out.road && out.road[0] > out.road[1] && out.road[1] > out.road[2] && out.road[0] - out.road[2] > 25,
+  S.ok('...and it is asphalt: a dark grey, its channels close together',
+       out.road && Math.max.apply(null, out.road) - Math.min.apply(null, out.road) < 22 && out.road[0] < 140,
        'rgb ' + out.road);
 
   S.eq('an unchanged map does not rebuild its ground map, frame after frame', out.idleBuilds, 0);

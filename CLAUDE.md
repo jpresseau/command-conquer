@@ -252,6 +252,13 @@ breaking it shipped once.
   random stream. Cosmetic: it writes no game cell. `G.starts` is `{player, enemy}`, not a list.
   `claim` tells `_r3dWorldBuild` which trees and tufts to leave out, so the plan is made first.
   `R3.sceneryAmt`. `unit/scenery`, `e2e/scenery`.
+- **Bridges are water land units may cross** (`core/bridge.js`): deck cells keep `RTS_T_WATER` (one
+  sea, ships pass under) with `blocked` 0. Laid from cells only, never `rnd`. `_rtsCanPlace` refuses
+  water, `_rtsIsBridgeCell(i)` tells a deck from sea, and land units stand at `_rtsStandY`.
+  3D model `render3d/bridge3d.js`, 2D `sprites/bridge.js`. `unit/bridge`, `e2e/bridge`.
+- **Roads are painted down `G.roads`** (centrelines kept by `_rtsCarveRoad`) from a baked distance
+  field (`render3d/road3d.js`). The cells stay the dirt-track material, which is the shoulder; a
+  loaded map has no `G.roads` and keeps its tracks. `R3.roadAmt`.
 - **In 3D a soldier has a model of his own** (`render3d/soldier3d.js`): rounded limbs, and four
   stride poses picked by his gait (`_r3dSoldierPose`) in place of the bob. The sprite's model
   stays for 2D, for prone squads and for the dog; the mesh cache key carries the pose.

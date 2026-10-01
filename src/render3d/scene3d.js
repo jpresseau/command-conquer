@@ -401,7 +401,7 @@ function _r3dFrame(G) {
       /* THE GROUND UNDER IT, not zero. An aircraft's altitude is measured from the ground it
          is over as well - it flies at a height, not at a level - so both take the terrain and
          only the flier adds to it. */
-      var y = _rtsElev(e.x, e.z) + (e.air ? ((e.rearming > 0 ? 2 : (e.alt || 12)) * 0.35) : 0);
+      var y = (e.air || rtsUnitDef(e.def).sea ? _rtsElev(e.x, e.z) : _rtsStandY(e.x, e.z)) + (e.air ? ((e.rearming > 0 ? 2 : (e.alt || 12)) * 0.35) : 0);
       /* A MARCHING SOLDIER BOBS. There is no walk cycle in 3D - the mesh is one pose - so the
          walk reads through a small vertical bob instead, phased by the same `gait` offset that
          desynchronises the 2D walk frames, so a squad does not pogo in unison. Vehicles do not

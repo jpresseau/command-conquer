@@ -957,7 +957,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">79f49e7 · 2026-10-01</div>
+  <div id="rtsBuild" title="build">57c20b2 · 2026-10-01</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -6705,6 +6705,9 @@ function _rtsBakeTerrain(G) {
     if (_mixPaintSeaCliffs(wcimg.data, S, G, seed) !== null) g.putImageData(wcimg, 0, 0);
   }
 
+  /* --- bridges: over the water, under everything that stands on the ground --- */
+  if (typeof _sprDrawBridges === 'function') _sprDrawBridges(g, G, TS);
+
   /* --- sandbag emplacements. With the player's own files loaded these come from sbag.shp,
          which is a real autotile: sixteen frames indexed by which neighbours are also wall, so
          a run joins up instead of being sixteen copies of one horizontal bag stack laid end to
@@ -6734,6 +6737,55 @@ function _rtsBakeTerrain(G) {
      ordinary sprites they get RTS_PS, several to a cell, and a 3D gate. See _sprTrees in
      sprites/scenery.js and the forest pass in render/frame.js. --- */
   return t.c;
+}
+</script>
+<script>/* sprites/bridge.js - the bridges, in the 2D picture. Part of rts.sprites; where they are is
+   core/bridge.js.
+
+   A bridge's cells are water that land units may cross, and the 2D terrain bake painted them
+   as water - so in 2D a column of tanks drove across the open sea. Painted into the bake here,
+   after the coast and before anything that stands on the ground: a shadow cast on the water
+   down and to the right (the bake's light is from the upper left), the deck, a parapet each
+   side with its posts, and an abutment at each shore. */
+function _sprDrawBridges(g, G, TS) {
+  (G.bridges || []).forEach(function (b) {
+    /* the deck's rectangle in bake pixels: every cell it covers, corner to corner */
+    var ex = b.tx + b.dx * (b.len - 1) + b.px * (b.w - 1), ez = b.tz + b.dz * (b.len - 1) + b.pz * (b.w - 1);
+    var rx = Math.min(b.tx, ex) * TS, rz = Math.min(b.tz, ez) * TS;
+    var rw = (Math.abs(ex - b.tx) + 1) * TS, rh = (Math.abs(ez - b.tz) + 1) * TS;
+    /* a pixel in from the water either side */
+    if (b.px) { rx += 1; rw -= 2; } else { rz += 1; rh -= 2; }
+    g.save();
+    /* shadow on the water */
+    g.fillStyle = 'rgba(8, 16, 28, 0.38)';
+    g.fillRect(rx + TS * 0.25, rz + TS * 0.3, rw, rh);
+    /* deck */
+    g.fillStyle = '#5f5d58';
+    g.fillRect(rx, rz, rw, rh);
+    /* a little tone along the run, so it is not a flat swatch */
+    g.fillStyle = 'rgba(255, 255, 255, 0.05)';
+    for (var k = 0; k < b.len; k++) if (k & 1) {
+      var sx = (b.tx + b.dx * k) * TS, sz = (b.tz + b.dz * k) * TS;
+      g.fillRect(b.px ? rx : sx, b.pz ? rz : sz, b.px ? rw : TS, b.pz ? rh : TS);
+    }
+    /* parapets: a pale rail down each side, posts on it every half cell */
+    var pw = Math.max(2, TS / 8);
+    g.fillStyle = '#b3aea1';
+    if (b.px) { g.fillRect(rx, rz, pw, rh); g.fillRect(rx + rw - pw, rz, pw, rh); }
+    else { g.fillRect(rx, rz, rw, pw); g.fillRect(rx, rz + rh - pw, rw, pw); }
+    g.fillStyle = '#7d796f';
+    for (var p = 0; p <= b.len * 2; p++) {
+      var t = p * TS / 2;
+      if (b.px) { g.fillRect(rx, rz + t - 1, pw, 2); g.fillRect(rx + rw - pw, rz + t - 1, pw, 2); }
+      else { g.fillRect(rx + t - 1, rz, 2, pw); g.fillRect(rx + t - 1, rz + rh - pw, 2, pw); }
+    }
+    /* abutments: a block of stone where the deck meets each shore */
+    g.fillStyle = '#8a857a';
+    var ab = TS * 0.3;
+    if (b.px) { g.fillRect(rx - 2, rz - ab / 2, rw + 4, ab); g.fillRect(rx - 2, rz + rh - ab / 2, rw + 4, ab); }
+    else { g.fillRect(rx - ab / 2, rz - 2, ab, rh + 4); g.fillRect(rx + rw - ab / 2, rz - 2, ab, rh + 4); }
+    g.restore();
+  });
 }
 </script>
 <script>/* sprites/scenery.js - the things that STAND on the baked ground: forests and rock ridges.
@@ -15378,6 +15430,8 @@ function _rtsGenTerrain(G, rnd, starts) {
     }
   }
 
+  _rtsLayBridges(G);               /* where the roads meet the water: core/bridge.js */
+
   /* --- and the ore has to still be reachable ---
      The two guarantees pull against each other. The ore connectivity carve above is allowed
      to lay a causeway across water, and a causeway splits the sea; re-laying the spine after
@@ -15473,6 +15527,10 @@ function _rtsGenTerrain(G, rnd, starts) {
 function _rtsCarveRoad(G, x0, z0, x1, z1, rnd, force) {
   var steps = Math.ceil(Math.hypot(x1 - x0, z1 - z0)) * 2;
   var sway = force ? 0 : (rnd() - 0.5) * 26;
+  /* ITS CENTRELINE, kept: the cells are a two-wide staircase, and the 3D ground paints a smooth
+     road down this line instead (render3d/road3d.js). Cell coordinates of the band's middle. */
+  var line = [];
+  if (G.roads) G.roads.push(line);
   for (var s = 0; s <= steps; s++) {
     var t = s / steps;
     /* a sine bulge perpendicular to the line, so roads bend instead of ruling a diagonal */
@@ -15480,6 +15538,7 @@ function _rtsCarveRoad(G, x0, z0, x1, z1, rnd, force) {
     var dx = x1 - x0, dz = z1 - z0, L = Math.hypot(dx, dz) || 1;
     var off = Math.sin(t * Math.PI) * sway;
     px += (-dz / L) * off; pz += (dx / L) * off;
+    line.push(Math.round((px + 0.5) * 100) / 100, Math.round((pz + 0.5) * 100) / 100);
     /* Two tiles wide. Three read as a runway rather than a track. */
     for (var ox = 0; ox <= 1; ox++) {
       for (var oz = 0; oz <= 1; oz++) {
@@ -15497,6 +15556,157 @@ function _rtsCarveRoad(G, x0, z0, x1, z1, rnd, force) {
       }
     }
   }
+}
+</script>
+<script>/* core/bridge.js - where the roads cross the water. Part of rts.core.
+
+   The roads are carved before the sea, so the channel cuts every branch that runs out to its
+   flank, and the ore connectivity pass's forced causeways are cut again when the spine is
+   re-laid (core/terrain.js says why: a causeway splits the sea in two). What was left was a
+   road that ran down to the water and stopped, the same road picking up again on the far
+   shore, and on most seeds a little ore stranded on the wrong side of it.
+
+   A BRIDGE IS WATER THAT LAND UNITS MAY CROSS. Its cells keep RTS_T_WATER, so the sea is still
+   one body and a ship still sails under it - _rtsBlocked's sea test is "water, and no
+   structure" - and their `blocked` byte goes to 0, so the land test lets a tank across. Nothing
+   in the pathfinder changes. A building may not stand on one (_rtsCanPlace refuses water).
+
+   Laid from the cells alone and never from the game's random stream, so a map that has no
+   bridge to lay is generated exactly as it was. Called from _rtsGenTerrain just before the
+   stranded-ore pass, which then sees the bridges as the way across. */
+
+var RTS_BRIDGE_SPAN = 14;        /* the longest bridge, in cells of water */
+var RTS_BRIDGE_MIN = 3;         /* ...and the shortest: a cell or two is an inlet, not a crossing */
+var RTS_BRIDGE_GAP = 6;          /* no two bridges closer than this, end to end */
+var RTS_BRIDGE_DECK = 0.55;      /* world units the deck stands over the water at its ends */
+var RTS_BRIDGE_ARCH = 1.7;       /* ...and how much higher at mid-span, on a span of 12 cells or
+                                    more: a gunboat has to pass under it. Shorter, lower. */
+
+function _rtsLayBridges(G) {
+  var N = RTS_N, T = G.terrain, B = G.blocked, out = [], used = new Uint8Array(N * N);
+  G.bridges = out;
+  function I(x, z) { return z * N + x; }
+  function water(x, z) { return _rtsInB(x, z) && T[I(x, z)] === RTS_T_WATER && B[I(x, z)] !== 1; }
+  function roadNear(x, z, r) {
+    for (var dz = -r; dz <= r; dz++) for (var dx = -r; dx <= r; dx++)
+      if (_rtsInB(x + dx, z + dz) && T[I(x + dx, z + dz)] === RTS_T_ROAD) return true;
+    return false;
+  }
+  /* From a road cell, straight out over the water: how many cells to dry land, or 0 */
+  function span(x, z, dx, dz) {
+    for (var k = 1; k <= RTS_BRIDGE_SPAN + 1; k++) {
+      var a = x + dx * k, b = z + dz * k;
+      if (!_rtsInB(a, b)) return 0;
+      if (water(a, b)) continue;
+      if (T[I(a, b)] === RTS_T_WATER || B[I(a, b)] !== 0) return 0;
+      return k > 1 && roadNear(a, b, 2) ? k - 1 : 0;
+    }
+    return 0;
+  }
+  function clear(x, z) {
+    for (var q = 0; q < out.length; q++) {
+      var o = out[q], ex = o.tx + o.dx * (o.len - 1), ez = o.tz + o.dz * (o.len - 1);
+      var d = Math.min(Math.hypot(x - o.tx, z - o.tz), Math.hypot(x - ex, z - ez));
+      if (d < RTS_BRIDGE_GAP) return false;
+    }
+    return true;
+  }
+  /* ACROSS THE WATER, not along it: the middle of the span has water on both sides of the deck.
+     A road that ran beside the coast and was swallowed lengthwise by the channel reconnects too,
+     and laid as a bridge it was a pier running down the shoreline under a cliff. */
+  function crosses(br) {
+    var wet = 0, n = 0;
+    for (var k = Math.floor(br.len / 3); k < Math.ceil(br.len * 2 / 3); k++) {
+      var cx = br.tx + br.dx * k, cz = br.tz + br.dz * k;
+      n++;
+      if (water(cx - br.px * 2, cz - br.pz * 2) && water(cx + br.px * (br.w + 1), cz + br.pz * (br.w + 1))) wet++;
+    }
+    return n > 0 && wet * 3 >= n * 2;
+  }
+  var DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  for (var tz = 0; tz < N; tz++) for (var tx = 0; tx < N; tx++) {
+    if (T[I(tx, tz)] !== RTS_T_ROAD) continue;
+    for (var di = 0; di < 4; di++) {
+      var dx = DIRS[di][0], dz = DIRS[di][1];
+      if (!water(tx + dx, tz + dz) || used[I(tx + dx, tz + dz)]) continue;
+      var len = span(tx, tz, dx, dz);
+      if (!len || !clear(tx + dx, tz + dz)) continue;
+      if (len < RTS_BRIDGE_MIN) continue;
+      /* two lanes where the road beside this cell, on either side, reaches the same far shore
+         (or one cell short of it - a road crossing at a slant lands a cell apart) */
+      var px = dz !== 0 ? 1 : 0, pz = dx !== 0 ? 1 : 0, w = 1, ox = tx, oz = tz;
+      for (var sd = 1; sd >= -1 && w === 1; sd -= 2) {
+        var qx = tx + px * sd, qz = tz + pz * sd;
+        if (!_rtsInB(qx, qz) || T[I(qx, qz)] !== RTS_T_ROAD) continue;
+        var l2 = span(qx, qz, dx, dz);
+        if (!l2 || Math.abs(l2 - len) > 1) continue;
+        w = 2; len = Math.max(len, l2);
+        if (sd < 0) { ox = qx; oz = qz; }
+      }
+      var br = { tx: ox + dx, tz: oz + dz, dx: dx, dz: dz, len: len, w: w, px: px, pz: pz };
+      if (!crosses(br)) continue;
+      /* the deck's cells that are water open to land units; a cell of the far shore under the
+         second lane of a slanting crossing is land already */
+      for (var k = 0; k < len; k++) for (var l = 0; l < w; l++) {
+        var cx = br.tx + dx * k + px * l, cz = br.tz + dz * k + pz * l;
+        if (!water(cx, cz)) continue;
+        B[I(cx, cz)] = 0; used[I(cx, cz)] = 1;
+      }
+      out.push(br);
+    }
+  }
+  return out;
+}
+
+/* Is cell i under a deck? The only water a land unit may stand on - open sea is blocked 2, a
+   shipyard's water 1. */
+function _rtsIsBridgeCell(i) {
+  var G = window._rtsG;
+  return G.terrain[i] === RTS_T_WATER && G.blocked[i] === 0;
+}
+
+/* Every cell a bridge's deck covers. */
+function _rtsBridgeCells(br) {
+  var out = [];
+  for (var k = 0; k < br.len; k++) for (var l = 0; l < br.w; l++)
+    out.push(_rtsIdx(br.tx + br.dx * k + br.px * l, br.tz + br.dz * k + br.pz * l));
+  return out;
+}
+
+/* Where along a bridge a world point is: { br, t } with t 0..1 from the near shore to the far,
+   or null off every deck. The renderer stands land units on the deck by it. */
+function _rtsBridgeAt(x, z) {
+  var G = window._rtsG, L = G && G.bridges;
+  if (!L || !L.length) return null;
+  var tx = _rtsTX(x), tz = _rtsTX(z);
+  for (var i = 0; i < L.length; i++) {
+    var b = L[i];
+    var a = (tx - b.tx) * b.dx + (tz - b.tz) * b.dz;            /* cells along the span */
+    var s = (tx - b.tx) * b.px + (tz - b.tz) * b.pz;            /* cells across it */
+    if (a < 0 || a >= b.len || s < 0 || s >= b.w) continue;
+    /* along, continuous: from the near abutment (half a cell before the first water cell) */
+    var ux = (x - _rtsWX(b.tx)) * b.dx + (z - _rtsWX(b.tz)) * b.dz;
+    var t = (ux / RTS_TILE + 0.5) / b.len;
+    return { br: b, t: t < 0 ? 0 : t > 1 ? 1 : t };
+  }
+  return null;
+}
+/* Where a bridge's ends are, in world units: the near and far abutment lines, centred across. */
+function _rtsBridgeEnd(br, t) {
+  var a = t * br.len - 0.5, c = (br.w - 1) / 2;
+  return [_rtsWX(br.tx + br.dx * a + br.px * c), _rtsWX(br.tz + br.dz * a + br.pz * c)];
+}
+/* The deck's height at a fraction t of its span: the ground's own height where it meets each
+   shore - not the shore cell's, which stands a step above the blended ground at the abutment,
+   and a tank drove up that step - lifted, arched in the middle. */
+function _rtsBridgeDeckY(br, t) {
+  var A = _rtsBridgeEnd(br, 0), Z = _rtsBridgeEnd(br, 1), h0 = _rtsElev(A[0], A[1]), h1 = _rtsElev(Z[0], Z[1]);
+  return h0 + (h1 - h0) * t + RTS_BRIDGE_DECK * Math.min(1, Math.min(t, 1 - t) * 6) + RTS_BRIDGE_ARCH * Math.min(1, br.len / 12) * Math.sin(Math.PI * t);
+}
+/* What a land unit stands on: the deck where there is one, else the ground. */
+function _rtsStandY(x, z) {
+  var at = _rtsBridgeAt(x, z);
+  return at ? Math.max(_rtsElev(x, z), _rtsBridgeDeckY(at.br, at.t)) : _rtsElev(x, z);
 }
 </script>
 <script>/* core/scenario.js - where the two sides start, where the ore is, and how a base is laid out
@@ -15721,6 +15931,8 @@ function _rtsNewGame(seed, diff) {
     blocked:new Uint8Array(RTS_N * RTS_N),
     terrain:new Uint8Array(RTS_N * RTS_N),  /* RTS_T_* - what the ground IS, for the renderer */
     height:new Uint8Array(RTS_N * RTS_N),   /* how high it is; see _rtsElev in core/grid.js */
+    bridges:[],                             /* water land units may cross; core/bridge.js */
+    roads:[],                               /* each carved road's centreline, cell coords x,z,... */
     scorch:new Uint8Array(RTS_N * RTS_N),   /* 0 none, 1-6 scorch variant, +8 bit = crater */
     /* BASE.CPP's node list, per side: the ordered (type, cell) plan a base is rebuilt against */
     base:{ player:[], enemy:[] },
@@ -16409,6 +16621,7 @@ function _rtsCanPlace(side, key, tx, tz, anywhere) {
     if (!_rtsInB(ax, az)) return false;
     if (G.blocked[_rtsIdx(ax, az)] !== 0) return false;
     if (G.scrap[_rtsIdx(ax, az)] > 0) return false;
+    if (G.terrain[_rtsIdx(ax, az)] === RTS_T_WATER) return false;   /* a bridge is open, and is water */
   }
   /* A shipyard must reach the water. Checked here rather than only at build time so the
      placement ghost turns red as you drag it inland, which is the only way a player finds out
@@ -17192,7 +17405,7 @@ function _rtsCombatAnim(dmg, x, z, big, stick) {
   var G = window._rtsG;
   if (!(dmg > 0)) return null;
   var tx = _rtsTX(x), tz = _rtsTX(z);
-  var water = _rtsInB(tx, tz) && G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER;
+  var water = _rtsInB(tx, tz) && G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER && !_rtsBridgeAt(x, z);
   var kind = water ? 'splash' : (dmg < RTS_ANIM_PIFF ? 'piff' : (dmg < RTS_ANIM_BOOM ? 'hit' : 'boom'));
   /* scale with damage the way the original steps through its list, rather than one fixed size */
   var scale = (big || 1) * (0.7 + Math.min(1, dmg / 90) * 0.7);
@@ -22622,7 +22835,7 @@ function _rtsDrawWater(g, G, cell) {
   for (var y = cw.tz0; y <= cw.tz1; y++) {
     for (var x = cw.tx0; x <= cw.tx1; x++) {
       var i = y * N + x;
-      if (G.terrain[i] !== RTS_T_WATER) continue;
+      if (G.terrain[i] !== RTS_T_WATER || _rtsIsBridgeCell(i)) continue;
       if (!G.mapped[i]) continue;                    /* never seen - the shroud covers it anyway */
       var v = (_sprHash(x, y, seed + 137) * set.length) | 0;
       if (v >= set.length) v = set.length - 1;
@@ -25239,6 +25452,134 @@ function _r3dBloomPass(R3, G, cam, invD) {
   return true;
 }
 </script>
+<script>/* render3d/road3d.js - metalled roads on the 3D ground. Part of rts.render3d.
+
+   The road cells are a two-wide staircase down the line _rtsCarveRoad walked, and drawn as a
+   material they were a dirt track - and an asphalt material on those cells was a lake of tar
+   with a coastline, because the ground's border warp that suits a shore makes a road ragged.
+   So the road is painted down the line itself (G.roads, kept by the generator): a smooth
+   carriageway, a kerb each side, a dashed centre line, merging where two roads meet. The
+   cells keep their track material underneath, which is the dirt shoulder either side.
+
+   THE FIELD. One texel per two world units over the whole map, baked once a map: the distance
+   to the nearest stretch of road in .r, for the carriageway and the kerbs; the same distance
+   SIGNED in .g but only two units either side, for the centre line - a signed field
+   interpolates exactly across the line where an unsigned one's V does not, but where the
+   nearest road changes sides it jumps, and in .r that jump drew a phantom road down the middle
+   between two roads; and the dash phase along it as a cosine in .b, which interpolates without
+   a seam where a phase would wrap. .a is 1 within reach of a road, a half where a second road
+   runs within a few units of the nearest - no centre line there - and 0 beyond. A stretch is
+   painted only where the cells under it are still road - not across the sea, where a bridge
+   carries it (bridge3d.js), nor through an ore field that cut it.
+
+   R3.roadAmt 0 takes the paint out (e2e/bridge's A/B); a map with no G.roads - a loaded one -
+   keeps its tracks. */
+
+var R3D_ROAD_TEXEL = 2;          /* world units a texel */
+var R3D_ROAD_RANGE = 8;          /* world units the field reaches either side of a road */
+var R3D_ROAD_DASH = 9;           /* world units from one dash to the next */
+
+function _r3dRoadField(G) {
+  var N = RTS_N, T = RTS_TILE, S = Math.ceil(N * T / R3D_ROAD_TEXEL), d = new Float32Array(S * S);
+  var cs = new Float32Array(S * S), own = new Int16Array(S * S).fill(-1), d2 = new Float32Array(S * S).fill(1e9), half = N * T / 2, i, k;
+  d.fill(R3D_ROAD_RANGE);
+  function road(c) {
+    var a = Math.round(c[0]), b = Math.round(c[1]);
+    return _rtsInB(a, b) && G.terrain[_rtsIdx(a, b)] === RTS_T_ROAD;
+  }
+  (G.roads || []).forEach(function (L, ri) {
+    var s = 0;
+    for (i = 0; i + 3 < L.length; i += 2) {
+      /* the line in world units: a cell coordinate c is at (c - N/2 + 0.5) * T */
+      var ax = (L[i] - N / 2 + 0.5) * T, az = (L[i + 1] - N / 2 + 0.5) * T;
+      var bx = (L[i + 2] - N / 2 + 0.5) * T, bz = (L[i + 3] - N / 2 + 0.5) * T;
+      var vx = bx - ax, vz = bz - az, l2 = vx * vx + vz * vz, len = Math.sqrt(l2);
+      if (len < 1e-6) continue;
+      var s0 = s; s += len;
+      if (!road([(L[i] + L[i + 2]) / 2, (L[i + 1] + L[i + 3]) / 2])) continue;
+      var R = R3D_ROAD_RANGE;
+      var i0 = Math.max(0, Math.floor((Math.min(ax, bx) - R + half) / R3D_ROAD_TEXEL)), i1 = Math.min(S - 1, Math.ceil((Math.max(ax, bx) + R + half) / R3D_ROAD_TEXEL));
+      var j0 = Math.max(0, Math.floor((Math.min(az, bz) - R + half) / R3D_ROAD_TEXEL)), j1 = Math.min(S - 1, Math.ceil((Math.max(az, bz) + R + half) / R3D_ROAD_TEXEL));
+      for (var tj = j0; tj <= j1; tj++) for (var ti = i0; ti <= i1; ti++) {
+        var x = (ti + 0.5) * R3D_ROAD_TEXEL - half, z = (tj + 0.5) * R3D_ROAD_TEXEL - half;
+        var q = ((x - ax) * vx + (z - az) * vz) / l2, qc = q < 0 ? 0 : q > 1 ? 1 : q;
+        var ex = x - ax - vx * qc, ez = z - az - vz * qc, dist = Math.sqrt(ex * ex + ez * ez);
+        k = tj * S + ti;
+        /* the nearest OTHER road, too: the generator lays several down the same route, and where
+           two run within a few units of each other their centre lines fought over the dash */
+        if (own[k] !== ri) {
+          if (dist < Math.abs(d[k])) { d2[k] = Math.min(d2[k], Math.abs(d[k])); own[k] = ri; }
+          else { d2[k] = Math.min(d2[k], dist); continue; }
+        }
+        if (dist >= Math.abs(d[k])) continue;
+        /* the side: which way across the run, so the field is signed */
+        d[k] = (vx * (z - az) - vz * (x - ax)) < 0 ? -dist : dist;
+        var ph = (s0 + len * qc) / R3D_ROAD_DASH * 2 * Math.PI;
+        cs[k] = Math.cos(ph);
+      }
+    }
+  });
+  var px = new Uint8Array(S * S * 4);
+  for (k = 0; k < S * S; k++) {
+    px[k * 4] = Math.min(255, Math.round(Math.abs(d[k]) / R3D_ROAD_RANGE * 255));
+    px[k * 4 + 1] = Math.round((0.5 + Math.max(-2, Math.min(2, d[k])) / 4) * 255);
+    px[k * 4 + 2] = Math.round((cs[k] * 0.5 + 0.5) * 255);
+    px[k * 4 + 3] = Math.abs(d[k]) < R3D_ROAD_RANGE ? (d2[k] < Math.abs(d[k]) + 6 ? 128 : 255) : 0;
+  }
+  return { S: S, px: px };
+}
+
+/* The field's texture, baked when the game changes. */
+function _r3dRoadTex(gl, R3, G) {
+  if (R3.roadTex && R3.roadFor === G) return R3.roadTex;
+  var F = _r3dRoadField(G), t = R3.roadTex || gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, F.S, F.S, 0, gl.RGBA, gl.UNSIGNED_BYTE, F.px);
+  R3.roadTex = t; R3.roadFor = G; R3.roadS = F.S;
+  R3.roadBuilds = (R3.roadBuilds || 0) + 1;
+  return t;
+}
+
+/* For the ground program: the field on texture unit 7, and whether to paint it. */
+function _r3dRoadSet(gl, R3, P, G) {
+  gl.activeTexture(gl.TEXTURE0 + 7);
+  gl.bindTexture(gl.TEXTURE_2D, _r3dRoadTex(gl, R3, G));
+  gl.uniform1i(gl.getUniformLocation(P, 'uRoadT'), 7);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.uniform1f(gl.getUniformLocation(P, 'uRoad'), R3.roadAmt === 0 || !(G.roads && G.roads.length) ? 0 : 1);
+}
+
+/* The paint, in _groundAt: `w` the world position, `col` the ground so far. Returns how much of
+   the pixel is carriageway, which flattens the bump under it. */
+var R3D_ROAD_GLSL =
+  'uniform sampler2D uRoadT; uniform float uRoad;' +
+  'float _road(vec2 w, inout vec3 col, vec4 N, vec4 M, float det){' +
+  '  if (uRoad < 0.5) return 0.0;' +
+  '  vec4 rd = texture2D(uRoadT, (w * uTileInv + uMat.z + 0.5) * uMat.y);' +
+  '  if (rd.a < 0.01) return 0.0;' +
+  '  float da = rd.r * ' + R3D_ROAD_RANGE.toFixed(1) + ', ds = (rd.g - 0.5) * 4.0;' +
+  '  float asph = 1.0 - smoothstep(3.05, 3.2, da);' +
+  '  float kerb = smoothstep(3.05, 3.15, da) * (1.0 - smoothstep(3.55, 3.65, da));' +
+  /* the carriageway: dark aggregate flecked with its own stone, worn paler down the wheel
+     tracks either side of the middle, mended darker in patches */
+  '  vec3 ac = mix(vec3(0.25, 0.25, 0.24), vec3(0.33, 0.33, 0.31), N.x) * (0.95 + 0.1 * M.x);' +
+  '  ac = mix(ac, vec3(0.5, 0.49, 0.46), M.z * 0.22 * det);' +
+  '  ac *= 1.0 + 0.07 * (1.0 - smoothstep(0.4, 0.9, abs(da - 1.6)));' +
+  '  ac = mix(ac, vec3(0.2, 0.2, 0.2), smoothstep(0.66, 0.71, N.y) * 0.55);' +
+  /* the centre line: dashes, a third of a unit wide */
+  '  float dash = (1.0 - smoothstep(0.12, 0.2, abs(ds))) * (1.0 - smoothstep(0.6, 1.0, da)) * smoothstep(0.1, 0.3, rd.b - 0.45) * smoothstep(0.8, 0.97, rd.a);' +
+  '  ac = mix(ac, vec3(0.86, 0.83, 0.70), dash * 0.9);' +
+  '  col = mix(col, ac, asph);' +
+  '  col = mix(col, vec3(0.70, 0.68, 0.62) * (0.92 + 0.12 * M.x), kerb);' +
+  /* a sliver of shadow where the kerb steps down to the shoulder */
+  '  col *= 1.0 - 0.25 * smoothstep(3.6, 3.7, da) * (1.0 - smoothstep(3.7, 4.1, da));' +
+  '  return asph; }';
+</script>
 <script>/* render3d/terrain3d.js - the ground as materials, not as a baked picture. Part of rts.render3d.
 
    THIS IS WHERE THE GAME STOPS BEING RED ALERT. Until now the 3D ground was the 2D renderer's
@@ -25279,6 +25620,7 @@ var R3D_MAT_GLSL =
   'uniform float uTileInv;' +
   /* the noise, and the border's wander, are render3d/noise3d.js's - shared with the sea */
   R3D_NOISE_GLSL +
+  R3D_ROAD_GLSL +                                          /* the roads' paint: road3d.js */
   /* ---- the materials. Each returns colour (sRGB, 0..1) and a height in .a ---- */
   /* ROUND GRAINS: one per lattice cell, at a random spot, only in some cells. Thresholding value
      noise instead gives blobs that snap to the noise's own grid and read as dashes. Returns
@@ -25336,7 +25678,8 @@ var R3D_MAT_GLSL =
   '  float wr = smoothstep(0.58, 0.72, N.y);' +
   '  c = mix(vec3(0.50, 0.43, 0.31), c, stone * (1.0 - wr));' +   /* sand packed in the seams */
   '  return vec4(c, (stone * (1.0 - v.x * 0.5)) * (1.0 - wr) * 0.9 + 0.1); }' +
-  /* a dirt track: packed, paler down the middle where the wheels run, gravel through it */
+  /* a dirt track: packed, paler down the middle where the wheels run, gravel through it - the
+     shoulder either side of a painted road, and the whole road on a loaded map */
   'vec4 _track(vec4 N, vec4 M, float det){' +
   '  vec4 d = _dirt(N, M, det);' +
   '  d.rgb = mix(d.rgb * vec3(1.08, 1.05, 1.0), vec3(0.66, 0.61, 0.52), M.z * 0.35 * det);' +
@@ -25430,6 +25773,8 @@ var R3D_MAT_GLSL =
   '    grad = (1.0 - smoothstep(0.58, 0.72, N.y)) * det * 1.3 *' +
   '           (6.0 * t * (1.0 - t) / 0.11 * (g2 - g1) * (1.0 - v.x * 0.5) - 0.5 * t * t * (3.0 - 2.0 * t) * g1);' +
   '  }' +
+  /* THE ROAD, painted down its own line over the cells' dirt shoulder; flat where it is laid */
+  '  grad *= 1.0 - _road(w, col.rgb, N, M, det);' +
   /* SCARS: scorch blends like the ground does; a crater is drawn round its own cell's centre */
   '  float sc = dot(wt, vec4(a.g, b.g, c.g, d.g));' +
   '  if (sc > 0.002) {' +
@@ -25481,7 +25826,8 @@ var R3D_MAT_GLSL =
    THE BASE STANDS ON PAVING. A kind of the ground map's own, R3D_KIND_PAVED, laid under and
    round every building: its footprint and R3D_PAVE_RING cells beyond on open ground, and road
    within R3D_PAVE_ROAD cells of it - so a base grows a cobbled plaza with streets running out
-   of it, and the roads out in the country stay dirt tracks. It follows the base as it is built
+   of it; out in the country a road's cells are its dirt shoulder, and the carriageway is painted
+   down its line over them (road3d.js). It follows the base as it is built
    and razed: the buildings are part of the key. */
 var R3D_KIND_PAVED = 7;
 var R3D_PAVE_RING = 1;
@@ -25623,6 +25969,7 @@ function _r3dMatSet(gl, R3, P, G) {
   gl.uniform1i(gl.getUniformLocation(P, 'uOreT'), 5);
   gl.activeTexture(gl.TEXTURE0);
   gl.uniform1f(gl.getUniformLocation(P, 'uTileInv'), 1 / RTS_TILE);
+  _r3dRoadSet(gl, R3, P, G);
   gl.uniform4f(u, 1, 1 / RTS_N, RTS_N / 2 - 0.5, Math.min(1, px / R3D_MAT_DETAIL_PX));
   return true;
 }
@@ -28157,7 +28504,7 @@ function _r3dFrame(G) {
       /* THE GROUND UNDER IT, not zero. An aircraft's altitude is measured from the ground it
          is over as well - it flies at a height, not at a level - so both take the terrain and
          only the flier adds to it. */
-      var y = _rtsElev(e.x, e.z) + (e.air ? ((e.rearming > 0 ? 2 : (e.alt || 12)) * 0.35) : 0);
+      var y = (e.air || rtsUnitDef(e.def).sea ? _rtsElev(e.x, e.z) : _rtsStandY(e.x, e.z)) + (e.air ? ((e.rearming > 0 ? 2 : (e.alt || 12)) * 0.35) : 0);
       /* A MARCHING SOLDIER BOBS. There is no walk cycle in 3D - the mesh is one pose - so the
          walk reads through a small vertical bob instead, phased by the same `gait` offset that
          desynchronises the 2D walk frames, so a squad does not pogo in unison. Vehicles do not
@@ -29089,7 +29436,7 @@ function _r3dWorldTick(G) {
   var R3 = window._R3D;
   if (!R3.world || R3.worldG !== G) {
     R3.scnPlan = _r3dSceneryPlan(G); R3.scnPlanFor = G;   /* first: the world leaves its claims alone */
-    _r3dWorldBuild(G); _r3dOreBuild(G); _r3dWaterBuild(G); _r3dDressTick(G); _r3dSceneryTick(G); return;
+    _r3dWorldBuild(G); _r3dOreBuild(G); _r3dWaterBuild(G); _r3dDressTick(G); _r3dSceneryTick(G); _r3dBridgeTick(G); return;
   }
   _r3dOreTick(G);
   _r3dSceneryTick(G);
@@ -29249,8 +29596,10 @@ function _r3dSceneryTick(G) {
   _r3dSceneryBuild(G, R3.scnPlan);
 }
 function _r3dSceneryBatches(R3) {
-  if (R3.sceneryAmt === 0 || !R3.world || !R3.world.length || !R3.scenery) return [];
-  return R3.scenery;
+  if (!R3.world || !R3.world.length) return [];
+  /* the bridges are not the countryside's to take away - a tank stands on them (bridge3d.js) */
+  var b = R3.bridges || [];
+  return R3.sceneryAmt === 0 || !R3.scenery ? b : b.length ? R3.scenery.concat(b) : R3.scenery;
 }
 </script>
 <script>/* render3d/farm3d.js - the countryside's models, and the batch they are built into. Part of
@@ -29446,6 +29795,96 @@ function _r3dSceneryBuild(G, P) {
     R3.sceneryTris += m.verts / 3;
   }
   R3.sceneryPlan = P;
+}
+</script>
+<script>/* render3d/bridge3d.js - the bridges, in 3D. Part of rts.render3d; where they are and the deck's
+   height are core/bridge.js, so a unit on a deck (scene3d.js, _rtsStandY) and the deck it is
+   drawn on read one function.
+
+   A concrete deck on the road's own line, arched over the water so a gunboat passes under the
+   long spans; a parapet each side, lamp posts along it, piers down into the water every second
+   cell and an abutment where it meets each shore. Built in the bridge's own frame - x along
+   the span, z across it - and turned onto the map, so one builder serves all four directions.
+
+   Drawn with the world batch in both passes, as part of the countryside's list
+   (_r3dSceneryBatches) but NOT behind its knob: R3.sceneryAmt 0 leaves the bridges standing,
+   because a tank on a deck that is not drawn is a tank on the water. */
+
+var R3D_BRIDGE = {
+  deck: '#55534f', deckTop: '#5d5b56', kerb: '#a8a497', wall: '#9a958a', pier: '#7f7a70',
+  line: '#d6d0b6', lamp: '#3a3a3a', bulb: '#f2e2b0'
+};
+var R3D_BRIDGE_THICK = 0.45;     /* the deck slab, world units */
+
+/* A sloped bar from xa to xb in the bridge's frame: its underside at ya..yb, `h` deep, between
+   z0 and z1 across. Faces wound outward like _r3Box's. */
+function _r3dBridgeBar(L, xa, xb, ya, yb, h, z0, z1, col, top) {
+  _r3F(L, [[xa, ya + h, z0], [xa, ya + h, z1], [xb, yb + h, z1], [xb, yb + h, z0]], top || col);
+  _r3F(L, [[xa, ya, z1], [xb, yb, z1], [xb, yb + h, z1], [xa, ya + h, z1]], col);
+  _r3F(L, [[xb, yb, z0], [xa, ya, z0], [xa, ya + h, z0], [xb, yb + h, z0]], col);
+  _r3F(L, [[xa, ya, z0], [xb, yb, z0], [xb, yb, z1], [xa, ya, z1]], col);
+}
+
+function _r3dBridge(out, br) {
+  var C = R3D_BRIDGE, T = RTS_TILE, L = [], len = br.len * T, hw = br.w * T / 2 - 0.15;
+  var n = br.len * 3, th = R3D_BRIDGE_THICK, k;
+  function y(x) { return _rtsBridgeDeckY(br, Math.max(0, Math.min(1, x / len))); }
+  for (k = 0; k < n; k++) {
+    var xa = len * k / n, xb = len * (k + 1) / n, ya = y(xa), yb = y(xb);
+    _r3dBridgeBar(L, xa, xb, ya - th, yb - th, th, -hw, hw, C.deck, C.deckTop);
+    /* kerbs and parapets, each side */
+    _r3dBridgeBar(L, xa, xb, ya, yb, 0.12, -hw, -hw + 0.5, C.kerb);
+    _r3dBridgeBar(L, xa, xb, ya, yb, 0.12, hw - 0.5, hw, C.kerb);
+    _r3dBridgeBar(L, xa, xb, ya + 0.12, yb + 0.12, 0.5, -hw, -hw + 0.22, C.wall, C.kerb);
+    _r3dBridgeBar(L, xa, xb, ya + 0.12, yb + 0.12, 0.5, hw - 0.22, hw, C.wall, C.kerb);
+    /* two lanes: a dashed line down the middle */
+    if (br.w > 1 && (k % 3) === 1) _r3dBridgeBar(L, xa, xb, ya + 0.005, yb + 0.005, 0.02, -0.09, 0.09, C.line);
+  }
+  /* piers: a column every second cell, from the bed up to the deck's underside, with a cutwater
+     upstream and down */
+  for (k = 2; k < br.len; k += 2) {
+    var px = k * T, top = y(px) - th, pd = Math.min(hw * 1.5, br.w * T * 0.7);
+    _r3Box(L, px, -1.4, 0, 1.0, top + 1.4, pd, C.pier, C.pier);
+    _r3Cyl(L, px, -1.4, pd / 2, 0.5, top + 1.4, C.pier, C.pier, 16);
+    _r3Cyl(L, px, -1.4, -pd / 2, 0.5, top + 1.4, C.pier, C.pier, 16);
+  }
+  /* abutments: where the deck meets each shore */
+  [0, len].forEach(function (ax) {
+    var g = y(ax);
+    _r3Box(L, ax + (ax ? 0.5 : -0.5), g - 1.2, 0, 1.6, 1.25, br.w * T + 0.6, C.pier, C.kerb);
+  });
+  /* lamp posts on the parapets, every third cell, alternating sides */
+  for (k = 1; k < br.len; k += 3) {
+    var lx = k * T + T / 2, lz = ((k / 3) & 1) ? hw - 0.11 : -hw + 0.11, ly = y(lx) + 0.62;
+    _r3Cyl(L, lx, ly, lz, 0.07, 2.4, C.lamp, C.lamp, 16);
+    _r3Box(L, lx, ly + 2.3, lz * 0.88, 0.32, 0.14, 0.7, C.lamp, C.lamp);
+    _r3Box(L, lx, ly + 2.2, lz * 0.82, 0.22, 0.1, 0.34, C.bulb, C.bulb);
+  }
+  /* into the world: the frame's origin is the near abutment, centred across the deck */
+  var ang = Math.atan2(br.dz, br.dx);
+  var ox = _rtsWX(br.tx) - br.dx * T / 2 + br.px * (br.w - 1) * T / 2;
+  var oz = _rtsWX(br.tz) - br.dz * T / 2 + br.pz * (br.w - 1) * T / 2;
+  _r3dPut(out, L, ang, ox, 0, oz);
+}
+
+/* Every bridge on the map, a mesh each with its bounds, rebuilt when the game changes. */
+function _r3dBridgeTick(G) {
+  var R3 = window._R3D;
+  if (!R3 || !R3.gl || R3.bridgeFor === G) return;
+  var gl = R3.gl;
+  if (R3.bridges) R3.bridges.forEach(function (m) { gl.deleteBuffer(m.p); gl.deleteBuffer(m.n); gl.deleteBuffer(m.c); });
+  R3.bridges = []; R3.bridgeFor = G; R3.bridgeTris = 0;
+  _r3SegBulk(function () {
+    (G.bridges || []).forEach(function (br) {
+      var faces = [];
+      _r3dBridge(faces, br);
+      var m = _r3dBuildMesh(gl, faces), T = RTS_TILE;
+      var ex = br.tx + br.dx * (br.len - 1) + br.px * (br.w - 1), ez = br.tz + br.dz * (br.len - 1) + br.pz * (br.w - 1);
+      m.x0 = Math.min(_rtsWX(br.tx), _rtsWX(ex)) - T * 1.5; m.x1 = Math.max(_rtsWX(br.tx), _rtsWX(ex)) + T * 1.5;
+      m.z0 = Math.min(_rtsWX(br.tz), _rtsWX(ez)) - T * 1.5; m.z1 = Math.max(_rtsWX(br.tz), _rtsWX(ez)) + T * 1.5;
+      R3.bridges.push(m); R3.bridgeTris += m.verts / 3;
+    });
+  });
 }
 </script>
 <script>/* render3d/ore3d.js - the ore field's crystals, as geometry that follows the field. Part of
@@ -29806,7 +30245,7 @@ function _rtsRFrame(dt) {
     for (var tx = tx0; tx <= tx1; tx++) {
       var idx = _rtsIdx(tx, tz);
       var ore = G.scrap[idx];
-      var isWater = G.terrain && G.terrain[idx] === RTS_T_WATER;
+      var isWater = G.terrain && G.terrain[idx] === RTS_T_WATER && !_rtsIsBridgeCell(idx);   /* under a deck: the bake's bridge */
       if (ore <= 0 && !isWater) continue;
       var pp = _rtsGroundToScreen(_rtsWX(tx) - RTS_TILE / 2, _rtsWX(tz) - RTS_TILE / 2);
       var px = Math.round(pp.x), py = Math.round(pp.y);
@@ -33421,7 +33860,8 @@ function _rtsDrawMini() {
     else {
       var tk = G.terrain ? G.terrain[idx] : 0;
       if (tk === 0) continue;
-      g.fillStyle = TCOL[tk] || TCOL[0];
+      /* a bridge is road on the radar: it is the way across */
+      g.fillStyle = TCOL[tk === RTS_T_WATER && _rtsIsBridgeCell(idx) ? RTS_T_ROAD : tk] || TCOL[0];
     }
     g.fillRect(tx * sc, tz * sc, sc, sc);
   }

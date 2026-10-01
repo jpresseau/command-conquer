@@ -372,7 +372,7 @@ function _r3dWorldTick(G) {
   var R3 = window._R3D;
   if (!R3.world || R3.worldG !== G) {
     R3.scnPlan = _r3dSceneryPlan(G); R3.scnPlanFor = G;   /* first: the world leaves its claims alone */
-    _r3dWorldBuild(G); _r3dOreBuild(G); _r3dWaterBuild(G); _r3dDressTick(G); _r3dSceneryTick(G); return;
+    _r3dWorldBuild(G); _r3dOreBuild(G); _r3dWaterBuild(G); _r3dDressTick(G); _r3dSceneryTick(G); _r3dBridgeTick(G); return;
   }
   _r3dOreTick(G);
   _r3dSceneryTick(G);

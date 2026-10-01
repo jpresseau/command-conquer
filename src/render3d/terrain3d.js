@@ -38,6 +38,7 @@ var R3D_MAT_GLSL =
   'uniform float uTileInv;' +
   /* the noise, and the border's wander, are render3d/noise3d.js's - shared with the sea */
   R3D_NOISE_GLSL +
+  R3D_ROAD_GLSL +                                          /* the roads' paint: road3d.js */
   /* ---- the materials. Each returns colour (sRGB, 0..1) and a height in .a ---- */
   /* ROUND GRAINS: one per lattice cell, at a random spot, only in some cells. Thresholding value
      noise instead gives blobs that snap to the noise's own grid and read as dashes. Returns
@@ -95,7 +96,8 @@ var R3D_MAT_GLSL =
   '  float wr = smoothstep(0.58, 0.72, N.y);' +
   '  c = mix(vec3(0.50, 0.43, 0.31), c, stone * (1.0 - wr));' +   /* sand packed in the seams */
   '  return vec4(c, (stone * (1.0 - v.x * 0.5)) * (1.0 - wr) * 0.9 + 0.1); }' +
-  /* a dirt track: packed, paler down the middle where the wheels run, gravel through it */
+  /* a dirt track: packed, paler down the middle where the wheels run, gravel through it - the
+     shoulder either side of a painted road, and the whole road on a loaded map */
   'vec4 _track(vec4 N, vec4 M, float det){' +
   '  vec4 d = _dirt(N, M, det);' +
   '  d.rgb = mix(d.rgb * vec3(1.08, 1.05, 1.0), vec3(0.66, 0.61, 0.52), M.z * 0.35 * det);' +
@@ -189,6 +191,8 @@ var R3D_MAT_GLSL =
   '    grad = (1.0 - smoothstep(0.58, 0.72, N.y)) * det * 1.3 *' +
   '           (6.0 * t * (1.0 - t) / 0.11 * (g2 - g1) * (1.0 - v.x * 0.5) - 0.5 * t * t * (3.0 - 2.0 * t) * g1);' +
   '  }' +
+  /* THE ROAD, painted down its own line over the cells' dirt shoulder; flat where it is laid */
+  '  grad *= 1.0 - _road(w, col.rgb, N, M, det);' +
   /* SCARS: scorch blends like the ground does; a crater is drawn round its own cell's centre */
   '  float sc = dot(wt, vec4(a.g, b.g, c.g, d.g));' +
   '  if (sc > 0.002) {' +
@@ -240,7 +244,8 @@ var R3D_MAT_GLSL =
    THE BASE STANDS ON PAVING. A kind of the ground map's own, R3D_KIND_PAVED, laid under and
    round every building: its footprint and R3D_PAVE_RING cells beyond on open ground, and road
    within R3D_PAVE_ROAD cells of it - so a base grows a cobbled plaza with streets running out
-   of it, and the roads out in the country stay dirt tracks. It follows the base as it is built
+   of it; out in the country a road's cells are its dirt shoulder, and the carriageway is painted
+   down its line over them (road3d.js). It follows the base as it is built
    and razed: the buildings are part of the key. */
 var R3D_KIND_PAVED = 7;
 var R3D_PAVE_RING = 1;
@@ -382,6 +387,7 @@ function _r3dMatSet(gl, R3, P, G) {
   gl.uniform1i(gl.getUniformLocation(P, 'uOreT'), 5);
   gl.activeTexture(gl.TEXTURE0);
   gl.uniform1f(gl.getUniformLocation(P, 'uTileInv'), 1 / RTS_TILE);
+  _r3dRoadSet(gl, R3, P, G);
   gl.uniform4f(u, 1, 1 / RTS_N, RTS_N / 2 - 0.5, Math.min(1, px / R3D_MAT_DETAIL_PX));
   return true;
 }

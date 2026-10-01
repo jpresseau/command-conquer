@@ -36,6 +36,7 @@ function _rtsCanPlace(side, key, tx, tz, anywhere) {
     if (!_rtsInB(ax, az)) return false;
     if (G.blocked[_rtsIdx(ax, az)] !== 0) return false;
     if (G.scrap[_rtsIdx(ax, az)] > 0) return false;
+    if (G.terrain[_rtsIdx(ax, az)] === RTS_T_WATER) return false;   /* a bridge is open, and is water */
   }
   /* A shipyard must reach the water. Checked here rather than only at build time so the
      placement ghost turns red as you drag it inland, which is the only way a player finds out
