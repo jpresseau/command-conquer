@@ -113,13 +113,15 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W) {
   if (d2.sea && !R3.swellOff) { var sw = _r3dShipSwell(e, t); y += sw.y; gn = sw.n; }
   var rk = _r3dRecoil(e, gn) || { hx: 0, hz: 0, tx: 0, tz: 0, n: gn };   /* the kick: combat3d.js */
   var AP = RTS_AIR_PARTS[e.def], rotor = AP && (AP.rotor || AP.prop) && !R3.rotorOff;
-  if (e.air) { mo.y = y; mo.n = rk.n; _r3dAirTrail(mo, e, y, t); }
+  mo.y = y;                                   /* where it was drawn, for its smoke (hurt3d.js) */
+  if (e.air) { mo.n = rk.n; _r3dAirTrail(mo, e, y, t); }
+  var hd = _r3dHurtDim(e, R3);                /* scorched as it is damaged - hurt3d.js */
   var roll = d2.kind === 'vehicle' && !d2.sea && !e.air ? _r3dRollPhase(R3, e.def, mo.d) : 0;
   drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : (rotor ? 'body' : null), e.prone, pose, roll),
-         e.x + rk.hx, y, e.z + rk.hz, -e.rot, ART2W, false, 1, rk.n);
+         e.x + rk.hx, y, e.z + rk.hz, -e.rot, ART2W, hd, 1, rk.n);
   if (turret) {
     drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false), e.x + rk.tx, y, e.z + rk.tz, -(e.turret || 0),
-           ART2W, false, 1, rk.n);
+           ART2W, hd, 1, rk.n);
   }
   if (rotor && AP.rotor) drawIn(C, _r3dMesh('u', e.def, e.side, 'rotor', false), e.x, y, e.z, -e.rot - mo.spin, ART2W, false, 1, rk.n);
   if (rotor && AP.prop) drawIn(C, _r3dMesh('u', e.def, e.side, 'prop' + _r3dPropPhase(mo.spin), false), e.x, y, e.z, -e.rot, ART2W, false, 1, rk.n);

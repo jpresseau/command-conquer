@@ -36,4 +36,18 @@ var R3D_WEATHER_GLSL =
   /* grime is mud, not shadow: browner as well as darker */
   '  vec3 w = c * k;' +
   '  w = mix(w, w * vec3(0.86, 0.76, 0.64), grime * 0.5);' +
-  '  return mix(c, w, uWeather); }';
+  '  return mix(c, w, uWeather); }' +
+  /* THE TINT A DRAW CARRIES in its dim value: 1 the dull cast of a building rising, 2 a
+     burnt-out husk, and 3 + s SCORCHED, s of the way from untouched to dead (hurt3d.js) - soot
+     blotches spreading as s grows, laid on in world space so they hold still on the model, and
+     past R3D_GLASS_OUT the windows - faces in the palette's glass - blown out dark */
+  'vec3 _tint(float w, vec3 wp, vec3 col){' +
+  '  if (w > 2.5) {' +
+  '    float s = w - 3.0;' +
+  '    float b = _vn(vec2(wp.x + wp.z * 0.7, wp.y * 0.6) * 2.2) * 0.5 + _vn(wp.xz * 4.6 + wp.y * 1.7) * 0.3 + _vn(wp.xz * 9.0 - wp.y * 3.1) * 0.2;' +
+  '    float m = smoothstep(1.25 - 0.8 * s, 1.6 - 0.8 * s, b + 0.3);' +
+  '    vec3 t = mix(vec3(1.0), vec3(0.30, 0.26, 0.23), m * 0.8);' +
+  '    float gl = 1.0 - smoothstep(0.03, 0.07, distance(col, vec3(0.561, 0.737, 0.831)));' +
+  '    return mix(t, vec3(0.12, 0.13, 0.15), gl * step(' + R3D_GLASS_OUT.toFixed(2) + ', s));' +
+  '  }' +
+  '  return w > 1.5 ? vec3(0.2, 0.18, 0.17) : mix(vec3(1.0), vec3(0.62, 0.55, 0.55), w); }';

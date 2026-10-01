@@ -285,6 +285,10 @@ breaking it shipped once.
   `R3.airOff/trailOff`; `unit/air`, `e2e/air`. Ships ride `_r3dSwellAt` (wave3d.js). A prone
   squad crawls (`crawl3d.js`). Kill switches `R3.rollOff/rotorOff/swellOff`. `unit/motion`,
   `e2e/motion`.
+- **Damage you can see** (`render3d/hurt3d.js`): soot spreads below `R3D_SCORCH_FROM` and the
+  windows (faces in `RTS_PAL.glass`) blow out past `R3D_GLASS_OUT`, in the mesh program's `_tint`
+  (weather3d.js; the dim value carries 3 + damage). Below yellow the thing smokes, below red it
+  burns. `R3.scorchOff/hurtOff`; `unit/hurt`, `e2e/hurt`. hurt3d.js loads before weather3d.js.
 - **The world's own sound** (`rts.ambience.js`): rain, wind, insects, one engine note, bridge
   rumble, thunder and a night echo, each a few nodes built once and only turned by `setTargetAtTime`
   (`_rtsAmbWant` is the pure half). Lightning keeps the GAME's clock on a fixed schedule

@@ -17,7 +17,7 @@ var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('motion');
 var g = load(['src/rules', 'src/core', 'src/map', 'src/r3d', 'src/sprites', 'src/render3d/forest3d.js', 'src/render3d/soldier3d.js',
-              'src/render3d/crawl3d.js', 'src/render3d/wave3d.js', 'src/render3d/combat3d.js', 'src/render3d/unit3d.js', 'src/render3d/air3d.js']);
+              'src/render3d/crawl3d.js', 'src/render3d/wave3d.js', 'src/render3d/combat3d.js', 'src/render3d/hurt3d.js', 'src/render3d/unit3d.js', 'src/render3d/air3d.js']);
 
 function sig(faces) {
   return faces.map(function (f) { return f.v.map(function (p) { return p.map(function (v) { return (Math.round(v * 1000) / 1000).toFixed(3); }).join(','); }).join(';') + '|' + f.c; }).sort();

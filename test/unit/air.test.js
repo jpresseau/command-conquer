@@ -16,7 +16,7 @@ var { load } = require('../lib/sandbox.js');
 var S = new Suite('air');
 var g = load(['src/rules', 'src/core', 'src/map', 'src/r3d', 'src/sprites', 'src/render3d/forest3d.js', 'src/render3d/soldier3d.js',
               'src/render3d/crawl3d.js', 'src/render3d/wave3d.js', 'src/render3d/combat3d.js', 'src/render3d/fxemit3d.js', 'src/render3d/skyfx3d.js',
-              'src/render3d/unit3d.js', 'src/render3d/air3d.js']);
+              'src/render3d/hurt3d.js', 'src/render3d/unit3d.js', 'src/render3d/air3d.js']);
 g._rtsNewGame(4242, 'easy');
 var G = g.window._rtsG;
 for (var vi = 0; vi < G.vis.length; vi++) { G.vis[vi] = 1; G.mapped[vi] = 1; }
