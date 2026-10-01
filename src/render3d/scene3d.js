@@ -130,7 +130,7 @@ function _r3dFrame(G) {
       gl.uniform2f(SC.uWave, 0, 0);
       if (R3.world) {
         _r3dInstConst(gl, I, SC, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0);
-        var sb = R3.world.concat(R3.ore || [], _r3dDressBatches(R3));
+        var sb = R3.world.concat(R3.ore || [], _r3dDressBatches(R3), _r3dSceneryBatches(R3));
         for (var si = 0; si < sb.length; si++) {
           var sm = sb[si];
           if (!sm || !sm.verts) continue;
@@ -345,7 +345,7 @@ function _r3dFrame(G) {
     var uSw = gl.getUniformLocation(MC.P, 'uSway');
     gl.uniform2f(uSw, R3D_SWAY * (R3.swayAmt === undefined ? 1 : R3.swayAmt), G.t || 0);
     var lift = R3D_WORLD_YMAX * R3.sp / R3.cp, cb = _r3dBoundsNear(vb, lift, 4);
-    var batches = R3.world.concat(R3.ore || [], _r3dDressBatches(R3));
+    var batches = R3.world.concat(R3.ore || [], _r3dDressBatches(R3), _r3dSceneryBatches(R3));
     for (var wb = 0; wb < batches.length; wb++) {
       var bm = batches[wb];
       if (!bm || !bm.verts) continue;

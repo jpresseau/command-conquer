@@ -222,7 +222,8 @@ function _r3dWorldBuild(G) { return _r3SegBulk(function () {
           var h1 = _sprHash(tx, tz, 331);
           var _lift0 = faces.length, _liftY = _rtsTileElev(tx, tz);
 
-          if (k === RTS_T_TREE) {
+          var _scn = R3.scnPlanFor === G && R3.scnPlan ? R3.scnPlan.claim[_rtsIdx(tx, tz)] : 0;   /* scenery3d.js */
+          if (k === RTS_T_TREE && _scn !== 1) {
             /* ONE OR TWO TREES, not two or three. A cell is four world units across and a
                canopy is up to two units in radius, so a single tree already closes the canopy
                over its own cell and a dense wood still reads solid from above - what the third
@@ -232,7 +233,7 @@ function _r3dWorldBuild(G) { return _r3SegBulk(function () {
 
                The offsets still take BOTH cell coordinates and the sub-index - see the note at
                the top of this file for what the separable version drew. */
-            var nt = h1 > 0.44 ? 2 : 1;
+            var nt = h1 > 0.44 && _scn !== 3 ? 2 : 1;
             for (var tn = 0; tn < nt; tn++) {
               var ox = (_sprHash(tx * 31 + tn, tz, 401) - 0.5) * (RTS_TILE - 1.6);
               var oz = (_sprHash(tz * 31 + tn, tx, 409) - 0.5) * (RTS_TILE - 1.6);
@@ -251,7 +252,7 @@ function _r3dWorldBuild(G) { return _r3SegBulk(function () {
                static batch is baked once and the field moves as it is worked, so this is the
                field as the map was GENERATED; ground that is mined out later keeps its bare
                scar, which is the right way round for it to be wrong. */
-            if (h1 < R3D_TUFT_ODDS && !(G.scrap && G.scrap[_rtsIdx(tx, tz)] > 0)) {
+            if (h1 < R3D_TUFT_ODDS && _scn !== 2 && !(G.scrap && G.scrap[_rtsIdx(tx, tz)] > 0)) {
               for (var tf = 0; tf < R3D_TUFTS_PER_CELL; tf++) {
                 var fx = wx + (_sprHash(tx * 31 + tf, tz, 367) - 0.5) * RTS_TILE;
                 var fz = wz + (_sprHash(tz * 31 + tf, tx, 373) - 0.5) * RTS_TILE;
@@ -370,8 +371,10 @@ function _r3dWaterBuild(G) { return _r3SegBulk(function () {
 function _r3dWorldTick(G) {
   var R3 = window._R3D;
   if (!R3.world || R3.worldG !== G) {
-    _r3dWorldBuild(G); _r3dOreBuild(G); _r3dWaterBuild(G); _r3dDressTick(G); return;
+    R3.scnPlan = _r3dSceneryPlan(G); R3.scnPlanFor = G;   /* first: the world leaves its claims alone */
+    _r3dWorldBuild(G); _r3dOreBuild(G); _r3dWaterBuild(G); _r3dDressTick(G); _r3dSceneryTick(G); return;
   }
   _r3dOreTick(G);
+  _r3dSceneryTick(G);
   _r3dDressTick(G);                 /* what the bases keep lying about - dress3d.js */
 }

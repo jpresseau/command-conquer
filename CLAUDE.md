@@ -247,6 +247,11 @@ breaking it shipped once.
   building's paved ring, sides and back only (never the front, where units come out), one static
   batch keyed on the standing buildings and drawn with the world's. Cosmetic: blocks nothing.
   `R3.dressAmt`. `e2e/dress`.
+- **The countryside** (`render3d/scenery3d.js` plans it, `farm3d.js` models it): fields, farmsteads,
+  telegraph poles, wrecks and boulders, placed by `_sprHash` salted with `G.seed`, never the game's
+  random stream. Cosmetic: it writes no game cell. `G.starts` is `{player, enemy}`, not a list.
+  `claim` tells `_r3dWorldBuild` which trees and tufts to leave out, so the plan is made first.
+  `R3.sceneryAmt`. `unit/scenery`, `e2e/scenery`.
 - **In 3D a soldier has a model of his own** (`render3d/soldier3d.js`): rounded limbs, and four
   stride poses picked by his gait (`_r3dSoldierPose`) in place of the bob. The sprite's model
   stays for 2D, for prone squads and for the dog; the mesh cache key carries the pose.
