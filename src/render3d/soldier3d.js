@@ -138,9 +138,9 @@ function _r3dSoldierMan(m, key, mx, mz, pose, lead, K) {
 }
 
 /* The squad as the sprite model lays it out - two men off the facing grid, a hero alone - at
-   the sprite model's own scale. Prone is the sprite's pose: low, long, and not walking. */
+   the sprite model's own scale. Prone, they lie and crawl (render3d/crawl3d.js). */
 function _r3dSoldierModel(key, side, prone, pose) {
-  if (key === 'dog' || prone) return null;
+  if (key === 'dog') return null;
   var TM = RTS_PAL.team[side], kit = RTS_INF_KIT[key] || RTS_INF_KIT.rifle;
   var K = { kit: kit, DK: RTS_PAL.dark, S: RTS_PAL.steel, SK: '#c8a882',
             BD: kit.body ? kit.body[0] : TM[0], BL: kit.body ? kit.body[1] : TM[1],
@@ -148,7 +148,9 @@ function _r3dSoldierModel(key, side, prone, pose) {
   var m = [], men = (key === 'tanya') ? [[0, 0]] : [[3.6, -1.5], [-3.6, 1.5]];
   for (var i = 0; i < men.length; i++) {
     /* the two men step off on opposite feet, so a squad does not march in lockstep */
-    _r3dSoldierMan(m, key, men[i][0], men[i][1], pose ? ((pose - 1 + i * 2) % 4) + 1 : 0, i ? -1 : 1, K);
+    var pi = pose ? ((pose - 1 + i * 2) % 4) + 1 : 0;
+    if (prone) _r3dCrawlMan(m, key, men[i][0], men[i][1], pi, K);
+    else _r3dSoldierMan(m, key, men[i][0], men[i][1], pi, i ? -1 : 1, K);
   }
   var sc = _sprUnitScale(key);
   return sc === 1 ? m : _r3Scale(m, sc);

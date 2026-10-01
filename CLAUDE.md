@@ -276,6 +276,12 @@ breaking it shipped once.
   its staging waypoint until the other prongs arrive or `RTS_SYNC_WAIT` passes; Assault and Sappers
   carry it. `core/aimend.js` sends vehicles under `RTS_MEND_AT` to a powered depot (`u.mend`; not
   recruited or escorted meanwhile). Raiders divide a harvester's worth by its guard. `unit/aitactics`.
+- **What moves on a unit** (`render3d/unit3d.js`, which draws every unit for scene3d.js): tracks
+  and wheels roll by a renderer-side odometer (`R3.motion`, never the game's) through
+  `R3D_ROLL_N` builds of the model (`_SPR_ROLL`, null for sprites; a 3D build evens the links),
+  held under one step a frame against the wagon wheel. `RTS_ROTOR_UNITS` draw part 'rotor' turning
+  over part 'body'. Ships ride `_r3dSwellAt` (wave3d.js). A prone squad crawls (`crawl3d.js`).
+  Kill switches `R3.rollOff/rotorOff/swellOff`. `unit/motion`, `e2e/motion`.
 - **The world's own sound** (`rts.ambience.js`): rain, wind, insects, one engine note, bridge
   rumble, thunder and a night echo, each a few nodes built once and only turned by `setTargetAtTime`
   (`_rtsAmbWant` is the pure half). Lightning keeps the GAME's clock on a fixed schedule

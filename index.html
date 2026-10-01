@@ -958,7 +958,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">2c3d329 · 2026-10-01</div>
+  <div id="rtsBuild" title="build">a6293da · 2026-10-01</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -8696,6 +8696,21 @@ var RTS_INF_KIT = {
   tanya:     { body:['#c4bca4','#e0d8bc'], top:'#a8452a', prop:'#2b3038' }
 };
 
+/* HOW FAR ROUND THE RUNNING GEAR HAS TURNED, 0 to 1 - set by the 3D renderer for the length of
+   one model build (render3d/unit3d.js) and null everywhere else, so every sprite is the model it
+   always was. One turn of it moves the track two links back and turns the sprocket two teeth
+   and the wheel nuts one, which brings every one of them back onto the pattern it started on -
+   given an even run of links, which a 3D build rounds up to, since the links alternate in
+   colour; _SPR_ROLL_LEN is how far, in model units, the vehicle rolls for it. */
+var _SPR_ROLL = null, _SPR_ROLL_LEN = 0, _SPR_ROLL_KIND = null;   /* 'track' or 'wheel' */
+/* Where link k of a run of `links` sits along a track `len` long, `roll` of the way round: the
+   bottom run stays on the ground while the hull goes forward, so against the hull it runs BACK,
+   and a link that runs off the rear comes in again at the front. */
+function _sprLinkX(k, links, len, roll) {
+  var u = ((k + 0.5 - 2 * roll) % links + links) % links;
+  return -len / 2 + u * (len / links);
+}
+
 /* part: undefined = the whole unit, 'hull' = body only, 'turret' = turret only. Hull and
    turret bake into the same size canvas about the same origin, so drawing one over the other
    at the same screen position lines them up with no per-facing offset table. */
@@ -8734,9 +8749,11 @@ function _sprUnitModel(key, side, prone, part) {
         _r3Box(m, 0, rad * 1.62, z, len - rad * 0.8, rad * 0.42, rad * 1.86, DK[1], DK[2]);
         /* LINKS, not a belt. A row of narrow plates across the bottom run is what tells the
            eye this is a track and not a skid, and it reads at any zoom. */
-        var links = Math.max(8, Math.round(len / (rad * 0.72)));
+        var links = Math.max(8, Math.round(len / (rad * 0.72))), rl = _SPR_ROLL || 0;
+        if (_SPR_ROLL !== null && links % 2) links++;
+        if (!_SPR_ROLL_LEN) { _SPR_ROLL_LEN = 2 * len / links; _SPR_ROLL_KIND = 'track'; }
         for (k = 0; k < links; k++) {
-          wx = -len / 2 + (k + 0.5) * (len / links);
+          wx = _sprLinkX(k, links, len, rl);
           _r3Box(m, wx, rad * 0.02, z, len / links * 0.62, rad * 0.62, rad * 2.16,
                  (k % 2) ? DK[1] : DK[0], DK[2]);
         }
@@ -8746,7 +8763,7 @@ function _sprUnitModel(key, side, prone, part) {
         _r3Wheel(m, len / 2 - rad * 1.05, rad * 1.05, z, rad * 1.08, rad * 1.7, 'z',
                  DK[2], DK[3], 22);
         for (k = 0; k < 9; k++) {                                            /* sprocket teeth */
-          ta = (k / 9) * Math.PI * 2;
+          ta = (k - 2 * rl) / 9 * Math.PI * 2;
           _r3Box(m, len / 2 - rad * 1.05 + Math.cos(ta) * rad * 1.12,
                  rad * 1.05 + Math.sin(ta) * rad * 1.12,
                  z, rad * 0.32, rad * 0.32, rad * 1.8, DK[3], DK[2]);
@@ -8761,13 +8778,14 @@ function _sprUnitModel(key, side, prone, part) {
       /* the road wheels themselves - bigger and tyred on a wheeled hull, small and steel on a
          tracked one, which is most of what separates a truck from a tank at a glance */
       var wr = wheeled ? rad * 1.35 : rad * 0.95, wt = wheeled ? rad * 1.5 : rad * 1.68;
+      if (wheeled && !_SPR_ROLL_LEN) { _SPR_ROLL_LEN = wr * Math.PI * 2 / 5; _SPR_ROLL_KIND = 'wheel'; }
       for (k = 0; k < wheels; k++) {
         wx = (k - (wheels - 1) / 2) * step;
         _r3Wheel(m, wx, wr * 0.92, z, wr, wt, 'z', wheeled ? DK[0] : ((k % 2) ? DK[2] : DK[1]),
                  wheeled ? DK[1] : DK[3], 20);
         _r3Wheel(m, wx, wr * 0.92, z, wr * (wheeled ? 0.52 : 0.42), wt * 1.1, 'z', S[1], S[2], 16);
         if (wheeled) for (var b2 = 0; b2 < 5; b2++) {                        /* wheel nuts */
-          ta = (b2 / 5) * Math.PI * 2;
+          ta = (b2 - (_SPR_ROLL || 0)) / 5 * Math.PI * 2;
           _r3Box(m, wx + Math.cos(ta) * wr * 0.3, wr * 0.92 + Math.sin(ta) * wr * 0.3, z,
                  wr * 0.13, wr * 0.13, wt * 1.14, S[2], S[3]);
         }
@@ -9150,8 +9168,9 @@ function _sprUnitGround(X, key) {
       var bx = i < 2 ? 6.2 : -6.2, bz = (i % 2) ? 6.0 : -6.0;
       _r3Wheel(m, bx, 3.1, bz, 3.1, 3.4, 'z', DK[0], DK[1], 22);
       _r3Wheel(m, bx, 3.1, bz, 1.5, 3.7, 'z', S[2], S[1], 16);     /* hub */
+      if (!_SPR_ROLL_LEN) { _SPR_ROLL_LEN = 3.1 * Math.PI * 2 / 5; _SPR_ROLL_KIND = 'wheel'; }   /* a nut's turn: unitmodels.js */
       for (var bn = 0; bn < 5; bn++) {
-        var bna = (bn / 5) * Math.PI * 2;
+        var bna = (bn - (_SPR_ROLL || 0)) / 5 * Math.PI * 2;
         _r3Box(m, bx + Math.cos(bna) * 0.95, 3.1 + Math.sin(bna) * 0.95, bz,
                0.42, 0.42, 3.9, S[3], S[2]);
       }
@@ -9180,6 +9199,9 @@ function _sprUnitGround(X, key) {
    Split because unitmodels.js reached 506 lines the moment the V2 Rocket Launcher was given a
    model of its own, and unit/layout holds every source file to 500. Same shape the building
    models already use (bld-base / bld-tech / bld-war / bld-super). */
+/* The units whose rotor the 3D renderer turns: their model builds part 'rotor' as the blades
+   alone and part 'body' as the rest. */
+var RTS_ROTOR_UNITS = { heli: true };
 function _sprUnitAirSea(X, key) {
   var m = X.m, TM = X.TM, VH = X.VH, S = X.S, DK = X.DK, O = X.O, C = X.C, GN = X.GN,
       d = X.d, prone = X.prone, part = X.part, side = X.side, tracks = X.tracks, i;
@@ -9201,8 +9223,14 @@ function _sprUnitAirSea(X, key) {
        axis-aligned boxes, so a diagonal "bar" is a box that is long in BOTH axes - a square.
        Four of them merged into a solid diamond. Two crossed bars along x and z are genuine
        thin bars, they read as a rotor, and the fuselage shows through the gaps. */
-    _r3Box(m, 0, 8.9, 0, 30.0, 0.5, 1.4, DK[1], DK[3]);
-    _r3Box(m, 0, 8.9, 0, 1.4, 0.5, 30.0, DK[1], DK[3]);
+    /* part 'rotor' is the blades alone and 'body' everything else, so the 3D renderer can turn
+       one over the other (render3d/unit3d.js); the sprite is still the whole machine */
+    var b0 = m.length;
+    if (part !== 'body') {
+      _r3Box(m, 0, 8.9, 0, 30.0, 0.5, 1.4, DK[1], DK[3]);
+      _r3Box(m, 0, 8.9, 0, 1.4, 0.5, 30.0, DK[1], DK[3]);
+      if (part === 'rotor') { m.splice(0, b0); return true; }
+    }
     _r3Box(m, 1.0, 2.2, -3.6, 6.0, 1.4, 1.4, GN[1], GN[3]);        /* stub wings + pods */
     _r3Box(m, 1.0, 2.2, 3.6, 6.0, 1.4, 1.4, GN[1], GN[3]);
     _r3Box(m, 2.6, 1.4, -3.6, 4.0, 1.6, 2.0, DK[1], DK[3]);
@@ -23709,6 +23737,18 @@ var R3D_WAVE_VGLSL_LIT = (function () {
     '    col += vec3(0.10, 0.13, 0.15) * smoothstep(0.45, 1.0, hh);' +
     '  }';
 })();
+
+/* THE SAME SWELL, ASKED FROM HERE - the height and slope of the sea at (x, z) at clock t, in
+   world units, from the same table the shaders are built from. A ship rides it
+   (render3d/unit3d.js), so a hull and the water it sits in heave together. */
+function _r3dSwellAt(x, z, t) {
+  var h = 0, dx = 0, dz = 0;
+  for (var i = 0; i < R3D_WAVE.length; i++) {
+    var w = R3D_WAVE[i], q = x * w[0] + z * w[1] + t * w[2], c = Math.cos(q) * w[3];
+    h += Math.sin(q) * w[3]; dx += c * w[0]; dz += c * w[1];
+  }
+  return { h: h * R3D_WAVE_AMP, dx: dx * R3D_WAVE_AMP, dz: dz * R3D_WAVE_AMP };
+}
 </script>
 <script>/* render3d/place3d.js - how a model is stood in the world: the ground it leans on.
    Part of rts.render3d.
@@ -28476,11 +28516,14 @@ function _r3dBuildMesh(gl, faces) {
 /* The cache key carries everything that changes the geometry or its colours: type, side,
    turret half, prone. A miss builds the model through the same functions the baker uses, so
    the two pipelines cannot drift apart - there is no second copy of any shape. */
-function _r3dMesh(kind, def, side, part, prone, pose) {
-  var R3 = window._R3D, key = kind + ':' + def + ':' + side + ':' + (part || '') + ':' + (prone ? 1 : 0) + ':' + (pose || 0) + (R3.soldierOff ? ':s' : '');
+function _r3dMesh(kind, def, side, part, prone, pose, roll) {
+  var R3 = window._R3D, key = kind + ':' + def + ':' + side + ':' + (part || '') + ':' + (prone ? 1 : 0) + ':' + (pose || 0) + (R3.soldierOff ? ':s' : '') + (roll ? ':r' + roll : '');
   var m = R3.mesh[key];
   if (m !== undefined) return m;
   var faces = null;
+  /* the point round its running gear it is built at, and how far it rolls for a full turn of
+     it (render3d/unit3d.js) */
+  _SPR_ROLL = (roll || 0) / R3D_ROLL_N; _SPR_ROLL_LEN = 0;
   try {
     /* BUILT RICHER THAN THE SPRITE. The model functions are the baker's own - one copy of every
        shape, which is the point of calling them from here at all - but the two consumers want
@@ -28491,13 +28534,15 @@ function _r3dMesh(kind, def, side, part, prone, pose) {
        normal per corner, for the duration of this build and no longer. See _R3_DETAIL. */
     faces = _r3DetailHigh(function () {
       if (kind === 'b') return _sprBuildingModel(def, side);
-      /* a soldier has a model of his own in 3D, in walking poses (render3d/soldier3d.js); the
-         sprite's is the fallback, and still what a prone squad and a dog are drawn as */
+      /* a soldier has a model of his own in 3D, walking (render3d/soldier3d.js) or crawling
+         (crawl3d.js); the sprite's is the fallback, and still what a dog is drawn as */
       var ud = rtsUnitDef(def), sm = (ud && ud.kind === 'infantry' && !part && !R3.soldierOff)
         ? _r3dSoldierModel(def, side, !!prone, pose || 0) : null;
       return sm || _sprUnitModel(def, side, !!prone, part || null);
     });
   } catch (e) { faces = null; }
+  _SPR_ROLL = null;
+  if (kind === 'u' && _SPR_ROLL_LEN) (R3.rollLen || (R3.rollLen = {}))[def] = _SPR_ROLL_LEN * _sprUnitScale(def) * RTS_TILE / RTS_TS;
   m = (faces && faces.length) ? _r3dBuildMesh(R3.gl, faces) : null;
   /* how much it weathers (weather3d.js): a building fully, a vehicle or a soldier less */
   if (m) m.weather = kind === 'b' ? 1 : 0.5;
@@ -28903,44 +28948,7 @@ function _r3dFrame(G) {
       var rise = e.building ? 0.12 + 0.88 * Math.max(0, Math.min(1, e.bprog || 0)) : 1;
       drawIn(C, _r3dMesh('b', e.def, e.side), e.x, _rtsElev(e.x, e.z), e.z, 0, ART2W,
              dmg || e.building, rise);
-    } else if (e.type === 'unit') {
-      var turret = R.spr.turret && R.spr.turret[e.side] && R.spr.turret[e.side][e.def];
-      /* THE GROUND UNDER IT, not zero. An aircraft's altitude is measured from the ground it
-         is over as well - it flies at a height, not at a level - so both take the terrain and
-         only the flier adds to it. */
-      var y = (e.air || rtsUnitDef(e.def).sea ? _rtsElev(e.x, e.z) : _rtsStandY(e.x, e.z)) + (e.air ? ((e.rearming > 0 ? 2 : (e.alt || 12)) * 0.35) : 0);
-      /* A MARCHING SOLDIER BOBS. There is no walk cycle in 3D - the mesh is one pose - so the
-         walk reads through a small vertical bob instead, phased by the same `gait` offset that
-         desynchronises the 2D walk frames, so a squad does not pogo in unison. Vehicles do not
-         bob; tracks do not walk. */
-      var d2 = rtsUnitDef(e.def), pose = 0;
-      /* now it WALKS: a stride pose by its own gait (soldier3d.js); the bob is what is left of
-         the old suggestion of a march, much smaller, in step with the stride */
-      if (d2.kind === 'infantry' && e.path && !e.prone) {
-        pose = R3.soldierOff ? 0 : _r3dSoldierPose(e, G.t);
-        y += Math.abs(Math.sin(G.t * 9 + (e.gait || 0) * 0.8)) * (pose ? 0.08 : 0.45);
-      }
-      /* AND IT LEANS ON THE GROUND IT IS STANDING ON. Measured over a running match, the
-         steepest slope under a unit is 0.228: a hull three units wide had one side 0.69 world
-         units clear of the ground and the other buried, about a third of a tank's height, and
-         19% of the map's open ground is steep enough to show it.
-
-         NOT WHAT IS FLYING. An aircraft's attitude is its own business and the hill it
-         happens to be over is nothing to do with it; passing no normal leaves it upright.
-         Boats likewise sit on water, which is level by construction.
-
-         The TURRET takes the same lean as the hull rather than staying level, because it is
-         bolted to the hull - it rotates in the hull's plane, and a turret that stayed
-         world-level would shear out of its own ring on any slope. */
-      var gn = (e.air || (d2 && d2.sea)) ? null : _rtsElevNormal(e.x, e.z);
-      var rk = _r3dRecoil(e, gn) || { hx: 0, hz: 0, tx: 0, tz: 0, n: gn };   /* the kick: combat3d.js */
-      drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : null, e.prone, pose),
-             e.x + rk.hx, y, e.z + rk.hz, -e.rot, ART2W, false, 1, rk.n);
-      if (turret) {
-        drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false), e.x + rk.tx, y, e.z + rk.tz, -(e.turret || 0),
-               ART2W, false, 1, rk.n);
-      }
-    }
+    } else if (e.type === 'unit') _r3dPaintUnit(C, e, G, R3, drawIn, ART2W);   /* render3d/unit3d.js */
   }
   /* and the burnt-out hulls of the vehicles that died, charred (render3d/husk3d.js) */
   if (!only) _r3dHusks(G, R3, function (m, x, y, z, rot, n) { drawIn(C, m, x, y, z, rot, ART2W, 2, 1, n); });
@@ -29444,9 +29452,9 @@ function _r3dSoldierMan(m, key, mx, mz, pose, lead, K) {
 }
 
 /* The squad as the sprite model lays it out - two men off the facing grid, a hero alone - at
-   the sprite model's own scale. Prone is the sprite's pose: low, long, and not walking. */
+   the sprite model's own scale. Prone, they lie and crawl (render3d/crawl3d.js). */
 function _r3dSoldierModel(key, side, prone, pose) {
-  if (key === 'dog' || prone) return null;
+  if (key === 'dog') return null;
   var TM = RTS_PAL.team[side], kit = RTS_INF_KIT[key] || RTS_INF_KIT.rifle;
   var K = { kit: kit, DK: RTS_PAL.dark, S: RTS_PAL.steel, SK: '#c8a882',
             BD: kit.body ? kit.body[0] : TM[0], BL: kit.body ? kit.body[1] : TM[1],
@@ -29454,7 +29462,9 @@ function _r3dSoldierModel(key, side, prone, pose) {
   var m = [], men = (key === 'tanya') ? [[0, 0]] : [[3.6, -1.5], [-3.6, 1.5]];
   for (var i = 0; i < men.length; i++) {
     /* the two men step off on opposite feet, so a squad does not march in lockstep */
-    _r3dSoldierMan(m, key, men[i][0], men[i][1], pose ? ((pose - 1 + i * 2) % 4) + 1 : 0, i ? -1 : 1, K);
+    var pi = pose ? ((pose - 1 + i * 2) % 4) + 1 : 0;
+    if (prone) _r3dCrawlMan(m, key, men[i][0], men[i][1], pi, K);
+    else _r3dSoldierMan(m, key, men[i][0], men[i][1], pi, i ? -1 : 1, K);
   }
   var sc = _sprUnitScale(key);
   return sc === 1 ? m : _r3Scale(m, sc);
@@ -29465,6 +29475,213 @@ function _r3dSoldierModel(key, side, prone, pose) {
 function _r3dSoldierPose(e, t) {
   if (!e.path || e.prone) return 0;
   return 1 + (Math.floor(t * 5 + (e.gait || 0) * 0.5) & 3);
+}
+</script>
+<script>/* render3d/crawl3d.js - a soldier on his belly. Part of rts.render3d.
+
+   Under fire the infantry go prone (core/combat.js, _rtsFearAI), and a prone squad that is
+   ordered on CRAWLS (RTS_PRONE_SPEED). The 3D mode drew that as the sprite's prone pose: a
+   block, a cube and a plate, still while it moved. This is the same man as soldier3d.js,
+   lying down - legs out behind, up on his elbows, head raised under the helmet, weapon
+   forward - and four crawl poses: one knee drawn up and the other arm reaching, then the
+   other side, the way a man crawls.
+
+   THE CAMERA STILL READS HIM BY HIS HELMET. Lying down the helmet's crown is still the highest
+   thing on him, so the unit's marker stays the patch the camera looks straight down on, and
+   what he carries rides low on his back. */
+
+var R3D_CRAWL_KNEE = 1.25;      /* how far forward a drawn-up knee comes, model units */
+
+/* One man at (mx, mz), head toward +x. `pose` 0 lies still with the weapon braced; 1 to 4 are
+   the crawl, a quarter cycle apart. */
+function _r3dCrawlMan(m, key, mx, mz, pose, K) {
+  var BD = K.BD, BL = K.BL, HD = K.HD, HL = K.HL, SK = K.SK, DK = K.DK, S = K.S, kit = K.kit;
+  var ph = pose ? (pose - 1) / 4 * Math.PI * 2 : 0;
+  var hipX = mx - 1.5, cx = mx + 1.4, hy = 0.95, cy = 1.15;
+  /* LEGS: out behind him, a little apart; a crawling man draws one knee up and out */
+  for (var s = -1; s <= 1; s += 2) {
+    var z = mz + s * 0.7, up = pose ? 0.5 + 0.5 * Math.sin(ph) * -s : 0;
+    var kx = hipX - 1.5 + up * R3D_CRAWL_KNEE, kz = z + s * (0.15 + up * 1.0);
+    var fx = kx - 1.45 + up * 0.35, fz = kz - s * up * 0.3;
+    _r3dLimb(m, hipX, hy, z, kx, 0.62, kz, 0.72, 0.58, 10, DK[1]);
+    _r3dBall(m, kx, 0.62, kz, 0.58, DK[1], 8, 5);
+    _r3dLimb(m, kx, 0.62, kz, fx, 0.5, fz, 0.58, 0.46, 10, DK[1]);
+    _r3Box(m, fx - 0.25, 0.05, fz, 0.7, 0.9, 0.78, DK[2], DK[0]);           /* boot, toe down */
+  }
+  /* TORSO: lying along the ground, chest a little higher than the hips - up on the elbows */
+  _r3dLimb(m, hipX, hy, mz, cx, cy, mz, 1.18, 1.32, 14, BD);
+  _r3dLimb(m, hipX - 0.1, hy, mz, hipX + 0.4, hy + 0.05, mz, 1.26, 1.26, 14, DK[2]);   /* belt */
+  /* NECK, HEAD AND HELMET, the head up to look where he is going */
+  var hx = cx + 1.25, hyy = 1.95;
+  _r3dLimb(m, cx, cy + 0.3, mz, hx - 0.3, hyy - 0.2, mz, 0.42, 0.4, 10, SK);
+  _r3dBall(m, hx, hyy, mz, 0.78, SK, 12, 8);
+  _r3Cyl(m, hx - 0.1, hyy + 0.18, mz, 1.4, 0.22, HD, HD, 20);              /* brim */
+  _r3Cone(m, hx - 0.1, hyy + 0.4, mz, 1.3, 1.08, 0.42, HD, 20);            /* the crown */
+  _r3Cyl(m, hx - 0.1, hyy + 0.82, mz, 1.09, 0.16, HL, HL, 20);             /* the marker */
+  /* ARMS: on the elbows, one reaching forward while the other draws back */
+  var hands = [];
+  for (var a = -1; a <= 1; a += 2) {
+    var reach = pose ? Math.sin(ph) * a * 0.7 : 0.2;
+    var sx = cx - 0.1, sz = mz + a * 1.35, ex = cx + 0.9 + reach, ez = mz + a * 1.7;
+    var wx = ex + 1.5 + reach * 0.4, wz = mz + a * 0.55;
+    _r3dBall(m, sx, cy + 0.2, sz, 0.6, BD, 10, 6);
+    _r3dLimb(m, sx, cy + 0.2, sz, ex, 0.45, ez, 0.52, 0.44, 10, BD);
+    _r3dLimb(m, ex, 0.45, ez, wx, 0.7, wz, 0.44, 0.36, 10, BD);
+    _r3dBall(m, wx, 0.7, wz, 0.38, SK, 8, 5);
+    hands.push([wx, wz]);
+  }
+  var hR = hands[0], hL = hands[1], fwd = Math.max(hR[0], hL[0]);
+  /* WHAT HE CARRIES, low on his back or out in front of him */
+  if (key === 'rocket') {
+    _r3dLimb(m, mx - 3.4, 1.75, mz - 0.9, mx + 4.4, 1.75, mz - 0.9, 0.55, 0.55, 16, S[1]);
+    _r3dLimb(m, mx - 3.8, 1.75, mz - 0.9, mx - 3.1, 1.75, mz - 0.9, 0.72, 0.66, 16, DK[0]);
+  } else if (key === 'flame') {
+    for (var t = -1; t <= 1; t += 2)
+      _r3dLimb(m, hipX - 0.2, 1.75, mz + t * 0.62, hipX + 2.6, 1.75, mz + t * 0.62, 0.6, 0.6, 14, kit.prop);
+    _r3dLimb(m, hR[0], 0.75, hR[1], fwd + 2.6, 0.8, mz - 0.2, 0.28, 0.22, 10, DK[1]);
+    _r3dBall(m, fwd + 2.7, 0.8, mz - 0.2, 0.28, '#e8531c', 8, 5);
+  } else if (key === 'medic' || key === 'engineer' || key === 'thief') {
+    _r3Box(m, hipX + 1.4, 1.55, mz, 2.4, 0.75, 2.0, kit.prop === '#c8302a' ? '#eaeae0' : kit.prop, DK[1]);
+    if (key === 'medic') {
+      _r3Box(m, hipX + 1.4, 2.3, mz, 0.7, 0.12, 1.8, kit.prop, kit.prop);   /* the red cross */
+      _r3Box(m, hipX + 1.4, 2.3, mz, 1.8, 0.12, 0.7, kit.prop, kit.prop);
+    }
+  } else if (key === 'tanya') {
+    _r3Box(m, hR[0] + 0.7, 0.55, hR[1], 1.4, 0.5, 0.35, kit.prop, DK[3]);   /* pistols */
+    _r3Box(m, hL[0] + 0.7, 0.55, hL[1], 1.4, 0.5, 0.35, kit.prop, DK[3]);
+  } else {
+    /* the rifle, out in front between the hands, the muzzle on the line he is crawling */
+    _r3dLimb(m, cx + 0.2, 0.95, mz - 0.6, fwd + 1.6, 0.8, mz - 0.15, 0.34, 0.26, 8, kit.prop);
+    _r3dLimb(m, fwd + 1.6, 0.8, mz - 0.15, fwd + 3.0, 0.78, mz - 0.1, 0.13, 0.13, 8, DK[3]);
+    if (key === 'grenadier')
+      for (var g = 0; g < 3; g++) _r3dBall(m, hipX + 0.6, 1.9, mz - 0.8 + g * 0.8, 0.3, '#d9a13c', 8, 5);
+  }
+  if (key !== 'flame' && key !== 'medic' && key !== 'engineer' && key !== 'thief')
+    _r3Box(m, hipX + 0.5, 1.5, mz, 2.2, 0.75, 2.3, DK[1], DK[0]);           /* pack, low */
+}
+
+/* The pose a prone soldier is drawn in: 0 lying still; 1 to 4 through the crawl while he is on
+   the move - slower than a walk, about one full crawl cycle every 1.6 seconds. */
+function _r3dCrawlPose(e, t) {
+  if (!e.path || !e.prone) return 0;
+  return 1 + (Math.floor(t * 2.5 + (e.gait || 0) * 0.5) & 3);
+}
+</script>
+<script>/* render3d/unit3d.js - one unit, drawn: where it stands, how it leans, and the parts of it that
+   move. Part of rts.render3d; called for every unit by scene3d.js's paintEntities, in the main
+   pass, the sun's and the silhouettes' alike.
+
+   WHAT MOVES ON IT, and none of it is the game's - all of it is read off what the unit is
+   already doing, so the simulation and a saved game know nothing about it:
+
+     TRACKS AND WHEELS  turn with the ground the unit has covered. The model is built at
+                        R3D_ROLL_N points round its running gear (_SPR_ROLL, sprites/
+                        unitmodels.js: links stepped back, sprocket and wheel nuts turned), and
+                        the odometer below picks one, so a tank that stops stops its tracks
+     ROTORS             spin: the blades are a part of their own, turned over the airframe -
+                        flat out in the air, idling on the pad
+     SHIPS              ride the swell they sit in (_r3dSwellAt, wave3d.js): up and down with
+                        it, pitching and rolling with its slope along and across the hull
+     CRAWLING           a prone squad on the move crawls (crawl3d.js)
+
+   Each has a kill switch for a spec's A/B: R3.rollOff, R3.rotorOff, R3.swellOff, and the
+   soldier's own R3.soldierOff. */
+
+var R3D_ROLL_N = 4;              /* points round the running gear a vehicle is built at */
+var R3D_ROTOR_SPIN = 13;         /* radians a second, in the air... */
+var R3D_ROTOR_IDLE = 4;          /* ...and on the pad */
+var R3D_SHIP_TILT = 0.14;        /* the most a ship leans on the swell, radians */
+var R3D_SHIP_REACH = 2.6;        /* world units fore and aft the swell is read at; half abeam */
+
+/* What the renderer remembers about a unit between frames: where it was, how far it has
+   rolled, how far round its rotor is. Asked by every pass of a frame, so only the first one in
+   a frame moves anything - a unit that has not moved has nothing to add. */
+function _r3dUnitMotion(R3, e, t) {
+  var M = R3.motion || (R3.motion = {}), r = M[e.id];
+  if (!r) r = M[e.id] = { x: e.x, z: e.z, d: 0, t: t, spin: (e.id * 2.39) % 6.283 };
+  /* NEVER MORE THAN A STEP ROUND A FRAME. A link is about a seventh of a world unit and a tank
+     covers more than that in a frame, so the true roll would step the running gear half a
+     turn a frame - and half a turn is the wagon wheel: the track stands still or runs
+     backwards. Held under one step, it always visibly runs the right way; at speed it runs
+     slower than the ground goes by, which the eye takes for a blur. */
+  var step = Math.hypot(e.x - r.x, e.z - r.z), len = R3.rollLen && R3.rollLen[e.def];
+  if (step < 4) r.d += len ? Math.min(step, len / R3D_ROLL_N * 0.95) : step;   /* a jump (unloaded, placed) is not rolled */
+  r.x = e.x; r.z = e.z;
+  var dt = t - r.t;
+  if (dt > 0 && dt < 1) r.spin += dt * (e.rearming > 0 ? R3D_ROTOR_IDLE : R3D_ROTOR_SPIN);
+  r.t = t;
+  /* forget the dead now and then */
+  if ((R3.motionN = (R3.motionN || 0) + 1) > 4000) {
+    R3.motionN = 0;
+    for (var k in M) if (M[k].t < t - 5) delete M[k];
+  }
+  return r;
+}
+
+/* Which point round its running gear a vehicle that has rolled `d` world units is at. */
+function _r3dRollPhase(R3, def, d) {
+  var len = R3.rollLen && R3.rollLen[def];
+  if (!len || R3.rollOff) return 0;
+  return Math.floor(((d / len) % 1) * R3D_ROLL_N) % R3D_ROLL_N;
+}
+
+/* A ship on the swell at clock t: how far it is lifted, and the normal it leans to - the
+   sea's slope read over the length of the hull rather than at one point, so a long hull
+   rides the short chop and pitches to the long swell. */
+function _r3dShipSwell(e, t) {
+  var fx = Math.cos(e.rot), fz = Math.sin(e.rot), L = R3D_SHIP_REACH, B = L / 2;
+  var h = _r3dSwellAt(e.x, e.z, t).h;
+  var pitch = (_r3dSwellAt(e.x + fx * L, e.z + fz * L, t).h - _r3dSwellAt(e.x - fx * L, e.z - fz * L, t).h) / (2 * L);
+  var roll = (_r3dSwellAt(e.x - fz * B, e.z + fx * B, t).h - _r3dSwellAt(e.x + fz * B, e.z - fx * B, t).h) / (2 * B);
+  /* the gradient in the world, held under the most a ship leans */
+  var gx = fx * pitch - fz * roll, gz = fz * pitch + fx * roll, g = Math.hypot(gx, gz), cap = Math.tan(R3D_SHIP_TILT);
+  if (g > cap) { gx *= cap / g; gz *= cap / g; }
+  var n = Math.hypot(gx, 1, gz);
+  return { y: h, n: [-gx / n, 1 / n, -gz / n] };
+}
+
+function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W) {
+  var R = _rtsR, t = G.t || 0;
+  var turret = R.spr.turret && R.spr.turret[e.side] && R.spr.turret[e.side][e.def];
+  var d2 = rtsUnitDef(e.def), pose = 0, mo = _r3dUnitMotion(R3, e, t);
+  /* THE GROUND UNDER IT, not zero. An aircraft's altitude is measured from the ground it
+     is over as well - it flies at a height, not at a level - so both take the terrain and
+     only the flier adds to it. */
+  var y = (e.air || d2.sea ? _rtsElev(e.x, e.z) : _rtsStandY(e.x, e.z)) + (e.air ? ((e.rearming > 0 ? 2 : (e.alt || 12)) * 0.35) : 0);
+  /* A MARCHING SOLDIER BOBS. The bob is what is left of the old suggestion of a march, much
+     smaller now that he walks (a stride pose by his own gait, soldier3d.js), in step with the
+     stride. Prone, he crawls instead (crawl3d.js). Vehicles do not bob; tracks do not walk. */
+  if (d2.kind === 'infantry' && e.path) {
+    if (e.prone) pose = R3.soldierOff ? 0 : _r3dCrawlPose(e, t);
+    else {
+      pose = R3.soldierOff ? 0 : _r3dSoldierPose(e, t);
+      y += Math.abs(Math.sin(t * 9 + (e.gait || 0) * 0.8)) * (pose ? 0.08 : 0.45);
+    }
+  }
+  /* AND IT LEANS ON THE GROUND IT IS STANDING ON. Measured over a running match, the
+     steepest slope under a unit is 0.228: a hull three units wide had one side 0.69 world
+     units clear of the ground and the other buried, about a third of a tank's height, and
+     19% of the map's open ground is steep enough to show it.
+
+     NOT WHAT IS FLYING. An aircraft's attitude is its own business and the hill it
+     happens to be over is nothing to do with it; passing no normal leaves it upright.
+     A ship leans on the swell instead.
+
+     The TURRET takes the same lean as the hull rather than staying level, because it is
+     bolted to the hull - it rotates in the hull's plane, and a turret that stayed
+     world-level would shear out of its own ring on any slope. */
+  var gn = (e.air || d2.sea) ? null : _rtsElevNormal(e.x, e.z);
+  if (d2.sea && !R3.swellOff) { var sw = _r3dShipSwell(e, t); y += sw.y; gn = sw.n; }
+  var rk = _r3dRecoil(e, gn) || { hx: 0, hz: 0, tx: 0, tz: 0, n: gn };   /* the kick: combat3d.js */
+  var rotor = RTS_ROTOR_UNITS[e.def] && !R3.rotorOff;
+  var roll = d2.kind === 'vehicle' && !d2.sea && !e.air ? _r3dRollPhase(R3, e.def, mo.d) : 0;
+  drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : (rotor ? 'body' : null), e.prone, pose, roll),
+         e.x + rk.hx, y, e.z + rk.hz, -e.rot, ART2W, false, 1, rk.n);
+  if (turret) {
+    drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false), e.x + rk.tx, y, e.z + rk.tz, -(e.turret || 0),
+           ART2W, false, 1, rk.n);
+  }
+  if (rotor) drawIn(C, _r3dMesh('u', e.def, e.side, 'rotor', false), e.x, y, e.z, -e.rot - mo.spin, ART2W, false, 1, null);
 }
 </script>
 <script>/* render3d/world3d.js - the map itself as geometry: forests, rock ridges and
