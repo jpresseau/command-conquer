@@ -6,7 +6,7 @@
    three frames at every size, lit by nothing and lighting nothing. This draws them instead: each
    quad is a small shader program, and what it draws depends only on its age, a seed and a type.
 
-   ONE PROGRAM, NINE TYPES, ONE DRAW. The type rides in a vertex attribute, so a whole battle's
+   ONE PROGRAM, ELEVEN TYPES, ONE DRAW. The type rides in a vertex attribute, so a whole battle's
    effects - fireballs, smoke, sparks, rings, spray, flames, rounds in flight - go down in one
    call with no state change between them. The ground light is the exception (see fx3d.js): it
    has to MULTIPLY what is under it, and blending is fixed per draw.
@@ -38,7 +38,7 @@ var R3D_FX2_VS =
 var R3D_FX2_FS =
   'precision highp float;' +
   'varying vec2 vQ; varying vec4 vA; varying vec3 vB; varying float vY;' +
-  'uniform vec3 uSunV; uniform float uEmit;' +
+  'uniform vec3 uSunV; uniform float uEmit; uniform vec3 uDarkL;' +   /* the hour: sky3d.js */
   R3D_NOISE_GLSL +
   /* black body, roughly: embers, red, orange, yellow, white */
   'vec3 _fireRamp(float h){ h = clamp(h, 0.0, 1.0);' +
@@ -143,7 +143,7 @@ var R3D_FX2_FS =
   /* 9. TRAIL: a rocket's smoke, thin at the rocket and spreading behind it, fading as it goes.
         k is how far the rocket has flown and heat how long the trail is, so the noise is laid
         down in the WORLD: the trail does not crawl along with the rocket, the rocket leaves it */
-  '  } else {' +
+  '  } else if (vY < 9.5) {' +
   '    float along = q.x * 0.5 + 0.5;' +
   '    float u = k - heat * (1.0 - along);' +
   '    float n = _vn(vec2(u * 0.9, q.y * 1.6) + s * 13.0) * 0.65 + _vn(vec2(u * 2.3, q.y * 3.1) + s * 5.0) * 0.35;' +
@@ -151,8 +151,20 @@ var R3D_FX2_FS =
   '    float body = smoothstep(wid, wid * 0.25, abs(q.y) + (n - 0.5) * 0.45);' +
   '    float a = body * smoothstep(0.0, 0.6, along) * (0.45 + 0.55 * n) * op;' +
   '    o = vec4(vB * a, a);' +
+  /* 10. RAIN: a falling drop's streak, pale and thin, blended - it gives off no light, so it is
+         not in the bloom's emitters (skyfx3d.js) */
+  '  } else if (vY < 10.5) {' +
+  '    float along = q.x * 0.5 + 0.5;' +
+  '    float a = exp(-q.y * q.y * 9.0) * smoothstep(0.0, 0.5, along) * op;' +
+  '    o = vec4(vB * a, a * 0.6);' +
+  /* 11. GLOW: a lamp seen at night - a soft round light in its own colour, added, and given off */
+  '  } else {' +
+  '    float r2 = dot(q, q); if (r2 >= 1.0) discard;' +
+  '    float l = (exp(-r2 * 9.0) * 0.8 + (1.0 - r2) * 0.2) * op;' +
+  '    vec3 c = vB * l; o = vec4(c, 0.0); em = c;' +
   '  }' +
   '  if (uEmit > 0.5) { if (em.r + em.g + em.b < 0.004) discard; gl_FragColor = vec4(em, 0.0); return; }' +
   '  if (o.a < 0.003 && o.r + o.g + o.b < 0.003) discard;' +
-  '  gl_FragColor = o;' +
+  /* the hour darkens what an effect REFLECTS - smoke, dust, rain - and not the light it gives */
+  '  gl_FragColor = vec4(em + max(o.rgb - em, vec3(0.0)) * (vec3(1.0) - uDarkL), o.a);' +
   '}';

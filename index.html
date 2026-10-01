@@ -877,6 +877,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   <div id="rtsTitleMenu">
   <div class="diff" id="rtsDiff"></div>
   <p class="diffnote" id="rtsDiffNote"></p>
+  <div class="diff" id="rtsSky"></div>
   <div class="diff" id="rtsVoxSide" hidden></div>
   <p class="diffnote" id="rtsVoxNote" hidden></p>
   <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE</button>
@@ -957,7 +958,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">57c20b2 · 2026-10-01</div>
+  <div id="rtsBuild" title="build">ef859a7 · 2026-10-01</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -16957,6 +16958,18 @@ function _rtsKill(e) {
       }
       /* "Very strong units that have an explosion will also rock the screen." */
       if (ud.hp > 400) G.shake = Math.min(1, G.shake + 0.12);
+      /* AND IT COMES APART: wreckage thrown out of the blast, bouncing - as a building's does, a
+         few pieces for a light vehicle, more for a heavy one. Its own generator off the id, as the
+         building's is, so the game's stream does not move (tick.js flies them). Not from a hull
+         afloat, which goes down rather than up. */
+      if (!ud.sea && !e.air) {
+        var vrn = _rtsRngMake((e.id * 6151) >>> 0), vn = 3 + Math.min(5, Math.round(ud.hp / 150));
+        for (var vk = 0; vk < vn; vk++) {
+          var va = vrn() * 6.283, vs = 3 + vrn() * 9;
+          G.fx.push({ kind:'debris', x:e.x, y:1 + vrn() * 1.5, z:e.z, t:0,
+            vx:Math.cos(va) * vs, vz:Math.sin(va) * vs, vy:6 + vrn() * 8, big:0.4 + vrn() * 0.5 });
+        }
+      }
       /* The wreck burns. An UNATTACHED ladder fire - no `att`, so it damages nothing and
          nothing owns it - that burns itself down through the existing chain: ~4s of flame
          guttering into ~7s of smoke. It is what makes ground where a battle just happened
@@ -23205,7 +23218,7 @@ var R3D_WEATHER_GLSL =
    R3D_PLIGHTS of them. The program's loop is that long whatever is burning, and a slot with nothing
    in it has no reach and sits far below the map, so nothing in the shader branches per light. */
 
-var R3D_PLIGHTS = 4;
+var R3D_PLIGHTS = 6;            /* four were enough for the fires; the night's lamps want more */
 var R3D_PLIGHT_WARM = [1.0, 0.58, 0.24];
 
 var R3D_PLIGHT_GLSL =
@@ -23235,26 +23248,45 @@ function _r3dFxLightOf(f, V) {
   return null;
 }
 
-/* The strongest R3D_PLIGHTS, onto program P: uPL [x, y, z, reach], uPC [r, g, b] * strength. */
+/* The strongest R3D_PLIGHTS, onto program P: uPL [x, y, z, reach], uPC [r, g, b] * strength.
+   PICKED ONCE A FRAME, BEFORE THE GROUND IS DRAWN (_r3dWorldTick): the ground draws first, and
+   while it took the mesh program's choice it lit itself with the frame before's lights - a lamp
+   turned off still lit the road for a frame, and the first frame of a night lit nothing. */
 function _r3dFxLightSet(gl, R3, G, P) {
+  if (!R3.plTick || R3.plFor !== R3.plTick) _r3dFxLightPick(R3, G);
+  _r3dFxLightPut(gl, R3, P);
+}
+function _r3dFxLightPick(R3, G) {
+  R3.plFor = R3.plTick;
   /* R3.plightAmt takes the light out and leaves the rest, as R3.aoAmt does the occlusion */
   var V = { t: G.t || 0, ground: _rtsElev }, L = [], i, amt = R3.plightAmt === undefined ? 1 : R3.plightAmt;
   for (i = 0; G.fx && (typeof _r3dQ !== 'function' || _r3dQ('lights')) && i < G.fx.length; i++) {
     var l = _r3dFxLightOf(G.fx[i], V);
     if (l && l[4] > 0.02) L.push(l);
   }
-  L.sort(function (a, b) { return b[4] * b[3] - a[4] * a[3]; });
+  /* the flash of every gun going off this instant (combat3d.js) */
+  if (typeof _r3dMuzzleLights === 'function' && (typeof _r3dQ !== 'function' || _r3dQ('lights'))) L = L.concat(_r3dMuzzleLights(G));
+  /* AND THE NIGHT'S LIGHTS (sky3d.js) - lamps, door lights, headlights - with their own colour,
+     ranked by how near the middle of the view they are, since there are more than the slots */
+  var R = window._rtsR, fx0 = R && R.focus ? R.focus.x : 0, fz0 = R && R.focus ? R.focus.z : 0;
+  function rank(l) { return l[4] * l[3] * (l[9] || 1) / (l[6] === undefined ? 1 : 1 + Math.hypot(l[0] - fx0, l[2] - fz0) / 30); }
+  if (typeof _r3dSkyLights === 'function' && (typeof _r3dQ !== 'function' || _r3dQ('lights'))) L = L.concat(_r3dSkyLights(G, R3));
+  L.sort(function (a, b) { return rank(b) - rank(a); });
   var pos = R3.plPos || (R3.plPos = new Float32Array(R3D_PLIGHTS * 4));
   var col = R3.plCol || (R3.plCol = new Float32Array(R3D_PLIGHTS * 3));
   for (i = 0; i < R3D_PLIGHTS; i++) {
     var s = L[i];
     pos[i * 4] = s ? s[0] : 0; pos[i * 4 + 1] = s ? s[1] : -1e4; pos[i * 4 + 2] = s ? s[2] : 0; pos[i * 4 + 3] = s ? s[3] : 0;
-    for (var c = 0; c < 3; c++) col[i * 3 + c] = s ? R3D_PLIGHT_WARM[c] * s[4] * amt : 0;
+    for (var c = 0; c < 3; c++) col[i * 3 + c] = s ? (s[6] === undefined ? R3D_PLIGHT_WARM[c] : s[6 + c]) * s[4] * amt : 0;
   }
   R3.plights = Math.min(L.length, R3D_PLIGHTS);
   R3.plList = L.slice(0, R3D_PLIGHTS);                  /* the heat haze reads them too */
-  gl.uniform4fv(gl.getUniformLocation(P, 'uPL'), pos);
-  gl.uniform3fv(gl.getUniformLocation(P, 'uPC'), col);
+}
+/* The lights chosen this frame onto another program - the ground's (terrain3d.js). */
+function _r3dFxLightPut(gl, R3, P) {
+  if (!R3.plPos) return;
+  gl.uniform4fv(gl.getUniformLocation(P, 'uPL'), R3.plPos);
+  gl.uniform3fv(gl.getUniformLocation(P, 'uPC'), R3.plCol);
 }
 </script>
 <script>/* render3d/wave3d.js - the sea's swell, in one place. Part of rts.render3d.
@@ -23497,6 +23529,9 @@ var R3D_HALF = (function () {
    blue-grey; a scalar multiply drags it toward black and takes the sky out of every shadow. */
 var R3D_MESH_LIGHT =
   'uniform vec3 uHalf;' +          /* the specular's half-vector, per frame: cam3d.js */
+  /* THE HOUR (sky3d.js): how much darker than day the lit and the shaded sides are, so a program
+     whose uniforms were never set draws day; and how wet everything is, with the clock */
+  'uniform vec3 uDarkL; uniform vec3 uDarkS; uniform vec2 uWet;' +
   /* The ramp itself, because it is now evaluated TWICE per vertex - once with
      the sun and once without it. That is what lets the fragment stage put a shadow on
      a surface: it has the same surface lit and unlit to choose between, so a shadow is
@@ -23520,9 +23555,9 @@ var R3D_MESH_LIGHT =
   /* a touch of sky bounce so upward faces do not go dead in shadow - r3d/render.js:97 */
   '  float sky = 0.10 * max(n.y, 0.0);' +
   '  float v = min(' + R3_AMB.toFixed(4) + ' + ' + R3_DIF.toFixed(4) +
-      ' * lam + sky + 0.16 * sp, 1.10);' +
+      ' * lam + sky + 0.16 * sp * (1.0 + 2.5 * uWet.x), 1.10);' +   /* wet: a sheen on everything */
   '  float vs = min(' + R3_AMB.toFixed(4) + ' + sky, 1.10);' +
-  '  return mix(_ramp(col, vs), _ramp(col, v), _shadowAt());' +
+  '  return mix(_ramp(col, vs) * (vec3(1.0) - uDarkS), _ramp(col, v) * (vec3(1.0) - uDarkL), _shadowAt());' +
   '}';
 </script>
 <script>/* render3d/cloud3d.js - clouds passing over the battlefield. Part of rts.render3d.
@@ -24001,6 +24036,7 @@ function _r3dCamU(gl, P) {
   gl.uniform2f(gl.getUniformLocation(P, 'uYaw'), R3.cy, R3.sy);
   var h = R3.half || R3D_HALF;
   gl.uniform3f(gl.getUniformLocation(P, 'uHalf'), h[0], h[1], h[2]);
+  if (typeof _r3dSkyU === 'function') _r3dSkyU(gl, P);     /* the hour and the weather: sky3d.js */
 }
 
 /* Set the camera's facing and lean. Yaw is kept in (-PI, PI]; tilt is clamped. */
@@ -24312,6 +24348,7 @@ var R3D_MESH_FS =
      linear blend of two unit vectors is shorter than one - which is exactly the case on the
      curves this is for, and would read as a dark seam down the middle of every one. */
   'uniform vec4 uSil;' +                /* a unit seen through what hides it - sil3d.js */
+  'uniform vec4 uHaze;' +               /* rgb, amount: sky3d.js */
   'void main(){' +
   '  if (uSil.a > 0.0) { gl_FragColor = uSil; return; }' +
   /* vCol.w: 0 whole, 1 damaged or rising, 2 a burnt-out husk (husk3d.js) */
@@ -24336,11 +24373,12 @@ var R3D_MESH_FS =
   '    c = _shade(np, vCol.rgb) * tint;' +
   '    float gl = max(dot(np, uHalf), 0.0);' +
   '    gl = pow(gl, 48.0) * _shadowAt();' +
-  '    c += vec3(1.0, 0.96, 0.86) * gl * 1.1;' +
+  '    vec3 day = vec3(1.0) - uDarkL;' +            /* the hour dims the glint, the foam and the surf */
+  '    c += vec3(1.0, 0.96, 0.86) * day * gl * 1.1;' +
   '    float edge = 1.0 - smoothstep(0.46, 0.66, wm);' +
   '    float fo = edge * edge * smoothstep(0.3, 0.7, _vn(vWxz * 1.6 + vec2(t * 0.2, 0.0)));' +
-  '    c = mix(c, vec3(0.16, 0.50, 0.50) + c * 0.35, edge * 0.45);' +   /* turquoise shallows */
-  '    c = mix(c, vec3(0.92, 0.95, 0.93), clamp(fo * 1.4, 0.0, 0.85));' +               /* foam */
+  '    c = mix(c, vec3(0.16, 0.50, 0.50) * day + c * 0.35, edge * 0.45);' +   /* turquoise shallows */
+  '    c = mix(c, vec3(0.92, 0.95, 0.93) * day, clamp(fo * 1.4, 0.0, 0.85));' +               /* foam */
   /* THE SURF. Lines of foam roll in to every shore, a few seconds apart: sd is how far out
      the water is by the same mask the coast is cut from - 0 at the waterline, 1 about a cell
      out - so each line follows the coast's own shape, and it breaks as it arrives. */
@@ -24348,11 +24386,13 @@ var R3D_MESH_FS =
   '    float wv = fract(sd * 1.6 + t * 0.22 + _vn(vWxz * 0.35) * 0.8);' +
   '    float brk = smoothstep(0.3, 0.65, _vn(vWxz * 0.9));' +   /* broken where it breaks, as over a bar */
   '    float roll = smoothstep(0.0, 0.05, wv) * (1.0 - smoothstep(0.05, 0.4, wv)) * (1.0 - sd) * (0.35 + 0.65 * brk);' +
-  '    c = mix(c, vec3(0.93, 0.96, 0.95), clamp(roll * 0.75 * uSurf, 0.0, 0.75));' +
+  '    c = mix(c, vec3(0.93, 0.96, 0.95) * day, clamp(roll * 0.75 * uSurf, 0.0, 0.75));' +
   '    a = uA * mix(0.45, 1.0, smoothstep(0.46, 0.74, wm));' +
   '  }' +
   /* what is burning near it lights it - render3d/fxlight3d.js */
   '  c += _plight(vCol.rgb * tint, normalize(vN), vec3(vWxz.x, vHY.y, vWxz.y));' +
+  /* the haze the weather and the hour lay over everything - sky3d.js */
+  '  c = mix(c, uHaze.rgb, uHaze.a);' +
   '  gl_FragColor = vec4(c, a); }';
 
 /* Ground and fog share one textured program; fog just samples a different texture with
@@ -25381,7 +25421,7 @@ function _r3dBloomPass(R3, G, cam, invD) {
      which removes the glow from the picture while still paying for the pass, so the cost and
      the appearance can be graded separately. */
   if (typeof RTS_POST_ON !== 'undefined' && !RTS_POST_ON) return false;
-  if (!R3.postReady || !G || !((G.fx && G.fx.length) || (G.proj && G.proj.length))) return false;
+  if (!R3.postReady || !G || !((G.fx && G.fx.length) || (G.proj && G.proj.length) || (R3.sky && R3.sky.night > 0))) return false;   /* lamps: skyfx3d.js */
   if (!R3.bloomP && !_r3dBloomInit(R3)) return false;
   if (!_r3dBloomSize(R3)) return false;
   var gl = R3.gl, i;
@@ -25895,15 +25935,34 @@ function _r3dGroundMap(gl, R3, G) {
    path it never takes. Built on first use and allowed to fail on its own, so a device that
    cannot compile it draws the baked ground rather than no 3D at all. */
 function _r3dMatFS() {
-  return 'precision highp float; varying vec2 vT; varying float vShade; varying vec2 vW;' +
+  return 'precision highp float; varying vec2 vT; varying float vShade; varying vec2 vW; varying float vY;' +
     R3D_MAT_GLSL +
-    R3D_SHADOW_GLSL +
+    R3D_SHADOW_GLSL + R3D_PLIGHT_GLSL +
+    /* the hour and the weather (sky3d.js): darker than day by uDarkL/uDarkS - unset, day */
+    'uniform vec3 uDarkL; uniform vec3 uDarkS; uniform vec4 uHaze; uniform vec2 uWet; uniform float uGndL;' +
     'void main(){' +
     '  vec4 c = _groundLit(vW, vec3(' + R3_LIGHT[0].toFixed(4) + ', ' + R3_LIGHT[1].toFixed(4) + ', ' +
          R3_LIGHT[2].toFixed(4) + '));' +
     /* the ground's own shade and relief, exactly as the textured program applies them */
-    '  vec3 lit = c.rgb * mix(vec3(0.575, 0.600, 0.655), vec3(1.0), _shadowAt());' +
-    '  gl_FragColor = vec4(lit * vShade, 1.0);' +
+    '  vec3 lit = c.rgb * mix(vec3(0.575, 0.600, 0.655) * (vec3(1.0) - uDarkS), vec3(1.0) - uDarkL, _shadowAt());' +
+    '  lit *= vShade;' +
+    /* WET: the ground darkens as it soaks, and the hollows hold water - a puddle is the sky,
+       dimmed, with the rain ringing it */
+    '  if (uWet.x > 0.0) {' +
+    '    lit *= 1.0 - 0.2 * uWet.x;' +
+    '    float pm = smoothstep(0.6, 0.67, _fbm(vW * 0.08 + vec2(13.0, 4.0))) * uWet.x;' +
+    '    if (pm > 0.0) {' +
+    '      vec2 gc = floor(vW * 0.8), gf = fract(vW * 0.8) - 0.5;' +
+    '      float ph = fract(uWet.y * 1.3 + _h2(gc));' +
+    '      float ring = smoothstep(0.06, 0.0, abs(length(gf) - ph * 0.45)) * (1.0 - ph) * step(0.35, _h2(gc + 7.0));' +
+    '      vec3 sky = uHaze.rgb * 0.55 + vec3(0.16, 0.18, 0.22);' +
+    '      lit = mix(lit, lit * 0.3 + sky * 0.55 + ring * 0.22, pm * 0.85);' +
+    '    }' +
+    '  }' +
+    /* the lamps, the headlights and the fires, when the lamps are on (fxlight3d.js) */
+    '  if (uGndL > 0.0) lit += _plight(c.rgb, vec3(0.0, 1.0, 0.0), vec3(vW.x, vY + 0.05, vW.y)) * uGndL;' +
+    '  lit = mix(lit, uHaze.rgb, uHaze.a);' +
+    '  gl_FragColor = vec4(lit, 1.0);' +
     '}';
 }
 
@@ -25970,6 +26029,7 @@ function _r3dMatSet(gl, R3, P, G) {
   gl.activeTexture(gl.TEXTURE0);
   gl.uniform1f(gl.getUniformLocation(P, 'uTileInv'), 1 / RTS_TILE);
   _r3dRoadSet(gl, R3, P, G);
+  _r3dFxLightPut(gl, R3, P);                       /* the night's lamps reach the ground: sky3d.js */
   gl.uniform4f(u, 1, 1 / RTS_N, RTS_N / 2 - 0.5, Math.min(1, px / R3D_MAT_DETAIL_PX));
   return true;
 }
@@ -26192,9 +26252,9 @@ var R3D_TEX_VS =
   'attribute vec3 aP; attribute vec2 aT; attribute vec3 aN;' +
   'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' + R3D_CAM_GLSL +
   R3D_SHADOW_VGLSL +
-  'varying vec2 vT; varying float vShade; varying vec2 vW;' +
+  'varying vec2 vT; varying float vShade; varying vec2 vW; varying float vY;' +
   'void main(){' +
-  '  vT = aT;' +
+  '  vT = aT; vY = aP.y;' +
   /* the world position under this fragment, for the grain below - see R3D_TEX_FS */
   '  vW = aP.xz;' +
   /* HOW MUCH LIGHT THIS PATCH OF GROUND TAKES, RELATIVE TO FLAT. The terrain texture is the
@@ -26310,7 +26370,7 @@ function _r3dPixSet(gl, R3, P, on) {
 
 var R3D_TEX_FS =
   'precision highp float; varying vec2 vT; varying float vShade; varying vec2 vW;' +
-  'uniform sampler2D uS; uniform float uA;' +
+  'uniform sampler2D uS; uniform float uA; uniform vec3 uDarkL;' +
   R3D_PIX_GLSL +
   'uniform float uRecv;' +
   'uniform sampler2D uGrainTex; uniform vec2 uGrain;' +   /* strength, world->tile scale */
@@ -26330,7 +26390,7 @@ var R3D_TEX_FS =
   '  vec3 lit = c.rgb * mix(vec3(0.575, 0.600, 0.655), vec3(1.0), s);' +
   /* uRecv is 0 for the fog, which is a signal painted over the world rather than a surface in
      it - leaning it toward the sun would make the shroud brighter on a hillside. */
-  '  gl_FragColor = vec4(lit * mix(1.0, vShade, uRecv), c.a * uA);' +
+  '  gl_FragColor = vec4(lit * mix(1.0, vShade, uRecv) * (vec3(1.0) - uDarkL), c.a * uA);' +   /* the hour: sky3d.js */
   '}';
 
 
@@ -26470,7 +26530,7 @@ function _r3dGrainSet(gl, R3, P) {
    three frames at every size, lit by nothing and lighting nothing. This draws them instead: each
    quad is a small shader program, and what it draws depends only on its age, a seed and a type.
 
-   ONE PROGRAM, NINE TYPES, ONE DRAW. The type rides in a vertex attribute, so a whole battle's
+   ONE PROGRAM, ELEVEN TYPES, ONE DRAW. The type rides in a vertex attribute, so a whole battle's
    effects - fireballs, smoke, sparks, rings, spray, flames, rounds in flight - go down in one
    call with no state change between them. The ground light is the exception (see fx3d.js): it
    has to MULTIPLY what is under it, and blending is fixed per draw.
@@ -26502,7 +26562,7 @@ var R3D_FX2_VS =
 var R3D_FX2_FS =
   'precision highp float;' +
   'varying vec2 vQ; varying vec4 vA; varying vec3 vB; varying float vY;' +
-  'uniform vec3 uSunV; uniform float uEmit;' +
+  'uniform vec3 uSunV; uniform float uEmit; uniform vec3 uDarkL;' +   /* the hour: sky3d.js */
   R3D_NOISE_GLSL +
   /* black body, roughly: embers, red, orange, yellow, white */
   'vec3 _fireRamp(float h){ h = clamp(h, 0.0, 1.0);' +
@@ -26607,7 +26667,7 @@ var R3D_FX2_FS =
   /* 9. TRAIL: a rocket's smoke, thin at the rocket and spreading behind it, fading as it goes.
         k is how far the rocket has flown and heat how long the trail is, so the noise is laid
         down in the WORLD: the trail does not crawl along with the rocket, the rocket leaves it */
-  '  } else {' +
+  '  } else if (vY < 9.5) {' +
   '    float along = q.x * 0.5 + 0.5;' +
   '    float u = k - heat * (1.0 - along);' +
   '    float n = _vn(vec2(u * 0.9, q.y * 1.6) + s * 13.0) * 0.65 + _vn(vec2(u * 2.3, q.y * 3.1) + s * 5.0) * 0.35;' +
@@ -26615,10 +26675,22 @@ var R3D_FX2_FS =
   '    float body = smoothstep(wid, wid * 0.25, abs(q.y) + (n - 0.5) * 0.45);' +
   '    float a = body * smoothstep(0.0, 0.6, along) * (0.45 + 0.55 * n) * op;' +
   '    o = vec4(vB * a, a);' +
+  /* 10. RAIN: a falling drop's streak, pale and thin, blended - it gives off no light, so it is
+         not in the bloom's emitters (skyfx3d.js) */
+  '  } else if (vY < 10.5) {' +
+  '    float along = q.x * 0.5 + 0.5;' +
+  '    float a = exp(-q.y * q.y * 9.0) * smoothstep(0.0, 0.5, along) * op;' +
+  '    o = vec4(vB * a, a * 0.6);' +
+  /* 11. GLOW: a lamp seen at night - a soft round light in its own colour, added, and given off */
+  '  } else {' +
+  '    float r2 = dot(q, q); if (r2 >= 1.0) discard;' +
+  '    float l = (exp(-r2 * 9.0) * 0.8 + (1.0 - r2) * 0.2) * op;' +
+  '    vec3 c = vB * l; o = vec4(c, 0.0); em = c;' +
   '  }' +
   '  if (uEmit > 0.5) { if (em.r + em.g + em.b < 0.004) discard; gl_FragColor = vec4(em, 0.0); return; }' +
   '  if (o.a < 0.003 && o.r + o.g + o.b < 0.003) discard;' +
-  '  gl_FragColor = o;' +
+  /* the hour darkens what an effect REFLECTS - smoke, dust, rain - and not the light it gives */
+  '  gl_FragColor = vec4(em + max(o.rgb - em, vec3(0.0)) * (vec3(1.0) - uDarkL), o.a);' +
   '}';
 </script>
 <script>/* render3d/fxemit3d.js - what each effect IS: a handful of shaded quads, placed from its age
@@ -26951,6 +27023,8 @@ function _r3dFxEmit(G, V) {
   _r3dFxProj(G, V);
   if (typeof _r3dFxWakes === 'function') _r3dFxWakes(G, V);     /* dust and wakes - fxwake3d.js */
   if (typeof _r3dFxAlive === 'function') _r3dFxAlive(G, V);     /* stacks, beacons - alive3d.js */
+  if (typeof _r3dFxSky === 'function') _r3dFxSky(G, V);         /* lamps, rain, fog - skyfx3d.js */
+  if (typeof _r3dFxMuzzle === 'function') _r3dFxMuzzle(G, V);   /* guns going off - combat3d.js */
   for (i = 0; i < G.fx.length; i++) {
     var f = G.fx[i];
     if (f.t < 0 || !_r3dFxOwns(f.kind)) continue;
@@ -27639,8 +27713,10 @@ var R3D_DRESS = {
 };
 
 /* One cell's worth, pressed against the wall at (wx, wz) and facing along the wall (ax, az). */
+/* What stands on a dressed cell: 0 crates, 1 drums, 2 sandbags, 3 a lamp post. */
+function _r3dDressKind(tx, tz) { return Math.floor(_sprHash(tz * 31 + 3, tx, 823) * 4); }
 function _r3dDressCell(out, wx, wz, ax, az, tx, tz) {
-  var h = _sprHash(tx * 31 + 7, tz, 811), k = Math.floor(_sprHash(tz * 31 + 3, tx, 823) * 4);
+  var h = _sprHash(tx * 31 + 7, tz, 811), k = _r3dDressKind(tx, tz);
   var P = R3D_DRESS, i, n;
   if (k === 0) {                                   /* a stack of crates */
     n = 1 + Math.floor(h * 3);
@@ -27686,7 +27762,7 @@ function _r3dDressTick(G) {
   if (R3.dressG === G && R3.dressKey === key) return;
   R3.dressG = G; R3.dressKey = key;
   if (R3.dress) { gl.deleteBuffer(R3.dress.p); gl.deleteBuffer(R3.dress.n); gl.deleteBuffer(R3.dress.c); R3.dress = null; }
-  var paved = _r3dPaved(G), faces = [], seen = {}, cells = 0, at = [];
+  var paved = _r3dPaved(G), faces = [], seen = {}, cells = 0, at = [], lamps = [];
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (e.type !== 'struct' || e.dead) continue;
@@ -27707,10 +27783,12 @@ function _r3dDressTick(G) {
       var ax = back ? 1 : 0, az = back ? 0 : 1, f0 = faces.length;
       _r3dDressCell(faces, wx, wz, ax, az, tx, tz);
       _r3dLiftFrom(faces, f0, _rtsElev(wx, wz));
+      /* a lamp's bulb, for the night (sky3d.js) */
+      if (_r3dDressKind(tx, tz) === 3) lamps.push([wx, _rtsElev(wx, wz) + 2.7, wz]);
       cells++;
     }
   }
-  R3.dressCells = cells; R3.dressAt = at;
+  R3.dressCells = cells; R3.dressAt = at; R3.dressLamps = lamps;
   if (!faces.length) return;
   var m = _r3dBuildMesh(gl, faces);
   var half = RTS_N * RTS_TILE / 2;
@@ -28529,11 +28607,12 @@ function _r3dFrame(G) {
          bolted to the hull - it rotates in the hull's plane, and a turret that stayed
          world-level would shear out of its own ring on any slope. */
       var gn = (e.air || (d2 && d2.sea)) ? null : _rtsElevNormal(e.x, e.z);
+      var rk = _r3dRecoil(e, gn) || { hx: 0, hz: 0, tx: 0, tz: 0, n: gn };   /* the kick: combat3d.js */
       drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : null, e.prone, pose),
-             e.x, y, e.z, -e.rot, ART2W, false, 1, gn);
+             e.x + rk.hx, y, e.z + rk.hz, -e.rot, ART2W, false, 1, rk.n);
       if (turret) {
-        drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false), e.x, y, e.z, -(e.turret || 0),
-               ART2W, false, 1, gn);
+        drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false), e.x + rk.tx, y, e.z + rk.tz, -(e.turret || 0),
+               ART2W, false, 1, rk.n);
       }
     }
   }
@@ -29434,6 +29513,9 @@ function _r3dWaterBuild(G) { return _r3SegBulk(function () {
    terrain. The ore field keeps its own watch, chunk by chunk - see _r3dOreTick in ore3d.js. */
 function _r3dWorldTick(G) {
   var R3 = window._R3D;
+  if (typeof _r3dSky === 'function') _r3dSky(G);     /* this frame's hour and weather: sky3d.js */
+  R3.plTick = (R3.plTick || 0) + 1;                     /* ...and its lights, before the ground: fxlight3d.js */
+  if (typeof _r3dFxLightPick === 'function') _r3dFxLightPick(R3, G);
   if (!R3.world || R3.worldG !== G) {
     R3.scnPlan = _r3dSceneryPlan(G); R3.scnPlanFor = G;   /* first: the world leaves its claims alone */
     _r3dWorldBuild(G); _r3dOreBuild(G); _r3dWaterBuild(G); _r3dDressTick(G); _r3dSceneryTick(G); _r3dBridgeTick(G); return;
@@ -29825,9 +29907,9 @@ function _r3dBridgeBar(L, xa, xb, ya, yb, h, z0, z1, col, top) {
   _r3F(L, [[xa, ya, z0], [xb, yb, z0], [xb, yb, z1], [xa, ya, z1]], col);
 }
 
-function _r3dBridge(out, br) {
+function _r3dBridge(out, br, lamps) {
   var C = R3D_BRIDGE, T = RTS_TILE, L = [], len = br.len * T, hw = br.w * T / 2 - 0.15;
-  var n = br.len * 3, th = R3D_BRIDGE_THICK, k;
+  var n = br.len * 3, th = R3D_BRIDGE_THICK, k, bulbs = [];
   function y(x) { return _rtsBridgeDeckY(br, Math.max(0, Math.min(1, x / len))); }
   for (k = 0; k < n; k++) {
     var xa = len * k / n, xb = len * (k + 1) / n, ya = y(xa), yb = y(xb);
@@ -29859,12 +29941,16 @@ function _r3dBridge(out, br) {
     _r3Cyl(L, lx, ly, lz, 0.07, 2.4, C.lamp, C.lamp, 16);
     _r3Box(L, lx, ly + 2.3, lz * 0.88, 0.32, 0.14, 0.7, C.lamp, C.lamp);
     _r3Box(L, lx, ly + 2.2, lz * 0.82, 0.22, 0.1, 0.34, C.bulb, C.bulb);
+    if (lamps) bulbs.push([lx, ly + 2.15, lz * 0.82]);
   }
   /* into the world: the frame's origin is the near abutment, centred across the deck */
   var ang = Math.atan2(br.dz, br.dx);
   var ox = _rtsWX(br.tx) - br.dx * T / 2 + br.px * (br.w - 1) * T / 2;
   var oz = _rtsWX(br.tz) - br.dz * T / 2 + br.pz * (br.w - 1) * T / 2;
   _r3dPut(out, L, ang, ox, 0, oz);
+  /* the bulbs into the world the same way, for the night (sky3d.js) */
+  var c = Math.cos(ang), s = Math.sin(ang);
+  bulbs.forEach(function (p) { lamps.push([p[0] * c - p[2] * s + ox, p[1], p[0] * s + p[2] * c + oz]); });
 }
 
 /* Every bridge on the map, a mesh each with its bounds, rebuilt when the game changes. */
@@ -29873,11 +29959,11 @@ function _r3dBridgeTick(G) {
   if (!R3 || !R3.gl || R3.bridgeFor === G) return;
   var gl = R3.gl;
   if (R3.bridges) R3.bridges.forEach(function (m) { gl.deleteBuffer(m.p); gl.deleteBuffer(m.n); gl.deleteBuffer(m.c); });
-  R3.bridges = []; R3.bridgeFor = G; R3.bridgeTris = 0;
+  R3.bridges = []; R3.bridgeFor = G; R3.bridgeTris = 0; R3.bridgeLamps = [];
   _r3SegBulk(function () {
     (G.bridges || []).forEach(function (br) {
       var faces = [];
-      _r3dBridge(faces, br);
+      _r3dBridge(faces, br, R3.bridgeLamps);
       var m = _r3dBuildMesh(gl, faces), T = RTS_TILE;
       var ex = br.tx + br.dx * (br.len - 1) + br.px * (br.w - 1), ez = br.tz + br.dz * (br.len - 1) + br.pz * (br.w - 1);
       m.x0 = Math.min(_rtsWX(br.tx), _rtsWX(ex)) - T * 1.5; m.x1 = Math.max(_rtsWX(br.tx), _rtsWX(ex)) + T * 1.5;
@@ -29885,6 +29971,292 @@ function _r3dBridgeTick(G) {
       R3.bridges.push(m); R3.bridgeTris += m.verts / 3;
     });
   });
+}
+</script>
+<script>/* render3d/sky3d.js - the time of day and the weather. Part of rts.render3d.
+
+   Every battle was fought at the same bright noon. Now a battle has CONDITIONS: day, dusk,
+   night, rain or fog - the player's choice on the title screen, kept per device, or AUTO, which
+   picks from the map's seed so the same battle always comes back under the same sky (and a
+   loaded save with it). Cosmetic, all of it: nothing here reads or writes the simulation.
+
+   THE LIGHT. The sun's direction is baked into the shaders and the shadow map, so the hour is
+   told by its COLOUR: the lit side of everything by uDarkL, the shaded side by uDarkS, both
+   given as how much DARKER than day - so a program that never had them set draws day, and day
+   itself is the exact picture it always was. A haze (uHaze: colour, amount) settles over the
+   distance at dusk, in rain and in fog. Every program gets them where it gets the camera
+   (_r3dCamU, cam3d.js).
+
+   THE LIGHTS. At dusk, at night and in rain the lamps come on: the bases' lamp posts, the
+   bridges' lamps, a light over every building's door and two headlights on every vehicle that
+   is moving - glows in the effects pass (so they bloom), and the nearest of them as point
+   lights that reach the ground and the models round them (fxlight3d.js), beside whatever is
+   burning.
+
+   THE WEATHER. Rain falls as streaks round the view, ringing where it lands, and the ground
+   goes wet: darker, with puddles that hold the sky. Fog drifts across the ground in banks. */
+
+var R3D_SKIES = {
+  /* L, S: the lit and shaded sides' colour against day; haze: rgb, amount; night: how far the
+     lamps are on; wet; rain; banks: fog banks */
+  day:   { L: [1, 1, 1],          S: [1, 1, 1],          haze: [0, 0, 0, 0],             night: 0,    wet: 0, rain: 0, banks: 0 },
+  dusk:  { L: [1.04, 0.74, 0.52], S: [0.56, 0.50, 0.66], haze: [0.92, 0.58, 0.40, 0.10], night: 0.5,  wet: 0, rain: 0, banks: 0 },
+  night: { L: [0.24, 0.29, 0.46], S: [0.15, 0.18, 0.31], haze: [0.04, 0.06, 0.12, 0.10], night: 1,    wet: 0, rain: 0, banks: 0 },
+  rain:  { L: [0.64, 0.68, 0.74], S: [0.57, 0.61, 0.69], haze: [0.52, 0.57, 0.63, 0.20], night: 0.35, wet: 1, rain: 1, banks: 0 },
+  fog:   { L: [0.86, 0.88, 0.91], S: [0.75, 0.78, 0.83], haze: [0.76, 0.79, 0.82, 0.32], night: 0.15, wet: 0, rain: 0, banks: 1 }
+};
+var RTS_SKY_LS = 'rtsSky';
+var RTS_SKY_KEYS = ['auto', 'day', 'dusk', 'night', 'rain', 'fog'];
+
+/* What the player chose: one of RTS_SKY_KEYS. */
+/* Read from storage once and then kept: it is asked every frame. */
+function _rtsSkyWant() {
+  if (window._RTS_SKY_W) return window._RTS_SKY_W;
+  var v = null;
+  try { v = window.localStorage.getItem(RTS_SKY_LS); } catch (e) { v = null; }
+  return (window._RTS_SKY_W = RTS_SKY_KEYS.indexOf(v) > 0 ? v : 'auto');
+}
+function _rtsSkySetWant(v) {
+  v = v && R3D_SKIES[v] ? v : 'auto';
+  window._RTS_SKY_W = v;
+  try {
+    if (v !== 'auto') window.localStorage.setItem(RTS_SKY_LS, v);
+    else window.localStorage.removeItem(RTS_SKY_LS);
+  } catch (e) {}
+}
+/* The title screen's button: AUTO -> DAY -> DUSK -> NIGHT -> RAIN -> FOG -> AUTO. */
+function rtsSkyCycle() {
+  var w = _rtsSkyWant();
+  _rtsSkySetWant(RTS_SKY_KEYS[(RTS_SKY_KEYS.indexOf(w) + 1) % RTS_SKY_KEYS.length]);
+  rtsSkySync();
+}
+function rtsSkySync() {
+  var wrap = document.getElementById('rtsSky');
+  if (!wrap) return;
+  if (!wrap.firstChild) wrap.innerHTML = '<button type="button" onclick="rtsSkyCycle()"></button>';
+  var w = _rtsSkyWant();
+  wrap.firstChild.textContent = 'SKY: ' + w.toUpperCase();
+  wrap.firstChild.title = w === 'auto' ? 'The time of day and the weather, picked by the map' : 'Every battle under this sky - tap to change';
+}
+/* AUTO: from the seed - mostly day, and every other sky about one battle in six or seven */
+function _rtsSkyOfSeed(seed) {
+  var h = _sprHash((seed | 0) % 9973, 17, 977);
+  return h < 0.4 ? 'day' : h < 0.55 ? 'dusk' : h < 0.7 ? 'night' : h < 0.85 ? 'rain' : 'fog';
+}
+/* The sky this battle is under: its name. */
+function _rtsSkyName(G) {
+  var w = _rtsSkyWant();
+  return w !== 'auto' ? w : _rtsSkyOfSeed(G ? G.seed : 0);
+}
+/* ...and its settings, held on R3 for the frame. */
+function _r3dSky(G) {
+  var R3 = window._R3D, n = window.RTS_SKY_FORCE || _rtsSkyName(G);   /* RTS_SKY_FORCE: a spec's */
+  var S = R3D_SKIES[n] || R3D_SKIES.day;
+  if (R3) { R3.sky = S; R3.skyName = n; }
+  return S;
+}
+
+/* Onto program P - every program, from _r3dCamU. Unset, each of these reads as day. */
+function _r3dSkyU(gl, P) {
+  var R3 = window._R3D, S = (R3 && R3.sky) || R3D_SKIES.day;
+  gl.uniform3f(gl.getUniformLocation(P, 'uDarkL'), 1 - S.L[0], 1 - S.L[1], 1 - S.L[2]);
+  gl.uniform3f(gl.getUniformLocation(P, 'uDarkS'), 1 - S.S[0], 1 - S.S[1], 1 - S.S[2]);
+  gl.uniform4f(gl.getUniformLocation(P, 'uHaze'), S.haze[0], S.haze[1], S.haze[2], S.haze[3]);
+  gl.uniform2f(gl.getUniformLocation(P, 'uWet'), S.wet, (window._rtsG && window._rtsG.t) || 0);
+  /* the ground takes the point lights only when the lamps are on: by day it was lit by an
+     explosion's glare on the ground alone (fxemit3d.js), and still is */
+  gl.uniform1f(gl.getUniformLocation(P, 'uGndL'), S.night > 0 ? 1 : 0);
+}
+
+var R3D_LAMP_C = [1.0, 0.82, 0.55];        /* sodium-warm, a lamp post or a door light */
+var R3D_HEAD_C = [0.95, 0.95, 0.85];       /* a headlight */
+
+/* Every light the night has: [x, y, z, reach, strength, 0, r, g, b, priority], strongest first is the
+   caller's business. Only what is near the view - the light is chosen per frame. */
+function _r3dSkyLights(G, R3) {
+  var S = R3.sky || R3D_SKIES.day, out = [];
+  if (!(S.night > 0) || R3.lampAmt === 0) return out;
+  var vb = _r3dBoundsNear(_r3dViewBounds(), 10, 20), n = S.night, i;
+  function inV(x, z) { return x > vb.x0 && x < vb.x1 && z > vb.z0 && z < vb.z1; }
+  /* [9] how much a light counts for its slot beyond its brightness: a headlight follows the action */
+  function lamp(p, reach, s, c, pri) { if (inV(p[0], p[2])) out.push([p[0], p[1], p[2], reach, s * n, 0, c[0], c[1], c[2], pri || 1]); }
+  (R3.dressLamps || []).forEach(function (p) { lamp(p, 9, 0.9, R3D_LAMP_C); });
+  (R3.bridgeLamps || []).forEach(function (p) { lamp(p, 9, 0.9, R3D_LAMP_C); });
+  var E = G.ents || [], A2W = RTS_TILE;
+  for (i = 0; i < E.length; i++) {
+    var e = E[i];
+    if (e.dead) continue;
+    if (e.type === 'struct' && !e.building) {
+      var d = rtsStructDef(e.def);
+      if (!d || d.wall) continue;
+      /* over the door: the front is +z, where the units come out */
+      lamp([e.x, _rtsElev(e.x, e.z) + 2.4, e.z + d.h * A2W / 2 + 0.6], 6 + d.w * 2, 0.8, R3D_LAMP_C);
+    } else if (e.type === 'unit' && !e.air && e.path) {
+      var ud = rtsUnitDef(e.def);
+      if (!ud || ud.kind !== 'vehicle' || ud.sea) continue;
+      /* the pool the headlights throw, a few units ahead: a unit faces (cos rot, sin rot) */
+      var hx = e.x + Math.cos(e.rot) * 4.5, hz = e.z + Math.sin(e.rot) * 4.5;
+      lamp([hx, _rtsStandY(e.x, e.z) + 1.2, hz], 7.5, 0.7, R3D_HEAD_C, 3);
+    }
+  }
+  return out;
+}
+</script>
+<script>/* render3d/skyfx3d.js - what the sky puts in the effects pass: the lamps' glows, the rain and
+   the fog banks. Part of rts.render3d; the sky itself is sky3d.js.
+
+   All of it is laid round the VIEW each frame, from hashes, and nothing is kept: a raindrop is a
+   position and a phase in its fall worked out from its index and the clock, so the rain costs
+   no state, cannot drift out of step with the frame, and is the same on every frame drawn at
+   the same moment. R3.rainAmt / R3.bankAmt / R3.lampAmt take each out for a spec's A/B. */
+
+var R3D_RAIN_N = 360;            /* streaks at once, at most */
+var R3D_RAIN_FALL = 0.55;        /* seconds from the top of a streak's fall to the ground */
+var R3D_RAIN_H = 16;             /* world units it falls */
+var R3D_RAIN_C = [0.78, 0.84, 0.92];
+var R3D_BANK_N = 14;             /* fog banks at once */
+var R3D_BANK_C = [0.86, 0.88, 0.91];
+var R3D_FXT_RAIN = 10, R3D_FXT_GLOW = 11;
+
+function _r3dFxSky(G, V) {
+  var R3 = window._R3D, S = R3 && R3.sky;
+  if (!S || S === R3D_SKIES.day) return;
+  var vb = _r3dBoundsNear(_r3dViewBounds(), 6, 12), W = vb.x1 - vb.x0, D = vb.z1 - vb.z0, i;
+
+  /* THE LAMPS: a steady glow on every bulb in view, headlights on what is moving */
+  if (S.night > 0 && R3.lampAmt !== 0) {
+    var glow = function (x, y, z, r, c) {
+      if (x < vb.x0 || x > vb.x1 || z < vb.z0 || z > vb.z1) return;
+      _r3dFxBill(V.M, V, x, y, z, r, r, 0.6, R3D_FXT_GLOW, 0, 0.5, 1.1 * S.night, 0, c);
+    };
+    (R3.dressLamps || []).forEach(function (p) { glow(p[0], p[1], p[2], 0.55, R3D_LAMP_C); });
+    (R3.bridgeLamps || []).forEach(function (p) { glow(p[0], p[1], p[2], 0.55, R3D_LAMP_C); });
+    var E = G.ents || [];
+    for (i = 0; i < E.length; i++) {
+      var e = E[i];
+      if (e.dead) continue;
+      if (e.type === 'struct' && !e.building) {
+        var d = rtsStructDef(e.def);
+        if (d && !d.wall) glow(e.x, _rtsElev(e.x, e.z) + 2.4, e.z + d.h * RTS_TILE / 2 + 0.4, 0.5, R3D_LAMP_C);
+      } else if (e.type === 'unit' && !e.air && e.path) {
+        var ud = rtsUnitDef(e.def);
+        if (!ud || ud.kind !== 'vehicle' || ud.sea) continue;
+        var fx = Math.cos(e.rot), fz = Math.sin(e.rot), y = _rtsStandY(e.x, e.z) + 0.9, f = (e.r || 2) * 0.95;
+        glow(e.x + fx * f - fz * 0.6, y, e.z + fz * f + fx * 0.6, 0.35, R3D_HEAD_C);
+        glow(e.x + fx * f + fz * 0.6, y, e.z + fz * f - fx * 0.6, 0.35, R3D_HEAD_C);
+      }
+    }
+  }
+
+  /* THE RAIN: streaks falling through the view, a ring where each lands */
+  if (S.rain > 0 && R3.rainAmt !== 0) {
+    var n = Math.min(R3D_RAIN_N, Math.round(W * D / 26));
+    R3.rainN = n;
+    for (i = 0; i < n; i++) {
+      var ph = _r3dFxH(i, 3.1), cyc = (V.t / R3D_RAIN_FALL + ph), ep = Math.floor(cyc), p = cyc - ep;
+      var rx = vb.x0 + _r3dFxH(i * 1.7 + ep * 0.31, 7.3) * W, rz = vb.z0 + _r3dFxH(i * 2.3 + ep * 0.57, 1.9) * D;
+      var gy = V.ground(rx, rz), top = gy + R3D_RAIN_H * (1 - p);
+      if (V.water(rx, rz)) gy = Math.max(gy, R3D_WATER_Y);
+      if (p < 0.94) {
+        /* a short streak, leaning down the wind */
+        _r3dFxStreak(V.M, V, rx + 0.35, top + 1.7, rz + 0.12, rx, top, rz, 0.11, 0, R3D_FXT_RAIN, 0, i, 0.85 * S.rain, 0, R3D_RAIN_C);
+      } else {
+        /* landed: a little ring, spreading */
+        var k = (p - 0.94) / 0.06;
+        _r3dFxDecal(V.M, V, rx, rz, 0.15 + k * 0.45, 8, 0.3, R3D_FXT_RING, k, i, 0.5 * S.rain * (1 - k), R3D_RAIN_C);
+      }
+    }
+  }
+
+  /* THE FOG BANKS: low, wide, slow, drifting on the wind across the view */
+  if (S.banks > 0 && R3.bankAmt !== 0) {
+    var span = Math.max(W, D) + 60;
+    for (i = 0; i < R3D_BANK_N; i++) {
+      var bx = vb.x0 - 30 + ((_r3dFxH(i, 5.5) * span + V.t * 1.1) % span);
+      var bz = vb.z0 - 30 + ((_r3dFxH(i, 8.8) * span + V.t * 0.4) % span);
+      var r = 14 + _r3dFxH(i, 2.2) * 12;
+      _r3dFxBill(V.M, V, bx, V.ground(bx, bz) + r * 0.25, bz, r, r * 0.55, 0.4, R3D_FXT_BLOB, 0.35, i * 0.37, 0.32 * S.banks, 0, R3D_BANK_C);
+    }
+  }
+}
+</script>
+<script>/* render3d/combat3d.js - the moment a gun goes off, in 3D. Part of rts.render3d.
+
+   The 2D picture had it (render/draw.js): a flash at the muzzle for e.fire, and the turret
+   drawn back along its barrel for e.recoil. The 3D mode had neither - a tank's shell left a
+   barrel that did not move, from a muzzle that did not flash. So:
+
+     RECOIL    the turret slides back along the barrel and the hull rocks back on its springs,
+               both for e.recoil (RTS_RECOIL_TIME), easing home - scene3d.js reads _r3dRecoil
+     FLASH     a burst of fire at the muzzle (_rtsFireCoord, where the shot really leaves) for
+               e.fire, a puff of smoke hanging there after a cannon, and the flash as a point
+               light for its instant (fxlight3d.js) - which at night lights everything round it
+
+   Read off the simulation's own timers and never written back. R3.recoilAmt / R3.muzzleAmt
+   take each out for a spec's A/B. */
+
+var R3D_RECOIL_TURRET = 0.55;    /* world units the turret slides back at the shot */
+var R3D_RECOIL_HULL = 0.16;      /* ...the hull */
+var R3D_RECOIL_LEAN = 0.12;      /* ...and how far it rocks back, as the lean normal's tilt */
+var R3D_MUZZLE_C = [1.0, 0.86, 0.55];
+
+/* How far into its kick a unit is: 1 at the shot, easing to 0. */
+function _r3dKick(e) {
+  var R3 = window._R3D, d;
+  if (!(e.recoil > 0) || (R3 && R3.recoilAmt === 0) || e.air || e.type !== 'unit') return 0;
+  /* a vehicle's gun: a soldier does not slide back on springs, nor does a hull afloat */
+  if (!(d = rtsUnitDef(e.def)) || d.kind !== 'vehicle' || d.sea) return 0;
+  var k = Math.min(1, e.recoil / RTS_RECOIL_TIME);
+  return k * k * (3 - 2 * k);
+}
+/* The recoil's offsets for a unit, along the bearing its gun points: the turret's, the hull's,
+   and the hull's lean normal rocked back from `n` (or straight up). */
+function _r3dRecoil(e, n) {
+  var k = _r3dKick(e);
+  if (!k) return null;
+  var a = _rtsMuzzleAngle(e), bx = -Math.cos(a), bz = -Math.sin(a);
+  var up = n || [0, 1, 0], t = R3D_RECOIL_LEAN * k;
+  var lx = up[0] + bx * t, ly = up[1], lz = up[2] + bz * t, l = Math.hypot(lx, ly, lz) || 1;
+  return { tx: bx * R3D_RECOIL_TURRET * k, tz: bz * R3D_RECOIL_TURRET * k,
+           hx: bx * R3D_RECOIL_HULL * k, hz: bz * R3D_RECOIL_HULL * k, n: [lx / l, ly / l, lz / l] };
+}
+
+/* How big a weapon's flash is: a cannon's is a fireball's worth, a rifle's a spark. */
+function _r3dMuzzleSize(e) {
+  var d = e.type === 'unit' ? rtsUnitDef(e.def) : rtsStructDef(e.def), w = d ? RTS_WEAPONS[d.weapon] : null;
+  if (!w) return 0.6;
+  return w.shot === 'tracer' ? (w.dmg > 7 ? 0.55 : 0.4) : w.shot === 'missile' ? 0.9 : 1.2;
+}
+/* Every muzzle firing this instant, in view: [x, y, z, size, strength]. */
+function _r3dMuzzles(G) {
+  var R3 = window._R3D, out = [];
+  if (!G || (R3 && R3.muzzleAmt === 0)) return out;
+  var vb = _r3dBoundsNear(_r3dViewBounds(), 8, 16), E = G.ents || [];
+  for (var i = 0; i < E.length; i++) {
+    var e = E[i];
+    if (e.dead || !(e.fire > 0) || e.air) continue;
+    if (e.x < vb.x0 || e.x > vb.x1 || e.z < vb.z0 || e.z > vb.z1) continue;
+    if (e.side !== 'player' && typeof _rtsEntSeen === 'function' && !_rtsEntSeen(e)) continue;
+    /* where the shot leaves, drawn at the barrel's own tip: the sim's coordinate is a little
+       further out than the 3D barrel reaches, and a flash that far out floated off the gun */
+    var m = _rtsFireCoord(e), s = _r3dMuzzleSize(e);
+    m = { x: e.x + (m.x - e.x) * 0.78, z: e.z + (m.z - e.z) * 0.78 };
+    var y = (e.type === 'unit' ? _rtsStandY(e.x, e.z) : _rtsElev(e.x, e.z)) + (e.type === 'struct' ? 1.8 : 1.15);
+    out.push([m.x, y, m.z, s, Math.min(1, e.fire / 0.09), e]);
+  }
+  return out;
+}
+/* Into the effects pass: the flash, and a cannon's smoke after it. */
+function _r3dFxMuzzle(G, V) {
+  _r3dMuzzles(G).forEach(function (m) {
+    var s = m[3], k = m[4], seed = _r3dFxH(m[5].id, 5.3);
+    _r3dFxBill(V.M, V, m[0], m[1], m[2], s * (0.7 + 0.5 * k), s * (0.7 + 0.5 * k), 0.8, R3D_FXT_FLASH, 0, seed, 0.6 + 0.4 * k, 0, R3D_MUZZLE_C);
+    if (s >= 1.2) _r3dFxBill(V.M, V, m[0], m[1] + 0.2, m[2], s * 0.9, s * 0.9, 0.6, R3D_FXT_BLOB, 0.35 + (1 - k) * 0.3, seed, 0.45, 0.25 * k, R3D_FX_SMOKE);
+  });
+}
+/* ...and as lights, for fxlight3d.js: [x, y, z, reach, strength] like an effect's. */
+function _r3dMuzzleLights(G) {
+  return _r3dMuzzles(G).map(function (m) { return [m[0], m[1], m[2], 4 + m[3] * 4, 1.6 * m[4] * m[3], 0]; });
 }
 </script>
 <script>/* render3d/ore3d.js - the ore field's crystals, as geometry that follows the field. Part of
@@ -30160,6 +30532,74 @@ function _rtsGroundDetail(g, R, TSscale) {
   g.fillRect(-ox, -oy, R.W * R.dpr, R.H * R.dpr);
   g.restore();
   return 1;
+}
+</script>
+<script>/* render/sky2d.js - the time of day and the weather, in the 2D picture. Part of rts.render; the
+   skies themselves are render3d/sky3d.js, which both renderers read.
+
+   The 2D battlefield is baked art, so the hour is laid over it rather than lit into it: the
+   lit side's colour multiplied over the whole frame, then the haze, then - at dusk, at night
+   and in rain - a warm pool round every building's door and ahead of every vehicle on the
+   move, added back. The rain is streaks across the screen. Drawn over the finished
+   battlefield and under the post pass (render/frame.js), so the HUD and the overlay keep
+   their own colours. */
+function _rtsSky2D(g, G) {
+  if (typeof _rtsSkyName !== 'function' || !G) return;
+  var n = window.RTS_SKY_FORCE || _rtsSkyName(G), S = R3D_SKIES[n];
+  if (!S || S === R3D_SKIES.day) return;
+  var cv = g.canvas, W = cv.width, H = cv.height, i;
+  var dpr = W / (cv.clientWidth || W);
+  function c255(v) { return Math.max(0, Math.min(255, Math.round(v * 255))); }
+  g.save();
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalCompositeOperation = 'multiply';
+  g.fillStyle = 'rgb(' + c255(S.L[0]) + ',' + c255(S.L[1]) + ',' + c255(S.L[2]) + ')';
+  g.fillRect(0, 0, W, H);
+  g.globalCompositeOperation = 'source-over';
+  if (S.haze[3] > 0) {
+    g.fillStyle = 'rgba(' + c255(S.haze[0]) + ',' + c255(S.haze[1]) + ',' + c255(S.haze[2]) + ',' + S.haze[3] + ')';
+    g.fillRect(0, 0, W, H);
+  }
+  /* the lamps, added back */
+  if (S.night > 0) {
+    g.globalCompositeOperation = 'lighter';
+    var zr = (typeof _rtsZoom === 'function' ? _rtsZoom() : 1) * dpr, E = G.ents || [];
+    var pool = function (x, z, r, a) {
+      var p = _rtsGroundToScreen(x, z), px = p.x * dpr, py = p.y * dpr, rr = r * zr;
+      if (px < -rr || py < -rr || px > W + rr || py > H + rr) return;
+      var gr = g.createRadialGradient(px, py, 0, px, py, rr);
+      gr.addColorStop(0, 'rgba(255,200,130,' + (a * S.night).toFixed(3) + ')');
+      gr.addColorStop(1, 'rgba(255,200,130,0)');
+      g.fillStyle = gr;
+      g.fillRect(px - rr, py - rr, rr * 2, rr * 2);
+    };
+    for (i = 0; i < E.length; i++) {
+      var e = E[i];
+      if (e.dead) continue;
+      if (e.type === 'struct' && !e.building) {
+        var d = rtsStructDef(e.def);
+        if (d && !d.wall) pool(e.x, e.z + d.h * RTS_TILE / 2 + 1, 5 + d.w * 1.5, 0.45);
+      } else if (e.type === 'unit' && !e.air && e.path) {
+        var ud = rtsUnitDef(e.def);
+        if (ud && ud.kind === 'vehicle' && !ud.sea) pool(e.x + Math.cos(e.rot) * 4, e.z + Math.sin(e.rot) * 4, 5, 0.4);
+      }
+    }
+    g.globalCompositeOperation = 'source-over';
+  }
+  /* the rain: streaks down and across the screen, each on its own short fall */
+  if (S.rain > 0) {
+    var t = G.t || 0, m = Math.round(W * H / 5200);
+    g.strokeStyle = 'rgba(200,215,235,0.35)';
+    g.lineWidth = Math.max(1, dpr);
+    g.beginPath();
+    for (i = 0; i < m; i++) {
+      var ph = _sprHash(i, 3, 991), cyc = t / 0.45 + ph, ep = Math.floor(cyc), p = cyc - ep;
+      var x0 = _sprHash(i, ep, 993) * W, y0 = (_sprHash(ep, i, 997) * 1.2 - 0.2) * H + p * H * 0.25;
+      g.moveTo(x0, y0); g.lineTo(x0 - 4 * dpr, y0 + 16 * dpr);
+    }
+    g.stroke();
+  }
+  g.restore();
 }
 </script>
 <script>/* render/frame.js - _rtsRFrame: drawing one frame of the battlefield, back to front.
@@ -30615,6 +31055,8 @@ function _rtsRFrame(dt) {
     } else g.strokeRect(gx + 1, gy + 1, def.w * cell * gp.scale - 2, def.h * cell * gp.scale - 2);
   }
 
+  /* the hour and the weather over the 2D battlefield - render/sky2d.js */
+  if (!r3on && typeof _rtsSky2D === 'function') _rtsSky2D(g, G);
   /* Last, over the finished battlefield and nothing else. */
   _rtsPost(g);
   /* The render readout samples here, at the end of the frame walk, so what it times is a
@@ -34576,6 +35018,7 @@ function rtsHome(){
   var b = document.getElementById('rtsGo');
   if (b) { b.disabled = false; b.textContent = 'START BATTLE'; }
   rtsBuildDiff();
+  if (typeof rtsSkySync === 'function') rtsSkySync();     /* the conditions: render3d/sky3d.js */
   rtsShowResume();
 }
 /* Get_Savefile_Info's job: print what is in the save without loading it. The button only
@@ -34682,6 +35125,7 @@ function rtsShowResume(){
   r.innerHTML = 'RESUME BATTLE<small>' + String(info.desc).replace(/[<&]/g, '') + '</small>';
 }
 rtsBuildDiff();
+if (typeof rtsSkySync === 'function') rtsSkySync();
 rtsShowResume();
 rtsShowEditor();
 rtsBuildVoxSide();

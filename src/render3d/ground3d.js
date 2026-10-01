@@ -193,9 +193,9 @@ var R3D_TEX_VS =
   'attribute vec3 aP; attribute vec2 aT; attribute vec3 aN;' +
   'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' + R3D_CAM_GLSL +
   R3D_SHADOW_VGLSL +
-  'varying vec2 vT; varying float vShade; varying vec2 vW;' +
+  'varying vec2 vT; varying float vShade; varying vec2 vW; varying float vY;' +
   'void main(){' +
-  '  vT = aT;' +
+  '  vT = aT; vY = aP.y;' +
   /* the world position under this fragment, for the grain below - see R3D_TEX_FS */
   '  vW = aP.xz;' +
   /* HOW MUCH LIGHT THIS PATCH OF GROUND TAKES, RELATIVE TO FLAT. The terrain texture is the
@@ -311,7 +311,7 @@ function _r3dPixSet(gl, R3, P, on) {
 
 var R3D_TEX_FS =
   'precision highp float; varying vec2 vT; varying float vShade; varying vec2 vW;' +
-  'uniform sampler2D uS; uniform float uA;' +
+  'uniform sampler2D uS; uniform float uA; uniform vec3 uDarkL;' +
   R3D_PIX_GLSL +
   'uniform float uRecv;' +
   'uniform sampler2D uGrainTex; uniform vec2 uGrain;' +   /* strength, world->tile scale */
@@ -331,7 +331,7 @@ var R3D_TEX_FS =
   '  vec3 lit = c.rgb * mix(vec3(0.575, 0.600, 0.655), vec3(1.0), s);' +
   /* uRecv is 0 for the fog, which is a signal painted over the world rather than a surface in
      it - leaning it toward the sun would make the shroud brighter on a hillside. */
-  '  gl_FragColor = vec4(lit * mix(1.0, vShade, uRecv), c.a * uA);' +
+  '  gl_FragColor = vec4(lit * mix(1.0, vShade, uRecv) * (vec3(1.0) - uDarkL), c.a * uA);' +   /* the hour: sky3d.js */
   '}';
 
 

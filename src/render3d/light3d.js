@@ -58,6 +58,9 @@ var R3D_HALF = (function () {
    blue-grey; a scalar multiply drags it toward black and takes the sky out of every shadow. */
 var R3D_MESH_LIGHT =
   'uniform vec3 uHalf;' +          /* the specular's half-vector, per frame: cam3d.js */
+  /* THE HOUR (sky3d.js): how much darker than day the lit and the shaded sides are, so a program
+     whose uniforms were never set draws day; and how wet everything is, with the clock */
+  'uniform vec3 uDarkL; uniform vec3 uDarkS; uniform vec2 uWet;' +
   /* The ramp itself, because it is now evaluated TWICE per vertex - once with
      the sun and once without it. That is what lets the fragment stage put a shadow on
      a surface: it has the same surface lit and unlit to choose between, so a shadow is
@@ -81,7 +84,7 @@ var R3D_MESH_LIGHT =
   /* a touch of sky bounce so upward faces do not go dead in shadow - r3d/render.js:97 */
   '  float sky = 0.10 * max(n.y, 0.0);' +
   '  float v = min(' + R3_AMB.toFixed(4) + ' + ' + R3_DIF.toFixed(4) +
-      ' * lam + sky + 0.16 * sp, 1.10);' +
+      ' * lam + sky + 0.16 * sp * (1.0 + 2.5 * uWet.x), 1.10);' +   /* wet: a sheen on everything */
   '  float vs = min(' + R3_AMB.toFixed(4) + ' + sky, 1.10);' +
-  '  return mix(_ramp(col, vs), _ramp(col, v), _shadowAt());' +
+  '  return mix(_ramp(col, vs) * (vec3(1.0) - uDarkS), _ramp(col, v) * (vec3(1.0) - uDarkL), _shadowAt());' +
   '}';

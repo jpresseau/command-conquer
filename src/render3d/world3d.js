@@ -370,6 +370,9 @@ function _r3dWaterBuild(G) { return _r3SegBulk(function () {
    terrain. The ore field keeps its own watch, chunk by chunk - see _r3dOreTick in ore3d.js. */
 function _r3dWorldTick(G) {
   var R3 = window._R3D;
+  if (typeof _r3dSky === 'function') _r3dSky(G);     /* this frame's hour and weather: sky3d.js */
+  R3.plTick = (R3.plTick || 0) + 1;                     /* ...and its lights, before the ground: fxlight3d.js */
+  if (typeof _r3dFxLightPick === 'function') _r3dFxLightPick(R3, G);
   if (!R3.world || R3.worldG !== G) {
     R3.scnPlan = _r3dSceneryPlan(G); R3.scnPlanFor = G;   /* first: the world leaves its claims alone */
     _r3dWorldBuild(G); _r3dOreBuild(G); _r3dWaterBuild(G); _r3dDressTick(G); _r3dSceneryTick(G); _r3dBridgeTick(G); return;

@@ -451,6 +451,8 @@ function _rtsRFrame(dt) {
     } else g.strokeRect(gx + 1, gy + 1, def.w * cell * gp.scale - 2, def.h * cell * gp.scale - 2);
   }
 
+  /* the hour and the weather over the 2D battlefield - render/sky2d.js */
+  if (!r3on && typeof _rtsSky2D === 'function') _rtsSky2D(g, G);
   /* Last, over the finished battlefield and nothing else. */
   _rtsPost(g);
   /* The render readout samples here, at the end of the frame walk, so what it times is a

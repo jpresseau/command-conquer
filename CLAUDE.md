@@ -259,6 +259,16 @@ breaking it shipped once.
 - **Roads are painted down `G.roads`** (centrelines kept by `_rtsCarveRoad`) from a baked distance
   field (`render3d/road3d.js`). The cells stay the dirt-track material, which is the shoulder; a
   loaded map has no `G.roads` and keeps its tracks. `R3.roadAmt`.
+- **The sky** (`render3d/sky3d.js`): day, dusk, night, rain or fog; the title's SKY button, or AUTO
+  from the seed. Shaders take `uDarkL`/`uDarkS` as darkness against day, so an unset program draws
+  day and day is unchanged. Every program gets them through `_r3dCamU`. Lamps and headlights are
+  point lights (`_r3dSkyLights`, picked in `_r3dWorldTick` before the ground draws) plus glows,
+  rain and banks in `skyfx3d.js`; 2D is `render/sky2d.js`. `RTS_SKY_FORCE` pins it for a spec.
+  `unit/sky`, `e2e/sky`.
+- **A gun going off** (`render3d/combat3d.js`): recoil off `e.recoil` (`_r3dRecoil`: turret and hull
+  back along `_rtsMuzzleAngle`, hull rocked; land vehicles only) and a flash plus light off
+  `e.fire` at the barrel tip. A dying vehicle throws `debris` from its own id-seeded generator,
+  never the game's. `unit/combat3d`, `e2e/combat3d`.
 - **In 3D a soldier has a model of his own** (`render3d/soldier3d.js`): rounded limbs, and four
   stride poses picked by his gait (`_r3dSoldierPose`) in place of the bob. The sprite's model
   stays for 2D, for prone squads and for the dog; the mesh cache key carries the pose.

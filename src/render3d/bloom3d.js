@@ -108,7 +108,7 @@ function _r3dBloomPass(R3, G, cam, invD) {
      which removes the glow from the picture while still paying for the pass, so the cost and
      the appearance can be graded separately. */
   if (typeof RTS_POST_ON !== 'undefined' && !RTS_POST_ON) return false;
-  if (!R3.postReady || !G || !((G.fx && G.fx.length) || (G.proj && G.proj.length))) return false;
+  if (!R3.postReady || !G || !((G.fx && G.fx.length) || (G.proj && G.proj.length) || (R3.sky && R3.sky.night > 0))) return false;   /* lamps: skyfx3d.js */
   if (!R3.bloomP && !_r3dBloomInit(R3)) return false;
   if (!_r3dBloomSize(R3)) return false;
   var gl = R3.gl, i;

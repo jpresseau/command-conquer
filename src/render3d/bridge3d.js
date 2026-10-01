@@ -26,9 +26,9 @@ function _r3dBridgeBar(L, xa, xb, ya, yb, h, z0, z1, col, top) {
   _r3F(L, [[xa, ya, z0], [xb, yb, z0], [xb, yb, z1], [xa, ya, z1]], col);
 }
 
-function _r3dBridge(out, br) {
+function _r3dBridge(out, br, lamps) {
   var C = R3D_BRIDGE, T = RTS_TILE, L = [], len = br.len * T, hw = br.w * T / 2 - 0.15;
-  var n = br.len * 3, th = R3D_BRIDGE_THICK, k;
+  var n = br.len * 3, th = R3D_BRIDGE_THICK, k, bulbs = [];
   function y(x) { return _rtsBridgeDeckY(br, Math.max(0, Math.min(1, x / len))); }
   for (k = 0; k < n; k++) {
     var xa = len * k / n, xb = len * (k + 1) / n, ya = y(xa), yb = y(xb);
@@ -60,12 +60,16 @@ function _r3dBridge(out, br) {
     _r3Cyl(L, lx, ly, lz, 0.07, 2.4, C.lamp, C.lamp, 16);
     _r3Box(L, lx, ly + 2.3, lz * 0.88, 0.32, 0.14, 0.7, C.lamp, C.lamp);
     _r3Box(L, lx, ly + 2.2, lz * 0.82, 0.22, 0.1, 0.34, C.bulb, C.bulb);
+    if (lamps) bulbs.push([lx, ly + 2.15, lz * 0.82]);
   }
   /* into the world: the frame's origin is the near abutment, centred across the deck */
   var ang = Math.atan2(br.dz, br.dx);
   var ox = _rtsWX(br.tx) - br.dx * T / 2 + br.px * (br.w - 1) * T / 2;
   var oz = _rtsWX(br.tz) - br.dz * T / 2 + br.pz * (br.w - 1) * T / 2;
   _r3dPut(out, L, ang, ox, 0, oz);
+  /* the bulbs into the world the same way, for the night (sky3d.js) */
+  var c = Math.cos(ang), s = Math.sin(ang);
+  bulbs.forEach(function (p) { lamps.push([p[0] * c - p[2] * s + ox, p[1], p[0] * s + p[2] * c + oz]); });
 }
 
 /* Every bridge on the map, a mesh each with its bounds, rebuilt when the game changes. */
@@ -74,11 +78,11 @@ function _r3dBridgeTick(G) {
   if (!R3 || !R3.gl || R3.bridgeFor === G) return;
   var gl = R3.gl;
   if (R3.bridges) R3.bridges.forEach(function (m) { gl.deleteBuffer(m.p); gl.deleteBuffer(m.n); gl.deleteBuffer(m.c); });
-  R3.bridges = []; R3.bridgeFor = G; R3.bridgeTris = 0;
+  R3.bridges = []; R3.bridgeFor = G; R3.bridgeTris = 0; R3.bridgeLamps = [];
   _r3SegBulk(function () {
     (G.bridges || []).forEach(function (br) {
       var faces = [];
-      _r3dBridge(faces, br);
+      _r3dBridge(faces, br, R3.bridgeLamps);
       var m = _r3dBuildMesh(gl, faces), T = RTS_TILE;
       var ex = br.tx + br.dx * (br.len - 1) + br.px * (br.w - 1), ez = br.tz + br.dz * (br.len - 1) + br.pz * (br.w - 1);
       m.x0 = Math.min(_rtsWX(br.tx), _rtsWX(ex)) - T * 1.5; m.x1 = Math.max(_rtsWX(br.tx), _rtsWX(ex)) + T * 1.5;

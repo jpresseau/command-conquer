@@ -46,6 +46,7 @@ function _r3dCamU(gl, P) {
   gl.uniform2f(gl.getUniformLocation(P, 'uYaw'), R3.cy, R3.sy);
   var h = R3.half || R3D_HALF;
   gl.uniform3f(gl.getUniformLocation(P, 'uHalf'), h[0], h[1], h[2]);
+  if (typeof _r3dSkyU === 'function') _r3dSkyU(gl, P);     /* the hour and the weather: sky3d.js */
 }
 
 /* Set the camera's facing and lean. Yaw is kept in (-PI, PI]; tilt is clamped. */

@@ -37,6 +37,7 @@ function rtsHome(){
   var b = document.getElementById('rtsGo');
   if (b) { b.disabled = false; b.textContent = 'START BATTLE'; }
   rtsBuildDiff();
+  if (typeof rtsSkySync === 'function') rtsSkySync();     /* the conditions: render3d/sky3d.js */
   rtsShowResume();
 }
 /* Get_Savefile_Info's job: print what is in the save without loading it. The button only
@@ -143,6 +144,7 @@ function rtsShowResume(){
   r.innerHTML = 'RESUME BATTLE<small>' + String(info.desc).replace(/[<&]/g, '') + '</small>';
 }
 rtsBuildDiff();
+if (typeof rtsSkySync === 'function') rtsSkySync();
 rtsShowResume();
 rtsShowEditor();
 rtsBuildVoxSide();

@@ -313,15 +313,34 @@ function _r3dGroundMap(gl, R3, G) {
    path it never takes. Built on first use and allowed to fail on its own, so a device that
    cannot compile it draws the baked ground rather than no 3D at all. */
 function _r3dMatFS() {
-  return 'precision highp float; varying vec2 vT; varying float vShade; varying vec2 vW;' +
+  return 'precision highp float; varying vec2 vT; varying float vShade; varying vec2 vW; varying float vY;' +
     R3D_MAT_GLSL +
-    R3D_SHADOW_GLSL +
+    R3D_SHADOW_GLSL + R3D_PLIGHT_GLSL +
+    /* the hour and the weather (sky3d.js): darker than day by uDarkL/uDarkS - unset, day */
+    'uniform vec3 uDarkL; uniform vec3 uDarkS; uniform vec4 uHaze; uniform vec2 uWet; uniform float uGndL;' +
     'void main(){' +
     '  vec4 c = _groundLit(vW, vec3(' + R3_LIGHT[0].toFixed(4) + ', ' + R3_LIGHT[1].toFixed(4) + ', ' +
          R3_LIGHT[2].toFixed(4) + '));' +
     /* the ground's own shade and relief, exactly as the textured program applies them */
-    '  vec3 lit = c.rgb * mix(vec3(0.575, 0.600, 0.655), vec3(1.0), _shadowAt());' +
-    '  gl_FragColor = vec4(lit * vShade, 1.0);' +
+    '  vec3 lit = c.rgb * mix(vec3(0.575, 0.600, 0.655) * (vec3(1.0) - uDarkS), vec3(1.0) - uDarkL, _shadowAt());' +
+    '  lit *= vShade;' +
+    /* WET: the ground darkens as it soaks, and the hollows hold water - a puddle is the sky,
+       dimmed, with the rain ringing it */
+    '  if (uWet.x > 0.0) {' +
+    '    lit *= 1.0 - 0.2 * uWet.x;' +
+    '    float pm = smoothstep(0.6, 0.67, _fbm(vW * 0.08 + vec2(13.0, 4.0))) * uWet.x;' +
+    '    if (pm > 0.0) {' +
+    '      vec2 gc = floor(vW * 0.8), gf = fract(vW * 0.8) - 0.5;' +
+    '      float ph = fract(uWet.y * 1.3 + _h2(gc));' +
+    '      float ring = smoothstep(0.06, 0.0, abs(length(gf) - ph * 0.45)) * (1.0 - ph) * step(0.35, _h2(gc + 7.0));' +
+    '      vec3 sky = uHaze.rgb * 0.55 + vec3(0.16, 0.18, 0.22);' +
+    '      lit = mix(lit, lit * 0.3 + sky * 0.55 + ring * 0.22, pm * 0.85);' +
+    '    }' +
+    '  }' +
+    /* the lamps, the headlights and the fires, when the lamps are on (fxlight3d.js) */
+    '  if (uGndL > 0.0) lit += _plight(c.rgb, vec3(0.0, 1.0, 0.0), vec3(vW.x, vY + 0.05, vW.y)) * uGndL;' +
+    '  lit = mix(lit, uHaze.rgb, uHaze.a);' +
+    '  gl_FragColor = vec4(lit, 1.0);' +
     '}';
 }
 
@@ -388,6 +407,7 @@ function _r3dMatSet(gl, R3, P, G) {
   gl.activeTexture(gl.TEXTURE0);
   gl.uniform1f(gl.getUniformLocation(P, 'uTileInv'), 1 / RTS_TILE);
   _r3dRoadSet(gl, R3, P, G);
+  _r3dFxLightPut(gl, R3, P);                       /* the night's lamps reach the ground: sky3d.js */
   gl.uniform4f(u, 1, 1 / RTS_N, RTS_N / 2 - 0.5, Math.min(1, px / R3D_MAT_DETAIL_PX));
   return true;
 }

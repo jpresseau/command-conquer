@@ -426,11 +426,12 @@ function _r3dFrame(G) {
          bolted to the hull - it rotates in the hull's plane, and a turret that stayed
          world-level would shear out of its own ring on any slope. */
       var gn = (e.air || (d2 && d2.sea)) ? null : _rtsElevNormal(e.x, e.z);
+      var rk = _r3dRecoil(e, gn) || { hx: 0, hz: 0, tx: 0, tz: 0, n: gn };   /* the kick: combat3d.js */
       drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : null, e.prone, pose),
-             e.x, y, e.z, -e.rot, ART2W, false, 1, gn);
+             e.x + rk.hx, y, e.z + rk.hz, -e.rot, ART2W, false, 1, rk.n);
       if (turret) {
-        drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false), e.x, y, e.z, -(e.turret || 0),
-               ART2W, false, 1, gn);
+        drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false), e.x + rk.tx, y, e.z + rk.tz, -(e.turret || 0),
+               ART2W, false, 1, rk.n);
       }
     }
   }
