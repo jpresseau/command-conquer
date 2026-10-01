@@ -34,10 +34,12 @@ var R3D_MAT_DETAIL_PX = 18;
 
 var R3D_MAT_GLSL =
   'uniform sampler2D uMap; uniform vec4 uMat;' +          /* on, 1/N, N/2 - 0.5, detail */
+  'uniform float uSnow;' +                                 /* the SNOW sky: sky3d.js */
   'uniform sampler2D uOreT;' +                             /* the ore field: colour, richness in .a */
   'uniform float uTileInv;' +
   /* the noise, and the border's wander, are render3d/noise3d.js's - shared with the sea */
   R3D_NOISE_GLSL +
+  R3D_ROAD_GLSL +                                          /* the roads' paint: road3d.js */
   /* ---- the materials. Each returns colour (sRGB, 0..1) and a height in .a ---- */
   /* ROUND GRAINS: one per lattice cell, at a random spot, only in some cells. Thresholding value
      noise instead gives blobs that snap to the noise's own grid and read as dashes. Returns
@@ -95,7 +97,8 @@ var R3D_MAT_GLSL =
   '  float wr = smoothstep(0.58, 0.72, N.y);' +
   '  c = mix(vec3(0.50, 0.43, 0.31), c, stone * (1.0 - wr));' +   /* sand packed in the seams */
   '  return vec4(c, (stone * (1.0 - v.x * 0.5)) * (1.0 - wr) * 0.9 + 0.1); }' +
-  /* a dirt track: packed, paler down the middle where the wheels run, gravel through it */
+  /* a dirt track: packed, paler down the middle where the wheels run, gravel through it - the
+     shoulder either side of a painted road, and the whole road on a loaded map */
   'vec4 _track(vec4 N, vec4 M, float det){' +
   '  vec4 d = _dirt(N, M, det);' +
   '  d.rgb = mix(d.rgb * vec3(1.08, 1.05, 1.0), vec3(0.66, 0.61, 0.52), M.z * 0.35 * det);' +
@@ -189,6 +192,16 @@ var R3D_MAT_GLSL =
   '    grad = (1.0 - smoothstep(0.58, 0.72, N.y)) * det * 1.3 *' +
   '           (6.0 * t * (1.0 - t) / 0.11 * (g2 - g1) * (1.0 - v.x * 0.5) - 0.5 * t * t * (3.0 - 2.0 * t) * g1);' +
   '  }' +
+  /* SNOW lies over the ground - thinner where the drift noise says, and on rock's steep faces -
+     before the road is painted, so the roads read as the cleared ones, and before the scars, so
+     a crater is a black hole in it */
+  '  if (uSnow > 0.0) {' +
+  '    float cov = uSnow * smoothstep(0.18, 0.5, N.x * 0.7 + N.z * 0.3 + 0.12) * (kdom > 1.5 && kdom < 2.5 ? 0.55 : 0.95);' +
+  '    col.rgb = mix(col.rgb, vec3(0.86, 0.89, 0.94) * (0.94 + 0.08 * N.w), cov);' +
+  '    grad *= 1.0 - cov * 0.7;' +
+  '  }' +
+  /* THE ROAD, painted down its own line over the cells' dirt shoulder; flat where it is laid */
+  '  grad *= 1.0 - _road(w, col.rgb, N, M, det);' +
   /* SCARS: scorch blends like the ground does; a crater is drawn round its own cell's centre */
   '  float sc = dot(wt, vec4(a.g, b.g, c.g, d.g));' +
   '  if (sc > 0.002) {' +
@@ -240,7 +253,8 @@ var R3D_MAT_GLSL =
    THE BASE STANDS ON PAVING. A kind of the ground map's own, R3D_KIND_PAVED, laid under and
    round every building: its footprint and R3D_PAVE_RING cells beyond on open ground, and road
    within R3D_PAVE_ROAD cells of it - so a base grows a cobbled plaza with streets running out
-   of it, and the roads out in the country stay dirt tracks. It follows the base as it is built
+   of it; out in the country a road's cells are its dirt shoulder, and the carriageway is painted
+   down its line over them (road3d.js). It follows the base as it is built
    and razed: the buildings are part of the key. */
 var R3D_KIND_PAVED = 7;
 var R3D_PAVE_RING = 1;
@@ -308,15 +322,34 @@ function _r3dGroundMap(gl, R3, G) {
    path it never takes. Built on first use and allowed to fail on its own, so a device that
    cannot compile it draws the baked ground rather than no 3D at all. */
 function _r3dMatFS() {
-  return 'precision highp float; varying vec2 vT; varying float vShade; varying vec2 vW;' +
+  return 'precision highp float; varying vec2 vT; varying float vShade; varying vec2 vW; varying float vY;' +
     R3D_MAT_GLSL +
-    R3D_SHADOW_GLSL +
+    R3D_SHADOW_GLSL + R3D_PLIGHT_GLSL +
+    /* the hour and the weather (sky3d.js): darker than day by uDarkL/uDarkS - unset, day */
+    'uniform vec3 uDarkL; uniform vec3 uDarkS; uniform vec4 uHaze; uniform vec2 uWet; uniform float uGndL; uniform vec3 uSunD;' +
     'void main(){' +
     '  vec4 c = _groundLit(vW, vec3(' + R3_LIGHT[0].toFixed(4) + ', ' + R3_LIGHT[1].toFixed(4) + ', ' +
-         R3_LIGHT[2].toFixed(4) + '));' +
+         R3_LIGHT[2].toFixed(4) + ') + uSunD);' +
     /* the ground's own shade and relief, exactly as the textured program applies them */
-    '  vec3 lit = c.rgb * mix(vec3(0.575, 0.600, 0.655), vec3(1.0), _shadowAt());' +
-    '  gl_FragColor = vec4(lit * vShade, 1.0);' +
+    '  vec3 lit = c.rgb * mix(vec3(0.575, 0.600, 0.655) * (vec3(1.0) - uDarkS), vec3(1.0) - uDarkL, _shadowAt());' +
+    '  lit *= vShade;' +
+    /* WET: the ground darkens as it soaks, and the hollows hold water - a puddle is the sky,
+       dimmed, with the rain ringing it */
+    '  if (uWet.x > 0.0) {' +
+    '    lit *= 1.0 - 0.2 * uWet.x;' +
+    '    float pm = smoothstep(0.6, 0.67, _fbm(vW * 0.08 + vec2(13.0, 4.0))) * uWet.x;' +
+    '    if (pm > 0.0) {' +
+    '      vec2 gc = floor(vW * 0.8), gf = fract(vW * 0.8) - 0.5;' +
+    '      float ph = fract(uWet.y * 1.3 + _h2(gc));' +
+    '      float ring = smoothstep(0.06, 0.0, abs(length(gf) - ph * 0.45)) * (1.0 - ph) * step(0.35, _h2(gc + 7.0));' +
+    '      vec3 sky = uHaze.rgb * 0.55 + vec3(0.16, 0.18, 0.22);' +
+    '      lit = mix(lit, lit * 0.3 + sky * 0.55 + ring * 0.22, pm * 0.85);' +
+    '    }' +
+    '  }' +
+    /* the lamps, the headlights and the fires, when the lamps are on (fxlight3d.js) */
+    '  if (uGndL > 0.0) lit += _plight(c.rgb, vec3(0.0, 1.0, 0.0), vec3(vW.x, vY + 0.05, vW.y)) * uGndL;' +
+    '  lit = mix(lit, uHaze.rgb, uHaze.a);' +
+    '  gl_FragColor = vec4(lit, 1.0);' +
     '}';
 }
 
@@ -382,6 +415,8 @@ function _r3dMatSet(gl, R3, P, G) {
   gl.uniform1i(gl.getUniformLocation(P, 'uOreT'), 5);
   gl.activeTexture(gl.TEXTURE0);
   gl.uniform1f(gl.getUniformLocation(P, 'uTileInv'), 1 / RTS_TILE);
+  _r3dRoadSet(gl, R3, P, G);
+  _r3dFxLightPut(gl, R3, P);                       /* the night's lamps reach the ground: sky3d.js */
   gl.uniform4f(u, 1, 1 / RTS_N, RTS_N / 2 - 0.5, Math.min(1, px / R3D_MAT_DETAIL_PX));
   return true;
 }

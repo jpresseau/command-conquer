@@ -44,7 +44,7 @@ var SIZES = [
 /* Everything in the menu that a player reads or presses. The two notes are the ones that were
    overlapping, and the loader cards are in because they are what the pinned build stamp lands
    on when the page is scrolled. */
-var PARTS = ['#rtsDiff', '#rtsDiffNote', '#rtsVoxSide', '#rtsVoxNote', '#rtsGo', '#rtsInstall'];
+var PARTS = ['#rtsDiff', '#rtsDiffNote', '#rtsSky', '#rtsVoxSide', '#rtsVoxNote', '#rtsGo', '#rtsInstall'];
 
 (async function () {
   var browser = await chromium.launch();

@@ -44,7 +44,7 @@ var S = new Suite('scenery');
     o.firstFrame = R3.scnFor === G && !!R3.scenery && R3.scenery.length > 0;
     o.n = { fields: P.fields.length, farms: P.farms.length, poles: P.poles.length, wrecks: P.wrecks.length, rocks: P.rocks.length };
     o.tris = R3.sceneryTris; o.worldTris = R3.worldTris; o.chunks = R3.scenery.length;
-    o.batched = _r3dSceneryBatches(R3).length === R3.scenery.length;
+    o.batched = _r3dSceneryBatches(R3).length === R3.scenery.length + (R3.bridges || []).length;   /* and the bridges: bridge3d.js */
 
     /* COSMETIC: a minute of frames with the batch drawn */
     for (i = 0; i < 20; i++) { G.t += 3; _rtsRFrame(0.05); }

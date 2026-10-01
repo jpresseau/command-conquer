@@ -46,6 +46,7 @@ function _r3dCamU(gl, P) {
   gl.uniform2f(gl.getUniformLocation(P, 'uYaw'), R3.cy, R3.sy);
   var h = R3.half || R3D_HALF;
   gl.uniform3f(gl.getUniformLocation(P, 'uHalf'), h[0], h[1], h[2]);
+  if (typeof _r3dSkyU === 'function') _r3dSkyU(gl, P);     /* the hour and the weather: sky3d.js */
 }
 
 /* Set the camera's facing and lean. Yaw is kept in (-PI, PI]; tilt is clamped. */
@@ -63,7 +64,7 @@ function _r3dCamSet(yaw, tilt) {
      built from a viewer standing south of the model; the viewer now stands wherever the yaw puts
      them, at the baker's own elevation - so at yaw 0 it is exactly R3D_HALF, and a glint on a
      hull stays where the eye would see one as the camera swings. The light stays in the world. */
-  var hv = R3_VIEW[1], hh = R3_VIEW[2], L = R3_LIGHT;
+  var hv = R3_VIEW[1], hh = R3_VIEW[2], L = R3.sun || R3_LIGHT;     /* the sun, moving or not: sky3d.js */
   var h = [L[0] - R3.sy * hh, L[1] + hv, L[2] + R3.cy * hh], m = Math.hypot(h[0], h[1], h[2]);
   R3.half = [h[0] / m, h[1] / m, h[2] / m];
 }

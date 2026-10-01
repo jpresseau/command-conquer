@@ -81,7 +81,7 @@ function _rtsRFrame(dt) {
     for (var tx = tx0; tx <= tx1; tx++) {
       var idx = _rtsIdx(tx, tz);
       var ore = G.scrap[idx];
-      var isWater = G.terrain && G.terrain[idx] === RTS_T_WATER;
+      var isWater = G.terrain && G.terrain[idx] === RTS_T_WATER && !_rtsIsBridgeCell(idx);   /* under a deck: the bake's bridge */
       if (ore <= 0 && !isWater) continue;
       var pp = _rtsGroundToScreen(_rtsWX(tx) - RTS_TILE / 2, _rtsWX(tz) - RTS_TILE / 2);
       var px = Math.round(pp.x), py = Math.round(pp.y);
@@ -451,6 +451,8 @@ function _rtsRFrame(dt) {
     } else g.strokeRect(gx + 1, gy + 1, def.w * cell * gp.scale - 2, def.h * cell * gp.scale - 2);
   }
 
+  /* the hour and the weather over the 2D battlefield - render/sky2d.js */
+  if (!r3on && typeof _rtsSky2D === 'function') _rtsSky2D(g, G);
   /* Last, over the finished battlefield and nothing else. */
   _rtsPost(g);
   /* The render readout samples here, at the end of the frame walk, so what it times is a

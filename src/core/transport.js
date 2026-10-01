@@ -288,7 +288,7 @@ function _rtsCombatAnim(dmg, x, z, big, stick) {
   var G = window._rtsG;
   if (!(dmg > 0)) return null;
   var tx = _rtsTX(x), tz = _rtsTX(z);
-  var water = _rtsInB(tx, tz) && G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER;
+  var water = _rtsInB(tx, tz) && G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER && !_rtsBridgeAt(x, z);
   var kind = water ? 'splash' : (dmg < RTS_ANIM_PIFF ? 'piff' : (dmg < RTS_ANIM_BOOM ? 'hit' : 'boom'));
   /* scale with damage the way the original steps through its list, rather than one fixed size */
   var scale = (big || 1) * (0.7 + Math.min(1, dmg / 90) * 0.7);

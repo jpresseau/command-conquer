@@ -94,6 +94,7 @@ function _rtsLoop(prime) {
     _rtsPanTick(dt);
     _rtsZoomTick(dt);                  /* the smooth zoom gliding in - ui/navigate.js */
     _rtsOrbitTick(dt);                 /* turning and leaning the 3D camera - ui/orbit.js */
+    if (typeof _rtsAmbTick === 'function') _rtsAmbTick(dt);   /* the world's own sound - rts.ambience.js */
     /* THE VIEW STAYS ON THE MAP, EVERY FRAME, and it is held here rather than at each place that
        moves the camera because the places kept outnumbering the clamps. Scrolling, the wheel,
        the pinch, a radar click and a team jump all clamped; the OPENING did not, and neither did

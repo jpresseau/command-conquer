@@ -396,43 +396,7 @@ function _r3dFrame(G) {
       var rise = e.building ? 0.12 + 0.88 * Math.max(0, Math.min(1, e.bprog || 0)) : 1;
       drawIn(C, _r3dMesh('b', e.def, e.side), e.x, _rtsElev(e.x, e.z), e.z, 0, ART2W,
              dmg || e.building, rise);
-    } else if (e.type === 'unit') {
-      var turret = R.spr.turret && R.spr.turret[e.side] && R.spr.turret[e.side][e.def];
-      /* THE GROUND UNDER IT, not zero. An aircraft's altitude is measured from the ground it
-         is over as well - it flies at a height, not at a level - so both take the terrain and
-         only the flier adds to it. */
-      var y = _rtsElev(e.x, e.z) + (e.air ? ((e.rearming > 0 ? 2 : (e.alt || 12)) * 0.35) : 0);
-      /* A MARCHING SOLDIER BOBS. There is no walk cycle in 3D - the mesh is one pose - so the
-         walk reads through a small vertical bob instead, phased by the same `gait` offset that
-         desynchronises the 2D walk frames, so a squad does not pogo in unison. Vehicles do not
-         bob; tracks do not walk. */
-      var d2 = rtsUnitDef(e.def), pose = 0;
-      /* now it WALKS: a stride pose by its own gait (soldier3d.js); the bob is what is left of
-         the old suggestion of a march, much smaller, in step with the stride */
-      if (d2.kind === 'infantry' && e.path && !e.prone) {
-        pose = R3.soldierOff ? 0 : _r3dSoldierPose(e, G.t);
-        y += Math.abs(Math.sin(G.t * 9 + (e.gait || 0) * 0.8)) * (pose ? 0.08 : 0.45);
-      }
-      /* AND IT LEANS ON THE GROUND IT IS STANDING ON. Measured over a running match, the
-         steepest slope under a unit is 0.228: a hull three units wide had one side 0.69 world
-         units clear of the ground and the other buried, about a third of a tank's height, and
-         19% of the map's open ground is steep enough to show it.
-
-         NOT WHAT IS FLYING. An aircraft's attitude is its own business and the hill it
-         happens to be over is nothing to do with it; passing no normal leaves it upright.
-         Boats likewise sit on water, which is level by construction.
-
-         The TURRET takes the same lean as the hull rather than staying level, because it is
-         bolted to the hull - it rotates in the hull's plane, and a turret that stayed
-         world-level would shear out of its own ring on any slope. */
-      var gn = (e.air || (d2 && d2.sea)) ? null : _rtsElevNormal(e.x, e.z);
-      drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : null, e.prone, pose),
-             e.x, y, e.z, -e.rot, ART2W, false, 1, gn);
-      if (turret) {
-        drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false), e.x, y, e.z, -(e.turret || 0),
-               ART2W, false, 1, gn);
-      }
-    }
+    } else if (e.type === 'unit') _r3dPaintUnit(C, e, G, R3, drawIn, ART2W);   /* render3d/unit3d.js */
   }
   /* and the burnt-out hulls of the vehicles that died, charred (render3d/husk3d.js) */
   if (!only) _r3dHusks(G, R3, function (m, x, y, z, rot, n) { drawIn(C, m, x, y, z, rot, ART2W, 2, 1, n); });

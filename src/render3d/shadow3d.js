@@ -87,9 +87,10 @@ var R3D_SHADOW_BIAS = 0.0022;
    217px below the caster.
 
    The basis itself: forward is the direction the light TRAVELS, so it is minus the surface-to-
-   light vector; right and up complete it. Built once - the sun does not move. */
-var R3D_SUN = (function () {
-  var Lx = R3_LIGHT[0], Ly = R3_LIGHT[1], Lz = -R3_LIGHT[2];   /* the z-flipped sun */
+   light vector; right and up complete it. Built for the baker's sun once (R3D_SUN), and for a
+   sun that moves (sky3d.js, the CYCLE sky) whenever it does - R3.sunB, read by _r3dSunB. */
+function _r3dSunBasis(SL) {
+  var Lx = SL[0], Ly = SL[1], Lz = -SL[2];   /* the z-flipped sun */
   var m = Math.hypot(Lx, Ly, Lz);
   Lx /= m; Ly /= m; Lz /= m;
   var fx = -Lx, fy = -Ly, fz = -Lz;
@@ -100,7 +101,10 @@ var R3D_SUN = (function () {
   rx /= rm; ry /= rm; rz /= rm;
   var ux = fy * rz - fz * ry, uy = fz * rx - fx * rz, uz = fx * ry - fy * rx;
   return { L: [Lx, Ly, Lz], f: [fx, fy, fz], r: [rx, ry, rz], u: [ux, uy, uz] };
-})();
+}
+var R3D_SUN = _r3dSunBasis(R3_LIGHT);
+/* The basis this frame is drawn under. */
+function _r3dSunB() { var R3 = window._R3D; return (R3 && R3.sunB) || R3D_SUN; }
 
 /* The depth-only pass. Positions come in exactly as the mesh program takes them - the same
    attribute, the same placement uniforms, the same wave displacement - because anything that
@@ -240,9 +244,9 @@ function _r3dShadowPass(G, draw) {
 
   gl.useProgram(R3.shadP);
   var P = R3.shadP;
-  gl.uniform3fv(gl.getUniformLocation(P, 'uSunR'), R3D_SUN.r);
-  gl.uniform3fv(gl.getUniformLocation(P, 'uSunU'), R3D_SUN.u);
-  gl.uniform3fv(gl.getUniformLocation(P, 'uSunF'), R3D_SUN.f);
+  gl.uniform3fv(gl.getUniformLocation(P, 'uSunR'), _r3dSunB().r);
+  gl.uniform3fv(gl.getUniformLocation(P, 'uSunU'), _r3dSunB().u);
+  gl.uniform3fv(gl.getUniformLocation(P, 'uSunF'), _r3dSunB().f);
   gl.uniform3fv(gl.getUniformLocation(P, 'uSunC'), sv.c);
   gl.uniform2f(gl.getUniformLocation(P, 'uSunSpan'), sv.span, R3D_SHADOW_RANGE);
   draw(P);
@@ -254,9 +258,9 @@ function _r3dShadowPass(G, draw) {
 /* Hand the sun's view to a program that reads the map. Called once per program per frame. */
 function _r3dShadowBind(P, unit) {
   var R3 = window._R3D, gl = R3.gl;
-  gl.uniform3fv(gl.getUniformLocation(P, 'uSunR'), R3D_SUN.r);
-  gl.uniform3fv(gl.getUniformLocation(P, 'uSunU'), R3D_SUN.u);
-  gl.uniform3fv(gl.getUniformLocation(P, 'uSunF'), R3D_SUN.f);
+  gl.uniform3fv(gl.getUniformLocation(P, 'uSunR'), _r3dSunB().r);
+  gl.uniform3fv(gl.getUniformLocation(P, 'uSunU'), _r3dSunB().u);
+  gl.uniform3fv(gl.getUniformLocation(P, 'uSunF'), _r3dSunB().f);
   gl.uniform3fv(gl.getUniformLocation(P, 'uSunC'), R3.sunC || [0, 0, 0]);
   gl.uniform2f(gl.getUniformLocation(P, 'uSunSpan'), R3.sunSpan || 64, R3D_SHADOW_RANGE);
   gl.uniform1f(gl.getUniformLocation(P, 'uShadowOn'), R3.shadowReady && _r3dQ('shadow') ? 1 : 0);

@@ -151,6 +151,8 @@ function _r3dSceneryTick(G) {
   _r3dSceneryBuild(G, R3.scnPlan);
 }
 function _r3dSceneryBatches(R3) {
-  if (R3.sceneryAmt === 0 || !R3.world || !R3.world.length || !R3.scenery) return [];
-  return R3.scenery;
+  if (!R3.world || !R3.world.length) return [];
+  /* the bridges are not the countryside's to take away - a tank stands on them (bridge3d.js) */
+  var b = R3.bridges || [];
+  return R3.sceneryAmt === 0 || !R3.scenery ? b : b.length ? R3.scenery.concat(b) : R3.scenery;
 }

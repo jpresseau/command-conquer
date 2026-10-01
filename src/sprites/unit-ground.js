@@ -344,8 +344,9 @@ function _sprUnitGround(X, key) {
       var bx = i < 2 ? 6.2 : -6.2, bz = (i % 2) ? 6.0 : -6.0;
       _r3Wheel(m, bx, 3.1, bz, 3.1, 3.4, 'z', DK[0], DK[1], 22);
       _r3Wheel(m, bx, 3.1, bz, 1.5, 3.7, 'z', S[2], S[1], 16);     /* hub */
+      if (!_SPR_ROLL_LEN) { _SPR_ROLL_LEN = 3.1 * Math.PI * 2 / 5; _SPR_ROLL_KIND = 'wheel'; }   /* a nut's turn: unitmodels.js */
       for (var bn = 0; bn < 5; bn++) {
-        var bna = (bn / 5) * Math.PI * 2;
+        var bna = (bn - (_SPR_ROLL || 0)) / 5 * Math.PI * 2;
         _r3Box(m, bx + Math.cos(bna) * 0.95, 3.1 + Math.sin(bna) * 0.95, bz,
                0.42, 0.42, 3.9, S[3], S[2]);
       }

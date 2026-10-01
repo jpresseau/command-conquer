@@ -194,7 +194,7 @@ function _rtsDrawWater(g, G, cell) {
   for (var y = cw.tz0; y <= cw.tz1; y++) {
     for (var x = cw.tx0; x <= cw.tx1; x++) {
       var i = y * N + x;
-      if (G.terrain[i] !== RTS_T_WATER) continue;
+      if (G.terrain[i] !== RTS_T_WATER || _rtsIsBridgeCell(i)) continue;
       if (!G.mapped[i]) continue;                    /* never seen - the shroud covers it anyway */
       var v = (_sprHash(x, y, seed + 137) * set.length) | 0;
       if (v >= set.length) v = set.length - 1;

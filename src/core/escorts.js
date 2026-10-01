@@ -38,7 +38,7 @@ function _rtsEscortable(u) {
   if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || u.air || u.inside) return false;
   var d = rtsUnitDef(u.def);
   if (!d || d.harvest || d.sea || !d.weapon) return false;
-  if (u.sqd != null) return false;
+  if (u.sqd != null || u.mend != null) return false;      /* mend: on its way to the depot, core/aimend.js */
   return !!_rtsMission(u).recruitable;
 }
 /* A team worth escorting: on the march, on land, with someone in it. */

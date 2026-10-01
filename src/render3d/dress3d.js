@@ -21,8 +21,10 @@ var R3D_DRESS = {
 };
 
 /* One cell's worth, pressed against the wall at (wx, wz) and facing along the wall (ax, az). */
+/* What stands on a dressed cell: 0 crates, 1 drums, 2 sandbags, 3 a lamp post. */
+function _r3dDressKind(tx, tz) { return Math.floor(_sprHash(tz * 31 + 3, tx, 823) * 4); }
 function _r3dDressCell(out, wx, wz, ax, az, tx, tz) {
-  var h = _sprHash(tx * 31 + 7, tz, 811), k = Math.floor(_sprHash(tz * 31 + 3, tx, 823) * 4);
+  var h = _sprHash(tx * 31 + 7, tz, 811), k = _r3dDressKind(tx, tz);
   var P = R3D_DRESS, i, n;
   if (k === 0) {                                   /* a stack of crates */
     n = 1 + Math.floor(h * 3);
@@ -68,7 +70,7 @@ function _r3dDressTick(G) {
   if (R3.dressG === G && R3.dressKey === key) return;
   R3.dressG = G; R3.dressKey = key;
   if (R3.dress) { gl.deleteBuffer(R3.dress.p); gl.deleteBuffer(R3.dress.n); gl.deleteBuffer(R3.dress.c); R3.dress = null; }
-  var paved = _r3dPaved(G), faces = [], seen = {}, cells = 0, at = [];
+  var paved = _r3dPaved(G), faces = [], seen = {}, cells = 0, at = [], lamps = [];
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (e.type !== 'struct' || e.dead) continue;
@@ -89,10 +91,12 @@ function _r3dDressTick(G) {
       var ax = back ? 1 : 0, az = back ? 0 : 1, f0 = faces.length;
       _r3dDressCell(faces, wx, wz, ax, az, tx, tz);
       _r3dLiftFrom(faces, f0, _rtsElev(wx, wz));
+      /* a lamp's bulb, for the night (sky3d.js) */
+      if (_r3dDressKind(tx, tz) === 3) lamps.push([wx, _rtsElev(wx, wz) + 2.7, wz]);
       cells++;
     }
   }
-  R3.dressCells = cells; R3.dressAt = at;
+  R3.dressCells = cells; R3.dressAt = at; R3.dressLamps = lamps;
   if (!faces.length) return;
   var m = _r3dBuildMesh(gl, faces);
   var half = RTS_N * RTS_TILE / 2;

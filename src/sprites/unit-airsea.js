@@ -6,6 +6,9 @@
    Split because unitmodels.js reached 506 lines the moment the V2 Rocket Launcher was given a
    model of its own, and unit/layout holds every source file to 500. Same shape the building
    models already use (bld-base / bld-tech / bld-war / bld-super). */
+/* The units whose rotor the 3D renderer turns: their model builds part 'rotor' as the blades
+   alone and part 'body' as the rest. */
+var RTS_ROTOR_UNITS = { heli: true };
 function _sprUnitAirSea(X, key) {
   var m = X.m, TM = X.TM, VH = X.VH, S = X.S, DK = X.DK, O = X.O, C = X.C, GN = X.GN,
       d = X.d, prone = X.prone, part = X.part, side = X.side, tracks = X.tracks, i;
@@ -27,8 +30,14 @@ function _sprUnitAirSea(X, key) {
        axis-aligned boxes, so a diagonal "bar" is a box that is long in BOTH axes - a square.
        Four of them merged into a solid diamond. Two crossed bars along x and z are genuine
        thin bars, they read as a rotor, and the fuselage shows through the gaps. */
-    _r3Box(m, 0, 8.9, 0, 30.0, 0.5, 1.4, DK[1], DK[3]);
-    _r3Box(m, 0, 8.9, 0, 1.4, 0.5, 30.0, DK[1], DK[3]);
+    /* part 'rotor' is the blades alone and 'body' everything else, so the 3D renderer can turn
+       one over the other (render3d/unit3d.js); the sprite is still the whole machine */
+    var b0 = m.length;
+    if (part !== 'body') {
+      _r3Box(m, 0, 8.9, 0, 30.0, 0.5, 1.4, DK[1], DK[3]);
+      _r3Box(m, 0, 8.9, 0, 1.4, 0.5, 30.0, DK[1], DK[3]);
+      if (part === 'rotor') { m.splice(0, b0); return true; }
+    }
     _r3Box(m, 1.0, 2.2, -3.6, 6.0, 1.4, 1.4, GN[1], GN[3]);        /* stub wings + pods */
     _r3Box(m, 1.0, 2.2, 3.6, 6.0, 1.4, 1.4, GN[1], GN[3]);
     _r3Box(m, 2.6, 1.4, -3.6, 4.0, 1.6, 2.0, DK[1], DK[3]);

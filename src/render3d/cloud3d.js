@@ -49,7 +49,8 @@ function _r3dCloudSet(gl, R3, P) {
   var c = R3.sunC || [0, 0, 0], G = window._rtsG;
   var amt = (typeof _r3dQ === 'function' && !_r3dQ('clouds')) ? 0 : R3.cloudAmt === undefined ? 1 : R3.cloudAmt;
   var t = (G && G.t) || 0;
-  gl.uniform4f(u, c[0] * R3D_SUN.r[0] + c[1] * R3D_SUN.r[1] + c[2] * R3D_SUN.r[2],
-                  c[0] * R3D_SUN.u[0] + c[1] * R3D_SUN.u[1] + c[2] * R3D_SUN.u[2],
+  var B = _r3dSunB();
+  gl.uniform4f(u, c[0] * B.r[0] + c[1] * B.r[1] + c[2] * B.r[2],
+                  c[0] * B.u[0] + c[1] * B.u[1] + c[2] * B.u[2],
                   R3D_CLOUD_DEPTH * amt, t * R3D_CLOUD_SPEED * R3D_CLOUD_SCALE);
 }

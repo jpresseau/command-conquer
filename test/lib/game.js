@@ -97,6 +97,14 @@ async function openPage(browser, opts) {
       try { window.localStorage.setItem('rtsGfxQ', q); } catch (e) {}
     }, opts.quality || 'high');
   }
+  /* AND THE SKY TO DAY. AUTO picks it from the map's seed (render3d/sky3d.js), so unpinned a spec
+     would be grading a night or a fog depending on which seed it happened to use. opts.sky
+     'auto' leaves the player's choice alone - e2e/sky, which forces each sky itself. */
+  if (opts.sky !== 'auto') {
+    await page.addInitScript(function (k) {
+      try { window.localStorage.setItem('rtsSky', k); } catch (e) {}
+    }, opts.sky || 'day');
+  }
   await page.goto(s.url, { waitUntil: 'load' });
   await page.waitForFunction(function () { return typeof window.rtsOpen === 'function'; });
   return {

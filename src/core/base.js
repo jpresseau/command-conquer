@@ -97,6 +97,8 @@ function _rtsNewGame(seed, diff) {
     blocked:new Uint8Array(RTS_N * RTS_N),
     terrain:new Uint8Array(RTS_N * RTS_N),  /* RTS_T_* - what the ground IS, for the renderer */
     height:new Uint8Array(RTS_N * RTS_N),   /* how high it is; see _rtsElev in core/grid.js */
+    bridges:[],                             /* water land units may cross; core/bridge.js */
+    roads:[],                               /* each carved road's centreline, cell coords x,z,... */
     scorch:new Uint8Array(RTS_N * RTS_N),   /* 0 none, 1-6 scorch variant, +8 bit = crater */
     /* BASE.CPP's node list, per side: the ordered (type, cell) plan a base is rebuilt against */
     base:{ player:[], enemy:[] },

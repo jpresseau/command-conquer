@@ -261,12 +261,19 @@ var R3D_MESH_FS =
      linear blend of two unit vectors is shorter than one - which is exactly the case on the
      curves this is for, and would read as a dark seam down the middle of every one. */
   'uniform vec4 uSil;' +                /* a unit seen through what hides it - sil3d.js */
+  'uniform vec4 uHaze;' +               /* rgb, amount: sky3d.js */
+  'uniform float uSnow;' +              /* the SNOW sky: on every roof, and the shore frozen */
   'void main(){' +
   '  if (uSil.a > 0.0) { gl_FragColor = uSil; return; }' +
   /* vCol.w: 0 whole, 1 damaged or rising, 2 a burnt-out husk (husk3d.js) */
   '  vec3 tint = vCol.w > 1.5 ? vec3(0.2, 0.18, 0.17) : mix(vec3(1.0), vec3(0.62, 0.55, 0.55), vCol.w);' +
   '  vec3 c = _shade(normalize(vN), vCol.rgb) * tint; float a = uA;' +
   '  if (uWeather > 0.0) c = _weather(c, normalize(vN), vec3(vWxz.x, vHY.y, vWxz.y));' +
+  /* snow settles on whatever faces up - roofs, hulls, canopies - and not on the sea */
+  '  if (uSnow > 0.0 && uSea.x < 0.5) {' +
+  '    float up = smoothstep(0.55, 0.85, normalize(vN).y) * uSnow;' +
+  '    c = mix(c, _shade(normalize(vN), vec3(0.88, 0.9, 0.95)) * tint, up * 0.82);' +
+  '  }' +
   '  if (uSea.x > 0.5) {' +
   '    vec2 cc = vWxz * uSea.w + uSea.z + _gwarp(vWxz);' +
   '    float wm = texture2D(uSeaM, (cc + 0.5) * uSea.y).r;' +
@@ -285,11 +292,12 @@ var R3D_MESH_FS =
   '    c = _shade(np, vCol.rgb) * tint;' +
   '    float gl = max(dot(np, uHalf), 0.0);' +
   '    gl = pow(gl, 48.0) * _shadowAt();' +
-  '    c += vec3(1.0, 0.96, 0.86) * gl * 1.1;' +
+  '    vec3 day = vec3(1.0) - uDarkL;' +            /* the hour dims the glint, the foam and the surf */
+  '    c += vec3(1.0, 0.96, 0.86) * day * gl * 1.1;' +
   '    float edge = 1.0 - smoothstep(0.46, 0.66, wm);' +
   '    float fo = edge * edge * smoothstep(0.3, 0.7, _vn(vWxz * 1.6 + vec2(t * 0.2, 0.0)));' +
-  '    c = mix(c, vec3(0.16, 0.50, 0.50) + c * 0.35, edge * 0.45);' +   /* turquoise shallows */
-  '    c = mix(c, vec3(0.92, 0.95, 0.93), clamp(fo * 1.4, 0.0, 0.85));' +               /* foam */
+  '    c = mix(c, vec3(0.16, 0.50, 0.50) * day + c * 0.35, edge * 0.45);' +   /* turquoise shallows */
+  '    c = mix(c, vec3(0.92, 0.95, 0.93) * day, clamp(fo * 1.4, 0.0, 0.85));' +               /* foam */
   /* THE SURF. Lines of foam roll in to every shore, a few seconds apart: sd is how far out
      the water is by the same mask the coast is cut from - 0 at the waterline, 1 about a cell
      out - so each line follows the coast's own shape, and it breaks as it arrives. */
@@ -297,11 +305,15 @@ var R3D_MESH_FS =
   '    float wv = fract(sd * 1.6 + t * 0.22 + _vn(vWxz * 0.35) * 0.8);' +
   '    float brk = smoothstep(0.3, 0.65, _vn(vWxz * 0.9));' +   /* broken where it breaks, as over a bar */
   '    float roll = smoothstep(0.0, 0.05, wv) * (1.0 - smoothstep(0.05, 0.4, wv)) * (1.0 - sd) * (0.35 + 0.65 * brk);' +
-  '    c = mix(c, vec3(0.93, 0.96, 0.95), clamp(roll * 0.75 * uSurf, 0.0, 0.75));' +
+  '    c = mix(c, vec3(0.93, 0.96, 0.95) * day, clamp(roll * 0.75 * uSurf, 0.0, 0.75));' +
   '    a = uA * mix(0.45, 1.0, smoothstep(0.46, 0.74, wm));' +
+  /* in the cold the shallows freeze: ice, from the shore a cell out, opaque */
+  '    if (uSnow > 0.0) { float ice = (1.0 - smoothstep(0.5, 0.82, wm)) * uSnow; c = mix(c, vec3(0.80, 0.87, 0.92) * day, ice * 0.9); a = mix(a, uA, ice); }' +
   '  }' +
   /* what is burning near it lights it - render3d/fxlight3d.js */
   '  c += _plight(vCol.rgb * tint, normalize(vN), vec3(vWxz.x, vHY.y, vWxz.y));' +
+  /* the haze the weather and the hour lay over everything - sky3d.js */
+  '  c = mix(c, uHaze.rgb, uHaze.a);' +
   '  gl_FragColor = vec4(c, a); }';
 
 /* Ground and fog share one textured program; fog just samples a different texture with

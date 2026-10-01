@@ -327,6 +327,8 @@ function _rtsGenTerrain(G, rnd, starts) {
     }
   }
 
+  _rtsLayBridges(G);               /* where the roads meet the water: core/bridge.js */
+
   /* --- and the ore has to still be reachable ---
      The two guarantees pull against each other. The ore connectivity carve above is allowed
      to lay a causeway across water, and a causeway splits the sea; re-laying the spine after
@@ -422,6 +424,10 @@ function _rtsGenTerrain(G, rnd, starts) {
 function _rtsCarveRoad(G, x0, z0, x1, z1, rnd, force) {
   var steps = Math.ceil(Math.hypot(x1 - x0, z1 - z0)) * 2;
   var sway = force ? 0 : (rnd() - 0.5) * 26;
+  /* ITS CENTRELINE, kept: the cells are a two-wide staircase, and the 3D ground paints a smooth
+     road down this line instead (render3d/road3d.js). Cell coordinates of the band's middle. */
+  var line = [];
+  if (G.roads) G.roads.push(line);
   for (var s = 0; s <= steps; s++) {
     var t = s / steps;
     /* a sine bulge perpendicular to the line, so roads bend instead of ruling a diagonal */
@@ -429,6 +435,7 @@ function _rtsCarveRoad(G, x0, z0, x1, z1, rnd, force) {
     var dx = x1 - x0, dz = z1 - z0, L = Math.hypot(dx, dz) || 1;
     var off = Math.sin(t * Math.PI) * sway;
     px += (-dz / L) * off; pz += (dx / L) * off;
+    line.push(Math.round((px + 0.5) * 100) / 100, Math.round((pz + 0.5) * 100) / 100);
     /* Two tiles wide. Three read as a runway rather than a track. */
     for (var ox = 0; ox <= 1; ox++) {
       for (var oz = 0; oz <= 1; oz++) {

@@ -69,6 +69,7 @@ function _rtsUpdateAI(dt) {
   if (S.lost) return;
   _rtsTeamsTick(dt);
   _rtsEscortsTick(dt);          /* the spare army goes with the teams - core/escorts.js */
+  _rtsAIMendTick(dt);           /* ...and the battered go home to the depot - core/aimend.js */
   _rtsAISupers(dt);
   /* Rich: refill a line as soon as it empties, rather than waiting up to five seconds for
      the next decision. Without this the opponent banks tens of thousands of credits it

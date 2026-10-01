@@ -364,6 +364,9 @@ function _rtsBakeTerrain(G) {
     if (_mixPaintSeaCliffs(wcimg.data, S, G, seed) !== null) g.putImageData(wcimg, 0, 0);
   }
 
+  /* --- bridges: over the water, under everything that stands on the ground --- */
+  if (typeof _sprDrawBridges === 'function') _sprDrawBridges(g, G, TS);
+
   /* --- sandbag emplacements. With the player's own files loaded these come from sbag.shp,
          which is a real autotile: sixteen frames indexed by which neighbours are also wall, so
          a run joins up instead of being sixteen copies of one horizontal bag stack laid end to

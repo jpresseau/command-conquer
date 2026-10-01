@@ -282,7 +282,8 @@ function _rtsDrawMini() {
     else {
       var tk = G.terrain ? G.terrain[idx] : 0;
       if (tk === 0) continue;
-      g.fillStyle = TCOL[tk] || TCOL[0];
+      /* a bridge is road on the radar: it is the way across */
+      g.fillStyle = TCOL[tk === RTS_T_WATER && _rtsIsBridgeCell(idx) ? RTS_T_ROAD : tk] || TCOL[0];
     }
     g.fillRect(tx * sc, tz * sc, sc, sc);
   }

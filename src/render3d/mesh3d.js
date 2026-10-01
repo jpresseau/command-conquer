@@ -72,11 +72,14 @@ function _r3dBuildMesh(gl, faces) {
 /* The cache key carries everything that changes the geometry or its colours: type, side,
    turret half, prone. A miss builds the model through the same functions the baker uses, so
    the two pipelines cannot drift apart - there is no second copy of any shape. */
-function _r3dMesh(kind, def, side, part, prone, pose) {
-  var R3 = window._R3D, key = kind + ':' + def + ':' + side + ':' + (part || '') + ':' + (prone ? 1 : 0) + ':' + (pose || 0) + (R3.soldierOff ? ':s' : '');
+function _r3dMesh(kind, def, side, part, prone, pose, roll) {
+  var R3 = window._R3D, key = kind + ':' + def + ':' + side + ':' + (part || '') + ':' + (prone ? 1 : 0) + ':' + (pose || 0) + (R3.soldierOff ? ':s' : '') + (roll ? ':r' + roll : '');
   var m = R3.mesh[key];
   if (m !== undefined) return m;
   var faces = null;
+  /* the point round its running gear it is built at, and how far it rolls for a full turn of
+     it (render3d/unit3d.js) */
+  _SPR_ROLL = (roll || 0) / R3D_ROLL_N; _SPR_ROLL_LEN = 0;
   try {
     /* BUILT RICHER THAN THE SPRITE. The model functions are the baker's own - one copy of every
        shape, which is the point of calling them from here at all - but the two consumers want
@@ -87,13 +90,15 @@ function _r3dMesh(kind, def, side, part, prone, pose) {
        normal per corner, for the duration of this build and no longer. See _R3_DETAIL. */
     faces = _r3DetailHigh(function () {
       if (kind === 'b') return _sprBuildingModel(def, side);
-      /* a soldier has a model of his own in 3D, in walking poses (render3d/soldier3d.js); the
-         sprite's is the fallback, and still what a prone squad and a dog are drawn as */
+      /* a soldier has a model of his own in 3D, walking (render3d/soldier3d.js) or crawling
+         (crawl3d.js); the sprite's is the fallback, and still what a dog is drawn as */
       var ud = rtsUnitDef(def), sm = (ud && ud.kind === 'infantry' && !part && !R3.soldierOff)
         ? _r3dSoldierModel(def, side, !!prone, pose || 0) : null;
       return sm || _sprUnitModel(def, side, !!prone, part || null);
     });
   } catch (e) { faces = null; }
+  _SPR_ROLL = null;
+  if (kind === 'u' && _SPR_ROLL_LEN) (R3.rollLen || (R3.rollLen = {}))[def] = _SPR_ROLL_LEN * _sprUnitScale(def) * RTS_TILE / RTS_TS;
   m = (faces && faces.length) ? _r3dBuildMesh(R3.gl, faces) : null;
   /* how much it weathers (weather3d.js): a building fully, a vehicle or a soldier less */
   if (m) m.weather = kind === 'b' ? 1 : 0.5;

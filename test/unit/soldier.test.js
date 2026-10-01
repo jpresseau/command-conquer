@@ -11,7 +11,7 @@ var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('soldier');
 var g = load(['src/rules', 'src/core', 'src/r3d', 'src/sprites', 'src/render3d/forest3d.js',
-              'src/render3d/soldier3d.js']);
+              'src/render3d/soldier3d.js', 'src/render3d/crawl3d.js']);
 var INF = g.RTS_UNITS.filter(function (u) { return u.kind === 'infantry' && u.key !== 'dog'; }).map(function (u) { return u.key; });
 
 function box(faces) {
@@ -78,7 +78,7 @@ S.ok('striding puts the feet further apart than standing', Math.max(spread[1], s
 var s1 = soles('tanya', 1), s3 = soles('tanya', 3);
 S.ok('...and in the two halves of the stride the other foot leads', (s1[0][0] - s1[1][0]) * (s3[0][0] - s3[1][0]) < 0,
      'left sole minus right, along the facing: ' + (s1[0][0] - s1[1][0]).toFixed(2) + ' then ' + (s3[0][0] - s3[1][0]).toFixed(2));
-S.eq('prone is left to the sprite model', g._r3dSoldierModel('rifle', 'player', true, 0), null);
+S.ok('prone has a model of its own too (crawl3d.js; unit/motion)', !!g._r3dSoldierModel('rifle', 'player', true, 0));
 S.eq('...and so is the dog', g._r3dSoldierModel('dog', 'player', false, 0), null);
 
 var walker = { path: [{ x: 1, z: 1 }], gait: 0 }, other = { path: [{ x: 1, z: 1 }], gait: 3 }, seen = {}, apart = 0;

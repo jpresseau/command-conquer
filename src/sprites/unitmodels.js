@@ -38,6 +38,21 @@ var RTS_INF_KIT = {
   tanya:     { body:['#c4bca4','#e0d8bc'], top:'#a8452a', prop:'#2b3038' }
 };
 
+/* HOW FAR ROUND THE RUNNING GEAR HAS TURNED, 0 to 1 - set by the 3D renderer for the length of
+   one model build (render3d/unit3d.js) and null everywhere else, so every sprite is the model it
+   always was. One turn of it moves the track two links back and turns the sprocket two teeth
+   and the wheel nuts one, which brings every one of them back onto the pattern it started on -
+   given an even run of links, which a 3D build rounds up to, since the links alternate in
+   colour; _SPR_ROLL_LEN is how far, in model units, the vehicle rolls for it. */
+var _SPR_ROLL = null, _SPR_ROLL_LEN = 0, _SPR_ROLL_KIND = null;   /* 'track' or 'wheel' */
+/* Where link k of a run of `links` sits along a track `len` long, `roll` of the way round: the
+   bottom run stays on the ground while the hull goes forward, so against the hull it runs BACK,
+   and a link that runs off the rear comes in again at the front. */
+function _sprLinkX(k, links, len, roll) {
+  var u = ((k + 0.5 - 2 * roll) % links + links) % links;
+  return -len / 2 + u * (len / links);
+}
+
 /* part: undefined = the whole unit, 'hull' = body only, 'turret' = turret only. Hull and
    turret bake into the same size canvas about the same origin, so drawing one over the other
    at the same screen position lines them up with no per-facing offset table. */
@@ -76,9 +91,11 @@ function _sprUnitModel(key, side, prone, part) {
         _r3Box(m, 0, rad * 1.62, z, len - rad * 0.8, rad * 0.42, rad * 1.86, DK[1], DK[2]);
         /* LINKS, not a belt. A row of narrow plates across the bottom run is what tells the
            eye this is a track and not a skid, and it reads at any zoom. */
-        var links = Math.max(8, Math.round(len / (rad * 0.72)));
+        var links = Math.max(8, Math.round(len / (rad * 0.72))), rl = _SPR_ROLL || 0;
+        if (_SPR_ROLL !== null && links % 2) links++;
+        if (!_SPR_ROLL_LEN) { _SPR_ROLL_LEN = 2 * len / links; _SPR_ROLL_KIND = 'track'; }
         for (k = 0; k < links; k++) {
-          wx = -len / 2 + (k + 0.5) * (len / links);
+          wx = _sprLinkX(k, links, len, rl);
           _r3Box(m, wx, rad * 0.02, z, len / links * 0.62, rad * 0.62, rad * 2.16,
                  (k % 2) ? DK[1] : DK[0], DK[2]);
         }
@@ -88,7 +105,7 @@ function _sprUnitModel(key, side, prone, part) {
         _r3Wheel(m, len / 2 - rad * 1.05, rad * 1.05, z, rad * 1.08, rad * 1.7, 'z',
                  DK[2], DK[3], 22);
         for (k = 0; k < 9; k++) {                                            /* sprocket teeth */
-          ta = (k / 9) * Math.PI * 2;
+          ta = (k - 2 * rl) / 9 * Math.PI * 2;
           _r3Box(m, len / 2 - rad * 1.05 + Math.cos(ta) * rad * 1.12,
                  rad * 1.05 + Math.sin(ta) * rad * 1.12,
                  z, rad * 0.32, rad * 0.32, rad * 1.8, DK[3], DK[2]);
@@ -103,13 +120,14 @@ function _sprUnitModel(key, side, prone, part) {
       /* the road wheels themselves - bigger and tyred on a wheeled hull, small and steel on a
          tracked one, which is most of what separates a truck from a tank at a glance */
       var wr = wheeled ? rad * 1.35 : rad * 0.95, wt = wheeled ? rad * 1.5 : rad * 1.68;
+      if (wheeled && !_SPR_ROLL_LEN) { _SPR_ROLL_LEN = wr * Math.PI * 2 / 5; _SPR_ROLL_KIND = 'wheel'; }
       for (k = 0; k < wheels; k++) {
         wx = (k - (wheels - 1) / 2) * step;
         _r3Wheel(m, wx, wr * 0.92, z, wr, wt, 'z', wheeled ? DK[0] : ((k % 2) ? DK[2] : DK[1]),
                  wheeled ? DK[1] : DK[3], 20);
         _r3Wheel(m, wx, wr * 0.92, z, wr * (wheeled ? 0.52 : 0.42), wt * 1.1, 'z', S[1], S[2], 16);
         if (wheeled) for (var b2 = 0; b2 < 5; b2++) {                        /* wheel nuts */
-          ta = (b2 / 5) * Math.PI * 2;
+          ta = (b2 - (_SPR_ROLL || 0)) / 5 * Math.PI * 2;
           _r3Box(m, wx + Math.cos(ta) * wr * 0.3, wr * 0.92 + Math.sin(ta) * wr * 0.3, z,
                  wr * 0.13, wr * 0.13, wt * 1.14, S[2], S[3]);
         }

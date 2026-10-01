@@ -196,6 +196,18 @@ function _rtsKill(e) {
       }
       /* "Very strong units that have an explosion will also rock the screen." */
       if (ud.hp > 400) G.shake = Math.min(1, G.shake + 0.12);
+      /* AND IT COMES APART: wreckage thrown out of the blast, bouncing - as a building's does, a
+         few pieces for a light vehicle, more for a heavy one. Its own generator off the id, as the
+         building's is, so the game's stream does not move (tick.js flies them). Not from a hull
+         afloat, which goes down rather than up. */
+      if (!ud.sea && !e.air) {
+        var vrn = _rtsRngMake((e.id * 6151) >>> 0), vn = 3 + Math.min(5, Math.round(ud.hp / 150));
+        for (var vk = 0; vk < vn; vk++) {
+          var va = vrn() * 6.283, vs = 3 + vrn() * 9;
+          G.fx.push({ kind:'debris', x:e.x, y:1 + vrn() * 1.5, z:e.z, t:0,
+            vx:Math.cos(va) * vs, vz:Math.sin(va) * vs, vy:6 + vrn() * 8, big:0.4 + vrn() * 0.5 });
+        }
+      }
       /* The wreck burns. An UNATTACHED ladder fire - no `att`, so it damages nothing and
          nothing owns it - that burns itself down through the existing chain: ~4s of flame
          guttering into ~7s of smoke. It is what makes ground where a battle just happened

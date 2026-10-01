@@ -114,6 +114,30 @@ function _rtsTeamDoMission(t, dt) {
       return 'ok';
     }
 
+    /* SYNC (ours, not TEAMTYPE.CPP's): hold at the staging waypoint until every other team that
+       is on its way to a sync of its own has arrived at it, so the front and the flank go in
+       together instead of one after the other into a base that has turned to face the first.
+       Only a team that is really marching (full strength once) is waited for, and never for
+       longer than RTS_SYNC_WAIT - a partner that is stuck or dead must not pin the attack. */
+    if (mis === 'sync') {
+      if (t.syncAt == null) t.syncAt = G.t;
+      var waitFor = 0;
+      for (var oid in G.teams) {
+        var o = G.teams[oid], L = o.type.missions;
+        if (o === t || !o.hasBeen || !L || !o.members.length) continue;
+        for (var k = (o.cur | 0); k < L.length; k++) if (L[k][0] === 'sync') { if (k > (o.cur | 0)) waitFor++; break; }
+      }
+      if (!waitFor || G.t - t.syncAt > RTS_SYNC_WAIT) { t.syncAt = null; t.synced = G.t; _rtsTeamAdvance(t); continue; }
+      var sw = _rtsWayptPos(arg);
+      _rtsTeamOrderAll(t, function (mm, idx) {
+        if (mm.target && !mm.target.dead) return;                  /* shoot what comes */
+        var off = _rtsTeamSpread(idx);
+        if (sw && Math.hypot(mm.x - sw.x - off.x, mm.z - sw.z - off.z) > RTS_TILE * 2 && mm.order !== 'move') _rtsOrderMove(mm, sw.x + off.x, sw.z + off.z);
+        else if (!mm.path && mm.order !== 'hold') { mm.order = 'hold'; mm.goal = null; }
+      });
+      return 'ok';
+    }
+
     if (mis === 'move' || mis === 'patrol') {
       var w = _rtsWayptPos(arg);
       if (!w) { _rtsTeamAdvance(t); continue; }

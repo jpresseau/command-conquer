@@ -121,3 +121,15 @@ var R3D_WAVE_VGLSL_LIT = (function () {
     '    col += vec3(0.10, 0.13, 0.15) * smoothstep(0.45, 1.0, hh);' +
     '  }';
 })();
+
+/* THE SAME SWELL, ASKED FROM HERE - the height and slope of the sea at (x, z) at clock t, in
+   world units, from the same table the shaders are built from. A ship rides it
+   (render3d/unit3d.js), so a hull and the water it sits in heave together. */
+function _r3dSwellAt(x, z, t) {
+  var h = 0, dx = 0, dz = 0;
+  for (var i = 0; i < R3D_WAVE.length; i++) {
+    var w = R3D_WAVE[i], q = x * w[0] + z * w[1] + t * w[2], c = Math.cos(q) * w[3];
+    h += Math.sin(q) * w[3]; dx += c * w[0]; dz += c * w[1];
+  }
+  return { h: h * R3D_WAVE_AMP, dx: dx * R3D_WAVE_AMP, dz: dz * R3D_WAVE_AMP };
+}

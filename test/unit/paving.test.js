@@ -2,7 +2,8 @@
 
    The 3D ground is materials now, and one of them belongs to the ground map rather than to the
    terrain: PAVED, laid under and round every building, so a base stands on a cobbled plaza with
-   streets running out of it while the roads out in the country stay dirt tracks. The rule has
+   streets running out of it, while out in the country a road's cells are its dirt shoulder
+   and the carriageway is painted down its line (render3d/road3d.js). The rule has
    three parts and each can quietly go wrong: the plaza (footprint and a ring), the streets (road
    near a building), and what is never paved (water, forest, rock - and anything round a wall,
    which is a line, not a base). e2e/terrainmat checks the picture; this holds the rule. */
@@ -11,7 +12,7 @@ var { Suite } = require('../lib/assert.js');
 var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('paving');
-var g = load(['src/rules', 'src/core', 'src/render3d/noise3d.js', 'src/render3d/terrain3d.js']);
+var g = load(['src/rules', 'src/core', 'src/render3d/noise3d.js', 'src/render3d/road3d.js', 'src/render3d/terrain3d.js']);
 var N = g.RTS_N;
 
 function world(fill) {
