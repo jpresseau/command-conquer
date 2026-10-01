@@ -87,6 +87,16 @@ async function openPage(browser, opts) {
       window.__glStubbed = true;
     });
   }
+  /* THE GRAPHICS TIER IS PINNED TO HIGH, for the same reason the renderer is (see start below):
+     AUTO steps down while frames are slow (render3d/quality3d.js), and this software rasteriser
+     draws one in about 0.6 s, so left to AUTO every spec with a live loop would be grading the
+     LOW picture - no shadows, no post stack - without a word about it. opts.quality says otherwise:
+     'auto' leaves the player's default in place; e2e/quality drives it with frame times of its own. */
+  if (opts.quality !== 'auto') {
+    await page.addInitScript(function (q) {
+      try { window.localStorage.setItem('rtsGfxQ', q); } catch (e) {}
+    }, opts.quality || 'high');
+  }
   await page.goto(s.url, { waitUntil: 'load' });
   await page.waitForFunction(function () { return typeof window.rtsOpen === 'function'; });
   return {

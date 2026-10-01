@@ -84,6 +84,12 @@ function _rtsLoop(prime) {
   U.raf = requestAnimationFrame(_rtsLoop);
   var now = (new Date()).getTime(), dt = Math.min(0.1, (now - U.last) / 1000);
   U.last = now;
+  /* the frame's own clock, for the readout's breakdown and for AUTO (render3d/quality3d.js) */
+  var pc = window.performance || Date, p0 = pc.now(), pf = U.prof || (U.prof = {});
+  if (U.pl) _r3dQualityFeed(p0 - U.pl, p0);
+  pf.gap = (pf.gap || 0) * 0.95 + (U.pl ? p0 - U.pl : 0) * 0.05;
+  U.pl = p0;
+  function mark(k) { var t = pc.now(); pf[k] = (pf[k] || 0) * 0.95 + (t - p0) * 0.05; p0 = t; }
   try {
     _rtsPanTick(dt);
     _rtsZoomTick(dt);                  /* the smooth zoom gliding in - ui/navigate.js */
@@ -161,12 +167,15 @@ function _rtsLoop(prime) {
         }
       }
     }
+    mark('sim');
     _rtsRFrame(dt);
+    mark('draw');
     _rtsDrawHud(dt);
     U.miniT = (U.miniT || 0) + dt;
     if (U.miniT > 0.12) { U.miniT = 0; _rtsDrawMini(); }
     U.uiT = (U.uiT || 0) + dt;
     if (U.uiT > 0.1) { U.uiT = 0; _rtsSyncSidebar(); _rtsSuperRow(); }
+    mark('ui');
     U.drawErrs = 0;
   } catch (err) {
     /* The other half: the renderer, the HUD or the sidebar threw. Nothing here can paint an

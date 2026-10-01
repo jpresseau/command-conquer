@@ -130,6 +130,12 @@ function _r3dOreTex(G) {
   var R3 = window._R3D, gl = R3.gl, N = RTS_N, i;
   var oh = _r3dOreHash(G);
   if (R3.oreTex && R3.oreHash === oh && R3.oreTexFor === G) return;
+  /* A HARVESTER CHANGES THE FIELD EVERY TICK IT MINES, and each change was a 64 KB upload -
+     every frame of a match with a harvester working. The stain fades over seconds, so four
+     times a second shows every step of it; a new match still uploads at once. */
+  var now = G.t || 0;
+  if (R3.oreTex && R3.oreTexFor === G && now >= (R3.oreT || 0) && now - (R3.oreT || 0) < 0.25) return;
+  R3.oreT = now;
   R3.oreHash = oh; R3.oreTexFor = G;
   if (!R3.oreCv) {
     R3.oreCv = document.createElement('canvas');
@@ -358,6 +364,14 @@ function _r3dGroundMesh(R3, gl, vb, EXT) {
   while ((t1x - t0x) / gstep * ((t1z - t0z) / gstep) > 4200 && gstep < 8) gstep *= 2;
   /* snap the origin to the step so the quads keep their phase as the camera pans */
   t0x -= t0x % gstep; t0z -= t0z % gstep;
+  /* THE SAME PATCH IS THE SAME PATCH. It was rebuilt and uploaded every frame - 740 KB of
+     vertices, normals and texture coordinates, and every height sampled twice over - whether
+     or not the camera had moved a cell. The heights are fixed for a match (core/terrain.js
+     writes them once), so the patch only changes when the cells it spans or its step do, or the
+     match does. On a phone that upload was a steady tax on the bus and on the CPU building it. */
+  var key = t0x + ',' + t1x + ',' + t0z + ',' + t1z + ',' + gstep, Gm = window._rtsG;
+  if (R3.groundKey === key && R3.groundFor === Gm && R3.groundVerts) return;
+  R3.groundKey = key; R3.groundFor = Gm;
   var nqx = Math.ceil((t1x - t0x) / gstep), nqz = Math.ceil((t1z - t0z) / gstep);
   var need = nqx * nqz * 18;
   if (!R3.groundBuf) { R3.groundBuf = gl.createBuffer(); R3.groundUV = gl.createBuffer(); }

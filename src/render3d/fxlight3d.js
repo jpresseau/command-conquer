@@ -44,7 +44,7 @@ function _r3dFxLightOf(f, V) {
 function _r3dFxLightSet(gl, R3, G, P) {
   /* R3.plightAmt takes the light out and leaves the rest, as R3.aoAmt does the occlusion */
   var V = { t: G.t || 0, ground: _rtsElev }, L = [], i, amt = R3.plightAmt === undefined ? 1 : R3.plightAmt;
-  for (i = 0; G.fx && i < G.fx.length; i++) {
+  for (i = 0; G.fx && (typeof _r3dQ !== 'function' || _r3dQ('lights')) && i < G.fx.length; i++) {
     var l = _r3dFxLightOf(G.fx[i], V);
     if (l && l[4] > 0.02) L.push(l);
   }

@@ -599,7 +599,7 @@
 #rcgRts #rtsGfxOut{position:absolute;left:6px;top:6px;z-index:9;display:none;pointer-events:none;
   font:11px/1.4 ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums;
   color:#bfe9ff;background:rgba(6,10,14,.72);border:1px solid #2b4657;border-radius:4px;
-  padding:3px 6px;white-space:nowrap}
+  padding:3px 6px;white-space:pre-wrap;max-width:calc(100% - 60px)}
 #rcgRts .rts-btns #rtsGfxBtn{font-size:10px;font-weight:700;letter-spacing:.5px}
 #rcgRts .rts-btns #rtsGfxBtn.on{color:#7fd0ff;border-color:#3f7fd0}
 /* The 3D camera's compass (ui/orbit.js): top right of the battlefield, under the top bar. Its

@@ -108,7 +108,7 @@ function _r3dResolve(R3) {
      picture - the buffer has no multisampling, so a postReady A/B measures the occlusion and
      the lost antialiasing added together and cannot tell which is which. */
   gl.uniform1f(gl.getUniformLocation(R3.aoResolveP, 'uAOAmt'),
-               R3.aoAmt === undefined ? 1 : R3.aoAmt);
+               !_r3dQ('ao') ? 0 : R3.aoAmt === undefined ? 1 : R3.aoAmt);   /* no pass, no occlusion */
   /* R3.aaAmt, for the same reason as R3.aoAmt: the edge filter and the occlusion are separate
      claims and a spec has to be able to grade one without the other moving. */
   gl.uniform1f(gl.getUniformLocation(R3.aoResolveP, 'uAA'),
@@ -117,7 +117,7 @@ function _r3dResolve(R3) {
   var postOn = typeof RTS_POST_ON === 'undefined' || RTS_POST_ON;
   gl.uniform1f(gl.getUniformLocation(R3.aoResolveP, 'uGrade'),
                postOn ? (R3.gradeAmt === undefined ? 1 : R3.gradeAmt) : 0);
-  _r3dHeatSet(gl, R3, R3.aoResolveP, postOn);
+  _r3dHeatSet(gl, R3, R3.aoResolveP, postOn && _r3dQ('heat'));
   /* The glow. R3.bloomOn is set by _r3dBloomPass for this frame only; with nothing burning the
      amount is zero and the sampler still needs a bound texture, so it gets the AO one - a
      texture multiplied by zero, rather than a branch in the shader every pixel. */

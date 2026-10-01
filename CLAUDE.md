@@ -114,6 +114,12 @@ Keep them small: if a file passes ~500 lines it wants splitting along its own ba
   on the CPU go through `_rtsWorldToScreen`/`_rtsGroundAt`, `_r3dToCam`/`_r3dFromCam`, and
   `_r3dBoundsNear`/`_r3dDepthKey` for "near" and "far". Never read world z as depth or world x
   as across.
+- **Graphics tiers (`render3d/quality3d.js`): gate the PASS with `_r3dQ(k)`, not an `*Amt`
+  knob** - the knobs zero an effect for specs and still pay for it. The harness pins HIGH
+  (`test/lib/game.js`); `e2e/quality` drives AUTO with its own frame times and counts sync calls,
+  draws and uploads. **A steady frame must make no synchronous GL call** (`checkFramebufferStatus`,
+  `getError`, `readPixels`, ...): each one stalls the CPU on the GPU. The GFX readout's second
+  line is the per-phase breakdown - read it on the device, not here.
 - `src/rts.audio.js` — all sound, synthesized at runtime with WebAudio. No sampled assets.
   `src/rts.sound.js` maps events to it; `src/rts.store.js`, `src/rts.save.js`, `src/rts.editor.js`.
 - `src/title.js` — the standalone shell: title screen, difficulty picker, file pickers, RESUME

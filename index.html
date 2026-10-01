@@ -610,7 +610,7 @@
 #rcgRts #rtsGfxOut{position:absolute;left:6px;top:6px;z-index:9;display:none;pointer-events:none;
   font:11px/1.4 ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums;
   color:#bfe9ff;background:rgba(6,10,14,.72);border:1px solid #2b4657;border-radius:4px;
-  padding:3px 6px;white-space:nowrap}
+  padding:3px 6px;white-space:pre-wrap;max-width:calc(100% - 60px)}
 #rcgRts .rts-btns #rtsGfxBtn{font-size:10px;font-weight:700;letter-spacing:.5px}
 #rcgRts .rts-btns #rtsGfxBtn.on{color:#7fd0ff;border-color:#3f7fd0}
 /* The 3D camera's compass (ui/orbit.js): top right of the battlefield, under the top bar. Its
@@ -957,7 +957,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">a434bd7 · 2026-09-30</div>
+  <div id="rtsBuild" title="build">f112012 · 2026-10-01</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -5361,6 +5361,8 @@ var R3_DETAIL_3D = 2;
    whose device cannot take it should not have to edit a constant to say so. */
 function _r3dDetailLevel() {
   var want = (typeof _rtsGfxWant === 'function') ? _rtsGfxWant() : null;
+  var R3 = window._R3D;
+  if (R3 && R3.q && !R3.q.detail) return 1;         /* the LOW tier: render3d/quality3d.js */
   return (want && want <= 2) ? 1 : R3_DETAIL_3D;
 }
 var _R3_DETAIL = 1;
@@ -23024,7 +23026,7 @@ function _r3dFxLightOf(f, V) {
 function _r3dFxLightSet(gl, R3, G, P) {
   /* R3.plightAmt takes the light out and leaves the rest, as R3.aoAmt does the occlusion */
   var V = { t: G.t || 0, ground: _rtsElev }, L = [], i, amt = R3.plightAmt === undefined ? 1 : R3.plightAmt;
-  for (i = 0; G.fx && i < G.fx.length; i++) {
+  for (i = 0; G.fx && (typeof _r3dQ !== 'function' || _r3dQ('lights')) && i < G.fx.length; i++) {
     var l = _r3dFxLightOf(G.fx[i], V);
     if (l && l[4] > 0.02) L.push(l);
   }
@@ -23359,7 +23361,7 @@ function _r3dCloudSet(gl, R3, P) {
   var u = gl.getUniformLocation(P, 'uCloud');
   if (!u) return;
   var c = R3.sunC || [0, 0, 0], G = window._rtsG;
-  var amt = R3.cloudAmt === undefined ? 1 : R3.cloudAmt;
+  var amt = (typeof _r3dQ === 'function' && !_r3dQ('clouds')) ? 0 : R3.cloudAmt === undefined ? 1 : R3.cloudAmt;
   var t = (G && G.t) || 0;
   gl.uniform4f(u, c[0] * R3D_SUN.r[0] + c[1] * R3D_SUN.r[1] + c[2] * R3D_SUN.r[2],
                   c[0] * R3D_SUN.u[0] + c[1] * R3D_SUN.u[1] + c[2] * R3D_SUN.u[2],
@@ -23627,12 +23629,115 @@ function _r3dShadowBind(P, unit) {
   gl.uniform3fv(gl.getUniformLocation(P, 'uSunF'), R3D_SUN.f);
   gl.uniform3fv(gl.getUniformLocation(P, 'uSunC'), R3.sunC || [0, 0, 0]);
   gl.uniform2f(gl.getUniformLocation(P, 'uSunSpan'), R3.sunSpan || 64, R3D_SHADOW_RANGE);
-  gl.uniform1f(gl.getUniformLocation(P, 'uShadowOn'), R3.shadowReady ? 1 : 0);
+  gl.uniform1f(gl.getUniformLocation(P, 'uShadowOn'), R3.shadowReady && _r3dQ('shadow') ? 1 : 0);
   _r3dCloudSet(gl, R3, P);
   gl.activeTexture(gl.TEXTURE0 + unit);
   gl.bindTexture(gl.TEXTURE_2D, R3.shadowTex);
   gl.uniform1i(gl.getUniformLocation(P, 'uShadowMap'), unit);
   gl.activeTexture(gl.TEXTURE0);
+}
+</script>
+<script>/* render3d/quality3d.js - how much the 3D mode draws, by device. Part of rts.render3d.
+
+   EVERY EFFECT HERE HAS A KNOB THAT TAKES IT OUT OF THE PICTURE (R3.aoAmt and the rest), AND
+   NONE OF THEM SAVES A MILLISECOND: they zero an amount so a spec can grade the effect, and the
+   pass still runs. A phone that cannot keep up needs the passes themselves not to run. So:
+
+     HIGH     everything, at the device's own resolution
+     MEDIUM   no occlusion pass, no heat haze, no cloud shade; the buffer at most 2 device px a CSS px
+     LOW      no shadow pass, no post stack at all (occlusion, bloom, heat, edge filter, grade), no
+              silhouettes, no firelight; 1.5 px a CSS px; the coarser meshes (r3d/curves.js)
+     AUTO     starts HIGH and steps down while the frame is slow - and KEEPS a step only if it
+              paid. A phone held at 30 by its own power saving is slow whatever this draws, and a
+              controller that stepped down on frame time alone would take it to LOW for nothing.
+              So each step is a trial (_r3dQualityFeed): the next window's frame time has to beat
+              the last by R3D_Q_GAIN or the step is undone and AUTO stops trying.
+
+   The tier is the player's (ui/gfxstat.js: the GFX button), kept per device. The harness pins
+   HIGH (test/lib/game.js), because its software rasteriser draws a frame in about 0.6 s and
+   AUTO would otherwise take every spec's picture down to LOW; e2e/quality drives AUTO with
+   frame times of its own. */
+
+var R3D_TIERS = [
+  { name: 'HIGH',   scale: 4,   shadow: 1, post: 1, ao: 1, heat: 1, clouds: 1, sil: 1, lights: 1, detail: 1 },
+  { name: 'MEDIUM', scale: 2,   shadow: 1, post: 1, ao: 0, heat: 0, clouds: 0, sil: 1, lights: 1, detail: 1 },
+  { name: 'LOW',    scale: 1.5, shadow: 0, post: 0, ao: 0, heat: 0, clouds: 0, sil: 0, lights: 0, detail: 0 }
+];
+var RTS_GFXQ_LS = 'rtsGfxQ';            /* 'auto' (or unset), 'high', 'medium', 'low' */
+var R3D_Q_WINDOW = 2500;                /* ms of frames AUTO judges at a time */
+var R3D_Q_SLOW = 26;                    /* ms: a median frame slower than this is worth a step down */
+var R3D_Q_FAST = 17.5;                  /* ms: ...and faster than this, for three windows, a step up */
+var R3D_Q_GAIN = 0.85;                  /* a step down is kept only if it takes the frame below this share */
+var R3D_Q_SETTLE = 4000;                /* ms after a match opens before AUTO judges anything */
+
+/* Is this part of the frame drawn at the current tier? True when no tier is set at all. */
+function _r3dQ(k) {
+  var R3 = window._R3D, q = R3 && R3.q;
+  return !q || q[k] !== 0;
+}
+
+/* What the player chose: 'auto', 'high', 'medium' or 'low'. */
+function _r3dQualityWant() {
+  var v = null;
+  try { v = window.localStorage.getItem(RTS_GFXQ_LS); } catch (e) { v = null; }
+  return (v === 'high' || v === 'medium' || v === 'low') ? v : 'auto';
+}
+function _r3dQualitySetWant(v) {
+  try {
+    if (v && v !== 'auto') window.localStorage.setItem(RTS_GFXQ_LS, v);
+    else window.localStorage.removeItem(RTS_GFXQ_LS);
+  } catch (e) {}
+  var R3 = window._R3D;
+  if (R3) { R3.qAuto = null; _r3dQualityApply(v === 'medium' ? 1 : v === 'low' ? 2 : 0); }
+}
+
+/* Put tier `lvl` in force: the switches, the buffer's size, and - when it changes - the meshes. */
+function _r3dQualityApply(lvl) {
+  var R3 = window._R3D;
+  if (!R3) return;
+  lvl = Math.max(0, Math.min(R3D_TIERS.length - 1, lvl | 0));
+  var was = R3.q, q = R3D_TIERS[lvl];
+  R3.q = q; R3.qLevel = lvl;
+  if (was && was.detail !== q.detail) R3.mesh = {};    /* rebuilt at the new tessellation on sight */
+  if (R3.cv && typeof _r3dResize === 'function') { R3.scale = -1; _r3dResize(); }
+}
+
+/* AUTO, a frame at a time: `dt` is the ms since the last frame, `now` the clock. */
+function _r3dQualityFeed(dt, now) {
+  var R3 = window._R3D;
+  if (!R3 || !R3.on || _r3dQualityWant() !== 'auto' || !(dt > 0) || dt > 250) return;
+  var A = R3.qAuto || (R3.qAuto = { t0: now + R3D_Q_SETTLE, s: [], fast: 0, trial: null, locked: false });
+  if (R3.q === undefined || R3.q === null) _r3dQualityApply(0);
+  if (now < A.t0) return;
+  A.s.push(dt);
+  if (now - A.t0 < R3D_Q_WINDOW) return;
+  var s = A.s.slice().sort(function (a, b) { return a - b; }), med = s[s.length >> 1];
+  A.s.length = 0; A.t0 = now; A.last = med;
+  var lvl = R3.qLevel || 0;
+  if (A.trial) {
+    /* the verdict on the last step: kept if it paid, undone if not - and then AUTO stops */
+    if (A.trial.down && !(med < A.trial.base * R3D_Q_GAIN)) { _r3dQualityApply(A.trial.from); A.locked = true; }
+    else if (!A.trial.down && med > R3D_Q_SLOW) { _r3dQualityApply(A.trial.from); A.locked = true; }
+    A.trial = null;
+    return;
+  }
+  if (A.locked) return;
+  if (med > R3D_Q_SLOW && lvl < R3D_TIERS.length - 1) {
+    A.trial = { from: lvl, base: med, down: true }; A.fast = 0;
+    _r3dQualityApply(lvl + 1);
+  } else if (med < R3D_Q_FAST && lvl > 0) {
+    if (++A.fast >= 3) { A.trial = { from: lvl, base: med, down: false }; A.fast = 0; _r3dQualityApply(lvl - 1); }
+  } else A.fast = 0;
+}
+
+/* WHERE A FRAME GOES, for the GFX readout (ui/gfxstat.js). `k` names the phase that has just
+   ended, null starts the frame. JavaScript time only - what the CPU spent building and
+   submitting each part - which is the half a phone's frame rate can be held by and the half this
+   harness can measure; the GPU's half shows as the readout's `wait`. Smoothed over ~20 frames. */
+function _r3dMark(R3, k) {
+  var t = (window.performance || Date).now();
+  if (k && R3.pm) { var P = R3.prof || (R3.prof = {}); P[k] = (P[k] || 0) * 0.95 + (t - R3.pm) * 0.05; }
+  R3.pm = t;
 }
 </script>
 <script>/* render3d/cam3d.js - which way the 3D camera faces, and how far it leans. Part of
@@ -24246,6 +24351,8 @@ function _r3dApply(on, quiet) {
     return false;
   }
   R3.on = !!on;
+  /* the tier the player chose, or AUTO's starting one (render3d/quality3d.js) */
+  if (!R3.q) { var qw = _r3dQualityWant(); _r3dQualityApply(qw === 'medium' ? 1 : qw === 'low' ? 2 : 0); }
   /* ADOPTION, because the shell rebuilds its DOM every match while this canvas - and the GL
      context, buffers and textures that live on it - persists across them. From the second
      match on, R3.cv is a DETACHED element and the #rtsCv3d in the document is a fresh blank
@@ -24336,7 +24443,8 @@ function _r3dResize() {
      device at every resolution it can show - see ui/gfxstat.js. Still bounded by dpr: a buffer
      larger than the screen is pure cost. */
   var pin = (typeof _rtsGfxWant === 'function') ? _rtsGfxWant() : null;
-  R3.scale = pin ? Math.min(dpr, pin) : Math.min(dpr, R3D_MAX_SCALE);
+  /* ...and the tier's own ceiling, when no pin is set (render3d/quality3d.js) */
+  R3.scale = pin ? Math.min(dpr, pin) : Math.min(dpr, R3D_MAX_SCALE, (R3.q && R3.q.scale) || R3D_MAX_SCALE);
   /* The CSS box tracks the presentation canvas's, so the presented layer always fills the
      stage whatever the buffer scale. Off the overlay's inline style rather than layout, for
      the same reason as the buffer size above - and string-compared, because this runs every
@@ -24709,7 +24817,8 @@ function _r3dPostEnd(R3, cam, invD) {
   gl.disable(gl.BLEND);
   gl.depthMask(false);
 
-  /* --- occlusion, at half resolution --- */
+  /* --- occlusion, at half resolution: not drawn at all below HIGH (render3d/quality3d.js) --- */
+  if (_r3dQ('ao')) {
   gl.bindFramebuffer(gl.FRAMEBUFFER, R3.aoFbo);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, R3.aoTex, 0);
   gl.viewport(0, 0, R3.aoW, R3.aoH);
@@ -24735,6 +24844,7 @@ function _r3dPostEnd(R3, cam, invD) {
     gl.uniform2f(gl.getUniformLocation(R3.aoBlurP, 'uDir'), i ? 0 : 1, i ? 1 : 0);
     gl.bindTexture(gl.TEXTURE_2D, src);
     _r3dQuad(R3, R3.aoBlurP);
+  }
   }
 
   /* --- and onto the canvas: render3d/resolve3d.js --- */
@@ -24913,7 +25023,7 @@ function _r3dResolve(R3) {
      picture - the buffer has no multisampling, so a postReady A/B measures the occlusion and
      the lost antialiasing added together and cannot tell which is which. */
   gl.uniform1f(gl.getUniformLocation(R3.aoResolveP, 'uAOAmt'),
-               R3.aoAmt === undefined ? 1 : R3.aoAmt);
+               !_r3dQ('ao') ? 0 : R3.aoAmt === undefined ? 1 : R3.aoAmt);   /* no pass, no occlusion */
   /* R3.aaAmt, for the same reason as R3.aoAmt: the edge filter and the occlusion are separate
      claims and a spec has to be able to grade one without the other moving. */
   gl.uniform1f(gl.getUniformLocation(R3.aoResolveP, 'uAA'),
@@ -24922,7 +25032,7 @@ function _r3dResolve(R3) {
   var postOn = typeof RTS_POST_ON === 'undefined' || RTS_POST_ON;
   gl.uniform1f(gl.getUniformLocation(R3.aoResolveP, 'uGrade'),
                postOn ? (R3.gradeAmt === undefined ? 1 : R3.gradeAmt) : 0);
-  _r3dHeatSet(gl, R3, R3.aoResolveP, postOn);
+  _r3dHeatSet(gl, R3, R3.aoResolveP, postOn && _r3dQ('heat'));
   /* The glow. R3.bloomOn is set by _r3dBloomPass for this frame only; with nothing burning the
      amount is zero and the sampler still needs a bound texture, so it gets the AO one - a
      texture multiplied by zero, rather than a branch in the shader every pixel. */
@@ -25069,7 +25179,14 @@ function _r3dBloomPass(R3, G, cam, invD) {
   /* The SCENE's depth, tested and never written - depthMask stays false through the draw, so
      nothing here can disturb the buffer the occlusion pass is about to read. */
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, R3.sceneDepth, 0);
-  if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+  /* ONCE PER PAIR OF ATTACHMENTS, NOT ONCE A FRAME. checkFramebufferStatus is a synchronous
+     question to the GPU process: the page waits until everything queued so far has been done,
+     so asked every frame it stopped the CPU building frame N+1 while the GPU drew frame N - on
+     the one pass that runs whenever anything is burning. Completeness can only change when an
+     attachment does, so it is asked when they do (e2e/quality counts the round trips). */
+  var fresh = R3.bloomChkE !== R3.emitTex || R3.bloomChkD !== R3.sceneDepth;
+  if (fresh) { R3.bloomChkOk = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE; R3.bloomChkE = R3.emitTex; R3.bloomChkD = R3.sceneDepth; }
+  if (!R3.bloomChkOk) {
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, null, 0);
     gl.bindFramebuffer(gl.FRAMEBUFFER, R3.sceneFbo);
     gl.viewport(0, 0, R3.postW, R3.postH);
@@ -25665,6 +25782,12 @@ function _r3dOreTex(G) {
   var R3 = window._R3D, gl = R3.gl, N = RTS_N, i;
   var oh = _r3dOreHash(G);
   if (R3.oreTex && R3.oreHash === oh && R3.oreTexFor === G) return;
+  /* A HARVESTER CHANGES THE FIELD EVERY TICK IT MINES, and each change was a 64 KB upload -
+     every frame of a match with a harvester working. The stain fades over seconds, so four
+     times a second shows every step of it; a new match still uploads at once. */
+  var now = G.t || 0;
+  if (R3.oreTex && R3.oreTexFor === G && now >= (R3.oreT || 0) && now - (R3.oreT || 0) < 0.25) return;
+  R3.oreT = now;
   R3.oreHash = oh; R3.oreTexFor = G;
   if (!R3.oreCv) {
     R3.oreCv = document.createElement('canvas');
@@ -25893,6 +26016,14 @@ function _r3dGroundMesh(R3, gl, vb, EXT) {
   while ((t1x - t0x) / gstep * ((t1z - t0z) / gstep) > 4200 && gstep < 8) gstep *= 2;
   /* snap the origin to the step so the quads keep their phase as the camera pans */
   t0x -= t0x % gstep; t0z -= t0z % gstep;
+  /* THE SAME PATCH IS THE SAME PATCH. It was rebuilt and uploaded every frame - 740 KB of
+     vertices, normals and texture coordinates, and every height sampled twice over - whether
+     or not the camera had moved a cell. The heights are fixed for a match (core/terrain.js
+     writes them once), so the patch only changes when the cells it spans or its step do, or the
+     match does. On a phone that upload was a steady tax on the bus and on the CPU building it. */
+  var key = t0x + ',' + t1x + ',' + t0z + ',' + t1z + ',' + gstep, Gm = window._rtsG;
+  if (R3.groundKey === key && R3.groundFor === Gm && R3.groundVerts) return;
+  R3.groundKey = key; R3.groundFor = Gm;
   var nqx = Math.ceil((t1x - t0x) / gstep), nqz = Math.ceil((t1z - t0z) / gstep);
   var need = nqx * nqz * 18;
   if (!R3.groundBuf) { R3.groundBuf = gl.createBuffer(); R3.groundUV = gl.createBuffer(); }
@@ -27647,7 +27778,7 @@ function _r3dFrame(G) {
      steady; the leak that prompted this made a spec take 113 seconds instead of 17 and passed
      every assertion about the frame. */
   R3.instDrawn = 0;
-  _r3dResize();
+  _r3dResize(); _r3dMark(R3, null);
 
   /* uniforms shared by both programs */
   /* _rtsZoom is screen px per world unit in CSS pixels; the canvas backing store is device
@@ -27740,13 +27871,13 @@ function _r3dFrame(G) {
   /* THE WORLD IS BUILT BEFORE THE SUN LOOKS AT IT. _r3dWorldTick used to run in the middle of
      the frame, which was fine while nothing read the geometry before the main pass; the shadow
      pass does, and a first frame with no buffers casts no shadows. */
-  _r3dWorldTick(G);
+  _r3dWorldTick(G); _r3dMark(R3, 'setup');       /* the frame's phases, timed: quality3d.js */
 
   /* --- the sun's view --- */
   /* Everything that stands up casts: the world's forests and ridges, the ore crystals, and
      every building and unit. The ground and the sea do not - both are effectively flat, and a
      flat surface's shadow is itself, which only feeds the bias. */
-  if (R3.shadowReady) {
+  if (R3.shadowReady && _r3dQ('shadow')) {          /* the tiers: render3d/quality3d.js */
     _r3dShadowPass(G, function (P) {
       var SC = ctx(P);
       gl.uniform2f(SC.uWave, 0, 0);
@@ -27775,7 +27906,7 @@ function _r3dFrame(G) {
      and everything standing on it are drawn offscreen and composited at the end. A driver that
      will not give the attachments leaves postReady false and everything below draws straight
      to the canvas exactly as it did before. */
-  var post = R3.postReady && _r3dPostBegin(R3);
+  _r3dMark(R3, 'shadow'); var post = R3.postReady && _r3dQ('post') && _r3dPostBegin(R3);
 
   gl.clearColor(0.016, 0.024, 0.035, 1);
   gl.enable(gl.DEPTH_TEST);
@@ -28062,7 +28193,7 @@ function _r3dFrame(G) {
   if (!only) _r3dAliveDraw(G, R3, function (m, x, y, z, rot, dim, sy) { drawIn(C, m, x, y, z, rot, ART2W, dim, sy, null); });
   flushBatch(C);
   }
-  paintEntities(MC);
+  _r3dMark(R3, 'world'); paintEntities(MC);
   /* the building about to be placed, as itself and translucent (render3d/place3d.js) */
   var gh = _r3dGhostAt();
   if (gh) {
@@ -28071,14 +28202,14 @@ function _r3dFrame(G) {
     _r3dGhostBlend(gl, MC.P, true); flushBatch(MC); _r3dGhostBlend(gl, MC.P, false);
   }
   /* a unit hidden behind a building, a wood or a hill shows through it (render3d/sil3d.js) */
-  _r3dSilPass(gl, R3, MC.P, function (side, keep) { paintEntities(MC, null, 'unit', side, keep); });
+  if (_r3dQ('sil')) _r3dSilPass(gl, R3, MC.P, function (side, keep) { paintEntities(MC, null, 'unit', side, keep); });
 
   /* THE EFFECTS, as quads standing in the world - see render3d/fx3d.js. Here, after everything
      with a surface and before the occlusion resolves, because they are the last thing that has
      a place in the scene and the first that must not contribute depth to it: a fireball is not
      a surface for the occlusion to find corners against. */
   /* every frame: rounds in flight, and the dust and wakes of anything moving, are effects too */
-  try { _r3dFxDraw(G, cam, invD); } catch (e) { R3.fxDrawn = -1; }
+  _r3dMark(R3, 'units'); try { _r3dFxDraw(G, cam, invD); } catch (e) { R3.fxDrawn = -1; } _r3dMark(R3, 'fx');
 
   /* THE GLOW, from the emitters only - see render3d/bloom3d.js for why it is drawn from what
      emits light rather than thresholded out of what is bright. Here, after the effects exist
@@ -28109,7 +28240,7 @@ function _r3dFrame(G) {
   _r3dGroundBind(gl, R3, R3.texP);
   gl.bindTexture(gl.TEXTURE_2D, R3.fogTex);
   gl.drawArrays(gl.TRIANGLES, 0, R3.groundVerts);
-  gl.disable(gl.BLEND);
+  gl.disable(gl.BLEND); _r3dMark(R3, 'post');
 }
 </script>
 <script>/* render3d/forest3d.js - the trees, and only the trees. Part of rts.render3d.
@@ -30799,13 +30930,38 @@ function _rtsGfxFrame() {
     (want ? ' pinned' : ' auto') +
     /* so the geometry half of the ask is visible too, rather than being a silent consequence
        of a control that reads as being about resolution */
-    '   mesh ' + (typeof _r3dDetailLevel === 'function' ? _r3dDetailLevel() : '-') + 'x';
+    '   mesh ' + (typeof _r3dDetailLevel === 'function' ? _r3dDetailLevel() : '-') + 'x' +
+    '\n' + _rtsGfxPhases();
+}
+/* WHERE THE FRAME WENT, the second line: the loop's own halves (ui/camera.js) - the simulation,
+   the drawing, the HUD and sidebar - with the 3D frame's phases inside the drawing
+   (render3d/quality3d.js), and `wait`: the rest of the frame interval, spent outside this code -
+   on the GPU, the compositor or the display's own clock. A big `wait` says the phone is held by
+   the GPU or a frame-rate cap; a big total says it is held here. And the tier in force. */
+function _rtsGfxPhases() {
+  var U = window._rtsUI, R3 = window._R3D, p = (U && U.prof) || {}, q = (R3 && R3.prof) || {};
+  function f(v) { return (v || 0).toFixed(1); }
+  var busy = (p.sim || 0) + (p.draw || 0) + (p.ui || 0), s = 'sim ' + f(p.sim) + '  draw ' + f(p.draw);
+  if (R3 && R3.on && R3.prof) {
+    s += ' [' + ['setup', 'shadow', 'world', 'units', 'fx', 'post'].map(function (k) { return k + ' ' + f(q[k]); }).join(' ') + ']';
+  }
+  s += '  ui ' + f(p.ui) + '  wait ' + f(Math.max(0, (p.gap || 0) - busy)) + 'ms';
+  var w = typeof _r3dQualityWant === 'function' ? _r3dQualityWant() : 'auto', A = R3 && R3.qAuto;
+  s += '   ' + (R3 && R3.q ? R3.q.name : '-') + (w === 'auto' ? ' auto' + (A && A.locked ? ' (held)' : '') : ' pinned');
+  return s;
+}
+/* The button: AUTO -> HIGH -> MEDIUM -> LOW -> AUTO (render3d/quality3d.js). */
+function rtsGfxQualityCycle() {
+  var order = ['auto', 'high', 'medium', 'low'], w = _r3dQualityWant();
+  _r3dQualitySetWant(order[(order.indexOf(w) + 1) % order.length]);
+  _rtsGfxSync();
 }
 function _rtsGfxSync() {
   var b = document.getElementById('rtsGfxBtn');
   if (b) {
-    var w = _rtsGfxWant();
-    b.textContent = 'GFX ' + (w ? w + 'x' : 'AUTO');
+    var w = typeof _r3dQualityWant === 'function' ? _r3dQualityWant() : 'auto', R3 = window._R3D;
+    b.textContent = 'GFX ' + (w === 'auto' ? 'AUTO' : w.toUpperCase());
+    b.title = 'Tap: graphics quality (' + (R3 && R3.q ? R3.q.name : 'HIGH') + ' now). Hold: show the frame readout.';
     b.className = _RTS_GFX.on ? 'on' : '';
   }
   var el = document.getElementById('rtsGfxOut');
@@ -30818,8 +30974,8 @@ function _rtsGfxInit() {
   if (!row || document.getElementById('rtsGfxBtn')) return;
   var b = document.createElement('button');
   b.id = 'rtsGfxBtn';
-  b.title = 'Tap: 3D render scale. Hold: show the frame readout.';
-  b.onclick = function () { rtsGfxCycle(); };
+  b.title = 'Tap: graphics quality. Hold: show the frame readout.';
+  b.onclick = function () { rtsGfxQualityCycle(); };
   b.oncontextmenu = function (e) { e.preventDefault(); _RTS_GFX.on = !_RTS_GFX.on; _rtsGfxSync(); return false; };
   var held = null;
   b.addEventListener('touchstart', function () {
@@ -33036,6 +33192,12 @@ function _rtsLoop(prime) {
   U.raf = requestAnimationFrame(_rtsLoop);
   var now = (new Date()).getTime(), dt = Math.min(0.1, (now - U.last) / 1000);
   U.last = now;
+  /* the frame's own clock, for the readout's breakdown and for AUTO (render3d/quality3d.js) */
+  var pc = window.performance || Date, p0 = pc.now(), pf = U.prof || (U.prof = {});
+  if (U.pl) _r3dQualityFeed(p0 - U.pl, p0);
+  pf.gap = (pf.gap || 0) * 0.95 + (U.pl ? p0 - U.pl : 0) * 0.05;
+  U.pl = p0;
+  function mark(k) { var t = pc.now(); pf[k] = (pf[k] || 0) * 0.95 + (t - p0) * 0.05; p0 = t; }
   try {
     _rtsPanTick(dt);
     _rtsZoomTick(dt);                  /* the smooth zoom gliding in - ui/navigate.js */
@@ -33113,12 +33275,15 @@ function _rtsLoop(prime) {
         }
       }
     }
+    mark('sim');
     _rtsRFrame(dt);
+    mark('draw');
     _rtsDrawHud(dt);
     U.miniT = (U.miniT || 0) + dt;
     if (U.miniT > 0.12) { U.miniT = 0; _rtsDrawMini(); }
     U.uiT = (U.uiT || 0) + dt;
     if (U.uiT > 0.1) { U.uiT = 0; _rtsSyncSidebar(); _rtsSuperRow(); }
+    mark('ui');
     U.drawErrs = 0;
   } catch (err) {
     /* The other half: the renderer, the HUD or the sidebar threw. Nothing here can paint an
