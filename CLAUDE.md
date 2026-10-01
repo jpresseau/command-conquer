@@ -264,11 +264,23 @@ breaking it shipped once.
   day and day is unchanged. Every program gets them through `_r3dCamU`. Lamps and headlights are
   point lights (`_r3dSkyLights`, picked in `_r3dWorldTick` before the ground draws) plus glows,
   rain and banks in `skyfx3d.js`; 2D is `render/sky2d.js`. `RTS_SKY_FORCE` pins it for a spec.
+  CYCLE moves the sun (`_rtsSunAt`; shaders take `uSunD`, its offset from `R3_LIGHT`, and the shadow
+  frame is `_r3dSunB()`), exactly the baker's sun at `RTS_DAY_NOON`. SNOW (`uSnow`) whitens the
+  ground before the road paint, settles on upward faces and freezes the shallows.
   `unit/sky`, `e2e/sky`.
 - **A gun going off** (`render3d/combat3d.js`): recoil off `e.recoil` (`_r3dRecoil`: turret and hull
   back along `_rtsMuzzleAngle`, hull rocked; land vehicles only) and a flash plus light off
   `e.fire` at the barrel tip. A dying vehicle throws `debris` from its own id-seeded generator,
   never the game's. `unit/combat3d`, `e2e/combat3d`.
+- **The opponent's newer habits**: a `sync` team mission (ours, `core/missions.js`) holds a prong at
+  its staging waypoint until the other prongs arrive or `RTS_SYNC_WAIT` passes; Assault and Sappers
+  carry it. `core/aimend.js` sends vehicles under `RTS_MEND_AT` to a powered depot (`u.mend`; not
+  recruited or escorted meanwhile). Raiders divide a harvester's worth by its guard. `unit/aitactics`.
+- **The world's own sound** (`rts.ambience.js`): rain, wind, insects, one engine note, bridge
+  rumble, thunder and a night echo, each a few nodes built once and only turned by `setTargetAtTime`
+  (`_rtsAmbWant` is the pure half). Lightning keeps the GAME's clock on a fixed schedule
+  (`_rtsLightning`), which both renderers read. Effects off the screen but within `RTS_FAR` views
+  go through the muffled `B.far` bus. `unit/ambience`, `e2e/ambience`.
 - **In 3D a soldier has a model of his own** (`render3d/soldier3d.js`): rounded limbs, and four
   stride poses picked by his gait (`_r3dSoldierPose`) in place of the bob. The sprite's model
   stays for 2D, for prone squads and for the dog; the mesh cache key carries the pose.

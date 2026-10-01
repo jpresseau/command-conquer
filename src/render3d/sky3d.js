@@ -28,10 +28,19 @@ var R3D_SKIES = {
   dusk:  { L: [1.04, 0.74, 0.52], S: [0.56, 0.50, 0.66], haze: [0.92, 0.58, 0.40, 0.10], night: 0.5,  wet: 0, rain: 0, banks: 0 },
   night: { L: [0.24, 0.29, 0.46], S: [0.15, 0.18, 0.31], haze: [0.04, 0.06, 0.12, 0.10], night: 1,    wet: 0, rain: 0, banks: 0 },
   rain:  { L: [0.64, 0.68, 0.74], S: [0.57, 0.61, 0.69], haze: [0.52, 0.57, 0.63, 0.20], night: 0.35, wet: 1, rain: 1, banks: 0 },
-  fog:   { L: [0.86, 0.88, 0.91], S: [0.75, 0.78, 0.83], haze: [0.76, 0.79, 0.82, 0.32], night: 0.15, wet: 0, rain: 0, banks: 1 }
+  fog:   { L: [0.86, 0.88, 0.91], S: [0.75, 0.78, 0.83], haze: [0.76, 0.79, 0.82, 0.32], night: 0.15, wet: 0, rain: 0, banks: 1 },
+  /* bright, and cold in the shade: the ground white, snow on every roof, the shore frozen */
+  snow:  { L: [0.93, 0.95, 1.0],  S: [0.66, 0.72, 0.86], haze: [0.86, 0.89, 0.94, 0.14], night: 0.15, wet: 0, rain: 0, banks: 0, snow: 1 }
 };
+/* THE CYCLE: a day passes over the battle. The hour runs from RTS_DAY_START through a whole day
+   in RTS_DAY_LEN seconds of game time; the sky is the presets blended at their hours, and the
+   sun itself moves - round the map and up and down the sky - so the shadows swing. */
+var RTS_DAY_LEN = 960;           /* game seconds for a whole day */
+var RTS_DAY_START = 8;           /* the hour a battle starts at */
+var RTS_DAY_NOON = 11;           /* the hour the sun stands where the sprite baker put it */
+var RTS_DAY_KEYS = [[0, 'night'], [5, 'night'], [6.5, 'dusk'], [8, 'day'], [17, 'day'], [18.5, 'dusk'], [20, 'night'], [24, 'night']];
 var RTS_SKY_LS = 'rtsSky';
-var RTS_SKY_KEYS = ['auto', 'day', 'dusk', 'night', 'rain', 'fog'];
+var RTS_SKY_KEYS = ['auto', 'day', 'dusk', 'night', 'rain', 'fog', 'snow', 'cycle'];
 
 /* What the player chose: one of RTS_SKY_KEYS. */
 /* Read from storage once and then kept: it is asked every frame. */
@@ -42,7 +51,7 @@ function _rtsSkyWant() {
   return (window._RTS_SKY_W = RTS_SKY_KEYS.indexOf(v) > 0 ? v : 'auto');
 }
 function _rtsSkySetWant(v) {
-  v = v && R3D_SKIES[v] ? v : 'auto';
+  v = RTS_SKY_KEYS.indexOf(v) > 0 ? v : 'auto';      /* the presets, and the cycle that blends them */
   window._RTS_SKY_W = v;
   try {
     if (v !== 'auto') window.localStorage.setItem(RTS_SKY_LS, v);
@@ -66,7 +75,53 @@ function rtsSkySync() {
 /* AUTO: from the seed - mostly day, and every other sky about one battle in six or seven */
 function _rtsSkyOfSeed(seed) {
   var h = _sprHash((seed | 0) % 9973, 17, 977);
-  return h < 0.4 ? 'day' : h < 0.55 ? 'dusk' : h < 0.7 ? 'night' : h < 0.85 ? 'rain' : 'fog';
+  return h < 0.36 ? 'day' : h < 0.48 ? 'dusk' : h < 0.6 ? 'night' : h < 0.72 ? 'rain' : h < 0.82 ? 'fog' : h < 0.91 ? 'snow' : 'cycle';
+}
+/* The hour of a CYCLE battle, 0..24. */
+function _rtsSkyHour(G) { return (RTS_DAY_START + ((G && G.t) || 0) / RTS_DAY_LEN * 24) % 24; }
+/* Two skies mixed, k of the way from a to b. */
+function _rtsSkyMix(a, b, k) {
+  var o = {}, f;
+  for (f in a) o[f] = a[f];
+  for (f in b) if (!(f in o)) o[f] = 0;
+  for (f in o) {
+    var x = a[f] || 0, y = b[f] || 0;
+    if (Array.isArray(x) || Array.isArray(y)) {
+      x = x || []; y = y || [];
+      o[f] = (x.length ? x : y).map(function (v, i) { return (x[i] || 0) + ((y[i] || 0) - (x[i] || 0)) * k; });
+    } else o[f] = x + (y - x) * k;
+  }
+  return o;
+}
+/* The sky at an hour of the cycle. */
+function _rtsSkyAt(h) {
+  for (var i = 1; i < RTS_DAY_KEYS.length; i++) if (h <= RTS_DAY_KEYS[i][0]) {
+    var a = RTS_DAY_KEYS[i - 1], b = RTS_DAY_KEYS[i], k = (h - a[0]) / Math.max(1e-6, b[0] - a[0]);
+    return _rtsSkyMix(R3D_SKIES[a[1]], R3D_SKIES[b[1]], k * k * (3 - 2 * k));
+  }
+  return R3D_SKIES.night;
+}
+/* Where the sun is at an hour: the baker's sun turned round the map with the hours and raised
+   and lowered with the day - high at noon, low at dawn and dusk; at night it is the moon, low. */
+function _rtsSunAt(h) {
+  var L = R3_LIGHT, hl = Math.hypot(L[0], L[2]), el0 = Math.atan2(L[1], hl);
+  var az = (h - RTS_DAY_NOON) / 12 * Math.PI * 0.85;
+  var up = Math.sin((h - 6) / 12 * Math.PI), up0 = Math.sin((RTS_DAY_NOON - 6) / 12 * Math.PI);
+  var el = el0 * Math.max(0.35, Math.min(1.35, up / up0));
+  var c = Math.cos(az), s = Math.sin(az), hx = (L[0] * c - L[2] * s) / hl, hz = (L[0] * s + L[2] * c) / hl;
+  return [hx * Math.cos(el), Math.sin(el), hz * Math.cos(el)];
+}
+/* The sky this frame, for both renderers: a named one as it is, the cycle at its hour. */
+function _rtsSkyNow(G) {
+  var n = window.RTS_SKY_FORCE || _rtsSkyName(G);
+  var S = n === 'cycle' ? _rtsSkyAt(_rtsSkyHour(G)) : (R3D_SKIES[n] || R3D_SKIES.day);
+  /* LIGHTNING, in the rain: for its instant the whole field is lit near to day - the strike's
+     schedule is the thunder's (rts.ambience.js), on the game's clock */
+  if (S.rain > 0 && typeof _rtsLightning === 'function' && window.RTS_FLASH_OFF !== true) {
+    var k = _rtsLightning((G && G.t) || 0).k * S.rain;
+    if (k > 0.01) { S = _rtsSkyMix(S, R3D_SKIES.day, k * 0.75); S.flash = k; }
+  }
+  return S;
 }
 /* The sky this battle is under: its name. */
 function _rtsSkyName(G) {
@@ -76,8 +131,13 @@ function _rtsSkyName(G) {
 /* ...and its settings, held on R3 for the frame. */
 function _r3dSky(G) {
   var R3 = window._R3D, n = window.RTS_SKY_FORCE || _rtsSkyName(G);   /* RTS_SKY_FORCE: a spec's */
-  var S = R3D_SKIES[n] || R3D_SKIES.day;
-  if (R3) { R3.sky = S; R3.skyName = n; }
+  var S = _rtsSkyNow(G);
+  if (R3) {
+    R3.sky = S; R3.skyName = n;
+    /* the sun: the baker's, unless the day is passing - then where the hour puts it */
+    if (n === 'cycle') { R3.sun = _rtsSunAt(_rtsSkyHour(G)); R3.sunB = _r3dSunBasis(R3.sun); }
+    else { R3.sun = R3_LIGHT; R3.sunB = null; }
+  }
   return S;
 }
 
@@ -91,6 +151,9 @@ function _r3dSkyU(gl, P) {
   /* the ground takes the point lights only when the lamps are on: by day it was lit by an
      explosion's glare on the ground alone (fxemit3d.js), and still is */
   gl.uniform1f(gl.getUniformLocation(P, 'uGndL'), S.night > 0 ? 1 : 0);
+  gl.uniform1f(gl.getUniformLocation(P, 'uSnow'), S.snow || 0);
+  var sun = (R3 && R3.sun) || R3_LIGHT;
+  gl.uniform3f(gl.getUniformLocation(P, 'uSunD'), sun[0] - R3_LIGHT[0], sun[1] - R3_LIGHT[1], sun[2] - R3_LIGHT[2]);
 }
 
 var R3D_LAMP_C = [1.0, 0.82, 0.55];        /* sodium-warm, a lamp post or a door light */

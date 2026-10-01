@@ -48,6 +48,10 @@ function _rtsTeamTarget(t, quarry, near) {
        quarry has to override IsNoThreat - otherwise a team raised to kill harvesters scores
        every harvester at zero and can never see one. */
     var v = _rtsEvalObject(lead, o, _rtsRangeTo(lead, o), w, quarry !== 'anything');
+    /* A RAID GOES FOR THE ONE LEFT ALONE. Scored on threat and distance only, the raiders drove
+       for whichever harvester was nearest - often the one working beside the player's tanks -
+       and died on the escort. Every armed thing of the player's guarding it cuts its worth. */
+    if (quarry === 'harvester' && v > 0) v /= 1 + _rtsGuardsNear(o, RTS_RAID_GUARD_R);
     if (v > bv) { bv = v; best = o; }
   }
   /* "If no target could be found, then the mission advances" - so a quarry that no longer
@@ -63,6 +67,19 @@ function _rtsTeamTarget(t, quarry, near) {
     }
   }
   return best;
+}
+/* How many armed things of `o`'s own side stand within r of it - its guard. */
+var RTS_RAID_GUARD_R = 10 * RTS_TILE;
+function _rtsGuardsNear(o, r) {
+  var G = window._rtsG, n = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var g = G.ents[i];
+    if (g === o || g.dead || g.side !== o.side) continue;
+    var d = g.type === 'unit' ? rtsUnitDef(g.def) : rtsStructDef(g.def);
+    if (!d || !d.weapon || (g.type === 'unit' && d.harvest)) continue;
+    if (Math.hypot(g.x - o.x, g.z - o.z) <= r) n++;
+  }
+  return n;
 }
 /* Calc_Center: the average position of INITIATED members only. A recruit still running to
    join up must not drag the team's centre out to meet it. */
@@ -83,6 +100,7 @@ function _rtsTeamCentre(t) {
 function _rtsTeamCanAdd(t, u) {
   if (u.dead || u.side !== 'enemy' || u.type !== 'unit') return false;
   if (rtsUnitDef(u.def).harvest) return false;
+  if (u.mend != null) return false;          /* on its way to the depot: core/aimend.js */
   if (!_rtsMission(u).recruitable) return false;
   var want = t.type.members[u.def] || 0;
   if (!want) return false;

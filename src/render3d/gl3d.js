@@ -262,12 +262,18 @@ var R3D_MESH_FS =
      curves this is for, and would read as a dark seam down the middle of every one. */
   'uniform vec4 uSil;' +                /* a unit seen through what hides it - sil3d.js */
   'uniform vec4 uHaze;' +               /* rgb, amount: sky3d.js */
+  'uniform float uSnow;' +              /* the SNOW sky: on every roof, and the shore frozen */
   'void main(){' +
   '  if (uSil.a > 0.0) { gl_FragColor = uSil; return; }' +
   /* vCol.w: 0 whole, 1 damaged or rising, 2 a burnt-out husk (husk3d.js) */
   '  vec3 tint = vCol.w > 1.5 ? vec3(0.2, 0.18, 0.17) : mix(vec3(1.0), vec3(0.62, 0.55, 0.55), vCol.w);' +
   '  vec3 c = _shade(normalize(vN), vCol.rgb) * tint; float a = uA;' +
   '  if (uWeather > 0.0) c = _weather(c, normalize(vN), vec3(vWxz.x, vHY.y, vWxz.y));' +
+  /* snow settles on whatever faces up - roofs, hulls, canopies - and not on the sea */
+  '  if (uSnow > 0.0 && uSea.x < 0.5) {' +
+  '    float up = smoothstep(0.55, 0.85, normalize(vN).y) * uSnow;' +
+  '    c = mix(c, _shade(normalize(vN), vec3(0.88, 0.9, 0.95)) * tint, up * 0.82);' +
+  '  }' +
   '  if (uSea.x > 0.5) {' +
   '    vec2 cc = vWxz * uSea.w + uSea.z + _gwarp(vWxz);' +
   '    float wm = texture2D(uSeaM, (cc + 0.5) * uSea.y).r;' +
@@ -301,6 +307,8 @@ var R3D_MESH_FS =
   '    float roll = smoothstep(0.0, 0.05, wv) * (1.0 - smoothstep(0.05, 0.4, wv)) * (1.0 - sd) * (0.35 + 0.65 * brk);' +
   '    c = mix(c, vec3(0.93, 0.96, 0.95) * day, clamp(roll * 0.75 * uSurf, 0.0, 0.75));' +
   '    a = uA * mix(0.45, 1.0, smoothstep(0.46, 0.74, wm));' +
+  /* in the cold the shallows freeze: ice, from the shore a cell out, opaque */
+  '    if (uSnow > 0.0) { float ice = (1.0 - smoothstep(0.5, 0.82, wm)) * uSnow; c = mix(c, vec3(0.80, 0.87, 0.92) * day, ice * 0.9); a = mix(a, uA, ice); }' +
   '  }' +
   /* what is burning near it lights it - render3d/fxlight3d.js */
   '  c += _plight(vCol.rgb * tint, normalize(vN), vec3(vWxz.x, vHY.y, vWxz.y));' +

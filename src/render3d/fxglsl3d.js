@@ -6,7 +6,7 @@
    three frames at every size, lit by nothing and lighting nothing. This draws them instead: each
    quad is a small shader program, and what it draws depends only on its age, a seed and a type.
 
-   ONE PROGRAM, ELEVEN TYPES, ONE DRAW. The type rides in a vertex attribute, so a whole battle's
+   ONE PROGRAM, TWELVE TYPES, ONE DRAW. The type rides in a vertex attribute, so a whole battle's
    effects - fireballs, smoke, sparks, rings, spray, flames, rounds in flight - go down in one
    call with no state change between them. The ground light is the exception (see fx3d.js): it
    has to MULTIPLY what is under it, and blending is fixed per draw.
@@ -157,6 +157,11 @@ var R3D_FX2_FS =
   '    float along = q.x * 0.5 + 0.5;' +
   '    float a = exp(-q.y * q.y * 9.0) * smoothstep(0.0, 0.5, along) * op;' +
   '    o = vec4(vB * a, a * 0.6);' +
+  /* 12. FLAKE: a snowflake, a soft round dot, blended and giving off nothing */
+  '  } else if (vY > 11.5) {' +
+  '    float r2 = dot(q, q); if (r2 >= 1.0) discard;' +
+  '    float a = (1.0 - r2) * (1.0 - r2) * op;' +
+  '    o = vec4(vB * a, a);' +
   /* 11. GLOW: a lamp seen at night - a soft round light in its own colour, added, and given off */
   '  } else {' +
   '    float r2 = dot(q, q); if (r2 >= 1.0) discard;' +

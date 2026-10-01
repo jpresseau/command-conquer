@@ -12,7 +12,10 @@ var R3D_RAIN_H = 16;             /* world units it falls */
 var R3D_RAIN_C = [0.78, 0.84, 0.92];
 var R3D_BANK_N = 14;             /* fog banks at once */
 var R3D_BANK_C = [0.86, 0.88, 0.91];
-var R3D_FXT_RAIN = 10, R3D_FXT_GLOW = 11;
+var R3D_FXT_RAIN = 10, R3D_FXT_GLOW = 11, R3D_FXT_FLAKE = 12;
+var R3D_SNOW_N = 420;            /* flakes at once, at most */
+var R3D_SNOW_FALL = 3.2;         /* seconds a flake takes to come down */
+var R3D_SNOW_C = [0.95, 0.96, 0.98];
 
 function _r3dFxSky(G, V) {
   var R3 = window._R3D, S = R3 && R3.sky;
@@ -61,6 +64,19 @@ function _r3dFxSky(G, V) {
         var k = (p - 0.94) / 0.06;
         _r3dFxDecal(V.M, V, rx, rz, 0.15 + k * 0.45, 8, 0.3, R3D_FXT_RING, k, i, 0.5 * S.rain * (1 - k), R3D_RAIN_C);
       }
+    }
+  }
+
+  /* THE SNOW: flakes drifting down through the view, swaying as they come */
+  if (S.snow > 0 && R3.snowAmt !== 0) {
+    var nf = Math.min(R3D_SNOW_N, Math.round(W * D / 22));
+    R3.snowN = nf;
+    for (i = 0; i < nf; i++) {
+      var fph = _r3dFxH(i, 4.7), fc = V.t / R3D_SNOW_FALL + fph, fe = Math.floor(fc), fp = fc - fe;
+      var fx = vb.x0 + _r3dFxH(i * 1.3 + fe * 0.41, 2.9) * W + Math.sin(V.t * 1.3 + i) * 0.8;
+      var fz = vb.z0 + _r3dFxH(i * 2.9 + fe * 0.73, 6.1) * D + Math.cos(V.t * 1.1 + i * 0.7) * 0.5;
+      var fy = V.ground(fx, fz) + 18 * (1 - fp), fr = 0.1 + _r3dFxH(i, 8.3) * 0.1;
+      _r3dFxBill(V.M, V, fx, fy, fz, fr, fr, 0.2, R3D_FXT_FLAKE, 0, i, 0.85 * S.snow * Math.min(1, (1 - fp) * 8), 0, R3D_SNOW_C);
     }
   }
 

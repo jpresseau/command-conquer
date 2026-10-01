@@ -27,7 +27,7 @@ var S = new Suite('sky');
     var b = document.querySelector('#rtsSky button'), o = { before: b && b.textContent };
     if (!b) return o;
     b.click(); o.after = b.textContent; o.stored = window.localStorage.getItem('rtsSky');
-    for (var i = 0; i < 5; i++) b.click();
+    for (var i = 0; i < 7; i++) b.click();
     o.back = b.textContent; o.storedBack = window.localStorage.getItem('rtsSky');
     return o;
   });
@@ -71,6 +71,15 @@ var S = new Suite('sky');
         var k = (py * CW + px) * 4; s2 += b[k] * 0.3 + b[k + 1] * 0.59 + b[k + 2] * 0.11; n++;
       }
       return n ? s2 / n : 0;
+    }
+    function rgb(b, sx, sy, r) {
+      var c = [0, 0, 0], n = 0;
+      for (var y = -r; y <= r; y++) for (var x = -r; x <= r; x++) {
+        var px = Math.round((sx + x) * sc), py = CH - 1 - Math.round((sy + y) * sc);
+        if (px < 0 || py < 0 || px >= CW || py >= CH) continue;
+        var k = (py * CW + px) * 4; c[0] += b[k]; c[1] += b[k + 1]; c[2] += b[k + 2]; n++;
+      }
+      return c.map(function (v) { return n ? Math.round(v / n) : 0; });
     }
     function diff(a, b, thr) { var n = 0; for (var k = 0; k < a.length; k += 4) if (Math.abs(a[k] - b[k]) + Math.abs(a[k + 1] - b[k + 1]) + Math.abs(a[k + 2] - b[k + 2]) > (thr || 24)) n++; return n / (a.length / 4); }
     var errs = [];
@@ -116,6 +125,13 @@ var S = new Suite('sky');
     var W2 = shot('rain'); R3D_SKIES.rain.wet = wet; R3.rainAmt = 1;
     o.wet = [stats(W1).luma, stats(W2).luma];
 
+    /* LIGHTNING: the same rain a moment before a strike and at it */
+    var tg0 = G.t;
+    G.t = RTS_THUNDER_FIRST - 1; var LB = shot('rain');
+    G.t = RTS_THUNDER_FIRST + 0.01; var LS = shot('rain');
+    G.t = tg0;
+    o.lightning = [stats(LS).luma, stats(LB).luma];
+
     /* FOG */
     var F0 = shot('fog'); glErr('fog');
     R3.bankAmt = 0; var F1 = shot('fog'); R3.bankAmt = 1;
@@ -129,6 +145,58 @@ var S = new Suite('sky');
     o.bankLift = [+lift(F0, F1).toFixed(2), +lift(B1, B0).toFixed(2)];
     o.fog = stats(F1);
 
+    /* THE PASSING DAY: the sun moves, the shadow map's frame goes with it, and night falls */
+    var t0g = G.t, Mp = R3.meshP;
+    function hour(h) { G.t = ((h - RTS_DAY_START + 24) % 24) / 24 * RTS_DAY_LEN; }
+    function sunF() { return Array.prototype.slice.call(gl.getUniform(Mp, gl.getUniformLocation(Mp, 'uSunF'))); }
+    function sunD() { return Array.prototype.slice.call(gl.getUniform(Mp, gl.getUniformLocation(Mp, 'uSunD'))); }
+    shot('day'); var dayD = sunD(), dayB = R3.sunB;
+    hour(RTS_DAY_NOON); shot('cycle'); var noonD = sunD();
+    hour(9); var C9 = shot('cycle'), f9 = sunF(), b9 = (R3.sunB || R3D_SUN).f.slice(), d9 = sunD();
+    hour(15); var C15 = shot('cycle'), f15 = sunF();
+    var dot = f9[0] * f15[0] + f9[1] * f15[1] + f9[2] * f15[2];
+    o.sunD = { day: dayD, dayB: dayB === null, noon: noonD.map(function (v) { return +v.toFixed(6); }), nine: d9.map(function (v) { return +v.toFixed(3); }) };
+    o.cycle = { swing: +(Math.acos(Math.max(-1, Math.min(1, dot))) * 57.3).toFixed(1), follows: Math.abs(f9[0] - b9[0]) + Math.abs(f9[2] - b9[2]) < 1e-5,
+                moved: +(diff(C9, C15) * 100).toFixed(2), noon: stats(C15).luma };
+    hour(23); R3.lampAmt = 1; var C23 = shot('cycle');
+    o.cycle.night = stats(C23).luma; o.cycle.lamps = R3.plights;
+    G.t = t0g;
+
+    /* SNOW */
+    var SNw = shot('snow'), SDy = shot('day');
+    var open = _r3dWorldToScreen(tank.x + 8, _rtsElev(tank.x + 8, tank.z + 6), tank.z + 6);
+    o.snowGround = [+patch(SNw, open.x, open.y, 5).toFixed(1), +patch(SDy, open.x, open.y, 5).toFixed(1)];
+    o.snowTank = [+patch(SNw, roof.x, roof.y, 2).toFixed(1), +patch(SDy, roof.x, roof.y, 2).toFixed(1)];
+    /* bare road: no building within three cells to be sampled instead, nor the tank - the
+       nearest such stretch, with the camera moved over it for this one pair of pictures */
+    var rbest = null, rbd = 1e9;
+    function clearOf(cx, cz) { return !G.ents.some(function (e) { return e.type === 'struct' && !e.dead && Math.abs(e.tx + 1 - cx) < 4 && Math.abs(e.tz + 1 - cz) < 4; }) &&
+      Math.hypot((cx - RTS_N / 2 + 0.5) * RTS_TILE - tank.x, (cz - RTS_N / 2 + 0.5) * RTS_TILE - tank.z) > 8; }
+    G.roads.forEach(function (L) { for (var q = 0; q < L.length; q += 2) { var wx2 = (L[q] - RTS_N / 2 + 0.5) * RTS_TILE, wz2 = (L[q + 1] - RTS_N / 2 + 0.5) * RTS_TILE, dd = Math.hypot(wx2 - R.focus.x, wz2 - R.focus.z); if (dd < rbd && G.terrain[_rtsIdx(Math.round(L[q]), Math.round(L[q + 1]))] === RTS_T_ROAD && clearOf(L[q], L[q + 1])) { rbd = dd; rbest = [wx2, wz2]; } } });
+    if (rbest) {
+      var fx0 = R.focus.x, fz0 = R.focus.z;
+      R.focus.x = rbest[0]; R.focus.z = rbest[1]; _rtsApplyCam();
+      var RS = shot('snow'), RD = shot('day');
+      var rp = _r3dWorldToScreen(rbest[0], _rtsElev(rbest[0], rbest[1]), rbest[1]);
+      o.road = [rgb(RS, rp.x, rp.y, 2), rgb(RD, rp.x, rp.y, 2)];
+      R.focus.x = fx0; R.focus.z = fz0; _rtsApplyCam();
+    }
+    /* a cell of water right against the land - where the shallows freeze */
+    var shore = null;
+    for (i = 0; i < 1600 && !shore; i++) {
+      var cx2 = _rtsTX(R.focus.x) + (i % 40 - 20), cz2 = _rtsTX(R.focus.z) + (Math.floor(i / 40) - 20);
+      if (!_rtsInB(cx2, cz2) || G.terrain[_rtsIdx(cx2, cz2)] !== RTS_T_WATER) continue;
+      var sp3 = _r3dWorldToScreen(_rtsWX(cx2), 0.1, _rtsWX(cz2));
+      if (sp3.x < 10 || sp3.y < 10 || sp3.x > R3.cv.clientWidth - 10 || sp3.y > R3.cv.clientHeight - 10) continue;     /* in view */
+      /* toward the land: the ice runs from the waterline part way out */
+      if (G.terrain[_rtsIdx(cx2 - 1, cz2)] !== RTS_T_WATER) shore = [cx2 - 0.3, cz2];
+      else if (G.terrain[_rtsIdx(cx2 + 1, cz2)] !== RTS_T_WATER) shore = [cx2 + 0.3, cz2];
+    }
+    if (shore) { var shp = _r3dWorldToScreen(_rtsWX(shore[0]), 0.1, _rtsWX(shore[1])); o.ice = [+patch(SNw, shp.x, shp.y, 3).toFixed(1), +patch(SDy, shp.x, shp.y, 3).toFixed(1)]; }
+    R3.snowN = 0; shot('snow'); o.snowN = R3.snowN;
+    R3.snowAmt = 0; var SN0 = shot('snow'); R3.snowAmt = 1; var SN1 = shot('snow');
+    o.flakes = +(diff(SN1, SN0, 10) * 100).toFixed(2);
+
     /* 2D */
     rts3dSet(false);
     function shot2(sky) { window.RTS_SKY_FORCE = sky; _rtsRFrame(0); var c = R.cv, x = c.getContext('2d'); return { d: x.getImageData(0, 0, c.width, c.height).data, w: c.width, dpr: c.width / c.clientWidth }; }
@@ -137,6 +205,10 @@ var S = new Suite('sky');
     o.luma2 = [+luma2(T0).toFixed(1), +luma2(T1).toFixed(1)];
     var dp = _rtsGroundToScreen(wf.x, wf.z + d.h * RTS_TILE / 2 + 1), fp = _rtsGroundToScreen(wf.x - 30, wf.z + 30);
     function at2(T, p) { var x = Math.round(p.x * T.dpr), y = Math.round(p.y * T.dpr), k = (y * T.w + x) * 4; return T.d[k] * 0.3 + T.d[k + 1] * 0.59 + T.d[k + 2] * 0.11; }
+    var T2s = shot2('snow');
+    /* a flake is a pixel the snow makes much BRIGHTER than the same pixel by day - the snow sky's tint darkens everything else a little */
+    var fl2 = 0; for (var k2 = 0; k2 < T2s.d.length; k2 += 4) if (T2s.d[k2] + T2s.d[k2 + 1] + T2s.d[k2 + 2] > T0.d[k2] + T0.d[k2 + 1] + T0.d[k2 + 2] + 120) fl2++;
+    o.flakes2 = [fl2, 0];
     o.door2 = [+(at2(T1, dp) / Math.max(1, at2(T0, dp))).toFixed(2), +(at2(T1, fp) / Math.max(1, at2(T0, fp))).toFixed(2)];
     window.RTS_SKY_FORCE = undefined;
     o.errs = errs;
@@ -160,10 +232,29 @@ var S = new Suite('sky');
     S.ok('...and the ground is wet: darker than the same sky dry', out.wet[0] < out.wet[1] - 3, out.wet[0] + ' wet, ' + out.wet[1] + ' dry');
     S.ok('an effect takes the hour too: the same banks lift the night less than half as much as the fog\'s day',
          out.bankLift[0] > 2 && out.bankLift[1] < out.bankLift[0] * 0.5, out.bankLift[1] + ' by night, ' + out.bankLift[0] + ' in the fog');
+    S.ok('lightning lights the rain for its instant', out.lightning[0] > out.lightning[1] * 1.15, out.lightning[0] + ' at the strike, ' + out.lightning[1] + ' a second before');
     S.ok('the fog banks are in the picture', out.bankSeen > 0.02, (out.bankSeen * 100).toFixed(2) + '% of the frame');
     S.ok('...and the haze takes the contrast out', out.fog.sd < out.day.sd * 0.85, 'spread ' + out.fog.sd + ' against ' + out.day.sd);
     S.ok('in 2D the night is dark too', out.luma2[1] < out.luma2[0] * 0.6, out.luma2.join(' -> '));
     S.ok('...but a door keeps more of its light than open ground', out.door2[0] > out.door2[1] * 1.3, 'door ' + out.door2[0] + ' of its day, open ground ' + out.door2[1]);
+    S.ok('by day the sun is the baker\'s to the last bit: no offset, no basis of its own', out.sunD.day.every(function (v) { return v === 0; }) && out.sunD.dayB,
+         JSON.stringify(out.sunD.day));
+    S.ok('...and the passing day\'s sun is the baker\'s at RTS_DAY_NOON, and away from it at nine', out.sunD.noon.every(function (v) { return Math.abs(v) < 1e-5; }) &&
+         Math.hypot(out.sunD.nine[0], out.sunD.nine[1], out.sunD.nine[2]) > 0.2, JSON.stringify(out.sunD.noon) + ' / ' + JSON.stringify(out.sunD.nine));
+    S.ok('the passing day moves the sun: the shadow map\'s frame swings between morning and afternoon', out.cycle.swing > 40 && out.cycle.follows,
+         out.cycle.swing + ' degrees, the uniforms following the sun: ' + out.cycle.follows);
+    S.ok('...and the picture with it', out.cycle.moved > 2, out.cycle.moved + '% of the frame changed');
+    S.ok('...until night falls on it, and the lamps come on', out.cycle.night < out.cycle.noon * 0.5 && out.cycle.lamps > 0,
+         out.cycle.night + ' against ' + out.cycle.noon + ' in the afternoon, ' + out.cycle.lamps + ' lights');
+    S.ok('in snow the ground is white', out.snowGround[0] > out.snowGround[1] + 50, out.snowGround[0] + ' against ' + out.snowGround[1] + ' by day');
+    S.ok('...and so is the top of the tank', out.snowTank[0] > out.snowTank[1] + 30, out.snowTank[0] + ' against ' + out.snowTank[1]);
+    /* a road is the colour it is by day - the snow is blue-white, and laid over a road it turns it */
+    var rw = out.road && out.road[0], rd = out.road && out.road[1], rdiff = rw ? Math.abs(rw[0] - rd[0]) + Math.abs(rw[1] - rd[1]) + Math.abs(rw[2] - rd[2]) : 999;
+    S.ok('...but the road is clear', !!rd && rd[0] + rd[1] + rd[2] > 60 && rdiff < 50, JSON.stringify(out.road) + ' on the road, snow then day: ' + rdiff + ' apart');
+    /* brighter than by day, surf and all - under the snow sky's own dimmer light */
+    S.ok('...the shallows are frozen', !!out.ice && out.ice[0] > out.ice[1] + 20, out.ice ? out.ice[0] + ' against ' + out.ice[1] + ' by day' : 'no shore in view');
+    S.ok('...and it snows: hundreds of flakes, in the picture', out.snowN > 150 && out.flakes > 0.1, out.snowN + ' flakes, ' + out.flakes + '% of the frame');
+    S.ok('in 2D it snows too', out.flakes2[0] > 300, out.flakes2[0] + ' pixels lit by flakes');
     S.ok('no GL errors under any sky', out.errs.length === 0, out.errs.join(' ') || 'none');
   }
   S.ok('no page errors', g.errors.length === 0, g.errors.join(' | ') || 'none');

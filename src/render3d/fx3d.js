@@ -229,7 +229,7 @@ function _r3dFxDraw(G, cam, invD) {
   gl.uniform1f(gl.getUniformLocation(P, 'uEmit'), emit ? 1 : 0);
   /* the scene's sun, turned into the quad's frame: across, up the screen, toward the eye - the
      camera's R, UP and E (cam3d.js), which at yaw 0 are the three this was written with */
-  var L = R3_LIGHT, cy = R3.cy, sy = R3.sy;
+  var L = R3.sun || R3_LIGHT, cy = R3.cy, sy = R3.sy;
   var lr = L[0] * cy + L[2] * sy, lf = -L[0] * sy + L[2] * cy;
   gl.uniform3f(gl.getUniformLocation(P, 'uSunV'), lr, L[1] * R3.sp - lf * R3.cp, L[1] * R3.cp + lf * R3.sp);
   var at = [['aP', 3, 0], ['aQ', 4, 12], ['aA', 4, 28], ['aB', 3, 44]], loc = [];

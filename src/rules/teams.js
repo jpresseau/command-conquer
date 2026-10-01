@@ -51,8 +51,10 @@ var RTS_TMISSIONS = {
   loop:     { need:'number'   },  /* TMISSION_LOOP       - jump to this line of the list */
   load:     { need:'none'     },  /* TMISSION_LOAD       - everyone who can, boards the transport */
   unload:   { need:'none'     },  /* TMISSION_UNLOAD     - the transport lands what it is carrying */
-  capture:  { need:'none'     }   /* TMISSION_CAPTURE    - the engineer walks in and takes it */
+  capture:  { need:'none'     },  /* TMISSION_CAPTURE    - the engineer walks in and takes it */
+  sync:     { need:'waypoint' }   /* ours: hold at the waypoint until the other prongs are in place */
 };
+var RTS_SYNC_WAIT = 25;          /* seconds a prong waits for the others at its staging point */
 /* How long a LOAD leg may take before the team gives up on it. Generous, because the walk to
    the water is a real march and the craft may still be coming; bounded, because a squad that
    cannot reach the beach must not hold a team slot for the rest of the match. */
@@ -95,14 +97,15 @@ var RTS_TEAM_TYPES = [
   { name:'Sappers',  priority:3, reinforce:false, quarry:'power',     members:{ rocket:3, rifle:2 },
     max:2, autocreate:true,  suicide:false,
     /* Stage off the flank first so the sappers do not walk in through the turrets. */
-    missions:[ ['patrol','flank'], ['attack','power'], ['attack','factories'],
+    missions:[ ['patrol','flank'], ['sync','flank'], ['attack','power'], ['attack','factories'],
                ['attack','buildings'], ['tarcom',0] ] },
   { name:'Assault',  priority:4, reinforce:false, quarry:'buildings', members:{ tank:3, rocket:2 },
     max:2, autocreate:true,  suicide:true,
     /* Straight down the throat and never mind what shoots back. No staging pause and no
        silent approach march: an opening GUARD plus a plain MOVE leg had the heaviest team
-       in the game spending its first half-minute not fighting. */
-    missions:[ ['patrol','front'], ['attack','buildings'], ['loop',1] ] },
+       in the game spending its first half-minute not fighting. The one pause it takes is the
+       SYNC at the front, and only while a flank team is still on its way to strike with it. */
+    missions:[ ['patrol','front'], ['sync','front'], ['attack','buildings'], ['loop',2] ] },
   /* --- AND IN THE AIR, which nothing fielded until now. Measured over six matches long enough
      for a pad to exist: the opponent built NINE aircraft and two of them ever had an attack
      order, both in the one run where the player came to them. Seven of nine sat on the pad for

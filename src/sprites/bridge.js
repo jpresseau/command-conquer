@@ -7,6 +7,8 @@
    down and to the right (the bake's light is from the upper left), the deck, a parapet each
    side with its posts, and an abutment at each shore. */
 function _sprDrawBridges(g, G, TS) {
+  /* a loaded map draws its own ground, crossings and all - and has no generated bridges anyway */
+  if (window._RTS_MAP) return;
   (G.bridges || []).forEach(function (b) {
     /* the deck's rectangle in bake pixels: every cell it covers, corner to corner */
     var ex = b.tx + b.dx * (b.len - 1) + b.px * (b.w - 1), ez = b.tz + b.dz * (b.len - 1) + b.pz * (b.w - 1);

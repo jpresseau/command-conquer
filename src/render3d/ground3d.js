@@ -194,6 +194,7 @@ var R3D_TEX_VS =
   'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' + R3D_CAM_GLSL +
   R3D_SHADOW_VGLSL +
   'varying vec2 vT; varying float vShade; varying vec2 vW; varying float vY;' +
+  'uniform vec3 uSunD;' +                 /* the sun's move from the baker's: sky3d.js */
   'void main(){' +
   '  vT = aT; vY = aP.y;' +
   /* the world position under this fragment, for the grain below - see R3D_TEX_FS */
@@ -206,9 +207,8 @@ var R3D_TEX_VS =
      ground leans. Without this the heightfield is invisible: it moves the pixels around and
      every one of them keeps the colour it had, so a hillside reads as a smear rather than as
      a slope. */
-  '  vShade = clamp(dot(normalize(aN), vec3(' +
-       R3_LIGHT[0].toFixed(4) + ', ' + R3_LIGHT[1].toFixed(4) + ', ' + R3_LIGHT[2].toFixed(4) +
-       ')) / ' + R3_LIGHT[1].toFixed(4) + ', 0.35, 1.55);' +
+  '  vec3 sl = vec3(' + R3_LIGHT[0].toFixed(4) + ', ' + R3_LIGHT[1].toFixed(4) + ', ' + R3_LIGHT[2].toFixed(4) + ') + uSunD;' +
+  '  vShade = clamp(dot(normalize(aN), sl) / max(sl.y, 0.2), 0.35, 1.55);' +
   '  _shadowFrom(aP);' +
   '  float sx = camUV(aP).x * uCam.z;' +
   '  float sy = (camUV(aP).y * uTilt.x - aP.y * uTilt.y) * uCam.w;' +

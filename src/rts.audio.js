@@ -104,22 +104,55 @@ function _rtsAudible(x, z) {
 var _RTS_SFX_GAP = { rifle:0.05, mg:0.04, cannon:0.07, rocket:0.07, turretgun:0.07,
   hit:0.05, splash:0.06, pop:0.06, boom:0.09, select:0.08, order:0.08 };
 
+/* ...and a fight a little way off the screen: heard, but muffled (rts.ambience.js). */
+function _rtsAudibleFar(x, z) {
+  var R = _rtsR;
+  if (!R || x == null) return false;
+  var vs = _rtsViewSpan(), f = typeof RTS_FAR === 'number' ? RTS_FAR : 0;
+  if (vs.cw) {
+    var c = _r3dToCam(x - R.focus.x, z - R.focus.z);
+    return Math.abs(c.u) < vs.cw * 0.75 * f && Math.abs(c.v) < vs.ch * 0.85 * f;
+  }
+  return Math.abs(x - R.focus.x) < vs.w * 0.75 * f && Math.abs(z - R.focus.z) < vs.h * 0.85 * f;
+}
+
 function _rtsSfx(name, x, z) {
   var A = _rtsA;
   if (!A || A.muted) return;
-  if (!_rtsAudible(x, z)) return;
+  if (!_rtsAudible(x, z)) {
+    /* out of sight but not out of earshot: through the ambience's muffled bus, if there is one */
+    var B = typeof _rtsAmbNodes === 'function' ? _rtsAmbNodes() : null;
+    if (!B || !_rtsAudibleFar(x, z) || !_RTS_SFX_GAP[name]) return;
+    var tf = A.ctx.currentTime, kf = name + '@far';
+    if (A.last[kf] != null && tf - A.last[kf] < _RTS_SFX_GAP[name] * 3) return;
+    A.last[kf] = tf;
+    try { _rtsSfxPlay(name, tf, B.far); } catch (_e) {}
+    return;
+  }
   var now = A.ctx.currentTime, gap = _RTS_SFX_GAP[name] || 0.02;
   if (A.last[name] != null && now - A.last[name] < gap) return;
   A.last[name] = now;
   try { _rtsSfxPlay(name, now); } catch (_e) {}
 }
 
-function _rtsSfxPlay(name, t) {
-  var A = _rtsA, ctx = A.ctx, out = A.sfx, n, g;
+function _rtsSfxPlay(name, t, via) {
+  var A = _rtsA, ctx = A.ctx, out = via || A.sfx, n, g;
 
   /* The player's own sound, if they have it and this effect has a counterpart. Everything
-     below stays exactly as it was and is what plays otherwise - see src/rts.sound.js. */
-  if (typeof _rtsSndTry === 'function' && _rtsSndTry(name)) return;
+     below stays exactly as it was and is what plays otherwise - see src/rts.sound.js. A sound
+     sent somewhere else (the far bus) is synthesized: a sample cannot be routed there. */
+  if (!via && typeof _rtsSndTry === 'function' && _rtsSndTry(name)) return;
+
+  if (name === 'thunder') {                     /* a crack, then a long low roll (rts.ambience.js) */
+    n = _rtsNoiseSrc(0.35, 'bandpass', 1800, 300, 0.7);
+    g = _rtsEnv(0.35, 1.1, 0.004); n.node.connect(g); g.connect(out);
+    n.src.start(t); n.src.stop(t + 0.4);
+    var roll = _rtsNoiseSrc(4.5, 'lowpass', 260, 70, 0.9), rg = ctx.createGain();
+    rg.gain.setValueAtTime(0.0001, t); rg.gain.exponentialRampToValueAtTime(1.6, t + 0.5);
+    rg.gain.exponentialRampToValueAtTime(0.0001, t + 4.5);
+    roll.node.connect(rg); rg.connect(out); roll.src.start(t + 0.05); roll.src.stop(t + 4.6);
+    return;
+  }
 
   if (name === 'rifle') {                       /* dry snap + a little body */
     n = _rtsNoiseSrc(0.09, 'bandpass', 2400, 900, 1.1);

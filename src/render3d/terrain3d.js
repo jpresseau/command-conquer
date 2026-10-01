@@ -34,6 +34,7 @@ var R3D_MAT_DETAIL_PX = 18;
 
 var R3D_MAT_GLSL =
   'uniform sampler2D uMap; uniform vec4 uMat;' +          /* on, 1/N, N/2 - 0.5, detail */
+  'uniform float uSnow;' +                                 /* the SNOW sky: sky3d.js */
   'uniform sampler2D uOreT;' +                             /* the ore field: colour, richness in .a */
   'uniform float uTileInv;' +
   /* the noise, and the border's wander, are render3d/noise3d.js's - shared with the sea */
@@ -191,6 +192,14 @@ var R3D_MAT_GLSL =
   '    grad = (1.0 - smoothstep(0.58, 0.72, N.y)) * det * 1.3 *' +
   '           (6.0 * t * (1.0 - t) / 0.11 * (g2 - g1) * (1.0 - v.x * 0.5) - 0.5 * t * t * (3.0 - 2.0 * t) * g1);' +
   '  }' +
+  /* SNOW lies over the ground - thinner where the drift noise says, and on rock's steep faces -
+     before the road is painted, so the roads read as the cleared ones, and before the scars, so
+     a crater is a black hole in it */
+  '  if (uSnow > 0.0) {' +
+  '    float cov = uSnow * smoothstep(0.18, 0.5, N.x * 0.7 + N.z * 0.3 + 0.12) * (kdom > 1.5 && kdom < 2.5 ? 0.55 : 0.95);' +
+  '    col.rgb = mix(col.rgb, vec3(0.86, 0.89, 0.94) * (0.94 + 0.08 * N.w), cov);' +
+  '    grad *= 1.0 - cov * 0.7;' +
+  '  }' +
   /* THE ROAD, painted down its own line over the cells' dirt shoulder; flat where it is laid */
   '  grad *= 1.0 - _road(w, col.rgb, N, M, det);' +
   /* SCARS: scorch blends like the ground does; a crater is drawn round its own cell's centre */
@@ -317,10 +326,10 @@ function _r3dMatFS() {
     R3D_MAT_GLSL +
     R3D_SHADOW_GLSL + R3D_PLIGHT_GLSL +
     /* the hour and the weather (sky3d.js): darker than day by uDarkL/uDarkS - unset, day */
-    'uniform vec3 uDarkL; uniform vec3 uDarkS; uniform vec4 uHaze; uniform vec2 uWet; uniform float uGndL;' +
+    'uniform vec3 uDarkL; uniform vec3 uDarkS; uniform vec4 uHaze; uniform vec2 uWet; uniform float uGndL; uniform vec3 uSunD;' +
     'void main(){' +
     '  vec4 c = _groundLit(vW, vec3(' + R3_LIGHT[0].toFixed(4) + ', ' + R3_LIGHT[1].toFixed(4) + ', ' +
-         R3_LIGHT[2].toFixed(4) + '));' +
+         R3_LIGHT[2].toFixed(4) + ') + uSunD);' +
     /* the ground's own shade and relief, exactly as the textured program applies them */
     '  vec3 lit = c.rgb * mix(vec3(0.575, 0.600, 0.655) * (vec3(1.0) - uDarkS), vec3(1.0) - uDarkL, _shadowAt());' +
     '  lit *= vShade;' +

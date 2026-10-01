@@ -9,7 +9,7 @@
    their own colours. */
 function _rtsSky2D(g, G) {
   if (typeof _rtsSkyName !== 'function' || !G) return;
-  var n = window.RTS_SKY_FORCE || _rtsSkyName(G), S = R3D_SKIES[n];
+  var S = _rtsSkyNow(G);
   if (!S || S === R3D_SKIES.day) return;
   var cv = g.canvas, W = cv.width, H = cv.height, i;
   var dpr = W / (cv.clientWidth || W);
@@ -62,6 +62,16 @@ function _rtsSky2D(g, G) {
       g.moveTo(x0, y0); g.lineTo(x0 - 4 * dpr, y0 + 16 * dpr);
     }
     g.stroke();
+  }
+  /* the snow: soft white flakes drifting down */
+  if (S.snow > 0) {
+    var ts = G.t || 0, ns = Math.round(W * H / 4200);
+    g.fillStyle = 'rgba(245,248,252,0.8)';
+    for (i = 0; i < ns; i++) {
+      var sp = _sprHash(i, 5, 983), sc = ts / 3 + sp, se = Math.floor(sc), sq = sc - se;
+      var sx = (_sprHash(i, se, 985) * W + Math.sin(ts * 1.3 + i) * 6 * dpr), sy = (_sprHash(se, i, 987) * 0.4 + sq) * H;
+      g.beginPath(); g.arc(sx, sy % H, (1 + _sprHash(i, 7, 989)) * dpr, 0, 6.283); g.fill();
+    }
   }
   g.restore();
 }
