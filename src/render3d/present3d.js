@@ -26,6 +26,8 @@ function _r3dApply(on, quiet) {
     return false;
   }
   R3.on = !!on;
+  /* the tier the player chose, or AUTO's starting one (render3d/quality3d.js) */
+  if (!R3.q) { var qw = _r3dQualityWant(); _r3dQualityApply(qw === 'medium' ? 1 : qw === 'low' ? 2 : 0); }
   /* ADOPTION, because the shell rebuilds its DOM every match while this canvas - and the GL
      context, buffers and textures that live on it - persists across them. From the second
      match on, R3.cv is a DETACHED element and the #rtsCv3d in the document is a fresh blank
@@ -116,7 +118,8 @@ function _r3dResize() {
      device at every resolution it can show - see ui/gfxstat.js. Still bounded by dpr: a buffer
      larger than the screen is pure cost. */
   var pin = (typeof _rtsGfxWant === 'function') ? _rtsGfxWant() : null;
-  R3.scale = pin ? Math.min(dpr, pin) : Math.min(dpr, R3D_MAX_SCALE);
+  /* ...and the tier's own ceiling, when no pin is set (render3d/quality3d.js) */
+  R3.scale = pin ? Math.min(dpr, pin) : Math.min(dpr, R3D_MAX_SCALE, (R3.q && R3.q.scale) || R3D_MAX_SCALE);
   /* The CSS box tracks the presentation canvas's, so the presented layer always fills the
      stage whatever the buffer scale. Off the overlay's inline style rather than layout, for
      the same reason as the buffer size above - and string-compared, because this runs every

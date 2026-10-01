@@ -22,15 +22,15 @@
 
 var R3D_FX2_VS =
   'attribute vec3 aP; attribute vec4 aQ; attribute vec4 aA; attribute vec3 aB;' +
-  'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' +
+  'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' + R3D_CAM_GLSL +
   'varying vec2 vQ; varying vec4 vA; varying vec3 vB; varying float vY;' +
   'void main(){' +
   '  vQ = aQ.xy; vA = aA; vB = aB; vY = aQ.w;' +
-  '  float sx = (aP.x - uCam.x) * uCam.z;' +
-  '  float sy = ((aP.z - uCam.y) * uTilt.x - aP.y * uTilt.y) * uCam.w;' +
+  '  float sx = camUV(aP).x * uCam.z;' +
+  '  float sy = (camUV(aP).y * uTilt.x - aP.y * uTilt.y) * uCam.w;' +
   /* the same projection as every other program here, with each quad's own lift toward the eye
      in aQ.z: a tall fireball needs more of it than a ring lying on the ground */
-  '  float d  = ((aP.z - uCam.y) * uTilt.y + aP.y * uTilt.x) + aQ.z;' +
+  '  float d  = (camUV(aP).y * uTilt.y + aP.y * uTilt.x) + aQ.z;' +
   '  float pw = 1.0 - d * uInvD;' +
   '  gl_Position = vec4(sx, -sy, -d / ' + R3D_DEPTH_RANGE.toFixed(1) + ' * pw, pw);' +
   '}';

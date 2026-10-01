@@ -57,6 +57,7 @@ var R3D_HALF = (function () {
    does not pass through the origin. Its floor is per-channel and COOL, so shade slides toward
    blue-grey; a scalar multiply drags it toward black and takes the sky out of every shadow. */
 var R3D_MESH_LIGHT =
+  'uniform vec3 uHalf;' +          /* the specular's half-vector, per frame: cam3d.js */
   /* The ramp itself, because it is now evaluated TWICE per vertex - once with
      the sun and once without it. That is what lets the fragment stage put a shadow on
      a surface: it has the same surface lit and unlit to choose between, so a shadow is
@@ -75,7 +76,7 @@ var R3D_MESH_LIGHT =
   'vec3 _shade(vec3 n, vec3 col){' +
   /* the sprite baker's own light and half-vector, so the two pipelines agree face for face */
   '  float lam = max(dot(n, ' + _r3dGlsl3(R3_LIGHT) + '), 0.0);' +
-  '  float sp = max(dot(n, ' + _r3dGlsl3(R3D_HALF) + '), 0.0);' +
+  '  float sp = max(dot(n, uHalf), 0.0);' +      /* R3D_HALF, turned with the camera: cam3d.js */
   '  sp *= sp; sp *= sp; sp *= sp; sp *= sp;' +      /* ^16, the baker's tight highlight */
   /* a touch of sky bounce so upward faces do not go dead in shadow - r3d/render.js:97 */
   '  float sky = 0.10 * max(n.y, 0.0);' +

@@ -259,7 +259,7 @@ function _r3dShadowBind(P, unit) {
   gl.uniform3fv(gl.getUniformLocation(P, 'uSunF'), R3D_SUN.f);
   gl.uniform3fv(gl.getUniformLocation(P, 'uSunC'), R3.sunC || [0, 0, 0]);
   gl.uniform2f(gl.getUniformLocation(P, 'uSunSpan'), R3.sunSpan || 64, R3D_SHADOW_RANGE);
-  gl.uniform1f(gl.getUniformLocation(P, 'uShadowOn'), R3.shadowReady ? 1 : 0);
+  gl.uniform1f(gl.getUniformLocation(P, 'uShadowOn'), R3.shadowReady && _r3dQ('shadow') ? 1 : 0);
   _r3dCloudSet(gl, R3, P);
   gl.activeTexture(gl.TEXTURE0 + unit);
   gl.bindTexture(gl.TEXTURE_2D, R3.shadowTex);

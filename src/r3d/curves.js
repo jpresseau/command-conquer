@@ -45,6 +45,8 @@ var R3_DETAIL_3D = 2;
    whose device cannot take it should not have to edit a constant to say so. */
 function _r3dDetailLevel() {
   var want = (typeof _rtsGfxWant === 'function') ? _rtsGfxWant() : null;
+  var R3 = window._R3D;
+  if (R3 && R3.q && !R3.q.detail) return 1;         /* the LOW tier: render3d/quality3d.js */
   return (want && want <= 2) ? 1 : R3_DETAIL_3D;
 }
 var _R3_DETAIL = 1;

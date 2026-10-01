@@ -350,7 +350,7 @@ function _r3dGroundDraw(gl, R3, G, cam, invD) {
   R3.matOn = !!M;
   gl.useProgram(P);
   gl.uniform4fv(gl.getUniformLocation(P, 'uCam'), cam);
-  gl.uniform2f(gl.getUniformLocation(P, 'uTilt'), R3.cp, R3.sp);
+  _r3dCamU(gl, P);
   gl.uniform1f(gl.getUniformLocation(P, 'uInvD'), invD);
   if (M) {
     _r3dMatSet(gl, R3, M, G);

@@ -358,7 +358,8 @@ function _r3dPostEnd(R3, cam, invD) {
   gl.disable(gl.BLEND);
   gl.depthMask(false);
 
-  /* --- occlusion, at half resolution --- */
+  /* --- occlusion, at half resolution: not drawn at all below HIGH (render3d/quality3d.js) --- */
+  if (_r3dQ('ao')) {
   gl.bindFramebuffer(gl.FRAMEBUFFER, R3.aoFbo);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, R3.aoTex, 0);
   gl.viewport(0, 0, R3.aoW, R3.aoH);
@@ -384,6 +385,7 @@ function _r3dPostEnd(R3, cam, invD) {
     gl.uniform2f(gl.getUniformLocation(R3.aoBlurP, 'uDir'), i ? 0 : 1, i ? 1 : 0);
     gl.bindTexture(gl.TEXTURE_2D, src);
     _r3dQuad(R3, R3.aoBlurP);
+  }
   }
 
   /* --- and onto the canvas: render3d/resolve3d.js --- */

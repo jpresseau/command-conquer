@@ -83,13 +83,38 @@ function _rtsGfxFrame() {
     (want ? ' pinned' : ' auto') +
     /* so the geometry half of the ask is visible too, rather than being a silent consequence
        of a control that reads as being about resolution */
-    '   mesh ' + (typeof _r3dDetailLevel === 'function' ? _r3dDetailLevel() : '-') + 'x';
+    '   mesh ' + (typeof _r3dDetailLevel === 'function' ? _r3dDetailLevel() : '-') + 'x' +
+    '\n' + _rtsGfxPhases();
+}
+/* WHERE THE FRAME WENT, the second line: the loop's own halves (ui/camera.js) - the simulation,
+   the drawing, the HUD and sidebar - with the 3D frame's phases inside the drawing
+   (render3d/quality3d.js), and `wait`: the rest of the frame interval, spent outside this code -
+   on the GPU, the compositor or the display's own clock. A big `wait` says the phone is held by
+   the GPU or a frame-rate cap; a big total says it is held here. And the tier in force. */
+function _rtsGfxPhases() {
+  var U = window._rtsUI, R3 = window._R3D, p = (U && U.prof) || {}, q = (R3 && R3.prof) || {};
+  function f(v) { return (v || 0).toFixed(1); }
+  var busy = (p.sim || 0) + (p.draw || 0) + (p.ui || 0), s = 'sim ' + f(p.sim) + '  draw ' + f(p.draw);
+  if (R3 && R3.on && R3.prof) {
+    s += ' [' + ['setup', 'shadow', 'world', 'units', 'fx', 'post'].map(function (k) { return k + ' ' + f(q[k]); }).join(' ') + ']';
+  }
+  s += '  ui ' + f(p.ui) + '  wait ' + f(Math.max(0, (p.gap || 0) - busy)) + 'ms';
+  var w = typeof _r3dQualityWant === 'function' ? _r3dQualityWant() : 'auto', A = R3 && R3.qAuto;
+  s += '   ' + (R3 && R3.q ? R3.q.name : '-') + (w === 'auto' ? ' auto' + (A && A.locked ? ' (held)' : '') : ' pinned');
+  return s;
+}
+/* The button: AUTO -> HIGH -> MEDIUM -> LOW -> AUTO (render3d/quality3d.js). */
+function rtsGfxQualityCycle() {
+  var order = ['auto', 'high', 'medium', 'low'], w = _r3dQualityWant();
+  _r3dQualitySetWant(order[(order.indexOf(w) + 1) % order.length]);
+  _rtsGfxSync();
 }
 function _rtsGfxSync() {
   var b = document.getElementById('rtsGfxBtn');
   if (b) {
-    var w = _rtsGfxWant();
-    b.textContent = 'GFX ' + (w ? w + 'x' : 'AUTO');
+    var w = typeof _r3dQualityWant === 'function' ? _r3dQualityWant() : 'auto', R3 = window._R3D;
+    b.textContent = 'GFX ' + (w === 'auto' ? 'AUTO' : w.toUpperCase());
+    b.title = 'Tap: graphics quality (' + (R3 && R3.q ? R3.q.name : 'HIGH') + ' now). Hold: show the frame readout.';
     b.className = _RTS_GFX.on ? 'on' : '';
   }
   var el = document.getElementById('rtsGfxOut');
@@ -102,8 +127,8 @@ function _rtsGfxInit() {
   if (!row || document.getElementById('rtsGfxBtn')) return;
   var b = document.createElement('button');
   b.id = 'rtsGfxBtn';
-  b.title = 'Tap: 3D render scale. Hold: show the frame readout.';
-  b.onclick = function () { rtsGfxCycle(); };
+  b.title = 'Tap: graphics quality. Hold: show the frame readout.';
+  b.onclick = function () { rtsGfxQualityCycle(); };
   b.oncontextmenu = function (e) { e.preventDefault(); _RTS_GFX.on = !_RTS_GFX.on; _rtsGfxSync(); return false; };
   var held = null;
   b.addEventListener('touchstart', function () {

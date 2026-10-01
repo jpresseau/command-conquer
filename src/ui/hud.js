@@ -310,7 +310,17 @@ function _rtsDrawMini() {
   var pv = (typeof _rtsPulse === 'function') ? _rtsPulse() : 0.6;
   g.strokeStyle = 'rgba(255,255,255,' + (0.45 + pv * 0.75).toFixed(2) + ')';
   g.lineWidth = 1.5;
-  g.strokeRect((vs.cx - vw / 2) / span * S + S / 2, (vs.cz - vh / 2) / span * S + S / 2,
-               vw / span * S, vh / span * S);
+  if (vs.poly) {
+    /* the 3D camera's view is a trapezoid, turned however the camera faces (cam3d.js) */
+    g.beginPath();
+    for (var q = 0; q < vs.poly.length; q++) {
+      var qx = vs.poly[q].x / span * S + S / 2, qz = vs.poly[q].z / span * S + S / 2;
+      if (q) g.lineTo(qx, qz); else g.moveTo(qx, qz);
+    }
+    g.closePath(); g.stroke();
+  } else {
+    g.strokeRect((vs.cx - vw / 2) / span * S + S / 2, (vs.cz - vh / 2) / span * S + S / 2,
+                 vw / span * S, vh / span * S);
+  }
 }
 

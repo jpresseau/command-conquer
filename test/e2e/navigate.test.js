@@ -104,13 +104,6 @@ var S = new Suite('navigate');
     S.ok('...keeping the ground it grabbed under the cursor', s1 < 2, s1 + ' px from the cursor');
     S.ok('...and orders nothing', !c1.ordered, 'unit ordered: ' + c1.ordered);
 
-    await park();
-    var w2 = await ground(420, 300), c2 = await cam();
-    await rdrag('middle', 420, 300, 560, 400);
-    var c3 = await cam(), s3 = await slip(w2, 560, 400);
-    S.ok('a middle-drag grabs the map too', Math.hypot(c3.fx - c2.fx, c3.fz - c2.fz) > 10 && s3 < 2,
-         'focus moved ' + Math.hypot(c3.fx - c2.fx, c3.fz - c2.fz).toFixed(1) + ', ' + s3 + ' px off');
-
     /* on past the canvas's edge, over the sidebar, and let go there */
     await park();
     var w4 = await ground(430, 330), c4 = await cam();
@@ -354,6 +347,13 @@ var S = new Suite('navigate');
   await M.wheel(0, 100);
   var dl = await cam();
   S.ok('after holding + in 2D, the next notch out is not swallowed', dl.zi === dk.zi - 1, 'rung ' + dk.zi + ' -> ' + dl.zi);
+  /* in 2D the middle button pans as the right one does; in 3D it turns the camera (e2e/orbit) */
+  await park(1);
+  var w2 = await ground(420, 300), c2 = await cam();
+  await rdrag('middle', 420, 300, 560, 400);
+  var c3 = await cam(), s3 = await slip(w2, 560, 400);
+  S.ok('a middle-drag in 2D grabs the map too', Math.hypot(c3.fx - c2.fx, c3.fz - c2.fz) > 10 && s3 < 2,
+       'focus moved ' + Math.hypot(c3.fx - c2.fx, c3.fz - c2.fz).toFixed(1) + ', ' + s3 + ' px off');
   await park(1);
   var w2d = await ground(450, 330);
   await rdrag('right', 450, 330, 300, 250);

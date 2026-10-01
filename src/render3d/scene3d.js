@@ -25,7 +25,7 @@ function _r3dFrame(G) {
      steady; the leak that prompted this made a spec take 113 seconds instead of 17 and passed
      every assertion about the frame. */
   R3.instDrawn = 0;
-  _r3dResize();
+  _r3dResize(); _r3dMark(R3, null);
 
   /* uniforms shared by both programs */
   /* _rtsZoom is screen px per world unit in CSS pixels; the canvas backing store is device
@@ -118,19 +118,19 @@ function _r3dFrame(G) {
   /* THE WORLD IS BUILT BEFORE THE SUN LOOKS AT IT. _r3dWorldTick used to run in the middle of
      the frame, which was fine while nothing read the geometry before the main pass; the shadow
      pass does, and a first frame with no buffers casts no shadows. */
-  _r3dWorldTick(G);
+  _r3dWorldTick(G); _r3dMark(R3, 'setup');       /* the frame's phases, timed: quality3d.js */
 
   /* --- the sun's view --- */
   /* Everything that stands up casts: the world's forests and ridges, the ore crystals, and
      every building and unit. The ground and the sea do not - both are effectively flat, and a
      flat surface's shadow is itself, which only feeds the bias. */
-  if (R3.shadowReady) {
+  if (R3.shadowReady && _r3dQ('shadow')) {          /* the tiers: render3d/quality3d.js */
     _r3dShadowPass(G, function (P) {
       var SC = ctx(P);
       gl.uniform2f(SC.uWave, 0, 0);
       if (R3.world) {
         _r3dInstConst(gl, I, SC, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0);
-        var sb = R3.world.concat(R3.ore || [], _r3dDressBatches(R3));
+        var sb = R3.world.concat(R3.ore || [], _r3dDressBatches(R3), _r3dSceneryBatches(R3));
         for (var si = 0; si < sb.length; si++) {
           var sm = sb[si];
           if (!sm || !sm.verts) continue;
@@ -153,7 +153,7 @@ function _r3dFrame(G) {
      and everything standing on it are drawn offscreen and composited at the end. A driver that
      will not give the attachments leaves postReady false and everything below draws straight
      to the canvas exactly as it did before. */
-  var post = R3.postReady && _r3dPostBegin(R3);
+  _r3dMark(R3, 'shadow'); var post = R3.postReady && _r3dQ('post') && _r3dPostBegin(R3);
 
   gl.clearColor(0.016, 0.024, 0.035, 1);
   gl.enable(gl.DEPTH_TEST);
@@ -189,7 +189,7 @@ function _r3dFrame(G) {
   /* --- entities --- */
   gl.useProgram(R3.meshP);
   gl.uniform4fv(gl.getUniformLocation(R3.meshP, 'uCam'), cam);
-  gl.uniform2f(gl.getUniformLocation(R3.meshP, 'uTilt'), R3.cp, R3.sp);
+  _r3dCamU(gl, R3.meshP);
   gl.uniform1f(gl.getUniformLocation(R3.meshP, 'uInvD'), invD);
   _r3dShadowBind(R3.meshP, 1);
   _r3dFxLightSet(gl, R3, G, R3.meshP);              /* what is burning lights its neighbours */
@@ -344,14 +344,13 @@ function _r3dFrame(G) {
     /* the wind in the canopies and the grass (R3D_MESH_VS); R3.swayAmt 0 holds them still */
     var uSw = gl.getUniformLocation(MC.P, 'uSway');
     gl.uniform2f(uSw, R3D_SWAY * (R3.swayAmt === undefined ? 1 : R3.swayAmt), G.t || 0);
-    var lift = R3D_WORLD_YMAX * R3.sp / R3.cp;
-    var batches = R3.world.concat(R3.ore || [], _r3dDressBatches(R3));
+    var lift = R3D_WORLD_YMAX * R3.sp / R3.cp, cb = _r3dBoundsNear(vb, lift, 4);
+    var batches = R3.world.concat(R3.ore || [], _r3dDressBatches(R3), _r3dSceneryBatches(R3));
     for (var wb = 0; wb < batches.length; wb++) {
       var bm = batches[wb];
       if (!bm || !bm.verts) continue;
       if (bm.x1 !== undefined &&
-          (bm.x1 < vb.x0 - 4 || bm.x0 > vb.x1 + 4 ||
-           bm.z1 < vb.z0 || bm.z0 > vb.z1 + lift)) continue;
+          (bm.x1 < cb.x0 || bm.x0 > cb.x1 || bm.z1 < cb.z0 || bm.z0 > cb.z1)) continue;
       gl.bindBuffer(gl.ARRAY_BUFFER, bm.p);
       gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 0, 0);
       gl.bindBuffer(gl.ARRAY_BUFFER, bm.n);
@@ -441,16 +440,23 @@ function _r3dFrame(G) {
   if (!only) _r3dAliveDraw(G, R3, function (m, x, y, z, rot, dim, sy) { drawIn(C, m, x, y, z, rot, ART2W, dim, sy, null); });
   flushBatch(C);
   }
-  paintEntities(MC);
+  _r3dMark(R3, 'world'); paintEntities(MC);
+  /* the building about to be placed, as itself and translucent (render3d/place3d.js) */
+  var gh = _r3dGhostAt();
+  if (gh) {
+    BATCH = _r3dInstBatch(R3);
+    drawIn(MC, _r3dMesh('b', gh.key, gh.side), gh.x, gh.y, gh.z, 0, ART2W, 0, 1, null);
+    _r3dGhostBlend(gl, MC.P, true); flushBatch(MC); _r3dGhostBlend(gl, MC.P, false);
+  }
   /* a unit hidden behind a building, a wood or a hill shows through it (render3d/sil3d.js) */
-  _r3dSilPass(gl, R3, MC.P, function (side, keep) { paintEntities(MC, null, 'unit', side, keep); });
+  if (_r3dQ('sil')) _r3dSilPass(gl, R3, MC.P, function (side, keep) { paintEntities(MC, null, 'unit', side, keep); });
 
   /* THE EFFECTS, as quads standing in the world - see render3d/fx3d.js. Here, after everything
      with a surface and before the occlusion resolves, because they are the last thing that has
      a place in the scene and the first that must not contribute depth to it: a fireball is not
      a surface for the occlusion to find corners against. */
   /* every frame: rounds in flight, and the dust and wakes of anything moving, are effects too */
-  try { _r3dFxDraw(G, cam, invD); } catch (e) { R3.fxDrawn = -1; }
+  _r3dMark(R3, 'units'); try { _r3dFxDraw(G, cam, invD); } catch (e) { R3.fxDrawn = -1; } _r3dMark(R3, 'fx');
 
   /* THE GLOW, from the emitters only - see render3d/bloom3d.js for why it is drawn from what
      emits light rather than thresholded out of what is bright. Here, after the effects exist
@@ -466,7 +472,7 @@ function _r3dFrame(G) {
   /* --- fog, over everything, depth ignored --- */
   gl.useProgram(R3.texP);
   gl.uniform4fv(gl.getUniformLocation(R3.texP, 'uCam'), cam);
-  gl.uniform2f(gl.getUniformLocation(R3.texP, 'uTilt'), R3.cp, R3.sp);
+  _r3dCamU(gl, R3.texP);
   gl.uniform1f(gl.getUniformLocation(R3.texP, 'uInvD'), invD);
   gl.uniform1f(gl.getUniformLocation(R3.texP, 'uA'), 1);
   gl.uniform1f(gl.getUniformLocation(R3.texP, 'uRecv'), 0);   /* the shroud is not a surface */
@@ -481,5 +487,5 @@ function _r3dFrame(G) {
   _r3dGroundBind(gl, R3, R3.texP);
   gl.bindTexture(gl.TEXTURE_2D, R3.fogTex);
   gl.drawArrays(gl.TRIANGLES, 0, R3.groundVerts);
-  gl.disable(gl.BLEND);
+  gl.disable(gl.BLEND); _r3dMark(R3, 'post');
 }

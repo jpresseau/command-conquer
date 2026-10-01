@@ -111,6 +111,32 @@ var S = new Suite('navtouch');
          Math.abs(c5.zf - 3) < 0.02 && s5 < 2, 'rung ' + c5.zf.toFixed(3) + ', ' + s5 + ' px from the finger');
   }
 
+  if (on) {
+    /* A TWIST turns the 3D camera about the fingers - once past a small threshold, so a pinch
+       that turns a little by accident does not */
+    await park(2);
+    var tx0 = box.x + box.w * 0.55, ty0 = box.y + box.h * 0.45, rr = 70;
+    function fingers(a) { return [[tx0 - rr * Math.cos(a), ty0 - rr * Math.sin(a), 1], [tx0 + rr * Math.cos(a), ty0 + rr * Math.sin(a), 2]]; }
+    var wt = await ground(tx0, ty0), wr = await ground(tx0 + 90, ty0);   /* and a point to the right of them */
+    await touch('touchStart', fingers(0));
+    for (i = 1; i <= 2; i++) await touch('touchMove', fingers(0.03 * i));
+    var small = await P.evaluate(function () { return window._R3D.yaw; });
+    for (i = 1; i <= 8; i++) await touch('touchMove', fingers(0.06 + 0.6 * i / 8));
+    var tw = await P.evaluate(function () { return window._R3D.yaw; }), st = await slip(wt, tx0, ty0);
+    var turned = await P.evaluate(function (a) {
+      var s = _rtsGroundToScreen(a[0].x, a[0].z);
+      return Math.atan2(s.y - a[2], s.x - a[1]);                    /* screen y runs down: + is clockwise */
+    }, [wr, tx0 - box.x, ty0 - box.y]);
+    await touch('touchEnd', []);
+    S.ok('a small twist does not turn the camera', small === 0, 'yaw ' + small);
+    S.ok('a twist turns it with the fingers: clockwise on the screen turns the map clockwise', Math.abs(tw + 0.66) < 0.01,
+         'fingers turned 0.66 rad clockwise, yaw ' + tw.toFixed(3));
+    S.ok('...about the fingers, the ground between them staying put', st < 2, st + ' px');
+    S.ok('...and the ground beside them goes round clockwise with them', turned > 0.2 && turned < 0.9,
+         'a point right of the fingers is now ' + turned.toFixed(3) + ' rad round, clockwise');
+    await P.evaluate(function () { _r3dCamSet(0, R3D_TILT); });
+  }
+
   /* ---------------- 2D ---------------- */
   await P.evaluate(function () { rts3dSet(false); });
   await park(1);

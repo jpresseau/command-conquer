@@ -128,10 +128,11 @@ function _rtsWheelRungs(e, quiet, unit) {
    What the order would be is settled AT THE PRESS - the thing under the cursor and the attack-
    move key - because the old order was given on mousedown, and in the tenth of a second a click
    takes, a held arrow key scrolls the view the width of a tank and A can already be up. */
-function _rtsGrabStart(button, mx, my) {
+function _rtsGrabStart(button, mx, my, orbit) {
   var U = window._rtsUI;
   if (U.grab) return;              /* a second button while one grab is live: the first keeps it */
-  U.grab = { button: button, x0: mx, y0: my, lx: mx, ly: my, moved: false,
+  /* `orbit`: this drag turns and leans the 3D camera instead of moving it (ui/orbit.js) */
+  U.grab = { button: button, x0: mx, y0: my, lx: mx, ly: my, moved: false, orbit: !!orbit,
              hit: button === 2 ? _rtsPickAt(mx, my) : null, am: !!U.attackMove };
 }
 function _rtsGrabMove(mx, my) {
@@ -139,6 +140,12 @@ function _rtsGrabMove(mx, my) {
   if (!g) return false;
   if (!g.moved && Math.hypot(mx - g.x0, my - g.y0) <= RTS_GRAB_SLOP) return false;
   g.moved = true;
+  if (g.orbit) {
+    /* across turns - the world under the cursor going the way it is dragged - and up leans over */
+    _rtsOrbitBy(-(mx - g.lx) * RTS_ORBIT_YAW, -(my - g.ly) * RTS_ORBIT_TILT);
+    g.lx = mx; g.ly = my; U.orbitTo = null;
+    return true;
+  }
   /* the ground under the last point is brought under this one: the grip is kept, and at the
      map's edge, where the clamp stops the view, dragging back moves it again at once */
   _rtsHoldGround(_rtsGroundAt(g.lx, g.ly), mx, my);
@@ -153,7 +160,7 @@ function _rtsGrabEnd() {
      context menu AFTER the release, on whatever is under the pointer: a build cameo went on
      hold, the radar sent the army across the map. ui/input.js eats that one menu. */
   if (U && g && g.moved && g.button === 2) U.eatCtx = true;
-  return g ? { moved: g.moved, button: g.button, x0: g.x0, y0: g.y0, hit: g.hit, am: g.am } : null;
+  return g ? { moved: g.moved, button: g.button, x0: g.x0, y0: g.y0, hit: g.hit, am: g.am, orbit: g.orbit } : null;
 }
 /* A right press that did not drag: the repair/sell cursor dropped, or the order, as pressed. */
 function _rtsGrabClick(g) {

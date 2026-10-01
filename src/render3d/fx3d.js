@@ -45,14 +45,14 @@
 
 var R3D_FX_VS =
   'attribute vec3 aP; attribute vec2 aT;' +
-  'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD; uniform float uLift;' +
+  'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD; uniform float uLift;' + R3D_CAM_GLSL +
   'varying vec2 vT;' +
   'void main(){' +
   '  vT = aT;' +
-  '  float sx = (aP.x - uCam.x) * uCam.z;' +
-  '  float sy = ((aP.z - uCam.y) * uTilt.x - aP.y * uTilt.y) * uCam.w;' +
+  '  float sx = camUV(aP).x * uCam.z;' +
+  '  float sy = (camUV(aP).y * uTilt.x - aP.y * uTilt.y) * uCam.w;' +
   /* the same three lines every other program in this renderer projects with */
-  '  float d  = ((aP.z - uCam.y) * uTilt.y + aP.y * uTilt.x) + uLift;' +
+  '  float d  = (camUV(aP).y * uTilt.y + aP.y * uTilt.x) + uLift;' +
   '  float pw = 1.0 - d * uInvD;' +
   '  gl_Position = vec4(sx, -sy, -d / ' + R3D_DEPTH_RANGE.toFixed(1) + ' * pw, pw);' +
   '}';
@@ -110,12 +110,12 @@ function _r3dFxDrawSprites(G, cam, invD) {
   if (!R3.fxP) { try { _r3dFxInit(R3); } catch (e) { return 0; } }
 
   var zoom = _rtsZoom(), TSscale = R.cell / RTS_TS;
-  var sp = R3.sp, cp = R3.cp;
+  var sp = R3.sp, cp = R3.cp, cy = R3.cy, sy = R3.sy;     /* the lean and the yaw: cam3d.js */
   var drawn = 0, i;
 
   gl.useProgram(R3.fxP);
   gl.uniform4fv(gl.getUniformLocation(R3.fxP, 'uCam'), cam);
-  gl.uniform2f(gl.getUniformLocation(R3.fxP, 'uTilt'), cp, sp);
+  _r3dCamU(gl, R3.fxP);
   gl.uniform1f(gl.getUniformLocation(R3.fxP, 'uInvD'), invD);
   gl.uniform1f(gl.getUniformLocation(R3.fxP, 'uLift'), R3D_FX_LIFT);
   gl.uniform1i(gl.getUniformLocation(R3.fxP, 'uS'), 0);
@@ -156,15 +156,17 @@ function _r3dFxDrawSprites(G, cam, invD) {
     /* f.y is a height above the GROUND - a blast across a roof, a shell burst in the air -
        so the terrain under it comes first, or an explosion on a hilltop goes off at the
        height the valley floor would have put it. */
-    var cxw = f.x, cyw = _rtsElev(f.x, f.z) + (f.y || 0) + off * sp, czw = f.z - off * cp;
+    /* along the screen's up, UP = (cos tilt * sin yaw, sin tilt, -cos tilt * cos yaw), and its
+       right, R = (cos yaw, 0, sin yaw) */
+    var cxw = f.x + off * cp * sy, cyw = _rtsElev(f.x, f.z) + (f.y || 0) + off * sp, czw = f.z - off * cp * cy;
 
-    var rx = w / 2;
-    var ux = 0, uy = (h / 2) * sp, uz = -(h / 2) * cp;
+    var rx = (w / 2) * cy, rz = (w / 2) * sy;
+    var ux = (h / 2) * cp * sy, uy = (h / 2) * sp, uz = -(h / 2) * cp * cy;
     /* corners: top-left, top-right, bottom-right / top-left, bottom-right, bottom-left */
     function put(k, sx2, sy2) {
       q[k] = cxw + rx * sx2 + ux * sy2;
       q[k + 1] = cyw + uy * sy2;
-      q[k + 2] = czw + uz * sy2;
+      q[k + 2] = czw + rz * sx2 + uz * sy2;
     }
     put(0, -1, 1); put(3, 1, 1); put(6, 1, -1);
     put(9, -1, 1); put(12, 1, -1); put(15, -1, -1);
@@ -205,7 +207,7 @@ function _r3dFxDraw(G, cam, invD) {
   /* BUILT ONCE A FRAME, by the world pass. The bloom's emitter pass draws the same quads again,
      so it reuses the upload rather than walking G.fx twice. */
   if (!emit) {
-    V.sp = R3.sp; V.cp = R3.cp; V.t = G.t || 0; V.M.n = 0; V.L.n = 0; V.M.lit = 0;
+    V.sp = R3.sp; V.cp = R3.cp; V.cy = R3.cy; V.sy = R3.sy; V.t = G.t || 0; V.M.n = 0; V.L.n = 0; V.M.lit = 0;
     V.gnd = R3.fxGroundAmt === undefined ? 1 : R3.fxGroundAmt;
     V.ground = _rtsElev;
     V.water = function (x, z) {
@@ -222,12 +224,14 @@ function _r3dFxDraw(G, cam, invD) {
 
   gl.useProgram(P);
   gl.uniform4fv(gl.getUniformLocation(P, 'uCam'), cam);
-  gl.uniform2f(gl.getUniformLocation(P, 'uTilt'), R3.cp, R3.sp);
+  _r3dCamU(gl, P);
   gl.uniform1f(gl.getUniformLocation(P, 'uInvD'), invD);
   gl.uniform1f(gl.getUniformLocation(P, 'uEmit'), emit ? 1 : 0);
-  /* the scene's sun, turned into the quad's frame: across, up the screen, toward the eye */
-  var L = R3_LIGHT;
-  gl.uniform3f(gl.getUniformLocation(P, 'uSunV'), L[0], L[1] * R3.sp - L[2] * R3.cp, L[1] * R3.cp + L[2] * R3.sp);
+  /* the scene's sun, turned into the quad's frame: across, up the screen, toward the eye - the
+     camera's R, UP and E (cam3d.js), which at yaw 0 are the three this was written with */
+  var L = R3_LIGHT, cy = R3.cy, sy = R3.sy;
+  var lr = L[0] * cy + L[2] * sy, lf = -L[0] * sy + L[2] * cy;
+  gl.uniform3f(gl.getUniformLocation(P, 'uSunV'), lr, L[1] * R3.sp - lf * R3.cp, L[1] * R3.cp + lf * R3.sp);
   var at = [['aP', 3, 0], ['aQ', 4, 12], ['aA', 4, 28], ['aB', 3, 44]], loc = [];
   for (i = 0; i < at.length; i++) loc.push(gl.getAttribLocation(P, at[i][0]));
   function bind(buf) {

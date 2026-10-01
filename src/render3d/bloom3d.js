@@ -119,7 +119,14 @@ function _r3dBloomPass(R3, G, cam, invD) {
   /* The SCENE's depth, tested and never written - depthMask stays false through the draw, so
      nothing here can disturb the buffer the occlusion pass is about to read. */
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, R3.sceneDepth, 0);
-  if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+  /* ONCE PER PAIR OF ATTACHMENTS, NOT ONCE A FRAME. checkFramebufferStatus is a synchronous
+     question to the GPU process: the page waits until everything queued so far has been done,
+     so asked every frame it stopped the CPU building frame N+1 while the GPU drew frame N - on
+     the one pass that runs whenever anything is burning. Completeness can only change when an
+     attachment does, so it is asked when they do (e2e/quality counts the round trips). */
+  var fresh = R3.bloomChkE !== R3.emitTex || R3.bloomChkD !== R3.sceneDepth;
+  if (fresh) { R3.bloomChkOk = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE; R3.bloomChkE = R3.emitTex; R3.bloomChkD = R3.sceneDepth; }
+  if (!R3.bloomChkOk) {
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, null, 0);
     gl.bindFramebuffer(gl.FRAMEBUFFER, R3.sceneFbo);
     gl.viewport(0, 0, R3.postW, R3.postH);

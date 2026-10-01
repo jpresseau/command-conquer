@@ -110,11 +110,11 @@ function _r3dAliveDraw(G, R3, draw) {
 function _r3dFxAlive(G, V) {
   var R3 = window._R3D;
   if (!R3 || R3.aliveAmt === 0) return;
-  var A2W = RTS_TILE / RTS_TS, vb = _r3dViewBounds(), E = G.ents || [];
+  var A2W = RTS_TILE / RTS_TS, vb = _r3dBoundsNear(_r3dViewBounds(), 10, 30), E = G.ents || [];
   for (var i = 0; i < E.length; i++) {
     var e = E[i];
     if (e.dead || e.type !== 'struct' || e.building) continue;
-    if (e.x < vb.x0 - 30 || e.x > vb.x1 + 30 || e.z < vb.z0 - 10 || e.z > vb.z1 + 40) continue;
+    if (e.x < vb.x0 || e.x > vb.x1 || e.z < vb.z0 || e.z > vb.z1) continue;
     var sp = _r3dAliveSpots(e.def);
     if (!sp) continue;
     var gy = _rtsElev(e.x, e.z), seed = _r3dFxH(e.id, 7.7), j, p;

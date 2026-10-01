@@ -103,11 +103,23 @@ Keep them small: if a file passes ~500 lines it wants splitting along its own ba
 - `src/render/` — canvas 2D. Reads the sim, never writes it. `camera`, `post` (light pass, water,
   shroud), `frame`, `draw`, `icons`.
 - `src/ui/` — `shell` (open/close/resize), `sidebar`, `input`, `select`, `hud`, `camera`
-  (panning + the main loop), `navigate` (right/middle-drag grabs the map, a still right-click
+  (panning + the main loop), `navigate` (right-drag grabs the map - middle too in 2D; a still right-click
   orders on release but as pressed; wheel and pinch zoom toward the pointer, `+`/`-` about the
   centre; `e2e/navigate`, `e2e/navtouch`). Keep a ground point under the cursor with
   `_rtsHoldGround` (closed form at the point's height), never by differencing `_rtsGroundAt`: the pick bisects
-  on height and is not an inverse on steep ground.
+  on height and is not an inverse on steep ground. `orbit` turns and leans the 3D camera
+  (middle-drag, Alt+right-drag, Q/E, PgUp/PgDn, two-finger twist, the compass; `e2e/orbit`).
+- **The 3D camera has a yaw and a tilt (`render3d/cam3d.js`), so screen axes are not world
+  axes.** Every projecting vertex shader splices `R3D_CAM_GLSL` and is set up by `_r3dCamU`;
+  on the CPU go through `_rtsWorldToScreen`/`_rtsGroundAt`, `_r3dToCam`/`_r3dFromCam`, and
+  `_r3dBoundsNear`/`_r3dDepthKey` for "near" and "far". Never read world z as depth or world x
+  as across.
+- **Graphics tiers (`render3d/quality3d.js`): gate the PASS with `_r3dQ(k)`, not an `*Amt`
+  knob** - the knobs zero an effect for specs and still pay for it. The harness pins HIGH
+  (`test/lib/game.js`); `e2e/quality` drives AUTO with its own frame times and counts sync calls,
+  draws and uploads. **A steady frame must make no synchronous GL call** (`checkFramebufferStatus`,
+  `getError`, `readPixels`, ...): each one stalls the CPU on the GPU. The GFX readout's second
+  line is the per-phase breakdown - read it on the device, not here.
 - `src/rts.audio.js` — all sound, synthesized at runtime with WebAudio. No sampled assets.
   `src/rts.sound.js` maps events to it; `src/rts.store.js`, `src/rts.save.js`, `src/rts.editor.js`.
 - `src/title.js` — the standalone shell: title screen, difficulty picker, file pickers, RESUME
@@ -235,6 +247,11 @@ breaking it shipped once.
   building's paved ring, sides and back only (never the front, where units come out), one static
   batch keyed on the standing buildings and drawn with the world's. Cosmetic: blocks nothing.
   `R3.dressAmt`. `e2e/dress`.
+- **The countryside** (`render3d/scenery3d.js` plans it, `farm3d.js` models it): fields, farmsteads,
+  telegraph poles, wrecks and boulders, placed by `_sprHash` salted with `G.seed`, never the game's
+  random stream. Cosmetic: it writes no game cell. `G.starts` is `{player, enemy}`, not a list.
+  `claim` tells `_r3dWorldBuild` which trees and tufts to leave out, so the plan is made first.
+  `R3.sceneryAmt`. `unit/scenery`, `e2e/scenery`.
 - **In 3D a soldier has a model of his own** (`render3d/soldier3d.js`): rounded limbs, and four
   stride poses picked by his gait (`_r3dSoldierPose`) in place of the bob. The sprite's model
   stays for 2D, for prone squads and for the dog; the mesh cache key carries the pose.

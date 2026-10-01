@@ -98,13 +98,13 @@ function _r3dTreadTick(G, R3) {
    they read constants from gl3d.js, which loads after this file. */
 function _r3dTreadVS() {
   return 'attribute vec3 aP; attribute vec2 aU; attribute vec3 aB;' +
-  'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' +
+  'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' + R3D_CAM_GLSL +
   'varying vec2 vU; varying vec3 vB;' +
   'void main(){' +
   '  vU = aU; vB = aB;' +
-  '  float sx = (aP.x - uCam.x) * uCam.z;' +
-  '  float sy = ((aP.z - uCam.y) * uTilt.x - aP.y * uTilt.y) * uCam.w;' +
-  '  float d  = ((aP.z - uCam.y) * uTilt.y + aP.y * uTilt.x);' +
+  '  float sx = camUV(aP).x * uCam.z;' +
+  '  float sy = (camUV(aP).y * uTilt.x - aP.y * uTilt.y) * uCam.w;' +
+  '  float d  = (camUV(aP).y * uTilt.y + aP.y * uTilt.x);' +
   '  float pw = 1.0 - d * uInvD;' +
   '  gl_Position = vec4(sx, -sy, -(d + ' + R3D_TREAD_LIFT.toFixed(2) + ') / ' + R3D_DEPTH_RANGE.toFixed(1) + ' * pw, pw);' +
   '}';
@@ -148,7 +148,7 @@ function _r3dTreadDraw(gl, R3, G, cam, invD) {
   }
   gl.useProgram(P);
   gl.uniform4fv(gl.getUniformLocation(P, 'uCam'), cam);
-  gl.uniform2f(gl.getUniformLocation(P, 'uTilt'), R3.cp, R3.sp);
+  _r3dCamU(gl, P);
   gl.uniform1f(gl.getUniformLocation(P, 'uInvD'), invD);
   gl.uniform1f(gl.getUniformLocation(P, 'uNow'), G.t || 0);
   gl.uniform1f(gl.getUniformLocation(P, 'uAmt'), R3.treadAmt === undefined ? 1 : R3.treadAmt);

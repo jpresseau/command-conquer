@@ -164,6 +164,7 @@ var R3D_MESH_VS =
   'uniform vec4 uCam;' +        /* focus.x, focus.z, 2*zoom/W, 2*zoom/H */
   'uniform vec2 uTilt;' +       /* cos(tilt), sin(tilt) */
   'uniform float uInvD;' +      /* 1 / eye distance; 0 is the orthographic camera */
+  R3D_CAM_GLSL +
   /* PLACEMENT COMES IN PER INSTANCE, not per draw - see render3d/inst3d.js. The unpack below
      defines uPos, uRot, uScale, uScaleY and uNrm as locals with exactly the names the uniforms
      had, so every line of the maths under it is the line that was here before. */
@@ -220,9 +221,9 @@ var R3D_MESH_VS =
   '  vWxz = wp.xz;' +                 /* the world position, for the sea's shoreline */
   '  vHY = vec2(wp.y - uPos.y, wp.y);' +   /* ...and its height, for the wear (weather3d.js) */
   '  _shadowFrom(wp);' +
-  '  float sx = (wp.x - uCam.x) * uCam.z;' +
-  '  float sy = ((wp.z - uCam.y) * uTilt.x - wp.y * uTilt.y) * uCam.w;' +
-  '  float d  = ((wp.z - uCam.y) * uTilt.y + wp.y * uTilt.x);' +
+  '  float sx = camUV(wp).x * uCam.z;' +
+  '  float sy = (camUV(wp).y * uTilt.x - wp.y * uTilt.y) * uCam.w;' +
+  '  float d  = (camUV(wp).y * uTilt.y + wp.y * uTilt.x);' +
   '  float pw = 1.0 - d * uInvD;' +
   '  gl_Position = vec4(sx, -sy, -(d + uDBias) / ' + R3D_DEPTH_RANGE.toFixed(1) + ' * pw, pw);' +
   '}';
@@ -282,7 +283,7 @@ var R3D_MESH_FS =
   '    float rz = _vn(p1 + vec2(0.0, 0.07)) + _vn(p2 + vec2(0.0, 0.07)) * 0.6 - r0;' +
   '    vec3 np = normalize(normalize(vN) + vec3(-rx, 0.0, -rz) * 5.0 * uRip);' +
   '    c = _shade(np, vCol.rgb) * tint;' +
-  '    float gl = max(dot(np, ' + _r3dGlsl3(R3D_HALF) + '), 0.0);' +
+  '    float gl = max(dot(np, uHalf), 0.0);' +
   '    gl = pow(gl, 48.0) * _shadowAt();' +
   '    c += vec3(1.0, 0.96, 0.86) * gl * 1.1;' +
   '    float edge = 1.0 - smoothstep(0.46, 0.66, wm);' +
@@ -341,7 +342,8 @@ function _r3dInit() {
       mesh: {}, terrainTex: null, terrainDirty: true,
       fogCv: null, fogTex: null, fogDirty: true,
       shadowReady: false, postReady: false,
-      cp: Math.cos(R3D_TILT), sp: Math.sin(R3D_TILT)
+      cp: Math.cos(R3D_TILT), sp: Math.sin(R3D_TILT),
+      yaw: 0, tilt: R3D_TILT, cy: 1, sy: 0         /* the camera's facing and lean: cam3d.js */
     };
   } catch (e) { return null; }
   /* The shadow map and the occlusion are the two parts of the mode allowed to fail on their
@@ -371,12 +373,9 @@ function _r3dProject(u, y, v) {
            scale: 1 / ws, behind: behind };
 }
 function _r3dWorldToScreen(x, y, z) {
-  var R = _rtsR;
-  return _r3dProject(x - R.focus.x, y || 0, z - R.focus.z);
+  var R = _rtsR, c = _r3dToCam(x - R.focus.x, z - R.focus.z);      /* the yaw: cam3d.js */
+  return _r3dProject(c.u, y || 0, c.v);
 }
-/* Screen y of a point on the ground. x cannot affect it under a north-up camera - the divide
-   is a function of depth alone - so this stays a one-argument question even with perspective. */
-function _r3dSY(wz) { return _r3dProject(0, 0, wz - _rtsR.focus.z).y; }
 
 /* The inverse, on the ground plane, which is the only plane input ever asks about. Solving
    syo = v*cp / (1 - v*sp/D) for v gives the closed form below; the denominator vanishing is
@@ -401,7 +400,8 @@ function _r3dPlaneAt(mx, my, h) {
   var v = (syo * (1 - h * R3.cp / D) + h * R3.sp) / den;
   var w = 1 - (v * R3.sp + h * R3.cp) / D;
   if (!(w > R3D_WMIN)) return null;
-  return { x: R.focus.x + sxo * w, z: R.focus.z + v };
+  var o = _r3dFromCam(sxo * w, v);                    /* back out of the camera's yaw */
+  return { x: R.focus.x + o.x, z: R.focus.z + o.z };
 }
 
 /* WHERE A PIXEL MEETS THE GROUND, which is no longer a plane.
@@ -462,14 +462,25 @@ function _r3dGroundAt(mx, my) {
    Setting the projected edge equal to the screen edge and solving gives the two z limits; the
    ratio (half-view-height / D) is a constant because D moves with the zoom, so the far limit
    is a fixed multiple of the half-height rather than something that can degenerate at one end
-   of the ladder. The x limit is taken at the FAR edge, where the trapezoid is widest. */
+   of the ladder. The x limit is taken at the FAR edge, where the trapezoid is widest.
+
+   THE CORNERS COME FROM THE CAMERA'S FRAME and are turned into the world by its yaw (cam3d.js),
+   so the box is the turned trapezoid's bounding box, and `poly` is the trapezoid itself - far
+   left, far right, near right, near left - for what wants the true shape: the radar's frame. */
 function _r3dViewBounds() {
   var R = _rtsR, R3 = window._R3D, zm = _rtsZoom(), D = _r3dEyeDist();
   var hx = R.W / 2 / zm, hz = R.H / 2 / zm;
   var conv = hz * R3.sp / D;
   var vFar = -hz / Math.max(1e-3, R3.cp - conv);      /* up the screen, away from the eye */
   var vNear = hz / (R3.cp + conv);                    /* down the screen, toward it */
-  var wFar = 1 - vFar * R3.sp / D;
-  return { x0: R.focus.x - hx * wFar, x1: R.focus.x + hx * wFar,
-           z0: R.focus.z + vFar, z1: R.focus.z + vNear };
+  var wFar = 1 - vFar * R3.sp / D, wNear = 1 - vNear * R3.sp / D;
+  var cs = [[-hx * wFar, vFar], [hx * wFar, vFar], [hx * wNear, vNear], [-hx * wNear, vNear]];
+  var b = { x0: 1e9, x1: -1e9, z0: 1e9, z1: -1e9, poly: [], cw: 2 * hx * wFar, cv0: vFar, cv1: vNear };
+  for (var i = 0; i < 4; i++) {
+    var o = _r3dFromCam(cs[i][0], cs[i][1]), px = R.focus.x + o.x, pz = R.focus.z + o.z;
+    b.poly.push({ x: px, z: pz });
+    if (px < b.x0) b.x0 = px; if (px > b.x1) b.x1 = px;
+    if (pz < b.z0) b.z0 = pz; if (pz > b.z1) b.z1 = pz;
+  }
+  return b;
 }

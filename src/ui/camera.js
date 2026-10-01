@@ -16,10 +16,14 @@ function _rtsPanTick(dt) {
      The arrow keys already pan, as do the screen edges, the radar and a finger drag, so WASD
      was the redundant half of every one of those pairs - and the half that was silently
      destroying things. RA panned with the arrows and the screen edge in the first place. */
-  if (k['arrowup'])    { R.focus.z -= sp; moved = true; }
-  if (k['arrowdown'])  { R.focus.z += sp; moved = true; }
-  if (k['arrowleft'])  { R.focus.x -= sp; moved = true; }
-  if (k['arrowright']) { R.focus.x += sp; moved = true; }
+  /* along the SCREEN's axes on the ground, which are the world's while the camera faces north:
+     right is the camera's R = (cos yaw, sin yaw), up is -F = (sin yaw, -cos yaw) - cam3d.js */
+  var R3 = _rtsIn3D() ? window._R3D : null, cy = R3 ? R3.cy : 1, sy = R3 ? R3.sy : 0;
+  function pan(a, b) { R.focus.x += (a * cy + b * sy) * sp; R.focus.z += (a * sy - b * cy) * sp; moved = true; }
+  if (k['arrowup'])    pan(0, 1);
+  if (k['arrowdown'])  pan(0, -1);
+  if (k['arrowleft'])  pan(-1, 0);
+  if (k['arrowright']) pan(1, 0);
   /* +/- held (ui/input.js): the press was a notch; past RTS_ZOOM_HOLD it glides on */
   var zd = (k['zoom+'] ? 1 : 0) - (k['zoom-'] ? 1 : 0);
   if (k['zoom+'] || k['zoom-']) {
@@ -31,10 +35,10 @@ function _rtsPanTick(dt) {
   /* edge scroll, but only while the pointer is genuinely over the battlefield */
   if (U.mouse.over && !U.drag && !U.grab) {
     var m = 26;
-    if (U.mouse.x < m) { R.focus.x -= sp; moved = true; }
-    if (U.mouse.x > R.W - m) { R.focus.x += sp; moved = true; }
-    if (U.mouse.y < m) { R.focus.z -= sp; moved = true; }
-    if (U.mouse.y > R.H - m) { R.focus.z += sp; moved = true; }
+    if (U.mouse.x < m) pan(-1, 0);
+    if (U.mouse.x > R.W - m) pan(1, 0);
+    if (U.mouse.y < m) pan(0, 1);
+    if (U.mouse.y > R.H - m) pan(0, -1);
   }
   if (moved) _rtsClampFocus();
 }
@@ -80,9 +84,16 @@ function _rtsLoop(prime) {
   U.raf = requestAnimationFrame(_rtsLoop);
   var now = (new Date()).getTime(), dt = Math.min(0.1, (now - U.last) / 1000);
   U.last = now;
+  /* the frame's own clock, for the readout's breakdown and for AUTO (render3d/quality3d.js) */
+  var pc = window.performance || Date, p0 = pc.now(), pf = U.prof || (U.prof = {});
+  if (U.pl) _r3dQualityFeed(p0 - U.pl, p0);
+  pf.gap = (pf.gap || 0) * 0.95 + (U.pl ? p0 - U.pl : 0) * 0.05;
+  U.pl = p0;
+  function mark(k) { var t = pc.now(); pf[k] = (pf[k] || 0) * 0.95 + (t - p0) * 0.05; p0 = t; }
   try {
     _rtsPanTick(dt);
     _rtsZoomTick(dt);                  /* the smooth zoom gliding in - ui/navigate.js */
+    _rtsOrbitTick(dt);                 /* turning and leaning the 3D camera - ui/orbit.js */
     /* THE VIEW STAYS ON THE MAP, EVERY FRAME, and it is held here rather than at each place that
        moves the camera because the places kept outnumbering the clamps. Scrolling, the wheel,
        the pinch, a radar click and a team jump all clamped; the OPENING did not, and neither did
@@ -156,12 +167,15 @@ function _rtsLoop(prime) {
         }
       }
     }
+    mark('sim');
     _rtsRFrame(dt);
+    mark('draw');
     _rtsDrawHud(dt);
     U.miniT = (U.miniT || 0) + dt;
     if (U.miniT > 0.12) { U.miniT = 0; _rtsDrawMini(); }
     U.uiT = (U.uiT || 0) + dt;
     if (U.uiT > 0.1) { U.uiT = 0; _rtsSyncSidebar(); _rtsSuperRow(); }
+    mark('ui');
     U.drawErrs = 0;
   } catch (err) {
     /* The other half: the renderer, the HUD or the sidebar threw. Nothing here can paint an

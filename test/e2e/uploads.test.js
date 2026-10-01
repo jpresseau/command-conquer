@@ -97,7 +97,11 @@ var FRAMES = 30;
     _r3dFrame(G);
     var oreBefore = snap().ore;
     G.scrap[70 * RTS_N + 70] = (G.scrap[70 * RTS_N + 70] || 0) + 25;
-    _r3dFrame(G);
+    /* the bed is throttled to four uploads a second (ground3d.js), so a change may wait a
+       quarter of one - waited for on the condition, with a second's grace that a bed which
+       never refreshes still fails */
+    var oreT0 = performance.now();
+    do _r3dFrame(G); while (snap().ore === oreBefore && performance.now() - oreT0 < 1000);
     o.oreAfterChange = snap().ore - oreBefore;
 
     /* 5. A NEW MATCH MUST NOT INHERIT THE LAST ONE'S SHROUD, and the collision has to be built
