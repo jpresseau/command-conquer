@@ -49,7 +49,8 @@ function _r3dMeshMay(R3) { return R3.meshBudget === undefined || R3.meshBudget >
 function _r3dMeshSpent(R3, ms) { if (R3.meshBudget !== undefined) R3.meshBudget -= ms; }
 
 /* WARM-UP: the base model of every unit type that is in the match, on every side in it -
-   whole, or as the parts the renderer draws it in - one at a time out of spare frame time. */
+   whole, or as the parts the renderer draws it in - one at a time out of spare frame time, at
+   both of the levels a unit is drawn at near. */
 function _r3dWarm(R3, ms) {
   var G = window._rtsG, R = window._rtsR;
   if (!G || !R || !R.spr) return;
@@ -68,10 +69,13 @@ function _r3dWarm(R3, ms) {
     });
     R3.warmQ = q; R3.warmFor = G;
   }
-  var t0 = _r3dNow();
+  /* the level this zoom draws a unit at first (render3d/unit3d.js), then the other one at the back
+     of the queue, so a zoom across R3D_LOD_MID_CELL finds both built */
+  var t0 = _r3dNow(), now = _r3dLodMid(R3) && !_r3dLodFar(R3) ? R3D_LOD_MID : 0;
   while (R3.warmQ.length && _r3dNow() - t0 < ms) {
-    var w = R3.warmQ.shift();
-    _r3dMesh(w[0], w[1], w[2], w[3], false, 0, 0);
+    var w = R3.warmQ.shift(), lv = w.length > 4 ? w[4] : now;
+    _r3dMesh(w[0], w[1], w[2], w[3], false, 0, 0, lv);
+    if (w.length < 5) R3.warmQ.push(w.concat([lv ? 0 : R3D_LOD_MID]));
   }
 }
 

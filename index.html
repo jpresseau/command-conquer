@@ -958,7 +958,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">9705a94 · 2026-10-02</div>
+  <div id="rtsBuild" title="build">55abfd7 · 2026-10-02</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -24696,7 +24696,8 @@ function _r3dMeshMay(R3) { return R3.meshBudget === undefined || R3.meshBudget >
 function _r3dMeshSpent(R3, ms) { if (R3.meshBudget !== undefined) R3.meshBudget -= ms; }
 
 /* WARM-UP: the base model of every unit type that is in the match, on every side in it -
-   whole, or as the parts the renderer draws it in - one at a time out of spare frame time. */
+   whole, or as the parts the renderer draws it in - one at a time out of spare frame time, at
+   both of the levels a unit is drawn at near. */
 function _r3dWarm(R3, ms) {
   var G = window._rtsG, R = window._rtsR;
   if (!G || !R || !R.spr) return;
@@ -24715,10 +24716,13 @@ function _r3dWarm(R3, ms) {
     });
     R3.warmQ = q; R3.warmFor = G;
   }
-  var t0 = _r3dNow();
+  /* the level this zoom draws a unit at first (render3d/unit3d.js), then the other one at the back
+     of the queue, so a zoom across R3D_LOD_MID_CELL finds both built */
+  var t0 = _r3dNow(), now = _r3dLodMid(R3) && !_r3dLodFar(R3) ? R3D_LOD_MID : 0;
   while (R3.warmQ.length && _r3dNow() - t0 < ms) {
-    var w = R3.warmQ.shift();
-    _r3dMesh(w[0], w[1], w[2], w[3], false, 0, 0);
+    var w = R3.warmQ.shift(), lv = w.length > 4 ? w[4] : now;
+    _r3dMesh(w[0], w[1], w[2], w[3], false, 0, 0, lv);
+    if (w.length < 5) R3.warmQ.push(w.concat([lv ? 0 : R3D_LOD_MID]));
   }
 }
 
@@ -29032,18 +29036,27 @@ function _r3dBuildMesh(gl, faces) {
    with `lod`, the model is built plain - flat chamfers, round things capped at R3D_LOD_SEG sides,
    a soldier as the sprite's own figure - in about half the triangles, and one model serves every
    pose and every roll of the tracks. Drawn into the sun's map always, and on screen when zoomed
-   far out (_r3dLod, render3d/unit3d.js). */
+   far out (_r3dLod, render3d/unit3d.js).
+
+   BETWEEN THE TWO, R3D_LOD_MID: the plain geometry, but still walking and still rolling - keyed by
+   pose and roll like the full model, so a soldier strides and the tracks turn. A unit at the
+   zoom a phone opens on is forty pixels long and its rounded bevels cost two triangles a pixel
+   that nobody can see (render3d/unit3d.js, _r3dLodMid). Units only: a building is five times
+   the size on screen, and its curved roofs show their facets at 8 sides. */
 var R3D_LOD_SEG = 8;
+var R3D_LOD_MID = 2;
 function _r3dMesh(kind, def, side, part, prone, pose, roll, lod) {
   var R3 = window._R3D;
-  if (lod) return _r3dMeshLod(R3, kind, def, side, part, prone);
-  var key = kind + ':' + def + ':' + side + ':' + (part || '') + ':' + (prone ? 1 : 0) + ':' + (pose || 0) + (R3.soldierOff ? ':s' : '') + (roll ? ':r' + roll : '');
+  if (lod && lod !== R3D_LOD_MID) return _r3dMeshLod(R3, kind, def, side, part, prone);
+  var key = (lod ? 'M:' : '') + kind + ':' + def + ':' + side + ':' + (part || '') + ':' + (prone ? 1 : 0) + ':' + (pose || 0) + (R3.soldierOff ? ':s' : '') + (roll ? ':r' + roll : '');
   var m = R3.mesh[key];
   if (m !== undefined) return m;
   /* AN OPTIONAL VARIANT WAITS ITS TURN in a live frame with no budget left - a pose, a roll of
-     the tracks, a turn of the propeller: the base model stands in (render3d/pace3d.js) */
+     the tracks, a turn of the propeller: the base model stands in (render3d/pace3d.js); and so
+     does the full model for a plain one not built yet, so zooming out never stalls a frame */
   var turn = !!part && part.slice(0, 4) === 'prop' && part !== 'prop0';
-  if ((roll || pose || turn) && !_r3dMeshMay(R3)) return _r3dMesh(kind, def, side, turn ? 'prop0' : part, prone, 0, 0);
+  if ((roll || pose || turn) && !_r3dMeshMay(R3)) return _r3dMesh(kind, def, side, turn ? 'prop0' : part, prone, 0, 0, lod);
+  if (lod && !_r3dMeshMay(R3)) return _r3dMesh(kind, def, side, part, prone, pose, roll);
   var faces = null, tb = _r3dNow();
   /* the point round its running gear it is built at, and how far it rolls for a full turn of
      it (render3d/unit3d.js) */
@@ -29056,7 +29069,7 @@ function _r3dMesh(kind, def, side, part, prone, pose, roll, lod) {
        copy of it in one call, so the vertex stage has room the baker does not. _r3DetailHigh
        raises the segment counts and turns every box's flat chamfer into a rounded edge with a
        normal per corner, for the duration of this build and no longer. See _R3_DETAIL. */
-    faces = _r3DetailHigh(function () {
+    faces = (lod ? _r3dPlain : _r3DetailHigh)(function () {
       if (kind === 'b') return _sprBuildingModel(def, side);
       if (part && part.slice(0, 4) === 'prop') return _r3dPropModel(def, side, +part.slice(4));   /* air3d.js */
       /* a soldier has a model of his own in 3D, walking (render3d/soldier3d.js) or crawling
@@ -29076,20 +29089,28 @@ function _r3dMesh(kind, def, side, part, prone, pose, roll, lod) {
   return m;
 }
 function _r3dMeshLod(R3, kind, def, side, part, prone) {
-  var key = 'L:' + kind + ':' + def + ':' + side + ':' + (part || '') + ':' + (prone ? 1 : 0);
+  /* a propeller's turn is drawn at its first; a stride or a roll at the base - one model for all */
+  var pt = part && part.slice(0, 4) === 'prop' ? 'prop0' : part;
+  var key = 'L:' + kind + ':' + def + ':' + side + ':' + (pt || '') + ':' + (prone ? 1 : 0);
   var m = R3.mesh[key];
   if (m !== undefined) return m;
-  /* a propeller's turn is drawn at its first; a stride or a roll at the base - one model for all */
-  var faces = null, cap = _R3_SEG_CAP, pt = part && part.slice(0, 4) === 'prop' ? 'prop0' : part;
-  _R3_SEG_CAP = R3D_LOD_SEG;
+  var faces = null;
   try {
-    faces = kind === 'b' ? _sprBuildingModel(def, side)
-      : pt === 'prop0' ? _r3dPropModel(def, side, 0) : _sprUnitModel(def, side, !!prone, pt || null);
-  } catch (e) { faces = null; } finally { _R3_SEG_CAP = cap; }
+    faces = _r3dPlain(function () {
+      return kind === 'b' ? _sprBuildingModel(def, side)
+        : pt === 'prop0' ? _r3dPropModel(def, side, 0) : _sprUnitModel(def, side, !!prone, pt || null);
+    });
+  } catch (e) { faces = null; }
   m = (faces && faces.length) ? _r3dBuildMesh(R3.gl, faces) : null;
   if (m) m.weather = kind === 'b' ? 1 : 0.5;
   R3.mesh[key] = m;
   return m;
+}
+/* the baker's own tessellation, round things capped at R3D_LOD_SEG sides, for this build only */
+function _r3dPlain(fn) {
+  var cap = _R3_SEG_CAP;
+  _R3_SEG_CAP = R3D_LOD_SEG;
+  try { return fn(); } finally { _R3_SEG_CAP = cap; }
 }
 </script>
 <script>/* render3d/scene3d.js - the frame walk: what the 3D mode draws, and in what order.
@@ -29473,6 +29494,7 @@ function _r3dFrame(G) {
      leave its own batches on its own program - the sun's has no colour attribute and no tint. */
   BATCH = _r3dInstBatch(R3);
   var lod = !!bound || _r3dLodFar(R3);              /* the plain models: the sun's pass, or far out - mesh3d.js */
+  var ulod = lod || (_r3dLodMid(R3) && R3D_LOD_MID);   /* and a unit, nearer: plain, still moving */
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (e.dead || (only && e.type !== only) || (side && e.side !== side) || (keep && !keep(e))) continue;
@@ -29487,7 +29509,7 @@ function _r3dFrame(G) {
       var rise = e.building ? 0.12 + 0.88 * Math.max(0, Math.min(1, e.bprog || 0)) : 1;
       drawIn(C, _r3dMesh('b', e.def, e.side, null, 0, 0, 0, lod), e.x, _rtsElev(e.x, e.z), e.z, 0, ART2W,
              e.building ? 1 : _r3dHurtDim(e, R3) || (dmg ? 1 : 0), rise);   /* scorched: hurt3d.js */
-    } else if (e.type === 'unit') _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod);   /* render3d/unit3d.js */
+    } else if (e.type === 'unit') _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, ulod);   /* render3d/unit3d.js */
   }
   /* and the burnt-out hulls of the vehicles that died, charred (render3d/husk3d.js) */
   if (!only) _r3dHusks(G, R3, function (m, x, y, z, rot, n) { drawIn(C, m, x, y, z, rot, ART2W, 2, 1, n); });
@@ -30197,6 +30219,14 @@ function _r3dShipSwell(e, t) {
 var R3D_LOD_CELL = 20;           /* device px a map cell, below which */
 function _r3dLodFar(R3) {
   return !R3.lodOff && typeof _rtsZoom === 'function' && _rtsZoom() * RTS_TILE * (R3.scale || 1) < R3D_LOD_CELL;
+}
+/* Nearer, but a unit still forty pixels long: the plain geometry, walking and rolling (R3D_LOD_MID).
+   Counted in the 3D buffer's pixels, so a heavy fight that drops the scale (pace3d.js) drops the
+   detail with it. Seen side by side at a phone's opening zoom, the two differ in a few hundred
+   pixels of the unit's edges, and the frame draws a third of the triangles for its units. */
+var R3D_LOD_MID_CELL = 80;       /* device px a map cell, below which */
+function _r3dLodMid(R3) {
+  return !R3.lodOff && typeof _rtsZoom === 'function' && _rtsZoom() * RTS_TILE * (R3.scale || 1) < R3D_LOD_MID_CELL;
 }
 
 function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {

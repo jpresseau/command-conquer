@@ -84,6 +84,14 @@ var R3D_LOD_CELL = 20;           /* device px a map cell, below which */
 function _r3dLodFar(R3) {
   return !R3.lodOff && typeof _rtsZoom === 'function' && _rtsZoom() * RTS_TILE * (R3.scale || 1) < R3D_LOD_CELL;
 }
+/* Nearer, but a unit still forty pixels long: the plain geometry, walking and rolling (R3D_LOD_MID).
+   Counted in the 3D buffer's pixels, so a heavy fight that drops the scale (pace3d.js) drops the
+   detail with it. Seen side by side at a phone's opening zoom, the two differ in a few hundred
+   pixels of the unit's edges, and the frame draws a third of the triangles for its units. */
+var R3D_LOD_MID_CELL = 80;       /* device px a map cell, below which */
+function _r3dLodMid(R3) {
+  return !R3.lodOff && typeof _rtsZoom === 'function' && _rtsZoom() * RTS_TILE * (R3.scale || 1) < R3D_LOD_MID_CELL;
+}
 
 function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
   var R = _rtsR, t = G.t || 0;

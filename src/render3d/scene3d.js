@@ -379,6 +379,7 @@ function _r3dFrame(G) {
      leave its own batches on its own program - the sun's has no colour attribute and no tint. */
   BATCH = _r3dInstBatch(R3);
   var lod = !!bound || _r3dLodFar(R3);              /* the plain models: the sun's pass, or far out - mesh3d.js */
+  var ulod = lod || (_r3dLodMid(R3) && R3D_LOD_MID);   /* and a unit, nearer: plain, still moving */
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (e.dead || (only && e.type !== only) || (side && e.side !== side) || (keep && !keep(e))) continue;
@@ -393,7 +394,7 @@ function _r3dFrame(G) {
       var rise = e.building ? 0.12 + 0.88 * Math.max(0, Math.min(1, e.bprog || 0)) : 1;
       drawIn(C, _r3dMesh('b', e.def, e.side, null, 0, 0, 0, lod), e.x, _rtsElev(e.x, e.z), e.z, 0, ART2W,
              e.building ? 1 : _r3dHurtDim(e, R3) || (dmg ? 1 : 0), rise);   /* scorched: hurt3d.js */
-    } else if (e.type === 'unit') _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod);   /* render3d/unit3d.js */
+    } else if (e.type === 'unit') _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, ulod);   /* render3d/unit3d.js */
   }
   /* and the burnt-out hulls of the vehicles that died, charred (render3d/husk3d.js) */
   if (!only) _r3dHusks(G, R3, function (m, x, y, z, rot, n) { drawIn(C, m, x, y, z, rot, ART2W, 2, 1, n); });
