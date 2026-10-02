@@ -86,25 +86,49 @@ function _r3dInstConst(gl, I, C, x, y, z, sy, cs, sn, sc, dim, nx, ny, nz) {
   }
 }
 
-/* Point the three attributes at the packed rows and step them once per instance. */
-function _r3dInstBind(gl, I, C, buf) {
+/* Point the three attributes at the packed rows - from byte `at` of the buffer, where a pass's
+   batches sit one after another (_r3dInstPack) - and step them once per instance. */
+function _r3dInstBind(gl, I, C, buf, at) {
   var S = R3D_INST_FLOATS * 4;
+  at = at || 0;
   gl.bindBuffer(gl.ARRAY_BUFFER, buf);
   if (C.aI0 >= 0) {
     gl.enableVertexAttribArray(C.aI0);
-    gl.vertexAttribPointer(C.aI0, 4, gl.FLOAT, false, S, 0);
+    gl.vertexAttribPointer(C.aI0, 4, gl.FLOAT, false, S, at);
     I.divisor(C.aI0, 1);
   }
   if (C.aI1 >= 0) {
     gl.enableVertexAttribArray(C.aI1);
-    gl.vertexAttribPointer(C.aI1, 4, gl.FLOAT, false, S, 16);
+    gl.vertexAttribPointer(C.aI1, 4, gl.FLOAT, false, S, at + 16);
     I.divisor(C.aI1, 1);
   }
   if (C.aI2 >= 0) {
     gl.enableVertexAttribArray(C.aI2);
-    gl.vertexAttribPointer(C.aI2, 3, gl.FLOAT, false, S, 32);
+    gl.vertexAttribPointer(C.aI2, 3, gl.FLOAT, false, S, at + 32);
     I.divisor(C.aI2, 1);
   }
+}
+
+/* ONE UPLOAD A PASS, NOT ONE A MESH. Every batch's rows used to go up on their own, into the one
+   buffer, just before that batch was drawn - a hundred and more uploads a frame in a battle,
+   each re-specifying a buffer the GPU may still be reading for the draw before, which a phone's
+   driver answers by waiting or copying. Now the pass's rows are laid end to end and sent once,
+   and each batch draws from its own offset (`b.at`, in bytes). */
+function _r3dInstPack(gl, R3, B) {
+  var n = 0, i, F = R3D_INST_FLOATS;
+  for (i = 0; i < B.order.length; i++) n += B.order[i].n;
+  if (!n) return null;
+  if (!R3.instAll || R3.instAll.length < n * F) R3.instAll = new Float32Array(Math.max(n * 2, 256) * F);
+  var all = R3.instAll, o = 0;
+  for (i = 0; i < B.order.length; i++) {
+    var b = B.order[i];
+    all.set(b.a.subarray(0, b.n * F), o);
+    b.at = o * 4; o += b.n * F;
+  }
+  var buf = _r3dInstBuffer(gl, R3);
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, all.subarray(0, o), gl.STREAM_DRAW);
+  return buf;
 }
 
 /* A frame's worth of placements, bucketed by the mesh they belong to.

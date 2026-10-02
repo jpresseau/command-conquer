@@ -78,9 +78,11 @@ function _r3dFxSky(G, V) {
         /* a short streak, leaning down the wind */
         _r3dFxStreak(V.M, V, rx + 0.35, top + 1.7, rz + 0.12, rx, top, rz, 0.11, 0, R3D_FXT_RAIN, 0, i, 0.85 * S.rain, 0, R3D_RAIN_C);
       } else {
-        /* landed: a little ring, spreading */
+        /* landed: a little ring, spreading - one quad: a ring under a cell across does not
+           need to follow the ground, and at 8 x 8 it was 64 quads a drop, most of the rain's
+           cost in a downpour */
         var k = (p - 0.94) / 0.06;
-        _r3dFxDecal(V.M, V, rx, rz, 0.15 + k * 0.45, 8, 0.3, R3D_FXT_RING, k, i, 0.5 * S.rain * (1 - k), R3D_RAIN_C);
+        _r3dFxDecal(V.M, V, rx, rz, 0.15 + k * 0.45, 1, 0.3, R3D_FXT_RING, k, i, 0.5 * S.rain * (1 - k), R3D_RAIN_C);
       }
     }
   }

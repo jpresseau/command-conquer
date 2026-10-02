@@ -119,7 +119,7 @@ function _r3dResize() {
      larger than the screen is pure cost. */
   var pin = (typeof _rtsGfxWant === 'function') ? _rtsGfxWant() : null;
   /* ...and the tier's own ceiling, when no pin is set (render3d/quality3d.js) */
-  R3.scale = pin ? Math.min(dpr, pin) : Math.min(dpr, R3D_MAX_SCALE, (R3.q && R3.q.scale) || R3D_MAX_SCALE);
+  R3.scale = pin ? Math.min(dpr, pin) : Math.min(dpr, R3D_MAX_SCALE, (R3.q && R3.q.scale) || R3D_MAX_SCALE) * (R3.dyn || 1);   /* fewer pixels when a fight is heavy: pace3d.js */
   /* The CSS box tracks the presentation canvas's, so the presented layer always fills the
      stage whatever the buffer scale. Off the overlay's inline style rather than layout, for
      the same reason as the buffer size above - and string-compared, because this runs every

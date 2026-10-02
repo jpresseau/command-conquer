@@ -218,7 +218,7 @@ function _r3dFxDraw(G, cam, invD) {
     gl.bindBuffer(gl.ARRAY_BUFFER, R3.fx2BufM);
     gl.bufferData(gl.ARRAY_BUFFER, _r3dFxOrder(V), gl.DYNAMIC_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, R3.fx2BufL);
-    gl.bufferData(gl.ARRAY_BUFFER, V.L.a.subarray(0, V.L.n * R3D_FX_QUAD), gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, _r3dFxPack(V.L, null, V, 'outL'), gl.DYNAMIC_DRAW);
   }
   if (emit ? !V.M.lit : (!V.M.n && !V.L.n)) { if (!emit) R3.fxDrawn = 0; return 0; }
 
@@ -248,16 +248,18 @@ function _r3dFxDraw(G, cam, invD) {
   gl.enable(gl.DEPTH_TEST);
   gl.depthMask(false);
   gl.enable(gl.BLEND);
+  /* four corners a quad, two triangles through a fixed index (fxemit3d.js, _r3dFxPack) */
+  function quads(n) { gl.drawElements(gl.TRIANGLES, _r3dFxIndex(gl, R3, n) * 6, gl.UNSIGNED_SHORT, 0); }
   /* the glare first, MULTIPLYING what is there: dst + dst * src */
   if (!emit && V.L.n) {
     bind(R3.fx2BufL);
     gl.blendFunc(gl.DST_COLOR, gl.ONE);
-    gl.drawArrays(gl.TRIANGLES, 0, V.L.n * 6);
+    quads(V.L.n);
   }
   if (V.M.n) {
     bind(R3.fx2BufM);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    gl.drawArrays(gl.TRIANGLES, 0, V.M.n * 6);
+    quads(V.M.n);
   }
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.disable(gl.BLEND);

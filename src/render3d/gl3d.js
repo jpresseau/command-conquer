@@ -352,7 +352,7 @@ function _r3dInit() {
       meshP: _r3dProgram(gl, R3D_MESH_VS, R3D_MESH_FS),
       texP: _r3dProgram(gl, R3D_TEX_VS, R3D_TEX_FS),
       mesh: {}, terrainTex: null, terrainDirty: true,
-      fogCv: null, fogTex: null, fogDirty: true,
+      fogPx: null, fogTex: null, fogDirty: true,
       shadowReady: false, postReady: false,
       cp: Math.cos(R3D_TILT), sp: Math.sin(R3D_TILT),
       yaw: 0, tilt: R3D_TILT, cy: 1, sy: 0         /* the camera's facing and lean: cam3d.js */

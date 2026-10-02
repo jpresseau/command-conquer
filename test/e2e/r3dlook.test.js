@@ -66,7 +66,11 @@ var S = new Suite('r3dlook');
       return { mag: gl.getTexParameter(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER),
                min: gl.getTexParameter(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER) };
     }
+    /* the baked picture is read - and so uploaded - only by the baked ground (upload3d.js): the
+       materials take their scars from the ground map. Its filters are the baked ground's. */
+    window.RTS_GROUND_LEGACY = true; _rtsRFrame(0);
     var gf = filters(R3.terrainTex), ff = filters(R3.fogTex);
+    window.RTS_GROUND_LEGACY = false; _rtsRFrame(0);
     o.NEAREST = gl.NEAREST; o.LINEAR = gl.LINEAR;
     o.groundMag = gf.mag; o.groundMin = gf.min;
     o.fogMag = ff.mag; o.fogMin = ff.min;

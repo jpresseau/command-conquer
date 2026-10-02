@@ -179,14 +179,16 @@ function _rtsRFrame(dt) {
 
   /* --- new scorch marks and craters, stamped once into the baked terrain. Because the
      ground is a single canvas, a smudge costs nothing after the frame it appears on. --- */
+  /* the GL ground shares this canvas, and is sent only the rectangles stamped (render3d/upload3d.js) */
+  var stamp = window._R3D && typeof _r3dTerrainStamp === 'function' ? _r3dTerrainStamp : function () {};
   if (G.corpses && G.corpses.length) {
-    if (window._R3D) window._R3D.terrainDirty = true;   /* the GL ground shares this canvas */
     var cg = R.terrain.getContext('2d');
     cg.imageSmoothingEnabled = false;
     while (G.corpses.length) {
-      var cp = G.corpses.pop();
+      var cp = G.corpses.pop(), cim = S.corpse[cp.v % 3];
       var cpx = (cp.x / RTS_TILE + RTS_N / 2) * RTS_TS, cpy = (cp.z / RTS_TILE + RTS_N / 2) * RTS_TS;
-      cg.drawImage(S.corpse[cp.v % 3], Math.round(cpx - 7), Math.round(cpy - 6));
+      cg.drawImage(cim, Math.round(cpx - 7), Math.round(cpy - 6));
+      stamp(Math.round(cpx - 7), Math.round(cpy - 6), cim.width, cim.height);
     }
   }
   if (G.newScorch && G.newScorch.length) {
@@ -196,8 +198,9 @@ function _rtsRFrame(dt) {
       var ni = G.newScorch.pop();
       var nx = (ni % RTS_N) * RTS_TS, ny = ((ni / RTS_N) | 0) * RTS_TS;
       var sv = G.scorch[ni];
-      if (sv & 8) tg.drawImage(S.crater, nx, ny);
-      else tg.drawImage(S.scorch[((sv & 7) - 1) % 6], nx, ny);
+      var sim = (sv & 8) ? S.crater : S.scorch[((sv & 7) - 1) % 6];
+      tg.drawImage(sim, nx, ny);
+      stamp(nx, ny, sim.width, sim.height);
     }
   }
 
