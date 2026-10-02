@@ -120,12 +120,12 @@ function _r3dFrame(G) {
      every building and unit. The ground and the sea do not - both are effectively flat, and a
      flat surface's shadow is itself, which only feeds the bias. */
   if (R3.shadowReady && _r3dQ('shadow')) {          /* the tiers: render3d/quality3d.js */
+    var sb = R3.world ? R3.world.concat(R3.ore || [], _r3dDressBatches(R3), _r3dSceneryBatches(R3)) : [];
     _r3dShadowPass(G, function (P) {
       var SC = ctx(P);
       gl.uniform2f(SC.uWave, 0, 0);
       if (R3.world) {
         _r3dInstConst(gl, I, SC, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0);
-        var sb = R3.world.concat(R3.ore || [], _r3dDressBatches(R3), _r3dSceneryBatches(R3));
         for (var si = 0; si < sb.length; si++) {
           var sm = sb[si];
           if (!sm || !sm.verts) continue;
@@ -138,9 +138,12 @@ function _r3dFrame(G) {
           gl.drawArrays(gl.TRIANGLES, 0, sm.verts);
         }
       }
+    }, function (P) {
+      var SC = ctx(P);
+      gl.uniform2f(SC.uWave, 0, 0);
       /* the sun's span plus the tallest thing that could lean into it */
       paintEntities(SC, [R3.sunC[0], R3.sunC[2], R3.sunSpan + R3D_WORLD_YMAX]);
-    });
+    }, sb);                                          /* the world's shadows are kept: shadowcache3d.js */
   }
 
   /* THE FRAME GOES INTO A BUFFER, NOT ONTO THE CANVAS - see post3d.js. A canvas's depth
@@ -371,14 +374,16 @@ function _r3dFrame(G) {
      units across and was being handed EVERY entity in the match, the enemy base included.
      Those draws cannot mark a texel of the map and cost a full submission each; at a hundred
      units a side it is most of the roster once a game is under way. */
-  function paintEntities(C, bound, only, side, keep) {
+  function paintEntities(C, bound, only, side, keep, view) {
   /* A fresh set of buckets for this pass. Both passes walk the same entities, but each has to
      leave its own batches on its own program - the sun's has no colour attribute and no tint. */
   BATCH = _r3dInstBatch(R3);
+  var lod = !!bound || _r3dLodFar(R3);              /* the plain models: the sun's pass, or far out - mesh3d.js */
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (e.dead || (only && e.type !== only) || (side && e.side !== side) || (keep && !keep(e))) continue;
     if (bound && (Math.abs(e.x - bound[0]) > bound[2] || Math.abs(e.z - bound[1]) > bound[2])) continue;
+    if (view && (e.x < view.x0 || e.x > view.x1 || e.z < view.z0 || e.z > view.z1)) continue;   /* off the screen */
     if (e.type === 'struct') {
       /* A BUILDING UNDER CONSTRUCTION RISES OUT OF THE GROUND. The 2D reveal is a wipe, which
          has no 3D analogue; height is the 3D-native equivalent, and it reads instantly as
@@ -386,9 +391,9 @@ function _r3dFrame(G) {
          is not mistaken for a finished one at full height's last moment. */
       var dmg = !e.building && e.hp < e.maxHp * RTS_COND_YELLOW;
       var rise = e.building ? 0.12 + 0.88 * Math.max(0, Math.min(1, e.bprog || 0)) : 1;
-      drawIn(C, _r3dMesh('b', e.def, e.side), e.x, _rtsElev(e.x, e.z), e.z, 0, ART2W,
+      drawIn(C, _r3dMesh('b', e.def, e.side, null, 0, 0, 0, lod), e.x, _rtsElev(e.x, e.z), e.z, 0, ART2W,
              e.building ? 1 : _r3dHurtDim(e, R3) || (dmg ? 1 : 0), rise);   /* scorched: hurt3d.js */
-    } else if (e.type === 'unit') _r3dPaintUnit(C, e, G, R3, drawIn, ART2W);   /* render3d/unit3d.js */
+    } else if (e.type === 'unit') _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod);   /* render3d/unit3d.js */
   }
   /* and the burnt-out hulls of the vehicles that died, charred (render3d/husk3d.js) */
   if (!only) _r3dHusks(G, R3, function (m, x, y, z, rot, n) { drawIn(C, m, x, y, z, rot, ART2W, 2, 1, n); });
@@ -396,7 +401,10 @@ function _r3dFrame(G) {
   if (!only) _r3dAliveDraw(G, R3, function (m, x, y, z, rot, dim, sy) { drawIn(C, m, x, y, z, rot, ART2W, dim, sy, null); });
   flushBatch(C);
   }
-  _r3dMark(R3, 'world'); paintEntities(MC);
+  /* THE CAMERA'S OWN CULL, which the world's chunks always had and the entities did not: every
+     unit and building on the map was drawn every frame, both bases off the screen included.
+     Widened like the world's, by the tallest thing's screen lift and the widest building. */
+  _r3dMark(R3, 'world'); paintEntities(MC, null, null, null, null, R3.entCullOff ? null : _r3dBoundsNear(vb, R3D_WORLD_YMAX * R3.sp / R3.cp, 10));
   /* the building about to be placed, as itself and translucent (render3d/place3d.js) */
   var gh = _r3dGhostAt();
   if (gh) {

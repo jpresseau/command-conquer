@@ -958,7 +958,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">17f2de1 · 2026-10-02</div>
+  <div id="rtsBuild" title="build">9705a94 · 2026-10-02</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -5110,9 +5110,12 @@ var R3_SEG_MIN = 24;
    and there are a hundred of them; a tree is drawn at ten and there are ten thousand. */
 var _R3_SEG_FLOOR = R3_SEG_MIN;
 
+/* _R3_SEG_CAP: the most sides a round thing may have, for the 3D mode's distant and shadow-only
+   models (render3d/mesh3d.js); no cap for anything else */
+var _R3_SEG_CAP = 1e9;
 function _r3Seg(n) {
-  return Math.round(Math.max(n || 0, _R3_SEG_FLOOR) *
-                    (_R3_DETAIL > 1 ? R3_DETAIL_SEG : 1));
+  return Math.min(_R3_SEG_CAP, Math.round(Math.max(n || 0, _R3_SEG_FLOOR) *
+                    (_R3_DETAIL > 1 ? R3_DETAIL_SEG : 1)));
 }
 /* Run `fn` with the floor lifted, for geometry that is bulk rather than model. */
 function _r3SegBulk(fn) {
@@ -24364,7 +24367,8 @@ function _r3dSunView() {
   var vb = _r3dViewBounds();
   var cx = (vb.x0 + vb.x1) / 2, cz = (vb.z0 + vb.z1) / 2;
   var half = Math.max(vb.x1 - vb.x0, vb.z1 - vb.z0) * 0.5 * R3D_SHADOW_SPAN;
-  return { c: [cx, R3D_WORLD_YMAX * 0.5, cz], span: Math.max(8, half) };
+  /* snapped, so the world's shadows can be kept from one frame to the next (shadowcache3d.js) */
+  return _r3dSunSnap(cx, cz, Math.max(8, half));
 }
 
 /* The pass itself. Colour only - the depth attachment is there so the nearest surface wins,
@@ -24373,26 +24377,45 @@ function _r3dSunView() {
    are - but the cones the trees, crags and ore crystals are built from are not reliably
    capped, and an open caster with its front faces culled leaves the light a way through it.
    A hole in a tree's shadow is worse than the acne the bias already handles. */
-function _r3dShadowPass(G, draw) {
+/* `world(P)` draws what never moves, `batches` naming the batches it draws; `units(P)` the rest.
+   The world goes into the kept map when that is out of date and is copied from it otherwise
+   (shadowcache3d.js); without the kept map, both draw every frame as they always did. */
+function _r3dShadowPass(G, world, units, batches) {
   var R3 = window._R3D, gl = R3.gl, sv = _r3dSunView();
   R3.sunC = sv.c; R3.sunSpan = sv.span;
-  gl.bindFramebuffer(gl.FRAMEBUFFER, R3.shadowFbo);
   gl.viewport(0, 0, R3D_SHADOW_SIZE, R3D_SHADOW_SIZE);
   gl.clearColor(1, 1, 1, 1);
   gl.disable(gl.BLEND);
   gl.enable(gl.DEPTH_TEST);
   gl.depthMask(true);
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-  gl.useProgram(R3.shadP);
   var P = R3.shadP;
-  gl.uniform3fv(gl.getUniformLocation(P, 'uSunR'), _r3dSunB().r);
-  gl.uniform3fv(gl.getUniformLocation(P, 'uSunU'), _r3dSunB().u);
-  gl.uniform3fv(gl.getUniformLocation(P, 'uSunF'), _r3dSunB().f);
-  gl.uniform3fv(gl.getUniformLocation(P, 'uSunC'), sv.c);
-  gl.uniform2f(gl.getUniformLocation(P, 'uSunSpan'), sv.span, R3D_SHADOW_RANGE);
-  draw(P);
-
+  function begin(fbo) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  }
+  function sun() {
+    gl.useProgram(P);
+    gl.uniform3fv(gl.getUniformLocation(P, 'uSunR'), _r3dSunB().r);
+    gl.uniform3fv(gl.getUniformLocation(P, 'uSunU'), _r3dSunB().u);
+    gl.uniform3fv(gl.getUniformLocation(P, 'uSunF'), _r3dSunB().f);
+    gl.uniform3fv(gl.getUniformLocation(P, 'uSunC'), sv.c);
+    gl.uniform2f(gl.getUniformLocation(P, 'uSunSpan'), sv.span, R3D_SHADOW_RANGE);
+  }
+  var C = R3.shadowCacheOff ? null : _r3dShadowCacheInit(R3);
+  if (C) {
+    var key = _r3dShadowKey(R3, sv, batches || []);
+    if (!_r3dShadowKeySame(C.key, key)) {
+      begin(C.fbo); sun(); world(P);
+      C.key = key; R3.shadowWorldDraws = (R3.shadowWorldDraws || 0) + 1;
+    }
+    begin(R3.shadowFbo);
+    if (R3.inst && R3.inst.on) R3.inst.divisor(0, 0);
+    _r3dShadowCopy(gl, C);
+    sun(); units(P);
+  } else {
+    begin(R3.shadowFbo); sun(); world(P); units(P);
+    R3.shadowWorldDraws = (R3.shadowWorldDraws || 0) + 1;
+  }
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, R3.cv.width, R3.cv.height);
 }
@@ -24411,6 +24434,110 @@ function _r3dShadowBind(P, unit) {
   gl.bindTexture(gl.TEXTURE_2D, R3.shadowTex);
   gl.uniform1i(gl.getUniformLocation(P, 'uShadowMap'), unit);
   gl.activeTexture(gl.TEXTURE0);
+}
+</script>
+<script>/* render3d/shadowcache3d.js - the world's shadows, drawn once and kept. Part of rts.render3d.
+
+   THE SUN'S PASS WAS THE HEAVIEST THING IN THE FRAME. Every frame it drew every tree, ridge,
+   crystal and prop under the sun's square into the shadow map - measured in a battle, 73 draws
+   and a million triangles, more than the camera's own pass drew of the world - to throw shadows
+   that had not moved since the last frame, because none of those things ever move. Only the
+   units do.
+
+   So the world's casters go into a map of their own (R3.shadowStatic) and stay there, and each
+   frame the live map starts as a copy of it - colour and DEPTH, the depth restored from the
+   packed value (gl_FragDepthEXT) so that a unit standing under a tree still loses to the tree -
+   and then only the units are drawn on top. The kept map is redrawn when what it shows could
+   have changed: the sun's window moved on, the sun turned, or a batch of the world was rebuilt.
+
+   A WINDOW THAT MOVES EVERY FRAME CAN NEVER BE KEPT, and the sun's window used to follow the
+   camera exactly. It is snapped now (_r3dSunSnap): its size to R3D_SHADOW_ZOOMQ steps a doubling,
+   its centre to a grid R3D_SHADOW_SNAP steps across it, with a margin of one step so the snapped
+   window still covers what the camera sees. Panning redraws the world's shadows once every
+   sixteenth of the window rather than every frame.
+
+   Without a way to write depth (WebGL2, or EXT_frag_depth on WebGL1) it cannot be restored, and
+   the pass draws everything every frame as it did. R3.shadowCacheOff does the same, for a spec's A/B. */
+
+var R3D_SHADOW_SNAP = 16;        /* the window's centre moves in steps of 1/16 of its width */
+var R3D_SHADOW_ZOOMQ = 4;        /* window sizes a doubling of the view */
+
+/* The sun's window for a view whose ground runs `half` either way of (cx, cz): snapped. */
+function _r3dSunSnap(cx, cz, half) {
+  var hq = Math.pow(2, Math.ceil(Math.log(Math.max(8, half)) / Math.LN2 * R3D_SHADOW_ZOOMQ) / R3D_SHADOW_ZOOMQ);
+  var step = hq * 2 / R3D_SHADOW_SNAP;
+  return { c: [Math.round(cx / step) * step, R3D_WORLD_YMAX * 0.5, Math.round(cz / step) * step], span: hq + step, step: step };
+}
+
+/* The kept map, its framebuffer, and the program that copies it into the live one: built on
+   first use, or not at all where the depth cannot be written. */
+function _r3dShadowCacheInit(R3) {
+  if (R3.shadowCache !== undefined) return R3.shadowCache;
+  var gl = R3.gl, S = R3D_SHADOW_SIZE;
+  R3.shadowCache = null;
+  try {
+    /* WebGL2 writes depth from any 300 es shader; WebGL1 needs the extension */
+    var two = typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext;
+    if (!two && !gl.getExtension('EXT_frag_depth')) return null;
+    var C = { tex: gl.createTexture(), rb: gl.createRenderbuffer(), fbo: gl.createFramebuffer(), quad: gl.createBuffer(), key: null };
+    gl.bindTexture(gl.TEXTURE_2D, C.tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, S, S, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindRenderbuffer(gl.RENDERBUFFER, C.rb);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, S, S);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, C.fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, C.tex, 0);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, C.rb);
+    var ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    if (!ok) return null;
+    gl.bindBuffer(gl.ARRAY_BUFFER, C.quad);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1]), gl.STATIC_DRAW);
+    /* the depth the packed value came from (shadow3d.js's pack): a unit behind a tree stays behind it */
+    var depth = 'clamp(c.r + c.g / 255.0, 0.0, 1.0)';
+    C.P = two ? _r3dProgram(gl,
+      '#version 300 es\nin vec2 aQ; out vec2 vU; void main(){ vU = aQ * 0.5 + 0.5; gl_Position = vec4(aQ, 0.0, 1.0); }',
+      '#version 300 es\nprecision highp float; in vec2 vU; uniform sampler2D uS; out vec4 oC;' +
+      'void main(){ vec4 c = texture(uS, vU); oC = c; gl_FragDepth = ' + depth + '; }')
+    : _r3dProgram(gl,
+      'attribute vec2 aQ; varying vec2 vU; void main(){ vU = aQ * 0.5 + 0.5; gl_Position = vec4(aQ, 0.0, 1.0); }',
+      '#extension GL_EXT_frag_depth : enable\n' +
+      'precision highp float; varying vec2 vU; uniform sampler2D uS;' +
+      'void main(){ vec4 c = texture2D(uS, vU); gl_FragColor = c; gl_FragDepthEXT = ' + depth + '; }');
+    if (!C.P) return null;
+    R3.shadowCache = C;
+  } catch (e) { R3.shadowCache = null; }
+  return R3.shadowCache;
+}
+
+/* What the kept map shows: the window, the sun, and which batches of the world drew it. */
+function _r3dShadowKey(R3, sv, batches) {
+  var f = _r3dSunB().f, k = sv.c[0] + ',' + sv.c[2] + ',' + sv.span + ',' + f.map(function (v) { return v.toFixed(4); }).join(',');
+  return { s: k, b: batches.slice() };
+}
+function _r3dShadowKeySame(a, b) {
+  if (!a || !b || a.s !== b.s || a.b.length !== b.b.length) return false;
+  for (var i = 0; i < a.b.length; i++) if (a.b[i] !== b.b[i]) return false;
+  return true;
+}
+
+/* Into the live map, the kept one: colour and depth, every texel. */
+function _r3dShadowCopy(gl, C) {
+  gl.useProgram(C.P);
+  gl.depthFunc(gl.ALWAYS);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, C.tex);
+  gl.uniform1i(gl.getUniformLocation(C.P, 'uS'), 0);
+  var a = gl.getAttribLocation(C.P, 'aQ');
+  gl.bindBuffer(gl.ARRAY_BUFFER, C.quad);
+  gl.enableVertexAttribArray(a);
+  gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0);
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+  gl.disableVertexAttribArray(a);
+  gl.depthFunc(gl.LESS);
 }
 </script>
 <script>/* render3d/quality3d.js - how much the 3D mode draws, by device. Part of rts.render3d.
@@ -28901,8 +29028,16 @@ function _r3dBuildMesh(gl, faces) {
 /* The cache key carries everything that changes the geometry or its colours: type, side,
    turret half, prone. A miss builds the model through the same functions the baker uses, so
    the two pipelines cannot drift apart - there is no second copy of any shape. */
-function _r3dMesh(kind, def, side, part, prone, pose, roll) {
-  var R3 = window._R3D, key = kind + ':' + def + ':' + side + ':' + (part || '') + ':' + (prone ? 1 : 0) + ':' + (pose || 0) + (R3.soldierOff ? ':s' : '') + (roll ? ':r' + roll : '');
+/* THE LEVEL OF DETAIL. A shadow does not show a bevel, and nor does a tank twenty pixels long:
+   with `lod`, the model is built plain - flat chamfers, round things capped at R3D_LOD_SEG sides,
+   a soldier as the sprite's own figure - in about half the triangles, and one model serves every
+   pose and every roll of the tracks. Drawn into the sun's map always, and on screen when zoomed
+   far out (_r3dLod, render3d/unit3d.js). */
+var R3D_LOD_SEG = 8;
+function _r3dMesh(kind, def, side, part, prone, pose, roll, lod) {
+  var R3 = window._R3D;
+  if (lod) return _r3dMeshLod(R3, kind, def, side, part, prone);
+  var key = kind + ':' + def + ':' + side + ':' + (part || '') + ':' + (prone ? 1 : 0) + ':' + (pose || 0) + (R3.soldierOff ? ':s' : '') + (roll ? ':r' + roll : '');
   var m = R3.mesh[key];
   if (m !== undefined) return m;
   /* AN OPTIONAL VARIANT WAITS ITS TURN in a live frame with no budget left - a pose, a roll of
@@ -28938,6 +29073,22 @@ function _r3dMesh(kind, def, side, part, prone, pose, roll) {
   if (m) m.weather = kind === 'b' ? 1 : 0.5;
   R3.mesh[key] = m;
   _r3dMeshSpent(R3, _r3dNow() - tb);
+  return m;
+}
+function _r3dMeshLod(R3, kind, def, side, part, prone) {
+  var key = 'L:' + kind + ':' + def + ':' + side + ':' + (part || '') + ':' + (prone ? 1 : 0);
+  var m = R3.mesh[key];
+  if (m !== undefined) return m;
+  /* a propeller's turn is drawn at its first; a stride or a roll at the base - one model for all */
+  var faces = null, cap = _R3_SEG_CAP, pt = part && part.slice(0, 4) === 'prop' ? 'prop0' : part;
+  _R3_SEG_CAP = R3D_LOD_SEG;
+  try {
+    faces = kind === 'b' ? _sprBuildingModel(def, side)
+      : pt === 'prop0' ? _r3dPropModel(def, side, 0) : _sprUnitModel(def, side, !!prone, pt || null);
+  } catch (e) { faces = null; } finally { _R3_SEG_CAP = cap; }
+  m = (faces && faces.length) ? _r3dBuildMesh(R3.gl, faces) : null;
+  if (m) m.weather = kind === 'b' ? 1 : 0.5;
+  R3.mesh[key] = m;
   return m;
 }
 </script>
@@ -29063,12 +29214,12 @@ function _r3dFrame(G) {
      every building and unit. The ground and the sea do not - both are effectively flat, and a
      flat surface's shadow is itself, which only feeds the bias. */
   if (R3.shadowReady && _r3dQ('shadow')) {          /* the tiers: render3d/quality3d.js */
+    var sb = R3.world ? R3.world.concat(R3.ore || [], _r3dDressBatches(R3), _r3dSceneryBatches(R3)) : [];
     _r3dShadowPass(G, function (P) {
       var SC = ctx(P);
       gl.uniform2f(SC.uWave, 0, 0);
       if (R3.world) {
         _r3dInstConst(gl, I, SC, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0);
-        var sb = R3.world.concat(R3.ore || [], _r3dDressBatches(R3), _r3dSceneryBatches(R3));
         for (var si = 0; si < sb.length; si++) {
           var sm = sb[si];
           if (!sm || !sm.verts) continue;
@@ -29081,9 +29232,12 @@ function _r3dFrame(G) {
           gl.drawArrays(gl.TRIANGLES, 0, sm.verts);
         }
       }
+    }, function (P) {
+      var SC = ctx(P);
+      gl.uniform2f(SC.uWave, 0, 0);
       /* the sun's span plus the tallest thing that could lean into it */
       paintEntities(SC, [R3.sunC[0], R3.sunC[2], R3.sunSpan + R3D_WORLD_YMAX]);
-    });
+    }, sb);                                          /* the world's shadows are kept: shadowcache3d.js */
   }
 
   /* THE FRAME GOES INTO A BUFFER, NOT ONTO THE CANVAS - see post3d.js. A canvas's depth
@@ -29314,14 +29468,16 @@ function _r3dFrame(G) {
      units across and was being handed EVERY entity in the match, the enemy base included.
      Those draws cannot mark a texel of the map and cost a full submission each; at a hundred
      units a side it is most of the roster once a game is under way. */
-  function paintEntities(C, bound, only, side, keep) {
+  function paintEntities(C, bound, only, side, keep, view) {
   /* A fresh set of buckets for this pass. Both passes walk the same entities, but each has to
      leave its own batches on its own program - the sun's has no colour attribute and no tint. */
   BATCH = _r3dInstBatch(R3);
+  var lod = !!bound || _r3dLodFar(R3);              /* the plain models: the sun's pass, or far out - mesh3d.js */
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (e.dead || (only && e.type !== only) || (side && e.side !== side) || (keep && !keep(e))) continue;
     if (bound && (Math.abs(e.x - bound[0]) > bound[2] || Math.abs(e.z - bound[1]) > bound[2])) continue;
+    if (view && (e.x < view.x0 || e.x > view.x1 || e.z < view.z0 || e.z > view.z1)) continue;   /* off the screen */
     if (e.type === 'struct') {
       /* A BUILDING UNDER CONSTRUCTION RISES OUT OF THE GROUND. The 2D reveal is a wipe, which
          has no 3D analogue; height is the 3D-native equivalent, and it reads instantly as
@@ -29329,9 +29485,9 @@ function _r3dFrame(G) {
          is not mistaken for a finished one at full height's last moment. */
       var dmg = !e.building && e.hp < e.maxHp * RTS_COND_YELLOW;
       var rise = e.building ? 0.12 + 0.88 * Math.max(0, Math.min(1, e.bprog || 0)) : 1;
-      drawIn(C, _r3dMesh('b', e.def, e.side), e.x, _rtsElev(e.x, e.z), e.z, 0, ART2W,
+      drawIn(C, _r3dMesh('b', e.def, e.side, null, 0, 0, 0, lod), e.x, _rtsElev(e.x, e.z), e.z, 0, ART2W,
              e.building ? 1 : _r3dHurtDim(e, R3) || (dmg ? 1 : 0), rise);   /* scorched: hurt3d.js */
-    } else if (e.type === 'unit') _r3dPaintUnit(C, e, G, R3, drawIn, ART2W);   /* render3d/unit3d.js */
+    } else if (e.type === 'unit') _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod);   /* render3d/unit3d.js */
   }
   /* and the burnt-out hulls of the vehicles that died, charred (render3d/husk3d.js) */
   if (!only) _r3dHusks(G, R3, function (m, x, y, z, rot, n) { drawIn(C, m, x, y, z, rot, ART2W, 2, 1, n); });
@@ -29339,7 +29495,10 @@ function _r3dFrame(G) {
   if (!only) _r3dAliveDraw(G, R3, function (m, x, y, z, rot, dim, sy) { drawIn(C, m, x, y, z, rot, ART2W, dim, sy, null); });
   flushBatch(C);
   }
-  _r3dMark(R3, 'world'); paintEntities(MC);
+  /* THE CAMERA'S OWN CULL, which the world's chunks always had and the entities did not: every
+     unit and building on the map was drawn every frame, both bases off the screen included.
+     Widened like the world's, by the tallest thing's screen lift and the widest building. */
+  _r3dMark(R3, 'world'); paintEntities(MC, null, null, null, null, R3.entCullOff ? null : _r3dBoundsNear(vb, R3D_WORLD_YMAX * R3.sp / R3.cp, 10));
   /* the building about to be placed, as itself and translucent (render3d/place3d.js) */
   var gh = _r3dGhostAt();
   if (gh) {
@@ -30034,7 +30193,13 @@ function _r3dShipSwell(e, t) {
   return { y: h, n: [-gx / n, 1 / n, -gz / n] };
 }
 
-function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W) {
+/* Far enough out that a unit is a few dozen pixels long: the plain models will do (mesh3d.js). */
+var R3D_LOD_CELL = 20;           /* device px a map cell, below which */
+function _r3dLodFar(R3) {
+  return !R3.lodOff && typeof _rtsZoom === 'function' && _rtsZoom() * RTS_TILE * (R3.scale || 1) < R3D_LOD_CELL;
+}
+
+function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
   var R = _rtsR, t = G.t || 0;
   var turret = R.spr.turret && R.spr.turret[e.side] && R.spr.turret[e.side][e.def];
   var d2 = rtsUnitDef(e.def), pose = 0, mo = _r3dUnitMotion(R3, e, t);
@@ -30075,14 +30240,14 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W) {
   if (e.air) { mo.n = rk.n; _r3dAirTrail(mo, e, y, t); }
   var hd = _r3dFadeDim(_r3dHurtDim(e, R3), fade);   /* scorched as it is damaged (hurt3d.js), fading (shroud3d.js) */
   var roll = d2.kind === 'vehicle' && !d2.sea && !e.air ? _r3dRollPhase(R3, e.def, mo.d) : 0;
-  drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : (rotor ? 'body' : null), e.prone, pose, roll),
+  drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : (rotor ? 'body' : null), e.prone, pose, roll, lod),
          e.x + rk.hx, y, e.z + rk.hz, -e.rot, ART2W, hd, 1, rk.n);
   if (turret) {
-    drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false), e.x + rk.tx, y, e.z + rk.tz, -(e.turret || 0),
+    drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false, 0, 0, lod), e.x + rk.tx, y, e.z + rk.tz, -(e.turret || 0),
            ART2W, hd, 1, rk.n);
   }
-  if (rotor && AP.rotor) drawIn(C, _r3dMesh('u', e.def, e.side, 'rotor', false), e.x, y, e.z, -e.rot - mo.spin, ART2W, hd, 1, rk.n);
-  if (rotor && AP.prop) drawIn(C, _r3dMesh('u', e.def, e.side, 'prop' + _r3dPropPhase(mo.spin), false), e.x, y, e.z, -e.rot, ART2W, hd, 1, rk.n);
+  if (rotor && AP.rotor) drawIn(C, _r3dMesh('u', e.def, e.side, 'rotor', false, 0, 0, lod), e.x, y, e.z, -e.rot - mo.spin, ART2W, hd, 1, rk.n);
+  if (rotor && AP.prop) drawIn(C, _r3dMesh('u', e.def, e.side, 'prop' + _r3dPropPhase(mo.spin), false, 0, 0, lod), e.x, y, e.z, -e.rot, ART2W, hd, 1, rk.n);
 }
 </script>
 <script>/* render3d/air3d.js - aircraft that fly like aircraft. Part of rts.render3d.

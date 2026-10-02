@@ -79,7 +79,13 @@ function _r3dShipSwell(e, t) {
   return { y: h, n: [-gx / n, 1 / n, -gz / n] };
 }
 
-function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W) {
+/* Far enough out that a unit is a few dozen pixels long: the plain models will do (mesh3d.js). */
+var R3D_LOD_CELL = 20;           /* device px a map cell, below which */
+function _r3dLodFar(R3) {
+  return !R3.lodOff && typeof _rtsZoom === 'function' && _rtsZoom() * RTS_TILE * (R3.scale || 1) < R3D_LOD_CELL;
+}
+
+function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
   var R = _rtsR, t = G.t || 0;
   var turret = R.spr.turret && R.spr.turret[e.side] && R.spr.turret[e.side][e.def];
   var d2 = rtsUnitDef(e.def), pose = 0, mo = _r3dUnitMotion(R3, e, t);
@@ -120,12 +126,12 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W) {
   if (e.air) { mo.n = rk.n; _r3dAirTrail(mo, e, y, t); }
   var hd = _r3dFadeDim(_r3dHurtDim(e, R3), fade);   /* scorched as it is damaged (hurt3d.js), fading (shroud3d.js) */
   var roll = d2.kind === 'vehicle' && !d2.sea && !e.air ? _r3dRollPhase(R3, e.def, mo.d) : 0;
-  drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : (rotor ? 'body' : null), e.prone, pose, roll),
+  drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : (rotor ? 'body' : null), e.prone, pose, roll, lod),
          e.x + rk.hx, y, e.z + rk.hz, -e.rot, ART2W, hd, 1, rk.n);
   if (turret) {
-    drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false), e.x + rk.tx, y, e.z + rk.tz, -(e.turret || 0),
+    drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false, 0, 0, lod), e.x + rk.tx, y, e.z + rk.tz, -(e.turret || 0),
            ART2W, hd, 1, rk.n);
   }
-  if (rotor && AP.rotor) drawIn(C, _r3dMesh('u', e.def, e.side, 'rotor', false), e.x, y, e.z, -e.rot - mo.spin, ART2W, hd, 1, rk.n);
-  if (rotor && AP.prop) drawIn(C, _r3dMesh('u', e.def, e.side, 'prop' + _r3dPropPhase(mo.spin), false), e.x, y, e.z, -e.rot, ART2W, hd, 1, rk.n);
+  if (rotor && AP.rotor) drawIn(C, _r3dMesh('u', e.def, e.side, 'rotor', false, 0, 0, lod), e.x, y, e.z, -e.rot - mo.spin, ART2W, hd, 1, rk.n);
+  if (rotor && AP.prop) drawIn(C, _r3dMesh('u', e.def, e.side, 'prop' + _r3dPropPhase(mo.spin), false, 0, 0, lod), e.x, y, e.z, -e.rot, ART2W, hd, 1, rk.n);
 }

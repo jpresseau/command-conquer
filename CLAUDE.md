@@ -303,6 +303,10 @@ breaking it shipped once.
   upload a pass (`_r3dInstPack`). In the live loop a frame has `R3D_MESH_BUDGET` ms for optional
   model variants (pose, roll, prop) and spare time warms base models; specs' frames have no budget.
   AUTO lowers `R3.dyn` (resolution) before any tier. pace3d.js; `unit/pace`, `e2e/pace`.
+  The world's shadows are kept (shadowcache3d.js: the sun's window is snapped, `_r3dSunSnap`; the
+  kept map is copied in with its depth, then only entities draw), the sun's pass and far zoom draw
+  plain models (`_r3dMesh(..., lod)`), and the main pass culls entities to the view.
+  `R3.shadowCacheOff/lodOff/entCullOff`; `unit/gpuwork`, `e2e/gpuwork`.
 - **The world's own sound** (`rts.ambience.js`): rain, wind, insects, one engine note, bridge
   rumble, thunder and a night echo, each a few nodes built once and only turned by `setTargetAtTime`
   (`_rtsAmbWant` is the pure half). Lightning keeps the GAME's clock on a fixed schedule
