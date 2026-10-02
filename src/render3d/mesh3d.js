@@ -76,18 +76,27 @@ function _r3dBuildMesh(gl, faces) {
    with `lod`, the model is built plain - flat chamfers, round things capped at R3D_LOD_SEG sides,
    a soldier as the sprite's own figure - in about half the triangles, and one model serves every
    pose and every roll of the tracks. Drawn into the sun's map always, and on screen when zoomed
-   far out (_r3dLod, render3d/unit3d.js). */
+   far out (_r3dLod, render3d/unit3d.js).
+
+   BETWEEN THE TWO, R3D_LOD_MID: the plain geometry, but still walking and still rolling - keyed by
+   pose and roll like the full model, so a soldier strides and the tracks turn. A unit at the
+   zoom a phone opens on is forty pixels long and its rounded bevels cost two triangles a pixel
+   that nobody can see (render3d/unit3d.js, _r3dLodMid). Units only: a building is five times
+   the size on screen, and its curved roofs show their facets at 8 sides. */
 var R3D_LOD_SEG = 8;
+var R3D_LOD_MID = 2;
 function _r3dMesh(kind, def, side, part, prone, pose, roll, lod) {
   var R3 = window._R3D;
-  if (lod) return _r3dMeshLod(R3, kind, def, side, part, prone);
-  var key = kind + ':' + def + ':' + side + ':' + (part || '') + ':' + (prone ? 1 : 0) + ':' + (pose || 0) + (R3.soldierOff ? ':s' : '') + (roll ? ':r' + roll : '');
+  if (lod && lod !== R3D_LOD_MID) return _r3dMeshLod(R3, kind, def, side, part, prone);
+  var key = (lod ? 'M:' : '') + kind + ':' + def + ':' + side + ':' + (part || '') + ':' + (prone ? 1 : 0) + ':' + (pose || 0) + (R3.soldierOff ? ':s' : '') + (roll ? ':r' + roll : '');
   var m = R3.mesh[key];
   if (m !== undefined) return m;
   /* AN OPTIONAL VARIANT WAITS ITS TURN in a live frame with no budget left - a pose, a roll of
-     the tracks, a turn of the propeller: the base model stands in (render3d/pace3d.js) */
+     the tracks, a turn of the propeller: the base model stands in (render3d/pace3d.js); and so
+     does the full model for a plain one not built yet, so zooming out never stalls a frame */
   var turn = !!part && part.slice(0, 4) === 'prop' && part !== 'prop0';
-  if ((roll || pose || turn) && !_r3dMeshMay(R3)) return _r3dMesh(kind, def, side, turn ? 'prop0' : part, prone, 0, 0);
+  if ((roll || pose || turn) && !_r3dMeshMay(R3)) return _r3dMesh(kind, def, side, turn ? 'prop0' : part, prone, 0, 0, lod);
+  if (lod && !_r3dMeshMay(R3)) return _r3dMesh(kind, def, side, part, prone, pose, roll);
   var faces = null, tb = _r3dNow();
   /* the point round its running gear it is built at, and how far it rolls for a full turn of
      it (render3d/unit3d.js) */
@@ -100,7 +109,7 @@ function _r3dMesh(kind, def, side, part, prone, pose, roll, lod) {
        copy of it in one call, so the vertex stage has room the baker does not. _r3DetailHigh
        raises the segment counts and turns every box's flat chamfer into a rounded edge with a
        normal per corner, for the duration of this build and no longer. See _R3_DETAIL. */
-    faces = _r3DetailHigh(function () {
+    faces = (lod ? _r3dPlain : _r3DetailHigh)(function () {
       if (kind === 'b') return _sprBuildingModel(def, side);
       if (part && part.slice(0, 4) === 'prop') return _r3dPropModel(def, side, +part.slice(4));   /* air3d.js */
       /* a soldier has a model of his own in 3D, walking (render3d/soldier3d.js) or crawling
@@ -125,14 +134,21 @@ function _r3dMeshLod(R3, kind, def, side, part, prone) {
   var key = 'L:' + kind + ':' + def + ':' + side + ':' + (pt || '') + ':' + (prone ? 1 : 0);
   var m = R3.mesh[key];
   if (m !== undefined) return m;
-  var faces = null, cap = _R3_SEG_CAP;
-  _R3_SEG_CAP = R3D_LOD_SEG;
+  var faces = null;
   try {
-    faces = kind === 'b' ? _sprBuildingModel(def, side)
-      : pt === 'prop0' ? _r3dPropModel(def, side, 0) : _sprUnitModel(def, side, !!prone, pt || null);
-  } catch (e) { faces = null; } finally { _R3_SEG_CAP = cap; }
+    faces = _r3dPlain(function () {
+      return kind === 'b' ? _sprBuildingModel(def, side)
+        : pt === 'prop0' ? _r3dPropModel(def, side, 0) : _sprUnitModel(def, side, !!prone, pt || null);
+    });
+  } catch (e) { faces = null; }
   m = (faces && faces.length) ? _r3dBuildMesh(R3.gl, faces) : null;
   if (m) m.weather = kind === 'b' ? 1 : 0.5;
   R3.mesh[key] = m;
   return m;
+}
+/* the baker's own tessellation, round things capped at R3D_LOD_SEG sides, for this build only */
+function _r3dPlain(fn) {
+  var cap = _R3_SEG_CAP;
+  _R3_SEG_CAP = R3D_LOD_SEG;
+  try { return fn(); } finally { _R3_SEG_CAP = cap; }
 }

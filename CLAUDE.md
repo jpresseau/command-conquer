@@ -305,7 +305,9 @@ breaking it shipped once.
   AUTO lowers `R3.dyn` (resolution) before any tier. pace3d.js; `unit/pace`, `e2e/pace`.
   The world's shadows are kept (shadowcache3d.js: the sun's window is snapped, `_r3dSunSnap`; the
   kept map is copied in with its depth, then only entities draw), the sun's pass and far zoom draw
-  plain models (`_r3dMesh(..., lod)`), and the main pass culls entities to the view.
+  plain models (`_r3dMesh(..., lod)`), and the main pass culls entities to the view. Below
+  `R3D_LOD_MID_CELL` device px a cell a UNIT (never a building) draws `R3D_LOD_MID`: plain, but
+  keyed by pose and roll, so it still walks; `R3.mesh` keys gain an `M:` prefix there.
   `R3.shadowCacheOff/lodOff/entCullOff`; `unit/gpuwork`, `e2e/gpuwork`.
 - **The world's own sound** (`rts.ambience.js`): rain, wind, insects, one engine note, bridge
   rumble, thunder and a night echo, each a few nodes built once and only turned by `setTargetAtTime`
