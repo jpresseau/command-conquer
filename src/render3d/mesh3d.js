@@ -72,8 +72,16 @@ function _r3dBuildMesh(gl, faces) {
 /* The cache key carries everything that changes the geometry or its colours: type, side,
    turret half, prone. A miss builds the model through the same functions the baker uses, so
    the two pipelines cannot drift apart - there is no second copy of any shape. */
-function _r3dMesh(kind, def, side, part, prone, pose, roll) {
-  var R3 = window._R3D, key = kind + ':' + def + ':' + side + ':' + (part || '') + ':' + (prone ? 1 : 0) + ':' + (pose || 0) + (R3.soldierOff ? ':s' : '') + (roll ? ':r' + roll : '');
+/* THE LEVEL OF DETAIL. A shadow does not show a bevel, and nor does a tank twenty pixels long:
+   with `lod`, the model is built plain - flat chamfers, round things capped at R3D_LOD_SEG sides,
+   a soldier as the sprite's own figure - in about half the triangles, and one model serves every
+   pose and every roll of the tracks. Drawn into the sun's map always, and on screen when zoomed
+   far out (_r3dLod, render3d/unit3d.js). */
+var R3D_LOD_SEG = 8;
+function _r3dMesh(kind, def, side, part, prone, pose, roll, lod) {
+  var R3 = window._R3D;
+  if (lod) return _r3dMeshLod(R3, kind, def, side, part, prone);
+  var key = kind + ':' + def + ':' + side + ':' + (part || '') + ':' + (prone ? 1 : 0) + ':' + (pose || 0) + (R3.soldierOff ? ':s' : '') + (roll ? ':r' + roll : '');
   var m = R3.mesh[key];
   if (m !== undefined) return m;
   /* AN OPTIONAL VARIANT WAITS ITS TURN in a live frame with no budget left - a pose, a roll of
@@ -109,5 +117,22 @@ function _r3dMesh(kind, def, side, part, prone, pose, roll) {
   if (m) m.weather = kind === 'b' ? 1 : 0.5;
   R3.mesh[key] = m;
   _r3dMeshSpent(R3, _r3dNow() - tb);
+  return m;
+}
+function _r3dMeshLod(R3, kind, def, side, part, prone) {
+  /* a propeller's turn is drawn at its first; a stride or a roll at the base - one model for all */
+  var pt = part && part.slice(0, 4) === 'prop' ? 'prop0' : part;
+  var key = 'L:' + kind + ':' + def + ':' + side + ':' + (pt || '') + ':' + (prone ? 1 : 0);
+  var m = R3.mesh[key];
+  if (m !== undefined) return m;
+  var faces = null, cap = _R3_SEG_CAP;
+  _R3_SEG_CAP = R3D_LOD_SEG;
+  try {
+    faces = kind === 'b' ? _sprBuildingModel(def, side)
+      : pt === 'prop0' ? _r3dPropModel(def, side, 0) : _sprUnitModel(def, side, !!prone, pt || null);
+  } catch (e) { faces = null; } finally { _R3_SEG_CAP = cap; }
+  m = (faces && faces.length) ? _r3dBuildMesh(R3.gl, faces) : null;
+  if (m) m.weather = kind === 'b' ? 1 : 0.5;
+  R3.mesh[key] = m;
   return m;
 }

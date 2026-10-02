@@ -213,12 +213,18 @@ var SCENE = function (n) {
       var r = acc.t / 10; acc = null;
       return Math.round(r);
     }
+    /* both passes drawn in full, as this budget was written: the world's shadows are kept now
+       (shadowcache3d.js), which would take them out of the world side and inflate the ratio */
+    var R3c = window._R3D;
+    R3c.shadowCacheOff = true;
     var full = tri(160), world = tri(0);
+    R3c.shadowCacheOff = false;
+    var kept = tri(160);
     /* and the same model as the baker builds it, to show the two levels really do differ */
     function tris(f) { var t = 0; for (var i = 0; i < f.length; i++) t += Math.max(0, f[i].v.length - 2); return t; }
     var bake = tris(_sprUnitModel('tank', 'player', false, null));
     var view = _r3DetailHigh(function () { return tris(_sprUnitModel('tank', 'player', false, null)); });
-    return { full: full, world: world, bake: bake, view: view };
+    return { full: full, world: world, kept: kept, bake: bake, view: view };
   }, SCENE);
 
   S.ok('a 160-unit battle stays inside the per-frame triangle budget', budget.full <= 3200000,
@@ -235,6 +241,8 @@ var SCENE = function (n) {
        (budget.full - budget.world) <= budget.world * 4.5,
        'entities are ' + ((budget.full - budget.world) / budget.world).toFixed(2) +
        'x the visible world batch');
+  S.ok('...and with the world\'s shadows kept, the frame draws less again', budget.kept < budget.full,
+       budget.kept.toLocaleString() + ' triangles against ' + budget.full.toLocaleString());
   S.ok('the 3D view really does build a richer model than the sprite baker',
        budget.view > budget.bake * 1.5,
        'a Battle Tank is ' + budget.view + ' triangles for this view against ' + budget.bake +

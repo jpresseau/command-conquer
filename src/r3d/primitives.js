@@ -201,9 +201,12 @@ var R3_SEG_MIN = 24;
    and there are a hundred of them; a tree is drawn at ten and there are ten thousand. */
 var _R3_SEG_FLOOR = R3_SEG_MIN;
 
+/* _R3_SEG_CAP: the most sides a round thing may have, for the 3D mode's distant and shadow-only
+   models (render3d/mesh3d.js); no cap for anything else */
+var _R3_SEG_CAP = 1e9;
 function _r3Seg(n) {
-  return Math.round(Math.max(n || 0, _R3_SEG_FLOOR) *
-                    (_R3_DETAIL > 1 ? R3_DETAIL_SEG : 1));
+  return Math.min(_R3_SEG_CAP, Math.round(Math.max(n || 0, _R3_SEG_FLOOR) *
+                    (_R3_DETAIL > 1 ? R3_DETAIL_SEG : 1)));
 }
 /* Run `fn` with the floor lifted, for geometry that is bulk rather than model. */
 function _r3SegBulk(fn) {

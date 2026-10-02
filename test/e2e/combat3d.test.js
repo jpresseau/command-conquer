@@ -57,7 +57,9 @@ var S = new Suite('combat3d');
       };
       _rtsRFrame(0);
       window._r3dInstPush = push;
-      return got;
+      /* the sun's pass draws the plain models (mesh3d.js) and comes first; the last two are the
+         camera's own hull and turret */
+      return got.slice(-2);
     }
     var still = placed();
     t.fire = 0.09; t.recoil = RTS_RECOIL_TIME;

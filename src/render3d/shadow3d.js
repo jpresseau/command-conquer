@@ -222,7 +222,8 @@ function _r3dSunView() {
   var vb = _r3dViewBounds();
   var cx = (vb.x0 + vb.x1) / 2, cz = (vb.z0 + vb.z1) / 2;
   var half = Math.max(vb.x1 - vb.x0, vb.z1 - vb.z0) * 0.5 * R3D_SHADOW_SPAN;
-  return { c: [cx, R3D_WORLD_YMAX * 0.5, cz], span: Math.max(8, half) };
+  /* snapped, so the world's shadows can be kept from one frame to the next (shadowcache3d.js) */
+  return _r3dSunSnap(cx, cz, Math.max(8, half));
 }
 
 /* The pass itself. Colour only - the depth attachment is there so the nearest surface wins,
@@ -231,26 +232,45 @@ function _r3dSunView() {
    are - but the cones the trees, crags and ore crystals are built from are not reliably
    capped, and an open caster with its front faces culled leaves the light a way through it.
    A hole in a tree's shadow is worse than the acne the bias already handles. */
-function _r3dShadowPass(G, draw) {
+/* `world(P)` draws what never moves, `batches` naming the batches it draws; `units(P)` the rest.
+   The world goes into the kept map when that is out of date and is copied from it otherwise
+   (shadowcache3d.js); without the kept map, both draw every frame as they always did. */
+function _r3dShadowPass(G, world, units, batches) {
   var R3 = window._R3D, gl = R3.gl, sv = _r3dSunView();
   R3.sunC = sv.c; R3.sunSpan = sv.span;
-  gl.bindFramebuffer(gl.FRAMEBUFFER, R3.shadowFbo);
   gl.viewport(0, 0, R3D_SHADOW_SIZE, R3D_SHADOW_SIZE);
   gl.clearColor(1, 1, 1, 1);
   gl.disable(gl.BLEND);
   gl.enable(gl.DEPTH_TEST);
   gl.depthMask(true);
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-  gl.useProgram(R3.shadP);
   var P = R3.shadP;
-  gl.uniform3fv(gl.getUniformLocation(P, 'uSunR'), _r3dSunB().r);
-  gl.uniform3fv(gl.getUniformLocation(P, 'uSunU'), _r3dSunB().u);
-  gl.uniform3fv(gl.getUniformLocation(P, 'uSunF'), _r3dSunB().f);
-  gl.uniform3fv(gl.getUniformLocation(P, 'uSunC'), sv.c);
-  gl.uniform2f(gl.getUniformLocation(P, 'uSunSpan'), sv.span, R3D_SHADOW_RANGE);
-  draw(P);
-
+  function begin(fbo) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  }
+  function sun() {
+    gl.useProgram(P);
+    gl.uniform3fv(gl.getUniformLocation(P, 'uSunR'), _r3dSunB().r);
+    gl.uniform3fv(gl.getUniformLocation(P, 'uSunU'), _r3dSunB().u);
+    gl.uniform3fv(gl.getUniformLocation(P, 'uSunF'), _r3dSunB().f);
+    gl.uniform3fv(gl.getUniformLocation(P, 'uSunC'), sv.c);
+    gl.uniform2f(gl.getUniformLocation(P, 'uSunSpan'), sv.span, R3D_SHADOW_RANGE);
+  }
+  var C = R3.shadowCacheOff ? null : _r3dShadowCacheInit(R3);
+  if (C) {
+    var key = _r3dShadowKey(R3, sv, batches || []);
+    if (!_r3dShadowKeySame(C.key, key)) {
+      begin(C.fbo); sun(); world(P);
+      C.key = key; R3.shadowWorldDraws = (R3.shadowWorldDraws || 0) + 1;
+    }
+    begin(R3.shadowFbo);
+    if (R3.inst && R3.inst.on) R3.inst.divisor(0, 0);
+    _r3dShadowCopy(gl, C);
+    sun(); units(P);
+  } else {
+    begin(R3.shadowFbo); sun(); world(P); units(P);
+    R3.shadowWorldDraws = (R3.shadowWorldDraws || 0) + 1;
+  }
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, R3.cv.width, R3.cv.height);
 }
