@@ -304,7 +304,9 @@ function boom(t, big) { return { kind: 'boom', x: 10, y: 1, z: 20, t: t, big: bi
   var out = g._r3dFxOrder(V), M = V.M, ok = true, same = true, depth = true;
   for (var i = 0; i < M.n; i++) {
     if (i && M.key[V.ord[i]] < M.key[V.ord[i - 1]]) ok = false;
-    for (var j = 0; j < Q && same; j++) if (out[i * Q + j] !== M.a[V.ord[i] * Q + j]) same = false;
+    /* four corners a quad go up - 0 1 2 5 of the six (_r3dFxPack) */
+    for (var c4 = 0; c4 < 4 && same; c4++) for (var j = 0; j < F && same; j++)
+      if (out[i * 4 * F + c4 * F + j] !== M.a[V.ord[i] * Q + g.R3D_FX_CORNER4[c4] * F + j]) same = false;
     /* a standing quad's key is its centre's depth toward the eye */
     var o = V.ord[i] * Q;
     if (M.a[o + 6] !== g.R3D_FXT_RING) {
@@ -316,7 +318,28 @@ function boom(t, big) { return { kind: 'boom', x: 10, y: 1, z: 20, t: t, big: bi
   S.ok('each quad is keyed by its depth toward the eye', depth, String(depth));
   S.ok('...and they go down farthest first, so a near puff covers a far one', ok && same && M.n > 30,
        M.n + ' quads, ' + (ok ? 'in order' : 'OUT of order') + (same ? '' : ', and the copy does not match'));
-  S.eq('...losing none', out.length, M.n * Q);
+  S.eq('...losing none', out.length, M.n * 4 * F);
+  /* WHAT THE PACKING RESTS ON: every emitter lays a quad as 0 1 2 and 0 2 5, so its fourth and
+     fifth vertices are its first and third again - in every quad of the frame */
+  var dup = 0;
+  for (var qd = 0; qd < M.n; qd++) for (var jj = 0; jj < F; jj++) {
+    if (M.a[qd * Q + 3 * F + jj] !== M.a[qd * Q + jj] || M.a[qd * Q + 4 * F + jj] !== M.a[qd * Q + 2 * F + jj]) { dup++; break; }
+  }
+  S.ok('every quad repeats its first and third corners, so four of its six go up', dup === 0 && M.n > 30, dup + ' of ' + M.n + ' do not');
+  /* ...and so does every helper that lays one, called directly */
+  var VH = g._r3dFxView(); VH.sp = 0.6; VH.cp = 0.8; VH.cy = 1; VH.sy = 0; VH.t = 1;
+  VH.ground = function () { return 0; }; VH.water = function () { return false; };
+  var C3 = [1, 1, 1], helpers = [];
+  g._r3dFxBill(VH.M, VH, 1, 2, 3, 1, 1, 0.5, 1, 0, 0, 1, 0, C3); helpers.push('bill');
+  g._r3dFxStreak(VH.M, VH, 0, 0, 0, 2, 3, 1, 0.4, 0.5, 8, 0, 0, 1, 0, C3); helpers.push('streak');
+  g._r3dFxStand(VH.M, VH, 1, 0, 1, 1, 2, 0.5, 7, 0, 0, 1, 0, C3); helpers.push('stand');
+  g._r3dFxDecal(VH.M, VH, 0, 0, 2, 3, 0.5, 4, 0, 0, 1, C3); helpers.push('decal');
+  if (typeof g._r3dFxFlat === 'function') { g._r3dFxFlat(VH.M, VH, [0, 0], [0, 1], [2, 0], [2, 1], 0.1, 0.5, 9, 0, 0, 1, 2, C3); helpers.push('flat'); }
+  var dupH = 0;
+  for (qd = 0; qd < VH.M.n; qd++) for (jj = 0; jj < F; jj++) {
+    if (VH.M.a[qd * Q + 3 * F + jj] !== VH.M.a[qd * Q + jj] || VH.M.a[qd * Q + 4 * F + jj] !== VH.M.a[qd * Q + 2 * F + jj]) { dupH++; break; }
+  }
+  S.ok('...for every helper that lays a quad', dupH === 0 && helpers.length >= 5 && VH.M.n >= 13, helpers.join(', ') + ': ' + VH.M.n + ' quads, ' + dupH + ' not');
 })();
 
 require('../lib/report.js')(S);

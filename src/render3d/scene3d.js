@@ -64,11 +64,6 @@ function _r3dFrame(G) {
   var ART2W = RTS_TILE / RTS_TS;
   var WEAR = R3.wear = Math.min(1, _rtsZoom() * (R3.scale || 1) / R3D_WEATHER_PX);   /* weather3d.js, same reason */
 
-  if (R3.terrainDirty && R.terrain) {
-    R3.terrainTex = _r3dTexture(gl, R3.terrainTex, gl.NEAREST);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, R.terrain);
-    R3.terrainDirty = false;
-  }
   _r3dFog(G);
 
   /* THE GROUND IS THE VISIBLE PATCH, REBUILT EACH FRAME, AND THE REASON IS DEPTH.
@@ -298,17 +293,14 @@ function _r3dFrame(G) {
      mesh rather than in entity order - which is invisible only because all of this is opaque
      and depth-tested. See the note at the top of inst3d.js before adding anything blended. */
   function flushBatch(C) {
-    var B = BATCH, i, j;
+    var B = BATCH, i, j, buf = I.on ? _r3dInstPack(gl, R3, B) : null;   /* one upload: inst3d.js */
     for (i = 0; i < B.order.length; i++) {
       var b = B.order[i];
       if (!b.n) continue;
       bindMesh(C, b.mesh);
       if (C.uW) gl.uniform1f(C.uW, (b.mesh.weather || 0) * WEAR);
       if (I.on) {
-        var buf = _r3dInstBuffer(gl, R3);
-        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-        gl.bufferData(gl.ARRAY_BUFFER, b.a.subarray(0, b.n * R3D_INST_FLOATS), gl.STREAM_DRAW);
-        _r3dInstBind(gl, I, C, buf);
+        _r3dInstBind(gl, I, C, buf, b.at);
         I.draw(gl.TRIANGLES, 0, b.mesh.verts, b.n);
         R3.instDrawn += b.n;
       } else {

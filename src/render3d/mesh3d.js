@@ -76,7 +76,11 @@ function _r3dMesh(kind, def, side, part, prone, pose, roll) {
   var R3 = window._R3D, key = kind + ':' + def + ':' + side + ':' + (part || '') + ':' + (prone ? 1 : 0) + ':' + (pose || 0) + (R3.soldierOff ? ':s' : '') + (roll ? ':r' + roll : '');
   var m = R3.mesh[key];
   if (m !== undefined) return m;
-  var faces = null;
+  /* AN OPTIONAL VARIANT WAITS ITS TURN in a live frame with no budget left - a pose, a roll of
+     the tracks, a turn of the propeller: the base model stands in (render3d/pace3d.js) */
+  var turn = !!part && part.slice(0, 4) === 'prop' && part !== 'prop0';
+  if ((roll || pose || turn) && !_r3dMeshMay(R3)) return _r3dMesh(kind, def, side, turn ? 'prop0' : part, prone, 0, 0);
+  var faces = null, tb = _r3dNow();
   /* the point round its running gear it is built at, and how far it rolls for a full turn of
      it (render3d/unit3d.js) */
   _SPR_ROLL = (roll || 0) / R3D_ROLL_N; _SPR_ROLL_LEN = 0;
@@ -104,5 +108,6 @@ function _r3dMesh(kind, def, side, part, prone, pose, roll) {
   /* how much it weathers (weather3d.js): a building fully, a vehicle or a soldier less */
   if (m) m.weather = kind === 'b' ? 1 : 0.5;
   R3.mesh[key] = m;
+  _r3dMeshSpent(R3, _r3dNow() - tb);
   return m;
 }

@@ -297,6 +297,12 @@ breaking it shipped once.
   (`_tint` discards). The shroud is read through a drifting noise warp with a mist in its
   half-light (`uFog`, set only for the fog draw and reset after). `R3.shroudOff/fadeOff`;
   `unit/shroud`, `e2e/shroud3d`.
+- **A steady frame in a heavy battle**: the terrain canvas goes up only for the baked ground, a
+  stamp at a time (`_r3dTerrainStamp`, upload3d.js; never `terrainDirty = true` for a stamp).
+  Effects go up as four corners a quad through a fixed index (`_r3dFxPack`), instances as one
+  upload a pass (`_r3dInstPack`). In the live loop a frame has `R3D_MESH_BUDGET` ms for optional
+  model variants (pose, roll, prop) and spare time warms base models; specs' frames have no budget.
+  AUTO lowers `R3.dyn` (resolution) before any tier. pace3d.js; `unit/pace`, `e2e/pace`.
 - **The world's own sound** (`rts.ambience.js`): rain, wind, insects, one engine note, bridge
   rumble, thunder and a night echo, each a few nodes built once and only turned by `setTargetAtTime`
   (`_rtsAmbWant` is the pure half). Lightning keeps the GAME's clock on a fixed schedule

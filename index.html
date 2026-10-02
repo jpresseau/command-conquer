@@ -958,7 +958,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">e5be722 · 2026-10-01</div>
+  <div id="rtsBuild" title="build">17f2de1 · 2026-10-02</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -23409,25 +23409,49 @@ function _r3dInstConst(gl, I, C, x, y, z, sy, cs, sn, sc, dim, nx, ny, nz) {
   }
 }
 
-/* Point the three attributes at the packed rows and step them once per instance. */
-function _r3dInstBind(gl, I, C, buf) {
+/* Point the three attributes at the packed rows - from byte `at` of the buffer, where a pass's
+   batches sit one after another (_r3dInstPack) - and step them once per instance. */
+function _r3dInstBind(gl, I, C, buf, at) {
   var S = R3D_INST_FLOATS * 4;
+  at = at || 0;
   gl.bindBuffer(gl.ARRAY_BUFFER, buf);
   if (C.aI0 >= 0) {
     gl.enableVertexAttribArray(C.aI0);
-    gl.vertexAttribPointer(C.aI0, 4, gl.FLOAT, false, S, 0);
+    gl.vertexAttribPointer(C.aI0, 4, gl.FLOAT, false, S, at);
     I.divisor(C.aI0, 1);
   }
   if (C.aI1 >= 0) {
     gl.enableVertexAttribArray(C.aI1);
-    gl.vertexAttribPointer(C.aI1, 4, gl.FLOAT, false, S, 16);
+    gl.vertexAttribPointer(C.aI1, 4, gl.FLOAT, false, S, at + 16);
     I.divisor(C.aI1, 1);
   }
   if (C.aI2 >= 0) {
     gl.enableVertexAttribArray(C.aI2);
-    gl.vertexAttribPointer(C.aI2, 3, gl.FLOAT, false, S, 32);
+    gl.vertexAttribPointer(C.aI2, 3, gl.FLOAT, false, S, at + 32);
     I.divisor(C.aI2, 1);
   }
+}
+
+/* ONE UPLOAD A PASS, NOT ONE A MESH. Every batch's rows used to go up on their own, into the one
+   buffer, just before that batch was drawn - a hundred and more uploads a frame in a battle,
+   each re-specifying a buffer the GPU may still be reading for the draw before, which a phone's
+   driver answers by waiting or copying. Now the pass's rows are laid end to end and sent once,
+   and each batch draws from its own offset (`b.at`, in bytes). */
+function _r3dInstPack(gl, R3, B) {
+  var n = 0, i, F = R3D_INST_FLOATS;
+  for (i = 0; i < B.order.length; i++) n += B.order[i].n;
+  if (!n) return null;
+  if (!R3.instAll || R3.instAll.length < n * F) R3.instAll = new Float32Array(Math.max(n * 2, 256) * F);
+  var all = R3.instAll, o = 0;
+  for (i = 0; i < B.order.length; i++) {
+    var b = B.order[i];
+    all.set(b.a.subarray(0, b.n * F), o);
+    b.at = o * 4; o += b.n * F;
+  }
+  var buf = _r3dInstBuffer(gl, R3);
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, all.subarray(0, o), gl.STREAM_DRAW);
+  return buf;
 }
 
 /* A frame's worth of placements, bucketed by the mesh they belong to.
@@ -24474,10 +24498,12 @@ function _r3dQualityFeed(dt, now) {
     return;
   }
   if (A.locked) return;
-  if (med > R3D_Q_SLOW && lvl < R3D_TIERS.length - 1) {
+  /* the resolution goes first (pace3d.js): a tier steps down once it can go no lower, and up only
+     once it is back at full */
+  if (med > R3D_Q_SLOW && lvl < R3D_TIERS.length - 1 && !_r3dDynRoom()) {
     A.trial = { from: lvl, base: med, down: true }; A.fast = 0;
     _r3dQualityApply(lvl + 1);
-  } else if (med < R3D_Q_FAST && lvl > 0) {
+  } else if (med < R3D_Q_FAST && lvl > 0 && !(R3.dyn < 1)) {
     if (++A.fast >= 3) { A.trial = { from: lvl, base: med, down: false }; A.fast = 0; _r3dQualityApply(lvl - 1); }
   } else A.fast = 0;
 }
@@ -24490,6 +24516,112 @@ function _r3dMark(R3, k) {
   var t = (window.performance || Date).now();
   if (k && R3.pm) { var P = R3.prof || (R3.prof = {}); P[k] = (P[k] || 0) * 0.95 + (t - R3.pm) * 0.05; }
   R3.pm = t;
+}
+</script>
+<script>/* render3d/pace3d.js - keeping the frame steady when the battle is heavy. Part of rts.render3d.
+
+   Two things made a big fight choppy that no tier switch could fix, because neither is about how
+   much the frame draws:
+
+     MODEL BUILDS     every unit model, pose and running-gear position is built the first time
+                      it is seen (_r3dMesh). Measured, the first frames of a 96-unit battle built
+                      27, 17, 16 and 15 models and took 193, 170, 128 and 108 ms. So in the live
+                      loop a frame may spend R3D_MESH_BUDGET ms on the optional ones - a pose, a
+                      roll of the tracks, a turn of a propeller - and draws the unit's base model
+                      until its turn comes; and spare time in a quick frame warms the base model
+                      of every unit type in the match, before it arrives on screen
+     THE PIXELS       a phone that cannot fill the screen at its own resolution in a fight is
+                      held to the frame by drawing fewer pixels: R3.dyn, down a step at a time
+                      to R3D_DYN_STEPS' last while frames are slow AND the time is the GPU's (the
+                      frame's own script is quick), back up when there is room. Only in AUTO -
+                      a tier the player chose is drawn as chosen - and before the tiers: a tier
+                      steps down only once the resolution can go no lower (quality3d.js)
+
+   A spec driving frames by hand has no budget (R3.meshBudget is undefined outside the live
+   loop), so its pictures are the same however fast the machine. */
+
+var R3D_MESH_BUDGET = 4;         /* ms a live frame may spend building the optional models */
+var R3D_WARM_BUDGET = 3;         /* ms of spare time a quick frame gives to warming base models */
+var R3D_WARM_QUICK = 12;         /* ms: a frame quicker than this has time to spare */
+var R3D_DYN_STEPS = [1, 0.85, 0.72, 0.6];
+var R3D_DYN_WINDOW = 1000;       /* ms of frames judged at a time */
+var R3D_DYN_SLOW = 21;           /* ms: a median frame slower than this is worth fewer pixels */
+var R3D_DYN_FAST = 14.5;         /* ms: ...and quicker than this, more */
+var R3D_DYN_GPU = 0.45;          /* the share of a frame that must be waiting, not scripting, to blame the pixels */
+
+function _r3dNow() { return (window.performance || Date).now(); }
+
+/* The live loop's frame, either side of the draw. */
+function _r3dPaceBegin() {
+  var R3 = window._R3D;
+  if (R3 && R3.on) R3.meshBudget = R3D_MESH_BUDGET;
+}
+function _r3dPaceEnd(js) {
+  var R3 = window._R3D;
+  if (!R3 || !R3.on) return;
+  R3.meshBudget = undefined;
+  if (js < R3D_WARM_QUICK) _r3dWarm(R3, R3D_WARM_BUDGET);
+}
+
+/* May an optional model be built now? Spends from the frame's budget when it is; a spec's frame
+   (no budget) always may. */
+function _r3dMeshMay(R3) { return R3.meshBudget === undefined || R3.meshBudget > 0; }
+function _r3dMeshSpent(R3, ms) { if (R3.meshBudget !== undefined) R3.meshBudget -= ms; }
+
+/* WARM-UP: the base model of every unit type that is in the match, on every side in it -
+   whole, or as the parts the renderer draws it in - one at a time out of spare frame time. */
+function _r3dWarm(R3, ms) {
+  var G = window._rtsG, R = window._rtsR;
+  if (!G || !R || !R.spr) return;
+  if (!R3.warmQ || R3.warmFor !== G) {
+    var sides = {}, defs = {}, q = [];
+    G.ents.forEach(function (e) { if (e.side) sides[e.side] = 1; });
+    RTS_UNITS.forEach(function (u) { defs[u.key] = 1; });
+    Object.keys(sides).forEach(function (sd) {
+      Object.keys(defs).forEach(function (def) {
+        var tur = R.spr.turret && R.spr.turret[sd] && R.spr.turret[sd][def], AP = RTS_AIR_PARTS[def];
+        if (tur) { q.push(['u', def, sd, 'hull']); q.push(['u', def, sd, 'turret']); }
+        else if (AP && AP.rotor) { q.push(['u', def, sd, 'body']); q.push(['u', def, sd, 'rotor']); }
+        else if (AP && AP.prop) { q.push(['u', def, sd, 'body']); q.push(['u', def, sd, 'prop0']); }
+        else q.push(['u', def, sd, null]);
+      });
+    });
+    R3.warmQ = q; R3.warmFor = G;
+  }
+  var t0 = _r3dNow();
+  while (R3.warmQ.length && _r3dNow() - t0 < ms) {
+    var w = R3.warmQ.shift();
+    _r3dMesh(w[0], w[1], w[2], w[3], false, 0, 0);
+  }
+}
+
+/* THE PIXELS, fed by the live loop: `dt` the ms since the last frame, `js` the ms the last frame
+   spent in script. */
+function _r3dDynFeed(dt, js, now) {
+  var R3 = window._R3D;
+  if (!R3 || !R3.on || _r3dQualityWant() !== 'auto' || !(dt > 0) || dt > 250) return;
+  var D = R3.dynA || (R3.dynA = { t0: now + R3D_Q_SETTLE, s: [], j: [] });
+  if (R3.dyn === undefined) R3.dyn = 1;
+  if (now < D.t0) return;
+  D.s.push(dt); D.j.push(js || 0);
+  if (now - D.t0 < R3D_DYN_WINDOW) return;
+  var s = D.s.slice().sort(function (a, b) { return a - b; }), j = D.j.slice().sort(function (a, b) { return a - b; });
+  var med = s[s.length >> 1], mj = j[j.length >> 1];
+  D.s.length = 0; D.j.length = 0; D.t0 = now;
+  var gpu = med - mj > med * R3D_DYN_GPU;
+  R3.dynBound = med > R3D_DYN_SLOW ? (gpu ? 'gpu' : 'js') : null;
+  var i = R3D_DYN_STEPS.indexOf(R3.dyn);
+  if (i < 0) i = 0;
+  if (med > R3D_DYN_SLOW && gpu && i < R3D_DYN_STEPS.length - 1) i++;
+  else if (med < R3D_DYN_FAST && i > 0) i--;
+  else return;
+  R3.dyn = R3D_DYN_STEPS[i];                 /* the next frame sizes its buffer by it (_r3dResize) */
+}
+/* Has the resolution a step left to give? While it has, a slow GPU-bound frame is its business
+   and not the tiers'. */
+function _r3dDynRoom() {
+  var R3 = window._R3D;
+  return !!(R3 && R3.dyn !== undefined && R3.dynBound === 'gpu' && R3.dyn > R3D_DYN_STEPS[R3D_DYN_STEPS.length - 1]);
 }
 </script>
 <script>/* render3d/cam3d.js - which way the 3D camera faces, and how far it leans. Part of
@@ -24943,7 +25075,7 @@ function _r3dInit() {
       meshP: _r3dProgram(gl, R3D_MESH_VS, R3D_MESH_FS),
       texP: _r3dProgram(gl, R3D_TEX_VS, R3D_TEX_FS),
       mesh: {}, terrainTex: null, terrainDirty: true,
-      fogCv: null, fogTex: null, fogDirty: true,
+      fogPx: null, fogTex: null, fogDirty: true,
       shadowReady: false, postReady: false,
       cp: Math.cos(R3D_TILT), sp: Math.sin(R3D_TILT),
       yaw: 0, tilt: R3D_TILT, cy: 1, sy: 0         /* the camera's facing and lean: cam3d.js */
@@ -25209,7 +25341,7 @@ function _r3dResize() {
      larger than the screen is pure cost. */
   var pin = (typeof _rtsGfxWant === 'function') ? _rtsGfxWant() : null;
   /* ...and the tier's own ceiling, when no pin is set (render3d/quality3d.js) */
-  R3.scale = pin ? Math.min(dpr, pin) : Math.min(dpr, R3D_MAX_SCALE, (R3.q && R3.q.scale) || R3D_MAX_SCALE);
+  R3.scale = pin ? Math.min(dpr, pin) : Math.min(dpr, R3D_MAX_SCALE, (R3.q && R3.q.scale) || R3D_MAX_SCALE) * (R3.dyn || 1);   /* fewer pixels when a fight is heavy: pace3d.js */
   /* The CSS box tracks the presentation canvas's, so the presented layer always fills the
      stage whatever the buffer scale. Off the overlay's inline style rather than layout, for
      the same reason as the buffer size above - and string-compared, because this runs every
@@ -26533,6 +26665,9 @@ function _r3dGroundDraw(gl, R3, G, cam, invD) {
   }
   _r3dShadowBind(P, 1);
   _r3dGroundBind(gl, R3, P);
+  /* the baked picture is only read by the baked ground; the materials take their scars from the
+     ground map - so it goes up only when it is drawn (upload3d.js) */
+  if (!M) _r3dTerrainUpload(gl, R3, window._rtsR && _rtsR.terrain);
   gl.bindTexture(gl.TEXTURE_2D, R3.terrainTex);
   gl.drawArrays(gl.TRIANGLES, 0, R3.groundVerts);
 }
@@ -26658,20 +26793,16 @@ function _r3dFog(G) {
   var fh = _r3dFogHash(G);
   if (R3.fogTex && R3.fogHash === fh && R3.fogFor === G) return;
   R3.fogHash = fh; R3.fogFor = G;
-  if (!R3.fogCv) {
-    R3.fogCv = document.createElement('canvas');
-    R3.fogCv.width = N; R3.fogCv.height = N;
-    R3.fogG = R3.fogCv.getContext('2d');
-    R3.fogIm = R3.fogG.createImageData(N, N);
-  }
-  var d = R3.fogIm.data;
+  if (!R3.fogPx || R3.fogPx.length !== N * N * 4) R3.fogPx = new Uint8Array(N * N * 4);
+  var d = R3.fogPx;
   for (var i = 0; i < N * N; i++) {
     var a = G.mapped[i] ? (G.vis[i] ? 0 : Math.round(255 * RTS_FOG_DIM)) : 255;
     d[i * 4] = 4; d[i * 4 + 1] = 6; d[i * 4 + 2] = 9; d[i * 4 + 3] = a;
   }
-  R3.fogG.putImageData(R3.fogIm, 0, 0);
+  /* straight from the bytes, not through the canvas: a canvas upload is a copy out of the 2D
+     canvas's own store, and the shroud changes whenever anything that sees moves */
   R3.fogTex = _r3dTexture(gl, R3.fogTex);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, R3.fogCv);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, N, N, 0, gl.RGBA, gl.UNSIGNED_BYTE, d);
 }
 
 /* THE ORE FIELD'S COLOUR, as a texture rather than as geometry.
@@ -27045,6 +27176,82 @@ function _r3dGrainSet(gl, R3, P) {
   return mag;
 }
 </script>
+<script>/* render3d/upload3d.js - what the 3D mode sends the GPU each frame, and how little. Part of
+   rts.render3d.
+
+   THE GROUND'S PICTURE IS SENT A STAMP AT A TIME. The baked terrain canvas the ground samples is
+   3072 px square - 36 MB - and every crater, scorch and corpse stamped into it (render/frame.js)
+   used to mark the whole of it dirty, so the next frame re-sent all 36 MB to the GPU. In a fight
+   that is several times a second: measured, a battle of 120 units averaged 8.6 MB a frame of
+   terrain upload, and each one was a stall of its own - the stutter that came exactly when the
+   action did. A stamp is a few dozen pixels square; now only those pixels go
+   (_r3dTerrainStamp, then _r3dTerrainUpload), and the whole canvas only when it was re-baked.
+   And only for the baked ground, which is the one thing that samples the canvas: the materials
+   (terrain3d.js) take their scars from the ground map, so while they draw nothing goes at all.
+
+   And the scorch marks, which never marked the canvas dirty at all, now reach the baked 3D
+   ground on the next frame rather than whenever a corpse happened to follow. */
+
+var R3D_STAMP_MAX = 32;          /* more stamps than this in a frame go up as one rectangle */
+var R3D_FX_IDX_MAX = 16383;      /* quads a 16-bit index can reach */
+
+/* The effects' fixed index - quad q is corners 4q..4q+3, drawn 0 1 2, 0 2 3 - grown as the
+   quads do and bound for the draw. Returns how many quads it can draw of the n asked. */
+function _r3dFxIndex(gl, R3, n) {
+  n = Math.min(n, R3D_FX_IDX_MAX);
+  if (!R3.fxIdx || R3.fxIdxN < n) {
+    var cap = Math.min(R3D_FX_IDX_MAX, Math.max(1024, n * 2)), ix = new Uint16Array(cap * 6);
+    for (var q = 0; q < cap; q++) {
+      var v = q * 4, o = q * 6;
+      ix[o] = v; ix[o + 1] = v + 1; ix[o + 2] = v + 2; ix[o + 3] = v; ix[o + 4] = v + 2; ix[o + 5] = v + 3;
+    }
+    R3.fxIdx = R3.fxIdx || gl.createBuffer(); R3.fxIdxN = cap;
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, R3.fxIdx);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, ix, gl.STATIC_DRAW);
+  } else gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, R3.fxIdx);
+  return n;
+}
+
+/* A rectangle of the terrain canvas has been drawn on: send it with the next frame. */
+function _r3dTerrainStamp(x, y, w, h) {
+  var R3 = window._R3D;
+  if (!R3 || R3.terrainDirty) return;
+  /* drawing the materials, nothing reads the canvas: it goes up whole if the baked ground is
+     ever drawn again, and until then nothing is kept */
+  if (R3.matOn) { R3.terrainDirty = true; return; }
+  var L = R3.terrainRects || (R3.terrainRects = []);
+  L.push([Math.floor(x) - 1, Math.floor(y) - 1, Math.ceil(w) + 2, Math.ceil(h) + 2]);
+}
+
+/* The terrain texture up to date: all of it after a re-bake, the stamped rectangles otherwise. */
+function _r3dTerrainUpload(gl, R3, cv) {
+  if (!cv) return;
+  if (R3.terrainDirty || !R3.terrainTex) {
+    R3.terrainTex = _r3dTexture(gl, R3.terrainTex, gl.NEAREST);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
+    R3.terrainDirty = false; R3.terrainRects = null;
+    R3.terrainFull = (R3.terrainFull || 0) + 1;
+    return;
+  }
+  var L = R3.terrainRects;
+  if (!L || !L.length) return;
+  R3.terrainRects = null;
+  if (L.length > R3D_STAMP_MAX) {
+    var b = L.reduce(function (a, r) { return [Math.min(a[0], r[0]), Math.min(a[1], r[1]), Math.max(a[2], r[0] + r[2]), Math.max(a[3], r[1] + r[3])]; }, [1e9, 1e9, -1e9, -1e9]);
+    L = [[b[0], b[1], b[2] - b[0], b[3] - b[1]]];
+  }
+  var g = cv.getContext('2d');
+  gl.bindTexture(gl.TEXTURE_2D, R3.terrainTex);
+  for (var i = 0; i < L.length; i++) {
+    var x = Math.max(0, L[i][0]), y = Math.max(0, L[i][1]);
+    var w = Math.min(cv.width, L[i][0] + L[i][2]) - x, h = Math.min(cv.height, L[i][1] + L[i][3]) - y;
+    if (w <= 0 || h <= 0) continue;
+    var im = g.getImageData(x, y, w, h);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, x, y, w, h, gl.RGBA, gl.UNSIGNED_BYTE, im.data);
+    R3.terrainSub = (R3.terrainSub || 0) + w * h;
+  }
+}
+</script>
 <script>/* render3d/fxglsl3d.js - how an explosion, a flame, a spark and a splash are SHADED. Part of
    rts.render3d; fxemit3d.js decides where the quads go and fx3d.js draws them.
 
@@ -27304,9 +27511,21 @@ function _r3dFxOrder(V) {
   ord.length = M.n;
   for (i = 0; i < M.n; i++) ord[i] = i;
   ord.sort(function (a, b) { return M.key[a] - M.key[b]; });
-  if (V.out.length < M.n * R3D_FX_QUAD) V.out = new Float32Array(M.a.length);
-  for (i = 0; i < M.n; i++) V.out.set(M.a.subarray(ord[i] * R3D_FX_QUAD, (ord[i] + 1) * R3D_FX_QUAD), i * R3D_FX_QUAD);
-  return V.out.subarray(0, M.n * R3D_FX_QUAD);
+  return _r3dFxPack(M, ord, V, 'out');
+}
+/* FOUR CORNERS A QUAD GO UP, NOT SIX. Every emitter lays a quad as two triangles, corners
+   0 1 2 and 0 2 5, so its fourth and fifth vertices are its first and third again - a third of
+   every upload repeated, and the effects' upload is the biggest a frame makes (a megabyte in a
+   heavy battle). Packed here to corners 0 1 2 5 and drawn through a fixed index (fx3d.js). */
+var R3D_FX_CORNER4 = [0, 1, 2, 5];
+function _r3dFxPack(B, ord, V, key) {
+  var S = R3D_FX_STRIDE, Q4 = 4 * S, n = B.n, out = V[key];
+  if (!out || out.length < n * Q4) out = V[key] = new Float32Array(Math.max(n, 64) * 2 * Q4);
+  for (var i = 0; i < n; i++) {
+    var q = (ord ? ord[i] : i) * R3D_FX_QUAD;
+    for (var c = 0; c < 4; c++) out.set(B.a.subarray(q + R3D_FX_CORNER4[c] * S, q + (R3D_FX_CORNER4[c] + 1) * S), i * Q4 + c * S);
+  }
+  return out.subarray(0, n * Q4);
 }
 function _r3dFxQuad(B, key) {
   if (B.n >= B.key.length) {
@@ -28551,7 +28770,7 @@ function _r3dFxDraw(G, cam, invD) {
     gl.bindBuffer(gl.ARRAY_BUFFER, R3.fx2BufM);
     gl.bufferData(gl.ARRAY_BUFFER, _r3dFxOrder(V), gl.DYNAMIC_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, R3.fx2BufL);
-    gl.bufferData(gl.ARRAY_BUFFER, V.L.a.subarray(0, V.L.n * R3D_FX_QUAD), gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, _r3dFxPack(V.L, null, V, 'outL'), gl.DYNAMIC_DRAW);
   }
   if (emit ? !V.M.lit : (!V.M.n && !V.L.n)) { if (!emit) R3.fxDrawn = 0; return 0; }
 
@@ -28581,16 +28800,18 @@ function _r3dFxDraw(G, cam, invD) {
   gl.enable(gl.DEPTH_TEST);
   gl.depthMask(false);
   gl.enable(gl.BLEND);
+  /* four corners a quad, two triangles through a fixed index (fxemit3d.js, _r3dFxPack) */
+  function quads(n) { gl.drawElements(gl.TRIANGLES, _r3dFxIndex(gl, R3, n) * 6, gl.UNSIGNED_SHORT, 0); }
   /* the glare first, MULTIPLYING what is there: dst + dst * src */
   if (!emit && V.L.n) {
     bind(R3.fx2BufL);
     gl.blendFunc(gl.DST_COLOR, gl.ONE);
-    gl.drawArrays(gl.TRIANGLES, 0, V.L.n * 6);
+    quads(V.L.n);
   }
   if (V.M.n) {
     bind(R3.fx2BufM);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    gl.drawArrays(gl.TRIANGLES, 0, V.M.n * 6);
+    quads(V.M.n);
   }
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.disable(gl.BLEND);
@@ -28684,7 +28905,11 @@ function _r3dMesh(kind, def, side, part, prone, pose, roll) {
   var R3 = window._R3D, key = kind + ':' + def + ':' + side + ':' + (part || '') + ':' + (prone ? 1 : 0) + ':' + (pose || 0) + (R3.soldierOff ? ':s' : '') + (roll ? ':r' + roll : '');
   var m = R3.mesh[key];
   if (m !== undefined) return m;
-  var faces = null;
+  /* AN OPTIONAL VARIANT WAITS ITS TURN in a live frame with no budget left - a pose, a roll of
+     the tracks, a turn of the propeller: the base model stands in (render3d/pace3d.js) */
+  var turn = !!part && part.slice(0, 4) === 'prop' && part !== 'prop0';
+  if ((roll || pose || turn) && !_r3dMeshMay(R3)) return _r3dMesh(kind, def, side, turn ? 'prop0' : part, prone, 0, 0);
+  var faces = null, tb = _r3dNow();
   /* the point round its running gear it is built at, and how far it rolls for a full turn of
      it (render3d/unit3d.js) */
   _SPR_ROLL = (roll || 0) / R3D_ROLL_N; _SPR_ROLL_LEN = 0;
@@ -28712,6 +28937,7 @@ function _r3dMesh(kind, def, side, part, prone, pose, roll) {
   /* how much it weathers (weather3d.js): a building fully, a vehicle or a soldier less */
   if (m) m.weather = kind === 'b' ? 1 : 0.5;
   R3.mesh[key] = m;
+  _r3dMeshSpent(R3, _r3dNow() - tb);
   return m;
 }
 </script>
@@ -28781,11 +29007,6 @@ function _r3dFrame(G) {
   var ART2W = RTS_TILE / RTS_TS;
   var WEAR = R3.wear = Math.min(1, _rtsZoom() * (R3.scale || 1) / R3D_WEATHER_PX);   /* weather3d.js, same reason */
 
-  if (R3.terrainDirty && R.terrain) {
-    R3.terrainTex = _r3dTexture(gl, R3.terrainTex, gl.NEAREST);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, R.terrain);
-    R3.terrainDirty = false;
-  }
   _r3dFog(G);
 
   /* THE GROUND IS THE VISIBLE PATCH, REBUILT EACH FRAME, AND THE REASON IS DEPTH.
@@ -29015,17 +29236,14 @@ function _r3dFrame(G) {
      mesh rather than in entity order - which is invisible only because all of this is opaque
      and depth-tested. See the note at the top of inst3d.js before adding anything blended. */
   function flushBatch(C) {
-    var B = BATCH, i, j;
+    var B = BATCH, i, j, buf = I.on ? _r3dInstPack(gl, R3, B) : null;   /* one upload: inst3d.js */
     for (i = 0; i < B.order.length; i++) {
       var b = B.order[i];
       if (!b.n) continue;
       bindMesh(C, b.mesh);
       if (C.uW) gl.uniform1f(C.uW, (b.mesh.weather || 0) * WEAR);
       if (I.on) {
-        var buf = _r3dInstBuffer(gl, R3);
-        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-        gl.bufferData(gl.ARRAY_BUFFER, b.a.subarray(0, b.n * R3D_INST_FLOATS), gl.STREAM_DRAW);
-        _r3dInstBind(gl, I, C, buf);
+        _r3dInstBind(gl, I, C, buf, b.at);
         I.draw(gl.TRIANGLES, 0, b.mesh.verts, b.n);
         R3.instDrawn += b.n;
       } else {
@@ -31153,9 +31371,11 @@ function _r3dFxSky(G, V) {
         /* a short streak, leaning down the wind */
         _r3dFxStreak(V.M, V, rx + 0.35, top + 1.7, rz + 0.12, rx, top, rz, 0.11, 0, R3D_FXT_RAIN, 0, i, 0.85 * S.rain, 0, R3D_RAIN_C);
       } else {
-        /* landed: a little ring, spreading */
+        /* landed: a little ring, spreading - one quad: a ring under a cell across does not
+           need to follow the ground, and at 8 x 8 it was 64 quads a drop, most of the rain's
+           cost in a downpour */
         var k = (p - 0.94) / 0.06;
-        _r3dFxDecal(V.M, V, rx, rz, 0.15 + k * 0.45, 8, 0.3, R3D_FXT_RING, k, i, 0.5 * S.rain * (1 - k), R3D_RAIN_C);
+        _r3dFxDecal(V.M, V, rx, rz, 0.15 + k * 0.45, 1, 0.3, R3D_FXT_RING, k, i, 0.5 * S.rain * (1 - k), R3D_RAIN_C);
       }
     }
   }
@@ -31856,14 +32076,16 @@ function _rtsRFrame(dt) {
 
   /* --- new scorch marks and craters, stamped once into the baked terrain. Because the
      ground is a single canvas, a smudge costs nothing after the frame it appears on. --- */
+  /* the GL ground shares this canvas, and is sent only the rectangles stamped (render3d/upload3d.js) */
+  var stamp = window._R3D && typeof _r3dTerrainStamp === 'function' ? _r3dTerrainStamp : function () {};
   if (G.corpses && G.corpses.length) {
-    if (window._R3D) window._R3D.terrainDirty = true;   /* the GL ground shares this canvas */
     var cg = R.terrain.getContext('2d');
     cg.imageSmoothingEnabled = false;
     while (G.corpses.length) {
-      var cp = G.corpses.pop();
+      var cp = G.corpses.pop(), cim = S.corpse[cp.v % 3];
       var cpx = (cp.x / RTS_TILE + RTS_N / 2) * RTS_TS, cpy = (cp.z / RTS_TILE + RTS_N / 2) * RTS_TS;
-      cg.drawImage(S.corpse[cp.v % 3], Math.round(cpx - 7), Math.round(cpy - 6));
+      cg.drawImage(cim, Math.round(cpx - 7), Math.round(cpy - 6));
+      stamp(Math.round(cpx - 7), Math.round(cpy - 6), cim.width, cim.height);
     }
   }
   if (G.newScorch && G.newScorch.length) {
@@ -31873,8 +32095,9 @@ function _rtsRFrame(dt) {
       var ni = G.newScorch.pop();
       var nx = (ni % RTS_N) * RTS_TS, ny = ((ni / RTS_N) | 0) * RTS_TS;
       var sv = G.scorch[ni];
-      if (sv & 8) tg.drawImage(S.crater, nx, ny);
-      else tg.drawImage(S.scorch[((sv & 7) - 1) % 6], nx, ny);
+      var sim = (sv & 8) ? S.crater : S.scorch[((sv & 7) - 1) % 6];
+      tg.drawImage(sim, nx, ny);
+      stamp(nx, ny, sim.width, sim.height);
     }
   }
 
@@ -35507,7 +35730,8 @@ function _rtsLoop(prime) {
   U.last = now;
   /* the frame's own clock, for the readout's breakdown and for AUTO (render3d/quality3d.js) */
   var pc = window.performance || Date, p0 = pc.now(), pf = U.prof || (U.prof = {});
-  if (U.pl) _r3dQualityFeed(p0 - U.pl, p0);
+  if (U.pl) { _r3dQualityFeed(p0 - U.pl, p0); _r3dDynFeed(p0 - U.pl, U.jsLast, p0); }   /* render3d/pace3d.js */
+  var pStart = p0;
   pf.gap = (pf.gap || 0) * 0.95 + (U.pl ? p0 - U.pl : 0) * 0.05;
   U.pl = p0;
   function mark(k) { var t = pc.now(); pf[k] = (pf[k] || 0) * 0.95 + (t - p0) * 0.05; p0 = t; }
@@ -35590,6 +35814,7 @@ function _rtsLoop(prime) {
       }
     }
     mark('sim');
+    _r3dPaceBegin();                   /* the frame's budget for building models - pace3d.js */
     _rtsRFrame(dt);
     mark('draw');
     _rtsDrawHud(dt);
@@ -35598,6 +35823,8 @@ function _rtsLoop(prime) {
     U.uiT = (U.uiT || 0) + dt;
     if (U.uiT > 0.1) { U.uiT = 0; _rtsSyncSidebar(); _rtsSuperRow(); }
     mark('ui');
+    U.jsLast = pc.now() - pStart;
+    _r3dPaceEnd(U.jsLast);             /* ...and what a quick frame has to spare, warming models */
     U.drawErrs = 0;
   } catch (err) {
     /* The other half: the renderer, the HUD or the sidebar threw. Nothing here can paint an

@@ -86,7 +86,8 @@ function _rtsLoop(prime) {
   U.last = now;
   /* the frame's own clock, for the readout's breakdown and for AUTO (render3d/quality3d.js) */
   var pc = window.performance || Date, p0 = pc.now(), pf = U.prof || (U.prof = {});
-  if (U.pl) _r3dQualityFeed(p0 - U.pl, p0);
+  if (U.pl) { _r3dQualityFeed(p0 - U.pl, p0); _r3dDynFeed(p0 - U.pl, U.jsLast, p0); }   /* render3d/pace3d.js */
+  var pStart = p0;
   pf.gap = (pf.gap || 0) * 0.95 + (U.pl ? p0 - U.pl : 0) * 0.05;
   U.pl = p0;
   function mark(k) { var t = pc.now(); pf[k] = (pf[k] || 0) * 0.95 + (t - p0) * 0.05; p0 = t; }
@@ -169,6 +170,7 @@ function _rtsLoop(prime) {
       }
     }
     mark('sim');
+    _r3dPaceBegin();                   /* the frame's budget for building models - pace3d.js */
     _rtsRFrame(dt);
     mark('draw');
     _rtsDrawHud(dt);
@@ -177,6 +179,8 @@ function _rtsLoop(prime) {
     U.uiT = (U.uiT || 0) + dt;
     if (U.uiT > 0.1) { U.uiT = 0; _rtsSyncSidebar(); _rtsSuperRow(); }
     mark('ui');
+    U.jsLast = pc.now() - pStart;
+    _r3dPaceEnd(U.jsLast);             /* ...and what a quick frame has to spare, warming models */
     U.drawErrs = 0;
   } catch (err) {
     /* The other half: the renderer, the HUD or the sidebar threw. Nothing here can paint an

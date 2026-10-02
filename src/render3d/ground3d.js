@@ -76,20 +76,16 @@ function _r3dFog(G) {
   var fh = _r3dFogHash(G);
   if (R3.fogTex && R3.fogHash === fh && R3.fogFor === G) return;
   R3.fogHash = fh; R3.fogFor = G;
-  if (!R3.fogCv) {
-    R3.fogCv = document.createElement('canvas');
-    R3.fogCv.width = N; R3.fogCv.height = N;
-    R3.fogG = R3.fogCv.getContext('2d');
-    R3.fogIm = R3.fogG.createImageData(N, N);
-  }
-  var d = R3.fogIm.data;
+  if (!R3.fogPx || R3.fogPx.length !== N * N * 4) R3.fogPx = new Uint8Array(N * N * 4);
+  var d = R3.fogPx;
   for (var i = 0; i < N * N; i++) {
     var a = G.mapped[i] ? (G.vis[i] ? 0 : Math.round(255 * RTS_FOG_DIM)) : 255;
     d[i * 4] = 4; d[i * 4 + 1] = 6; d[i * 4 + 2] = 9; d[i * 4 + 3] = a;
   }
-  R3.fogG.putImageData(R3.fogIm, 0, 0);
+  /* straight from the bytes, not through the canvas: a canvas upload is a copy out of the 2D
+     canvas's own store, and the shroud changes whenever anything that sees moves */
   R3.fogTex = _r3dTexture(gl, R3.fogTex);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, R3.fogCv);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, N, N, 0, gl.RGBA, gl.UNSIGNED_BYTE, d);
 }
 
 /* THE ORE FIELD'S COLOUR, as a texture rather than as geometry.

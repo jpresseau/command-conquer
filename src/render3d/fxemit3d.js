@@ -81,9 +81,21 @@ function _r3dFxOrder(V) {
   ord.length = M.n;
   for (i = 0; i < M.n; i++) ord[i] = i;
   ord.sort(function (a, b) { return M.key[a] - M.key[b]; });
-  if (V.out.length < M.n * R3D_FX_QUAD) V.out = new Float32Array(M.a.length);
-  for (i = 0; i < M.n; i++) V.out.set(M.a.subarray(ord[i] * R3D_FX_QUAD, (ord[i] + 1) * R3D_FX_QUAD), i * R3D_FX_QUAD);
-  return V.out.subarray(0, M.n * R3D_FX_QUAD);
+  return _r3dFxPack(M, ord, V, 'out');
+}
+/* FOUR CORNERS A QUAD GO UP, NOT SIX. Every emitter lays a quad as two triangles, corners
+   0 1 2 and 0 2 5, so its fourth and fifth vertices are its first and third again - a third of
+   every upload repeated, and the effects' upload is the biggest a frame makes (a megabyte in a
+   heavy battle). Packed here to corners 0 1 2 5 and drawn through a fixed index (fx3d.js). */
+var R3D_FX_CORNER4 = [0, 1, 2, 5];
+function _r3dFxPack(B, ord, V, key) {
+  var S = R3D_FX_STRIDE, Q4 = 4 * S, n = B.n, out = V[key];
+  if (!out || out.length < n * Q4) out = V[key] = new Float32Array(Math.max(n, 64) * 2 * Q4);
+  for (var i = 0; i < n; i++) {
+    var q = (ord ? ord[i] : i) * R3D_FX_QUAD;
+    for (var c = 0; c < 4; c++) out.set(B.a.subarray(q + R3D_FX_CORNER4[c] * S, q + (R3D_FX_CORNER4[c] + 1) * S), i * Q4 + c * S);
+  }
+  return out.subarray(0, n * Q4);
 }
 function _r3dFxQuad(B, key) {
   if (B.n >= B.key.length) {

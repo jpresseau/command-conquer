@@ -399,6 +399,9 @@ function _r3dGroundDraw(gl, R3, G, cam, invD) {
   }
   _r3dShadowBind(P, 1);
   _r3dGroundBind(gl, R3, P);
+  /* the baked picture is only read by the baked ground; the materials take their scars from the
+     ground map - so it goes up only when it is drawn (upload3d.js) */
+  if (!M) _r3dTerrainUpload(gl, R3, window._rtsR && _rtsR.terrain);
   gl.bindTexture(gl.TEXTURE_2D, R3.terrainTex);
   gl.drawArrays(gl.TRIANGLES, 0, R3.groundVerts);
 }

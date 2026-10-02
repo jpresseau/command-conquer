@@ -83,10 +83,12 @@ function _r3dQualityFeed(dt, now) {
     return;
   }
   if (A.locked) return;
-  if (med > R3D_Q_SLOW && lvl < R3D_TIERS.length - 1) {
+  /* the resolution goes first (pace3d.js): a tier steps down once it can go no lower, and up only
+     once it is back at full */
+  if (med > R3D_Q_SLOW && lvl < R3D_TIERS.length - 1 && !_r3dDynRoom()) {
     A.trial = { from: lvl, base: med, down: true }; A.fast = 0;
     _r3dQualityApply(lvl + 1);
-  } else if (med < R3D_Q_FAST && lvl > 0) {
+  } else if (med < R3D_Q_FAST && lvl > 0 && !(R3.dyn < 1)) {
     if (++A.fast >= 3) { A.trial = { from: lvl, base: med, down: false }; A.fast = 0; _r3dQualityApply(lvl - 1); }
   } else A.fast = 0;
 }
