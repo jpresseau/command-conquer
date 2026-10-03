@@ -958,7 +958,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">eba6f4e · 2026-10-03</div>
+  <div id="rtsBuild" title="build">077fefd · 2026-10-03</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -13463,16 +13463,696 @@ function _rtsEdAdopt(M) {
   return true;
 }
 </script>
-<script>/* RED ALERT - audio. Everything here is SYNTHESIZED at runtime with WebAudio: there is not
-   a single sampled asset in the app, from any game or anywhere else. Weapons are shaped noise
-   and pitch-swept oscillators, the music is a sequenced drum machine plus a bass and lead
-   through a waveshaper.
+<script>/* audio/dsp.js - the sound, built sample by sample. Part of the audio.
+
+   THE OLD EFFECTS WERE BUILT LIVE, a few WebAudio nodes a shot: one square wave for a click, one
+   band of white noise for a rifle, the same every time. That is all a node graph can afford when
+   it is rebuilt for every shot of a battle, and it sounded like it - a toy's beeps and hiss.
+
+   So the effects are rendered ahead of time instead, into plain arrays, by the functions here:
+   noise of three colours, oscillators with a falling pitch, filters swept over a sound's life,
+   struck-metal resonances, crackle, bubbles, saturation. A recipe (audio/recipes.js) layers a
+   dozen of them into one sound, the bank (audio/bank.js) renders each a few times over with its
+   own seed so no two shots are identical, and the game only ever plays the finished buffer.
+
+   Pure arithmetic over Float32Arrays, with no WebAudio and no window: unit/sfx renders every
+   sound in node and measures it. Seeded, so a sound is the same on every run. */
+
+/* a small fast seeded generator (mulberry32): the same seed, the same sound */
+function _dspRng(seed) {
+  var a = (seed >>> 0) || 1;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    var t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+/* x varied by up to +-k of itself */
+function _dspJit(rng, x, k) { return x * (1 + (rng() * 2 - 1) * k); }
+
+/* ---------------------------------------------------------------- sources ---- */
+/* noise: white, pink (Kellet's filter - the hiss of air), or brown (the rumble of the ground) */
+function _dspNoise(n, rng, color) {
+  var out = new Float32Array(n), i, w;
+  if (color === 'pink') {
+    var b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+    for (i = 0; i < n; i++) {
+      w = rng() * 2 - 1;
+      b0 = 0.99886 * b0 + w * 0.0555179; b1 = 0.99332 * b1 + w * 0.0750759;
+      b2 = 0.96900 * b2 + w * 0.1538520; b3 = 0.86650 * b3 + w * 0.3104856;
+      b4 = 0.55000 * b4 + w * 0.5329522; b5 = -0.7616 * b5 - w * 0.0168980;
+      out[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11;
+      b6 = w * 0.115926;
+    }
+  } else if (color === 'brown') {
+    var last = 0;
+    for (i = 0; i < n; i++) { last = (last + 0.02 * (rng() * 2 - 1)) / 1.02; out[i] = last * 3.5; }
+  } else {
+    for (i = 0; i < n; i++) out[i] = rng() * 2 - 1;
+  }
+  return out;
+}
+
+/* PolyBLEP: the step a saw or square takes once a cycle, rounded off so it does not alias into
+   the whistling the old square-wave beeps had */
+function _dspBlep(t, dt) {
+  if (t < dt) { t /= dt; return t + t - t * t - 1; }
+  if (t > 1 - dt) { t = (t - 1) / dt; return t * t + t + t + 1; }
+  return 0;
+}
+/* an oscillator gliding from f0 to f1 (exponentially, as a falling shell or a dying motor does) */
+function _dspTone(n, sr, shape, f0, f1) {
+  var out = new Float32Array(n), ph = 0, i, f = f0, dt, v;
+  var r = f1 && f1 !== f0 ? Math.exp(Math.log(f1 / f0) / Math.max(1, n)) : 1;
+  for (i = 0; i < n; i++, f *= r) {
+    dt = f / sr;
+    if (shape === 'saw') v = 2 * ph - 1 - _dspBlep(ph, dt);
+    else if (shape === 'square') v = (ph < 0.5 ? 1 : -1) + _dspBlep(ph, dt) - _dspBlep((ph + 0.5) % 1, dt);
+    else if (shape === 'tri') v = ph < 0.5 ? 4 * ph - 1 : 3 - 4 * ph;
+    else v = Math.sin(2 * Math.PI * ph);
+    out[i] = v;
+    ph += dt; if (ph >= 1) ph -= 1;
+  }
+  return out;
+}
+/* struck metal: a few inharmonic partials, each ringing down at its own rate (modal synthesis) */
+function _dspModal(n, sr, modes) {
+  var out = new Float32Array(n), m, i, w, d;
+  for (m = 0; m < modes.length; m++) {
+    /* a damped resonator run as a recurrence - two multiplies a sample, no sine */
+    w = 2 * Math.PI * modes[m].f / sr; d = Math.exp(-6.91 / (modes[m].t60 * sr));
+    var c = 2 * d * Math.cos(w), d2 = d * d, y1 = modes[m].a * d * Math.sin(w), y2 = 0, y;
+    for (i = 1; i < n; i++) { out[i] += y1; y = c * y1 - d2 * y2; y2 = y1; y1 = y; }
+  }
+  return out;
+}
+/* crackle: sparse random impulses - grit, debris, a fire catching */
+function _dspCrackle(n, sr, rng, rate) {
+  var out = new Float32Array(n), p = rate / sr;
+  for (var i = 0; i < n; i++) if (rng() < p) out[i] = (rng() * 2 - 1) * (0.4 + 0.6 * rng());
+  return out;
+}
+
+/* ----------------------------------------------------------------- shaping ---- */
+/* an RBJ biquad, its corner swept exponentially from f0 to f1 over the sound */
+function _dspFilter(x, sr, type, f0, f1, q) {
+  var n = x.length, Q = q || 0.707, b0, b1, b2, a1, a2, x1 = 0, x2 = 0, y1 = 0, y2 = 0, i, y;
+  var lf0 = Math.log(Math.min(f0, sr * 0.45)), lf1 = Math.log(Math.min(f1 || f0, sr * 0.45));
+  for (i = 0; i < n; i++) {
+    if ((i & 15) === 0) {
+      var f = Math.exp(lf0 + (lf1 - lf0) * i / n), w = 2 * Math.PI * f / sr;
+      var c = Math.cos(w), al = Math.sin(w) / (2 * Q), a0 = 1 + al;
+      if (type === 'hp') { b0 = (1 + c) / 2; b1 = -(1 + c); b2 = b0; }
+      else if (type === 'bp') { b0 = al; b1 = 0; b2 = -al; }
+      else { b0 = (1 - c) / 2; b1 = 1 - c; b2 = b0; }
+      b0 /= a0; b1 /= a0; b2 /= a0; a1 = -2 * c / a0; a2 = (1 - al) / a0;
+    }
+    y = b0 * x[i] + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+    x2 = x1; x1 = x[i]; y2 = y1; y1 = y;
+    x[i] = y;
+  }
+  return x;
+}
+/* the amplitude: a linear rise over `a` seconds, held for `h`, then an exponential fall with time
+   constant `tau` - the shape of almost every struck or exploding thing */
+function _dspEnv(x, sr, a, tau, h) {
+  var na = Math.max(1, Math.round(a * sr)), nh = Math.round((h || 0) * sr), d = Math.exp(-1 / (tau * sr)), e = 1, i;
+  for (i = 0; i < x.length && i < na; i++) x[i] *= i / na;
+  for (; i < x.length && i < na + nh; i++) {}
+  for (; i < x.length; i++) { x[i] *= e; e *= d; }
+  return x;
+}
+/* a slow random swell and fade - thunder rolling, a fire breathing */
+function _dspWobble(x, sr, rng, rate, depth) {
+  var step = Math.max(1, Math.round(sr / rate)), a = rng(), b = rng();
+  for (var i = 0; i < x.length; i++) {
+    var j = i % step;
+    if (j === 0 && i) { a = b; b = rng(); }
+    var s = j / step, m = a + (b - a) * s * s * (3 - 2 * s);
+    x[i] *= 1 - depth + depth * 2 * m;
+  }
+  return x;
+}
+/* warmth and punch: a soft clip, unity at small signals */
+function _dspSat(x, drive) {
+  var k = Math.tanh(drive);
+  for (var i = 0; i < x.length; i++) x[i] = Math.tanh(x[i] * drive) / k;
+  return x;
+}
+/* src into dst at `at` seconds, scaled */
+function _dspAdd(dst, src, sr, at, gain) {
+  var o = Math.round((at || 0) * sr), g = gain == null ? 1 : gain;
+  for (var i = 0; i < src.length && o + i < dst.length; i++) dst[o + i] += src[i] * g;
+  return dst;
+}
+/* a sound brought down over its last `n` samples along a raised cosine, which an ear hears as it
+   dying away rather than being turned off */
+function _dspRelease(x, n) {
+  n = Math.min(x.length, n);
+  for (var i = 0; i < n; i++) x[x.length - n + i] *= 0.5 + 0.5 * Math.cos(Math.PI * (i + 1) / n);
+  return x;
+}
+/* its loudest sample to `peak`, and no DC: a sound that sits off zero thumps when it starts */
+function _dspNorm(x, peak) {
+  var m = 0, s = 0, i;
+  for (i = 0; i < x.length; i++) s += x[i];
+  s /= x.length || 1;
+  for (i = 0; i < x.length; i++) { x[i] -= s; if (Math.abs(x[i]) > m) m = Math.abs(x[i]); }
+  if (m > 0) for (i = 0; i < x.length; i++) x[i] *= peak / m;
+  return x;
+}
+
+/* ------------------------------------------------------------------ layers ----
+   What a recipe is made of: each makes one part of a sound and lays it into `out`.
+   o.at start (s), o.dur length (s), o.amp level, o.a attack (s), o.tau decay (s), o.h hold (s).
+
+   A FILTERED NOISE IS BROUGHT BACK TO A FIXED LEVEL before its envelope (_dspLevel), so that `amp`
+   means the same loudness whatever the filter took away. Without it a narrow band of noise came
+   out at a tenth of a sine of the same `amp`, and every gunshot was its thump and nothing else:
+   measured, the rifle had 92% of its energy under 400 Hz. */
+var RTS_DSP_LEVEL = 0.5;            /* the RMS a noise layer is brought to: a sine of amp 0.7 */
+function _dspLevel(x) {
+  var s = 0, i;
+  for (i = 0; i < x.length; i++) s += x[i] * x[i];
+  s = Math.sqrt(s / (x.length || 1));
+  if (s > 0) for (i = 0; i < x.length; i++) x[i] *= RTS_DSP_LEVEL / s;
+  return x;
+}
+function _dspLayerNoise(out, sr, rng, o) {
+  var x = _dspNoise(Math.round(o.dur * sr), rng, o.color);
+  if (o.type) _dspFilter(x, sr, o.type, o.f0, o.f1, o.q);
+  if (o.type2) _dspFilter(x, sr, o.type2, o.g0, o.g1, o.q2);
+  _dspLevel(x);
+  _dspEnv(x, sr, o.a || 0.001, o.tau, o.h);
+  if (o.wob) _dspWobble(x, sr, rng, o.wob, o.wd || 0.5);
+  return _dspAdd(out, x, sr, o.at, o.amp);
+}
+function _dspLayerTone(out, sr, o) {
+  var x = _dspTone(Math.round(o.dur * sr), sr, o.shape, o.f0, o.f1);
+  if (o.type) _dspFilter(x, sr, o.type, o.c0, o.c1, o.q);
+  _dspEnv(x, sr, o.a || 0.001, o.tau, o.h);
+  return _dspAdd(out, x, sr, o.at, o.amp);
+}
+function _dspLayerModal(out, sr, o) {
+  return _dspAdd(out, _dspModal(Math.round(o.dur * sr), sr, o.modes), sr, o.at, o.amp);
+}
+function _dspLayerCrackle(out, sr, rng, o) {
+  var x = _dspCrackle(Math.round(o.dur * sr), sr, rng, o.rate);
+  if (o.type) _dspFilter(x, sr, o.type, o.f0, o.f1, o.q);
+  _dspLevel(x);
+  _dspEnv(x, sr, o.a || 0.001, o.tau, o.h);
+  return _dspAdd(out, x, sr, o.at, o.amp);
+}
+/* a bubble: a sine that rises as it rings down (water, not noise) */
+function _dspLayerBubble(out, sr, o) {
+  var n = Math.round(o.dur * sr), x = _dspTone(n, sr, 'sine', o.f, o.f * (o.rise || 1.4));
+  _dspEnv(x, sr, 0.001, o.tau);
+  return _dspAdd(out, x, sr, o.at, o.amp);
+}
+
+/* THE ROOM. An impulse response for the reverb every effect is sent to: a handful of early
+   reflections, then a tail of noise that dies away and darkens as it goes, the two channels
+   drawn apart so the space has width. Rendered once, for a ConvolverNode (audio/mix.js). */
+function _dspRoom(sr, sec, seed) {
+  var n = Math.round(sec * sr), rng = _dspRng(seed || 7), out = [new Float32Array(n), new Float32Array(n)];
+  for (var ch = 0; ch < 2; ch++) {
+    var x = out[ch], lp = 0;
+    for (var i = 0; i < n; i++) {
+      var t = i / sr, k = 0.55 - 0.45 * Math.min(1, t / sec);   /* the tail darkens */
+      lp += k * ((rng() * 2 - 1) - lp);
+      x[i] = lp * Math.exp(-6.91 * t / (sec * 0.8)) * Math.min(1, t / 0.012);
+    }
+    for (var r = 0; r < 6; r++) {
+      var at = Math.round((0.008 + rng() * 0.07) * sr);
+      if (at < n) x[at] += (rng() < 0.5 ? -1 : 1) * (0.5 - r * 0.06);
+    }
+    _dspNorm(x, 0.5);
+  }
+  return out;
+}
+</script>
+<script>/* audio/recipes.js - what the battle sounds like: the guns and what they hit.
+
+   Each effect is LAYERS, the way a real one is heard. A gunshot is a supersonic crack (a few
+   milliseconds of broadband noise), the report (lower, longer noise, the gas leaving the barrel),
+   a thump of pressure (a falling sine), the slap of the shot coming back off the land, and the
+   action cycling (a struck-metal ring). A shell landing is a thud, a spray of dirt and the grit
+   falling after it. An explosion has a sub-bass push, a second blast, a long rumble and debris
+   that keeps landing for two seconds.
+
+   Every number that shapes a layer is varied by a few per cent per take (_dspJit), with the
+   take's own seed, so a squad firing is never one sample played over and over. The bank renders
+   `takes` of each (audio/bank.js); `peak` is what the take is normalised to and `cat` which bus
+   it plays through (audio/mix.js). `len` is in seconds.
+
+   `heard` is how loud the effect is MEANT to sound - dB of its loudest 400 ms, weighted the way
+   the ear weights it (A-weighting) - and `vol` the gain that gets it there. A peak says nothing
+   about loudness: a click and a building's collapse can share one. unit/sfx measures every
+   effect and holds `vol` to `heard`, so a recipe retuned without its gain fails there.
+
+   UI and world sounds - the clicks, the chimes, the klaxon, the thunder - are audio/recipes2.js. */
+
+var RTS_SFX_WAR = {
+  /* infantry small arms: a sharp crack, a short report, a slap off the land */
+  rifle: { cat: 'gun', len: 0.6, takes: 5, peak: 0.9, heard: -20, vol: 1.12, fn: function (sr, rng) {
+    var o = new Float32Array(Math.round(0.6 * sr)), J = function (x, k) { return _dspJit(rng, x, k || 0.08); };
+    _dspLayerNoise(o, sr, rng, { dur: 0.05, amp: 1.0, a: 0.0004, tau: J(0.006), type: 'hp', f0: J(2200) });
+    _dspLayerNoise(o, sr, rng, { dur: 0.25, amp: 0.85, a: 0.0008, tau: J(0.035), color: 'pink', type: 'lp', f0: J(3800), f1: 700, q: 0.8 });
+    _dspLayerTone(o, sr, { dur: 0.12, amp: 0.5, tau: J(0.03), f0: J(170), f1: 70 });
+    _dspLayerNoise(o, sr, rng, { at: J(0.03, 0.3), dur: 0.5, amp: 0.16, a: 0.01, tau: J(0.12), color: 'pink', type: 'lp', f0: 1100, f1: 350 });
+    _dspLayerModal(o, sr, { at: 0.002, dur: 0.08, amp: 0.1, modes: [{ f: J(3150), t60: 0.03, a: 1 }, { f: J(4720), t60: 0.02, a: 0.6 }] });
+    return _dspSat(o, 1.6);
+  } },
+
+  /* a machine gun's round: lighter and higher, a bolt that clacks */
+  mg: { cat: 'gun', len: 0.45, takes: 5, peak: 0.85, heard: -22, vol: 1.66, fn: function (sr, rng) {
+    var o = new Float32Array(Math.round(0.45 * sr)), J = function (x, k) { return _dspJit(rng, x, k || 0.08); };
+    _dspLayerNoise(o, sr, rng, { dur: 0.03, amp: 1.0, a: 0.0003, tau: J(0.004), type: 'hp', f0: J(2800) });
+    _dspLayerNoise(o, sr, rng, { dur: 0.18, amp: 0.7, a: 0.0006, tau: J(0.024), color: 'pink', type: 'lp', f0: J(4500), f1: 1000, q: 0.8 });
+    _dspLayerTone(o, sr, { dur: 0.08, amp: 0.35, tau: J(0.02), f0: J(240), f1: 110 });
+    _dspLayerNoise(o, sr, rng, { at: 0.02, dur: 0.4, amp: 0.1, a: 0.008, tau: J(0.08), color: 'pink', type: 'lp', f0: 1300, f1: 400 });
+    _dspLayerModal(o, sr, { at: J(0.035, 0.2), dur: 0.06, amp: 0.14, modes: [{ f: J(2650), t60: 0.03, a: 1 }, { f: J(4100), t60: 0.02, a: 0.5 }] });
+    return _dspSat(o, 1.5);
+  } },
+
+  /* a tank's main gun: a blast, a deep push, a rolling tail, and the breech clanking open */
+  cannon: { cat: 'gun', len: 1.6, takes: 4, peak: 0.95, heard: -16, vol: 1.10, fn: function (sr, rng) {
+    var o = new Float32Array(Math.round(1.6 * sr)), J = function (x, k) { return _dspJit(rng, x, k || 0.08); };
+    _dspLayerNoise(o, sr, rng, { dur: 0.08, amp: 1.0, a: 0.0005, tau: J(0.014), type: 'hp', f0: J(500) });
+    _dspLayerTone(o, sr, { dur: 0.6, amp: 1.0, a: 0.002, tau: J(0.16), f0: J(115), f1: 40 });
+    _dspLayerNoise(o, sr, rng, { dur: 0.6, amp: 0.9, a: 0.001, tau: J(0.11), color: 'pink', type: 'lp', f0: J(2800), f1: 260 });
+    _dspLayerNoise(o, sr, rng, { at: 0.01, dur: 1.5, amp: 0.45, a: 0.03, tau: J(0.45), color: 'brown', type: 'lp', f0: 420, f1: 110 });
+    _dspLayerModal(o, sr, { at: J(0.13, 0.15), dur: 0.4, amp: 0.1, modes: [
+      { f: J(880), t60: 0.25, a: 1 }, { f: J(1370), t60: 0.2, a: 0.7 }, { f: J(2240), t60: 0.15, a: 0.5 }, { f: J(3510), t60: 0.1, a: 0.3 }] });
+    return _dspSat(o, 2.4);
+  } },
+
+  /* a gun on a wall: as heavy, tighter, a harder crack */
+  turretgun: { cat: 'gun', len: 1.3, takes: 4, peak: 0.92, heard: -16.5, vol: 1.15, fn: function (sr, rng) {
+    var o = new Float32Array(Math.round(1.3 * sr)), J = function (x, k) { return _dspJit(rng, x, k || 0.08); };
+    _dspLayerNoise(o, sr, rng, { dur: 0.06, amp: 1.0, a: 0.0004, tau: J(0.01), type: 'hp', f0: J(900) });
+    _dspLayerTone(o, sr, { dur: 0.45, amp: 0.85, a: 0.002, tau: J(0.13), f0: J(145), f1: 55 });
+    _dspLayerNoise(o, sr, rng, { dur: 0.5, amp: 0.85, a: 0.001, tau: J(0.09), color: 'pink', type: 'lp', f0: J(3400), f1: 380 });
+    _dspLayerNoise(o, sr, rng, { at: 0.01, dur: 1.2, amp: 0.35, a: 0.02, tau: J(0.34), color: 'brown', type: 'lp', f0: 480, f1: 130 });
+    _dspLayerModal(o, sr, { at: J(0.09, 0.15), dur: 0.3, amp: 0.1, modes: [
+      { f: J(1040), t60: 0.2, a: 1 }, { f: J(1650), t60: 0.16, a: 0.6 }, { f: J(2610), t60: 0.12, a: 0.4 }] });
+    return _dspSat(o, 2.2);
+  } },
+
+  /* a rocket: the motor lighting, a rasp, and the whoosh rising then falling away */
+  rocket: { cat: 'gun', len: 1.1, takes: 4, peak: 0.85, heard: -17, vol: 0.43, fn: function (sr, rng) {
+    var o = new Float32Array(Math.round(1.1 * sr)), J = function (x, k) { return _dspJit(rng, x, k || 0.08); };
+    _dspLayerNoise(o, sr, rng, { dur: 0.06, amp: 0.7, a: 0.0005, tau: J(0.012), type: 'hp', f0: 900 });
+    _dspLayerTone(o, sr, { dur: 0.12, amp: 0.3, tau: 0.03, f0: J(320), f1: 120 });
+    _dspLayerNoise(o, sr, rng, { at: 0.01, dur: 0.4, amp: 0.9, a: 0.05, tau: J(0.16), color: 'pink', type: 'bp', f0: J(650), f1: J(2600), q: 1.3 });
+    _dspLayerNoise(o, sr, rng, { at: 0.18, dur: 0.9, amp: 0.6, a: 0.05, tau: J(0.3), color: 'pink', type: 'bp', f0: 2600, f1: J(700), q: 1.1 });
+    _dspLayerTone(o, sr, { at: 0.02, dur: 0.7, amp: 0.14, a: 0.04, tau: 0.25, shape: 'saw', f0: J(85), f1: J(150), type: 'lp', c0: 1400, c1: 900 });
+    return _dspSat(o, 1.5);
+  } },
+
+  /* a shell landing on ground: a thud, a spray of dirt, the grit pattering down after */
+  hit: { cat: 'boom', len: 0.9, takes: 5, peak: 0.85, heard: -19, vol: 1.08, fn: function (sr, rng) {
+    var o = new Float32Array(Math.round(0.9 * sr)), J = function (x, k) { return _dspJit(rng, x, k || 0.1); };
+    _dspLayerTone(o, sr, { dur: 0.3, amp: 0.8, a: 0.001, tau: J(0.08), f0: J(95), f1: 40 });
+    _dspLayerNoise(o, sr, rng, { dur: 0.3, amp: 1.0, a: 0.0008, tau: J(0.06), color: 'pink', type: 'lp', f0: J(1800), f1: 260 });
+    _dspLayerCrackle(o, sr, rng, { at: 0.004, dur: 0.4, amp: 0.22, rate: J(1100), tau: J(0.08), type: 'bp', f0: 2200, f1: 1400, q: 1.2 });
+    _dspLayerCrackle(o, sr, rng, { at: J(0.09), dur: 0.7, amp: 0.15, rate: J(140), tau: J(0.22), type: 'bp', f0: 1600, q: 2 });
+    return _dspSat(o, 1.8);
+  } },
+
+  /* a round landing in water: a whump, the spray, bubbles - and no crack, which water does not make */
+  splash: { cat: 'boom', len: 1.0, takes: 4, peak: 0.8, heard: -21, vol: 1.19, fn: function (sr, rng) {
+    var o = new Float32Array(Math.round(1.0 * sr)), J = function (x, k) { return _dspJit(rng, x, k || 0.1); };
+    _dspLayerTone(o, sr, { dur: 0.3, amp: 0.6, a: 0.003, tau: J(0.07), f0: J(125), f1: 55 });
+    _dspLayerNoise(o, sr, rng, { dur: 0.7, amp: 0.3, a: 0.01, tau: J(0.15), type: 'bp', f0: J(2700), f1: 1000, q: 0.8 });
+    _dspLayerNoise(o, sr, rng, { dur: 0.5, amp: 0.55, a: 0.005, tau: J(0.11), color: 'pink', type: 'lp', f0: 1500, f1: 420 });
+    for (var b = 0; b < 11; b++) {
+      _dspLayerBubble(o, sr, { at: 0.04 + rng() * 0.55, dur: 0.12, amp: 0.07 + rng() * 0.09, f: 380 + rng() * 1100, tau: 0.025 + rng() * 0.035 });
+    }
+    return o;
+  } },
+
+  /* a vehicle going up: a crack, a deep blast, metal raining down, the fire catching */
+  pop: { cat: 'boom', len: 1.9, takes: 4, peak: 0.95, heard: -15, vol: 0.89, fn: function (sr, rng) {
+    var o = new Float32Array(Math.round(1.9 * sr)), J = function (x, k) { return _dspJit(rng, x, k || 0.1); };
+    _dspLayerNoise(o, sr, rng, { dur: 0.1, amp: 1.0, a: 0.0005, tau: J(0.018), type: 'hp', f0: 600 });
+    _dspLayerTone(o, sr, { dur: 0.9, amp: 1.0, a: 0.002, tau: J(0.24), f0: J(92), f1: 30 });
+    _dspLayerNoise(o, sr, rng, { dur: 0.9, amp: 0.9, a: 0.001, tau: J(0.22), color: 'pink', type: 'lp', f0: J(3200), f1: 220 });
+    _dspLayerNoise(o, sr, rng, { at: 0.02, dur: 1.8, amp: 0.5, a: 0.04, tau: J(0.6), color: 'brown', type: 'lp', f0: 380, f1: 90 });
+    for (var c = 0; c < 3; c++) {
+      var f = 650 + rng() * 2300;
+      _dspLayerModal(o, sr, { at: 0.12 + c * J(0.17, 0.3), dur: 0.3, amp: 0.06 + rng() * 0.07, modes: [{ f: f, t60: 0.2, a: 1 }, { f: f * 1.58, t60: 0.15, a: 0.5 }, { f: f * 2.37, t60: 0.1, a: 0.3 }] });
+    }
+    _dspLayerCrackle(o, sr, rng, { at: 0.1, dur: 1.7, amp: 0.16, rate: J(420), a: 0.1, tau: J(0.5), type: 'bp', f0: 3000, q: 1 });
+    return _dspSat(o, 2.2);
+  } },
+
+  /* a building coming down: two blasts, a long rumble, masonry falling for two seconds */
+  boom: { cat: 'boom', len: 2.9, takes: 3, peak: 0.98, heard: -12, vol: 0.97, fn: function (sr, rng) {
+    var o = new Float32Array(Math.round(2.9 * sr)), J = function (x, k) { return _dspJit(rng, x, k || 0.1); };
+    _dspLayerNoise(o, sr, rng, { dur: 0.12, amp: 1.0, a: 0.0006, tau: J(0.025), type: 'hp', f0: 420 });
+    _dspLayerTone(o, sr, { dur: 1.4, amp: 1.1, a: 0.003, tau: J(0.42), f0: J(72), f1: 24 });
+    _dspLayerNoise(o, sr, rng, { dur: 1.2, amp: 1.0, a: 0.001, tau: J(0.4), color: 'pink', type: 'lp', f0: J(2300), f1: 150 });
+    var t2 = J(0.18, 0.25);
+    _dspLayerNoise(o, sr, rng, { at: t2, dur: 1.2, amp: 0.7, a: 0.002, tau: J(0.45), color: 'pink', type: 'lp', f0: 1700, f1: 120 });
+    _dspLayerTone(o, sr, { at: t2, dur: 0.9, amp: 0.6, a: 0.002, tau: J(0.28), f0: J(62), f1: 25 });
+    _dspLayerNoise(o, sr, rng, { at: 0.03, dur: 2.8, amp: 0.6, a: 0.06, tau: J(1.0), color: 'brown', type: 'lp', f0: 320, f1: 70, wob: 6, wd: 0.3 });
+    _dspLayerCrackle(o, sr, rng, { at: 0.1, dur: 2.5, amp: 0.13, rate: J(260), a: 0.05, tau: J(0.85), type: 'bp', f0: 2000, f1: 1200, q: 1.2 });
+    for (var m = 0; m < 5; m++) {
+      var at = 0.3 + rng() * 1.4;
+      _dspLayerTone(o, sr, { at: at, dur: 0.2, amp: 0.18, tau: 0.045, f0: 125 + rng() * 40, f1: 60 });
+      _dspLayerNoise(o, sr, rng, { at: at, dur: 0.2, amp: 0.2, tau: 0.04, color: 'pink', type: 'lp', f0: 950 });
+    }
+    return _dspSat(o, 2.5);
+  } }
+};
+
+/* One recipe by name, from whichever table holds it; null for a name nothing makes. */
+function _rtsSfxRecipe(name) {
+  return RTS_SFX_WAR[name] || (typeof RTS_SFX_UI !== 'undefined' && RTS_SFX_UI[name]) || null;
+}
+/* every effect there is a recipe for */
+function rtsSfxNames() {
+  return Object.keys(RTS_SFX_WAR).concat(typeof RTS_SFX_UI !== 'undefined' ? Object.keys(RTS_SFX_UI) : []);
+}
+/* One take of an effect, rendered: a Float32Array at `sr`, normalised, its end brought to rest. */
+function _rtsSfxRender(name, take, sr) {
+  var R = _rtsSfxRecipe(name);
+  if (!R) return null;
+  var seed = 0;
+  for (var i = 0; i < name.length; i++) seed = (seed * 31 + name.charCodeAt(i)) >>> 0;
+  var x = R.fn(sr, _dspRng(seed + 7919 * (take + 1)));
+  /* the last fifth of it released along a raised cosine: a tail still ringing when its buffer
+     ends would otherwise stop dead, and that is heard as a cut even where it does not click */
+  return _dspRelease(_dspNorm(x, R.peak), Math.max(Math.round(sr * 0.03), Math.round(x.length * 0.2)));
+}
+</script>
+<script>/* audio/recipes2.js - the sounds that are not gunfire: the interface, the base, the weather.
+
+   THE INTERFACE WAS SQUARE WAVES, and a square wave is the sound of a 1980s handheld: every
+   click, blip and chime in the game was one, with nothing to soften it. These are built from
+   what real equipment sounds like instead - a click is a struck plastic tick, a chime is a bell
+   (a sine with the inharmonic partials a struck bar really has, ringing down), an order is a
+   radio acknowledging with a squelch either side, and the attack alarm is a klaxon, not a buzzer.
+   Kept consistent take to take (`takes` 2, small jitter): the interface should sound the same
+   every time, which is how a player learns what it is saying.
+
+   A recipe's fields are those of audio/recipes.js. */
+
+/* a struck bar: its fundamental and the partials at 2.76x and 5.4x that make it a bell, not a beep */
+function _sfxBell(o, sr, at, f, amp, t60) {
+  _dspLayerModal(o, sr, { at: at, dur: t60 * 1.1, amp: amp, modes: [
+    { f: f, t60: t60, a: 1 }, { f: f * 2.756, t60: t60 * 0.45, a: 0.32 }, { f: f * 5.404, t60: t60 * 0.22, a: 0.12 }] });
+}
+
+var RTS_SFX_UI = {
+  /* selecting a unit: a soft, bright blip and the faintest tick */
+  select: { cat: 'ui', len: 0.2, takes: 2, peak: 0.6, heard: -24, vol: 0.48, fn: function (sr, rng) {
+    var o = new Float32Array(Math.round(0.2 * sr));
+    _dspLayerTone(o, sr, { dur: 0.18, amp: 0.7, a: 0.002, tau: 0.04, f0: _dspJit(rng, 1480, 0.01) });
+    _dspLayerTone(o, sr, { dur: 0.1, amp: 0.25, a: 0.002, tau: 0.02, f0: 2960 });
+    _dspLayerNoise(o, sr, rng, { dur: 0.01, amp: 0.15, a: 0.0002, tau: 0.002, type: 'hp', f0: 4500 });
+    return o;
+  } },
+
+  /* an order given: a radio acknowledging - squelch, two rising tones down a narrow band, squelch */
+  order: { cat: 'ui', len: 0.34, takes: 2, peak: 0.6, heard: -22, vol: 0.35, fn: function (sr, rng) {
+    var o = new Float32Array(Math.round(0.34 * sr));
+    _dspLayerNoise(o, sr, rng, { dur: 0.04, amp: 0.12, a: 0.001, tau: 0.012, type: 'bp', f0: 2300, q: 0.9 });
+    _dspLayerTone(o, sr, { at: 0.02, dur: 0.09, amp: 0.6, a: 0.003, h: 0.03, tau: 0.02, shape: 'tri', f0: 1046, type: 'bp', c0: 1500, q: 0.6 });
+    _dspLayerTone(o, sr, { at: 0.11, dur: 0.13, amp: 0.6, a: 0.003, h: 0.04, tau: 0.03, shape: 'tri', f0: 1568, type: 'bp', c0: 1700, q: 0.6 });
+    _dspLayerNoise(o, sr, rng, { at: 0.25, dur: 0.06, amp: 0.1, a: 0.002, tau: 0.015, type: 'bp', f0: 2100, q: 0.9 });
+    return o;
+  } },
+
+  /* a button: a crisp plastic tick */
+  click: { cat: 'ui', len: 0.08, takes: 2, peak: 0.55, heard: -26, vol: 0.99, fn: function (sr, rng) {
+    var o = new Float32Array(Math.round(0.08 * sr));
+    _dspLayerModal(o, sr, { dur: 0.06, amp: 0.6, modes: [{ f: _dspJit(rng, 3300, 0.02), t60: 0.02, a: 1 }, { f: 5150, t60: 0.014, a: 0.5 }] });
+    _dspLayerNoise(o, sr, rng, { dur: 0.01, amp: 0.35, a: 0.0002, tau: 0.0025, type: 'hp', f0: 3000 });
+    return o;
+  } },
+
+  /* refused: two soft low tones, falling - "no", not an error buzzer */
+  deny: { cat: 'ui', len: 0.36, takes: 2, peak: 0.6, heard: -23, vol: 0.80, fn: function (sr) {
+    var o = new Float32Array(Math.round(0.36 * sr));
+    _dspLayerTone(o, sr, { dur: 0.12, amp: 0.7, a: 0.004, h: 0.03, tau: 0.03, shape: 'tri', f0: 330, type: 'lp', c0: 1400 });
+    _dspLayerTone(o, sr, { at: 0.12, dur: 0.22, amp: 0.7, a: 0.004, h: 0.04, tau: 0.05, shape: 'tri', f0: 247, type: 'lp', c0: 1200 });
+    return o;
+  } },
+
+  /* production started: a latch clicking and a servo winding up */
+  build: { cat: 'ui', len: 0.5, takes: 2, peak: 0.6, heard: -24, vol: 2.04, fn: function (sr, rng) {
+    var o = new Float32Array(Math.round(0.5 * sr));
+    _dspLayerModal(o, sr, { dur: 0.06, amp: 0.4, modes: [{ f: 2400, t60: 0.03, a: 1 }, { f: 3800, t60: 0.02, a: 0.5 }] });
+    _dspLayerTone(o, sr, { dur: 0.12, amp: 0.4, tau: 0.035, f0: 190, f1: 120 });
+    _dspLayerTone(o, sr, { at: 0.03, dur: 0.42, amp: 0.25, a: 0.03, h: 0.1, tau: 0.08, shape: 'saw', f0: _dspJit(rng, 140, 0.02), f1: 300, type: 'lp', c0: 900, c1: 1600 });
+    return o;
+  } },
+
+  /* a building set down: a heavy thud, a steel frame ringing, dust */
+  place: { cat: 'boom', len: 1.0, takes: 3, peak: 0.85, heard: -17, vol: 2.21, fn: function (sr, rng) {
+    var o = new Float32Array(Math.round(1.0 * sr)), J = function (x, k) { return _dspJit(rng, x, k || 0.05); };
+    _dspLayerTone(o, sr, { dur: 0.5, amp: 1.0, a: 0.002, tau: J(0.12), f0: J(88), f1: 45 });
+    _dspLayerNoise(o, sr, rng, { dur: 0.3, amp: 0.8, a: 0.001, tau: J(0.07), color: 'pink', type: 'lp', f0: 1500, f1: 260 });
+    _dspLayerModal(o, sr, { at: 0.01, dur: 0.5, amp: 0.22, modes: [
+      { f: J(430), t60: 0.32, a: 1 }, { f: J(690), t60: 0.26, a: 0.7 }, { f: J(1120), t60: 0.2, a: 0.5 }, { f: J(1790), t60: 0.14, a: 0.3 }] });
+    _dspLayerNoise(o, sr, rng, { at: 0.02, dur: 0.9, amp: 0.2, a: 0.03, tau: 0.25, color: 'pink', type: 'lp', f0: 900 });
+    return _dspSat(o, 1.6);
+  } },
+
+  /* construction complete: a rising major arpeggio on a bell */
+  ready: { cat: 'ui', len: 1.5, takes: 2, peak: 0.6, heard: -20, vol: 0.67, fn: function (sr) {
+    var o = new Float32Array(Math.round(1.5 * sr));
+    [659.3, 830.6, 987.8].forEach(function (f, i) { _sfxBell(o, sr, i * 0.09, f, 0.5, 1.0); });
+    return o;
+  } },
+
+  /* a unit ready: two notes of the same bell */
+  unitready: { cat: 'ui', len: 1.0, takes: 2, peak: 0.55, heard: -21, vol: 0.82, fn: function (sr) {
+    var o = new Float32Array(Math.round(1.0 * sr));
+    [784, 1174.7].forEach(function (f, i) { _sfxBell(o, sr, i * 0.08, f, 0.5, 0.7); });
+    return o;
+  } },
+
+  /* under attack: a klaxon, three falling pulses with grit in them */
+  alert: { cat: 'ui', len: 1.3, takes: 2, peak: 0.7, heard: -17, vol: 0.58, fn: function (sr) {
+    var o = new Float32Array(Math.round(1.3 * sr));
+    for (var p = 0; p < 3; p++) {
+      var at = p * 0.38;
+      _dspLayerTone(o, sr, { at: at, dur: 0.34, amp: 0.6, a: 0.012, h: 0.22, tau: 0.03, shape: 'saw', f0: 520, f1: 400, type: 'lp', c0: 2200, c1: 1500 });
+      _dspLayerTone(o, sr, { at: at, dur: 0.34, amp: 0.35, a: 0.012, h: 0.22, tau: 0.03, shape: 'square', f0: 262, f1: 201, type: 'lp', c0: 1600 });
+    }
+    return _dspSat(o, 2.2);
+  } },
+
+  /* power failing: everything winding down, and the hum of what is left */
+  lowpower: { cat: 'ui', len: 1.3, takes: 2, peak: 0.6, heard: -20, vol: 1.30, fn: function (sr) {
+    var o = new Float32Array(Math.round(1.3 * sr));
+    _dspLayerTone(o, sr, { dur: 1.2, amp: 0.6, a: 0.01, h: 0.15, tau: 0.35, shape: 'saw', f0: 230, f1: 55, type: 'lp', c0: 1600, c1: 250 });
+    _dspLayerTone(o, sr, { dur: 1.2, amp: 0.4, a: 0.01, h: 0.2, tau: 0.4, f0: 116, f1: 40 });
+    _dspLayerTone(o, sr, { at: 0.1, dur: 1.1, amp: 0.15, a: 0.1, h: 0.4, tau: 0.25, shape: 'square', f0: 60, type: 'lp', c0: 400 });
+    return o;
+  } },
+
+  /* in a storm: the crack overhead, then the roll, swelling and fading as it goes (rts.ambience.js) */
+  thunder: { cat: 'world', len: 5.5, takes: 2, peak: 0.95, heard: -16, vol: 1.45, fn: function (sr, rng) {
+    var o = new Float32Array(Math.round(5.5 * sr));
+    _dspLayerNoise(o, sr, rng, { dur: 0.5, amp: 0.6, a: 0.002, tau: 0.1, type: 'bp', f0: 2200, f1: 500, q: 0.7 });
+    _dspLayerCrackle(o, sr, rng, { dur: 0.5, amp: 0.22, rate: 2200, tau: 0.1, type: 'bp', f0: 1800, q: 0.8 });
+    _dspLayerNoise(o, sr, rng, { at: 0.05, dur: 5.4, amp: 1.0, a: 0.4, tau: 1.9, color: 'brown', type: 'lp', f0: 320, f1: 80, wob: 3, wd: 0.45 });
+    _dspLayerNoise(o, sr, rng, { at: 1.1 + rng() * 0.5, dur: 3.8, amp: 0.7, a: 0.3, tau: 1.3, color: 'brown', type: 'lp', f0: 240, f1: 60, wob: 2, wd: 0.5 });
+    return _dspSat(o, 1.4);
+  } }
+};
+</script>
+<script>/* audio/bank.js - every effect, rendered once a take and kept.
+
+   An effect is rendered (audio/recipes.js) into an AudioBuffer the first time it is wanted and
+   then only ever played, so a firefight costs one buffer source a shot rather than the half-dozen
+   oscillators, filters and envelopes the old effects built and threw away for every one.
+
+   TAKES. Each effect has a few, each from its own seed, and a shot plays one at random - never
+   the one just played - so twelve rifles are twelve slightly different cracks. The first take of
+   anything is rendered the moment it is first asked for, so nothing is ever silent; the rest are
+   rendered out of spare time (_rtsBankIdle), a few milliseconds at a slice, every effect's first
+   take before any effect's second. Measured: the whole bank, every take, is about 230 ms of
+   rendering on a desktop, a building's collapse 15 ms of it and a rifle 2. */
+
+var RTS_BANK_SLICE = 8;          /* ms of rendering per idle slice */
+
+function _rtsBank(A) {
+  return A.bank || (A.bank = { take: {}, last: {}, q: null, built: 0, idle: false });
+}
+/* one take, built now if it is not already */
+function _rtsBankBuf(A, name, take) {
+  var B = _rtsBank(A), k = name + '#' + take;
+  if (B.take[k]) return B.take[k];
+  var x = _rtsSfxRender(name, take, A.ctx.sampleRate);
+  if (!x) return null;
+  var buf = A.ctx.createBuffer(1, x.length, A.ctx.sampleRate);
+  buf.getChannelData(0).set(x);
+  B.take[k] = buf; B.built++;
+  return buf;
+}
+/* A take of `name` to play: any built one but the last played, or the first, built now. */
+function _rtsBankPick(A, name) {
+  var R = _rtsSfxRecipe(name);
+  if (!R) return null;
+  var B = _rtsBank(A), have = [], t;
+  for (t = 0; t < R.takes; t++) if (B.take[name + '#' + t]) have.push(t);
+  if (!have.length) { if (!_rtsBankBuf(A, name, 0)) return null; have = [0]; }
+  var pick = have[Math.floor(Math.random() * have.length)];
+  if (have.length > 1 && pick === B.last[name]) pick = have[(have.indexOf(pick) + 1) % have.length];
+  B.last[name] = pick;
+  return B.take[name + '#' + pick];
+}
+/* What is left to render, the first take of everything ahead of anyone's second. */
+function _rtsBankQueue() {
+  var names = rtsSfxNames(), q = [], most = 0, t;
+  names.forEach(function (n) { most = Math.max(most, _rtsSfxRecipe(n).takes); });
+  for (t = 0; t < most; t++) names.forEach(function (n) { if (t < _rtsSfxRecipe(n).takes) q.push([n, t]); });
+  return q;
+}
+/* Render for up to `ms`; how many takes are still to come. */
+function _rtsBankWarm(A, ms) {
+  var B = _rtsBank(A), t0 = Date.now();
+  if (!B.q) B.q = _rtsBankQueue();
+  while (B.q.length && Date.now() - t0 < ms) {
+    var w = B.q.shift();
+    try { _rtsBankBuf(A, w[0], w[1]); } catch (_e) {}
+  }
+  return B.q.length;
+}
+/* ...a slice at a time, whenever the page is idle, until the bank is full */
+function _rtsBankIdle(A) {
+  var B = _rtsBank(A);
+  if (B.idle) return;
+  B.idle = true;
+  var later = window.requestIdleCallback ? function (f) { window.requestIdleCallback(f, { timeout: 500 }); }
+                                         : function (f) { setTimeout(f, 40); };
+  (function slice() {
+    if (_rtsBankWarm(A, RTS_BANK_SLICE) > 0) later(slice);
+    else B.idle = false;
+  })();
+}
+</script>
+<script>/* audio/mix.js - where a sound goes once it is made.
+
+   The old effects went straight onto one bus: every shot dead centre, dry, as loud in a hundred-
+   unit battle as in a skirmish, and summed until the output clipped. Now each one:
+
+     LEFT OR RIGHT   is placed across the stereo field where its source is on the screen
+                     (_rtsPanAt), so a fight on the left of the view is heard on the left
+     IN A ROOM       is sent to one shared reverb (a ConvolverNode on a rendered impulse,
+                     _dspRoom), a little for a rifle, more for an explosion, least for a click
+     ON ITS BUS      by category - guns, explosions, the interface, the weather - each with its
+                     own level and its own share of the room (RTS_CAT_BUS)
+     NOT TOO MANY    at most RTS_VOICE_PER of one effect and RTS_VOICE_MAX in all: past either, the
+                     oldest of the same name, or the oldest of the least important kind, gives
+                     way - faded over 15 ms, not cut - and a click is never lost to a rifle
+     UNDER A LID     everything ends in a compressor before the speakers, so a barrage is loud
+                     and stays clean instead of clipping
+
+   The take is varied as it plays too: a few per cent of pitch, a dB or so of level. Not the
+   interface, which should sound the same every time. */
+
+var RTS_VOICE_MAX = 24;          /* voices at once, all effects together */
+var RTS_VOICE_PER = 4;           /* ...and of any one effect */
+var RTS_PAN_WIDTH = 0.75;        /* how far to either side the edge of the screen sits */
+/* g the bus's level, verb its send to the room, pri how much it matters when voices run short */
+var RTS_CAT_BUS = {
+  gun:   { g: 0.9, verb: 0.22, pri: 1 },
+  boom:  { g: 1.0, verb: 0.32, pri: 2 },
+  ui:    { g: 0.9, verb: 0.05, pri: 3 },
+  world: { g: 1.0, verb: 0.28, pri: 2 }
+};
+
+/* The chain, built once with the context: category buses into the effects bus, a room, and the
+   compressor the master feeds (rts.audio.js). */
+function _rtsMixInit(A) {
+  if (A.mix) return A.mix;
+  var ctx = A.ctx, M = { cat: {}, voices: [], verbIn: null };
+  try {
+    var cv = ctx.createConvolver(), ir = _dspRoom(ctx.sampleRate, 1.6, 11);
+    var b = ctx.createBuffer(2, ir[0].length, ctx.sampleRate);
+    b.getChannelData(0).set(ir[0]); b.getChannelData(1).set(ir[1]);
+    cv.buffer = b;
+    M.verbIn = ctx.createGain();
+    var back = ctx.createGain(); back.gain.value = 0.55;
+    M.verbIn.connect(cv); cv.connect(back); back.connect(A.sfx);
+  } catch (_e) { M.verbIn = null; }
+  Object.keys(RTS_CAT_BUS).forEach(function (c) {
+    var g = ctx.createGain(); g.gain.value = RTS_CAT_BUS[c].g; g.connect(A.sfx);
+    if (M.verbIn) { var s = ctx.createGain(); s.gain.value = RTS_CAT_BUS[c].verb; g.connect(s); s.connect(M.verbIn); }
+    M.cat[c] = g;
+  });
+  A.mix = M;
+  return M;
+}
+
+/* Where across the stereo field a sound at (x, z) sits: -1 hard left to 1 hard right, from where
+   it is on the screen. Nothing for a sound with no place (the interface). */
+function _rtsPanAt(x, z) {
+  var R = window._rtsR;
+  if (!R || x == null || typeof _rtsViewSpan !== 'function') return 0;
+  var vs = _rtsViewSpan(), u;
+  if (vs.cw) u = _r3dToCam(x - R.focus.x, z - R.focus.z).u / (vs.cw / 2);
+  else u = (x - R.focus.x) / (vs.w / 2);
+  return Math.max(-1, Math.min(1, u)) * RTS_PAN_WIDTH;
+}
+
+function _rtsVoiceStop(v, now) {
+  try { v.g.gain.setTargetAtTime(0, now, 0.015); v.src.stop(now + 0.1); } catch (_e) {}
+  v.end = now;
+}
+
+/* Play a rendered take of `name`, from (x, z) if it has a place, onto its bus - or onto `via`
+   (the ambience's muffled far bus) instead. False when the voices were full of better things. */
+function _rtsVoice(A, name, buf, x, z, via) {
+  var R = _rtsSfxRecipe(name), C = RTS_CAT_BUS[R.cat] || RTS_CAT_BUS.gun, ctx = A.ctx, now = ctx.currentTime;
+  var M = _rtsMixInit(A), i;
+  M.voices = M.voices.filter(function (v) { return v.end > now; });
+  var same = M.voices.filter(function (v) { return v.name === name; });
+  if (same.length >= RTS_VOICE_PER) _rtsVoiceStop(same[0], now);
+  else if (M.voices.length >= RTS_VOICE_MAX) {
+    var low = null;
+    for (i = 0; i < M.voices.length; i++) if (!low || M.voices[i].pri < low.pri) low = M.voices[i];
+    if (low.pri > C.pri) return false;
+    _rtsVoiceStop(low, now);
+  }
+  M.voices = M.voices.filter(function (v) { return v.end > now; });
+  var src = ctx.createBufferSource(), g = ctx.createGain(), ui = R.cat === 'ui';
+  src.buffer = buf;
+  var rate = ui ? 1 : 1 + (Math.random() * 2 - 1) * 0.04;
+  src.playbackRate.value = rate;
+  g.gain.value = (R.vol || 1) * (ui ? 1 : Math.pow(10, (Math.random() * 2 - 1) * 1.2 / 20));
+  src.connect(g);
+  var last = g;
+  if (!via && x != null && ctx.createStereoPanner) {
+    var p = ctx.createStereoPanner(); p.pan.value = _rtsPanAt(x, z);
+    g.connect(p); last = p;
+  }
+  last.connect(via || M.cat[R.cat] || A.sfx);
+  src.start(now);
+  M.voices.push({ name: name, src: src, g: g, pri: C.pri, end: now + buf.duration / rate });
+  return true;
+}
+</script>
+<script>/* RED ALERT - audio. Everything here is SYNTHESIZED: there is not a single sampled asset in the
+   app, from any game or anywhere else. The effects are rendered ahead of time from layered
+   recipes (audio/recipes.js, audio/dsp.js) into a bank of takes (audio/bank.js) and played
+   through a mixer with stereo position, a room and a compressor (audio/mix.js); the music is a
+   sequenced drum machine plus a bass and lead through a waveshaper.
 
    Two rules keep it from turning into mush during a big fight:
-   - Sounds are positional in the loosest sense: an event outside the visible map area is
-     simply not played. Forty units firing across the map would otherwise be a wall of noise.
+   - Sounds are positional: an event outside the visible map area is not played at full voice
+     (a little way off it is heard muffled, rts.ambience.js), and one on screen is placed left
+     or right by where it is.
    - Every effect name has a minimum retrigger gap, so a squad firing in unison makes one
-     satisfying crack rather than eight phase-cancelling ones. */
+     satisfying crack rather than eight phase-cancelling ones - and past the gap, the mixer
+     caps how many play at once (RTS_VOICE_MAX). */
 
 var _rtsA = null;
 
@@ -13482,17 +14162,36 @@ function _rtsAudioInit() {
   if (!AC) return null;
   var ctx;
   try { ctx = new AC(); } catch (_e) { return null; }
-  var master = ctx.createGain(); master.gain.value = 0.9; master.connect(ctx.destination);
-  var sfxBus = ctx.createGain(); sfxBus.gain.value = 0.85; sfxBus.connect(master);
-  var musBus = ctx.createGain(); musBus.gain.value = 0.34; musBus.connect(master);
+  var master = ctx.createGain(); master.gain.value = 0.9;
+  /* THE LID: everything passes a compressor on its way out, then a soft clip, so a barrage is
+     loud and stays clean. The clip is not optional: a compressor alone let sixty simultaneous
+     effects out at 1.5 - its attack is slower than a gunshot's, and Chrome adds makeup gain -
+     where the clip rounds whatever is left over under full scale and leaves anything quieter
+     than about half of it untouched (e2e/sfxmix). */
+  var lid = null, out = null;
+  try {
+    lid = ctx.createDynamicsCompressor();
+    lid.threshold.value = -12; lid.knee.value = 8; lid.ratio.value = 4;
+    lid.attack.value = 0.003; lid.release.value = 0.25;
+    out = ctx.createWaveShaper();
+    var cn = 2048, cv = new Float32Array(cn);
+    /* the shaper's input runs -1..1; it stands for -4..4, so the gain in front is a quarter */
+    for (var ci = 0; ci < cn; ci++) { var cx = (ci / (cn - 1) * 2 - 1) * 4; cv[ci] = Math.abs(cx) < 0.5 ? cx : (cx < 0 ? -1 : 1) * (0.5 + 0.49 * Math.tanh((Math.abs(cx) - 0.5) / 0.49)); }
+    out.curve = cv; out.oversample = '4x';
+    var quarter = ctx.createGain(); quarter.gain.value = 0.25;
+    master.connect(lid); lid.connect(quarter); quarter.connect(out); out.connect(ctx.destination);
+  } catch (_e) { lid = null; out = null; master.connect(ctx.destination); }
+  var sfxBus = ctx.createGain(); sfxBus.gain.value = 0.6; sfxBus.connect(master);
+  var musBus = ctx.createGain(); musBus.gain.value = 0.28; musBus.connect(master);
 
   /* one second of white noise, reused by every noise-based effect */
   var nb = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
   var nd = nb.getChannelData(0);
   for (var i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
 
-  _rtsA = { ctx:ctx, master:master, sfx:sfxBus, mus:musBus, noise:nb,
+  _rtsA = { ctx:ctx, master:master, lid:lid, out:out, sfx:sfxBus, mus:musBus, noise:nb,
     last:{}, muted:false, music:null, t0:0 };
+  try { _rtsMixInit(_rtsA); _rtsBankIdle(_rtsA); } catch (_e) {}
   return _rtsA;
 }
 function _rtsAudioResume() {
@@ -13508,35 +14207,6 @@ function rtsMuteToggle() {
 }
 
 /* ---------------------------------------------------------------- helpers */
-function _rtsNoiseSrc(dur, type, f0, f1, q) {
-  var A = _rtsA, ctx = A.ctx, t = ctx.currentTime;
-  var s = ctx.createBufferSource(); s.buffer = A.noise; s.loop = true;
-  var f = ctx.createBiquadFilter(); f.type = type || 'bandpass';
-  f.frequency.setValueAtTime(f0, t);
-  if (f1 != null) f.frequency.exponentialRampToValueAtTime(Math.max(30, f1), t + dur);
-  f.Q.value = q == null ? 1 : q;
-  s.connect(f);
-  return { src:s, node:f };
-}
-function _rtsEnv(dur, peak, attack) {
-  var A = _rtsA, ctx = A.ctx, t = ctx.currentTime;
-  var g = ctx.createGain();
-  var a = attack == null ? 0.004 : attack;
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + a);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  return g;
-}
-function _rtsTone(type, f0, f1, dur, peak) {
-  var A = _rtsA, ctx = A.ctx, t = ctx.currentTime;
-  var o = ctx.createOscillator(); o.type = type || 'sine';
-  o.frequency.setValueAtTime(f0, t);
-  if (f1 != null) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
-  var g = _rtsEnv(dur, peak == null ? 0.3 : peak);
-  o.connect(g);
-  o.start(t); o.stop(t + dur + 0.02);
-  return g;
-}
 /* NB: named _rtsWaveShaper, not _rtsDist - src/core already owns _rtsDist (distance
    between two entities). Everything here shares one global namespace, and core loads later,
    so the collision silently replaced this function and killed the music with a type error. */
@@ -13591,141 +14261,24 @@ function _rtsSfx(name, x, z) {
     var tf = A.ctx.currentTime, kf = name + '@far';
     if (A.last[kf] != null && tf - A.last[kf] < _RTS_SFX_GAP[name] * 3) return;
     A.last[kf] = tf;
-    try { _rtsSfxPlay(name, tf, B.far); } catch (_e) {}
+    try { _rtsSfxPlay(name, tf, B.far, x, z); } catch (_e) {}
     return;
   }
   var now = A.ctx.currentTime, gap = _RTS_SFX_GAP[name] || 0.02;
   if (A.last[name] != null && now - A.last[name] < gap) return;
   A.last[name] = now;
-  try { _rtsSfxPlay(name, now); } catch (_e) {}
+  try { _rtsSfxPlay(name, now, null, x, z); } catch (_e) {}
 }
 
-function _rtsSfxPlay(name, t, via) {
-  var A = _rtsA, ctx = A.ctx, out = via || A.sfx, n, g;
-
-  /* The player's own sound, if they have it and this effect has a counterpart. Everything
-     below stays exactly as it was and is what plays otherwise - see src/rts.sound.js. A sound
-     sent somewhere else (the far bus) is synthesized: a sample cannot be routed there. */
+/* One effect, now: the player's own sample if they have one, else a rendered take from the bank,
+   through the mixer - from (x, z) on the map if it has a place there. */
+function _rtsSfxPlay(name, t, via, x, z) {
+  var A = _rtsA;
+  /* The player's own sound, if they have it and this effect has a counterpart - see
+     src/rts.sound.js. A sound sent somewhere else (the far bus) is always the rendered one. */
   if (!via && typeof _rtsSndTry === 'function' && _rtsSndTry(name)) return;
-
-  if (name === 'thunder') {                     /* a crack, then a long low roll (rts.ambience.js) */
-    n = _rtsNoiseSrc(0.35, 'bandpass', 1800, 300, 0.7);
-    g = _rtsEnv(0.35, 1.1, 0.004); n.node.connect(g); g.connect(out);
-    n.src.start(t); n.src.stop(t + 0.4);
-    var roll = _rtsNoiseSrc(4.5, 'lowpass', 260, 70, 0.9), rg = ctx.createGain();
-    rg.gain.setValueAtTime(0.0001, t); rg.gain.exponentialRampToValueAtTime(1.6, t + 0.5);
-    rg.gain.exponentialRampToValueAtTime(0.0001, t + 4.5);
-    roll.node.connect(rg); rg.connect(out); roll.src.start(t + 0.05); roll.src.stop(t + 4.6);
-    return;
-  }
-
-  if (name === 'rifle') {                       /* dry snap + a little body */
-    n = _rtsNoiseSrc(0.09, 'bandpass', 2400, 900, 1.1);
-    g = _rtsEnv(0.09, 0.32); n.node.connect(g); g.connect(out);
-    n.src.start(t); n.src.stop(t + 0.11);
-    _rtsTone('square', 260, 90, 0.05, 0.09).connect(out);
-
-  } else if (name === 'mg') {                   /* faster, thinner, higher */
-    n = _rtsNoiseSrc(0.055, 'bandpass', 3200, 1500, 1.4);
-    g = _rtsEnv(0.055, 0.22); n.node.connect(g); g.connect(out);
-    n.src.start(t); n.src.stop(t + 0.07);
-
-  } else if (name === 'cannon') {               /* deep thump + crack */
-    _rtsTone('sine', 150, 38, 0.34, 0.55).connect(out);
-    n = _rtsNoiseSrc(0.22, 'lowpass', 1700, 260, 0.8);
-    g = _rtsEnv(0.22, 0.4); n.node.connect(g); g.connect(out);
-    n.src.start(t); n.src.stop(t + 0.24);
-
-  } else if (name === 'turretgun') {
-    _rtsTone('sine', 200, 60, 0.24, 0.42).connect(out);
-    n = _rtsNoiseSrc(0.16, 'bandpass', 2100, 700, 1.0);
-    g = _rtsEnv(0.16, 0.3); n.node.connect(g); g.connect(out);
-    n.src.start(t); n.src.stop(t + 0.18);
-
-  } else if (name === 'rocket') {               /* whoosh: noise sweeping upward */
-    n = _rtsNoiseSrc(0.42, 'bandpass', 380, 2600, 2.2);
-    g = _rtsEnv(0.42, 0.3, 0.05); n.node.connect(g); g.connect(out);
-    n.src.start(t); n.src.stop(t + 0.44);
-    _rtsTone('sawtooth', 120, 300, 0.3, 0.08).connect(out);
-
-  } else if (name === 'boom') {                 /* structure destroyed */
-    _rtsTone('sine', 110, 26, 0.85, 0.75).connect(out);
-    n = _rtsNoiseSrc(0.75, 'lowpass', 1300, 120, 0.7);
-    g = _rtsEnv(0.75, 0.6, 0.01); n.node.connect(g); g.connect(out);
-    n.src.start(t); n.src.stop(t + 0.8);
-
-  } else if (name === 'pop') {                  /* unit destroyed */
-    _rtsTone('sine', 190, 50, 0.3, 0.4).connect(out);
-    n = _rtsNoiseSrc(0.26, 'lowpass', 1500, 300, 0.8);
-    g = _rtsEnv(0.26, 0.34); n.node.connect(g); g.connect(out);
-    n.src.start(t); n.src.stop(t + 0.28);
-
-  } else if (name === 'hit') {
-    n = _rtsNoiseSrc(0.11, 'bandpass', 1500, 500, 1.6);
-    g = _rtsEnv(0.11, 0.18); n.node.connect(g); g.connect(out);
-    n.src.start(t); n.src.stop(t + 0.13);
-
-  } else if (name === 'splash') {               /* a round landing in water */
-    /* _rtsImpact picks this kind for ANY shot that lands on water and dispatched it to a name
-       nothing here handled, so it fell through every branch and returned. Every round fired
-       into the sea landed in silence, and nothing reported it - there is no else, no warning
-       and no throw, which is why it survived: naval fights were half mute for one missing
-       branch.
-
-       Water is the opposite shape to an impact on ground - no crack. A low-passed burst that
-       falls away, over a short downward tone for the gulp. The attack is slower than 'hit' and
-       there is no high content to snap. */
-    n = _rtsNoiseSrc(0.30, 'lowpass', 1600, 300, 0.8);
-    g = _rtsEnv(0.30, 0.24, 0.012); n.node.connect(g); g.connect(out);
-    n.src.start(t); n.src.stop(t + 0.32);
-    _rtsTone('sine', 420, 150, 0.16, 0.12).connect(out);
-
-  } else if (name === 'select') {               /* crisp UI blip */
-    _rtsTone('square', 880, 1320, 0.06, 0.12).connect(out);
-
-  } else if (name === 'order') {                /* two-tone acknowledge */
-    _rtsTone('square', 620, 620, 0.045, 0.11).connect(out);
-    setTimeout(function () { try { _rtsTone('square', 930, 930, 0.05, 0.1).connect(out); } catch (_e) {} }, 55);
-
-  } else if (name === 'click') {
-    _rtsTone('square', 520, 380, 0.04, 0.1).connect(out);
-
-  } else if (name === 'build') {                /* production started */
-    _rtsTone('sawtooth', 150, 300, 0.2, 0.16).connect(out);
-
-  } else if (name === 'place') {                /* building slammed down */
-    _rtsTone('sine', 120, 40, 0.4, 0.6).connect(out);
-    n = _rtsNoiseSrc(0.3, 'lowpass', 900, 180, 0.7);
-    g = _rtsEnv(0.3, 0.35); n.node.connect(g); g.connect(out);
-    n.src.start(t); n.src.stop(t + 0.32);
-
-  } else if (name === 'ready') {                /* construction complete */
-    [660, 880, 1320].forEach(function (f, i) {
-      setTimeout(function () {
-        try { _rtsTone('triangle', f, f, 0.16, 0.16).connect(out); } catch (_e) {}
-      }, i * 90);
-    });
-
-  } else if (name === 'unitready') {
-    [520, 780].forEach(function (f, i) {
-      setTimeout(function () {
-        try { _rtsTone('triangle', f, f, 0.11, 0.13).connect(out); } catch (_e) {}
-      }, i * 80);
-    });
-
-  } else if (name === 'alert') {                /* incoming attack */
-    [0, 260, 520].forEach(function (d) {
-      setTimeout(function () {
-        try { _rtsTone('sawtooth', 440, 300, 0.2, 0.22).connect(out); } catch (_e) {}
-      }, d);
-    });
-
-  } else if (name === 'lowpower') {
-    _rtsTone('sawtooth', 200, 120, 0.5, 0.16).connect(out);
-
-  } else if (name === 'deny') {
-    _rtsTone('square', 200, 130, 0.16, 0.16).connect(out);
-  }
+  var buf = _rtsBankPick(A, name);
+  if (buf) _rtsVoice(A, name, buf, x, z, via);
 }
 
 /* ------------------------------------------------------------------ music --
@@ -14323,9 +14876,11 @@ function _rtsAmbNodes() {
   B.far = ctx.createGain(); B.far.gain.value = 0.32;
   var ff = ctx.createBiquadFilter(); ff.type = 'lowpass'; ff.frequency.value = 650;
   B.far.connect(ff); ff.connect(A.master);
-  /* THE ECHO: the effects' bus into a delay that feeds itself, dark, and up only at night */
+  /* THE ECHO: the effects' bus into a delay that feeds itself, dark, and up only at night - the
+     slap of a shot coming back off the far hills, a third of a second late and long enough to
+     stand clear of the room every effect already plays into (audio/mix.js) */
   var dl = ctx.createDelay(1.0), fb = ctx.createGain(), df = ctx.createBiquadFilter(), wet = ctx.createGain();
-  dl.delayTime.value = 0.23; fb.gain.value = 0.32; df.type = 'lowpass'; df.frequency.value = 1500; wet.gain.value = 0;
+  dl.delayTime.value = 0.34; fb.gain.value = 0.45; df.type = 'lowpass'; df.frequency.value = 1400; wet.gain.value = 0;
   A.sfx.connect(dl); dl.connect(df); df.connect(fb); fb.connect(dl); df.connect(wet); wet.connect(A.master);
   B.echo = { g: wet };
   B.t = 0; B.strike = -1;
@@ -14341,7 +14896,7 @@ function _rtsAmbWant(G) {
   w.rain = 0.11 * rain;
   w.wind = Math.min(0.26, 0.15 * Math.min(1, (S ? (S.snow || 0) + (S.banks || 0) : 0)) + 0.24 * (S ? S.sand || 0 : 0));
   w.ins = 0.035 * night * (1 - rain);
-  w.echo = 0.28 * night + (S && S.banks ? 0.08 : 0);
+  w.echo = 0.42 * night + (S && S.banks ? 0.08 : 0);
   var moving = 0, speed = 0, decks = 0, E = (G && G.ents) || [];
   for (var i = 0; i < E.length; i++) {
     var e = E[i];

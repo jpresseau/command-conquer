@@ -120,7 +120,7 @@ Keep them small: if a file passes ~500 lines it wants splitting along its own ba
   draws and uploads. **A steady frame must make no synchronous GL call** (`checkFramebufferStatus`,
   `getError`, `readPixels`, ...): each one stalls the CPU on the GPU. The GFX readout's second
   line is the per-phase breakdown - read it on the device, not here.
-- `src/rts.audio.js` — all sound, synthesized at runtime with WebAudio. No sampled assets.
+- `src/rts.audio.js` + `src/audio/` — all sound, synthesized, no sampled assets: effects are recipes rendered to a bank of takes, played through `audio/mix.js` (pan, room, voice cap); `heard`/`vol` are held by `unit/sfx`.
   `src/rts.sound.js` maps events to it; `src/rts.store.js`, `src/rts.save.js`, `src/rts.editor.js`.
 - `src/title.js` — the standalone shell: title screen, difficulty picker, file pickers, RESUME
   BATTLE, install prompt, START. Loads last, after everything it calls.

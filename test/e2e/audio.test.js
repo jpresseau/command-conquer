@@ -55,8 +55,20 @@ function installProbe() {
      that one - which made a shot that had been correctly culled for being off-screen measure
      as clearly audible, and a single rifle measure louder than twelve. Every measurement here
      therefore waits for the room to go quiet, resets, and only then runs. */
-  window._apSettle = function (ms) {
-    return new Promise(function (res) { setTimeout(res, ms || 520); });
+  /* ...UNTIL IT IS QUIET, not for a fixed time: the effects are rendered with their full tails
+     now and played into a room, and a cannon rings for the better part of three seconds. So the
+     probe listens in short stretches until one passes with nothing louder than a whisper in it,
+     and gives up (falling through to the measurement) after eight seconds. */
+  window._apSettle = function () {
+    var t0 = Date.now();
+    return new Promise(function (res) {
+      (function again() {
+        window._apReset();
+        setTimeout(function () {
+          if (M.peak < 0.003 || Date.now() - t0 > 8000) res(); else again();
+        }, 150);
+      })();
+    });
   };
   window._apMeasure = function (fn, ms) {
     return window._apSettle().then(function () {
@@ -244,7 +256,9 @@ function installProbe() {
     return { near: near.peak, far: far.peak, audibleNear: _rtsAudible(f.x, f.z), audibleFar: _rtsAudible(f.x + 4000, f.z + 4000) };
   });
   S.ok('a shot in view is heard', cull.near > 0.01, 'peak ' + cull.near.toFixed(3));
-  S.eq('a shot on the far side of the map is silent', cull.far, 0);
+  /* silent to -60 dB, not to the last bit: the room's tail decays smoothly towards zero, and the
+     last of the shot before this one is still in it - measured at a few ten-thousandths */
+  S.ok('a shot on the far side of the map is silent', cull.far < 0.001, 'peak ' + cull.far.toExponential(1));
   S.eq('...because it is judged out of earshot', cull.audibleFar, false);
   S.eq('...while the one in view is not', cull.audibleNear, true);
 

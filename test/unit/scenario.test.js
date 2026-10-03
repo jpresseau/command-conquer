@@ -271,11 +271,9 @@ function checkArg(where, need, arg, bad) {
      playSound goes straight to the mixer, which returns silently for a name it does not
      handle. A trigger firing a sound nobody hears is indistinguishable from a trigger that
      never fired. */
-  var audio = load(['src/rts.audio.js']);
+  var audio = load(['src/audio', 'src/rts.audio.js']);
   var synth = {};
-  (audio._rtsSfxPlay.toString().match(/name === '([a-z0-9]+)'/g) || []).forEach(function (s) {
-    synth[s.replace(/.*'([a-z0-9]+)'.*/, '$1')] = 1;
-  });
+  audio.rtsSfxNames().forEach(function (n) { synth[n] = 1; });   /* every effect with a recipe */
   var mute = [];
   TRIGS.forEach(function (T) {
     [T.action1, T.action2].forEach(function (a) {
