@@ -48,6 +48,9 @@ function installProbe() {
   A.master.connect(tap); tap.connect(sink); sink.connect(ctx.destination);
   window._AP = M;
   window._apReset = function () { M.peak = 0; M.energy = 0; M.frames = 0; };
+  /* the world's bed is off: the camera opens on the base, whose power plants hum (rts.ambience.js),
+     and everything here measures the effects and the score against silence */
+  rtsVolSet('amb', 0);
   /* Measure what a piece of code produces.
 
      The wait BEFORE the reset is not padding. An explosion rings for the best part of a

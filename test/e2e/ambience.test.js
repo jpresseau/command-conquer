@@ -62,6 +62,14 @@ function installProbe() {
       });
     };
 
+    /* the bed's loops render out of idle time (audio/loops.js): all of them, before anything is measured */
+    tick();
+    var t0 = Date.now();
+    while (A.amb.q.length && Date.now() - t0 < 15000) await settle();
+    o.loops = { left: A.amb.q.length, started: Object.keys(A.amb.v).filter(function (k) { return A.amb.v[k].src; }).length };
+    /* the weather heard over open ground: the middle of the map, away from either base's hum */
+    R.focus.x = _rtsWX(RTS_N / 2); R.focus.z = _rtsWX(RTS_N / 2); _rtsApplyCam();
+    o.structsInView = G.ents.filter(function (e) { return !e.dead && e.type === 'struct' && _rtsAudible(e.x, e.z); }).length;
     sky('day'); await window._amListen(900, tick);
     o.day = await window._amListen(700, tick);
     sky('rain'); await window._amListen(1200, tick);
@@ -102,16 +110,19 @@ function installProbe() {
     await settle();
     var dy = window._amListen(3200, tick); _rtsSfx('cannon', R.focus.x, R.focus.z); var dyM = await dy;
     sky('night'); await window._amListen(1800, tick); await settle();
-    A.amb.ins.g.gain.value = 0; A.amb.ins.g.gain.cancelScheduledValues(A.ctx.currentTime);   /* the insects would drown the measure */
+    A.amb.v.crickets.g.gain.value = 0; A.amb.v.crickets.g.gain.cancelScheduledValues(A.ctx.currentTime);   /* the crickets would drown the measure */
     var nt = window._amListen(3200); _rtsSfx('cannon', R.focus.x, R.focus.z); var ntM = await nt;
     o.echo = [tail(ntM), tail(dyM)];
     window.RTS_SKY_FORCE = undefined;
     return o;
   });
 
-  S.ok('a clear day with nothing moving is silent', out.day.rms < 0.002, 'rms ' + out.day.rms);
-  S.ok('rain is heard', out.rain.rms > 0.01 && out.rain.rms > out.day.rms * 5, 'rms ' + out.rain.rms + ' against ' + out.day.rms);
-  S.ok('...and so is the night', out.night.rms > out.day.rms * 3 && out.night.rms > 0.003, 'rms ' + out.night.rms);
+  S.ok('the bed\'s loops are all rendered and running', out.loops.left === 0 && out.loops.started === 13, JSON.stringify(out.loops));
+  /* not silent any more over open ground: the odd bird */
+  S.eq('the weather is heard over open ground, no building in earshot', out.structsInView, 0);
+  S.ok('a clear day with nothing moving is quiet', out.day.rms < 0.004, 'rms ' + out.day.rms);
+  S.ok('rain is heard', out.rain.rms > 0.01 && out.rain.rms > out.day.rms * 3, 'rms ' + out.rain.rms + ' against ' + out.day.rms);
+  S.ok('...and so is the night', out.night.rms > out.day.rms * 2 && out.night.rms > 0.004, 'rms ' + out.night.rms + ' against ' + out.day.rms);
   S.ok('tanks on the move in view are heard', out.engines.rms > 0.006 && out.engines.rms > out.day.rms * 3, 'rms ' + out.engines.rms);
   S.ok('...and stop being heard when they stop', out.parked.rms < out.engines.rms * 0.3, 'rms ' + out.parked.rms);
   S.ok('a strike in the rain is a crack and a roll over the hiss', out.thunder.peak > out.hiss.peak * 2.5 && out.thunder.rms > out.hiss.rms * 1.5,

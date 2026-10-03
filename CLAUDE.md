@@ -120,7 +120,7 @@ Keep them small: if a file passes ~500 lines it wants splitting along its own ba
   draws and uploads. **A steady frame must make no synchronous GL call** (`checkFramebufferStatus`,
   `getError`, `readPixels`, ...): each one stalls the CPU on the GPU. The GFX readout's second
   line is the per-phase breakdown - read it on the device, not here.
-- `src/rts.audio.js` + `src/audio/` — all sound, synthesized, no sampled assets: effects are recipes rendered to a bank of takes, played through `audio/mix.js` (pan, room, voice cap; `heard`/`vol` held by `unit/sfx`); music is `score.js` (two songs, three intensities, pure) played by the `music.js` sampler on `instruments.js` (`unit/music`, `e2e/music`).
+- `src/rts.audio.js` + `src/audio/` — all sound, synthesized, no sampled assets: effects are recipes rendered to a bank of takes, played through `audio/mix.js` (pan, room, voice cap; `heard`/`vol` held by `unit/sfx`); music is `score.js` (two songs, three intensities, pure) played by the `music.js` sampler on `instruments.js` (`unit/music`, `e2e/music`); the bed is `audio/loops.js` turned by `_rtsAmbWant` (`unit/worldsound`); levels are `rtsVolSet`, the panel `ui/soundpanel.js`.
   `src/rts.sound.js` maps events to it; `src/rts.store.js`, `src/rts.save.js`, `src/rts.editor.js`.
 - `src/title.js` — the standalone shell: title screen, difficulty picker, file pickers, RESUME
   BATTLE, install prompt, START. Loads last, after everything it calls.
@@ -309,9 +309,9 @@ breaking it shipped once.
   `R3D_LOD_MID_CELL` device px a cell a UNIT (never a building) draws `R3D_LOD_MID`: plain, but
   keyed by pose and roll, so it still walks; `R3.mesh` keys gain an `M:` prefix there.
   `R3.shadowCacheOff/lodOff/entCullOff`; `unit/gpuwork`, `e2e/gpuwork`.
-- **The world's own sound** (`rts.ambience.js`): rain, wind, insects, one engine note, bridge
-  rumble, thunder and a night echo, each a few nodes built once and only turned by `setTargetAtTime`
-  (`_rtsAmbWant` is the pure half). Lightning keeps the GAME's clock on a fixed schedule
+- **The world's own sound** (`rts.ambience.js`): rendered loops (`audio/loops.js`) - weather,
+  crickets, birds, an engine per kind of hull, a power hum, a building going up - started once and
+  only turned by `setTargetAtTime` (`_rtsAmbWant` is the pure half). Lightning keeps the GAME's clock on a fixed schedule
   (`_rtsLightning`), which both renderers read. Effects off the screen but within `RTS_FAR` views
   go through the muffled `B.far` bus. `unit/ambience`, `e2e/ambience`.
 - **In 3D a soldier has a model of his own** (`render3d/soldier3d.js`): rounded limbs, and four

@@ -622,6 +622,23 @@
   font-style:normal;padding-top:6px;box-sizing:border-box}
 #rcgRts #rtsCompass i::before{content:'';position:absolute;left:50%;top:3px;margin-left:-5px;
   border:5px solid transparent;border-bottom:9px solid #e8544a;border-top:0}
+
+/* THE SOUND PANEL (ui/soundpanel.js): under the top bar at the right, where the 🔊 that opens it is */
+#rcgRts .rts-sound{position:absolute;top:40px;right:6px;z-index:30;width:min(300px,calc(100% - 12px));box-sizing:border-box;
+  padding:12px 14px;display:grid;gap:10px;background:rgba(14,18,22,.96);border:1px solid #3a4652;border-radius:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,.45);color:#dfe5e8;font:13px/1.3 system-ui,sans-serif}
+#rcgRts .rts-sound[hidden]{display:none}
+#rcgRts .rts-sound .hd{display:flex;justify-content:space-between;align-items:center}
+#rcgRts .rts-sound .hd b{letter-spacing:2px;font-size:12px;color:#c8892a}
+#rcgRts .rts-sound .x{width:28px;height:28px;border:0;border-radius:5px;background:rgba(255,255,255,.08);color:#dfe5e8;cursor:pointer}
+#rcgRts .rts-sound .mute{padding:9px 10px;border:1px solid #3a4652;border-radius:6px;background:rgba(255,255,255,.06);
+  color:#dfe5e8;text-align:left;cursor:pointer;font:inherit}
+#rcgRts .rts-sound .mute.off{border-color:#c8892a;color:#e8b04a}
+#rcgRts .rts-sound .row{display:grid;grid-template-columns:62px 1fr 38px;align-items:center;gap:8px}
+#rcgRts .rts-sound .row input{width:100%;accent-color:#c8892a;min-height:28px}
+#rcgRts .rts-sound .row i{font-style:normal;text-align:right;font-variant-numeric:tabular-nums;color:#9aa6b0}
+@media (pointer:coarse){ #rcgRts .rts-sound{top:52px} #rcgRts .rts-sound .row input{min-height:36px} }
+
 </style>
 <style>
 /* --- standalone shell: the title screen this app boots into --- */
@@ -958,7 +975,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">1b6be28 · 2026-10-03</div>
+  <div id="rtsBuild" title="build">ff74682 · 2026-10-03</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -14627,6 +14644,157 @@ function _rtsMusicEnd(A) {
   setTimeout(function () { try { M.out.disconnect(); } catch (_e) {} }, 600);
 }
 </script>
+<script>/* audio/loops.js - the world's sound, as loops (rts.ambience.js plays them).
+
+   THE BED WAS A FEW LIVE NODES: rain was white noise through one filter, the wind one low-passed
+   noise with a slow wobble, the insects a single triangle wave chirped by a square, and every
+   vehicle on the map one 40 Hz saw. Each of these is a rendered loop now, built with the effects'
+   tools (audio/dsp.js), seamless (_dspLoop), and turned up and down as before:
+
+     RAIN      a hiss with drops in it, each side its own, and a patter under it
+     WIND      a low roar that gusts, with a whistle that comes and goes; SAND, a gritty hiss
+     CRICKETS  at night, three of them across the field and one further off
+     BIRDS     by day, the odd call - sparse, so it is a place and not a soundtrack
+     TRACKS    a tank's engine with its treads clattering; WHEELS, a truck's engine and the road
+     ROTOR     a helicopter's blades and its turbine; JET, a roar with a whine in it
+     BOAT      a diesel's chug and the water washing past
+     BRIDGE    the deep rumble of a deck with traffic on it
+     HUM       a power plant's mains hum and buzz
+     BUILD     a building going up: clanks, a hammer, the hiss of a weld
+
+   Each loop renders at the lowest rate its content allows (`div`, as audio/instruments.js does),
+   and a tone in a loop is tuned to a whole number of cycles of it, so the seam is not heard. */
+
+/* the last `x` seconds laid over the first, so the end runs into the start with no seam */
+function _dspLoop(y, sr, sec, x) {
+  var n = Math.round(sec * sr), m = Math.round(x * sr), out = new Float32Array(n);
+  for (var i = 0; i < n; i++) out[i] = y[i];
+  for (i = 0; i < m; i++) {
+    var k = i / m, a = Math.sin(k * Math.PI / 2), b = Math.cos(k * Math.PI / 2);
+    out[i] = y[i] * a + y[n + i] * b;                      /* equal power: noise does not dip */
+  }
+  return out;
+}
+/* a frequency moved to the nearest one that fits a whole number of cycles into `sec` */
+function _dspFit(f, sec) { return Math.max(1, Math.round(f * sec)) / sec; }
+
+var RTS_LOOPS = {
+  rain: { div: 2, sec: 4, stereo: true, fn: function (sr, rng, sec) {
+    var o = new Float32Array(Math.round((sec + 1) * sr));
+    _dspLayerNoise(o, sr, rng, { dur: sec + 1, amp: 0.7, a: 0.001, tau: 1e9, color: 'pink', type: 'hp', f0: 500, type2: 'lp', g0: 8000 });
+    _dspLayerCrackle(o, sr, rng, { dur: sec + 1, amp: 0.5, rate: 380, tau: 1e9, type: 'bp', f0: 3200, f1: 4200, q: 1.4 });
+    _dspLayerNoise(o, sr, rng, { dur: sec + 1, amp: 0.25, a: 0.001, tau: 1e9, color: 'brown', type: 'lp', f0: 500, wob: 1.5, wd: 0.3 });
+    return o;
+  } },
+  wind: { div: 4, sec: 9, stereo: true, fn: function (sr, rng, sec) {
+    var o = new Float32Array(Math.round((sec + 1.5) * sr));
+    _dspLayerNoise(o, sr, rng, { dur: sec + 1.5, amp: 0.9, a: 0.001, tau: 1e9, color: 'brown', type: 'lp', f0: 600, wob: 0.35, wd: 0.6 });
+    _dspLayerNoise(o, sr, rng, { dur: sec + 1.5, amp: 0.25, a: 0.001, tau: 1e9, color: 'pink', type: 'bp', f0: 720, f1: 900, q: 7, wob: 0.5, wd: 0.85 });
+    return o;
+  } },
+  sand: { div: 2, sec: 4, stereo: true, fn: function (sr, rng, sec) {
+    var o = new Float32Array(Math.round((sec + 1) * sr));
+    _dspLayerNoise(o, sr, rng, { dur: sec + 1, amp: 0.7, a: 0.001, tau: 1e9, type: 'hp', f0: 2200, type2: 'lp', g0: 9000, wob: 0.8, wd: 0.5 });
+    _dspLayerCrackle(o, sr, rng, { dur: sec + 1, amp: 0.4, rate: 1500, tau: 1e9, type: 'hp', f0: 4000 });
+    return o;
+  } },
+  crickets: { div: 2, sec: 4, stereo: true, fn: function (sr, rng, sec) {
+    var o = new Float32Array(Math.round((sec + 0.5) * sr));
+    for (var c = 0; c < 2; c++) {                                      /* two a side, one nearer */
+      var f = 4400 + rng() * 900, per = 0.7 + rng() * 0.5, amp = c ? 0.12 : 0.3;
+      for (var t = rng() * per; t < sec + 0.5; t += per) for (var p = 0; p < 3; p++)
+        _dspLayerTone(o, sr, { at: t + p * 0.045, dur: 0.035, amp: amp, a: 0.004, tau: 0.008, f0: f });
+    }
+    return o;
+  } },
+  birds: { div: 2, sec: 8, stereo: true, fn: function (sr, rng, sec) {
+    var o = new Float32Array(Math.round((sec + 1) * sr));
+    for (var b = 0; b < 2; b++) {
+      var at = 0.5 + rng() * (sec - 2), f = 2600 + rng() * 1800, notes = 2 + Math.floor(rng() * 4);
+      for (var k = 0; k < notes; k++) {
+        var up = rng() < 0.5;
+        _dspLayerTone(o, sr, { at: at + k * (0.11 + rng() * 0.05), dur: 0.09, amp: 0.25, a: 0.01, tau: 0.03, f0: f * (up ? 0.85 : 1.15), f1: f * (up ? 1.15 : 0.85) });
+      }
+    }
+    return o;
+  } },
+  tracks: { div: 4, sec: 2, fn: function (sr, rng, sec) {
+    var o = new Float32Array(Math.round((sec + 0.4) * sr)), f = _dspFit(44, sec);
+    _dspLayerTone(o, sr, { dur: sec + 0.4, amp: 0.8, tau: 1e9, shape: 'saw', f0: f, type: 'lp', c0: 320 });
+    _dspLayerTone(o, sr, { dur: sec + 0.4, amp: 0.4, tau: 1e9, shape: 'square', f0: f / 2, type: 'lp', c0: 200 });
+    for (var t = 0; t < sec + 0.4; t += 1 / 13)                       /* the links, coming round */
+      _dspLayerModal(o, sr, { at: t + rng() * 0.01, dur: 0.06, amp: 0.05 + rng() * 0.05, modes: [{ f: 1150 + rng() * 300, t60: 0.04, a: 1 }, { f: 1900 + rng() * 300, t60: 0.03, a: 0.6 }] });
+    return _dspSat(o, 1.6);
+  } },
+  wheels: { div: 4, sec: 2, fn: function (sr, rng, sec) {
+    var o = new Float32Array(Math.round((sec + 0.4) * sr)), f = _dspFit(72, sec);
+    _dspLayerTone(o, sr, { dur: sec + 0.4, amp: 0.6, tau: 1e9, shape: 'saw', f0: f, type: 'lp', c0: 650 });
+    _dspLayerTone(o, sr, { dur: sec + 0.4, amp: 0.35, tau: 1e9, shape: 'square', f0: f / 2, type: 'lp', c0: 300 });
+    _dspLayerTone(o, sr, { dur: sec + 0.4, amp: 0.05, tau: 1e9, f0: _dspFit(430, sec) });
+    _dspLayerNoise(o, sr, rng, { dur: sec + 0.4, amp: 0.35, tau: 1e9, color: 'pink', type: 'lp', f0: 900 });
+    return _dspSat(o, 1.4);
+  } },
+  rotor: { div: 4, sec: 2, fn: function (sr, rng, sec) {
+    var o = new Float32Array(Math.round((sec + 0.4) * sr)), per = 1 / _dspFit(19, sec);
+    for (var t = 0; t < sec + 0.4; t += per)                           /* each blade's slap */
+      _dspLayerNoise(o, sr, rng, { at: t, dur: 0.05, amp: 0.8, a: 0.003, tau: 0.012, color: 'pink', type: 'lp', f0: 1000 });
+    _dspLayerTone(o, sr, { dur: sec + 0.4, amp: 0.06, tau: 1e9, f0: _dspFit(1700, sec) });
+    _dspLayerTone(o, sr, { dur: sec + 0.4, amp: 0.3, tau: 1e9, f0: _dspFit(38, sec) });
+    return o;
+  } },
+  jet: { div: 2, sec: 3, fn: function (sr, rng, sec) {
+    var o = new Float32Array(Math.round((sec + 0.5) * sr));
+    _dspLayerNoise(o, sr, rng, { dur: sec + 0.5, amp: 0.8, tau: 1e9, color: 'pink', type: 'lp', f0: 2600, wob: 1.2, wd: 0.2 });
+    _dspLayerNoise(o, sr, rng, { dur: sec + 0.5, amp: 0.5, tau: 1e9, color: 'brown', type: 'lp', f0: 300 });
+    _dspLayerTone(o, sr, { dur: sec + 0.5, amp: 0.05, tau: 1e9, f0: _dspFit(3300, sec) });
+    return o;
+  } },
+  boat: { div: 4, sec: 3, fn: function (sr, rng, sec) {
+    var o = new Float32Array(Math.round((sec + 0.5) * sr)), per = 1 / _dspFit(6, sec);
+    for (var t = 0; t < sec + 0.5; t += per)                           /* the diesel's beat */
+      _dspLayerTone(o, sr, { at: t, dur: per, amp: 0.7, a: 0.01, tau: 0.07, shape: 'saw', f0: 30, f1: 26, type: 'lp', c0: 240 });
+    _dspLayerNoise(o, sr, rng, { dur: sec + 0.5, amp: 0.4, tau: 1e9, color: 'pink', type: 'lp', f0: 1300, wob: 0.7, wd: 0.5 });
+    return o;
+  } },
+  bridge: { div: 4, sec: 3, fn: function (sr, rng, sec) {
+    var o = new Float32Array(Math.round((sec + 0.5) * sr));
+    _dspLayerNoise(o, sr, rng, { dur: sec + 0.5, amp: 0.9, tau: 1e9, color: 'brown', type: 'lp', f0: 150, wob: 3, wd: 0.4 });
+    return o;
+  } },
+  hum: { div: 4, sec: 2, fn: function (sr, rng, sec) {
+    var o = new Float32Array(Math.round((sec + 0.4) * sr));
+    [[60, 0.6], [120, 0.35], [180, 0.2], [240, 0.08]].forEach(function (h) { _dspLayerTone(o, sr, { dur: sec + 0.4, amp: h[1], tau: 1e9, f0: _dspFit(h[0], sec) }); });
+    _dspLayerTone(o, sr, { dur: sec + 0.4, amp: 0.06, tau: 1e9, shape: 'square', f0: _dspFit(120, sec), type: 'lp', c0: 1600 });
+    return o;
+  } },
+  build: { div: 2, sec: 5, fn: function (sr, rng, sec) {
+    var o = new Float32Array(Math.round((sec + 0.6) * sr));
+    for (var t = 0.2; t < sec; t += 0.35 + rng() * 0.6) {
+      if (rng() < 0.55) {                                              /* a hammer on steel */
+        var f = 600 + rng() * 900;
+        _dspLayerModal(o, sr, { at: t, dur: 0.3, amp: 0.4, modes: [{ f: f, t60: 0.2, a: 1 }, { f: f * 2.4, t60: 0.12, a: 0.5 }, { f: f * 3.9, t60: 0.08, a: 0.3 }] });
+      } else {                                                         /* a weld, crackling */
+        _dspLayerCrackle(o, sr, rng, { at: t, dur: 0.6, amp: 0.3, rate: 2500, a: 0.02, h: 0.3, tau: 0.08, type: 'bp', f0: 3800, q: 1.2 });
+      }
+    }
+    return o;
+  } }
+};
+
+/* One loop, rendered: a Float32Array, or [left, right] for a stereo one, each side its own seed. */
+function _rtsLoopRender(name, sr) {
+  var L = RTS_LOOPS[name];
+  if (!L) return null;
+  var x = 0.3;
+  function side(seed) {
+    var y = L.fn(sr, _dspRng(seed), L.sec);
+    return _dspNorm(_dspLoop(y, sr, L.sec, x), 0.8);
+  }
+  var seed = 0;
+  for (var i = 0; i < name.length; i++) seed = (seed * 31 + name.charCodeAt(i)) >>> 0;
+  return L.stereo ? [side(seed + 1), side(seed + 2)] : side(seed + 1);
+}
+</script>
 <script>/* RED ALERT - audio. Everything here is SYNTHESIZED: there is not a single sampled asset in the
    app, from any game or anywhere else. The effects are rendered ahead of time from layered
    recipes (audio/recipes.js, audio/dsp.js) into a bank of takes (audio/bank.js) and played
@@ -14642,6 +14810,33 @@ function _rtsMusicEnd(A) {
      caps how many play at once (RTS_VOICE_MAX). */
 
 var _rtsA = null;
+
+/* THE PLAYER'S LEVELS (ui/soundpanel.js): each bus at its own level times the slider's, kept
+   between sessions. A key that is missing, unreadable or out of range reads as full. */
+var RTS_BUS_BASE = { sfx: 0.6, mus: 0.28, amb: 0.7 };
+var RTS_VOL_LS = 'rtsSoundVol';
+var _RTS_VOL = null;
+function _rtsVol(k) {
+  if (!_RTS_VOL) {
+    _RTS_VOL = {};
+    try { _RTS_VOL = JSON.parse(window.localStorage.getItem(RTS_VOL_LS) || '{}') || {}; } catch (_e) { _RTS_VOL = {}; }
+  }
+  var v = +_RTS_VOL[k];
+  return _RTS_VOL[k] != null && v >= 0 && v <= 1 ? v : 1;
+}
+function rtsVolSet(k, v) {
+  if (!RTS_BUS_BASE[k]) return;
+  _rtsVol(k);
+  _RTS_VOL[k] = Math.max(0, Math.min(1, +v || 0));
+  try { window.localStorage.setItem(RTS_VOL_LS, JSON.stringify(_RTS_VOL)); } catch (_e) {}
+  var A = _rtsA;
+  if (!A) return;
+  var bus = k === 'sfx' ? A.sfx : k === 'mus' ? A.mus : (A.amb && A.amb.bus);
+  if (bus) bus.gain.setTargetAtTime(RTS_BUS_BASE[k] * _RTS_VOL[k], A.ctx.currentTime, 0.03);
+  /* the score at nothing is the score stopped, not a sequencer playing to a silent bus */
+  if (k === 'mus' && !_RTS_VOL[k]) _rtsMusicStop();
+  else if (k === 'mus' && !A.music && window._rtsG && !window._rtsG.over) _rtsMusicStart();
+}
 
 function _rtsAudioInit() {
   if (_rtsA) return _rtsA;
@@ -14669,8 +14864,8 @@ function _rtsAudioInit() {
     var quarter = ctx.createGain(); quarter.gain.value = 0.25;
     master.connect(lid); lid.connect(quarter); quarter.connect(out); out.connect(ctx.destination);
   } catch (_e) { lid = null; out = null; master.connect(ctx.destination); }
-  var sfxBus = ctx.createGain(); sfxBus.gain.value = 0.6; sfxBus.connect(master);
-  var musBus = ctx.createGain(); musBus.gain.value = 0.28; musBus.connect(master);
+  var sfxBus = ctx.createGain(); sfxBus.gain.value = RTS_BUS_BASE.sfx * _rtsVol('sfx'); sfxBus.connect(master);
+  var musBus = ctx.createGain(); musBus.gain.value = RTS_BUS_BASE.mus * _rtsVol('mus'); musBus.connect(master);
 
   /* one second of white noise, reused by every noise-based effect */
   var nb = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
@@ -14765,7 +14960,7 @@ function _rtsMusicStart() {
      with the effects present and no score - and that is a normal state, not a failure. */
   if (typeof rtsSndMusicStart === 'function' && rtsSndMusicStart()) return;
   var A = _rtsA;
-  if (!A || A.music) return;
+  if (!A || A.music || !_rtsVol('mus')) return;
   try { _rtsMusicBegin(A); } catch (_e) {}
 }
 function _rtsMusicStop() {
@@ -15169,17 +15364,21 @@ function rtsSndMusicPlaying() { return _RTS_SNDMUS ? _RTS_SNDMUS.name : null; }
    name that was absent before may be present now. The decoded buffers stay valid. */
 function rtsSndReset() { _RTS_SND_MISS = {}; _RTS_SNDTRACKS = null; }
 </script>
-<script>/* RED ALERT - the world's own sound, under the guns. Synthesized like everything in rts.audio.js.
+<script>/* RED ALERT - the world's own sound, under the guns. Synthesized like everything in rts.audio.js:
+   every voice of it a rendered loop (audio/loops.js).
 
    The effects were the only sound there was: a shot, an explosion, a click - and between them
    silence, whatever the sky (render3d/sky3d.js) was doing. So a bed of sound now runs under the
-   effects, every voice of it a few nodes built once and only ever turned up or down:
+   effects, every voice of it a loop started once and only ever turned up or down:
 
-     RAIN      hiss, as heavy as the rain is
-     WIND      a low gusting roar in snow and fog, a howl in a sandstorm
-     NIGHT     insects, at night and dusk, hushed by rain
-     ENGINES   one engine note for everything on tracks or wheels that is moving in view - louder
-               the more there are, higher the faster they go
+     RAIN      hiss and drops, as heavy as the rain is
+     WIND      a low gusting roar in snow and fog, a howl in a sandstorm and the sand's own hiss
+     NIGHT     crickets, at night and dusk, hushed by rain; BY DAY the odd bird, in clear weather
+     ENGINES   what is moving in view, by what it moves on: tracks clattering, a truck's engine and
+               road, a helicopter's blades, a jet's roar, a boat's diesel - each louder the more
+               there are, and running faster the faster they go
+     THE BASE  the hum of the power plants in view, and the clanks and welding of a building
+               going up
      BRIDGES   the deep rumble of a deck with traffic on it
      THUNDER   in rain, now and then: a crack and a long roll - with the lightning that comes
                first, which the renderers draw (_rtsLightning, read by sky3d.js and sky2d.js)
@@ -15209,42 +15408,18 @@ function _rtsLightning(t) {
   return { k: k, n: n };
 }
 
-/* The bed's nodes, built the first time there is an audio context to build them in. */
+/* The bed: a bus, a gain for every loop (silent until it is rendered and started), the far bus
+   and the echo. Built the first time there is an audio context to build it in. */
 function _rtsAmbNodes() {
   var A = _rtsA;
   if (!A) return null;
   if (A.amb) return A.amb;
-  var ctx = A.ctx, B = {};
-  function loop(lo, hi) {
-    var src = ctx.createBufferSource(); src.buffer = A.noise; src.loop = true;
-    var f = ctx.createBiquadFilter(); f.type = lo ? 'lowpass' : 'highpass'; f.frequency.value = lo || hi;
-    var g = ctx.createGain(); g.gain.value = 0;
-    src.connect(f); f.connect(g); g.connect(B.bus);
-    src.start();
-    return { src: src, f: f, g: g };
-  }
-  B.bus = ctx.createGain(); B.bus.gain.value = 0.7; B.bus.connect(A.master);
-  B.rain = loop(0, 1400);
-  var rl = ctx.createBiquadFilter(); rl.type = 'lowpass'; rl.frequency.value = 7000;
-  B.rain.f.disconnect(); B.rain.f.connect(rl); rl.connect(B.rain.g);
-  B.wind = loop(380);
-  /* the gusts: a slow wobble on the wind's filter */
-  var gust = ctx.createOscillator(), gd = ctx.createGain();
-  gust.frequency.value = 0.13; gd.gain.value = 160; gust.connect(gd); gd.connect(B.wind.f.frequency); gust.start();
-  /* the insects: a high tone, chirped by a fast square on its gain */
-  var ins = ctx.createOscillator(), chirp = ctx.createOscillator(), cg = ctx.createGain(), ig = ctx.createGain();
-  ins.type = 'triangle'; ins.frequency.value = 4300;
-  chirp.type = 'square'; chirp.frequency.value = 11; cg.gain.value = 0.5;
-  var ib = ctx.createGain(); ib.gain.value = 0.5;
-  ins.connect(ib); chirp.connect(cg); cg.connect(ib.gain); ib.connect(ig); ig.gain.value = 0; ig.connect(B.bus);
-  ins.start(); chirp.start();
-  B.ins = { g: ig };
-  /* the engines: a low saw and some rumble, through a low-pass */
-  var eo = ctx.createOscillator(), ef = ctx.createBiquadFilter(), eg = ctx.createGain();
-  eo.type = 'sawtooth'; eo.frequency.value = 40; ef.type = 'lowpass'; ef.frequency.value = 260; eg.gain.value = 0;
-  eo.connect(ef); ef.connect(eg); eg.connect(B.bus); eo.start();
-  B.eng = { o: eo, g: eg, f: ef };
-  B.bridge = loop(110);
+  var ctx = A.ctx, B = { v: {}, q: Object.keys(RTS_LOOPS) };
+  B.bus = ctx.createGain(); B.bus.gain.value = RTS_BUS_BASE.amb * _rtsVol('amb'); B.bus.connect(A.master);
+  Object.keys(RTS_LOOPS).forEach(function (k) {
+    var g = ctx.createGain(); g.gain.value = 0; g.connect(B.bus);
+    B.v[k] = { g: g, src: null };
+  });
   /* DISTANCE: what the effects send here is heard through a wall of air */
   B.far = ctx.createGain(); B.far.gain.value = 0.32;
   var ff = ctx.createBiquadFilter(); ff.type = 'lowpass'; ff.frequency.value = 650;
@@ -15258,33 +15433,90 @@ function _rtsAmbNodes() {
   B.echo = { g: wet };
   B.t = 0; B.strike = -1;
   A.amb = B;
+  /* the loops, rendered a slice at a time while the page is idle */
+  var later = window.requestIdleCallback ? function (f) { window.requestIdleCallback(f, { timeout: 600 }); } : function (f) { setTimeout(f, 50); };
+  (function slice() { if (_rtsAmbLoad(A, B, 4) > 0) later(slice); })();
   return B;
 }
 
+/* THE LOOPS, rendered out of spare time (audio/loops.js) - at least one a call, for up to `ms` -
+   and started as they come */
+function _rtsAmbLoad(A, B, ms) {
+  var t0 = Date.now();
+  while (B.q.length && Date.now() - t0 < ms) {
+    var k = B.q.shift(), L = RTS_LOOPS[k], sr = A.ctx.sampleRate / (L.div || 1), x = null;
+    try { x = _rtsLoopRender(k, sr); } catch (_e) { x = null; }
+    if (!x) continue;
+    var two = !(x instanceof Float32Array), buf = A.ctx.createBuffer(two ? 2 : 1, two ? x[0].length : x.length, sr);
+    buf.getChannelData(0).set(two ? x[0] : x);
+    if (two) buf.getChannelData(1).set(x[1]);
+    var src = A.ctx.createBufferSource();
+    src.buffer = buf; src.loop = true;
+    src.connect(B.v[k].g);
+    src.start(A.ctx.currentTime + 0.02, Math.random() * L.sec);      /* each from somewhere in it */
+    B.v[k].src = src;
+  }
+  return B.q.length;
+}
+
+/* vehicles on tracks, not wheels: the hulls that crush infantry (rules/vehicles.js), the APC and
+   the MCV - UDATA.CPP's tracked set */
+function _rtsAmbTracked(def) { return !!(RTS_CRUSHERS[def] || def === 'apc' || def === 'mcv'); }
+
 /* What the bed should be playing now, from the game - pure, so it can be asked without a sound
-   card: the gains and the engine's pitch. */
+   card: the gains, and how fast the engines run. The gains are for the rendered loops, which sit
+   about a third of the level the old raw noise did, hence the rain's 0.32 where it was 0.11. */
 function _rtsAmbWant(G) {
   var S = typeof _rtsSkyNow === 'function' ? _rtsSkyNow(G) : null, w = {};
-  var rain = S ? S.rain || 0 : 0, night = S ? S.night || 0 : 0;
-  w.rain = 0.11 * rain;
-  w.wind = Math.min(0.26, 0.15 * Math.min(1, (S ? (S.snow || 0) + (S.banks || 0) : 0)) + 0.24 * (S ? S.sand || 0 : 0));
-  w.ins = 0.035 * night * (1 - rain);
+  var rain = S ? S.rain || 0 : 0, night = S ? S.night || 0 : 0, snow = S ? S.snow || 0 : 0, sand = S ? S.sand || 0 : 0;
+  w.rain = 0.32 * rain;
+  w.wind = Math.min(0.26, 0.15 * Math.min(1, snow + (S ? S.banks || 0 : 0)) + 0.24 * sand);
+  w.sand = 0.1 * sand;
+  w.ins = 0.16 * night * (1 - rain);
+  w.birds = 0.05 * (1 - night) * (1 - rain) * (1 - Math.min(1, snow + sand));
   w.echo = 0.42 * night + (S && S.banks ? 0.08 : 0);
-  var moving = 0, speed = 0, decks = 0, E = (G && G.ents) || [];
+  var n = { tracks: 0, wheels: 0, rotor: 0, jet: 0, boat: 0 }, sp = { tracks: 0, wheels: 0 };
+  var moving = 0, speed = 0, decks = 0, power = 0, build = 0, E = (G && G.ents) || [];
   for (var i = 0; i < E.length; i++) {
     var e = E[i];
-    if (e.dead || e.type !== 'unit' || e.air || !e.path) continue;
+    if (e.dead) continue;
+    if (e.type === 'struct') {
+      if (!_rtsAudible(e.x, e.z)) continue;
+      if (e.building) build++;
+      else { var sd = rtsStructDef(e.def); if (sd && sd.power > 0) power++; }
+      continue;
+    }
+    if (e.type !== 'unit') continue;
     var d = rtsUnitDef(e.def);
-    if (!d || d.kind !== 'vehicle' || d.sea || !_rtsAudible(e.x, e.z)) continue;
+    if (!d || !_rtsAudible(e.x, e.z)) continue;
+    if (d.kind === 'air') { if ((e.alt || 0) > 1) n[e.def === 'heli' ? 'rotor' : 'jet']++; continue; }
+    if (!e.path) continue;
+    if (d.kind === 'ship' || d.sea) { n.boat++; continue; }
+    if (d.kind !== 'vehicle') continue;
+    var k = _rtsAmbTracked(e.def) ? 'tracks' : 'wheels';
+    n[k]++; sp[k] += d.speed || 8;
     moving++; speed += d.speed || 8;
     if (typeof _rtsBridgeAt === 'function' && _rtsBridgeAt(e.x, e.z)) decks++;
   }
-  w.moving = moving; w.decks = decks;
-  w.eng = moving ? Math.min(0.16, 0.045 * Math.sqrt(moving)) : 0;
+  w.moving = moving; w.decks = decks; w.n = n;
+  /* a crowd is louder than one, but not by its number: the square root of it */
+  function crowd(c, per, cap) { return c ? Math.min(cap, per * Math.sqrt(c)) : 0; }
+  w.tracks = crowd(n.tracks, 0.05, 0.16); w.wheels = crowd(n.wheels, 0.045, 0.14);
+  w.rotor = crowd(n.rotor, 0.06, 0.16); w.jet = crowd(n.jet, 0.05, 0.14); w.boat = crowd(n.boat, 0.05, 0.14);
+  w.eng = crowd(moving, 0.045, 0.16);
   w.engHz = moving ? 34 + (speed / moving) * 1.4 : 34;
+  /* the engines run faster with a faster crowd: a tank's own loop at the tank's own speed */
+  w.tracksRate = n.tracks ? 0.75 + sp.tracks / n.tracks / 30 : 1;
+  w.wheelsRate = n.wheels ? 0.75 + sp.wheels / n.wheels / 30 : 1;
   w.bridge = decks ? Math.min(0.22, 0.1 * Math.sqrt(decks)) : 0;
+  w.hum = crowd(power, 0.02, 0.05);
+  w.build = build ? 0.07 : 0;
   return w;
 }
+
+/* which loop each of the wants turns */
+var RTS_AMB_OF = { rain: 'rain', wind: 'wind', sand: 'sand', ins: 'crickets', birds: 'birds', tracks: 'tracks',
+  wheels: 'wheels', rotor: 'rotor', jet: 'jet', boat: 'boat', bridge: 'bridge', hum: 'hum', build: 'build' };
 
 /* A few times a second, from the main loop (ui/camera.js). */
 function _rtsAmbTick(dt) {
@@ -15298,13 +15530,10 @@ function _rtsAmbTick(dt) {
     B.t = RTS_AMB_EVERY;
     w = _rtsAmbWant(G);
     var now = A.ctx.currentTime;
-    B.rain.g.gain.setTargetAtTime(w.rain, now, 0.4);
-    B.wind.g.gain.setTargetAtTime(w.wind, now, 0.6);
-    B.ins.g.gain.setTargetAtTime(w.ins, now, 0.8);
+    Object.keys(RTS_AMB_OF).forEach(function (k) { B.v[RTS_AMB_OF[k]].g.gain.setTargetAtTime(w[k], now, k === 'rain' || k === 'wind' ? 0.5 : 0.3); });
+    if (B.v.tracks.src) B.v.tracks.src.playbackRate.setTargetAtTime(w.tracksRate, now, 0.4);
+    if (B.v.wheels.src) B.v.wheels.src.playbackRate.setTargetAtTime(w.wheelsRate, now, 0.4);
     B.echo.g.gain.setTargetAtTime(w.echo, now, 0.5);
-    B.eng.g.gain.setTargetAtTime(w.eng, now, 0.25);
-    B.eng.o.frequency.setTargetAtTime(w.engHz, now, 0.3);
-    B.bridge.g.gain.setTargetAtTime(w.bridge, now, 0.25);
     B.last = w;
   }
   /* THUNDER: once per strike, asked every frame - a flash is over in a fraction of the knobs' beat */
@@ -34239,7 +34468,7 @@ function rtsOpen(seed) {
     +       '<button type="button" class="rts-mute" id="rtsReloadBtn" title="Reload for the latest build" onclick="rtsReloadClick()">⟳</button>'
     +       '<button type="button" class="rts-mute" id="rtsSaveBtn" title="Save this battle (Ctrl+S)" onclick="rtsSaveGame()">💾</button>'
     +       '<button type="button" class="rts-mute" id="rtsLoadBtn" title="Resume the saved battle" onclick="rtsLoadGame()">📂</button>'
-    +       '<button type="button" class="rts-mute" id="rtsMute" title="Sound on" onclick="rtsMuteToggle()">🔊</button>'
+    +       '<button type="button" class="rts-mute" id="rtsMute" title="Sound on" aria-expanded="false" onclick="rtsSoundPanel()">🔊</button>'
     +       '<button type="button" class="rts-x" id="rtsQuitBtn" title="Leave the battle" onclick="rtsQuitClick()">✕</button>'
     +     '</span></div>'
     /* The touch hint is a SIBLING of the top bar, not a child of it. In that bar it had to share
@@ -34648,6 +34877,74 @@ function _rtsGfxInit() {
   out.id = 'rtsGfxOut';
   document.querySelector('#rcgRts .rts-stage').appendChild(out);
   _rtsGfxSync();
+}
+</script>
+<script>/* ui/soundpanel.js - the player's levels: the 🔊 button opens a panel with the mute and three
+   sliders, music, effects and the world around them (rts.audio.js keeps them, rtsVolSet).
+
+   ONE BUTTON, NOT FOUR. The top bar has no room - on a 360-pixel phone it already carries six
+   controls and e2e/topbar holds them to their places - so the button that was mute opens this,
+   and the mute is its first line. A slider at zero is that sound off: the music stops rather
+   than playing to a silent bus.
+
+   It closes on its ✕, on Escape (ui/input.js), or on a press anywhere outside it. */
+
+var RTS_SOUND_ROWS = [['mus', 'Music'], ['sfx', 'Effects'], ['amb', 'World']];
+
+function _rtsSoundPanelBuild() {
+  var root = document.getElementById('rcgRts') || document.body, P = document.createElement('div');
+  P.id = 'rtsSoundPanel'; P.className = 'rts-sound'; P.hidden = true;
+  P.setAttribute('role', 'dialog'); P.setAttribute('aria-label', 'Sound');
+  var h = '<div class="hd"><b>SOUND</b><button type="button" class="x" id="rtsSoundClose" title="Close">✕</button></div>' +
+          '<button type="button" class="mute" id="rtsSoundMute"></button>';
+  RTS_SOUND_ROWS.forEach(function (r) {
+    h += '<label class="row" for="rtsVol_' + r[0] + '"><span>' + r[1] + '</span>' +
+         '<input type="range" id="rtsVol_' + r[0] + '" min="0" max="100" step="5">' +
+         '<i id="rtsVolV_' + r[0] + '"></i></label>';
+  });
+  P.innerHTML = h;
+  root.appendChild(P);
+  RTS_SOUND_ROWS.forEach(function (r) {
+    var s = document.getElementById('rtsVol_' + r[0]);
+    s.addEventListener('input', function () { rtsVolSet(r[0], s.value / 100); _rtsSoundPanelSync(); });
+  });
+  document.getElementById('rtsSoundMute').onclick = function () { rtsMuteToggle(); _rtsSoundPanelSync(); };
+  document.getElementById('rtsSoundClose').onclick = function () { rtsSoundPanel(false); };
+  /* a press outside it closes it - Escape is ui/input.js's, which has to know the panel is open
+     before it decides Escape means leaving the battle. Once for the page: the shell rebuilds its
+     DOM every match, and with it this panel, so the listener looks the panel up */
+  if (!_rtsSoundPanelBuild.once) {
+    _rtsSoundPanelBuild.once = true;
+    var open = function () { var Q = document.getElementById('rtsSoundPanel'); return Q && !Q.hidden ? Q : null; };
+    document.addEventListener('pointerdown', function (e) {
+      var Q = open();
+      if (Q && !Q.contains(e.target) && !(e.target.closest && e.target.closest('#rtsMute'))) rtsSoundPanel(false);
+    }, true);
+  }
+  return P;
+}
+
+/* every control showing what is so */
+function _rtsSoundPanelSync() {
+  var muted = !!(_rtsA && _rtsA.muted), m = document.getElementById('rtsSoundMute');
+  if (!m) return;
+  m.textContent = muted ? '🔇 Sound off - tap to turn on' : '🔊 Sound on - tap to mute';
+  m.classList.toggle('off', muted);
+  RTS_SOUND_ROWS.forEach(function (r) {
+    var v = Math.round(_rtsVol(r[0]) * 100);
+    document.getElementById('rtsVol_' + r[0]).value = v;
+    document.getElementById('rtsVolV_' + r[0]).textContent = v ? v + '%' : 'off';
+  });
+}
+
+/* open it, close it (false), or turn it over (nothing) */
+function rtsSoundPanel(open) {
+  if (typeof _rtsAudioInit === 'function') { _rtsAudioInit(); _rtsAudioResume(); }
+  var P = document.getElementById('rtsSoundPanel') || _rtsSoundPanelBuild();
+  P.hidden = open == null ? !P.hidden : !open;
+  if (!P.hidden) _rtsSoundPanelSync();
+  var b = document.getElementById('rtsMute');
+  if (b) b.setAttribute('aria-expanded', P.hidden ? 'false' : 'true');
 }
 </script>
 <script>/* ui/touchcmd.js - the combat commands a phone had no way to give.
@@ -36056,13 +36353,19 @@ function _rtsKeyDown(e) {
     /* Escape cancels the armed thing, whatever it is, and only leaves the battle when there is
        nothing armed to cancel. The superweapon was the one armed cursor missing from this list,
        so a player who had learned Escape-cancels from repair, sell and placement pressed it
-       with the nuke live and QUIT THE MATCH - no confirmation, no autosave. */
-    if (U.mode) rtsMode(U.mode);
+       with the nuke live and QUIT THE MATCH - no confirmation, no autosave. The sound panel
+       (ui/soundpanel.js) is the newest member of the list and the first in it: closing it with
+       Escape quit the battle too, until e2e/soundpanel pressed it. */
+    var SP = document.getElementById('rtsSoundPanel');
+    if (SP && !SP.hidden) rtsSoundPanel(false);
+    else if (U.mode) rtsMode(U.mode);
     else if (U.place) { U.place = null; _rtsGhostHide(); }
     else if (U.superArm) _rtsSuperDisarm();
     else rtsClose();
     e.preventDefault(); return;
   }
+  /* a key in a slider or a box is that control's: Home, End, the arrows move a slider, not the camera */
+  if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
   U.keys[k.toLowerCase()] = true;
   if (_rtsZoomKeyDown(e, U)) return;   /* + and - : ui/navigate.js */
   if (k === 'Delete' || k === 'Backspace') { /* scuttle selected own units */

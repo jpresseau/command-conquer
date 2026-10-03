@@ -379,13 +379,19 @@ function _rtsKeyDown(e) {
     /* Escape cancels the armed thing, whatever it is, and only leaves the battle when there is
        nothing armed to cancel. The superweapon was the one armed cursor missing from this list,
        so a player who had learned Escape-cancels from repair, sell and placement pressed it
-       with the nuke live and QUIT THE MATCH - no confirmation, no autosave. */
-    if (U.mode) rtsMode(U.mode);
+       with the nuke live and QUIT THE MATCH - no confirmation, no autosave. The sound panel
+       (ui/soundpanel.js) is the newest member of the list and the first in it: closing it with
+       Escape quit the battle too, until e2e/soundpanel pressed it. */
+    var SP = document.getElementById('rtsSoundPanel');
+    if (SP && !SP.hidden) rtsSoundPanel(false);
+    else if (U.mode) rtsMode(U.mode);
     else if (U.place) { U.place = null; _rtsGhostHide(); }
     else if (U.superArm) _rtsSuperDisarm();
     else rtsClose();
     e.preventDefault(); return;
   }
+  /* a key in a slider or a box is that control's: Home, End, the arrows move a slider, not the camera */
+  if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
   U.keys[k.toLowerCase()] = true;
   if (_rtsZoomKeyDown(e, U)) return;   /* + and - : ui/navigate.js */
   if (k === 'Delete' || k === 'Backspace') { /* scuttle selected own units */
