@@ -125,7 +125,7 @@ missing entirely, and it turned out to be the largest gap any of these files has
 biting until you have actually spent down. Collapsing them into one number makes the cap
 meaningless — you would start the match already over capacity and never earn a credit again.
 
-In `rts.core.js`: `rtsMoney(S)` to ask, `_rtsSpend` / `_rtsGrant` / `_rtsHarvested` to change.
+In `src/core/treasury.js`: `rtsMoney(S)` to ask, `_rtsSpend` / `_rtsGrant` / `_rtsHarvested` to change.
 The distinction is load-bearing in both directions — harvest is the *only* income the cap may
 refuse, and a refund into a full store must still pay out in full.
 
