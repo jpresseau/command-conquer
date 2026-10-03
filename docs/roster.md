@@ -7,6 +7,11 @@ player can DO, not another damage number. Entries live in `src/rules/`, models i
 
 > Reference, split out of `CLAUDE.md`. The rules that must be followed before touching
 > anything are still in `CLAUDE.md`; this is the working behind them.
+>
+> The sections below are dated records. They name files as they were then: `rts.rules.js` is
+> now `src/rules/`, `rts.sprites.js` is `src/sprites/`, and the old harnesses (`content.js`,
+> `verbs.js`, `mech.js`, `unitzoom.js`) became specs under `test/`. The `add-unit` skill
+> (`.claude/skills/add-unit/`) is the current checklist for a new entry.
 
 ## The roster: nine and nine, not five and six
 
