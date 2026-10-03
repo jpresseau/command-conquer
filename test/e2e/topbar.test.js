@@ -282,6 +282,10 @@ var CONTROLS = ['#rtsReloadBtn', '#rtsSaveBtn', '#rtsLoadBtn', '#rtsMute', '#rcg
     });
   }
   await press('#probeTile', 120);
+  /* and the tap has TAKEN before it is read, for the same reason as the hold below: with other
+     specs sharing the machine a frame can outlast a fixed wait, and "queued null" was a tap the
+     page had not processed yet, not one it refused */
+  await t.page.waitForFunction(function () { return !!window._rtsG.sides.player.q.struct; }, null, { timeout: 30000 }).catch(function () {});
   var q1 = await q();
   S.ok('a tap starts a job', q1.key !== null, 'queued ' + q1.key + ' — "' + q1.msg + '"');
   await t.page.evaluate(function () { for (var i = 0; i < 120; i++) _rtsTick(1 / 60); });

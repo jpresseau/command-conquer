@@ -52,7 +52,10 @@
    blend mode it exists to avoid - both priced in the same run, seconds apart, through the
    RTS_DETAIL_OP seam. Across seven runs, four of them with the box deliberately loaded, those
    came out at 45-49% and 1.80-2.00x. (The live overlay figure, 5.45-7.71 ms, does corroborate
-   the 7.06 the comment remembered.) */
+   the 7.06 the comment remembered.)
+
+   @solo - it times a pass in milliseconds, which only means something on a machine nothing
+   else is using (test/run.js). */
 
 var { chromium } = require('playwright');
 var { Suite } = require('../lib/assert.js');
