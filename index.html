@@ -975,7 +975,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">ff74682 · 2026-10-03</div>
+  <div id="rtsBuild" title="build">22b9b3a · 2026-10-03</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -20107,13 +20107,14 @@ function _rtsSplash(x, z, rad, dmg, side, spread, from) {
 <script>/* core/move.js - getting there: aircraft, path requests, steering and unit separation.
    Part of rts.core, the simulation. */
 
+/* the nearest pad - a free one ahead of a busy one, however much further (core/airspace.js) */
 function _rtsRearmPad(e) {
   var G = window._rtsG, best = null, bd = 1e9;
   for (var i = 0; i < G.ents.length; i++) {
     var b = G.ents[i];
     if (b.dead || b.building || b.type !== 'struct' || b.side !== e.side) continue;
     if (!(rtsStructDef(b.def) || {}).rearm) continue;
-    var dd = Math.hypot(b.x - e.x, b.z - e.z);
+    var dd = Math.hypot(b.x - e.x, b.z - e.z) + (_rtsPadBusy(b, e) ? 1e5 : 0);
     if (dd < bd) { bd = dd; best = b; }
   }
   return best;
@@ -20134,10 +20135,13 @@ function _rtsAirTick(e, dt, d) {
     return true;
   }
   e.target = null;
-  if (Math.hypot(pad.x - e.x, pad.z - e.z) <= RTS_TILE * 1.4) {
+  var dp = Math.hypot(pad.x - e.x, pad.z - e.z), busy = _rtsPadBusy(pad, e);
+  if (dp <= RTS_TILE * 1.4 && !busy) {
     e.path = null; e.goal = null; e.rearming = d.rearm || 6;
     return true;
   }
+  /* ONE ON A PAD AT A TIME: the rest wait beside it, hovering, for their turn */
+  if (busy && dp <= RTS_PAD_WAIT) { e.path = null; e.goal = null; e.order = 'rearm'; return true; }
   if (!e.path || !e.goal || Math.hypot(pad.x - e.goal.x, pad.z - e.goal.z) > RTS_TILE) {
     e.order = 'rearm'; e.goal = { x:pad.x, z:pad.z };
     e.path = _rtsPathFor(e, pad.x, pad.z); e.pi = 0;
@@ -20316,6 +20320,64 @@ function _rtsSeparate(dt) {
             !_rtsBlocked(_rtsTX(ax), _rtsTX(az), domA)) { a.x = ax; a.z = az; }
       }
     }
+  }
+}
+</script>
+<script>/* core/airspace.js - aircraft keep their distance, and take turns on a pad. Part of rts.core.
+
+   AIRCRAFT WERE NEVER IN THE CROWD (core/move.js, _rtsSeparate), on purpose: the ground's shove
+   kept a helicopter off its own pad. But nothing replaced it, so aircraft sent at one place -
+   a target, a rally point, the pad they all go home to - ended at exactly the same point, one on
+   top of another. Five Attack Helis read as one, with their rotors fanned into a star, and only
+   the top one could be clicked. So aircraft keep their own distance, from aircraft only:
+
+     THE GAP     RTS_AIR_GAP centre to centre, opened at no more than RTS_AIR_PUSH a second, so a
+                 stack drifts apart rather than jumping; two at exactly the same point part along
+                 a direction drawn from their ids, so the same stack always opens the same way
+     THE PAD     one aircraft on it at a time. A machine already rearming is never pushed (the
+                 bug the old exclusion was about), and the others wait their turn hovering beside
+                 it - or go to another pad, if there is a free one (_rtsRearmPad, core/move.js). */
+
+/* how high an aircraft is drawn above the ground it is over: its altitude, or a hop off the pad
+   while it rearms - the one figure the 2D and 3D renderers and the picking all use (render/camera.js) */
+function _rtsAirLift(e) { return e.air ? (e.rearming > 0 ? 2 : (e.alt || 12)) : 0; }
+
+var RTS_AIR_GAP = RTS_TILE * 1.6;          /* a rotor disc and a little air */
+var RTS_AIR_PUSH = 6;                      /* world units a second, at the most */
+var RTS_PAD_WAIT = RTS_TILE * 2.6;         /* how near a busy pad its queue hovers */
+
+/* is someone other than `e` already on this pad? */
+function _rtsPadBusy(pad, e) {
+  var G = window._rtsG;
+  for (var i = 0; i < G.ents.length; i++) {
+    var o = G.ents[i];
+    if (o !== e && !o.dead && o.air && o.rearming > 0 && Math.hypot(o.x - pad.x, o.z - pad.z) <= RTS_TILE * 1.4) return true;
+  }
+  return false;
+}
+
+function _rtsAirSpread(dt) {
+  /* the map's own edges: world coordinates are centred on the middle of the map */
+  var G = window._rtsG, air = [], i, j, lo = _rtsWX(0), hi = _rtsWX(RTS_N - 1);
+  for (i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (!e.dead && !e.inside && e.type === 'unit' && e.air) air.push(e);
+  }
+  for (i = 0; i < air.length; i++) for (j = i + 1; j < air.length; j++) {
+    var a = air[i], b = air[j], ha = a.rearming > 0, hb = b.rearming > 0;
+    if (ha && hb) continue;
+    var dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz);
+    if (d >= RTS_AIR_GAP) continue;
+    if (d < 1e-3) { var ang = ((a.id || i) * 2.399 + (b.id || j) * 0.737) % (Math.PI * 2); dx = Math.cos(ang); dz = Math.sin(ang); d = 0; }
+    else { dx /= d; dz /= d; }
+    var step = Math.min((RTS_AIR_GAP - d) * 0.5, RTS_AIR_PUSH * dt);
+    /* the one on the pad holds; whoever it is crowding takes the whole step */
+    var sa = ha ? 0 : (hb ? 2 : 1), sb = hb ? 0 : (ha ? 2 : 1);
+    a.x -= dx * step * sa; a.z -= dz * step * sa;
+    b.x += dx * step * sb; b.z += dz * step * sb;
+  }
+  for (i = 0; i < air.length; i++) {
+    air[i].x = Math.max(lo, Math.min(hi, air[i].x)); air[i].z = Math.max(lo, Math.min(hi, air[i].z));
   }
 }
 </script>
@@ -23781,6 +23843,7 @@ function _rtsTick(dt) {
     if (e.type === 'unit') _rtsUpdateUnit(e, dt); else _rtsUpdateStruct(e, dt);
   }
   _rtsSeparate(dt);
+  _rtsAirSpread(dt);                             /* aircraft keep their own distance: core/airspace.js */
   _rtsUpdateProj(dt);
 
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 2.2);
@@ -24124,6 +24187,25 @@ function _rtsGroundToScreen(x, z) {
   return _rtsWorldToScreen(x, (R3 && R3.on) ? _rtsElev(x, z) : 0, z);
 }
 
+/* WHERE A UNIT IS DRAWN, which for an aircraft is not where it is. A helicopter is lifted off its
+   ground position by its altitude - render/draw.js in pixels, render3d/unit3d.js in world units,
+   both through _rtsAirLift (core/airspace.js) - so a click on the machine you can see lands on ground well behind
+   it. Picking (render/post.js) and the drag box (ui/select.js) ask here, and an Attack Heli is
+   selectable where it is drawn instead of only where its shadow falls. */
+function _rtsScreenOf(e) {
+  var R3 = window._R3D;
+  if (!e.air) return _rtsWorldToScreen(e.x, 1, e.z);
+  if (R3 && R3.on) return _rtsWorldToScreen(e.x, _rtsElev(e.x, e.z) + _rtsAirLift(e) * 0.35, e.z);
+  var up = _rtsGroundToScreen(e.x, e.z);
+  return { x: up.x, y: up.y - _rtsAirLift(e) * (_rtsR.cell / RTS_TS) * (up.scale || 1), scale: up.scale, behind: up.behind };
+}
+/* ...and how many pixels a world unit spans there, for a radius measured on the screen */
+function _rtsPxPerUnit(e) {
+  var s0 = _rtsScreenOf(e), s1 = _rtsScreenOf({ x: e.x + 1, z: e.z, air: e.air, alt: e.alt, rearming: e.rearming }),
+      s2 = _rtsScreenOf({ x: e.x, z: e.z + 1, air: e.air, alt: e.alt, rearming: e.rearming });
+  return Math.max(1e-3, Math.hypot(s1.x - s0.x, s1.y - s0.y), Math.hypot(s2.x - s0.x, s2.y - s0.y));
+}
+
 /* Stamp RA's shroud tiles over the visible cells.
 
    Three states per cell, and they are NOT the same thing:
@@ -24436,6 +24518,8 @@ function _rtsPickAt(mx, my) {
     var e = G.ents[i];
     if (e.dead || !_rtsEntSeen(e)) continue;     /* you cannot click what you cannot see */
     var rad, d = Math.hypot(e.x - p.x, e.z - p.z);
+    /* an aircraft is measured where it is drawn, in world units on the screen (render/camera.js) */
+    if (e.air) { var sc = _rtsScreenOf(e); d = sc.behind ? 1e9 : Math.hypot(sc.x - mx, sc.y - my) / _rtsPxPerUnit(e); }
     if (e.type === 'struct') { var sd = rtsStructDef(e.def); rad = Math.max(sd.w, sd.h) * RTS_TILE * 0.55; }
     else rad = Math.max(2.2, e.r * 1.6);
     if (d <= rad && d < bd) { bd = d; best = e; }
@@ -31396,7 +31480,7 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
   /* THE GROUND UNDER IT, not zero. An aircraft's altitude is measured from the ground it
      is over as well - it flies at a height, not at a level - so both take the terrain and
      only the flier adds to it. */
-  var y = (e.air || d2.sea ? _rtsElev(e.x, e.z) : _rtsStandY(e.x, e.z)) + (e.air ? ((e.rearming > 0 ? 2 : (e.alt || 12)) * 0.35) : 0);
+  var y = (e.air || d2.sea ? _rtsElev(e.x, e.z) : _rtsStandY(e.x, e.z)) + (e.air ? _rtsAirLift(e) * 0.35 : 0);   /* render/camera.js */
   /* A MARCHING SOLDIER BOBS. The bob is what is left of the old suggestion of a march, much
      smaller now that he walks (a stride pose by his own gait, soldier3d.js), in step with the
      stride. Prone, he crawls instead (crawl3d.js). Vehicles do not bob; tracks do not walk. */
@@ -34155,7 +34239,7 @@ function _rtsDrawUnit(g, e, TSscale) {
      the battlefield rather than on it" - without it a helicopter reads as a fast, oddly
      invulnerable jeep. It shrinks to nothing while the machine is sitting on a pad rearming. */
   if (e.air) {
-    var lift = Math.round((e.rearming > 0 ? 2 : (e.alt || 12)) * TSscale * up.scale);
+    var lift = Math.round(_rtsAirLift(e) * TSscale * up.scale);     /* render/camera.js: picking asks the same */
     g.save();
     g.globalAlpha = 0.28;
     g.drawImage(img, px, py + Math.round(h * 0.06), w, Math.max(1, Math.round(h * 0.55)));
@@ -36484,7 +36568,7 @@ function _rtsIsArmy(e) { return !!e && !e.dead && !e.inside && e.side === 'playe
 /* On screen right now. DISPLAY.CPP scopes double-click selection to the tactical view - it is
    "all the ones I can see", not "all the ones I own"; select-all is the command for that. */
 function _rtsOnScreen(e) {
-  var s = _rtsWorldToScreen(e.x, 1, e.z);
+  var s = _rtsScreenOf(e);
   return !s.behind && s.x >= 0 && s.x <= _rtsR.W && s.y >= 0 && s.y <= _rtsR.H;
 }
 
@@ -36590,7 +36674,7 @@ function _rtsBoxSelect(dg) {
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (!_rtsIsArmy(e)) continue;                    /* box only grabs your own units */
-    var s = _rtsWorldToScreen(e.x, 1, e.z);
+    var s = _rtsScreenOf(e);                         /* where it is drawn: an aircraft is lifted */
     if (s.behind) continue;
     if (s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1 && G.sel.indexOf(e) < 0) G.sel.push(e);
   }

@@ -250,7 +250,7 @@ function _rtsDrawUnit(g, e, TSscale) {
      the battlefield rather than on it" - without it a helicopter reads as a fast, oddly
      invulnerable jeep. It shrinks to nothing while the machine is sitting on a pad rearming. */
   if (e.air) {
-    var lift = Math.round((e.rearming > 0 ? 2 : (e.alt || 12)) * TSscale * up.scale);
+    var lift = Math.round(_rtsAirLift(e) * TSscale * up.scale);     /* render/camera.js: picking asks the same */
     g.save();
     g.globalAlpha = 0.28;
     g.drawImage(img, px, py + Math.round(h * 0.06), w, Math.max(1, Math.round(h * 0.55)));

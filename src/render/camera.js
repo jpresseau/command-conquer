@@ -296,6 +296,25 @@ function _rtsGroundToScreen(x, z) {
   return _rtsWorldToScreen(x, (R3 && R3.on) ? _rtsElev(x, z) : 0, z);
 }
 
+/* WHERE A UNIT IS DRAWN, which for an aircraft is not where it is. A helicopter is lifted off its
+   ground position by its altitude - render/draw.js in pixels, render3d/unit3d.js in world units,
+   both through _rtsAirLift (core/airspace.js) - so a click on the machine you can see lands on ground well behind
+   it. Picking (render/post.js) and the drag box (ui/select.js) ask here, and an Attack Heli is
+   selectable where it is drawn instead of only where its shadow falls. */
+function _rtsScreenOf(e) {
+  var R3 = window._R3D;
+  if (!e.air) return _rtsWorldToScreen(e.x, 1, e.z);
+  if (R3 && R3.on) return _rtsWorldToScreen(e.x, _rtsElev(e.x, e.z) + _rtsAirLift(e) * 0.35, e.z);
+  var up = _rtsGroundToScreen(e.x, e.z);
+  return { x: up.x, y: up.y - _rtsAirLift(e) * (_rtsR.cell / RTS_TS) * (up.scale || 1), scale: up.scale, behind: up.behind };
+}
+/* ...and how many pixels a world unit spans there, for a radius measured on the screen */
+function _rtsPxPerUnit(e) {
+  var s0 = _rtsScreenOf(e), s1 = _rtsScreenOf({ x: e.x + 1, z: e.z, air: e.air, alt: e.alt, rearming: e.rearming }),
+      s2 = _rtsScreenOf({ x: e.x, z: e.z + 1, air: e.air, alt: e.alt, rearming: e.rearming });
+  return Math.max(1e-3, Math.hypot(s1.x - s0.x, s1.y - s0.y), Math.hypot(s2.x - s0.x, s2.y - s0.y));
+}
+
 /* Stamp RA's shroud tiles over the visible cells.
 
    Three states per cell, and they are NOT the same thing:

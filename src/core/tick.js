@@ -33,6 +33,7 @@ function _rtsTick(dt) {
     if (e.type === 'unit') _rtsUpdateUnit(e, dt); else _rtsUpdateStruct(e, dt);
   }
   _rtsSeparate(dt);
+  _rtsAirSpread(dt);                             /* aircraft keep their own distance: core/airspace.js */
   _rtsUpdateProj(dt);
 
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 2.2);

@@ -103,7 +103,7 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
   /* THE GROUND UNDER IT, not zero. An aircraft's altitude is measured from the ground it
      is over as well - it flies at a height, not at a level - so both take the terrain and
      only the flier adds to it. */
-  var y = (e.air || d2.sea ? _rtsElev(e.x, e.z) : _rtsStandY(e.x, e.z)) + (e.air ? ((e.rearming > 0 ? 2 : (e.alt || 12)) * 0.35) : 0);
+  var y = (e.air || d2.sea ? _rtsElev(e.x, e.z) : _rtsStandY(e.x, e.z)) + (e.air ? _rtsAirLift(e) * 0.35 : 0);   /* render/camera.js */
   /* A MARCHING SOLDIER BOBS. The bob is what is left of the old suggestion of a march, much
      smaller now that he walks (a stride pose by his own gait, soldier3d.js), in step with the
      stride. Prone, he crawls instead (crawl3d.js). Vehicles do not bob; tracks do not walk. */
