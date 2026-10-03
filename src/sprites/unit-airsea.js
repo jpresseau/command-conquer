@@ -13,6 +13,9 @@
    the contrails come off. */
 var RTS_AIR_PARTS = {
   heli: { rotor: true },
+  /* `rotors`: where along the body each copy of part 'rotor' turns, when there is more than one
+     (render3d/unit3d.js). The Chinook's two are the same rotor, so one mesh is drawn twice. */
+  tran: { rotor: true, rotors: [8.4, -8.4] },
   mig:  { burner: [-9.6, 4.4, 0], tips: 9.6, trail: true },
   yak:  { prop: [8.4, 4.1, 0, 5.4], tips: 10.6 }
 };
@@ -60,6 +63,40 @@ function _sprUnitAirSea(X, key) {
     _r3Cyl(m, 6.8, 1.6, 0, 1.2, 1.6, DK[0], DK[2], 10);            /* chin sensor ball */
     _r3Box(m, 2.6, 1.2, 0, 1.1, 1.2, 6.6, S[1], S[0]);             /* skid cross-tubes */
     _r3Box(m, -2.6, 1.2, 0, 1.1, 1.2, 6.6, S[1], S[0]);
+
+  } else if (key === 'tran') {
+    /* The Chinook. What has to read at this size is what no other aircraft has: a long boxy
+       hull with a ROTOR AT EACH END and the back one raised on its pylon, and no tail boom.
+       It is the helicopter you can see is a bus. (y is the bottom of a box or a cylinder.) */
+    var _rot = function (rx) {                                      /* one rotor: mast, hub, blades */
+      _r3Cyl(m, rx, 8.4, 0, 0.6, 1.8, GN[1], GN[3], 16);
+      _r3Cyl(m, rx, 9.6, 0, 1.1, 0.6, GN[1], GN[3], 16);
+      _r3Box(m, rx, 10.2, 0, 24.0, 0.5, 1.3, DK[1], DK[3]);
+      _r3Box(m, rx, 10.2, 0, 1.3, 0.5, 24.0, DK[1], DK[3]);
+    };
+    if (part === 'rotor') { _rot(0); return true; }
+    if (part !== 'body') { _rot(8.4); _rot(-8.4); }                 /* the sprite: both rotors */
+    _r3Box(m, 0, 1.4, 0, 21.0, 5.6, 5.6, VH[0], VH[1]);            /* fuselage */
+    _r3Box(m, 11.4, 1.6, 0, 2.4, 4.4, 5.0, VH[1], VH[3]);          /* nose */
+    _r3Box(m, 12.3, 4.0, 0, 1.0, 2.0, 4.2, RTS_PAL.glass, RTS_PAL.glass);   /* windscreen */
+    _r3Box(m, 8.4, 7.0, 0, 4.2, 1.6, 3.4, VH[2], VH[1]);           /* forward pylon */
+    _r3Box(m, -8.4, 7.0, 0, 6.0, 2.8, 4.2, VH[1], VH[3]);          /* aft pylon, raised */
+    _r3Box(m, -6.2, 7.0, -3.2, 6.2, 2.0, 1.6, VH[2], VH[1]);       /* engine pods beside it */
+    _r3Box(m, -6.2, 7.0, 3.2, 6.2, 2.0, 1.6, VH[2], VH[1]);
+    _r3Cyl(m, -9.6, 7.4, -3.2, 0.7, 1.4, DK[1], DK[3], 16);        /* exhausts */
+    _r3Cyl(m, -9.6, 7.4, 3.2, 0.7, 1.4, DK[1], DK[3], 16);
+    _r3Box(m, -11.4, 0.8, 0, 1.8, 3.6, 5.0, DK[0], DK[2]);         /* rear ramp */
+    _r3Box(m, 0, 7.0, 0, 9.0, 0.5, 2.4, TM[1], TM[3]);             /* team stripe along the spine */
+    _r3Box(m, 2.0, 1.0, -3.1, 14.0, 1.6, 0.8, VH[2], VH[1]);       /* side fuel sponsons */
+    _r3Box(m, 2.0, 1.0, 3.1, 14.0, 1.6, 0.8, VH[2], VH[1]);
+    for (i = 0; i < 4; i++) {                                       /* cabin windows */
+      _r3Box(m, 5.0 - i * 3.0, 4.0, -2.85, 1.2, 1.0, 0.2, RTS_PAL.glass, RTS_PAL.glass);
+      _r3Box(m, 5.0 - i * 3.0, 4.0, 2.85, 1.2, 1.0, 0.2, RTS_PAL.glass, RTS_PAL.glass);
+    }
+    [[7.6, -2.4], [7.6, 2.4], [-6.0, -3.2], [-6.0, 3.2]].forEach(function (w) {   /* wheels */
+      _r3Box(m, w[0], 0.6, w[1], 0.5, 1.0, 0.5, S[1], S[0]);
+      _r3Cyl(m, w[0], 0, w[1], 0.6, 0.6, DK[0], DK[2], 16);
+    });
 
   } else if (key === 'mig' || key === 'yak') {
     /* FIXED WING, and the whole job of these two is to not read as the helicopter above. The

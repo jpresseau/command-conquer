@@ -166,7 +166,10 @@ function _rtsUpdateUnit(e, dt) {
        path ends at whatever land cell _rtsPath found nearest the hull, and how far that is from
        the hull is a property of the coastline, not of the order. Three tiles is what covers a
        craft nosed against a beach without letting a squad teleport aboard from inland. */
-    var breach = ((rtsUnitDef(tr && tr.def || '') || {}).sea) ? RTS_TILE * 3.0 : RTS_TILE * 1.6;
+    /* A CHINOOK the same: it sets down wherever it was left, which may be a cell or two off the
+       nearest ground a squad can walk to - beside a wall, or with its tail over the water. */
+    var tdef = rtsUnitDef(tr && tr.def || '') || {};
+    var breach = (tdef.sea || tdef.air) ? RTS_TILE * 3.0 : RTS_TILE * 1.6;
     if (!tr || tr.dead || !_rtsCanBoard(e, tr)) { e.order = null; e.target = null; e.path = null; }
     else if (_rtsRangeTo(e, tr) <= breach) { _rtsBoard(e, tr); return; }
     else {

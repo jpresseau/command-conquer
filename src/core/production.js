@@ -364,6 +364,21 @@ function _rtsRallyOut(u, src) {
   _rtsOrderMove(u, r.x, r.z, false);
   return !!u.path;
 }
+/* The pad a new aircraft appears over: one of the kind it `needs` (a Helipad for a helicopter)
+   before any other, and a free one before a busy one, so a second machine does not appear on top
+   of one that is rearming. Null if no pad is standing - it was bombed while the aircraft was
+   building - and then the aircraft comes out where it always did rather than being lost. */
+function _rtsAirPadFor(side, u) {
+  var G = window._rtsG, best = null, bs = 1e9;
+  for (var i = 0; i < G.ents.length; i++) {
+    var b = G.ents[i];
+    if (b.dead || b.building || b.type !== 'struct' || b.side !== side) continue;
+    if ((rtsStructDef(b.def) || {}).produces !== 'air') continue;
+    var s = ((u.needs || []).indexOf(b.def) >= 0 ? 0 : 2) + (_rtsPadBusy(b, null) ? 1 : 0);
+    if (s < bs) { bs = s; best = b; }
+  }
+  return best;
+}
 function _rtsDeliverUnit(side, key) {
   var G = window._rtsG, u = rtsUnitDef(key);
   if (G.justBuilt) G.justBuilt[side].unit = key;   /* HouseClass::JustBuiltUnit */
@@ -376,6 +391,14 @@ function _rtsDeliverUnit(side, key) {
     var boat = _rtsSpawnUnit(side, key, _rtsWX(at.tx), _rtsWX(at.tz));
     if (boat) _rtsRallyOut(boat, yard);
     return boat;
+  }
+  /* AN AIRCRAFT IS BUILT ON ITS PAD. It used to come out of the war factory's door like a tank,
+     across the base from the helipad that made it, and had to fly home before it could rearm. */
+  var pad = u.air ? _rtsAirPadFor(side, u) : null;
+  if (pad) {
+    var a = _rtsSpawnUnit(side, key, pad.x, pad.z);
+    if (a) _rtsRallyOut(a, pad);
+    return a;
   }
   var src = _rtsHas(side, u.kind === 'infantry' ? 'barracks' : 'factory') || _rtsHas(side, 'yard');
   if (!src) return null;

@@ -22,7 +22,9 @@ NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node .claude/skills/balan
 ```
 
 - It builds this tree and a detached worktree of `--ref`, then runs both in browsers at the same
-  time. A match takes about 5–10 s, so the default 18 matches finish in about 3 minutes.
+  time. `--ref=main` means `origin/main` when there is one. A clone's local `main` is stale, and
+  measuring against it once showed a 25 s "change" this tree did not make. Run
+  `git fetch origin main:refs/remotes/origin/main` first, and read the SHA it prints. A match takes about 5–10 s, so the default 18 matches finish in about 3 minutes.
 - It prints each rung's mean and the per-seed times, the change, and `ORDER BROKEN` if a harder
   rung outlasts an easier one.
 - It rebuilds `index.html` with a new stamp. Run `git checkout index.html` if you are not

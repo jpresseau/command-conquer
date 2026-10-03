@@ -50,10 +50,18 @@ async function ladder(dir, label) {
 (async function () {
   var trees = [{ dir: ROOT, label: 'this' }], wt = null;
   if (o.ref) {
+    /* origin/<ref> before <ref>: a clone's local `main` is whatever it was when the branch was
+       cut, weeks stale, and measuring against it once credited this tree with 25 s it did not make */
+    var sha = null;
+    ['origin/' + o.ref, o.ref].some(function (r) {
+      try { sha = cp.execSync('git rev-parse --verify --quiet ' + r + '^{commit}', { cwd: ROOT, encoding: 'utf8' }).trim(); return !!sha; } catch (e) { return false; }
+    });
+    if (!sha) { console.error('no such ref: ' + o.ref); process.exit(2); }
+    console.error('measuring against ' + o.ref + ' at ' + sha.slice(0, 7) + ' (fetch it first if that is not the newest)');
     wt = '/tmp/ladder-ref-' + o.ref.replace(/[^\w.-]/g, '_');
     try { cp.execSync('git worktree remove --force ' + wt, { cwd: ROOT, stdio: 'ignore' }); } catch (e) {}
-    cp.execSync('git worktree add --detach ' + wt + ' ' + o.ref, { cwd: ROOT, stdio: 'ignore' });
-    trees.push({ dir: wt, label: o.ref });
+    cp.execSync('git worktree add --detach ' + wt + ' ' + sha, { cwd: ROOT, stdio: 'ignore' });
+    trees.push({ dir: wt, label: o.ref + '@' + sha.slice(0, 7) });
   }
   trees.forEach(function (t) { build(t.dir); });
   var res = await Promise.all(trees.map(function (t) { return ladder(t.dir, t.label); }));

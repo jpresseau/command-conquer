@@ -204,3 +204,24 @@ three seeds) and fields flame squads (83).
 × 6 s = 232 exactly — assert the *rate*, not a number picked by eye. And the "unreachable capture"
 test put its fake building at tile (2,2), which is merely a long walk; the engineer was correctly
 still walking. Off-map is unreachable; a far corner is not.
+
+## The Chinook — an air lift
+
+The Allies' transport helicopter (RA's TRAN), built at the Helipad. The verb is the one no ground
+transport has: five infantry put down beyond a channel, a cliff or a wall, where no road reaches.
+It is unarmed, slower and thinner-skinned than the Attack Heli, so a lift caught over the
+enemy's guns loses all five. Load it by right-clicking it with a squad selected; right-click open
+ground with it loaded and it flies there and puts them down.
+
+Three mechanisms came with it:
+- an unarmed aircraft never flies home to reload (`_rtsAirTick`);
+- a transport sets down onto open ground while it waits (`_rtsAirSettle`, `land` 0 to 1);
+- `RTS_AIR_PARTS.rotors` draws one rotor mesh over each of several hubs, so its two rotors turn
+  over their own hubs, in opposite directions.
+
+The opponent does not build it, because it is a plan-dependent unit (see above).
+
+### Verified
+
+`unit/chinook`, `e2e/chinook`, and the rotor hubs in `unit/motion`. Ten mutants, each red on its
+own assertion.

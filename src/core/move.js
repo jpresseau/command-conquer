@@ -21,7 +21,10 @@ function _rtsAirTick(e, dt, d) {
     if (e.rearming <= 0) { e.ammo = d.ammo || 0; e.rearming = 0; e.order = null; e.target = null; }
     return true;                                   /* it does nothing else while reloading */
   }
-  if (e.ammo > 0) return false;
+  /* NOTHING TO RELOAD: an unarmed aircraft - the Chinook - has an empty rack from the start and
+     would otherwise spend its life flying home for missiles it never carries, and crash the
+     moment the last pad fell. */
+  if (e.ammo > 0 || !d.weapon) return false;
   var pad = _rtsRearmPad(e);
   if (!pad) {
     /* nowhere to go: it has to crash */

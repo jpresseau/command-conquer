@@ -219,7 +219,7 @@ function _rtsRightClick(mx, my, hit0) {
   var onScrap = _rtsInB(tx, tz) && G.scrap[_rtsIdx(tx, tz)] > 0;
   var onWater = _rtsInB(tx, tz) && G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER;
   var spread = _rtsFormation(mine.length);
-  var landed = 0;
+  var landed = 0, dropped = 0;
   for (i = 0; i < mine.length; i++) {
     var u = mine[i], ud = rtsUnitDef(u.def);
     if (ud.harvest && onScrap) { _rtsOrderHarvest(u, tx, tz); continue; }
@@ -229,14 +229,18 @@ function _rtsRightClick(mx, my, hit0) {
        the boat is still steerable while loaded.
 
        An APC is deliberately NOT included. It drives on the ground it would unload onto, so
-       right-clicking land with one is a move order and always was; unloading stays on U. */
-    if (ud.sea && ud.carries && !onWater && _rtsCargoCount(u)
-        && _rtsOrderUnloadAt(u, hit.x + spread[i].x, hit.z + spread[i].z)) { landed++; continue; }
+       right-clicking land with one is a move order and always was; unloading stays on U.
+
+       A LOADED CHINOOK is the craft's case from the air: it cannot put men down on water, so a
+       click on land is where they go - fly there, set down, out they get. */
+    if ((ud.sea || ud.air) && ud.carries && !onWater && _rtsCargoCount(u)
+        && _rtsOrderUnloadAt(u, hit.x + spread[i].x, hit.z + spread[i].z)) { if (ud.air) dropped++; else landed++; continue; }
     if (ud.harvest && tgt && tgt.side === 'player' && tgt.def === 'refinery') { u.order = 'harvest'; u.hstate = 'toRef'; u.path = null; continue; }
     _rtsOrderMove(u, hit.x + spread[i].x, hit.z + spread[i].z, !!U.attackMove);
   }
   _rtsFlash(hit.x, hit.z, onScrap ? 'harvest' : 'move');
   if (landed) _rtsSay(landed === 1 ? 'Making for the shore.' : landed + ' transports making for the shore.');
+  else if (dropped) _rtsSay(dropped === 1 ? 'Taking them in.' : dropped + ' Chinooks taking them in.');
   if (typeof _rtsSfx === 'function') _rtsSfx('order');
   if (typeof rtsVox === 'function') _rtsVoxOrder();
 }
