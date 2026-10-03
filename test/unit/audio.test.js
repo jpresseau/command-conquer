@@ -210,24 +210,12 @@ checkNames('the infantry death cries', g.RTS_DEATH_CRIES);
 })();
 
 /* ------------------------------------------------------- the sequencer ----
-   The synthesized music is a 16-step pattern. Both tables have to be that long or the bass and
-   the lead drift apart against the drums a little further every bar. */
+   The synthesized score is two songs now (audio/score.js), played by a sampler (audio/music.js);
+   unit/music plays every bar of them. All that is asked here is that the entry points the shell
+   calls are the ones that start and stop it. */
 (function () {
-  S.eq('the bass line is sixteen steps', g._RTS_BASS.length, 16);
-  S.eq('the lead line is sixteen steps', g._RTS_LEAD.length, 16);
-  var notes = g._RTS_BASS.filter(function (v) { return v != null; });
-  S.ok('the bass actually plays on most steps', notes.length >= 8, notes.length + ' of 16');
-  S.ok('the lead is sparse - stabs, not a melody',
-       g._RTS_LEAD.filter(function (v) { return v != null; }).length <= 8,
-       g._RTS_LEAD.filter(function (v) { return v != null; }).length + ' of 16');
-
-  /* semitones -> hertz, the one piece of arithmetic in the music */
-  S.near('a semitone offset of 0 is the base note', g._rtsNote(0, 41.2), 41.2, 1e-9);
-  S.near('twelve semitones is an octave up', g._rtsNote(12, 41.2), 82.4, 1e-9);
-  S.near('seven semitones is a fifth', g._rtsNote(7, 41.2), 41.2 * 1.4983, 0.01);
-  S.ok('every note in the bass line lands in a sane range for a bass',
-       g._RTS_BASS.every(function (v) { return v == null || (g._rtsNote(v, 41.2) >= 40 && g._rtsNote(v, 41.2) <= 70); }),
-       'E1 to ' + g._rtsNote(Math.max.apply(null, notes), 41.2).toFixed(1) + ' Hz');
+  S.ok('the shell\'s music calls reach the score', /_rtsMusicBegin\(A\)/.test(g._rtsMusicStart.toString()) &&
+       /_rtsMusicEnd\(_rtsA\)/.test(g._rtsMusicStop.toString()));
 })();
 
 /* ------------------------------------------ nothing works without a context ----
