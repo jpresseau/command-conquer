@@ -62,7 +62,9 @@ var browser = await chromium.launch();
   /* The stage colour is only ever on screen where the canvas is not covering it. The shot is
      decoded back inside the page - there is no PNG reader here, and the browser has one. */
   async function bgPixels() {
-    var shot = (await page.screenshot({ type: 'png' })).toString('base64');
+    /* a long timeout, not the default 30 s: a screenshot waits on the frame, and a frame of the
+       3D view on SwiftShader with two other specs on the machine has run past thirty seconds */
+    var shot = (await page.screenshot({ type: 'png', timeout: 120000 })).toString('base64');
     return page.evaluate(async function (a) {
       var b64 = a[0], bg = a[1];
       var im = await new Promise(function (res, rej) {

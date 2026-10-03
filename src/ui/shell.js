@@ -52,7 +52,7 @@ function rtsOpen(seed) {
     +       '<button type="button" class="rts-mute" id="rtsReloadBtn" title="Reload for the latest build" onclick="rtsReloadClick()">⟳</button>'
     +       '<button type="button" class="rts-mute" id="rtsSaveBtn" title="Save this battle (Ctrl+S)" onclick="rtsSaveGame()">💾</button>'
     +       '<button type="button" class="rts-mute" id="rtsLoadBtn" title="Resume the saved battle" onclick="rtsLoadGame()">📂</button>'
-    +       '<button type="button" class="rts-mute" id="rtsMute" title="Sound on" onclick="rtsMuteToggle()">🔊</button>'
+    +       '<button type="button" class="rts-mute" id="rtsMute" title="Sound on" aria-expanded="false" onclick="rtsSoundPanel()">🔊</button>'
     +       '<button type="button" class="rts-x" id="rtsQuitBtn" title="Leave the battle" onclick="rtsQuitClick()">✕</button>'
     +     '</span></div>'
     /* The touch hint is a SIBLING of the top bar, not a child of it. In that bar it had to share

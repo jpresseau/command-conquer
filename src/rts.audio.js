@@ -14,6 +14,33 @@
 
 var _rtsA = null;
 
+/* THE PLAYER'S LEVELS (ui/soundpanel.js): each bus at its own level times the slider's, kept
+   between sessions. A key that is missing, unreadable or out of range reads as full. */
+var RTS_BUS_BASE = { sfx: 0.6, mus: 0.28, amb: 0.7 };
+var RTS_VOL_LS = 'rtsSoundVol';
+var _RTS_VOL = null;
+function _rtsVol(k) {
+  if (!_RTS_VOL) {
+    _RTS_VOL = {};
+    try { _RTS_VOL = JSON.parse(window.localStorage.getItem(RTS_VOL_LS) || '{}') || {}; } catch (_e) { _RTS_VOL = {}; }
+  }
+  var v = +_RTS_VOL[k];
+  return _RTS_VOL[k] != null && v >= 0 && v <= 1 ? v : 1;
+}
+function rtsVolSet(k, v) {
+  if (!RTS_BUS_BASE[k]) return;
+  _rtsVol(k);
+  _RTS_VOL[k] = Math.max(0, Math.min(1, +v || 0));
+  try { window.localStorage.setItem(RTS_VOL_LS, JSON.stringify(_RTS_VOL)); } catch (_e) {}
+  var A = _rtsA;
+  if (!A) return;
+  var bus = k === 'sfx' ? A.sfx : k === 'mus' ? A.mus : (A.amb && A.amb.bus);
+  if (bus) bus.gain.setTargetAtTime(RTS_BUS_BASE[k] * _RTS_VOL[k], A.ctx.currentTime, 0.03);
+  /* the score at nothing is the score stopped, not a sequencer playing to a silent bus */
+  if (k === 'mus' && !_RTS_VOL[k]) _rtsMusicStop();
+  else if (k === 'mus' && !A.music && window._rtsG && !window._rtsG.over) _rtsMusicStart();
+}
+
 function _rtsAudioInit() {
   if (_rtsA) return _rtsA;
   var AC = window.AudioContext || window.webkitAudioContext;
@@ -40,8 +67,8 @@ function _rtsAudioInit() {
     var quarter = ctx.createGain(); quarter.gain.value = 0.25;
     master.connect(lid); lid.connect(quarter); quarter.connect(out); out.connect(ctx.destination);
   } catch (_e) { lid = null; out = null; master.connect(ctx.destination); }
-  var sfxBus = ctx.createGain(); sfxBus.gain.value = 0.6; sfxBus.connect(master);
-  var musBus = ctx.createGain(); musBus.gain.value = 0.28; musBus.connect(master);
+  var sfxBus = ctx.createGain(); sfxBus.gain.value = RTS_BUS_BASE.sfx * _rtsVol('sfx'); sfxBus.connect(master);
+  var musBus = ctx.createGain(); musBus.gain.value = RTS_BUS_BASE.mus * _rtsVol('mus'); musBus.connect(master);
 
   /* one second of white noise, reused by every noise-based effect */
   var nb = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
@@ -136,7 +163,7 @@ function _rtsMusicStart() {
      with the effects present and no score - and that is a normal state, not a failure. */
   if (typeof rtsSndMusicStart === 'function' && rtsSndMusicStart()) return;
   var A = _rtsA;
-  if (!A || A.music) return;
+  if (!A || A.music || !_rtsVol('mus')) return;
   try { _rtsMusicBegin(A); } catch (_e) {}
 }
 function _rtsMusicStop() {
