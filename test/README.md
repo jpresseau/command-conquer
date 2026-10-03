@@ -12,7 +12,19 @@ node test/run.js unit            # fast, no browser
 node test/run.js save touch      # anything matching either word
 node test/run.js --list          # what is there
 node test/run.js --no-build      # skip the rebuild (only if you just built)
+node test/run.js --failed        # only what failed last time
+node test/run.js --quiet         # failures and totals, not every passing spec's numbers
+node test/run.js --jobs=1        # one at a time
 ```
+
+Specs run **three at a time** (one fewer than the cores, up to three), longest first by how long
+each took last time - `test/.last-run.json`, written by every run and not committed. The full
+suite was 93 minutes when it ran one spec after another; a `--jobs=3` flag was passed to it for
+weeks and read by nothing. Each spec is its own process with its own browser and its own server
+on port 0, so they cannot see each other. Failures are printed again under the totals. A spec
+that asserts on milliseconds marks itself `@solo` in its opening comment and runs alone at the
+end (`e2e/grain`); anything else that fails only under load wants a wait on a condition, not a
+longer delay. `--list` shows the order a run will use.
 
 Each spec is a plain node file that builds a `Suite`, makes assertions, and hands it to
 `lib/report.js`. There is no framework to register with and nothing to install — the repo has no
@@ -63,8 +75,8 @@ because it reports confidently on code that is not there any more.
 renderer to the claims its own source makes: a 3×3 structure covers exactly 72×72 art pixels,
 alpha is 1-bit so the silhouette never feathers, visibility is a depth buffer and not a
 painter's algorithm (so shuffling the faces must give a byte-identical picture), backfaces are
-culled by winding, and `_r3FitSize` returns a square that no facing runs out of. It then puts
-the real shipped sprites through the same checks, and confirms a rebake is deterministic.
+culled by winding, and `_r3FitSize` returns a square that no facing runs out of. `e2e/r3dsprites`
+then puts the real shipped sprites through the same checks, and confirms a rebake is deterministic.
 
 `e2e/swupdate` is the one spec that does not use the shared server. It runs its own, which counts
 requests and whose **bytes can be changed while the browser is running** — the only honest way to
@@ -80,7 +92,7 @@ an event that reads its argument's house rather than its owner's. `RTS_TRIGGERS`
 the spec pushes a trigger, drives it, and takes it away again — which is the only way to reach the
 rules the shipped list never exercises.
 
-`e2e/navair` covers the two domains together, because sea and air are the same feature twice:
+`e2e/navsea` and `e2e/navair` cover the two domains, because sea and air are the same feature twice:
 units that move where nothing else can, held up entirely by restrictions. A ship that could drive
 onto land, a torpedo that could climb a beach, a tank that could shoot down a plane — each of them
 stops being a domain and becomes a strictly better land game. Every restriction is one `continue`
@@ -159,12 +171,16 @@ which tests the frame table without claiming anything about how the frames look.
 
 ## Size
 
-Source files are capped at 500 lines and `unit/layout` enforces it. Specs are not: a spec file is
-a unit of *reporting* — one line in the run, one narrative — and cutting one in half to hit a
-number splits an argument that was making sense. `decoders` was split because it was seven
-unrelated formats sharing nothing but a file; `e2e/navair` stays at 568 because sea and air are
-one argument made twice, and every section of it builds on the same live battle in the same
-browser. The question to ask is whether the file is one thing or several, not how long it is.
+Source files are capped at 500 lines and `unit/layout` enforces it - and test files are too, now.
+They used to be exempt, on the argument that a spec is one narrative and cutting it splits an
+argument; `e2e/navair` was kept whole at 696 lines because every section "builds on the same live
+battle". Very little of it did: split at the seam between the sea and the weapons, the one thing
+the second half took from the first was the survey of the coastline, which is now
+`lib/sea.js` and both halves run it; each opens its own match from the same seed and passes
+alone. And a long spec costs more than reading: the runner can only run specs side by side, so
+one long spec is a stretch of the run nothing can share.
+Split at a seam, each half able to run alone; the question is still whether a file is one thing
+or several, but past 500 lines it is almost always several.
 
 ## Adding one
 

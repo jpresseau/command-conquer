@@ -24,7 +24,7 @@ each one is there because the matching bug already shipped once.
 ## Tests — WRITE ONE
 
 ```
-NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node test/run.js
+NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node test/run.js   # 3 at a time; --failed reruns
 ```
 
 Rebuilds and runs everything; `test/README.md` has the details. **Every change gets a test**, and

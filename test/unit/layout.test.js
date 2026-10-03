@@ -125,6 +125,16 @@ S.ok('no source file is over ' + MAX_LINES + ' lines',
      !over.length,
      over.length ? over.map(function (r) { return r.f + ' (' + r.n + ')'; }).join(', ')
                  : 'largest is ' + sized[0].f + ' at ' + sized[0].n);
+/* THE SPECS TOO. The cap was only ever applied to the game, and two specs walked past it
+   (e2e/navair to 696 lines, e2e/r3d to 546) with nothing to say so. A spec is split the same way
+   a source file is - at a seam, each half able to run alone - and a smaller spec is also one the
+   parallel runner (test/run.js) can place beside the others. */
+var specFiles = walk('test', []).filter(function (f) { return !/\/_[^/]*$/.test(f); });
+var bigSpecs = specFiles.map(function (f) {
+  return { f: f, n: fs.readFileSync(path.join(ROOT, f), 'utf8').split('\n').length };
+}).filter(function (r) { return r.n > MAX_LINES; });
+S.ok('no test file is over ' + MAX_LINES + ' lines either', !bigSpecs.length,
+     bigSpecs.map(function (r) { return r.f + ' (' + r.n + ')'; }).join(', ') || specFiles.length + ' test files');
 S.note('top 5: ' + sized.slice(0, 5).map(function (r) {
   return r.f.replace(/^src\//, '') + ' ' + r.n;
 }).join(', '));
