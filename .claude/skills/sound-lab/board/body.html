@@ -1,0 +1,25 @@
+<div class="wrap">
+  <header>
+    <h1>Battlefield Sound Board</h1>
+    <p class="lede">The game's sound, new and old, side by side: the score at each intensity, and every effect. The new sounds are rendered here by the same code the game runs, with the same stereo placement, room and compressor; the old ones are the live synth they replace. Headphones make the stereo obvious.</p>
+    <div class="bar">
+      <button class="big new" id="skirmish">Play a skirmish</button>
+      <button class="big old" id="skirmishOld">Same skirmish, old sounds</button>
+      <span class="hint" id="status">Tap any button to start the audio.</span>
+    </div>
+  </header>
+  <section class="score"><h2>Music</h2>
+    <div class="deck">
+      <div class="row"><span class="lbl">Song</span><div class="seg" id="songSeg"></div></div>
+      <div class="row"><span class="lbl">Intensity</span><div class="seg" id="lvSeg"></div></div>
+      <div class="row"><button class="big new" id="musNew">Play the new score</button><button class="big old" id="musOld">Play the old loop</button><button class="big" id="musStop">Stop</button></div>
+      <div class="readout" id="musRead">Calm is the pad and an arpeggio; alert adds half-time drums and a driving bass; battle brings in the full kit, a distorted riff, brass and the tune. In the game the intensity follows the fighting you can hear.</div>
+    </div>
+  </section>
+  <section><h2>The world</h2><p class="hint">The loops under the guns. Each plays until you press it again; in the game they rise and fall with the weather and with what is moving on the screen.</p><div class="strips" id="g-loops"></div></section>
+  <section><h2>Weapons</h2><div class="strips" id="g-gun"></div></section>
+  <section><h2>Impacts and explosions</h2><div class="strips" id="g-boom"></div></section>
+  <section><h2>Interface and base</h2><div class="strips" id="g-ui"></div></section>
+  <section><h2>Weather</h2><div class="strips" id="g-world"></div></section>
+  <footer>Each New press plays a different take of the effect, at a slightly different pitch and level, the way the game does for a squad firing. Old sounds have no variation: every press is identical, which is half of what made them grate.</footer>
+</div>
