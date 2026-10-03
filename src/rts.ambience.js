@@ -78,9 +78,11 @@ function _rtsAmbNodes() {
   B.far = ctx.createGain(); B.far.gain.value = 0.32;
   var ff = ctx.createBiquadFilter(); ff.type = 'lowpass'; ff.frequency.value = 650;
   B.far.connect(ff); ff.connect(A.master);
-  /* THE ECHO: the effects' bus into a delay that feeds itself, dark, and up only at night */
+  /* THE ECHO: the effects' bus into a delay that feeds itself, dark, and up only at night - the
+     slap of a shot coming back off the far hills, a third of a second late and long enough to
+     stand clear of the room every effect already plays into (audio/mix.js) */
   var dl = ctx.createDelay(1.0), fb = ctx.createGain(), df = ctx.createBiquadFilter(), wet = ctx.createGain();
-  dl.delayTime.value = 0.23; fb.gain.value = 0.32; df.type = 'lowpass'; df.frequency.value = 1500; wet.gain.value = 0;
+  dl.delayTime.value = 0.34; fb.gain.value = 0.45; df.type = 'lowpass'; df.frequency.value = 1400; wet.gain.value = 0;
   A.sfx.connect(dl); dl.connect(df); df.connect(fb); fb.connect(dl); df.connect(wet); wet.connect(A.master);
   B.echo = { g: wet };
   B.t = 0; B.strike = -1;
@@ -96,7 +98,7 @@ function _rtsAmbWant(G) {
   w.rain = 0.11 * rain;
   w.wind = Math.min(0.26, 0.15 * Math.min(1, (S ? (S.snow || 0) + (S.banks || 0) : 0)) + 0.24 * (S ? S.sand || 0 : 0));
   w.ins = 0.035 * night * (1 - rain);
-  w.echo = 0.28 * night + (S && S.banks ? 0.08 : 0);
+  w.echo = 0.42 * night + (S && S.banks ? 0.08 : 0);
   var moving = 0, speed = 0, decks = 0, E = (G && G.ents) || [];
   for (var i = 0; i < E.length; i++) {
     var e = E[i];

@@ -54,7 +54,13 @@ function installProbe() {
     G.ents.forEach(function (e) { if (e.type === 'unit') e.path = null; });
     function tick() { G.t += 0.05; _rtsAmbTick(0.25); }
     function sky(s) { window.RTS_SKY_FORCE = s; }
-    var settle = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    /* until the room is quiet - every shot here has a tail and a room now - or eight seconds */
+    var settle = function () {
+      var t0 = Date.now();
+      return new Promise(function (r) {
+        (function again() { window._amListen(150).then(function (m) { if (m.peak < 0.004 || Date.now() - t0 > 8000) r(); else again(); }); })();
+      });
+    };
 
     sky('day'); await window._amListen(900, tick);
     o.day = await window._amListen(700, tick);
@@ -85,18 +91,19 @@ function installProbe() {
     var vs = _rtsViewSpan(), wv = vs.cw || vs.w;
     function shot(dx) { return window._amListen(700, null).then(function (m) { return m; }); }
     var near = window._amListen(700); _rtsSfx('cannon', R.focus.x, R.focus.z); o.near = await near;
-    await settle(600);
+    await settle();
     var mid = window._amListen(700); _rtsSfx('cannon', R.focus.x + wv * 1.3, R.focus.z); o.mid = await mid;
-    await settle(600);
+    await settle();
     var gone = window._amListen(700); _rtsSfx('cannon', R.focus.x + wv * 5, R.focus.z); o.gone = await gone;
-    await settle(600);
+    await settle();
 
     /* ECHO: the same shot by day and at night, and how long it rings */
     function tail(m) { var t = m.trail, peak = Math.max.apply(null, t), n = 0; for (var k = 0; k < t.length; k++) if (t[k] > peak * 0.05) n = k; return n; }
-    var dy = window._amListen(1400, tick); _rtsSfx('cannon', R.focus.x, R.focus.z); var dyM = await dy;
-    sky('night'); await window._amListen(1800, tick); await settle(300);
+    await settle();
+    var dy = window._amListen(3200, tick); _rtsSfx('cannon', R.focus.x, R.focus.z); var dyM = await dy;
+    sky('night'); await window._amListen(1800, tick); await settle();
     A.amb.ins.g.gain.value = 0; A.amb.ins.g.gain.cancelScheduledValues(A.ctx.currentTime);   /* the insects would drown the measure */
-    var nt = window._amListen(1400); _rtsSfx('cannon', R.focus.x, R.focus.z); var ntM = await nt;
+    var nt = window._amListen(3200); _rtsSfx('cannon', R.focus.x, R.focus.z); var ntM = await nt;
     o.echo = [tail(ntM), tail(dyM)];
     window.RTS_SKY_FORCE = undefined;
     return o;

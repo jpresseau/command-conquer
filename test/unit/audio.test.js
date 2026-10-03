@@ -27,7 +27,7 @@ var { load, read: srcText } = require('../lib/sandbox.js');
 
 var S = new Suite('audio');
 var ROOT = path.resolve(__dirname, '..', '..');
-var g = load(['ra/sndtab.js', 'src/rts.audio.js', 'src/rts.sound.js']);
+var g = load(['ra/sndtab.js', 'src/audio', 'src/rts.audio.js', 'src/rts.sound.js']);
 var TAB = g.RA_SNDTAB || {};
 
 S.note(Object.keys(TAB).length + ' sounds identified in the archives, ' +
@@ -160,11 +160,9 @@ checkNames('the infantry death cries', g.RTS_DEATH_CRIES);
        unresolved.join(', ') + ' - these are checked at runtime by e2e/audio instead')
     : 'every call site names its sound literally');
 
-  var audio = srcText('src/rts.audio.js');
+  /* what can be played: every effect there is a recipe for (audio/recipes.js) */
   var handled = {};
-  (audio.match(/name === '([a-z0-9]+)'/g) || []).forEach(function (s) {
-    handled[s.replace(/.*'([a-z0-9]+)'.*/, '$1')] = 1;
-  });
+  g.rtsSfxNames().forEach(function (n) { handled[n] = 1; });
 
   var names = Object.keys(asked).sort();
   S.ok('the source dispatches a recognisable set of effect names', names.length >= 10,

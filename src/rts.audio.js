@@ -1,13 +1,16 @@
-/* RED ALERT - audio. Everything here is SYNTHESIZED at runtime with WebAudio: there is not
-   a single sampled asset in the app, from any game or anywhere else. Weapons are shaped noise
-   and pitch-swept oscillators, the music is a sequenced drum machine plus a bass and lead
-   through a waveshaper.
+/* RED ALERT - audio. Everything here is SYNTHESIZED: there is not a single sampled asset in the
+   app, from any game or anywhere else. The effects are rendered ahead of time from layered
+   recipes (audio/recipes.js, audio/dsp.js) into a bank of takes (audio/bank.js) and played
+   through a mixer with stereo position, a room and a compressor (audio/mix.js); the music is a
+   sequenced drum machine plus a bass and lead through a waveshaper.
 
    Two rules keep it from turning into mush during a big fight:
-   - Sounds are positional in the loosest sense: an event outside the visible map area is
-     simply not played. Forty units firing across the map would otherwise be a wall of noise.
+   - Sounds are positional: an event outside the visible map area is not played at full voice
+     (a little way off it is heard muffled, rts.ambience.js), and one on screen is placed left
+     or right by where it is.
    - Every effect name has a minimum retrigger gap, so a squad firing in unison makes one
-     satisfying crack rather than eight phase-cancelling ones. */
+     satisfying crack rather than eight phase-cancelling ones - and past the gap, the mixer
+     caps how many play at once (RTS_VOICE_MAX). */
 
 var _rtsA = null;
 
@@ -17,17 +20,36 @@ function _rtsAudioInit() {
   if (!AC) return null;
   var ctx;
   try { ctx = new AC(); } catch (_e) { return null; }
-  var master = ctx.createGain(); master.gain.value = 0.9; master.connect(ctx.destination);
-  var sfxBus = ctx.createGain(); sfxBus.gain.value = 0.85; sfxBus.connect(master);
-  var musBus = ctx.createGain(); musBus.gain.value = 0.34; musBus.connect(master);
+  var master = ctx.createGain(); master.gain.value = 0.9;
+  /* THE LID: everything passes a compressor on its way out, then a soft clip, so a barrage is
+     loud and stays clean. The clip is not optional: a compressor alone let sixty simultaneous
+     effects out at 1.5 - its attack is slower than a gunshot's, and Chrome adds makeup gain -
+     where the clip rounds whatever is left over under full scale and leaves anything quieter
+     than about half of it untouched (e2e/sfxmix). */
+  var lid = null, out = null;
+  try {
+    lid = ctx.createDynamicsCompressor();
+    lid.threshold.value = -12; lid.knee.value = 8; lid.ratio.value = 4;
+    lid.attack.value = 0.003; lid.release.value = 0.25;
+    out = ctx.createWaveShaper();
+    var cn = 2048, cv = new Float32Array(cn);
+    /* the shaper's input runs -1..1; it stands for -4..4, so the gain in front is a quarter */
+    for (var ci = 0; ci < cn; ci++) { var cx = (ci / (cn - 1) * 2 - 1) * 4; cv[ci] = Math.abs(cx) < 0.5 ? cx : (cx < 0 ? -1 : 1) * (0.5 + 0.49 * Math.tanh((Math.abs(cx) - 0.5) / 0.49)); }
+    out.curve = cv; out.oversample = '4x';
+    var quarter = ctx.createGain(); quarter.gain.value = 0.25;
+    master.connect(lid); lid.connect(quarter); quarter.connect(out); out.connect(ctx.destination);
+  } catch (_e) { lid = null; out = null; master.connect(ctx.destination); }
+  var sfxBus = ctx.createGain(); sfxBus.gain.value = 0.6; sfxBus.connect(master);
+  var musBus = ctx.createGain(); musBus.gain.value = 0.28; musBus.connect(master);
 
   /* one second of white noise, reused by every noise-based effect */
   var nb = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
   var nd = nb.getChannelData(0);
   for (var i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
 
-  _rtsA = { ctx:ctx, master:master, sfx:sfxBus, mus:musBus, noise:nb,
+  _rtsA = { ctx:ctx, master:master, lid:lid, out:out, sfx:sfxBus, mus:musBus, noise:nb,
     last:{}, muted:false, music:null, t0:0 };
+  try { _rtsMixInit(_rtsA); _rtsBankIdle(_rtsA); } catch (_e) {}
   return _rtsA;
 }
 function _rtsAudioResume() {
@@ -43,35 +65,6 @@ function rtsMuteToggle() {
 }
 
 /* ---------------------------------------------------------------- helpers */
-function _rtsNoiseSrc(dur, type, f0, f1, q) {
-  var A = _rtsA, ctx = A.ctx, t = ctx.currentTime;
-  var s = ctx.createBufferSource(); s.buffer = A.noise; s.loop = true;
-  var f = ctx.createBiquadFilter(); f.type = type || 'bandpass';
-  f.frequency.setValueAtTime(f0, t);
-  if (f1 != null) f.frequency.exponentialRampToValueAtTime(Math.max(30, f1), t + dur);
-  f.Q.value = q == null ? 1 : q;
-  s.connect(f);
-  return { src:s, node:f };
-}
-function _rtsEnv(dur, peak, attack) {
-  var A = _rtsA, ctx = A.ctx, t = ctx.currentTime;
-  var g = ctx.createGain();
-  var a = attack == null ? 0.004 : attack;
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + a);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  return g;
-}
-function _rtsTone(type, f0, f1, dur, peak) {
-  var A = _rtsA, ctx = A.ctx, t = ctx.currentTime;
-  var o = ctx.createOscillator(); o.type = type || 'sine';
-  o.frequency.setValueAtTime(f0, t);
-  if (f1 != null) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
-  var g = _rtsEnv(dur, peak == null ? 0.3 : peak);
-  o.connect(g);
-  o.start(t); o.stop(t + dur + 0.02);
-  return g;
-}
 /* NB: named _rtsWaveShaper, not _rtsDist - src/core already owns _rtsDist (distance
    between two entities). Everything here shares one global namespace, and core loads later,
    so the collision silently replaced this function and killed the music with a type error. */
@@ -126,141 +119,24 @@ function _rtsSfx(name, x, z) {
     var tf = A.ctx.currentTime, kf = name + '@far';
     if (A.last[kf] != null && tf - A.last[kf] < _RTS_SFX_GAP[name] * 3) return;
     A.last[kf] = tf;
-    try { _rtsSfxPlay(name, tf, B.far); } catch (_e) {}
+    try { _rtsSfxPlay(name, tf, B.far, x, z); } catch (_e) {}
     return;
   }
   var now = A.ctx.currentTime, gap = _RTS_SFX_GAP[name] || 0.02;
   if (A.last[name] != null && now - A.last[name] < gap) return;
   A.last[name] = now;
-  try { _rtsSfxPlay(name, now); } catch (_e) {}
+  try { _rtsSfxPlay(name, now, null, x, z); } catch (_e) {}
 }
 
-function _rtsSfxPlay(name, t, via) {
-  var A = _rtsA, ctx = A.ctx, out = via || A.sfx, n, g;
-
-  /* The player's own sound, if they have it and this effect has a counterpart. Everything
-     below stays exactly as it was and is what plays otherwise - see src/rts.sound.js. A sound
-     sent somewhere else (the far bus) is synthesized: a sample cannot be routed there. */
+/* One effect, now: the player's own sample if they have one, else a rendered take from the bank,
+   through the mixer - from (x, z) on the map if it has a place there. */
+function _rtsSfxPlay(name, t, via, x, z) {
+  var A = _rtsA;
+  /* The player's own sound, if they have it and this effect has a counterpart - see
+     src/rts.sound.js. A sound sent somewhere else (the far bus) is always the rendered one. */
   if (!via && typeof _rtsSndTry === 'function' && _rtsSndTry(name)) return;
-
-  if (name === 'thunder') {                     /* a crack, then a long low roll (rts.ambience.js) */
-    n = _rtsNoiseSrc(0.35, 'bandpass', 1800, 300, 0.7);
-    g = _rtsEnv(0.35, 1.1, 0.004); n.node.connect(g); g.connect(out);
-    n.src.start(t); n.src.stop(t + 0.4);
-    var roll = _rtsNoiseSrc(4.5, 'lowpass', 260, 70, 0.9), rg = ctx.createGain();
-    rg.gain.setValueAtTime(0.0001, t); rg.gain.exponentialRampToValueAtTime(1.6, t + 0.5);
-    rg.gain.exponentialRampToValueAtTime(0.0001, t + 4.5);
-    roll.node.connect(rg); rg.connect(out); roll.src.start(t + 0.05); roll.src.stop(t + 4.6);
-    return;
-  }
-
-  if (name === 'rifle') {                       /* dry snap + a little body */
-    n = _rtsNoiseSrc(0.09, 'bandpass', 2400, 900, 1.1);
-    g = _rtsEnv(0.09, 0.32); n.node.connect(g); g.connect(out);
-    n.src.start(t); n.src.stop(t + 0.11);
-    _rtsTone('square', 260, 90, 0.05, 0.09).connect(out);
-
-  } else if (name === 'mg') {                   /* faster, thinner, higher */
-    n = _rtsNoiseSrc(0.055, 'bandpass', 3200, 1500, 1.4);
-    g = _rtsEnv(0.055, 0.22); n.node.connect(g); g.connect(out);
-    n.src.start(t); n.src.stop(t + 0.07);
-
-  } else if (name === 'cannon') {               /* deep thump + crack */
-    _rtsTone('sine', 150, 38, 0.34, 0.55).connect(out);
-    n = _rtsNoiseSrc(0.22, 'lowpass', 1700, 260, 0.8);
-    g = _rtsEnv(0.22, 0.4); n.node.connect(g); g.connect(out);
-    n.src.start(t); n.src.stop(t + 0.24);
-
-  } else if (name === 'turretgun') {
-    _rtsTone('sine', 200, 60, 0.24, 0.42).connect(out);
-    n = _rtsNoiseSrc(0.16, 'bandpass', 2100, 700, 1.0);
-    g = _rtsEnv(0.16, 0.3); n.node.connect(g); g.connect(out);
-    n.src.start(t); n.src.stop(t + 0.18);
-
-  } else if (name === 'rocket') {               /* whoosh: noise sweeping upward */
-    n = _rtsNoiseSrc(0.42, 'bandpass', 380, 2600, 2.2);
-    g = _rtsEnv(0.42, 0.3, 0.05); n.node.connect(g); g.connect(out);
-    n.src.start(t); n.src.stop(t + 0.44);
-    _rtsTone('sawtooth', 120, 300, 0.3, 0.08).connect(out);
-
-  } else if (name === 'boom') {                 /* structure destroyed */
-    _rtsTone('sine', 110, 26, 0.85, 0.75).connect(out);
-    n = _rtsNoiseSrc(0.75, 'lowpass', 1300, 120, 0.7);
-    g = _rtsEnv(0.75, 0.6, 0.01); n.node.connect(g); g.connect(out);
-    n.src.start(t); n.src.stop(t + 0.8);
-
-  } else if (name === 'pop') {                  /* unit destroyed */
-    _rtsTone('sine', 190, 50, 0.3, 0.4).connect(out);
-    n = _rtsNoiseSrc(0.26, 'lowpass', 1500, 300, 0.8);
-    g = _rtsEnv(0.26, 0.34); n.node.connect(g); g.connect(out);
-    n.src.start(t); n.src.stop(t + 0.28);
-
-  } else if (name === 'hit') {
-    n = _rtsNoiseSrc(0.11, 'bandpass', 1500, 500, 1.6);
-    g = _rtsEnv(0.11, 0.18); n.node.connect(g); g.connect(out);
-    n.src.start(t); n.src.stop(t + 0.13);
-
-  } else if (name === 'splash') {               /* a round landing in water */
-    /* _rtsImpact picks this kind for ANY shot that lands on water and dispatched it to a name
-       nothing here handled, so it fell through every branch and returned. Every round fired
-       into the sea landed in silence, and nothing reported it - there is no else, no warning
-       and no throw, which is why it survived: naval fights were half mute for one missing
-       branch.
-
-       Water is the opposite shape to an impact on ground - no crack. A low-passed burst that
-       falls away, over a short downward tone for the gulp. The attack is slower than 'hit' and
-       there is no high content to snap. */
-    n = _rtsNoiseSrc(0.30, 'lowpass', 1600, 300, 0.8);
-    g = _rtsEnv(0.30, 0.24, 0.012); n.node.connect(g); g.connect(out);
-    n.src.start(t); n.src.stop(t + 0.32);
-    _rtsTone('sine', 420, 150, 0.16, 0.12).connect(out);
-
-  } else if (name === 'select') {               /* crisp UI blip */
-    _rtsTone('square', 880, 1320, 0.06, 0.12).connect(out);
-
-  } else if (name === 'order') {                /* two-tone acknowledge */
-    _rtsTone('square', 620, 620, 0.045, 0.11).connect(out);
-    setTimeout(function () { try { _rtsTone('square', 930, 930, 0.05, 0.1).connect(out); } catch (_e) {} }, 55);
-
-  } else if (name === 'click') {
-    _rtsTone('square', 520, 380, 0.04, 0.1).connect(out);
-
-  } else if (name === 'build') {                /* production started */
-    _rtsTone('sawtooth', 150, 300, 0.2, 0.16).connect(out);
-
-  } else if (name === 'place') {                /* building slammed down */
-    _rtsTone('sine', 120, 40, 0.4, 0.6).connect(out);
-    n = _rtsNoiseSrc(0.3, 'lowpass', 900, 180, 0.7);
-    g = _rtsEnv(0.3, 0.35); n.node.connect(g); g.connect(out);
-    n.src.start(t); n.src.stop(t + 0.32);
-
-  } else if (name === 'ready') {                /* construction complete */
-    [660, 880, 1320].forEach(function (f, i) {
-      setTimeout(function () {
-        try { _rtsTone('triangle', f, f, 0.16, 0.16).connect(out); } catch (_e) {}
-      }, i * 90);
-    });
-
-  } else if (name === 'unitready') {
-    [520, 780].forEach(function (f, i) {
-      setTimeout(function () {
-        try { _rtsTone('triangle', f, f, 0.11, 0.13).connect(out); } catch (_e) {}
-      }, i * 80);
-    });
-
-  } else if (name === 'alert') {                /* incoming attack */
-    [0, 260, 520].forEach(function (d) {
-      setTimeout(function () {
-        try { _rtsTone('sawtooth', 440, 300, 0.2, 0.22).connect(out); } catch (_e) {}
-      }, d);
-    });
-
-  } else if (name === 'lowpower') {
-    _rtsTone('sawtooth', 200, 120, 0.5, 0.16).connect(out);
-
-  } else if (name === 'deny') {
-    _rtsTone('square', 200, 130, 0.16, 0.16).connect(out);
-  }
+  var buf = _rtsBankPick(A, name);
+  if (buf) _rtsVoice(A, name, buf, x, z, via);
 }
 
 /* ------------------------------------------------------------------ music --
