@@ -288,6 +288,8 @@ function _rtsPickAt(mx, my) {
     var e = G.ents[i];
     if (e.dead || !_rtsEntSeen(e)) continue;     /* you cannot click what you cannot see */
     var rad, d = Math.hypot(e.x - p.x, e.z - p.z);
+    /* an aircraft is measured where it is drawn, in world units on the screen (render/camera.js) */
+    if (e.air) { var sc = _rtsScreenOf(e); d = sc.behind ? 1e9 : Math.hypot(sc.x - mx, sc.y - my) / _rtsPxPerUnit(e); }
     if (e.type === 'struct') { var sd = rtsStructDef(e.def); rad = Math.max(sd.w, sd.h) * RTS_TILE * 0.55; }
     else rad = Math.max(2.2, e.r * 1.6);
     if (d <= rad && d < bd) { bd = d; best = e; }

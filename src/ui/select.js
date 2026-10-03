@@ -10,7 +10,7 @@ function _rtsIsArmy(e) { return !!e && !e.dead && !e.inside && e.side === 'playe
 /* On screen right now. DISPLAY.CPP scopes double-click selection to the tactical view - it is
    "all the ones I can see", not "all the ones I own"; select-all is the command for that. */
 function _rtsOnScreen(e) {
-  var s = _rtsWorldToScreen(e.x, 1, e.z);
+  var s = _rtsScreenOf(e);
   return !s.behind && s.x >= 0 && s.x <= _rtsR.W && s.y >= 0 && s.y <= _rtsR.H;
 }
 
@@ -116,7 +116,7 @@ function _rtsBoxSelect(dg) {
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (!_rtsIsArmy(e)) continue;                    /* box only grabs your own units */
-    var s = _rtsWorldToScreen(e.x, 1, e.z);
+    var s = _rtsScreenOf(e);                         /* where it is drawn: an aircraft is lifted */
     if (s.behind) continue;
     if (s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1 && G.sel.indexOf(e) < 0) G.sel.push(e);
   }

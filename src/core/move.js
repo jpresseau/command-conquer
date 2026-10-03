@@ -1,13 +1,14 @@
 /* core/move.js - getting there: aircraft, path requests, steering and unit separation.
    Part of rts.core, the simulation. */
 
+/* the nearest pad - a free one ahead of a busy one, however much further (core/airspace.js) */
 function _rtsRearmPad(e) {
   var G = window._rtsG, best = null, bd = 1e9;
   for (var i = 0; i < G.ents.length; i++) {
     var b = G.ents[i];
     if (b.dead || b.building || b.type !== 'struct' || b.side !== e.side) continue;
     if (!(rtsStructDef(b.def) || {}).rearm) continue;
-    var dd = Math.hypot(b.x - e.x, b.z - e.z);
+    var dd = Math.hypot(b.x - e.x, b.z - e.z) + (_rtsPadBusy(b, e) ? 1e5 : 0);
     if (dd < bd) { bd = dd; best = b; }
   }
   return best;
@@ -28,10 +29,13 @@ function _rtsAirTick(e, dt, d) {
     return true;
   }
   e.target = null;
-  if (Math.hypot(pad.x - e.x, pad.z - e.z) <= RTS_TILE * 1.4) {
+  var dp = Math.hypot(pad.x - e.x, pad.z - e.z), busy = _rtsPadBusy(pad, e);
+  if (dp <= RTS_TILE * 1.4 && !busy) {
     e.path = null; e.goal = null; e.rearming = d.rearm || 6;
     return true;
   }
+  /* ONE ON A PAD AT A TIME: the rest wait beside it, hovering, for their turn */
+  if (busy && dp <= RTS_PAD_WAIT) { e.path = null; e.goal = null; e.order = 'rearm'; return true; }
   if (!e.path || !e.goal || Math.hypot(pad.x - e.goal.x, pad.z - e.goal.z) > RTS_TILE) {
     e.order = 'rearm'; e.goal = { x:pad.x, z:pad.z };
     e.path = _rtsPathFor(e, pad.x, pad.z); e.pi = 0;
