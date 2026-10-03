@@ -143,19 +143,22 @@ S.note(UNITS.length + ' units, ' + STRUCTS.length + ' structures, ' +
   S.ok('every weapon named by a unit or building exists', !missing.length,
        missing.join('; ') || 'all resolve');
 
-  /* Damage is looked up per armour class; a class with no entry silently deals nothing. */
+  /* Damage is looked up per armour class (rtsVerses), and a class the table does not mention
+     takes 1 - the original's rule - so a gap or a misspelt class is full damage, silently. This
+     read `.vs` for a long time, a field no weapon has, and so checked nothing at all. */
   var classes = {};
   UNITS.concat(STRUCTS).forEach(function (d) { if (d.armour) classes[d.armour] = 1; });
-  var gaps = [];
+  var gaps = [], rated = 0, stray = Object.keys(classes).filter(function (c) { return g.RTS_ARMOUR.indexOf(c) < 0; });
   Object.keys(WEAPONS).forEach(function (w) {
-    var vs = WEAPONS[w].vs;
+    var vs = WEAPONS[w].verses;
     if (!vs) return;
-    Object.keys(classes).forEach(function (c) {
-      if (vs[c] === undefined) gaps.push(w + ' has no entry for armour "' + c + '"');
-    });
+    rated++;
+    g.RTS_ARMOUR.forEach(function (c) { if (vs[c] === undefined) gaps.push(w + ' has no entry for armour "' + c + '"'); });
+    Object.keys(vs).forEach(function (c) { if (g.RTS_ARMOUR.indexOf(c) < 0) gaps.push(w + ' rates "' + c + '", which is no armour class'); });
   });
-  S.ok('every weapon rates every armour class in use', !gaps.length,
-       gaps.slice(0, 6).join('; ') || Object.keys(classes).sort().join(', '));
+  S.ok('every weapon rates every armour class, and nothing that is not one', rated === Object.keys(WEAPONS).length && !gaps.length,
+       gaps.slice(0, 6).join('; ') || rated + ' weapons x ' + g.RTS_ARMOUR.join(', '));
+  S.ok('...and every unit and building wears a class there is', !stray.length, stray.join(', ') || Object.keys(classes).sort().join(', '));
 })();
 
 /* ------------------------------------------------------------------ production ----
