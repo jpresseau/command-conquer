@@ -41,6 +41,10 @@ before writing it.
    - Tracked hulls use `X.tracks(...)`. Smooth geometry, as everywhere.
    - Optional tables: `RTS_UNIT_SPAN` (its size on screen), `RTS_TURRETED` (`src/sprites/props.js`,
      a separate turret and the muzzle reach) and `RTS_AIR_PARTS` (`rotor`, `prop` or `burner`).
+     A helicopter with two rotors lists their hubs in `rotors`. Its part `'rotor'` is ONE rotor
+     at the origin, and `unit/motion` holds body + a rotor at each hub to the whole sprite.
+   - An unarmed aircraft never rearms. A transport (`carries`) sets down while idle (see the
+     `chinook` spec).
    - **Infantry** also needs `RTS_INF_KIT` colours, a branch in `_r3dSoldierModel`
      (`render3d/soldier3d.js`) and props in `crawl3d.js`. `unit/soldier` holds 3D against sprite
      height to within 20%.
@@ -59,8 +63,8 @@ before writing it.
      (`src/rts.sound.js`), and its lines must resolve in `ra/sndtab.js` (`unit/audio`).
    - The engine loop is picked in `src/rts.ambience.js`: tracked (`RTS_CRUSHERS`, `apc`, `mcv`)
      plays `tracks`, other ground units play `wheels`, ships play `boat`.
-   - **An aircraft plays `jet` unless it is `heli`.** A new helicopter needs that line widened to
-     a rotor test. Use `air` parts, not the key.
+   - An aircraft plays `rotor` if its `RTS_AIR_PARTS` entry has `rotor`, otherwise `jet`
+     (`_rtsAmbRotor`).
    - Use the `sound-lab` skill for any new effect.
 7. **Optional extras**:
    - `RTS_CRATE_UNITS` (`src/rules/crates.js`): an armed, harvesting or deployable unit only.
@@ -90,9 +94,10 @@ before writing it.
    - Each side needs at least two buildable defences in the order.
 4. **Production** has hand-kept producers in `src/core/production.js`:
    - The queue gate is `barracks` / `factory` / `navalyard` / `subpen`.
-   - Units spawn at `barracks` or `factory`. **Aircraft spawn from the factory**, not the pad.
-   - A new `produces:` building is counted for the build rate, but it is not a queue gate or a
-     spawn point until these lines learn about it.
+   - Units spawn at `barracks` or `factory`. Aircraft spawn over a `produces:'air'` pad
+     (`_rtsAirPadFor`): one their `needs` names first, then a free one.
+   - A new `produces:` building for any other category is counted for the build rate, but it is
+     not a queue gate or a spawn point until these lines learn about it.
 5. **Red Alert art** (`RTS_MIX_BLD`) is optional.
 
 ## Prove it

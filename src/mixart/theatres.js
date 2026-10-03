@@ -136,7 +136,7 @@ var RTS_MIX_BLD = {
 };
 var RTS_MIX_UNIT = {
   buggy:'jeep', light:'1tnk', tank:'2tnk', heavy:'4tnk', arty:'arty', v2rl:'v2rl',
-  harvester:'harv', apc:'apc', mcv:'mcv', heli:'heli', mig:'mig', yak:'yak',
+  harvester:'harv', apc:'apc', mcv:'mcv', heli:'heli', tran:'tran', mig:'mig', yak:'yak',
   rifle:'e1', rocket:'e3', grenadier:'e2', flame:'e4', engineer:'e6',
   medic:'medi', thief:'thf', tanya:'e7', dog:'dog',
   /* THE FLEET. Absent, so with the player's own files loaded a real Naval Yard launched

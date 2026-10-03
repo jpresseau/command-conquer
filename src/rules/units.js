@@ -110,6 +110,15 @@ var RTS_UNITS = [
     needs:['helipad'], air:true, ammo:8, rearm:6, alt:14,
     side:'allied', armour:'light',
     desc:'Flies over anything. Eight missiles, then it must return to a pad to reload.' },
+  /* The Chinook (RA's TRAN). The verb is the one no ground transport has: five men put down on
+     the far side of a channel, a cliff or a wall, where no road reaches. Unarmed, so it never
+     goes home to reload (core/move.js), and slower and thinner-skinned than the Attack Heli -
+     it is a lift, and a lift caught over the enemy's guns is five men lost with it. It settles
+     onto the ground while it waits, to take men on or put them off (core/airspace.js). */
+  { key:'tran',     name:'Chinook',       kind:'air',      cost:1000, build:12, hp:140,  speed:18,  turn:3.5,r:1.9, sight:16, weapon:null,
+    needs:['helipad'], air:true, alt:14, carries:5, takes:['infantry'],
+    side:'allied', armour:'light',
+    desc:'Carries five infantry over water, cliffs and walls. Unarmed - keep it away from the guns.' },
   /* THE TWO SOVIET AIRCRAFT, and they do different jobs on purpose - two planes that both kill
      tanks would be one plane with two names.
 

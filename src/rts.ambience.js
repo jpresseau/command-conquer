@@ -96,6 +96,12 @@ function _rtsAmbLoad(A, B, ms) {
 /* vehicles on tracks, not wheels: the hulls that crush infantry (rules/vehicles.js), the APC and
    the MCV - UDATA.CPP's tracked set */
 function _rtsAmbTracked(def) { return !!(RTS_CRUSHERS[def] || def === 'apc' || def === 'mcv'); }
+/* a rotor is a helicopter, whichever one: read off the model's own parts (sprites/unit-airsea.js),
+   so the Chinook beats the air like the Attack Heli instead of roaring like a MiG */
+function _rtsAmbRotor(def) {
+  if (typeof RTS_AIR_PARTS !== 'undefined') return !!(RTS_AIR_PARTS[def] && RTS_AIR_PARTS[def].rotor);
+  return def === 'heli';
+}
 
 /* What the bed should be playing now, from the game - pure, so it can be asked without a sound
    card: the gains, and how fast the engines run. The gains are for the rendered loops, which sit
@@ -123,7 +129,7 @@ function _rtsAmbWant(G) {
     if (e.type !== 'unit') continue;
     var d = rtsUnitDef(e.def);
     if (!d || !_rtsAudible(e.x, e.z)) continue;
-    if (d.kind === 'air') { if ((e.alt || 0) > 1) n[e.def === 'heli' ? 'rotor' : 'jet']++; continue; }
+    if (d.kind === 'air') { if ((e.alt || 0) > 1) n[_rtsAmbRotor(e.def) ? 'rotor' : 'jet']++; continue; }
     if (!e.path) continue;
     if (d.kind === 'ship' || d.sea) { n.boat++; continue; }
     if (d.kind !== 'vehicle') continue;

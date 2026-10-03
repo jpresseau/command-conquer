@@ -975,7 +975,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">14f6378 · 2026-10-03</div>
+  <div id="rtsBuild" title="build">203dfdc · 2026-10-03</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -3250,6 +3250,15 @@ var RTS_UNITS = [
     needs:['helipad'], air:true, ammo:8, rearm:6, alt:14,
     side:'allied', armour:'light',
     desc:'Flies over anything. Eight missiles, then it must return to a pad to reload.' },
+  /* The Chinook (RA's TRAN). The verb is the one no ground transport has: five men put down on
+     the far side of a channel, a cliff or a wall, where no road reaches. Unarmed, so it never
+     goes home to reload (core/move.js), and slower and thinner-skinned than the Attack Heli -
+     it is a lift, and a lift caught over the enemy's guns is five men lost with it. It settles
+     onto the ground while it waits, to take men on or put them off (core/airspace.js). */
+  { key:'tran',     name:'Chinook',       kind:'air',      cost:1000, build:12, hp:140,  speed:18,  turn:3.5,r:1.9, sight:16, weapon:null,
+    needs:['helipad'], air:true, alt:14, carries:5, takes:['infantry'],
+    side:'allied', armour:'light',
+    desc:'Carries five infantry over water, cliffs and walls. Unarmed - keep it away from the guns.' },
   /* THE TWO SOVIET AIRCRAFT, and they do different jobs on purpose - two planes that both kill
      tanks would be one plane with two names.
 
@@ -8693,7 +8702,7 @@ function _sprBuildingClean(key, side) {
    hundred hand-tuned coordinates, and it cannot silently change the unit's proportions. */
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
-  dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40
+  dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -9226,6 +9235,9 @@ function _sprUnitGround(X, key) {
    the contrails come off. */
 var RTS_AIR_PARTS = {
   heli: { rotor: true },
+  /* `rotors`: where along the body each copy of part 'rotor' turns, when there is more than one
+     (render3d/unit3d.js). The Chinook's two are the same rotor, so one mesh is drawn twice. */
+  tran: { rotor: true, rotors: [8.4, -8.4] },
   mig:  { burner: [-9.6, 4.4, 0], tips: 9.6, trail: true },
   yak:  { prop: [8.4, 4.1, 0, 5.4], tips: 10.6 }
 };
@@ -9273,6 +9285,40 @@ function _sprUnitAirSea(X, key) {
     _r3Cyl(m, 6.8, 1.6, 0, 1.2, 1.6, DK[0], DK[2], 10);            /* chin sensor ball */
     _r3Box(m, 2.6, 1.2, 0, 1.1, 1.2, 6.6, S[1], S[0]);             /* skid cross-tubes */
     _r3Box(m, -2.6, 1.2, 0, 1.1, 1.2, 6.6, S[1], S[0]);
+
+  } else if (key === 'tran') {
+    /* The Chinook. What has to read at this size is what no other aircraft has: a long boxy
+       hull with a ROTOR AT EACH END and the back one raised on its pylon, and no tail boom.
+       It is the helicopter you can see is a bus. (y is the bottom of a box or a cylinder.) */
+    var _rot = function (rx) {                                      /* one rotor: mast, hub, blades */
+      _r3Cyl(m, rx, 8.4, 0, 0.6, 1.8, GN[1], GN[3], 16);
+      _r3Cyl(m, rx, 9.6, 0, 1.1, 0.6, GN[1], GN[3], 16);
+      _r3Box(m, rx, 10.2, 0, 24.0, 0.5, 1.3, DK[1], DK[3]);
+      _r3Box(m, rx, 10.2, 0, 1.3, 0.5, 24.0, DK[1], DK[3]);
+    };
+    if (part === 'rotor') { _rot(0); return true; }
+    if (part !== 'body') { _rot(8.4); _rot(-8.4); }                 /* the sprite: both rotors */
+    _r3Box(m, 0, 1.4, 0, 21.0, 5.6, 5.6, VH[0], VH[1]);            /* fuselage */
+    _r3Box(m, 11.4, 1.6, 0, 2.4, 4.4, 5.0, VH[1], VH[3]);          /* nose */
+    _r3Box(m, 12.3, 4.0, 0, 1.0, 2.0, 4.2, RTS_PAL.glass, RTS_PAL.glass);   /* windscreen */
+    _r3Box(m, 8.4, 7.0, 0, 4.2, 1.6, 3.4, VH[2], VH[1]);           /* forward pylon */
+    _r3Box(m, -8.4, 7.0, 0, 6.0, 2.8, 4.2, VH[1], VH[3]);          /* aft pylon, raised */
+    _r3Box(m, -6.2, 7.0, -3.2, 6.2, 2.0, 1.6, VH[2], VH[1]);       /* engine pods beside it */
+    _r3Box(m, -6.2, 7.0, 3.2, 6.2, 2.0, 1.6, VH[2], VH[1]);
+    _r3Cyl(m, -9.6, 7.4, -3.2, 0.7, 1.4, DK[1], DK[3], 16);        /* exhausts */
+    _r3Cyl(m, -9.6, 7.4, 3.2, 0.7, 1.4, DK[1], DK[3], 16);
+    _r3Box(m, -11.4, 0.8, 0, 1.8, 3.6, 5.0, DK[0], DK[2]);         /* rear ramp */
+    _r3Box(m, 0, 7.0, 0, 9.0, 0.5, 2.4, TM[1], TM[3]);             /* team stripe along the spine */
+    _r3Box(m, 2.0, 1.0, -3.1, 14.0, 1.6, 0.8, VH[2], VH[1]);       /* side fuel sponsons */
+    _r3Box(m, 2.0, 1.0, 3.1, 14.0, 1.6, 0.8, VH[2], VH[1]);
+    for (i = 0; i < 4; i++) {                                       /* cabin windows */
+      _r3Box(m, 5.0 - i * 3.0, 4.0, -2.85, 1.2, 1.0, 0.2, RTS_PAL.glass, RTS_PAL.glass);
+      _r3Box(m, 5.0 - i * 3.0, 4.0, 2.85, 1.2, 1.0, 0.2, RTS_PAL.glass, RTS_PAL.glass);
+    }
+    [[7.6, -2.4], [7.6, 2.4], [-6.0, -3.2], [-6.0, 3.2]].forEach(function (w) {   /* wheels */
+      _r3Box(m, w[0], 0.6, w[1], 0.5, 1.0, 0.5, S[1], S[0]);
+      _r3Cyl(m, w[0], 0, w[1], 0.6, 0.6, DK[0], DK[2], 16);
+    });
 
   } else if (key === 'mig' || key === 'yak') {
     /* FIXED WING, and the whole job of these two is to not read as the helicopter above. The
@@ -10127,7 +10173,7 @@ var RTS_MIX_BLD = {
 };
 var RTS_MIX_UNIT = {
   buggy:'jeep', light:'1tnk', tank:'2tnk', heavy:'4tnk', arty:'arty', v2rl:'v2rl',
-  harvester:'harv', apc:'apc', mcv:'mcv', heli:'heli', mig:'mig', yak:'yak',
+  harvester:'harv', apc:'apc', mcv:'mcv', heli:'heli', tran:'tran', mig:'mig', yak:'yak',
   rifle:'e1', rocket:'e3', grenadier:'e2', flame:'e4', engineer:'e6',
   medic:'medi', thief:'thf', tanya:'e7', dog:'dog',
   /* THE FLEET. Absent, so with the player's own files loaded a real Naval Yard launched
@@ -15462,6 +15508,12 @@ function _rtsAmbLoad(A, B, ms) {
 /* vehicles on tracks, not wheels: the hulls that crush infantry (rules/vehicles.js), the APC and
    the MCV - UDATA.CPP's tracked set */
 function _rtsAmbTracked(def) { return !!(RTS_CRUSHERS[def] || def === 'apc' || def === 'mcv'); }
+/* a rotor is a helicopter, whichever one: read off the model's own parts (sprites/unit-airsea.js),
+   so the Chinook beats the air like the Attack Heli instead of roaring like a MiG */
+function _rtsAmbRotor(def) {
+  if (typeof RTS_AIR_PARTS !== 'undefined') return !!(RTS_AIR_PARTS[def] && RTS_AIR_PARTS[def].rotor);
+  return def === 'heli';
+}
 
 /* What the bed should be playing now, from the game - pure, so it can be asked without a sound
    card: the gains, and how fast the engines run. The gains are for the rendered loops, which sit
@@ -15489,7 +15541,7 @@ function _rtsAmbWant(G) {
     if (e.type !== 'unit') continue;
     var d = rtsUnitDef(e.def);
     if (!d || !_rtsAudible(e.x, e.z)) continue;
-    if (d.kind === 'air') { if ((e.alt || 0) > 1) n[e.def === 'heli' ? 'rotor' : 'jet']++; continue; }
+    if (d.kind === 'air') { if ((e.alt || 0) > 1) n[_rtsAmbRotor(e.def) ? 'rotor' : 'jet']++; continue; }
     if (!e.path) continue;
     if (d.kind === 'ship' || d.sea) { n.boat++; continue; }
     if (d.kind !== 'vehicle') continue;
@@ -19274,6 +19326,21 @@ function _rtsRallyOut(u, src) {
   _rtsOrderMove(u, r.x, r.z, false);
   return !!u.path;
 }
+/* The pad a new aircraft appears over: one of the kind it `needs` (a Helipad for a helicopter)
+   before any other, and a free one before a busy one, so a second machine does not appear on top
+   of one that is rearming. Null if no pad is standing - it was bombed while the aircraft was
+   building - and then the aircraft comes out where it always did rather than being lost. */
+function _rtsAirPadFor(side, u) {
+  var G = window._rtsG, best = null, bs = 1e9;
+  for (var i = 0; i < G.ents.length; i++) {
+    var b = G.ents[i];
+    if (b.dead || b.building || b.type !== 'struct' || b.side !== side) continue;
+    if ((rtsStructDef(b.def) || {}).produces !== 'air') continue;
+    var s = ((u.needs || []).indexOf(b.def) >= 0 ? 0 : 2) + (_rtsPadBusy(b, null) ? 1 : 0);
+    if (s < bs) { bs = s; best = b; }
+  }
+  return best;
+}
 function _rtsDeliverUnit(side, key) {
   var G = window._rtsG, u = rtsUnitDef(key);
   if (G.justBuilt) G.justBuilt[side].unit = key;   /* HouseClass::JustBuiltUnit */
@@ -19286,6 +19353,14 @@ function _rtsDeliverUnit(side, key) {
     var boat = _rtsSpawnUnit(side, key, _rtsWX(at.tx), _rtsWX(at.tz));
     if (boat) _rtsRallyOut(boat, yard);
     return boat;
+  }
+  /* AN AIRCRAFT IS BUILT ON ITS PAD. It used to come out of the war factory's door like a tank,
+     across the base from the helipad that made it, and had to fly home before it could rearm. */
+  var pad = u.air ? _rtsAirPadFor(side, u) : null;
+  if (pad) {
+    var a = _rtsSpawnUnit(side, key, pad.x, pad.z);
+    if (a) _rtsRallyOut(a, pad);
+    return a;
   }
   var src = _rtsHas(side, u.kind === 'infantry' ? 'barracks' : 'factory') || _rtsHas(side, 'yard');
   if (!src) return null;
@@ -20134,7 +20209,10 @@ function _rtsAirTick(e, dt, d) {
     if (e.rearming <= 0) { e.ammo = d.ammo || 0; e.rearming = 0; e.order = null; e.target = null; }
     return true;                                   /* it does nothing else while reloading */
   }
-  if (e.ammo > 0) return false;
+  /* NOTHING TO RELOAD: an unarmed aircraft - the Chinook - has an empty rack from the start and
+     would otherwise spend its life flying home for missiles it never carries, and crash the
+     moment the last pad fell. */
+  if (e.ammo > 0 || !d.weapon) return false;
   var pad = _rtsRearmPad(e);
   if (!pad) {
     /* nowhere to go: it has to crash */
@@ -20347,7 +20425,27 @@ function _rtsSeparate(dt) {
 
 /* how high an aircraft is drawn above the ground it is over: its altitude, or a hop off the pad
    while it rearms - the one figure the 2D and 3D renderers and the picking all use (render/camera.js) */
-function _rtsAirLift(e) { return e.air ? (e.rearming > 0 ? 2 : (e.alt || 12)) : 0; }
+function _rtsAirLift(e) {
+  if (!e.air) return 0;
+  if (e.rearming > 0) return 2;
+  var a = e.alt || 12;
+  return e.land ? a + (RTS_AIR_SET - a) * e.land : a;
+}
+
+/* A CHINOOK SETS DOWN TO WAIT. Idle over open ground - nothing to fly to - it eases down to
+   RTS_AIR_SET over RTS_AIR_SETTLE seconds, which is where men climb in and out, and lifts again
+   the moment it has somewhere to go. `land` runs 0 (flying) to 1 (down). Over water, a wall or
+   a building it hovers: there is nothing to set down on. Only a transport does this; a gunship
+   waiting for a target stays in the air. */
+var RTS_AIR_SET = 1.2, RTS_AIR_SETTLE = 1.5;
+function _rtsAirSettle(e, dt) {
+  var d = rtsUnitDef(e.def) || {};
+  if (!d.carries) return;
+  var idle = !e.order && (!e.path || e.pi >= e.path.length), tx = _rtsTX(e.x), tz = _rtsTX(e.z);
+  var want = idle && _rtsInB(tx, tz) && !_rtsBlocked(tx, tz) ? 1 : 0, l = e.land || 0;
+  if (want > l) e.land = Math.min(1, l + dt / RTS_AIR_SETTLE);
+  else if (want < l) e.land = Math.max(0, l - dt / RTS_AIR_SETTLE);
+}
 
 var RTS_AIR_GAP = RTS_TILE * 1.6;          /* a rotor disc and a little air */
 var RTS_AIR_PUSH = 6;                      /* world units a second, at the most */
@@ -20368,10 +20466,11 @@ function _rtsAirSpread(dt) {
   var G = window._rtsG, air = [], i, j, lo = _rtsWX(0), hi = _rtsWX(RTS_N - 1);
   for (i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (!e.dead && !e.inside && e.type === 'unit' && e.air) air.push(e);
+    if (!e.dead && !e.inside && e.type === 'unit' && e.air) { air.push(e); _rtsAirSettle(e, dt); }
   }
   for (i = 0; i < air.length; i++) for (j = i + 1; j < air.length; j++) {
-    var a = air[i], b = air[j], ha = a.rearming > 0, hb = b.rearming > 0;
+    /* on the pad, or set down on the ground: either way it holds and the other gives way */
+    var a = air[i], b = air[j], ha = a.rearming > 0 || a.land > 0.5, hb = b.rearming > 0 || b.land > 0.5;
     if (ha && hb) continue;
     var dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz);
     if (d >= RTS_AIR_GAP) continue;
@@ -20556,7 +20655,10 @@ function _rtsUpdateUnit(e, dt) {
        path ends at whatever land cell _rtsPath found nearest the hull, and how far that is from
        the hull is a property of the coastline, not of the order. Three tiles is what covers a
        craft nosed against a beach without letting a squad teleport aboard from inland. */
-    var breach = ((rtsUnitDef(tr && tr.def || '') || {}).sea) ? RTS_TILE * 3.0 : RTS_TILE * 1.6;
+    /* A CHINOOK the same: it sets down wherever it was left, which may be a cell or two off the
+       nearest ground a squad can walk to - beside a wall, or with its tail over the water. */
+    var tdef = rtsUnitDef(tr && tr.def || '') || {};
+    var breach = (tdef.sea || tdef.air) ? RTS_TILE * 3.0 : RTS_TILE * 1.6;
     if (!tr || tr.dead || !_rtsCanBoard(e, tr)) { e.order = null; e.target = null; e.path = null; }
     else if (_rtsRangeTo(e, tr) <= breach) { _rtsBoard(e, tr); return; }
     else {
@@ -31530,8 +31632,22 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
     drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false, 0, 0, lod), e.x + rk.tx, y, e.z + rk.tz, -(e.turret || 0),
            ART2W, hd, 1, rk.n);
   }
-  if (rotor && AP.rotor) drawIn(C, _r3dMesh('u', e.def, e.side, 'rotor', false, 0, 0, lod), e.x, y, e.z, -e.rot - mo.spin, ART2W, hd, 1, rk.n);
+  if (rotor && AP.rotor) {
+    var rm = _r3dMesh('u', e.def, e.side, 'rotor', false, 0, 0, lod), hubs = _r3dRotorHubs(e, mo.spin);
+    for (var ri = 0; ri < hubs.length; ri++) drawIn(C, rm, hubs[ri].x, y, hubs[ri].z, hubs[ri].a, ART2W, hd, 1, rk.n);
+  }
   if (rotor && AP.prop) drawIn(C, _r3dMesh('u', e.def, e.side, 'prop' + _r3dPropPhase(mo.spin), false, 0, 0, lod), e.x, y, e.z, -e.rot, ART2W, hd, 1, rk.n);
+}
+
+/* Where a helicopter's rotors turn, in the world, and at what angle: one over the hub, or - a
+   Chinook - one over each of RTS_AIR_PARTS.rotors, along the body and turning opposite ways.
+   The same mesh is drawn at each (sprites/unit-airsea.js); unit/motion holds these hubs to the
+   sprite's own rotors. */
+function _r3dRotorHubs(e, spin) {
+  var AP = RTS_AIR_PARTS[e.def] || {}, RS = AP.rotors || [0], sc = _sprUnitScale(e.def) * RTS_TILE / RTS_TS, out = [];
+  for (var i = 0; i < RS.length; i++)
+    out.push({ x: e.x + Math.cos(e.rot) * RS[i] * sc, z: e.z + Math.sin(e.rot) * RS[i] * sc, a: -e.rot - (i % 2 ? -spin : spin) });
+  return out;
 }
 </script>
 <script>/* render3d/air3d.js - aircraft that fly like aircraft. Part of rts.render3d.
@@ -36794,7 +36910,7 @@ function _rtsRightClick(mx, my, hit0) {
   var onScrap = _rtsInB(tx, tz) && G.scrap[_rtsIdx(tx, tz)] > 0;
   var onWater = _rtsInB(tx, tz) && G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER;
   var spread = _rtsFormation(mine.length);
-  var landed = 0;
+  var landed = 0, dropped = 0;
   for (i = 0; i < mine.length; i++) {
     var u = mine[i], ud = rtsUnitDef(u.def);
     if (ud.harvest && onScrap) { _rtsOrderHarvest(u, tx, tz); continue; }
@@ -36804,14 +36920,18 @@ function _rtsRightClick(mx, my, hit0) {
        the boat is still steerable while loaded.
 
        An APC is deliberately NOT included. It drives on the ground it would unload onto, so
-       right-clicking land with one is a move order and always was; unloading stays on U. */
-    if (ud.sea && ud.carries && !onWater && _rtsCargoCount(u)
-        && _rtsOrderUnloadAt(u, hit.x + spread[i].x, hit.z + spread[i].z)) { landed++; continue; }
+       right-clicking land with one is a move order and always was; unloading stays on U.
+
+       A LOADED CHINOOK is the craft's case from the air: it cannot put men down on water, so a
+       click on land is where they go - fly there, set down, out they get. */
+    if ((ud.sea || ud.air) && ud.carries && !onWater && _rtsCargoCount(u)
+        && _rtsOrderUnloadAt(u, hit.x + spread[i].x, hit.z + spread[i].z)) { if (ud.air) dropped++; else landed++; continue; }
     if (ud.harvest && tgt && tgt.side === 'player' && tgt.def === 'refinery') { u.order = 'harvest'; u.hstate = 'toRef'; u.path = null; continue; }
     _rtsOrderMove(u, hit.x + spread[i].x, hit.z + spread[i].z, !!U.attackMove);
   }
   _rtsFlash(hit.x, hit.z, onScrap ? 'harvest' : 'move');
   if (landed) _rtsSay(landed === 1 ? 'Making for the shore.' : landed + ' transports making for the shore.');
+  else if (dropped) _rtsSay(dropped === 1 ? 'Taking them in.' : dropped + ' Chinooks taking them in.');
   if (typeof _rtsSfx === 'function') _rtsSfx('order');
   if (typeof rtsVox === 'function') _rtsVoxOrder();
 }

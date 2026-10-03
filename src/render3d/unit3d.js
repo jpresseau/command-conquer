@@ -140,6 +140,20 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
     drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false, 0, 0, lod), e.x + rk.tx, y, e.z + rk.tz, -(e.turret || 0),
            ART2W, hd, 1, rk.n);
   }
-  if (rotor && AP.rotor) drawIn(C, _r3dMesh('u', e.def, e.side, 'rotor', false, 0, 0, lod), e.x, y, e.z, -e.rot - mo.spin, ART2W, hd, 1, rk.n);
+  if (rotor && AP.rotor) {
+    var rm = _r3dMesh('u', e.def, e.side, 'rotor', false, 0, 0, lod), hubs = _r3dRotorHubs(e, mo.spin);
+    for (var ri = 0; ri < hubs.length; ri++) drawIn(C, rm, hubs[ri].x, y, hubs[ri].z, hubs[ri].a, ART2W, hd, 1, rk.n);
+  }
   if (rotor && AP.prop) drawIn(C, _r3dMesh('u', e.def, e.side, 'prop' + _r3dPropPhase(mo.spin), false, 0, 0, lod), e.x, y, e.z, -e.rot, ART2W, hd, 1, rk.n);
+}
+
+/* Where a helicopter's rotors turn, in the world, and at what angle: one over the hub, or - a
+   Chinook - one over each of RTS_AIR_PARTS.rotors, along the body and turning opposite ways.
+   The same mesh is drawn at each (sprites/unit-airsea.js); unit/motion holds these hubs to the
+   sprite's own rotors. */
+function _r3dRotorHubs(e, spin) {
+  var AP = RTS_AIR_PARTS[e.def] || {}, RS = AP.rotors || [0], sc = _sprUnitScale(e.def) * RTS_TILE / RTS_TS, out = [];
+  for (var i = 0; i < RS.length; i++)
+    out.push({ x: e.x + Math.cos(e.rot) * RS[i] * sc, z: e.z + Math.sin(e.rot) * RS[i] * sc, a: -e.rot - (i % 2 ? -spin : spin) });
+  return out;
 }

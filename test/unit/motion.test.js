@@ -121,9 +121,20 @@ var keys = Object.keys(g.RTS_AIR_PARTS).filter(function (k) { return g.RTS_AIR_P
 S.ok('there are rotors to turn', keys.length >= 1, keys.join(', '));
 keys.forEach(function (key) {
   var whole = g._sprUnitModel(key, 'player', false, null), body = g._sprUnitModel(key, 'player', false, 'body'), blades = g._sprUnitModel(key, 'player', false, 'rotor');
-  S.ok(key + ': the blades are a part of their own, and body and blades are the whole machine',
-       blades.length > 0 && blades.length < whole.length / 4 && JSON.stringify(sig(body.concat(blades))) === JSON.stringify(sig(whole)),
-       blades.length + ' blade faces, ' + body.length + ' body, ' + whole.length + ' whole');
+  /* one copy of the blades over each hub the 3D mode turns one at (RTS_AIR_PARTS.rotors - the
+     Chinook has two), so a rotor drawn in 3D is exactly where the sprite has it */
+  var hubs = g.RTS_AIR_PARTS[key].rotors || [0], copies = [], usc = g._sprUnitScale(key);
+  hubs.forEach(function (hx) { blades.forEach(function (f) { copies.push({ v: f.v.map(function (p) { return [p[0] + hx * usc, p[1], p[2]]; }), c: f.c }); }); });
+  S.ok(key + ': the blades are a part of their own, and body and blades over each hub are the whole machine',
+       blades.length > 0 && copies.length < whole.length / 3 && JSON.stringify(sig(body.concat(copies))) === JSON.stringify(sig(whole)),
+       blades.length + ' blade faces x ' + hubs.length + ' hub' + (hubs.length > 1 ? 's, ' : ', ') + body.length + ' body, ' + whole.length + ' whole');
+  /* ...and the 3D mode turns them over those same hubs, wherever the machine is heading */
+  var rot = 0.7, W2 = g.RTS_TILE / g.RTS_TS, hb = g._r3dRotorHubs({ def: key, x: 10, z: 20, rot: rot }, 0.3);
+  var hubOk = hb.length === hubs.length && hb.every(function (q, i) {
+    return Math.abs(q.x - (10 + Math.cos(rot) * hubs[i] * usc * W2)) < 1e-9 && Math.abs(q.z - (20 + Math.sin(rot) * hubs[i] * usc * W2)) < 1e-9;
+  }) && (hb.length < 2 || Math.abs((hb[0].a + rot) + (hb[1].a + rot)) < 1e-9);
+  S.ok(key + ': ...and the 3D mode turns a rotor over each of those hubs' + (hubs.length > 1 ? ', the two turning opposite ways' : ''), hubOk,
+       hb.map(function (q) { return q.x.toFixed(2) + ',' + q.z.toFixed(2); }).join('  '));
   var bb = box(blades), wb = box(body);
   S.ok(key + ': ...on top of it, and wider than it is long', bb.y0 > wb.y1 - 1 && bb.x1 - bb.x0 > (wb.x1 - wb.x0) * 0.9, 'blades from ' + bb.y0.toFixed(1) + ', body to ' + wb.y1.toFixed(1));
 });
