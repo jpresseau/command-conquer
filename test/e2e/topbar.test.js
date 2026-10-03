@@ -281,7 +281,10 @@ var CONTROLS = ['#rtsReloadBtn', '#rtsSaveBtn', '#rtsLoadBtn', '#rtsMute', '#rcg
                tip: document.getElementById('probeTile').title };
     });
   }
-  await press('#probeTile', 120);
+  /* A TAP IS A TAP: down and up at once. With the finger held 120 ms, a page three specs are
+     sharing a machine with could run the cameo's 350 ms hold timer before it saw the finger lift,
+     and a tap became a hold on a job that did not exist yet */
+  await press('#probeTile', 0);
   /* and the tap has TAKEN before it is read, for the same reason as the hold below: with other
      specs sharing the machine a frame can outlast a fixed wait, and "queued null" was a tap the
      page had not processed yet, not one it refused */

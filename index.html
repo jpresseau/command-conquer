@@ -958,7 +958,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">077fefd · 2026-10-03</div>
+  <div id="rtsBuild" title="build">1b6be28 · 2026-10-03</div>
 </div>
 
 <script>/* LCW ("Format80") decompression - a line-for-line port of LCW_Uncompress from
@@ -14140,11 +14140,498 @@ function _rtsVoice(A, name, buf, x, z, via) {
   return true;
 }
 </script>
+<script>/* audio/instruments.js - the band the score is played on (audio/score.js, audio/music.js).
+
+   THE OLD MUSIC WAS FIVE OSCILLATORS: a sine kick, a noise snare, a noise hat, a saw bass and a
+   saw lead, built live on every step of a one-bar loop. These are rendered instead, once a note,
+   with the same tools as the effects (audio/dsp.js), and the sequencer plays the finished buffers:
+
+     DRUMS    a kick with a click, a pitch drop and a sub; a snare that is a tuned shell and a
+              burst of wires; closed and open hats and a crash from metal, not plain hiss; two
+              toms; a shaker for the quiet passages
+     BASS     a saw with a square an octave under it, its filter closing as the note dies; and a
+              driven version for a battle
+     PLUCK    the arpeggio: a short, bright, falling saw
+     LEAD     two detuned saws and a square below, with a vibrato that arrives late, as a player's
+     PAD      each chord on three detuned saws a note, in stereo, slow to rise
+     BRASS    a chord stabbed: the filter opening and shutting in a quarter of a second
+
+   A pitched note is keyed by MIDI number, a chord by its name (audio/score.js), and the pad by
+   its length too, because a pad lasts exactly a bar of the song it is in. Every render is pure
+   and seeded: unit/music renders the whole band in node and checks every note is in tune. */
+
+function _rtsMidiHz(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+
+/* a saw (or square, or triangle) at a steady pitch with a vibrato that fades in after `vd` s */
+function _dspVoice(n, sr, shape, f, vib, vd, cents) {
+  var out = new Float32Array(n), ph = 0, f0 = f * Math.pow(2, (cents || 0) / 1200), i, dt, v, w;
+  for (i = 0; i < n; i++) {
+    var t = i / sr, m = vib && t > vd ? 1 + vib * Math.min(1, (t - vd) / 0.3) * Math.sin(2 * Math.PI * 5.4 * t) : 1;
+    dt = f0 * m / sr;
+    if (shape === 'square') v = (ph < 0.5 ? 1 : -1) + _dspBlep(ph, dt) - _dspBlep((ph + 0.5) % 1, dt);
+    else if (shape === 'tri') v = ph < 0.5 ? 4 * ph - 1 : 3 - 4 * ph;
+    else v = 2 * ph - 1 - _dspBlep(ph, dt);
+    out[i] = v;
+    ph += dt; if (ph >= 1) ph -= 1;
+  }
+  return out;
+}
+
+var RTS_INST = {
+  kick: function (sr, rng) {
+    var o = new Float32Array(Math.round(0.6 * sr));
+    _dspLayerTone(o, sr, { dur: 0.5, amp: 1.0, a: 0.001, tau: 0.16, f0: 150, f1: 44 });
+    _dspLayerTone(o, sr, { dur: 0.6, amp: 0.5, a: 0.004, tau: 0.25, f0: 52, f1: 45 });
+    _dspLayerNoise(o, sr, rng, { dur: 0.02, amp: 0.35, a: 0.0003, tau: 0.003, type: 'hp', f0: 2500 });
+    return _dspSat(o, 1.8);
+  },
+  snare: function (sr, rng) {
+    var o = new Float32Array(Math.round(0.5 * sr));
+    _dspLayerTone(o, sr, { dur: 0.25, amp: 0.7, a: 0.001, tau: 0.06, f0: 210, f1: 175 });
+    _dspLayerTone(o, sr, { dur: 0.2, amp: 0.3, a: 0.001, tau: 0.04, f0: 330, f1: 300 });
+    _dspLayerNoise(o, sr, rng, { dur: 0.45, amp: 0.9, a: 0.001, tau: 0.12, type: 'bp', f0: 4200, f1: 2600, q: 0.6 });
+    return _dspSat(o, 1.6);
+  },
+  hatC: function (sr, rng) {
+    var o = new Float32Array(Math.round(0.12 * sr));
+    _dspLayerNoise(o, sr, rng, { dur: 0.12, amp: 0.8, a: 0.0005, tau: 0.018, type: 'hp', f0: 7500, type2: 'bp', g0: 10000, q2: 0.8 });
+    _dspLayerModal(o, sr, { dur: 0.12, amp: 0.08, modes: [{ f: 3240, t60: 0.05, a: 1 }, { f: 5070, t60: 0.04, a: 0.8 }, { f: 7310, t60: 0.03, a: 0.6 }] });
+    return o;
+  },
+  hatO: function (sr, rng) {
+    var o = new Float32Array(Math.round(0.6 * sr));
+    _dspLayerNoise(o, sr, rng, { dur: 0.6, amp: 0.7, a: 0.002, tau: 0.16, type: 'hp', f0: 6500, type2: 'bp', g0: 9500, q2: 0.7 });
+    _dspLayerModal(o, sr, { dur: 0.6, amp: 0.07, modes: [{ f: 3240, t60: 0.4, a: 1 }, { f: 5070, t60: 0.35, a: 0.8 }, { f: 7310, t60: 0.3, a: 0.6 }] });
+    return o;
+  },
+  crash: function (sr, rng) {
+    var o = new Float32Array(Math.round(2.4 * sr));
+    _dspLayerNoise(o, sr, rng, { dur: 2.4, amp: 0.8, a: 0.003, tau: 0.7, type: 'hp', f0: 4200, f1: 3000 });
+    _dspLayerModal(o, sr, { dur: 2.4, amp: 0.12, modes: [
+      { f: 2120, t60: 1.6, a: 1 }, { f: 3390, t60: 1.4, a: 0.8 }, { f: 4870, t60: 1.2, a: 0.7 }, { f: 6630, t60: 1.0, a: 0.5 }, { f: 8810, t60: 0.8, a: 0.4 }] });
+    return o;
+  },
+  tomH: function (sr, rng) {
+    var o = new Float32Array(Math.round(0.6 * sr));
+    _dspLayerTone(o, sr, { dur: 0.6, amp: 1.0, a: 0.001, tau: 0.18, f0: 175, f1: 128 });
+    _dspLayerNoise(o, sr, rng, { dur: 0.1, amp: 0.25, a: 0.001, tau: 0.02, color: 'pink', type: 'lp', f0: 2500 });
+    return _dspSat(o, 1.4);
+  },
+  tomL: function (sr, rng) {
+    var o = new Float32Array(Math.round(0.8 * sr));
+    _dspLayerTone(o, sr, { dur: 0.8, amp: 1.0, a: 0.001, tau: 0.24, f0: 118, f1: 82 });
+    _dspLayerNoise(o, sr, rng, { dur: 0.1, amp: 0.25, a: 0.001, tau: 0.02, color: 'pink', type: 'lp', f0: 2000 });
+    return _dspSat(o, 1.4);
+  },
+  shaker: function (sr, rng) {
+    var o = new Float32Array(Math.round(0.12 * sr));
+    _dspLayerNoise(o, sr, rng, { dur: 0.12, amp: 0.6, a: 0.012, tau: 0.03, type: 'bp', f0: 6200, q: 1.2 });
+    return o;
+  },
+  /* a bass note: saw over a square an octave down, the filter closing as it dies */
+  bass: function (sr, rng, m, sec) { return _rtsInstBass(sr, m, 1.4, sec); },
+  bassD: function (sr, rng, m, sec) { return _rtsInstBass(sr, m, 3.2, sec); },
+  pluck: function (sr, rng, m) {
+    var f = _rtsMidiHz(m), n = Math.round(0.7 * sr), o = new Float32Array(n);
+    var a = _dspVoice(n, sr, 'saw', f), b = _dspVoice(n, sr, 'square', f, 0, 0, 7);
+    for (var i = 0; i < n; i++) o[i] = a[i] * 0.7 + b[i] * 0.3;
+    _dspFilter(o, sr, 'lp', Math.min(6000, f * 9), f * 1.5, 0.9);
+    _dspEnv(o, sr, 0.002, 0.18);
+    return o;
+  },
+  lead: function (sr, rng, m, sec) {
+    var f = _rtsMidiHz(m), n = Math.round((sec || 2.2) * sr), o = new Float32Array(n);
+    var a = _dspVoice(n, sr, 'saw', f, 0.006, 0.18, -6), b = _dspVoice(n, sr, 'saw', f, 0.006, 0.18, 6), c = _dspVoice(n, sr, 'square', f / 2, 0.006, 0.18);
+    for (var i = 0; i < n; i++) o[i] = (a[i] + b[i]) * 0.4 + c[i] * 0.22;
+    _dspSat(o, 1.3);                                    /* the grit before the filter, which takes its top off */
+    _dspFilter(o, sr, 'lp', Math.min(3400, sr * 0.28), 2400, 1.1);
+    return _dspEnv(o, sr, 0.012, 2.5, 0.05);
+  }
+};
+
+function _rtsInstBass(sr, m, drive, sec) {
+  var f = _rtsMidiHz(m), n = Math.round((sec || 1.6) * sr), o = new Float32Array(n);
+  var a = _dspVoice(n, sr, 'saw', f), b = _dspVoice(n, sr, 'square', f / 2);
+  for (var i = 0; i < n; i++) o[i] = a[i] * 0.6 + b[i] * 0.45;
+  _dspFilter(o, sr, 'lp', 1600 + drive * 300, 260, 1.4);
+  _dspEnv(o, sr, 0.004, 1.2, 0.04);
+  return _dspSat(o, drive);
+}
+
+/* A chord on the pad, `sec` long: three saws a note, spread across the two sides. */
+function _rtsInstPad(sr, notes, sec) {
+  var n = Math.round(sec * sr), L = new Float32Array(n), R = new Float32Array(n), j, i;
+  var det = [[-9, 3], [-3, 9], [0, 0]];                       /* cents, left and right */
+  notes.forEach(function (m) {
+    var f = _rtsMidiHz(m);
+    for (j = 0; j < 3; j++) {
+      var l = _dspVoice(n, sr, 'saw', f, 0, 0, det[j][0]), r = _dspVoice(n, sr, 'saw', f, 0, 0, det[j][1]);
+      for (i = 0; i < n; i++) { L[i] += l[i]; R[i] += r[i]; }
+    }
+  });
+  [L, R].forEach(function (x) {
+    _dspFilter(x, sr, 'lp', 900, 1500, 0.7);
+    var a = Math.round(0.35 * sr);
+    for (i = 0; i < a; i++) x[i] *= i / a;
+    _dspRelease(x, Math.round(0.6 * sr));
+  });
+  return [L, R];
+}
+/* A chord stabbed on the brass. */
+function _rtsInstBrass(sr, notes) {
+  var n = Math.round(0.7 * sr), o = new Float32Array(n), i;
+  notes.forEach(function (m) {
+    var f = _rtsMidiHz(m), a = _dspVoice(n, sr, 'saw', f, 0, 0, -5), b = _dspVoice(n, sr, 'saw', f, 0, 0, 5);
+    for (i = 0; i < n; i++) o[i] += a[i] + b[i];
+  });
+  var x = Float32Array.from(o);
+  _dspFilter(o, sr, 'lp', 3600, 700, 1.2);                  /* the blare, closing */
+  _dspFilter(x, sr, 'lp', 500, 500, 0.7);                   /* and the body under it */
+  for (i = 0; i < n; i++) o[i] = o[i] * 0.7 + x[i] * 0.5;
+  _dspEnv(o, sr, 0.012, 0.22, 0.04);
+  return _dspSat(o, 1.6);
+}
+
+/* THE LOW ONES AT A LOWER RATE. Most of the band is filtered well below the top of the hearing
+   range - the pad under 1.5 kHz, the bass under 2.6, the lead under 3.4, the arpeggio under 6 - so
+   a full-rate buffer would spend most of its memory on silence. They render at a half or a
+   quarter of the context's rate, and the context resamples them as they play. Measured, a song's
+   samples were 23 MB at full rate and full length; at these rates and only as long as the song
+   holds each note, 7. */
+var RTS_INST_RATE = { bass: 4, bassD: 4, pad: 4, lead: 4, pluck: 2 };
+
+/* One rendered sample for the sampler: `inst` and its key (a MIDI number, a chord's notes, or
+   nothing for a drum), `sec` long where its length varies; normalised. A Float32Array, or
+   [left, right] for the pad. */
+function _rtsInstRender(inst, key, sr, sec) {
+  var rng = _dspRng(1 + inst.length * 97 + (typeof key === 'number' ? key : 0));
+  if (inst === 'pad') { var p = _rtsInstPad(sr, key, sec); _dspNorm(p[0], 0.5); _dspNorm(p[1], 0.5); return p; }
+  if (inst === 'brass') return _dspNorm(_rtsInstBrass(sr, key), 0.8);
+  var fn = RTS_INST[inst];
+  if (!fn) return null;
+  return _dspRelease(_dspNorm(fn(sr, rng, key, sec), 0.9), Math.round(0.02 * sr));
+}
+</script>
+<script>/* audio/score.js - the music, written down: two songs, and what each bar of them plays.
+
+   THE OLD SCORE WAS ONE BAR. Sixteen steps of bass and a lead stab every other bar, looping for
+   the length of a match, the same at a quiet start as in the middle of a battle. This is two
+   songs, each a chord progression set out in phrases of four bars, played in a form (A A B A C B)
+   that then repeats; and three INTENSITIES, which the game moves between (audio/music.js):
+
+     CALM    0   the pad and a soft arpeggio, a shaker, a low tom now and then
+     ALERT   1   half-time drums, a driving eighth-note bass, the arpeggio in sixteenths; the
+                 lead in the B phrases only
+     BATTLE  2   the full kit with fills and crashes, a distorted bass riff, brass stabs, and the
+                 lead carrying the tune - doubled an octave up every second time through
+
+   Everything a bar plays comes out of _rtsScoreBar, a pure function of the song, the bar number
+   and the intensity, so unit/music can play a whole song without a sound card and check what it
+   would have played: every note in key, the tune on its chords, every bar the right length.
+
+   Pattern strings are sixteen steps a bar, one a sixteenth note. Drums: 'x' a hit, 'X' an accent,
+   '.' rest. Bass: 'R' root, '5' fifth, 'O' octave, '.' rest. Arpeggio: '1'-'4' the chord's notes
+   from the bottom, '.' rest. A tune is bars of [step, MIDI note, length in steps]. */
+
+var RTS_STEPS = 16;
+var RTS_PC = { C: 0, 'C#': 1, Db: 1, D: 2, 'D#': 3, Eb: 3, E: 4, F: 5, 'F#': 6, Gb: 6, G: 7, 'G#': 8, Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11 };
+
+/* 'Em', 'C', 'B', 'Bm', 'Bb': its root's pitch class and its notes' */
+function _rtsChordOf(sym) {
+  var m = /^([A-G][b#]?)(m?)$/.exec(sym);
+  if (!m) return null;
+  var r = RTS_PC[m[1]];
+  return { sym: sym, root: r, minor: !!m[2], tones: [r, (r + (m[2] ? 3 : 4)) % 12, (r + 7) % 12] };
+}
+/* the chord's notes as MIDI, the lowest at or above `lo`, close together */
+function _rtsVoicing(sym, lo) {
+  var c = _rtsChordOf(sym), out = [];
+  c.tones.forEach(function (pc) { var n = lo + ((pc - lo % 12) + 12) % 12; out.push(n); });
+  return out.sort(function (a, b) { return a - b; });
+}
+
+var RTS_DRUMS = {
+  0: { shaker: '..x...x...x...x.' },
+  1: { kick: 'x.......x.......', snare: '........x.......', hatC: 'X.x.X.x.X.x.X.x.' },
+  2: { kick: 'x...x...x...x.x.', snare: '....x.......x...', hatC: 'XxxxXxxxXxxxXxxx', hatO: '..............x.' },
+  half: { kick: 'x.......x..x....', snare: '........x.......', hatC: 'X.x.X.x.X.x.X.x.' }
+};
+var RTS_FILL = { 1: { snare: '............xxxx' }, 2: { tomH: '............xx..', tomL: '..............xx', snare: '........x.x.....' } };
+var RTS_BASSLINE = { 0: 'R...............', 1: 'R.R.R.R.R.R.R.R.', 2: 'R.RR.RR.R.ROR.5.', half: 'R.......R..R....' };
+var RTS_ARP = { 0: '1.2.3.2.1.2.3.2.', 1: '1234321412343214', 2: '1.3.2.4.1.3.2.4.' };
+var RTS_STAB = 'x.....x...x.....';
+
+var RTS_SONGS = [
+  { name: 'Iron Tide', bpm: 112, tonic: 4, scale: [4, 6, 7, 9, 11, 0, 2, 3],       /* E minor, and the D# of its B major */
+    phrases: {
+      A: ['Em', 'C', 'D', 'Em'], B: ['Em', 'Am', 'C', 'B'], C: ['C', 'D', 'Bm', 'Em'] },
+    form: ['A', 'A', 'B', 'A', 'C', 'B'],
+    tune: {
+      A: [[[0, 71, 4], [4, 76, 4], [8, 71, 2], [10, 74, 2], [12, 67, 4]],
+          [[0, 72, 6], [6, 71, 2], [8, 67, 4], [12, 64, 4]],
+          [[0, 66, 4], [4, 69, 4], [8, 74, 6], [14, 72, 2]],
+          [[0, 71, 12], [12, 67, 2], [14, 69, 2]]],
+      B: [[[0, 76, 4], [4, 79, 4], [8, 76, 2], [10, 78, 2], [12, 71, 4]],
+          [[0, 72, 4], [4, 76, 4], [8, 69, 8]],
+          [[0, 67, 4], [4, 72, 4], [8, 76, 4], [12, 74, 4]],
+          [[0, 75, 8], [8, 71, 4], [12, 78, 4]]],
+      C: [[[0, 64, 8], [8, 67, 8]], [[0, 66, 8], [8, 69, 8]], [[0, 71, 8], [8, 74, 8]], [[0, 76, 16]]] } },
+  { name: 'Red Dawn', bpm: 96, tonic: 2, scale: [2, 4, 5, 7, 9, 10, 0, 1],         /* D minor, and the C# of its A major */
+    phrases: {
+      A: ['Dm', 'Bb', 'Gm', 'A'], B: ['Dm', 'F', 'C', 'A'], C: ['Bb', 'C', 'Dm', 'Dm'] },
+    form: ['A', 'A', 'B', 'A', 'C', 'B'],
+    half: true,                                                                   /* a half-time battle */
+    tune: {
+      A: [[[0, 69, 6], [6, 72, 2], [8, 74, 4], [12, 69, 4]],
+          [[0, 70, 8], [8, 74, 4], [12, 77, 4]],
+          [[0, 79, 4], [4, 77, 4], [8, 74, 4], [12, 70, 4]],
+          [[0, 73, 8], [8, 76, 4], [12, 69, 4]]],
+      B: [[[0, 74, 4], [4, 77, 4], [8, 81, 8]],
+          [[0, 81, 4], [4, 79, 2], [6, 77, 2], [8, 72, 8]],
+          [[0, 76, 4], [4, 79, 4], [8, 76, 4], [12, 72, 4]],
+          [[0, 73, 6], [6, 76, 2], [8, 81, 8]]],
+      C: [[[0, 74, 16]], [[0, 76, 16]], [[0, 77, 8], [8, 74, 8]], [[0, 69, 16]]] } }
+];
+
+/* Where bar `n` of a song falls: its phrase, the bar within it, the chord, and how many times the
+   phrase has come round before (for the variations). */
+function _rtsScoreAt(song, n) {
+  var per = song.form.length * 4, k = n % per, pi = Math.floor(k / 4), letter = song.form[pi], seen = 0;
+  for (var i = 0; i < pi; i++) if (song.form[i] === letter) seen++;
+  seen += Math.floor(n / per) * song.form.filter(function (f) { return f === letter; }).length;
+  return { phrase: letter, bar: k % 4, chord: song.phrases[letter][k % 4], seen: seen, first: k % 4 === 0, last: k % 4 === 3 };
+}
+
+/* EVERYTHING BAR `n` PLAYS at intensity `lv`: a list of { step, inst, key, len, vel } - `key` a
+   MIDI note, a chord's notes (pad, brass) or nothing (drums), `len` in steps. */
+function _rtsScoreBar(song, n, lv) {
+  var at = _rtsScoreAt(song, n), ev = [], s, i;
+  function hits(pat, inst, vel) {
+    for (s = 0; s < RTS_STEPS; s++) if (pat[s] === 'x' || pat[s] === 'X') ev.push({ step: s, inst: inst, len: 1, vel: vel * (pat[s] === 'X' ? 1 : 0.62) });
+  }
+  var half = at.phrase === 'C' || song.half, drums = lv === 2 && half ? RTS_DRUMS.half : RTS_DRUMS[lv];
+  var fill = lv > 0 && at.last ? RTS_FILL[lv] : null;
+  /* the last bar of a phrase ends in a fill: the kit's last beat gives way to it */
+  Object.keys(drums).forEach(function (k) { hits(fill ? drums[k].slice(0, 12) + '....' : drums[k], k, k === 'shaker' ? 0.45 : 0.9); });
+  if (fill) Object.keys(fill).forEach(function (k) { hits(fill[k], k, 0.85); });
+  if (lv === 0 && at.first && at.seen % 2 === 0) ev.push({ step: 0, inst: 'tomL', len: 1, vel: 0.5 });
+  if (lv === 2 && at.first) ev.push({ step: 0, inst: 'crash', len: 1, vel: 0.8 });
+
+  /* the bass: under the chord, an octave of E1 to D#2 */
+  var c = _rtsChordOf(at.chord), root = 28 + ((c.root - 4) + 12) % 12;
+  var bl = lv === 2 && half ? RTS_BASSLINE.half : RTS_BASSLINE[lv], blen = lv === 0 ? 16 : (lv === 2 && half ? 4 : 2);
+  for (s = 0; s < RTS_STEPS; s++) {
+    var b = bl[s];
+    if (b === '.') continue;
+    var len = Math.min(blen, RTS_STEPS - s);
+    for (i = s + 1; i < s + len; i++) if (bl[i] && bl[i] !== '.') { len = i - s; break; }
+    ev.push({ step: s, inst: lv === 2 ? 'bassD' : 'bass', key: root + (b === '5' ? 7 : b === 'O' ? 12 : 0), len: len, vel: lv === 0 ? 0.55 : 0.85 });
+  }
+  /* the chord: the pad every bar, the arpeggio over it, the brass stabbing it in a battle */
+  ev.push({ step: 0, inst: 'pad', key: at.chord, len: RTS_STEPS, vel: lv === 2 ? 0.55 : 0.75 });
+  var notes = _rtsVoicing(at.chord, 55).concat([_rtsVoicing(at.chord, 55)[0] + 12]), ap = RTS_ARP[lv];
+  for (s = 0; s < RTS_STEPS; s++) if (ap[s] !== '.') ev.push({ step: s, inst: 'pluck', key: notes[+ap[s] - 1], len: 1, vel: lv === 2 ? 0.35 : 0.5 });
+  if (lv === 2 && (at.bar % 2 === 0 || at.phrase === 'B'))
+    for (s = 0; s < RTS_STEPS; s++) if (RTS_STAB[s] === 'x') ev.push({ step: s, inst: 'brass', key: at.chord, len: 1, vel: 0.7 });
+  /* the tune */
+  if (lv === 2 || (lv === 1 && at.phrase === 'B')) {
+    song.tune[at.phrase][at.bar].forEach(function (t) {
+      ev.push({ step: t[0], inst: 'lead', key: t[1], len: t[2], vel: lv === 2 ? 0.8 : 0.55 });
+      if (lv === 2 && at.seen % 2 === 1) ev.push({ step: t[0], inst: 'lead', key: t[1] + 12, len: t[2], vel: 0.3 });
+    });
+  }
+  return ev;
+}
+
+/* Every sample a song can ask for, at any intensity, and the longest it is ever held (`len`, in
+   steps): the sampler renders these and only these, each as long as it needs to be. */
+function _rtsScoreNeeds(song) {
+  var need = {}, per = song.form.length * 4 * 2;      /* twice round, for the doubled tunes */
+  for (var n = 0; n < per; n++) for (var lv = 0; lv <= 2; lv++) {
+    _rtsScoreBar(song, n, lv).forEach(function (e) {
+      var k = e.inst + (e.key == null ? '' : ':' + e.key);
+      if (!need[k]) need[k] = { inst: e.inst, key: e.key, len: 0 };
+      need[k].len = Math.max(need[k].len, e.len);
+    });
+  }
+  return Object.keys(need).sort().map(function (k) { return need[k]; });
+}
+
+/* THE INTENSITY. `heat` is how much fighting has been heard lately (audio/music.js keeps it); the
+   level climbs as soon as it is called for and comes down one step at a time, only after the
+   heat has stayed under the level for RTS_MUS_HOLD seconds - so a lull between two volleys does
+   not drop the drums out. */
+var RTS_MUS_HOT = 5;            /* heat for a battle */
+var RTS_MUS_WARM = 1.2;         /* ...for the alert */
+var RTS_MUS_HOLD = 10;          /* seconds under a level before it steps down */
+function _rtsMusicLevel(prev, heat, below) {
+  var want = heat >= RTS_MUS_HOT ? 2 : heat >= RTS_MUS_WARM ? 1 : 0;
+  if (want >= prev) return want;
+  return below >= RTS_MUS_HOLD ? prev - 1 : prev;
+}
+</script>
+<script>/* audio/music.js - the score (audio/score.js) played on the band (audio/instruments.js).
+
+   A SAMPLER, NOT A SYNTHESIZER. Every note a song can ask for (_rtsScoreNeeds) is rendered once
+   into a buffer, the first bar's at once and the rest out of idle time, and a note is then one
+   buffer source and one gain - with its length set by when that gain lets go. A note whose
+   sample is not rendered yet is left out rather than waited for, so the music never holds up a
+   frame; within a few seconds of a match starting there is nothing left to render.
+
+   A BAR AT A TIME, on the audio clock: a 25 ms timer looks a quarter of a second ahead, and when
+   a bar's downbeat comes into that window, the whole bar is scheduled. So a change of intensity
+   lands on a downbeat - the drums come in with a crash, not halfway through a beat.
+
+   THE INTENSITY follows the fighting the player can hear: every audible shot and explosion adds
+   to a heat that halves every RTS_MUS_HALF seconds (_rtsMusicHeatAdd, called by _rtsSfx), and at
+   each downbeat _rtsMusicLevel decides what the next bar plays.
+
+   THE SONGS TAKE TURNS: after RTS_MUS_SONG_BARS bars, at the start of a phrase, the next one
+   begins, its samples rendered over the eight bars before. Four stems (drums, bass, keys, lead)
+   mix into one output on the music bus, with a room of their own. */
+
+var RTS_MUS_AHEAD = 0.25;        /* s the scheduler looks ahead */
+var RTS_MUS_HALF = 6;            /* s for the heat to halve */
+var RTS_MUS_SONG_BARS = 48;      /* bars of a song before the next */
+var RTS_MUS_SLICE = 6;           /* ms of rendering per idle slice */
+/* how much heat each sound the player hears adds */
+var RTS_MUS_HEAT = { rifle: 0.3, mg: 0.25, cannon: 1, turretgun: 1, rocket: 1, hit: 0.5, splash: 0.3, pop: 2, boom: 3, alert: 6 };
+var RTS_MUS_STEM = { drums: 0.9, bass: 0.75, keys: 0.6, lead: 0.5 };
+var RTS_MUS_VERB = { drums: 0.1, bass: 0, keys: 0.32, lead: 0.28 };
+var RTS_MUS_OF = { kick: 'drums', snare: 'drums', hatC: 'drums', hatO: 'drums', crash: 'drums', tomH: 'drums', tomL: 'drums',
+  shaker: 'drums', bass: 'bass', bassD: 'bass', pluck: 'keys', pad: 'keys', brass: 'keys', lead: 'lead' };
+
+/* THE HEAT: a shot heard adds its weight to what is left of the last */
+function _rtsMusicHeatAdd(A, name) {
+  var w = RTS_MUS_HEAT[name];
+  if (!w || !A) return;
+  var now = A.ctx.currentTime;
+  A.heat = { v: _rtsMusicHeat(A, now) + w, t: now };
+}
+function _rtsMusicHeat(A, now) {
+  var h = A && A.heat;
+  return h ? h.v * Math.pow(0.5, (now - h.t) / RTS_MUS_HALF) : 0;
+}
+
+/* a sample's name in the cache: a drum is a drum in any song; a note is held for the song's own
+   tempo, so it is that song's */
+function _rtsMusicKey(song, e) {
+  return e.inst + (e.key == null ? '' : ':' + e.key + '@' + song.bpm);
+}
+/* render one sample into the sampler's cache, as long as the song ever holds it (`len`) */
+function _rtsMusicRender(M, song, e) {
+  var k = _rtsMusicKey(song, e);
+  if (M.buf[k]) return M.buf[k];
+  var ctx = M.ctx, sr = ctx.sampleRate / (RTS_INST_RATE[e.inst] || 1), key = e.key, step = 15 / song.bpm;
+  if (e.inst === 'pad') key = _rtsVoicing(e.key, 52);
+  if (e.inst === 'brass') key = _rtsVoicing(e.key, 55);
+  var x = _rtsInstRender(e.inst, key, sr, (e.len || 1) * step + (e.inst === 'pad' ? 0.7 : 0.35));
+  if (!x) return null;
+  var two = x.length === 2 && x[0] instanceof Float32Array, buf = ctx.createBuffer(two ? 2 : 1, two ? x[0].length : x.length, sr);
+  if (two) { buf.getChannelData(0).set(x[0]); buf.getChannelData(1).set(x[1]); } else buf.getChannelData(0).set(x);
+  M.buf[k] = buf; M.built++;
+  return buf;
+}
+/* queue a song's samples, and render them a slice at a time while the page is idle */
+function _rtsMusicQueue(M, song) {
+  _rtsScoreNeeds(song).forEach(function (e) { M.q.push([song, e]); });
+  if (M.idle) return;
+  M.idle = true;
+  var later = window.requestIdleCallback ? function (f) { window.requestIdleCallback(f, { timeout: 400 }); } : function (f) { setTimeout(f, 30); };
+  (function slice() {
+    var t0 = Date.now();
+    while (M.q.length && Date.now() - t0 < RTS_MUS_SLICE) { var w = M.q.shift(); try { _rtsMusicRender(M, w[0], w[1]); } catch (_e) {} }
+    if (M.q.length && M === (_rtsA && _rtsA.music)) later(slice); else M.idle = false;
+  })();
+}
+
+/* one note: a buffer source, a gain that lets go when the note ends, into its stem */
+function _rtsMusicNote(M, song, e, t, stepDur) {
+  var buf = M.buf[_rtsMusicKey(song, e)];
+  if (!buf) { M.missed++; return; }                    /* not rendered yet: left out, never waited for */
+  var ctx = M.ctx, src = ctx.createBufferSource(), g = ctx.createGain(), end = t + e.len * stepDur;
+  src.buffer = buf;
+  g.gain.setValueAtTime(e.vel, t);
+  src.connect(g); g.connect(M.stem[RTS_MUS_OF[e.inst]]);
+  src.start(t);
+  if (e.inst === 'bass' || e.inst === 'bassD' || e.inst === 'lead') {
+    g.gain.setValueAtTime(e.vel, end);
+    g.gain.setTargetAtTime(0, end, 0.04);
+    src.stop(end + 0.4);
+  }
+  M.live.push({ src: src, end: Math.min(t + buf.duration, end + 0.4) });
+}
+
+/* the bar whose downbeat is `t` */
+function _rtsMusicBar(M, t) {
+  var song = RTS_SONGS[M.song], stepDur = 60 / song.bpm / 4, barDur = stepDur * RTS_STEPS;
+  /* the intensity, decided at the downbeat */
+  var heat = _rtsMusicHeat(_rtsA, t), want = heat >= RTS_MUS_HOT ? 2 : heat >= RTS_MUS_WARM ? 1 : 0;
+  M.below = want < M.level ? M.below + barDur : 0;
+  var lv = _rtsMusicLevel(M.level, heat, M.below);
+  if (lv !== M.level) { M.level = lv; M.below = 0; }
+  _rtsScoreBar(song, M.bar, M.level).forEach(function (e) { _rtsMusicNote(M, song, e, t + e.step * stepDur, stepDur); });
+  M.live = M.live.filter(function (v) { return v.end > M.ctx.currentTime; });
+  M.bar++; M.bars++; M.step = M.bars * RTS_STEPS;
+  /* the next song: its samples over the last eight bars, then it begins at a phrase */
+  if (!M.queued && M.bar >= RTS_MUS_SONG_BARS - 8) { M.queued = true; _rtsMusicQueue(M, RTS_SONGS[(M.song + 1) % RTS_SONGS.length]); }
+  if (M.bar >= RTS_MUS_SONG_BARS && M.bar % 4 === 0) {
+    M.song = (M.song + 1) % RTS_SONGS.length; M.bar = 0; M.queued = false;
+    /* and the last one's notes let go, a few megabytes of them; they render again if it comes back */
+    var was = '@' + song.bpm;
+    if (RTS_SONGS[M.song].bpm !== song.bpm) Object.keys(M.buf).forEach(function (k) { if (k.slice(-was.length) === was) delete M.buf[k]; });
+  }
+  return barDur;
+}
+
+/* Start the score: the stems, a room, the first bar's samples now and the rest in idle time. */
+function _rtsMusicBegin(A) {
+  var ctx = A.ctx, M = { ctx: ctx, buf: (A.musBuf = A.musBuf || {}), built: 0, missed: 0, q: [], idle: false, live: [], stem: {},
+    song: A.musSong || 0, bar: 0, bars: 0, step: 0, level: 0, below: 0, next: ctx.currentTime + 0.08, timer: 0 };
+  M.out = ctx.createGain(); M.out.connect(A.mus);
+  var verb = null;
+  try {
+    var cv = ctx.createConvolver(), ir = _dspRoom(ctx.sampleRate, 2.2, 23), b = ctx.createBuffer(2, ir[0].length, ctx.sampleRate);
+    b.getChannelData(0).set(ir[0]); b.getChannelData(1).set(ir[1]);
+    cv.buffer = b; verb = ctx.createGain(); var back = ctx.createGain(); back.gain.value = 0.6;
+    verb.connect(cv); cv.connect(back); back.connect(M.out);
+  } catch (_e) { verb = null; }
+  Object.keys(RTS_MUS_STEM).forEach(function (k) {
+    var g = ctx.createGain(); g.gain.value = RTS_MUS_STEM[k]; g.connect(M.out);
+    if (verb && RTS_MUS_VERB[k]) { var s = ctx.createGain(); s.gain.value = RTS_MUS_VERB[k]; g.connect(s); s.connect(verb); }
+    M.stem[k] = g;
+  });
+  var song = RTS_SONGS[M.song], needs = _rtsScoreNeeds(song), first = {};
+  _rtsScoreBar(song, 0, 0).forEach(function (e) { first[_rtsMusicKey(song, e)] = 1; });
+  needs.forEach(function (e) { if (first[_rtsMusicKey(song, e)]) try { _rtsMusicRender(M, song, e); } catch (_e) {} });
+  A.music = M;
+  _rtsMusicQueue(M, song);
+  function tick() {
+    if (_rtsA.music !== M) return;
+    while (M.next < ctx.currentTime + RTS_MUS_AHEAD) M.next += _rtsMusicBar(M, M.next);
+  }
+  M.timer = setInterval(tick, 25);
+  tick();
+  return M;
+}
+/* Stop it: everything still ringing faded out inside a fifth of a second. */
+function _rtsMusicEnd(A) {
+  var M = A.music;
+  if (!M) return;
+  clearInterval(M.timer);
+  A.music = null;
+  A.musSong = (M.song + 1) % RTS_SONGS.length;          /* the next match opens on the other song */
+  var now = M.ctx.currentTime;
+  try { M.out.gain.setTargetAtTime(0, now, 0.03); } catch (_e) {}
+  M.live.forEach(function (v) { try { v.src.stop(now + 0.3); } catch (_e) {} });
+  setTimeout(function () { try { M.out.disconnect(); } catch (_e) {} }, 600);
+}
+</script>
 <script>/* RED ALERT - audio. Everything here is SYNTHESIZED: there is not a single sampled asset in the
    app, from any game or anywhere else. The effects are rendered ahead of time from layered
    recipes (audio/recipes.js, audio/dsp.js) into a bank of takes (audio/bank.js) and played
    through a mixer with stereo position, a room and a compressor (audio/mix.js); the music is a
-   sequenced drum machine plus a bass and lead through a waveshaper.
+   score of two songs that follows the fighting (audio/score.js, audio/music.js).
 
    Two rules keep it from turning into mush during a big fight:
    - Sounds are positional: an event outside the visible map area is not played at full voice
@@ -14167,7 +14654,8 @@ function _rtsAudioInit() {
      loud and stays clean. The clip is not optional: a compressor alone let sixty simultaneous
      effects out at 1.5 - its attack is slower than a gunshot's, and Chrome adds makeup gain -
      where the clip rounds whatever is left over under full scale and leaves anything quieter
-     than about half of it untouched (e2e/sfxmix). */
+     than about half of it untouched (e2e/sfxmix). Its ceiling is 0.95, not 0.99: the shaper's
+     oversampling filter rings a little past the curve, and at 0.99 a barrage measured 1.00. */
   var lid = null, out = null;
   try {
     lid = ctx.createDynamicsCompressor();
@@ -14176,7 +14664,7 @@ function _rtsAudioInit() {
     out = ctx.createWaveShaper();
     var cn = 2048, cv = new Float32Array(cn);
     /* the shaper's input runs -1..1; it stands for -4..4, so the gain in front is a quarter */
-    for (var ci = 0; ci < cn; ci++) { var cx = (ci / (cn - 1) * 2 - 1) * 4; cv[ci] = Math.abs(cx) < 0.5 ? cx : (cx < 0 ? -1 : 1) * (0.5 + 0.49 * Math.tanh((Math.abs(cx) - 0.5) / 0.49)); }
+    for (var ci = 0; ci < cn; ci++) { var cx = (ci / (cn - 1) * 2 - 1) * 4; cv[ci] = Math.abs(cx) < 0.5 ? cx : (cx < 0 ? -1 : 1) * (0.5 + 0.45 * Math.tanh((Math.abs(cx) - 0.5) / 0.45)); }
     out.curve = cv; out.oversample = '4x';
     var quarter = ctx.createGain(); quarter.gain.value = 0.25;
     master.connect(lid); lid.connect(quarter); quarter.connect(out); out.connect(ctx.destination);
@@ -14204,21 +14692,6 @@ function rtsMuteToggle() {
   A.master.gain.setTargetAtTime(A.muted ? 0 : 0.9, A.ctx.currentTime, 0.02);
   var b = document.getElementById('rtsMute');
   if (b) { b.textContent = A.muted ? '🔇' : '🔊'; b.title = A.muted ? 'Sound off' : 'Sound on'; }
-}
-
-/* ---------------------------------------------------------------- helpers */
-/* NB: named _rtsWaveShaper, not _rtsDist - src/core already owns _rtsDist (distance
-   between two entities). Everything here shares one global namespace, and core loads later,
-   so the collision silently replaced this function and killed the music with a type error. */
-function _rtsWaveShaper(amount) {
-  var ctx = _rtsA.ctx, ws = ctx.createWaveShaper(), n = 1024, curve = new Float32Array(n);
-  var k = amount || 12;
-  for (var i = 0; i < n; i++) {
-    var x = (i / (n - 1)) * 2 - 1;
-    curve[i] = (1 + k) * x / (1 + k * Math.abs(x));
-  }
-  ws.curve = curve; ws.oversample = '2x';
-  return ws;
 }
 
 /* Only play things the player can actually see - a battle on the far side of the map should
@@ -14264,6 +14737,7 @@ function _rtsSfx(name, x, z) {
     try { _rtsSfxPlay(name, tf, B.far, x, z); } catch (_e) {}
     return;
   }
+  if (typeof _rtsMusicHeatAdd === 'function') _rtsMusicHeatAdd(A, name);   /* the fighting the music follows */
   var now = A.ctx.currentTime, gap = _RTS_SFX_GAP[name] || 0.02;
   if (A.last[name] != null && now - A.last[name] < gap) return;
   A.last[name] = now;
@@ -14282,122 +14756,21 @@ function _rtsSfxPlay(name, t, via, x, z) {
 }
 
 /* ------------------------------------------------------------------ music --
-   A looping industrial-rock bed: four-on-the-floor kick, backbeat snare, driving eighth
-   hats, a distorted saw bass on an E-minor riff, and lead stabs on the off-beats. Scheduled
-   with a lookahead so it stays tight regardless of frame rate. */
-var _RTS_BASS = [                                /* 16 steps, semitone offsets from E1, null = rest */
-  0, null, 0, null, 3, null, 0, null, 5, null, 0, 0, 7, null, 5, 3
-];
-var _RTS_LEAD = [                                /* stabs, offsets from E3 */
-  null, null, 12, null, null, 15, null, null, null, 12, null, null, 19, null, 17, null
-];
-function _rtsNote(semi, base) { return (base || 41.2) * Math.pow(2, semi / 12); }
-
+   The player's own soundtrack when they have it (rts.sound.js); otherwise the score of
+   audio/score.js, played by audio/music.js - two songs that take turns, louder and fuller as the
+   fighting the player can hear grows. */
 function _rtsMusicStart() {
   /* The player's own soundtrack takes priority when it is there. It lives in scores.mix, which
      ships inside MAIN.MIX rather than among the loose archives, so most installs land here
-     with the effects present and no score - and that is a normal state, not a failure: the
-     synthesized sequencer below carries on exactly as it did. */
+     with the effects present and no score - and that is a normal state, not a failure. */
   if (typeof rtsSndMusicStart === 'function' && rtsSndMusicStart()) return;
-
   var A = _rtsA;
   if (!A || A.music) return;
-  var ctx = A.ctx, out = A.mus;
-  var bpm = 128, spb = 60 / bpm, step = spb / 2;      /* eighth notes */
-  var M = { step:0, next:ctx.currentTime + 0.08, timer:0, bars:0 };
-
-  var dist = _rtsWaveShaper(14); dist.connect(out);
-  var leadFilt = ctx.createBiquadFilter();
-  leadFilt.type = 'lowpass'; leadFilt.frequency.value = 2400; leadFilt.connect(dist);
-
-  function kick(t) {
-    var o = ctx.createOscillator(), g = ctx.createGain();
-    o.type = 'sine';
-    o.frequency.setValueAtTime(130, t);
-    o.frequency.exponentialRampToValueAtTime(38, t + 0.11);
-    g.gain.setValueAtTime(0.9, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.24);
-    o.connect(g); g.connect(out); o.start(t); o.stop(t + 0.26);
-  }
-  function snare(t) {
-    var s = ctx.createBufferSource(); s.buffer = A.noise; s.loop = true;
-    var f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1900; f.Q.value = 0.7;
-    var g = ctx.createGain();
-    g.gain.setValueAtTime(0.5, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.17);
-    s.connect(f); f.connect(g); g.connect(out);
-    s.start(t); s.stop(t + 0.19);
-    var o = ctx.createOscillator(), og = ctx.createGain();
-    o.type = 'triangle'; o.frequency.setValueAtTime(220, t);
-    og.gain.setValueAtTime(0.22, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
-    o.connect(og); og.connect(out); o.start(t); o.stop(t + 0.13);
-  }
-  function hat(t, open) {
-    var s = ctx.createBufferSource(); s.buffer = A.noise; s.loop = true;
-    var f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 7200;
-    var g = ctx.createGain(), d = open ? 0.16 : 0.045;
-    g.gain.setValueAtTime(open ? 0.16 : 0.13, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + d);
-    s.connect(f); f.connect(g); g.connect(out);
-    s.start(t); s.stop(t + d + 0.02);
-  }
-  function bass(t, semi) {
-    var o = ctx.createOscillator(), o2 = ctx.createOscillator();
-    var f = ctx.createBiquadFilter(), g = ctx.createGain();
-    o.type = 'sawtooth'; o2.type = 'square';
-    var hz = _rtsNote(semi, 41.2);
-    o.frequency.setValueAtTime(hz, t);
-    o2.frequency.setValueAtTime(hz / 2, t);
-    f.type = 'lowpass';
-    f.frequency.setValueAtTime(1500, t);
-    f.frequency.exponentialRampToValueAtTime(420, t + step * 0.9);
-    f.Q.value = 6;
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.34, t + 0.012);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + step * 0.95);
-    o.connect(f); o2.connect(f); f.connect(g); g.connect(dist);
-    o.start(t); o.stop(t + step); o2.start(t); o2.stop(t + step);
-  }
-  function lead(t, semi) {
-    var o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain();
-    o.type = 'sawtooth'; o2.type = 'sawtooth';
-    var hz = _rtsNote(semi, 164.8);
-    o.frequency.setValueAtTime(hz, t);
-    o2.frequency.setValueAtTime(hz * 1.008, t);          /* detune for width */
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.17, t + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + step * 1.4);
-    o.connect(g); o2.connect(g); g.connect(leadFilt);
-    o.start(t); o.stop(t + step * 1.5); o2.start(t); o2.stop(t + step * 1.5);
-  }
-
-  function schedule() {
-    if (!_rtsA || !_rtsA.music) return;
-    var t = ctx.currentTime;
-    while (M.next < t + 0.22) {
-      var s = M.step % 16, at = M.next;
-      if (s % 4 === 0) kick(at);
-      if (s === 4 || s === 12) snare(at);
-      hat(at, s % 8 === 6);
-      if (_RTS_BASS[s] != null) bass(at, _RTS_BASS[s]);
-      /* the lead only joins in every other bar, so the loop breathes */
-      if (M.bars % 2 === 1 && _RTS_LEAD[s] != null) lead(at, _RTS_LEAD[s]);
-      M.step++;
-      if (M.step % 16 === 0) M.bars++;
-      M.next += step;
-    }
-  }
-  M.timer = setInterval(schedule, 30);
-  A.music = M;
-  schedule();
+  try { _rtsMusicBegin(A); } catch (_e) {}
 }
 function _rtsMusicStop() {
   if (typeof rtsSndMusicStop === 'function') rtsSndMusicStop();
-
-  var A = _rtsA;
-  if (!A || !A.music) return;
-  clearInterval(A.music.timer);
-  A.music = null;
+  if (_rtsA && _rtsA.music) _rtsMusicEnd(_rtsA);
 }
 </script>
 <script>/* Real Red Alert sound, when the player has it.
