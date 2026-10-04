@@ -80,7 +80,7 @@ var man = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.webmanifest'), 'u
 S.ok('the installed app is called Breachwater', man.name === 'Breachwater' && man.short_name === 'Breachwater',
      man.name + ' / ' + man.short_name);
 S.ok('...and its description is clean', !dirty(man.description).length, man.description);
-['sw.js', 'icon.svg'].forEach(function (f) {
+['sw.js', 'favicon.svg'].forEach(function (f) {
   var t = fs.readFileSync(path.join(ROOT, f), 'utf8');
   S.ok(f + ' carries the new name and not the old', /Breachwater/.test(t) && !dirty(t).length, dirty(t).join(', ') || 'clean');
 });
