@@ -197,7 +197,7 @@ var RTS_STRUCTS = [
     desc:'Holds 1500 more ore. Without enough storage, harvested ore over the cap is lost.' },
 
   /* ------------------------------------------------------------ superweapons --
-     Four buildings whose entire output is one button on a timer. They share a shape: a `super`
+     Six buildings whose entire output is one button on a timer, three to an army. They share a shape: a `super`
      block naming the charge, what it wants clicked, and what it does when it goes off.
 
      The charges are RA's proportions, not RA's numbers. The original runs 8-13 minutes, on
@@ -239,6 +239,19 @@ var RTS_STRUCTS = [
     needs:['lab'], side:'allied', armour:'concrete', capturable:false,
     super:{ key:'gps', name:'Skyeye Satellite', charge:200, target:'none', auto:true, icon:'🛰',
             hint:'Skyeye satellite up — the whole map is on the radar.' },
-    desc:'Launches a satellite. Once it is up the entire map is revealed, permanently.' }
+    desc:'Launches a satellite. Once it is up the entire map is revealed, permanently.' },
+  /* WEATHER, CALLED DOWN - each army's third, core/wxsupers.js. The sky's own weather is the
+     map's (core/skyplay.js); these put it on one place, where the player chooses. The Compact
+     hides things in fog; the Dominion breaks a storm over them. */
+  { key:'mist',     name:'Mist Tower',    w:2, h:2, cost:1500, build:22, hp:400,  power:-150, sight:12,
+    needs:['lab'], side:'allied', armour:'concrete', capturable:false,
+    super:{ key:'fogbank', name:'Fog Bank', charge:240, target:'cell', icon:'🌫',
+            hint:'Fog Bank ready — click where the fog should fall.' },
+    desc:'Lays a fog bank anywhere on the map for two minutes. Nothing in it sees, or is seen, past three cells.' },
+  { key:'spire',    name:'Storm Spire',   w:2, h:2, cost:1750, build:24, hp:400,  power:-200, sight:12,
+    needs:['lab'], side:'soviet', armour:'concrete', capturable:false,
+    super:{ key:'thunder', name:'Thunderhead', charge:270, target:'cell', icon:'⛈',
+            hint:'Thunderhead ready — click where the storm should break.' },
+    desc:'Breaks a thunderstorm anywhere on the map for a minute. Lightning strikes the enemy under it, and no aircraft flies in it.' }
 ];
 

@@ -23,6 +23,9 @@ function _rtsAISupers(dt) {
     var aim = null;
     if (key === 'nuke')            aim = _rtsAIMassOf('player');
     else if (key === 'ironcurtain') aim = _rtsAIMassOf('enemy');
+    /* weather on the player's base: the fog blinds its guns to the approach, the storm grounds
+       its aircraft and strikes what stands there (core/wxsupers.js) */
+    else if (key === 'fogbank' || key === 'thunder') aim = _rtsAIMassOf('player');
     else if (key === 'chrono')      continue;   /* see below */
     if (!aim) continue;
     if (_rtsSuperFire('enemy', key, aim.tx, aim.tz)) return;   /* one per decision */

@@ -162,6 +162,7 @@ function _rtsFindTarget(e, range, w) {
        close enough to board. An asymmetric distance would have quietly answered all of those
        differently too, and none of them are about height. */
     if (dist > _rtsElevReach(e, o, range)) continue;
+    if (!_rtsWxFinds(e, o, dist)) continue;          /* a fog bank between them: core/wxsupers.js */
     var v = _rtsEvalObject(e, o, dist, w);
     if (v > bv) { bv = v; best = o; }
   }

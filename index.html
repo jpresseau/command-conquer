@@ -706,7 +706,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">75552e2 · 2026-10-04</div>
+  <div id="rtsBuild" title="build">4971890 · 2026-10-04</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -908,7 +908,7 @@ var RTS_STRUCTS = [
     desc:'Holds 1500 more ore. Without enough storage, harvested ore over the cap is lost.' },
 
   /* ------------------------------------------------------------ superweapons --
-     Four buildings whose entire output is one button on a timer. They share a shape: a `super`
+     Six buildings whose entire output is one button on a timer, three to an army. They share a shape: a `super`
      block naming the charge, what it wants clicked, and what it does when it goes off.
 
      The charges are RA's proportions, not RA's numbers. The original runs 8-13 minutes, on
@@ -950,7 +950,20 @@ var RTS_STRUCTS = [
     needs:['lab'], side:'allied', armour:'concrete', capturable:false,
     super:{ key:'gps', name:'Skyeye Satellite', charge:200, target:'none', auto:true, icon:'🛰',
             hint:'Skyeye satellite up — the whole map is on the radar.' },
-    desc:'Launches a satellite. Once it is up the entire map is revealed, permanently.' }
+    desc:'Launches a satellite. Once it is up the entire map is revealed, permanently.' },
+  /* WEATHER, CALLED DOWN - each army's third, core/wxsupers.js. The sky's own weather is the
+     map's (core/skyplay.js); these put it on one place, where the player chooses. The Compact
+     hides things in fog; the Dominion breaks a storm over them. */
+  { key:'mist',     name:'Mist Tower',    w:2, h:2, cost:1500, build:22, hp:400,  power:-150, sight:12,
+    needs:['lab'], side:'allied', armour:'concrete', capturable:false,
+    super:{ key:'fogbank', name:'Fog Bank', charge:240, target:'cell', icon:'🌫',
+            hint:'Fog Bank ready — click where the fog should fall.' },
+    desc:'Lays a fog bank anywhere on the map for two minutes. Nothing in it sees, or is seen, past three cells.' },
+  { key:'spire',    name:'Storm Spire',   w:2, h:2, cost:1750, build:24, hp:400,  power:-200, sight:12,
+    needs:['lab'], side:'soviet', armour:'concrete', capturable:false,
+    super:{ key:'thunder', name:'Thunderhead', charge:270, target:'cell', icon:'⛈',
+            hint:'Thunderhead ready — click where the storm should break.' },
+    desc:'Breaks a thunderstorm anywhere on the map for a minute. Lightning strikes the enemy under it, and no aircraft flies in it.' }
 ];
 
 </script>
@@ -1793,7 +1806,7 @@ var RTS_AI = {
      the opponent uses to raid a coast, and the ratio has to stay small or a map
      with a long shoreline turns the whole base plan maritime. */
           navalyard:0.05, subpen:0.05,
-          mslo:0.02, iron:0.02, pdox:0.02, gps:0.02 },
+          mslo:0.02, iron:0.02, pdox:0.02, gps:0.02, mist:0.02, spire:0.02 },
   limit:{ refinery:4,    barracks:2,    factory:2,    radar:1,    lab:1,    depot:1,
   /* The silo limit is high on purpose and is the one number here that was MEASURED rather
      than guessed. At 6 the opponent filled its 17,000 of storage on `normal` and then threw
@@ -1806,7 +1819,7 @@ var RTS_AI = {
           navalyard:1, subpen:1,
   /* One each. A second silo would not charge a second missile - the timer is per house - so
      building one is pure waste, and the limit says so rather than relying on the ratio. */
-          mslo:1,      iron:1,      pdox:1,    gps:1 },
+          mslo:1,      iron:1,      pdox:1,    gps:1,    mist:1,    spire:1 },
   /* HOUSE.CPP AI_Building checks Tiberium against Capacity before it checks anything else:
      an overflowing house builds a silo NEXT, whatever else the base plan wanted. Without this
      the storage cap is a pure nerf to the opponent - it loses the income and never buys the
@@ -1843,7 +1856,7 @@ var RTS_AI = {
   buildOrder:['refinery', 'barracks', 'silo', 'factory', 'radar', 'apower', 'depot', 'lab', 'kennel',
               'helipad', 'afld', 'navalyard', 'subpen',
               'pillbox', 'flametower', 'turret', 'rocketpit', 'tesla', 'aagun',
-              'mslo', 'iron', 'pdox', 'gps'],
+              'mslo', 'iron', 'pdox', 'gps', 'mist', 'spire'],
 
   /* WHICH RUNG EACH BUILDING BELONGS TO. The order above says what to build first; this says
      who gets to build it at all, and it exists because the gate it replaces was all-or-nothing.
@@ -1865,7 +1878,7 @@ var RTS_AI = {
 
      Recruit keeps an EMPTY order deliberately - refinery and barracks are listed at 3, not 2 -
      because that rung is unchanged by this and its ladder position was already measured. */
-  buildIQ:{ mslo:5, iron:5, pdox:5, gps:5 },
+  buildIQ:{ mslo:5, iron:5, pdox:5, gps:5, mist:5, spire:5 },
   buildIQDefault:3,
   /* What to spend a production run on. A table rather than an if-chain: adding a unit to
      RTS_UNITS should not mean editing the opponent's brain, and the hardcoded ladder that used
@@ -5771,7 +5784,7 @@ function _sprBldWar(X, key) {
   return true;
 }
 </script>
-<script>/* sprites/bld-super.js - the four superweapon buildings, and the three small defences that share their file by
+<script>/* sprites/bld-super.js - the six superweapon buildings, and the three small defences that share their file by
    position rather than by kind: wall, pillbox and gun turret.
 
    One arm of the model chain that used to be a single 500-line function in
@@ -5923,6 +5936,56 @@ function _sprBldSuper(X, key) {
     pipe(W / 2 - 7, 2, D / 2 - 7, 9, 'y', 1.2);
     facade(6, 3.2, W / 2 - 4, D / 2 - 4);
     floodlight(W / 2 - 5, 2, -D / 2 + 5, 11);
+
+  } else if (key === 'mist') {
+    /* MIST TOWER. A tall white tower that breathes: a water tank on legs, a slender stack with
+       rings of nozzles up it, and a crown that glows. Tall and pale where the Storm Spire is a
+       dark copper lattice - the two weather machines must not be confusable. */
+    _r3Box(m, 0, 0, 0, W - 4, 3, D - 4, C[2], C[0]);
+    _r3Slab(m, W / 2 - 9, 3, D / 2 - 9, 10, 6, 10, 1.5, WH[1], WH[0]);   /* pump house */
+    _r3Cyl(m, 2, 3, 2, 6, 4, C[3], C[1], 20);                            /* the stack's footing */
+    _r3Cyl(m, 2, 7, 2, 3.2, 22, WH[0], WH[2], 20);                       /* the stack */
+    for (var _mr = 0; _mr < 4; _mr++) {                                  /* nozzle rings */
+      _r3Cyl(m, 2, 12 + _mr * 4.5, 2, 4.4, 1.0, S[2], S[1], 20);
+      for (var _mn = 0; _mn < 6; _mn++) {
+        var _ma = _mn / 6 * Math.PI * 2 + _mr * 0.5;
+        _r3Box(m, 2 + Math.cos(_ma) * 4.6, 12.2 + _mr * 4.5, 2 + Math.sin(_ma) * 4.6, 0.9, 0.6, 0.9, S[3], S[3]);
+      }
+    }
+    _r3Cone(m, 2, 29, 2, 4.2, 1.6, 3, WH[1], 20);                        /* the crown */
+    _r3Cyl(m, 2, 32, 2, 1.4, 1.4, RTS_PAL.lit, RTS_PAL.lit, 12);
+    /* the reservoir on its legs, the pipe that feeds the stack */
+    for (var _ml = 0; _ml < 4; _ml++)
+      _r3Box(m, -W / 2 + 9 + (_ml & 1 ? 3 : -3), 3, -D / 2 + 9 + (_ml & 2 ? 3 : -3), 1.0, 8, 1.0, DK[1], DK[2]);
+    _r3Cyl(m, -W / 2 + 9, 11, -D / 2 + 9, 5.2, 6, C[3], WH[0], 20);
+    pipe(-W / 2 + 9, 11, -D / 2 + 9, 8, 'x', 1.0);
+    _r3Box(m, 2, 9.2, -D / 2 + 9, 8, 1.2, 3, B.roof, B.roof);           /* team band */
+    facade(6, 3.2, W / 2 - 4, D / 2 - 4);
+    ladder(W / 2 - 5, 2, D / 2 - 5, 9);
+    floodlight(W / 2 - 5, 2, -D / 2 + 5, 11);
+
+  } else if (key === 'spire') {
+    /* STORM SPIRE. A dark lattice needle ringed with copper, standing on capacitor banks, a
+       ball on top for the lightning to come down to. Built to draw the eye up, the way a storm
+       does. */
+    _r3Box(m, 0, 0, 0, W - 4, 3, D - 4, C[2], C[0]);
+    _r3Box(m, 0, 3, 0, W - 10, 5, D - 10, OL[0], OL[1]);                 /* plinth, painted */
+    for (var _sl = 0; _sl < 5; _sl++) {                                  /* the needle, tapering */
+      var _sw = 9 - _sl * 1.5;
+      _r3Box(m, 0, 8 + _sl * 4.4, 0, _sw, 4.4, _sw, DK[1], DK[2]);
+      _r3Cyl(m, 0, 11.6 + _sl * 4.4, 0, _sw * 0.5 + 0.9, 0.9, CU[0], CU[3], 18);    /* copper collars */
+    }
+    _r3Cyl(m, 0, 30, 0, 0.8, 4, S[2], S[1], 12);                         /* the rod */
+    _r3Cone(m, 0, 34, 0, 1.4, 2.8, 2, CU[1], 18);
+    _r3Cone(m, 0, 36, 0, 2.8, 1.4, 2, CU[0], 18);
+    _r3Cyl(m, 0, 35.4, 0, 1.2, 1.2, RTS_PAL.lit, RTS_PAL.lit, 12);
+    for (var _sc = 0; _sc < 4; _sc++)                                    /* capacitor banks */
+      _r3Cyl(m, (_sc & 1 ? 1 : -1) * (W / 2 - 6), 3, (_sc & 2 ? 1 : -1) * (D / 2 - 6),
+             2.4, 7.0, CU[1], CU[0], 18);
+    _r3Box(m, 0, 8, -D / 2 + 6, 9, 1.2, 3, B.roof, B.roof);             /* team band */
+    _r3Box(m, W / 2 - 7, 3, 0, 4, 6, 6, S[2], S[1]);                     /* switch room */
+    roofscape(8.5, W / 2 - 5, D / 2 - 5);
+    ladder(-W / 2 + 4, 2, D / 2 - 4, 9);
 
   } else if (key === 'wall') {
     /* Concrete Wall. Has to tile with itself edge to edge, so it fills the cell exactly and
@@ -11910,8 +11973,20 @@ function _rtsFogReach(range) { return _rtsFogged() ? Math.min(range, RTS_FOG_CEL
 function _rtsStormAt(sky, t) {
   return sky === 'rain' && typeof _rtsShower === 'function' && _rtsShower(t).rain >= RTS_STORM_RAIN;
 }
-/* Does the storm hold this aircraft on the ground? Asked by _rtsAirTick. */
-function _rtsStormGrounds(e, d) { var G = window._rtsG; return !!(G && G.storm && d.weapon); }
+/* Does the storm hold this aircraft on the ground? Asked by _rtsAirTick. The sky's storm, or a
+   Thunderhead it has been caught in (core/wxsupers.js) - held until that one has blown out. */
+function _rtsStormGrounds(e, d) {
+  var G = window._rtsG;
+  if (!G || !d.weapon) return false;
+  if (G.storm) return true;
+  if (e.wxHeld) {
+    if (_rtsWxCells().some(function (c) { return c.id === e.wxHeld; })) return true;
+    e.wxHeld = 0;
+  }
+  var c = _rtsWxAt('storm', e.x, e.z);
+  if (c) { e.wxHeld = c.id; return true; }
+  return false;
+}
 
 function _rtsSkyPlayTick() {
   var G = window._rtsG;
@@ -11928,6 +12003,113 @@ function _rtsSkyPlayTick() {
   }
   if (G.storm && !was) _rtsSay('Storm: aircraft grounded.', 5);
   else if (was && !G.storm) _rtsSay('The storm has passed - aircraft can fly.', 5);
+}
+</script>
+<script>/* core/wxsupers.js - weather called down: the Compact's Fog Bank and the Dominion's Thunderhead.
+
+   The weather of the whole battle is the map's (core/skyplay.js). These two put weather on ONE
+   place, for a while, where a side chooses - the third superweapon each army has, from its own
+   building (rules/structures.js `mist`, `spire`). Both live in G.wx as cells: { kind, x, z, r,
+   t, side, id }, centred where they were called, r in world units, t the seconds left.
+
+     FOG BANK     RTS_FOGBANK.r cells across the middle, RTS_FOGBANK.time seconds. Nothing SEES or
+                  is seen through it past RTS_FOGBANK.see cells: a sight disc from inside is
+                  capped to that (_rtsVisTick), ground inside is only revealed that close to the
+                  eye looking at it (_rtsSightFrom), and no shooter finds a target past it when
+                  either is in the bank (_rtsFindTarget). Like the sky's fog it takes no side -
+                  the caller's own guns are as blind in it - and a gun given its target keeps
+                  its reach. So it hides an advance, or blinds a fortified line to one.
+     THUNDERHEAD  RTS_THUNDER.r cells, RTS_THUNDER.time seconds. Every RTS_THUNDER.every seconds
+                  lightning strikes the caller's enemy under it - an aircraft first, then a
+                  vehicle, a building, a man, the one nearest the eye of the storm - for
+                  RTS_THUNDER.dmg. And no armed aircraft of either side flies in it: one caught
+                  in it goes home as in the sky's storm (_rtsStormGrounds), and stays down until
+                  this storm has blown out, so a storm over an airfield holds the whole wing. */
+
+var RTS_FOGBANK = { r: 9, time: 120, see: 3 };
+var RTS_THUNDER = { r: 8, time: 60, every: 3, dmg: 80 };
+
+function _rtsWxCells() { var G = window._rtsG; return (G && G.wx) || []; }
+function _rtsWxAt(kind, x, z) {
+  var W = _rtsWxCells();
+  for (var i = 0; i < W.length; i++) if (W[i].kind === kind && Math.hypot(x - W[i].x, z - W[i].z) <= W[i].r) return W[i];
+  return null;
+}
+function _rtsInFogBank(x, z) { return !!_rtsWxAt('fog', x, z); }
+function _rtsWxCall(side, kind, tx, tz, r, time) {
+  var G = window._rtsG;
+  if (!_rtsInB(tx, tz)) return null;
+  G.wx = G.wx || [];
+  G.wxN = (G.wxN || 0) + 1;
+  var c = { kind: kind, x: _rtsWX(tx), z: _rtsWX(tz), r: r * RTS_TILE, t: time, side: side, id: G.wxN, boltT: RTS_THUNDER.every };
+  G.wx.push(c);
+  G.visDirty = 1;
+  return c;
+}
+function _rtsFireFogBank(side, tx, tz) {
+  if (!_rtsWxCall(side, 'fog', tx, tz, RTS_FOGBANK.r, RTS_FOGBANK.time)) return false;
+  _rtsSay(side === 'player' ? 'Fog Bank down. Nothing sees through it past ' + RTS_FOGBANK.see + ' cells.' : 'The enemy has called down a fog bank.');
+  if (typeof _rtsSfx === 'function') _rtsSfx('build');
+  return true;
+}
+function _rtsFireThunder(side, tx, tz) {
+  if (!_rtsWxCall(side, 'storm', tx, tz, RTS_THUNDER.r, RTS_THUNDER.time)) return false;
+  _rtsSay(side === 'player' ? 'Thunderhead breaking. Nothing flies in it.' : 'The enemy has called a thunderstorm down on us.');
+  if (typeof _rtsSfx === 'function') _rtsSfx('rocket');
+  return true;
+}
+
+/* A sight disc from (x, z), in cells: capped inside a fog bank. */
+function _rtsWxSight(x, z, cells) { return _rtsInFogBank(x, z) ? Math.min(cells, RTS_FOGBANK.see) : cells; }
+/* Can a shooter at e find o at this distance? Not past the bank's reach when either is in one. */
+function _rtsWxFinds(e, o, dist) {
+  if (!_rtsWxCells().length || dist <= RTS_FOGBANK.see * RTS_TILE) return true;
+  return !_rtsInFogBank(e.x, e.z) && !_rtsInFogBank(o.x, o.z);
+}
+/* The fog banks a sight disc from (tx, tz) out to `range` cells could reach, or null for none. */
+function _rtsWxBanksNear(tx, tz, range) {
+  var W = _rtsWxCells(), out = null, x = _rtsWX(tx), z = _rtsWX(tz);
+  for (var i = 0; i < W.length; i++) {
+    if (W[i].kind !== 'fog' || Math.hypot(x - W[i].x, z - W[i].z) > W[i].r + range * RTS_TILE) continue;
+    (out = out || []).push(W[i]);
+  }
+  return out;
+}
+
+/* The lightning's mark: the enemy under the storm, aircraft first, nearest the eye. */
+var RTS_BOLT_RANK = { air: 0, vehicle: 1, struct: 2, infantry: 3 };
+function _rtsBoltTarget(c) {
+  var G = window._rtsG, best = null, bk = 1e9;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.inside || e.side === c.side || !e.side || e.hidden) continue;
+    var d = Math.hypot(e.x - c.x, e.z - c.z);
+    if (d > c.r) continue;
+    var kind = e.type === 'struct' ? 'struct' : (rtsUnitDef(e.def) || {}).kind;
+    var k = (RTS_BOLT_RANK[kind] != null ? RTS_BOLT_RANK[kind] : 3) * 1e4 + d;
+    if (k < bk) { bk = k; best = e; }
+  }
+  return best;
+}
+function _rtsWxTick(dt) {
+  var G = window._rtsG, W = G.wx || [], i;
+  for (i = W.length - 1; i >= 0; i--) {
+    var c = W[i];
+    c.t -= dt;
+    if (c.t <= 0) { W.splice(i, 1); G.visDirty = 1; continue; }
+    if (c.kind !== 'storm') continue;
+    c.boltT -= dt;
+    if (c.boltT > 0) continue;
+    c.boltT += RTS_THUNDER.every;
+    var hit = _rtsBoltTarget(c);
+    if (!hit) continue;
+    _rtsDamage(hit, RTS_THUNDER.dmg, null, false);
+    (G.bolts = G.bolts || []).push({ x: hit.x, z: hit.z, t: 0 });
+    G.fx.push({ kind: 'boom', x: hit.x, y: 1, z: hit.z, t: 0, big: 1.4 });
+    if (typeof _rtsSfx === 'function') _rtsSfx('boom', hit.x, hit.z);
+  }
+  /* the bolts the renderer draws, for their instant */
+  if (G.bolts) for (i = G.bolts.length - 1; i >= 0; i--) if ((G.bolts[i].t += dt) > 0.35) G.bolts.splice(i, 1);
 }
 </script>
 <script>/* core/supers.js - superweapons (atom bomb, iron curtain, chronosphere, GPS) and the shroud
@@ -12017,6 +12199,8 @@ function _rtsSuperFire(side, key, tx, tz, sel) {
   else if (key === 'ironcurtain') ok = _rtsFireIron(side, tx, tz);
   else if (key === 'chrono')      ok = _rtsFireChrono(side, tx, tz, sel);
   else if (key === 'gps')         ok = _rtsFireGps(side);
+  else if (key === 'fogbank')     ok = _rtsFireFogBank(side, tx, tz);     /* core/wxsupers.js */
+  else if (key === 'thunder')     ok = _rtsFireThunder(side, tx, tz);
   if (!ok) return false;
   var st = G.sides[side].supers[key];
   st.t = 0; st.ready = false; st.said = false;
@@ -12197,6 +12381,8 @@ function _rtsSightFrom(tx, tz, range) {
   range = Math.max(0, Math.min(RTS_SIGHT_MAX, range | 0));
   var n = T.count[range] * 2, off = T.off, rr = range * range;
   var seen = _rtsHorizon(tx, tz, range);
+  /* A FOG BANK in reach hides what is inside it past its own short sight (core/wxsupers.js) */
+  var banks = _rtsWxBanksNear(tx, tz, range), see2 = RTS_FOGBANK.see * RTS_FOGBANK.see;
   for (var i = 0; i < n; i += 2) {
     var dx = off[i], dz = off[i + 1];
     /* Sight_From filters the ring list by TRUE distance as well - the offset table is a
@@ -12205,6 +12391,7 @@ function _rtsSightFrom(tx, tz, range) {
     if (!_rtsHorizonAt(seen, dx, dz)) continue;
     var x = tx + dx, z = tz + dz;
     if (x < 0 || z < 0 || x >= RTS_N || z >= RTS_N) continue;
+    if (banks && dx * dx + dz * dz > see2 && banks.some(function (b) { return Math.hypot(_rtsWX(x) - b.x, _rtsWX(z) - b.z) <= b.r; })) continue;
     var c = z * RTS_N + x;
     G.vis[c] = 1; G.mapped[c] = 1;
   }
@@ -12224,7 +12411,7 @@ function _rtsVisTick(dt) {
     if (!def) continue;
     /* Standing high is worth a wider disc - see RTS_ELEV_SIGHT. _rtsSightFrom clamps to
        RTS_SIGHT_MAX, so the original's own ten-cell ceiling still holds over the bonus. */
-    _rtsSightFrom(_rtsTX(e.x), _rtsTX(e.z), _rtsFogSight(rtsSightTiles(def) + _rtsSightBonus(e)));   /* fog: core/skyplay.js */
+    _rtsSightFrom(_rtsTX(e.x), _rtsTX(e.z), _rtsWxSight(e.x, e.z, _rtsFogSight(rtsSightTiles(def) + _rtsSightBonus(e))));   /* fog: core/skyplay.js, wxsupers.js */
   }
   G.visDirty = 1;                 /* the renderer only re-bakes the shroud when this is set */
 }
@@ -13886,6 +14073,7 @@ function _rtsFindTarget(e, range, w) {
        close enough to board. An asymmetric distance would have quietly answered all of those
        differently too, and none of them are about height. */
     if (dist > _rtsElevReach(e, o, range)) continue;
+    if (!_rtsWxFinds(e, o, dist)) continue;          /* a fog bank between them: core/wxsupers.js */
     var v = _rtsEvalObject(e, o, dist, w);
     if (v > bv) { bv = v; best = o; }
   }
@@ -17866,6 +18054,9 @@ function _rtsAISupers(dt) {
     var aim = null;
     if (key === 'nuke')            aim = _rtsAIMassOf('player');
     else if (key === 'ironcurtain') aim = _rtsAIMassOf('enemy');
+    /* weather on the player's base: the fog blinds its guns to the approach, the storm grounds
+       its aircraft and strikes what stands there (core/wxsupers.js) */
+    else if (key === 'fogbank' || key === 'thunder') aim = _rtsAIMassOf('player');
     else if (key === 'chrono')      continue;   /* see below */
     if (!aim) continue;
     if (_rtsSuperFire('enemy', key, aim.tx, aim.tz)) return;   /* one per decision */
@@ -18467,6 +18658,7 @@ function _rtsTick(dt) {
   _rtsSupersTick(dt);
   _rtsStrikesTick(dt);
   _rtsIronTick(dt);
+  _rtsWxTick(dt);                                /* fog banks and thunderheads: core/wxsupers.js */
   _rtsPowerDamage(dt);
   /* Power_Output tracks hit points, so it has to be re-totalled before anything reads it. */
   _rtsRecalcPower('player'); _rtsRecalcPower('enemy');
@@ -23360,6 +23552,7 @@ function _r3dFxEmit(G, V) {
   if (typeof _r3dFxWakes === 'function') _r3dFxWakes(G, V);     /* dust and wakes - fxwake3d.js */
   if (typeof _r3dFxAlive === 'function') _r3dFxAlive(G, V);     /* stacks, beacons - alive3d.js */
   if (typeof _r3dFxSky === 'function') _r3dFxSky(G, V);         /* lamps, rain, fog - skyfx3d.js */
+  if (typeof _r3dFxWx === 'function') _r3dFxWx(G, V);           /* fog banks, thunderheads - wxfx3d.js */
   if (typeof _r3dFxMuzzle === 'function') _r3dFxMuzzle(G, V);   /* guns going off - combat3d.js */
   if (typeof _r3dFxAir === 'function') _r3dFxAir(G, V);         /* contrails, afterburners - air3d.js */
   if (typeof _r3dFxHurt === 'function') _r3dFxHurt(G, V);       /* the smoke of the damaged - hurt3d.js */
@@ -27117,6 +27310,70 @@ function _r3dFxSky(G, V) {
       var r = 14 + _r3dFxH(i, 2.2) * 12;
       _r3dFxBill(V.M, V, bx, V.ground(bx, bz) + r * 0.25, bz, r, r * 0.55, 0.4, R3D_FXT_BLOB, 0.35, i * 0.37, 0.32 * S.banks, 0, R3D_BANK_C);
     }
+  }
+}
+</script>
+<script>/* render3d/wxfx3d.js - weather called down (core/wxsupers.js) in the effects pass: a fog bank
+   lying on the ground where it was called, and a thunderhead's cloud, its rain and its bolts.
+   Laid from hashes each frame like the sky's own weather (skyfx3d.js), so it costs no state.
+   Each comes in and goes out over R3D_WX_FADE seconds rather than popping. */
+
+var R3D_WX_FADE = 3;
+var R3D_WX_FOG_C = [0.88, 0.9, 0.93];
+var R3D_WX_CLOUD_C = [0.30, 0.32, 0.38];
+var R3D_WX_BOLT_C = [0.86, 0.9, 1.0];
+
+function _r3dFxWx(G, V) {
+  var W = G && G.wx, R3 = window._R3D;
+  if (R3 && R3.wxOff === true) return;
+  var vb = _r3dViewBounds(), i, j;
+  for (i = 0; W && i < W.length; i++) {
+    var c = W[i], life = c.kind === 'fog' ? RTS_FOGBANK.time : RTS_THUNDER.time;
+    if (c.x + c.r < vb.x0 - 20 || c.x - c.r > vb.x1 + 20 || c.z + c.r < vb.z0 - 20 || c.z - c.r > vb.z1 + 20) continue;
+    var fade = Math.max(0, Math.min(1, (life - c.t) / R3D_WX_FADE, c.t / R3D_WX_FADE));
+    if (c.kind === 'fog') {
+      /* the bank: wide low blobs over the whole of it, thickest in the middle, drifting */
+      var nb = Math.round(c.r * c.r / 9);
+      for (j = 0; j < nb; j++) {
+        var a = _r3dFxH(j, c.id * 1.7) * Math.PI * 2, rr = Math.sqrt(_r3dFxH(j, c.id * 3.1)) * c.r * 0.92;
+        var bx = c.x + Math.cos(a) * rr + Math.sin(V.t * 0.15 + j) * 2.2, bz = c.z + Math.sin(a) * rr + Math.cos(V.t * 0.12 + j * 0.7) * 1.6;
+        var br = 6 + _r3dFxH(j, 5.3) * 5;
+        /* flat and low: a blanket lying on the ground, not a cloud standing on it */
+        _r3dFxBill(V.M, V, bx, V.ground(bx, bz) + br * 0.12, bz, br, br * 0.38, 0.4, R3D_FXT_BLOB, 0.3, j * 0.41 + c.id,
+                   0.6 * fade * (1 - 0.3 * rr / c.r), 0, R3D_WX_FOG_C);
+      }
+    } else {
+      /* the cloud, low, heavy and dark over the storm */
+      var nc = Math.round(c.r * c.r / 16);
+      for (j = 0; j < nc; j++) {
+        var ca = _r3dFxH(j, c.id * 2.3) * Math.PI * 2, cr = Math.sqrt(_r3dFxH(j, c.id * 4.7)) * c.r;
+        var cx = c.x + Math.cos(ca) * cr + Math.sin(V.t * 0.3 + j) * 1.5, cz = c.z + Math.sin(ca) * cr;
+        var cs = 7 + _r3dFxH(j, 7.7) * 5;
+        _r3dFxBill(V.M, V, cx, V.ground(cx, cz) + 12 + _r3dFxH(j, 1.3) * 4, cz, cs, cs * 0.55, 0.4, R3D_FXT_BLOB, 0.4, j * 0.37 + c.id,
+                   0.6 * fade, 0, R3D_WX_CLOUD_C);
+      }
+      /* its rain, under the cloud only */
+      var nr = Math.round(c.r * c.r / 3);
+      for (j = 0; j < nr; j++) {
+        var ph = _r3dFxH(j, 3.3), cyc = V.t / R3D_RAIN_FALL + ph, ep = Math.floor(cyc), p = cyc - ep;
+        var ra = _r3dFxH(j * 1.7 + ep * 0.31, c.id) * Math.PI * 2, rd = Math.sqrt(_r3dFxH(j * 2.3 + ep * 0.57, c.id + 0.5)) * c.r;
+        var rx = c.x + Math.cos(ra) * rd, rz = c.z + Math.sin(ra) * rd, top = V.ground(rx, rz) + 18 * (1 - p);
+        if (p < 0.94) _r3dFxStreak(V.M, V, rx + 0.35, top + 1.9, rz + 0.12, rx, top, rz, 0.12, 0, R3D_FXT_RAIN, 0, j, 0.8 * fade, 0, R3D_RAIN_C);
+      }
+    }
+  }
+  /* the bolts: a jagged line of light from the cloud to what it struck, and a glare at the foot */
+  var Bl = G && G.bolts;
+  for (i = 0; Bl && i < Bl.length; i++) {
+    var b = Bl[i], gy = V.ground(b.x, b.z), op = Math.max(0, 1 - b.t / 0.35), px = b.x, pz = b.z, py = gy + 24;
+    for (j = 1; j <= 8; j++) {
+      var k = j / 8, nx = b.x + (j < 8 ? (_r3dFxH(j, b.x + b.z) - 0.5) * 3.4 * (1 - k) : 0);
+      var nz = b.z + (j < 8 ? (_r3dFxH(j, b.z - b.x) - 0.5) * 2.4 * (1 - k) : 0), ny = gy + 24 * (1 - k);
+      _r3dFxStreak(V.M, V, px, py, pz, nx, ny, nz, 1.0, 0.6, R3D_FXT_STREAK, 0, 0, op, 0, R3D_WX_BOLT_C);
+      _r3dFxStreak(V.M, V, nx, ny, nz, px, py, pz, 1.0, 0.6, R3D_FXT_STREAK, 0, 0, op, 0, R3D_WX_BOLT_C);
+      px = nx; py = ny; pz = nz;
+    }
+    _r3dFxBill(V.M, V, b.x, gy + 1, b.z, 4, 4, 0.6, R3D_FXT_GLOW, 0, 0.5, op, 0, R3D_WX_BOLT_C);
   }
 }
 </script>

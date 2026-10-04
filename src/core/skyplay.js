@@ -37,8 +37,20 @@ function _rtsFogReach(range) { return _rtsFogged() ? Math.min(range, RTS_FOG_CEL
 function _rtsStormAt(sky, t) {
   return sky === 'rain' && typeof _rtsShower === 'function' && _rtsShower(t).rain >= RTS_STORM_RAIN;
 }
-/* Does the storm hold this aircraft on the ground? Asked by _rtsAirTick. */
-function _rtsStormGrounds(e, d) { var G = window._rtsG; return !!(G && G.storm && d.weapon); }
+/* Does the storm hold this aircraft on the ground? Asked by _rtsAirTick. The sky's storm, or a
+   Thunderhead it has been caught in (core/wxsupers.js) - held until that one has blown out. */
+function _rtsStormGrounds(e, d) {
+  var G = window._rtsG;
+  if (!G || !d.weapon) return false;
+  if (G.storm) return true;
+  if (e.wxHeld) {
+    if (_rtsWxCells().some(function (c) { return c.id === e.wxHeld; })) return true;
+    e.wxHeld = 0;
+  }
+  var c = _rtsWxAt('storm', e.x, e.z);
+  if (c) { e.wxHeld = c.id; return true; }
+  return false;
+}
 
 function _rtsSkyPlayTick() {
   var G = window._rtsG;

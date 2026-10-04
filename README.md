@@ -65,6 +65,12 @@ come close, so fog is the day to walk up on a fortified line. In the rain the sh
 clock, and while one is at full strength every armed aircraft is grounded on its pad until it
 passes. A battle keeps the sky it started under, and a save keeps it too.
 
+**Call the weather down.** Each army has a third superweapon. The Compact's Mist Tower lays a fog
+bank anywhere on the map for two minutes: nothing in it sees, or is seen, past three cells, so it
+hides an advance or blinds a fortified line to one. The Dominion's Storm Spire breaks a
+thunderstorm over a place for a minute: lightning strikes the enemy under it every few seconds,
+aircraft first, and no aircraft flies in it.
+
 **The enemy uses its whole garage.** It mines the approach to its own base, and once you have a
 harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands
 them beside your ore field, and goes home to do it again.

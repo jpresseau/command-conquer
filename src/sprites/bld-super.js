@@ -1,4 +1,4 @@
-/* sprites/bld-super.js - the four superweapon buildings, and the three small defences that share their file by
+/* sprites/bld-super.js - the six superweapon buildings, and the three small defences that share their file by
    position rather than by kind: wall, pillbox and gun turret.
 
    One arm of the model chain that used to be a single 500-line function in
@@ -150,6 +150,56 @@ function _sprBldSuper(X, key) {
     pipe(W / 2 - 7, 2, D / 2 - 7, 9, 'y', 1.2);
     facade(6, 3.2, W / 2 - 4, D / 2 - 4);
     floodlight(W / 2 - 5, 2, -D / 2 + 5, 11);
+
+  } else if (key === 'mist') {
+    /* MIST TOWER. A tall white tower that breathes: a water tank on legs, a slender stack with
+       rings of nozzles up it, and a crown that glows. Tall and pale where the Storm Spire is a
+       dark copper lattice - the two weather machines must not be confusable. */
+    _r3Box(m, 0, 0, 0, W - 4, 3, D - 4, C[2], C[0]);
+    _r3Slab(m, W / 2 - 9, 3, D / 2 - 9, 10, 6, 10, 1.5, WH[1], WH[0]);   /* pump house */
+    _r3Cyl(m, 2, 3, 2, 6, 4, C[3], C[1], 20);                            /* the stack's footing */
+    _r3Cyl(m, 2, 7, 2, 3.2, 22, WH[0], WH[2], 20);                       /* the stack */
+    for (var _mr = 0; _mr < 4; _mr++) {                                  /* nozzle rings */
+      _r3Cyl(m, 2, 12 + _mr * 4.5, 2, 4.4, 1.0, S[2], S[1], 20);
+      for (var _mn = 0; _mn < 6; _mn++) {
+        var _ma = _mn / 6 * Math.PI * 2 + _mr * 0.5;
+        _r3Box(m, 2 + Math.cos(_ma) * 4.6, 12.2 + _mr * 4.5, 2 + Math.sin(_ma) * 4.6, 0.9, 0.6, 0.9, S[3], S[3]);
+      }
+    }
+    _r3Cone(m, 2, 29, 2, 4.2, 1.6, 3, WH[1], 20);                        /* the crown */
+    _r3Cyl(m, 2, 32, 2, 1.4, 1.4, RTS_PAL.lit, RTS_PAL.lit, 12);
+    /* the reservoir on its legs, the pipe that feeds the stack */
+    for (var _ml = 0; _ml < 4; _ml++)
+      _r3Box(m, -W / 2 + 9 + (_ml & 1 ? 3 : -3), 3, -D / 2 + 9 + (_ml & 2 ? 3 : -3), 1.0, 8, 1.0, DK[1], DK[2]);
+    _r3Cyl(m, -W / 2 + 9, 11, -D / 2 + 9, 5.2, 6, C[3], WH[0], 20);
+    pipe(-W / 2 + 9, 11, -D / 2 + 9, 8, 'x', 1.0);
+    _r3Box(m, 2, 9.2, -D / 2 + 9, 8, 1.2, 3, B.roof, B.roof);           /* team band */
+    facade(6, 3.2, W / 2 - 4, D / 2 - 4);
+    ladder(W / 2 - 5, 2, D / 2 - 5, 9);
+    floodlight(W / 2 - 5, 2, -D / 2 + 5, 11);
+
+  } else if (key === 'spire') {
+    /* STORM SPIRE. A dark lattice needle ringed with copper, standing on capacitor banks, a
+       ball on top for the lightning to come down to. Built to draw the eye up, the way a storm
+       does. */
+    _r3Box(m, 0, 0, 0, W - 4, 3, D - 4, C[2], C[0]);
+    _r3Box(m, 0, 3, 0, W - 10, 5, D - 10, OL[0], OL[1]);                 /* plinth, painted */
+    for (var _sl = 0; _sl < 5; _sl++) {                                  /* the needle, tapering */
+      var _sw = 9 - _sl * 1.5;
+      _r3Box(m, 0, 8 + _sl * 4.4, 0, _sw, 4.4, _sw, DK[1], DK[2]);
+      _r3Cyl(m, 0, 11.6 + _sl * 4.4, 0, _sw * 0.5 + 0.9, 0.9, CU[0], CU[3], 18);    /* copper collars */
+    }
+    _r3Cyl(m, 0, 30, 0, 0.8, 4, S[2], S[1], 12);                         /* the rod */
+    _r3Cone(m, 0, 34, 0, 1.4, 2.8, 2, CU[1], 18);
+    _r3Cone(m, 0, 36, 0, 2.8, 1.4, 2, CU[0], 18);
+    _r3Cyl(m, 0, 35.4, 0, 1.2, 1.2, RTS_PAL.lit, RTS_PAL.lit, 12);
+    for (var _sc = 0; _sc < 4; _sc++)                                    /* capacitor banks */
+      _r3Cyl(m, (_sc & 1 ? 1 : -1) * (W / 2 - 6), 3, (_sc & 2 ? 1 : -1) * (D / 2 - 6),
+             2.4, 7.0, CU[1], CU[0], 18);
+    _r3Box(m, 0, 8, -D / 2 + 6, 9, 1.2, 3, B.roof, B.roof);             /* team band */
+    _r3Box(m, W / 2 - 7, 3, 0, 4, 6, 6, S[2], S[1]);                     /* switch room */
+    roofscape(8.5, W / 2 - 5, D / 2 - 5);
+    ladder(-W / 2 + 4, 2, D / 2 - 4, 9);
 
   } else if (key === 'wall') {
     /* Concrete Wall. Has to tile with itself edge to edge, so it fills the cell exactly and

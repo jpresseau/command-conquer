@@ -36,6 +36,8 @@ because saves and specs hold them. A player sees only the names in the tables:
 | `iron` / `ironcurtain` | Iron Curtain | Bastion Generator / Bastion Field |
 | `pdox` / `chrono` | Chronosphere | Rift Gate / Rift Jump |
 | `gps` | GPS Uplink / Satellite | Skyeye Uplink / Satellite |
+| `mist` / `fogbank` | (new) | Mist Tower / Fog Bank |
+| `spire` / `thunder` | (new) | Storm Spire / Thunderhead |
 
 `unit/brand` keeps the old names out of every string in `src/`.
 

@@ -112,7 +112,7 @@ var RTS_AI = {
      the opponent uses to raid a coast, and the ratio has to stay small or a map
      with a long shoreline turns the whole base plan maritime. */
           navalyard:0.05, subpen:0.05,
-          mslo:0.02, iron:0.02, pdox:0.02, gps:0.02 },
+          mslo:0.02, iron:0.02, pdox:0.02, gps:0.02, mist:0.02, spire:0.02 },
   limit:{ refinery:4,    barracks:2,    factory:2,    radar:1,    lab:1,    depot:1,
   /* The silo limit is high on purpose and is the one number here that was MEASURED rather
      than guessed. At 6 the opponent filled its 17,000 of storage on `normal` and then threw
@@ -125,7 +125,7 @@ var RTS_AI = {
           navalyard:1, subpen:1,
   /* One each. A second silo would not charge a second missile - the timer is per house - so
      building one is pure waste, and the limit says so rather than relying on the ratio. */
-          mslo:1,      iron:1,      pdox:1,    gps:1 },
+          mslo:1,      iron:1,      pdox:1,    gps:1,    mist:1,    spire:1 },
   /* HOUSE.CPP AI_Building checks Tiberium against Capacity before it checks anything else:
      an overflowing house builds a silo NEXT, whatever else the base plan wanted. Without this
      the storage cap is a pure nerf to the opponent - it loses the income and never buys the
@@ -162,7 +162,7 @@ var RTS_AI = {
   buildOrder:['refinery', 'barracks', 'silo', 'factory', 'radar', 'apower', 'depot', 'lab', 'kennel',
               'helipad', 'afld', 'navalyard', 'subpen',
               'pillbox', 'flametower', 'turret', 'rocketpit', 'tesla', 'aagun',
-              'mslo', 'iron', 'pdox', 'gps'],
+              'mslo', 'iron', 'pdox', 'gps', 'mist', 'spire'],
 
   /* WHICH RUNG EACH BUILDING BELONGS TO. The order above says what to build first; this says
      who gets to build it at all, and it exists because the gate it replaces was all-or-nothing.
@@ -184,7 +184,7 @@ var RTS_AI = {
 
      Recruit keeps an EMPTY order deliberately - refinery and barracks are listed at 3, not 2 -
      because that rung is unchanged by this and its ladder position was already measured. */
-  buildIQ:{ mslo:5, iron:5, pdox:5, gps:5 },
+  buildIQ:{ mslo:5, iron:5, pdox:5, gps:5, mist:5, spire:5 },
   buildIQDefault:3,
   /* What to spend a production run on. A table rather than an if-chain: adding a unit to
      RTS_UNITS should not mean editing the opponent's brain, and the hardcoded ladder that used
