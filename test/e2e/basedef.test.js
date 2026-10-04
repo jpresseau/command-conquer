@@ -37,11 +37,17 @@ var S = new Suite('basedef');
 /* One seed per army rather than the three the numbers above came from: what has to be guarded
    from here on is the property, not the mean.
 
-   420 seconds is not padding. At 300 the base plan has not reached its defensive tail yet -
+   480 seconds is not padding. At 300 the base plan has not reached its defensive tail yet -
    measured, the same run gives 3 defences over 2 zones and 2 over 1, and every assertion below
    fails on a perfectly healthy build. A spec has to run long enough to reach the thing it is
-   about, and this is where that is. It costs about 80 seconds of wall clock. */
-var SECS = 420;
+   about, and this is where that is. It was 420, and the Soviet plan on seed 9001 was asking for
+   its Tesla Coil at 417 of those - a three-second margin on a match whose whole trajectory
+   turns on which teams the roll raises. The twelfth team type (Ebb, rules/teams.js) moved one
+   Wolfpack's cap at one army size, the battle went differently from 330 s, and the same plan
+   asked for the coil at 458 s instead: still reached, still not skipped, which is what this spec
+   is about. Measured in node with the same seed and ticks (bdrep): 417 s without, 458 s with.
+   It costs about 100 seconds of wall clock. */
+var SECS = 480;
 
 (async function () {
   var browser = await chromium.launch();

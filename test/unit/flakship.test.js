@@ -4,7 +4,8 @@
                    not without one; and the cruiser's guns find nothing to fire at in a ship or a
                    building - it is anti-aircraft and nothing else
      ESCORT        left idle beside a gunboat, it follows when the gunboat sails fourteen cells,
-                   and keeps within a few cells of it; sent back by the player it goes, and
+                   and keeps within a few cells of it; it keeps station on the ship under way
+                   over one parked nearer; sent back by the player it goes, and
                    waits there until it is idle before taking up station again; with no ship of
                    its side in reach it stays where it is; and two Flak Cruisers with no other
                    ship do not chase each other
@@ -106,6 +107,14 @@ S.ok('sent back by the player it goes there, and does not break off for the stat
      there !== null ? there.toFixed(1) + ' cells from where it was sent, ' + stillThere.toFixed(1) + ' from the gunboat' : 'never arrived');
 S.ok('...and once idle takes up station again', stillThere > 6 && cells(fl1, gb1) <= 4,
      'from ' + (stillThere || 0).toFixed(1) + ' to ' + cells(fl1, gb1).toFixed(1) + ' cells off the gunboat');
+/* the ship that is going somewhere, over the one parked nearer */
+G = fresh();
+var parked = g._rtsSpawnUnit('player', 'gunboat', C.x, C.z), f3 = at(C, 2, 0), fl3 = g._rtsSpawnUnit('player', 'flakship', f3.x, f3.z);
+var s4 = at(C, 4, 0), sailing = g._rtsSpawnUnit('player', 'gunboat', s4.x, s4.z);
+g._rtsOrderMove(sailing, CH.B.x, CH.B.z, false);
+run(25, function () { parked.order = 'hold'; parked.path = null; });
+S.ok('it keeps station on the ship under way, not on the one parked nearer', cells(fl3, sailing) <= 4 && cells(fl3, parked) > 6 && cells(sailing, parked) >= 10,
+     cells(fl3, sailing).toFixed(1) + ' cells from the sailing gunboat, ' + cells(fl3, parked).toFixed(1) + ' from the parked one');
 /* nothing to follow */
 G = fresh();
 var lone = g._rtsSpawnUnit('player', 'flakship', C.x, C.z), x0 = lone.x, z0 = lone.z;

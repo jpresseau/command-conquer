@@ -14,15 +14,21 @@
 var RTS_ESCORT = { reach: 14, close: 3, every: 1 };
 
 function _rtsEscorts(u) { return !!(rtsUnitDef(u.def) || {}).escorts; }
-/* the ship it keeps station on: the nearest of its side's within reach that is not an escort */
+/* the ship it keeps station on: of its side's within reach that are not escorts, the nearest
+   one UNDER WAY - sailing, or in a team on the march - and only if none is, the nearest at all.
+   The umbrella goes where the fleet goes, not to whichever hull happens to be parked closest. */
 function _rtsEscortOf(e) {
-  var G = window._rtsG, best = null, bd = RTS_ESCORT.reach * RTS_TILE;
+  var G = window._rtsG, best = null, bd = 1e9, busy = false;
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
     if (o === e || o.dead || o.inside || o.side !== e.side || o.type !== 'unit') continue;
     var d = rtsUnitDef(o.def) || {};
     if (!d.sea || d.escorts) continue;
     var dd = Math.hypot(o.x - e.x, o.z - e.z);
+    if (dd > RTS_ESCORT.reach * RTS_TILE) continue;
+    var going = !!(o.path && o.pi < o.path.length) || !!(o.sqd != null && G.teams && G.teams[o.sqd] && G.teams[o.sqd].moving);
+    if (going && !busy) { busy = true; bd = 1e9; }
+    if (busy && !going) continue;
     if (dd < bd) { bd = dd; best = o; }
   }
   return best;

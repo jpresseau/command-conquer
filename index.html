@@ -706,7 +706,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">9f8388d · 2026-10-04</div>
+  <div id="rtsBuild" title="build">ff4918e · 2026-10-05</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -2640,6 +2640,20 @@ var RTS_TEAM_TYPES = [
     members:{ cruiser:1, destroyer:1 },
     max:1, autocreate:true, suicide:false,
     missions:[ ['patrol','sea'], ['attack','buildings'], ['tarcom',0] ] },
+  /* THE LOW-WATER BOMBARDMENT: the Dominion's River Monitor, escorted. `tide:true` is the gate,
+     the same shape as Landing's `crossing` - _rtsAIEbb (core/monitor.js) says yes only on the
+     falling tide with the flats drying, AND only when a Monitor and two subs are afloat and
+     free, so the team forms the moment it is raised and reaches the flats near low water. The
+     subs are the escort the flat-bottomed hull needs: it is slow, and a Destroyer finds it.
+     `only` because the opponent owns one Monitor at a time (_rtsAISupportBuy), so a second team
+     could never be crewed. Quarry `shore`: a building the Monitor can shell from its water.
+     `suicide` because the Monitor and its escort part company by design: the Monitor goes in
+     over the flats where the subs cannot follow, and the lag rule would otherwise hold whoever
+     was nearest the team's centre while the other half of the team could not close up. */
+  { name:'Ebb',      priority:3, reinforce:false, quarry:'shore',
+    members:{ monitor:1, sub:2 },
+    max:1, only:true, autocreate:true, suicide:true, tide:true,
+    missions:[ ['patrol','sea'], ['attack','shore'], ['attack','buildings'], ['tarcom',0] ] },
   /* --- AND ACROSS IT. The one team that uses the water to deliver an ARMY rather than to
      fight on it, and the only one whose composition mixes the two domains.
 
@@ -10285,6 +10299,7 @@ function _rtsNearestOpen(tx, tz, maxR, dom) {
   }
   return null;
 }
+var RTS_SEA_GOAL_RINGS = 12;       /* how far a hull's blocked goal is walked out to water */
 function _rtsPath(sx, sz, gx, gz, dom) {
   if (!_rtsPF) _rtsPathfindInit();
   var P = _rtsPF, run = ++P.run;
@@ -10313,11 +10328,15 @@ function _rtsPath(sx, sz, gx, gz, dom) {
     return [{ x:ex, z:ez }].concat(rest);
   }
   /* If the goal tile is blocked (ordered onto a building), walk outwards to the nearest
-     open tile so "attack that refinery" still produces a path that arrives beside it. */
+     open tile so "attack that refinery" still produces a path that arrives beside it.
+     FURTHER FOR A HULL: a ship sent at a building ashore is being sent to the water nearest it,
+     and at low tide that water is past the flats as well as past the building - six rings found
+     nothing for a submarine sent at a shore battery two cells inland, and its order was dropped
+     (unit/ebb). A long gun's reach is nine cells, so the water it fires from may be that far. */
   var moved = false;
   if (!_rtsInB(gtx, gtz) || _rtsBlocked(gtx, gtz, dom)) {
-    var best = null, bd = 1e9;
-    for (var rr = 1; rr <= 6 && !best; rr++) {
+    var best = null, bd = 1e9, rings = (dom === 'sea' || dom === 'shallow') ? RTS_SEA_GOAL_RINGS : 6;
+    for (var rr = 1; rr <= rings && !best; rr++) {
       for (var ox = -rr; ox <= rr; ox++) for (var oz = -rr; oz <= rr; oz++) {
         if (Math.max(Math.abs(ox), Math.abs(oz)) !== rr) continue;
         var cx = gtx + ox, cz = gtz + oz; if (_rtsBlocked(cx, cz, dom)) continue;
@@ -10434,12 +10453,17 @@ function _rtsPath(sx, sz, gx, gz, dom) {
     }
   }
   var out = [], px = sx, pz = sz, j = 0, pc = 0;
+  /* A HULL'S ROUTE IS NEVER STRAIGHTENED. It used to be pulled against LAND, on the premise that
+     a segment starting on water never clears - and changing that moves every fleet, so it is
+     left unpulled. The premise broke with the tide: a hull standing on a flat that has dried
+     starts its segment on open GROUND, the line over the headland beyond cleared, and the River
+     Monitor's twenty-two-waypoint route up the channel collapsed onto one it could not sail
+     (unit/ebb). So the pull is simply skipped for a hull, in every state of the tide. */
+  var pull = dom !== 'sea' && dom !== 'shallow';
   while (j < pts.length) {
     var far = j;
-    for (var k = pts.length - 1; k > j; k--) {
-      /* The domain is passed for a hovercraft, whose straight line may cross water. Ships are
-         still pulled against LAND here - which never clears, so their paths are never
-         straightened - and changing that moves every fleet; it is left as it was. */
+    for (var k = pts.length - 1; k > j && pull; k--) {
+      /* The domain is passed for a hovercraft, whose straight line may cross water. */
       if (!_rtsClearLine(px, pz, pts[k].x, pts[k].z, dom === 'hover' ? dom : undefined)) continue;
       if (cum && _rtsLineClimb(px, pz, pts[k].x, pts[k].z) > cum[k] - pc + RTS_PULL_SLACK) continue;
       far = k; break;
@@ -12657,6 +12681,14 @@ var RTS_TIDE = {
 function _rtsTideLevel(G) { return Math.cos(2 * Math.PI * ((G.t || 0) % RTS_TIDE.period) / RTS_TIDE.period); }
 /* The level below which a flat d cells from the shore is dry: the first ring dries soonest. */
 function _rtsTideDriesAt(d) { return 1 - 2 * d / (RTS_TIDE.reach + 1); }
+/* LOW WATER, for anything that lives on the flats: the first ring is dry, so there is ground a
+   ship cannot sail and water a Monitor can (core/monitor.js). THE EBB: the tide falling, with the
+   outermost flats still wet - the window in which a fleet can still sail out down a channel
+   that will be a causeway at low water, so an escort sent with the Monitor gets there with it. */
+function _rtsTideLow(G) { return _rtsTideLevel(G) <= _rtsTideDriesAt(1); }
+function _rtsTideEbbing(G) {
+  return ((G.t || 0) % RTS_TIDE.period) < RTS_TIDE.period / 2 && _rtsTideLevel(G) > _rtsTideDriesAt(RTS_TIDE.reach);
+}
 
 /* The flats: every open-sea cell within reach of a shore, by its distance from it. */
 function _rtsTideInit(G) {
@@ -14657,6 +14689,7 @@ function _rtsOrderCapture(u, b) {
   u.path = null; u.goal = null; u.susp = null;
   return true;
 }
+var RTS_REFUSED_RETRY = 2;       /* seconds before a unit with no route to its target asks again */
 function _rtsOrderAttack(e, tgt) {
   if (e.type !== 'unit') return;
   var d = rtsUnitDef(e.def);
@@ -14668,8 +14701,19 @@ function _rtsOrderAttack(e, tgt) {
     _rtsOrderMove(e, tgt.x, tgt.z, false); return;
   }
   /* ...and the same for any unit ordered onto what none of its guns can engage: a tank sent
-     at a gunship drives to where it is, a Flak Track sent at a tank does the same. */
-  if (!_rtsCanEngage(e, tgt)) { _rtsOrderMove(e, tgt.x, tgt.z, false); return; }
+     at a gunship drives to where it is, a Flak Track sent at a tank does the same.
+     ONCE, NOT ONCE A TICK. A team re-issues its attack to every member every tick it is not on
+     one, and this fallback is never "on one": for a submarine sent with the Ebb team at a battery
+     ashore that was a fresh A* over the whole sea thirty times a second, and when no route
+     existed each one searched every cell of it (unit/ebb). Already driving there: leave it.
+     Refused a route: ask again in a couple of seconds, not now. */
+  if (!_rtsCanEngage(e, tgt)) {
+    var same = e.goal && e.goal.x === tgt.x && e.goal.z === tgt.z;
+    if (same && e.order === 'move') return;
+    if (same && e.goalT != null && window._rtsG.t - e.goalT < RTS_REFUSED_RETRY) return;
+    e.goalT = window._rtsG.t;
+    _rtsOrderMove(e, tgt.x, tgt.z, false); return;
+  }
   e.order = 'attack'; e.target = tgt; e.hstate = null;
   e.goal = { x:tgt.x, z:tgt.z };
   e.path = _rtsPathFor(e, tgt.x, tgt.z); e.pi = 0;
@@ -17541,6 +17585,7 @@ function _rtsQuarryMatch(o, quarry) {
   if (quarry === 'power') return sd.power > 0;
   if (quarry === 'factories') return !!sd.produces;
   if (quarry === 'defense') return !!sd.weapon;
+  if (quarry === 'shore') return _rtsShoreReach(o);     /* a Monitor can shell it: core/monitor.js */
   return false;
 }
 /* TMission_Attack: the LEADER picks the target, and the leader is the first active member
@@ -17804,6 +17849,8 @@ function _rtsSuggestTeam(spare) {
        there is not one. Same gate the engineer purchase is on, so the team and the unit it is
        built around are always raised for the same reason. */
     if (ty.capture && !_rtsAIWorthCapturing()) continue;
+    /* ...and the low-water bombardment goes out on the ebb, with its hulls ready: core/monitor.js */
+    if (ty.tide && !_rtsAIEbb(ty)) continue;
     if (spare < need) continue;
     choices.push(ty);
   }
@@ -18747,15 +18794,21 @@ function _rtsAIBombTick(dt) {
 var RTS_ESCORT = { reach: 14, close: 3, every: 1 };
 
 function _rtsEscorts(u) { return !!(rtsUnitDef(u.def) || {}).escorts; }
-/* the ship it keeps station on: the nearest of its side's within reach that is not an escort */
+/* the ship it keeps station on: of its side's within reach that are not escorts, the nearest
+   one UNDER WAY - sailing, or in a team on the march - and only if none is, the nearest at all.
+   The umbrella goes where the fleet goes, not to whichever hull happens to be parked closest. */
 function _rtsEscortOf(e) {
-  var G = window._rtsG, best = null, bd = RTS_ESCORT.reach * RTS_TILE;
+  var G = window._rtsG, best = null, bd = 1e9, busy = false;
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
     if (o === e || o.dead || o.inside || o.side !== e.side || o.type !== 'unit') continue;
     var d = rtsUnitDef(o.def) || {};
     if (!d.sea || d.escorts) continue;
     var dd = Math.hypot(o.x - e.x, o.z - e.z);
+    if (dd > RTS_ESCORT.reach * RTS_TILE) continue;
+    var going = !!(o.path && o.pi < o.path.length) || !!(o.sqd != null && G.teams && G.teams[o.sqd] && G.teams[o.sqd].moving);
+    if (going && !busy) { busy = true; bd = 1e9; }
+    if (busy && !going) continue;
     if (dd < bd) { bd = dd; best = o; }
   }
   return best;
@@ -18899,22 +18952,37 @@ function _rtsAISeaMinesTick(dt) {
    short, close, tide-riding answer.
 
    The opponent buys one once it has a yard, its own base is defended and the player has a
-   building within the Monitor's reach of the water. It sends it at that building, the one
-   nearest the Monitor, whenever it is idle. */
+   building within the Monitor's reach of the water. IT COMES IN ON THE EBB AND LEAVES ON THE
+   FLOOD: at low water (core/tide.js _rtsTideLow, the first flats dry) it is sent at the player's
+   building nearest it that it can shell from the water; at high water it goes home to its yard,
+   breaking off whatever it was doing. So the player's coast is shelled on the tide's clock, and
+   the Monitor is not a lone gunboat at high water.
 
-var RTS_MONITOR = { every: 2 };
+   AND IT SAILS WITH COMPANY. The Ebb team (rules/teams.js, `tide:true`) - a Monitor and two
+   submarines - is raised only on the falling tide (_rtsAIEbb), when every member is already
+   afloat and free, so it forms the moment it is raised and arrives on the flats near low water;
+   the Repair Tender follows it as the fleet (core/repairtruck.js). Its quarry is `shore`
+   (_rtsQuarryMatch): a building a Monitor can shell from its water. A Monitor in a team is the
+   team's; the solo tick leaves it alone. */
+
+var RTS_MONITOR = { every: 2, home: 6 };
+
+/* Can a Monitor shell `b` from its water: is there a cell of the shallow domain within a cell of
+   its reach? Tide-independent, since the shallow domain is. */
+function _rtsShoreReach(b) {
+  var reach = RTS_WEAPONS[rtsUnitDef('monitor').weapon].range / RTS_TILE - 1;
+  var w = _rtsNearestOpen(_rtsTX(b.x), _rtsTX(b.z), Math.floor(reach), 'shallow');
+  return !!w && Math.hypot(_rtsWX(w[0]) - b.x, _rtsWX(w[1]) - b.z) / RTS_TILE <= reach;
+}
 
 /* The player's building nearest the Monitor that it can shell from water: one with an open
    cell of the Monitor's water within a cell of its reach. */
 function _rtsAIMonitorTarget(u) {
-  var G = window._rtsG, d = rtsUnitDef('monitor'), reach = RTS_WEAPONS[d.weapon].range / RTS_TILE - 1;
-  var from = u || _rtsShipyardOf('enemy', null), best = null, bd = 1e9;
+  var G = window._rtsG, from = u || _rtsShipyardOf('enemy', null), best = null, bd = 1e9;
   if (!from) return null;
   for (var i = 0; i < G.ents.length; i++) {
     var b = G.ents[i];
-    if (b.dead || b.side !== 'player' || b.type !== 'struct') continue;
-    var w = _rtsNearestOpen(_rtsTX(b.x), _rtsTX(b.z), Math.floor(reach), 'shallow');
-    if (!w || Math.hypot(_rtsWX(w[0]) - b.x, _rtsWX(w[1]) - b.z) / RTS_TILE > reach) continue;
+    if (b.dead || b.side !== 'player' || b.type !== 'struct' || !_rtsShoreReach(b)) continue;
     var dd = Math.hypot(b.x - from.x, b.z - from.z);
     if (dd < bd) { bd = dd; best = b; }
   }
@@ -18925,13 +18993,37 @@ function _rtsAIMonitorTick(dt) {
   G.ai.monT = (G.ai.monT || 0) + dt;
   if (G.ai.monT < RTS_MONITOR.every) return;
   G.ai.monT = 0;
+  var low = _rtsTideLow(G);
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || u.def !== 'monitor') continue;
+    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || u.def !== 'monitor' || u.sqd != null) continue;
+    if (!low) {                                                   /* the flood: home to the yard */
+      var y = _rtsShipyardOf('enemy', u);
+      if (!y || Math.hypot(y.x - u.x, y.z - u.z) <= RTS_MONITOR.home * RTS_TILE) continue;
+      if (u.order === 'move' && u.goal && Math.hypot(u.goal.x - y.x, u.goal.z - y.z) < RTS_TILE * 3) continue;
+      _rtsOrderMove(u, y.x, y.z, false);
+      continue;
+    }
     if (u.order === 'attack' && u.target && !u.target.dead) continue;
     var t = _rtsAIMonitorTarget(u);
     if (t) _rtsOrderAttack(u, t);
   }
+}
+/* The Ebb team's gate: the tide falling with the flats drying, and every member of the type
+   afloat and free to be recruited right now - so a team that is raised forms at once and sails
+   in the window, instead of holding the Monitor out of the war while it waits for a hull. */
+function _rtsAIEbb(ty) {
+  var G = window._rtsG, need = {}, k;
+  if (!_rtsTideEbbing(G)) return false;
+  for (k in ty.members) need[k] = ty.members[k];
+  for (var i = 0; i < G.ents.length; i++) {
+    var u = G.ents[i];
+    if (u.dead || u.inside || u.side !== 'enemy' || u.type !== 'unit' || u.sqd != null || !need[u.def]) continue;
+    if (!_rtsMission(u).recruitable) continue;
+    need[u.def]--;
+  }
+  for (k in need) if (need[k] > 0) return false;
+  return true;
 }
 </script>
 <script>/* core/missions.js - the team mission list (TEAMTYPE.CPP): the script a team runs.

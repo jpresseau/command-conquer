@@ -71,6 +71,7 @@ function _rtsOrderCapture(u, b) {
   u.path = null; u.goal = null; u.susp = null;
   return true;
 }
+var RTS_REFUSED_RETRY = 2;       /* seconds before a unit with no route to its target asks again */
 function _rtsOrderAttack(e, tgt) {
   if (e.type !== 'unit') return;
   var d = rtsUnitDef(e.def);
@@ -82,8 +83,19 @@ function _rtsOrderAttack(e, tgt) {
     _rtsOrderMove(e, tgt.x, tgt.z, false); return;
   }
   /* ...and the same for any unit ordered onto what none of its guns can engage: a tank sent
-     at a gunship drives to where it is, a Flak Track sent at a tank does the same. */
-  if (!_rtsCanEngage(e, tgt)) { _rtsOrderMove(e, tgt.x, tgt.z, false); return; }
+     at a gunship drives to where it is, a Flak Track sent at a tank does the same.
+     ONCE, NOT ONCE A TICK. A team re-issues its attack to every member every tick it is not on
+     one, and this fallback is never "on one": for a submarine sent with the Ebb team at a battery
+     ashore that was a fresh A* over the whole sea thirty times a second, and when no route
+     existed each one searched every cell of it (unit/ebb). Already driving there: leave it.
+     Refused a route: ask again in a couple of seconds, not now. */
+  if (!_rtsCanEngage(e, tgt)) {
+    var same = e.goal && e.goal.x === tgt.x && e.goal.z === tgt.z;
+    if (same && e.order === 'move') return;
+    if (same && e.goalT != null && window._rtsG.t - e.goalT < RTS_REFUSED_RETRY) return;
+    e.goalT = window._rtsG.t;
+    _rtsOrderMove(e, tgt.x, tgt.z, false); return;
+  }
   e.order = 'attack'; e.target = tgt; e.hstate = null;
   e.goal = { x:tgt.x, z:tgt.z };
   e.path = _rtsPathFor(e, tgt.x, tgt.z); e.pi = 0;

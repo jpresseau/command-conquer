@@ -18,6 +18,7 @@ function _rtsQuarryMatch(o, quarry) {
   if (quarry === 'power') return sd.power > 0;
   if (quarry === 'factories') return !!sd.produces;
   if (quarry === 'defense') return !!sd.weapon;
+  if (quarry === 'shore') return _rtsShoreReach(o);     /* a Monitor can shell it: core/monitor.js */
   return false;
 }
 /* TMission_Attack: the LEADER picks the target, and the leader is the first active member
@@ -281,6 +282,8 @@ function _rtsSuggestTeam(spare) {
        there is not one. Same gate the engineer purchase is on, so the team and the unit it is
        built around are always raised for the same reason. */
     if (ty.capture && !_rtsAIWorthCapturing()) continue;
+    /* ...and the low-water bombardment goes out on the ebb, with its hulls ready: core/monitor.js */
+    if (ty.tide && !_rtsAIEbb(ty)) continue;
     if (spare < need) continue;
     choices.push(ty);
   }
