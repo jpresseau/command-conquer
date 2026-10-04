@@ -94,6 +94,10 @@ drops it without landing - the men come down under canopies and go to work - the
 **An eye that stays up.** The Compact's Recon Drone circles wherever you send it, unarmed, and
 sees what is under it through fog, fog banks and Jammers - and your guns fire on whatever it sees.
 
+**Carpet-bomb a base.** Either army's Heavy Bomber lays a line of eight bombs across whatever you
+send it at, in one pass, then flies home to load again. The bombs hurt everything under them,
+including your own units.
+
 **The enemy uses its whole garage.** It mines the approach to its own base, and once you have a
 harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands
 them beside your ore field, and goes home to do it again.

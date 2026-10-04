@@ -16,7 +16,7 @@
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
   dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46,
-  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:44, drone:26
+  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:44, drone:26, bomber:56
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be

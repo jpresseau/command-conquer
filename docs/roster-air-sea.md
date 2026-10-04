@@ -34,3 +34,23 @@ unarmed and thin-skinned:
 
 `unit/drone` (14 assertions, 7 of 8 mutants killed; the survivor drops `side:'allied'`, which
 changes nothing, because the Dominion has no Helipad).
+
+## The Heavy Bomber — the carpet
+
+Both armies' four-engined bomber (`bomber`), behind either air pad: the Helipad and the Airfield
+both `provides:['airpad']` (`core/bomber.js`):
+- Sent at anything on the ground, it lays `RTS_BOMB.n` (8) bombs `RTS_BOMB.gap` (1) cell apart in
+  one pass, in a straight line along its course and centred on the aim (`_rtsBombRun`). Each bomb
+  is in `G.bombs`, falls for `RTS_BOMB.fall` (0.7 s), and bursts through `_rtsSplash`, which
+  hurts whoever is under it, either side. A bomber already past the start of the line lays only
+  what is still ahead of it. A new order mid-run calls the run off.
+- Its `carpet` weapon is never fired as a shot (`_rtsFire` returns on `w.carpet`). It only lets
+  the bomber be sent at ground targets. The run spends its one round (`ammo:1`), and
+  `_rtsAirTick` sends it home to load again (`rearm:12`).
+- Falling bombs are drawn as dark streaks blended like rain (`_r3dFxBombs`, fxemit3d.js). A
+  `STREAK` is additive, so a dark one would draw nothing.
+- The opponent buys one, after its Paradrop Plane, once the player has dug in and its own base
+  is defended. Whenever the bomber is loaded, it is sent at the player's building with the most
+  other buildings within `RTS_BOMB.crowd` (4) cells (`_rtsAIBombTarget`).
+
+`unit/bomber` (18 assertions, 11 mutants killed).

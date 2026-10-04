@@ -141,6 +141,8 @@ function _rtsUpdateUnit(e, dt) {
   /* An aircraft out of ammo is not available for anything else, so this runs first and can
      take the whole tick. */
   if (e.air && _rtsAirTick(e, dt, d)) { _rtsSteer(e, dt, d); return; }
+  /* ...and a bomber on its run lays its carpet: core/bomber.js */
+  if (d.carpets && _rtsBomberTick(e, dt, d)) { _rtsSteer(e, dt, d); return; }
 
   /* ---- unloading ----
      A transport under an unload order sails/drives to where it was sent and puts its cargo

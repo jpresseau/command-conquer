@@ -706,7 +706,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">d75ccac · 2026-10-04</div>
+  <div id="rtsBuild" title="build">ac97bda · 2026-10-04</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -890,7 +890,7 @@ var RTS_STRUCTS = [
      ammo back to one, and if there is no airfield available "it has to crash", which is
      implemented rather than softened. */
   { key:'helipad',  name:'Helipad',      w:2, h:2, cost:1500, build:14, hp:500,  power:-10,  sight:10,
-    needs:['radar'], produces:'air', rearm:true,
+    needs:['radar'], produces:'air', rearm:true, provides:['airpad'],
     side:'allied', armour:'concrete',
     desc:'Builds and rearms helicopters. Without one, an aircraft out of ammo goes down.' },
   /* The Soviet Airfield. Same job as the Helipad on the other side of the war - AIRCRAFT.CPP
@@ -899,7 +899,7 @@ var RTS_STRUCTS = [
      afld.shp's 72x48) and cheaper, because a runway takes more room than a helipad and because
      the aircraft it flies are cheaper and shorter-legged than the Attack Heli. */
   { key:'afld',     name:'Airfield',     w:3, h:2, cost:1200, build:13, hp:600,  power:-20,  sight:10,
-    needs:['radar'], produces:'air', rearm:true,
+    needs:['radar'], produces:'air', rearm:true, provides:['airpad'],
     side:'soviet', armour:'concrete',
     desc:'Builds and rearms Kestrels and Shrikes. An aircraft with no airfield left has nowhere to land.' },
   { key:'silo',     name:'Ore Silo',   w:2, h:2, cost:150,  build:5,  hp:400,  power:0,    sight:8,
@@ -1132,6 +1132,13 @@ var RTS_UNITS = [
     needs:['helipad'], air:true, alt:18, spots:true, orbits:true,
     side:'allied', armour:'light',
     desc:'Circles wherever you send it and sees everything under it - through fog, fog banks and Jammers. Unarmed.' },
+  /* HEAVY BOMBER. The verb is the CARPET: one pass, a line of eight bombs laid across whatever it
+     is sent at, hurting everything under it - yours too - and then home to load again. Both
+     armies', from either air pad - core/bomber.js. */
+  { key:'bomber',   name:'Heavy Bomber',  kind:'air',      cost:2200, build:22, hp:420,  speed:17,  turn:2.2,r:2.6, sight:20, weapon:'carpet',
+    needs:['airpad'], air:true, ammo:1, rearm:12, alt:20, carpets:true,
+    armour:'light',
+    desc:'Lays a line of eight bombs across what you send it at, then flies home to reload. Its bombs hurt your own units too.' },
   /* FLAK TRACK. The verb is ESCORT: the armour column takes its anti-aircraft cover with it.
      Until this, everything that could shoot down an aircraft either stood still (the AA Gun,
      the Rocket Turret) or was a squad on foot (rockets), so a gunship could pick apart a tank
@@ -1369,6 +1376,10 @@ var RTS_WEAPONS = {
   /* And the Yak's nose guns, which are the mirror image: it strafes people and barely marks
      armour. Cheap, fast, and the answer to massed infantry that the Soviets otherwise have to
      solve with a Flame Tower they cannot move. */
+  /* The Heavy Bomber's load. Never fired as a shot (_rtsFire refuses `carpet`): it is what the
+     bomber can be sent at - anything on the ground - and the run itself is core/bomber.js. */
+  carpet:     { dmg:90, range:2, cool:1, shot:'bomb', speed:0, splash:1, ammo:1, carpet:true,
+                verses:{ none:1, wood:1, light:1, heavy:1, concrete:1 } },
   strafe:     { dmg:16, range:14, cool:0.22, shot:'tracer', speed:0, splash:0.6, ammo:1,
                 verses:{ none:1.15, wood:0.40, light:0.30, heavy:0.10, concrete:0.10 } },
   /* THE ALLIED ANSWER TO ALL OF THIS. Before the Soviets could fly, the only two weapons in the
@@ -6509,7 +6520,7 @@ function _sprBuildingClean(key, side) {
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
   dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46,
-  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:44, drone:26
+  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:44, drone:26, bomber:56
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -7691,6 +7702,7 @@ function _sprUnitSpecial(X, key) {
 /* the 3D renderer's moving parts for these (see RTS_AIR_PARTS in unit-airsea.js) */
 RTS_AIR_PARTS.skycrane = { rotor: true };
 RTS_AIR_PARTS.drone = { prop: [-6.2, 2.6, 0, 2.4], tips: 9.0 };
+RTS_AIR_PARTS.bomber = { prop: [5.4, 4.6, -6.4, 2.6], props: [[5.4, 4.6, -6.4, 2.6], [5.4, 4.6, 6.4, 2.6], [4.0, 4.6, -12.0, 2.6], [4.0, 4.6, 12.0, 2.6]], tips: 17.0 };
 RTS_AIR_PARTS.paraplane = { prop: [7.4, 6.1, -6.6, 2.8], props: [[7.4, 6.1, -6.6, 2.8], [7.4, 6.1, 6.6, 2.8]], tips: 13.0 };
 
 function _sprUnitWings(X, key) {
@@ -7771,6 +7783,33 @@ function _sprUnitWings(X, key) {
     _r3Box(m, 2.4, 3.8, 0, 0.3, 1.2, 0.3, DK[1], DK[3]);           /* antenna */
     if (part !== 'body') {
       _r3Box(m, -6.2, 0.2, 0, 0.3, 4.8, 0.5, DK[1], DK[2]);         /* the prop, for the sprite */
+    }
+  } else if (key === 'bomber') {
+    /* HEAVY BOMBER. The biggest thing in the air: a long round-backed fuselage under a broad
+       straight wing with four engines along it, a glazed nose, a twin-finned tail with a gun
+       turret in its tip, and the bomb bay open in its belly. The identity is FOUR ENGINES and the
+       open bay - nothing else flying has more than two. */
+    _r3Box(m, 0, 3.0, 0, 26.0, 4.4, 4.4, VH[0], VH[1]);            /* fuselage */
+    _r3Box(m, 0, 5.4, 0, 22.0, 0.8, 3.4, VH[1], VH[2]);            /* its rounded back */
+    _r3Box(m, 14.2, 3.2, 0, 2.6, 3.6, 3.8, VH[1], VH[3]);          /* the nose */
+    _r3Box(m, 15.6, 3.4, 0, 0.6, 2.8, 3.2, RTS_PAL.glass, RTS_PAL.glass);   /* glazed nose */
+    _r3Box(m, 11.6, 5.6, 0, 2.4, 1.0, 2.6, RTS_PAL.glass, RTS_PAL.glass);   /* cockpit */
+    _r3Box(m, 3.0, 4.2, 0, 5.4, 0.7, 34.0, VH[1], VH[2]);          /* the broad wing */
+    _r3Box(m, 3.0, 4.6, 0, 3.6, 0.3, 10.0, TM[1], TM[3]);          /* team band on it */
+    [[5.4, 6.4], [4.0, 12.0]].forEach(function (E) {               /* four engines */
+      for (var sd = -1; sd <= 1; sd += 2) {
+        _r3Box(m, E[0] - 1.6, 3.8, sd * E[1], 5.6, 1.8, 2.0, VH[2], VH[1]);
+        _r3Cyl(m, E[0] + 1.4, 3.9, sd * E[1], 0.6, 1.0, DK[1], DK[2], 16);
+      }
+    });
+    _r3Box(m, -15.2, 5.6, 0, 4.0, 0.4, 13.0, VH[1], VH[2]);        /* tailplane */
+    for (var fn = -1; fn <= 1; fn += 2) _r3Box(m, -15.6, 7.6, fn * 6.2, 3.0, 4.0, 0.5, VH[1], VH[2]);   /* twin fins */
+    _r3Cyl(m, -13.6, 3.2, 0, 1.4, 1.6, GN[2], GN[1], 16);          /* tail turret */
+    _r3Box(m, -15.2, 3.4, 0, 2.0, 0.4, 0.4, DK[1], DK[3]);         /* its guns */
+    _r3Box(m, 1.2, 0.7, 0, 9.0, 0.3, 2.8, DK[2], DK[3]);           /* the open bomb bay */
+    for (var bd = -1; bd <= 1; bd += 2) _r3Box(m, 1.2, 0.0, bd * 1.9, 9.0, 1.4, 0.2, VH[2], VH[1]);   /* its doors */
+    if (part !== 'body') {                                          /* the props, for the sprite */
+      [[5.4, 6.4], [4.0, 12.0]].forEach(function (E) { for (var sp = -1; sp <= 1; sp += 2) _r3Box(m, E[0] + 2.0, 2.0, sp * E[1], 0.3, 5.2, 0.6, DK[1], DK[2]); });
     }
   } else return false;
   return true;
@@ -14789,6 +14828,7 @@ function _rtsFire(e, tgt, w) {
      it goes through _rtsDamage rather than through here. */
   if (tgt && tgt.side === e.side) return;
   if (!_rtsWeaponReaches(w, tgt)) return;
+  if (w.carpet) return;                           /* a bomber's load goes in one run: core/bomber.js */
   /* AIRCRAFT.CPP spends a round per shot and the aircraft is out of the fight when the rack is
      empty. Decremented here rather than in the aircraft's own update so that every route to a
      shot - ordered, acquired, retaliating - pays for it. */
@@ -15671,6 +15711,8 @@ function _rtsUpdateUnit(e, dt) {
   /* An aircraft out of ammo is not available for anything else, so this runs first and can
      take the whole tick. */
   if (e.air && _rtsAirTick(e, dt, d)) { _rtsSteer(e, dt, d); return; }
+  /* ...and a bomber on its run lays its carpet: core/bomber.js */
+  if (d.carpets && _rtsBomberTick(e, dt, d)) { _rtsSteer(e, dt, d); return; }
 
   /* ---- unloading ----
      A transport under an unload order sails/drives to where it was sent and puts its cargo
@@ -18042,7 +18084,8 @@ function _rtsAISupport(S) {
          _rtsAISupportBuy(S, 'repairtruck', function () { return _rtsAIFieldVehicles() >= RTS_FIX.army && _rtsAIDefended(); }) ||  /* an army worth mending: core/repairtruck.js */
          _rtsAISupportBuy(S, 'jammer', function () { return _rtsPlayerDefences() >= RTS_JAM.digIn && _rtsAIFieldVehicles() >= 4 && _rtsAIDefended(); }) ||  /* the player dug in: core/jammer.js */
          _rtsAISupportBuy(S, 'paraplane', function () { return _rtsPlayerDefences() >= RTS_JAM.digIn && _rtsAIDefended() && !!_rtsAIParaTarget(); }) ||  /* over the wall: core/paradrop.js */
-         _rtsAISupportBuy(S, 'drone', function () { return _rtsAIHalfBlind() && _rtsAIDefended(); });  /* eyes in fog, or on a Jammer: core/drone.js */
+         _rtsAISupportBuy(S, 'drone', function () { return _rtsAIHalfBlind() && _rtsAIDefended(); }) ||  /* eyes in fog, or on a Jammer: core/drone.js */
+         _rtsAISupportBuy(S, 'bomber', function () { return _rtsPlayerDefences() >= RTS_JAM.digIn && _rtsAIDefended(); });  /* a carpet across the base: core/bomber.js */
 }
 function _rtsAISupportBuy(S, key, worth) {
   var G = window._rtsG, d = rtsUnitDef(key);
@@ -18441,6 +18484,99 @@ function _rtsAIDroneTick(dt) {
     var u = G.ents[i];
     if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || !_rtsOrbits(u)) continue;
     if (!u.orbit || Math.hypot(u.orbit.x - c.x, u.orbit.z - c.z) > RTS_TILE * 3) _rtsDroneAt(u, c.x, c.z);
+  }
+}
+</script>
+<script>/* core/bomber.js - the Heavy Bomber: a line of bombs laid across a base.
+
+   The verb is the CARPET. Every other aircraft picks one target and spends its rack on it; the
+   bomber spends its whole load in one pass. Sent at a target, it lays a line of RTS_BOMB.n bombs
+   RTS_BOMB.gap cells apart along its course, centred on the aim. Each bomb falls for
+   RTS_BOMB.fall seconds and bursts where it lands, hurting whatever stands there, whoever owns it:
+   carpet-bomb a fight and your own men are under it too. Then the rack is empty, and it flies
+   home to any air pad to load again (core/move.js `_rtsAirTick`).
+
+   Both armies build one, behind a Helipad or an Airfield (`provides:['airpad']`). Its weapon is
+   `carpet`, which only says what it can be sent at: _rtsFire never fires it (combat.js).
+
+   The opponent buys one once the player has dug in and its own base is defended, and sends it,
+   whenever it is loaded, at the most crowded corner of the player's base: the building with the
+   most of the player's buildings round it. */
+
+var RTS_BOMB = { n: 8, gap: 1, fall: 0.7, dmg: 90, rad: 1.3, lead: 5, crowd: 4, every: 2 };
+
+/* the run: n bombs gap cells apart, centred on (x, z), along the line the bomber flies to it */
+function _rtsBombRun(e, x, z) {
+  var dx = x - e.x, dz = z - e.z, L = Math.hypot(dx, dz) || 1, step = RTS_BOMB.gap * RTS_TILE;
+  dx /= L; dz /= L;
+  var half = (RTS_BOMB.n - 1) / 2 * step, out = half + RTS_BOMB.lead * RTS_TILE;
+  e.run = { sx: x - dx * half, sz: z - dz * half, dx: dx, dz: dz, k: 0 };
+  /* already past the start of the line: it lays only what is still ahead of it */
+  var s = ((e.x - e.run.sx) * dx + (e.z - e.run.sz) * dz) / step;
+  if (s > 0) e.run.k = Math.ceil(s);
+  e.goal = { x: x + dx * out, z: z + dz * out };
+  e.path = [{ x: e.goal.x, z: e.goal.z }]; e.pi = 0;
+}
+/* A bomber's tick, ahead of the ordinary engage logic: true while it is on a run (the caller
+   steers it), false to leave it to everything else. */
+function _rtsBomberTick(e, dt, d) {
+  if (!d.carpets) return false;
+  if (e.order !== 'attack') { e.run = null; return false; }
+  if (!e.run) {
+    if (!(e.ammo > 0) || !e.target || e.target.dead) return false;
+    _rtsBombRun(e, e.target.x, e.target.z);
+  }
+  var r = e.run, step = RTS_BOMB.gap * RTS_TILE, s = ((e.x - r.sx) * r.dx + (e.z - r.sz) * r.dz) / step;
+  while (r.k < RTS_BOMB.n && s >= r.k) { _rtsBombDrop(e, r.sx + r.dx * r.k * step, r.sz + r.dz * r.k * step); r.k++; }
+  if (r.k >= RTS_BOMB.n || !e.path || e.pi >= e.path.length) {
+    /* the load is gone: home to load again */
+    e.run = null; e.ammo = 0; e.target = null; e.order = null; e.path = null; e.goal = null;
+  }
+  return true;
+}
+function _rtsBombDrop(e, x, z) {
+  var G = window._rtsG;
+  (G.bombs || (G.bombs = [])).push({ x: x, z: z, y: e.alt || 16, t: RTS_BOMB.fall, side: e.side, from: e });
+}
+/* bombs in the air: falling, then bursting where they land */
+function _rtsBombsTick(dt) {
+  var G = window._rtsG, B = G.bombs;
+  if (!B || !B.length) return;
+  for (var i = B.length - 1; i >= 0; i--) {
+    var b = B[i];
+    b.t -= dt;
+    b.y = Math.max(0, b.y * b.t / (b.t + dt));
+    if (b.t > 0) continue;
+    B.splice(i, 1);
+    _rtsSplash(b.x, b.z, RTS_BOMB.rad * RTS_TILE, RTS_BOMB.dmg, b.side, 1, null);
+    _rtsCombatAnim(RTS_BOMB.dmg, b.x, b.z, 1.6, null);
+    if (typeof _rtsSfx === 'function') _rtsSfx('boom', b.x, b.z);
+  }
+}
+
+/* ------------------------------------------------ the opponent's runs -- */
+/* the most crowded corner of the player's base: the building with most others round it */
+function _rtsAIBombTarget() {
+  var G = window._rtsG, best = null, bv = -1, R = RTS_BOMB.crowd * RTS_TILE, bs = [];
+  for (var i = 0; i < G.ents.length; i++) { var b = G.ents[i]; if (!b.dead && b.side === 'player' && b.type === 'struct') bs.push(b); }
+  for (var a = 0; a < bs.length; a++) {
+    var n = 0;
+    for (var k = 0; k < bs.length; k++) if (Math.hypot(bs[k].x - bs[a].x, bs[k].z - bs[a].z) <= R) n++;
+    if (n > bv) { bv = n; best = bs[a]; }
+  }
+  return best;
+}
+function _rtsAIBombTick(dt) {
+  var G = window._rtsG;
+  G.ai.bombT = (G.ai.bombT || 0) + dt;
+  if (G.ai.bombT < RTS_BOMB.every) return;
+  G.ai.bombT = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var u = G.ents[i];
+    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || !(rtsUnitDef(u.def) || {}).carpets) continue;
+    if (u.rearming > 0 || !(u.ammo > 0) || u.run || (u.order === 'attack' && u.target && !u.target.dead)) continue;
+    var t = _rtsAIBombTarget();
+    if (t) _rtsOrderAttack(u, t);
   }
 }
 </script>
@@ -18895,6 +19031,7 @@ function _rtsUpdateAI(dt) {
   _rtsAIJamTick(dt);            /* ...and the jammer hides it - core/jammer.js */
   _rtsAIParaTick(dt);           /* ...and the paratroopers go over the wall - core/paradrop.js */
   _rtsAIDroneTick(dt);          /* ...and the drone watches over the attack - core/drone.js */
+  _rtsAIBombTick(dt);           /* ...and the bomber lays its carpet - core/bomber.js */
   _rtsAISupers(dt);
   /* Rich: refill a line as soon as it empties, rather than waiting up to five seconds for
      the next decision. Without this the opponent banks tens of thousands of credits it
@@ -19473,6 +19610,7 @@ function _rtsTick(dt) {
   _rtsAnimAI(dt);
   _rtsCrateAI(dt);
   _rtsDroneTick();                               /* Recon Drones circle where they stop: core/drone.js */
+  _rtsBombsTick(dt);                             /* the Heavy Bomber's bombs fall and burst: core/bomber.js */
   _rtsFixTick(dt);                               /* Repair Trucks go to the damaged: core/repairtruck.js */
   _rtsSweepTick(dt);                             /* the Mine Sweeper finds and clears: core/sweeper.js */
   _rtsMineTick(dt);                              /* the Mine Layer's: core/mines.js */
@@ -24338,11 +24476,26 @@ function _r3dFxProj(G, V) {
   }
 }
 
+/* THE HEAVY BOMBER'S BOMBS (G.bombs, core/bomber.js), falling: a dark streak each, blended the
+   way rain is (skyfx3d.js) - a STREAK is added, so a dark one draws nothing. Hidden where the
+   player cannot see. */
+var R3D_FX_BOMB = [0.16, 0.16, 0.17];
+function _r3dFxBombs(G, V) {
+  var B = G.bombs || [], vis = typeof _rtsVisible === 'function';
+  for (var i = 0; i < B.length; i++) {
+    var b = B[i];
+    if (vis && !_rtsVisible(_rtsTX(b.x), _rtsTX(b.z))) continue;
+    var y = V.ground(b.x, b.z) + b.y;
+    _r3dFxStreak(V.M, V, b.x, y + 2.2, b.z, b.x, y, b.z, 0.9, 0, R3D_FXT_RAIN, 0, i + 1, 1, 0, R3D_FX_BOMB);
+  }
+}
+
 /* Everything G.fx and G.proj hold that this pass owns, and what moving things leave behind them,
    into the two batches. */
 function _r3dFxEmit(G, V) {
   var A = RTS_ANIMS, i;
   _r3dFxProj(G, V);
+  _r3dFxBombs(G, V);
   if (typeof _r3dFxWakes === 'function') _r3dFxWakes(G, V);     /* dust and wakes - fxwake3d.js */
   if (typeof _r3dFxAlive === 'function') _r3dFxAlive(G, V);     /* stacks, beacons - alive3d.js */
   if (typeof _r3dFxSky === 'function') _r3dFxSky(G, V);         /* lamps, rain, fog - skyfx3d.js */

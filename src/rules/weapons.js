@@ -87,6 +87,10 @@ var RTS_WEAPONS = {
   /* And the Yak's nose guns, which are the mirror image: it strafes people and barely marks
      armour. Cheap, fast, and the answer to massed infantry that the Soviets otherwise have to
      solve with a Flame Tower they cannot move. */
+  /* The Heavy Bomber's load. Never fired as a shot (_rtsFire refuses `carpet`): it is what the
+     bomber can be sent at - anything on the ground - and the run itself is core/bomber.js. */
+  carpet:     { dmg:90, range:2, cool:1, shot:'bomb', speed:0, splash:1, ammo:1, carpet:true,
+                verses:{ none:1, wood:1, light:1, heavy:1, concrete:1 } },
   strafe:     { dmg:16, range:14, cool:0.22, shot:'tracer', speed:0, splash:0.6, ammo:1,
                 verses:{ none:1.15, wood:0.40, light:0.30, heavy:0.10, concrete:0.10 } },
   /* THE ALLIED ANSWER TO ALL OF THIS. Before the Soviets could fly, the only two weapons in the

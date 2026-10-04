@@ -44,6 +44,7 @@ function _rtsTick(dt) {
   _rtsAnimAI(dt);
   _rtsCrateAI(dt);
   _rtsDroneTick();                               /* Recon Drones circle where they stop: core/drone.js */
+  _rtsBombsTick(dt);                             /* the Heavy Bomber's bombs fall and burst: core/bomber.js */
   _rtsFixTick(dt);                               /* Repair Trucks go to the damaged: core/repairtruck.js */
   _rtsSweepTick(dt);                             /* the Mine Sweeper finds and clears: core/sweeper.js */
   _rtsMineTick(dt);                              /* the Mine Layer's: core/mines.js */

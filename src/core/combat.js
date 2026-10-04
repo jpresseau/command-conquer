@@ -279,6 +279,7 @@ function _rtsFire(e, tgt, w) {
      it goes through _rtsDamage rather than through here. */
   if (tgt && tgt.side === e.side) return;
   if (!_rtsWeaponReaches(w, tgt)) return;
+  if (w.carpet) return;                           /* a bomber's load goes in one run: core/bomber.js */
   /* AIRCRAFT.CPP spends a round per shot and the aircraft is out of the fight when the rack is
      empty. Decremented here rather than in the aircraft's own update so that every route to a
      shot - ordered, acquired, retaliating - pays for it. */

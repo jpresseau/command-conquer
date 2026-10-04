@@ -163,6 +163,13 @@ var RTS_UNITS = [
     needs:['helipad'], air:true, alt:18, spots:true, orbits:true,
     side:'allied', armour:'light',
     desc:'Circles wherever you send it and sees everything under it - through fog, fog banks and Jammers. Unarmed.' },
+  /* HEAVY BOMBER. The verb is the CARPET: one pass, a line of eight bombs laid across whatever it
+     is sent at, hurting everything under it - yours too - and then home to load again. Both
+     armies', from either air pad - core/bomber.js. */
+  { key:'bomber',   name:'Heavy Bomber',  kind:'air',      cost:2200, build:22, hp:420,  speed:17,  turn:2.2,r:2.6, sight:20, weapon:'carpet',
+    needs:['airpad'], air:true, ammo:1, rearm:12, alt:20, carpets:true,
+    armour:'light',
+    desc:'Lays a line of eight bombs across what you send it at, then flies home to reload. Its bombs hurt your own units too.' },
   /* FLAK TRACK. The verb is ESCORT: the armour column takes its anti-aircraft cover with it.
      Until this, everything that could shoot down an aircraft either stood still (the AA Gun,
      the Rocket Turret) or was a squad on foot (rockets), so a gunship could pick apart a tank

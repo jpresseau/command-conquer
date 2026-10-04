@@ -179,7 +179,7 @@ var RTS_STRUCTS = [
      ammo back to one, and if there is no airfield available "it has to crash", which is
      implemented rather than softened. */
   { key:'helipad',  name:'Helipad',      w:2, h:2, cost:1500, build:14, hp:500,  power:-10,  sight:10,
-    needs:['radar'], produces:'air', rearm:true,
+    needs:['radar'], produces:'air', rearm:true, provides:['airpad'],
     side:'allied', armour:'concrete',
     desc:'Builds and rearms helicopters. Without one, an aircraft out of ammo goes down.' },
   /* The Soviet Airfield. Same job as the Helipad on the other side of the war - AIRCRAFT.CPP
@@ -188,7 +188,7 @@ var RTS_STRUCTS = [
      afld.shp's 72x48) and cheaper, because a runway takes more room than a helipad and because
      the aircraft it flies are cheaper and shorter-legged than the Attack Heli. */
   { key:'afld',     name:'Airfield',     w:3, h:2, cost:1200, build:13, hp:600,  power:-20,  sight:10,
-    needs:['radar'], produces:'air', rearm:true,
+    needs:['radar'], produces:'air', rearm:true, provides:['airpad'],
     side:'soviet', armour:'concrete',
     desc:'Builds and rearms Kestrels and Shrikes. An aircraft with no airfield left has nowhere to land.' },
   { key:'silo',     name:'Ore Silo',   w:2, h:2, cost:150,  build:5,  hp:400,  power:0,    sight:8,
