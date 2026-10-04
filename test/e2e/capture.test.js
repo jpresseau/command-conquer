@@ -114,8 +114,8 @@ var S = new Suite('capture');
   S.ok('...and not reinforcing, because the engineer dies on SUCCESS',
        !decide.reinforce, 'reinforce:false');
 
-  S.eq('six buildings cannot be captured at all', decide.uncapturable.join(','),
-       'gps,iron,mslo,pdox,silo,wall');
+  S.eq('eight buildings cannot be captured at all', decide.uncapturable.join(','),
+       'gps,iron,mist,mslo,pdox,silo,spire,wall');
   S.eq('the Construction Yard costs nothing, so price cannot rank it', decide.yardCost, 0);
   S.ok('...and is scored on what it does instead', decide.yardWorth > decide.refWorth,
        'yard ' + decide.yardWorth + ' vs refinery ' + decide.refWorth);

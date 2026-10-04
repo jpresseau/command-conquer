@@ -18,6 +18,7 @@ function _rtsTick(dt) {
   _rtsSupersTick(dt);
   _rtsStrikesTick(dt);
   _rtsIronTick(dt);
+  _rtsWxTick(dt);                                /* fog banks and thunderheads: core/wxsupers.js */
   _rtsPowerDamage(dt);
   /* Power_Output tracks hit points, so it has to be re-totalled before anything reads it. */
   _rtsRecalcPower('player'); _rtsRecalcPower('enemy');

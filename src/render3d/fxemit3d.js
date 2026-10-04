@@ -341,6 +341,7 @@ function _r3dFxEmit(G, V) {
   if (typeof _r3dFxWakes === 'function') _r3dFxWakes(G, V);     /* dust and wakes - fxwake3d.js */
   if (typeof _r3dFxAlive === 'function') _r3dFxAlive(G, V);     /* stacks, beacons - alive3d.js */
   if (typeof _r3dFxSky === 'function') _r3dFxSky(G, V);         /* lamps, rain, fog - skyfx3d.js */
+  if (typeof _r3dFxWx === 'function') _r3dFxWx(G, V);           /* fog banks, thunderheads - wxfx3d.js */
   if (typeof _r3dFxMuzzle === 'function') _r3dFxMuzzle(G, V);   /* guns going off - combat3d.js */
   if (typeof _r3dFxAir === 'function') _r3dFxAir(G, V);         /* contrails, afterburners - air3d.js */
   if (typeof _r3dFxHurt === 'function') _r3dFxHurt(G, V);       /* the smoke of the damaged - hurt3d.js */

@@ -85,6 +85,8 @@ function _rtsSuperFire(side, key, tx, tz, sel) {
   else if (key === 'ironcurtain') ok = _rtsFireIron(side, tx, tz);
   else if (key === 'chrono')      ok = _rtsFireChrono(side, tx, tz, sel);
   else if (key === 'gps')         ok = _rtsFireGps(side);
+  else if (key === 'fogbank')     ok = _rtsFireFogBank(side, tx, tz);     /* core/wxsupers.js */
+  else if (key === 'thunder')     ok = _rtsFireThunder(side, tx, tz);
   if (!ok) return false;
   var st = G.sides[side].supers[key];
   st.t = 0; st.ready = false; st.said = false;
@@ -265,6 +267,8 @@ function _rtsSightFrom(tx, tz, range) {
   range = Math.max(0, Math.min(RTS_SIGHT_MAX, range | 0));
   var n = T.count[range] * 2, off = T.off, rr = range * range;
   var seen = _rtsHorizon(tx, tz, range);
+  /* A FOG BANK in reach hides what is inside it past its own short sight (core/wxsupers.js) */
+  var banks = _rtsWxBanksNear(tx, tz, range), see2 = RTS_FOGBANK.see * RTS_FOGBANK.see;
   for (var i = 0; i < n; i += 2) {
     var dx = off[i], dz = off[i + 1];
     /* Sight_From filters the ring list by TRUE distance as well - the offset table is a
@@ -273,6 +277,7 @@ function _rtsSightFrom(tx, tz, range) {
     if (!_rtsHorizonAt(seen, dx, dz)) continue;
     var x = tx + dx, z = tz + dz;
     if (x < 0 || z < 0 || x >= RTS_N || z >= RTS_N) continue;
+    if (banks && dx * dx + dz * dz > see2 && banks.some(function (b) { return Math.hypot(_rtsWX(x) - b.x, _rtsWX(z) - b.z) <= b.r; })) continue;
     var c = z * RTS_N + x;
     G.vis[c] = 1; G.mapped[c] = 1;
   }
@@ -292,7 +297,7 @@ function _rtsVisTick(dt) {
     if (!def) continue;
     /* Standing high is worth a wider disc - see RTS_ELEV_SIGHT. _rtsSightFrom clamps to
        RTS_SIGHT_MAX, so the original's own ten-cell ceiling still holds over the bonus. */
-    _rtsSightFrom(_rtsTX(e.x), _rtsTX(e.z), _rtsFogSight(rtsSightTiles(def) + _rtsSightBonus(e)));   /* fog: core/skyplay.js */
+    _rtsSightFrom(_rtsTX(e.x), _rtsTX(e.z), _rtsWxSight(e.x, e.z, _rtsFogSight(rtsSightTiles(def) + _rtsSightBonus(e))));   /* fog: core/skyplay.js, wxsupers.js */
   }
   G.visDirty = 1;                 /* the renderer only re-bakes the shroud when this is set */
 }
