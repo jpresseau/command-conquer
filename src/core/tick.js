@@ -10,7 +10,8 @@ function _rtsTick(dt) {
      units. Rebuilt here rather than kept up to date incrementally, because one pass over the
      list is what a SINGLE one of those scans used to cost. */
   _rtsSpBuild();
-  _rtsSpotTick();                                /* what the Spotters see: core/spotter.js */
+  _rtsSpotTick();
+  _rtsJamTick(dt);                               /* which Jammers' fields are up: core/jammer.js */                                /* what the Spotters see: core/spotter.js */
   _rtsSkyPlayTick();                             /* the weather takes part: core/skyplay.js */
   if (G.msgT > 0) G.msgT -= dt;
 

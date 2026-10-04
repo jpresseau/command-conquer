@@ -165,6 +165,7 @@ function _rtsFindTarget(e, range, w) {
        with shooting - how far to the refinery, which of two threats is nearer, is the transport
        close enough to board. An asymmetric distance would have quietly answered all of those
        differently too, and none of them are about height. */
+    if (o.type === 'unit' && _rtsJamHides(o, e.side, e.x, e.z)) continue;   /* jammed: core/jammer.js */
     var seen = spot && _rtsSpotted(o, e.side);
     if (dist > _rtsElevReach(e, o, seen ? full : fogged)) continue;
     if (!seen && !_rtsWxFinds(e, o, dist)) continue;  /* a fog bank between them: core/wxsupers.js */
@@ -298,6 +299,7 @@ function _rtsFire(e, tgt, w) {
     e.cool = w.cool * bias.rof * rtsCrateMult(e, 'rof'); e.second = true;  /* ROFBias: higher = slower reload */
   }
   e.fire = 0.09;
+  e.firedT = window._rtsG.t;                      /* a shot gives a jammed unit away: core/jammer.js */
   e.recoil = RTS_RECOIL_TIME;                     /* Recoil_Adjust */
   var m = _rtsFireCoord(e, w);
   /* "If a projectile was fired from a unit that is hidden in the darkness, reveal that unit

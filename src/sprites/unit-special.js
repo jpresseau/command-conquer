@@ -220,6 +220,28 @@ function _sprUnitSpecial(X, key) {
     _r3Box(m, -13.6, 3.6, 0, 1.0, 1.0, 0.6, S[3], S[2]);           /* the hook */
     _r3Box(m, 9.4, 3.2, -3.0, 0.9, 1.0, 1.4, GN[3], GN[3]);        /* headlights */
     _r3Box(m, 9.4, 3.2, 3.0, 0.9, 1.0, 1.4, GN[3], GN[3]);
+  } else if (key === 'jammer') {
+    /* JAMMER. A tracked equipment carrier bristling with antennas: a windowless shelter, a tall
+       mast holding a flat array of panels broadside, two small dishes and a row of whips. The
+       identity is the ARRAY - a flat grille standing above the hull - and the whips. */
+    tracks(17, 6.0, 5, 2.1);
+    _r3Slab(m, 0, 3.2, 0, 16.4, 3.0, 10.0, 1.0, VH[0], VH[1]);    /* hull */
+    _r3Box(m, 6.8, 3.2, 0, 2.6, 2.8, 9.0, VH[1], VH[3]);          /* glacis */
+    _r3Slab(m, -1.6, 6.2, 0, 10.0, 4.2, 8.6, 0.8, DK[1], TM[1]);  /* the shelter - team roof, no windows */
+    _r3Box(m, 4.2, 6.2, 0, 2.4, 2.6, 7.0, VH[1], VH[2]);          /* driver's hood */
+    _r3Box(m, 5.5, 7.4, 0, 0.4, 0.8, 5.0, RTS_PAL.glass, RTS_PAL.glass);
+    _r3Cyl(m, -3.6, 10.4, 0, 0.6, 7.0, S[2], S[1], 16);           /* the mast */
+    for (var pa = 0; pa < 3; pa++)                                  /* the array, three panels broadside */
+      for (var pb = 0; pb < 2; pb++)
+        _r3Box(m, -3.6, 15.0 + pb * 2.3, -3.2 + pa * 3.2, 0.5, 2.0, 2.8, pb ? S[2] : S[1], S[3]);
+    _r3Box(m, -3.6, 14.6, 0, 0.6, 0.5, 10.0, DK[1], DK[2]);       /* its frame */
+    for (var dsh = -1; dsh <= 1; dsh += 2) {                        /* two small dishes */
+      _r3Cyl(m, 1.4, 10.4, dsh * 3.0, 0.4, 1.4, S[2], S[1], 12);
+      _r3Cone(m, 1.4, 11.8, dsh * 3.0, 0.3, 1.6, 0.8, S[3], 18);
+    }
+    for (var wh = 0; wh < 4; wh++)                                  /* a row of whips */
+      _r3Box(m, -6.8 + wh * 1.6, 10.4, 4.0, 0.3, 4.6 + (wh % 2) * 1.6, 0.3, DK[1], DK[3]);
+    _r3Cyl(m, 0.6, 10.4, -3.4, 0.6, 0.8, RTS_PAL.lit, RTS_PAL.lit, 12);   /* a lit telltale */
   } else if (key === 'bridgelayer') {
     /* BRIDGE LAYER. A tank hull carrying its bridge folded in two on its back: a long pale deck
        with a truss along each side and the hinge at the front, overhanging the hull at both ends.

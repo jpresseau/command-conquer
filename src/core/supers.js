@@ -333,6 +333,8 @@ function _rtsEntSeen(e) {
      rebuilt from scratch every sweep, so the reveal lives on the shooter as a short timer
      rather than as a mark on the grid that the next sweep would wipe. */
   if (e.spot > 0) return true;
+  /* a unit in an enemy Jammer's field is not seen unless something of ours is close (core/jammer.js) */
+  if (_rtsJamHidden(e, 'player')) return false;
   var tx = _rtsTX(e.x), tz = _rtsTX(e.z);
   return e.type === 'struct' ? _rtsSeen(tx, tz) : _rtsVisible(tx, tz);
 }

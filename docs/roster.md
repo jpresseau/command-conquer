@@ -424,6 +424,17 @@ cells comes back at 12 hp/s, for free, whatever the truck is doing; not itself (
 
 `unit/repairtruck` (11 assertions, 9 mutants killed; the medic still mends only infantry).
 
+## The Jammer — concealment
+
+Both armies' tracked antenna carrier (`jammer`), behind a Radar Post (`core/jammer.js`). Parked
+2 s, its field (4 cells) jams its side's UNITS, never buildings: unseen by the other side unless
+something of it is within 2 cells or its Spotter sees them; found by no gun and picked by no team
+from further off; a unit that fired in the last 3 s is not jammed. The enemy radar shows static
+over the field. The opponent buys one once the player has two armed buildings and it has four
+armed vehicles, and parks it in the middle of its largest team on the march.
+
+`unit/jammer` (15 assertions, 12 mutants killed) and `e2e/jammer` (the radar's static, 2 mutants).
+
 ## The opponent uses the new vehicles
 
 - **The Mine Layer mines its approach** (`core/aimines.js`):
