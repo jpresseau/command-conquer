@@ -191,7 +191,9 @@ function _rtsSkyNow(G) {
 }
 /* The sky this battle is under: its name. */
 function _rtsSkyName(G) {
-  var w = _rtsSkyWant();
+  /* fixed at the battle's first tick (core/skyplay.js), and the daily's is its seed's alone */
+  if (G && G.sky) return G.sky;
+  var w = window._RTS_DAILY ? 'auto' : _rtsSkyWant();
   return w !== 'auto' ? w : _rtsSkyOfSeed(G ? G.seed : 0, _rtsSandShare(G) >= RTS_SKY_SANDY);
 }
 /* ...and its settings, held on R3 for the frame. */

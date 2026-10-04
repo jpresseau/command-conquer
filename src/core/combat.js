@@ -133,6 +133,7 @@ function _rtsGunEngages(w, o) {
 }
 function _rtsFindTarget(e, range, w) {
   var G = window._rtsG, foe = _rtsEnemyOf(e.side), best = null, bv = 0;
+  range = _rtsFogReach(range);                  /* in fog nothing looks further: core/skyplay.js */
   /* The candidate list, not the candidate test. core/spatial.js hands back the entities whose
      buckets touch our own reach, in entity-list order, so everything below runs exactly as it
      did over a shorter list - and falls back to the whole list when there is no index. The

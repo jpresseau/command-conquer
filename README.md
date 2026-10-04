@@ -59,8 +59,14 @@ strait you could not cross becomes a causeway, while a ship that sailed there ca
 turns you are warned; anything still on the flats as the sea comes back is swamped and makes for
 dry ground. Low water is an opening with a deadline.
 
+**The weather fights too.** Under fog or a sandstorm nothing sees past five cells, and nothing on
+either side picks a target further off: the artillery, the cruisers and the towers wait for you to
+come close, so fog is the day to walk up on a fortified line. In the rain the showers come on a
+clock, and while one is at full strength every armed aircraft is grounded on its pad until it
+passes. A battle keeps the sky it started under, and a save keeps it too.
+
 **A daily battle.** DAILY BATTLE on the title screen gives everyone the same map that day, with
-the same army, difficulty and tide, all from the date alone. The end screen gives you a line to
+the same army, difficulty, tide and weather, all from the date alone. The end screen gives you a line to
 copy and post, and your best of the day is kept.
 
 ## Everything is generated in code

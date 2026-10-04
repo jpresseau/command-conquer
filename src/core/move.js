@@ -24,8 +24,11 @@ function _rtsAirTick(e, dt, d) {
   /* NOTHING TO RELOAD: an unarmed aircraft - the Chinook - has an empty rack from the start and
      would otherwise spend its life flying home for missiles it never carries, and crash the
      moment the last pad fell. */
-  if (e.ammo > 0 || !d.weapon) return false;
+  /* A STORM GROUNDS IT TOO (core/skyplay.js): home to the pad as though the rack were empty, and
+     it sits there, topping up, until the storm passes - or, with no pad left, it rides it out. */
+  if ((e.ammo > 0 || !d.weapon) && !_rtsStormGrounds(e, d)) return false;
   var pad = _rtsRearmPad(e);
+  if (!pad && e.ammo > 0) return false;
   if (!pad) {
     /* nowhere to go: it has to crash */
     _rtsDamage(e, e.hp + 1, null, false);

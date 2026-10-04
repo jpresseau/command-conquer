@@ -706,7 +706,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">be31699 · 2026-10-04</div>
+  <div id="rtsBuild" title="build">33a8a15 · 2026-10-04</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -11871,6 +11871,65 @@ function _rtsTideTick(dt) {
   }
 }
 </script>
+<script>/* core/skyplay.js - the weather takes part.
+
+   The sky was scenery: fog, a sandstorm, a downpour were all a picture and nothing else. Two of
+   them now change the battle, for both sides alike:
+
+     FOG     under fog or a sandstorm nothing sees past RTS_FOG_CELLS cells. The player's sight
+             discs shrink to it (_rtsVisTick), and nothing on either side FINDS a target further
+             off (_rtsFindTarget). A gun given its target keeps its full reach, and one that is
+             shot at still answers (core/response.js) - only the looking is shortened. So the long
+             guns - artillery, the cruisers, the towers - wait for the enemy to come close, and a
+             fog is the day to walk up on a fortified line.
+     STORM   in a downpour on the rain sky (the shower at RTS_STORM_RAIN or more, _rtsShower in
+             render3d/sky3d.js) every armed aircraft is grounded: it flies home to its pad as if
+             its rack were empty and sits there until the storm passes (core/move.js). The Chinook
+             still flies - it carries, it does not fight - and an aircraft with no pad left to go
+             to rides the storm out in the air rather than crashing for want of one.
+
+   THE BATTLE'S WEATHER IS FIXED AT ITS FIRST TICK (G.sky), so the simulation never reads the
+   player's preference again: a sky changed on the title cannot change a battle already going, a
+   save carries its weather with it, and the daily battle is under its seed's own sky for everyone
+   (_rtsSkyName). The shower clock is the game's, so a storm comes at the same second every time
+   a battle is played. A page without the renderer - the unit sandbox - fights under a clear day. */
+
+var RTS_FOG_CELLS = 5;
+var RTS_FOG_SKIES = { fog: 'Fog', sand: 'Sandstorm' };
+var RTS_STORM_RAIN = 0.5;
+var RTS_SKY_SAY = 6;            /* seconds into a battle before the weather is named */
+
+function _rtsFogged() { var G = window._rtsG; return !!(G && RTS_FOG_SKIES[G.sky]); }
+
+/* A sight disc, in cells, under this battle's sky. */
+function _rtsFogSight(cells) { return _rtsFogged() ? Math.min(cells, RTS_FOG_CELLS) : cells; }
+/* How far a unit looks for something to shoot, in world units, under this battle's sky. */
+function _rtsFogReach(range) { return _rtsFogged() ? Math.min(range, RTS_FOG_CELLS * RTS_TILE) : range; }
+
+/* Is the rain sky storming at game time t? */
+function _rtsStormAt(sky, t) {
+  return sky === 'rain' && typeof _rtsShower === 'function' && _rtsShower(t).rain >= RTS_STORM_RAIN;
+}
+/* Does the storm hold this aircraft on the ground? Asked by _rtsAirTick. */
+function _rtsStormGrounds(e, d) { var G = window._rtsG; return !!(G && G.storm && d.weapon); }
+
+function _rtsSkyPlayTick() {
+  var G = window._rtsG;
+  if (!G.sky) G.sky = typeof _rtsSkyName === 'function' ? _rtsSkyName(G) : 'day';
+  var was = !!G.storm;
+  G.storm = _rtsStormAt(G.sky, G.t);
+  /* the battle's opening line has the floor for its first seconds; then the weather is named once */
+  if (G.t < RTS_SKY_SAY) return;
+  if (!G.skySaid) {
+    G.skySaid = 1;
+    if (RTS_FOG_SKIES[G.sky]) _rtsSay(RTS_FOG_SKIES[G.sky] + ': nothing sees past ' + RTS_FOG_CELLS + ' cells.', 6);
+    else if (G.storm) _rtsSay('Storm: aircraft grounded.', 5);
+    return;
+  }
+  if (G.storm && !was) _rtsSay('Storm: aircraft grounded.', 5);
+  else if (was && !G.storm) _rtsSay('The storm has passed - aircraft can fly.', 5);
+}
+</script>
 <script>/* core/supers.js - superweapons (atom bomb, iron curtain, chronosphere, GPS) and the shroud
    they lift. Part of rts.core, the simulation. */
 
@@ -12165,7 +12224,7 @@ function _rtsVisTick(dt) {
     if (!def) continue;
     /* Standing high is worth a wider disc - see RTS_ELEV_SIGHT. _rtsSightFrom clamps to
        RTS_SIGHT_MAX, so the original's own ten-cell ceiling still holds over the bonus. */
-    _rtsSightFrom(_rtsTX(e.x), _rtsTX(e.z), rtsSightTiles(def) + _rtsSightBonus(e));
+    _rtsSightFrom(_rtsTX(e.x), _rtsTX(e.z), _rtsFogSight(rtsSightTiles(def) + _rtsSightBonus(e)));   /* fog: core/skyplay.js */
   }
   G.visDirty = 1;                 /* the renderer only re-bakes the shroud when this is set */
 }
@@ -13798,6 +13857,7 @@ function _rtsGunEngages(w, o) {
 }
 function _rtsFindTarget(e, range, w) {
   var G = window._rtsG, foe = _rtsEnemyOf(e.side), best = null, bv = 0;
+  range = _rtsFogReach(range);                  /* in fog nothing looks further: core/skyplay.js */
   /* The candidate list, not the candidate test. core/spatial.js hands back the entities whose
      buckets touch our own reach, in entity-list order, so everything below runs exactly as it
      did over a shorter list - and falls back to the whole list when there is no index. The
@@ -14396,8 +14456,11 @@ function _rtsAirTick(e, dt, d) {
   /* NOTHING TO RELOAD: an unarmed aircraft - the Chinook - has an empty rack from the start and
      would otherwise spend its life flying home for missiles it never carries, and crash the
      moment the last pad fell. */
-  if (e.ammo > 0 || !d.weapon) return false;
+  /* A STORM GROUNDS IT TOO (core/skyplay.js): home to the pad as though the rack were empty, and
+     it sits there, topping up, until the storm passes - or, with no pad left, it rides it out. */
+  if ((e.ammo > 0 || !d.weapon) && !_rtsStormGrounds(e, d)) return false;
   var pad = _rtsRearmPad(e);
+  if (!pad && e.ammo > 0) return false;
   if (!pad) {
     /* nowhere to go: it has to crash */
     _rtsDamage(e, e.hp + 1, null, false);
@@ -18218,6 +18281,7 @@ function _rtsTick(dt) {
      units. Rebuilt here rather than kept up to date incrementally, because one pass over the
      list is what a SINGLE one of those scans used to cost. */
   _rtsSpBuild();
+  _rtsSkyPlayTick();                             /* the weather takes part: core/skyplay.js */
   if (G.msgT > 0) G.msgT -= dt;
 
   _rtsTickOre(dt);
@@ -26658,7 +26722,9 @@ function _rtsSkyNow(G) {
 }
 /* The sky this battle is under: its name. */
 function _rtsSkyName(G) {
-  var w = _rtsSkyWant();
+  /* fixed at the battle's first tick (core/skyplay.js), and the daily's is its seed's alone */
+  if (G && G.sky) return G.sky;
+  var w = window._RTS_DAILY ? 'auto' : _rtsSkyWant();
   return w !== 'auto' ? w : _rtsSkyOfSeed(G ? G.seed : 0, _rtsSandShare(G) >= RTS_SKY_SANDY);
 }
 /* ...and its settings, held on R3 for the frame. */

@@ -292,7 +292,7 @@ function _rtsVisTick(dt) {
     if (!def) continue;
     /* Standing high is worth a wider disc - see RTS_ELEV_SIGHT. _rtsSightFrom clamps to
        RTS_SIGHT_MAX, so the original's own ten-cell ceiling still holds over the bonus. */
-    _rtsSightFrom(_rtsTX(e.x), _rtsTX(e.z), rtsSightTiles(def) + _rtsSightBonus(e));
+    _rtsSightFrom(_rtsTX(e.x), _rtsTX(e.z), _rtsFogSight(rtsSightTiles(def) + _rtsSightBonus(e)));   /* fog: core/skyplay.js */
   }
   G.visDirty = 1;                 /* the renderer only re-bakes the shroud when this is set */
 }
