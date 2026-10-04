@@ -706,7 +706,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">d3fc31b · 2026-10-04</div>
+  <div id="rtsBuild" title="build">14f481c · 2026-10-04</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1107,6 +1107,14 @@ var RTS_UNITS = [
     needs:['afld'], air:true, ammo:30, rearm:5, alt:15,
     side:'soviet', armour:'light',
     desc:'Strafes infantry. Barely scratches armour — send it at the men, not the tanks.' },
+  /* SKY CRANE. The verb is the Skylift's for armour: one vehicle lifted and set down anywhere -
+     a tank over a river, a Repair Truck to the front, a Harvester to a field cut off by water.
+     The Dominion's lift, as the Skylift is the Compact's. It carries its load slung under it
+     (render3d/unit3d.js); shot down over water, the load goes with it. Unarmed. */
+  { key:'skycrane', name:'Sky Crane',     kind:'air',      cost:1300, build:14, hp:220,  speed:16,  turn:3.0,r:2.2, sight:16, weapon:null,
+    needs:['afld'], air:true, alt:14, carries:1, takes:['vehicle'], slings:true,
+    side:'soviet', armour:'light',
+    desc:'Lifts one of your vehicles and sets it down anywhere. Order a vehicle onto it, then click where to drop it.' },
   /* FLAK TRACK. The verb is ESCORT: the armour column takes its anti-aircraft cover with it.
      Until this, everything that could shoot down an aircraft either stood still (the AA Gun,
      the Rocket Turret) or was a squad on foot (rockets), so a gunship could pick apart a tank
@@ -6484,7 +6492,7 @@ function _sprBuildingClean(key, side) {
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
   dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46,
-  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37
+  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -6617,12 +6625,12 @@ function _sprUnitModel(key, side, prone, part) {
     }
   }
 
-  /* The chain is four files now - see sprites/unit-*.js. Each arm returns false for a key it
+  /* The chain is five files now - see sprites/unit-*.js. Each arm returns false for a key it
      does not own. Everything the branches need is handed over in X rather than rebuilt, so a
      model line reads the same as it did when this was one function. */
   var X = { m:m, TM:TM, VH:VH, S:S, DK:DK, O:O, C:C, GN:GN,
             d:d, prone:prone, part:part, side:side, tracks:tracks };
-  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key))) {
+  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key))) {
     _r3Box(m, 0, 0, -5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 0, 5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 2.5, 0, 15, 4, 8, TM[0], TM[1]);
@@ -7654,6 +7662,52 @@ function _sprUnitSpecial(X, key) {
     }
     _r3Box(m, 8.6, 4.2, -4.4, 0.9, 0.9, 1.3, GN[3], GN[3]);       /* lamps */
     _r3Box(m, 8.6, 4.2, 4.4, 0.9, 0.9, 1.3, GN[3], GN[3]);
+  } else return false;
+  return true;
+}
+</script>
+<script>/* sprites/unit-wings.js - the second wave of aircraft: the Sky Crane, and those that follow it.
+   One arm of the unit model chain (sprites/unitmodels.js has the dispatch and the shared locals
+   handed over in X); returns false for a key it does not own. A file of its own because
+   unit-airsea.js holds the first four aircraft and every ship and is near the 500-line cap. */
+
+/* the 3D renderer's moving parts for these (see RTS_AIR_PARTS in unit-airsea.js) */
+RTS_AIR_PARTS.skycrane = { rotor: true };
+
+function _sprUnitWings(X, key) {
+  var m = X.m, TM = X.TM, VH = X.VH, S = X.S, DK = X.DK, GN = X.GN, part = X.part, i;
+
+  if (key === 'skycrane') {
+    /* SKY CRANE. A flying crane: a thin spine with the cockpit at its nose and nothing under
+       it but air - tall splayed legs and a hook, room for a tank to hang where a cabin would
+       be. The identity is that EMPTY BELLY under one big rotor; the Skylift is a box. */
+    var _blades = function () {
+      _r3Cyl(m, 0, 12.2, 0, 0.7, 1.4, GN[1], GN[3], 16);           /* mast, from the engine deck up */
+      _r3Cyl(m, 0, 13.4, 0, 1.3, 0.6, GN[1], GN[3], 16);           /* hub */
+      _r3Box(m, 0, 14.0, 0, 30.0, 0.5, 1.4, DK[1], DK[3]);         /* blades */
+      _r3Box(m, 0, 14.0, 0, 1.4, 0.5, 30.0, DK[1], DK[3]);
+    };
+    if (part === 'rotor') { _blades(); return true; }
+    if (part !== 'body') _blades();
+    _r3Box(m, 0, 8.2, 0, 22.0, 2.6, 3.0, VH[0], VH[1]);            /* the spine */
+    _r3Box(m, 10.6, 5.6, 0, 4.6, 4.6, 4.4, VH[1], VH[3]);          /* the cockpit, slung under its nose */
+    _r3Box(m, 12.9, 6.6, 0, 0.6, 2.6, 3.8, RTS_PAL.glass, RTS_PAL.glass);   /* windscreen */
+    _r3Box(m, 8.6, 6.8, 0, 0.5, 1.4, 4.6, RTS_PAL.glass, RTS_PAL.glass);    /* the rear-facing winch window */
+    _r3Box(m, 0, 10.8, 0, 7.0, 1.2, 4.4, VH[2], VH[1]);            /* engine deck */
+    _r3Box(m, 0, 10.9, 0, 5.0, 0.4, 4.6, TM[1], TM[3]);            /* team band on it */
+    _r3Cyl(m, -2.6, 10.9, -2.6, 0.8, 1.2, DK[1], DK[3], 16);       /* exhausts */
+    _r3Cyl(m, -2.6, 10.9, 2.6, 0.8, 1.2, DK[1], DK[3], 16);
+    _r3Box(m, -12.4, 8.6, 0, 3.0, 4.6, 0.6, VH[1], VH[2]);         /* the tail fin */
+    _r3Cyl(m, -13.0, 10.4, 0.8, 1.6, 0.4, DK[1], DK[2], 16);       /* tail rotor */
+    /* the legs: four, long and splayed, so a tank fits between them */
+    [[7.0, -4.4], [7.0, 4.4], [-7.0, -4.4], [-7.0, 4.4]].forEach(function (L) {
+      _r3Box(m, L[0], 0.6, L[1], 0.7, 7.8, 0.7, S[2], S[1]);
+      _r3Box(m, L[0], 0, L[1], 2.4, 0.6, 1.0, DK[1], DK[2]);       /* its pad */
+    });
+    _r3Box(m, 7.0, 4.6, 0, 0.6, 0.6, 8.8, S[2], S[1]);             /* cross members */
+    _r3Box(m, -7.0, 4.6, 0, 0.6, 0.6, 8.8, S[2], S[1]);
+    _r3Box(m, 0, 4.4, 0, 0.3, 3.8, 0.3, DK[2], DK[3]);             /* the cable */
+    _r3Box(m, 0, 3.8, 0, 1.4, 0.8, 1.0, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);   /* the hook block */
   } else return false;
   return true;
 }
@@ -25650,6 +25704,10 @@ function _r3dFrame(G) {
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (e.dead || (only && e.type !== only) || (side && e.side !== side) || (keep && !keep(e))) continue;
+    /* NOT WHAT IS RIDING IN SOMETHING. A passenger keeps a position of its own, dragged along under
+       its transport, and was drawn there - squads standing on the ground under a Skylift in flight.
+       A Sky Crane's load is drawn by the crane, slung (unit3d.js). */
+    if (e.inside) continue;
     if (bound && (Math.abs(e.x - bound[0]) > bound[2] || Math.abs(e.z - bound[1]) > bound[2])) continue;
     if (view && (e.x < view.x0 || e.x > view.x1 || e.z < view.z0 || e.z > view.z1)) continue;   /* off the screen */
     if (e.type === 'struct') {
@@ -26368,6 +26426,7 @@ function _r3dShipSwell(e, t) {
 }
 
 /* Far enough out that a unit is a few dozen pixels long: the plain models will do (mesh3d.js). */
+var R3D_SLING_DROP = 0.4;        /* world units a slung load hangs under its crane: between its legs, under the hook */
 var R3D_LOD_CELL = 20;           /* device px a map cell, below which */
 function _r3dLodFar(R3) {
   return !R3.lodOff && typeof _rtsZoom === 'function' && _rtsZoom() * RTS_TILE * (R3.scale || 1) < R3D_LOD_CELL;
@@ -26433,6 +26492,13 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
     for (var ri = 0; ri < hubs.length; ri++) drawIn(C, rm, hubs[ri].x, y, hubs[ri].z, hubs[ri].a, ART2W, hd, 1, rk.n);
   }
   if (rotor && AP.prop) drawIn(C, _r3dMesh('u', e.def, e.side, 'prop' + _r3dPropPhase(mo.spin), false, 0, 0, lod), e.x, y, e.z, -e.rot, ART2W, hd, 1, rk.n);
+  /* A SLUNG LOAD (a Sky Crane's): the vehicle it carries hangs under it, never through the ground */
+  if (d2.slings && e.cargo && e.cargo.length && R3.slingOff !== true) {     /* R3.slingOff: a spec's A/B */
+    var cg = e.cargo[0], cgt = R.spr.turret && R.spr.turret[cg.side] && R.spr.turret[cg.side][cg.def];
+    var cy = Math.max(_rtsStandY(e.x, e.z), y - R3D_SLING_DROP);
+    drawIn(C, _r3dMesh('u', cg.def, cg.side, cgt ? 'hull' : null, false, 0, 0, lod), e.x, cy, e.z, -e.rot, ART2W, hd, 1, rk.n);
+    if (cgt) drawIn(C, _r3dMesh('u', cg.def, cg.side, 'turret', false, 0, 0, lod), e.x, cy, e.z, -e.rot, ART2W, hd, 1, rk.n);
+  }
 }
 
 /* Where a helicopter's rotors turn, in the world, and at what angle: one over the hub, or - a

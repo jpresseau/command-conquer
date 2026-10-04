@@ -85,6 +85,9 @@ drives to a damaged one by itself - the Repair Bay, on wheels.
 untargeted past two cells until they open fire - and the enemy's radar fills with static there.
 Only a Spotter sees through it.
 
+**Fly the armour in.** The Dominion's Sky Crane lifts one of your vehicles and sets it down
+anywhere - a tank over a river, onto an island no road reaches.
+
 **The enemy uses its whole garage.** It mines the approach to its own base, and once you have a
 harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands
 them beside your ore field, and goes home to do it again.
