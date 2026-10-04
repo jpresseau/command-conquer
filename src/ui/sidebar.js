@@ -419,8 +419,15 @@ function _rtsSyncSidebar(dt) {
       + '<p>' + (G.over === 'win' ? 'The ' + rtsArmyName('enemy') + ' forces have been wiped off the map.'
                           : rtsArmyName('player') + ' command has fallen.') + '</p>'
       + '<p class="s">Enemy units destroyed: ' + G.stats.killed + ' · Units lost: ' + G.stats.lostU + '</p>'
+      + (typeof rtsDailyOverHTML === 'function' ? rtsDailyOverHTML(G) : '')
       + '<button type="button" onclick="rtsRestart()">Play again</button> '
       + '<button type="button" onclick="rtsClose()">Quit</button></div>';
   }
 }
-function rtsRestart() { rtsClose(); setTimeout(function () { rtsOpen(); }, 60); }
+/* Play again: a daily replays the day's battle, with its army and difficulty kept (daily.js). */
+function rtsRestart() {
+  var d = window._RTS_DAILY, prev = window._RTS_DAILY_PREV;
+  rtsClose();
+  if (d) { window._RTS_DAILY = d; window._RTS_DAILY_PREV = prev; window._RTS_DIFF = d.diff; window._RTS_ARMY = d.army; }
+  setTimeout(function () { rtsOpen(d ? d.seed : undefined); }, 60);
+}

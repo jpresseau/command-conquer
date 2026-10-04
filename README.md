@@ -59,6 +59,10 @@ strait you could not cross becomes a causeway, while a ship that sailed there ca
 turns you are warned; anything still on the flats as the sea comes back is swamped and makes for
 dry ground. Low water is an opening with a deadline.
 
+**A daily battle.** DAILY BATTLE on the title screen gives everyone the same map that day, with
+the same army, difficulty and tide, all from the date alone. The end screen gives you a line to
+copy and post, and your best of the day is kept.
+
 ## Everything is generated in code
 
 There are no art or audio assets in this repository, and none are downloaded at runtime:

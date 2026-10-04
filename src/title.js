@@ -36,6 +36,11 @@ function rtsHome(){
   if (h) h.classList.remove('gone');
   var b = document.getElementById('rtsGo');
   if (b) { b.disabled = false; b.textContent = 'START BATTLE'; }
+  /* a daily battle borrowed the army and difficulty: put the player's own back (daily.js) */
+  if (typeof rtsDailyEnd === 'function') rtsDailyEnd();
+  var db = document.getElementById('rtsDaily');
+  if (db) { db.disabled = false; db.innerHTML = 'DAILY BATTLE<small id="rtsDailyNote"></small>'; }
+  if (typeof rtsDailyNote === 'function') rtsDailyNote();
   rtsBuildDiff();
   if (typeof rtsSkySync === 'function') rtsSkySync();     /* the conditions: render3d/sky3d.js */
   rtsShowResume();
@@ -94,6 +99,7 @@ rtsBuildDiff();
 if (typeof rtsSkySync === 'function') rtsSkySync();
 rtsShowResume();
 rtsBuildArmyPick();
+if (typeof rtsDailyNote === 'function') rtsDailyNote();
 
 /* THE OLD ARCHIVE STORE, gone. Earlier versions could keep a player's own game archives in
    IndexedDB, 13 MB and up; that feature is removed, so a returning player gets the space back. */
