@@ -101,6 +101,9 @@ including your own units.
 **An umbrella over the fleet.** The Flak Cruiser's guns hit nothing but aircraft, and left idle it
 keeps station on your nearest ship on its own, so the fleet's cover goes wherever the fleet goes.
 
+**Mine the channel.** The Mine Boat lays hidden mines in the water that go off under any enemy
+ship or hovercraft. A Destroyer's sonar finds them.
+
 **The enemy uses its whole garage.** It mines the approach to its own base, and once you have a
 harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands
 them beside your ore field, and goes home to do it again.

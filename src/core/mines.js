@@ -43,7 +43,8 @@ function _rtsLayMine(e, atx, atz) {
   if (!G.mines) G.mines = [];
   if (_rtsMinesLeft(e) <= 0) { if (e.side === 'player') _rtsSay('Out of mines - a Repair Bay will restock it.'); return false; }
   if (_rtsMineAt(tx, tz)) { if (e.side === 'player') _rtsSay('There is already a mine here.'); return false; }
-  if (!_rtsInB(tx, tz) || G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER) return false;
+  /* on ground, or - from a Mine Boat (core/seamines.js) - on water, and nowhere else */
+  if (!_rtsInB(tx, tz) || (G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER) !== !!rtsUnitDef(e.def).sea) return false;
   G.mines.push({ tx: tx, tz: tz, side: e.side, arm: RTS_MINE.arm });
   e.mines--;
   if (e.side === 'player' && typeof _rtsSfx === 'function') _rtsSfx('place', e.x, e.z);
@@ -80,8 +81,8 @@ function _rtsMineTick(dt) {
     G.shake = Math.max(G.shake || 0, 0.5);
     if (typeof _rtsSfx === 'function') _rtsSfx('boom', x, z);
     if (u.side === 'player') _rtsSay('Mine!');
-    /* where a mine cost a side a unit - the opponent's sweeper goes there (core/sweeper.js) */
-    if (u.side === 'enemy') (G.mineHits = G.mineHits || []).push({ tx: hit.tx, tz: hit.tz });
+    /* where a mine on land cost a side a unit - the opponent's sweeper goes there (core/sweeper.js) */
+    if (u.side === 'enemy' && G.terrain[_rtsIdx(hit.tx, hit.tz)] !== RTS_T_WATER) (G.mineHits = G.mineHits || []).push({ tx: hit.tx, tz: hit.tz });
   }
   G.mines = G.mines.filter(function (m) { return !m.gone; });
 }

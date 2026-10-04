@@ -25,7 +25,8 @@ function _rtsAISupport(S) {
          _rtsAISupportBuy(S, 'jammer', function () { return _rtsPlayerDefences() >= RTS_JAM.digIn && _rtsAIFieldVehicles() >= 4 && _rtsAIDefended(); }) ||  /* the player dug in: core/jammer.js */
          _rtsAISupportBuy(S, 'paraplane', function () { return _rtsPlayerDefences() >= RTS_JAM.digIn && _rtsAIDefended() && !!_rtsAIParaTarget(); }) ||  /* over the wall: core/paradrop.js */
          _rtsAISupportBuy(S, 'drone', function () { return _rtsAIHalfBlind() && _rtsAIDefended(); }) ||  /* eyes in fog, or on a Jammer: core/drone.js */
-         _rtsAISupportBuy(S, 'bomber', function () { return _rtsPlayerDefences() >= RTS_JAM.digIn && _rtsAIDefended(); });  /* a carpet across the base: core/bomber.js */
+         _rtsAISupportBuy(S, 'bomber', function () { return _rtsPlayerDefences() >= RTS_JAM.digIn && _rtsAIDefended(); }) ||  /* a carpet across the base: core/bomber.js */
+         _rtsAISupportBuy(S, 'mineboat', function (G) { return _rtsAISeaMineSpots(G).length > 0; });  /* the channel to its yard: core/seamines.js */
 }
 function _rtsAISupportBuy(S, key, worth) {
   var G = window._rtsG, d = rtsUnitDef(key);
@@ -74,7 +75,7 @@ function _rtsAIMinesTick(dt) {
   G.ai.mineT = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || u.inside || !(rtsUnitDef(u.def) || {}).mines) continue;
+    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || u.inside || !(rtsUnitDef(u.def) || {}).mines || _rtsSeaLayer(u)) continue;
     if (_rtsMinesLeft(u) <= 0) {                               /* home to load again */
       var bay = _rtsHas('enemy', 'depot');
       if (bay && !_rtsAtStruct(u, bay, rtsStructDef('depot').repairs) && !u.path) _rtsOrderMove(u, bay.x, bay.z, false);
