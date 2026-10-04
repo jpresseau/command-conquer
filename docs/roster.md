@@ -413,6 +413,17 @@ Fog Bank blind the long guns most; this is their eyes (`core/spotter.js`):
 
 `unit/spotter` (12 assertions, 10 mutants killed).
 
+## The Repair Truck — mending in the field
+
+Both armies' six-wheeled workshop truck with a crane (`repairtruck`), behind a Repair Bay. The
+Field Medic's aura (`heals`) pointed at vehicles by `healKind`: every friendly vehicle within 2.5
+cells comes back at 12 hp/s, for free, whatever the truck is doing; not itself (`core/repairtruck.js`).
+- Left idle it drives to the nearest damaged vehicle within 10 cells.
+- The opponent buys one once its field army has six armed vehicles; with nothing to mend, its
+  truck follows the largest team on the march, four cells behind.
+
+`unit/repairtruck` (11 assertions, 9 mutants killed; the medic still mends only infantry).
+
 ## The opponent uses the new vehicles
 
 - **The Mine Layer mines its approach** (`core/aimines.js`):

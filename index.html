@@ -706,7 +706,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">0695f1b · 2026-10-04</div>
+  <div id="rtsBuild" title="build">9555a84 · 2026-10-04</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1146,6 +1146,12 @@ var RTS_UNITS = [
   { key:'spotter',  name:'Spotter',       kind:'vehicle',  cost:600,  build:9,  hp:160,  speed:20,  turn:4.0,r:1.6, sight:28, weapon:'mg',
     needs:['radar'], spots:true, armour:'light',
     desc:'Sees through fog and fog banks, and your guns can hit anything it sees at their full range.' },
+  /* REPAIR TRUCK. The verb is MENDING IN THE FIELD: the Field Medic's aura for vehicles, so a
+     battered column is put right where it stands instead of driving home to the Repair Bay. It
+     drives to a damaged vehicle near it by itself - core/repairtruck.js. Unarmed. */
+  { key:'repairtruck',name:'Repair Truck', kind:'vehicle', cost:800,  build:10, hp:280,  speed:13,  turn:3.0,r:1.8, sight:16, weapon:null,
+    needs:['depot'], heals:RTS_TILE * 2.5, healRate:12, healKind:'vehicle', armour:'light',
+    desc:'Repairs your vehicles near it, for free, wherever they are. Drives to a damaged one by itself.' },
   /* Armoured Personnel Carrier. UDATA.CPP's UnitAPC is IsCrusher with no turret; the transport
      rules are in UNIT.CPP - capacity via Max_Passengers, and, in Death, the half of the branch
      that matters: when a TRANSPORT dies its infantry passengers are unlimboed at the wreck and
@@ -6472,7 +6478,7 @@ function _sprBuildingClean(key, side) {
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
   dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46,
-  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30
+  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -7533,6 +7539,36 @@ function _sprUnitSpecial(X, key) {
     _r3Box(m, 1.2, 8.2, 0, 4.0, 0.9, 0.9, DK[1], DK[3]);           /* pintle gun */
     _r3Box(m, 8.0, 3.4, -2.6, 0.9, 1.0, 1.4, GN[3], GN[3]);        /* headlights */
     _r3Box(m, 8.0, 3.4, 2.6, 0.9, 1.0, 1.4, GN[3], GN[3]);
+  } else if (key === 'repairtruck') {
+    /* REPAIR TRUCK. A six-wheeled cab-over truck with a workshop bed: a slewing crane with its
+       hook let down, tool lockers along both sides and an amber beacon on the cab. The identity
+       is the CRANE - a jib leaning out over the tail, which no fighting vehicle carries. */
+    for (i = 0; i < 6; i++) {
+      var tx2 = [6.4, -1.6, -5.6][i >> 1], tz2 = (i % 2) ? 5.2 : -5.2;
+      _r3Wheel(m, tx2, 2.6, tz2, 2.6, 2.8, 'z', DK[0], DK[1], 22);
+      _r3Wheel(m, tx2, 2.6, tz2, 1.2, 3.1, 'z', S[2], S[1], 16);
+      if (!_SPR_ROLL_LEN) { _SPR_ROLL_LEN = 2.6 * Math.PI * 2 / 5; _SPR_ROLL_KIND = 'wheel'; }
+      for (var tn = 0; tn < 5; tn++) {
+        var ta = (tn - (_SPR_ROLL || 0)) / 5 * Math.PI * 2;
+        _r3Box(m, tx2 + Math.cos(ta) * 0.8, 2.6 + Math.sin(ta) * 0.8, tz2, 0.4, 0.4, 3.3, S[3], S[2]);
+      }
+    }
+    _r3Box(m, 0, 2.4, 0, 18.0, 1.4, 8.4, DK[1], DK[2]);            /* chassis */
+    _r3Slab(m, 6.6, 3.8, 0, 5.0, 5.0, 8.2, 0.8, VH[1], TM[1]);     /* the cab - team roof */
+    _r3Box(m, 9.2, 5.8, 0, 0.5, 2.0, 7.0, RTS_PAL.glass, RTS_PAL.glass);   /* windscreen */
+    _r3Cyl(m, 6.6, 8.8, 0, 0.8, 1.0, RTS_PAL.hazard[0], RTS_PAL.lit, 16);  /* amber beacon */
+    _r3Box(m, -3.2, 3.8, 0, 11.4, 1.0, 8.4, S[1], S[2]);           /* the workshop bed */
+    for (var lk2 = -1; lk2 <= 1; lk2 += 2)                          /* tool lockers */
+      _r3Box(m, -1.6, 4.8, lk2 * 3.4, 7.0, 2.6, 1.6, VH[0], VH[1]);
+    _r3Cyl(m, -6.0, 4.8, 0, 1.6, 1.4, DK[1], DK[2], 18);           /* the crane's turntable */
+    _r3Box(m, -6.0, 6.2, 0, 1.4, 3.6, 1.4, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);   /* its post */
+    n0 = m.length;
+    _r3Box(m, -10.0, 9.4, 0, 9.0, 1.0, 1.0, RTS_PAL.hazard[0], RTS_PAL.hazard[1]); /* the jib */
+    _sprPitch(m, n0, -0.3, -6.0, 9.6);
+    _r3Box(m, -13.6, 4.2, 0, 0.2, 7.2, 0.2, DK[2], DK[3]);         /* the cable */
+    _r3Box(m, -13.6, 3.6, 0, 1.0, 1.0, 0.6, S[3], S[2]);           /* the hook */
+    _r3Box(m, 9.4, 3.2, -3.0, 0.9, 1.0, 1.4, GN[3], GN[3]);        /* headlights */
+    _r3Box(m, 9.4, 3.2, 3.0, 0.9, 1.0, 1.4, GN[3], GN[3]);
   } else if (key === 'bridgelayer') {
     /* BRIDGE LAYER. A tank hull carrying its bridge folded in two on its back: a long pale deck
        with a truss along each side and the hinge at the front, overhanging the hull at both ends.
@@ -12003,6 +12039,93 @@ function _rtsAISpotTick(dt) {
   }
 }
 </script>
+<script>/* core/repairtruck.js - the Repair Truck: a Repair Bay that drives to the fight.
+
+   The verb is MENDING IN THE FIELD. The repair itself is the Field Medic's aura (core/units.js
+   `heals`), pointed at vehicles by `healKind` - every friendly vehicle within its radius is
+   brought back up, for free, whatever the truck is doing. This file is where it goes:
+
+     LEFT IDLE   it drives to the nearest damaged friendly vehicle within RTS_FIX.seek cells that
+                 is not already in its reach, and stops beside it
+     THE ENEMY'S follows its army: idle with nothing damaged near, it goes to the centre of the
+                 opponent's largest team on the march, a few cells behind it (_rtsAIFixTick)
+
+   The opponent buys one once its field army has RTS_FIX.army vehicles worth mending
+   (_rtsAISupport, core/aimines.js). */
+
+var RTS_FIX = { seek: 10, every: 1, army: 6, behind: 4, defended: 4 };
+
+function _rtsFixes(u) { var d = rtsUnitDef(u.def) || {}; return d.healKind === 'vehicle' && d.heals > 0; }
+function _rtsFixIdle(u) { return !u.order && (!u.path || u.pi >= u.path.length); }
+/* The nearest damaged friendly vehicle within `cells`, not already in the truck's reach. */
+function _rtsFixWants(u) {
+  var G = window._rtsG, d = rtsUnitDef(u.def), best = null, bd = RTS_FIX.seek * RTS_TILE;
+  for (var i = 0; i < G.ents.length; i++) {
+    var v = G.ents[i];
+    if (v === u || v.dead || v.inside || v.type !== 'unit' || v.side !== u.side || v.hp >= v.maxHp) continue;
+    if ((rtsUnitDef(v.def) || {}).kind !== 'vehicle') continue;
+    var dd = Math.hypot(v.x - u.x, v.z - u.z);
+    if (dd <= d.heals * 0.8 || dd >= bd) continue;
+    bd = dd; best = v;
+  }
+  return best;
+}
+function _rtsFixTick(dt) {
+  var G = window._rtsG;
+  G.fixT = (G.fixT || 0) + dt;
+  if (G.fixT < RTS_FIX.every) return;
+  G.fixT = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var u = G.ents[i];
+    if (u.dead || u.inside || u.type !== 'unit' || !_rtsFixes(u) || !_rtsFixIdle(u)) continue;
+    var v = _rtsFixWants(u);
+    if (v) _rtsOrderMove(u, v.x, v.z, false);
+  }
+}
+/* The opponent's truck, with nothing damaged near: behind the largest team on the march. */
+function _rtsAIFixTick(dt) {
+  var G = window._rtsG, big = null, bn = 0, id;
+  G.ai.fixT = (G.ai.fixT || 0) + dt;
+  if (G.ai.fixT < RTS_FIX.every) return;
+  G.ai.fixT = 0;
+  for (id in G.teams) {
+    var t = G.teams[id];
+    if (!t.moving) continue;
+    var n = t.members.filter(function (m) { return !m.dead && (rtsUnitDef(m.def) || {}).kind === 'vehicle'; }).length;
+    if (n > bn) { bn = n; big = t; }
+  }
+  var c = big && _rtsTeamCentre(big), home = _rtsHas('enemy', 'yard');
+  if (!c || !home) return;
+  var dx = home.x - c.x, dz = home.z - c.z, L = Math.hypot(dx, dz) || 1;
+  var ax = c.x + dx / L * RTS_FIX.behind * RTS_TILE, az = c.z + dz / L * RTS_FIX.behind * RTS_TILE;
+  for (var i = 0; i < G.ents.length; i++) {
+    var u = G.ents[i];
+    if (u.dead || u.inside || u.side !== 'enemy' || u.type !== 'unit' || !_rtsFixes(u) || !_rtsFixIdle(u)) continue;
+    if (_rtsFixWants(u)) continue;                                    /* mending comes first */
+    if (Math.hypot(ax - u.x, az - u.z) > RTS_TILE * 3) _rtsOrderMove(u, ax, az, false);
+  }
+}
+/* HAS THE OPPONENT DUG IN ITSELF? A truck is bought after its base has its defences, not before:
+   bought on six vehicles alone, the one purchase moved the base plan off its defensive tail on
+   seed 9001 - five defences and an Arc Tower became two, in e2e/basedef. */
+function _rtsAIDefended() {
+  var G = window._rtsG, n = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (!e.dead && e.side === 'enemy' && e.type === 'struct' && !e.building && (rtsStructDef(e.def) || {}).weapon) n++;
+  }
+  return n >= RTS_FIX.defended;
+}
+/* How many vehicles the opponent's field army has. */
+function _rtsAIFieldVehicles() {
+  var G = window._rtsG, n = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var u = G.ents[i], d = u.type === 'unit' && rtsUnitDef(u.def);
+    if (!u.dead && u.side === 'enemy' && d && d.kind === 'vehicle' && d.weapon && !d.harvest) n++;
+  }
+  return n;
+}
+</script>
 <script>/* core/bridgelayer.js - the Bridge Layer: a bridge where the map has none.
 
    The verb is the CROSSING: a river or a channel the map gave no bridge over, spanned where the
@@ -15213,7 +15336,7 @@ function _rtsUpdateUnit(e, dt) {
   /* ---- harvester economy loop ---- */
   if (d.harvest) { _rtsUpdateHarvester(e, dt, d); return; }
 
-  /* ---- Field Medic: a passive aura, not an order ----
+  /* ---- Field Medic and Repair Truck: a passive aura, not an order ----
      Runs every tick regardless of what the medic is doing, because a medic that stops healing
      while it walks is a medic nobody uses. "Cannot heal himself" comes straight from the
      reference and stops a pair of medics being an immortal blob. */
@@ -15222,7 +15345,8 @@ function _rtsUpdateUnit(e, dt) {
     for (var hi = 0; hi < hl.length; hi++) {
       var pt = hl[hi];
       if (pt === e || pt.dead || pt.type !== 'unit' || pt.side !== e.side) continue;
-      if (pt.hp >= pt.maxHp || rtsUnitDef(pt.def).kind !== 'infantry') continue;
+      /* `healKind`: the medic's is people, the Repair Truck's vehicles (core/repairtruck.js) */
+      if (pt.hp >= pt.maxHp || rtsUnitDef(pt.def).kind !== (d.healKind || 'infantry')) continue;
       if (Math.hypot(pt.x - e.x, pt.z - e.z) > d.heals) continue;
       pt.hp = Math.min(pt.maxHp, pt.hp + d.healRate * dt);
     }
@@ -17670,7 +17794,8 @@ function _rtsAISupport(S) {
   return _rtsAISupportBuy(S, 'minelayer', function (G) { return _rtsAIMineSpots(G).length > 0; }) ||   /* a land route to deny */
          _rtsAISupportBuy(S, 'hovercraft', function () { return !!_rtsAIHoverTarget(); }) ||           /* a harvester by the water: core/aihover.js */
          _rtsAISupportBuy(S, 'sweeper', function (G) { return !!(G.mineHits && G.mineHits.length); }) ||  /* a mine has cost it a unit: core/sweeper.js */
-         _rtsAISupportBuy(S, 'spotter', function () { return _rtsFogged() && _rtsAILongGuns() > 0; });    /* long guns blind in fog: core/spotter.js */
+         _rtsAISupportBuy(S, 'spotter', function () { return _rtsFogged() && _rtsAILongGuns() > 0; }) ||  /* long guns blind in fog: core/spotter.js */
+         _rtsAISupportBuy(S, 'repairtruck', function () { return _rtsAIFieldVehicles() >= RTS_FIX.army && _rtsAIDefended(); });  /* an army worth mending: core/repairtruck.js */
 }
 function _rtsAISupportBuy(S, key, worth) {
   var G = window._rtsG, d = rtsUnitDef(key);
@@ -18353,6 +18478,7 @@ function _rtsUpdateAI(dt) {
   _rtsAIHoverTick(dt);          /* ...and the Hovercraft raids by sea - core/aihover.js */
   _rtsAISweepTick();            /* ...and the sweeper clears where mines hurt it - core/sweeper.js */
   _rtsAISpotTick(dt);           /* ...and the spotter sees for the long guns - core/spotter.js */
+  _rtsAIFixTick(dt);            /* ...and the truck follows the army - core/repairtruck.js */
   _rtsAISupers(dt);
   /* Rich: refill a line as soon as it empties, rather than waiting up to five seconds for
      the next decision. Without this the opponent banks tens of thousands of credits it
@@ -18929,6 +19055,7 @@ function _rtsTick(dt) {
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 2.2);
   _rtsAnimAI(dt);
   _rtsCrateAI(dt);
+  _rtsFixTick(dt);                               /* Repair Trucks go to the damaged: core/repairtruck.js */
   _rtsSweepTick(dt);                             /* the Mine Sweeper finds and clears: core/sweeper.js */
   _rtsMineTick(dt);                              /* the Mine Layer's: core/mines.js */
   _rtsTideTick(dt);                              /* the sea goes out and comes back: core/tide.js */
