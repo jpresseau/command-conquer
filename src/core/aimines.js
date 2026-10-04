@@ -9,7 +9,7 @@
    No army the opponent raises takes it along: teams recruit by composition and none has a layer
    in it, and escorts and the base's response want a gun.
 
-   BOUGHT OUTSIDE THE ROLL (_rtsAISupport, called from _rtsAIUnits). As an entry in the weighted
+   BOUGHT OUTSIDE THE ROLL (_rtsAISupport, called from _rtsAIUnits - the Hovercraft too). As an entry in the weighted
    vehicle mix it moved every roll after it - the Soviet opponent stopped reaching its Arc Tower
    in e2e/basedef, and the raiders thinned out in e2e/raid - and a full army skipped the whole
    line, so a capped opponent never bought one. Here it is one question, asked before the roll:
@@ -17,13 +17,17 @@
    above what the base plan is saving for (as the engineer is), so it delays no building. */
 
 function _rtsAISupport(S) {
-  var G = window._rtsG, d = rtsUnitDef('minelayer');
-  if (!d || _rtsAIOwned('minelayer') >= 1) return false;
+  return _rtsAISupportBuy(S, 'minelayer', function (G) { return _rtsAIMineSpots(G).length > 0; }) ||   /* a land route to deny */
+         _rtsAISupportBuy(S, 'hovercraft', function () { return !!_rtsAIHoverTarget(); });             /* a harvester by the water: core/aihover.js */
+}
+function _rtsAISupportBuy(S, key, worth) {
+  var G = window._rtsG, d = rtsUnitDef(key);
+  if (!d || _rtsAIOwned(key) >= 1) return false;
   if (S.q && S.q.vehicle) return false;
-  if (!_rtsCanQueue('enemy', 'minelayer')) return false;
-  if (!_rtsAIMineSpots(G).length) return false;          /* no land route: nothing to deny */
+  if (!_rtsCanQueue('enemy', key)) return false;
+  if (!worth(G)) return false;
   if (rtsMoney(S) < _rtsAISpare(S) + _rtsCostOf('enemy', d)) return false;
-  _rtsQueue('enemy', 'minelayer');
+  _rtsQueue('enemy', key);
   return true;
 }
 

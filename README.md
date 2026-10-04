@@ -65,6 +65,10 @@ come close, so fog is the day to walk up on a fortified line. In the rain the sh
 clock, and while one is at full strength every armed aircraft is grounded on its pad until it
 passes. A battle keeps the sky it started under, and a save keeps it too.
 
+**The enemy uses its whole garage.** It mines the approach to its own base, and once you have a
+harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands
+them beside your ore field, and goes home to do it again.
+
 **A daily battle.** DAILY BATTLE on the title screen gives everyone the same map that day, with
 the same army, difficulty, tide and weather, all from the date alone. The end screen gives you a line to
 copy and post, and your best of the day is kept.
