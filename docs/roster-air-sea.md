@@ -54,3 +54,20 @@ both `provides:['airpad']` (`core/bomber.js`):
   other buildings within `RTS_BOMB.crowd` (4) cells (`_rtsAIBombTarget`).
 
 `unit/bomber` (18 assertions, 11 mutants killed).
+
+## The Flak Cruiser — escort at sea
+
+Both armies' anti-aircraft hull (`flakship`), from either yard plus a Radar Post
+(`core/flakship.js`; model in `sprites/unit-hulls.js`, the start of the second wave of ships):
+- `shipflak` is `aa` and `aaOnly`: a fleet finally has something that can touch a gunship, and
+  the cruiser cannot hit a ship or the shore.
+- `escorts`: left idle, it keeps station on the nearest ship of its own side within
+  `RTS_ESCORT.reach` (14) cells, never on another escort. When it falls more than
+  `RTS_ESCORT.close` (3) cells behind, it closes up on an attack-move, so it fires at anything
+  flying over on the way. The station order is marked `e.esc === e.goal`, so a move the player
+  gives always comes first, and the station is taken up again only once it is idle.
+- The opponent buys one through the ship mix with `vsAir:2`, as it does the Flak Track: none
+  while the sky is empty, so the roll is unchanged in a game with no aircraft.
+
+`unit/flakship` (12 assertions, 8 mutants killed). The maps' seas are channels at most five cells
+wide, so the staging finds a fourteen-cell stretch of one.

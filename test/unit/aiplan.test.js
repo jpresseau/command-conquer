@@ -115,11 +115,14 @@ S.note(Object.keys(mixKeys).length + ' units in the shopping list, ' +
 })();
 
 (function () {
+  /* ...or keeps station on one that is (`escorts`, core/flakship.js): the Flak Cruiser follows
+     the nearest hull of its side on its own, so it sails wherever the fleet is sent without a
+     team of its own. unit/flakship measures the following. */
   var hulls = (MIX.ship || []).map(function (e) { return e.key; });
-  var idle = hulls.filter(function (k) { return !fielded[k]; });
-  S.ok('every hull the opponent buys is fielded by some team', !idle.length,
+  var idle = hulls.filter(function (k) { return !fielded[k] && !unitKeys[k].escorts; });
+  S.ok('every hull the opponent buys is fielded by some team, or escorts one that is', !idle.length,
        idle.length ? idle.join(', ') + ' would sit at the yard'
-                   : hulls.map(function (k) { return k + '→' + fielded[k].join('+'); }).join('  '));
+                   : hulls.map(function (k) { return k + '→' + (fielded[k] ? fielded[k].join('+') : 'escort'); }).join('  '));
 
   /* And the Cruiser specifically is escorted. It carries no sonar - see RTS_UNITS - so an
      unescorted one is a submarine's lunch, which e2e/navy measures. A team that sent it out

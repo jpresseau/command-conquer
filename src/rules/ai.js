@@ -252,7 +252,9 @@ var RTS_AI = {
               a rule here. Weight 2: it is a siege piece rather than a fleet, and an opponent
               that spent its whole navy budget on one 2,000-credit hull would own the coastline
               and lose the water. */
-           { key:'cruiser', at:3200, w:2 } ],
+           { key:'cruiser', at:3200, w:2 },
+           /* against aircraft only, as the Flak Track is: core/flakship.js */
+           { key:'flakship', at:1600, w:4, vsAir:2 } ],
     infantry:[ { key:'flame', at:1200, w:2 }, { key:'grenadier', at:900, w:2 },
                { key:'rocket', at:500, w:3 }, { key:'dog', at:400, w:2 },
                { key:'rifle', at:250, w:2 }, { key:'engineer', at:2200, w:2 } ],

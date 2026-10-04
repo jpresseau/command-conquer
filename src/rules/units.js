@@ -307,6 +307,14 @@ var RTS_UNITS = [
      RA sinks an LST's whole cargo with it and so do we - see _rtsSpillCargo. That is what
      keeps it a decision: a loaded transport is five units and 700 credits in one hull with no
      gun, and the crossing is the risk you are buying. */
+  /* FLAK CRUISER. The verb is the UMBRELLA at sea: until this, a fleet had nothing that could
+     touch an aircraft, so a gunship could sink a navy for free. Both armies', from either yard
+     and a Radar Post. Left idle it keeps station with the nearest ship of its own side
+     (`escorts`, core/flakship.js), so the umbrella goes where the fleet goes - core/flakship.js. */
+  { key:'flakship', name:'Flak Cruiser', kind:'ship',     cost:1200, build:15, hp:800,  speed:11,  turn:1.4,r:2.4, sight:30,
+    weapon:'shipflak', needs:['shipyard', 'radar'], sea:true, escorts:true,
+    armour:'heavy',
+    desc:'Anti-aircraft guns afloat. Sails with your nearest ship on its own and keeps aircraft off the fleet; cannot hit ships or the shore.' },
   { key:'lst',      name:'Landing Craft',kind:'ship',     cost:700,  build:10, hp:400,  speed:12,  turn:1.6,r:2.4, sight:14, weapon:null,
     needs:['shipyard'], sea:true, carries:5, takes:['infantry', 'vehicle'],
     armour:'heavy',

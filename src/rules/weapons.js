@@ -109,6 +109,11 @@ var RTS_WEAPONS = {
   trackflak:  { dmg:18, range:22, cool:0.45, burst:2, shot:'tracer', speed:0, splash:1.2, aa:true,
                 aaOnly:true,
                 verses:{ none:0.9, wood:0.15, light:0.9, heavy:0.35, concrete:0.10 } },
+  /* The Flak Cruiser's battery: the AA Gun's flak, a step further, so a fleet's umbrella reaches
+     past the hulls it sails with. */
+  shipflak:   { dmg:22, range:28, cool:0.45, burst:2, shot:'tracer', speed:0, splash:1.4, aa:true,
+                aaOnly:true,
+                verses:{ none:0.9, wood:0.15, light:0.9, heavy:0.35, concrete:0.10 } },
   bite:       { dmg:22, range:5.5,cool:0.55, shot:'tracer',  speed:0,  splash:0, maul:true,
                 verses:{ none:1.4,  wood:0,    light:0,    heavy:0,    concrete:0 } },
   /* Two .45s: shreds infantry, barely marks anything else. The Commando's threat to buildings
