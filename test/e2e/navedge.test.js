@@ -6,8 +6,7 @@
                         the first, so the menu after a right drag is still eaten
      AS PRESSED         a still right-click on an enemy that dies before the release moves to its
                         ground rather than attacking a corpse
-     THE WHEEL          a Mac mouse click (4.000244 px) is a whole notch; in 2D a turn back
-                        starts the sum clean, with no key involved
+     THE WHEEL          a Mac mouse click (4.000244 px) is a whole notch
      ONE BIG FRAME      a zoom of four rungs taken in a single slow frame keeps the point under the
                         cursor - on the steepest hillside
      SAFARI             a trackpad pinch sent as GestureEvents zooms the map, not the page
@@ -22,7 +21,7 @@ var S = new Suite('navedge');
 (async function () {
   var browser = await chromium.launch();
   var g = await openPage(browser, { width: 900, height: 640, dpr: 1 });
-  await g.start(7, 20, { freeze: true, mode3d: true });
+  await g.start(7, 20, { freeze: true });
   var P = g.page, M0 = g.page.mouse;
   await P.evaluate(function () { window.__wheels = 0; document.addEventListener('wheel', function () { window.__wheels++; }); });
   var M = {
@@ -207,24 +206,6 @@ var S = new Suite('navedge');
     S.ok('the touch bar\'s latched attack-move survives the window losing focus', latch.kept, String(latch.kept));
     S.ok('...while one from the A key held is let go', latch.keyLetGo, String(latch.keyLetGo));
   }
-
-  /* ---------------- 2D: A TURN BACK STARTS THE SUM CLEAN ---------------- */
-  await P.evaluate(function () { rts3dSet(false); RTS_WHEEL_QUIET = 60000; });
-  await park(1);
-  await M.move(400, 300);
-  for (var t = 0; t < 3; t++) await M.wheel(0, -25);           /* three quarters of a rung in */
-  var steps = [];
-  for (t = 0; t < 4; t++) { await M.wheel(0, 25); steps.push((await state()).zi); }
-  S.ok('in 2D, after three quarters in, the way out takes a whole rung of its own', steps.join() === '1,1,1,0',
-       'rungs after each notch out: ' + steps.join(', '));
-
-  /* and a remainder belongs to its own gesture: three quarters in, a pause, a quarter more */
-  await park(1);
-  for (t = 0; t < 3; t++) await M.wheel(0, -25);
-  await P.evaluate(function () { RTS_WHEEL_QUIET = 0; });      /* every event from here comes after a pause */
-  await M.wheel(0, -25);
-  var after = (await state()).zi;
-  S.ok('...and after a pause a small nudge does not finish the last gesture\'s rung', after === 1, 'rung ' + after);
 
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
   await g.close();

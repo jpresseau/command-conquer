@@ -32,9 +32,8 @@ function _rtsFxFrame(f, S) {
            anchor: RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].size ? 0.72 : 0.5 };
 }
 
-/* The sprite's width with NO perspective in it. The 2D path multiplies by the projection's
-   own scale; the 3D path divides by the zoom to get world units, which is the same number
-   arriving from the other side. Divided by the density the frame was baked at: the drawn set
+/* The sprite's width with NO perspective in it. The 3D path divides by the zoom to get
+   world units. Divided by the density the frame was baked at: the drawn set
    bakes at RTS_PS and says so, real Red Alert artwork carries no tag and reads as 1, and
    _mixFx replaces these role by role so a mixed set holds both at once. */
 function _rtsFxSize(img, TSscale, big) {

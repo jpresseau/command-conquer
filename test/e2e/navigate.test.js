@@ -29,7 +29,7 @@ var S = new Suite('navigate');
 (async function () {
   var browser = await chromium.launch();
   var g = await openPage(browser, { width: 900, height: 640, dpr: 1 });
-  await g.start(7, 20, { freeze: true, mode3d: true });
+  await g.start(7, 20, { freeze: true });
   var P = g.page, M0 = g.page.mouse;
   /* A WHEEL IS HANDLED WHEN IT IS HANDLED: Chromium routes it through the compositor, and
      mouse.wheel returns before the page has seen it. Counted as it bubbles out of the canvas,
@@ -322,44 +322,6 @@ var S = new Suite('navigate');
     S.ok('keys down when the window loses focus are let go', h2.plus && h2.left && st.zoom === 0 && st.pan === 0,
          'held ' + JSON.stringify(h2) + '; a second later: zoom ' + st.zoom + ' rungs, pan ' + st.pan);
   }
-
-  /* ---------------- 2D: ON ITS RUNGS ---------------- */
-  await P.evaluate(function () { rts3dSet(false); RTS_WHEEL_QUIET = 60000; });   /* the burst below is one gesture, however slow the harness */
-  await park(1);
-  var da = await cam(), wd = await ground(490, 190);
-  await M.move(490, 190);
-  await M.wheel(0, -100);
-  var db = await cam(), sd = await slip(wd, 490, 190);
-  S.ok('a wheel notch in 2D is a whole rung', db.zi === da.zi + 1 && db.cell === db.ladder[db.zi],
-       'rung ' + da.zi + ' -> ' + db.zi + ', cell ' + db.cell);
-  S.ok('...toward the cursor', sd < 2, sd + ' px from the cursor');
-  await park(1);
-  var steps = [];
-  for (var t = 0; t < 4; t++) { await M.wheel(0, -25); steps.push((await cam()).zi); }
-  S.ok('a trackpad\'s small deltas add up to one rung', steps.join() === '1,1,1,2', 'rungs after each: ' + steps.join(', '));
-  /* a held + in 2D: a rung at the press, a remainder from the hold; the next notch out must count */
-  await park(0);
-  await P.keyboard.down('Equal');
-  await panTick(0.1, 5);
-  await P.keyboard.up('Equal');
-  var dk = await cam();
-  await M.move(400, 300);
-  await M.wheel(0, 100);
-  var dl = await cam();
-  S.ok('after holding + in 2D, the next notch out is not swallowed', dl.zi === dk.zi - 1, 'rung ' + dk.zi + ' -> ' + dl.zi);
-  /* in 2D the middle button pans as the right one does; in 3D it turns the camera (e2e/orbit) */
-  await park(1);
-  var w2 = await ground(420, 300), c2 = await cam();
-  await rdrag('middle', 420, 300, 560, 400);
-  var c3 = await cam(), s3 = await slip(w2, 560, 400);
-  S.ok('a middle-drag in 2D grabs the map too', Math.hypot(c3.fx - c2.fx, c3.fz - c2.fz) > 10 && s3 < 2,
-       'focus moved ' + Math.hypot(c3.fx - c2.fx, c3.fz - c2.fz).toFixed(1) + ', ' + s3 + ' px off');
-  await park(1);
-  var w2d = await ground(450, 330);
-  await rdrag('right', 450, 330, 300, 250);
-  var s2d = await slip(w2d, 300, 250), c2d = await cam();
-  S.ok('a right-drag in 2D keeps the ground under the cursor', s2d < 2, s2d + ' px off');
-  S.ok('...and orders nothing', !c2d.ordered, 'unit ordered: ' + c2d.ordered);
 
   var help = await P.evaluate(function () {
     var d = document.querySelector('#rcgRts .rts-help.desk'), k = document.getElementById('rtsKeys');

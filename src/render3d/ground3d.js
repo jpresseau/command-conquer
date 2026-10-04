@@ -90,8 +90,7 @@ function _r3dFog(G) {
 
 /* THE ORE FIELD'S COLOUR, as a texture rather than as geometry.
 
-   In 2D the deposit is a painted tile; render/frame.js skips that in 3D because the crystals
-   are real there, which left the crystals standing on plain grass with nothing to say a
+   The crystals are real geometry (render3d/ore3d.js), which left the crystals standing on plain grass with nothing to say a
    deposit was underneath them. Drawing the bed as flat quads was tried and looked like a heap
    of overlapping paper squares - a quad's hard straight edge reads louder than the colour it
    carries, however the colour is varied.

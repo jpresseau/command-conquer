@@ -1,18 +1,18 @@
-/* THE LIVE 3D MODE: it renders, it projects, and the game stays playable inside it.
+/* THE LIVE 3D BATTLEFIELD: it renders, it projects, and the game stays playable inside it.
 
-   The mode draws the same models the sprite baker flattens - there is no second set of
-   geometry to drift - so what can actually break is the seam between the two worlds:
+   It draws the same models the sprite baker flattens for cameos and the radar - there is no
+   second set of geometry to drift - so what can actually break is the seam between the two:
 
    THE PROJECTION CONTRACT is the load-bearing part. Input picking, drag select, health bars,
-   effects and the ghost all reach the screen through _rtsSX/_rtsSY/_rtsGroundAt/
-   _rtsWorldToScreen, and in 3D those become the tilted-camera forms while the GL shader
+   effects and the ghost all reach the screen through _rtsGroundToScreen/_rtsGroundAt/
+   _rtsWorldToScreen, which are the tilted-camera forms, while the GL shader
    projects the same numbers independently (render3d/gl3d.js). If the two ever disagree,
    every click lands beside the thing it was aimed at - a failure no other spec would see,
-   because the 2D mode's identity projection cannot produce it. So the round trip is asserted
+   because a flat projection cannot produce it. So the round trip is asserted
    exactly: ground -> screen -> ground must return the pixel it started from.
 
    THE PRESENTATION is the other seam. The GL canvas is a visible layer under a transparent
-   2D overlay now - it was a per-frame blit into the overlay for a long time, because stacking
+   overlay canvas (selection, effects sprites, the ghost) now - it was a per-frame blit into the overlay for a long time, because stacking
    once composited black in headless capture; preserveDrawingBuffer:true is what changed the
    answer, making the GL buffer readable at any time, and the blit survives only as
    _rtsCompose(), the harness's on-demand rebuild of the frame the compositor shows. Three
@@ -46,8 +46,6 @@ var S = new Suite('r3dlive');
     for (var t = 0; t < 30; t++) _rtsTick(1 / 60);
     o.tank = !!(tank && !tank.dead);
 
-    o.button = !!document.getElementById('rts3dBtn');
-    rts3dSet(true);
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;
@@ -93,7 +91,7 @@ var S = new Suite('r3dlive');
     });
     o.roundtrip = +worst.toFixed(3);
 
-    /* height lifts things UP the screen in 3D, as it does in 2D - the sign is easy to flip */
+    /* height lifts things UP the screen - the sign is easy to flip */
     var flat = _rtsWorldToScreen(yard.x, 0, yard.z), tall = _rtsWorldToScreen(yard.x, 10, yard.z);
     o.heightLifts = tall.y < flat.y;
 
@@ -128,16 +126,10 @@ var S = new Suite('r3dlive');
     }
     o.chunksDrawn = drawn;
 
-    /* and the way back: 2D must be untouched by the round trip through 3D */
-    rts3dSet(false);
-    o.off = !(window._R3D && window._R3D.on);
-    var p2 = _rtsGroundAt(450, 325), s2 = _rtsWorldToScreen(p2.x, 0, p2.z);
-    o.roundtrip2d = +Math.max(Math.abs(s2.x - 450), Math.abs(s2.y - 325)).toFixed(3);
     return o;
   });
 
-  S.ok('the 3D button is in the top bar', out.button, out.button ? 'present' : 'missing');
-  S.ok('the mode turns on', out.on, out.on ? 'on' : 'toggle refused (no WebGL?)');
+  S.ok('the 3D view is on', out.on, out.on ? 'on' : 'no WebGL?');
   S.ok('a tank stood on open ground for the pick', out.tank, out.tank ? 'spawned' : 'spawn refused');
   if (out.on) {
     S.ok('models become meshes on first sight', out.meshes > 0, out.meshes + ' meshes cached');
@@ -163,8 +155,6 @@ var S = new Suite('r3dlive');
     S.ok('and the view culls it - most chunks never reach the vertex stage',
          out.chunksDrawn > 0 && out.chunksDrawn < out.chunks,
          out.chunksDrawn + ' of ' + out.chunks + ' chunks drawn at the default view');
-    S.ok('toggling back leaves 2D exact', out.off && out.roundtrip2d <= 0.001,
-         'mode off, 2D round trip drift ' + out.roundtrip2d + 'px');
   }
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
 

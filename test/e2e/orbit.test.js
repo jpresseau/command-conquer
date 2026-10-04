@@ -25,7 +25,7 @@ var S = new Suite('orbit');
 (async function () {
   var browser = await chromium.launch();
   var g = await openPage(browser, { width: 900, height: 640, dpr: 1 });
-  await g.start(7, 20, { freeze: true, mode3d: true });
+  await g.start(7, 20, { freeze: true });
   var P = g.page, M = P.mouse;
   var on = await P.evaluate(function () { return !!(window._R3D && window._R3D.on); });
   S.ok('the 3D mode is available to check', on, on ? 'on' : 'no WebGL');
@@ -186,14 +186,10 @@ var S = new Suite('orbit');
     var o = { shown: c && getComputedStyle(c).display !== 'none', turn: c && c.firstChild.style.transform };
     c.click(); for (var i = 0; i < 120; i++) _rtsOrbitTick(1 / 60);
     o.after = window._R3D.yaw;
-    rts3dSet(false); _rtsOrbitTick(0);
-    o.hidden2d = getComputedStyle(c).display === 'none';
-    rts3dSet(true); _rtsOrbitTick(0);
     return o;
   });
   S.ok('the compass shows in 3D, its needle turned back by the yaw', comp.shown && /^rotate\(-0\.8(0*)rad\)$/.test(comp.turn), JSON.stringify(comp));
   S.ok('...a tap faces north again', comp.after === 0, String(comp.after));
-  S.ok('...and it is not there in 2D', comp.hidden2d, String(comp.hidden2d));
 
   /* THE PLACEMENT GHOST, turned: the building's own mesh, translucent, where it would stand */
   await park();

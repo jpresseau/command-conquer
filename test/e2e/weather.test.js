@@ -1,13 +1,12 @@
 /* MORE WEATHER, in the picture - the sandstorm, the showers and the bolt (render3d/sky3d.js,
-   skyfx3d.js, the ground's puddles in terrain3d.js, render/sky2d.js):
+   skyfx3d.js, the ground's puddles in terrain3d.js):
 
-     SANDSTORM  the light goes ochre; sand drives across the view (R3.sandAmt takes it out);
-                and the 2D picture takes the tint, with the sand driving across it
+     SANDSTORM  the light goes ochre; sand drives across the view (R3.sandAmt takes it out)
      SHOWERS    in a shower the rain falls; in a dry spell none does, and the ground dries -
                 brighter as the spell goes on. (The puddles also shrink back as they dry, but at
                 this zoom too few pixels of puddle are in view to measure it apart from that.)
      LIGHTNING  at a strike a bolt of light stands from the cloud to the ground (R3.boltOff takes
-                it out); and in 2D too */
+                it out) */
 
 var { chromium } = require('playwright');
 var { Suite } = require('../lib/assert.js');
@@ -24,7 +23,6 @@ var S = new Suite('weather');
     var o = {}, R = _rtsR, G = window._rtsG, i;
     for (i = 0; i < RTS_N * RTS_N; i++) { G.mapped[i] = 1; G.vis[i] = 1; }
     G.visDirty = 1;
-    rts3dSet(true);
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;
@@ -87,17 +85,8 @@ var S = new Suite('weather');
       });
     }
 
-    /* 2D */
-    rts3dSet(false);
-    function shot2(sky, t2) { window.RTS_SKY_FORCE = sky; G.t = t2; _rtsRFrame(0); var c = R.cv; return c.getContext('2d').getImageData(0, 0, c.width, c.height).data; }
-    var A0 = shot2('day', 5), A1 = shot2('sand', 5);
-    o.sand2 = [stats(A0), stats(A1)];
-    var A2 = shot2('sand', 5.3), F0 = shot2('fog', 5), F1 = shot2('fog', 5.3);
-    o.sandMove2 = [diff(A1, A2).n, diff(F0, F1).n];
-    var B1 = shot2('rain', tS), B0 = shot2('rain', tS + 0.8);
-    o.bolt2 = diff(B1, B0).bright;
     window.RTS_SKY_FORCE = undefined;
-    gl.getError(); rts3dSet(true); window.RTS_POST_ON = true; shot(undefined, 5); o.glErr = gl.getError();
+    gl.getError(); window.RTS_POST_ON = true; shot(undefined, 5); o.glErr = gl.getError();
     R3.cloudAmt = undefined; R3.swayAmt = undefined; R3.surfAmt = undefined;
     return o;
   });
@@ -108,16 +97,12 @@ var S = new Suite('weather');
   S.ok('in a sandstorm the light goes ochre', s.r / s.b > (d.r / d.b) * 1.15,
        'red over blue ' + (s.r / s.b).toFixed(2) + ' against ' + (d.r / d.b).toFixed(2) + ' by day');
   S.ok('...and sand drives across the view', out.sandN > 100 && out.sandQuads >= out.sandN && out.blown > 1500, out.sandN + ' grains, ' + out.sandQuads + ' quads, ' + out.blown + ' pixels');
-  S.ok('...in 2D as well', out.sand2[1].r / out.sand2[1].b > (out.sand2[0].r / out.sand2[0].b) * 1.1,
-       (out.sand2[1].r / out.sand2[1].b).toFixed(2) + ' against ' + (out.sand2[0].r / out.sand2[0].b).toFixed(2));
-  S.ok('...the sand driving across it there too, where a fog stands still', out.sandMove2[0] > 300 && out.sandMove2[1] < out.sandMove2[0] / 10, out.sandMove2.join(' against '));
   S.ok('the rain comes and goes: there is a dry spell and a shower after it', !!out.spell && !!out.spell.t1 && !!out.shower, JSON.stringify(out.spell) + ', shower at ' + out.shower);
   S.ok('in the shower the rain falls', out.falling > 400, out.falling + ' pixels of rain');
   S.ok('...in the dry spell none does', out.dryFalling === 0, out.dryFalling + ' pixels');
   S.ok('...and the ground dries through it, brighter as it goes', out.wet[1] < out.wet[0] - 0.2 && out.dries[1] > out.dries[0] && out.dries[2] > 2000,
        'wet ' + out.wet.join(' then ') + '; ' + out.dries[0].toFixed(1) + ' then ' + out.dries[1].toFixed(1) + ' bright, ' + out.dries[2] + ' pixels change');
   S.ok('at a strike a bolt stands from the cloud to the ground', !!out.foot && out.bolt.bright > 40 && out.boltUp > 10, out.boltUp + ' pixels lit white up the bolt, ' + out.bolt.bright + ' in all');
-  S.ok('...and in 2D as well', out.bolt2 > 40, out.bolt2 + ' pixels');
   S.eq('no draw is refused', out.glErr, 0);
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
 

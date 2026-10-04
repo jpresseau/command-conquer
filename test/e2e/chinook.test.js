@@ -19,7 +19,7 @@ var S = new Suite('chinook');
 (async function () {
   var browser = await chromium.launch();
   var g = await openPage(browser, { width: 1100, height: 760 });
-  await g.start(7, 1, { freeze: true, mode3d: true });
+  await g.start(7, 1, { freeze: true });
   var p = g.page;
   async function canvasAt(sx, sy) {
     var r = await p.evaluate(function () { var c = document.getElementById('rtsCv').getBoundingClientRect(); return { l: c.left, t: c.top }; });

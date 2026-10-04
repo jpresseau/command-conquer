@@ -27,9 +27,10 @@ var { openPage } = require('../lib/game.js');
 
 var S = new Suite('crash');
 
-/* A cheap hash of the canvas. Comparing whole data URLs is the same test with more bytes. */
+/* A cheap hash of the battlefield: the GL canvas, which carries the world (the canvas over it is
+   a transparent overlay). Readable at any time - it is created with preserveDrawingBuffer. */
 function shotFn() {
-  var c = _rtsR.cv, d = c.toDataURL(), h = 0;
+  var c = window._R3D.cv, d = c.toDataURL(), h = 0;
   for (var i = 0; i < d.length; i += 97) h = (Math.imul(h, 31) + d.charCodeAt(i)) | 0;
   var el = document.getElementById('rtsMsg');
   return { hash: h, msg: el ? el.textContent : null,
@@ -46,18 +47,28 @@ function shotFn() {
      that a coin toss. Measured: frames 800ms apart hashed identically twice in eight samples on
      a perfectly healthy match. Take several and ask whether they are ALL the same, which is
      what "frozen" actually means. */
-  async function moving(g, n, ms) {
+  async function moving(g, n, ms, look) {
     var seen = {};
     for (var i = 0; i < n; i++) {
       var r = await g.page.evaluate(shotFn);
       seen[r.hash] = 1;
-      if (i < n - 1) await g.page.waitForTimeout(ms);
+      /* LOOKING AROUND: with the simulation dead the world's own motion runs on game time and
+         stops with it, so what proves the loop still paints is that it shows a camera move -
+         the player can still look at the battle they are about to save */
+      if (look) await g.page.evaluate(function () { _rtsR.focus.x += 6; _rtsApplyCam(); });
+      if (i < n - 1) {
+        var raf0 = await g.page.evaluate(function () { return window._rtsUI.raf || 0; });
+        await g.page.waitForTimeout(ms);
+        await g.page.waitForFunction(function (f) { return (window._rtsUI.raf || 0) > f + 1; }, raf0, { timeout: 30000 }).catch(function () {});
+      }
     }
     return Object.keys(seen).length;
   }
 
   async function fresh() {
-    var g = await openPage(browser, { width: 900, height: 700 });
+    /* LOW quality: the loop's behaviour is under test, not the picture, and the give-up counts
+       FRAMES - a software rasteriser's full-quality 3D frame makes sixty of them a minute's wait */
+    var g = await openPage(browser, { width: 900, height: 700, quality: 'low' });
     /* NOT frozen. Everything here is about the real requestAnimationFrame loop - a spec that
        drove _rtsTick by hand would never enter the code under test. */
     await g.start(7, 12);
@@ -84,10 +95,12 @@ function shotFn() {
     return true;
   });
   S.ok('a sim-only fault is armed', sim, '');
-  await g.page.waitForTimeout(1600);
-  var liveFrames = await moving(g, 5, 220);
+  /* on the condition, not a clock: RTS_LOOP_GIVEUP is a count of frames, and how long sixty
+     frames take is a fact about this machine */
+  await g.page.waitForFunction(function () { return window._rtsUI.simDead; }, null, { timeout: 120000 }).catch(function () {});
+  var liveFrames = await moving(g, 5, 220, true);
   var d = await g.page.evaluate(shotFn);
-  S.ok('the picture goes on moving with the simulation dead', liveFrames > 1,
+  S.ok('the picture goes on following the camera with the simulation dead', liveFrames > 1,
        liveFrames + ' distinct frames out of 5, simDead=' + d.simDead);
   S.ok('the simulation is given up on rather than retried forever', d.simDead, '');
   S.ok('...and the error text reaches the screen', /SIM ONLY/.test(d.msg || ''),
@@ -100,7 +113,7 @@ function shotFn() {
   await g.page.waitForTimeout(1000);
   var e2 = await g.page.evaluate(function () { return window._rtsUI.errs; });
   S.eq('it stops throwing once it has given up', e2 - e1, 0);
-  S.ok('...having given up inside about a second, not immediately and not never',
+  S.ok('...having given up after about a second of frames, not immediately and not never',
        e2 >= 30 && e2 <= 200, e2 + ' frames tried');
   S.ok('...and the render loop is still running, so the sidebar and menu still work',
        !d.drawDead && d.raf !== 0, 'raf ' + d.raf);
@@ -150,7 +163,7 @@ function shotFn() {
       return !x.dead && x.type === 'unit' && x.side === 'player'; })[0];
     u.def = 'notarealunitkey';
   });
-  await g.page.waitForTimeout(2000);
+  await g.page.waitForFunction(function () { return window._rtsUI.drawDead; }, null, { timeout: 120000 }).catch(function () {});
   var f1 = await g.page.evaluate(shotFn);
   await g.page.waitForTimeout(1000);
   var f2 = await g.page.evaluate(shotFn);

@@ -4,8 +4,7 @@
    flat 2D mark floating in front of a 3D world. In the 3D mode a selected unit stands in a soft
    ring of light on the ground now, and a selected building has its footprint traced round, the
    way the later 3D RTS games mark a selection - green for the player's own, red for the
-   opponent's, breathing a little so a ring on a busy field is found at a glance. The 2D mode
-   keeps its brackets (ui/hud.js).
+   opponent's, breathing a little so a ring on a busy field is found at a glance.
 
    Drawn straight after the ground and its tread marks, before anything stands on it, so the
    unit stands IN its ring and hides the part of it that runs behind its hull. The quads are

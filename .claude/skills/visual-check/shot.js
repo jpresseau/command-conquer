@@ -1,6 +1,6 @@
 /* A picture of the game, headless, and optionally a before/after pair with a pixel count.
 
-     node shot.js --out=/scratch/ring [--3d] [--fog] [--w=1100 --h=760 --dpr=1] [--seed=7]
+     node shot.js --out=/scratch/ring [--fog] [--w=1100 --h=760 --dpr=1] [--seed=7]
                   [--setup=setup.js] [--ab=toggle.js] [--crop=x,y,w,h]
 
    --setup  JS run in the page before the shot, with G (the game), R (the camera), R3 (the 3D
@@ -20,7 +20,7 @@ var { chromium } = require('playwright');
 var { openPage } = require(path.join(ROOT, 'test/lib/game.js'));
 var A = {};
 process.argv.slice(2).forEach(function (a) { var m = /^--([\w]+)(?:=(.*))?$/.exec(a); if (m) A[m[1]] = m[2] == null ? true : m[2]; });
-if (!A.out) { console.error('usage: node shot.js --out=<prefix> [--3d] [--setup=f.js] [--ab=f.js] [--crop=x,y,w,h]'); process.exit(2); }
+if (!A.out) { console.error('usage: node shot.js --out=<prefix> [--setup=f.js] [--ab=f.js] [--crop=x,y,w,h]'); process.exit(2); }
 
 function png(file, w, h, px) {
   var rows = Buffer.alloc((w * 4 + 1) * h);
@@ -45,24 +45,21 @@ function crc32(b) { var c, t = [], k, n; for (n = 0; n < 256; n++) { c = n; for 
     var G = window._rtsG, R = _rtsR;
     if (window._rtsUI) window._rtsUI.dead = true;                        /* the loop stays out of it */
     if (!a.fog) { for (var i = 0; i < RTS_N * RTS_N; i++) { G.mapped[i] = 1; G.vis[i] = 1; } G.visDirty = 1; }   /* the whole map, unless --fog */
-    rts3dSet(!!a.three);
     var R3 = window._R3D;
     (new Function('G', 'R', 'R3', a.setup))(G, R, R3);
     function grab() {
       _rtsRFrame(0); _rtsRFrame(0);
-      var three = window._R3D && window._R3D.on, cv = three ? window._R3D.cv : R.cv, W = cv.width, H = cv.height;
+      var cv = window._R3D.cv, W = cv.width, H = cv.height;
       var c = a.crop || [0, 0, W, H], x = c[0], y = c[1], w = Math.min(c[2], W - x), h = Math.min(c[3], H - y), out = new Uint8Array(w * h * 4);
-      if (three) {
-        var gl = window._R3D.gl, b = new Uint8Array(w * h * 4);
-        gl.readPixels(x, H - y - h, w, h, gl.RGBA, gl.UNSIGNED_BYTE, b);
-        for (var r = 0; r < h; r++) out.set(b.subarray((h - 1 - r) * w * 4, (h - r) * w * 4), r * w * 4);   /* GL is bottom-up */
-      } else out.set(R.g.getImageData(x, y, w, h).data);
+      var gl = window._R3D.gl, b = new Uint8Array(w * h * 4);
+      gl.readPixels(x, H - y - h, w, h, gl.RGBA, gl.UNSIGNED_BYTE, b);
+      for (var r = 0; r < h; r++) out.set(b.subarray((h - 1 - r) * w * 4, (h - r) * w * 4), r * w * 4);   /* GL is bottom-up */
       return { w: w, h: h, px: Array.from(out) };
     }
     var s = [grab()];
     if (a.ab) { (new Function('G', 'R', 'R3', a.ab))(G, R, window._R3D); s.push(grab()); }
     return s;
-  }, { three: !!A['3d'], fog: !!A.fog, setup: read(A.setup), ab: read(A.ab), crop: crop });
+  }, { fog: !!A.fog, setup: read(A.setup), ab: read(A.ab), crop: crop });
   shots.forEach(function (s, i) { png(A.out + (shots.length > 1 ? (i ? '_B' : '_A') : '') + '.png', s.w, s.h, Buffer.from(s.px)); });
   if (shots.length > 1) {
     var a0 = shots[0].px, b0 = shots[1].px, n = 0;

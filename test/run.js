@@ -34,8 +34,8 @@
    the end, so a red line is never left a thousand lines up the scroll.
 
    A SPEC THAT TIMES ITSELF RUNS ALONE. One that asserts on milliseconds measures the machine,
-   and a machine three specs are sharing is a different machine: e2e/grain's "overlay costs more
-   than the blend it replaces" came out backwards beside two other browsers. Such a spec says so
+   and a machine three specs are sharing is a different machine: the old 2D grain spec's "overlay
+   costs more than the blend it replaces" came out backwards beside two other browsers. Such a spec says so
    with `@solo` in its opening comment, and runs by itself after everything else. Waiting on a
    condition rather than a fixed delay is the fix for anything else that only fails under load.
 

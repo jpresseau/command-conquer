@@ -4,8 +4,8 @@
 /* RED ALERT - UI + input + the main loop.
 
    Layout is the classic one: battlefield on the left, a fixed command sidebar on the
-   right holding credits, power, radar and the build tiles. Selection brackets, health bars
-   and the drag box are drawn on a 2D overlay canvas above the battlefield canvas. */
+   right holding credits, power, radar and the build tiles. Health bars, the drag box and
+   effects sprites are drawn on a transparent overlay canvas above the 3D battlefield. */
 
 window._rtsUI = null;
 
@@ -19,13 +19,12 @@ function rtsOpen(seed) {
   d.id = 'rcgRts';
   d.innerHTML = ''
     + '<div class="rts-stage">'
-    /* The 3D mode's canvas, UNDER the 2D one: when the mode is on, rtsCv becomes a
-       transparent overlay (effects, decals, ghost) and this carries the world. Hidden rather
-       than absent when the mode is off, so toggling is a style flip, not a DOM rebuild. */
+    /* The 3D world's canvas, UNDER rtsCv: rtsCv is a transparent overlay (effects sprites, the
+       placement outline, crates) and this carries the world. */
     +   '<canvas id="rtsCv3d" style="display:none"></canvas>'
     +   '<canvas id="rtsCv"></canvas>'
-    /* The vignette, as an ELEMENT rather than a per-frame canvas composite - see _rtsPost for
-       why it moved. It sits between the battlefield and the HUD, which is exactly where the
+    /* The vignette, as an ELEMENT rather than a per-frame canvas composite (see style.css for
+       why). It sits between the battlefield and the HUD, which is exactly where the
        old multiply sat in the draw order. */
     +   '<div id="rtsVig"></div>'
     +   '<canvas id="rtsHud"></canvas>'
@@ -48,7 +47,6 @@ function rtsOpen(seed) {
        whatever is deployed. Putting it at the far end of the group keeps that difference
        visible, and keeps it as far as the group allows from the ✕, which is the control it
        would be worst to confuse it with: both end the match, and only one of them is meant to. */
-    +       '<button type="button" class="rts-mute" id="rts3dBtn" title="Switch to 3D" onclick="rts3dToggle()">3D</button>'
     +       '<button type="button" class="rts-mute" id="rtsReloadBtn" title="Reload for the latest build" onclick="rtsReloadClick()">⟳</button>'
     +       '<button type="button" class="rts-mute" id="rtsSaveBtn" title="Save this battle (Ctrl+S)" onclick="rtsSaveGame()">💾</button>'
     +       '<button type="button" class="rts-mute" id="rtsLoadBtn" title="Resume the saved battle" onclick="rtsLoadGame()">📂</button>'
@@ -135,11 +133,13 @@ function rtsOpen(seed) {
   _rtsWatchSize();
   /* rtsOpen runs off a real click, so this is a valid gesture to unlock WebAudio */
   if (typeof _rtsAudioInit === 'function') { _rtsAudioInit(); _rtsAudioResume(); _rtsMusicStart(); }
-  /* A player who chose 3D chose it for the game, not for one match: without this the mode came
-     back off after every reload and every new battle, which reads as the toggle having been
-     ignored rather than as a default. Restored here because it needs the canvases and the
-     button to exist, and before the first frame so nothing paints in the wrong mode. */
-  if (typeof rts3dRestore === 'function') rts3dRestore();
+  /* The battlefield is 3D. Started here because it needs the canvases to exist, and before the
+     first frame. No WebGL, no battle: the title screen says why (title.js shows the message). */
+  if (!_r3dStart()) {
+    rtsClose();
+    throw new Error('This game draws its battlefield in 3D, and this browser did not provide WebGL. ' +
+                    'Try another browser, or turn on hardware acceleration.');
+  }
   if (_load) _rtsSay('Battle resumed.');
   else _rtsSay(rtsArmyName('player') + ' command online. Build a Refinery to start earning.');
   _rtsUI.last = (new Date()).getTime();

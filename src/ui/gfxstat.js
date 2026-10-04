@@ -11,9 +11,8 @@
    into a thing a player can read off the screen in ten seconds.
 
    THE SCALE IS THE 3D BUFFER'S ALONE. render/camera.js picks a device pixel ratio of up to 4
-   for the 2D renderer and must, because that mode stamps pixel art onto whole device pixels;
-   the 3D mode draws meshes and render/frame.js blits its buffer up to the presentation canvas
-   whatever size it is. See R3D_MAX_SCALE in render3d/gl3d.js. `auto` means that cap. */
+   for the overlay canvas, which stamps sprites onto whole device pixels; the 3D buffer draws
+   meshes and the compositor stretches it to the screen whatever size it is. See R3D_MAX_SCALE in render3d/gl3d.js. `auto` means that cap. */
 
 var RTS_GFX_LS = 'rtsGfxScale';        /* '' = auto, or '1' / '2' / '3' / '4' */
 

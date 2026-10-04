@@ -79,7 +79,6 @@ var S = new Suite('sea');
     for (i = 0; i < RTS_N * RTS_N; i++) { G.mapped[i] = 1; G.vis[i] = 1; }
     G.visDirty = 1;
 
-    rts3dSet(true);
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;
@@ -108,7 +107,7 @@ var S = new Suite('sea');
        "RTS_ZOOMS.length - 1" quietly became a different magnification - a four-times
        narrower view, with every tolerance and sample position here still sized for the
        old one. e2e/zoom3d covers the new rungs for the things that can break silently. */
-    R.zi = RTS_ZOOM_2D_STEPS - 1; _rtsApplyCam();
+    R.zi = RTS_ZOOM_BASE_STEPS - 1; _rtsApplyCam();
     _rtsRFrame(1 / 60);
 
     o.mesh = !!R3.waterMesh;
@@ -277,16 +276,6 @@ var S = new Suite('sea');
     _rtsRFrame(1 / 60);
     R.g.drawImage = origDraw;
     o.waveTiles3d = wave;
-    rts3dSet(false);
-    wave = 0;
-    R.g.drawImage = function (img) {
-      if (R.spr.wave && R.spr.wave.indexOf(img) >= 0) wave++;
-      return origDraw.apply(this, arguments);
-    };
-    _rtsRFrame(1 / 60);
-    R.g.drawImage = origDraw;
-    o.waveTiles2d = wave;
-    o.off = !(window._R3D && window._R3D.on);
     return o;
   });
 
@@ -361,8 +350,6 @@ var S = new Suite('sea');
        out.waveTiles3d + ' wave tiles drawn over the GL sea - a flat sheet over a surface ' +
        'with a swell on it hides the swell, which is the mistake the ore tile made');
 
-  S.ok('...and still draw the sea in 2D, which has no other', out.off && out.waveTiles2d > 0,
-       out.waveTiles2d + ' wave tiles drawn with the mode off');
 
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
 

@@ -37,7 +37,7 @@ var R3D_AO_RESOLVE_FS =
   /* THE GRADE - the game's own light, applied last, to the whole picture: warm in the highlights
      and cool in the shade, a little more colour, a gentle S-curve, and the far edge of the frame
      hazed toward a pale sky - the sunlit, lived-in look of the later 3D RTS games rather than
-     the flat palette of the 2D one. No vignette: #rtsVig already lays one over both modes.
+     the flat palette of the 2D one. No vignette: #rtsVig already lays one over the stage.
      Part of the light pass, so RTS_POST_ON takes it out with the bloom; R3.gradeAmt (0 to 1)
      takes it out alone, as R3.aoAmt does the occlusion. e2e/grade holds what it does. */
   'uniform float uGrade;' +

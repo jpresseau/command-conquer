@@ -20,7 +20,10 @@
    panel, because a canvas smaller than its CSS box is the blur this removes; and the HUD
    overlay must be at the same device resolution as the battlefield under it, because it had
    its own copy of the old cap and health bars drawn at a different sharpness from the units
-   they sit on is the same fault wearing a different hat. */
+   they sit on is the same fault wearing a different hat.
+
+   @solo - it times frames, and compares two of its own timings, which only means something on a
+   machine nothing else is using (test/run.js). */
 
 var { chromium } = require('playwright');
 var { Suite } = require('../lib/assert.js');
@@ -102,8 +105,9 @@ function clean(v) {
     });
   });
 
-  /* The shipped ladder must not move for the devices that already had it right. */
-  S.eq('the dpr-2 ladder is untouched', two.ladder.join(','), '12,24,48');
+  /* The shipped ladder must not move for the devices that already had it right: its base rungs,
+     before the close ones the 3D camera adds (RTS_ZOOM_3D_EXTRA). */
+  S.eq('the dpr-2 ladder is untouched', two.ladder.slice(0, 3).join(','), '12,24,48');
 
   /* THE COST OF THE RESOLUTION IS A RATIO, NOT A CLOCK READING.
 

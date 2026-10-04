@@ -10,8 +10,8 @@ is precise except the symptom. The job is the cause.
 
 ## 1. Read the report for facts
 
-- From the screenshot: the device (an iPhone in landscape is about 844×390 at DPR 3), the view (2D
-  or 3D), the zoom, the theme and weather, what is selected, and what the HUD says.
+- From the screenshot: the device (an iPhone in landscape is about 844×390 at DPR 3), the zoom, the camera's turn
+  and tilt, the theme and weather, what is selected, and what the HUD says.
 - From the sentence: what they tried, and what happened instead. "I can't select X" can mean the
   click misses, the selection is cleared, or X is hidden under Y. Each is a different bug.
 - If the report shows two problems ("several on top of each other, so I can't see how many"), fix
@@ -34,7 +34,7 @@ is precise except the symptom. The job is the cause.
   helicopters". The cause was that picks were measured on the ground under an aircraft, which is
   drawn lifted by its altitude. The second cause was that nothing kept aircraft apart, and
   everything shared one pad.
-- Grep for every caller of the function you are about to change. A 2D/3D or mouse/touch pair
+- Grep for every caller of the function you are about to change. A mouse/touch pair
   usually has two paths, and both are broken.
 - `git log -S'<name>' --oneline` and `docs/` explain why the code is as it is. Read them before
   undoing a past decision.

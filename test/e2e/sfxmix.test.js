@@ -82,7 +82,6 @@ function installProbe() {
     }
     o.left = await at(0.15); o.right = await at(0.85); o.mid = await at(0.5);
     /* in 3D, turned a quarter: the screen's left is somewhere else on the map now */
-    rts3dSet(true);
     o.in3d = !!(window._R3D && window._R3D.on);
     if (o.in3d) { _r3dCamSet(Math.PI / 2); _rtsApplyCam(); _rtsRFrame(0); }
     o.turnedLeft = await at(0.15);

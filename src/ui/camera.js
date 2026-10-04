@@ -60,8 +60,7 @@ function _rtsPanTick(dt) {
 
    _rtsViewSpan already reports the trapezoid's true centre - the radar box needed it for the
    same reason - and this was the one caller still assuming the focus was it. Clamping the
-   centre puts the view's far edge exactly on the map's, at any tilt. In 2D the centre IS the
-   focus, so the offsets are zero and this is the same clamp it always was. */
+   centre puts the view's far edge exactly on the map's, at any tilt. */
 function _rtsClampFocus() {
   var R = _rtsR, span = RTS_N * RTS_TILE, vs = _rtsViewSpan();
   var lx = Math.max(0, span / 2 - vs.w * 0.5), lz = Math.max(0, span / 2 - vs.h * 0.5);

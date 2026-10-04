@@ -36,21 +36,17 @@
    wants and what every zoom level in this renderer is already built around.
 
    The HUD canvas is deliberately NOT pixelated - it draws text, and text wants the smoothing. */
-/* THE GL CANVAS IS A LAYER when the mode is on. _r3dApply flips its inline display, which
-   beats this file, so the none here is only the resting state: hidden in 2D, where the overlay
-   paints everything and a second composited full-screen layer would be pure cost (measured on
-   an emulated iPhone 13: 5.6 MB a copy). In 3D it is presented directly under the transparent
-   overlay instead of being blitted onto it - the blit was a full-resolution drawImage of a
-   WebGL canvas every frame, which is a GPU sync on exactly the phones the mode struggles on;
-   see the note in render/frame.js.
+/* THE GL CANVAS IS A LAYER. _r3dStart flips its inline display, which beats this file, so the
+   none here is only the resting state before the renderer adopts it. It is presented directly
+   under the transparent overlay instead of being blitted onto it - the blit was a
+   full-resolution drawImage of a WebGL canvas every frame, which is a GPU sync on exactly the
+   phones that struggle; see the note in render/frame.js.
 
    pixelated for the same reason as #rtsCv below: with a pinned render scale the buffer is
    smaller than the screen and the compositor stretch must stay nearest-neighbour, which is
    what the blit's imageSmoothingEnabled=false used to guarantee. */
 #rcgRts #rtsCv3d{position:absolute;inset:0;display:none;
   image-rendering:pixelated;image-rendering:crisp-edges}
-#rcgRts .rts-btns #rts3dBtn{font-size:10px;font-weight:700;letter-spacing:.5px}
-#rcgRts .rts-btns #rts3dBtn.on{color:#7fd0ff;border-color:#3f7fd0}
 #rcgRts #rtsCv{position:absolute;inset:0;display:block;cursor:crosshair;
   image-rendering:pixelated;image-rendering:crisp-edges}
 #rcgRts #rtsHud{position:absolute;inset:0;display:block;pointer-events:none}
@@ -69,7 +65,7 @@
 #rcgRts #rtsTCmd button:disabled{opacity:.4}
 /* The nine digits have to fit a 360px phone: 9 x 32 + 8 gaps = 320, inside the stage. */
 #rcgRts #rtsTNums button{min-width:32px;padding:0 4px;font-size:11px}
-/* The vignette. This used to be a full-frame `multiply` drawImage inside _rtsPost, every frame,
+/* The vignette. This used to be a full-frame `multiply` drawImage in the post pass, every frame,
    priced per pixel on the canvas raster path - measured as the difference between p99 25.9ms and
    p99 20.1ms with the post-pass off. As an element with mix-blend-mode the same multiply happens
    once per frame on the COMPOSITOR, which blends layers for a living; the canvas pipeline no
@@ -704,7 +700,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">93bf4db · 2026-10-04</div>
+  <div id="rtsBuild" title="build">35066b0 · 2026-10-04</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -2257,20 +2253,8 @@ var RTS_UNLOAD_RATE = 700;      /* scrap/second poured into the refinery */
 var RTS_POWER_BAND = 0.75, RTS_POWER_MIN = 0.5;
 var RTS_BUILD_RADIUS = 9;       /* tiles: how far from an existing structure you may build */
 
-/* The light pass. Restraint is the whole game here: bloom above about 0.5 turns pixel art into
-   soup, and a vignette you can consciously see is one that is too strong. These are the numbers
-   that survived looking at them. */
+/* The vignette: a corner you can consciously see is one that is too strong. */
 var RTS_POST_ON = true;
-var RTS_BLOOM = 1.0;            /* how much of the blurred highlight is added back, per pass.
-                                   Raised with the threshold, which squares once more (see
-                                   render/post.js) and costs the fireball itself 0.81 -> 0.66.
-                                   ONE is the ceiling and not a tuning choice: this is a canvas
-                                   globalAlpha, and the spec says a value outside [0,1] is
-                                   IGNORED rather than clamped - so 1.05 here does not mean 1.05,
-                                   it means whatever alpha was already set. More gain than this
-                                   has to come from RTS_BLOOM_PASSES. */
-var RTS_BLOOM_PASSES = 1;       /* added this many times - gain, separate from the threshold */
-var RTS_BLOOM_BLUR = 2;         /* px, at EIGHTH resolution - so ~16px across the frame */
 var RTS_VIGNETTE = '#d2d7de';   /* the corner multiplier; nearer white is a weaker vignette */
 
 /* ------------------------------------------------------------ superweapons --
@@ -14104,7 +14088,7 @@ function _rtsSeparate(dt) {
                  it - or go to another pad, if there is a free one (_rtsRearmPad, core/move.js). */
 
 /* how high an aircraft is drawn above the ground it is over: its altitude, or a hop off the pad
-   while it rearms - the one figure the 2D and 3D renderers and the picking all use (render/camera.js) */
+   while it rearms - the one figure the renderer and the picking both use (render/camera.js) */
 function _rtsAirLift(e) {
   if (!e.air) return 0;
   if (e.rearming > 0) return 2;
@@ -17738,67 +17722,48 @@ function _rtsPickDpr() {
   return Math.max(1, Math.min(4, Math.round(raw)));
 }
 
-/* IN 3D THE LADDER GOES FURTHER IN, and the reason the 2D one stops where it does is a 2D
-   reason: every step above has to land the SPRITE on a whole multiple of its bake, or the
-   whole picture resamples and goes soft. That is the constraint the comment above is about,
-   and it is real - for sprites.
+/* THE LADDER GOES FURTHER IN THAN THE BASE TABLES. Those stop where a SPRITE would have to
+   land on a whole multiple of its bake, or the picture resamples and goes soft - which is
+   what the comment above is about, and it still holds for the overlay's effects sprites.
 
-   In 3D there are no sprites for the things you would zoom in to look at. A unit is geometry:
+   There are no sprites for the things you would zoom in to look at. A unit is geometry:
    its edges are rounded, its wheels turn on their axles and its running gear is modelled (see
    r3d/curves.js), and none of that survives being drawn at 48 pixels a cell. The models were
    made denser and there was no way to see it, which is the complaint this answers.
 
-   WHAT DOES SOFTEN IS THE GROUND, because the terrain really is a texture in both modes. That
+   WHAT DOES SOFTEN IS THE LEGACY GROUND, because that terrain really is a texture. That
    is not a new problem and it is already answered: render/detail.js restores the frequencies
    magnification loses, gated at RTS_DETAIL_MIN_MAG, and these steps are squarely inside what
-   that pass was built for. Whole multiples of the top 2D step, so the terrain magnifies by a
+   that pass was built for. Whole multiples of the top base step, so the terrain magnifies by a
    clean factor at every one of them. */
 var RTS_ZOOM_3D_EXTRA = [2, 4];
-/* HOW MANY RUNGS THE SHIPPED 2D LADDER HAS, so that "the closest zoom" can be said two
+/* HOW MANY RUNGS THE BASE LADDER HAS, so that "the closest zoom" can be said two
    different ways and mean the right one each time. RTS_ZOOMS.length - 1 is the closest rung
    THERE IS, which is what a player's pinch should reach; several specs used it to mean the
-   magnification their numbers were calibrated at, which was the top of this ladder and is no
-   longer the same thing in 3D. A proxy that silently changes meaning is the failure this
+   magnification their numbers were calibrated at, which was the top of the base ladder and is
+   not the same thing. A proxy that silently changes meaning is the failure this
    project keeps finding, so both readings get a name. */
-var RTS_ZOOM_2D_STEPS = 3;
-function _rtsZoomLadder(dpr, threeD) {
+var RTS_ZOOM_BASE_STEPS = 3;
+function _rtsZoomLadder(dpr) {
   var base = RTS_ZOOM_LADDERS[dpr] || RTS_ZOOM_LADDERS[2];
   /* the constant above is a claim about these tables; unit/zoom holds them to it */
-  if (!threeD) return base;
   var top = base[base.length - 1], out = base.slice(), i;
   for (i = 0; i < RTS_ZOOM_3D_EXTRA.length; i++) out.push(top * RTS_ZOOM_3D_EXTRA[i]);
   return out;
 }
 function _rtsIn3D() { return !!(window._R3D && window._R3D.on); }
 
-/* Re-derive the ladder when the renderer changes under it, keeping the magnification the
-   player is actually looking at rather than the index they got there by. Leaving 3D from one
-   of the close steps has to land somewhere the 2D ladder has - and it must be the CLOSEST one
-   it has, not wherever the old index happens to point, or stepping out of 3D would silently
-   zoom the map out to a third of what was on screen. */
-function _rtsZoomLadderSync() {
-  var R = _rtsR;
-  if (!R) return;
-  var was = RTS_ZOOMS[R.zi];
-  RTS_ZOOMS = _rtsZoomLadder(R.dpr, _rtsIn3D());
-  var at = RTS_ZOOMS.indexOf(was);
-  R.zi = at >= 0 ? at : RTS_ZOOMS.length - 1;
-  _rtsApplyCam();
-}
-
 function _rtsRInit(cv) {
   var W = cv.clientWidth || 960, H = cv.clientHeight || 620;
   var dpr = _rtsPickDpr();
   /* The ladder is global because everything from the sidebar to the specs reads RTS_ZOOMS, and
      it is settled here because this is the first point at which the device is known. */
-  RTS_ZOOMS = _rtsZoomLadder(dpr, _rtsIn3D());
+  RTS_ZOOMS = _rtsZoomLadder(dpr);
   cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
   /* WITH ALPHA, and it is load-bearing: in 3D this canvas is a transparent overlay above the
      presented GL layer, and a context created alpha:false can never be transparent - clearRect
      leaves opaque black, which put a black sheet over the whole world the moment the blit
-     stopped. Context attributes are fixed at first getContext, so the one canvas must carry
-     the attribute both modes can live with. 2D pays nothing for it: its frame paints every
-     pixel opaquely before anything reads or composites the canvas. */
+     stopped. Context attributes are fixed at first getContext. */
   var g = cv.getContext('2d', { alpha: true });
   g.imageSmoothingEnabled = false;
 
@@ -17828,9 +17793,8 @@ function _rtsApplyCam() {
   R.zf = R.zt = R.zi;            /* snapped: no smooth zoom in flight (ui/navigate.js) */
   R.dist = R.H / _rtsZoom();
 }
-/* BETWEEN THE RUNGS, IN 3D ONLY. The rungs exist because 2D art resamples badly off them; the
-   3D mode draws geometry, so the wheel there glides through the ladder instead of jumping it
-   in doublings. `f` is a fractional index into RTS_ZOOMS, interpolated geometrically, so each
+/* BETWEEN THE RUNGS. The world is geometry, so the wheel glides through the ladder instead of
+   jumping it in doublings. `f` is a fractional index into RTS_ZOOMS, interpolated geometrically, so each
    step of it is the same ratio of magnification wherever it is. */
 function _rtsCellAt(f) {
   var n = RTS_ZOOMS.length, i0 = Math.max(0, Math.min(n - 1, Math.floor(f))), i1 = Math.min(n - 1, i0 + 1);
@@ -17852,12 +17816,6 @@ function _rtsReapplyCam() {
   var R = _rtsR, own = _rtsIn3D() && R.zf !== undefined && Math.round(R.zf) === R.zi, zt = R.zt;
   if (own && R.zf !== R.zi) _rtsApplyCamF(); else _rtsApplyCam();
   if (own && zt !== undefined) R.zt = zt;
-}
-function _rtsZoomStep(dir) {
-  var R = _rtsR;
-  if (!R) return;
-  R.zi = Math.max(0, Math.min(RTS_ZOOMS.length - 1, R.zi + (dir > 0 ? 1 : -1)));
-  _rtsApplyCam();
 }
 /* HOW MUCH WORLD IS ON SCREEN, which is not W/zoom by H/zoom in every camera. The focus
    clamp, the radar's view box and the audibility test all ask this, and all three were given
@@ -17884,63 +17842,15 @@ function _rtsViewSpan() {
   return { w: R.W / z, h: R.H / z, cx: R.focus.x, cz: R.focus.z };
 }
 
-/* WHICH CELLS THE CAMERA CAN SEE, as an index window with padding for sprites hanging over
-   the edge. The 2D overlays that still run in 3D - the sea, the ore field - used to derive
-   this from the zoom alone, which is the right answer for a top-down camera and for no other:
-   under the tilt the strip is 1/cos(tilt) taller than that, and under perspective the far end
-   is wider again. The visible sea was measured a row short at the top at the middle zoom and
-   four rows short at the widest, and the missing rows were exactly the ones furthest from the
-   camera - where a hole in the sea is least likely to be read as a bug and most likely to be
-   read as the map just ending.
+/* THE PROJECTION CONTRACT. Every input path and every overlay - picking, drag select, health
+   bars, effects, the placement outline - goes through these functions and nothing else, and
+   they hand over to the 3D camera's own (render3d/gl3d.js). If the shader and these ever
+   disagree, clicks land beside units - e2e/r3dlive asserts the round trip. `scale` is what an
+   overlay multiplies its size by: a health bar over a unit at the back of the view is smaller
+   than the same bar at the front. `behind` marks a point the camera cannot see.
 
-   Taken through the projection's own inverse at the four screen corners, so it is correct for
-   whatever camera is mounted. In 2D that reduces to exactly the arithmetic it replaces, to the
-   last bit - _rtsGroundAt at a corner IS focus +/- half the span - so nothing about the 2D
-   frame moves. A corner past the horizon (which the shipped camera cannot produce, but a
-   future one could) falls back to the whole map rather than to a wrong window. */
-function _rtsCellWindow(padX, padZ) {
-  var R = _rtsR, i, x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
-  var corners = [[0, 0], [R.W, 0], [0, R.H], [R.W, R.H]];
-  for (i = 0; i < 4; i++) {
-    var p = _rtsGroundAt(corners[i][0], corners[i][1]);
-    if (!p) { x0 = z0 = -1e9; x1 = z1 = 1e9; break; }
-    if (p.x < x0) x0 = p.x;
-    if (p.x > x1) x1 = p.x;
-    if (p.z < z0) z0 = p.z;
-    if (p.z > z1) z1 = p.z;
-  }
-  return {
-    tx0: Math.max(0, _rtsTX(x0) - padX), tx1: Math.min(RTS_N - 1, _rtsTX(x1) + padX),
-    tz0: Math.max(0, _rtsTX(z0) - padZ), tz1: Math.min(RTS_N - 1, _rtsTX(z1) + padZ)
-  };
-}
-/* THE PROJECTION CONTRACT, in both modes. Every input path and every overlay - picking,
-   drag select, health bars, effects, the ghost - goes through these functions and nothing
-   else, which is what makes the 3D mode a branch rather than a rewrite. If the GL shader and
-   these ever disagree, clicks land beside units - e2e/r3dlive asserts the round trip.
-
-   _rtsWorldToScreen IS THE CONTRACT. _rtsSX and _rtsSY are the SEPARABLE special case, and
-   they are only sound while screenX depends on nothing but wx - true of a north-up
-   orthographic camera and of nothing else. That held for as long as the 3D camera was welded
-   north-up and flat-projected, which is exactly why the mode looked two-dimensional: no
-   perspective divide, no yaw, a 35 degree lean and nothing else to tell a player the world
-   has depth. The 3D camera has perspective now (render3d/gl3d.js), so screenX genuinely
-   depends on z there and _rtsSX is the 2D form only.
-
-   So the pair is no longer the interface. Every drawing site takes both coordinates through
-   _rtsWorldToScreen, which returns a screen point AND the scale to draw at. The 2D renderer
-   keeps the closed form below - it is genuinely orthographic and must not move a pixel.
-
-   `scale` is 1 under the orthographic 2D camera and is what an overlay must multiply its size
-   by under the perspective one: a health bar over a unit at the back of the view is smaller
-   than the same bar at the front, and a caller that ignores it will draw bars that all match
-   while the units under them do not. `behind` marks a point the camera cannot see, which an
-   orthographic camera never produces and a perspective one does. */
-function _rtsSX(wx) { return (wx - _rtsR.focus.x) * _rtsZoom() + _rtsR.W / 2; }
-function _rtsSY(wz) {
-  return (wz - _rtsR.focus.z) * _rtsZoom() + _rtsR.H / 2;
-}
-
+   The flat formulas after each 3D call answer only before the 3D context exists - while the
+   match is being set up, and in the node specs, which have no GL. Nothing is drawn with them. */
 function _rtsGroundAt(mx, my) {
   var R3 = window._R3D;
   if (R3 && R3.on) return _r3dGroundAt(mx, my);
@@ -17956,15 +17866,14 @@ function _rtsWorldToScreen(x, y, z) {
 }
 /* The ground-level case, which is most of them: a point on the map with no height of its own.
 
-   "No height of its own" stopped meaning y = 0 when the terrain got relief. Every overlay the
-   2D painter lays over the world arrives through here - selection brackets, health bars, the
-   placement ghost, the effects the 3D pass does not own - and each is positioned by a point ON
+   "No height of its own" stopped meaning y = 0 when the terrain got relief. Every overlay laid
+   over the world arrives through here - health bars, the placement ghost, the effects the 3D
+   pass does not own - and each is positioned by a point ON
    THE GROUND. Left at zero they would sit at sea level while the thing they belong to stood on
    a hill, and the further the hill the wider the gap.
 
-   ONLY IN 3D. The 2D painter draws the terrain bake, which is flat and always was, and its own
-   branch of _rtsWorldToScreen does lift by y - so handing it an elevation would slide every
-   bracket up the screen away from the unit it belongs to. Relief is something the 3D mode has. */
+   Before the GL context exists (node specs) the flat fallback takes no elevation, because its
+   own branch of _rtsWorldToScreen lifts by y. */
 function _rtsGroundToScreen(x, z) {
   var R3 = window._R3D;
   return _rtsWorldToScreen(x, (R3 && R3.on) ? _rtsElev(x, z) : 0, z);
@@ -18011,171 +17920,8 @@ function _rtsPxPerUnit(e) {
    `+137`. That coupling is the price of not re-baking a 3072x3072 canvas four times a second. */
 
 </script>
-<script>/* render/post.js - the light pass, water and shroud tiles, picking, and the colour cycle.
-   Part of rts.render, which owns every pixel. */
-
-/* ------------------------------------------------------------ the light pass --
-   Everything above draws flat: each sprite is composited at full opacity over the one behind
-   it, which is exactly what the original did and exactly why a 1996 frame looks like one. This
-   is the only part of the renderer that is NOT trying to be faithful - it is a pass over the
-   finished frame, and it is what makes the picture read as lit rather than as printed.
-
-   Two effects, both cheap, both deliberately restrained:
-
-   BLOOM. The frame is scaled to a quarter, MULTIPLIED BY ITSELF twice - which cubes every
-   channel and so crushes everything dark to nothing while leaving whites alone - then blurred
-   and added back. The multiply is doing the job a threshold would do in a shader; canvas 2D has
-   no threshold, but it does have multiply, and x^3 is a perfectly good soft one. The result is
-   that fire, explosions, muzzle flashes and the Tesla Coil throw light and nothing else does.
-
-   VIGNETTE. A cached radial gradient multiplied over the frame. It costs one drawImage and does
-   more for the sense of depth than anything else here.
-
-   Applied to the BATTLEFIELD canvas only. The HUD is a separate canvas on top, so the sidebar,
-   the text and the health bars stay perfectly sharp - blooming a UI is how you make it look
-   cheap. */
-function _rtsPostInit(R) {
-  /* An EIGHTH, not a quarter. The downscale reads the whole frame either way, but everything
-     downstream - the multiplies, the blur, the composites - is priced on the buffer, and at 1/8
-     that is four times less. The bilinear stretch back up also does more of the softening, so
-     the blur radius drops with it. */
-  var q = 8;
-  R.bloomW = Math.max(1, R.W / q | 0);
-  R.bloomH = Math.max(1, R.H / q | 0);
-  if (!R.bloomCv) R.bloomCv = document.createElement('canvas');
-  R.bloomCv.width = R.bloomW; R.bloomCv.height = R.bloomH;
-  R.bloomG = R.bloomCv.getContext('2d');
-  /* A second small buffer to blur INTO. Blurring at full frame size cost 36 fps of 59 - a
-     canvas-2D filter is priced per pixel, and a quarter-size buffer is a sixteenth of them. */
-  if (!R.blurCv) R.blurCv = document.createElement('canvas');
-  R.blurCv.width = R.bloomW; R.blurCv.height = R.bloomH;
-  R.blurG = R.blurCv.getContext('2d', { willReadFrequently: true });   /* the gain reads it back */
-
-  /* The vignette used to be built here as a frame-sized canvas and multiplied over the frame
-     every frame. It is now the #rtsVig element, blended once per frame by the COMPOSITOR - see
-     style.css - so nothing per-frame remains of it in the canvas pipeline. That multiply was
-     the only unconditional full-frame cost in the post pass, and it lived in the frame-time
-     tail: p99 25.9ms with the post on, 20.1ms with it off, at zero fx - i.e. the vignette was
-     the difference. RTS_VIGNETTE still names the corner colour; the CSS carries its value. */
-  R.vigW = R.W; R.vigH = R.H;
-}
-
-/* Is there anything on screen worth blooming? Almost always no. The threshold is built to pass
-   only fire and explosions, so on a quiet frame the entire bloom - a full-frame downscale, two
-   full-frame additive composites - produces nothing and costs a third of the frame rate doing
-   it. Gating on "is anything burning or exploding" turns that into a cost paid during fights,
-   which is exactly when it is visible. Muzzle flashes are deliberately not counted: they last
-   a couple of frames and are not worth waking the pass for. */
-function _rtsWantBloom(G) {
-  for (var i = 0; i < G.fx.length; i++) {
-    var k = G.fx[i].kind;
-    if (k === 'tracer' || k === 'debris') continue;
-    if (G.fx[i].t < 0) continue;
-    return true;
-  }
-  return false;
-}
-
-function _rtsPost(g) {
-  var R = _rtsR, G = window._rtsG;
-  if (!R || !RTS_POST_ON || R.W < 8 || R.H < 8) return;
-  /* 2D ONLY, NOW. In 3D the glow is computed on the GPU from the emitters - see
-     render3d/bloom3d.js - and this pass was measured as the entire cost of a combat frame
-     there: one getImageData of the blur buffer plus eight drawImage calls per burning frame,
-     one of them dragging the whole WebGL canvas into a 2D context. Two GPU->CPU syncs, on a
-     device that was missing vsync by a millisecond. The canvas path stays for the 2D renderer,
-     which has no GL to do it in and no sync to pay: there the frame IS this canvas. */
-  if (window._R3D && window._R3D.on) return;
-  if (R.vigW !== R.W || R.vigH !== R.H || !R.bloomG) _rtsPostInit(R);
-
-  /* The vignette is the #rtsVig element now (see style.css), so a frame with nothing worth
-     blooming - which is most frames - costs the post pass NOTHING at all. The glow element
-     does have to be told the fire is out, though - it lives outside the canvas, so nothing
-     else ever paints over it, and the last explosion's halo would hang on screen forever. */
-  if (!G || !_rtsWantBloom(G)) return;
-
-  /* --- bloom --- */
-  var bg = R.bloomG, bw = R.bloomW, bh = R.bloomH;
-  bg.globalCompositeOperation = 'source-over';
-  bg.globalAlpha = 1;
-  bg.clearRect(0, 0, bw, bh);
-  bg.drawImage(g.canvas, 0, 0, bw, bh);
-  /* A POWER CURVE FOR THE THRESHOLD, then the gain separately. The two are separate jobs and
-     conflating them is what went wrong twice:
-
-       one weak add          the midtones vanish and so does the glow - measured as a pass that
-                             only darkened the frame (mean 59 -> 55.9)
-       square + strong add   the highlights glow, but so does everything else, because squaring
-                             leaves plenty of midtone behind - a 19% lift across the whole
-                             frame, which is haze rather than light (mean 59 -> 70.4)
-
-     Drawing the buffer into ITSELF with multiply squares it, so each of these lines doubles
-     the exponent: x, x^2, x^4, x^8. Three of them, and the third is what makes the glow LOCAL.
-
-     At x^4 a midtone of 0.5 still comes through at 0.0625, which is 16 levels before the gain
-     and enough - once blurred over the whole frame and added back - to warm everything. That
-     is not a hypothetical: measured on one explosion, the pass lifted 99.8% of the frame by a
-     mean of 7.2 levels. A glow that reaches every pixel of the map is haze by another route,
-     just a milder one than the version already rejected above.
-
-     x^8 collapses that midtone to 0.004 - one level, below anything the eye or an 8-bit buffer
-     can carry - while a fireball at 0.95 only falls from 0.81 to 0.66. So the bright end keeps
-     its glow, and the rest of the frame stops receiving one. RTS_BLOOM carries that 0.81->0.66
-     back so the fireball's own halo is no weaker than before. */
-  bg.globalCompositeOperation = 'multiply';
-  bg.drawImage(R.bloomCv, 0, 0);
-  bg.drawImage(R.bloomCv, 0, 0);
-  bg.drawImage(R.bloomCv, 0, 0);
-  bg.globalCompositeOperation = 'source-over';
-
-  /* blur once, small */
-  var rg = R.blurG;
-  rg.globalCompositeOperation = 'source-over';
-  rg.clearRect(0, 0, bw, bh);
-  rg.filter = 'blur(' + RTS_BLOOM_BLUR + 'px)';
-  rg.drawImage(R.bloomCv, 0, 0);
-  rg.filter = 'none';
-
-  /* ...then up, with smoothing ON. The renderer runs with it off everywhere else so pixels stay
-     square, but here the bilinear stretch from a quarter-size buffer IS most of the softening -
-     which is why the blur radius above can be small. */
-  /* THE GAIN STANDS DOWN ON A BRIGHT FIELD, and snow is why. The cube is a threshold built
-     for temperate ground, where everything but fire lands near black and dies. Snow ground is
-     near WHITE: it sails through the cube, and the moment any fx exists the whole field gets
-     added back onto itself at 85% - an intermittent full-screen flash, reported as exactly
-     that. Bloom keyed on brightness cannot tell albedo from light, so on a frame that is
-     bright everywhere the honest move is to not add.
-
-     The statistic is the FRACTION of bright pixels in the cubed buffer, and both simpler
-     ideas were tried and failed by measurement:
-       - a 1x1 drawImage "mean": GPU minification point-samples near the centre - where the
-         fireball is - so the mean came back as the fireball (240,165,65 against a true mean
-         of 4.0) and the gain shut the bloom off on every frame that had something to bloom;
-       - the true mean: the shroud broke it - a half-explored snow map is mostly black, the
-         black dilutes the mean back under the threshold, and the visible white patch flashed
-         exactly as before.
-     Fire is small and bright: the worst battle puts low single-digit percent of the frame
-     over the cube's threshold. Snowfield is bright by the tens of percent however much shroud
-     surrounds it - no amount of black changes how MANY bright pixels there are. Full glow up
-     to 4% of the frame, gone by 14%. Sampling every 4th pixel of the 1/8 buffer is ~2000
-     reads, only on frames with fx. */
-  var md = R.blurG.getImageData(0, 0, R.bloomW, R.bloomH).data;
-  var mbright = 0, mn = 0;
-  for (var mi = 0; mi < md.length; mi += 16) {
-    if (md[mi] + md[mi + 1] + md[mi + 2] > 180) mbright++;
-    mn++;
-  }
-  var gain = RTS_BLOOM * Math.max(0, Math.min(1, 1 - (mbright / mn - 0.04) / 0.10));
-  if (gain > 0.01) {
-    g.save();
-    g.globalCompositeOperation = 'lighter';
-    g.globalAlpha = gain;
-    g.imageSmoothingEnabled = true;
-    for (var bp = 0; bp < RTS_BLOOM_PASSES; bp++) g.drawImage(R.blurCv, 0, 0, R.W, R.H);
-    g.restore();
-  }
-  /* the vignette multiplies over this on the compositor - #rtsVig sits above the canvas */
-}
+<script>/* render/post.js - picking on the screen, and the colour cycle the HUD pulses with.
+   Part of rts.render. */
 
 /* NULL WHEN THE POINTER IS NOT ON THE GROUND. Under both orthographic cameras every screen
    pixel maps to a ground point, so this dereferenced _rtsGroundAt's result without asking - and
@@ -18235,10 +17981,6 @@ function _rtsAnimFrame() { return _RTS_PULSE.frame; }
 /* Time quantised to the 15 Hz grid, for anything choosing a frame from an elapsed timer. */
 function _rtsAnimQ(t) { return Math.floor(t * 15) / 15; }
 function _rtsPulse() { return _RTS_PULSE.val / 255; }        /* 0.125 .. 0.588 */
-function _rtsEmber() {
-  var k = _rtsPulse();
-  return 'rgb(' + Math.round(255 * k) + ',' + Math.round(80 * k) + ',' + Math.round(80 * k) + ')';
-}
 
 </script>
 <script>/* render3d/inst3d.js - drawing many copies of one mesh in one call. Part of rts.render3d.
@@ -20274,101 +20016,37 @@ var R3D_MESH_FS =
   '  c = mix(c, uHaze.rgb, uHaze.a);' +
   '  gl_FragColor = vec4(c, a); }';
 </script>
-<script>/* render3d/present3d.js - the 3D mode's lifecycle: turning it on and off, presenting its
-   canvas, remembering the choice, and sizing the buffer.
+<script>/* render3d/present3d.js - the 3D view's lifecycle: starting it, presenting its canvas, and
+   sizing the buffer.
 
    Split out of gl3d.js, which owns the GL context, the programs and the projection contract -
    this file owns whether and how the rendered buffer reaches the SCREEN. That stopped being
    one line when the canvas became a presented layer: the blit that used to copy the buffer
-   into the 2D frame is gone (see render/frame.js), so presentation now means adoption into
+   into the overlay is gone (see render/frame.js), so presentation now means adoption into
    the shell's rebuilt DOM, a display flip, a CSS box, and a scale - all of which live here. */
 
-/* Which mode the player last chose. localStorage rather than the IndexedDB store in
-   rts.store.js, for the same reason the title screen's controls panel uses it: that store
-   exists to hold megabytes of archives and this is one boolean. Wrapped because private
-   browsing throws on access rather than returning null, and a disabled store must cost a
-   preference, not the battle. */
-var RTS_3D_LS = 'rcc.mode3d';
-
-/* Lazy init so a machine without WebGL pays nothing and is told plainly rather than shown a
-   black screen. `quiet` is for restoring the saved choice at match start: no click sound for
-   something the player did not just click, and no complaint about WebGL on a machine that
-   never had it - it simply stays in 2D. */
-function _r3dApply(on, quiet) {
-  var R3 = window._R3D;
-  if (!R3) R3 = _r3dInit();
-  if (!R3) {
-    if (!quiet) _rtsSay('3D needs WebGL, which this browser did not provide.');
-    return false;
-  }
-  R3.on = !!on;
+/* THE GAME IS 3D, and only 3D: there is no flat battlefield to fall back to. Called once per
+   match from rtsOpen, before the first frame; false when the browser gives no WebGL, and rtsOpen
+   then refuses the match with a reason rather than showing a black screen. */
+function _r3dStart() {
+  var R3 = window._R3D || _r3dInit();
+  if (!R3) return false;
+  R3.on = true;
   /* the tier the player chose, or AUTO's starting one (render3d/quality3d.js) */
   if (!R3.q) { var qw = _r3dQualityWant(); _r3dQualityApply(qw === 'medium' ? 1 : qw === 'low' ? 2 : 0); }
   /* ADOPTION, because the shell rebuilds its DOM every match while this canvas - and the GL
      context, buffers and textures that live on it - persists across them. From the second
      match on, R3.cv is a DETACHED element and the #rtsCv3d in the document is a fresh blank
-     one. The old blit never noticed, because drawImage reads the reference and not the DOM;
-     a presented layer is the DOM, so the persistent canvas is swapped back into the fresh
-     shell's slot. A context cannot move between canvases - this is the only direction the
-     repair can run. */
+     one. A context cannot move between canvases, so the persistent canvas is swapped back into
+     the fresh shell's slot. */
   var slot = document.getElementById('rtsCv3d');
   if (slot && slot !== R3.cv && slot.parentNode) slot.parentNode.replaceChild(R3.cv, slot);
-  /* The canvas is a LAYER now, not a buffer: visible under the 2D overlay when the mode is
-     on, so the compositor presents the world directly instead of the frame walk copying it
-     out with a full-resolution drawImage every frame - see the note where that blit used to
-     live in render/frame.js. Hidden again in 2D, where the overlay paints everything and an
-     opaque world layer underneath it would just be pinned memory. */
-  R3.cv.style.display = R3.on ? 'block' : 'none';
-  if (!R3.on) { R3.shakeT = ''; R3.cv.style.transform = ''; }
-  /* the world moved between canvases, so both need a clean slate */
+  /* A LAYER, under the overlay canvas: the compositor presents the world directly rather than the
+     frame walk copying it out with a full-resolution drawImage every frame. */
+  R3.cv.style.display = 'block';
   R3.terrainDirty = true; R3.fogDirty = true;
-  /* 3D reaches further in than 2D can - see RTS_ZOOM_3D_EXTRA. The ladder is a global that
-     everything from the sidebar to the specs reads, so it is re-derived here, on the one
-     event that changes which ladder applies. */
-  if (typeof _rtsZoomLadderSync === 'function') _rtsZoomLadderSync();
-  var btn = document.getElementById('rts3dBtn');
-  if (btn) { btn.classList.toggle('on', R3.on); btn.title = R3.on ? 'Back to classic 2D' : 'Switch to 3D'; }
   _r3dResize();
-  if (!quiet && typeof _rtsSfx === 'function') _rtsSfx('click');
   return true;
-}
-
-/* The toggle the button calls. */
-function rts3dToggle() {
-  rts3dSet(!(window._R3D && window._R3D.on));
-}
-
-/* SET IT, RATHER THAN FLIP IT. A toggle is the right thing for a button and the wrong thing
-   for everybody else: every caller that wanted the mode ON said `toggle` and meant it, which
-   was only true while 2D was the default. It is not any more, so a caller that means "on" has
-   to say so. Returns whether the mode ended up where it was asked to go. */
-function rts3dSet(on) {
-  on = !!on;
-  if (!_r3dApply(on, false)) return false;
-  try { window.localStorage.setItem(RTS_3D_LS, on ? '1' : '0'); } catch (e) {}
-  return true;
-}
-
-/* Called once per match from rtsOpen.
-
-   3D IS THE DEFAULT NOW, which inverts what this used to do. It only ever turned the mode ON
-   and let an absent preference fall through to 2D, so a new player never saw the renderer at
-   all - the shadows, the occlusion, the swell, the lean, the effects standing in the world -
-   unless they found a two-character button in the top bar and pressed it.
-
-   So an ABSENT or unreadable preference lands in 3D now, and only an explicit '0' keeps it in
-   2D. Nothing writes that '0' except rts3dSet, which is to say except somebody pressing the
-   button to leave, so the only way to get the 2D game is to have asked for it. Treating
-   unreadable as 3D is deliberate too: a browser refusing localStorage should get the mode the
-   game is built around rather than the fallback.
-
-   2D IS STILL THE FLOOR, and that is why this cannot just force the mode on. _r3dApply returns
-   false when there is no WebGL context to be had; nothing has changed then, and the 2D painter
-   draws the match exactly as it always did. */
-function rts3dRestore() {
-  var want = null;
-  try { want = window.localStorage.getItem(RTS_3D_LS); } catch (e) { want = null; }
-  if (want !== '0') _r3dApply(true, true);
 }
 
 /* HOW MANY DEVICE PIXELS THE 3D BUFFER GETS PER CSS PIXEL. Native by default; this ceiling
@@ -20379,15 +20057,13 @@ function rts3dRestore() {
    is judged on - then the frame rate was read off a real iPhone 17 Pro Max through the GFX
    readout: 0.29 MP gave ~30 fps, 1.15 MP ~30, 2.60 MP ~30-40. A ninefold range in pixels moved
    nothing, so that phone is not fill-bound: the cap bought no frames and cost sharpness on every
-   dense screen. The knob stays (ui/gfxstat.js) for devices that ARE fill-bound. Why 30 and not
-   60 is still open - the 2D renderer has not been read, and a frame-rate cap and a slow 3D path
-   look identical from here. */
+   dense screen. The knob stays (ui/gfxstat.js) for devices that ARE fill-bound. */
 var R3D_MAX_SCALE = 4;   /* = the dpr ceiling in camera.js, so AUTO is native */
 
 function _r3dResize() {
   var R3 = window._R3D, main = document.getElementById('rtsCv'), R = window._rtsR;
   if (!R3 || !main) return;
-  /* The 2D canvas is the reference for CSS size because it is the one being presented, and its
+  /* The overlay canvas is the reference for CSS size because it fills the stage, and its
      backing store is cssPx * R.dpr - so this recovers the CSS box without reading layout. */
   var dpr = (R && R.dpr) || 1;
   /* A pinned scale from the GFX control wins over the cap, so a player can measure their own
@@ -20903,7 +20579,7 @@ var R3D_AO_RESOLVE_FS =
   /* THE GRADE - the game's own light, applied last, to the whole picture: warm in the highlights
      and cool in the shade, a little more colour, a gentle S-curve, and the far edge of the frame
      hazed toward a pale sky - the sunlit, lived-in look of the later 3D RTS games rather than
-     the flat palette of the 2D one. No vignette: #rtsVig already lays one over both modes.
+     the flat palette of the 2D one. No vignette: #rtsVig already lays one over the stage.
      Part of the light pass, so RTS_POST_ON takes it out with the bloom; R3.gradeAmt (0 to 1)
      takes it out alone, as R3.aoAmt does the occlusion. e2e/grade holds what it does. */
   'uniform float uGrade;' +
@@ -21861,8 +21537,7 @@ function _r3dFog(G) {
 
 /* THE ORE FIELD'S COLOUR, as a texture rather than as geometry.
 
-   In 2D the deposit is a painted tile; render/frame.js skips that in 3D because the crystals
-   are real there, which left the crystals standing on plain grass with nothing to say a
+   The crystals are real geometry (render3d/ore3d.js), which left the crystals standing on plain grass with nothing to say a
    deposit was underneath them. Drawing the bed as flat quads was tried and looked like a heap
    of overlapping paper squares - a quad's hard straight edge reads louder than the colour it
    carries, however the colour is varied.
@@ -23193,8 +22868,7 @@ function _r3dSilPass(gl, R3, P, paint) {
    flat 2D mark floating in front of a 3D world. In the 3D mode a selected unit stands in a soft
    ring of light on the ground now, and a selected building has its footprint traced round, the
    way the later 3D RTS games mark a selection - green for the player's own, red for the
-   opponent's, breathing a little so a ring on a busy field is found at a glance. The 2D mode
-   keeps its brackets (ui/hud.js).
+   opponent's, breathing a little so a ring on a busy field is found at a glance.
 
    Drawn straight after the ground and its tread marks, before anything stands on it, so the
    unit stands IN its ring and hides the part of it that runs behind its hull. The quads are
@@ -24811,7 +24485,7 @@ function _r3dTree(out, x, z, tx, tz, tn) {
    from the rounded parts this renderer can draw: limbs as tapered tubes between joints
    (_r3dLimb, forest3d.js), a head, a helmet, webbing over a torso that narrows to the waist, a
    pack, and a rifle held across the body in both hands. The sprite model is untouched, so the
-   2D mode and everything measured on its sprites stay exactly as they were.
+   cameo and everything measured on its sprites stay exactly as they were.
 
    THE SAME MAN, NOT A NEW ONE. Same size (_sprUnitScale, the sprite model's own fit), same
    pair offset off the facing grid, same identity colours: the helmet's crown is the unit's
@@ -26768,7 +26442,6 @@ function _r3dOreTick(G) {
 }
 </script>
 <script>/* render/detail.js - the ground's high-frequency grain, added back at magnification.
-   Part of rts.render, which owns every pixel.
 
    THE GROUND IS BAKED AT 24 PIXELS A CELL AND CAN NEVER BE BAKED AT MORE. That is not a
    preference, it is arithmetic: the bake is one canvas of RTS_N * RTS_TS square, it costs a
@@ -26808,22 +26481,10 @@ var RTS_DETAIL_TILE = 128;        /* pixels square; 9 repeats across a phone, 65
 var RTS_DETAIL_SCALE = 4;         /* feature size in tile pixels; MUST divide the tile */
 var RTS_DETAIL_MIN_MAG = 1.5;     /* below this the ground is not magnified enough to need it */
 var RTS_DETAIL_ALPHA = 0.22;      /* grain, not pattern - see the note on the weave below */
-/* HOW THE TILE IS COMPOSITED, and the reason it is a variable rather than a literal.
-
-   `overlay` is the natural blend for grain and it is the expensive one. This tile does not need
-   it: it encodes lighten-or-darken per pixel in its own colour and strength in its alpha, so a
-   plain source-over produces the same picture for a fraction of the fill cost. That claim used
-   to be defended by two numbers written into a comment - overlay 7.06 ms, soft-light 10.38 -
-   measured once, on a machine nobody has any more, and no longer checkable by anything.
-
-   e2e/grain now prices the alternative itself by pointing this at 'overlay' for a few frames
-   and timing both. A number a test can re-measure is worth more than a number a comment
-   remembers. Nothing in the game ever assigns to it. */
-var RTS_DETAIL_OP = 'source-over';
 var _RTS_DETAIL = null;
-var _RTS_DETAIL_PAT = null;      /* {g, pat} - a pattern belongs to the context that made it */
 
-/* THE TILE CARRIES ITS STRENGTH IN ALPHA, NOT IN GREY, so the composite can be a plain one.
+/* THE TILE CARRIES ITS STRENGTH IN ALPHA, NOT IN GREY. The ground's fragment shader
+   (R3D_TEX_FS, render3d/ground3d.js) samples it on the legacy baked ground.
 
    The obvious build is a neutral-grey tile blended with `overlay`, which modulates luminance
    around mid-grey and leaves hue alone. It looks right and it costs too much: measured in a
@@ -26876,168 +26537,24 @@ function _rtsDetailTile() {
   return _RTS_DETAIL;
 }
 
-/* Lay the grain over the ground already drawn into `g`. `srcX`/`srcY` are the terrain-canvas
-   coordinates of the top-left of the view, which is what anchors the pattern to the world. */
-function _rtsGroundDetail(g, R, TSscale) {
-  /* device pixels per baked terrain pixel - the magnification this exists to answer */
-  var mag = TSscale * R.dpr;
-  if (mag < RTS_DETAIL_MIN_MAG) return 0;
-  /* THE PATTERN IS BUILT ONCE, NOT ONCE A FRAME. It is cached against the context it was made
-     for, because a pattern belongs to its context and the context is replaced whenever the
-     canvas is resized.
-
-     THE NUMBER THAT USED TO BE HERE IS GONE, because it is no longer true. This said
-     createPattern cost a measured 8.3 ms a frame - 8.8 ms to 17.1, straight through the
-     budget. Re-measured through e2e/grain with the cache defeated, it now costs nothing that
-     rises out of the noise: 3.32 ms against 3.51 for the pass as a whole, which is a difference
-     in the wrong direction. The tile itself is cached separately in _RTS_DETAIL, so what was
-     being timed was createPattern alone, and whatever made it expensive in that browser is not
-     doing so in this one. The cache stays - allocating an object per frame to hand it straight
-     back is pointless whatever it costs - but it is no longer load-bearing, and a comment
-     asserting 8.3 ms would send the next reader looking for a regression that is not there. */
-  if (!_RTS_DETAIL_PAT || _RTS_DETAIL_PAT.g !== g) {
-    var made = g.createPattern(_rtsDetailTile(), 'repeat');
-    if (!made) return 0;
-    _RTS_DETAIL_PAT = { g: g, pat: made };
-  }
-  var pat = _RTS_DETAIL_PAT.pat;
-
-  /* The grain is drawn at DEVICE resolution, not scaled up with the ground: the whole point is
-     to supply detail finer than a magnified baked pixel, and a pattern stretched by `mag`
-     would be exactly as blocky as what it is covering. The canvas transform is already scaled
-     by dpr, so a 1/dpr scale on the pattern puts one tile pixel on one device pixel. */
-  /* World anchoring: the terrain-canvas origin of the view, carried into device pixels and
-     wrapped to the tile so the offset stays small and exact. */
-  var ox = -((R.focus.x / RTS_TILE + RTS_N / 2) * RTS_TS - (R.W / 2) / TSscale) * mag;
-  var oy = -((R.focus.z / RTS_TILE + RTS_N / 2) * RTS_TS - (R.H / 2) / TSscale) * mag;
-  var T = RTS_DETAIL_TILE;
-  ox = ox - Math.floor(ox / T) * T;
-  oy = oy - Math.floor(oy / T) * T;
-
-  g.save();
-  /* Plain source-over: the tile already encodes lighten-or-darken per pixel in its own colour
-     and alpha, so no blend mode is needed and none of their cost is paid. See RTS_DETAIL_OP. */
-  g.globalCompositeOperation = RTS_DETAIL_OP;
-  g.globalAlpha = RTS_DETAIL_ALPHA;
-  g.setTransform(1, 0, 0, 1, 0, 0);            /* device pixels: one tile pixel per screen pixel */
-  g.translate(ox, oy);
-  g.fillStyle = pat;
-  g.fillRect(-ox, -oy, R.W * R.dpr, R.H * R.dpr);
-  g.restore();
-  return 1;
-}
 </script>
-<script>/* render/sky2d.js - the time of day and the weather, in the 2D picture. Part of rts.render; the
-   skies themselves are render3d/sky3d.js, which both renderers read.
+<script>/* render/frame.js - _rtsRFrame: one frame - the 3D world, and the overlay over it.
+   Part of rts.render. */
 
-   The 2D battlefield is baked art, so the hour is laid over it rather than lit into it: the
-   lit side's colour multiplied over the whole frame, then the haze, then - at dusk, at night
-   and in rain - a warm pool round every building's door and ahead of every vehicle on the
-   move, added back. The rain is streaks across the screen. Drawn over the finished
-   battlefield and under the post pass (render/frame.js), so the HUD and the overlay keep
-   their own colours. */
-function _rtsSky2D(g, G) {
-  if (typeof _rtsSkyName !== 'function' || !G) return;
-  var S = _rtsSkyNow(G);
-  if (!S || S === R3D_SKIES.day) return;
-  var cv = g.canvas, W = cv.width, H = cv.height, i;
-  var dpr = W / (cv.clientWidth || W);
-  function c255(v) { return Math.max(0, Math.min(255, Math.round(v * 255))); }
-  g.save();
-  g.setTransform(1, 0, 0, 1, 0, 0);
-  g.globalCompositeOperation = 'multiply';
-  g.fillStyle = 'rgb(' + c255(S.L[0]) + ',' + c255(S.L[1]) + ',' + c255(S.L[2]) + ')';
-  g.fillRect(0, 0, W, H);
-  g.globalCompositeOperation = 'source-over';
-  if (S.haze[3] > 0) {
-    g.fillStyle = 'rgba(' + c255(S.haze[0]) + ',' + c255(S.haze[1]) + ',' + c255(S.haze[2]) + ',' + S.haze[3] + ')';
-    g.fillRect(0, 0, W, H);
-  }
-  /* the lamps, added back */
-  if (S.night > 0) {
-    g.globalCompositeOperation = 'lighter';
-    var zr = (typeof _rtsZoom === 'function' ? _rtsZoom() : 1) * dpr, E = G.ents || [];
-    var pool = function (x, z, r, a) {
-      var p = _rtsGroundToScreen(x, z), px = p.x * dpr, py = p.y * dpr, rr = r * zr;
-      if (px < -rr || py < -rr || px > W + rr || py > H + rr) return;
-      var gr = g.createRadialGradient(px, py, 0, px, py, rr);
-      gr.addColorStop(0, 'rgba(255,200,130,' + (a * S.night).toFixed(3) + ')');
-      gr.addColorStop(1, 'rgba(255,200,130,0)');
-      g.fillStyle = gr;
-      g.fillRect(px - rr, py - rr, rr * 2, rr * 2);
-    };
-    for (i = 0; i < E.length; i++) {
-      var e = E[i];
-      if (e.dead) continue;
-      if (e.type === 'struct' && !e.building) {
-        var d = rtsStructDef(e.def);
-        if (d && !d.wall) pool(e.x, e.z + d.h * RTS_TILE / 2 + 1, 5 + d.w * 1.5, 0.45);
-      } else if (e.type === 'unit' && !e.air && e.path) {
-        var ud = rtsUnitDef(e.def);
-        if (ud && ud.kind === 'vehicle' && !ud.sea) pool(e.x + Math.cos(e.rot) * 4, e.z + Math.sin(e.rot) * 4, 5, 0.4);
-      }
-    }
-    g.globalCompositeOperation = 'source-over';
-  }
-  /* the rain: streaks down and across the screen, each on its own short fall */
-  if (S.rain > 0) {
-    var t = G.t || 0, m = Math.round(W * H / 5200);
-    g.strokeStyle = 'rgba(200,215,235,0.35)';
-    g.lineWidth = Math.max(1, dpr);
-    g.beginPath();
-    for (i = 0; i < m; i++) {
-      var ph = _sprHash(i, 3, 991), cyc = t / 0.45 + ph, ep = Math.floor(cyc), p = cyc - ep;
-      var x0 = _sprHash(i, ep, 993) * W, y0 = (_sprHash(ep, i, 997) * 1.2 - 0.2) * H + p * H * 0.25;
-      g.moveTo(x0, y0); g.lineTo(x0 - 4 * dpr, y0 + 16 * dpr);
-    }
-    g.stroke();
-  }
-  /* the sandstorm: ochre streaks driven across the screen on the wind */
-  if (S.sand > 0) {
-    var td = G.t || 0, nd = Math.round(W * H / 3000);
-    g.strokeStyle = 'rgba(222,176,112,0.45)';
-    g.lineWidth = Math.max(1, dpr);
-    g.beginPath();
-    for (i = 0; i < nd; i++) {
-      var dp = _sprHash(i, 9, 971), dc = td / 0.7 + dp, de = Math.floor(dc), dq = dc - de;
-      var dx = (_sprHash(i, de, 973) * 1.3 - 0.3) * W + dq * W * 0.3, dy = _sprHash(de, i, 977) * H;
-      g.moveTo(dx, dy); g.lineTo(dx + 22 * dpr, dy + 3 * dpr);
-    }
-    g.stroke();
-  }
-  /* the lightning: the bolt, from the top of the screen to where it strikes (_rtsBoltAt) */
-  if (S.flash > 0.05 && typeof _rtsLightning === 'function') {
-    var bolt = _rtsBoltAt(_rtsLightning(G.t || 0).n), fx0 = bolt.u * W, fy0 = bolt.v * H, bs = fy0 / 26;
-    g.strokeStyle = 'rgba(225,232,255,' + Math.min(1, S.flash * 1.4).toFixed(3) + ')';
-    g.lineWidth = 3 * dpr;
-    g.beginPath();
-    bolt.pts.forEach(function (p, k) { var px = fx0 + p[0] * bs * 2, py = fy0 - p[1] * bs; if (k) g.lineTo(px, py); else g.moveTo(px, py); });
-    g.stroke();
-  }
-  /* the snow: soft white flakes drifting down */
-  if (S.snow > 0) {
-    var ts = G.t || 0, ns = Math.round(W * H / 4200);
-    g.fillStyle = 'rgba(245,248,252,0.8)';
-    for (i = 0; i < ns; i++) {
-      var sp = _sprHash(i, 5, 983), sc = ts / 3 + sp, se = Math.floor(sc), sq = sc - se;
-      var sx = (_sprHash(i, se, 985) * W + Math.sin(ts * 1.3 + i) * 6 * dpr), sy = (_sprHash(se, i, 987) * 0.4 + sq) * H;
-      g.beginPath(); g.arc(sx, sy % H, (1 + _sprHash(i, 7, 989)) * dpr, 0, 6.283); g.fill();
-    }
-  }
-  g.restore();
-}
-</script>
-<script>/* render/frame.js - _rtsRFrame: drawing one frame of the battlefield, back to front.
-   Part of rts.render, which owns every pixel. */
-
-/* --------------------------------------------------------------- the frame */
+/* --------------------------------------------------------------- the frame
+   The world - ground, entities, fog, effects - is drawn by the GL canvas underneath this one
+   (_r3dFrame). This canvas is a transparent overlay over it, carrying only what is not part of
+   the world: the crates, the effects the GL pass does not own (render/fx.js asks _r3dFxOwns),
+   the placement outline, and the readouts. Everything on it positions itself through the same
+   projection the meshes use (render/camera.js), so the two cannot drift apart. */
 function _rtsRFrame(dt) {
   var R = _rtsR, G = window._rtsG, g = R.g, S = R.spr, i;
-  var z = _rtsZoom(), cell = R.cell, TSscale = cell / RTS_TS;
+  var cell = R.cell, TSscale = cell / RTS_TS;
 
   _rtsCycleTick(dt);
-  /* Shake_The_Screen(): the original blits the page offset by a couple of pixels, picking a
-     new offset each tick. Same idea, applied as a transform offset. */
+  /* Shake_The_Screen(): the page is offset by a couple of pixels, a new offset each tick. The
+     world layer shakes by a compositor transform, the overlay by its own transform, so the two
+     cannot part. */
   var shk = G.shake || 0, shy = 0, shx = 0;
   if (shk > 0.02) {
     R.shakeF = (R.shakeF || 0) + 1;
@@ -27046,164 +26563,12 @@ function _rtsRFrame(dt) {
   }
   g.setTransform(R.dpr, 0, 0, R.dpr, shx * R.dpr, shy * R.dpr);
   g.imageSmoothingEnabled = false;
-  /* 3D MODE: the world - ground, entities, fog - is drawn by the GL canvas underneath this
-     one (_r3dFrame), and this canvas becomes a transparent overlay carrying only what stays
-     2D: ore and wave decals, effects, the ghost, the message line. Everything positions
-     itself through _rtsSX/_rtsSY, which camera.js makes projection-aware, so the overlay and
-     the meshes cannot drift apart. */
-  var r3on = window._R3D && window._R3D.on;
-  if (r3on) {
-    _r3dFrame(G);
-    /* The GL canvas is STACKED under this one - _r3dApply flips it visible - and this canvas
-       only CLEARS, so the compositor shows the world through it. It was a per-frame blit for a
-       long time, because stacking once composited black in headless capture and a renderer
-       this project cannot capture is one it cannot verify. Two things changed the answer. The
-       context now carries preserveDrawingBuffer:true, so the GL buffer reads back correctly at
-       any time and every capture path works against the layers themselves (_rtsCompose below
-       rebuilds the exact composited frame on demand - it IS the old blit, kept for the
-       harness). And the blit itself became the suspect for the phone frame rate: an iPhone
-       17 Pro Max held ~30fps at 0.29, 1.15 and 2.60 megapixels alike, so it is not fill-bound
-       in the shader - but a full-resolution drawImage of a WebGL canvas into a 2D canvas every
-       frame forces a GPU sync on exactly that class of device, and it is the one full-frame
-       cost the scale knob cannot touch. Presenting the canvas directly deletes it.
-
-       Screen shake moved with it: the world layer shakes by a compositor transform (below),
-       the overlay through the same setTransform it always used, so the two cannot part. */
-    g.clearRect(-8, -8, R.W + 16, R.H + 16);
-    var shT = (shx || shy) ? 'translate(' + shx + 'px,' + shy + 'px)' : '';
-    if (window._R3D.shakeT !== shT) {
-      window._R3D.shakeT = shT;
-      window._R3D.cv.style.transform = shT;
-    }
-  } else {
-    g.fillStyle = '#1a1d16';
-    g.fillRect(-8, -8, R.W + 16, R.H + 16);
-  }
-  /* ground decals squash by the camera lean so they hug the terrain instead of shingling
-     over the row below - 1 in 2D, cos(tilt) in 3D */
-  var ys = r3on ? window._R3D.cp : 1;
-
-  /* Visible cell range, padded so half-on-screen sprites still draw. Through the projection's
-     own inverse rather than through the zoom: the tilted camera sees 1/cos(tilt) further up
-     the screen than W/zoom by H/zoom says, and the perspective one further again at the far
-     end, so the flat arithmetic this replaces left the top rows of the sea undrawn. In 2D it
-     reduces to exactly the same four numbers. */
-  var cw = _rtsCellWindow(1, 2);
-  var tx0 = cw.tx0, tx1 = cw.tx1, tz0 = cw.tz0, tz1 = cw.tz1;
-
-  /* --- terrain: one blit of the baked map, plus ore on top ---
-     The ground is a single pre-painted canvas, so the visible window is one drawImage
-     rather than a couple of thousand tile blits - and, more to the point, its dirt
-     patches are continuous noise instead of per-cell stamps, so there is no grid. */
-  var srcX = (R.focus.x / RTS_TILE + RTS_N / 2) * RTS_TS - (R.W / 2) / TSscale;
-  var srcY = (R.focus.z / RTS_TILE + RTS_N / 2) * RTS_TS - (R.H / 2) / TSscale;
-  if (!r3on) {
-    g.drawImage(R.terrain,
-      srcX, srcY, R.W / TSscale, R.H / TSscale,
-      0, 0, R.W, R.H);
-    /* and the grain the magnification just destroyed, put back at device resolution - see
-       render/detail.js. Under everything that stands on the ground, because it IS the ground. */
-    _rtsGroundDetail(g, R, TSscale);
-  }
-
-  for (var tz = tz0; tz <= tz1; tz++) {
-    for (var tx = tx0; tx <= tx1; tx++) {
-      var idx = _rtsIdx(tx, tz);
-      var ore = G.scrap[idx];
-      var isWater = G.terrain && G.terrain[idx] === RTS_T_WATER && !_rtsIsBridgeCell(idx);   /* under a deck: the bake's bridge */
-      if (ore <= 0 && !isWater) continue;
-      var pp = _rtsGroundToScreen(_rtsWX(tx) - RTS_TILE / 2, _rtsWX(tz) - RTS_TILE / 2);
-      var px = Math.round(pp.x), py = Math.round(pp.y);
-      if (isWater && !r3on) {
-        /* The crest highlights step round a four-frame cycle, so the lake moves.
-           2D ONLY, now that the GL side has a sea of its own (render3d/world3d.js). This used
-           to run in both modes - the comment here said so - because without it 3D had nothing
-           but a flat painted colour where the water was. It was then the last thing painting
-           over a surface that has real geometry, a moving normal and a specular, which is the
-           same mistake the ore tile made and was fixed for.
-
-           SIZED CORNER TO CORNER, not by `cell` and a lean factor. A tile drawn at a fixed
-           size abuts its neighbour only while every cell projects to the same rectangle -
-           true of both orthographic cameras and of nothing else. Under perspective the near
-           rows are larger than the far ones, so a fixed size opens a hairline of dark ground
-           between every row at one end of the screen and overlaps them at the other. Asking
-           the projection where the OPPOSITE corner lands makes each tile exactly reach its
-           neighbour whatever the camera, and in 2D it is the same integer it always was. */
-        var pq = _rtsGroundToScreen(_rtsWX(tx) + RTS_TILE / 2, _rtsWX(tz) + RTS_TILE / 2);
-        g.drawImage(S.wave[(_RTS_PULSE.wf + tx + tz) & 3], px, py,
-                    Math.max(1, Math.round(pq.x) - px), Math.max(1, Math.round(pq.y) - py));
-        continue;
-      }
-      /* IN 3D THE ORE IS REAL GEOMETRY, so this flat tile must not be painted over it. Every
-         other 2D world layer is already gated on r3on - the terrain blit above, the pads, the
-         sprites, the shroud - and this loop was missed. Measured over a full field at max
-         zoom, the composited frame differed from the raw GL buffer in 77.2% of its pixels
-         (50.0% of them by more than 60 levels); with the ore skipped it is 0.1%. This single
-         ungated loop was burying the ~47k crystal triangles world3d.js builds every frame,
-         and it is most of why the 3D toggle "looked exactly the same" as 2D. */
-      if (r3on) continue;
-      /* The number of density steps comes from the sprite set, not from a literal: ours has
-         four, the original's gold has TWELVE and its gems three. Hard-coding 4 here worked
-         until real art arrived and then quietly showed a third of a field. */
-      var set = (G.gems && G.gems[idx] ? S.gem : S.ore);
-      /* A FULL CELL IS RICHNESS-SCALED, not RTS_SCRAP_TILE. core/ore.js seeds a cell with
-         `(lvl+1)/LEVELS * RTS_SCRAP_TILE * RTS_ORE_RICHNESS`, so at richness 0.51 the richest
-         cell on the map holds 255 of a nominal 500 - and dividing by the nominal value asked
-         the last stage for ore that cannot exist. Measured over a seeded map the stage
-         histogram was [86, 300, 411, 0]: a quarter of the ore artwork was dead. */
-      var full = RTS_SCRAP_TILE * (typeof RTS_ORE_RICHNESS === 'number' ? RTS_ORE_RICHNESS : 1);
-      var stage = Math.min(set.length - 1, Math.floor(ore / full * set.length));
-      /* Hashed, not arithmetic. `(tx*7 + tz*13) % 3` collapses to `(tx + tz) % 3`, because 7
-         and 13 are both 1 mod 3 - verified identical for all 797 ore cells of a seeded map -
-         so the three anti-repetition variants laid out as diagonal ribbons on a three-cell
-         lattice instead of breaking the field up. */
-      var vari = Math.floor(_sprHash(tx, tz, 6101) * set[stage].length) % set[stage].length;
-      g.drawImage(set[stage][vari], px, py, cell, cell * ys);
-    }
-  }
-
-  /* --- the forest, drawn rather than baked ---------------------------------------------
-     These used to be stamped into the terrain canvas at one 24-pixel tree a cell, which read
-     as a legible but sparse and very regular wood. (The commit that moved them claimed the old
-     forest measured brighter than bare grass; that was a stale-bake artifact and is corrected
-     on _sprTrees.) That canvas is capped at Red Alert's tile density and cannot grow, so the
-     trees came out of it: as sprites they bake at RTS_PS, several stand on one cell, and there
-     are five variants, which is what makes a grove read as one close up.
-
-     SKIPPED IN 3D, like the ore - render3d/world3d.js grows real conifers from the same cells,
-     and until the trees left the bake the flat ones were sitting underneath them.
-
-     TREES PER CELL TAPERS WITH ZOOM. It is not a performance dodge, it is what the picture
-     wants: zoomed out a cell is twelve pixels and three overlapping canopies are one dark
-     blob, so the extra two cost time and show nothing. Zoomed in they are the difference
-     between a wood and a lawn. The count is also what bounds the cost - at the widest zoom
-     the most forest is on screen and the fewest trees are drawn per cell.
-
-     Drawn back to front so a grove overlaps correctly, and before the units, which keeps the
-     old behaviour of a unit never being hidden by a tree it is standing behind. Depth-sorting
-     trees into the entity pass is a separate change; doing it here would silently alter what
-     the player can see. */
-  if (!r3on && S.tree) {
-    var TPC = cell >= 48 ? 3 : (cell >= 24 ? 2 : 1);
-    var tsc = TSscale / (S.tree[0].c.ps || 1);
-    for (var ftz = tz0; ftz <= tz1; ftz++) {
-      for (var ftx = tx0; ftx <= tx1; ftx++) {
-        if (G.terrain[_rtsIdx(ftx, ftz)] !== RTS_T_TREE) continue;
-        for (var ti = 0; ti < TPC; ti++) {
-          /* hash-placed, never random: the same seed must grow the same wood every frame,
-             and a tree that moved between frames would read as the map shimmering */
-          var jx = (_sprHash(ftx * 3 + ti, ftz, 101) - 0.5) * RTS_TILE * 0.78;
-          var jz = (_sprHash(ftz, ftx * 3 + ti, 103) - 0.5) * RTS_TILE * 0.78;
-          var tv = S.tree[Math.floor(_sprHash(ftx + ti, ftz * 2 + ti, 107) * S.tree.length)
-                          % S.tree.length];
-          var tp = _rtsGroundToScreen(_rtsWX(ftx) + jx, _rtsWX(ftz) + jz);
-          var tw = Math.round(tv.c.width * tsc * tp.scale), th = Math.round(tv.c.height * tsc * tp.scale);
-          var tpx = Math.round(tp.x - tw / 2);
-          var tpy = Math.round(tp.y - Math.round(tv.head * tsc * tp.scale) - th / 2);
-          g.drawImage(tv.c, tpx, tpy, tw, th);
-        }
-      }
-    }
+  _r3dFrame(G);
+  g.clearRect(-8, -8, R.W + 16, R.H + 16);
+  var shT = (shx || shy) ? 'translate(' + shx + 'px,' + shy + 'px)' : '';
+  if (window._R3D.shakeT !== shT) {
+    window._R3D.shakeT = shT;
+    window._R3D.cv.style.transform = shT;
   }
 
   /* --- new scorch marks and craters, stamped once into the baked terrain. Because the
@@ -27233,32 +26598,6 @@ function _rtsRFrame(dt) {
     }
   }
 
-  /* --- foundation pads. A separate pass before any structure is drawn, so one building's
-     pad can never cover its neighbour. Without these a base looks like furniture dropped
-     on a lawn; a scuffed earth apron is what makes it look built. --- */
-  for (i = 0; i < G.ents.length; i++) {
-    var pe = G.ents[i];
-    if (r3on) break;                 /* 3D buildings model their own ground - a flat pad sprite
-                                        drawn on the overlay would float above the mesh */
-    if (pe.type !== 'struct' || (pe.dead && !(pe.wreck > 0))) continue;
-    if (!_rtsEntSeen(pe)) continue;
-    var pd = rtsStructDef(pe.def);
-    var pad = S.pad[pe.def];
-    var pp2 = _rtsGroundToScreen(_rtsWX(pe.tx) - RTS_TILE / 2, _rtsWX(pe.tz) - RTS_TILE / 2);
-    /* TWO SCALES, AND THEY ARE NOT THE SAME ONE. `psc` turns PAD pixels into screen pixels and
-       so divides by the density the pad was baked at. The 10 and 8 below are the pad's
-       overhang beyond the footprint measured in ART pixels - a fixed part of the shape, not of
-       the raster - so they convert with `pofs` and must NOT pick up the divide, or the apron
-       shifts under every building by half its own overhang the moment the density changes. */
-    var pofs = TSscale * pp2.scale;
-    var psc = pofs / (pad.ps || 1);
-    var pw = Math.round(pad.width * psc), ph = Math.round(pad.height * psc);
-    var ppx = Math.round(pp2.x) - Math.round(10 * pofs);
-    var ppy = Math.round(pp2.y) - Math.round(8 * pofs);
-    if (ppx > R.W || ppy > R.H || ppx + pw < 0 || ppy + ph < 0) continue;
-    g.drawImage(pad, ppx, ppy, pw, ph);
-  }
-
   /* --- crates. Drawn with the ground clutter rather than with the objects that stand up:
      a crate sits ON the map, and sorting it into the depth pass would let a unit walking
      over one disappear behind it. Only where the player can see: a crate under the shroud is
@@ -27277,209 +26616,39 @@ function _rtsRFrame(dt) {
     }
   }
 
-  /* --- everything that stands up, painted back to front --- */
-  var draw = [];
-  /* IN 3D NOTHING HERE IS DRAWN: the meshes are _r3dFrame's, and so are their shadows - the blob
-     shadows below were painted over the GL scene on top of its real ones, and the box this list
-     is culled by is a north-up one the turning camera (cam3d.js) no longer fits. */
-  for (i = 0; !r3on && i < G.ents.length; i++) {
-    var e = G.ents[i];
-    /* CountDown: a destroyed structure is still on the map, burning, for a moment. Dropping
-       it on the frame it died left its own explosion hanging over bare grass. */
-    if (e.dead && !(e.type === 'struct' && e.wreck > 0)) continue;
-    if (e.inside) continue;                /* riding inside a transport */
-    if (!_rtsEntSeen(e)) continue;         /* out of sight, off the screen */
-    if (e.z < R.focus.z - R.H / z || e.z > R.focus.z + R.H / z) continue;
-    if (e.x < R.focus.x - R.W / z || e.x > R.focus.x + R.W / z) continue;
-    draw.push(e);
-  }
-  draw.sort(function (a, b) { return a.z - b.z; });
-
-  /* Ground shadows for the DRAWN units only. The original's sprites carry their shadow inside
-     the frame - palette index 4, which _mixFrameToCanvas already paints as translucent black -
-     so adding one under those would give every tank two. Ours have none at all, which is what
-     makes them look laid on the grass rather than standing on it.
-
-     A separate pass ahead of the units, not per unit inside the loop: drawn inline, a unit's
-     shadow would fall ON TOP of the unit sorted just behind it. */
-  {
-    g.globalAlpha = 0.28;
-    g.fillStyle = '#0b0f14';
-    for (i = 0; i < draw.length; i++) {
-      var sd = draw[i];
-      if (sd.type !== 'unit') continue;
-      var sdd = rtsUnitDef(sd.def);
-      if (!sdd || sdd.kind === 'air') continue;      /* a helicopter's shadow is not under it */
-      var sp2 = _rtsGroundToScreen(sd.x, sd.z);
-      var srx = Math.max(2, Math.round(sd.r * _rtsZoom() * 0.95 * sp2.scale));
-      var sry = Math.max(1, Math.round(srx * 0.55));
-      g.beginPath();
-      g.ellipse(Math.round(sp2.x), Math.round(sp2.y) + Math.round(sry * 0.5),
-                srx, sry, 0, 0, Math.PI * 2);
-      g.fill();
-    }
-    g.globalAlpha = 1;
-  }
-
-  for (i = 0; i < draw.length; i++) {
-    var d = draw[i];
-    /* YOUR OWN SUBMARINES, DRAWN AWASH. The draw list only holds what _rtsEntSeen allows, and
-       that refuses a hidden ENEMY boat outright - so the only cloaked thing that reaches here
-       is one of yours, and it has to LOOK submerged or the state is invisible to the player who
-       owns it. Half-transparent is the whole treatment: still selectable, still clearly there,
-       obviously not on the surface. It goes solid the moment it fires, because _rtsCloakAI
-       clears `hidden` for the surfacing window. */
-    if (d.hidden) g.globalAlpha = 0.42;
-    if (r3on) continue;                    /* drawn as meshes by _r3dFrame */
-    if (d.type === 'struct') _rtsDrawStruct(g, d, TSscale, cell);
-    else _rtsDrawUnit(g, d, TSscale);
-    if (d.hidden) g.globalAlpha = 1;
-  }
-
   _rtsDrawFx(g, G, S, TSscale, cell);
 
-
-  /* --- shroud. MAP.CPP keeps IsMapped and IsVisible per cell; this paints them.
-     Baked into a 112x112 canvas (one pixel per cell) and blown up with smoothing off, so
-     the whole layer is one drawImage and the edges stay hard and cell-aligned the way the
-     original's shroud tiles do. Re-baked only when the visibility sweep says something
-     changed, which is at most 15 times a second. --- */
-  /* With the player's archives loaded there is a better shroud available than a grid of
-     squares: RA's own shadow.shp, whose 48 frames are the diagonal wedges and corner nibbles
-     that make the boundary look CUT rather than pixel-stepped. Stamped per cell, and only
-     across the cells actually on screen - a 160x160 map is 25600 cells and perhaps 900 of them
-     are visible, so drawing all of them would be 28x the work for the same picture. */
-  /* OFF THE MAP IS NOT UNSHROUDED, and it used to be. Both branches below paint only cells
-     that exist - the tile stamper walks the visible cells, the fallback blits a canvas that is
-     exactly RTS_N square - so wherever the view runs past the edge of the world neither one
-     painted anything, and whatever the terrain pass had left there stayed.
-
-     That is not an edge case at the widest zoom, it is the normal state: a 1660px battlefield
-     at 12px cells is 138 cells across against a 128-cell map, so the view is ALWAYS wider than
-     the world and there is always a band down each side carrying no shroud. What showed
-     through it was the ore-and-water overlay, which draws without asking whether the player
-     has seen the cell - so unexplored lakes came out as fields of blue speckle on the black,
-     inside a hard straight-edged band, on every desktop window. Filled here, once, for both
-     branches, because "there is no map here" is the same answer in both. */
-  if (!r3on && G.mapped) {
-    var mfx = R.focus.x / RTS_TILE + RTS_N / 2 - (R.W / 2) / cell;
-    var mfy = R.focus.z / RTS_TILE + RTS_N / 2 - (R.H / 2) / cell;
-    var mdx = -mfx * cell, mdy = -mfy * cell, mds = RTS_N * cell;
-    /* Outward-rounded, so the fill never leaves a gap at the seam; the sliver it can overlap
-       is the outermost column of the map, under which there is nothing to hide. */
-    var ex0 = Math.max(0, Math.ceil(mdx)), ey0 = Math.max(0, Math.ceil(mdy));
-    var ex1 = Math.min(R.W, Math.floor(mdx + mds)), ey1 = Math.min(R.H, Math.floor(mdy + mds));
-    g.fillStyle = 'rgb(4,6,9)';                     /* the unexplored colour, fully opaque */
-    if (ex0 > 0) g.fillRect(0, 0, ex0, R.H);
-    if (ex1 < R.W) g.fillRect(ex1, 0, R.W - ex1, R.H);
-    if (ey0 > 0) g.fillRect(0, 0, R.W, ey0);
-    if (ey1 < R.H) g.fillRect(0, ey1, R.W, R.H - ey1);
-  }
-  if (r3on) { /* fog drawn by the GL pass, soft-sampled */ }
-  else if (G.mapped) {
-    if (!R.fog) {
-      R.fog = document.createElement('canvas');
-      R.fog.width = RTS_N; R.fog.height = RTS_N;
-      R.fogG = R.fog.getContext('2d');
-      G.visDirty = 1;
-    }
-    if (G.visDirty) {
-      G.visDirty = 0;
-      var fim = R.fogG.createImageData(RTS_N, RTS_N), fd = fim.data;
-      for (i = 0; i < RTS_N * RTS_N; i++) {
-        var a = G.mapped[i] ? (G.vis[i] ? 0 : Math.round(255 * RTS_FOG_DIM)) : 255;
-        fd[i * 4] = 4; fd[i * 4 + 1] = 6; fd[i * 4 + 2] = 9; fd[i * 4 + 3] = a;
-      }
-      R.fogG.putImageData(fim, 0, 0);
-    }
-    /* POSITION THE WHOLE CANVAS RATHER THAN CROPPING IT TO THE SCREEN. This is a
-       simplification, NOT the fix for the missing shroud - the fill above is that, and this
-       was written first on the assumption that the crop was also landing the fog in the wrong
-       place. It was not: asking for a source rectangle that overruns the image is well
-       defined, and drawImage clips the source and the destination IN THE SAME PROPORTION, so
-       the scale and the position both survive. Reverting this line alone and re-running the
-       alignment check in e2e/shroud finds zero misplaced cells, which is the measurement that
-       settled it.
-
-       What it buys is not depending on that rule. The destination the map occupies is
-       something this code can state directly, and stating it removes the only place where the
-       picture rested on a subtlety of how a source rectangle gets clipped. Destination
-       clipping, which is what happens instead, is the ordinary case. */
-    var mapDX = -(R.focus.x / RTS_TILE + RTS_N / 2 - (R.W / 2) / cell) * cell;
-    var mapDY = -(R.focus.z / RTS_TILE + RTS_N / 2 - (R.H / 2) / cell) * cell;
-    /* SMOOTHED, deliberately, and only for this one draw. The comment above says hard edges
-       are "the way the original's shroud tiles do" it - but RA's shadow.shp frames are
-       diagonal wedges and corner nibbles, a CUT edge; the hard cell-aligned square was this
-       fallback's approximation of that, and blown up it read as a black staircase, the
-       loudest wrong note in the frame. A half-cell soft edge is the other honest
-       approximation, it is what the 3D mode's LINEAR-sampled fog already does, and using it
-       here means the two modes agree about what the boundary looks like. Players with their
-       archives loaded still get the real wedges - this branch is the fallback only. */
-    g.imageSmoothingEnabled = true;
-    g.drawImage(R.fog, 0, 0, RTS_N, RTS_N,
-                mapDX, mapDY, RTS_N * cell, RTS_N * cell);
-    g.imageSmoothingEnabled = false;
-  }
-
-  /* --- placement ghost --- */
+  /* --- placement: the footprint as the ground shows it - four corners, projected at their own
+     heights, so it is the right shape at any lean and faces the right way at any turn. The
+     building itself is its own mesh (render3d/place3d.js). --- */
   if (R.ghost) {
     var def = rtsStructDef(R.ghostKey);
-    var gspr = S.bld[R.ghost.side][R.ghostKey];
-    var gp = _rtsGroundToScreen(_rtsWX(R.ghost.tx) - RTS_TILE / 2,
-                                _rtsWX(R.ghost.tz) - RTS_TILE / 2);
-    var gx = Math.round(gp.x), gy = Math.round(gp.y);
-    g.globalAlpha = 0.55;
-    /* DIVIDE BY THE SCALE THE SPRITE WAS BAKED AT, exactly as _rtsDrawStruct does. This was
-       the one draw site that missed it, so the ghost came out at RTS_PS times its real size -
-       measured at zoom 48, the Construction Yard ghost was drawn 288x448 with its head offset
-       at 160 where 144x224 and 80 are correct, inside a footprint box the very next statement
-       strokes correctly at 144x144. On a 390 CSS px phone that is a translucent building 74%
-       of the screen wide, floating above and beside the green box telling you where it will
-       actually land. Procedural art only: real Red Alert art carries no `ps` and reads as 1,
-       so a player with their own archives loaded never saw this. */
-    var gsc = TSscale * gp.scale / (gspr.c.ps || 1);
-    /* in 3D the building is its own mesh, drawn by _r3dFrame (render3d/place3d.js) */
-    if (!r3on) g.drawImage(gspr.c, gx, gy - Math.round(gspr.head * gsc),
-      Math.round(gspr.c.width * gsc), Math.round(gspr.c.height * gsc));
-    g.globalAlpha = 1;
     g.strokeStyle = R.ghost.ok ? '#7fe07f' : '#e05a4a';
     g.lineWidth = 2;
-    if (r3on) {
-      /* the footprint as the ground shows it: four corners, projected at their own heights, so
-         it is the right shape at any lean and faces the right way at any turn */
-      var gx0 = _rtsWX(R.ghost.tx) - RTS_TILE / 2, gz0 = _rtsWX(R.ghost.tz) - RTS_TILE / 2;
-      var fw = def.w * RTS_TILE, fh = def.h * RTS_TILE, cs = [[0, 0], [fw, 0], [fw, fh], [0, fh]];
-      g.beginPath();
-      for (var gi = 0; gi < 4; gi++) {
-        var gq = _rtsGroundToScreen(gx0 + cs[gi][0], gz0 + cs[gi][1]);
-        if (gi) g.lineTo(gq.x, gq.y); else g.moveTo(gq.x, gq.y);
-      }
-      g.closePath(); g.stroke();
-    } else g.strokeRect(gx + 1, gy + 1, def.w * cell * gp.scale - 2, def.h * cell * gp.scale - 2);
+    var gx0 = _rtsWX(R.ghost.tx) - RTS_TILE / 2, gz0 = _rtsWX(R.ghost.tz) - RTS_TILE / 2;
+    var fw = def.w * RTS_TILE, fh = def.h * RTS_TILE, cs = [[0, 0], [fw, 0], [fw, fh], [0, fh]];
+    g.beginPath();
+    for (var gi = 0; gi < 4; gi++) {
+      var gq = _rtsGroundToScreen(gx0 + cs[gi][0], gz0 + cs[gi][1]);
+      if (gi) g.lineTo(gq.x, gq.y); else g.moveTo(gq.x, gq.y);
+    }
+    g.closePath(); g.stroke();
   }
 
-  /* the hour and the weather over the 2D battlefield - render/sky2d.js */
-  if (!r3on && typeof _rtsSky2D === 'function') _rtsSky2D(g, G);
-  /* Last, over the finished battlefield and nothing else. */
-  _rtsPost(g);
   /* The render readout samples here, at the end of the frame walk, so what it times is a
-     whole frame of this renderer - see ui/gfxstat.js. It throttles its own repaint. */
+     whole frame - see ui/gfxstat.js. It throttles its own repaint. */
   if (typeof _rtsGfxFrame === 'function') _rtsGfxFrame();
   /* The touch command bar builds itself from here for the same reason the readout does - see
      ui/touchcmd.js - and early-outs once its buttons exist. */
   if (typeof _rtsTouchCmdFrame === 'function') _rtsTouchCmdFrame();
 }
 
-
-
-/* The composited frame, on demand: the GL world with the 2D overlay over it - exactly what
+/* The composited frame, on demand: the GL world with the overlay canvas over it - exactly what
    the compositor is showing the player, rebuilt as one readable canvas. This is the per-frame
    blit that used to live in the frame walk, demoted to a capture tool: the harness reads
-   pixels, and layered canvases have no readable composite except through something like this.
-   In 2D the presentation canvas already IS the frame, so it comes back untouched. */
+   pixels, and layered canvases have no readable composite except through something like this. */
 function _rtsCompose() {
   var R = _rtsR, R3 = window._R3D;
-  if (!(R3 && R3.on)) return R.cv;
   var out = document.createElement('canvas');
   out.width = R.cv.width; out.height = R.cv.height;
   var og = out.getContext('2d');
@@ -27523,9 +26692,8 @@ function _rtsFxFrame(f, S) {
            anchor: RTS_ANIMS[f.kind] && RTS_ANIMS[f.kind].size ? 0.72 : 0.5 };
 }
 
-/* The sprite's width with NO perspective in it. The 2D path multiplies by the projection's
-   own scale; the 3D path divides by the zoom to get world units, which is the same number
-   arriving from the other side. Divided by the density the frame was baked at: the drawn set
+/* The sprite's width with NO perspective in it. The 3D path divides by the zoom to get
+   world units. Divided by the density the frame was baked at: the drawn set
    bakes at RTS_PS and says so, real Red Alert artwork carries no tag and reads as 1, and
    _mixFx replaces these role by role so a mixed set holds both at once. */
 function _rtsFxSize(img, TSscale, big) {
@@ -27629,223 +26797,6 @@ function _rtsDrawFx(g, G, S, TSscale, cell) {
     }
   }
 }
-</script>
-<script>/* render/draw.js - drawing one structure or one unit, including their animations.
-   Part of rts.render, which owns every pixel. */
-
-function _rtsDrawStruct(g, e, TSscale, cell) {
-  var R = _rtsR, def = rtsStructDef(e.def);
-  var spr = R.spr.bld[e.side][e.def];
-  /* Below half strength the original swaps in the damaged artwork - scorched, holed, smoking.
-     RTS_COND_YELLOW is the same threshold the sim already uses for "hurt" everywhere else, so
-     what you see and what the rules think agree rather than being two separate judgements.
-     Only while it is STANDING: a building still going up shows its clean frame, because the
-     build-up reveal is about progress and a half-built ruin reads as a bug. */
-  if (spr.dmg && !e.building && e.hp < e.maxHp * RTS_COND_YELLOW) {
-    spr = { c: spr.dmg, head: spr.head, dmg: spr.dmg };
-  }
-  var bp = _rtsGroundToScreen(_rtsWX(e.tx) - RTS_TILE / 2, _rtsWX(e.tz) - RTS_TILE / 2);
-  var px = Math.round(bp.x), py = Math.round(bp.y);
-  /* THE SPRITE'S OWN RESOLUTION, not the map's. A procedurally baked sprite carries `ps` - how
-     many of its pixels there are per RA art pixel (sprites/bake.js) - and real RA artwork
-     carries none, so it reads as 1 and this is the arithmetic it always was. Dividing here is
-     what keeps a building covering exactly its own tiles however finely it was baked. */
-  var ps = spr.c.ps || 1, sc = TSscale / ps;
-  var w = Math.round(spr.c.width * sc), h = Math.round(spr.c.height * sc);
-  var top = py - Math.round(spr.head * sc);
-  if (e.building) {
-    /* Build-up. BUILDING.H drives this off Mission_Construction, and in the originals a
-       structure visibly assembles rather than sliding up out of the ground. Here: the
-       finished fraction is revealed from the bottom, the leading edge carries a bright
-       construction beam, and a few stippled rows above it flicker so the boundary
-       dissolves instead of being a hard horizontal cut. */
-    var showH = Math.max(2, Math.round(h * Math.min(1, e.bprog)));
-    var edge = top + (h - showH);
-    g.save();
-    g.beginPath(); g.rect(px, edge, w, showH); g.clip();
-    g.drawImage(spr.c, px, top, w, h);
-    g.restore();
-    var band = Math.max(1, Math.round(cell / 12));
-    for (var q = 1; q <= 4; q++) {                                /* dissolving stipple */
-      var by = edge - q * band;
-      if (by < top) break;
-      if (((q + _rtsAnimFrame()) & 1) === 0) continue;
-      g.save();
-      g.beginPath(); g.rect(px, by, w, band); g.clip();
-      g.globalAlpha = 0.85 - q * 0.18;
-      g.drawImage(spr.c, px, top, w, h);
-      g.restore();
-      g.globalAlpha = 1;
-    }
-    g.fillStyle = '#cfe6ff';
-    g.globalAlpha = 0.75;
-    g.fillRect(px, edge - band, w, band);                          /* construction beam */
-    g.globalAlpha = 1;
-    return;
-  }
-  if (e.dead) {
-    /* CountDown: the wreck. Darkened, sinking slightly and fading out over its last moments,
-       with fire on top - so a destroyed building collapses rather than being deleted. */
-    var k = Math.max(0, Math.min(1, e.wreck / RTS_WRECK_TIME));
-    var sink = Math.round(h * (1 - k) * 0.16);
-    g.save();
-    g.globalAlpha = 0.35 + k * 0.6;
-    g.beginPath(); g.rect(px, top + sink, w, h - sink); g.clip();
-    g.drawImage(spr.c, px, top, w, h);
-    /* burn it down to a silhouette as it goes */
-    g.globalCompositeOperation = 'source-atop';
-    g.fillStyle = 'rgba(14,12,12,' + (0.45 + (1 - k) * 0.4).toFixed(2) + ')';
-    g.fillRect(px, top, w, h);
-    g.restore();
-    g.globalAlpha = 1;
-    var ffr = _rtsAnimFrame() % R.spr.fire.length, fimg = R.spr.fire[ffr];
-    var fp = _rtsGroundToScreen(e.x, e.z);
-    var rsc = TSscale * fp.scale / (fimg.ps || 1);
-    var fws = Math.round(fimg.width * rsc * (0.9 + def.w * 0.35));
-    var fhs = Math.round(fimg.height * rsc * (0.9 + def.w * 0.35));
-    g.globalAlpha = Math.min(1, k * 1.6);
-    g.drawImage(fimg, Math.round(fp.x - fws / 2), Math.round(fp.y - fhs * 0.75), fws, fhs);
-    g.globalAlpha = 1;
-    return;
-  }
-  if (e.hitT > 0) g.globalAlpha = 0.75;
-  g.drawImage(spr.c, px, top, w, h);
-  g.globalAlpha = 1;
-  _rtsDrawStructAnim(g, e, def, px, top, w, h, cell);
-  /* turret barrel tracks its target */
-  if (def.weapon) {
-    var tp = _rtsGroundToScreen(e.x, e.z);
-    var cx = tp.x, cy = tp.y - cell * tp.scale * 0.25, L = cell * tp.scale * 0.55;
-    g.strokeStyle = RTS_PAL.dark[0];
-    g.lineWidth = Math.max(2, cell * tp.scale * 0.08);
-    g.beginPath(); g.moveTo(cx, cy);
-    g.lineTo(cx + Math.cos(e.rot) * L, cy + Math.sin(e.rot) * L);
-    g.stroke();
-  }
-}
-
-function _rtsDrawUnit(g, e, TSscale) {
-  var R = _rtsR, d = rtsUnitDef(e.def);
-  var N = _sprFacingsFor(d);   /* d is already in hand - rtsUnitDef is a linear scan */
-  var f = ((Math.round(e.rot / (Math.PI * 2) * N) % N) + N) % N;
-  var turreted = R.spr.turret && R.spr.turret[e.side][e.def];
-  var img = (e.prone && R.spr.prone[e.side][e.def])
-    ? R.spr.prone[e.side][e.def][f]
-    : (turreted ? R.spr.hull[e.side][e.def][f] : R.spr.unit[e.side][e.def][f]);
-  /* Same as the structures: divide by the scale the sprite was baked at. See _rtsDrawStruct. */
-  var up = _rtsGroundToScreen(e.x, e.z);
-  var usc = TSscale * up.scale / (img.ps || 1);
-  var w = Math.round(img.width * usc), h = Math.round(img.height * usc);
-  var px = Math.round(up.x - w / 2), py = Math.round(up.y - h / 2);
-  /* An aircraft is drawn lifted off its own ground position, with a flattened shadow left
-     behind on the cell it is actually over. That gap is the only cue that says "this is above
-     the battlefield rather than on it" - without it a helicopter reads as a fast, oddly
-     invulnerable jeep. It shrinks to nothing while the machine is sitting on a pad rearming. */
-  if (e.air) {
-    var lift = Math.round(_rtsAirLift(e) * TSscale * up.scale);     /* render/camera.js: picking asks the same */
-    g.save();
-    g.globalAlpha = 0.28;
-    g.drawImage(img, px, py + Math.round(h * 0.06), w, Math.max(1, Math.round(h * 0.55)));
-    g.restore();
-    py -= lift;
-  }
-  if (e.hitT > 0) g.globalAlpha = 0.7;
-  g.drawImage(img, px, py, w, h);
-  /* SecondaryFacing: the turret is its own shape at its own angle, drawn over the hull. */
-  if (turreted) {
-    var tf = ((Math.round(e.turret / (Math.PI * 2) * N) % N) + N) % N;
-    var timg = turreted[tf], rx = 0, ry = 0;
-    /* Recoil_Adjust: a firing turret moves back one pixel along its facing. */
-    if (e.recoil > 0) {
-      var u = Math.max(1, Math.round(TSscale));
-      rx = -Math.round(Math.cos(e.turret)) * u;
-      ry = -Math.round(Math.sin(e.turret)) * u;
-    }
-    g.drawImage(timg, px + rx, py + ry, w, h);
-  }
-  g.globalAlpha = 1;
-  if (e.fire > 0) {
-    var fl = R.spr.fx.flash[Math.min(2, Math.floor(e.fire * 30))];
-    /* The flash belongs on the muzzle the shot actually left from - the same Fire_Coord the
-       simulation used, projected. Offsetting along `e.turret` regardless put the flash on the
-       turret's bearing even for a hull-mounted gun like the buggy's, so the flash and its own
-       tracer came off the vehicle at different angles. */
-    var mz = _rtsFireCoord(e, e.type === 'struct' ? null : RTS_WEAPONS[d.weapon]);
-    var mp = _rtsGroundToScreen(mz.x, mz.z);
-    var fx = mp.x, fy = mp.y;
-    var fs = fl.width * TSscale * mp.scale / (fl.ps || 1);
-    g.drawImage(fl, Math.round(fx - fs / 2), Math.round(fy - fs / 2), fs, fs);
-  }
-  /* a loaded harvester shows its ore */
-  if (d.harvest && e.carry > 1) {
-    g.fillStyle = RTS_PAL.ore[1];
-    var s = Math.max(2, Math.round(w * 0.16));
-    g.fillRect(Math.round(up.x - s / 2), Math.round(up.y - h * 0.42), s, s);
-  }
-}
-
-/* Animated states. BUILDING.H carries BState/QueueBState and MAX_DOOR_STAGE 18 with
-   DOOR_OPEN_STAGE 9: a structure is not one static bitmap, it has an idle look and a
-   working look, and the War Factory's door is an eighteen-frame animation. Door and
-   activity phase are kept here, keyed by entity id, so the simulation stays renderer-free. */
-function _rtsStructAnim(id) {
-  var A = _rtsR.anim || (_rtsR.anim = {});
-  return A[id] || (A[id] = { door: 0, phase: 0, df: -1 });
-}
-function _rtsDrawStructAnim(g, e, def, px, top, w, h, cell) {
-  var G = window._rtsG, S = G.sides[e.side], a = _rtsStructAnim(e.id);
-  var u = cell / RTS_TS;                       /* screen px per art px */
-
-  if (def.produces === 'vehicle') {
-    /* Open while a vehicle is on the line, shut otherwise. 18 stages, wide open at 9. */
-    var want = (S.q && S.q.vehicle) ? 9 : 0;
-    /* One stage per animation frame: MAX_DOOR_STAGE 18 at 15 FPS is the original's timing. */
-    if (a.df !== _rtsAnimFrame()) {
-      a.df = _rtsAnimFrame();
-      a.door += Math.max(-1, Math.min(1, want - a.door));
-    }
-    var open = Math.max(0, Math.min(1, a.door / 9));
-    if (open > 0.01) {
-      var dw = Math.round(30 * u), dh = Math.round(13 * u * open);
-      var dx = px + Math.round(w / 2 - dw / 2);
-      var dy = top + h - Math.round(15 * u);
-      g.fillStyle = '#0d0f12';
-      g.fillRect(dx, dy, dw, dh);
-      g.fillStyle = RTS_PAL.lit;
-      g.globalAlpha = 0.35;
-      g.fillRect(dx, dy + dh - Math.max(1, Math.round(u)), dw, Math.max(1, Math.round(u)));
-      g.globalAlpha = 1;
-    }
-  }
-  /* A structure below a third health burns. CC_EMBER_COLOR pulses on the same clock as the
-     radar, which is what ties the whole screen's glow together in the original. */
-  var hpFrac = e.hp / rtsStructDef(e.def).hp;
-  if (hpFrac < 0.34) {
-    var er = Math.max(1, Math.round(u * 3));
-    g.fillStyle = _rtsEmber();
-    for (var q = 0; q < 3; q++) {
-      var ex = px + Math.round(w * (0.24 + q * 0.26));
-      var ey = top + Math.round(h * (0.42 + ((q * 7 + (_RTS_PULSE.wf & 1)) % 3) * 0.14));
-      g.fillRect(ex, ey, er, er);
-    }
-    g.globalAlpha = 0.28 + _rtsPulse() * 0.3;
-    g.fillStyle = '#2a2a2e';
-    g.fillRect(px + Math.round(w * 0.3), top - Math.round(u * 5), Math.round(w * 0.4), Math.round(u * 6));
-    g.globalAlpha = 1;
-  }
-  if (e.def === 'refinery' || e.def === 'power') {
-    /* A working structure blinks. Cheap, but it is the difference between a base that is
-       running and a row of ornaments. */
-    var lit = (((_rtsAnimFrame() + e.id) % 14) < 6);
-    if (lit) {
-      var r = Math.max(1, Math.round(u * 2));
-      g.fillStyle = e.def === 'refinery' ? '#ffd070' : '#8fe8a8';
-      g.fillRect(px + Math.round(w * 0.18), top + Math.round(h * 0.30), r, r);
-      g.fillRect(px + Math.round(w * 0.74), top + Math.round(h * 0.30), r, r);
-    }
-  }
-}
-
 </script>
 <script>/* render/icons.js - radar blips, the placement ghost, resize/dispose, and sidebar icons.
    Part of rts.render, which owns every pixel. */
@@ -28007,8 +26958,8 @@ function _rtsMakeIcons(side) {
 /* RED ALERT - UI + input + the main loop.
 
    Layout is the classic one: battlefield on the left, a fixed command sidebar on the
-   right holding credits, power, radar and the build tiles. Selection brackets, health bars
-   and the drag box are drawn on a 2D overlay canvas above the battlefield canvas. */
+   right holding credits, power, radar and the build tiles. Health bars, the drag box and
+   effects sprites are drawn on a transparent overlay canvas above the 3D battlefield. */
 
 window._rtsUI = null;
 
@@ -28022,13 +26973,12 @@ function rtsOpen(seed) {
   d.id = 'rcgRts';
   d.innerHTML = ''
     + '<div class="rts-stage">'
-    /* The 3D mode's canvas, UNDER the 2D one: when the mode is on, rtsCv becomes a
-       transparent overlay (effects, decals, ghost) and this carries the world. Hidden rather
-       than absent when the mode is off, so toggling is a style flip, not a DOM rebuild. */
+    /* The 3D world's canvas, UNDER rtsCv: rtsCv is a transparent overlay (effects sprites, the
+       placement outline, crates) and this carries the world. */
     +   '<canvas id="rtsCv3d" style="display:none"></canvas>'
     +   '<canvas id="rtsCv"></canvas>'
-    /* The vignette, as an ELEMENT rather than a per-frame canvas composite - see _rtsPost for
-       why it moved. It sits between the battlefield and the HUD, which is exactly where the
+    /* The vignette, as an ELEMENT rather than a per-frame canvas composite (see style.css for
+       why). It sits between the battlefield and the HUD, which is exactly where the
        old multiply sat in the draw order. */
     +   '<div id="rtsVig"></div>'
     +   '<canvas id="rtsHud"></canvas>'
@@ -28051,7 +27001,6 @@ function rtsOpen(seed) {
        whatever is deployed. Putting it at the far end of the group keeps that difference
        visible, and keeps it as far as the group allows from the ✕, which is the control it
        would be worst to confuse it with: both end the match, and only one of them is meant to. */
-    +       '<button type="button" class="rts-mute" id="rts3dBtn" title="Switch to 3D" onclick="rts3dToggle()">3D</button>'
     +       '<button type="button" class="rts-mute" id="rtsReloadBtn" title="Reload for the latest build" onclick="rtsReloadClick()">⟳</button>'
     +       '<button type="button" class="rts-mute" id="rtsSaveBtn" title="Save this battle (Ctrl+S)" onclick="rtsSaveGame()">💾</button>'
     +       '<button type="button" class="rts-mute" id="rtsLoadBtn" title="Resume the saved battle" onclick="rtsLoadGame()">📂</button>'
@@ -28138,11 +27087,13 @@ function rtsOpen(seed) {
   _rtsWatchSize();
   /* rtsOpen runs off a real click, so this is a valid gesture to unlock WebAudio */
   if (typeof _rtsAudioInit === 'function') { _rtsAudioInit(); _rtsAudioResume(); _rtsMusicStart(); }
-  /* A player who chose 3D chose it for the game, not for one match: without this the mode came
-     back off after every reload and every new battle, which reads as the toggle having been
-     ignored rather than as a default. Restored here because it needs the canvases and the
-     button to exist, and before the first frame so nothing paints in the wrong mode. */
-  if (typeof rts3dRestore === 'function') rts3dRestore();
+  /* The battlefield is 3D. Started here because it needs the canvases to exist, and before the
+     first frame. No WebGL, no battle: the title screen says why (title.js shows the message). */
+  if (!_r3dStart()) {
+    rtsClose();
+    throw new Error('This game draws its battlefield in 3D, and this browser did not provide WebGL. ' +
+                    'Try another browser, or turn on hardware acceleration.');
+  }
   if (_load) _rtsSay('Battle resumed.');
   else _rtsSay(rtsArmyName('player') + ' command online. Build a Refinery to start earning.');
   _rtsUI.last = (new Date()).getTime();
@@ -28332,9 +27283,8 @@ function _rtsWatchSize() {
    into a thing a player can read off the screen in ten seconds.
 
    THE SCALE IS THE 3D BUFFER'S ALONE. render/camera.js picks a device pixel ratio of up to 4
-   for the 2D renderer and must, because that mode stamps pixel art onto whole device pixels;
-   the 3D mode draws meshes and render/frame.js blits its buffer up to the presentation canvas
-   whatever size it is. See R3D_MAX_SCALE in render3d/gl3d.js. `auto` means that cap. */
+   for the overlay canvas, which stamps sprites onto whole device pixels; the 3D buffer draws
+   meshes and the compositor stretches it to the screen whatever size it is. See R3D_MAX_SCALE in render3d/gl3d.js. `auto` means that cap. */
 
 var RTS_GFX_LS = 'rtsGfxScale';        /* '' = auto, or '1' / '2' / '3' / '4' */
 
@@ -29236,10 +28186,9 @@ function _rtsSuperClick(mx, my) {
                         so the game can tell the two apart, but worked out AS PRESSED: what was
                         under the cursor and whether A was held then, not a moment later.
      ZOOM WHERE YOU     the wheel zooms toward the point under the cursor, not the middle of the
-       POINT            screen, in both modes.
-     SMOOTHLY, IN 3D    the 3D mode glides between the ladder's rungs a third of one a notch
-                        (_rtsCellAt), and a trackpad or a pinch moves it continuously. 2D keeps
-                        its whole rungs, because its art resamples badly off them.
+       POINT            screen.
+     SMOOTHLY           the camera glides between the ladder's rungs a third of one a notch
+                        (_rtsCellAt), and a trackpad or a pinch moves it continuously.
      + AND -            zoom from the keyboard, a notch a press, held to keep going.
 
    The radar, the arrows, the screen edge and Home all still move it as they did. */
@@ -29264,7 +28213,7 @@ var RTS_ZOOM_HOLD = 0.3;         /* seconds a +/- key is held before it glides o
 function _rtsHoldGround(W, sx, sy) {
   var R = _rtsR;
   if (W) {
-    var p = _rtsIn3D() ? _r3dPlaneAt(sx, sy, _rtsElev(W.x, W.z)) : _rtsGroundAt(sx, sy);
+    var p = _r3dPlaneAt(sx, sy, _rtsElev(W.x, W.z));
     if (p) { R.focus.x += W.x - p.x; R.focus.z += W.z - p.z; }
   }
   _rtsClampFocus();
@@ -29279,34 +28228,19 @@ function _rtsZoomPivot() {
 
 /* Zoom by `delta` rungs toward the screen point (sx, sy). */
 function _rtsZoomToward(delta, sx, sy) {
-  var R = _rtsR, U = window._rtsUI;
+  var R = _rtsR;
   if (!R || !delta) return;
-  if (_rtsIn3D()) {
-    if (R.zt === undefined) R.zt = R.zi;
-    R.zAnchor = { x: sx, y: sy };
-    R.zt = Math.max(0, Math.min(RTS_ZOOMS.length - 1, R.zt + delta));
-    /* three thirds of a rung are a rung, not 3.0000000000000004 of one */
-    if (Math.abs(R.zt - Math.round(R.zt)) < 1e-6) R.zt = Math.round(R.zt);
-    return;
-  }
-  /* 2D: whole rungs, a notch at a time or added up from a trackpad or a held key, about the
-     point. A turn the other way, or a whole notch, starts the sum clean: a remainder left over
-     from a held '+' swallowed the next notch out entirely. */
-  U = U || {};
-  if ((U.zAcc || 0) * delta < 0 || Math.abs(delta) >= 1) U.zAcc = 0;
-  U.zAcc = (U.zAcc || 0) + delta;
-  while (Math.abs(U.zAcc) >= 1) {
-    var dir = U.zAcc > 0 ? 1 : -1, w0 = _rtsGroundAt(sx, sy);
-    U.zAcc -= dir;
-    _rtsZoomStep(dir);
-    _rtsHoldGround(w0, sx, sy);
-  }
+  if (R.zt === undefined) R.zt = R.zi;
+  R.zAnchor = { x: sx, y: sy };
+  R.zt = Math.max(0, Math.min(RTS_ZOOMS.length - 1, R.zt + delta));
+  /* three thirds of a rung are a rung, not 3.0000000000000004 of one */
+  if (Math.abs(R.zt - Math.round(R.zt)) < 1e-6) R.zt = Math.round(R.zt);
 }
 
 /* The 3D glide, a frame at a time, keeping the anchored point where it is on screen. */
 function _rtsZoomTick(dt) {
   var R = _rtsR;
-  if (!R || R.zt === undefined || R.zf === undefined || R.zt === R.zf || !_rtsIn3D()) return;
+  if (!R || R.zt === undefined || R.zf === undefined || R.zt === R.zf) return;
   var a = R.zAnchor || { x: R.W / 2, y: R.H / 2 }, w = _rtsGroundAt(a.x, a.y);
   var step = (R.zt - R.zf) * Math.min(1, dt * RTS_ZOOM_RATE);
   R.zf = Math.abs(R.zt - R.zf - step) < 0.004 ? R.zt : R.zf + step;
@@ -29314,9 +28248,8 @@ function _rtsZoomTick(dt) {
   _rtsHoldGround(w, a.x, a.y);      /* exact through the projection, so no frame's miss adds up */
 }
 
-/* A wheel event, in rungs. In proportion - 100 px (or 3 lines) is a notch: RTS_ZOOM_NOTCH in 3D,
-   a whole rung in 2D, and a trackpad's small deltas add up to the same, in 2D through
-   _rtsZoomToward's accumulator. But A MOUSE CLICK IS A NOTCH whatever size the browser reports
+/* A wheel event, in rungs. In proportion - 100 px (or 3 lines) is RTS_ZOOM_NOTCH, and a
+   trackpad's small deltas add up to the same. But A MOUSE CLICK IS A NOTCH whatever size the browser reports
    it: macOS gives one as 4.000244140625 px (or a multiple), which in proportion was a
    seventy-fifth of a doubling, and some wheels on Linux give 53. So an event with the Mac's
    pattern, or one of 30 px or more after a pause (`quiet`, from ui/input.js), is at least a notch; the
@@ -29332,7 +28265,7 @@ function _rtsWheelRungs(e, quiet, unit) {
      it has asked what mode the event is in (its bug 1392460) */
   var mode = e.deltaMode, px = e.deltaY * (mode === 1 ? 33 : mode === 2 ? 400 : 1);
   if (!px) return 0;
-  var notch = _rtsIn3D() ? RTS_ZOOM_NOTCH : 1, r = -px / 100 * notch, a = Math.abs(px), n = 1;
+  var notch = RTS_ZOOM_NOTCH, r = -px / 100 * notch, a = Math.abs(px), n = 1;
   /* `unit` is the size of the click that opened THIS gesture (ui/input.js), so the same wheel
      turning on - the same size again, or a whole multiple where the browser merged clicks - is a
      notch each; it goes with the gesture, and a trackpad cannot leave one behind for the next */
@@ -29343,8 +28276,7 @@ function _rtsWheelRungs(e, quiet, unit) {
      fingers; a MOUSE click with Ctrl held is still a click */
   if (e.ctrlKey && !click) return Math.max(-1, Math.min(1, -px * 0.012));
   if (click) r = (px > 0 ? -1 : 1) * Math.max(Math.abs(r), n * notch);
-  var cap = _rtsIn3D() ? 0.75 : 1;
-  return Math.max(-cap, Math.min(cap, r));
+  return Math.max(-0.75, Math.min(0.75, r));
 }
 
 /* GRABBING THE MAP. `start` on a right or middle press; `move` drags the view once the press
@@ -29407,7 +28339,7 @@ function _rtsZoomKeyDown(e, U) {
   if (!zk || e.ctrlKey || e.metaKey) return false;
   if (!e.repeat || !by) {
     var pv = _rtsZoomPivot();
-    U.zkHeld = 0; _rtsZoomToward((zk === 'zoom+' ? 1 : -1) * (_rtsIn3D() ? RTS_ZOOM_NOTCH : 1), pv.x, pv.y);
+    U.zkHeld = 0; _rtsZoomToward((zk === 'zoom+' ? 1 : -1) * RTS_ZOOM_NOTCH, pv.x, pv.y);
   }
   U.keys[zk] = true; (U.zkBy || (U.zkBy = {}))[id] = zk;
   e.preventDefault();
@@ -29421,7 +28353,6 @@ function _rtsZoomKeyUp(e, U) {
   var other = false;
   for (var k in U.zkBy) if (U.zkBy[k] === zk) other = true;
   if (!other) U.keys[zk] = false;
-  U.zAcc = 0;
 }
 /* + and - zoom, BY THE CHARACTER TYPED: the key's place means nothing across layouts - on a Belgian
    or Turkish board the key US calls Equal types '-'. The number pad is the exception, by place.
@@ -29458,7 +28389,7 @@ function _rtsNavBindWindow(U) {
       if (!UU) return;
       /* an attack-move from the A KEY is let go; the touch bar's A-MOVE is a latch and stays */
       if (UU.keys.a) UU.attackMove = false;
-      UU.keys = {}; UU.zkBy = {}; UU.zAcc = 0;
+      UU.keys = {}; UU.zkBy = {};
       if (UU.grab) _rtsGrabEnd();
     }, false]
   ];
@@ -29481,8 +28412,7 @@ function _rtsNavBindWindow(U) {
      TWO FINGERS        twisted, on a phone - past a small threshold, so a pinch does not wander.
 
    Every turn and lean pivots on the ground under a screen point - the middle of the screen, or
-   the fingers - and holds it there (_rtsHoldGround), so the thing being looked at stays put.
-   In 2D there is nothing to turn: the middle button pans there as it did. */
+   the fingers - and holds it there (_rtsHoldGround), so the thing being looked at stays put. */
 
 var RTS_ORBIT_YAW = 0.0065;      /* radians of turn a pixel of drag */
 var RTS_ORBIT_TILT = 0.004;      /* radians of lean a pixel of drag */
@@ -29617,12 +28547,9 @@ function _rtsBindInput() {
   };
   cv.onwheel = function (e) {
     e.preventDefault();
-    /* Toward the point under the cursor. 2D steps between fixed levels (see _rtsApplyCam:
-       anything off RTS_ZOOMS resamples 24px-per-cell art by a fraction and softens every
-       sprite on screen); 3D glides between them - ui/navigate.js. */
+    /* Toward the point under the cursor, gliding between the ladder's rungs - ui/navigate.js. */
     var r = cv.getBoundingClientRect(), quiet = !(e.timeStamp - (U.wheelT || -1e9) < RTS_WHEEL_QUIET);
     U.wheelT = e.timeStamp;
-    if (quiet) U.zAcc = 0;           /* a 2D remainder belongs to one gesture, not to the next */
     if (e.ctrlKey) U.ctrlWheelT = e.timeStamp;
     var md = e.deltaMode, dy = Math.abs(e.deltaY);    /* the mode read first: see _rtsWheelRungs */
     _rtsZoomToward(_rtsWheelRungs(e, quiet, U.wheelNotch), e.clientX - r.left, e.clientY - r.top);
@@ -29751,8 +28678,8 @@ function _rtsBindInput() {
        drag one finger      pan the battlefield
        tap                  select, or place a building / fire a superweapon when one is armed
        long-press (350ms)   the context order - what right-click does on a desktop
-       pinch two fingers    zoom about the fingers, and move them together to pan; in whole
-                            steps in 2D, continuously in 3D (ui/navigate.js)
+       pinch two fingers    zoom about the fingers, and move them together to pan,
+                            continuously (ui/navigate.js)
 
      DRAG PANS RATHER THAN BOX-SELECTS, which is the one place this deliberately differs from
      the mouse. A drag is the only gesture a phone has for moving a map, and a player who
@@ -29820,9 +28747,7 @@ function _rtsBindInput() {
   cv.addEventListener('touchmove', function (e) {
     e.preventDefault();
     if (e.targetTouches.length >= 2) {
-      /* Pinch, about the fingers. In 2D in whole zoom steps: RTS_ZOOMS exists because anything
-         off it resamples 24px art by a fraction, and a continuous pinch would soften every
-         sprite on screen. In 3D it follows the fingers, a doubling of their spread a rung. */
+      /* Pinch, about the fingers: it follows them, a doubling of their spread a rung. */
       var gap = _tGap(e), mid = _tMid(e);
       if (!T.pinch) { T.pinch = gap; T.mid = mid; return; }
       /* the midpoint keeps its grip on the ground, as one finger does: two fingers pan too */
@@ -29830,9 +28755,7 @@ function _rtsBindInput() {
       T.mid = mid;
       _rtsTwist(e, T, mid);                /* two fingers twisted turn the 3D camera: ui/orbit.js */
       var ratio = gap / T.pinch;
-      if (_rtsIn3D())        { _rtsZoomToward(Math.log(ratio) / Math.LN2, mid.x, mid.y); T.pinch = gap; }
-      else if (ratio > 1.25) { _rtsZoomToward(1, mid.x, mid.y);  T.pinch = gap; }
-      else if (ratio < 0.8)  { _rtsZoomToward(-1, mid.x, mid.y); T.pinch = gap; }
+      _rtsZoomToward(Math.log(ratio) / Math.LN2, mid.x, mid.y); T.pinch = gap;
       return;
     }
     if (T.id === null) return;
@@ -30318,8 +29241,7 @@ function _rtsDrawHud(dt) {
   var W = _rtsR.W, H = _rtsR.H;
   g.clearRect(0, 0, W, H);
   var i;
-  /* in 3D a selection is a ring on the ground (render3d/ring3d.js), not these brackets */
-  var ringed = !!(window._R3D && window._R3D.on && typeof _r3dRingDraw === 'function');
+  /* a selection is a ring on the ground (render3d/ring3d.js); this pass draws the bars */
   /* health bars: always for selected, and for anything damaged */
   for (i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
@@ -30377,20 +29299,6 @@ function _rtsDrawHud(dt) {
         g.closePath(); g.fill();
         g.restore();
       }
-    }
-    if (selected && !ringed) {
-      /* corner brackets, the classic selection look */
-      var r = (e.type === 'struct' ? rtsStructDef(e.def).w * _rtsR.cell * 0.5 : _rtsR.cell * 0.42) * sc;
-      r = Math.max(10, Math.min(70, r));
-      var cy = s.y + r * 0.55, L = Math.max(5, r * 0.42);
-      g.strokeStyle = e.side === 'player' ? '#8ef07a' : '#ff8a7a';
-      g.lineWidth = 2;
-      [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (c) {
-        var cx = s.x + c[0] * r, cz2 = cy + c[1] * r * 0.62;
-        g.beginPath();
-        g.moveTo(cx - c[0] * L, cz2); g.lineTo(cx, cz2); g.lineTo(cx, cz2 - c[1] * L);
-        g.stroke();
-      });
     }
   }
   /* drag box */
@@ -30698,8 +29606,7 @@ function _rtsPanTick(dt) {
 
    _rtsViewSpan already reports the trapezoid's true centre - the radar box needed it for the
    same reason - and this was the one caller still assuming the focus was it. Clamping the
-   centre puts the view's far edge exactly on the map's, at any tilt. In 2D the centre IS the
-   focus, so the offsets are zero and this is the same clamp it always was. */
+   centre puts the view's far edge exactly on the map's, at any tilt. */
 function _rtsClampFocus() {
   var R = _rtsR, span = RTS_N * RTS_TILE, vs = _rtsViewSpan();
   var lx = Math.max(0, span / 2 - vs.w * 0.5), lz = Math.max(0, span / 2 - vs.h * 0.5);

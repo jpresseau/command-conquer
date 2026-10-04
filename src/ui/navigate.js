@@ -10,10 +10,9 @@
                         so the game can tell the two apart, but worked out AS PRESSED: what was
                         under the cursor and whether A was held then, not a moment later.
      ZOOM WHERE YOU     the wheel zooms toward the point under the cursor, not the middle of the
-       POINT            screen, in both modes.
-     SMOOTHLY, IN 3D    the 3D mode glides between the ladder's rungs a third of one a notch
-                        (_rtsCellAt), and a trackpad or a pinch moves it continuously. 2D keeps
-                        its whole rungs, because its art resamples badly off them.
+       POINT            screen.
+     SMOOTHLY           the camera glides between the ladder's rungs a third of one a notch
+                        (_rtsCellAt), and a trackpad or a pinch moves it continuously.
      + AND -            zoom from the keyboard, a notch a press, held to keep going.
 
    The radar, the arrows, the screen edge and Home all still move it as they did. */
@@ -38,7 +37,7 @@ var RTS_ZOOM_HOLD = 0.3;         /* seconds a +/- key is held before it glides o
 function _rtsHoldGround(W, sx, sy) {
   var R = _rtsR;
   if (W) {
-    var p = _rtsIn3D() ? _r3dPlaneAt(sx, sy, _rtsElev(W.x, W.z)) : _rtsGroundAt(sx, sy);
+    var p = _r3dPlaneAt(sx, sy, _rtsElev(W.x, W.z));
     if (p) { R.focus.x += W.x - p.x; R.focus.z += W.z - p.z; }
   }
   _rtsClampFocus();
@@ -53,34 +52,19 @@ function _rtsZoomPivot() {
 
 /* Zoom by `delta` rungs toward the screen point (sx, sy). */
 function _rtsZoomToward(delta, sx, sy) {
-  var R = _rtsR, U = window._rtsUI;
+  var R = _rtsR;
   if (!R || !delta) return;
-  if (_rtsIn3D()) {
-    if (R.zt === undefined) R.zt = R.zi;
-    R.zAnchor = { x: sx, y: sy };
-    R.zt = Math.max(0, Math.min(RTS_ZOOMS.length - 1, R.zt + delta));
-    /* three thirds of a rung are a rung, not 3.0000000000000004 of one */
-    if (Math.abs(R.zt - Math.round(R.zt)) < 1e-6) R.zt = Math.round(R.zt);
-    return;
-  }
-  /* 2D: whole rungs, a notch at a time or added up from a trackpad or a held key, about the
-     point. A turn the other way, or a whole notch, starts the sum clean: a remainder left over
-     from a held '+' swallowed the next notch out entirely. */
-  U = U || {};
-  if ((U.zAcc || 0) * delta < 0 || Math.abs(delta) >= 1) U.zAcc = 0;
-  U.zAcc = (U.zAcc || 0) + delta;
-  while (Math.abs(U.zAcc) >= 1) {
-    var dir = U.zAcc > 0 ? 1 : -1, w0 = _rtsGroundAt(sx, sy);
-    U.zAcc -= dir;
-    _rtsZoomStep(dir);
-    _rtsHoldGround(w0, sx, sy);
-  }
+  if (R.zt === undefined) R.zt = R.zi;
+  R.zAnchor = { x: sx, y: sy };
+  R.zt = Math.max(0, Math.min(RTS_ZOOMS.length - 1, R.zt + delta));
+  /* three thirds of a rung are a rung, not 3.0000000000000004 of one */
+  if (Math.abs(R.zt - Math.round(R.zt)) < 1e-6) R.zt = Math.round(R.zt);
 }
 
 /* The 3D glide, a frame at a time, keeping the anchored point where it is on screen. */
 function _rtsZoomTick(dt) {
   var R = _rtsR;
-  if (!R || R.zt === undefined || R.zf === undefined || R.zt === R.zf || !_rtsIn3D()) return;
+  if (!R || R.zt === undefined || R.zf === undefined || R.zt === R.zf) return;
   var a = R.zAnchor || { x: R.W / 2, y: R.H / 2 }, w = _rtsGroundAt(a.x, a.y);
   var step = (R.zt - R.zf) * Math.min(1, dt * RTS_ZOOM_RATE);
   R.zf = Math.abs(R.zt - R.zf - step) < 0.004 ? R.zt : R.zf + step;
@@ -88,9 +72,8 @@ function _rtsZoomTick(dt) {
   _rtsHoldGround(w, a.x, a.y);      /* exact through the projection, so no frame's miss adds up */
 }
 
-/* A wheel event, in rungs. In proportion - 100 px (or 3 lines) is a notch: RTS_ZOOM_NOTCH in 3D,
-   a whole rung in 2D, and a trackpad's small deltas add up to the same, in 2D through
-   _rtsZoomToward's accumulator. But A MOUSE CLICK IS A NOTCH whatever size the browser reports
+/* A wheel event, in rungs. In proportion - 100 px (or 3 lines) is RTS_ZOOM_NOTCH, and a
+   trackpad's small deltas add up to the same. But A MOUSE CLICK IS A NOTCH whatever size the browser reports
    it: macOS gives one as 4.000244140625 px (or a multiple), which in proportion was a
    seventy-fifth of a doubling, and some wheels on Linux give 53. So an event with the Mac's
    pattern, or one of 30 px or more after a pause (`quiet`, from ui/input.js), is at least a notch; the
@@ -106,7 +89,7 @@ function _rtsWheelRungs(e, quiet, unit) {
      it has asked what mode the event is in (its bug 1392460) */
   var mode = e.deltaMode, px = e.deltaY * (mode === 1 ? 33 : mode === 2 ? 400 : 1);
   if (!px) return 0;
-  var notch = _rtsIn3D() ? RTS_ZOOM_NOTCH : 1, r = -px / 100 * notch, a = Math.abs(px), n = 1;
+  var notch = RTS_ZOOM_NOTCH, r = -px / 100 * notch, a = Math.abs(px), n = 1;
   /* `unit` is the size of the click that opened THIS gesture (ui/input.js), so the same wheel
      turning on - the same size again, or a whole multiple where the browser merged clicks - is a
      notch each; it goes with the gesture, and a trackpad cannot leave one behind for the next */
@@ -117,8 +100,7 @@ function _rtsWheelRungs(e, quiet, unit) {
      fingers; a MOUSE click with Ctrl held is still a click */
   if (e.ctrlKey && !click) return Math.max(-1, Math.min(1, -px * 0.012));
   if (click) r = (px > 0 ? -1 : 1) * Math.max(Math.abs(r), n * notch);
-  var cap = _rtsIn3D() ? 0.75 : 1;
-  return Math.max(-cap, Math.min(cap, r));
+  return Math.max(-0.75, Math.min(0.75, r));
 }
 
 /* GRABBING THE MAP. `start` on a right or middle press; `move` drags the view once the press
@@ -181,7 +163,7 @@ function _rtsZoomKeyDown(e, U) {
   if (!zk || e.ctrlKey || e.metaKey) return false;
   if (!e.repeat || !by) {
     var pv = _rtsZoomPivot();
-    U.zkHeld = 0; _rtsZoomToward((zk === 'zoom+' ? 1 : -1) * (_rtsIn3D() ? RTS_ZOOM_NOTCH : 1), pv.x, pv.y);
+    U.zkHeld = 0; _rtsZoomToward((zk === 'zoom+' ? 1 : -1) * RTS_ZOOM_NOTCH, pv.x, pv.y);
   }
   U.keys[zk] = true; (U.zkBy || (U.zkBy = {}))[id] = zk;
   e.preventDefault();
@@ -195,7 +177,6 @@ function _rtsZoomKeyUp(e, U) {
   var other = false;
   for (var k in U.zkBy) if (U.zkBy[k] === zk) other = true;
   if (!other) U.keys[zk] = false;
-  U.zAcc = 0;
 }
 /* + and - zoom, BY THE CHARACTER TYPED: the key's place means nothing across layouts - on a Belgian
    or Turkish board the key US calls Equal types '-'. The number pad is the exception, by place.
@@ -232,7 +213,7 @@ function _rtsNavBindWindow(U) {
       if (!UU) return;
       /* an attack-move from the A KEY is let go; the touch bar's A-MOVE is a latch and stays */
       if (UU.keys.a) UU.attackMove = false;
-      UU.keys = {}; UU.zkBy = {}; UU.zAcc = 0;
+      UU.keys = {}; UU.zkBy = {};
       if (UU.grab) _rtsGrabEnd();
     }, false]
   ];

@@ -1,6 +1,6 @@
 ---
 name: visual-check
-description: Look at the game headless - render a scene in 2D or 3D to a PNG and, for a change, an A/B pair with a pixel count. Use to verify anything visual (a model, an effect, a camera, the UI over the map), to compare before and after, or to reproduce a screenshot a player sent.
+description: Look at the game headless - render a scene to a PNG and, for a change, an A/B pair with a pixel count. Use to verify anything visual (a model, an effect, a camera), to compare before and after, or to reproduce a screenshot a player sent.
 ---
 
 # Look at it
@@ -11,7 +11,7 @@ with the Read tool.
 ```bash
 cd /home/user/command-conquer && python3 build.py
 NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node .claude/skills/visual-check/shot.js \
-  --out=$SCRATCH/heli --3d --setup=$SCRATCH/setup.js [--ab=$SCRATCH/toggle.js] [--crop=x,y,w,h]
+  --out=$SCRATCH/heli --setup=$SCRATCH/setup.js [--ab=$SCRATCH/toggle.js] [--crop=x,y,w,h]
 ```
 
 - `--setup` is JavaScript run in the page with `G` (the game), `R` (the camera) and `R3` (the 3D renderer)
@@ -34,7 +34,8 @@ NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node .claude/skills/visua
 - **Level of detail:** full against plain models at a phone's zoom. A few hundred pixels differed and they
   were judged invisible; the buildings' curved roofs did show their facets, so buildings kept full detail.
 - **A player's screenshot:** stage the same thing (a stack of helicopters, a sky, a zoom) and see it.
-- **The UI over the map:** the 2D canvas is read too (no `--3d`).
+- **The UI over the map** (selection, effects sprites, the ghost) is on the overlay canvas `#rtsCv`,
+  which this does not read: use `_rtsCompose()` in an e2e spec for the frame the player sees.
 
 ## Traps
 

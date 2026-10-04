@@ -20,7 +20,7 @@ S.ok('...and so is one it never had', odd.status === 2 && /--paralel/.test(odd.s
 /* the order a run starts them in: anything timing itself last, alone */
 var order = run(['--list', 'e2e']).stdout.trim().split('\n');
 var alone = order.filter(function (l) { return /alone/.test(l); });
-S.ok('a spec that times itself is run alone (@solo), and there is one to check', alone.length > 0 && alone.some(function (l) { return /e2e\/grain/.test(l); }),
+S.ok('a spec that times itself is run alone (@solo), and there is one to check', alone.length > 0 && alone.some(function (l) { return /e2e\/resolution/.test(l); }),
      alone.map(function (l) { return l.split(' ')[0]; }).join(', ') || 'none marked');
 var firstAlone = order.findIndex(function (l) { return /alone/.test(l); });
 S.ok('...after everything that shares the machine', order.slice(firstAlone).every(function (l) { return /alone/.test(l); }),

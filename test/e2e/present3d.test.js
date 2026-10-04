@@ -34,7 +34,7 @@ var S = new Suite('present3d');
 (async function () {
   var browser = await chromium.launch();
   var g = await openPage(browser, { width: 1000, height: 700, dpr: 1 });
-  await g.start(7, 10, { mode3d: true });
+  await g.start(7, 10, {});
   await g.freeze();
 
   var out = await g.page.evaluate(function () {
@@ -97,15 +97,6 @@ var S = new Suite('present3d');
     o.m2display = window._R3D.cv.style.display;
     o.m2gl = stats(window._R3D.cv);
 
-    /* the control: in 2D the same overlay is the whole picture and must be opaque, and the
-       world layer must leave the compositor */
-    rts3dSet(false);
-    _rtsRFrame(1 / 60);
-    o.off2d = {
-      display: window._R3D.cv.style.display,
-      overlay: stats(_rtsR.cv)
-    };
-    rts3dSet(true);
     return o;
   });
 
@@ -141,10 +132,6 @@ var S = new Suite('present3d');
          out.m2adopted && out.m2display === 'block' && out.m2gl.tones >= 8,
          (out.m2adopted ? 'adopted' : 'DETACHED - match two is a blackout') +
          ', ' + out.m2gl.tones + ' tones on screen');
-    S.ok('in 2D the layer leaves and the overlay is the whole opaque picture (control)',
-         out.off2d.display === 'none' && out.off2d.overlay.opaquePct === 100,
-         'display:' + out.off2d.display + ', overlay ' + out.off2d.overlay.opaquePct +
-         '% opaque - proves the transparency measurement can tell the modes apart');
   }
   S.ok('no page errors', !errs.length, errs.join(' | ') || 'none');
   require('../lib/report.js')(S);

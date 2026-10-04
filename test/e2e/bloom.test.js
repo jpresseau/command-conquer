@@ -49,7 +49,6 @@ var S = new Suite('bloom');
     for (i = 0; i < RTS_N * RTS_N; i++) { G.mapped[i] = 1; G.vis[i] = 1; }
     G.visDirty = 1;
 
-    rts3dSet(true);
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;
@@ -65,7 +64,7 @@ var S = new Suite('bloom');
        "RTS_ZOOMS.length - 1" quietly became a different magnification - a four-times
        narrower view, with every tolerance and sample position here still sized for the
        old one. e2e/zoom3d covers the new rungs for the things that can break silently. */
-    R.zi = RTS_ZOOM_2D_STEPS - 1; _rtsApplyCam();
+    R.zi = RTS_ZOOM_BASE_STEPS - 1; _rtsApplyCam();
 
     /* The GL world is PRESENTED under the 2D overlay now, not blitted into it, so no single
        canvas carries the finished picture any more - _rtsCompose() rebuilds it (GL layer plus

@@ -1,12 +1,9 @@
 /* Zooming in far enough to see the models — the 3D-only rungs on the zoom ladder.
 
-   The ladder stops at 48 pixels a cell for a 2D reason: every rung has to land the SPRITE on a
-   whole multiple of its bake or the picture resamples and goes soft. In 3D the things worth
-   zooming in to look at are not sprites - a unit is geometry, and since r3d/curves.js its edges
-   are rounded and its wheels turn on their axles - so that constraint does not bind and the
-   detail had nowhere to be seen. RTS_ZOOM_3D_EXTRA adds two rungs beyond the 2D top.
+   A unit is geometry - since r3d/curves.js its edges are rounded and its wheels turn on their
+   axles - and RTS_ZOOM_3D_EXTRA adds two rungs beyond the base ladder so that detail can be seen.
 
-   TWO THINGS HAVE TO SURVIVE IT, and neither is about how it looks.
+   PICKING HAS TO SURVIVE IT.
 
    PICKING. Every click, every placement and the drag-pan go through _rtsGroundAt and
    _rtsGroundToScreen, which are inverses of each other. If that breaks at close zoom, orders
@@ -14,10 +11,7 @@
    picture still looks right. e2e/tilt already measures this, but at a fixed sample grid
    calibrated when the closest rung showed 53 world units; at 13 that grid is four screen-widths
    wide and lands outside the frustum, where a perspective inverse is legitimately meaningless.
-   So it is measured here over what is ACTUALLY ON SCREEN, at every rung.
-
-   COMING BACK OUT. The ladder is a global that the sidebar, the pinch, the wheel and twenty
-   specs read. Turning 3D off from a rung 2D does not have has to land somewhere real. */
+   So it is measured here over what is ACTUALLY ON SCREEN, at every rung. */
 
 var { chromium } = require('playwright');
 var { Suite } = require('../lib/assert.js');
@@ -28,12 +22,12 @@ var S = new Suite('zoom3d');
 (async function () {
   var browser = await chromium.launch();
   var g = await openPage(browser, { width: 900, height: 640, dpr: 1 });
-  await g.start(7, 20, { freeze: true, mode3d: true });
+  await g.start(7, 20, { freeze: true });
 
   var out = await g.page.evaluate(function () {
     var R = _rtsR, G = window._rtsG, C = RTS_N * RTS_TILE / 2, o = {};
     o.ladder = RTS_ZOOMS.slice();
-    o.flat = _rtsZoomLadder(R.dpr, false).slice();
+    o.flat = RTS_ZOOM_LADDERS[R.dpr] ? RTS_ZOOM_LADDERS[R.dpr].slice() : RTS_ZOOM_LADDERS[2].slice();
 
     /* ---------- picking, over the visible rect, at every rung ---------- */
     R.focus.x = 0; R.focus.z = 0;
@@ -86,26 +80,16 @@ var S = new Suite('zoom3d');
       }
       return n;
     }
-    R.zi = RTS_ZOOM_2D_STEPS - 1; _rtsApplyCam();
+    R.zi = RTS_ZOOM_BASE_STEPS - 1; _rtsApplyCam();
     o.px2d = unitPixels();
     R.zi = RTS_ZOOMS.length - 1; _rtsApplyCam();
     o.px3d = unitPixels();
 
-    /* ---------- coming back out of 3D from a rung 2D does not have ---------- */
-    o.deepIndex = R.zi;
-    o.deepCell = R.cell;
-    rts3dSet(false);
-    o.afterLadder = RTS_ZOOMS.slice();
-    o.afterIndex = R.zi;
-    o.afterCell = R.cell;
-    o.afterInRange = R.zi >= 0 && R.zi < RTS_ZOOMS.length;
-    rts3dSet(true);
-    o.backLadder = RTS_ZOOMS.length;
     return o;
   });
 
-  S.ok('3D offers rungs that 2D does not', out.ladder.length > out.flat.length,
-       'in 3D ' + out.ladder.join(', ') + ' css px per cell; in 2D ' + out.flat.join(', '));
+  S.ok('the ladder reaches past its base rungs', out.ladder.length > out.flat.length,
+       out.ladder.join(', ') + ' css px per cell, from a base of ' + out.flat.join(', '));
 
   var worstErr = Math.max.apply(null, out.pick.map(function (r) { return r.err; }));
   S.ok('screen and world still invert exactly, at every rung', worstErr < 0.01,
@@ -115,14 +99,7 @@ var S = new Suite('zoom3d');
 
   S.ok('a unit is drawn far larger at the closest rung', out.px3d > out.px2d * 8,
        out.px3d.toLocaleString() + ' pixels against ' + out.px2d.toLocaleString() +
-       ' at the top 2D rung - ' + (out.px3d / out.px2d).toFixed(1) + 'x the area');
-
-  S.ok('leaving 3D from a rung 2D does not have lands on a real one', out.afterInRange,
-       'was index ' + out.deepIndex + ' at ' + out.deepCell + 'px/cell, became index ' +
-       out.afterIndex + ' at ' + out.afterCell + ' on a ladder of ' + out.afterLadder.length);
-  S.eq('...and it is the closest 2D rung, not whatever the index pointed at',
-       out.afterCell, out.afterLadder[out.afterLadder.length - 1]);
-  S.eq('...and going back into 3D restores the long ladder', out.backLadder, out.ladder.length);
+       ' at the top base rung - ' + (out.px3d / out.px2d).toFixed(1) + 'x the area');
 
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
   await g.close();

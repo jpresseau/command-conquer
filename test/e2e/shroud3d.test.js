@@ -21,7 +21,6 @@ var S = new Suite('shroud3d');
 
   var out = await g.page.evaluate(function () {
     var o = {}, R = _rtsR, G = window._rtsG, i;
-    rts3dSet(true);
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;

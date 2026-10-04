@@ -8,7 +8,6 @@
      DUSK      warmer than day: red gains on blue across the frame
      RAIN      the rain is in the picture, and the ground is wet: darker than the same sky dry
      FOG       the banks are in the picture, and the haze takes contrast out of the frame
-     2D        the 2D picture takes the hour too, and its lamps light the doors
      GL        no program is left with an error under any sky
      TITLE     the SKY button cycles the conditions and keeps the choice */
 
@@ -40,7 +39,6 @@ var S = new Suite('sky');
     G = window._rtsG;
     for (i = 0; i < RTS_N * RTS_N; i++) { G.mapped[i] = 1; G.vis[i] = 1; }
     G.visDirty = 1;
-    rts3dSet(true);
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;
@@ -197,19 +195,6 @@ var S = new Suite('sky');
     R3.snowAmt = 0; var SN0 = shot('snow'); R3.snowAmt = 1; var SN1 = shot('snow');
     o.flakes = +(diff(SN1, SN0, 10) * 100).toFixed(2);
 
-    /* 2D */
-    rts3dSet(false);
-    function shot2(sky) { window.RTS_SKY_FORCE = sky; _rtsRFrame(0); var c = R.cv, x = c.getContext('2d'); return { d: x.getImageData(0, 0, c.width, c.height).data, w: c.width, dpr: c.width / c.clientWidth }; }
-    var T0 = shot2('day'), T1 = shot2('night');
-    function luma2(T) { var s2 = 0, n = 0; for (var k = 0; k < T.d.length; k += 64) { s2 += T.d[k] * 0.3 + T.d[k + 1] * 0.59 + T.d[k + 2] * 0.11; n++; } return s2 / n; }
-    o.luma2 = [+luma2(T0).toFixed(1), +luma2(T1).toFixed(1)];
-    var dp = _rtsGroundToScreen(wf.x, wf.z + d.h * RTS_TILE / 2 + 1), fp = _rtsGroundToScreen(wf.x - 30, wf.z + 30);
-    function at2(T, p) { var x = Math.round(p.x * T.dpr), y = Math.round(p.y * T.dpr), k = (y * T.w + x) * 4; return T.d[k] * 0.3 + T.d[k + 1] * 0.59 + T.d[k + 2] * 0.11; }
-    var T2s = shot2('snow');
-    /* a flake is a pixel the snow makes much BRIGHTER than the same pixel by day - the snow sky's tint darkens everything else a little */
-    var fl2 = 0; for (var k2 = 0; k2 < T2s.d.length; k2 += 4) if (T2s.d[k2] + T2s.d[k2 + 1] + T2s.d[k2 + 2] > T0.d[k2] + T0.d[k2 + 1] + T0.d[k2 + 2] + 120) fl2++;
-    o.flakes2 = [fl2, 0];
-    o.door2 = [+(at2(T1, dp) / Math.max(1, at2(T0, dp))).toFixed(2), +(at2(T1, fp) / Math.max(1, at2(T0, fp))).toFixed(2)];
     window.RTS_SKY_FORCE = undefined;
     o.errs = errs;
     return o;
@@ -235,8 +220,6 @@ var S = new Suite('sky');
     S.ok('lightning lights the rain for its instant', out.lightning[0] > out.lightning[1] * 1.15, out.lightning[0] + ' at the strike, ' + out.lightning[1] + ' a second before');
     S.ok('the fog banks are in the picture', out.bankSeen > 0.02, (out.bankSeen * 100).toFixed(2) + '% of the frame');
     S.ok('...and the haze takes the contrast out', out.fog.sd < out.day.sd * 0.85, 'spread ' + out.fog.sd + ' against ' + out.day.sd);
-    S.ok('in 2D the night is dark too', out.luma2[1] < out.luma2[0] * 0.6, out.luma2.join(' -> '));
-    S.ok('...but a door keeps more of its light than open ground', out.door2[0] > out.door2[1] * 1.3, 'door ' + out.door2[0] + ' of its day, open ground ' + out.door2[1]);
     S.ok('by day the sun is the baker\'s to the last bit: no offset, no basis of its own', out.sunD.day.every(function (v) { return v === 0; }) && out.sunD.dayB,
          JSON.stringify(out.sunD.day));
     S.ok('...and the passing day\'s sun is the baker\'s at RTS_DAY_NOON, and away from it at nine', out.sunD.noon.every(function (v) { return Math.abs(v) < 1e-5; }) &&
@@ -254,7 +237,6 @@ var S = new Suite('sky');
     /* brighter than by day, surf and all - under the snow sky's own dimmer light */
     S.ok('...the shallows are frozen', !!out.ice && out.ice[0] > out.ice[1] + 20, out.ice ? out.ice[0] + ' against ' + out.ice[1] + ' by day' : 'no shore in view');
     S.ok('...and it snows: hundreds of flakes, in the picture', out.snowN > 150 && out.flakes > 0.1, out.snowN + ' flakes, ' + out.flakes + '% of the frame');
-    S.ok('in 2D it snows too', out.flakes2[0] > 300, out.flakes2[0] + ' pixels lit by flakes');
     S.ok('no GL errors under any sky', out.errs.length === 0, out.errs.join(' ') || 'none');
   }
   S.ok('no page errors', g.errors.length === 0, g.errors.join(' | ') || 'none');

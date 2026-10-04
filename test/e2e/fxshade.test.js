@@ -37,7 +37,6 @@ var S = new Suite('fxshade');
     G = window._rtsG;
     for (i = 0; i < RTS_N * RTS_N; i++) { G.mapped[i] = 1; G.vis[i] = 1; }
     G.visDirty = 1;
-    rts3dSet(true);
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;
@@ -59,7 +58,7 @@ var S = new Suite('fxshade');
     o.grassAt = best;
     if (!best) return o;
     var X = _rtsWX(best[0]), Z = _rtsWX(best[1]);
-    R.focus.x = X; R.focus.z = Z; R.zi = RTS_ZOOM_2D_STEPS - 1; _rtsApplyCam();
+    R.focus.x = X; R.focus.z = Z; R.zi = RTS_ZOOM_BASE_STEPS - 1; _rtsApplyCam();
 
     function frame(fx) {
       G.fx.length = 0;
@@ -163,7 +162,7 @@ var S = new Suite('fxshade');
        A rocket between its launcher and its mark: drawn in the world at the height it flies, a
        flame at its head and its smoke laid back toward the launcher - so what changes on screen
        runs a trail's length along its flight, not a square's width. And a round from a rifle is
-       a dash racing along its line, not the line (e2e/tracer holds the 2D painter to the same). */
+       a dash racing along its line, not the line. */
     var shooter = { id: 91, x: X - 30, z: Z };
     /* against the bare frame, so drawn the way it was: without the light pass, whose grade
        moves every pixel on the screen (and a check that anything changed then passes on all) */

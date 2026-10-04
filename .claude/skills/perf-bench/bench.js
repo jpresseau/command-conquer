@@ -26,7 +26,7 @@ var FR = +A.frames || 40, UNITS = +A.units || 60, ZOOM = +A.zoom || 3;
     var R = _rtsR, G = window._rtsG, i;
     if (window._rtsUI) window._rtsUI.dead = true;
     for (i = 0; i < RTS_N * RTS_N; i++) { G.mapped[i] = 1; G.vis[i] = 1; }
-    G.visDirty = 1; rts3dSet(true);
+    G.visDirty = 1;
     window.RTS_SKY_FORCE = 'rain';
     var yd = _rtsHas('player', 'yard'), cx = yd.x + 30, cz = yd.z + 30;
     var mix = ['tank', 'tank', 'light', 'heavy', 'rifle', 'rifle', 'rocket', 'apc', 'arty', 'buggy'];

@@ -64,11 +64,6 @@ var S = new Suite('perspective');
     R.focus.x = _rtsWX(RTS_N / 2); R.focus.z = _rtsWX(RTS_N / 2);
     R.zi = 1; _rtsApplyCam();
 
-    /* --- what the flat window used to cover, for the record --- */
-    var zm = _rtsZoom();
-    o.flatRows = Math.round(R.H / zm / RTS_TILE);
-
-    rts3dSet(true);
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;
@@ -100,10 +95,6 @@ var S = new Suite('perspective');
       worst = Math.max(worst, Math.abs(s.x - pt[0]), Math.abs(s.y - pt[1]));
     });
     o.roundtrip = +worst.toFixed(3);
-
-    /* the cell window the 2D overlays iterate - through the projection now */
-    var cw = _rtsCellWindow(1, 2);
-    o.rows3d = cw.tz1 - cw.tz0 + 1;
 
     /* the lens, at every rung of the ladder */
     o.ladder = [];
@@ -168,7 +159,7 @@ var S = new Suite('perspective');
     /* Two cells at the SAME world x, one near the top of the view and one near the bottom.
        Offset well off centre, because convergence is a fan about the centre line and there is
        nothing to see on the axis itself. */
-    var offX = R.W * 0.30 / zm;                       /* world units right of the focus */
+    var offX = R.W * 0.30 / _rtsZoom();                      /* world units right of the focus */
     var wx = R.focus.x + offX;
     var tx = _rtsTX(wx);
     var tzTop = _rtsTX(topP.z), tzBot = _rtsTX(botP.z);
@@ -204,18 +195,6 @@ var S = new Suite('perspective');
     o.bareShare = +(bare / tot * 100).toFixed(2);
     o.sampled = tot;
 
-    rts3dSet(false);
-    o.off = !(window._R3D && window._R3D.on);
-    /* and 2D is untouched - same closed form, same pixel */
-    var p2 = _rtsGroundAt(450, 325), s2 = _rtsWorldToScreen(p2.x, 0, p2.z);
-    o.roundtrip2d = +Math.max(Math.abs(s2.x - 450), Math.abs(s2.y - 325)).toFixed(4);
-    o.scale2d = _rtsWorldToScreen(p2.x, 0, p2.z).scale;
-    var cw2 = _rtsCellWindow(1, 2);
-    o.win2d = { tz0: cw2.tz0, tz1: cw2.tz1 };
-    o.win2dFlat = {
-      tz0: Math.max(0, _rtsTX(R.focus.z - R.H / 2 / _rtsZoom()) - 2),
-      tz1: Math.min(RTS_N - 1, _rtsTX(R.focus.z + R.H / 2 / _rtsZoom()) + 2)
-    };
     R3.gradeAmt = undefined;
     return o;
   });
@@ -276,19 +255,6 @@ var S = new Suite('perspective');
          return 'cell ' + r.cell + ': eye ' + r.eye + ', range ' + r.range;
        }).join(' | ') + ' - the eye distance moves with the zoom so the convergence cannot, ' +
        'which a constant eye distance would not give');
-
-  S.ok('the cell window follows the camera rather than the zoom',
-       out.rows3d > out.flatRows,
-       out.rows3d + ' rows of cells covered in 3D against the ' + out.flatRows +
-       ' the flat H/zoom arithmetic gives - the difference is the rows furthest from the ' +
-       'camera, which is where the sea used to stop early');
-
-  S.ok('2D is untouched: same pixel, unit scale, same window',
-       out.off && out.roundtrip2d <= 0.001 && out.scale2d === 1 &&
-       out.win2d.tz0 === out.win2dFlat.tz0 && out.win2d.tz1 === out.win2dFlat.tz1,
-       'round trip ' + out.roundtrip2d + 'px, scale ' + out.scale2d + ', window rows ' +
-       out.win2d.tz0 + '-' + out.win2d.tz1 + ' against the arithmetic it replaced, ' +
-       out.win2dFlat.tz0 + '-' + out.win2dFlat.tz1);
 
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
 

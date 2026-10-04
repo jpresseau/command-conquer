@@ -1,17 +1,9 @@
 /* The zoom ladder — src/render/camera.js.
 
-   Zoom is not a free number. The art is 24 pixels per cell, so a screen cell of anything but
-   24, its double or its half resamples every sprite by a fraction and the whole picture goes
-   soft. That is why there is a ladder at all, and why it is chosen per device pixel ratio.
-
-   IN 3D THAT CONSTRAINT DOES NOT BIND, which is what RTS_ZOOM_3D_EXTRA is for. The things you
-   would zoom in to look at are not sprites there - a unit is geometry, with rounded edges and
-   wheels that turn on their axles - and none of that survives being drawn at 48 pixels a cell.
-   The models were made denser and there was no way to see it.
-
-   What the ground does is the honest cost, and it is not new: the terrain is a texture in both
-   modes, so it magnifies. render/detail.js is the pass that restores what magnification loses,
-   and these rungs are inside what it was built for. */
+   The ladder is chosen per device pixel ratio (RTS_ZOOM_LADDERS) and then reaches further in
+   by RTS_ZOOM_3D_EXTRA: a unit is geometry, with rounded edges and wheels that turn on their
+   axles, and none of that survives being drawn at 48 pixels a cell. Each extra rung is a whole
+   multiple of the closest base rung, so the ground magnifies by a clean factor at every one. */
 
 var { Suite } = require('../lib/assert.js');
 var { load } = require('../lib/sandbox.js');
@@ -19,38 +11,28 @@ var { load } = require('../lib/sandbox.js');
 var S = new Suite('zoom');
 var g = load(['src/rules', 'src/r3d', 'src/sprites', 'src/render', 'src/ui/navigate.js']);
 
-/* ------------------------------------------------------------- the 2D ladder ----*/
+/* ------------------------------------------------------------- the base ladders ----*/
 (function () {
   var dprs = Object.keys(g.RTS_ZOOM_LADDERS);
   S.ok('there is a ladder for every device pixel ratio the game will pick', dprs.length >= 4,
        'dpr ' + dprs.join(', '));
-
-  /* RTS_ZOOM_2D_STEPS is a claim about these tables and several specs now pin themselves to
-     it, so it is checked against them rather than trusted. */
+  /* RTS_ZOOM_BASE_STEPS is a claim about these tables and several specs pin themselves to it */
   var wrong = dprs.filter(function (d) {
-    return g.RTS_ZOOM_LADDERS[d].length !== g.RTS_ZOOM_2D_STEPS;
+    return g.RTS_ZOOM_LADDERS[d].length !== g.RTS_ZOOM_BASE_STEPS;
   });
-  S.eq('every one of them has RTS_ZOOM_2D_STEPS rungs', wrong.join(',') || 'none', 'none');
-
-  dprs.forEach(function (d) {
-    var lad = g._rtsZoomLadder(+d, false);
-    S.eq('dpr ' + d + ' in 2D is the shipped ladder, untouched',
-         lad.join(','), g.RTS_ZOOM_LADDERS[d].join(','));
-  });
+  S.eq('every one of them has RTS_ZOOM_BASE_STEPS rungs', wrong.join(',') || 'none', 'none');
 })();
 
 /* ------------------------------------------------------------- the 3D ladder ----*/
 (function () {
   Object.keys(g.RTS_ZOOM_LADDERS).forEach(function (d) {
-    var flat = g._rtsZoomLadder(+d, false), deep = g._rtsZoomLadder(+d, true);
-    S.eq('dpr ' + d + ' in 3D keeps every 2D rung and adds to them',
+    var flat = g.RTS_ZOOM_LADDERS[d], deep = g._rtsZoomLadder(+d);
+    S.eq('dpr ' + d + ' keeps every base rung and adds to them',
          deep.slice(0, flat.length).join(','), flat.join(','));
 
-    /* WHOLE MULTIPLES OF THE TOP 2D RUNG. The ladder exists so that a screen cell is a clean
-       ratio of the art; the extra rungs are further in than the sprites can follow, but the
-       TERRAIN is still a texture and still wants a clean factor to magnify by. */
+    /* WHOLE MULTIPLES OF THE TOP BASE RUNG: the ground is a texture and wants a clean factor */
     var top = flat[flat.length - 1], extra = deep.slice(flat.length);
-    S.eq('...' + extra.length + ' of them, each a whole multiple of the closest 2D rung',
+    S.eq('...' + extra.length + ' of them, each a whole multiple of the closest base rung',
          extra.map(function (v) { return v / top; }).join(','),
          g.RTS_ZOOM_3D_EXTRA.join(','));
     var ints = extra.every(function (v) { return v % top === 0; });
@@ -58,9 +40,9 @@ var g = load(['src/rules', 'src/r3d', 'src/sprites', 'src/render', 'src/ui/navig
          flat.join('/') + ' then ' + extra.join('/'));
   });
 
-  var d2 = g._rtsZoomLadder(2, true);
-  S.ok('the closest 3D rung is several times closer than 2D can reach',
-       d2[d2.length - 1] >= g._rtsZoomLadder(2, false).slice(-1)[0] * 3,   /* not pop(): 2D hands back the table itself */
+  var d2 = g._rtsZoomLadder(2);
+  S.ok('the closest rung is several times closer than the base ladder reaches',
+       d2[d2.length - 1] >= g.RTS_ZOOM_LADDERS[2].slice(-1)[0] * 3,
        d2.join(', ') + ' css px per cell - a unit is about a cell and a half across');
 
   /* strictly increasing, or the pinch and the wheel would step sideways */
@@ -72,7 +54,7 @@ var g = load(['src/rules', 'src/r3d', 'src/sprites', 'src/render', 'src/ui/navig
 /* ---------------------------------------------- between the rungs, in 3D (ui/navigate.js) ----*/
 (function () {
   var was = g.RTS_ZOOMS;
-  g.RTS_ZOOMS = g._rtsZoomLadder(2, true);
+  g.RTS_ZOOMS = g._rtsZoomLadder(2);
   var L = g.RTS_ZOOMS, off = [], i;
   for (i = 0; i < L.length; i++) if (Math.abs(g._rtsCellAt(i) - L[i]) > 1e-9) off.push(i);
   S.eq('on a whole index the smooth zoom is exactly the rung', off.join(',') || 'none', 'none');
@@ -121,12 +103,6 @@ var g = load(['src/rules', 'src/r3d', 'src/sprites', 'src/render', 'src/ui/navig
        Math.abs(g._rtsWheelRungs({ deltaY: -g.RTS_WHEEL_MAC, deltaMode: 0, ctrlKey: true }, false) - g.RTS_ZOOM_NOTCH) < 1e-9, 'mac + ctrl');
   S.ok('...and so is a 53 px click after a pause', Math.abs(g._rtsWheelRungs({ deltaY: -53, deltaMode: 0, ctrlKey: true }, true) - g.RTS_ZOOM_NOTCH) < 1e-9, 'quiet + ctrl');
   S.ok('...while a pinch\'s small stream follows the fingers', Math.abs(g._rtsWheelRungs({ deltaY: -8, deltaMode: 0, ctrlKey: true }, false) - 0.096) < 1e-9, 'pinch');
-  g.window._R3D = { on: false };
-  S.eq('in 2D a notch is a whole rung', g._rtsWheelRungs({ deltaY: 100, deltaMode: 0 }), -1);
-  S.eq('...and so is a Mac mouse click', g._rtsWheelRungs({ deltaY: -g.RTS_WHEEL_MAC * 2, deltaMode: 0 }), 1);
-  S.eq('...and a slower wheel\'s smaller notch after a pause', g._rtsWheelRungs({ deltaY: -53, deltaMode: 0 }, true), 1);
-  S.eq('...while a trackpad\'s small delta is a fraction, to add up', g._rtsWheelRungs({ deltaY: -25, deltaMode: 0 }), 0.25);
-  S.eq('...and a brisk trackpad swipe is in proportion, not a rung an event', g._rtsWheelRungs({ deltaY: -60, deltaMode: 0 }, false), 0.6);
   S.eq('no movement is no zoom', g._rtsWheelRungs({ deltaY: 0, deltaMode: 0 }), 0);
 })();
 

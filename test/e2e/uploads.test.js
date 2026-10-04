@@ -59,7 +59,7 @@ var FRAMES = 30;
     };
   });
 
-  await g.start(7, 20, { mode3d: 'default', freeze: true });
+  await g.start(7, 20, { freeze: true });
 
   var out = await g.page.evaluate(function (FRAMES) {
     var G = window._rtsG, o = {};

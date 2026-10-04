@@ -23,7 +23,7 @@ var S = new Suite('quality');
 (async function () {
   var browser = await chromium.launch();
   var g = await openPage(browser, { width: 900, height: 640, dpr: 3, quality: 'auto' });
-  await g.start(7, 20, { freeze: true, mode3d: true });
+  await g.start(7, 20, { freeze: true });
   var P = g.page;
   var on = await P.evaluate(function () { return !!(window._R3D && window._R3D.on); });
   S.ok('the 3D mode is available to check', on, on ? 'on' : 'no WebGL');

@@ -47,7 +47,7 @@ var S = new Suite('<name>');
 (async function () {
   var browser = await chromium.launch();
   var g = await openPage(browser, { width: 1100, height: 760 });   // or { device: { viewport, deviceScaleFactor } }
-  await g.start(7, 1);                 // seed, seconds simulated; { freeze: true } stops the loop, { mode3d: true } for 3D
+  await g.start(7, 1);                 // seed, seconds simulated; { freeze: true } stops the loop
   var p = g.page;
   /* real input: p.mouse, p.keyboard, (await g.touch()).start/move/end */
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
@@ -60,7 +60,7 @@ var S = new Suite('<name>');
 `Suite` has `ok(what, cond, detail)`, `eq(what, got, want)`, `near(what, got, want, tol)`,
 `throws(what, fn, re)`, `bytes` and `note(line)`. A note is a number for the reader and is not
 asserted. Good examples to copy: `unit/airspace` (the simulation, determinism, a queue),
-`e2e/airpick` (mouse in 2D and 3D) and `e2e/soundpanel` (keys, a reload, a phone touch, reachability
+`e2e/airpick` (mouse on the 3D camera) and `e2e/soundpanel` (keys, a reload, a phone touch, reachability
 by `elementFromPoint`).
 
 ## The rules that keep a test honest
