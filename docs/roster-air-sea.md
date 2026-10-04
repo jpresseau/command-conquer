@@ -91,3 +91,19 @@ Both armies' mine layer at sea (`mineboat`, `sea` + `mines:6`), from either yard
 
 `unit/seamines` (19 assertions, 9 mutants killed). One mutant survived and is equivalent: it
 lets sonar mark its own side's mines, which that side already sees.
+
+## The Repair Tender — mending at sea
+
+Both armies' repair ship (`tender`), from either yard. It is the Repair Truck with
+`healKind:'ship'`, and `core/repairtruck.js` holds both:
+- The heal aura (core/units.js `heals`) mends every friendly ship within 3 cells. It does not
+  mend vehicles, and the Repair Truck does not mend ships.
+- Left idle, it sails to the nearest damaged ship within `RTS_FIX.seek` cells (`_rtsFixWants`
+  matches on the unit's own `healKind`).
+- The opponent buys one once it has `RTS_FIX.fleet` (3) armed hulls
+  (`_rtsAIFieldVehicles('ship')`). It keeps the tender a few cells behind its largest team of
+  ships on the march (`_rtsAIFixBehind(kind)`), as it keeps the truck behind its tanks.
+
+`unit/tender` (10 assertions, 5 mutants killed). The sixth mutant survived because the line it
+removed, which snapped the AI's goal to water, was redundant: ship pathing already handles a goal
+on land. The line was taken out.

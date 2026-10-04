@@ -104,6 +104,9 @@ keeps station on your nearest ship on its own, so the fleet's cover goes whereve
 **Mine the channel.** The Mine Boat lays hidden mines in the water that go off under any enemy
 ship or hovercraft. A Destroyer's sonar finds them.
 
+**Mend the fleet at sea.** The Repair Tender repairs every ship of yours near it for free, and
+sails to a damaged one by itself, so a fleet no longer goes home to be patched up.
+
 **The enemy uses its whole garage.** It mines the approach to its own base, and once you have a
 harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands
 them beside your ore field, and goes home to do it again.

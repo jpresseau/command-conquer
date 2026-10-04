@@ -1,4 +1,6 @@
-/* core/repairtruck.js - the Repair Truck: a Repair Bay that drives to the fight.
+/* core/repairtruck.js - the Repair Truck: a Repair Bay that drives to the fight - and the Repair
+   Tender, the same at sea (`healKind:'ship'`): every rule below holds for the tender with
+   "vehicle" read as "ship", and the fleet it follows is the largest team of ships.
 
    The verb is MENDING IN THE FIELD. The repair itself is the Field Medic's aura (core/units.js
    `heals`), pointed at vehicles by `healKind` - every friendly vehicle within its radius is
@@ -12,17 +14,17 @@
    The opponent buys one once its field army has RTS_FIX.army vehicles worth mending
    (_rtsAISupport, core/aimines.js). */
 
-var RTS_FIX = { seek: 10, every: 1, army: 6, behind: 4, defended: 4 };
+var RTS_FIX = { seek: 10, every: 1, army: 6, fleet: 3, behind: 4, defended: 4 };
 
-function _rtsFixes(u) { var d = rtsUnitDef(u.def) || {}; return d.healKind === 'vehicle' && d.heals > 0; }
+function _rtsFixes(u) { var d = rtsUnitDef(u.def) || {}; return (d.healKind === 'vehicle' || d.healKind === 'ship') && d.heals > 0; }
 function _rtsFixIdle(u) { return !u.order && (!u.path || u.pi >= u.path.length); }
-/* The nearest damaged friendly vehicle within `cells`, not already in the truck's reach. */
+/* The nearest damaged friendly vehicle (or ship) within `cells`, not already in its reach. */
 function _rtsFixWants(u) {
   var G = window._rtsG, d = rtsUnitDef(u.def), best = null, bd = RTS_FIX.seek * RTS_TILE;
   for (var i = 0; i < G.ents.length; i++) {
     var v = G.ents[i];
     if (v === u || v.dead || v.inside || v.type !== 'unit' || v.side !== u.side || v.hp >= v.maxHp) continue;
-    if ((rtsUnitDef(v.def) || {}).kind !== 'vehicle') continue;
+    if ((rtsUnitDef(v.def) || {}).kind !== d.healKind) continue;
     var dd = Math.hypot(v.x - u.x, v.z - u.z);
     if (dd <= d.heals * 0.8 || dd >= bd) continue;
     bd = dd; best = v;
@@ -41,27 +43,33 @@ function _rtsFixTick(dt) {
     if (v) _rtsOrderMove(u, v.x, v.z, false);
   }
 }
-/* The opponent's truck, with nothing damaged near: behind the largest team on the march. */
-function _rtsAIFixTick(dt) {
+/* The opponent's truck, with nothing damaged near: behind the largest team on the march - of
+   vehicles for a truck, of ships for a tender. */
+function _rtsAIFixBehind(kind) {
   var G = window._rtsG, big = null, bn = 0, id;
-  G.ai.fixT = (G.ai.fixT || 0) + dt;
-  if (G.ai.fixT < RTS_FIX.every) return;
-  G.ai.fixT = 0;
   for (id in G.teams) {
     var t = G.teams[id];
     if (!t.moving) continue;
-    var n = t.members.filter(function (m) { return !m.dead && (rtsUnitDef(m.def) || {}).kind === 'vehicle'; }).length;
+    var n = t.members.filter(function (m) { return !m.dead && (rtsUnitDef(m.def) || {}).kind === kind; }).length;
     if (n > bn) { bn = n; big = t; }
   }
   var c = big && _rtsTeamCentre(big), home = _rtsHas('enemy', 'yard');
-  if (!c || !home) return;
+  if (!c || !home) return null;
   var dx = home.x - c.x, dz = home.z - c.z, L = Math.hypot(dx, dz) || 1;
-  var ax = c.x + dx / L * RTS_FIX.behind * RTS_TILE, az = c.z + dz / L * RTS_FIX.behind * RTS_TILE;
+  return { x: c.x + dx / L * RTS_FIX.behind * RTS_TILE, z: c.z + dz / L * RTS_FIX.behind * RTS_TILE };
+}
+function _rtsAIFixTick(dt) {
+  var G = window._rtsG, at = {};
+  G.ai.fixT = (G.ai.fixT || 0) + dt;
+  if (G.ai.fixT < RTS_FIX.every) return;
+  G.ai.fixT = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
     if (u.dead || u.inside || u.side !== 'enemy' || u.type !== 'unit' || !_rtsFixes(u) || !_rtsFixIdle(u)) continue;
     if (_rtsFixWants(u)) continue;                                    /* mending comes first */
-    if (Math.hypot(ax - u.x, az - u.z) > RTS_TILE * 3) _rtsOrderMove(u, ax, az, false);
+    var k = rtsUnitDef(u.def).healKind, a = k in at ? at[k] : (at[k] = _rtsAIFixBehind(k));
+    if (!a) continue;
+    if (Math.hypot(a.x - u.x, a.z - u.z) > RTS_TILE * 3) _rtsOrderMove(u, a.x, a.z, false);
   }
 }
 /* HAS THE OPPONENT DUG IN ITSELF? A truck is bought after its base has its defences, not before:
@@ -75,12 +83,13 @@ function _rtsAIDefended() {
   }
   return n >= RTS_FIX.defended;
 }
-/* How many vehicles the opponent's field army has. */
-function _rtsAIFieldVehicles() {
+/* How many vehicles the opponent's field army has - or, asked for 'ship', armed hulls its fleet. */
+function _rtsAIFieldVehicles(kind) {
   var G = window._rtsG, n = 0;
+  kind = kind || 'vehicle';
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i], d = u.type === 'unit' && rtsUnitDef(u.def);
-    if (!u.dead && u.side === 'enemy' && d && d.kind === 'vehicle' && d.weapon && !d.harvest) n++;
+    if (!u.dead && u.side === 'enemy' && d && d.kind === kind && d.weapon && !d.harvest) n++;
   }
   return n;
 }

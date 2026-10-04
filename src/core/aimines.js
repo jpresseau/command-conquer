@@ -26,7 +26,8 @@ function _rtsAISupport(S) {
          _rtsAISupportBuy(S, 'paraplane', function () { return _rtsPlayerDefences() >= RTS_JAM.digIn && _rtsAIDefended() && !!_rtsAIParaTarget(); }) ||  /* over the wall: core/paradrop.js */
          _rtsAISupportBuy(S, 'drone', function () { return _rtsAIHalfBlind() && _rtsAIDefended(); }) ||  /* eyes in fog, or on a Jammer: core/drone.js */
          _rtsAISupportBuy(S, 'bomber', function () { return _rtsPlayerDefences() >= RTS_JAM.digIn && _rtsAIDefended(); }) ||  /* a carpet across the base: core/bomber.js */
-         _rtsAISupportBuy(S, 'mineboat', function (G) { return _rtsAISeaMineSpots(G).length > 0; });  /* the channel to its yard: core/seamines.js */
+         _rtsAISupportBuy(S, 'mineboat', function (G) { return _rtsAISeaMineSpots(G).length > 0; }) ||  /* the channel to its yard: core/seamines.js */
+         _rtsAISupportBuy(S, 'tender', function () { return _rtsAIFieldVehicles('ship') >= RTS_FIX.fleet; });  /* a fleet worth mending: core/repairtruck.js */
 }
 function _rtsAISupportBuy(S, key, worth) {
   var G = window._rtsG, d = rtsUnitDef(key);
