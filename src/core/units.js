@@ -195,6 +195,10 @@ function _rtsUpdateUnit(e, dt) {
      the same code with a cannon. Cleared LOCALLY, so the order keeps its target and only the
      gun forgets about it. */
   if (tgt && tgt.side === e.side) tgt = null;
+  /* NOR IS ANYTHING NONE OF ITS GUNS CAN ENGAGE - an aircraft over a tank, the ground under a
+     Flak Track. Every way a target arrives (an order, a team's pick, a retaliation) is checked
+     where it arrives too; this is the one place they all pass through. */
+  if (tgt && !_rtsCanEngage(e, tgt)) tgt = e.target = null;
   /* An overridden mission that has run its course puts the old one back. Without this only
      the attack case ever restores, and the half of the defenders sent to stand guard would
      never resume what they were doing. */

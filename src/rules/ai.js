@@ -200,7 +200,10 @@ var RTS_AI = {
   mix:{
     vehicle:[ { key:'heavy', at:2600, w:3 }, { key:'arty',  at:2000, w:2 }, { key:'v2rl', at:2000, w:2 },
               { key:'tank', at:1600, w:4 },
-              { key:'light', at:1100, w:3 }, { key:'buggy', at:900,  w:2 } ],
+              { key:'light', at:1100, w:3 }, { key:'buggy', at:900,  w:2 },
+              /* `vsAir`: bought only against aircraft, one for every vsAir the player flies
+                 (core/ai.js). A gun that cannot hit the ground is dead weight on a ground war. */
+              { key:'flaktrack', at:1200, w:4, vsAir:2 } ],
     /* No thief in the mix, and no Commando - both are decisions about a specific building at
        a specific moment, and an AI that buys them without a plan just donates the credits to
        whatever shoots them first (the Commando also has her `only` cap). The dog IS in: it

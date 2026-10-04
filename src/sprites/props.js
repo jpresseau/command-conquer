@@ -58,7 +58,7 @@ function _sprUnit(key, side, prone, part) {
 /* Which hulls carry a turret that aims independently of the body. The gun ships do - a cruiser,
    a destroyer and a gunboat all traverse their guns - and their SHPs are laid out that way, so
    leaving them out drew the turret frames as if they were hull facings. */
-var RTS_TURRETED = { tank:1, light:1, heavy:1, destroyer:1, gunboat:1, cruiser:1 };
+var RTS_TURRETED = { tank:1, light:1, heavy:1, destroyer:1, gunboat:1, cruiser:1, flaktrack:1 };
 
 /* The concrete apron a structure stands on. In the reference every building sits on a pale
    irregular pad noticeably larger than itself - it is what stops a base looking like

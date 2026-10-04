@@ -138,6 +138,14 @@ var RTS_UNITS = [
     needs:['afld'], air:true, ammo:30, rearm:5, alt:15,
     side:'soviet', armour:'light',
     desc:'Strafes infantry. Barely scratches armour — send it at the men, not the tanks.' },
+  /* FLAK TRACK. The verb is ESCORT: the armour column takes its anti-aircraft cover with it.
+     Until this, everything that could shoot down an aircraft either stood still (the AA Gun,
+     the Rocket Turret) or was a squad on foot (rockets), so a gunship could pick apart a tank
+     column anywhere outside a base. Both armies build it, and it cannot fire at the ground at
+     all - a specialist, like the AA Gun it is the mobile half of. */
+  { key:'flaktrack',name:'Flak Track',    kind:'vehicle',  cost:800,  build:10, hp:260,  speed:12.5,turn:2.4,r:1.8, sight:26, weapon:'trackflak',
+    needs:['radar'], armour:'light',
+    desc:'Anti-aircraft guns on a half-track. Keeps gunships and jets off your tanks; cannot hit the ground.' },
   /* Armoured Personnel Carrier. UDATA.CPP's UnitAPC is IsCrusher with no turret; the transport
      rules are in UNIT.CPP - capacity via Max_Passengers, and, in Death, the half of the branch
      that matters: when a TRANSPORT dies its infantry passengers are unlimboed at the wreck and

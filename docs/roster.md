@@ -259,3 +259,39 @@ The opponent does not build it, because it is a plan-dependent unit (see above).
 
 `unit/chinook`, `e2e/chinook`, and the rotor hubs in `unit/motion`. Ten mutants, each red on its
 own assertion.
+
+## The Flak Track — anti-aircraft that keeps up
+
+Both armies' half-track with twin flak guns, built at the Vehicle Works once there is a Radar
+Post (`flaktrack`, weapon `trackflak`). The verb is ESCORT: before it, everything that could shoot
+down an aircraft either stood still (the AA Gun, the Rocket Turret) or walked (the Rocket Squad),
+so a gunship could take a tank column apart anywhere outside a base. Its guns are aa-only, like
+the AA Gun's; its sight of 26 is what lets it see a gunship standing off at 20 to fire at the tank
+beside it, and close.
+
+The opponent buys it against the sky only (`vsAir` on its mix entry, `_rtsAIWantsVsAir`): one for
+every two aircraft the player has up, none while the sky is empty.
+
+Staging the fight found **the air/ground contract had never held for units.**
+- No unit ever acquired an aircraft by itself. Its own acquisition called `_rtsFindTarget`
+  without a weapon, and with no weapon in hand every aircraft was refused and every ground
+  target allowed. A Rocket Squad watched a gunship work over the tank beside it, and an aa-only
+  gun was free to shell the ground. A target now counts if any gun aboard can engage it
+  (`_rtsGunEngages`, `_rtsCanEngage`).
+- Any armed unit a gunship hit shot it down. Retaliation checked only the armour modifier, so a
+  tank's cannon took 125 off a 200 hp gunship in one round. Retaliation, attack orders and the
+  engage step now all ask whether a gun can engage. As a result, a lone gunship now kills a lone
+  Battle Tank with its eight missiles, as its rules always said it would. With a Flak Track
+  beside it, the tank comes through at 67%.
+
+The ladder did not move on any rung, seed for seed: an idle player is overrun before aircraft
+matter. That is not evidence that the air war is balanced. `unit/flaktrack` stages it instead.
+
+### Verified
+
+`unit/flaktrack` checks the fight with and without cover, never aiming at the ground, every road
+by which a target arrives, a Rocket Squad acquiring a gunship unprompted, and the opponent's real
+buy loop. `unit/motion` now measures the front of the TRACK rather than of the model, because a
+half-track's steered wheels lie ahead of its sprocket. Ten mutants were killed. The one that
+survived, the flak's reach cut from 22 to 19, showed that its sight carries the escort, not its
+reach, and the comment says so.

@@ -169,6 +169,10 @@ function _rtsCanRetaliate(tgt, from) {
   /* "Don't allow retaliation if it isn't equipped with a weapon that can deal with the
      threat" - a Modifier of zero against that armour means shooting back is pointless. */
   if (!rtsVerses(w, from)) return false;
+  /* ...and the air/ground contract, which the armour modifier knows nothing about. Without it
+     a tank a gunship hit turned and shot the gunship down with its cannon - 125 off a 200 hp
+     airframe in one round - so no aircraft outlived a sortie against anything armed. */
+  if (!_rtsCanEngage(tgt, from)) return false;
   /* Idle: always turn and fight. */
   if (!tgt.order) return true;
   /* Already busy: "Compare potential threat of the current target and the potential new

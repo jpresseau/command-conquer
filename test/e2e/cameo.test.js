@@ -123,7 +123,7 @@ var S = new Suite('cameo');
   S.ok('and it goes away when the reason does',
        !/You may only have one at a time\./.test(cleared.after),
        JSON.stringify(cleared.after));
-  S.ok('...leaving the ordinary description behind', /Commando/.test(cleared.after),
+  S.ok('...leaving the ordinary description behind', /Breacher/.test(cleared.after),
        JSON.stringify(cleared.after));
 
   /* ---------- 4. no cameo is nearest-neighbour DOWNSCALED onto its plate ----------

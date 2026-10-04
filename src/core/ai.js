@@ -87,6 +87,18 @@ function _rtsAIWants(S) {
    in. InfantryReserve is the "we are rich" line: above it the AI restarts a line the instant
    it frees up, below it it only decides on its slow tick, so a poor opponent trickles and a
    rich one runs its factories flat out. */
+/* ANSWERED TO THE SKY. A mix entry with `vsAir` is anti-aircraft and nothing else: the opponent
+   wants one for every `per` aircraft the player has up, and none at all while the sky is empty. */
+function _rtsAIWantsVsAir(key, per) {
+  var G = window._rtsG, flyers = 0, have = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.type !== 'unit') continue;
+    if (e.side === 'player' && e.air) flyers++;
+    else if (e.side === 'enemy' && e.def === key) have++;
+  }
+  return have < Math.ceil(flyers / per);
+}
 function _rtsAIUnits(S) {
   var G = window._rtsG, harv = 0, i;
   for (i = 0; i < G.ents.length; i++) {
@@ -184,6 +196,7 @@ function _rtsAIUnits(S) {
            not drift apart. */
         if (rtsMoney(S) < _rtsAISpare(S) + _rtsCostOf('enemy', rtsUnitDef('engineer'))) continue;
       }
+      if (list[i].vsAir && !_rtsAIWantsVsAir(list[i].key, list[i].vsAir)) continue;
       if (list[i].key === 'lst') {
         if (!_rtsAIWorthCrossing()) continue;
         var craft = 0;

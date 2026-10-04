@@ -98,6 +98,13 @@ var RTS_WEAPONS = {
   flak:       { dmg:22, range:24, cool:0.5, burst:2, shot:'tracer', speed:0, splash:1.4, aa:true,
                 aaOnly:true,
                 verses:{ none:0.9, wood:0.15, light:0.9, heavy:0.35, concrete:0.10 } },
+  /* The Flak Track's twin guns: the AA Gun's flak, lighter and a little shorter, on a chassis
+     that keeps up with the tanks it covers. What makes it an escort is its SIGHT (26, in
+     rules/units.js), not this reach: it spots a gunship standing off to fire at the tank beside
+     it and closes. Measured, unit/flaktrack: at sight 20 it never saw one hovering 22 away. */
+  trackflak:  { dmg:18, range:22, cool:0.45, burst:2, shot:'tracer', speed:0, splash:1.2, aa:true,
+                aaOnly:true,
+                verses:{ none:0.9, wood:0.15, light:0.9, heavy:0.35, concrete:0.10 } },
   bite:       { dmg:22, range:5.5,cool:0.55, shot:'tracer',  speed:0,  splash:0, maul:true,
                 verses:{ none:1.4,  wood:0,    light:0,    heavy:0,    concrete:0 } },
   /* Two .45s: shreds infantry, barely marks anything else. The Commando's threat to buildings
