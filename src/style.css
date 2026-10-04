@@ -192,6 +192,10 @@
 #rcgRts .rts-over button{margin:4px;padding:8px 18px;border:0;border-radius:6px;background:#2e6fd0;color:#fff;
   font-weight:600;cursor:pointer}
 #rcgRts .rts-over button:hover{background:#3d84ee}
+/* the daily battle's result, a line to copy and post (daily.js) */
+#rcgRts .rts-over .daily{margin:6px 0 14px;padding:10px 12px;border:1px solid #34465c;border-radius:8px;background:#111821}
+#rcgRts .rts-over .daily .dline{font:600 13px/1.4 ui-monospace,Menlo,Consolas,monospace;opacity:1;user-select:all}
+#rcgRts .rts-over .daily p.s{margin:6px 0 0}
 
 /* --- command sidebar: credits / radar / power strip / build tiles --- */
 #rcgRts .rts-bar{flex:0 0 244px;display:flex;flex-direction:column;gap:7px;padding:7px;

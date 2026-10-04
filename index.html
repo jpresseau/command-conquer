@@ -203,6 +203,10 @@
 #rcgRts .rts-over button{margin:4px;padding:8px 18px;border:0;border-radius:6px;background:#2e6fd0;color:#fff;
   font-weight:600;cursor:pointer}
 #rcgRts .rts-over button:hover{background:#3d84ee}
+/* the daily battle's result, a line to copy and post (daily.js) */
+#rcgRts .rts-over .daily{margin:6px 0 14px;padding:10px 12px;border:1px solid #34465c;border-radius:8px;background:#111821}
+#rcgRts .rts-over .daily .dline{font:600 13px/1.4 ui-monospace,Menlo,Consolas,monospace;opacity:1;user-select:all}
+#rcgRts .rts-over .daily p.s{margin:6px 0 0}
 
 /* --- command sidebar: credits / radar / power strip / build tiles --- */
 #rcgRts .rts-bar{flex:0 0 244px;display:flex;flex-direction:column;gap:7px;padding:7px;
@@ -652,6 +656,8 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   <p class="diffnote" id="rtsVoxNote" hidden></p>
   <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE</button>
   <button type="button" class="go resume" id="rtsResume" onclick="rtsLoadGame()" hidden>RESUME BATTLE</button>
+  <!-- One map a day, the same for everyone: daily.js -->
+  <button type="button" class="go resume" id="rtsDaily" onclick="rtsDailyStart(this)">DAILY BATTLE<small id="rtsDailyNote"></small></button>
   <!-- Why a resume did not happen, and why one is not on offer. This screen has no message
        line, so without somewhere to put the reason the button simply did nothing. -->
   <p class="diffnote" id="rtsResumeNote" hidden></p>
@@ -700,7 +706,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">c0faa31 · 2026-10-04</div>
+  <div id="rtsBuild" title="build">abf7561 · 2026-10-04</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -28592,11 +28598,18 @@ function _rtsSyncSidebar(dt) {
       + '<p>' + (G.over === 'win' ? 'The ' + rtsArmyName('enemy') + ' forces have been wiped off the map.'
                           : rtsArmyName('player') + ' command has fallen.') + '</p>'
       + '<p class="s">Enemy units destroyed: ' + G.stats.killed + ' · Units lost: ' + G.stats.lostU + '</p>'
+      + (typeof rtsDailyOverHTML === 'function' ? rtsDailyOverHTML(G) : '')
       + '<button type="button" onclick="rtsRestart()">Play again</button> '
       + '<button type="button" onclick="rtsClose()">Quit</button></div>';
   }
 }
-function rtsRestart() { rtsClose(); setTimeout(function () { rtsOpen(); }, 60); }
+/* Play again: a daily replays the day's battle, with its army and difficulty kept (daily.js). */
+function rtsRestart() {
+  var d = window._RTS_DAILY, prev = window._RTS_DAILY_PREV;
+  rtsClose();
+  if (d) { window._RTS_DAILY = d; window._RTS_DAILY_PREV = prev; window._RTS_DIFF = d.diff; window._RTS_ARMY = d.army; }
+  setTimeout(function () { rtsOpen(d ? d.seed : undefined); }, 60);
+}
 </script>
 <script>/* ui/superbar.js - the superweapon buttons: one per superweapon the player can charge, each
    with its own charge bar. Part of rts.ui, which owns the DOM.
@@ -30714,6 +30727,109 @@ function rtsLoadGame() {
 }
 </script>
 
+<script>/* daily.js - the DAILY BATTLE: one map a day, the same for everyone, and a result worth sharing.
+
+   The simulation is deterministic from its seed (all gameplay randomness runs off the scenario
+   seed), so the only thing a daily needs to agree on is the seed and the rules around it. Both
+   come from the UTC date alone: the same day gives every player the same map, the same army, the
+   same difficulty and the same tide - nothing is fetched, nothing is shared but a line of text.
+
+   A daily does NOT touch the player's own choices: the army and difficulty it fixes are put back
+   when the battle ends (rtsHome), and nothing of it is written over the stored preferences. The
+   best result of each day is kept, and the end screen offers a line to copy and post. */
+
+var RTS_DAILY_LS = 'bw.daily.';           /* + date: the best result of that day */
+
+function rtsDailyDate(now) { return (now || new Date()).toISOString().slice(0, 10); }
+/* Everything that makes the day's battle, from the date and nothing else. */
+function rtsDailySpec(date) {
+  var h = 2166136261 >>> 0, s = 'breachwater:' + date;
+  for (var i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619) >>> 0;
+  return { date: date, seed: 1 + (h % 60000), army: (h >>> 16) & 1 ? 'soviet' : 'allied', diff: 'normal' };
+}
+
+function rtsDailyStart(btn) {
+  var d = rtsDailySpec(rtsDailyDate());
+  /* the player's own choices, kept to be put back */
+  window._RTS_DAILY_PREV = { diff: window._RTS_DIFF, army: window._RTS_ARMY };
+  window._RTS_DAILY = d;
+  window._RTS_DIFF = d.diff;
+  window._RTS_ARMY = d.army;                 /* for this battle only - rtsSetArmySide would store it */
+  var err = document.getElementById('rtsErr');
+  if (err) err.style.display = 'none';
+  if (btn) { btn.disabled = true; btn.textContent = 'DEPLOYING…'; }
+  setTimeout(function () {
+    try {
+      document.getElementById('rtsHome').classList.add('gone');
+      rtsOpen(d.seed);
+    } catch (e) {
+      rtsDailyEnd(); rtsHome();
+      if (err) { err.style.display = 'block'; err.textContent = 'Could not start:\n' + ((e && e.message) || e); }
+    }
+  }, 30);
+}
+/* The battle is over and the player is back on the title: their own army and difficulty again. */
+function rtsDailyEnd() {
+  var p = window._RTS_DAILY_PREV;
+  if (!p) return;
+  window._RTS_DIFF = p.diff;
+  window._RTS_ARMY = p.army;
+  window._RTS_DAILY = null; window._RTS_DAILY_PREV = null;
+}
+
+function rtsDailyClock(secs) {
+  var s = Math.max(0, Math.round(secs)), m = Math.floor(s / 60);
+  return m + ':' + String(s % 60).padStart(2, '0');
+}
+/* Better: any victory over any defeat; the faster victory; the longer defeat. */
+function rtsDailyBetter(a, b) {
+  if (!b) return true;
+  if (a.won !== b.won) return a.won;
+  return a.won ? a.secs < b.secs : a.secs > b.secs;
+}
+/* The day's result, recorded once, and the line that says it. */
+function rtsDailyResult(G) {
+  var d = window._RTS_DAILY;
+  if (!d || !G || !G.over) return null;
+  var r = { won: G.over === 'win', secs: G.t, lost: G.stats.lostU, killed: G.stats.killed };
+  var best = null, key = RTS_DAILY_LS + d.date;
+  try { best = JSON.parse(window.localStorage.getItem(key) || 'null'); } catch (e) { best = null; }
+  var isBest = rtsDailyBetter(r, best);
+  if (isBest) { try { window.localStorage.setItem(key, JSON.stringify(r)); } catch (e) {} best = r; }
+  var line = 'Breachwater daily ' + d.date + ' · ' + (r.won ? 'Victory in ' : 'Held out ') + rtsDailyClock(r.secs) +
+             ' · ' + r.killed + ' destroyed, ' + r.lost + ' lost';
+  return { line: line, best: best, isBest: isBest, spec: d };
+}
+function rtsDailyCopy(btn) {
+  var t = document.getElementById('rtsDailyLine');
+  if (!t) return;
+  var text = t.textContent, done = function () { if (btn) btn.textContent = 'COPIED'; };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).then(done, function () {}); return; }
+  } catch (e) {}
+  var r = document.createRange(); r.selectNodeContents(t);
+  var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+  try { if (document.execCommand('copy')) done(); } catch (e) {}
+}
+/* The end-screen block for a daily: the line, a copy button, and the day's best. */
+function rtsDailyOverHTML(G) {
+  var res = rtsDailyResult(G);
+  if (!res) return '';
+  var b = res.best;
+  return '<div class="daily"><p class="dline" id="rtsDailyLine">' + res.line + '</p>'
+    + '<button type="button" onclick="rtsDailyCopy(this)">COPY RESULT</button>'
+    + '<p class="s">' + (res.isBest ? 'Your best today.' : 'Your best today: ' + (b.won ? 'victory in ' : 'held out ') + rtsDailyClock(b.secs) + '.') + '</p></div>';
+}
+/* The title screen's note under the button: what today's battle is. */
+function rtsDailyNote() {
+  var n = document.getElementById('rtsDailyNote');
+  if (!n || typeof rtsArmyTitle !== 'function') return;
+  var d = rtsDailySpec(rtsDailyDate()), best = null;
+  try { best = JSON.parse(window.localStorage.getItem(RTS_DAILY_LS + d.date) || 'null'); } catch (e) {}
+  n.textContent = 'Today, the same map for everyone: the ' + rtsArmyTitle(d.army) + ', on ' + RTS_DIFF[d.diff].name + '.'
+    + (best ? ' Your best: ' + (best.won ? 'victory in ' : 'held out ') + rtsDailyClock(best.secs) + '.' : '');
+}
+</script>
 <script>/* title.js - the standalone shell around the game: the title screen, the difficulty picker,
    the army picker, RESUME BATTLE, the install prompt, and the START button.
 
@@ -30752,6 +30868,11 @@ function rtsHome(){
   if (h) h.classList.remove('gone');
   var b = document.getElementById('rtsGo');
   if (b) { b.disabled = false; b.textContent = 'START BATTLE'; }
+  /* a daily battle borrowed the army and difficulty: put the player's own back (daily.js) */
+  if (typeof rtsDailyEnd === 'function') rtsDailyEnd();
+  var db = document.getElementById('rtsDaily');
+  if (db) { db.disabled = false; db.innerHTML = 'DAILY BATTLE<small id="rtsDailyNote"></small>'; }
+  if (typeof rtsDailyNote === 'function') rtsDailyNote();
   rtsBuildDiff();
   if (typeof rtsSkySync === 'function') rtsSkySync();     /* the conditions: render3d/sky3d.js */
   rtsShowResume();
@@ -30810,6 +30931,7 @@ rtsBuildDiff();
 if (typeof rtsSkySync === 'function') rtsSkySync();
 rtsShowResume();
 rtsBuildArmyPick();
+if (typeof rtsDailyNote === 'function') rtsDailyNote();
 
 /* THE OLD ARCHIVE STORE, gone. Earlier versions could keep a player's own game archives in
    IndexedDB, 13 MB and up; that feature is removed, so a returning player gets the space back. */
