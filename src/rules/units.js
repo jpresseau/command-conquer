@@ -146,6 +146,13 @@ var RTS_UNITS = [
   { key:'flaktrack',name:'Flak Track',    kind:'vehicle',  cost:800,  build:10, hp:260,  speed:12.5,turn:2.4,r:1.8, sight:26, weapon:'trackflak',
     needs:['radar'], tracked:true, armour:'light',
     desc:'Anti-aircraft guns on a half-track. Keeps gunships and jets off your tanks; cannot hit the ground.' },
+  /* HOVERCRAFT. The verb is the BEACH: it drives on land and on open water alike (`hover`, the
+     third domain - core/grid.js _rtsBlocked), so five men can be carried down a river, across a
+     bay and up the far beach without a landing craft, a bridge or a turn of the tide. Fast and
+     thin-skinned, with a machine gun for the men waiting on the sand. Torpedoes run under it. */
+  { key:'hovercraft',name:'Hovercraft',   kind:'vehicle',  cost:950,  build:11, hp:280,  speed:16,  turn:2.4,r:2.0, sight:18, weapon:'mg',
+    needs:['radar'], hover:true, carries:5, takes:['infantry'], armour:'light',
+    desc:'Drives on land and water alike. Carries five infantry across a bay and up the far beach.' },
   /* BRIDGE LAYER. The verb is the CROSSING: a gap the map gave no bridge over, spanned where the
      player chooses. At the water's edge, DEPLOY (D) turns it into a one-lane bridge of up to
      eight cells across the water ahead - core/bridgelayer.js. Unarmed, and spent in the laying. */

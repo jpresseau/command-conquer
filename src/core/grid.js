@@ -133,13 +133,16 @@ function _rtsBlocked(tx, tz, dom) {
   if (!_rtsInB(tx, tz)) return true;
   var i = _rtsIdx(tx, tz);
   if (dom === 'sea') return G.terrain[i] !== RTS_T_WATER || G.blocked[i] === 1;
+  /* 'hover' is both: open water as a ship has it, and everything a land unit may cross. A
+     structure, a shipyard's water, rock and trees still stop it. */
+  if (dom === 'hover') return G.terrain[i] === RTS_T_WATER ? G.blocked[i] === 1 : G.blocked[i] !== 0;
   return G.blocked[i] !== 0;
 }
-/* The domain a unit moves in, from its def. Anything not marked `sea` walks. */
+/* The domain a unit moves in, from its def. Anything not marked `sea` or `hover` walks. */
 function _rtsDomainOf(e) {
   if (!e) return null;
   var d = (e.type === 'unit') ? rtsUnitDef(e.def) : null;
-  return (d && d.sea) ? 'sea' : null;
+  return (d && d.sea) ? 'sea' : (d && d.hover) ? 'hover' : null;
 }
 
 /* Deterministic PRNG so a given seed always lays out the same battlefield. */
@@ -370,7 +373,10 @@ function _rtsPath(sx, sz, gx, gz, dom) {
   while (j < pts.length) {
     var far = j;
     for (var k = pts.length - 1; k > j; k--) {
-      if (!_rtsClearLine(px, pz, pts[k].x, pts[k].z)) continue;
+      /* The domain is passed for a hovercraft, whose straight line may cross water. Ships are
+         still pulled against LAND here - which never clears, so their paths are never
+         straightened - and changing that moves every fleet; it is left as it was. */
+      if (!_rtsClearLine(px, pz, pts[k].x, pts[k].z, dom === 'hover' ? dom : undefined)) continue;
       if (cum && _rtsLineClimb(px, pz, pts[k].x, pts[k].z) > cum[k] - pc + RTS_PULL_SLACK) continue;
       far = k; break;
     }

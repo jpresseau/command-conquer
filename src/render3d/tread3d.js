@@ -69,7 +69,7 @@ function _r3dTreadTick(G, R3) {
     var e = E[i];
     if (e.dead || e.type !== 'unit' || e.air) continue;
     var d = rtsUnitDef(e.def);
-    if (!d || d.kind === 'infantry' || d.kind === 'air' || d.sea) continue;
+    if (!d || d.kind === 'infantry' || d.kind === 'air' || d.sea || d.hover) continue;   /* a skirt leaves no track */
     var l = L[e.id];
     if (!l) { L[e.id] = [e.x, e.z, 0]; continue; }
     var dx = e.x - l[0], dz = e.z - l[1], m = Math.sqrt(dx * dx + dz * dz);
