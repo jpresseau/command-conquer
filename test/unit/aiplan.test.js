@@ -187,4 +187,20 @@ S.note(Object.keys(mixKeys).length + ' units in the shopping list, ' +
          (loose.join(', ') || 'none'));
 })();
 
+/* `only` MAKES max A CEILING (core/teams.js _rtsTypeCap). e2e/teamsupply watches for a second
+   Snatch in real matches, but an idle player is overrun before the opponent's army is big enough
+   to want one - every run's peak is one Snatch - so the rule is asked here directly, with an army
+   large enough to want many teams of every type. */
+(function () {
+  var keep = g._rtsTeamCap;
+  g._rtsTeamCap = function () { return 40; };
+  var only = g.RTS_TEAM_TYPES.filter(function (t) { return t.only; });
+  var ceil = only.filter(function (t) { return g._rtsTypeCap(t, 1) > (t.max == null ? 1 : t.max); }).map(function (t) { return t.name; });
+  var free = g.RTS_TEAM_TYPES.filter(function (t) { return !t.only && g._rtsTypeCap(t, 1) <= (t.max == null ? g.RTS_TEAM_MAX : t.max); });
+  g._rtsTeamCap = keep;
+  S.ok('a type built around a hard-capped unit is held to its max however big the army',
+       only.length >= 2 && !ceil.length, only.map(function (t) { return t.name; }).join(', ') + (ceil.length ? ' - over: ' + ceil.join(', ') : ''));
+  S.ok('...while every other type scales with it', free.length === 0, free.map(function (t) { return t.name; }).join(', ') || 'all scale');
+})();
+
 require('../lib/report.js')(S);

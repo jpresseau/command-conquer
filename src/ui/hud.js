@@ -267,8 +267,8 @@ function _rtsDrawMini() {
     else {
       var tk = G.terrain ? G.terrain[idx] : 0;
       if (tk === 0) continue;
-      /* a bridge is road on the radar: it is the way across */
-      g.fillStyle = TCOL[tk === RTS_T_WATER && _rtsIsBridgeCell(idx) ? RTS_T_ROAD : tk] || TCOL[0];
+      /* a deck reads as road, and flats the tide has gone out from as sand: core/tide.js */
+      g.fillStyle = TCOL[tk === RTS_T_WATER && _rtsIsBridgeCell(idx) ? RTS_T_ROAD : tk === RTS_T_WATER && G.tideDry && G.tideDry[idx] ? RTS_T_SAND : tk] || TCOL[0];
     }
     g.fillRect(tx * sc, tz * sc, sc, sc);
   }

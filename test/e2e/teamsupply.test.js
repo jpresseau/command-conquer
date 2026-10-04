@@ -20,7 +20,12 @@
    WHAT THIS PINS is the invariant rather than the number: no `only` type may ever have more teams
    in the field at once than it is allowed. That is the thing that was false, it is cheap to
    check, and it cannot be satisfied by accident. The wasted-unit count is reported beside it
-   because it is what the fault actually cost. */
+   because it is what the fault actually cost.
+
+   AND IT IS NO LONGER WHERE THE RULE IS PINNED. An idle player is now overrun before the
+   opponent's army is big enough to want a second Snatch - every run's peak is one - so a mutant
+   that removed the ceiling passed here. unit/aiplan asks _rtsTypeCap directly, with an army big
+   enough to want many teams, and that is the check that goes red. */
 
 var { chromium } = require('playwright');
 var { Suite } = require('../lib/assert.js');
@@ -69,20 +74,29 @@ var SECS = 420;
           for (var id in G.teams) {
             var tm = G.teams[id];
             live[tm.type.name] = (live[tm.type.name] || 0) + 1;
-            if (!seen[id]) seen[id] = { name: tm.type.name, marched: false };
+            if (!seen[id]) seen[id] = { name: tm.type.name, marched: false, at: G.t };
             if (tm.hasBeen) seen[id].marched = true;
           }
           for (var k in live) if (!(peak[k] >= live[k])) peak[k] = live[k];
         }
-        var raised = 0, marched = 0, held = 0;
-        for (var q in seen) { raised++; if (seen[q].marched) marched++; }
+        /* A TEAM STILL FORMING WHEN THE WINDOW CLOSES has not failed to march - it has not had
+           the time. Counted, it made the ratio below a coin toss on whichever team happened to be
+           raised in the last two minutes: main read 30 of 33 and the same code with the tide moving
+           a team's timing read 29. The end is the MATCH's end, G.t, not the window's: an idle
+           player is often overrun first. Only a team raised more than RTS_TEAM_FORM_TIMEOUT before
+           it is asked whether it marched. */
+        var raised = 0, marched = 0, held = 0, forming = 0;
+        for (var q in seen) {
+          if (!seen[q].marched && G.teams[q] && G.t - seen[q].at < RTS_TEAM_FORM_TIMEOUT) { forming++; continue; }
+          raised++; if (seen[q].marched) marched++;
+        }
         for (var i = 0; i < G.ents.length; i++) {
           var e = G.ents[i];
           if (e.dead || e.side !== 'enemy' || e.type !== 'unit') continue;
           if (e.sqd != null && G.teams[e.sqd] && !G.teams[e.sqd].hasBeen) held++;
         }
         runs.push({ tag: c[0] + '/' + c[1] + '/' + seed, peak: peak,
-                    raised: raised, marched: marched, held: held });
+                    raised: raised, marched: marched, held: held, forming: forming });
       });
     });
     return { capped: capped, runs: runs };
@@ -95,7 +109,7 @@ var SECS = 420;
   var raised = 0, marched = 0, held = 0;
   out.runs.forEach(function (r) {
     raised += r.raised; marched += r.marched; held += r.held;
-    S.note('  ' + r.tag.padEnd(20) + r.marched + ' of ' + r.raised + ' teams marched, ' +
+    S.note('  ' + r.tag.padEnd(20) + r.marched + ' of ' + r.raised + ' teams marched (' + r.forming + ' still forming at the end), ' +
            r.held + ' units held   peak live: ' +
            Object.keys(r.peak).map(function (k) { return k + '×' + r.peak[k]; }).join(' '));
   });

@@ -132,11 +132,14 @@ function _rtsBlocked(tx, tz, dom) {
   var G = window._rtsG;
   if (!_rtsInB(tx, tz)) return true;
   var i = _rtsIdx(tx, tz);
-  if (dom === 'sea') return G.terrain[i] !== RTS_T_WATER || G.blocked[i] === 1;
+  /* THE TIDE (core/tide.js): flats the sea has gone out from are ground to a land unit and no
+     water to a ship. This is the one place passability hears of it. */
+  var dry = G.tideDry && G.tideDry[i];
+  if (dom === 'sea') return G.terrain[i] !== RTS_T_WATER || G.blocked[i] === 1 || dry === 1;
   /* 'hover' is both: open water as a ship has it, and everything a land unit may cross. A
      structure, a shipyard's water, rock and trees still stop it. */
   if (dom === 'hover') return G.terrain[i] === RTS_T_WATER ? G.blocked[i] === 1 : G.blocked[i] !== 0;
-  return G.blocked[i] !== 0;
+  return G.blocked[i] !== 0 && dry !== 1;
 }
 /* The domain a unit moves in, from its def. Anything not marked `sea` or `hover` walks. */
 function _rtsDomainOf(e) {
