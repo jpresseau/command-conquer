@@ -136,6 +136,8 @@ function _rtsBlocked(tx, tz, dom) {
      water to a ship. This is the one place passability hears of it. */
   var dry = G.tideDry && G.tideDry[i];
   if (dom === 'sea') return G.terrain[i] !== RTS_T_WATER || G.blocked[i] === 1 || dry === 1;
+  /* 'shallow' is the River Monitor's (core/monitor.js): water at any tide - it sits on the flats */
+  if (dom === 'shallow') return G.terrain[i] !== RTS_T_WATER || G.blocked[i] === 1;
   /* 'hover' is both: open water as a ship has it, and everything a land unit may cross. A
      structure, a shipyard's water, rock and trees still stop it. */
   if (dom === 'hover') return G.terrain[i] === RTS_T_WATER ? G.blocked[i] === 1 : G.blocked[i] !== 0;
@@ -145,7 +147,7 @@ function _rtsBlocked(tx, tz, dom) {
 function _rtsDomainOf(e) {
   if (!e) return null;
   var d = (e.type === 'unit') ? rtsUnitDef(e.def) : null;
-  return (d && d.sea) ? 'sea' : (d && d.hover) ? 'hover' : null;
+  return (d && d.shallow) ? 'shallow' : (d && d.sea) ? 'sea' : (d && d.hover) ? 'hover' : null;
 }
 
 /* Deterministic PRNG so a given seed always lays out the same battlefield. */
@@ -294,7 +296,7 @@ function _rtsPath(sx, sz, gx, gz, dom) {
      else made: e2e/navy cuts its duel arena over whatever terrain was there, and the
      submarine-versus-gunboat result went from +33 to -33 as hulls sailed around scenery they
      should never have noticed. Any map this game did not generate can do the same. */
-  var HGT = (dom === 'sea') ? null : ((window._rtsG && window._rtsG.height) || null);
+  var HGT = (dom === 'sea' || dom === 'shallow') ? null : ((window._rtsG && window._rtsG.height) || null);
   function H(i) { var ax = Math.abs((i % RTS_N) - gtx), az = Math.abs(((i / RTS_N) | 0) - gtz);
     return (ax > az) ? (ax - az) + 1.41421 * az : (az - ax) + 1.41421 * ax; }
   P.g[start] = 0; P.f[start] = H(start); P.stamp[start] = run; P.state[start] = 1; _rtsHeapPush(start);

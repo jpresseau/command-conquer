@@ -144,6 +144,10 @@ var RTS_WEAPONS = {
      work rather than a special case: 1.4 against wood and 1.3 against concrete make it a siege
      piece, 0.75 against heavy make it a poor duellist, and a Cruiser that lets submarines close
      is in real trouble - it carries no sonar and its reach is worth nothing at knife range. */
+  /* The River Monitor's twin heavy gun: a short-range shore battery, heavy against buildings,
+     from a hull that sits right under the coast (core/monitor.js). */
+  monitorgun: { dmg:70, range:24, cool:2.8, shot:'shell', speed:50, splash:3.0, wall:true, wood:true,
+                verses:{ none:0.6, wood:1.3, light:1.0, heavy:0.8, concrete:1.2 } },
   cruisergun: { dmg:90, range:38, cool:3.4, burst:2, shot:'shell', speed:55, splash:4.0,
                 wall:true, wood:true,
                 verses:{ none:0.5, wood:1.4, light:1.0, heavy:0.75, concrete:1.3 } },

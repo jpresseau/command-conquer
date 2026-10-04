@@ -73,6 +73,20 @@ function _sprUnitHulls(X, key) {
     });
     _r3Cyl(m, -Lt * 0.10, 3.6, Wt * 0.30, 0.6, 1.8, GN[1], GN[2], 16);   /* gas bottles for the rig */
     _r3Cyl(m, -Lt * 0.10, 3.6, Wt * 0.18, 0.6, 1.8, GN[1], GN[2], 16);
+  } else if (key === 'monitor') {
+    /* RIVER MONITOR. A low flat barge riding almost awash, with ONE big armoured turret and its
+       twin heavy barrels forward, a small conning tower behind it and nothing else. The identity
+       is the low hull under the oversized turret - a gun that floats rather than a ship. */
+    var Lo = 22, Wo = 8.0;
+    _r3Slab(m, 0, 0.4, 0, Lo, 2.0, Wo, 1.6, VH[0], VH[1]);              /* the low hull, square-ended */
+    _r3Box(m, Lo * 0.44, 0.6, 0, Lo * 0.12, 1.6, Wo * 0.70, VH[1], VH[3]); /* blunt bow */
+    _r3Cyl(m, Lo * 0.12, 3.0, 0, 3.4, 2.6, VH[3], VH[1], 20);           /* the turret */
+    _r3Cyl(m, Lo * 0.12, 5.4, 0, 2.6, 0.5, TM[1], TM[3], 20);           /* team ring on its roof */
+    for (var bb = -1; bb <= 1; bb += 2) _r3Box(m, Lo * 0.12 + 5.2, 3.6, bb * 0.9, 7.0, 0.9, 0.9, GN[0], GN[2]);   /* twin heavy barrels */
+    _r3Box(m, -Lo * 0.18, 3.4, 0, 3.4, 3.2, 3.2, VH[2], VH[0]);          /* conning tower */
+    _r3Box(m, -Lo * 0.18 + 1.75, 4.4, 0, 0.3, 0.8, 2.6, RTS_PAL.glass, RTS_PAL.glass);   /* its vision slit */
+    _r3Cyl(m, -Lo * 0.32, 3.0, 0, 0.9, 2.0, DK[1], DK[0], 16);          /* low stack */
+    for (var rl = -1; rl <= 1; rl += 2) _r3Box(m, -Lo * 0.05, 1.6, rl * Wo * 0.47, Lo * 0.80, 0.4, 0.3, DK[0], DK[0]);   /* rubbing strakes */
   } else return false;
   return true;
 }

@@ -329,6 +329,14 @@ var RTS_UNITS = [
     needs:['shipyard'], sea:true, heals:RTS_TILE * 3, healRate:14, healKind:'ship',
     armour:'heavy',
     desc:'Repairs your ships near it, for free, wherever they are. Sails to a damaged one by itself. Unarmed.' },
+  /* RIVER MONITOR. The verb is the LOW-WATER BOMBARDMENT: flat-bottomed (`shallow`, its own
+     domain), it sits on the tidal flats when the sea goes out and every other hull has to keep
+     off them, and shells the coast from right under it. The Dominion's, from its Sub Pen -
+     core/monitor.js. */
+  { key:'monitor',  name:'River Monitor',kind:'ship',     cost:1300, build:15, hp:750,  speed:9,   turn:1.4,r:2.4, sight:24,
+    weapon:'monitorgun', needs:['subpen'], sea:true, shallow:true, side:'soviet',
+    armour:'heavy',
+    desc:'A flat-bottomed gun barge. At low tide it can sit on the drying flats, where no other ship can go, and shell the shore.' },
   { key:'lst',      name:'Landing Craft',kind:'ship',     cost:700,  build:10, hp:400,  speed:12,  turn:1.6,r:2.4, sight:14, weapon:null,
     needs:['shipyard'], sea:true, carries:5, takes:['infantry', 'vehicle'],
     armour:'heavy',
