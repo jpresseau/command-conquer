@@ -154,7 +154,7 @@ function _sprUnitModel(key, side, prone, part) {
      model line reads the same as it did when this was one function. */
   var X = { m:m, TM:TM, VH:VH, S:S, DK:DK, O:O, C:C, GN:GN,
             d:d, prone:prone, part:part, side:side, tracks:tracks };
-  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key))) {
+  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key) || _sprUnitHulls(X, key))) {
     _r3Box(m, 0, 0, -5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 0, 5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 2.5, 0, 15, 4, 8, TM[0], TM[1]);

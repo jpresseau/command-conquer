@@ -706,7 +706,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">ac97bda · 2026-10-04</div>
+  <div id="rtsBuild" title="build">f9be70f · 2026-10-04</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1276,6 +1276,14 @@ var RTS_UNITS = [
      RA sinks an LST's whole cargo with it and so do we - see _rtsSpillCargo. That is what
      keeps it a decision: a loaded transport is five units and 700 credits in one hull with no
      gun, and the crossing is the risk you are buying. */
+  /* FLAK CRUISER. The verb is the UMBRELLA at sea: until this, a fleet had nothing that could
+     touch an aircraft, so a gunship could sink a navy for free. Both armies', from either yard
+     and a Radar Post. Left idle it keeps station with the nearest ship of its own side
+     (`escorts`, core/flakship.js), so the umbrella goes where the fleet goes - core/flakship.js. */
+  { key:'flakship', name:'Flak Cruiser', kind:'ship',     cost:1200, build:15, hp:800,  speed:11,  turn:1.4,r:2.4, sight:30,
+    weapon:'shipflak', needs:['shipyard', 'radar'], sea:true, escorts:true,
+    armour:'heavy',
+    desc:'Anti-aircraft guns afloat. Sails with your nearest ship on its own and keeps aircraft off the fleet; cannot hit ships or the shore.' },
   { key:'lst',      name:'Landing Craft',kind:'ship',     cost:700,  build:10, hp:400,  speed:12,  turn:1.6,r:2.4, sight:14, weapon:null,
     needs:['shipyard'], sea:true, carries:5, takes:['infantry', 'vehicle'],
     armour:'heavy',
@@ -1396,6 +1404,11 @@ var RTS_WEAPONS = {
      rules/units.js), not this reach: it spots a gunship standing off to fire at the tank beside
      it and closes. Measured, unit/flaktrack: at sight 20 it never saw one hovering 22 away. */
   trackflak:  { dmg:18, range:22, cool:0.45, burst:2, shot:'tracer', speed:0, splash:1.2, aa:true,
+                aaOnly:true,
+                verses:{ none:0.9, wood:0.15, light:0.9, heavy:0.35, concrete:0.10 } },
+  /* The Flak Cruiser's battery: the AA Gun's flak, a step further, so a fleet's umbrella reaches
+     past the hulls it sails with. */
+  shipflak:   { dmg:22, range:28, cool:0.45, burst:2, shot:'tracer', speed:0, splash:1.4, aa:true,
                 aaOnly:true,
                 verses:{ none:0.9, wood:0.15, light:0.9, heavy:0.35, concrete:0.10 } },
   bite:       { dmg:22, range:5.5,cool:0.55, shot:'tracer',  speed:0,  splash:0, maul:true,
@@ -2006,7 +2019,9 @@ var RTS_AI = {
               a rule here. Weight 2: it is a siege piece rather than a fleet, and an opponent
               that spent its whole navy budget on one 2,000-credit hull would own the coastline
               and lose the water. */
-           { key:'cruiser', at:3200, w:2 } ],
+           { key:'cruiser', at:3200, w:2 },
+           /* against aircraft only, as the Flak Track is: core/flakship.js */
+           { key:'flakship', at:1600, w:4, vsAir:2 } ],
     infantry:[ { key:'flame', at:1200, w:2 }, { key:'grenadier', at:900, w:2 },
                { key:'rocket', at:500, w:3 }, { key:'dog', at:400, w:2 },
                { key:'rifle', at:250, w:2 }, { key:'engineer', at:2200, w:2 } ],
@@ -6658,7 +6673,7 @@ function _sprUnitModel(key, side, prone, part) {
      model line reads the same as it did when this was one function. */
   var X = { m:m, TM:TM, VH:VH, S:S, DK:DK, O:O, C:C, GN:GN,
             d:d, prone:prone, part:part, side:side, tracks:tracks };
-  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key))) {
+  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key) || _sprUnitHulls(X, key))) {
     _r3Box(m, 0, 0, -5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 0, 5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 2.5, 0, 15, 4, 8, TM[0], TM[1]);
@@ -7810,6 +7825,43 @@ function _sprUnitWings(X, key) {
     for (var bd = -1; bd <= 1; bd += 2) _r3Box(m, 1.2, 0.0, bd * 1.9, 9.0, 1.4, 0.2, VH[2], VH[1]);   /* its doors */
     if (part !== 'body') {                                          /* the props, for the sprite */
       [[5.4, 6.4], [4.0, 12.0]].forEach(function (E) { for (var sp = -1; sp <= 1; sp += 2) _r3Box(m, E[0] + 2.0, 2.0, sp * E[1], 0.3, 5.2, 0.6, DK[1], DK[2]); });
+    }
+  } else return false;
+  return true;
+}
+</script>
+<script>/* sprites/unit-hulls.js - the second wave of ships: the Flak Cruiser, and those that follow it.
+   One arm of the unit model chain (sprites/unitmodels.js has the dispatch and the shared locals
+   handed over in X); returns false for a key it does not own. A file of its own because
+   unit-airsea.js holds the first ships and is near the 500-line cap. */
+
+function _sprUnitHulls(X, key) {
+  var m = X.m, TM = X.TM, VH = X.VH, S = X.S, DK = X.DK, GN = X.GN;
+
+  if (key === 'flakship') {
+    /* FLAK CRUISER. A Destroyer's hull with no big gun on it: its deck is a forest of twin flak
+       mounts, four of them with their barrels cocked up at the sky, round a tall bridge under
+       a big search radar. The identity is the GUNS POINTING UP - every other hull's point
+       ahead. */
+    var L = 27, W = 8.8;
+    _r3Slab(m, 0, 0.6, 0, L, 3.4, W, 1.4, VH[0], VH[1]);                /* hull */
+    _r3Box(m, L * 0.40, 0.9, 0, L * 0.22, 2.8, W * 0.55, VH[1], VH[3]);  /* raked bow */
+    _r3Box(m, -L * 0.02, 4.0, 0, L * 0.30, 3.6, W * 0.62, VH[2], VH[0]); /* superstructure */
+    _r3Box(m, L * 0.06, 7.6, 0, L * 0.12, 2.4, W * 0.48, VH[1], VH[2]);  /* the bridge */
+    _r3Box(m, L * 0.12, 8.0, 0, 0.5, 1.2, W * 0.42, RTS_PAL.glass, RTS_PAL.glass);   /* its glass */
+    _r3Box(m, -L * 0.02, 7.0, 0, L * 0.16, 1.2, W * 0.40, TM[1], TM[3]); /* team cap */
+    _r3Cyl(m, -L * 0.15, 7.0, 0, 1.4, 4.0, DK[1], DK[0], 16);           /* funnel */
+    _r3Box(m, L * 0.02, 9.8, 0, 0.9, 5.0, 0.9, S[1], S[0]);             /* mast */
+    _r3Box(m, L * 0.02, 14.6, 0, 1.6, 1.6, W * 0.72, S[2], S[3]);       /* the big search radar */
+    /* the four twin mounts, fore and aft, each with its pair of barrels cocked at the sky */
+    [[L * 0.24, 0], [L * 0.33, 0], [-L * 0.28, 0], [-L * 0.38, 0]].forEach(function (p, i) {
+      var y = i === 1 || i === 3 ? 4.4 : 5.6;                           /* the outer pair lower */
+      _r3Cyl(m, p[0], y - 1.2, p[1], 1.7, 1.4, VH[3], VH[1], 16);
+      for (var b = -1; b <= 1; b += 2) _r3Box(m, p[0] + 0.6, y + 1.4, b * 0.55, 0.5, 3.2, 0.5, GN[0], GN[2]);
+    });
+    for (var bl = -1; bl <= 1; bl += 2) {                               /* bollards */
+      _r3Box(m, L * 0.44, 4.0, bl * W * 0.22, 1.0, 1.1, 1.0, DK[0], DK[2]);
+      _r3Box(m, -L * 0.46, 4.0, bl * W * 0.22, 1.0, 1.1, 1.0, DK[0], DK[2]);
     }
   } else return false;
   return true;
@@ -18580,6 +18632,58 @@ function _rtsAIBombTick(dt) {
   }
 }
 </script>
+<script>/* core/flakship.js - the Flak Cruiser: an umbrella that sails with the fleet.
+
+   The verb is ESCORT AT SEA. Its guns (`shipflak`) touch nothing but aircraft, so on its own it
+   is a hull that does nothing; its worth is entirely in what it sails beside. So, left idle, it
+   keeps station on the nearest ship of its own side within RTS_ESCORT.reach cells - never on
+   another escort, or two would chase each other round the bay - sailing to within
+   RTS_ESCORT.close cells of it whenever it falls further behind. It sails there on an
+   attack-move, so it fires at whatever flies over on the way. An order of the player's always
+   comes first: the station is taken up again only once it is idle.
+
+   The opponent buys one only against aircraft, one for every two the player flies, as it does
+   the Flak Track (rules/ai.js `vsAir`); the escorting is the same for both sides. */
+
+var RTS_ESCORT = { reach: 14, close: 3, every: 1 };
+
+function _rtsEscorts(u) { return !!(rtsUnitDef(u.def) || {}).escorts; }
+/* the ship it keeps station on: the nearest of its side's within reach that is not an escort */
+function _rtsEscortOf(e) {
+  var G = window._rtsG, best = null, bd = RTS_ESCORT.reach * RTS_TILE;
+  for (var i = 0; i < G.ents.length; i++) {
+    var o = G.ents[i];
+    if (o === e || o.dead || o.inside || o.side !== e.side || o.type !== 'unit') continue;
+    var d = rtsUnitDef(o.def) || {};
+    if (!d.sea || d.escorts) continue;
+    var dd = Math.hypot(o.x - e.x, o.z - e.z);
+    if (dd < bd) { bd = dd; best = o; }
+  }
+  return best;
+}
+function _rtsEscortTick(dt) {
+  var G = window._rtsG;
+  G.escT = (G.escT || 0) + dt;
+  if (G.escT < RTS_ESCORT.every) return;
+  G.escT = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.type !== 'unit' || !_rtsEscorts(e)) continue;
+    var ours = e.order === 'amove' && e.esc && e.goal === e.esc;
+    if (e.order && !ours) continue;                                   /* its own orders first */
+    var s = _rtsEscortOf(e);
+    if (!s) continue;
+    var d = Math.hypot(s.x - e.x, s.z - e.z);
+    if (d <= RTS_ESCORT.close * RTS_TILE) continue;
+    /* to just off its quarter, on the side it is coming from */
+    var k = (RTS_ESCORT.close - 1) * RTS_TILE / d, x = s.x + (e.x - s.x) * k, z = s.z + (e.z - s.z) * k;
+    if (ours && Math.hypot(e.goal.x - x, e.goal.z - z) < RTS_TILE && e.path && e.pi < e.path.length) continue;
+    var p = _rtsPathFor(e, x, z);
+    if (!p) continue;
+    e.order = 'amove'; e.esc = e.goal = { x: x, z: z }; e.path = p; e.pi = 0; e.target = null;
+  }
+}
+</script>
 <script>/* core/missions.js - the team mission list (TEAMTYPE.CPP): the script a team runs.
    Part of rts.core, the simulation. */
 
@@ -19610,6 +19714,7 @@ function _rtsTick(dt) {
   _rtsAnimAI(dt);
   _rtsCrateAI(dt);
   _rtsDroneTick();                               /* Recon Drones circle where they stop: core/drone.js */
+  _rtsEscortTick(dt);                            /* Flak Cruisers keep station on the fleet: core/flakship.js */
   _rtsBombsTick(dt);                             /* the Heavy Bomber's bombs fall and burst: core/bomber.js */
   _rtsFixTick(dt);                               /* Repair Trucks go to the damaged: core/repairtruck.js */
   _rtsSweepTick(dt);                             /* the Mine Sweeper finds and clears: core/sweeper.js */
