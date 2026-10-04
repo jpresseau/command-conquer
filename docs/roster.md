@@ -400,9 +400,25 @@ water (11 waypoints without it, 1 with) is the case that kills it.
   - In a 900 s match on seed 9001, with the player's base held standing, it bought its layer at
     340 s and had 16 mines down by the end. A map whose yards share no land route gets no layer.
 - **The Flak Track** is bought against the sky (above).
-- **The Hovercraft and the Bridge Layer are not built by the opponent.** The hovercraft went into
-  the mix and moved the rolls the same way, so it waits for a plan of its own, as a landing or a
-  crossing is.
+- **The Hovercraft raids by sea** (`core/aihover.js`):
+  - Every generated map has one body of water that reaches both coasts, about ten cells from each
+    yard, while the land route between the bases runs straight down the middle.
+  - The raid takes up to four armed infantry from home that no team has, rocket squads first. It
+    drives to its own launch water, sails the SEA domain to the beach nearest a player harvester
+    (within `RTS_AI_HOVER.near` cells of it, the one with the fewest guards), and lands them
+    there. They go for harvesters, then a Refinery, and rejoin the army when neither is in reach.
+    The craft waits on its own water `RTS_AI_HOVER.rest` seconds and goes again.
+  - Raiders carry `raid`, and `_rtsTeamCanAdd` refuses them (and anything `inside`).
+  - It is bought by `_rtsAISupport`, after the Mine Layer, when there is a harvester to raid.
+  - Seed 9001, normal, with the player's base held standing and a Refinery placed: the craft was
+    bought at 274 s, boarded four squads in 12 s, crossed the map by water in 28 s, and the
+    harvester beside the beach died 14 s after the landing. The idle-player ladder does not move
+    (an idle player builds no Refinery, so it has no harvester to raid).
+- **The Bridge Layer is not built by the opponent, and that is measured.** On 30 generated maps the
+  land route between the yards is within about 5% of the straight line, and no bridge site
+  shortens the walk to the player's yard, flank or ore field (the best estimate is 92% of the
+  route, by the straight-line lower bound). A plan gated on "a bridge helps" would never fire.
+  It needs maps with a river between the bases.
 
 ### Verified
 
@@ -411,3 +427,9 @@ reload, the layer never in a team (asked of every type), one layer bought even w
 and never two, and nothing bought a credit short of surplus. Eight mutants were killed. Earlier
 versions had two survivors, and both were claims the code did not make: a "layer" flag that only
 changed a count, and a dynamic check that never raised the mutated team.
+
+`unit/aihover` (seed 776, where a hovercraft's land route cuts across the land and the sea route
+does not) checks the target and its reach, the guard preference, the purchase, the crew, a sail
+at least 85% on water, the landing, the kill (and not the power plant beside the beach), raiders
+kept from teams ashore and put back on their prey, the craft's return and the release. Thirteen
+mutants were killed.

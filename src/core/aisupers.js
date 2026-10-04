@@ -71,6 +71,7 @@ function _rtsUpdateAI(dt) {
   _rtsEscortsTick(dt);          /* the spare army goes with the teams - core/escorts.js */
   _rtsAIMendTick(dt);           /* ...and the battered go home to the depot - core/aimend.js */
   _rtsAIMinesTick(dt);          /* ...and the layer mines the approach - core/aimines.js */
+  _rtsAIHoverTick(dt);          /* ...and the Hovercraft raids by sea - core/aihover.js */
   _rtsAISupers(dt);
   /* Rich: refill a line as soon as it empties, rather than waiting up to five seconds for
      the next decision. Without this the opponent banks tens of thousands of credits it

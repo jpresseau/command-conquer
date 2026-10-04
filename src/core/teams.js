@@ -101,6 +101,7 @@ function _rtsTeamCanAdd(t, u) {
   if (u.dead || u.side !== 'enemy' || u.type !== 'unit') return false;
   if (rtsUnitDef(u.def).harvest) return false;
   if (u.mend != null) return false;          /* on its way to the depot: core/aimend.js */
+  if (u.inside || u.raid) return false;      /* aboard, or on the sea raid: core/aihover.js */
   if (!_rtsMission(u).recruitable) return false;
   var want = t.type.members[u.def] || 0;
   if (!want) return false;
