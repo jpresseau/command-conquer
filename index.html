@@ -706,7 +706,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">abf7561 · 2026-10-04</div>
+  <div id="rtsBuild" title="build">be31699 · 2026-10-04</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1885,6 +1885,10 @@ var RTS_AI = {
               /* `vsAir`: bought only against aircraft, one for every vsAir the player flies
                  (core/ai.js). A gun that cannot hit the ground is dead weight on a ground war. */
               { key:'flaktrack', at:1200, w:4, vsAir:2 } ],
+    /* No Mine Layer here: it is bought outside the weighted roll (core/aimines.js
+       _rtsAISupport), because an entry in this pool moves every roll after it - measured, the
+       Soviet opponent stopped reaching its Arc Tower in e2e/basedef and the raiders thinned out
+       in e2e/raid with nothing else changed. */
     /* No thief in the mix, and no Commando - both are decisions about a specific building at
        a specific moment, and an AI that buys them without a plan just donates the credits to
        whatever shoots them first (the Commando also has her `only` cap). The dog IS in: it
@@ -11641,9 +11645,15 @@ function _rtsMineAt(tx, tz) {
   for (var i = 0; i < G.mines.length; i++) if (G.mines[i].tx === tx && G.mines[i].tz === tz) return G.mines[i];
   return null;
 }
-/* Lay one where the layer stands. False, and the player told why, when it cannot. */
-function _rtsLayMine(e) {
+/* Lay one where the layer stands - or on a cell beside it, which is how the opponent's layer
+   puts one exactly on its planned cell when a move order stops it a cell short (aimines.js).
+   False, and the player told why, when it cannot. */
+function _rtsLayMine(e, atx, atz) {
   var G = window._rtsG, tx = _rtsTX(e.x), tz = _rtsTX(e.z);
+  if (atx != null) {
+    if (Math.abs(atx - tx) > 1 || Math.abs(atz - tz) > 1) return false;
+    tx = atx; tz = atz;
+  }
   if (!G.mines) G.mines = [];
   if (_rtsMinesLeft(e) <= 0) { if (e.side === 'player') _rtsSay('Out of mines - a Repair Bay will restock it.'); return false; }
   if (_rtsMineAt(tx, tz)) { if (e.side === 'player') _rtsSay('There is already a mine here.'); return false; }
@@ -15880,6 +15890,11 @@ function _rtsAIWants(S) {
    in. InfantryReserve is the "we are rich" line: above it the AI restarts a line the instant
    it frees up, below it it only decides on its slow tick, so a poor opponent trickles and a
    rich one runs its factories flat out. */
+function _rtsAIOwned(key) {
+  var G = window._rtsG, n = 0;
+  for (var i = 0; i < G.ents.length; i++) if (!G.ents[i].dead && G.ents[i].side === 'enemy' && G.ents[i].def === key) n++;
+  return n;
+}
 /* ANSWERED TO THE SKY. A mix entry with `vsAir` is anti-aircraft and nothing else: the opponent
    wants one for every `per` aircraft the player has up, and none at all while the sky is empty. */
 function _rtsAIWantsVsAir(key, per) {
@@ -15903,6 +15918,7 @@ function _rtsAIUnits(S) {
   if (harv < wantHarv) {
     if (_rtsCanQueue('enemy', 'harvester')) { _rtsQueue('enemy', 'harvester'); return; }
   }
+  if (_rtsAISupport(S)) return;                 /* the Mine Layer: core/aimines.js */
   /* One pass per production line: gather everything affordable and buildable, then pick among
      them by weight. RTS_AI.mix holds the ladder so that adding a unit to RTS_UNITS does not
      mean editing this function.
@@ -17137,6 +17153,86 @@ function _rtsAIMendTick(dt) {
   }
 }
 </script>
+<script>/* core/aimines.js - the opponent's Mine Layer: a minefield across the way you will come.
+
+   The layer's verb is denial, and the opponent has one place worth denying: the approach to its
+   own base. So the field is planned once a match, from the land route between the two yards - the
+   way an attack actually walks - as the cells of that route between RTS_AI_MINES.from and .to cells
+   out from its yard, with a cell either side of each, nearest first. The layer works through them,
+   one mine a cell, and goes home to the Repair Bay to load again when it runs out.
+
+   No army the opponent raises takes it along: teams recruit by composition and none has a layer
+   in it, and escorts and the base's response want a gun.
+
+   BOUGHT OUTSIDE THE ROLL (_rtsAISupport, called from _rtsAIUnits). As an entry in the weighted
+   vehicle mix it moved every roll after it - the Soviet opponent stopped reaching its Arc Tower
+   in e2e/basedef, and the raiders thinned out in e2e/raid - and a full army skipped the whole
+   line, so a capped opponent never bought one. Here it is one question, asked before the roll:
+   no layer alive, a field to lay, the vehicle line free, and the price out of genuine surplus
+   above what the base plan is saving for (as the engineer is), so it delays no building. */
+
+function _rtsAISupport(S) {
+  var G = window._rtsG, d = rtsUnitDef('minelayer');
+  if (!d || _rtsAIOwned('minelayer') >= 1) return false;
+  if (S.q && S.q.vehicle) return false;
+  if (!_rtsCanQueue('enemy', 'minelayer')) return false;
+  if (!_rtsAIMineSpots(G).length) return false;          /* no land route: nothing to deny */
+  if (rtsMoney(S) < _rtsAISpare(S) + _rtsCostOf('enemy', d)) return false;
+  _rtsQueue('enemy', 'minelayer');
+  return true;
+}
+
+var RTS_AI_MINES = { from: 9, to: 18, every: 1 };
+
+/* The field: route cells 9 to 18 out from the yard, each with its neighbours across the route. */
+function _rtsAIMineSpots(G) {
+  if (G.ai.mineSpots) return G.ai.mineSpots;
+  var ey = _rtsHas('enemy', 'yard'), py = _rtsHas('player', 'yard'), out = [], seen = {};
+  G.ai.mineSpots = out;
+  if (!ey || !py) return out;
+  var path = _rtsPath(ey.x, ey.z, py.x, py.z, null);
+  if (!path || !path.length) return out;
+  var px = ey.x, pz = ey.z, step = RTS_TILE / 2;
+  for (var i = 0; i < path.length; i++) {
+    var dx = path[i].x - px, dz = path[i].z - pz, L = Math.hypot(dx, dz), n = Math.ceil(L / step);
+    for (var k = 1; k <= n; k++) {
+      var x = px + dx * k / n, z = pz + dz * k / n;
+      var out2 = Math.hypot(x - ey.x, z - ey.z) / RTS_TILE;
+      if (out2 < RTS_AI_MINES.from || out2 > RTS_AI_MINES.to) continue;
+      var ax = -dz / (L || 1), az = dx / (L || 1);              /* across the route */
+      for (var s = -1; s <= 1; s++) {
+        var tx = _rtsTX(x + ax * s * RTS_TILE * 1.5), tz = _rtsTX(z + az * s * RTS_TILE * 1.5), key = tx + ',' + tz;
+        if (seen[key] || !_rtsInB(tx, tz) || _rtsBlocked(tx, tz, null) || G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER) continue;
+        seen[key] = 1; out.push([tx, tz]);
+      }
+    }
+    px = path[i].x; pz = path[i].z;
+  }
+  return out;
+}
+
+function _rtsAIMinesTick(dt) {
+  var G = window._rtsG;
+  G.ai.mineT = (G.ai.mineT || 0) + dt;
+  if (G.ai.mineT < RTS_AI_MINES.every) return;
+  G.ai.mineT = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var u = G.ents[i];
+    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || u.inside || !(rtsUnitDef(u.def) || {}).mines) continue;
+    if (_rtsMinesLeft(u) <= 0) {                               /* home to load again */
+      var bay = _rtsHas('enemy', 'depot');
+      if (bay && !_rtsAtStruct(u, bay, rtsStructDef('depot').repairs) && !u.path) _rtsOrderMove(u, bay.x, bay.z, false);
+      continue;
+    }
+    var spots = _rtsAIMineSpots(G), next = null;
+    for (var k = 0; k < spots.length && !next; k++) if (!_rtsMineAt(spots[k][0], spots[k][1])) next = spots[k];
+    if (!next) continue;                                       /* the field is laid */
+    /* beside it is near enough: a move order stops a cell short */
+    if (Math.abs(_rtsTX(u.x) - next[0]) <= 1 && Math.abs(_rtsTX(u.z) - next[1]) <= 1) { _rtsLayMine(u, next[0], next[1]); u.path = null; continue; }
+    if (!u.path) _rtsOrderMove(u, _rtsWX(next[0]), _rtsWX(next[1]), false);
+  }
+}
+</script>
 <script>/* core/missions.js - the team mission list (TEAMTYPE.CPP): the script a team runs.
    Part of rts.core, the simulation. */
 
@@ -17577,6 +17673,7 @@ function _rtsUpdateAI(dt) {
   _rtsTeamsTick(dt);
   _rtsEscortsTick(dt);          /* the spare army goes with the teams - core/escorts.js */
   _rtsAIMendTick(dt);           /* ...and the battered go home to the depot - core/aimend.js */
+  _rtsAIMinesTick(dt);          /* ...and the layer mines the approach - core/aimines.js */
   _rtsAISupers(dt);
   /* Rich: refill a line as soon as it empties, rather than waiting up to five seconds for
      the next decision. Without this the opponent banks tens of thousands of credits it

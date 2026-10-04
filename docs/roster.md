@@ -383,3 +383,31 @@ a landing is a plan.
 across, a wreck afloat and ashore, and the torpedo. Six mutants were killed. The pulling mutant
 survived the first set, because a straight crossing needs no pulling; a slanting run across open
 water (11 waypoints without it, 1 with) is the case that kills it.
+
+## The opponent uses the new vehicles
+
+- **The Mine Layer mines its approach** (`core/aimines.js`):
+  - The field is planned once a match, from the land route between the two yards: route cells
+    9 to 18 out from the opponent's yard, with a cell either side.
+  - The layer works through them, lays on a cell beside it when a move order stops it a cell
+    short, and goes home to the Repair Bay to reload.
+  - It is bought OUTSIDE the weighted roll (`_rtsAISupport`): no layer alive, a field to lay,
+    the vehicle line free, and the price out of genuine surplus above the base plan.
+  - As a mix entry it moved every roll after it. The Soviet opponent stopped reaching its Arc
+    Tower (`e2e/basedef`) and the raiders thinned (`e2e/raid`), and a full army skipped the line
+    so a capped opponent never bought one.
+  - No team composition includes a layer, so no attack takes it along.
+  - In a 900 s match on seed 9001, with the player's base held standing, it bought its layer at
+    340 s and had 16 mines down by the end. A map whose yards share no land route gets no layer.
+- **The Flak Track** is bought against the sky (above).
+- **The Hovercraft and the Bridge Layer are not built by the opponent.** The hovercraft went into
+  the mix and moved the rolls the same way, so it waits for a plan of its own, as a landing or a
+  crossing is.
+
+### Verified
+
+`unit/aimines` checks the field's band and ground, a full load laid on it and only on it, the
+reload, the layer never in a team (asked of every type), one layer bought even with a full army
+and never two, and nothing bought a credit short of surplus. Eight mutants were killed. Earlier
+versions had two survivors, and both were claims the code did not make: a "layer" flag that only
+changed a count, and a dynamic check that never raised the mutated team.
