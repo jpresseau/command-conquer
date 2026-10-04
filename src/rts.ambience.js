@@ -1,4 +1,4 @@
-/* RED ALERT - the world's own sound, under the guns. Synthesized like everything in rts.audio.js:
+/* BREACHWATER - the world's own sound, under the guns. Synthesized like everything in rts.audio.js:
    every voice of it a rendered loop (audio/loops.js).
 
    The effects were the only sound there was: a shot, an explosion, a click - and between them

@@ -225,6 +225,6 @@ function _rtsLoopErr(U, err, where) {
   var txt = where + ': ' + _rtsErrText(err);
   if (U.lastErr === txt) return;
   U.lastErr = txt;
-  try { console.error('Red Alert:', where, err); } catch (_c) {}
+  try { console.error('Breachwater:', where, err); } catch (_c) {}
   if (where === 'tick') _rtsSay('Error: ' + _rtsErrText(err));
 }

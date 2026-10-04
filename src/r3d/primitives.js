@@ -2,7 +2,7 @@
    is built from: boxes, slabs, cylinders, cones, roofs, plus yaw/scale/bounds.
    Part of rts.r3d, the little 3D renderer that bakes the sprites. */
 
-/* RED ALERT - the sprite baker: a tiny 3D renderer that runs once, at load.
+/* BREACHWATER - the sprite baker: a tiny 3D renderer that runs once, at load.
 
    This is how the games this is modelled on actually made their art. Westwood did not draw
    those units and buildings pixel by pixel - they built them as 3D models, rendered each one

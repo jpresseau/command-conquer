@@ -1,22 +1,13 @@
 /* render/camera.js - the renderer's view: zoom, projection, and world <-> screen.
    Part of rts.render, which owns every pixel. */
 
-/* RED ALERT - render layer. Canvas 2D, sprite-based, pure top-down.
+/* BREACHWATER - the camera: the zoom ladder, the overlay canvas, and the projection contract.
 
-   This replaced a three.js renderer. The 3D version was the wrong medium: the games this
-   is modelled on are 2D sprite games, and no amount of flattening the camera or shrinking
-   footprints makes lit 3D geometry read as 1996 pixel art. The simulation was written with
-   no renderer dependencies precisely so this swap was possible - src/core did not
-   change by a single line.
-
-   Everything is drawn at sprite resolution (24px per map cell) and blitted with image
-   smoothing off, scaled by a whole number of pixels per cell. That integer scaling is what
-   keeps pixels square and hard instead of blurry.
-
-   Screen space is a straight top-down projection of the sim's x/z plane:
-       screenX = (worldX - focus.x) * zoom + W/2
-       screenY = (worldZ - focus.z) * zoom + H/2
-   No tilt, no perspective. */
+   The world is drawn in WebGL (render3d/) under a leaned, turnable camera (render3d/cam3d.js).
+   This file owns what everything else asks of that camera - _rtsWorldToScreen, _rtsGroundAt,
+   _rtsGroundToScreen, _rtsViewSpan - so input, the overlay and the HUD reach the screen through
+   the same numbers the shaders use. Each keeps a flat top-down fallback for the moments before
+   the GL context exists (and for node specs): screenX = (worldX - focus.x) * zoom + W/2. */
 
 var _rtsR = null;
 

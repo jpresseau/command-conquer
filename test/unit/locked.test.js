@@ -79,8 +79,8 @@ var BASE = ['yard', 'power', 'refinery', 'barracks', 'factory', 'radar', 'lab'];
 
   world(['yard', 'power', 'barracks']);
   w = why('buggy');
-  S.ok('a vehicle with no War Factory is refused', !!w, w);
-  S.ok('...by name', /War Factory/.test(w || ''), w);
+  S.ok('a vehicle with no Vehicle Works is refused', !!w, w);
+  S.ok('...by name', /Vehicle Works/.test(w || ''), w);
 
   /* Under construction is not standing. */
   world(['yard', 'power', 'barracks!']);

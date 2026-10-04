@@ -1,7 +1,7 @@
 /* ui/shell.js - opening and closing a battle, and keeping the canvases the right size.
    Part of rts.ui, which owns the DOM. */
 
-/* RED ALERT - UI + input + the main loop.
+/* BREACHWATER - UI + input + the main loop.
 
    Layout is the classic one: battlefield on the left, a fixed command sidebar on the
    right holding credits, power, radar and the build tiles. Health bars, the drag box and
@@ -28,7 +28,7 @@ function rtsOpen(seed) {
        old multiply sat in the draw order. */
     +   '<div id="rtsVig"></div>'
     +   '<canvas id="rtsHud"></canvas>'
-    +   '<div class="rts-top"><span class="rts-title">RED ALERT</span>'
+    +   '<div class="rts-top"><span class="rts-title">BREACHWATER</span>'
     +     '<span class="rts-vs"><b class="p">' + rtsArmyName('player') + '</b> vs <b class="e">' +
           rtsArmyName('enemy') + '</b>'
     +       '<i class="dif" id="rtsDifLbl"></i></span>'

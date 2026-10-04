@@ -17,7 +17,7 @@ var S = new Suite('input');
 
   /* ================= the title screen keyboard ================= */
   /* A document-level keydown fired rtsStart for EVERY Enter and Space, and its preventDefault
-     killed the button the player was actually on: tab to SOVIET, press Enter, get an ALLIED
+     killed the button the player was actually on: tab to DOMINION, press Enter, get a COMPACT
      battle. Tab to RESUME BATTLE, press Enter, get a new match instead of your save. */
   var t = await openPage(browser, { width: 1280, height: 900 });
   var side = await t.page.evaluate(function () { try { localStorage.removeItem('rcgVoxSide'); } catch (e) {} return 1; });
@@ -25,31 +25,31 @@ var S = new Suite('input');
   /* find the faction buttons by their own text, not by tab count - tab order changes */
   var picked = await t.page.evaluate(async function () {
     var b = [].slice.call(document.querySelectorAll('#rtsArmySide button'))
-              .filter(function (x) { return /SOVIET/i.test(x.textContent); })[0];
-    if (!b) return { error: 'no SOVIET button' };
+              .filter(function (x) { return /DOMINION/i.test(x.textContent); })[0];
+    if (!b) return { error: 'no DOMINION button' };
     b.focus();
     return { focused: document.activeElement === b, before: rtsArmySide() };
   });
-  S.ok('the SOVIET button can be focused', picked.focused && !picked.error, picked.error || '');
+  S.ok('the DOMINION button can be focused', picked.focused && !picked.error, picked.error || '');
   await t.page.keyboard.press('Enter');
   await t.page.waitForTimeout(250);
   var afterEnter = await t.page.evaluate(function () {
     return { vox: rtsArmySide(), inBattle: !!document.getElementById('rcgRts') };
   });
-  S.eq('Enter on SOVIET picks Soviet rather than starting a battle', afterEnter.vox, 'soviet');
+  S.eq('Enter on DOMINION picks the Dominion rather than starting a battle', afterEnter.vox, 'soviet');
   S.ok('...and does not start a battle', !afterEnter.inBattle);
 
   /* Space on a focused button is that button's activation too */
   await t.page.evaluate(function () {
     [].slice.call(document.querySelectorAll('#rtsArmySide button'))
-      .filter(function (x) { return /ALLIED/i.test(x.textContent); })[0].focus();
+      .filter(function (x) { return /COMPACT/i.test(x.textContent); })[0].focus();
   });
   await t.page.keyboard.press(' ');
   await t.page.waitForTimeout(250);
   var afterSpace = await t.page.evaluate(function () {
     return { vox: rtsArmySide(), inBattle: !!document.getElementById('rcgRts') };
   });
-  S.eq('Space on ALLIED picks Allied', afterSpace.vox, 'allied');
+  S.eq('Space on COMPACT picks the Compact', afterSpace.vox, 'allied');
   S.ok('...and does not start a battle either', !afterSpace.inBattle);
 
   /* With nothing focused, Enter is still the shortcut it was meant to be. */

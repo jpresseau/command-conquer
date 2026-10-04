@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Command &amp; Conquer: Red Alert">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Breachwater">
   <defs>
     <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#243244"/>
@@ -8,24 +8,36 @@
       <stop offset="0" stop-color="#ffe0a0"/>
       <stop offset="1" stop-color="#e0a32a"/>
     </linearGradient>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3f8fd8"/>
+      <stop offset="1" stop-color="#1c4f86"/>
+    </linearGradient>
+    <clipPath id="inner"><rect x="22" y="22" width="468" height="468" rx="78"/></clipPath>
   </defs>
 
   <rect width="512" height="512" rx="96" fill="url(#plate)"/>
+
+  <g clip-path="url(#inner)">
+    <!-- the sea, parted where the spearhead comes through -->
+    <path d="M0 300 Q64 272 128 300 T256 300 T384 300 T512 300 V512 H0 Z" fill="url(#sea)" opacity="0.55"/>
+    <path d="M0 340 Q64 312 128 340 T256 340 T384 340 T512 340 V512 H0 Z" fill="url(#sea)" opacity="0.8"/>
+    <path d="M0 384 Q64 356 128 384 T256 384 T384 384 T512 384 V512 H0 Z" fill="url(#sea)"/>
+    <!-- the breach: white water thrown off both flanks -->
+    <g fill="none" stroke="#dff1ff" stroke-linecap="round" stroke-width="10" opacity="0.9">
+      <path d="M190 318 Q160 296 132 304"/>
+      <path d="M322 318 Q352 296 380 304"/>
+      <path d="M176 352 Q140 336 110 346" opacity="0.7"/>
+      <path d="M336 352 Q372 336 402 346" opacity="0.7"/>
+    </g>
+  </g>
+
+  <!-- the spearhead -->
+  <path d="M256 92 L340 300 L294 300 L256 214 L218 300 L172 300 Z" fill="url(#gold)"/>
+  <path d="M256 236 L312 372 L278 372 L256 322 L234 372 L200 372 Z" fill="url(#gold)" opacity="0.82"/>
+
   <rect x="14" y="14" width="484" height="484" rx="84" fill="none" stroke="#3d5470" stroke-width="8"/>
 
-  <!-- radar sweep arcs -->
-  <g fill="none" stroke="#4a8ff0" stroke-linecap="round" opacity="0.45">
-    <path d="M256 372 A116 116 0 0 1 256 140" stroke-width="10"/>
-    <path d="M256 330 A74 74 0 0 1 256 182" stroke-width="10" opacity="0.75"/>
-  </g>
-
-  <!-- command chevrons -->
-  <g fill="url(#gold)">
-    <path d="M256 132 L360 244 L310 244 L256 186 L202 244 L152 244 Z"/>
-    <path d="M256 226 L360 338 L310 338 L256 280 L202 338 L152 338 Z" opacity="0.82"/>
-  </g>
-
-  <!-- faction bar: Vanguard / Redline -->
-  <rect x="152" y="386" width="102" height="26" rx="13" fill="#4a8ff0"/>
-  <rect x="258" y="386" width="102" height="26" rx="13" fill="#e0503c"/>
+  <!-- faction bar: Meridian Compact / Basalt Dominion -->
+  <rect x="152" y="420" width="102" height="26" rx="13" fill="#7fb6ff" stroke="#0d1219" stroke-width="6"/>
+  <rect x="258" y="420" width="102" height="26" rx="13" fill="#e0503c" stroke="#0d1219" stroke-width="6"/>
 </svg>

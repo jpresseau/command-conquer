@@ -1,7 +1,7 @@
 {
-  "name": "Command & Conquer: Red Alert",
-  "short_name": "Red Alert",
-  "description": "Command & Conquer: Red Alert, rebuilt for the browser. Mine ore, build a base, and fight the Soviets. Reads the artwork from your own copy of the game.",
+  "name": "Breachwater",
+  "short_name": "Breachwater",
+  "description": "Breachwater: real-time strategy in 3D, in the browser. Mine ore, build a base, and take the coast from the other army.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

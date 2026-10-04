@@ -1,4 +1,4 @@
-/* RED ALERT — saving and loading a battle. From SAVELOAD.CPP.
+/* BREACHWATER — saving and loading a battle. From SAVELOAD.CPP.
 
    The original's shape, and the reason for it:
 

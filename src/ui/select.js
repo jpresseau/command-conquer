@@ -223,7 +223,7 @@ function _rtsRightClick(mx, my, hit0) {
   }
   _rtsFlash(hit.x, hit.z, onScrap ? 'harvest' : 'move');
   if (landed) _rtsSay(landed === 1 ? 'Making for the shore.' : landed + ' transports making for the shore.');
-  else if (dropped) _rtsSay(dropped === 1 ? 'Taking them in.' : dropped + ' Chinooks taking them in.');
+  else if (dropped) _rtsSay(dropped === 1 ? 'Taking them in.' : dropped + ' Skylifts taking them in.');
   if (typeof _rtsSfx === 'function') _rtsSfx('order');
 }
 /* Spread a group over a loose grid so twelve units do not all path to one tile. */

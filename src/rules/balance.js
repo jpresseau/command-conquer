@@ -76,7 +76,7 @@ var RTS_DIFF = {
             desc:'The enemy attacks late, builds little and hits softly.' },
   normal: { name:'Soldier',  iq:3, fire:1,    speed:1,    armor:1,   rof:1,    cost:1,   build:1,   wall:true,  scan:false, keep:6, commit:0.75, army:42,
             desc:'An even fight. The enemy expands and repairs.' },
-  hard:   { name:'Commando', iq:5, fire:1.15, speed:1.1,  armor:1.2, rof:0.85, cost:0.8, build:0.7, wall:true,  scan:true, keep:4, commit:1,
+  hard:   { name:'Veteran',  iq:5, fire:1.15, speed:1.1,  armor:1.2, rof:0.85, cost:0.8, build:0.7, wall:true,  scan:true, keep:4, commit:1,
             desc:'The enemy builds a real base, defends it and comes early.' }
 };
 var RTS_DIFF_DEFAULT = 'normal';

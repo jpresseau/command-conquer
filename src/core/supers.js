@@ -142,8 +142,8 @@ function _rtsFireIron(side, tx, tz) {
     n++;
   }
   if (!n) return false;                       /* nothing of yours there - do not spend it */
-  if (side === 'player') _rtsSay('Iron Curtain active on ' + n + (n === 1 ? ' unit.' : ' units.'));
-  else _rtsSay('Enemy units are protected by an Iron Curtain.');
+  if (side === 'player') _rtsSay('Bastion Field active on ' + n + (n === 1 ? ' unit.' : ' units.'));
+  else _rtsSay('Enemy units are protected by a Bastion Field.');
   if (typeof _rtsSfx === 'function') _rtsSfx('build');
   return true;
 }
@@ -191,7 +191,7 @@ function _rtsFireChrono(side, tx, tz, sel) {
     moved++;
   }
   if (!moved) return false;
-  if (side === 'player') _rtsSay('Chronoshift complete — ' + moved +
+  if (side === 'player') _rtsSay('Rift jump complete — ' + moved +
                                  (moved === 1 ? ' unit moved.' : ' units moved.'));
   return true;
 }
@@ -222,7 +222,7 @@ function _rtsFireGps(side) {
   if (side !== 'player') return true;          /* the AI is not fogged; nothing to reveal */
   G.mapped.fill(1);
   G.visDirty = 1;
-  _rtsSay('GPS satellite online — the map is yours.');
+  _rtsSay('Skyeye satellite online — the map is yours.');
   if (typeof _rtsSfx === 'function') _rtsSfx('ready');
   return true;
 }

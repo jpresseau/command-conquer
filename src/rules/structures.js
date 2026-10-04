@@ -1,9 +1,9 @@
 /* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
    Part of rts.rules, the roster. */
 
-/* RED ALERT - a rebuild of Command & Conquer: Red Alert for the browser.
+/* BREACHWATER - a real-time strategy game for the browser, grown out of a rebuild of Red Alert.
    Build a base, mine ore with harvesters, produce units, and fight the opposing army.
-   Standalone: the only outside dependency in the whole app is three.js.
+   Standalone: no library, no assets, nothing downloaded.
 
    This file is the RULES layer - every balance number lives here, nothing else. The
    structure/unit tables are deliberately data-only so the whole game can be re-tuned by
@@ -26,9 +26,11 @@ var RTS_SIDES = {
   player: { key:'player', color:0x4a8ff0, glow:0xa8d4ff },
   enemy:  { key:'enemy',  color:0xe0503c, glow:0xffb49f }
 };
-/* "Allied" / "Soviet" for either house, following the army the player picked. Singular and
-   adjectival - "Allied command", "the Soviet base" - which is how Red Alert itself words it. */
-function rtsArmyName(house) { return rtsHouseSide(house) === 'soviet' ? 'Soviet' : 'Allied'; }
+/* "Compact" / "Dominion" for either house, following the army the player picked: the short,
+   adjectival form - "Compact command", "the Dominion forces". rtsArmyTitle is the full name. */
+var RTS_ARMY_NAMES = { allied: ['Compact', 'Meridian Compact'], soviet: ['Dominion', 'Basalt Dominion'] };
+function rtsArmyName(house) { return RTS_ARMY_NAMES[rtsHouseSide(house) === 'soviet' ? 'soviet' : 'allied'][0]; }
+function rtsArmyTitle(side) { return RTS_ARMY_NAMES[side === 'soviet' ? 'soviet' : 'allied'][1]; }
 function rtsArmyTag(house)  { return rtsHouseSide(house) === 'soviet' ? 'SOV' : 'ALD'; }
 
 /* ---------------------------------------------------------------- structures --
@@ -62,23 +64,23 @@ var RTS_STRUCTS = [
     needs:['power'], produces:'infantry',
     armour:'wood',
     desc:'Trains infantry.' },
-  { key:'factory',  name:'War Factory',   w:3, h:2, cost:1600, build:20, hp:900,  power:-30,  sight:12,
+  { key:'factory',  name:'Vehicle Works', w:3, h:2, cost:1600, build:20, hp:900,  power:-30,  sight:12,
     needs:['refinery'], produces:'vehicle',
     armour:'concrete',
-    desc:'Builds RC combat vehicles and Harvesters.' },
+    desc:'Builds combat vehicles and Harvesters.' },
   { key:'turret',   name:'Gun Turret',    w:1, h:1, cost:500,  build:10, hp:520,  power:-20,  sight:18,
     needs:['barracks'], weapon:'turretgun',
     side:'allied', armour:'concrete',
     desc:'Automated base defence. Needs power to fire.' },
   /* --- the tier the roster was missing. `needs` already gated everything, so these are data. --- */
-  { key:'radar',    name:'Radar Dome',    w:2, h:2, cost:1000, build:14, hp:600,  power:-40,  sight:26,
+  { key:'radar',    name:'Radar Post',    w:2, h:2, cost:1000, build:14, hp:600,  power:-40,  sight:26,
     needs:['refinery'], radar:true,
     armour:'wood',
     desc:'Switches the radar on. Without one the map panel stays dark.' },
   /* Cost, power and prerequisites here are the reference's own: Tech Center $1500 / -200 /
      War Factory + Radar Dome. -200 is two whole power plants, which is the point - the tech
      tier is supposed to cost you an economy, not a line item. */
-  { key:'lab',      name:'Tech Center',   w:2, h:2, cost:1500, build:22, hp:600,  power:-200, sight:14,
+  { key:'lab',      name:'Research Lab',  w:2, h:2, cost:1500, build:22, hp:600,  power:-200, sight:14,
     needs:['radar', 'factory'],
     armour:'wood',
     desc:'Unlocks Artillery and the Heavy Tank. Draws as much power as two plants.' },
@@ -109,13 +111,13 @@ var RTS_STRUCTS = [
     needs:['barracks'], weapon:'pillboxgun',
     side:'allied', armour:'concrete',
     desc:'Cheap early defence. Shreds infantry, barely scratches armour.' },
-  { key:'depot',    name:'Service Depot',w:2, h:2, cost:1200, build:16, hp:700,  power:-30,  sight:12,
+  { key:'depot',    name:'Repair Bay',   w:2, h:2, cost:1200, build:16, hp:700,  power:-30,  sight:12,
     needs:['factory'], repairs:RTS_TILE * 3.2, repairRate:22,
     armour:'wood',
     desc:'Park damaged vehicles on it and they are patched up, free of charge.' },
   /* Advanced Power Plant $500 / +200 / needs Power Plant. Twice the output for well under
      twice the price and one footprint instead of two - the correct answer once a base is big. */
-  { key:'apower',   name:'Adv. Power Plant', w:3, h:2, cost:500, build:11, hp:600, power:200, sight:10,
+  { key:'apower',   name:'Fusion Plant', w:3, h:2, cost:500, build:11, hp:600, power:200, sight:10,
     needs:['power'], provides:['power'],
     armour:'concrete',
     desc:'Supplies 200 power. Cheaper per unit than two plants, and half the footprint.' },
@@ -132,10 +134,10 @@ var RTS_STRUCTS = [
      wall is only as good as the plants behind it, so killing the power is a real strategy
      rather than an inconvenience. Priced and armed from RULES.INI: 1500, 200 damage, and a
      draw of 100 which is more than any other defence asks for. */
-  { key:'tesla',    name:'Tesla Coil',   w:1, h:2, cost:1500, build:20, hp:400,  power:-100, sight:20,
+  { key:'tesla',    name:'Arc Tower',    w:1, h:2, cost:1500, build:20, hp:400,  power:-100, sight:20,
     needs:['radar'], weapon:'teslazap', side:'soviet', needsPower:true,
     armour:'concrete',
-    desc:'Devastating, and dead the moment your power browns out. Soviet.' },
+    desc:'Devastating, and dead the moment your power browns out. Dominion.' },
   /* ------------------------------------------------------------------ naval --
      Both armies get a shipyard and they are the same building with different names and
      different hulls coming out of it, which is what RA does too: the Naval Yard and the Sub
@@ -156,11 +158,11 @@ var RTS_STRUCTS = [
   { key:'navalyard',name:'Naval Yard',  w:3, h:3, cost:1000, build:14, hp:600,  power:-30, sight:12,
     needs:['refinery'], side:'allied', shore:true, produces:'ship', provides:['shipyard'],
     armour:'wood',
-    desc:'Builds ships. Must be placed against water. Allied.' },
+    desc:'Builds ships. Must be placed against water. Compact.' },
   { key:'subpen',   name:'Sub Pen',     w:3, h:3, cost:1000, build:14, hp:600,  power:-30, sight:12,
     needs:['refinery'], side:'soviet', shore:true, produces:'ship', provides:['shipyard'],
     armour:'wood',
-    desc:'Builds submarines. Must be placed against water. Soviet.' },
+    desc:'Builds submarines. Must be placed against water. Dominion.' },
   { key:'flametower',name:'Flame Tower', w:1, h:1, cost:500,  build:11, hp:450,  power:-20,  sight:16,
     needs:['barracks'], weapon:'towerflame', deathBlast:{ dmg:70, radius:RTS_TILE * 2.6 },
     side:'soviet', armour:'concrete',
@@ -188,7 +190,7 @@ var RTS_STRUCTS = [
   { key:'afld',     name:'Airfield',     w:3, h:2, cost:1200, build:13, hp:600,  power:-20,  sight:10,
     needs:['radar'], produces:'air', rearm:true,
     side:'soviet', armour:'concrete',
-    desc:'Builds and rearms MiGs and Yaks. An aircraft with no airfield left has nowhere to land.' },
+    desc:'Builds and rearms Kestrels and Shrikes. An aircraft with no airfield left has nowhere to land.' },
   { key:'silo',     name:'Ore Silo',   w:2, h:2, cost:150,  build:5,  hp:400,  power:0,    sight:8,
     needs:['refinery'], storage:1500, capturable:false,
     armour:'wood',
@@ -206,10 +208,10 @@ var RTS_STRUCTS = [
 
      Each is gated on the Tech Center, so getting one costs the -200 power the tier already
      charges, and each is faction-locked to the side that had it. */
-  { key:'mslo',     name:'Missile Silo',  w:2, h:2, cost:1750, build:24, hp:400,  power:-150, sight:12,
+  { key:'mslo',     name:'Sunfall Silo',  w:2, h:2, cost:1750, build:24, hp:400,  power:-150, sight:12,
     needs:['lab'], side:'soviet', armour:'concrete', capturable:false,
-    super:{ key:'nuke', name:'Atom Bomb', charge:300, target:'cell', icon:'☢',
-            hint:'Atom Bomb ready — click anywhere on the map.' },
+    super:{ key:'nuke', name:'Sunfall', charge:300, target:'cell', icon:'☢',
+            hint:'Sunfall ready — click anywhere on the map.' },
     /* This said "levels everything within four tiles", which the blast does not do and cannot:
        damage falls as 1/steps through the shared splash curve, so a thing four tiles out takes
        100 of RTS_NUKE_DAMAGE's 1000 and the cheapest structure in the game has 400 hit points.
@@ -220,23 +222,23 @@ var RTS_STRUCTS = [
        and one the ladder cannot answer: measured over three hard seeds, the opponent never
        builds a superweapon building at all before the match ends. */
     desc:'Charges an atomic missile. A direct hit guts a building; out to four tiles the blast kills infantry and damages everything else.' },
-  { key:'iron',     name:'Iron Curtain',  w:2, h:2, cost:1500, build:22, hp:400,  power:-200, sight:12,
+  { key:'iron',     name:'Bastion Generator', w:2, h:2, cost:1500, build:22, hp:400,  power:-200, sight:12,
     needs:['lab'], side:'soviet', armour:'concrete', capturable:false,
-    super:{ key:'ironcurtain', name:'Iron Curtain', charge:270, target:'own', icon:'🛡',
-            hint:'Iron Curtain ready — click one of your own units or buildings.' },
+    super:{ key:'ironcurtain', name:'Bastion Field', charge:270, target:'own', icon:'🛡',
+            hint:'Bastion Field ready — click one of your own units or buildings.' },
     desc:'Makes what you point it at invulnerable for half a minute. Everything near it too.' },
-  { key:'pdox',     name:'Chronosphere',  w:2, h:2, cost:1750, build:24, hp:400,  power:-200, sight:12,
+  { key:'pdox',     name:'Rift Gate',     w:2, h:2, cost:1750, build:24, hp:400,  power:-200, sight:12,
     needs:['lab'], side:'allied', armour:'concrete', capturable:false,
-    super:{ key:'chrono', name:'Chronosphere', charge:270, target:'cell', icon:'⌛',
-            hint:'Chronosphere ready — select units, then click where to send them.' },
+    super:{ key:'chrono', name:'Rift Jump', charge:270, target:'cell', icon:'⌛',
+            hint:'Rift Jump ready — select units, then click where to send them.' },
     desc:'Teleports your selected units anywhere on the map. Select first, then aim.' },
   /* GPS fires itself. In the original the satellite launches the moment it is paid for and the
      map simply stays revealed - there is nothing to aim and no reason to hold it back, so
      making the player click a button to accept a gift would be ceremony rather than a decision. */
-  { key:'gps',      name:'GPS Uplink',    w:2, h:2, cost:1000, build:18, hp:400,  power:-100, sight:12,
+  { key:'gps',      name:'Skyeye Uplink', w:2, h:2, cost:1000, build:18, hp:400,  power:-100, sight:12,
     needs:['lab'], side:'allied', armour:'concrete', capturable:false,
-    super:{ key:'gps', name:'GPS Satellite', charge:200, target:'none', auto:true, icon:'🛰',
-            hint:'GPS satellite up — the whole map is on the radar.' },
+    super:{ key:'gps', name:'Skyeye Satellite', charge:200, target:'none', auto:true, icon:'🛰',
+            hint:'Skyeye satellite up — the whole map is on the radar.' },
     desc:'Launches a satellite. Once it is up the entire map is revealed, permanently.' }
 ];
 
