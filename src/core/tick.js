@@ -10,6 +10,7 @@ function _rtsTick(dt) {
      units. Rebuilt here rather than kept up to date incrementally, because one pass over the
      list is what a SINGLE one of those scans used to cost. */
   _rtsSpBuild();
+  _rtsSkyPlayTick();                             /* the weather takes part: core/skyplay.js */
   if (G.msgT > 0) G.msgT -= dt;
 
   _rtsTickOre(dt);
