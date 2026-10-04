@@ -183,6 +183,12 @@ var RTS_UNITS = [
   { key:'repairtruck',name:'Repair Truck', kind:'vehicle', cost:800,  build:10, hp:280,  speed:13,  turn:3.0,r:1.8, sight:16, weapon:null,
     needs:['depot'], heals:RTS_TILE * 2.5, healRate:12, healKind:'vehicle', armour:'light',
     desc:'Repairs your vehicles near it, for free, wherever they are. Drives to a damaged one by itself.' },
+  /* JAMMER. The verb is CONCEALMENT: parked, it hides its side's units near it from the enemy -
+     unseen and untargeted past two cells, until they fire - and fills the enemy's radar with
+     static over them. A Spotter sees through it - core/jammer.js. Unarmed. */
+  { key:'jammer',   name:'Jammer',        kind:'vehicle',  cost:900,  build:11, hp:300,  speed:11,  turn:2.4,r:1.9, sight:16, weapon:null,
+    needs:['radar'], jams:true, tracked:true, armour:'light',
+    desc:'Parked, it hides your units within four cells: the enemy cannot see or target them past two cells until they fire.' },
   /* Armoured Personnel Carrier. UDATA.CPP's UnitAPC is IsCrusher with no turret; the transport
      rules are in UNIT.CPP - capacity via Max_Passengers, and, in Death, the half of the branch
      that matters: when a TRANSPORT dies its infantry passengers are unlimboed at the wreck and

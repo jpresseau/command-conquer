@@ -40,6 +40,7 @@ function _rtsTeamTarget(t, quarry, near) {
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
     if (o.dead || o.side !== 'player') continue;
+    if (o.type === 'unit' && _rtsJamHides(o, 'enemy', lead.x, lead.z)) continue;   /* jammed: core/jammer.js */
     if (!_rtsQuarryMatch(o, quarry)) continue;
     /* ATT_WAYPT is "clear out what is HERE", so candidates outside the waypoint's radius
        are not merely worth less - they are not candidates at all. */

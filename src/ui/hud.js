@@ -286,6 +286,16 @@ function _rtsDrawMini() {
       g.fillRect(mx - 1.5, mz - 1.5, 3, 3);
     }
   }
+  /* STATIC over an enemy Jammer's field (core/jammer.js): the radar cannot read it */
+  var JF = G.jam && G.jam.enemy;
+  for (i = 0; JF && i < JF.length; i++) {
+    var jx = (JF[i].x / RTS_TILE + RTS_N / 2) * sc, jz = (JF[i].z / RTS_TILE + RTS_N / 2) * sc, jr = JF[i].r / RTS_TILE * sc;
+    for (var jn = 0; jn < 90; jn++) {
+      var ja = Math.random() * Math.PI * 2, jd = Math.sqrt(Math.random()) * jr, jv = (120 + Math.random() * 135) | 0;
+      g.fillStyle = 'rgb(' + jv + ',' + jv + ',' + jv + ')';
+      g.fillRect(jx + Math.cos(ja) * jd - 1, jz + Math.sin(ja) * jd - 1, 2, 2);
+    }
+  }
   /* CAMERA VIEWPORT BOX, hung on the centre of what is visible rather than on the focus. The
      two are the same point under both orthographic cameras and are not under the perspective
      one - the visible ground reaches further up the screen than down it - so this asked

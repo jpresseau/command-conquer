@@ -81,6 +81,10 @@ on your side can hit whatever it sees at full range - artillery in fog stops bei
 **Mend in the field.** The Repair Truck brings your vehicles back up wherever they stand, and
 drives to a damaged one by itself - the Repair Bay, on wheels.
 
+**Hide the column.** Park a Jammer and your units round it vanish from the enemy - unseen and
+untargeted past two cells until they open fire - and the enemy's radar fills with static there.
+Only a Spotter sees through it.
+
 **The enemy uses its whole garage.** It mines the approach to its own base, and once you have a
 harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands
 them beside your ore field, and goes home to do it again.
