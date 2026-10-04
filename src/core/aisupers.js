@@ -79,6 +79,7 @@ function _rtsUpdateAI(dt) {
   _rtsAISpotTick(dt);           /* ...and the spotter sees for the long guns - core/spotter.js */
   _rtsAIFixTick(dt);            /* ...and the truck follows the army - core/repairtruck.js */
   _rtsAIJamTick(dt);            /* ...and the jammer hides it - core/jammer.js */
+  _rtsAIParaTick(dt);           /* ...and the paratroopers go over the wall - core/paradrop.js */
   _rtsAISupers(dt);
   /* Rich: refill a line as soon as it empties, rather than waiting up to five seconds for
      the next decision. Without this the opponent banks tens of thousands of credits it

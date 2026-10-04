@@ -30,7 +30,7 @@ function _rtsAirLift(e) {
 var RTS_AIR_SET = 1.2, RTS_AIR_SETTLE = 1.5;
 function _rtsAirSettle(e, dt) {
   var d = rtsUnitDef(e.def) || {};
-  if (!d.carries) return;
+  if (!d.carries || d.paradrops) return;     /* a Paradrop Plane never sets down: core/paradrop.js */
   var idle = !e.order && (!e.path || e.pi >= e.path.length), tx = _rtsTX(e.x), tz = _rtsTX(e.z);
   var want = idle && _rtsInB(tx, tz) && !_rtsBlocked(tx, tz) ? 1 : 0, l = e.land || 0;
   if (want > l) e.land = Math.min(1, l + dt / RTS_AIR_SETTLE);

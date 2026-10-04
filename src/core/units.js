@@ -19,6 +19,8 @@ function _rtsUpdateUnit(e, dt) {
   if (e.recoil > 0) e.recoil -= dt;
   if (e.hitT > 0) e.hitT -= dt;
   if (e.spot > 0) e.spot -= dt;
+  /* UNDER A CANOPY: a paratrooper does nothing until he is down (core/paradrop.js) */
+  if (e.chute > 0) { e.chute -= dt; e.path = null; return; }
   /* Specialists do not panic. Fear scatters ordinary infantry, which is right for a rifle
      squad and fatal for a directed one: measured, a commando ordered onto an enemy barracks sat
      at fear 49.75, went prone, and had her goal rewritten every second - she circled the
@@ -149,7 +151,8 @@ function _rtsUpdateUnit(e, dt) {
     if (!_rtsCargoCount(e)) { e.order = null; e.path = null; }
     else if (e.path && e.pi < e.path.length) { _rtsSteer(e, dt, d); return; }
     else {
-      var put = _rtsUnload(e);
+      var men = (e.cargo || []).slice(), put = _rtsUnload(e);
+      if (d.paradrops && put) { _rtsParaJumped(e, men); return; }   /* home again: core/paradrop.js */
       /* Nothing got out: the hull is somewhere with no ground its cargo can stand on. Say so
          rather than leave the player watching a boat that has apparently ignored the order -
          which is the whole reason _rtsUnload returns a count. */

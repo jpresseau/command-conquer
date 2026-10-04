@@ -146,6 +146,15 @@ var RTS_UNITS = [
     needs:['afld'], air:true, alt:14, carries:1, takes:['vehicle'], slings:true,
     side:'soviet', armour:'light',
     desc:'Lifts one of your vehicles and sets it down anywhere. Order a vehicle onto it, then click where to drop it.' },
+  /* PARADROP PLANE. The verb is the DROP: men put down behind a wall without the plane ever
+     touching the ground. It waits in the air over its Airfield to be boarded, flies to where it is
+     sent, the men jump - a short fall under canopies, unable to act - and it goes home. The
+     Dominion's way over a fortified line, as the Skylift is the Compact's way across water.
+     Unarmed - core/paradrop.js. */
+  { key:'paraplane',name:'Paradrop Plane', kind:'air',     cost:1100, build:12, hp:200,  speed:30,  turn:3.0,r:2.0, sight:18, weapon:null,
+    needs:['afld'], air:true, alt:16, carries:5, takes:['infantry'], paradrops:true,
+    side:'soviet', armour:'light',
+    desc:'Drops five infantry anywhere without landing, then flies home. Board it over the Airfield, then click the drop zone.' },
   /* FLAK TRACK. The verb is ESCORT: the armour column takes its anti-aircraft cover with it.
      Until this, everything that could shoot down an aircraft either stood still (the AA Gun,
      the Rocket Turret) or was a squad on foot (rockets), so a gunship could pick apart a tank

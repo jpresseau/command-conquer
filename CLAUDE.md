@@ -382,7 +382,7 @@ done. Read the one that covers what you are changing; you do not need to read th
 | `docs/core-ai.md` | difficulty and IQ, the base blueprint, teams and their mission lists, committing an army |
 | `docs/core-economy.md` | production charging, the two money pools and storage, ore fields, crates, what a building does while it stands |
 | `docs/core-world.md` | shroud, start positions, triggers, saving a battle |
-| `docs/roster.md` | the units and structures beyond the opening set, and the rule each was held to |
+| `docs/roster.md`, `docs/roster-air-sea.md` | the units and structures beyond the opening set, and the rule each was held to |
 | `docs/ui.md` | selection, the sidebar, radar orders, and the 15 Hz animation cadence |
 | `docs/art.md` | why the art read flat, read dark and read blue — and what the measurements said |
 | `docs/measuring.md` | the ladder, and how it has been misread |

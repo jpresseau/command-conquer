@@ -53,14 +53,16 @@ function _r3dPropPhase(spin) {
    the nose, built where the model's own propeller sits. Tubes, not boxes - _r3dLimb runs
    between any two points, which is what lets a blade stand at an angle a box cannot. */
 function _r3dPropModel(def, side, k) {
-  var P = RTS_AIR_PARTS[def] && RTS_AIR_PARTS[def].prop;
-  if (!P) return null;
+  var AP = RTS_AIR_PARTS[def], L = AP && (AP.props || (AP.prop ? [AP.prop] : null));   /* `props`: one per engine */
+  if (!L) return null;
   var m = [], DK = RTS_PAL.dark, GN = RTS_PAL.gun, a0 = k / R3D_PROP_N * Math.PI / 2;
-  for (var b = 0; b < 2; b++) {
-    var a = a0 + b * Math.PI / 2, cy = Math.cos(a) * P[3], cz = Math.sin(a) * P[3];
-    _r3dLimb(m, P[0], P[1] - cy, P[2] - cz, P[0], P[1] + cy, P[2] + cz, 0.32, 0.32, 8, DK[1]);
-  }
-  _r3dBall(m, P[0] + 0.3, P[1], P[2], 0.7, GN[2], 10, 6);                 /* spinner */
+  L.forEach(function (P) {
+    for (var b = 0; b < 2; b++) {
+      var a = a0 + b * Math.PI / 2, cy = Math.cos(a) * P[3], cz = Math.sin(a) * P[3];
+      _r3dLimb(m, P[0], P[1] - cy, P[2] - cz, P[0], P[1] + cy, P[2] + cz, 0.32, 0.32, 8, DK[1]);
+    }
+    _r3dBall(m, P[0] + 0.3, P[1], P[2], 0.7, GN[2], 10, 6);               /* spinner */
+  });
   var sc = _sprUnitScale(def);
   return sc === 1 ? m : _r3Scale(m, sc);
 }
@@ -79,11 +81,18 @@ function _r3dAirTrail(mo, e, y, t) {
 }
 
 /* Into the effects pass: the contrails and the afterburners of whatever is flying in sight. */
+var R3D_CANOPY_C = [0.92, 0.9, 0.84];
 function _r3dFxAir(G, V) {
   var R3 = window._R3D, M = R3 && R3.motion, E = G.ents || [], vis = typeof _rtsVisible === 'function';
   if (!M) return;
   var w2 = RTS_TILE / RTS_TS;
   for (var i = 0; i < E.length; i++) {
+    /* A PARATROOPER'S CANOPY, over him while he comes down (core/paradrop.js, unit3d.js) */
+    var pe = E[i];
+    if (pe.chute > 0 && !pe.dead && M[pe.id] && M[pe.id].y !== undefined && (!vis || _rtsVisible(_rtsTX(pe.x), _rtsTX(pe.z)))) {
+      _r3dFxBill(V.M, V, pe.x, M[pe.id].y + 1.3, pe.z, 0.9, 0.42, 0.4, R3D_FXT_BLOB, 0.2, pe.id, 0.95, 0, R3D_CANOPY_C);
+      continue;
+    }
     var e = E[i], AP = RTS_AIR_PARTS[e.def], mo = M[e.id];
     if (e.dead || !e.air || !AP || !mo || mo.y === undefined || e.rearming > 0) continue;
     if (vis && !_rtsVisible(_rtsTX(e.x), _rtsTX(e.z))) continue;
