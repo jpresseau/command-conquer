@@ -80,6 +80,7 @@ function _r3dShipSwell(e, t) {
 }
 
 /* Far enough out that a unit is a few dozen pixels long: the plain models will do (mesh3d.js). */
+var R3D_CHUTE_H = 5.0;           /* world units a paratrooper falls from, over RTS_PARA.fall */
 var R3D_SLING_DROP = 0.4;        /* world units a slung load hangs under its crane: between its legs, under the hook */
 var R3D_LOD_CELL = 20;           /* device px a map cell, below which */
 function _r3dLodFar(R3) {
@@ -105,6 +106,7 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
      is over as well - it flies at a height, not at a level - so both take the terrain and
      only the flier adds to it. */
   var y = (e.air || d2.sea ? _rtsElev(e.x, e.z) : _rtsStandY(e.x, e.z)) + (e.air ? _rtsAirLift(e) * 0.35 : 0);   /* render/camera.js */
+  if (e.chute > 0) y += e.chute / RTS_PARA.fall * R3D_CHUTE_H;     /* coming down under a canopy: core/paradrop.js */
   /* A MARCHING SOLDIER BOBS. The bob is what is left of the old suggestion of a march, much
      smaller now that he walks (a stride pose by his own gait, soldier3d.js), in step with the
      stride. Prone, he crawls instead (crawl3d.js). Vehicles do not bob; tracks do not walk. */

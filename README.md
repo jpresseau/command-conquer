@@ -88,6 +88,9 @@ Only a Spotter sees through it.
 **Fly the armour in.** The Dominion's Sky Crane lifts one of your vehicles and sets it down
 anywhere - a tank over a river, onto an island no road reaches.
 
+**Drop in behind the wall.** The Dominion's Paradrop Plane flies a squad over the defences and
+drops it without landing - the men come down under canopies and go to work - then flies home.
+
 **The enemy uses its whole garage.** It mines the approach to its own base, and once you have a
 harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands
 them beside your ore field, and goes home to do it again.

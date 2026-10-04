@@ -5,6 +5,7 @@
 
 /* the 3D renderer's moving parts for these (see RTS_AIR_PARTS in unit-airsea.js) */
 RTS_AIR_PARTS.skycrane = { rotor: true };
+RTS_AIR_PARTS.paraplane = { prop: [7.4, 6.1, -6.6, 2.8], props: [[7.4, 6.1, -6.6, 2.8], [7.4, 6.1, 6.6, 2.8]], tips: 13.0 };
 
 function _sprUnitWings(X, key) {
   var m = X.m, TM = X.TM, VH = X.VH, S = X.S, DK = X.DK, GN = X.GN, part = X.part, i;
@@ -40,6 +41,31 @@ function _sprUnitWings(X, key) {
     _r3Box(m, -7.0, 4.6, 0, 0.6, 0.6, 8.8, S[2], S[1]);
     _r3Box(m, 0, 4.4, 0, 0.3, 3.8, 0.3, DK[2], DK[3]);             /* the cable */
     _r3Box(m, 0, 3.8, 0, 1.4, 0.8, 1.0, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);   /* the hook block */
+  } else if (key === 'paraplane') {
+    /* PARADROP PLANE. A high-winged twin-engined transport with a fat fuselage, a tail raised on
+       an upswept boom and the jump door open in its flank. The identity is the HIGH STRAIGHT WING
+       with an engine pod on each side, wider than anything else in the air, and the door. */
+    _r3Box(m, 0, 2.2, 0, 19.0, 4.6, 4.8, VH[0], VH[1]);            /* fuselage */
+    _r3Box(m, 10.4, 2.6, 0, 2.4, 3.6, 4.2, VH[1], VH[3]);          /* nose */
+    _r3Box(m, 11.3, 4.6, 0, 0.6, 1.4, 3.4, RTS_PAL.glass, RTS_PAL.glass);   /* cockpit glazing */
+    _r3Box(m, 1.4, 6.8, 0, 4.6, 0.6, 26.0, VH[1], VH[2]);          /* the high wing */
+    _r3Box(m, 1.4, 7.4, 0, 3.0, 0.3, 8.0, TM[1], TM[3]);           /* team band on it */
+    for (var en = -1; en <= 1; en += 2) {                           /* engine pods */
+      _r3Box(m, 3.6, 5.2, en * 6.6, 6.0, 1.8, 2.0, VH[2], VH[1]);
+      _r3Cyl(m, 6.8, 5.4, en * 6.6, 0.6, 1.2, DK[1], DK[2], 16);
+    }
+    _r3Box(m, -11.4, 4.0, 0, 6.0, 1.6, 2.2, VH[1], VH[2]);         /* the upswept boom */
+    _r3Box(m, -13.6, 5.2, 0, 2.4, 4.4, 0.5, VH[1], VH[2]);         /* the fin */
+    _r3Box(m, -13.4, 8.6, 0, 2.2, 0.4, 9.0, VH[1], VH[2]);         /* tailplane, high */
+    _r3Box(m, -4.6, 2.6, 2.45, 2.4, 3.0, 0.2, DK[2], DK[3]);       /* the open jump door */
+    _r3Box(m, -4.6, 5.8, 2.6, 2.6, 0.3, 0.6, RTS_PAL.lit, RTS_PAL.lit);    /* its jump light */
+    for (var wn = 0; wn < 4; wn++) {                                /* cabin windows */
+      _r3Box(m, 6.0 - wn * 2.6, 4.0, -2.45, 1.0, 0.8, 0.2, RTS_PAL.glass, RTS_PAL.glass);
+      _r3Box(m, 6.0 - wn * 2.6, 4.0, 2.45, 1.0, 0.8, 0.2, RTS_PAL.glass, RTS_PAL.glass);
+    }
+    if (part !== 'body') {                                          /* the props, for the sprite */
+      for (var pp = -1; pp <= 1; pp += 2) _r3Box(m, 7.4, 3.3, pp * 6.6, 0.3, 5.6, 0.6, DK[1], DK[2]);
+    }
   } else return false;
   return true;
 }

@@ -706,7 +706,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">14f481c · 2026-10-04</div>
+  <div id="rtsBuild" title="build">7b9b4f3 · 2026-10-04</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1115,6 +1115,15 @@ var RTS_UNITS = [
     needs:['afld'], air:true, alt:14, carries:1, takes:['vehicle'], slings:true,
     side:'soviet', armour:'light',
     desc:'Lifts one of your vehicles and sets it down anywhere. Order a vehicle onto it, then click where to drop it.' },
+  /* PARADROP PLANE. The verb is the DROP: men put down behind a wall without the plane ever
+     touching the ground. It waits in the air over its Airfield to be boarded, flies to where it is
+     sent, the men jump - a short fall under canopies, unable to act - and it goes home. The
+     Dominion's way over a fortified line, as the Skylift is the Compact's way across water.
+     Unarmed - core/paradrop.js. */
+  { key:'paraplane',name:'Paradrop Plane', kind:'air',     cost:1100, build:12, hp:200,  speed:30,  turn:3.0,r:2.0, sight:18, weapon:null,
+    needs:['afld'], air:true, alt:16, carries:5, takes:['infantry'], paradrops:true,
+    side:'soviet', armour:'light',
+    desc:'Drops five infantry anywhere without landing, then flies home. Board it over the Airfield, then click the drop zone.' },
   /* FLAK TRACK. The verb is ESCORT: the armour column takes its anti-aircraft cover with it.
      Until this, everything that could shoot down an aircraft either stood still (the AA Gun,
      the Rocket Turret) or was a squad on foot (rockets), so a gunship could pick apart a tank
@@ -6492,7 +6501,7 @@ function _sprBuildingClean(key, side) {
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
   dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46,
-  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46
+  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:44
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -7673,6 +7682,7 @@ function _sprUnitSpecial(X, key) {
 
 /* the 3D renderer's moving parts for these (see RTS_AIR_PARTS in unit-airsea.js) */
 RTS_AIR_PARTS.skycrane = { rotor: true };
+RTS_AIR_PARTS.paraplane = { prop: [7.4, 6.1, -6.6, 2.8], props: [[7.4, 6.1, -6.6, 2.8], [7.4, 6.1, 6.6, 2.8]], tips: 13.0 };
 
 function _sprUnitWings(X, key) {
   var m = X.m, TM = X.TM, VH = X.VH, S = X.S, DK = X.DK, GN = X.GN, part = X.part, i;
@@ -7708,6 +7718,31 @@ function _sprUnitWings(X, key) {
     _r3Box(m, -7.0, 4.6, 0, 0.6, 0.6, 8.8, S[2], S[1]);
     _r3Box(m, 0, 4.4, 0, 0.3, 3.8, 0.3, DK[2], DK[3]);             /* the cable */
     _r3Box(m, 0, 3.8, 0, 1.4, 0.8, 1.0, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);   /* the hook block */
+  } else if (key === 'paraplane') {
+    /* PARADROP PLANE. A high-winged twin-engined transport with a fat fuselage, a tail raised on
+       an upswept boom and the jump door open in its flank. The identity is the HIGH STRAIGHT WING
+       with an engine pod on each side, wider than anything else in the air, and the door. */
+    _r3Box(m, 0, 2.2, 0, 19.0, 4.6, 4.8, VH[0], VH[1]);            /* fuselage */
+    _r3Box(m, 10.4, 2.6, 0, 2.4, 3.6, 4.2, VH[1], VH[3]);          /* nose */
+    _r3Box(m, 11.3, 4.6, 0, 0.6, 1.4, 3.4, RTS_PAL.glass, RTS_PAL.glass);   /* cockpit glazing */
+    _r3Box(m, 1.4, 6.8, 0, 4.6, 0.6, 26.0, VH[1], VH[2]);          /* the high wing */
+    _r3Box(m, 1.4, 7.4, 0, 3.0, 0.3, 8.0, TM[1], TM[3]);           /* team band on it */
+    for (var en = -1; en <= 1; en += 2) {                           /* engine pods */
+      _r3Box(m, 3.6, 5.2, en * 6.6, 6.0, 1.8, 2.0, VH[2], VH[1]);
+      _r3Cyl(m, 6.8, 5.4, en * 6.6, 0.6, 1.2, DK[1], DK[2], 16);
+    }
+    _r3Box(m, -11.4, 4.0, 0, 6.0, 1.6, 2.2, VH[1], VH[2]);         /* the upswept boom */
+    _r3Box(m, -13.6, 5.2, 0, 2.4, 4.4, 0.5, VH[1], VH[2]);         /* the fin */
+    _r3Box(m, -13.4, 8.6, 0, 2.2, 0.4, 9.0, VH[1], VH[2]);         /* tailplane, high */
+    _r3Box(m, -4.6, 2.6, 2.45, 2.4, 3.0, 0.2, DK[2], DK[3]);       /* the open jump door */
+    _r3Box(m, -4.6, 5.8, 2.6, 2.6, 0.3, 0.6, RTS_PAL.lit, RTS_PAL.lit);    /* its jump light */
+    for (var wn = 0; wn < 4; wn++) {                                /* cabin windows */
+      _r3Box(m, 6.0 - wn * 2.6, 4.0, -2.45, 1.0, 0.8, 0.2, RTS_PAL.glass, RTS_PAL.glass);
+      _r3Box(m, 6.0 - wn * 2.6, 4.0, 2.45, 1.0, 0.8, 0.2, RTS_PAL.glass, RTS_PAL.glass);
+    }
+    if (part !== 'body') {                                          /* the props, for the sprite */
+      for (var pp = -1; pp <= 1; pp += 2) _r3Box(m, 7.4, 3.3, pp * 6.6, 0.3, 5.6, 0.6, DK[1], DK[2]);
+    }
   } else return false;
   return true;
 }
@@ -15417,7 +15452,7 @@ function _rtsAirLift(e) {
 var RTS_AIR_SET = 1.2, RTS_AIR_SETTLE = 1.5;
 function _rtsAirSettle(e, dt) {
   var d = rtsUnitDef(e.def) || {};
-  if (!d.carries) return;
+  if (!d.carries || d.paradrops) return;     /* a Paradrop Plane never sets down: core/paradrop.js */
   var idle = !e.order && (!e.path || e.pi >= e.path.length), tx = _rtsTX(e.x), tz = _rtsTX(e.z);
   var want = idle && _rtsInB(tx, tz) && !_rtsBlocked(tx, tz) ? 1 : 0, l = e.land || 0;
   if (want > l) e.land = Math.min(1, l + dt / RTS_AIR_SETTLE);
@@ -15485,6 +15520,8 @@ function _rtsUpdateUnit(e, dt) {
   if (e.recoil > 0) e.recoil -= dt;
   if (e.hitT > 0) e.hitT -= dt;
   if (e.spot > 0) e.spot -= dt;
+  /* UNDER A CANOPY: a paratrooper does nothing until he is down (core/paradrop.js) */
+  if (e.chute > 0) { e.chute -= dt; e.path = null; return; }
   /* Specialists do not panic. Fear scatters ordinary infantry, which is right for a rifle
      squad and fatal for a directed one: measured, a commando ordered onto an enemy barracks sat
      at fear 49.75, went prone, and had her goal rewritten every second - she circled the
@@ -15615,7 +15652,8 @@ function _rtsUpdateUnit(e, dt) {
     if (!_rtsCargoCount(e)) { e.order = null; e.path = null; }
     else if (e.path && e.pi < e.path.length) { _rtsSteer(e, dt, d); return; }
     else {
-      var put = _rtsUnload(e);
+      var men = (e.cargo || []).slice(), put = _rtsUnload(e);
+      if (d.paradrops && put) { _rtsParaJumped(e, men); return; }   /* home again: core/paradrop.js */
       /* Nothing got out: the hull is somewhere with no ground its cargo can stand on. Say so
          rather than leave the player watching a boat that has apparently ignored the order -
          which is the whole reason _rtsUnload returns a count. */
@@ -17973,7 +18011,8 @@ function _rtsAISupport(S) {
          _rtsAISupportBuy(S, 'sweeper', function (G) { return !!(G.mineHits && G.mineHits.length); }) ||  /* a mine has cost it a unit: core/sweeper.js */
          _rtsAISupportBuy(S, 'spotter', function () { return _rtsFogged() && _rtsAILongGuns() > 0; }) ||  /* long guns blind in fog: core/spotter.js */
          _rtsAISupportBuy(S, 'repairtruck', function () { return _rtsAIFieldVehicles() >= RTS_FIX.army && _rtsAIDefended(); }) ||  /* an army worth mending: core/repairtruck.js */
-         _rtsAISupportBuy(S, 'jammer', function () { return _rtsPlayerDefences() >= RTS_JAM.digIn && _rtsAIFieldVehicles() >= 4 && _rtsAIDefended(); });  /* the player dug in: core/jammer.js */
+         _rtsAISupportBuy(S, 'jammer', function () { return _rtsPlayerDefences() >= RTS_JAM.digIn && _rtsAIFieldVehicles() >= 4 && _rtsAIDefended(); }) ||  /* the player dug in: core/jammer.js */
+         _rtsAISupportBuy(S, 'paraplane', function () { return _rtsPlayerDefences() >= RTS_JAM.digIn && _rtsAIDefended() && !!_rtsAIParaTarget(); });  /* over the wall: core/paradrop.js */
 }
 function _rtsAISupportBuy(S, key, worth) {
   var G = window._rtsG, d = rtsUnitDef(key);
@@ -18206,6 +18245,111 @@ function _rtsAIHoverTick(dt) {
       hc.path = p ? p.concat([{ x: aim.beach.x, z: aim.beach.z }]) : null; hc.pi = 0;
       if (!hc.path) { _rtsUnload(hc); }
     }
+  }
+}
+</script>
+<script>/* core/paradrop.js - the Paradrop Plane: men put down behind the wall, from the air.
+
+   The verb is the DROP. The Skylift has to set down to put a squad off, and a transport on the
+   ground inside an enemy base is a transport lost. This plane never sets down (core/airspace.js
+   asks `paradrops`): its squad is boarded where it waits over its Airfield, it flies to where it
+   is sent, and the men jump - each comes down under a canopy for RTS_PARA.fall seconds, unable
+   to act, and lands within a few cells of the drop. The plane goes straight home.
+
+   The opponent uses it to go over a base the player has dug in: four squads, rocket squads
+   first, dropped beside the player's least-guarded power plant, which they go for. */
+
+var RTS_PARA = { fall: 1.2, crew: 4, rest: 90, board: 40, fly: 120, every: 1 };
+
+/* the drop is done: home to the nearest friendly air pad */
+function _rtsParaHome(e) {
+  var G = window._rtsG, best = null, bd = 1e9;
+  for (var i = 0; i < G.ents.length; i++) {
+    var b = G.ents[i];
+    if (b.dead || b.type !== 'struct' || b.side !== e.side || (rtsStructDef(b.def) || {}).produces !== 'air') continue;
+    var d = Math.hypot(b.x - e.x, b.z - e.z);
+    if (d < bd) { bd = d; best = b; }
+  }
+  if (best) _rtsOrderMove(e, best.x, best.z, false);
+}
+/* the men who got out jump: a canopy and a fall before each can act; the plane goes home */
+function _rtsParaJumped(e, men) {
+  for (var i = 0; i < men.length; i++) if (!men[i].inside && !men[i].dead) men[i].chute = RTS_PARA.fall;
+  _rtsParaHome(e);
+  if (e.side === 'player' && typeof _rtsSay === 'function') _rtsSay('Paratroopers away.');
+}
+
+/* ------------------------------------------------ the opponent's drops -- */
+/* what to drop on: the player's power plant with the fewest guns round it */
+function _rtsAIParaTarget() {
+  var G = window._rtsG, best = null, bv = 1e9;
+  for (var i = 0; i < G.ents.length; i++) {
+    var b = G.ents[i];
+    if (b.dead || b.side !== 'player' || b.type !== 'struct' || !((rtsStructDef(b.def) || {}).power > 0)) continue;
+    var v = _rtsGuardsNear(b, RTS_RAID_GUARD_R);
+    if (v < bv) { bv = v; best = b; }
+  }
+  return best;
+}
+function _rtsAIParaTick(dt) {
+  var G = window._rtsG;
+  G.ai.paraT = (G.ai.paraT || 0) + dt;
+  if (G.ai.paraT < RTS_PARA.every) return;
+  G.ai.paraT = 0;
+  var st = G.ai.para || (G.ai.para = { s: 'rest', t: G.t - RTS_PARA.rest, crew: [] });
+  /* the men on the ground: at the target, then any of the player's buildings near, then home */
+  st.crew = st.crew.filter(function (id) {
+    var u = G.byId[id];
+    if (!u || u.dead || !u.raid) return false;
+    if (u.inside || u.chute > 0) return true;
+    if (!u.target || u.target.dead || u.order !== 'attack') {
+      var aim = st.aim && !st.aim.dead ? st.aim : null, near = 1e9;
+      if (!aim) G.ents.forEach(function (b) {
+        if (b.dead || b.side !== 'player' || b.type !== 'struct') return;
+        var d = Math.hypot(b.x - u.x, b.z - u.z);
+        if (d < near && d < RTS_AI_HOVER.reach * RTS_TILE) { near = d; aim = b; }
+      });
+      if (!aim) { u.raid = 0; u.order = null; u.target = null; return false; }
+      _rtsOrderAttack(u, aim);
+    }
+    return true;
+  });
+  var pl = null;
+  for (var i = 0; i < G.ents.length && !pl; i++) {
+    var e = G.ents[i];
+    if (!e.dead && e.side === 'enemy' && e.type === 'unit' && (rtsUnitDef(e.def) || {}).paradrops) pl = e;
+  }
+  if (!pl) { st.s = 'rest'; return; }
+  if (st.s === 'rest') {
+    if (G.t - st.t < RTS_PARA.rest || !_rtsAIParaTarget()) return;
+    st.s = 'crew'; st.t = G.t;
+  }
+  if (st.s === 'crew') {
+    var want = RTS_PARA.crew - _rtsCargoCount(pl), boarding = 0;
+    G.ents.forEach(function (u) { if (!u.dead && u.raid && !u.inside && u.order === 'board' && u.target === pl) boarding++; });
+    _rtsAIHoverCrew(pl, Math.max(0, want - boarding)).forEach(function (u) {
+      if (_rtsOrderBoard(u, pl)) { u.raid = 1; st.crew.push(u.id); }
+    });
+    var full = _rtsCargoCount(pl) >= RTS_PARA.crew, late = G.t - st.t > RTS_PARA.board;
+    if (!full && !(late && _rtsCargoCount(pl) >= 2)) {
+      if (late && G.t - st.t > RTS_PARA.board * 2) { st.s = 'rest'; st.t = G.t; }
+      return;
+    }
+    G.ents.forEach(function (u) { if (!u.dead && u.raid && !u.inside && u.order === 'board') { u.raid = 0; u.order = null; u.target = null; } });
+    st.aim = _rtsAIParaTarget();
+    if (!st.aim) { st.s = 'rest'; st.t = G.t; return; }
+    /* the drop zone: open ground just past the plant's footprint, on the side away from the
+       player's yard - the side its guns face least */
+    var py = _rtsHas('player', 'yard') || st.aim, dx = st.aim.x - py.x, dz = st.aim.z - py.z, L = Math.hypot(dx, dz) || 1;
+    var off = (Math.max((rtsStructDef(st.aim.def) || {}).w || 2, 2) / 2 + 1.5) * RTS_TILE;
+    var c = _rtsNearestOpen(_rtsTX(st.aim.x + dx / L * off), _rtsTX(st.aim.z + dz / L * off), 3, null);
+    if (!c || !_rtsOrderUnloadAt(pl, _rtsWX(c[0]), _rtsWX(c[1]))) { st.s = 'rest'; st.t = G.t; return; }
+    st.s = 'fly'; st.t = G.t;
+    return;
+  }
+  if (st.s === 'fly' && (!_rtsCargoCount(pl) || G.t - st.t > RTS_PARA.fly)) {
+    if (_rtsCargoCount(pl)) { _rtsUnload(pl); _rtsParaHome(pl); }
+    st.s = 'rest'; st.t = G.t;
   }
 }
 </script>
@@ -18658,6 +18802,7 @@ function _rtsUpdateAI(dt) {
   _rtsAISpotTick(dt);           /* ...and the spotter sees for the long guns - core/spotter.js */
   _rtsAIFixTick(dt);            /* ...and the truck follows the army - core/repairtruck.js */
   _rtsAIJamTick(dt);            /* ...and the jammer hides it - core/jammer.js */
+  _rtsAIParaTick(dt);           /* ...and the paratroopers go over the wall - core/paradrop.js */
   _rtsAISupers(dt);
   /* Rich: refill a line as soon as it empties, rather than waiting up to five seconds for
      the next decision. Without this the opponent banks tens of thousands of credits it
@@ -26426,6 +26571,7 @@ function _r3dShipSwell(e, t) {
 }
 
 /* Far enough out that a unit is a few dozen pixels long: the plain models will do (mesh3d.js). */
+var R3D_CHUTE_H = 5.0;           /* world units a paratrooper falls from, over RTS_PARA.fall */
 var R3D_SLING_DROP = 0.4;        /* world units a slung load hangs under its crane: between its legs, under the hook */
 var R3D_LOD_CELL = 20;           /* device px a map cell, below which */
 function _r3dLodFar(R3) {
@@ -26451,6 +26597,7 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
      is over as well - it flies at a height, not at a level - so both take the terrain and
      only the flier adds to it. */
   var y = (e.air || d2.sea ? _rtsElev(e.x, e.z) : _rtsStandY(e.x, e.z)) + (e.air ? _rtsAirLift(e) * 0.35 : 0);   /* render/camera.js */
+  if (e.chute > 0) y += e.chute / RTS_PARA.fall * R3D_CHUTE_H;     /* coming down under a canopy: core/paradrop.js */
   /* A MARCHING SOLDIER BOBS. The bob is what is left of the old suggestion of a march, much
      smaller now that he walks (a stride pose by his own gait, soldier3d.js), in step with the
      stride. Prone, he crawls instead (crawl3d.js). Vehicles do not bob; tracks do not walk. */
@@ -26567,14 +26714,16 @@ function _r3dPropPhase(spin) {
    the nose, built where the model's own propeller sits. Tubes, not boxes - _r3dLimb runs
    between any two points, which is what lets a blade stand at an angle a box cannot. */
 function _r3dPropModel(def, side, k) {
-  var P = RTS_AIR_PARTS[def] && RTS_AIR_PARTS[def].prop;
-  if (!P) return null;
+  var AP = RTS_AIR_PARTS[def], L = AP && (AP.props || (AP.prop ? [AP.prop] : null));   /* `props`: one per engine */
+  if (!L) return null;
   var m = [], DK = RTS_PAL.dark, GN = RTS_PAL.gun, a0 = k / R3D_PROP_N * Math.PI / 2;
-  for (var b = 0; b < 2; b++) {
-    var a = a0 + b * Math.PI / 2, cy = Math.cos(a) * P[3], cz = Math.sin(a) * P[3];
-    _r3dLimb(m, P[0], P[1] - cy, P[2] - cz, P[0], P[1] + cy, P[2] + cz, 0.32, 0.32, 8, DK[1]);
-  }
-  _r3dBall(m, P[0] + 0.3, P[1], P[2], 0.7, GN[2], 10, 6);                 /* spinner */
+  L.forEach(function (P) {
+    for (var b = 0; b < 2; b++) {
+      var a = a0 + b * Math.PI / 2, cy = Math.cos(a) * P[3], cz = Math.sin(a) * P[3];
+      _r3dLimb(m, P[0], P[1] - cy, P[2] - cz, P[0], P[1] + cy, P[2] + cz, 0.32, 0.32, 8, DK[1]);
+    }
+    _r3dBall(m, P[0] + 0.3, P[1], P[2], 0.7, GN[2], 10, 6);               /* spinner */
+  });
   var sc = _sprUnitScale(def);
   return sc === 1 ? m : _r3Scale(m, sc);
 }
@@ -26593,11 +26742,18 @@ function _r3dAirTrail(mo, e, y, t) {
 }
 
 /* Into the effects pass: the contrails and the afterburners of whatever is flying in sight. */
+var R3D_CANOPY_C = [0.92, 0.9, 0.84];
 function _r3dFxAir(G, V) {
   var R3 = window._R3D, M = R3 && R3.motion, E = G.ents || [], vis = typeof _rtsVisible === 'function';
   if (!M) return;
   var w2 = RTS_TILE / RTS_TS;
   for (var i = 0; i < E.length; i++) {
+    /* A PARATROOPER'S CANOPY, over him while he comes down (core/paradrop.js, unit3d.js) */
+    var pe = E[i];
+    if (pe.chute > 0 && !pe.dead && M[pe.id] && M[pe.id].y !== undefined && (!vis || _rtsVisible(_rtsTX(pe.x), _rtsTX(pe.z)))) {
+      _r3dFxBill(V.M, V, pe.x, M[pe.id].y + 1.3, pe.z, 0.9, 0.42, 0.4, R3D_FXT_BLOB, 0.2, pe.id, 0.95, 0, R3D_CANOPY_C);
+      continue;
+    }
     var e = E[i], AP = RTS_AIR_PARTS[e.def], mo = M[e.id];
     if (e.dead || !e.air || !AP || !mo || mo.y === undefined || e.rearming > 0) continue;
     if (vis && !_rtsVisible(_rtsTX(e.x), _rtsTX(e.z))) continue;
