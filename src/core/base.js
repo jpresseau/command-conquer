@@ -107,7 +107,7 @@ function _rtsNewGame(seed, diff) {
     vis:new Uint8Array(RTS_N * RTS_N),
     owner:new Int32Array(RTS_N * RTS_N),   /* entity id occupying the tile, 0 = none */
     ents:[], byId:{}, nextId:1,
-    sel:[], proj:[], fx:[],
+    sel:[], proj:[], fx:[], mines:[],
     sides:{ player:_rtsSideNew('player'), enemy:_rtsSideNew('enemy') },
     rnd:null,                              /* seeded on first use; see _rtsRnd */
     ai:{ next:0, wave:0, build:6, place:0, state:0, lastHit:-999, want:null },

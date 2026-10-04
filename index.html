@@ -700,7 +700,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">270c616 · 2026-10-04</div>
+  <div id="rtsBuild" title="build">37570fb · 2026-10-04</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1094,8 +1094,14 @@ var RTS_UNITS = [
      column anywhere outside a base. Both armies build it, and it cannot fire at the ground at
      all - a specialist, like the AA Gun it is the mobile half of. */
   { key:'flaktrack',name:'Flak Track',    kind:'vehicle',  cost:800,  build:10, hp:260,  speed:12.5,turn:2.4,r:1.8, sight:26, weapon:'trackflak',
-    needs:['radar'], armour:'light',
+    needs:['radar'], tracked:true, armour:'light',
     desc:'Anti-aircraft guns on a half-track. Keeps gunships and jets off your tanks; cannot hit the ground.' },
+  /* MINE LAYER. The verb is DENIAL: a road, a ford or a gap that the enemy will pay to cross.
+     Unarmed; it lays a mine where it stands (D, or DEPLOY), five to a load, and a Repair Bay
+     loads them back. The mines are invisible to the other side - core/mines.js. */
+  { key:'minelayer',name:'Mine Layer',    kind:'vehicle',  cost:900,  build:11, hp:340,  speed:10,  turn:2.0,r:1.9, sight:16, weapon:null,
+    needs:['depot'], mines:5, tracked:true, armour:'heavy',
+    desc:'Lays hidden mines where it stands - press D or DEPLOY. Five to a load; a Repair Bay restocks it.' },
   /* Armoured Personnel Carrier. UDATA.CPP's UnitAPC is IsCrusher with no turret; the transport
      rules are in UNIT.CPP - capacity via Max_Passengers, and, in Death, the half of the branch
      that matters: when a TRANSPORT dies its infantry passengers are unlimboed at the wreck and
@@ -6368,7 +6374,7 @@ function _sprBuildingClean(key, side) {
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
   dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46,
-  flaktrack:34
+  flaktrack:34, minelayer:37
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -7238,7 +7244,7 @@ function _sprUnitAirSea(X, key) {
 }
 </script>
 <script>/* sprites/unit-special.js - the special-purpose vehicles Breachwater added to the roster: the
-   Flak Track first. One arm of the unit model chain (see sprites/unitmodels.js for the
+   Flak Track and the Mine Layer. One arm of the unit model chain (see sprites/unitmodels.js for the
    dispatch and the shared locals handed over in X); returns false for a key it does not own.
 
    Two small helpers live here because these are the first models that need them: a run of
@@ -7319,6 +7325,39 @@ function _sprUnitSpecial(X, key) {
       }
       _sprPitch(m, n0, 50 * Math.PI / 180, -0.4, 10.2);
     }
+  } else if (key === 'minelayer') {
+    /* MINE LAYER. A low tracked hull carrying its load where it can be seen: a rack of mines
+       stacked on the rear deck, and the dispenser chute sloping off the stern that puts them
+       down. The identity is the chute and the stacks - round, dark discs with a yellow band,
+       the one cargo nothing else in the roster carries. */
+    tracks(19, 6.0, 5, 2.2);
+    _r3Slab(m, 0, 3.2, 0, 18.0, 3.2, 10.2, 1.0, VH[0], VH[1]);    /* hull */
+    _r3Box(m, 7.2, 3.2, 0, 3.2, 3.0, 9.2, VH[1], VH[3]);          /* glacis */
+    _r3Slab(m, 4.2, 6.4, 0, 6.0, 2.8, 8.4, 0.8, VH[1], TM[1]);    /* crew cab - team roof */
+    _r3Box(m, 7.4, 7.4, 0, 0.6, 1.0, 6.4, RTS_PAL.glass, RTS_PAL.glass);   /* vision block */
+    _r3Box(m, -3.2, 6.4, 0, 9.4, 0.8, 9.0, S[1], S[2]);           /* the rack's floor */
+    /* the load: three stacks of four, each mine a squat disc with a hazard band */
+    for (var st = 0; st < 3; st++) {
+      var sx = -6.2 + st * 3.1;
+      for (var lv = 0; lv < 4; lv++) {
+        _r3Cyl(m, sx, 7.2 + lv * 1.05, -2.2, 1.3, 0.8, DK[1], DK[2], 18);
+        _r3Cyl(m, sx, 7.2 + lv * 1.05, 2.2, 1.3, 0.8, DK[1], DK[2], 18);
+      }
+      _r3Cyl(m, sx, 11.4, -2.2, 0.5, 0.4, RTS_PAL.hazard[0], RTS_PAL.hazard[1], 16);   /* fuzes */
+      _r3Cyl(m, sx, 11.4, 2.2, 0.5, 0.4, RTS_PAL.hazard[0], RTS_PAL.hazard[1], 16);
+    }
+    _r3Box(m, -3.2, 7.2, -4.4, 9.4, 1.4, 0.5, S[2], S[1]);        /* rack rails, low enough to show the load */
+    _r3Box(m, -3.2, 7.2, 4.4, 9.4, 1.4, 0.5, S[2], S[1]);
+    /* the dispenser chute off the stern, pitched down to the ground */
+    n0 = m.length;
+    _r3Box(m, -11.6, 4.6, 0, 6.0, 0.6, 4.4, S[1], S[2]);          /* chute floor */
+    _r3Box(m, -11.6, 5.2, -2.1, 6.0, 1.2, 0.4, VH[2], VH[1]);     /* its sides */
+    _r3Box(m, -11.6, 5.2, 2.1, 6.0, 1.2, 0.4, VH[2], VH[1]);
+    _sprPitch(m, n0, 0.42, -8.6, 5.0);
+    _r3Cyl(m, -13.0, 2.0, 0, 1.3, 0.8, DK[1], RTS_PAL.hazard[0], 18);   /* one on its way out */
+    _r3Box(m, 8.6, 5.0, -3.6, 0.9, 1.0, 1.4, GN[3], GN[3]);       /* headlights */
+    _r3Box(m, 8.6, 5.0, 3.6, 0.9, 1.0, 1.4, GN[3], GN[3]);
+    _r3Box(m, 2.4, 9.0, -3.2, 0.5, 4.2, 0.5, DK[1], DK[3]);       /* whip aerial */
   } else return false;
   return true;
 }
@@ -9342,7 +9381,7 @@ function _rtsAmbLoad(A, B, ms) {
 
 /* vehicles on tracks, not wheels: the hulls that crush infantry (rules/vehicles.js), the APC and
    the MCV - UDATA.CPP's tracked set */
-function _rtsAmbTracked(def) { return !!(RTS_CRUSHERS[def] || def === 'apc' || def === 'mcv'); }
+function _rtsAmbTracked(def) { return !!(RTS_CRUSHERS[def] || def === 'apc' || def === 'mcv' || (rtsUnitDef(def) || {}).tracked); }
 /* a rotor is a helicopter, whichever one: read off the model's own parts (sprites/unit-airsea.js),
    so the Chinook beats the air like the Attack Heli instead of roaring like a MiG */
 function _rtsAmbRotor(def) {
@@ -11210,7 +11249,7 @@ function _rtsNewGame(seed, diff) {
     vis:new Uint8Array(RTS_N * RTS_N),
     owner:new Int32Array(RTS_N * RTS_N),   /* entity id occupying the tile, 0 = none */
     ents:[], byId:{}, nextId:1,
-    sel:[], proj:[], fx:[],
+    sel:[], proj:[], fx:[], mines:[],
     sides:{ player:_rtsSideNew('player'), enemy:_rtsSideNew('enemy') },
     rnd:null,                              /* seeded on first use; see _rtsRnd */
     ai:{ next:0, wave:0, build:6, place:0, state:0, lastHit:-999, want:null },
@@ -11483,6 +11522,92 @@ function _rtsCrateOpen(cr, u) {
   return cr.kind;
 }
 
+</script>
+<script>/* core/mines.js - the Mine Layer's mines: laid, armed, hidden, and set off.
+
+   The Mine Layer's verb is DENIAL: a road, a ford or a gap in a wall that the enemy will pay to
+   cross. A mine is not an entity - nothing targets it, it does not count toward anyone's base,
+   and the structure loop would otherwise tick it - so it lives in G.mines beside the crates,
+   and is saved with the rest of G.
+
+   A mine belongs to the side that laid it. It ARMS a moment after it goes down, so the layer
+   can drive off its own mine, and from then on it is set off by the first ENEMY ground unit -
+   vehicle or infantry - to stand on its cell. Aircraft pass over. That unit takes the charge;
+   the blast round it is an ordinary splash, so it can hurt anything beside it, the layer's own
+   side included: it is a mine. A side sees only its own mines (_rtsMineShown). */
+
+var RTS_MINE = {
+  dmg: 380,          /* to what set it off: most of a Battle Tank, all of a squad */
+  splash: 120,       /* ...and a blast round it for whatever stands beside */
+  radius: 5,         /* world units - a little over a cell */
+  arm: 1.5,          /* seconds before a fresh mine will go off */
+  restock: 4         /* seconds a Repair Bay takes to load one mine back onto a layer */
+};
+
+function _rtsMinesLeft(e) {
+  var d = rtsUnitDef(e.def);
+  if (!d || !d.mines) return 0;
+  if (e.mines == null) e.mines = d.mines;
+  return e.mines;
+}
+function _rtsMineAt(tx, tz) {
+  var G = window._rtsG;
+  if (!G.mines) return null;
+  for (var i = 0; i < G.mines.length; i++) if (G.mines[i].tx === tx && G.mines[i].tz === tz) return G.mines[i];
+  return null;
+}
+/* Lay one where the layer stands. False, and the player told why, when it cannot. */
+function _rtsLayMine(e) {
+  var G = window._rtsG, tx = _rtsTX(e.x), tz = _rtsTX(e.z);
+  if (!G.mines) G.mines = [];
+  if (_rtsMinesLeft(e) <= 0) { if (e.side === 'player') _rtsSay('Out of mines - a Repair Bay will restock it.'); return false; }
+  if (_rtsMineAt(tx, tz)) { if (e.side === 'player') _rtsSay('There is already a mine here.'); return false; }
+  if (!_rtsInB(tx, tz) || G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER) return false;
+  G.mines.push({ tx: tx, tz: tz, side: e.side, arm: RTS_MINE.arm });
+  e.mines--;
+  if (e.side === 'player' && typeof _rtsSfx === 'function') _rtsSfx('place', e.x, e.z);
+  return true;
+}
+/* What a side may see: its own mines, and nobody else's. */
+function _rtsMineShown(m, side) { return m.side === (side || 'player'); }
+
+function _rtsMineTick(dt) {
+  var G = window._rtsG;
+  if (!G.mines || !G.mines.length) return;
+  var armed = {}, n = 0, i;
+  for (i = 0; i < G.mines.length; i++) {
+    var m = G.mines[i];
+    if (m.arm > 0) { m.arm -= dt; continue; }
+    armed[_rtsIdx(m.tx, m.tz)] = m; n++;
+  }
+  if (!n) return;
+  for (i = 0; i < G.ents.length; i++) {
+    var u = G.ents[i];
+    if (u.dead || u.type !== 'unit' || u.air || u.inside) continue;
+    var hit = armed[_rtsIdx(_rtsTX(u.x), _rtsTX(u.z))];
+    if (!hit || hit.side === u.side || hit.gone) continue;
+    hit.gone = true;
+    var x = _rtsWX(hit.tx), z = _rtsWX(hit.tz);
+    /* Under the unit, not beside it: the one that set it off takes the whole charge wherever
+       in the cell it stood - a splash alone falls off so steeply that a tank on the edge of
+       the cell took a fifth of it. The blast round it is a splash, and spares that unit. */
+    u.hurtBy = hit.side;
+    _rtsDamage(u, RTS_MINE.dmg, null);
+    _rtsSplash(x, z, RTS_MINE.radius, RTS_MINE.splash, hit.side, 1, u);
+    G.fx.push({ kind: 'boom', x: x, y: 1, z: z, t: 0, big: 1.3 });
+    G.shake = Math.max(G.shake || 0, 0.5);
+    if (typeof _rtsSfx === 'function') _rtsSfx('boom', x, z);
+    if (u.side === 'player') _rtsSay('Mine!');
+  }
+  G.mines = G.mines.filter(function (m) { return !m.gone; });
+}
+/* A Repair Bay loads mines back onto a layer parked on it, one every RTS_MINE.restock seconds. */
+function _rtsMineRestock(v, dt) {
+  var d = rtsUnitDef(v.def);
+  if (!d || !d.mines || _rtsMinesLeft(v) >= d.mines) return;
+  v.mineT = (v.mineT || 0) + dt;
+  if (v.mineT >= RTS_MINE.restock) { v.mineT = 0; v.mines++; }
+}
 </script>
 <script>/* core/supers.js - superweapons (atom bomb, iron curtain, chronosphere, GPS) and the shroud
    they lift. Part of rts.core, the simulation. */
@@ -12512,6 +12637,7 @@ function _rtsDeploy(e) {
   var G = window._rtsG;
   if (!e || e.dead || e.type !== 'unit') return false;
   var d = rtsUnitDef(e.def);
+  if (d && d.mines) return _rtsLayMine(e);          /* the Mine Layer's deploy lays one: core/mines.js */
   if (!d || !d.deploy) return false;
   var sd = rtsStructDef(d.deploy);
   if (!sd) return false;
@@ -12551,8 +12677,8 @@ function _rtsDeploySelected() {
 /* Is this one of the player's units that can turn into a building? The button asks so it can
    show itself, and the order asks so it can skip everything else in a mixed selection. */
 function _rtsCanDeploy(e) {
-  return !!(e && !e.dead && e.side === 'player' && e.type === 'unit' &&
-            (rtsUnitDef(e.def) || {}).deploy);
+  var d = e && rtsUnitDef(e.def) || {};
+  return !!(e && !e.dead && e.side === 'player' && e.type === 'unit' && (d.deploy || d.mines));
 }
 
 /* Removing the vehicle without the wreck, the explosion or the kill credit - it was not
@@ -14688,10 +14814,11 @@ function _rtsUpdateStruct(e, dt) {
     var G2 = window._rtsG;
     for (var ri = 0; ri < G2.ents.length; ri++) {
       var v = G2.ents[ri];
-      if (v.dead || v.type !== 'unit' || v.side !== e.side || v.hp >= v.maxHp) continue;
+      if (v.dead || v.type !== 'unit' || v.side !== e.side) continue;
       if (rtsUnitDef(v.def).kind !== 'vehicle') continue;
       if (!_rtsAtStruct(v, e, d.repairs)) continue;
       v.hp = Math.min(v.maxHp, v.hp + d.repairRate * dt);
+      _rtsMineRestock(v, dt);                         /* and a Mine Layer's rack: core/mines.js */
     }
   }
   if (!d.weapon) return;
@@ -17769,6 +17896,7 @@ function _rtsTick(dt) {
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 2.2);
   _rtsAnimAI(dt);
   _rtsCrateAI(dt);
+  _rtsMineTick(dt);                              /* the Mine Layer's: core/mines.js */
   for (i = G.fx.length - 1; i >= 0; i--) {
     var fxi = G.fx[i];
     fxi.t += dt;
@@ -26751,6 +26879,21 @@ function _rtsRFrame(dt) {
       var cpx = Math.round(crp.x - cw / 2), cpy = Math.round(crp.y - ch / 2);
       if (cpx > R.W || cpy > R.H || cpx + cw < 0 || cpy + ch < 0) continue;
       g.drawImage(cimg, cpx, cpy, cw, ch);
+    }
+  }
+
+  /* --- the player's own mines (core/mines.js): a dark disc with a ring in the house colour,
+     blinking until it arms. Nobody else's are drawn - that is what a mine is. --- */
+  if (G.mines && G.mines.length) {
+    var mr = Math.max(2, RTS_TILE * 0.32 * _rtsZoom()), tcol = (RTS_PAL.team.player || [])[1] || '#4a8ff0';
+    for (i = 0; i < G.mines.length; i++) {
+      var mn = G.mines[i];
+      if (!_rtsMineShown(mn) || (mn.arm > 0 && ((G.t * 4) | 0) % 2)) continue;
+      var mp = _rtsGroundToScreen(_rtsWX(mn.tx), _rtsWX(mn.tz)), ms = mr * (mp.scale || 1);
+      if (mp.x < -ms || mp.y < -ms || mp.x > R.W + ms || mp.y > R.H + ms) continue;
+      g.beginPath(); g.ellipse(mp.x, mp.y, ms, ms * 0.6, 0, 0, Math.PI * 2);
+      g.fillStyle = 'rgba(28,32,26,0.92)'; g.fill();
+      g.lineWidth = Math.max(1, ms * 0.28); g.strokeStyle = tcol; g.stroke();
     }
   }
 

@@ -76,6 +76,21 @@ function _rtsRFrame(dt) {
     }
   }
 
+  /* --- the player's own mines (core/mines.js): a dark disc with a ring in the house colour,
+     blinking until it arms. Nobody else's are drawn - that is what a mine is. --- */
+  if (G.mines && G.mines.length) {
+    var mr = Math.max(2, RTS_TILE * 0.32 * _rtsZoom()), tcol = (RTS_PAL.team.player || [])[1] || '#4a8ff0';
+    for (i = 0; i < G.mines.length; i++) {
+      var mn = G.mines[i];
+      if (!_rtsMineShown(mn) || (mn.arm > 0 && ((G.t * 4) | 0) % 2)) continue;
+      var mp = _rtsGroundToScreen(_rtsWX(mn.tx), _rtsWX(mn.tz)), ms = mr * (mp.scale || 1);
+      if (mp.x < -ms || mp.y < -ms || mp.x > R.W + ms || mp.y > R.H + ms) continue;
+      g.beginPath(); g.ellipse(mp.x, mp.y, ms, ms * 0.6, 0, 0, Math.PI * 2);
+      g.fillStyle = 'rgba(28,32,26,0.92)'; g.fill();
+      g.lineWidth = Math.max(1, ms * 0.28); g.strokeStyle = tcol; g.stroke();
+    }
+  }
+
   _rtsDrawFx(g, G, S, TSscale, cell);
 
   /* --- placement: the footprint as the ground shows it - four corners, projected at their own

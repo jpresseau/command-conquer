@@ -1,5 +1,5 @@
 /* sprites/unit-special.js - the special-purpose vehicles Breachwater added to the roster: the
-   Flak Track first. One arm of the unit model chain (see sprites/unitmodels.js for the
+   Flak Track and the Mine Layer. One arm of the unit model chain (see sprites/unitmodels.js for the
    dispatch and the shared locals handed over in X); returns false for a key it does not own.
 
    Two small helpers live here because these are the first models that need them: a run of
@@ -80,6 +80,39 @@ function _sprUnitSpecial(X, key) {
       }
       _sprPitch(m, n0, 50 * Math.PI / 180, -0.4, 10.2);
     }
+  } else if (key === 'minelayer') {
+    /* MINE LAYER. A low tracked hull carrying its load where it can be seen: a rack of mines
+       stacked on the rear deck, and the dispenser chute sloping off the stern that puts them
+       down. The identity is the chute and the stacks - round, dark discs with a yellow band,
+       the one cargo nothing else in the roster carries. */
+    tracks(19, 6.0, 5, 2.2);
+    _r3Slab(m, 0, 3.2, 0, 18.0, 3.2, 10.2, 1.0, VH[0], VH[1]);    /* hull */
+    _r3Box(m, 7.2, 3.2, 0, 3.2, 3.0, 9.2, VH[1], VH[3]);          /* glacis */
+    _r3Slab(m, 4.2, 6.4, 0, 6.0, 2.8, 8.4, 0.8, VH[1], TM[1]);    /* crew cab - team roof */
+    _r3Box(m, 7.4, 7.4, 0, 0.6, 1.0, 6.4, RTS_PAL.glass, RTS_PAL.glass);   /* vision block */
+    _r3Box(m, -3.2, 6.4, 0, 9.4, 0.8, 9.0, S[1], S[2]);           /* the rack's floor */
+    /* the load: three stacks of four, each mine a squat disc with a hazard band */
+    for (var st = 0; st < 3; st++) {
+      var sx = -6.2 + st * 3.1;
+      for (var lv = 0; lv < 4; lv++) {
+        _r3Cyl(m, sx, 7.2 + lv * 1.05, -2.2, 1.3, 0.8, DK[1], DK[2], 18);
+        _r3Cyl(m, sx, 7.2 + lv * 1.05, 2.2, 1.3, 0.8, DK[1], DK[2], 18);
+      }
+      _r3Cyl(m, sx, 11.4, -2.2, 0.5, 0.4, RTS_PAL.hazard[0], RTS_PAL.hazard[1], 16);   /* fuzes */
+      _r3Cyl(m, sx, 11.4, 2.2, 0.5, 0.4, RTS_PAL.hazard[0], RTS_PAL.hazard[1], 16);
+    }
+    _r3Box(m, -3.2, 7.2, -4.4, 9.4, 1.4, 0.5, S[2], S[1]);        /* rack rails, low enough to show the load */
+    _r3Box(m, -3.2, 7.2, 4.4, 9.4, 1.4, 0.5, S[2], S[1]);
+    /* the dispenser chute off the stern, pitched down to the ground */
+    n0 = m.length;
+    _r3Box(m, -11.6, 4.6, 0, 6.0, 0.6, 4.4, S[1], S[2]);          /* chute floor */
+    _r3Box(m, -11.6, 5.2, -2.1, 6.0, 1.2, 0.4, VH[2], VH[1]);     /* its sides */
+    _r3Box(m, -11.6, 5.2, 2.1, 6.0, 1.2, 0.4, VH[2], VH[1]);
+    _sprPitch(m, n0, 0.42, -8.6, 5.0);
+    _r3Cyl(m, -13.0, 2.0, 0, 1.3, 0.8, DK[1], RTS_PAL.hazard[0], 18);   /* one on its way out */
+    _r3Box(m, 8.6, 5.0, -3.6, 0.9, 1.0, 1.4, GN[3], GN[3]);       /* headlights */
+    _r3Box(m, 8.6, 5.0, 3.6, 0.9, 1.0, 1.4, GN[3], GN[3]);
+    _r3Box(m, 2.4, 9.0, -3.2, 0.5, 4.2, 0.5, DK[1], DK[3]);       /* whip aerial */
   } else return false;
   return true;
 }
