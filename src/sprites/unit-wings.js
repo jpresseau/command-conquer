@@ -6,6 +6,7 @@
 /* the 3D renderer's moving parts for these (see RTS_AIR_PARTS in unit-airsea.js) */
 RTS_AIR_PARTS.skycrane = { rotor: true };
 RTS_AIR_PARTS.drone = { prop: [-6.2, 2.6, 0, 2.4], tips: 9.0 };
+RTS_AIR_PARTS.bomber = { prop: [5.4, 4.6, -6.4, 2.6], props: [[5.4, 4.6, -6.4, 2.6], [5.4, 4.6, 6.4, 2.6], [4.0, 4.6, -12.0, 2.6], [4.0, 4.6, 12.0, 2.6]], tips: 17.0 };
 RTS_AIR_PARTS.paraplane = { prop: [7.4, 6.1, -6.6, 2.8], props: [[7.4, 6.1, -6.6, 2.8], [7.4, 6.1, 6.6, 2.8]], tips: 13.0 };
 
 function _sprUnitWings(X, key) {
@@ -86,6 +87,33 @@ function _sprUnitWings(X, key) {
     _r3Box(m, 2.4, 3.8, 0, 0.3, 1.2, 0.3, DK[1], DK[3]);           /* antenna */
     if (part !== 'body') {
       _r3Box(m, -6.2, 0.2, 0, 0.3, 4.8, 0.5, DK[1], DK[2]);         /* the prop, for the sprite */
+    }
+  } else if (key === 'bomber') {
+    /* HEAVY BOMBER. The biggest thing in the air: a long round-backed fuselage under a broad
+       straight wing with four engines along it, a glazed nose, a twin-finned tail with a gun
+       turret in its tip, and the bomb bay open in its belly. The identity is FOUR ENGINES and the
+       open bay - nothing else flying has more than two. */
+    _r3Box(m, 0, 3.0, 0, 26.0, 4.4, 4.4, VH[0], VH[1]);            /* fuselage */
+    _r3Box(m, 0, 5.4, 0, 22.0, 0.8, 3.4, VH[1], VH[2]);            /* its rounded back */
+    _r3Box(m, 14.2, 3.2, 0, 2.6, 3.6, 3.8, VH[1], VH[3]);          /* the nose */
+    _r3Box(m, 15.6, 3.4, 0, 0.6, 2.8, 3.2, RTS_PAL.glass, RTS_PAL.glass);   /* glazed nose */
+    _r3Box(m, 11.6, 5.6, 0, 2.4, 1.0, 2.6, RTS_PAL.glass, RTS_PAL.glass);   /* cockpit */
+    _r3Box(m, 3.0, 4.2, 0, 5.4, 0.7, 34.0, VH[1], VH[2]);          /* the broad wing */
+    _r3Box(m, 3.0, 4.6, 0, 3.6, 0.3, 10.0, TM[1], TM[3]);          /* team band on it */
+    [[5.4, 6.4], [4.0, 12.0]].forEach(function (E) {               /* four engines */
+      for (var sd = -1; sd <= 1; sd += 2) {
+        _r3Box(m, E[0] - 1.6, 3.8, sd * E[1], 5.6, 1.8, 2.0, VH[2], VH[1]);
+        _r3Cyl(m, E[0] + 1.4, 3.9, sd * E[1], 0.6, 1.0, DK[1], DK[2], 16);
+      }
+    });
+    _r3Box(m, -15.2, 5.6, 0, 4.0, 0.4, 13.0, VH[1], VH[2]);        /* tailplane */
+    for (var fn = -1; fn <= 1; fn += 2) _r3Box(m, -15.6, 7.6, fn * 6.2, 3.0, 4.0, 0.5, VH[1], VH[2]);   /* twin fins */
+    _r3Cyl(m, -13.6, 3.2, 0, 1.4, 1.6, GN[2], GN[1], 16);          /* tail turret */
+    _r3Box(m, -15.2, 3.4, 0, 2.0, 0.4, 0.4, DK[1], DK[3]);         /* its guns */
+    _r3Box(m, 1.2, 0.7, 0, 9.0, 0.3, 2.8, DK[2], DK[3]);           /* the open bomb bay */
+    for (var bd = -1; bd <= 1; bd += 2) _r3Box(m, 1.2, 0.0, bd * 1.9, 9.0, 1.4, 0.2, VH[2], VH[1]);   /* its doors */
+    if (part !== 'body') {                                          /* the props, for the sprite */
+      [[5.4, 6.4], [4.0, 12.0]].forEach(function (E) { for (var sp = -1; sp <= 1; sp += 2) _r3Box(m, E[0] + 2.0, 2.0, sp * E[1], 0.3, 5.2, 0.6, DK[1], DK[2]); });
     }
   } else return false;
   return true;

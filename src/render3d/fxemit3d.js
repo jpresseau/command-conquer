@@ -333,11 +333,26 @@ function _r3dFxProj(G, V) {
   }
 }
 
+/* THE HEAVY BOMBER'S BOMBS (G.bombs, core/bomber.js), falling: a dark streak each, blended the
+   way rain is (skyfx3d.js) - a STREAK is added, so a dark one draws nothing. Hidden where the
+   player cannot see. */
+var R3D_FX_BOMB = [0.16, 0.16, 0.17];
+function _r3dFxBombs(G, V) {
+  var B = G.bombs || [], vis = typeof _rtsVisible === 'function';
+  for (var i = 0; i < B.length; i++) {
+    var b = B[i];
+    if (vis && !_rtsVisible(_rtsTX(b.x), _rtsTX(b.z))) continue;
+    var y = V.ground(b.x, b.z) + b.y;
+    _r3dFxStreak(V.M, V, b.x, y + 2.2, b.z, b.x, y, b.z, 0.9, 0, R3D_FXT_RAIN, 0, i + 1, 1, 0, R3D_FX_BOMB);
+  }
+}
+
 /* Everything G.fx and G.proj hold that this pass owns, and what moving things leave behind them,
    into the two batches. */
 function _r3dFxEmit(G, V) {
   var A = RTS_ANIMS, i;
   _r3dFxProj(G, V);
+  _r3dFxBombs(G, V);
   if (typeof _r3dFxWakes === 'function') _r3dFxWakes(G, V);     /* dust and wakes - fxwake3d.js */
   if (typeof _r3dFxAlive === 'function') _r3dFxAlive(G, V);     /* stacks, beacons - alive3d.js */
   if (typeof _r3dFxSky === 'function') _r3dFxSky(G, V);         /* lamps, rain, fog - skyfx3d.js */
