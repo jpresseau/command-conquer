@@ -155,6 +155,14 @@ var RTS_UNITS = [
     needs:['afld'], air:true, alt:16, carries:5, takes:['infantry'], paradrops:true,
     side:'soviet', armour:'light',
     desc:'Drops five infantry anywhere without landing, then flies home. Board it over the Airfield, then click the drop zone.' },
+  /* RECON DRONE. The verb is WATCHING A PLACE: cheap and unarmed, it circles wherever it is sent,
+     and it is a Spotter in the air - its sight never cut by fog, every gun of its side finding
+     what it sees at full reach, and no Jammer hiding anything from it. The Compact's, as the
+     Paradrop Plane is the Dominion's - core/drone.js. */
+  { key:'drone',    name:'Recon Drone',   kind:'air',      cost:500,  build:7,  hp:90,   speed:24,  turn:5.0,r:1.2, sight:32, weapon:null,
+    needs:['helipad'], air:true, alt:18, spots:true, orbits:true,
+    side:'allied', armour:'light',
+    desc:'Circles wherever you send it and sees everything under it - through fog, fog banks and Jammers. Unarmed.' },
   /* FLAK TRACK. The verb is ESCORT: the armour column takes its anti-aircraft cover with it.
      Until this, everything that could shoot down an aircraft either stood still (the AA Gun,
      the Rocket Turret) or was a squad on foot (rockets), so a gunship could pick apart a tank

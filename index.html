@@ -706,7 +706,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">7b9b4f3 · 2026-10-04</div>
+  <div id="rtsBuild" title="build">d75ccac · 2026-10-04</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1124,6 +1124,14 @@ var RTS_UNITS = [
     needs:['afld'], air:true, alt:16, carries:5, takes:['infantry'], paradrops:true,
     side:'soviet', armour:'light',
     desc:'Drops five infantry anywhere without landing, then flies home. Board it over the Airfield, then click the drop zone.' },
+  /* RECON DRONE. The verb is WATCHING A PLACE: cheap and unarmed, it circles wherever it is sent,
+     and it is a Spotter in the air - its sight never cut by fog, every gun of its side finding
+     what it sees at full reach, and no Jammer hiding anything from it. The Compact's, as the
+     Paradrop Plane is the Dominion's - core/drone.js. */
+  { key:'drone',    name:'Recon Drone',   kind:'air',      cost:500,  build:7,  hp:90,   speed:24,  turn:5.0,r:1.2, sight:32, weapon:null,
+    needs:['helipad'], air:true, alt:18, spots:true, orbits:true,
+    side:'allied', armour:'light',
+    desc:'Circles wherever you send it and sees everything under it - through fog, fog banks and Jammers. Unarmed.' },
   /* FLAK TRACK. The verb is ESCORT: the armour column takes its anti-aircraft cover with it.
      Until this, everything that could shoot down an aircraft either stood still (the AA Gun,
      the Rocket Turret) or was a squad on foot (rockets), so a gunship could pick apart a tank
@@ -6501,7 +6509,7 @@ function _sprBuildingClean(key, side) {
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
   dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46,
-  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:44
+  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:44, drone:26
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -7682,6 +7690,7 @@ function _sprUnitSpecial(X, key) {
 
 /* the 3D renderer's moving parts for these (see RTS_AIR_PARTS in unit-airsea.js) */
 RTS_AIR_PARTS.skycrane = { rotor: true };
+RTS_AIR_PARTS.drone = { prop: [-6.2, 2.6, 0, 2.4], tips: 9.0 };
 RTS_AIR_PARTS.paraplane = { prop: [7.4, 6.1, -6.6, 2.8], props: [[7.4, 6.1, -6.6, 2.8], [7.4, 6.1, 6.6, 2.8]], tips: 13.0 };
 
 function _sprUnitWings(X, key) {
@@ -7742,6 +7751,26 @@ function _sprUnitWings(X, key) {
     }
     if (part !== 'body') {                                          /* the props, for the sprite */
       for (var pp = -1; pp <= 1; pp += 2) _r3Box(m, 7.4, 3.3, pp * 6.6, 0.3, 5.6, 0.6, DK[1], DK[2]);
+    }
+  } else if (key === 'drone') {
+    /* RECON DRONE. A small glider-winged pusher: a slim pod with a sensor ball under its chin, long
+       thin wings, a twin-boom tail and the propeller at the back. The identity is the SENSOR BALL
+       and the long wings on so small a body - and that it is the smallest thing in the air. */
+    _r3Box(m, 0.4, 1.8, 0, 10.0, 2.0, 2.2, VH[0], VH[1]);          /* the pod */
+    _r3Box(m, 5.6, 1.9, 0, 1.6, 1.6, 1.8, VH[1], VH[3]);           /* its nose */
+    _r3Cyl(m, 4.6, 0.6, 0, 0.9, 1.2, DK[1], DK[2], 18);            /* the sensor turret */
+    _r3Wheel(m, 5.4, 1.1, 0, 0.55, 0.3, 'x', RTS_PAL.glass, RTS_PAL.lit, 18);   /* its lens */
+    _r3Box(m, 0.8, 3.4, 0, 2.0, 0.3, 18.0, VH[1], VH[2]);          /* the long thin wing */
+    _r3Box(m, 0.8, 3.6, 0, 1.4, 0.2, 4.0, TM[1], TM[3]);           /* team band on it */
+    for (var tb = -1; tb <= 1; tb += 2) {                           /* the twin booms and their fins */
+      _r3Box(m, -4.6, 2.6, tb * 2.6, 8.0, 0.5, 0.5, S[2], S[1]);
+      _r3Box(m, -8.2, 3.0, tb * 2.6, 1.2, 2.0, 0.3, VH[1], VH[2]);
+    }
+    _r3Box(m, -8.2, 4.8, 0, 1.2, 0.3, 5.6, VH[1], VH[2]);          /* the tailplane between them */
+    _r3Cyl(m, -5.6, 2.0, 0, 0.6, 1.2, GN[2], GN[1], 12);           /* the pusher's hub */
+    _r3Box(m, 2.4, 3.8, 0, 0.3, 1.2, 0.3, DK[1], DK[3]);           /* antenna */
+    if (part !== 'body') {
+      _r3Box(m, -6.2, 0.2, 0, 0.3, 4.8, 0.5, DK[1], DK[2]);         /* the prop, for the sprite */
     }
   } else return false;
   return true;
@@ -18012,7 +18041,8 @@ function _rtsAISupport(S) {
          _rtsAISupportBuy(S, 'spotter', function () { return _rtsFogged() && _rtsAILongGuns() > 0; }) ||  /* long guns blind in fog: core/spotter.js */
          _rtsAISupportBuy(S, 'repairtruck', function () { return _rtsAIFieldVehicles() >= RTS_FIX.army && _rtsAIDefended(); }) ||  /* an army worth mending: core/repairtruck.js */
          _rtsAISupportBuy(S, 'jammer', function () { return _rtsPlayerDefences() >= RTS_JAM.digIn && _rtsAIFieldVehicles() >= 4 && _rtsAIDefended(); }) ||  /* the player dug in: core/jammer.js */
-         _rtsAISupportBuy(S, 'paraplane', function () { return _rtsPlayerDefences() >= RTS_JAM.digIn && _rtsAIDefended() && !!_rtsAIParaTarget(); });  /* over the wall: core/paradrop.js */
+         _rtsAISupportBuy(S, 'paraplane', function () { return _rtsPlayerDefences() >= RTS_JAM.digIn && _rtsAIDefended() && !!_rtsAIParaTarget(); }) ||  /* over the wall: core/paradrop.js */
+         _rtsAISupportBuy(S, 'drone', function () { return _rtsAIHalfBlind() && _rtsAIDefended(); });  /* eyes in fog, or on a Jammer: core/drone.js */
 }
 function _rtsAISupportBuy(S, key, worth) {
   var G = window._rtsG, d = rtsUnitDef(key);
@@ -18350,6 +18380,67 @@ function _rtsAIParaTick(dt) {
   if (st.s === 'fly' && (!_rtsCargoCount(pl) || G.t - st.t > RTS_PARA.fly)) {
     if (_rtsCargoCount(pl)) { _rtsUnload(pl); _rtsParaHome(pl); }
     st.s = 'rest'; st.t = G.t;
+  }
+}
+</script>
+<script>/* core/drone.js - the Recon Drone: an eye that stays up.
+
+   The verb is WATCHING A PLACE. Cheap, unarmed and thin-skinned, it flies where it is sent and
+   then CIRCLES there (RTS_DRONE.r cells round the point it stopped at) rather than parking, and
+   it is a Spotter in the air (rules `spots`, core/spotter.js): its sight is never cut by fog or
+   a fog bank, every gun of its side finds what it sees at full reach, and what it sees cannot
+   hide in a Jammer's field. Sent somewhere new, it circles there instead.
+
+   The opponent buys one when its army is fighting half-blind - fog, a sandstorm, or a Jammer of
+   the player's on the field - with its own base defended, and keeps it circling over the middle
+   of its largest team on the march. */
+
+var RTS_DRONE = { r: 3, step: 0.6, every: 2 };
+
+function _rtsOrbits(u) { return !!(rtsUnitDef(u.def) || {}).orbits; }
+function _rtsDroneTick() {
+  var G = window._rtsG;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.type !== 'unit' || !_rtsOrbits(e)) continue;
+    var busy = e.order && e.order !== 'orbit';
+    if (busy && e.path && e.pi < e.path.length) { e.orbit = null; continue; }    /* on its way */
+    if (!e.orbit) e.orbit = { x: e.x, z: e.z };                                      /* stopped: circle here */
+    if (e.path && e.pi < e.path.length) continue;                                  /* still on this leg */
+    /* the next point round the circle, a step ahead of where it is */
+    var o = e.orbit, a = Math.atan2(e.z - o.z, e.x - o.x) + RTS_DRONE.step, r = RTS_DRONE.r * RTS_TILE;
+    e.order = 'orbit'; e.goal = { x: o.x + Math.cos(a) * r, z: o.z + Math.sin(a) * r };
+    e.path = [{ x: e.goal.x, z: e.goal.z }]; e.pi = 0;
+  }
+}
+/* send it to circle somewhere else */
+function _rtsDroneAt(e, x, z) { e.orbit = { x: x, z: z }; e.order = 'orbit'; e.path = [{ x: x, z: z }]; e.pi = 0; e.goal = { x: x, z: z }; }
+
+/* Is the opponent fighting half-blind? */
+function _rtsAIHalfBlind() {
+  if (_rtsFogged()) return true;
+  var G = window._rtsG;
+  for (var i = 0; i < G.ents.length; i++) { var e = G.ents[i]; if (!e.dead && e.side === 'player' && e.type === 'unit' && _rtsJams(e)) return true; }
+  return false;
+}
+/* the opponent's drone: over the middle of its largest team on the march */
+function _rtsAIDroneTick(dt) {
+  var G = window._rtsG, big = null, bn = 0, id;
+  G.ai.droneT = (G.ai.droneT || 0) + dt;
+  if (G.ai.droneT < RTS_DRONE.every) return;
+  G.ai.droneT = 0;
+  for (id in G.teams) {
+    var t = G.teams[id];
+    if (!t.moving) continue;
+    var n = t.members.filter(function (m) { return !m.dead; }).length;
+    if (n > bn) { bn = n; big = t; }
+  }
+  var c = big && _rtsTeamCentre(big);
+  if (!c) return;
+  for (var i = 0; i < G.ents.length; i++) {
+    var u = G.ents[i];
+    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || !_rtsOrbits(u)) continue;
+    if (!u.orbit || Math.hypot(u.orbit.x - c.x, u.orbit.z - c.z) > RTS_TILE * 3) _rtsDroneAt(u, c.x, c.z);
   }
 }
 </script>
@@ -18803,6 +18894,7 @@ function _rtsUpdateAI(dt) {
   _rtsAIFixTick(dt);            /* ...and the truck follows the army - core/repairtruck.js */
   _rtsAIJamTick(dt);            /* ...and the jammer hides it - core/jammer.js */
   _rtsAIParaTick(dt);           /* ...and the paratroopers go over the wall - core/paradrop.js */
+  _rtsAIDroneTick(dt);          /* ...and the drone watches over the attack - core/drone.js */
   _rtsAISupers(dt);
   /* Rich: refill a line as soon as it empties, rather than waiting up to five seconds for
      the next decision. Without this the opponent banks tens of thousands of credits it
@@ -19380,6 +19472,7 @@ function _rtsTick(dt) {
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 2.2);
   _rtsAnimAI(dt);
   _rtsCrateAI(dt);
+  _rtsDroneTick();                               /* Recon Drones circle where they stop: core/drone.js */
   _rtsFixTick(dt);                               /* Repair Trucks go to the damaged: core/repairtruck.js */
   _rtsSweepTick(dt);                             /* the Mine Sweeper finds and clears: core/sweeper.js */
   _rtsMineTick(dt);                              /* the Mine Layer's: core/mines.js */

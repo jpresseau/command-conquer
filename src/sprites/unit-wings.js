@@ -5,6 +5,7 @@
 
 /* the 3D renderer's moving parts for these (see RTS_AIR_PARTS in unit-airsea.js) */
 RTS_AIR_PARTS.skycrane = { rotor: true };
+RTS_AIR_PARTS.drone = { prop: [-6.2, 2.6, 0, 2.4], tips: 9.0 };
 RTS_AIR_PARTS.paraplane = { prop: [7.4, 6.1, -6.6, 2.8], props: [[7.4, 6.1, -6.6, 2.8], [7.4, 6.1, 6.6, 2.8]], tips: 13.0 };
 
 function _sprUnitWings(X, key) {
@@ -65,6 +66,26 @@ function _sprUnitWings(X, key) {
     }
     if (part !== 'body') {                                          /* the props, for the sprite */
       for (var pp = -1; pp <= 1; pp += 2) _r3Box(m, 7.4, 3.3, pp * 6.6, 0.3, 5.6, 0.6, DK[1], DK[2]);
+    }
+  } else if (key === 'drone') {
+    /* RECON DRONE. A small glider-winged pusher: a slim pod with a sensor ball under its chin, long
+       thin wings, a twin-boom tail and the propeller at the back. The identity is the SENSOR BALL
+       and the long wings on so small a body - and that it is the smallest thing in the air. */
+    _r3Box(m, 0.4, 1.8, 0, 10.0, 2.0, 2.2, VH[0], VH[1]);          /* the pod */
+    _r3Box(m, 5.6, 1.9, 0, 1.6, 1.6, 1.8, VH[1], VH[3]);           /* its nose */
+    _r3Cyl(m, 4.6, 0.6, 0, 0.9, 1.2, DK[1], DK[2], 18);            /* the sensor turret */
+    _r3Wheel(m, 5.4, 1.1, 0, 0.55, 0.3, 'x', RTS_PAL.glass, RTS_PAL.lit, 18);   /* its lens */
+    _r3Box(m, 0.8, 3.4, 0, 2.0, 0.3, 18.0, VH[1], VH[2]);          /* the long thin wing */
+    _r3Box(m, 0.8, 3.6, 0, 1.4, 0.2, 4.0, TM[1], TM[3]);           /* team band on it */
+    for (var tb = -1; tb <= 1; tb += 2) {                           /* the twin booms and their fins */
+      _r3Box(m, -4.6, 2.6, tb * 2.6, 8.0, 0.5, 0.5, S[2], S[1]);
+      _r3Box(m, -8.2, 3.0, tb * 2.6, 1.2, 2.0, 0.3, VH[1], VH[2]);
+    }
+    _r3Box(m, -8.2, 4.8, 0, 1.2, 0.3, 5.6, VH[1], VH[2]);          /* the tailplane between them */
+    _r3Cyl(m, -5.6, 2.0, 0, 0.6, 1.2, GN[2], GN[1], 12);           /* the pusher's hub */
+    _r3Box(m, 2.4, 3.8, 0, 0.3, 1.2, 0.3, DK[1], DK[3]);           /* antenna */
+    if (part !== 'body') {
+      _r3Box(m, -6.2, 0.2, 0, 0.3, 4.8, 0.5, DK[1], DK[2]);         /* the prop, for the sprite */
     }
   } else return false;
   return true;

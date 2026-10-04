@@ -43,6 +43,7 @@ function _rtsTick(dt) {
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 2.2);
   _rtsAnimAI(dt);
   _rtsCrateAI(dt);
+  _rtsDroneTick();                               /* Recon Drones circle where they stop: core/drone.js */
   _rtsFixTick(dt);                               /* Repair Trucks go to the damaged: core/repairtruck.js */
   _rtsSweepTick(dt);                             /* the Mine Sweeper finds and clears: core/sweeper.js */
   _rtsMineTick(dt);                              /* the Mine Layer's: core/mines.js */
