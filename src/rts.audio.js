@@ -1,4 +1,4 @@
-/* RED ALERT - audio. Everything here is SYNTHESIZED: there is not a single sampled asset in the
+/* BREACHWATER - audio. Everything here is SYNTHESIZED: there is not a single sampled asset in the
    app, from any game or anywhere else. The effects are rendered ahead of time from layered
    recipes (audio/recipes.js, audio/dsp.js) into a bank of takes (audio/bank.js) and played
    through a mixer with stereo position, a room and a compressor (audio/mix.js); the music is a

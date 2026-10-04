@@ -113,7 +113,7 @@ function _rtsBindInput() {
   function miniOrder(e) {
     var G = window._rtsG;
     if (!G || G.over) return false;
-    if (!_rtsRadarLit()) { _rtsSay('No radar — build a Radar Dome to command from the map.'); return false; }
+    if (!_rtsRadarLit()) { _rtsSay('No radar — build a Radar Post to command from the map.'); return false; }
     var mine = [], i;
     for (i = 0; i < G.sel.length; i++) {
       var sv = G.sel[i];

@@ -53,8 +53,8 @@ function rtsBuildArmyPick(){
   if (!wrap || typeof rtsArmySide !== 'function') return;
   wrap.hidden = note.hidden = false;
   if (!wrap.firstChild) {
-    wrap.innerHTML = '<button type="button" data-v="allied">ALLIED</button>' +
-                     '<button type="button" data-v="soviet">SOVIET</button>';
+    wrap.innerHTML = '<button type="button" data-v="allied">COMPACT</button>' +
+                     '<button type="button" data-v="soviet">DOMINION</button>';
     [].forEach.call(wrap.getElementsByTagName('button'), function (b) {
       b.onclick = function () { rtsSetArmySide(b.getAttribute('data-v')); rtsBuildArmyPick(); };
     });
@@ -64,8 +64,8 @@ function rtsBuildArmyPick(){
     b.className = (b.getAttribute('data-v') === cur) ? 'on' : '';
   });
   note.textContent = (cur === 'soviet'
-    ? 'Soviet: Flame Towers, Tesla Coils, attack dogs, Mammoth tanks.'
-    : 'Allied: Pillboxes, gun turrets, medics, light tanks, artillery, helicopters.')
+    ? 'The Basalt Dominion: Flame Towers, Arc Towers, war dogs, Bulwark tanks.'
+    : 'The Meridian Compact: Pillboxes, gun turrets, medics, light tanks, artillery, gunships.')
     + ' The enemy takes the other army.';
 }
 

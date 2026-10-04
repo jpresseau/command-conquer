@@ -5,6 +5,40 @@ six-and-five, and the rule every addition was held to — a new entry has to add
 player can DO, not another damage number. Entries live in `src/rules/`, models in
 `src/sprites/`.
 
+## Names: the code keys are old, the names are Breachwater's
+
+The records below use the names the units had when they were written. The keys never changed,
+because saves and specs hold them. A player sees only the names in the tables:
+
+| Army key | Name (short / full) |
+|---|---|
+| `allied` | Compact / Meridian Compact |
+| `soviet` | Dominion / Basalt Dominion |
+
+| Key | Was | Is |
+|---|---|---|
+| `v2rl` | V2 Rocket | Longshot Rocket |
+| `heavy` | Mammoth Tank | Bulwark Tank |
+| `thief` | Thief | Infiltrator |
+| `tanya` | Commando | Breacher |
+| `heli` | Attack Heli | Wasp Gunship |
+| `tran` | Chinook | Skylift |
+| `mig` | MiG | Kestrel |
+| `yak` | Yak | Shrike |
+| `lst` | Transport | Landing Craft |
+| `factory` | War Factory | Vehicle Works |
+| `radar` | Radar Dome | Radar Post |
+| `lab` | Tech Center | Research Lab |
+| `depot` | Service Depot | Repair Bay |
+| `apower` | Adv. Power Plant | Fusion Plant |
+| `tesla` | Tesla Coil | Arc Tower |
+| `mslo` / `nuke` | Missile Silo / Atom Bomb | Sunfall Silo / Sunfall |
+| `iron` / `ironcurtain` | Iron Curtain | Bastion Generator / Bastion Field |
+| `pdox` / `chrono` | Chronosphere | Rift Gate / Rift Jump |
+| `gps` | GPS Uplink / Satellite | Skyeye Uplink / Satellite |
+
+`unit/brand` keeps the old names out of every string in `src/`.
+
 > Reference, split out of `CLAUDE.md`. The rules that must be followed before touching
 > anything are still in `CLAUDE.md`; this is the working behind them.
 >

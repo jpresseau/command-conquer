@@ -1,7 +1,7 @@
-/* RED ALERT - the simulation core. src/core is pure game state + logic; there is no rendering
-   anywhere in it. src/render owns every pixel, src/ui owns the DOM. Keeping the sim
-   renderer-free means the whole battle can be stepped headlessly (which is how it gets
-   verified) - and it is what allowed the renderer to be swapped from three.js to canvas 2D
+/* BREACHWATER - the simulation core. src/core is pure game state + logic; there is no rendering
+   anywhere in it. src/render and src/render3d own every pixel, src/ui owns the DOM. Keeping the
+   sim renderer-free means the whole battle can be stepped headlessly (which is how it gets
+   verified) - and it is what let the renderer change twice, to canvas 2D and then to WebGL,
    without touching a line of it.
 
    core/grid.js, the first of the twenty: the world grid - tile <-> world maths, passability,

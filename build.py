@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assemble index.html - the whole Command & Conquer: Red Alert game.  Usage: python3 build.py
+"""Assemble index.html - the whole Breachwater game.  Usage: python3 build.py
 
 The shipped game is a single self-contained index.html with no network dependencies and no
 libraries at all - it is canvas 2D, every sprite is drawn in code, and every sound is
@@ -128,7 +128,7 @@ def main():
                        'unpkg.com', 'jsdelivr', 'cdnjs', 'googleapis.com') if r in page]
     if bad:
         sys.exit('build.py: the built page loads something external (%s). '
-                 'Red Alert ships as one self-contained file.' % ', '.join(map(repr, bad)))
+                 'Breachwater ships as one self-contained file.' % ', '.join(map(repr, bad)))
 
     with open(os.path.join(ROOT, 'index.html'), 'w', encoding='utf-8') as f:
         f.write(page)

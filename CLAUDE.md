@@ -2,8 +2,11 @@
 
 Guidance for Claude Code (claude.ai/code) working in this repository.
 
-**Command & Conquer: Red Alert** (short name *Red Alert*) is a browser rebuild of Westwood's
-1996 RTS, deployed via GitHub Pages from `main`.
+**Breachwater** is a 3D real-time strategy game for the browser, deployed via GitHub Pages from
+`main`. It grew out of a rebuild of Westwood's Red Alert (much of `docs/` is that port's
+reference) and is its own game now: never put the old name, its faction names or its unit
+names in anything a player sees. The two armies are the **Meridian Compact** (`allied` in code)
+and the **Basalt Dominion** (`soviet` in code); `rtsArmyName`/`rtsArmyTitle` say them.
 It ships as one generated, fully self-contained `index.html` (~1.0 MB) — no network calls, no
 asset files, and **no libraries at all**. Every pixel, sound and map is generated in code; the game
 reads no outside files.

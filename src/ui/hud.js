@@ -236,7 +236,7 @@ function _rtsDrawMini() {
     var cssW = mini.getBoundingClientRect().width || S;
     var k = S / cssW;                             /* backing pixels per CSS pixel */
     var top = dome ? 'NO POWER' : 'NO RADAR';
-    var sub = dome ? 'restore power' : 'build a Radar Dome';
+    var sub = dome ? 'restore power' : 'build a Radar Post';
     function _fit(txt, wantCss, weight) {
       var px = wantCss;
       for (;;) {

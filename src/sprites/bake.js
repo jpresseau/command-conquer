@@ -1,7 +1,7 @@
 /* sprites/bake.js - the palette, and the plumbing every baked sprite goes through:
    canvases, shadows, outlines. Part of rts.sprites, the sprite baker. */
 
-/* RED ALERT - sprite generation: terrain, ore, effects, and the palette everything uses.
+/* BREACHWATER - sprite generation: terrain, ore, effects, and the palette everything uses.
 
    The structures and units are NOT drawn here - they are 3D models, defined further down
    and rendered to sprites once at load by src/r3d. That is how the originals were made,

@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Command &amp; Conquer: Red Alert</title>
-<meta name="description" content="Command &amp; Conquer: Red Alert — a real-time strategy game rebuilt for the browser. Mine ore, build a base, and take on the Soviets.">
+<title>Breachwater</title>
+<meta name="description" content="Breachwater — a real-time strategy game in 3D, in the browser. Mine ore, build a base, and take the coast from the other army.">
 <meta name="theme-color" content="#10141a">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<style>/* RED ALERT - RTS mode. Full-screen overlay: battlefield left, command sidebar right.
+<style>/* BREACHWATER - RTS mode. Full-screen overlay: battlefield left, command sidebar right.
    Deliberately mid-90s military-console in feel (dark slate, amber/cyan readouts, hard
    edges) without borrowing any actual game's artwork. */
 /* above the welcome launcher (…2500) and the Studio (…2600) - Red Alert is a full-screen
@@ -547,7 +547,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   background:radial-gradient(ellipse at 50% 35%,#1d2a3a 0%,#111722 55%,#0b0f16 100%);
   font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#dfe8f2;text-align:center}
 #rtsHome.gone{display:none}
-#rtsHome h1{margin:0;font-size:clamp(34px,7vw,62px);font-weight:800;letter-spacing:clamp(6px,2vw,14px);
+#rtsHome h1{margin:0;font-size:clamp(26px,8vw,62px);font-weight:800;letter-spacing:clamp(3px,1.6vw,14px);
   color:#ffcf6a;text-shadow:0 0 34px rgba(255,207,106,.28)}
 /* The series name sits ABOVE the title, small - which is the actual branding hierarchy and
    also keeps the big element the one the layout tests measure. */
@@ -641,8 +641,8 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 <body>
 
 <div id="rtsHome">
-  <p class="eyebrow">Command &amp; Conquer</p>
-  <h1>RED ALERT</h1>
+  <p class="eyebrow">A war for the coast</p>
+  <h1>BREACHWATER</h1>
   <p class="sub">Real-Time Strategy</p>
   <div id="rtsTitleMenu">
   <div class="diff" id="rtsDiff"></div>
@@ -700,15 +700,15 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">35066b0 · 2026-10-04</div>
+  <div id="rtsBuild" title="build">2a7dab5 · 2026-10-04</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
    Part of rts.rules, the roster. */
 
-/* RED ALERT - a rebuild of Command & Conquer: Red Alert for the browser.
+/* BREACHWATER - a real-time strategy game for the browser, grown out of a rebuild of Red Alert.
    Build a base, mine ore with harvesters, produce units, and fight the opposing army.
-   Standalone: the only outside dependency in the whole app is three.js.
+   Standalone: no library, no assets, nothing downloaded.
 
    This file is the RULES layer - every balance number lives here, nothing else. The
    structure/unit tables are deliberately data-only so the whole game can be re-tuned by
@@ -731,9 +731,11 @@ var RTS_SIDES = {
   player: { key:'player', color:0x4a8ff0, glow:0xa8d4ff },
   enemy:  { key:'enemy',  color:0xe0503c, glow:0xffb49f }
 };
-/* "Allied" / "Soviet" for either house, following the army the player picked. Singular and
-   adjectival - "Allied command", "the Soviet base" - which is how Red Alert itself words it. */
-function rtsArmyName(house) { return rtsHouseSide(house) === 'soviet' ? 'Soviet' : 'Allied'; }
+/* "Compact" / "Dominion" for either house, following the army the player picked: the short,
+   adjectival form - "Compact command", "the Dominion forces". rtsArmyTitle is the full name. */
+var RTS_ARMY_NAMES = { allied: ['Compact', 'Meridian Compact'], soviet: ['Dominion', 'Basalt Dominion'] };
+function rtsArmyName(house) { return RTS_ARMY_NAMES[rtsHouseSide(house) === 'soviet' ? 'soviet' : 'allied'][0]; }
+function rtsArmyTitle(side) { return RTS_ARMY_NAMES[side === 'soviet' ? 'soviet' : 'allied'][1]; }
 function rtsArmyTag(house)  { return rtsHouseSide(house) === 'soviet' ? 'SOV' : 'ALD'; }
 
 /* ---------------------------------------------------------------- structures --
@@ -767,23 +769,23 @@ var RTS_STRUCTS = [
     needs:['power'], produces:'infantry',
     armour:'wood',
     desc:'Trains infantry.' },
-  { key:'factory',  name:'War Factory',   w:3, h:2, cost:1600, build:20, hp:900,  power:-30,  sight:12,
+  { key:'factory',  name:'Vehicle Works', w:3, h:2, cost:1600, build:20, hp:900,  power:-30,  sight:12,
     needs:['refinery'], produces:'vehicle',
     armour:'concrete',
-    desc:'Builds RC combat vehicles and Harvesters.' },
+    desc:'Builds combat vehicles and Harvesters.' },
   { key:'turret',   name:'Gun Turret',    w:1, h:1, cost:500,  build:10, hp:520,  power:-20,  sight:18,
     needs:['barracks'], weapon:'turretgun',
     side:'allied', armour:'concrete',
     desc:'Automated base defence. Needs power to fire.' },
   /* --- the tier the roster was missing. `needs` already gated everything, so these are data. --- */
-  { key:'radar',    name:'Radar Dome',    w:2, h:2, cost:1000, build:14, hp:600,  power:-40,  sight:26,
+  { key:'radar',    name:'Radar Post',    w:2, h:2, cost:1000, build:14, hp:600,  power:-40,  sight:26,
     needs:['refinery'], radar:true,
     armour:'wood',
     desc:'Switches the radar on. Without one the map panel stays dark.' },
   /* Cost, power and prerequisites here are the reference's own: Tech Center $1500 / -200 /
      War Factory + Radar Dome. -200 is two whole power plants, which is the point - the tech
      tier is supposed to cost you an economy, not a line item. */
-  { key:'lab',      name:'Tech Center',   w:2, h:2, cost:1500, build:22, hp:600,  power:-200, sight:14,
+  { key:'lab',      name:'Research Lab',  w:2, h:2, cost:1500, build:22, hp:600,  power:-200, sight:14,
     needs:['radar', 'factory'],
     armour:'wood',
     desc:'Unlocks Artillery and the Heavy Tank. Draws as much power as two plants.' },
@@ -814,13 +816,13 @@ var RTS_STRUCTS = [
     needs:['barracks'], weapon:'pillboxgun',
     side:'allied', armour:'concrete',
     desc:'Cheap early defence. Shreds infantry, barely scratches armour.' },
-  { key:'depot',    name:'Service Depot',w:2, h:2, cost:1200, build:16, hp:700,  power:-30,  sight:12,
+  { key:'depot',    name:'Repair Bay',   w:2, h:2, cost:1200, build:16, hp:700,  power:-30,  sight:12,
     needs:['factory'], repairs:RTS_TILE * 3.2, repairRate:22,
     armour:'wood',
     desc:'Park damaged vehicles on it and they are patched up, free of charge.' },
   /* Advanced Power Plant $500 / +200 / needs Power Plant. Twice the output for well under
      twice the price and one footprint instead of two - the correct answer once a base is big. */
-  { key:'apower',   name:'Adv. Power Plant', w:3, h:2, cost:500, build:11, hp:600, power:200, sight:10,
+  { key:'apower',   name:'Fusion Plant', w:3, h:2, cost:500, build:11, hp:600, power:200, sight:10,
     needs:['power'], provides:['power'],
     armour:'concrete',
     desc:'Supplies 200 power. Cheaper per unit than two plants, and half the footprint.' },
@@ -837,10 +839,10 @@ var RTS_STRUCTS = [
      wall is only as good as the plants behind it, so killing the power is a real strategy
      rather than an inconvenience. Priced and armed from RULES.INI: 1500, 200 damage, and a
      draw of 100 which is more than any other defence asks for. */
-  { key:'tesla',    name:'Tesla Coil',   w:1, h:2, cost:1500, build:20, hp:400,  power:-100, sight:20,
+  { key:'tesla',    name:'Arc Tower',    w:1, h:2, cost:1500, build:20, hp:400,  power:-100, sight:20,
     needs:['radar'], weapon:'teslazap', side:'soviet', needsPower:true,
     armour:'concrete',
-    desc:'Devastating, and dead the moment your power browns out. Soviet.' },
+    desc:'Devastating, and dead the moment your power browns out. Dominion.' },
   /* ------------------------------------------------------------------ naval --
      Both armies get a shipyard and they are the same building with different names and
      different hulls coming out of it, which is what RA does too: the Naval Yard and the Sub
@@ -861,11 +863,11 @@ var RTS_STRUCTS = [
   { key:'navalyard',name:'Naval Yard',  w:3, h:3, cost:1000, build:14, hp:600,  power:-30, sight:12,
     needs:['refinery'], side:'allied', shore:true, produces:'ship', provides:['shipyard'],
     armour:'wood',
-    desc:'Builds ships. Must be placed against water. Allied.' },
+    desc:'Builds ships. Must be placed against water. Compact.' },
   { key:'subpen',   name:'Sub Pen',     w:3, h:3, cost:1000, build:14, hp:600,  power:-30, sight:12,
     needs:['refinery'], side:'soviet', shore:true, produces:'ship', provides:['shipyard'],
     armour:'wood',
-    desc:'Builds submarines. Must be placed against water. Soviet.' },
+    desc:'Builds submarines. Must be placed against water. Dominion.' },
   { key:'flametower',name:'Flame Tower', w:1, h:1, cost:500,  build:11, hp:450,  power:-20,  sight:16,
     needs:['barracks'], weapon:'towerflame', deathBlast:{ dmg:70, radius:RTS_TILE * 2.6 },
     side:'soviet', armour:'concrete',
@@ -893,7 +895,7 @@ var RTS_STRUCTS = [
   { key:'afld',     name:'Airfield',     w:3, h:2, cost:1200, build:13, hp:600,  power:-20,  sight:10,
     needs:['radar'], produces:'air', rearm:true,
     side:'soviet', armour:'concrete',
-    desc:'Builds and rearms MiGs and Yaks. An aircraft with no airfield left has nowhere to land.' },
+    desc:'Builds and rearms Kestrels and Shrikes. An aircraft with no airfield left has nowhere to land.' },
   { key:'silo',     name:'Ore Silo',   w:2, h:2, cost:150,  build:5,  hp:400,  power:0,    sight:8,
     needs:['refinery'], storage:1500, capturable:false,
     armour:'wood',
@@ -911,10 +913,10 @@ var RTS_STRUCTS = [
 
      Each is gated on the Tech Center, so getting one costs the -200 power the tier already
      charges, and each is faction-locked to the side that had it. */
-  { key:'mslo',     name:'Missile Silo',  w:2, h:2, cost:1750, build:24, hp:400,  power:-150, sight:12,
+  { key:'mslo',     name:'Sunfall Silo',  w:2, h:2, cost:1750, build:24, hp:400,  power:-150, sight:12,
     needs:['lab'], side:'soviet', armour:'concrete', capturable:false,
-    super:{ key:'nuke', name:'Atom Bomb', charge:300, target:'cell', icon:'☢',
-            hint:'Atom Bomb ready — click anywhere on the map.' },
+    super:{ key:'nuke', name:'Sunfall', charge:300, target:'cell', icon:'☢',
+            hint:'Sunfall ready — click anywhere on the map.' },
     /* This said "levels everything within four tiles", which the blast does not do and cannot:
        damage falls as 1/steps through the shared splash curve, so a thing four tiles out takes
        100 of RTS_NUKE_DAMAGE's 1000 and the cheapest structure in the game has 400 hit points.
@@ -925,23 +927,23 @@ var RTS_STRUCTS = [
        and one the ladder cannot answer: measured over three hard seeds, the opponent never
        builds a superweapon building at all before the match ends. */
     desc:'Charges an atomic missile. A direct hit guts a building; out to four tiles the blast kills infantry and damages everything else.' },
-  { key:'iron',     name:'Iron Curtain',  w:2, h:2, cost:1500, build:22, hp:400,  power:-200, sight:12,
+  { key:'iron',     name:'Bastion Generator', w:2, h:2, cost:1500, build:22, hp:400,  power:-200, sight:12,
     needs:['lab'], side:'soviet', armour:'concrete', capturable:false,
-    super:{ key:'ironcurtain', name:'Iron Curtain', charge:270, target:'own', icon:'🛡',
-            hint:'Iron Curtain ready — click one of your own units or buildings.' },
+    super:{ key:'ironcurtain', name:'Bastion Field', charge:270, target:'own', icon:'🛡',
+            hint:'Bastion Field ready — click one of your own units or buildings.' },
     desc:'Makes what you point it at invulnerable for half a minute. Everything near it too.' },
-  { key:'pdox',     name:'Chronosphere',  w:2, h:2, cost:1750, build:24, hp:400,  power:-200, sight:12,
+  { key:'pdox',     name:'Rift Gate',     w:2, h:2, cost:1750, build:24, hp:400,  power:-200, sight:12,
     needs:['lab'], side:'allied', armour:'concrete', capturable:false,
-    super:{ key:'chrono', name:'Chronosphere', charge:270, target:'cell', icon:'⌛',
-            hint:'Chronosphere ready — select units, then click where to send them.' },
+    super:{ key:'chrono', name:'Rift Jump', charge:270, target:'cell', icon:'⌛',
+            hint:'Rift Jump ready — select units, then click where to send them.' },
     desc:'Teleports your selected units anywhere on the map. Select first, then aim.' },
   /* GPS fires itself. In the original the satellite launches the moment it is paid for and the
      map simply stays revealed - there is nothing to aim and no reason to hold it back, so
      making the player click a button to accept a gift would be ceremony rather than a decision. */
-  { key:'gps',      name:'GPS Uplink',    w:2, h:2, cost:1000, build:18, hp:400,  power:-100, sight:12,
+  { key:'gps',      name:'Skyeye Uplink', w:2, h:2, cost:1000, build:18, hp:400,  power:-100, sight:12,
     needs:['lab'], side:'allied', armour:'concrete', capturable:false,
-    super:{ key:'gps', name:'GPS Satellite', charge:200, target:'none', auto:true, icon:'🛰',
-            hint:'GPS satellite up — the whole map is on the radar.' },
+    super:{ key:'gps', name:'Skyeye Satellite', charge:200, target:'none', auto:true, icon:'🛰',
+            hint:'Skyeye satellite up — the whole map is on the radar.' },
     desc:'Launches a satellite. Once it is up the entire map is revealed, permanently.' }
 ];
 
@@ -965,7 +967,7 @@ var RTS_UNITS = [
     desc:'Slow-firing missiles. Tears up vehicles and buildings.' },
   { key:'buggy',    name:'Scout Buggy',   kind:'vehicle',  cost:500,  build:7,  hp:170,  speed:16,  turn:3.2,r:1.6, sight:22, weapon:'mg',
     armour:'light',
-    desc:'Fast RC scout. Shreds infantry, folds against tanks.' },
+    desc:'Fast scout. Shreds infantry, folds against tanks.' },
   /* weapon2: TECHNO.CPP's SecondaryWeapon. What_Weapon_Should_I_Use scores both against the
      target's armour and takes the better, so the tank answers infantry with its coaxial gun
      and armour with the main gun, with no input from the player. */
@@ -995,11 +997,11 @@ var RTS_UNITS = [
   /* The Soviet answer to the Artillery, and the reason it exists is a measured asymmetry rather
      than a wish for parity: see `v2rocket` in rules/weapons.js. Dearer, slower and more fragile
      than the Allied piece, and it hits a building far harder and infantry rather less. */
-  { key:'v2rl',     name:'V2 Rocket',      kind:'vehicle',  cost:900,  build:13, hp:140,  speed:5.5, turn:1.2,r:2.0, sight:16, weapon:'v2rocket',
+  { key:'v2rl',     name:'Longshot Rocket',kind:'vehicle',  cost:900,  build:13, hp:140,  speed:5.5, turn:1.2,r:2.0, sight:16, weapon:'v2rocket',
     needs:['radar'], noMovingFire:true, standoff:true,
     side:'soviet', armour:'light',
     desc:'Outranges every base defence. One rocket, slowly — and it dies to anything that reaches it.' },
-  { key:'heavy',    name:'Mammoth Tank',  kind:'vehicle',  cost:1700, build:20, hp:820,  speed:6.5, turn:1.3,r:2.2, sight:18, weapon:'heavycannon', weapon2:'coax',
+  { key:'heavy',    name:'Bulwark Tank',  kind:'vehicle',  cost:1700, build:20, hp:820,  speed:6.5, turn:1.3,r:2.2, sight:18, weapon:'heavycannon', weapon2:'coax',
     needs:['lab'],
     side:'soviet', armour:'heavy',
     desc:'The heaviest hull on the field. Slow, expensive, and very hard to stop.' },
@@ -1031,13 +1033,13 @@ var RTS_UNITS = [
     desc:'Heals nearby infantry continuously and for free. Cannot heal himself.' },
   /* steal: walks into an enemy refinery and leaves with a fraction of that side\'s credits.
      Same walk-in as capture, different payload, spent the same way. */
-  { key:'thief',    name:'Thief',         kind:'infantry', cost:500,  build:7,  hp:45,   speed:7,   turn:6,  r:1.1, sight:12, weapon:null,
+  { key:'thief',    name:'Infiltrator',   kind:'infantry', cost:500,  build:7,  hp:45,   speed:7,   turn:6,  r:1.1, sight:12, weapon:null,
     needs:['lab'], steal:0.5, stealFrom:'refinery',
     side:'allied', armour:'none',
     crawl:false, fraidy:false,
     desc:'Walks into an enemy refinery and leaves with half their credits. Unarmed.' },
   /* demo: C4. "Can destroy buildings instantly if she is able to get adjacent to them." */
-  { key:'tanya',    name:'Commando',      kind:'infantry', cost:1200, build:14, hp:130,  speed:8,   turn:7,  r:1.1, sight:16, weapon:'pistols',
+  { key:'tanya',    name:'Breacher',      kind:'infantry', cost:1200, build:14, hp:130,  speed:8,   turn:7,  r:1.1, sight:16, weapon:'pistols',
     needs:['lab'], demo:true, only:1,
     side:'allied', armour:'none',
     crawl:true, fraidy:false,
@@ -1054,7 +1056,7 @@ var RTS_UNITS = [
        "If this aircraft has nowhere else to go, meaning that there is no airfield available,
         then it has to crash."
      Plus: it flies. Terrain does not block it and only an `aa` weapon can touch it. */
-  { key:'heli',     name:'Attack Heli',   kind:'air',      cost:1200, build:15, hp:200,  speed:22,  turn:5.0,r:1.6, sight:20, weapon:'hellfire',
+  { key:'heli',     name:'Wasp Gunship',  kind:'air',      cost:1200, build:15, hp:200,  speed:22,  turn:5.0,r:1.6, sight:20, weapon:'hellfire',
     needs:['helipad'], air:true, ammo:8, rearm:6, alt:14,
     side:'allied', armour:'light',
     desc:'Flies over anything. Eight missiles, then it must return to a pad to reload.' },
@@ -1063,7 +1065,7 @@ var RTS_UNITS = [
      goes home to reload (core/move.js), and slower and thinner-skinned than the Attack Heli -
      it is a lift, and a lift caught over the enemy's guns is five men lost with it. It settles
      onto the ground while it waits, to take men on or put them off (core/airspace.js). */
-  { key:'tran',     name:'Chinook',       kind:'air',      cost:1000, build:12, hp:140,  speed:18,  turn:3.5,r:1.9, sight:16, weapon:null,
+  { key:'tran',     name:'Skylift',       kind:'air',      cost:1000, build:12, hp:140,  speed:18,  turn:3.5,r:1.9, sight:16, weapon:null,
     needs:['helipad'], air:true, alt:14, carries:5, takes:['infantry'],
     side:'allied', armour:'light',
     desc:'Carries five infantry over water, cliffs and walls. Unarmed - keep it away from the guns.' },
@@ -1078,11 +1080,11 @@ var RTS_UNITS = [
      The Yak is the opposite unit. Cheap, fragile, and useless against armour - what it does is
      strafe massed infantry, which the Soviets otherwise have to answer with a Flame Tower that
      cannot move. At 900 it is the cheapest thing in the game that flies. */
-  { key:'mig',      name:'MiG',           kind:'air',      cost:1400, build:16, hp:180,  speed:30,  turn:4.0,r:1.5, sight:22, weapon:'maverick',
+  { key:'mig',      name:'Kestrel',       kind:'air',      cost:1400, build:16, hp:180,  speed:30,  turn:4.0,r:1.5, sight:22, weapon:'maverick',
     needs:['afld'], air:true, ammo:4, rearm:6, alt:16,
     side:'soviet', armour:'light',
     desc:'Fast tank-killer. Four missiles, then back to the airfield — it cannot linger.' },
-  { key:'yak',      name:'Yak',           kind:'air',      cost:900,  build:11, hp:150,  speed:26,  turn:4.5,r:1.3, sight:20, weapon:'strafe',
+  { key:'yak',      name:'Shrike',        kind:'air',      cost:900,  build:11, hp:150,  speed:26,  turn:4.5,r:1.3, sight:20, weapon:'strafe',
     needs:['afld'], air:true, ammo:30, rearm:5, alt:15,
     side:'soviet', armour:'light',
     desc:'Strafes infantry. Barely scratches armour — send it at the men, not the tanks.' },
@@ -1127,7 +1129,7 @@ var RTS_UNITS = [
     weapon:'navalheavy', needs:['navalyard'], sea:true, side:'allied', aaOnly:false,
     detects:RTS_TILE * 9,
     armour:'heavy',
-    desc:'Heavy guns and long reach. Its sonar finds submarines — the Allied answer to them.' },
+    desc:'Heavy guns and long reach. Its sonar finds submarines — the Compact\'s answer to them.' },
   /* THE CRUISER. The Allied line stopped at the Destroyer, which meant the Soviets owned the
      long game at sea: a Missile Sub bombards from 34 and submerges, and nothing Allied reached
      it. This is the counterweight, and it is deliberately not a bigger Destroyer.
@@ -1172,7 +1174,7 @@ var RTS_UNITS = [
      RA sinks an LST's whole cargo with it and so do we - see _rtsSpillCargo. That is what
      keeps it a decision: a loaded transport is five units and 700 credits in one hull with no
      gun, and the crossing is the risk you are buying. */
-  { key:'lst',      name:'Transport',    kind:'ship',     cost:700,  build:10, hp:400,  speed:12,  turn:1.6,r:2.4, sight:14, weapon:null,
+  { key:'lst',      name:'Landing Craft',kind:'ship',     cost:700,  build:10, hp:400,  speed:12,  turn:1.6,r:2.4, sight:14, weapon:null,
     needs:['shipyard'], sea:true, carries:5, takes:['infantry', 'vehicle'],
     armour:'heavy',
     desc:'Carries five units, tanks included, across water. Unarmed — and everything aboard goes down with it.' },
@@ -1595,7 +1597,7 @@ var RTS_DIFF = {
             desc:'The enemy attacks late, builds little and hits softly.' },
   normal: { name:'Soldier',  iq:3, fire:1,    speed:1,    armor:1,   rof:1,    cost:1,   build:1,   wall:true,  scan:false, keep:6, commit:0.75, army:42,
             desc:'An even fight. The enemy expands and repairs.' },
-  hard:   { name:'Commando', iq:5, fire:1.15, speed:1.1,  armor:1.2, rof:0.85, cost:0.8, build:0.7, wall:true,  scan:true, keep:4, commit:1,
+  hard:   { name:'Veteran',  iq:5, fire:1.15, speed:1.1,  armor:1.2, rof:0.85, cost:0.8, build:0.7, wall:true,  scan:true, keep:4, commit:1,
             desc:'The enemy builds a real base, defends it and comes early.' }
 };
 var RTS_DIFF_DEFAULT = 'normal';
@@ -2736,7 +2738,7 @@ var RTS_TRIGGERS = [
    is built from: boxes, slabs, cylinders, cones, roofs, plus yaw/scale/bounds.
    Part of rts.r3d, the little 3D renderer that bakes the sprites. */
 
-/* RED ALERT - the sprite baker: a tiny 3D renderer that runs once, at load.
+/* BREACHWATER - the sprite baker: a tiny 3D renderer that runs once, at load.
 
    This is how the games this is modelled on actually made their art. Westwood did not draw
    those units and buildings pixel by pixel - they built them as 3D models, rendered each one
@@ -3771,7 +3773,7 @@ function _r3FitSize(models, margin) {
 <script>/* sprites/bake.js - the palette, and the plumbing every baked sprite goes through:
    canvases, shadows, outlines. Part of rts.sprites, the sprite baker. */
 
-/* RED ALERT - sprite generation: terrain, ore, effects, and the palette everything uses.
+/* BREACHWATER - sprite generation: terrain, ore, effects, and the palette everything uses.
 
    The structures and units are NOT drawn here - they are 3D models, defined further down
    and rendered to sprites once at load by src/r3d. That is how the originals were made,
@@ -8974,7 +8976,7 @@ function _rtsLoopRender(name, sr) {
   return L.stereo ? [side(seed + 1), side(seed + 2)] : side(seed + 1);
 }
 </script>
-<script>/* RED ALERT - audio. Everything here is SYNTHESIZED: there is not a single sampled asset in the
+<script>/* BREACHWATER - audio. Everything here is SYNTHESIZED: there is not a single sampled asset in the
    app, from any game or anywhere else. The effects are rendered ahead of time from layered
    recipes (audio/recipes.js, audio/dsp.js) into a bank of takes (audio/bank.js) and played
    through a mixer with stereo position, a room and a compressor (audio/mix.js); the music is a
@@ -9138,7 +9140,7 @@ function _rtsMusicStop() {
   if (_rtsA && _rtsA.music) _rtsMusicEnd(_rtsA);
 }
 </script>
-<script>/* RED ALERT - the world's own sound, under the guns. Synthesized like everything in rts.audio.js:
+<script>/* BREACHWATER - the world's own sound, under the guns. Synthesized like everything in rts.audio.js:
    every voice of it a rendered loop (audio/loops.js).
 
    The effects were the only sound there was: a shot, an explosion, a click - and between them
@@ -9324,10 +9326,10 @@ function _rtsAmbTick(dt) {
   }
 }
 </script>
-<script>/* RED ALERT - the simulation core. src/core is pure game state + logic; there is no rendering
-   anywhere in it. src/render owns every pixel, src/ui owns the DOM. Keeping the sim
-   renderer-free means the whole battle can be stepped headlessly (which is how it gets
-   verified) - and it is what allowed the renderer to be swapped from three.js to canvas 2D
+<script>/* BREACHWATER - the simulation core. src/core is pure game state + logic; there is no rendering
+   anywhere in it. src/render and src/render3d own every pixel, src/ui owns the DOM. Keeping the
+   sim renderer-free means the whole battle can be stepped headlessly (which is how it gets
+   verified) - and it is what let the renderer change twice, to canvas 2D and then to WebGL,
    without touching a line of it.
 
    core/grid.js, the first of the twenty: the world grid - tile <-> world maths, passability,
@@ -11521,8 +11523,8 @@ function _rtsFireIron(side, tx, tz) {
     n++;
   }
   if (!n) return false;                       /* nothing of yours there - do not spend it */
-  if (side === 'player') _rtsSay('Iron Curtain active on ' + n + (n === 1 ? ' unit.' : ' units.'));
-  else _rtsSay('Enemy units are protected by an Iron Curtain.');
+  if (side === 'player') _rtsSay('Bastion Field active on ' + n + (n === 1 ? ' unit.' : ' units.'));
+  else _rtsSay('Enemy units are protected by a Bastion Field.');
   if (typeof _rtsSfx === 'function') _rtsSfx('build');
   return true;
 }
@@ -11570,7 +11572,7 @@ function _rtsFireChrono(side, tx, tz, sel) {
     moved++;
   }
   if (!moved) return false;
-  if (side === 'player') _rtsSay('Chronoshift complete — ' + moved +
+  if (side === 'player') _rtsSay('Rift jump complete — ' + moved +
                                  (moved === 1 ? ' unit moved.' : ' units moved.'));
   return true;
 }
@@ -11601,7 +11603,7 @@ function _rtsFireGps(side) {
   if (side !== 'player') return true;          /* the AI is not fogged; nothing to reveal */
   G.mapped.fill(1);
   G.visDirty = 1;
-  _rtsSay('GPS satellite online — the map is yours.');
+  _rtsSay('Skyeye satellite online — the map is yours.');
   if (typeof _rtsSfx === 'function') _rtsSfx('ready');
   return true;
 }
@@ -12684,7 +12686,7 @@ function _rtsWhyLocked(side, key) {
      Yard mid-match left you able to spend credits on buildings; RA takes the whole tab away. */
   if (cat === 'struct' && !_rtsHas(side, 'yard')) return 'Needs a Construction Yard first.';
   if (cat === 'infantry' && !_rtsHas(side, 'barracks')) return 'Build a Barracks first.';
-  if (cat === 'vehicle' && !_rtsHas(side, 'factory')) return 'Build a War Factory first.';
+  if (cat === 'vehicle' && !_rtsHas(side, 'factory')) return 'Build a Vehicle Works first.';
   /* A shipyard with nowhere to launch is not a shipyard. Refusing here rather than failing at
      delivery means the sidebar greys the ship out instead of taking the credits and producing
      nothing. The missing yard itself is already covered: every ship `needs` one. */
@@ -17659,22 +17661,13 @@ function _rtsTick(dt) {
 <script>/* render/camera.js - the renderer's view: zoom, projection, and world <-> screen.
    Part of rts.render, which owns every pixel. */
 
-/* RED ALERT - render layer. Canvas 2D, sprite-based, pure top-down.
+/* BREACHWATER - the camera: the zoom ladder, the overlay canvas, and the projection contract.
 
-   This replaced a three.js renderer. The 3D version was the wrong medium: the games this
-   is modelled on are 2D sprite games, and no amount of flattening the camera or shrinking
-   footprints makes lit 3D geometry read as 1996 pixel art. The simulation was written with
-   no renderer dependencies precisely so this swap was possible - src/core did not
-   change by a single line.
-
-   Everything is drawn at sprite resolution (24px per map cell) and blitted with image
-   smoothing off, scaled by a whole number of pixels per cell. That integer scaling is what
-   keeps pixels square and hard instead of blurry.
-
-   Screen space is a straight top-down projection of the sim's x/z plane:
-       screenX = (worldX - focus.x) * zoom + W/2
-       screenY = (worldZ - focus.z) * zoom + H/2
-   No tilt, no perspective. */
+   The world is drawn in WebGL (render3d/) under a leaned, turnable camera (render3d/cam3d.js).
+   This file owns what everything else asks of that camera - _rtsWorldToScreen, _rtsGroundAt,
+   _rtsGroundToScreen, _rtsViewSpan - so input, the overlay and the HUD reach the screen through
+   the same numbers the shaders use. Each keeps a flat top-down fallback for the moments before
+   the GL context exists (and for node specs): screenX = (worldX - focus.x) * zoom + W/2. */
 
 var _rtsR = null;
 
@@ -26955,7 +26948,7 @@ function _rtsMakeIcons(side) {
 <script>/* ui/shell.js - opening and closing a battle, and keeping the canvases the right size.
    Part of rts.ui, which owns the DOM. */
 
-/* RED ALERT - UI + input + the main loop.
+/* BREACHWATER - UI + input + the main loop.
 
    Layout is the classic one: battlefield on the left, a fixed command sidebar on the
    right holding credits, power, radar and the build tiles. Health bars, the drag box and
@@ -26982,7 +26975,7 @@ function rtsOpen(seed) {
        old multiply sat in the draw order. */
     +   '<div id="rtsVig"></div>'
     +   '<canvas id="rtsHud"></canvas>'
-    +   '<div class="rts-top"><span class="rts-title">RED ALERT</span>'
+    +   '<div class="rts-top"><span class="rts-title">BREACHWATER</span>'
     +     '<span class="rts-vs"><b class="p">' + rtsArmyName('player') + '</b> vs <b class="e">' +
           rtsArmyName('enemy') + '</b>'
     +       '<i class="dif" id="rtsDifLbl"></i></span>'
@@ -28596,7 +28589,7 @@ function _rtsBindInput() {
   function miniOrder(e) {
     var G = window._rtsG;
     if (!G || G.over) return false;
-    if (!_rtsRadarLit()) { _rtsSay('No radar — build a Radar Dome to command from the map.'); return false; }
+    if (!_rtsRadarLit()) { _rtsSay('No radar — build a Radar Post to command from the map.'); return false; }
     var mine = [], i;
     for (i = 0; i < G.sel.length; i++) {
       var sv = G.sel[i];
@@ -29202,7 +29195,7 @@ function _rtsRightClick(mx, my, hit0) {
   }
   _rtsFlash(hit.x, hit.z, onScrap ? 'harvest' : 'move');
   if (landed) _rtsSay(landed === 1 ? 'Making for the shore.' : landed + ' transports making for the shore.');
-  else if (dropped) _rtsSay(dropped === 1 ? 'Taking them in.' : dropped + ' Chinooks taking them in.');
+  else if (dropped) _rtsSay(dropped === 1 ? 'Taking them in.' : dropped + ' Skylifts taking them in.');
   if (typeof _rtsSfx === 'function') _rtsSfx('order');
 }
 /* Spread a group over a loose grid so twelve units do not all path to one tile. */
@@ -29469,7 +29462,7 @@ function _rtsDrawMini() {
     var cssW = mini.getBoundingClientRect().width || S;
     var k = S / cssW;                             /* backing pixels per CSS pixel */
     var top = dome ? 'NO POWER' : 'NO RADAR';
-    var sub = dome ? 'restore power' : 'build a Radar Dome';
+    var sub = dome ? 'restore power' : 'build a Radar Post';
     function _fit(txt, wantCss, weight) {
       var px = wantCss;
       for (;;) {
@@ -29771,11 +29764,11 @@ function _rtsLoopErr(U, err, where) {
   var txt = where + ': ' + _rtsErrText(err);
   if (U.lastErr === txt) return;
   U.lastErr = txt;
-  try { console.error('Red Alert:', where, err); } catch (_c) {}
+  try { console.error('Breachwater:', where, err); } catch (_c) {}
   if (where === 'tick') _rtsSay('Error: ' + _rtsErrText(err));
 }
 </script>
-<script>/* RED ALERT — saving and loading a battle. From SAVELOAD.CPP.
+<script>/* BREACHWATER — saving and loading a battle. From SAVELOAD.CPP.
 
    The original's shape, and the reason for it:
 
@@ -30228,8 +30221,8 @@ function rtsBuildArmyPick(){
   if (!wrap || typeof rtsArmySide !== 'function') return;
   wrap.hidden = note.hidden = false;
   if (!wrap.firstChild) {
-    wrap.innerHTML = '<button type="button" data-v="allied">ALLIED</button>' +
-                     '<button type="button" data-v="soviet">SOVIET</button>';
+    wrap.innerHTML = '<button type="button" data-v="allied">COMPACT</button>' +
+                     '<button type="button" data-v="soviet">DOMINION</button>';
     [].forEach.call(wrap.getElementsByTagName('button'), function (b) {
       b.onclick = function () { rtsSetArmySide(b.getAttribute('data-v')); rtsBuildArmyPick(); };
     });
@@ -30239,8 +30232,8 @@ function rtsBuildArmyPick(){
     b.className = (b.getAttribute('data-v') === cur) ? 'on' : '';
   });
   note.textContent = (cur === 'soviet'
-    ? 'Soviet: Flame Towers, Tesla Coils, attack dogs, Mammoth tanks.'
-    : 'Allied: Pillboxes, gun turrets, medics, light tanks, artillery, helicopters.')
+    ? 'The Basalt Dominion: Flame Towers, Arc Towers, war dogs, Bulwark tanks.'
+    : 'The Meridian Compact: Pillboxes, gun turrets, medics, light tanks, artillery, gunships.')
     + ' The enemy takes the other army.';
 }
 

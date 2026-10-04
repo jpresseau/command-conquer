@@ -50,7 +50,7 @@ function _rtsWhyLocked(side, key) {
      Yard mid-match left you able to spend credits on buildings; RA takes the whole tab away. */
   if (cat === 'struct' && !_rtsHas(side, 'yard')) return 'Needs a Construction Yard first.';
   if (cat === 'infantry' && !_rtsHas(side, 'barracks')) return 'Build a Barracks first.';
-  if (cat === 'vehicle' && !_rtsHas(side, 'factory')) return 'Build a War Factory first.';
+  if (cat === 'vehicle' && !_rtsHas(side, 'factory')) return 'Build a Vehicle Works first.';
   /* A shipyard with nowhere to launch is not a shipyard. Refusing here rather than failing at
      delivery means the sidebar greys the ship out instead of taking the credits and producing
      nothing. The missing yard itself is already covered: every ship `needs` one. */

@@ -17,7 +17,7 @@ var RTS_UNITS = [
     desc:'Slow-firing missiles. Tears up vehicles and buildings.' },
   { key:'buggy',    name:'Scout Buggy',   kind:'vehicle',  cost:500,  build:7,  hp:170,  speed:16,  turn:3.2,r:1.6, sight:22, weapon:'mg',
     armour:'light',
-    desc:'Fast RC scout. Shreds infantry, folds against tanks.' },
+    desc:'Fast scout. Shreds infantry, folds against tanks.' },
   /* weapon2: TECHNO.CPP's SecondaryWeapon. What_Weapon_Should_I_Use scores both against the
      target's armour and takes the better, so the tank answers infantry with its coaxial gun
      and armour with the main gun, with no input from the player. */
@@ -47,11 +47,11 @@ var RTS_UNITS = [
   /* The Soviet answer to the Artillery, and the reason it exists is a measured asymmetry rather
      than a wish for parity: see `v2rocket` in rules/weapons.js. Dearer, slower and more fragile
      than the Allied piece, and it hits a building far harder and infantry rather less. */
-  { key:'v2rl',     name:'V2 Rocket',      kind:'vehicle',  cost:900,  build:13, hp:140,  speed:5.5, turn:1.2,r:2.0, sight:16, weapon:'v2rocket',
+  { key:'v2rl',     name:'Longshot Rocket',kind:'vehicle',  cost:900,  build:13, hp:140,  speed:5.5, turn:1.2,r:2.0, sight:16, weapon:'v2rocket',
     needs:['radar'], noMovingFire:true, standoff:true,
     side:'soviet', armour:'light',
     desc:'Outranges every base defence. One rocket, slowly — and it dies to anything that reaches it.' },
-  { key:'heavy',    name:'Mammoth Tank',  kind:'vehicle',  cost:1700, build:20, hp:820,  speed:6.5, turn:1.3,r:2.2, sight:18, weapon:'heavycannon', weapon2:'coax',
+  { key:'heavy',    name:'Bulwark Tank',  kind:'vehicle',  cost:1700, build:20, hp:820,  speed:6.5, turn:1.3,r:2.2, sight:18, weapon:'heavycannon', weapon2:'coax',
     needs:['lab'],
     side:'soviet', armour:'heavy',
     desc:'The heaviest hull on the field. Slow, expensive, and very hard to stop.' },
@@ -83,13 +83,13 @@ var RTS_UNITS = [
     desc:'Heals nearby infantry continuously and for free. Cannot heal himself.' },
   /* steal: walks into an enemy refinery and leaves with a fraction of that side\'s credits.
      Same walk-in as capture, different payload, spent the same way. */
-  { key:'thief',    name:'Thief',         kind:'infantry', cost:500,  build:7,  hp:45,   speed:7,   turn:6,  r:1.1, sight:12, weapon:null,
+  { key:'thief',    name:'Infiltrator',   kind:'infantry', cost:500,  build:7,  hp:45,   speed:7,   turn:6,  r:1.1, sight:12, weapon:null,
     needs:['lab'], steal:0.5, stealFrom:'refinery',
     side:'allied', armour:'none',
     crawl:false, fraidy:false,
     desc:'Walks into an enemy refinery and leaves with half their credits. Unarmed.' },
   /* demo: C4. "Can destroy buildings instantly if she is able to get adjacent to them." */
-  { key:'tanya',    name:'Commando',      kind:'infantry', cost:1200, build:14, hp:130,  speed:8,   turn:7,  r:1.1, sight:16, weapon:'pistols',
+  { key:'tanya',    name:'Breacher',      kind:'infantry', cost:1200, build:14, hp:130,  speed:8,   turn:7,  r:1.1, sight:16, weapon:'pistols',
     needs:['lab'], demo:true, only:1,
     side:'allied', armour:'none',
     crawl:true, fraidy:false,
@@ -106,7 +106,7 @@ var RTS_UNITS = [
        "If this aircraft has nowhere else to go, meaning that there is no airfield available,
         then it has to crash."
      Plus: it flies. Terrain does not block it and only an `aa` weapon can touch it. */
-  { key:'heli',     name:'Attack Heli',   kind:'air',      cost:1200, build:15, hp:200,  speed:22,  turn:5.0,r:1.6, sight:20, weapon:'hellfire',
+  { key:'heli',     name:'Wasp Gunship',  kind:'air',      cost:1200, build:15, hp:200,  speed:22,  turn:5.0,r:1.6, sight:20, weapon:'hellfire',
     needs:['helipad'], air:true, ammo:8, rearm:6, alt:14,
     side:'allied', armour:'light',
     desc:'Flies over anything. Eight missiles, then it must return to a pad to reload.' },
@@ -115,7 +115,7 @@ var RTS_UNITS = [
      goes home to reload (core/move.js), and slower and thinner-skinned than the Attack Heli -
      it is a lift, and a lift caught over the enemy's guns is five men lost with it. It settles
      onto the ground while it waits, to take men on or put them off (core/airspace.js). */
-  { key:'tran',     name:'Chinook',       kind:'air',      cost:1000, build:12, hp:140,  speed:18,  turn:3.5,r:1.9, sight:16, weapon:null,
+  { key:'tran',     name:'Skylift',       kind:'air',      cost:1000, build:12, hp:140,  speed:18,  turn:3.5,r:1.9, sight:16, weapon:null,
     needs:['helipad'], air:true, alt:14, carries:5, takes:['infantry'],
     side:'allied', armour:'light',
     desc:'Carries five infantry over water, cliffs and walls. Unarmed - keep it away from the guns.' },
@@ -130,11 +130,11 @@ var RTS_UNITS = [
      The Yak is the opposite unit. Cheap, fragile, and useless against armour - what it does is
      strafe massed infantry, which the Soviets otherwise have to answer with a Flame Tower that
      cannot move. At 900 it is the cheapest thing in the game that flies. */
-  { key:'mig',      name:'MiG',           kind:'air',      cost:1400, build:16, hp:180,  speed:30,  turn:4.0,r:1.5, sight:22, weapon:'maverick',
+  { key:'mig',      name:'Kestrel',       kind:'air',      cost:1400, build:16, hp:180,  speed:30,  turn:4.0,r:1.5, sight:22, weapon:'maverick',
     needs:['afld'], air:true, ammo:4, rearm:6, alt:16,
     side:'soviet', armour:'light',
     desc:'Fast tank-killer. Four missiles, then back to the airfield — it cannot linger.' },
-  { key:'yak',      name:'Yak',           kind:'air',      cost:900,  build:11, hp:150,  speed:26,  turn:4.5,r:1.3, sight:20, weapon:'strafe',
+  { key:'yak',      name:'Shrike',        kind:'air',      cost:900,  build:11, hp:150,  speed:26,  turn:4.5,r:1.3, sight:20, weapon:'strafe',
     needs:['afld'], air:true, ammo:30, rearm:5, alt:15,
     side:'soviet', armour:'light',
     desc:'Strafes infantry. Barely scratches armour — send it at the men, not the tanks.' },
@@ -179,7 +179,7 @@ var RTS_UNITS = [
     weapon:'navalheavy', needs:['navalyard'], sea:true, side:'allied', aaOnly:false,
     detects:RTS_TILE * 9,
     armour:'heavy',
-    desc:'Heavy guns and long reach. Its sonar finds submarines — the Allied answer to them.' },
+    desc:'Heavy guns and long reach. Its sonar finds submarines — the Compact\'s answer to them.' },
   /* THE CRUISER. The Allied line stopped at the Destroyer, which meant the Soviets owned the
      long game at sea: a Missile Sub bombards from 34 and submerges, and nothing Allied reached
      it. This is the counterweight, and it is deliberately not a bigger Destroyer.
@@ -224,7 +224,7 @@ var RTS_UNITS = [
      RA sinks an LST's whole cargo with it and so do we - see _rtsSpillCargo. That is what
      keeps it a decision: a loaded transport is five units and 700 credits in one hull with no
      gun, and the crossing is the risk you are buying. */
-  { key:'lst',      name:'Transport',    kind:'ship',     cost:700,  build:10, hp:400,  speed:12,  turn:1.6,r:2.4, sight:14, weapon:null,
+  { key:'lst',      name:'Landing Craft',kind:'ship',     cost:700,  build:10, hp:400,  speed:12,  turn:1.6,r:2.4, sight:14, weapon:null,
     needs:['shipyard'], sea:true, carries:5, takes:['infantry', 'vehicle'],
     armour:'heavy',
     desc:'Carries five units, tanks included, across water. Unarmed — and everything aboard goes down with it.' },
