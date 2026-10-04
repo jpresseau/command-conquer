@@ -51,6 +51,28 @@ function _sprUnitHulls(X, key) {
     }
     _r3Box(m, -Lm * 0.44, 4.2, 0, 0.6, 3.6, 0.6, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);   /* the stern crane */
     _r3Box(m, -Lm * 0.50, 5.8, 0, 2.2, 0.5, 0.5, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);
+  } else if (key === 'tender') {
+    /* REPAIR TENDER. A broad working hull with a gantry crane straddling an open well deck, a
+       hook hanging from it, crates of spares and a welding rig on the deck, and the deckhouse
+       aft. The identity is the GANTRY - a frame across the whole beam, which no warship has. */
+    var Lt = 24, Wt = 8.4;
+    _r3Slab(m, 0, 0.6, 0, Lt, 3.2, Wt, 1.4, VH[0], VH[1]);              /* hull */
+    _r3Box(m, Lt * 0.40, 0.9, 0, Lt * 0.20, 2.6, Wt * 0.55, VH[1], VH[3]); /* bow */
+    _r3Box(m, -Lt * 0.30, 4.2, 0, Lt * 0.24, 3.6, Wt * 0.72, VH[2], VH[0]); /* deckhouse aft */
+    _r3Box(m, -Lt * 0.20, 5.0, 0, 0.5, 1.4, Wt * 0.58, RTS_PAL.glass, RTS_PAL.glass);   /* its bridge glass */
+    _r3Box(m, -Lt * 0.30, 6.3, 0, Lt * 0.18, 0.6, Wt * 0.56, TM[1], TM[3]);   /* team roof */
+    _r3Cyl(m, -Lt * 0.38, 7.4, 0, 1.0, 2.6, DK[1], DK[0], 16);          /* stack */
+    /* the gantry: two legs either side of the well deck and the beam across them */
+    for (var gl = -1; gl <= 1; gl += 2) _r3Box(m, Lt * 0.06, 6.0, gl * Wt * 0.44, 0.8, 7.6, 0.8, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);
+    _r3Box(m, Lt * 0.06, 10.0, 0, 1.2, 1.0, Wt * 0.98, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);
+    _r3Box(m, Lt * 0.06, 7.6, 0, 0.2, 4.0, 0.2, DK[2], DK[3]);           /* cable */
+    _r3Box(m, Lt * 0.06, 5.4, 0, 1.0, 0.8, 1.0, DK[1], DK[2]);           /* hook block */
+    _r3Box(m, Lt * 0.06, 2.4, 0, Lt * 0.20, 0.3, Wt * 0.60, DK[0], DK[1]);  /* the open well deck */
+    [[Lt * 0.26, -1.6], [Lt * 0.26, 1.6], [Lt * 0.32, 0]].forEach(function (c) {   /* crates of spares */
+      _r3Box(m, c[0], 3.4, c[1], 1.8, 1.6, 1.6, S[2], S[1]);
+    });
+    _r3Cyl(m, -Lt * 0.10, 3.6, Wt * 0.30, 0.6, 1.8, GN[1], GN[2], 16);   /* gas bottles for the rig */
+    _r3Cyl(m, -Lt * 0.10, 3.6, Wt * 0.18, 0.6, 1.8, GN[1], GN[2], 16);
   } else return false;
   return true;
 }

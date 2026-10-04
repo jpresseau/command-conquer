@@ -322,6 +322,13 @@ var RTS_UNITS = [
     needs:['shipyard'], sea:true, mines:6,
     armour:'heavy',
     desc:'Lays hidden mines in the water where it stands - press D. Anything afloat sets them off. Six to a load; its yard restocks it.' },
+  /* REPAIR TENDER. The Repair Truck's verb at sea: a fleet mended where it fights instead of
+     sailing home. Every friendly ship within its reach is brought back up, for free; left idle
+     it goes to the nearest damaged one - core/repairtruck.js, `healKind:'ship'`. Unarmed. */
+  { key:'tender',   name:'Repair Tender',kind:'ship',     cost:900,  build:12, hp:500,  speed:11,  turn:1.6,r:2.2, sight:16, weapon:null,
+    needs:['shipyard'], sea:true, heals:RTS_TILE * 3, healRate:14, healKind:'ship',
+    armour:'heavy',
+    desc:'Repairs your ships near it, for free, wherever they are. Sails to a damaged one by itself. Unarmed.' },
   { key:'lst',      name:'Landing Craft',kind:'ship',     cost:700,  build:10, hp:400,  speed:12,  turn:1.6,r:2.4, sight:14, weapon:null,
     needs:['shipyard'], sea:true, carries:5, takes:['infantry', 'vehicle'],
     armour:'heavy',
