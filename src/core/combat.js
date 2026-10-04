@@ -108,6 +108,29 @@ function _rtsCloakAI(e, dt, d) {
   e.spotted = found;
   e.hidden = (e.decloak > 0 || found) ? 0 : 1;
 }
+/* Whether anything this shooter carries can engage that target at all, range aside. */
+function _rtsCanEngage(e, o) {
+  var ws = _rtsGuns(e);
+  for (var i = 0; i < ws.length; i++) if (_rtsGunEngages(ws[i], o)) return true;
+  return false;
+}
+/* Whether one weapon can engage one target at all, range aside. */
+function _rtsGunEngages(w, o) {
+  /* The air/ground contract. A weapon without `aa` cannot engage anything flying, and an
+     aircraft's own weapons cannot reach another aircraft either - our helicopter carries no
+     air-to-air, exactly as the Longbow does not. */
+  if (o.air && !w.aa) return false;
+  /* ...and the reverse, for a weapon that is ONLY anti-air. A flak gun that can also shell the
+     infantry walking past it is just a Gun Turret with a longer reach, which is not what an AA
+     emplacement - or the Flak Track - is for. */
+  if (!o.air && w.aaOnly) return false;
+  /* "Dogs can only attack infantrymen" - INFANTRY.CPP turns ACTION_ATTACK into ACTION_NONE
+     against anything else. Without this a dog with a one-bite kill would delete tanks. */
+  if (w.maul && !(o.type === 'unit' && (rtsUnitDef(o.def) || {}).kind === 'infantry')) return false;
+  /* A submarine must not sit off a beach acquiring a tank it can never torpedo, refusing to
+     look for a target it CAN hit. Same shape as the aa rule above and for the same reason. */
+  return _rtsWeaponReaches(w, o);
+}
 function _rtsFindTarget(e, range, w) {
   var G = window._rtsG, foe = _rtsEnemyOf(e.side), best = null, bv = 0;
   /* The candidate list, not the candidate test. core/spatial.js hands back the entities whose
@@ -116,27 +139,20 @@ function _rtsFindTarget(e, range, w) {
      reach it is asked for is the same max() the caller used, plus spatial's own pad for the
      elevation bonus _rtsElevReach can add further down. */
   var list = _rtsSpNear(e.x, e.z, range, RTS_SP_ELEV) || G.ents;
+  var gs = w ? null : _rtsGuns(e);
   for (var i = 0; i < list.length; i++) {
     var o = list[i];
     if (o.dead || o.side !== foe || o.inside) continue;
     /* You cannot shoot what is under water. The same flag that hides a submarine from the
        player's screen hides it from the opponent's target acquisition - see _rtsCloakAI. */
     if (o.hidden) continue;
-    /* The air/ground contract. A weapon without `aa` cannot engage anything flying, and an
-       aircraft's own weapons cannot reach another aircraft either - our helicopter carries no
-       air-to-air, exactly as the Longbow does not. */
-    if (o.air && !(w && w.aa)) continue;
-    /* ...and the reverse, for a weapon that is ONLY anti-air. A flak gun that can also shell
-       the infantry walking past it is just a Gun Turret with a longer reach, which is not what
-       an AA emplacement is for and would make the Allied one strictly better than the Soviet
-       SAM site it exists to mirror. */
-    if (!o.air && w && w.aaOnly) continue;
-    /* "Dogs can only attack infantrymen" - INFANTRY.CPP turns ACTION_ATTACK into ACTION_NONE
-       against anything else. Without this a dog with a one-bite kill would delete tanks. */
-    if (w && w.maul && !(o.type === 'unit' && (rtsUnitDef(o.def) || {}).kind === 'infantry')) continue;
-    /* A submarine must not sit off a beach acquiring a tank it can never torpedo, refusing to
-       look for a target it CAN hit. Same shape as the aa rule above and for the same reason. */
-    if (!_rtsWeaponReaches(w, o)) continue;
+    /* ASKED OF EVERY GUN THE SHOOTER CARRIES when the caller names none. A unit's own
+       acquisition never named one, and with no weapon in hand the air rules below read as
+       "no aa": no unit ever acquired an aircraft by itself - a Rocket Squad watched a gunship
+       work over the tank beside it - and an anti-air-only gun was free to shell the ground. A
+       target is fair game if any gun aboard can engage it. */
+    if (w ? !_rtsGunEngages(w, o) : (gs.length && !gs.some(function (gw) { return _rtsGunEngages(gw, o); }))) continue;
+    if (!w && !gs.length && o.air) continue;
     var dist = _rtsRangeTo(e, o);
     /* Standing above what you are shooting at is worth a little reach - see RTS_ELEV_RANGE in
        core/relief.js. Applied to the RANGE rather than to the distance, deliberately:

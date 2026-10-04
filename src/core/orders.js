@@ -81,6 +81,9 @@ function _rtsOrderAttack(e, tgt) {
   if (_ow && _ow.maul && !(tgt.type === 'unit' && (rtsUnitDef(tgt.def) || {}).kind === 'infantry')) {
     _rtsOrderMove(e, tgt.x, tgt.z, false); return;
   }
+  /* ...and the same for any unit ordered onto what none of its guns can engage: a tank sent
+     at a gunship drives to where it is, a Flak Track sent at a tank does the same. */
+  if (!_rtsCanEngage(e, tgt)) { _rtsOrderMove(e, tgt.x, tgt.z, false); return; }
   e.order = 'attack'; e.target = tgt; e.hstate = null;
   e.goal = { x:tgt.x, z:tgt.z };
   e.path = _rtsPathFor(e, tgt.x, tgt.z); e.pi = 0;

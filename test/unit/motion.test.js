@@ -69,9 +69,11 @@ VEH.forEach(function (key) {
   tracked.push(key);
   var ch = changed(r0, rq);
   function cx(f) { return f.v.reduce(function (s2, p) { return s2 + p[0]; }, 0) / f.v.length; }
-  /* the run of the track: what lies along the bottom of the model - the hull's gun would
-     stretch the model's own box */
-  var yb = box(r0).y0, run = r0.filter(function (f) { return Math.min.apply(null, f.v.map(function (p) { return p[1]; })) < yb + 0.5; }).map(cx);
+  /* the run of the TRACK: the faces along the bottom that the roll moves - its links. Not the
+     model's own box, which the hull's gun would stretch, and not everything on the bottom: a
+     half-track (the Flak Track) has steered wheels ahead of its track, and the front of its
+     running gear is not where its sprocket is */
+  var yb = box(r0).y0, run = ch.filter(function (f) { return Math.min.apply(null, f.v.map(function (p) { return p[1]; })) < yb + 0.5; }).map(cx);
   var x0 = Math.min.apply(null, run), x1 = Math.max.apply(null, run), q = (x1 - x0) / 4, xs = ch.map(cx);
   var rearHalf = xs.filter(function (x) { return x < (x0 + x1) / 2; }).length;
   var front = xs.filter(function (x) { return x > x1 - q; }).length, back = xs.filter(function (x) { return x < x0 + q; }).length;

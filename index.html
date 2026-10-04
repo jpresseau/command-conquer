@@ -700,7 +700,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">a74b4b3 · 2026-10-04</div>
+  <div id="rtsBuild" title="build">270c616 · 2026-10-04</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1088,6 +1088,14 @@ var RTS_UNITS = [
     needs:['afld'], air:true, ammo:30, rearm:5, alt:15,
     side:'soviet', armour:'light',
     desc:'Strafes infantry. Barely scratches armour — send it at the men, not the tanks.' },
+  /* FLAK TRACK. The verb is ESCORT: the armour column takes its anti-aircraft cover with it.
+     Until this, everything that could shoot down an aircraft either stood still (the AA Gun,
+     the Rocket Turret) or was a squad on foot (rockets), so a gunship could pick apart a tank
+     column anywhere outside a base. Both armies build it, and it cannot fire at the ground at
+     all - a specialist, like the AA Gun it is the mobile half of. */
+  { key:'flaktrack',name:'Flak Track',    kind:'vehicle',  cost:800,  build:10, hp:260,  speed:12.5,turn:2.4,r:1.8, sight:26, weapon:'trackflak',
+    needs:['radar'], armour:'light',
+    desc:'Anti-aircraft guns on a half-track. Keeps gunships and jets off your tanks; cannot hit the ground.' },
   /* Armoured Personnel Carrier. UDATA.CPP's UnitAPC is IsCrusher with no turret; the transport
      rules are in UNIT.CPP - capacity via Max_Passengers, and, in Death, the half of the branch
      that matters: when a TRANSPORT dies its infantry passengers are unlimboed at the wreck and
@@ -1283,6 +1291,13 @@ var RTS_WEAPONS = {
      force without this would have handed one side a weapon the other could only answer with
      infantry. Deliberately aa-only: it is a specialist, not a second Gun Turret. */
   flak:       { dmg:22, range:24, cool:0.5, burst:2, shot:'tracer', speed:0, splash:1.4, aa:true,
+                aaOnly:true,
+                verses:{ none:0.9, wood:0.15, light:0.9, heavy:0.35, concrete:0.10 } },
+  /* The Flak Track's twin guns: the AA Gun's flak, lighter and a little shorter, on a chassis
+     that keeps up with the tanks it covers. What makes it an escort is its SIGHT (26, in
+     rules/units.js), not this reach: it spots a gunship standing off to fire at the tank beside
+     it and closes. Measured, unit/flaktrack: at sight 20 it never saw one hovering 22 away. */
+  trackflak:  { dmg:18, range:22, cool:0.45, burst:2, shot:'tracer', speed:0, splash:1.2, aa:true,
                 aaOnly:true,
                 verses:{ none:0.9, wood:0.15, light:0.9, heavy:0.35, concrete:0.10 } },
   bite:       { dmg:22, range:5.5,cool:0.55, shot:'tracer',  speed:0,  splash:0, maul:true,
@@ -1841,7 +1856,10 @@ var RTS_AI = {
   mix:{
     vehicle:[ { key:'heavy', at:2600, w:3 }, { key:'arty',  at:2000, w:2 }, { key:'v2rl', at:2000, w:2 },
               { key:'tank', at:1600, w:4 },
-              { key:'light', at:1100, w:3 }, { key:'buggy', at:900,  w:2 } ],
+              { key:'light', at:1100, w:3 }, { key:'buggy', at:900,  w:2 },
+              /* `vsAir`: bought only against aircraft, one for every vsAir the player flies
+                 (core/ai.js). A gun that cannot hit the ground is dead weight on a ground war. */
+              { key:'flaktrack', at:1200, w:4, vsAir:2 } ],
     /* No thief in the mix, and no Commando - both are decisions about a specific building at
        a specific moment, and an AI that buys them without a plan just donates the credits to
        whatever shoots them first (the Commando also has her `only` cap). The dog IS in: it
@@ -6349,7 +6367,8 @@ function _sprBuildingClean(key, side) {
    hundred hand-tuned coordinates, and it cannot silently change the unit's proportions. */
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
-  dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46
+  dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46,
+  flaktrack:34
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -6482,12 +6501,12 @@ function _sprUnitModel(key, side, prone, part) {
     }
   }
 
-  /* The chain is three files now - see sprites/unit-*.js. Each arm returns false for a key it
+  /* The chain is four files now - see sprites/unit-*.js. Each arm returns false for a key it
      does not own. Everything the branches need is handed over in X rather than rebuilt, so a
      model line reads the same as it did when this was one function. */
   var X = { m:m, TM:TM, VH:VH, S:S, DK:DK, O:O, C:C, GN:GN,
             d:d, prone:prone, part:part, side:side, tracks:tracks };
-  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key))) {
+  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key))) {
     _r3Box(m, 0, 0, -5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 0, 5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 2.5, 0, 15, 4, 8, TM[0], TM[1]);
@@ -7218,6 +7237,92 @@ function _sprUnitAirSea(X, key) {
   return true;
 }
 </script>
+<script>/* sprites/unit-special.js - the special-purpose vehicles Breachwater added to the roster: the
+   Flak Track first. One arm of the unit model chain (see sprites/unitmodels.js for the
+   dispatch and the shared locals handed over in X); returns false for a key it does not own.
+
+   Two small helpers live here because these are the first models that need them: a run of
+   faces moved along the hull (a half-track's tracks sit behind its front wheels, and `tracks`
+   builds them centred), and a run of faces pitched up about a pivot (an anti-aircraft gun points
+   at the sky, and every primitive is axis-aligned). */
+
+/* Move faces [from, end) of `m` along x. */
+function _sprShiftX(m, from, dx) {
+  for (var i = from; i < m.length; i++) {
+    var v = m[i].v;
+    for (var j = 0; j < v.length; j++) v[j] = [v[j][0] + dx, v[j][1], v[j][2]];
+  }
+}
+/* Pitch faces [from, end) of `m` nose-up by `ang` radians about the point (px, py), in the x-y
+   plane - a barrel along +x comes up toward +y. Normals turn with them. */
+function _sprPitch(m, from, ang, px, py) {
+  var c = Math.cos(ang), s = Math.sin(ang);
+  function rot(p, o) { var x = p[0] - o[0], y = p[1] - o[1]; return [o[0] + x * c - y * s, o[1] + x * s + y * c, p[2]]; }
+  for (var i = from; i < m.length; i++) {
+    var f = m[i], o = [px, py, 0], z0 = [0, 0, 0];
+    f.v = f.v.map(function (p) { return rot(p, o); });
+    if (f.n) f.n = f.n.map(function (n) { return rot(n, z0); });
+  }
+}
+
+function _sprUnitSpecial(X, key) {
+  var m = X.m, TM = X.TM, VH = X.VH, S = X.S, DK = X.DK, GN = X.GN, part = X.part,
+      tracks = X.tracks, i, n0;
+
+  if (key === 'flaktrack') {
+    /* FLAK TRACK. A half-track - steered wheels at the front, a track run under the bed -
+       carrying a twin anti-aircraft mount on a turntable. Its identity has to survive one cell
+       of screen: the TWO PALE BARRELS POINTING AT THE SKY. Every other gun in the roster lies
+       along the ground, so the raised pair is the one silhouette nothing else has. */
+    if (part !== 'turret') {
+      n0 = m.length;
+      tracks(11, 5.0, 3, 1.9);                                      /* the rear track run */
+      _sprShiftX(m, n0, -3.6);
+      for (var s = -1; s <= 1; s += 2) {                            /* steered front wheels */
+        _r3Wheel(m, 6.6, 2.3, s * 4.6, 2.3, 2.0, 'z', DK[0], DK[1], 22);
+        _r3Wheel(m, 6.6, 2.3, s * 4.6, 1.1, 2.2, 'z', S[2], S[1], 16);
+        for (var wn = 0; wn < 5; wn++) {                            /* nuts, turning with the roll */
+          var wa = (wn - (_SPR_ROLL || 0)) / 5 * Math.PI * 2;
+          _r3Box(m, 6.6 + Math.cos(wa) * 0.7, 2.3 + Math.sin(wa) * 0.7, s * 4.6, 0.34, 0.34, 2.4, S[3], S[2]);
+        }
+        _r3Box(m, 6.6, 4.6, s * 4.6, 4.8, 0.8, 2.6, VH[2], VH[1]); /* mudguard */
+      }
+      _r3Slab(m, 0.4, 2.6, 0, 17.5, 3.2, 8.2, 1.0, VH[0], VH[1]);  /* the hull */
+      _r3Box(m, 7.6, 3.6, 0, 3.6, 2.6, 6.8, VH[1], VH[3]);         /* the engine bonnet */
+      _r3Box(m, 9.6, 3.4, 0, 0.8, 2.2, 5.4, DK[1], DK[2]);         /* radiator grille */
+      _r3Box(m, 4.4, 5.8, 0, 2.6, 2.8, 7.4, VH[2], VH[1]);         /* the cab's armoured front */
+      _r3Box(m, 5.6, 6.8, 0, 0.6, 1.2, 5.8, RTS_PAL.glass, RTS_PAL.glass);   /* vision slits */
+      _r3Box(m, -3.0, 5.8, 0, 9.8, 1.4, 8.2, VH[2], TM[1]);        /* the gun deck - team colour */
+      /* ready ammunition along both sides of the deck: the flak's long clips */
+      for (i = 0; i < 3; i++) {
+        _r3Box(m, -6.4 + i * 2.6, 7.4, -3.4, 2.0, 1.6, 1.2, RTS_PAL.hazard[0], S[1]);
+        _r3Box(m, -6.4 + i * 2.6, 7.4, 3.4, 2.0, 1.6, 1.2, RTS_PAL.hazard[0], S[1]);
+      }
+      _r3Box(m, 10.0, 4.4, -3.0, 0.8, 0.9, 1.3, GN[3], GN[3]);     /* headlights */
+      _r3Box(m, 10.0, 4.4, 3.0, 0.8, 0.9, 1.3, GN[3], GN[3]);
+      _r3Box(m, 3.0, 8.6, -3.6, 0.5, 4.0, 0.5, DK[1], DK[3]);      /* whip aerial */
+    }
+    if (part !== 'hull') {
+      /* The turntable and its shield, then the cradle and the barrels pitched up at fifty
+         degrees about the trunnions. Built along +x and turned, so the pair keeps its spacing
+         and its muzzle brakes at the top whatever the turret faces. */
+      _r3Cyl(m, -2.4, 7.2, 0, 3.4, 1.0, DK[1], DK[2], 20);         /* turntable ring */
+      _r3Slab(m, -2.4, 8.2, 0, 5.4, 2.2, 6.4, 0.6, VH[1], TM[1]);  /* the mount - team roof */
+      _r3Box(m, 0.2, 9.4, -3.6, 1.0, 3.2, 1.2, S[2], S[1]);        /* splinter shields */
+      _r3Box(m, 0.2, 9.4, 3.6, 1.0, 3.2, 1.2, S[2], S[1]);
+      _r3Box(m, -5.4, 9.6, 0, 1.4, 1.6, 1.4, DK[1], DK[3]);        /* the gunner's sight */
+      n0 = m.length;
+      for (var b = -1; b <= 1; b += 2) {
+        _r3Box(m, 2.4, 10.4, b * 1.5, 5.0, 1.8, 1.8, DK[1], DK[3]);   /* the breeches */
+        _r3Box(m, 8.6, 10.6, b * 1.5, 8.6, 0.9, 0.9, GN[1], GN[3]);   /* barrels - pale steel */
+        _r3Box(m, 13.4, 10.6, b * 1.5, 1.4, 1.4, 1.4, GN[0], GN[3]);  /* muzzle brakes */
+      }
+      _sprPitch(m, n0, 50 * Math.PI / 180, -0.4, 10.2);
+    }
+  } else return false;
+  return true;
+}
+</script>
 <script>/* sprites/props.js - unit scaling and fit, pads, corpses, scorch, craters, fire, crates and
    the effect sheet. Part of rts.sprites, the sprite baker. */
 
@@ -7278,7 +7383,7 @@ function _sprUnit(key, side, prone, part) {
 /* Which hulls carry a turret that aims independently of the body. The gun ships do - a cruiser,
    a destroyer and a gunboat all traverse their guns - and their SHPs are laid out that way, so
    leaving them out drew the turret frames as if they were hull facings. */
-var RTS_TURRETED = { tank:1, light:1, heavy:1, destroyer:1, gunboat:1, cruiser:1 };
+var RTS_TURRETED = { tank:1, light:1, heavy:1, destroyer:1, gunboat:1, cruiser:1, flaktrack:1 };
 
 /* The concrete apron a structure stands on. In the reference every building sits on a pale
    irregular pad noticeably larger than itself - it is what stops a base looking like
@@ -13141,6 +13246,9 @@ function _rtsOrderAttack(e, tgt) {
   if (_ow && _ow.maul && !(tgt.type === 'unit' && (rtsUnitDef(tgt.def) || {}).kind === 'infantry')) {
     _rtsOrderMove(e, tgt.x, tgt.z, false); return;
   }
+  /* ...and the same for any unit ordered onto what none of its guns can engage: a tank sent
+     at a gunship drives to where it is, a Flak Track sent at a tank does the same. */
+  if (!_rtsCanEngage(e, tgt)) { _rtsOrderMove(e, tgt.x, tgt.z, false); return; }
   e.order = 'attack'; e.target = tgt; e.hstate = null;
   e.goal = { x:tgt.x, z:tgt.z };
   e.path = _rtsPathFor(e, tgt.x, tgt.z); e.pi = 0;
@@ -13275,6 +13383,29 @@ function _rtsCloakAI(e, dt, d) {
   e.spotted = found;
   e.hidden = (e.decloak > 0 || found) ? 0 : 1;
 }
+/* Whether anything this shooter carries can engage that target at all, range aside. */
+function _rtsCanEngage(e, o) {
+  var ws = _rtsGuns(e);
+  for (var i = 0; i < ws.length; i++) if (_rtsGunEngages(ws[i], o)) return true;
+  return false;
+}
+/* Whether one weapon can engage one target at all, range aside. */
+function _rtsGunEngages(w, o) {
+  /* The air/ground contract. A weapon without `aa` cannot engage anything flying, and an
+     aircraft's own weapons cannot reach another aircraft either - our helicopter carries no
+     air-to-air, exactly as the Longbow does not. */
+  if (o.air && !w.aa) return false;
+  /* ...and the reverse, for a weapon that is ONLY anti-air. A flak gun that can also shell the
+     infantry walking past it is just a Gun Turret with a longer reach, which is not what an AA
+     emplacement - or the Flak Track - is for. */
+  if (!o.air && w.aaOnly) return false;
+  /* "Dogs can only attack infantrymen" - INFANTRY.CPP turns ACTION_ATTACK into ACTION_NONE
+     against anything else. Without this a dog with a one-bite kill would delete tanks. */
+  if (w.maul && !(o.type === 'unit' && (rtsUnitDef(o.def) || {}).kind === 'infantry')) return false;
+  /* A submarine must not sit off a beach acquiring a tank it can never torpedo, refusing to
+     look for a target it CAN hit. Same shape as the aa rule above and for the same reason. */
+  return _rtsWeaponReaches(w, o);
+}
 function _rtsFindTarget(e, range, w) {
   var G = window._rtsG, foe = _rtsEnemyOf(e.side), best = null, bv = 0;
   /* The candidate list, not the candidate test. core/spatial.js hands back the entities whose
@@ -13283,27 +13414,20 @@ function _rtsFindTarget(e, range, w) {
      reach it is asked for is the same max() the caller used, plus spatial's own pad for the
      elevation bonus _rtsElevReach can add further down. */
   var list = _rtsSpNear(e.x, e.z, range, RTS_SP_ELEV) || G.ents;
+  var gs = w ? null : _rtsGuns(e);
   for (var i = 0; i < list.length; i++) {
     var o = list[i];
     if (o.dead || o.side !== foe || o.inside) continue;
     /* You cannot shoot what is under water. The same flag that hides a submarine from the
        player's screen hides it from the opponent's target acquisition - see _rtsCloakAI. */
     if (o.hidden) continue;
-    /* The air/ground contract. A weapon without `aa` cannot engage anything flying, and an
-       aircraft's own weapons cannot reach another aircraft either - our helicopter carries no
-       air-to-air, exactly as the Longbow does not. */
-    if (o.air && !(w && w.aa)) continue;
-    /* ...and the reverse, for a weapon that is ONLY anti-air. A flak gun that can also shell
-       the infantry walking past it is just a Gun Turret with a longer reach, which is not what
-       an AA emplacement is for and would make the Allied one strictly better than the Soviet
-       SAM site it exists to mirror. */
-    if (!o.air && w && w.aaOnly) continue;
-    /* "Dogs can only attack infantrymen" - INFANTRY.CPP turns ACTION_ATTACK into ACTION_NONE
-       against anything else. Without this a dog with a one-bite kill would delete tanks. */
-    if (w && w.maul && !(o.type === 'unit' && (rtsUnitDef(o.def) || {}).kind === 'infantry')) continue;
-    /* A submarine must not sit off a beach acquiring a tank it can never torpedo, refusing to
-       look for a target it CAN hit. Same shape as the aa rule above and for the same reason. */
-    if (!_rtsWeaponReaches(w, o)) continue;
+    /* ASKED OF EVERY GUN THE SHOOTER CARRIES when the caller names none. A unit's own
+       acquisition never named one, and with no weapon in hand the air rules below read as
+       "no aa": no unit ever acquired an aircraft by itself - a Rocket Squad watched a gunship
+       work over the tank beside it - and an anti-air-only gun was free to shell the ground. A
+       target is fair game if any gun aboard can engage it. */
+    if (w ? !_rtsGunEngages(w, o) : (gs.length && !gs.some(function (gw) { return _rtsGunEngages(gw, o); }))) continue;
+    if (!w && !gs.length && o.air) continue;
     var dist = _rtsRangeTo(e, o);
     /* Standing above what you are shooting at is worth a little reach - see RTS_ELEV_RANGE in
        core/relief.js. Applied to the RANGE rather than to the distance, deliberately:
@@ -13650,6 +13774,10 @@ function _rtsCanRetaliate(tgt, from) {
   /* "Don't allow retaliation if it isn't equipped with a weapon that can deal with the
      threat" - a Modifier of zero against that armour means shooting back is pointless. */
   if (!rtsVerses(w, from)) return false;
+  /* ...and the air/ground contract, which the armour modifier knows nothing about. Without it
+     a tank a gunship hit turned and shot the gunship down with its cannon - 125 off a 200 hp
+     airframe in one round - so no aircraft outlived a sortie against anything armed. */
+  if (!_rtsCanEngage(tgt, from)) return false;
   /* Idle: always turn and fight. */
   if (!tgt.order) return true;
   /* Already busy: "Compare potential threat of the current target and the potential new
@@ -14350,6 +14478,10 @@ function _rtsUpdateUnit(e, dt) {
      the same code with a cannon. Cleared LOCALLY, so the order keeps its target and only the
      gun forgets about it. */
   if (tgt && tgt.side === e.side) tgt = null;
+  /* NOR IS ANYTHING NONE OF ITS GUNS CAN ENGAGE - an aircraft over a tank, the ground under a
+     Flak Track. Every way a target arrives (an order, a team's pick, a retaliation) is checked
+     where it arrives too; this is the one place they all pass through. */
+  if (tgt && !_rtsCanEngage(e, tgt)) tgt = e.target = null;
   /* An overridden mission that has run its course puts the old one back. Without this only
      the attack case ever restores, and the half of the defenders sent to stand guard would
      never resume what they were doing. */
@@ -15367,6 +15499,18 @@ function _rtsAIWants(S) {
    in. InfantryReserve is the "we are rich" line: above it the AI restarts a line the instant
    it frees up, below it it only decides on its slow tick, so a poor opponent trickles and a
    rich one runs its factories flat out. */
+/* ANSWERED TO THE SKY. A mix entry with `vsAir` is anti-aircraft and nothing else: the opponent
+   wants one for every `per` aircraft the player has up, and none at all while the sky is empty. */
+function _rtsAIWantsVsAir(key, per) {
+  var G = window._rtsG, flyers = 0, have = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.type !== 'unit') continue;
+    if (e.side === 'player' && e.air) flyers++;
+    else if (e.side === 'enemy' && e.def === key) have++;
+  }
+  return have < Math.ceil(flyers / per);
+}
 function _rtsAIUnits(S) {
   var G = window._rtsG, harv = 0, i;
   for (i = 0; i < G.ents.length; i++) {
@@ -15464,6 +15608,7 @@ function _rtsAIUnits(S) {
            not drift apart. */
         if (rtsMoney(S) < _rtsAISpare(S) + _rtsCostOf('enemy', rtsUnitDef('engineer'))) continue;
       }
+      if (list[i].vsAir && !_rtsAIWantsVsAir(list[i].key, list[i].vsAir)) continue;
       if (list[i].key === 'lst') {
         if (!_rtsAIWorthCrossing()) continue;
         var craft = 0;
