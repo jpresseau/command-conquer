@@ -41,6 +41,7 @@ function _rtsTick(dt) {
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 2.2);
   _rtsAnimAI(dt);
   _rtsCrateAI(dt);
+  _rtsSweepTick(dt);                             /* the Mine Sweeper finds and clears: core/sweeper.js */
   _rtsMineTick(dt);                              /* the Mine Layer's: core/mines.js */
   _rtsTideTick(dt);                              /* the sea goes out and comes back: core/tide.js */
   for (i = G.fx.length - 1; i >= 0; i--) {

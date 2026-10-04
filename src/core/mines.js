@@ -49,8 +49,8 @@ function _rtsLayMine(e, atx, atz) {
   if (e.side === 'player' && typeof _rtsSfx === 'function') _rtsSfx('place', e.x, e.z);
   return true;
 }
-/* What a side may see: its own mines, and nobody else's. */
-function _rtsMineShown(m, side) { return m.side === (side || 'player'); }
+/* What a side may see: its own mines, and those a Mine Sweeper of its has found (core/sweeper.js). */
+function _rtsMineShown(m, side) { side = side || 'player'; return m.side === side || !!(m.seen && m.seen[side]); }
 
 function _rtsMineTick(dt) {
   var G = window._rtsG;
@@ -66,6 +66,7 @@ function _rtsMineTick(dt) {
     var u = G.ents[i];
     if (u.dead || u.type !== 'unit' || u.air || u.inside) continue;
     var hit = armed[_rtsIdx(_rtsTX(u.x), _rtsTX(u.z))];
+    if (hit && (rtsUnitDef(u.def) || {}).sweeps) continue;      /* a Mine Sweeper never sets one off */
     if (!hit || hit.side === u.side || hit.gone) continue;
     hit.gone = true;
     var x = _rtsWX(hit.tx), z = _rtsWX(hit.tz);
@@ -79,6 +80,8 @@ function _rtsMineTick(dt) {
     G.shake = Math.max(G.shake || 0, 0.5);
     if (typeof _rtsSfx === 'function') _rtsSfx('boom', x, z);
     if (u.side === 'player') _rtsSay('Mine!');
+    /* where a mine cost a side a unit - the opponent's sweeper goes there (core/sweeper.js) */
+    if (u.side === 'enemy') (G.mineHits = G.mineHits || []).push({ tx: hit.tx, tz: hit.tz });
   }
   G.mines = G.mines.filter(function (m) { return !m.gone; });
 }

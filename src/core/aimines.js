@@ -18,7 +18,8 @@
 
 function _rtsAISupport(S) {
   return _rtsAISupportBuy(S, 'minelayer', function (G) { return _rtsAIMineSpots(G).length > 0; }) ||   /* a land route to deny */
-         _rtsAISupportBuy(S, 'hovercraft', function () { return !!_rtsAIHoverTarget(); });             /* a harvester by the water: core/aihover.js */
+         _rtsAISupportBuy(S, 'hovercraft', function () { return !!_rtsAIHoverTarget(); }) ||           /* a harvester by the water: core/aihover.js */
+         _rtsAISupportBuy(S, 'sweeper', function (G) { return !!(G.mineHits && G.mineHits.length); });  /* a mine has cost it a unit: core/sweeper.js */
 }
 function _rtsAISupportBuy(S, key, worth) {
   var G = window._rtsG, d = rtsUnitDef(key);

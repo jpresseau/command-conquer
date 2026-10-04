@@ -77,7 +77,8 @@ function _rtsRFrame(dt) {
   }
 
   /* --- the player's own mines (core/mines.js): a dark disc with a ring in the house colour,
-     blinking until it arms. Nobody else's are drawn - that is what a mine is. --- */
+     blinking until it arms. Nobody else's are drawn - that is what a mine is - unless a Mine
+     Sweeper has found it (core/sweeper.js), when it is ringed in the enemy's colour. --- */
   if (G.mines && G.mines.length) {
     var mr = Math.max(2, RTS_TILE * 0.32 * _rtsZoom()), tcol = (RTS_PAL.team.player || [])[1] || '#4a8ff0';
     for (i = 0; i < G.mines.length; i++) {
@@ -87,7 +88,7 @@ function _rtsRFrame(dt) {
       if (mp.x < -ms || mp.y < -ms || mp.x > R.W + ms || mp.y > R.H + ms) continue;
       g.beginPath(); g.ellipse(mp.x, mp.y, ms, ms * 0.6, 0, 0, Math.PI * 2);
       g.fillStyle = 'rgba(28,32,26,0.92)'; g.fill();
-      g.lineWidth = Math.max(1, ms * 0.28); g.strokeStyle = tcol; g.stroke();
+      g.lineWidth = Math.max(1, ms * 0.28); g.strokeStyle = mn.side === 'player' ? tcol : ((RTS_PAL.team.enemy || [])[1] || '#e04a3a'); g.stroke();
     }
   }
 
