@@ -164,6 +164,7 @@ function _rtsDeploy(e) {
   var G = window._rtsG;
   if (!e || e.dead || e.type !== 'unit') return false;
   var d = rtsUnitDef(e.def);
+  if (d && d.mines) return _rtsLayMine(e);          /* the Mine Layer's deploy lays one: core/mines.js */
   if (!d || !d.deploy) return false;
   var sd = rtsStructDef(d.deploy);
   if (!sd) return false;
@@ -203,8 +204,8 @@ function _rtsDeploySelected() {
 /* Is this one of the player's units that can turn into a building? The button asks so it can
    show itself, and the order asks so it can skip everything else in a mixed selection. */
 function _rtsCanDeploy(e) {
-  return !!(e && !e.dead && e.side === 'player' && e.type === 'unit' &&
-            (rtsUnitDef(e.def) || {}).deploy);
+  var d = e && rtsUnitDef(e.def) || {};
+  return !!(e && !e.dead && e.side === 'player' && e.type === 'unit' && (d.deploy || d.mines));
 }
 
 /* Removing the vehicle without the wreck, the explosion or the kill credit - it was not

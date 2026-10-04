@@ -144,8 +144,14 @@ var RTS_UNITS = [
      column anywhere outside a base. Both armies build it, and it cannot fire at the ground at
      all - a specialist, like the AA Gun it is the mobile half of. */
   { key:'flaktrack',name:'Flak Track',    kind:'vehicle',  cost:800,  build:10, hp:260,  speed:12.5,turn:2.4,r:1.8, sight:26, weapon:'trackflak',
-    needs:['radar'], armour:'light',
+    needs:['radar'], tracked:true, armour:'light',
     desc:'Anti-aircraft guns on a half-track. Keeps gunships and jets off your tanks; cannot hit the ground.' },
+  /* MINE LAYER. The verb is DENIAL: a road, a ford or a gap that the enemy will pay to cross.
+     Unarmed; it lays a mine where it stands (D, or DEPLOY), five to a load, and a Repair Bay
+     loads them back. The mines are invisible to the other side - core/mines.js. */
+  { key:'minelayer',name:'Mine Layer',    kind:'vehicle',  cost:900,  build:11, hp:340,  speed:10,  turn:2.0,r:1.9, sight:16, weapon:null,
+    needs:['depot'], mines:5, tracked:true, armour:'heavy',
+    desc:'Lays hidden mines where it stands - press D or DEPLOY. Five to a load; a Repair Bay restocks it.' },
   /* Armoured Personnel Carrier. UDATA.CPP's UnitAPC is IsCrusher with no turret; the transport
      rules are in UNIT.CPP - capacity via Max_Passengers, and, in Death, the half of the branch
      that matters: when a TRANSPORT dies its infantry passengers are unlimboed at the wreck and

@@ -95,7 +95,7 @@ function _rtsAmbLoad(A, B, ms) {
 
 /* vehicles on tracks, not wheels: the hulls that crush infantry (rules/vehicles.js), the APC and
    the MCV - UDATA.CPP's tracked set */
-function _rtsAmbTracked(def) { return !!(RTS_CRUSHERS[def] || def === 'apc' || def === 'mcv'); }
+function _rtsAmbTracked(def) { return !!(RTS_CRUSHERS[def] || def === 'apc' || def === 'mcv' || (rtsUnitDef(def) || {}).tracked); }
 /* a rotor is a helicopter, whichever one: read off the model's own parts (sprites/unit-airsea.js),
    so the Chinook beats the air like the Attack Heli instead of roaring like a MiG */
 function _rtsAmbRotor(def) {

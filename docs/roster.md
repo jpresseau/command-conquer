@@ -295,3 +295,33 @@ buy loop. `unit/motion` now measures the front of the TRACK rather than of the m
 half-track's steered wheels lie ahead of its sprocket. Ten mutants were killed. The one that
 survived, the flak's reach cut from 22 to 19, showed that its sight carries the escort, not its
 reach, and the comment says so.
+
+## The Mine Layer — denial
+
+Both armies' tracked layer, built at the Vehicle Works once there is a Repair Bay (`minelayer`).
+The verb is DENIAL: a road, a ford or a gap in a wall that the enemy pays to cross. It is unarmed
+and carries five mines. It lays one where it stands on D or DEPLOY (the MCV's order, so a phone
+has it too), and a powered Repair Bay loads them back, one every four seconds.
+
+How a mine behaves (`core/mines.js`):
+- Mines live in `G.mines` beside the crates, not as entities. Nothing targets them and no base
+  counts them, and they are saved with the rest of G.
+- A mine arms 1.5 s after it goes down. This is what stops it being dropped under an enemy's
+  feet as an instant weapon.
+- It is set off by the first ENEMY ground unit, vehicle or infantry, that stands on its cell.
+  Aircraft pass over.
+- The unit that sets it off takes the whole charge (380). A splash alone falls off so steeply
+  that a tank on the edge of the cell took a fifth of it. The blast around it is a splash of 120
+  that spares that unit and spares no one else, the layer's own side included.
+- A side sees only its own mines: a dark disc ringed in its house colour on the overlay,
+  blinking until armed.
+
+The opponent does not build one yet: where to mine is a plan, like the engineer's capture.
+
+### Verified
+
+`unit/minelayer` covers laying, the load, arming, its own side, a tank, a squad, an aircraft,
+the hidden rule, the restock and the save. `e2e/minelayer` covers the D key, the DEPLOY button by
+a real click, and the overlay drawing ours and not theirs. Twelve mutants were killed. The
+arming mutant survived the first set, because the side check already spares the layer. That
+showed what the delay is really for, and the test for it is the one above.

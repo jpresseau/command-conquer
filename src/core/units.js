@@ -405,10 +405,11 @@ function _rtsUpdateStruct(e, dt) {
     var G2 = window._rtsG;
     for (var ri = 0; ri < G2.ents.length; ri++) {
       var v = G2.ents[ri];
-      if (v.dead || v.type !== 'unit' || v.side !== e.side || v.hp >= v.maxHp) continue;
+      if (v.dead || v.type !== 'unit' || v.side !== e.side) continue;
       if (rtsUnitDef(v.def).kind !== 'vehicle') continue;
       if (!_rtsAtStruct(v, e, d.repairs)) continue;
       v.hp = Math.min(v.maxHp, v.hp + d.repairRate * dt);
+      _rtsMineRestock(v, dt);                         /* and a Mine Layer's rack: core/mines.js */
     }
   }
   if (!d.weapon) return;

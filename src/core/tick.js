@@ -39,6 +39,7 @@ function _rtsTick(dt) {
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 2.2);
   _rtsAnimAI(dt);
   _rtsCrateAI(dt);
+  _rtsMineTick(dt);                              /* the Mine Layer's: core/mines.js */
   for (i = G.fx.length - 1; i >= 0; i--) {
     var fxi = G.fx[i];
     fxi.t += dt;
