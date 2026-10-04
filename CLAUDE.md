@@ -100,6 +100,8 @@ Keep them small: if a file passes ~500 lines it wants splitting along its own ba
   made the AI weaker (see `unit/aiplan`); `e2e/armyuse` holds it.
 - **Three movement domains** (`_rtsDomainOf`, `_rtsBlocked`): land (`null`), `'sea'` and `'hover'`
   (the Hovercraft: open water and land). Pass the domain to every passability test.
+- **The tide** (`core/tide.js`): the flats (open sea within `RTS_TIDE.reach` of a shore) dry and flood on
+  game time; `_rtsBlocked` alone reads `G.tideDry`, cells stay water. `unit/tide`, `e2e/tide`.
 - `src/render/` — the camera and the transparent overlay canvas over the 3D world (effects
   sprites, the placement outline, crates). Reads the sim, never writes it. `camera` (zoom ladder,
   projection contract), `post` (screen picking, colour cycle), `frame` (the frame walk), `fx`,

@@ -40,6 +40,7 @@ function _rtsTick(dt) {
   _rtsAnimAI(dt);
   _rtsCrateAI(dt);
   _rtsMineTick(dt);                              /* the Mine Layer's: core/mines.js */
+  _rtsTideTick(dt);                              /* the sea goes out and comes back: core/tide.js */
   for (i = G.fx.length - 1; i >= 0; i--) {
     var fxi = G.fx[i];
     fxi.t += dt;

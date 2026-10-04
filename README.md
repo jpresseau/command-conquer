@@ -53,6 +53,12 @@ That is the classic build-speed curve (100, 75, 60, 50), and the enemy gets it t
 The enemy is doing the same thing on the other side of the map, and its first attack wave is on a
 timer. A player who does nothing is overrun in about four and a half minutes.
 
+**The sea goes out and comes back.** Every six minutes the tide falls from high water to low and
+rises again. As it falls, the water within four cells of every shore dries into sand flats, and a
+strait you could not cross becomes a causeway, while a ship that sailed there cannot. When it
+turns you are warned; anything still on the flats as the sea comes back is swamped and makes for
+dry ground. Low water is an opening with a deadline.
+
 ## Everything is generated in code
 
 There are no art or audio assets in this repository, and none are downloaded at runtime:

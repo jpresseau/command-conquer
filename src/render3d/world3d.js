@@ -346,12 +346,22 @@ function _r3dWaterBuild(G) { return _r3SegBulk(function () {
     gl.deleteBuffer(R3.waterMesh.p); gl.deleteBuffer(R3.waterMesh.n);
     gl.deleteBuffer(R3.waterMesh.c);
   }
-  /* the water mask the shoreline is cut from: one texel per cell, 255 on water, LINEAR */
+  _r3dSeaMask(G);
+  R3.waterMesh = faces.length ? _r3dBuildMesh(gl, faces) : null;
+  R3.waterTris = faces.length * 2;
+});
+}
+/* The water mask the shoreline is cut from: one texel per cell, 255 on water, LINEAR. Rebuilt
+   whenever the tide moves (core/tide.js bumps G.tideRev), so flats the sea has gone out from
+   are cut out of the sheet and the ground under them shows - the coast walks out and back. */
+function _r3dSeaMask(G) {
+  var R3 = window._R3D, gl = R3.gl, N = RTS_N, dry = G.tideDry;
   var wm = new Uint8Array(N * N * 4);
   for (var mi = 0; mi < N * N; mi++) {
-    var wv = G.terrain[mi] === RTS_T_WATER ? 255 : 0;
+    var wv = G.terrain[mi] === RTS_T_WATER && !(dry && dry[mi]) ? 255 : 0;
     wm[mi * 4] = wv; wm[mi * 4 + 1] = wv; wm[mi * 4 + 2] = wv; wm[mi * 4 + 3] = 255;
   }
+  R3.seaMaskRev = G.tideRev || 0;
   R3.seaMaskTex = R3.seaMaskTex || gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, R3.seaMaskTex);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -360,9 +370,6 @@ function _r3dWaterBuild(G) { return _r3SegBulk(function () {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, N, N, 0, gl.RGBA, gl.UNSIGNED_BYTE, wm);
-  R3.waterMesh = faces.length ? _r3dBuildMesh(gl, faces) : null;
-  R3.waterTris = faces.length * 2;
-});
 }
 
 /* Change detection: the static world is keyed to the game OBJECT - a new game is a new map,
@@ -379,6 +386,7 @@ function _r3dWorldTick(G) {
   }
   _r3dOreTick(G);
   _r3dBridgeTick(G);                /* a no-op unless a bridge was laid in play */
+  if (R3.seaMaskRev !== (G.tideRev || 0)) _r3dSeaMask(G);   /* the tide moved: core/tide.js */
   _r3dSceneryTick(G);
   _r3dDressTick(G);                 /* what the bases keep lying about - dress3d.js */
 }
