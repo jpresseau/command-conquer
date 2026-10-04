@@ -315,6 +315,13 @@ var RTS_UNITS = [
     weapon:'shipflak', needs:['shipyard', 'radar'], sea:true, escorts:true,
     armour:'heavy',
     desc:'Anti-aircraft guns afloat. Sails with your nearest ship on its own and keeps aircraft off the fleet; cannot hit ships or the shore.' },
+  /* MINE BOAT. The Mine Layer's verb at sea: a channel denied. Both armies', from either yard;
+     its mines go off under anything afloat, and it loads again alongside its yard. Sonar (the
+     Destroyer) finds them - core/seamines.js. */
+  { key:'mineboat', name:'Mine Boat',    kind:'ship',     cost:900,  build:11, hp:380,  speed:12,  turn:1.8,r:2.0, sight:16, weapon:null,
+    needs:['shipyard'], sea:true, mines:6,
+    armour:'heavy',
+    desc:'Lays hidden mines in the water where it stands - press D. Anything afloat sets them off. Six to a load; its yard restocks it.' },
   { key:'lst',      name:'Landing Craft',kind:'ship',     cost:700,  build:10, hp:400,  speed:12,  turn:1.6,r:2.4, sight:14, weapon:null,
     needs:['shipyard'], sea:true, carries:5, takes:['infantry', 'vehicle'],
     armour:'heavy',

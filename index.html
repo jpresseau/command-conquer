@@ -706,7 +706,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">f9be70f · 2026-10-04</div>
+  <div id="rtsBuild" title="build">7a278e5 · 2026-10-04</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1284,6 +1284,13 @@ var RTS_UNITS = [
     weapon:'shipflak', needs:['shipyard', 'radar'], sea:true, escorts:true,
     armour:'heavy',
     desc:'Anti-aircraft guns afloat. Sails with your nearest ship on its own and keeps aircraft off the fleet; cannot hit ships or the shore.' },
+  /* MINE BOAT. The Mine Layer's verb at sea: a channel denied. Both armies', from either yard;
+     its mines go off under anything afloat, and it loads again alongside its yard. Sonar (the
+     Destroyer) finds them - core/seamines.js. */
+  { key:'mineboat', name:'Mine Boat',    kind:'ship',     cost:900,  build:11, hp:380,  speed:12,  turn:1.8,r:2.0, sight:16, weapon:null,
+    needs:['shipyard'], sea:true, mines:6,
+    armour:'heavy',
+    desc:'Lays hidden mines in the water where it stands - press D. Anything afloat sets them off. Six to a load; its yard restocks it.' },
   { key:'lst',      name:'Landing Craft',kind:'ship',     cost:700,  build:10, hp:400,  speed:12,  turn:1.6,r:2.4, sight:14, weapon:null,
     needs:['shipyard'], sea:true, carries:5, takes:['infantry', 'vehicle'],
     armour:'heavy',
@@ -7863,6 +7870,26 @@ function _sprUnitHulls(X, key) {
       _r3Box(m, L * 0.44, 4.0, bl * W * 0.22, 1.0, 1.1, 1.0, DK[0], DK[2]);
       _r3Box(m, -L * 0.46, 4.0, bl * W * 0.22, 1.0, 1.1, 1.0, DK[0], DK[2]);
     }
+  } else if (key === 'mineboat') {
+    /* MINE BOAT. A small low working hull with a flat open stern: two rows of round black mines
+       on rails along it, a little crane at the transom to put them over the side, and a squat
+       wheelhouse well forward. The identity is the ROWS OF MINES on the open deck. */
+    var Lm = 19, Wm = 6.6;
+    _r3Slab(m, 0, 0.6, 0, Lm, 3.0, Wm, 1.2, VH[0], VH[1]);              /* hull */
+    _r3Box(m, Lm * 0.40, 0.9, 0, Lm * 0.20, 2.4, Wm * 0.55, VH[1], VH[3]); /* bow */
+    _r3Box(m, Lm * 0.20, 3.8, 0, Lm * 0.22, 3.0, Wm * 0.70, VH[2], VH[0]); /* wheelhouse */
+    _r3Box(m, Lm * 0.30, 4.4, 0, 0.5, 1.2, Wm * 0.56, RTS_PAL.glass, RTS_PAL.glass);   /* its windows */
+    _r3Box(m, Lm * 0.20, 5.5, 0, Lm * 0.16, 0.5, Wm * 0.50, TM[1], TM[3]);  /* team roof */
+    _r3Box(m, Lm * 0.14, 6.6, 0, 0.5, 2.6, 0.5, S[1], S[0]);             /* mast */
+    for (var rw = -1; rw <= 1; rw += 2) {                                 /* the mine rails and their mines */
+      _r3Box(m, -Lm * 0.18, 2.5, rw * 1.6, Lm * 0.52, 0.3, 0.4, S[2], S[1]);
+      for (var mn = 0; mn < 4; mn++) {                                  /* each a squat drum with its horn */
+        _r3Cyl(m, -Lm * 0.02 - mn * 2.2, 2.8, rw * 1.6, 0.9, 1.2, DK[0], DK[1], 16);
+        _r3Cyl(m, -Lm * 0.02 - mn * 2.2, 4.0, rw * 1.6, 0.25, 0.5, RTS_PAL.hazard[0], RTS_PAL.hazard[1], 16);
+      }
+    }
+    _r3Box(m, -Lm * 0.44, 4.2, 0, 0.6, 3.6, 0.6, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);   /* the stern crane */
+    _r3Box(m, -Lm * 0.50, 5.8, 0, 2.2, 0.5, 0.5, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);
   } else return false;
   return true;
 }
@@ -12082,7 +12109,8 @@ function _rtsLayMine(e, atx, atz) {
   if (!G.mines) G.mines = [];
   if (_rtsMinesLeft(e) <= 0) { if (e.side === 'player') _rtsSay('Out of mines - a Repair Bay will restock it.'); return false; }
   if (_rtsMineAt(tx, tz)) { if (e.side === 'player') _rtsSay('There is already a mine here.'); return false; }
-  if (!_rtsInB(tx, tz) || G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER) return false;
+  /* on ground, or - from a Mine Boat (core/seamines.js) - on water, and nowhere else */
+  if (!_rtsInB(tx, tz) || (G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER) !== !!rtsUnitDef(e.def).sea) return false;
   G.mines.push({ tx: tx, tz: tz, side: e.side, arm: RTS_MINE.arm });
   e.mines--;
   if (e.side === 'player' && typeof _rtsSfx === 'function') _rtsSfx('place', e.x, e.z);
@@ -12119,8 +12147,8 @@ function _rtsMineTick(dt) {
     G.shake = Math.max(G.shake || 0, 0.5);
     if (typeof _rtsSfx === 'function') _rtsSfx('boom', x, z);
     if (u.side === 'player') _rtsSay('Mine!');
-    /* where a mine cost a side a unit - the opponent's sweeper goes there (core/sweeper.js) */
-    if (u.side === 'enemy') (G.mineHits = G.mineHits || []).push({ tx: hit.tx, tz: hit.tz });
+    /* where a mine on land cost a side a unit - the opponent's sweeper goes there (core/sweeper.js) */
+    if (u.side === 'enemy' && G.terrain[_rtsIdx(hit.tx, hit.tz)] !== RTS_T_WATER) (G.mineHits = G.mineHits || []).push({ tx: hit.tx, tz: hit.tz });
   }
   G.mines = G.mines.filter(function (m) { return !m.gone; });
 }
@@ -12164,6 +12192,7 @@ function _rtsSweepTick(dt) {
       var d = Math.hypot(_rtsWX(m.tx) - u.x, _rtsWX(m.tz) - u.z) / RTS_TILE;
       if (d <= RTS_SWEEP.see) (m.seen = m.seen || {})[u.side] = 1;
       if (!(m.seen && m.seen[u.side])) continue;
+      if (G.terrain[_rtsIdx(m.tx, m.tz)] === RTS_T_WATER) continue;   /* seen, but out in the water */
       if (d <= RTS_SWEEP.reach) {
         m.sweep = (m.sweep || 0) + dt;
         if (m.sweep >= RTS_SWEEP.clear) {
@@ -18137,7 +18166,8 @@ function _rtsAISupport(S) {
          _rtsAISupportBuy(S, 'jammer', function () { return _rtsPlayerDefences() >= RTS_JAM.digIn && _rtsAIFieldVehicles() >= 4 && _rtsAIDefended(); }) ||  /* the player dug in: core/jammer.js */
          _rtsAISupportBuy(S, 'paraplane', function () { return _rtsPlayerDefences() >= RTS_JAM.digIn && _rtsAIDefended() && !!_rtsAIParaTarget(); }) ||  /* over the wall: core/paradrop.js */
          _rtsAISupportBuy(S, 'drone', function () { return _rtsAIHalfBlind() && _rtsAIDefended(); }) ||  /* eyes in fog, or on a Jammer: core/drone.js */
-         _rtsAISupportBuy(S, 'bomber', function () { return _rtsPlayerDefences() >= RTS_JAM.digIn && _rtsAIDefended(); });  /* a carpet across the base: core/bomber.js */
+         _rtsAISupportBuy(S, 'bomber', function () { return _rtsPlayerDefences() >= RTS_JAM.digIn && _rtsAIDefended(); }) ||  /* a carpet across the base: core/bomber.js */
+         _rtsAISupportBuy(S, 'mineboat', function (G) { return _rtsAISeaMineSpots(G).length > 0; });  /* the channel to its yard: core/seamines.js */
 }
 function _rtsAISupportBuy(S, key, worth) {
   var G = window._rtsG, d = rtsUnitDef(key);
@@ -18186,7 +18216,7 @@ function _rtsAIMinesTick(dt) {
   G.ai.mineT = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || u.inside || !(rtsUnitDef(u.def) || {}).mines) continue;
+    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || u.inside || !(rtsUnitDef(u.def) || {}).mines || _rtsSeaLayer(u)) continue;
     if (_rtsMinesLeft(u) <= 0) {                               /* home to load again */
       var bay = _rtsHas('enemy', 'depot');
       if (bay && !_rtsAtStruct(u, bay, rtsStructDef('depot').repairs) && !u.path) _rtsOrderMove(u, bay.x, bay.z, false);
@@ -18684,6 +18714,109 @@ function _rtsEscortTick(dt) {
   }
 }
 </script>
+<script>/* core/seamines.js - the Mine Boat: a minefield in the water.
+
+   The Mine Layer's verb, at sea: DENIAL of a channel. The mines are the Mine Layer's own
+   (core/mines.js) - the same G.mines, the same charge, hidden from the side they are meant for -
+   laid on water instead of ground (`_rtsLayMine` asks the layer's `sea`). They go off under
+   anything afloat that stands on their cell, ships and hovercraft alike; aircraft pass over.
+
+     RESTOCKED      at its own shipyard, one mine every RTS_MINE.restock seconds, alongside
+                    within RTS_SEAMINE.dock cells
+     FOUND          by SONAR: a hull with `detects` (the Destroyer) sees every enemy mine in the
+                    water within its sonar reach, as a Mine Sweeper does on land - and a Sweeper
+                    on the shore sees those in its own reach, though it cannot clear them
+
+   The opponent buys one once the player has a shipyard, and mines the channel the player's
+   ships would come by: the sea route between the two yards, RTS_SEAMINE.from to .to cells out
+   from its own, with a cell either side of it. */
+
+var RTS_SEAMINE = { dock: 2.5, from: 4, to: 12, every: 1 };
+
+function _rtsSeaLayer(u) { var d = rtsUnitDef(u.def) || {}; return !!(d.mines && d.sea); }
+function _rtsShipyardOf(side, u) {
+  var G = window._rtsG, best = null, bd = 1e9;
+  for (var i = 0; i < G.ents.length; i++) {
+    var b = G.ents[i];
+    if (b.dead || b.building || b.type !== 'struct' || b.side !== side || (rtsStructDef(b.def) || {}).produces !== 'ship') continue;
+    var d = u ? Math.hypot(b.x - u.x, b.z - u.z) : 0;
+    if (d < bd) { bd = d; best = b; }
+  }
+  return best;
+}
+function _rtsSeaMineTick(dt) {
+  var G = window._rtsG, M = G.mines, i, k;
+  for (i = 0; i < G.ents.length; i++) {
+    var u = G.ents[i];
+    if (u.dead || u.inside || u.type !== 'unit') continue;
+    var d = rtsUnitDef(u.def) || {};
+    /* alongside its yard: loaded again */
+    if (d.mines && d.sea) {
+      var y = _rtsShipyardOf(u.side, u);
+      if (y && _rtsAtStruct(u, y, RTS_SEAMINE.dock * RTS_TILE)) _rtsMineRestock(u, dt);
+    }
+    /* sonar: the enemy's mines in the water within its reach are seen */
+    if (d.detects && M) for (k = 0; k < M.length; k++) {
+      var m = M[k];
+      if (m.side === u.side || G.terrain[_rtsIdx(m.tx, m.tz)] !== RTS_T_WATER) continue;
+      if (Math.hypot(_rtsWX(m.tx) - u.x, _rtsWX(m.tz) - u.z) <= d.detects) (m.seen = m.seen || {})[u.side] = 1;
+    }
+  }
+}
+
+/* ------------------------------------------------ the opponent's field -- */
+/* The channel: the sea route from the player's yard to its own, from .from to .to cells out
+   from its own, each cell with its neighbours across the route. Planned once per player yard. */
+function _rtsAISeaMineSpots(G) {
+  var py = _rtsShipyardOf('player', null), ey = _rtsShipyardOf('enemy', null);
+  if (!py || !ey) return [];
+  if (G.ai.seaMines && G.ai.seaMines.by === py.id + ':' + ey.id) return G.ai.seaMines.out;
+  var out = [], seen = {};
+  G.ai.seaMines = { by: py.id + ':' + ey.id, out: out };
+  var a = _rtsNearestOpen(_rtsTX(ey.x), _rtsTX(ey.z), 6, 'sea'), b = _rtsNearestOpen(_rtsTX(py.x), _rtsTX(py.z), 6, 'sea');
+  var path = a && b && _rtsPath(_rtsWX(a[0]), _rtsWX(a[1]), _rtsWX(b[0]), _rtsWX(b[1]), 'sea');
+  if (!path || !path.length) return out;
+  var px = _rtsWX(a[0]), pz = _rtsWX(a[1]), step = RTS_TILE / 2;
+  for (var i = 0; i < path.length; i++) {
+    var dx = path[i].x - px, dz = path[i].z - pz, L = Math.hypot(dx, dz), n = Math.ceil(L / step);
+    for (var k = 1; k <= n; k++) {
+      var x = px + dx * k / n, z = pz + dz * k / n, o = Math.hypot(x - ey.x, z - ey.z) / RTS_TILE;
+      if (o < RTS_SEAMINE.from || o > RTS_SEAMINE.to) continue;
+      var ax = -dz / (L || 1), az = dx / (L || 1);
+      for (var s = -1; s <= 1; s++) {
+        var tx = _rtsTX(x + ax * s * RTS_TILE), tz = _rtsTX(z + az * s * RTS_TILE), key = tx + ',' + tz;
+        if (seen[key] || _rtsBlocked(tx, tz, 'sea')) continue;
+        seen[key] = 1; out.push([tx, tz]);
+      }
+    }
+    px = path[i].x; pz = path[i].z;
+  }
+  return out;
+}
+function _rtsAISeaMinesTick(dt) {
+  var G = window._rtsG;
+  G.ai.seaMineT = (G.ai.seaMineT || 0) + dt;
+  if (G.ai.seaMineT < RTS_SEAMINE.every) return;
+  G.ai.seaMineT = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var u = G.ents[i];
+    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || !_rtsSeaLayer(u)) continue;
+    if (_rtsMinesLeft(u) <= 0) {                               /* home to load again */
+      var y = _rtsShipyardOf('enemy', u);
+      if (y && !_rtsAtStruct(u, y, RTS_SEAMINE.dock * RTS_TILE) && !u.path) {
+        var c = _rtsNearestOpen(_rtsTX(y.x), _rtsTX(y.z), 6, 'sea');
+        if (c) _rtsOrderMove(u, _rtsWX(c[0]), _rtsWX(c[1]), false);
+      }
+      continue;
+    }
+    var spots = _rtsAISeaMineSpots(G), next = null;
+    for (var k = 0; k < spots.length && !next; k++) if (!_rtsMineAt(spots[k][0], spots[k][1])) next = spots[k];
+    if (!next) continue;
+    if (Math.abs(_rtsTX(u.x) - next[0]) <= 1 && Math.abs(_rtsTX(u.z) - next[1]) <= 1) { _rtsLayMine(u, next[0], next[1]); u.path = null; continue; }
+    if (!u.path || u.pi >= u.path.length) _rtsOrderMove(u, _rtsWX(next[0]), _rtsWX(next[1]), false);
+  }
+}
+</script>
 <script>/* core/missions.js - the team mission list (TEAMTYPE.CPP): the script a team runs.
    Part of rts.core, the simulation. */
 
@@ -19135,6 +19268,7 @@ function _rtsUpdateAI(dt) {
   _rtsAIJamTick(dt);            /* ...and the jammer hides it - core/jammer.js */
   _rtsAIParaTick(dt);           /* ...and the paratroopers go over the wall - core/paradrop.js */
   _rtsAIDroneTick(dt);          /* ...and the drone watches over the attack - core/drone.js */
+  _rtsAISeaMinesTick(dt);       /* ...and the Mine Boat mines the channel - core/seamines.js */
   _rtsAIBombTick(dt);           /* ...and the bomber lays its carpet - core/bomber.js */
   _rtsAISupers(dt);
   /* Rich: refill a line as soon as it empties, rather than waiting up to five seconds for
@@ -19714,6 +19848,7 @@ function _rtsTick(dt) {
   _rtsAnimAI(dt);
   _rtsCrateAI(dt);
   _rtsDroneTick();                               /* Recon Drones circle where they stop: core/drone.js */
+  _rtsSeaMineTick(dt);                           /* Mine Boats restock, sonar finds sea mines: core/seamines.js */
   _rtsEscortTick(dt);                            /* Flak Cruisers keep station on the fleet: core/flakship.js */
   _rtsBombsTick(dt);                             /* the Heavy Bomber's bombs fall and burst: core/bomber.js */
   _rtsFixTick(dt);                               /* Repair Trucks go to the damaged: core/repairtruck.js */

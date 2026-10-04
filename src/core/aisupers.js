@@ -81,6 +81,7 @@ function _rtsUpdateAI(dt) {
   _rtsAIJamTick(dt);            /* ...and the jammer hides it - core/jammer.js */
   _rtsAIParaTick(dt);           /* ...and the paratroopers go over the wall - core/paradrop.js */
   _rtsAIDroneTick(dt);          /* ...and the drone watches over the attack - core/drone.js */
+  _rtsAISeaMinesTick(dt);       /* ...and the Mine Boat mines the channel - core/seamines.js */
   _rtsAIBombTick(dt);           /* ...and the bomber lays its carpet - core/bomber.js */
   _rtsAISupers(dt);
   /* Rich: refill a line as soon as it empties, rather than waiting up to five seconds for

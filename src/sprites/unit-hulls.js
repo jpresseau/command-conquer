@@ -31,6 +31,26 @@ function _sprUnitHulls(X, key) {
       _r3Box(m, L * 0.44, 4.0, bl * W * 0.22, 1.0, 1.1, 1.0, DK[0], DK[2]);
       _r3Box(m, -L * 0.46, 4.0, bl * W * 0.22, 1.0, 1.1, 1.0, DK[0], DK[2]);
     }
+  } else if (key === 'mineboat') {
+    /* MINE BOAT. A small low working hull with a flat open stern: two rows of round black mines
+       on rails along it, a little crane at the transom to put them over the side, and a squat
+       wheelhouse well forward. The identity is the ROWS OF MINES on the open deck. */
+    var Lm = 19, Wm = 6.6;
+    _r3Slab(m, 0, 0.6, 0, Lm, 3.0, Wm, 1.2, VH[0], VH[1]);              /* hull */
+    _r3Box(m, Lm * 0.40, 0.9, 0, Lm * 0.20, 2.4, Wm * 0.55, VH[1], VH[3]); /* bow */
+    _r3Box(m, Lm * 0.20, 3.8, 0, Lm * 0.22, 3.0, Wm * 0.70, VH[2], VH[0]); /* wheelhouse */
+    _r3Box(m, Lm * 0.30, 4.4, 0, 0.5, 1.2, Wm * 0.56, RTS_PAL.glass, RTS_PAL.glass);   /* its windows */
+    _r3Box(m, Lm * 0.20, 5.5, 0, Lm * 0.16, 0.5, Wm * 0.50, TM[1], TM[3]);  /* team roof */
+    _r3Box(m, Lm * 0.14, 6.6, 0, 0.5, 2.6, 0.5, S[1], S[0]);             /* mast */
+    for (var rw = -1; rw <= 1; rw += 2) {                                 /* the mine rails and their mines */
+      _r3Box(m, -Lm * 0.18, 2.5, rw * 1.6, Lm * 0.52, 0.3, 0.4, S[2], S[1]);
+      for (var mn = 0; mn < 4; mn++) {                                  /* each a squat drum with its horn */
+        _r3Cyl(m, -Lm * 0.02 - mn * 2.2, 2.8, rw * 1.6, 0.9, 1.2, DK[0], DK[1], 16);
+        _r3Cyl(m, -Lm * 0.02 - mn * 2.2, 4.0, rw * 1.6, 0.25, 0.5, RTS_PAL.hazard[0], RTS_PAL.hazard[1], 16);
+      }
+    }
+    _r3Box(m, -Lm * 0.44, 4.2, 0, 0.6, 3.6, 0.6, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);   /* the stern crane */
+    _r3Box(m, -Lm * 0.50, 5.8, 0, 2.2, 0.5, 0.5, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);
   } else return false;
   return true;
 }

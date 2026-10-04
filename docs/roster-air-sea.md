@@ -71,3 +71,23 @@ Both armies' anti-aircraft hull (`flakship`), from either yard plus a Radar Post
 
 `unit/flakship` (12 assertions, 8 mutants killed). The maps' seas are channels at most five cells
 wide, so the staging finds a fourteen-cell stretch of one.
+
+## The Mine Boat — a channel denied
+
+Both armies' mine layer at sea (`mineboat`, `sea` + `mines:6`), from either yard
+(`core/seamines.js`). It lays the Mine Layer's own mines (core/mines.js):
+- `_rtsLayMine` lays on water only for a `sea` layer and on ground only for a land one. A sea
+  mine goes off under anything afloat on its cell, ships and hovercraft alike. Aircraft pass
+  over it.
+- It restocks alongside its own shipyard (`RTS_SEAMINE.dock`, 2.5 cells), one mine every
+  `RTS_MINE.restock` seconds.
+- Sonar finds sea mines: a hull with `detects` (the Destroyer) marks every enemy mine in the
+  water within its reach `seen`. A Mine Sweeper on the shore sees the ones in its reach but
+  never drives after one in the water. `G.mineHits` records land mines only, so the opponent's
+  sweeper is never sent after a sea mine.
+- The opponent buys one once the player has a shipyard. It mines the sea route between the two
+  yards, `RTS_SEAMINE.from` to `.to` (4 to 12) cells out from its own, with a cell either side
+  (`_rtsAISeaMineSpots`). The land tick skips sea layers (`_rtsSeaLayer`).
+
+`unit/seamines` (19 assertions, 9 mutants killed). One mutant survived and is equivalent: it
+lets sonar mark its own side's mines, which that side already sees.
