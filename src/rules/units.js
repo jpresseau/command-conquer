@@ -171,6 +171,12 @@ var RTS_UNITS = [
   { key:'sweeper',  name:'Mine Sweeper',  kind:'vehicle',  cost:700,  build:10, hp:420,  speed:9,   turn:2.0,r:1.9, sight:16, weapon:null,
     needs:['factory'], sweeps:true, tracked:true, armour:'heavy',
     desc:'Finds enemy mines within four cells and shows them, and clears any it reaches. Never sets one off.' },
+  /* SPOTTER. The verb is SEEING FOR OTHERS: fog and the Fog Bank blind the long guns, and this is
+     their eyes. Its own sight is never shortened by fog, and every gun of its side finds what it
+     sees at full reach - core/spotter.js. A light machine gun for the men who find it. */
+  { key:'spotter',  name:'Spotter',       kind:'vehicle',  cost:600,  build:9,  hp:160,  speed:20,  turn:4.0,r:1.6, sight:28, weapon:'mg',
+    needs:['radar'], spots:true, armour:'light',
+    desc:'Sees through fog and fog banks, and your guns can hit anything it sees at their full range.' },
   /* Armoured Personnel Carrier. UDATA.CPP's UnitAPC is IsCrusher with no turret; the transport
      rules are in UNIT.CPP - capacity via Max_Passengers, and, in Death, the half of the branch
      that matters: when a TRANSPORT dies its infantry passengers are unlimboed at the wreck and

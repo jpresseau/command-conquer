@@ -133,7 +133,11 @@ function _rtsGunEngages(w, o) {
 }
 function _rtsFindTarget(e, range, w) {
   var G = window._rtsG, foe = _rtsEnemyOf(e.side), best = null, bv = 0;
-  range = _rtsFogReach(range);                  /* in fog nothing looks further: core/skyplay.js */
+  /* in fog nothing looks further (core/skyplay.js) - except at what a Spotter of ours sees, which
+     is found at full reach (core/spotter.js); so the search spans the full reach, and the fog's
+     cap is asked per candidate */
+  var full = range, fogged = _rtsFogReach(range), spot = window._rtsG.spot && window._rtsG.spot[e.side] && window._rtsG.spot[e.side].length;
+  if (!spot) range = fogged;
   /* The candidate list, not the candidate test. core/spatial.js hands back the entities whose
      buckets touch our own reach, in entity-list order, so everything below runs exactly as it
      did over a shorter list - and falls back to the whole list when there is no index. The
@@ -161,8 +165,9 @@ function _rtsFindTarget(e, range, w) {
        with shooting - how far to the refinery, which of two threats is nearer, is the transport
        close enough to board. An asymmetric distance would have quietly answered all of those
        differently too, and none of them are about height. */
-    if (dist > _rtsElevReach(e, o, range)) continue;
-    if (!_rtsWxFinds(e, o, dist)) continue;          /* a fog bank between them: core/wxsupers.js */
+    var seen = spot && _rtsSpotted(o, e.side);
+    if (dist > _rtsElevReach(e, o, seen ? full : fogged)) continue;
+    if (!seen && !_rtsWxFinds(e, o, dist)) continue;  /* a fog bank between them: core/wxsupers.js */
     var v = _rtsEvalObject(e, o, dist, w);
     if (v > bv) { bv = v; best = o; }
   }

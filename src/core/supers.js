@@ -262,13 +262,13 @@ function _rtsRadiusTable() {
    the bites out of it where a ridge stands between the eye and the cell. On flat ground it
    takes none - slope from the eye rises toward zero with distance, so every cell clears the
    one before it - which is what makes this the loop it always was on a map without relief. */
-function _rtsSightFrom(tx, tz, range) {
+function _rtsSightFrom(tx, tz, range, clear) {
   var G = window._rtsG, T = _rtsRadiusTable();
   range = Math.max(0, Math.min(RTS_SIGHT_MAX, range | 0));
   var n = T.count[range] * 2, off = T.off, rr = range * range;
   var seen = _rtsHorizon(tx, tz, range);
   /* A FOG BANK in reach hides what is inside it past its own short sight (core/wxsupers.js) */
-  var banks = _rtsWxBanksNear(tx, tz, range), see2 = RTS_FOGBANK.see * RTS_FOGBANK.see;
+  var banks = clear ? null : _rtsWxBanksNear(tx, tz, range), see2 = RTS_FOGBANK.see * RTS_FOGBANK.see;   /* a Spotter's is clear */
   for (var i = 0; i < n; i += 2) {
     var dx = off[i], dz = off[i + 1];
     /* Sight_From filters the ring list by TRUE distance as well - the offset table is a
@@ -297,7 +297,9 @@ function _rtsVisTick(dt) {
     if (!def) continue;
     /* Standing high is worth a wider disc - see RTS_ELEV_SIGHT. _rtsSightFrom clamps to
        RTS_SIGHT_MAX, so the original's own ten-cell ceiling still holds over the bonus. */
-    _rtsSightFrom(_rtsTX(e.x), _rtsTX(e.z), _rtsWxSight(e.x, e.z, _rtsFogSight(rtsSightTiles(def) + _rtsSightBonus(e))));   /* fog: core/skyplay.js, wxsupers.js */
+    var cells = rtsSightTiles(def) + _rtsSightBonus(e), clear = e.type === 'unit' && !!def.spots;
+    /* fog caps every eye but a Spotter's (core/skyplay.js, wxsupers.js, spotter.js) */
+    _rtsSightFrom(_rtsTX(e.x), _rtsTX(e.z), clear ? cells : _rtsWxSight(e.x, e.z, _rtsFogSight(cells)), clear);
   }
   G.visDirty = 1;                 /* the renderer only re-bakes the shroud when this is set */
 }
