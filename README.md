@@ -83,13 +83,16 @@ drives to a damaged one by itself - the Repair Bay, on wheels.
 
 **Hide the column.** Park a Jammer and your units round it vanish from the enemy - unseen and
 untargeted past two cells until they open fire - and the enemy's radar fills with static there.
-Only a Spotter sees through it.
+Only a Spotter or a Recon Drone sees through it.
 
 **Fly the armour in.** The Dominion's Sky Crane lifts one of your vehicles and sets it down
 anywhere - a tank over a river, onto an island no road reaches.
 
 **Drop in behind the wall.** The Dominion's Paradrop Plane flies a squad over the defences and
 drops it without landing - the men come down under canopies and go to work - then flies home.
+
+**An eye that stays up.** The Compact's Recon Drone circles wherever you send it, unarmed, and
+sees what is under it through fog, fog banks and Jammers - and your guns fire on whatever it sees.
 
 **The enemy uses its whole garage.** It mines the approach to its own base, and once you have a
 harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands

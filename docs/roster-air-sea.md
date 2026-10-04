@@ -18,3 +18,19 @@ Skylift has to set down to put a squad off; this plane never does (`_rtsAirSettl
 - Propellers: `RTS_AIR_PARTS.<key>.props` lists one per engine (air3d.js `_r3dPropModel`).
 
 `unit/paradrop` (14 assertions, 10 mutants killed).
+
+## The Recon Drone — watching a place
+
+The Compact's long-winged pusher (`drone`), behind a Helipad (`core/drone.js`). Cheap (500),
+unarmed and thin-skinned:
+- Where it stops, it does not park: `_rtsDroneTick` sets `e.orbit` there and keeps it circling
+  `RTS_DRONE.r` (3) cells round it, with `order 'orbit'`. A new move order clears the orbit, and it
+  circles wherever it stops next.
+- It `spots` (core/spotter.js): fog, fog banks and sandstorms never cut its sight, every gun of its
+  side finds what it sees at full reach, and a Jammer hides nothing from it.
+- The opponent buys one when it is half-blind (`_rtsAIHalfBlind`: fog, a sandstorm, or a Jammer
+  of the player's on the field) and defended, and keeps it circling over the centre of its
+  largest team on the march (`_rtsAIDroneTick`).
+
+`unit/drone` (14 assertions, 7 of 8 mutants killed; the survivor drops `side:'allied'`, which
+changes nothing, because the Dominion has no Helipad).
