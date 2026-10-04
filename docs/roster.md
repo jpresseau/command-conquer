@@ -386,6 +386,20 @@ across, a wreck afloat and ashore, and the torpedo. Six mutants were killed. The
 survived the first set, because a straight crossing needs no pulling; a slanting run across open
 water (11 waypoints without it, 1 with) is the case that kills it.
 
+## The Mine Sweeper — clearing
+
+Both armies' unarmed tracked flail (`sweeper`), at the Vehicle Works. A minefield had no answer
+but a lost tank; this is the answer (`core/sweeper.js`):
+- Every enemy mine within 4 cells is SEEN by its side from then on (`m.seen[side]`, read by
+  `_rtsMineShown`) and drawn ringed in the enemy's colour.
+- A seen mine within 1.5 cells is beaten out in 1.5 s. Left idle, it drives to the nearest one.
+- It never sets a mine off (`_rtsMineTick` asks `sweeps`).
+- The opponent buys one once a player mine has cost it a unit (`G.mineHits`), and sends it round
+  those places, nearest first.
+
+`unit/sweeper` (11 assertions, 10 mutants killed) and `e2e/sweeper` (the found mine drawn, a real
+click on the list).
+
 ## The opponent uses the new vehicles
 
 - **The Mine Layer mines its approach** (`core/aimines.js`):

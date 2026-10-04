@@ -26,6 +26,18 @@ function _sprPitch(m, from, ang, px, py) {
   }
 }
 
+/* Roll faces [from, end) of `m` by `ang` radians about the line y = py, z = pz along x - a
+   cylinder, which every primitive builds standing up, laid across the hull. */
+function _sprRoll(m, from, ang, py, pz) {
+  var c = Math.cos(ang), s = Math.sin(ang);
+  function rot(p, o) { var y = p[1] - o[1], z = p[2] - o[2]; return [p[0], o[1] + y * c - z * s, o[2] + y * s + z * c]; }
+  for (var i = from; i < m.length; i++) {
+    var f = m[i], o = [0, py, pz], z0 = [0, 0, 0];
+    f.v = f.v.map(function (p) { return rot(p, o); });
+    if (f.n) f.n = f.n.map(function (n) { return rot(n, z0); });
+  }
+}
+
 function _sprUnitSpecial(X, key) {
   var m = X.m, TM = X.TM, VH = X.VH, S = X.S, DK = X.DK, GN = X.GN, part = X.part,
       tracks = X.tracks, i, n0;
@@ -113,6 +125,42 @@ function _sprUnitSpecial(X, key) {
     _r3Box(m, 8.6, 5.0, -3.6, 0.9, 1.0, 1.4, GN[3], GN[3]);       /* headlights */
     _r3Box(m, 8.6, 5.0, 3.6, 0.9, 1.0, 1.4, GN[3], GN[3]);
     _r3Box(m, 2.4, 9.0, -3.2, 0.5, 4.2, 0.5, DK[1], DK[3]);       /* whip aerial */
+  } else if (key === 'sweeper') {
+    /* MINE SWEEPER. A tank hull pushing a flail: a drum across the bow on two arms, hung with
+       chains that beat the ground ahead of it. The identity is the DRUM - a bar wider than the
+       hull, out in front of it - and the chains under it; a hazard-striped cab with a beacon
+       says the rest. */
+    tracks(18, 6.0, 5, 2.2);
+    _r3Slab(m, -1.0, 3.2, 0, 17.0, 3.2, 10.2, 1.0, VH[0], VH[1]);   /* hull */
+    _r3Slab(m, -3.6, 6.4, 0, 7.0, 3.0, 8.0, 0.8, VH[1], TM[1]);    /* armoured cab - team roof */
+    _r3Box(m, 0.0, 7.6, 0, 0.6, 1.0, 6.0, RTS_PAL.glass, RTS_PAL.glass);   /* vision slit */
+    for (var hz = 0; hz < 4; hz++)                                   /* hazard band on the cab */
+      _r3Box(m, -0.2, 6.6, -3.0 + hz * 2.0, 0.4, 0.9, 1.0, hz % 2 ? DK[2] : RTS_PAL.hazard[0], hz % 2 ? DK[3] : RTS_PAL.hazard[1]);
+    _r3Cyl(m, -5.0, 9.4, 0, 0.8, 1.0, RTS_PAL.lit, RTS_PAL.lit, 16);   /* the beacon */
+    /* the two arms, from the bow down to the drum */
+    for (var ar = -1; ar <= 1; ar += 2) {
+      n0 = m.length;
+      _r3Box(m, 10.4, 4.0, ar * 4.4, 7.0, 1.0, 1.0, S[2], S[1]);
+      _sprPitch(m, n0, -0.32, 7.2, 4.5);
+    }
+    /* the drum, laid across the bow - wider than the hull - with its end caps */
+    n0 = m.length;
+    _r3Cyl(m, 13.4, 2.6 - 6.5, 0, 1.5, 13.0, S[1], S[2], 18);
+    _sprRoll(m, n0, Math.PI / 2, 2.6, 0);
+    for (var ec = -1; ec <= 1; ec += 2) {
+      n0 = m.length;
+      _r3Cyl(m, 13.4, 2.6 + ec * 6.5 - 0.4, 0, 1.9, 0.8, DK[1], DK[2], 18);
+      _sprRoll(m, n0, Math.PI / 2, 2.6, 0);
+    }
+    /* the chains, hanging from it to the ground, links staggered */
+    for (var ch = 0; ch < 7; ch++) {
+      var cz = -5.4 + ch * 1.8;
+      for (var lk = 0; lk < 2; lk++) _r3Box(m, 13.6 + (ch % 2) * 0.5, 0.2 + lk * 0.9, cz, 0.5, 0.8, 0.4, DK[2], DK[3]);
+    }
+    _r3Box(m, -9.6, 6.4, -3.6, 0.5, 3.6, 0.5, DK[1], DK[3]);       /* marker pole */
+    _r3Box(m, -9.6, 9.4, -3.0, 0.1, 1.0, 1.4, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);  /* its pennant */
+    _r3Box(m, 7.6, 5.0, -3.8, 0.9, 1.0, 1.4, GN[3], GN[3]);       /* headlights */
+    _r3Box(m, 7.6, 5.0, 3.8, 0.9, 1.0, 1.4, GN[3], GN[3]);
   } else if (key === 'bridgelayer') {
     /* BRIDGE LAYER. A tank hull carrying its bridge folded in two on its back: a long pale deck
        with a truss along each side and the hinge at the front, overhanging the hull at both ends.

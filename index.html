@@ -706,7 +706,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">4971890 · 2026-10-04</div>
+  <div id="rtsBuild" title="build">723d2b7 · 2026-10-04</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1134,6 +1134,12 @@ var RTS_UNITS = [
   { key:'minelayer',name:'Mine Layer',    kind:'vehicle',  cost:900,  build:11, hp:340,  speed:10,  turn:2.0,r:1.9, sight:16, weapon:null,
     needs:['depot'], mines:5, tracked:true, armour:'heavy',
     desc:'Lays hidden mines where it stands - press D or DEPLOY. Five to a load; a Repair Bay restocks it.' },
+  /* MINE SWEEPER. The verb is CLEARING: the answer to a minefield, which until now had none but a
+     lost tank. Unarmed; finds enemy mines within four cells, shows them, beats out any it reaches,
+     and never sets one off - core/sweeper.js. */
+  { key:'sweeper',  name:'Mine Sweeper',  kind:'vehicle',  cost:700,  build:10, hp:420,  speed:9,   turn:2.0,r:1.9, sight:16, weapon:null,
+    needs:['factory'], sweeps:true, tracked:true, armour:'heavy',
+    desc:'Finds enemy mines within four cells and shows them, and clears any it reaches. Never sets one off.' },
   /* Armoured Personnel Carrier. UDATA.CPP's UnitAPC is IsCrusher with no turret; the transport
      rules are in UNIT.CPP - capacity via Max_Passengers, and, in Death, the half of the branch
      that matters: when a TRANSPORT dies its infantry passengers are unlimboed at the wreck and
@@ -6460,7 +6466,7 @@ function _sprBuildingClean(key, side) {
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
   dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46,
-  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40
+  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -7357,6 +7363,18 @@ function _sprPitch(m, from, ang, px, py) {
   }
 }
 
+/* Roll faces [from, end) of `m` by `ang` radians about the line y = py, z = pz along x - a
+   cylinder, which every primitive builds standing up, laid across the hull. */
+function _sprRoll(m, from, ang, py, pz) {
+  var c = Math.cos(ang), s = Math.sin(ang);
+  function rot(p, o) { var y = p[1] - o[1], z = p[2] - o[2]; return [p[0], o[1] + y * c - z * s, o[2] + y * s + z * c]; }
+  for (var i = from; i < m.length; i++) {
+    var f = m[i], o = [0, py, pz], z0 = [0, 0, 0];
+    f.v = f.v.map(function (p) { return rot(p, o); });
+    if (f.n) f.n = f.n.map(function (n) { return rot(n, z0); });
+  }
+}
+
 function _sprUnitSpecial(X, key) {
   var m = X.m, TM = X.TM, VH = X.VH, S = X.S, DK = X.DK, GN = X.GN, part = X.part,
       tracks = X.tracks, i, n0;
@@ -7444,6 +7462,42 @@ function _sprUnitSpecial(X, key) {
     _r3Box(m, 8.6, 5.0, -3.6, 0.9, 1.0, 1.4, GN[3], GN[3]);       /* headlights */
     _r3Box(m, 8.6, 5.0, 3.6, 0.9, 1.0, 1.4, GN[3], GN[3]);
     _r3Box(m, 2.4, 9.0, -3.2, 0.5, 4.2, 0.5, DK[1], DK[3]);       /* whip aerial */
+  } else if (key === 'sweeper') {
+    /* MINE SWEEPER. A tank hull pushing a flail: a drum across the bow on two arms, hung with
+       chains that beat the ground ahead of it. The identity is the DRUM - a bar wider than the
+       hull, out in front of it - and the chains under it; a hazard-striped cab with a beacon
+       says the rest. */
+    tracks(18, 6.0, 5, 2.2);
+    _r3Slab(m, -1.0, 3.2, 0, 17.0, 3.2, 10.2, 1.0, VH[0], VH[1]);   /* hull */
+    _r3Slab(m, -3.6, 6.4, 0, 7.0, 3.0, 8.0, 0.8, VH[1], TM[1]);    /* armoured cab - team roof */
+    _r3Box(m, 0.0, 7.6, 0, 0.6, 1.0, 6.0, RTS_PAL.glass, RTS_PAL.glass);   /* vision slit */
+    for (var hz = 0; hz < 4; hz++)                                   /* hazard band on the cab */
+      _r3Box(m, -0.2, 6.6, -3.0 + hz * 2.0, 0.4, 0.9, 1.0, hz % 2 ? DK[2] : RTS_PAL.hazard[0], hz % 2 ? DK[3] : RTS_PAL.hazard[1]);
+    _r3Cyl(m, -5.0, 9.4, 0, 0.8, 1.0, RTS_PAL.lit, RTS_PAL.lit, 16);   /* the beacon */
+    /* the two arms, from the bow down to the drum */
+    for (var ar = -1; ar <= 1; ar += 2) {
+      n0 = m.length;
+      _r3Box(m, 10.4, 4.0, ar * 4.4, 7.0, 1.0, 1.0, S[2], S[1]);
+      _sprPitch(m, n0, -0.32, 7.2, 4.5);
+    }
+    /* the drum, laid across the bow - wider than the hull - with its end caps */
+    n0 = m.length;
+    _r3Cyl(m, 13.4, 2.6 - 6.5, 0, 1.5, 13.0, S[1], S[2], 18);
+    _sprRoll(m, n0, Math.PI / 2, 2.6, 0);
+    for (var ec = -1; ec <= 1; ec += 2) {
+      n0 = m.length;
+      _r3Cyl(m, 13.4, 2.6 + ec * 6.5 - 0.4, 0, 1.9, 0.8, DK[1], DK[2], 18);
+      _sprRoll(m, n0, Math.PI / 2, 2.6, 0);
+    }
+    /* the chains, hanging from it to the ground, links staggered */
+    for (var ch = 0; ch < 7; ch++) {
+      var cz = -5.4 + ch * 1.8;
+      for (var lk = 0; lk < 2; lk++) _r3Box(m, 13.6 + (ch % 2) * 0.5, 0.2 + lk * 0.9, cz, 0.5, 0.8, 0.4, DK[2], DK[3]);
+    }
+    _r3Box(m, -9.6, 6.4, -3.6, 0.5, 3.6, 0.5, DK[1], DK[3]);       /* marker pole */
+    _r3Box(m, -9.6, 9.4, -3.0, 0.1, 1.0, 1.4, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);  /* its pennant */
+    _r3Box(m, 7.6, 5.0, -3.8, 0.9, 1.0, 1.4, GN[3], GN[3]);       /* headlights */
+    _r3Box(m, 7.6, 5.0, 3.8, 0.9, 1.0, 1.4, GN[3], GN[3]);
   } else if (key === 'bridgelayer') {
     /* BRIDGE LAYER. A tank hull carrying its bridge folded in two on its back: a long pale deck
        with a truss along each side and the hinge at the front, overhanging the hull at both ends.
@@ -11726,8 +11780,8 @@ function _rtsLayMine(e, atx, atz) {
   if (e.side === 'player' && typeof _rtsSfx === 'function') _rtsSfx('place', e.x, e.z);
   return true;
 }
-/* What a side may see: its own mines, and nobody else's. */
-function _rtsMineShown(m, side) { return m.side === (side || 'player'); }
+/* What a side may see: its own mines, and those a Mine Sweeper of its has found (core/sweeper.js). */
+function _rtsMineShown(m, side) { side = side || 'player'; return m.side === side || !!(m.seen && m.seen[side]); }
 
 function _rtsMineTick(dt) {
   var G = window._rtsG;
@@ -11743,6 +11797,7 @@ function _rtsMineTick(dt) {
     var u = G.ents[i];
     if (u.dead || u.type !== 'unit' || u.air || u.inside) continue;
     var hit = armed[_rtsIdx(_rtsTX(u.x), _rtsTX(u.z))];
+    if (hit && (rtsUnitDef(u.def) || {}).sweeps) continue;      /* a Mine Sweeper never sets one off */
     if (!hit || hit.side === u.side || hit.gone) continue;
     hit.gone = true;
     var x = _rtsWX(hit.tx), z = _rtsWX(hit.tz);
@@ -11756,6 +11811,8 @@ function _rtsMineTick(dt) {
     G.shake = Math.max(G.shake || 0, 0.5);
     if (typeof _rtsSfx === 'function') _rtsSfx('boom', x, z);
     if (u.side === 'player') _rtsSay('Mine!');
+    /* where a mine cost a side a unit - the opponent's sweeper goes there (core/sweeper.js) */
+    if (u.side === 'enemy') (G.mineHits = G.mineHits || []).push({ tx: hit.tx, tz: hit.tz });
   }
   G.mines = G.mines.filter(function (m) { return !m.gone; });
 }
@@ -11765,6 +11822,75 @@ function _rtsMineRestock(v, dt) {
   if (!d || !d.mines || _rtsMinesLeft(v) >= d.mines) return;
   v.mineT = (v.mineT || 0) + dt;
   if (v.mineT >= RTS_MINE.restock) { v.mineT = 0; v.mines++; }
+}
+</script>
+<script>/* core/sweeper.js - the Mine Sweeper: the answer to a minefield.
+
+   The verb is CLEARING. A mine is invisible to the side it is meant for (core/mines.js), so until
+   now a minefield had no answer but to lose a tank on it. The sweeper is that answer:
+
+     IT FINDS     every enemy mine within RTS_SWEEP.see cells of it is SEEN by its side from then
+                  on (m.seen[side]) - drawn for the player like their own (render/frame.js), so
+                  the rest of the column can be steered round it
+     IT CLEARS    a seen mine within RTS_SWEEP.reach cells is cleared in RTS_SWEEP.clear seconds
+                  - the flail beats it out - and left idle it drives to the nearest one it has
+                  found, so parked at the edge of a field it works through the field by itself
+     IT IS SAFE   it never sets a mine off (core/mines.js asks `sweeps`)
+
+   The opponent buys one once a player mine has cost it a unit (_rtsAISupport, core/aimines.js),
+   and sends it round the places where that happened (G.mineHits), nearest first. */
+
+var RTS_SWEEP = { see: 4, reach: 1.5, clear: 1.5 };
+
+function _rtsSweeps(u) { return !!(rtsUnitDef(u.def) || {}).sweeps; }
+
+function _rtsSweepTick(dt) {
+  var G = window._rtsG, M = G.mines, i, k;
+  var sw = G.ents.filter(function (u) { return !u.dead && !u.inside && u.type === 'unit' && _rtsSweeps(u); });
+  if (!sw.length) return;
+  for (i = 0; i < sw.length; i++) {
+    var u = sw[i], near = null, nd = 1e9, cleared = 0;
+    for (k = 0; M && k < M.length; k++) {
+      var m = M[k];
+      if (m.gone || m.side === u.side) continue;
+      var d = Math.hypot(_rtsWX(m.tx) - u.x, _rtsWX(m.tz) - u.z) / RTS_TILE;
+      if (d <= RTS_SWEEP.see) (m.seen = m.seen || {})[u.side] = 1;
+      if (!(m.seen && m.seen[u.side])) continue;
+      if (d <= RTS_SWEEP.reach) {
+        m.sweep = (m.sweep || 0) + dt;
+        if (m.sweep >= RTS_SWEEP.clear) {
+          m.gone = true; cleared++;
+          G.fx.push({ kind: 'boom', x: _rtsWX(m.tx), y: 0.5, z: _rtsWX(m.tz), t: 0, big: 0.5 });
+        }
+        continue;
+      }
+      if (d < nd) { nd = d; near = m; }
+    }
+    if (cleared && u.side === 'player') _rtsSay(cleared === 1 ? 'Mine cleared.' : cleared + ' mines cleared.');
+    /* idle, with a mine found and not yet in reach: go and beat it out */
+    if (near && !u.order && (!u.path || u.pi >= u.path.length)) _rtsOrderMove(u, _rtsWX(near.tx), _rtsWX(near.tz), false);
+  }
+  if (M) G.mines = M.filter(function (m) { return !m.gone; });
+}
+
+/* The opponent's sweeper: round the places a player mine cost it a unit, nearest first. */
+function _rtsAISweepTick() {
+  var G = window._rtsG, H = G.mineHits;
+  if (!H || !H.length) return;
+  for (var i = 0; i < G.ents.length; i++) {
+    var u = G.ents[i];
+    if (u.dead || u.inside || u.side !== 'enemy' || u.type !== 'unit' || !_rtsSweeps(u)) continue;
+    if (u.order || (u.path && u.pi < u.path.length)) continue;           /* busy, or clearing */
+    var best = null, bd = 1e9;
+    for (var k = 0; k < H.length; k++) {
+      var h = H[k];
+      if (h.swept) continue;
+      var d = Math.hypot(_rtsWX(h.tx) - u.x, _rtsWX(h.tz) - u.z);
+      if (d <= RTS_TILE * 1.5) { h.swept = 1; continue; }
+      if (d < bd) { bd = d; best = h; }
+    }
+    if (best) _rtsOrderMove(u, _rtsWX(best.tx), _rtsWX(best.tz), false);
+  }
 }
 </script>
 <script>/* core/bridgelayer.js - the Bridge Layer: a bridge where the map has none.
@@ -17425,7 +17551,8 @@ function _rtsAIMendTick(dt) {
 
 function _rtsAISupport(S) {
   return _rtsAISupportBuy(S, 'minelayer', function (G) { return _rtsAIMineSpots(G).length > 0; }) ||   /* a land route to deny */
-         _rtsAISupportBuy(S, 'hovercraft', function () { return !!_rtsAIHoverTarget(); });             /* a harvester by the water: core/aihover.js */
+         _rtsAISupportBuy(S, 'hovercraft', function () { return !!_rtsAIHoverTarget(); }) ||           /* a harvester by the water: core/aihover.js */
+         _rtsAISupportBuy(S, 'sweeper', function (G) { return !!(G.mineHits && G.mineHits.length); });  /* a mine has cost it a unit: core/sweeper.js */
 }
 function _rtsAISupportBuy(S, key, worth) {
   var G = window._rtsG, d = rtsUnitDef(key);
@@ -18106,6 +18233,7 @@ function _rtsUpdateAI(dt) {
   _rtsAIMendTick(dt);           /* ...and the battered go home to the depot - core/aimend.js */
   _rtsAIMinesTick(dt);          /* ...and the layer mines the approach - core/aimines.js */
   _rtsAIHoverTick(dt);          /* ...and the Hovercraft raids by sea - core/aihover.js */
+  _rtsAISweepTick();            /* ...and the sweeper clears where mines hurt it - core/sweeper.js */
   _rtsAISupers(dt);
   /* Rich: refill a line as soon as it empties, rather than waiting up to five seconds for
      the next decision. Without this the opponent banks tens of thousands of credits it
@@ -18681,6 +18809,7 @@ function _rtsTick(dt) {
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 2.2);
   _rtsAnimAI(dt);
   _rtsCrateAI(dt);
+  _rtsSweepTick(dt);                             /* the Mine Sweeper finds and clears: core/sweeper.js */
   _rtsMineTick(dt);                              /* the Mine Layer's: core/mines.js */
   _rtsTideTick(dt);                              /* the sea goes out and comes back: core/tide.js */
   for (i = G.fx.length - 1; i >= 0; i--) {
@@ -27747,7 +27876,8 @@ function _rtsRFrame(dt) {
   }
 
   /* --- the player's own mines (core/mines.js): a dark disc with a ring in the house colour,
-     blinking until it arms. Nobody else's are drawn - that is what a mine is. --- */
+     blinking until it arms. Nobody else's are drawn - that is what a mine is - unless a Mine
+     Sweeper has found it (core/sweeper.js), when it is ringed in the enemy's colour. --- */
   if (G.mines && G.mines.length) {
     var mr = Math.max(2, RTS_TILE * 0.32 * _rtsZoom()), tcol = (RTS_PAL.team.player || [])[1] || '#4a8ff0';
     for (i = 0; i < G.mines.length; i++) {
@@ -27757,7 +27887,7 @@ function _rtsRFrame(dt) {
       if (mp.x < -ms || mp.y < -ms || mp.x > R.W + ms || mp.y > R.H + ms) continue;
       g.beginPath(); g.ellipse(mp.x, mp.y, ms, ms * 0.6, 0, 0, Math.PI * 2);
       g.fillStyle = 'rgba(28,32,26,0.92)'; g.fill();
-      g.lineWidth = Math.max(1, ms * 0.28); g.strokeStyle = tcol; g.stroke();
+      g.lineWidth = Math.max(1, ms * 0.28); g.strokeStyle = mn.side === 'player' ? tcol : ((RTS_PAL.team.enemy || [])[1] || '#e04a3a'); g.stroke();
     }
   }
 

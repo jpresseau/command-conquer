@@ -71,6 +71,10 @@ hides an advance or blinds a fortified line to one. The Dominion's Storm Spire b
 thunderstorm over a place for a minute: lightning strikes the enemy under it every few seconds,
 aircraft first, and no aircraft flies in it.
 
+**Clear the way.** A Mine Sweeper finds enemy mines within four cells, shows them to you, and
+beats out any it reaches - and never sets one off. The enemy buys one too, once your mines have
+cost it a tank.
+
 **The enemy uses its whole garage.** It mines the approach to its own base, and once you have a
 harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands
 them beside your ore field, and goes home to do it again.

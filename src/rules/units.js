@@ -165,6 +165,12 @@ var RTS_UNITS = [
   { key:'minelayer',name:'Mine Layer',    kind:'vehicle',  cost:900,  build:11, hp:340,  speed:10,  turn:2.0,r:1.9, sight:16, weapon:null,
     needs:['depot'], mines:5, tracked:true, armour:'heavy',
     desc:'Lays hidden mines where it stands - press D or DEPLOY. Five to a load; a Repair Bay restocks it.' },
+  /* MINE SWEEPER. The verb is CLEARING: the answer to a minefield, which until now had none but a
+     lost tank. Unarmed; finds enemy mines within four cells, shows them, beats out any it reaches,
+     and never sets one off - core/sweeper.js. */
+  { key:'sweeper',  name:'Mine Sweeper',  kind:'vehicle',  cost:700,  build:10, hp:420,  speed:9,   turn:2.0,r:1.9, sight:16, weapon:null,
+    needs:['factory'], sweeps:true, tracked:true, armour:'heavy',
+    desc:'Finds enemy mines within four cells and shows them, and clears any it reaches. Never sets one off.' },
   /* Armoured Personnel Carrier. UDATA.CPP's UnitAPC is IsCrusher with no turret; the transport
      rules are in UNIT.CPP - capacity via Max_Passengers, and, in Death, the half of the branch
      that matters: when a TRANSPORT dies its infantry passengers are unlimboed at the wreck and
