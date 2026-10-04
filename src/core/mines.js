@@ -31,9 +31,15 @@ function _rtsMineAt(tx, tz) {
   for (var i = 0; i < G.mines.length; i++) if (G.mines[i].tx === tx && G.mines[i].tz === tz) return G.mines[i];
   return null;
 }
-/* Lay one where the layer stands. False, and the player told why, when it cannot. */
-function _rtsLayMine(e) {
+/* Lay one where the layer stands - or on a cell beside it, which is how the opponent's layer
+   puts one exactly on its planned cell when a move order stops it a cell short (aimines.js).
+   False, and the player told why, when it cannot. */
+function _rtsLayMine(e, atx, atz) {
   var G = window._rtsG, tx = _rtsTX(e.x), tz = _rtsTX(e.z);
+  if (atx != null) {
+    if (Math.abs(atx - tx) > 1 || Math.abs(atz - tz) > 1) return false;
+    tx = atx; tz = atz;
+  }
   if (!G.mines) G.mines = [];
   if (_rtsMinesLeft(e) <= 0) { if (e.side === 'player') _rtsSay('Out of mines - a Repair Bay will restock it.'); return false; }
   if (_rtsMineAt(tx, tz)) { if (e.side === 'player') _rtsSay('There is already a mine here.'); return false; }

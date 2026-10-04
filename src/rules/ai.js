@@ -204,6 +204,10 @@ var RTS_AI = {
               /* `vsAir`: bought only against aircraft, one for every vsAir the player flies
                  (core/ai.js). A gun that cannot hit the ground is dead weight on a ground war. */
               { key:'flaktrack', at:1200, w:4, vsAir:2 } ],
+    /* No Mine Layer here: it is bought outside the weighted roll (core/aimines.js
+       _rtsAISupport), because an entry in this pool moves every roll after it - measured, the
+       Soviet opponent stopped reaching its Arc Tower in e2e/basedef and the raiders thinned out
+       in e2e/raid with nothing else changed. */
     /* No thief in the mix, and no Commando - both are decisions about a specific building at
        a specific moment, and an AI that buys them without a plan just donates the credits to
        whatever shoots them first (the Commando also has her `only` cap). The dog IS in: it

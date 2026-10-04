@@ -87,6 +87,11 @@ function _rtsAIWants(S) {
    in. InfantryReserve is the "we are rich" line: above it the AI restarts a line the instant
    it frees up, below it it only decides on its slow tick, so a poor opponent trickles and a
    rich one runs its factories flat out. */
+function _rtsAIOwned(key) {
+  var G = window._rtsG, n = 0;
+  for (var i = 0; i < G.ents.length; i++) if (!G.ents[i].dead && G.ents[i].side === 'enemy' && G.ents[i].def === key) n++;
+  return n;
+}
 /* ANSWERED TO THE SKY. A mix entry with `vsAir` is anti-aircraft and nothing else: the opponent
    wants one for every `per` aircraft the player has up, and none at all while the sky is empty. */
 function _rtsAIWantsVsAir(key, per) {
@@ -110,6 +115,7 @@ function _rtsAIUnits(S) {
   if (harv < wantHarv) {
     if (_rtsCanQueue('enemy', 'harvester')) { _rtsQueue('enemy', 'harvester'); return; }
   }
+  if (_rtsAISupport(S)) return;                 /* the Mine Layer: core/aimines.js */
   /* One pass per production line: gather everything affordable and buildable, then pick among
      them by weight. RTS_AI.mix holds the ladder so that adding a unit to RTS_UNITS does not
      mean editing this function.
