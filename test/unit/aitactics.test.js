@@ -17,7 +17,7 @@ var { Suite } = require('../lib/assert.js');
 var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('aitactics');
-var g = load(['src/rules', 'src/core', 'src/map', 'src/sprites/props.js']);
+var g = load(['src/rules', 'src/core', 'src/sprites/props.js']);
 
 function fresh() {
   g._rtsNewGame(4242, 'easy');

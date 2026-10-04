@@ -58,7 +58,7 @@ var SECS = 420;
     var runs = [];
     CASES.forEach(function (c) {
       SEEDS.forEach(function (seed) {
-        if (typeof rtsSetVoxSide === 'function') rtsSetVoxSide(c[0]);
+        if (typeof rtsSetArmySide === 'function') rtsSetArmySide(c[0]);
         _rtsNewGame(seed, c[1]);
         var G = window._rtsG, seen = {}, peak = {};
         for (var t = 0; t < 60 * SECS; t++) {

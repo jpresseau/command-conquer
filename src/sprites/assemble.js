@@ -37,16 +37,6 @@ function _rtsSprites() {
     RTS_UNITS.forEach(function (d) {
       if (d.kind === 'infantry') S.prone[side][d.key] = _sprUnit(d.key, side, true);
     });
-    /* The walk cycle only exists with real artwork - there is no procedural equivalent, and a
-       missing entry simply means the renderer keeps drawing the standing frame. */
-    S.walk = S.walk || {}; S.walk[side] = {};
-    if (typeof _mixWalk === 'function') {
-      RTS_UNITS.forEach(function (d) {
-        if (d.kind !== 'infantry') return;
-        var w = _mixWalk(d.key, side);
-        if (w) S.walk[side][d.key] = w;
-      });
-    }
   });
   /* One flame set, referenced twice. `_sprFx` cannot call `_sprFire()` itself without
      baking a second identical set of canvases - same pixels, twice the memory, and two

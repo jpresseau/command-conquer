@@ -15,56 +15,25 @@
 <body>
 
 <div id="rtsHome">
-  <div id="rtsTitleWrap"><img id="rtsTitleArt" alt="Command &amp; Conquer: Red Alert" hidden></div>
   <p class="eyebrow">Command &amp; Conquer</p>
   <h1>RED ALERT</h1>
   <p class="sub">Real-Time Strategy</p>
-  <!-- The menu, as one block, because when the original title art is loaded it moves bodily
-       INSIDE the picture's empty panel - see rtsShowTitleArt. Left here in the flow otherwise. -->
   <div id="rtsTitleMenu">
   <div class="diff" id="rtsDiff"></div>
   <p class="diffnote" id="rtsDiffNote"></p>
   <div class="diff" id="rtsSky"></div>
-  <div class="diff" id="rtsVoxSide" hidden></div>
+  <div class="diff" id="rtsArmySide" hidden></div>
   <p class="diffnote" id="rtsVoxNote" hidden></p>
   <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE</button>
   <button type="button" class="go resume" id="rtsResume" onclick="rtsLoadGame()" hidden>RESUME BATTLE</button>
   <!-- Why a resume did not happen, and why one is not on offer. This screen has no message
        line, so without somewhere to put the reason the button simply did nothing. -->
   <p class="diffnote" id="rtsResumeNote" hidden></p>
-  <button type="button" class="go resume" id="rtsEdit" onclick="rtsEdOpen()" hidden>MAP EDITOR<small>draw a battlefield of your own</small></button>
   <!-- Shown only when the browser says the app can be installed; see rtsInstallInit. -->
   <!-- Always present unless the app IS the installed app; see rtsInstallInit for why. -->
   <button type="button" class="go resume" id="rtsInstall" onclick="rtsInstall()">INSTALL<small>run it in its own window, off the desktop</small></button>
   <p class="diffnote" id="rtsInstallNote" hidden></p>
   </div>
-  <p class="artload">
-    <label class="artbtn">USE ORIGINAL ARTWORK
-      <input type="file" id="rtsMixPick" multiple accept=".mix,.MIX,.iso,.ISO" onchange="rtsMixPicked(this)">
-    </label>
-    <span id="rtsMixNote">Optional. Point this at <b>conquer.mix</b>, <b>local.mix</b>,
-      <b>temperat.mix</b> and <b>hires.mix</b> from your own copy of Red Alert and the game will
-      draw with the real sprites instead of its own — <b>hires.mix</b> also carries the original
-      title screen, which replaces the one above. Add <b>sounds.mix</b>, <b>speech.mix</b>,
-      <b>allies.mix</b> and <b>russian.mix</b> for the original weapons, EVA and the units'
-      own voices, and <b>scores.mix</b> for the soundtrack. Simplest of all: point this at
-      your Red Alert <b>CD image</b> — an <b>.iso</b> of either disc — or at <b>MAIN.MIX</b>, and
-      it finds every archive itself. Nothing is uploaded — the files
-      are read in your browser.</span>
-  </p>
-  <p class="artload">
-    <label class="artbtn">PLAY A REAL MAP
-      <input type="file" id="rtsMapPick" multiple accept=".oramap,.bin,.yaml,.mpr,.ini,.mix,.iso,.ISO"
-             onchange="rtsMapPicked(this)">
-    </label>
-    <span id="rtsMapNote">Optional. The battle is fought on a real map's own terrain, ore and
-      start positions instead of a generated one. Point this at a Red Alert <b>.iso</b> or your own
-      <b>MAIN.MIX</b> and it will search for the scenarios Red Alert shipped with; a loose <b>.mpr</b> or <b>.ini</b>
-      scenario works too, as does an <b>.oramap</b>, or a map's <b>map.bin</b> and <b>map.yaml</b>
-      together. Temperate and snow maps work; load the artwork above as well or there is nothing
-      to draw the cliffs with. Generated battles are landlocked — a real map is the only way to get
-      water, and loading one tells you whether it has a coast you can build a naval yard on.</span>
-  </p>
   <!-- <details>, not a hand-rolled toggle: it collapses with no script, it is keyboard-operable
        and screen-reader-labelled for free, and Ctrl+F still finds the text inside a closed one in
        every browser that matters. Open by default so a first-time player still meets the
@@ -108,18 +77,6 @@
   <div id="rtsBuild" title="build">@@BUILD@@</div>
 </div>
 
-<script>//@@INC:../ra/lcw.js@@</script>
-<script>//@@INC:../ra/blowfish.js@@</script>
-<script>//@@INC:../ra/mix.js@@</script>
-<script>//@@INC:../ra/shp.js@@</script>
-<script>//@@INC:../ra/pcx.js@@</script>
-<script>//@@INC:../ra/iso.js@@</script>
-<script>//@@INC:../ra/aud.js@@</script>
-<script>//@@INC:../ra/sndtab.js@@</script>
-<script>//@@INC:../ra/zip.js@@</script>
-<script>//@@INC:../ra/ramap.js@@</script>
-<script>//@@INC:../ra/inimap.js@@</script>
-<script>//@@INC:../ra/tiletab.js@@</script>
 <script>//@@INC:rules/structures.js@@</script>
 <script>//@@INC:rules/units.js@@</script>
 <script>//@@INC:rules/weapons.js@@</script>
@@ -153,21 +110,6 @@
 <script>//@@INC:sprites/unit-airsea.js@@</script>
 <script>//@@INC:sprites/props.js@@</script>
 <script>//@@INC:sprites/assemble.js@@</script>
-<script>//@@INC:mixart/theatres.js@@</script>
-<script>//@@INC:mixart/remap.js@@</script>
-<script>//@@INC:mixart/frames.js@@</script>
-<script>//@@INC:mixart/load.js@@</script>
-<script>//@@INC:mixart/tiles.js@@</script>
-<script>//@@INC:mixart/fit.js@@</script>
-<script>//@@INC:mixart/cliffs.js@@</script>
-<script>//@@INC:mixart/shore.js@@</script>
-<script>//@@INC:mixart/walls.js@@</script>
-<script>//@@INC:map/mainmix.js@@</script>
-<script>//@@INC:map/load.js@@</script>
-<script>//@@INC:map/build.js@@</script>
-<script>//@@INC:map/starts.js@@</script>
-<script>//@@INC:rts.store.js@@</script>
-<script>//@@INC:rts.editor.js@@</script>
 <script>//@@INC:audio/dsp.js@@</script>
 <script>//@@INC:audio/recipes.js@@</script>
 <script>//@@INC:audio/recipes2.js@@</script>
@@ -178,7 +120,6 @@
 <script>//@@INC:audio/music.js@@</script>
 <script>//@@INC:audio/loops.js@@</script>
 <script>//@@INC:rts.audio.js@@</script>
-<script>//@@INC:rts.sound.js@@</script>
 <script>//@@INC:rts.ambience.js@@</script>
 <script>//@@INC:core/grid.js@@</script>
 <script>//@@INC:core/treasury.js@@</script>

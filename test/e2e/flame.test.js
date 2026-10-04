@@ -16,20 +16,7 @@
    distance from the axis, the half-width pinches to nothing at the fuel, swells through the
    lower third and tapers to a point, and the axis snakes by a per-frame hash. This spec grades
    the three properties that distinguishes that from what was there - a hot core, a taper, and
-   frames that actually differ - rather than grading the picture.
-
-   AND THE SEA WAS DRAWN WITH A FLAT PROJECTION IN A TILTED WORLD. _rtsDrawWater placed each
-   tile at `(x - ox) * cell` - a top-down projection written out by hand - so in 3D the sea was
-   laid over a tilted map on a grid that was not, drifting further out of register with every
-   row. Only players who load their own Red Alert archives ever saw it - _mixWater returns null
-   without them - which is why no spec caught it, and why this one stubs the archive path.
-
-   IT IS A 2D PASS NOW, and that is the second half of the claim. The GL side has a real water
-   surface (render3d/world3d.js): geometry with a travelling swell, a moving normal and a tone
-   that lifts on the crests. A sheet of flat authored tiles laid over that hides every bit of
-   it - the same mistake the ore tile made over the ore crystals, measured and fixed once
-   already. So the assertion below is the reverse of what it was: 2D draws the sea through the
-   projection, and 3D draws none of it, because 3D has its own. */
+   frames that actually differ - rather than grading the picture. */
 
 var { chromium } = require('playwright');
 var { Suite } = require('../lib/assert.js');
@@ -44,7 +31,7 @@ var S = new Suite('flame');
 
   var out = await g.page.evaluate(function () {
     var o = {}, R = _rtsR, SP = _rtsSprites();
-    rtsSetVoxSide('allied');
+    rtsSetArmySide('allied');
     _rtsNewGame(4242, 'easy');
 
     /* ---------- the flame ---------- */
@@ -96,63 +83,6 @@ var S = new Suite('flame');
     }
     o.distinctFrames = Object.keys(sigs).length;
 
-    /* ---------- the sea, in 3D ---------- */
-    /* Stub the archive path: no assets ship here, so the only way to exercise the water
-       overlay at all is to hand it a tile set of its own. */
-    var tile = _sprMake(RTS_TS, RTS_TS);
-    tile.g.fillStyle = '#1e5e8a'; tile.g.fillRect(0, 0, RTS_TS, RTS_TS);
-    window._mixWater = function () { return [[tile.c]]; };
-
-    var G = window._rtsG, i;
-    for (i = 0; i < RTS_N * RTS_N; i++) { G.mapped[i] = 1; G.vis[i] = 1; }
-    G.visDirty = 1;
-    /* find a water cell and look at it */
-    var wc = null;
-    for (i = 0; i < RTS_N * RTS_N && !wc; i++) {
-      if (G.terrain[i] === RTS_T_WATER) wc = [i % RTS_N, (i / RTS_N) | 0];
-    }
-    o.haveWater = !!wc;
-    if (wc) {
-      R.zi = 1; _rtsApplyCam();
-      R.focus.x = _rtsWX(wc[0]); R.focus.z = _rtsWX(wc[1]);
-      function drawnAt() {
-        var got = null, orig = R.g.drawImage;
-        R.g.drawImage = function (img, a, b) {
-          if (img === tile.c && got === null) got = { x: a, y: b };
-          return orig.apply(this, arguments);
-        };
-        _rtsRFrame(1 / 60);
-        R.g.drawImage = orig;
-        return got;
-      }
-      /* the cell the camera is centred on, through the projection contract */
-      function expect() {
-        var p = _rtsGroundToScreen(_rtsWX(wc[0]) - RTS_TILE / 2, _rtsWX(wc[1]) - RTS_TILE / 2);
-        return { x: Math.round(p.x), y: Math.round(p.y) };
-      }
-      /* the FIRST tile drawn is not necessarily our cell, so compare the whole set instead:
-         collect every drawn position and check our cell's expected position is among them */
-      function allDrawn() {
-        var pts = [], orig = R.g.drawImage;
-        R.g.drawImage = function (img, a, b) {
-          if (img === tile.c) pts.push(Math.round(a) + ',' + Math.round(b));
-          return orig.apply(this, arguments);
-        };
-        _rtsRFrame(1 / 60);
-        R.g.drawImage = orig;
-        return pts;
-      }
-      var e2 = expect(), p2 = allDrawn();
-      o.water2d = { expect: e2.x + ',' + e2.y, drew: p2.length, hit: p2.indexOf(e2.x + ',' + e2.y) >= 0 };
-
-      rts3dSet(true);
-      o.on3d = !!(window._R3D && window._R3D.on);
-      if (o.on3d) {
-        var e3 = expect(), p3 = allDrawn();
-        o.water3d = { expect: e3.x + ',' + e3.y, drew: p3.length, hit: p3.indexOf(e3.x + ',' + e3.y) >= 0 };
-        rts3dSet(false);
-      }
-    }
     return o;
   });
 
@@ -175,19 +105,6 @@ var S = new Suite('flame');
 
   S.ok('the frames flicker rather than pulse', out.distinctFrames === out.frames,
        out.distinctFrames + ' distinct silhouettes across ' + out.frames + ' frames');
-
-  S.ok('the map has water to check', out.haveWater, out.haveWater ? 'found some' : 'none');
-  if (out.haveWater) {
-    S.ok('the sea is drawn where the projection puts it in 2D', out.water2d.hit,
-         'expected a tile at ' + out.water2d.expect + ' among ' + out.water2d.drew + ' drawn');
-    S.ok('the 3D mode is available to check', out.on3d, out.on3d ? 'on' : 'no WebGL');
-    if (out.on3d) {
-      S.ok('...and in 3D it stands aside for the surface that has real waves on it',
-           out.water3d.drew === 0,
-           out.water3d.drew + ' authored tiles drawn in 3D - the GL sea is geometry with a ' +
-           'swell and a moving normal, and a flat sheet over it hides all of it');
-    }
-  }
 
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
 

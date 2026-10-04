@@ -24,30 +24,30 @@ var S = new Suite('input');
 
   /* find the faction buttons by their own text, not by tab count - tab order changes */
   var picked = await t.page.evaluate(async function () {
-    var b = [].slice.call(document.querySelectorAll('#rtsVoxSide button'))
+    var b = [].slice.call(document.querySelectorAll('#rtsArmySide button'))
               .filter(function (x) { return /SOVIET/i.test(x.textContent); })[0];
     if (!b) return { error: 'no SOVIET button' };
     b.focus();
-    return { focused: document.activeElement === b, before: rtsVoxSide() };
+    return { focused: document.activeElement === b, before: rtsArmySide() };
   });
   S.ok('the SOVIET button can be focused', picked.focused && !picked.error, picked.error || '');
   await t.page.keyboard.press('Enter');
   await t.page.waitForTimeout(250);
   var afterEnter = await t.page.evaluate(function () {
-    return { vox: rtsVoxSide(), inBattle: !!document.getElementById('rcgRts') };
+    return { vox: rtsArmySide(), inBattle: !!document.getElementById('rcgRts') };
   });
   S.eq('Enter on SOVIET picks Soviet rather than starting a battle', afterEnter.vox, 'soviet');
   S.ok('...and does not start a battle', !afterEnter.inBattle);
 
   /* Space on a focused button is that button's activation too */
   await t.page.evaluate(function () {
-    [].slice.call(document.querySelectorAll('#rtsVoxSide button'))
+    [].slice.call(document.querySelectorAll('#rtsArmySide button'))
       .filter(function (x) { return /ALLIED/i.test(x.textContent); })[0].focus();
   });
   await t.page.keyboard.press(' ');
   await t.page.waitForTimeout(250);
   var afterSpace = await t.page.evaluate(function () {
-    return { vox: rtsVoxSide(), inBattle: !!document.getElementById('rcgRts') };
+    return { vox: rtsArmySide(), inBattle: !!document.getElementById('rcgRts') };
   });
   S.eq('Space on ALLIED picks Allied', afterSpace.vox, 'allied');
   S.ok('...and does not start a battle either', !afterSpace.inBattle);

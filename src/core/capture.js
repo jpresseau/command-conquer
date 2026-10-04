@@ -115,9 +115,6 @@ function _rtsKill(e) {
   var G = window._rtsG;
   if (e.dead) return;
   e.dead = true;
-  /* Infantry cry out when they die - ten recorded takes, and until now not one of them ever
-     played: the identification table knew what they were and nothing asked for them. */
-  if (e.type === 'unit' && typeof rtsDeathCry === 'function') rtsDeathCry(e);
   /* the passengers walk away from it - or go down with it, if there is no shore to walk to */
   if (e.cargo && e.cargo.length) _rtsSpillCargo(e);
   if (e.type === 'struct') { _rtsFootprint(e, false); _rtsRecalcPower(e.side); }
@@ -128,7 +125,6 @@ function _rtsKill(e) {
   }
   else if (e.type === 'struct') {
     /* Losing a building is announced; losing one of THEIRS is not. */
-    if (e.side === 'player' && typeof rtsEva === 'function') rtsEva('lostbldg');
     var sd = rtsStructDef(e.def);
     /* "Since there are volatile fuels used in the Flame Tower, it damages nearby units and
        structures if destroyed." Friendly fire included - that is the whole drawback, and it is
@@ -168,18 +164,7 @@ function _rtsKill(e) {
     G.fx.push({ kind:'pop', x:e.x, y:1, z:e.z, t:0, big:1 });
     var ud = rtsUnitDef(e.def);
     if (ud.kind === 'infantry') {
-      /* The original's own falling-over animation, as an EFFECT rather than by keeping the
-         soldier alive: he is already off the board as far as the rules are concerned, and
-         extending an entity's life to play a picture is how a corpse ends up blocking a path or
-         soaking a shell. The corpse is stamped when the animation finishes instead of now. */
-      var _dv = (e.id * 7) % 5;
-      var _dseq = (typeof _mixDeath === 'function') ? _mixDeath(e.def, e.side, _dv) : null;
-      if (_dseq) {
-        G.fx.push({ kind:'die', x:e.x, y:0, z:e.z, t:0, seq:_dseq,
-                    corpse:{ x:e.x, z:e.z, v:(e.id * 5) % 3 } });
-      } else {
-        _rtsAddCorpse(G, { x:e.x, z:e.z, v:(e.id * 5) % 3 });
-      }
+      _rtsAddCorpse(G, { x:e.x, z:e.z, v:(e.id * 5) % 3 });
     } else {
       /* Take_Damage: half the time a crew member bails out of a wrecked vehicle, wounded and
          running. Not from one that was crushed - there is nobody left to climb out. */

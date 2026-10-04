@@ -32,7 +32,7 @@ function _r3dFxShaded() {
    when it is shading - and so are the rounds in flight in G.proj (_r3dFxProj). render/fx.js
    asks this, so the two sides cannot disagree about who draws what. */
 function _r3dFxOwns(kind) {
-  if (kind === 'nuke' || kind === 'die' || kind === 'fire') return false;
+  if (kind === 'fire') return false;
   if (kind === 'tracer' || kind === 'debris') return _r3dFxShaded();
   return true;
 }

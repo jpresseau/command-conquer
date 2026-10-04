@@ -21,7 +21,7 @@ var { Suite } = require('../lib/assert.js');
 var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('bridge');
-var g = load(['src/rules', 'src/core', 'src/map', 'src/render3d/road3d.js']);
+var g = load(['src/rules', 'src/core', 'src/render3d/road3d.js']);
 var N = g.RTS_N, SPAN = g.RTS_BRIDGE_SPAN;
 var SEEDS = [4242, 77, 1913, 31337, 600, 1, 2, 3, 12345, 999, 5150, 8080];
 

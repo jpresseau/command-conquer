@@ -29,7 +29,7 @@ var { Suite } = require('../lib/assert.js');
 var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('<name>');
-var g = load(['src/rules', 'src/core', 'src/map']);
+var g = load(['src/rules', 'src/core']);
 g._rtsNewGame(4242, 'easy');
 var G = g.window._rtsG;
 G.over = null;

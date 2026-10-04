@@ -15,7 +15,7 @@ var { Suite } = require('../lib/assert.js');
 var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('ambience');
-var g = load(['src/rules', 'src/core', 'src/map', 'src/r3d', 'src/sprites/bake.js', 'src/render3d/sky3d.js', 'src/rts.audio.js', 'src/rts.ambience.js']);
+var g = load(['src/rules', 'src/core', 'src/r3d', 'src/sprites/bake.js', 'src/render3d/sky3d.js', 'src/rts.audio.js', 'src/rts.ambience.js']);
 g._rtsNewGame(4242, 'easy');
 var G = g.window._rtsG, heard = true;
 g._rtsAudible = function () { return heard; };

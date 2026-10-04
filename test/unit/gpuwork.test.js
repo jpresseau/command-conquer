@@ -18,7 +18,7 @@ var { Suite } = require('../lib/assert.js');
 var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('gpuwork');
-var g = load(['src/rules', 'src/core', 'src/map', 'src/r3d', 'src/sprites', 'src/render3d']);
+var g = load(['src/rules', 'src/core', 'src/r3d', 'src/sprites', 'src/render3d']);
 g._rtsNewGame(4242, 'easy');
 
 /* ---- THE WINDOW ---- */

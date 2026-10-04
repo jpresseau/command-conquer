@@ -15,7 +15,7 @@ var { Suite } = require('../lib/assert.js');
 var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('chinook');
-var SRC = ['src/rules', 'src/core', 'src/map', 'src/sprites/unit-airsea.js', 'src/rts.ambience.js'];
+var SRC = ['src/rules', 'src/core', 'src/sprites/unit-airsea.js', 'src/rts.ambience.js'];
 function fresh(seed) {
   var g = load(SRC);
   g._rtsNewGame(seed, 'easy');

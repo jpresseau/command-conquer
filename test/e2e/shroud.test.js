@@ -43,7 +43,7 @@ var S = new Suite('shroud');
 
   var out = await g.page.evaluate(function () {
     var o = {};
-    rtsSetVoxSide('allied');
+    rtsSetArmySide('allied');
     _rtsNewGame(4242, 'easy');
     var R = _rtsR, G = window._rtsG;
 

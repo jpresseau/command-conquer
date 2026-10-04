@@ -56,7 +56,7 @@ var S = new Suite('airforce');
 
   /* ---------- 2. a Soviet player can actually build one, through the real gate ---------- */
   var build = await g.page.evaluate(function () {
-    rtsSetVoxSide('soviet');
+    rtsSetArmySide('soviet');
     rtsClose(); rtsOpen(7);
     var G = window._rtsG, Sp = G.sides.player;
     var before = _rtsCanQueue('player', 'mig');
@@ -160,7 +160,7 @@ var S = new Suite('airforce');
     var out = {};
     [['allied', 'aagun'], ['soviet', 'rocketpit']].forEach(function (c) {
       var side = c[0], gunKey = c[1];
-      rtsSetVoxSide(side);
+      rtsSetArmySide(side);
       rtsClose(); rtsOpen(7);
       var G = window._rtsG, yd = _rtsHas('player', 'yard'), gun = null;
       for (var r = 3; r <= 16 && !gun; r++) for (var a = 0; a < 24 && !gun; a++) {
@@ -199,7 +199,7 @@ var S = new Suite('airforce');
      twenty seconds. What the change actually says is "this weapon will not choose a ground
      target", and _rtsFindTarget is where that is decided. */
   var picks = await g.page.evaluate(function () {
-    rtsSetVoxSide('allied');
+    rtsSetArmySide('allied');
     rtsClose(); rtsOpen(7);
     var G = window._rtsG, yd = _rtsHas('player', 'yard'), gun = null;
     for (var r = 3; r <= 16 && !gun; r++) for (var a = 0; a < 24 && !gun; a++) {
@@ -263,7 +263,7 @@ var S = new Suite('airforce');
      not a real game; it is the only way to watch what the opponent DEVELOPS, which is where the
      fleet cap has to hold. */
   var longGame = await g.page.evaluate(function () {
-    rtsSetVoxSide('allied');               /* so the opponent is Soviet and flies MiGs and Yaks */
+    rtsSetArmySide('allied');               /* so the opponent is Soviet and flies MiGs and Yaks */
     rtsClose(); rtsOpen(7);
     _rtsNewGame(9001, 'hard');
     var G = window._rtsG, padAt = null, planeAt = null, peak = 0, peakPads = 0, over = 0;

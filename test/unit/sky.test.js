@@ -13,7 +13,7 @@ var { Suite } = require('../lib/assert.js');
 var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('sky');
-var g = load(['src/rules', 'src/core', 'src/map', 'src/r3d', 'src/sprites/bake.js', 'src/render3d/sky3d.js']);
+var g = load(['src/rules', 'src/core', 'src/r3d', 'src/sprites/bake.js', 'src/render3d/sky3d.js']);
 var K = g.R3D_SKIES;
 
 var d = K.day;

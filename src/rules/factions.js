@@ -21,10 +21,24 @@ function rtsBuildableBy(def, side) {
   var s = rtsSideOf(def);
   return !s || s === side;
 }
+/* WHICH ARMY THE PLAYER COMMANDS, chosen on the title screen and kept in localStorage - a
+   six-byte preference. (The key keeps its old name so a returning player keeps their choice.) */
+var RTS_ARMY_SIDES = ['allied', 'soviet'];
+function rtsArmySide() {
+  if (window._RTS_ARMY) return window._RTS_ARMY;
+  var v = null;
+  try { v = window.localStorage.getItem('rcgVoxSide'); } catch (e) {}
+  return (window._RTS_ARMY = (RTS_ARMY_SIDES.indexOf(v) >= 0 ? v : 'allied'));
+}
+function rtsSetArmySide(v) {
+  if (RTS_ARMY_SIDES.indexOf(v) < 0) return;
+  window._RTS_ARMY = v;
+  try { window.localStorage.setItem('rcgVoxSide', v); } catch (e) {}
+}
 /* Which army a house fields. The player's is their choice; the opponent takes the other one,
    because a mirror match is the one arrangement that makes the whole split pointless. */
 function rtsHouseSide(house) {
-  var mine = (typeof rtsVoxSide === 'function') ? rtsVoxSide() : 'allied';
+  var mine = rtsArmySide();
   return house === 'player' ? mine : (mine === 'allied' ? 'soviet' : 'allied');
 }
 
@@ -87,8 +101,6 @@ var RTS_UNLOAD_RATE = 700;      /* scrap/second poured into the refinery */
    powered feel like a real decision rather than a gradient you can ignore. */
 var RTS_POWER_BAND = 0.75, RTS_POWER_MIN = 0.5;
 var RTS_BUILD_RADIUS = 9;       /* tiles: how far from an existing structure you may build */
-/* CONQUER.CPP's Color_Cycle steps the water band once every TIMER_SECOND/4 - four a second. */
-var RTS_WATER_HZ = 4;
 
 /* The light pass. Restraint is the whole game here: bloom above about 0.5 turns pixel art into
    soup, and a vignette you can consciously see is one that is too strong. These are the numbers

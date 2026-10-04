@@ -448,8 +448,4 @@ tone with a few deliberate marks in them; that is the shape the field has now.
 reported 16.9 falling to 14.1 - it was measuring its own resampling aliasing the paint blocks back
 into noise, and the real change was nearly twice as large as it claimed.
 
-Still not done, and worth being plain about it: the ground has structure now but it is still
-GENERATED. RA composes terrain from drawn 24x24 templates with real cell boundaries, drawn cliff
-faces and shore pieces. `src/mixart` repaints the base ground from those when the player has
-loaded their own files; the procedural path is what everyone else sees, and it has better texture
-than it did rather than a different nature.
+The ground is GENERATED, by design: every cell, cliff and shore is drawn by the game's own code.

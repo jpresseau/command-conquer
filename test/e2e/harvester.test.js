@@ -43,7 +43,7 @@ var S = new Suite('harvester');
   var out = await g.page.evaluate(function () {
     /* One loaded harvester, one refinery, 120 seconds. `block` is the only difference. */
     function trial(block) {
-      rtsSetVoxSide('allied');
+      rtsSetArmySide('allied');
       _rtsNewGame(4242, 'easy');
       var G = window._rtsG;
       var yard = _rtsHas('player', 'yard');

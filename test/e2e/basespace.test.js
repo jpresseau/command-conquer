@@ -47,7 +47,7 @@ var H = 300;
       /* the before-picture is the code as it was, escorts included: with them on, the opponent
          walks its idle units out before the pocket seals and fewer are left to be trapped */
       window.RTS_ESCORT_OFF = a[4];
-      if (typeof rtsSetVoxSide === 'function') rtsSetVoxSide(a[0]);
+      if (typeof rtsSetArmySide === 'function') rtsSetArmySide(a[0]);
       _rtsNewGame(a[1], 'normal');
       var G = window._rtsG, N = RTS_N, i;
       /* the main open region: the largest four-way component of free land */

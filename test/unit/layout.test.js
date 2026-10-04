@@ -21,7 +21,7 @@
    up along its own banner comments.
 
    WHAT THE CAP COVERS, AND WHAT IT DELIBERATELY DOES NOT. It applies to source under src/ and
-   ra/, and to the reference documents under docs/. It does NOT apply to test/ or to CSS, and
+   and to the reference documents under docs/. It does NOT apply to test/ or to CSS, and
    both exemptions are choices rather than oversights - they were oversights until somebody
    ranked the tree by size and found the three largest hand-edited files in the project were all
    outside a rule that governed nothing bigger than 498 lines.
@@ -55,7 +55,7 @@ var inlined = sources();                       /* every .js the page includes, i
 
 /* ------------------------------------------------------------ nothing is orphaned ----
    Walked from the disk, not from the manifest, because the manifest is the thing being
-   checked. Anything under src/ or ra/ that ends in .js is meant to be in the page. */
+   checked. Anything under src/ that ends in .js is meant to be in the page. */
 function walk(dir, out) {
   fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true }).forEach(function (d) {
     var rel = dir + '/' + d.name;
@@ -64,7 +64,7 @@ function walk(dir, out) {
   });
   return out;
 }
-var onDisk = walk('src', walk('ra', [])).sort();
+var onDisk = walk('src', []).sort();
 var listed = {};
 inlined.forEach(function (f) { listed[f] = (listed[f] || 0) + 1; });
 

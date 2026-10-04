@@ -10,12 +10,6 @@
    with y=0 at ground level and +y up. Build from the ground upward - every part sits on
    something below it, so the y offsets read as a running total. */
 function _sprBuilding(key, side) {
-  /* Real artwork wins when the player has pointed the game at their own game files; everything
-     below is the fallback that got this project to the point where it could ask. */
-  if (typeof _rtsArtReady === 'function' && _rtsArtReady()) {
-    var real = _mixBuilding(key, side);
-    if (real) return real;
-  }
   /* The drawn set gets a damaged look too, or "buildings show their wounds" is a feature only
      the players who loaded their archives ever see. There is no second hand-drawn sprite to
      switch to, so one is DERIVED: scorch the finished canvas, punch a few dark holes through

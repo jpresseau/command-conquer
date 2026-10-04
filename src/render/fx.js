@@ -65,34 +65,6 @@ function _rtsDrawFx(g, G, S, TSscale, cell) {
     var f = G.fx[i], k = _rtsAnimQ(f.t) / 0.75;
     if (f.t < 0) continue;                       /* a delayed secondary blast, not started */
     if (r3on && _r3dFxOwns(f.kind)) continue;    /* the world pass has it - see above */
-    if (f.kind === 'nuke') {
-      /* Anchored near its BASE, not its centre: a mushroom cloud stands on the ground and grows
-         upward, so centring it would sink the stem below the impact point. */
-      var nz = (typeof _mixFxSet === 'function') ? _mixFxSet('nuke') : null;
-      if (nz) {
-        var ni = Math.min(nz.length - 1, Math.floor((f.t / RTS_ANIMS.nuke.dur) * nz.length));
-        var nc = nz[ni];
-        var np = _rtsGroundToScreen(f.x, f.z);
-        var nw = Math.round(nc.width * TSscale * np.scale * (f.big || 1));
-        var nh = Math.round(nc.height * TSscale * np.scale * (f.big || 1));
-        g.drawImage(nc, Math.round(np.x - nw / 2), Math.round(np.y - nh * 0.88),
-                    nw, nh);
-        continue;
-      }
-    }
-    if (f.kind === 'die') {
-      /* A soldier falling over, drawn from his own artwork. Held on the LAST frame once the
-         sequence runs out rather than looping - a body that gets back up and dies again is
-         worse than one that lies still. */
-      var dq = RTS_ANIMS.die.dur;
-      var di = Math.min(f.seq.length - 1, Math.floor((f.t / dq) * f.seq.length));
-      var dc = f.seq[di];
-      var dp = _rtsGroundToScreen(f.x, f.z);
-      var dw = Math.round(dc.width * TSscale * dp.scale), dh = Math.round(dc.height * TSscale * dp.scale);
-      g.drawImage(dc, Math.round(dp.x - dw / 2), Math.round(dp.y - dh * 0.62),
-                  dw, dh);
-      continue;
-    }
     if (f.kind === 'debris') {
       /* Chunks thrown clear of a dying structure. Height projects upward the same way the
          baked sprites do, so a chunk arcs over the ground rather than sliding along it. */

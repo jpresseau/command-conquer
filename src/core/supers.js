@@ -50,7 +50,6 @@ function _rtsSupersTick(dt) {
       st.ready = true;
       if (side === 'player') {
         if (typeof _rtsSay === 'function') _rtsSay(sup.hint);
-        if (typeof rtsEva === 'function') rtsEva('ready');
       }
       /* GPS launches itself; see the note on its def. */
       if (sup.auto) _rtsSuperFire(side, k, 0, 0);
@@ -100,9 +99,6 @@ function _rtsFireNuke(side, tx, tz) {
   G.strikes = G.strikes || [];
   G.strikes.push({ t: RTS_NUKE_DELAY, x: _rtsWX(tx), z: _rtsWX(tz), side: side });
   if (side === 'player') _rtsSay('Missile away.');
-  /* RA's "nuclear missile launched" line is not among the 152 sounds the identity table
-     recovered, so this borrows the one that fits: something IS about to hit your base. */
-  else if (typeof rtsEva === 'function') rtsEva('attack');
   if (typeof _rtsSfx === 'function') _rtsSfx('rocket');
   return true;
 }
@@ -118,19 +114,13 @@ function _rtsStrikesTick(dt) {
     G.strikes.splice(i, 1);
     _rtsSplash(k.x, k.z, RTS_NUKE_RADIUS * RTS_TILE, RTS_NUKE_DAMAGE, k.side, RTS_NUKE_SPREAD, null);
     G.shake = Math.max(G.shake || 0, 1.4);
-    /* The original's own mushroom cloud where the player has it. The drawn stand-in is one huge
-       boom plus a ring of smaller ones staggered behind it - the ring exists purely to give a
-       scaled-up sprite an EDGE, since a single disc blown up to seven times its size reads as a
-       puff. A real 27-frame cloud does not need propping up, so the ring goes with it. */
-    if (typeof _mixFxSet === 'function' && _mixFxSet('nuke')) {
-      G.fx.push({ kind:'nuke', x:k.x, y:1, z:k.z, t:0, big:3.2 });
-    } else {
-      G.fx.push({ kind:'boom', x:k.x, y:1, z:k.z, t:0, big:7 });
-      for (var r = 0; r < 8; r++) {
-        var ang = r / 8 * Math.PI * 2, rad = RTS_NUKE_RADIUS * RTS_TILE * 0.55;
-        G.fx.push({ kind:'boom', t:-0.08 - r * 0.03, big:2.6,
-                    x:k.x + Math.cos(ang) * rad, y:1, z:k.z + Math.sin(ang) * rad });
-      }
+    /* One huge boom plus a ring of smaller ones staggered behind it: a single blast blown up to
+       seven times its size reads as a puff, and the ring gives it an edge. */
+    G.fx.push({ kind:'boom', x:k.x, y:1, z:k.z, t:0, big:7 });
+    for (var r = 0; r < 8; r++) {
+      var ang = r / 8 * Math.PI * 2, rad = RTS_NUKE_RADIUS * RTS_TILE * 0.55;
+      G.fx.push({ kind:'boom', t:-0.08 - r * 0.03, big:2.6,
+                  x:k.x + Math.cos(ang) * rad, y:1, z:k.z + Math.sin(ang) * rad });
     }
     if (typeof _rtsSfx === 'function') _rtsSfx('boom', k.x, k.z);
     if (k.side !== 'player') _rtsSay('Our base has been hit by an atomic strike.');
@@ -203,8 +193,6 @@ function _rtsFireChrono(side, tx, tz, sel) {
   if (!moved) return false;
   if (side === 'player') _rtsSay('Chronoshift complete — ' + moved +
                                  (moved === 1 ? ' unit moved.' : ' units moved.'));
-  /* the one superweapon whose real sound survived identification - see ra/sndtab.js */
-  if (typeof rtsEva === 'function') rtsEva('chrono');
   return true;
 }
 

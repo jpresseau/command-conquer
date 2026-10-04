@@ -53,7 +53,7 @@ var SECS = 420;
     var vs = ['allied', 'soviet'][si];
     var r = await g.page.evaluate(function (a) {
       var vs = a[0], SECS = a[1];
-      if (typeof rtsSetVoxSide === 'function') rtsSetVoxSide(vs);
+      if (typeof rtsSetArmySide === 'function') rtsSetArmySide(vs);
       /* ESCORTS OFF, because this harness makes the player unkillable and escorts would make that
          the whole match. With them on, the opponent's spare army marched out and shelled a player
          building that cannot fall - for three minutes, from beside buildings the opponent had put

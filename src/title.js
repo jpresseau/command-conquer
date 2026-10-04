@@ -1,5 +1,5 @@
 /* title.js - the standalone shell around the game: the title screen, the difficulty picker,
-   the file pickers, RESUME BATTLE, the install prompt, and the START button.
+   the army picker, RESUME BATTLE, the install prompt, and the START button.
 
    This lived inline in index.skeleton.html, which meant build.py's syntax gate and its
    duplicate-name check - both of which walk the files the skeleton INCLUDES - never saw a
@@ -43,85 +43,32 @@ function rtsHome(){
 /* Get_Savefile_Info's job: print what is in the save without loading it. The button only
    appears when there is a save this build can actually read - the version stamp does that
    check, so a save from older code shows nothing rather than a button that fails. */
-/* The editor draws with the player's own terrain templates, so it is only worth offering once
-   the artwork is loaded - an empty palette is not a tool. */
 /* WHICH ARMY YOU COMMAND. This began as a voices-only toggle, because the roster was one
    merged list with both sides' buildings in it and there was genuinely nothing else to choose
    between. There is now: the Allies get the Pillbox, the Gun Turret, the Medic, the Light Tank,
    the Artillery and the Helipad; the Soviets get the Flame Tower, the Tesla Coil, the Kennel
-   and its dogs, the Flame Squad and the Mammoth. Always offered - it changes what you can
-   build whether or not the speech archives are loaded. */
-function rtsBuildVoxSide(){
-  var wrap = document.getElementById('rtsVoxSide'), note = document.getElementById('rtsVoxNote');
-  if (!wrap || typeof rtsVoxSide !== 'function') return;
+   and its dogs, the Flame Squad and the Mammoth. */
+function rtsBuildArmyPick(){
+  var wrap = document.getElementById('rtsArmySide'), note = document.getElementById('rtsVoxNote');
+  if (!wrap || typeof rtsArmySide !== 'function') return;
   wrap.hidden = note.hidden = false;
   if (!wrap.firstChild) {
     wrap.innerHTML = '<button type="button" data-v="allied">ALLIED</button>' +
                      '<button type="button" data-v="soviet">SOVIET</button>';
     [].forEach.call(wrap.getElementsByTagName('button'), function (b) {
-      b.onclick = function () { rtsSetVoxSide(b.getAttribute('data-v')); rtsBuildVoxSide(); };
+      b.onclick = function () { rtsSetArmySide(b.getAttribute('data-v')); rtsBuildArmyPick(); };
     });
   }
-  var cur = rtsVoxSide();
+  var cur = rtsArmySide();
   [].forEach.call(wrap.getElementsByTagName('button'), function (b) {
     b.className = (b.getAttribute('data-v') === cur) ? 'on' : '';
   });
-  var have = typeof rtsSndNamed === 'function' && !!rtsSndNamed('yes_sir_soviet_vehicle_1');
   note.textContent = (cur === 'soviet'
     ? 'Soviet: Flame Towers, Tesla Coils, attack dogs, Mammoth tanks.'
     : 'Allied: Pillboxes, gun turrets, medics, light tanks, artillery, helicopters.')
-    + ' The enemy takes the other army.'
-    + (have ? ' Your units answer in its voices.' : '');
+    + ' The enemy takes the other army.';
 }
 
-/* Swap our own title card for Westwood's, when the player's files supply it.
-
-   title.pcx is 640x400 of 1996 pixel art carrying the real logo, so once it is on screen the
-   text title underneath it is redundant - two wordmarks stacked is worse than either. It is a
-   REPLACEMENT rather than a background: as a background the menu would have to stay legible
-   over whatever happens to be behind it at every viewport, and this screen is far taller than
-   400px once the briefing and both loaders are on it.
-
-   Silent when there is no hires.mix. That is the normal case for anyone who has not pointed the
-   loader at their install, and the drawn title card is not a fallback, it is the default. */
-function rtsShowTitleArt(){
-  var img = document.getElementById('rtsTitleArt');
-  if (!img || img.src) return;                       /* already swapped */
-  if (typeof _mixTitleArt !== 'function') return;
-  var c;
-  try { c = _mixTitleArt(); } catch (e) { return; }
-  if (!c) return;
-  img.src = c.toDataURL('image/png');
-  img.hidden = false;
-  ['.eyebrow', 'h1', '.sub'].forEach(function (sel) {
-    var el = document.querySelector('#rtsHome ' + sel);
-    if (el) el.hidden = true;
-  });
-  /* Move the menu into the plate's empty panel, and the loaders and the controls tile in after
-     it - the panel is the whole screen's content area now, not just somewhere to put buttons.
-     Done here rather than in the markup so that a player with no artwork keeps the exact layout
-     they had: the overlay only exists when there is a bezel to sit inside.
-
-     ORDER MATTERS. The menu goes first because it is what the screen is for; the loaders and
-     the reference list follow it, in the order they already appear on the page. Appending each
-     in turn preserves that, and appendChild MOVES a node rather than copying it, so nothing is
-     left behind. */
-  var wrap = document.getElementById('rtsTitleWrap');
-  var menu = document.getElementById('rtsTitleMenu');
-  if (wrap && menu && menu.parentNode !== wrap) {
-    wrap.appendChild(menu);
-    var home = document.getElementById('rtsHome');
-    [].forEach.call(home.querySelectorAll('.artload, #rtsKeys'), function (el) {
-      menu.appendChild(el);
-    });
-    home.classList.add('hasart');
-  }
-}
-
-function rtsShowEditor(){
-  var b = document.getElementById('rtsEdit');
-  if (b) b.hidden = !(typeof _rtsArtReady === 'function' && _rtsArtReady());
-}
 function rtsShowResume(){
   var r = document.getElementById('rtsResume');
   var n = document.getElementById('rtsResumeNote');
@@ -146,68 +93,17 @@ function rtsShowResume(){
 rtsBuildDiff();
 if (typeof rtsSkySync === 'function') rtsSkySync();
 rtsShowResume();
-rtsShowEditor();
-rtsBuildVoxSide();
+rtsBuildArmyPick();
 
-/* Anything the player chose last time loads itself now. This is the whole point of
-   src/rts.store.js: picking 13 MB of archives out of a file dialog is a decision, and a
-   decision should be made once rather than charged as a toll on every visit. Nothing here
-   blocks the START button - the game is fully playable with neither. */
-function rtsRestoreSaved() {
-  if (typeof rtsStoreRestore !== 'function') return;
-  var mixNote = document.getElementById('rtsMixNote');
-  var mapNote = document.getElementById('rtsMapNote');
-  var before = mixNote && mixNote.textContent, mapBefore = mapNote && mapNote.textContent;
-  if (mixNote) mixNote.textContent = 'Checking for artwork you loaded before…';
-  rtsStoreRestore(function (mix) {
-    if (!mixNote) return;
-    if (mix) {
-      mixNote.textContent = 'Original artwork loaded from last time — ' + mix.count +
-        ' archives, ' + (mix.bytes / 1048576).toFixed(1) + ' MB. ';
-      mixNote.className = 'ok';
-      rtsAddForget(mixNote);
-      rtsPickDoneArt();
-    } else { mixNote.textContent = before; mixNote.className = ''; }
-    rtsShowEditor(); rtsBuildVoxSide();
-  }, function (map) {
-    if (!mapNote) return;
-    if (map) { mapNote.textContent = rtsMapDescribe(map); mapNote.className = 'ok'; rtsPickDoneMap(); }
-    else { mapNote.textContent = mapBefore; mapNote.className = ''; }
-    /* ASK AGAIN NOW THE MAP IS BACK. rtsShowResume ran once at parse time, before this async
-       restore landed, and the save's version stamp is computed from the map that will be used -
-       so with a real map stored, the first call read the stamp for the wrong map size and hid
-       the button. Cheap to repeat and it is the only thing that makes the button reappear. */
-    rtsShowResume();
-  }, function (scen) {
-    /* The whole scenario list back without the file dialog. Nothing to do when there is none -
-       that is the first visit, and the picker's own instructions are already on screen. */
-    if (scen && typeof rtsMapShowStored === 'function' && rtsMapShowStored(scen)) rtsPickDoneMap();
-  });
-}
-/* The buttons are imperatives - USE ORIGINAL ARTWORK, PLAY A REAL MAP - and an imperative sat
-   next to a note reading "loaded from last time" says two different things at once: the note
-   says it is done, the button says do it. Once something IS loaded the same control has stopped
-   being an instruction and become a way to change your mind, so it says that instead.
-
-   The text node is edited rather than the label, because the label also contains the <input>
-   that makes the whole thing a file picker; replacing its contents would throw that away. */
-function rtsPickLabel(inputId, text) {
-  var input = document.getElementById(inputId);
-  if (!input || !input.parentNode) return;
-  var kids = input.parentNode.childNodes, i;
-  for (i = 0; i < kids.length; i++) {
-    if (kids[i].nodeType === 3 && kids[i].nodeValue.trim()) { kids[i].nodeValue = text; return; }
-  }
-}
-function rtsPickDoneArt() { rtsPickLabel('rtsMixPick', 'REPLACE ARTWORK'); }
-function rtsPickDoneMap() { rtsPickLabel('rtsMapPick', 'CHOOSE ANOTHER MAP'); }
+/* THE OLD ARCHIVE STORE, gone. Earlier versions could keep a player's own game archives in
+   IndexedDB, 13 MB and up; that feature is removed, so a returning player gets the space back. */
+try { if (window.indexedDB) window.indexedDB.deleteDatabase('rccommand'); } catch (e) {}
 
 /* The controls tile collapses, and stays collapsed. A player who has learnt the shortcuts should
    not have to scroll past thirty of them on every visit - but a first-time player should still
    meet them, so the markup ships `open` and only an explicit close is remembered.
 
-   localStorage rather than the IndexedDB store in src/rts.store.js: that one exists to hold
-   megabytes of archives, and this is one boolean. Wrapped because private-browsing modes throw
+   localStorage, and wrapped because private-browsing modes throw
    on access rather than returning null, and a disabled store must cost the player a preference,
    not the title screen. */
 var RTS_KEYS_LS = 'rcc.keysOpen';
@@ -307,19 +203,6 @@ function rtsInstall() {
 }
 rtsInstallInit();
 
-/* Remembering has to be undoable, or a bad file becomes permanent. */
-function rtsAddForget(host) {
-  if (!host || document.getElementById('rtsForget')) return;
-  var a = document.createElement('a');
-  a.id = 'rtsForget'; a.href = '#'; a.textContent = 'forget these';
-  a.onclick = function (ev) {
-    ev.preventDefault();
-    rtsStoreForget().then(function () { location.reload(); });
-    return false;
-  };
-  host.appendChild(a);
-}
-rtsRestoreSaved();
 function rtsStart(btn){
   var err = document.getElementById('rtsErr');
   if (err) err.style.display = 'none';

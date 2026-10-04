@@ -18,7 +18,7 @@ var { Suite } = require('../lib/assert.js');
 var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('scenery');
-var g = load(['src/rules', 'src/core', 'src/map', 'src/sprites/bake.js', 'src/render3d/scenery3d.js']);
+var g = load(['src/rules', 'src/core', 'src/sprites/bake.js', 'src/render3d/scenery3d.js']);
 var N = g.RTS_N;
 
 function game(seed) { g._rtsNewGame(seed, 'easy'); return g.window._rtsG; }

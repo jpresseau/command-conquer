@@ -226,12 +226,6 @@ function _rtsAnimAI(dt) {
     var f = G.fx[i];
     var def = RTS_ANIMS[f.kind];
     if (!def || f.t < 0) continue;
-    /* A finished death animation leaves the body. Stamped HERE rather than at the moment of
-       death so the corpse appears under the soldier as he lands, not before he has fallen. */
-    if (f.kind === 'die' && f.corpse && f.t >= def.dur) {
-      _rtsAddCorpse(G, f.corpse);
-      f.corpse = null;
-    }
 
     /* An attached animation rides its object and burns it down. */
     if (f.att) {

@@ -34,10 +34,6 @@ function _sprFacingsFor(d) { return d.kind === 'infantry' ? 8 : 32; }
 function _sprFacings(key) { return _sprFacingsFor(rtsUnitDef(key)); }
 
 function _sprUnit(key, side, prone, part) {
-  if (typeof _rtsArtReady === 'function' && _rtsArtReady()) {
-    var real = _mixUnit(key, side, prone, part);
-    if (real) return real;
-  }
   var m = _sprUnitModel(key, side, prone, part), size = _sprUnitFit(key, side);
   var frames = [], N = _sprFacings(key);
   /* Same RTS_PS scale-up the structures get - see sprites/bake.js. Applied AFTER the yaw so
@@ -392,13 +388,6 @@ function _sprFx() {
   [boom, flash, piff, splash, smoke].forEach(function (set) {
     for (var q = 0; q < set.length; q++) set[q].ps = K;
   });
-  var drawn = { boom: boom, flash: flash, piff: piff, splash: splash, fire: fire, smoke: smoke };
-  /* The originals win where they exist, role by role, keeping the drawn one for anything the
-     archives do not cover - so a partial set degrades to a mixture rather than to nothing. */
-  var real = (typeof _mixFx === 'function') ? _mixFx() : null;
-  if (real) {
-    for (var rk in real) if (real[rk]) drawn[rk] = real[rk];
-  }
-  return drawn;
+  return { boom: boom, flash: flash, piff: piff, splash: splash, fire: fire, smoke: smoke };
 }
 

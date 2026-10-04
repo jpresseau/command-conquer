@@ -382,7 +382,7 @@ var S = new Suite('pathing');
      stand. The behaviour is checked underneath it so a future change cannot satisfy the letter
      of it and strand the unit anyway. */
   var mis = await g2.page.evaluate(function () {
-    rtsSetVoxSide('allied');
+    rtsSetArmySide('allied');
     _rtsNewGame(4242, 'easy');
     var yard = _rtsHas('player', 'yard');
     if (!yard) return { error: 'no command yard' };

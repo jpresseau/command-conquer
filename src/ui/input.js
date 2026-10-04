@@ -152,7 +152,6 @@ function _rtsBindInput() {
       _rtsFlash(w.x, w.z, onScrap ? 'harvest' : 'move');
     }
     if (typeof _rtsSfx === 'function') _rtsSfx('order');
-    if (typeof rtsVox === 'function') _rtsVoxOrder();
     return true;
   }
   /* LEFT button only. mousedown fires for every button, so without this guard the

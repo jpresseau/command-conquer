@@ -36,7 +36,7 @@ var S = new Suite('r3dlive');
 
   var out = await g.page.evaluate(function () {
     var o = {};
-    rtsSetVoxSide('allied');
+    rtsSetArmySide('allied');
     _rtsNewGame(4242, 'easy');
     var G = window._rtsG, yard = _rtsHas('player', 'yard');
     /* spawn on ground PROVEN open - a spawn onto a blocked cell returns null and the pick

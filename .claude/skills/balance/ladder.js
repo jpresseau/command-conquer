@@ -32,7 +32,7 @@ async function ladder(dir, label) {
     var fell = [];
     for (var seed of SEEDS) {
       var r = await g.page.evaluate(function (a) {
-        if (typeof rtsSetVoxSide === 'function') rtsSetVoxSide(a[2]);
+        if (typeof rtsSetArmySide === 'function') rtsSetArmySide(a[2]);
         _rtsNewGame(a[1], a[0]);
         var G = window._rtsG, fell = null;
         for (var i = 0; i < 60 * a[3] && fell === null; i++) { _rtsTick(1 / 60); if (G.over) fell = Math.round(G.t); }
