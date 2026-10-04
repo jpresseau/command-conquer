@@ -67,7 +67,7 @@ function _r3dFxWakes(G, V) {
     if (!d || d.kind === 'infantry' || d.kind === 'air') continue;
     if (vis && !_rtsVisible(_rtsTX(e.x), _rtsTX(e.z))) continue;
     var hx = Math.cos(e.rot || 0), hz = Math.sin(e.rot || 0), r = d.r || 1.6, seed = _r3dFxH(e.id || i + 1, 5.5);
-    if (d.sea) { _r3dFxWake(V, e, hx, hz, r, seed); continue; }
+    if (d.sea || (d.hover && G.terrain[_rtsIdx(_rtsTX(e.x), _rtsTX(e.z))] === RTS_T_WATER)) { _r3dFxWake(V, e, hx, hz, r, seed); continue; }
     var amt = _r3dFxDustOf(G, e.x - hx * r, e.z - hz * r);
     if (amt > 0) _r3dFxDust(V, e, hx, hz, r, seed, amt);
   }

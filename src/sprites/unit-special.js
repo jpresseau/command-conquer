@@ -1,5 +1,5 @@
 /* sprites/unit-special.js - the special-purpose vehicles Breachwater added to the roster: the
-   Flak Track, the Mine Layer and the Bridge Layer. One arm of the unit model chain (see sprites/unitmodels.js for the
+   Flak Track, the Mine Layer, the Bridge Layer and the Hovercraft. One arm of the unit model chain (see sprites/unitmodels.js for the
    dispatch and the shared locals handed over in X); returns false for a key it does not own.
 
    Two small helpers live here because these are the first models that need them: a run of
@@ -141,6 +141,35 @@ function _sprUnitSpecial(X, key) {
     _r3Box(m, -1.0, 8.4, 0, 18.0, 1.0, 6.6, DK[1], DK[2]);        /* the cradle under it */
     _r3Box(m, 9.4, 5.2, -3.8, 0.9, 1.0, 1.4, GN[3], GN[3]);       /* headlights */
     _r3Box(m, 9.4, 5.2, 3.8, 0.9, 1.0, 1.4, GN[3], GN[3]);
+  } else if (key === 'hovercraft') {
+    /* HOVERCRAFT. No wheels and no tracks: a flat hull riding on a fat black skirt, driven by
+       two great ducted fans at the stern. The fans are the identity - two rings standing up
+       behind the cabin, bigger than anything else on it - and the skirt the second, a dark band
+       all round that says "this floats". */
+    _r3Slab(m, 0, 0.6, 0, 21.0, 2.6, 12.4, 1.3, DK[0], DK[1]);    /* the skirt */
+    _r3Slab(m, 0.4, 3.0, 0, 19.0, 1.6, 10.8, 0.8, VH[0], VH[1]);  /* the hull deck */
+    _r3Box(m, 9.4, 3.2, 0, 2.6, 1.4, 8.6, VH[1], VH[3]);          /* a blunt bow ramp */
+    _r3Slab(m, 2.6, 4.6, 0, 7.6, 3.2, 7.0, 0.8, VH[1], TM[1]);    /* the cabin - team roof */
+    _r3Box(m, 6.5, 5.8, 0, 0.6, 1.4, 5.8, RTS_PAL.glass, RTS_PAL.glass);  /* windscreen */
+    _r3Box(m, 2.6, 5.8, -3.6, 5.0, 1.2, 0.6, RTS_PAL.glass, RTS_PAL.glass);
+    _r3Box(m, 2.6, 5.8, 3.6, 5.0, 1.2, 0.6, RTS_PAL.glass, RTS_PAL.glass);
+    _r3Cyl(m, 2.0, 7.8, 0, 1.1, 0.8, DK[1], DK[2], 16);           /* gun ring */
+    _r3Box(m, 4.4, 8.5, 0, 5.4, 0.7, 0.7, DK[1], DK[3]);          /* machine gun */
+    /* the fans: a duct ring standing across the stern on each side, a hub, four blades */
+    for (var fs = -1; fs <= 1; fs += 2) {
+      var fz = fs * 3.0;
+      _r3Wheel(m, -7.6, 8.2, fz, 3.4, 1.4, 'x', S[1], S[2], 24);   /* the duct */
+      _r3Wheel(m, -7.6, 8.2, fz, 2.8, 1.6, 'x', DK[1], DK[2], 24); /* its dark throat */
+      _r3Wheel(m, -7.6, 8.2, fz, 0.7, 2.0, 'x', S[2], S[3], 16);   /* hub */
+      for (var bl = 0; bl < 4; bl++) {
+        var ba = bl * Math.PI / 2 + Math.PI / 4;
+        _r3Box(m, -7.4, 8.2 + Math.sin(ba) * 1.4, fz + Math.cos(ba) * 1.4, 0.3, 0.6 + Math.abs(Math.sin(ba)) * 1.6, 0.6 + Math.abs(Math.cos(ba)) * 1.6, GN[1], GN[2]);
+      }
+      _r3Box(m, -7.6, 4.6, fz, 1.2, 3.6, 1.0, VH[2], VH[1]);       /* the pylon it stands on */
+      _r3Box(m, -10.0, 8.2, fz, 0.4, 5.2, 0.6, VH[1], VH[3]);      /* rudder behind it */
+    }
+    _r3Box(m, 8.6, 4.2, -4.4, 0.9, 0.9, 1.3, GN[3], GN[3]);       /* lamps */
+    _r3Box(m, 8.6, 4.2, 4.4, 0.9, 0.9, 1.3, GN[3], GN[3]);
   } else return false;
   return true;
 }

@@ -356,3 +356,30 @@ facing (on a dug fork). `e2e/bridgelayer` covers the D key and the 3D mesh appea
 water. Ten mutants were killed. Two guards survived and say so:
 - the zero-length run was redundant with the across rule, and is gone;
 - "never from the water" is kept as a guard that no generated map reaches.
+
+## The Hovercraft — the beach
+
+Both armies' hovercraft, built at the Vehicle Works once there is a Radar Post (`hovercraft`).
+The verb is the BEACH. It drives on land and on open water alike, so five men can be carried
+down a river, across a bay and up the far beach without a landing craft or a bridge. It is fast
+and thin-skinned, with a machine gun for the men waiting on the sand. Torpedoes run under it.
+
+It is the third movement domain, `'hover'` (`core/grid.js`):
+- Its ground is open water as a ship has it, plus everything a land unit may cross. A structure,
+  a shipyard's water, rock and trees still stop it.
+- Its paths are pulled straight against its own domain. Ships are still pulled against land,
+  which never clears, so their paths are never straightened. Fixing that would move every fleet,
+  so it is left as it was and the comment says so.
+- Killed over water it goes down like a ship: no debris thrown up, no fire on the waves.
+- It wakes over water and leaves no treads anywhere.
+
+On seed 4242 the gap a tank drives 407 units round is a straight 32 for the hovercraft, and a
+squad of five boards on one bank and is put down on the other. The opponent does not build it:
+a landing is a plan.
+
+### Verified
+
+`unit/hovercraft` covers the domain cell by cell, the short way, the slanting leg, five men
+across, a wreck afloat and ashore, and the torpedo. Six mutants were killed. The pulling mutant
+survived the first set, because a straight crossing needs no pulling; a slanting run across open
+water (11 waypoints without it, 1 with) is the case that kills it.

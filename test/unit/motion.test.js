@@ -45,7 +45,8 @@ S.eq('the sprites are built at no roll', g._SPR_ROLL, null);
 var exact = true;
 for (var k = 0; k < 14; k++) if (g._sprLinkX(k, 14, 23, 0) !== -23 / 2 + (k + 0.5) * (23 / 14)) exact = false;
 S.ok('...where every link sits exactly where it always did', exact);
-var VEH = g.RTS_UNITS.filter(function (u) { return u.kind === 'vehicle' && !u.sea && !u.air; }).map(function (u) { return u.key; });
+/* on tracks or wheels: a hovercraft rides a skirt and has nothing to roll */
+var VEH = g.RTS_UNITS.filter(function (u) { return u.kind === 'vehicle' && !u.sea && !u.air && !u.hover; }).map(function (u) { return u.key; });
 S.ok('there are vehicles on the ground to roll', VEH.length >= 6, VEH.join(', '));
 var moved = [], closed = [], still = [], links = [], teeth = [], tracked = [];
 /* the faces of b that are not in a: what a roll moved */
@@ -84,7 +85,7 @@ S.ok('on tracks, a quarter turn runs the links back', tracked.length >= 6 && lin
 S.ok('...and turns the drive sprocket', teeth.length === tracked.length, teeth.length + ' of ' + tracked.length);
 S.ok('every vehicle on tracks or wheels has running gear to roll', still.length === 0, still.join(', ') || 'all');
 S.ok('...a quarter turn of it changes the model', moved.length === VEH.length, moved.length + ' of ' + VEH.length + ': ' + moved.join(', '));
-S.ok('...and a full turn brings every link, tooth and nut back onto the pattern', closed.length === VEH.length, closed.length + ' of ' + VEH.length);
+S.ok('...and a full turn brings every link, tooth and nut back onto the pattern', closed.length === VEH.length, closed.length + ' of ' + VEH.length + ' (open: ' + VEH.filter(function (k) { return closed.indexOf(k) < 0; }).join(', ') + ')');
 g._SPR_ROLL_LEN = 0; g._sprUnitModel('rifle', 'player', false, null);
 S.eq('a soldier has nothing to roll', g._SPR_ROLL_LEN, 0);
 var pitch = 23 / 14, dx = g._sprLinkX(3, 14, 23, 0.1) - g._sprLinkX(3, 14, 23, 0);

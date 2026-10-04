@@ -185,7 +185,8 @@ function _rtsKill(e) {
          few pieces for a light vehicle, more for a heavy one. Its own generator off the id, as the
          building's is, so the game's stream does not move (tick.js flies them). Not from a hull
          afloat, which goes down rather than up. */
-      if (!ud.sea && !e.air) {
+      var afloat = ud.sea || (ud.hover && G.terrain[_rtsIdx(_rtsTX(e.x), _rtsTX(e.z))] === RTS_T_WATER);
+      if (!afloat && !e.air) {
         var vrn = _rtsRngMake((e.id * 6151) >>> 0), vn = 3 + Math.min(5, Math.round(ud.hp / 150));
         for (var vk = 0; vk < vn; vk++) {
           var va = vrn() * 6.283, vs = 3 + vrn() * 9;
@@ -198,7 +199,7 @@ function _rtsKill(e) {
          guttering into ~7s of smoke. It is what makes ground where a battle just happened
          look like ground where a battle just happened. Land vehicles only: a sinking ship
          leaves water, and a helicopter dies where it FELL FROM, not where it lands. */
-      if (!e.crushed && !ud.sea && ud.kind !== 'air') {
+      if (!e.crushed && !afloat && ud.kind !== 'air') {
         var wkind = (e.r || 1) >= 1.2 ? 'firemed' : 'firesmall';
         var wbase = 0.55 + (e.r || 1) * 0.28;
         /* `husk`: what burned, for the 3D mode to leave its hull standing in the fire until
