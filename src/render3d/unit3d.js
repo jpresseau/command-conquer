@@ -80,6 +80,7 @@ function _r3dShipSwell(e, t) {
 }
 
 /* Far enough out that a unit is a few dozen pixels long: the plain models will do (mesh3d.js). */
+var R3D_SLING_DROP = 0.4;        /* world units a slung load hangs under its crane: between its legs, under the hook */
 var R3D_LOD_CELL = 20;           /* device px a map cell, below which */
 function _r3dLodFar(R3) {
   return !R3.lodOff && typeof _rtsZoom === 'function' && _rtsZoom() * RTS_TILE * (R3.scale || 1) < R3D_LOD_CELL;
@@ -145,6 +146,13 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
     for (var ri = 0; ri < hubs.length; ri++) drawIn(C, rm, hubs[ri].x, y, hubs[ri].z, hubs[ri].a, ART2W, hd, 1, rk.n);
   }
   if (rotor && AP.prop) drawIn(C, _r3dMesh('u', e.def, e.side, 'prop' + _r3dPropPhase(mo.spin), false, 0, 0, lod), e.x, y, e.z, -e.rot, ART2W, hd, 1, rk.n);
+  /* A SLUNG LOAD (a Sky Crane's): the vehicle it carries hangs under it, never through the ground */
+  if (d2.slings && e.cargo && e.cargo.length && R3.slingOff !== true) {     /* R3.slingOff: a spec's A/B */
+    var cg = e.cargo[0], cgt = R.spr.turret && R.spr.turret[cg.side] && R.spr.turret[cg.side][cg.def];
+    var cy = Math.max(_rtsStandY(e.x, e.z), y - R3D_SLING_DROP);
+    drawIn(C, _r3dMesh('u', cg.def, cg.side, cgt ? 'hull' : null, false, 0, 0, lod), e.x, cy, e.z, -e.rot, ART2W, hd, 1, rk.n);
+    if (cgt) drawIn(C, _r3dMesh('u', cg.def, cg.side, 'turret', false, 0, 0, lod), e.x, cy, e.z, -e.rot, ART2W, hd, 1, rk.n);
+  }
 }
 
 /* Where a helicopter's rotors turn, in the world, and at what angle: one over the hub, or - a

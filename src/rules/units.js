@@ -138,6 +138,14 @@ var RTS_UNITS = [
     needs:['afld'], air:true, ammo:30, rearm:5, alt:15,
     side:'soviet', armour:'light',
     desc:'Strafes infantry. Barely scratches armour — send it at the men, not the tanks.' },
+  /* SKY CRANE. The verb is the Skylift's for armour: one vehicle lifted and set down anywhere -
+     a tank over a river, a Repair Truck to the front, a Harvester to a field cut off by water.
+     The Dominion's lift, as the Skylift is the Compact's. It carries its load slung under it
+     (render3d/unit3d.js); shot down over water, the load goes with it. Unarmed. */
+  { key:'skycrane', name:'Sky Crane',     kind:'air',      cost:1300, build:14, hp:220,  speed:16,  turn:3.0,r:2.2, sight:16, weapon:null,
+    needs:['afld'], air:true, alt:14, carries:1, takes:['vehicle'], slings:true,
+    side:'soviet', armour:'light',
+    desc:'Lifts one of your vehicles and sets it down anywhere. Order a vehicle onto it, then click where to drop it.' },
   /* FLAK TRACK. The verb is ESCORT: the armour column takes its anti-aircraft cover with it.
      Until this, everything that could shoot down an aircraft either stood still (the AA Gun,
      the Rocket Turret) or was a squad on foot (rockets), so a gunship could pick apart a tank
