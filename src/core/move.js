@@ -186,6 +186,7 @@ function _rtsSeparate(dt) {
        each other through a shoreline they should not be able to cross. Same shape of mistake
        as leaving aircraft in this pass, which is what kept a helicopter off its own pad. */
     var dom = _rtsDomainOf(e) || 'land';
+    if (dom === 'shallow') dom = 'sea';                  /* a Monitor crowds with the other hulls */
     var k = dom + ':' + ((e.x / cell) | 0) + ':' + ((e.z / cell) | 0);
     (buckets[k] || (buckets[k] = [])).push(e);
   }

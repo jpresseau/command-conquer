@@ -107,6 +107,10 @@ ship or hovercraft. A Destroyer's sonar finds them.
 **Mend the fleet at sea.** The Repair Tender repairs every ship of yours near it for free, and
 sails to a damaged one by itself, so a fleet no longer goes home to be patched up.
 
+**Shell the coast at low tide.** The Dominion's River Monitor is flat-bottomed: when the tide goes
+out it can sit on the drying flats, where no other ship can go, and shell the shore from right
+under it.
+
 **The enemy uses its whole garage.** It mines the approach to its own base, and once you have a
 harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands
 them beside your ore field, and goes home to do it again.

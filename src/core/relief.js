@@ -225,7 +225,7 @@ var RTS_ELEV_RANGE = 0.9;
    Air is at its own altitude for the same reason and has been from the start. */
 function _rtsStandHeight(e) {
   if (!e || e.air) return 0;
-  if (_rtsDomainOf(e) === 'sea') return 0;
+  if (_rtsDomainOf(e) === 'sea' || _rtsDomainOf(e) === 'shallow') return 0;
   return _rtsElev(e.x, e.z);
 }
 

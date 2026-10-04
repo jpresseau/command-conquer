@@ -706,7 +706,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">7aff908 · 2026-10-04</div>
+  <div id="rtsBuild" title="build">9f8388d · 2026-10-04</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1298,6 +1298,14 @@ var RTS_UNITS = [
     needs:['shipyard'], sea:true, heals:RTS_TILE * 3, healRate:14, healKind:'ship',
     armour:'heavy',
     desc:'Repairs your ships near it, for free, wherever they are. Sails to a damaged one by itself. Unarmed.' },
+  /* RIVER MONITOR. The verb is the LOW-WATER BOMBARDMENT: flat-bottomed (`shallow`, its own
+     domain), it sits on the tidal flats when the sea goes out and every other hull has to keep
+     off them, and shells the coast from right under it. The Dominion's, from its Sub Pen -
+     core/monitor.js. */
+  { key:'monitor',  name:'River Monitor',kind:'ship',     cost:1300, build:15, hp:750,  speed:9,   turn:1.4,r:2.4, sight:24,
+    weapon:'monitorgun', needs:['subpen'], sea:true, shallow:true, side:'soviet',
+    armour:'heavy',
+    desc:'A flat-bottomed gun barge. At low tide it can sit on the drying flats, where no other ship can go, and shell the shore.' },
   { key:'lst',      name:'Landing Craft',kind:'ship',     cost:700,  build:10, hp:400,  speed:12,  turn:1.6,r:2.4, sight:14, weapon:null,
     needs:['shipyard'], sea:true, carries:5, takes:['infantry', 'vehicle'],
     armour:'heavy',
@@ -1455,6 +1463,10 @@ var RTS_WEAPONS = {
      work rather than a special case: 1.4 against wood and 1.3 against concrete make it a siege
      piece, 0.75 against heavy make it a poor duellist, and a Cruiser that lets submarines close
      is in real trouble - it carries no sonar and its reach is worth nothing at knife range. */
+  /* The River Monitor's twin heavy gun: a short-range shore battery, heavy against buildings,
+     from a hull that sits right under the coast (core/monitor.js). */
+  monitorgun: { dmg:70, range:24, cool:2.8, shot:'shell', speed:50, splash:3.0, wall:true, wood:true,
+                verses:{ none:0.6, wood:1.3, light:1.0, heavy:0.8, concrete:1.2 } },
   cruisergun: { dmg:90, range:38, cool:3.4, burst:2, shot:'shell', speed:55, splash:4.0,
                 wall:true, wood:true,
                 verses:{ none:0.5, wood:1.4, light:1.0, heavy:0.75, concrete:1.3 } },
@@ -7919,6 +7931,20 @@ function _sprUnitHulls(X, key) {
     });
     _r3Cyl(m, -Lt * 0.10, 3.6, Wt * 0.30, 0.6, 1.8, GN[1], GN[2], 16);   /* gas bottles for the rig */
     _r3Cyl(m, -Lt * 0.10, 3.6, Wt * 0.18, 0.6, 1.8, GN[1], GN[2], 16);
+  } else if (key === 'monitor') {
+    /* RIVER MONITOR. A low flat barge riding almost awash, with ONE big armoured turret and its
+       twin heavy barrels forward, a small conning tower behind it and nothing else. The identity
+       is the low hull under the oversized turret - a gun that floats rather than a ship. */
+    var Lo = 22, Wo = 8.0;
+    _r3Slab(m, 0, 0.4, 0, Lo, 2.0, Wo, 1.6, VH[0], VH[1]);              /* the low hull, square-ended */
+    _r3Box(m, Lo * 0.44, 0.6, 0, Lo * 0.12, 1.6, Wo * 0.70, VH[1], VH[3]); /* blunt bow */
+    _r3Cyl(m, Lo * 0.12, 3.0, 0, 3.4, 2.6, VH[3], VH[1], 20);           /* the turret */
+    _r3Cyl(m, Lo * 0.12, 5.4, 0, 2.6, 0.5, TM[1], TM[3], 20);           /* team ring on its roof */
+    for (var bb = -1; bb <= 1; bb += 2) _r3Box(m, Lo * 0.12 + 5.2, 3.6, bb * 0.9, 7.0, 0.9, 0.9, GN[0], GN[2]);   /* twin heavy barrels */
+    _r3Box(m, -Lo * 0.18, 3.4, 0, 3.4, 3.2, 3.2, VH[2], VH[0]);          /* conning tower */
+    _r3Box(m, -Lo * 0.18 + 1.75, 4.4, 0, 0.3, 0.8, 2.6, RTS_PAL.glass, RTS_PAL.glass);   /* its vision slit */
+    _r3Cyl(m, -Lo * 0.32, 3.0, 0, 0.9, 2.0, DK[1], DK[0], 16);          /* low stack */
+    for (var rl = -1; rl <= 1; rl += 2) _r3Box(m, -Lo * 0.05, 1.6, rl * Wo * 0.47, Lo * 0.80, 0.4, 0.3, DK[0], DK[0]);   /* rubbing strakes */
   } else return false;
   return true;
 }
@@ -10169,6 +10195,8 @@ function _rtsBlocked(tx, tz, dom) {
      water to a ship. This is the one place passability hears of it. */
   var dry = G.tideDry && G.tideDry[i];
   if (dom === 'sea') return G.terrain[i] !== RTS_T_WATER || G.blocked[i] === 1 || dry === 1;
+  /* 'shallow' is the River Monitor's (core/monitor.js): water at any tide - it sits on the flats */
+  if (dom === 'shallow') return G.terrain[i] !== RTS_T_WATER || G.blocked[i] === 1;
   /* 'hover' is both: open water as a ship has it, and everything a land unit may cross. A
      structure, a shipyard's water, rock and trees still stop it. */
   if (dom === 'hover') return G.terrain[i] === RTS_T_WATER ? G.blocked[i] === 1 : G.blocked[i] !== 0;
@@ -10178,7 +10206,7 @@ function _rtsBlocked(tx, tz, dom) {
 function _rtsDomainOf(e) {
   if (!e) return null;
   var d = (e.type === 'unit') ? rtsUnitDef(e.def) : null;
-  return (d && d.sea) ? 'sea' : (d && d.hover) ? 'hover' : null;
+  return (d && d.shallow) ? 'shallow' : (d && d.sea) ? 'sea' : (d && d.hover) ? 'hover' : null;
 }
 
 /* Deterministic PRNG so a given seed always lays out the same battlefield. */
@@ -10327,7 +10355,7 @@ function _rtsPath(sx, sz, gx, gz, dom) {
      else made: e2e/navy cuts its duel arena over whatever terrain was there, and the
      submarine-versus-gunboat result went from +33 to -33 as hulls sailed around scenery they
      should never have noticed. Any map this game did not generate can do the same. */
-  var HGT = (dom === 'sea') ? null : ((window._rtsG && window._rtsG.height) || null);
+  var HGT = (dom === 'sea' || dom === 'shallow') ? null : ((window._rtsG && window._rtsG.height) || null);
   function H(i) { var ax = Math.abs((i % RTS_N) - gtx), az = Math.abs(((i / RTS_N) | 0) - gtz);
     return (ax > az) ? (ax - az) + 1.41421 * az : (az - ax) + 1.41421 * ax; }
   P.g[start] = 0; P.f[start] = H(start); P.stamp[start] = run; P.state[start] = 1; _rtsHeapPush(start);
@@ -10768,7 +10796,7 @@ var RTS_ELEV_RANGE = 0.9;
    Air is at its own altitude for the same reason and has been from the start. */
 function _rtsStandHeight(e) {
   if (!e || e.air) return 0;
-  if (_rtsDomainOf(e) === 'sea') return 0;
+  if (_rtsDomainOf(e) === 'sea' || _rtsDomainOf(e) === 'shallow') return 0;
   return _rtsElev(e.x, e.z);
 }
 
@@ -15571,6 +15599,7 @@ function _rtsSeparate(dt) {
        each other through a shoreline they should not be able to cross. Same shape of mistake
        as leaving aircraft in this pass, which is what kept a helicopter off its own pad. */
     var dom = _rtsDomainOf(e) || 'land';
+    if (dom === 'shallow') dom = 'sea';                  /* a Monitor crowds with the other hulls */
     var k = dom + ':' + ((e.x / cell) | 0) + ':' + ((e.z / cell) | 0);
     (buckets[k] || (buckets[k] = [])).push(e);
   }
@@ -18206,7 +18235,8 @@ function _rtsAISupport(S) {
          _rtsAISupportBuy(S, 'drone', function () { return _rtsAIHalfBlind() && _rtsAIDefended(); }) ||  /* eyes in fog, or on a Jammer: core/drone.js */
          _rtsAISupportBuy(S, 'bomber', function () { return _rtsPlayerDefences() >= RTS_JAM.digIn && _rtsAIDefended(); }) ||  /* a carpet across the base: core/bomber.js */
          _rtsAISupportBuy(S, 'mineboat', function (G) { return _rtsAISeaMineSpots(G).length > 0; }) ||  /* the channel to its yard: core/seamines.js */
-         _rtsAISupportBuy(S, 'tender', function () { return _rtsAIFieldVehicles('ship') >= RTS_FIX.fleet; });  /* a fleet worth mending: core/repairtruck.js */
+         _rtsAISupportBuy(S, 'tender', function () { return _rtsAIFieldVehicles('ship') >= RTS_FIX.fleet; }) ||  /* a fleet worth mending: core/repairtruck.js */
+         _rtsAISupportBuy(S, 'monitor', function () { return _rtsAIDefended() && !!_rtsAIMonitorTarget(); });  /* a coast to shell: core/monitor.js */
 }
 function _rtsAISupportBuy(S, key, worth) {
   var G = window._rtsG, d = rtsUnitDef(key);
@@ -18856,6 +18886,54 @@ function _rtsAISeaMinesTick(dt) {
   }
 }
 </script>
+<script>/* core/monitor.js - the River Monitor: a gun that sits on the flats.
+
+   The verb is THE LOW-WATER BOMBARDMENT. When the tide goes out (core/tide.js) the flats dry and
+   every hull afloat has to keep off them: they are ground to a ship. The Monitor is
+   flat-bottomed - it moves in its own domain, `shallow` (core/grid.js _rtsBlocked), in which any
+   water cell is open whatever the tide, dry or not - so at low water it can sit on the flats
+   right under a coast that every other ship has been pushed away from, and shell it. Being a
+   ship, it is never swamped. It cannot go ashore.
+
+   The Dominion's, from its Sub Pen: the Compact has the Cruiser for the long reach; this is the
+   short, close, tide-riding answer.
+
+   The opponent buys one once it has a yard, its own base is defended and the player has a
+   building within the Monitor's reach of the water. It sends it at that building, the one
+   nearest the Monitor, whenever it is idle. */
+
+var RTS_MONITOR = { every: 2 };
+
+/* The player's building nearest the Monitor that it can shell from water: one with an open
+   cell of the Monitor's water within a cell of its reach. */
+function _rtsAIMonitorTarget(u) {
+  var G = window._rtsG, d = rtsUnitDef('monitor'), reach = RTS_WEAPONS[d.weapon].range / RTS_TILE - 1;
+  var from = u || _rtsShipyardOf('enemy', null), best = null, bd = 1e9;
+  if (!from) return null;
+  for (var i = 0; i < G.ents.length; i++) {
+    var b = G.ents[i];
+    if (b.dead || b.side !== 'player' || b.type !== 'struct') continue;
+    var w = _rtsNearestOpen(_rtsTX(b.x), _rtsTX(b.z), Math.floor(reach), 'shallow');
+    if (!w || Math.hypot(_rtsWX(w[0]) - b.x, _rtsWX(w[1]) - b.z) / RTS_TILE > reach) continue;
+    var dd = Math.hypot(b.x - from.x, b.z - from.z);
+    if (dd < bd) { bd = dd; best = b; }
+  }
+  return best;
+}
+function _rtsAIMonitorTick(dt) {
+  var G = window._rtsG;
+  G.ai.monT = (G.ai.monT || 0) + dt;
+  if (G.ai.monT < RTS_MONITOR.every) return;
+  G.ai.monT = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var u = G.ents[i];
+    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || u.def !== 'monitor') continue;
+    if (u.order === 'attack' && u.target && !u.target.dead) continue;
+    var t = _rtsAIMonitorTarget(u);
+    if (t) _rtsOrderAttack(u, t);
+  }
+}
+</script>
 <script>/* core/missions.js - the team mission list (TEAMTYPE.CPP): the script a team runs.
    Part of rts.core, the simulation. */
 
@@ -19308,6 +19386,7 @@ function _rtsUpdateAI(dt) {
   _rtsAIParaTick(dt);           /* ...and the paratroopers go over the wall - core/paradrop.js */
   _rtsAIDroneTick(dt);          /* ...and the drone watches over the attack - core/drone.js */
   _rtsAISeaMinesTick(dt);       /* ...and the Mine Boat mines the channel - core/seamines.js */
+  _rtsAIMonitorTick(dt);        /* ...and the Monitor shells the coast - core/monitor.js */
   _rtsAIBombTick(dt);           /* ...and the bomber lays its carpet - core/bomber.js */
   _rtsAISupers(dt);
   /* Rich: refill a line as soon as it empties, rather than waiting up to five seconds for

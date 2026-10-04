@@ -107,3 +107,20 @@ Both armies' repair ship (`tender`), from either yard. It is the Repair Truck wi
 `unit/tender` (10 assertions, 5 mutants killed). The sixth mutant survived because the line it
 removed, which snapped the AI's goal to water, was redundant: ship pathing already handles a goal
 on land. The line was taken out.
+
+## The River Monitor — the low-water bombardment
+
+The Dominion's flat-bottomed gun barge (`monitor`, `shallow:true`), from its Sub Pen
+(`core/monitor.js`):
+- It moves in its own domain, `'shallow'` (core/grid.js `_rtsDomainOf` / `_rtsBlocked`): any
+  water cell is open to it at any tide, so it can sit on a dried flat that is ground to every
+  other ship. It is a ship, so the tide never swamps it, and it cannot go ashore. Everything that
+  treats `'sea'` as "afloat" treats `'shallow'` the same way: the path's seabed height
+  (`_rtsPath`), stand height (`_rtsStandHeight`), and crowding with the other hulls (`move.js`).
+- `monitorgun`: a 24-reach heavy gun, strong against buildings.
+- The opponent buys one once its own base is defended and the player has a building the Monitor
+  can reach from water (`_rtsAIMonitorTarget`). Whenever it is idle, it sends the Monitor at the
+  one nearest to it.
+
+`unit/monitor` (14 assertions, 7 of 8 mutants killed). The survivor drops the circular trim on
+the reach check, which the square search radius before it already nearly makes.
