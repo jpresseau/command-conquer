@@ -706,7 +706,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">723d2b7 · 2026-10-04</div>
+  <div id="rtsBuild" title="build">0695f1b · 2026-10-04</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1140,6 +1140,12 @@ var RTS_UNITS = [
   { key:'sweeper',  name:'Mine Sweeper',  kind:'vehicle',  cost:700,  build:10, hp:420,  speed:9,   turn:2.0,r:1.9, sight:16, weapon:null,
     needs:['factory'], sweeps:true, tracked:true, armour:'heavy',
     desc:'Finds enemy mines within four cells and shows them, and clears any it reaches. Never sets one off.' },
+  /* SPOTTER. The verb is SEEING FOR OTHERS: fog and the Fog Bank blind the long guns, and this is
+     their eyes. Its own sight is never shortened by fog, and every gun of its side finds what it
+     sees at full reach - core/spotter.js. A light machine gun for the men who find it. */
+  { key:'spotter',  name:'Spotter',       kind:'vehicle',  cost:600,  build:9,  hp:160,  speed:20,  turn:4.0,r:1.6, sight:28, weapon:'mg',
+    needs:['radar'], spots:true, armour:'light',
+    desc:'Sees through fog and fog banks, and your guns can hit anything it sees at their full range.' },
   /* Armoured Personnel Carrier. UDATA.CPP's UnitAPC is IsCrusher with no turret; the transport
      rules are in UNIT.CPP - capacity via Max_Passengers, and, in Death, the half of the branch
      that matters: when a TRANSPORT dies its infantry passengers are unlimboed at the wreck and
@@ -6466,7 +6472,7 @@ function _sprBuildingClean(key, side) {
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
   dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46,
-  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38
+  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -7498,6 +7504,35 @@ function _sprUnitSpecial(X, key) {
     _r3Box(m, -9.6, 9.4, -3.0, 0.1, 1.0, 1.4, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);  /* its pennant */
     _r3Box(m, 7.6, 5.0, -3.8, 0.9, 1.0, 1.4, GN[3], GN[3]);       /* headlights */
     _r3Box(m, 7.6, 5.0, 3.8, 0.9, 1.0, 1.4, GN[3], GN[3]);
+  } else if (key === 'spotter') {
+    /* SPOTTER. A light four-wheeler carrying an optics mast: a telescoping pole off the rear
+       deck, a sensor head with a big lens and a small dish on top. The identity is that MAST -
+       the tallest thing on any wheeled hull - and the lens catching the light. */
+    for (i = 0; i < 4; i++) {
+      var wx = i < 2 ? 5.8 : -5.6, wz = (i % 2) ? 5.4 : -5.4;
+      _r3Wheel(m, wx, 2.8, wz, 2.8, 3.0, 'z', DK[0], DK[1], 22);
+      _r3Wheel(m, wx, 2.8, wz, 1.3, 3.3, 'z', S[2], S[1], 16);      /* hub */
+      if (!_SPR_ROLL_LEN) { _SPR_ROLL_LEN = 2.8 * Math.PI * 2 / 5; _SPR_ROLL_KIND = 'wheel'; }
+      for (var wn = 0; wn < 5; wn++) {
+        var wa = (wn - (_SPR_ROLL || 0)) / 5 * Math.PI * 2;
+        _r3Box(m, wx + Math.cos(wa) * 0.85, 2.8 + Math.sin(wa) * 0.85, wz, 0.4, 0.4, 3.5, S[3], S[2]);
+      }
+    }
+    _r3Slab(m, 0, 2.6, 0, 16.0, 3.0, 7.8, 1.0, VH[0], VH[3]);      /* body */
+    _r3Box(m, 6.2, 3.0, 0, 3.4, 2.0, 7.2, VH[1], VH[3]);           /* nose */
+    _r3Slab(m, 1.8, 5.6, 0, 6.0, 2.6, 7.0, 0.7, VH[1], TM[1]);     /* cab - team roof */
+    _r3Box(m, 4.9, 6.6, 0, 0.5, 1.4, 6.0, RTS_PAL.glass, RTS_PAL.glass);   /* windscreen */
+    _r3Box(m, -4.2, 5.6, 0, 6.0, 1.2, 6.6, S[1], S[2]);            /* equipment deck */
+    _r3Cyl(m, -4.6, 6.8, 0, 1.0, 6.0, S[2], S[1], 16);             /* the mast, two stages */
+    _r3Cyl(m, -4.6, 12.8, 0, 0.7, 4.0, S[3], S[2], 16);
+    _r3Box(m, -4.6, 16.8, 0, 2.6, 1.8, 2.2, DK[1], DK[2]);         /* the sensor head */
+    _r3Wheel(m, -3.1, 17.7, 0, 0.8, 0.5, 'x', RTS_PAL.glass, RTS_PAL.lit, 18);   /* its lens */
+    _r3Cone(m, -4.6, 18.6, 0, 0.3, 1.5, 0.7, S[3], 18);            /* the dish */
+    _r3Box(m, -7.2, 5.6, -2.8, 2.0, 1.6, 1.6, DK[1], DK[2]);       /* cases */
+    _r3Box(m, -7.2, 5.6, 2.8, 2.0, 1.6, 1.6, DK[1], DK[2]);
+    _r3Box(m, 1.2, 8.2, 0, 4.0, 0.9, 0.9, DK[1], DK[3]);           /* pintle gun */
+    _r3Box(m, 8.0, 3.4, -2.6, 0.9, 1.0, 1.4, GN[3], GN[3]);        /* headlights */
+    _r3Box(m, 8.0, 3.4, 2.6, 0.9, 1.0, 1.4, GN[3], GN[3]);
   } else if (key === 'bridgelayer') {
     /* BRIDGE LAYER. A tank hull carrying its bridge folded in two on its back: a long pale deck
        with a truss along each side and the hinge at the front, overhanging the hull at both ends.
@@ -11893,6 +11928,81 @@ function _rtsAISweepTick() {
   }
 }
 </script>
+<script>/* core/spotter.js - the Spotter: eyes for the long guns.
+
+   The verb is SEEING FOR OTHERS. Fog and the Fog Bank shorten what every eye sees and how far
+   every gun looks for a target (core/skyplay.js, core/wxsupers.js); the long guns - artillery,
+   rocket artillery, the cruisers, the towers - are the ones that lose most by it. The Spotter
+   is the answer:
+
+     IT SEES THROUGH   its own sight disc is never capped by fog, a sandstorm or a fog bank, and
+                       what it sees in a fog bank is not hidden from it (_rtsVisTick)
+     IT SPOTS          anything inside its sight is SPOTTED for its side: every gun of that side
+                       finds a spotted target at its full reach, fog or no fog (_rtsFindTarget)
+
+   G.spot holds, per side, the discs its spotters see this tick - plain numbers, built once a tick
+   (_rtsSpotTick), so the many questions a target search asks cost a short loop each.
+
+   The opponent buys one when its long guns are fighting blind - under fog or a sandstorm with a
+   long gun to see for (_rtsAISupport, core/aimines.js) - and keeps it a few cells ahead of the
+   nearest of them, toward the player's base. */
+
+var RTS_SPOT = { ahead: 4, every: 2 };
+
+function _rtsSpots(u) { return !!(rtsUnitDef(u.def) || {}).spots; }
+function _rtsSpotTick() {
+  var G = window._rtsG, sp = { player: [], enemy: [] };
+  for (var i = 0; i < G.ents.length; i++) {
+    var u = G.ents[i];
+    if (u.dead || u.inside || u.type !== 'unit' || !sp[u.side] || !_rtsSpots(u)) continue;
+    sp[u.side].push({ x: u.x, z: u.z, r: rtsSightTiles(rtsUnitDef(u.def)) * RTS_TILE });
+  }
+  G.spot = sp;
+}
+/* Is `o` inside the sight of a spotter of `side`? */
+function _rtsSpotted(o, side) {
+  var G = window._rtsG, L = G && G.spot && G.spot[side];
+  if (!L || !L.length) return false;
+  for (var i = 0; i < L.length; i++) if (Math.hypot(o.x - L[i].x, o.z - L[i].z) <= L[i].r) return true;
+  return false;
+}
+
+/* A long gun: anything that shoots further than it would otherwise see in fog. */
+function _rtsLongGun(u) {
+  var d = rtsUnitDef(u.def) || {}, w = d.weapon && RTS_WEAPONS[d.weapon];
+  return !!(w && w.range > RTS_FOG_CELLS * RTS_TILE && !d.air);
+}
+function _rtsAILongGuns() {
+  var G = window._rtsG, n = 0;
+  for (var i = 0; i < G.ents.length; i++) { var u = G.ents[i]; if (!u.dead && u.side === 'enemy' && u.type === 'unit' && _rtsLongGun(u)) n++; }
+  return n;
+}
+/* The opponent's spotter: a few cells ahead of the nearest long gun, toward the player's base. */
+function _rtsAISpotTick(dt) {
+  var G = window._rtsG;
+  G.ai.spotT = (G.ai.spotT || 0) + dt;
+  if (G.ai.spotT < RTS_SPOT.every) return;
+  G.ai.spotT = 0;
+  var py = _rtsHas('player', 'yard');
+  if (!py) return;
+  for (var i = 0; i < G.ents.length; i++) {
+    var s = G.ents[i];
+    if (s.dead || s.inside || s.side !== 'enemy' || s.type !== 'unit' || !_rtsSpots(s)) continue;
+    if (s.order === 'attack' && s.target && !s.target.dead) continue;          /* defending itself */
+    var gun = null, gd = 1e9;
+    for (var k = 0; k < G.ents.length; k++) {
+      var u = G.ents[k];
+      if (u.dead || u.inside || u.side !== 'enemy' || u.type !== 'unit' || !_rtsLongGun(u)) continue;
+      var d = Math.hypot(u.x - s.x, u.z - s.z);
+      if (d < gd) { gd = d; gun = u; }
+    }
+    if (!gun) continue;
+    var dx = py.x - gun.x, dz = py.z - gun.z, L = Math.hypot(dx, dz) || 1;
+    var ax = gun.x + dx / L * RTS_SPOT.ahead * RTS_TILE, az = gun.z + dz / L * RTS_SPOT.ahead * RTS_TILE;
+    if (Math.hypot(ax - s.x, az - s.z) > RTS_TILE * 2) _rtsOrderMove(s, ax, az, false);
+  }
+}
+</script>
 <script>/* core/bridgelayer.js - the Bridge Layer: a bridge where the map has none.
 
    The verb is the CROSSING: a river or a channel the map gave no bridge over, spanned where the
@@ -12502,13 +12612,13 @@ function _rtsRadiusTable() {
    the bites out of it where a ridge stands between the eye and the cell. On flat ground it
    takes none - slope from the eye rises toward zero with distance, so every cell clears the
    one before it - which is what makes this the loop it always was on a map without relief. */
-function _rtsSightFrom(tx, tz, range) {
+function _rtsSightFrom(tx, tz, range, clear) {
   var G = window._rtsG, T = _rtsRadiusTable();
   range = Math.max(0, Math.min(RTS_SIGHT_MAX, range | 0));
   var n = T.count[range] * 2, off = T.off, rr = range * range;
   var seen = _rtsHorizon(tx, tz, range);
   /* A FOG BANK in reach hides what is inside it past its own short sight (core/wxsupers.js) */
-  var banks = _rtsWxBanksNear(tx, tz, range), see2 = RTS_FOGBANK.see * RTS_FOGBANK.see;
+  var banks = clear ? null : _rtsWxBanksNear(tx, tz, range), see2 = RTS_FOGBANK.see * RTS_FOGBANK.see;   /* a Spotter's is clear */
   for (var i = 0; i < n; i += 2) {
     var dx = off[i], dz = off[i + 1];
     /* Sight_From filters the ring list by TRUE distance as well - the offset table is a
@@ -12537,7 +12647,9 @@ function _rtsVisTick(dt) {
     if (!def) continue;
     /* Standing high is worth a wider disc - see RTS_ELEV_SIGHT. _rtsSightFrom clamps to
        RTS_SIGHT_MAX, so the original's own ten-cell ceiling still holds over the bonus. */
-    _rtsSightFrom(_rtsTX(e.x), _rtsTX(e.z), _rtsWxSight(e.x, e.z, _rtsFogSight(rtsSightTiles(def) + _rtsSightBonus(e))));   /* fog: core/skyplay.js, wxsupers.js */
+    var cells = rtsSightTiles(def) + _rtsSightBonus(e), clear = e.type === 'unit' && !!def.spots;
+    /* fog caps every eye but a Spotter's (core/skyplay.js, wxsupers.js, spotter.js) */
+    _rtsSightFrom(_rtsTX(e.x), _rtsTX(e.z), clear ? cells : _rtsWxSight(e.x, e.z, _rtsFogSight(cells)), clear);
   }
   G.visDirty = 1;                 /* the renderer only re-bakes the shroud when this is set */
 }
@@ -14170,7 +14282,11 @@ function _rtsGunEngages(w, o) {
 }
 function _rtsFindTarget(e, range, w) {
   var G = window._rtsG, foe = _rtsEnemyOf(e.side), best = null, bv = 0;
-  range = _rtsFogReach(range);                  /* in fog nothing looks further: core/skyplay.js */
+  /* in fog nothing looks further (core/skyplay.js) - except at what a Spotter of ours sees, which
+     is found at full reach (core/spotter.js); so the search spans the full reach, and the fog's
+     cap is asked per candidate */
+  var full = range, fogged = _rtsFogReach(range), spot = window._rtsG.spot && window._rtsG.spot[e.side] && window._rtsG.spot[e.side].length;
+  if (!spot) range = fogged;
   /* The candidate list, not the candidate test. core/spatial.js hands back the entities whose
      buckets touch our own reach, in entity-list order, so everything below runs exactly as it
      did over a shorter list - and falls back to the whole list when there is no index. The
@@ -14198,8 +14314,9 @@ function _rtsFindTarget(e, range, w) {
        with shooting - how far to the refinery, which of two threats is nearer, is the transport
        close enough to board. An asymmetric distance would have quietly answered all of those
        differently too, and none of them are about height. */
-    if (dist > _rtsElevReach(e, o, range)) continue;
-    if (!_rtsWxFinds(e, o, dist)) continue;          /* a fog bank between them: core/wxsupers.js */
+    var seen = spot && _rtsSpotted(o, e.side);
+    if (dist > _rtsElevReach(e, o, seen ? full : fogged)) continue;
+    if (!seen && !_rtsWxFinds(e, o, dist)) continue;  /* a fog bank between them: core/wxsupers.js */
     var v = _rtsEvalObject(e, o, dist, w);
     if (v > bv) { bv = v; best = o; }
   }
@@ -17552,7 +17669,8 @@ function _rtsAIMendTick(dt) {
 function _rtsAISupport(S) {
   return _rtsAISupportBuy(S, 'minelayer', function (G) { return _rtsAIMineSpots(G).length > 0; }) ||   /* a land route to deny */
          _rtsAISupportBuy(S, 'hovercraft', function () { return !!_rtsAIHoverTarget(); }) ||           /* a harvester by the water: core/aihover.js */
-         _rtsAISupportBuy(S, 'sweeper', function (G) { return !!(G.mineHits && G.mineHits.length); });  /* a mine has cost it a unit: core/sweeper.js */
+         _rtsAISupportBuy(S, 'sweeper', function (G) { return !!(G.mineHits && G.mineHits.length); }) ||  /* a mine has cost it a unit: core/sweeper.js */
+         _rtsAISupportBuy(S, 'spotter', function () { return _rtsFogged() && _rtsAILongGuns() > 0; });    /* long guns blind in fog: core/spotter.js */
 }
 function _rtsAISupportBuy(S, key, worth) {
   var G = window._rtsG, d = rtsUnitDef(key);
@@ -18234,6 +18352,7 @@ function _rtsUpdateAI(dt) {
   _rtsAIMinesTick(dt);          /* ...and the layer mines the approach - core/aimines.js */
   _rtsAIHoverTick(dt);          /* ...and the Hovercraft raids by sea - core/aihover.js */
   _rtsAISweepTick();            /* ...and the sweeper clears where mines hurt it - core/sweeper.js */
+  _rtsAISpotTick(dt);           /* ...and the spotter sees for the long guns - core/spotter.js */
   _rtsAISupers(dt);
   /* Rich: refill a line as soon as it empties, rather than waiting up to five seconds for
      the next decision. Without this the opponent banks tens of thousands of credits it
@@ -18778,6 +18897,7 @@ function _rtsTick(dt) {
      units. Rebuilt here rather than kept up to date incrementally, because one pass over the
      list is what a SINGLE one of those scans used to cost. */
   _rtsSpBuild();
+  _rtsSpotTick();                                /* what the Spotters see: core/spotter.js */
   _rtsSkyPlayTick();                             /* the weather takes part: core/skyplay.js */
   if (G.msgT > 0) G.msgT -= dt;
 

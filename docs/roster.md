@@ -400,6 +400,19 @@ but a lost tank; this is the answer (`core/sweeper.js`):
 `unit/sweeper` (11 assertions, 10 mutants killed) and `e2e/sweeper` (the found mine drawn, a real
 click on the list).
 
+## The Spotter — seeing for others
+
+Both armies' fast four-wheeler with an optics mast (`spotter`), behind a Radar Post. Fog and the
+Fog Bank blind the long guns most; this is their eyes (`core/spotter.js`):
+- Its own sight (nine cells) is never capped by fog, a sandstorm or a fog bank, and ground in a
+  bank is not hidden from it.
+- Anything inside its sight is SPOTTED for its side (`G.spot`, rebuilt each tick): every gun of
+  that side finds a spotted target at full reach, fog or no fog. On a clear day it changes nothing.
+- The opponent buys one in fog when it has a long gun, and keeps it four cells ahead of the
+  nearest one, toward the player's base.
+
+`unit/spotter` (12 assertions, 10 mutants killed).
+
 ## The opponent uses the new vehicles
 
 - **The Mine Layer mines its approach** (`core/aimines.js`):

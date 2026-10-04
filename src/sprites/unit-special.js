@@ -161,6 +161,35 @@ function _sprUnitSpecial(X, key) {
     _r3Box(m, -9.6, 9.4, -3.0, 0.1, 1.0, 1.4, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);  /* its pennant */
     _r3Box(m, 7.6, 5.0, -3.8, 0.9, 1.0, 1.4, GN[3], GN[3]);       /* headlights */
     _r3Box(m, 7.6, 5.0, 3.8, 0.9, 1.0, 1.4, GN[3], GN[3]);
+  } else if (key === 'spotter') {
+    /* SPOTTER. A light four-wheeler carrying an optics mast: a telescoping pole off the rear
+       deck, a sensor head with a big lens and a small dish on top. The identity is that MAST -
+       the tallest thing on any wheeled hull - and the lens catching the light. */
+    for (i = 0; i < 4; i++) {
+      var wx = i < 2 ? 5.8 : -5.6, wz = (i % 2) ? 5.4 : -5.4;
+      _r3Wheel(m, wx, 2.8, wz, 2.8, 3.0, 'z', DK[0], DK[1], 22);
+      _r3Wheel(m, wx, 2.8, wz, 1.3, 3.3, 'z', S[2], S[1], 16);      /* hub */
+      if (!_SPR_ROLL_LEN) { _SPR_ROLL_LEN = 2.8 * Math.PI * 2 / 5; _SPR_ROLL_KIND = 'wheel'; }
+      for (var wn = 0; wn < 5; wn++) {
+        var wa = (wn - (_SPR_ROLL || 0)) / 5 * Math.PI * 2;
+        _r3Box(m, wx + Math.cos(wa) * 0.85, 2.8 + Math.sin(wa) * 0.85, wz, 0.4, 0.4, 3.5, S[3], S[2]);
+      }
+    }
+    _r3Slab(m, 0, 2.6, 0, 16.0, 3.0, 7.8, 1.0, VH[0], VH[3]);      /* body */
+    _r3Box(m, 6.2, 3.0, 0, 3.4, 2.0, 7.2, VH[1], VH[3]);           /* nose */
+    _r3Slab(m, 1.8, 5.6, 0, 6.0, 2.6, 7.0, 0.7, VH[1], TM[1]);     /* cab - team roof */
+    _r3Box(m, 4.9, 6.6, 0, 0.5, 1.4, 6.0, RTS_PAL.glass, RTS_PAL.glass);   /* windscreen */
+    _r3Box(m, -4.2, 5.6, 0, 6.0, 1.2, 6.6, S[1], S[2]);            /* equipment deck */
+    _r3Cyl(m, -4.6, 6.8, 0, 1.0, 6.0, S[2], S[1], 16);             /* the mast, two stages */
+    _r3Cyl(m, -4.6, 12.8, 0, 0.7, 4.0, S[3], S[2], 16);
+    _r3Box(m, -4.6, 16.8, 0, 2.6, 1.8, 2.2, DK[1], DK[2]);         /* the sensor head */
+    _r3Wheel(m, -3.1, 17.7, 0, 0.8, 0.5, 'x', RTS_PAL.glass, RTS_PAL.lit, 18);   /* its lens */
+    _r3Cone(m, -4.6, 18.6, 0, 0.3, 1.5, 0.7, S[3], 18);            /* the dish */
+    _r3Box(m, -7.2, 5.6, -2.8, 2.0, 1.6, 1.6, DK[1], DK[2]);       /* cases */
+    _r3Box(m, -7.2, 5.6, 2.8, 2.0, 1.6, 1.6, DK[1], DK[2]);
+    _r3Box(m, 1.2, 8.2, 0, 4.0, 0.9, 0.9, DK[1], DK[3]);           /* pintle gun */
+    _r3Box(m, 8.0, 3.4, -2.6, 0.9, 1.0, 1.4, GN[3], GN[3]);        /* headlights */
+    _r3Box(m, 8.0, 3.4, 2.6, 0.9, 1.0, 1.4, GN[3], GN[3]);
   } else if (key === 'bridgelayer') {
     /* BRIDGE LAYER. A tank hull carrying its bridge folded in two on its back: a long pale deck
        with a truss along each side and the hinge at the front, overhanging the hull at both ends.
