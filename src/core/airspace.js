@@ -14,7 +14,7 @@
                  it - or go to another pad, if there is a free one (_rtsRearmPad, core/move.js). */
 
 /* how high an aircraft is drawn above the ground it is over: its altitude, or a hop off the pad
-   while it rearms - the one figure the 2D and 3D renderers and the picking all use (render/camera.js) */
+   while it rearms - the one figure the renderer and the picking both use (render/camera.js) */
 function _rtsAirLift(e) {
   if (!e.air) return 0;
   if (e.rearming > 0) return 2;

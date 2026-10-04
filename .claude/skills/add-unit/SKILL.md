@@ -48,7 +48,7 @@ before writing it.
    - **Infantry** also needs `RTS_INF_KIT` colours, a branch in `_r3dSoldierModel`
      (`render3d/soldier3d.js`) and props in `crawl3d.js`. `unit/soldier` holds 3D against sprite
      height to within 20%.
-   - Look at it with the `visual-check` skill, in 2D and 3D, at phone zoom.
+   - Look at it with the `visual-check` skill, at phone zoom.
 4. **The AI** never builds a unit that is not in `RTS_AI.mix.<kind>` (`src/rules/ai.js`):
    `{key, at, w}`.
    - The weights are load-bearing. Best-first buying once produced 461 grenadiers.
@@ -83,7 +83,7 @@ before writing it.
    - **There is no fallback**: a missing branch makes the building invisible, and the geometry
      floor skips empty models.
    - `e2e/r3dsprites` holds the sprite to its `w x h` footprint.
-   - Optional liveliness: `alive3d.js` for 3D, `_rtsBldBusy` (`render/draw.js`) for 2D.
+   - Optional liveliness: `alive3d.js` (turning radar, smoke, beacons).
 3. **The AI**: if the structure goes in `buildOrder`, it **must** also have a `ratio` and a `limit`
    in `src/rules/ai.js`. `unit/rules` checks this both ways.
    - Never write `key === '<defence>'` in `core/ai.js` or `basezone.js`. A source scan fails it.

@@ -45,7 +45,7 @@ var TARGETS = [
   for (var i = 0; i < TARGETS.length; i++) {
     var T = TARGETS[i];
     var g = await openPage(browser, T.opts);
-    await g.start(7, 15, { mode3d: 'default' });
+    await g.start(7, 15, {});
     var r = await g.page.evaluate(function () {
       var R3 = window._R3D, R = window._rtsR, main = document.getElementById('rtsCv');
       var worst = 0, n = 0;

@@ -43,7 +43,6 @@ var S = new Suite('pixedge');
        picture, which the materials (render3d/terrain3d.js) replaced. It still serves the baked
        ground behind RTS_GROUND_LEGACY, and that is what this measures. */
     window.RTS_GROUND_LEGACY = true;
-    rts3dSet(true);
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;

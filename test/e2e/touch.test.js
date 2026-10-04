@@ -26,26 +26,19 @@ var browser = await chromium.launch();
   await page.waitForFunction(function () { return typeof window.rtsOpen === 'function'; });
 
   await page.evaluate(function () {
-    /* PINNED TO 2D, like every other spec - and this file has to do it by hand because it is
-       the one that never took the shared harness (it keeps its own page setup for the iPhone
-       profile and only borrows `serve`), so test/lib/game.js's pin never reaches it.
-
-       This is a spec about the INPUT layer: whether a finger drag pans, a tap selects, a hold
-       orders and two fingers zoom. The renderer under it is not the subject, and e2e/pan
-       already grades dragging in 3D, where the vertical component carries a cos(tilt) the flat
-       camera does not.
-
-       Left unpinned it did not fail honestly, either - it failed by being SLOW. When 3D became
-       the default this ran the whole GL renderer at iPhone 13 resolution and 3x DPR through a
-       software rasteriser: the spec went from 10.8s to 37.9s, and every single-finger gesture
-       came back dead - drag 0.0 world units, tap selected nothing, hold issued no order -
-       while the pinch, which needs no frames in between, still worked. That is a starved rAF
-       loop reported as broken input. */
-    try { window.localStorage.setItem(RTS_3D_LS, '0'); } catch (e) {}
+    /* THE FRAME LOOP IS STOPPED, because this is a spec about the INPUT layer: whether a finger
+       drag pans, a tap selects, a hold orders and two fingers zoom. The renderer is not the
+       subject, and at iPhone resolution a software rasteriser takes longer than the 350 ms hold
+       over one frame - so the hold timer fired between a drag's touchstart and its first
+       touchmove, the drag became a long-press, and it came back as "drag 0.0 world units", on
+       some runs and not others. Every handler here acts synchronously except the zoom's glide,
+       which the spec steps itself. */
+    try { window.localStorage.setItem('rtsGfxQ', 'low'); } catch (e) {}
     rtsOpen(7);
     for (var i = 0; i < 60 * 25; i++) _rtsTick(1 / 60);
+    if (window._rtsUI) window._rtsUI.dead = true;
+    _rtsRFrame(0);
   });
-  await page.waitForTimeout(400);
 
   var cdp = await ctx.newCDPSession(page);
   function pt(x, y) { return { x: x, y: y, radiusX: 12, radiusY: 12, force: 1 }; }
@@ -85,10 +78,13 @@ var browser = await chromium.launch();
     if (!mine) return { error: 'no player unit' };
     mine.x = _rtsR.focus.x; mine.z = _rtsR.focus.z;
     _rtsRFrame(0);
-    return { before: G.sel.length, unit: mine.def };
+    /* where it is DRAWN: the camera leans, so a unit stands up the screen from its ground point */
+    var s = _rtsScreenOf(mine);
+    return { before: G.sel.length, unit: mine.def, sx: s.x, sy: s.y };
   });
   var f2 = await focus();
-  await touch('touchStart', [pt(cx, cy)]);
+  var tx = sel.error ? cx : Math.round(box.x + sel.sx), ty = sel.error ? cy : Math.round(box.y + sel.sy);
+  await touch('touchStart', [pt(tx, ty)]);
   await page.waitForTimeout(60);
   await touch('touchEnd', []);
   await page.waitForTimeout(120);
@@ -121,7 +117,10 @@ var browser = await chromium.launch();
   await page.waitForTimeout(60);
   await touch('touchEnd', []);
   await page.waitForTimeout(120);
-  var z1 = await page.evaluate(function () { return _rtsZoom(); });
+  var z1 = await page.evaluate(function () {
+    for (var i = 0; i < 90; i++) _rtsZoomTick(1 / 30);       /* the glide the loop would run */
+    return _rtsZoom();
+  });
 
   /* ---- 5. the hint line says touch verbs, not mouse ones ---- */
   var hint = await page.evaluate(function () {

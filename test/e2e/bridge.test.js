@@ -7,8 +7,7 @@
                  deck changes with the bridges taken out
      ROADS       the road paint is in the picture over a country road, and what it paints there
                  is asphalt - a dark grey - where the cells under it are a dirt shoulder
-     2D          the bake paints the deck over the water, grey, not blue, and the 2D frame's
-                 animated sea leaves it alone; the radar shows it as road */
+     RADAR       the radar shows a bridge as road, not sea */
 
 var { chromium } = require('playwright');
 var { Suite } = require('../lib/assert.js');
@@ -50,7 +49,6 @@ var S = new Suite('bridge');
                 dist: +(Math.hypot(u.x - _rtsWX(fx), u.z - _rtsWX(fz)) / RTS_TILE).toFixed(2), alive: !u.dead };
 
     /* ---------- 3D ---------- */
-    rts3dSet(true);
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (o.on) {
@@ -107,22 +105,6 @@ var S = new Suite('bridge');
       R3.roadAmt = 1;
     }
 
-    /* ---------- 2D ---------- */
-    rts3dSet(false);
-    var T = R.terrain, tg = T.getContext('2d'), TS = RTS_TS;
-    function bakeAt(cx, cz) { var d = tg.getImageData(Math.round((cx + 0.5) * TS), Math.round((cz + 0.5) * TS), 1, 1).data; return [d[0], d[1], d[2]]; }
-    o.bakeDeck = bakeAt(mx + br.px * 0, mz + br.pz * 0);
-    /* open water beside the deck, two cells off it */
-    o.bakeSea = bakeAt(mx - br.px * 3, mz - br.pz * 3);
-    R.focus.x = _rtsWX(mx); R.focus.z = _rtsWX(mz); R.zi = RTS_ZOOMS.length - 2; _rtsApplyCam();
-    var blueish = 0, cells = 0;
-    for (var fr = 0; fr < 4; fr++) {
-      G.t += 0.3; _rtsRFrame(0.3);
-      var cv = R.cv, cg = cv.getContext('2d'), sp2 = _rtsGroundToScreen(_rtsWX(mx), _rtsWX(mz)), dpr = cv.width / cv.clientWidth;
-      var dd2 = cg.getImageData(Math.round(sp2.x * dpr) - 3, Math.round(sp2.y * dpr) - 3, 7, 7).data;
-      for (var j = 0; j < dd2.length; j += 4) { cells++; if (dd2[j + 2] > dd2[j] + 25) blueish++; }
-    }
-    o.frameBlue = +(blueish / cells).toFixed(2);
     /* the radar, lit for the measurement */
     var lit = window._rtsRadarLit; window._rtsRadarLit = function () { return true; };
     _rtsDrawMini(); window._rtsRadarLit = lit;
@@ -150,9 +132,6 @@ var S = new Suite('bridge');
              out.roadRgb[0] < out.dirtRgb[0] - 20, 'rgb ' + out.roadRgb + ' against ' + out.dirtRgb + ' unpainted');
       }
     }
-    S.ok('in 2D the bake paints the deck over the water: grey, not blue', Math.abs(out.bakeDeck[2] - out.bakeDeck[0]) < 25 && out.bakeSea[2] > out.bakeSea[0] + 30,
-         'deck rgb ' + out.bakeDeck + ', the sea beside it ' + out.bakeSea);
-    S.ok('...and the 2D frame\'s moving sea leaves it alone', out.frameBlue < 0.1, (out.frameBlue * 100) + '% of the deck\'s pixels blue over four frames');
     S.ok('the radar shows a bridge as road, not sea', out.radar[0] > out.radar[2] + 15, 'rgb ' + out.radar);
   }
   S.ok('no page errors', g.errors.length === 0, g.errors.join(' | ') || 'none');

@@ -69,12 +69,12 @@ async function openPage(browser, opts) {
   var page = await ctx.newPage();
   var errors = [];
   page.on('pageerror', function (e) { errors.push(String(e)); });
-  /* A BROWSER WITH NO WEBGL, for the specs that grade the 2D fallback. Installed BEFORE the
+  /* A BROWSER WITH NO WEBGL, for e2e/webgl: the match is refused with a reason. Installed BEFORE the
      page loads, so the refusal is in place the first time anything asks - stubbing afterwards
      tests a renderer that already has its context. Every GL flavour is refused, including the
      experimental spellings, because _r3dInit tries webgl2 and then webgl and a stub that only
-     covers one of them proves nothing. 2D contexts pass straight through: the game is drawn on
-     one, so breaking it would test a blank page rather than a fallback. */
+     covers one of them proves nothing. 2D contexts pass straight through: the title screen and
+     the overlay use them, so breaking them would test a blank page rather than the refusal. */
   if (opts.noWebGL) {
     await page.addInitScript(function () {
       var real = HTMLCanvasElement.prototype.getContext;
@@ -85,7 +85,7 @@ async function openPage(browser, opts) {
       window.__glStubbed = true;
     });
   }
-  /* THE GRAPHICS TIER IS PINNED TO HIGH, for the same reason the renderer is (see start below):
+  /* THE GRAPHICS TIER IS PINNED TO HIGH, because
      AUTO steps down while frames are slow (render3d/quality3d.js), and this software rasteriser
      draws one in about 0.6 s, so left to AUTO every spec with a live loop would be grading the
      LOW picture - no shadows, no post stack - without a word about it. opts.quality says otherwise:
@@ -124,20 +124,6 @@ async function openPage(browser, opts) {
        input, the atmosphere frame table - and stopping the loop would stop what they measure. */
     start: async function (seed, seconds, opts) {
       await page.evaluate(function (a) {
-        /* PIN THE RENDERER, because a spec must not inherit a default it never mentions.
-           3D is what a player gets now (see rts3dRestore), and flipping that default silently
-           rewrote what much of this suite measures: e2e/forest counts the flat trees the 2D
-           painter stamps, the 3D mode grows its own instead, and the spec went from a real
-           measurement to "0 stamps" at every zoom while still reading as though it were about
-           tree density. Nothing in that file mentions 3D at all.
-
-           So every match starts in the mode its spec was written against, and the seventeen
-           that want the other one say rts3dSet(true) for themselves. Pass {mode3d: 'default'}
-           to start the way a new player does - e2e/default3d is the one place that wants the
-           default itself under test, and pinning it there would only measure this line. */
-        if (a[3] !== 'default') {
-          try { window.localStorage.setItem(RTS_3D_LS, a[3] ? '1' : '0'); } catch (e) {}
-        }
         rtsOpen(a[0]);
         for (var i = 0; i < 60 * a[1]; i++) _rtsTick(1 / 60);
         /* Frozen HERE, in the same step that started the match, and not afterwards: the settle
@@ -148,7 +134,7 @@ async function openPage(browser, opts) {
           if (U) { U.dead = true; try { if (U.raf) cancelAnimationFrame(U.raf); } catch (e) {} }
         }
       }, [seed === undefined ? 7 : seed, seconds === undefined ? 20 : seconds,
-          !!(opts && opts.freeze), (opts && opts.mode3d) || false]);
+          !!(opts && opts.freeze)]);
       await page.waitForTimeout(200);
     },
     /* Stop the rAF loop, so from here the simulation advances only on an explicit _rtsTick.

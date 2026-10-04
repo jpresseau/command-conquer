@@ -1,13 +1,11 @@
-/* HOW THE 3D MODE LOOKS, as opposed to whether it works.
+/* HOW THE 3D PICTURE LOOKS, as opposed to whether it works.
 
-   r3dlive covers the seams that would make the mode WRONG - the projection contract, the blit.
-   This covers the three things that made it look worse than the 2D mode it is supposed to
-   improve on, each of which is a property of the picture rather than of the geometry.
+   r3dlive covers the seams that would make the picture WRONG - the projection contract, the blit.
+   This covers the three things that made it look worse than it should, each of which is a
+   property of the picture rather than of the geometry.
 
-   THE GROUND'S MAGNIFICATION FILTER. The ground texture is the 2D renderer's own baked terrain
-   canvas, and the 2D renderer draws it with imageSmoothingEnabled = false, deliberately and at
-   length: art at 24 art pixels a cell magnified to 144 device pixels has to land on hard pixel
-   blocks, because the alternative is not more detail, it is the same detail smeared. The GL
+   THE GROUND'S MAGNIFICATION FILTER. The legacy ground texture is a baked terrain canvas: art
+   at 24 art pixels a cell magnified to 144 device pixels has to land on hard pixel blocks, because the alternative is not more detail, it is the same detail smeared. The GL
    side shared one texture-parameter helper between the ground and the fog and got LINEAR for
    both, so at max zoom - about six times magnification - every baked pixel became a six-pixel
    gradient. The two textures want OPPOSITE filters and the spec pins both: NEAREST magnifies
@@ -22,7 +20,7 @@
    flat, and now a shadow map, see e2e/shadows - but this claim is about the BLEND, not about
    what is casting, and it holds for whatever is.)
 
-   THE SAVED MODE. A player who picks 3D picks it for the game. It survives a fresh rtsOpen. */
+   A FRESH BATTLE IS 3D TOO. Closing a battle and opening another brings the renderer back on. */
 
 var { chromium } = require('playwright');
 var { Suite } = require('../lib/assert.js');
@@ -42,7 +40,6 @@ var S = new Suite('r3dlook');
     var G = window._rtsG, R = _rtsR;
 
     /* --- the filters, read back off the live textures --- */
-    rts3dSet(true);
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;
@@ -182,24 +179,19 @@ var S = new Suite('r3dlook');
     o.hasSky = vs.indexOf('sky') >= 0;
     o.strayLiterals = (vs.indexOf('0.40 + 0.74') >= 0) || (vs.indexOf('-0.38, 0.76, 0.53') >= 0);
 
-    /* --- the preference survives a fresh match --- */
-    o.stored = null;
-    try { o.stored = window.localStorage.getItem('rcc.mode3d'); } catch (e) {}
-    /* close and reopen the battle exactly as the UI would */
+    /* --- a fresh match opens in 3D: close and reopen the battle exactly as the UI would --- */
     var host = document.getElementById('rcgRts');
     if (host) host.remove();
     window._rtsUI = null;
     if (window._R3D) window._R3D.on = false;
     rtsOpen(4242);
     o.reopened = !!(window._R3D && window._R3D.on);
-    o.btnOn = !!(document.getElementById('rts3dBtn') || {}).classList &&
-              document.getElementById('rts3dBtn').classList.contains('on');
     return o;
   });
 
   S.ok('the mode turns on', out.on, out.on ? 'on' : 'no WebGL');
   if (out.on) {
-    S.ok('the ground magnifies with NEAREST, like the 2D renderer draws it',
+    S.ok('the ground magnifies with NEAREST, onto hard pixel blocks',
          out.groundMag === out.NEAREST,
          'MAG=' + (out.groundMag === out.NEAREST ? 'NEAREST' : 'LINEAR') +
          ' - LINEAR turned every baked pixel into a six-pixel gradient at max zoom');
@@ -230,10 +222,8 @@ var S = new Suite('r3dlook');
     S.ok('...and carries no hand-copied light of its own to drift', !out.strayLiterals,
          out.strayLiterals ? 'found the old inline constants' : 'no duplicated constants');
 
-    S.ok('the chosen mode is remembered', out.stored === '1', 'stored ' + JSON.stringify(out.stored));
-    S.ok('...and a fresh battle opens in it', out.reopened,
-         out.reopened ? '3D restored on rtsOpen' : 'dropped back to 2D');
-    S.ok('...with the button showing it', out.btnOn, out.btnOn ? 'lit' : 'not lit');
+    S.ok('a fresh battle opens in 3D', out.reopened,
+         out.reopened ? '3D on after rtsOpen' : 'the renderer stayed off');
   }
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
 

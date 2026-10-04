@@ -52,7 +52,7 @@ var ARMY = function (side, z0, dir, per, gap) {
   var g = await openPage(browser, { width: 1100, height: 800 });
   /* Frozen: every number below is per-tick, so the match must not also be advancing on its own
      between evaluate calls. See start()/freeze() in lib/game.js. */
-  await g.start(7, 20, { freeze: true, mode3d: true });
+  await g.start(7, 20, { freeze: true });
 
   /* ---------- 1. the same scan ---------- */
   var same = await g.page.evaluate(function (armySrc) {
@@ -215,7 +215,7 @@ var ARMY = function (side, z0, dir, per, gap) {
 
   /* ---------- 2. what it costs ---------- */
   var g2 = await openPage(browser, { width: 1100, height: 800 });
-  await g2.start(7, 20, { freeze: true, mode3d: true });
+  await g2.start(7, 20, { freeze: true });
 
   async function cost(gap) {
     return g2.page.evaluate(function (a) {

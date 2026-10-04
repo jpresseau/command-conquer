@@ -64,67 +64,48 @@ function _rtsPickDpr() {
   return Math.max(1, Math.min(4, Math.round(raw)));
 }
 
-/* IN 3D THE LADDER GOES FURTHER IN, and the reason the 2D one stops where it does is a 2D
-   reason: every step above has to land the SPRITE on a whole multiple of its bake, or the
-   whole picture resamples and goes soft. That is the constraint the comment above is about,
-   and it is real - for sprites.
+/* THE LADDER GOES FURTHER IN THAN THE BASE TABLES. Those stop where a SPRITE would have to
+   land on a whole multiple of its bake, or the picture resamples and goes soft - which is
+   what the comment above is about, and it still holds for the overlay's effects sprites.
 
-   In 3D there are no sprites for the things you would zoom in to look at. A unit is geometry:
+   There are no sprites for the things you would zoom in to look at. A unit is geometry:
    its edges are rounded, its wheels turn on their axles and its running gear is modelled (see
    r3d/curves.js), and none of that survives being drawn at 48 pixels a cell. The models were
    made denser and there was no way to see it, which is the complaint this answers.
 
-   WHAT DOES SOFTEN IS THE GROUND, because the terrain really is a texture in both modes. That
+   WHAT DOES SOFTEN IS THE LEGACY GROUND, because that terrain really is a texture. That
    is not a new problem and it is already answered: render/detail.js restores the frequencies
    magnification loses, gated at RTS_DETAIL_MIN_MAG, and these steps are squarely inside what
-   that pass was built for. Whole multiples of the top 2D step, so the terrain magnifies by a
+   that pass was built for. Whole multiples of the top base step, so the terrain magnifies by a
    clean factor at every one of them. */
 var RTS_ZOOM_3D_EXTRA = [2, 4];
-/* HOW MANY RUNGS THE SHIPPED 2D LADDER HAS, so that "the closest zoom" can be said two
+/* HOW MANY RUNGS THE BASE LADDER HAS, so that "the closest zoom" can be said two
    different ways and mean the right one each time. RTS_ZOOMS.length - 1 is the closest rung
    THERE IS, which is what a player's pinch should reach; several specs used it to mean the
-   magnification their numbers were calibrated at, which was the top of this ladder and is no
-   longer the same thing in 3D. A proxy that silently changes meaning is the failure this
+   magnification their numbers were calibrated at, which was the top of the base ladder and is
+   not the same thing. A proxy that silently changes meaning is the failure this
    project keeps finding, so both readings get a name. */
-var RTS_ZOOM_2D_STEPS = 3;
-function _rtsZoomLadder(dpr, threeD) {
+var RTS_ZOOM_BASE_STEPS = 3;
+function _rtsZoomLadder(dpr) {
   var base = RTS_ZOOM_LADDERS[dpr] || RTS_ZOOM_LADDERS[2];
   /* the constant above is a claim about these tables; unit/zoom holds them to it */
-  if (!threeD) return base;
   var top = base[base.length - 1], out = base.slice(), i;
   for (i = 0; i < RTS_ZOOM_3D_EXTRA.length; i++) out.push(top * RTS_ZOOM_3D_EXTRA[i]);
   return out;
 }
 function _rtsIn3D() { return !!(window._R3D && window._R3D.on); }
 
-/* Re-derive the ladder when the renderer changes under it, keeping the magnification the
-   player is actually looking at rather than the index they got there by. Leaving 3D from one
-   of the close steps has to land somewhere the 2D ladder has - and it must be the CLOSEST one
-   it has, not wherever the old index happens to point, or stepping out of 3D would silently
-   zoom the map out to a third of what was on screen. */
-function _rtsZoomLadderSync() {
-  var R = _rtsR;
-  if (!R) return;
-  var was = RTS_ZOOMS[R.zi];
-  RTS_ZOOMS = _rtsZoomLadder(R.dpr, _rtsIn3D());
-  var at = RTS_ZOOMS.indexOf(was);
-  R.zi = at >= 0 ? at : RTS_ZOOMS.length - 1;
-  _rtsApplyCam();
-}
-
 function _rtsRInit(cv) {
   var W = cv.clientWidth || 960, H = cv.clientHeight || 620;
   var dpr = _rtsPickDpr();
   /* The ladder is global because everything from the sidebar to the specs reads RTS_ZOOMS, and
      it is settled here because this is the first point at which the device is known. */
-  RTS_ZOOMS = _rtsZoomLadder(dpr, _rtsIn3D());
+  RTS_ZOOMS = _rtsZoomLadder(dpr);
   cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
   /* WITH ALPHA, and it is load-bearing: in 3D this canvas is a transparent overlay above the
      presented GL layer, and a context created alpha:false can never be transparent - clearRect
      leaves opaque black, which put a black sheet over the whole world the moment the blit
-     stopped. Context attributes are fixed at first getContext, so the one canvas must carry
-     the attribute both modes can live with. 2D pays nothing for it: its frame paints every
-     pixel opaquely before anything reads or composites the canvas. */
+     stopped. Context attributes are fixed at first getContext. */
   var g = cv.getContext('2d', { alpha: true });
   g.imageSmoothingEnabled = false;
 
@@ -154,9 +135,8 @@ function _rtsApplyCam() {
   R.zf = R.zt = R.zi;            /* snapped: no smooth zoom in flight (ui/navigate.js) */
   R.dist = R.H / _rtsZoom();
 }
-/* BETWEEN THE RUNGS, IN 3D ONLY. The rungs exist because 2D art resamples badly off them; the
-   3D mode draws geometry, so the wheel there glides through the ladder instead of jumping it
-   in doublings. `f` is a fractional index into RTS_ZOOMS, interpolated geometrically, so each
+/* BETWEEN THE RUNGS. The world is geometry, so the wheel glides through the ladder instead of
+   jumping it in doublings. `f` is a fractional index into RTS_ZOOMS, interpolated geometrically, so each
    step of it is the same ratio of magnification wherever it is. */
 function _rtsCellAt(f) {
   var n = RTS_ZOOMS.length, i0 = Math.max(0, Math.min(n - 1, Math.floor(f))), i1 = Math.min(n - 1, i0 + 1);
@@ -178,12 +158,6 @@ function _rtsReapplyCam() {
   var R = _rtsR, own = _rtsIn3D() && R.zf !== undefined && Math.round(R.zf) === R.zi, zt = R.zt;
   if (own && R.zf !== R.zi) _rtsApplyCamF(); else _rtsApplyCam();
   if (own && zt !== undefined) R.zt = zt;
-}
-function _rtsZoomStep(dir) {
-  var R = _rtsR;
-  if (!R) return;
-  R.zi = Math.max(0, Math.min(RTS_ZOOMS.length - 1, R.zi + (dir > 0 ? 1 : -1)));
-  _rtsApplyCam();
 }
 /* HOW MUCH WORLD IS ON SCREEN, which is not W/zoom by H/zoom in every camera. The focus
    clamp, the radar's view box and the audibility test all ask this, and all three were given
@@ -210,63 +184,15 @@ function _rtsViewSpan() {
   return { w: R.W / z, h: R.H / z, cx: R.focus.x, cz: R.focus.z };
 }
 
-/* WHICH CELLS THE CAMERA CAN SEE, as an index window with padding for sprites hanging over
-   the edge. The 2D overlays that still run in 3D - the sea, the ore field - used to derive
-   this from the zoom alone, which is the right answer for a top-down camera and for no other:
-   under the tilt the strip is 1/cos(tilt) taller than that, and under perspective the far end
-   is wider again. The visible sea was measured a row short at the top at the middle zoom and
-   four rows short at the widest, and the missing rows were exactly the ones furthest from the
-   camera - where a hole in the sea is least likely to be read as a bug and most likely to be
-   read as the map just ending.
+/* THE PROJECTION CONTRACT. Every input path and every overlay - picking, drag select, health
+   bars, effects, the placement outline - goes through these functions and nothing else, and
+   they hand over to the 3D camera's own (render3d/gl3d.js). If the shader and these ever
+   disagree, clicks land beside units - e2e/r3dlive asserts the round trip. `scale` is what an
+   overlay multiplies its size by: a health bar over a unit at the back of the view is smaller
+   than the same bar at the front. `behind` marks a point the camera cannot see.
 
-   Taken through the projection's own inverse at the four screen corners, so it is correct for
-   whatever camera is mounted. In 2D that reduces to exactly the arithmetic it replaces, to the
-   last bit - _rtsGroundAt at a corner IS focus +/- half the span - so nothing about the 2D
-   frame moves. A corner past the horizon (which the shipped camera cannot produce, but a
-   future one could) falls back to the whole map rather than to a wrong window. */
-function _rtsCellWindow(padX, padZ) {
-  var R = _rtsR, i, x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
-  var corners = [[0, 0], [R.W, 0], [0, R.H], [R.W, R.H]];
-  for (i = 0; i < 4; i++) {
-    var p = _rtsGroundAt(corners[i][0], corners[i][1]);
-    if (!p) { x0 = z0 = -1e9; x1 = z1 = 1e9; break; }
-    if (p.x < x0) x0 = p.x;
-    if (p.x > x1) x1 = p.x;
-    if (p.z < z0) z0 = p.z;
-    if (p.z > z1) z1 = p.z;
-  }
-  return {
-    tx0: Math.max(0, _rtsTX(x0) - padX), tx1: Math.min(RTS_N - 1, _rtsTX(x1) + padX),
-    tz0: Math.max(0, _rtsTX(z0) - padZ), tz1: Math.min(RTS_N - 1, _rtsTX(z1) + padZ)
-  };
-}
-/* THE PROJECTION CONTRACT, in both modes. Every input path and every overlay - picking,
-   drag select, health bars, effects, the ghost - goes through these functions and nothing
-   else, which is what makes the 3D mode a branch rather than a rewrite. If the GL shader and
-   these ever disagree, clicks land beside units - e2e/r3dlive asserts the round trip.
-
-   _rtsWorldToScreen IS THE CONTRACT. _rtsSX and _rtsSY are the SEPARABLE special case, and
-   they are only sound while screenX depends on nothing but wx - true of a north-up
-   orthographic camera and of nothing else. That held for as long as the 3D camera was welded
-   north-up and flat-projected, which is exactly why the mode looked two-dimensional: no
-   perspective divide, no yaw, a 35 degree lean and nothing else to tell a player the world
-   has depth. The 3D camera has perspective now (render3d/gl3d.js), so screenX genuinely
-   depends on z there and _rtsSX is the 2D form only.
-
-   So the pair is no longer the interface. Every drawing site takes both coordinates through
-   _rtsWorldToScreen, which returns a screen point AND the scale to draw at. The 2D renderer
-   keeps the closed form below - it is genuinely orthographic and must not move a pixel.
-
-   `scale` is 1 under the orthographic 2D camera and is what an overlay must multiply its size
-   by under the perspective one: a health bar over a unit at the back of the view is smaller
-   than the same bar at the front, and a caller that ignores it will draw bars that all match
-   while the units under them do not. `behind` marks a point the camera cannot see, which an
-   orthographic camera never produces and a perspective one does. */
-function _rtsSX(wx) { return (wx - _rtsR.focus.x) * _rtsZoom() + _rtsR.W / 2; }
-function _rtsSY(wz) {
-  return (wz - _rtsR.focus.z) * _rtsZoom() + _rtsR.H / 2;
-}
-
+   The flat formulas after each 3D call answer only before the 3D context exists - while the
+   match is being set up, and in the node specs, which have no GL. Nothing is drawn with them. */
 function _rtsGroundAt(mx, my) {
   var R3 = window._R3D;
   if (R3 && R3.on) return _r3dGroundAt(mx, my);
@@ -282,15 +208,14 @@ function _rtsWorldToScreen(x, y, z) {
 }
 /* The ground-level case, which is most of them: a point on the map with no height of its own.
 
-   "No height of its own" stopped meaning y = 0 when the terrain got relief. Every overlay the
-   2D painter lays over the world arrives through here - selection brackets, health bars, the
-   placement ghost, the effects the 3D pass does not own - and each is positioned by a point ON
+   "No height of its own" stopped meaning y = 0 when the terrain got relief. Every overlay laid
+   over the world arrives through here - health bars, the placement ghost, the effects the 3D
+   pass does not own - and each is positioned by a point ON
    THE GROUND. Left at zero they would sit at sea level while the thing they belong to stood on
    a hill, and the further the hill the wider the gap.
 
-   ONLY IN 3D. The 2D painter draws the terrain bake, which is flat and always was, and its own
-   branch of _rtsWorldToScreen does lift by y - so handing it an elevation would slide every
-   bracket up the screen away from the unit it belongs to. Relief is something the 3D mode has. */
+   Before the GL context exists (node specs) the flat fallback takes no elevation, because its
+   own branch of _rtsWorldToScreen lifts by y. */
 function _rtsGroundToScreen(x, z) {
   var R3 = window._R3D;
   return _rtsWorldToScreen(x, (R3 && R3.on) ? _rtsElev(x, z) : 0, z);

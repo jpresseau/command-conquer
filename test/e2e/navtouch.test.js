@@ -7,7 +7,6 @@
 
      A PINCH IN 3D      follows the fingers - twice the spread is a rung in - about their
                         midpoint, and moving both fingers together pans
-     A PINCH IN 2D      a whole rung, about the fingers
      A RESTING FINGER   one on the sidebar does not turn a one-finger drag on the battlefield into
                         a pinch against a finger that never moves */
 
@@ -20,7 +19,7 @@ var S = new Suite('navtouch');
 (async function () {
   var browser = await chromium.launch();
   var g = await openPage(browser, { device: { viewport: { width: 900, height: 640 }, deviceScaleFactor: 1 } });
-  await g.start(7, 20, { freeze: true, mode3d: true });
+  await g.start(7, 20, { freeze: true });
   var P = g.page, cdp = (await g.touch()).cdp;
   /* points carry ids, so a finger that stays down is the same finger from one event to the next */
   function touch(type, pts) {
@@ -137,22 +136,8 @@ var S = new Suite('navtouch');
     await P.evaluate(function () { _r3dCamSet(0, R3D_TILT); });
   }
 
-  /* ---------------- 2D ---------------- */
-  await P.evaluate(function () { rts3dSet(false); });
-  await park(1);
-  var d0 = await cam(), wd = await ground(mx, my);
-  await touch('touchStart', [[mx - 40, my, 1], [mx + 40, my, 2]]);
-  await touch('touchMove', [[mx - 100, my, 1], [mx + 100, my, 2]]);
-  await touch('touchEnd', []);
-  var d1 = await cam(), sd = await slip(wd, mx, my);
-  S.ok('a pinch in 2D is a whole rung', d1.zi === d0.zi + 1 && d1.zf === d1.zi, 'rung ' + d0.zi + ' -> ' + d1.zf);
-  S.ok('...about the fingers', sd < 2, sd + ' px from their midpoint');
-
   /* A RESTING FINGER on the sidebar, on something that does nothing with it, and another
-     dragging the battlefield. In 3D, where any change in the fingers' spread moves the zoom: the
-     2D pinch only steps past a quarter, which this spread never reaches, so there a pinch could
-     pass for a drag. */
-  await P.evaluate(function () { rts3dSet(true); });
+     dragging the battlefield, where any change in the fingers' spread moves the zoom. */
   await park(1);
   var rest = await P.evaluate(function (b) {
     var d = document.createElement('div');

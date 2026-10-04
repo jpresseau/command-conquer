@@ -13,8 +13,8 @@
    north row of the map was 0 of 128 cells explored.
 
    The fix holds the view on the map every frame in the live loop (ui/camera.js), rather than at
-   each place that moves the camera - because the places kept outnumbering the clamps: the 3D
-   toggle and a resize both change what the camera can see without moving its focus. */
+   each place that moves the camera - because the places kept outnumbering the clamps: a resize
+   changes what the camera can see without moving its focus. */
 
 var { chromium } = require('playwright');
 var { Suite } = require('../lib/assert.js');
@@ -30,7 +30,7 @@ var SEEDS = [7, 42, 9001, 3, 11, 500];
   var rows = [];
   for (var i = 0; i < SEEDS.length; i++) {
     var g = await openPage(browser, { width: 1280, height: 800, dpr: 1 });
-    await g.start(SEEDS[i], 0, { freeze: true, mode3d: 'default' });
+    await g.start(SEEDS[i], 0, { freeze: true });
     var r = await g.page.evaluate(function () {
       var R = _rtsR, HALF = RTS_N * RTS_TILE / 2, vb = _r3dViewBounds();
       var yd = _rtsHas('player', 'yard'), s = _rtsGroundToScreen(yd.x, yd.z);
@@ -65,7 +65,7 @@ var SEEDS = [7, 42, 9001, 3, 11, 500];
 
   /* ---------- 2. nothing unexplored shows at the top of the screen ---------- */
   var g2 = await openPage(browser, { width: 1280, height: 800, dpr: 1 });
-  await g2.start(7, 0, { freeze: true, mode3d: 'default' });
+  await g2.start(7, 0, { freeze: true });
   var leak = await g2.page.evaluate(function () {
     var G = window._rtsG, R3 = window._R3D, gl = R3.gl;
     /* The population: the far row of this map really is unexplored and really has things
@@ -98,40 +98,33 @@ var SEEDS = [7, 42, 9001, 3, 11, 500];
   S.eq('...and none of it shows through the top of the opening screen', leak.lit, 0);
   await g2.close();
 
-  /* ---------- 3. and the camera moves that do not move the focus ---------- */
-  var g3 = await openPage(browser, { width: 1280, height: 800, dpr: 1 });
-  await g3.start(7, 0, { mode3d: 'default' });            /* the live loop, not frozen */
-  var toggle = await g3.page.evaluate(async function () {
-    var HALF = RTS_N * RTS_TILE / 2;
-    function over() {
-      var vb = (window._R3D && window._R3D.on) ? _r3dViewBounds() : null, R = _rtsR;
-      if (!vb) {
-        var z = _rtsZoom();
-        vb = { x0: R.focus.x - R.W / z / 2, x1: R.focus.x + R.W / z / 2,
-               z0: R.focus.z - R.H / z / 2, z1: R.focus.z + R.H / z / 2 };
-      }
-      return Math.max(0, -HALF - vb.z0, vb.z1 - HALF, -HALF - vb.x0, vb.x1 - HALF);
-    }
-    function frames(n) {
-      return new Promise(function (res) {
-        var k = 0;
-        (function f() { if (++k >= n) res(); else requestAnimationFrame(f); })();
-      });
-    }
-    /* push the focus hard against the north edge while in 2D, where the view is smaller... */
-    rts3dSet(false);
+  /* ---------- 3. and a change that does not move the focus ----------
+     A resize changes what the camera can see without touching where it is pointed - the case a
+     clamp at each camera move never sees, and the reason the clamp runs every frame. */
+  var g3 = await openPage(browser, { width: 1000, height: 640, dpr: 1 });
+  await g3.start(7, 0, {});            /* the live loop, not frozen */
+  var OVER = function () {
+    var HALF = RTS_N * RTS_TILE / 2, vb = _r3dViewBounds();
+    return Math.max(0, -HALF - vb.z0, vb.z1 - HALF, -HALF - vb.x0, vb.x1 - HALF);
+  };
+  var FRAMES = function (n) {
+    return new Promise(function (res) { var k = 0; (function f() { if (++k >= n) res(); else requestAnimationFrame(f); })(); });
+  };
+  var before = await g3.page.evaluate(async function (a) {
+    var over = new Function('return (' + a[0] + ')')(), frames = new Function('return (' + a[1] + ')')();
     _rtsR.focus.z = -1e6; _rtsClampFocus();
     await frames(3);
-    var in2d = over();
-    /* ...then switch renderer, which changes what the camera sees without touching the focus */
-    rts3dSet(true);
-    await frames(3);
-    return { in2d: in2d, after3d: over() };
-  });
-  S.ok('switching to 3D at the edge of the map does not open the view onto the void',
-       toggle.in2d < 0.01 && toggle.after3d < 0.01,
-       'overshoot ' + toggle.in2d.toFixed(2) + ' in 2D against the north edge, ' +
-       toggle.after3d.toFixed(2) + ' a few frames after switching to 3D');
+    return over();
+  }, [OVER.toString(), FRAMES.toString()]);
+  await g3.page.setViewportSize({ width: 1600, height: 1000 });
+  var after = await g3.page.evaluate(async function (a) {
+    var over = new Function('return (' + a[0] + ')')(), frames = new Function('return (' + a[1] + ')')();
+    await frames(4);
+    return over();
+  }, [OVER.toString(), FRAMES.toString()]);
+  S.ok('a larger window at the edge of the map does not open the view onto the void',
+       before < 0.01 && after < 0.01,
+       'overshoot ' + before.toFixed(2) + ' against the north edge, ' + after.toFixed(2) + ' a few frames after the window grew');
   await g3.close();
 
   await browser.close();

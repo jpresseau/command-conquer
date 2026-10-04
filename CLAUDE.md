@@ -81,8 +81,7 @@ Keep them small: if a file passes ~500 lines it wants splitting along its own ba
 - `src/sprites/` — `bake` (palette + plumbing), `terrain`, `ore`, `models` (structures),
   `unitmodels`, `props`, `assemble`.
 - `src/core/` — the simulation, and by far the largest subsystem. Deliberately renderer-free, so
-  a whole battle can be stepped headlessly; swapping the 3D renderer for the 2D one cost it zero
-  lines. `grid` (tiles, passability, A*, state), `terrain`, `base`, `crates`, `supers`,
+  a whole battle can be stepped headlessly; removing the old 2D renderer cost it zero lines. `grid` (tiles, passability, A*, state), `terrain`, `base`, `crates`, `supers`,
   `entities`, `capture`, `transport`, `production`, `combat` (target + fire), `damage`, `move`,
   `units`, `ai`, `teams`, `missions`, `aisupers`, `ore`, `triggers`, `tick`, and `spatial` — the
   per-tick bucket index the target scan and the crush check run over instead of the whole entity
@@ -96,10 +95,13 @@ Keep them small: if a file passes ~500 lines it wants splitting along its own ba
   is the army's SIZE (`army` in `RTS_DIFF`), not the share that marches: shares and per-team caps
   either flooded the player or sent the army home again. Separate teams for the unlisted units
   made the AI weaker (see `unit/aiplan`); `e2e/armyuse` holds it.
-- `src/render/` — canvas 2D. Reads the sim, never writes it. `camera`, `post` (light pass, water,
-  shroud), `frame`, `draw`, `icons`.
+- `src/render/` — the camera and the transparent overlay canvas over the 3D world (effects
+  sprites, the placement outline, crates). Reads the sim, never writes it. `camera` (zoom ladder,
+  projection contract), `post` (screen picking, colour cycle), `frame` (the frame walk), `fx`,
+  `detail` (the legacy ground's grain), `icons`. The battlefield is WebGL only: `_r3dStart`
+  (`render3d/present3d.js`) or `rtsOpen` refuses the match with a reason (`e2e/webgl`).
 - `src/ui/` — `shell` (open/close/resize), `sidebar`, `input`, `select`, `hud`, `camera`
-  (panning + the main loop), `navigate` (right-drag grabs the map - middle too in 2D; a still right-click
+  (panning + the main loop), `navigate` (right-drag grabs the map; a still right-click
   orders on release but as pressed; wheel and pinch zoom toward the pointer, `+`/`-` about the
   centre; `e2e/navigate`, `e2e/navtouch`). Keep a ground point under the cursor with
   `_rtsHoldGround` (closed form at the point's height), never by differencing `_rtsGroundAt`: the pick bisects
@@ -129,19 +131,14 @@ Art is authored at **`RTS_TS` = 24 pixels per map cell**. The four rules below a
 separate "looks like the game" from "looks like a web demo", and each is written down because
 breaking it shipped once.
 
-- **Never scale by a fraction.** Screen cells come from `RTS_ZOOMS` = 12/24/48 only — half, one
-  and two art-pixels per screen pixel. A build that drew 24px art at 40px cells resampled every
-  sprite by 1.667× and the whole picture went soft, with pixels of two different sizes side by
-  side. `_rtsApplyCam` enforces this; do not reintroduce a free-running `cell`.
-  The one exception is 3D, which draws geometry: its zoom glides between rungs (`R.zf`,
-  `_rtsApplyCamF`, `ui/navigate.js`). 2D never leaves a rung.
-- **Structures and units are pre-rendered 3D, not drawn.** Westwood modelled them, rendered
-  each to a bitmap at a fixed camera and light, and shipped the bitmaps — which is why the
-  originals have volume and flat facets. `rts.r3d.js` does the same at load: models in 3D,
-  baked to sprites, then the game is the 2D sprite engine it already was. No WebGL, no
-  library, no per-frame cost. Unit facings come from yawing the *model*, so a tank at 45°
-  shows its side and tracks properly.
-- **The ground plane is not foreshortened.** Projection is oblique — `screenY = z - K*y` —
+- **The zoom ladder.** `RTS_ZOOM_LADDERS` holds `RTS_ZOOM_BASE_STEPS` rungs per dpr, each a
+  whole multiple of the 24px bake (`e2e/resolution`), and `RTS_ZOOM_3D_EXTRA` adds the close
+  ones. The camera glides between rungs (`R.zf`, `_rtsApplyCamF`, `ui/navigate.js`).
+- **One set of models.** `src/r3d/` and `src/sprites/` describe every unit and structure as
+  faces; the WebGL renderer draws them as meshes, and the baker flattens the same faces into
+  sprites only for the build cameos and the radar. Unit facings come from yawing the *model*.
+- **The baker's ground plane is not foreshortened** (cameos and radar; the battlefield's camera
+  leans, `render3d/cam3d.js`). The bake's projection is oblique — `screenY = z - K*y` —
   because a 3×3 structure has to cover exactly 72×72 art pixels or it stops lining up with
   its tiles. Height projects straight up into headroom above the footprint.
 - **Never leave a roof as one flat polygon.** With no yaw a plain box shows exactly two
@@ -225,8 +222,7 @@ breaking it shipped once.
   recover the foam's own mix: the water under it changes colour with the swell. `e2e/ambient`.
 - **In 3D a selection is a ring on the ground** (`render3d/ring3d.js`), not Red Alert's corner
   brackets: a band round a unit, a rounded box round a building's footprint, drawn after the
-  treads and before the entities so a unit stands in its ring. `ui/hud.js` skips the brackets
-  while the 3D mode is on; 2D keeps them. `R3.selAmt`. `e2e/selring`. A check's expected
+  treads and before the entities so a unit stands in its ring. `R3.selAmt`. `e2e/selring`. A check's expected
   number must be the test's own: reading `R3D_RING_UNIT` back let a ring drawn anywhere pass.
 - **The air shimmers over what burns** (`render3d/heat3d.js`, read by the composite): a column of
   heat over each of the strongest effect lights that sends one (the sixth element of
@@ -249,7 +245,7 @@ breaking it shipped once.
 - **Bridges are water land units may cross** (`core/bridge.js`): deck cells keep `RTS_T_WATER` (one
   sea, ships pass under) with `blocked` 0. Laid from cells only, never `rnd`. `_rtsCanPlace` refuses
   water, `_rtsIsBridgeCell(i)` tells a deck from sea, and land units stand at `_rtsStandY`.
-  3D model `render3d/bridge3d.js`, 2D `sprites/bridge.js`. `unit/bridge`, `e2e/bridge`.
+  3D model `render3d/bridge3d.js`; `sprites/bridge.js` paints it into the legacy ground bake and the radar. `unit/bridge`, `e2e/bridge`.
 - **Roads are painted down `G.roads`** (centrelines kept by `_rtsCarveRoad`) from a baked distance
   field (`render3d/road3d.js`). The cells stay the dirt-track material, which is the shoulder; a
   loaded map has no `G.roads` and keeps its tracks. `R3.roadAmt`.
@@ -257,7 +253,7 @@ breaking it shipped once.
   from the seed. Shaders take `uDarkL`/`uDarkS` as darkness against day, so an unset program draws
   day and day is unchanged. Every program gets them through `_r3dCamU`. Lamps and headlights are
   point lights (`_r3dSkyLights`, picked in `_r3dWorldTick` before the ground draws) plus glows,
-  rain and banks in `skyfx3d.js`; 2D is `render/sky2d.js`. `RTS_SKY_FORCE` pins it for a spec.
+  rain and banks in `skyfx3d.js`. `RTS_SKY_FORCE` pins it for a spec.
   CYCLE moves the sun (`_rtsSunAt`; shaders take `uSunD`, its offset from `R3_LIGHT`, and the shadow
   frame is `_r3dSunB()`), exactly the baker's sun at `RTS_DAY_NOON`. SNOW (`uSnow`) whitens the
   ground before the road paint, settles on upward faces and freezes the shallows. SAND is a
@@ -306,11 +302,11 @@ breaking it shipped once.
 - **The world's own sound** (`rts.ambience.js`): rendered loops (`audio/loops.js`) - weather,
   crickets, birds, an engine per kind of hull, a power hum, a building going up - started once and
   only turned by `setTargetAtTime` (`_rtsAmbWant` is the pure half). Lightning keeps the GAME's clock on a fixed schedule
-  (`_rtsLightning`), which both renderers read. Effects off the screen but within `RTS_FAR` views
+  (`_rtsLightning`), which the renderer and the sound both read. Effects off the screen but within `RTS_FAR` views
   go through the muffled `B.far` bus. `unit/ambience`, `e2e/ambience`.
 - **In 3D a soldier has a model of his own** (`render3d/soldier3d.js`): rounded limbs, and four
   stride poses picked by his gait (`_r3dSoldierPose`) in place of the bob. The sprite's model
-  stays for 2D, for prone squads and for the dog; the mesh cache key carries the pose.
+  stays for the cameo, for prone squads and for the dog; the mesh cache key carries the pose.
   `R3.soldierOff`. `test/*/soldier`.
 - **The bases are working** (`render3d/alive3d.js`): the radar's antenna turns, the stacks
   smoke, beacons blink, and a destroyed building slumps into a charred ruin that stands for

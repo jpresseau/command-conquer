@@ -33,7 +33,6 @@ var S = new Suite('scenery');
     G.visDirty = 1;
     function sum(a) { var s = 0; for (var j = 0; j < a.length; j++) s = (Math.imul(s, 31) + a[j]) | 0; return s; }
     var cells0 = [sum(G.terrain), sum(G.blocked), sum(G.scrap)].join();
-    rts3dSet(true);
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;

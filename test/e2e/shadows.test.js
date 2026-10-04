@@ -55,7 +55,6 @@ var S = new Suite('shadows');
     for (i = 0; i < RTS_N * RTS_N; i++) { G.mapped[i] = 1; G.vis[i] = 1; }
     G.visDirty = 1;
 
-    rts3dSet(true);
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;
@@ -191,7 +190,7 @@ var S = new Suite('shadows');
     var keepEnts = G.ents;
     G.ents = [];
     R.focus.x = _rtsWX(best[0] + 4); R.focus.z = _rtsWX(best[1] + 4);
-    R.zi = RTS_ZOOM_2D_STEPS - 1; _rtsApplyCam();
+    R.zi = RTS_ZOOM_BASE_STEPS - 1; _rtsApplyCam();
     _rtsRFrame(1 / 60);
     o.world = shaded(withAndWithout());
 
@@ -271,7 +270,6 @@ var S = new Suite('shadows');
     var G = window._rtsG;
     for (i = 0; i < RTS_N * RTS_N; i++) { G.mapped[i] = 1; G.vis[i] = 1; }
     G.visDirty = 1;
-    rts3dSet(true);
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;

@@ -8,7 +8,7 @@
      THE OTHER   the opponent's tank rings red
      A BUILDING  the yard's footprint is outlined, along its edge
      THE SWITCH  R3.selAmt 0 takes the rings out
-     THE HUD     in 3D it draws no brackets; in 2D it still does */
+     THE HUD     draws no brackets */
 
 var { chromium } = require('playwright');
 var { Suite } = require('../lib/assert.js');
@@ -25,7 +25,6 @@ var S = new Suite('selring');
     var o = {}, R = _rtsR, G = window._rtsG, i;
     for (i = 0; i < RTS_N * RTS_N; i++) { G.mapped[i] = 1; G.vis[i] = 1; }
     G.visDirty = 1;
-    rts3dSet(true);
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;
@@ -112,8 +111,6 @@ var S = new Suite('selring');
     window.RTS_POST_ON = true;
     G.sel = [mine]; shot(); G.sel = [];
     o.glErr = gl.getError();
-    rts3dSet(false);
-    o.hud2 = brackets();
     R3.cloudAmt = undefined;
     return o;
   });
@@ -136,8 +133,7 @@ var S = new Suite('selring');
   S.ok('...square to it: the line turns both front corners', out.corners[0] >= 5 && out.corners[1] >= 5,
        out.corners.join(' and ') + ' pixels within a unit and a half of the two front corners');
   S.ok('R3.selAmt 0 takes the rings out', out.off.n === 0, out.off.n + ' pixels change');
-  S.ok('in 3D the HUD draws no corner brackets', out.hud3 === 0, out.hud3 + ' green strokes');
-  S.ok('...and in 2D it still does', out.hud2 >= 4, out.hud2 + ' green strokes');
+  S.ok('the HUD draws no corner brackets: the ring is the selection', out.hud3 === 0, out.hud3 + ' green strokes');
   S.eq('no draw is refused with a ring and the post buffer on', out.glErr, 0);
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
 

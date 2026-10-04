@@ -64,12 +64,9 @@ function _rtsBindInput() {
   };
   cv.onwheel = function (e) {
     e.preventDefault();
-    /* Toward the point under the cursor. 2D steps between fixed levels (see _rtsApplyCam:
-       anything off RTS_ZOOMS resamples 24px-per-cell art by a fraction and softens every
-       sprite on screen); 3D glides between them - ui/navigate.js. */
+    /* Toward the point under the cursor, gliding between the ladder's rungs - ui/navigate.js. */
     var r = cv.getBoundingClientRect(), quiet = !(e.timeStamp - (U.wheelT || -1e9) < RTS_WHEEL_QUIET);
     U.wheelT = e.timeStamp;
-    if (quiet) U.zAcc = 0;           /* a 2D remainder belongs to one gesture, not to the next */
     if (e.ctrlKey) U.ctrlWheelT = e.timeStamp;
     var md = e.deltaMode, dy = Math.abs(e.deltaY);    /* the mode read first: see _rtsWheelRungs */
     _rtsZoomToward(_rtsWheelRungs(e, quiet, U.wheelNotch), e.clientX - r.left, e.clientY - r.top);
@@ -198,8 +195,8 @@ function _rtsBindInput() {
        drag one finger      pan the battlefield
        tap                  select, or place a building / fire a superweapon when one is armed
        long-press (350ms)   the context order - what right-click does on a desktop
-       pinch two fingers    zoom about the fingers, and move them together to pan; in whole
-                            steps in 2D, continuously in 3D (ui/navigate.js)
+       pinch two fingers    zoom about the fingers, and move them together to pan,
+                            continuously (ui/navigate.js)
 
      DRAG PANS RATHER THAN BOX-SELECTS, which is the one place this deliberately differs from
      the mouse. A drag is the only gesture a phone has for moving a map, and a player who
@@ -267,9 +264,7 @@ function _rtsBindInput() {
   cv.addEventListener('touchmove', function (e) {
     e.preventDefault();
     if (e.targetTouches.length >= 2) {
-      /* Pinch, about the fingers. In 2D in whole zoom steps: RTS_ZOOMS exists because anything
-         off it resamples 24px art by a fraction, and a continuous pinch would soften every
-         sprite on screen. In 3D it follows the fingers, a doubling of their spread a rung. */
+      /* Pinch, about the fingers: it follows them, a doubling of their spread a rung. */
       var gap = _tGap(e), mid = _tMid(e);
       if (!T.pinch) { T.pinch = gap; T.mid = mid; return; }
       /* the midpoint keeps its grip on the ground, as one finger does: two fingers pan too */
@@ -277,9 +272,7 @@ function _rtsBindInput() {
       T.mid = mid;
       _rtsTwist(e, T, mid);                /* two fingers twisted turn the 3D camera: ui/orbit.js */
       var ratio = gap / T.pinch;
-      if (_rtsIn3D())        { _rtsZoomToward(Math.log(ratio) / Math.LN2, mid.x, mid.y); T.pinch = gap; }
-      else if (ratio > 1.25) { _rtsZoomToward(1, mid.x, mid.y);  T.pinch = gap; }
-      else if (ratio < 0.8)  { _rtsZoomToward(-1, mid.x, mid.y); T.pinch = gap; }
+      _rtsZoomToward(Math.log(ratio) / Math.LN2, mid.x, mid.y); T.pinch = gap;
       return;
     }
     if (T.id === null) return;

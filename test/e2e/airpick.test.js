@@ -1,5 +1,5 @@
 /* A HELICOPTER IS PICKED WHERE IT IS DRAWN (render/camera.js _rtsScreenOf, render/post.js), with
-   real mouse input, in 2D and in 3D:
+   real mouse input, on the leaned 3D camera:
 
      A CLICK       on the machine you can see selects it - it is drawn lifted off its ground point
                    by its altitude, and a click used to be measured against the ground under it
@@ -25,12 +25,11 @@ var S = new Suite('airpick');
     var r = await p.evaluate(function () { var c = document.getElementById('rtsCv').getBoundingClientRect(); return { l: c.left, t: c.top }; });
     return { x: r.l + sx, y: r.t + sy };
   }
-  async function round(mode) {
-    var o = { mode: mode };
-    var setup = await p.evaluate(function (three) {
+  async function round() {
+    var o = {};
+    var setup = await p.evaluate(function () {
       var G = window._rtsG, R = _rtsR;
       if (window._rtsUI) window._rtsUI.dead = true;
-      rts3dSet(three);
       G.ents.forEach(function (e) { if (e.type === 'unit' && e.air) e.dead = true; });
       var yd = _rtsHas('player', 'yard'), x = yd.x + 26, z = yd.z + 18;
       R.focus.x = x; R.focus.z = z; _rtsApplyCam();
@@ -40,7 +39,7 @@ var S = new Suite('airpick');
       var s = _rtsScreenOf(h), gnd = _rtsWorldToScreen(h.x, 1, h.z);
       G.sel.length = 0;
       return { s: { x: s.x, y: s.y }, lift: Math.hypot(s.x - gnd.x, s.y - gnd.y), px: _rtsPxPerUnit(h), on: !!(window._R3D && window._R3D.on) };
-    }, mode === '3D');
+    });
     o.on = setup.on;
     o.lift = setup.lift;
     /* A CLICK on the drawn machine */
@@ -50,7 +49,7 @@ var S = new Suite('airpick');
     o.click = await p.evaluate(function () { return window._rtsG.sel.indexOf(window.__h) >= 0; });
     /* THE BOX round the drawn machine, not reaching its ground point */
     await p.evaluate(function () { window._rtsG.sel.length = 0; });
-    /* the box stops short of the ground point, or it proves nothing: in 2D the lift is ten pixels */
+    /* the box stops short of the ground point, or it proves nothing */
     var r = setup.lift * 0.6, a = await canvasAt(setup.s.x - r, setup.s.y - r), b = await canvasAt(setup.s.x + r, setup.s.y + r);
     await p.mouse.move(a.x, a.y); await p.mouse.down(); await p.mouse.move(b.x, b.y, { steps: 6 }); await p.mouse.up();
     await p.waitForTimeout(150);
@@ -77,13 +76,13 @@ var S = new Suite('airpick');
     return o;
   }
 
-  for (var mode of ['2D', '3D']) {
-    var o = await round(mode);
-    if (mode === '3D') S.ok('the 3D view is up to check', o.on, '');
-    S.ok(mode + ': a click on the helicopter you can see selects it', o.click, 'drawn ' + o.lift.toFixed(0) + ' px from its ground point');
-    S.ok(mode + ': ...and a box round it takes it, not reaching its ground point', o.box && o.boxReach, 'box ' + (o.boxReach ? 'clear of' : 'over') + ' the ground point');
+  var o = await round();
+  S.ok('the 3D view is up to check', o.on, '');
+  {
+    S.ok('a click on the helicopter you can see selects it', o.click, 'drawn ' + o.lift.toFixed(0) + ' px from its ground point');
+    S.ok('...and a box round it takes it, not reaching its ground point', o.box && o.boxReach, 'box ' + (o.boxReach ? 'clear of' : 'over') + ' the ground point');
     var distinct = o.stack.filter(function (v, k) { return v >= 0 && o.stack.indexOf(v) === k; }).length;
-    S.ok(mode + ': four sent to one place part, and four clicks pick four different machines', distinct === 4, JSON.stringify(o.stack));
+    S.ok('four sent to one place part, and four clicks pick four different machines', distinct === 4, JSON.stringify(o.stack));
   }
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
 

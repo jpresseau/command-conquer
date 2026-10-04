@@ -8,8 +8,7 @@ function _rtsDrawHud(dt) {
   var W = _rtsR.W, H = _rtsR.H;
   g.clearRect(0, 0, W, H);
   var i;
-  /* in 3D a selection is a ring on the ground (render3d/ring3d.js), not these brackets */
-  var ringed = !!(window._R3D && window._R3D.on && typeof _r3dRingDraw === 'function');
+  /* a selection is a ring on the ground (render3d/ring3d.js); this pass draws the bars */
   /* health bars: always for selected, and for anything damaged */
   for (i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
@@ -67,20 +66,6 @@ function _rtsDrawHud(dt) {
         g.closePath(); g.fill();
         g.restore();
       }
-    }
-    if (selected && !ringed) {
-      /* corner brackets, the classic selection look */
-      var r = (e.type === 'struct' ? rtsStructDef(e.def).w * _rtsR.cell * 0.5 : _rtsR.cell * 0.42) * sc;
-      r = Math.max(10, Math.min(70, r));
-      var cy = s.y + r * 0.55, L = Math.max(5, r * 0.42);
-      g.strokeStyle = e.side === 'player' ? '#8ef07a' : '#ff8a7a';
-      g.lineWidth = 2;
-      [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (c) {
-        var cx = s.x + c[0] * r, cz2 = cy + c[1] * r * 0.62;
-        g.beginPath();
-        g.moveTo(cx - c[0] * L, cz2); g.lineTo(cx, cz2); g.lineTo(cx, cz2 - c[1] * L);
-        g.stroke();
-      });
     }
   }
   /* drag box */

@@ -7,7 +7,7 @@
    from the rounded parts this renderer can draw: limbs as tapered tubes between joints
    (_r3dLimb, forest3d.js), a head, a helmet, webbing over a torso that narrows to the waist, a
    pack, and a rifle held across the body in both hands. The sprite model is untouched, so the
-   2D mode and everything measured on its sprites stay exactly as they were.
+   cameo and everything measured on its sprites stay exactly as they were.
 
    THE SAME MAN, NOT A NEW ONE. Same size (_sprUnitScale, the sprite model's own fit), same
    pair offset off the facing grid, same identity colours: the helmet's crown is the unit's

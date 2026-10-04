@@ -69,16 +69,12 @@ var S = new Suite('pan');
     function centre() { R.focus.x = _rtsWX(RTS_N / 2); R.focus.z = _rtsWX(RTS_N / 2); }
 
     R.zi = 1; _rtsApplyCam();
-    centre();
-    o.slip2d = drag(430, 300, 330, 180);
 
-    rts3dSet(true);
     o.on3d = !!(window._R3D && window._R3D.on);
     if (o.on3d) {
       o.cp = +window._R3D.cp.toFixed(4);
       centre();
       o.slip3d = drag(430, 300, 330, 180);
-      rts3dSet(false);
     }
 
     /* --- the HUD's use of `scale` --- */
@@ -120,16 +116,11 @@ var S = new Suite('pan');
 
   /* The whole claim of a drag-to-pan control: the ground you grabbed is the ground you still
      have. A tolerance of a tenth of a world unit is well under a cell (RTS_TILE is 4). */
-  S.ok('a touch drag leaves the ground under the finger in 2D',
-       Math.abs(out.slip2d.dx) < 0.1 && Math.abs(out.slip2d.dz) < 0.1,
-       'the world point that started under the finger ended ' + out.slip2d.dx + ' x and ' +
-       out.slip2d.dz + ' z away from it');
-
   S.ok('the 3D mode is available to check', out.on3d,
        out.on3d ? ('tilt cosine ' + out.cp) : 'no WebGL');
 
   if (out.on3d) {
-    S.ok('...and in 3D, where the tilt used to eat 18.6% of every vertical drag',
+    S.ok('a touch drag leaves the ground under the finger, though the tilt used to eat 18.6% of every vertical drag',
          Math.abs(out.slip3d.dx) < 0.1 && Math.abs(out.slip3d.dz) < 0.1,
          'slip ' + out.slip3d.dx + ' x, ' + out.slip3d.dz + ' z (dividing by the zoom alone ' +
          'left the ground short by a factor of ' + out.cp + ' on the z axis)');

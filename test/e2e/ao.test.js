@@ -50,7 +50,6 @@ var S = new Suite('ao');
     for (i = 0; i < RTS_N * RTS_N; i++) { G.mapped[i] = 1; G.vis[i] = 1; }
     G.visDirty = 1;
 
-    rts3dSet(true);
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;
@@ -60,7 +59,7 @@ var S = new Suite('ao');
     var gl = R3.gl;
     var yard = _rtsHas('player', 'yard');
     R.focus.x = yard.x; R.focus.z = yard.z;
-    R.zi = RTS_ZOOM_2D_STEPS - 1; _rtsApplyCam();
+    R.zi = RTS_ZOOM_BASE_STEPS - 1; _rtsApplyCam();
     _rtsRFrame(1 / 60);
     var CW = R3.cv.width, CH = R3.cv.height;
     o.sub = R3D_GROUND_SUB;

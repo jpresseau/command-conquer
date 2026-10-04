@@ -14,8 +14,7 @@
      TWO FINGERS        twisted, on a phone - past a small threshold, so a pinch does not wander.
 
    Every turn and lean pivots on the ground under a screen point - the middle of the screen, or
-   the fingers - and holds it there (_rtsHoldGround), so the thing being looked at stays put.
-   In 2D there is nothing to turn: the middle button pans there as it did. */
+   the fingers - and holds it there (_rtsHoldGround), so the thing being looked at stays put. */
 
 var RTS_ORBIT_YAW = 0.0065;      /* radians of turn a pixel of drag */
 var RTS_ORBIT_TILT = 0.004;      /* radians of lean a pixel of drag */

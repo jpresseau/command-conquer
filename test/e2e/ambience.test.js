@@ -68,8 +68,12 @@ function installProbe() {
     while (A.amb.q.length && Date.now() - t0 < 15000) await settle();
     o.loops = { left: A.amb.q.length, started: Object.keys(A.amb.v).filter(function (k) { return A.amb.v[k].src; }).length };
     /* the weather heard over open ground: the middle of the map, away from either base's hum */
-    R.focus.x = _rtsWX(RTS_N / 2); R.focus.z = _rtsWX(RTS_N / 2); _rtsApplyCam();
-    o.structsInView = G.ents.filter(function (e) { return !e.dead && e.type === 'struct' && _rtsAudible(e.x, e.z); }).length;
+    /* ...zoomed in until it really is open: the leaned camera sees further than the old flat
+       one did, and at the default zoom both bases' hum is in earshot of the middle */
+    R.focus.x = _rtsWX(RTS_N / 2); R.focus.z = _rtsWX(RTS_N / 2);
+    function hums() { return G.ents.filter(function (e) { return !e.dead && e.type === 'struct' && _rtsAudible(e.x, e.z); }).length; }
+    for (var zi = R.zi; zi < RTS_ZOOMS.length; zi++) { R.zi = zi; _rtsApplyCam(); if (!hums()) break; }
+    o.structsInView = hums();
     sky('day'); await window._amListen(900, tick);
     o.day = await window._amListen(700, tick);
     sky('rain'); await window._amListen(1200, tick);

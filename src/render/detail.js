@@ -1,5 +1,4 @@
 /* render/detail.js - the ground's high-frequency grain, added back at magnification.
-   Part of rts.render, which owns every pixel.
 
    THE GROUND IS BAKED AT 24 PIXELS A CELL AND CAN NEVER BE BAKED AT MORE. That is not a
    preference, it is arithmetic: the bake is one canvas of RTS_N * RTS_TS square, it costs a
@@ -39,22 +38,10 @@ var RTS_DETAIL_TILE = 128;        /* pixels square; 9 repeats across a phone, 65
 var RTS_DETAIL_SCALE = 4;         /* feature size in tile pixels; MUST divide the tile */
 var RTS_DETAIL_MIN_MAG = 1.5;     /* below this the ground is not magnified enough to need it */
 var RTS_DETAIL_ALPHA = 0.22;      /* grain, not pattern - see the note on the weave below */
-/* HOW THE TILE IS COMPOSITED, and the reason it is a variable rather than a literal.
-
-   `overlay` is the natural blend for grain and it is the expensive one. This tile does not need
-   it: it encodes lighten-or-darken per pixel in its own colour and strength in its alpha, so a
-   plain source-over produces the same picture for a fraction of the fill cost. That claim used
-   to be defended by two numbers written into a comment - overlay 7.06 ms, soft-light 10.38 -
-   measured once, on a machine nobody has any more, and no longer checkable by anything.
-
-   e2e/grain now prices the alternative itself by pointing this at 'overlay' for a few frames
-   and timing both. A number a test can re-measure is worth more than a number a comment
-   remembers. Nothing in the game ever assigns to it. */
-var RTS_DETAIL_OP = 'source-over';
 var _RTS_DETAIL = null;
-var _RTS_DETAIL_PAT = null;      /* {g, pat} - a pattern belongs to the context that made it */
 
-/* THE TILE CARRIES ITS STRENGTH IN ALPHA, NOT IN GREY, so the composite can be a plain one.
+/* THE TILE CARRIES ITS STRENGTH IN ALPHA, NOT IN GREY. The ground's fragment shader
+   (R3D_TEX_FS, render3d/ground3d.js) samples it on the legacy baked ground.
 
    The obvious build is a neutral-grey tile blended with `overlay`, which modulates luminance
    around mid-grey and leaves hue alone. It looks right and it costs too much: measured in a
@@ -107,53 +94,3 @@ function _rtsDetailTile() {
   return _RTS_DETAIL;
 }
 
-/* Lay the grain over the ground already drawn into `g`. `srcX`/`srcY` are the terrain-canvas
-   coordinates of the top-left of the view, which is what anchors the pattern to the world. */
-function _rtsGroundDetail(g, R, TSscale) {
-  /* device pixels per baked terrain pixel - the magnification this exists to answer */
-  var mag = TSscale * R.dpr;
-  if (mag < RTS_DETAIL_MIN_MAG) return 0;
-  /* THE PATTERN IS BUILT ONCE, NOT ONCE A FRAME. It is cached against the context it was made
-     for, because a pattern belongs to its context and the context is replaced whenever the
-     canvas is resized.
-
-     THE NUMBER THAT USED TO BE HERE IS GONE, because it is no longer true. This said
-     createPattern cost a measured 8.3 ms a frame - 8.8 ms to 17.1, straight through the
-     budget. Re-measured through e2e/grain with the cache defeated, it now costs nothing that
-     rises out of the noise: 3.32 ms against 3.51 for the pass as a whole, which is a difference
-     in the wrong direction. The tile itself is cached separately in _RTS_DETAIL, so what was
-     being timed was createPattern alone, and whatever made it expensive in that browser is not
-     doing so in this one. The cache stays - allocating an object per frame to hand it straight
-     back is pointless whatever it costs - but it is no longer load-bearing, and a comment
-     asserting 8.3 ms would send the next reader looking for a regression that is not there. */
-  if (!_RTS_DETAIL_PAT || _RTS_DETAIL_PAT.g !== g) {
-    var made = g.createPattern(_rtsDetailTile(), 'repeat');
-    if (!made) return 0;
-    _RTS_DETAIL_PAT = { g: g, pat: made };
-  }
-  var pat = _RTS_DETAIL_PAT.pat;
-
-  /* The grain is drawn at DEVICE resolution, not scaled up with the ground: the whole point is
-     to supply detail finer than a magnified baked pixel, and a pattern stretched by `mag`
-     would be exactly as blocky as what it is covering. The canvas transform is already scaled
-     by dpr, so a 1/dpr scale on the pattern puts one tile pixel on one device pixel. */
-  /* World anchoring: the terrain-canvas origin of the view, carried into device pixels and
-     wrapped to the tile so the offset stays small and exact. */
-  var ox = -((R.focus.x / RTS_TILE + RTS_N / 2) * RTS_TS - (R.W / 2) / TSscale) * mag;
-  var oy = -((R.focus.z / RTS_TILE + RTS_N / 2) * RTS_TS - (R.H / 2) / TSscale) * mag;
-  var T = RTS_DETAIL_TILE;
-  ox = ox - Math.floor(ox / T) * T;
-  oy = oy - Math.floor(oy / T) * T;
-
-  g.save();
-  /* Plain source-over: the tile already encodes lighten-or-darken per pixel in its own colour
-     and alpha, so no blend mode is needed and none of their cost is paid. See RTS_DETAIL_OP. */
-  g.globalCompositeOperation = RTS_DETAIL_OP;
-  g.globalAlpha = RTS_DETAIL_ALPHA;
-  g.setTransform(1, 0, 0, 1, 0, 0);            /* device pixels: one tile pixel per screen pixel */
-  g.translate(ox, oy);
-  g.fillStyle = pat;
-  g.fillRect(-ox, -oy, R.W * R.dpr, R.H * R.dpr);
-  g.restore();
-  return 1;
-}

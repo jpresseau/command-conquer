@@ -26,14 +26,13 @@ var S = new Suite('grade');
     var o = {}, R = _rtsR, G = window._rtsG, i;
     for (i = 0; i < RTS_N * RTS_N; i++) { G.mapped[i] = 1; G.vis[i] = 1; }
     G.visDirty = 1;
-    rts3dSet(true);
     var R3 = window._R3D;
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;
     o.post = !!R3.postReady;
     /* the middle of the map, so the whole frame is land and sea - the top of a frame near the
        edge is off the map, black, and a haze laid over black measures nothing about distance */
-    R.focus.x = 0; R.focus.z = 0; R.zi = RTS_ZOOM_2D_STEPS - 2; _rtsApplyCam();
+    R.focus.x = 0; R.focus.z = 0; R.zi = RTS_ZOOM_BASE_STEPS - 2; _rtsApplyCam();
     G.fx.length = 0;
     var gl = R3.gl, CW = R3.cv.width, CH = R3.cv.height;
     function shot() {

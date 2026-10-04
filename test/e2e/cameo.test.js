@@ -170,45 +170,72 @@ var S = new Suite('cameo');
        (plates.down.length ? ' - except ' + plates.down.slice(0, 6).join(', ') : '') +
        ' (the stale 160px literal reduced ten of them, worst 0.661)');
 
-  /* ---------- 5. the placement ghost is drawn at its real size ----------
-     Every sprite draw divides by the density its canvas was baked at; this one site did not,
-     so the translucent preview came out RTS_PS times too large and floated above and beside
-     the footprint box that the very next statement strokes correctly. */
+  /* ---------- 5. the placement ghost is the size of the building it places ----------
+     The 2D ghost was the sprite drawn at the wrong density - RTS_PS times too large, floating
+     beside the footprint. In 3D the ghost is the building's own mesh (render3d/place3d.js), so
+     the claim is asked of the picture: the screen box the translucent ghost covers spans the
+     footprint it will occupy, projected through the same camera - not three times it. (The
+     placed building is no reference: its cast shadow and the base dressing round it double
+     its box.) */
   var ghost = await g.page.evaluate(function () {
-    var R = _rtsR, S = _rtsSprites(), G = window._rtsG;
-    R.zi = RTS_ZOOMS.length - 1; R.cell = RTS_ZOOMS[R.zi];
-    /* Ghost a structure the player has NOT built, so the only draw of that canvas in the
-       frame is the ghost itself and there is no real building to confuse it with. */
-    var key = null;
-    for (var i = 0; i < RTS_STRUCTS.length; i++) {
-      var k = RTS_STRUCTS[i].key;
-      if (!_rtsHas('player', k) && S.bld.player[k]) { key = k; break; }
+    var R = _rtsR, G = window._rtsG, R3 = window._R3D, gl = R3.gl;
+    for (var i = 0; i < RTS_N * RTS_N; i++) { G.mapped[i] = 1; G.vis[i] = 1; }
+    G.visDirty = 1;
+    /* a structure the player has NOT built, on open ground beside the yard */
+    var key = null, k, yd = _rtsHas('player', 'yard'), spot = null;
+    for (i = 0; i < RTS_STRUCTS.length && !key; i++) {
+      k = RTS_STRUCTS[i].key;
+      if (_rtsHas('player', k) || RTS_STRUCTS[i].wall || RTS_STRUCTS[i].shore) continue;
+      var d0 = rtsStructDef(k);
+      if (d0.w < 2) continue;
+      for (var r = 4; r < 14 && !spot; r++)
+        for (var dz = -r; dz <= r && !spot; dz++)
+          for (var dx = -r; dx <= r && !spot; dx++)
+            if (_rtsCanPlace('player', k, yd.tx + dx, yd.tz + dz, true)) spot = [yd.tx + dx, yd.tz + dz];
+      if (spot) key = k;
     }
     if (!key) return { key: null };
-    var def = rtsStructDef(key), spr = S.bld.player[key];
-    _rtsGhostShow(key);
-    _rtsGhostMove(_rtsTX(R.focus.x), _rtsTX(R.focus.z), true);
-
-    /* observe the actual draw, exactly as the ore spec does */
-    var got = null, orig = R.g.drawImage;
-    R.g.drawImage = function (img) {
-      if (img === spr.c) got = { w: arguments[3], h: arguments[4] };
-      return orig.apply(this, arguments);
-    };
-    _rtsRFrame(1 / 60);
-    R.g.drawImage = orig;
+    var d = rtsStructDef(key);
+    R.focus.x = _rtsWX(spot[0]) + d.w * RTS_TILE / 2; R.focus.z = _rtsWX(spot[1]) + d.h * RTS_TILE / 2;
+    R.zi = RTS_ZOOMS.length - 1; _rtsApplyCam();
+    function grab() {
+      _rtsRFrame(0); _rtsRFrame(0);
+      var W = R3.cv.width, H = R3.cv.height, px = new Uint8Array(W * H * 4);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      return { W: W, H: H, px: px };
+    }
+    function box(a, b) {
+      var x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1, n = 0;
+      for (var y = 0; y < a.H; y++) for (var x = 0; x < a.W; x++) {
+        var q = (y * a.W + x) * 4;
+        if (Math.abs(a.px[q] - b.px[q]) + Math.abs(a.px[q + 1] - b.px[q + 1]) + Math.abs(a.px[q + 2] - b.px[q + 2]) < 40) continue;
+        n++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+      return n ? { w: x1 - x0 + 1, h: y1 - y0 + 1, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, n: n } : null;
+    }
+    var bare = grab();
+    _rtsGhostShow(key); _rtsGhostMove(spot[0], spot[1], true);
+    var withGhost = grab();
     _rtsGhostHide();
-    return { key: key, drawnW: got && got.w, boxW: def.w * R.cell,
-             srcW: spr.c.width, ps: spr.c.ps || 1, cell: R.cell };
+    /* the footprint's corners on the ground, in GL pixels (the overlay is CSS px times dpr) */
+    var x0 = _rtsWX(spot[0]) - RTS_TILE / 2, z0 = _rtsWX(spot[1]) - RTS_TILE / 2;
+    var xs = [[x0, z0], [x0 + d.w * RTS_TILE, z0], [x0, z0 + d.h * RTS_TILE], [x0 + d.w * RTS_TILE, z0 + d.h * RTS_TILE]].map(function (c) {
+      return _rtsGroundToScreen(c[0], c[1]).x * R3.cv.width / R.W;
+    });
+    var fl = Math.min.apply(null, xs), fr = Math.max.apply(null, xs);
+    return { key: key, ghost: box(bare, withGhost), real: { w: Math.round(fr - fl), cx: Math.round((fl + fr) / 2) } };
   });
   S.ok('a structure the player has not built was available to ghost', !!ghost.key,
        ghost.key || 'none');
-  S.eq('the ghost is drawn exactly as wide as the footprint it will occupy',
-       ghost.drawnW, ghost.boxW);
-  S.ok('...which an undivided draw could not be', ghost.ps > 1,
-       'the ' + ghost.key + ' sprite is baked at ps=' + ghost.ps + ' (' + ghost.srcW +
-       'px), so skipping the divide would draw ' + (ghost.srcW * ghost.cell / 24) +
-       'px into a ' + ghost.boxW + 'px box');
+  var gb = ghost.ghost, rb = ghost.real;
+  S.ok('...and the ghost shows on screen', !!gb, 'ghost ' + JSON.stringify(gb));
+  if (gb) {
+    S.ok('the ghost is drawn about as wide as the footprint it will occupy, over it',
+         gb.w >= rb.w * 0.8 && gb.w <= rb.w * 1.35 && Math.abs(gb.cx - rb.cx) <= rb.w * 0.15,
+         'the ' + ghost.key + ' ghost spans ' + gb.w + ' px about x=' + gb.cx + '; its footprint ' +
+         rb.w + ' px about x=' + rb.cx + ' (the 2D ghost was RTS_PS times too large)');
+  }
 
   S.ok('the page logged no errors', !g.errors.length, g.errors.slice(0, 3).join(' | ') || 'clean');
 

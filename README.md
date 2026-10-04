@@ -55,21 +55,16 @@ timer. A player who does nothing is overrun in about four and a half minutes.
 
 There are no art or audio assets in this repository, and none are downloaded at runtime:
 
-- **Structures and units are pre-rendered 3D.** They are defined as 3D models and rasterised
-  to sprites once at startup by a ~200-line renderer with its own scanline fill and depth
-  buffer — the same approach the games of the era used, and the reason the results have real
-  volume and flat shaded facets. Nothing renders in 3D at runtime; there is no WebGL context
-  and no library. Unit facings come from rotating the model, not the canvas.
-- **Everything else is drawn in code** at 24 pixels per map cell: terrain, four ore densities,
-  explosions and muzzle flashes. Hard near-black outlines are traced from the alpha channel,
-  so a building made of overlapping parts gets one clean line around the whole silhouette.
-- **The battlefield is painted once** into a single 2688×2688 canvas from continuous noise, so
-  dirt patches are organic blobs rather than per-cell tiles — and the ground costs one blit
-  per frame.
-- **Sidebar icons** are the sprites themselves on a dark plate.
-- **All sound** is synthesized with WebAudio: weapons are shaped noise plus pitch-swept
-  oscillators, and the music is a scheduled drum machine with a distorted bass riff and lead
-  stabs. Not one sampled file.
+- **The battlefield is 3D, in WebGL, with no library.** Units and structures are defined as
+  faceted models in code and drawn as meshes under a camera you can turn, tilt and zoom; the
+  ground is a material shader over the map's own heightfield, with water, weather, a moving
+  sun, shadows and lit explosions. A browser without WebGL is told so on the title screen.
+- **The same models are baked to sprites** at startup by a ~200-line software renderer, for the
+  build cameos and the radar.
+- **Sidebar icons** are those sprites on a dark plate.
+- **All sound** is synthesized with WebAudio: effects are recipes rendered to a bank of takes,
+  and the score (two songs, three intensities that follow the fighting) is played by a sampler
+  over instruments synthesized at load. Not one sampled file.
 
 ## Building it
 
@@ -92,7 +87,7 @@ so a new file is one `//@@INC:` line and the order is for readability, not corre
 | `src/sprites/` | Palette, terrain bake, ore, effects, and the 3D models |
 | `src/rts.audio.js` | All sound and music |
 | `src/core/` | Simulation: grid, A\* pathfinding, combat, economy, enemy AI. Renderer-free, so a battle can be stepped headlessly. |
-| `src/render/` | Canvas 2D. Reads the sim, never writes it. |
+| `src/render/` | The camera, and the overlay canvas over the 3D world. Reads the sim, never writes it. |
 | `src/ui/` | Sidebar, radar, HUD overlay, input, main loop |
 | `src/title.js` | Title screen, difficulty and army pickers, START |
 | `src/index.skeleton.html` | The page shell and the include manifest - no JavaScript of its own |

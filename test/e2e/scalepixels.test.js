@@ -38,7 +38,7 @@ var S = new Suite('scalepixels');
   var browser = await chromium.launch();
   /* dpr 3, so a pinned 1x is genuinely different from AUTO */
   var g = await openPage(browser, { width: 900, height: 700, dpr: 3 });
-  await g.start(7, 12, { mode3d: true });
+  await g.start(7, 12, {});
   await g.freeze();
 
   var out = await g.page.evaluate(function () {

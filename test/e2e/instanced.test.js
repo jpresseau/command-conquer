@@ -56,7 +56,7 @@ var SCENE = function (n) {
 (async function () {
   var browser = await chromium.launch();
   var g = await openPage(browser, { width: 900, height: 700, dpr: 1 });
-  await g.start(7, 20, { freeze: true, mode3d: true });
+  await g.start(7, 20, { freeze: true });
 
   /* ---------- 1. the same frame, drawn both ways ---------- */
   var same = await g.page.evaluate(function (src) {
