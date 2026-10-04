@@ -165,6 +165,7 @@ function _rtsDeploy(e) {
   if (!e || e.dead || e.type !== 'unit') return false;
   var d = rtsUnitDef(e.def);
   if (d && d.mines) return _rtsLayMine(e);          /* the Mine Layer's deploy lays one: core/mines.js */
+  if (d && d.bridge) return _rtsLayBridge(e);       /* the Bridge Layer's becomes a span: core/bridgelayer.js */
   if (!d || !d.deploy) return false;
   var sd = rtsStructDef(d.deploy);
   if (!sd) return false;
@@ -205,7 +206,7 @@ function _rtsDeploySelected() {
    show itself, and the order asks so it can skip everything else in a mixed selection. */
 function _rtsCanDeploy(e) {
   var d = e && rtsUnitDef(e.def) || {};
-  return !!(e && !e.dead && e.side === 'player' && e.type === 'unit' && (d.deploy || d.mines));
+  return !!(e && !e.dead && e.side === 'player' && e.type === 'unit' && (d.deploy || d.mines || d.bridge));
 }
 
 /* Removing the vehicle without the wreck, the explosion or the kill credit - it was not

@@ -1,5 +1,5 @@
 /* sprites/unit-special.js - the special-purpose vehicles Breachwater added to the roster: the
-   Flak Track and the Mine Layer. One arm of the unit model chain (see sprites/unitmodels.js for the
+   Flak Track, the Mine Layer and the Bridge Layer. One arm of the unit model chain (see sprites/unitmodels.js for the
    dispatch and the shared locals handed over in X); returns false for a key it does not own.
 
    Two small helpers live here because these are the first models that need them: a run of
@@ -113,6 +113,34 @@ function _sprUnitSpecial(X, key) {
     _r3Box(m, 8.6, 5.0, -3.6, 0.9, 1.0, 1.4, GN[3], GN[3]);       /* headlights */
     _r3Box(m, 8.6, 5.0, 3.6, 0.9, 1.0, 1.4, GN[3], GN[3]);
     _r3Box(m, 2.4, 9.0, -3.2, 0.5, 4.2, 0.5, DK[1], DK[3]);       /* whip aerial */
+  } else if (key === 'bridgelayer') {
+    /* BRIDGE LAYER. A tank hull carrying its bridge folded in two on its back: a long pale deck
+       with a truss along each side and the hinge at the front, overhanging the hull at both ends.
+       The identity is that overhang - a box longer than the vehicle under it - and the launching
+       arm reaching up to it from the bow. */
+    tracks(20, 6.4, 5, 2.3);
+    _r3Slab(m, 0, 3.4, 0, 19.0, 3.4, 10.6, 1.1, VH[0], VH[1]);    /* hull */
+    _r3Box(m, 8.2, 3.4, 0, 3.0, 3.2, 9.6, VH[1], VH[3]);          /* glacis */
+    _r3Slab(m, 5.6, 6.8, -2.6, 4.4, 2.4, 4.4, 0.6, VH[1], TM[1]); /* the driver's cab, offset - team roof */
+    _r3Box(m, 7.8, 7.6, -2.6, 0.6, 1.0, 3.4, RTS_PAL.glass, RTS_PAL.glass);
+    /* the folded bridge: two deck halves stacked, overhanging fore and aft */
+    for (var h = 0; h < 2; h++) {
+      var by = 9.6 + h * 1.9;
+      _r3Box(m, -1.0, by, 0, 26.0, 1.0, 8.8, S[1], S[0]);         /* deck plate, pale steel */
+      for (var sd = -1; sd <= 1; sd += 2) {
+        _r3Box(m, -1.0, by + 0.9, sd * 4.0, 26.0, 0.9, 0.6, S[2], S[1]);   /* truss chords */
+        for (var t = 0; t < 7; t++) _r3Box(m, -12.0 + t * 3.7, by + 0.5, sd * 4.0, 0.5, 1.2, 0.6, S[3], S[2]);
+      }
+    }
+    _r3Box(m, 11.4, 10.6, 0, 1.6, 3.4, 8.0, DK[1], DK[2]);        /* the hinge, at the bow */
+    /* the launching arm, pitched up from the bow to the bridge */
+    n0 = m.length;
+    _r3Box(m, 9.0, 6.6, -3.0, 5.6, 1.2, 1.2, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);
+    _r3Box(m, 9.0, 6.6, 3.0, 5.6, 1.2, 1.2, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);
+    _sprPitch(m, n0, 0.55, 6.6, 6.6);
+    _r3Box(m, -1.0, 8.4, 0, 18.0, 1.0, 6.6, DK[1], DK[2]);        /* the cradle under it */
+    _r3Box(m, 9.4, 5.2, -3.8, 0.9, 1.0, 1.4, GN[3], GN[3]);       /* headlights */
+    _r3Box(m, 9.4, 5.2, 3.8, 0.9, 1.0, 1.4, GN[3], GN[3]);
   } else return false;
   return true;
 }

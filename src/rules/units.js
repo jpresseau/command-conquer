@@ -146,6 +146,12 @@ var RTS_UNITS = [
   { key:'flaktrack',name:'Flak Track',    kind:'vehicle',  cost:800,  build:10, hp:260,  speed:12.5,turn:2.4,r:1.8, sight:26, weapon:'trackflak',
     needs:['radar'], tracked:true, armour:'light',
     desc:'Anti-aircraft guns on a half-track. Keeps gunships and jets off your tanks; cannot hit the ground.' },
+  /* BRIDGE LAYER. The verb is the CROSSING: a gap the map gave no bridge over, spanned where the
+     player chooses. At the water's edge, DEPLOY (D) turns it into a one-lane bridge of up to
+     eight cells across the water ahead - core/bridgelayer.js. Unarmed, and spent in the laying. */
+  { key:'bridgelayer',name:'Bridge Layer', kind:'vehicle', cost:1000, build:12, hp:380,  speed:9.5, turn:1.8,r:2.0, sight:16, weapon:null,
+    needs:['radar'], bridge:true, tracked:true, armour:'heavy',
+    desc:'At the water\'s edge, press D or DEPLOY: it becomes a bridge of up to eight cells across the gap ahead.' },
   /* MINE LAYER. The verb is DENIAL: a road, a ford or a gap that the enemy will pay to cross.
      Unarmed; it lays a mine where it stands (D, or DEPLOY), five to a load, and a Repair Bay
      loads them back. The mines are invisible to the other side - core/mines.js. */

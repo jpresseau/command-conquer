@@ -700,7 +700,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">37570fb · 2026-10-04</div>
+  <div id="rtsBuild" title="build">3c9b81b · 2026-10-04</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1096,6 +1096,12 @@ var RTS_UNITS = [
   { key:'flaktrack',name:'Flak Track',    kind:'vehicle',  cost:800,  build:10, hp:260,  speed:12.5,turn:2.4,r:1.8, sight:26, weapon:'trackflak',
     needs:['radar'], tracked:true, armour:'light',
     desc:'Anti-aircraft guns on a half-track. Keeps gunships and jets off your tanks; cannot hit the ground.' },
+  /* BRIDGE LAYER. The verb is the CROSSING: a gap the map gave no bridge over, spanned where the
+     player chooses. At the water's edge, DEPLOY (D) turns it into a one-lane bridge of up to
+     eight cells across the water ahead - core/bridgelayer.js. Unarmed, and spent in the laying. */
+  { key:'bridgelayer',name:'Bridge Layer', kind:'vehicle', cost:1000, build:12, hp:380,  speed:9.5, turn:1.8,r:2.0, sight:16, weapon:null,
+    needs:['radar'], bridge:true, tracked:true, armour:'heavy',
+    desc:'At the water\'s edge, press D or DEPLOY: it becomes a bridge of up to eight cells across the gap ahead.' },
   /* MINE LAYER. The verb is DENIAL: a road, a ford or a gap that the enemy will pay to cross.
      Unarmed; it lays a mine where it stands (D, or DEPLOY), five to a load, and a Repair Bay
      loads them back. The mines are invisible to the other side - core/mines.js. */
@@ -6374,7 +6380,7 @@ function _sprBuildingClean(key, side) {
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
   dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46,
-  flaktrack:34, minelayer:37
+  flaktrack:34, minelayer:37, bridgelayer:42
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -7244,7 +7250,7 @@ function _sprUnitAirSea(X, key) {
 }
 </script>
 <script>/* sprites/unit-special.js - the special-purpose vehicles Breachwater added to the roster: the
-   Flak Track and the Mine Layer. One arm of the unit model chain (see sprites/unitmodels.js for the
+   Flak Track, the Mine Layer and the Bridge Layer. One arm of the unit model chain (see sprites/unitmodels.js for the
    dispatch and the shared locals handed over in X); returns false for a key it does not own.
 
    Two small helpers live here because these are the first models that need them: a run of
@@ -7358,6 +7364,34 @@ function _sprUnitSpecial(X, key) {
     _r3Box(m, 8.6, 5.0, -3.6, 0.9, 1.0, 1.4, GN[3], GN[3]);       /* headlights */
     _r3Box(m, 8.6, 5.0, 3.6, 0.9, 1.0, 1.4, GN[3], GN[3]);
     _r3Box(m, 2.4, 9.0, -3.2, 0.5, 4.2, 0.5, DK[1], DK[3]);       /* whip aerial */
+  } else if (key === 'bridgelayer') {
+    /* BRIDGE LAYER. A tank hull carrying its bridge folded in two on its back: a long pale deck
+       with a truss along each side and the hinge at the front, overhanging the hull at both ends.
+       The identity is that overhang - a box longer than the vehicle under it - and the launching
+       arm reaching up to it from the bow. */
+    tracks(20, 6.4, 5, 2.3);
+    _r3Slab(m, 0, 3.4, 0, 19.0, 3.4, 10.6, 1.1, VH[0], VH[1]);    /* hull */
+    _r3Box(m, 8.2, 3.4, 0, 3.0, 3.2, 9.6, VH[1], VH[3]);          /* glacis */
+    _r3Slab(m, 5.6, 6.8, -2.6, 4.4, 2.4, 4.4, 0.6, VH[1], TM[1]); /* the driver's cab, offset - team roof */
+    _r3Box(m, 7.8, 7.6, -2.6, 0.6, 1.0, 3.4, RTS_PAL.glass, RTS_PAL.glass);
+    /* the folded bridge: two deck halves stacked, overhanging fore and aft */
+    for (var h = 0; h < 2; h++) {
+      var by = 9.6 + h * 1.9;
+      _r3Box(m, -1.0, by, 0, 26.0, 1.0, 8.8, S[1], S[0]);         /* deck plate, pale steel */
+      for (var sd = -1; sd <= 1; sd += 2) {
+        _r3Box(m, -1.0, by + 0.9, sd * 4.0, 26.0, 0.9, 0.6, S[2], S[1]);   /* truss chords */
+        for (var t = 0; t < 7; t++) _r3Box(m, -12.0 + t * 3.7, by + 0.5, sd * 4.0, 0.5, 1.2, 0.6, S[3], S[2]);
+      }
+    }
+    _r3Box(m, 11.4, 10.6, 0, 1.6, 3.4, 8.0, DK[1], DK[2]);        /* the hinge, at the bow */
+    /* the launching arm, pitched up from the bow to the bridge */
+    n0 = m.length;
+    _r3Box(m, 9.0, 6.6, -3.0, 5.6, 1.2, 1.2, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);
+    _r3Box(m, 9.0, 6.6, 3.0, 5.6, 1.2, 1.2, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);
+    _sprPitch(m, n0, 0.55, 6.6, 6.6);
+    _r3Box(m, -1.0, 8.4, 0, 18.0, 1.0, 6.6, DK[1], DK[2]);        /* the cradle under it */
+    _r3Box(m, 9.4, 5.2, -3.8, 0.9, 1.0, 1.4, GN[3], GN[3]);       /* headlights */
+    _r3Box(m, 9.4, 5.2, 3.8, 0.9, 1.0, 1.4, GN[3], GN[3]);
   } else return false;
   return true;
 }
@@ -11609,6 +11643,84 @@ function _rtsMineRestock(v, dt) {
   if (v.mineT >= RTS_MINE.restock) { v.mineT = 0; v.mines++; }
 }
 </script>
+<script>/* core/bridgelayer.js - the Bridge Layer: a bridge where the map has none.
+
+   The verb is the CROSSING: a river or a channel the map gave no bridge over, spanned where the
+   player chooses, so an army can come at a base from the side it is not watching. The layer
+   drives to the water's edge and DEPLOYs (D, or the button), and becomes a one-lane bridge
+   across the gap ahead of it - the vehicle is the span, as the MCV is the yard.
+
+   The bridge is exactly the kind the map generator lays (core/bridge.js): a record in G.bridges
+   and its water cells opened to land units, so nothing that reads a bridge needs to know where
+   this one came from - the pathfinder, a unit standing on the deck, the radar, a save. Only the
+   3D mesh is built once per map, so a bridge laid in play bumps G.bridgeRev and the renderer
+   rebuilds (render3d/bridge3d.js). */
+
+var RTS_LAYBRIDGE_SPAN = 8;      /* the longest gap it can span, in cells of water */
+
+/* The gap ahead: from the layer's own cell, a straight run of open water ending on open, dry
+   ground, tried along the way it faces first and then the other three. Null if there is none. */
+function _rtsBridgeGap(e) {
+  var G = window._rtsG, T = G.terrain, B = G.blocked;
+  var tx = _rtsTX(e.x), tz = _rtsTX(e.z);
+  /* never from the water - a deck - which no generated map has yet offered a gap from, since a
+     deck runs the length of its channel; a guard, and unit/bridgelayer cannot reach it */
+  if (!_rtsInB(tx, tz) || T[_rtsIdx(tx, tz)] === RTS_T_WATER) return null;
+  var fx = Math.cos(e.rot || 0), fz = Math.sin(e.rot || 0);
+  var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]].sort(function (a, b) {
+    return (b[0] * fx + b[1] * fz) - (a[0] * fx + a[1] * fz);
+  });
+  for (var d = 0; d < 4; d++) {
+    var dx = dirs[d][0], dz = dirs[d][1];
+    for (var k = 1; k <= RTS_LAYBRIDGE_SPAN + 1; k++) {
+      var x = tx + dx * k, z = tz + dz * k;
+      if (!_rtsInB(x, z)) break;
+      var i = _rtsIdx(x, z);
+      if (T[i] === RTS_T_WATER) {
+        if (B[i] !== 2) break;             /* a deck already, or a shipyard's water */
+        continue;
+      }
+      if (B[i] === 0) {                    /* a zero-length run fails _rtsBridgeAcross */
+        var br = { tx: tx + dx, tz: tz + dz, dx: dx, dz: dz, len: k - 1, w: 1, px: dz !== 0 ? 1 : 0, pz: dx !== 0 ? 1 : 0 };
+        if (_rtsBridgeAcross(br)) return br;
+      }
+      break;
+    }
+  }
+  return null;
+}
+/* ACROSS THE WATER, NOT ALONG IT - the generator's own rule (core/bridge.js `crosses`): through
+   the middle third of the span there is water on both sides of the deck. Without it a layer on a
+   beach laid a pier down the shoreline over the first inlet it faced. */
+function _rtsBridgeAcross(br) {
+  var G = window._rtsG, wet = 0, n = 0;
+  function sea(x, z) { return _rtsInB(x, z) && G.terrain[_rtsIdx(x, z)] === RTS_T_WATER; }
+  for (var k = Math.floor(br.len / 3); k < Math.ceil(br.len * 2 / 3); k++) {
+    var cx = br.tx + br.dx * k, cz = br.tz + br.dz * k;
+    n++;
+    if (sea(cx - br.px * 2, cz - br.pz * 2) && sea(cx + br.px * 2, cz + br.pz * 2)) wet++;
+  }
+  return n > 0 && wet * 3 >= n * 2;
+}
+/* Lay it: the layer becomes the bridge. False, and the player told why, when there is no gap. */
+function _rtsLayBridge(e) {
+  var G = window._rtsG, br = _rtsBridgeGap(e);
+  if (!br) {
+    if (e.side === 'player') _rtsSay('No gap to span here - drive to the water\'s edge, facing the far bank.');
+    return false;
+  }
+  br.laid = e.side;
+  _rtsBridgeCells(br).forEach(function (i) { G.blocked[i] = 0; });
+  (G.bridges = G.bridges || []).push(br);
+  G.bridgeRev = (G.bridgeRev || 0) + 1;
+  _rtsKillQuiet(e);
+  if (e.side === 'player') {
+    _rtsSay('Bridge laid.');
+    if (typeof _rtsSfx === 'function') _rtsSfx('place', e.x, e.z);
+  }
+  return true;
+}
+</script>
 <script>/* core/supers.js - superweapons (atom bomb, iron curtain, chronosphere, GPS) and the shroud
    they lift. Part of rts.core, the simulation. */
 
@@ -12638,6 +12750,7 @@ function _rtsDeploy(e) {
   if (!e || e.dead || e.type !== 'unit') return false;
   var d = rtsUnitDef(e.def);
   if (d && d.mines) return _rtsLayMine(e);          /* the Mine Layer's deploy lays one: core/mines.js */
+  if (d && d.bridge) return _rtsLayBridge(e);       /* the Bridge Layer's becomes a span: core/bridgelayer.js */
   if (!d || !d.deploy) return false;
   var sd = rtsStructDef(d.deploy);
   if (!sd) return false;
@@ -12678,7 +12791,7 @@ function _rtsDeploySelected() {
    show itself, and the order asks so it can skip everything else in a mixed selection. */
 function _rtsCanDeploy(e) {
   var d = e && rtsUnitDef(e.def) || {};
-  return !!(e && !e.dead && e.side === 'player' && e.type === 'unit' && (d.deploy || d.mines));
+  return !!(e && !e.dead && e.side === 'player' && e.type === 'unit' && (d.deploy || d.mines || d.bridge));
 }
 
 /* Removing the vehicle without the wreck, the explosion or the kill credit - it was not
@@ -25650,6 +25763,7 @@ function _r3dWorldTick(G) {
     _r3dWorldBuild(G); _r3dOreBuild(G); _r3dWaterBuild(G); _r3dDressTick(G); _r3dSceneryTick(G); _r3dBridgeTick(G); return;
   }
   _r3dOreTick(G);
+  _r3dBridgeTick(G);                /* a no-op unless a bridge was laid in play */
   _r3dSceneryTick(G);
   _r3dDressTick(G);                 /* what the bases keep lying about - dress3d.js */
 }
@@ -26082,10 +26196,12 @@ function _r3dBridge(out, br, lamps) {
   bulbs.forEach(function (p) { lamps.push([p[0] * c - p[2] * s + ox, p[1], p[0] * s + p[2] * c + oz]); });
 }
 
-/* Every bridge on the map, a mesh each with its bounds, rebuilt when the game changes. */
+/* Every bridge on the map, a mesh each with its bounds, rebuilt when the game changes - or when
+   a Bridge Layer lays one in play (core/bridgelayer.js bumps G.bridgeRev). */
 function _r3dBridgeTick(G) {
   var R3 = window._R3D;
-  if (!R3 || !R3.gl || R3.bridgeFor === G) return;
+  if (!R3 || !R3.gl || (R3.bridgeFor === G && R3.bridgeRev === (G.bridgeRev || 0))) return;
+  R3.bridgeRev = G.bridgeRev || 0;
   var gl = R3.gl;
   if (R3.bridges) R3.bridges.forEach(function (m) { gl.deleteBuffer(m.p); gl.deleteBuffer(m.n); gl.deleteBuffer(m.c); });
   R3.bridges = []; R3.bridgeFor = G; R3.bridgeTris = 0; R3.bridgeLamps = [];

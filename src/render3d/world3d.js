@@ -378,6 +378,7 @@ function _r3dWorldTick(G) {
     _r3dWorldBuild(G); _r3dOreBuild(G); _r3dWaterBuild(G); _r3dDressTick(G); _r3dSceneryTick(G); _r3dBridgeTick(G); return;
   }
   _r3dOreTick(G);
+  _r3dBridgeTick(G);                /* a no-op unless a bridge was laid in play */
   _r3dSceneryTick(G);
   _r3dDressTick(G);                 /* what the bases keep lying about - dress3d.js */
 }
