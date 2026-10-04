@@ -72,10 +72,12 @@ function _r3dBridge(out, br, lamps) {
   bulbs.forEach(function (p) { lamps.push([p[0] * c - p[2] * s + ox, p[1], p[0] * s + p[2] * c + oz]); });
 }
 
-/* Every bridge on the map, a mesh each with its bounds, rebuilt when the game changes. */
+/* Every bridge on the map, a mesh each with its bounds, rebuilt when the game changes - or when
+   a Bridge Layer lays one in play (core/bridgelayer.js bumps G.bridgeRev). */
 function _r3dBridgeTick(G) {
   var R3 = window._R3D;
-  if (!R3 || !R3.gl || R3.bridgeFor === G) return;
+  if (!R3 || !R3.gl || (R3.bridgeFor === G && R3.bridgeRev === (G.bridgeRev || 0))) return;
+  R3.bridgeRev = G.bridgeRev || 0;
   var gl = R3.gl;
   if (R3.bridges) R3.bridges.forEach(function (m) { gl.deleteBuffer(m.p); gl.deleteBuffer(m.n); gl.deleteBuffer(m.c); });
   R3.bridges = []; R3.bridgeFor = G; R3.bridgeTris = 0; R3.bridgeLamps = [];

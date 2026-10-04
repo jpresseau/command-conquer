@@ -325,3 +325,34 @@ the hidden rule, the restock and the save. `e2e/minelayer` covers the D key, the
 a real click, and the overlay drawing ours and not theirs. Twelve mutants were killed. The
 arming mutant survived the first set, because the side check already spares the layer. That
 showed what the delay is really for, and the test for it is the one above.
+
+## The Bridge Layer — a crossing where the map has none
+
+Both armies' tracked layer, built at the Vehicle Works once there is a Radar Post
+(`bridgelayer`). The verb is the CROSSING: a river or a channel the map gave no bridge over,
+spanned where the player chooses, so an army can come at a base from the side it isn't
+watching. At the water's edge, D or DEPLOY turns the vehicle into a one-lane bridge of up to
+eight cells across the gap ahead. It tries the way it faces first, then the other three. The
+vehicle is the span, as the MCV is the yard.
+
+The bridge is exactly the generator's kind (`core/bridge.js`): a record in `G.bridges` and its
+water cells opened to land units. The pathfinder, the deck a unit stands on, the radar and a
+save all treat it like any other bridge. Two things were added to make that work in play:
+- The 3D mesh was built once per map, so a laid bridge bumps `G.bridgeRev` and the renderer
+  rebuilds.
+- The generator's ACROSS, NOT ALONG rule (`_rtsBridgeAcross`) is now shared. Without it, the
+  first render showed a layer on a beach laying a pier down the shoreline over an inlet.
+
+On seed 4242, the best gap it finds leads to ground no tank could reach before; laid, it is a
+straight 36-unit drive.
+
+The opponent does not build one: a crossing is a plan.
+
+### Verified
+
+`unit/bridgelayer` covers the generated map's worst gap, laid; the path before and after; a tank
+driving over the deck; a ship under it; and four refusals: dry land, a second deck, a pier, and
+facing (on a dug fork). `e2e/bridgelayer` covers the D key and the 3D mesh appearing over the
+water. Ten mutants were killed. Two guards survived and say so:
+- the zero-length run was redundant with the across rule, and is gone;
+- "never from the water" is kept as a guard that no generated map reaches.
