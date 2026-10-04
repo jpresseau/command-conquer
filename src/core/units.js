@@ -46,7 +46,7 @@ function _rtsUpdateUnit(e, dt) {
   /* ---- harvester economy loop ---- */
   if (d.harvest) { _rtsUpdateHarvester(e, dt, d); return; }
 
-  /* ---- Field Medic: a passive aura, not an order ----
+  /* ---- Field Medic and Repair Truck: a passive aura, not an order ----
      Runs every tick regardless of what the medic is doing, because a medic that stops healing
      while it walks is a medic nobody uses. "Cannot heal himself" comes straight from the
      reference and stops a pair of medics being an immortal blob. */
@@ -55,7 +55,8 @@ function _rtsUpdateUnit(e, dt) {
     for (var hi = 0; hi < hl.length; hi++) {
       var pt = hl[hi];
       if (pt === e || pt.dead || pt.type !== 'unit' || pt.side !== e.side) continue;
-      if (pt.hp >= pt.maxHp || rtsUnitDef(pt.def).kind !== 'infantry') continue;
+      /* `healKind`: the medic's is people, the Repair Truck's vehicles (core/repairtruck.js) */
+      if (pt.hp >= pt.maxHp || rtsUnitDef(pt.def).kind !== (d.healKind || 'infantry')) continue;
       if (Math.hypot(pt.x - e.x, pt.z - e.z) > d.heals) continue;
       pt.hp = Math.min(pt.maxHp, pt.hp + d.healRate * dt);
     }

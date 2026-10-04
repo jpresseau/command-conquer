@@ -177,6 +177,12 @@ var RTS_UNITS = [
   { key:'spotter',  name:'Spotter',       kind:'vehicle',  cost:600,  build:9,  hp:160,  speed:20,  turn:4.0,r:1.6, sight:28, weapon:'mg',
     needs:['radar'], spots:true, armour:'light',
     desc:'Sees through fog and fog banks, and your guns can hit anything it sees at their full range.' },
+  /* REPAIR TRUCK. The verb is MENDING IN THE FIELD: the Field Medic's aura for vehicles, so a
+     battered column is put right where it stands instead of driving home to the Repair Bay. It
+     drives to a damaged vehicle near it by itself - core/repairtruck.js. Unarmed. */
+  { key:'repairtruck',name:'Repair Truck', kind:'vehicle', cost:800,  build:10, hp:280,  speed:13,  turn:3.0,r:1.8, sight:16, weapon:null,
+    needs:['depot'], heals:RTS_TILE * 2.5, healRate:12, healKind:'vehicle', armour:'light',
+    desc:'Repairs your vehicles near it, for free, wherever they are. Drives to a damaged one by itself.' },
   /* Armoured Personnel Carrier. UDATA.CPP's UnitAPC is IsCrusher with no turret; the transport
      rules are in UNIT.CPP - capacity via Max_Passengers, and, in Death, the half of the branch
      that matters: when a TRANSPORT dies its infantry passengers are unlimboed at the wreck and

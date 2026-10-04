@@ -190,6 +190,36 @@ function _sprUnitSpecial(X, key) {
     _r3Box(m, 1.2, 8.2, 0, 4.0, 0.9, 0.9, DK[1], DK[3]);           /* pintle gun */
     _r3Box(m, 8.0, 3.4, -2.6, 0.9, 1.0, 1.4, GN[3], GN[3]);        /* headlights */
     _r3Box(m, 8.0, 3.4, 2.6, 0.9, 1.0, 1.4, GN[3], GN[3]);
+  } else if (key === 'repairtruck') {
+    /* REPAIR TRUCK. A six-wheeled cab-over truck with a workshop bed: a slewing crane with its
+       hook let down, tool lockers along both sides and an amber beacon on the cab. The identity
+       is the CRANE - a jib leaning out over the tail, which no fighting vehicle carries. */
+    for (i = 0; i < 6; i++) {
+      var tx2 = [6.4, -1.6, -5.6][i >> 1], tz2 = (i % 2) ? 5.2 : -5.2;
+      _r3Wheel(m, tx2, 2.6, tz2, 2.6, 2.8, 'z', DK[0], DK[1], 22);
+      _r3Wheel(m, tx2, 2.6, tz2, 1.2, 3.1, 'z', S[2], S[1], 16);
+      if (!_SPR_ROLL_LEN) { _SPR_ROLL_LEN = 2.6 * Math.PI * 2 / 5; _SPR_ROLL_KIND = 'wheel'; }
+      for (var tn = 0; tn < 5; tn++) {
+        var ta = (tn - (_SPR_ROLL || 0)) / 5 * Math.PI * 2;
+        _r3Box(m, tx2 + Math.cos(ta) * 0.8, 2.6 + Math.sin(ta) * 0.8, tz2, 0.4, 0.4, 3.3, S[3], S[2]);
+      }
+    }
+    _r3Box(m, 0, 2.4, 0, 18.0, 1.4, 8.4, DK[1], DK[2]);            /* chassis */
+    _r3Slab(m, 6.6, 3.8, 0, 5.0, 5.0, 8.2, 0.8, VH[1], TM[1]);     /* the cab - team roof */
+    _r3Box(m, 9.2, 5.8, 0, 0.5, 2.0, 7.0, RTS_PAL.glass, RTS_PAL.glass);   /* windscreen */
+    _r3Cyl(m, 6.6, 8.8, 0, 0.8, 1.0, RTS_PAL.hazard[0], RTS_PAL.lit, 16);  /* amber beacon */
+    _r3Box(m, -3.2, 3.8, 0, 11.4, 1.0, 8.4, S[1], S[2]);           /* the workshop bed */
+    for (var lk2 = -1; lk2 <= 1; lk2 += 2)                          /* tool lockers */
+      _r3Box(m, -1.6, 4.8, lk2 * 3.4, 7.0, 2.6, 1.6, VH[0], VH[1]);
+    _r3Cyl(m, -6.0, 4.8, 0, 1.6, 1.4, DK[1], DK[2], 18);           /* the crane's turntable */
+    _r3Box(m, -6.0, 6.2, 0, 1.4, 3.6, 1.4, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);   /* its post */
+    n0 = m.length;
+    _r3Box(m, -10.0, 9.4, 0, 9.0, 1.0, 1.0, RTS_PAL.hazard[0], RTS_PAL.hazard[1]); /* the jib */
+    _sprPitch(m, n0, -0.3, -6.0, 9.6);
+    _r3Box(m, -13.6, 4.2, 0, 0.2, 7.2, 0.2, DK[2], DK[3]);         /* the cable */
+    _r3Box(m, -13.6, 3.6, 0, 1.0, 1.0, 0.6, S[3], S[2]);           /* the hook */
+    _r3Box(m, 9.4, 3.2, -3.0, 0.9, 1.0, 1.4, GN[3], GN[3]);        /* headlights */
+    _r3Box(m, 9.4, 3.2, 3.0, 0.9, 1.0, 1.4, GN[3], GN[3]);
   } else if (key === 'bridgelayer') {
     /* BRIDGE LAYER. A tank hull carrying its bridge folded in two on its back: a long pale deck
        with a truss along each side and the hinge at the front, overhanging the hull at both ends.
