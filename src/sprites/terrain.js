@@ -146,85 +146,8 @@ function _rtsBakeTerrain(G) {
       }
     }
   }
-  /* With the player's own game files loaded, the GROUND is repainted from the original's
-     terrain templates - real grass and water, one of sixteen clear variants picked per cell the
-     way the original picks them. Everything layered on afterwards (rock, trees, ore, the dirt
-     patches' drawn edges) stays procedural, because those are multi-tile templates with real
-     placement rules and half-applying them would look worse than either end state. */
-  /* On a REAL map the cell names its own template and tile, so the ground is painted exactly
-     as its author laid it out - including the cliffs and shorelines, which is the entire
-     reason for loading a map. That is the one case where RTS_T_ROCK is not skipped below:
-     a cliff drawn from the template the map names is a real cliff, not half of one. */
-  /* WHICH CELLS THE MAP'S AUTHOR DREW. Kept because the flat ground-cover pass further down
-     has to leave them alone, and it could not tell: its only escape was `shore !== null`, and
-     the shoreline pass is switched off on a real map (the map draws its own). So every sand,
-     road and water cell the author had laid out from real templates was then repainted flat
-     on top - the beaches, the roads and the river banks, which are most of the reason for
-     loading somebody's map in the first place.
-
-     A per-cell mask rather than "skip these kinds on a real map": _rtsMapPaintCell returns
-     false for a hole in a template or a piece the table does not know, those cells fall through
-     to _mixPaintCell, and _mixPaintCell has no SAND branch at all - so a blanket skip would
-     leave a template-miss sand cell showing bare grass. Only what was actually drawn is
-     protected. */
   var authored = null;
-  if (window._RTS_MAP && typeof _rtsMapPaintCell === 'function' &&
-      typeof _mixGround === 'function' && _mixGround()) {
-    window._RTS_TERRMISS = {};
-    authored = new Uint8Array(N * N);
-    for (var mz = 0; mz < N; mz++) {
-      for (var mx2 = 0; mx2 < N; mx2++) {
-        if (_rtsMapPaintCell(d, S, mx2, mz)) { authored[mz * N + mx2] = 1; continue; }
-        /* a hole in the template, or a piece the table does not know - fill it with ground */
-        _mixPaintCell(d, S, mx2, mz, G.terrain[_rtsIdx(mx2, mz)], seed);
-      }
-    }
-    /* Say which templates fell back, on screen, once. A player looking at smeared cliffs
-       deserves better than a smear: the list NAMES the missing art files, which is the whole
-       diagnosis - typically the Counterstrike/Aftermath templates (sh57+, cliffsw*, sbridge*,
-       hill01) on an expansion map, which no base archive carries. */
-    var mk = Object.keys(window._RTS_TERRMISS || {});
-    if (mk.length) {
-      var MISS = window._RTS_TERRMISS, mtot = 0;
-      mk.forEach(function (m) { mtot += MISS[m]; });
-      mk.sort(function (a, b) { return MISS[b] - MISS[a]; });
-      var msg = 'terrain: ' + mtot + ' cells have no template art (' +
-                mk.slice(0, 6).join(', ') + (mk.length > 6 ? ' +' + (mk.length - 6) + ' more' : '') + ')';
-      try { console.warn('Red Alert ' + msg, MISS); } catch (_e) {}
-      if (typeof _rtsSay === 'function') setTimeout(function () { _rtsSay(msg); }, 1500);
-    }
-    window._RTS_TERRMISS = null;
-  } else if (typeof _mixGround === 'function' && _mixGround()) {
-    for (var gz = 0; gz < N; gz++) {
-      for (var gx = 0; gx < N; gx++) {
-        var gk = G.terrain[_rtsIdx(gx, gz)];
-        if (gk === RTS_T_ROCK) continue;                /* ours is better than half a cliff */
-        _mixPaintCell(d, S, gx, gz, gk, seed);
-      }
-    }
-  }
   g.putImageData(img, 0, 0);
-
-  /* Real scatter first, when the player's files are loaded: loose rock on open ground and the
-     occasional log or wreck. Stamped before the procedural clutter so the tufts still go on top
-     and the ground keeps some life in it. */
-  if (typeof _mixDebris === 'function') {
-    var deb = _mixDebris();
-    if (deb) {
-      var dimg = g.getImageData(0, 0, S, S), dd = dimg.data;
-      for (var dz = 0; dz < N; dz++) {
-        for (var dx2 = 0; dx2 < N; dx2++) {
-          if (G.terrain[_rtsIdx(dx2, dz)] !== RTS_T_GRASS) continue;
-          var r = _sprHash(dx2, dz, seed + 211);
-          if (r > 0.045) continue;                       /* sparse - it is scenery, not gravel */
-          var set = (r < 0.006 && deb.props.length) ? deb.props : deb.rock;
-          var pick = (_sprHash(dz, dx2, seed + 212) * set.length) | 0;
-          _mixStamp(dd, S, set[Math.min(pick, set.length - 1)], dx2 * RTS_TS, dz * RTS_TS);
-        }
-      }
-      g.putImageData(dimg, 0, 0);
-    }
-  }
 
   /* Scatter that crosses cell lines: tufts, pebbles and bushes placed in world pixels.
 
@@ -254,46 +177,17 @@ function _rtsBakeTerrain(G) {
     }
   }
 
-  /* --- the shoreline, from the player's own game files. -----------------------------------
-         RA's Beach templates fitted onto the sand ring and the water it surrounds - see
-         mixart/shore.js. Without it the sand and the water are painted flat below, which
-         beside RA's own grass reads as a 24-pixel staircase of beige and blue: the one place
-         on the map where you could count the cells.
-
-         Null means no artwork, the ordinary case. Anything else means the shoreline is real
-         and the flat sand and water are skipped outright. --- */
   var shore = null;
-  if (typeof _mixPaintShore === 'function' && !window._RTS_MAP && _rtsArtReady()) {
-    var shimg = g.getImageData(0, 0, S, S);
-    shore = _mixPaintShore(shimg.data, S, G, seed);
-    if (shore !== null) g.putImageData(shimg, 0, 0);
-  }
 
   /* --- ground cover per tile: sand, road and water are painted flat, under everything --- */
   var TS = RTS_TS, tx, tz, k, cx, cy;
-  var roadPal = typeof _mixRoadPal === 'function' ? _mixRoadPal() : null;
   function tileAt(x, z) { return _rtsInB(x, z) ? G.terrain[_rtsIdx(x, z)] : -1; }
   for (tz = 0; tz < N; tz++) {
     for (tx = 0; tx < N; tx++) {
       k = G.terrain[_rtsIdx(tx, tz)];
       if (k !== RTS_T_SAND && k !== RTS_T_ROAD && k !== RTS_T_WATER) continue;
-      /* The map's author already drew this one. Before every other rule, including the road
-         exception below - that exception exists because RA's road templates cannot draw OUR
-         generated roads, and on a real map the roads are the map's own. */
-      if (authored && authored[_rtsIdx(tx, tz)]) continue;
-      /* ROAD is still drawn here even with artwork loaded, and deliberately: RA's 45 Road
-         templates cannot draw it. Measured three ways - fitting them produces camouflage
-         rather than a road; 35 of the 45 keep their track inside the footprint with clear
-         margins all round, so there is nothing to chain; and NO cell in the whole set is more
-         than 55% packed earth, so there is no fill tile either. The reason is structural: our
-         roads are 2-4 cell wide carved swathes and RA's road art is a narrow track with grass
-         either side. See docs/artwork.md. */
-      if (shore !== null && k !== RTS_T_ROAD) continue;
-      /* The road's COLOURS come from the tileset's own packed earth when there is artwork, even
-         though its shape cannot. Ours beside RA's ground is the same mismatch the drawn trees
-         had before the real ones arrived - and a road is 500 cells of it. */
       var pal = k === RTS_T_WATER ? RTS_PAL.water
-              : (k === RTS_T_ROAD ? (roadPal || RTS_PAL.road) : RTS_PAL.sand);
+              : (k === RTS_T_ROAD ? RTS_PAL.road : RTS_PAL.sand);
       for (var py = 0; py < TS; py += 2) {
         for (var px = 0; px < TS; px += 2) {
           var gx = tx * TS + px, gy = tz * TS + py;
@@ -339,47 +233,18 @@ function _rtsBakeTerrain(G) {
     _sprRect(g, wx + 1, wy + 1, wl - 2, 1, RTS_PAL.water[4]);
   }
 
-  /* --- cliffs. When the player has pointed the game at their own game files, Red Alert's own
-         Cliffs templates are FITTED onto the rock mask instead - see mixart/cliffs.js for why
-         fitted rather than chained, and for the measurement that ruled the alternative out.
-
-         It runs at exactly the point the drawn cliffs would have been composited, so the
-         tufts and debris scattered further up still end up underneath the rock. What comes
-         back is how many blocked cells it could NOT reach: zero on every seed measured, and
-         the drawn cliffs are then skipped outright. Null means there was no artwork, which
-         is the ordinary case and the reason all of _sprDrawRock still exists. --- */
-  var cliffLeft = null;
-  if (typeof _mixPaintCliffs === 'function' && !window._RTS_MAP && _rtsArtReady()) {
-    var cimg = g.getImageData(0, 0, S, S);
-    cliffLeft = _mixPaintCliffs(cimg.data, S, G, seed);
-    if (cliffLeft !== null) g.putImageData(cimg, 0, 0);
-  }
-  if (cliffLeft === null || cliffLeft > 0) _sprDrawRock(g, G, S, seed);
-
-  /* --- headlands: rock that meets the sea, from RA's 38 Water Cliffs templates. Painted after
-         the land cliffs because it repaints nothing they touched - _rtsCliffRules refuses those
-         cells outright - and before the trees, which stand on top of everything. --- */
-  if (typeof _mixPaintSeaCliffs === 'function' && !window._RTS_MAP && _rtsArtReady()) {
-    var wcimg = g.getImageData(0, 0, S, S);
-    if (_mixPaintSeaCliffs(wcimg.data, S, G, seed) !== null) g.putImageData(wcimg, 0, 0);
-  }
+  /* --- cliffs --- */
+  _sprDrawRock(g, G, S, seed);
 
   /* --- bridges: over the water, under everything that stands on the ground --- */
   if (typeof _sprDrawBridges === 'function') _sprDrawBridges(g, G, TS);
 
-  /* --- sandbag emplacements. With the player's own files loaded these come from sbag.shp,
-         which is a real autotile: sixteen frames indexed by which neighbours are also wall, so
-         a run joins up instead of being sixteen copies of one horizontal bag stack laid end to
-         end. See mixart/walls.js. Ours is one sprite and has no notion of a corner, which is
-         why a north-south wall used to read as a ladder. --- */
-  var wallSet = typeof _mixWallSet === 'function' ? _mixWallSet() : null;
-  var bagSpr = wallSet ? null : _sprSandbag();
-  function isWallAt(x, z) { return _rtsInB(x, z) && G.terrain[_rtsIdx(x, z)] === RTS_T_WALL; }
+  /* --- sandbag emplacements --- */
+  var bagSpr = _sprSandbag();
   for (tz = 0; tz < N; tz++) {
     for (tx = 0; tx < N; tx++) {
       if (G.terrain[_rtsIdx(tx, tz)] !== RTS_T_WALL) continue;
-      if (wallSet) g.drawImage(wallSet[_rtsWallMask(isWallAt, tx, tz)], tx * TS, tz * TS);
-      else g.drawImage(bagSpr.c, tx * TS, tz * TS - bagSpr.head);
+      g.drawImage(bagSpr.c, tx * TS, tz * TS - bagSpr.head);
     }
   }
 

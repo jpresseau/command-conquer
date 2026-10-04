@@ -1,83 +1,6 @@
 /* render/draw.js - drawing one structure or one unit, including their animations.
    Part of rts.render, which owns every pixel. */
 
-/* Which frame of an animated building to draw right now.
-
-   Returns null when there is nothing to choose - no extra frames, or the building is still
-   going up, where the build-up reveal owns the picture and a moving part inside it reads as a
-   glitch. The damaged set is the same frames shifted by `half`, so the choice is made once
-   against the healthy layout and shifted at the end. */
-function _rtsBldFrame(e, spr) {
-  if (!spr || !spr.frames || e.building) return null;
-  var a = RTS_MIX_BLDANIM[e.def];
-  if (!a) return null;
-  var G = window._rtsG, hurt = e.hp < e.maxHp * RTS_COND_YELLOW;
-  var idx = null;
-
-  if (a.kind === 'facing') {
-    /* Same classic facing order the vehicles use - measured once from the artwork, not read off
-       a document - so a turret and a tank pointing the same way agree. */
-    var f32 = Math.round(((-(e.rot || 0) / (Math.PI * 2)) * a.facings + a.facings) % a.facings);
-    idx = a.start + _mixFacing(f32, a.facings);
-
-  } else if (a.kind === 'fill') {
-    /* All of a house's silos show the same level, because the ore is the HOUSE's, not the
-       building's - which is also why selling one does not empty the others. */
-    var cap = (typeof rtsCapacity === 'function') ? rtsCapacity(e.side) : 0;
-    var S = G.sides[e.side];
-    var frac = cap > 0 ? Math.max(0, Math.min(1, (S ? S.ore : 0) / cap)) : 0;
-    idx = a.start + Math.min(a.len - 1, Math.floor(frac * a.len));
-
-  } else if (a.kind === 'loop' || (a.kind === 'active' && _rtsBldBusy(e))) {
-    idx = a.start + (Math.floor(G.t * (a.fps || 10)) % a.len);
-  }
-
-  if (idx === null) return null;
-  if (hurt) idx += spr.half;
-  return (idx >= 0 && idx < spr.frames.length) ? spr.frames[idx] : null;
-}
-
-/* Is this building doing its job? Deliberately a different question per type, because "busy"
-   has a different meaning for each and a single generic flag would be wrong for all of them. */
-function _rtsBldBusy(e) {
-  var G = window._rtsG, S = G.sides[e.side];
-  if (!S) return false;
-  switch (e.def) {
-    case 'yard':
-      return !!S.q.struct;                       /* the yard works while a structure is queued */
-    case 'tesla':
-      return (e.cool || 0) > 0;                  /* the coil discharges, then recovers */
-    case 'pdox': case 'iron': case 'mslo':
-      /* a superweapon building is busy exactly while its charge is climbing */
-      return !!(S.supers && S.supers[_rtsSuperKeyOf(e.def)] &&
-                !S.supers[_rtsSuperKeyOf(e.def)].ready);
-    case 'helipad': {
-      var i, o;
-      for (i = 0; i < G.ents.length; i++) {
-        o = G.ents[i];
-        if (o.dead || o.type !== 'unit' || o.side !== e.side || !o.rearming) continue;
-        if (Math.abs(o.x - e.x) < RTS_TILE && Math.abs(o.z - e.z) < RTS_TILE) return true;
-      }
-      return false;
-    }
-    case 'depot': {
-      var j, u;
-      for (j = 0; j < G.ents.length; j++) {
-        u = G.ents[j];
-        if (u.dead || u.type !== 'unit' || u.side !== e.side) continue;
-        if (u.hp >= u.maxHp) continue;                       /* nothing to mend */
-        if (Math.abs(u.x - e.x) < RTS_TILE * 1.5 && Math.abs(u.z - e.z) < RTS_TILE * 1.5) return true;
-      }
-      return false;
-    }
-  }
-  return false;
-}
-function _rtsSuperKeyOf(defKey) {
-  var d = rtsStructDef(defKey);
-  return (d && d.super) ? d.super.key : '';
-}
-
 function _rtsDrawStruct(g, e, TSscale, cell) {
   var R = _rtsR, def = rtsStructDef(e.def);
   var spr = R.spr.bld[e.side][e.def];
@@ -86,12 +9,7 @@ function _rtsDrawStruct(g, e, TSscale, cell) {
      what you see and what the rules think agree rather than being two separate judgements.
      Only while it is STANDING: a building still going up shows its clean frame, because the
      build-up reveal is about progress and a half-built ruin reads as a bug. */
-  /* An animated building picks its own frame - moving part, aim or fill level - and that frame
-     already accounts for damage, so it is asked FIRST and the plain damaged swap below only
-     runs for the buildings that have no frame set. */
-  var af = _rtsBldFrame(e, spr);
-  if (af) spr = { c: af, head: spr.head, dmg: spr.dmg, half: spr.half, frames: spr.frames };
-  else if (spr.dmg && !e.building && e.hp < e.maxHp * RTS_COND_YELLOW) {
+  if (spr.dmg && !e.building && e.hp < e.maxHp * RTS_COND_YELLOW) {
     spr = { c: spr.dmg, head: spr.head, dmg: spr.dmg };
   }
   var bp = _rtsGroundToScreen(_rtsWX(e.tx) - RTS_TILE / 2, _rtsWX(e.tz) - RTS_TILE / 2);
@@ -104,19 +22,6 @@ function _rtsDrawStruct(g, e, TSscale, cell) {
   var w = Math.round(spr.c.width * sc), h = Math.round(spr.c.height * sc);
   var top = py - Math.round(spr.head * sc);
   if (e.building) {
-    /* The original's own construction sequence, when the player's files have it: RA draws a
-       building assembling itself frame by frame, and 21 of the 22 ship one. That is what the
-       reveal below was standing in for, so where the real thing exists it simply replaces it -
-       no beam, no stipple, because the artwork is already doing the job they were faking. */
-    var mk = (typeof _mixMake === 'function') ? _mixMake(e.def, e.side) : null;
-    if (mk) {
-      var mi = Math.max(0, Math.min(mk.frames.length - 1,
-                        Math.floor(Math.min(1, e.bprog) * (mk.frames.length - 1))));
-      var mc = mk.frames[mi];
-      var mw = Math.round(mc.width * TSscale), mh = Math.round(mc.height * TSscale);
-      g.drawImage(mc, px, py - Math.round(mk.head * TSscale), mw, mh);
-      return;
-    }
     /* Build-up. BUILDING.H drives this off Mission_Construction, and in the originals a
        structure visibly assembles rather than sliding up out of the ground. Here: the
        finished fraction is revealed from the bottom, the leading edge carries a bright
@@ -195,51 +100,6 @@ function _rtsDrawUnit(g, e, TSscale) {
   var img = (e.prone && R.spr.prone[e.side][e.def])
     ? R.spr.prone[e.side][e.def][f]
     : (turreted ? R.spr.hull[e.side][e.def][f] : R.spr.unit[e.side][e.def][f]);
-  /* A walking soldier steps through the run cycle. `gait` is MasterDoControls' 'randomstart' -
-     it was put on every unit at spawn long before there were frames to start - so a squad does
-     not march in lockstep. The cycle is driven off the clock rather than off distance covered,
-     which is what the original does (Tick: 100). */
-  var walk = R.spr.walk && R.spr.walk[e.side] && R.spr.walk[e.side][e.def];
-  if (walk && !e.prone && e.path && e.pi < e.path.length) {
-    var cyc = walk[f];
-    img = cyc[(Math.floor(_rtsG.t * 10) + (e.gait || 0)) % cyc.length];
-  }
-  /* A SOLDIER STANDING STILL DOES NOT STAND TO ATTENTION FOREVER. Every so often he shifts his
-     weight, checks his weapon, stretches - RA's idle1/idle2, ticked at 120ms.
-
-     Cosmetic, and driven entirely off the clock and the unit's own `gait`, exactly like the
-     walk cycle above: nothing is stored on the entity, so this cannot desynchronise a save, a
-     replay or the sim. gait also staggers WHICH fidget and WHEN, so a squad standing in a line
-     does not twitch in unison - the thing that would make it read as a glitch rather than as
-     life. The period is 9-13s per unit, and each fidget runs a second or two of that.
-
-     Only while genuinely idle: not prone, not walking, and not while the unit has a target,
-     because a man mid-burst rolling his shoulders looks broken rather than relaxed. */
-  var fidg = (!e.prone && d.kind === 'infantry' && !e.target
-              && !(e.path && e.pi < e.path.length)
-              && typeof _mixIdleAnim === 'function') ? _mixIdleAnim(e.def, e.side) : null;
-  if (fidg && fidg.length) {
-    var gt = e.gait || 0, per = 9 + (gt % 5), ph = (_rtsG.t + gt * 0.37) % per;
-    var run = fidg[(gt + Math.floor((_rtsG.t + gt * 0.37) / per)) % fidg.length];
-    if (ph < run.length * 0.12) img = run[Math.floor(ph / 0.12)];
-  }
-  /* The harvester AT WORK, from the 79 frames of harv.shp the facing bake does not use.
-     Purely cosmetic - the sim's hstate drives it and is never touched. The dock timer is
-     stamped here in the renderer because it is a drawing concern: the tip-up plays once from
-     the moment unloading is first seen, then the pour loops until the sim moves on. */
-  if (e.def === 'harvester' && typeof _mixHarvAnim === 'function') {
-    var ha = (e.hstate === 'mining' || e.hstate === 'unload') ? _mixHarvAnim(e.side) : null;
-    if (ha && e.hstate === 'mining') {
-      var f8 = ((Math.round(e.rot / (Math.PI * 2) * 8) % 8) + 8) % 8;
-      img = ha.harvest[f8][(Math.floor(_rtsG.t * 10) + (e.gait || 0)) % 8];
-      e.dockT = 0;
-    } else if (ha) {                                   /* unload */
-      if (!e.dockT) e.dockT = _rtsG.t;
-      var dk = Math.floor((_rtsG.t - e.dockT) * 10);
-      img = dk < ha.dock.length ? ha.dock[dk]
-                                : ha.pour[(dk - ha.dock.length) % ha.pour.length];
-    } else e.dockT = 0;
-  }
   /* Same as the structures: divide by the scale the sprite was baked at. See _rtsDrawStruct. */
   var up = _rtsGroundToScreen(e.x, e.z);
   var usc = TSscale * up.scale / (img.ps || 1);

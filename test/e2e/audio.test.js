@@ -1,8 +1,8 @@
 /* The audio, measured as sound rather than as function calls.
 
    This subsystem has exactly one failure mode and it is silence. Nothing throws, nothing logs:
-   an effect name that matches no branch in the dispatcher simply returns, a sample name that is
-   not in the archives quietly falls back, a muted bus passes zeroes. Every one of those looks
+   an effect name that matches no branch in the dispatcher simply returns, a muted bus passes
+   zeroes. Every one of those looks
    identical from the outside - the game runs, and a sound does not come. So a spec that checked
    "was the handler called" would pass through all of them.
 
@@ -16,10 +16,8 @@
    of the call rather than the call itself: a suppressed effect builds nothing. It is corroborated
    with an energy measurement immediately afterwards so it cannot pass on node-counting alone.
 
-   No game assets ship here, so RTS_MIX is empty and every sample lookup misses. That is the
-   primary path - it is what a player without a copy of Red Alert hears - and the synthesized
-   fallback is what is under test. The sampled path is covered by unit/audio, which checks that
-   every name the game asks for is one the identity table can actually resolve. */
+   Every sound in the game is synthesized (src/audio); unit/audio checks that every effect the
+   game dispatches has a recipe. */
 
 var { chromium } = require('playwright');
 var { Suite } = require('../lib/assert.js');
@@ -304,8 +302,6 @@ function installProbe() {
   var music = await g.page.evaluate(async function () {
     var A = _rtsAudioInit();
     _rtsMusicStop();
-    /* no archives here, so this is the synthesized path - which is the point */
-    var usedSamples = (typeof rtsSndMusicPlaying === 'function') && rtsSndMusicPlaying();
     _rtsMusicStart();
     var running = !!A.music;
     await new Promise(function (r) { setTimeout(r, 400); });      /* let the sequencer get going */
@@ -324,9 +320,8 @@ function installProbe() {
     await new Promise(function (r) { setTimeout(r, 500); });
     var off = { peak: window._AP.peak, rms: window._AP.frames ? Math.sqrt(window._AP.energy / window._AP.frames) : 0 };
     return { running: running, on: on, off: off, bars: bars, steps: steps,
-             stopped: stopped, usedSamples: usedSamples };
+             stopped: stopped };
   });
-  S.eq('with no archives loaded the score is the synthesized one', music.usedSamples, null);
   S.eq('starting the music starts a sequencer', music.running, true);
   S.ok('...which keeps producing sound, not one bar and silence', music.on.rms > 0.005,
        'rms ' + music.on.rms.toFixed(4) + ', peak ' + music.on.peak.toFixed(3) +
@@ -378,38 +373,12 @@ function installProbe() {
   S.ok('the music runs through the music bus, so its level is separately controllable',
        bus.quiet < 0.002, 'rms with the music bus at zero: ' + bus.quiet.toFixed(5));
 
-  /* --------------------------------------------- the sampled path, with nothing ----
-     Every one of these is called from game code that does not check first. With no archives
-     they must decline and let the synthesized version carry on - never throw inside a tick. */
-  var noArt = await g.page.evaluate(function () {
-    var out = { threw: [] }, A = _rtsAudioInit();
-    function t(n, f) { try { out[n] = f(); } catch (e) { out.threw.push(n + ': ' + e.message); } }
-    t('ready', function () { return _rtsArtReady(); });
-    t('sndReady', function () { return _rtsSndReady(); });
-    t('eva', function () { return rtsEva('built'); });
-    t('vox', function () { return rtsVox({ def: 'rifle', side: 'player', id: 4 }, 'select'); });
-    t('cry', function () { return rtsDeathCry({ def: 'rifle', side: 'player', id: 4, x: 0, z: 0 }); });
-    t('tracks', function () { return rtsSndTracks().length; });
-    t('musicStart', function () { return rtsSndMusicStart(); });
-    t('sndTry', function () { return _rtsSndTry('rifle'); });
-    t('named', function () { return rtsSndNamed('unit_ready'); });
-    return out;
-  });
-  S.ok('no sampled entry point throws when the player has no game files', !noArt.threw.length,
-       noArt.threw.join('; ') || 'nine entry points, none threw');
-  S.eq('the artwork is correctly reported as absent', noArt.sndReady, false);
-  S.eq('EVA declines', noArt.eva, false);
-  S.eq('unit voices decline', noArt.vox, false);
-  S.eq('death cries decline', noArt.cry, false);
-  S.eq('the sampled score offers no tracks', noArt.tracks, 0);
-  S.eq('and the sampled effect hook declines, so the synth plays', noArt.sndTry, false);
-
-  /* And the whole point of declining: the synthesized effect still sounds. */
+  /* And a single effect, measured as sound. */
   var fallback = await g.page.evaluate(function () {
     var A = _rtsAudioInit(); A.last = {};
     return window._apMeasure(function () { _rtsSfx('cannon', null, null); }, 320);
   });
-  S.ok('a player with no game files still hears the guns', fallback.peak > 0.05,
+  S.ok('a cannon is heard', fallback.peak > 0.05,
        'peak ' + fallback.peak.toFixed(3));
 
   S.ok('the page logged no errors throughout', !g.errors.length,

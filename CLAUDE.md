@@ -5,9 +5,8 @@ Guidance for Claude Code (claude.ai/code) working in this repository.
 **Command & Conquer: Red Alert** (short name *Red Alert*) is a browser rebuild of Westwood's
 1996 RTS, deployed via GitHub Pages from `main`.
 It ships as one generated, fully self-contained `index.html` (~1.0 MB) — no network calls, no
-asset files, and **no libraries at all**. Every pixel and every sound is generated in code.
-Real Red Alert artwork can be read at runtime from the player's own copy of the game, in their
-browser; none of it is committed here and nothing is uploaded anywhere.
+asset files, and **no libraries at all**. Every pixel, sound and map is generated in code; the game
+reads no outside files.
 
 ## Build — READ FIRST
 
@@ -81,9 +80,6 @@ Keep them small: if a file passes ~500 lines it wants splitting along its own ba
   `primitives` (the solids), `render` (scanline fill + depth buffer), `bake` (fitting a sprite).
 - `src/sprites/` — `bake` (palette + plumbing), `terrain`, `ore`, `models` (structures),
   `unitmodels`, `props`, `assemble`.
-- `src/mixart/` — real Red Alert artwork read from the player's own files: `theatres`, `remap`,
-  `frames`, `load`, `tiles`.
-- `src/map/` — real Red Alert maps: `mainmix` (template tables), `load`, `build`, `starts`.
 - `src/core/` — the simulation, and by far the largest subsystem. Deliberately renderer-free, so
   a whole battle can be stepped headlessly; swapping the 3D renderer for the 2D one cost it zero
   lines. `grid` (tiles, passability, A*, state), `terrain`, `base`, `crates`, `supers`,
@@ -121,13 +117,11 @@ Keep them small: if a file passes ~500 lines it wants splitting along its own ba
   `getError`, `readPixels`, ...): each one stalls the CPU on the GPU. The GFX readout's second
   line is the per-phase breakdown - read it on the device, not here.
 - `src/rts.audio.js` + `src/audio/` — all sound, synthesized, no sampled assets: effects are recipes rendered to a bank of takes, played through `audio/mix.js` (pan, room, voice cap; `heard`/`vol` held by `unit/sfx`); music is `score.js` (two songs, three intensities, pure) played by the `music.js` sampler on `instruments.js` (`unit/music`, `e2e/music`); the bed is `audio/loops.js` turned by `_rtsAmbWant` (`unit/worldsound`); levels are `rtsVolSet`, the panel `ui/soundpanel.js`.
-  `src/rts.sound.js` maps events to it; `src/rts.store.js`, `src/rts.save.js`, `src/rts.editor.js`.
-- `src/title.js` — the standalone shell: title screen, difficulty picker, file pickers, RESUME
+  `src/rts.save.js` saves and resumes a battle.
+- `src/title.js` — the standalone shell: title screen, difficulty and army pickers, RESUME
   BATTLE, install prompt, START. Loads last, after everything it calls.
 - `src/index.skeleton.html` — the page shell and the include manifest, no JavaScript of its own;
   `src/style.css`.
-- `ra/` — the file-format readers (MIX, SHP, LCW, Blowfish, PCX, AUD, ISO, zip, the INI/map
-  parsers). Standalone and browser-free enough to be unit-tested directly.
 
 ## Presentation rules — these are load-bearing
 
@@ -384,7 +378,6 @@ done. Read the one that covers what you are changing; you do not need to read th
 | `docs/roster.md` | the units and structures beyond the opening set, and the rule each was held to |
 | `docs/ui.md` | selection, the sidebar, radar orders, and the 15 Hz animation cadence |
 | `docs/art.md` | why the art read flat, read dark and read blue — and what the measurements said |
-| `docs/artwork.md` | reading the player's own game files: MIX, SHP, palettes, terrain templates, and laying the cliffs and the shoreline |
 | `docs/measuring.md` | the ladder, and how it has been misread |
 
 Two habits run through all of them and are worth stating once here:

@@ -40,13 +40,6 @@
 var _RTS_TREES = null;
 function _sprTrees() {
   if (_RTS_TREES) return _RTS_TREES;
-  /* Real trees when the player's own files are loaded. Ours next to the original's ground was
-     the one thing in the first pass that looked plainly wrong - bright cones on RA's dark
-     temperate grass. Those carry no `ps` and read as 1, so they draw at their own size. */
-  if (typeof _mixTrees === 'function') {
-    var real = _mixTrees();
-    if (real) return (_RTS_TREES = real);
-  }
   var TR = RTS_PAL.tree, out = [], PS = RTS_PS;
   for (var v = 0; v < 5; v++) {
     var sc = [0.74, 0.86, 1.0, 1.13, 1.28][v], m = [];

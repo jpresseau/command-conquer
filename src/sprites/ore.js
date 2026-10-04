@@ -38,10 +38,6 @@ function _sprCrystal(g, x, y, w, h, P) {
    continuous ground rather than a grid of identical stamps. Three variants per stage,
    chosen by a hash of the cell, kill the last of the repetition. */
 function _sprOre(P, gem) {
-  if (typeof _mixOre === 'function') {
-    var real = _mixOre(gem);
-    if (real) return real;
-  }
   /* EIGHT DENSITY STAGES, NOT FOUR. The simulation tracks twelve ore levels per cell
      (RTS_ORE_LEVELS) and the field was being displayed at four, so a third of what the
      harvesters actually do to a deposit was invisible - and, worse, the quantisation IS the

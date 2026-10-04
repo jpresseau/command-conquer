@@ -33,7 +33,7 @@ var SECS = 360;
   async function match(vs, diff, off) {
     return g.page.evaluate(function (a) {
       window.RTS_ESCORT_OFF = a[2];
-      if (typeof rtsSetVoxSide === 'function') rtsSetVoxSide(a[0]);
+      if (typeof rtsSetArmySide === 'function') rtsSetArmySide(a[0]);
       _rtsNewGame(9001, a[1]);
       var G = window._rtsG;
       /* the unit types no team composition names */

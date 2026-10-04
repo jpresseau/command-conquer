@@ -40,7 +40,7 @@ var CAP = 600;                       /* simulated seconds before a match is call
       for (var i = 0; i < SEEDS.length; i++) {
         var r = await g.page.evaluate(function (a) {
           var d = a[0], seed = a[1], vs = a[2], CAP = a[3];
-          if (typeof rtsSetVoxSide === 'function') rtsSetVoxSide(vs);
+          if (typeof rtsSetArmySide === 'function') rtsSetArmySide(vs);
           _rtsNewGame(seed, d);
           var G = window._rtsG, fell = null, wave = null;
           for (var i = 0; i < 60 * CAP && fell === null; i++) {

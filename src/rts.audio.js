@@ -142,31 +142,22 @@ function _rtsSfx(name, x, z) {
   try { _rtsSfxPlay(name, now, null, x, z); } catch (_e) {}
 }
 
-/* One effect, now: the player's own sample if they have one, else a rendered take from the bank,
-   through the mixer - from (x, z) on the map if it has a place there. */
+/* One effect, now: a rendered take from the bank, through the mixer - from (x, z) on the map if
+   it has a place there. */
 function _rtsSfxPlay(name, t, via, x, z) {
   var A = _rtsA;
-  /* The player's own sound, if they have it and this effect has a counterpart - see
-     src/rts.sound.js. A sound sent somewhere else (the far bus) is always the rendered one. */
-  if (!via && typeof _rtsSndTry === 'function' && _rtsSndTry(name)) return;
   var buf = _rtsBankPick(A, name);
   if (buf) _rtsVoice(A, name, buf, x, z, via);
 }
 
 /* ------------------------------------------------------------------ music --
-   The player's own soundtrack when they have it (rts.sound.js); otherwise the score of
-   audio/score.js, played by audio/music.js - two songs that take turns, louder and fuller as the
-   fighting the player can hear grows. */
+   The score of audio/score.js, played by audio/music.js - two songs that take turns, louder and
+   fuller as the fighting the player can hear grows. */
 function _rtsMusicStart() {
-  /* The player's own soundtrack takes priority when it is there. It lives in scores.mix, which
-     ships inside MAIN.MIX rather than among the loose archives, so most installs land here
-     with the effects present and no score - and that is a normal state, not a failure. */
-  if (typeof rtsSndMusicStart === 'function' && rtsSndMusicStart()) return;
   var A = _rtsA;
   if (!A || A.music || !_rtsVol('mus')) return;
   try { _rtsMusicBegin(A); } catch (_e) {}
 }
 function _rtsMusicStop() {
-  if (typeof rtsSndMusicStop === 'function') rtsSndMusicStop();
   if (_rtsA && _rtsA.music) _rtsMusicEnd(_rtsA);
 }

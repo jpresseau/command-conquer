@@ -29,23 +29,8 @@ function _rtsClickSelect(mx, my, add) {
   if (ent) {
     if (G.sel.indexOf(ent) < 0) G.sel.push(ent);
     if (ent.side === 'player' && typeof _rtsSfx === 'function') _rtsSfx('select');
-    /* and the unit itself answers, in its own side's voice - see rtsVox */
-    if (ent.side === 'player' && ent.type === 'unit' && typeof rtsVox === 'function') rtsVox(ent, 'select');
   }
 }
-/* The unit that answers an order must be one of YOURS. G.sel can hold an enemy unit - clicking
-   one selects it, which is how you inspect it - and slot 0 is whatever was clicked first. So an
-   enemy tank could end up acknowledging your orders, in the other army's voice, if you happened
-   to click it before shift-adding your own. */
-function _rtsVoxOrder() {
-  var G = window._rtsG;
-  if (!G || !G.sel) return;
-  for (var i = 0; i < G.sel.length; i++) {
-    var e = G.sel[i];
-    if (e && !e.dead && e.side === 'player' && e.type === 'unit') { rtsVox(e, 'order'); return; }
-  }
-}
-
 function _rtsSelectSameType(ent, add) {
   var G = window._rtsG, n = 0;
   if (!add) G.sel.length = 0;
@@ -179,7 +164,6 @@ function _rtsRightClick(mx, my, hit0) {
       _rtsFlash(tgt.x, tgt.z, 'harvest');
       _rtsSay(got === 1 ? 'Loading up.' : got + ' units loading up.');
       if (typeof _rtsSfx === 'function') _rtsSfx('order');
-      if (typeof rtsVox === 'function') _rtsVoxOrder();
       return;
     }
     /* Nobody could board - a full hold, or a group of tanks at an APC. Fall through, so the
@@ -212,7 +196,6 @@ function _rtsRightClick(mx, my, hit0) {
     _rtsFlash(tgt.x, tgt.z, special === mine.length ? 'harvest' : 'attack');
     if (special) _rtsSay(special === 1 ? 'Moving in.' : special + ' specialists moving in.');
     if (typeof _rtsSfx === 'function') _rtsSfx('order');
-    if (typeof rtsVox === 'function') _rtsVoxOrder();
     return;
   }
   var tx = _rtsTX(hit.x), tz = _rtsTX(hit.z);
@@ -242,7 +225,6 @@ function _rtsRightClick(mx, my, hit0) {
   if (landed) _rtsSay(landed === 1 ? 'Making for the shore.' : landed + ' transports making for the shore.');
   else if (dropped) _rtsSay(dropped === 1 ? 'Taking them in.' : dropped + ' Chinooks taking them in.');
   if (typeof _rtsSfx === 'function') _rtsSfx('order');
-  if (typeof rtsVox === 'function') _rtsVoxOrder();
 }
 /* Spread a group over a loose grid so twelve units do not all path to one tile. */
 function _rtsFormation(n) {

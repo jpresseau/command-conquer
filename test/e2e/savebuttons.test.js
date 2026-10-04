@@ -65,70 +65,66 @@ var b=await chromium.launch();var fails=[];var errs=[];
    await ctx.close();
  }
 
- /* ---- 2. save version follows the MAP, not the live RTS_N ---- */
+ /* ---- 2. the save version is the same on the title screen as in the battle ---- */
  var ctx2=await b.newContext({viewport:{width:1280,height:800}});
  var p2=await ctx2.newPage(); p2.on('pageerror',function(e){errs.push(String(e));});
  await p2.goto(PAGE,{waitUntil:'load'});
  await p2.waitForFunction(function(){return typeof window.rtsOpen==='function';});
  var ver=await p2.evaluate(function(){
-   /* stand in for a real map the way the loader does: a map object with n = 96 */
    var boot=_rtsSaveVersion();
-   window._RTS_MAP={n:96};
-   var withMap=_rtsSaveVersion();
    rtsOpen(7); for(var i=0;i<60*10;i++)_rtsTick(1/60);
    var inBattle=_rtsSaveVersion();
    var ok=rtsSaveGame();
    var stamp=JSON.parse(localStorage.getItem('rccmd.save1.info')).v;
    rtsClose();
    var outside=_rtsSaveVersion();
-   return {boot:boot,withMap:withMap,inBattle:inBattle,outside:outside,stamp:stamp,
+   return {boot:boot,inBattle:inBattle,outside:outside,stamp:stamp,
            saved:ok, resumable:!!rtsSaveInfo(), stale:rtsSaveStale()};
  });
- console.log('\nsave version stamp: boot '+ver.boot+', map loaded '+ver.withMap+
-   ', in battle '+ver.inBattle+', back on the title screen '+ver.outside);
+ console.log('\nsave version stamp: boot '+ver.boot+', in battle '+ver.inBattle+', back on the title screen '+ver.outside);
  console.log('  saved with stamp '+ver.stamp+' -> resumable outside the battle: '+ver.resumable+
    ', reported stale: '+ver.stale);
- if(ver.withMap!==ver.inBattle) fails.push('the stamp differs between the map being loaded ('+
-   ver.withMap+') and the battle running ('+ver.inBattle+')');
+ if(ver.boot!==ver.inBattle) fails.push('the stamp differs between the title screen ('+
+   ver.boot+') and the battle running ('+ver.inBattle+')');
  if(ver.outside!==ver.stamp) fails.push('the stamp cannot be recomputed outside a battle ('+
    ver.outside+' vs the saved '+ver.stamp+')');
- if(!ver.resumable) fails.push('a battle saved on a 96-tile map is not resumable');
- if(ver.stale) fails.push('a battle saved on a 96-tile map is reported as from an older build');
+ if(!ver.resumable) fails.push('a saved battle is not resumable from the title screen');
+ if(ver.stale) fails.push('a saved battle is reported as from an older build');
 
- /* ---- 3. a death animation full of canvases must not destroy the save ---- */
+ /* ---- 3. an effect carrying canvases must not destroy the save ---- */
  var death=await p2.evaluate(function(){
    rtsOpen(7); for(var i=0;i<60*20;i++)_rtsTick(1/60);
    var first=rtsSaveGame();
    var bytesBefore=(localStorage.getItem('rccmd.save1')||'').length;
-   /* exactly what the real _mixDeath returns once artwork is loaded: baked canvases */
+   /* a canvas cannot be encoded: an effect that carries some must be skipped, not fail the save */
    var seq=[];for(var k=0;k<8;k++){var c=document.createElement('canvas');c.width=c.height=8;seq.push(c);}
    var G=window._rtsG;
-   G.fx.push({kind:'die',x:0,y:1,z:0,t:0,seq:seq,base:1});
+   G.fx.push({kind:'boom',x:0,y:1,z:0,t:0,seq:seq,base:1});
    var second=rtsSaveGame();
    var bytesAfter=(localStorage.getItem('rccmd.save1')||'').length;
    var infoAfter=!!localStorage.getItem('rccmd.save1.info');
    return {first:first,second:second,bytesBefore:bytesBefore,bytesAfter:bytesAfter,
            infoAfter:infoAfter,msg:G.msg};
  });
- console.log('\nsaving with a canvas-bearing death effect on screen:');
+ console.log('\nsaving with a canvas-bearing effect on screen:');
  console.log('  first save '+death.first+' ('+death.bytesBefore+' bytes) -> second save '+
    death.second+' ('+death.bytesAfter+' bytes), header still there: '+death.infoAfter);
- if(!death.second) fails.push('saving during a death animation still fails');
- if(!death.bytesAfter) fails.push('saving during a death animation DELETED the save on disk');
+ if(!death.second) fails.push('saving with a canvas-bearing effect fails');
+ if(!death.bytesAfter) fails.push('saving with a canvas-bearing effect DELETED the save on disk');
  if(!death.infoAfter) fails.push('the save header was deleted');
 
  /* ---- 4. the army is recorded, and restored ---- */
  var side=await p2.evaluate(function(){
-   rtsSetVoxSide('soviet');
+   rtsSetArmySide('soviet');
    rtsClose(); rtsOpen(7); for(var i=0;i<60*15;i++)_rtsTick(1/60);
    var mineAtSave=rtsHouseSide('player');
    rtsSaveGame();
    var info=JSON.parse(localStorage.getItem('rccmd.save1.info'));
    rtsClose();
-   rtsSetVoxSide('allied');                    /* the player changes their mind on the title screen */
+   rtsSetArmySide('allied');                    /* the player changes their mind on the title screen */
    var ok=rtsLoadGame();
    return {recorded:info.side,mineAtSave:mineAtSave,loaded:ok,
-           after:rtsHouseSide('player'),vox:rtsVoxSide()};
+           after:rtsHouseSide('player'),vox:rtsArmySide()};
  });
  console.log('\nfaction across a save: saved as '+side.mineAtSave+', header records "'+side.recorded+
    '", switched to allied, resumed -> '+side.after);

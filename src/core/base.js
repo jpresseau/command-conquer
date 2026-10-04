@@ -75,20 +75,6 @@ function _rtsBaseDropNode(e) {
 }
 
 function _rtsNewGame(seed, diff) {
-  /* THE battlefield size is decided here and only here. It is derived from whether a map is
-     loaded, because every grid below is allocated against it and they must agree.
-
-     It used to be set as a side effect of assembling a map - which was fine when assembling
-     meant "about to play this", and wrong the moment anything assembled a map to ASK A
-     QUESTION. The editor's CHECK button does exactly that and never loads the map, so one
-     click left RTS_N at the checked map's size for the rest of the session and the next
-     generated battle came out 124 wide instead of 128. Nothing reported it. */
-  RTS_N = (window._RTS_MAP && window._RTS_MAP.n) ? window._RTS_MAP.n : RTS_MAP_DEFAULT_N;
-  /* Adopting a map adopts its theatre, for the same reason and in the same place as the size
-     above: this is the one point that means "about to play this", so it is the only place the
-     artwork is allowed to change under the renderer. A generated battle is always temperate. */
-  if (typeof rtsSetTheatre === 'function')
-    rtsSetTheatre((window._RTS_MAP && window._RTS_MAP.theatre) || 'TEMPERAT');
 
   var G = {
     t:0, seed:seed || 12345, over:null, msg:null, msgT:0, shake:0,
@@ -145,14 +131,6 @@ function _rtsNewGame(seed, diff) {
      flat 3x multiplier left the AI sitting on 90k credits it could not spend by the four
      minute mark. Small patch, no regrowth, enormous payout: that is the whole point of the
      deposit in the middle of the map. */
-  /* A real map, if the player loaded one, replaces this whole section: its terrain, its
-     passability, its ore and its author's start positions all arrive together, already
-     checked for connectivity when it was loaded. See src/map for why cliffs and
-     coastlines have to come from a map rather than from a generator. */
-  var _mapStarts = (typeof _rtsMapApply === 'function') ? _rtsMapApply(G) : null;
-  if (_mapStarts) {
-    G.starts = _mapStarts;
-  } else {
   /* The two starts are rolled BEFORE anything else is laid down, because the ore, the roads,
      the connectivity fill and the team waypoints are all expressed relative to them. */
   G.starts = _rtsPickStarts(rnd);
@@ -168,7 +146,6 @@ function _rtsNewGame(seed, diff) {
     }
   }
   _rtsGenTerrain(G, rnd, G.starts);
-  }
 
   /* --- the two bases: player bottom-left, opponent top-right.
      Footprints are small (Command Yard 3x3) so a base is a cluster of compact structures

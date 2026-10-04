@@ -40,7 +40,7 @@ var S = new Suite('ground');
   await g.start(7, 1);
 
   var out = await g.page.evaluate(function () {
-    rtsSetVoxSide('allied');
+    rtsSetArmySide('allied');
     _rtsNewGame(4242, 'easy');
     var R = _rtsR, o = {};
     o.side = R.terrain.width;

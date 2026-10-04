@@ -3,11 +3,9 @@
    Reported from an iPhone: the difficulty note was printed straight across the difficulty
    buttons, and the army note across the army buttons.
 
-   The cause was not a phone problem at all. `#rtsTitleMenu` exists only so the whole menu can
-   be moved bodily inside the original title plate's red panel when the player's own artwork is
-   loaded (see rtsShowTitleArt), and it had been given a layout ONLY under `.hasart`. Without
-   the artwork it was a plain block <div>, and most of what is inside it is `<button>`s - which
-   are inline-level, and flowed as words in a paragraph. What made it visible is that the notes
+   The cause was not a phone problem at all. `#rtsTitleMenu` had been given a layout only for
+   a title-art mode, and otherwise was a plain block <div> - and most of what is inside it is
+   `<button>`s, which are inline-level, and flowed as words in a paragraph. What made it visible is that the notes
    and the secondary buttons carry NEGATIVE top margins (-14px, -10px) whose entire job is to
    cancel #rtsHome's own 22px flex gap; inside a wrapper with no gap they cancel nothing and
    just pull each element up into the one above.
@@ -15,7 +13,7 @@
    Measured before the fix, at every viewport tried - phone AND desktop:
 
      #rtsDiff x #rtsDiffNote  overlap 14px
-     #rtsVoxSide x #rtsVoxNote overlap 14px
+     #rtsArmySide x #rtsVoxNote overlap 14px
      desktop: #rtsInstall drawn ABOVE #rtsGo, across it and both notes
 
    So this is not a phone spec with a phone fix. It is the overlap itself, asserted at six
@@ -44,7 +42,7 @@ var SIZES = [
 /* Everything in the menu that a player reads or presses. The two notes are the ones that were
    overlapping, and the loader cards are in because they are what the pinned build stamp lands
    on when the page is scrolled. */
-var PARTS = ['#rtsDiff', '#rtsDiffNote', '#rtsSky', '#rtsVoxSide', '#rtsVoxNote', '#rtsGo', '#rtsInstall'];
+var PARTS = ['#rtsDiff', '#rtsDiffNote', '#rtsSky', '#rtsArmySide', '#rtsVoxNote', '#rtsGo', '#rtsInstall'];
 
 (async function () {
   var browser = await chromium.launch();
@@ -128,22 +126,6 @@ var PARTS = ['#rtsDiff', '#rtsDiffNote', '#rtsSky', '#rtsVoxSide', '#rtsVoxNote'
        results.every(function (r) {
          return r.stampBg && r.stampBg !== 'transparent' && !/rgba\(0, 0, 0, 0\)/.test(r.stampBg);
        }), results[0].stampBg);
-
-  /* And the artwork path still wins. The fix adds a default `#rtsTitleMenu` rule, and a base
-     rule that outranked `#rtsHome.hasart #rtsTitleMenu` would strand the menu outside the
-     plate's panel - the one arrangement this wrapper exists for. */
-  var g2 = await openPage(browser, { width: 1280, height: 900 });
-  var art = await g2.page.evaluate(function () {
-    var m = document.getElementById('rtsTitleMenu'), h = document.getElementById('rtsHome');
-    var before = getComputedStyle(m).position;
-    h.classList.add('hasart');
-    var after = getComputedStyle(m).position;
-    h.classList.remove('hasart');
-    return { before: before, after: after };
-  });
-  S.eq('without artwork the menu is in the ordinary flow', art.before, 'static');
-  S.eq('...and with it the plate still positions the menu inside its panel', art.after, 'absolute');
-  await g2.close();
 
   await browser.close();
   require('../lib/report.js')(S);

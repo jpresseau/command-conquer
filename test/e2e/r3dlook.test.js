@@ -37,7 +37,7 @@ var S = new Suite('r3dlook');
 
   var out = await g.page.evaluate(function () {
     var o = {};
-    rtsSetVoxSide('allied');
+    rtsSetArmySide('allied');
     _rtsNewGame(4242, 'easy');
     var G = window._rtsG, R = _rtsR;
 

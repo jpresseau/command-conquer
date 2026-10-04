@@ -13,7 +13,7 @@ var { Suite } = require('../lib/assert.js');
 var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('combat3d');
-var g = load(['src/rules', 'src/core', 'src/map', 'src/sprites/bake.js', 'src/sprites/props.js', 'src/render3d/combat3d.js']);
+var g = load(['src/rules', 'src/core', 'src/sprites/bake.js', 'src/sprites/props.js', 'src/render3d/combat3d.js']);
 g.window._R3D = {};
 g._r3dViewBounds = function () { return { x0: -1e4, x1: 1e4, z0: -1e4, z1: 1e4 }; };
 g._r3dBoundsNear = function (b) { return b; };

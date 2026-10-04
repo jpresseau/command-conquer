@@ -38,7 +38,7 @@ function world(keys, q) {
 function why(key) { return g._rtsWhyLocked('player', key); }
 
 /* The player is Allied unless a case says otherwise - rtsHouseSide reads it from here. */
-g.window._RTS_VOXSIDE = 'allied';
+g.window._RTS_ARMY = 'allied';
 
 /* Every ground rule below is about buildings and infantry, and a full base makes them one-liners
    rather than six lines of setup each. */

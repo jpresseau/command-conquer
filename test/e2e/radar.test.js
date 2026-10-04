@@ -65,7 +65,7 @@ var S = new Suite('radar');
 
   var out = await g.page.evaluate(function () {
     var o = {};
-    rtsSetVoxSide('allied');
+    rtsSetArmySide('allied');
     _rtsNewGame(4242, 'easy');
     var SP = _rtsSprites();
 

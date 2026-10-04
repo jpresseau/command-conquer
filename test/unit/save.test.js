@@ -28,28 +28,6 @@ S.eq('hash of the empty string is defined', typeof g._rtsHash(''), 'number');
   S.ok('hash catches a single flipped byte in 5000', g._rtsHash(a) !== g._rtsHash(b));
 })();
 
-/* ------------------------------------------------------------ version stamp ----
-   THE BUG THIS FILE EXISTS FOR. The stamp folded in RTS_N, which holds the map's size only
-   while a battle is running - so a stamp written inside a battle could never be recomputed
-   outside one, and every save made on a real map was rejected on the next visit with the
-   title screen blaming a version change that had not happened. */
-(function () {
-  var outside = g._rtsSaveVersion();
-  g.window._RTS_MAP = { n: 96 };                       /* a real map is loaded */
-  var withMap = g._rtsSaveVersion();
-  var savedRTSN = g.RTS_N;
-  g.RTS_N = 96;                                        /* ...and now the battle is running */
-  var inBattle = g._rtsSaveVersion();
-  g.RTS_N = savedRTSN;                                 /* _rtsMapAssemble puts it back */
-  var afterBattle = g._rtsSaveVersion();
-
-  S.ok('a 96-tile map moves the stamp off the 128 default', withMap !== outside,
-       'default ' + outside + ', with the map ' + withMap);
-  S.eq('the stamp is the same inside the battle as out', inBattle, withMap);
-  S.eq('and the same again once RTS_N has been put back', afterBattle, withMap);
-  g.window._RTS_MAP = null;
-  S.eq('with no map it falls back to RTS_N', g._rtsSaveVersion(), outside);
-})();
 
 /* The stamp's actual job: reject a save whose shape no longer matches the code. */
 (function () {

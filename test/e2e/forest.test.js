@@ -43,7 +43,7 @@ var S = new Suite('forest');
 
   var out = await g.page.evaluate(function () {
     var o = {};
-    rtsSetVoxSide('allied');
+    rtsSetArmySide('allied');
     _rtsNewGame(4242, 'easy');
     var G = window._rtsG, R = _rtsR, SP = R.spr, i;
 

@@ -36,7 +36,7 @@ var S = new Suite('pan');
 
   var out = await g.page.evaluate(function () {
     var o = {}, R = _rtsR;
-    rtsSetVoxSide('allied');
+    rtsSetArmySide('allied');
     _rtsNewGame(4242, 'easy');
 
     var cv = document.getElementById('rtsCv');

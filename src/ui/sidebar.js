@@ -75,7 +75,6 @@ function _rtsModeClick(mx, my) {
   var e = hit && hit.ent;
   if (!e || e.type !== 'struct' || e.side !== 'player') {
     if (typeof _rtsSfx === 'function') _rtsSfx('deny');
-    if (typeof rtsEva === 'function') rtsEva('cantbuild');
     _rtsSay('Pick one of your own buildings.');
     return true;
   }
@@ -237,12 +236,7 @@ function _rtsItemClick(key) {
   else {
     var def = rtsStructDef(key) || rtsUnitDef(key);
     if (typeof _rtsSfx === 'function') _rtsSfx('deny');
-    /* EVA distinguishes "you cannot build that" from "you cannot AFFORD that", and being told
-       the wrong one is worse than being told nothing - the first sends you looking for a
-       prerequisite you already have. */
     var why = _rtsWhyLocked('player', key);
-    var _broke = !why && rtsMoney(S) < def.cost;
-    if (typeof rtsEva === 'function') rtsEva(_broke ? 'nofunds' : 'cantbuild');
     /* EVERY refusal says something. This used to be a ladder of its own guesses at why, and it
        ran out: a Commando at her one-at-a-time cap passed every branch of it and the click
        produced a beep and an empty message line. `_rtsWhyLocked` is the same answer the tile
@@ -275,7 +269,6 @@ function _rtsItemCancel(key) {
     if (U.place === key) { U.place = null; _rtsGhostHide(); }
     _rtsSay('Canceled.');
     if (typeof _rtsSfx === 'function') _rtsSfx('deny');
-    if (typeof rtsEva === 'function') rtsEva('cancel');
   }
 }
 /* StripClass::Add speaks VOX_NEW_CONSTRUCT when something joins the buildable list. It is
@@ -295,7 +288,6 @@ function _rtsWatchNewOptions() {
   if (fresh) {
     _rtsSay('New construction options.');
     if (typeof _rtsSfx === 'function') _rtsSfx('ready');
-    if (typeof rtsEva === 'function') rtsEva('newopt');
   }
   U.avail = now;
 }

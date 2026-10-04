@@ -318,10 +318,6 @@ function _rtsTickProduction(side, dt) {
       if (cat === 'struct') { S.ready = q.key; S.readyPaid = q.paid; }
       else _rtsDeliverUnit(side, q.key);
       if (side === 'player' && typeof _rtsSfx === 'function') _rtsSfx(cat === 'struct' ? 'ready' : 'unitready');
-      /* EVA calls it. A finished building and a finished unit are different announcements in
-         the original and were both silent here - "Construction complete" was in the table and
-         had no caller at all. */
-      if (side === 'player' && typeof rtsEva === 'function') rtsEva(cat === 'struct' ? 'built' : 'ready');
     }
   }
 }

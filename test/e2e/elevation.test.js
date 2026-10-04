@@ -46,7 +46,7 @@ var S = new Suite('elevation');
 
   var out = await g.page.evaluate(function () {
     var o = {}, R = _rtsR, i, tx, tz;
-    rtsSetVoxSide('allied');
+    rtsSetArmySide('allied');
     _rtsNewGame(4242, 'easy');
     var G = window._rtsG, N = RTS_N;
     for (i = 0; i < N * N; i++) { G.mapped[i] = 1; G.vis[i] = 1; }

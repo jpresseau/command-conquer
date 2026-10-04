@@ -314,23 +314,21 @@ var CONTROLS = ['#rtsReloadBtn', '#rtsSaveBtn', '#rtsLoadBtn', '#rtsMute', '#rcg
      confirmation and not the wiring - with the markup pointed straight back at rtsClose() the
      whole block still passed, which is a spec proving something nobody was worried about. */
   await x.page.click('#rtsQuitBtn');
+  /* THE SECOND PRESS GOES THROUGH THE BUTTON'S OWN click(), not the harness's pointer, and IN
+     THE SAME STEP as reading the armed state. The window it has to land in is five seconds of a
+     person's time, and on a loaded machine each round trip to the page can take seconds - a
+     real pointer press took 7 to 9s, and even a separate evaluate after the read landed after
+     the button had disarmed in a full run. The first press above is the real one and proves the
+     button is reachable; this one still runs the markup's wiring, which is the point of not
+     calling rtsQuitClick() directly. */
   var quit1 = await x.page.evaluate(function () {
-    return { still: !!document.getElementById('rcgRts'),
-             msg: window._rtsG ? window._rtsG.msg : '',
-             armed: /arm/.test((document.getElementById('rtsQuitBtn') || {}).className || '') };
+    var o = { still: !!document.getElementById('rcgRts'),
+              msg: window._rtsG ? window._rtsG.msg : '',
+              armed: /arm/.test((document.getElementById('rtsQuitBtn') || {}).className || '') };
+    if (o.still) { document.getElementById('rtsQuitBtn').click(); o.gone = !document.getElementById('rcgRts'); }
+    return o;
   });
-  var gone = false;
-  if (quit1.still) {
-    /* THE SECOND PRESS GOES THROUGH THE BUTTON'S OWN click(), not the harness's pointer. The
-       window it has to land in is five seconds of a person's time, and at this screen size a
-       real press takes the harness 7 to 9s to deliver - it waits on frames SwiftShader draws
-       at 1-2s each - so it arrived after the button had disarmed, on main as well, and this
-       passed or failed on the frame rate. The first press above is the real one and proves the
-       button is reachable; this one still runs the markup's wiring, which is the point of not
-       calling rtsQuitClick() directly. */
-    await x.page.evaluate(function () { document.getElementById('rtsQuitBtn').click(); });
-    gone = await x.page.evaluate(function () { return !document.getElementById('rcgRts'); });
-  }
+  var gone = !!quit1.gone;
   var quit = { afterOne: quit1.still, msg: quit1.msg, armed: quit1.armed, afterTwo: !gone };
   S.ok('one press on ✕ does not end the battle', quit.afterOne, '');
   S.ok('...it asks, in words', /press ✕ again/i.test(quit.msg || ''), JSON.stringify(quit.msg));

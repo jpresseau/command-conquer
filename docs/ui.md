@@ -154,11 +154,9 @@ by `_rtsNeedName`: the namesake building's name if there is one, otherwise every
 provides it joined with "or". Without that, the first capability nothing is named after would
 make the sidebar throw while trying to explain itself.
 
-**EVA lines**: `VOX_TRAINING` ("Training") for infantry vs `VOX_BUILDING` ("Building") for
-everything else; `VOX_SUSPENDED` / `VOX_CANCELED`; and `VOX_NEW_CONSTRUCT` ("New construction
-options") from `StripClass::Add` whenever something *joins* the buildable list — the cue that
-finishing a barracks just unlocked infantry, which is easy to miss when the new options are on
-a tab you are not looking at. Watch every category, not just the visible one, and stay quiet
+**"New construction options"** is said whenever something *joins* the buildable list — the cue
+that finishing a barracks just unlocked infantry, which is easy to miss when the new options are
+on a tab you are not looking at. Watch every category, not just the visible one, and stay quiet
 on the first pass or a new game announces itself.
 
 ## Animations — from ANIM.CPP

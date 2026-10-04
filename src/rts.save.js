@@ -39,15 +39,7 @@ var RTS_SAVE_INFO = 'rccmd.save1.info';
    every existing save is rejected without anyone having to remember to bump a number. */
 function _rtsSaveVersion() {
   var w = 0; for (var k in RTS_WEAPONS) w++;
-  /* THE MAP SIZE, FROM THE MAP - not from RTS_N. RTS_N is only the map's size WHILE a battle is
-     running: _rtsNewGame sets it from the map at the start and _rtsMapAssemble deliberately puts
-     it back afterwards. So a stamp folding in the live RTS_N could be written inside a battle
-     and never recomputed outside one, and every save made on a real map was rejected on the
-     next visit - hash intact, body intact, and the title screen blaming a version change that
-     had not happened. Measured on "A Path Beyond" (96x96): 3814 in the battle, 4806 on the
-     title screen. Any map whose smaller playable bound is not exactly 128 was affected. */
-  var n = (window._RTS_MAP && window._RTS_MAP.n) || RTS_N;
-  return 3 + n * 31 + RTS_UNITS.length * 7 + RTS_STRUCTS.length * 11 + w * 13
+  return 3 + RTS_N * 31 + RTS_UNITS.length * 7 + RTS_STRUCTS.length * 11 + w * 13
     + RTS_TEAM_TYPES.length * 17 + RTS_TRIGGERS.length * 19;
 }
 
@@ -275,7 +267,7 @@ function rtsSaveGame() {
          faction is the one piece of a battle that lives outside the state being written. Left
          unrecorded, resuming after switching sides loaded the base intact and then refused to
          build from it: a standing Kennel that cannot make dogs. */
-      side:(typeof rtsVoxSide === 'function') ? rtsVoxSide() : null,
+      side:(typeof rtsArmySide === 'function') ? rtsArmySide() : null,
       desc:(RTS_DIFF[G.diff] ? RTS_DIFF[G.diff].name : G.diff) + ' — '
         + mins + ':' + (secs < 10 ? '0' : '') + secs
         + ' — ' + G.ents.filter(function (e) { return !e.dead && e.side === 'player'; }).length + ' units and buildings' };
@@ -394,7 +386,7 @@ function rtsLoadGame() {
      load the Soviet base and then hand you the Allied roster - a Kennel standing in your base
      that cannot build a dog. Saves written before this field existed have no `side`, and are
      left exactly as they were rather than being guessed at. */
-  if (res.info && res.info.side && typeof rtsSetVoxSide === 'function') rtsSetVoxSide(res.info.side);
+  if (res.info && res.info.side && typeof rtsSetArmySide === 'function') rtsSetArmySide(res.info.side);
   /* The load goes through the same door as starting a battle: close, open, and hand the state
      to rtsOpen so it lands after _rtsNewGame and before the renderer bakes the terrain. */
   window._RTS_PENDING_LOAD = body;

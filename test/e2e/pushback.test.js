@@ -156,7 +156,7 @@ var PB_BASE = process.env.PUSHBACK_BASELINE || '';
     /* One decision every RTS_PUSH_TICK seconds, which is roughly how often a person acts. The
        order is an opening: keep mining, keep the lights on, put up a line, then make an army. */
     window._rtsPushPlay = function (vs, diff, seed, HORIZON) {
-      if (typeof rtsSetVoxSide === 'function') rtsSetVoxSide(vs);
+      if (typeof rtsSetArmySide === 'function') rtsSetArmySide(vs);
       _rtsNewGame(seed, diff);
       var G = window._rtsG, P = G.sides.player;
       var fell = null, next = 0, sent = 0, built = {}, army = [];

@@ -37,18 +37,10 @@ are genuinely modular:
 
 | spec | what it holds to account |
 |---|---|
-| `lcw` | format 80 both ways: one hand-built stream per op-code, so a broken branch is named instead of showing up as "the image looks odd" — including the overlapping back-reference, which is the single most common way a hand-written LCW decoder is subtly wrong. The compressor is checked by round trip, because how well it compressed is not the decoder's business |
-| `mix` | the archive format everything else is read out of: the hash that serves as its only index (there are no names in the file), both header forms, that a read is a *view* and not a copy, and truncation — the trap where a file cut short still parses perfectly and then throws on the first read past the cut |
-| `shp` | shapes and the 6-bit palettes that colour them. Two of the three frame formats are deltas, so the load-bearing assertion is asking for frame 1 *first*: a chain walked lazily and a chain assumed already-walked agree until you skip |
-| `blowfish` | Eric Young's published ECB vectors, in **both** directions — an encryptor with its Feistel halves mirrored wrongly reproduces every published ciphertext and then cannot invert its own output, which is exactly how the first draft here was wrong |
-| `oramap` | the `.oramap` path: a stored-entry zip, `map.bin` (whose column-major-to-row-major transpose is the whole point), `map.yaml` in both tab and space indentation, and the tile table they index into |
-| `inimap` | RA's own `.MPR` scenarios, read and written. No real one is to hand, so a full 128×128 scenario is *built* — which needs an LCW encoder the game does not have — with the chunk header's format marker set non-zero on purpose, because a reader that masks with `0xFFFFFFFF` passes every test where it happens to be zero. The editor's save path is a round trip through the same reader that opens MAIN.MIX, because there is no second path for maps we made ourselves |
-| `aud` | every sound and every music track. The property both codecs share and both can get wrong: the running sample carries *across* chunk boundaries — a decoder that resets per chunk produces audio of exactly the right length that clicks every 512 samples |
-| `iso` | the ISO 9660 directory walker, against hand-built images containing the awkward cases: records past a sector's zero padding, self-referential entries, a raw 2352-byte rip, an extent pointing off the end |
 | `save` | the checksum, the version stamp, and the encoder that walks live game state into JSON |
 | `rules` | invariants over the roster: no orphan unit kinds, every prerequisite and weapon resolves, every unit kind has a building that produces it, no faction needs something it cannot build |
 | `r3d` | the sprite baker's geometry half: the oblique projection (`x` unchanged, `z − K·y`, ground deliberately **not** foreshortened), the shape builders, yaw and scale as pure transforms that must not edit the model handed to them, and the colour ramp — which exists to keep a shadow coloured instead of letting it slide to grey, so the test is "does it stay saturated", not "does it get darker" |
-| `audio` | the sound tables, whose only failure mode is silence: every EVA line, unit voice and death cry resolves in the identity table, every voice pool expands to takes that exist, every effect the game dispatches has something to play, and no retrigger gap or sampled mapping is left pointing at an effect that is gone |
+| `audio` | sound's only failure mode is silence: every effect the game dispatches has a synthesized recipe, no retrigger gap points at an effect that is gone, the shell's music calls reach the score, and with no AudioContext every entry point declines quietly |
 | `scenario` | the two tables read as scripts — team mission lists and triggers. Every mission, event, action, waypoint, quarry, team and unit name resolves; every argument is the kind its own table's `need` declares; every `loop` jumps inside its own script; and the two invariants the source states in prose hold — the autocreate split has both halves populated, and the shipped trigger list stays balance-neutral, which is what the ladder measurements assume |
 | `crates` | the crate table: weights, and the caps — whose *direction* is the subtle part, since `rof` is clamped with `Math.max` because lower is faster, so a cap written above 1 turns a bonus into a penalty without failing. Plus the check this file exists for: every modifier a crate grants is read back somewhere, because one that is stored and never consulted still announces itself, plays its sound and does nothing |
 | `sfx` | every rendered effect, measured without a sound card (`lib/sound.js`): every take finite, at its peak, at rest at its end; takes that differ but match in level; each effect as loud as its recipe says once A-weighted; a rifle a crack and a cannon heavier; the interface tone and the battle noise. `e2e/sfxmix` hears the same effects in the page - left and right by the pixel, the voice cap, the compressor and clip |
@@ -167,12 +159,8 @@ be genuinely reachable, it establishes it and asserts that it did.
 
 ## No game assets
 
-None ship in this repo, by design — artwork, audio and maps are read at runtime from the
-player's own copy. So `_rtsArtReady()` is false in every spec and the procedural fallback
-renders. That is also exactly what a first-time player sees, so it is the primary path, not a
-degraded one. Specs that need the artwork path stub `_mixShp` and `_rtsArtReady` themselves —
-`e2e/atmosphere` does this with a synthetic sprite that records which frames get asked for,
-which tests the frame table without claiming anything about how the frames look.
+None ship and none are read: every model, texture, sound and map is generated by the game's own
+code, so what a spec sees is exactly what a player sees.
 
 ## Size
 

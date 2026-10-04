@@ -204,9 +204,6 @@ function _rtsRFrame(dt) {
     }
   }
 
-  /* --- the sea, moving. Over the baked terrain and under everything that stands on it. --- */
-  if (typeof _rtsDrawWater === 'function') _rtsDrawWater(g, G, cell);
-
   /* --- foundation pads. A separate pass before any structure is drawn, so one building's
      pad can never cover its neighbour. Without these a base looks like furniture dropped
      on a lawn; a scuffed earth apron is what makes it look built. --- */
@@ -217,26 +214,6 @@ function _rtsRFrame(dt) {
     if (pe.type !== 'struct' || (pe.dead && !(pe.wreck > 0))) continue;
     if (!_rtsEntSeen(pe)) continue;
     var pd = rtsStructDef(pe.def);
-    /* The original's own apron, when the player's files have it. It is a tyre-marked strip
-       lining up with the footprint exactly, where ours is a pale blob noticeably larger than
-       the building - which is what made a base look pasted onto the ground rather than
-       standing on it. Two cells tall, hung off the BOTTOM row of the footprint, which is
-       where RA puts it. */
-    var bib = (typeof _mixBib === 'function') ? _mixBib(pd.w) : null;
-    if (bib) {
-      var bcell = Math.round(RTS_TILE * TSscale) || 1;
-      var bp = _rtsGroundToScreen(_rtsWX(pe.tx) - RTS_TILE / 2,
-                                  _rtsWX(pe.tz + pd.h - 2) - RTS_TILE / 2);
-      var bx0 = Math.round(bp.x), by0 = Math.round(bp.y);
-      if (bx0 > R.W || by0 > R.H || bx0 + bcell * bib.w < 0 || by0 + bcell * 2 < 0) continue;
-      for (var br = 0; br < 2; br++) {
-        for (var bc = 0; bc < bib.w; bc++) {
-          var bt = bib.tile[br * bib.w + bc];
-          if (bt) g.drawImage(bt, bx0 + bc * bcell, by0 + br * bcell, bcell + 1, bcell + 1);
-        }
-      }
-      continue;
-    }
     var pad = S.pad[pe.def];
     var pp2 = _rtsGroundToScreen(_rtsWX(pe.tx) - RTS_TILE / 2, _rtsWX(pe.tz) - RTS_TILE / 2);
     /* TWO SCALES, AND THEY ARE NOT THE SAME ONE. `psc` turns PAD pixels into screen pixels and
@@ -296,7 +273,7 @@ function _rtsRFrame(dt) {
 
      A separate pass ahead of the units, not per unit inside the loop: drawn inline, a unit's
      shadow would fall ON TOP of the unit sorted just behind it. */
-  if (!(typeof _rtsArtReady === 'function' && _rtsArtReady())) {
+  {
     g.globalAlpha = 0.28;
     g.fillStyle = '#0b0f14';
     for (i = 0; i < draw.length; i++) {
@@ -370,9 +347,7 @@ function _rtsRFrame(dt) {
     if (ey1 < R.H) g.fillRect(0, ey1, R.W, R.H - ey1);
   }
   if (r3on) { /* fog drawn by the GL pass, soft-sampled */ }
-  else if (G.mapped && typeof _mixShroud === 'function' && _mixShroud()) {
-    _rtsDrawShroudTiles(g, G, cell);
-  } else if (G.mapped) {
+  else if (G.mapped) {
     if (!R.fog) {
       R.fog = document.createElement('canvas');
       R.fog.width = RTS_N; R.fog.height = RTS_N;

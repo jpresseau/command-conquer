@@ -56,7 +56,7 @@ function _rtsPostInit(R) {
 function _rtsWantBloom(G) {
   for (var i = 0; i < G.fx.length; i++) {
     var k = G.fx[i].kind;
-    if (k === 'tracer' || k === 'debris' || k === 'die') continue;
+    if (k === 'tracer' || k === 'debris') continue;
     if (G.fx[i].t < 0) continue;
     return true;
   }
@@ -162,113 +162,6 @@ function _rtsPost(g) {
     g.restore();
   }
   /* the vignette multiplies over this on the compositor - #rtsVig sits above the canvas */
-}
-
-/* THROUGH THE PROJECTION, LIKE EVERY OTHER WORLD DRAW. This placed each tile at
-   `(x - ox) * cell` - a flat top-down projection written out by hand - and it is called
-   ungated, in both modes. In 3D the world is tilted: a cell's screen height is cell * cos(tilt)
-   and its row position compresses with it, so the sea was laid over the tilted map on a grid
-   that was not, drifting further out of register with every row from the camera. It is the one
-   world overlay that still has to run in 3D - the GL side has no water surface of its own, so
-   without it the sea is a flat painted colour - which is exactly why it has to be in the right
-   place rather than merely present.
-
-   Only players who have loaded their own Red Alert archives ever saw it: _mixWater returns
-   null without them and this returns immediately, which is also why no spec caught it. */
-function _rtsDrawWater(g, G, cell) {
-  /* 2D ONLY. In 3D the sea is geometry with a moving normal and a specular on it
-     (render3d/world3d.js), and a flat sheet of authored tiles laid over that hides every bit
-     of it - the same mistake the ore tile made over the ore crystals. */
-  if (window._R3D && window._R3D.on) return;
-  var steps = _mixWater();
-  if (!steps) return;
-  var N = RTS_N;
-  var set = steps[Math.floor(G.t * RTS_WATER_HZ) % steps.length];
-  /* The window comes from the projection's inverse for the same reason the placement does:
-     the flat cell arithmetic this replaces is the top-down answer, and under the tilt it fell
-     a row short at the far edge - which is where a missing row of sea reads as the map ending
-     rather than as a bug. */
-  var cw = _rtsCellWindow(1, 2);
-  var seed = (G.seed || 1) | 0;
-
-  for (var y = cw.tz0; y <= cw.tz1; y++) {
-    for (var x = cw.tx0; x <= cw.tx1; x++) {
-      var i = y * N + x;
-      if (G.terrain[i] !== RTS_T_WATER || _rtsIsBridgeCell(i)) continue;
-      if (!G.mapped[i]) continue;                    /* never seen - the shroud covers it anyway */
-      var v = (_sprHash(x, y, seed + 137) * set.length) | 0;
-      if (v >= set.length) v = set.length - 1;
-      var tile = set[v];
-      if (!tile) continue;
-      /* Corner to corner, so each tile reaches its neighbour under any projection - a fixed
-         size only abuts while every cell projects to the same rectangle, which stopped being
-         true the moment the 3D camera gained a perspective divide. */
-      var sp = _rtsGroundToScreen(_rtsWX(x) - RTS_TILE / 2, _rtsWX(y) - RTS_TILE / 2);
-      var sq = _rtsGroundToScreen(_rtsWX(x) + RTS_TILE / 2, _rtsWX(y) + RTS_TILE / 2);
-      var px = Math.round(sp.x), py = Math.round(sp.y);
-      g.drawImage(tile, px, py, Math.max(1, Math.round(sq.x) - px + 1),
-                  Math.max(1, Math.round(sq.y) - py + 1));
-    }
-  }
-}
-
-function _rtsDrawShroudTiles(g, G, cell) {
-  var R = _rtsR, spr = _mixShroud(), map = _mixShroudMap();
-  var N = RTS_N;
-  /* which cells are on screen, in cell coordinates */
-  var ox = R.focus.x / RTS_TILE + N / 2 - (R.W / 2) / cell;
-  var oy = R.focus.z / RTS_TILE + N / 2 - (R.H / 2) / cell;
-  var x0 = Math.max(0, Math.floor(ox) - 1), y0 = Math.max(0, Math.floor(oy) - 1);
-  var x1 = Math.min(N - 1, Math.ceil(ox + R.W / cell) + 1);
-  var y1 = Math.min(N - 1, Math.ceil(oy + R.H / cell) + 1);
-
-  /* Off the edge of the MAP counts as unexplored, so the border gets a proper cut edge rather
-     than stopping flat at the last cell. */
-  function dark(x, y) { return (x < 0 || y < 0 || x >= N || y >= N) ? 1 : (G.mapped[y * N + x] ? 0 : 1); }
-
-  var prevA = g.globalAlpha;
-  for (var y = y0; y <= y1; y++) {
-    for (var x = x0; x <= x1; x++) {
-      var i = y * N + x;
-      var sx = Math.round((x - ox) * cell), sy = Math.round((y - oy) * cell);
-      var w = Math.ceil(cell) + 1;
-
-      if (!G.mapped[i]) {
-        /* unexplored: solid, no shape needed - the shape lives on the LIT side of the border */
-        g.globalAlpha = 1;
-        g.fillStyle = '#040609';
-        g.fillRect(sx, sy, w, w);
-        continue;
-      }
-
-      /* explored: dim it, then cut the edge against anything unexplored around it */
-      if (!G.vis[i]) {
-        g.globalAlpha = RTS_FOG_DIM;
-        g.fillStyle = '#040609';
-        g.fillRect(sx, sy, w, w);
-      }
-
-      var u = dark(x, y - 1), d = dark(x, y + 1), l = dark(x - 1, y), r = dark(x + 1, y);
-      var e = 0;
-      if (u) e |= 0x10;
-      if (r) e |= 0x20;
-      if (d) e |= 0x40;
-      if (l) e |= 0x80;
-      /* A corner only counts when neither of its sides does - otherwise the side piece already
-         covers it, and the combined mask names a frame that does not exist. */
-      if (!u && !l && dark(x - 1, y - 1)) e |= 0x01;
-      if (!u && !r && dark(x + 1, y - 1)) e |= 0x02;
-      if (!d && !r && dark(x + 1, y + 1)) e |= 0x04;
-      if (!d && !l && dark(x - 1, y + 1)) e |= 0x08;
-      if (!e) continue;
-
-      var f = map[e];
-      if (f < 0 || !spr[f]) continue;
-      g.globalAlpha = 1;
-      g.drawImage(spr[f], sx, sy, w, w);
-    }
-  }
-  g.globalAlpha = prevA;
 }
 
 /* NULL WHEN THE POINTER IS NOT ON THE GROUND. Under both orthographic cameras every screen

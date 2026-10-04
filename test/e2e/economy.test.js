@@ -104,7 +104,7 @@ var S = new Suite('economy');
   var turrets = await g.page.evaluate(function () {
     var out = {};
     ['allied', 'soviet'].forEach(function (mine) {
-      rtsSetVoxSide(mine);
+      rtsSetArmySide(mine);
       _rtsNewGame(7, 'normal');
       var G = window._rtsG, theirs = rtsHouseSide('enemy'), wrong = [];
       G.ents.filter(function (e) { return !e.dead && e.side === 'enemy' && e.type === 'struct'; })
@@ -134,7 +134,7 @@ var S = new Suite('economy');
      terrain, with and without the deaths, compared pixel by pixel. */
   var bodies = await g.page.evaluate(function () {
     function run(kill) {
-      rtsSetVoxSide('allied');
+      rtsSetArmySide('allied');
       if (document.getElementById('rcgRts')) rtsClose();
       rtsOpen(7);
       for (var i = 0; i < 60 * 10; i++) _rtsTick(1 / 60);

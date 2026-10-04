@@ -18,7 +18,7 @@ var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('airspace');
 function fresh() {
-  var g = load(['src/rules', 'src/core', 'src/map']);
+  var g = load(['src/rules', 'src/core']);
   g._rtsNewGame(4242, 'easy');
   var G = g.window._rtsG;
   G.over = null;

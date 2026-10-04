@@ -325,10 +325,6 @@ S.note(UNITS.length + ' units, ' + STRUCTS.length + ' structures, ' +
    outranges the other's base defences, or one of them is besieging and the other is enduring. */
 (function () {
   var W = g.RTS_WEAPONS;
-  /* RTS_MIX_UNIT lives in src/mixart, which this spec does not otherwise need - loaded on its
-     own so a unit added without artwork is caught here rather than seen as a procedural box
-     standing beside real sprites. */
-  var MIXU = load(['src/mixart/theatres.js']).RTS_MIX_UNIT || {};
   function reach(list, side, kinds) {
     return list.filter(function (d) {
       return d.weapon && W[d.weapon] && (!kinds || kinds.indexOf(d.kind) >= 0) &&
@@ -363,7 +359,6 @@ S.note(UNITS.length + ' units, ' + STRUCTS.length + ' structures, ' +
     if (!d) return;
     S.ok('...it belongs to exactly one army', !!d.side, d.side || 'both');
     S.ok('...it holds its fire while moving, like a siege piece', !!d.noMovingFire, '');
-    S.ok('...and the artwork table knows it', !!MIXU[k], MIXU[k] || 'MISSING');
   });
 
   /* The opponent has to be able to field it, or half the point is lost - _rtsCanQueue drops the
@@ -425,24 +420,6 @@ S.note(UNITS.length + ' units, ' + STRUCTS.length + ' structures, ' +
          dead.join(', ') || 'ceiling ' + top + ', deepest rung ' +
          list.reduce(function (m, r) { return Math.max(m, r[1]); }, 0));
   });
-})();
-
-/* ------------------------------------------------- every unit the player can build has art ----
-   With the player's own files loaded, a key missing from RTS_MIX_UNIT falls back to the
-   procedural sprite - so a real Naval Yard launched drawn boxes alongside real 2tnk hulls, the
-   one place on the map where the two styles stood side by side. Four ships had no entry. */
-(function () {
-  var MIXU = load(['src/mixart/theatres.js']).RTS_MIX_UNIT || {};
-  var missing = g.RTS_UNITS.filter(function (d) { return !MIXU[d.key]; })
-    .map(function (d) { return d.key; });
-  S.ok('every unit in the roster has an entry in the artwork table', !missing.length,
-       missing.join(', ') || g.RTS_UNITS.length + ' units, all mapped');
-  /* and no entry names a unit that no longer exists */
-  var keys = {};
-  g.RTS_UNITS.forEach(function (d) { keys[d.key] = 1; });
-  var orphan = Object.keys(MIXU).filter(function (k) { return !keys[k]; });
-  S.ok('...and the table names no unit the roster has dropped', !orphan.length,
-       orphan.join(', ') || 'none');
 })();
 
 /* ------------------------------------------------------ cloak, and its counter ----

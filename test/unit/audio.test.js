@@ -1,23 +1,13 @@
-/* The sound tables, and the one failure mode this subsystem actually has.
+/* THE ONE FAILURE MODE AUDIO HAS: SILENCE. Nothing throws, nothing logs, the game plays on, and
+   the only symptom is a sound that never comes. Not something a person notices by playing;
+   something a check over the source notices in a millisecond. So:
 
-   Audio here fails SILENTLY, always. rts.sound.js says so in its own header: a name that is
-   not in the archives "costs a failed lookup and a silent fall back to synthesis, so a wrong
-   guess is invisible rather than broken - but it is also a sound nobody ever hears, which is
-   worse than an error because nothing reports it." Nothing throws, nothing logs, the game
-   plays on, and the only symptom is a sound that never comes. That is not something a person
-   notices by playing; it is something a table check notices in a millisecond.
+     every effect the game ever dispatches has a synthesized recipe to play,
+     every retrigger gap belongs to an effect that exists,
+     the shell's music calls reach the score,
+     and with no AudioContext every entry point declines quietly instead of throwing.
 
-   Two whole classes of bug have already been found and fixed here by reasoning rather than
-   listening - a fallback chain whose first branch always resolved so the second was dead, and
-   a voice pool indexed by base names that were never keys - and both were exactly this shape:
-   a lookup that always misses. So the assertions are:
-
-     every name the game ever asks for is a name that can be found,
-     and every effect the game ever plays has something to play.
-
-   All of it is pure. The tables are data and the dispatcher is a function of a string, so this
-   runs in plain node with no browser and no WebAudio. What needs a real AudioContext - that a
-   sound actually reaches the speakers, that the retrigger gap holds, that muting works - is
+   What needs a real AudioContext - that a sound reaches the speakers, that muting works - is
    test/e2e/audio. */
 
 var fs = require('fs');
@@ -27,73 +17,11 @@ var { load, read: srcText } = require('../lib/sandbox.js');
 
 var S = new Suite('audio');
 var ROOT = path.resolve(__dirname, '..', '..');
-var g = load(['ra/sndtab.js', 'src/audio', 'src/rts.audio.js', 'src/rts.sound.js']);
-var TAB = g.RA_SNDTAB || {};
+var g = load(['src/rules/factions.js', 'src/audio', 'src/rts.audio.js']);
 
-S.note(Object.keys(TAB).length + ' sounds identified in the archives, ' +
-       Object.keys(g.RTS_SND_SFX).length + ' effects mapped, ' +
-       g.RTS_SND_TRACKS.length + ' score tracks named');
-
-/* ------------------------------------------------- every name resolves ----
-   RA_SNDTAB is the identity table: it knows what each sound in the player's archives IS, by
-   hash. Anything the game asks for by name has to be a key in it, or the lookup returns null
-   forever and that line simply never plays. */
-function checkNames(what, names) {
-  var missing = names.filter(function (n) { return TAB[n] == null; });
-  S.ok(what + ' all resolve in the identity table', !missing.length,
-       missing.slice(0, 6).join(', ') || (names.length + ' names, all present'));
-}
-
-checkNames('EVA\'s announcements', Object.keys(g.RTS_EVA_NAMED).map(function (k) { return g.RTS_EVA_NAMED[k]; }));
-checkNames('the infantry death cries', g.RTS_DEATH_CRIES);
-
-/* The unit voices are stored as BASE names and the table holds takes - `_1`, `_2`. That
-   indirection is where the last bug lived, so it is checked through the same expansion the
-   game uses rather than against the raw list. */
-(function () {
-  var pools = [];
-  ['allied', 'soviet'].forEach(function (side) {
-    ['infantry', 'vehicle'].forEach(function (kind) {
-      var a = g.RTS_VOX_SELECT[side][kind], b = g.RTS_VOX_ORDER[side][kind];
-      if (a) pools.push(['select/' + side + '/' + kind, a]);
-      if (b) pools.push(['order/' + side + '/' + kind, b]);
-    });
-  });
-  Object.keys(g.RTS_VOX_SPECIAL).forEach(function (k) { pools.push(['special/' + k, g.RTS_VOX_SPECIAL[k]]); });
-
-  var dead = [], total = 0;
-  pools.forEach(function (p) {
-    var takes = g._rtsVoxTakes(p[1]);
-    total += takes.length;
-    if (!takes.length) dead.push(p[0] + ' (' + p[1].length + ' lines, none found)');
-    /* a pool where SOME lines expand and others do not is the silent half-failure */
-    p[1].forEach(function (base) {
-      var got = takes.filter(function (t) { return t === base || t === base + '_1' || t === base + '_2'; });
-      if (!got.length) dead.push(p[0] + ': ' + base);
-    });
-  });
-  S.ok('every voice pool expands to lines that exist', !dead.length,
-       dead.slice(0, 6).join('; ') || (pools.length + ' pools expanding to ' + total + ' takes'));
-
-  /* And the expansion must actually be doing something: if it returned the base names it was
-     handed, the check above would pass while every lookup missed - which is the bug that was
-     here. So at least one take must differ from the name it came from. */
-  var sel = g._rtsVoxTakes(g.RTS_VOX_SELECT.allied.infantry);
-  S.ok('...and the expansion resolves takes, not the base names it was given',
-       sel.some(function (t) { return /_[12]$/.test(t); }),
-       sel.slice(0, 3).join(', '));
-
-  /* Both armies have to be reachable. Half the identified voices are Soviet and they were all
-     unplayable once, behind a branch that could not be taken. */
-  ['allied', 'soviet'].forEach(function (side) {
-    var n = g._rtsVoxTakes(g.RTS_VOX_SELECT[side].infantry).length +
-            g._rtsVoxTakes(g.RTS_VOX_ORDER[side].infantry).length;
-    S.ok('the ' + side + ' infantry have lines to say', n >= 8, n + ' takes');
-  });
-  S.eq('the voice side defaults to allied', g.rtsVoxSide(), 'allied');
-  S.ok('and both sides are offered', g.RTS_VOX_SIDES.length === 2 &&
-       g.RTS_VOX_SIDES.indexOf('soviet') >= 0, g.RTS_VOX_SIDES.join(', '));
-})();
+/* ------------------------------------------------------- the army picker ---- */
+S.eq('the army defaults to allied', g.rtsArmySide(), 'allied');
+S.ok('...and both are offered', g.RTS_ARMY_SIDES.length === 2 && g.RTS_ARMY_SIDES.indexOf('soviet') >= 0, g.RTS_ARMY_SIDES.join(', '));
 
 /* -------------------------------------------- every effect makes a sound ----
    An effect name reaching _rtsSfxPlay that matches none of its branches plays nothing at all.
@@ -101,8 +29,7 @@ checkNames('the infantry death cries', g.RTS_DEATH_CRIES);
    DISPATCHES has to be a subset of the set the dispatcher HANDLES, and the only honest way to
    know the first set is to read the call sites out of the source. */
 (function () {
-  var srcFiles = ['src/core', 'src/ui', 'src/render', 'src/rts.store.js',
-                  'src/rts.editor.js', 'src/map', 'src/title.js'];
+  var srcFiles = ['src/core', 'src/ui', 'src/render', 'src/title.js'];
   var src = srcFiles.map(function (f) { return srcText(f); }).join('\n');
 
   /* Reading the dispatched names off the call sites needs a little care, and getting it wrong
@@ -185,28 +112,6 @@ checkNames('the infantry death cries', g.RTS_DEATH_CRIES);
   S.ok('every retrigger gap belongs to an effect that exists', !strayGap.length,
        strayGap.join(', ') || (Object.keys(g._RTS_SFX_GAP).length + ' gaps, all matched'));
 
-  /* And the real-sample map must not name effects the synthesizer has never heard of: an entry
-     here without a branch means the sample plays for players with archives and NOTHING plays
-     for everyone else, which is the worst of the two failures because it is invisible to
-     whoever is testing with their own copy of the game installed. */
-  var oneSided = Object.keys(g.RTS_SND_SFX).filter(function (n) { return !handled[n]; });
-  S.ok('every sampled effect also has a synthesized fallback', !oneSided.length,
-       oneSided.join(', ') || (Object.keys(g.RTS_SND_SFX).length + ' mapped effects, all with fallbacks'));
-})();
-
-/* ------------------------------------------------------------ the score ----
-   Track names are looked up as files in the archives rather than by hash, so a typo is a track
-   that never plays. They cannot be verified against anything here - no archives ship - but the
-   list can be held to being a list: no duplicates, no empties, no stray extensions. */
-(function () {
-  var t = g.RTS_SND_TRACKS, seen = {}, dup = [], bad = [];
-  t.forEach(function (n) {
-    if (seen[n]) dup.push(n); seen[n] = 1;
-    if (!/^[a-z0-9_]{2,12}$/.test(n)) bad.push(n);
-  });
-  S.ok('the score list has no duplicate tracks', !dup.length, dup.join(', ') || t.length + ' tracks');
-  S.ok('...and every name is a bare archive name, no extension', !bad.length,
-       bad.join(', ') || 'all clean');
 })();
 
 /* ------------------------------------------------------- the sequencer ----
@@ -224,16 +129,9 @@ checkNames('the infantry death cries', g.RTS_DEATH_CRIES);
    quietly rather than throw. A throw inside a tick loop takes the whole frame with it. */
 (function () {
   var calls = [
-    ['rtsEva', function () { return g.rtsEva('ready'); }],
-    ['rtsVox', function () { return g.rtsVox({ def: 'rifle', side: 'player', id: 3 }, 'select'); }],
-    ['rtsDeathCry', function () { return g.rtsDeathCry({ def: 'rifle', side: 'player', id: 3, x: 0, z: 0 }); }],
-    ['rtsSndMusicStart', function () { return g.rtsSndMusicStart(); }],
-    ['rtsSndMusicStop', function () { return g.rtsSndMusicStop(); }],
-    ['rtsSndTracks', function () { return g.rtsSndTracks(); }],
-    ['rtsSndNamed', function () { return g.rtsSndNamed('unit_ready'); }],
-    ['_rtsSndTry', function () { return g._rtsSndTry('rifle'); }],
-    ['rtsSndReset', function () { return g.rtsSndReset(); }],
     ['_rtsSfx', function () { return g._rtsSfx('rifle', 0, 0); }],
+    ['_rtsMusicStart', function () { return g._rtsMusicStart(); }],
+    ['_rtsMusicStop', function () { return g._rtsMusicStop(); }],
     ['rtsMuteToggle', function () { return g.rtsMuteToggle(); }]
   ];
   var threw = [];
@@ -243,10 +141,6 @@ checkNames('the infantry death cries', g.RTS_DEATH_CRIES);
   S.ok('every audio entry point declines quietly with no AudioContext', !threw.length,
        threw.slice(0, 4).join('; ') || (calls.length + ' entry points called, none threw'));
 
-  S.eq('...and the ones that report success say no', g.rtsEva('ready'), false);
-  S.eq('...for voices too', g.rtsVox({ def: 'rifle', side: 'player', id: 1 }, 'select'), false);
-  S.eq('...and the score reports nothing playing', g.rtsSndMusicPlaying(), null);
-  S.eq('...and no tracks are available', g.rtsSndTracks().length, 0);
 })();
 
 require('../lib/report.js')(S);

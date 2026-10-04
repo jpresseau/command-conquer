@@ -15,7 +15,7 @@ var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('air');
 /* the whole renderer, in page order: a unit's draw reaches into most of it */
-var g = load(['src/rules', 'src/core', 'src/map', 'src/r3d', 'src/sprites', 'src/render3d']);
+var g = load(['src/rules', 'src/core', 'src/r3d', 'src/sprites', 'src/render3d']);
 g._rtsNewGame(4242, 'easy');
 var G = g.window._rtsG;
 for (var vi = 0; vi < G.vis.length; vi++) { G.vis[vi] = 1; G.mapped[vi] = 1; }

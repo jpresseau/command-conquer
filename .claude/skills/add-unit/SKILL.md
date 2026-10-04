@@ -1,6 +1,6 @@
 ---
 name: add-unit
-description: Add a new unit or structure to command-conquer's roster - the rules entry, its weapon, a 3D model, Red Alert art mapping, the AI's purchase mix and teams, voices, engine sound, crates - and every hand-kept list and test that has to agree. Use when the owner asks for a new unit, building, weapon or faction option, or when changing what an existing one is.
+description: Add a new unit or structure to command-conquer's roster - the rules entry, its weapon, a 3D model, the AI's purchase mix and teams, engine sound, crates - and every hand-kept list and test that has to agree. Use when the owner asks for a new unit, building, weapon or faction option, or when changing what an existing one is.
 ---
 
 # Add a unit or a structure
@@ -49,24 +49,20 @@ before writing it.
      (`render3d/soldier3d.js`) and props in `crawl3d.js`. `unit/soldier` holds 3D against sprite
      height to within 20%.
    - Look at it with the `visual-check` skill, in 2D and 3D, at phone zoom.
-4. **Red Alert art**: add `RTS_MIX_UNIT` (`src/mixart/theatres.js`), the SHP name for the player's
-   own game files. **This is required**; `unit/rules` fails a unit without it.
-5. **The AI** never builds a unit that is not in `RTS_AI.mix.<kind>` (`src/rules/ai.js`):
+4. **The AI** never builds a unit that is not in `RTS_AI.mix.<kind>` (`src/rules/ai.js`):
    `{key, at, w}`.
    - The weights are load-bearing. Best-first buying once produced 461 grenadiers.
    - Its `needs` must be reachable through `buildOrder` (`unit/aiplan`).
    - **Aircraft and ships** must also be fielded by a team in `RTS_TEAM_TYPES`
      (`src/rules/teams.js`), or `unit/aiplan` fails.
    - Keep plan-dependent units (an engineer, a thief) out unless something gates them.
-6. **Sound**:
-   - Voices come from `rtsVox` by side and kind. A special voice goes in `RTS_VOX_SPECIAL`
-     (`src/rts.sound.js`), and its lines must resolve in `ra/sndtab.js` (`unit/audio`).
+5. **Sound**:
    - The engine loop is picked in `src/rts.ambience.js`: tracked (`RTS_CRUSHERS`, `apc`, `mcv`)
      plays `tracks`, other ground units play `wheels`, ships play `boat`.
    - An aircraft plays `rotor` if its `RTS_AIR_PARTS` entry has `rotor`, otherwise `jet`
      (`_rtsAmbRotor`).
    - Use the `sound-lab` skill for any new effect.
-7. **Optional extras**:
+6. **Optional extras**:
    - `RTS_CRATE_UNITS` (`src/rules/crates.js`): an armed, harvesting or deployable unit only.
    - The opening forces (`src/core/base.js`).
    - `RTS_SP_MOVE` (`src/core/spatial.js`): `unit/spatial` needs `max speed*0.1 + max r <= 8`, so
@@ -98,7 +94,6 @@ before writing it.
      (`_rtsAirPadFor`): one their `needs` names first, then a free one.
    - A new `produces:` building for any other category is counted for the build rate, but it is
      not a queue gate or a spawn point until these lines learn about it.
-5. **Red Alert art** (`RTS_MIX_BLD`) is optional.
 
 ## Prove it
 
@@ -116,7 +111,6 @@ NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node test/run.js --no-bui
   - sane costs;
   - the AI tables agreeing;
   - **equal longest land reach on both sides** (a one-sided long-range land weapon breaks it);
-  - `RTS_MIX_UNIT`;
   - cloak and detector pairs.
 - `unit/save` expects the save version to change, because new entries reject old saves on purpose.
 - Write a spec for the unit's **verb** (the `write-test` skill). Stage the fight it exists to win

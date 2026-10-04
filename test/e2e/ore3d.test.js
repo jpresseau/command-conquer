@@ -62,7 +62,7 @@ var S = new Suite('ore3d');
 
   var out = await g.page.evaluate(function () {
     var o = {}, R = _rtsR, i;
-    rtsSetVoxSide('allied');
+    rtsSetArmySide('allied');
     _rtsNewGame(4242, 'easy');
     var G = window._rtsG;
     for (i = 0; i < RTS_N * RTS_N; i++) { G.mapped[i] = 1; G.vis[i] = 1; }

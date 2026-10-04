@@ -64,7 +64,7 @@ function boom(t, big) { return { kind: 'boom', x: 10, y: 1, z: 20, t: t, big: bi
     if (!V.M.n) empty.push(k);
   });
   S.eq('every kind the 3D pass owns puts quads down', empty.join(','), '');
-  var foreign = ['nuke', 'die', 'fire'].filter(function (k) {
+  var foreign = ['fire'].filter(function (k) {
     return emit([{ kind: k, x: 10, y: 1, z: 20, t: 0.1, big: 1, x2: 20, z2: 20 }]).M.n > 0 || g._r3dFxOwns(k);
   });
   S.eq('...and none of the kinds the 2D painter keeps', foreign.join(','), '');

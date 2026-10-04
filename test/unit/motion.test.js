@@ -17,7 +17,7 @@ var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('motion');
 /* the whole renderer, in page order: a unit's draw reaches into most of it */
-var g = load(['src/rules', 'src/core', 'src/map', 'src/r3d', 'src/sprites', 'src/render3d']);
+var g = load(['src/rules', 'src/core', 'src/r3d', 'src/sprites', 'src/render3d']);
 
 function sig(faces) {
   return faces.map(function (f) { return f.v.map(function (p) { return p.map(function (v) { return (Math.round(v * 1000) / 1000).toFixed(3); }).join(','); }).join(';') + '|' + f.c; }).sort();
