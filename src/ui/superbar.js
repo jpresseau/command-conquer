@@ -73,7 +73,7 @@ function rtsSuperArm(key) {
   if (typeof _rtsSfx === 'function') _rtsSfx('click');
   if (U.superArm) {
     var sd = _rtsSuperDefOf(U.superArm);
-    if (sd) _rtsSay(sd.super.hint);
+    if (sd) _rtsSay(_rtsSuperHint(sd.super));
   }
   U.superSig = null;                    /* force the row to restyle now rather than in 100ms */
   _rtsSuperRow();

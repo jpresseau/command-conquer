@@ -97,6 +97,23 @@ function canBuild(army) {
 }
 S.ok('either army can build one, behind a Vehicle Works', canBuild('allied') && canBuild('soviet'), '');
 
+/* ---------------- no way there ---------------- */
+/* a seen mine with no route to it - walled in - is asked for once in RTS_REFUSED_RETRY, not every
+   tick: the refusal left the sweeper idle, and idle it asked for the same route thirty times a
+   second for as long as the mine lay there */
+G = fresh();
+m = middle();
+var wall = mine('enemy', m.tx, m.tz);
+for (var wz = -1; wz <= 1; wz++) for (var wx = -1; wx <= 1; wx++) if (wx || wz) G.blocked[g._rtsIdx(wall.tx + wx, wall.tz + wz)] = 1;
+var swc = g._rtsNearestOpen(wall.tx + 3, wall.tz, 2, null), swN = g._rtsSpawnUnit('player', 'sweeper', g._rtsWX(swc[0]), g._rtsWX(swc[1]));
+var asks = 0, path0 = g._rtsPath;
+g._rtsPath = function (sx, sz, gx, gz) { if (Math.hypot(sx - swN.x, sz - swN.z) < g.RTS_TILE) asks++; return path0.apply(this, arguments); };
+run(5);
+g._rtsPath = path0;
+S.ok('a seen mine walled in, with no way to it, is asked for a route once in a couple of seconds - not every tick',
+     !!(wall.seen && wall.seen.player) && G.mines.indexOf(wall) >= 0 && asks >= 1 && asks <= Math.ceil(5 / g.RTS_REFUSED_RETRY) + 1,
+     asks + ' asks in 5 s, the mine ' + (wall.seen && wall.seen.player ? 'seen' : 'unseen') + ', ' + Math.hypot(swN.x - g._rtsWX(wall.tx), swN.z - g._rtsWX(wall.tz)) / g.RTS_TILE + ' cells off');
+
 /* ---------------- the opponent ---------------- */
 G = fresh('allied');
 ['factory', 'radar', 'depot', 'apower', 'apower', 'apower'].forEach(function (k) { if (!g._rtsHas('enemy', k) || /power/.test(k)) place('enemy', k); });
@@ -125,6 +142,15 @@ var left = pm[1];
 run(150, function () { G.ents.forEach(function (e) { if (e.side === 'player' && e.type === 'unit') e.dead = true; }); });
 S.ok('...and its sweeper goes there and clears the mine still lying beside it', G.mines.indexOf(left) < 0 && !esw.dead,
      (G.mines.indexOf(left) < 0 ? 'cleared' : 'still there') + ', sweeper ' + Math.round(Math.hypot(esw.x - g._rtsWX(left.tx), esw.z - g._rtsWX(left.tz)) / g.RTS_TILE) + ' cells from it');
+/* the place, swept, is struck off the list - the list once held every hit of the match, and the
+   buy gate read its length, so a sweeper was bought again for ground long since cleared */
+S.ok('...and the place, once swept, is struck off the list of hits', !(G.mineHits || []).length, (G.mineHits || []).length + ' hits left');
+G.ents.forEach(function (e) { if (e.side === 'enemy' && e.def === 'sweeper') e.dead = true; });   /* esw, and the one the opponent bought meanwhile */
+G.mineHits = [{ tx: pm[0].tx, tz: pm[0].tz, swept: 1 }];
+var sweptOnly = buys(30);
+G.mineHits = [{ tx: pm[0].tx, tz: pm[0].tz }];
+var fresh1 = buys(30);
+S.ok('...and with only swept places on it, none is bought - a fresh one buys again', sweptOnly === 0 && fresh1 > 5, sweptOnly + ' then ' + fresh1 + ' of 30');
 
 g._rtsDamage = dmg0;
 require('../lib/report.js')(S);

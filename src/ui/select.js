@@ -176,7 +176,7 @@ function _rtsRightClick(mx, my, hit0) {
     /* Specialists sent at an enemy BUILDING do their own job instead of attacking it. The
        engineer and the thief have no weapon at all, so an attack order would be a walk followed
        by standing there; the Commando has pistols but her C4 is the reason to send her. */
-    var capped = 0, special = 0, drops = 0;
+    var capped = 0, special = 0, drops = 0, cant = 0;
     for (i = 0; i < mine.length; i++) {
       var mu = mine[i], md = rtsUnitDef(mu.def), job = null;
       if (tgt.type === 'struct') {
@@ -197,11 +197,17 @@ function _rtsRightClick(mx, my, hit0) {
          it with a gun it does not have. Through _rtsOrderAttack that became a plain move, and
          the plane hovered over the target with its squads still aboard. */
       else if (!md.weapon && _rtsIsTransport(mu) && _rtsCargoCount(mu) && _rtsOrderUnloadAt(mu, tgt.x, tgt.z)) drops++;
-      else _rtsOrderAttack(mu, tgt);
+      else {
+        /* an armed unit whose gun cannot bear on this - a Flak Track sent at a tank - drives to
+           it instead (orders.js), and is told so when nothing selected can do better */
+        if (md.weapon && !_rtsCanEngage(mu, tgt)) cant++;
+        _rtsOrderAttack(mu, tgt);
+      }
     }
     _rtsFlash(tgt.x, tgt.z, special + drops === mine.length ? 'harvest' : 'attack');
     if (special) _rtsSay(special === 1 ? 'Moving in.' : special + ' specialists moving in.');
     else if (drops) _rtsSay(drops === 1 ? 'Dropping in.' : drops + ' transports dropping in.');
+    else if (cant && cant === mine.length) _rtsSay((mine.length === 1 ? rtsUnitDef(mine[0].def).name + ' cannot' : 'They cannot') + ' engage that - moving up to it.');
     if (typeof _rtsSfx === 'function') _rtsSfx('order');
     return;
   }

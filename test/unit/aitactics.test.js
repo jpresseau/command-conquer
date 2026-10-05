@@ -112,6 +112,18 @@ S.ok('...and nobody recruits it on the way - a team that wants tanks would take 
      g._rtsTeamCanAdd(t2, hurt) === false && g._rtsEscortable(hurt) === false);
 hurt.hp = hurt.maxHp * 0.97; G.mendT = 0; g._rtsAIMendTick(1);
 S.ok('once mended it is sent back out, free to be recruited again', hurt.mend == null && hurt.order == null && g._rtsTeamCanAdd(t2, hurt) === true);
+/* a battered support vehicle is the mend tick's too: its own controller (the jammer's, core/jammer.js)
+   does not call it back to the march, or the two traded orders every second and it was never mended */
+var jm = g._rtsSpawnUnit('enemy', 'jammer', ox + 4, oz + 4); jm.hp = jm.maxHp * 0.2;
+var mt = team(G, 'Assault', 'tank', 3, ox + 40, oz); mt.moving = true; mt.hasBeen = true;
+G.mendT = 0; g._rtsAIMendTick(1);
+var jg = jm.goal;
+G.ai.jamT = 99; g._rtsAIJamTick(1);
+S.ok('a battered Jammer goes to the depot, and the jammer tick leaves it on its way rather than calling it to the march',
+     jm.mend === dep.id && !!jg && jm.goal === jg && jm.order === 'move', 'mend ' + jm.mend + ', goal kept ' + (jm.goal === jg) + ', order ' + jm.order);
+jm.mend = null; jm.hp = jm.maxHp; G.ai.jamT = 99; g._rtsAIJamTick(1);
+S.ok('...and sound, the same tick sends it to the march', jm.goal !== jg && !!jm.goal && Math.hypot(jm.goal.x - (ox + 40), jm.goal.z - oz) < g.RTS_TILE * 6, jm.goal ? 'to ' + Math.round(jm.goal.x) + ',' + Math.round(jm.goal.z) : 'no goal');
+g._rtsTeamDisband(mt); jm.dead = true;
 /* a suicide team's tank, and no depot */
 var sui = team(G, 'Assault', 'tank', 1, ox + 8, oz + 8);
 sui.members[0].hp = sui.members[0].maxHp * 0.1; G.mendT = 0; g._rtsAIMendTick(1);

@@ -59,6 +59,9 @@ function _rtsTideInit(G) {
   G.tideLast = _rtsTideLevel(G); G.tideSaid = null;
 }
 
+/* how long the turn of the tide stays on the message line: the one warning before the flood,
+   where the default four seconds was gone before a player on the sidebar looked up */
+var RTS_TIDE_SAY = 10;
 function _rtsTideTick(dt) {
   var G = window._rtsG;
   if (!G.tideD) _rtsTideInit(G);
@@ -74,9 +77,9 @@ function _rtsTideTick(dt) {
   /* the turn of the tide, said once each way */
   var rising = L > G.tideLast;
   if (rising && G.tideLast < RTS_TIDE.warn && L >= RTS_TIDE.warn && G.tideSaid !== 'in') {
-    G.tideSaid = 'in'; _rtsSay('The tide is turning - get off the flats.');
+    G.tideSaid = 'in'; _rtsSay('The tide is turning - get off the flats.', RTS_TIDE_SAY);
   } else if (!rising && G.tideLast > _rtsTideDriesAt(1) && L <= _rtsTideDriesAt(1) && G.tideSaid !== 'out') {
-    G.tideSaid = 'out'; _rtsSay('The tide is going out.');
+    G.tideSaid = 'out'; _rtsSay('The tide is going out.', RTS_TIDE_SAY);
   }
   G.tideLast = L;
   /* SWAMPED: a land unit standing in the flood, on a flat that is under water again */

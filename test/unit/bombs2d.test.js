@@ -48,4 +48,25 @@ G.vis[g._rtsIdx(g._rtsTX(10), g._rtsTX(20))] = 0;
 S.eq('a bomb over the shroud is not drawn', draw([b]).length, 0);
 G.vis[g._rtsIdx(g._rtsTX(10), g._rtsTX(20))] = 1;
 
+/* the weather called down (core/wxsupers.js): a disc per bank or storm and a line per bolt, on
+   the painter that cannot shade - the shaded pass draws the real thing */
+var arcs = 0, strokes = 0;
+ctx.arc = function () { arcs++; }; ctx.stroke = function () { strokes++; }; ctx.moveTo = function () {}; ctx.lineTo = function () {};
+function drawWx(R3) {
+  arcs = 0; strokes = 0;
+  g.window._R3D = R3 || { on: false };
+  G.proj = []; G.fx = []; G.bombs = [];
+  G.wx = [{ kind: 'fog', x: 10, z: 20, r: 24, t: 5, side: 'player' }, { kind: 'storm', x: 30, z: 20, r: 24, t: 5, side: 'player' }];
+  G.bolts = [{ x: 30, z: 20, t: 0 }];
+  g._rtsDrawFx(ctx, G, {}, 1, 24);
+  return { arcs: arcs, strokes: strokes };
+}
+var wx2d = drawWx();
+g._r3dFxShaded = function () { return true; };
+var wxOwned = drawWx({ on: true });
+g._r3dFxShaded = function () { return false; };
+G.wx = []; G.bolts = [];
+S.ok('a fog bank and a thunderhead are each a disc and a bolt a line on the painter that cannot shade - and nothing when the 3D pass owns them',
+     wx2d.arcs === 2 && wx2d.strokes === 1 && wxOwned.arcs === 0 && wxOwned.strokes === 0, JSON.stringify([wx2d, wxOwned]));
+
 require('../lib/report.js')(S);

@@ -71,6 +71,24 @@ function _rtsDrawFx(g, G, S, TSscale, cell) {
     g.fillStyle = '#2a2a2c';
     g.fillRect(Math.round(bj.x) - bw, Math.round(bj.y) - bh, bw * 2, bh * 2);
   }
+  /* --- the weather called down (core/wxsupers.js): a pale disc for a fog bank, a dark one for a
+     thunderhead, and a bolt as a white line - the shaded pass draws the real thing
+     (render3d/wxfx3d.js); without this a device that cannot shade saw sight cut and units struck
+     by nothing at all --- */
+  var WX = G.wx || [];
+  for (i = 0; i < WX.length && !r3proj; i++) {
+    var wc = WX[i], wj = _rtsGroundToScreen(wc.x, wc.z), wr = wc.r / RTS_TILE * cell * (wj.scale || 1);
+    g.globalAlpha = wc.kind === 'fog' ? 0.35 : 0.45;
+    g.fillStyle = wc.kind === 'fog' ? '#d8dde2' : '#262a33';
+    g.beginPath(); g.arc(wj.x, wj.y, wr, 0, Math.PI * 2); g.fill();
+    g.globalAlpha = 1;
+  }
+  var BL = G.bolts || [];
+  for (i = 0; i < BL.length && !r3proj; i++) {
+    var bo = BL[i], bt = _rtsWorldToScreen(bo.x, _rtsElev(bo.x, bo.z) + 14, bo.z), bb = _rtsGroundToScreen(bo.x, bo.z);
+    g.strokeStyle = '#ffffff'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(bt.x, bt.y); g.lineTo(bb.x, bb.y); g.stroke();
+  }
 
   /* --- explosions, tracers, muzzle flashes --- */
   for (i = 0; i < G.fx.length; i++) {

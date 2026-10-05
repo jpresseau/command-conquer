@@ -105,7 +105,7 @@ var out4 = g._rtsUnloadNow(pl4), chutes4 = men4.filter(function (u) { return u.c
 run(8);
 S.ok('U puts the men out under canopies and sends the plane home', out4 === 3 && chutes4 === 3 && cells(pl4, pad) < 3, out4 + ' out, ' + chutes4 + ' canopies; the plane ' + cells(pl4, pad).toFixed(1) + ' cells from its field');
 var keysSrc = require('fs').readFileSync(require('path').join(__dirname, '../../src/ui/keys.js'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-S.ok('...and the U key goes through it', /_rtsUnloadNow\(t\)/.test(keysSrc) && !/out \+= _rtsUnload\(t\)/.test(keysSrc), '');
+S.ok('...and the U key goes through it', /_rtsUnloadSelected\(\)/.test(keysSrc) && !/_rtsUnload\(t\)/.test(keysSrc) && /out \+= _rtsUnloadNow\(t\)/.test(require('fs').readFileSync(require('path').join(__dirname, '../../src/core/transport.js'), 'utf8')), '');
 /* the opponent's timed-out drop */
 G = fresh('allied');
 var ey4 = g._rtsHas('enemy', 'yard'), epl4 = g._rtsSpawnUnit('enemy', 'paraplane', ey4.x, ey4.z + 30);

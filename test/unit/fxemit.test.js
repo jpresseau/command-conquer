@@ -358,6 +358,13 @@ function boom(t, big) { return { kind: 'boom', x: 10, y: 1, z: 20, t: t, big: bi
   S.ok('a Monitor under way on wet water lays a wake, and on a flat the tide has dried none', sail(false) > 0 && sail(true) === 0, sail(false) + ' wet, ' + sail(true) + ' dry');
 })();
 
+/* ---- a flat the tide has dried is sand to the dust ---- */
+(function () {
+  var N = g.RTS_N, t = new Uint8Array(N * N); t.fill(g.RTS_T_WATER);
+  var D = new Uint8Array(N * N); D[g._rtsIdx(g._rtsTX(20), g._rtsTX(20))] = 1;
+  S.ok('a flat the tide has dried throws dust like sand; under water, none', g._r3dFxDustOf({ terrain: t, tideDry: D }, 20, 20) === 1 && g._r3dFxDustOf({ terrain: t, tideDry: new Uint8Array(N * N) }, 20, 20) === 0, '');
+})();
+
 /* ---- the Heavy Bomber's bombs fall from where the bomber is drawn ---- */
 (function () {
   g.window._rtsG = { fx: [], bombs: [{ x: 10, z: 20, y: 20, t: 0 }], byId: {}, ents: [] };

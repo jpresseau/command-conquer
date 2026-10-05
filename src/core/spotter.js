@@ -59,6 +59,7 @@ function _rtsAISpotTick(dt) {
     var s = G.ents[i];
     if (s.dead || s.inside || s.side !== 'enemy' || s.type !== 'unit' || !_rtsSpots(s)) continue;
     if (_rtsOrbits(s)) continue;                       /* the Recon Drone is the drone tick's: core/drone.js */
+    if (s.mend != null) continue;                      /* on its way to the depot: core/aimend.js */
     if (s.order === 'attack' && s.target && !s.target.dead) continue;          /* defending itself */
     var gun = null, gd = 1e9;
     for (var k = 0; k < G.ents.length; k++) {

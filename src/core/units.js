@@ -179,8 +179,10 @@ function _rtsUpdateUnit(e, dt) {
        craft nosed against a beach without letting a squad teleport aboard from inland. */
     /* A CHINOOK the same: it sets down wherever it was left, which may be a cell or two off the
        nearest ground a squad can walk to - beside a wall, or with its tail over the water. */
+    /* And a HOVERCRAFT afloat the same: it floats as the craft does, and a squad sent aboard one
+       three cells out stood on the shore in order 'board' for good with the APC's reach. */
     var tdef = rtsUnitDef(tr && tr.def || '') || {};
-    var breach = (tdef.sea || tdef.air) ? RTS_TILE * 3.0 : RTS_TILE * 1.6;
+    var breach = (tdef.sea || tdef.air || tdef.hover) ? RTS_TILE * 3.0 : RTS_TILE * 1.6;
     if (!tr || tr.dead || !_rtsCanBoard(e, tr)) { e.order = null; e.target = null; e.path = null; }
     else if (_rtsRangeTo(e, tr) <= breach) { _rtsBoard(e, tr); return; }
     else {

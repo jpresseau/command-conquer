@@ -210,10 +210,7 @@ function _r3dFxDraw(G, cam, invD) {
     V.sp = R3.sp; V.cp = R3.cp; V.cy = R3.cy; V.sy = R3.sy; V.t = G.t || 0; V.M.n = 0; V.L.n = 0; V.M.lit = 0;
     V.gnd = R3.fxGroundAmt === undefined ? 1 : R3.fxGroundAmt;
     V.ground = _rtsElev;
-    V.water = function (x, z) {
-      var tx = _rtsTX(x), tz = _rtsTX(z);
-      return _rtsInB(tx, tz) && G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER;
-    };
+    V.water = function (x, z) { return _r3dWetAt(G, x, z); };   /* the sea, and not a flat the tide has dried (fxwake3d.js) */
     _r3dFxEmit(G, V);
     gl.bindBuffer(gl.ARRAY_BUFFER, R3.fx2BufM);
     gl.bufferData(gl.ARRAY_BUFFER, _r3dFxOrder(V), gl.DYNAMIC_DRAW);

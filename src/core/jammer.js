@@ -58,23 +58,34 @@ function _rtsJamHidden(o, side) {
   return true;
 }
 
+/* Whether the radar shows static over an enemy field (ui/hud.js): only where the radar reads at
+   all - the field's centre explored. Under the unexplored shroud a disc of static marked the
+   army the Jammer was hiding, from across the map. */
+function _rtsRadarStaticShown(G, f) {
+  var tx = _rtsTX(f.x), tz = _rtsTX(f.z);
+  return _rtsInB(tx, tz) && !!(G.mapped && G.mapped[_rtsIdx(tx, tz)]);
+}
+
 /* The opponent's jammer: parked in the middle of its largest team on the march. */
 function _rtsAIJamTick(dt) {
   var G = window._rtsG, big = null, bn = 0, id;
   G.ai.jamT = (G.ai.jamT || 0) + dt;
   if (G.ai.jamT < RTS_JAM.every) return;
   G.ai.jamT = 0;
+  /* the largest team ON LAND: counted by its land members, and never a crossing. A fleet or a
+     landing party was once the largest team moving, and the jammer was sent onto the water -
+     to park on the nearest beach, hiding nothing, while the army it was bought for marched bare. */
   for (id in G.teams) {
     var t = G.teams[id];
-    if (!t.moving) continue;
-    var n = t.members.filter(function (m) { return !m.dead; }).length;
+    if (!t.moving || (t.type && t.type.crossing)) continue;
+    var n = t.members.filter(function (m) { var md = rtsUnitDef(m.def) || {}; return !m.dead && !md.sea && !md.air; }).length;
     if (n > bn) { bn = n; big = t; }
   }
   var c = big && _rtsTeamCentre(big);
   if (!c) return;
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.inside || u.side !== 'enemy' || u.type !== 'unit' || !_rtsJams(u)) continue;
+    if (u.dead || u.inside || u.side !== 'enemy' || u.type !== 'unit' || !_rtsJams(u) || u.mend != null) continue;   /* mend: core/aimend.js */
     if (Math.hypot(c.x - u.x, c.z - u.z) > RTS_TILE * 2.5) _rtsOrderMove(u, c.x, c.z, false);
   }
 }

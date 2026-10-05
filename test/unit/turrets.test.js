@@ -35,7 +35,7 @@ function extent(m) {
   m.forEach(function (f) { f.v.forEach(function (p) { for (var i = 0; i < 3; i++) { lo[i] = Math.min(lo[i], p[i]); hi[i] = Math.max(hi[i], p[i]); } }); });
   return { lo: lo, hi: hi };
 }
-var badSplit = [], notPart = [], offOrigin = [], offHull = [];
+var badSplit = [], notPart = [], offOrigin = [], offHull = [], offRing = [];
 keys.forEach(function (k) {
   var sc = g._sprUnitScale(k);
   var whole = g._sprUnitModel(k, 'player', false, null), hull = g._sprUnitModel(k, 'player', false, 'hull'), tur = g._sprUnitModel(k, 'player', false, 'turret');
@@ -43,6 +43,14 @@ keys.forEach(function (k) {
   if (!(tur.length > 0 && tur.length < whole.length * 0.6 && hull.length < whole.length)) notPart.push(k + ':' + hull.length + '+' + tur.length + '/' + whole.length);
   var te = extent(tur);
   if (!(te.lo[0] < 0 && te.hi[0] > 0 && Math.abs(te.lo[2] + te.hi[2]) < 0.5 * sc)) offOrigin.push(k);
+  /* a turntable built off the pivot orbits the deck as it traverses: the Flak Track's ring (the
+     cylinder at y 7.2..8.2 in its model, unit-special.js) was built 2.4 units aft and swung round 0 */
+  if (k === 'flaktrack') {
+    var ring = tur.filter(function (f) { var ys = f.v.map(function (p) { return p[1]; }); return Math.min.apply(null, ys) >= 7.19 * sc && Math.max.apply(null, ys) <= 8.21 * sc; });
+    var rc = [0, 0], rn = 0;
+    ring.forEach(function (f) { f.v.forEach(function (p) { rc[0] += p[0]; rc[1] += p[2]; rn++; }); });
+    if (rn < 20 || Math.abs(rc[0] / rn) > 0.3 * sc || Math.abs(rc[1] / rn) > 0.3 * sc) offRing.push(k + '@' + (rn ? (rc[0] / rn / sc).toFixed(1) : 'no ring'));
+  }
   var mounts = g.RTS_TURRET_AT[k] || [[0, 0]], want = keysOf(hull);
   mounts.forEach(function (p) { want = want.concat(keysOf(tur, p[0] * sc, p[1] * sc)); });
   if (want.sort().join('\n') !== keysOf(whole).join('\n')) badSplit.push(k);
@@ -53,6 +61,7 @@ S.eq('every turreted model builds in two parts, the turret a fraction of the who
 S.eq('...the turret part about the origin', offOrigin.join(' ') || 'all', 'all');
 S.eq('...and the hull plus that part at every mount is the whole model, face for face', badSplit.join(' ') || 'all', 'all');
 S.eq('...with every mount on the hull', offHull.join(' ') || 'all', 'all');
+S.eq('...and the Flak Track\'s turntable centred on the pivot it turns about', offRing.join(' ') || 'all', 'all');
 
 /* ---- in the world ---- */
 var sc = g._sprUnitScale('destroyer') * g.RTS_TILE / g.RTS_TS, M = g.RTS_TURRET_AT.destroyer;
@@ -62,8 +71,9 @@ S.ok('a destroyer heading +x has a mount ahead of it and one astern', east.lengt
      east.map(function (p) { return p.x.toFixed(2) + ',' + p.z.toFixed(2); }).join(' / '));
 S.ok('...turned to head +z, the same two mounts turn with it', Math.abs(north[0].z - (200 + M[0][0] * sc)) < 1e-9 && Math.abs(north[1].z - (200 + M[1][0] * sc)) < 1e-9 && Math.abs(north[0].x - 100) < 1e-9,
      north.map(function (p) { return p.x.toFixed(2) + ',' + p.z.toFixed(2); }).join(' / '));
-var tk = at('tank', 1.1);
+var tk = at('tank', 1.1), noTable = at('no-such-def', 2.3);
 S.ok('a tank\'s one turret turns at its centre', tk.length === 1 && tk[0].x === 100 && tk[0].z === 200);
+S.ok('...as does anything with no mount table at all - the fallback is the hull, not nothing', !g.RTS_TURRET_AT.tank && noTable.length === 1 && noTable[0].x === 100 && noTable[0].z === 200, JSON.stringify(noTable));
 
 /* ---- the husk ---- */
 g._rtsR = g.window._rtsR = { spr: { turret: { player: { destroyer: 1, tank: 1 } } } };

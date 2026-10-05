@@ -7,6 +7,9 @@
    builds them centred), and a run of faces pitched up about a pivot (an anti-aircraft gun points
    at the sky, and every primitive is axis-aligned). */
 
+/* where the Flak Track's turntable turns (RTS_TURRET_AT, unit-airsea.js): on the gun deck, aft */
+RTS_TURRET_AT.flaktrack = [[-2.4, 0]];
+
 /* Move faces [from, end) of `m` along x. */
 function _sprShiftX(m, from, dx) {
   for (var i = from; i < m.length; i++) {
@@ -78,19 +81,23 @@ function _sprUnitSpecial(X, key) {
     if (part !== 'hull') {
       /* The turntable and its shield, then the cradle and the barrels pitched up at fifty
          degrees about the trunnions. Built along +x and turned, so the pair keeps its spacing
-         and its muzzle brakes at the top whatever the turret faces. */
-      _r3Cyl(m, -2.4, 7.2, 0, 3.4, 1.0, DK[1], DK[2], 20);         /* turntable ring */
-      _r3Slab(m, -2.4, 8.2, 0, 5.4, 2.2, 6.4, 0.6, VH[1], TM[1]);  /* the mount - team roof */
-      _r3Box(m, 0.2, 9.4, -3.6, 1.0, 3.2, 1.2, S[2], S[1]);        /* splinter shields */
-      _r3Box(m, 0.2, 9.4, 3.6, 1.0, 3.2, 1.2, S[2], S[1]);
-      _r3Box(m, -5.4, 9.6, 0, 1.4, 1.6, 1.4, DK[1], DK[3]);        /* the gunner's sight */
+         and its muzzle brakes at the top whatever the turret faces. BUILT ABOUT THE RING'S OWN
+         CENTRE: the 'turret' part turns about the origin (render3d/unit3d.js _r3dTurretAt), and
+         the whole model sets it down on the deck at RTS_TURRET_AT.flaktrack - built at -2.4 and
+         turned about 0, the turntable orbited the gun deck as it traversed. */
+      var mx = part === 'turret' ? 0 : RTS_TURRET_AT.flaktrack[0][0];
+      _r3Cyl(m, mx, 7.2, 0, 3.4, 1.0, DK[1], DK[2], 20);           /* turntable ring */
+      _r3Slab(m, mx, 8.2, 0, 5.4, 2.2, 6.4, 0.6, VH[1], TM[1]);    /* the mount - team roof */
+      _r3Box(m, mx + 2.6, 9.4, -3.6, 1.0, 3.2, 1.2, S[2], S[1]);   /* splinter shields */
+      _r3Box(m, mx + 2.6, 9.4, 3.6, 1.0, 3.2, 1.2, S[2], S[1]);
+      _r3Box(m, mx - 3.0, 9.6, 0, 1.4, 1.6, 1.4, DK[1], DK[3]);    /* the gunner's sight */
       n0 = m.length;
       for (var b = -1; b <= 1; b += 2) {
-        _r3Box(m, 2.4, 10.4, b * 1.5, 5.0, 1.8, 1.8, DK[1], DK[3]);   /* the breeches */
-        _r3Box(m, 8.6, 10.6, b * 1.5, 8.6, 0.9, 0.9, GN[1], GN[3]);   /* barrels - pale steel */
-        _r3Box(m, 13.4, 10.6, b * 1.5, 1.4, 1.4, 1.4, GN[0], GN[3]);  /* muzzle brakes */
+        _r3Box(m, mx + 4.8, 10.4, b * 1.5, 5.0, 1.8, 1.8, DK[1], DK[3]);   /* the breeches */
+        _r3Box(m, mx + 11.0, 10.6, b * 1.5, 8.6, 0.9, 0.9, GN[1], GN[3]);  /* barrels - pale steel */
+        _r3Box(m, mx + 15.8, 10.6, b * 1.5, 1.4, 1.4, 1.4, GN[0], GN[3]);  /* muzzle brakes */
       }
-      _sprPitch(m, n0, 50 * Math.PI / 180, -0.4, 10.2);
+      _sprPitch(m, n0, 50 * Math.PI / 180, mx + 2.0, 10.2);
     }
   } else if (key === 'minelayer') {
     /* MINE LAYER. A low tracked hull carrying its load where it can be seen: a rack of mines

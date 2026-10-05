@@ -19,8 +19,13 @@ function _rtsBridgeGap(e) {
   var G = window._rtsG, T = G.terrain, B = G.blocked;
   var tx = _rtsTX(e.x), tz = _rtsTX(e.z);
   /* never from the water - a deck - which no generated map has yet offered a gap from, since a
-     deck runs the length of its channel; a guard, and unit/bridgelayer cannot reach it */
-  if (!_rtsInB(tx, tz) || T[_rtsIdx(tx, tz)] === RTS_T_WATER) return null;
+     deck runs the length of its channel; a guard, and unit/bridgelayer cannot reach it. A FLAT
+     THE TIDE HAS DRIED IS GROUND (core/tide.js): at low water the water's edge is out on the
+     flats, and refusing the span from there said "drive to the water's edge" to a layer standing
+     on it. */
+  if (!_rtsInB(tx, tz)) return null;
+  var own = _rtsIdx(tx, tz);
+  if (T[own] === RTS_T_WATER && !(G.tideDry && G.tideDry[own])) return null;
   var fx = Math.cos(e.rot || 0), fz = Math.sin(e.rot || 0);
   var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]].sort(function (a, b) {
     return (b[0] * fx + b[1] * fz) - (a[0] * fx + a[1] * fz);

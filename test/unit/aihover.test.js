@@ -93,6 +93,15 @@ harvAt(far);
 G.ai.hovQ = null;
 S.ok('one whose nearest beach is beyond reach is not, though the craft could sail there', !!far && !g._rtsAIHoverTarget(),
      far ? 'beach ' + farD.toFixed(1) + ' cells off, against ' + NEAR : 'no such cell found');
+/* ...and the search for its beach stops at that reach: thirty rings of _rtsNearestOpen for every
+   inland harvester, once a second, for a beach the raid would then refuse */
+var rings = [], ls0 = g._rtsLandingSpot;
+g._rtsLandingSpot = function (aim, r) { rings.push(r); return ls0.apply(this, arguments); };
+G.ai.hovQ = null; g._rtsAIHoverTarget();
+g._rtsLandingSpot = ls0;
+var farSpot = far && { x: g._rtsWX(far[0]), z: g._rtsWX(far[1]) };
+S.ok('...and its beach is looked for no further out than the raid will go', rings.length >= 1 && rings.every(function (r) { return r === NEAR; }) &&
+     !!far && !g._rtsLandingSpot(farSpot, NEAR) && !!g._rtsLandingSpot(farSpot), 'rings asked: ' + rings.join(',') + '; bounded ' + (far && g._rtsLandingSpot(farSpot, NEAR) ? 'found one' : 'none') + ', unbounded ' + (far && g._rtsLandingSpot(farSpot) ? 'found one' : 'none'));
 
 /* ---------------- bought ---------------- */
 function buys(n) {
@@ -135,7 +144,7 @@ var crewKeys = ['rifle', 'rifle', 'rifle', 'rifle', 'rocket', 'rocket'], inf = c
 /* one rocket squad already in a team: not the raid's to take */
 var team = g._rtsTeamMake(g.RTS_TEAM_TYPES[0]); g._rtsTeamAdd(team, inf[4]);
 G.ai.hov = { s: 'rest', t: -1e3, crew: [] };
-var ashoreShut = null, sailCells = [], landed = null, lastS = null, L = null, atLaunch = null, raiders = [];
+var ashoreShut = null, sailCells = [], homeCells = [], landed = null, lastS = null, L = null, atLaunch = null, raiders = [];
 run(150, function () {
   pin();
   var s = G.ai.hov.s;
@@ -150,6 +159,7 @@ run(150, function () {
     g._rtsTeamDisband(sk);
   }
   if (s === 'sail') sailCells.push(cell(hc));
+  if (s === 'rest' && landed && hc.order === 'move' && hc.path) homeCells.push(cell(hc));   /* the leg home */
   if (lastS === 'sail' && s === 'rest' && !landed) landed = { t: G.t, x: hc.x, z: hc.z };
   lastS = s;
 });
@@ -166,6 +176,9 @@ S.ok('...and the harvester dies - not the power plant beside the beach', prey.de
      (prey.dead ? 'harvester dead' : prey.hp + ' hp left') + ', plant ' + (plant ? plant.hp + ' of ' + plant.maxHp : 'not placed'));
 S.ok('...and ashore, no team can take a raider', raiders.length > 0 && ashoreShut === true, raiders.length + ' raiders');
 S.ok('...and the craft goes home to its own water', !!L && cells(hc, L) < 4, L ? cells(hc, L).toFixed(1) + ' cells from home' : '');
+var homeWet = homeCells.filter(function (c) { return G.terrain[g._rtsIdx(c[0], c[1])] === g.RTS_T_WATER; }).length;
+S.ok('...by the water, as it came - not the short way overland', homeCells.length > 10 && homeWet >= homeCells.length * 0.85,
+     homeWet + ' of ' + homeCells.length + ' samples of the leg home on water');
 
 /* a raider found shooting something else - the plant - is put back on a harvester */
 var prey2 = harvAt(b), stray = g._rtsSpawnUnit('enemy', 'rocket', prey2.x + g.RTS_TILE * 2, prey2.z);
@@ -173,6 +186,57 @@ stray.raid = 1; G.ai.hov.crew.push(stray.id);
 g._rtsOrderAttack(stray, plant);
 run(1.5, pin);
 S.ok('a raider found shooting anything else is put back on a harvester', stray.target === prey2, 'on ' + (stray.target ? stray.target.def : 'nothing'));
+
+/* ---------------- the raid's alone ---------------- */
+/* not an escort (core/escorts.js): a march cannot recruit the craft, nor the Spotter - each has a
+   controller of its own, and the two once tugged the craft between its water and the march */
+var sp0 = g._rtsSpawnUnit('enemy', 'spotter', ey.x, ey.z + 4), tk0 = g._rtsSpawnUnit('enemy', 'tank', ey.x, ey.z + 6);
+S.ok('the resting craft is no escort - a march cannot recruit it, nor the Spotter, where it takes a tank', !g._rtsEscortable(hc) && !g._rtsEscortable(sp0) && g._rtsEscortable(tk0),
+     [hc, sp0, tk0].map(function (u) { return u.def + ':' + g._rtsEscortable(u); }).join(' '));
+sp0.dead = true; tk0.dead = true;
+/* battered, it is the mend tick's (core/aimend.js): the rest state does not order it home against
+   the mend's order to the pad - measured against the same craft sound, which is sent home */
+var mendKeep = g._rtsAIMendTick, moveKeep = g._rtsOrderMove, homeOrders = 0;
+g._rtsAIMendTick = function () {};                                   /* the trip itself is aimend's: here only its flag */
+g._rtsOrderMove = function (u) { if (u === hc) homeOrders++; return moveKeep.apply(this, arguments); };
+function tug(mending) {
+  hc.mend = mending ? 12345 : null; hc.order = null; hc.path = null; hc.goal = null; homeOrders = 0;
+  var far = g._rtsNearestOpen(g._rtsTX(L.x) + 8, g._rtsTX(L.z), 6, 'hover');
+  hc.x = g._rtsWX(far[0]); hc.z = g._rtsWX(far[1]);
+  run(3, pin);
+  return homeOrders;
+}
+var sentHome = tug(false), leftToMend = tug(true);
+hc.mend = null; g._rtsAIMendTick = mendKeep; g._rtsOrderMove = moveKeep;
+S.ok('...and on its way to be mended it is not ordered home - where the same craft sound is', sentHome > 0 && leftToMend === 0, 'sound: ' + sentHome + ' home orders in 3 s, mending: ' + leftToMend);
+
+/* ---------------- the sail and the tide ---------------- */
+/* the aim is chosen at launch and kept for the sail: on a falling tide the search comes back
+   empty mid-channel (the beach's water dries away), and the raid was called off there with the
+   crew put down on a drying flat; only the harvester gone ends it */
+var tgtKeep = g._rtsAIHoverTarget;
+g._rtsAIHoverTarget = function () { return null; };
+var prey3 = harvAt(b), w3 = g._rtsNearestOpen(b[0], b[1], g.RTS_UNLOAD_REACH, 'sea');
+var aim3 = { h: prey3, beach: { x: g._rtsWX(b[0]), z: g._rtsWX(b[1]) }, water: { x: g._rtsWX(w3[0]), z: g._rtsWX(w3[1]) }, hx: prey3.x, hz: prey3.z };
+var dry3 = g._rtsNearestOpen(g._rtsTX(L.x), g._rtsTX(L.z), 8, null);                 /* men spawned on the water drown */
+[0, 1].forEach(function () { g._rtsBoard(g._rtsSpawnUnit('enemy', 'rifle', g._rtsWX(dry3[0]), g._rtsWX(dry3[1])), hc); });
+/* ...and on the way down to the launch water the same: the aim once chosen is not asked again */
+var dry5 = g._rtsNearestOpen(g._rtsTX(L.x) + 5, g._rtsTX(L.z), 6, null);
+hc.x = g._rtsWX(dry5[0]); hc.z = g._rtsWX(dry5[1]); hc.order = null; hc.path = null; hc.goal = null;
+G.ai.hov = { s: 'launch', t: G.t, crew: G.ai.hov.crew, aim: aim3 };
+run(2, pin);
+var keptLaunch = G.ai.hov.s !== 'rest' && G.ai.hov.aim === aim3 && g._rtsCargoCount(hc) === 2;
+hc.x = L.x; hc.z = L.z; hc.order = null; hc.path = null; hc.goal = null;
+G.ai.hov = { s: 'sail', t: G.t, crew: G.ai.hov.crew, aim: aim3 };      /* the stray stays the raid's */
+run(2, pin);
+var kept = keptLaunch && G.ai.hov.s === 'sail' && g._rtsCargoCount(hc) === 2 && G.ai.hov.aim === aim3;
+prey3.dead = true;
+run(2, pin);
+var ended = G.ai.hov.s === 'rest' && !G.ai.hov.aim;
+g._rtsAIHoverTarget = tgtKeep;
+S.ok('mid-sail, an empty search does not end the raid - with no route at this tide it waits, crew aboard; the harvester gone ends it', kept && ended,
+     'with the search empty: ' + (kept ? 'launching and sailing on, crew aboard' : (keptLaunch ? 'launch kept; ' : 'launch dropped; ') + G.ai.hov.s + ', ' + g._rtsCargoCount(hc) + ' aboard') + '; harvester dead: ' + (ended ? 'rest' : G.ai.hov.s));
+G.ents.forEach(function (e) { if (e.inside === hc) { e.dead = true; } }); hc.cargo = [];
 
 /* ---------------- released ---------------- */
 G.ents.forEach(function (e) { if (e.side === 'player' && (e.def === 'refinery' || (g.rtsUnitDef(e.def) || {}).harvest)) e.dead = true; });

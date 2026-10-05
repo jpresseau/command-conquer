@@ -209,6 +209,28 @@ function _rtsCanDeploy(e) {
   return !!(e && !e.dead && e.side === 'player' && e.type === 'unit' && (d.deploy || d.mines || d.bridge));
 }
 
+/* UNLOAD, here and now, for every selected transport that is carrying anything - the U key and
+   the sidebar's UNLOAD button give the same order, as DEPLOY's two doors do. The loop lived in
+   ui/keys.js, so a phone could board five men on a Hovercraft and never put them down: the
+   aimed unload (right-click the shore, _rtsOrderUnloadAt) is a craft's and an aircraft's, since
+   a Hovercraft drives on the ground it would unload onto. Says why when nothing came out of a
+   hold that is not empty - a craft in open water. Returns { out, held }. */
+function _rtsUnloadSelected() {
+  var G = window._rtsG, out = 0, held = 0;
+  if (!G || !G.sel) return { out: 0, held: 0 };
+  G.sel.slice().forEach(function (t) {
+    if (!_rtsCanUnload(t)) return;
+    out += _rtsUnloadNow(t);                       /* a Paradrop Plane's men jump: core/paradrop.js */
+    held += _rtsCargoCount(t);
+  });
+  if (held && !out) _rtsSay('Nowhere to unload — bring it closer to shore.');
+  return { out: out, held: held };
+}
+/* one of the player's transports with something aboard: the button shows itself for these */
+function _rtsCanUnload(e) {
+  return !!(e && !e.dead && e.side === 'player' && e.type === 'unit' && _rtsCargoCount(e));
+}
+
 /* Removing the vehicle without the wreck, the explosion or the kill credit - it was not
    destroyed, it turned into something. */
 function _rtsKillQuiet(e) {
@@ -283,8 +305,9 @@ function _rtsAnimAI(dt) {
 function _rtsCombatAnim(dmg, x, z, big, stick) {
   var G = window._rtsG;
   if (!(dmg > 0)) return null;
-  var tx = _rtsTX(x), tz = _rtsTX(z);
-  var water = _rtsInB(tx, tz) && G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER && !_rtsBridgeAt(x, z);
+  var tx = _rtsTX(x), tz = _rtsTX(z), ci = _rtsInB(tx, tz) ? _rtsIdx(tx, tz) : -1;
+  /* a splash wants water: not a deck, and not a flat the tide has dried (core/tide.js) */
+  var water = ci >= 0 && G.terrain[ci] === RTS_T_WATER && !(G.tideDry && G.tideDry[ci]) && !_rtsBridgeAt(x, z);
   var kind = water ? 'splash' : (dmg < RTS_ANIM_PIFF ? 'piff' : (dmg < RTS_ANIM_BOOM ? 'hit' : 'boom'));
   /* scale with damage the way the original steps through its list, rather than one fixed size */
   var scale = (big || 1) * (0.7 + Math.min(1, dmg / 90) * 0.7);

@@ -146,8 +146,11 @@ g._rtsOrderAttack(given.a, given.f);
 var hp0 = given.f.hp;
 run(15, function () { given.f.path = null; given.f.target = null; given.f.order = 'hold'; });
 S.ok('...and a gun given a target in the bank still shells it', given.f.dead || given.f.hp < hp0, given.f.hp + ' of ' + hp0);
-run(g.RTS_FOGBANK.time - 14);
-S.ok('after two minutes the bank is gone', !given.G.wx.some(function (c) { return c.kind === 'fog'; }), given.G.wx.length + ' cells left');
+run(60 - 15);
+var midway = given.G.wx.some(function (c) { return c.kind === 'fog'; });
+run(61);
+S.ok('a minute on the bank still stands; after two minutes it is gone', midway && !given.G.wx.some(function (c) { return c.kind === 'fog'; }),
+     (midway ? 'up' : 'gone') + ' at 60 s, ' + given.G.wx.length + ' cells left at 121 s');
 
 /* ---------------- thunderhead ---------------- */
 G = fresh('soviet'); m = middle();
@@ -167,6 +170,17 @@ S.ok('lightning every three seconds on the enemy under it', hits.length === 3, h
 S.ok('...an aircraft first', firstHit === eh, firstHit ? firstHit.def : 'none');
 S.ok('...and nothing of the caller\'s, not even its aircraft nearer the eye', hits.length > 0 && hits.indexOf(mine) < 0 && hits.indexOf(myHeli) < 0 && hits.every(function (t) { return t.side === 'enemy'; }), hits.map(function (t) { return t.side + ' ' + t.def; }).join(', '));
 g._rtsDamage = dmg0;
+/* the kill is the caller's: counted on the end card and the daily line (capture.js reads hurtBy) */
+var k0 = G.stats.killed, rf = g._rtsSpawnUnit('enemy', 'tank', pad.x + 2, pad.z + 2); rf.hp = 1;   /* a vehicle: the bolt ranks it over the pad */
+eh.dead = true; et.dead = true;
+run(10, function () { pin(); });
+S.ok('a kill under it is credited to the side that called the storm', rf.dead && rf.hurtBy === 'player' && G.stats.killed === k0 + 1,
+     (rf.dead ? 'dead' : 'alive') + ', hurtBy ' + rf.hurtBy + ', killed +' + (G.stats.killed - k0));
+/* the ready line, in the device's own verb (core/supers.js _rtsSuperHint) */
+var sup0 = g.RTS_STRUCTS.filter(function (s) { return s.super && /click/.test(s.super.hint); })[0];
+g._rtsTouchUI = function () { return true; }; var tapped = g._rtsSuperHint(sup0.super);
+g._rtsTouchUI = function () { return false; }; var clicked = g._rtsSuperHint(sup0.super);
+S.ok('the ready line says tap on a phone and click at a desk', !!sup0 && /tap/.test(tapped) && !/click/.test(tapped) && clicked === sup0.super.hint, tapped);
 /* an armed aircraft flying into it */
 G = fresh('allied'); m = middle();
 var pp = place('player', 'helipad');

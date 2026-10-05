@@ -15,7 +15,7 @@ var { Suite } = require('../lib/assert.js');
 var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('hovercraft');
-var g = load(['src/rules', 'src/core', 'src/sprites/props.js']);
+var g = load(['src/rules', 'src/core', 'src/sprites/props.js', 'src/ui']);
 var T, B;
 
 function fresh() {
@@ -126,6 +126,89 @@ var ashore = men.filter(function (u) {
 S.ok('...rides across the water', wet, wet ? 'it was over the water' : 'it never left the land');
 S.eq('...and all five are put down on the far bank', ashore, 5);
 
+/* ---------------- three cells out ---------------- */
+/* afloat, it boards as the craft does (core/units.js): a squad sent aboard one three cells off
+   the beach walks to the shore and climbs in, where the APC's reach left it standing there */
+G = fresh();
+var pair = null;
+for (var pz = 2; pz < g.RTS_N - 2 && !pair; pz++) for (var px = 2; px < g.RTS_N - 2 && !pair; px++) {
+  if (T[g._rtsIdx(px, pz)] !== W || g._rtsBlocked(px, pz, 'sea')) continue;
+  for (var dz2 = -3; dz2 <= 3 && !pair; dz2++) for (var dx2 = -3; dx2 <= 3 && !pair; dx2++) {
+    var d2 = Math.hypot(dx2, dz2);
+    if (d2 < 2.6 || d2 > 3.2) continue;
+    var lx = px + dx2, lz = pz + dz2;
+    if (!g._rtsInB(lx, lz) || T[g._rtsIdx(lx, lz)] === W || g._rtsBlocked(lx, lz, null)) continue;
+    pair = { sea: [px, pz], land: [lx, lz], d: +d2.toFixed(2) };
+  }
+}
+S.ok('the case: open water three cells off a shore a squad can stand on', !!pair, pair ? JSON.stringify(pair) : 'none');
+var hc3 = g._rtsSpawnUnit('player', 'hovercraft', g._rtsWX(pair.sea[0]), g._rtsWX(pair.sea[1]));
+var sq3 = g._rtsSpawnUnit('player', 'rifle', g._rtsWX(pair.land[0]), g._rtsWX(pair.land[1]));
+var took = g._rtsOrderBoard(sq3, hc3);
+run(G, 25, function () { hc3.order = 'hold'; hc3.path = null; return g._rtsCargoCount(hc3) === 1; });
+S.ok('a squad sent aboard a hovercraft three cells off the beach gets in', took && g._rtsCargoCount(hc3) === 1 && sq3.inside === hc3, 'order taken ' + took + ', aboard ' + g._rtsCargoCount(hc3));
+/* ...from the nearest ground there is, which the APC's reach would not have allowed: the shore
+   dug back so that no standable cell is within two and a half of the craft, the squad walks to
+   the water's edge - two and a half cells and more from the hull - and still climbs in */
+G = fresh();
+var dug = 0;
+for (var dz3 = -2; dz3 <= 2; dz3++) for (var dx3 = -2; dx3 <= 2; dx3++) {
+  var cx3 = pair.sea[0] + dx3, cz3 = pair.sea[1] + dz3, ci3 = g._rtsIdx(cx3, cz3);
+  if (Math.hypot(dx3, dz3) < 2.5 && g._rtsInB(cx3, cz3) && T[ci3] !== W) { T[ci3] = W; B[ci3] = 2; dug++; }
+}
+var nearestLand = 1e9;
+for (var lz = -4; lz <= 4; lz++) for (var lx = -4; lx <= 4; lx++) {
+  var lc = [pair.sea[0] + lx, pair.sea[1] + lz];
+  if (g._rtsInB(lc[0], lc[1]) && T[g._rtsIdx(lc[0], lc[1])] !== W && !g._rtsBlocked(lc[0], lc[1], null)) nearestLand = Math.min(nearestLand, Math.hypot(lx, lz));
+}
+var hc4 = g._rtsSpawnUnit('player', 'hovercraft', g._rtsWX(pair.sea[0]), g._rtsWX(pair.sea[1]));
+hc4.x = g._rtsWX(pair.sea[0]); hc4.z = g._rtsWX(pair.sea[1]);
+var sq4 = g._rtsSpawnUnit('player', 'rifle', g._rtsWX(pair.land[0]), g._rtsWX(pair.land[1]));
+var took4 = g._rtsOrderBoard(sq4, hc4);
+run(G, 25, function () { hc4.order = 'hold'; hc4.path = null; hc4.x = g._rtsWX(pair.sea[0]); hc4.z = g._rtsWX(pair.sea[1]); return g._rtsCargoCount(hc4) === 1; });
+S.ok('...and with the shore dug back to two and a half cells and more from the hull, the squad still boards from the water\'s edge', dug > 0 && nearestLand >= 2.5 && nearestLand <= 3.2 && took4 && g._rtsCargoCount(hc4) === 1,
+     dug + ' cells dug; nearest ground ' + nearestLand.toFixed(2) + ' cells from the hull; aboard ' + g._rtsCargoCount(hc4) + (sq4.inside ? '' : ', squad ' + (Math.hypot(sq4.x - hc4.x, sq4.z - hc4.z) / g.RTS_TILE).toFixed(2) + ' cells off'));
+
+/* ---------------- the pointer ---------------- */
+/* the cursor asks each selected unit's own domain (ui/hud.js _rtsActionAt): open water is a move
+   for a hovercraft and a refusal for a tank; and an enemy is the reticle only for a gun that bears */
+g.window._rtsUI = { place: null, mode: null, attackMove: false };
+var pick = null;
+g._rtsPickAt = function () { return pick; };
+pick = { ent: null, x: g._rtsWX(kinds.sea[0]), z: g._rtsWX(kinds.sea[1]) };
+G.sel = [hc3]; var curHover = g._rtsActionAt(0, 0);
+var tk3 = g._rtsSpawnUnit('player', 'tank', g._rtsWX(kinds.land[0]), g._rtsWX(kinds.land[1]));
+G.sel = [tk3]; var curTank = g._rtsActionAt(0, 0);
+S.ok('over open water the pointer offers a hovercraft a move, and a tank a refusal', curHover === 'move' && curTank === 'no', curHover + ' / ' + curTank);
+var ft = g._rtsSpawnUnit('player', 'flaktrack', g._rtsWX(kinds.land[0]), g._rtsWX(kinds.land[1]));
+var et3 = g._rtsSpawnUnit('enemy', 'tank', g._rtsWX(kinds.land[0]) + 12, g._rtsWX(kinds.land[1])), eh3 = g._rtsSpawnUnit('enemy', 'heli', g._rtsWX(kinds.land[0]), g._rtsWX(kinds.land[1]) + 12);
+G.sel = [ft];
+pick = { ent: et3, x: et3.x, z: et3.z }; var onTank = g._rtsActionAt(0, 0);
+pick = { ent: eh3, x: eh3.x, z: eh3.z }; var onHeli = g._rtsActionAt(0, 0);
+S.ok('a Flak Track gets the reticle over a gunship, and a refusal over a tank its gun cannot bear on', onHeli === 'attack' && onTank === 'no', 'gunship ' + onHeli + ', tank ' + onTank);
+var said3 = [], say3 = g._rtsSay; g._rtsSay = function (m) { said3.push(m); };
+g._rtsRightClick(0, 0, { ent: et3, x: et3.x, z: et3.z });
+g._rtsSay = say3;
+S.ok('...and right-clicked onto the tank anyway, it is told', said3.some(function (m) { return /cannot engage/.test(m); }), said3.join(' | ') || 'nothing said');
+
+/* ---------------- unload, by button ---------------- */
+/* U and the sidebar's UNLOAD give one order (core/transport.js _rtsUnloadSelected): a finger has no U,
+   and a phone could board five men on a hovercraft and never put them down */
+var can0 = g._rtsCanUnload(hc3);
+hc3.x = g._rtsWX(kinds.land[0]) + 4; hc3.z = g._rtsWX(kinds.land[1]) + 4; hc3.order = null; hc3.path = null;
+G.sel = [hc3];
+var ur = g._rtsUnloadSelected();
+S.ok('UNLOAD shows for a loaded transport, and puts the men down where it stands', can0 && ur.out === 1 && !sq3.inside && !g._rtsCanUnload(hc3), 'shown ' + can0 + ', ' + JSON.stringify(ur));
+var deep = null;
+for (var qz = 3; qz < g.RTS_N - 3 && !deep; qz += 2) for (var qx = 3; qx < g.RTS_N - 3 && !deep; qx += 2)
+  if (T[g._rtsIdx(qx, qz)] === W && !g._rtsBlocked(qx, qz, 'sea') && !g._rtsNearestOpen(qx, qz, 4, null)) deep = [qx, qz];
+var lst = deep ? g._rtsSpawnUnit('player', 'lst', g._rtsWX(deep[0]), g._rtsWX(deep[1])) : null;
+if (lst) g._rtsBoard(g._rtsSpawnUnit('player', 'rifle', lst.x, lst.z), lst);
+var said4 = [], say4 = g._rtsSay; g._rtsSay = function (m) { said4.push(m); };
+G.sel = lst ? [lst] : []; var ur2 = g._rtsUnloadSelected();
+g._rtsSay = say4;
+S.ok('...and a craft in open water keeps its men and says so', !!deep && ur2.out === 0 && ur2.held === 1 && said4.some(function (m) { return /Nowhere to unload/.test(m); }), (deep ? JSON.stringify(ur2) : 'no open water four cells from land') + ' ' + said4.join(' | '));
+
 /* ---------------- afloat ---------------- */
 function wreck(onWater) {
   var G2 = fresh(), c = onWater ? kinds.sea : kinds.land;
@@ -139,6 +222,19 @@ function wreck(onWater) {
 var sea = wreck(true), land = wreck(false);
 S.ok('killed over the water it goes down: nothing thrown up, no fire on the waves', sea.dead && sea.debris === 0 && sea.fire === 0, JSON.stringify(sea));
 S.ok('...on land it comes apart and burns like any vehicle', land.dead && land.debris > 0 && land.fire > 0, JSON.stringify(land));
+
+/* ---------------- crowded ---------------- */
+/* it crowds with whatever shares the ground under it (core/move.js): in a bucket of its own it
+   was never pushed off anyone, and a craft driven into a parked column stopped inside a tank */
+function apart(other, c) {
+  fresh();
+  var a = g._rtsSpawnUnit('player', other, g._rtsWX(c[0]), g._rtsWX(c[1])), h = g._rtsSpawnUnit('player', 'hovercraft', g._rtsWX(c[0]) + 0.3, g._rtsWX(c[1]));
+  for (var t = 0; t < 90; t++) { [a, h].forEach(function (u) { u.order = 'hold'; u.path = null; }); g._rtsTick(1 / 30); }
+  return { d: Math.hypot(a.x - h.x, a.z - h.z), r: a.r + h.r };
+}
+var onLand = apart('tank', kinds.land), onSea = apart('gunboat', kinds.sea);
+S.ok('set down on a parked tank it is pushed clear, as a tank would be', onLand.d >= onLand.r * 0.9, onLand.d.toFixed(2) + ' apart, radii ' + onLand.r.toFixed(2));
+S.ok('...and off a gunboat on the water', onSea.d >= onSea.r * 0.9, onSea.d.toFixed(2) + ' apart, radii ' + onSea.r.toFixed(2));
 
 /* ---------------- under it ---------------- */
 var torp = g.RTS_WEAPONS[g.rtsUnitDef('sub').weapon];

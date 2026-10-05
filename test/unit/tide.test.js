@@ -103,6 +103,52 @@ S.ok('a dry flat is ground to a tank and no water to a ship', lo.land && !lo.sea
 S.ok('...under water again, the other way round', !hi.land && hi.sea, JSON.stringify(hi));
 S.ok('...and a hovercraft goes either way at any tide', lo.hover && hi.hover, '');
 
+/* ---------------- stranded ---------------- */
+/* a hull on a flat the tide has dried waits for the flood (core/move.js, grid.js): freed the
+   way a unit inside a footprint is, a gunboat ordered off a dried flat drove across the sand -
+   and across land - to the nearest water */
+at(G, P / 2);
+var ring1 = -1;
+for (i = 0; i < N * N && ring1 < 0; i++) if (G.tideD[i] === 1 && G.tideDry[i] && g._rtsNearestOpen(i % N, (i / N) | 0, 10, 'sea')) ring1 = i;
+var rx = ring1 % N, rz = (ring1 / N) | 0, wetC = g._rtsNearestOpen(rx, rz, 10, 'sea');
+var gb = g._rtsSpawnUnit('player', 'gunboat', g._rtsWX(rx), g._rtsWX(rz)); gb.x = g._rtsWX(rx); gb.z = g._rtsWX(rz);
+g._rtsOrderMove(gb, g._rtsWX(wetC[0]), g._rtsWX(wetC[1]), false);
+var onLand = 0, moved = 0;
+G.t = P / 2;
+for (var s3 = 0; s3 < 300; s3++) {
+  g._rtsTick(1 / 30);
+  if (T[g._rtsIdx(g._rtsTX(gb.x), g._rtsTX(gb.z))] !== g.RTS_T_WATER) onLand++;
+  moved = Math.max(moved, Math.hypot(gb.x - g._rtsWX(rx), gb.z - g._rtsWX(rz)) / g.RTS_TILE);
+}
+S.ok('a gunboat on a dried flat ordered to open water stays where the sea left it - never across the sand, never over land', ring1 >= 0 && moved < 1 && onLand === 0,
+     'moved ' + moved.toFixed(2) + ' cells, ' + onLand + ' ticks on land');
+S.ok('...and has no route at all while it is stranded - the pathfinder says so, not a beeline over the sand', !g._rtsPath(gb.x, gb.z, g._rtsWX(wetC[0]), g._rtsWX(wetC[1]), 'sea'), '');
+/* ...and one caught by the ebb with a route in hand - afloat on the flat at high water, under way
+   to open water as the flat dries - stops where it is: the step itself refuses, not only the
+   pathfinder, since a hull on a cell blocked in its domain was otherwise "freeing itself" and
+   drove the rest of its route over the sand */
+at(G, 0);
+var gb2 = g._rtsSpawnUnit('player', 'gunboat', g._rtsWX(rx), g._rtsWX(rz)); gb2.x = g._rtsWX(rx); gb2.z = g._rtsWX(rz);
+g._rtsOrderMove(gb2, g._rtsWX(wetC[0]), g._rtsWX(wetC[1]), false);
+var hadRoute = !!gb2.path;
+at(G, P / 2);
+var onLand2 = 0, moved2 = 0;
+for (var s4 = 0; s4 < 300; s4++) {
+  g._rtsTick(1 / 30);
+  if (T[g._rtsIdx(g._rtsTX(gb2.x), g._rtsTX(gb2.z))] !== g.RTS_T_WATER) onLand2++;
+  moved2 = Math.max(moved2, Math.hypot(gb2.x - g._rtsWX(rx), gb2.z - g._rtsWX(rz)) / g.RTS_TILE);
+}
+S.ok('...and one under way as the flat dries under it stops where it is, route in hand or not', hadRoute && !!G.tideDry[g._rtsIdx(rx, rz)] && moved2 < 1 && onLand2 === 0,
+     (hadRoute ? 'had a route at high water' : 'no route at high water') + ', moved ' + moved2.toFixed(2) + ' cells, ' + onLand2 + ' ticks on land');
+at(G, 0);
+S.ok('...and afloat again at high water, it has its route', !!g._rtsPath(gb.x, gb.z, g._rtsWX(wetC[0]), g._rtsWX(wetC[1]), 'sea'), '');
+/* a shell on a dry flat bursts on sand, not in water (core/transport.js _rtsCombatAnim) */
+function burst() { var n0 = G.fx.length; g._rtsCombatAnim(100, g._rtsWX(rx), g._rtsWX(rz), 1); return G.fx[n0]; }
+at(G, P / 2); var dryKind = burst();
+at(G, 0); var wetKind = burst();
+S.ok('a shell bursting on a dried flat is a blast on sand; on the same cell under water, a splash', !!dryKind && dryKind.kind !== 'splash' && !!wetKind && wetKind.kind === 'splash',
+     (dryKind && dryKind.kind) + ' / ' + (wetKind && wetKind.kind));
+
 /* ---------------- a crossing ---------------- */
 var best = null;
 for (var tz = 2; tz < N - 2; tz += 2) for (var tx = 2; tx < N - 2; tx += 2) {
@@ -153,6 +199,11 @@ S.ok('a tank caught on the flats as the sea comes back makes for dry ground and 
 S.ok('...hurt by the water on the way', tk.u.hp < tk.hp0, tk.u.hp.toFixed(0) + ' of ' + tk.hp0);
 var sq = caught('rifle');
 S.ok('a squad left standing in the flood is lost', sq.u.dead, sq.u.dead ? 'swept away after ' + (sq.wet / 30).toFixed(1) + ' s' : 'alive at ' + sq.u.hp);
+/* what floats is not swamped: a gunboat the ebb left on the flat, and a hovercraft, ride the
+   flood with every hit point they had */
+var gbF = caught('gunboat'), hvF = caught('hovercraft');
+S.ok('a gunboat stranded on the flat, and a hovercraft on it, ride the flood unhurt', !gbF.u.dead && gbF.u.hp === gbF.hp0 && gbF.wet > 0 && !hvF.u.dead && hvF.u.hp === hvF.hp0,
+     'gunboat ' + gbF.u.hp + ' of ' + gbF.hp0 + ' after ' + (gbF.wet / 30).toFixed(1) + ' s afloat; hovercraft ' + hvF.u.hp + ' of ' + hvF.hp0);
 
 /* ---------------- warned ---------------- */
 G = fresh(); said.length = 0;

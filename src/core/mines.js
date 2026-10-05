@@ -49,7 +49,12 @@ function _rtsLayMine(e, atx, atz) {
   /* on ground, or - from a Mine Boat (core/seamines.js) - on water, and nowhere else; and never
      on a bridge's deck, which is water underneath and a road on top */
   var sea = !!rtsUnitDef(e.def).sea, ci = _rtsInB(tx, tz) ? _rtsIdx(tx, tz) : -1;
-  if (ci < 0 || (G.terrain[ci] === RTS_T_WATER) !== sea || (sea && _rtsIsBridgeCell(ci))) return false;
+  if (ci < 0 || (G.terrain[ci] === RTS_T_WATER) !== sea || (sea && _rtsIsBridgeCell(ci))) {
+    /* and the player told why, as the other refusals tell: D on a deck or a dried flat did
+       nothing at all, which read as a broken key */
+    if (e.side === 'player') _rtsSay(sea ? 'Mines go in open water - not under a bridge.' : 'Mines go in the ground - not on a deck, nor on the flats.');
+    return false;
+  }
   G.mines.push({ tx: tx, tz: tz, side: e.side, arm: RTS_MINE.arm, sea: sea });
   e.mines--;
   if (e.side === 'player' && typeof _rtsSfx === 'function') _rtsSfx('place', e.x, e.z);

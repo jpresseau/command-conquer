@@ -34,6 +34,7 @@ function _r3dTreadGround(G, R3, x, z) {
   var i = _rtsIdx(tx, tz);
   if (R3.treadPave && R3.treadPave[i]) return 0;
   var t = G.terrain[i];
+  if (t === RTS_T_WATER && G.tideDry && G.tideDry[i]) t = RTS_T_SAND;   /* a flat the tide has dried: core/tide.js */
   if (t === RTS_T_SAND) return 1;
   if (t === RTS_T_ROAD) return 0.85;
   if (t === RTS_T_GRASS) return 0.45;
@@ -70,6 +71,7 @@ function _r3dTreadTick(G, R3) {
     if (e.dead || e.type !== 'unit' || e.air || e.inside) continue;      /* a slung tank is in the air */
     var d = rtsUnitDef(e.def);
     if (!d || d.kind === 'infantry' || d.kind === 'air' || d.sea || d.hover) continue;   /* a skirt leaves no track */
+    if (!_rtsEffectsSeen(e)) { delete L[e.id]; continue; }              /* a jammed unit's tracks gave it away: core/supers.js */
     var l = L[e.id];
     if (!l) { L[e.id] = [e.x, e.z, 0]; continue; }
     var dx = e.x - l[0], dz = e.z - l[1], m = Math.sqrt(dx * dx + dz * dz);

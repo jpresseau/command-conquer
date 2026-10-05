@@ -150,14 +150,16 @@ function _rtsAIUnits(S) {
   /* THE FIELD ARMY'S CEILING, per difficulty - RTS_DIFF `army`. Counted once: the opponent's
      ground fighters, harvesters and aircraft and hulls excluded (those have caps of their own
      below). See the note on RTS_DIFF for why the size of the army, not how much of it marches,
-     is what sets a difficulty now that the army marches. */
+     is what sets a difficulty now that the army marches. The unarmed support vehicles bought
+     outside the roll (_rtsAISupport: layer, sweeper, spotter, truck, jammer) are not fighters
+     and do not fill a fighter's place, as _rtsAIFieldVehicles already reads it. */
   var armyCap = _rtsBias('enemy').army, fighters = 0;
   if (armyCap != null) {
     for (i = 0; i < G.ents.length; i++) {
       var fe = G.ents[i];
       if (fe.dead || fe.side !== 'enemy' || fe.type !== 'unit' || fe.air) continue;
       var fd = rtsUnitDef(fe.def);
-      if (fd && !fd.harvest && !fd.sea) fighters++;
+      if (fd && !fd.harvest && !fd.sea && fd.weapon) fighters++;
     }
   }
   for (var cat in RTS_AI.mix) {

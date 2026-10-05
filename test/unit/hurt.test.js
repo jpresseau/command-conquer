@@ -66,6 +66,13 @@ var crn = g._rtsSpawnUnit('player', 'skycrane', 50, 50), slung = tank(0.2, {}); 
 g.window._R3D.motion[slung.id] = { y: 9.5 };
 var sl = run([slung]);
 S.ok('...but a Sky Crane\'s slung load does, from where it hangs', sl.cols.length === 1 && sl.cols[0].y > 9.5 && sl.fires.length === 1, sl.cols.length ? 'from ' + sl.cols[0].y.toFixed(2) : 'nothing');
+/* a jammed enemy vehicle shows no smoke (core/jammer.js, fxwake3d.js _r3dFxOf): the column gave away a hull the field had hidden */
+var jt = g._rtsSpawnUnit('enemy', 'tank', 80, 80); jt.hp = jt.maxHp * 0.2;
+var seenOpen = run([jt]).cols.length;
+G.jam = { player: [], enemy: [{ x: jt.x, z: jt.z, r: g.RTS_JAM.r * g.RTS_TILE }] };
+var seenJam = run([jt]).cols.length;
+G.jam = { player: [], enemy: [] };
+S.ok('a hurt enemy vehicle smokes in the open, and not inside its Jammer\'s field', seenOpen === 1 && seenJam === 0, seenOpen + ' column(s) in the open, ' + seenJam + ' in the field');
 
 /* ---- ROOF ---- */
 var yd = g._rtsHas('player', 'yard'), dY = g.rtsStructDef(yd.def), keepHp = yd.hp;

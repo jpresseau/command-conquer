@@ -110,8 +110,13 @@ function _rtsSteer(e, dt, d) {
   var dom = _rtsDomainOf(e);
   /* While standing on a blocked tile, movement is unrestricted - that is how a unit
      extracts itself from a footprint it ended up inside. Blocking it here as well would
-     make the escape waypoint unreachable and re-trap it. */
-  var freeing = _rtsBlocked(_rtsTX(e.x), _rtsTX(e.z), dom);
+     make the escape waypoint unreachable and re-trap it. NOT A HULL ON A FLAT THE TIDE HAS
+     DRIED (core/tide.js): that is blocked in its domain too, and freed the same way a stranded
+     gunboat drove over the sand, and over land, to the nearest water. Stranded, it waits for the
+     flood; the step test below keeps it where it is. */
+  var hereI = _rtsIdx(_rtsTX(e.x), _rtsTX(e.z)), Gt = window._rtsG;
+  var stranded = dom === 'sea' && Gt.tideDry && Gt.tideDry[hereI];
+  var freeing = !stranded && _rtsBlocked(_rtsTX(e.x), _rtsTX(e.z), dom);
   /* Nothing on the ground is in an aircraft's way - not walls, not cliffs, not the footprint
      of the very pad it is trying to land on. That last one is what actually bit: a helicopter
      flew home, stopped dead 5.9 world units out (the pad's half-width plus its own radius) and
@@ -187,6 +192,10 @@ function _rtsSeparate(dt) {
        as leaving aircraft in this pass, which is what kept a helicopter off its own pad. */
     var dom = _rtsDomainOf(e) || 'land';
     if (dom === 'shallow') dom = 'sea';                  /* a Monitor crowds with the other hulls */
+    /* A HOVERCRAFT CROWDS WITH WHATEVER SHARES THE GROUND UNDER IT: the hulls over water, the
+       tanks and the men over land. In a bucket of its own it was never pushed off anyone, and a
+       craft driven into a parked column stopped inside a tank. */
+    if (dom === 'hover') { var hci = _rtsIdx(_rtsTX(e.x), _rtsTX(e.z)); dom = G.terrain[hci] === RTS_T_WATER && !(G.tideDry && G.tideDry[hci]) ? 'sea' : 'land'; }
     var k = dom + ':' + ((e.x / cell) | 0) + ':' + ((e.z / cell) | 0);
     (buckets[k] || (buckets[k] = [])).push(e);
   }

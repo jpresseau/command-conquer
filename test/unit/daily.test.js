@@ -11,7 +11,7 @@ var { Suite } = require('../lib/assert.js');
 var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('daily');
-var g = load(['src/rules', 'src/core', 'src/daily.js']);
+var g = load(['src/rules', 'src/core', 'src/daily.js', 'src/rts.save.js']);
 
 /* ---------------- one a day ---------------- */
 var a = g.rtsDailySpec('2026-10-04'), b = g.rtsDailySpec('2026-10-04'), c = g.rtsDailySpec('2026-10-05');
@@ -50,5 +50,24 @@ S.ok('no daily under way, no result', (g.window._RTS_DAILY = null, g.rtsDailyRes
 /* ---------------- the line ---------------- */
 S.eq('the line says the date, the outcome, the time and the tallies', r2.line, 'Breachwater daily 2026-10-04 · Victory in 11:40 · 30 destroyed, 12 lost');
 S.eq('...and a defeat says how long it held', r1.line, 'Breachwater daily 2026-10-04 · Held out 5:00 · 30 destroyed, 12 lost');
+
+/* ---------------- resumed ---------------- */
+/* a saved daily resumes AS the daily (rts.save.js _rtsLoadArmy): its army for the battle only, the
+   player's stored preference untouched, the result still on the end card */
+var LS = g.window.localStorage;
+g.rtsSetArmySide('allied');
+g.window._RTS_DAILY = null; g.window._RTS_DAILY_PREV = null; g.window._RTS_DIFF = 'easy';
+var spec = Object.assign({}, g.rtsDailySpec('2026-10-04'), { army: 'soviet' });
+g._rtsLoadArmy({ side: 'soviet', daily: spec });
+S.ok('a resumed daily sets its army for the battle only: the stored preference is untouched, and the daily is on again',
+     g.window._RTS_ARMY === 'soviet' && LS.getItem('rcgVoxSide') === 'allied' && g.window._RTS_DAILY === spec && g.window._RTS_DIFF === 'normal'
+     && !!g.window._RTS_DAILY_PREV && g.window._RTS_DAILY_PREV.army === 'allied' && g.window._RTS_DAILY_PREV.diff === 'easy',
+     'army ' + g.window._RTS_ARMY + ', stored ' + LS.getItem('rcgVoxSide') + ', diff ' + g.window._RTS_DIFF);
+g.rtsDailyEnd();
+S.ok('...and the battle over, the player has their own army and difficulty back', g.window._RTS_ARMY === 'allied' && g.window._RTS_DIFF === 'easy' && !g.window._RTS_DAILY, g.window._RTS_ARMY + ' ' + g.window._RTS_DIFF);
+g._rtsLoadArmy({ side: 'soviet' });
+S.ok('an ordinary battle\'s army is stored, as the player\'s choice', g.window._RTS_ARMY === 'soviet' && LS.getItem('rcgVoxSide') === 'soviet', '');
+var saveSrc = require('fs').readFileSync(require('path').join(__dirname, '../../src/rts.save.js'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+S.ok('...and a save\'s header carries the daily for the load to read', /daily:window\._RTS_DAILY \|\| null,/.test(saveSrc) && /_rtsLoadArmy\(res\.info\)/.test(saveSrc), '');
 
 require('../lib/report.js')(S);

@@ -33,13 +33,22 @@
 var RTS_ESCORT_EVERY = 2;          /* seconds between re-aims */
 
 /* A unit that can go: the opponent's, on the ground, armed, not a harvester, not in a team, and
-   not on a mission that forbids recruiting it (holding, harvesting, rearming...). */
+   not on a mission that forbids recruiting it (holding, harvesting, rearming...). NOT A SUPPORT
+   VEHICLE WITH A CONTROLLER OF ITS OWN (_rtsSupportDriven): the Hovercraft and the Spotter are
+   armed, so this once took them, and the raid tick and the escort tick then tugged the craft
+   between its launch water and the march for the rest of the match. */
 function _rtsEscortable(u) {
   if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || u.air || u.inside) return false;
   var d = rtsUnitDef(u.def);
-  if (!d || d.harvest || d.sea || !d.weapon) return false;
+  if (!d || d.harvest || d.sea || !d.weapon || _rtsSupportDriven(d)) return false;
   if (u.sqd != null || u.mend != null) return false;      /* mend: on its way to the depot, core/aimend.js */
   return !!_rtsMission(u).recruitable;
+}
+/* A unit the opponent drives through a controller of its own - the raid (aihover.js), the
+   spotter, jammer, mine, sweeper and mending ticks, the bridge layer - rather than through its
+   teams and escorts. Read off the rules, so a new support unit joins the list by its flag. */
+function _rtsSupportDriven(d) {
+  return !!(d && (d.hover || d.spots || d.jams || d.mines || d.sweeps || d.heals || d.bridge));
 }
 /* A team worth escorting: on the march, on land, with someone in it. */
 function _rtsEscortWorthy(t) {

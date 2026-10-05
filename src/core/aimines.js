@@ -19,7 +19,7 @@
 function _rtsAISupport(S) {
   return _rtsAISupportBuy(S, 'minelayer', function (G) { return _rtsAIMineSpots(G).length > 0; }) ||   /* a land route to deny */
          _rtsAISupportBuy(S, 'hovercraft', function () { return !!_rtsAIHoverTarget(); }) ||           /* a harvester by the water: core/aihover.js */
-         _rtsAISupportBuy(S, 'sweeper', function (G) { return !!(G.mineHits && G.mineHits.length); }) ||  /* a mine has cost it a unit: core/sweeper.js */
+         _rtsAISupportBuy(S, 'sweeper', function (G) { return !!(G.mineHits && G.mineHits.some(function (h) { return !h.swept; })); }) ||  /* a mine has cost it a unit, somewhere not yet swept: core/sweeper.js */
          _rtsAISupportBuy(S, 'spotter', function () { return _rtsFogged() && _rtsAILongGuns() > 0; }) ||  /* long guns blind in fog: core/spotter.js */
          _rtsAISupportBuy(S, 'repairtruck', function () { return _rtsAIFieldVehicles() >= RTS_FIX.army && _rtsAIDefended(); }) ||  /* an army worth mending: core/repairtruck.js */
          _rtsAISupportBuy(S, 'jammer', function () { return _rtsPlayerDefences() >= RTS_JAM.digIn && _rtsAIFieldVehicles() >= 4 && _rtsAIDefended(); }) ||  /* the player dug in: core/jammer.js */
@@ -46,14 +46,17 @@ function _rtsAISupportBuy(S, key, worth) {
   return true;
 }
 
-var RTS_AI_MINES = { from: 9, to: 18, every: 1 };
+var RTS_AI_MINES = { from: 9, to: 18, every: 1, retry: 30 };   /* retry: seconds a spot with no route is set aside */
 
 /* The field: route cells 9 to 18 out from the yard, each with its neighbours across the route. */
 function _rtsAIMineSpots(G) {
   if (G.ai.mineSpots) return G.ai.mineSpots;
   var ey = _rtsHas('enemy', 'yard'), py = _rtsHas('player', 'yard'), out = [], seen = {};
-  G.ai.mineSpots = out;
+  /* planned once both yards stand: asked while either was down (a raid had taken it, an MCV not
+     yet deployed) it used to cache the empty plan and never buy a layer for the rest of the match.
+     No land route between the two is the one permanent answer. */
   if (!ey || !py) return out;
+  G.ai.mineSpots = out;
   var path = _rtsPath(ey.x, ey.z, py.x, py.z, null);
   if (!path || !path.length) return out;
   var px = ey.x, pz = ey.z, step = RTS_TILE / 2;
@@ -83,16 +86,28 @@ function _rtsAIMinesTick(dt) {
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
     if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || u.inside || !(rtsUnitDef(u.def) || {}).mines || _rtsSeaLayer(u)) continue;
+    if (u.mend != null) continue;                              /* on its way to be mended: core/aimend.js */
     if (_rtsMinesLeft(u) <= 0) {                               /* home to load again */
       var bay = _rtsHas('enemy', 'depot');
       if (bay && !_rtsAtStruct(u, bay, rtsStructDef('depot').repairs) && !u.path) _rtsOrderMove(u, bay.x, bay.z, false);
       continue;
     }
-    var spots = _rtsAIMineSpots(G), next = null;
-    for (var k = 0; k < spots.length && !next; k++) if (!_rtsMineAt(spots[k][0], spots[k][1])) next = spots[k];
+    /* the nearest cell of the plan not yet mined - and not one the layer was refused a route to
+       within RTS_AI_MINES.retry (G.ai.mineNo): a spot the player has since walled off, or that
+       the tide has cut off, had the layer asking for the same impossible route every second
+       and laying nothing else for the rest of the match */
+    var spots = _rtsAIMineSpots(G), next = null, no = G.ai.mineNo || {};
+    for (var k = 0; k < spots.length && !next; k++) {
+      var nk = spots[k][0] + ',' + spots[k][1];
+      if (_rtsMineAt(spots[k][0], spots[k][1]) || (no[nk] != null && G.t - no[nk] < RTS_AI_MINES.retry)) continue;
+      next = spots[k];
+    }
     if (!next) continue;                                       /* the field is laid */
     /* beside it is near enough: a move order stops a cell short */
     if (Math.abs(_rtsTX(u.x) - next[0]) <= 1 && Math.abs(_rtsTX(u.z) - next[1]) <= 1) { _rtsLayMine(u, next[0], next[1]); u.path = null; continue; }
-    if (!u.path) _rtsOrderMove(u, _rtsWX(next[0]), _rtsWX(next[1]), false);
+    if (!u.path) {
+      _rtsOrderMove(u, _rtsWX(next[0]), _rtsWX(next[1]), false);
+      if (!u.order) (G.ai.mineNo = G.ai.mineNo || {})[next[0] + ',' + next[1]] = G.t;
+    }
   }
 }

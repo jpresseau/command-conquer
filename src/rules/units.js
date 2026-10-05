@@ -184,7 +184,7 @@ var RTS_UNITS = [
      thin-skinned, with a machine gun for the men waiting on the sand. Torpedoes run under it. */
   { key:'hovercraft',name:'Hovercraft',   kind:'vehicle',  cost:950,  build:11, hp:280,  speed:16,  turn:2.4,r:2.0, sight:18, weapon:'mg',
     needs:['radar'], hover:true, carries:5, takes:['infantry'], armour:'light',
-    desc:'Drives on land and water alike. Carries five infantry across a bay and up the far beach.' },
+    desc:'Drives on land and water alike. Carries five infantry across a bay and up the far beach; U or UNLOAD puts them down where it stands.' },
   /* BRIDGE LAYER. The verb is the CROSSING: a gap the map gave no bridge over, spanned where the
      player chooses. At the water's edge, DEPLOY (D) turns it into a one-lane bridge of up to
      eight cells across the water ahead - core/bridgelayer.js. Unarmed, and spent in the laying. */

@@ -178,4 +178,52 @@ if (pier) {
   S.ok('...and the layer will not lay a pier down it', !pg || pg.dx !== 1, pg ? 'offered ' + JSON.stringify({ dx: pg.dx, dz: pg.dz, len: pg.len }) : 'refused');
 }
 
+/* ---------------- the longest span ---------------- */
+/* RTS_LAYBRIDGE_SPAN cells of water is spanned; one more is not: a channel dug five wide (water
+   two cells either side of the deck, so it is a crossing and not a pier) across open ground */
+G = fresh();
+var SPAN = g.RTS_LAYBRIDGE_SPAN, flatRow = null;
+for (var fz2 = 4; fz2 < N - 4 && !flatRow; fz2++) for (var fx2 = 2; fx2 < N - SPAN - 4 && !flatRow; fx2++) {
+  var okRow = true;
+  for (var cz = fz2 - 2; cz <= fz2 + 2 && okRow; cz++) for (var cx = fx2 - 1; cx <= fx2 + SPAN + 2 && okRow; cx++) {
+    var ci2 = g._rtsIdx(cx, cz);
+    if (T[ci2] === W || B[ci2] !== 0 || (G.tideD && G.tideD[ci2])) okRow = false;
+  }
+  if (okRow) flatRow = [fx2, fz2];
+}
+S.ok('the case: open ground a span and a half wide, five deep', !!flatRow, flatRow ? flatRow.join(',') : 'none');
+if (flatRow) {
+  dig(flatRow[0] + 1, flatRow[1] - 2, flatRow[0] + SPAN, flatRow[1] + 2);                   /* SPAN cells of water ahead, five wide */
+  var atCap = g._rtsBridgeGap({ x: g._rtsWX(flatRow[0]), z: g._rtsWX(flatRow[1]), rot: 0 });
+  dig(flatRow[0] + SPAN + 1, flatRow[1] - 2, flatRow[0] + SPAN + 1, flatRow[1] + 2);        /* one more */
+  var overCap = g._rtsBridgeGap({ x: g._rtsWX(flatRow[0]), z: g._rtsWX(flatRow[1]), rot: 0 });
+  S.ok('a gap of RTS_LAYBRIDGE_SPAN cells is spanned, and one a cell longer is not', !!atCap && atCap.len === SPAN && atCap.dx === 1 && !(overCap && overCap.dx === 1),
+       (atCap ? 'offered ' + atCap.len : 'refused ' + SPAN) + '; ' + (overCap && overCap.dx === 1 ? 'offered ' + overCap.len : 'refused ' + (SPAN + 1)));
+}
+
+/* ---------------- at low water ---------------- */
+/* a flat the tide has dried is ground (core/tide.js): the water's edge is out on the flats, and
+   a layer standing there is offered the span across what is still wet */
+G = fresh(); T = G.terrain; B = G.blocked;
+G.t = g.RTS_TIDE.period / 2; g._rtsTideTick(0);
+var fromFlat = null, dryCells = 0;
+for (var fz = 2; fz < N - 2 && !fromFlat; fz++) for (var fx = 2; fx < N - 2 && !fromFlat; fx++) {
+  var fi = g._rtsIdx(fx, fz);
+  if (T[fi] !== W || !G.tideDry[fi] || g._rtsBlocked(fx, fz, null)) continue;
+  dryCells++;
+  for (var ff = 0; ff < 4 && !fromFlat; ff++) {
+    var fg = g._rtsBridgeGap({ x: g._rtsWX(fx), z: g._rtsWX(fz), rot: ff * Math.PI / 2 });
+    if (fg && fg.len >= 2) fromFlat = { tx: fx, tz: fz, rot: ff * Math.PI / 2, len: fg.len };
+  }
+}
+S.ok('the case: at low water, dried flats a tank may stand on', dryCells > 5, dryCells + ' dry open cells');
+S.ok('a layer on a dried flat at the water\'s edge is offered the span across what is still wet', !!fromFlat, fromFlat ? JSON.stringify(fromFlat) : 'none offered');
+if (fromFlat) {
+  var dfi = g._rtsIdx(fromFlat.tx, fromFlat.tz);
+  G.tideDry[dfi] = 0;
+  var wetAgain = g._rtsBridgeGap({ x: g._rtsWX(fromFlat.tx), z: g._rtsWX(fromFlat.tz), rot: fromFlat.rot });
+  G.tideDry[dfi] = 1;
+  S.ok('...and not from the same cell while the water is over it', !wetAgain, wetAgain ? 'offered' : 'refused');
+}
+
 require('../lib/report.js')(S);

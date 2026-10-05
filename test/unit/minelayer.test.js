@@ -15,7 +15,7 @@ var { Suite } = require('../lib/assert.js');
 var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('minelayer');
-var g = load(['src/rules', 'src/core', 'src/sprites/props.js']);
+var g = load(['src/rules', 'src/core', 'src/sprites/props.js', 'src/rts.save.js']);
 
 function fresh() {
   g._rtsNewGame(4242, 'easy');
@@ -75,11 +75,11 @@ var under = g._rtsSpawnUnit('enemy', 'rifle', c.x, c.z);
 under.order = 'hold';
 g._rtsLayMine(ly);
 ly.x += 6 * g.RTS_TILE;
-var early = run(g.RTS_MINE.arm * 0.6, function () { return !G.mines.length; });
+var early = run(g.RTS_MINE.arm * 0.9, function () { return !G.mines.length; });
 under.x = c.x; under.z = c.z;                               /* still standing there */
-var later = run(g.RTS_MINE.arm + 1, function () { return !G.mines.length; });
-S.ok('a mine laid under an enemy waits out its arming before it goes off', !early && later,
-     'went off ' + (early ? 'at once' : later ? 'once armed' : 'never'));
+var later = run(g.RTS_MINE.arm * 0.1 + 0.2, function () { return !G.mines.length; });
+S.ok('a mine laid under an enemy waits out its arming before it goes off - the whole of RTS_MINE.arm, and no longer', !early && later,
+     'went off ' + (early ? 'before ' + (g.RTS_MINE.arm * 0.9).toFixed(2) + ' s' : later ? 'between ' + (g.RTS_MINE.arm * 0.9).toFixed(2) + ' and ' + (g.RTS_MINE.arm + 0.2).toFixed(2) + ' s' : 'never'));
 
 /* ---------------- the blast ---------------- */
 function crossing(def, air) {
@@ -100,6 +100,22 @@ S.ok('an enemy tank driving across an armed mine is wrecked, and the mine is spe
      'tank ' + (tk.foe.dead ? 'destroyed' : 'at ' + Math.round(tk.foe.hp / tk.foe.maxHp * 100) + '%') + ', ' + tk.mines + ' mines left');
 var sq = crossing('rifle');
 S.ok('...an enemy squad is killed outright', sq.mines === 0 && sq.foe.dead, sq.foe.dead ? 'dead' : 'alive at ' + sq.foe.hp);
+/* the blast round it is a splash: an enemy tank in the next cell is hurt, and a fraction of what
+   the one that trod on it takes (the blast is no respecter of sides - a tank of the layer's own
+   beside it takes the same splash) */
+G = fresh();
+var bp = open(), by = g._rtsSpawnUnit('player', 'minelayer', bp.x, bp.z);
+g._rtsLayMine(by); by.x = open(12).x;
+run(g.RTS_MINE.arm + 0.5);
+var tread = g._rtsSpawnUnit('enemy', 'tank', bp.x, bp.z), side = g._rtsSpawnUnit('enemy', 'tank', bp.x + g.RTS_TILE, bp.z);
+G.ents.forEach(function (u) { if (u.type === 'unit' && u.side === 'player' && u !== by) u.dead = true; });   /* nothing to shoot at: the blast alone */
+[tread, side].forEach(function (u) { u.order = 'hold'; u.path = null; });
+var sideHp = side.hp, treadHp = tread.hp;
+run(1, function () { return !G.mines.length; });
+run(0.5);
+S.ok('an enemy tank in the next cell takes the splash - a fraction of what the one that trod on it takes',
+     !G.mines.length && side.hp < sideHp && (sideHp - side.hp) < (treadHp - (tread.dead ? 0 : tread.hp)) * 0.25,
+     'beside: ' + (sideHp - side.hp).toFixed(0) + ' of ' + sideHp + '; on it: ' + (treadHp - (tread.dead ? 0 : tread.hp)).toFixed(0));
 var fl = crossing('heli', true);
 S.ok('...and an aircraft passes over it', fl.mines === 1 && !fl.foe.dead && fl.foe.hp === fl.foe.maxHp && fl.crossed,
      fl.mines + ' mines, aircraft at ' + fl.foe.hp + (fl.crossed ? ', crossed' : ', never got there'));
@@ -130,11 +146,50 @@ ly = g._rtsSpawnUnit('player', 'minelayer', bay.x, bay.z);
 ly.mines = 0; ly.path = null; ly.order = 'hold';
 S.ok('the case: a powered Repair Bay with an empty layer parked on it',
      !!bay && g._rtsPowerFactor('player') >= 0.999 && g._rtsAtStruct(ly, bay, g.rtsStructDef('depot').repairs), '');
-run(6 * 4 + 1);
+run(g.RTS_MINE.restock * 1.5);
+var oneSoFar = ly.mines;
+run(g.RTS_MINE.restock * 4);
 S.eq('parked on it, the layer is loaded back to five', ly.mines, 5);
+S.ok('...one mine every RTS_MINE.restock seconds, not all at once', oneSoFar === 1, oneSoFar + ' after ' + (g.RTS_MINE.restock * 1.5) + ' s');
+/* browned out, the bay loads nothing - the depot's repairs stop with the power, and the rack with them */
+ly.mines = 0;
+var pf0 = g._rtsPowerFactor; g._rtsPowerFactor = function () { return 0.5; };
+run(g.RTS_MINE.restock * 2.5);
+g._rtsPowerFactor = pf0;
+S.eq('...and none while the base is browned out', ly.mines, 0);
+ly.mines = 5;
 
 /* ---------------- saved ---------------- */
-var keys = Object.keys(G);
-S.ok('the mines are part of the state a save carries', keys.indexOf('mines') >= 0 && Array.isArray(G.mines), keys.length + ' keys');
+/* the real round trip (rts.save.js), not a look for the key: through JSON and back, with a field
+   of three laid first */
+for (var lm = 0; lm < 3; lm++) { var lc = open(lm * 2 - 2); ly.x = lc.x; ly.z = lc.z; g._rtsLayMine(ly); }
+var snap = JSON.parse(JSON.stringify(g._rtsSaveState(G))), laid = G.mines.length, hits0 = (G.mineHits || []).length, mines0 = G.mines.map(function (m) { return m.tx + ',' + m.tz + ',' + m.side; });
+var G2 = fresh();
+g._rtsApplyState(G2, snap);
+S.ok('the mines are part of the state a save carries: a round trip brings every one back, cell and side', laid > 0 && G2.mines.length === laid &&
+     G2.mines.every(function (m, i) { return m.tx + ',' + m.tz + ',' + m.side === mines0[i]; }) && (G2.mineHits || []).length === hits0,
+     laid + ' mines before, ' + G2.mines.length + ' after');
+var t2 = G2.t; run(1);
+S.ok('...and the game ticks on from it', G2.t > t2 && G2.mines.length === laid, '');
+
+/* ---------------- told why ---------------- */
+G = fresh();
+var said = [], say0 = g._rtsSay; g._rtsSay = function (m) { said.push(m); };
+var deck = (G.bridges || []).length ? g._rtsBridgeCells(G.bridges[0]).filter(function (i) { return G.terrain[i] === g.RTS_T_WATER; })[0] : null;
+S.ok('the case: the map has a bridge deck to drive onto', deck != null, (G.bridges || []).length + ' bridges');
+var onDeck = deck != null ? g._rtsSpawnUnit('player', 'minelayer', g._rtsWX(deck % g.RTS_N), g._rtsWX((deck / g.RTS_N) | 0)) : null;
+var laidOnDeck = onDeck ? g._rtsLayMine(onDeck) : null;
+g._rtsSay = say0;
+S.ok('on a deck, DEPLOY lays nothing and says why, where it used to say nothing', laidOnDeck === false && !!onDeck && onDeck.mines === 5 && said.length === 1 && /deck/.test(said[0]), said.join(' | ') || 'silent');
+/* and on a flat the tide has dried - the causeway the tide opens, the most natural place to deny */
+G.t = g.RTS_TIDE.period / 2; g._rtsTideTick(0);
+var flatI = -1;
+for (var fi3 = 0; fi3 < G.tideDry.length && flatI < 0; fi3++) if (G.tideDry[fi3]) flatI = fi3;
+said = []; g._rtsSay = function (m) { said.push(m); };
+var onFlat = flatI >= 0 ? g._rtsSpawnUnit('player', 'minelayer', g._rtsWX(flatI % g.RTS_N), g._rtsWX((flatI / g.RTS_N) | 0)) : null;
+if (onFlat) { onFlat.x = g._rtsWX(flatI % g.RTS_N); onFlat.z = g._rtsWX((flatI / g.RTS_N) | 0); }
+var laidOnFlat = onFlat ? g._rtsLayMine(onFlat) : null;
+g._rtsSay = say0;
+S.ok('...and on a flat the tide has dried, likewise', flatI >= 0 && laidOnFlat === false && said.length === 1 && /flats/.test(said[0]), said.join(' | ') || 'silent');
 
 require('../lib/report.js')(S);

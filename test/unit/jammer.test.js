@@ -160,8 +160,21 @@ team2.moving = true; team2.hasBeen = true;
 py = g._rtsHas('player', 'yard');
 tanks.forEach(function (u) { u.x += (py.x - u.x) * 0.4; u.z += (py.z - u.z) * 0.4; });
 var ej = g._rtsSpawnUnit('enemy', 'jammer', ey.x, ey.z + 10);
-run(60, function () { hold(tanks); });
+/* a larger team at sea on the march at the same time: the jammer is for the land army, not the
+   fleet - it once followed the biggest team whatever its water, and parked on a beach */
+var fleetTeam = g._rtsTeamMake(g.RTS_TEAM_TYPES.filter(function (t) { return t.name === 'Wolfpack'; })[0]), fleet = [];
+for (var si = 0; si < g.RTS_N * g.RTS_N && fleet.length < tanks.length + 2; si += 3) {
+  var sx = si % g.RTS_N, sz = (si / g.RTS_N) | 0;
+  if (G.terrain[si] === g.RTS_T_WATER && !g._rtsBlocked(sx, sz, 'sea')) fleet.push(g._rtsSpawnUnit('enemy', 'sub', g._rtsWX(sx), g._rtsWX(sz)));
+}
+fleet.forEach(function (u) { g._rtsTeamAdd(fleetTeam, u); u.init = true; });
+fleetTeam.moving = true; fleetTeam.hasBeen = true;
+run(60, function () { hold(tanks); hold(fleet); });
 var c = g._rtsTeamCentre(team2), off = Math.hypot(ej.x - c.x, ej.z - c.z) / g.RTS_TILE;
-S.ok('...and parks it in the middle of its team on the march', off < 4, off.toFixed(1) + ' cells from the team\'s centre');
+S.ok('...and parks it in the middle of its team on the march - the land team, with a larger one at sea', fleet.length > tanks.length && off < 4, off.toFixed(1) + ' cells from the land team\'s centre, ' + fleet.length + ' hulls at sea against ' + tanks.length + ' tanks');
+/* the radar's static over a field (ui/hud.js) is drawn only where the radar reads: explored ground */
+var fld = { x: ej.x, z: ej.z, r: g.RTS_JAM.r * g.RTS_TILE }, fi2 = g._rtsIdx(g._rtsTX(ej.x), g._rtsTX(ej.z)), m0 = G.mapped[fi2];
+G.mapped[fi2] = 0; var unseen = g._rtsRadarStaticShown(G, fld); G.mapped[fi2] = 1; var seenS = g._rtsRadarStaticShown(G, fld); G.mapped[fi2] = m0;
+S.ok('the radar shows static over a field only where the player has explored', unseen === false && seenS === true, '');
 
 require('../lib/report.js')(S);

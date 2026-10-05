@@ -142,15 +142,26 @@ function _rtsActionAt(mx, my) {
     if (G.sel[i] && G.sel[i].side === 'player' && _rtsCanRally(G.sel[i])) { anyMaker = true; break; }
   if (anyMaker && !mine.length) return 'rally';
   if (!mine.length) return (tgt && !tgt.dead) ? 'select' : null;
-  if (tgt && tgt.side === 'enemy') return 'attack';
+  /* AN ENEMY under the pointer is the attack reticle only if something selected can engage it,
+     or is a specialist whose click means something else (an engineer, a loaded transport): a
+     Flak Track given the reticle over a tank drove onto the tank, since its gun cannot bear */
+  if (tgt && tgt.side === 'enemy') {
+    for (i = 0; i < mine.length; i++) { var sd0 = rtsUnitDef(mine[i].def) || {}; if (!sd0.weapon || _rtsCanEngage(mine[i], tgt)) return 'attack'; }
+    return 'no';
+  }
   var tx = _rtsTX(hit.x), tz = _rtsTX(hit.z);
   var onScrap = _rtsInB(tx, tz) && G.scrap[_rtsIdx(tx, tz)] > 0;
   var harv = false;
   for (i = 0; i < mine.length; i++) if (rtsUnitDef(mine[i].def).harvest) harv = true;
   if (harv && onScrap) return 'harvest';
   if (harv && tgt && tgt.side === 'player' && tgt.def === 'refinery') return 'deliver';
-  /* Somewhere no ground unit can stand is a no-entry, not a move order that quietly fails. */
-  if (!_rtsInB(tx, tz) || _rtsBlocked(tx, tz)) return 'no';
+  /* Somewhere nothing selected can stand is a no-entry, not a move order that quietly fails -
+     asked in each unit's own domain, so open water is a move for a hovercraft or a hull and a
+     refusal for a tank (the order paths the same way: _rtsPathFor) */
+  if (!_rtsInB(tx, tz)) return 'no';
+  var stand = false;
+  for (i = 0; i < mine.length && !stand; i++) if (!_rtsBlocked(tx, tz, _rtsDomainOf(mine[i]))) stand = true;
+  if (!stand) return 'no';
   return U.attackMove ? 'amove' : 'move';
 }
 function _rtsDrawCursor(g, x, y, kind) {
@@ -286,9 +297,12 @@ function _rtsDrawMini() {
       g.fillRect(mx - 1.5, mz - 1.5, 3, 3);
     }
   }
-  /* STATIC over an enemy Jammer's field (core/jammer.js): the radar cannot read it */
+  /* STATIC over an enemy Jammer's field (core/jammer.js): the radar cannot read it - where the
+     radar reads at all. Under the unexplored shroud there is nothing to disturb, and a disc of
+     static there marked the army the Jammer was hiding from across the map. */
   var JF = G.jam && G.jam.enemy;
   for (i = 0; JF && i < JF.length; i++) {
+    if (!_rtsRadarStaticShown(G, JF[i])) continue;
     var jx = (JF[i].x / RTS_TILE + RTS_N / 2) * sc, jz = (JF[i].z / RTS_TILE + RTS_N / 2) * sc, jr = JF[i].r / RTS_TILE * sc;
     for (var jn = 0; jn < 90; jn++) {
       var ja = Math.random() * Math.PI * 2, jd = Math.sqrt(Math.random()) * jr, jv = (120 + Math.random() * 135) | 0;

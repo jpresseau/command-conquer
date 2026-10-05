@@ -406,6 +406,14 @@ function _rtsSyncSidebar(dt) {
     for (var di = 0; di < sel.length; di++) if (_rtsCanDeploy(sel[di])) { can = true; break; }
     if (dep.hidden === can) dep.hidden = !can;
   }
+  /* AND UNLOAD, the same way: shown while a selected transport has something aboard, since the
+     U key is the only other door and a finger has no U (core/transport.js _rtsUnloadSelected) */
+  var unl = document.getElementById('rtsUnloadBtn');
+  if (unl) {
+    var canU = false;
+    for (var ui2 = 0; ui2 < sel.length; ui2++) if (_rtsCanUnload(sel[ui2])) { canU = true; break; }
+    if (unl.hidden === canU) unl.hidden = !canU;
+  }
 
   var msg = document.getElementById('rtsMsg');
   msg.textContent = G.msgT > 0 ? (G.msg || '') : '';

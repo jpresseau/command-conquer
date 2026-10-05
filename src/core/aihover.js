@@ -42,6 +42,15 @@ function _rtsAIHoverSails(G, w) {
 }
 /* What to raid, and where to land for it: { h, beach, water } or null. Asked at most every few
    seconds - _rtsLandingSpot and a sea path are not free - and kept on G.ai for the spec to read. */
+/* HOME BY THE WATER, as it came. A plain move paths in the craft's own domain, which is the short
+   way - overland, across the player's half of the map, for a 280-hp hull the opponent then buys
+   again. The sea route from wherever it stands (from the beach, _rtsPath steps a blocked start
+   out to the nearest water); the hover path only when there is no sea route at all. */
+function _rtsAIHoverHome(hc, L) {
+  var p = _rtsPath(hc.x, hc.z, L.x, L.z, 'sea');
+  if (p && p.length) { hc.order = 'move'; hc.target = null; hc.hstate = null; hc.goal = { x: L.x, z: L.z }; hc.path = p; hc.pi = 0; }
+  else _rtsOrderMove(hc, L.x, L.z, false);
+}
 function _rtsAIHoverTarget() {
   var G = window._rtsG;
   if (G.ai.hovQ && G.t - G.ai.hovQ.t < 5 && (!G.ai.hovQ.v || !G.ai.hovQ.v.h.dead)) return G.ai.hovQ.v;
@@ -49,7 +58,7 @@ function _rtsAIHoverTarget() {
   for (var i = 0; i < G.ents.length; i++) {
     var h = G.ents[i];
     if (h.dead || h.side !== 'player' || h.type !== 'unit' || h.inside || !(rtsUnitDef(h.def) || {}).harvest) continue;
-    var beach = _rtsLandingSpot(h);
+    var beach = _rtsLandingSpot(h, RTS_AI_HOVER.near);
     if (!beach || Math.hypot(beach.x - h.x, beach.z - h.z) > RTS_AI_HOVER.near * RTS_TILE) continue;
     var w = _rtsNearestOpen(_rtsTX(beach.x), _rtsTX(beach.z), RTS_UNLOAD_REACH, 'sea');
     if (!w || !_rtsAIHoverSails(G, w)) continue;
@@ -116,13 +125,20 @@ function _rtsAIHoverTick(dt) {
     var e = G.ents[i];
     if (!e.dead && e.side === 'enemy' && e.type === 'unit' && e.def === 'hovercraft') hc = e;
   }
-  if (!hc) { st.s = 'rest'; return; }
+  if (!hc) { st.s = 'rest'; st.aim = null; return; }
+  /* BATTERED, IT GOES TO THE DEPOT FIRST (core/aimend.js): a raid in hand is called off and its
+     crew released, and the craft is not ordered home against the mend tick's order to the pad -
+     the two once traded orders every second, and the craft shuttled between them unmended */
+  if (hc.mend != null) {
+    if (st.s !== 'rest') { G.ents.forEach(function (u) { if (u.raid && !u.dead && u.order === 'board' && u.target === hc) { u.raid = 0; u.order = null; u.target = null; } }); st.s = 'rest'; st.t = G.t; st.crew = []; }
+    return;
+  }
   if (st.s === 'rest') {
     /* between raids it waits on its own water - not swept into a land attack wave, though the
        base's defence may still call on it (an attack order is left alone) */
     var home = _rtsAIHoverLaunch(G);
     if (home && hc.order !== 'attack' && Math.hypot(hc.x - home.x, hc.z - home.z) > RTS_TILE * 3 &&
-        !(hc.order === 'move' && hc.goal && Math.hypot(hc.goal.x - home.x, hc.goal.z - home.z) < RTS_TILE)) _rtsOrderMove(hc, home.x, home.z, false);
+        !(hc.order === 'move' && hc.goal && Math.hypot(hc.goal.x - home.x, hc.goal.z - home.z) < RTS_TILE)) _rtsAIHoverHome(hc, home);
     if (G.t - st.t < RTS_AI_HOVER.rest || !_rtsAIHoverTarget()) return;
     st.s = 'crew'; st.t = G.t;
   }
@@ -142,10 +158,27 @@ function _rtsAIHoverTick(dt) {
     G.ents.forEach(function (u) { if (!u.dead && u.raid && !u.inside && u.order === 'board' && u.target === hc) { u.raid = 0; u.order = null; u.target = null; } });   /* its own boarders, not the Paradrop Plane's */
     st.s = 'launch'; st.t = G.t;
   }
-  var L = _rtsAIHoverLaunch(G), aim = _rtsAIHoverTarget();
-  if (!L || !aim || G.t - st.t > RTS_AI_HOVER.sail) {               /* nothing left to raid, or lost */
+  /* THE AIM IS CHOSEN AT LAUNCH AND KEPT FOR THE SAIL. The search asks for water off the beach at
+     this instant, and on a falling tide the flats dry that water away in mid-channel: asked again
+     every second, the raid was called off there and the crew put down on a drying flat, far from
+     anything. The sail ends for a harvester gone (dead, or aboard something), a launch water
+     lost, or the clock - not for the tide. */
+  var L = _rtsAIHoverLaunch(G);
+  if (st.s === 'launch' && !st.aim) {
+    var v0 = _rtsAIHoverTarget();
+    st.aim = v0 ? { h: v0.h, beach: v0.beach, water: v0.water, hx: v0.h.x, hz: v0.h.z } : null;
+  }
+  var aim = st.aim;
+  if (!L || !aim || aim.h.dead || aim.h.inside || G.t - st.t > RTS_AI_HOVER.sail) {
     if (_rtsCargoCount(hc)) _rtsUnload(hc);
-    st.s = 'rest'; st.t = G.t; return;
+    st.s = 'rest'; st.t = G.t; st.aim = null; return;
+  }
+  /* the harvester works on while the craft sails: a beach is found again for where it is now,
+     once it has moved a few cells - and the old one kept where the tide offers none */
+  if (Math.hypot(aim.h.x - aim.hx, aim.h.z - aim.hz) > RTS_TILE * 3) {
+    aim.hx = aim.h.x; aim.hz = aim.h.z;
+    var nb = _rtsLandingSpot(aim.h, RTS_AI_HOVER.near), nw = nb && _rtsNearestOpen(_rtsTX(nb.x), _rtsTX(nb.z), RTS_UNLOAD_REACH, 'sea');
+    if (nb && nw && Math.hypot(nb.x - aim.h.x, nb.z - aim.h.z) <= RTS_AI_HOVER.near * RTS_TILE) { aim.beach = nb; aim.water = { x: _rtsWX(nw[0]), z: _rtsWX(nw[1]) }; }
   }
   if (st.s === 'launch') {
     if (Math.hypot(hc.x - L.x, hc.z - L.z) > RTS_TILE * 1.5) {
@@ -156,8 +189,8 @@ function _rtsAIHoverTick(dt) {
   }
   if (st.s === 'sail') {
     if (!_rtsCargoCount(hc)) {                                        /* ashore: home to wait */
-      _rtsOrderMove(hc, L.x, L.z, false);
-      st.s = 'rest'; st.t = G.t; return;
+      _rtsAIHoverHome(hc, L);
+      st.s = 'rest'; st.t = G.t; st.aim = null; return;
     }
     if (hc.order !== 'unload' || !hc.goal || Math.hypot(hc.goal.x - aim.beach.x, hc.goal.z - aim.beach.z) > RTS_TILE * 2) {
       hc.order = 'unload'; hc.target = null; hc.hstate = null;
@@ -165,7 +198,10 @@ function _rtsAIHoverTick(dt) {
       /* the sea path to the water off the beach, then the beach itself - the hull noses in */
       var p = _rtsPath(hc.x, hc.z, aim.water.x, aim.water.z, 'sea');
       hc.path = p ? p.concat([{ x: aim.beach.x, z: aim.beach.z }]) : null; hc.pi = 0;
-      if (!hc.path) { _rtsUnload(hc); }
+      /* no route at this tide - the channel has dried between here and the beach: wait for the
+         flood with the crew aboard, rather than put them into the sea where it stands; the sail
+         clock above decides when to give up */
+      if (!hc.path) { hc.order = null; hc.goal = null; }
     }
   }
 }
