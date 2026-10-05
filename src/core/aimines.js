@@ -33,7 +33,12 @@ function _rtsAISupport(S) {
 function _rtsAISupportBuy(S, key, worth) {
   var G = window._rtsG, d = rtsUnitDef(key);
   if (!d || _rtsAIOwned(key) >= 1) return false;
-  if (S.q && S.q.vehicle) return false;
+  /* its own production line free, and under the line's cap - one aircraft per pad, so many hulls
+     per yard - the same caps the weighted roll keeps (core/ai.js) */
+  var cat = d.kind === 'air' ? 'air' : d.kind === 'ship' ? 'ship' : 'vehicle';
+  if (S.q && S.q[cat]) return false;
+  if (cat === 'air' && !_rtsAIAirRoom()) return false;
+  if (cat === 'ship' && !_rtsAIFleetRoom()) return false;
   if (!_rtsCanQueue('enemy', key)) return false;
   if (!worth(G)) return false;
   if (rtsMoney(S) < _rtsAISpare(S) + _rtsCostOf('enemy', d)) return false;

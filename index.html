@@ -706,7 +706,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">946a346 · 2026-10-05</div>
+  <div id="rtsBuild" title="build">b7d0fec · 2026-10-05</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -17029,6 +17029,29 @@ function _rtsAIWantsVsAir(key, per) {
   }
   return have < Math.ceil(flyers / per);
 }
+/* The two caps above, as questions - asked by the weighted roll AND by the support purchases
+   (core/aimines.js), which used to skip them: one Airfield ended up holding a Paradrop Plane and a
+   Heavy Bomber, and the support plane then counted against the cap and starved the Sortie. */
+function _rtsAIAirRoom() {
+  var G = window._rtsG, pads = 0, air = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var pe = G.ents[i];
+    if (pe.dead || pe.side !== 'enemy') continue;
+    if (pe.type === 'struct' && !pe.building && !pe.selling && (rtsStructDef(pe.def) || {}).produces === 'air') pads++;
+    else if (pe.type === 'unit' && (rtsUnitDef(pe.def) || {}).kind === 'air') air++;
+  }
+  return air < pads;
+}
+function _rtsAIFleetRoom() {
+  var G = window._rtsG, yards = 0, hulls = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var se = G.ents[i];
+    if (se.dead || se.side !== 'enemy') continue;
+    if (se.type === 'struct' && !se.building && !se.selling && (rtsStructDef(se.def) || {}).produces === 'ship') yards++;
+    else if (se.type === 'unit' && (rtsUnitDef(se.def) || {}).sea) hulls++;
+  }
+  return yards > 0 && hulls < yards * RTS_AI.fleetPerYard;
+}
 function _rtsAIUnits(S) {
   var G = window._rtsG, harv = 0, i;
   for (i = 0; i < G.ents.length; i++) {
@@ -17073,33 +17096,13 @@ function _rtsAIUnits(S) {
        Deliberately on the AI's PURCHASE only. Capping what the player may own is a bigger
        change to the Helipad that has stood since the Attack Heli shipped, and it is not what
        an opponent building thirty-four Yaks is asking for. */
-    if (cat === 'air') {
-      var pads = 0, air = 0;
-      for (i = 0; i < G.ents.length; i++) {
-        var pe = G.ents[i];
-        if (pe.dead || pe.side !== 'enemy') continue;
-        if (pe.type === 'struct' && !pe.building && !pe.selling &&
-            (rtsStructDef(pe.def) || {}).produces === 'air') pads++;
-        else if (pe.type === 'unit' && (rtsUnitDef(pe.def) || {}).kind === 'air') air++;
-      }
-      if (air >= pads) continue;
-    }
+    if (cat === 'air' && !_rtsAIAirRoom()) continue;
     /* AS MANY HULLS AS THERE ARE YARDS TO BUILD THEM, times a small factor. Ships are their
        own production line and the opponent is rich late, so without a cap this is the
        thirty-four-Yak problem again in a domain the player may not even be contesting. A
        shipyard is not consumed by a hull the way a pad is by an aircraft, so the cap is a
        multiple rather than one-for-one. */
-    if (cat === 'ship') {
-      var yards = 0, hulls = 0;
-      for (i = 0; i < G.ents.length; i++) {
-        var se = G.ents[i];
-        if (se.dead || se.side !== 'enemy') continue;
-        if (se.type === 'struct' && !se.building && !se.selling &&
-            (rtsStructDef(se.def) || {}).produces === 'ship') yards++;
-        else if (se.type === 'unit' && (rtsUnitDef(se.def) || {}).sea) hulls++;
-      }
-      if (!yards || hulls >= yards * RTS_AI.fleetPerYard) continue;
-    }
+    if (cat === 'ship' && !_rtsAIFleetRoom()) continue;
     var list = RTS_AI.mix[cat], pool = [], total = 0;
     for (i = 0; i < list.length; i++) {
       if (rtsMoney(S) <= list[i].at) continue;
@@ -18315,7 +18318,12 @@ function _rtsAISupport(S) {
 function _rtsAISupportBuy(S, key, worth) {
   var G = window._rtsG, d = rtsUnitDef(key);
   if (!d || _rtsAIOwned(key) >= 1) return false;
-  if (S.q && S.q.vehicle) return false;
+  /* its own production line free, and under the line's cap - one aircraft per pad, so many hulls
+     per yard - the same caps the weighted roll keeps (core/ai.js) */
+  var cat = d.kind === 'air' ? 'air' : d.kind === 'ship' ? 'ship' : 'vehicle';
+  if (S.q && S.q[cat]) return false;
+  if (cat === 'air' && !_rtsAIAirRoom()) return false;
+  if (cat === 'ship' && !_rtsAIFleetRoom()) return false;
   if (!_rtsCanQueue('enemy', key)) return false;
   if (!worth(G)) return false;
   if (rtsMoney(S) < _rtsAISpare(S) + _rtsCostOf('enemy', d)) return false;
@@ -18753,8 +18761,9 @@ var RTS_BOMB = { n: 8, gap: 1, fall: 0.7, dmg: 90, rad: 1.3, lead: 5, crowd: 4, 
 
 /* the run: n bombs gap cells apart, centred on (x, z), along the line the bomber flies to it */
 function _rtsBombRun(e, x, z) {
-  var dx = x - e.x, dz = z - e.z, L = Math.hypot(dx, dz) || 1, step = RTS_BOMB.gap * RTS_TILE;
-  dx /= L; dz /= L;
+  var dx = x - e.x, dz = z - e.z, L = Math.hypot(dx, dz), step = RTS_BOMB.gap * RTS_TILE;
+  /* right over the aim there is no course to it: the line runs the way the bomber is heading */
+  if (L < RTS_TILE) { dx = Math.cos(e.rot); dz = Math.sin(e.rot); } else { dx /= L; dz /= L; }
   var half = (RTS_BOMB.n - 1) / 2 * step, out = half + RTS_BOMB.lead * RTS_TILE;
   e.run = { sx: x - dx * half, sz: z - dz * half, dx: dx, dz: dz, k: 0, tgt: e.target ? e.target.id : null };
   /* already past the start of the line: it lays only what is still ahead of it */
@@ -18800,7 +18809,8 @@ function _rtsBomberTick(e, dt, d) {
 }
 function _rtsBombDrop(e, x, z) {
   var G = window._rtsG;
-  (G.bombs || (G.bombs = [])).push({ x: x, z: z, y: e.alt || 16, t: RTS_BOMB.fall, side: e.side, from: e });
+  /* the bomber by id, not by reference: a save walks G.bombs, and a dead bomber is a cycle */
+  (G.bombs || (G.bombs = [])).push({ x: x, z: z, y: e.alt || 16, t: RTS_BOMB.fall, side: e.side, from: e.id });
 }
 /* bombs in the air: falling, then bursting where they land */
 function _rtsBombsTick(dt) {
@@ -18813,9 +18823,22 @@ function _rtsBombsTick(dt) {
     if (b.t > 0) continue;
     B.splice(i, 1);
     /* `from` is the bomber: a splash spares its source, and the bomber turning for home hangs
-       over the tail of its own line as the last bombs burst */
-    _rtsSplash(b.x, b.z, RTS_BOMB.rad * RTS_TILE, RTS_BOMB.dmg, b.side, 1, b.from && !b.from.dead ? b.from : null);
-    _rtsCombatAnim(RTS_BOMB.dmg, b.x, b.z, 1.6, null);
+       over the tail of its own line as the last bombs burst. The difficulty's FirepowerBias
+       applies, as it does to every shot (combat.js). */
+    var bomber = G.byId[b.from], dmg = RTS_BOMB.dmg * _rtsBias(b.side).fire, rad = RTS_BOMB.rad * RTS_TILE;
+    if (bomber && bomber.dead) bomber = null;
+    _rtsSplash(b.x, b.z, rad, dmg, b.side, 1, bomber);
+    /* A BURST IS AN ATTACK. A splash attributes itself to nobody (see _rtsSplash), so a carpet
+       across a base raised no "base under attack", woke no defence and tripped no trigger. The
+       buildings under it are told, as a shell would tell them. */
+    for (var k = 0, said = {}; k < G.ents.length; k++) {
+      var s = G.ents[k];
+      if (s.dead || s.type !== 'struct' || s.side === b.side || Math.hypot(s.x - b.x, s.z - b.z) > rad) continue;
+      if (!said[s.side]) { said[s.side] = 1; _rtsAttacked(s.side); }
+      if (bomber) _rtsBaseIsAttacked(s, bomber);
+      _rtsTrigNotify('attacked', s, null);
+    }
+    _rtsCombatAnim(dmg, b.x, b.z, 1.6, null);
     if (typeof _rtsSfx === 'function') _rtsSfx('boom', b.x, b.z);
   }
 }
