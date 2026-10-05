@@ -115,6 +115,62 @@ waiting to be placed needs a yard to come out of, so it goes too. Without this, 
 barracks left the rifle squad inside it still ticking toward completion and then walking out
 of a building that no longer exists.
 
+### What a selected unit is for (ui/selhint.js)
+
+The orders were there and nothing on the field said so: the build tooltip was the only place, read
+once, before the unit existed. Three things now come off the unit's own rules:
+- **The tip.** The first selection of a kind of unit with a verb, once a match (`G.tipSeen`), says
+  what to do with it on the message line, in the words the device can obey (right-click and keys at
+  a desk; hold, AMOVE and the sidebar's buttons on a phone). It waits rather than talk over a fresh
+  message, and the readout keeps it as its hover title. One tip per verb flag (`RTS_VERB_TIPS`); a
+  unit resolves to its most particular one (`RTS_VERB_ORDER`: a Paradrop Plane `carries` too, but
+  its tip is the drop's).
+- **The state.** The readout adds what the order turns on: mines left, a bomber loaded, loading,
+  going home or on its run (and a run waiting), what a drone circles or shadows, men aboard.
+- **The button.** DEPLOY reads LAY MINE for a layer or a Mine Boat, BRIDGE for the Bridge Layer.
+
+`unit/selhint` holds it from both ends: every unarmed unit has a verb and a tip at a desk and on a
+phone, every tip names a flag some unit carries, no phone tip names a key or a click, and every key
+a desk tip names is one `ui/keys.js` handles. `e2e/deploy` taps LAY MINE on a phone profile.
+
+### An order that becomes something else says so
+
+A sweep of every new unit's verbs, on a desk and on a phone, found orders the game acknowledged
+(the order sound, the ping, a cursor that promised it) and then quietly did something else. Each
+now says what happened, and the cursor tells the truth before the click:
+- **Boarding.** A refused board says why: full, the wrong kind (`_rtsBoardWhyNot`), or a craft
+  parked further than its breach from any ground a squad can stand on (`_rtsBoardReachable`),
+  which left the squad on the shore in order `'board'` for good. Over your own transport with
+  something that can get in, the cursor is **board**; a loaded craft over dry ground, **unload**.
+- **Unarmed.** A Repair Truck, a Sweeper or an empty transport sent at an enemy is told it is
+  unarmed and is moving up to it; the cursor is the reticle only for a job on the target
+  (`_rtsJobOn`: capture, theft, a loaded transport's drop), a move for a drone (it shadows).
+- **Hulls.** A hull sent at a building no water lies within its gun's reach of is told so, and
+  the cursor refuses it (`_rtsHullReaches`). A deep-water hull on a dried flat is aground until
+  the flood (`_rtsAground`): told when ordered, shown in the readout, refused by the cursor. A
+  loaded craft with no route to the shore it was sent at puts its load down where it stands, as
+  `_rtsOrderUnloadAt`'s comment always promised (`_rtsLandAt`); a dried flat is ground for that.
+- **Aircraft held** by an empty rack, a pad turn or a storm (`_rtsAirHeld`) keep the order just
+  given (`e.airNext`) and fly it at the first free tick (`_rtsAirResume`), told so. The radar's
+  order is the second door to all of this (`_rtsKeepHeld`, `_rtsLandAt`, `_rtsBomberSend`).
+- **The Bridge Layer** says why there is no span, read along the way it faces
+  (`_rtsBridgeWhyNot`): no water ahead, too far, along the shore, the far bank blocked.
+- **A long press on touch** picks what the finger went down on, not what is under it 350 ms later
+  (a gunship has flown on). With a weapon armed, a steady finger fires it, as placement places.
+- **Weather weapons.** One whose building is destroyed while armed is disarmed and named
+  (`_rtsSuperStale`): left armed it ate every later click. The ready line names the button
+  (`_rtsSuperReadyLine`); armed, a banner says what the click does and the cursor traces the
+  ground it will cover (`'super'`, `_rtsSuperRing`). A Thunderhead says when it grounds your
+  aircraft, and when it passes.
+- **The tide line** under the radar says what the tide does next and when (`_rtsTideLine`), and a
+  daily's pill shows its clock. On a phone, the first build of each kind says what it is
+  (`_rtsBuildDescSay`), in a phone's words (`_rtsDescFor`): the tile's title is a hover a phone
+  never shows. The help line names A, D and U; the Spotter's and Jammer's descriptions name the
+  counter to a Jammer.
+
+`unit/refusals` and `unit/fieldhints` hold these; `e2e/touch` presses a gunship that flies on,
+and `e2e/jammer` reads the cover traced on the radar.
+
 ### One answer to "why can't I build this?"
 
 `Who_Can_Build_Me` is one question, and it had three implementations here: `_rtsCanQueue`

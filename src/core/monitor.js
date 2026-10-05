@@ -34,6 +34,24 @@ function _rtsShoreReach(b) {
   return !!w && Math.hypot(_rtsWX(w[0]) - b.x, _rtsWX(w[1]) - b.z) / RTS_TILE <= reach;
 }
 
+/* CAN THIS HULL'S GUN REACH IT FROM ITS WATER? Any hull, in its own domain and by its own gun -
+   the test above, for the player's order: a Monitor sent at a building too far inland parked at
+   the nearest water with its attack order and never fired, and nothing said why. A building's
+   half-width is reach too, since the gun reaches its edge. */
+function _rtsHullReaches(u, b) {
+  var d = rtsUnitDef(u.def) || {}, w = d.weapon && RTS_WEAPONS[d.weapon];
+  if (!d.sea || !w) return true;
+  var sd = b.type === 'struct' ? rtsStructDef(b.def) : null;
+  var reach = w.range / RTS_TILE - 1 + (sd ? Math.max(sd.w, sd.h) / 2 : 0);
+  var o = _rtsNearestOpen(_rtsTX(b.x), _rtsTX(b.z), Math.ceil(reach), _rtsDomainOf(u));
+  return !!o && Math.hypot(_rtsWX(o[0]) - b.x, _rtsWX(o[1]) - b.z) / RTS_TILE <= reach;
+}
+/* Is this hull aground - a deep-water hull on a flat the tide has dried (core/move.js holds it
+   there until the flood)? The Monitor sits on the flats by design and is never aground. */
+function _rtsAground(u) {
+  var G = window._rtsG, i = _rtsIdx(_rtsTX(u.x), _rtsTX(u.z));
+  return _rtsDomainOf(u) === 'sea' && !!(G.tideDry && G.tideDry[i]);
+}
 /* The player's building nearest the Monitor that it can shell from water: one with an open
    cell of the Monitor's water within a cell of its reach. */
 function _rtsAIMonitorTarget(u) {

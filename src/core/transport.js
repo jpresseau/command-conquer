@@ -48,6 +48,40 @@ function _rtsCanBoard(inf, t) {
   var cap = (rtsUnitDef(t.def) || {}).carries || 0;
   return cap > 0 && _rtsCargoCount(t) < cap;
 }
+/* THE PLAYER'S AIMED DROP: a route to the spot, go - 'route'; none (aground beside the beach, on
+   other water), put them down where it stands, as U would - 'here', or 'none' when nothing could
+   get out. */
+function _rtsLandAt(t, x, z) {
+  if (_rtsOrderUnloadAt(t, x, z)) return 'route';
+  return _rtsUnloadNow(t) ? 'here' : 'none';
+}
+/* WHY ONE CANNOT GET IN, in the player's words - or null when it can, or when it is nothing a
+   player would have sent aboard (a ship, an aircraft). A refused board order became a move to
+   the craft in silence, and the men parked under a full Hovercraft with no way to tell why. */
+function _rtsBoardWhyNot(inf, t) {
+  if (_rtsCanBoard(inf, t) || !inf || !t || inf === t) return null;
+  var pd = rtsUnitDef(inf.def) || {}, td = rtsUnitDef(t.def) || {};
+  if (pd.sea || pd.air || inf.side !== t.side) return null;
+  if (_rtsIsTransport(inf)) return 'cannot carry another transport';
+  var takes = _rtsTakes(t);
+  if (takes.indexOf(pd.kind) < 0) return 'carries ' + (takes.length === 1 ? (takes[0] === 'vehicle' ? 'vehicles' : takes[0]) + ' only' : takes.join(' and '));
+  if (_rtsCargoCount(t) >= (td.carries || 0)) return 'is full';
+  return null;
+}
+/* Can anything on foot reach it? A craft afloat or an aircraft takes its boarders from within
+   the hull's breach (core/units.js, three cells): parked further than that from any ground a
+   squad can stand on - a Skylift over a lake, a plane over the sea - the squad stood on the
+   shore in order 'board' for good, told 'Loading up.' */
+function _rtsBoardReachable(t) {
+  var td = rtsUnitDef(t.def) || {};
+  if (!(td.sea || td.air || td.hover)) return true;
+  var tx = _rtsTX(t.x), tz = _rtsTX(t.z), R = 3;
+  for (var dz = -R; dz <= R; dz++) for (var dx = -R; dx <= R; dx++) {
+    if (Math.hypot(dx, dz) > R - 0.3 || !_rtsInB(tx + dx, tz + dz)) continue;
+    if (!_rtsBlocked(tx + dx, tz + dz, null)) return true;
+  }
+  return false;
+}
 function _rtsBoard(inf, t) {
   if (!_rtsCanBoard(inf, t)) return false;
   var G = window._rtsG;

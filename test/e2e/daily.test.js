@@ -43,6 +43,25 @@ var S = new Suite('daily');
   S.ok('a real click opens today\'s battle: its seed, its army, its difficulty', !!inside && inside.seed === before.spec.seed &&
        inside.army === before.spec.army && inside.diff === before.spec.diff, JSON.stringify(inside) + ' for ' + JSON.stringify(before.spec));
 
+  /* ---------- on the clock ---------- */
+  /* the daily is scored on the clock, and nothing showed it until the end card: the pill carries
+     it (ui/sidebar.js), a saved daily says it is the daily, and the radar says what the tide does
+     next (core/tide.js) */
+  var clock = await p.evaluate(function () {
+    var G = window._rtsG, t0 = G.t;
+    G.t = 75; _rtsSyncSidebar(0);
+    var pill = document.getElementById('rtsDifLbl').textContent, tide = document.getElementById('rtsTide');
+    var tideTxt = tide && !tide.hidden ? tide.textContent : null;
+    rtsSaveGame();
+    var info = rtsSaveInfo();
+    G.t = t0;
+    return { pill: pill, tide: tideTxt, flats: _rtsTideAny(G), desc: info && info.desc };
+  });
+  S.ok('in the battle the pill shows the daily\'s clock, and a saved daily says it is the daily', clock.pill === 'DAILY 1:15' && /^Daily — /.test(clock.desc || ''),
+       JSON.stringify({ pill: clock.pill, desc: clock.desc }));
+  S.ok('...and the radar says what the tide does next, on a map with flats', clock.flats ? /^TIDE: (ebbing - low in|flats dry in) \d+:\d\d$/.test(clock.tide || '') : clock.tide === null,
+       JSON.stringify({ flats: clock.flats, tide: clock.tide }));
+
   /* ---------- the result ---------- */
   var card = await p.evaluate(function () {
     var G = window._rtsG;

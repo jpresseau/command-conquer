@@ -38,7 +38,22 @@ var S = new Suite('jammer');
       for (var q = 0; q < px.length; q += 4) { seen[px[q] + ',' + px[q + 1] + ',' + px[q + 2]] = 1; hi = Math.max(hi, px[q], px[q + 1], px[q + 2]); }
       return dark ? hi : Object.keys(seen).length;
     }
-    return { none: levels(null), theirs: levels('enemy'), mine: levels('player'), dark: levels(null, true), darkTheirs: levels('enemy', true) };
+    /* the player's own cover, traced: points round the field's edge that come out the radar's blue */
+    function edge(side) {
+      G.jam = { player: [], enemy: [] };
+      if (side) G.jam[side].push({ x: _rtsWX(c[0]), z: _rtsWX(c[1]), r: RTS_JAM.r * RTS_TILE });
+      _rtsDrawMini();
+      var mini = document.getElementById('rtsMini'), mg = mini.getContext('2d'), k = mini.width / RTS_N, blue = 0;
+      for (var a = 0; a < 24; a++) {
+        var px = Math.round((c[0] + 0.5 + Math.cos(a / 24 * Math.PI * 2) * RTS_JAM.r) * k), py = Math.round((c[1] + 0.5 + Math.sin(a / 24 * Math.PI * 2) * RTS_JAM.r) * k);
+        var d = mg.getImageData(px - 1, py - 1, 3, 3).data, hit = false;
+        for (var q = 0; q < d.length; q += 4) if (d[q + 2] > 180 && d[q] < 150) hit = true;
+        if (hit) blue++;
+      }
+      return blue;
+    }
+    return { none: levels(null), theirs: levels('enemy'), mine: levels('player'), dark: levels(null, true), darkTheirs: levels('enemy', true),
+             edgeMine: edge('player'), edgeNone: edge(null), edgeTheirs: edge('enemy') };
   });
   S.ok('the radar over a parked enemy Jammer\'s field is noise, where the same ground drew a few colours', o.theirs >= o.none * 2 && o.theirs > 15,
        o.theirs + ' colours against ' + o.none);
@@ -49,6 +64,9 @@ var S = new Suite('jammer');
      explored ground reaches 70; a shroud with neither stays at the seams' 30 or so. */
   S.ok('...nor an enemy field over ground the player has not explored: the shroud stays black, and marks no army', o.dark <= 40 && o.darkTheirs <= 40,
        'brightest ' + o.darkTheirs + ' with the field, ' + o.dark + ' without, under the shroud');
+
+  S.ok('the player\'s own Jammer cover is traced round its edge on the radar in blue - and nothing is, without one or for the enemy\'s',
+       o.edgeMine >= 16 && o.edgeNone === 0 && o.edgeTheirs === 0, o.edgeMine + ' of 24 points round the edge blue; ' + o.edgeNone + ' with no field, ' + o.edgeTheirs + ' for the enemy\'s');
 
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
   await g.close();

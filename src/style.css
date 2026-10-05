@@ -221,6 +221,10 @@
 #rcgRts #rtsMini{width:100%;height:auto;display:block;cursor:crosshair;image-rendering:pixelated;border-radius:2px}
 #rcgRts .rts-radar .rlbl{position:absolute;left:6px;top:5px;font-size:8.5px;letter-spacing:2px;
   color:#7fd0ff;opacity:.5;pointer-events:none}
+/* the tide's next turn, along the radar's foot (core/tide.js _rtsTideLine) */
+#rcgRts .rts-radar .tlbl{position:absolute;left:6px;right:6px;bottom:5px;font-size:8.5px;letter-spacing:.5px;
+  color:#9fd0ff;opacity:.8;pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#rcgRts .rts-radar .tlbl[hidden]{display:none}
 
 /* tabs
    WRAP, do not overflow. Five tabs at their natural width need about 220px and the sidebar is

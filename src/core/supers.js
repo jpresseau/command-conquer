@@ -32,6 +32,14 @@ function _rtsSuperSources(side) {
 /* The ready line and the arm line, in the device's own verb: 'click' at a desk, 'tap' on a phone
    (ui/sidebar.js _rtsTouchUI). The first-wave weather copied the older supers' wording, and the
    one instruction on a phone's screen named an input it does not have. */
+/* THE READY LINE NAMES THE BUTTON. A click on the map fires only once the button is pressed, and
+   "click where the fog should fall" on its own had the player click the map, lay nothing and lose
+   the selection. The arm line, said when the button is pressed, keeps the bare hint. */
+function _rtsSuperReadyLine(sup) {
+  var h = _rtsSuperHint(sup), at = h.indexOf('— ');
+  if (sup.auto || at < 0) return h;
+  return h.slice(0, at + 2) + 'press ' + sup.icon + ' ' + sup.name + ', then ' + h.charAt(at + 2).toLowerCase() + h.slice(at + 3);
+}
 function _rtsSuperHint(sup) {
   var h = (sup && sup.hint) || '';
   return (typeof _rtsTouchUI === 'function' && _rtsTouchUI()) ? h.replace(/\bclick\b/g, 'tap') : h;
@@ -56,7 +64,7 @@ function _rtsSupersTick(dt) {
       st.t = sup.charge;
       st.ready = true;
       if (side === 'player') {
-        if (typeof _rtsSay === 'function') _rtsSay(_rtsSuperHint(sup));
+        if (typeof _rtsSay === 'function') _rtsSay(_rtsSuperReadyLine(sup));
       }
       /* GPS launches itself; see the note on its def. */
       if (sup.auto) _rtsSuperFire(side, k, 0, 0);

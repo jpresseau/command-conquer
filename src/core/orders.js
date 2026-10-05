@@ -22,7 +22,7 @@ function _rtsHoldSelected() {
     var u = G.sel[i];
     if (!u || u.dead || u.side !== 'player' || u.type !== 'unit') continue;
     if ((rtsUnitDef(u.def) || {}).harvest) continue;
-    u.order = 'hold'; u.path = null; u.goal = null; u.susp = null; held++;
+    u.order = 'hold'; u.path = null; u.goal = null; u.susp = null; u.bombNext = null; u.airNext = null; held++;   /* and an aircraft's waiting order: core/move.js, core/bomber.js */
   }
   return held;
 }
@@ -54,8 +54,10 @@ function _rtsOrderUnloadAt(t, x, z) {
   t.order = 'unload'; t.target = null; t.hstate = null;
   t.goal = { x:x, z:z };
   t.path = _rtsPathFor(t, x, z); t.pi = 0;
-  /* No route at all - unload where it stands, which is what the player asked for as nearly as
-     it can be done, and what the U key would have done anyway. */
+  /* No route at all: refused, and the caller decides. The player's click puts the load down where
+     the craft stands, as the U key would (core/transport.js _rtsLandAt); the opponent's plans
+     stand down (core/paradrop.js, core/missions.js). This comment once promised the first while
+     the code did neither, and a craft aground beside its beach took the click in silence. */
   if (!t.path) { t.order = null; return false; }
   return true;
 }

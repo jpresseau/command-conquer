@@ -22,6 +22,8 @@
 var RTS_JAM = { r: 4, close: 2, park: 2, fired: 3, digIn: 2, every: 2 };
 
 function _rtsJams(u) { return !!(rtsUnitDef(u.def) || {}).jams; }
+/* Is this Jammer's field up - parked long enough? (what _rtsJamTick puts in G.jam) */
+function _rtsJamUp(u) { return !!u && !u.dead && !u.inside && _rtsJams(u) && u.jamT >= RTS_JAM.park; }
 function _rtsJamTick(dt) {
   var G = window._rtsG, J = { player: [], enemy: [] };
   for (var i = 0; i < G.ents.length; i++) {

@@ -15,13 +15,26 @@
    Rebuilt only when the SET changes, not every tick: the bar is a style update on a button
    that stays put, and replacing the innerHTML ten times a second would drop a click that
    landed between two frames of it. */
+/* AN ARMED WEAPON WHOSE BUILDING IS GONE is disarmed, and the player told. Left armed, every later
+   click on the map was a shot that could not be fired ("Cannot fire there."), so nothing could be
+   selected; its button had gone with the building, and on a phone there is no Esc. */
+function _rtsSuperStale(have) {
+  var U = window._rtsUI;
+  if (!U || !U.superArm || (have[U.superArm] && _rtsSuperReady('player', U.superArm))) return false;
+  var lost = _rtsSuperDefOf(U.superArm);
+  U.superArm = null; U.superSig = null;
+  _rtsSay((lost ? lost.super.name + ' lost - its ' + lost.name : 'The weapon lost - its building') + ' is gone.');
+  return true;
+}
 function _rtsSuperRow() {
   var G = window._rtsG, U = window._rtsUI;
-  var el = document.getElementById('rtsSupers');
-  if (!el || !G) return;
+  if (!G || !U) return;
   var have = _rtsSuperSources('player'), keys = [], k;
   for (k in have) keys.push(k);
   keys.sort();
+  _rtsSuperStale(have);
+  var el = document.getElementById('rtsSupers');
+  if (!el) return;
 
   var sig = keys.join(',');
   if (sig !== U.superSig) {

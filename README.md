@@ -29,10 +29,17 @@ battle is there in both.
 | Left-drag | Select your units |
 | Left-click | Select one unit or building |
 | Right-click | Context order — enemy: attack · ore: harvest · ground: move |
-| `A` + right-click | Attack-move (engage anything on the way) |
+| `A` + right-click | Attack-move (engage anything on the way) · with Heavy Bombers: carpet that spot |
+| `D` / the sidebar's button | Deploy: the Mobile Yard sets down, a layer lays a mine, the Bridge Layer spans the gap (the button says which) |
+| `U` / UNLOAD | Put a transport's load down where it stands |
+| `S` | Hold position |
 | `WASD` / arrows | Pan the camera (screen edges work too) |
 | Mouse wheel | Zoom |
 | `Esc` | Leave the battle |
+
+The first time a match selects a unit with an order of its own - a drone, a bomber, a layer, a
+transport - the message line says how to give it, in a phone's words on a phone, and the
+selection readout shows what the order needs: mines left, bombs loaded or loading, men aboard.
 
 ## How it plays
 

@@ -272,7 +272,7 @@ function rtsSaveGame() {
          for this battle only, its result on the end card - rather than an ordinary battle that
          wrote the day's army over the player's stored preference. */
       daily:window._RTS_DAILY || null,
-      desc:(RTS_DIFF[G.diff] ? RTS_DIFF[G.diff].name : G.diff) + ' — '
+      desc:(window._RTS_DAILY ? 'Daily — ' : '') + (RTS_DIFF[G.diff] ? RTS_DIFF[G.diff].name : G.diff) + ' — '
         + mins + ':' + (secs < 10 ? '0' : '') + secs
         + ' — ' + G.ents.filter(function (e) { return !e.dead && e.side === 'player'; }).length + ' units and buildings' };
   } catch (e) {
