@@ -19,6 +19,10 @@ var R3D_RING_UNIT = 1.25;    /* a unit's ring, as a multiple of its radius */
 
 /* The house's selection colour: the green and red the HUD always drew its brackets in. */
 var R3D_RING_COL = { player: [0.557, 0.941, 0.478], enemy: [1.0, 0.541, 0.478] };
+/* A PARKED JAMMER'S COVER, ringed in the radar's blue round a selected one of the player's: the
+   field hid units within RTS_JAM.r cells and nothing showed where that was, or that it was up,
+   so a column could not be put inside it (core/jammer.js; the radar traces it too, ui/hud.js) */
+var R3D_RING_FIELD = [0.369, 0.659, 1.0];
 
 function _r3dRingVS() {
   return 'attribute vec3 aP; attribute vec4 aL; attribute vec4 aK;' +
@@ -65,7 +69,7 @@ function _r3dRingQuad(a, o, cx, cz, hx, hz, box, c) {
 
 /* The rings of everything selected that the player can see, into R3.ringA; how many. */
 function _r3dRingBuild(G, R3) {
-  var sel = G.sel || [], n = 0, need = sel.length * 6 * R3D_RING_F;
+  var sel = G.sel || [], n = 0, need = sel.length * 2 * 6 * R3D_RING_F;      /* two each: a Jammer's cover */
   if (!R3.ringA || R3.ringA.length < need) R3.ringA = new Float32Array(Math.max(need, 64 * 6 * R3D_RING_F));
   for (var i = 0; i < sel.length; i++) {
     var e = sel[i];
@@ -78,6 +82,11 @@ function _r3dRingBuild(G, R3) {
     } else {
       var r = (rtsUnitDef(e.def).r || 1.2) * R3D_RING_UNIT;
       _r3dRingQuad(R3.ringA, o, e.x, e.z, r, r, 0, c);
+      if (e.side === 'player' && _rtsJamUp(e)) {
+        n++;
+        var fr = RTS_JAM.r * RTS_TILE;
+        _r3dRingQuad(R3.ringA, n * 6 * R3D_RING_F, e.x, e.z, fr, fr, 0, R3D_RING_FIELD);
+      }
     }
     n++;
   }

@@ -47,7 +47,7 @@ function _rtsFireFogBank(side, tx, tz) {
 }
 function _rtsFireThunder(side, tx, tz) {
   if (!_rtsWxCall(side, 'storm', tx, tz, RTS_THUNDER.r, RTS_THUNDER.time)) return false;
-  _rtsSay(side === 'player' ? 'Thunderhead breaking. Nothing flies in it.' : 'The enemy has called a thunderstorm down on us.');
+  _rtsSay(side === 'player' ? 'Thunderhead breaking. No armed aircraft flies in it, yours included.' : 'The enemy has called a thunderstorm down on us.');
   if (typeof _rtsSfx === 'function') _rtsSfx('rocket');
   return true;
 }
@@ -89,7 +89,11 @@ function _rtsWxTick(dt) {
   for (i = W.length - 1; i >= 0; i--) {
     var c = W[i];
     c.t -= dt;
-    if (c.t <= 0) { W.splice(i, 1); G.visDirty = 1; continue; }
+    if (c.t <= 0) {
+      W.splice(i, 1); G.visDirty = 1;
+      if (c.heldPlayer) _rtsSay('The thunderhead has passed - aircraft can fly.', 5);   /* as the sky's storm says (core/skyplay.js) */
+      continue;
+    }
     if (c.kind !== 'storm') continue;
     c.boltT -= dt;
     if (c.boltT > 0) continue;

@@ -13,6 +13,23 @@ function _rtsRearmPad(e) {
   }
   return best;
 }
+/* IS THE AIRCRAFT TICK HOLDING IT - an empty rack, a pad turn, a storm? While it is, the tick
+   below owns the aircraft: on the way home it puts the route to the pad in place of whatever it
+   was sent to do, and it clears the target when the rack is full - so a move given to one flying
+   home, and any attack given to one held at all, was lost after the order sound had said it was
+   given. The player's order is kept (e.airNext, ui/select.js) and given again by _rtsAirResume
+   at the first tick it is free; a bomber keeps its own (core/bomber.js e.bombNext). */
+function _rtsAirHeld(e, d) {
+  return !!(e.air && ((d.weapon && !(e.ammo > 0)) || e.rearming > 0 || _rtsStormGrounds(e, d)));
+}
+function _rtsAirResume(e) {
+  var n = e.airNext;
+  e.airNext = null;
+  if (!n) return;
+  if (n.id != null) { var t = window._rtsG.byId[n.id]; if (t && !t.dead) _rtsOrderAttack(e, t); }
+  else if (n.unload) _rtsOrderUnloadAt(e, n.x, n.z);
+  else _rtsOrderMove(e, n.x, n.z, !!n.am);
+}
 function _rtsAirTick(e, dt, d) {
   if (!e.air) return false;
   /* topping up on the pad */

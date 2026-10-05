@@ -110,7 +110,36 @@ function _rtsBoxSelect(dg) {
    own transport -> get in, enemy -> attack, scrap -> harvest, own refinery -> unload,
    ground -> move. `hit0`, when given, is what was under the cursor when the button went down
    (ui/navigate.js _rtsGrabClick); something it named that has died since is just its ground. */
+/* THE CONTEXT ORDER, and an aircraft the air tick is holding keeps it (core/move.js _rtsAirHeld):
+   what the order paths below gave it - an attack, a move, an aimed drop - is kept in e.airNext
+   and given again the first tick it is free, and the player is told it is waiting. */
 function _rtsRightClick(mx, my, hit0) {
+  var G = window._rtsG, sel0 = (G && G.sel || []).slice();
+  _rtsKeepHeld(sel0, true);
+  _rtsRightClickNow(mx, my, hit0);
+  _rtsKeepHeld(sel0, false);
+}
+/* before (clear): what any of these were keeping is replaced; after: what the order just gave a
+   held aircraft is kept. The radar's order is the other door (ui/input.js). */
+function _rtsKeepHeld(sel0, clear) {
+  var kept = 0, storm = 0, i;
+  if (clear) { for (i = 0; i < sel0.length; i++) if (sel0[i]) sel0[i].airNext = null; return; }
+  for (i = 0; i < sel0.length; i++) {
+    var u = sel0[i], d = u && rtsUnitDef(u.def);
+    if (!u || u.dead || u.inside || u.side !== 'player' || u.type !== 'unit' || !d || d.carpets || !_rtsAirHeld(u, d)) continue;
+    if (u.order === 'attack' && u.target && !u.target.dead) u.airNext = { id: u.target.id };
+    else if ((u.order === 'move' || u.order === 'amove' || u.order === 'unload') && u.goal) u.airNext = { x: u.goal.x, z: u.goal.z, am: u.order === 'amove', unload: u.order === 'unload' };
+    else continue;
+    kept++;
+    if (_rtsStormGrounds(u, d)) storm++;
+  }
+  if (kept) _rtsSay((kept === 1 ? 'It goes' : kept + ' aircraft go') + ' once ' + (storm === kept ? 'the storm has passed.' : 'loaded.'));
+  /* A HULL AGROUND on a dried flat takes no order until the flood (core/move.js): the order sound
+     and the ping said it was given, and the ship stayed put - say why */
+  var G = window._rtsG, ag = sel0.filter(function (e) { return e && !e.dead && e.side === 'player' && e.type === 'unit' && _rtsAground(e) && e.landedT !== G.t; });
+  if (ag.length && !kept) _rtsSay((ag.length === 1 ? 'The ' + rtsUnitDef(ag[0].def).name + ' is' : ag.length + ' ships are') + ' aground - afloat again on the flood.');
+}
+function _rtsRightClickNow(mx, my, hit0) {
   var G = window._rtsG, U = window._rtsUI;
   if (U.place) { U.place = null; _rtsGhostHide(); return; }
   var hit = hit0 !== undefined ? hit0 : _rtsPickAt(mx, my);
@@ -120,6 +149,7 @@ function _rtsRightClick(mx, my, hit0) {
   for (i = 0; i < G.sel.length; i++) if (G.sel[i].side === 'player' && G.sel[i].type === 'unit') mine.push(G.sel[i]);
   /* a new order replaces one a bomber was keeping for when it is loaded (core/bomber.js) */
   for (i = 0; i < mine.length; i++) mine[i].bombNext = null;
+  var boardWhy = null;                      /* why nobody got into the transport clicked, if so */
   /* A SELECTED PRODUCTION BUILDING TAKES THE ORDER AS A RALLY POINT. This used to be the line
      that returned: `mine` holds units only, so with a war factory selected the right-click -
      and the touch hold, which comes through here too - reached the end of the function and did
@@ -151,11 +181,11 @@ function _rtsRightClick(mx, my, hit0) {
      for the rest of the match. Calling _rtsOrderBoard by hand in the same match loaded it
      immediately - the transport worked, the one route to it did not. */
   if (tgt && tgt.type === 'unit' && !tgt.dead && _rtsIsTransport(tgt)) {
-    var got = 0, rest = [];
+    var got = 0, rest = [], why = null, reach = _rtsBoardReachable(tgt);
     for (i = 0; i < mine.length; i++) {
       var bu = mine[i];
-      if (bu !== tgt && _rtsCanBoard(bu, tgt) && _rtsOrderBoard(bu, tgt)) got++;
-      else rest.push(bu);
+      if (reach && bu !== tgt && _rtsCanBoard(bu, tgt) && _rtsOrderBoard(bu, tgt)) got++;
+      else { rest.push(bu); why = why || (reach ? _rtsBoardWhyNot(bu, tgt) : (bu !== tgt && _rtsCanBoard(bu, tgt) ? 'is too far from the shore to board - bring it in' : null)); }
     }
     if (got) {
       /* Whatever cannot get in - the transport itself, a full hold, the wrong kind - still gets
@@ -169,7 +199,8 @@ function _rtsRightClick(mx, my, hit0) {
       return;
     }
     /* Nobody could board - a full hold, or a group of tanks at an APC. Fall through, so the
-       click still means "go there" instead of meaning nothing. */
+       click still means "go there" instead of meaning nothing - and say why it is not more. */
+    if (why) boardWhy = 'The ' + (rtsUnitDef(tgt.def) || {}).name + ' ' + why + '.';
   }
   if (tgt && tgt.side === 'enemy') {
     /* An engineer sent at an enemy BUILDING captures it rather than attacking it - it has no
@@ -178,7 +209,7 @@ function _rtsRightClick(mx, my, hit0) {
     /* Specialists sent at an enemy BUILDING do their own job instead of attacking it. The
        engineer and the thief have no weapon at all, so an attack order would be a walk followed
        by standing there; the Commando has pistols but her C4 is the reason to send her. */
-    var capped = 0, special = 0, drops = 0, cant = 0, queued = 0, shadow = 0;
+    var capped = 0, special = 0, drops = 0, cant = 0, queued = 0, shadow = 0, bare = 0, inland = 0;
     for (i = 0; i < mine.length; i++) {
       var mu = mine[i], md = rtsUnitDef(mu.def), job = null;
       if (tgt.type === 'struct') {
@@ -204,9 +235,12 @@ function _rtsRightClick(mx, my, hit0) {
       else if (md.orbits && tgt.type === 'unit') { _rtsDroneOn(mu, tgt); shadow++; }
       else {
         /* an armed unit whose gun cannot bear on this - a Flak Track sent at a tank - drives to
-           it instead (orders.js), and is told so when nothing selected can do better */
-        var cannot = md.weapon && !_rtsCanEngage(mu, tgt);
-        if (cannot) cant++;
+           it instead (orders.js), and is told so when nothing selected can do better. AN UNARMED
+           ONE WITH NO JOB HERE the same: a Sweeper or a Repair Truck sent at an enemy got the
+           attack reticle, a red ping and a silent drive onto the enemy's guns. */
+        var cannot = !md.weapon || !_rtsCanEngage(mu, tgt);
+        if (cannot) { cant++; if (!md.weapon) bare++; }
+        else if (!_rtsHullReaches(mu, tgt)) { cant++; inland++; }   /* core/monitor.js */
         /* a bomber is SENT, which keeps the order through a reload (core/bomber.js) */
         if (md.carpets && !cannot) { if (!_rtsBomberSend(mu, { id: tgt.id })) queued++; }
         else _rtsOrderAttack(mu, tgt);
@@ -217,15 +251,17 @@ function _rtsRightClick(mx, my, hit0) {
     else if (drops) _rtsSay(drops === 1 ? 'Dropping in.' : drops + ' transports dropping in.');
     else if (queued) _rtsSay(_rtsBombQueuedSay(queued));
     else if (shadow && shadow === mine.length) _rtsSay((shadow === 1 ? 'Drone' : shadow + ' drones') + ' shadowing the ' + (rtsUnitDef(tgt.def) || {}).name + '.');
-    else if (cant && cant === mine.length) _rtsSay((mine.length === 1 ? rtsUnitDef(mine[0].def).name + ' cannot' : 'They cannot') + ' engage that - moving up to it.');
+    else if (cant && cant === mine.length) _rtsSay(inland === cant ? (mine.length === 1 ? rtsUnitDef(mine[0].def).name + ' cannot' : 'They cannot') + ' reach that from the water - as close as it gets.'
+      : (mine.length === 1 ? rtsUnitDef(mine[0].def).name + (bare ? ' is unarmed' : ' cannot engage that') : (bare === cant ? 'They are unarmed' : 'They cannot engage that')) + ' - moving up to it.');
     if (typeof _rtsSfx === 'function') _rtsSfx('order');
     return;
   }
   var tx = _rtsTX(hit.x), tz = _rtsTX(hit.z);
   var onScrap = _rtsInB(tx, tz) && G.scrap[_rtsIdx(tx, tz)] > 0;
-  var onWater = _rtsInB(tx, tz) && G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER;
+  /* a flat the tide has dried is ground: a loaded craft sent there puts its load down on it */
+  var onWater = _rtsInB(tx, tz) && G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER && !(G.tideDry && G.tideDry[_rtsIdx(tx, tz)]);
   var spread = _rtsFormation(mine.length);
-  var landed = 0, dropped = 0, struck = 0, waits = 0, shadows = 0;
+  var landed = 0, dropped = 0, struck = 0, waits = 0, shadows = 0, here = 0, nowhere = 0;
   for (i = 0; i < mine.length; i++) {
     var u = mine[i], ud = rtsUnitDef(u.def);
     if (ud.harvest && onScrap) { _rtsOrderHarvest(u, tx, tz); continue; }
@@ -247,14 +283,21 @@ function _rtsRightClick(mx, my, hit0) {
 
        A LOADED CHINOOK is the craft's case from the air: it cannot put men down on water, so a
        click on land is where they go - fly there, set down, out they get. */
-    if ((ud.sea || ud.air) && ud.carries && !onWater && _rtsCargoCount(u)
-        && _rtsOrderUnloadAt(u, hit.x + spread[i].x, hit.z + spread[i].z)) { if (ud.air) dropped++; else landed++; continue; }
+    if ((ud.sea || ud.air) && ud.carries && !onWater && _rtsCargoCount(u)) {
+      var land = _rtsLandAt(u, hit.x + spread[i].x, hit.z + spread[i].z);     /* core/transport.js */
+      if (land === 'route') { if (ud.air) dropped++; else landed++; }
+      else if (land === 'here') { here++; u.landedT = G.t; } else nowhere++;
+      continue;
+    }
     if (ud.harvest && tgt && tgt.side === 'player' && tgt.def === 'refinery') { u.order = 'harvest'; u.hstate = 'toRef'; u.path = null; continue; }
     _rtsOrderMove(u, hit.x + spread[i].x, hit.z + spread[i].z, !!U.attackMove);
   }
   _rtsFlash(hit.x, hit.z, onScrap ? 'harvest' : (struck || waits) ? 'attack' : 'move');
   if (landed) _rtsSay(landed === 1 ? 'Making for the shore.' : landed + ' transports making for the shore.');
-  else if (dropped) _rtsSay(dropped === 1 ? 'Taking them in.' : dropped + ' Skylifts taking them in.');
+  else if (dropped) _rtsSay(dropped === 1 ? 'Taking them in.' : dropped + ' aircraft taking them in.');   /* not 'Skylifts': a Dominion player has none */
+  else if (boardWhy) _rtsSay(boardWhy);
+  else if (here) _rtsSay('No way to that shore - putting them down here.');
+  else if (nowhere) _rtsSay('Nowhere to unload — bring it closer to shore.');
   else if (waits) _rtsSay(_rtsBombQueuedSay(waits));
   else if (struck) _rtsSay(struck === 1 ? 'Bombing run on the marked ground.' : struck + ' bombers on their runs.');
   else if (shadows && tgt) _rtsSay((shadows === 1 ? 'Drone' : shadows + ' drones') + ' shadowing the ' + (rtsUnitDef(tgt.def) || {}).name + '.');

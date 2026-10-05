@@ -99,6 +99,19 @@ function _rtsDrawHud(dt) {
     g.fillText('Click to place ' + rtsStructDef(U.place).name + '  ·  Esc to cancel', W / 2, 31);
     g.textAlign = 'left';
   }
+  /* AN ARMED SUPERWEAPON gets the banner placement has, and its cursor traces the ground it will
+     cover (_rtsDrawCursor 'super'): the cursor showed the selection's right-click order instead -
+     a no-entry over water, where the click laid the fog - and nothing showed the area */
+  if (U.superArm) {
+    var sdA = _rtsSuperDefOf(U.superArm), touchA = typeof _rtsTouchUI === 'function' && _rtsTouchUI();
+    if (sdA) {
+      var hA = _rtsSuperHint(sdA.super), cut = hA.indexOf('— ');
+      g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(W / 2 - 190, 14, 380, 26);
+      g.fillStyle = '#cfe9ff'; g.font = '13px system-ui,sans-serif'; g.textAlign = 'center';
+      g.fillText((cut >= 0 ? hA.slice(cut + 2) : hA).replace(/\.$/, '') + '  ·  ' + (touchA ? 'tap its button to cancel' : 'Esc to cancel'), W / 2, 31);
+      g.textAlign = 'left';
+    }
+  }
   /* The action cursor goes last so nothing draws over it. While one is showing the OS
      pointer is hidden, or you get two cursors fighting for the same few pixels. */
   var act = (U.mouse.over && !U.drag) ? _rtsActionAt(U.mouse.x, U.mouse.y) : null;
@@ -121,6 +134,7 @@ function _rtsActionAt(mx, my) {
   var G = window._rtsG, U = window._rtsUI;
   if (!G || G.over) return null;
   if (U.place) return null;                      /* the ghost is already the feedback */
+  if (U.superArm) return 'super';                /* the next click fires it: ui/superbar.js */
   if (U.mode === 'repair' || U.mode === 'sell') {
     var h0 = _rtsPickAt(mx, my), t0 = h0 && h0.ent;
     if (t0 && t0.side === 'player' && t0.type === 'struct') return U.mode;
@@ -145,9 +159,25 @@ function _rtsActionAt(mx, my) {
   /* AN ENEMY under the pointer is the attack reticle only if something selected can engage it,
      or is a specialist whose click means something else (an engineer, a loaded transport): a
      Flak Track given the reticle over a tank drove onto the tank, since its gun cannot bear */
+  /* AN UNARMED UNIT is the reticle only where it has a job on the target - an engineer at a
+     building it can take, a thief at a Refinery, a loaded transport's drop. A Repair Truck over
+     an enemy tank was offered the reticle and given a drive onto its guns. A drone over an enemy
+     unit shadows it, which is a move, not an attack. */
   if (tgt && tgt.side === 'enemy') {
-    for (i = 0; i < mine.length; i++) { var sd0 = rtsUnitDef(mine[i].def) || {}; if (!sd0.weapon || _rtsCanEngage(mine[i], tgt)) return 'attack'; }
-    return 'no';
+    var shadow = false, asked = {};
+    for (i = 0; i < mine.length; i++) {
+      var sd0 = rtsUnitDef(mine[i].def) || {};
+      /* a hull's reach is a ring scan, run every frame: asked once per kind of hull, which answers alike */
+      if (sd0.sea && asked[mine[i].def]) continue;
+      if (sd0.sea) asked[mine[i].def] = 1;
+      if (sd0.weapon ? _rtsCanEngage(mine[i], tgt) && (!sd0.sea || _rtsHullReaches(mine[i], tgt)) : _rtsJobOn(mine[i], sd0, tgt)) return 'attack';
+      if (sd0.orbits && tgt.type === 'unit') shadow = true;
+    }
+    return shadow ? 'move' : 'no';
+  }
+  /* your own transport with something selected that can get in: the board cursor */
+  if (tgt && tgt.side === 'player' && tgt.type === 'unit' && !tgt.dead && _rtsIsTransport(tgt)) {
+    for (i = 0; i < mine.length; i++) if (mine[i] !== tgt && _rtsCanBoard(mine[i], tgt)) return _rtsBoardReachable(tgt) ? 'board' : 'no';
   }
   var tx = _rtsTX(hit.x), tz = _rtsTX(hit.z);
   var onScrap = _rtsInB(tx, tz) && G.scrap[_rtsIdx(tx, tz)] > 0;
@@ -161,7 +191,18 @@ function _rtsActionAt(mx, my) {
      anywhere: _rtsDomainOf gives it the land's domain, and the cursor said no over the sea to a
      bomber whose move order (a straight line, _rtsPathFor) went there regardless. */
   if (!_rtsInB(tx, tz)) return 'no';
-  var stand = false, bombers = 0;
+  /* a loaded craft or aircraft over dry ground puts its load down there (ui/select.js): the
+     unload cursor, where the stand test said no to a Landing Craft whose click worked */
+  var onW = G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER && !(G.tideDry && G.tideDry[_rtsIdx(tx, tz)]);
+  for (i = 0; i < mine.length && !onW; i++) {
+    var ld = rtsUnitDef(mine[i].def) || {};
+    if ((ld.sea || ld.air) && ld.carries && _rtsCargoCount(mine[i])) return 'unload';
+  }
+  /* every selected hull aground: nothing it is ordered to do happens until the flood */
+  var ag = 0;
+  for (i = 0; i < mine.length; i++) if (_rtsAground(mine[i])) ag++;
+  if (ag && ag === mine.length) return 'no';
+  var stand = !!(tgt && tgt.side === 'player' && tgt.type === 'struct'), bombers = 0;   /* your own building: the move goes beside it */
   for (i = 0; i < mine.length; i++) {
     if (mine[i].air || !_rtsBlocked(tx, tz, _rtsDomainOf(mine[i]))) stand = true;
     if (rtsUnitDef(mine[i].def).carpets) bombers++;
@@ -171,12 +212,33 @@ function _rtsActionAt(mx, my) {
   if (!stand) return 'no';
   return U.attackMove ? 'amove' : 'move';
 }
+/* The ground an armed superweapon will cover, in cells: the weather's cells (core/wxsupers.js) */
+function _rtsSuperRadius(key) {
+  return key === 'fogbank' ? RTS_FOGBANK.r : key === 'thunder' ? RTS_THUNDER.r : 0;
+}
+/* ...traced round the ground under (x, y), projected point by point so it is the circle on the
+   ground the 3D camera sees - an ellipse, leaning with the view */
+function _rtsSuperRing(g, x, y) {
+  var U = window._rtsUI, R = U && _rtsSuperRadius(U.superArm), gp = R && _rtsGroundAt(x, y);
+  if (!gp) return;
+  g.beginPath();
+  for (var a = 0; a <= 36; a++) {
+    var ang = a / 36 * Math.PI * 2, p = _rtsGroundToScreen(gp.x + Math.cos(ang) * R * RTS_TILE, gp.z + Math.sin(ang) * R * RTS_TILE);
+    if (a) g.lineTo(p.x, p.y); else g.moveTo(p.x, p.y);
+  }
+  g.stroke();
+}
+/* An unarmed unit's job on an enemy target, as _rtsRightClick gives it (ui/select.js) */
+function _rtsJobOn(u, d, tgt) {
+  if (tgt.type === 'struct' && ((d.capture && rtsCapturable(tgt.def)) || (d.steal && tgt.def === d.stealFrom))) return true;
+  return _rtsIsTransport(u) && _rtsCargoCount(u) > 0;
+}
 function _rtsDrawCursor(g, x, y, kind) {
   if (!kind) return;
   g.save(); g.translate(x, y); g.lineCap = 'round'; g.lineJoin = 'round';
   var col = { move:'#8ef07a', amove:'#ffd473', attack:'#ff6a5a', harvest:'#ffd473',
     deliver:'#8ef07a', select:'#9fd0ff', repair:'#ffd473', sell:'#ff9a4a', no:'#ff6a5a',
-    rally:'#8ef07a' }[kind] || '#8ef07a';
+    rally:'#8ef07a', board:'#9fd0ff', unload:'#9fd0ff', super:'#cfe9ff' }[kind] || '#8ef07a';
   /* every shape is stroked twice: a fat dark pass first so it stays legible on pale ore */
   for (var pass = 0; pass < 2; pass++) {
     g.strokeStyle = pass ? col : 'rgba(0,0,0,0.75)';
@@ -202,6 +264,22 @@ function _rtsDrawCursor(g, x, y, kind) {
       g.beginPath(); g.arc(0, 1, 7, 0.15, Math.PI - 0.15); g.stroke();
       g.beginPath(); g.moveTo(0, -9); g.lineTo(0, -2); g.stroke();
       if (kind === 'deliver') { g.beginPath(); g.moveTo(-4, -6); g.lineTo(0, -10); g.lineTo(4, -6); g.stroke(); }
+    } else if (kind === 'board') {                 /* an arrow down into an open hold */
+      g.beginPath(); g.moveTo(-8, -2); g.lineTo(-8, 8); g.lineTo(8, 8); g.lineTo(8, -2); g.stroke();
+      g.beginPath(); g.moveTo(0, -10); g.lineTo(0, 4); g.stroke();
+      g.beginPath(); g.moveTo(-4, 0); g.lineTo(0, 4); g.lineTo(4, 0); g.stroke();
+    } else if (kind === 'super') {                 /* cross-hairs, and the ground it will cover */
+      g.restore(); g.save(); g.lineCap = 'round';
+      g.strokeStyle = pass ? col : 'rgba(0,0,0,0.75)'; g.lineWidth = pass ? 2 : 4.5;
+      _rtsSuperRing(g, x, y);
+      g.translate(x, y);
+      [[0, -1], [0, 1], [-1, 0], [1, 0]].forEach(function (d) {
+        g.beginPath(); g.moveTo(d[0] * 3, d[1] * 3); g.lineTo(d[0] * 11, d[1] * 11); g.stroke();
+      });
+    } else if (kind === 'unload') {                /* an arrow up out of an open hold */
+      g.beginPath(); g.moveTo(-8, -2); g.lineTo(-8, 8); g.lineTo(8, 8); g.lineTo(8, -2); g.stroke();
+      g.beginPath(); g.moveTo(0, 4); g.lineTo(0, -10); g.stroke();
+      g.beginPath(); g.moveTo(-4, -6); g.lineTo(0, -10); g.lineTo(4, -6); g.stroke();
     } else if (kind === 'sell') {                  /* banknote */
       g.beginPath(); g.rect(-9, -6, 18, 12); g.stroke();
       g.beginPath(); g.arc(0, 0, 3, 0, Math.PI * 2); g.stroke();
@@ -316,6 +394,13 @@ function _rtsDrawMini() {
       g.fillStyle = 'rgb(' + jv + ',' + jv + ',' + jv + ')';
       g.fillRect(jx + Math.cos(ja) * jd - 1, jz + Math.sin(ja) * jd - 1, 2, 2);
     }
+  }
+  /* THE PLAYER'S OWN JAMMER COVER, traced in the radar's blue: where a column is hidden (the 3D
+     view rings it round a selected Jammer, render3d/ring3d.js) */
+  var JM = G.jam && G.jam.player;
+  for (i = 0; JM && i < JM.length; i++) {
+    g.strokeStyle = 'rgba(94,168,255,0.85)'; g.lineWidth = 1.2;
+    g.beginPath(); g.arc((JM[i].x / RTS_TILE + RTS_N / 2) * sc, (JM[i].z / RTS_TILE + RTS_N / 2) * sc, JM[i].r / RTS_TILE * sc, 0, Math.PI * 2); g.stroke();
   }
   /* CAMERA VIEWPORT BOX, hung on the centre of what is visible rather than on the focus. The
      two are the same point under both orthographic cameras and are not under the perspective

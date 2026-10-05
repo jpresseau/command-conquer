@@ -48,7 +48,13 @@ function _rtsStormGrounds(e, d) {
     e.wxHeld = 0;
   }
   var c = _rtsWxAt('storm', e.x, e.z);
-  if (c) { e.wxHeld = c.id; return true; }
+  if (c) {
+    e.wxHeld = c.id;
+    /* SAID, as the sky's storm is said (below): a Thunderhead held the player's aircraft for up
+       to a minute, every order to them thrown away, and nothing named why */
+    if (e.side === 'player' && !c.heldPlayer) { c.heldPlayer = 1; _rtsSay('Thunderhead: your aircraft in it are grounded until it passes.', 5); }
+    return true;
+  }
   return false;
 }
 

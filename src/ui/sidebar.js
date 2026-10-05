@@ -229,8 +229,9 @@ function _rtsItemClick(key) {
     return;
   }
   if (_rtsQueue('player', key)) {
-    /* VOX_TRAINING for infantry, VOX_BUILDING for everything else. */
-    _rtsSay(cat === 'infantry' ? 'Training.' : 'Building.');
+    /* VOX_TRAINING for infantry, VOX_BUILDING for everything else - or, the first of its kind on
+       a phone, what it is: a phone cannot show the tile's title (ui/selhint.js) */
+    if (!_rtsBuildDescSay(key)) _rtsSay(cat === 'infantry' ? 'Training.' : 'Building.');
     if (typeof _rtsSfx === 'function') _rtsSfx('build');
   }
   else {
@@ -419,6 +420,20 @@ function _rtsSyncSidebar(dt) {
     var canU = false;
     for (var ui2 = 0; ui2 < sel.length; ui2++) if (_rtsCanUnload(sel[ui2])) { canU = true; break; }
     if (unl.hidden === canU) unl.hidden = !canU;
+  }
+
+  /* the tide's next turn on the radar (core/tide.js), where the map has flats; and a daily's
+     clock in the pill - the daily is scored on it, and nothing showed it until the end card */
+  var tl = document.getElementById('rtsTide');
+  if (tl) {
+    var tOn = _rtsTideAny(G), tTxt = tOn ? _rtsTideLine(G) : '';
+    if (tl.hidden === tOn) tl.hidden = !tOn;
+    if (tl.textContent !== tTxt) tl.textContent = tTxt;
+  }
+  var dl2 = document.getElementById('rtsDifLbl');
+  if (dl2 && window._RTS_DAILY && typeof rtsDailyClock === 'function') {
+    var dTxt = 'DAILY ' + rtsDailyClock(G.t);
+    if (dl2.textContent !== dTxt) dl2.textContent = dTxt;
   }
 
   var msg = document.getElementById('rtsMsg');

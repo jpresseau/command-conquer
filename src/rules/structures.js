@@ -252,6 +252,6 @@ var RTS_STRUCTS = [
     needs:['lab'], side:'soviet', armour:'concrete', capturable:false,
     super:{ key:'thunder', name:'Thunderhead', charge:270, target:'cell', icon:'⛈',
             hint:'Thunderhead ready — click where the storm should break.' },
-    desc:'Breaks a thunderstorm anywhere on the map for a minute. Lightning strikes the enemy under it, and no aircraft flies in it.' }
+    desc:'Breaks a thunderstorm anywhere on the map for a minute. Lightning strikes the enemy under it, and no armed aircraft flies in it, yours included.' }
 ];
 

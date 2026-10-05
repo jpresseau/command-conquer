@@ -24,26 +24,32 @@ function _rtsRadarOrder(mine, w, attackMove) {
       } else if (_rtsTX(o.x) === tx && _rtsTX(o.z) === tz) { tgt = o; break; }
     }
   }
+  /* the same keeping as a right-click's (ui/select.js): a held aircraft's order waits, a bomber is
+     sent, a landing with no route puts the load down where the craft stands */
+  for (i = 0; i < mine.length; i++) mine[i].bombNext = null;
+  _rtsKeepHeld(mine, true);
   if (tgt) {
     var drops = 0;
     for (i = 0; i < mine.length; i++) {
       var mu = mine[i], md = rtsUnitDef(mu.def);
       if (!md.weapon && _rtsIsTransport(mu) && _rtsCargoCount(mu) && _rtsOrderUnloadAt(mu, tgt.x, tgt.z)) drops++;
+      else if (md.carpets && _rtsCanEngage(mu, tgt)) _rtsBomberSend(mu, { id: tgt.id });
       else _rtsOrderAttack(mu, tgt);
     }
     _rtsFlash(tgt.x, tgt.z, drops === mine.length ? 'harvest' : 'attack');
   } else {
-    var onScrap = mapped && G.scrap[_rtsIdx(tx, tz)] > 0, onWater = G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER;
+    var onScrap = mapped && G.scrap[_rtsIdx(tx, tz)] > 0, onWater = G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER && !(G.tideDry && G.tideDry[_rtsIdx(tx, tz)]);
     var spread = _rtsFormation(mine.length);
     for (i = 0; i < mine.length; i++) {
       var u = mine[i], ud = rtsUnitDef(u.def);
       if (ud.harvest && onScrap) { _rtsOrderHarvest(u, tx, tz); continue; }
-      if ((ud.sea || ud.air) && ud.carries && !onWater && _rtsCargoCount(u)
-          && _rtsOrderUnloadAt(u, w.x + spread[i].x, w.z + spread[i].z)) continue;
+      if ((ud.sea || ud.air) && ud.carries && !onWater && _rtsCargoCount(u)) { if (_rtsLandAt(u, w.x + spread[i].x, w.z + spread[i].z) === 'here') u.landedT = G.t; continue; }
+      if (ud.carpets && attackMove) { _rtsBomberSend(u, { x: w.x + spread[i].x, z: w.z + spread[i].z }); continue; }
       _rtsOrderMove(u, w.x + spread[i].x, w.z + spread[i].z, attackMove);
     }
     _rtsFlash(w.x, w.z, onScrap ? 'harvest' : 'move');
   }
+  _rtsKeepHeld(mine, false);
   return true;
 }
 
@@ -261,6 +267,10 @@ function _rtsBindInput() {
        ghost, the superweapon cursor - lines up with where the player is actually touching. */
     U.mouse.x = p.x; U.mouse.y = p.y; U.mouse.over = true;
     _tGhost(p);
+    /* WHAT THE FINGER WENT DOWN ON, picked now: the order fires 350ms later, and picked then, an
+       aircraft in flight had left the spot - a Flak Track held on a gunship got a move to the
+       ground under the finger, and stopped looking for the gunship until it got there */
+    T.pick0 = _rtsPickAt(p.x, p.y);
     /* A press held in one place is the second button. Cancelled by movement below, so a pan
        never fires an order. */
     _tClearHold();
@@ -271,11 +281,12 @@ function _rtsBindInput() {
          "cancel", so resting a finger for a third of a second while lining up a building
          silently threw the placement away and touchend then did nothing - the same tap placed
          it fine at 120ms and cancelled it at 500ms, with nothing on screen saying why. Leave
-         T.id intact so touchend still places it. */
-      if (U.place) return;
+         T.id intact so touchend still places it. AN ARMED SUPERWEAPON THE SAME: held still, the
+         selection walked to where the fog was meant to fall and the weapon stayed armed. */
+      if (U.place || U.superArm) return;
       T.id = null;                                  /* consumed: touchend must not also select */
       if (U.mode) { rtsMode(U.mode); return; }
-      _rtsRightClick(T.x0, T.y0);
+      _rtsRightClick(T.x0, T.y0, T.pick0 || undefined);
       if (typeof _rtsSfx === 'function') _rtsSfx('order');
     }, 350);
   }, { passive: false });

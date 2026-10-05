@@ -108,6 +108,28 @@ function _rtsSelTipFrame(sel, el) {
   _rtsSay(tip, 7);
 }
 
+/* A DESCRIPTION IN THE DEVICE'S WORDS. The rules write a key and its button together ("press D
+   or LAY MINE", "U or UNLOAD"); on a phone the key goes and the button is tapped. */
+function _rtsDescFor(d, touch) {
+  var s = d.desc || '';
+  if (!touch) return s;
+  return s.replace(/\bpress D or ([A-Z][A-Z ]*[A-Z])\b/g, 'tap $1').replace(/\bU or (UNLOAD)\b/g, '$1');
+}
+/* THE BUILD TILE'S DESCRIPTION, ON A PHONE. It lives in the tile's title, and a phone shows no
+   title: a touch player was never told that a Jammer must be parked, that the Bridge Layer needs
+   the water's edge, that a bomber's bombs hit their own men. So the first time a match starts one
+   of a kind on a phone, the message line says what it is (ui/sidebar.js _rtsItemClick); a desk
+   has the hover, and is told nothing new. True when it said it. */
+function _rtsBuildDescSay(key) {
+  var G = window._rtsG, d = rtsUnitDef(key) || rtsStructDef(key);
+  if (!d || !d.desc || !(typeof _rtsTouchUI === 'function' && _rtsTouchUI())) return false;
+  var seen = G.descSeen || (G.descSeen = {});
+  if (seen[key]) return false;
+  seen[key] = 1;
+  _rtsSay(d.name + ': ' + _rtsDescFor(d, true), 7);
+  return true;
+}
+
 /* What the readout adds after "Name - hp": the state the unit's order turns on. */
 function _rtsUnitStateTxt(e) {
   var d = rtsUnitDef(e.def) || {}, out = '';
@@ -122,6 +144,14 @@ function _rtsUnitStateTxt(e) {
     else if (e.order === 'orbit') out += ' · circling';
   }
   if (d.carries) { var n = _rtsCargoCount(e); if (n) out += ' · ' + n + ' aboard'; }
+  if (d.sea && _rtsAground(e)) out += ' · aground until the flood';
+  if (d.jams) {
+    if (_rtsJamUp(e)) {
+      var G = window._rtsG, k = 0;
+      for (var i = 0; i < G.ents.length; i++) { var o = G.ents[i]; if (o !== e && !o.dead && o.side === e.side && _rtsJammed(o)) k++; }
+      out += ' · field up, hiding ' + k + (k === 1 ? ' unit' : ' units');
+    } else out += (e.path && e.pi < e.path.length) ? ' · moving - no field' : ' · parking';
+  }
   return out;
 }
 

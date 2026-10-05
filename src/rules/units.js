@@ -145,7 +145,7 @@ var RTS_UNITS = [
   { key:'skycrane', name:'Sky Crane',     kind:'air',      cost:1300, build:14, hp:220,  speed:16,  turn:3.0,r:2.2, sight:16, weapon:null,
     needs:['afld'], air:true, alt:14, carries:1, takes:['vehicle'], slings:true,
     side:'soviet', armour:'light',
-    desc:'Lifts one of your vehicles and sets it down anywhere. Order a vehicle onto it, then click where to drop it.' },
+    desc:'Lifts one of your vehicles and sets it down anywhere. Order a vehicle onto it, then send the crane where to set it down.' },
   /* PARADROP PLANE. The verb is the DROP: men put down behind a wall without the plane ever
      touching the ground. It waits in the air over its Airfield to be boarded, flies to where it is
      sent, the men jump - a short fall under canopies, unable to act - and it goes home. The
@@ -154,7 +154,7 @@ var RTS_UNITS = [
   { key:'paraplane',name:'Paradrop Plane', kind:'air',     cost:1100, build:12, hp:200,  speed:30,  turn:3.0,r:2.0, sight:18, weapon:null,
     needs:['afld'], air:true, alt:16, carries:5, takes:['infantry'], paradrops:true,
     side:'soviet', armour:'light',
-    desc:'Drops five infantry anywhere without landing, then flies home. Board it over the Airfield, then click the drop zone.' },
+    desc:'Drops five infantry anywhere without landing, then flies home. Board it over the Airfield, then send it at the drop zone.' },
   /* RECON DRONE. The verb is WATCHING A PLACE: cheap and unarmed, it circles wherever it is sent,
      and it is a Spotter in the air - its sight never cut by fog, every gun of its side finding
      what it sees at full reach, and no Jammer hiding anything from it. The Compact's, as the
@@ -190,13 +190,13 @@ var RTS_UNITS = [
      eight cells across the water ahead - core/bridgelayer.js. Unarmed, and spent in the laying. */
   { key:'bridgelayer',name:'Bridge Layer', kind:'vehicle', cost:1000, build:12, hp:380,  speed:9.5, turn:1.8,r:2.0, sight:16, weapon:null,
     needs:['radar'], bridge:true, tracked:true, armour:'heavy',
-    desc:'At the water\'s edge, press D or DEPLOY: it becomes a bridge of up to eight cells across the gap ahead.' },
+    desc:'At the water\'s edge, facing the far bank, press D or BRIDGE: it becomes a bridge of up to eight cells across the gap ahead.' },
   /* MINE LAYER. The verb is DENIAL: a road, a ford or a gap that the enemy will pay to cross.
      Unarmed; it lays a mine where it stands (D, or DEPLOY), five to a load, and a Repair Bay
      loads them back. The mines are invisible to the other side - core/mines.js. */
   { key:'minelayer',name:'Mine Layer',    kind:'vehicle',  cost:900,  build:11, hp:340,  speed:10,  turn:2.0,r:1.9, sight:16, weapon:null,
     needs:['depot'], mines:5, tracked:true, armour:'heavy',
-    desc:'Lays hidden mines where it stands - press D or DEPLOY. Five to a load; a Repair Bay restocks it.' },
+    desc:'Lays hidden mines where it stands - press D or LAY MINE. Five to a load; a Repair Bay restocks it.' },
   /* MINE SWEEPER. The verb is CLEARING: the answer to a minefield, which until now had none but a
      lost tank. Unarmed; finds enemy mines within four cells, shows them, beats out any it reaches,
      and never sets one off - core/sweeper.js. */
@@ -208,7 +208,7 @@ var RTS_UNITS = [
      sees at full reach - core/spotter.js. A light machine gun for the men who find it. */
   { key:'spotter',  name:'Spotter',       kind:'vehicle',  cost:600,  build:9,  hp:160,  speed:20,  turn:4.0,r:1.6, sight:28, weapon:'mg',
     needs:['radar'], spots:true, armour:'light',
-    desc:'Sees through fog and fog banks, and your guns can hit anything it sees at their full range.' },
+    desc:'Sees through fog, fog banks and enemy Jammers, and your guns can hit anything it sees at their full range.' },
   /* REPAIR TRUCK. The verb is MENDING IN THE FIELD: the Field Medic's aura for vehicles, so a
      battered column is put right where it stands instead of driving home to the Repair Bay. It
      drives to a damaged vehicle near it by itself - core/repairtruck.js. Unarmed. */
@@ -220,7 +220,7 @@ var RTS_UNITS = [
      static over them. A Spotter sees through it - core/jammer.js. Unarmed. */
   { key:'jammer',   name:'Jammer',        kind:'vehicle',  cost:900,  build:11, hp:300,  speed:11,  turn:2.4,r:1.9, sight:16, weapon:null,
     needs:['radar'], jams:true, tracked:true, armour:'light',
-    desc:'Parked, it hides your units within four cells: the enemy cannot see or target them past two cells until they fire.' },
+    desc:'Parked, it hides your units within four cells: the enemy cannot see or target them past two cells until they fire. A Spotter or a Recon Drone sees through it.' },
   /* Armoured Personnel Carrier. UDATA.CPP's UnitAPC is IsCrusher with no turret; the transport
      rules are in UNIT.CPP - capacity via Max_Passengers, and, in Death, the half of the branch
      that matters: when a TRANSPORT dies its infantry passengers are unlimboed at the wreck and
@@ -321,7 +321,7 @@ var RTS_UNITS = [
   { key:'mineboat', name:'Mine Boat',    kind:'ship',     cost:900,  build:11, hp:380,  speed:12,  turn:1.8,r:2.0, sight:16, weapon:null,
     needs:['shipyard'], sea:true, mines:6,
     armour:'heavy',
-    desc:'Lays hidden mines in the water where it stands - press D. Anything afloat sets them off. Six to a load; its yard restocks it.' },
+    desc:'Lays hidden mines in the water where it stands - press D or LAY MINE. Anything afloat sets them off. Six to a load; its yard restocks it.' },
   /* REPAIR TENDER. The Repair Truck's verb at sea: a fleet mended where it fights instead of
      sailing home. Every friendly ship within its reach is brought back up, for free; left idle
      it goes to the nearest damaged one - core/repairtruck.js, `healKind:'ship'`. Unarmed. */
@@ -344,6 +344,6 @@ var RTS_UNITS = [
   { key:'mcv',      name:'Mobile Yard',   kind:'vehicle',  cost:2500, build:26, hp:600,  speed:5.5, turn:1.2,r:2.2, sight:14, weapon:null,
     needs:['depot'], deploy:'yard', crush:true,
     armour:'light',
-    desc:'Unarmed. Deploys into a Command Yard - press D, or use the Deploy button.' }
+    desc:'Unarmed. Deploys into a Command Yard - press D or DEPLOY.' }
 ];
 

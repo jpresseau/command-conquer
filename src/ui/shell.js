@@ -34,7 +34,7 @@ function rtsOpen(seed) {
     +       '<i class="dif" id="rtsDifLbl"></i></span>'
     /* Two hint lines, because the verbs genuinely differ - a phone has no right button and no
        wheel, and a desktop has no long-press. CSS shows exactly one; see .rts-help. */
-    +     '<span class="rts-help desk">drag select · right-click order · right-drag pan · wheel zoom · middle-drag turn · S hold · 1-9 teams (ctrl set, alt jump) · repair/sell · Esc</span>'
+    +     '<span class="rts-help desk">drag select · right-click order · A attack-move · right-drag pan · wheel zoom · middle-drag turn · S hold · D deploy · U unload · 1-9 teams (ctrl set, alt jump) · repair/sell · Esc</span>'
     /* ONE GROUP, IN THE FLOW. These were four absolutely positioned buttons at right:6/34/62/90,
        so the bar's flex layout did not know they existed and the army/difficulty text ran
        underneath them - measured on every phone from 360 to 412px wide, with `.rts-vs` sitting
@@ -70,7 +70,7 @@ function rtsOpen(seed) {
        thrown away is a line of text that has already scrolled off. */
     +   '<div class="rts-store" id="rtsStore" title="Storage"><i id="rtsStoreFill"></i></div>'
     +   '<div class="rts-radar"><canvas id="rtsMini" width="188" height="188"></canvas>'
-    +     '<span class="rlbl">RADAR</span></div>'
+    +     '<span class="rlbl">RADAR</span><span class="tlbl" id="rtsTide" hidden></span></div>'
     +   '<div class="rts-tabs">' + _rtsTabButtons() + '</div>'
     +   '<div class="rts-ops">'
     +     '<button type="button" data-mode="repair" onclick="rtsMode(\'repair\')" '

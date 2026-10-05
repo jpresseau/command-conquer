@@ -62,11 +62,33 @@ function _rtsBridgeAcross(br) {
   }
   return n > 0 && wet * 3 >= n * 2;
 }
+/* WHY THERE IS NO SPAN, read along the way the layer faces - the scan _rtsBridgeGap makes first.
+   One sentence served every refusal, "drive to the water's edge, facing the far bank", and the
+   usual reason was a far bank more than RTS_LAYBRIDGE_SPAN cells off: the player was told to do
+   what they had already done. */
+function _rtsBridgeWhyNot(e) {
+  var G = window._rtsG, T = G.terrain, B = G.blocked, tx = _rtsTX(e.x), tz = _rtsTX(e.z);
+  var fx = Math.cos(e.rot || 0), fz = Math.sin(e.rot || 0);
+  var dx = Math.abs(fx) >= Math.abs(fz) ? (fx < 0 ? -1 : 1) : 0, dz = dx ? 0 : (fz < 0 ? -1 : 1);
+  var own = _rtsIdx(tx, tz);
+  if (T[own] === RTS_T_WATER && !(G.tideDry && G.tideDry[own])) return 'Not from the water - drive up onto the bank.';
+  var first = _rtsInB(tx + dx, tz + dz) ? _rtsIdx(tx + dx, tz + dz) : -1;
+  if (first < 0 || T[first] !== RTS_T_WATER) return 'No water ahead - drive to the water\'s edge, facing the far bank.';
+  for (var k = 1; k <= RTS_LAYBRIDGE_SPAN + 1; k++) {
+    var x = tx + dx * k, z = tz + dz * k;
+    if (!_rtsInB(x, z)) return 'The water runs off the map - there is no far bank that way.';
+    var i = _rtsIdx(x, z);
+    if (T[i] === RTS_T_WATER) { if (B[i] !== 2) return 'A bridge or a yard\'s water is in the way.'; continue; }
+    if (B[i] !== 0) return 'Nothing to land on across the water - the far bank is blocked.';
+    return 'That runs along the shore - face straight across the water.';
+  }
+  return 'Too far to span - the far bank is more than ' + RTS_LAYBRIDGE_SPAN + ' cells off.';
+}
 /* Lay it: the layer becomes the bridge. False, and the player told why, when there is no gap. */
 function _rtsLayBridge(e) {
   var G = window._rtsG, br = _rtsBridgeGap(e);
   if (!br) {
-    if (e.side === 'player') _rtsSay('No gap to span here - drive to the water\'s edge, facing the far bank.');
+    if (e.side === 'player') _rtsSay(_rtsBridgeWhyNot(e));
     return false;
   }
   br.laid = e.side;

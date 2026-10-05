@@ -59,6 +59,31 @@ function _rtsTideInit(G) {
   G.tideLast = _rtsTideLevel(G); G.tideSaid = null;
 }
 
+/* WHAT THE TIDE DOES NEXT, AND WHEN - the radar's tide line (ui/sidebar.js). Nothing on screen
+   said when the flats would dry or flood: two ten-second lines on a message line anything else
+   overwrites, and the last ring - mid-strait, where the crossings open - drying with no line at
+   all. The rings dry at fixed levels (_rtsTideDriesAt) and the level is a cosine of the clock, so
+   each turn falls at a known second of the period: the first ring dries at tIn, the last at
+   tOut, and they flood again in the mirror order. { what, secs } */
+function _rtsTideNext(G) {
+  var P = RTS_TIDE.period, t = (G.t || 0) % P, k = P / (2 * Math.PI);
+  var tIn = k * Math.acos(_rtsTideDriesAt(1)), tOut = k * Math.acos(_rtsTideDriesAt(RTS_TIDE.reach));
+  if (t < tIn) return { what: 'flats dry in', secs: tIn - t };
+  if (t < tOut) return { what: 'ebbing - low in', secs: tOut - t };
+  if (t < P - tOut) return { what: 'low - flood in', secs: P - tOut - t };
+  if (t < P - tIn) return { what: 'flooding - high in', secs: P - tIn - t };
+  return { what: 'flats dry in', secs: P + tIn - t };
+}
+function _rtsTideLine(G) {
+  var n = _rtsTideNext(G), s = Math.max(0, Math.ceil(n.secs));
+  return 'TIDE: ' + n.what + ' ' + Math.floor(s / 60) + ':' + (s % 60 < 10 ? '0' : '') + (s % 60);
+}
+/* Has this map any flats for the tide to dry? (none: no tide line) */
+function _rtsTideAny(G) {
+  if (G.tideAny == null && G.tideD) { G.tideAny = 0; for (var i = 0; i < G.tideD.length; i++) if (G.tideD[i]) { G.tideAny = 1; break; } }
+  return !!G.tideAny;
+}
+
 /* how long the turn of the tide stays on the message line: the one warning before the flood,
    where the default four seconds was gone before a player on the sidebar looked up */
 var RTS_TIDE_SAY = 10;

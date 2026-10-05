@@ -109,6 +109,54 @@ var browser = await chromium.launch();
     return !!(u && (u.path || u.goal || u.order));
   });
 
+  /* ---- 3b. a long-press on an aircraft orders on the aircraft, not where it has flown from ----
+     The hold fires 350ms after the finger lands; picked then, a gunship in flight had left the
+     spot and a Flak Track held on it got a move to the ground (ui/input.js picks at touchstart).
+     The gunship is moved twelve cells between the press and the hold, as flight would. */
+  var air = await page.evaluate(function () {
+    var G = window._rtsG, c = _rtsNearestOpen(_rtsTX(_rtsR.focus.x), _rtsTX(_rtsR.focus.z), 10, null);
+    var ft = _rtsSpawnUnit('player', 'flaktrack', _rtsWX(c[0]) - 6 * RTS_TILE, _rtsWX(c[1]));
+    var hl = _rtsSpawnUnit('enemy', 'heli', _rtsWX(c[0]), _rtsWX(c[1]));
+    hl.order = 'hold'; hl.path = null;
+    G.sel = [ft];
+    window._rtsHeliT = hl; window._rtsFlakT = ft;
+    var s = _rtsScreenOf(hl), r = document.getElementById('rtsCv').getBoundingClientRect();
+    var p0 = _rtsPickAt(s.x, s.y);
+    return { x: s.x + r.left, y: s.y + r.top, picked: !!(p0 && p0.ent === hl) };
+  });
+  await touch('touchStart', [pt(air.x, air.y)]);
+  await page.evaluate(function () { window._rtsHeliT.x += 12 * RTS_TILE; });
+  await page.waitForTimeout(500);
+  await touch('touchEnd', []);
+  await page.waitForTimeout(150);
+  var airOrd = await page.evaluate(function () {
+    var f = window._rtsFlakT;
+    return { order: f.order, onHeli: f.target === window._rtsHeliT };
+  });
+
+  /* ---- 3c. a steady finger with a weapon armed fires it, and orders nobody ----
+     The hold used to give the selection a context order to the spot meant for the fog, and the
+     weapon stayed armed (ui/input.js leaves an armed weapon's press to touchend, as placement). */
+  var armS = await page.evaluate(function () {
+    var G = window._rtsG, yd = _rtsHas('player', 'yard'), b = null;
+    for (var r = 4; r < 30 && !b; r++) for (var a = 0; a < 8 && !b; a++) {
+      var sp = _rtsNearestOpen(yd.tx + Math.round(Math.cos(a) * r), yd.tz + Math.round(Math.sin(a) * r), 3, null);
+      if (sp && _rtsCanPlace('player', 'mist', sp[0], sp[1], true)) { b = _rtsPlaceStruct('player', 'mist', sp[0], sp[1], true); if (b) b.building = 0; }
+    }
+    var S2 = G.sides.player; S2.supers = S2.supers || {}; S2.supers.fogbank = { t: 1e3, ready: true, said: true };
+    window._rtsUI.superArm = 'fogbank';
+    var u = window._rtsFlakT; G.sel = [u]; u.order = null; u.path = null; u.target = null; u.goal = null;
+    return { tower: !!b, wx0: (G.wx || []).length };
+  });
+  await touch('touchStart', [pt(cx - 60, cy + 40)]);
+  await page.waitForTimeout(500);                 /* past the 350ms hold */
+  await touch('touchEnd', []);
+  await page.waitForTimeout(150);
+  var armE = await page.evaluate(function () {
+    var G = window._rtsG, u = window._rtsFlakT;
+    return { wx1: (G.wx || []).filter(function (c) { return c.kind === 'fog'; }).length, armed: window._rtsUI.superArm, order: u.order, goal: !!u.goal };
+  });
+
   /* ---- 4. pinch zooms ---- */
   var z0 = await page.evaluate(function () { return _rtsZoom(); });
   await touch('touchStart', [pt(cx - 40, cy), pt(cx + 40, cy)]);
@@ -134,6 +182,8 @@ var browser = await chromium.launch();
   console.log('tap: selected ' + afterTap + ' (was ' + sel.before + ')   camera drift ' +
               tapDrift.toFixed(2));
   console.log('long-press: order issued ' + ordered);
+  console.log('long-press on a gunship that flies on: picked under the finger ' + air.picked + ', order ' + airOrd.order + ', on the gunship ' + airOrd.onHeli);
+  console.log('steady finger with the Fog Bank armed: fog cells ' + armS.wx0 + ' -> ' + armE.wx1 + ', armed ' + armE.armed + ', the selection\'s order ' + armE.order);
   console.log('pinch out: zoom ' + z0.toFixed(2) + ' -> ' + z1.toFixed(2));
   console.log('hint line: touch shown ' + hint.touch + ', desktop hidden ' + !hint.desk);
   console.log('  "' + hint.text + '"');
@@ -145,6 +195,10 @@ var browser = await chromium.launch();
   if (!afterTap)  fails.push('a tap selected nothing');
   if (tapDrift > 1) fails.push('a tap moved the camera by ' + tapDrift.toFixed(2) + ' - taps are panning');
   if (!ordered)   fails.push('a long-press issued no order');
+  if (!air.picked) fails.push('the staging: the gunship is not under the finger');
+  else if (!(airOrd.order === 'attack' && airOrd.onHeli)) fails.push('a long-press on a gunship that flew on gave the Flak Track "' + airOrd.order + '", not an attack on it');
+  if (!armS.tower) fails.push('the staging: no Mist Tower could be placed');
+  else if (!(armE.wx1 === armS.wx0 + 1 && !armE.armed && !armE.order && !armE.goal)) fails.push('a steady finger with the Fog Bank armed did not fire it, or ordered the selection (' + JSON.stringify(armE) + ')');
   if (z1 <= z0)   fails.push('pinching out did not zoom in (' + z0 + ' -> ' + z1 + ')');
   if (!hint.touch) fails.push('the touch hint line is not shown on a touch device');
   if (hint.desk)  fails.push('the mouse hint line is still shown on a touch device');
