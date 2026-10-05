@@ -340,13 +340,19 @@ function _r3dFxProj(G, V) {
    appeared out of empty sky three times higher than the aircraft they had just left. */
 var R3D_FX_BOMB = [0.16, 0.16, 0.17];
 var R3D_BOMB_STREAK = 0.8;       /* world units of streak above each bomb */
+/* ...AND A BODY UNDER IT. The streak alone, thin as rain, was a hundred-odd faint pixels round a
+   bomb at the player's zoom (e2e/unitfx): a carpet went down that no one could see falling. Each
+   bomb is a dark blob, longer than it is wide, at the foot of its streak. */
+var R3D_BOMB_BODY = [0.3, 0.55];  /* half across, half up, world units */
 function _r3dFxBombs(G, V) {
-  var B = G.bombs || [], vis = typeof _rtsVisible === 'function';
+  var B = G.bombs || [], vis = typeof _rtsVisible === 'function', R3 = window._R3D;
+  if (R3 && R3.bombsOff) return;                 /* R3.bombsOff: a spec's A/B (e2e/unitfx) */
   for (var i = 0; i < B.length; i++) {
     var b = B[i];
     if (vis && !_rtsVisible(_rtsTX(b.x), _rtsTX(b.z))) continue;
     var y = V.ground(b.x, b.z) + b.y * RTS_AIR_ALT_K;
     _r3dFxStreak(V.M, V, b.x, y + R3D_BOMB_STREAK, b.z, b.x, y, b.z, 0.9, 0, R3D_FXT_RAIN, 0, i + 1, 1, 0, R3D_FX_BOMB);
+    _r3dFxBill(V.M, V, b.x, y, b.z, R3D_BOMB_BODY[0], R3D_BOMB_BODY[1], 0, R3D_FXT_BLOB, 0, i + 1, 0.95, 0, R3D_FX_BOMB);
   }
 }
 

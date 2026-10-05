@@ -387,6 +387,7 @@ function _r3dFrame(G) {
        its transport, and was drawn there - squads standing on the ground under a Skylift in flight.
        A Sky Crane's load is drawn by the crane, slung (unit3d.js). */
     if (e.inside) continue;
+    if (R3.hideId != null && e.id === R3.hideId) continue;   /* one unit out of the picture, for a spec's A/B (e2e/unitfx) */
     if (bound && (Math.abs(e.x - bound[0]) > bound[2] || Math.abs(e.z - bound[1]) > bound[2])) continue;
     if (view && (e.x < view.x0 || e.x > view.x1 || e.z < view.z0 || e.z > view.z1)) continue;   /* off the screen */
     if (e.type === 'struct') {

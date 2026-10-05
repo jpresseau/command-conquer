@@ -711,7 +711,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">f37d187 · 2026-10-05</div>
+  <div id="rtsBuild" title="build">b8b385b · 2026-10-05</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -25461,13 +25461,19 @@ function _r3dFxProj(G, V) {
    appeared out of empty sky three times higher than the aircraft they had just left. */
 var R3D_FX_BOMB = [0.16, 0.16, 0.17];
 var R3D_BOMB_STREAK = 0.8;       /* world units of streak above each bomb */
+/* ...AND A BODY UNDER IT. The streak alone, thin as rain, was a hundred-odd faint pixels round a
+   bomb at the player's zoom (e2e/unitfx): a carpet went down that no one could see falling. Each
+   bomb is a dark blob, longer than it is wide, at the foot of its streak. */
+var R3D_BOMB_BODY = [0.3, 0.55];  /* half across, half up, world units */
 function _r3dFxBombs(G, V) {
-  var B = G.bombs || [], vis = typeof _rtsVisible === 'function';
+  var B = G.bombs || [], vis = typeof _rtsVisible === 'function', R3 = window._R3D;
+  if (R3 && R3.bombsOff) return;                 /* R3.bombsOff: a spec's A/B (e2e/unitfx) */
   for (var i = 0; i < B.length; i++) {
     var b = B[i];
     if (vis && !_rtsVisible(_rtsTX(b.x), _rtsTX(b.z))) continue;
     var y = V.ground(b.x, b.z) + b.y * RTS_AIR_ALT_K;
     _r3dFxStreak(V.M, V, b.x, y + R3D_BOMB_STREAK, b.z, b.x, y, b.z, 0.9, 0, R3D_FXT_RAIN, 0, i + 1, 1, 0, R3D_FX_BOMB);
+    _r3dFxBill(V.M, V, b.x, y, b.z, R3D_BOMB_BODY[0], R3D_BOMB_BODY[1], 0, R3D_FXT_BLOB, 0, i + 1, 0.95, 0, R3D_FX_BOMB);
   }
 }
 
@@ -27107,6 +27113,7 @@ function _r3dFrame(G) {
        its transport, and was drawn there - squads standing on the ground under a Skylift in flight.
        A Sky Crane's load is drawn by the crane, slung (unit3d.js). */
     if (e.inside) continue;
+    if (R3.hideId != null && e.id === R3.hideId) continue;   /* one unit out of the picture, for a spec's A/B (e2e/unitfx) */
     if (bound && (Math.abs(e.x - bound[0]) > bound[2] || Math.abs(e.z - bound[1]) > bound[2])) continue;
     if (view && (e.x < view.x0 || e.x > view.x1 || e.z < view.z0 || e.z > view.z1)) continue;   /* off the screen */
     if (e.type === 'struct') {
@@ -27961,7 +27968,7 @@ function _r3dRotorHubs(e, spin) {
 
    On the pad (rearming) everything sits level. R3.airOff takes the banking and pitch out, and
    R3.trailOff the contrails, for a spec's A/B; R3.rotorOff stops the propeller as it stops the
-   rotor. */
+   rotor; R3.canopyOff takes a paratrooper's canopy away (e2e/unitfx). */
 
 var R3D_BANK_K = 0.45;           /* radians of bank for each radian a second of turn */
 var R3D_BANK_MAX = 0.6;          /* the most anything banks, radians */
@@ -28033,7 +28040,7 @@ function _r3dFxAir(G, V) {
   for (var i = 0; i < E.length; i++) {
     /* A PARATROOPER'S CANOPY, over him while he comes down (core/paradrop.js, unit3d.js) */
     var pe = E[i];
-    if (pe.chute > 0 && !pe.dead && M[pe.id] && M[pe.id].y !== undefined && (typeof _rtsEntSeen !== 'function' || _rtsEntSeen(pe))) {   /* as the man himself: a Jammer hides his canopy too */
+    if (pe.chute > 0 && !R3.canopyOff && !pe.dead && M[pe.id] && M[pe.id].y !== undefined && (typeof _rtsEntSeen !== 'function' || _rtsEntSeen(pe))) {   /* as the man himself: a Jammer hides his canopy too */
       _r3dFxBill(V.M, V, pe.x, M[pe.id].y + 1.3, pe.z, 0.9, 0.42, 0.4, R3D_FXT_BLOB, 0.2, pe.id, 0.95, 0, R3D_CANOPY_C);
       continue;
     }
