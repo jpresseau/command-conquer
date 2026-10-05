@@ -145,7 +145,6 @@
   #rcgRts .rts-mute,#rcgRts .rts-x{width:40px;height:40px;font-size:17px;border-radius:7px}
   #rcgRts .rts-btns{gap:6px}
   #rcgRts .rts-x{margin-left:12px}
-  #rcgRts .rts-msg{top:56px}
 }
 /* Below 520px the bar is over-subscribed even with the title gone, and a difficulty pill
    clipped in half by the ellipsis reads as a rendering fault rather than as information. The
@@ -177,6 +176,12 @@
   opacity:0;transition:opacity .2s;pointer-events:none;
   white-space:normal;max-width:min(92%,560px);text-align:center}
 #rcgRts .rts-msg.on{opacity:1}
+/* A PHONE'S LINE clears its taller strip (46px), and the HUD's banners take the same slot
+   (ui/hud.js). This sat in the touch block above, where the plain rule after it won: the line
+   was at 44 on every upright phone, 2 pixels under the strip. Held sideways, see below. */
+@media (hover: none) and (pointer: coarse){
+  #rcgRts .rts-msg{top:56px}
+}
 
 /* --- win/lose card --- */
 #rcgRts .rts-over{position:absolute;inset:0;display:none;align-items:center;justify-content:center;

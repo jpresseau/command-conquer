@@ -18,7 +18,15 @@
                        move; a tank over one of its own buildings is a move
      THE TIDE LINE     says what the tide does next and when, at each of the five stages of the
                        period - and the flats really do dry and flood when it says
-     THE HELP LINE     names every key a desk tip names */
+     THE HELP LINE     names every key a desk tip names
+     PLACING           the placement banner names the gestures of the device in hand - click and
+                       Esc at a desk, drag and hold its button on a phone - and holding the button
+                       does cancel the placement
+     BANNERS           a banner is as wide as its words and clear of the compass: the longest
+                       phone line breaks in two inside a 360-pixel field rather than run off it
+     PINGS             a ground order given on attack-move pings in the cursor's own amber, from
+                       the field and from the radar; a tank sent onto scrap pings a move, and only
+                       a Harvester sent there pings the harvest it is given */
 
 var { Suite } = require('../lib/assert.js');
 var { load } = require('../lib/sandbox.js');
@@ -189,5 +197,61 @@ var named = {};
 g.RTS_UNITS.forEach(function (d) { ((g._rtsVerbTip(d, false) || '').replace(/^[^:]*:/, '').match(/(?:^|[\s(])([A-Z])(?= (?:or|\+|to) )/g) || []).forEach(function (m) { named[m.trim()] = 1; }); });
 var missing = Object.keys(named).filter(function (k) { return help.indexOf(' ' + k + ' ') < 0; });
 S.ok('the help line names every key a desk tip names', Object.keys(named).length >= 3 && !missing.length, (missing.length ? 'missing ' + missing.join(',') + ' from ' : '') + help);
+
+/* ---------------- placing ---------------- */
+g._rtsGhostHide = function () {};
+var pDesk = g._rtsPlaceHint('Power Plant', false), pPhone = g._rtsPlaceHint('Power Plant', true);
+G = fresh(); U = g.window._rtsUI;
+G.sides.player.ready = 'power'; U.place = 'power';
+g._rtsItemCancel('power');                 /* what holding a build button does on a phone (ui/sidebar.js) */
+S.ok('the placement banner names the device\'s gestures: click and Esc at a desk, drag and hold its button on a phone - and holding it does cancel the placement',
+     pDesk === 'Click to place Power Plant  ·  Esc to cancel' && !/click|esc/i.test(pPhone) && /^Drag to place Power Plant .*hold its button to cancel$/.test(pPhone) && U.place === null,
+     JSON.stringify([pDesk, pPhone, U.place]));
+
+/* ---------------- banners ---------------- */
+/* a context that measures 6.6 pixels a character at 13-pixel type, and keeps what was drawn */
+function fakeG() {
+  var o = { font: '', rects: [], texts: [], fillRect: function (x, y, w, h) { o.rects.push([x, y, w, h]); }, fillText: function (t) { o.texts.push(t); },
+            measureText: function (t) { return { width: t.length * 6.6 * parseFloat(o.font) / 13 }; } };
+  return o;
+}
+var longest = '';
+g.RTS_STRUCTS.forEach(function (d) { var h = g._rtsPlaceHint(d.name, true); if (h.length > longest.length) longest = h; });
+g._rtsTouchUI = phone;
+g.RTS_STRUCTS.forEach(function (d) { if (!d.super) return; var h = g._rtsArmedHint(d.super, true); if (h.length > longest.length) longest = h; });
+g._rtsTouchUI = desk;
+var fg = fakeG(), b360 = g._rtsBanner(fg, 360, longest, 56), r360 = fg.rects[0];
+var fg2 = fakeG(), b840 = g._rtsBanner(fg2, 840, pDesk, 44), r840 = fg2.rects[0];
+S.ok('a banner is as wide as its words and clear of the compass: the longest phone line breaks in two inside a 360-pixel field rather than run off it',
+     longest.length > 50 && b360.lines === 2 && fg.texts.length === 2 && r360[0] >= 56 && r360[0] + r360[2] <= 304 && r360[1] === 56 && b360.px >= 10 &&
+     b840.lines === 1 && b840.px === 13 && r840[2] === Math.ceil(pDesk.length * 6.6) + 24 && r840[1] === 44,
+     JSON.stringify([longest, b360, r360, b840, r840]));
+
+/* ---------------- attack-move ---------------- */
+G = fresh(); U = g.window._rtsUI;
+/* sent onto scrap, which is where the old ping went wrong: it read the ground, not the order */
+var ore = -1;
+for (var oi = 0; oi < N * N && ore < 0; oi++) if (G.scrap[oi] > 0 && !g._rtsBlocked(oi % N, (oi / N) | 0, null)) ore = oi;
+var ox0 = ore % N, oz0 = (ore / N) | 0, dw = { x: g._rtsWX(ox0), z: g._rtsWX(oz0) };
+var at0 = g._rtsNearestOpen(ox0 + 5, oz0, 8, null), tk2 = g._rtsSpawnUnit('player', 'tank', g._rtsWX(at0[0]), g._rtsWX(at0[1]));
+G.mapped[ore] = 1;                          /* the radar reads ore only where the map is explored */
+U.attackMove = true; order([tk2], null, dw); var kA = U.flash && U.flash.kind, oA = tk2.order;
+U.attackMove = false; order([tk2], null, dw); var kM = U.flash && U.flash.kind;
+U.flash = null; g._rtsRadarOrder([tk2], dw, true); var kRA = U.flash && U.flash.kind;
+U.flash = null; g._rtsRadarOrder([tk2], dw, false); var kRM = U.flash && U.flash.kind;
+var hv = g._rtsSpawnUnit('player', 'harvester', g._rtsWX(at0[0]), g._rtsWX(at0[1]));
+var cHv = cursor([hv], null, dw); U.flash = null; order([hv], null, dw); var kH = U.flash && U.flash.kind;
+/* the cursor's own colour for each order, read off the last stroke it makes */
+function cursorCol(kind) {
+  var t = {}, last = null;
+  var cg = new Proxy(t, { get: function (o, k) { return k in o ? o[k] : function () { if (k === 'stroke') last = o.strokeStyle; }; }, set: function (o, k, v) { o[k] = v; return true; } });
+  g._rtsDrawCursor(cg, 0, 0, kind);
+  return last;
+}
+var cA = cursorCol('amove'), cM = cursorCol('move');
+S.ok('a ground order on attack-move pings in the cursor\'s own amber, from the field and from the radar',
+     ore >= 0 && oA === 'amove' && kA === 'amove' && kRA === 'amove' && cA !== cM && g._rtsPingCol(kA) === cA, JSON.stringify([ore, oA, kA, kRA, cA, g._rtsPingCol('amove')]));
+S.ok('...and a tank sent onto scrap pings a move, not a harvest, from either; a Harvester sent there is the harvest cursor and the harvest ping',
+     ore >= 0 && kM === 'move' && kRM === 'move' && g._rtsPingCol(kM) === cM && cHv === 'harvest' && kH === 'harvest', JSON.stringify([kM, kRM, cM, cHv, kH]));
 
 require('../lib/report.js')(S);

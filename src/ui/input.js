@@ -39,15 +39,15 @@ function _rtsRadarOrder(mine, w, attackMove) {
     _rtsFlash(tgt.x, tgt.z, drops === mine.length ? 'harvest' : 'attack');
   } else {
     var onScrap = mapped && G.scrap[_rtsIdx(tx, tz)] > 0, onWater = G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER && !(G.tideDry && G.tideDry[_rtsIdx(tx, tz)]);
-    var spread = _rtsFormation(mine.length);
+    var spread = _rtsFormation(mine.length), reaped = 0, struck = 0;
     for (i = 0; i < mine.length; i++) {
       var u = mine[i], ud = rtsUnitDef(u.def);
-      if (ud.harvest && onScrap) { _rtsOrderHarvest(u, tx, tz); continue; }
+      if (ud.harvest && onScrap) { _rtsOrderHarvest(u, tx, tz); reaped++; continue; }
       if ((ud.sea || ud.air) && ud.carries && !onWater && _rtsCargoCount(u)) { if (_rtsLandAt(u, w.x + spread[i].x, w.z + spread[i].z) === 'here') u.landedT = G.t; continue; }
-      if (ud.carpets && attackMove) { _rtsBomberSend(u, { x: w.x + spread[i].x, z: w.z + spread[i].z }); continue; }
+      if (ud.carpets && attackMove) { _rtsBomberSend(u, { x: w.x + spread[i].x, z: w.z + spread[i].z }); struck++; continue; }
       _rtsOrderMove(u, w.x + spread[i].x, w.z + spread[i].z, attackMove);
     }
-    _rtsFlash(w.x, w.z, onScrap ? 'harvest' : 'move');
+    _rtsFlash(w.x, w.z, reaped ? 'harvest' : struck ? 'attack' : attackMove ? 'amove' : 'move');   /* as the field's (ui/select.js) */
   }
   _rtsKeepHeld(mine, false);
   return true;
