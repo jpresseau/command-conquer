@@ -46,7 +46,7 @@ function _rtsKeyDown(e) {
     var Gu = window._rtsG, out = 0, held = 0;
     if (Gu && Gu.sel) Gu.sel.forEach(function (t) {
       if (t.side !== 'player' || t.type !== 'unit' || !_rtsCargoCount(t)) return;
-      out += _rtsUnload(t);
+      out += _rtsUnloadNow(t);                       /* a Paradrop Plane's men jump: core/paradrop.js */
       held += _rtsCargoCount(t);
     });
     if (held && !out) _rtsSay('Nowhere to unload — bring it closer to shore.');

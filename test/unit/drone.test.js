@@ -166,6 +166,9 @@ function team(n, ox) {
 }
 var small = team(2, -30), large = team(5, 20), all = small.members.concat(large.members);
 var ed = g._rtsSpawnUnit('enemy', 'drone', ey.x, ey.z + 10);
+/* ...and a long gun at home, which the Spotter AI (core/spotter.js) would send a spotter ahead of:
+   the drone spots too, and it is the drone tick's, not the Spotter AI's */
+var gun = g._rtsSpawnUnit('enemy', 'arty', ey.x - 10, ey.z - 10); all.push(gun);
 var lo = 99, hi = 0;
 function only() { G.ents.forEach(function (e) { if (e.side === 'enemy' && e.type === 'unit' && e !== ed && all.indexOf(e) < 0) e.dead = true; }); hold(all); }
 run(40, only);
@@ -175,7 +178,7 @@ run(10, function () {
   lo = Math.min(lo, d); hi = Math.max(hi, d);
 });
 var toSmall = cells(ed, g._rtsTeamCentre(small));
-S.ok('...and keeps it circling over its largest team on the march', hi <= 5 && toSmall > hi,
-     'from ' + lo.toFixed(1) + ' to ' + hi.toFixed(1) + ' cells round the larger team\'s centre; ' + toSmall.toFixed(1) + ' from the smaller');
+S.ok('...and keeps it circling over its largest team on the march, a long gun at home notwithstanding', hi <= 5 && toSmall > hi && cells(ed, gun) > 10,
+     'from ' + lo.toFixed(1) + ' to ' + hi.toFixed(1) + ' cells round the larger team\'s centre; ' + toSmall.toFixed(1) + ' from the smaller, ' + cells(ed, gun).toFixed(1) + ' from the gun');
 
 require('../lib/report.js')(S);

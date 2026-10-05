@@ -4,7 +4,7 @@
                   the far shore at altitude and sets it down there, where the tank could not have
                   driven
      WHAT FITS    one vehicle and nothing more: a second tank cannot board, nor a squad, nor a
-                  transport
+                  transport; a Harvester ordered onto it goes aboard
      SHOT DOWN    over land its load is set down and lives; over water the load goes with it
      WHOSE        the Dominion builds it, behind an Airfield; the Compact does not (it has the
                   Skylift for men) */
@@ -88,6 +88,10 @@ g._rtsBoard(t1, c2);
 S.ok('one vehicle and nothing more: a second tank cannot board', t1.inside === c2 && !g._rtsCanBoard(t2, c2), '');
 c2.cargo = []; t1.inside = null;
 S.ok('...nor a squad, nor a transport', !g._rtsCanBoard(sq, c2) && !g._rtsCanBoard(apc, c2), '');
+/* a Harvester is a vehicle, and a field cut off by water is in the crane's own rules */
+var hv = g._rtsSpawnUnit('player', 'harvester', A.x + 8, A.z + 4), hvOk = g._rtsOrderBoard(hv, c2);
+run(12, function () { if (!c2.cargo || !c2.cargo.length) { c2.order = null; c2.path = null; } });
+S.ok('...a Harvester ordered onto it goes aboard', hvOk && hv.inside === c2, 'accepted ' + hvOk + ', inside ' + (hv.inside === c2));
 
 /* ---------------- shot down ---------------- */
 function downed(over) {
