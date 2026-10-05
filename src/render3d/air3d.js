@@ -89,7 +89,7 @@ function _r3dFxAir(G, V) {
   for (var i = 0; i < E.length; i++) {
     /* A PARATROOPER'S CANOPY, over him while he comes down (core/paradrop.js, unit3d.js) */
     var pe = E[i];
-    if (pe.chute > 0 && !pe.dead && M[pe.id] && M[pe.id].y !== undefined && (!vis || _rtsVisible(_rtsTX(pe.x), _rtsTX(pe.z)))) {
+    if (pe.chute > 0 && !pe.dead && M[pe.id] && M[pe.id].y !== undefined && (typeof _rtsEntSeen !== 'function' || _rtsEntSeen(pe))) {   /* as the man himself: a Jammer hides his canopy too */
       _r3dFxBill(V.M, V, pe.x, M[pe.id].y + 1.3, pe.z, 0.9, 0.42, 0.4, R3D_FXT_BLOB, 0.2, pe.id, 0.95, 0, R3D_CANOPY_C);
       continue;
     }

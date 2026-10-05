@@ -122,4 +122,12 @@ S.ok('the ring holds R3D_TREAD_MAX marks and lays the next over the oldest',
 var G3 = world(); g._r3dTreadTick(G3, R3);
 S.ok('a new game starts on clean ground', R3.treadN === 0 && R3.treadHead === 0, R3.treadN + ' marks');
 
+/* a tank riding in a Sky Crane is dragged along under it, ten units up: no tracks on the grass */
+(function () {
+  var G = world(), R3 = { motion: {}, treadLast: {}, treadN: 0 };
+  var rider = unit(G, 'tank', 40, 40); rider.inside = { id: 999 };
+  drive(G, R3, rider, 40 + g.R3D_TREAD_STEP * 6, 40, g.R3D_TREAD_STEP);
+  S.ok('a tank riding in a Sky Crane lays no tracks along the crane\'s flight', R3.treadN === 0, R3.treadN + ' marks');
+})();
+
 require('../lib/report.js')(S);

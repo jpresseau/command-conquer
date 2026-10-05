@@ -41,11 +41,16 @@ function _rtsLayMine(e, atx, atz) {
     tx = atx; tz = atz;
   }
   if (!G.mines) G.mines = [];
-  if (_rtsMinesLeft(e) <= 0) { if (e.side === 'player') _rtsSay('Out of mines - a Repair Bay will restock it.'); return false; }
+  if (_rtsMinesLeft(e) <= 0) {
+    if (e.side === 'player') _rtsSay(rtsUnitDef(e.def).sea ? 'Out of mines - bring it alongside your shipyard to restock.' : 'Out of mines - a Repair Bay will restock it.');
+    return false;
+  }
   if (_rtsMineAt(tx, tz)) { if (e.side === 'player') _rtsSay('There is already a mine here.'); return false; }
-  /* on ground, or - from a Mine Boat (core/seamines.js) - on water, and nowhere else */
-  if (!_rtsInB(tx, tz) || (G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER) !== !!rtsUnitDef(e.def).sea) return false;
-  G.mines.push({ tx: tx, tz: tz, side: e.side, arm: RTS_MINE.arm });
+  /* on ground, or - from a Mine Boat (core/seamines.js) - on water, and nowhere else; and never
+     on a bridge's deck, which is water underneath and a road on top */
+  var sea = !!rtsUnitDef(e.def).sea, ci = _rtsInB(tx, tz) ? _rtsIdx(tx, tz) : -1;
+  if (ci < 0 || (G.terrain[ci] === RTS_T_WATER) !== sea || (sea && _rtsIsBridgeCell(ci))) return false;
+  G.mines.push({ tx: tx, tz: tz, side: e.side, arm: RTS_MINE.arm, sea: sea });
   e.mines--;
   if (e.side === 'player' && typeof _rtsSfx === 'function') _rtsSfx('place', e.x, e.z);
   return true;
@@ -69,6 +74,11 @@ function _rtsMineTick(dt) {
     var hit = armed[_rtsIdx(_rtsTX(u.x), _rtsTX(u.z))];
     if (hit && (rtsUnitDef(u.def) || {}).sweeps) continue;      /* a Mine Sweeper never sets one off */
     if (!hit || hit.side === u.side || hit.gone) continue;
+    /* A SEA MINE GOES OFF UNDER WHAT FLOATS - a hull, a hovercraft - and a land mine under what
+       walks or drives, the hovercraft again. A tank crossing a flat the tide has dried, or a
+       bridge, is not afloat over the mine under it; a hull is never over a land mine at all. */
+    var dom = _rtsDomainOf(u);
+    if (hit.sea ? !dom : (dom && dom !== 'hover')) continue;
     hit.gone = true;
     var x = _rtsWX(hit.tx), z = _rtsWX(hit.tz);
     /* Under the unit, not beside it: the one that set it off takes the whole charge wherever
@@ -82,7 +92,7 @@ function _rtsMineTick(dt) {
     if (typeof _rtsSfx === 'function') _rtsSfx('boom', x, z);
     if (u.side === 'player') _rtsSay('Mine!');
     /* where a mine on land cost a side a unit - the opponent's sweeper goes there (core/sweeper.js) */
-    if (u.side === 'enemy' && G.terrain[_rtsIdx(hit.tx, hit.tz)] !== RTS_T_WATER) (G.mineHits = G.mineHits || []).push({ tx: hit.tx, tz: hit.tz });
+    if (u.side === 'enemy' && !hit.sea) (G.mineHits = G.mineHits || []).push({ tx: hit.tx, tz: hit.tz });
   }
   G.mines = G.mines.filter(function (m) { return !m.gone; });
 }

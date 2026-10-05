@@ -27,6 +27,11 @@ function _rtsFixWants(u) {
     if ((rtsUnitDef(v.def) || {}).kind !== d.healKind) continue;
     var dd = Math.hypot(v.x - u.x, v.z - u.z);
     if (dd <= d.heals * 0.8 || dd >= bd) continue;
+    /* ...and one it can get its aura onto: a Monitor on a flat at low water is four cells from
+       any water a Tender can sail, and a Tender fixed on it sat at the water's edge healing
+       nothing while a gunboat further off went unmended */
+    var dom = _rtsDomainOf(u), near = _rtsNearestOpen(_rtsTX(v.x), _rtsTX(v.z), Math.ceil(d.heals / RTS_TILE), dom);
+    if (!near || Math.hypot(_rtsWX(near[0]) - v.x, _rtsWX(near[1]) - v.z) > d.heals) continue;
     bd = dd; best = v;
   }
   return best;

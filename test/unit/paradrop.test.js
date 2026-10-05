@@ -56,7 +56,7 @@ S.ok('...and squads board it as it waits', pl.cargo && pl.cargo.length === 4, (p
 /* ---------------- the drop ---------------- */
 var dz = g._rtsNearestOpen(g._rtsTX(pl.x) + 20, g._rtsTX(pl.z), 6, null), DZ = { x: g._rtsWX(dz[0]), z: g._rtsWX(dz[1]) };
 g._rtsOrderUnloadAt(pl, DZ.x, DZ.z);
-var bait = null, jumped = null, lowAtDrop = 99, chuted = 0, movedFalling = 0, firedFalling = 0, at = {};
+var bait = null, jumped = null, lowAtDrop = 99, chuted = 0, movedFalling = 0, firedFalling = 0, at = {}, fell = {};
 run(20, function () {
   if (!jumped && pl.cargo && !pl.cargo.length) {
     jumped = G.t; lowAtDrop = g._rtsAirLift(pl);
@@ -64,15 +64,16 @@ run(20, function () {
     /* an enemy tank right beside them, to tempt a falling man */
     var c = men[0]; bait = g._rtsSpawnUnit('enemy', 'light', c.x + 6, c.z);
   } else if (jumped) men.forEach(function (u) {
-    if (u.chute > 0) { if (at[u.id] && Math.hypot(u.x - at[u.id].x, u.z - at[u.id].z) > 0.01) movedFalling++; if (u.fire > 0) firedFalling++; }
+    if (u.chute > 0) { fell[u.id] = (fell[u.id] || 0) + 1; if (at[u.id] && Math.hypot(u.x - at[u.id].x, u.z - at[u.id].z) > 0.01) movedFalling++; if (u.fire > 0) firedFalling++; }
   });
 });
 var spread = Math.max.apply(null, men.map(function (u) { return cells(u, DZ); }));
 S.ok('sent twenty cells off, it puts its squads down within a few cells of the drop zone', !!jumped && men.every(function (u) { return !u.inside; }) && spread <= 4,
      jumped ? 'farthest ' + spread.toFixed(1) + ' cells from the drop zone' : 'never dropped');
 S.ok('...without landing', lowAtDrop >= 10, lowAtDrop.toFixed(1) + ' up at the drop');
-S.ok('...each comes down under a canopy, and neither moves nor fires on the way', chuted === 4 && movedFalling === 0 && firedFalling === 0,
-     chuted + ' canopies; moved ' + movedFalling + ', fired ' + firedFalling);
+var shortest = Math.min.apply(null, men.map(function (u) { return fell[u.id] || 0; }));
+S.ok('...each comes down under a canopy for about a second, and neither moves nor fires on the way', chuted === 4 && shortest >= 30 && movedFalling === 0 && firedFalling === 0,
+     chuted + ' canopies, the shortest ' + shortest + ' frames; moved ' + movedFalling + ', fired ' + firedFalling);
 S.ok('...and then fights: the tank beside them is hit', !!bait && (bait.dead || bait.hp < bait.maxHp), bait ? (bait.dead ? 'destroyed' : bait.hp + ' of ' + bait.maxHp) : 'no tank');
 S.ok('...and the plane goes home to its Airfield', cells(pl, pad) < 3, cells(pl, pad).toFixed(1) + ' cells from it');
 

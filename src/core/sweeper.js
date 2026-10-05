@@ -30,7 +30,7 @@ function _rtsSweepTick(dt) {
       var d = Math.hypot(_rtsWX(m.tx) - u.x, _rtsWX(m.tz) - u.z) / RTS_TILE;
       if (d <= RTS_SWEEP.see) (m.seen = m.seen || {})[u.side] = 1;
       if (!(m.seen && m.seen[u.side])) continue;
-      if (G.terrain[_rtsIdx(m.tx, m.tz)] === RTS_T_WATER) continue;   /* seen, but out in the water */
+      if (m.sea) continue;                                        /* seen, but a sea mine: not its to clear */
       if (d <= RTS_SWEEP.reach) {
         m.sweep = (m.sweep || 0) + dt;
         if (m.sweep >= RTS_SWEEP.clear) {

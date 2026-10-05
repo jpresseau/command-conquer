@@ -4,7 +4,10 @@
                    lay one in the water
      SET OFF       an enemy gunboat sailing down the channel over it is hit and the mine is spent;
                    a gunboat of the layer's own side sails over unharmed, and so does a
-                   helicopter of the enemy's; an enemy hovercraft is hit
+                   helicopter of the enemy's; an enemy hovercraft is hit; a tank crossing the
+                   flat it lies on at low water is not, and the mine is still there; a sunk
+                   gunboat is not a place the opponent's Sweeper is sent (G.mineHits)
+     EMPTY         out of mines, the player is told to bring it alongside the yard, not to a bay
      HIDDEN        the enemy does not see it - until a Destroyer of theirs comes within sonar
                    reach; a Gunboat, with no sonar, finds nothing
      RESTOCKED     alongside its own yard it loads again; out at sea it does not
@@ -13,7 +16,8 @@
      BOTH ARMIES   either builds one from its yard
      THE OPPONENT  buys one once the player has a yard, not before; and lays its mines in the
                    water of the channel between the two yards, a few cells out from its own -
-                   never sent after a cell on land - and the plan keeps to its band */
+                   never sent after a cell on land - the plan keeps to its band, and a plan made
+                   at low water, with the channels dry to a hull, is the same plan */
 
 var { Suite } = require('../lib/assert.js');
 var { load } = require('../lib/sandbox.js');
@@ -95,11 +99,25 @@ function sail(side, key, from, to) {
   run(20, function () { if (g._rtsTX(u.x) === MC.tx && g._rtsTX(u.z) === MC.tz) over = true; if (u.air) { u.target = null; } });
   return { hurt: hp - (u.dead ? 0 : u.hp), spent: !M.G.mines.length, over: over || u.dead };
 }
-var foe = sail('enemy', 'gunboat'), own = sail('player', 'gunboat'), heli = sail('enemy', 'heli'), hov = sail('enemy', 'hovercraft', CH.p[Math.floor(CH.p.length / 2) - 3], CH.p[Math.floor(CH.p.length / 2) + 3]);
+var foe = sail('enemy', 'gunboat'), hitsAfter = (g.window._rtsG.mineHits || []).length;
+var own = sail('player', 'gunboat'), heli = sail('enemy', 'heli'), hov = sail('enemy', 'hovercraft', CH.p[Math.floor(CH.p.length / 2) - 3], CH.p[Math.floor(CH.p.length / 2) + 3]);
 S.ok('an enemy gunboat sailing down the channel over it is hit, and the mine is spent', foe.over && foe.hurt >= 300 && foe.spent, foe.hurt.toFixed(0) + ' hp; spent ' + foe.spent);
+S.ok('...and a sunk gunboat is not a place the opponent\'s Sweeper is sent', hitsAfter === 0, hitsAfter + ' mine hits recorded');
 S.ok('...a gunboat of the layer\'s own side sails over unharmed', own.over && own.hurt === 0 && !own.spent, 'over ' + own.over + ', ' + own.hurt + ' hp');
 S.ok('...and so does a helicopter of the enemy\'s', heli.over && heli.hurt === 0 && !heli.spent, 'over ' + heli.over + ', ' + heli.hurt + ' hp');
 S.ok('...and an enemy hovercraft is hit', hov.over && hov.hurt > 0 && hov.spent, 'over ' + hov.over + ', ' + hov.hurt.toFixed(0) + ' hp');
+
+/* a tank over a sea mine on a flat the tide has dried: at low water the flats are ground */
+G = fresh(); G.t = 180; g._rtsTideTick(0);
+var flat = null;
+for (var fi = 0; fi < g.RTS_N * g.RTS_N && !flat; fi++) if (G.tideD[fi] === 1 && G.tideDry[fi]) flat = W(fi % g.RTS_N, (fi / g.RTS_N) | 0);
+var mb = g._rtsSpawnUnit('player', 'mineboat', flat.x, flat.z), laidFlat = g._rtsLayMine(mb); mb.dead = true;
+var shoreC = g._rtsNearestOpen(flat.tx, flat.tz, 4, null), tank = g._rtsSpawnUnit('enemy', 'tank', g._rtsWX(shoreC[0]), g._rtsWX(shoreC[1])), tkHp = tank.hp, stood = false;
+run(3, function () { G.t = 180; g._rtsTideTick(0); tank.x = flat.x; tank.z = flat.z; tank.order = 'hold'; tank.path = null; if (g._rtsTX(tank.x) === flat.tx && g._rtsTX(tank.z) === flat.tz) stood = true; });
+S.ok('a tank crossing the flat it lies on at low water is not hit, and the mine is still there', laidFlat && stood && tank.hp === tkHp && G.mines.length === 1 && G.mines[0].sea === true,
+     'laid ' + laidFlat + ', stood on it ' + stood + ', ' + tkHp + ' -> ' + tank.hp + ', ' + G.mines.length + ' mines');
+/* ...and a Mine Layer's land mine is not set off by a hull: the one mine of each kind only goes
+   off under what it is for */
 
 /* ---------------- hidden ---------------- */
 function found(key) {
@@ -123,6 +141,11 @@ b1.mines = 0; b2.mines = 0;
 run(10, function () { [b1, b2].forEach(function (b) { b.order = 'hold'; b.path = null; }); });
 S.ok('alongside its own yard it loads again', b1.mines >= 2, b1.mines + ' mines after ten seconds');
 S.ok('...out at sea it does not', b2.mines === 0 && cells(b2, ny) > 6, b2.mines + ' mines, ' + cells(b2, ny).toFixed(1) + ' cells from the yard');
+
+/* ---------------- empty ---------------- */
+G = fresh();
+var mb0 = g._rtsSpawnUnit('player', 'mineboat', MC.x, MC.z); mb0.mines = 0; G.msg = '';
+S.ok('out of mines, the player is told to bring it alongside the yard, not to a bay', !g._rtsLayMine(mb0) && /shipyard/.test(G.msg) && !/Repair Bay/.test(G.msg), JSON.stringify(G.msg));
 
 /* ---------------- the sweeper ---------------- */
 var SW = mined('enemy'), swc = g._rtsNearestOpen(MC.tx, MC.tz, 8, null), sw = g._rtsSpawnUnit('player', 'sweeper', g._rtsWX(swc[0]), g._rtsWX(swc[1]));
@@ -184,5 +207,10 @@ var far = g._rtsAISeaMineSpots(G).map(function (s) { return cells(W(s[0], s[1]),
 g.RTS_SEAMINE.from = keep.from; G.ai.seaMines = null;
 S.ok('...and the plan keeps to its band of cells out from the yard', far.length > 0 && Math.min.apply(null, far) >= 7 && Math.max.apply(null, far) <= g.RTS_SEAMINE.to + 1.5,
      far.length ? far.length + ' cells, ' + Math.min.apply(null, far).toFixed(1) + '-' + Math.max.apply(null, far).toFixed(1) + ' out with the band at 8-' + g.RTS_SEAMINE.to : 'none');
+/* ...and the same plan at low water, when the channels are dry to a hull */
+var highPlan = (G.ai.seaMines = null, g._rtsAISeaMineSpots(G).map(String).sort().join(' '));
+G.t = 180; g._rtsTideTick(0); G.ai.seaMines = null;
+var lowPlan = g._rtsAISeaMineSpots(G).map(String).sort().join(' ');
+S.ok('...and a plan made at low water, the channels dry to a hull, is the same plan', lowPlan.length > 0 && lowPlan === highPlan, lowPlan.split(' ').length + ' cells at low water against ' + highPlan.split(' ').length + ' at high');
 
 require('../lib/report.js')(S);

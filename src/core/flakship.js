@@ -41,7 +41,9 @@ function _rtsEscortTick(dt) {
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (e.dead || e.type !== 'unit' || !_rtsEscorts(e)) continue;
-    var ours = e.order === 'amove' && e.esc && e.goal === e.esc;
+    /* its own station order, told from the player's by VALUE - a save writes the two objects
+       out separately, so identity does not survive a resume */
+    var ours = e.order === 'amove' && e.esc && e.goal && e.goal.x === e.esc.x && e.goal.z === e.esc.z;
     if (e.order && !ours) continue;                                   /* its own orders first */
     var s = _rtsEscortOf(e);
     if (!s) continue;

@@ -91,6 +91,31 @@ run(20, function () { sit([hurt]); });
 S.ok('left idle, it sails down the channel to a damaged gunboat eight cells off', cells(tn2, hurt) <= 3, cells(tn2, hurt).toFixed(1) + ' cells from it');
 S.ok('...and mends it', hurt.hp - h0 >= 100, h0.toFixed(0) + ' -> ' + hurt.hp.toFixed(0));
 
+/* a damaged Monitor out on a flat the tide has dried, four cells from any water a Tender can sail,
+   and a damaged gunboat further off in open water: the Tender goes to the one it can reach */
+G = fresh(); G.t = 180; g._rtsTideTick(0);
+var flatM = null;
+for (var fi = 0; fi < g.RTS_N * g.RTS_N && !flatM; fi++) {
+  if (G.tideD[fi] !== 1 || !G.tideDry[fi]) continue;
+  var fx = fi % g.RTS_N, fz = (fi / g.RTS_N) | 0, nearSea = g._rtsNearestOpen(fx, fz, 3, 'sea');
+  if (nearSea) continue;
+  var deepM = g._rtsNearestOpen(fx, fz, 9, 'sea');
+  if (deepM && Math.hypot(deepM[0] - fx, deepM[1] - fz) >= 4) flatM = { f: W(fx, fz), d: W(deepM[0], deepM[1]) };
+}
+var mon = flatM && g._rtsSpawnUnit('enemy', 'monitor', flatM.f.x, flatM.f.z), gbT = flatM && g._rtsSpawnUnit('enemy', 'gunboat', flatM.d.x, flatM.d.z);
+var tnT = flatM && g._rtsSpawnUnit('enemy', 'tender', flatM.d.x, flatM.d.z);
+if (flatM) {
+  /* the gunboat sails off a few cells so the Tender has somewhere to go, then everything holds */
+  var gc = g._rtsNearestOpen(flatM.d.tx, flatM.d.tz, 8, 'sea'); mon.hp = mon.maxHp * 0.3; gbT.hp = gbT.maxHp * 0.3;
+  var far8 = null;
+  for (var r8 = 6; r8 <= 10 && !far8; r8++) for (var a8 = 0; a8 < 16 && !far8; a8++) { var qx = Math.round(flatM.d.tx + Math.cos(a8 * Math.PI / 8) * r8), qz = Math.round(flatM.d.tz + Math.sin(a8 * Math.PI / 8) * r8); if (g._rtsInB(qx, qz) && !g._rtsBlocked(qx, qz, 'sea') && g._rtsPath(flatM.d.x, flatM.d.z, g._rtsWX(qx), g._rtsWX(qz), 'sea')) far8 = W(qx, qz); }
+  if (far8) { gbT.x = far8.x; gbT.z = far8.z; }
+  run(25, function () { G.t = 180; g._rtsTideTick(0); sit([mon, gbT]); G.sides.enemy.q = {}; });
+}
+var want = flatM && g._rtsFixWants(tnT);
+S.ok('it passes over a damaged Monitor on a flat it cannot reach for a damaged gunboat it can', !!flatM && !!gbT && want !== mon && cells(tnT, gbT) <= 3 && gbT.hp > gbT.maxHp * 0.3,
+     flatM ? 'went to the ' + (want === mon ? 'Monitor' : cells(tnT, gbT) <= 3 ? 'gunboat' : 'neither') + ', ' + cells(tnT, gbT).toFixed(1) + ' cells from the gunboat, ' + cells(tnT, mon).toFixed(1) + ' from the Monitor' : 'no dried flat four cells from open water on this map');
+
 /* ---------------- both armies ---------------- */
 function canBuild(army, key) {
   fresh(army);

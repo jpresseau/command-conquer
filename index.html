@@ -706,7 +706,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">9fd9520 · 2026-10-05</div>
+  <div id="rtsBuild" title="build">946a346 · 2026-10-05</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -12188,11 +12188,16 @@ function _rtsLayMine(e, atx, atz) {
     tx = atx; tz = atz;
   }
   if (!G.mines) G.mines = [];
-  if (_rtsMinesLeft(e) <= 0) { if (e.side === 'player') _rtsSay('Out of mines - a Repair Bay will restock it.'); return false; }
+  if (_rtsMinesLeft(e) <= 0) {
+    if (e.side === 'player') _rtsSay(rtsUnitDef(e.def).sea ? 'Out of mines - bring it alongside your shipyard to restock.' : 'Out of mines - a Repair Bay will restock it.');
+    return false;
+  }
   if (_rtsMineAt(tx, tz)) { if (e.side === 'player') _rtsSay('There is already a mine here.'); return false; }
-  /* on ground, or - from a Mine Boat (core/seamines.js) - on water, and nowhere else */
-  if (!_rtsInB(tx, tz) || (G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER) !== !!rtsUnitDef(e.def).sea) return false;
-  G.mines.push({ tx: tx, tz: tz, side: e.side, arm: RTS_MINE.arm });
+  /* on ground, or - from a Mine Boat (core/seamines.js) - on water, and nowhere else; and never
+     on a bridge's deck, which is water underneath and a road on top */
+  var sea = !!rtsUnitDef(e.def).sea, ci = _rtsInB(tx, tz) ? _rtsIdx(tx, tz) : -1;
+  if (ci < 0 || (G.terrain[ci] === RTS_T_WATER) !== sea || (sea && _rtsIsBridgeCell(ci))) return false;
+  G.mines.push({ tx: tx, tz: tz, side: e.side, arm: RTS_MINE.arm, sea: sea });
   e.mines--;
   if (e.side === 'player' && typeof _rtsSfx === 'function') _rtsSfx('place', e.x, e.z);
   return true;
@@ -12216,6 +12221,11 @@ function _rtsMineTick(dt) {
     var hit = armed[_rtsIdx(_rtsTX(u.x), _rtsTX(u.z))];
     if (hit && (rtsUnitDef(u.def) || {}).sweeps) continue;      /* a Mine Sweeper never sets one off */
     if (!hit || hit.side === u.side || hit.gone) continue;
+    /* A SEA MINE GOES OFF UNDER WHAT FLOATS - a hull, a hovercraft - and a land mine under what
+       walks or drives, the hovercraft again. A tank crossing a flat the tide has dried, or a
+       bridge, is not afloat over the mine under it; a hull is never over a land mine at all. */
+    var dom = _rtsDomainOf(u);
+    if (hit.sea ? !dom : (dom && dom !== 'hover')) continue;
     hit.gone = true;
     var x = _rtsWX(hit.tx), z = _rtsWX(hit.tz);
     /* Under the unit, not beside it: the one that set it off takes the whole charge wherever
@@ -12229,7 +12239,7 @@ function _rtsMineTick(dt) {
     if (typeof _rtsSfx === 'function') _rtsSfx('boom', x, z);
     if (u.side === 'player') _rtsSay('Mine!');
     /* where a mine on land cost a side a unit - the opponent's sweeper goes there (core/sweeper.js) */
-    if (u.side === 'enemy' && G.terrain[_rtsIdx(hit.tx, hit.tz)] !== RTS_T_WATER) (G.mineHits = G.mineHits || []).push({ tx: hit.tx, tz: hit.tz });
+    if (u.side === 'enemy' && !hit.sea) (G.mineHits = G.mineHits || []).push({ tx: hit.tx, tz: hit.tz });
   }
   G.mines = G.mines.filter(function (m) { return !m.gone; });
 }
@@ -12273,7 +12283,7 @@ function _rtsSweepTick(dt) {
       var d = Math.hypot(_rtsWX(m.tx) - u.x, _rtsWX(m.tz) - u.z) / RTS_TILE;
       if (d <= RTS_SWEEP.see) (m.seen = m.seen || {})[u.side] = 1;
       if (!(m.seen && m.seen[u.side])) continue;
-      if (G.terrain[_rtsIdx(m.tx, m.tz)] === RTS_T_WATER) continue;   /* seen, but out in the water */
+      if (m.sea) continue;                                        /* seen, but a sea mine: not its to clear */
       if (d <= RTS_SWEEP.reach) {
         m.sweep = (m.sweep || 0) + dt;
         if (m.sweep >= RTS_SWEEP.clear) {
@@ -12416,6 +12426,11 @@ function _rtsFixWants(u) {
     if ((rtsUnitDef(v.def) || {}).kind !== d.healKind) continue;
     var dd = Math.hypot(v.x - u.x, v.z - u.z);
     if (dd <= d.heals * 0.8 || dd >= bd) continue;
+    /* ...and one it can get its aura onto: a Monitor on a flat at low water is four cells from
+       any water a Tender can sail, and a Tender fixed on it sat at the water's edge healing
+       nothing while a gunboat further off went unmended */
+    var dom = _rtsDomainOf(u), near = _rtsNearestOpen(_rtsTX(v.x), _rtsTX(v.z), Math.ceil(d.heals / RTS_TILE), dom);
+    if (!near || Math.hypot(_rtsWX(near[0]) - v.x, _rtsWX(near[1]) - v.z) > d.heals) continue;
     bd = dd; best = v;
   }
   return best;
@@ -18500,7 +18515,7 @@ function _rtsAIHoverTick(dt) {
       return;
     }
     /* the ones still walking up are left behind, and are the army's again */
-    G.ents.forEach(function (u) { if (!u.dead && u.raid && !u.inside && u.order === 'board') { u.raid = 0; u.order = null; u.target = null; } });
+    G.ents.forEach(function (u) { if (!u.dead && u.raid && !u.inside && u.order === 'board' && u.target === hc) { u.raid = 0; u.order = null; u.target = null; } });   /* its own boarders, not the Paradrop Plane's */
     st.s = 'launch'; st.t = G.t;
   }
   var L = _rtsAIHoverLaunch(G), aim = _rtsAIHoverTarget();
@@ -18630,7 +18645,7 @@ function _rtsAIParaTick(dt) {
       if (late && G.t - st.t > RTS_PARA.board * 2) { st.s = 'rest'; st.t = G.t; }
       return;
     }
-    G.ents.forEach(function (u) { if (!u.dead && u.raid && !u.inside && u.order === 'board') { u.raid = 0; u.order = null; u.target = null; } });
+    G.ents.forEach(function (u) { if (!u.dead && u.raid && !u.inside && u.order === 'board' && u.target === pl) { u.raid = 0; u.order = null; u.target = null; } });
     st.aim = _rtsAIParaTarget();
     if (!st.aim) { st.s = 'rest'; st.t = G.t; return; }
     /* the drop zone: open ground just past the plant's footprint, on the side away from the
@@ -18875,7 +18890,9 @@ function _rtsEscortTick(dt) {
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (e.dead || e.type !== 'unit' || !_rtsEscorts(e)) continue;
-    var ours = e.order === 'amove' && e.esc && e.goal === e.esc;
+    /* its own station order, told from the player's by VALUE - a save writes the two objects
+       out separately, so identity does not survive a resume */
+    var ours = e.order === 'amove' && e.esc && e.goal && e.goal.x === e.esc.x && e.goal.z === e.esc.z;
     if (e.order && !ours) continue;                                   /* its own orders first */
     var s = _rtsEscortOf(e);
     if (!s) continue;
@@ -18934,7 +18951,7 @@ function _rtsSeaMineTick(dt) {
     /* sonar: the enemy's mines in the water within its reach are seen */
     if (d.detects && M) for (k = 0; k < M.length; k++) {
       var m = M[k];
-      if (m.side === u.side || G.terrain[_rtsIdx(m.tx, m.tz)] !== RTS_T_WATER) continue;
+      if (m.side === u.side || !m.sea) continue;
       if (Math.hypot(_rtsWX(m.tx) - u.x, _rtsWX(m.tz) - u.z) <= d.detects) (m.seen = m.seen || {})[u.side] = 1;
     }
   }
@@ -18942,15 +18959,20 @@ function _rtsSeaMineTick(dt) {
 
 /* ------------------------------------------------ the opponent's field -- */
 /* The channel: the sea route from the player's yard to its own, from .from to .to cells out
-   from its own, each cell with its neighbours across the route. Planned once per player yard. */
+   from its own, each cell with its neighbours across the route. Planned once per pair of yards,
+   IN THE SHALLOW DOMAIN - water at any tide - so a plan made at low water, when the channels are
+   dry to a hull, is the same plan as one made at high; and a plan that came back empty is asked
+   again after a while rather than kept for the match. */
+var RTS_SEAMINE_RECHECK = 30;
 function _rtsAISeaMineSpots(G) {
   var py = _rtsShipyardOf('player', null), ey = _rtsShipyardOf('enemy', null);
   if (!py || !ey) return [];
-  if (G.ai.seaMines && G.ai.seaMines.by === py.id + ':' + ey.id) return G.ai.seaMines.out;
+  var C = G.ai.seaMines;
+  if (C && C.by === py.id + ':' + ey.id && (C.out.length || G.t - C.t < RTS_SEAMINE_RECHECK)) return C.out;
   var out = [], seen = {};
-  G.ai.seaMines = { by: py.id + ':' + ey.id, out: out };
-  var a = _rtsNearestOpen(_rtsTX(ey.x), _rtsTX(ey.z), 6, 'sea'), b = _rtsNearestOpen(_rtsTX(py.x), _rtsTX(py.z), 6, 'sea');
-  var path = a && b && _rtsPath(_rtsWX(a[0]), _rtsWX(a[1]), _rtsWX(b[0]), _rtsWX(b[1]), 'sea');
+  G.ai.seaMines = { by: py.id + ':' + ey.id, out: out, t: G.t };
+  var a = _rtsNearestOpen(_rtsTX(ey.x), _rtsTX(ey.z), 6, 'shallow'), b = _rtsNearestOpen(_rtsTX(py.x), _rtsTX(py.z), 6, 'shallow');
+  var path = a && b && _rtsPath(_rtsWX(a[0]), _rtsWX(a[1]), _rtsWX(b[0]), _rtsWX(b[1]), 'shallow');
   if (!path || !path.length) return out;
   var px = _rtsWX(a[0]), pz = _rtsWX(a[1]), step = RTS_TILE / 2;
   for (var i = 0; i < path.length; i++) {
@@ -18961,7 +18983,7 @@ function _rtsAISeaMineSpots(G) {
       var ax = -dz / (L || 1), az = dx / (L || 1);
       for (var s = -1; s <= 1; s++) {
         var tx = _rtsTX(x + ax * s * RTS_TILE), tz = _rtsTX(z + az * s * RTS_TILE), key = tx + ',' + tz;
-        if (seen[key] || _rtsBlocked(tx, tz, 'sea')) continue;
+        if (seen[key] || _rtsBlocked(tx, tz, 'shallow')) continue;
         seen[key] = 1; out.push([tx, tz]);
       }
     }
@@ -25181,7 +25203,7 @@ function _r3dTreadTick(G, R3) {
   var a = R3.treadA || (R3.treadA = new Float32Array(R3D_TREAD_MAX * 6 * R3D_TREAD_F));
   for (var i = 0; i < E.length; i++) {
     var e = E[i];
-    if (e.dead || e.type !== 'unit' || e.air) continue;
+    if (e.dead || e.type !== 'unit' || e.air || e.inside) continue;      /* a slung tank is in the air */
     var d = rtsUnitDef(e.def);
     if (!d || d.kind === 'infantry' || d.kind === 'air' || d.sea || d.hover) continue;   /* a skirt leaves no track */
     var l = L[e.id];
@@ -27500,7 +27522,7 @@ function _r3dFxAir(G, V) {
   for (var i = 0; i < E.length; i++) {
     /* A PARATROOPER'S CANOPY, over him while he comes down (core/paradrop.js, unit3d.js) */
     var pe = E[i];
-    if (pe.chute > 0 && !pe.dead && M[pe.id] && M[pe.id].y !== undefined && (!vis || _rtsVisible(_rtsTX(pe.x), _rtsTX(pe.z)))) {
+    if (pe.chute > 0 && !pe.dead && M[pe.id] && M[pe.id].y !== undefined && (typeof _rtsEntSeen !== 'function' || _rtsEntSeen(pe))) {   /* as the man himself: a Jammer hides his canopy too */
       _r3dFxBill(V.M, V, pe.x, M[pe.id].y + 1.3, pe.z, 0.9, 0.42, 0.4, R3D_FXT_BLOB, 0.2, pe.id, 0.95, 0, R3D_CANOPY_C);
       continue;
     }
