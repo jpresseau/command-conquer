@@ -22,11 +22,23 @@ function _rtsParaHome(e) {
   }
   if (best) _rtsOrderMove(e, best.x, best.z, false);
 }
-/* the men who got out jump: a canopy and a fall before each can act; the plane goes home */
+/* the men who got out jump: a canopy and a fall before each can act; the plane goes home.
+   Each lands with no order unless one is given on the way down (core/units.js). */
 function _rtsParaJumped(e, men) {
-  for (var i = 0; i < men.length; i++) if (!men[i].inside && !men[i].dead) men[i].chute = RTS_PARA.fall;
+  for (var i = 0; i < men.length; i++) {
+    var u = men[i];
+    if (u.inside || u.dead) continue;
+    u.chute = RTS_PARA.fall; u.order = null; u.path = null; u.goal = null; u.target = null;
+  }
   _rtsParaHome(e);
   if (e.side === 'player' && typeof _rtsSay === 'function') _rtsSay('Paratroopers away.');
+}
+/* "Unload here and now" (the U key, the opponent's timed-out drop): the plane's men jump rather
+   than appear on the ground from sixteen units up. Anything else unloads as it always did. */
+function _rtsUnloadNow(t) {
+  var men = (t && t.cargo || []).slice(), n = _rtsUnload(t);
+  if (n && (rtsUnitDef(t.def) || {}).paradrops) _rtsParaJumped(t, men);
+  return n;
 }
 
 /* ------------------------------------------------ the opponent's drops -- */
@@ -98,7 +110,7 @@ function _rtsAIParaTick(dt) {
     return;
   }
   if (st.s === 'fly' && (!_rtsCargoCount(pl) || G.t - st.t > RTS_PARA.fly)) {
-    if (_rtsCargoCount(pl)) { _rtsUnload(pl); _rtsParaHome(pl); }
+    if (_rtsCargoCount(pl)) { if (!_rtsUnloadNow(pl)) _rtsParaHome(pl); }   /* out of time: jump here */
     st.s = 'rest'; st.t = G.t;
   }
 }
