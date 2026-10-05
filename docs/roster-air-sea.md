@@ -11,13 +11,19 @@ Skylift has to set down to put a squad off; this plane never does (`_rtsAirSettl
 - Squads board it as it waits in the air. Sent anywhere, it puts them down within a few cells
   of the drop zone without landing, and flies home to the nearest air pad.
 - Each man comes down under a canopy for `RTS_PARA.fall` (1.2 s), unable to move or fire
-  (`e.chute`, core/units.js), drawn falling (unit3d.js) under a canopy (air3d.js).
+  (`e.chute`, core/units.js), drawn falling (unit3d.js) under a canopy (air3d.js). He lands with
+  no order unless one is given on the way down, which he then follows (the jump clears what he
+  had; the canopy keeps what he is given).
+- Every way out of the plane is a jump: the aimed drop, the U key and the opponent's timed-out
+  drop all go through `_rtsUnloadNow` → `_rtsParaJumped`. A loaded, unarmed transport
+  right-clicked onto an enemy is sent to drop there (`_rtsOrderUnloadAt`), not to hover over it
+  (ui/select.js) - the Sky Crane and the Landing Craft too.
 - The opponent buys one once the player has two armed buildings and its own base has four
   (`_rtsAIDefended`), crews it with four squads (rocket first), drops them just past the
   player's least-guarded power plant on the side away from the player's yard, and they go for it.
 - Propellers: `RTS_AIR_PARTS.<key>.props` lists one per engine (air3d.js `_r3dPropModel`).
 
-`unit/paradrop` (14 assertions, 10 mutants killed).
+`unit/paradrop` (19 assertions, 15 mutants killed over two rounds).
 
 ## The Recon Drone — watching a place
 
@@ -30,7 +36,8 @@ unarmed and thin-skinned:
   side finds what it sees at full reach, and a Jammer hides nothing from it.
 - The opponent buys one when it is half-blind (`_rtsAIHalfBlind`: fog, a sandstorm, or a Jammer
   of the player's on the field) and defended, and keeps it circling over the centre of its
-  largest team on the march (`_rtsAIDroneTick`).
+  largest team on the march (`_rtsAIDroneTick`). The Spotter AI leaves it alone (`_rtsAISpotTick`
+  skips `orbits`), or the two pulled it between a long gun and the team every two seconds.
 
 `unit/drone` (14 assertions, 7 of 8 mutants killed; the survivor drops `side:'allied'`, which
 changes nothing, because the Dominion has no Helipad).
@@ -41,9 +48,20 @@ Both armies' four-engined bomber (`bomber`), behind either air pad: the Helipad 
 both `provides:['airpad']` (`core/bomber.js`):
 - Sent at anything on the ground, it lays `RTS_BOMB.n` (8) bombs `RTS_BOMB.gap` (1) cell apart in
   one pass, in a straight line along its course and centred on the aim (`_rtsBombRun`). Each bomb
-  is in `G.bombs`, falls for `RTS_BOMB.fall` (0.7 s), and bursts through `_rtsSplash`, which
-  hurts whoever is under it, either side. A bomber already past the start of the line lays only
-  what is still ahead of it. A new order mid-run calls the run off.
+  is in `G.bombs`, falls for `RTS_BOMB.fall` (0.7 s), and bursts through `_rtsSplash` with the
+  bomber as its source, which hurts whoever is under it, either side, but not the bomber turning
+  for home over its own tail. A bomber already past the start of the line lays only what is still
+  ahead of it.
+- **The run is the order's** (`run.tgt`): until the first bomb is away the line follows its
+  target, so a tank driving off is bombed where it is; a target that dies under the line does not
+  stop the line. A bay that has opened is spent: called off or re-aimed after the first bomb, the
+  round is gone and the bomber goes home; before the first bomb it turns away with its round, or
+  lays the line on the new target instead. A run or orbit goal is clamped inside the air clamp,
+  and a line that runs off the map ends there.
+- **It bombs only what it is sent at.** `carpets` units never acquire a target of their own (idle,
+  attack-moving or holding, core/units.js), never retaliate (`_rtsCanRetaliate`), and are never
+  pooled as base defenders (`_rtsBaseIsAttacked`): a loaded bomber on its pad does not carpet its
+  own base at the first raider past it.
 - Its `carpet` weapon is never fired as a shot (`_rtsFire` returns on `w.carpet`). It only lets
   the bomber be sent at ground targets. The run spends its one round (`ammo:1`), and
   `_rtsAirTick` sends it home to load again (`rearm:12`).
@@ -51,9 +69,10 @@ both `provides:['airpad']` (`core/bomber.js`):
   `STREAK` is additive, so a dark one would draw nothing.
 - The opponent buys one, after its Paradrop Plane, once the player has dug in and its own base
   is defended. Whenever the bomber is loaded, it is sent at the player's building with the most
-  other buildings within `RTS_BOMB.crowd` (4) cells (`_rtsAIBombTarget`).
+  other buildings within `RTS_BOMB.crowd` (4) cells (`_rtsAIBombTarget`); walls are not counted,
+  or a wall line outranks every real corner of the base.
 
-`unit/bomber` (18 assertions, 11 mutants killed).
+`unit/bomber` (26 assertions, 21 mutants killed over two rounds).
 
 ## The Flak Cruiser — escort at sea
 

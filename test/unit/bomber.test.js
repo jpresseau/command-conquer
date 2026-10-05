@@ -6,9 +6,18 @@
                    building is hit
      EVERYONE      a tank of its own side parked under the line is hurt too
      HOME          the load gone, it flies to an air pad, loads again, and can make another run
-     CALLED OFF    sent somewhere else mid-run, it stops laying bombs
-     NEVER A SHOT  loaded and idle right over an enemy tank, it does not fire on it as a gun
-                   would: it keeps its load for a run
+     CALLED OFF    sent somewhere else after the first bomb, it stops laying and its round is
+                   spent; called off before the first bomb it keeps its round; pointed at a
+                   second target after the first bomb the old line stops and the round is spent;
+                   pointed at a second target before the first bomb the line is laid on the new one
+     IT FOLLOWS    sent at a tank driving away, the line is laid where the tank is when the first
+                   bomb falls, not where it was when the order was given
+     UNHURT        it is not hit by its own bombs as it turns for home
+     ONLY ORDERED  loaded and idle right over an enemy tank it lays nothing and takes no order of
+                   its own; attack-moving past one it flies on; shot at, it does not turn on the
+                   gun; its base under attack, it is not sent to defend it
+     THE EDGE      sent at a target by the map's edge, the run ends and it goes home rather than
+                   hanging at the edge with its load
      BOTH ARMIES   either builds one, behind its own air pad - a Helipad or an Airfield
      THE OPPONENT  buys one (after its Paradrop Plane) once the player has dug in and its own base
                    is defended, not before;
@@ -100,26 +109,91 @@ g._rtsOrderAttack(bm, aim);
 run(25, function () { (G.bombs || []).forEach(function (b) { if (seen.indexOf(b) < 0) seen.push(b); }); });
 S.ok('...and can make another run', seen.length - before === 8, (seen.length - before) + ' bombs on the second');
 
-/* ---------------- never a shot ---------------- */
-G = fresh();
-var m = middle(), et = g._rtsSpawnUnit('enemy', 'tank', m.x, m.z), b2 = g._rtsSpawnUnit('player', 'bomber', m.x, m.z);
-var etHp = et.hp;
-g._rtsTick(1 / 30);
-S.ok('loaded and idle right over an enemy tank, it does not fire on it as a gun would', b2.ammo === 1 && et.hp === etHp, 'ammo ' + b2.ammo + '; tank ' + etHp + ' -> ' + et.hp);
-g._rtsTick(1 / 30);
-S.ok('...it keeps its load for a run', !!b2.run && b2.order === 'attack', 'run ' + !!b2.run + ', order ' + b2.order);
-
 /* ---------------- called off ---------------- */
+var m = middle();
+function sit(u) { u.order = 'hold'; u.path = null; u.target = null; u.cool = 9; }
+/* a bomber sent at a tank fourteen cells off; once `when` bombs are into the run - or, for 0,
+   once the run is planned and the bomber is on its way with nothing yet away - `then` is done to it */
+function interrupt(when, then, secs) {
+  var G = fresh(), b = g._rtsSpawnUnit('player', 'bomber', m.x - 14 * g.RTS_TILE, m.z), tk = g._rtsSpawnUnit('enemy', 'tank', m.x, m.z), drops = [], done = false, other = null, t0 = G.t;
+  g._rtsOrderAttack(b, tk);
+  run(secs || 14, function () {
+    sit(tk); if (other) sit(other);
+    (G.bombs || []).forEach(function (q) { if (drops.indexOf(q) < 0) drops.push(q); });
+    var ready = when > 0 ? drops.length >= when : (!!b.run && b.run.k === 0 && G.t - t0 > 1.5);
+    if (!done && ready) { done = true; other = then(b, tk); }
+  });
+  return { b: b, tk: tk, drops: drops, done: done, other: other };
+}
+var off2 = interrupt(2, function (b) { g._rtsOrderMove(b, m.x, m.z + 20 * g.RTS_TILE, false); });
+S.ok('sent somewhere else after the first bomb, it stops laying its carpet and its round is spent', off2.done && off2.drops.length >= 2 && off2.drops.length <= 3 && !off2.b.run && off2.b.ammo === 0,
+     off2.drops.length + ' bombs; run ' + !!off2.b.run + ', ammo ' + off2.b.ammo);
+var off0 = interrupt(0, function (b) { g._rtsOrderMove(b, m.x, m.z + 20 * g.RTS_TILE, false); }, 6);
+S.ok('...called off before the first bomb it keeps its round', off0.done && off0.drops.length === 0 && !off0.b.run && off0.b.ammo === 1, off0.drops.length + ' bombs, ammo ' + off0.b.ammo);
+var re2 = interrupt(2, function (b) { var o = g._rtsSpawnUnit('enemy', 'tank', m.x, m.z + 16 * g.RTS_TILE); g._rtsOrderAttack(b, o); return o; });
+S.ok('...pointed at a second target after the first bomb, the old line stops and the round is spent', re2.done && re2.drops.length >= 2 && re2.drops.length <= 3 && re2.b.ammo === 0 && !re2.b.run,
+     re2.drops.length + ' bombs, ammo ' + re2.b.ammo + ', run ' + !!re2.b.run);
+var re0 = interrupt(0, function (b) { var o = g._rtsSpawnUnit('enemy', 'tank', m.x, m.z + 12 * g.RTS_TILE); g._rtsOrderAttack(b, o); return o; }, 22);
+var c0 = { x: 0, z: 0 }; re0.drops.forEach(function (q) { c0.x += q.x / re0.drops.length; c0.z += q.z / re0.drops.length; });
+S.ok('...pointed at a second target before the first bomb, the line is laid on the new one', re0.drops.length === 8 && !!re0.other && cells(c0, re0.other) < 1 && cells(c0, re0.tk) > 8,
+     re0.drops.length + ' bombs, centred ' + (re0.other ? cells(c0, re0.other).toFixed(1) : '-') + ' cells from the new target, ' + cells(c0, re0.tk).toFixed(1) + ' from the old');
+
+/* ---------------- it follows ---------------- */
 G = fresh();
-var b3 = g._rtsSpawnUnit('player', 'bomber', m.x - 14 * g.RTS_TILE, m.z), tk3 = g._rtsSpawnUnit('enemy', 'tank', m.x, m.z), drops = [];
-g._rtsOrderAttack(b3, tk3);
-var moved = false;
-run(12, function () {
-  tk3.order = 'hold'; tk3.path = null; tk3.target = null; tk3.cool = 9;
-  (G.bombs || []).forEach(function (b) { if (drops.indexOf(b) < 0) drops.push(b); });
-  if (!moved && drops.length >= 2) { moved = true; g._rtsOrderMove(b3, m.x, m.z + 20 * g.RTS_TILE, false); }
+var b4 = g._rtsSpawnUnit('player', 'bomber', m.x - 20 * g.RTS_TILE, m.z), run4 = g._rtsSpawnUnit('enemy', 'tank', m.x, m.z), was = { x: run4.x, z: run4.z };
+var away = g._rtsNearestOpen(m.tx, m.tz + 14, 6, null);
+g._rtsOrderAttack(b4, run4);
+var atFirst = null;
+run(25, function () {
+  if (!run4.path && !run4.dead) g._rtsOrderMove(run4, g._rtsWX(away[0]), g._rtsWX(away[1]), false);
+  if (!atFirst && G.bombs && G.bombs.length && b4.run) {
+    var r4 = b4.run, half4 = (g.RTS_BOMB.n - 1) / 2 * g.RTS_BOMB.gap * g.RTS_TILE;
+    atFirst = { x: run4.x, z: run4.z, centre: { x: r4.sx + r4.dx * half4, z: r4.sz + r4.dz * half4 } };
+  }
 });
-S.ok('sent somewhere else mid-run, it stops laying its carpet', moved && drops.length >= 2 && drops.length <= 3 && !b3.run, drops.length + ' bombs; run ' + !!b3.run);
+/* the line's centre, read off the run as the first bomb falls: on the tank now, not where it was */
+var moved4 = atFirst ? cells(atFirst, was) : 0, nearNow = atFirst ? cells(atFirst.centre, atFirst) : 99, nearWas = atFirst ? cells(atFirst.centre, was) : 0;
+S.ok('sent at a tank driving away, the line is laid where the tank is when the first bomb falls, not where it was', !!atFirst && moved4 >= 4 && nearNow < 1.5 && nearWas > 3,
+     atFirst ? 'the tank had gone ' + moved4.toFixed(1) + ' cells; the line is centred ' + nearNow.toFixed(1) + ' cells from it and ' + nearWas.toFixed(1) + ' from where it had been' : 'no bomb fell');
+
+/* ---------------- unhurt ---------------- */
+/* home is BEHIND it: the run ends on the eighth bomb and the bomber turns about over the tail of
+   its own line as the last two burst */
+G = fresh();
+var pad5 = place('player', 'helipad'), c5 = g._rtsNearestOpen(pad5.tx + 14, pad5.tz, 6, null);
+var b5 = g._rtsSpawnUnit('player', 'bomber', pad5.x, pad5.z), tk5 = g._rtsSpawnUnit('enemy', 'tank', g._rtsWX(c5[0]), g._rtsWX(c5[1])), hp5 = b5.hp, hurt5 = false, turned = false;
+g._rtsOrderAttack(b5, tk5);
+run(16, function () { sit(tk5); if (b5.hp < hp5) hurt5 = true; if (b5.ammo === 0 && !b5.run && b5.order === 'rearm') turned = true; });
+S.ok('it is not hit by its own bombs as it turns for home', turned && !hurt5 && b5.ammo === 0, (turned ? 'turned for home; ' : 'never turned for home; ') + (hurt5 ? 'hurt' : 'unhurt') + ', ammo ' + b5.ammo);
+
+/* ---------------- only ordered ---------------- */
+G = fresh();
+var et = g._rtsSpawnUnit('enemy', 'tank', m.x, m.z), b2 = g._rtsSpawnUnit('player', 'bomber', m.x, m.z), etHp = et.hp;
+run(3, function () { sit(et); });
+S.ok('loaded and idle right over an enemy tank, it lays nothing and takes no order of its own', b2.ammo === 1 && et.hp === etHp && !b2.run && !b2.order && !(G.bombs && G.bombs.length),
+     'ammo ' + b2.ammo + ', order ' + b2.order + ', run ' + !!b2.run);
+var b6 = g._rtsSpawnUnit('player', 'bomber', m.x - 10 * g.RTS_TILE, m.z), goal6 = { x: m.x + 10 * g.RTS_TILE, z: m.z };
+g._rtsOrderMove(b6, goal6.x, goal6.z, true);
+run(8, function () { sit(et); });
+S.ok('...attack-moving past one, it flies on to where it was sent', cells(b6, goal6) < 2 && !b6.run && b6.ammo === 1, cells(b6, goal6).toFixed(1) + ' cells from its goal, ammo ' + b6.ammo);
+var flak = g._rtsSpawnUnit('enemy', 'flaktrack', m.x + 3 * g.RTS_TILE, m.z + 3 * g.RTS_TILE);
+g._rtsDamage(b2, 10, flak);
+S.ok('...shot at, it does not turn on the gun', b2.order !== 'attack' && !b2.run, 'order ' + b2.order);
+/* its base under attack: the pool of defenders is asked directly, with a loaded bomber idle at home */
+G = fresh();
+var eyd = g._rtsHas('enemy', 'yard'), eb = g._rtsSpawnUnit('enemy', 'bomber', eyd.x + 8, eyd.z), raider = g._rtsSpawnUnit('player', 'light', eyd.x + 12, eyd.z + 4);
+g._rtsSpawnUnit('enemy', 'tank', eyd.x - 8, eyd.z);
+var sent = g._rtsBaseIsAttacked(eyd, raider);
+S.ok('...and its base under attack, it is not sent to defend it', eb.order !== 'attack' && !eb.run, 'order ' + eb.order + '; ' + sent + ' defender(s) sent');
+
+/* ---------------- the edge ---------------- */
+G = fresh();
+var edgeC = g._rtsNearestOpen(g.RTS_N - 2, g.RTS_N >> 1, 6, null), edgeT = g._rtsSpawnUnit('enemy', 'tank', g._rtsWX(edgeC[0]), g._rtsWX(edgeC[1]));
+var b7 = g._rtsSpawnUnit('player', 'bomber', edgeT.x - 12 * g.RTS_TILE, edgeT.z), hung = true, dropped7 = 0;
+g._rtsOrderAttack(b7, edgeT);
+run(30, function () { sit(edgeT); if (G.bombs) dropped7 = Math.max(dropped7, G.bombs.length); if (!b7.run && b7.ammo === 0) hung = false; });
+S.ok('sent at a target by the map\'s edge, the run ends and it goes home rather than hanging there with its load', !hung && dropped7 > 0 && g._rtsTX(edgeT.x) >= g.RTS_N - 3,
+     (hung ? 'still on its run' : 'run over') + ', ' + dropped7 + ' bombs in the air at once, the target ' + (g.RTS_N - 1 - g._rtsTX(edgeT.x)) + ' cells from the edge');
 
 /* ---------------- both armies ---------------- */
 function canBuild(army, padKey) {
@@ -164,11 +238,19 @@ S.ok('...nor while its own base is undefended', undefended === 0, undefended + '
 py = g._rtsHas('player', 'yard');
 ['power', 'refinery', 'power'].forEach(function (k) { place('player', k); });
 var lone = place('player', 'power', { tx: py.tx, tz: py.tz }, 14);
-function round(b) { return G.ents.filter(function (o) { return !o.dead && o.side === 'player' && o.type === 'struct' && cells(o, b) <= g.RTS_BOMB.crowd; }).length; }
-var most = Math.max.apply(null, G.ents.filter(function (o) { return !o.dead && o.side === 'player' && o.type === 'struct'; }).map(round));
+/* ...and a wall line of nine segments off to one side: nine buildings round the middle one, more
+   than any real corner of the base, and not what a bomber is for */
+var walls = [];
+for (var wr = 8; wr < 24 && walls.length < 9; wr++) for (var wa = 0; wa < 8 && walls.length < 9; wa++) {
+  var wx0 = py.tx + Math.round(Math.cos(wa * Math.PI / 4) * wr), wz0 = py.tz + Math.round(Math.sin(wa * Math.PI / 4) * wr), ok = true;
+  for (var wi = 0; wi < 9; wi++) if (!g._rtsCanPlace('player', 'wall', wx0 + wi, wz0, true)) ok = false;
+  if (ok) for (var wj = 0; wj < 9; wj++) { var wb = g._rtsPlaceStruct('player', 'wall', wx0 + wj, wz0, true); wb.building = 0; walls.push(wb); }
+}
+function round(b) { return G.ents.filter(function (o) { return !o.dead && o.side === 'player' && o.type === 'struct' && !g.rtsStructDef(o.def).wall && cells(o, b) <= g.RTS_BOMB.crowd; }).length; }
+var most = Math.max.apply(null, G.ents.filter(function (o) { return !o.dead && o.side === 'player' && o.type === 'struct' && !g.rtsStructDef(o.def).wall; }).map(round));
 var eb = g._rtsSpawnUnit('enemy', 'bomber', ey.x, ey.z), sent = null, dropped = 0;
 run(40, function () { if (!sent && eb.target) sent = eb.target; if (G.bombs) dropped = Math.max(dropped, G.bombs.length); });
-S.ok('...and sends it at the most crowded corner of the player\'s base', !!lone && round(lone) < most && !!sent && sent !== lone && round(sent) === most && dropped > 0,
-     sent ? 'sent at a ' + sent.def + ' with ' + round(sent) + ' buildings round it, of ' + most + ' at most; the lone one has ' + (lone ? round(lone) : '-') + '; ' + dropped + ' bombs in the air at once' : 'never sent');
+S.ok('...and sends it at the most crowded corner of the player\'s base, never at the wall line', walls.length === 9 && !!lone && round(lone) < most && !!sent && sent !== lone && sent.def !== 'wall' && round(sent) === most && dropped > 0,
+     sent ? 'sent at a ' + sent.def + ' with ' + round(sent) + ' buildings round it, of ' + most + ' at most; the lone one has ' + (lone ? round(lone) : '-') + '; ' + walls.length + ' wall segments; ' + dropped + ' bombs in the air at once' : 'never sent');
 
 require('../lib/report.js')(S);

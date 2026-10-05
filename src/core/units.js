@@ -19,8 +19,11 @@ function _rtsUpdateUnit(e, dt) {
   if (e.recoil > 0) e.recoil -= dt;
   if (e.hitT > 0) e.hitT -= dt;
   if (e.spot > 0) e.spot -= dt;
-  /* UNDER A CANOPY: a paratrooper does nothing until he is down (core/paradrop.js) */
-  if (e.chute > 0) { e.chute -= dt; e.path = null; return; }
+  /* UNDER A CANOPY: a paratrooper does nothing until he is down (core/paradrop.js) - but an
+     order given on the way down is kept for the landing, so a move clicked while he falls is
+     followed, not left as an order with no path that he would stand under for the rest of the
+     match. The jump itself cleared whatever he had before (_rtsParaJumped). */
+  if (e.chute > 0) { e.chute -= dt; return; }
   /* Specialists do not panic. Fear scatters ordinary infantry, which is right for a rifle
      squad and fatal for a directed one: measured, a commando ordered onto an enemy barracks sat
      at fear 49.75, went prone, and had her goal rewritten every second - she circled the
@@ -45,8 +48,10 @@ function _rtsUpdateUnit(e, dt) {
      tank never ran anything over. */
   if (RTS_CRUSHERS[e.def]) _rtsOverrun(e);
 
-  /* ---- harvester economy loop ---- */
-  if (d.harvest) { _rtsUpdateHarvester(e, dt, d); return; }
+  /* ---- harvester economy loop ---- (unless it is walking onto a Sky Crane: the board order
+     is handled below like any other vehicle's, and the harvester is a vehicle the crane takes -
+     "a Harvester to a field cut off by water" is in the crane's own rules) */
+  if (d.harvest && e.order !== 'board') { _rtsUpdateHarvester(e, dt, d); return; }
 
   /* ---- Field Medic and Repair Truck: a passive aura, not an order ----
      Runs every tick regardless of what the medic is doing, because a medic that stops healing
@@ -211,10 +216,15 @@ function _rtsUpdateUnit(e, dt) {
   if (e.susp != null && !e.target && !e.path) _rtsRestoreMission(e);
   /* MISSION_STICKY holds ground: it acquires and fires, but never takes a chase order and
      never picks up a path. */
+  /* A BOMBER PICKS NOTHING UP BY ITSELF - its only shot is the carpet run its order starts
+     (core/bomber.js); acquiring here turned a loaded one on its pad into a run across its own
+     base at the first raider within five cells, and an attack-moving one into a hover over the
+     first thing it passed. */
+  var acq = w && !d.carpets;
   if (e.order === 'hold') {
     e.path = null; e.goal = null;
-    if (w && (!tgt || _rtsRangeTo(e, tgt) > _rtsReach(e))) e.target = tgt = _rtsFindTarget(e, _rtsReach(e));
-  } else if (w && !tgt && (e.order === 'amove' || !e.order)) {
+    if (acq && (!tgt || _rtsRangeTo(e, tgt) > _rtsReach(e))) e.target = tgt = _rtsFindTarget(e, _rtsReach(e));
+  } else if (acq && !tgt && (e.order === 'amove' || !e.order)) {
     /* ANYTHING LOOKS AS FAR AS IT SHOOTS. This started as a special case for the two siege
        hulls, whose guns reach 34 against sight 16 - they had to walk into everything else's
        range before they could fire, which is why they were worthless. Sweeping the roster

@@ -93,7 +93,8 @@ function _rtsBaseIsAttacked(bldg, enemy) {
     var u = G.ents[i];
     if (u.dead || u.side !== 'enemy' || u.type !== 'unit') continue;
     var ud = rtsUnitDef(u.def);
-    if (!ud.weapon || ud.harvest) continue;
+    /* ...nor a bomber, whose answer to a raider in its own base would be a carpet across it */
+    if (!ud.weapon || ud.harvest || ud.carpets) continue;
     /* "Never recruit sticky guard units to defend a base." */
     if (!_rtsMission(u).recruitable) continue;
     var w = RTS_WEAPONS[ud.weapon];
@@ -164,7 +165,7 @@ function _rtsCanRetaliate(tgt, from) {
   if (from.side === tgt.side) return false;                 /* never against an ally */
   if (!_rtsMission(tgt).retaliate) return false;            /* "If the mission precludes it" */
   var d = rtsUnitDef(tgt.def);
-  if (!d || !d.weapon) return false;
+  if (!d || !d.weapon || d.carpets) return false;         /* a bomber flies on: core/bomber.js */
   var w = RTS_WEAPONS[d.weapon];
   /* "Don't allow retaliation if it isn't equipped with a weapon that can deal with the
      threat" - a Modifier of zero against that armour means shooting back is pointless. */

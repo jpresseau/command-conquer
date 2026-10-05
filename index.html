@@ -706,7 +706,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">ff4918e · 2026-10-05</div>
+  <div id="rtsBuild" title="build">4fc275c · 2026-10-05</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -15173,7 +15173,8 @@ function _rtsBaseIsAttacked(bldg, enemy) {
     var u = G.ents[i];
     if (u.dead || u.side !== 'enemy' || u.type !== 'unit') continue;
     var ud = rtsUnitDef(u.def);
-    if (!ud.weapon || ud.harvest) continue;
+    /* ...nor a bomber, whose answer to a raider in its own base would be a carpet across it */
+    if (!ud.weapon || ud.harvest || ud.carpets) continue;
     /* "Never recruit sticky guard units to defend a base." */
     if (!_rtsMission(u).recruitable) continue;
     var w = RTS_WEAPONS[ud.weapon];
@@ -15244,7 +15245,7 @@ function _rtsCanRetaliate(tgt, from) {
   if (from.side === tgt.side) return false;                 /* never against an ally */
   if (!_rtsMission(tgt).retaliate) return false;            /* "If the mission precludes it" */
   var d = rtsUnitDef(tgt.def);
-  if (!d || !d.weapon) return false;
+  if (!d || !d.weapon || d.carpets) return false;         /* a bomber flies on: core/bomber.js */
   var w = RTS_WEAPONS[d.weapon];
   /* "Don't allow retaliation if it isn't equipped with a weapon that can deal with the
      threat" - a Modifier of zero against that armour means shooting back is pointless. */
@@ -15781,8 +15782,11 @@ function _rtsUpdateUnit(e, dt) {
   if (e.recoil > 0) e.recoil -= dt;
   if (e.hitT > 0) e.hitT -= dt;
   if (e.spot > 0) e.spot -= dt;
-  /* UNDER A CANOPY: a paratrooper does nothing until he is down (core/paradrop.js) */
-  if (e.chute > 0) { e.chute -= dt; e.path = null; return; }
+  /* UNDER A CANOPY: a paratrooper does nothing until he is down (core/paradrop.js) - but an
+     order given on the way down is kept for the landing, so a move clicked while he falls is
+     followed, not left as an order with no path that he would stand under for the rest of the
+     match. The jump itself cleared whatever he had before (_rtsParaJumped). */
+  if (e.chute > 0) { e.chute -= dt; return; }
   /* Specialists do not panic. Fear scatters ordinary infantry, which is right for a rifle
      squad and fatal for a directed one: measured, a commando ordered onto an enemy barracks sat
      at fear 49.75, went prone, and had her goal rewritten every second - she circled the
@@ -15807,8 +15811,10 @@ function _rtsUpdateUnit(e, dt) {
      tank never ran anything over. */
   if (RTS_CRUSHERS[e.def]) _rtsOverrun(e);
 
-  /* ---- harvester economy loop ---- */
-  if (d.harvest) { _rtsUpdateHarvester(e, dt, d); return; }
+  /* ---- harvester economy loop ---- (unless it is walking onto a Sky Crane: the board order
+     is handled below like any other vehicle's, and the harvester is a vehicle the crane takes -
+     "a Harvester to a field cut off by water" is in the crane's own rules) */
+  if (d.harvest && e.order !== 'board') { _rtsUpdateHarvester(e, dt, d); return; }
 
   /* ---- Field Medic and Repair Truck: a passive aura, not an order ----
      Runs every tick regardless of what the medic is doing, because a medic that stops healing
@@ -15973,10 +15979,15 @@ function _rtsUpdateUnit(e, dt) {
   if (e.susp != null && !e.target && !e.path) _rtsRestoreMission(e);
   /* MISSION_STICKY holds ground: it acquires and fires, but never takes a chase order and
      never picks up a path. */
+  /* A BOMBER PICKS NOTHING UP BY ITSELF - its only shot is the carpet run its order starts
+     (core/bomber.js); acquiring here turned a loaded one on its pad into a run across its own
+     base at the first raider within five cells, and an attack-moving one into a hover over the
+     first thing it passed. */
+  var acq = w && !d.carpets;
   if (e.order === 'hold') {
     e.path = null; e.goal = null;
-    if (w && (!tgt || _rtsRangeTo(e, tgt) > _rtsReach(e))) e.target = tgt = _rtsFindTarget(e, _rtsReach(e));
-  } else if (w && !tgt && (e.order === 'amove' || !e.order)) {
+    if (acq && (!tgt || _rtsRangeTo(e, tgt) > _rtsReach(e))) e.target = tgt = _rtsFindTarget(e, _rtsReach(e));
+  } else if (acq && !tgt && (e.order === 'amove' || !e.order)) {
     /* ANYTHING LOOKS AS FAR AS IT SHOOTS. This started as a special case for the two siege
        hulls, whose guns reach 34 against sight 16 - they had to walk into everything else's
        range before they could fire, which is why they were worthless. Sweeping the roster
@@ -18694,6 +18705,15 @@ function _rtsAIDroneTick(dt) {
    carpet-bomb a fight and your own men are under it too. Then the rack is empty, and it flies
    home to any air pad to load again (core/move.js `_rtsAirTick`).
 
+   THE RUN IS THE ORDER'S. It belongs to the target it was given (run.tgt), and the line follows
+   that target until the first bomb is away - a tank driving off is bombed where it is, not where
+   it was. A bay that has opened is spent: called off or re-aimed after the first bomb, the bomber
+   keeps nothing and goes home to load; before the first bomb it simply turns away, or re-plans on
+   the new target. A target that dies under the line does not stop the line. And the bomber bombs
+   ONLY what it is sent at: it never picks a target up by itself (core/units.js skips `carpets`
+   in acquisition, core/response.js in retaliation and the base's defence), so a loaded one on its
+   pad does not carpet its own base at the first raider to walk past.
+
    Both armies build one, behind a Helipad or an Airfield (`provides:['airpad']`). Its weapon is
    `carpet`, which only says what it can be sent at: _rtsFire never fires it (combat.js).
 
@@ -18708,24 +18728,42 @@ function _rtsBombRun(e, x, z) {
   var dx = x - e.x, dz = z - e.z, L = Math.hypot(dx, dz) || 1, step = RTS_BOMB.gap * RTS_TILE;
   dx /= L; dz /= L;
   var half = (RTS_BOMB.n - 1) / 2 * step, out = half + RTS_BOMB.lead * RTS_TILE;
-  e.run = { sx: x - dx * half, sz: z - dz * half, dx: dx, dz: dz, k: 0 };
+  e.run = { sx: x - dx * half, sz: z - dz * half, dx: dx, dz: dz, k: 0, tgt: e.target ? e.target.id : null };
   /* already past the start of the line: it lays only what is still ahead of it */
   var s = ((e.x - e.run.sx) * dx + (e.z - e.run.sz) * dz) / step;
   if (s > 0) e.run.k = Math.ceil(s);
-  e.goal = { x: x + dx * out, z: z + dz * out };
+  /* the run's end, inside the air clamp (core/airspace.js): a goal past the map's edge is one
+     the bomber can never reach, and it hung there with its load */
+  var lo = _rtsWX(0), hi = _rtsWX(RTS_N - 1);
+  e.goal = { x: Math.max(lo, Math.min(hi, x + dx * out)), z: Math.max(lo, Math.min(hi, z + dz * out)) };
   e.path = [{ x: e.goal.x, z: e.goal.z }]; e.pi = 0;
 }
 /* A bomber's tick, ahead of the ordinary engage logic: true while it is on a run (the caller
    steers it), false to leave it to everything else. */
 function _rtsBomberTick(e, dt, d) {
   if (!d.carpets) return false;
-  if (e.order !== 'attack') { e.run = null; return false; }
-  if (!e.run) {
-    if (!(e.ammo > 0) || !e.target || e.target.dead) return false;
-    _rtsBombRun(e, e.target.x, e.target.z);
+  var r = e.run, live = e.order === 'attack' && !!e.target && !e.target.dead;
+  /* called off, or pointed at something else: a bay that has opened is spent */
+  if (r && (e.order !== 'attack' || (e.target && r.tgt !== e.target.id))) {
+    if (r.k > 0) e.ammo = 0;
+    e.run = r = null;
   }
-  var r = e.run, step = RTS_BOMB.gap * RTS_TILE, s = ((e.x - r.sx) * r.dx + (e.z - r.sz) * r.dz) / step;
-  while (r.k < RTS_BOMB.n && s >= r.k) { _rtsBombDrop(e, r.sx + r.dx * r.k * step, r.sz + r.dz * r.k * step); r.k++; }
+  if (!r) {
+    if (!live || !(e.ammo > 0)) return false;
+    _rtsBombRun(e, e.target.x, e.target.z); r = e.run;
+  } else if (r.k === 0) {
+    /* nothing away yet: the line follows the target - or, the target gone, the run is off. The
+       first bomb stays the first: a re-plan on the tick the bomber crosses the start of the line
+       would otherwise count it as already past bomb 0 and lay seven. */
+    if (!live) { e.run = null; e.order = null; e.target = null; e.path = null; e.goal = null; return false; }
+    _rtsBombRun(e, e.target.x, e.target.z); r = e.run; r.k = 0;
+  }
+  var step = RTS_BOMB.gap * RTS_TILE, s = ((e.x - r.sx) * r.dx + (e.z - r.sz) * r.dz) / step;
+  while (r.k < RTS_BOMB.n && s >= r.k) {
+    var bx = r.sx + r.dx * r.k * step, bz = r.sz + r.dz * r.k * step;
+    if (!_rtsInB(_rtsTX(bx), _rtsTX(bz))) { r.k = RTS_BOMB.n; break; }     /* the line runs off the map */
+    _rtsBombDrop(e, bx, bz); r.k++;
+  }
   if (r.k >= RTS_BOMB.n || !e.path || e.pi >= e.path.length) {
     /* the load is gone: home to load again */
     e.run = null; e.ammo = 0; e.target = null; e.order = null; e.path = null; e.goal = null;
@@ -18746,17 +18784,20 @@ function _rtsBombsTick(dt) {
     b.y = Math.max(0, b.y * b.t / (b.t + dt));
     if (b.t > 0) continue;
     B.splice(i, 1);
-    _rtsSplash(b.x, b.z, RTS_BOMB.rad * RTS_TILE, RTS_BOMB.dmg, b.side, 1, null);
+    /* `from` is the bomber: a splash spares its source, and the bomber turning for home hangs
+       over the tail of its own line as the last bombs burst */
+    _rtsSplash(b.x, b.z, RTS_BOMB.rad * RTS_TILE, RTS_BOMB.dmg, b.side, 1, b.from && !b.from.dead ? b.from : null);
     _rtsCombatAnim(RTS_BOMB.dmg, b.x, b.z, 1.6, null);
     if (typeof _rtsSfx === 'function') _rtsSfx('boom', b.x, b.z);
   }
 }
 
 /* ------------------------------------------------ the opponent's runs -- */
-/* the most crowded corner of the player's base: the building with most others round it */
+/* the most crowded corner of the player's base: the building with most others round it - walls
+   not counted, or a wall line (nine segments round any one of them) outranks every real cluster */
 function _rtsAIBombTarget() {
   var G = window._rtsG, best = null, bv = -1, R = RTS_BOMB.crowd * RTS_TILE, bs = [];
-  for (var i = 0; i < G.ents.length; i++) { var b = G.ents[i]; if (!b.dead && b.side === 'player' && b.type === 'struct') bs.push(b); }
+  for (var i = 0; i < G.ents.length; i++) { var b = G.ents[i]; if (!b.dead && b.side === 'player' && b.type === 'struct' && !(rtsStructDef(b.def) || {}).wall) bs.push(b); }
   for (var a = 0; a < bs.length; a++) {
     var n = 0;
     for (var k = 0; k < bs.length; k++) if (Math.hypot(bs[k].x - bs[a].x, bs[k].z - bs[a].z) <= R) n++;
