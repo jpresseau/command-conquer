@@ -97,7 +97,7 @@ function _rtsAIParaTick(dt) {
       if (late && G.t - st.t > RTS_PARA.board * 2) { st.s = 'rest'; st.t = G.t; }
       return;
     }
-    G.ents.forEach(function (u) { if (!u.dead && u.raid && !u.inside && u.order === 'board') { u.raid = 0; u.order = null; u.target = null; } });
+    G.ents.forEach(function (u) { if (!u.dead && u.raid && !u.inside && u.order === 'board' && u.target === pl) { u.raid = 0; u.order = null; u.target = null; } });
     st.aim = _rtsAIParaTarget();
     if (!st.aim) { st.s = 'rest'; st.t = G.t; return; }
     /* the drop zone: open ground just past the plant's footprint, on the side away from the

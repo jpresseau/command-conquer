@@ -88,12 +88,13 @@ var gb1 = g._rtsSpawnUnit('player', 'gunboat', C.x, C.z), f1 = at(C, 2, 0);
 var fl1 = g._rtsSpawnUnit('player', 'flakship', f1.x, f1.z);
 var to = CH.B;
 g._rtsOrderMove(gb1, to.x, to.z, false);
-var far = 0;
-run(25, function () { if (G.t > 6) far = Math.max(far, cells(fl1, gb1)); });
+var far = 0, amoves = 0, plainMoves = 0;
+run(25, function () { if (G.t > 6) far = Math.max(far, cells(fl1, gb1)); if (fl1.esc) { if (fl1.order === 'amove') amoves++; else if (fl1.order === 'move') plainMoves++; } });
 var gone = cells(gb1, C);
 S.ok('left idle beside a gunboat, it follows when the gunboat sails fourteen cells', gone >= 12 && cells(fl1, gb1) <= 4,
      'the gunboat went ' + gone.toFixed(1) + ' cells; the cruiser ended ' + cells(fl1, gb1).toFixed(1) + ' from it');
 S.ok('...and keeps within a few cells of it', far <= 7, 'at most ' + far.toFixed(1) + ' cells behind after the first six seconds');
+S.ok('...closing up on an attack-move, so it fires at anything flying over on the way', amoves > 0 && plainMoves === 0, amoves + ' ticks on amove, ' + plainMoves + ' on a plain move');
 /* the player's order comes first */
 var spot = C, there = null, stillThere = null, broke = 0;
 g._rtsOrderMove(fl1, spot.x, spot.z, false);
@@ -115,6 +116,14 @@ g._rtsOrderMove(sailing, CH.B.x, CH.B.z, false);
 run(25, function () { parked.order = 'hold'; parked.path = null; });
 S.ok('it keeps station on the ship under way, not on the one parked nearer', cells(fl3, sailing) <= 4 && cells(fl3, parked) > 6 && cells(sailing, parked) >= 10,
      cells(fl3, sailing).toFixed(1) + ' cells from the sailing gunboat, ' + cells(fl3, parked).toFixed(1) + ' from the parked one');
+/* after a save and a resume the station order is two objects with one value; a cruiser that has
+   acquired a target has no path, so an 'amove' it does not recognise as its own would never end */
+G = fresh();
+var gbS = g._rtsSpawnUnit('player', 'gunboat', C.x, C.z), fS = at(C, 2, 0), flS = g._rtsSpawnUnit('player', 'flakship', fS.x, fS.z);
+flS.order = 'amove'; flS.esc = { x: flS.x, z: flS.z }; flS.goal = { x: flS.x, z: flS.z }; flS.path = null;
+g._rtsOrderMove(gbS, CH.B.x, CH.B.z, false);
+run(25);
+S.ok('its station order is still its own after a save has split it into two objects: it follows the gunboat', cells(flS, gbS) <= 4 && cells(gbS, C) >= 12, cells(flS, gbS).toFixed(1) + ' cells from the gunboat');
 /* nothing to follow */
 G = fresh();
 var lone = g._rtsSpawnUnit('player', 'flakship', C.x, C.z), x0 = lone.x, z0 = lone.z;

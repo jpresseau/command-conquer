@@ -139,7 +139,7 @@ function _rtsAIHoverTick(dt) {
       return;
     }
     /* the ones still walking up are left behind, and are the army's again */
-    G.ents.forEach(function (u) { if (!u.dead && u.raid && !u.inside && u.order === 'board') { u.raid = 0; u.order = null; u.target = null; } });
+    G.ents.forEach(function (u) { if (!u.dead && u.raid && !u.inside && u.order === 'board' && u.target === hc) { u.raid = 0; u.order = null; u.target = null; } });   /* its own boarders, not the Paradrop Plane's */
     st.s = 'launch'; st.t = G.t;
   }
   var L = _rtsAIHoverLaunch(G), aim = _rtsAIHoverTarget();

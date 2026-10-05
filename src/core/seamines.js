@@ -42,7 +42,7 @@ function _rtsSeaMineTick(dt) {
     /* sonar: the enemy's mines in the water within its reach are seen */
     if (d.detects && M) for (k = 0; k < M.length; k++) {
       var m = M[k];
-      if (m.side === u.side || G.terrain[_rtsIdx(m.tx, m.tz)] !== RTS_T_WATER) continue;
+      if (m.side === u.side || !m.sea) continue;
       if (Math.hypot(_rtsWX(m.tx) - u.x, _rtsWX(m.tz) - u.z) <= d.detects) (m.seen = m.seen || {})[u.side] = 1;
     }
   }
@@ -50,15 +50,20 @@ function _rtsSeaMineTick(dt) {
 
 /* ------------------------------------------------ the opponent's field -- */
 /* The channel: the sea route from the player's yard to its own, from .from to .to cells out
-   from its own, each cell with its neighbours across the route. Planned once per player yard. */
+   from its own, each cell with its neighbours across the route. Planned once per pair of yards,
+   IN THE SHALLOW DOMAIN - water at any tide - so a plan made at low water, when the channels are
+   dry to a hull, is the same plan as one made at high; and a plan that came back empty is asked
+   again after a while rather than kept for the match. */
+var RTS_SEAMINE_RECHECK = 30;
 function _rtsAISeaMineSpots(G) {
   var py = _rtsShipyardOf('player', null), ey = _rtsShipyardOf('enemy', null);
   if (!py || !ey) return [];
-  if (G.ai.seaMines && G.ai.seaMines.by === py.id + ':' + ey.id) return G.ai.seaMines.out;
+  var C = G.ai.seaMines;
+  if (C && C.by === py.id + ':' + ey.id && (C.out.length || G.t - C.t < RTS_SEAMINE_RECHECK)) return C.out;
   var out = [], seen = {};
-  G.ai.seaMines = { by: py.id + ':' + ey.id, out: out };
-  var a = _rtsNearestOpen(_rtsTX(ey.x), _rtsTX(ey.z), 6, 'sea'), b = _rtsNearestOpen(_rtsTX(py.x), _rtsTX(py.z), 6, 'sea');
-  var path = a && b && _rtsPath(_rtsWX(a[0]), _rtsWX(a[1]), _rtsWX(b[0]), _rtsWX(b[1]), 'sea');
+  G.ai.seaMines = { by: py.id + ':' + ey.id, out: out, t: G.t };
+  var a = _rtsNearestOpen(_rtsTX(ey.x), _rtsTX(ey.z), 6, 'shallow'), b = _rtsNearestOpen(_rtsTX(py.x), _rtsTX(py.z), 6, 'shallow');
+  var path = a && b && _rtsPath(_rtsWX(a[0]), _rtsWX(a[1]), _rtsWX(b[0]), _rtsWX(b[1]), 'shallow');
   if (!path || !path.length) return out;
   var px = _rtsWX(a[0]), pz = _rtsWX(a[1]), step = RTS_TILE / 2;
   for (var i = 0; i < path.length; i++) {
@@ -69,7 +74,7 @@ function _rtsAISeaMineSpots(G) {
       var ax = -dz / (L || 1), az = dx / (L || 1);
       for (var s = -1; s <= 1; s++) {
         var tx = _rtsTX(x + ax * s * RTS_TILE), tz = _rtsTX(z + az * s * RTS_TILE), key = tx + ',' + tz;
-        if (seen[key] || _rtsBlocked(tx, tz, 'sea')) continue;
+        if (seen[key] || _rtsBlocked(tx, tz, 'shallow')) continue;
         seen[key] = 1; out.push([tx, tz]);
       }
     }

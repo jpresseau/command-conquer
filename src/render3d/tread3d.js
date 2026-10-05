@@ -67,7 +67,7 @@ function _r3dTreadTick(G, R3) {
   var a = R3.treadA || (R3.treadA = new Float32Array(R3D_TREAD_MAX * 6 * R3D_TREAD_F));
   for (var i = 0; i < E.length; i++) {
     var e = E[i];
-    if (e.dead || e.type !== 'unit' || e.air) continue;
+    if (e.dead || e.type !== 'unit' || e.air || e.inside) continue;      /* a slung tank is in the air */
     var d = rtsUnitDef(e.def);
     if (!d || d.kind === 'infantry' || d.kind === 'air' || d.sea || d.hover) continue;   /* a skirt leaves no track */
     var l = L[e.id];
