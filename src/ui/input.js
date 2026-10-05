@@ -2,6 +2,51 @@
    Part of rts.ui, which owns the DOM. */
 
 /* --------------------------------------------------------------- input */
+/* THE RADAR'S ORDER, for `mine` (the player's selected units) at world point w: attack what stands
+   there if the cell has been explored, otherwise move - with the same two readings a right-click
+   on the field gives a loaded transport (ui/select.js): sent at the enemy or at dry land, a
+   Paradrop Plane, a Sky Crane or a landing craft is being told where to put its load down, not to
+   hover there with it. The radar is the advertised way to order across the map, and it was the
+   one route that gave the plane a plain move. Its own function so a spec can ask it. */
+function _rtsRadarOrder(mine, w, attackMove) {
+  var G = window._rtsG, tx = _rtsTX(w.x), tz = _rtsTX(w.z), i;
+  if (!_rtsInB(tx, tz)) return false;
+  var mapped = !!G.mapped[_rtsIdx(tx, tz)];
+  /* Pick out anything standing there, but only if the cell has been explored. */
+  var tgt = null;
+  if (mapped) {
+    for (i = 0; i < G.ents.length; i++) {
+      var o = G.ents[i];
+      if (o.dead || o.inside || o.side === 'player') continue;
+      if (o.type === 'struct') {
+        var sd = rtsStructDef(o.def);
+        if (tx >= o.tx && tx < o.tx + sd.w && tz >= o.tz && tz < o.tz + sd.h) { tgt = o; break; }
+      } else if (_rtsTX(o.x) === tx && _rtsTX(o.z) === tz) { tgt = o; break; }
+    }
+  }
+  if (tgt) {
+    var drops = 0;
+    for (i = 0; i < mine.length; i++) {
+      var mu = mine[i], md = rtsUnitDef(mu.def);
+      if (!md.weapon && _rtsIsTransport(mu) && _rtsCargoCount(mu) && _rtsOrderUnloadAt(mu, tgt.x, tgt.z)) drops++;
+      else _rtsOrderAttack(mu, tgt);
+    }
+    _rtsFlash(tgt.x, tgt.z, drops === mine.length ? 'harvest' : 'attack');
+  } else {
+    var onScrap = mapped && G.scrap[_rtsIdx(tx, tz)] > 0, onWater = G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER;
+    var spread = _rtsFormation(mine.length);
+    for (i = 0; i < mine.length; i++) {
+      var u = mine[i], ud = rtsUnitDef(u.def);
+      if (ud.harvest && onScrap) { _rtsOrderHarvest(u, tx, tz); continue; }
+      if ((ud.sea || ud.air) && ud.carries && !onWater && _rtsCargoCount(u)
+          && _rtsOrderUnloadAt(u, w.x + spread[i].x, w.z + spread[i].z)) continue;
+      _rtsOrderMove(u, w.x + spread[i].x, w.z + spread[i].z, attackMove);
+    }
+    _rtsFlash(w.x, w.z, onScrap ? 'harvest' : 'move');
+  }
+  return true;
+}
+
 function _rtsBindInput() {
   var cv = document.getElementById('rtsCv'), U = window._rtsUI;
   cv.oncontextmenu = function (e) { e.preventDefault(); return false; };
@@ -120,34 +165,8 @@ function _rtsBindInput() {
       if (sv && !sv.dead && !sv.inside && sv.side === 'player' && sv.type === 'unit') mine.push(sv);
     }
     if (!mine.length) return false;
-    var w = miniWorld(e), tx = _rtsTX(w.x), tz = _rtsTX(w.z);
-    if (!_rtsInB(tx, tz)) return false;
-    var mapped = !!G.mapped[_rtsIdx(tx, tz)];
-    /* Pick out anything standing there, but only if the cell has been explored. */
-    var tgt = null;
-    if (mapped) {
-      for (i = 0; i < G.ents.length; i++) {
-        var o = G.ents[i];
-        if (o.dead || o.inside || o.side === 'player') continue;
-        if (o.type === 'struct') {
-          var sd = rtsStructDef(o.def);
-          if (tx >= o.tx && tx < o.tx + sd.w && tz >= o.tz && tz < o.tz + sd.h) { tgt = o; break; }
-        } else if (_rtsTX(o.x) === tx && _rtsTX(o.z) === tz) { tgt = o; break; }
-      }
-    }
-    if (tgt) {
-      for (i = 0; i < mine.length; i++) _rtsOrderAttack(mine[i], tgt);
-      _rtsFlash(tgt.x, tgt.z, 'attack');
-    } else {
-      var onScrap = mapped && G.scrap[_rtsIdx(tx, tz)] > 0;
-      var spread = _rtsFormation(mine.length);
-      for (i = 0; i < mine.length; i++) {
-        var u = mine[i], ud = rtsUnitDef(u.def);
-        if (ud.harvest && onScrap) { _rtsOrderHarvest(u, tx, tz); continue; }
-        _rtsOrderMove(u, w.x + spread[i].x, w.z + spread[i].z, !!U.attackMove);
-      }
-      _rtsFlash(w.x, w.z, onScrap ? 'harvest' : 'move');
-    }
+    var w = miniWorld(e);
+    if (!_rtsRadarOrder(mine, w, !!U.attackMove)) return false;
     if (typeof _rtsSfx === 'function') _rtsSfx('order');
     return true;
   }

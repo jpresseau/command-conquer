@@ -184,8 +184,13 @@ function _rtsKill(e) {
       /* AND IT COMES APART: wreckage thrown out of the blast, bouncing - as a building's does, a
          few pieces for a light vehicle, more for a heavy one. Its own generator off the id, as the
          building's is, so the game's stream does not move (tick.js flies them). Not from a hull
-         afloat, which goes down rather than up. */
-      var afloat = ud.sea || (ud.hover && G.terrain[_rtsIdx(_rtsTX(e.x), _rtsTX(e.z))] === RTS_T_WATER);
+         afloat, which goes down rather than up - and AFLOAT IS WHERE IT DIED, not what it was: a
+         hovercraft over water, or a tank lost with the Sky Crane carrying it over the channel,
+         goes down the same way, while a hull on a flat the tide has dried, or a tank on a bridge
+         deck, burns where it stands. */
+      var ci = _rtsIdx(_rtsTX(e.x), _rtsTX(e.z));
+      var wet = G.terrain[ci] === RTS_T_WATER && !(G.tideDry && G.tideDry[ci]) && !_rtsIsBridgeCell(ci);
+      var afloat = ud.sea || (wet && !e.air);
       if (!afloat && !e.air) {
         var vrn = _rtsRngMake((e.id * 6151) >>> 0), vn = 3 + Math.min(5, Math.round(ud.hp / 150));
         for (var vk = 0; vk < vn; vk++) {

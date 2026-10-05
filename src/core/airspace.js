@@ -21,18 +21,26 @@ function _rtsAirLift(e) {
   var a = e.alt || 12;
   return e.land ? a + (RTS_AIR_SET - a) * e.land : a;
 }
+/* World units of height per unit of that lift: what the 3D mode draws an aircraft at, and so
+   what falls from one is drawn at too - its bombs (render3d/fxemit3d.js, render/fx.js) - and
+   where a click on it lands (render/camera.js). One number, because the bombs were once drawn at
+   the raw altitude: three times higher than the aircraft that had just dropped them. */
+var RTS_AIR_ALT_K = 0.35;
 
 /* A CHINOOK SETS DOWN TO WAIT. Idle over open ground - nothing to fly to - it eases down to
    RTS_AIR_SET over RTS_AIR_SETTLE seconds, which is where men climb in and out, and lifts again
    the moment it has somewhere to go. `land` runs 0 (flying) to 1 (down). Over water, a wall or
    a building it hovers: there is nothing to set down on. Only a transport does this; a gunship
-   waiting for a target stays in the air. */
+   waiting for a target stays in the air. A SKY CRANE WITH A LOAD STAYS UP: the load hangs under
+   its legs, so setting down would stand the crane on its own cargo; it comes down once the hook
+   is empty. */
 var RTS_AIR_SET = 1.2, RTS_AIR_SETTLE = 1.5;
 function _rtsAirSettle(e, dt) {
   var d = rtsUnitDef(e.def) || {};
   if (!d.carries || d.paradrops) return;     /* a Paradrop Plane never sets down: core/paradrop.js */
   var idle = !e.order && (!e.path || e.pi >= e.path.length), tx = _rtsTX(e.x), tz = _rtsTX(e.z);
-  var want = idle && _rtsInB(tx, tz) && !_rtsBlocked(tx, tz) ? 1 : 0, l = e.land || 0;
+  var slung = d.slings && e.cargo && e.cargo.length > 0;
+  var want = idle && !slung && _rtsInB(tx, tz) && !_rtsBlocked(tx, tz) ? 1 : 0, l = e.land || 0;
   if (want > l) e.land = Math.min(1, l + dt / RTS_AIR_SETTLE);
   else if (want < l) e.land = Math.max(0, l - dt / RTS_AIR_SETTLE);
 }

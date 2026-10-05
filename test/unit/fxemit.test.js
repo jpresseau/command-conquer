@@ -12,7 +12,7 @@ var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('fxemit');
 var g = load(['src/rules', 'src/core', 'src/sprites/bake.js', 'src/render3d/fxemit3d.js', 'src/render3d/fxwake3d.js',
-              'src/render3d/fxlight3d.js']);
+              'src/render3d/fxlight3d.js', 'src/render3d/skyfx3d.js']);
 g.R3D_WATER_Y = 0.10;       /* render3d/world3d.js's, which this sandbox does not load */
 var A = g.RTS_ANIMS, F = g.R3D_FX_STRIDE, Q = g.R3D_FX_QUAD;
 
@@ -340,6 +340,32 @@ function boom(t, big) { return { kind: 'boom', x: 10, y: 1, z: 20, t: t, big: bi
     if (VH.M.a[qd * Q + 3 * F + jj] !== VH.M.a[qd * Q + jj] || VH.M.a[qd * Q + 4 * F + jj] !== VH.M.a[qd * Q + 2 * F + jj]) { dupH++; break; }
   }
   S.ok('...for every helper that lays a quad', dupH === 0 && helpers.length >= 5 && VH.M.n >= 13, helpers.join(', ') + ': ' + VH.M.n + ' quads, ' + dupH + ' not');
+})();
+
+/* ---- no wake on a flat the tide has dried: the water is not there (_r3dWetAt) ---- */
+(function () {
+  var N = g.RTS_N;
+  function sail(dry) {
+    var u = { id: 14, type: 'unit', def: 'monitor', side: 'player', x: 20, z: -60, rot: 0, path: [{ x: 60, z: -60 }] };
+    var t = new Uint8Array(N * N); t.fill(g.RTS_T_WATER);
+    var D = new Uint8Array(N * N); if (dry) D[g._rtsIdx(g._rtsTX(20), g._rtsTX(-60))] = 1;
+    g.window._rtsG = { fx: [], proj: [], ents: [u], byId: {}, terrain: t, tideDry: D };
+    var V = view(); g._rtsVisible = function () { return true; };
+    g._r3dFxEmit(g.window._rtsG, V);
+    var n = 0; for (var q = 0; q < V.M.n; q++) if (V.M.a[q * Q + 6] === g.R3D_FXT_TRAIL) n++;
+    return n;
+  }
+  S.ok('a Monitor under way on wet water lays a wake, and on a flat the tide has dried none', sail(false) > 0 && sail(true) === 0, sail(false) + ' wet, ' + sail(true) + ' dry');
+})();
+
+/* ---- the Heavy Bomber's bombs fall from where the bomber is drawn ---- */
+(function () {
+  g.window._rtsG = { fx: [], bombs: [{ x: 10, z: 20, y: 20, t: 0 }], byId: {}, ents: [] };
+  var V = view(); g._r3dFxEmit(g.window._rtsG, V);
+  var q = quads(V.M, g.R3D_FXT_RAIN), drawnAt = 20 * g.RTS_AIR_ALT_K;
+  S.ok('a bomb just released at the bomber\'s altitude is drawn at the height the bomber is drawn, not at the raw figure',
+       q.length === 1 && Math.abs(q[0].y - (drawnAt + g.R3D_BOMB_STREAK / 2)) < 0.05 && q[0].y < 10,
+       q.length ? 'streak centred at ' + q[0].y.toFixed(2) + ' against the bomber\'s ' + drawnAt.toFixed(2) : 'no streak');
 })();
 
 require('../lib/report.js')(S);

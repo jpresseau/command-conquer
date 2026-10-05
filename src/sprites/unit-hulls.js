@@ -3,8 +3,12 @@
    handed over in X); returns false for a key it does not own. A file of its own because
    unit-airsea.js holds the first ships and is near the 500-line cap. */
 
+/* where the Monitor's one turret turns (see RTS_TURRET_AT, unit-airsea.js): Lo * 0.12 on the
+   model below */
+RTS_TURRET_AT.monitor = [[22 * 0.12, 0]];
+
 function _sprUnitHulls(X, key) {
-  var m = X.m, TM = X.TM, VH = X.VH, S = X.S, DK = X.DK, GN = X.GN;
+  var m = X.m, TM = X.TM, VH = X.VH, S = X.S, DK = X.DK, GN = X.GN, part = X.part;
 
   if (key === 'flakship') {
     /* FLAK CRUISER. A Destroyer's hull with no big gun on it: its deck is a forest of twin flak
@@ -78,11 +82,17 @@ function _sprUnitHulls(X, key) {
        twin heavy barrels forward, a small conning tower behind it and nothing else. The identity
        is the low hull under the oversized turret - a gun that floats rather than a ship. */
     var Lo = 22, Wo = 8.0;
+    /* the turret, its team ring and the twin barrels are the 'turret' part: built at the origin
+       for the part, on its ring for the whole model, and turned to the aim by the 3D mode */
+    var _tur = function (mx) {
+      _r3Cyl(m, mx, 3.0, 0, 3.4, 2.6, VH[3], VH[1], 20);                 /* the turret */
+      _r3Cyl(m, mx, 5.4, 0, 2.6, 0.5, TM[1], TM[3], 20);                 /* team ring on its roof */
+      for (var bb = -1; bb <= 1; bb += 2) _r3Box(m, mx + 5.2, 3.6, bb * 0.9, 7.0, 0.9, 0.9, GN[0], GN[2]);   /* twin heavy barrels */
+    };
+    if (part === 'turret') { _tur(0); return true; }
+    if (part !== 'hull') _tur(RTS_TURRET_AT.monitor[0][0]);
     _r3Slab(m, 0, 0.4, 0, Lo, 2.0, Wo, 1.6, VH[0], VH[1]);              /* the low hull, square-ended */
     _r3Box(m, Lo * 0.44, 0.6, 0, Lo * 0.12, 1.6, Wo * 0.70, VH[1], VH[3]); /* blunt bow */
-    _r3Cyl(m, Lo * 0.12, 3.0, 0, 3.4, 2.6, VH[3], VH[1], 20);           /* the turret */
-    _r3Cyl(m, Lo * 0.12, 5.4, 0, 2.6, 0.5, TM[1], TM[3], 20);           /* team ring on its roof */
-    for (var bb = -1; bb <= 1; bb += 2) _r3Box(m, Lo * 0.12 + 5.2, 3.6, bb * 0.9, 7.0, 0.9, 0.9, GN[0], GN[2]);   /* twin heavy barrels */
     _r3Box(m, -Lo * 0.18, 3.4, 0, 3.4, 3.2, 3.2, VH[2], VH[0]);          /* conning tower */
     _r3Box(m, -Lo * 0.18 + 1.75, 4.4, 0, 0.3, 0.8, 2.6, RTS_PAL.glass, RTS_PAL.glass);   /* its vision slit */
     _r3Cyl(m, -Lo * 0.32, 3.0, 0, 0.9, 2.0, DK[1], DK[0], 16);          /* low stack */

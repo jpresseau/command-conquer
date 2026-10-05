@@ -54,11 +54,13 @@ function _sprUnit(key, side, prone, part) {
 }
 /* Which units carry a separately-rotating turret. Artillery is deliberately NOT on this list:
    a howitzer traverses on its chassis, and a fixed forward tube is what makes it read as
-   artillery rather than as another tank. */
-/* Which hulls carry a turret that aims independently of the body. The gun ships do - a cruiser,
-   a destroyer and a gunboat all traverse their guns - and their SHPs are laid out that way, so
-   leaving them out drew the turret frames as if they were hull facings. */
-var RTS_TURRETED = { tank:1, light:1, heavy:1, destroyer:1, gunboat:1, cruiser:1, flaktrack:1 };
+   artillery rather than as another tank. The gun ships are: a cruiser, a destroyer, a gunboat
+   and the Monitor all traverse their guns. Each model here builds in two parts, 'hull' and
+   'turret' (sprites/unit-*.js), and a ship's turret part is one mount built at the origin and
+   drawn at each place RTS_TURRET_AT names (sprites/unit-airsea.js), turned to the unit's aim.
+   The ships' models once ignored the part and built the whole ship for both, so a destroyer
+   shelling a target abeam was drawn twice, the second hull swung across the first. */
+var RTS_TURRETED = { tank:1, light:1, heavy:1, destroyer:1, gunboat:1, cruiser:1, flaktrack:1, monitor:1 };
 
 /* The concrete apron a structure stands on. In the reference every building sits on a pale
    irregular pad noticeably larger than itself - it is what stops a base looking like

@@ -335,15 +335,18 @@ function _r3dFxProj(G, V) {
 
 /* THE HEAVY BOMBER'S BOMBS (G.bombs, core/bomber.js), falling: a dark streak each, blended the
    way rain is (skyfx3d.js) - a STREAK is added, so a dark one draws nothing. Hidden where the
-   player cannot see. */
+   player cannot see. A bomb's `y` is the sim's altitude, the bomber's own at release, and it is
+   drawn at the height the bomber is (RTS_AIR_ALT_K, core/airspace.js): drawn raw, the first bombs
+   appeared out of empty sky three times higher than the aircraft they had just left. */
 var R3D_FX_BOMB = [0.16, 0.16, 0.17];
+var R3D_BOMB_STREAK = 0.8;       /* world units of streak above each bomb */
 function _r3dFxBombs(G, V) {
   var B = G.bombs || [], vis = typeof _rtsVisible === 'function';
   for (var i = 0; i < B.length; i++) {
     var b = B[i];
     if (vis && !_rtsVisible(_rtsTX(b.x), _rtsTX(b.z))) continue;
-    var y = V.ground(b.x, b.z) + b.y;
-    _r3dFxStreak(V.M, V, b.x, y + 2.2, b.z, b.x, y, b.z, 0.9, 0, R3D_FXT_RAIN, 0, i + 1, 1, 0, R3D_FX_BOMB);
+    var y = V.ground(b.x, b.z) + b.y * RTS_AIR_ALT_K;
+    _r3dFxStreak(V.M, V, b.x, y + R3D_BOMB_STREAK, b.z, b.x, y, b.z, 0.9, 0, R3D_FXT_RAIN, 0, i + 1, 1, 0, R3D_FX_BOMB);
   }
 }
 

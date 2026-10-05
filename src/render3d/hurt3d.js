@@ -51,6 +51,9 @@ function _r3dFxHurt(G, V) {
     var e = E[i];
     if (e.dead || e.building || e.burning || !e.maxHp || e.hp >= e.maxHp * RTS_COND_YELLOW) continue;
     if (e.type === 'unit' && rtsUnitDef(e.def).kind === 'infantry') continue;
+    /* ABOARD, nothing of it shows - except a Sky Crane's load, which hangs in plain sight and
+       smokes from where it is drawn (unit3d.js leaves that height in its motion record) */
+    if (e.inside && !(rtsUnitDef(e.inside.def) || {}).slings) continue;
     if (vis && !_rtsVisible(_rtsTX(e.x), _rtsTX(e.z))) continue;
     var f = e.hp / e.maxHp, k = (RTS_COND_YELLOW - f) / RTS_COND_YELLOW, red = f < RTS_COND_RED;
     var seed = _r3dFxH(e.id, 9.1), tint = red ? R3D_FX_SOOT : R3D_FX_SMOKE;

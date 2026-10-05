@@ -40,14 +40,17 @@ var S = new Suite('basedef');
    480 seconds is not padding. At 300 the base plan has not reached its defensive tail yet -
    measured, the same run gives 3 defences over 2 zones and 2 over 1, and every assertion below
    fails on a perfectly healthy build. A spec has to run long enough to reach the thing it is
-   about, and this is where that is. It was 420, and the Soviet plan on seed 9001 was asking for
-   its Tesla Coil at 417 of those - a three-second margin on a match whose whole trajectory
-   turns on which teams the roll raises. The twelfth team type (Ebb, rules/teams.js) moved one
-   Wolfpack's cap at one army size, the battle went differently from 330 s, and the same plan
-   asked for the coil at 458 s instead: still reached, still not skipped, which is what this spec
-   is about. Measured in node with the same seed and ticks (bdrep): 417 s without, 458 s with.
-   It costs about 100 seconds of wall clock. */
-var SECS = 480;
+   about, and this is where that is. It costs about 100 seconds of wall clock.
+
+   THE COIL IS WAITED FOR, NOT TIMED. The Soviet plan on seed 9001 asked for its Tesla Coil at
+   417 s; the twelfth team type (Ebb, rules/teams.js) moved one Wolfpack's cap at one army size,
+   the battle went differently from 330 s, and the same plan asked at 458 s; the next change to
+   the opponent's shopping moved it again, past a 480 s window. The whole trajectory turns on
+   which teams the roll raises, so any fixed window is a bet against the next change. The Soviet
+   half therefore runs its SECS and then on until the plan asks for the coil, up to CAP - a
+   condition with a timeout that falls through to the assertion, which is about the coil being
+   reached at all, not when. */
+var SECS = 480, CAP = 900;
 
 (async function () {
   var browser = await chromium.launch();
@@ -58,7 +61,7 @@ var SECS = 480;
   for (var si = 0; si < 2; si++) {
     var vs = ['allied', 'soviet'][si];
     var r = await g.page.evaluate(function (a) {
-      var vs = a[0], SECS = a[1];
+      var vs = a[0], SECS = a[1], CAP = a[2];
       if (typeof rtsSetArmySide === 'function') rtsSetArmySide(vs);
       /* ESCORTS OFF, because this harness makes the player unkillable and escorts would make that
          the whole match. With them on, the opponent's spare army marched out and shelled a player
@@ -71,7 +74,8 @@ var SECS = 480;
       window.RTS_ESCORT_OFF = true;
       _rtsNewGame(9001, 'hard');
       var G = window._rtsG, wanted = {};
-      for (var t = 0; t < SECS * 60; t++) {
+      /* the Soviet half runs on past SECS until the coil is asked for, to CAP at the most */
+      for (var t = 0; t < CAP * 60 && (t < SECS * 60 || (vs === 'soviet' && !wanted.tesla)); t++) {
         _rtsTick(1 / 60);
         if (G.over) break;
         /* The player does nothing but refuse to die. An idle player who dies at 170s never
@@ -98,7 +102,7 @@ var SECS = 480;
       return { house: rtsHouseSide('enemy'), counts: counts, defences: defences,
                zones: Object.keys(zones).length, wanted: Object.keys(wanted).sort(),
                t: Math.round(G.t) };
-    }, [vs, SECS]);
+    }, [vs, SECS, CAP]);
     out.push(r);
 
     S.note(r.house + ' opponent at ' + r.t + 's: ' + r.defences + ' defences over ' +

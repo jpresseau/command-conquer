@@ -73,6 +73,14 @@ run(12);
 var c2 = circling(P2, 12);
 S.ok('...sent somewhere new, it circles there instead', c2.lo >= 1.5 && c2.hi <= 4.5 && c2.turns >= 0.75,
      'from ' + c2.lo.toFixed(1) + ' to ' + c2.hi.toFixed(1) + ' cells, ' + c2.turns.toFixed(1) + ' times round');
+/* the map's edge: the sky ends there (_rtsAirSpread), so the centre is pulled in by the radius */
+var PE = { x: g._rtsWX(1), z: m.z }, PC = g._rtsDroneCentre(PE.x, PE.z);
+g._rtsOrderMove(dr, PE.x, PE.z, false);
+run(12);
+var c3 = circling(PC, 12);
+S.ok('sent to the map\'s edge it circles a centre pulled in by its own radius, rather than parking against the edge',
+     Math.abs(PC.x - (g._rtsWX(0) + g.RTS_DRONE.r * g.RTS_TILE)) < 1e-9 && PC.z === PE.z && c3.lo >= 1.5 && c3.hi <= 4.5 && c3.turns >= 0.75,
+     'centre ' + (PC.x - PE.x) / g.RTS_TILE + ' cells in; from ' + c3.lo.toFixed(1) + ' to ' + c3.hi.toFixed(1) + ' cells, ' + c3.turns.toFixed(1) + ' times round');
 
 /* ---------------- it sees ---------------- */
 function farthest(G, u, R) {

@@ -58,6 +58,19 @@ function _rtsDrawFx(g, G, S, TSscale, cell) {
     var r = Math.max(2, Math.round(cell * pj.scale * (p.kind === 'missile' ? 0.09 : 0.06)));
     g.fillRect(sx - r, sy - r, r * 2, r * 2);
   }
+  /* --- the Heavy Bomber's bombs, the same way: a dark dash each, at the height it fell to
+     (RTS_AIR_ALT_K, core/airspace.js) - the shaded pass draws them itself (render3d/fxemit3d.js),
+     and without this a device that cannot shade saw bursts appear from nowhere --- */
+  var B = G.bombs || [];
+  for (i = 0; i < B.length && !r3proj; i++) {
+    var b = B[i];
+    if (!_rtsVisible(_rtsTX(b.x), _rtsTX(b.z))) continue;
+    var bj = _rtsWorldToScreen(b.x, _rtsElev(b.x, b.z) + b.y * RTS_AIR_ALT_K, b.z);
+    if (!bj || bj.behind) continue;
+    var bw = Math.max(1, Math.round(cell * (bj.scale || 1) * 0.04)), bh = Math.max(3, Math.round(cell * (bj.scale || 1) * 0.12));
+    g.fillStyle = '#2a2a2c';
+    g.fillRect(Math.round(bj.x) - bw, Math.round(bj.y) - bh, bw * 2, bh * 2);
+  }
 
   /* --- explosions, tracers, muzzle flashes --- */
   for (i = 0; i < G.fx.length; i++) {

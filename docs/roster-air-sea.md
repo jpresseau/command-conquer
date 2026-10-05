@@ -17,13 +17,17 @@ Skylift has to set down to put a squad off; this plane never does (`_rtsAirSettl
 - Every way out of the plane is a jump: the aimed drop, the U key and the opponent's timed-out
   drop all go through `_rtsUnloadNow` → `_rtsParaJumped`. A loaded, unarmed transport
   right-clicked onto an enemy is sent to drop there (`_rtsOrderUnloadAt`), not to hover over it
-  (ui/select.js) - the Sky Crane and the Landing Craft too.
+  (ui/select.js) - the Sky Crane and the Landing Craft too - and the radar's right-click reads
+  the same way (ui/input.js `_rtsRadarOrder`), at an enemy or at bare land.
 - The opponent buys one once the player has two armed buildings and its own base has four
   (`_rtsAIDefended`), crews it with four squads (rocket first), drops them just past the
   player's least-guarded power plant on the side away from the player's yard, and they go for it.
-- Propellers: `RTS_AIR_PARTS.<key>.props` lists one per engine (air3d.js `_r3dPropModel`).
+- Propellers: `RTS_AIR_PARTS.<key>.props` lists one per engine (air3d.js `_r3dPropModel`); the
+  bomber's are derived from its engine table (`RTS_BOMBER_ENGINES`), and unit/air holds every
+  entry to the disc the sprite's own model has. On the size ladder (`RTS_UNIT_SPAN`) the plane
+  out-spans both fighters, as its high straight wing is meant to; only the bomber is wider.
 
-`unit/paradrop` (19 assertions, 15 mutants killed over two rounds).
+`unit/paradrop` (21 assertions, 17 mutants killed over three rounds).
 
 ## The Recon Drone — watching a place
 
@@ -31,7 +35,9 @@ The Compact's long-winged pusher (`drone`), behind a Helipad (`core/drone.js`). 
 unarmed and thin-skinned:
 - Where it stops, it does not park: `_rtsDroneTick` sets `e.orbit` there and keeps it circling
   `RTS_DRONE.r` (3) cells round it, with `order 'orbit'`. A new move order clears the orbit, and it
-  circles wherever it stops next.
+  circles wherever it stops next. The centre is pulled in from the map's edge by the radius
+  (`_rtsDroneCentre`): the sky ends at the edge (`_rtsAirSpread`), and a circle that crossed it
+  had a point the drone could never reach, so it sat pinned there.
 - It `spots` (core/spotter.js): fog, fog banks and sandstorms never cut its sight, every gun of its
   side finds what it sees at full reach, and a Jammer hides nothing from it.
 - The opponent buys one when it is half-blind (`_rtsAIHalfBlind`: fog, a sandstorm, or a Jammer
@@ -39,8 +45,8 @@ unarmed and thin-skinned:
   largest team on the march (`_rtsAIDroneTick`). The Spotter AI leaves it alone (`_rtsAISpotTick`
   skips `orbits`), or the two pulled it between a long gun and the team every two seconds.
 
-`unit/drone` (14 assertions, 7 of 8 mutants killed; the survivor drops `side:'allied'`, which
-changes nothing, because the Dominion has no Helipad).
+`unit/drone` (16 assertions, 9 of 10 mutants killed; the one survivor dropped `side:'allied'`,
+which changes nothing, because the Dominion has no Helipad).
 
 ## The Heavy Bomber — the carpet
 
@@ -66,7 +72,11 @@ both `provides:['airpad']` (`core/bomber.js`):
   the bomber be sent at ground targets. The run spends its one round (`ammo:1`), and
   `_rtsAirTick` sends it home to load again (`rearm:12`).
 - Falling bombs are drawn as dark streaks blended like rain (`_r3dFxBombs`, fxemit3d.js). A
-  `STREAK` is additive, so a dark one would draw nothing.
+  `STREAK` is additive, so a dark one would draw nothing. A bomb's `y` is the sim's altitude, and
+  it is drawn at the height the aircraft is (`RTS_AIR_ALT_K`, core/airspace.js - the one factor
+  camera.js, unit3d.js and the painters share); drawn raw, the bombs appeared out of empty sky
+  three times higher than the bomber. The sprite fallback (render/fx.js, for a device that cannot
+  shade) draws them as dark dashes the same way.
 - The opponent buys one, after its Paradrop Plane, once the player has dug in and its own base
   is defended - and never onto a pad another aircraft holds: the support purchases keep the
   roll's caps, one aircraft per pad and `fleetPerYard` hulls per yard (`_rtsAIAirRoom`,
@@ -151,13 +161,22 @@ The Dominion's flat-bottomed gun barge (`monitor`, `shallow:true`), from its Sub
   other ship. It is a ship, so the tide never swamps it, and it cannot go ashore. Everything that
   treats `'sea'` as "afloat" treats `'shallow'` the same way: the path's seabed height
   (`_rtsPath`), stand height (`_rtsStandHeight`), and crowding with the other hulls (`move.js`).
-- `monitorgun`: a 24-reach heavy gun, strong against buildings.
+- `monitorgun`: a 24-reach heavy gun, strong against buildings. The turret turns to the aim: it
+  is in `RTS_TURRETED`, and its model builds the turret, ring and barrels as the 'turret' part on
+  the mount `RTS_TURRET_AT.monitor` names (unit-hulls.js). Building that found the gun ships
+  were drawn TWICE - their models ignored the part, so hull and "turret" were each the whole
+  ship, the second swung to the aim. Each now builds one mount at the origin as its turret part,
+  drawn on each ring (`_r3dTurretAt`, unit3d.js; the husk too), fore and aft on the big two.
+- On a flat the tide has dried it sits on the sand: no swell, no lean, no wake (`_r3dWetAt`,
+  fxwake3d.js) - the water sheet is cut away there, and a hull heaving on an invisible sea sank
+  two thirds of its height into the ground at every trough.
 - The opponent buys one once its own base is defended and the player has a building the Monitor
   can reach from water (`_rtsAIMonitorTarget`). Whenever it is idle, it sends the Monitor at the
   one nearest to it.
 
-`unit/monitor` (14 assertions, 7 of 8 mutants killed). The survivor drops the circular trim on
-the reach check, which the square search radius before it already nearly makes.
+`unit/monitor` (17 assertions, 10 of 11 mutants killed; the survivor drops the circular trim on
+the reach check, which the square search radius before it already nearly makes), `unit/turrets`
+(the two parts, the mounts, the husk).
 
 ## The navy sails together — the Ebb team
 

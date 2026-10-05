@@ -82,6 +82,13 @@ var Gb = game(4242), bb = Gb.bridges[0], bk = g._rtsBridgeCells(bb).filter(funct
 var bx = bk % N, bz = (bk / N) | 0, shore = [bb.tx - bb.dx * 3, bb.tz - bb.dz * 3];
 S.ok('nothing can be built on a deck - while the same turret goes down on the shore', g._rtsCanPlace('player', 'turret', bx, bz, true) === false &&
      g._rtsCanPlace('player', 'turret', shore[0], shore[1], true) === true, 'deck ' + bx + ',' + bz + ', shore ' + shore);
+/* WRECK: a tank lost on a deck is over water, but it burns where it stands - the deck is not the
+   sea (core/capture.js reads the cell, and _rtsIsBridgeCell) */
+var td = g._rtsSpawnUnit('player', 'tank', g._rtsWX(bx), g._rtsWX(bz)), fd0 = Gb.fx.length;
+g._rtsDamage(td, td.hp + 1, null, false);
+var deckFx = Gb.fx.slice(fd0);
+S.ok('a tank lost on a deck leaves its husk in its fire, as on land', td.dead && g._rtsIsBridgeCell(bk) && deckFx.filter(function (f) { return f.husk; }).length === 1,
+     deckFx.map(function (f) { return f.kind + (f.husk ? '+husk' : ''); }).join(' '));
 
 /* STREAM: the same map but for the decks and the ore */
 var Ga = game(4242), Gz = game(4242, 0), tdiff = 0, bdiff = [], ents = [];

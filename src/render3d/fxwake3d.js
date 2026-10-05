@@ -57,6 +57,16 @@ function _r3dFxWake(V, e, hx, hz, r, seed) {
              R3D_FX_SEA_LIFT, R3D_FXT_TRAIL, V.t * 6, seed, 0.8, L, R3D_FX_WAKEC);
 }
 
+/* Is there water under (x, z) to draw on: the sea, and not a flat the tide has gone out from
+   (core/tide.js; world3d.js cuts those out of the sheet)? The wakes ask, and so does the swell a
+   hull rides (unit3d.js). */
+function _r3dWetAt(G, x, z) {
+  var tx = _rtsTX(x), tz = _rtsTX(z);
+  if (!_rtsInB(tx, tz)) return false;
+  var ci = _rtsIdx(tx, tz);
+  return G.terrain[ci] === RTS_T_WATER && !(G.tideDry && G.tideDry[ci]);
+}
+
 /* Every vehicle and ship on the move, into the main batch. */
 function _r3dFxWakes(G, V) {
   var E = G.ents || [], vis = typeof _rtsVisible === 'function';
@@ -67,7 +77,9 @@ function _r3dFxWakes(G, V) {
     if (!d || d.kind === 'infantry' || d.kind === 'air') continue;
     if (vis && !_rtsVisible(_rtsTX(e.x), _rtsTX(e.z))) continue;
     var hx = Math.cos(e.rot || 0), hz = Math.sin(e.rot || 0), r = d.r || 1.6, seed = _r3dFxH(e.id || i + 1, 5.5);
-    if (d.sea || (d.hover && G.terrain[_rtsIdx(_rtsTX(e.x), _rtsTX(e.z))] === RTS_T_WATER)) { _r3dFxWake(V, e, hx, hz, r, seed); continue; }
+    /* a wake wants water under the hull: a Monitor crossing a flat the tide has dried, or a
+       hovercraft over one, is on sand (unit3d.js _r3dWetAt) */
+    if ((d.sea || d.hover) && _r3dWetAt(G, e.x, e.z)) { _r3dFxWake(V, e, hx, hz, r, seed); continue; }
     var amt = _r3dFxDustOf(G, e.x - hx * r, e.z - hz * r);
     if (amt > 0) _r3dFxDust(V, e, hx, hz, r, seed, amt);
   }
