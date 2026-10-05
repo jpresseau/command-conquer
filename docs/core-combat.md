@@ -252,7 +252,9 @@ already casts one.
   Since the turret is drawn as a separate sprite, spawning shots at the object's centre makes
   a tank with its gun swung 90° appear to fire sideways out of its own flank. `_rtsFireCoord`
   is used by the tracer, the projectile **and** the renderer's muzzle flash, so all three
-  agree.
+  agree - the flash from the **turret ring that fired** (`_r3dMuzzleAt`, combat3d.js): a ship
+  with guns fore and aft (`RTS_TURRET_AT`) flashed from the deck between them, and now fires from
+  the ring nearer its target. The shell's own path stays the sim's.
 - **One bearing carries the weapon**, and it is `e.turret` for *every* armed unit — turret
   drawn separately or not — because that is the bearing `Can_Fire` gated on. Structures aim by
   turning their whole selves (`e.rot`). Using the hull bearing for units without a drawn

@@ -75,6 +75,22 @@ var tk = at('tank', 1.1), noTable = at('no-such-def', 2.3);
 S.ok('a tank\'s one turret turns at its centre', tk.length === 1 && tk[0].x === 100 && tk[0].z === 200);
 S.ok('...as does anything with no mount table at all - the fallback is the hull, not nothing', !g.RTS_TURRET_AT.tank && noTable.length === 1 && noTable[0].x === 100 && noTable[0].z === 200, JSON.stringify(noTable));
 
+/* ---- the muzzle flash, from the ring that fired (combat3d.js _r3dMuzzleAt) ---- */
+function unitAt(def, rot, turret, tgt) { return { type: 'unit', def: def, x: 100, z: 200, rot: rot, turret: turret, target: tgt || null }; }
+var reachK = 0.78, ft = unitAt('flaktrack', 0, 0), ftRing = at('flaktrack', 0)[0], ftFlash = g._r3dMuzzleAt(ft);
+var ftReach = g.rtsUnitDef('flaktrack').r * (g.RTS_TURRETED.flaktrack ? g.RTS_MUZZLE_TURRET : g.RTS_MUZZLE_HULL) * reachK;
+S.ok('a Flak Track\'s flash bursts a barrel\'s reach from its own ring, a little behind its middle',
+     ftRing.x < 100 && Math.abs(Math.hypot(ftFlash.x - ftRing.x, ftFlash.z - ftRing.z) - ftReach) < 0.35,
+     'ring at ' + ftRing.x.toFixed(2) + ', flash at ' + ftFlash.x.toFixed(2) + ', ' + Math.hypot(ftFlash.x - ftRing.x, ftFlash.z - ftRing.z).toFixed(2) + ' from the ring against a barrel of ' + ftReach.toFixed(2));
+var fore = at('destroyer', 0)[0], aft = at('destroyer', 0)[1];
+var dAhead = g._r3dMuzzleAt(unitAt('destroyer', 0, 0, { x: 300, z: 200 })), dAstern = g._r3dMuzzleAt(unitAt('destroyer', 0, Math.PI, { x: -100, z: 200 }));
+var near = function (p, q) { return Math.hypot(p.x - q.x, p.z - q.z); };
+var dReach = g.rtsUnitDef('destroyer').r * (g.RTS_TURRETED.destroyer ? g.RTS_MUZZLE_TURRET : g.RTS_MUZZLE_HULL) * reachK;
+S.ok('...a destroyer\'s from the ring nearer its target: the fore gun at a target ahead, the aft at one astern - not the deck between them',
+     near(fore, aft) > 1.5 && Math.abs(near(dAhead, fore) - dReach) < 0.35 && Math.abs(near(dAstern, aft) - dReach) < 0.35, 'ahead: ' + near(dAhead, fore).toFixed(2) + ' from fore, astern: ' + near(dAstern, aft).toFixed(2) + ' from aft');
+var tk2 = unitAt('tank', 0.7, 0.7), tkFlash = g._r3dMuzzleAt(tk2), fc = g._rtsFireCoord(tk2);
+S.ok('...and a tank\'s, one turret at its middle, where it always was', Math.abs(tkFlash.x - (100 + (fc.x - 100) * reachK)) < 1e-9 && Math.abs(tkFlash.z - (200 + (fc.z - 200) * reachK)) < 1e-9, JSON.stringify(tkFlash));
+
 /* ---- the husk ---- */
 g._rtsR = g.window._rtsR = { spr: { turret: { player: { destroyer: 1, tank: 1 } } } };
 g._r3dMesh = function (kind, def, side, part) { return { def: def, part: part || null }; };
