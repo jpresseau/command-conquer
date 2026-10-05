@@ -17,7 +17,7 @@
 
    On the pad (rearming) everything sits level. R3.airOff takes the banking and pitch out, and
    R3.trailOff the contrails, for a spec's A/B; R3.rotorOff stops the propeller as it stops the
-   rotor. */
+   rotor; R3.canopyOff takes a paratrooper's canopy away (e2e/unitfx). */
 
 var R3D_BANK_K = 0.45;           /* radians of bank for each radian a second of turn */
 var R3D_BANK_MAX = 0.6;          /* the most anything banks, radians */
@@ -89,7 +89,7 @@ function _r3dFxAir(G, V) {
   for (var i = 0; i < E.length; i++) {
     /* A PARATROOPER'S CANOPY, over him while he comes down (core/paradrop.js, unit3d.js) */
     var pe = E[i];
-    if (pe.chute > 0 && !pe.dead && M[pe.id] && M[pe.id].y !== undefined && (typeof _rtsEntSeen !== 'function' || _rtsEntSeen(pe))) {   /* as the man himself: a Jammer hides his canopy too */
+    if (pe.chute > 0 && !R3.canopyOff && !pe.dead && M[pe.id] && M[pe.id].y !== undefined && (typeof _rtsEntSeen !== 'function' || _rtsEntSeen(pe))) {   /* as the man himself: a Jammer hides his canopy too */
       _r3dFxBill(V.M, V, pe.x, M[pe.id].y + 1.3, pe.z, 0.9, 0.42, 0.4, R3D_FXT_BLOB, 0.2, pe.id, 0.95, 0, R3D_CANOPY_C);
       continue;
     }

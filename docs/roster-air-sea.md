@@ -226,3 +226,23 @@ refusal was an A* over the whole sea.
 
 `unit/ebb` (17 assertions), `unit/monitor` (+2), `unit/flakship` (+1); `unit/aiplan` now reads the
 support purchases as a second shopping list, each bought one at a time.
+
+## On the screen — read off the picture
+
+`e2e/unitfx` reads what the new units put on the screen, each the same moment drawn twice, with
+the thing and without it, as `e2e/skycrane` reads the crane's slung load. All three are staged on
+the real simulation and the staging is asserted first:
+- **The carpet.** A Heavy Bomber sent at an enemy building, stepped until two bombs fall at once
+  (a bomb falls 0.7 s and the next leaves about half a second later, so two is the most); the spec
+  sums a small square round each (`R3.bombsOff`). **The picture found the bombs illegible:** the
+  streak alone, thin as rain, came to about 130 faint pixels round two bombs, a carpet no one could
+  see falling. Each bomb now has a dark body at the foot of its streak (`R3D_BOMB_BODY`,
+  fxemit3d.js), about 230 pixels a bomb, and the check holds it there (over 250 for two).
+- **The canopies.** A Paradrop Plane's men coming down: the square round a man under his canopy,
+  centred on his drawn height once he has been painted (`R3.canopyOff`).
+- **The flats.** A River Monitor on a flat the tide has dried, at low water: drawn and not
+  (`R3.hideId`, one unit left out of the picture, render3d/scene3d.js). It sits on the sand, not
+  under it.
+
+Four drawing mutants were killed, each on its own assertion: no bomb streak, no bomb body, no
+canopy, and a Monitor drawn four units under the sand.
