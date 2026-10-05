@@ -29,6 +29,14 @@ var RTS_TIDE = {
 function _rtsTideLevel(G) { return Math.cos(2 * Math.PI * ((G.t || 0) % RTS_TIDE.period) / RTS_TIDE.period); }
 /* The level below which a flat d cells from the shore is dry: the first ring dries soonest. */
 function _rtsTideDriesAt(d) { return 1 - 2 * d / (RTS_TIDE.reach + 1); }
+/* LOW WATER, for anything that lives on the flats: the first ring is dry, so there is ground a
+   ship cannot sail and water a Monitor can (core/monitor.js). THE EBB: the tide falling, with the
+   outermost flats still wet - the window in which a fleet can still sail out down a channel
+   that will be a causeway at low water, so an escort sent with the Monitor gets there with it. */
+function _rtsTideLow(G) { return _rtsTideLevel(G) <= _rtsTideDriesAt(1); }
+function _rtsTideEbbing(G) {
+  return ((G.t || 0) % RTS_TIDE.period) < RTS_TIDE.period / 2 && _rtsTideLevel(G) > _rtsTideDriesAt(RTS_TIDE.reach);
+}
 
 /* The flats: every open-sea cell within reach of a shore, by its distance from it. */
 function _rtsTideInit(G) {

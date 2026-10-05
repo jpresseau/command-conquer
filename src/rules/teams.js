@@ -179,6 +179,20 @@ var RTS_TEAM_TYPES = [
     members:{ cruiser:1, destroyer:1 },
     max:1, autocreate:true, suicide:false,
     missions:[ ['patrol','sea'], ['attack','buildings'], ['tarcom',0] ] },
+  /* THE LOW-WATER BOMBARDMENT: the Dominion's River Monitor, escorted. `tide:true` is the gate,
+     the same shape as Landing's `crossing` - _rtsAIEbb (core/monitor.js) says yes only on the
+     falling tide with the flats drying, AND only when a Monitor and two subs are afloat and
+     free, so the team forms the moment it is raised and reaches the flats near low water. The
+     subs are the escort the flat-bottomed hull needs: it is slow, and a Destroyer finds it.
+     `only` because the opponent owns one Monitor at a time (_rtsAISupportBuy), so a second team
+     could never be crewed. Quarry `shore`: a building the Monitor can shell from its water.
+     `suicide` because the Monitor and its escort part company by design: the Monitor goes in
+     over the flats where the subs cannot follow, and the lag rule would otherwise hold whoever
+     was nearest the team's centre while the other half of the team could not close up. */
+  { name:'Ebb',      priority:3, reinforce:false, quarry:'shore',
+    members:{ monitor:1, sub:2 },
+    max:1, only:true, autocreate:true, suicide:true, tide:true,
+    missions:[ ['patrol','sea'], ['attack','shore'], ['attack','buildings'], ['tarcom',0] ] },
   /* --- AND ACROSS IT. The one team that uses the water to deliver an ARMY rather than to
      fight on it, and the only one whose composition mixes the two domains.
 

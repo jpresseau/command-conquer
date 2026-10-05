@@ -11,22 +11,37 @@
    short, close, tide-riding answer.
 
    The opponent buys one once it has a yard, its own base is defended and the player has a
-   building within the Monitor's reach of the water. It sends it at that building, the one
-   nearest the Monitor, whenever it is idle. */
+   building within the Monitor's reach of the water. IT COMES IN ON THE EBB AND LEAVES ON THE
+   FLOOD: at low water (core/tide.js _rtsTideLow, the first flats dry) it is sent at the player's
+   building nearest it that it can shell from the water; at high water it goes home to its yard,
+   breaking off whatever it was doing. So the player's coast is shelled on the tide's clock, and
+   the Monitor is not a lone gunboat at high water.
 
-var RTS_MONITOR = { every: 2 };
+   AND IT SAILS WITH COMPANY. The Ebb team (rules/teams.js, `tide:true`) - a Monitor and two
+   submarines - is raised only on the falling tide (_rtsAIEbb), when every member is already
+   afloat and free, so it forms the moment it is raised and arrives on the flats near low water;
+   the Repair Tender follows it as the fleet (core/repairtruck.js). Its quarry is `shore`
+   (_rtsQuarryMatch): a building a Monitor can shell from its water. A Monitor in a team is the
+   team's; the solo tick leaves it alone. */
+
+var RTS_MONITOR = { every: 2, home: 6 };
+
+/* Can a Monitor shell `b` from its water: is there a cell of the shallow domain within a cell of
+   its reach? Tide-independent, since the shallow domain is. */
+function _rtsShoreReach(b) {
+  var reach = RTS_WEAPONS[rtsUnitDef('monitor').weapon].range / RTS_TILE - 1;
+  var w = _rtsNearestOpen(_rtsTX(b.x), _rtsTX(b.z), Math.floor(reach), 'shallow');
+  return !!w && Math.hypot(_rtsWX(w[0]) - b.x, _rtsWX(w[1]) - b.z) / RTS_TILE <= reach;
+}
 
 /* The player's building nearest the Monitor that it can shell from water: one with an open
    cell of the Monitor's water within a cell of its reach. */
 function _rtsAIMonitorTarget(u) {
-  var G = window._rtsG, d = rtsUnitDef('monitor'), reach = RTS_WEAPONS[d.weapon].range / RTS_TILE - 1;
-  var from = u || _rtsShipyardOf('enemy', null), best = null, bd = 1e9;
+  var G = window._rtsG, from = u || _rtsShipyardOf('enemy', null), best = null, bd = 1e9;
   if (!from) return null;
   for (var i = 0; i < G.ents.length; i++) {
     var b = G.ents[i];
-    if (b.dead || b.side !== 'player' || b.type !== 'struct') continue;
-    var w = _rtsNearestOpen(_rtsTX(b.x), _rtsTX(b.z), Math.floor(reach), 'shallow');
-    if (!w || Math.hypot(_rtsWX(w[0]) - b.x, _rtsWX(w[1]) - b.z) / RTS_TILE > reach) continue;
+    if (b.dead || b.side !== 'player' || b.type !== 'struct' || !_rtsShoreReach(b)) continue;
     var dd = Math.hypot(b.x - from.x, b.z - from.z);
     if (dd < bd) { bd = dd; best = b; }
   }
@@ -37,11 +52,35 @@ function _rtsAIMonitorTick(dt) {
   G.ai.monT = (G.ai.monT || 0) + dt;
   if (G.ai.monT < RTS_MONITOR.every) return;
   G.ai.monT = 0;
+  var low = _rtsTideLow(G);
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || u.def !== 'monitor') continue;
+    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || u.def !== 'monitor' || u.sqd != null) continue;
+    if (!low) {                                                   /* the flood: home to the yard */
+      var y = _rtsShipyardOf('enemy', u);
+      if (!y || Math.hypot(y.x - u.x, y.z - u.z) <= RTS_MONITOR.home * RTS_TILE) continue;
+      if (u.order === 'move' && u.goal && Math.hypot(u.goal.x - y.x, u.goal.z - y.z) < RTS_TILE * 3) continue;
+      _rtsOrderMove(u, y.x, y.z, false);
+      continue;
+    }
     if (u.order === 'attack' && u.target && !u.target.dead) continue;
     var t = _rtsAIMonitorTarget(u);
     if (t) _rtsOrderAttack(u, t);
   }
+}
+/* The Ebb team's gate: the tide falling with the flats drying, and every member of the type
+   afloat and free to be recruited right now - so a team that is raised forms at once and sails
+   in the window, instead of holding the Monitor out of the war while it waits for a hull. */
+function _rtsAIEbb(ty) {
+  var G = window._rtsG, need = {}, k;
+  if (!_rtsTideEbbing(G)) return false;
+  for (k in ty.members) need[k] = ty.members[k];
+  for (var i = 0; i < G.ents.length; i++) {
+    var u = G.ents[i];
+    if (u.dead || u.inside || u.side !== 'enemy' || u.type !== 'unit' || u.sqd != null || !need[u.def]) continue;
+    if (!_rtsMission(u).recruitable) continue;
+    need[u.def]--;
+  }
+  for (k in need) if (need[k] > 0) return false;
+  return true;
 }

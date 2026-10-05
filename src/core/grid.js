@@ -226,6 +226,7 @@ function _rtsNearestOpen(tx, tz, maxR, dom) {
   }
   return null;
 }
+var RTS_SEA_GOAL_RINGS = 12;       /* how far a hull's blocked goal is walked out to water */
 function _rtsPath(sx, sz, gx, gz, dom) {
   if (!_rtsPF) _rtsPathfindInit();
   var P = _rtsPF, run = ++P.run;
@@ -254,11 +255,15 @@ function _rtsPath(sx, sz, gx, gz, dom) {
     return [{ x:ex, z:ez }].concat(rest);
   }
   /* If the goal tile is blocked (ordered onto a building), walk outwards to the nearest
-     open tile so "attack that refinery" still produces a path that arrives beside it. */
+     open tile so "attack that refinery" still produces a path that arrives beside it.
+     FURTHER FOR A HULL: a ship sent at a building ashore is being sent to the water nearest it,
+     and at low tide that water is past the flats as well as past the building - six rings found
+     nothing for a submarine sent at a shore battery two cells inland, and its order was dropped
+     (unit/ebb). A long gun's reach is nine cells, so the water it fires from may be that far. */
   var moved = false;
   if (!_rtsInB(gtx, gtz) || _rtsBlocked(gtx, gtz, dom)) {
-    var best = null, bd = 1e9;
-    for (var rr = 1; rr <= 6 && !best; rr++) {
+    var best = null, bd = 1e9, rings = (dom === 'sea' || dom === 'shallow') ? RTS_SEA_GOAL_RINGS : 6;
+    for (var rr = 1; rr <= rings && !best; rr++) {
       for (var ox = -rr; ox <= rr; ox++) for (var oz = -rr; oz <= rr; oz++) {
         if (Math.max(Math.abs(ox), Math.abs(oz)) !== rr) continue;
         var cx = gtx + ox, cz = gtz + oz; if (_rtsBlocked(cx, cz, dom)) continue;
@@ -375,12 +380,17 @@ function _rtsPath(sx, sz, gx, gz, dom) {
     }
   }
   var out = [], px = sx, pz = sz, j = 0, pc = 0;
+  /* A HULL'S ROUTE IS NEVER STRAIGHTENED. It used to be pulled against LAND, on the premise that
+     a segment starting on water never clears - and changing that moves every fleet, so it is
+     left unpulled. The premise broke with the tide: a hull standing on a flat that has dried
+     starts its segment on open GROUND, the line over the headland beyond cleared, and the River
+     Monitor's twenty-two-waypoint route up the channel collapsed onto one it could not sail
+     (unit/ebb). So the pull is simply skipped for a hull, in every state of the tide. */
+  var pull = dom !== 'sea' && dom !== 'shallow';
   while (j < pts.length) {
     var far = j;
-    for (var k = pts.length - 1; k > j; k--) {
-      /* The domain is passed for a hovercraft, whose straight line may cross water. Ships are
-         still pulled against LAND here - which never clears, so their paths are never
-         straightened - and changing that moves every fleet; it is left as it was. */
+    for (var k = pts.length - 1; k > j && pull; k--) {
+      /* The domain is passed for a hovercraft, whose straight line may cross water. */
       if (!_rtsClearLine(px, pz, pts[k].x, pts[k].z, dom === 'hover' ? dom : undefined)) continue;
       if (cum && _rtsLineClimb(px, pz, pts[k].x, pts[k].z) > cum[k] - pc + RTS_PULL_SLACK) continue;
       far = k; break;

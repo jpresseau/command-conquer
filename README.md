@@ -111,6 +111,10 @@ sails to a damaged one by itself, so a fleet no longer goes home to be patched u
 out it can sit on the drying flats, where no other ship can go, and shell the shore from right
 under it.
 
+**The navy sails on the tide.** The enemy's River Monitor comes in on the ebb and goes home on the
+flood, and as the tide starts to fall it sends the Monitor out with two submarines and the Repair
+Tender behind them: the subs hold the channel while the Monitor goes in over the flats.
+
 **The enemy uses its whole garage.** It mines the approach to its own base, and once you have a
 harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands
 them beside your ore field, and goes home to do it again.

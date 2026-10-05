@@ -124,3 +124,36 @@ The Dominion's flat-bottomed gun barge (`monitor`, `shallow:true`), from its Sub
 
 `unit/monitor` (14 assertions, 7 of 8 mutants killed). The survivor drops the circular trim on
 the reach check, which the square search radius before it already nearly makes.
+
+## The navy sails together — the Ebb team
+
+How the opponent uses the new ships as a fleet rather than one at a time:
+- **The Monitor keeps the tide's clock** (`_rtsAIMonitorTick`): at low water (`_rtsTideLow`, the
+  first flats dry) it is sent at the nearest building it can shell from the water; at high water
+  it breaks off and goes home to its yard. A Monitor in a team is left to the team.
+- **The Ebb team** (`rules/teams.js`, Dominion): a Monitor and two subs, quarry `shore`,
+  `suicide:true` so the lag rule never holds the subs for a Monitor that has gone where they
+  cannot follow. `tide:true` gates it on `_rtsAIEbb`: the tide ebbing (`_rtsTideEbbing`: falling,
+  with the outermost flats still wet, so there is a lane down the channel for the escort) and
+  every member afloat and free right now, so a team raised forms at once. The Tender follows it
+  as the largest team of ships on the march.
+- **`shore`** (`_rtsQuarryMatch`): a building with a cell of the shallow domain within a cell of
+  the Monitor's reach (`_rtsShoreReach`).
+- **The Flak Cruiser** keeps station on the ship under way (sailing, or in a marching team) over
+  one parked nearer, so the umbrella leaves harbour with the fleet.
+
+Two pathing rules changed for hulls (`core/grid.js`), both found by the Ebb team's march:
+- A hull's route is never string-pulled. It used to be pulled against the land domain, on the
+  premise that a segment starting on water never clears; a hull standing on a flat that had
+  dried started its segment on open ground, and the Monitor's route up the channel collapsed
+  onto a headland.
+- A hull's blocked goal is walked out `RTS_SEA_GOAL_RINGS` (12) rings to water, not six: at low
+  water the water nearest a building ashore is past the flats as well.
+
+And `_rtsOrderAttack`'s fallback for a target the unit cannot engage (drive to it) is issued once,
+and retried after `RTS_REFUSED_RETRY` (2 s) when no route was found, not once a tick: a team
+re-issues its attack to every member every tick, and for a sub sent at a battery ashore each
+refusal was an A* over the whole sea.
+
+`unit/ebb` (17 assertions), `unit/monitor` (+2), `unit/flakship` (+1); `unit/aiplan` now reads the
+support purchases as a second shopping list, each bought one at a time.

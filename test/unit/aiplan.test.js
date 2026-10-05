@@ -26,6 +26,13 @@ TEAMS.forEach(function (t) {
 });
 var mixKeys = {};
 for (var cat in MIX) MIX[cat].forEach(function (e) { mixKeys[e.key] = cat; });
+/* THE SECOND SHOPPING LIST: the support units bought outside the weighted roll, one at a time,
+   each for a reason of its own (core/aimines.js _rtsAISupport). Read off the code, not kept here. */
+var supportKeys = (function () {
+  var src = g._rtsAISupport.toString(), out = {}, m, re = /_rtsAISupportBuy\(S,\s*'([a-z]+)'/g;
+  while ((m = re.exec(src))) out[m[1]] = 1;
+  return out;
+})();
 
 S.note(Object.keys(mixKeys).length + ' units in the shopping list, ' +
        TEAMS.length + ' team types: ' + TEAMS.map(function (t) { return t.name; }).join(', '));
@@ -48,7 +55,12 @@ S.note(Object.keys(mixKeys).length + ' units in the shopping list, ' +
 (function () {
   var starved = [];
   TEAMS.forEach(function (t) {
-    for (var k in t.members) if (!mixKeys[k]) starved.push(t.name + ' wants ' + k);
+    for (var k in t.members) {
+      if (mixKeys[k]) continue;
+      /* a support unit is bought one at a time, so a type may want at most one of it */
+      if (supportKeys[k]) { if (t.members[k] > 1) starved.push(t.name + ' wants ' + t.members[k] + ' of ' + k + ', bought one at a time'); continue; }
+      starved.push(t.name + ' wants ' + k);
+    }
   });
   S.ok('every team is made of units the opponent actually buys', !starved.length,
        starved.join(', ') || 'all ' + TEAMS.length + ' types crewable');

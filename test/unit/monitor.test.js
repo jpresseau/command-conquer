@@ -8,7 +8,8 @@
      THE SHORE     from the flats it shells a building that no ship can reach at low water
      WHOSE         the Dominion builds it, from its Sub Pen; the Compact does not
      THE OPPONENT  buys one once its own base is defended and the player has a building it can
-                   reach from the water, not while undefended; and sends it to shell that building */
+                   reach from the water, not while undefended; on the ebb it sends it to shell
+                   that building, and at high water it brings it home to the yard */
 
 var { Suite } = require('../lib/assert.js');
 var { load } = require('../lib/sandbox.js');
@@ -156,8 +157,17 @@ S.ok('...nor with every building of the player\'s out of its reach of the water'
 var em = g._rtsSpawnUnit('enemy', 'monitor', ey.x, ey.z), dk = g._rtsNearestOpen(ey.tx + 1, ey.tz + 1, 8, 'shallow');
 em.x = g._rtsWX(dk[0]); em.z = g._rtsWX(dk[1]);
 var first = g._rtsAIMonitorTarget(em), f0 = first ? first.hp : 0;
+/* the clock at the ebb: the tide falling, the first flats dry (core/tide.js _rtsTideEbbing) */
+G.t = 70; g._rtsTideTick(0);
 run(90, function () { G.sides.enemy.q = {}; });
-S.ok('...and sends it to shell that building', !!first && (first.dead || first.hp < f0),
+S.ok('...on the ebb it sends it to shell that building', !!first && (first.dead || first.hp < f0),
      first ? 'a ' + first.def + ': ' + (first.dead ? 'destroyed' : f0 + ' -> ' + first.hp.toFixed(0)) : 'none');
+/* ...and at high water, out by the player's coast, it is brought home - breaking off its attack */
+G.t = 350; g._rtsTideTick(0);                                        /* rising, and nearly high */
+em.x = F.deep.x; em.z = F.deep.z; em.hp = em.maxHp;
+var start = cells(em, ey), wentHome = false;
+run(20, function () { G.sides.enemy.q = {}; if (em.order === 'move' && em.goal && cells(em.goal, ey) < 3) wentHome = true; });
+S.ok('...and at high water it brings it home to the yard', wentHome && cells(em, ey) < start - 3 && em.order !== 'attack',
+     (wentHome ? 'ordered home; ' : 'never ordered home; ') + start.toFixed(1) + ' -> ' + cells(em, ey).toFixed(1) + ' cells from the yard, order ' + em.order);
 
 require('../lib/report.js')(S);
