@@ -17,6 +17,9 @@
 var RTS_SWEEP = { see: 4, reach: 1.5, clear: 1.5 };
 
 function _rtsSweeps(u) { return !!(rtsUnitDef(u.def) || {}).sweeps; }
+/* Refused a route a moment ago (u.noRouteT, stamped by whoever asked): do not ask again yet. The
+   same breath _rtsOrderAttack takes between asks (core/orders.js RTS_REFUSED_RETRY). */
+function _rtsRouteRefused(u) { return u.noRouteT != null && window._rtsG.t - u.noRouteT < RTS_REFUSED_RETRY; }
 
 function _rtsSweepTick(dt) {
   var G = window._rtsG, M = G.mines, i, k;
@@ -42,8 +45,14 @@ function _rtsSweepTick(dt) {
       if (d < nd) { nd = d; near = m; }
     }
     if (cleared && u.side === 'player') _rtsSay(cleared === 1 ? 'Mine cleared.' : cleared + ' mines cleared.');
-    /* idle, with a mine found and not yet in reach: go and beat it out */
-    if (near && !u.order && (!u.path || u.pi >= u.path.length)) _rtsOrderMove(u, _rtsWX(near.tx), _rtsWX(near.tz), false);
+    /* idle, with a mine found and not yet in reach: go and beat it out. ONCE IN A WHILE WHEN
+       THERE IS NO WAY: a seen mine behind a wall, or across water, refused the move, and the
+       refusal left the sweeper idle - so this asked for the route again every tick, a fresh A*
+       over the whole map thirty times a second for as long as the mine lay there. */
+    if (near && !u.order && (!u.path || u.pi >= u.path.length) && !_rtsRouteRefused(u)) {
+      _rtsOrderMove(u, _rtsWX(near.tx), _rtsWX(near.tz), false);
+      if (!u.order) u.noRouteT = G.t;
+    }
   }
   if (M) G.mines = M.filter(function (m) { return !m.gone; });
 }
@@ -56,6 +65,7 @@ function _rtsAISweepTick() {
     var u = G.ents[i];
     if (u.dead || u.inside || u.side !== 'enemy' || u.type !== 'unit' || !_rtsSweeps(u)) continue;
     if (u.order || (u.path && u.pi < u.path.length)) continue;           /* busy, or clearing */
+    if (_rtsRouteRefused(u)) continue;                                   /* no way there just now */
     var best = null, bd = 1e9;
     for (var k = 0; k < H.length; k++) {
       var h = H[k];
@@ -64,6 +74,9 @@ function _rtsAISweepTick() {
       if (d <= RTS_TILE * 1.5) { h.swept = 1; continue; }
       if (d < bd) { bd = d; best = h; }
     }
-    if (best) _rtsOrderMove(u, _rtsWX(best.tx), _rtsWX(best.tz), false);
+    if (best) { _rtsOrderMove(u, _rtsWX(best.tx), _rtsWX(best.tz), false); if (!u.order) u.noRouteT = G.t; }
   }
+  /* a place swept is a place done with: the list held every hit of the match, and the buy gate
+     (core/aimines.js) read its length, so a sweeper was bought again for ground long since cleared */
+  if (H.some(function (h) { return h.swept; })) G.mineHits = H.filter(function (h) { return !h.swept; });
 }

@@ -14,7 +14,7 @@
    The opponent buys one once its field army has RTS_FIX.army vehicles worth mending
    (_rtsAISupport, core/aimines.js). */
 
-var RTS_FIX = { seek: 10, every: 1, army: 6, fleet: 3, behind: 4, defended: 4 };
+var RTS_FIX = { seek: 10, every: 1, army: 6, fleet: 3, behind: 4, defended: 4, retry: 10 };   /* retry: seconds a vehicle with no route to it is passed over */
 
 function _rtsFixes(u) { var d = rtsUnitDef(u.def) || {}; return (d.healKind === 'vehicle' || d.healKind === 'ship') && d.heals > 0; }
 function _rtsFixIdle(u) { return !u.order && (!u.path || u.pi >= u.path.length); }
@@ -25,6 +25,10 @@ function _rtsFixWants(u) {
     var v = G.ents[i];
     if (v === u || v.dead || v.inside || v.type !== 'unit' || v.side !== u.side || v.hp >= v.maxHp) continue;
     if ((rtsUnitDef(v.def) || {}).kind !== d.healKind) continue;
+    /* ...not one it was refused a route to within RTS_FIX.retry (u.noFix, stamped below): a tank
+       across a strait is in its reach as the crow flies and nowhere a truck can drive, and the
+       nearest such kept it asking for that route every second while the next tank over waited */
+    if (u.noFix && u.noFix[v.id] != null && G.t - u.noFix[v.id] < RTS_FIX.retry) continue;
     var dd = Math.hypot(v.x - u.x, v.z - u.z);
     if (dd <= d.heals * 0.8 || dd >= bd) continue;
     /* ...and one it can get its aura onto: a Monitor on a flat at low water is four cells from
@@ -45,7 +49,7 @@ function _rtsFixTick(dt) {
     var u = G.ents[i];
     if (u.dead || u.inside || u.type !== 'unit' || !_rtsFixes(u) || !_rtsFixIdle(u)) continue;
     var v = _rtsFixWants(u);
-    if (v) _rtsOrderMove(u, v.x, v.z, false);
+    if (v) { _rtsOrderMove(u, v.x, v.z, false); if (!u.order) (u.noFix = u.noFix || {})[v.id] = G.t; }
   }
 }
 /* The opponent's truck, with nothing damaged near: behind the largest team on the march - of
@@ -71,6 +75,7 @@ function _rtsAIFixTick(dt) {
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
     if (u.dead || u.inside || u.side !== 'enemy' || u.type !== 'unit' || !_rtsFixes(u) || !_rtsFixIdle(u)) continue;
+    if (u.mend != null) continue;                                     /* its own trip to the depot: core/aimend.js */
     if (_rtsFixWants(u)) continue;                                    /* mending comes first */
     var k = rtsUnitDef(u.def).healKind, a = k in at ? at[k] : (at[k] = _rtsAIFixBehind(k));
     if (!a) continue;

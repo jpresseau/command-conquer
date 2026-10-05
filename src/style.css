@@ -378,11 +378,11 @@
    11px text beside it - it is a one-shot, irreversible order on a 2500-credit unit, and the
    thing it must never be is a near-miss. It is hidden unless the selection can actually take
    the order, so this width costs the readout nothing the rest of the time. */
-#rcgRts .rts-sel #rtsDeployBtn{flex:0 0 auto;min-height:34px;padding:0 12px;
+#rcgRts .rts-sel #rtsDeployBtn,#rcgRts .rts-sel #rtsUnloadBtn{flex:0 0 auto;min-height:34px;padding:0 12px;
   border:1px solid #3f7fd0;border-radius:4px;background:#12243a;color:#8fd0ff;
   font:700 11px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.5px;cursor:pointer}
-#rcgRts .rts-sel #rtsDeployBtn:active{background:#1d3a5c}
-#rcgRts .rts-sel #rtsDeployBtn[hidden]{display:none}
+#rcgRts .rts-sel #rtsDeployBtn:active,#rcgRts .rts-sel #rtsUnloadBtn:active{background:#1d3a5c}
+#rcgRts .rts-sel #rtsDeployBtn[hidden],#rcgRts .rts-sel #rtsUnloadBtn[hidden]{display:none}
 
 @media (max-width:820px){
   #rcgRts .rts-bar{flex-basis:190px}

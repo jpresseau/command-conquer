@@ -42,6 +42,12 @@ S.ok('the field is planned, on the route out from the opponent\'s yard', spots.l
 S.ok('...nine to eighteen cells out, a cell of slack either side', out.every(function (d) { return d >= g.RTS_AI_MINES.from - 2 && d <= g.RTS_AI_MINES.to + 2; }),
      Math.min.apply(null, out).toFixed(1) + ' to ' + Math.max.apply(null, out).toFixed(1));
 S.ok('...and every cell of it open ground', spots.every(function (s) { return !g._rtsBlocked(s[0], s[1], null) && G.terrain[g._rtsIdx(s[0], s[1])] !== g.RTS_T_WATER; }), '');
+/* asked while a yard is down, the plan is not cached empty for the rest of the match */
+G.ai.mineSpots = null;
+var py0 = g._rtsHas('player', 'yard'); py0.dead = true;
+var noYard = g._rtsAIMineSpots(G).length; py0.dead = false;
+var yardBack = g._rtsAIMineSpots(G).length;
+S.ok('asked while the player\'s yard is down it plans nothing, and plans the field once the yard stands again', noYard === 0 && yardBack >= 10, noYard + ' then ' + yardBack);
 
 /* ---------------- laid, and kept back ---------------- */
 var bay = place('enemy', 'depot');
@@ -71,6 +77,22 @@ var spotsLeft = spots.filter(function (s) { return !g._rtsMineAt(s[0], s[1]); })
 S.ok('...and with field still to lay, a second load goes down after the Repair Bay', spotsLeft > 0 && mine.length > 5,
      mine.length + ' mines, ' + spotsLeft + ' cells left, the bay ' + (bay ? 'standing' : 'missing'));
 
+/* ---------------- no way there ---------------- */
+/* a cell of the plan the layer cannot get to - walled in since the plan was made - is set aside
+   for RTS_AI_MINES.retry and the rest of the field laid, where it once asked for that one route
+   every second and laid nothing else for the rest of the match */
+G = fresh(); ey = g._rtsHas('enemy', 'yard');
+var sp3 = g._rtsAIMineSpots(G), shut = sp3[0];
+for (var wz = -1; wz <= 1; wz++) for (var wx = -1; wx <= 1; wx++) if (wx || wz) G.blocked[g._rtsIdx(shut[0] + wx, shut[1] + wz)] = 1;
+var ly3 = g._rtsSpawnUnit('enemy', 'minelayer', ey.x + g.RTS_TILE * 3, ey.z), asks = 0, path0 = g._rtsPath;
+g._rtsPath = function (sx, sz, gx, gz) { if (g._rtsTX(gx) === shut[0] && g._rtsTX(gz) === shut[1]) asks++; return path0.apply(this, arguments); };
+run(60);
+g._rtsPath = path0;
+var laid3 = G.mines.filter(function (mm) { return mm.side === 'enemy'; }).length;
+S.ok('a cell of the plan walled in is asked for once and set aside, and the rest of the load goes down',
+     sp3.length >= 5 && asks >= 1 && asks <= Math.ceil(60 / g.RTS_AI_MINES.retry) + 1 && laid3 >= 4 && !g._rtsMineAt(shut[0], shut[1]),
+     asks + ' asks in 60 s, ' + laid3 + ' mines down, the walled cell ' + (g._rtsMineAt(shut[0], shut[1]) ? 'mined' : 'bare'));
+
 /* ---------------- one ---------------- */
 G = fresh();
 ['factory', 'radar', 'depot', 'apower', 'apower', 'apower'].forEach(function (k) { if (!g._rtsHas('enemy', k) || /power/.test(k)) place('enemy', k); });
@@ -94,5 +116,17 @@ g._rtsSpawnUnit('enemy', 'minelayer', ey.x, ey.z + 20);
 var one = buys(200);
 S.ok('the buy loop takes a Mine Layer while it has none - with its army already full', cap > 0 && none > 5, none + ' of 200 rolls, the army at ' + (cap + 2) + ' against a cap of ' + cap);
 S.ok('...and never a second', one === 0, one + ' of 200 rolls');
+/* the cap counts fighters (core/ai.js): unarmed support bought outside the roll does not fill a
+   fighter's place - with the layer in hand and the tanks at the cap, nothing is queued... */
+var S4 = G.sides.enemy;
+S4.q = {}; S4.credits = 1e6; S4.ore = 0; g._rtsAIUnits(S4);
+var cappedQueue = Object.keys(S4.q).filter(function (k) { return k === 'vehicle' || k === 'infantry'; });
+/* ...and with the tanks gone and as many sweepers in their place, the army is bought again */
+G.ents.forEach(function (e) { if (!e.dead && e.side === 'enemy' && e.def === 'tank') e.dead = true; });
+for (var sw = 0; sw < cap + 2; sw++) g._rtsSpawnUnit('enemy', 'sweeper', ey.x + (sw % 8) * 3, ey.z + 34 + ((sw / 8) | 0) * 3);
+S4.q = {}; S4.credits = 1e6; S4.ore = 0; g._rtsAIUnits(S4);
+var supportQueue = Object.keys(S4.q).filter(function (k) { return k === 'vehicle' || k === 'infantry'; });
+S.ok('the army cap counts fighters: tanks at the cap stop the buying, as many unarmed sweepers do not', cappedQueue.length === 0 && supportQueue.length > 0,
+     'at the cap: ' + (cappedQueue.join(',') || 'nothing') + '; sweepers instead: ' + (supportQueue.join(',') || 'nothing'));
 
 require('../lib/report.js')(S);

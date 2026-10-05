@@ -33,9 +33,11 @@ function _rtsTeamOrderAll(t, fn) {
    there, and then sat in open water for the rest of the leg because nothing within reach of it
    was land. A hull cannot land on water; it lands on the shore beside it, so the shore is the
    thing to look for. */
-function _rtsLandingSpot(aim) {
-  var atx = _rtsTX(aim.x), atz = _rtsTX(aim.z);
-  for (var r = 1; r <= 30; r++) {
+function _rtsLandingSpot(aim, rings) {
+  var atx = _rtsTX(aim.x), atz = _rtsTX(aim.z), R = rings || 30;
+  /* `rings` bounds the scan: a caller that will take no beach past N cells (the raid,
+     core/aihover.js) need not walk thirty rings of _rtsNearestOpen for every inland harvester */
+  for (var r = 1; r <= R; r++) {
     for (var ox = -r; ox <= r; ox++) {
       for (var oz = -r; oz <= r; oz++) {
         if (Math.max(Math.abs(ox), Math.abs(oz)) !== r) continue;

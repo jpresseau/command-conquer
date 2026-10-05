@@ -237,6 +237,11 @@ function _rtsPath(sx, sz, gx, gz, dom) {
      immediately (every neighbour is inside the same footprint), which used to strand the
      unit permanently. Step it out to the nearest open tile first, then path from there. */
   if (_rtsBlocked(stx, stz, dom)) {
+    /* a hull on a flat the tide has dried has no route until the flood (core/tide.js): the
+       escape step below is a beeline with no line test, and from a dried flat it crossed sand
+       and land to the nearest water */
+    var Gs = window._rtsG;
+    if (dom === 'sea' && Gs && Gs.tideDry && Gs.tideDry[_rtsIdx(stx, stz)]) return null;
     var esc = _rtsNearestOpen(stx, stz, 10, dom);
     if (!esc) return null;
     var ex = _rtsWX(esc[0]), ez = _rtsWX(esc[1]);

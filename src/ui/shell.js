@@ -91,7 +91,11 @@ function rtsOpen(seed) {
        beside it on the next frame. */
     +   '<div class="rts-sel" id="rtsSel"><span id="rtsSelTxt">Nothing selected</span>'
     +     '<button id="rtsDeployBtn" type="button" hidden ' +
-              'onclick="_rtsDeploySelected()">DEPLOY</button></div>'
+              'onclick="_rtsDeploySelected()">DEPLOY</button>'
+    /* and UNLOAD, shown while a selected transport has something aboard - the U key's other door,
+       for a finger (core/transport.js _rtsUnloadSelected) */
+    +     '<button id="rtsUnloadBtn" type="button" hidden ' +
+              'onclick="_rtsUnloadSelected()">UNLOAD</button></div>'
     + '</div>';
   document.body.appendChild(d);
 

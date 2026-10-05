@@ -139,8 +139,8 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
      A SHIP ON A FLAT THE TIDE HAS DRIED sits on the sand (the Monitor's verb, core/monitor.js):
      no swell, no lean - the water sheet is cut away there (world3d.js) and a hull heaving on an
      invisible sea sank two thirds of its height into the ground at every trough. */
-  var wet = d2.sea && _r3dWetAt(G, e.x, e.z);                /* fxwake3d.js */
-  var gn = d2.sea ? (wet ? null : _rtsElevNormal(e.x, e.z)) : e.air ? _r3dAirLean(R3, e, mo, d2) : _rtsElevNormal(e.x, e.z);
+  var wet = (d2.sea || d2.hover) && _r3dWetAt(G, e.x, e.z);  /* fxwake3d.js; a hovercraft over water rides the swell too */
+  var gn = e.air ? _r3dAirLean(R3, e, mo, d2) : (d2.sea && wet) ? null : _rtsElevNormal(e.x, e.z);
   if (wet && !R3.swellOff) { var sw = _r3dShipSwell(e, t); y += sw.y; gn = sw.n; }
   var rk = _r3dRecoil(e, gn) || { hx: 0, hz: 0, tx: 0, tz: 0, n: gn };   /* the kick: combat3d.js */
   var AP = RTS_AIR_PARTS[e.def], rotor = AP && (AP.rotor || AP.prop) && !R3.rotorOff;

@@ -14,11 +14,13 @@
 
 var R3D_FX_WAKEC = [0.93, 0.96, 0.97];
 
-/* how much dust a surface throws: loose ground most, grass a little, a hard base none */
+/* how much dust a surface throws: loose ground most, grass a little, a hard base none - and a
+   flat the tide has dried is sand (core/tide.js) */
 function _r3dFxDustOf(G, x, z) {
   var tx = _rtsTX(x), tz = _rtsTX(z);
   if (!_rtsInB(tx, tz)) return 0;
-  var t = G.terrain[_rtsIdx(tx, tz)];
+  var ci = _rtsIdx(tx, tz), t = G.terrain[ci];
+  if (t === RTS_T_WATER && G.tideDry && G.tideDry[ci]) t = RTS_T_SAND;
   if (t === RTS_T_SAND || t === RTS_T_ROAD) return 1;
   if (t === RTS_T_ROCK) return 0.5;
   if (t === RTS_T_GRASS) return 0.35;
@@ -76,6 +78,7 @@ function _r3dFxWakes(G, V) {
     var d = rtsUnitDef(e.def);
     if (!d || d.kind === 'infantry' || d.kind === 'air') continue;
     if (vis && !_rtsVisible(_rtsTX(e.x), _rtsTX(e.z))) continue;
+    if (!_rtsEffectsSeen(e)) continue;                         /* a jammed unit's dust gave it away: core/supers.js */
     var hx = Math.cos(e.rot || 0), hz = Math.sin(e.rot || 0), r = d.r || 1.6, seed = _r3dFxH(e.id || i + 1, 5.5);
     /* a wake wants water under the hull: a Monitor crossing a flat the tide has dried, or a
        hovercraft over one, is on sand (unit3d.js _r3dWetAt) */

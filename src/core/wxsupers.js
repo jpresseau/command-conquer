@@ -96,6 +96,9 @@ function _rtsWxTick(dt) {
     c.boltT += RTS_THUNDER.every;
     var hit = _rtsBoltTarget(c);
     if (!hit) continue;
+    /* the kill is the caller's (capture.js counts a kill by hurtBy, as a mine's and a splash's
+       are), without a source entity: a cell cannot carry the threat weighting a unit would */
+    hit.hurtBy = c.side;
     _rtsDamage(hit, RTS_THUNDER.dmg, null, false);
     (G.bolts = G.bolts || []).push({ x: hit.x, z: hit.z, t: 0 });
     G.fx.push({ kind: 'boom', x: hit.x, y: 1, z: hit.z, t: 0, big: 1.4 });

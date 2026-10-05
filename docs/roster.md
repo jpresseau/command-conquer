@@ -303,7 +303,7 @@ reach, and the comment says so.
 Both armies' tracked layer, built at the Vehicle Works once there is a Repair Bay (`minelayer`).
 The verb is DENIAL: a road, a ford or a gap in a wall that the enemy pays to cross. It is unarmed
 and carries five mines. It lays one where it stands on D or DEPLOY (the MCV's order, so a phone
-has it too), and a powered Repair Bay loads them back, one every four seconds.
+has it too; on a deck or a dried flat it says why not), and a powered Repair Bay loads them back.
 
 How a mine behaves (`core/mines.js`):
 - Mines live in `G.mines` beside the crates, not as entities. Nothing targets them and no base
@@ -334,7 +334,8 @@ Both armies' tracked layer, built at the Vehicle Works once there is a Radar Pos
 (`bridgelayer`). The verb is the CROSSING: a river or a channel the map gave no bridge over,
 spanned where the player chooses, so an army can come at a base from the side it isn't
 watching. At the water's edge, D or DEPLOY turns the vehicle into a one-lane bridge of up to
-eight cells across the gap ahead. It tries the way it faces first, then the other three. The
+eight cells across the gap ahead. It tries the way it faces first, then the other three - at low
+water from a dried flat too, across what is still wet (`_rtsBridgeGap` reads `G.tideDry`). The
 vehicle is the span, as the MCV is the yard.
 
 The bridge is exactly the generator's kind (`core/bridge.js`): a record in `G.bridges` and its
@@ -369,9 +370,10 @@ and thin-skinned, with a machine gun for the men waiting on the sand. Torpedoes 
 It is the third movement domain, `'hover'` (`core/grid.js`):
 - Its ground is open water as a ship has it, plus everything a land unit may cross. A structure,
   a shipyard's water, rock and trees still stop it.
-- Its paths are pulled straight against its own domain. Ships are still pulled against land,
-  which never clears, so their paths are never straightened. Fixing that would move every fleet,
-  so it is left as it was and the comment says so.
+- Its paths are pulled straight against its own domain (a hull's never are). It crowds with what
+  shares the ground under it (core/move.js). Afloat, a squad boards it from three cells off, as a
+  craft; U or the sidebar's UNLOAD puts the men down (`_rtsUnloadSelected`, the DEPLOY shape); over
+  water it rides the swell, and the pointer offers it a move there (ui/hud.js, its own domain).
 - Killed over water it goes down like a ship: no debris thrown up, no fire on the waves.
 - It wakes over water and leaves no treads anywhere.
 
@@ -392,12 +394,13 @@ Both armies' unarmed tracked flail (`sweeper`), at the Vehicle Works. A minefiel
 but a lost tank; this is the answer (`core/sweeper.js`):
 - Every enemy mine within 4 cells is SEEN by its side from then on (`m.seen[side]`, read by
   `_rtsMineShown`) and drawn ringed in the enemy's colour.
-- A seen mine within 1.5 cells is beaten out in 1.5 s. Left idle, it drives to the nearest one.
+- A seen mine within 1.5 cells is beaten out in 1.5 s. Left idle, it drives to the nearest one;
+  refused a route (walled in, across water) it asks again in 2 s, not every tick (`u.noRouteT`).
 - It never sets a mine off (`_rtsMineTick` asks `sweeps`).
-- The opponent buys one once a player mine has cost it a unit (`G.mineHits`), and sends it round
-  those places, nearest first.
+- The opponent buys one once a player mine has cost it a unit somewhere not yet swept
+  (`G.mineHits`), and sends it round those places, nearest first; a place swept is struck off.
 
-`unit/sweeper` (11 assertions, 10 mutants killed) and `e2e/sweeper` (the found mine drawn, a real
+`unit/sweeper` (14 assertions, its mutants killed) and `e2e/sweeper` (the found mine drawn, a real
 click on the list).
 
 ## The Spotter — seeing for others
@@ -411,27 +414,29 @@ Fog Bank blind the long guns most; this is their eyes (`core/spotter.js`):
 - The opponent buys one in fog when it has a long gun, and keeps it four cells ahead of the
   nearest one, toward the player's base.
 
-`unit/spotter` (12 assertions, 10 mutants killed).
+`unit/spotter` (13 assertions, 10 mutants killed; the duel is also run through `_rtsTick`).
 
 ## The Repair Truck — mending in the field
 
 Both armies' six-wheeled workshop truck with a crane (`repairtruck`), behind a Repair Bay. The
 Field Medic's aura (`heals`) pointed at vehicles by `healKind`: every friendly vehicle within 2.5
 cells comes back at 12 hp/s, for free, whatever the truck is doing; not itself (`core/repairtruck.js`).
-- Left idle it drives to the nearest damaged vehicle within 10 cells.
+- Left idle it drives to the nearest damaged vehicle within 10 cells it can get its aura onto;
+  one it is refused a route to is passed over for 10 s (`u.noFix`), and the next one mended.
 - The opponent buys one once its field army has six armed vehicles; with nothing to mend, its
   truck follows the largest team on the march, four cells behind.
 
-`unit/repairtruck` (11 assertions, 9 mutants killed; the medic still mends only infantry).
+`unit/repairtruck` (13 assertions, its mutants killed; the medic still mends only infantry).
 
 ## The Jammer — concealment
 
 Both armies' tracked antenna carrier (`jammer`), behind a Radar Post (`core/jammer.js`). Parked
 2 s, its field (4 cells) jams its side's UNITS, never buildings: unseen by the other side unless
 something of it is within 2 cells or its Spotter sees them; found by no gun and picked by no team
-from further off; a unit that fired in the last 3 s is not jammed. The enemy radar shows static
-over the field. The opponent buys one once the player has two armed buildings and it has four
-armed vehicles, and parks it in the middle of its largest team on the march.
+from further off; a unit that fired in the last 3 s is not jammed. The enemy radar shows static over
+the field where its ground is explored (`_rtsRadarStaticShown`); a jammed unit leaves no dust, smoke
+or tracks (`_rtsEffectsSeen`). The opponent buys one once the player has two armed buildings and it has
+four armed vehicles, parks it amid its largest LAND team on the march, and mends it when battered.
 
 `unit/jammer` (15 assertions, 12 mutants killed) and `e2e/jammer` (the radar's static, 2 mutants).
 
@@ -440,11 +445,9 @@ armed vehicles, and parks it in the middle of its largest team on the march.
 The Dominion's flying crane (`skycrane`), behind an Airfield: the Skylift's verb for one vehicle.
 It is the transport rules (`carries:1, takes:['vehicle']`); a vehicle ordered onto it boards - a
 Harvester too, which walks onto it before its own economy loop runs - and an unload order sets it
-down anywhere. The load hangs under its legs by its own height (`slings`, unit3d.js `R3D_SLING_GAP`:
-the legs stand 0.9 world units apart and a tank is 1.6 wide), scorched and smoking as it is hurt
-(hurt3d.js); a loaded crane never settles (`_rtsAirSettle`). Shot down over land the load is set
-down; over water it goes with it, and sinks: no husk, no wreckage (capture.js reads the cell). The
-opponent does not build it: the land route between the bases is already direct (see the Bridge Layer).
+down anywhere. The load hangs under its legs by its own height (unit3d.js `R3D_SLING_GAP`), scorched
+and smoking as it is hurt; a loaded crane never settles. Shot down over land the load is set down;
+over water it sinks with it, no husk, no wreckage. The opponent does not build it (see the Bridge Layer).
 
 `unit/skycrane` (14 assertions, 7 mutants) and `e2e/skycrane` (passengers not drawn, the load drawn).
 
@@ -454,19 +457,19 @@ opponent does not build it: the land route between the bases is already direct (
   - The field is planned once a match, from the land route between the two yards: route cells
     9 to 18 out from the opponent's yard, with a cell either side.
   - The layer works through them, lays on a cell beside it when a move order stops it a cell
-    short, and goes home to the Repair Bay to reload.
-  - It is bought OUTSIDE the weighted roll (`_rtsAISupport`): no layer alive, a field to lay,
-    the vehicle line free, and the price out of genuine surplus above the base plan.
-  - As a mix entry it moved every roll after it. The Soviet opponent stopped reaching its Arc
-    Tower (`e2e/basedef`) and the raiders thinned (`e2e/raid`), and a full army skipped the line
-    so a capped opponent never bought one.
+    short, sets a cell it is refused a route to aside for `RTS_AI_MINES.retry` s, and reloads at
+    the Repair Bay.
+  - Bought OUTSIDE the weighted roll (`_rtsAISupport`): no layer alive, a field to lay, the
+    vehicle line free, and the price out of genuine surplus above the base plan. As a mix entry
+    it moved every roll after it (the Soviet opponent stopped reaching its Arc Tower in
+    `e2e/basedef`, the raiders thinned in `e2e/raid`) and a full army skipped the line.
   - No team composition includes a layer, so no attack takes it along.
   - In a 900 s match on seed 9001, with the player's base held standing, it bought its layer at
     340 s and had 16 mines down by the end. A map whose yards share no land route gets no layer.
 - **The Flak Track** is bought against the sky (above).
 - **The Hovercraft raids by sea** (`core/aihover.js`):
-  - Every generated map has one body of water that reaches both coasts, about ten cells from each
-    yard, while the land route between the bases runs straight down the middle.
+  - Every generated map has one body of water that reaches both coasts, about ten cells from
+    each yard; the land route between the bases runs down the middle, where the guns face.
   - The raid takes up to four armed infantry from home that no team has, rocket squads first. It
     drives to its own launch water, sails the SEA domain to the beach nearest a player harvester
     (within `RTS_AI_HOVER.near` cells of it, the one with the fewest guards), and lands them
@@ -478,22 +481,19 @@ opponent does not build it: the land route between the bases is already direct (
     bought at 274 s, boarded four squads in 12 s, crossed the map by water in 28 s, and the
     harvester beside the beach died 14 s after the landing. The idle-player ladder does not move
     (an idle player builds no Refinery, so it has no harvester to raid).
-- **The Bridge Layer is not built by the opponent, and that is measured.** On 30 generated maps the
-  land route between the yards is within about 5% of the straight line, and no bridge site
-  shortens the walk to the player's yard, flank or ore field (the best estimate is 92% of the
-  route, by the straight-line lower bound). A plan gated on "a bridge helps" would never fire.
-  It needs maps with a river between the bases.
+- **The Bridge Layer is not built by the opponent, and that is measured.** On 30 generated maps
+  the land route between the yards is within about 5% of the straight line, and no bridge site
+  shortens the walk to the player's yard, flank or ore field (best estimate 92% of the route, by
+  the straight-line bound). A plan gated on "a bridge helps" would never fire; it needs rivers.
 
 ### Verified
 
 `unit/aimines` checks the field's band and ground, a full load laid on it and only on it, the
-reload, the layer never in a team (asked of every type), one layer bought even with a full army
-and never two, and nothing bought a credit short of surplus. Eight mutants were killed. Earlier
-versions had two survivors, and both were claims the code did not make: a "layer" flag that only
-changed a count, and a dynamic check that never raised the mutated team.
+reload, a walled-in cell set aside, the layer never in a team (asked of every type), one layer
+bought even with a full army and never two, and nothing bought a credit short of surplus. Its
+mutants were killed; two early survivors were claims the code did not make.
 
-`unit/aihover` (seed 776, where a hovercraft's land route cuts across the land and the sea route
-does not) checks the target and its reach, the guard preference, the purchase, the crew, a sail
-at least 85% on water, the landing, the kill (and not the power plant beside the beach), raiders
-kept from teams ashore and put back on their prey, the craft's return and the release. Thirteen
-mutants were killed.
+`unit/aihover` (seed 776, where a hovercraft's land route cuts the land and the sea route does
+not) checks the target and its reach, the guard preference, the purchase, the crew, a sail at least
+85% on water, the landing, the kill (not the power plant by the beach), raiders kept from teams
+ashore and put back on their prey, the craft's return and the release. Its mutants were killed.

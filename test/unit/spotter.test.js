@@ -96,6 +96,19 @@ var theirs = duel('fog', 'enemy');
 S.ok('...nor with only the enemy\'s: the gun finds nothing at all', !theirs, theirs ? 'found its ' + theirs.def : 'nothing');
 S.ok('in a fog bank the same: found with a spotter, not without', duel('day', 'player', true) && !duel('day', null, true), '');
 S.ok('on a clear day the spotter changes nothing: found either way', duel('day', 'player') && duel('day', null), '');
+/* ...and through the frame loop itself, not the finder alone: an idle long gun in fog opens up on
+   the tank its spotter sees, and does not without one */
+function fought(spotSide) {
+  var G = fresh('fog'), m = middle();
+  var a = g._rtsSpawnUnit('player', 'arty', m.x, m.z), p = open(m.tx + 7, m.tz), f = g._rtsSpawnUnit('enemy', 'tank', p.x, p.z), sp = null;
+  if (spotSide) { var q = open(m.tx + 4, m.tz + 2); sp = g._rtsSpawnUnit(spotSide, 'spotter', q.x, q.z); }
+  var hp0 = f.hp;
+  run(6, function () { [a, f, sp].forEach(function (u) { if (u) { u.path = null; u.order = u === a ? null : 'hold'; } }); });
+  return { shot: f.dead || f.hp < hp0, aimed: a.target === f };
+}
+var withSp = fought('player'), without = fought(null);
+S.ok('through the frame loop: an idle long gun in fog opens up on the tank its spotter sees, and not without one', (withSp.shot || withSp.aimed) && !without.shot && !without.aimed,
+     'with: ' + JSON.stringify(withSp) + ', without: ' + JSON.stringify(without));
 
 /* ---------------- both armies ---------------- */
 function canBuild(army) {

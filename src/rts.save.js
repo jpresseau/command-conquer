@@ -268,6 +268,10 @@ function rtsSaveGame() {
          unrecorded, resuming after switching sides loaded the base intact and then refused to
          build from it: a standing Kennel that cannot make dogs. */
       side:(typeof rtsArmySide === 'function') ? rtsArmySide() : null,
+      /* A DAILY, if this is one (daily.js): its spec, so a resume is still the daily - its army
+         for this battle only, its result on the end card - rather than an ordinary battle that
+         wrote the day's army over the player's stored preference. */
+      daily:window._RTS_DAILY || null,
       desc:(RTS_DIFF[G.diff] ? RTS_DIFF[G.diff].name : G.diff) + ' — '
         + mins + ':' + (secs < 10 ? '0' : '') + secs
         + ' — ' + G.ents.filter(function (e) { return !e.dead && e.side === 'player'; }).length + ' units and buildings' };
@@ -386,11 +390,27 @@ function rtsLoadGame() {
      load the Soviet base and then hand you the Allied roster - a Kennel standing in your base
      that cannot build a dog. Saves written before this field existed have no `side`, and are
      left exactly as they were rather than being guessed at. */
-  if (res.info && res.info.side && typeof rtsSetArmySide === 'function') rtsSetArmySide(res.info.side);
+  _rtsLoadArmy(res.info);
   /* The load goes through the same door as starting a battle: close, open, and hand the state
      to rtsOpen so it lands after _rtsNewGame and before the renderer bakes the terrain. */
   window._RTS_PENDING_LOAD = body;
   if (document.getElementById('rcgRts')) rtsClose();
   rtsOpen(body.seed);
   return true;
+}
+/* The army a save is resumed with. An ordinary battle's is stored, as the player's choice. A
+   DAILY'S is not: it is set for the battle only, the way daily.js sets it, with the player's own
+   army and difficulty kept to be put back by rtsDailyEnd - resuming a Dominion daily once wrote
+   Dominion into a Compact player's stored preference, and resumed it as a plain match with no
+   daily line on the end card. */
+function _rtsLoadArmy(info) {
+  if (!info || !info.side) return;
+  if (info.daily) {
+    if (!window._RTS_DAILY_PREV) window._RTS_DAILY_PREV = { diff: window._RTS_DIFF, army: typeof rtsArmySide === 'function' ? rtsArmySide() : window._RTS_ARMY };
+    window._RTS_DAILY = info.daily;
+    if (info.daily.diff) window._RTS_DIFF = info.daily.diff;
+    window._RTS_ARMY = info.side;
+    return;
+  }
+  if (typeof rtsSetArmySide === 'function') rtsSetArmySide(info.side);
 }

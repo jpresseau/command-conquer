@@ -262,4 +262,13 @@ S.ok('a Sky Crane\'s load hangs under its legs by its own height, the turret\'s 
 S.ok('...scorched as the load is hurt, not as the crane is', cargo[0].dim >= 3 && sc2[0].dim === 0, 'load ' + cargo[0].dim.toFixed(2) + ', crane ' + sc2[0].dim);
 S.ok('...and its drawn height goes in its motion record, for its smoke', R5.motion[ld.id] && R5.motion[ld.id].y === cargo[0].y);
 
+/* ---- a hovercraft over water rides the swell, as a hull does; over land it stands on the ground ---- */
+var hv = g._rtsSpawnUnit('player', 'hovercraft', shp.x, shp.z); hv.rot = 0.3;
+var hvW = paint(hv)[0], want2 = g._r3dShipSwell(hv, G.t);
+S.ok('a hovercraft over open water is drawn on the swell - the waves washed over a deck drawn at sea level', Math.abs(hvW.y - (g._rtsElev(hv.x, hv.z) + want2.y)) < 1e-9 && hvW.n && Math.abs(hvW.n[0] - want2.n[0]) < 1e-9,
+     'y ' + hvW.y.toFixed(3) + ' against the swell\'s ' + (g._rtsElev(hv.x, hv.z) + want2.y).toFixed(3));
+hv.x = 40; hv.z = 40;
+var hvL = paint(hv)[0];
+S.ok('...and over land it stands on the ground', Math.abs(hvL.y - g._rtsStandY(40, 40)) < 1e-9, 'y ' + hvL.y.toFixed(3));
+
 require('../lib/report.js')(S);

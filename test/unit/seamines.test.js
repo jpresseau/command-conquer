@@ -96,7 +96,11 @@ function sail(side, key, from, to) {
   from = from || CH.A; to = to || CH.B;
   var M = mined('player'), u = g._rtsSpawnUnit(side, key, from.x, from.z), hp = u.hp, over = false;
   g._rtsOrderMove(u, to.x, to.z, false);
+  /* the opponent's own raid controller (core/aihover.js) would send an idle enemy hovercraft
+     home by sea, off the course this spec sets: the staging is the sail, not the raid */
+  var tick = g._rtsAIHoverTick; g._rtsAIHoverTick = function () {};
   run(20, function () { if (g._rtsTX(u.x) === MC.tx && g._rtsTX(u.z) === MC.tz) over = true; if (u.air) { u.target = null; } });
+  g._rtsAIHoverTick = tick;
   return { hurt: hp - (u.dead ? 0 : u.hp), spent: !M.G.mines.length, over: over || u.dead };
 }
 var foe = sail('enemy', 'gunboat'), hitsAfter = (g.window._rtsG.mineHits || []).length;

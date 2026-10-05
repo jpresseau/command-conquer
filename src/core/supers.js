@@ -29,6 +29,13 @@ function _rtsSuperSources(side) {
 
 /* Low power stalls a charge rather than resetting it - the same treatment a Tesla coil gets,
    and for the same reason: a brownout should cost you tempo, not the whole investment. */
+/* The ready line and the arm line, in the device's own verb: 'click' at a desk, 'tap' on a phone
+   (ui/sidebar.js _rtsTouchUI). The first-wave weather copied the older supers' wording, and the
+   one instruction on a phone's screen named an input it does not have. */
+function _rtsSuperHint(sup) {
+  var h = (sup && sup.hint) || '';
+  return (typeof _rtsTouchUI === 'function' && _rtsTouchUI()) ? h.replace(/\bclick\b/g, 'tap') : h;
+}
 function _rtsSupersTick(dt) {
   var G = window._rtsG, sides = ['player', 'enemy'], k;
   for (var s = 0; s < sides.length; s++) {
@@ -49,7 +56,7 @@ function _rtsSupersTick(dt) {
       st.t = sup.charge;
       st.ready = true;
       if (side === 'player') {
-        if (typeof _rtsSay === 'function') _rtsSay(sup.hint);
+        if (typeof _rtsSay === 'function') _rtsSay(_rtsSuperHint(sup));
       }
       /* GPS launches itself; see the note on its def. */
       if (sup.auto) _rtsSuperFire(side, k, 0, 0);
@@ -316,6 +323,11 @@ function _rtsVisible(tx, tz) {
 /* Can the player see this entity at all? A unit vanishes the moment it leaves your sight;
    a building you have already scouted stays on the map, because it is part of what you know
    about the ground rather than something that moves. */
+/* Whether an entity's EFFECTS - its dust, its smoke, its tracks, its wake - are drawn (render3d
+   fxwake3d.js, hurt3d.js, tread3d.js): the player's always, the enemy's only while the entity
+   itself is seen. The unit pass dissolved a jammed hull and those passes went on drawing round it,
+   so a dust plume and a smoke column tracked the hidden column across the map. */
+function _rtsEffectsSeen(e) { return e.side === 'player' || _rtsEntSeen(e); }
 function _rtsEntSeen(e) {
   if (!e) return false;
   if (e.side === 'player') return true;

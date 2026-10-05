@@ -39,18 +39,12 @@ function _rtsKeyDown(e) {
   /* N walks the army, shift+N walks it backwards. */
   if (k === 'n' || k === 'N') { _rtsCycleObject(e.shiftKey ? -1 : 1); e.preventDefault(); }
   /* U unloads every selected transport that is carrying anything - here and now, wherever it is
-     standing. For a landing craft in open water that is nowhere, so the key has to be able to
-     say so: a boat that silently ignores the order reads as a broken key rather than as a boat
-     in the wrong place. Right-clicking the shore is the aimed version - see _rtsOrderUnloadAt. */
+     standing. The loop is core/transport.js _rtsUnloadSelected, which the sidebar's UNLOAD button
+     gives too (a phone has no U), and which says so when a craft in open water has nowhere to
+     put anyone. Right-clicking the shore is the aimed version - see _rtsOrderUnloadAt. */
   if (k === 'u' || k === 'U') {
-    var Gu = window._rtsG, out = 0, held = 0;
-    if (Gu && Gu.sel) Gu.sel.forEach(function (t) {
-      if (t.side !== 'player' || t.type !== 'unit' || !_rtsCargoCount(t)) return;
-      out += _rtsUnloadNow(t);                       /* a Paradrop Plane's men jump: core/paradrop.js */
-      held += _rtsCargoCount(t);
-    });
-    if (held && !out) _rtsSay('Nowhere to unload — bring it closer to shore.');
-    if (out || held) e.preventDefault();
+    var ur = _rtsUnloadSelected();
+    if (ur.out || ur.held) e.preventDefault();
   }
   /* D deploys every selected vehicle that can - an MCV into a Command Yard. The loop itself
      lives in core/transport.js, because the sidebar's Deploy button gives the same order and a

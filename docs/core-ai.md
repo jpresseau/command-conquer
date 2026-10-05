@@ -228,6 +228,20 @@ Commitment lands at 47% rather than the 62% asked for, and that is a real constr
 than a bug: a team only recruits units matching its composition, so a tank-heavy army cannot
 fill the rocket slots in Sappers. Raising it further means changing the compositions.
 
+The support vehicles - Hovercraft, Spotter, Jammer, the layers, Sweeper, Repair Truck - are
+driven by controllers of their own and are never escorts (`_rtsSupportDriven`, core/escorts.js):
+the raid tick and the escort tick once tugged the craft between its launch water and the march.
+A battered one is the mend tick's (core/aimend.js), and its controller leaves it alone until it
+is back out. The field-army cap counts ARMED ground units, so support bought outside the roll
+takes no fighter's place. **A refused route is remembered**, the way `_rtsOrderAttack` remembers
+one (`RTS_REFUSED_RETRY`): the Sweeper and the opponent's sweeper stamp `u.noRouteT` and wait
+two seconds before asking again, the Repair Truck passes a vehicle it cannot reach over for
+`RTS_FIX.retry` seconds (`u.noFix`), and the Mine Layer sets a cell of its plan aside for
+`RTS_AI_MINES.retry` seconds (`G.ai.mineNo`) and lays the rest. Each of those once asked for the
+same impossible route every tick or every second for the rest of the match. The raid's beach
+search is bounded to `RTS_AI_HOVER.near` rings (`_rtsLandingSpot(h, rings)`), since it would
+take no beach further out.
+
 ## The opponent's production ceiling
 
 **MINE, not a port, and a fix for a measured defect.** By five minutes on hard the opponent

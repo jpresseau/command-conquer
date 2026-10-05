@@ -389,11 +389,11 @@
    11px text beside it - it is a one-shot, irreversible order on a 2500-credit unit, and the
    thing it must never be is a near-miss. It is hidden unless the selection can actually take
    the order, so this width costs the readout nothing the rest of the time. */
-#rcgRts .rts-sel #rtsDeployBtn{flex:0 0 auto;min-height:34px;padding:0 12px;
+#rcgRts .rts-sel #rtsDeployBtn,#rcgRts .rts-sel #rtsUnloadBtn{flex:0 0 auto;min-height:34px;padding:0 12px;
   border:1px solid #3f7fd0;border-radius:4px;background:#12243a;color:#8fd0ff;
   font:700 11px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.5px;cursor:pointer}
-#rcgRts .rts-sel #rtsDeployBtn:active{background:#1d3a5c}
-#rcgRts .rts-sel #rtsDeployBtn[hidden]{display:none}
+#rcgRts .rts-sel #rtsDeployBtn:active,#rcgRts .rts-sel #rtsUnloadBtn:active{background:#1d3a5c}
+#rcgRts .rts-sel #rtsDeployBtn[hidden],#rcgRts .rts-sel #rtsUnloadBtn[hidden]{display:none}
 
 @media (max-width:820px){
   #rcgRts .rts-bar{flex-basis:190px}
@@ -706,7 +706,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">eb19d93 · 2026-10-05</div>
+  <div id="rtsBuild" title="build">0455725 · 2026-10-05</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1153,7 +1153,7 @@ var RTS_UNITS = [
      thin-skinned, with a machine gun for the men waiting on the sand. Torpedoes run under it. */
   { key:'hovercraft',name:'Hovercraft',   kind:'vehicle',  cost:950,  build:11, hp:280,  speed:16,  turn:2.4,r:2.0, sight:18, weapon:'mg',
     needs:['radar'], hover:true, carries:5, takes:['infantry'], armour:'light',
-    desc:'Drives on land and water alike. Carries five infantry across a bay and up the far beach.' },
+    desc:'Drives on land and water alike. Carries five infantry across a bay and up the far beach; U or UNLOAD puts them down where it stands.' },
   /* BRIDGE LAYER. The verb is the CROSSING: a gap the map gave no bridge over, spanned where the
      player chooses. At the water's edge, DEPLOY (D) turns it into a one-lane bridge of up to
      eight cells across the water ahead - core/bridgelayer.js. Unarmed, and spent in the laying. */
@@ -7464,6 +7464,9 @@ function _sprUnitAirSea(X, key) {
    builds them centred), and a run of faces pitched up about a pivot (an anti-aircraft gun points
    at the sky, and every primitive is axis-aligned). */
 
+/* where the Flak Track's turntable turns (RTS_TURRET_AT, unit-airsea.js): on the gun deck, aft */
+RTS_TURRET_AT.flaktrack = [[-2.4, 0]];
+
 /* Move faces [from, end) of `m` along x. */
 function _sprShiftX(m, from, dx) {
   for (var i = from; i < m.length; i++) {
@@ -7535,19 +7538,23 @@ function _sprUnitSpecial(X, key) {
     if (part !== 'hull') {
       /* The turntable and its shield, then the cradle and the barrels pitched up at fifty
          degrees about the trunnions. Built along +x and turned, so the pair keeps its spacing
-         and its muzzle brakes at the top whatever the turret faces. */
-      _r3Cyl(m, -2.4, 7.2, 0, 3.4, 1.0, DK[1], DK[2], 20);         /* turntable ring */
-      _r3Slab(m, -2.4, 8.2, 0, 5.4, 2.2, 6.4, 0.6, VH[1], TM[1]);  /* the mount - team roof */
-      _r3Box(m, 0.2, 9.4, -3.6, 1.0, 3.2, 1.2, S[2], S[1]);        /* splinter shields */
-      _r3Box(m, 0.2, 9.4, 3.6, 1.0, 3.2, 1.2, S[2], S[1]);
-      _r3Box(m, -5.4, 9.6, 0, 1.4, 1.6, 1.4, DK[1], DK[3]);        /* the gunner's sight */
+         and its muzzle brakes at the top whatever the turret faces. BUILT ABOUT THE RING'S OWN
+         CENTRE: the 'turret' part turns about the origin (render3d/unit3d.js _r3dTurretAt), and
+         the whole model sets it down on the deck at RTS_TURRET_AT.flaktrack - built at -2.4 and
+         turned about 0, the turntable orbited the gun deck as it traversed. */
+      var mx = part === 'turret' ? 0 : RTS_TURRET_AT.flaktrack[0][0];
+      _r3Cyl(m, mx, 7.2, 0, 3.4, 1.0, DK[1], DK[2], 20);           /* turntable ring */
+      _r3Slab(m, mx, 8.2, 0, 5.4, 2.2, 6.4, 0.6, VH[1], TM[1]);    /* the mount - team roof */
+      _r3Box(m, mx + 2.6, 9.4, -3.6, 1.0, 3.2, 1.2, S[2], S[1]);   /* splinter shields */
+      _r3Box(m, mx + 2.6, 9.4, 3.6, 1.0, 3.2, 1.2, S[2], S[1]);
+      _r3Box(m, mx - 3.0, 9.6, 0, 1.4, 1.6, 1.4, DK[1], DK[3]);    /* the gunner's sight */
       n0 = m.length;
       for (var b = -1; b <= 1; b += 2) {
-        _r3Box(m, 2.4, 10.4, b * 1.5, 5.0, 1.8, 1.8, DK[1], DK[3]);   /* the breeches */
-        _r3Box(m, 8.6, 10.6, b * 1.5, 8.6, 0.9, 0.9, GN[1], GN[3]);   /* barrels - pale steel */
-        _r3Box(m, 13.4, 10.6, b * 1.5, 1.4, 1.4, 1.4, GN[0], GN[3]);  /* muzzle brakes */
+        _r3Box(m, mx + 4.8, 10.4, b * 1.5, 5.0, 1.8, 1.8, DK[1], DK[3]);   /* the breeches */
+        _r3Box(m, mx + 11.0, 10.6, b * 1.5, 8.6, 0.9, 0.9, GN[1], GN[3]);  /* barrels - pale steel */
+        _r3Box(m, mx + 15.8, 10.6, b * 1.5, 1.4, 1.4, 1.4, GN[0], GN[3]);  /* muzzle brakes */
       }
-      _sprPitch(m, n0, 50 * Math.PI / 180, -0.4, 10.2);
+      _sprPitch(m, n0, 50 * Math.PI / 180, mx + 2.0, 10.2);
     }
   } else if (key === 'minelayer') {
     /* MINE LAYER. A low tracked hull carrying its load where it can be seen: a rack of mines
@@ -10341,6 +10348,11 @@ function _rtsPath(sx, sz, gx, gz, dom) {
      immediately (every neighbour is inside the same footprint), which used to strand the
      unit permanently. Step it out to the nearest open tile first, then path from there. */
   if (_rtsBlocked(stx, stz, dom)) {
+    /* a hull on a flat the tide has dried has no route until the flood (core/tide.js): the
+       escape step below is a beeline with no line test, and from a dried flat it crossed sand
+       and land to the nearest water */
+    var Gs = window._rtsG;
+    if (dom === 'sea' && Gs && Gs.tideDry && Gs.tideDry[_rtsIdx(stx, stz)]) return null;
     var esc = _rtsNearestOpen(stx, stz, 10, dom);
     if (!esc) return null;
     var ex = _rtsWX(esc[0]), ez = _rtsWX(esc[1]);
@@ -12227,7 +12239,12 @@ function _rtsLayMine(e, atx, atz) {
   /* on ground, or - from a Mine Boat (core/seamines.js) - on water, and nowhere else; and never
      on a bridge's deck, which is water underneath and a road on top */
   var sea = !!rtsUnitDef(e.def).sea, ci = _rtsInB(tx, tz) ? _rtsIdx(tx, tz) : -1;
-  if (ci < 0 || (G.terrain[ci] === RTS_T_WATER) !== sea || (sea && _rtsIsBridgeCell(ci))) return false;
+  if (ci < 0 || (G.terrain[ci] === RTS_T_WATER) !== sea || (sea && _rtsIsBridgeCell(ci))) {
+    /* and the player told why, as the other refusals tell: D on a deck or a dried flat did
+       nothing at all, which read as a broken key */
+    if (e.side === 'player') _rtsSay(sea ? 'Mines go in open water - not under a bridge.' : 'Mines go in the ground - not on a deck, nor on the flats.');
+    return false;
+  }
   G.mines.push({ tx: tx, tz: tz, side: e.side, arm: RTS_MINE.arm, sea: sea });
   e.mines--;
   if (e.side === 'player' && typeof _rtsSfx === 'function') _rtsSfx('place', e.x, e.z);
@@ -12301,6 +12318,9 @@ function _rtsMineRestock(v, dt) {
 var RTS_SWEEP = { see: 4, reach: 1.5, clear: 1.5 };
 
 function _rtsSweeps(u) { return !!(rtsUnitDef(u.def) || {}).sweeps; }
+/* Refused a route a moment ago (u.noRouteT, stamped by whoever asked): do not ask again yet. The
+   same breath _rtsOrderAttack takes between asks (core/orders.js RTS_REFUSED_RETRY). */
+function _rtsRouteRefused(u) { return u.noRouteT != null && window._rtsG.t - u.noRouteT < RTS_REFUSED_RETRY; }
 
 function _rtsSweepTick(dt) {
   var G = window._rtsG, M = G.mines, i, k;
@@ -12326,8 +12346,14 @@ function _rtsSweepTick(dt) {
       if (d < nd) { nd = d; near = m; }
     }
     if (cleared && u.side === 'player') _rtsSay(cleared === 1 ? 'Mine cleared.' : cleared + ' mines cleared.');
-    /* idle, with a mine found and not yet in reach: go and beat it out */
-    if (near && !u.order && (!u.path || u.pi >= u.path.length)) _rtsOrderMove(u, _rtsWX(near.tx), _rtsWX(near.tz), false);
+    /* idle, with a mine found and not yet in reach: go and beat it out. ONCE IN A WHILE WHEN
+       THERE IS NO WAY: a seen mine behind a wall, or across water, refused the move, and the
+       refusal left the sweeper idle - so this asked for the route again every tick, a fresh A*
+       over the whole map thirty times a second for as long as the mine lay there. */
+    if (near && !u.order && (!u.path || u.pi >= u.path.length) && !_rtsRouteRefused(u)) {
+      _rtsOrderMove(u, _rtsWX(near.tx), _rtsWX(near.tz), false);
+      if (!u.order) u.noRouteT = G.t;
+    }
   }
   if (M) G.mines = M.filter(function (m) { return !m.gone; });
 }
@@ -12340,6 +12366,7 @@ function _rtsAISweepTick() {
     var u = G.ents[i];
     if (u.dead || u.inside || u.side !== 'enemy' || u.type !== 'unit' || !_rtsSweeps(u)) continue;
     if (u.order || (u.path && u.pi < u.path.length)) continue;           /* busy, or clearing */
+    if (_rtsRouteRefused(u)) continue;                                   /* no way there just now */
     var best = null, bd = 1e9;
     for (var k = 0; k < H.length; k++) {
       var h = H[k];
@@ -12348,8 +12375,11 @@ function _rtsAISweepTick() {
       if (d <= RTS_TILE * 1.5) { h.swept = 1; continue; }
       if (d < bd) { bd = d; best = h; }
     }
-    if (best) _rtsOrderMove(u, _rtsWX(best.tx), _rtsWX(best.tz), false);
+    if (best) { _rtsOrderMove(u, _rtsWX(best.tx), _rtsWX(best.tz), false); if (!u.order) u.noRouteT = G.t; }
   }
+  /* a place swept is a place done with: the list held every hit of the match, and the buy gate
+     (core/aimines.js) read its length, so a sweeper was bought again for ground long since cleared */
+  if (H.some(function (h) { return h.swept; })) G.mineHits = H.filter(function (h) { return !h.swept; });
 }
 </script>
 <script>/* core/spotter.js - the Spotter: eyes for the long guns.
@@ -12413,6 +12443,7 @@ function _rtsAISpotTick(dt) {
     var s = G.ents[i];
     if (s.dead || s.inside || s.side !== 'enemy' || s.type !== 'unit' || !_rtsSpots(s)) continue;
     if (_rtsOrbits(s)) continue;                       /* the Recon Drone is the drone tick's: core/drone.js */
+    if (s.mend != null) continue;                      /* on its way to the depot: core/aimend.js */
     if (s.order === 'attack' && s.target && !s.target.dead) continue;          /* defending itself */
     var gun = null, gd = 1e9;
     for (var k = 0; k < G.ents.length; k++) {
@@ -12444,7 +12475,7 @@ function _rtsAISpotTick(dt) {
    The opponent buys one once its field army has RTS_FIX.army vehicles worth mending
    (_rtsAISupport, core/aimines.js). */
 
-var RTS_FIX = { seek: 10, every: 1, army: 6, fleet: 3, behind: 4, defended: 4 };
+var RTS_FIX = { seek: 10, every: 1, army: 6, fleet: 3, behind: 4, defended: 4, retry: 10 };   /* retry: seconds a vehicle with no route to it is passed over */
 
 function _rtsFixes(u) { var d = rtsUnitDef(u.def) || {}; return (d.healKind === 'vehicle' || d.healKind === 'ship') && d.heals > 0; }
 function _rtsFixIdle(u) { return !u.order && (!u.path || u.pi >= u.path.length); }
@@ -12455,6 +12486,10 @@ function _rtsFixWants(u) {
     var v = G.ents[i];
     if (v === u || v.dead || v.inside || v.type !== 'unit' || v.side !== u.side || v.hp >= v.maxHp) continue;
     if ((rtsUnitDef(v.def) || {}).kind !== d.healKind) continue;
+    /* ...not one it was refused a route to within RTS_FIX.retry (u.noFix, stamped below): a tank
+       across a strait is in its reach as the crow flies and nowhere a truck can drive, and the
+       nearest such kept it asking for that route every second while the next tank over waited */
+    if (u.noFix && u.noFix[v.id] != null && G.t - u.noFix[v.id] < RTS_FIX.retry) continue;
     var dd = Math.hypot(v.x - u.x, v.z - u.z);
     if (dd <= d.heals * 0.8 || dd >= bd) continue;
     /* ...and one it can get its aura onto: a Monitor on a flat at low water is four cells from
@@ -12475,7 +12510,7 @@ function _rtsFixTick(dt) {
     var u = G.ents[i];
     if (u.dead || u.inside || u.type !== 'unit' || !_rtsFixes(u) || !_rtsFixIdle(u)) continue;
     var v = _rtsFixWants(u);
-    if (v) _rtsOrderMove(u, v.x, v.z, false);
+    if (v) { _rtsOrderMove(u, v.x, v.z, false); if (!u.order) (u.noFix = u.noFix || {})[v.id] = G.t; }
   }
 }
 /* The opponent's truck, with nothing damaged near: behind the largest team on the march - of
@@ -12501,6 +12536,7 @@ function _rtsAIFixTick(dt) {
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
     if (u.dead || u.inside || u.side !== 'enemy' || u.type !== 'unit' || !_rtsFixes(u) || !_rtsFixIdle(u)) continue;
+    if (u.mend != null) continue;                                     /* its own trip to the depot: core/aimend.js */
     if (_rtsFixWants(u)) continue;                                    /* mending comes first */
     var k = rtsUnitDef(u.def).healKind, a = k in at ? at[k] : (at[k] = _rtsAIFixBehind(k));
     if (!a) continue;
@@ -12589,23 +12625,34 @@ function _rtsJamHidden(o, side) {
   return true;
 }
 
+/* Whether the radar shows static over an enemy field (ui/hud.js): only where the radar reads at
+   all - the field's centre explored. Under the unexplored shroud a disc of static marked the
+   army the Jammer was hiding, from across the map. */
+function _rtsRadarStaticShown(G, f) {
+  var tx = _rtsTX(f.x), tz = _rtsTX(f.z);
+  return _rtsInB(tx, tz) && !!(G.mapped && G.mapped[_rtsIdx(tx, tz)]);
+}
+
 /* The opponent's jammer: parked in the middle of its largest team on the march. */
 function _rtsAIJamTick(dt) {
   var G = window._rtsG, big = null, bn = 0, id;
   G.ai.jamT = (G.ai.jamT || 0) + dt;
   if (G.ai.jamT < RTS_JAM.every) return;
   G.ai.jamT = 0;
+  /* the largest team ON LAND: counted by its land members, and never a crossing. A fleet or a
+     landing party was once the largest team moving, and the jammer was sent onto the water -
+     to park on the nearest beach, hiding nothing, while the army it was bought for marched bare. */
   for (id in G.teams) {
     var t = G.teams[id];
-    if (!t.moving) continue;
-    var n = t.members.filter(function (m) { return !m.dead; }).length;
+    if (!t.moving || (t.type && t.type.crossing)) continue;
+    var n = t.members.filter(function (m) { var md = rtsUnitDef(m.def) || {}; return !m.dead && !md.sea && !md.air; }).length;
     if (n > bn) { bn = n; big = t; }
   }
   var c = big && _rtsTeamCentre(big);
   if (!c) return;
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.inside || u.side !== 'enemy' || u.type !== 'unit' || !_rtsJams(u)) continue;
+    if (u.dead || u.inside || u.side !== 'enemy' || u.type !== 'unit' || !_rtsJams(u) || u.mend != null) continue;   /* mend: core/aimend.js */
     if (Math.hypot(c.x - u.x, c.z - u.z) > RTS_TILE * 2.5) _rtsOrderMove(u, c.x, c.z, false);
   }
 }
@@ -12640,8 +12687,13 @@ function _rtsBridgeGap(e) {
   var G = window._rtsG, T = G.terrain, B = G.blocked;
   var tx = _rtsTX(e.x), tz = _rtsTX(e.z);
   /* never from the water - a deck - which no generated map has yet offered a gap from, since a
-     deck runs the length of its channel; a guard, and unit/bridgelayer cannot reach it */
-  if (!_rtsInB(tx, tz) || T[_rtsIdx(tx, tz)] === RTS_T_WATER) return null;
+     deck runs the length of its channel; a guard, and unit/bridgelayer cannot reach it. A FLAT
+     THE TIDE HAS DRIED IS GROUND (core/tide.js): at low water the water's edge is out on the
+     flats, and refusing the span from there said "drive to the water's edge" to a layer standing
+     on it. */
+  if (!_rtsInB(tx, tz)) return null;
+  var own = _rtsIdx(tx, tz);
+  if (T[own] === RTS_T_WATER && !(G.tideDry && G.tideDry[own])) return null;
   var fx = Math.cos(e.rot || 0), fz = Math.sin(e.rot || 0);
   var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]].sort(function (a, b) {
     return (b[0] * fx + b[1] * fz) - (a[0] * fx + a[1] * fz);
@@ -12758,6 +12810,9 @@ function _rtsTideInit(G) {
   G.tideLast = _rtsTideLevel(G); G.tideSaid = null;
 }
 
+/* how long the turn of the tide stays on the message line: the one warning before the flood,
+   where the default four seconds was gone before a player on the sidebar looked up */
+var RTS_TIDE_SAY = 10;
 function _rtsTideTick(dt) {
   var G = window._rtsG;
   if (!G.tideD) _rtsTideInit(G);
@@ -12773,9 +12828,9 @@ function _rtsTideTick(dt) {
   /* the turn of the tide, said once each way */
   var rising = L > G.tideLast;
   if (rising && G.tideLast < RTS_TIDE.warn && L >= RTS_TIDE.warn && G.tideSaid !== 'in') {
-    G.tideSaid = 'in'; _rtsSay('The tide is turning - get off the flats.');
+    G.tideSaid = 'in'; _rtsSay('The tide is turning - get off the flats.', RTS_TIDE_SAY);
   } else if (!rising && G.tideLast > _rtsTideDriesAt(1) && L <= _rtsTideDriesAt(1) && G.tideSaid !== 'out') {
-    G.tideSaid = 'out'; _rtsSay('The tide is going out.');
+    G.tideSaid = 'out'; _rtsSay('The tide is going out.', RTS_TIDE_SAY);
   }
   G.tideLast = L;
   /* SWAMPED: a land unit standing in the flood, on a flat that is under water again */
@@ -12963,6 +13018,9 @@ function _rtsWxTick(dt) {
     c.boltT += RTS_THUNDER.every;
     var hit = _rtsBoltTarget(c);
     if (!hit) continue;
+    /* the kill is the caller's (capture.js counts a kill by hurtBy, as a mine's and a splash's
+       are), without a source entity: a cell cannot carry the threat weighting a unit would */
+    hit.hurtBy = c.side;
     _rtsDamage(hit, RTS_THUNDER.dmg, null, false);
     (G.bolts = G.bolts || []).push({ x: hit.x, z: hit.z, t: 0 });
     G.fx.push({ kind: 'boom', x: hit.x, y: 1, z: hit.z, t: 0, big: 1.4 });
@@ -13003,6 +13061,13 @@ function _rtsSuperSources(side) {
 
 /* Low power stalls a charge rather than resetting it - the same treatment a Tesla coil gets,
    and for the same reason: a brownout should cost you tempo, not the whole investment. */
+/* The ready line and the arm line, in the device's own verb: 'click' at a desk, 'tap' on a phone
+   (ui/sidebar.js _rtsTouchUI). The first-wave weather copied the older supers' wording, and the
+   one instruction on a phone's screen named an input it does not have. */
+function _rtsSuperHint(sup) {
+  var h = (sup && sup.hint) || '';
+  return (typeof _rtsTouchUI === 'function' && _rtsTouchUI()) ? h.replace(/\bclick\b/g, 'tap') : h;
+}
 function _rtsSupersTick(dt) {
   var G = window._rtsG, sides = ['player', 'enemy'], k;
   for (var s = 0; s < sides.length; s++) {
@@ -13023,7 +13088,7 @@ function _rtsSupersTick(dt) {
       st.t = sup.charge;
       st.ready = true;
       if (side === 'player') {
-        if (typeof _rtsSay === 'function') _rtsSay(sup.hint);
+        if (typeof _rtsSay === 'function') _rtsSay(_rtsSuperHint(sup));
       }
       /* GPS launches itself; see the note on its def. */
       if (sup.auto) _rtsSuperFire(side, k, 0, 0);
@@ -13290,6 +13355,11 @@ function _rtsVisible(tx, tz) {
 /* Can the player see this entity at all? A unit vanishes the moment it leaves your sight;
    a building you have already scouted stays on the map, because it is part of what you know
    about the ground rather than something that moves. */
+/* Whether an entity's EFFECTS - its dust, its smoke, its tracks, its wake - are drawn (render3d
+   fxwake3d.js, hurt3d.js, tread3d.js): the player's always, the enemy's only while the entity
+   itself is seen. The unit pass dissolved a jammed hull and those passes went on drawing round it,
+   so a dust plume and a smoke column tracked the hidden column across the map. */
+function _rtsEffectsSeen(e) { return e.side === 'player' || _rtsEntSeen(e); }
 function _rtsEntSeen(e) {
   if (!e) return false;
   if (e.side === 'player') return true;
@@ -14060,6 +14130,28 @@ function _rtsCanDeploy(e) {
   return !!(e && !e.dead && e.side === 'player' && e.type === 'unit' && (d.deploy || d.mines || d.bridge));
 }
 
+/* UNLOAD, here and now, for every selected transport that is carrying anything - the U key and
+   the sidebar's UNLOAD button give the same order, as DEPLOY's two doors do. The loop lived in
+   ui/keys.js, so a phone could board five men on a Hovercraft and never put them down: the
+   aimed unload (right-click the shore, _rtsOrderUnloadAt) is a craft's and an aircraft's, since
+   a Hovercraft drives on the ground it would unload onto. Says why when nothing came out of a
+   hold that is not empty - a craft in open water. Returns { out, held }. */
+function _rtsUnloadSelected() {
+  var G = window._rtsG, out = 0, held = 0;
+  if (!G || !G.sel) return { out: 0, held: 0 };
+  G.sel.slice().forEach(function (t) {
+    if (!_rtsCanUnload(t)) return;
+    out += _rtsUnloadNow(t);                       /* a Paradrop Plane's men jump: core/paradrop.js */
+    held += _rtsCargoCount(t);
+  });
+  if (held && !out) _rtsSay('Nowhere to unload — bring it closer to shore.');
+  return { out: out, held: held };
+}
+/* one of the player's transports with something aboard: the button shows itself for these */
+function _rtsCanUnload(e) {
+  return !!(e && !e.dead && e.side === 'player' && e.type === 'unit' && _rtsCargoCount(e));
+}
+
 /* Removing the vehicle without the wreck, the explosion or the kill credit - it was not
    destroyed, it turned into something. */
 function _rtsKillQuiet(e) {
@@ -14134,8 +14226,9 @@ function _rtsAnimAI(dt) {
 function _rtsCombatAnim(dmg, x, z, big, stick) {
   var G = window._rtsG;
   if (!(dmg > 0)) return null;
-  var tx = _rtsTX(x), tz = _rtsTX(z);
-  var water = _rtsInB(tx, tz) && G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER && !_rtsBridgeAt(x, z);
+  var tx = _rtsTX(x), tz = _rtsTX(z), ci = _rtsInB(tx, tz) ? _rtsIdx(tx, tz) : -1;
+  /* a splash wants water: not a deck, and not a flat the tide has dried (core/tide.js) */
+  var water = ci >= 0 && G.terrain[ci] === RTS_T_WATER && !(G.tideDry && G.tideDry[ci]) && !_rtsBridgeAt(x, z);
   var kind = water ? 'splash' : (dmg < RTS_ANIM_PIFF ? 'piff' : (dmg < RTS_ANIM_BOOM ? 'hit' : 'boom'));
   /* scale with damage the way the original steps through its list, rather than one fixed size */
   var scale = (big || 1) * (0.7 + Math.min(1, dmg / 90) * 0.7);
@@ -15620,8 +15713,13 @@ function _rtsSteer(e, dt, d) {
   var dom = _rtsDomainOf(e);
   /* While standing on a blocked tile, movement is unrestricted - that is how a unit
      extracts itself from a footprint it ended up inside. Blocking it here as well would
-     make the escape waypoint unreachable and re-trap it. */
-  var freeing = _rtsBlocked(_rtsTX(e.x), _rtsTX(e.z), dom);
+     make the escape waypoint unreachable and re-trap it. NOT A HULL ON A FLAT THE TIDE HAS
+     DRIED (core/tide.js): that is blocked in its domain too, and freed the same way a stranded
+     gunboat drove over the sand, and over land, to the nearest water. Stranded, it waits for the
+     flood; the step test below keeps it where it is. */
+  var hereI = _rtsIdx(_rtsTX(e.x), _rtsTX(e.z)), Gt = window._rtsG;
+  var stranded = dom === 'sea' && Gt.tideDry && Gt.tideDry[hereI];
+  var freeing = !stranded && _rtsBlocked(_rtsTX(e.x), _rtsTX(e.z), dom);
   /* Nothing on the ground is in an aircraft's way - not walls, not cliffs, not the footprint
      of the very pad it is trying to land on. That last one is what actually bit: a helicopter
      flew home, stopped dead 5.9 world units out (the pad's half-width plus its own radius) and
@@ -15697,6 +15795,10 @@ function _rtsSeparate(dt) {
        as leaving aircraft in this pass, which is what kept a helicopter off its own pad. */
     var dom = _rtsDomainOf(e) || 'land';
     if (dom === 'shallow') dom = 'sea';                  /* a Monitor crowds with the other hulls */
+    /* A HOVERCRAFT CROWDS WITH WHATEVER SHARES THE GROUND UNDER IT: the hulls over water, the
+       tanks and the men over land. In a bucket of its own it was never pushed off anyone, and a
+       craft driven into a parked column stopped inside a tank. */
+    if (dom === 'hover') { var hci = _rtsIdx(_rtsTX(e.x), _rtsTX(e.z)); dom = G.terrain[hci] === RTS_T_WATER && !(G.tideDry && G.tideDry[hci]) ? 'sea' : 'land'; }
     var k = dom + ':' + ((e.x / cell) | 0) + ':' + ((e.z / cell) | 0);
     (buckets[k] || (buckets[k] = [])).push(e);
   }
@@ -16002,8 +16104,10 @@ function _rtsUpdateUnit(e, dt) {
        craft nosed against a beach without letting a squad teleport aboard from inland. */
     /* A CHINOOK the same: it sets down wherever it was left, which may be a cell or two off the
        nearest ground a squad can walk to - beside a wall, or with its tail over the water. */
+    /* And a HOVERCRAFT afloat the same: it floats as the craft does, and a squad sent aboard one
+       three cells out stood on the shore in order 'board' for good with the APC's reach. */
     var tdef = rtsUnitDef(tr && tr.def || '') || {};
-    var breach = (tdef.sea || tdef.air) ? RTS_TILE * 3.0 : RTS_TILE * 1.6;
+    var breach = (tdef.sea || tdef.air || tdef.hover) ? RTS_TILE * 3.0 : RTS_TILE * 1.6;
     if (!tr || tr.dead || !_rtsCanBoard(e, tr)) { e.order = null; e.target = null; e.path = null; }
     else if (_rtsRangeTo(e, tr) <= breach) { _rtsBoard(e, tr); return; }
     else {
@@ -17119,14 +17223,16 @@ function _rtsAIUnits(S) {
   /* THE FIELD ARMY'S CEILING, per difficulty - RTS_DIFF `army`. Counted once: the opponent's
      ground fighters, harvesters and aircraft and hulls excluded (those have caps of their own
      below). See the note on RTS_DIFF for why the size of the army, not how much of it marches,
-     is what sets a difficulty now that the army marches. */
+     is what sets a difficulty now that the army marches. The unarmed support vehicles bought
+     outside the roll (_rtsAISupport: layer, sweeper, spotter, truck, jammer) are not fighters
+     and do not fill a fighter's place, as _rtsAIFieldVehicles already reads it. */
   var armyCap = _rtsBias('enemy').army, fighters = 0;
   if (armyCap != null) {
     for (i = 0; i < G.ents.length; i++) {
       var fe = G.ents[i];
       if (fe.dead || fe.side !== 'enemy' || fe.type !== 'unit' || fe.air) continue;
       var fd = rtsUnitDef(fe.def);
-      if (fd && !fd.harvest && !fd.sea) fighters++;
+      if (fd && !fd.harvest && !fd.sea && fd.weapon) fighters++;
     }
   }
   for (var cat in RTS_AI.mix) {
@@ -18161,13 +18267,22 @@ function _rtsTeamsTick(dt) {
 var RTS_ESCORT_EVERY = 2;          /* seconds between re-aims */
 
 /* A unit that can go: the opponent's, on the ground, armed, not a harvester, not in a team, and
-   not on a mission that forbids recruiting it (holding, harvesting, rearming...). */
+   not on a mission that forbids recruiting it (holding, harvesting, rearming...). NOT A SUPPORT
+   VEHICLE WITH A CONTROLLER OF ITS OWN (_rtsSupportDriven): the Hovercraft and the Spotter are
+   armed, so this once took them, and the raid tick and the escort tick then tugged the craft
+   between its launch water and the march for the rest of the match. */
 function _rtsEscortable(u) {
   if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || u.air || u.inside) return false;
   var d = rtsUnitDef(u.def);
-  if (!d || d.harvest || d.sea || !d.weapon) return false;
+  if (!d || d.harvest || d.sea || !d.weapon || _rtsSupportDriven(d)) return false;
   if (u.sqd != null || u.mend != null) return false;      /* mend: on its way to the depot, core/aimend.js */
   return !!_rtsMission(u).recruitable;
+}
+/* A unit the opponent drives through a controller of its own - the raid (aihover.js), the
+   spotter, jammer, mine, sweeper and mending ticks, the bridge layer - rather than through its
+   teams and escorts. Read off the rules, so a new support unit joins the list by its flag. */
+function _rtsSupportDriven(d) {
+  return !!(d && (d.hover || d.spots || d.jams || d.mines || d.sweeps || d.heals || d.bridge));
 }
 /* A team worth escorting: on the march, on land, with someone in it. */
 function _rtsEscortWorthy(t) {
@@ -18348,7 +18463,7 @@ function _rtsAIMendTick(dt) {
 function _rtsAISupport(S) {
   return _rtsAISupportBuy(S, 'minelayer', function (G) { return _rtsAIMineSpots(G).length > 0; }) ||   /* a land route to deny */
          _rtsAISupportBuy(S, 'hovercraft', function () { return !!_rtsAIHoverTarget(); }) ||           /* a harvester by the water: core/aihover.js */
-         _rtsAISupportBuy(S, 'sweeper', function (G) { return !!(G.mineHits && G.mineHits.length); }) ||  /* a mine has cost it a unit: core/sweeper.js */
+         _rtsAISupportBuy(S, 'sweeper', function (G) { return !!(G.mineHits && G.mineHits.some(function (h) { return !h.swept; })); }) ||  /* a mine has cost it a unit, somewhere not yet swept: core/sweeper.js */
          _rtsAISupportBuy(S, 'spotter', function () { return _rtsFogged() && _rtsAILongGuns() > 0; }) ||  /* long guns blind in fog: core/spotter.js */
          _rtsAISupportBuy(S, 'repairtruck', function () { return _rtsAIFieldVehicles() >= RTS_FIX.army && _rtsAIDefended(); }) ||  /* an army worth mending: core/repairtruck.js */
          _rtsAISupportBuy(S, 'jammer', function () { return _rtsPlayerDefences() >= RTS_JAM.digIn && _rtsAIFieldVehicles() >= 4 && _rtsAIDefended(); }) ||  /* the player dug in: core/jammer.js */
@@ -18375,14 +18490,17 @@ function _rtsAISupportBuy(S, key, worth) {
   return true;
 }
 
-var RTS_AI_MINES = { from: 9, to: 18, every: 1 };
+var RTS_AI_MINES = { from: 9, to: 18, every: 1, retry: 30 };   /* retry: seconds a spot with no route is set aside */
 
 /* The field: route cells 9 to 18 out from the yard, each with its neighbours across the route. */
 function _rtsAIMineSpots(G) {
   if (G.ai.mineSpots) return G.ai.mineSpots;
   var ey = _rtsHas('enemy', 'yard'), py = _rtsHas('player', 'yard'), out = [], seen = {};
-  G.ai.mineSpots = out;
+  /* planned once both yards stand: asked while either was down (a raid had taken it, an MCV not
+     yet deployed) it used to cache the empty plan and never buy a layer for the rest of the match.
+     No land route between the two is the one permanent answer. */
   if (!ey || !py) return out;
+  G.ai.mineSpots = out;
   var path = _rtsPath(ey.x, ey.z, py.x, py.z, null);
   if (!path || !path.length) return out;
   var px = ey.x, pz = ey.z, step = RTS_TILE / 2;
@@ -18412,17 +18530,29 @@ function _rtsAIMinesTick(dt) {
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
     if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || u.inside || !(rtsUnitDef(u.def) || {}).mines || _rtsSeaLayer(u)) continue;
+    if (u.mend != null) continue;                              /* on its way to be mended: core/aimend.js */
     if (_rtsMinesLeft(u) <= 0) {                               /* home to load again */
       var bay = _rtsHas('enemy', 'depot');
       if (bay && !_rtsAtStruct(u, bay, rtsStructDef('depot').repairs) && !u.path) _rtsOrderMove(u, bay.x, bay.z, false);
       continue;
     }
-    var spots = _rtsAIMineSpots(G), next = null;
-    for (var k = 0; k < spots.length && !next; k++) if (!_rtsMineAt(spots[k][0], spots[k][1])) next = spots[k];
+    /* the nearest cell of the plan not yet mined - and not one the layer was refused a route to
+       within RTS_AI_MINES.retry (G.ai.mineNo): a spot the player has since walled off, or that
+       the tide has cut off, had the layer asking for the same impossible route every second
+       and laying nothing else for the rest of the match */
+    var spots = _rtsAIMineSpots(G), next = null, no = G.ai.mineNo || {};
+    for (var k = 0; k < spots.length && !next; k++) {
+      var nk = spots[k][0] + ',' + spots[k][1];
+      if (_rtsMineAt(spots[k][0], spots[k][1]) || (no[nk] != null && G.t - no[nk] < RTS_AI_MINES.retry)) continue;
+      next = spots[k];
+    }
     if (!next) continue;                                       /* the field is laid */
     /* beside it is near enough: a move order stops a cell short */
     if (Math.abs(_rtsTX(u.x) - next[0]) <= 1 && Math.abs(_rtsTX(u.z) - next[1]) <= 1) { _rtsLayMine(u, next[0], next[1]); u.path = null; continue; }
-    if (!u.path) _rtsOrderMove(u, _rtsWX(next[0]), _rtsWX(next[1]), false);
+    if (!u.path) {
+      _rtsOrderMove(u, _rtsWX(next[0]), _rtsWX(next[1]), false);
+      if (!u.order) (G.ai.mineNo = G.ai.mineNo || {})[next[0] + ',' + next[1]] = G.t;
+    }
   }
 }
 </script>
@@ -18470,6 +18600,15 @@ function _rtsAIHoverSails(G, w) {
 }
 /* What to raid, and where to land for it: { h, beach, water } or null. Asked at most every few
    seconds - _rtsLandingSpot and a sea path are not free - and kept on G.ai for the spec to read. */
+/* HOME BY THE WATER, as it came. A plain move paths in the craft's own domain, which is the short
+   way - overland, across the player's half of the map, for a 280-hp hull the opponent then buys
+   again. The sea route from wherever it stands (from the beach, _rtsPath steps a blocked start
+   out to the nearest water); the hover path only when there is no sea route at all. */
+function _rtsAIHoverHome(hc, L) {
+  var p = _rtsPath(hc.x, hc.z, L.x, L.z, 'sea');
+  if (p && p.length) { hc.order = 'move'; hc.target = null; hc.hstate = null; hc.goal = { x: L.x, z: L.z }; hc.path = p; hc.pi = 0; }
+  else _rtsOrderMove(hc, L.x, L.z, false);
+}
 function _rtsAIHoverTarget() {
   var G = window._rtsG;
   if (G.ai.hovQ && G.t - G.ai.hovQ.t < 5 && (!G.ai.hovQ.v || !G.ai.hovQ.v.h.dead)) return G.ai.hovQ.v;
@@ -18477,7 +18616,7 @@ function _rtsAIHoverTarget() {
   for (var i = 0; i < G.ents.length; i++) {
     var h = G.ents[i];
     if (h.dead || h.side !== 'player' || h.type !== 'unit' || h.inside || !(rtsUnitDef(h.def) || {}).harvest) continue;
-    var beach = _rtsLandingSpot(h);
+    var beach = _rtsLandingSpot(h, RTS_AI_HOVER.near);
     if (!beach || Math.hypot(beach.x - h.x, beach.z - h.z) > RTS_AI_HOVER.near * RTS_TILE) continue;
     var w = _rtsNearestOpen(_rtsTX(beach.x), _rtsTX(beach.z), RTS_UNLOAD_REACH, 'sea');
     if (!w || !_rtsAIHoverSails(G, w)) continue;
@@ -18544,13 +18683,20 @@ function _rtsAIHoverTick(dt) {
     var e = G.ents[i];
     if (!e.dead && e.side === 'enemy' && e.type === 'unit' && e.def === 'hovercraft') hc = e;
   }
-  if (!hc) { st.s = 'rest'; return; }
+  if (!hc) { st.s = 'rest'; st.aim = null; return; }
+  /* BATTERED, IT GOES TO THE DEPOT FIRST (core/aimend.js): a raid in hand is called off and its
+     crew released, and the craft is not ordered home against the mend tick's order to the pad -
+     the two once traded orders every second, and the craft shuttled between them unmended */
+  if (hc.mend != null) {
+    if (st.s !== 'rest') { G.ents.forEach(function (u) { if (u.raid && !u.dead && u.order === 'board' && u.target === hc) { u.raid = 0; u.order = null; u.target = null; } }); st.s = 'rest'; st.t = G.t; st.crew = []; }
+    return;
+  }
   if (st.s === 'rest') {
     /* between raids it waits on its own water - not swept into a land attack wave, though the
        base's defence may still call on it (an attack order is left alone) */
     var home = _rtsAIHoverLaunch(G);
     if (home && hc.order !== 'attack' && Math.hypot(hc.x - home.x, hc.z - home.z) > RTS_TILE * 3 &&
-        !(hc.order === 'move' && hc.goal && Math.hypot(hc.goal.x - home.x, hc.goal.z - home.z) < RTS_TILE)) _rtsOrderMove(hc, home.x, home.z, false);
+        !(hc.order === 'move' && hc.goal && Math.hypot(hc.goal.x - home.x, hc.goal.z - home.z) < RTS_TILE)) _rtsAIHoverHome(hc, home);
     if (G.t - st.t < RTS_AI_HOVER.rest || !_rtsAIHoverTarget()) return;
     st.s = 'crew'; st.t = G.t;
   }
@@ -18570,10 +18716,27 @@ function _rtsAIHoverTick(dt) {
     G.ents.forEach(function (u) { if (!u.dead && u.raid && !u.inside && u.order === 'board' && u.target === hc) { u.raid = 0; u.order = null; u.target = null; } });   /* its own boarders, not the Paradrop Plane's */
     st.s = 'launch'; st.t = G.t;
   }
-  var L = _rtsAIHoverLaunch(G), aim = _rtsAIHoverTarget();
-  if (!L || !aim || G.t - st.t > RTS_AI_HOVER.sail) {               /* nothing left to raid, or lost */
+  /* THE AIM IS CHOSEN AT LAUNCH AND KEPT FOR THE SAIL. The search asks for water off the beach at
+     this instant, and on a falling tide the flats dry that water away in mid-channel: asked again
+     every second, the raid was called off there and the crew put down on a drying flat, far from
+     anything. The sail ends for a harvester gone (dead, or aboard something), a launch water
+     lost, or the clock - not for the tide. */
+  var L = _rtsAIHoverLaunch(G);
+  if (st.s === 'launch' && !st.aim) {
+    var v0 = _rtsAIHoverTarget();
+    st.aim = v0 ? { h: v0.h, beach: v0.beach, water: v0.water, hx: v0.h.x, hz: v0.h.z } : null;
+  }
+  var aim = st.aim;
+  if (!L || !aim || aim.h.dead || aim.h.inside || G.t - st.t > RTS_AI_HOVER.sail) {
     if (_rtsCargoCount(hc)) _rtsUnload(hc);
-    st.s = 'rest'; st.t = G.t; return;
+    st.s = 'rest'; st.t = G.t; st.aim = null; return;
+  }
+  /* the harvester works on while the craft sails: a beach is found again for where it is now,
+     once it has moved a few cells - and the old one kept where the tide offers none */
+  if (Math.hypot(aim.h.x - aim.hx, aim.h.z - aim.hz) > RTS_TILE * 3) {
+    aim.hx = aim.h.x; aim.hz = aim.h.z;
+    var nb = _rtsLandingSpot(aim.h, RTS_AI_HOVER.near), nw = nb && _rtsNearestOpen(_rtsTX(nb.x), _rtsTX(nb.z), RTS_UNLOAD_REACH, 'sea');
+    if (nb && nw && Math.hypot(nb.x - aim.h.x, nb.z - aim.h.z) <= RTS_AI_HOVER.near * RTS_TILE) { aim.beach = nb; aim.water = { x: _rtsWX(nw[0]), z: _rtsWX(nw[1]) }; }
   }
   if (st.s === 'launch') {
     if (Math.hypot(hc.x - L.x, hc.z - L.z) > RTS_TILE * 1.5) {
@@ -18584,8 +18747,8 @@ function _rtsAIHoverTick(dt) {
   }
   if (st.s === 'sail') {
     if (!_rtsCargoCount(hc)) {                                        /* ashore: home to wait */
-      _rtsOrderMove(hc, L.x, L.z, false);
-      st.s = 'rest'; st.t = G.t; return;
+      _rtsAIHoverHome(hc, L);
+      st.s = 'rest'; st.t = G.t; st.aim = null; return;
     }
     if (hc.order !== 'unload' || !hc.goal || Math.hypot(hc.goal.x - aim.beach.x, hc.goal.z - aim.beach.z) > RTS_TILE * 2) {
       hc.order = 'unload'; hc.target = null; hc.hstate = null;
@@ -18593,7 +18756,10 @@ function _rtsAIHoverTick(dt) {
       /* the sea path to the water off the beach, then the beach itself - the hull noses in */
       var p = _rtsPath(hc.x, hc.z, aim.water.x, aim.water.z, 'sea');
       hc.path = p ? p.concat([{ x: aim.beach.x, z: aim.beach.z }]) : null; hc.pi = 0;
-      if (!hc.path) { _rtsUnload(hc); }
+      /* no route at this tide - the channel has dried between here and the beach: wait for the
+         flood with the crew aboard, rather than put them into the sea where it stands; the sail
+         clock above decides when to give up */
+      if (!hc.path) { hc.order = null; hc.goal = null; }
     }
   }
 }
@@ -19214,9 +19380,11 @@ function _rtsTeamOrderAll(t, fn) {
    there, and then sat in open water for the rest of the leg because nothing within reach of it
    was land. A hull cannot land on water; it lands on the shore beside it, so the shore is the
    thing to look for. */
-function _rtsLandingSpot(aim) {
-  var atx = _rtsTX(aim.x), atz = _rtsTX(aim.z);
-  for (var r = 1; r <= 30; r++) {
+function _rtsLandingSpot(aim, rings) {
+  var atx = _rtsTX(aim.x), atz = _rtsTX(aim.z), R = rings || 30;
+  /* `rings` bounds the scan: a caller that will take no beach past N cells (the raid,
+     core/aihover.js) need not walk thirty rings of _rtsNearestOpen for every inland harvester */
+  for (var r = 1; r <= R; r++) {
     for (var ox = -r; ox <= r; ox++) {
       for (var oz = -r; oz <= r; oz++) {
         if (Math.max(Math.abs(ox), Math.abs(oz)) !== r) continue;
@@ -20830,6 +20998,7 @@ function _r3dFxHurt(G, V) {
        smokes from where it is drawn (unit3d.js leaves that height in its motion record) */
     if (e.inside && !(rtsUnitDef(e.inside.def) || {}).slings) continue;
     if (vis && !_rtsVisible(_rtsTX(e.x), _rtsTX(e.z))) continue;
+    if (e.type === 'unit' && !_rtsEffectsSeen(e)) continue;   /* a jammed unit's smoke gave it away: core/supers.js */
     var f = e.hp / e.maxHp, k = (RTS_COND_YELLOW - f) / RTS_COND_YELLOW, red = f < RTS_COND_RED;
     var seed = _r3dFxH(e.id, 9.1), tint = red ? R3D_FX_SOOT : R3D_FX_SMOKE;
     if (e.type === 'struct') {
@@ -25158,11 +25327,13 @@ function _r3dFxEmit(G, V) {
 
 var R3D_FX_WAKEC = [0.93, 0.96, 0.97];
 
-/* how much dust a surface throws: loose ground most, grass a little, a hard base none */
+/* how much dust a surface throws: loose ground most, grass a little, a hard base none - and a
+   flat the tide has dried is sand (core/tide.js) */
 function _r3dFxDustOf(G, x, z) {
   var tx = _rtsTX(x), tz = _rtsTX(z);
   if (!_rtsInB(tx, tz)) return 0;
-  var t = G.terrain[_rtsIdx(tx, tz)];
+  var ci = _rtsIdx(tx, tz), t = G.terrain[ci];
+  if (t === RTS_T_WATER && G.tideDry && G.tideDry[ci]) t = RTS_T_SAND;
   if (t === RTS_T_SAND || t === RTS_T_ROAD) return 1;
   if (t === RTS_T_ROCK) return 0.5;
   if (t === RTS_T_GRASS) return 0.35;
@@ -25220,6 +25391,7 @@ function _r3dFxWakes(G, V) {
     var d = rtsUnitDef(e.def);
     if (!d || d.kind === 'infantry' || d.kind === 'air') continue;
     if (vis && !_rtsVisible(_rtsTX(e.x), _rtsTX(e.z))) continue;
+    if (!_rtsEffectsSeen(e)) continue;                         /* a jammed unit's dust gave it away: core/supers.js */
     var hx = Math.cos(e.rot || 0), hz = Math.sin(e.rot || 0), r = d.r || 1.6, seed = _r3dFxH(e.id || i + 1, 5.5);
     /* a wake wants water under the hull: a Monitor crossing a flat the tide has dried, or a
        hovercraft over one, is on sand (unit3d.js _r3dWetAt) */
@@ -25265,6 +25437,7 @@ function _r3dTreadGround(G, R3, x, z) {
   var i = _rtsIdx(tx, tz);
   if (R3.treadPave && R3.treadPave[i]) return 0;
   var t = G.terrain[i];
+  if (t === RTS_T_WATER && G.tideDry && G.tideDry[i]) t = RTS_T_SAND;   /* a flat the tide has dried: core/tide.js */
   if (t === RTS_T_SAND) return 1;
   if (t === RTS_T_ROAD) return 0.85;
   if (t === RTS_T_GRASS) return 0.45;
@@ -25301,6 +25474,7 @@ function _r3dTreadTick(G, R3) {
     if (e.dead || e.type !== 'unit' || e.air || e.inside) continue;      /* a slung tank is in the air */
     var d = rtsUnitDef(e.def);
     if (!d || d.kind === 'infantry' || d.kind === 'air' || d.sea || d.hover) continue;   /* a skirt leaves no track */
+    if (!_rtsEffectsSeen(e)) { delete L[e.id]; continue; }              /* a jammed unit's tracks gave it away: core/supers.js */
     var l = L[e.id];
     if (!l) { L[e.id] = [e.x, e.z, 0]; continue; }
     var dx = e.x - l[0], dz = e.z - l[1], m = Math.sqrt(dx * dx + dz * dz);
@@ -26115,10 +26289,7 @@ function _r3dFxDraw(G, cam, invD) {
     V.sp = R3.sp; V.cp = R3.cp; V.cy = R3.cy; V.sy = R3.sy; V.t = G.t || 0; V.M.n = 0; V.L.n = 0; V.M.lit = 0;
     V.gnd = R3.fxGroundAmt === undefined ? 1 : R3.fxGroundAmt;
     V.ground = _rtsElev;
-    V.water = function (x, z) {
-      var tx = _rtsTX(x), tz = _rtsTX(z);
-      return _rtsInB(tx, tz) && G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER;
-    };
+    V.water = function (x, z) { return _r3dWetAt(G, x, z); };   /* the sea, and not a flat the tide has dried (fxwake3d.js) */
     _r3dFxEmit(G, V);
     gl.bindBuffer(gl.ARRAY_BUFFER, R3.fx2BufM);
     gl.bufferData(gl.ARRAY_BUFFER, _r3dFxOrder(V), gl.DYNAMIC_DRAW);
@@ -27501,8 +27672,8 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
      A SHIP ON A FLAT THE TIDE HAS DRIED sits on the sand (the Monitor's verb, core/monitor.js):
      no swell, no lean - the water sheet is cut away there (world3d.js) and a hull heaving on an
      invisible sea sank two thirds of its height into the ground at every trough. */
-  var wet = d2.sea && _r3dWetAt(G, e.x, e.z);                /* fxwake3d.js */
-  var gn = d2.sea ? (wet ? null : _rtsElevNormal(e.x, e.z)) : e.air ? _r3dAirLean(R3, e, mo, d2) : _rtsElevNormal(e.x, e.z);
+  var wet = (d2.sea || d2.hover) && _r3dWetAt(G, e.x, e.z);  /* fxwake3d.js; a hovercraft over water rides the swell too */
+  var gn = e.air ? _r3dAirLean(R3, e, mo, d2) : (d2.sea && wet) ? null : _rtsElevNormal(e.x, e.z);
   if (wet && !R3.swellOff) { var sw = _r3dShipSwell(e, t); y += sw.y; gn = sw.n; }
   var rk = _r3dRecoil(e, gn) || { hx: 0, hz: 0, tx: 0, tz: 0, n: gn };   /* the kick: combat3d.js */
   var AP = RTS_AIR_PARTS[e.def], rotor = AP && (AP.rotor || AP.prop) && !R3.rotorOff;
@@ -29501,6 +29672,24 @@ function _rtsDrawFx(g, G, S, TSscale, cell) {
     g.fillStyle = '#2a2a2c';
     g.fillRect(Math.round(bj.x) - bw, Math.round(bj.y) - bh, bw * 2, bh * 2);
   }
+  /* --- the weather called down (core/wxsupers.js): a pale disc for a fog bank, a dark one for a
+     thunderhead, and a bolt as a white line - the shaded pass draws the real thing
+     (render3d/wxfx3d.js); without this a device that cannot shade saw sight cut and units struck
+     by nothing at all --- */
+  var WX = G.wx || [];
+  for (i = 0; i < WX.length && !r3proj; i++) {
+    var wc = WX[i], wj = _rtsGroundToScreen(wc.x, wc.z), wr = wc.r / RTS_TILE * cell * (wj.scale || 1);
+    g.globalAlpha = wc.kind === 'fog' ? 0.35 : 0.45;
+    g.fillStyle = wc.kind === 'fog' ? '#d8dde2' : '#262a33';
+    g.beginPath(); g.arc(wj.x, wj.y, wr, 0, Math.PI * 2); g.fill();
+    g.globalAlpha = 1;
+  }
+  var BL = G.bolts || [];
+  for (i = 0; i < BL.length && !r3proj; i++) {
+    var bo = BL[i], bt = _rtsWorldToScreen(bo.x, _rtsElev(bo.x, bo.z) + 14, bo.z), bb = _rtsGroundToScreen(bo.x, bo.z);
+    g.strokeStyle = '#ffffff'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(bt.x, bt.y); g.lineTo(bb.x, bb.y); g.stroke();
+  }
 
   /* --- explosions, tracers, muzzle flashes --- */
   for (i = 0; i < G.fx.length; i++) {
@@ -29828,7 +30017,11 @@ function rtsOpen(seed) {
        beside it on the next frame. */
     +   '<div class="rts-sel" id="rtsSel"><span id="rtsSelTxt">Nothing selected</span>'
     +     '<button id="rtsDeployBtn" type="button" hidden ' +
-              'onclick="_rtsDeploySelected()">DEPLOY</button></div>'
+              'onclick="_rtsDeploySelected()">DEPLOY</button>'
+    /* and UNLOAD, shown while a selected transport has something aboard - the U key's other door,
+       for a finger (core/transport.js _rtsUnloadSelected) */
+    +     '<button id="rtsUnloadBtn" type="button" hidden ' +
+              'onclick="_rtsUnloadSelected()">UNLOAD</button></div>'
     + '</div>';
   document.body.appendChild(d);
 
@@ -30821,6 +31014,14 @@ function _rtsSyncSidebar(dt) {
     for (var di = 0; di < sel.length; di++) if (_rtsCanDeploy(sel[di])) { can = true; break; }
     if (dep.hidden === can) dep.hidden = !can;
   }
+  /* AND UNLOAD, the same way: shown while a selected transport has something aboard, since the
+     U key is the only other door and a finger has no U (core/transport.js _rtsUnloadSelected) */
+  var unl = document.getElementById('rtsUnloadBtn');
+  if (unl) {
+    var canU = false;
+    for (var ui2 = 0; ui2 < sel.length; ui2++) if (_rtsCanUnload(sel[ui2])) { canU = true; break; }
+    if (unl.hidden === canU) unl.hidden = !canU;
+  }
 
   var msg = document.getElementById('rtsMsg');
   msg.textContent = G.msgT > 0 ? (G.msg || '') : '';
@@ -30922,7 +31123,7 @@ function rtsSuperArm(key) {
   if (typeof _rtsSfx === 'function') _rtsSfx('click');
   if (U.superArm) {
     var sd = _rtsSuperDefOf(U.superArm);
-    if (sd) _rtsSay(sd.super.hint);
+    if (sd) _rtsSay(_rtsSuperHint(sd.super));
   }
   U.superSig = null;                    /* force the row to restyle now rather than in 100ms */
   _rtsSuperRow();
@@ -31696,18 +31897,12 @@ function _rtsKeyDown(e) {
   /* N walks the army, shift+N walks it backwards. */
   if (k === 'n' || k === 'N') { _rtsCycleObject(e.shiftKey ? -1 : 1); e.preventDefault(); }
   /* U unloads every selected transport that is carrying anything - here and now, wherever it is
-     standing. For a landing craft in open water that is nowhere, so the key has to be able to
-     say so: a boat that silently ignores the order reads as a broken key rather than as a boat
-     in the wrong place. Right-clicking the shore is the aimed version - see _rtsOrderUnloadAt. */
+     standing. The loop is core/transport.js _rtsUnloadSelected, which the sidebar's UNLOAD button
+     gives too (a phone has no U), and which says so when a craft in open water has nowhere to
+     put anyone. Right-clicking the shore is the aimed version - see _rtsOrderUnloadAt. */
   if (k === 'u' || k === 'U') {
-    var Gu = window._rtsG, out = 0, held = 0;
-    if (Gu && Gu.sel) Gu.sel.forEach(function (t) {
-      if (t.side !== 'player' || t.type !== 'unit' || !_rtsCargoCount(t)) return;
-      out += _rtsUnloadNow(t);                       /* a Paradrop Plane's men jump: core/paradrop.js */
-      held += _rtsCargoCount(t);
-    });
-    if (held && !out) _rtsSay('Nowhere to unload — bring it closer to shore.');
-    if (out || held) e.preventDefault();
+    var ur = _rtsUnloadSelected();
+    if (ur.out || ur.held) e.preventDefault();
   }
   /* D deploys every selected vehicle that can - an MCV into a Command Yard. The loop itself
      lives in core/transport.js, because the sidebar's Deploy button gives the same order and a
@@ -31964,7 +32159,7 @@ function _rtsRightClick(mx, my, hit0) {
     /* Specialists sent at an enemy BUILDING do their own job instead of attacking it. The
        engineer and the thief have no weapon at all, so an attack order would be a walk followed
        by standing there; the Commando has pistols but her C4 is the reason to send her. */
-    var capped = 0, special = 0, drops = 0;
+    var capped = 0, special = 0, drops = 0, cant = 0;
     for (i = 0; i < mine.length; i++) {
       var mu = mine[i], md = rtsUnitDef(mu.def), job = null;
       if (tgt.type === 'struct') {
@@ -31985,11 +32180,17 @@ function _rtsRightClick(mx, my, hit0) {
          it with a gun it does not have. Through _rtsOrderAttack that became a plain move, and
          the plane hovered over the target with its squads still aboard. */
       else if (!md.weapon && _rtsIsTransport(mu) && _rtsCargoCount(mu) && _rtsOrderUnloadAt(mu, tgt.x, tgt.z)) drops++;
-      else _rtsOrderAttack(mu, tgt);
+      else {
+        /* an armed unit whose gun cannot bear on this - a Flak Track sent at a tank - drives to
+           it instead (orders.js), and is told so when nothing selected can do better */
+        if (md.weapon && !_rtsCanEngage(mu, tgt)) cant++;
+        _rtsOrderAttack(mu, tgt);
+      }
     }
     _rtsFlash(tgt.x, tgt.z, special + drops === mine.length ? 'harvest' : 'attack');
     if (special) _rtsSay(special === 1 ? 'Moving in.' : special + ' specialists moving in.');
     else if (drops) _rtsSay(drops === 1 ? 'Dropping in.' : drops + ' transports dropping in.');
+    else if (cant && cant === mine.length) _rtsSay((mine.length === 1 ? rtsUnitDef(mine[0].def).name + ' cannot' : 'They cannot') + ' engage that - moving up to it.');
     if (typeof _rtsSfx === 'function') _rtsSfx('order');
     return;
   }
@@ -32191,15 +32392,26 @@ function _rtsActionAt(mx, my) {
     if (G.sel[i] && G.sel[i].side === 'player' && _rtsCanRally(G.sel[i])) { anyMaker = true; break; }
   if (anyMaker && !mine.length) return 'rally';
   if (!mine.length) return (tgt && !tgt.dead) ? 'select' : null;
-  if (tgt && tgt.side === 'enemy') return 'attack';
+  /* AN ENEMY under the pointer is the attack reticle only if something selected can engage it,
+     or is a specialist whose click means something else (an engineer, a loaded transport): a
+     Flak Track given the reticle over a tank drove onto the tank, since its gun cannot bear */
+  if (tgt && tgt.side === 'enemy') {
+    for (i = 0; i < mine.length; i++) { var sd0 = rtsUnitDef(mine[i].def) || {}; if (!sd0.weapon || _rtsCanEngage(mine[i], tgt)) return 'attack'; }
+    return 'no';
+  }
   var tx = _rtsTX(hit.x), tz = _rtsTX(hit.z);
   var onScrap = _rtsInB(tx, tz) && G.scrap[_rtsIdx(tx, tz)] > 0;
   var harv = false;
   for (i = 0; i < mine.length; i++) if (rtsUnitDef(mine[i].def).harvest) harv = true;
   if (harv && onScrap) return 'harvest';
   if (harv && tgt && tgt.side === 'player' && tgt.def === 'refinery') return 'deliver';
-  /* Somewhere no ground unit can stand is a no-entry, not a move order that quietly fails. */
-  if (!_rtsInB(tx, tz) || _rtsBlocked(tx, tz)) return 'no';
+  /* Somewhere nothing selected can stand is a no-entry, not a move order that quietly fails -
+     asked in each unit's own domain, so open water is a move for a hovercraft or a hull and a
+     refusal for a tank (the order paths the same way: _rtsPathFor) */
+  if (!_rtsInB(tx, tz)) return 'no';
+  var stand = false;
+  for (i = 0; i < mine.length && !stand; i++) if (!_rtsBlocked(tx, tz, _rtsDomainOf(mine[i]))) stand = true;
+  if (!stand) return 'no';
   return U.attackMove ? 'amove' : 'move';
 }
 function _rtsDrawCursor(g, x, y, kind) {
@@ -32335,9 +32547,12 @@ function _rtsDrawMini() {
       g.fillRect(mx - 1.5, mz - 1.5, 3, 3);
     }
   }
-  /* STATIC over an enemy Jammer's field (core/jammer.js): the radar cannot read it */
+  /* STATIC over an enemy Jammer's field (core/jammer.js): the radar cannot read it - where the
+     radar reads at all. Under the unexplored shroud there is nothing to disturb, and a disc of
+     static there marked the army the Jammer was hiding from across the map. */
   var JF = G.jam && G.jam.enemy;
   for (i = 0; JF && i < JF.length; i++) {
+    if (!_rtsRadarStaticShown(G, JF[i])) continue;
     var jx = (JF[i].x / RTS_TILE + RTS_N / 2) * sc, jz = (JF[i].z / RTS_TILE + RTS_N / 2) * sc, jr = JF[i].r / RTS_TILE * sc;
     for (var jn = 0; jn < 90; jn++) {
       var ja = Math.random() * Math.PI * 2, jd = Math.sqrt(Math.random()) * jr, jv = (120 + Math.random() * 135) | 0;
@@ -32871,6 +33086,10 @@ function rtsSaveGame() {
          unrecorded, resuming after switching sides loaded the base intact and then refused to
          build from it: a standing Kennel that cannot make dogs. */
       side:(typeof rtsArmySide === 'function') ? rtsArmySide() : null,
+      /* A DAILY, if this is one (daily.js): its spec, so a resume is still the daily - its army
+         for this battle only, its result on the end card - rather than an ordinary battle that
+         wrote the day's army over the player's stored preference. */
+      daily:window._RTS_DAILY || null,
       desc:(RTS_DIFF[G.diff] ? RTS_DIFF[G.diff].name : G.diff) + ' — '
         + mins + ':' + (secs < 10 ? '0' : '') + secs
         + ' — ' + G.ents.filter(function (e) { return !e.dead && e.side === 'player'; }).length + ' units and buildings' };
@@ -32989,13 +33208,29 @@ function rtsLoadGame() {
      load the Soviet base and then hand you the Allied roster - a Kennel standing in your base
      that cannot build a dog. Saves written before this field existed have no `side`, and are
      left exactly as they were rather than being guessed at. */
-  if (res.info && res.info.side && typeof rtsSetArmySide === 'function') rtsSetArmySide(res.info.side);
+  _rtsLoadArmy(res.info);
   /* The load goes through the same door as starting a battle: close, open, and hand the state
      to rtsOpen so it lands after _rtsNewGame and before the renderer bakes the terrain. */
   window._RTS_PENDING_LOAD = body;
   if (document.getElementById('rcgRts')) rtsClose();
   rtsOpen(body.seed);
   return true;
+}
+/* The army a save is resumed with. An ordinary battle's is stored, as the player's choice. A
+   DAILY'S is not: it is set for the battle only, the way daily.js sets it, with the player's own
+   army and difficulty kept to be put back by rtsDailyEnd - resuming a Dominion daily once wrote
+   Dominion into a Compact player's stored preference, and resumed it as a plain match with no
+   daily line on the end card. */
+function _rtsLoadArmy(info) {
+  if (!info || !info.side) return;
+  if (info.daily) {
+    if (!window._RTS_DAILY_PREV) window._RTS_DAILY_PREV = { diff: window._RTS_DIFF, army: typeof rtsArmySide === 'function' ? rtsArmySide() : window._RTS_ARMY };
+    window._RTS_DAILY = info.daily;
+    if (info.daily.diff) window._RTS_DIFF = info.daily.diff;
+    window._RTS_ARMY = info.side;
+    return;
+  }
+  if (typeof rtsSetArmySide === 'function') rtsSetArmySide(info.side);
 }
 </script>
 

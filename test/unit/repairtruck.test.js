@@ -78,6 +78,24 @@ far.hp = 100;
 run(20, function () { hold([far]); });
 S.ok('...and leaves one fourteen cells off alone', far.hp === 100 && Math.hypot(tr.x - g._rtsWX(m.tx), tr.z - g._rtsWX(m.tz)) < g.RTS_TILE * 2, far.hp + ' hp');
 
+/* ---------------- no way there ---------------- */
+/* a damaged tank it cannot get to - walled in, five cells off - is asked for once and then passed
+   over for the next, nine cells off, rather than asked for again every second while that one waits */
+G = fresh(); m = middle();
+var tr2 = at('player', 'repairtruck', m.tx, m.tz);
+var walled = at('player', 'tank', m.tx + 5, m.tz), beyond = at('player', 'tank', m.tx - 9, m.tz);
+walled.hp = 50; beyond.hp = 50;
+var wtx = g._rtsTX(walled.x), wtz = g._rtsTX(walled.z);
+for (var wz = -1; wz <= 1; wz++) for (var wx = -1; wx <= 1; wx++) if (wx || wz) G.blocked[g._rtsIdx(wtx + wx, wtz + wz)] = 1;
+hold([walled, beyond]);
+var asks = 0, path0 = g._rtsPath;
+g._rtsPath = function (sx, sz, gx, gz) { if (Math.hypot(gx - walled.x, gz - walled.z) < g.RTS_TILE * 2) asks++; return path0.apply(this, arguments); };
+run(12, function () { hold([walled, beyond]); });
+g._rtsPath = path0;
+S.ok('a damaged tank walled in five cells off is asked for a route once, then passed over for the one nine cells off',
+     asks === 1 && beyond.hp > 50 && Math.hypot(tr2.x - beyond.x, tr2.z - beyond.z) <= D.heals,
+     asks + ' asks in 12 s; the far tank ' + beyond.hp + ' hp, the truck ' + (Math.hypot(tr2.x - beyond.x, tr2.z - beyond.z) / g.RTS_TILE).toFixed(1) + ' cells from it');
+
 /* ---------------- both armies ---------------- */
 function canBuild(army) {
   fresh(army);
