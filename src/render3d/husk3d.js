@@ -29,7 +29,11 @@ function _r3dHusks(G, R3, draw) {
     var y = _rtsElev(f.x, f.z) - sink, nrm = _rtsElevNormal(f.x, f.z);
     var hasT = _r3dHuskTurret(h);
     draw(_r3dMesh('u', h.def, h.side, hasT ? 'hull' : null, false), f.x, y, f.z, -(h.rot || 0), nrm);
-    if (hasT) draw(_r3dMesh('u', h.def, h.side, 'turret', false), f.x, y, f.z, -(h.tur || 0), nrm);
+    if (hasT) {
+      /* on its mounts, as the live one's was (unit3d.js): a gun ship's fore and aft */
+      var tm = _r3dMesh('u', h.def, h.side, 'turret', false), TP = _r3dTurretAt(h.def, f.x, f.z, h.rot || 0);
+      for (var ti = 0; ti < TP.length; ti++) draw(tm, TP[ti].x, y, TP[ti].z, -(h.tur || 0), nrm);
+    }
     n++;
   }
   R3.husks = n;

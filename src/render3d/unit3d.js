@@ -81,7 +81,13 @@ function _r3dShipSwell(e, t) {
 
 /* Far enough out that a unit is a few dozen pixels long: the plain models will do (mesh3d.js). */
 var R3D_CHUTE_H = 5.0;           /* world units a paratrooper falls from, over RTS_PARA.fall */
-var R3D_SLING_DROP = 0.4;        /* world units a slung load hangs under its crane: between its legs, under the hook */
+/* A SLUNG LOAD HANGS UNDER THE LEGS, not between them: on the size ladder the crane's legs stand
+   0.9 world units apart across the beam and a Battle Tank is 1.6 wide, so the load's top sits
+   this far below the crane's leg pads (its origin), by the load's own height. Drawn 0.4 under
+   the origin regardless of height, a tank swallowed the legs, the hook and the cross members and
+   put its turret through the spine. */
+var R3D_SLING_GAP = 0.15;
+var R3D_SLING_FALLBACK = 1.5;    /* world units of load height while its mesh is still to be built */
 var R3D_LOD_CELL = 20;           /* device px a map cell, below which */
 function _r3dLodFar(R3) {
   return !R3.lodOff && typeof _rtsZoom === 'function' && _rtsZoom() * RTS_TILE * (R3.scale || 1) < R3D_LOD_CELL;
@@ -105,7 +111,7 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
   /* THE GROUND UNDER IT, not zero. An aircraft's altitude is measured from the ground it
      is over as well - it flies at a height, not at a level - so both take the terrain and
      only the flier adds to it. */
-  var y = (e.air || d2.sea ? _rtsElev(e.x, e.z) : _rtsStandY(e.x, e.z)) + (e.air ? _rtsAirLift(e) * 0.35 : 0);   /* render/camera.js */
+  var y = (e.air || d2.sea ? _rtsElev(e.x, e.z) : _rtsStandY(e.x, e.z)) + (e.air ? _rtsAirLift(e) * RTS_AIR_ALT_K : 0);   /* render/camera.js */
   if (e.chute > 0) y += e.chute / RTS_PARA.fall * R3D_CHUTE_H;     /* coming down under a canopy: core/paradrop.js */
   /* A MARCHING SOLDIER BOBS. The bob is what is left of the old suggestion of a march, much
      smaller now that he walks (a stride pose by his own gait, soldier3d.js), in step with the
@@ -128,9 +134,14 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
 
      The TURRET takes the same lean as the hull rather than staying level, because it is
      bolted to the hull - it rotates in the hull's plane, and a turret that stayed
-     world-level would shear out of its own ring on any slope. */
-  var gn = d2.sea ? null : e.air ? _r3dAirLean(R3, e, mo, d2) : _rtsElevNormal(e.x, e.z);
-  if (d2.sea && !R3.swellOff) { var sw = _r3dShipSwell(e, t); y += sw.y; gn = sw.n; }
+     world-level would shear out of its own ring on any slope.
+
+     A SHIP ON A FLAT THE TIDE HAS DRIED sits on the sand (the Monitor's verb, core/monitor.js):
+     no swell, no lean - the water sheet is cut away there (world3d.js) and a hull heaving on an
+     invisible sea sank two thirds of its height into the ground at every trough. */
+  var wet = d2.sea && _r3dWetAt(G, e.x, e.z);                /* fxwake3d.js */
+  var gn = d2.sea ? (wet ? null : _rtsElevNormal(e.x, e.z)) : e.air ? _r3dAirLean(R3, e, mo, d2) : _rtsElevNormal(e.x, e.z);
+  if (wet && !R3.swellOff) { var sw = _r3dShipSwell(e, t); y += sw.y; gn = sw.n; }
   var rk = _r3dRecoil(e, gn) || { hx: 0, hz: 0, tx: 0, tz: 0, n: gn };   /* the kick: combat3d.js */
   var AP = RTS_AIR_PARTS[e.def], rotor = AP && (AP.rotor || AP.prop) && !R3.rotorOff;
   mo.y = y;                                   /* where it was drawn, for its smoke (hurt3d.js) */
@@ -140,21 +151,39 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
   drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : (rotor ? 'body' : null), e.prone, pose, roll, lod),
          e.x + rk.hx, y, e.z + rk.hz, -e.rot, ART2W, hd, 1, rk.n);
   if (turret) {
-    drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false, 0, 0, lod), e.x + rk.tx, y, e.z + rk.tz, -(e.turret || 0),
-           ART2W, hd, 1, rk.n);
+    /* the one turret part, on each of its mounts: a tank's one at the origin, a gun ship's fore
+       and aft (RTS_TURRET_AT, sprites/unit-airsea.js), all turned to the aim */
+    var tm = _r3dMesh('u', e.def, e.side, 'turret', false, 0, 0, lod), TP = _r3dTurretAt(e.def, e.x + rk.tx, e.z + rk.tz, e.rot);
+    for (var ti = 0; ti < TP.length; ti++) drawIn(C, tm, TP[ti].x, y, TP[ti].z, -(e.turret || 0), ART2W, hd, 1, rk.n);
   }
   if (rotor && AP.rotor) {
     var rm = _r3dMesh('u', e.def, e.side, 'rotor', false, 0, 0, lod), hubs = _r3dRotorHubs(e, mo.spin);
     for (var ri = 0; ri < hubs.length; ri++) drawIn(C, rm, hubs[ri].x, y, hubs[ri].z, hubs[ri].a, ART2W, hd, 1, rk.n);
   }
   if (rotor && AP.prop) drawIn(C, _r3dMesh('u', e.def, e.side, 'prop' + _r3dPropPhase(mo.spin), false, 0, 0, lod), e.x, y, e.z, -e.rot, ART2W, hd, 1, rk.n);
-  /* A SLUNG LOAD (a Sky Crane's): the vehicle it carries hangs under it, never through the ground */
+  /* A SLUNG LOAD (a Sky Crane's): the vehicle it carries hangs under it by its own height
+     (R3D_SLING_GAP), never through the ground, scorched as IT is hurt rather than as the crane
+     is, and its drawn height goes in its motion record so its smoke rises from it (hurt3d.js) */
   if (d2.slings && e.cargo && e.cargo.length && R3.slingOff !== true) {     /* R3.slingOff: a spec's A/B */
     var cg = e.cargo[0], cgt = R.spr.turret && R.spr.turret[cg.side] && R.spr.turret[cg.side][cg.def];
-    var cy = Math.max(_rtsStandY(e.x, e.z), y - R3D_SLING_DROP);
-    drawIn(C, _r3dMesh('u', cg.def, cg.side, cgt ? 'hull' : null, false, 0, 0, lod), e.x, cy, e.z, -e.rot, ART2W, hd, 1, rk.n);
-    if (cgt) drawIn(C, _r3dMesh('u', cg.def, cg.side, 'turret', false, 0, 0, lod), e.x, cy, e.z, -e.rot, ART2W, hd, 1, rk.n);
+    var ch = _r3dMesh('u', cg.def, cg.side, cgt ? 'hull' : null, false, 0, 0, lod), ct = cgt ? _r3dMesh('u', cg.def, cg.side, 'turret', false, 0, 0, lod) : null;
+    var top = ch ? Math.max(ch.top || 0, ct ? ct.top || 0 : 0) * ART2W : R3D_SLING_FALLBACK;
+    var cy = Math.max(_rtsStandY(e.x, e.z), y - R3D_SLING_GAP - top), cd = _r3dFadeDim(_r3dHurtDim(cg, R3), fade);
+    _r3dUnitMotion(R3, cg, t).y = cy;
+    drawIn(C, ch, e.x, cy, e.z, -e.rot, ART2W, cd, 1, rk.n);
+    if (ct) drawIn(C, ct, e.x, cy, e.z, -e.rot, ART2W, cd, 1, rk.n);
   }
+}
+
+/* Where a unit's turret part turns, in the world: at its origin, unless RTS_TURRET_AT (sprites/
+   unit-airsea.js) names the mounts - a gun ship's fore and aft - in model units along the hull,
+   which the one part is drawn at in turn. The husk of one does the same (husk3d.js). */
+function _r3dTurretAt(def, x, z, rot) {
+  var TP = typeof RTS_TURRET_AT !== 'undefined' && RTS_TURRET_AT[def];
+  if (!TP) return [{ x: x, z: z }];
+  var sc = _sprUnitScale(def) * RTS_TILE / RTS_TS, c = Math.cos(rot), s = Math.sin(rot), out = [];
+  for (var i = 0; i < TP.length; i++) out.push({ x: x + (TP[i][0] * c - TP[i][1] * s) * sc, z: z + (TP[i][0] * s + TP[i][1] * c) * sc });
+  return out;
 }
 
 /* Where a helicopter's rotors turn, in the world, and at what angle: one over the hub, or - a

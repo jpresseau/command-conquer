@@ -206,8 +206,8 @@ S.eq('...and standing is not crawling', g._r3dCrawlPose({ path: [{ x: 0, z: 0 }]
 g._rtsNewGame(4242, 'easy');
 var G = g.window._rtsG, calls = [], R5 = { motion: {}, rollLen: { tank: 1.2 } };
 g._rtsR = g.window._rtsR = { spr: { turret: { player: { tank: 1 } } } };
-g._r3dMesh = function (kind, def, side, part, prone, pose, roll) { return { def: def, part: part || null, prone: !!prone, pose: pose || 0, roll: roll || 0 }; };
-function paint(e) { calls = []; g._r3dPaintUnit(null, e, G, R5, function (C, m, x, y, z, rot, sc, dim, sy, n) { calls.push({ m: m, y: y, rot: rot, n: n }); }, 1); return calls; }
+g._r3dMesh = function (kind, def, side, part, prone, pose, roll) { return { def: def, part: part || null, prone: !!prone, pose: pose || 0, roll: roll || 0, top: part === 'turret' ? 3.0 : 2.4 }; };
+function paint(e) { calls = []; g._r3dPaintUnit(null, e, G, R5, function (C, m, x, y, z, rot, sc, dim, sy, n) { calls.push({ m: m, x: x, y: y, z: z, rot: rot, n: n, dim: dim }); }, 1); return calls; }
 var sea2 = null;
 for (var ci = 0; ci < G.terrain.length && !sea2; ci++) if (G.terrain[ci] === g.RTS_T_WATER) sea2 = ci;
 var shp = g._rtsSpawnUnit('player', 'destroyer', g._rtsWX(sea2 % g.RTS_N), g._rtsWX(Math.floor(sea2 / g.RTS_N)));
@@ -232,5 +232,34 @@ S.ok('...and with R3.rotorOff the one machine it always was', hOff.length === 1 
 var cr = g._rtsSpawnUnit('player', 'rifle', 48, 48); cr.prone = 1; cr.path = [{ x: 0, z: 0 }];
 var cc = paint(cr)[0];
 S.ok('a prone squad on the move is drawn crawling', cc.m.prone && cc.m.pose === g._r3dCrawlPose(cr, G.t) && cc.m.pose > 0, JSON.stringify(cc.m));
+
+/* ---- a gun ship: its turret part on both mounts, and no swell on a flat the tide has dried ---- */
+g._rtsR.spr.turret.player.destroyer = 1;
+shp.turret = 2.0;
+var sd = paint(shp), sm = g._r3dTurretAt('destroyer', shp.x, shp.z, shp.rot);
+S.ok('a destroyer is its hull once and its turret part on both mounts, fore and aft, turned to the aim',
+     sd.length === 3 && sd[0].m.part === 'hull' && sd[1].m.part === 'turret' && sd[2].m.part === 'turret'
+     && Math.abs(sd[1].x - sm[0].x) + Math.abs(sd[1].z - sm[0].z) < 1e-9 && Math.abs(sd[2].x - sm[1].x) + Math.abs(sd[2].z - sm[1].z) < 1e-9
+     && Math.abs(sd[1].rot + 2.0) < 1e-9 && Math.hypot(sd[1].x - sd[2].x, sd[1].z - sd[2].z) > 1.5,
+     sd.map(function (c) { return c.m.part + '@' + c.x.toFixed(1) + ',' + c.z.toFixed(1); }).join(' '));
+var ci2 = g._rtsIdx(g._rtsTX(shp.x), g._rtsTX(shp.z));
+if (!G.tideDry) G.tideDry = new Uint8Array(G.terrain.length);     /* the tide lays it on its first tick */
+G.tideDry[ci2] = 1;
+var dDry = paint(shp)[0], gnd = g._rtsElevNormal(shp.x, shp.z);
+G.tideDry[ci2] = 0;
+S.ok('on a flat the tide has dried it sits on the sand: no swell, leaning only as the ground does',
+     Math.abs(dDry.y - g._rtsElev(shp.x, shp.z)) < 1e-9 && dDry.n && Math.abs(dDry.n[0] - gnd[0]) + Math.abs(dDry.n[2] - gnd[2]) < 1e-9,
+     'y ' + dDry.y.toFixed(3) + ' against the waterline ' + g._rtsElev(shp.x, shp.z).toFixed(3));
+S.ok('...and _r3dWetAt says so: water, but not dried water', g._r3dWetAt(G, shp.x, shp.z) === true && (G.tideDry[ci2] = 1, g._r3dWetAt(G, shp.x, shp.z) === false) && (G.tideDry[ci2] = 0, !g._r3dWetAt(G, tk.x, tk.z)));
+
+/* ---- a Sky Crane's load: hung under the legs by its own height, scorched as it is hurt ---- */
+var crn = g._rtsSpawnUnit('player', 'skycrane', 52, 52), ld = g._rtsSpawnUnit('player', 'tank', 52, 52);
+g._rtsBoard(ld, crn); ld.hp = ld.maxHp * 0.3; crn.rot = 0;
+var sc2 = paint(crn), cargo = sc2.filter(function (c) { return c.m.def === 'tank'; }), craneY = sc2[0].y;
+S.ok('a Sky Crane\'s load hangs under its legs by its own height, the turret\'s top the taller', cargo.length === 2 && cargo[0].m.part === 'hull' && cargo[1].m.part === 'turret'
+     && Math.abs(cargo[0].y - (craneY - g.R3D_SLING_GAP - 3.0)) < 1e-9 && cargo[1].y === cargo[0].y && cargo[0].y > g._rtsStandY(crn.x, crn.z),
+     'crane at ' + craneY.toFixed(2) + ', load at ' + (cargo[0] ? cargo[0].y.toFixed(2) : '-'));
+S.ok('...scorched as the load is hurt, not as the crane is', cargo[0].dim >= 3 && sc2[0].dim === 0, 'load ' + cargo[0].dim.toFixed(2) + ', crane ' + sc2[0].dim);
+S.ok('...and its drawn height goes in its motion record, for its smoke', R5.motion[ld.id] && R5.motion[ld.id].y === cargo[0].y);
 
 require('../lib/report.js')(S);

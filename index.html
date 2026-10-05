@@ -706,7 +706,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">b7d0fec · 2026-10-05</div>
+  <div id="rtsBuild" title="build">eb19d93 · 2026-10-05</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -6575,7 +6575,7 @@ function _sprBuildingClean(key, side) {
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
   dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46,
-  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:44, drone:26, bomber:56
+  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:53, drone:26, bomber:56
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -7114,6 +7114,17 @@ var RTS_AIR_PARTS = {
   mig:  { burner: [-9.6, 4.4, 0], tips: 9.6, trail: true },
   yak:  { prop: [8.4, 4.1, 0, 5.4], tips: 10.6 }
 };
+/* WHERE A GUN SHIP'S TURRETS TURN, in model units before _sprUnitScale: the surface ships' hull
+   lengths, and the mounts along them - one forward on a gunboat, fore and aft on the big two.
+   The model below builds the 'turret' part as one mount at the origin and, for the whole ship,
+   a mount at each of these; the 3D mode draws the one part at each (render3d/unit3d.js
+   _r3dTurretAt), turned to the aim. unit/turrets holds the two together. */
+var RTS_SHIP_L = { gunboat: 19, destroyer: 26, cruiser: 32 };
+var RTS_TURRET_AT = {
+  gunboat:   [[RTS_SHIP_L.gunboat * 0.16, 0]],
+  destroyer: [[RTS_SHIP_L.destroyer * 0.16, 0], [-RTS_SHIP_L.destroyer * 0.34, 0]],
+  cruiser:   [[RTS_SHIP_L.cruiser * 0.16, 0], [-RTS_SHIP_L.cruiser * 0.34, 0]]
+};
 function _sprUnitAirSea(X, key) {
   var m = X.m, TM = X.TM, VH = X.VH, S = X.S, DK = X.DK, O = X.O, C = X.C, GN = X.GN,
       d = X.d, prone = X.prone, part = X.part, side = X.side, tracks = X.tracks, i;
@@ -7253,19 +7264,23 @@ function _sprUnitAirSea(X, key) {
        Cruiser has to read as bigger than a Destroyer at a glance or the player cannot tell what
        is in their fleet without clicking it. The extra turret aft comes with `_big`. */
     var _cru = (key === 'cruiser'), _big = (key === 'destroyer' || _cru);
-    var _L = _cru ? 32 : (_big ? 26 : 19), _Wd = _cru ? 10.5 : (_big ? 8.5 : 6.5);
+    var _L = RTS_SHIP_L[key], _Wd = _cru ? 10.5 : (_big ? 8.5 : 6.5);
+    /* the guns: one forward on a gunboat, fore and aft on a destroyer. Each is the 'turret'
+       part - a ring and its barrel pointing ahead, the cruiser's with a barrel each side as well
+       - built at the origin for the part itself and at RTS_TURRET_AT's places for the whole
+       ship, so the 3D mode turns one mount on each ring (render3d/unit3d.js). */
+    var _mount = function (mx) {
+      _r3Cyl(m, mx, 4.2, 0, 2.4, 1.8, VH[3], VH[1], 14);
+      _r3Box(m, mx + _L * 0.14, 4.6, 0, _big ? 7 : 5, 1.1, 1.1, GN[0], GN[2]);
+      if (_cru) for (var _tb = -1; _tb <= 1; _tb += 2) _r3Box(m, mx + _L * 0.14, 4.6, _tb * 1.4, 7, 1.1, 1.1, GN[0], GN[2]);
+    };
+    if (part === 'turret') { _mount(0); return true; }
+    if (part !== 'hull') RTS_TURRET_AT[key].forEach(function (p) { _mount(p[0]); });
     _r3Slab(m, 0, 0.6, 0, _L, 3.4, _Wd, 1.4, VH[0], VH[1]);              /* hull */
     _r3Box(m, _L * 0.40, 0.9, 0, _L * 0.22, 2.8, _Wd * 0.55, VH[1], VH[3]);   /* raked bow */
     _r3Box(m, -_L * 0.06, 4.0, 0, _L * 0.34, 3.2, _Wd * 0.66, VH[2], VH[0]);  /* superstructure */
     _r3Box(m, -_L * 0.06, 7.2, 0, _L * 0.20, 1.4, _Wd * 0.44, TM[1], TM[3]);  /* team cap */
     _r3Cyl(m, -_L * 0.18, 7.2, 0, 1.5, 4.5, DK[1], DK[0], 14);           /* funnel */
-    /* the guns: one forward on a gunboat, fore and aft on a destroyer */
-    _r3Cyl(m, _L * 0.16, 4.2, 0, 2.4, 1.8, VH[3], VH[1], 14);
-    _r3Box(m, _L * 0.30, 4.6, 0, _big ? 7 : 5, 1.1, 1.1, GN[0], GN[2]);
-    if (_big) {
-      _r3Cyl(m, -_L * 0.34, 4.2, 0, 2.4, 1.8, VH[3], VH[1], 14);
-      _r3Box(m, -_L * 0.48, 4.6, 0, 6, 1.1, 1.1, GN[0], GN[2]);
-    }
     _r3Box(m, _L * 0.02, 5.6, 0, 1.0, 1.0, _Wd * 0.9, DK[0], DK[0]);     /* rail */
 
     /* A WARSHIP IS RIGGED, and these were bare hulls with a box and a funnel: at 198 triangles
@@ -7291,13 +7306,9 @@ function _sprUnitAirSea(X, key) {
         _r3Cyl(m, -_L * 0.46, 5.4, (_dc - 1) * _Wd * 0.17, 0.7, 1.3, DK[2], DK[0], 8);
     }
     if (_cru) {
-      /* THE CRUISER'S OWN TELL: twin barrels in BOTH mounts - it is the shore-bombardment
-         ship and its guns are its identity - plus a second funnel and a higher bridge tier,
-         so it out-silhouettes the Destroyer instead of just out-measuring it. */
-      _r3Box(m, _L * 0.30, 4.6, -1.4, 7, 1.1, 1.1, GN[0], GN[2]);
-      _r3Box(m, _L * 0.30, 4.6, 1.4, 7, 1.1, 1.1, GN[0], GN[2]);
-      _r3Box(m, -_L * 0.48, 4.6, -1.4, 6, 1.1, 1.1, GN[0], GN[2]);
-      _r3Box(m, -_L * 0.48, 4.6, 1.4, 6, 1.1, 1.1, GN[0], GN[2]);
+      /* THE CRUISER'S OWN TELL: a barrel each side of the one in BOTH mounts (_mount above) - it
+         is the shore-bombardment ship and its guns are its identity - plus a second funnel and a
+         higher bridge tier, so it out-silhouettes the Destroyer instead of just out-measuring it. */
       _r3Cyl(m, -_L * 0.26, 7.2, 0, 1.5, 3.8, DK[1], DK[0], 14);         /* second funnel */
       _r3Box(m, -_L * 0.02, 8.6, 0, _L * 0.16, 1.8, _Wd * 0.4, VH[1], VH[3]);
     }
@@ -7757,7 +7768,15 @@ function _sprUnitSpecial(X, key) {
 /* the 3D renderer's moving parts for these (see RTS_AIR_PARTS in unit-airsea.js) */
 RTS_AIR_PARTS.skycrane = { rotor: true };
 RTS_AIR_PARTS.drone = { prop: [-6.2, 2.6, 0, 2.4], tips: 9.0 };
-RTS_AIR_PARTS.bomber = { prop: [5.4, 4.6, -6.4, 2.6], props: [[5.4, 4.6, -6.4, 2.6], [5.4, 4.6, 6.4, 2.6], [4.0, 4.6, -12.0, 2.6], [4.0, 4.6, 12.0, 2.6]], tips: 17.0 };
+/* The bomber's four engines, [x, |z|] of each pair along the wing: the model's nacelles and the
+   sprite's propellers are built off this, and so are the 3D propellers (two model units ahead
+   of each engine, where the sprite's disc is). They were once a second list, two units aft. */
+var RTS_BOMBER_ENGINES = [[5.4, 6.4], [4.0, 12.0]];
+RTS_AIR_PARTS.bomber = (function () {
+  var P = [];
+  RTS_BOMBER_ENGINES.forEach(function (E) { P.push([E[0] + 2.0, 4.6, -E[1], 2.6], [E[0] + 2.0, 4.6, E[1], 2.6]); });
+  return { prop: P[0], props: P, tips: 17.0 };
+})();
 RTS_AIR_PARTS.paraplane = { prop: [7.4, 6.1, -6.6, 2.8], props: [[7.4, 6.1, -6.6, 2.8], [7.4, 6.1, 6.6, 2.8]], tips: 13.0 };
 
 function _sprUnitWings(X, key) {
@@ -7851,7 +7870,7 @@ function _sprUnitWings(X, key) {
     _r3Box(m, 11.6, 5.6, 0, 2.4, 1.0, 2.6, RTS_PAL.glass, RTS_PAL.glass);   /* cockpit */
     _r3Box(m, 3.0, 4.2, 0, 5.4, 0.7, 34.0, VH[1], VH[2]);          /* the broad wing */
     _r3Box(m, 3.0, 4.6, 0, 3.6, 0.3, 10.0, TM[1], TM[3]);          /* team band on it */
-    [[5.4, 6.4], [4.0, 12.0]].forEach(function (E) {               /* four engines */
+    RTS_BOMBER_ENGINES.forEach(function (E) {                      /* four engines */
       for (var sd = -1; sd <= 1; sd += 2) {
         _r3Box(m, E[0] - 1.6, 3.8, sd * E[1], 5.6, 1.8, 2.0, VH[2], VH[1]);
         _r3Cyl(m, E[0] + 1.4, 3.9, sd * E[1], 0.6, 1.0, DK[1], DK[2], 16);
@@ -7864,7 +7883,7 @@ function _sprUnitWings(X, key) {
     _r3Box(m, 1.2, 0.7, 0, 9.0, 0.3, 2.8, DK[2], DK[3]);           /* the open bomb bay */
     for (var bd = -1; bd <= 1; bd += 2) _r3Box(m, 1.2, 0.0, bd * 1.9, 9.0, 1.4, 0.2, VH[2], VH[1]);   /* its doors */
     if (part !== 'body') {                                          /* the props, for the sprite */
-      [[5.4, 6.4], [4.0, 12.0]].forEach(function (E) { for (var sp = -1; sp <= 1; sp += 2) _r3Box(m, E[0] + 2.0, 2.0, sp * E[1], 0.3, 5.2, 0.6, DK[1], DK[2]); });
+      RTS_BOMBER_ENGINES.forEach(function (E) { for (var sp = -1; sp <= 1; sp += 2) _r3Box(m, E[0] + 2.0, 2.0, sp * E[1], 0.3, 5.2, 0.6, DK[1], DK[2]); });
     }
   } else return false;
   return true;
@@ -7875,8 +7894,12 @@ function _sprUnitWings(X, key) {
    handed over in X); returns false for a key it does not own. A file of its own because
    unit-airsea.js holds the first ships and is near the 500-line cap. */
 
+/* where the Monitor's one turret turns (see RTS_TURRET_AT, unit-airsea.js): Lo * 0.12 on the
+   model below */
+RTS_TURRET_AT.monitor = [[22 * 0.12, 0]];
+
 function _sprUnitHulls(X, key) {
-  var m = X.m, TM = X.TM, VH = X.VH, S = X.S, DK = X.DK, GN = X.GN;
+  var m = X.m, TM = X.TM, VH = X.VH, S = X.S, DK = X.DK, GN = X.GN, part = X.part;
 
   if (key === 'flakship') {
     /* FLAK CRUISER. A Destroyer's hull with no big gun on it: its deck is a forest of twin flak
@@ -7950,11 +7973,17 @@ function _sprUnitHulls(X, key) {
        twin heavy barrels forward, a small conning tower behind it and nothing else. The identity
        is the low hull under the oversized turret - a gun that floats rather than a ship. */
     var Lo = 22, Wo = 8.0;
+    /* the turret, its team ring and the twin barrels are the 'turret' part: built at the origin
+       for the part, on its ring for the whole model, and turned to the aim by the 3D mode */
+    var _tur = function (mx) {
+      _r3Cyl(m, mx, 3.0, 0, 3.4, 2.6, VH[3], VH[1], 20);                 /* the turret */
+      _r3Cyl(m, mx, 5.4, 0, 2.6, 0.5, TM[1], TM[3], 20);                 /* team ring on its roof */
+      for (var bb = -1; bb <= 1; bb += 2) _r3Box(m, mx + 5.2, 3.6, bb * 0.9, 7.0, 0.9, 0.9, GN[0], GN[2]);   /* twin heavy barrels */
+    };
+    if (part === 'turret') { _tur(0); return true; }
+    if (part !== 'hull') _tur(RTS_TURRET_AT.monitor[0][0]);
     _r3Slab(m, 0, 0.4, 0, Lo, 2.0, Wo, 1.6, VH[0], VH[1]);              /* the low hull, square-ended */
     _r3Box(m, Lo * 0.44, 0.6, 0, Lo * 0.12, 1.6, Wo * 0.70, VH[1], VH[3]); /* blunt bow */
-    _r3Cyl(m, Lo * 0.12, 3.0, 0, 3.4, 2.6, VH[3], VH[1], 20);           /* the turret */
-    _r3Cyl(m, Lo * 0.12, 5.4, 0, 2.6, 0.5, TM[1], TM[3], 20);           /* team ring on its roof */
-    for (var bb = -1; bb <= 1; bb += 2) _r3Box(m, Lo * 0.12 + 5.2, 3.6, bb * 0.9, 7.0, 0.9, 0.9, GN[0], GN[2]);   /* twin heavy barrels */
     _r3Box(m, -Lo * 0.18, 3.4, 0, 3.4, 3.2, 3.2, VH[2], VH[0]);          /* conning tower */
     _r3Box(m, -Lo * 0.18 + 1.75, 4.4, 0, 0.3, 0.8, 2.6, RTS_PAL.glass, RTS_PAL.glass);   /* its vision slit */
     _r3Cyl(m, -Lo * 0.32, 3.0, 0, 0.9, 2.0, DK[1], DK[0], 16);          /* low stack */
@@ -8019,11 +8048,13 @@ function _sprUnit(key, side, prone, part) {
 }
 /* Which units carry a separately-rotating turret. Artillery is deliberately NOT on this list:
    a howitzer traverses on its chassis, and a fixed forward tube is what makes it read as
-   artillery rather than as another tank. */
-/* Which hulls carry a turret that aims independently of the body. The gun ships do - a cruiser,
-   a destroyer and a gunboat all traverse their guns - and their SHPs are laid out that way, so
-   leaving them out drew the turret frames as if they were hull facings. */
-var RTS_TURRETED = { tank:1, light:1, heavy:1, destroyer:1, gunboat:1, cruiser:1, flaktrack:1 };
+   artillery rather than as another tank. The gun ships are: a cruiser, a destroyer, a gunboat
+   and the Monitor all traverse their guns. Each model here builds in two parts, 'hull' and
+   'turret' (sprites/unit-*.js), and a ship's turret part is one mount built at the origin and
+   drawn at each place RTS_TURRET_AT names (sprites/unit-airsea.js), turned to the unit's aim.
+   The ships' models once ignored the part and built the whole ship for both, so a destroyer
+   shelling a target abeam was drawn twice, the second hull swung across the first. */
+var RTS_TURRETED = { tank:1, light:1, heavy:1, destroyer:1, gunboat:1, cruiser:1, flaktrack:1, monitor:1 };
 
 /* The concrete apron a structure stands on. In the reference every building sits on a pale
    irregular pad noticeably larger than itself - it is what stops a base looking like
@@ -13645,8 +13676,13 @@ function _rtsKill(e) {
       /* AND IT COMES APART: wreckage thrown out of the blast, bouncing - as a building's does, a
          few pieces for a light vehicle, more for a heavy one. Its own generator off the id, as the
          building's is, so the game's stream does not move (tick.js flies them). Not from a hull
-         afloat, which goes down rather than up. */
-      var afloat = ud.sea || (ud.hover && G.terrain[_rtsIdx(_rtsTX(e.x), _rtsTX(e.z))] === RTS_T_WATER);
+         afloat, which goes down rather than up - and AFLOAT IS WHERE IT DIED, not what it was: a
+         hovercraft over water, or a tank lost with the Sky Crane carrying it over the channel,
+         goes down the same way, while a hull on a flat the tide has dried, or a tank on a bridge
+         deck, burns where it stands. */
+      var ci = _rtsIdx(_rtsTX(e.x), _rtsTX(e.z));
+      var wet = G.terrain[ci] === RTS_T_WATER && !(G.tideDry && G.tideDry[ci]) && !_rtsIsBridgeCell(ci);
+      var afloat = ud.sea || (wet && !e.air);
       if (!afloat && !e.air) {
         var vrn = _rtsRngMake((e.id * 6151) >>> 0), vn = 3 + Math.min(5, Math.round(ud.hp / 150));
         for (var vk = 0; vk < vn; vk++) {
@@ -15721,18 +15757,26 @@ function _rtsAirLift(e) {
   var a = e.alt || 12;
   return e.land ? a + (RTS_AIR_SET - a) * e.land : a;
 }
+/* World units of height per unit of that lift: what the 3D mode draws an aircraft at, and so
+   what falls from one is drawn at too - its bombs (render3d/fxemit3d.js, render/fx.js) - and
+   where a click on it lands (render/camera.js). One number, because the bombs were once drawn at
+   the raw altitude: three times higher than the aircraft that had just dropped them. */
+var RTS_AIR_ALT_K = 0.35;
 
 /* A CHINOOK SETS DOWN TO WAIT. Idle over open ground - nothing to fly to - it eases down to
    RTS_AIR_SET over RTS_AIR_SETTLE seconds, which is where men climb in and out, and lifts again
    the moment it has somewhere to go. `land` runs 0 (flying) to 1 (down). Over water, a wall or
    a building it hovers: there is nothing to set down on. Only a transport does this; a gunship
-   waiting for a target stays in the air. */
+   waiting for a target stays in the air. A SKY CRANE WITH A LOAD STAYS UP: the load hangs under
+   its legs, so setting down would stand the crane on its own cargo; it comes down once the hook
+   is empty. */
 var RTS_AIR_SET = 1.2, RTS_AIR_SETTLE = 1.5;
 function _rtsAirSettle(e, dt) {
   var d = rtsUnitDef(e.def) || {};
   if (!d.carries || d.paradrops) return;     /* a Paradrop Plane never sets down: core/paradrop.js */
   var idle = !e.order && (!e.path || e.pi >= e.path.length), tx = _rtsTX(e.x), tz = _rtsTX(e.z);
-  var want = idle && _rtsInB(tx, tz) && !_rtsBlocked(tx, tz) ? 1 : 0, l = e.land || 0;
+  var slung = d.slings && e.cargo && e.cargo.length > 0;
+  var want = idle && !slung && _rtsInB(tx, tz) && !_rtsBlocked(tx, tz) ? 1 : 0, l = e.land || 0;
   if (want > l) e.land = Math.min(1, l + dt / RTS_AIR_SETTLE);
   else if (want < l) e.land = Math.max(0, l - dt / RTS_AIR_SETTLE);
 }
@@ -18693,7 +18737,7 @@ function _rtsDroneTick() {
     if (e.dead || e.type !== 'unit' || !_rtsOrbits(e)) continue;
     var busy = e.order && e.order !== 'orbit';
     if (busy && e.path && e.pi < e.path.length) { e.orbit = null; continue; }    /* on its way */
-    if (!e.orbit) e.orbit = { x: e.x, z: e.z };                                      /* stopped: circle here */
+    if (!e.orbit) e.orbit = _rtsDroneCentre(e.x, e.z);                              /* stopped: circle here */
     if (e.path && e.pi < e.path.length) continue;                                  /* still on this leg */
     /* the next point round the circle, a step ahead of where it is */
     var o = e.orbit, a = Math.atan2(e.z - o.z, e.x - o.x) + RTS_DRONE.step, r = RTS_DRONE.r * RTS_TILE;
@@ -18701,8 +18745,18 @@ function _rtsDroneTick() {
     e.path = [{ x: e.goal.x, z: e.goal.z }]; e.pi = 0;
   }
 }
+/* A CIRCLE THAT FITS IN THE SKY. _rtsAirSpread holds every aircraft inside the map's edges, so a
+   centre nearer an edge than the radius would put a point of the circle where the drone can
+   never arrive, and it sat pinned at the edge for the rest of the match instead of circling. */
+function _rtsDroneCentre(x, z) {
+  var r = RTS_DRONE.r * RTS_TILE, lo = _rtsWX(0) + r, hi = _rtsWX(RTS_N - 1) - r;
+  return { x: Math.min(hi, Math.max(lo, x)), z: Math.min(hi, Math.max(lo, z)) };
+}
 /* send it to circle somewhere else */
-function _rtsDroneAt(e, x, z) { e.orbit = { x: x, z: z }; e.order = 'orbit'; e.path = [{ x: x, z: z }]; e.pi = 0; e.goal = { x: x, z: z }; }
+function _rtsDroneAt(e, x, z) {
+  var o = _rtsDroneCentre(x, z);
+  e.orbit = o; e.order = 'orbit'; e.path = [{ x: o.x, z: o.z }]; e.pi = 0; e.goal = { x: o.x, z: o.z };
+}
 
 /* Is the opponent fighting half-blind? */
 function _rtsAIHalfBlind() {
@@ -20420,7 +20474,7 @@ function _rtsGroundToScreen(x, z) {
 function _rtsScreenOf(e) {
   var R3 = window._R3D;
   if (!e.air) return _rtsWorldToScreen(e.x, 1, e.z);
-  if (R3 && R3.on) return _rtsWorldToScreen(e.x, _rtsElev(e.x, e.z) + _rtsAirLift(e) * 0.35, e.z);
+  if (R3 && R3.on) return _rtsWorldToScreen(e.x, _rtsElev(e.x, e.z) + _rtsAirLift(e) * RTS_AIR_ALT_K, e.z);
   var up = _rtsGroundToScreen(e.x, e.z);
   return { x: up.x, y: up.y - _rtsAirLift(e) * (_rtsR.cell / RTS_TS) * (up.scale || 1), scale: up.scale, behind: up.behind };
 }
@@ -20772,6 +20826,9 @@ function _r3dFxHurt(G, V) {
     var e = E[i];
     if (e.dead || e.building || e.burning || !e.maxHp || e.hp >= e.maxHp * RTS_COND_YELLOW) continue;
     if (e.type === 'unit' && rtsUnitDef(e.def).kind === 'infantry') continue;
+    /* ABOARD, nothing of it shows - except a Sky Crane's load, which hangs in plain sight and
+       smokes from where it is drawn (unit3d.js leaves that height in its motion record) */
+    if (e.inside && !(rtsUnitDef(e.inside.def) || {}).slings) continue;
     if (vis && !_rtsVisible(_rtsTX(e.x), _rtsTX(e.z))) continue;
     var f = e.hp / e.maxHp, k = (RTS_COND_YELLOW - f) / RTS_COND_YELLOW, red = f < RTS_COND_RED;
     var seed = _r3dFxH(e.id, 9.1), tint = red ? R3D_FX_SOOT : R3D_FX_SMOKE;
@@ -25027,15 +25084,18 @@ function _r3dFxProj(G, V) {
 
 /* THE HEAVY BOMBER'S BOMBS (G.bombs, core/bomber.js), falling: a dark streak each, blended the
    way rain is (skyfx3d.js) - a STREAK is added, so a dark one draws nothing. Hidden where the
-   player cannot see. */
+   player cannot see. A bomb's `y` is the sim's altitude, the bomber's own at release, and it is
+   drawn at the height the bomber is (RTS_AIR_ALT_K, core/airspace.js): drawn raw, the first bombs
+   appeared out of empty sky three times higher than the aircraft they had just left. */
 var R3D_FX_BOMB = [0.16, 0.16, 0.17];
+var R3D_BOMB_STREAK = 0.8;       /* world units of streak above each bomb */
 function _r3dFxBombs(G, V) {
   var B = G.bombs || [], vis = typeof _rtsVisible === 'function';
   for (var i = 0; i < B.length; i++) {
     var b = B[i];
     if (vis && !_rtsVisible(_rtsTX(b.x), _rtsTX(b.z))) continue;
-    var y = V.ground(b.x, b.z) + b.y;
-    _r3dFxStreak(V.M, V, b.x, y + 2.2, b.z, b.x, y, b.z, 0.9, 0, R3D_FXT_RAIN, 0, i + 1, 1, 0, R3D_FX_BOMB);
+    var y = V.ground(b.x, b.z) + b.y * RTS_AIR_ALT_K;
+    _r3dFxStreak(V.M, V, b.x, y + R3D_BOMB_STREAK, b.z, b.x, y, b.z, 0.9, 0, R3D_FXT_RAIN, 0, i + 1, 1, 0, R3D_FX_BOMB);
   }
 }
 
@@ -25141,6 +25201,16 @@ function _r3dFxWake(V, e, hx, hz, r, seed) {
              R3D_FX_SEA_LIFT, R3D_FXT_TRAIL, V.t * 6, seed, 0.8, L, R3D_FX_WAKEC);
 }
 
+/* Is there water under (x, z) to draw on: the sea, and not a flat the tide has gone out from
+   (core/tide.js; world3d.js cuts those out of the sheet)? The wakes ask, and so does the swell a
+   hull rides (unit3d.js). */
+function _r3dWetAt(G, x, z) {
+  var tx = _rtsTX(x), tz = _rtsTX(z);
+  if (!_rtsInB(tx, tz)) return false;
+  var ci = _rtsIdx(tx, tz);
+  return G.terrain[ci] === RTS_T_WATER && !(G.tideDry && G.tideDry[ci]);
+}
+
 /* Every vehicle and ship on the move, into the main batch. */
 function _r3dFxWakes(G, V) {
   var E = G.ents || [], vis = typeof _rtsVisible === 'function';
@@ -25151,7 +25221,9 @@ function _r3dFxWakes(G, V) {
     if (!d || d.kind === 'infantry' || d.kind === 'air') continue;
     if (vis && !_rtsVisible(_rtsTX(e.x), _rtsTX(e.z))) continue;
     var hx = Math.cos(e.rot || 0), hz = Math.sin(e.rot || 0), r = d.r || 1.6, seed = _r3dFxH(e.id || i + 1, 5.5);
-    if (d.sea || (d.hover && G.terrain[_rtsIdx(_rtsTX(e.x), _rtsTX(e.z))] === RTS_T_WATER)) { _r3dFxWake(V, e, hx, hz, r, seed); continue; }
+    /* a wake wants water under the hull: a Monitor crossing a flat the tide has dried, or a
+       hovercraft over one, is on sand (unit3d.js _r3dWetAt) */
+    if ((d.sea || d.hover) && _r3dWetAt(G, e.x, e.z)) { _r3dFxWake(V, e, hx, hz, r, seed); continue; }
     var amt = _r3dFxDustOf(G, e.x - hx * r, e.z - hz * r);
     if (amt > 0) _r3dFxDust(V, e, hx, hz, r, seed, amt);
   }
@@ -25568,7 +25640,11 @@ function _r3dHusks(G, R3, draw) {
     var y = _rtsElev(f.x, f.z) - sink, nrm = _rtsElevNormal(f.x, f.z);
     var hasT = _r3dHuskTurret(h);
     draw(_r3dMesh('u', h.def, h.side, hasT ? 'hull' : null, false), f.x, y, f.z, -(h.rot || 0), nrm);
-    if (hasT) draw(_r3dMesh('u', h.def, h.side, 'turret', false), f.x, y, f.z, -(h.tur || 0), nrm);
+    if (hasT) {
+      /* on its mounts, as the live one's was (unit3d.js): a gun ship's fore and aft */
+      var tm = _r3dMesh('u', h.def, h.side, 'turret', false), TP = _r3dTurretAt(h.def, f.x, f.z, h.rot || 0);
+      for (var ti = 0; ti < TP.length; ti++) draw(tm, TP[ti].x, y, TP[ti].z, -(h.tur || 0), nrm);
+    }
     n++;
   }
   R3.husks = n;
@@ -27367,7 +27443,13 @@ function _r3dShipSwell(e, t) {
 
 /* Far enough out that a unit is a few dozen pixels long: the plain models will do (mesh3d.js). */
 var R3D_CHUTE_H = 5.0;           /* world units a paratrooper falls from, over RTS_PARA.fall */
-var R3D_SLING_DROP = 0.4;        /* world units a slung load hangs under its crane: between its legs, under the hook */
+/* A SLUNG LOAD HANGS UNDER THE LEGS, not between them: on the size ladder the crane's legs stand
+   0.9 world units apart across the beam and a Battle Tank is 1.6 wide, so the load's top sits
+   this far below the crane's leg pads (its origin), by the load's own height. Drawn 0.4 under
+   the origin regardless of height, a tank swallowed the legs, the hook and the cross members and
+   put its turret through the spine. */
+var R3D_SLING_GAP = 0.15;
+var R3D_SLING_FALLBACK = 1.5;    /* world units of load height while its mesh is still to be built */
 var R3D_LOD_CELL = 20;           /* device px a map cell, below which */
 function _r3dLodFar(R3) {
   return !R3.lodOff && typeof _rtsZoom === 'function' && _rtsZoom() * RTS_TILE * (R3.scale || 1) < R3D_LOD_CELL;
@@ -27391,7 +27473,7 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
   /* THE GROUND UNDER IT, not zero. An aircraft's altitude is measured from the ground it
      is over as well - it flies at a height, not at a level - so both take the terrain and
      only the flier adds to it. */
-  var y = (e.air || d2.sea ? _rtsElev(e.x, e.z) : _rtsStandY(e.x, e.z)) + (e.air ? _rtsAirLift(e) * 0.35 : 0);   /* render/camera.js */
+  var y = (e.air || d2.sea ? _rtsElev(e.x, e.z) : _rtsStandY(e.x, e.z)) + (e.air ? _rtsAirLift(e) * RTS_AIR_ALT_K : 0);   /* render/camera.js */
   if (e.chute > 0) y += e.chute / RTS_PARA.fall * R3D_CHUTE_H;     /* coming down under a canopy: core/paradrop.js */
   /* A MARCHING SOLDIER BOBS. The bob is what is left of the old suggestion of a march, much
      smaller now that he walks (a stride pose by his own gait, soldier3d.js), in step with the
@@ -27414,9 +27496,14 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
 
      The TURRET takes the same lean as the hull rather than staying level, because it is
      bolted to the hull - it rotates in the hull's plane, and a turret that stayed
-     world-level would shear out of its own ring on any slope. */
-  var gn = d2.sea ? null : e.air ? _r3dAirLean(R3, e, mo, d2) : _rtsElevNormal(e.x, e.z);
-  if (d2.sea && !R3.swellOff) { var sw = _r3dShipSwell(e, t); y += sw.y; gn = sw.n; }
+     world-level would shear out of its own ring on any slope.
+
+     A SHIP ON A FLAT THE TIDE HAS DRIED sits on the sand (the Monitor's verb, core/monitor.js):
+     no swell, no lean - the water sheet is cut away there (world3d.js) and a hull heaving on an
+     invisible sea sank two thirds of its height into the ground at every trough. */
+  var wet = d2.sea && _r3dWetAt(G, e.x, e.z);                /* fxwake3d.js */
+  var gn = d2.sea ? (wet ? null : _rtsElevNormal(e.x, e.z)) : e.air ? _r3dAirLean(R3, e, mo, d2) : _rtsElevNormal(e.x, e.z);
+  if (wet && !R3.swellOff) { var sw = _r3dShipSwell(e, t); y += sw.y; gn = sw.n; }
   var rk = _r3dRecoil(e, gn) || { hx: 0, hz: 0, tx: 0, tz: 0, n: gn };   /* the kick: combat3d.js */
   var AP = RTS_AIR_PARTS[e.def], rotor = AP && (AP.rotor || AP.prop) && !R3.rotorOff;
   mo.y = y;                                   /* where it was drawn, for its smoke (hurt3d.js) */
@@ -27426,21 +27513,39 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
   drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : (rotor ? 'body' : null), e.prone, pose, roll, lod),
          e.x + rk.hx, y, e.z + rk.hz, -e.rot, ART2W, hd, 1, rk.n);
   if (turret) {
-    drawIn(C, _r3dMesh('u', e.def, e.side, 'turret', false, 0, 0, lod), e.x + rk.tx, y, e.z + rk.tz, -(e.turret || 0),
-           ART2W, hd, 1, rk.n);
+    /* the one turret part, on each of its mounts: a tank's one at the origin, a gun ship's fore
+       and aft (RTS_TURRET_AT, sprites/unit-airsea.js), all turned to the aim */
+    var tm = _r3dMesh('u', e.def, e.side, 'turret', false, 0, 0, lod), TP = _r3dTurretAt(e.def, e.x + rk.tx, e.z + rk.tz, e.rot);
+    for (var ti = 0; ti < TP.length; ti++) drawIn(C, tm, TP[ti].x, y, TP[ti].z, -(e.turret || 0), ART2W, hd, 1, rk.n);
   }
   if (rotor && AP.rotor) {
     var rm = _r3dMesh('u', e.def, e.side, 'rotor', false, 0, 0, lod), hubs = _r3dRotorHubs(e, mo.spin);
     for (var ri = 0; ri < hubs.length; ri++) drawIn(C, rm, hubs[ri].x, y, hubs[ri].z, hubs[ri].a, ART2W, hd, 1, rk.n);
   }
   if (rotor && AP.prop) drawIn(C, _r3dMesh('u', e.def, e.side, 'prop' + _r3dPropPhase(mo.spin), false, 0, 0, lod), e.x, y, e.z, -e.rot, ART2W, hd, 1, rk.n);
-  /* A SLUNG LOAD (a Sky Crane's): the vehicle it carries hangs under it, never through the ground */
+  /* A SLUNG LOAD (a Sky Crane's): the vehicle it carries hangs under it by its own height
+     (R3D_SLING_GAP), never through the ground, scorched as IT is hurt rather than as the crane
+     is, and its drawn height goes in its motion record so its smoke rises from it (hurt3d.js) */
   if (d2.slings && e.cargo && e.cargo.length && R3.slingOff !== true) {     /* R3.slingOff: a spec's A/B */
     var cg = e.cargo[0], cgt = R.spr.turret && R.spr.turret[cg.side] && R.spr.turret[cg.side][cg.def];
-    var cy = Math.max(_rtsStandY(e.x, e.z), y - R3D_SLING_DROP);
-    drawIn(C, _r3dMesh('u', cg.def, cg.side, cgt ? 'hull' : null, false, 0, 0, lod), e.x, cy, e.z, -e.rot, ART2W, hd, 1, rk.n);
-    if (cgt) drawIn(C, _r3dMesh('u', cg.def, cg.side, 'turret', false, 0, 0, lod), e.x, cy, e.z, -e.rot, ART2W, hd, 1, rk.n);
+    var ch = _r3dMesh('u', cg.def, cg.side, cgt ? 'hull' : null, false, 0, 0, lod), ct = cgt ? _r3dMesh('u', cg.def, cg.side, 'turret', false, 0, 0, lod) : null;
+    var top = ch ? Math.max(ch.top || 0, ct ? ct.top || 0 : 0) * ART2W : R3D_SLING_FALLBACK;
+    var cy = Math.max(_rtsStandY(e.x, e.z), y - R3D_SLING_GAP - top), cd = _r3dFadeDim(_r3dHurtDim(cg, R3), fade);
+    _r3dUnitMotion(R3, cg, t).y = cy;
+    drawIn(C, ch, e.x, cy, e.z, -e.rot, ART2W, cd, 1, rk.n);
+    if (ct) drawIn(C, ct, e.x, cy, e.z, -e.rot, ART2W, cd, 1, rk.n);
   }
+}
+
+/* Where a unit's turret part turns, in the world: at its origin, unless RTS_TURRET_AT (sprites/
+   unit-airsea.js) names the mounts - a gun ship's fore and aft - in model units along the hull,
+   which the one part is drawn at in turn. The husk of one does the same (husk3d.js). */
+function _r3dTurretAt(def, x, z, rot) {
+  var TP = typeof RTS_TURRET_AT !== 'undefined' && RTS_TURRET_AT[def];
+  if (!TP) return [{ x: x, z: z }];
+  var sc = _sprUnitScale(def) * RTS_TILE / RTS_TS, c = Math.cos(rot), s = Math.sin(rot), out = [];
+  for (var i = 0; i < TP.length; i++) out.push({ x: x + (TP[i][0] * c - TP[i][1] * s) * sc, z: z + (TP[i][0] * s + TP[i][1] * c) * sc });
+  return out;
 }
 
 /* Where a helicopter's rotors turn, in the world, and at what angle: one over the hub, or - a
@@ -29383,6 +29488,19 @@ function _rtsDrawFx(g, G, S, TSscale, cell) {
     var r = Math.max(2, Math.round(cell * pj.scale * (p.kind === 'missile' ? 0.09 : 0.06)));
     g.fillRect(sx - r, sy - r, r * 2, r * 2);
   }
+  /* --- the Heavy Bomber's bombs, the same way: a dark dash each, at the height it fell to
+     (RTS_AIR_ALT_K, core/airspace.js) - the shaded pass draws them itself (render3d/fxemit3d.js),
+     and without this a device that cannot shade saw bursts appear from nowhere --- */
+  var B = G.bombs || [];
+  for (i = 0; i < B.length && !r3proj; i++) {
+    var b = B[i];
+    if (!_rtsVisible(_rtsTX(b.x), _rtsTX(b.z))) continue;
+    var bj = _rtsWorldToScreen(b.x, _rtsElev(b.x, b.z) + b.y * RTS_AIR_ALT_K, b.z);
+    if (!bj || bj.behind) continue;
+    var bw = Math.max(1, Math.round(cell * (bj.scale || 1) * 0.04)), bh = Math.max(3, Math.round(cell * (bj.scale || 1) * 0.12));
+    g.fillStyle = '#2a2a2c';
+    g.fillRect(Math.round(bj.x) - bw, Math.round(bj.y) - bh, bw * 2, bh * 2);
+  }
 
   /* --- explosions, tracers, muzzle flashes --- */
   for (i = 0; i < G.fx.length; i++) {
@@ -31157,6 +31275,51 @@ function _rtsTwist(e, T, mid) {
    Part of rts.ui, which owns the DOM. */
 
 /* --------------------------------------------------------------- input */
+/* THE RADAR'S ORDER, for `mine` (the player's selected units) at world point w: attack what stands
+   there if the cell has been explored, otherwise move - with the same two readings a right-click
+   on the field gives a loaded transport (ui/select.js): sent at the enemy or at dry land, a
+   Paradrop Plane, a Sky Crane or a landing craft is being told where to put its load down, not to
+   hover there with it. The radar is the advertised way to order across the map, and it was the
+   one route that gave the plane a plain move. Its own function so a spec can ask it. */
+function _rtsRadarOrder(mine, w, attackMove) {
+  var G = window._rtsG, tx = _rtsTX(w.x), tz = _rtsTX(w.z), i;
+  if (!_rtsInB(tx, tz)) return false;
+  var mapped = !!G.mapped[_rtsIdx(tx, tz)];
+  /* Pick out anything standing there, but only if the cell has been explored. */
+  var tgt = null;
+  if (mapped) {
+    for (i = 0; i < G.ents.length; i++) {
+      var o = G.ents[i];
+      if (o.dead || o.inside || o.side === 'player') continue;
+      if (o.type === 'struct') {
+        var sd = rtsStructDef(o.def);
+        if (tx >= o.tx && tx < o.tx + sd.w && tz >= o.tz && tz < o.tz + sd.h) { tgt = o; break; }
+      } else if (_rtsTX(o.x) === tx && _rtsTX(o.z) === tz) { tgt = o; break; }
+    }
+  }
+  if (tgt) {
+    var drops = 0;
+    for (i = 0; i < mine.length; i++) {
+      var mu = mine[i], md = rtsUnitDef(mu.def);
+      if (!md.weapon && _rtsIsTransport(mu) && _rtsCargoCount(mu) && _rtsOrderUnloadAt(mu, tgt.x, tgt.z)) drops++;
+      else _rtsOrderAttack(mu, tgt);
+    }
+    _rtsFlash(tgt.x, tgt.z, drops === mine.length ? 'harvest' : 'attack');
+  } else {
+    var onScrap = mapped && G.scrap[_rtsIdx(tx, tz)] > 0, onWater = G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER;
+    var spread = _rtsFormation(mine.length);
+    for (i = 0; i < mine.length; i++) {
+      var u = mine[i], ud = rtsUnitDef(u.def);
+      if (ud.harvest && onScrap) { _rtsOrderHarvest(u, tx, tz); continue; }
+      if ((ud.sea || ud.air) && ud.carries && !onWater && _rtsCargoCount(u)
+          && _rtsOrderUnloadAt(u, w.x + spread[i].x, w.z + spread[i].z)) continue;
+      _rtsOrderMove(u, w.x + spread[i].x, w.z + spread[i].z, attackMove);
+    }
+    _rtsFlash(w.x, w.z, onScrap ? 'harvest' : 'move');
+  }
+  return true;
+}
+
 function _rtsBindInput() {
   var cv = document.getElementById('rtsCv'), U = window._rtsUI;
   cv.oncontextmenu = function (e) { e.preventDefault(); return false; };
@@ -31275,34 +31438,8 @@ function _rtsBindInput() {
       if (sv && !sv.dead && !sv.inside && sv.side === 'player' && sv.type === 'unit') mine.push(sv);
     }
     if (!mine.length) return false;
-    var w = miniWorld(e), tx = _rtsTX(w.x), tz = _rtsTX(w.z);
-    if (!_rtsInB(tx, tz)) return false;
-    var mapped = !!G.mapped[_rtsIdx(tx, tz)];
-    /* Pick out anything standing there, but only if the cell has been explored. */
-    var tgt = null;
-    if (mapped) {
-      for (i = 0; i < G.ents.length; i++) {
-        var o = G.ents[i];
-        if (o.dead || o.inside || o.side === 'player') continue;
-        if (o.type === 'struct') {
-          var sd = rtsStructDef(o.def);
-          if (tx >= o.tx && tx < o.tx + sd.w && tz >= o.tz && tz < o.tz + sd.h) { tgt = o; break; }
-        } else if (_rtsTX(o.x) === tx && _rtsTX(o.z) === tz) { tgt = o; break; }
-      }
-    }
-    if (tgt) {
-      for (i = 0; i < mine.length; i++) _rtsOrderAttack(mine[i], tgt);
-      _rtsFlash(tgt.x, tgt.z, 'attack');
-    } else {
-      var onScrap = mapped && G.scrap[_rtsIdx(tx, tz)] > 0;
-      var spread = _rtsFormation(mine.length);
-      for (i = 0; i < mine.length; i++) {
-        var u = mine[i], ud = rtsUnitDef(u.def);
-        if (ud.harvest && onScrap) { _rtsOrderHarvest(u, tx, tz); continue; }
-        _rtsOrderMove(u, w.x + spread[i].x, w.z + spread[i].z, !!U.attackMove);
-      }
-      _rtsFlash(w.x, w.z, onScrap ? 'harvest' : 'move');
-    }
+    var w = miniWorld(e);
+    if (!_rtsRadarOrder(mine, w, !!U.attackMove)) return false;
     if (typeof _rtsSfx === 'function') _rtsSfx('order');
     return true;
   }

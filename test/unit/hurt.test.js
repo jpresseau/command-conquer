@@ -60,6 +60,12 @@ S.ok('...nor out of sight', run([hid]).cols.length === 0);
 G.vis[g._rtsIdx(g._rtsTX(hid.x), g._rtsTX(hid.z))] = 1;
 var up = tank(0.3); g.window._R3D.motion[up.id] = { y: 7 };
 S.ok('a vehicle smokes from where it was drawn', run([up]).cols[0].y > 7, 'from ' + run([up]).cols[0].y.toFixed(2));
+var apc = g._rtsSpawnUnit('player', 'apc', 46, 46), rider = tank(0.2, {}); rider.inside = apc;
+S.ok('nothing aboard a transport smokes', run([rider]).cols.length === 0);
+var crn = g._rtsSpawnUnit('player', 'skycrane', 50, 50), slung = tank(0.2, {}); slung.inside = crn;
+g.window._R3D.motion[slung.id] = { y: 9.5 };
+var sl = run([slung]);
+S.ok('...but a Sky Crane\'s slung load does, from where it hangs', sl.cols.length === 1 && sl.cols[0].y > 9.5 && sl.fires.length === 1, sl.cols.length ? 'from ' + sl.cols[0].y.toFixed(2) : 'nothing');
 
 /* ---- ROOF ---- */
 var yd = g._rtsHas('player', 'yard'), dY = g.rtsStructDef(yd.def), keepHp = yd.hp;

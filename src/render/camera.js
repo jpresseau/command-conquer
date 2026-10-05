@@ -220,7 +220,7 @@ function _rtsGroundToScreen(x, z) {
 function _rtsScreenOf(e) {
   var R3 = window._R3D;
   if (!e.air) return _rtsWorldToScreen(e.x, 1, e.z);
-  if (R3 && R3.on) return _rtsWorldToScreen(e.x, _rtsElev(e.x, e.z) + _rtsAirLift(e) * 0.35, e.z);
+  if (R3 && R3.on) return _rtsWorldToScreen(e.x, _rtsElev(e.x, e.z) + _rtsAirLift(e) * RTS_AIR_ALT_K, e.z);
   var up = _rtsGroundToScreen(e.x, e.z);
   return { x: up.x, y: up.y - _rtsAirLift(e) * (_rtsR.cell / RTS_TS) * (up.scale || 1), scale: up.scale, behind: up.behind };
 }

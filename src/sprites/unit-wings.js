@@ -6,7 +6,15 @@
 /* the 3D renderer's moving parts for these (see RTS_AIR_PARTS in unit-airsea.js) */
 RTS_AIR_PARTS.skycrane = { rotor: true };
 RTS_AIR_PARTS.drone = { prop: [-6.2, 2.6, 0, 2.4], tips: 9.0 };
-RTS_AIR_PARTS.bomber = { prop: [5.4, 4.6, -6.4, 2.6], props: [[5.4, 4.6, -6.4, 2.6], [5.4, 4.6, 6.4, 2.6], [4.0, 4.6, -12.0, 2.6], [4.0, 4.6, 12.0, 2.6]], tips: 17.0 };
+/* The bomber's four engines, [x, |z|] of each pair along the wing: the model's nacelles and the
+   sprite's propellers are built off this, and so are the 3D propellers (two model units ahead
+   of each engine, where the sprite's disc is). They were once a second list, two units aft. */
+var RTS_BOMBER_ENGINES = [[5.4, 6.4], [4.0, 12.0]];
+RTS_AIR_PARTS.bomber = (function () {
+  var P = [];
+  RTS_BOMBER_ENGINES.forEach(function (E) { P.push([E[0] + 2.0, 4.6, -E[1], 2.6], [E[0] + 2.0, 4.6, E[1], 2.6]); });
+  return { prop: P[0], props: P, tips: 17.0 };
+})();
 RTS_AIR_PARTS.paraplane = { prop: [7.4, 6.1, -6.6, 2.8], props: [[7.4, 6.1, -6.6, 2.8], [7.4, 6.1, 6.6, 2.8]], tips: 13.0 };
 
 function _sprUnitWings(X, key) {
@@ -100,7 +108,7 @@ function _sprUnitWings(X, key) {
     _r3Box(m, 11.6, 5.6, 0, 2.4, 1.0, 2.6, RTS_PAL.glass, RTS_PAL.glass);   /* cockpit */
     _r3Box(m, 3.0, 4.2, 0, 5.4, 0.7, 34.0, VH[1], VH[2]);          /* the broad wing */
     _r3Box(m, 3.0, 4.6, 0, 3.6, 0.3, 10.0, TM[1], TM[3]);          /* team band on it */
-    [[5.4, 6.4], [4.0, 12.0]].forEach(function (E) {               /* four engines */
+    RTS_BOMBER_ENGINES.forEach(function (E) {                      /* four engines */
       for (var sd = -1; sd <= 1; sd += 2) {
         _r3Box(m, E[0] - 1.6, 3.8, sd * E[1], 5.6, 1.8, 2.0, VH[2], VH[1]);
         _r3Cyl(m, E[0] + 1.4, 3.9, sd * E[1], 0.6, 1.0, DK[1], DK[2], 16);
@@ -113,7 +121,7 @@ function _sprUnitWings(X, key) {
     _r3Box(m, 1.2, 0.7, 0, 9.0, 0.3, 2.8, DK[2], DK[3]);           /* the open bomb bay */
     for (var bd = -1; bd <= 1; bd += 2) _r3Box(m, 1.2, 0.0, bd * 1.9, 9.0, 1.4, 0.2, VH[2], VH[1]);   /* its doors */
     if (part !== 'body') {                                          /* the props, for the sprite */
-      [[5.4, 6.4], [4.0, 12.0]].forEach(function (E) { for (var sp = -1; sp <= 1; sp += 2) _r3Box(m, E[0] + 2.0, 2.0, sp * E[1], 0.3, 5.2, 0.6, DK[1], DK[2]); });
+      RTS_BOMBER_ENGINES.forEach(function (E) { for (var sp = -1; sp <= 1; sp += 2) _r3Box(m, E[0] + 2.0, 2.0, sp * E[1], 0.3, 5.2, 0.6, DK[1], DK[2]); });
     }
   } else return false;
   return true;

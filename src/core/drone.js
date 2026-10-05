@@ -20,7 +20,7 @@ function _rtsDroneTick() {
     if (e.dead || e.type !== 'unit' || !_rtsOrbits(e)) continue;
     var busy = e.order && e.order !== 'orbit';
     if (busy && e.path && e.pi < e.path.length) { e.orbit = null; continue; }    /* on its way */
-    if (!e.orbit) e.orbit = { x: e.x, z: e.z };                                      /* stopped: circle here */
+    if (!e.orbit) e.orbit = _rtsDroneCentre(e.x, e.z);                              /* stopped: circle here */
     if (e.path && e.pi < e.path.length) continue;                                  /* still on this leg */
     /* the next point round the circle, a step ahead of where it is */
     var o = e.orbit, a = Math.atan2(e.z - o.z, e.x - o.x) + RTS_DRONE.step, r = RTS_DRONE.r * RTS_TILE;
@@ -28,8 +28,18 @@ function _rtsDroneTick() {
     e.path = [{ x: e.goal.x, z: e.goal.z }]; e.pi = 0;
   }
 }
+/* A CIRCLE THAT FITS IN THE SKY. _rtsAirSpread holds every aircraft inside the map's edges, so a
+   centre nearer an edge than the radius would put a point of the circle where the drone can
+   never arrive, and it sat pinned at the edge for the rest of the match instead of circling. */
+function _rtsDroneCentre(x, z) {
+  var r = RTS_DRONE.r * RTS_TILE, lo = _rtsWX(0) + r, hi = _rtsWX(RTS_N - 1) - r;
+  return { x: Math.min(hi, Math.max(lo, x)), z: Math.min(hi, Math.max(lo, z)) };
+}
 /* send it to circle somewhere else */
-function _rtsDroneAt(e, x, z) { e.orbit = { x: x, z: z }; e.order = 'orbit'; e.path = [{ x: x, z: z }]; e.pi = 0; e.goal = { x: x, z: z }; }
+function _rtsDroneAt(e, x, z) {
+  var o = _rtsDroneCentre(x, z);
+  e.orbit = o; e.order = 'orbit'; e.path = [{ x: o.x, z: o.z }]; e.pi = 0; e.goal = { x: o.x, z: o.z };
+}
 
 /* Is the opponent fighting half-blind? */
 function _rtsAIHalfBlind() {

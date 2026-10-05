@@ -125,6 +125,22 @@ G.sel = [pl5]; g.window._rtsUI = g.window._rtsUI || {}; g.window._rtsUI.place = 
 g._rtsRightClick(0, 0, { ent: eyd5, x: eyd5.x, z: eyd5.z });
 S.ok('a loaded plane right-clicked onto an enemy building is sent to drop there, not to hover over it', pl5.order === 'unload' && pl5.goal && cells(pl5.goal, eyd5) < 4,
      'order ' + pl5.order + (pl5.goal ? ', goal ' + cells(pl5.goal, eyd5).toFixed(1) + ' cells from the building' : ''));
+/* ...and through the radar (ui/input.js _rtsRadarOrder), the advertised way to order across the map */
+G = fresh(); pad = place('player', 'afld');
+var og6 = g._rtsNearestOpen(g._rtsTX(pad.x) + 6, g._rtsTX(pad.z) + 6, 6, null);
+var pl6 = g._rtsSpawnUnit('player', 'paraplane', g._rtsWX(og6[0]), g._rtsWX(og6[1])), tk6 = g._rtsSpawnUnit('player', 'tank', pl6.x + 8, pl6.z);
+var pl7 = g._rtsSpawnUnit('player', 'paraplane', pl6.x, pl6.z + 8);     /* empty */
+g._rtsBoard(g._rtsSpawnUnit('player', 'rifle', pl6.x, pl6.z + 6), pl6);
+var eyd6 = g._rtsHas('enemy', 'yard');
+G.mapped[g._rtsIdx(g._rtsTX(eyd6.x), g._rtsTX(eyd6.z))] = 1;
+g._rtsRadarOrder([pl6, tk6], { x: eyd6.x, z: eyd6.z }, false);
+S.ok('through the radar, a loaded plane sent at the enemy yard is sent to drop there - and the tank beside it to attack it',
+     pl6.order === 'unload' && pl6.goal && cells(pl6.goal, eyd6) < 4 && tk6.order === 'attack' && tk6.target === eyd6,
+     'plane ' + pl6.order + ', tank ' + tk6.order);
+var dz6 = g._rtsNearestOpen(g._rtsTX(eyd6.x) + 6, g._rtsTX(eyd6.z), 6, null), DZ = { x: g._rtsWX(dz6[0]), z: g._rtsWX(dz6[1]) };
+g._rtsRadarOrder([pl6, pl7], DZ, false);
+S.ok('...and at bare land it drops there, where an empty plane is simply sent', pl6.order === 'unload' && pl6.goal && cells(pl6.goal, DZ) < 2 && pl7.order === 'move',
+     'loaded ' + pl6.order + ', empty ' + pl7.order);
 
 /* ---------------- whose ---------------- */
 function canBuild(army) {

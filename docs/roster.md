@@ -440,12 +440,13 @@ armed vehicles, and parks it in the middle of its largest team on the march.
 The Dominion's flying crane (`skycrane`), behind an Airfield: the Skylift's verb for one vehicle.
 It is the transport rules (`carries:1, takes:['vehicle']`); a vehicle ordered onto it boards - a
 Harvester too, which walks onto it before its own economy loop runs - and an unload order sets it
-down anywhere. The load hangs between its legs (`slings`, unit3d.js). Shot
-down over land the load is set down; over water it goes with it. The opponent does not build it:
-the land route between the bases is already direct (see the Bridge Layer). Building it found that
-passengers were drawn on the ground under their transport; scene3d.js now skips `inside`.
+down anywhere. The load hangs under its legs by its own height (`slings`, unit3d.js `R3D_SLING_GAP`:
+the legs stand 0.9 world units apart and a tank is 1.6 wide), scorched and smoking as it is hurt
+(hurt3d.js); a loaded crane never settles (`_rtsAirSettle`). Shot down over land the load is set
+down; over water it goes with it, and sinks: no husk, no wreckage (capture.js reads the cell). The
+opponent does not build it: the land route between the bases is already direct (see the Bridge Layer).
 
-`unit/skycrane` (11 assertions, 5 mutants) and `e2e/skycrane` (passengers not drawn, the load drawn).
+`unit/skycrane` (14 assertions, 7 mutants) and `e2e/skycrane` (passengers not drawn, the load drawn).
 
 ## The opponent uses the new vehicles
 

@@ -105,13 +105,35 @@ function downed(over) {
   if (!p) return null;
   var c = g._rtsSpawnUnit('player', 'skycrane', p.x, p.z), t = g._rtsSpawnUnit('player', 'tank', p.x, p.z);
   g._rtsBoard(t, c);
+  /* every effect the second adds: the tank's wreck, if it leaves one */
+  var seen = new Set(G.fx), added = [];
+  function sweep() { G.fx.forEach(function (f) { if (!seen.has(f)) { seen.add(f); added.push(f); } }); }
   g._rtsDamage(c, c.hp + 1, null, false);
-  run(1);
-  return !t.dead;
+  sweep(); run(1, sweep); sweep();
+  return { alive: !t.dead, husks: added.filter(function (f) { return f.husk; }).length, debris: added.filter(function (f) { return f.kind === 'debris'; }).length };
 }
 var overLand = downed('land'), overWater = downed('water');
-S.ok('shot down over land, its load is set down and lives', overLand === true, String(overLand));
-S.ok('...over open water, the load goes with it', overWater === false, overWater === null ? 'no open water three cells from land' : String(overWater));
+S.ok('shot down over land, its load is set down and lives', !!overLand && overLand.alive === true, JSON.stringify(overLand));
+S.ok('...over open water, the load goes with it', !!overWater && overWater.alive === false, overWater === null ? 'no open water three cells from land' : JSON.stringify(overWater));
+S.ok('...and goes down: no burning husk on the sea, no wreckage thrown up from it', !!overWater && overWater.husks === 0 && overWater.debris === 0, JSON.stringify(overWater));
+/* the control: the same tank lost on land burns where it stands */
+var G2 = fresh(), tl = g._rtsSpawnUnit('player', 'tank', A.x, A.z), f0 = G2.fx.length;
+g._rtsDamage(tl, tl.hp + 1, null, false);
+var landFx = G2.fx.slice(f0);
+S.ok('...where the same tank lost on land leaves its husk in its fire, and wreckage', tl.dead && landFx.filter(function (f) { return f.husk; }).length === 1 && landFx.filter(function (f) { return f.kind === 'debris'; }).length > 0,
+     landFx.map(function (f) { return f.kind + (f.husk ? '+husk' : ''); }).join(' '));
+
+/* ---------------- it stays up with a load ---------------- */
+G = fresh();
+var cu = g._rtsSpawnUnit('player', 'skycrane', A.x, A.z), lu = g._rtsSpawnUnit('player', 'tank', A.x, A.z);
+g._rtsBoard(lu, cu); cu.land = 1;
+run(6, function () { cu.order = null; cu.path = null; });
+var upLoaded = g._rtsAirLift(cu);
+g._rtsUnload(cu); lu.dead = true;
+run(6, function () { cu.order = null; cu.path = null; });
+var downEmpty = g._rtsAirLift(cu);
+S.ok('idle with a load slung it climbs to altitude and stays there; its hook empty, it settles', upLoaded >= (cu.alt || 12) - 0.01 && downEmpty <= g.RTS_AIR_SET + 0.01,
+     'lift ' + upLoaded.toFixed(2) + ' loaded, ' + downEmpty.toFixed(2) + ' empty');
 
 /* ---------------- whose ---------------- */
 function canBuild(army) {

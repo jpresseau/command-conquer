@@ -67,6 +67,27 @@ S.ok('the spin steps it through every angle in a quarter turn, and round again',
 var whole = g._sprUnitModel('yak', 'player', false, null), body = g._sprUnitModel('yak', 'player', false, 'body');
 S.ok('the body leaves the old propeller off - and only that', whole.length - body.length > 0 && whole.length - body.length <= 60, (whole.length - body.length) + ' faces fewer');
 S.eq('a jet has no propeller', g._r3dPropModel('mig', 'player', 0), null);
+/* ...and the second wave's, engine by engine: each entry of RTS_AIR_PARTS.<key>.props sits on a
+   disc the sprite's own model has - the faces the 'body' part leaves off */
+var offHub = [], propped = [];
+Object.keys(g.RTS_AIR_PARTS).forEach(function (key) {
+  var AP = g.RTS_AIR_PARTS[key];
+  if (!AP.props) return;
+  propped.push(key);
+  var s2 = g._sprUnitScale(key), w2 = g._sprUnitModel(key, 'player', false, null), b2 = g._sprUnitModel(key, 'player', false, 'body');
+  var inBody = {}; b2.forEach(function (fc) { inBody[JSON.stringify(fc.v)] = 1; });
+  var extra = w2.filter(function (fc) { return !inBody[JSON.stringify(fc.v)]; });
+  AP.props.forEach(function (P, i) {
+    var near = extra.filter(function (fc) { var c = centre([fc]); return Math.abs(c[0] - P[0] * s2) < 0.6 * s2 && Math.abs(c[1] - P[1] * s2) < 3.5 * s2 && Math.abs(c[2] - P[2] * s2) < 0.6 * s2; });
+    var c = near.length ? centre(near) : null;
+    if (!(near.length >= 4 && Math.abs(c[0] - P[0] * s2) < 0.3 * s2 && Math.abs(c[2] - P[2] * s2) < 0.3 * s2)) offHub.push(key + '#' + i + (c ? '@' + (c[0] / s2).toFixed(1) : ':no disc there'));
+  });
+});
+S.ok('the second wave\'s propellers each turn on a disc the sprite has, engine by engine', propped.length >= 2 && offHub.length === 0, propped.join(' ') + (offHub.length ? ' - off: ' + offHub.join(' ') : ''));
+/* the size ladder, across the beam: the troop transport's high straight wing is its identity */
+function span(key) { var m2 = g._sprUnitModel(key, 'player', false, null), lo = 1e9, hi = -1e9; m2.forEach(function (fc) { fc.v.forEach(function (p) { lo = Math.min(lo, p[2]); hi = Math.max(hi, p[2]); }); }); return (hi - lo) * g.RTS_TILE / g.RTS_TS; }
+S.ok('the Paradrop Plane out-spans both fighters, and only the Heavy Bomber out-spans it', span('paraplane') > span('yak') + 0.1 && span('paraplane') > span('mig') + 0.1 && span('bomber') > span('paraplane') + 0.3,
+     ['yak', 'mig', 'paraplane', 'bomber'].map(function (k) { return k + ' ' + span(k).toFixed(2); }).join(', '));
 
 /* ---- CONTRAILS ---- */
 var mo2 = { }, mg = { id: 4, def: 'mig', x: 0, z: 0, rot: 0, air: true }, t;

@@ -19,6 +19,17 @@ var RTS_AIR_PARTS = {
   mig:  { burner: [-9.6, 4.4, 0], tips: 9.6, trail: true },
   yak:  { prop: [8.4, 4.1, 0, 5.4], tips: 10.6 }
 };
+/* WHERE A GUN SHIP'S TURRETS TURN, in model units before _sprUnitScale: the surface ships' hull
+   lengths, and the mounts along them - one forward on a gunboat, fore and aft on the big two.
+   The model below builds the 'turret' part as one mount at the origin and, for the whole ship,
+   a mount at each of these; the 3D mode draws the one part at each (render3d/unit3d.js
+   _r3dTurretAt), turned to the aim. unit/turrets holds the two together. */
+var RTS_SHIP_L = { gunboat: 19, destroyer: 26, cruiser: 32 };
+var RTS_TURRET_AT = {
+  gunboat:   [[RTS_SHIP_L.gunboat * 0.16, 0]],
+  destroyer: [[RTS_SHIP_L.destroyer * 0.16, 0], [-RTS_SHIP_L.destroyer * 0.34, 0]],
+  cruiser:   [[RTS_SHIP_L.cruiser * 0.16, 0], [-RTS_SHIP_L.cruiser * 0.34, 0]]
+};
 function _sprUnitAirSea(X, key) {
   var m = X.m, TM = X.TM, VH = X.VH, S = X.S, DK = X.DK, O = X.O, C = X.C, GN = X.GN,
       d = X.d, prone = X.prone, part = X.part, side = X.side, tracks = X.tracks, i;
@@ -158,19 +169,23 @@ function _sprUnitAirSea(X, key) {
        Cruiser has to read as bigger than a Destroyer at a glance or the player cannot tell what
        is in their fleet without clicking it. The extra turret aft comes with `_big`. */
     var _cru = (key === 'cruiser'), _big = (key === 'destroyer' || _cru);
-    var _L = _cru ? 32 : (_big ? 26 : 19), _Wd = _cru ? 10.5 : (_big ? 8.5 : 6.5);
+    var _L = RTS_SHIP_L[key], _Wd = _cru ? 10.5 : (_big ? 8.5 : 6.5);
+    /* the guns: one forward on a gunboat, fore and aft on a destroyer. Each is the 'turret'
+       part - a ring and its barrel pointing ahead, the cruiser's with a barrel each side as well
+       - built at the origin for the part itself and at RTS_TURRET_AT's places for the whole
+       ship, so the 3D mode turns one mount on each ring (render3d/unit3d.js). */
+    var _mount = function (mx) {
+      _r3Cyl(m, mx, 4.2, 0, 2.4, 1.8, VH[3], VH[1], 14);
+      _r3Box(m, mx + _L * 0.14, 4.6, 0, _big ? 7 : 5, 1.1, 1.1, GN[0], GN[2]);
+      if (_cru) for (var _tb = -1; _tb <= 1; _tb += 2) _r3Box(m, mx + _L * 0.14, 4.6, _tb * 1.4, 7, 1.1, 1.1, GN[0], GN[2]);
+    };
+    if (part === 'turret') { _mount(0); return true; }
+    if (part !== 'hull') RTS_TURRET_AT[key].forEach(function (p) { _mount(p[0]); });
     _r3Slab(m, 0, 0.6, 0, _L, 3.4, _Wd, 1.4, VH[0], VH[1]);              /* hull */
     _r3Box(m, _L * 0.40, 0.9, 0, _L * 0.22, 2.8, _Wd * 0.55, VH[1], VH[3]);   /* raked bow */
     _r3Box(m, -_L * 0.06, 4.0, 0, _L * 0.34, 3.2, _Wd * 0.66, VH[2], VH[0]);  /* superstructure */
     _r3Box(m, -_L * 0.06, 7.2, 0, _L * 0.20, 1.4, _Wd * 0.44, TM[1], TM[3]);  /* team cap */
     _r3Cyl(m, -_L * 0.18, 7.2, 0, 1.5, 4.5, DK[1], DK[0], 14);           /* funnel */
-    /* the guns: one forward on a gunboat, fore and aft on a destroyer */
-    _r3Cyl(m, _L * 0.16, 4.2, 0, 2.4, 1.8, VH[3], VH[1], 14);
-    _r3Box(m, _L * 0.30, 4.6, 0, _big ? 7 : 5, 1.1, 1.1, GN[0], GN[2]);
-    if (_big) {
-      _r3Cyl(m, -_L * 0.34, 4.2, 0, 2.4, 1.8, VH[3], VH[1], 14);
-      _r3Box(m, -_L * 0.48, 4.6, 0, 6, 1.1, 1.1, GN[0], GN[2]);
-    }
     _r3Box(m, _L * 0.02, 5.6, 0, 1.0, 1.0, _Wd * 0.9, DK[0], DK[0]);     /* rail */
 
     /* A WARSHIP IS RIGGED, and these were bare hulls with a box and a funnel: at 198 triangles
@@ -196,13 +211,9 @@ function _sprUnitAirSea(X, key) {
         _r3Cyl(m, -_L * 0.46, 5.4, (_dc - 1) * _Wd * 0.17, 0.7, 1.3, DK[2], DK[0], 8);
     }
     if (_cru) {
-      /* THE CRUISER'S OWN TELL: twin barrels in BOTH mounts - it is the shore-bombardment
-         ship and its guns are its identity - plus a second funnel and a higher bridge tier,
-         so it out-silhouettes the Destroyer instead of just out-measuring it. */
-      _r3Box(m, _L * 0.30, 4.6, -1.4, 7, 1.1, 1.1, GN[0], GN[2]);
-      _r3Box(m, _L * 0.30, 4.6, 1.4, 7, 1.1, 1.1, GN[0], GN[2]);
-      _r3Box(m, -_L * 0.48, 4.6, -1.4, 6, 1.1, 1.1, GN[0], GN[2]);
-      _r3Box(m, -_L * 0.48, 4.6, 1.4, 6, 1.1, 1.1, GN[0], GN[2]);
+      /* THE CRUISER'S OWN TELL: a barrel each side of the one in BOTH mounts (_mount above) - it
+         is the shore-bombardment ship and its guns are its identity - plus a second funnel and a
+         higher bridge tier, so it out-silhouettes the Destroyer instead of just out-measuring it. */
       _r3Cyl(m, -_L * 0.26, 7.2, 0, 1.5, 3.8, DK[1], DK[0], 14);         /* second funnel */
       _r3Box(m, -_L * 0.02, 8.6, 0, _L * 0.16, 1.8, _Wd * 0.4, VH[1], VH[3]);
     }

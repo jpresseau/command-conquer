@@ -164,11 +164,13 @@ S.ok('...on the attack leg the team picks a shore building', !!shelled && shelle
 S.ok('...and shells it', !!shelled && (shelled.dead || shelled.hp < (shelled === coast ? c0 : shelled.maxHp)), shelled ? (shelled.dead ? 'destroyed' : shelled.hp.toFixed(0) + ' of ' + shelled.maxHp) : 'no target');
 /* the subs cannot shell a building, so the attack is a passage to the water nearest it - and
    at half-tide on a channel map the lane may be a cell wide, so what is asked is that they are
-   out of harbour and under way to it, not that they arrived */
+   out of harbour and under way to it - or, with a Monitor that shells without turning its hull
+   (RTS_TURRETED) and so stops sooner, already there */
 var subs = team.members.filter(function (m) { return m.def === 'sub' && !m.dead; });
-var out = subs.filter(function (m) { return cells(m, D) > 15; }).length, going = subs.filter(function (m) { return m.order === 'move' && m.path && m.goal && cells(m.goal, coast) < 1; }).length;
-S.ok('...the subs sail out with it and make for the water nearest the building', subs.length === 2 && out === 2 && going === 2,
-     out + ' of ' + subs.length + ' out of harbour, ' + going + ' under way to it');
+var out = subs.filter(function (m) { return cells(m, D) > 15; }).length;
+var going = subs.filter(function (m) { return (m.order === 'move' && m.path && m.goal && cells(m.goal, coast) < 1) || cells(m, coast) < 4; }).length;
+S.ok('...the subs sail out with it and make for the water nearest the building, or are there', subs.length === 2 && out === 2 && going === 2,
+     out + ' of ' + subs.length + ' out of harbour, ' + going + ' under way to it or there, ' + subs.map(function (m) { return cells(m, coast).toFixed(1); }).join('/') + ' cells off it');
 /* ...asked for their route once in a while, not thirty times a second each (core/orders.js) */
 S.ok('...asking for a route to it once in a couple of seconds, not every tick', searches < 60 * 2 * 2, searches + ' sea routes searched in sixty seconds');
 var tc = g._rtsTeamCentre(team), off = tc ? cells(tender, tc) : 99;
