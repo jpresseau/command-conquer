@@ -37,6 +37,8 @@ are genuinely modular:
 
 | spec | what it holds to account |
 |---|---|
+| `fingerprint` | the game did not change: four whole battles (three difficulties, both armies) hashed every 30 s of game time - every unit's order, target and position, every team, each side's money and production, the opponent's own state - against `test/fixtures/fingerprint.json`. In two the player does the obvious things (`pusher`: a base, harvesters, guns, an army that pushes), because what the opponent decides about a player never runs against an idle one; in three the player's buildings are held up so the battle lasts five minutes. A refactor must leave it alone; a change to play rewrites it with `FINGERPRINT_WRITE=1` and says why. Controls: the battles are real (teams, a wave, a dozen kinds of unit and building), and one more hit point on the tank's gun moves it |
+| `fast` | `loadFast`, the sandbox with an ordinary global (`vm.constants.DONT_CONTEXTIFY`), runs the same game 6-8x faster: one battle stepped through both loaders fingerprints the same every 15 s; its document throws and two loads share nothing |
 | `save` | the checksum, the version stamp, and the encoder that walks live game state into JSON |
 | `rules` | invariants over the roster: no orphan unit kinds, every prerequisite and weapon resolves, every unit kind has a building that produces it, no faction needs something it cannot build |
 | `brand` | the game is Breachwater and says nothing else: every string literal in `src/` (comments stripped), the page's title, heading and text, the manifest, `sw.js` and `favicon.svg`, and every unit, structure and superweapon name, are clean of the old game's name, armies and unit names; the armies are the Meridian Compact and the Basalt Dominion |

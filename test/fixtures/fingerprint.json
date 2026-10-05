@@ -1,0 +1,46 @@
+{
+ "normal, Compact, a player who builds": [
+  "d2a5e293",
+  "883b4415",
+  "b070db1f",
+  "affa4839",
+  "8e00176b",
+  "36f1e9c1",
+  "19922c51",
+  "acb36e1f",
+  "e903b18d",
+  "1c9058f2"
+ ],
+ "hard, Dominion, a player who builds": [
+  "f8caecac",
+  "d0524962",
+  "b6ce8781",
+  "9d6daf78",
+  "c070c4ef",
+  "6123e778",
+  "862068f9",
+  "84776afb"
+ ],
+ "easy, Compact, kept": [
+  "36839cf0",
+  "be135524",
+  "a88e005d",
+  "6efda1a1",
+  "8be25934",
+  "0105b0d3",
+  "3bb98ce0",
+  "57e9da27",
+  "24639a8e",
+  "ea2febe5"
+ ],
+ "normal, Dominion, to the end": [
+  "786183be",
+  "a7b6d4f4",
+  "c06f8da3",
+  "9f06d50c",
+  "027a4518",
+  "b4674755",
+  "9c4e9e64",
+  "9d88ac94"
+ ]
+}
