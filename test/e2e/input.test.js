@@ -158,7 +158,24 @@ var S = new Suite('input');
   S.eq('Escape cancels the placement', esc1.place, null);
   S.ok('...and does not close the battle', esc1.alive);
 
-  await g.page.evaluate(function () { window._rtsUI.superArm = 'nuke'; });
+  /* ARMED FROM A REAL, CHARGED SOURCE. Armed with none, the superweapon row disarms it on the next
+     frame (_rtsSuperStale, ui/superbar.js), so whenever a frame beat the key this Escape found
+     nothing armed and fell through to leaving the battle - and the check below passed on nothing */
+  var src = await g.page.evaluate(function () {
+    var G = window._rtsG, d = RTS_STRUCTS.filter(function (s) { return s.super && s.super.key === 'nuke'; })[0];
+    var yd = _rtsHas('player', 'yard'), b = null;
+    for (var r = 4; r < 30 && !b; r++) for (var a = 0; a < 8 && !b; a++) {
+      var sp = _rtsNearestOpen(yd.tx + Math.round(Math.cos(a) * r), yd.tz + Math.round(Math.sin(a) * r), 3, null);
+      if (sp && _rtsCanPlace('player', d.key, sp[0], sp[1], true)) { b = _rtsPlaceStruct('player', d.key, sp[0], sp[1], true); if (b) b.building = 0; }
+    }
+    G.sides.player.supers = G.sides.player.supers || {};
+    G.sides.player.supers.nuke = { t: 1e3, ready: true, said: true };
+    window._rtsUI.superArm = 'nuke';
+    return { placed: !!b, sources: Object.keys(_rtsSuperSources('player')) };
+  });
+  await g.page.waitForTimeout(300);              /* frames run: an armed weapon with a source stays armed */
+  var armed = await g.page.evaluate(function () { return window._rtsUI.superArm; });
+  S.ok('the weapon is armed from a real, charged source, and stays armed across frames', src.placed && src.sources.indexOf('nuke') >= 0 && armed === 'nuke', JSON.stringify([src, armed]));
   await g.page.keyboard.press('Escape');
   await g.page.waitForTimeout(120);
   var esc2 = await g.page.evaluate(function () {
@@ -184,10 +201,16 @@ var S = new Suite('input');
   S.note('selection ' + team.before + ' -> ' + team.after +
          ' (clearing it matches Handle_Team; the silence did not)');
 
-  /* Escape with nothing armed still leaves the battle, which is documented behaviour */
+  /* Escape with nothing armed leaves the battle, and ASKS FIRST, as the ✕ does: it quit at once,
+     with no save, so a second Escape pressed to be sure a placement was gone threw the battle away */
   await g.page.keyboard.press('Escape');
   await g.page.waitForTimeout(200);
-  S.ok('Escape with nothing armed still leaves the battle',
+  var esc3 = await g.page.evaluate(function () { return { alive: !!document.getElementById('rcgRts'), msg: window._rtsG && window._rtsG.msg }; });
+  S.ok('Escape with nothing armed asks first: the battle stays, and the line says how to leave',
+       esc3.alive && /Leave the battle\? Press Esc again/.test(esc3.msg || ''), JSON.stringify(esc3));
+  await g.page.keyboard.press('Escape');
+  await g.page.waitForTimeout(200);
+  S.ok('...and a second Escape leaves it',
        await g.page.evaluate(function () { return !document.getElementById('rcgRts'); }));
 
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');

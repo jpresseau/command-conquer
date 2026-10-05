@@ -171,6 +171,23 @@ now says what happened, and the cursor tells the truth before the click:
 `unit/refusals` and `unit/fieldhints` hold these; `e2e/touch` presses a gunship that flies on,
 and `e2e/jammer` reads the cover traced on the radar.
 
+### Banners and pings
+
+The placement banner and an armed weapon's are drawn on the HUD canvas, and the top strip, the
+compass and the message line are DOM laid over it. Drawn at y 14 they sat under the strip: behind
+its gradient at a desk, behind its 40-pixel buttons on a phone. A banner now takes the message
+line's own slot (`_rtsBannerTop`, read again after every resize) and is drawn only while the line
+is quiet. It is as wide as its words, clear of the compass, and breaks at its `·` before its type
+shrinks (`_rtsBanner`). The phone's line itself sat 2 pixels under the strip, because its rule lost
+to the plain one after it in the cascade. On a phone the placement banner says drag, and hold the
+button to cancel (`_rtsPlaceHint`). The order ping is the order given, in the cursor's colour
+(`_rtsPingCol`): an attack-move is amber, and a harvest only when something harvests, where a tank
+sent onto scrap used to ping the harvester's teal. `e2e/banner` reads the boxes against the DOM on
+an upright phone, the same phone turned, and a desk; `unit/fieldhints` holds the words and pings.
+Escape with nothing armed now asks first, as the ✕ does (`rtsQuitClick(true)`). It used to quit at
+once with no save, so a second Escape pressed to be sure a placement was gone threw the battle
+away; `e2e/input` presses it twice.
+
 ### One answer to "why can't I build this?"
 
 `Who_Can_Build_Me` is one question, and it had three implementations here: `_rtsCanQueue`

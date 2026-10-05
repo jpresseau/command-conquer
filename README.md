@@ -35,7 +35,7 @@ battle is there in both.
 | `S` | Hold position |
 | `WASD` / arrows | Pan the camera (screen edges work too) |
 | Mouse wheel | Zoom |
-| `Esc` | Leave the battle |
+| `Esc` | Cancel a placement, repair, sell or an armed weapon · with nothing armed, leave the battle (press it twice) |
 
 The first time a match selects a unit with an order of its own - a drone, a bomber, a layer, a
 transport - the message line says how to give it, in a phone's words on a phone, and the

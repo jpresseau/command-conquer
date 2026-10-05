@@ -12,13 +12,17 @@ function _rtsKeyDown(e) {
        so a player who had learned Escape-cancels from repair, sell and placement pressed it
        with the nuke live and QUIT THE MATCH - no confirmation, no autosave. The sound panel
        (ui/soundpanel.js) is the newest member of the list and the first in it: closing it with
-       Escape quit the battle too, until e2e/soundpanel pressed it. */
+       Escape quit the battle too, until e2e/soundpanel pressed it.
+
+       AND WITH NOTHING ARMED IT ASKS FIRST, as the ✕ does (rtsQuitClick): it quit at once, with
+       no save, so a second Escape pressed to be sure a placement was cancelled - the banner
+       says Esc - threw the battle away. */
     var SP = document.getElementById('rtsSoundPanel');
     if (SP && !SP.hidden) rtsSoundPanel(false);
     else if (U.mode) rtsMode(U.mode);
     else if (U.place) { U.place = null; _rtsGhostHide(); }
     else if (U.superArm) _rtsSuperDisarm();
-    else rtsClose();
+    else rtsQuitClick(true);
     e.preventDefault(); return;
   }
   /* a key in a slider or a box is that control's: Home, End, the arrows move a slider, not the camera */

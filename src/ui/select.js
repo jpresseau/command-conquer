@@ -261,10 +261,10 @@ function _rtsRightClickNow(mx, my, hit0) {
   /* a flat the tide has dried is ground: a loaded craft sent there puts its load down on it */
   var onWater = _rtsInB(tx, tz) && G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER && !(G.tideDry && G.tideDry[_rtsIdx(tx, tz)]);
   var spread = _rtsFormation(mine.length);
-  var landed = 0, dropped = 0, struck = 0, waits = 0, shadows = 0, here = 0, nowhere = 0;
+  var landed = 0, dropped = 0, struck = 0, waits = 0, shadows = 0, here = 0, nowhere = 0, reaped = 0;
   for (i = 0; i < mine.length; i++) {
     var u = mine[i], ud = rtsUnitDef(u.def);
-    if (ud.harvest && onScrap) { _rtsOrderHarvest(u, tx, tz); continue; }
+    if (ud.harvest && onScrap) { _rtsOrderHarvest(u, tx, tz); reaped++; continue; }
     /* A BOMBER ON ATTACK-MOVE LAYS ITS LINE ACROSS THE GROUND it was sent at - the one way to
        bomb a place rather than a thing (core/bomber.js). A plain right-click still moves it. */
     if (ud.carpets && U.attackMove) {
@@ -292,7 +292,9 @@ function _rtsRightClickNow(mx, my, hit0) {
     if (ud.harvest && tgt && tgt.side === 'player' && tgt.def === 'refinery') { u.order = 'harvest'; u.hstate = 'toRef'; u.path = null; continue; }
     _rtsOrderMove(u, hit.x + spread[i].x, hit.z + spread[i].z, !!U.attackMove);
   }
-  _rtsFlash(hit.x, hit.z, onScrap ? 'harvest' : (struck || waits) ? 'attack' : 'move');
+  /* the ping is the order given, as the cursor was: a harvest only when something harvests - a
+     tank sent onto scrap pinged the harvester's colour - and an attack-move the cursor's amber */
+  _rtsFlash(hit.x, hit.z, reaped ? 'harvest' : (struck || waits) ? 'attack' : U.attackMove ? 'amove' : 'move');
   if (landed) _rtsSay(landed === 1 ? 'Making for the shore.' : landed + ' transports making for the shore.');
   else if (dropped) _rtsSay(dropped === 1 ? 'Taking them in.' : dropped + ' aircraft taking them in.');   /* not 'Skylifts': a Dominion player has none */
   else if (boardWhy) _rtsSay(boardWhy);

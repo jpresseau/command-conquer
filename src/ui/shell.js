@@ -157,9 +157,10 @@ function rtsOpen(seed) {
    Two presses rather than a browser confirm(): the game already teaches press-once-to-arm,
    press-again-to-commit for holding and cancelling production, and a modal dialog on a phone
    is a worse interruption than a line of text. rtsClose itself is left alone - it is called
-   by the game-over path and by the specs, and neither should be made to answer a question. */
+   by the game-over path and by the specs, and neither should be made to answer a question.
+   Escape with nothing armed comes here too (ui/keys.js), and either key confirms the other. */
 var RTS_QUIT_WINDOW = 5;
-function rtsQuitClick() {
+function rtsQuitClick(byKey) {
   var U = window._rtsUI, G = window._rtsG;
   if (!U) { rtsClose(); return; }
   var now = G ? G.t : 0;
@@ -168,7 +169,7 @@ function rtsQuitClick() {
   var b = document.getElementById('rtsQuitBtn');
   if (b) b.classList.add('arm');
   if (typeof _rtsSfx === 'function') _rtsSfx('deny');
-  _rtsSay('Leave the battle? Press ✕ again to confirm — this battle is not saved.',
+  _rtsSay('Leave the battle? Press ' + (byKey ? 'Esc' : '✕') + ' again to confirm — this battle is not saved.',
           RTS_QUIT_WINDOW);
   setTimeout(function () {
     var bb = document.getElementById('rtsQuitBtn');
@@ -281,6 +282,7 @@ function _rtsResizeCanvases() {
   hud.style.width = W + 'px'; hud.style.height = H + 'px';
   hud.width = Math.round(W * dpr); hud.height = Math.round(H * dpr);
   hud.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (window._rtsUI) window._rtsUI.bannerY = 0;      /* the message line may have moved (ui/hud.js) */
   return { W:W, H:H };
 }
 function _rtsOnResize() {

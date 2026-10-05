@@ -84,7 +84,7 @@ function _rtsDrawHud(dt) {
       var f = U.flash, sp = _rtsWorldToScreen(f.x, 0.5, f.z), k = f.t / 0.55;
       if (!sp.behind) {
         var fsc = sp.scale || 1;                 /* the ping is on the ground, so it scales too */
-        g.strokeStyle = f.kind === 'attack' ? '#ff6a52' : (f.kind === 'harvest' ? '#6fe3b8' : '#8ef07a');
+        g.strokeStyle = _rtsPingCol(f.kind);
         g.lineWidth = 2.5 * (1 - k) * fsc;
         g.beginPath();
         g.ellipse(sp.x, sp.y, (26 * k + 5) * fsc, (14 * k + 3) * fsc, 0, 0, 6.2832);
@@ -92,25 +92,16 @@ function _rtsDrawHud(dt) {
       }
     }
   }
-  /* placement hint */
-  if (U.place) {
-    g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(W / 2 - 150, 14, 300, 26);
-    g.fillStyle = '#cfe9ff'; g.font = '13px system-ui,sans-serif'; g.textAlign = 'center';
-    g.fillText('Click to place ' + rtsStructDef(U.place).name + '  ·  Esc to cancel', W / 2, 31);
-    g.textAlign = 'left';
-  }
+  /* placement hint, in the gestures of the device in hand - in the message line's slot while
+     the line is quiet (_rtsBannerTop) */
+  var quiet = !(G.msgT > 0);
+  if (U.place && quiet) _rtsBanner(g, W, _rtsPlaceHint(rtsStructDef(U.place).name, typeof _rtsTouchUI === 'function' && _rtsTouchUI()), _rtsBannerTop());
   /* AN ARMED SUPERWEAPON gets the banner placement has, and its cursor traces the ground it will
      cover (_rtsDrawCursor 'super'): the cursor showed the selection's right-click order instead -
      a no-entry over water, where the click laid the fog - and nothing showed the area */
   if (U.superArm) {
-    var sdA = _rtsSuperDefOf(U.superArm), touchA = typeof _rtsTouchUI === 'function' && _rtsTouchUI();
-    if (sdA) {
-      var hA = _rtsSuperHint(sdA.super), cut = hA.indexOf('— ');
-      g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(W / 2 - 190, 14, 380, 26);
-      g.fillStyle = '#cfe9ff'; g.font = '13px system-ui,sans-serif'; g.textAlign = 'center';
-      g.fillText((cut >= 0 ? hA.slice(cut + 2) : hA).replace(/\.$/, '') + '  ·  ' + (touchA ? 'tap its button to cancel' : 'Esc to cancel'), W / 2, 31);
-      g.textAlign = 'left';
-    }
+    var sdA = _rtsSuperDefOf(U.superArm);
+    if (sdA && quiet) _rtsBanner(g, W, _rtsArmedHint(sdA.super, typeof _rtsTouchUI === 'function' && _rtsTouchUI()), _rtsBannerTop());
   }
   /* The action cursor goes last so nothing draws over it. While one is showing the OS
      pointer is hidden, or you get two cursors fighting for the same few pixels. */
@@ -227,6 +218,52 @@ function _rtsSuperRing(g, x, y) {
     if (a) g.lineTo(p.x, p.y); else g.moveTo(p.x, p.y);
   }
   g.stroke();
+}
+/* The order ping's colour. An attack-move is the cursor's amber: it flashed the plain move's
+   green, so the one confirmation of the order looked like the order it is not. */
+function _rtsPingCol(kind) {
+  return { attack:'#ff6a52', harvest:'#6fe3b8', amove:'#ffd473' }[kind] || '#8ef07a';
+}
+/* What the placement banner says. A phone has no Esc key and no hover: it places by dragging
+   the ghost and letting go (ui/input.js), and cancels by holding the building's button
+   (ui/sidebar.js) - the banner told it to click and press Esc. */
+function _rtsPlaceHint(name, touch) {
+  return touch ? 'Drag to place ' + name + '  ·  hold its button to cancel'
+               : 'Click to place ' + name + '  ·  Esc to cancel';
+}
+/* What an armed superweapon's banner says: what to do with it, and how to put it down */
+function _rtsArmedHint(sup, touch) {
+  var h = _rtsSuperHint(sup), cut = h.indexOf('— ');
+  return (cut >= 0 ? h.slice(cut + 2) : h).replace(/\.$/, '') + '  ·  ' + (touch ? 'tap its button to cancel' : 'Esc to cancel');
+}
+/* WHERE A BANNER GOES: in the message line's own slot, drawn only while the line is quiet. The
+   banners were drawn at y 14, and the top strip is DOM laid OVER the HUD canvas - so a banner
+   sat under the strip's gradient at a desk and behind its 40-pixel buttons on a phone. The
+   line's top is the stylesheet's (44, 56 on a phone, 52 held sideways): read once, and again
+   after every resize, which is where a rotation passes (ui/shell.js). */
+function _rtsBannerTop() {
+  var U = window._rtsUI;
+  if (U && U.bannerY) return U.bannerY;
+  var m = document.getElementById('rtsMsg'), y = (m && m.offsetTop) || 44;
+  if (U) U.bannerY = y;
+  return y;
+}
+/* A banner across the top of the field at y, as wide as its words: the boxes were a fixed 300
+   and 380 pixels, which a long building name overran. Centred, it keeps 56 pixels clear at each
+   side for the compass that shares its height at the right. Too wide, it breaks at its ' · '
+   into two lines, and only then steps its type down. Returns what it drew, for the specs. */
+function _rtsBanner(g, W, text, y) {
+  var room = W - 136, px = 13, lines = [text], tw, i;
+  function widest() { var m = 0; for (var k = 0; k < lines.length; k++) m = Math.max(m, g.measureText(lines[k]).width); return m; }
+  g.font = px + 'px system-ui,sans-serif'; tw = widest();
+  if (tw > room && text.indexOf('  ·  ') > 0) { lines = text.split('  ·  '); tw = widest(); }
+  while (tw > room && px > 9) { px--; g.font = px + 'px system-ui,sans-serif'; tw = widest(); }
+  var bw = Math.min(W - 112, Math.ceil(tw) + 24), lh = px + 4, bh = 26 + (lines.length - 1) * lh;
+  g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(W / 2 - bw / 2, y, bw, bh);
+  g.fillStyle = '#cfe9ff'; g.textAlign = 'center';
+  for (i = 0; i < lines.length; i++) g.fillText(lines[i], W / 2, y + 17 + i * lh);
+  g.textAlign = 'left';
+  return { x: W / 2 - bw / 2, y: y, w: bw, h: bh, tw: tw, px: px, lines: lines.length };
 }
 /* An unarmed unit's job on an enemy target, as _rtsRightClick gives it (ui/select.js) */
 function _rtsJobOn(u, d, tgt) {
