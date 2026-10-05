@@ -68,11 +68,17 @@ both `provides:['airpad']` (`core/bomber.js`):
 - Falling bombs are drawn as dark streaks blended like rain (`_r3dFxBombs`, fxemit3d.js). A
   `STREAK` is additive, so a dark one would draw nothing.
 - The opponent buys one, after its Paradrop Plane, once the player has dug in and its own base
-  is defended. Whenever the bomber is loaded, it is sent at the player's building with the most
-  other buildings within `RTS_BOMB.crowd` (4) cells (`_rtsAIBombTarget`); walls are not counted,
-  or a wall line outranks every real corner of the base.
+  is defended - and never onto a pad another aircraft holds: the support purchases keep the
+  roll's caps, one aircraft per pad and `fleetPerYard` hulls per yard (`_rtsAIAirRoom`,
+  `_rtsAIFleetRoom` in core/ai.js), and queue on their own line. Whenever the bomber is loaded,
+  it is sent at the player's building with the most other buildings within `RTS_BOMB.crowd` (4)
+  cells (`_rtsAIBombTarget`); walls are not counted, or a wall line outranks every real corner of
+  the base.
+- A burst is an attack: the buildings under it are told (`_rtsAttacked`, `_rtsBaseIsAttacked`,
+  the `attacked` trigger), as a shell tells them, since a splash attributes itself to nobody; and
+  the difficulty's FirepowerBias applies. A bomb carries its bomber by id, not by reference.
 
-`unit/bomber` (26 assertions, 21 mutants killed over two rounds).
+`unit/bomber` (29 assertions, 25 mutants killed over three rounds).
 
 ## The Flak Cruiser — escort at sea
 
@@ -83,8 +89,9 @@ Both armies' anti-aircraft hull (`flakship`), from either yard plus a Radar Post
 - `escorts`: left idle, it keeps station on the nearest ship of its own side within
   `RTS_ESCORT.reach` (14) cells, never on another escort. When it falls more than
   `RTS_ESCORT.close` (3) cells behind, it closes up on an attack-move, so it fires at anything
-  flying over on the way. The station order is marked `e.esc === e.goal`, so a move the player
-  gives always comes first, and the station is taken up again only once it is idle.
+  flying over on the way. The station order is told from a player's by value (`e.esc` and
+  `e.goal` at one point - a save writes them as two objects), so a move the player gives always
+  comes first, and the station is taken up again only once it is idle.
 - The opponent buys one through the ship mix with `vsAir:2`, as it does the Flak Track: none
   while the sky is empty, so the roll is unchanged in a game with no aircraft.
 
@@ -95,9 +102,11 @@ wide, so the staging finds a fourteen-cell stretch of one.
 
 Both armies' mine layer at sea (`mineboat`, `sea` + `mines:6`), from either yard
 (`core/seamines.js`). It lays the Mine Layer's own mines (core/mines.js):
-- `_rtsLayMine` lays on water only for a `sea` layer and on ground only for a land one. A sea
-  mine goes off under anything afloat on its cell, ships and hovercraft alike. Aircraft pass
-  over it.
+- `_rtsLayMine` lays on water only for a `sea` layer and on ground only for a land one, never on
+  a bridge's deck, and marks the mine `sea`. A sea mine goes off under what floats - a hull in
+  the `sea` or `shallow` domain, or a hovercraft - and a land mine under what walks or drives (the
+  hovercraft again). A tank crossing a flat the tide has dried is not afloat over the sea mine
+  under it, and does not set it off. Aircraft pass over everything.
 - It restocks alongside its own shipyard (`RTS_SEAMINE.dock`, 2.5 cells), one mine every
   `RTS_MINE.restock` seconds.
 - Sonar finds sea mines: a hull with `detects` (the Destroyer) marks every enemy mine in the
@@ -106,7 +115,11 @@ Both armies' mine layer at sea (`mineboat`, `sea` + `mines:6`), from either yard
   sweeper is never sent after a sea mine.
 - The opponent buys one once the player has a shipyard. It mines the sea route between the two
   yards, `RTS_SEAMINE.from` to `.to` (4 to 12) cells out from its own, with a cell either side
-  (`_rtsAISeaMineSpots`). The land tick skips sea layers (`_rtsSeaLayer`).
+  (`_rtsAISeaMineSpots`). The plan is made in the `shallow` domain, water at any tide, so a plan
+  made at low water, when the channels are dry to a hull, is the same plan as one made at high;
+  a plan that came back empty is asked again after `RTS_SEAMINE_RECHECK` (30 s) rather than kept
+  for the match. The land tick skips sea layers (`_rtsSeaLayer`). Out of mines, the player is
+  told to bring the boat alongside the yard.
 
 `unit/seamines` (19 assertions, 9 mutants killed). One mutant survived and is equivalent: it
 lets sonar mark its own side's mines, which that side already sees.
@@ -118,7 +131,9 @@ Both armies' repair ship (`tender`), from either yard. It is the Repair Truck wi
 - The heal aura (core/units.js `heals`) mends every friendly ship within 3 cells. It does not
   mend vehicles, and the Repair Truck does not mend ships.
 - Left idle, it sails to the nearest damaged ship within `RTS_FIX.seek` cells (`_rtsFixWants`
-  matches on the unit's own `healKind`).
+  matches on the unit's own `healKind`), and only one it can get its aura onto: a Monitor on a
+  flat at low water, four cells from any water a Tender can sail, is passed over for a gunboat
+  it can reach. The truck has the same rule in its own domain.
 - The opponent buys one once it has `RTS_FIX.fleet` (3) armed hulls
   (`_rtsAIFieldVehicles('ship')`). It keeps the tender a few cells behind its largest team of
   ships on the march (`_rtsAIFixBehind(kind)`), as it keeps the truck behind its tanks.

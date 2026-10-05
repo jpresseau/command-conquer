@@ -20,7 +20,7 @@
                    hanging at the edge with its load
      BOTH ARMIES   either builds one, behind its own air pad - a Helipad or an Airfield
      THE OPPONENT  buys one (after its Paradrop Plane) once the player has dug in and its own base
-                   is defended, not before;
+                   is defended, not before, and not onto a pad another aircraft holds;
                    and sends it at the most crowded corner of the player's base */
 
 var { Suite } = require('../lib/assert.js');
@@ -94,6 +94,7 @@ var falls = bursts.map(function (b) { return b.gone - b.at; });
 S.ok('...each falls for most of a second before it bursts', bursts.length === 8 && Math.min.apply(null, falls) >= 0.6 && Math.max.apply(null, falls) <= 0.8,
      falls.map(function (f) { return f.toFixed(2); }).join(' '));
 S.ok('...and the building is hit', aim.hp < hp0 - 100, hp0 + ' -> ' + aim.hp.toFixed(0));
+S.ok('...and its owner is told it is under attack', typeof G.ai.lastHit === 'number' && G.ai.lastHit > 0, 'lastHit ' + G.ai.lastHit);
 S.ok('a tank of its own side parked under the line is hurt too', own.hp < ownHp, ownHp + ' -> ' + own.hp.toFixed(0));
 
 /* ---------------- home ---------------- */
@@ -137,6 +138,16 @@ var re0 = interrupt(0, function (b) { var o = g._rtsSpawnUnit('enemy', 'tank', m
 var c0 = { x: 0, z: 0 }; re0.drops.forEach(function (q) { c0.x += q.x / re0.drops.length; c0.z += q.z / re0.drops.length; });
 S.ok('...pointed at a second target before the first bomb, the line is laid on the new one', re0.drops.length === 8 && !!re0.other && cells(c0, re0.other) < 1 && cells(c0, re0.tk) > 8,
      re0.drops.length + ' bombs, centred ' + (re0.other ? cells(c0, re0.other).toFixed(1) : '-') + ' cells from the new target, ' + cells(c0, re0.tk).toFixed(1) + ' from the old');
+
+/* right over the aim: the line runs the way it is heading, and it lays what is still ahead */
+G = fresh();
+var over = g._rtsSpawnUnit('enemy', 'tank', m.x, m.z), b8 = g._rtsSpawnUnit('player', 'bomber', m.x, m.z), x8 = b8.x;
+b8.rot = 0;                                                            /* heading east */
+g._rtsOrderAttack(b8, over);
+var bombs8 = [];
+run(10, function () { sit(over); (G.bombs || []).forEach(function (q) { if (bombs8.indexOf(q) < 0) bombs8.push(q); }); });
+S.ok('sent at a target right under it, the line runs the way it is heading and it lays only what is still ahead of it', bombs8.length === 4 && bombs8.every(function (q) { return q.x > x8 + 1; }),
+     bombs8.length + ' bombs, ' + bombs8.filter(function (q) { return q.x > x8 + 1; }).length + ' ahead');
 
 /* ---------------- it follows ---------------- */
 G = fresh();
@@ -225,6 +236,8 @@ var towers = [];
 for (var df = 0; df < 4; df++) towers.push(place('enemy', 'flametower'));
 var notDug = buys(20);                                               /* its own base defended, the player not dug in */
 ['pillbox', 'pillbox'].forEach(function (k) { place('player', k); });
+var onePad = buys(20);                                               /* one Airfield, and the plane already on it */
+place('enemy', 'afld');
 var both = buys(20);
 towers.forEach(function (t) { if (t) t.dead = true; });
 g._rtsTick(1 / 30);
@@ -234,6 +247,7 @@ para.dead = true;
 S.ok('the opponent buys one once the player has dug in and its own base is defended', both > 3, both + ' of 20');
 S.ok('...not before the player has dug in', notDug === 0, notDug + ' of 20');
 S.ok('...nor while its own base is undefended', undefended === 0, undefended + ' of 20');
+S.ok('...nor onto a pad another aircraft already holds: one aircraft per pad holds for the support purchases too', onePad === 0, onePad + ' of 20 with one Airfield holding the Paradrop Plane');
 /* the player's base: its yard's cluster, and one building alone far out */
 py = g._rtsHas('player', 'yard');
 ['power', 'refinery', 'power'].forEach(function (k) { place('player', k); });

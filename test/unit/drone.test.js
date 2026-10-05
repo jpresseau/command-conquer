@@ -120,6 +120,7 @@ function canBuild(army, pad) {
   return !!g._rtsCanQueue('player', 'drone');
 }
 S.ok('the Compact builds it behind a Helipad; the Dominion does not', canBuild('allied', 'helipad') && !canBuild('soviet', 'afld'), '');
+S.ok('...and not for want of a Helipad: the Dominion may not build it at all', !g.rtsBuildableBy(g.rtsUnitDef('drone'), 'soviet') && g.rtsBuildableBy(g.rtsUnitDef('drone'), 'allied'), '');
 
 /* ---------------- the opponent ---------------- */
 function base(sky) {

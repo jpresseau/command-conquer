@@ -4,6 +4,7 @@
      THE FLATS     at low water a dried flat is closed to a Destroyer and open to the Monitor:
                    sent there, the Monitor gets onto it and the Destroyer stops short; sitting
                    there it is not swamped; at high water both sail it
+                   when the sea comes back over the flat it is not swamped, where a tank is
      NEVER ASHORE  sent onto dry land, it stops at the water; and it crowds with the other hulls
      THE SHORE     from the flats it shells a building that no ship can reach at low water
      WHOSE         the Dominion builds it, from its Sub Pen; the Compact does not
@@ -77,7 +78,13 @@ function sendTo(key, high) {
 var mon = sendTo('monitor'), des = sendTo('destroyer'), desHigh = sendTo('destroyer', true);
 S.ok('...sent there, the Monitor gets onto it', mon.d <= 1, mon.d.toFixed(1) + ' cells from the flat');
 S.ok('...and the Destroyer stops short', des.d >= 1.5, des.d.toFixed(1) + ' cells from the flat');
-S.ok('...sitting there the Monitor is not swamped', mon.dry && mon.hurt === 0, 'on a dry cell ' + mon.dry + ', ' + mon.hurt + ' hp lost');
+S.ok('...sitting there the Monitor is on dry ground, unhurt', mon.dry && mon.hurt === 0, 'on a dry cell ' + mon.dry + ', ' + mon.hurt + ' hp lost');
+/* ...and when the sea comes back over the flat it is not swamped, where a tank on the same flat is */
+G = fresh(); lowWater(G);
+var mS = g._rtsSpawnUnit('enemy', 'monitor', F.flat.x, F.flat.z), tS = g._rtsSpawnUnit('enemy', 'tank', F.flat.x, F.flat.z), mHp = mS.hp, tHp = tS.hp;
+run(6, function () { G.t = 300; g._rtsTideTick(0); mS.x = F.flat.x; mS.z = F.flat.z; tS.x = F.flat.x; tS.z = F.flat.z; [mS, tS].forEach(function (u) { u.order = 'hold'; u.path = null; }); });
+S.ok('...and when the sea comes back over it the Monitor is not swamped, where a tank on the same flat is', !G.tideDry[cellOf(mS)] && mS.hp === mHp && tS.hp < tHp,
+     'the flat ' + (G.tideDry[cellOf(mS)] ? 'still dry' : 'under water again') + '; Monitor ' + mHp + ' -> ' + mS.hp.toFixed(0) + ', tank ' + tHp + ' -> ' + tS.hp.toFixed(0));
 S.ok('...and at high water the Destroyer sails it too', desHigh.d <= 1, desHigh.d.toFixed(1) + ' cells from the flat');
 
 /* ---------------- never ashore ---------------- */
@@ -99,19 +106,32 @@ S.ok('a Monitor and a Gunboat put on the same spot are pushed apart, as two ship
 /* a building of the player's on the shore by the flat, out of a ship's reach from water that is
    open at low tide */
 G = fresh(); lowWater(G);
-var tgt = null, reach = g.RTS_WEAPONS.monitorgun.range / g.RTS_TILE;
-for (var r = 1; r < 8 && !tgt; r++) for (var aa = 0; aa < 16 && !tgt; aa++) {
-  var bx = Math.round(F.flat.tx + Math.cos(aa * Math.PI / 8) * r), bz = Math.round(F.flat.tz + Math.sin(aa * Math.PI / 8) * r);
-  if (!g._rtsCanPlace('player', 'pillbox', bx, bz, true)) continue;
-  var b = g._rtsPlaceStruct('player', 'pillbox', bx, bz, true);
-  var deepNear = g._rtsNearestOpen(bx, bz, Math.ceil(reach), 'sea'), dn = deepNear ? Math.hypot(deepNear[0] - bx, deepNear[1] - bz) : 99;
-  if (dn > g.RTS_WEAPONS.navalheavy.range / g.RTS_TILE && cells(b, F.flat) < reach - 1) { b.building = 0; tgt = b; } else b.dead = true;
+/* The Monitor on the innermost flat, right under the shore, reaches six cells inland; a Destroyer
+   standing off in the water past the flats reaches seven and a half from there, which is less.
+   So: a cell for a pillbox whose nearest open sea at low water is beyond the Destroyer's gun,
+   with a dried innermost flat within the Monitor's - anywhere on the map. */
+var dReach = g.RTS_WEAPONS.navalheavy.range / g.RTS_TILE, reach = g.RTS_WEAPONS.monitorgun.range / g.RTS_TILE, pick = null;
+for (var ptz = 3; ptz < g.RTS_N - 3 && !pick; ptz++) for (var ptx = 3; ptx < g.RTS_N - 3 && !pick; ptx++) {
+  if (!g._rtsCanPlace('player', 'pillbox', ptx, ptz, true)) continue;
+  var sn = g._rtsNearestOpen(ptx, ptz, 12, 'sea');
+  if (sn && Math.hypot(sn[0] - ptx, sn[1] - ptz) <= dReach + 0.5) continue;
+  for (var fz = -4; fz <= 4 && !pick; fz++) for (var fx = -4; fx <= 4 && !pick; fx++) {
+    var fi = g._rtsIdx(ptx + fx, ptz + fz);
+    if (g._rtsInB(ptx + fx, ptz + fz) && G.tideD[fi] === 1 && G.tideDry[fi] && Math.hypot(fx, fz) <= reach - 1.5) pick = { b: [ptx, ptz], f1: W(ptx + fx, ptz + fz), sea: sn && W(sn[0], sn[1]) };
+  }
 }
+var tgt = pick && g._rtsPlaceStruct('player', 'pillbox', pick.b[0], pick.b[1], true); if (tgt) tgt.building = 0;
 g._rtsTick(1 / 30);
-var m3 = g._rtsSpawnUnit('enemy', 'monitor', F.flat.x, F.flat.z), t0 = tgt ? tgt.hp : 0;
-run(15, function () { lowWater(G); m3.order = m3.order === 'move' ? null : m3.order; });
-S.ok('from the flats it shells a building that no Destroyer can reach at low water', !!tgt && (tgt.dead || tgt.hp < t0),
-     tgt ? (tgt.dead ? 'destroyed' : t0 + ' -> ' + tgt.hp.toFixed(0)) + ', ' + cells(tgt, F.flat).toFixed(1) + ' cells from the flat' : 'no such building on this shore');
+/* the Destroyer first, alone, sent at it from the nearest open sea */
+var t0 = tgt ? tgt.hp : 0, dd3 = tgt && pick.sea && g._rtsSpawnUnit('enemy', 'destroyer', pick.sea.x, pick.sea.z);
+if (dd3) { g._rtsOrderAttack(dd3, tgt); run(15, function () { lowWater(G); }); }
+var dHurt = tgt ? t0 - tgt.hp : 0, dOff = dd3 ? cells(dd3, tgt) : 0;
+if (dd3) dd3.dead = true;
+/* then the Monitor, from the flat */
+var m3 = pick && g._rtsSpawnUnit('enemy', 'monitor', pick.f1.x, pick.f1.z);
+if (m3) run(15, function () { lowWater(G); m3.order = m3.order === 'move' ? null : m3.order; });
+S.ok('from the flats it shells a building that no Destroyer can reach at low water', !!tgt && !!dd3 && dHurt === 0 && dOff > dReach && (tgt.dead || tgt.hp < t0),
+     tgt ? 'the Destroyer got ' + dOff.toFixed(1) + ' cells from it against a reach of ' + dReach + ' and took ' + dHurt + ' hp; the Monitor, ' + cells(pick.f1, tgt).toFixed(1) + ' cells off on the flat: ' + (tgt.dead ? 'destroyed' : t0 + ' -> ' + tgt.hp.toFixed(0)) : 'no shore cell on this map beyond a Destroyer\'s reach with a flat in the Monitor\'s');
 
 /* ---------------- whose ---------------- */
 function canBuild(army, key) {
@@ -121,6 +141,7 @@ function canBuild(army, key) {
   return !!y && !!g._rtsCanQueue('player', 'monitor');
 }
 S.ok('the Dominion builds it from its Sub Pen; the Compact does not', canBuild('soviet', 'subpen') && !canBuild('allied', 'navalyard'), '');
+S.ok('...and not for want of a Sub Pen: the Compact may not build it at all', !g.rtsBuildableBy(g.rtsUnitDef('monitor'), 'allied') && g.rtsBuildableBy(g.rtsUnitDef('monitor'), 'soviet'), '');
 
 /* ---------------- the opponent ---------------- */
 G = fresh();

@@ -104,6 +104,29 @@ function _rtsAIWantsVsAir(key, per) {
   }
   return have < Math.ceil(flyers / per);
 }
+/* The two caps above, as questions - asked by the weighted roll AND by the support purchases
+   (core/aimines.js), which used to skip them: one Airfield ended up holding a Paradrop Plane and a
+   Heavy Bomber, and the support plane then counted against the cap and starved the Sortie. */
+function _rtsAIAirRoom() {
+  var G = window._rtsG, pads = 0, air = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var pe = G.ents[i];
+    if (pe.dead || pe.side !== 'enemy') continue;
+    if (pe.type === 'struct' && !pe.building && !pe.selling && (rtsStructDef(pe.def) || {}).produces === 'air') pads++;
+    else if (pe.type === 'unit' && (rtsUnitDef(pe.def) || {}).kind === 'air') air++;
+  }
+  return air < pads;
+}
+function _rtsAIFleetRoom() {
+  var G = window._rtsG, yards = 0, hulls = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var se = G.ents[i];
+    if (se.dead || se.side !== 'enemy') continue;
+    if (se.type === 'struct' && !se.building && !se.selling && (rtsStructDef(se.def) || {}).produces === 'ship') yards++;
+    else if (se.type === 'unit' && (rtsUnitDef(se.def) || {}).sea) hulls++;
+  }
+  return yards > 0 && hulls < yards * RTS_AI.fleetPerYard;
+}
 function _rtsAIUnits(S) {
   var G = window._rtsG, harv = 0, i;
   for (i = 0; i < G.ents.length; i++) {
@@ -148,33 +171,13 @@ function _rtsAIUnits(S) {
        Deliberately on the AI's PURCHASE only. Capping what the player may own is a bigger
        change to the Helipad that has stood since the Attack Heli shipped, and it is not what
        an opponent building thirty-four Yaks is asking for. */
-    if (cat === 'air') {
-      var pads = 0, air = 0;
-      for (i = 0; i < G.ents.length; i++) {
-        var pe = G.ents[i];
-        if (pe.dead || pe.side !== 'enemy') continue;
-        if (pe.type === 'struct' && !pe.building && !pe.selling &&
-            (rtsStructDef(pe.def) || {}).produces === 'air') pads++;
-        else if (pe.type === 'unit' && (rtsUnitDef(pe.def) || {}).kind === 'air') air++;
-      }
-      if (air >= pads) continue;
-    }
+    if (cat === 'air' && !_rtsAIAirRoom()) continue;
     /* AS MANY HULLS AS THERE ARE YARDS TO BUILD THEM, times a small factor. Ships are their
        own production line and the opponent is rich late, so without a cap this is the
        thirty-four-Yak problem again in a domain the player may not even be contesting. A
        shipyard is not consumed by a hull the way a pad is by an aircraft, so the cap is a
        multiple rather than one-for-one. */
-    if (cat === 'ship') {
-      var yards = 0, hulls = 0;
-      for (i = 0; i < G.ents.length; i++) {
-        var se = G.ents[i];
-        if (se.dead || se.side !== 'enemy') continue;
-        if (se.type === 'struct' && !se.building && !se.selling &&
-            (rtsStructDef(se.def) || {}).produces === 'ship') yards++;
-        else if (se.type === 'unit' && (rtsUnitDef(se.def) || {}).sea) hulls++;
-      }
-      if (!yards || hulls >= yards * RTS_AI.fleetPerYard) continue;
-    }
+    if (cat === 'ship' && !_rtsAIFleetRoom()) continue;
     var list = RTS_AI.mix[cat], pool = [], total = 0;
     for (i = 0; i < list.length; i++) {
       if (rtsMoney(S) <= list[i].at) continue;
