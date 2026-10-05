@@ -58,8 +58,9 @@ function read(rel) {
   }).join('\n');
 }
 
-function load(files, extra) {
-  var sandbox = {
+/* The globals every game file may reach for, on whatever object will be the context's global. */
+function _shim(g, extra) {
+  var base = {
     console: console, Math: Math, JSON: JSON, Date: Date,
     Uint8Array: Uint8Array, Uint16Array: Uint16Array, Uint32Array: Uint32Array,
     Int32Array: Int32Array, Float32Array: Float32Array, Float64Array: Float64Array,
@@ -72,26 +73,28 @@ function load(files, extra) {
     atob: function (s) { return Buffer.from(s, 'base64').toString('binary'); },
     /* localStorage, because several of these files read a preference at call time. A plain
        object is enough and keeps the test in charge of what is stored. */
-    _store: {},
+    _store: {}
   };
-  sandbox.window = sandbox;
-  sandbox.globalThis = sandbox;
-  sandbox.localStorage = {
-    getItem: function (k) { return Object.prototype.hasOwnProperty.call(sandbox._store, k) ? sandbox._store[k] : null; },
-    setItem: function (k, v) { sandbox._store[k] = String(v); },
-    removeItem: function (k) { delete sandbox._store[k]; }
+  for (var b in base) g[b] = base[b];
+  g.window = g;
+  g.globalThis = g;
+  g.localStorage = {
+    getItem: function (k) { return Object.prototype.hasOwnProperty.call(g._store, k) ? g._store[k] : null; },
+    setItem: function (k, v) { g._store[k] = String(v); },
+    removeItem: function (k) { delete g._store[k]; }
   };
   /* Anything DOM-shaped throws rather than returning a convincing null: a unit test that
      silently exercises a stub is worse than one that refuses to run. */
-  sandbox.document = new Proxy({}, {
+  g.document = new Proxy({}, {
     get: function (_t, prop) {
       throw new Error('unit tests must not touch the DOM (document.' + String(prop) +
                       ') — that belongs in test/e2e');
     }
   });
-  if (extra) for (var k in extra) sandbox[k] = extra[k];
-
-  var ctx = vm.createContext(sandbox);
+  if (extra) for (var k in extra) g[k] = extra[k];
+  return g;
+}
+function _run(files, ctx) {
   var flat = [];
   files.forEach(function (rel) { flat = flat.concat(expand(rel)); });
   flat.forEach(function (rel) {
@@ -99,7 +102,28 @@ function load(files, extra) {
     try { vm.runInContext(src, ctx, { filename: rel }); }
     catch (e) { throw new Error('loading ' + rel + ': ' + e.message); }
   });
+}
+
+function load(files, extra) {
+  var sandbox = _shim({}, extra);
+  var ctx = vm.createContext(sandbox);
+  _run(files, ctx);
   return sandbox;
 }
 
-module.exports = { load: load, read: read, sources: sources, expand: expand, ROOT: ROOT };
+/* THE SAME SOURCES, WITH AN ORDINARY GLOBAL - for battles stepped for minutes on end. A context
+   made from a sandbox object puts an interceptor between every global the game declares and every
+   read of one, and this game is nothing but globals: a battle stepped through load() runs 6-8x
+   slower than the same battle in a browser, so a few hundred of them would take days.
+   vm.constants.DONT_CONTEXTIFY (node 22.8 and later) makes the context's global a plain object
+   instead. Same shims, same order, same throwing document, and the same results: test/unit/fast
+   holds the two loaders to identical battles. */
+function loadFast(files, extra) {
+  if (!vm.constants || vm.constants.DONT_CONTEXTIFY === undefined) throw new Error('loadFast needs node 22.8 or later');
+  var ctx = vm.createContext(vm.constants.DONT_CONTEXTIFY);
+  var g = _shim(vm.runInContext('globalThis', ctx), extra);
+  _run(files, ctx);
+  return g;
+}
+
+module.exports = { load: load, loadFast: loadFast, read: read, sources: sources, expand: expand, ROOT: ROOT };

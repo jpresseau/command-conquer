@@ -61,14 +61,14 @@ the output instead — tap an `AnalyserNode` on `_rtsA.master` and read RMS for 
 sprites onto a sheet at 6-9x and *look* at them, and sample the baked terrain's pixel histogram,
 for art. A palette entry at 0% means that material is not being generated.
 
-**Balance is measured, not judged.** The one number this project argues about is the ladder —
-mean seconds an idle player survives, five seeds per difficulty — and `e2e/ladder` is the spec
-that produces it. All gameplay randomness runs off the scenario seed, so a seed replays exactly
-and an A/B is a comparison rather than an estimate. Two things to know before quoting it: a
-change the idle player never provokes (a rebuild path, a crate, an aircraft) is *invisible* to
-the ladder and needs its own harness, and a wide per-seed spread is a signal that something is
-under-committed rather than inherent variance. `docs/measuring.md` has the history, including
-the runs that were wrong.
+**Balance is measured, not judged.** The ladder — mean seconds an idle player survives, three
+seeds per difficulty, `e2e/ladder` — is the number this project argues about; a seed replays
+exactly, so an A/B is a comparison, not an estimate. A change the idle player never provokes (a
+rebuild path, a crate, an aircraft) is *invisible* to it and needs its own harness, and a wide
+per-seed spread means something is under-committed. `docs/measuring.md` has the history. **A
+change meant to alter nothing is held to `unit/fingerprint`**: four whole battles hashed every
+30 s against `test/fixtures/fingerprint.json`. A change meant to alter play rewrites the fixture
+(`FINGERPRINT_WRITE=1`) in the same commit, and the commit says why the battles changed.
 
 ## Layout
 
