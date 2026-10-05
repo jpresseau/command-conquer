@@ -711,7 +711,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">b8b385b · 2026-10-05</div>
+  <div id="rtsBuild" title="build">5397ae6 · 2026-10-05</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -29438,6 +29438,23 @@ function _r3dMuzzleSize(e) {
   if (!w) return 0.6;
   return w.shot === 'tracer' ? (w.dmg > 7 ? 0.55 : 0.4) : w.shot === 'missile' ? 0.9 : 1.2;
 }
+/* WHERE THE FLASH IS, on the ground plan: the shot's own coordinate (core/combat.js _rtsFireCoord)
+   drawn at the barrel's tip - and FROM THE TURRET RING THAT FIRED. The sim fires from the unit's
+   centre, but a destroyer's and a cruiser's guns stand fore and aft (RTS_TURRET_AT, unit3d.js
+   _r3dTurretAt), two units apart: from the centre, a ship's flash burst from the deck between its
+   guns. A ship with two rings fires from the one nearer its target; the Flak Track's one ring
+   sits a little behind its middle. The shell's own path is the sim's and is left alone. */
+function _r3dMuzzleAt(e) {
+  var m = _rtsFireCoord(e), bx = (m.x - e.x) * 0.78, bz = (m.z - e.z) * 0.78, ox = e.x, oz = e.z;
+  var TP = e.type === 'unit' && typeof RTS_TURRET_AT !== 'undefined' && RTS_TURRET_AT[e.def];
+  if (TP) {
+    var at = _r3dTurretAt(e.def, e.x, e.z, e.rot || 0), t = e.target, best = at[0];
+    if (t && at.length > 1) for (var i = 1; i < at.length; i++)
+      if (Math.hypot(at[i].x - t.x, at[i].z - t.z) < Math.hypot(best.x - t.x, best.z - t.z)) best = at[i];
+    ox = best.x; oz = best.z;
+  }
+  return { x: ox + bx, z: oz + bz };
+}
 /* Every muzzle firing this instant, in view: [x, y, z, size, strength]. */
 function _r3dMuzzles(G) {
   var R3 = window._R3D, out = [];
@@ -29450,8 +29467,7 @@ function _r3dMuzzles(G) {
     if (e.side !== 'player' && typeof _rtsEntSeen === 'function' && !_rtsEntSeen(e)) continue;
     /* where the shot leaves, drawn at the barrel's own tip: the sim's coordinate is a little
        further out than the 3D barrel reaches, and a flash that far out floated off the gun */
-    var m = _rtsFireCoord(e), s = _r3dMuzzleSize(e);
-    m = { x: e.x + (m.x - e.x) * 0.78, z: e.z + (m.z - e.z) * 0.78 };
+    var m = _r3dMuzzleAt(e), s = _r3dMuzzleSize(e);
     var y = (e.type === 'unit' ? _rtsStandY(e.x, e.z) : _rtsElev(e.x, e.z)) + (e.type === 'struct' ? 1.8 : 1.15);
     out.push([m.x, y, m.z, s, Math.min(1, e.fire / 0.09), e]);
   }
