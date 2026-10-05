@@ -386,6 +386,7 @@ function _rtsSyncSidebar(dt) {
     txt = ed.name + ' — ' + Math.ceil(e.hp) + '/' + e.maxHp + ' hp';
     if (e.type === 'unit' && rtsUnitDef(e.def).harvest)
       txt += ' · ' + Math.floor(e.carry) + ' load (' + Math.floor(e.carryVal || 0) + ' credits)';
+    if (e.type === 'unit' && e.side === 'player') txt += _rtsUnitStateTxt(e);   /* mines left, bombs, aboard: ui/selhint.js */
   } else {
     var counts = {}, i;
     for (i = 0; i < sel.length; i++) { var n = (rtsUnitDef(sel[i].def) || rtsStructDef(sel[i].def)).name; counts[n] = (counts[n] || 0) + 1; }
@@ -393,7 +394,9 @@ function _rtsSyncSidebar(dt) {
     for (var n2 in counts) parts.push(counts[n2] + '× ' + n2);
     txt = parts.join(', ');
   }
-  document.getElementById('rtsSelTxt').textContent = txt;
+  var selEl = document.getElementById('rtsSelTxt');
+  if (selEl.textContent !== txt) selEl.textContent = txt;
+  _rtsSelTipFrame(sel, selEl);                       /* what this unit is for, once a match: ui/selhint.js */
 
   /* THE DEPLOY BUTTON, and it is the only way to deploy without a keyboard. It appears exactly
      when the order would do something - the selection holds one of your units with a `deploy`
@@ -405,6 +408,9 @@ function _rtsSyncSidebar(dt) {
     var can = false;
     for (var di = 0; di < sel.length; di++) if (_rtsCanDeploy(sel[di])) { can = true; break; }
     if (dep.hidden === can) dep.hidden = !can;
+    /* ...and says what it does: a mine, a span, or a Command Yard (ui/selhint.js) */
+    var dw = can ? _rtsDeployLabel(sel) : 'DEPLOY';
+    if (dep.textContent !== dw) dep.textContent = dw;
   }
   /* AND UNLOAD, the same way: shown while a selected transport has something aboard, since the
      U key is the only other door and a finger has no U (core/transport.js _rtsUnloadSelected) */

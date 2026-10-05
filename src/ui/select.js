@@ -118,6 +118,8 @@ function _rtsRightClick(mx, my, hit0) {
   if (!hit) return;
   var mine = [], i;
   for (i = 0; i < G.sel.length; i++) if (G.sel[i].side === 'player' && G.sel[i].type === 'unit') mine.push(G.sel[i]);
+  /* a new order replaces one a bomber was keeping for when it is loaded (core/bomber.js) */
+  for (i = 0; i < mine.length; i++) mine[i].bombNext = null;
   /* A SELECTED PRODUCTION BUILDING TAKES THE ORDER AS A RALLY POINT. This used to be the line
      that returned: `mine` holds units only, so with a war factory selected the right-click -
      and the touch hold, which comes through here too - reached the end of the function and did
@@ -176,7 +178,7 @@ function _rtsRightClick(mx, my, hit0) {
     /* Specialists sent at an enemy BUILDING do their own job instead of attacking it. The
        engineer and the thief have no weapon at all, so an attack order would be a walk followed
        by standing there; the Commando has pistols but her C4 is the reason to send her. */
-    var capped = 0, special = 0, drops = 0, cant = 0;
+    var capped = 0, special = 0, drops = 0, cant = 0, queued = 0, shadow = 0;
     for (i = 0; i < mine.length; i++) {
       var mu = mine[i], md = rtsUnitDef(mu.def), job = null;
       if (tgt.type === 'struct') {
@@ -197,16 +199,24 @@ function _rtsRightClick(mx, my, hit0) {
          it with a gun it does not have. Through _rtsOrderAttack that became a plain move, and
          the plane hovered over the target with its squads still aboard. */
       else if (!md.weapon && _rtsIsTransport(mu) && _rtsCargoCount(mu) && _rtsOrderUnloadAt(mu, tgt.x, tgt.z)) drops++;
+      /* a Recon Drone sent at an enemy unit SHADOWS it - circles over it wherever it goes - rather
+         than flying to where it stood and circling there (core/drone.js) */
+      else if (md.orbits && tgt.type === 'unit') { _rtsDroneOn(mu, tgt); shadow++; }
       else {
         /* an armed unit whose gun cannot bear on this - a Flak Track sent at a tank - drives to
            it instead (orders.js), and is told so when nothing selected can do better */
-        if (md.weapon && !_rtsCanEngage(mu, tgt)) cant++;
-        _rtsOrderAttack(mu, tgt);
+        var cannot = md.weapon && !_rtsCanEngage(mu, tgt);
+        if (cannot) cant++;
+        /* a bomber is SENT, which keeps the order through a reload (core/bomber.js) */
+        if (md.carpets && !cannot) { if (!_rtsBomberSend(mu, { id: tgt.id })) queued++; }
+        else _rtsOrderAttack(mu, tgt);
       }
     }
     _rtsFlash(tgt.x, tgt.z, special + drops === mine.length ? 'harvest' : 'attack');
     if (special) _rtsSay(special === 1 ? 'Moving in.' : special + ' specialists moving in.');
     else if (drops) _rtsSay(drops === 1 ? 'Dropping in.' : drops + ' transports dropping in.');
+    else if (queued) _rtsSay(_rtsBombQueuedSay(queued));
+    else if (shadow && shadow === mine.length) _rtsSay((shadow === 1 ? 'Drone' : shadow + ' drones') + ' shadowing the ' + (rtsUnitDef(tgt.def) || {}).name + '.');
     else if (cant && cant === mine.length) _rtsSay((mine.length === 1 ? rtsUnitDef(mine[0].def).name + ' cannot' : 'They cannot') + ' engage that - moving up to it.');
     if (typeof _rtsSfx === 'function') _rtsSfx('order');
     return;
@@ -215,10 +225,18 @@ function _rtsRightClick(mx, my, hit0) {
   var onScrap = _rtsInB(tx, tz) && G.scrap[_rtsIdx(tx, tz)] > 0;
   var onWater = _rtsInB(tx, tz) && G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER;
   var spread = _rtsFormation(mine.length);
-  var landed = 0, dropped = 0;
+  var landed = 0, dropped = 0, struck = 0, waits = 0, shadows = 0;
   for (i = 0; i < mine.length; i++) {
     var u = mine[i], ud = rtsUnitDef(u.def);
     if (ud.harvest && onScrap) { _rtsOrderHarvest(u, tx, tz); continue; }
+    /* A BOMBER ON ATTACK-MOVE LAYS ITS LINE ACROSS THE GROUND it was sent at - the one way to
+       bomb a place rather than a thing (core/bomber.js). A plain right-click still moves it. */
+    if (ud.carpets && U.attackMove) {
+      if (_rtsBomberSend(u, { x: hit.x + spread[i].x, z: hit.z + spread[i].z })) struck++; else waits++;
+      continue;
+    }
+    /* a Recon Drone sent onto one of your own units shadows it, as onto an enemy's (above) */
+    if (ud.orbits && tgt && tgt.type === 'unit' && tgt.side === 'player' && tgt !== u && !tgt.dead) { _rtsDroneOn(u, tgt); shadows++; continue; }
     /* A LOADED LANDING CRAFT SENT AT DRY LAND unloads there. That is the LST's only verb, and
        right-click is where it belongs: the craft cannot go on land, so a click on land with one
        selected can only mean "the cargo goes there". Sent at water it is an ordinary move, so
@@ -234,10 +252,17 @@ function _rtsRightClick(mx, my, hit0) {
     if (ud.harvest && tgt && tgt.side === 'player' && tgt.def === 'refinery') { u.order = 'harvest'; u.hstate = 'toRef'; u.path = null; continue; }
     _rtsOrderMove(u, hit.x + spread[i].x, hit.z + spread[i].z, !!U.attackMove);
   }
-  _rtsFlash(hit.x, hit.z, onScrap ? 'harvest' : 'move');
+  _rtsFlash(hit.x, hit.z, onScrap ? 'harvest' : (struck || waits) ? 'attack' : 'move');
   if (landed) _rtsSay(landed === 1 ? 'Making for the shore.' : landed + ' transports making for the shore.');
   else if (dropped) _rtsSay(dropped === 1 ? 'Taking them in.' : dropped + ' Skylifts taking them in.');
+  else if (waits) _rtsSay(_rtsBombQueuedSay(waits));
+  else if (struck) _rtsSay(struck === 1 ? 'Bombing run on the marked ground.' : struck + ' bombers on their runs.');
+  else if (shadows && tgt) _rtsSay((shadows === 1 ? 'Drone' : shadows + ' drones') + ' shadowing the ' + (rtsUnitDef(tgt.def) || {}).name + '.');
   if (typeof _rtsSfx === 'function') _rtsSfx('order');
+}
+/* what the player is told when a bomber keeps the order for later: why it is not going yet */
+function _rtsBombQueuedSay(n) {
+  return (n === 1 ? 'The bomber flies that run' : n + ' bombers fly those runs') + ' once loaded.';
 }
 /* Spread a group over a loose grid so twelve units do not all path to one tile. */
 function _rtsFormation(n) {

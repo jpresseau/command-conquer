@@ -157,10 +157,17 @@ function _rtsActionAt(mx, my) {
   if (harv && tgt && tgt.side === 'player' && tgt.def === 'refinery') return 'deliver';
   /* Somewhere nothing selected can stand is a no-entry, not a move order that quietly fails -
      asked in each unit's own domain, so open water is a move for a hovercraft or a hull and a
-     refusal for a tank (the order paths the same way: _rtsPathFor) */
+     refusal for a tank (the order paths the same way: _rtsPathFor). An AIRCRAFT stands
+     anywhere: _rtsDomainOf gives it the land's domain, and the cursor said no over the sea to a
+     bomber whose move order (a straight line, _rtsPathFor) went there regardless. */
   if (!_rtsInB(tx, tz)) return 'no';
-  var stand = false;
-  for (i = 0; i < mine.length && !stand; i++) if (!_rtsBlocked(tx, tz, _rtsDomainOf(mine[i]))) stand = true;
+  var stand = false, bombers = 0;
+  for (i = 0; i < mine.length; i++) {
+    if (mine[i].air || !_rtsBlocked(tx, tz, _rtsDomainOf(mine[i]))) stand = true;
+    if (rtsUnitDef(mine[i].def).carpets) bombers++;
+  }
+  /* bombers alone on attack-move lay their line across this ground: the reticle (ui/select.js) */
+  if (U.attackMove && bombers && bombers === mine.length) return 'attack';
   if (!stand) return 'no';
   return U.attackMove ? 'amove' : 'move';
 }

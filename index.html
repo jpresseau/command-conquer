@@ -706,7 +706,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">0455725 · 2026-10-05</div>
+  <div id="rtsBuild" title="build">ffd9371 · 2026-10-05</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -14785,7 +14785,7 @@ function _rtsHoldSelected() {
     var u = G.sel[i];
     if (!u || u.dead || u.side !== 'player' || u.type !== 'unit') continue;
     if ((rtsUnitDef(u.def) || {}).harvest) continue;
-    u.order = 'hold'; u.path = null; u.goal = null; u.susp = null; held++;
+    u.order = 'hold'; u.path = null; u.goal = null; u.susp = null; u.bombNext = null; held++;   /* and a bomber's waiting run: core/bomber.js */
   }
   return held;
 }
@@ -18889,11 +18889,17 @@ function _rtsAIParaTick(dt) {
    a fog bank, every gun of its side finds what it sees at full reach, and what it sees cannot
    hide in a Jammer's field. Sent somewhere new, it circles there instead.
 
+   SENT ONTO A UNIT IT SHADOWS IT (e.orbitOn): the circle's centre follows the unit once it has
+   moved RTS_DRONE.follow cells from it - over one of yours, a column's eye on the march; over
+   an enemy's, a tail on it. It lets go when the unit dies or boards something, or when an enemy
+   unit is no longer seen by the drone's side (a submarine diving), so a drone cannot hand the
+   player the track of something nothing of theirs can see. A new order ends it.
+
    The opponent buys one when its army is fighting half-blind - fog, a sandstorm, or a Jammer of
    the player's on the field - with its own base defended, and keeps it circling over the middle
    of its largest team on the march. */
 
-var RTS_DRONE = { r: 3, step: 0.6, every: 2 };
+var RTS_DRONE = { r: 3, step: 0.6, every: 2, follow: 2 };
 
 function _rtsOrbits(u) { return !!(rtsUnitDef(u.def) || {}).orbits; }
 function _rtsDroneTick() {
@@ -18902,7 +18908,13 @@ function _rtsDroneTick() {
     var e = G.ents[i];
     if (e.dead || e.type !== 'unit' || !_rtsOrbits(e)) continue;
     var busy = e.order && e.order !== 'orbit';
+    if (busy) e.orbitOn = null;                                                     /* a new order ends a shadow */
     if (busy && e.path && e.pi < e.path.length) { e.orbit = null; continue; }    /* on its way */
+    if (e.orbitOn != null) {
+      var t = G.byId[e.orbitOn];
+      if (!t || t.dead || t.inside || (t.side !== e.side && !_rtsShadowSeen(e, t))) e.orbitOn = null;
+      else if (!e.orbit || Math.hypot(t.x - e.orbit.x, t.z - e.orbit.z) > RTS_DRONE.follow * RTS_TILE) e.orbit = _rtsDroneCentre(t.x, t.z);
+    }
     if (!e.orbit) e.orbit = _rtsDroneCentre(e.x, e.z);                              /* stopped: circle here */
     if (e.path && e.pi < e.path.length) continue;                                  /* still on this leg */
     /* the next point round the circle, a step ahead of where it is */
@@ -18922,7 +18934,17 @@ function _rtsDroneCentre(x, z) {
 function _rtsDroneAt(e, x, z) {
   var o = _rtsDroneCentre(x, z);
   e.orbit = o; e.order = 'orbit'; e.path = [{ x: o.x, z: o.z }]; e.pi = 0; e.goal = { x: o.x, z: o.z };
+  e.orbitOn = null;
 }
+/* ...or over a unit, wherever it goes */
+function _rtsDroneOn(e, t) {
+  _rtsDroneAt(e, t.x, t.z);
+  e.orbitOn = t.id;
+}
+/* Is the shadowed enemy still seen by the drone's side? The player's view is _rtsEntSeen
+   (core/supers.js) - a diving submarine is not seen, however close the drone circles. The
+   opponent never shadows anything (its drone follows its own team, below). */
+function _rtsShadowSeen(e, t) { return e.side !== 'player' || _rtsEntSeen(t); }
 
 /* Is the opponent fighting half-blind? */
 function _rtsAIHalfBlind() {
@@ -18973,19 +18995,29 @@ function _rtsAIDroneTick(dt) {
    Both armies build one, behind a Helipad or an Airfield (`provides:['airpad']`). Its weapon is
    `carpet`, which only says what it can be sent at: _rtsFire never fires it (combat.js).
 
+   ...OR AT A PLACE. Attack-move on the ground (A + right-click; on a phone the AMOVE button, then
+   a hold) sends it at that spot: order 'bomb', the aim in e.bombAt, and the line laid across it
+   as it would be across a target that never moves - a road a column will come down, the ground
+   in front of a wall. And AN ORDER GIVEN WHILE IT CANNOT FLY WAITS: an empty rack, a pad turn or
+   a storm put the aircraft tick in charge (core/move.js _rtsAirTick), which set the order to
+   'rearm' and cleared it when the bombs were aboard, so a target or a place given to a bomber
+   on its pad was dropped without a word. It is kept in e.bombNext and flown the first tick the
+   bomber is free (_rtsBomberSend). 
+
    The opponent buys one once the player has dug in and its own base is defended, and sends it,
    whenever it is loaded, at the most crowded corner of the player's base: the building with the
    most of the player's buildings round it. */
 
 var RTS_BOMB = { n: 8, gap: 1, fall: 0.7, dmg: 90, rad: 1.3, lead: 5, crowd: 4, every: 2 };
 
-/* the run: n bombs gap cells apart, centred on (x, z), along the line the bomber flies to it */
-function _rtsBombRun(e, x, z) {
+/* the run: n bombs gap cells apart, centred on (x, z), along the line the bomber flies to it.
+   `aim` names what the run belongs to - the target's id, or the ground order's key */
+function _rtsBombRun(e, x, z, aim) {
   var dx = x - e.x, dz = z - e.z, L = Math.hypot(dx, dz), step = RTS_BOMB.gap * RTS_TILE;
   /* right over the aim there is no course to it: the line runs the way the bomber is heading */
   if (L < RTS_TILE) { dx = Math.cos(e.rot); dz = Math.sin(e.rot); } else { dx /= L; dz /= L; }
   var half = (RTS_BOMB.n - 1) / 2 * step, out = half + RTS_BOMB.lead * RTS_TILE;
-  e.run = { sx: x - dx * half, sz: z - dz * half, dx: dx, dz: dz, k: 0, tgt: e.target ? e.target.id : null };
+  e.run = { sx: x - dx * half, sz: z - dz * half, dx: dx, dz: dz, k: 0, tgt: aim };
   /* already past the start of the line: it lays only what is still ahead of it */
   var s = ((e.x - e.run.sx) * dx + (e.z - e.run.sz) * dz) / step;
   if (s > 0) e.run.k = Math.ceil(s);
@@ -18999,21 +19031,26 @@ function _rtsBombRun(e, x, z) {
    steers it), false to leave it to everything else. */
 function _rtsBomberTick(e, dt, d) {
   if (!d.carpets) return false;
-  var r = e.run, live = e.order === 'attack' && !!e.target && !e.target.dead;
+  /* free to fly, with an order that waited for it: fly it now (_rtsBomberSend) */
+  if (e.bombNext && !e.run && e.ammo > 0) { var nx = e.bombNext; e.bombNext = null; _rtsBomberGo(e, nx); }
+  /* what the run is aimed at: a target (order 'attack'), or a place on the ground (order 'bomb') */
+  var ground = e.order === 'bomb' && !!e.bombAt, aim = ground ? _rtsBombKey(e.bombAt) : (e.target ? e.target.id : null);
+  var r = e.run, live = ground || (e.order === 'attack' && !!e.target && !e.target.dead);
+  var ax = ground ? e.bombAt.x : e.target && e.target.x, az = ground ? e.bombAt.z : e.target && e.target.z;
   /* called off, or pointed at something else: a bay that has opened is spent */
-  if (r && (e.order !== 'attack' || (e.target && r.tgt !== e.target.id))) {
+  if (r && ((e.order !== 'attack' && !ground) || (aim != null && r.tgt !== aim))) {
     if (r.k > 0) e.ammo = 0;
     e.run = r = null;
   }
   if (!r) {
     if (!live || !(e.ammo > 0)) return false;
-    _rtsBombRun(e, e.target.x, e.target.z); r = e.run;
+    _rtsBombRun(e, ax, az, aim); r = e.run;
   } else if (r.k === 0) {
     /* nothing away yet: the line follows the target - or, the target gone, the run is off. The
        first bomb stays the first: a re-plan on the tick the bomber crosses the start of the line
        would otherwise count it as already past bomb 0 and lay seven. */
     if (!live) { e.run = null; e.order = null; e.target = null; e.path = null; e.goal = null; return false; }
-    _rtsBombRun(e, e.target.x, e.target.z); r = e.run; r.k = 0;
+    _rtsBombRun(e, ax, az, aim); r = e.run; r.k = 0;
   }
   var step = RTS_BOMB.gap * RTS_TILE, s = ((e.x - r.sx) * r.dx + (e.z - r.sz) * r.dz) / step;
   while (r.k < RTS_BOMB.n && s >= r.k) {
@@ -19023,9 +19060,31 @@ function _rtsBomberTick(e, dt, d) {
   }
   if (r.k >= RTS_BOMB.n || !e.path || e.pi >= e.path.length) {
     /* the load is gone: home to load again */
-    e.run = null; e.ammo = 0; e.target = null; e.order = null; e.path = null; e.goal = null;
+    e.run = null; e.ammo = 0; e.target = null; e.order = null; e.path = null; e.goal = null; e.bombAt = null;
   }
   return true;
+}
+/* a ground order's key: the run belongs to the place, as a target's run belongs to its id */
+function _rtsBombKey(p) { return 'at:' + Math.round(p.x) + ',' + Math.round(p.z); }
+/* SEND IT: at a target ({ id }) or a place ({ x, z }). Loaded and free to fly, it goes now and
+   this says true; otherwise the order waits in e.bombNext - the aircraft tick (core/move.js) is
+   taking it home to load, or keeping it on the pad through a storm - and false says so. A bay
+   already open lays the rest of its line first: re-aimed there, the run is spent (above), and
+   the new aim was lost with it. */
+function _rtsBomberSend(e, aim) {
+  e.bombNext = null;
+  var d = rtsUnitDef(e.def) || {};
+  if (e.ammo > 0 && !(e.rearming > 0) && !_rtsStormGrounds(e, d) && !(e.run && e.run.k > 0)) { _rtsBomberGo(e, aim); return true; }
+  e.bombNext = aim;
+  return false;
+}
+function _rtsBomberGo(e, aim) {
+  if (aim.id != null) {
+    var t = window._rtsG.byId[aim.id];
+    if (t && !t.dead) { e.bombAt = null; _rtsOrderAttack(e, t); }
+    return;
+  }
+  e.order = 'bomb'; e.target = null; e.hstate = null; e.bombAt = { x: aim.x, z: aim.z };
 }
 function _rtsBombDrop(e, x, z) {
   var G = window._rtsG;
@@ -30606,6 +30665,146 @@ function _rtsTouchCmdInit() {
   _rtsTouchCmdSync();
 }
 </script>
+<script>/* ui/selhint.js - what a selected unit is FOR, said where the player is looking.
+
+   THE ORDERS WERE THERE AND NOTHING SAID SO. A Recon Drone circles wherever it is sent, a Mine
+   Boat lays on D, a Heavy Bomber carpets what it is sent at - and the only place any of it was
+   written was the build tooltip, read once, before the unit existed. Once on the field, the
+   readout said "Mine Boat - 380/380 hp" and the DEPLOY button said DEPLOY over a mine, a bridge
+   and a Command Yard alike. Three things here, all read off the unit's own rules:
+
+     THE TIP       the first time a match selects a kind of unit with an order of its own, the
+                   message line says what to do with it - in the words the device can obey
+                   (right-click and keys at a desk; hold, AMOVE and the sidebar's buttons on a
+                   phone) - and the readout keeps it as its hover title (_rtsSelTipFrame)
+     THE STATE     the readout carries what the order needs to know: mines left, bombs loaded or
+                   loading, a run waiting, men aboard, what a drone is shadowing (_rtsUnitStateTxt)
+     THE BUTTON    reads what it does: LAY MINE, BRIDGE or DEPLOY (_rtsDeployLabel)
+
+   One tip per verb, keyed by the rule flag that gives the unit the verb (RTS_VERB_TIPS), and
+   the unit resolved to its most particular verb (RTS_VERB_ORDER). unit/selhint holds it from
+   both ends: every unarmed unit has a verb, every tip names a flag some unit carries, and no
+   phone tip names a key or a right button. */
+
+/* most particular first: a Paradrop Plane `carries` too, but its tip is the drop's */
+var RTS_VERB_ORDER = ['carpets', 'orbits', 'slings', 'paradrops', 'hover', 'bridge', 'mines', 'sweeps', 'jams', 'spots',
+  'heals', 'deploy', 'escorts', 'shallow', 'harvest', 'capture', 'steal', 'demo', 'carries'];
+
+/* d: the unit's rules. desk/touch: the tip, without the unit's name (the caller puts it first). */
+var RTS_VERB_TIPS = {
+  carpets: { desk: function () { return 'right-click a target to carpet it, or A + right-click the ground to carpet that spot.'; },
+             touch: function () { return 'hold on a target to carpet it, or tap AMOVE and hold on the ground to carpet that spot.'; } },
+  orbits: { desk: function () { return 'right-click a place and it circles there; right-click a unit and it shadows it.'; },
+            touch: function () { return 'hold on a place and it circles there; hold on a unit and it shadows it.'; } },
+  slings: { desk: function () { return 'select a vehicle and right-click the crane to hook it on, then right-click where to set it down - or U to drop it here.'; },
+            touch: function () { return 'select a vehicle and hold on the crane to hook it on, then hold where to set it down - or tap UNLOAD to drop it here.'; } },
+  paradrops: { desk: function () { return 'select infantry and right-click the plane over its Airfield to board, then right-click the drop zone - or U to jump here.'; },
+               touch: function () { return 'select infantry and hold on the plane over its Airfield to board, then hold on the drop zone - or tap UNLOAD to jump here.'; } },
+  hover: { desk: function () { return 'crosses land and water. Select infantry and right-click it to board; right-click a shore to land them, or U to unload where it stands.'; },
+           touch: function () { return 'crosses land and water. Select infantry and hold on it to board; hold on a shore to land them, or tap UNLOAD where it stands.'; } },
+  bridge: { desk: function () { return 'drive to the water\'s edge facing the far bank, then D or BRIDGE lays a span up to ' + RTS_LAYBRIDGE_SPAN + ' cells.'; },
+            touch: function () { return 'drive to the water\'s edge facing the far bank, then tap BRIDGE to lay a span up to ' + RTS_LAYBRIDGE_SPAN + ' cells.'; } },
+  mines: { desk: function (d) { return 'D or LAY MINE puts a mine ' + (d.sea ? 'in the water ' : '') + 'where it stands; ' + (d.sea ? 'its yard' : 'a Repair Bay') + ' restocks it.'; },
+           touch: function (d) { return 'tap LAY MINE to put a mine ' + (d.sea ? 'in the water ' : '') + 'where it stands; ' + (d.sea ? 'its yard' : 'a Repair Bay') + ' restocks it.'; } },
+  sweeps: { desk: function () { return 'finds enemy mines within ' + RTS_SWEEP.see + ' cells and beats out the ones in reach; left idle, it clears what it found.'; } },
+  jams: { desk: function () { return 'parked, it hides your units within ' + RTS_JAM.r + ' cells from enemy eyes and guns until they fire or the enemy comes close.'; } },
+  spots: { desk: function () { return 'every gun of yours finds what it sees at full reach, through fog and Jammers.'; } },
+  heals: { desk: function (d) {
+    var k = d.healKind === 'vehicle' ? 'vehicles' : d.healKind === 'ship' ? 'ships' : 'infantry';
+    return 'mends your ' + k + ' near it for free' + (d.healKind ? '; left idle, it goes to a damaged one by itself.' : '.');
+  } },
+  deploy: { desk: function () { return 'D or DEPLOY sets it down as a Command Yard where it stands.'; },
+            touch: function () { return 'tap DEPLOY to set it down as a Command Yard where it stands.'; } },
+  escorts: { desk: function () { return 'sails with your nearest ship by itself and keeps aircraft off it; it cannot hit ships or the shore.'; } },
+  shallow: { desk: function () { return 'at low tide it can sit on the drying flats, where no other ship can go, and shell the shore.'; } },
+  harvest: { desk: function () { return 'right-click scrap to gather it; it takes the load to a Refinery by itself.'; },
+             touch: function () { return 'hold on scrap to gather it; it takes the load to a Refinery by itself.'; } },
+  capture: { desk: function () { return 'right-click an enemy building to take it over.'; },
+             touch: function () { return 'hold on an enemy building to take it over.'; } },
+  steal: { desk: function () { return 'right-click an enemy Refinery to steal its credits.'; },
+           touch: function () { return 'hold on an enemy Refinery to steal its credits.'; } },
+  demo: { desk: function () { return 'right-click an enemy building to blow it up with C4.'; },
+          touch: function () { return 'hold on an enemy building to blow it up with C4.'; } },
+  carries: { desk: function (d) { return 'select units and right-click it to board' + ((d.sea || d.air) ? '; right-click the ground to put them down there' : '') + ', or U to unload where it stands.'; },
+             touch: function (d) { return 'select units and hold on it to board' + ((d.sea || d.air) ? '; hold on the ground to put them down there' : '') + ', or tap UNLOAD where it stands.'; } },
+};
+
+/* the verb a unit is selected for, by its rules: the first flag of RTS_VERB_ORDER it carries */
+function _rtsVerbOf(d) {
+  if (!d) return null;
+  for (var i = 0; i < RTS_VERB_ORDER.length; i++) if (d[RTS_VERB_ORDER[i]]) return RTS_VERB_ORDER[i];
+  return null;
+}
+/* The tip for one kind of unit, for this device: "Name: what to do." - or null */
+function _rtsVerbTip(d, touch) {
+  var v = _rtsVerbOf(d), T = v && RTS_VERB_TIPS[v];
+  if (!T) return null;
+  var f = (touch && T.touch) || T.desk;
+  return d.name + ': ' + f(d);
+}
+/* The kind of unit a selection is, when it is one kind: the player's units in it, all one def */
+function _rtsSelOneKind(sel) {
+  var def = null;
+  for (var i = 0; i < sel.length; i++) {
+    var e = sel[i];
+    if (!e || e.dead || e.side !== 'player' || e.type !== 'unit') return null;
+    if (def && e.def !== def) return null;
+    def = e.def;
+  }
+  return def;
+}
+
+/* Once a frame, from the sidebar: on a NEW selection of one kind with a verb, the readout's
+   title becomes the tip, and the first such selection of that kind this match says it on the
+   message line - unless something else is being said, so a tip never talks over "Base under
+   attack" (it waits for a later selection instead). */
+function _rtsSelTipFrame(sel, el) {
+  var G = window._rtsG, U = window._rtsUI;
+  if (!G || !U) return;
+  var key = sel.map(function (e) { return e && e.id; }).join(',');
+  if (U.tipSel === key) return;
+  U.tipSel = key;
+  var def = _rtsSelOneKind(sel), d = def && rtsUnitDef(def);
+  var touch = typeof _rtsTouchUI === 'function' && _rtsTouchUI();
+  var tip = d ? _rtsVerbTip(d, touch) : null;
+  if (el) el.title = tip || '';
+  if (!tip) return;
+  var seen = G.tipSeen || (G.tipSeen = {});
+  if (seen[def] || G.msgT > 1.5) return;
+  seen[def] = 1;
+  _rtsSay(tip, 7);
+}
+
+/* What the readout adds after "Name - hp": the state the unit's order turns on. */
+function _rtsUnitStateTxt(e) {
+  var d = rtsUnitDef(e.def) || {}, out = '';
+  if (d.mines) { var m = _rtsMinesLeft(e); out += ' · ' + m + (m === 1 ? ' mine' : ' mines'); }
+  if (d.carpets) {
+    out += e.run ? ' · on its run' : e.rearming > 0 ? ' · loading' : e.ammo > 0 ? ' · loaded' : ' · going home to load';
+    if (e.bombNext) out += ', next run waiting';
+  }
+  if (d.orbits) {
+    var t = e.orbitOn != null && window._rtsG.byId[e.orbitOn];
+    if (t && !t.dead) out += ' · shadowing ' + (rtsUnitDef(t.def) || {}).name;
+    else if (e.order === 'orbit') out += ' · circling';
+  }
+  if (d.carries) { var n = _rtsCargoCount(e); if (n) out += ' · ' + n + ' aboard'; }
+  return out;
+}
+
+/* The DEPLOY button's word, for what the selection's deployables would do (core/transport.js
+   _rtsDeploy): LAY MINE, BRIDGE or DEPLOY - and DEPLOY for a mixture, which is all of them. */
+function _rtsDeployLabel(sel) {
+  var w = null;
+  for (var i = 0; i < sel.length; i++) {
+    if (!_rtsCanDeploy(sel[i])) continue;
+    var d = rtsUnitDef(sel[i].def), x = d.mines ? 'LAY MINE' : d.bridge ? 'BRIDGE' : 'DEPLOY';
+    if (w && w !== x) return 'DEPLOY';
+    w = x;
+  }
+  return w || 'DEPLOY';
+}
+</script>
 <script>/* ui/sidebar.js - the sidebar: tabs, the build list, and the per-frame readouts.
    Part of rts.ui, which owns the DOM.
 
@@ -30994,6 +31193,7 @@ function _rtsSyncSidebar(dt) {
     txt = ed.name + ' — ' + Math.ceil(e.hp) + '/' + e.maxHp + ' hp';
     if (e.type === 'unit' && rtsUnitDef(e.def).harvest)
       txt += ' · ' + Math.floor(e.carry) + ' load (' + Math.floor(e.carryVal || 0) + ' credits)';
+    if (e.type === 'unit' && e.side === 'player') txt += _rtsUnitStateTxt(e);   /* mines left, bombs, aboard: ui/selhint.js */
   } else {
     var counts = {}, i;
     for (i = 0; i < sel.length; i++) { var n = (rtsUnitDef(sel[i].def) || rtsStructDef(sel[i].def)).name; counts[n] = (counts[n] || 0) + 1; }
@@ -31001,7 +31201,9 @@ function _rtsSyncSidebar(dt) {
     for (var n2 in counts) parts.push(counts[n2] + '× ' + n2);
     txt = parts.join(', ');
   }
-  document.getElementById('rtsSelTxt').textContent = txt;
+  var selEl = document.getElementById('rtsSelTxt');
+  if (selEl.textContent !== txt) selEl.textContent = txt;
+  _rtsSelTipFrame(sel, selEl);                       /* what this unit is for, once a match: ui/selhint.js */
 
   /* THE DEPLOY BUTTON, and it is the only way to deploy without a keyboard. It appears exactly
      when the order would do something - the selection holds one of your units with a `deploy`
@@ -31013,6 +31215,9 @@ function _rtsSyncSidebar(dt) {
     var can = false;
     for (var di = 0; di < sel.length; di++) if (_rtsCanDeploy(sel[di])) { can = true; break; }
     if (dep.hidden === can) dep.hidden = !can;
+    /* ...and says what it does: a mine, a span, or a Command Yard (ui/selhint.js) */
+    var dw = can ? _rtsDeployLabel(sel) : 'DEPLOY';
+    if (dep.textContent !== dw) dep.textContent = dw;
   }
   /* AND UNLOAD, the same way: shown while a selected transport has something aboard, since the
      U key is the only other door and a finger has no U (core/transport.js _rtsUnloadSelected) */
@@ -32101,6 +32306,8 @@ function _rtsRightClick(mx, my, hit0) {
   if (!hit) return;
   var mine = [], i;
   for (i = 0; i < G.sel.length; i++) if (G.sel[i].side === 'player' && G.sel[i].type === 'unit') mine.push(G.sel[i]);
+  /* a new order replaces one a bomber was keeping for when it is loaded (core/bomber.js) */
+  for (i = 0; i < mine.length; i++) mine[i].bombNext = null;
   /* A SELECTED PRODUCTION BUILDING TAKES THE ORDER AS A RALLY POINT. This used to be the line
      that returned: `mine` holds units only, so with a war factory selected the right-click -
      and the touch hold, which comes through here too - reached the end of the function and did
@@ -32159,7 +32366,7 @@ function _rtsRightClick(mx, my, hit0) {
     /* Specialists sent at an enemy BUILDING do their own job instead of attacking it. The
        engineer and the thief have no weapon at all, so an attack order would be a walk followed
        by standing there; the Commando has pistols but her C4 is the reason to send her. */
-    var capped = 0, special = 0, drops = 0, cant = 0;
+    var capped = 0, special = 0, drops = 0, cant = 0, queued = 0, shadow = 0;
     for (i = 0; i < mine.length; i++) {
       var mu = mine[i], md = rtsUnitDef(mu.def), job = null;
       if (tgt.type === 'struct') {
@@ -32180,16 +32387,24 @@ function _rtsRightClick(mx, my, hit0) {
          it with a gun it does not have. Through _rtsOrderAttack that became a plain move, and
          the plane hovered over the target with its squads still aboard. */
       else if (!md.weapon && _rtsIsTransport(mu) && _rtsCargoCount(mu) && _rtsOrderUnloadAt(mu, tgt.x, tgt.z)) drops++;
+      /* a Recon Drone sent at an enemy unit SHADOWS it - circles over it wherever it goes - rather
+         than flying to where it stood and circling there (core/drone.js) */
+      else if (md.orbits && tgt.type === 'unit') { _rtsDroneOn(mu, tgt); shadow++; }
       else {
         /* an armed unit whose gun cannot bear on this - a Flak Track sent at a tank - drives to
            it instead (orders.js), and is told so when nothing selected can do better */
-        if (md.weapon && !_rtsCanEngage(mu, tgt)) cant++;
-        _rtsOrderAttack(mu, tgt);
+        var cannot = md.weapon && !_rtsCanEngage(mu, tgt);
+        if (cannot) cant++;
+        /* a bomber is SENT, which keeps the order through a reload (core/bomber.js) */
+        if (md.carpets && !cannot) { if (!_rtsBomberSend(mu, { id: tgt.id })) queued++; }
+        else _rtsOrderAttack(mu, tgt);
       }
     }
     _rtsFlash(tgt.x, tgt.z, special + drops === mine.length ? 'harvest' : 'attack');
     if (special) _rtsSay(special === 1 ? 'Moving in.' : special + ' specialists moving in.');
     else if (drops) _rtsSay(drops === 1 ? 'Dropping in.' : drops + ' transports dropping in.');
+    else if (queued) _rtsSay(_rtsBombQueuedSay(queued));
+    else if (shadow && shadow === mine.length) _rtsSay((shadow === 1 ? 'Drone' : shadow + ' drones') + ' shadowing the ' + (rtsUnitDef(tgt.def) || {}).name + '.');
     else if (cant && cant === mine.length) _rtsSay((mine.length === 1 ? rtsUnitDef(mine[0].def).name + ' cannot' : 'They cannot') + ' engage that - moving up to it.');
     if (typeof _rtsSfx === 'function') _rtsSfx('order');
     return;
@@ -32198,10 +32413,18 @@ function _rtsRightClick(mx, my, hit0) {
   var onScrap = _rtsInB(tx, tz) && G.scrap[_rtsIdx(tx, tz)] > 0;
   var onWater = _rtsInB(tx, tz) && G.terrain[_rtsIdx(tx, tz)] === RTS_T_WATER;
   var spread = _rtsFormation(mine.length);
-  var landed = 0, dropped = 0;
+  var landed = 0, dropped = 0, struck = 0, waits = 0, shadows = 0;
   for (i = 0; i < mine.length; i++) {
     var u = mine[i], ud = rtsUnitDef(u.def);
     if (ud.harvest && onScrap) { _rtsOrderHarvest(u, tx, tz); continue; }
+    /* A BOMBER ON ATTACK-MOVE LAYS ITS LINE ACROSS THE GROUND it was sent at - the one way to
+       bomb a place rather than a thing (core/bomber.js). A plain right-click still moves it. */
+    if (ud.carpets && U.attackMove) {
+      if (_rtsBomberSend(u, { x: hit.x + spread[i].x, z: hit.z + spread[i].z })) struck++; else waits++;
+      continue;
+    }
+    /* a Recon Drone sent onto one of your own units shadows it, as onto an enemy's (above) */
+    if (ud.orbits && tgt && tgt.type === 'unit' && tgt.side === 'player' && tgt !== u && !tgt.dead) { _rtsDroneOn(u, tgt); shadows++; continue; }
     /* A LOADED LANDING CRAFT SENT AT DRY LAND unloads there. That is the LST's only verb, and
        right-click is where it belongs: the craft cannot go on land, so a click on land with one
        selected can only mean "the cargo goes there". Sent at water it is an ordinary move, so
@@ -32217,10 +32440,17 @@ function _rtsRightClick(mx, my, hit0) {
     if (ud.harvest && tgt && tgt.side === 'player' && tgt.def === 'refinery') { u.order = 'harvest'; u.hstate = 'toRef'; u.path = null; continue; }
     _rtsOrderMove(u, hit.x + spread[i].x, hit.z + spread[i].z, !!U.attackMove);
   }
-  _rtsFlash(hit.x, hit.z, onScrap ? 'harvest' : 'move');
+  _rtsFlash(hit.x, hit.z, onScrap ? 'harvest' : (struck || waits) ? 'attack' : 'move');
   if (landed) _rtsSay(landed === 1 ? 'Making for the shore.' : landed + ' transports making for the shore.');
   else if (dropped) _rtsSay(dropped === 1 ? 'Taking them in.' : dropped + ' Skylifts taking them in.');
+  else if (waits) _rtsSay(_rtsBombQueuedSay(waits));
+  else if (struck) _rtsSay(struck === 1 ? 'Bombing run on the marked ground.' : struck + ' bombers on their runs.');
+  else if (shadows && tgt) _rtsSay((shadows === 1 ? 'Drone' : shadows + ' drones') + ' shadowing the ' + (rtsUnitDef(tgt.def) || {}).name + '.');
   if (typeof _rtsSfx === 'function') _rtsSfx('order');
+}
+/* what the player is told when a bomber keeps the order for later: why it is not going yet */
+function _rtsBombQueuedSay(n) {
+  return (n === 1 ? 'The bomber flies that run' : n + ' bombers fly those runs') + ' once loaded.';
 }
 /* Spread a group over a loose grid so twelve units do not all path to one tile. */
 function _rtsFormation(n) {
@@ -32407,10 +32637,17 @@ function _rtsActionAt(mx, my) {
   if (harv && tgt && tgt.side === 'player' && tgt.def === 'refinery') return 'deliver';
   /* Somewhere nothing selected can stand is a no-entry, not a move order that quietly fails -
      asked in each unit's own domain, so open water is a move for a hovercraft or a hull and a
-     refusal for a tank (the order paths the same way: _rtsPathFor) */
+     refusal for a tank (the order paths the same way: _rtsPathFor). An AIRCRAFT stands
+     anywhere: _rtsDomainOf gives it the land's domain, and the cursor said no over the sea to a
+     bomber whose move order (a straight line, _rtsPathFor) went there regardless. */
   if (!_rtsInB(tx, tz)) return 'no';
-  var stand = false;
-  for (i = 0; i < mine.length && !stand; i++) if (!_rtsBlocked(tx, tz, _rtsDomainOf(mine[i]))) stand = true;
+  var stand = false, bombers = 0;
+  for (i = 0; i < mine.length; i++) {
+    if (mine[i].air || !_rtsBlocked(tx, tz, _rtsDomainOf(mine[i]))) stand = true;
+    if (rtsUnitDef(mine[i].def).carpets) bombers++;
+  }
+  /* bombers alone on attack-move lay their line across this ground: the reticle (ui/select.js) */
+  if (U.attackMove && bombers && bombers === mine.length) return 'attack';
   if (!stand) return 'no';
   return U.attackMove ? 'amove' : 'move';
 }

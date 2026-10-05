@@ -115,6 +115,24 @@ waiting to be placed needs a yard to come out of, so it goes too. Without this, 
 barracks left the rifle squad inside it still ticking toward completion and then walking out
 of a building that no longer exists.
 
+### What a selected unit is for (ui/selhint.js)
+
+The orders were there and nothing on the field said so: the build tooltip was the only place, read
+once, before the unit existed. Three things now come off the unit's own rules:
+- **The tip.** The first selection of a kind of unit with a verb, once a match (`G.tipSeen`), says
+  what to do with it on the message line, in the words the device can obey (right-click and keys at
+  a desk; hold, AMOVE and the sidebar's buttons on a phone). It waits rather than talk over a fresh
+  message, and the readout keeps it as its hover title. One tip per verb flag (`RTS_VERB_TIPS`); a
+  unit resolves to its most particular one (`RTS_VERB_ORDER`: a Paradrop Plane `carries` too, but
+  its tip is the drop's).
+- **The state.** The readout adds what the order turns on: mines left, a bomber loaded, loading,
+  going home or on its run (and a run waiting), what a drone circles or shadows, men aboard.
+- **The button.** DEPLOY reads LAY MINE for a layer or a Mine Boat, BRIDGE for the Bridge Layer.
+
+`unit/selhint` holds it from both ends: every unarmed unit has a verb and a tip at a desk and on a
+phone, every tip names a flag some unit carries, no phone tip names a key or a click, and every key
+a desk tip names is one `ui/keys.js` handles. `e2e/deploy` taps LAY MINE on a phone profile.
+
 ### One answer to "why can't I build this?"
 
 `Who_Can_Build_Me` is one question, and it had three implementations here: `_rtsCanQueue`

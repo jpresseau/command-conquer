@@ -22,7 +22,7 @@ function _rtsHoldSelected() {
     var u = G.sel[i];
     if (!u || u.dead || u.side !== 'player' || u.type !== 'unit') continue;
     if ((rtsUnitDef(u.def) || {}).harvest) continue;
-    u.order = 'hold'; u.path = null; u.goal = null; u.susp = null; held++;
+    u.order = 'hold'; u.path = null; u.goal = null; u.susp = null; u.bombNext = null; held++;   /* and a bomber's waiting run: core/bomber.js */
   }
   return held;
 }

@@ -17,6 +17,8 @@
    - it is big enough to hit. This order is one-shot and irreversible on a 2500-credit unit.
    - the key and the button give the SAME order, which is why the loop moved into
      core/transport.js. Two copies would drift, and the drift would be silent.
+   - the button says what it does (LAY MINE, BRIDGE, DEPLOY), and the readout what the order
+     needs (mines left), with the unit's tip in a phone's words - ui/selhint.js.
    - the readout's text and the button coexist. The sidebar rewrites that line every frame, and
      it used to do it by assigning textContent to the row the button now lives in - which would
      have deleted the button on the frame after it appeared. That is a real trap, not a
@@ -136,6 +138,36 @@ var S = new Suite('deploy');
     }));
   }
 
+  /* THE BUTTON SAYS WHAT IT DOES, AND THE READOUT WHAT THE ORDER NEEDS (ui/selhint.js): a Mine
+     Layer selected on a phone shows LAY MINE, its mines left, and its tip - in a phone's words -
+     on the message line and as the readout's title; a tap lays one and the count goes down; and
+     the Bridge Layer's button reads BRIDGE. Through the real sidebar repaint, not the helpers. */
+  Object.assign(out, await g.page.evaluate(function () {
+    var G = window._rtsG, yard = _rtsHas('player', 'yard');
+    var c = _rtsNearestOpen(_rtsTX(yard.x) + 9, _rtsTX(yard.z) + 9, 12, null);
+    if (!c) return { mlStaged: false };
+    var ml = _rtsSpawnUnit('player', 'minelayer', _rtsWX(c[0]), _rtsWX(c[1]));
+    window._rtsML = ml;
+    G.msgT = 0; G.msg = '';
+    G.sel = [ml];
+    _rtsSyncSidebar();
+    var btn = document.getElementById('rtsDeployBtn'), txt = document.getElementById('rtsSelTxt');
+    return { mlStaged: true, mlWord: btn.textContent, mlShown: !btn.hidden, mlTxt: txt.textContent, mlTitle: txt.title,
+             mlMsg: document.getElementById('rtsMsg').textContent, mines0: (G.mines || []).length };
+  }));
+  if (out.mlStaged && out.mlShown) {
+    await g.page.locator('#rtsDeployBtn').tap();
+    Object.assign(out, await g.page.evaluate(function () {
+      var G = window._rtsG, ml = window._rtsML;
+      _rtsSyncSidebar();
+      var o = { mines1: (G.mines || []).length, mlTxt2: document.getElementById('rtsSelTxt').textContent };
+      var bl = _rtsSpawnUnit('player', 'bridgelayer', ml.x, ml.z);
+      G.sel = [bl]; _rtsSyncSidebar();
+      o.blWord = document.getElementById('rtsDeployBtn').textContent;
+      return o;
+    }));
+  }
+
   var errs = g.errors.filter(function (e) { return !/ServiceWorker/.test(e); });
   await g.close();
   await browser.close();
@@ -174,6 +206,12 @@ var S = new Suite('deploy');
            'core/transport.js, so the key and the button cannot drift apart');
     }
   }
+  S.ok('a Mine Layer selected on a phone: the button reads LAY MINE, the readout its five mines, and its tip is said in a phone\'s words and kept as the title',
+       out.mlStaged && out.mlShown && out.mlWord === 'LAY MINE' && /· 5 mines/.test(out.mlTxt) && /tap LAY MINE/.test(out.mlMsg) && out.mlTitle === out.mlMsg,
+       JSON.stringify({ word: out.mlWord, readout: out.mlTxt, msg: out.mlMsg, title: out.mlTitle }));
+  S.ok('...a tap lays one and the readout counts it down; the Bridge Layer\'s button reads BRIDGE',
+       out.mines1 === out.mines0 + 1 && /· 4 mines/.test(out.mlTxt2 || '') && out.blWord === 'BRIDGE',
+       'mines ' + out.mines0 + ' -> ' + out.mines1 + ', readout "' + out.mlTxt2 + '", bridge button "' + out.blWord + '"');
   S.ok('no page errors', !errs.length, errs.join(' | ') || 'none');
   require('../lib/report.js')(S);
 })();

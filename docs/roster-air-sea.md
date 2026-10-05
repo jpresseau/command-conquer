@@ -40,6 +40,10 @@ unarmed and thin-skinned:
   had a point the drone could never reach, so it sat pinned there.
 - It `spots` (core/spotter.js): fog, fog banks and sandstorms never cut its sight, every gun of its
   side finds what it sees at full reach, and a Jammer hides nothing from it.
+- **Sent onto a unit it shadows it** (`_rtsDroneOn`, `e.orbitOn`): the circle's centre follows the
+  unit once it is `RTS_DRONE.follow` (2) cells off - one of yours, or an enemy's. It lets go when
+  the unit dies or boards, when an enemy unit is no longer seen by the player (`_rtsEntSeen`: a
+  diving submarine), and at any new order.
 - The opponent buys one when it is half-blind (`_rtsAIHalfBlind`: fog, a sandstorm, or a Jammer
   of the player's on the field) and defended, and keeps it circling over the centre of its
   largest team on the march (`_rtsAIDroneTick`). The Spotter AI leaves it alone (`_rtsAISpotTick`
@@ -64,6 +68,16 @@ both `provides:['airpad']` (`core/bomber.js`):
   round is gone and the bomber goes home; before the first bomb it turns away with its round, or
   lays the line on the new target instead. A run or orbit goal is clamped inside the air clamp,
   and a line that runs off the map ends there.
+- **Or at a place.** Attack-move on bare ground (`A` + right-click; the AMOVE button and a hold on
+  a phone) is order `'bomb'` with the aim in `e.bombAt`, and the line is laid across that spot as
+  across a target that never moves (`_rtsBomberTick`, `_rtsBombKey`). A plain right-click still
+  only moves it, and the cursor shows the reticle only for bombers alone on attack-move.
+- **An order it cannot fly yet waits** (`_rtsBomberSend`, `e.bombNext`). Loading on its pad, going
+  home empty or grounded by a storm, `_rtsAirTick` owns the aircraft, set its order to `'rearm'`
+  and cleared it when loaded, so a target given then was dropped without a word. Now the player is
+  told it flies once loaded, and it does, at the first tick it is free. A player's re-aim after the
+  first bomb lays the rest of the line and keeps the new aim for after the reload. Any later order
+  from the player, or hold, drops the waiting one; the opponent never re-aims mid-run.
 - **It bombs only what it is sent at.** `carpets` units never acquire a target of their own (idle,
   attack-moving or holding, core/units.js), never retaliate (`_rtsCanRetaliate`), and are never
   pooled as base defenders (`_rtsBaseIsAttacked`): a loaded bomber on its pad does not carpet its
@@ -88,7 +102,9 @@ both `provides:['airpad']` (`core/bomber.js`):
   the `attacked` trigger), as a shell tells them, since a splash attributes itself to nobody; and
   the difficulty's FirepowerBias applies. A bomb carries its bomber by id, not by reference.
 
-`unit/bomber` (29 assertions, 25 mutants killed over three rounds).
+`unit/bomber` (29 assertions, 25 mutants killed over three rounds), and `unit/strike` for the orders
+as a player gives them: the ground strike, the waiting order, a re-aim mid-run, the drone's shadow
+and the cursor (15 assertions, every mutant killed).
 
 ## The Flak Cruiser — escort at sea
 
