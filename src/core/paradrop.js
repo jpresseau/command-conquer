@@ -31,7 +31,7 @@ function _rtsParaJumped(e, men) {
     u.chute = RTS_PARA.fall; u.order = null; u.path = null; u.goal = null; u.target = null;
   }
   _rtsParaHome(e);
-  if (e.side === 'player' && typeof _rtsSay === 'function') _rtsSay('Paratroopers away.');
+  if (e.side === _rtsAIFoe() && typeof _rtsSay === 'function') _rtsSay('Paratroopers away.');
 }
 /* "Unload here and now" (the U key, the opponent's timed-out drop): the plane's men jump rather
    than appear on the ground from sixteen units up. Anything else unloads as it always did. */
@@ -47,7 +47,7 @@ function _rtsAIParaTarget() {
   var G = window._rtsG, best = null, bv = 1e9;
   for (var i = 0; i < G.ents.length; i++) {
     var b = G.ents[i];
-    if (b.dead || b.side !== 'player' || b.type !== 'struct' || !((rtsStructDef(b.def) || {}).power > 0)) continue;
+    if (b.dead || b.side !== _rtsAIFoe() || b.type !== 'struct' || !((rtsStructDef(b.def) || {}).power > 0)) continue;
     var v = _rtsGuardsNear(b, RTS_RAID_GUARD_R);
     if (v < bv) { bv = v; best = b; }
   }
@@ -67,7 +67,7 @@ function _rtsAIParaTick(dt) {
     if (!u.target || u.target.dead || u.order !== 'attack') {
       var aim = st.aim && !st.aim.dead ? st.aim : null, near = 1e9;
       if (!aim) G.ents.forEach(function (b) {
-        if (b.dead || b.side !== 'player' || b.type !== 'struct') return;
+        if (b.dead || b.side !== _rtsAIFoe() || b.type !== 'struct') return;
         var d = Math.hypot(b.x - u.x, b.z - u.z);
         if (d < near && d < RTS_AI_HOVER.reach * RTS_TILE) { near = d; aim = b; }
       });
@@ -79,7 +79,7 @@ function _rtsAIParaTick(dt) {
   var pl = null;
   for (var i = 0; i < G.ents.length && !pl; i++) {
     var e = G.ents[i];
-    if (!e.dead && e.side === 'enemy' && e.type === 'unit' && (rtsUnitDef(e.def) || {}).paradrops) pl = e;
+    if (!e.dead && e.side === _rtsAIOn && e.type === 'unit' && (rtsUnitDef(e.def) || {}).paradrops) pl = e;
   }
   if (!pl) { st.s = 'rest'; return; }
   if (st.s === 'rest') {
@@ -102,7 +102,7 @@ function _rtsAIParaTick(dt) {
     if (!st.aim) { st.s = 'rest'; st.t = G.t; return; }
     /* the drop zone: open ground just past the plant's footprint, on the side away from the
        player's yard - the side its guns face least */
-    var py = _rtsHas('player', 'yard') || st.aim, dx = st.aim.x - py.x, dz = st.aim.z - py.z, L = Math.hypot(dx, dz) || 1;
+    var py = _rtsHas(_rtsAIFoe(), 'yard') || st.aim, dx = st.aim.x - py.x, dz = st.aim.z - py.z, L = Math.hypot(dx, dz) || 1;
     var off = (Math.max((rtsStructDef(st.aim.def) || {}).w || 2, 2) / 2 + 1.5) * RTS_TILE;
     var c = _rtsNearestOpen(_rtsTX(st.aim.x + dx / L * off), _rtsTX(st.aim.z + dz / L * off), 3, null);
     if (!c || !_rtsOrderUnloadAt(pl, _rtsWX(c[0]), _rtsWX(c[1]))) { st.s = 'rest'; st.t = G.t; return; }

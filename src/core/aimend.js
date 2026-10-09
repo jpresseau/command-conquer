@@ -24,17 +24,17 @@ var RTS_MEND_EVERY = 1;          /* seconds between looks */
 /* The opponent's depot that can mend right now, or null. */
 function _rtsAIDepot() {
   var G = window._rtsG;
-  if (_rtsPowerFactor('enemy') < 0.999) return null;
+  if (_rtsPowerFactor(_rtsAIOn) < 0.999) return null;
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.type === 'struct' && e.side === 'enemy' && !e.dead && !e.building && rtsStructDef(e.def).repairs) return e;
+    if (e.type === 'struct' && e.side === _rtsAIOn && !e.dead && !e.building && rtsStructDef(e.def).repairs) return e;
   }
   return null;
 }
 /* Which of the opponent's units are worth the trip: wheels and tracks on land, not a harvester
    (it has a refinery to go to and a job to do), not an aircraft. */
 function _rtsMendable(u) {
-  if (u.dead || u.type !== 'unit' || u.side !== 'enemy' || u.air || u.inside) return false;
+  if (u.dead || u.type !== 'unit' || u.side !== _rtsAIOn || u.air || u.inside) return false;
   var d = rtsUnitDef(u.def);
   return !!d && d.kind === 'vehicle' && !d.sea && !d.harvest;
 }

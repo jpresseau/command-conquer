@@ -58,11 +58,11 @@ function _rtsAIFixBehind(kind) {
   var G = window._rtsG, big = null, bn = 0, id;
   for (id in G.teams) {
     var t = G.teams[id];
-    if (!t.moving) continue;
+    if (!t.moving || !_rtsTeamMine(t)) continue;
     var n = t.members.filter(function (m) { return !m.dead && (rtsUnitDef(m.def) || {}).kind === kind; }).length;
     if (n > bn) { bn = n; big = t; }
   }
-  var c = big && _rtsTeamCentre(big), home = _rtsHas('enemy', 'yard');
+  var c = big && _rtsTeamCentre(big), home = _rtsHas(_rtsAIOn, 'yard');
   if (!c || !home) return null;
   var dx = home.x - c.x, dz = home.z - c.z, L = Math.hypot(dx, dz) || 1;
   return { x: c.x + dx / L * RTS_FIX.behind * RTS_TILE, z: c.z + dz / L * RTS_FIX.behind * RTS_TILE };
@@ -74,7 +74,7 @@ function _rtsAIFixTick(dt) {
   G.ai.fixT = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.inside || u.side !== 'enemy' || u.type !== 'unit' || !_rtsFixes(u) || !_rtsFixIdle(u)) continue;
+    if (u.dead || u.inside || u.side !== _rtsAIOn || u.type !== 'unit' || !_rtsFixes(u) || !_rtsFixIdle(u)) continue;
     if (u.mend != null) continue;                                     /* its own trip to the depot: core/aimend.js */
     if (_rtsFixWants(u)) continue;                                    /* mending comes first */
     var k = rtsUnitDef(u.def).healKind, a = k in at ? at[k] : (at[k] = _rtsAIFixBehind(k));
@@ -89,7 +89,7 @@ function _rtsAIDefended() {
   var G = window._rtsG, n = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (!e.dead && e.side === 'enemy' && e.type === 'struct' && !e.building && (rtsStructDef(e.def) || {}).weapon) n++;
+    if (!e.dead && e.side === _rtsAIOn && e.type === 'struct' && !e.building && (rtsStructDef(e.def) || {}).weapon) n++;
   }
   return n >= RTS_FIX.defended;
 }
@@ -99,7 +99,7 @@ function _rtsAIFieldVehicles(kind) {
   kind = kind || 'vehicle';
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i], d = u.type === 'unit' && rtsUnitDef(u.def);
-    if (!u.dead && u.side === 'enemy' && d && d.kind === kind && d.weapon && !d.harvest) n++;
+    if (!u.dead && u.side === _rtsAIOn && d && d.kind === kind && d.weapon && !d.harvest) n++;
   }
   return n;
 }

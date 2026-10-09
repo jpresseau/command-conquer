@@ -44,11 +44,16 @@ function snapshot(g, extraTeams) {
   G.ents.forEach(function (e) {
     if (e.dead) return;
     out.ents.push([e.id, e.type, e.def, e.side, e.x, e.z, e.hp, e.order || null, _id(e.target), e.path ? e.path.length : -1,
-      e.sqd ? (tm[e.sqd] || 'gone') : null, e.escort ? (tm[e.escort] || 'gone') : null, e.inside ? _id(e.inside) : null,
+      e.sqd != null ? (tm[e.sqd] || 'gone') : null, e.escort != null ? (tm[e.escort] || 'gone') : null,   /* team 0 is a team */ e.inside ? _id(e.inside) : null,
       e.goal ? [e.goal.x, e.goal.z] : null, e.ammo === undefined ? null : e.ammo, e.rot === undefined ? null : e.rot,
       e.turret === undefined ? null : e.turret, e.carry === undefined ? null : e.carry, e.hstate || null, e.cool === undefined ? null : e.cool]);
   });
-  Object.keys(teams).map(Number).sort(function (a, b) { return a - b; }).forEach(function (tid) {
+  /* by seat, then in order of creation: two runs that number their teams differently - one counter
+     for every seat, or one per seat - still list them alike */
+  Object.keys(teams).map(Number).sort(function (a, b) {
+    var A = tm[a].split('#'), B = tm[b].split('#');
+    return A[0] < B[0] ? -1 : A[0] > B[0] ? 1 : A[1] - B[1];
+  }).forEach(function (tid) {
     var t = teams[tid];
     out.teams.push([tm[tid], t.type ? t.type.name : null, (t.members || []).map(_id), t.mi === undefined ? null : t.mi]);
   });
@@ -113,10 +118,11 @@ function pusher(g) {
   };
 }
 
-/* cfg: { seed, diff, army ('allied'|'soviet'), secs, every (s), keep, push, dt } */
+/* cfg: { seed, diff, army ('allied'|'soviet'), secs, every (s), keep, push, dt, self (the player's
+   seat played by the computer at this difficulty) } */
 function battle(g, cfg) {
   if (cfg.army) g.window._RTS_ARMY = cfg.army;
-  g._rtsNewGame(cfg.seed, cfg.diff);
+  g._rtsNewGame(cfg.seed, cfg.diff, cfg.self ? { player: { ctl: 'ai', diff: cfg.self } } : undefined);
   var G = g._rtsG, dt = cfg.dt || 1 / 60, every = cfg.every || 30, steps = Math.round(cfg.secs / dt), per = Math.round(every / dt);
   var marks = [], kinds = {}, play = cfg.push ? pusher(g) : null;
   for (var i = 1; i <= steps; i++) {

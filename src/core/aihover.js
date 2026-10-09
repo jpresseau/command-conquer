@@ -28,7 +28,7 @@ var RTS_AI_HOVER = { crew: 4, near: 10, rest: 75, board: 45, sail: 150, reach: 1
 /* The opponent's own water: the nearest open sea cell to its yard. */
 function _rtsAIHoverLaunch(G) {
   if (G.ai.hovLaunch !== undefined) return G.ai.hovLaunch;
-  var ey = _rtsHasHome('enemy', 'yard') || _rtsHas('enemy', 'yard'), w = ey && _rtsNearestOpen(ey.tx, ey.tz, 30, 'sea');
+  var ey = _rtsHasHome(_rtsAIOn, 'yard') || _rtsHas(_rtsAIOn, 'yard'), w = ey && _rtsNearestOpen(ey.tx, ey.tz, 30, 'sea');
   return (G.ai.hovLaunch = w ? { tx: w[0], tz: w[1], x: _rtsWX(w[0]), z: _rtsWX(w[1]) } : null);
 }
 /* Does a sea route run from the launch water to this water cell? */
@@ -57,7 +57,7 @@ function _rtsAIHoverTarget() {
   var best = null, bv = -1e9;
   for (var i = 0; i < G.ents.length; i++) {
     var h = G.ents[i];
-    if (h.dead || h.side !== 'player' || h.type !== 'unit' || h.inside || !(rtsUnitDef(h.def) || {}).harvest) continue;
+    if (h.dead || h.side !== _rtsAIFoe() || h.type !== 'unit' || h.inside || !(rtsUnitDef(h.def) || {}).harvest) continue;
     var beach = _rtsLandingSpot(h, RTS_AI_HOVER.near);
     if (!beach || Math.hypot(beach.x - h.x, beach.z - h.z) > RTS_AI_HOVER.near * RTS_TILE) continue;
     var w = _rtsNearestOpen(_rtsTX(beach.x), _rtsTX(beach.z), RTS_UNLOAD_REACH, 'sea');
@@ -73,7 +73,7 @@ function _rtsAIHoverCrew(hc, n) {
   var G = window._rtsG, out = [];
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || u.inside || u.raid || u.sqd != null || u.mend != null) continue;
+    if (u.dead || u.side !== _rtsAIOn || u.type !== 'unit' || u.inside || u.raid || u.sqd != null || u.mend != null) continue;
     var d = rtsUnitDef(u.def) || {};
     if (d.kind !== 'infantry' || !d.weapon || !_rtsMission(u).recruitable || !_rtsCanBoard(u, hc)) continue;
     var dist = Math.hypot(u.x - hc.x, u.z - hc.z);
@@ -90,7 +90,7 @@ function _rtsAIRaidPrey(u) {
   for (var pass = 0; pass < 2 && !best; pass++) {
     for (var i = 0; i < G.ents.length; i++) {
       var o = G.ents[i];
-      if (o.dead || o.side !== 'player' || o.inside) continue;
+      if (o.dead || o.side !== _rtsAIFoe() || o.inside) continue;
       var hit = pass === 0 ? o.type === 'unit' && (rtsUnitDef(o.def) || {}).harvest : o.def === 'refinery';
       if (!hit) continue;
       var dd = Math.hypot(o.x - u.x, o.z - u.z);
@@ -123,7 +123,7 @@ function _rtsAIHoverTick(dt) {
   var hc = null;
   for (var i = 0; i < G.ents.length && !hc; i++) {
     var e = G.ents[i];
-    if (!e.dead && e.side === 'enemy' && e.type === 'unit' && e.def === 'hovercraft') hc = e;
+    if (!e.dead && e.side === _rtsAIOn && e.type === 'unit' && e.def === 'hovercraft') hc = e;
   }
   if (!hc) { st.s = 'rest'; st.aim = null; return; }
   /* BATTERED, IT GOES TO THE DEPOT FIRST (core/aimend.js): a raid in hand is called off and its

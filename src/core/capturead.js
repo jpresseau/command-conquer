@@ -41,7 +41,7 @@ function _rtsCaptureGuns(b) {
   var G = window._rtsG, n = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.dead || e.side !== 'player' || e.type !== 'struct') continue;
+    if (e.dead || e.side !== _rtsAIFoe() || e.type !== 'struct') continue;
     var sd = rtsStructDef(e.def);
     if (!sd || !sd.weapon) continue;
     var w = RTS_WEAPONS[sd.weapon];
@@ -62,12 +62,12 @@ function _rtsCaptureGuns(b) {
      guns         - past RTS_CAP_MAX_GUNS the engineer does not arrive, so the prize is moot */
 function _rtsAICaptureTarget() {
   var G = window._rtsG, best = null, bv = 0;
-  var home = _rtsHasHome('enemy', 'yard') || _rtsHasHome('enemy', 'factory')
-          || _rtsHasHome('enemy', 'barracks');
+  var home = _rtsHasHome(_rtsAIOn, 'yard') || _rtsHasHome(_rtsAIOn, 'factory')
+          || _rtsHasHome(_rtsAIOn, 'barracks');
   if (!home) return null;
   for (var i = 0; i < G.ents.length; i++) {
     var b = G.ents[i];
-    if (b.dead || b.side !== 'player' || b.type !== 'struct') continue;
+    if (b.dead || b.side !== _rtsAIFoe() || b.type !== 'struct') continue;
     if (b.selling || b.building) continue;
     if (!rtsCapturable(b.def)) continue;
     var worth = _rtsCaptureWorth(b);
@@ -107,12 +107,12 @@ function _rtsAIWorthCapturing() {
     /* A cached target that has since died, been sold or already changed hands is not an
        answer, and waiting out the rest of the recheck on it would aim the leg at a corpse. */
     var c = G.ai.capTgt;
-    if (!c || c.dead || c.selling || c.side !== 'player') { G.ai.capT = null; }
+    if (!c || c.dead || c.selling || c.side !== _rtsAIFoe()) { G.ai.capT = null; }
     else return true;
   }
   G.ai.capT = G.t;
   G.ai.capTgt = null;
-  if (!_rtsCanProduce('enemy', 'engineer')) return false;
+  if (!_rtsCanProduce(_rtsAIOn, 'engineer')) return false;
   /* NOT BEFORE THE HOUSE IS AWAKE. The Snatch team is `autocreate`, so Suggested_New_Team will
      not raise one until the alert - but nothing gated the PURCHASE, and the gate opens in the
      opening seconds, when the player owns two undefended buildings and nothing is covering
@@ -141,7 +141,7 @@ function _rtsAIEngineers() {
   var G = window._rtsG, n = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.dead || e.side !== 'enemy' || e.type !== 'unit' || e.def !== 'engineer') continue;
+    if (e.dead || e.side !== _rtsAIOn || e.type !== 'unit' || e.def !== 'engineer') continue;
     n++;
   }
   return n;

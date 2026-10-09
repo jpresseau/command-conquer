@@ -61,13 +61,13 @@ function _rtsDroneOn(e, t) {
 /* Is the shadowed enemy still seen by the drone's side? The player's view is _rtsEntSeen
    (core/supers.js) - a diving submarine is not seen, however close the drone circles. The
    opponent never shadows anything (its drone follows its own team, below). */
-function _rtsShadowSeen(e, t) { return e.side !== 'player' || _rtsEntSeen(t); }
+function _rtsShadowSeen(e, t) { return e.side !== _rtsAIFoe() || _rtsEntSeen(t); }
 
 /* Is the opponent fighting half-blind? */
 function _rtsAIHalfBlind() {
   if (_rtsFogged()) return true;
   var G = window._rtsG;
-  for (var i = 0; i < G.ents.length; i++) { var e = G.ents[i]; if (!e.dead && e.side === 'player' && e.type === 'unit' && _rtsJams(e)) return true; }
+  for (var i = 0; i < G.ents.length; i++) { var e = G.ents[i]; if (!e.dead && e.side === _rtsAIFoe() && e.type === 'unit' && _rtsJams(e)) return true; }
   return false;
 }
 /* the opponent's drone: over the middle of its largest team on the march */
@@ -78,7 +78,7 @@ function _rtsAIDroneTick(dt) {
   G.ai.droneT = 0;
   for (id in G.teams) {
     var t = G.teams[id];
-    if (!t.moving) continue;
+    if (!t.moving || !_rtsTeamMine(t)) continue;
     var n = t.members.filter(function (m) { return !m.dead; }).length;
     if (n > bn) { bn = n; big = t; }
   }
@@ -86,7 +86,7 @@ function _rtsAIDroneTick(dt) {
   if (!c) return;
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || !_rtsOrbits(u)) continue;
+    if (u.dead || u.side !== _rtsAIOn || u.type !== 'unit' || !_rtsOrbits(u)) continue;
     if (!u.orbit || Math.hypot(u.orbit.x - c.x, u.orbit.z - c.z) > RTS_TILE * 3) _rtsDroneAt(u, c.x, c.z);
   }
 }

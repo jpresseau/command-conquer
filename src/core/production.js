@@ -401,7 +401,7 @@ function _rtsDeliverUnit(side, key) {
   var made = _rtsSpawnAt(side, key, src);
   /* the player's rally point if one is set; the opponent's units walk out of the doorway to a
      muster point instead of standing in it - see _rtsAIMuster */
-  if (made && !_rtsRallyOut(made, src) && side === 'enemy' && !u.harvest && !u.air) _rtsAIMusterOut(made, src);
+  if (made && !_rtsRallyOut(made, src) && _rtsSeatAI(side) && !u.harvest && !u.air) _rtsAIAs(side, function () { _rtsAIMusterOut(made, src); });
   return made;
 }
 
@@ -409,14 +409,17 @@ function rtsCrateMult(e, what) {
   var c = e && e.cr;
   return (c && c[what]) ? c[what] : 1;
 }
+/* A seat's difficulty: the opponent's is the battle's (G.diff); any other seat plays at the one it
+   was handed (core/seats.js _rtsSeatToAI), and the human at none. */
 function _rtsBias(side) {
+  var G = window._rtsG, S = G && G.sides && G.sides[side];
+  if (S && S.diff) return RTS_DIFF[S.diff] || RTS_DIFF[RTS_DIFF_DEFAULT];
   if (side !== 'enemy') return _RTS_NOBIAS;
-  var G = window._rtsG;
   return (G && RTS_DIFF[G.diff]) || RTS_DIFF[RTS_DIFF_DEFAULT];
 }
 /* Is an AI behaviour switched on at the current IQ? RULES.CPP gates each one separately, so
    a weak opponent is missing nameable abilities rather than just doing less damage. */
-function _rtsIQAt(level) { return _rtsBias('enemy').iq >= level; }
+function _rtsIQAt(level) { return _rtsBias(_rtsAIOn).iq >= level; }
 /* CostBias / BuildSpeedBias, applied wherever a price or a build time is read. */
 function _rtsCostOf(side, def) { return Math.round(def.cost * _rtsBias(side).cost); }
 function _rtsBuildTimeOf(side, def) { return Math.max(0.1, def.build * _rtsBias(side).build); }

@@ -141,12 +141,12 @@ function _rtsWhichZone(c, x, z) {
    facing the enemy is exactly the mistake this routine exists to avoid - it leaves the other
    three approaches open. */
 function _rtsAIWeakZone() {
-  var G = window._rtsG, c = _rtsBaseCentre('enemy');
+  var G = window._rtsG, c = _rtsBaseCentre(_rtsAIOn);
   if (!c) return null;
   var def = [0, 0, 0, 0, 0], i;
   for (i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.dead || e.type !== 'struct' || e.side !== 'enemy' || e.selling) continue;
+    if (e.dead || e.type !== 'struct' || e.side !== _rtsAIOn || e.selling) continue;
     var sd = rtsStructDef(e.def);
     if (!sd.weapon) continue;
     var z = _rtsWhichZone(c, e.x, e.z);
@@ -220,11 +220,11 @@ function _rtsAIPlace(key) {
   /* Next_Buildable first. If the plan has a fillable hole of this type, the building goes back
      into it - that is the whole point of the node list, and it comes before any of the aiming
      below because the plan already decided where this one belongs. */
-  var node = _rtsNextBuildable('enemy', key), kd = rtsStructDef(key);
+  var node = _rtsNextBuildable(_rtsAIOn, key), kd = rtsStructDef(key);
   /* ...unless the hole has been closed in since: the plan was open when it was laid out, but a
      building put up beside the gap afterwards may have leaned on it to keep a lane clear */
   if (node && !_rtsSealsGround(node.tx, node.tz, kd.w, kd.h)) {
-    _rtsPlaceStruct('enemy', key, node.tx, node.tz, false, G.sides.enemy.readyPaid); return true;
+    _rtsPlaceStruct(_rtsAIOn, key, node.tx, node.tz, false, G.sides[_rtsAIOn].readyPaid); return true;
   }
   if (key === 'refinery') aim = _rtsAIOreSpot();
   /* ANYTHING THAT SHOOTS, not the one building called 'turret'. The zone routine above already
@@ -247,7 +247,7 @@ function _rtsAIPlace(key) {
   var anchors = [];
   for (i = 0; i < G.ents.length; i++) {
     e = G.ents[i];
-    if (e.type === 'struct' && e.side === 'enemy' && !e.dead && !e.selling) anchors.push(e);
+    if (e.type === 'struct' && e.side === _rtsAIOn && !e.dead && !e.selling) anchors.push(e);
   }
   if (!anchors.length) return false;
   if (aim) anchors.sort(function (a, b) {
@@ -262,7 +262,7 @@ function _rtsAIPlace(key) {
     var anchor = anchors[a], best = null, cand = [];
     for (var tx = anchor.tx - R; tx <= anchor.tx + R; tx++) {
       for (var tz = anchor.tz - R; tz <= anchor.tz + R; tz++) {
-        if (!_rtsCanPlace('enemy', key, tx, tz)) continue;
+        if (!_rtsCanPlace(_rtsAIOn, key, tx, tz)) continue;
         var wx = _rtsWX(tx), wz = _rtsWX(tz);
         cand.push([aim ? Math.hypot(wx - aim.x, wz - aim.z) : Math.hypot(wx - anchor.x, wz - anchor.z), tx, tz]);
       }
@@ -276,7 +276,7 @@ function _rtsAIPlace(key) {
     }
     /* Anything placed outside the plan becomes part of it (in _rtsPlaceStruct), so the next
        raid is repaired against the base as it actually stands, not just the opening layout. */
-    if (best) { _rtsPlaceStruct('enemy', key, best[0], best[1], false, G.sides.enemy.readyPaid); return true; }
+    if (best) { _rtsPlaceStruct(_rtsAIOn, key, best[0], best[1], false, G.sides[_rtsAIOn].readyPaid); return true; }
   }
   return false;
 }
@@ -289,13 +289,13 @@ function _rtsAIShoreSpot(key) {
   var anchors = [];
   for (i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.type === 'struct' && e.side === 'enemy' && !e.dead && !e.selling) anchors.push(e);
+    if (e.type === 'struct' && e.side === _rtsAIOn && !e.dead && !e.selling) anchors.push(e);
   }
   for (var a = 0; a < anchors.length; a++) {
     var an = anchors[a];
     for (var tx = an.tx - R; tx <= an.tx + R; tx++) {
       for (var tz = an.tz - R; tz <= an.tz + R; tz++) {
-        if (!_rtsCanPlace('enemy', key, tx, tz)) continue;
+        if (!_rtsCanPlace(_rtsAIOn, key, tx, tz)) continue;
         /* Prefer a berth near the middle of the base rather than the first cell scanned:
            a yard tucked behind the furthest outbuilding is one the defences do not cover. */
         var s = Math.hypot(_rtsWX(tx) - an.x, _rtsWX(tz) - an.z);
@@ -312,7 +312,7 @@ function _rtsAIOreSpot() {
   var G = window._rtsG, structs = [], i, e;
   for (i = 0; i < G.ents.length; i++) {
     e = G.ents[i];
-    if (e.type === 'struct' && e.side === 'enemy' && !e.dead && !e.selling) structs.push(e);
+    if (e.type === 'struct' && e.side === _rtsAIOn && !e.dead && !e.selling) structs.push(e);
   }
   if (!structs.length) return null;
   var best = null, bd = 1e9;
@@ -414,7 +414,7 @@ function _rtsOnMuster(tx, tz, w, h) {
   var G = window._rtsG, m = RTS_MUSTER_CLEAR + 2;
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.dead || e.type !== 'struct' || e.side !== 'enemy' || !e.muster) continue;
+    if (e.dead || e.type !== 'struct' || e.side !== _rtsAIOn || !e.muster) continue;
     if (e.muster.tx >= tx - m && e.muster.tx < tx + w + m &&
         e.muster.tz >= tz - m && e.muster.tz < tz + h + m) return true;
   }

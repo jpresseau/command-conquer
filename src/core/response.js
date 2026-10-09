@@ -46,7 +46,7 @@ function _rtsScatter(e, fromX, fromZ) {
 
 function _rtsAttacked(side) {
   var G = window._rtsG;
-  if (side === 'enemy') { G.ai.lastHit = G.t; return; }
+  if (_rtsSeatAI(side)) { G.sides[side].ai.lastHit = G.t; return; }   /* a computer seat's brain notes it; core/seats.js */
   var last = (G.playerHit == null) ? -999 : G.playerHit;
   if (G.t - last < RTS_ALERT_DELAY) return;      /* SpeakDelay - and do NOT restart the clock,
                                                     or a sustained attack never warns twice */
@@ -62,8 +62,12 @@ function _rtsAttacked(side) {
    A building that can shoot back does not overreact, and a BaseAttackTimer on the attacker
    stops one long firefight from recalling the whole army over and over. */
 function _rtsBaseIsAttacked(bldg, enemy) {
+  if (!_rtsSeatAI(bldg.side)) return 0;
+  return _rtsAIAs(bldg.side, function () { return _rtsBaseIsAttackedFor(bldg, enemy); });
+}
+function _rtsBaseIsAttackedFor(bldg, enemy) {
   var G = window._rtsG;
-  if (bldg.side !== 'enemy' || !enemy || enemy.type !== 'unit') return 0;
+  if (bldg.side !== _rtsAIOn || !enemy || enemy.type !== 'unit') return 0;
   if (rtsStructDef(bldg.def).weapon) return 0;     /* it can defend itself */
   if (enemy.baseTimer && G.t < enemy.baseTimer) return 0;
   /* AND IT HAS TO BE THE BASE. There was no locality test here at all, because until an
@@ -79,7 +83,7 @@ function _rtsBaseIsAttacked(bldg, enemy) {
      purpose is to make taking a base HARDER became a trickle-feed of the opponent's garrison
      into those guns, on demand, for the price of one rifleman - and two units taking turns
      dodge the BaseAttackTimer, so it was not even rate-limited. */
-  if (!_rtsInBase('enemy', bldg.x, bldg.z)) return 0;
+  if (!_rtsInBase(_rtsAIOn, bldg.x, bldg.z)) return 0;
 
   /* "We will need units to defend our base. We need to suspend teams until the situation has
      been dealt with." Below the survival priority a team is disbanded outright and its
@@ -91,7 +95,7 @@ function _rtsBaseIsAttacked(bldg, enemy) {
   var desired = rtsUnitDef(enemy.def).cost, pool = [], i;
   for (i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.side !== 'enemy' || u.type !== 'unit') continue;
+    if (u.dead || u.side !== _rtsAIOn || u.type !== 'unit') continue;
     var ud = rtsUnitDef(u.def);
     /* ...nor a bomber, whose answer to a raider in its own base would be a carpet across it */
     if (!ud.weapon || ud.harvest || ud.carpets) continue;

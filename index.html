@@ -716,7 +716,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">b6352af · 2026-10-05</div>
+  <div id="rtsBuild" title="build">4205cd1 · 2026-10-09</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -11815,6 +11815,93 @@ function _rtsLayBase(start, foe, list, side) {
 }
 
 </script>
+<script>/* core/seats.js - who is playing which seat, and which seat's brain is thinking.
+   Part of rts.core, the simulation.
+
+   A battle has SEATS: 'player', the human's, and 'enemy', the computer opponent's - the keys every
+   other file and every spec already reads, and they stay. What a seat is FOR is no longer its key:
+   G.sides[k].ctl says who drives it ('human' or 'ai'), and .diff which difficulty a computer
+   seat plays at. So the opponent's brain can drive any seat - the player's too, for self-play.
+
+   THE BRAIN IS WRITTEN FROM ONE SEAT'S POINT OF VIEW. Its code says _rtsAIOn where it means "my
+   side" and _rtsAIFoe() where it means "the side I fight"; _rtsUpdateAI (core/aisupers.js) runs
+   each computer seat in turn with _rtsAIOn set to it, and the four places the simulation calls
+   into the brain from outside its tick (_rtsAttacked, _rtsBaseIsAttacked, _rtsTeamTookDamage,
+   the delivery muster) set it to the seat concerned. Outside those, _rtsAIOn is 'enemy', so in
+   the shipped game - one computer seat - every line of the brain reads exactly what it read
+   when it named 'enemy' and 'player' outright. unit/fingerprint holds that to the byte.
+
+   A seat's brain state lives on the seat (G.sides[k].ai): its timers and caches, its team-type
+   holds, its waypoints, its mending clock and the cells where mines cost it a unit. The names the
+   brain has always used for them - G.ai, G.teamHold, G.waypt, G.mendT, G.mineHits - are kept, as
+   accessors onto the brain that is thinking. They are not enumerable, so a save (a for-in walk
+   of G) never sees them: each brain is reachable by one path only, which the encoder needs. */
+var _rtsAIOn = 'enemy';
+
+/* The seat this one fights: the first seat in play on another team. Two seats: the other one. */
+function _rtsAIFoe(side) {
+  var G = window._rtsG, me = side || _rtsAIOn, S = G && G.sides && G.sides[me];
+  if (S && G.order) {
+    for (var i = 0; i < G.order.length; i++) {
+      var k = G.order[i], O = G.sides[k];
+      if (k !== me && O && O.team !== S.team && !O.lost) return k;
+    }
+  }
+  return me === 'player' ? 'enemy' : 'player';
+}
+/* Run fn with `side`'s brain thinking, and put the previous one back whatever happens. */
+function _rtsAIAs(side, fn) {
+  var was = _rtsAIOn;
+  _rtsAIOn = side;
+  try { return fn(); } finally { _rtsAIOn = was; }
+}
+function _rtsSeatAI(side) {
+  var G = window._rtsG, S = G && G.sides && G.sides[side];
+  return !!(S && S.ctl === 'ai');
+}
+/* A computer seat's brain, as _rtsNewGame starts the opponent's. */
+function _rtsBrainNew() {
+  return { next:0, wave:0, build:6, place:0, state:0, lastHit:-999, want:null, teamHold:{} };
+}
+/* Hand a seat to the computer at difficulty `diff`, with a fresh brain - self-play's setup. */
+function _rtsSeatToAI(side, diff) {
+  var G = window._rtsG, S = G.sides[side], B = _rtsBrainNew();
+  S.ctl = 'ai'; S.diff = diff;
+  B.next = RTS_WAVE_FIRST * _rtsBias(side).build;
+  S.ai = B;
+  return B;
+}
+function _rtsBrainOf(G) {
+  var S = G.sides && G.sides[_rtsAIOn];
+  return S && S.ai;
+}
+/* The brain's old global names, onto the brain that is thinking. Defined on every new G; a load
+   applies its body onto a G that _rtsNewGame has just built, so they are already there. */
+function _rtsBrainLink(G) {
+  Object.defineProperty(G, 'ai', { configurable:true, enumerable:false,
+    get: function () { return _rtsBrainOf(G); },
+    set: function (v) { G.sides[_rtsAIOn].ai = v; } });
+  ['teamHold', 'waypt', 'mendT', 'mineHits'].forEach(function (k) {
+    Object.defineProperty(G, k, { configurable:true, enumerable:false,
+      get: function () { var B = _rtsBrainOf(G); return B ? B[k] : undefined; },
+      set: function (v) { var B = _rtsBrainOf(G); if (B) B[k] = v; } });
+  });
+}
+/* Is team t this brain's? A team belongs to the seat that raised it (core/teams.js). */
+function _rtsTeamMine(t) { return !!t && (t.side || 'enemy') === _rtsAIOn; }
+/* The computer's opening, in the seat's own frame (`along` toward the foe). The opening defence is
+   whichever one the seat's OWN army has: this list once hardcoded two Gun Turrets, which are the
+   Compact's, so a Dominion opponent opened behind two Compact buildings it never sold or replaced. */
+function _rtsAIOpening(side) {
+  var turret = rtsBuildableBy(rtsStructDef('turret'), rtsHouseSide(side)) ? 'turret' : 'flametower';
+  return [
+    ['struct','yard',    0,  0], ['struct','power',  -1, -5],
+    ['struct','refinery',5,  0], ['struct','barracks',4, -5],
+    ['struct','factory', 4,  5], ['struct',turret,    9, -2], ['struct',turret,  9, 3],
+    ['unit',  'harvester',11, 1], ['unit','rifle',   10, -2], ['unit','tank',   11, 3]
+  ];
+}
+</script>
 <script>/* core/base.js - BASE.CPP: the opponent's prebuilt base blueprint. Part of rts.core. */
 
 /* ------------------------------------------------------------- BASE.CPP: the base blueprint
@@ -11891,7 +11978,8 @@ function _rtsBaseDropNode(e) {
     if (list[i].key === e.def && list[i].tx === e.tx && list[i].tz === e.tz) { list.splice(i, 1); return; }
 }
 
-function _rtsNewGame(seed, diff) {
+function _rtsNewGame(seed, diff, spec) {
+  _rtsAIOn = 'enemy';
 
   var G = {
     t:0, seed:seed || 12345, over:null, msg:null, msgT:0, shake:0,
@@ -11927,10 +12015,14 @@ function _rtsNewGame(seed, diff) {
     sel:[], proj:[], fx:[], mines:[],
     sides:{ player:_rtsSideNew('player'), enemy:_rtsSideNew('enemy') },
     rnd:null,                              /* seeded on first use; see _rtsRnd */
-    ai:{ next:0, wave:0, build:6, place:0, state:0, lastHit:-999, want:null },
-    teams:{}, teamSeq:0, teamHold:{},
+    order:['player', 'enemy'],             /* the seats, in tick order; core/seats.js */
+    teams:{}, teamSeq:0,
     stats:{ killed:0, lostU:0 }
   };
+  /* the human at 'player', the computer at 'enemy' with its brain; core/seats.js */
+  G.sides.player.team = 0; G.sides.player.ctl = 'human';
+  G.sides.enemy.team = 1; G.sides.enemy.ctl = 'ai'; G.sides.enemy.ai = _rtsBrainNew();
+  _rtsBrainLink(G);
   window._rtsG = G;
   /* AttackDelay: how long you get before the first wave, stretched on the easy setting. */
   G.ai.next = RTS_WAVE_FIRST * _rtsBias('enemy').build;
@@ -11971,7 +12063,11 @@ function _rtsNewGame(seed, diff) {
      the side - so the same arrangement works whichever axis the roll produced. Scan_Place_Object
      is what fills in when a slot is blocked: it walks outward through distances, trying every
      facing at each, rather than giving up on the exact cell. */
-  _rtsLayBase(G.starts.player, G.starts.enemy, [
+  /* SELF-PLAY: spec.player.ctl 'ai' hands the player's seat to the computer (core/seats.js), and
+     then it opens as the computer does - the human's opening is a yard and a power plant, which
+     the opponent's brain was measured unable to grow into a base. */
+  var pAI = !!(spec && spec.player && spec.player.ctl === 'ai');
+  _rtsLayBase(G.starts.player, G.starts.enemy, pAI ? _rtsAIOpening('player') : [
     ['struct','yard',    0,  0], ['struct','power',   1,  5],
     ['unit',  'rifle',   3, -3], ['unit',  'rifle',   4, -1], ['unit', 'buggy', 1, -4]
   ], 'player');
@@ -11981,13 +12077,8 @@ function _rtsNewGame(seed, diff) {
      with Allied statistics, and the AI never sold or replaced them. Its build planner already
      filters on rtsBuildableBy and carries a comment about faction lists breaking exactly this
      way; the opening layout was the one that had not been told. */
-  var eTurret = rtsBuildableBy(rtsStructDef('turret'), rtsHouseSide('enemy')) ? 'turret' : 'flametower';
-  _rtsLayBase(G.starts.enemy, G.starts.player, [
-    ['struct','yard',    0,  0], ['struct','power',  -1, -5],
-    ['struct','refinery',5,  0], ['struct','barracks',4, -5],
-    ['struct','factory', 4,  5], ['struct',eTurret,   9, -2], ['struct',eTurret, 9, 3],
-    ['unit',  'harvester',11, 1], ['unit','rifle',   10, -2], ['unit','tank',   11, 3]
-  ], 'enemy');
+  _rtsLayBase(G.starts.enemy, G.starts.player, _rtsAIOpening('enemy'), 'enemy');
+  if (pAI) _rtsSeatToAI('player', spec.player.diff || G.diff);
 
   /* Density LAST. Terrain generation and the two bases both erase ore, and a cell's level is
      a function of how many neighbours still have some - so running the adjust before those
@@ -12355,7 +12446,7 @@ function _rtsSweepTick(dt) {
       }
       if (d < nd) { nd = d; near = m; }
     }
-    if (cleared && u.side === 'player') _rtsSay(cleared === 1 ? 'Mine cleared.' : cleared + ' mines cleared.');
+    if (cleared && u.side === _rtsAIFoe()) _rtsSay(cleared === 1 ? 'Mine cleared.' : cleared + ' mines cleared.');
     /* idle, with a mine found and not yet in reach: go and beat it out. ONCE IN A WHILE WHEN
        THERE IS NO WAY: a seen mine behind a wall, or across water, refused the move, and the
        refusal left the sweeper idle - so this asked for the route again every tick, a fresh A*
@@ -12374,7 +12465,7 @@ function _rtsAISweepTick() {
   if (!H || !H.length) return;
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.inside || u.side !== 'enemy' || u.type !== 'unit' || !_rtsSweeps(u)) continue;
+    if (u.dead || u.inside || u.side !== _rtsAIOn || u.type !== 'unit' || !_rtsSweeps(u)) continue;
     if (u.order || (u.path && u.pi < u.path.length)) continue;           /* busy, or clearing */
     if (_rtsRouteRefused(u)) continue;                                   /* no way there just now */
     var best = null, bd = 1e9;
@@ -12438,7 +12529,7 @@ function _rtsLongGun(u) {
 }
 function _rtsAILongGuns() {
   var G = window._rtsG, n = 0;
-  for (var i = 0; i < G.ents.length; i++) { var u = G.ents[i]; if (!u.dead && u.side === 'enemy' && u.type === 'unit' && _rtsLongGun(u)) n++; }
+  for (var i = 0; i < G.ents.length; i++) { var u = G.ents[i]; if (!u.dead && u.side === _rtsAIOn && u.type === 'unit' && _rtsLongGun(u)) n++; }
   return n;
 }
 /* The opponent's spotter: a few cells ahead of the nearest long gun, toward the player's base. */
@@ -12447,18 +12538,18 @@ function _rtsAISpotTick(dt) {
   G.ai.spotT = (G.ai.spotT || 0) + dt;
   if (G.ai.spotT < RTS_SPOT.every) return;
   G.ai.spotT = 0;
-  var py = _rtsHas('player', 'yard');
+  var py = _rtsHas(_rtsAIFoe(), 'yard');
   if (!py) return;
   for (var i = 0; i < G.ents.length; i++) {
     var s = G.ents[i];
-    if (s.dead || s.inside || s.side !== 'enemy' || s.type !== 'unit' || !_rtsSpots(s)) continue;
+    if (s.dead || s.inside || s.side !== _rtsAIOn || s.type !== 'unit' || !_rtsSpots(s)) continue;
     if (_rtsOrbits(s)) continue;                       /* the Recon Drone is the drone tick's: core/drone.js */
     if (s.mend != null) continue;                      /* on its way to the depot: core/aimend.js */
     if (s.order === 'attack' && s.target && !s.target.dead) continue;          /* defending itself */
     var gun = null, gd = 1e9;
     for (var k = 0; k < G.ents.length; k++) {
       var u = G.ents[k];
-      if (u.dead || u.inside || u.side !== 'enemy' || u.type !== 'unit' || !_rtsLongGun(u)) continue;
+      if (u.dead || u.inside || u.side !== _rtsAIOn || u.type !== 'unit' || !_rtsLongGun(u)) continue;
       var d = Math.hypot(u.x - s.x, u.z - s.z);
       if (d < gd) { gd = d; gun = u; }
     }
@@ -12529,11 +12620,11 @@ function _rtsAIFixBehind(kind) {
   var G = window._rtsG, big = null, bn = 0, id;
   for (id in G.teams) {
     var t = G.teams[id];
-    if (!t.moving) continue;
+    if (!t.moving || !_rtsTeamMine(t)) continue;
     var n = t.members.filter(function (m) { return !m.dead && (rtsUnitDef(m.def) || {}).kind === kind; }).length;
     if (n > bn) { bn = n; big = t; }
   }
-  var c = big && _rtsTeamCentre(big), home = _rtsHas('enemy', 'yard');
+  var c = big && _rtsTeamCentre(big), home = _rtsHas(_rtsAIOn, 'yard');
   if (!c || !home) return null;
   var dx = home.x - c.x, dz = home.z - c.z, L = Math.hypot(dx, dz) || 1;
   return { x: c.x + dx / L * RTS_FIX.behind * RTS_TILE, z: c.z + dz / L * RTS_FIX.behind * RTS_TILE };
@@ -12545,7 +12636,7 @@ function _rtsAIFixTick(dt) {
   G.ai.fixT = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.inside || u.side !== 'enemy' || u.type !== 'unit' || !_rtsFixes(u) || !_rtsFixIdle(u)) continue;
+    if (u.dead || u.inside || u.side !== _rtsAIOn || u.type !== 'unit' || !_rtsFixes(u) || !_rtsFixIdle(u)) continue;
     if (u.mend != null) continue;                                     /* its own trip to the depot: core/aimend.js */
     if (_rtsFixWants(u)) continue;                                    /* mending comes first */
     var k = rtsUnitDef(u.def).healKind, a = k in at ? at[k] : (at[k] = _rtsAIFixBehind(k));
@@ -12560,7 +12651,7 @@ function _rtsAIDefended() {
   var G = window._rtsG, n = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (!e.dead && e.side === 'enemy' && e.type === 'struct' && !e.building && (rtsStructDef(e.def) || {}).weapon) n++;
+    if (!e.dead && e.side === _rtsAIOn && e.type === 'struct' && !e.building && (rtsStructDef(e.def) || {}).weapon) n++;
   }
   return n >= RTS_FIX.defended;
 }
@@ -12570,7 +12661,7 @@ function _rtsAIFieldVehicles(kind) {
   kind = kind || 'vehicle';
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i], d = u.type === 'unit' && rtsUnitDef(u.def);
-    if (!u.dead && u.side === 'enemy' && d && d.kind === kind && d.weapon && !d.harvest) n++;
+    if (!u.dead && u.side === _rtsAIOn && d && d.kind === kind && d.weapon && !d.harvest) n++;
   }
   return n;
 }
@@ -12656,7 +12747,7 @@ function _rtsAIJamTick(dt) {
      to park on the nearest beach, hiding nothing, while the army it was bought for marched bare. */
   for (id in G.teams) {
     var t = G.teams[id];
-    if (!t.moving || (t.type && t.type.crossing)) continue;
+    if (!t.moving || !_rtsTeamMine(t) || (t.type && t.type.crossing)) continue;
     var n = t.members.filter(function (m) { var md = rtsUnitDef(m.def) || {}; return !m.dead && !md.sea && !md.air; }).length;
     if (n > bn) { bn = n; big = t; }
   }
@@ -12664,7 +12755,7 @@ function _rtsAIJamTick(dt) {
   if (!c) return;
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.inside || u.side !== 'enemy' || u.type !== 'unit' || !_rtsJams(u) || u.mend != null) continue;   /* mend: core/aimend.js */
+    if (u.dead || u.inside || u.side !== _rtsAIOn || u.type !== 'unit' || !_rtsJams(u) || u.mend != null) continue;   /* mend: core/aimend.js */
     if (Math.hypot(c.x - u.x, c.z - u.z) > RTS_TILE * 2.5) _rtsOrderMove(u, c.x, c.z, false);
   }
 }
@@ -12673,7 +12764,7 @@ function _rtsPlayerDefences() {
   var G = window._rtsG, n = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (!e.dead && e.side === 'player' && e.type === 'struct' && !e.building && (rtsStructDef(e.def) || {}).weapon) n++;
+    if (!e.dead && e.side === _rtsAIFoe() && e.type === 'struct' && !e.building && (rtsStructDef(e.def) || {}).weapon) n++;
   }
   return n;
 }
@@ -14851,7 +14942,7 @@ function _rtsDeliverUnit(side, key) {
   var made = _rtsSpawnAt(side, key, src);
   /* the player's rally point if one is set; the opponent's units walk out of the doorway to a
      muster point instead of standing in it - see _rtsAIMuster */
-  if (made && !_rtsRallyOut(made, src) && side === 'enemy' && !u.harvest && !u.air) _rtsAIMusterOut(made, src);
+  if (made && !_rtsRallyOut(made, src) && _rtsSeatAI(side) && !u.harvest && !u.air) _rtsAIAs(side, function () { _rtsAIMusterOut(made, src); });
   return made;
 }
 
@@ -14859,14 +14950,17 @@ function rtsCrateMult(e, what) {
   var c = e && e.cr;
   return (c && c[what]) ? c[what] : 1;
 }
+/* A seat's difficulty: the opponent's is the battle's (G.diff); any other seat plays at the one it
+   was handed (core/seats.js _rtsSeatToAI), and the human at none. */
 function _rtsBias(side) {
+  var G = window._rtsG, S = G && G.sides && G.sides[side];
+  if (S && S.diff) return RTS_DIFF[S.diff] || RTS_DIFF[RTS_DIFF_DEFAULT];
   if (side !== 'enemy') return _RTS_NOBIAS;
-  var G = window._rtsG;
   return (G && RTS_DIFF[G.diff]) || RTS_DIFF[RTS_DIFF_DEFAULT];
 }
 /* Is an AI behaviour switched on at the current IQ? RULES.CPP gates each one separately, so
    a weak opponent is missing nameable abilities rather than just doing less damage. */
-function _rtsIQAt(level) { return _rtsBias('enemy').iq >= level; }
+function _rtsIQAt(level) { return _rtsBias(_rtsAIOn).iq >= level; }
 /* CostBias / BuildSpeedBias, applied wherever a price or a build time is read. */
 function _rtsCostOf(side, def) { return Math.round(def.cost * _rtsBias(side).cost); }
 function _rtsBuildTimeOf(side, def) { return Math.max(0.1, def.build * _rtsBias(side).build); }
@@ -15384,7 +15478,7 @@ function _rtsScatter(e, fromX, fromZ) {
 
 function _rtsAttacked(side) {
   var G = window._rtsG;
-  if (side === 'enemy') { G.ai.lastHit = G.t; return; }
+  if (_rtsSeatAI(side)) { G.sides[side].ai.lastHit = G.t; return; }   /* a computer seat's brain notes it; core/seats.js */
   var last = (G.playerHit == null) ? -999 : G.playerHit;
   if (G.t - last < RTS_ALERT_DELAY) return;      /* SpeakDelay - and do NOT restart the clock,
                                                     or a sustained attack never warns twice */
@@ -15400,8 +15494,12 @@ function _rtsAttacked(side) {
    A building that can shoot back does not overreact, and a BaseAttackTimer on the attacker
    stops one long firefight from recalling the whole army over and over. */
 function _rtsBaseIsAttacked(bldg, enemy) {
+  if (!_rtsSeatAI(bldg.side)) return 0;
+  return _rtsAIAs(bldg.side, function () { return _rtsBaseIsAttackedFor(bldg, enemy); });
+}
+function _rtsBaseIsAttackedFor(bldg, enemy) {
   var G = window._rtsG;
-  if (bldg.side !== 'enemy' || !enemy || enemy.type !== 'unit') return 0;
+  if (bldg.side !== _rtsAIOn || !enemy || enemy.type !== 'unit') return 0;
   if (rtsStructDef(bldg.def).weapon) return 0;     /* it can defend itself */
   if (enemy.baseTimer && G.t < enemy.baseTimer) return 0;
   /* AND IT HAS TO BE THE BASE. There was no locality test here at all, because until an
@@ -15417,7 +15515,7 @@ function _rtsBaseIsAttacked(bldg, enemy) {
      purpose is to make taking a base HARDER became a trickle-feed of the opponent's garrison
      into those guns, on demand, for the price of one rifleman - and two units taking turns
      dodge the BaseAttackTimer, so it was not even rate-limited. */
-  if (!_rtsInBase('enemy', bldg.x, bldg.z)) return 0;
+  if (!_rtsInBase(_rtsAIOn, bldg.x, bldg.z)) return 0;
 
   /* "We will need units to defend our base. We need to suspend teams until the situation has
      been dealt with." Below the survival priority a team is disbanded outright and its
@@ -15429,7 +15527,7 @@ function _rtsBaseIsAttacked(bldg, enemy) {
   var desired = rtsUnitDef(enemy.def).cost, pool = [], i;
   for (i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.side !== 'enemy' || u.type !== 'unit') continue;
+    if (u.dead || u.side !== _rtsAIOn || u.type !== 'unit') continue;
     var ud = rtsUnitDef(u.def);
     /* ...nor a bomber, whose answer to a raider in its own base would be a carpet across it */
     if (!ud.weapon || ud.harvest || ud.carpets) continue;
@@ -16912,12 +17010,12 @@ function _rtsWhichZone(c, x, z) {
    facing the enemy is exactly the mistake this routine exists to avoid - it leaves the other
    three approaches open. */
 function _rtsAIWeakZone() {
-  var G = window._rtsG, c = _rtsBaseCentre('enemy');
+  var G = window._rtsG, c = _rtsBaseCentre(_rtsAIOn);
   if (!c) return null;
   var def = [0, 0, 0, 0, 0], i;
   for (i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.dead || e.type !== 'struct' || e.side !== 'enemy' || e.selling) continue;
+    if (e.dead || e.type !== 'struct' || e.side !== _rtsAIOn || e.selling) continue;
     var sd = rtsStructDef(e.def);
     if (!sd.weapon) continue;
     var z = _rtsWhichZone(c, e.x, e.z);
@@ -16991,11 +17089,11 @@ function _rtsAIPlace(key) {
   /* Next_Buildable first. If the plan has a fillable hole of this type, the building goes back
      into it - that is the whole point of the node list, and it comes before any of the aiming
      below because the plan already decided where this one belongs. */
-  var node = _rtsNextBuildable('enemy', key), kd = rtsStructDef(key);
+  var node = _rtsNextBuildable(_rtsAIOn, key), kd = rtsStructDef(key);
   /* ...unless the hole has been closed in since: the plan was open when it was laid out, but a
      building put up beside the gap afterwards may have leaned on it to keep a lane clear */
   if (node && !_rtsSealsGround(node.tx, node.tz, kd.w, kd.h)) {
-    _rtsPlaceStruct('enemy', key, node.tx, node.tz, false, G.sides.enemy.readyPaid); return true;
+    _rtsPlaceStruct(_rtsAIOn, key, node.tx, node.tz, false, G.sides[_rtsAIOn].readyPaid); return true;
   }
   if (key === 'refinery') aim = _rtsAIOreSpot();
   /* ANYTHING THAT SHOOTS, not the one building called 'turret'. The zone routine above already
@@ -17018,7 +17116,7 @@ function _rtsAIPlace(key) {
   var anchors = [];
   for (i = 0; i < G.ents.length; i++) {
     e = G.ents[i];
-    if (e.type === 'struct' && e.side === 'enemy' && !e.dead && !e.selling) anchors.push(e);
+    if (e.type === 'struct' && e.side === _rtsAIOn && !e.dead && !e.selling) anchors.push(e);
   }
   if (!anchors.length) return false;
   if (aim) anchors.sort(function (a, b) {
@@ -17033,7 +17131,7 @@ function _rtsAIPlace(key) {
     var anchor = anchors[a], best = null, cand = [];
     for (var tx = anchor.tx - R; tx <= anchor.tx + R; tx++) {
       for (var tz = anchor.tz - R; tz <= anchor.tz + R; tz++) {
-        if (!_rtsCanPlace('enemy', key, tx, tz)) continue;
+        if (!_rtsCanPlace(_rtsAIOn, key, tx, tz)) continue;
         var wx = _rtsWX(tx), wz = _rtsWX(tz);
         cand.push([aim ? Math.hypot(wx - aim.x, wz - aim.z) : Math.hypot(wx - anchor.x, wz - anchor.z), tx, tz]);
       }
@@ -17047,7 +17145,7 @@ function _rtsAIPlace(key) {
     }
     /* Anything placed outside the plan becomes part of it (in _rtsPlaceStruct), so the next
        raid is repaired against the base as it actually stands, not just the opening layout. */
-    if (best) { _rtsPlaceStruct('enemy', key, best[0], best[1], false, G.sides.enemy.readyPaid); return true; }
+    if (best) { _rtsPlaceStruct(_rtsAIOn, key, best[0], best[1], false, G.sides[_rtsAIOn].readyPaid); return true; }
   }
   return false;
 }
@@ -17060,13 +17158,13 @@ function _rtsAIShoreSpot(key) {
   var anchors = [];
   for (i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.type === 'struct' && e.side === 'enemy' && !e.dead && !e.selling) anchors.push(e);
+    if (e.type === 'struct' && e.side === _rtsAIOn && !e.dead && !e.selling) anchors.push(e);
   }
   for (var a = 0; a < anchors.length; a++) {
     var an = anchors[a];
     for (var tx = an.tx - R; tx <= an.tx + R; tx++) {
       for (var tz = an.tz - R; tz <= an.tz + R; tz++) {
-        if (!_rtsCanPlace('enemy', key, tx, tz)) continue;
+        if (!_rtsCanPlace(_rtsAIOn, key, tx, tz)) continue;
         /* Prefer a berth near the middle of the base rather than the first cell scanned:
            a yard tucked behind the furthest outbuilding is one the defences do not cover. */
         var s = Math.hypot(_rtsWX(tx) - an.x, _rtsWX(tz) - an.z);
@@ -17083,7 +17181,7 @@ function _rtsAIOreSpot() {
   var G = window._rtsG, structs = [], i, e;
   for (i = 0; i < G.ents.length; i++) {
     e = G.ents[i];
-    if (e.type === 'struct' && e.side === 'enemy' && !e.dead && !e.selling) structs.push(e);
+    if (e.type === 'struct' && e.side === _rtsAIOn && !e.dead && !e.selling) structs.push(e);
   }
   if (!structs.length) return null;
   var best = null, bd = 1e9;
@@ -17185,7 +17283,7 @@ function _rtsOnMuster(tx, tz, w, h) {
   var G = window._rtsG, m = RTS_MUSTER_CLEAR + 2;
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.dead || e.type !== 'struct' || e.side !== 'enemy' || !e.muster) continue;
+    if (e.dead || e.type !== 'struct' || e.side !== _rtsAIOn || !e.muster) continue;
     if (e.muster.tx >= tx - m && e.muster.tx < tx + w + m &&
         e.muster.tz >= tz - m && e.muster.tz < tz + h + m) return true;
   }
@@ -17216,7 +17314,7 @@ function _rtsAIWants(S) {
   for (i = 0; i < G.ents.length; i++) {
     e = G.ents[i];
     if (e.type !== 'struct' || e.dead || e.selling) continue;
-    if (e.side === 'player') { theirs++; continue; }
+    if (e.side === _rtsAIFoe()) { theirs++; continue; }
     have[e.def] = (have[e.def] || 0) + 1;
     /* `have` counts everything this side owns - a captured Refinery is a Refinery and the plan
        must not queue a replacement for it. `own` is a different question: how big is MY BASE,
@@ -17246,9 +17344,9 @@ function _rtsAIWants(S) {
      cap is a pure nerf: the opponent would lose the credits and never buy the fix, because a
      silo sits behind the whole defence tier in the build order. Gated on the silo actually
      being buildable so an AI with no refinery does not sit here demanding one. */
-  var cap = rtsCapacity('enemy');
+  var cap = rtsCapacity(_rtsAIOn);
   if (cap > 0 && S.ore >= cap * RTS_AI.siloUrgent && (have.silo || 0) < RTS_AI.limit.silo
-      && _rtsCanProduce('enemy', 'silo')) return { key:'silo', urgent:true };
+      && _rtsCanProduce(_rtsAIOn, 'silo')) return { key:'silo', urgent:true };
 
   /* Below IQProduction the opponent keeps a minimal base and never expands. That used to be
      one flag between "two buildings" and "all twenty-three", and since the difficulties are
@@ -17259,7 +17357,7 @@ function _rtsAIWants(S) {
                  return _rtsIQAt(RTS_AI.buildIQ[k] || RTS_AI.buildIQDefault);
                }) : []);
   var size = Math.max(own, theirs + RTS_AI.baseSizeAdd);
-  var mySide = rtsHouseSide('enemy');
+  var mySide = rtsHouseSide(_rtsAIOn);
   for (i = 0; i < order.length; i++) {
     var k = order[i];
     /* Skip the other army's buildings. Without this the plan STOPS DEAD on the first one it
@@ -17293,7 +17391,7 @@ function _rtsAIWants(S) {
    rich one runs its factories flat out. */
 function _rtsAIOwned(key) {
   var G = window._rtsG, n = 0;
-  for (var i = 0; i < G.ents.length; i++) if (!G.ents[i].dead && G.ents[i].side === 'enemy' && G.ents[i].def === key) n++;
+  for (var i = 0; i < G.ents.length; i++) if (!G.ents[i].dead && G.ents[i].side === _rtsAIOn && G.ents[i].def === key) n++;
   return n;
 }
 /* ANSWERED TO THE SKY. A mix entry with `vsAir` is anti-aircraft and nothing else: the opponent
@@ -17303,8 +17401,8 @@ function _rtsAIWantsVsAir(key, per) {
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (e.dead || e.type !== 'unit') continue;
-    if (e.side === 'player' && e.air) flyers++;
-    else if (e.side === 'enemy' && e.def === key) have++;
+    if (e.side === _rtsAIFoe() && e.air) flyers++;
+    else if (e.side === _rtsAIOn && e.def === key) have++;
   }
   return have < Math.ceil(flyers / per);
 }
@@ -17315,7 +17413,7 @@ function _rtsAIAirRoom() {
   var G = window._rtsG, pads = 0, air = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var pe = G.ents[i];
-    if (pe.dead || pe.side !== 'enemy') continue;
+    if (pe.dead || pe.side !== _rtsAIOn) continue;
     if (pe.type === 'struct' && !pe.building && !pe.selling && (rtsStructDef(pe.def) || {}).produces === 'air') pads++;
     else if (pe.type === 'unit' && (rtsUnitDef(pe.def) || {}).kind === 'air') air++;
   }
@@ -17325,7 +17423,7 @@ function _rtsAIFleetRoom() {
   var G = window._rtsG, yards = 0, hulls = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var se = G.ents[i];
-    if (se.dead || se.side !== 'enemy') continue;
+    if (se.dead || se.side !== _rtsAIOn) continue;
     if (se.type === 'struct' && !se.building && !se.selling && (rtsStructDef(se.def) || {}).produces === 'ship') yards++;
     else if (se.type === 'unit' && (rtsUnitDef(se.def) || {}).sea) hulls++;
   }
@@ -17335,12 +17433,12 @@ function _rtsAIUnits(S) {
   var G = window._rtsG, harv = 0, i;
   for (i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.dead || e.side !== 'enemy' || e.type !== 'unit') continue;
+    if (e.dead || e.side !== _rtsAIOn || e.type !== 'unit') continue;
     if (rtsUnitDef(e.def).harvest) harv++;
   }
   var wantHarv = _rtsIQAt(RTS_IQ.harvester) ? 3 : 1;
   if (harv < wantHarv) {
-    if (_rtsCanQueue('enemy', 'harvester')) { _rtsQueue('enemy', 'harvester'); return; }
+    if (_rtsCanQueue(_rtsAIOn, 'harvester')) { _rtsQueue(_rtsAIOn, 'harvester'); return; }
   }
   if (_rtsAISupport(S)) return;                 /* the Mine Layer: core/aimines.js */
   /* One pass per production line: gather everything affordable and buildable, then pick among
@@ -17357,11 +17455,11 @@ function _rtsAIUnits(S) {
      is what sets a difficulty now that the army marches. The unarmed support vehicles bought
      outside the roll (_rtsAISupport: layer, sweeper, spotter, truck, jammer) are not fighters
      and do not fill a fighter's place, as _rtsAIFieldVehicles already reads it. */
-  var armyCap = _rtsBias('enemy').army, fighters = 0;
+  var armyCap = _rtsBias(_rtsAIOn).army, fighters = 0;
   if (armyCap != null) {
     for (i = 0; i < G.ents.length; i++) {
       var fe = G.ents[i];
-      if (fe.dead || fe.side !== 'enemy' || fe.type !== 'unit' || fe.air) continue;
+      if (fe.dead || fe.side !== _rtsAIOn || fe.type !== 'unit' || fe.air) continue;
       var fd = rtsUnitDef(fe.def);
       if (fd && !fd.harvest && !fd.sea && fd.weapon) fighters++;
     }
@@ -17387,7 +17485,7 @@ function _rtsAIUnits(S) {
     var list = RTS_AI.mix[cat], pool = [], total = 0;
     for (i = 0; i < list.length; i++) {
       if (rtsMoney(S) <= list[i].at) continue;
-      if (!_rtsCanQueue('enemy', list[i].key)) continue;
+      if (!_rtsCanQueue(_rtsAIOn, list[i].key)) continue;
       /* TWO ENTRIES ARE BOUGHT FOR A REASON OR NOT AT ALL, and they are the only ones in any
          mix that are asked a question before being offered. Both are unarmed and worth nothing
          on their own: a hull is worth something only when there is a crossing to make, and an
@@ -17409,7 +17507,7 @@ function _rtsAIUnits(S) {
            into an engineer instead. Asking for the spare PLUS the price means the plan's money
            is never touched, and it is the same _rtsAISpare the caller tested, so the two can
            not drift apart. */
-        if (rtsMoney(S) < _rtsAISpare(S) + _rtsCostOf('enemy', rtsUnitDef('engineer'))) continue;
+        if (rtsMoney(S) < _rtsAISpare(S) + _rtsCostOf(_rtsAIOn, rtsUnitDef('engineer'))) continue;
       }
       if (list[i].vsAir && !_rtsAIWantsVsAir(list[i].key, list[i].vsAir)) continue;
       if (list[i].key === 'lst') {
@@ -17417,7 +17515,7 @@ function _rtsAIUnits(S) {
         var craft = 0;
         for (var ci = 0; ci < G.ents.length; ci++) {
           var ce = G.ents[ci];
-          if (!ce.dead && ce.side === 'enemy' && ce.def === 'lst') craft++;
+          if (!ce.dead && ce.side === _rtsAIOn && ce.def === 'lst') craft++;
         }
         if (craft >= RTS_AI.craftCap) continue;
       }
@@ -17427,7 +17525,7 @@ function _rtsAIUnits(S) {
     var roll = _rtsRnd() * total;
     for (i = 0; i < pool.length; i++) {
       roll -= pool[i].w;
-      if (roll <= 0 || i === pool.length - 1) { _rtsQueue('enemy', pool[i].key); break; }
+      if (roll <= 0 || i === pool.length - 1) { _rtsQueue(_rtsAIOn, pool[i].key); break; }
     }
   }
 }
@@ -17459,24 +17557,24 @@ function _rtsAIStateTick(S) {
   G.ai.state = rtsMoney(S) < 25 ? RTS_STATE.BROKE : RTS_STATE.BUILDUP;
 }
 function _rtsAICanEarn() {
-  return !!(_rtsHas('enemy', 'refinery') && _rtsAIHarvesters());
+  return !!(_rtsHas(_rtsAIOn, 'refinery') && _rtsAIHarvesters());
 }
 function _rtsAIHarvesters() {
   var G = window._rtsG, n = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (!e.dead && e.side === 'enemy' && e.type === 'unit' && rtsUnitDef(e.def).harvest) n++;
+    if (!e.dead && e.side === _rtsAIOn && e.type === 'unit' && rtsUnitDef(e.def).harvest) n++;
   }
   return n;
 }
 /* Does this house still own anything that can PRODUCE? Check_Fire_Sale's question. */
 function _rtsAIHasFactory() {
-  return !!(_rtsHas('enemy', 'yard') || _rtsHas('enemy', 'barracks') || _rtsHas('enemy', 'factory'));
+  return !!(_rtsHas(_rtsAIOn, 'yard') || _rtsHas(_rtsAIOn, 'barracks') || _rtsHas(_rtsAIOn, 'factory'));
 }
 /* Score every strategy. NONE means "not worth doing at all right now". */
 function _rtsAIUrgency(S) {
   var G = window._rtsG, U = RTS_URGENCY, u = {};
-  var pf = _rtsPowerFactor('enemy'), slack = S.powerMade - S.powerUsed;
+  var pf = _rtsPowerFactor(_rtsAIOn), slack = S.powerMade - S.powerUsed;
   var attacked = G.ai.state === RTS_STATE.ATTACKED;
 
   /* Check_Build_Power */
@@ -17506,12 +17604,12 @@ function _rtsAIUrgency(S) {
   if (rtsMoney(S) < RTS_AI.desperateMoney && !_rtsAICanEarn()) {
     u.raiseMoney = U.MEDIUM;
     if (!_rtsAIHasFactory()) u.raiseMoney = U.HIGH;
-    if (!_rtsHas('enemy', 'yard')) u.raiseMoney = U.CRITICAL;
+    if (!_rtsHas(_rtsAIOn, 'yard')) u.raiseMoney = U.CRITICAL;
   }
 
   /* Check_Fire_Sale: nothing left that can build. The game is over; go out swinging. */
   u.fireSale = U.NONE;
-  if (!attacked && _rtsCount('enemy', 'struct') > 0 && !_rtsAIHasFactory()) u.fireSale = U.CRITICAL;
+  if (!attacked && _rtsCount(_rtsAIOn, 'struct') > 0 && !_rtsAIHasFactory()) u.fireSale = U.CRITICAL;
 
   /* Check_Attack */
   u.attack = U.NONE;
@@ -17520,7 +17618,7 @@ function _rtsAIUrgency(S) {
   /* Building the base out. These are the composition ratios, expressed as urgency. */
   var want = _rtsAIWants(S);
   u.build = U.NONE;
-  if (want) u.build = want.key === 'refinery' && !_rtsHas('enemy', 'refinery') ? U.HIGH
+  if (want) u.build = want.key === 'refinery' && !_rtsHas(_rtsAIOn, 'refinery') ? U.HIGH
     : (want.urgent ? U.HIGH : U.MEDIUM);
   G.ai.want = want;
   return u;
@@ -17537,7 +17635,7 @@ function _rtsCount(side, type) {
 function _rtsAISellFrom(list, urgency) {
   for (var i = 0; i < list.length; i++) {
     if (urgency < list[i][1]) continue;
-    var b = _rtsHas('enemy', list[i][0]);
+    var b = _rtsHas(_rtsAIOn, list[i][0]);
     if (b && _rtsSell(b)) return true;
   }
   return false;
@@ -17549,8 +17647,8 @@ function _rtsAIDo(strat, urgency, S) {
       if (!G.ai.want || S.q.struct || S.ready) return false;
       var sd = rtsStructDef(G.ai.want.key);
       var reserve = (urgency >= RTS_URGENCY.HIGH) ? 0 : RTS_AI.creditReserve;
-      if (rtsMoney(S) < _rtsCostOf('enemy', sd) + reserve) return false;
-      return _rtsQueue('enemy', G.ai.want.key);
+      if (rtsMoney(S) < _rtsCostOf(_rtsAIOn, sd) + reserve) return false;
+      return _rtsQueue(_rtsAIOn, G.ai.want.key);
 
     case 'raiseMoney':
       if (!_rtsIQAt(RTS_IQ.sellBack)) return false;
@@ -17568,7 +17666,7 @@ function _rtsAIDo(strat, urgency, S) {
          past powerWaste and fires this strategy in the first place, so with a plain _rtsHas
          the opponent sold the very plant it had just spent an engineer taking, seconds later,
          for half of what the PLAYER paid. See _rtsHasHome. */
-      var p = _rtsHasHome('enemy', 'power');
+      var p = _rtsHasHome(_rtsAIOn, 'power');
       if (!p || S.powerMade - rtsStructDef('power').power < S.powerUsed) return false;
       return _rtsSell(p);
 
@@ -17578,7 +17676,7 @@ function _rtsAIDo(strat, urgency, S) {
       var sold = 0, i, e;
       for (i = 0; i < G.ents.length; i++) {
         e = G.ents[i];
-        if (e.dead || e.side !== 'enemy' || e.type !== 'struct' || e.selling) continue;
+        if (e.dead || e.side !== _rtsAIOn || e.type !== 'struct' || e.selling) continue;
         if (_rtsSell(e)) sold++;
       }
       _rtsAIAllToHunt();
@@ -17594,12 +17692,12 @@ function _rtsAIAllToHunt() {
   var G = window._rtsG;
   /* Do_All_To_Hunt overrides everything, so the teams are dissolved first - otherwise the
      team logic would keep re-issuing its own orders on top of the hunt. */
-  for (var tid in (G.teams || {})) _rtsTeamDisband(G.teams[tid]);
-  var aim = _rtsHas('player', 'yard') || _rtsHas('player', 'refinery') || _rtsHas('player', 'power');
+  for (var tid in (G.teams || {})) if (_rtsTeamMine(G.teams[tid])) _rtsTeamDisband(G.teams[tid]);
+  var aim = _rtsHas(_rtsAIFoe(), 'yard') || _rtsHas(_rtsAIFoe(), 'refinery') || _rtsHas(_rtsAIFoe(), 'power');
   if (!aim) return;
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.side !== 'enemy' || u.type !== 'unit') continue;
+    if (u.dead || u.side !== _rtsAIOn || u.type !== 'unit') continue;
     if (rtsUnitDef(u.def).harvest) continue;
     /* A 3x3 spread around the target, so the hunt arrives on a frontage instead of funnelling
        every unit into one cell.
@@ -17680,7 +17778,7 @@ function _rtsCaptureGuns(b) {
   var G = window._rtsG, n = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.dead || e.side !== 'player' || e.type !== 'struct') continue;
+    if (e.dead || e.side !== _rtsAIFoe() || e.type !== 'struct') continue;
     var sd = rtsStructDef(e.def);
     if (!sd || !sd.weapon) continue;
     var w = RTS_WEAPONS[sd.weapon];
@@ -17701,12 +17799,12 @@ function _rtsCaptureGuns(b) {
      guns         - past RTS_CAP_MAX_GUNS the engineer does not arrive, so the prize is moot */
 function _rtsAICaptureTarget() {
   var G = window._rtsG, best = null, bv = 0;
-  var home = _rtsHasHome('enemy', 'yard') || _rtsHasHome('enemy', 'factory')
-          || _rtsHasHome('enemy', 'barracks');
+  var home = _rtsHasHome(_rtsAIOn, 'yard') || _rtsHasHome(_rtsAIOn, 'factory')
+          || _rtsHasHome(_rtsAIOn, 'barracks');
   if (!home) return null;
   for (var i = 0; i < G.ents.length; i++) {
     var b = G.ents[i];
-    if (b.dead || b.side !== 'player' || b.type !== 'struct') continue;
+    if (b.dead || b.side !== _rtsAIFoe() || b.type !== 'struct') continue;
     if (b.selling || b.building) continue;
     if (!rtsCapturable(b.def)) continue;
     var worth = _rtsCaptureWorth(b);
@@ -17746,12 +17844,12 @@ function _rtsAIWorthCapturing() {
     /* A cached target that has since died, been sold or already changed hands is not an
        answer, and waiting out the rest of the recheck on it would aim the leg at a corpse. */
     var c = G.ai.capTgt;
-    if (!c || c.dead || c.selling || c.side !== 'player') { G.ai.capT = null; }
+    if (!c || c.dead || c.selling || c.side !== _rtsAIFoe()) { G.ai.capT = null; }
     else return true;
   }
   G.ai.capT = G.t;
   G.ai.capTgt = null;
-  if (!_rtsCanProduce('enemy', 'engineer')) return false;
+  if (!_rtsCanProduce(_rtsAIOn, 'engineer')) return false;
   /* NOT BEFORE THE HOUSE IS AWAKE. The Snatch team is `autocreate`, so Suggested_New_Team will
      not raise one until the alert - but nothing gated the PURCHASE, and the gate opens in the
      opening seconds, when the player owns two undefended buildings and nothing is covering
@@ -17780,7 +17878,7 @@ function _rtsAIEngineers() {
   var G = window._rtsG, n = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.dead || e.side !== 'enemy' || e.type !== 'unit' || e.def !== 'engineer') continue;
+    if (e.dead || e.side !== _rtsAIOn || e.type !== 'unit' || e.def !== 'engineer') continue;
     n++;
   }
   return n;
@@ -17827,7 +17925,7 @@ function _rtsNearestOre(G, tx, tz) {
   return best;
 }
 function _rtsBuildWaypoints(G) {
-  var home = _rtsHas('enemy', 'yard'), foe = _rtsHas('player', 'yard');
+  var home = _rtsHas(_rtsAIOn, 'yard'), foe = _rtsHas(_rtsAIFoe(), 'yard');
   var W = {};
   var hx = home ? home.tx : RTS_N - 20, hz = home ? home.tz : 20;
   var fx = foe ? foe.tx : 20, fz = foe ? foe.tz : RTS_N - 20;
@@ -17918,8 +18016,8 @@ function _rtsTeamTarget(t, quarry, near) {
   var best = null, bv = 0, w = _rtsPickWeapon(lead, lead);
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
-    if (o.dead || o.side !== 'player') continue;
-    if (o.type === 'unit' && _rtsJamHides(o, 'enemy', lead.x, lead.z)) continue;   /* jammed: core/jammer.js */
+    if (o.dead || o.side !== _rtsAIFoe()) continue;
+    if (o.type === 'unit' && _rtsJamHides(o, _rtsAIOn, lead.x, lead.z)) continue;   /* jammed: core/jammer.js */
     if (!_rtsQuarryMatch(o, quarry)) continue;
     /* ATT_WAYPT is "clear out what is HERE", so candidates outside the waypoint's radius
        are not merely worth less - they are not candidates at all. */
@@ -17941,7 +18039,7 @@ function _rtsTeamTarget(t, quarry, near) {
   if (!best && !near && !t.type.missions && quarry !== 'anything') {
     for (var j = 0; j < G.ents.length; j++) {
       var p = G.ents[j];
-      if (p.dead || p.side !== 'player' || p.type !== 'struct') continue;
+      if (p.dead || p.side !== _rtsAIFoe() || p.type !== 'struct') continue;
       var pv = _rtsEvalObject(lead, p, _rtsRangeTo(lead, p), w);
       if (pv > bv) { bv = pv; best = p; }
     }
@@ -17978,7 +18076,7 @@ function _rtsTeamCentre(t) {
 }
 /* Can_Add. The mission gate is the one MISSION.CPP's IsRecruitable exists for. */
 function _rtsTeamCanAdd(t, u) {
-  if (u.dead || u.side !== 'enemy' || u.type !== 'unit') return false;
+  if (u.dead || u.side !== _rtsAIOn || u.type !== 'unit') return false;
   if (rtsUnitDef(u.def).harvest) return false;
   if (u.mend != null) return false;          /* on its way to the depot: core/aimend.js */
   if (u.inside || u.raid) return false;      /* aboard, or on the sea raid: core/aihover.js */
@@ -18036,7 +18134,7 @@ function _rtsTeamDesired(t) {
 }
 function _rtsTeamMake(type) {
   var G = window._rtsG;
-  var t = { id:G.teamSeq++, type:type, members:[], have:{}, target:null,
+  var t = { id:G.teamSeq++, side:_rtsAIOn, type:type, members:[], have:{}, target:null,
     moving:false, hasBeen:false, under:true, zone:null, lagging:false,
     cur:0, guardUntil:0, legT:null };      /* Current: the index into MissionList[] */
   G.teams[t.id] = t;
@@ -18053,7 +18151,7 @@ function _rtsTeamCap() {
   var G = window._rtsG, army = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.dead || e.side !== 'enemy' || e.type !== 'unit') continue;
+    if (e.dead || e.side !== _rtsAIOn || e.type !== 'unit') continue;
     if (rtsUnitDef(e.def).harvest) continue;
     army++;
   }
@@ -18110,6 +18208,7 @@ function _rtsHouseAlerted() {
 function _rtsSuggestTeam(spare) {
   var G = window._rtsG, choices = [], counts = {}, tid, ti, kk;
   for (tid in G.teams) {
+    if (!_rtsTeamMine(G.teams[tid])) continue;
     var nm = G.teams[tid].type.name;
     counts[nm] = (counts[nm] || 0) + 1;
   }
@@ -18123,10 +18222,11 @@ function _rtsSuggestTeam(spare) {
      the alert sat in the roster forever and the assault phase never got more than two slots
      out of RTS_TEAM_MAX. */
   for (tid in G.teams) {
-    if (alerted !== !!G.teams[tid].type.autocreate) { _rtsTeamDisband(G.teams[tid]); }
+    if (_rtsTeamMine(G.teams[tid]) && alerted !== !!G.teams[tid].type.autocreate) { _rtsTeamDisband(G.teams[tid]); }
   }
   counts = {};
   for (tid in G.teams) {
+    if (!_rtsTeamMine(G.teams[tid])) continue;
     var nm2 = G.teams[tid].type.name;
     counts[nm2] = (counts[nm2] || 0) + 1;
   }
@@ -18149,7 +18249,7 @@ function _rtsSuggestTeam(spare) {
          marches and never frees the slot either. Harmless while every composition was
          faction-neutral infantry and armour; the moment the two naval types arrived, one of
          them was always uncrewable, because a house builds one side's hulls only. */
-      if (!_rtsCanProduce('enemy', kk)) buildable = false;
+      if (!_rtsCanProduce(_rtsAIOn, kk)) buildable = false;
     }
     if (!buildable) continue;
     /* AND A TYPE THAT ONLY MAKES SENSE ACROSS WATER IS NOT A CANDIDATE ON DRY LAND. The same
@@ -18187,15 +18287,15 @@ function _rtsAIWorthCrossing() {
   if (G.ai.crossT != null && G.t - G.ai.crossT < RTS_AI_CROSS_RECHECK) return !!G.ai.crossOk;
   G.ai.crossT = G.t;
   G.ai.crossOk = false;
-  if (!_rtsCanProduce('enemy', 'lst')) return false;
+  if (!_rtsCanProduce(_rtsAIOn, 'lst')) return false;
   /* BOTH ANCHORS ARE HOME ANCHORS. With a plain _rtsHas, an opponent that had captured the
      player's Construction Yard measured the crossing FROM that captured yard - which stands in
      the player's base - TO the player's War Factory a few tiles away. The straight line
      collapses to single digits while the walked route goes round the player's own buildings,
      so the detour test flipped true on a map with no water on it, and the opponent bought a
      700-credit transport for a crossing that did not exist. */
-  var from = _rtsHasHome('enemy', 'yard') || _rtsHasHome('enemy', 'factory');
-  var to = _rtsHasHome('player', 'yard') || _rtsHasHome('player', 'factory');
+  var from = _rtsHasHome(_rtsAIOn, 'yard') || _rtsHasHome(_rtsAIOn, 'factory');
+  var to = _rtsHasHome(_rtsAIFoe(), 'yard') || _rtsHasHome(_rtsAIFoe(), 'factory');
   if (!from || !to) return false;
   var straight = Math.hypot(to.x - from.x, to.z - from.z);
   if (straight <= 0) return false;
@@ -18216,7 +18316,7 @@ function _rtsSuspendTeams(priority) {
   var G = window._rtsG, n = 0;
   for (var id in G.teams) {
     var t = G.teams[id];
-    if (t.type.priority < priority) { _rtsTeamDisband(t); G.teamHold[t.type.name] = G.t + RTS_SUSPEND_DELAY; n++; }
+    if (_rtsTeamMine(t) && t.type.priority < priority) { _rtsTeamDisband(t); G.teamHold[t.type.name] = G.t + RTS_SUSPEND_DELAY; n++; }
   }
   return n;
 }
@@ -18237,13 +18337,13 @@ function _rtsTeamMaybeRaise() {
   if (!G.ai || !G.ai.wave) return false;
 
   var live = 0;
-  for (tid in G.teams) live++;
+  for (tid in G.teams) if (_rtsTeamMine(G.teams[tid])) live++;
   if (live >= _rtsTeamCap()) return false;
 
   var spare = 0;
   for (i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.side !== 'enemy' || u.type !== 'unit') continue;
+    if (u.dead || u.side !== _rtsAIOn || u.type !== 'unit') continue;
     if (rtsUnitDef(u.def).harvest || u.sqd != null) continue;
     if (!_rtsMission(u).recruitable) continue;
     spare++;
@@ -18263,6 +18363,7 @@ function _rtsTeamsTick(dt) {
 
   for (id in G.teams) {
     t = G.teams[id];
+    if (!_rtsTeamMine(t)) continue;
     /* prune the dead */
     for (i = t.members.length - 1; i >= 0; i--) {
       m = t.members[i];
@@ -18403,7 +18504,7 @@ var RTS_ESCORT_EVERY = 2;          /* seconds between re-aims */
    armed, so this once took them, and the raid tick and the escort tick then tugged the craft
    between its launch water and the march for the rest of the match. */
 function _rtsEscortable(u) {
-  if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || u.air || u.inside) return false;
+  if (u.dead || u.side !== _rtsAIOn || u.type !== 'unit' || u.air || u.inside) return false;
   var d = rtsUnitDef(u.def);
   if (!d || d.harvest || d.sea || !d.weapon || _rtsSupportDriven(d)) return false;
   if (u.sqd != null || u.mend != null) return false;      /* mend: on its way to the depot, core/aimend.js */
@@ -18431,17 +18532,17 @@ function _rtsEscortsTick(dt) {
   G.ai.escT = (G.ai.escT || 0) + dt;
   if (G.ai.escT < RTS_ESCORT_EVERY) return;
   G.ai.escT = 0;
-  var B = _rtsBias('enemy'), i, u, tid, t;
+  var B = _rtsBias(_rtsAIOn), i, u, tid, t;
   /* KEEP THE MUSTER POINTS GOOD, on this tick rather than only at delivery. Production stops at
      the army's ceiling (RTS_DIFF `army`), and a point checked only when a unit comes out was
      never checked again after that: a refinery built beside it, or ore spreading to its edge,
      left the waiting army standing in the harvest - e2e/basespace caught exactly one. */
   for (i = 0; i < G.ents.length; i++) {
     var pb = G.ents[i];
-    if (!pb.dead && pb.side === 'enemy' && pb.type === 'struct' && pb.muster) _rtsAIMuster(pb);
+    if (!pb.dead && pb.side === _rtsAIOn && pb.type === 'struct' && pb.muster) _rtsAIMuster(pb);
   }
   var teams = [];
-  for (tid in (G.teams || {})) if (_rtsEscortWorthy(G.teams[tid])) teams.push(G.teams[tid]);
+  for (tid in (G.teams || {})) if (_rtsTeamMine(G.teams[tid]) && _rtsEscortWorthy(G.teams[tid])) teams.push(G.teams[tid]);
 
   /* ---- who is escorting whom, and who is free ---- */
   var loose = [], count = {};
@@ -18461,7 +18562,7 @@ function _rtsEscortsTick(dt) {
   if (!teams.length || !loose.length) return;
 
   /* ---- the garrison stays: the fighters nearest the base's centre ---- */
-  var c = _rtsBaseCentre('enemy');
+  var c = _rtsBaseCentre(_rtsAIOn);
   if (c) loose.sort(function (a, b) {
     return Math.hypot(a.x - c.x, a.z - c.z) - Math.hypot(b.x - c.x, b.z - c.z) || a.id - b.id;
   });
@@ -18497,7 +18598,7 @@ function _rtsEscortAim(u, t, n) {
 }
 function _rtsEscortRelease(u) {
   u.escort = null;
-  var aim = _rtsHas('player', 'yard') || _rtsHas('player', 'factory') || _rtsHas('player', 'refinery');
+  var aim = _rtsHas(_rtsAIFoe(), 'yard') || _rtsHas(_rtsAIFoe(), 'factory') || _rtsHas(_rtsAIFoe(), 'refinery');
   if (aim && !u.target) _rtsOrderMove(u, aim.x, aim.z, true);
 }
 </script>
@@ -18527,17 +18628,17 @@ var RTS_MEND_EVERY = 1;          /* seconds between looks */
 /* The opponent's depot that can mend right now, or null. */
 function _rtsAIDepot() {
   var G = window._rtsG;
-  if (_rtsPowerFactor('enemy') < 0.999) return null;
+  if (_rtsPowerFactor(_rtsAIOn) < 0.999) return null;
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.type === 'struct' && e.side === 'enemy' && !e.dead && !e.building && rtsStructDef(e.def).repairs) return e;
+    if (e.type === 'struct' && e.side === _rtsAIOn && !e.dead && !e.building && rtsStructDef(e.def).repairs) return e;
   }
   return null;
 }
 /* Which of the opponent's units are worth the trip: wheels and tracks on land, not a harvester
    (it has a refinery to go to and a job to do), not an aircraft. */
 function _rtsMendable(u) {
-  if (u.dead || u.type !== 'unit' || u.side !== 'enemy' || u.air || u.inside) return false;
+  if (u.dead || u.type !== 'unit' || u.side !== _rtsAIOn || u.air || u.inside) return false;
   var d = rtsUnitDef(u.def);
   return !!d && d.kind === 'vehicle' && !d.sea && !d.harvest;
 }
@@ -18614,10 +18715,10 @@ function _rtsAISupportBuy(S, key, worth) {
   if (S.q && S.q[cat]) return false;
   if (cat === 'air' && !_rtsAIAirRoom()) return false;
   if (cat === 'ship' && !_rtsAIFleetRoom()) return false;
-  if (!_rtsCanQueue('enemy', key)) return false;
+  if (!_rtsCanQueue(_rtsAIOn, key)) return false;
   if (!worth(G)) return false;
-  if (rtsMoney(S) < _rtsAISpare(S) + _rtsCostOf('enemy', d)) return false;
-  _rtsQueue('enemy', key);
+  if (rtsMoney(S) < _rtsAISpare(S) + _rtsCostOf(_rtsAIOn, d)) return false;
+  _rtsQueue(_rtsAIOn, key);
   return true;
 }
 
@@ -18626,7 +18727,7 @@ var RTS_AI_MINES = { from: 9, to: 18, every: 1, retry: 30 };   /* retry: seconds
 /* The field: route cells 9 to 18 out from the yard, each with its neighbours across the route. */
 function _rtsAIMineSpots(G) {
   if (G.ai.mineSpots) return G.ai.mineSpots;
-  var ey = _rtsHas('enemy', 'yard'), py = _rtsHas('player', 'yard'), out = [], seen = {};
+  var ey = _rtsHas(_rtsAIOn, 'yard'), py = _rtsHas(_rtsAIFoe(), 'yard'), out = [], seen = {};
   /* planned once both yards stand: asked while either was down (a raid had taken it, an MCV not
      yet deployed) it used to cache the empty plan and never buy a layer for the rest of the match.
      No land route between the two is the one permanent answer. */
@@ -18660,10 +18761,10 @@ function _rtsAIMinesTick(dt) {
   G.ai.mineT = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || u.inside || !(rtsUnitDef(u.def) || {}).mines || _rtsSeaLayer(u)) continue;
+    if (u.dead || u.side !== _rtsAIOn || u.type !== 'unit' || u.inside || !(rtsUnitDef(u.def) || {}).mines || _rtsSeaLayer(u)) continue;
     if (u.mend != null) continue;                              /* on its way to be mended: core/aimend.js */
     if (_rtsMinesLeft(u) <= 0) {                               /* home to load again */
-      var bay = _rtsHas('enemy', 'depot');
+      var bay = _rtsHas(_rtsAIOn, 'depot');
       if (bay && !_rtsAtStruct(u, bay, rtsStructDef('depot').repairs) && !u.path) _rtsOrderMove(u, bay.x, bay.z, false);
       continue;
     }
@@ -18717,7 +18818,7 @@ var RTS_AI_HOVER = { crew: 4, near: 10, rest: 75, board: 45, sail: 150, reach: 1
 /* The opponent's own water: the nearest open sea cell to its yard. */
 function _rtsAIHoverLaunch(G) {
   if (G.ai.hovLaunch !== undefined) return G.ai.hovLaunch;
-  var ey = _rtsHasHome('enemy', 'yard') || _rtsHas('enemy', 'yard'), w = ey && _rtsNearestOpen(ey.tx, ey.tz, 30, 'sea');
+  var ey = _rtsHasHome(_rtsAIOn, 'yard') || _rtsHas(_rtsAIOn, 'yard'), w = ey && _rtsNearestOpen(ey.tx, ey.tz, 30, 'sea');
   return (G.ai.hovLaunch = w ? { tx: w[0], tz: w[1], x: _rtsWX(w[0]), z: _rtsWX(w[1]) } : null);
 }
 /* Does a sea route run from the launch water to this water cell? */
@@ -18746,7 +18847,7 @@ function _rtsAIHoverTarget() {
   var best = null, bv = -1e9;
   for (var i = 0; i < G.ents.length; i++) {
     var h = G.ents[i];
-    if (h.dead || h.side !== 'player' || h.type !== 'unit' || h.inside || !(rtsUnitDef(h.def) || {}).harvest) continue;
+    if (h.dead || h.side !== _rtsAIFoe() || h.type !== 'unit' || h.inside || !(rtsUnitDef(h.def) || {}).harvest) continue;
     var beach = _rtsLandingSpot(h, RTS_AI_HOVER.near);
     if (!beach || Math.hypot(beach.x - h.x, beach.z - h.z) > RTS_AI_HOVER.near * RTS_TILE) continue;
     var w = _rtsNearestOpen(_rtsTX(beach.x), _rtsTX(beach.z), RTS_UNLOAD_REACH, 'sea');
@@ -18762,7 +18863,7 @@ function _rtsAIHoverCrew(hc, n) {
   var G = window._rtsG, out = [];
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || u.inside || u.raid || u.sqd != null || u.mend != null) continue;
+    if (u.dead || u.side !== _rtsAIOn || u.type !== 'unit' || u.inside || u.raid || u.sqd != null || u.mend != null) continue;
     var d = rtsUnitDef(u.def) || {};
     if (d.kind !== 'infantry' || !d.weapon || !_rtsMission(u).recruitable || !_rtsCanBoard(u, hc)) continue;
     var dist = Math.hypot(u.x - hc.x, u.z - hc.z);
@@ -18779,7 +18880,7 @@ function _rtsAIRaidPrey(u) {
   for (var pass = 0; pass < 2 && !best; pass++) {
     for (var i = 0; i < G.ents.length; i++) {
       var o = G.ents[i];
-      if (o.dead || o.side !== 'player' || o.inside) continue;
+      if (o.dead || o.side !== _rtsAIFoe() || o.inside) continue;
       var hit = pass === 0 ? o.type === 'unit' && (rtsUnitDef(o.def) || {}).harvest : o.def === 'refinery';
       if (!hit) continue;
       var dd = Math.hypot(o.x - u.x, o.z - u.z);
@@ -18812,7 +18913,7 @@ function _rtsAIHoverTick(dt) {
   var hc = null;
   for (var i = 0; i < G.ents.length && !hc; i++) {
     var e = G.ents[i];
-    if (!e.dead && e.side === 'enemy' && e.type === 'unit' && e.def === 'hovercraft') hc = e;
+    if (!e.dead && e.side === _rtsAIOn && e.type === 'unit' && e.def === 'hovercraft') hc = e;
   }
   if (!hc) { st.s = 'rest'; st.aim = null; return; }
   /* BATTERED, IT GOES TO THE DEPOT FIRST (core/aimend.js): a raid in hand is called off and its
@@ -18928,7 +19029,7 @@ function _rtsParaJumped(e, men) {
     u.chute = RTS_PARA.fall; u.order = null; u.path = null; u.goal = null; u.target = null;
   }
   _rtsParaHome(e);
-  if (e.side === 'player' && typeof _rtsSay === 'function') _rtsSay('Paratroopers away.');
+  if (e.side === _rtsAIFoe() && typeof _rtsSay === 'function') _rtsSay('Paratroopers away.');
 }
 /* "Unload here and now" (the U key, the opponent's timed-out drop): the plane's men jump rather
    than appear on the ground from sixteen units up. Anything else unloads as it always did. */
@@ -18944,7 +19045,7 @@ function _rtsAIParaTarget() {
   var G = window._rtsG, best = null, bv = 1e9;
   for (var i = 0; i < G.ents.length; i++) {
     var b = G.ents[i];
-    if (b.dead || b.side !== 'player' || b.type !== 'struct' || !((rtsStructDef(b.def) || {}).power > 0)) continue;
+    if (b.dead || b.side !== _rtsAIFoe() || b.type !== 'struct' || !((rtsStructDef(b.def) || {}).power > 0)) continue;
     var v = _rtsGuardsNear(b, RTS_RAID_GUARD_R);
     if (v < bv) { bv = v; best = b; }
   }
@@ -18964,7 +19065,7 @@ function _rtsAIParaTick(dt) {
     if (!u.target || u.target.dead || u.order !== 'attack') {
       var aim = st.aim && !st.aim.dead ? st.aim : null, near = 1e9;
       if (!aim) G.ents.forEach(function (b) {
-        if (b.dead || b.side !== 'player' || b.type !== 'struct') return;
+        if (b.dead || b.side !== _rtsAIFoe() || b.type !== 'struct') return;
         var d = Math.hypot(b.x - u.x, b.z - u.z);
         if (d < near && d < RTS_AI_HOVER.reach * RTS_TILE) { near = d; aim = b; }
       });
@@ -18976,7 +19077,7 @@ function _rtsAIParaTick(dt) {
   var pl = null;
   for (var i = 0; i < G.ents.length && !pl; i++) {
     var e = G.ents[i];
-    if (!e.dead && e.side === 'enemy' && e.type === 'unit' && (rtsUnitDef(e.def) || {}).paradrops) pl = e;
+    if (!e.dead && e.side === _rtsAIOn && e.type === 'unit' && (rtsUnitDef(e.def) || {}).paradrops) pl = e;
   }
   if (!pl) { st.s = 'rest'; return; }
   if (st.s === 'rest') {
@@ -18999,7 +19100,7 @@ function _rtsAIParaTick(dt) {
     if (!st.aim) { st.s = 'rest'; st.t = G.t; return; }
     /* the drop zone: open ground just past the plant's footprint, on the side away from the
        player's yard - the side its guns face least */
-    var py = _rtsHas('player', 'yard') || st.aim, dx = st.aim.x - py.x, dz = st.aim.z - py.z, L = Math.hypot(dx, dz) || 1;
+    var py = _rtsHas(_rtsAIFoe(), 'yard') || st.aim, dx = st.aim.x - py.x, dz = st.aim.z - py.z, L = Math.hypot(dx, dz) || 1;
     var off = (Math.max((rtsStructDef(st.aim.def) || {}).w || 2, 2) / 2 + 1.5) * RTS_TILE;
     var c = _rtsNearestOpen(_rtsTX(st.aim.x + dx / L * off), _rtsTX(st.aim.z + dz / L * off), 3, null);
     if (!c || !_rtsOrderUnloadAt(pl, _rtsWX(c[0]), _rtsWX(c[1]))) { st.s = 'rest'; st.t = G.t; return; }
@@ -19075,13 +19176,13 @@ function _rtsDroneOn(e, t) {
 /* Is the shadowed enemy still seen by the drone's side? The player's view is _rtsEntSeen
    (core/supers.js) - a diving submarine is not seen, however close the drone circles. The
    opponent never shadows anything (its drone follows its own team, below). */
-function _rtsShadowSeen(e, t) { return e.side !== 'player' || _rtsEntSeen(t); }
+function _rtsShadowSeen(e, t) { return e.side !== _rtsAIFoe() || _rtsEntSeen(t); }
 
 /* Is the opponent fighting half-blind? */
 function _rtsAIHalfBlind() {
   if (_rtsFogged()) return true;
   var G = window._rtsG;
-  for (var i = 0; i < G.ents.length; i++) { var e = G.ents[i]; if (!e.dead && e.side === 'player' && e.type === 'unit' && _rtsJams(e)) return true; }
+  for (var i = 0; i < G.ents.length; i++) { var e = G.ents[i]; if (!e.dead && e.side === _rtsAIFoe() && e.type === 'unit' && _rtsJams(e)) return true; }
   return false;
 }
 /* the opponent's drone: over the middle of its largest team on the march */
@@ -19092,7 +19193,7 @@ function _rtsAIDroneTick(dt) {
   G.ai.droneT = 0;
   for (id in G.teams) {
     var t = G.teams[id];
-    if (!t.moving) continue;
+    if (!t.moving || !_rtsTeamMine(t)) continue;
     var n = t.members.filter(function (m) { return !m.dead; }).length;
     if (n > bn) { bn = n; big = t; }
   }
@@ -19100,7 +19201,7 @@ function _rtsAIDroneTick(dt) {
   if (!c) return;
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || !_rtsOrbits(u)) continue;
+    if (u.dead || u.side !== _rtsAIOn || u.type !== 'unit' || !_rtsOrbits(u)) continue;
     if (!u.orbit || Math.hypot(u.orbit.x - c.x, u.orbit.z - c.z) > RTS_TILE * 3) _rtsDroneAt(u, c.x, c.z);
   }
 }
@@ -19258,7 +19359,7 @@ function _rtsBombsTick(dt) {
    not counted, or a wall line (nine segments round any one of them) outranks every real cluster */
 function _rtsAIBombTarget() {
   var G = window._rtsG, best = null, bv = -1, R = RTS_BOMB.crowd * RTS_TILE, bs = [];
-  for (var i = 0; i < G.ents.length; i++) { var b = G.ents[i]; if (!b.dead && b.side === 'player' && b.type === 'struct' && !(rtsStructDef(b.def) || {}).wall) bs.push(b); }
+  for (var i = 0; i < G.ents.length; i++) { var b = G.ents[i]; if (!b.dead && b.side === _rtsAIFoe() && b.type === 'struct' && !(rtsStructDef(b.def) || {}).wall) bs.push(b); }
   for (var a = 0; a < bs.length; a++) {
     var n = 0;
     for (var k = 0; k < bs.length; k++) if (Math.hypot(bs[k].x - bs[a].x, bs[k].z - bs[a].z) <= R) n++;
@@ -19273,7 +19374,7 @@ function _rtsAIBombTick(dt) {
   G.ai.bombT = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || !(rtsUnitDef(u.def) || {}).carpets) continue;
+    if (u.dead || u.side !== _rtsAIOn || u.type !== 'unit' || !(rtsUnitDef(u.def) || {}).carpets) continue;
     if (u.rearming > 0 || !(u.ammo > 0) || u.run || (u.order === 'attack' && u.target && !u.target.dead)) continue;
     var t = _rtsAIBombTarget();
     if (t) _rtsOrderAttack(u, t);
@@ -19398,7 +19499,7 @@ function _rtsSeaMineTick(dt) {
    again after a while rather than kept for the match. */
 var RTS_SEAMINE_RECHECK = 30;
 function _rtsAISeaMineSpots(G) {
-  var py = _rtsShipyardOf('player', null), ey = _rtsShipyardOf('enemy', null);
+  var py = _rtsShipyardOf(_rtsAIFoe(), null), ey = _rtsShipyardOf(_rtsAIOn, null);
   if (!py || !ey) return [];
   var C = G.ai.seaMines;
   if (C && C.by === py.id + ':' + ey.id && (C.out.length || G.t - C.t < RTS_SEAMINE_RECHECK)) return C.out;
@@ -19431,9 +19532,9 @@ function _rtsAISeaMinesTick(dt) {
   G.ai.seaMineT = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || !_rtsSeaLayer(u)) continue;
+    if (u.dead || u.side !== _rtsAIOn || u.type !== 'unit' || !_rtsSeaLayer(u)) continue;
     if (_rtsMinesLeft(u) <= 0) {                               /* home to load again */
-      var y = _rtsShipyardOf('enemy', u);
+      var y = _rtsShipyardOf(_rtsAIOn, u);
       if (y && !_rtsAtStruct(u, y, RTS_SEAMINE.dock * RTS_TILE) && !u.path) {
         var c = _rtsNearestOpen(_rtsTX(y.x), _rtsTX(y.z), 6, 'sea');
         if (c) _rtsOrderMove(u, _rtsWX(c[0]), _rtsWX(c[1]), false);
@@ -19505,11 +19606,11 @@ function _rtsAground(u) {
 /* The player's building nearest the Monitor that it can shell from water: one with an open
    cell of the Monitor's water within a cell of its reach. */
 function _rtsAIMonitorTarget(u) {
-  var G = window._rtsG, from = u || _rtsShipyardOf('enemy', null), best = null, bd = 1e9;
+  var G = window._rtsG, from = u || _rtsShipyardOf(_rtsAIOn, null), best = null, bd = 1e9;
   if (!from) return null;
   for (var i = 0; i < G.ents.length; i++) {
     var b = G.ents[i];
-    if (b.dead || b.side !== 'player' || b.type !== 'struct' || !_rtsShoreReach(b)) continue;
+    if (b.dead || b.side !== _rtsAIFoe() || b.type !== 'struct' || !_rtsShoreReach(b)) continue;
     var dd = Math.hypot(b.x - from.x, b.z - from.z);
     if (dd < bd) { bd = dd; best = b; }
   }
@@ -19523,9 +19624,9 @@ function _rtsAIMonitorTick(dt) {
   var low = _rtsTideLow(G);
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || u.def !== 'monitor' || u.sqd != null) continue;
+    if (u.dead || u.side !== _rtsAIOn || u.type !== 'unit' || u.def !== 'monitor' || u.sqd != null) continue;
     if (!low) {                                                   /* the flood: home to the yard */
-      var y = _rtsShipyardOf('enemy', u);
+      var y = _rtsShipyardOf(_rtsAIOn, u);
       if (!y || Math.hypot(y.x - u.x, y.z - u.z) <= RTS_MONITOR.home * RTS_TILE) continue;
       if (u.order === 'move' && u.goal && Math.hypot(u.goal.x - y.x, u.goal.z - y.z) < RTS_TILE * 3) continue;
       _rtsOrderMove(u, y.x, y.z, false);
@@ -19545,7 +19646,7 @@ function _rtsAIEbb(ty) {
   for (k in ty.members) need[k] = ty.members[k];
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.inside || u.side !== 'enemy' || u.type !== 'unit' || u.sqd != null || !need[u.def]) continue;
+    if (u.dead || u.inside || u.side !== _rtsAIOn || u.type !== 'unit' || u.sqd != null || !need[u.def]) continue;
     if (!_rtsMission(u).recruitable) continue;
     need[u.def]--;
   }
@@ -19681,7 +19782,7 @@ function _rtsTeamDoMission(t, dt) {
       var waitFor = 0;
       for (var oid in G.teams) {
         var o = G.teams[oid], L = o.type.missions;
-        if (o === t || !o.hasBeen || !L || !o.members.length) continue;
+        if (o === t || !_rtsTeamMine(o) || !o.hasBeen || !L || !o.members.length) continue;
         for (var k = (o.cur | 0); k < L.length; k++) if (L[k][0] === 'sync') { if (k > (o.cur | 0)) waitFor++; break; }
       }
       if (!waitFor || G.t - t.syncAt > RTS_SYNC_WAIT) { t.syncAt = null; t.synced = G.t; _rtsTeamAdvance(t); continue; }
@@ -19760,7 +19861,7 @@ function _rtsTeamDoMission(t, dt) {
       if (!trU || !_rtsCargoCount(trU)) { _rtsTeamAdvance(t); continue; }
       if (t.legT == null) t.legT = G.t;
       if (!t.target || t.target.dead) t.target = _rtsTeamTarget(t, 'buildings');
-      var aim = t.target || _rtsHas('player', 'yard');
+      var aim = t.target || _rtsHas(_rtsAIFoe(), 'yard');
       if (!aim) { _rtsTeamAdvance(t); continue; }
       /* AIM AT THE BEACH, NOT AT THE BUILDING. A target worth landing against is usually well
          inland, and _rtsOrderUnloadAt walks an unreachable goal outwards only far enough to
@@ -19800,7 +19901,7 @@ function _rtsTeamDoMission(t, dt) {
          reported back; it never sets `dead`, and there is no event. So the .dead idiom every
          other leg completes on is not merely wrong here, it hangs: a captured building
          satisfies neither `!t.capt` nor `t.capt.dead`, forever. */
-      if (t.capt && (t.capt.dead || t.capt.selling || t.capt.side !== 'player')) {
+      if (t.capt && (t.capt.dead || t.capt.selling || t.capt.side !== _rtsAIFoe())) {
         _rtsTeamAdvance(t); continue;
       }
       if (!t.capt) t.capt = (G.ai && G.ai.capTgt) || _rtsAICaptureTarget();
@@ -19846,7 +19947,7 @@ function _rtsTeamDoMission(t, dt) {
          execute, since a gun clears a friendly target - and the team held a slot for the rest
          of the match. Reachable from either direction, because both sides capture now. */
       if (!t.target || t.target.dead
-          || (t.target.side !== 'player' && t.target.type === 'struct')) {
+          || (t.target.side !== _rtsAIFoe() && t.target.type === 'struct')) {
         _rtsTeamAdvance(t); continue;
       }
       _rtsTeamOrderAll(t, function (mm) {
@@ -19869,10 +19970,11 @@ function _rtsTeamDoMission(t, dt) {
    something that shoots back and is in range. "There is no point in endlessly shuffling
    between targets that have firepower." */
 function _rtsTeamTookDamage(u, from) {
+  if (_rtsSeatAI(u.side) && u.side !== _rtsAIOn) return _rtsAIAs(u.side, function () { return _rtsTeamTookDamage(u, from); });
   var G = window._rtsG;
   if (u.sqd == null || !G.teams || !G.teams[u.sqd]) return;
   var t = G.teams[u.sqd];
-  if (!from || from.side !== 'player' || !t.moving) return;
+  if (!from || from.side !== _rtsAIFoe() || !t.moving) return;
   /* IsSuicide: "Charge toward target ignoring distractions". Being shot at IS the
      distraction, so a suicide team never retargets onto whoever hit it. */
   if (t.type.suicide) return;
@@ -19889,7 +19991,7 @@ function _rtsAIAttack(urgency) {
   var G = window._rtsG, pool = [], k;
   for (k = 0; k < G.ents.length; k++) {
     var u = G.ents[k];
-    if (!u.dead && u.side === 'enemy' && u.type === 'unit' && !rtsUnitDef(u.def).harvest
+    if (!u.dead && u.side === _rtsAIOn && u.type === 'unit' && !rtsUnitDef(u.def).harvest
         && u.sqd == null && _rtsMission(u).recruitable) pool.push(u);
   }
   /* Commit a real share of the idle army, not a token squad. Sending a fixed handful let
@@ -19897,15 +19999,15 @@ function _rtsAIAttack(urgency) {
      IQGuardArea: only a smart opponent knows to hold some of it back as a garrison. */
   /* AttackInterval is deliberately randomised over a 4x spread in the original, so waves
      never arrive on a metronome you can set your watch by. */
-  G.ai.next = RTS_WAVE_EVERY * _rtsBias('enemy').build * (0.5 + _rtsRnd() * 1.5);
-  if (!_rtsHas('player', 'yard') && !_rtsHas('player', 'refinery') && !_rtsHas('player', 'power')) return false;
+  G.ai.next = RTS_WAVE_EVERY * _rtsBias(_rtsAIOn).build * (0.5 + _rtsRnd() * 1.5);
+  if (!_rtsHas(_rtsAIFoe(), 'yard') && !_rtsHas(_rtsAIFoe(), 'refinery') && !_rtsHas(_rtsAIFoe(), 'power')) return false;
 
   /* Raise a TEAM rather than shoving a share of everything idle at the nearest building.
      A team holds a composition and a quarry, waits until it is at full strength, and then
      goes after the kind of thing it was raised to kill. */
   if (!G.teams) { G.teams = {}; G.teamSeq = 0; G.teamHold = {}; }
   var live = 0, tid;
-  for (tid in G.teams) live++;
+  for (tid in G.teams) if (_rtsTeamMine(G.teams[tid])) live++;
   if (live >= _rtsTeamCap()) return false;
 
   /* Only raise a type this army can actually crew, and respect a suspension.
@@ -19917,7 +20019,7 @@ function _rtsAIAttack(urgency) {
   if (!pick) return false;
   _rtsTeamMake(pick);
   G.ai.wave++;
-  _rtsSay(rtsArmyName('enemy') + ' ' + pick.name + ' team inbound!');
+  _rtsSay(rtsArmyName(_rtsAIOn) + ' ' + pick.name + ' team inbound!');
   if (typeof _rtsSfx === 'function') _rtsSfx('alert');
   return true;
 }
@@ -19936,7 +20038,7 @@ function _rtsAIAttack(urgency) {
    sometimes an army in the field, and always somewhere the player can see coming and rebuild
    from. */
 function _rtsAISupers(dt) {
-  var G = window._rtsG, S = G.sides.enemy;
+  var G = window._rtsG, S = G.sides[_rtsAIOn];
   if (!S.supers) return;
   if (!_rtsIQAt(RTS_IQ.superweapon)) return;
   G.ai.superT = (G.ai.superT || 0) - dt;
@@ -19944,16 +20046,16 @@ function _rtsAISupers(dt) {
   G.ai.superT = 3;                          /* it does not need to re-decide every frame */
 
   for (var key in S.supers) {
-    if (!_rtsSuperReady('enemy', key)) continue;
+    if (!_rtsSuperReady(_rtsAIOn, key)) continue;
     var aim = null;
-    if (key === 'nuke')            aim = _rtsAIMassOf('player');
-    else if (key === 'ironcurtain') aim = _rtsAIMassOf('enemy');
+    if (key === 'nuke')            aim = _rtsAIMassOf(_rtsAIFoe());
+    else if (key === 'ironcurtain') aim = _rtsAIMassOf(_rtsAIOn);
     /* weather on the player's base: the fog blinds its guns to the approach, the storm grounds
        its aircraft and strikes what stands there (core/wxsupers.js) */
-    else if (key === 'fogbank' || key === 'thunder') aim = _rtsAIMassOf('player');
+    else if (key === 'fogbank' || key === 'thunder') aim = _rtsAIMassOf(_rtsAIFoe());
     else if (key === 'chrono')      continue;   /* see below */
     if (!aim) continue;
-    if (_rtsSuperFire('enemy', key, aim.tx, aim.tz)) return;   /* one per decision */
+    if (_rtsSuperFire(_rtsAIOn, key, aim.tx, aim.tz)) return;   /* one per decision */
   }
 }
 /* Where a side's stuff is, in tiles. Buildings weigh more than units so a nuke goes to the
@@ -19989,11 +20091,19 @@ function _rtsAISpare(S) {
   if (!w) return RTS_AI.infantryReserve;
   var sd = rtsStructDef(w.key);
   if (!sd) return RTS_AI.infantryReserve;
-  return Math.max(RTS_AI.infantryReserve, _rtsCostOf('enemy', sd) + RTS_AI.creditReserve);
+  return Math.max(RTS_AI.infantryReserve, _rtsCostOf(_rtsAIOn, sd) + RTS_AI.creditReserve);
 }
 
+/* Every computer seat thinks in turn, the opponent first and then the rest in seat order, each with
+   _rtsAIOn set to it (core/seats.js). One computer seat - the shipped game - is one call, as ever. */
 function _rtsUpdateAI(dt) {
-  var G = window._rtsG, S = G.sides.enemy;
+  var G = window._rtsG;
+  if (_rtsSeatAI('enemy')) _rtsAIAs('enemy', function () { _rtsUpdateAIFor(dt); });
+  for (var i = 0; i < G.order.length; i++) if (G.order[i] !== 'enemy' && _rtsSeatAI(G.order[i])) _rtsUpdateAISeat(G.order[i], dt);
+}
+function _rtsUpdateAISeat(side, dt) { _rtsAIAs(side, function () { _rtsUpdateAIFor(dt); }); }
+function _rtsUpdateAIFor(dt) {
+  var G = window._rtsG, S = G.sides[_rtsAIOn];
   if (S.lost) return;
   _rtsTeamsTick(dt);
   _rtsEscortsTick(dt);          /* the spare army goes with the teams - core/escorts.js */
@@ -20024,14 +20134,14 @@ function _rtsUpdateAI(dt) {
   if (G.ai.build <= 0) {
     G.ai.build = 5;
     _rtsAIStateTick(S);
-    _rtsAIDeploy('enemy');
+    _rtsAIDeploy(_rtsAIOn);
 
     /* Repair_AI, gated on IQRepairSell: the low difficulties simply cannot do this, which is
        why raiding a Commando base and leaving means finding it whole again. */
     if (_rtsIQAt(RTS_IQ.repairSell) && rtsMoney(S) > RTS_AI.creditReserve * 0.5) {
       for (var r = 0; r < G.ents.length; r++) {
         var b = G.ents[r];
-        if (b.dead || b.side !== 'enemy' || b.type !== 'struct' || b.building || b.selling) continue;
+        if (b.dead || b.side !== _rtsAIOn || b.type !== 'struct' || b.building || b.selling) continue;
         if (!b.repair && b.hp < b.maxHp * 0.85) { b.repair = 1; b.rtimer = 0; }
       }
     }
@@ -20054,7 +20164,7 @@ function _rtsUpdateAI(dt) {
     if (G.ai.place <= 0) {
       G.ai.place = 0.6;
       if (_rtsAIPlace(S.ready)) { S.ready = null; S.readyPaid = null; S.readyTry = 0; }
-      else if (++S.readyTry > 8 || !_rtsHas('enemy', 'yard')) { S.ready = null; S.readyPaid = null; S.readyTry = 0; }
+      else if (++S.readyTry > 8 || !_rtsHas(_rtsAIOn, 'yard')) { S.ready = null; S.readyPaid = null; S.readyTry = 0; }
     }
   }
 }
@@ -33517,7 +33627,9 @@ var RTS_SAVE_INFO = 'rccmd.save1.info';
    every existing save is rejected without anyone having to remember to bump a number. */
 function _rtsSaveVersion() {
   var w = 0; for (var k in RTS_WEAPONS) w++;
-  return 3 + RTS_N * 31 + RTS_UNITS.length * 7 + RTS_STRUCTS.length * 11 + w * 13
+  /* the 1000 is the SHAPE of G: brains moved onto the seats (core/seats.js), so an older save's
+     G.ai would load into a game that no longer reads it */
+  return 3 + 1000 + RTS_N * 31 + RTS_UNITS.length * 7 + RTS_STRUCTS.length * 11 + w * 13
     + RTS_TEAM_TYPES.length * 17 + RTS_TRIGGERS.length * 19;
 }
 

@@ -74,7 +74,8 @@ function _rtsBaseDropNode(e) {
     if (list[i].key === e.def && list[i].tx === e.tx && list[i].tz === e.tz) { list.splice(i, 1); return; }
 }
 
-function _rtsNewGame(seed, diff) {
+function _rtsNewGame(seed, diff, spec) {
+  _rtsAIOn = 'enemy';
 
   var G = {
     t:0, seed:seed || 12345, over:null, msg:null, msgT:0, shake:0,
@@ -110,10 +111,14 @@ function _rtsNewGame(seed, diff) {
     sel:[], proj:[], fx:[], mines:[],
     sides:{ player:_rtsSideNew('player'), enemy:_rtsSideNew('enemy') },
     rnd:null,                              /* seeded on first use; see _rtsRnd */
-    ai:{ next:0, wave:0, build:6, place:0, state:0, lastHit:-999, want:null },
-    teams:{}, teamSeq:0, teamHold:{},
+    order:['player', 'enemy'],             /* the seats, in tick order; core/seats.js */
+    teams:{}, teamSeq:0,
     stats:{ killed:0, lostU:0 }
   };
+  /* the human at 'player', the computer at 'enemy' with its brain; core/seats.js */
+  G.sides.player.team = 0; G.sides.player.ctl = 'human';
+  G.sides.enemy.team = 1; G.sides.enemy.ctl = 'ai'; G.sides.enemy.ai = _rtsBrainNew();
+  _rtsBrainLink(G);
   window._rtsG = G;
   /* AttackDelay: how long you get before the first wave, stretched on the easy setting. */
   G.ai.next = RTS_WAVE_FIRST * _rtsBias('enemy').build;
@@ -154,7 +159,11 @@ function _rtsNewGame(seed, diff) {
      the side - so the same arrangement works whichever axis the roll produced. Scan_Place_Object
      is what fills in when a slot is blocked: it walks outward through distances, trying every
      facing at each, rather than giving up on the exact cell. */
-  _rtsLayBase(G.starts.player, G.starts.enemy, [
+  /* SELF-PLAY: spec.player.ctl 'ai' hands the player's seat to the computer (core/seats.js), and
+     then it opens as the computer does - the human's opening is a yard and a power plant, which
+     the opponent's brain was measured unable to grow into a base. */
+  var pAI = !!(spec && spec.player && spec.player.ctl === 'ai');
+  _rtsLayBase(G.starts.player, G.starts.enemy, pAI ? _rtsAIOpening('player') : [
     ['struct','yard',    0,  0], ['struct','power',   1,  5],
     ['unit',  'rifle',   3, -3], ['unit',  'rifle',   4, -1], ['unit', 'buggy', 1, -4]
   ], 'player');
@@ -164,13 +173,8 @@ function _rtsNewGame(seed, diff) {
      with Allied statistics, and the AI never sold or replaced them. Its build planner already
      filters on rtsBuildableBy and carries a comment about faction lists breaking exactly this
      way; the opening layout was the one that had not been told. */
-  var eTurret = rtsBuildableBy(rtsStructDef('turret'), rtsHouseSide('enemy')) ? 'turret' : 'flametower';
-  _rtsLayBase(G.starts.enemy, G.starts.player, [
-    ['struct','yard',    0,  0], ['struct','power',  -1, -5],
-    ['struct','refinery',5,  0], ['struct','barracks',4, -5],
-    ['struct','factory', 4,  5], ['struct',eTurret,   9, -2], ['struct',eTurret, 9, 3],
-    ['unit',  'harvester',11, 1], ['unit','rifle',   10, -2], ['unit','tank',   11, 3]
-  ], 'enemy');
+  _rtsLayBase(G.starts.enemy, G.starts.player, _rtsAIOpening('enemy'), 'enemy');
+  if (pAI) _rtsSeatToAI('player', spec.player.diff || G.diff);
 
   /* Density LAST. Terrain generation and the two bases both erase ore, and a cell's level is
      a function of how many neighbours still have some - so running the adjust before those

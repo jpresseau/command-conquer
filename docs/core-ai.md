@@ -453,3 +453,30 @@ work above had already made reachable and which it could never actually get to.
 **The ladder still did not move**: allied 296/221/171s and soviet 294/221/172s. Three sessions of AI
 work have now left it inside a couple of seconds of where it started, which is the point — the
 opponent plays a fuller game without becoming harder to survive as an idle player.
+
+## Seats: the brain can play either side
+
+The brain was written from one seat's point of view and named it outright, `'enemy'` for itself
+and `'player'` for its target, some hundred and fifty times across twenty files. It now says
+`_rtsAIOn` and `_rtsAIFoe()` (`core/seats.js`), and `_rtsUpdateAI` runs every computer seat in turn
+with `_rtsAIOn` set to it: the opponent first, then the rest of `G.order`. A seat carries `team`,
+`ctl` (`'human'` or `'ai'`), `diff` and, for a computer seat, its brain (`G.sides[k].ai`, with the
+team-type holds, waypoints, mending clock and mine hits that used to sit on `G`). `G.ai`,
+`G.teamHold`, `G.waypt`, `G.mendT` and `G.mineHits` are kept as non-enumerable accessors onto the
+brain that is thinking, so the code reads as before and a save holds each brain once. Teams carry
+the `side` that raised them and every brain-scoped loop over `G.teams` takes only its own
+(`_rtsTeamMine`). The four calls into the brain from outside its tick (`_rtsAttacked`,
+`_rtsBaseIsAttacked`, `_rtsTeamTookDamage`, the delivery muster) run in the seat concerned.
+
+With one computer seat - the shipped game - `_rtsAIOn` is always `'enemy'`, so every rewritten line
+reads what it read before; `unit/fingerprint` holds it to the byte. `_rtsNewGame(seed, diff,
+{ player: { ctl: 'ai', diff } })` is self-play: the player's seat opens as the computer does
+(`_rtsAIOpening`) and gets a brain. It was proved against a label-swap harness on the unmodified
+code (the real brain run a second time per tick with every side label swapped): identical
+fingerprints at every sample on three seeds, normal/normal, hard/hard and easy/normal.
+`unit/selfplay` pins the first and checks the rest - each seat's teams are its own and fight the
+other, a hit tells its own brain, and a save keeps both brains and plays on as if never saved.
+
+Still keyed to the two named seats, outside the brain: the scatter IQ gate, auto-sell, the mine-hit
+log and the win rule (the player's seat against everyone else). A third seat needs those, the
+hostility test (`_rtsEnemyOf` is binary), colours, starts and fog.

@@ -151,7 +151,7 @@ function _rtsBombsTick(dt) {
    not counted, or a wall line (nine segments round any one of them) outranks every real cluster */
 function _rtsAIBombTarget() {
   var G = window._rtsG, best = null, bv = -1, R = RTS_BOMB.crowd * RTS_TILE, bs = [];
-  for (var i = 0; i < G.ents.length; i++) { var b = G.ents[i]; if (!b.dead && b.side === 'player' && b.type === 'struct' && !(rtsStructDef(b.def) || {}).wall) bs.push(b); }
+  for (var i = 0; i < G.ents.length; i++) { var b = G.ents[i]; if (!b.dead && b.side === _rtsAIFoe() && b.type === 'struct' && !(rtsStructDef(b.def) || {}).wall) bs.push(b); }
   for (var a = 0; a < bs.length; a++) {
     var n = 0;
     for (var k = 0; k < bs.length; k++) if (Math.hypot(bs[k].x - bs[a].x, bs[k].z - bs[a].z) <= R) n++;
@@ -166,7 +166,7 @@ function _rtsAIBombTick(dt) {
   G.ai.bombT = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || !(rtsUnitDef(u.def) || {}).carpets) continue;
+    if (u.dead || u.side !== _rtsAIOn || u.type !== 'unit' || !(rtsUnitDef(u.def) || {}).carpets) continue;
     if (u.rearming > 0 || !(u.ammo > 0) || u.run || (u.order === 'attack' && u.target && !u.target.dead)) continue;
     var t = _rtsAIBombTarget();
     if (t) _rtsOrderAttack(u, t);

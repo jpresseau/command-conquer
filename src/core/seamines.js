@@ -56,7 +56,7 @@ function _rtsSeaMineTick(dt) {
    again after a while rather than kept for the match. */
 var RTS_SEAMINE_RECHECK = 30;
 function _rtsAISeaMineSpots(G) {
-  var py = _rtsShipyardOf('player', null), ey = _rtsShipyardOf('enemy', null);
+  var py = _rtsShipyardOf(_rtsAIFoe(), null), ey = _rtsShipyardOf(_rtsAIOn, null);
   if (!py || !ey) return [];
   var C = G.ai.seaMines;
   if (C && C.by === py.id + ':' + ey.id && (C.out.length || G.t - C.t < RTS_SEAMINE_RECHECK)) return C.out;
@@ -89,9 +89,9 @@ function _rtsAISeaMinesTick(dt) {
   G.ai.seaMineT = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || !_rtsSeaLayer(u)) continue;
+    if (u.dead || u.side !== _rtsAIOn || u.type !== 'unit' || !_rtsSeaLayer(u)) continue;
     if (_rtsMinesLeft(u) <= 0) {                               /* home to load again */
-      var y = _rtsShipyardOf('enemy', u);
+      var y = _rtsShipyardOf(_rtsAIOn, u);
       if (y && !_rtsAtStruct(u, y, RTS_SEAMINE.dock * RTS_TILE) && !u.path) {
         var c = _rtsNearestOpen(_rtsTX(y.x), _rtsTX(y.z), 6, 'sea');
         if (c) _rtsOrderMove(u, _rtsWX(c[0]), _rtsWX(c[1]), false);
