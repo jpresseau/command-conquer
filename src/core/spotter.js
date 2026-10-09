@@ -44,7 +44,7 @@ function _rtsLongGun(u) {
 }
 function _rtsAILongGuns() {
   var G = window._rtsG, n = 0;
-  for (var i = 0; i < G.ents.length; i++) { var u = G.ents[i]; if (!u.dead && u.side === 'enemy' && u.type === 'unit' && _rtsLongGun(u)) n++; }
+  for (var i = 0; i < G.ents.length; i++) { var u = G.ents[i]; if (!u.dead && u.side === _rtsAIOn && u.type === 'unit' && _rtsLongGun(u)) n++; }
   return n;
 }
 /* The opponent's spotter: a few cells ahead of the nearest long gun, toward the player's base. */
@@ -53,18 +53,18 @@ function _rtsAISpotTick(dt) {
   G.ai.spotT = (G.ai.spotT || 0) + dt;
   if (G.ai.spotT < RTS_SPOT.every) return;
   G.ai.spotT = 0;
-  var py = _rtsHas('player', 'yard');
+  var py = _rtsHas(_rtsAIFoe(), 'yard');
   if (!py) return;
   for (var i = 0; i < G.ents.length; i++) {
     var s = G.ents[i];
-    if (s.dead || s.inside || s.side !== 'enemy' || s.type !== 'unit' || !_rtsSpots(s)) continue;
+    if (s.dead || s.inside || s.side !== _rtsAIOn || s.type !== 'unit' || !_rtsSpots(s)) continue;
     if (_rtsOrbits(s)) continue;                       /* the Recon Drone is the drone tick's: core/drone.js */
     if (s.mend != null) continue;                      /* on its way to the depot: core/aimend.js */
     if (s.order === 'attack' && s.target && !s.target.dead) continue;          /* defending itself */
     var gun = null, gd = 1e9;
     for (var k = 0; k < G.ents.length; k++) {
       var u = G.ents[k];
-      if (u.dead || u.inside || u.side !== 'enemy' || u.type !== 'unit' || !_rtsLongGun(u)) continue;
+      if (u.dead || u.inside || u.side !== _rtsAIOn || u.type !== 'unit' || !_rtsLongGun(u)) continue;
       var d = Math.hypot(u.x - s.x, u.z - s.z);
       if (d < gd) { gd = d; gun = u; }
     }

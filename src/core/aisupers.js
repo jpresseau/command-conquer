@@ -11,7 +11,7 @@
    sometimes an army in the field, and always somewhere the player can see coming and rebuild
    from. */
 function _rtsAISupers(dt) {
-  var G = window._rtsG, S = G.sides.enemy;
+  var G = window._rtsG, S = G.sides[_rtsAIOn];
   if (!S.supers) return;
   if (!_rtsIQAt(RTS_IQ.superweapon)) return;
   G.ai.superT = (G.ai.superT || 0) - dt;
@@ -19,16 +19,16 @@ function _rtsAISupers(dt) {
   G.ai.superT = 3;                          /* it does not need to re-decide every frame */
 
   for (var key in S.supers) {
-    if (!_rtsSuperReady('enemy', key)) continue;
+    if (!_rtsSuperReady(_rtsAIOn, key)) continue;
     var aim = null;
-    if (key === 'nuke')            aim = _rtsAIMassOf('player');
-    else if (key === 'ironcurtain') aim = _rtsAIMassOf('enemy');
+    if (key === 'nuke')            aim = _rtsAIMassOf(_rtsAIFoe());
+    else if (key === 'ironcurtain') aim = _rtsAIMassOf(_rtsAIOn);
     /* weather on the player's base: the fog blinds its guns to the approach, the storm grounds
        its aircraft and strikes what stands there (core/wxsupers.js) */
-    else if (key === 'fogbank' || key === 'thunder') aim = _rtsAIMassOf('player');
+    else if (key === 'fogbank' || key === 'thunder') aim = _rtsAIMassOf(_rtsAIFoe());
     else if (key === 'chrono')      continue;   /* see below */
     if (!aim) continue;
-    if (_rtsSuperFire('enemy', key, aim.tx, aim.tz)) return;   /* one per decision */
+    if (_rtsSuperFire(_rtsAIOn, key, aim.tx, aim.tz)) return;   /* one per decision */
   }
 }
 /* Where a side's stuff is, in tiles. Buildings weigh more than units so a nuke goes to the
@@ -64,11 +64,19 @@ function _rtsAISpare(S) {
   if (!w) return RTS_AI.infantryReserve;
   var sd = rtsStructDef(w.key);
   if (!sd) return RTS_AI.infantryReserve;
-  return Math.max(RTS_AI.infantryReserve, _rtsCostOf('enemy', sd) + RTS_AI.creditReserve);
+  return Math.max(RTS_AI.infantryReserve, _rtsCostOf(_rtsAIOn, sd) + RTS_AI.creditReserve);
 }
 
+/* Every computer seat thinks in turn, the opponent first and then the rest in seat order, each with
+   _rtsAIOn set to it (core/seats.js). One computer seat - the shipped game - is one call, as ever. */
 function _rtsUpdateAI(dt) {
-  var G = window._rtsG, S = G.sides.enemy;
+  var G = window._rtsG;
+  if (_rtsSeatAI('enemy')) _rtsAIAs('enemy', function () { _rtsUpdateAIFor(dt); });
+  for (var i = 0; i < G.order.length; i++) if (G.order[i] !== 'enemy' && _rtsSeatAI(G.order[i])) _rtsUpdateAISeat(G.order[i], dt);
+}
+function _rtsUpdateAISeat(side, dt) { _rtsAIAs(side, function () { _rtsUpdateAIFor(dt); }); }
+function _rtsUpdateAIFor(dt) {
+  var G = window._rtsG, S = G.sides[_rtsAIOn];
   if (S.lost) return;
   _rtsTeamsTick(dt);
   _rtsEscortsTick(dt);          /* the spare army goes with the teams - core/escorts.js */
@@ -99,14 +107,14 @@ function _rtsUpdateAI(dt) {
   if (G.ai.build <= 0) {
     G.ai.build = 5;
     _rtsAIStateTick(S);
-    _rtsAIDeploy('enemy');
+    _rtsAIDeploy(_rtsAIOn);
 
     /* Repair_AI, gated on IQRepairSell: the low difficulties simply cannot do this, which is
        why raiding a Commando base and leaving means finding it whole again. */
     if (_rtsIQAt(RTS_IQ.repairSell) && rtsMoney(S) > RTS_AI.creditReserve * 0.5) {
       for (var r = 0; r < G.ents.length; r++) {
         var b = G.ents[r];
-        if (b.dead || b.side !== 'enemy' || b.type !== 'struct' || b.building || b.selling) continue;
+        if (b.dead || b.side !== _rtsAIOn || b.type !== 'struct' || b.building || b.selling) continue;
         if (!b.repair && b.hp < b.maxHp * 0.85) { b.repair = 1; b.rtimer = 0; }
       }
     }
@@ -129,7 +137,7 @@ function _rtsUpdateAI(dt) {
     if (G.ai.place <= 0) {
       G.ai.place = 0.6;
       if (_rtsAIPlace(S.ready)) { S.ready = null; S.readyPaid = null; S.readyTry = 0; }
-      else if (++S.readyTry > 8 || !_rtsHas('enemy', 'yard')) { S.ready = null; S.readyPaid = null; S.readyTry = 0; }
+      else if (++S.readyTry > 8 || !_rtsHas(_rtsAIOn, 'yard')) { S.ready = null; S.readyPaid = null; S.readyTry = 0; }
     }
   }
 }

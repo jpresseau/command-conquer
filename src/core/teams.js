@@ -40,8 +40,8 @@ function _rtsTeamTarget(t, quarry, near) {
   var best = null, bv = 0, w = _rtsPickWeapon(lead, lead);
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
-    if (o.dead || o.side !== 'player') continue;
-    if (o.type === 'unit' && _rtsJamHides(o, 'enemy', lead.x, lead.z)) continue;   /* jammed: core/jammer.js */
+    if (o.dead || o.side !== _rtsAIFoe()) continue;
+    if (o.type === 'unit' && _rtsJamHides(o, _rtsAIOn, lead.x, lead.z)) continue;   /* jammed: core/jammer.js */
     if (!_rtsQuarryMatch(o, quarry)) continue;
     /* ATT_WAYPT is "clear out what is HERE", so candidates outside the waypoint's radius
        are not merely worth less - they are not candidates at all. */
@@ -63,7 +63,7 @@ function _rtsTeamTarget(t, quarry, near) {
   if (!best && !near && !t.type.missions && quarry !== 'anything') {
     for (var j = 0; j < G.ents.length; j++) {
       var p = G.ents[j];
-      if (p.dead || p.side !== 'player' || p.type !== 'struct') continue;
+      if (p.dead || p.side !== _rtsAIFoe() || p.type !== 'struct') continue;
       var pv = _rtsEvalObject(lead, p, _rtsRangeTo(lead, p), w);
       if (pv > bv) { bv = pv; best = p; }
     }
@@ -100,7 +100,7 @@ function _rtsTeamCentre(t) {
 }
 /* Can_Add. The mission gate is the one MISSION.CPP's IsRecruitable exists for. */
 function _rtsTeamCanAdd(t, u) {
-  if (u.dead || u.side !== 'enemy' || u.type !== 'unit') return false;
+  if (u.dead || u.side !== _rtsAIOn || u.type !== 'unit') return false;
   if (rtsUnitDef(u.def).harvest) return false;
   if (u.mend != null) return false;          /* on its way to the depot: core/aimend.js */
   if (u.inside || u.raid) return false;      /* aboard, or on the sea raid: core/aihover.js */
@@ -158,7 +158,7 @@ function _rtsTeamDesired(t) {
 }
 function _rtsTeamMake(type) {
   var G = window._rtsG;
-  var t = { id:G.teamSeq++, type:type, members:[], have:{}, target:null,
+  var t = { id:G.teamSeq++, side:_rtsAIOn, type:type, members:[], have:{}, target:null,
     moving:false, hasBeen:false, under:true, zone:null, lagging:false,
     cur:0, guardUntil:0, legT:null };      /* Current: the index into MissionList[] */
   G.teams[t.id] = t;
@@ -175,7 +175,7 @@ function _rtsTeamCap() {
   var G = window._rtsG, army = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.dead || e.side !== 'enemy' || e.type !== 'unit') continue;
+    if (e.dead || e.side !== _rtsAIOn || e.type !== 'unit') continue;
     if (rtsUnitDef(e.def).harvest) continue;
     army++;
   }
@@ -232,6 +232,7 @@ function _rtsHouseAlerted() {
 function _rtsSuggestTeam(spare) {
   var G = window._rtsG, choices = [], counts = {}, tid, ti, kk;
   for (tid in G.teams) {
+    if (!_rtsTeamMine(G.teams[tid])) continue;
     var nm = G.teams[tid].type.name;
     counts[nm] = (counts[nm] || 0) + 1;
   }
@@ -245,10 +246,11 @@ function _rtsSuggestTeam(spare) {
      the alert sat in the roster forever and the assault phase never got more than two slots
      out of RTS_TEAM_MAX. */
   for (tid in G.teams) {
-    if (alerted !== !!G.teams[tid].type.autocreate) { _rtsTeamDisband(G.teams[tid]); }
+    if (_rtsTeamMine(G.teams[tid]) && alerted !== !!G.teams[tid].type.autocreate) { _rtsTeamDisband(G.teams[tid]); }
   }
   counts = {};
   for (tid in G.teams) {
+    if (!_rtsTeamMine(G.teams[tid])) continue;
     var nm2 = G.teams[tid].type.name;
     counts[nm2] = (counts[nm2] || 0) + 1;
   }
@@ -271,7 +273,7 @@ function _rtsSuggestTeam(spare) {
          marches and never frees the slot either. Harmless while every composition was
          faction-neutral infantry and armour; the moment the two naval types arrived, one of
          them was always uncrewable, because a house builds one side's hulls only. */
-      if (!_rtsCanProduce('enemy', kk)) buildable = false;
+      if (!_rtsCanProduce(_rtsAIOn, kk)) buildable = false;
     }
     if (!buildable) continue;
     /* AND A TYPE THAT ONLY MAKES SENSE ACROSS WATER IS NOT A CANDIDATE ON DRY LAND. The same
@@ -309,15 +311,15 @@ function _rtsAIWorthCrossing() {
   if (G.ai.crossT != null && G.t - G.ai.crossT < RTS_AI_CROSS_RECHECK) return !!G.ai.crossOk;
   G.ai.crossT = G.t;
   G.ai.crossOk = false;
-  if (!_rtsCanProduce('enemy', 'lst')) return false;
+  if (!_rtsCanProduce(_rtsAIOn, 'lst')) return false;
   /* BOTH ANCHORS ARE HOME ANCHORS. With a plain _rtsHas, an opponent that had captured the
      player's Construction Yard measured the crossing FROM that captured yard - which stands in
      the player's base - TO the player's War Factory a few tiles away. The straight line
      collapses to single digits while the walked route goes round the player's own buildings,
      so the detour test flipped true on a map with no water on it, and the opponent bought a
      700-credit transport for a crossing that did not exist. */
-  var from = _rtsHasHome('enemy', 'yard') || _rtsHasHome('enemy', 'factory');
-  var to = _rtsHasHome('player', 'yard') || _rtsHasHome('player', 'factory');
+  var from = _rtsHasHome(_rtsAIOn, 'yard') || _rtsHasHome(_rtsAIOn, 'factory');
+  var to = _rtsHasHome(_rtsAIFoe(), 'yard') || _rtsHasHome(_rtsAIFoe(), 'factory');
   if (!from || !to) return false;
   var straight = Math.hypot(to.x - from.x, to.z - from.z);
   if (straight <= 0) return false;
@@ -338,7 +340,7 @@ function _rtsSuspendTeams(priority) {
   var G = window._rtsG, n = 0;
   for (var id in G.teams) {
     var t = G.teams[id];
-    if (t.type.priority < priority) { _rtsTeamDisband(t); G.teamHold[t.type.name] = G.t + RTS_SUSPEND_DELAY; n++; }
+    if (_rtsTeamMine(t) && t.type.priority < priority) { _rtsTeamDisband(t); G.teamHold[t.type.name] = G.t + RTS_SUSPEND_DELAY; n++; }
   }
   return n;
 }
@@ -359,13 +361,13 @@ function _rtsTeamMaybeRaise() {
   if (!G.ai || !G.ai.wave) return false;
 
   var live = 0;
-  for (tid in G.teams) live++;
+  for (tid in G.teams) if (_rtsTeamMine(G.teams[tid])) live++;
   if (live >= _rtsTeamCap()) return false;
 
   var spare = 0;
   for (i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.side !== 'enemy' || u.type !== 'unit') continue;
+    if (u.dead || u.side !== _rtsAIOn || u.type !== 'unit') continue;
     if (rtsUnitDef(u.def).harvest || u.sqd != null) continue;
     if (!_rtsMission(u).recruitable) continue;
     spare++;
@@ -385,6 +387,7 @@ function _rtsTeamsTick(dt) {
 
   for (id in G.teams) {
     t = G.teams[id];
+    if (!_rtsTeamMine(t)) continue;
     /* prune the dead */
     for (i = t.members.length - 1; i >= 0; i--) {
       m = t.members[i];

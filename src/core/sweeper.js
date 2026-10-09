@@ -44,7 +44,7 @@ function _rtsSweepTick(dt) {
       }
       if (d < nd) { nd = d; near = m; }
     }
-    if (cleared && u.side === 'player') _rtsSay(cleared === 1 ? 'Mine cleared.' : cleared + ' mines cleared.');
+    if (cleared && u.side === _rtsAIFoe()) _rtsSay(cleared === 1 ? 'Mine cleared.' : cleared + ' mines cleared.');
     /* idle, with a mine found and not yet in reach: go and beat it out. ONCE IN A WHILE WHEN
        THERE IS NO WAY: a seen mine behind a wall, or across water, refused the move, and the
        refusal left the sweeper idle - so this asked for the route again every tick, a fresh A*
@@ -63,7 +63,7 @@ function _rtsAISweepTick() {
   if (!H || !H.length) return;
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.inside || u.side !== 'enemy' || u.type !== 'unit' || !_rtsSweeps(u)) continue;
+    if (u.dead || u.inside || u.side !== _rtsAIOn || u.type !== 'unit' || !_rtsSweeps(u)) continue;
     if (u.order || (u.path && u.pi < u.path.length)) continue;           /* busy, or clearing */
     if (_rtsRouteRefused(u)) continue;                                   /* no way there just now */
     var best = null, bd = 1e9;

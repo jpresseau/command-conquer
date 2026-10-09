@@ -79,7 +79,7 @@ function _rtsAIJamTick(dt) {
      to park on the nearest beach, hiding nothing, while the army it was bought for marched bare. */
   for (id in G.teams) {
     var t = G.teams[id];
-    if (!t.moving || (t.type && t.type.crossing)) continue;
+    if (!t.moving || !_rtsTeamMine(t) || (t.type && t.type.crossing)) continue;
     var n = t.members.filter(function (m) { var md = rtsUnitDef(m.def) || {}; return !m.dead && !md.sea && !md.air; }).length;
     if (n > bn) { bn = n; big = t; }
   }
@@ -87,7 +87,7 @@ function _rtsAIJamTick(dt) {
   if (!c) return;
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.inside || u.side !== 'enemy' || u.type !== 'unit' || !_rtsJams(u) || u.mend != null) continue;   /* mend: core/aimend.js */
+    if (u.dead || u.inside || u.side !== _rtsAIOn || u.type !== 'unit' || !_rtsJams(u) || u.mend != null) continue;   /* mend: core/aimend.js */
     if (Math.hypot(c.x - u.x, c.z - u.z) > RTS_TILE * 2.5) _rtsOrderMove(u, c.x, c.z, false);
   }
 }
@@ -96,7 +96,7 @@ function _rtsPlayerDefences() {
   var G = window._rtsG, n = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (!e.dead && e.side === 'player' && e.type === 'struct' && !e.building && (rtsStructDef(e.def) || {}).weapon) n++;
+    if (!e.dead && e.side === _rtsAIFoe() && e.type === 'struct' && !e.building && (rtsStructDef(e.def) || {}).weapon) n++;
   }
   return n;
 }

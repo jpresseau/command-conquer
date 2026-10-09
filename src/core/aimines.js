@@ -39,10 +39,10 @@ function _rtsAISupportBuy(S, key, worth) {
   if (S.q && S.q[cat]) return false;
   if (cat === 'air' && !_rtsAIAirRoom()) return false;
   if (cat === 'ship' && !_rtsAIFleetRoom()) return false;
-  if (!_rtsCanQueue('enemy', key)) return false;
+  if (!_rtsCanQueue(_rtsAIOn, key)) return false;
   if (!worth(G)) return false;
-  if (rtsMoney(S) < _rtsAISpare(S) + _rtsCostOf('enemy', d)) return false;
-  _rtsQueue('enemy', key);
+  if (rtsMoney(S) < _rtsAISpare(S) + _rtsCostOf(_rtsAIOn, d)) return false;
+  _rtsQueue(_rtsAIOn, key);
   return true;
 }
 
@@ -51,7 +51,7 @@ var RTS_AI_MINES = { from: 9, to: 18, every: 1, retry: 30 };   /* retry: seconds
 /* The field: route cells 9 to 18 out from the yard, each with its neighbours across the route. */
 function _rtsAIMineSpots(G) {
   if (G.ai.mineSpots) return G.ai.mineSpots;
-  var ey = _rtsHas('enemy', 'yard'), py = _rtsHas('player', 'yard'), out = [], seen = {};
+  var ey = _rtsHas(_rtsAIOn, 'yard'), py = _rtsHas(_rtsAIFoe(), 'yard'), out = [], seen = {};
   /* planned once both yards stand: asked while either was down (a raid had taken it, an MCV not
      yet deployed) it used to cache the empty plan and never buy a layer for the rest of the match.
      No land route between the two is the one permanent answer. */
@@ -85,10 +85,10 @@ function _rtsAIMinesTick(dt) {
   G.ai.mineT = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || u.inside || !(rtsUnitDef(u.def) || {}).mines || _rtsSeaLayer(u)) continue;
+    if (u.dead || u.side !== _rtsAIOn || u.type !== 'unit' || u.inside || !(rtsUnitDef(u.def) || {}).mines || _rtsSeaLayer(u)) continue;
     if (u.mend != null) continue;                              /* on its way to be mended: core/aimend.js */
     if (_rtsMinesLeft(u) <= 0) {                               /* home to load again */
-      var bay = _rtsHas('enemy', 'depot');
+      var bay = _rtsHas(_rtsAIOn, 'depot');
       if (bay && !_rtsAtStruct(u, bay, rtsStructDef('depot').repairs) && !u.path) _rtsOrderMove(u, bay.x, bay.z, false);
       continue;
     }

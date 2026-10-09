@@ -126,7 +126,7 @@ function _rtsTeamDoMission(t, dt) {
       var waitFor = 0;
       for (var oid in G.teams) {
         var o = G.teams[oid], L = o.type.missions;
-        if (o === t || !o.hasBeen || !L || !o.members.length) continue;
+        if (o === t || !_rtsTeamMine(o) || !o.hasBeen || !L || !o.members.length) continue;
         for (var k = (o.cur | 0); k < L.length; k++) if (L[k][0] === 'sync') { if (k > (o.cur | 0)) waitFor++; break; }
       }
       if (!waitFor || G.t - t.syncAt > RTS_SYNC_WAIT) { t.syncAt = null; t.synced = G.t; _rtsTeamAdvance(t); continue; }
@@ -205,7 +205,7 @@ function _rtsTeamDoMission(t, dt) {
       if (!trU || !_rtsCargoCount(trU)) { _rtsTeamAdvance(t); continue; }
       if (t.legT == null) t.legT = G.t;
       if (!t.target || t.target.dead) t.target = _rtsTeamTarget(t, 'buildings');
-      var aim = t.target || _rtsHas('player', 'yard');
+      var aim = t.target || _rtsHas(_rtsAIFoe(), 'yard');
       if (!aim) { _rtsTeamAdvance(t); continue; }
       /* AIM AT THE BEACH, NOT AT THE BUILDING. A target worth landing against is usually well
          inland, and _rtsOrderUnloadAt walks an unreachable goal outwards only far enough to
@@ -245,7 +245,7 @@ function _rtsTeamDoMission(t, dt) {
          reported back; it never sets `dead`, and there is no event. So the .dead idiom every
          other leg completes on is not merely wrong here, it hangs: a captured building
          satisfies neither `!t.capt` nor `t.capt.dead`, forever. */
-      if (t.capt && (t.capt.dead || t.capt.selling || t.capt.side !== 'player')) {
+      if (t.capt && (t.capt.dead || t.capt.selling || t.capt.side !== _rtsAIFoe())) {
         _rtsTeamAdvance(t); continue;
       }
       if (!t.capt) t.capt = (G.ai && G.ai.capTgt) || _rtsAICaptureTarget();
@@ -291,7 +291,7 @@ function _rtsTeamDoMission(t, dt) {
          execute, since a gun clears a friendly target - and the team held a slot for the rest
          of the match. Reachable from either direction, because both sides capture now. */
       if (!t.target || t.target.dead
-          || (t.target.side !== 'player' && t.target.type === 'struct')) {
+          || (t.target.side !== _rtsAIFoe() && t.target.type === 'struct')) {
         _rtsTeamAdvance(t); continue;
       }
       _rtsTeamOrderAll(t, function (mm) {
@@ -314,10 +314,11 @@ function _rtsTeamDoMission(t, dt) {
    something that shoots back and is in range. "There is no point in endlessly shuffling
    between targets that have firepower." */
 function _rtsTeamTookDamage(u, from) {
+  if (_rtsSeatAI(u.side) && u.side !== _rtsAIOn) return _rtsAIAs(u.side, function () { return _rtsTeamTookDamage(u, from); });
   var G = window._rtsG;
   if (u.sqd == null || !G.teams || !G.teams[u.sqd]) return;
   var t = G.teams[u.sqd];
-  if (!from || from.side !== 'player' || !t.moving) return;
+  if (!from || from.side !== _rtsAIFoe() || !t.moving) return;
   /* IsSuicide: "Charge toward target ignoring distractions". Being shot at IS the
      distraction, so a suicide team never retargets onto whoever hit it. */
   if (t.type.suicide) return;
@@ -334,7 +335,7 @@ function _rtsAIAttack(urgency) {
   var G = window._rtsG, pool = [], k;
   for (k = 0; k < G.ents.length; k++) {
     var u = G.ents[k];
-    if (!u.dead && u.side === 'enemy' && u.type === 'unit' && !rtsUnitDef(u.def).harvest
+    if (!u.dead && u.side === _rtsAIOn && u.type === 'unit' && !rtsUnitDef(u.def).harvest
         && u.sqd == null && _rtsMission(u).recruitable) pool.push(u);
   }
   /* Commit a real share of the idle army, not a token squad. Sending a fixed handful let
@@ -342,15 +343,15 @@ function _rtsAIAttack(urgency) {
      IQGuardArea: only a smart opponent knows to hold some of it back as a garrison. */
   /* AttackInterval is deliberately randomised over a 4x spread in the original, so waves
      never arrive on a metronome you can set your watch by. */
-  G.ai.next = RTS_WAVE_EVERY * _rtsBias('enemy').build * (0.5 + _rtsRnd() * 1.5);
-  if (!_rtsHas('player', 'yard') && !_rtsHas('player', 'refinery') && !_rtsHas('player', 'power')) return false;
+  G.ai.next = RTS_WAVE_EVERY * _rtsBias(_rtsAIOn).build * (0.5 + _rtsRnd() * 1.5);
+  if (!_rtsHas(_rtsAIFoe(), 'yard') && !_rtsHas(_rtsAIFoe(), 'refinery') && !_rtsHas(_rtsAIFoe(), 'power')) return false;
 
   /* Raise a TEAM rather than shoving a share of everything idle at the nearest building.
      A team holds a composition and a quarry, waits until it is at full strength, and then
      goes after the kind of thing it was raised to kill. */
   if (!G.teams) { G.teams = {}; G.teamSeq = 0; G.teamHold = {}; }
   var live = 0, tid;
-  for (tid in G.teams) live++;
+  for (tid in G.teams) if (_rtsTeamMine(G.teams[tid])) live++;
   if (live >= _rtsTeamCap()) return false;
 
   /* Only raise a type this army can actually crew, and respect a suspension.
@@ -362,7 +363,7 @@ function _rtsAIAttack(urgency) {
   if (!pick) return false;
   _rtsTeamMake(pick);
   G.ai.wave++;
-  _rtsSay(rtsArmyName('enemy') + ' ' + pick.name + ' team inbound!');
+  _rtsSay(rtsArmyName(_rtsAIOn) + ' ' + pick.name + ' team inbound!');
   if (typeof _rtsSfx === 'function') _rtsSfx('alert');
   return true;
 }

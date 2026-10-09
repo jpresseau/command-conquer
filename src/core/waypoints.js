@@ -39,7 +39,7 @@ function _rtsNearestOre(G, tx, tz) {
   return best;
 }
 function _rtsBuildWaypoints(G) {
-  var home = _rtsHas('enemy', 'yard'), foe = _rtsHas('player', 'yard');
+  var home = _rtsHas(_rtsAIOn, 'yard'), foe = _rtsHas(_rtsAIFoe(), 'yard');
   var W = {};
   var hx = home ? home.tx : RTS_N - 20, hz = home ? home.tz : 20;
   var fx = foe ? foe.tx : 20, fz = foe ? foe.tz : RTS_N - 20;

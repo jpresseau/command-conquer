@@ -38,7 +38,7 @@ var RTS_ESCORT_EVERY = 2;          /* seconds between re-aims */
    armed, so this once took them, and the raid tick and the escort tick then tugged the craft
    between its launch water and the march for the rest of the match. */
 function _rtsEscortable(u) {
-  if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || u.air || u.inside) return false;
+  if (u.dead || u.side !== _rtsAIOn || u.type !== 'unit' || u.air || u.inside) return false;
   var d = rtsUnitDef(u.def);
   if (!d || d.harvest || d.sea || !d.weapon || _rtsSupportDriven(d)) return false;
   if (u.sqd != null || u.mend != null) return false;      /* mend: on its way to the depot, core/aimend.js */
@@ -66,17 +66,17 @@ function _rtsEscortsTick(dt) {
   G.ai.escT = (G.ai.escT || 0) + dt;
   if (G.ai.escT < RTS_ESCORT_EVERY) return;
   G.ai.escT = 0;
-  var B = _rtsBias('enemy'), i, u, tid, t;
+  var B = _rtsBias(_rtsAIOn), i, u, tid, t;
   /* KEEP THE MUSTER POINTS GOOD, on this tick rather than only at delivery. Production stops at
      the army's ceiling (RTS_DIFF `army`), and a point checked only when a unit comes out was
      never checked again after that: a refinery built beside it, or ore spreading to its edge,
      left the waiting army standing in the harvest - e2e/basespace caught exactly one. */
   for (i = 0; i < G.ents.length; i++) {
     var pb = G.ents[i];
-    if (!pb.dead && pb.side === 'enemy' && pb.type === 'struct' && pb.muster) _rtsAIMuster(pb);
+    if (!pb.dead && pb.side === _rtsAIOn && pb.type === 'struct' && pb.muster) _rtsAIMuster(pb);
   }
   var teams = [];
-  for (tid in (G.teams || {})) if (_rtsEscortWorthy(G.teams[tid])) teams.push(G.teams[tid]);
+  for (tid in (G.teams || {})) if (_rtsTeamMine(G.teams[tid]) && _rtsEscortWorthy(G.teams[tid])) teams.push(G.teams[tid]);
 
   /* ---- who is escorting whom, and who is free ---- */
   var loose = [], count = {};
@@ -96,7 +96,7 @@ function _rtsEscortsTick(dt) {
   if (!teams.length || !loose.length) return;
 
   /* ---- the garrison stays: the fighters nearest the base's centre ---- */
-  var c = _rtsBaseCentre('enemy');
+  var c = _rtsBaseCentre(_rtsAIOn);
   if (c) loose.sort(function (a, b) {
     return Math.hypot(a.x - c.x, a.z - c.z) - Math.hypot(b.x - c.x, b.z - c.z) || a.id - b.id;
   });
@@ -132,6 +132,6 @@ function _rtsEscortAim(u, t, n) {
 }
 function _rtsEscortRelease(u) {
   u.escort = null;
-  var aim = _rtsHas('player', 'yard') || _rtsHas('player', 'factory') || _rtsHas('player', 'refinery');
+  var aim = _rtsHas(_rtsAIFoe(), 'yard') || _rtsHas(_rtsAIFoe(), 'factory') || _rtsHas(_rtsAIFoe(), 'refinery');
   if (aim && !u.target) _rtsOrderMove(u, aim.x, aim.z, true);
 }

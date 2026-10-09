@@ -12,7 +12,7 @@ function _rtsAIWants(S) {
   for (i = 0; i < G.ents.length; i++) {
     e = G.ents[i];
     if (e.type !== 'struct' || e.dead || e.selling) continue;
-    if (e.side === 'player') { theirs++; continue; }
+    if (e.side === _rtsAIFoe()) { theirs++; continue; }
     have[e.def] = (have[e.def] || 0) + 1;
     /* `have` counts everything this side owns - a captured Refinery is a Refinery and the plan
        must not queue a replacement for it. `own` is a different question: how big is MY BASE,
@@ -42,9 +42,9 @@ function _rtsAIWants(S) {
      cap is a pure nerf: the opponent would lose the credits and never buy the fix, because a
      silo sits behind the whole defence tier in the build order. Gated on the silo actually
      being buildable so an AI with no refinery does not sit here demanding one. */
-  var cap = rtsCapacity('enemy');
+  var cap = rtsCapacity(_rtsAIOn);
   if (cap > 0 && S.ore >= cap * RTS_AI.siloUrgent && (have.silo || 0) < RTS_AI.limit.silo
-      && _rtsCanProduce('enemy', 'silo')) return { key:'silo', urgent:true };
+      && _rtsCanProduce(_rtsAIOn, 'silo')) return { key:'silo', urgent:true };
 
   /* Below IQProduction the opponent keeps a minimal base and never expands. That used to be
      one flag between "two buildings" and "all twenty-three", and since the difficulties are
@@ -55,7 +55,7 @@ function _rtsAIWants(S) {
                  return _rtsIQAt(RTS_AI.buildIQ[k] || RTS_AI.buildIQDefault);
                }) : []);
   var size = Math.max(own, theirs + RTS_AI.baseSizeAdd);
-  var mySide = rtsHouseSide('enemy');
+  var mySide = rtsHouseSide(_rtsAIOn);
   for (i = 0; i < order.length; i++) {
     var k = order[i];
     /* Skip the other army's buildings. Without this the plan STOPS DEAD on the first one it
@@ -89,7 +89,7 @@ function _rtsAIWants(S) {
    rich one runs its factories flat out. */
 function _rtsAIOwned(key) {
   var G = window._rtsG, n = 0;
-  for (var i = 0; i < G.ents.length; i++) if (!G.ents[i].dead && G.ents[i].side === 'enemy' && G.ents[i].def === key) n++;
+  for (var i = 0; i < G.ents.length; i++) if (!G.ents[i].dead && G.ents[i].side === _rtsAIOn && G.ents[i].def === key) n++;
   return n;
 }
 /* ANSWERED TO THE SKY. A mix entry with `vsAir` is anti-aircraft and nothing else: the opponent
@@ -99,8 +99,8 @@ function _rtsAIWantsVsAir(key, per) {
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (e.dead || e.type !== 'unit') continue;
-    if (e.side === 'player' && e.air) flyers++;
-    else if (e.side === 'enemy' && e.def === key) have++;
+    if (e.side === _rtsAIFoe() && e.air) flyers++;
+    else if (e.side === _rtsAIOn && e.def === key) have++;
   }
   return have < Math.ceil(flyers / per);
 }
@@ -111,7 +111,7 @@ function _rtsAIAirRoom() {
   var G = window._rtsG, pads = 0, air = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var pe = G.ents[i];
-    if (pe.dead || pe.side !== 'enemy') continue;
+    if (pe.dead || pe.side !== _rtsAIOn) continue;
     if (pe.type === 'struct' && !pe.building && !pe.selling && (rtsStructDef(pe.def) || {}).produces === 'air') pads++;
     else if (pe.type === 'unit' && (rtsUnitDef(pe.def) || {}).kind === 'air') air++;
   }
@@ -121,7 +121,7 @@ function _rtsAIFleetRoom() {
   var G = window._rtsG, yards = 0, hulls = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var se = G.ents[i];
-    if (se.dead || se.side !== 'enemy') continue;
+    if (se.dead || se.side !== _rtsAIOn) continue;
     if (se.type === 'struct' && !se.building && !se.selling && (rtsStructDef(se.def) || {}).produces === 'ship') yards++;
     else if (se.type === 'unit' && (rtsUnitDef(se.def) || {}).sea) hulls++;
   }
@@ -131,12 +131,12 @@ function _rtsAIUnits(S) {
   var G = window._rtsG, harv = 0, i;
   for (i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.dead || e.side !== 'enemy' || e.type !== 'unit') continue;
+    if (e.dead || e.side !== _rtsAIOn || e.type !== 'unit') continue;
     if (rtsUnitDef(e.def).harvest) harv++;
   }
   var wantHarv = _rtsIQAt(RTS_IQ.harvester) ? 3 : 1;
   if (harv < wantHarv) {
-    if (_rtsCanQueue('enemy', 'harvester')) { _rtsQueue('enemy', 'harvester'); return; }
+    if (_rtsCanQueue(_rtsAIOn, 'harvester')) { _rtsQueue(_rtsAIOn, 'harvester'); return; }
   }
   if (_rtsAISupport(S)) return;                 /* the Mine Layer: core/aimines.js */
   /* One pass per production line: gather everything affordable and buildable, then pick among
@@ -153,11 +153,11 @@ function _rtsAIUnits(S) {
      is what sets a difficulty now that the army marches. The unarmed support vehicles bought
      outside the roll (_rtsAISupport: layer, sweeper, spotter, truck, jammer) are not fighters
      and do not fill a fighter's place, as _rtsAIFieldVehicles already reads it. */
-  var armyCap = _rtsBias('enemy').army, fighters = 0;
+  var armyCap = _rtsBias(_rtsAIOn).army, fighters = 0;
   if (armyCap != null) {
     for (i = 0; i < G.ents.length; i++) {
       var fe = G.ents[i];
-      if (fe.dead || fe.side !== 'enemy' || fe.type !== 'unit' || fe.air) continue;
+      if (fe.dead || fe.side !== _rtsAIOn || fe.type !== 'unit' || fe.air) continue;
       var fd = rtsUnitDef(fe.def);
       if (fd && !fd.harvest && !fd.sea && fd.weapon) fighters++;
     }
@@ -183,7 +183,7 @@ function _rtsAIUnits(S) {
     var list = RTS_AI.mix[cat], pool = [], total = 0;
     for (i = 0; i < list.length; i++) {
       if (rtsMoney(S) <= list[i].at) continue;
-      if (!_rtsCanQueue('enemy', list[i].key)) continue;
+      if (!_rtsCanQueue(_rtsAIOn, list[i].key)) continue;
       /* TWO ENTRIES ARE BOUGHT FOR A REASON OR NOT AT ALL, and they are the only ones in any
          mix that are asked a question before being offered. Both are unarmed and worth nothing
          on their own: a hull is worth something only when there is a crossing to make, and an
@@ -205,7 +205,7 @@ function _rtsAIUnits(S) {
            into an engineer instead. Asking for the spare PLUS the price means the plan's money
            is never touched, and it is the same _rtsAISpare the caller tested, so the two can
            not drift apart. */
-        if (rtsMoney(S) < _rtsAISpare(S) + _rtsCostOf('enemy', rtsUnitDef('engineer'))) continue;
+        if (rtsMoney(S) < _rtsAISpare(S) + _rtsCostOf(_rtsAIOn, rtsUnitDef('engineer'))) continue;
       }
       if (list[i].vsAir && !_rtsAIWantsVsAir(list[i].key, list[i].vsAir)) continue;
       if (list[i].key === 'lst') {
@@ -213,7 +213,7 @@ function _rtsAIUnits(S) {
         var craft = 0;
         for (var ci = 0; ci < G.ents.length; ci++) {
           var ce = G.ents[ci];
-          if (!ce.dead && ce.side === 'enemy' && ce.def === 'lst') craft++;
+          if (!ce.dead && ce.side === _rtsAIOn && ce.def === 'lst') craft++;
         }
         if (craft >= RTS_AI.craftCap) continue;
       }
@@ -223,7 +223,7 @@ function _rtsAIUnits(S) {
     var roll = _rtsRnd() * total;
     for (i = 0; i < pool.length; i++) {
       roll -= pool[i].w;
-      if (roll <= 0 || i === pool.length - 1) { _rtsQueue('enemy', pool[i].key); break; }
+      if (roll <= 0 || i === pool.length - 1) { _rtsQueue(_rtsAIOn, pool[i].key); break; }
     }
   }
 }
@@ -255,24 +255,24 @@ function _rtsAIStateTick(S) {
   G.ai.state = rtsMoney(S) < 25 ? RTS_STATE.BROKE : RTS_STATE.BUILDUP;
 }
 function _rtsAICanEarn() {
-  return !!(_rtsHas('enemy', 'refinery') && _rtsAIHarvesters());
+  return !!(_rtsHas(_rtsAIOn, 'refinery') && _rtsAIHarvesters());
 }
 function _rtsAIHarvesters() {
   var G = window._rtsG, n = 0;
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (!e.dead && e.side === 'enemy' && e.type === 'unit' && rtsUnitDef(e.def).harvest) n++;
+    if (!e.dead && e.side === _rtsAIOn && e.type === 'unit' && rtsUnitDef(e.def).harvest) n++;
   }
   return n;
 }
 /* Does this house still own anything that can PRODUCE? Check_Fire_Sale's question. */
 function _rtsAIHasFactory() {
-  return !!(_rtsHas('enemy', 'yard') || _rtsHas('enemy', 'barracks') || _rtsHas('enemy', 'factory'));
+  return !!(_rtsHas(_rtsAIOn, 'yard') || _rtsHas(_rtsAIOn, 'barracks') || _rtsHas(_rtsAIOn, 'factory'));
 }
 /* Score every strategy. NONE means "not worth doing at all right now". */
 function _rtsAIUrgency(S) {
   var G = window._rtsG, U = RTS_URGENCY, u = {};
-  var pf = _rtsPowerFactor('enemy'), slack = S.powerMade - S.powerUsed;
+  var pf = _rtsPowerFactor(_rtsAIOn), slack = S.powerMade - S.powerUsed;
   var attacked = G.ai.state === RTS_STATE.ATTACKED;
 
   /* Check_Build_Power */
@@ -302,12 +302,12 @@ function _rtsAIUrgency(S) {
   if (rtsMoney(S) < RTS_AI.desperateMoney && !_rtsAICanEarn()) {
     u.raiseMoney = U.MEDIUM;
     if (!_rtsAIHasFactory()) u.raiseMoney = U.HIGH;
-    if (!_rtsHas('enemy', 'yard')) u.raiseMoney = U.CRITICAL;
+    if (!_rtsHas(_rtsAIOn, 'yard')) u.raiseMoney = U.CRITICAL;
   }
 
   /* Check_Fire_Sale: nothing left that can build. The game is over; go out swinging. */
   u.fireSale = U.NONE;
-  if (!attacked && _rtsCount('enemy', 'struct') > 0 && !_rtsAIHasFactory()) u.fireSale = U.CRITICAL;
+  if (!attacked && _rtsCount(_rtsAIOn, 'struct') > 0 && !_rtsAIHasFactory()) u.fireSale = U.CRITICAL;
 
   /* Check_Attack */
   u.attack = U.NONE;
@@ -316,7 +316,7 @@ function _rtsAIUrgency(S) {
   /* Building the base out. These are the composition ratios, expressed as urgency. */
   var want = _rtsAIWants(S);
   u.build = U.NONE;
-  if (want) u.build = want.key === 'refinery' && !_rtsHas('enemy', 'refinery') ? U.HIGH
+  if (want) u.build = want.key === 'refinery' && !_rtsHas(_rtsAIOn, 'refinery') ? U.HIGH
     : (want.urgent ? U.HIGH : U.MEDIUM);
   G.ai.want = want;
   return u;
@@ -333,7 +333,7 @@ function _rtsCount(side, type) {
 function _rtsAISellFrom(list, urgency) {
   for (var i = 0; i < list.length; i++) {
     if (urgency < list[i][1]) continue;
-    var b = _rtsHas('enemy', list[i][0]);
+    var b = _rtsHas(_rtsAIOn, list[i][0]);
     if (b && _rtsSell(b)) return true;
   }
   return false;
@@ -345,8 +345,8 @@ function _rtsAIDo(strat, urgency, S) {
       if (!G.ai.want || S.q.struct || S.ready) return false;
       var sd = rtsStructDef(G.ai.want.key);
       var reserve = (urgency >= RTS_URGENCY.HIGH) ? 0 : RTS_AI.creditReserve;
-      if (rtsMoney(S) < _rtsCostOf('enemy', sd) + reserve) return false;
-      return _rtsQueue('enemy', G.ai.want.key);
+      if (rtsMoney(S) < _rtsCostOf(_rtsAIOn, sd) + reserve) return false;
+      return _rtsQueue(_rtsAIOn, G.ai.want.key);
 
     case 'raiseMoney':
       if (!_rtsIQAt(RTS_IQ.sellBack)) return false;
@@ -364,7 +364,7 @@ function _rtsAIDo(strat, urgency, S) {
          past powerWaste and fires this strategy in the first place, so with a plain _rtsHas
          the opponent sold the very plant it had just spent an engineer taking, seconds later,
          for half of what the PLAYER paid. See _rtsHasHome. */
-      var p = _rtsHasHome('enemy', 'power');
+      var p = _rtsHasHome(_rtsAIOn, 'power');
       if (!p || S.powerMade - rtsStructDef('power').power < S.powerUsed) return false;
       return _rtsSell(p);
 
@@ -374,7 +374,7 @@ function _rtsAIDo(strat, urgency, S) {
       var sold = 0, i, e;
       for (i = 0; i < G.ents.length; i++) {
         e = G.ents[i];
-        if (e.dead || e.side !== 'enemy' || e.type !== 'struct' || e.selling) continue;
+        if (e.dead || e.side !== _rtsAIOn || e.type !== 'struct' || e.selling) continue;
         if (_rtsSell(e)) sold++;
       }
       _rtsAIAllToHunt();
@@ -390,12 +390,12 @@ function _rtsAIAllToHunt() {
   var G = window._rtsG;
   /* Do_All_To_Hunt overrides everything, so the teams are dissolved first - otherwise the
      team logic would keep re-issuing its own orders on top of the hunt. */
-  for (var tid in (G.teams || {})) _rtsTeamDisband(G.teams[tid]);
-  var aim = _rtsHas('player', 'yard') || _rtsHas('player', 'refinery') || _rtsHas('player', 'power');
+  for (var tid in (G.teams || {})) if (_rtsTeamMine(G.teams[tid])) _rtsTeamDisband(G.teams[tid]);
+  var aim = _rtsHas(_rtsAIFoe(), 'yard') || _rtsHas(_rtsAIFoe(), 'refinery') || _rtsHas(_rtsAIFoe(), 'power');
   if (!aim) return;
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.side !== 'enemy' || u.type !== 'unit') continue;
+    if (u.dead || u.side !== _rtsAIOn || u.type !== 'unit') continue;
     if (rtsUnitDef(u.def).harvest) continue;
     /* A 3x3 spread around the target, so the hunt arrives on a frontage instead of funnelling
        every unit into one cell.

@@ -55,11 +55,11 @@ function _rtsAground(u) {
 /* The player's building nearest the Monitor that it can shell from water: one with an open
    cell of the Monitor's water within a cell of its reach. */
 function _rtsAIMonitorTarget(u) {
-  var G = window._rtsG, from = u || _rtsShipyardOf('enemy', null), best = null, bd = 1e9;
+  var G = window._rtsG, from = u || _rtsShipyardOf(_rtsAIOn, null), best = null, bd = 1e9;
   if (!from) return null;
   for (var i = 0; i < G.ents.length; i++) {
     var b = G.ents[i];
-    if (b.dead || b.side !== 'player' || b.type !== 'struct' || !_rtsShoreReach(b)) continue;
+    if (b.dead || b.side !== _rtsAIFoe() || b.type !== 'struct' || !_rtsShoreReach(b)) continue;
     var dd = Math.hypot(b.x - from.x, b.z - from.z);
     if (dd < bd) { bd = dd; best = b; }
   }
@@ -73,9 +73,9 @@ function _rtsAIMonitorTick(dt) {
   var low = _rtsTideLow(G);
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.side !== 'enemy' || u.type !== 'unit' || u.def !== 'monitor' || u.sqd != null) continue;
+    if (u.dead || u.side !== _rtsAIOn || u.type !== 'unit' || u.def !== 'monitor' || u.sqd != null) continue;
     if (!low) {                                                   /* the flood: home to the yard */
-      var y = _rtsShipyardOf('enemy', u);
+      var y = _rtsShipyardOf(_rtsAIOn, u);
       if (!y || Math.hypot(y.x - u.x, y.z - u.z) <= RTS_MONITOR.home * RTS_TILE) continue;
       if (u.order === 'move' && u.goal && Math.hypot(u.goal.x - y.x, u.goal.z - y.z) < RTS_TILE * 3) continue;
       _rtsOrderMove(u, y.x, y.z, false);
@@ -95,7 +95,7 @@ function _rtsAIEbb(ty) {
   for (k in ty.members) need[k] = ty.members[k];
   for (var i = 0; i < G.ents.length; i++) {
     var u = G.ents[i];
-    if (u.dead || u.inside || u.side !== 'enemy' || u.type !== 'unit' || u.sqd != null || !need[u.def]) continue;
+    if (u.dead || u.inside || u.side !== _rtsAIOn || u.type !== 'unit' || u.sqd != null || !need[u.def]) continue;
     if (!_rtsMission(u).recruitable) continue;
     need[u.def]--;
   }
