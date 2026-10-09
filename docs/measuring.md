@@ -79,3 +79,34 @@ between the rungs both hold, which is what the ladder is for. Two causes, and ne
 opponent getting cleverer: the map carries about 8% less ore (the channel's spine clears what it
 runs over, and anything the water strands is swept rather than bridged), and a base with water
 on one flank has one fewer approach to defend.
+
+## Self-play (`tools/selfplay.js`)
+
+The computer against itself (`core/seats.js`), headless through `loadFast`: every seed twice with the
+armies swapped between seats, both at the same difficulty, crates off, clear day, 1/60 s ticks, 12
+minutes. Three workers run 80 battles in about an hour. A ledger kept beside the game (it draws no
+random number and writes no saved field) values damage at the victim's price per hit point, so every
+shot that landed counts. `--set=file.js` applies rule changes in the game's context before each battle,
+so a change is measured paired against the same seeds.
+
+Almost no battle ends inside 12 minutes (77 of 80), so the outcome is each army's SHARE of everything
+standing at the horizon - units and buildings at price, plus money. Per-seed standard deviation is
+about 0.19, so 80 battles resolve about 0.02 on the mean and a paired change about 0.01-0.02.
+
+First findings, normal against normal (40 seeds, 80 battles):
+
+- **The Compact led, 0.565 of the field** (0.539 from the player's seat, 0.591 from the opponent's).
+  Both armies spent the same 5.2 million credits; the Compact dealt 32% more damage and took 18% less.
+- **Price is invisible to the computer.** Its purchases are weighted rolls (`RTS_AI.mix`), so a Wasp at
+  1500 instead of 1200 changed nothing (+0.007 ± 0.008), and neither did weaker Wasp and Artillery
+  weapons (+0.003 ± 0.011). Taking the Wasp away entirely moved it (-0.028 ± 0.012). Self-play prices
+  the AI's choices; a price aimed at human players needs its own trial.
+- **What the Dominion bought was the gap.** It rolled buggies (0.24 damage per credit) where its
+  Bulwark waited for 2,600 in the bank, and the Bulwark itself returned 0.52. Buggies at half weight,
+  the Bulwark from 1,900 and its cannon 62 -> 75 measured **0.528** (-0.037 ± 0.021) - and were NOT
+  shipped: halving buggies broke `e2e/armyuse` (buggies are what the escorts send to the fight, and an
+  easy Dominion then left 35% of its army idle), and the stronger cannon put `e2e/pace`'s heavy-battle
+  frame over its upload budget. A fix has to keep both, so the Dominion's mix wants a unit to take the
+  buggy's place in the escort, not fewer buggies.
+- Submarines took 190k credits for almost no damage: the one lagoon rarely has a ship to hunt. That is
+  the AI's buying, not the unit, and the next thing to fix there.
