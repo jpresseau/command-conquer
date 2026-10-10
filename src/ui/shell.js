@@ -113,7 +113,9 @@ function rtsOpen(seed) {
      terrain the save actually carries rather than the one the seed would have produced. */
   var _load = window._RTS_PENDING_LOAD; window._RTS_PENDING_LOAD = null;
   _rtsNewGame(_load ? _load.seed : (seed || (((new Date()).getTime()) & 0xffff)),
-              _load ? _load.diff : undefined);
+              _load ? _load.diff : undefined,
+              /* the map a save was made on, or the title's setup for a plain battle (skirmish.js) */
+              { skirmish: _load ? _load.skirmish : (typeof rtsSkirmishWant === 'function' ? rtsSkirmishWant() : null) });
   if (_load) _rtsApplyState(window._rtsG, _load);
   var cv = document.getElementById('rtsCv');
   _rtsResizeCanvases();

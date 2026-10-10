@@ -138,7 +138,9 @@ function _rtsGenTerrain(G, rnd, starts) {
      is off to one side, so it is only ever a flank BRANCH that gets cut - decoration, not
      the connectivity guarantee. */
   var _sg = ((seed >>> 3) & 1) ? 1 : -1;          /* which flank, off the scenario seed */
-  var SEA_OFF = 16, SEA_R = 6.2, SEA_BEACH = 2.4;
+  /* how much water: rules/skirmish.js. INLAND has none; COAST is the inlet as it always was */
+  var _wat = RTS_SKIRMISH.water[(G.skirmish || RTS_SKIRMISH_DEFAULT).water];
+  var SEA_OFF = _wat.off, SEA_R = _wat.r, SEA_BEACH = SEA_R > 0 ? 2.4 : 0;
   var _ia = [_sp.tx + _px * _sg * SEA_OFF, _sp.tz + _pz * _sg * SEA_OFF];
   var _ib = [_se.tx + _px * _sg * SEA_OFF, _se.tz + _pz * _sg * SEA_OFF];
   function _segD(x, z, a, b) {

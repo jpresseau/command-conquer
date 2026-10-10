@@ -130,6 +130,11 @@ them beside your ore field, and goes home to do it again.
 the same army, difficulty, tide and weather, all from the date alone. The end screen gives you a line to
 copy and post, and your best of the day is kept.
 
+**A skirmish setup.** SKIRMISH SETUP on the title screen picks the map's size (96, 128 or 160
+cells a side), how much water it has (INLAND, COAST or a wide LAGOON) and what both sides start
+with (3,000, 6,000 or 10,000 credits). The choice is kept between visits. The daily battle and the
+campaign always use the standard map.
+
 **A campaign.** CAMPAIGN on the title screen opens four missions, each built on a generated map:
 run a convoy over the flats at low water, blind a fortress with the Fog Bank, lift tanks onto an
 island with Sky Cranes, and hold a Sub Pen against a flotilla for eight minutes. Each has a briefing,

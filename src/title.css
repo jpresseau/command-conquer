@@ -114,3 +114,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 #rtsCampList p.s{opacity:.55;margin:0}
 #rtsCampList button{margin-top:4px;padding:6px 18px;font:600 12px/1 inherit;letter-spacing:.6px;color:#fff;
   background:#2c4a6e;border:0;border-radius:5px;cursor:pointer}
+/* the skirmish setup (skirmish.js) */
+#rtsSkirmish{display:flex;flex-direction:column;align-items:center;gap:6px}
+#rtsSkirmish[hidden]{display:none}
+#rtsSkirmish p.lbl{margin:4px 0 0;font-size:11px;letter-spacing:1.2px;opacity:.6}

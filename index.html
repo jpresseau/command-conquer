@@ -668,6 +668,10 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 #rtsCampList p.s{opacity:.55;margin:0}
 #rtsCampList button{margin-top:4px;padding:6px 18px;font:600 12px/1 inherit;letter-spacing:.6px;color:#fff;
   background:#2c4a6e;border:0;border-radius:5px;cursor:pointer}
+/* the skirmish setup (skirmish.js) */
+#rtsSkirmish{display:flex;flex-direction:column;align-items:center;gap:6px}
+#rtsSkirmish[hidden]{display:none}
+#rtsSkirmish p.lbl{margin:4px 0 0;font-size:11px;letter-spacing:1.2px;opacity:.6}
 </style>
 </head>
 <body>
@@ -683,6 +687,9 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   <div class="diff" id="rtsArmySide" hidden></div>
   <p class="diffnote" id="rtsVoxNote" hidden></p>
   <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE</button>
+  <!-- Map size, water and credits for START BATTLE: skirmish.js -->
+  <button type="button" class="go resume" id="rtsSkirmishBtn" onclick="rtsSkirmishToggle()">SKIRMISH SETUP<small id="rtsSkirmishNote"></small></button>
+  <div id="rtsSkirmish" hidden></div>
   <button type="button" class="go resume" id="rtsResume" onclick="rtsLoadGame()" hidden>RESUME BATTLE</button>
   <!-- One map a day, the same for everyone: daily.js -->
   <button type="button" class="go resume" id="rtsDaily" onclick="rtsDailyStart(this)">DAILY BATTLE<small id="rtsDailyNote"></small></button>
@@ -738,7 +745,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">5cc38ec · 2026-10-10</div>
+  <div id="rtsBuild" title="build">fee1772 · 2026-10-10</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -998,6 +1005,36 @@ var RTS_STRUCTS = [
     desc:'Breaks a thunderstorm anywhere on the map for a minute. Lightning strikes the enemy under it, and no armed aircraft flies in it, yours included.' }
 ];
 
+</script>
+<script>/* rules/skirmish.js - the skirmish setup: how big the map is, how much water it has, and what
+   each side starts with. Part of rts.rules, the data.
+
+   The DEFAULT of every option is the battle this game has always made, exactly: a 128-cell map,
+   one inlet down a flank, 3000 credits. unit/fingerprint holds that, so a seeded battle, a daily
+   or a campaign mission never moves when a player picks something else here - they ask for the
+   default by name (_rtsSkirmishOf(null)), and only the title's START BATTLE reads the choice.
+
+   The size is RTS_N for the battle: _rtsNewGame sets it before anything is allocated, and every
+   reader takes it live. The water is the inlet's radius and offset in core/terrain.js: INLAND has
+   none (the navy is off the table for both sides), LAGOON a wide one, so more of the map is sea
+   and more of it is tidal flats. Money is both sides' start, never only the player's: on easy and
+   normal the computer was measured to leave a surplus untouched, so a rich start helps whoever
+   spends it. */
+
+var RTS_N_DEFAULT = 128;
+var RTS_SKIRMISH = {
+  size:  { small: { name: 'SMALL', n: 96 }, standard: { name: 'STANDARD', n: 128 }, large: { name: 'LARGE', n: 160 } },
+  water: { inland: { name: 'INLAND', r: 0, off: 0 }, coast: { name: 'COAST', r: 6.2, off: 16 }, lagoon: { name: 'LAGOON', r: 10, off: 20 } },
+  money: { standard: { name: '3,000', credits: 3000 }, rich: { name: '6,000', credits: 6000 }, flush: { name: '10,000', credits: 10000 } }
+};
+var RTS_SKIRMISH_DEFAULT = { size: 'standard', water: 'coast', money: 'standard' };
+
+/* A whole, valid choice from any partial or stale one: an unknown key falls back to the default. */
+function _rtsSkirmishOf(s) {
+  var out = {};
+  for (var k in RTS_SKIRMISH_DEFAULT) out[k] = s && RTS_SKIRMISH[k][s[k]] ? s[k] : RTS_SKIRMISH_DEFAULT[k];
+  return out;
+}
 </script>
 <script>/* rules/units.js - RTS_UNITS: every unit kind. Part of rts.rules, the roster. */
 
@@ -11422,7 +11459,9 @@ function _rtsGenTerrain(G, rnd, starts) {
      is off to one side, so it is only ever a flank BRANCH that gets cut - decoration, not
      the connectivity guarantee. */
   var _sg = ((seed >>> 3) & 1) ? 1 : -1;          /* which flank, off the scenario seed */
-  var SEA_OFF = 16, SEA_R = 6.2, SEA_BEACH = 2.4;
+  /* how much water: rules/skirmish.js. INLAND has none; COAST is the inlet as it always was */
+  var _wat = RTS_SKIRMISH.water[(G.skirmish || RTS_SKIRMISH_DEFAULT).water];
+  var SEA_OFF = _wat.off, SEA_R = _wat.r, SEA_BEACH = SEA_R > 0 ? 2.4 : 0;
   var _ia = [_sp.tx + _px * _sg * SEA_OFF, _sp.tz + _pz * _sg * SEA_OFF];
   var _ib = [_se.tx + _px * _sg * SEA_OFF, _se.tz + _pz * _sg * SEA_OFF];
   function _segD(x, z, a, b) {
@@ -12283,6 +12322,9 @@ function _rtsBaseDropNode(e) {
 
 function _rtsNewGame(seed, diff, spec) {
   _rtsAIOn = 'enemy';
+  /* the skirmish setup (rules/skirmish.js): the map's size is set before anything is sized by it */
+  var sk = _rtsSkirmishOf(spec && spec.skirmish);
+  RTS_N = RTS_SKIRMISH.size[sk.size].n;
 
   var G = {
     t:0, seed:seed || 12345, over:null, msg:null, msgT:0, shake:0,
@@ -12320,8 +12362,10 @@ function _rtsNewGame(seed, diff, spec) {
     rnd:null,                              /* seeded on first use; see _rtsRnd */
     order:['player', 'enemy'],             /* the seats, in tick order; core/seats.js */
     teams:{}, teamSeq:0,
-    stats:{ killed:0, lostU:0 }
+    stats:{ killed:0, lostU:0 },
+    skirmish:sk
   };
+  G.sides.player.credits = G.sides.enemy.credits = RTS_SKIRMISH.money[sk.money].credits;
   /* the human at 'player', the computer at 'enemy' with its brain; core/seats.js */
   G.sides.player.team = 0; G.sides.player.ctl = 'human';
   G.sides.enemy.team = 1; G.sides.enemy.ctl = 'ai'; G.sides.enemy.ai = _rtsBrainNew();
@@ -30694,7 +30738,9 @@ function rtsOpen(seed) {
      terrain the save actually carries rather than the one the seed would have produced. */
   var _load = window._RTS_PENDING_LOAD; window._RTS_PENDING_LOAD = null;
   _rtsNewGame(_load ? _load.seed : (seed || (((new Date()).getTime()) & 0xffff)),
-              _load ? _load.diff : undefined);
+              _load ? _load.diff : undefined,
+              /* the map a save was made on, or the title's setup for a plain battle (skirmish.js) */
+              { skirmish: _load ? _load.skirmish : (typeof rtsSkirmishWant === 'function' ? rtsSkirmishWant() : null) });
   if (_load) _rtsApplyState(window._rtsG, _load);
   var cv = document.getElementById('rtsCv');
   _rtsResizeCanvases();
@@ -33940,7 +33986,7 @@ function _rtsSaveVersion() {
   var w = 0; for (var k in RTS_WEAPONS) w++;
   /* the 1000 is the SHAPE of G: brains moved onto the seats (core/seats.js), so an older save's
      G.ai would load into a game that no longer reads it */
-  return 3 + 1000 + RTS_N * 31 + RTS_UNITS.length * 7 + RTS_STRUCTS.length * 11 + w * 13
+  return 3 + 1000 + RTS_N_DEFAULT * 31 + RTS_UNITS.length * 7 + RTS_STRUCTS.length * 11 + w * 13
     + RTS_TEAM_TYPES.length * 17 + RTS_TRIGGERS.length * 19;
 }
 
@@ -34519,6 +34565,61 @@ function rtsCampMissions() {
   if (box) { box.hidden = true; rtsCampToggle(); }
 }
 </script>
+<script>/* skirmish.js - the SKIRMISH SETUP on the title screen: map size, water and starting credits
+   (rules/skirmish.js), kept between visits.
+
+   Only a plain battle reads it. A daily is the same map for everyone and a campaign mission was
+   tuned on the default map, so both ask for the default (rtsSkirmishWant answers null for them),
+   and a saved battle carries its own setup in G.skirmish. */
+
+var RTS_SKIRMISH_LS = 'bw.skirmish';
+
+function rtsSkirmishGet() {
+  var s = null;
+  try { s = JSON.parse(window.localStorage.getItem(RTS_SKIRMISH_LS) || 'null'); } catch (e) {}
+  return _rtsSkirmishOf(s);
+}
+function rtsSkirmishSet(k, v) {
+  var s = rtsSkirmishGet();
+  if (!RTS_SKIRMISH[k] || !RTS_SKIRMISH[k][v]) return;
+  s[k] = v;
+  try { window.localStorage.setItem(RTS_SKIRMISH_LS, JSON.stringify(s)); } catch (e) {}
+  rtsSkirmishSync();
+}
+/* What rtsOpen builds the battle with: the setup, unless this battle is a daily or a mission. */
+function rtsSkirmishWant() {
+  if (window._RTS_DAILY || window._RTS_MISSION) return null;
+  return rtsSkirmishGet();
+}
+/* One line for the button: what START BATTLE will make. */
+function rtsSkirmishLine(s) {
+  return RTS_SKIRMISH.size[s.size].name.toLowerCase() + ' map · ' + RTS_SKIRMISH.water[s.water].name.toLowerCase()
+    + ' · ' + RTS_SKIRMISH.money[s.money].name + ' credits';
+}
+var RTS_SKIRMISH_ROWS = [['size', 'MAP'], ['water', 'WATER'], ['money', 'CREDITS']];
+function rtsSkirmishToggle() {
+  var box = document.getElementById('rtsSkirmish');
+  if (!box) return;
+  if (!box.hidden) { box.hidden = true; return; }
+  box.innerHTML = RTS_SKIRMISH_ROWS.map(function (r) {
+    var opts = RTS_SKIRMISH[r[0]], html = '<p class="lbl">' + r[1] + '</p><div class="diff" data-k="' + r[0] + '">';
+    for (var v in opts) html += '<button type="button" data-v="' + v + '" onclick="rtsSkirmishSet(\'' + r[0] + '\',\'' + v + '\')">' + opts[v].name + '</button>';
+    return html + '</div>';
+  }).join('');
+  box.hidden = false;
+  rtsSkirmishSync();
+}
+/* The pills and the button's line, from the stored setup. */
+function rtsSkirmishSync() {
+  var s = rtsSkirmishGet(), n = document.getElementById('rtsSkirmishNote');
+  if (n) n.textContent = rtsSkirmishLine(s);
+  var rows = document.querySelectorAll('#rtsSkirmish .diff');
+  for (var i = 0; i < rows.length; i++) {
+    var k = rows[i].getAttribute('data-k'), bs = rows[i].getElementsByTagName('button');
+    for (var j = 0; j < bs.length; j++) bs[j].className = bs[j].getAttribute('data-v') === s[k] ? 'on' : '';
+  }
+}
+</script>
 <script>/* title.js - the standalone shell around the game: the title screen, the difficulty picker,
    the army picker, RESUME BATTLE, the install prompt, and the START button.
 
@@ -34563,6 +34664,7 @@ function rtsHome(){
   var db = document.getElementById('rtsDaily');
   if (db) { db.disabled = false; db.innerHTML = 'DAILY BATTLE<small id="rtsDailyNote"></small>'; }
   if (typeof rtsDailyNote === 'function') rtsDailyNote();
+  if (typeof rtsSkirmishSync === 'function') rtsSkirmishSync();   /* the setup's line (skirmish.js) */
   rtsBuildDiff();
   if (typeof rtsSkySync === 'function') rtsSkySync();     /* the conditions: render3d/sky3d.js */
   rtsShowResume();
@@ -34622,6 +34724,7 @@ if (typeof rtsSkySync === 'function') rtsSkySync();
 rtsShowResume();
 rtsBuildArmyPick();
 if (typeof rtsDailyNote === 'function') rtsDailyNote();
+if (typeof rtsSkirmishSync === 'function') rtsSkirmishSync();
 
 /* THE OLD ARCHIVE STORE, gone. Earlier versions could keep a player's own game archives in
    IndexedDB, 13 MB and up; that feature is removed, so a returning player gets the space back. */
