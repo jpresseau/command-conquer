@@ -532,3 +532,11 @@
 #rcgRts .rts-sound .row i{font-style:normal;text-align:right;font-variant-numeric:tabular-nums;color:#9aa6b0}
 @media (pointer:coarse){ #rcgRts .rts-sound{top:52px} #rcgRts .rts-sound .row input{min-height:36px} }
 
+/* a mission's objectives, top left of the battlefield (campaign.js) */
+#rcgRts .rts-goals{position:absolute;left:8px;top:44px;max-width:min(300px,60vw);padding:6px 10px;border-radius:6px;
+  background:rgba(10,14,20,.72);color:#e8eef5;font:12px/1.45 system-ui,sans-serif;pointer-events:none;z-index:3}
+#rcgRts .rts-goals[hidden]{display:none}
+#rcgRts .rts-goals b{display:block;font-size:12px;letter-spacing:.5px;margin-bottom:2px}
+#rcgRts .rts-goals span{display:block}
+#rcgRts .rts-goals .done{color:#7fd08a}
+#rcgRts .rts-goals .failed{color:#ff8a7a}

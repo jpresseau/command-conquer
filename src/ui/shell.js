@@ -62,6 +62,7 @@ function rtsOpen(seed) {
     /* the 3D camera's compass: its needle points north, and a tap turns the view back to it */
     +   '<button type="button" id="rtsCompass" title="Face north (middle-click)" onclick="_rtsOrbitReset()" style="display:none"><i>N</i></button>'
     +   '<div class="rts-msg" id="rtsMsg"></div>'
+    +   '<div class="rts-goals" id="rtsGoals" hidden></div>'
     +   '<div class="rts-over" id="rtsOver"></div>'
     + '</div>'
     + '<div class="rts-bar">'
@@ -122,6 +123,8 @@ function rtsOpen(seed) {
      match can begin anywhere on the ring and a hardcoded focus looks at empty ground. */
   var _home = _rtsHas('player', 'yard');
   if (_home) { _rtsR.focus.x = _home.x; _rtsR.focus.z = _home.z; }
+  /* a campaign mission is laid on the battle just made, and looks where it says (campaign.js) */
+  if (!_load && typeof rtsCampLay === 'function') rtsCampLay(window._rtsG);
 
   window._rtsUI = { cat:'struct', place:null, drag:null, keys:{}, last:0, raf:0, dead:false,
     btns:{}, mouse:{ x:0, y:0, over:false }, miniDrag:false, credShown:0, avail:null,

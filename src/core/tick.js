@@ -74,6 +74,8 @@ function _rtsTick(dt) {
     delete G.byId[e.id];
   }
 
+  /* a mission keeps its own goals and calls its own result (core/campaign.js) */
+  if (G.mission) { _rtsMissionTick(G, dt); return; }
   /* win / lose: losing every structure ends it, the way it did in the originals */
   var pAlive = 0, eAlive = 0;
   for (i = 0; i < G.ents.length; i++) {

@@ -543,6 +543,14 @@
 #rcgRts .rts-sound .row i{font-style:normal;text-align:right;font-variant-numeric:tabular-nums;color:#9aa6b0}
 @media (pointer:coarse){ #rcgRts .rts-sound{top:52px} #rcgRts .rts-sound .row input{min-height:36px} }
 
+/* a mission's objectives, top left of the battlefield (campaign.js) */
+#rcgRts .rts-goals{position:absolute;left:8px;top:44px;max-width:min(300px,60vw);padding:6px 10px;border-radius:6px;
+  background:rgba(10,14,20,.72);color:#e8eef5;font:12px/1.45 system-ui,sans-serif;pointer-events:none;z-index:3}
+#rcgRts .rts-goals[hidden]{display:none}
+#rcgRts .rts-goals b{display:block;font-size:12px;letter-spacing:.5px;margin-bottom:2px}
+#rcgRts .rts-goals span{display:block}
+#rcgRts .rts-goals .done{color:#7fd08a}
+#rcgRts .rts-goals .failed{color:#ff8a7a}
 </style>
 <style>
 /* --- standalone shell: the title screen this app boots into --- */
@@ -649,6 +657,17 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   #rtsTitleMenu{gap:9px}
   #rtsHome .go{padding:13px 34px;font-size:15px}
 }
+/* the campaign's mission list (campaign.js) */
+#rtsCampList{width:min(460px,92vw);display:flex;flex-direction:column;gap:8px;text-align:left}
+#rtsCampList[hidden]{display:none}
+#rtsCampList .mission{padding:10px 12px;border:1px solid #2b3a4d;border-radius:8px;background:#141c27}
+#rtsCampList .mission.won{border-color:#3d6b45}
+#rtsCampList h3{margin:0 0 2px;font-size:14px;letter-spacing:.6px}
+#rtsCampList h3 i{font-style:normal;color:#7fd08a;font-weight:400;font-size:12px}
+#rtsCampList p{margin:4px 0;font-size:12px;line-height:1.45;opacity:.85}
+#rtsCampList p.s{opacity:.55;margin:0}
+#rtsCampList button{margin-top:4px;padding:6px 18px;font:600 12px/1 inherit;letter-spacing:.6px;color:#fff;
+  background:#2c4a6e;border:0;border-radius:5px;cursor:pointer}
 </style>
 </head>
 <body>
@@ -667,6 +686,9 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   <button type="button" class="go resume" id="rtsResume" onclick="rtsLoadGame()" hidden>RESUME BATTLE</button>
   <!-- One map a day, the same for everyone: daily.js -->
   <button type="button" class="go resume" id="rtsDaily" onclick="rtsDailyStart(this)">DAILY BATTLE<small id="rtsDailyNote"></small></button>
+  <!-- Four authored missions: campaign.js -->
+  <button type="button" class="go resume" id="rtsCampBtn" onclick="rtsCampToggle()">CAMPAIGN<small>four missions on the coast</small></button>
+  <div id="rtsCampList" hidden></div>
   <!-- Why a resume did not happen, and why one is not on offer. This screen has no message
        line, so without somewhere to put the reason the button simply did nothing. -->
   <p class="diffnote" id="rtsResumeNote" hidden></p>
@@ -716,7 +738,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">c1f78a2 · 2026-10-09</div>
+  <div id="rtsBuild" title="build">5cc38ec · 2026-10-10</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -2917,6 +2939,182 @@ var RTS_TRIGGERS = [
     event1:['time', 30], event2:['nBuildingsLost', 2],
     action1:['text', 'The enemy is dismantling your base.'],
     action2:['playSound', 'alert'] }
+];
+</script>
+<script>/* rules/campaign.js - the campaign: four missions on generated maps (core/campaign.js runs them).
+
+   Each is a seed and the two armies, a briefing, its goals, a setup that lays the mission onto the
+   battle the seed made, and a check, every tick, that keeps the goals and calls the result. A
+   mission's memory is plain data in M (G.mission); nothing here is kept on G but through it. */
+
+/* across the water: the lagoon's long axis, and a shore cell either side of it */
+function _rtsCampAcross(G) {
+  var W = _rtsMWater(G), sxx = 0, szz = 0, sxz = 0;
+  W.cells.forEach(function (i) { var dx = (i % RTS_N) - W.tx, dz = ((i / RTS_N) | 0) - W.tz; sxx += dx * dx; szz += dz * dz; sxz += dx * dz; });
+  var ang = 0.5 * Math.atan2(2 * sxz, sxx - szz), nx = -Math.sin(ang), nz = Math.cos(ang);   /* normal to the long axis */
+  function shore(sgn) {
+    for (var d = 2; d < 40; d++) {
+      var x = Math.round(W.tx + nx * d * sgn), z = Math.round(W.tz + nz * d * sgn);
+      if (_rtsInB(x, z) && G.terrain[_rtsIdx(x, z)] !== RTS_T_WATER && !_rtsBlocked(x, z, null)) {
+        var c = _rtsNearestOpen(Math.round(x + nx * 4 * sgn), Math.round(z + nz * 4 * sgn), 6, null);
+        return c ? { tx: c[0], tz: c[1] } : { tx: x, tz: z };
+      }
+    }
+    return null;
+  }
+  var a = shore(1), b = shore(-1), P = G.starts.player;
+  /* the convoy starts on the shore nearer the player's corner */
+  if (a && b && Math.hypot(b.tx - P.tx, b.tz - P.tz) < Math.hypot(a.tx - P.tx, a.tz - P.tz)) { var t = a; a = b; b = t; }
+  return { from: a, to: b, water: W };
+}
+function _rtsCampReveal(G, tx, tz, r) {
+  for (var z = tz - r; z <= tz + r; z++) for (var x = tx - r; x <= tx + r; x++) if (_rtsInB(x, z) && Math.hypot(x - tx, z - tz) <= r) G.mapped[_rtsIdx(x, z)] = 1;
+}
+function _rtsCampLeft(G, side, keys) {
+  return G.ents.filter(function (e) { return !e.dead && e.side === side && e.type === 'unit' && (!keys || keys.indexOf(e.def) >= 0); }).length;
+}
+
+var RTS_CAMPAIGN = [
+  { id: 'lowwater', name: 'Low Water', army: 'allied', diff: 'easy', seed: 9001,
+    brief: 'The strait between you and the Dominion shore is too deep to ford - except at low water, when the sea goes out and leaves the flats dry for a few minutes. Wait for the ebb, take the convoy across while the sand holds, and land it on the far shore before the flood comes back. The far side is lightly held.',
+    goals: [ { id: 'cross', text: 'Get two convoy APCs to the far shore (marked) before the flood: the flats are dry from about 2:10 to 3:50' },
+             { id: 'keep', text: 'Keep at least two APCs alive' } ],
+    setup: function (G, M) {
+      var P = G.starts.player, E = G.starts.enemy, L = Math.hypot(E.tx - P.tx, E.tz - P.tz) || 1;
+      var nx = (E.tx - P.tx) / L, nz = (E.tz - P.tz) / L, cx = Math.round((P.tx + E.tx) / 2), cz = Math.round((P.tz + E.tz) / 2);
+      _rtsMClear(G, 'player'); _rtsMClear(G, 'enemy');
+      G.sides.enemy.ctl = 'none';
+      _rtsMStrait(G, cx, cz, nx, nz, 3.5);    /* seven cells: every one within the tide's reach of a shore */
+      function at(d) { var c = _rtsNearestOpen(Math.round(cx + nx * d), Math.round(cz + nz * d), 8, null); return { tx: c[0], tz: c[1] }; }
+      var A = { from: at(-12), to: at(11) };
+      M.to = A.to; M.from = A.from;
+      _rtsMUnits('player', 'apc', A.from.tx, A.from.tz, 3, 'convoy');
+      _rtsMUnits('player', 'light', A.from.tx + 2, A.from.tz, 3, null);
+      _rtsMUnits('player', 'rifle', A.from.tx - 2, A.from.tz, 2, null);
+      _rtsMBuild('enemy', 'flametower', A.to.tx + 6, A.to.tz + 4);
+      _rtsMUnits('enemy', 'rifle', A.to.tx + 5, A.to.tz - 3, 3, null);
+      _rtsMUnits('enemy', 'dog', A.to.tx + 7, A.to.tz, 2, null);
+      _rtsCampReveal(G, A.from.tx, A.from.tz, 10); _rtsCampReveal(G, A.to.tx, A.to.tz, 5);
+      M.focus = A.from;
+    },
+    check: function (G, M) {
+      var c = _rtsMTagged(G, 'convoy'), there = c.filter(function (e) { return _rtsMNear(e, M.to.tx, M.to.tz, 6); }).length;
+      M.obj.cross = there >= 2 ? 'done' : '';
+      if (there >= 2) return { over: 'win', why: 'The convoy is across, and the sea is closing behind it.' };
+      if (c.length < 2) { M.obj.keep = 'failed'; return { over: 'lose', why: 'Too few of the convoy are left to make the landing.' }; }
+      if (G.t > 250) { M.obj.cross = 'failed'; return { over: 'lose', why: 'The flood came in before the convoy was across.' }; }
+      return null;
+    } },
+
+  { id: 'fogbank', name: 'Blind the Fortress', army: 'allied', diff: 'normal', seed: 9002,
+    brief: 'The Dominion command yard sits behind a ring of guns no column survives in clear air. Your Mist Tower is charged: lay a Fog Bank over the fortress and its towers see three cells and no more. Go in under it and destroy the command yard.',
+    goals: [ { id: 'yard', text: 'Destroy the Dominion Command Yard' },
+             { id: 'force', text: 'Do not lose the whole strike group' } ],
+    setup: function (G, M) {
+      var P = G.starts.player, E = G.starts.enemy;
+      _rtsMClear(G, 'player');
+      G.sides.enemy.ctl = 'none';
+      G.sides.enemy.credits = 99999;
+      var y = _rtsHas('enemy', 'yard'); if (y) y.tag = 'target';
+      /* power first: a browned-out tower does not fire at all */
+      for (var q = 0; q < 7; q++) _rtsMBuild('enemy', 'apower', Math.round(E.tx - 16 * Math.cos(q)), Math.round(E.tz - 16 * Math.sin(q)));
+      /* two rings of guns: no column lives through them in clear air */
+      for (var a = 0; a < 8; a++) _rtsMBuild('enemy', 'tesla', Math.round(E.tx + Math.cos(a * 0.785) * 7), Math.round(E.tz + Math.sin(a * 0.785) * 7));
+      for (a = 0; a < 10; a++) _rtsMBuild('enemy', a % 2 ? 'flametower' : 'rocketpit', Math.round(E.tx + Math.cos(a * 0.628 + 0.3) * 12), Math.round(E.tz + Math.sin(a * 0.628 + 0.3) * 12));
+      _rtsMUnits('enemy', 'heavy', E.tx + 2, E.tz + 2, 4, null).forEach(function (u) { u.order = 'hold'; });
+      _rtsMBuild('player', 'power', P.tx, P.tz);
+      _rtsMBuild('player', 'mist', P.tx + 4, P.tz + 4);
+      G.sides.player.supers = { fogbank: { t: 1e4, ready: true, said: true } };
+      _rtsMUnits('player', 'tank', P.tx + 6, P.tz - 4, 6, 'force');
+      _rtsMUnits('player', 'rocket', P.tx + 8, P.tz - 6, 3, 'force');
+      _rtsCampReveal(G, E.tx, E.tz, 12); _rtsCampReveal(G, P.tx, P.tz, 12);
+      M.focus = { tx: P.tx, tz: P.tz };
+    },
+    check: function (G, M) {
+      var y = _rtsMTagged(G, 'target');
+      if (!y.length) { M.obj.yard = 'done'; return { over: 'win', why: 'The fortress is headless: its command yard is rubble.' }; }
+      if (!_rtsMTagged(G, 'force').length && !_rtsCampLeft(G, 'player')) { M.obj.force = 'failed'; return { over: 'lose', why: 'The strike group is gone, and the fortress stands.' }; }
+      return null;
+    } },
+
+  { id: 'skycrane', name: 'Armour by Air', army: 'soviet', diff: 'normal', seed: 9003,
+    brief: 'The Compact has put its radar on an island no bridge reaches and no tide uncovers. Your Sky Cranes can lift one tank at a time: carry the armour over the water and take the radar down inside six minutes.',
+    goals: [ { id: 'radar', text: 'Destroy the Compact radar on the island' },
+             { id: 'keep', text: 'Keep the Sky Cranes or the tanks alive' } ],
+    setup: function (G, M) {
+      var P = G.starts.player, E = G.starts.enemy;
+      _rtsMClear(G, 'player'); _rtsMClear(G, 'enemy');
+      G.sides.enemy.ctl = 'none';
+      G.sides.enemy.credits = 99999;
+      _rtsMMoat(G, E.tx, E.tz, 9, 21);
+      var r = _rtsMBuild('enemy', 'radar', E.tx, E.tz, 'target');
+      if (r) r.maxHp = r.hp = r.maxHp * 3;   /* a hardened radar: one drop of two tanks is not enough */
+      _rtsMBuild('enemy', 'power', E.tx + 4, E.tz - 3); _rtsMBuild('enemy', 'power', E.tx - 4, E.tz - 4);
+      _rtsMBuild('enemy', 'turret', E.tx - 4, E.tz + 3); _rtsMBuild('enemy', 'pillbox', E.tx + 3, E.tz + 4);
+      _rtsMBuild('enemy', 'turret', E.tx + 5, E.tz + 1); _rtsMBuild('enemy', 'turret', E.tx - 1, E.tz - 6);
+      _rtsMUnits('enemy', 'rifle', E.tx - 3, E.tz - 3, 3, null);
+      _rtsMBuild('player', 'yard', P.tx, P.tz);
+      _rtsMBuild('player', 'power', P.tx + 4, P.tz - 4);
+      _rtsMBuild('player', 'afld', P.tx - 5, P.tz + 3);
+      _rtsMUnits('player', 'skycrane', P.tx - 3, P.tz + 6, 2, 'lift');
+      _rtsMUnits('player', 'heavy', P.tx + 6, P.tz, 4, 'armour');
+      _rtsCampReveal(G, E.tx, E.tz, 22); _rtsCampReveal(G, P.tx, P.tz, 12);
+      M.focus = { tx: P.tx, tz: P.tz }; M.isle = { tx: E.tx, tz: E.tz };
+      M.ok = !!r;
+    },
+    check: function (G, M) {
+      if (!_rtsMTagged(G, 'target').length) { M.obj.radar = 'done'; return { over: 'win', why: 'The radar is down, and the island is yours.' }; }
+      if (!_rtsMTagged(G, 'armour').length || (!_rtsMTagged(G, 'lift').length && !_rtsMTagged(G, 'armour').some(function (e) { return _rtsMNear(e, M.isle.tx, M.isle.tz, 9); }))) {
+        M.obj.keep = 'failed'; return { over: 'lose', why: 'Nothing left can reach the island.' };
+      }
+      if (G.t > 360) { M.obj.radar = 'failed'; return { over: 'lose', why: 'The radar called in the Compact fleet. Too late.' }; }
+      return null;
+    } },
+
+  { id: 'channel', name: 'Hold the Channel', army: 'soviet', diff: 'normal', seed: 9004,
+    brief: 'A Compact flotilla is coming up the lagoon for your Sub Pen. Hold the shore for eight minutes, until the relief column arrives. Their ships come in on the high water; at low tide the flats strand them.',
+    goals: [ { id: 'hold', text: function (G, M) { return 'Hold for eight minutes - ' + Math.max(0, Math.ceil((480 - G.t) / 60)) + ' to go'; } },
+             { id: 'yard', text: 'Keep the Sub Pen on the shore standing' } ],
+    setup: function (G, M) {
+      var P = G.starts.player, W = _rtsMWater(G);
+      _rtsMClear(G, 'enemy');
+      G.sides.enemy.ctl = 'none';
+      var y = _rtsHas('player', 'yard'); if (y) y.tag = 'yard';
+      /* the guns on the shore nearest the base */
+      var best = null, bd = 1e9;
+      W.cells.forEach(function (i) { var x = i % RTS_N, z = (i / RTS_N) | 0, d = Math.hypot(x - P.tx, z - P.tz); if (d < bd) { bd = d; best = { tx: x, tz: z }; } });
+      M.shore = best;
+      var far = null, fd = -1;
+      W.cells.forEach(function (i) { var x = i % RTS_N, z = (i / RTS_N) | 0, d = Math.hypot(x - best.tx, z - best.tz); if (d > fd && !_rtsBlocked(x, z, 'sea')) { fd = d; far = { tx: x, tz: z }; } });
+      M.mouth = far;
+      var mx = Math.round((P.tx + best.tx) / 2), mz = Math.round((P.tz + best.tz) / 2);
+      _rtsMBuild('player', 'power', P.tx + 5, P.tz - 5); _rtsMBuild('player', 'power', P.tx + 8, P.tz - 2);
+      _rtsMBuild('player', 'tesla', mx, mz); _rtsMBuild('player', 'flametower', mx + 3, mz - 2);
+      _rtsMBuild('player', 'refinery', P.tx - 5, P.tz + 2);
+      M.pen = !!_rtsMBuild('player', 'subpen', best.tx, best.tz, 'pen');
+      _rtsMTagged(G, 'pen').forEach(function (e) { e.maxHp = e.hp = 1800; });   /* a hardened pen */
+      _rtsMBuild('player', 'tesla', Math.round((best.tx * 3 + P.tx) / 4), Math.round((best.tz * 3 + P.tz) / 4));
+      _rtsMUnits('player', 'sub', best.tx, best.tz, 2, 'subs');
+      _rtsMUnits('player', 'v2rl', mx - 2, mz + 3, 3, null);
+      _rtsMUnits('player', 'rocket', mx + 1, mz + 4, 4, null);
+      _rtsCampReveal(G, best.tx, best.tz, 14);
+      M.waves = [40, 130, 230, 340, 420]; M.next = 0;
+      M.focus = { tx: mx, tz: mz };
+    },
+    check: function (G, M) {
+      while (M.next < M.waves.length && G.t >= M.waves[M.next]) {
+        var n = M.next++, ships = [];
+        ships = ships.concat(_rtsMUnits('enemy', 'gunboat', M.mouth.tx, M.mouth.tz, 1 + Math.ceil(n / 2), 'fleet'));
+        if (n >= 2) ships = ships.concat(_rtsMUnits('enemy', 'destroyer', M.mouth.tx, M.mouth.tz, 1, 'fleet'));
+        if (n >= 4) ships = ships.concat(_rtsMUnits('enemy', 'cruiser', M.mouth.tx, M.mouth.tz, 1, 'fleet'));
+        var pen = _rtsMTagged(G, 'pen')[0];
+        ships.forEach(function (s) { if (pen) _rtsOrderAttack(s, pen); else _rtsOrderMove(s, _rtsWX(M.shore.tx), _rtsWX(M.shore.tz), true); });
+        _rtsSay('Ships on the water - wave ' + (n + 1) + ' of ' + M.waves.length + '.');
+      }
+      if (!_rtsMTagged(G, 'pen').length) { M.obj.yard = 'failed'; return { over: 'lose', why: 'The Sub Pen is gone, and the channel with it.' }; }
+      if (G.t >= 480) { M.obj.hold = 'done'; return { over: 'win', why: 'The relief column is here. The channel held.' }; }
+      return null;
+    } }
 ];
 </script>
 <script>/* r3d/primitives.js - the projection, the lighting constants, and the solids every model
@@ -11902,6 +12100,111 @@ function _rtsAIOpening(side) {
   ];
 }
 </script>
+<script>/* core/campaign.js - an authored mission on a generated map. Part of rts.core, the simulation.
+
+   A mission (rules/campaign.js) is a seed, the armies, a setup and a check. The setup runs once,
+   on the battle _rtsNewGame has just made: it clears what the mission does not want, lays what it
+   does, and may cut the ground (a moat, an island). The check runs every tick in place of the
+   skirmish's "lose every building and it is over" rule, which ended a base-less mission on its
+   first tick: it keeps the objectives and calls the result.
+
+   Everything the mission remembers is plain data on G.mission ({id, obj, ...}), looked up by id
+   in RTS_CAMPAIGN, so the functions stay in the table and nothing callable is ever on G. A seat
+   the mission does not want thinking is handed ctl 'none' (core/seats.js): its buildings stand
+   and its guns fire, but no brain sells, builds or attacks with them. */
+
+function _rtsMissionOf(id) {
+  for (var i = 0; i < RTS_CAMPAIGN.length; i++) if (RTS_CAMPAIGN[i].id === id) return RTS_CAMPAIGN[i];
+  return null;
+}
+/* Lay mission `id` onto the battle just made. */
+function _rtsMissionSetup(G, id) {
+  var m = _rtsMissionOf(id);
+  if (!m) return null;
+  G.mission = { id: id, obj: {}, t0: G.t, over: null, why: '' };
+  m.setup(G, G.mission);
+  _rtsRecalcPower('player'); _rtsRecalcPower('enemy');
+  G.waypt = null;                       /* the waypoints are rebuilt on the ground the mission left */
+  return G.mission;
+}
+/* Every tick, instead of the skirmish rule: the mission's check, and its verdict once. */
+function _rtsMissionTick(G, dt) {
+  var M = G.mission, m = _rtsMissionOf(M.id);
+  if (!m || G.over) return;
+  var r = m.check(G, M, dt);
+  if (r) {
+    G.over = r.over; M.why = r.why || '';
+    if (r.over === 'win') G.sides.enemy.lost = true; else G.sides.player.lost = true;
+  }
+}
+/* The objectives as the player reads them: [{text, done, failed}] */
+function _rtsMissionGoals(G) {
+  var M = G && G.mission, m = M && _rtsMissionOf(M.id);
+  if (!m) return [];
+  return m.goals.map(function (g) { var s = M.obj[g.id] || ''; return { text: typeof g.text === 'function' ? g.text(G, M) : g.text, done: s === 'done', failed: s === 'failed' }; });
+}
+
+/* ---- helpers the missions are written in ---- */
+/* Take a side's whole presence off the map: buildings, units, its blueprint. */
+function _rtsMClear(G, side) {
+  G.ents.forEach(function (e) {
+    if (e.side !== side || e.dead) return;
+    if (e.type === 'struct') { _rtsFootprint(e, false); _rtsKillQuiet(e); } else { e.dead = true; e.hp = 0; }
+  });
+  G.ents = G.ents.filter(function (e) { return !e.dead; });
+  if (G.base) G.base[side] = [];
+}
+/* n units of `key` for `side` near cell (tx, tz), tagged; returns them */
+function _rtsMUnits(side, key, tx, tz, n, tag) {
+  var out = [], d = rtsUnitDef(key), dom = d.sea ? 'sea' : (d.hover ? 'hover' : null);
+  for (var i = 0; i < n; i++) {
+    var c = _rtsNearestOpen(tx + (i % 3) - 1, tz + ((i / 3) | 0), 12, dom);
+    if (!c) continue;
+    var e = _rtsSpawnUnit(side, key, _rtsWX(c[0]), _rtsWX(c[1]));
+    if (e) { e.tag = tag || null; out.push(e); }
+  }
+  return out;
+}
+/* a building of `key` for `side` as near (tx, tz) as it fits, built */
+function _rtsMBuild(side, key, tx, tz, tag) {
+  for (var r = 0; r < 14; r++) for (var a = 0; a < 12; a++) {
+    var x = Math.round(tx + Math.cos(a / 12 * 6.283) * r), z = Math.round(tz + Math.sin(a / 12 * 6.283) * r);
+    if (!_rtsCanPlace(side, key, x, z, true)) continue;
+    var b = _rtsPlaceStruct(side, key, x, z, true);
+    if (b) { b.building = 0; b.hp = b.maxHp; b.tag = tag || null; return b; }
+  }
+  return null;
+}
+function _rtsMTagged(G, tag) { return G.ents.filter(function (e) { return !e.dead && e.tag === tag; }); }
+function _rtsMNear(e, tx, tz, r) { return Math.hypot(e.x - _rtsWX(tx), e.z - _rtsWX(tz)) <= r * RTS_TILE; }
+function _rtsMAlive(G, side, type) { return G.ents.filter(function (e) { return !e.dead && e.side === side && (!type || e.type === type); }).length; }
+/* the water: its cells and their centre */
+function _rtsMWater(G) {
+  var n = 0, sx = 0, sz = 0, cells = [];
+  for (var i = 0; i < RTS_N * RTS_N; i++) if (G.terrain[i] === RTS_T_WATER && !_rtsIsBridgeCell(i)) { var x = i % RTS_N, z = (i / RTS_N) | 0; n++; sx += x; sz += z; cells.push(i); }
+  return { n: n, tx: n ? Math.round(sx / n) : RTS_N >> 1, tz: n ? Math.round(sz / n) : RTS_N >> 1, cells: cells };
+}
+/* Cut a ring of open water between radii r0 and r1 round (cx, cz): a moat, for an island */
+function _rtsMMoat(G, cx, cz, r0, r1) {
+  for (var z = cz - r1; z <= cz + r1; z++) for (var x = cx - r1; x <= cx + r1; x++) {
+    if (!_rtsInB(x, z)) continue;
+    var d = Math.hypot(x - cx, z - cz), i = _rtsIdx(x, z);
+    if (d < r0 || d > r1 || G.owner[i]) continue;
+    G.terrain[i] = RTS_T_WATER; G.blocked[i] = 2; G.scrap[i] = 0;   /* 2: water, as the generator marks it (1 is a building) */ G.gems[i] = 0; G.height[i] = 0;
+  }
+  G.roads = [];
+}
+/* Cut a strait of open water `half` cells either side of the line through (cx, cz) with normal
+   (nx, nz), edge to edge. Eight wide or less, it is all flats: dry ground at low water, sea at high. */
+function _rtsMStrait(G, cx, cz, nx, nz, half) {
+  for (var z = 0; z < RTS_N; z++) for (var x = 0; x < RTS_N; x++) {
+    var d = Math.abs((x - cx) * nx + (z - cz) * nz), i = _rtsIdx(x, z);
+    if (d > half || G.owner[i]) continue;
+    G.terrain[i] = RTS_T_WATER; G.blocked[i] = 2; G.scrap[i] = 0; G.gems[i] = 0; G.height[i] = 0;
+  }
+  G.roads = []; G.bridges = [];
+}
+</script>
 <script>/* core/base.js - BASE.CPP: the opponent's prebuilt base blueprint. Part of rts.core. */
 
 /* ------------------------------------------------------------- BASE.CPP: the base blueprint
@@ -20727,6 +21030,8 @@ function _rtsTick(dt) {
     delete G.byId[e.id];
   }
 
+  /* a mission keeps its own goals and calls its own result (core/campaign.js) */
+  if (G.mission) { _rtsMissionTick(G, dt); return; }
   /* win / lose: losing every structure ends it, the way it did in the originals */
   var pAlive = 0, eAlive = 0;
   for (i = 0; i < G.ents.length; i++) {
@@ -30338,6 +30643,7 @@ function rtsOpen(seed) {
     /* the 3D camera's compass: its needle points north, and a tap turns the view back to it */
     +   '<button type="button" id="rtsCompass" title="Face north (middle-click)" onclick="_rtsOrbitReset()" style="display:none"><i>N</i></button>'
     +   '<div class="rts-msg" id="rtsMsg"></div>'
+    +   '<div class="rts-goals" id="rtsGoals" hidden></div>'
     +   '<div class="rts-over" id="rtsOver"></div>'
     + '</div>'
     + '<div class="rts-bar">'
@@ -30398,6 +30704,8 @@ function rtsOpen(seed) {
      match can begin anywhere on the ring and a hardcoded focus looks at empty ground. */
   var _home = _rtsHas('player', 'yard');
   if (_home) { _rtsR.focus.x = _home.x; _rtsR.focus.z = _home.z; }
+  /* a campaign mission is laid on the battle just made, and looks where it says (campaign.js) */
+  if (!_load && typeof rtsCampLay === 'function') rtsCampLay(window._rtsG);
 
   window._rtsUI = { cat:'struct', place:null, drag:null, keys:{}, last:0, raf:0, dead:false,
     btns:{}, mouse:{ x:0, y:0, over:false }, miniDrag:false, credShown:0, avail:null,
@@ -31566,6 +31874,7 @@ function _rtsSyncSidebar(dt) {
     if (dl2.textContent !== dTxt) dl2.textContent = dTxt;
   }
 
+  if (typeof rtsCampHud === 'function') rtsCampHud(G);     /* a mission's objectives (campaign.js) */
   var msg = document.getElementById('rtsMsg');
   msg.textContent = G.msgT > 0 ? (G.msg || '') : '';
   msg.className = 'rts-msg' + (G.msgT > 0 ? ' on' : '');
@@ -31574,7 +31883,8 @@ function _rtsSyncSidebar(dt) {
     U.overShown = true;
     var o = document.getElementById('rtsOver');
     o.className = 'rts-over on';
-    o.innerHTML = '<div class="card ' + G.over + '"><h2>' + (G.over === 'win' ? 'VICTORY' : 'DEFEATED') + '</h2>'
+    if (G.mission && typeof rtsCampOverHTML === 'function') o.innerHTML = rtsCampOverHTML(G);
+    else o.innerHTML = '<div class="card ' + G.over + '"><h2>' + (G.over === 'win' ? 'VICTORY' : 'DEFEATED') + '</h2>'
       + '<p>' + (G.over === 'win' ? 'The ' + rtsArmyName('enemy') + ' forces have been wiped off the map.'
                           : rtsArmyName('player') + ' command has fallen.') + '</p>'
       + '<p class="s">Enemy units destroyed: ' + G.stats.killed + ' · Units lost: ' + G.stats.lostU + '</p>'
@@ -31585,8 +31895,9 @@ function _rtsSyncSidebar(dt) {
 }
 /* Play again: a daily replays the day's battle, with its army and difficulty kept (daily.js). */
 function rtsRestart() {
-  var d = window._RTS_DAILY, prev = window._RTS_DAILY_PREV;
+  var d = window._RTS_DAILY, prev = window._RTS_DAILY_PREV, mi = window._RTS_MISSION;
   rtsClose();
+  if (mi) { setTimeout(function () { rtsCampStart(mi.id); }, 60); return; }   /* retry the mission */
   if (d) { window._RTS_DAILY = d; window._RTS_DAILY_PREV = prev; window._RTS_DIFF = d.diff; window._RTS_ARMY = d.army; }
   setTimeout(function () { rtsOpen(d ? d.seed : undefined); }, 60);
 }
@@ -33842,6 +34153,8 @@ function rtsSaveStale() {
 function rtsSaveGame() {
   var G = window._rtsG;
   if (!G) return false;
+  /* a mission is not saved: its setup cannot be replayed under a resumed state (campaign.js) */
+  if (G.mission) { _rtsSay('A mission cannot be saved - retry it from the end card.'); return false; }
   /* SERIALISE FIRST, OUTSIDE THE TRY THAT OWNS THE CLEANUP. Both steps could throw and only one
      of them can leave a half-written pair behind, so they must not share a catch: a serialiser
      failure used to run the removeItem pair and DELETE THE SAVE ALREADY ON DISK - a save from
@@ -34109,6 +34422,103 @@ function rtsDailyNote() {
     + (best ? ' Your best: ' + (best.won ? 'victory in ' : 'held out ') + rtsDailyClock(best.secs) + '.' : '');
 }
 </script>
+<script>/* campaign.js - the CAMPAIGN on the title screen: the mission list, a mission's battle, its
+   objectives in the corner, its end card, and which missions have been won.
+
+   The missions themselves are rules/campaign.js and core/campaign.js; this is only the page
+   around them. Like a daily (daily.js), a mission borrows the army and difficulty it was
+   written for and puts the player's own back when the battle ends (rtsHome), and nothing of it
+   is written over the stored preferences. A mission is not saved: its check lives in the rules
+   table by id, and a resumed half-mission would need its whole setup replayed under it. */
+
+var RTS_CAMP_LS = 'bw.campaign';        /* {<id>: {won, secs, lost, killed}} - the best of each */
+
+function rtsCampProgress() {
+  try { return JSON.parse(window.localStorage.getItem(RTS_CAMP_LS) || '{}') || {}; } catch (e) { return {}; }
+}
+/* The mission list, opened and closed under the CAMPAIGN button. */
+function rtsCampToggle() {
+  var box = document.getElementById('rtsCampList');
+  if (!box) return;
+  if (!box.hidden) { box.hidden = true; return; }
+  var done = rtsCampProgress();
+  box.innerHTML = RTS_CAMPAIGN.map(function (m, i) {
+    var r = done[m.id];
+    return '<div class="mission' + (r && r.won ? ' won' : '') + '" data-id="' + m.id + '">'
+      + '<h3>' + (i + 1) + '. ' + m.name + (r && r.won ? ' <i>✓ ' + rtsDailyClock(r.secs) + '</i>' : '') + '</h3>'
+      + '<p class="s">' + rtsArmyTitle(m.army) + ' · ' + RTS_DIFF[m.diff].name + '</p>'
+      + '<p>' + m.brief + '</p>'
+      + '<button type="button" onclick="rtsCampStart(\'' + m.id + '\', this)">PLAY</button></div>';
+  }).join('');
+  box.hidden = false;
+}
+function rtsCampStart(id, btn) {
+  var m = _rtsMissionOf(id);
+  if (!m) return;
+  if (!window._RTS_MISSION) window._RTS_CAMP_PREV = { diff: window._RTS_DIFF, army: window._RTS_ARMY };
+  window._RTS_MISSION = { id: id, seed: m.seed };
+  window._RTS_DIFF = m.diff; window._RTS_ARMY = m.army;
+  var err = document.getElementById('rtsErr');
+  if (err) err.style.display = 'none';
+  if (btn) { btn.disabled = true; btn.textContent = 'DEPLOYING…'; }
+  setTimeout(function () {
+    try { rtsOpen(m.seed); }
+    catch (e) {
+      rtsCampEnd(); rtsHome();
+      if (err) { err.style.display = 'block'; err.textContent = 'Could not start:\n' + ((e && e.message) || e); }
+    }
+  }, 30);
+}
+/* Called by rtsOpen on the battle it has just made: lay the mission and look at it. */
+function rtsCampLay(G) {
+  var mi = window._RTS_MISSION;
+  if (!mi || !G) return null;
+  var M = _rtsMissionSetup(G, mi.id);
+  if (M && M.focus && window._rtsR) { _rtsR.focus.x = _rtsWX(M.focus.tx); _rtsR.focus.z = _rtsWX(M.focus.tz); }
+  return M;
+}
+/* Back on the title: the player's own army and difficulty again. */
+function rtsCampEnd() {
+  var p = window._RTS_CAMP_PREV;
+  window._RTS_MISSION = null; window._RTS_CAMP_PREV = null;
+  if (!p) return;
+  window._RTS_DIFF = p.diff; window._RTS_ARMY = p.army;
+}
+/* The objectives, top left of the battlefield, kept in step by the HUD tick. */
+function rtsCampHud(G) {
+  var el = document.getElementById('rtsGoals');
+  if (!el) return;
+  var on = !!(G && G.mission);
+  if (el.hidden === on) el.hidden = !on;
+  if (!on) return;
+  var html = '<b>' + _rtsMissionOf(G.mission.id).name + '</b>' + _rtsMissionGoals(G).map(function (g) {
+    return '<span class="' + (g.done ? 'done' : g.failed ? 'failed' : '') + '">' + (g.done ? '✓ ' : g.failed ? '✕ ' : '• ') + g.text + '</span>';
+  }).join('');
+  if (el.innerHTML !== html) el.innerHTML = html;
+}
+/* The end card for a mission, recording the best result once. */
+function rtsCampOverHTML(G) {
+  var M = G && G.mission;
+  if (!M || !G.over) return '';
+  var m = _rtsMissionOf(M.id), won = G.over === 'win', all = rtsCampProgress(), b = all[M.id];
+  var r = { won: won, secs: G.t, lost: G.stats.lostU, killed: G.stats.killed };
+  if (won && (!b || !b.won || r.secs < b.secs)) { all[M.id] = r; try { window.localStorage.setItem(RTS_CAMP_LS, JSON.stringify(all)); } catch (e) {} }
+  var next = won && RTS_CAMPAIGN[RTS_CAMPAIGN.indexOf(m) + 1];
+  return '<div class="card ' + G.over + '"><h2>' + (won ? 'MISSION COMPLETE' : 'MISSION FAILED') + '</h2>'
+    + '<p>' + m.name + ': ' + (M.why || '') + '</p>'
+    + '<p class="s">Time ' + rtsDailyClock(G.t) + ' · Enemy destroyed: ' + G.stats.killed + ' · Units lost: ' + G.stats.lostU + '</p>'
+    + (next ? '<button type="button" onclick="rtsCampNext(\'' + next.id + '\')">Next: ' + next.name + '</button> ' : '')
+    + '<button type="button" onclick="rtsRestart()">Retry</button> '
+    + '<button type="button" onclick="rtsCampMissions()">Missions</button> '
+    + '<button type="button" onclick="rtsClose()">Quit</button></div>';
+}
+function rtsCampNext(id) { rtsClose(); setTimeout(function () { rtsCampStart(id); }, 60); }
+function rtsCampMissions() {
+  rtsClose();
+  var box = document.getElementById('rtsCampList');
+  if (box) { box.hidden = true; rtsCampToggle(); }
+}
+</script>
 <script>/* title.js - the standalone shell around the game: the title screen, the difficulty picker,
    the army picker, RESUME BATTLE, the install prompt, and the START button.
 
@@ -34149,6 +34559,7 @@ function rtsHome(){
   if (b) { b.disabled = false; b.textContent = 'START BATTLE'; }
   /* a daily battle borrowed the army and difficulty: put the player's own back (daily.js) */
   if (typeof rtsDailyEnd === 'function') rtsDailyEnd();
+  if (typeof rtsCampEnd === 'function') rtsCampEnd();      /* and so did a mission (campaign.js) */
   var db = document.getElementById('rtsDaily');
   if (db) { db.disabled = false; db.innerHTML = 'DAILY BATTLE<small id="rtsDailyNote"></small>'; }
   if (typeof rtsDailyNote === 'function') rtsDailyNote();

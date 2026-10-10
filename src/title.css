@@ -103,3 +103,14 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   #rtsTitleMenu{gap:9px}
   #rtsHome .go{padding:13px 34px;font-size:15px}
 }
+/* the campaign's mission list (campaign.js) */
+#rtsCampList{width:min(460px,92vw);display:flex;flex-direction:column;gap:8px;text-align:left}
+#rtsCampList[hidden]{display:none}
+#rtsCampList .mission{padding:10px 12px;border:1px solid #2b3a4d;border-radius:8px;background:#141c27}
+#rtsCampList .mission.won{border-color:#3d6b45}
+#rtsCampList h3{margin:0 0 2px;font-size:14px;letter-spacing:.6px}
+#rtsCampList h3 i{font-style:normal;color:#7fd08a;font-weight:400;font-size:12px}
+#rtsCampList p{margin:4px 0;font-size:12px;line-height:1.45;opacity:.85}
+#rtsCampList p.s{opacity:.55;margin:0}
+#rtsCampList button{margin-top:4px;padding:6px 18px;font:600 12px/1 inherit;letter-spacing:.6px;color:#fff;
+  background:#2c4a6e;border:0;border-radius:5px;cursor:pointer}
