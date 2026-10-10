@@ -228,3 +228,17 @@ and `src/campaign.js` is the title-screen list, the objectives and the end card.
   `unit/campaign-play` play both paths headless:
   - The fortress is lost without the fog: its guns outrange the strike group.
   - The Channel's Sub Pen is hardened to 1800 hp, and is held only by building submarines.
+
+## The skirmish setup
+
+`rules/skirmish.js` holds the options: size (`RTS_N` of 96, 128 or 160), water (the inlet's radius
+and offset in `core/terrain.js`; INLAND has none) and money (both sides' starting credits).
+`src/skirmish.js` is the title-screen panel, stored in localStorage under `bw.skirmish`.
+
+- **`RTS_N` is set per battle**, at the top of `_rtsNewGame`, before anything is sized by it.
+  Every reader takes it live. Never cache it at load time.
+- **The default reproduces the old battle exactly**, held by `unit/fingerprint`. Only START
+  BATTLE reads the stored choice: `rtsSkirmishWant` answers null for a daily and a mission.
+- **A save carries `G.skirmish`**, and `rtsOpen` builds the loaded battle on it. The save version
+  uses `RTS_N_DEFAULT`, never `RTS_N`, or a save would read as stale after a battle of another size.
+- An AI ally or a second opponent needs a third and fourth side. That is separate, larger work.

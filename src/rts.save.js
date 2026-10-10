@@ -41,7 +41,7 @@ function _rtsSaveVersion() {
   var w = 0; for (var k in RTS_WEAPONS) w++;
   /* the 1000 is the SHAPE of G: brains moved onto the seats (core/seats.js), so an older save's
      G.ai would load into a game that no longer reads it */
-  return 3 + 1000 + RTS_N * 31 + RTS_UNITS.length * 7 + RTS_STRUCTS.length * 11 + w * 13
+  return 3 + 1000 + RTS_N_DEFAULT * 31 + RTS_UNITS.length * 7 + RTS_STRUCTS.length * 11 + w * 13
     + RTS_TEAM_TYPES.length * 17 + RTS_TRIGGERS.length * 19;
 }
 

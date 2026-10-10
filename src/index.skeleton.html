@@ -25,6 +25,9 @@
   <div class="diff" id="rtsArmySide" hidden></div>
   <p class="diffnote" id="rtsVoxNote" hidden></p>
   <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE</button>
+  <!-- Map size, water and credits for START BATTLE: skirmish.js -->
+  <button type="button" class="go resume" id="rtsSkirmishBtn" onclick="rtsSkirmishToggle()">SKIRMISH SETUP<small id="rtsSkirmishNote"></small></button>
+  <div id="rtsSkirmish" hidden></div>
   <button type="button" class="go resume" id="rtsResume" onclick="rtsLoadGame()" hidden>RESUME BATTLE</button>
   <!-- One map a day, the same for everyone: daily.js -->
   <button type="button" class="go resume" id="rtsDaily" onclick="rtsDailyStart(this)">DAILY BATTLE<small id="rtsDailyNote"></small></button>
@@ -84,6 +87,7 @@
 </div>
 
 <script>//@@INC:rules/structures.js@@</script>
+<script>//@@INC:rules/skirmish.js@@</script>
 <script>//@@INC:rules/units.js@@</script>
 <script>//@@INC:rules/weapons.js@@</script>
 <script>//@@INC:rules/missions.js@@</script>
@@ -260,6 +264,7 @@
 
 <script>//@@INC:daily.js@@</script>
 <script>//@@INC:campaign.js@@</script>
+<script>//@@INC:skirmish.js@@</script>
 <script>//@@INC:title.js@@</script>
 
 </body>

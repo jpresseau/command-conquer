@@ -76,6 +76,9 @@ function _rtsBaseDropNode(e) {
 
 function _rtsNewGame(seed, diff, spec) {
   _rtsAIOn = 'enemy';
+  /* the skirmish setup (rules/skirmish.js): the map's size is set before anything is sized by it */
+  var sk = _rtsSkirmishOf(spec && spec.skirmish);
+  RTS_N = RTS_SKIRMISH.size[sk.size].n;
 
   var G = {
     t:0, seed:seed || 12345, over:null, msg:null, msgT:0, shake:0,
@@ -113,8 +116,10 @@ function _rtsNewGame(seed, diff, spec) {
     rnd:null,                              /* seeded on first use; see _rtsRnd */
     order:['player', 'enemy'],             /* the seats, in tick order; core/seats.js */
     teams:{}, teamSeq:0,
-    stats:{ killed:0, lostU:0 }
+    stats:{ killed:0, lostU:0 },
+    skirmish:sk
   };
+  G.sides.player.credits = G.sides.enemy.credits = RTS_SKIRMISH.money[sk.money].credits;
   /* the human at 'player', the computer at 'enemy' with its brain; core/seats.js */
   G.sides.player.team = 0; G.sides.player.ctl = 'human';
   G.sides.enemy.team = 1; G.sides.enemy.ctl = 'ai'; G.sides.enemy.ai = _rtsBrainNew();
