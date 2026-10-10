@@ -38,6 +38,7 @@ function rtsHome(){
   if (b) { b.disabled = false; b.textContent = 'START BATTLE'; }
   /* a daily battle borrowed the army and difficulty: put the player's own back (daily.js) */
   if (typeof rtsDailyEnd === 'function') rtsDailyEnd();
+  if (typeof rtsCampEnd === 'function') rtsCampEnd();      /* and so did a mission (campaign.js) */
   var db = document.getElementById('rtsDaily');
   if (db) { db.disabled = false; db.innerHTML = 'DAILY BATTLE<small id="rtsDailyNote"></small>'; }
   if (typeof rtsDailyNote === 'function') rtsDailyNote();

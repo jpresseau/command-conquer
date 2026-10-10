@@ -254,6 +254,8 @@ function rtsSaveStale() {
 function rtsSaveGame() {
   var G = window._rtsG;
   if (!G) return false;
+  /* a mission is not saved: its setup cannot be replayed under a resumed state (campaign.js) */
+  if (G.mission) { _rtsSay('A mission cannot be saved - retry it from the end card.'); return false; }
   /* SERIALISE FIRST, OUTSIDE THE TRY THAT OWNS THE CLEANUP. Both steps could throw and only one
      of them can leave a half-written pair behind, so they must not share a catch: a serialiser
      failure used to run the removeItem pair and DELETE THE SAVE ALREADY ON DISK - a save from

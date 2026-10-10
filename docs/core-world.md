@@ -207,3 +207,24 @@ Two harness assertions were wrong before the code was: one expected the difficul
 `desc` carries the display name, and one capped screen darkness at 50 % when 71 % of an idle
 game's map is legitimately under shroud. Compare the two frames' darkness to each other, not to a
 number picked by eye.
+
+## The campaign
+
+`rules/campaign.js` holds `RTS_CAMPAIGN`, the four missions. Each has a seed, an army, a
+difficulty, a brief, goals, a `setup(G, M)` and a `check(G, M, dt)`. `core/campaign.js` runs them,
+and `src/campaign.js` is the title-screen list, the objectives and the end card.
+
+- **The setup runs on the battle `_rtsNewGame` has just made.** It clears what the mission does not
+  want with `_rtsMClear` (which frees each building's footprint), then lays the units and buildings
+  it does want. It can also cut water into the ground with `_rtsMMoat` or `_rtsMStrait`. Cut water
+  must be `blocked = 2`, because `1` means a building stands there.
+- **The check replaces the skirmish rule.** `tick.js` hands a mission battle to
+  `_rtsMissionTick` before the "lose every building" rule, which would end a base-less mission
+  on its first tick. The check returns `{over, why}`, and the end card shows `why`.
+- **The enemy seat runs no brain** (ctl `'none'`, `core/seats.js`). Its guns still fire.
+- **`G.mission` is plain data.** The functions stay in the table and are looked up by id. A mission
+  cannot be saved, because a resumed state would need its whole setup replayed under it.
+- **Each mission is tuned so the intended play wins and doing nothing loses.** `unit/campaign` and
+  `unit/campaign-play` play both paths headless:
+  - The fortress is lost without the fog: its guns outrange the strike group.
+  - The Channel's Sub Pen is hardened to 1800 hp, and is held only by building submarines.

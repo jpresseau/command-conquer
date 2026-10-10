@@ -130,6 +130,11 @@ them beside your ore field, and goes home to do it again.
 the same army, difficulty, tide and weather, all from the date alone. The end screen gives you a line to
 copy and post, and your best of the day is kept.
 
+**A campaign.** CAMPAIGN on the title screen opens four missions, each built on a generated map:
+run a convoy over the flats at low water, blind a fortress with the Fog Bank, lift tanks onto an
+island with Sky Cranes, and hold a Sub Pen against a flotilla for eight minutes. Each has a briefing,
+objectives on the battlefield and an end card, and the missions you win are marked.
+
 ## Everything is generated in code
 
 There are no art or audio assets in this repository, and none are downloaded at runtime:
