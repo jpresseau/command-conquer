@@ -71,7 +71,7 @@ function _r3dMuzzles(G) {
     var e = E[i];
     if (e.dead || !(e.fire > 0) || e.air) continue;
     if (e.x < vb.x0 || e.x > vb.x1 || e.z < vb.z0 || e.z > vb.z1) continue;
-    if (e.side !== 'player' && typeof _rtsEntSeen === 'function' && !_rtsEntSeen(e)) continue;
+    if (!_rtsWithPlayer(e.side) && typeof _rtsEntSeen === 'function' && !_rtsEntSeen(e)) continue;
     /* where the shot leaves, drawn at the barrel's own tip: the sim's coordinate is a little
        further out than the 3D barrel reaches, and a flash that far out floated off the gun */
     var m = _r3dMuzzleAt(e), s = _r3dMuzzleSize(e);

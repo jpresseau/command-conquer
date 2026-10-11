@@ -245,7 +245,7 @@ function _rtsTeamDoMission(t, dt) {
          reported back; it never sets `dead`, and there is no event. So the .dead idiom every
          other leg completes on is not merely wrong here, it hangs: a captured building
          satisfies neither `!t.capt` nor `t.capt.dead`, forever. */
-      if (t.capt && (t.capt.dead || t.capt.selling || t.capt.side !== _rtsAIFoe())) {
+      if (t.capt && (t.capt.dead || t.capt.selling || !_rtsHostile(t.capt.side, _rtsAIOn))) {
         _rtsTeamAdvance(t); continue;
       }
       if (!t.capt) t.capt = (G.ai && G.ai.capTgt) || _rtsAICaptureTarget();
@@ -318,7 +318,7 @@ function _rtsTeamTookDamage(u, from) {
   var G = window._rtsG;
   if (u.sqd == null || !G.teams || !G.teams[u.sqd]) return;
   var t = G.teams[u.sqd];
-  if (!from || from.side !== _rtsAIFoe() || !t.moving) return;
+  if (!from || !_rtsHostile(from.side, _rtsAIOn) || !t.moving) return;
   /* IsSuicide: "Charge toward target ignoring distractions". Being shot at IS the
      distraction, so a suicide team never retargets onto whoever hit it. */
   if (t.type.suicide) return;

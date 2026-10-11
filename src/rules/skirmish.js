@@ -17,9 +17,22 @@ var RTS_N_DEFAULT = 128;
 var RTS_SKIRMISH = {
   size:  { small: { name: 'SMALL', n: 96 }, standard: { name: 'STANDARD', n: 128 }, large: { name: 'LARGE', n: 160 } },
   water: { inland: { name: 'INLAND', r: 0, off: 0 }, coast: { name: 'COAST', r: 6.2, off: 16 }, lagoon: { name: 'LAGOON', r: 10, off: 20 } },
-  money: { standard: { name: '3,000', credits: 3000 }, rich: { name: '6,000', credits: 6000 }, flush: { name: '10,000', credits: 10000 } }
+  money: { standard: { name: '3,000', credits: 3000 }, rich: { name: '6,000', credits: 6000 }, flush: { name: '10,000', credits: 10000 } },
+  /* who else is on the field: the computer seats beyond the one opponent (RTS_SEATS) */
+  foes:  { one: { name: '1 FOE', extra: [] }, two: { name: '2 FOES', extra: ['enemy2'] },
+           ally: { name: 'FOE + ALLY', extra: ['ally'] }, team: { name: '2 V 2', extra: ['ally', 'enemy2'] } }
 };
-var RTS_SKIRMISH_DEFAULT = { size: 'standard', water: 'coast', money: 'standard' };
+var RTS_SKIRMISH_DEFAULT = { size: 'standard', water: 'coast', money: 'standard', foes: 'one' };
+
+/* THE SEATS. A seat's team is fixed by its name, so an ally is always the player's army and on the
+   player's team, and a second opponent is the first opponent's: everything that has to know whose
+   side a seat is on before a battle exists (the army it builds, the colours it is baked in) reads
+   it here. `near` is the seat an extra base is put beside. */
+var RTS_SEATS = {
+  player: { team: 0 }, enemy: { team: 1 },
+  ally:   { team: 0, near: 'player', name: 'Ally' },
+  enemy2: { team: 1, near: 'enemy',  name: 'Second foe' }
+};
 
 /* A whole, valid choice from any partial or stale one: an unknown key falls back to the default. */
 function _rtsSkirmishOf(s) {

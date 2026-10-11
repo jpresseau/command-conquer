@@ -78,6 +78,8 @@ function _rtsUpdateAISeat(side, dt) { _rtsAIAs(side, function () { _rtsUpdateAIF
 function _rtsUpdateAIFor(dt) {
   var G = window._rtsG, S = G.sides[_rtsAIOn];
   if (S.lost) return;
+  /* the foe the waypoints lead to is out of the battle: lead them to the next (core/seats.js) */
+  if (S.ai.wayFoe && S.ai.wayFoe !== _rtsAIFoe()) G.waypt = null;
   _rtsTeamsTick(dt);
   _rtsEscortsTick(dt);          /* the spare army goes with the teams - core/escorts.js */
   _rtsAIMendTick(dt);           /* ...and the battered go home to the depot - core/aimend.js */

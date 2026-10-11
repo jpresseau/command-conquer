@@ -29,7 +29,7 @@ function _rtsDroneTick() {
     if (busy && e.path && e.pi < e.path.length) { e.orbit = null; continue; }    /* on its way */
     if (e.orbitOn != null) {
       var t = G.byId[e.orbitOn];
-      if (!t || t.dead || t.inside || (t.side !== e.side && !_rtsShadowSeen(e, t))) e.orbitOn = null;
+      if (!t || t.dead || t.inside || (_rtsHostile(t.side, e.side) && !_rtsShadowSeen(e, t))) e.orbitOn = null;
       else if (!e.orbit || Math.hypot(t.x - e.orbit.x, t.z - e.orbit.z) > RTS_DRONE.follow * RTS_TILE) e.orbit = _rtsDroneCentre(t.x, t.z);
     }
     if (!e.orbit) e.orbit = _rtsDroneCentre(e.x, e.z);                              /* stopped: circle here */
@@ -61,7 +61,7 @@ function _rtsDroneOn(e, t) {
 /* Is the shadowed enemy still seen by the drone's side? The player's view is _rtsEntSeen
    (core/supers.js) - a diving submarine is not seen, however close the drone circles. The
    opponent never shadows anything (its drone follows its own team, below). */
-function _rtsShadowSeen(e, t) { return e.side !== _rtsAIFoe() || _rtsEntSeen(t); }
+function _rtsShadowSeen(e, t) { return !_rtsWithPlayer(e.side) || _rtsEntSeen(t); }
 
 /* Is the opponent fighting half-blind? */
 function _rtsAIHalfBlind() {

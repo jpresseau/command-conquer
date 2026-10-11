@@ -239,7 +239,7 @@ function _rtsKill(e) {
      number labelled "units destroyed" was also counting every enemy building, so the two
      halves of the same readout were not measuring the same kind of thing. A sold building is
      not a kill either, which the loss counter above says in its own comment. */
-  if (e.side === 'enemy' && e.type === 'unit' && !e.selling && e.hurtBy === 'player') G.stats.killed++;
+  if (_rtsHostile(e.side, 'player') && e.type === 'unit' && !e.selling && e.hurtBy === 'player') G.stats.killed++;
   var si = G.sel.indexOf(e); if (si >= 0) G.sel.splice(si, 1);
   /* SIDEBAR.CPP Recalc is only called when a FACTORY is destroyed - it is an exhaustive
      sweep and the comment is explicit that it should not run for every casualty. */

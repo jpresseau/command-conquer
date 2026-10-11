@@ -16,33 +16,43 @@ function _rtsSprites() {
   S.crate = _sprCrate();
   S.fire = _sprFire();
   S.corpse = _sprCorpse();
-  ['player', 'enemy'].forEach(function (side) {
-    S.bld[side] = {}; S.unit[side] = {};
-    RTS_STRUCTS.forEach(function (d) { S.bld[side][d.key] = _sprBuilding(d.key, side); });
-    S.hull = S.hull || {}; S.turret = S.turret || {};
-    S.hull[side] = {}; S.turret[side] = {};
-    RTS_UNITS.forEach(function (d) {
-      if (RTS_TURRETED[d.key]) {
-        /* A turreted unit is only ever DRAWN as hull + turret, so baking the combined body as
-           well was pure waste - 32 canvases per unit per side that nothing referenced. `unit`
-           aliases the hull instead of duplicating it. */
-        S.hull[side][d.key] = _sprUnit(d.key, side, false, 'hull');
-        S.turret[side][d.key] = _sprUnit(d.key, side, false, 'turret');
-        S.unit[side][d.key] = S.hull[side][d.key];
-      } else {
-        S.unit[side][d.key] = _sprUnit(d.key, side);
-      }
-    });
-    S.prone[side] = {};
-    RTS_UNITS.forEach(function (d) {
-      if (d.kind === 'infantry') S.prone[side][d.key] = _sprUnit(d.key, side, true);
-    });
-  });
+  ['player', 'enemy'].forEach(function (side) { _sprBakeSide(S, side); });
   /* One flame set, referenced twice. `_sprFx` cannot call `_sprFire()` itself without
      baking a second identical set of canvases - same pixels, twice the memory, and two
      things that are supposed to be the same fire drifting apart the moment either is
      retuned. Assigned here, where both already exist. */
   S.fx.fire = S.fire;
   _RTS_SPR = S;
+  return S;
+}
+
+/* One seat's buildings, units and prone men in its own colours. The two that always play are baked
+   with the sheet; an ally's or a second foe's only when a battle has one (_rtsSpritesFor), so the
+   title screen pays nothing for seats a battle may never use. */
+function _sprBakeSide(S, side) {
+  S.bld[side] = {}; S.unit[side] = {};
+  RTS_STRUCTS.forEach(function (d) { S.bld[side][d.key] = _sprBuilding(d.key, side); });
+  S.hull = S.hull || {}; S.turret = S.turret || {};
+  S.hull[side] = {}; S.turret[side] = {};
+  RTS_UNITS.forEach(function (d) {
+    if (RTS_TURRETED[d.key]) {
+      /* A turreted unit is only ever DRAWN as hull + turret, so baking the combined body as
+         well was pure waste - 32 canvases per unit per side that nothing referenced. `unit`
+         aliases the hull instead of duplicating it. */
+      S.hull[side][d.key] = _sprUnit(d.key, side, false, 'hull');
+      S.turret[side][d.key] = _sprUnit(d.key, side, false, 'turret');
+      S.unit[side][d.key] = S.hull[side][d.key];
+    } else {
+      S.unit[side][d.key] = _sprUnit(d.key, side);
+    }
+  });
+  S.prone[side] = {};
+  RTS_UNITS.forEach(function (d) {
+    if (d.kind === 'infantry') S.prone[side][d.key] = _sprUnit(d.key, side, true);
+  });
+}
+function _rtsSpritesFor(sides) {
+  var S = _rtsSprites();
+  (sides || []).forEach(function (side) { if (!S.bld[side]) _sprBakeSide(S, side); });
   return S;
 }

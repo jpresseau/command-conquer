@@ -20,8 +20,8 @@ function _rtsDamage(tgt, dmg, from, floor) {
       if (!(tgt.type === 'unit' && (rtsUnitDef(tgt.def) || {}).kind === 'infantry')) return;
       tgt.hp = 0; tgt.hitT = 0.18;
       if (from.side) tgt.hurtBy = from.side;
-      if (from.side !== tgt.side) from.kills = (from.kills || 0) + 1;
-      if (from.side !== tgt.side) _rtsTrigNotify('attacked', tgt, null);
+      if (_rtsHostile(from.side, tgt.side)) from.kills = (from.kills || 0) + 1;
+      if (_rtsHostile(from.side, tgt.side)) _rtsTrigNotify('attacked', tgt, null);
       _rtsKill(tgt);
       return;
     }
@@ -45,12 +45,12 @@ function _rtsDamage(tgt, dmg, from, floor) {
     _rtsAttacked(tgt.side);
     _rtsBaseIsAttacked(tgt, from);
   }
-  if (from && from.side && from.side !== tgt.side) _rtsTrigNotify('attacked', tgt, null);
+  if (from && _rtsHostile(from.side, tgt.side)) _rtsTrigNotify('attacked', tgt, null);
   if (tgt.type === 'unit' && tgt.sqd != null) _rtsTeamTookDamage(tgt, from);
   if (_rtsCanRetaliate(tgt, from)) { tgt.order = 'attack'; tgt.target = from; }
   if (tgt.hp <= 0) {
     /* Crew.Made_A_Kill: something that has killed becomes a hotter target itself. */
-    if (from && from.side && from.side !== tgt.side) from.kills = (from.kills || 0) + 1;
+    if (from && _rtsHostile(from.side, tgt.side)) from.kills = (from.kills || 0) + 1;
     _rtsKill(tgt);
   }
   else if (tgt.type === 'unit' && rtsUnitDef(tgt.def).harvest && tgt.carry > 0

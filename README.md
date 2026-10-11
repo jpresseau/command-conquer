@@ -130,9 +130,11 @@ them beside your ore field, and goes home to do it again.
 the same army, difficulty, tide and weather, all from the date alone. The end screen gives you a line to
 copy and post, and your best of the day is kept.
 
-**A skirmish setup.** SKIRMISH SETUP on the title screen picks the map's size (96, 128 or 160
-cells a side), how much water it has (INLAND, COAST or a wide LAGOON) and what both sides start
-with (3,000, 6,000 or 10,000 credits). The choice is kept between visits. The daily battle and the
+**A skirmish setup.** SKIRMISH SETUP on the title screen picks who is on the field (one foe, two
+foes, a foe and a computer ally, or two against two), the map's size (96, 128 or 160 cells a side),
+how much water it has (INLAND, COAST or a wide LAGOON) and what every side starts with (3,000,
+6,000 or 10,000 credits). An ally fights in green on your army and shares its sight with you; a
+second foe fights in amber. The choice is kept between visits. The daily battle and the
 campaign always use the standard map.
 
 **A campaign.** CAMPAIGN on the title screen opens four missions, each built on a generated map:

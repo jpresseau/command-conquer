@@ -377,7 +377,7 @@ function _rtsAirPadFor(side, u) {
 }
 function _rtsDeliverUnit(side, key) {
   var G = window._rtsG, u = rtsUnitDef(key);
-  if (G.justBuilt) G.justBuilt[side].unit = key;   /* HouseClass::JustBuiltUnit */
+  if (G.justBuilt && G.justBuilt[side]) G.justBuilt[side].unit = key;   /* HouseClass::JustBuiltUnit */
   /* A ship comes out of its shipyard and INTO THE WATER, which is the one delivery that
      cannot use the generic scan-place: every cell it would pick is land. */
   if (u.sea) {

@@ -90,7 +90,7 @@ function _rtsAIRaidPrey(u) {
   for (var pass = 0; pass < 2 && !best; pass++) {
     for (var i = 0; i < G.ents.length; i++) {
       var o = G.ents[i];
-      if (o.dead || o.side !== _rtsAIFoe() || o.inside) continue;
+      if (o.dead || !_rtsHostile(o.side, _rtsAIOn) || o.inside) continue;
       var hit = pass === 0 ? o.type === 'unit' && (rtsUnitDef(o.def) || {}).harvest : o.def === 'refinery';
       if (!hit) continue;
       var dd = Math.hypot(o.x - u.x, o.z - u.z);

@@ -241,4 +241,17 @@ and offset in `core/terrain.js`; INLAND has none) and money (both sides' startin
   BATTLE reads the stored choice: `rtsSkirmishWant` answers null for a daily and a mission.
 - **A save carries `G.skirmish`**, and `rtsOpen` builds the loaded battle on it. The save version
   uses `RTS_N_DEFAULT`, never `RTS_N`, or a save would read as stale after a battle of another size.
-- An AI ally or a second opponent needs a third and fourth side. That is separate, larger work.
+- **Sides** (`foes`) adds seats beyond the two that always play: `ally` on the player's team and
+  `enemy2` on the opponent's (`RTS_SEATS`). The rules for any seat:
+  - **Hostility is by team**, through `_rtsHostile(a, b)`, never "not mine". "Is it on my team"
+    for sight and the player's own view is `_rtsWithPlayer`.
+  - A computer seat's foe is the **nearest hostile seat by start** (`_rtsAIFoe`). When that foe is
+    out, the brain's waypoints are rebuilt toward the next.
+  - An extra base goes beside its partner, on the ring, on the flank away from the inlet, with a
+    road to its partner and a home ore field. None of that rolls the RNG, so the default battle is
+    unchanged.
+  - Anything per seat loops over `G.order`. Production, power, supers and the base-centre cache
+    once named `'player'` and `'enemy'` and silently skipped a third seat.
+  - A seat is out when its last building falls. The player wins when no hostile seat is left, and
+    loses when their own base is gone, whatever an ally still holds.
+  - The extra seats' sprites are baked only for a battle that has them (`_rtsSpritesFor`).

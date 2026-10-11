@@ -17,7 +17,7 @@ function _rtsRadarOrder(mine, w, attackMove) {
   if (mapped) {
     for (i = 0; i < G.ents.length; i++) {
       var o = G.ents[i];
-      if (o.dead || o.inside || o.side === 'player') continue;
+      if (o.dead || o.inside || !_rtsHostile(o.side, 'player')) continue;
       if (o.type === 'struct') {
         var sd = rtsStructDef(o.def);
         if (tx >= o.tx && tx < o.tx + sd.w && tz >= o.tz && tz < o.tz + sd.h) { tgt = o; break; }

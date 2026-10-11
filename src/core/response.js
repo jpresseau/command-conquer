@@ -166,7 +166,7 @@ function _rtsMission(e) {
 function _rtsCanRetaliate(tgt, from) {
   if (!from || !from.side) return false;                    /* no source, no retaliation */
   if (tgt.dead || tgt.type !== 'unit') return false;
-  if (from.side === tgt.side) return false;                 /* never against an ally */
+  if (!_rtsHostile(from.side, tgt.side)) return false;      /* never against an ally */
   if (!_rtsMission(tgt).retaliate) return false;            /* "If the mission precludes it" */
   var d = rtsUnitDef(tgt.def);
   if (!d || !d.weapon || d.carpets) return false;         /* a bomber flies on: core/bomber.js */

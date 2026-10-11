@@ -154,7 +154,7 @@ function _rtsActionAt(mx, my) {
      building it can take, a thief at a Refinery, a loaded transport's drop. A Repair Truck over
      an enemy tank was offered the reticle and given a drive onto its guns. A drone over an enemy
      unit shadows it, which is a move, not an attack. */
-  if (tgt && tgt.side === 'enemy') {
+  if (tgt && _rtsHostile(tgt.side, 'player')) {
     var shadow = false, asked = {};
     for (i = 0; i < mine.length; i++) {
       var sd0 = rtsUnitDef(mine[i].def) || {};
@@ -350,6 +350,8 @@ function _rtsRadarLit() {
   var PS = G.sides.player;
   return PS.powerMade >= PS.powerUsed;
 }
+/* each seat's dot on the radar: the player blue, an ally green, the foes red and amber */
+var RTS_MINI_COL = { player: '#5ea8ff', ally: '#5fd88a', enemy: '#ff6a52', enemy2: '#ffae4a' };
 function _rtsDrawMini() {
   var G = window._rtsG, mini = document.getElementById('rtsMini');
   if (!mini) return;
@@ -408,7 +410,7 @@ function _rtsDrawMini() {
   for (i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (e.dead || !_rtsEntSeen(e)) continue;
-    g.fillStyle = e.side === 'player' ? '#5ea8ff' : '#ff6a52';
+    g.fillStyle = RTS_MINI_COL[e.side] || '#ff6a52';
     if (e.type === 'struct') {
       var d = rtsStructDef(e.def);
       var ico = (typeof _rtsRadarIcon === 'function') ? _rtsRadarIcon(e.def, e.side) : null;

@@ -39,7 +39,9 @@ function rtsSetArmySide(v) {
    because a mirror match is the one arrangement that makes the whole split pointless. */
 function rtsHouseSide(house) {
   var mine = rtsArmySide();
-  return house === 'player' ? mine : (mine === 'allied' ? 'soviet' : 'allied');
+  /* a seat on the player's team fields the player's army (rules/skirmish.js RTS_SEATS) */
+  var S = typeof RTS_SEATS !== 'undefined' && RTS_SEATS[house];
+  return (S ? S.team === 0 : house === 'player') ? mine : (mine === 'allied' ? 'soviet' : 'allied');
 }
 
 /* Armour class per thing, used with a weapon's `verses` table above. */

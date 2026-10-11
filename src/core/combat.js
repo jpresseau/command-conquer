@@ -10,13 +10,15 @@ function _rtsRangeTo(a, b) {
   if (b.type === 'struct') { var sd = rtsStructDef(b.def); d -= Math.min(sd.w, sd.h) * RTS_TILE * 0.45; }
   return Math.max(0, d);
 }
-function _rtsEnemyOf(side) { return side === 'player' ? 'enemy' : 'player'; }
+/* the one seat a side fights, where a single answer is wanted; hostility itself is _rtsHostile */
+function _rtsEnemyOf(side) { return _rtsAIFoe(side); }
 /* Base centres are needed once per candidate but cost a pass over every structure, so they
    are cached and refreshed on the visibility clock rather than recomputed per lookup. */
 function _rtsZoneCache() {
   var G = window._rtsG;
   if (!G.zc || G.t - G.zcT > 0.5) {
-    G.zc = { player:_rtsBaseCentre('player'), enemy:_rtsBaseCentre('enemy') };
+    G.zc = {};
+    G.order.forEach(function (k) { G.zc[k] = _rtsBaseCentre(k); });   /* every seat's base */
     G.zcT = G.t;
   }
   return G.zc;
@@ -91,14 +93,14 @@ function _rtsEvalObject(e, o, dist, w, force) {
 function _rtsCloakAI(e, dt, d) {
   if (!d || !d.cloak) return;
   if (e.decloak > 0) e.decloak -= dt;
-  var G = window._rtsG, foe = _rtsEnemyOf(e.side), found = 0;
+  var G = window._rtsG, found = 0;
   /* Bucketed on the widest detection radius in the roster rather than on RTS_SUB_DETECT: the
      radius that matters here belongs to the OBSERVER, not to the submarine, so a scan narrowed
      to the default would stop a Destroyer noticing anything from its own longer reach. */
   var list = _rtsSpNear(e.x, e.z, _rtsSpDetectMax()) || G.ents;
   for (var i = 0; i < list.length; i++) {
     var o = list[i];
-    if (o.dead || o.side !== foe || o.inside) continue;
+    if (o.dead || !_rtsHostile(o.side, e.side) || o.inside) continue;
     if (o.type === 'struct' && o.building) continue;
     var od = (o.type === 'struct' ? rtsStructDef(o.def) : rtsUnitDef(o.def)) || {};
     var r = od.detects || RTS_SUB_DETECT;
@@ -132,7 +134,7 @@ function _rtsGunEngages(w, o) {
   return _rtsWeaponReaches(w, o);
 }
 function _rtsFindTarget(e, range, w) {
-  var G = window._rtsG, foe = _rtsEnemyOf(e.side), best = null, bv = 0;
+  var G = window._rtsG, best = null, bv = 0;
   /* in fog nothing looks further (core/skyplay.js) - except at what a Spotter of ours sees, which
      is found at full reach (core/spotter.js); so the search spans the full reach, and the fog's
      cap is asked per candidate */
@@ -147,7 +149,7 @@ function _rtsFindTarget(e, range, w) {
   var gs = w ? null : _rtsGuns(e);
   for (var i = 0; i < list.length; i++) {
     var o = list[i];
-    if (o.dead || o.side !== foe || o.inside) continue;
+    if (o.dead || !_rtsHostile(o.side, e.side) || o.inside) continue;
     /* You cannot shoot what is under water. The same flag that hides a submarine from the
        player's screen hides it from the opponent's target acquisition - see _rtsCloakAI. */
     if (o.hidden) continue;
@@ -277,7 +279,7 @@ function _rtsFire(e, tgt, w) {
      a future order that parks an ally in `target` cannot quietly become gunfire. Nothing in the
      game fires on its own side on purpose: the Flame Tower's death blast does hurt friends, and
      it goes through _rtsDamage rather than through here. */
-  if (tgt && tgt.side === e.side) return;
+  if (tgt && !_rtsHostile(tgt.side, e.side)) return;
   if (!_rtsWeaponReaches(w, tgt)) return;
   if (w.carpet) return;                           /* a bomber's load goes in one run: core/bomber.js */
   /* AIRCRAFT.CPP spends a round per shot and the aircraft is out of the fight when the rack is
@@ -305,7 +307,7 @@ function _rtsFire(e, tgt, w) {
   var m = _rtsFireCoord(e, w);
   /* "If a projectile was fired from a unit that is hidden in the darkness, reveal that unit
      and a little area around it." The muzzle flash gives away the shooter. */
-  if (e.side !== 'player' && !_rtsVisible(_rtsTX(e.x), _rtsTX(e.z))) e.spot = RTS_MUZZLE_SPOT;
+  if (!_rtsWithPlayer(e.side) && !_rtsVisible(_rtsTX(e.x), _rtsTX(e.z))) e.spot = RTS_MUZZLE_SPOT;
   /* "A cloaked object that fires will decloak." It has to surface to shoot, and it stays up
      afterwards for RTS_SUB_SURFACE seconds - the window in which a submarine can be answered.
      Set at the one place every route to a shot passes through, so there is no way to fire from

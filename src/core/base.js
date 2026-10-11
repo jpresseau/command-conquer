@@ -123,7 +123,17 @@ function _rtsNewGame(seed, diff, spec) {
   /* the human at 'player', the computer at 'enemy' with its brain; core/seats.js */
   G.sides.player.team = 0; G.sides.player.ctl = 'human';
   G.sides.enemy.team = 1; G.sides.enemy.ctl = 'ai'; G.sides.enemy.ai = _rtsBrainNew();
+  /* the extra computer seats the setup asks for - an ally, a second foe (rules/skirmish.js), each
+     with its own brain and the battle's difficulty; ticked after the two that always play */
+  var extra = RTS_SKIRMISH.foes[sk.foes].extra;
+  extra.forEach(function (k) {
+    var S = G.sides[k] = _rtsSideNew(k);
+    S.credits = G.sides.enemy.credits; S.team = RTS_SEATS[k].team;
+    G.order.push(k);
+  });
   _rtsBrainLink(G);
+  window._rtsG = G;
+  extra.forEach(function (k) { _rtsSeatToAI(k, G.diff); });
   window._rtsG = G;
   /* AttackDelay: how long you get before the first wave, stretched on the easy setting. */
   G.ai.next = RTS_WAVE_FIRST * _rtsBias('enemy').build;
@@ -144,6 +154,7 @@ function _rtsNewGame(seed, diff, spec) {
   /* The two starts are rolled BEFORE anything else is laid down, because the ore, the roads,
      the connectivity fill and the team waypoints are all expressed relative to them. */
   G.starts = _rtsPickStarts(rnd);
+  _rtsExtraStarts(G.starts, extra, G.seed);
   var fields = _rtsOreFields(G.starts);
   for (var f = 0; f < fields.length; f++) {
     var cx = fields[f][0], cz = fields[f][1], rad = fields[f][2], isGem = fields[f][3];
@@ -180,6 +191,9 @@ function _rtsNewGame(seed, diff, spec) {
      way; the opening layout was the one that had not been told. */
   _rtsLayBase(G.starts.enemy, G.starts.player, _rtsAIOpening('enemy'), 'enemy');
   if (pAI) _rtsSeatToAI('player', spec.player.diff || G.diff);
+  extra.forEach(function (k) {
+    _rtsLayBase(G.starts[k], G.starts[_rtsAIFoe(k)], _rtsAIOpening(k), k);
+  });
 
   /* Density LAST. Terrain generation and the two bases both erase ore, and a cell's level is
      a function of how many neighbours still have some - so running the adjust before those
@@ -192,7 +206,7 @@ function _rtsNewGame(seed, diff, spec) {
   _rtsTrigInit(G);
   _rtsCrateInit(G);           /* after the map is finished: a crate needs clear ground */
 
-  _rtsRecalcPower('player'); _rtsRecalcPower('enemy');
+  G.order.forEach(function (k) { _rtsRecalcPower(k); });
 
   /* THE BAKED GROUND BELONGS TO THIS MAP, and until now that held only by call order.
      _rtsBakeTerrain runs inside _rtsRInit and rtsOpen happens to call _rtsNewGame first, so
