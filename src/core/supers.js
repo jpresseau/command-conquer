@@ -45,7 +45,7 @@ function _rtsSuperHint(sup) {
   return (typeof _rtsTouchUI === 'function' && _rtsTouchUI()) ? h.replace(/\bclick\b/g, 'tap') : h;
 }
 function _rtsSupersTick(dt) {
-  var G = window._rtsG, sides = ['player', 'enemy'], k;
+  var G = window._rtsG, sides = G.order, k;
   for (var s = 0; s < sides.length; s++) {
     var side = sides[s], S = G.sides[side];
     if (!S) continue;
@@ -307,7 +307,7 @@ function _rtsVisTick(dt) {
   G.vis.fill(0);
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.dead || e.side !== 'player') continue;
+    if (e.dead || !_rtsWithPlayer(e.side)) continue;
     var def = e.type === 'struct' ? rtsStructDef(e.def) : rtsUnitDef(e.def);
     if (!def) continue;
     /* Standing high is worth a wider disc - see RTS_ELEV_SIGHT. _rtsSightFrom clamps to
@@ -335,10 +335,10 @@ function _rtsVisible(tx, tz) {
    fxwake3d.js, hurt3d.js, tread3d.js): the player's always, the enemy's only while the entity
    itself is seen. The unit pass dissolved a jammed hull and those passes went on drawing round it,
    so a dust plume and a smoke column tracked the hidden column across the map. */
-function _rtsEffectsSeen(e) { return e.side === 'player' || _rtsEntSeen(e); }
+function _rtsEffectsSeen(e) { return _rtsWithPlayer(e.side) || _rtsEntSeen(e); }
 function _rtsEntSeen(e) {
   if (!e) return false;
-  if (e.side === 'player') return true;
+  if (_rtsWithPlayer(e.side)) return true;
   /* A SUBMERGED BOAT IS NOT SEEN, however well lit the water over it is. This sits ABOVE the
      muzzle-flash reveal below and below the "it is mine" line above, and both positions are
      deliberate: your own submarines stay on your screen (drawn awash - see the draw list), and

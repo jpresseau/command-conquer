@@ -75,7 +75,7 @@ function _rtsBoltTarget(c) {
   var G = window._rtsG, best = null, bk = 1e9;
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.dead || e.inside || e.side === c.side || !e.side || e.hidden) continue;
+    if (e.dead || e.inside || !_rtsHostile(e.side, c.side) || e.hidden) continue;
     var d = Math.hypot(e.x - c.x, e.z - c.z);
     if (d > c.r) continue;
     var kind = e.type === 'struct' ? 'struct' : (rtsUnitDef(e.def) || {}).kind;

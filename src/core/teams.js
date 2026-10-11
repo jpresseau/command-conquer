@@ -40,7 +40,7 @@ function _rtsTeamTarget(t, quarry, near) {
   var best = null, bv = 0, w = _rtsPickWeapon(lead, lead);
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
-    if (o.dead || o.side !== _rtsAIFoe()) continue;
+    if (o.dead || !_rtsHostile(o.side, _rtsAIOn)) continue;
     if (o.type === 'unit' && _rtsJamHides(o, _rtsAIOn, lead.x, lead.z)) continue;   /* jammed: core/jammer.js */
     if (!_rtsQuarryMatch(o, quarry)) continue;
     /* ATT_WAYPT is "clear out what is HERE", so candidates outside the waypoint's radius

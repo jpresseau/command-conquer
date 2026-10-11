@@ -106,7 +106,7 @@ function _rtsRInit(cv) {
     zi: RTS_ZOOM_DEF,            /* index into RTS_ZOOMS */
     cell: RTS_ZOOMS[RTS_ZOOM_DEF],
     dist: 0,                     /* derived: world height visible, kept for the UI + minimap */
-    spr: _rtsSprites(),
+    spr: _rtsSpritesFor(window._rtsG && window._rtsG.order),   /* and any extra seat's colours */
     ghost: null, ghostKey: null,
     terrain: null
   };

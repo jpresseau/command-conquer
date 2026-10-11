@@ -68,7 +68,7 @@ function _rtsOrderUnloadAt(t, x, z) {
    to pick which side to stand on, and that is only right once it is actually moving. */
 function _rtsOrderCapture(u, b) {
   if (!u || u.type !== 'unit' || !b || b.type !== 'struct') return false;
-  if (b.dead || b.selling || b.side === u.side || !rtsCapturable(b.def)) return false;
+  if (b.dead || b.selling || !_rtsHostile(b.side, u.side) || !rtsCapturable(b.def)) return false;
   u.order = 'capture'; u.target = b; u.hstate = null;
   u.path = null; u.goal = null; u.susp = null;
   return true;

@@ -21,16 +21,35 @@
    of G) never sees them: each brain is reachable by one path only, which the encoder needs. */
 var _rtsAIOn = 'enemy';
 
-/* The seat this one fights: the first seat in play on another team. Two seats: the other one. */
+/* The seat this one fights: the NEAREST seat in play on another team, by start - so with two foes
+   and an ally each brain takes the base across from its own. Two seats: the other one. */
 function _rtsAIFoe(side) {
   var G = window._rtsG, me = side || _rtsAIOn, S = G && G.sides && G.sides[me];
   if (S && G.order) {
+    var best = null, bd = 1e9, P = G.starts && G.starts[me];
     for (var i = 0; i < G.order.length; i++) {
       var k = G.order[i], O = G.sides[k];
-      if (k !== me && O && O.team !== S.team && !O.lost) return k;
+      if (k === me || !O || O.team === S.team || O.lost) continue;
+      var Q = G.starts && G.starts[k], d = P && Q ? Math.hypot(P.tx - Q.tx, P.tz - Q.tz) : i;
+      if (d < bd) { bd = d; best = k; }
     }
+    if (best) return best;
   }
   return me === 'player' ? 'enemy' : 'player';
+}
+/* WHO FIGHTS WHOM: two sides are hostile when they are on different teams. Every "is that an enemy"
+   test asks this rather than "is that not mine", which with an ally on the field would have the
+   ally's guns turned on the player. Unknown or missing sides are hostile to nobody. */
+function _rtsHostile(a, b) {
+  if (a === b || !a || !b) return false;
+  var S = window._rtsG.sides, A = S[a], B = S[b];
+  return !!(A && B) && A.team !== B.team;
+}
+/* On the human's team: what the player sees by, and never shoots at. */
+function _rtsWithPlayer(side) {
+  if (side === 'player') return true;
+  var S = window._rtsG && window._rtsG.sides, A = S && S[side];
+  return !!(A && S.player) && A.team === S.player.team;
 }
 /* Run fn with `side`'s brain thinking, and put the previous one back whatever happens. */
 function _rtsAIAs(side, fn) {

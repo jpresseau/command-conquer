@@ -39,6 +39,28 @@ function _rtsPickStarts(rnd) {
   }
   return { player:taken[0], enemy:taken[1] };
 }
+/* THE EXTRA SEATS' STARTS: each beside the seat it sides with (RTS_SEATS.near), on the ring next
+   to it, on the flank AWAY from the inlet - so the water is never between an ally and its partner
+   and the land route between them stays whole. Rolls nothing: a battle with no extra seat draws
+   exactly the numbers it always did. */
+function _rtsExtraStarts(S, extras, seed) {
+  if (!extras || !extras.length) return;
+  var p = S.player, e = S.enemy, mid = RTS_N / 2;
+  var dx = e.tx - p.tx, dz = e.tz - p.tz, L = Math.hypot(dx, dz) || 1, px = -dz / L, pz = dx / L;
+  var sg = ((seed >>> 3) & 1) ? 1 : -1;              /* the inlet's flank, as core/terrain.js rolls it */
+  var cand = _rtsStartCandidates().filter(function (c) {
+    for (var k in S) if (Math.hypot(c.tx - S[k].tx, c.tz - S[k].tz) < 4) return false;
+    return ((c.tx - mid) * px + (c.tz - mid) * pz) * sg <= 0;
+  });
+  extras.forEach(function (k) {
+    var near = S[RTS_SEATS[k].near], best = -1, bd = 1e9;
+    for (var i = 0; i < cand.length; i++) {
+      var d = Math.hypot(cand[i].tx - near.tx, cand[i].tz - near.tz);
+      if (d < bd) { bd = d; best = i; }
+    }
+    if (best >= 0) S[k] = cand.splice(best, 1)[0];
+  });
+}
 /* The ore layout is expressed RELATIVE to the two starts rather than as fixed cells: a home
    field beside each base, matched pairs out along the line between them, and the gems in
    contested ground at the midpoint. Mirroring it about the midpoint is what keeps the map
@@ -64,7 +86,17 @@ function _rtsOreFields(S) {
     /* gems: small, unmirrored pair straddling the midpoint, in the most contested ground */
     [Math.round(mx + px * 14), Math.round(mz + pz * 14), 3, 1],
     [Math.round(mx - px * 14), Math.round(mz - pz * 14), 3, 1]
-  ];
+  ].concat(_rtsExtraOre(S));
+}
+/* An extra seat's home field, toward the middle of the map from its base. */
+function _rtsExtraOre(S) {
+  var out = [], mid = RTS_N / 2;
+  for (var k in S) {
+    if (k === 'player' || k === 'enemy') continue;
+    var s = S[k], dx = mid - s.tx, dz = mid - s.tz, L = Math.hypot(dx, dz) || 1, ux = dx / L, uz = dz / L;
+    out.push([Math.round(s.tx + ux * 9 + uz * 7), Math.round(s.tz + uz * 9 - ux * 7), 7, 0]);
+  }
+  return out;
 }
 
 

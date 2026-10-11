@@ -79,6 +79,7 @@ function _rtsBuildWaypoints(G) {
   W.ore = _rtsWayptSnap(ore ? ore.tx : fx, ore ? ore.tz : fz);
 
   G.waypt = W;
+  if (G.ai) G.ai.wayFoe = _rtsAIFoe();         /* rebuilt when this foe is out (core/aisupers.js) */
   return W;
 }
 function _rtsWayptPos(name) {

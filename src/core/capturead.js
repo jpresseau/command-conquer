@@ -107,7 +107,7 @@ function _rtsAIWorthCapturing() {
     /* A cached target that has since died, been sold or already changed hands is not an
        answer, and waiting out the rest of the recheck on it would aim the leg at a corpse. */
     var c = G.ai.capTgt;
-    if (!c || c.dead || c.selling || c.side !== _rtsAIFoe()) { G.ai.capT = null; }
+    if (!c || c.dead || c.selling || !_rtsHostile(c.side, _rtsAIOn)) { G.ai.capT = null; }
     else return true;
   }
   G.ai.capT = G.t;

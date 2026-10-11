@@ -78,7 +78,7 @@ function _rtsMineTick(dt) {
     if (u.dead || u.type !== 'unit' || u.air || u.inside) continue;
     var hit = armed[_rtsIdx(_rtsTX(u.x), _rtsTX(u.z))];
     if (hit && (rtsUnitDef(u.def) || {}).sweeps) continue;      /* a Mine Sweeper never sets one off */
-    if (!hit || hit.side === u.side || hit.gone) continue;
+    if (!hit || !_rtsHostile(hit.side, u.side) || hit.gone) continue;
     /* A SEA MINE GOES OFF UNDER WHAT FLOATS - a hull, a hovercraft - and a land mine under what
        walks or drives, the hovercraft again. A tank crossing a flat the tide has dried, or a
        bridge, is not afloat over the mine under it; a hull is never over a land mine at all. */

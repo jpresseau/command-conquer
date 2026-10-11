@@ -745,7 +745,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">fee1772 · 2026-10-10</div>
+  <div id="rtsBuild" title="build">25584f1 · 2026-10-11</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -774,7 +774,9 @@ var RTS_N = 128;       /* DEFINES.H MAP_CELL_W. This was 112, chosen by eye with
    are is a choice made on the title screen. rtsArmyName answers it; see rtsHouseSide. */
 var RTS_SIDES = {
   player: { key:'player', color:0x4a8ff0, glow:0xa8d4ff },
-  enemy:  { key:'enemy',  color:0xe0503c, glow:0xffb49f }
+  enemy:  { key:'enemy',  color:0xe0503c, glow:0xffb49f },
+  ally:   { key:'ally',   color:0x4ad07a, glow:0xa8f0c0 },
+  enemy2: { key:'enemy2', color:0xf0a040, glow:0xffd49f }
 };
 /* "Compact" / "Dominion" for either house, following the army the player picked: the short,
    adjectival form - "Compact command", "the Dominion forces". rtsArmyTitle is the full name. */
@@ -1025,9 +1027,22 @@ var RTS_N_DEFAULT = 128;
 var RTS_SKIRMISH = {
   size:  { small: { name: 'SMALL', n: 96 }, standard: { name: 'STANDARD', n: 128 }, large: { name: 'LARGE', n: 160 } },
   water: { inland: { name: 'INLAND', r: 0, off: 0 }, coast: { name: 'COAST', r: 6.2, off: 16 }, lagoon: { name: 'LAGOON', r: 10, off: 20 } },
-  money: { standard: { name: '3,000', credits: 3000 }, rich: { name: '6,000', credits: 6000 }, flush: { name: '10,000', credits: 10000 } }
+  money: { standard: { name: '3,000', credits: 3000 }, rich: { name: '6,000', credits: 6000 }, flush: { name: '10,000', credits: 10000 } },
+  /* who else is on the field: the computer seats beyond the one opponent (RTS_SEATS) */
+  foes:  { one: { name: '1 FOE', extra: [] }, two: { name: '2 FOES', extra: ['enemy2'] },
+           ally: { name: 'FOE + ALLY', extra: ['ally'] }, team: { name: '2 V 2', extra: ['ally', 'enemy2'] } }
 };
-var RTS_SKIRMISH_DEFAULT = { size: 'standard', water: 'coast', money: 'standard' };
+var RTS_SKIRMISH_DEFAULT = { size: 'standard', water: 'coast', money: 'standard', foes: 'one' };
+
+/* THE SEATS. A seat's team is fixed by its name, so an ally is always the player's army and on the
+   player's team, and a second opponent is the first opponent's: everything that has to know whose
+   side a seat is on before a battle exists (the army it builds, the colours it is baked in) reads
+   it here. `near` is the seat an extra base is put beside. */
+var RTS_SEATS = {
+  player: { team: 0 }, enemy: { team: 1 },
+  ally:   { team: 0, near: 'player', name: 'Ally' },
+  enemy2: { team: 1, near: 'enemy',  name: 'Second foe' }
+};
 
 /* A whole, valid choice from any partial or stale one: an unknown key falls back to the default. */
 function _rtsSkirmishOf(s) {
@@ -2422,7 +2437,9 @@ function rtsSetArmySide(v) {
    because a mirror match is the one arrangement that makes the whole split pointless. */
 function rtsHouseSide(house) {
   var mine = rtsArmySide();
-  return house === 'player' ? mine : (mine === 'allied' ? 'soviet' : 'allied');
+  /* a seat on the player's team fields the player's army (rules/skirmish.js RTS_SEATS) */
+  var S = typeof RTS_SEATS !== 'undefined' && RTS_SEATS[house];
+  return (S ? S.team === 0 : house === 'player') ? mine : (mine === 'allied' ? 'soviet' : 'allied');
 }
 
 /* Armour class per thing, used with a weapon's `verses` table above. */
@@ -4314,7 +4331,10 @@ var RTS_PAL = {
   spark: ['#bfe6ff', '#7fc4ff', '#e8f6ff'],
   team: {
     player: ['#2f5fa8', '#3f7fd0', '#1e3f74', '#69a9ee'],
-    enemy:  ['#a83228', '#d04438', '#741e18', '#ec7663']
+    enemy:  ['#a83228', '#d04438', '#741e18', '#ec7663'],
+    /* the extra seats (rules/skirmish.js): an ally in green, a second foe in amber */
+    ally:   ['#2f8a4a', '#3fae5e', '#1e5a30', '#6fd08a'],
+    enemy2: ['#b0661c', '#dc8428', '#744010', '#f2ae62']
   },
   /* Vehicle bodies are NOT the team colour, and this is taken straight off the reference art
      rather than guessed: in the sidebar cameos for both factions every tank, truck and jeep is
@@ -4333,7 +4353,9 @@ var RTS_PAL = {
      khaki - so a glance at a distant column tells you whose it is even before the trim reads. */
   veh: {
     player: ['#7e8672', '#949c86', '#5a6151', '#a9b19a'],
-    enemy:  ['#8a7d52', '#a09368', '#635939', '#b5a97c']
+    enemy:  ['#8a7d52', '#a09368', '#635939', '#b5a97c'],
+    ally:   ['#7e8672', '#949c86', '#5a6151', '#a9b19a'],
+    enemy2: ['#8a7d52', '#a09368', '#635939', '#b5a97c']
   },
   /* Structures are NOT grey. In the reference each faction's buildings are strongly
      coloured - steel blue walls under maroon roofs on one side, red on the other - and that
@@ -4351,7 +4373,9 @@ var RTS_PAL = {
      is limited and high-contrast: red, grey, white, mid-green. Nothing in it is muddy. */
   bld: {
     player: { wall:'#7d8794', roof:'#3f6ea8', trim:'#c8d2dc', dark:'#2b3d52' },
-    enemy:  { wall:'#8a8f94', roof:'#b8322a', trim:'#d8ccc8', dark:'#4a1f1a' }
+    enemy:  { wall:'#8a8f94', roof:'#b8322a', trim:'#d8ccc8', dark:'#4a1f1a' },
+    ally:   { wall:'#7d8794', roof:'#3a8a4a', trim:'#c8d2dc', dark:'#1f3d28' },
+    enemy2: { wall:'#8a8f94', roof:'#c47a22', trim:'#d8ccc8', dark:'#4a2e12' }
   },
   /* Building MATERIALS, read off the structure cameos. A Red Alert base is not one colour: the
      power plants are red brick with brick chimneys, the Allied barracks are sand-coloured Nissen
@@ -8658,34 +8682,44 @@ function _rtsSprites() {
   S.crate = _sprCrate();
   S.fire = _sprFire();
   S.corpse = _sprCorpse();
-  ['player', 'enemy'].forEach(function (side) {
-    S.bld[side] = {}; S.unit[side] = {};
-    RTS_STRUCTS.forEach(function (d) { S.bld[side][d.key] = _sprBuilding(d.key, side); });
-    S.hull = S.hull || {}; S.turret = S.turret || {};
-    S.hull[side] = {}; S.turret[side] = {};
-    RTS_UNITS.forEach(function (d) {
-      if (RTS_TURRETED[d.key]) {
-        /* A turreted unit is only ever DRAWN as hull + turret, so baking the combined body as
-           well was pure waste - 32 canvases per unit per side that nothing referenced. `unit`
-           aliases the hull instead of duplicating it. */
-        S.hull[side][d.key] = _sprUnit(d.key, side, false, 'hull');
-        S.turret[side][d.key] = _sprUnit(d.key, side, false, 'turret');
-        S.unit[side][d.key] = S.hull[side][d.key];
-      } else {
-        S.unit[side][d.key] = _sprUnit(d.key, side);
-      }
-    });
-    S.prone[side] = {};
-    RTS_UNITS.forEach(function (d) {
-      if (d.kind === 'infantry') S.prone[side][d.key] = _sprUnit(d.key, side, true);
-    });
-  });
+  ['player', 'enemy'].forEach(function (side) { _sprBakeSide(S, side); });
   /* One flame set, referenced twice. `_sprFx` cannot call `_sprFire()` itself without
      baking a second identical set of canvases - same pixels, twice the memory, and two
      things that are supposed to be the same fire drifting apart the moment either is
      retuned. Assigned here, where both already exist. */
   S.fx.fire = S.fire;
   _RTS_SPR = S;
+  return S;
+}
+
+/* One seat's buildings, units and prone men in its own colours. The two that always play are baked
+   with the sheet; an ally's or a second foe's only when a battle has one (_rtsSpritesFor), so the
+   title screen pays nothing for seats a battle may never use. */
+function _sprBakeSide(S, side) {
+  S.bld[side] = {}; S.unit[side] = {};
+  RTS_STRUCTS.forEach(function (d) { S.bld[side][d.key] = _sprBuilding(d.key, side); });
+  S.hull = S.hull || {}; S.turret = S.turret || {};
+  S.hull[side] = {}; S.turret[side] = {};
+  RTS_UNITS.forEach(function (d) {
+    if (RTS_TURRETED[d.key]) {
+      /* A turreted unit is only ever DRAWN as hull + turret, so baking the combined body as
+         well was pure waste - 32 canvases per unit per side that nothing referenced. `unit`
+         aliases the hull instead of duplicating it. */
+      S.hull[side][d.key] = _sprUnit(d.key, side, false, 'hull');
+      S.turret[side][d.key] = _sprUnit(d.key, side, false, 'turret');
+      S.unit[side][d.key] = S.hull[side][d.key];
+    } else {
+      S.unit[side][d.key] = _sprUnit(d.key, side);
+    }
+  });
+  S.prone[side] = {};
+  RTS_UNITS.forEach(function (d) {
+    if (d.kind === 'infantry') S.prone[side][d.key] = _sprUnit(d.key, side, true);
+  });
+}
+function _rtsSpritesFor(sides) {
+  var S = _rtsSprites();
+  (sides || []).forEach(function (side) { if (!S.bld[side]) _sprBakeSide(S, side); });
   return S;
 }
 </script>
@@ -11361,8 +11395,8 @@ function _rtsGenTerrain(G, rnd, starts) {
      because _clearStart bulldozes the real ones afterwards - but it meant every map carried
      two unexplained clearings, and the ore and terrain kept away from the wrong places. */
   function nearBase(x, z) {
-    return Math.hypot(x - starts.player.tx, z - starts.player.tz) < 15 ||
-           Math.hypot(x - starts.enemy.tx,  z - starts.enemy.tz)  < 15;
+    for (var k in starts) if (Math.hypot(x - starts[k].tx, z - starts[k].tz) < 15) return true;
+    return false;
   }
   function free(x, z) {
     return _rtsInB(x, z) && G.scrap[_rtsIdx(x, z)] <= 0 && !nearBase(x, z);
@@ -11436,6 +11470,13 @@ function _rtsGenTerrain(G, rnd, starts) {
   _rtsCarveRoad(G, _sp.tx, _sp.tz, _se.tx, _se.tz, rnd);      /* the main route, base to base */
   _rtsCarveRoad(G, _sp.tx, _sp.tz, _b1[0], _b1[1], rnd);      /* one branch out to each flank */
   _rtsCarveRoad(G, _se.tx, _se.tz, _b2[0], _b2[1], rnd);
+  /* an extra seat's base is cleared and joined by road to the seat it sides with (scenario.js) */
+  for (var _xk in starts) {
+    if (_xk === 'player' || _xk === 'enemy') continue;
+    var _xs = starts[_xk], _xn = starts[RTS_SEATS[_xk].near];
+    _clearStart(_xs);
+    _rtsCarveRoad(G, _xs.tx, _xs.tz, _xn.tx, _xn.tz, rnd);
+  }
 
   /* --- the inlet ---
      A COAST EACH, and one body of water rather than two ponds.
@@ -11492,6 +11533,7 @@ function _rtsGenTerrain(G, rnd, starts) {
          outside the base rather than in the middle of it. */
       if (Math.hypot(tx - _sp.tx, tz - _sp.tz) < 7.5) continue;
       if (Math.hypot(tx - _se.tx, tz - _se.tz) < 7.5) continue;
+      if (_rtsNearExtra(starts, tx, tz, 7.5)) continue;
       var _wob = nz(tx, tz, 11, seed + 31) * 5 - 2.5;
       var _sd = _segD(tx, tz, _ia, _ib) + _wob;
       if (_sd < SEA_R) set(tx, tz, RTS_T_WATER, true);
@@ -11744,6 +11786,11 @@ function _rtsGenTerrain(G, rnd, starts) {
 }
 
 /* A wandering 3-tile-wide track between two points. Clears obstacles as it goes. */
+/* Within r of an extra seat's start (scenario.js _rtsExtraStarts). */
+function _rtsNearExtra(starts, tx, tz, r) {
+  for (var k in starts) if (k !== 'player' && k !== 'enemy' && Math.hypot(tx - starts[k].tx, tz - starts[k].tz) < r) return true;
+  return false;
+}
 function _rtsCarveRoad(G, x0, z0, x1, z1, rnd, force) {
   var steps = Math.ceil(Math.hypot(x1 - x0, z1 - z0)) * 2;
   var sway = force ? 0 : (rnd() - 0.5) * 26;
@@ -11970,6 +12017,28 @@ function _rtsPickStarts(rnd) {
   }
   return { player:taken[0], enemy:taken[1] };
 }
+/* THE EXTRA SEATS' STARTS: each beside the seat it sides with (RTS_SEATS.near), on the ring next
+   to it, on the flank AWAY from the inlet - so the water is never between an ally and its partner
+   and the land route between them stays whole. Rolls nothing: a battle with no extra seat draws
+   exactly the numbers it always did. */
+function _rtsExtraStarts(S, extras, seed) {
+  if (!extras || !extras.length) return;
+  var p = S.player, e = S.enemy, mid = RTS_N / 2;
+  var dx = e.tx - p.tx, dz = e.tz - p.tz, L = Math.hypot(dx, dz) || 1, px = -dz / L, pz = dx / L;
+  var sg = ((seed >>> 3) & 1) ? 1 : -1;              /* the inlet's flank, as core/terrain.js rolls it */
+  var cand = _rtsStartCandidates().filter(function (c) {
+    for (var k in S) if (Math.hypot(c.tx - S[k].tx, c.tz - S[k].tz) < 4) return false;
+    return ((c.tx - mid) * px + (c.tz - mid) * pz) * sg <= 0;
+  });
+  extras.forEach(function (k) {
+    var near = S[RTS_SEATS[k].near], best = -1, bd = 1e9;
+    for (var i = 0; i < cand.length; i++) {
+      var d = Math.hypot(cand[i].tx - near.tx, cand[i].tz - near.tz);
+      if (d < bd) { bd = d; best = i; }
+    }
+    if (best >= 0) S[k] = cand.splice(best, 1)[0];
+  });
+}
 /* The ore layout is expressed RELATIVE to the two starts rather than as fixed cells: a home
    field beside each base, matched pairs out along the line between them, and the gems in
    contested ground at the midpoint. Mirroring it about the midpoint is what keeps the map
@@ -11995,7 +12064,17 @@ function _rtsOreFields(S) {
     /* gems: small, unmirrored pair straddling the midpoint, in the most contested ground */
     [Math.round(mx + px * 14), Math.round(mz + pz * 14), 3, 1],
     [Math.round(mx - px * 14), Math.round(mz - pz * 14), 3, 1]
-  ];
+  ].concat(_rtsExtraOre(S));
+}
+/* An extra seat's home field, toward the middle of the map from its base. */
+function _rtsExtraOre(S) {
+  var out = [], mid = RTS_N / 2;
+  for (var k in S) {
+    if (k === 'player' || k === 'enemy') continue;
+    var s = S[k], dx = mid - s.tx, dz = mid - s.tz, L = Math.hypot(dx, dz) || 1, ux = dx / L, uz = dz / L;
+    out.push([Math.round(s.tx + ux * 9 + uz * 7), Math.round(s.tz + uz * 9 - ux * 7), 7, 0]);
+  }
+  return out;
 }
 
 
@@ -12075,16 +12154,35 @@ function _rtsLayBase(start, foe, list, side) {
    of G) never sees them: each brain is reachable by one path only, which the encoder needs. */
 var _rtsAIOn = 'enemy';
 
-/* The seat this one fights: the first seat in play on another team. Two seats: the other one. */
+/* The seat this one fights: the NEAREST seat in play on another team, by start - so with two foes
+   and an ally each brain takes the base across from its own. Two seats: the other one. */
 function _rtsAIFoe(side) {
   var G = window._rtsG, me = side || _rtsAIOn, S = G && G.sides && G.sides[me];
   if (S && G.order) {
+    var best = null, bd = 1e9, P = G.starts && G.starts[me];
     for (var i = 0; i < G.order.length; i++) {
       var k = G.order[i], O = G.sides[k];
-      if (k !== me && O && O.team !== S.team && !O.lost) return k;
+      if (k === me || !O || O.team === S.team || O.lost) continue;
+      var Q = G.starts && G.starts[k], d = P && Q ? Math.hypot(P.tx - Q.tx, P.tz - Q.tz) : i;
+      if (d < bd) { bd = d; best = k; }
     }
+    if (best) return best;
   }
   return me === 'player' ? 'enemy' : 'player';
+}
+/* WHO FIGHTS WHOM: two sides are hostile when they are on different teams. Every "is that an enemy"
+   test asks this rather than "is that not mine", which with an ally on the field would have the
+   ally's guns turned on the player. Unknown or missing sides are hostile to nobody. */
+function _rtsHostile(a, b) {
+  if (a === b || !a || !b) return false;
+  var S = window._rtsG.sides, A = S[a], B = S[b];
+  return !!(A && B) && A.team !== B.team;
+}
+/* On the human's team: what the player sees by, and never shoots at. */
+function _rtsWithPlayer(side) {
+  if (side === 'player') return true;
+  var S = window._rtsG && window._rtsG.sides, A = S && S[side];
+  return !!(A && S.player) && A.team === S.player.team;
 }
 /* Run fn with `side`'s brain thinking, and put the previous one back whatever happens. */
 function _rtsAIAs(side, fn) {
@@ -12369,7 +12467,17 @@ function _rtsNewGame(seed, diff, spec) {
   /* the human at 'player', the computer at 'enemy' with its brain; core/seats.js */
   G.sides.player.team = 0; G.sides.player.ctl = 'human';
   G.sides.enemy.team = 1; G.sides.enemy.ctl = 'ai'; G.sides.enemy.ai = _rtsBrainNew();
+  /* the extra computer seats the setup asks for - an ally, a second foe (rules/skirmish.js), each
+     with its own brain and the battle's difficulty; ticked after the two that always play */
+  var extra = RTS_SKIRMISH.foes[sk.foes].extra;
+  extra.forEach(function (k) {
+    var S = G.sides[k] = _rtsSideNew(k);
+    S.credits = G.sides.enemy.credits; S.team = RTS_SEATS[k].team;
+    G.order.push(k);
+  });
   _rtsBrainLink(G);
+  window._rtsG = G;
+  extra.forEach(function (k) { _rtsSeatToAI(k, G.diff); });
   window._rtsG = G;
   /* AttackDelay: how long you get before the first wave, stretched on the easy setting. */
   G.ai.next = RTS_WAVE_FIRST * _rtsBias('enemy').build;
@@ -12390,6 +12498,7 @@ function _rtsNewGame(seed, diff, spec) {
   /* The two starts are rolled BEFORE anything else is laid down, because the ore, the roads,
      the connectivity fill and the team waypoints are all expressed relative to them. */
   G.starts = _rtsPickStarts(rnd);
+  _rtsExtraStarts(G.starts, extra, G.seed);
   var fields = _rtsOreFields(G.starts);
   for (var f = 0; f < fields.length; f++) {
     var cx = fields[f][0], cz = fields[f][1], rad = fields[f][2], isGem = fields[f][3];
@@ -12426,6 +12535,9 @@ function _rtsNewGame(seed, diff, spec) {
      way; the opening layout was the one that had not been told. */
   _rtsLayBase(G.starts.enemy, G.starts.player, _rtsAIOpening('enemy'), 'enemy');
   if (pAI) _rtsSeatToAI('player', spec.player.diff || G.diff);
+  extra.forEach(function (k) {
+    _rtsLayBase(G.starts[k], G.starts[_rtsAIFoe(k)], _rtsAIOpening(k), k);
+  });
 
   /* Density LAST. Terrain generation and the two bases both erase ore, and a cell's level is
      a function of how many neighbours still have some - so running the adjust before those
@@ -12438,7 +12550,7 @@ function _rtsNewGame(seed, diff, spec) {
   _rtsTrigInit(G);
   _rtsCrateInit(G);           /* after the map is finished: a crate needs clear ground */
 
-  _rtsRecalcPower('player'); _rtsRecalcPower('enemy');
+  G.order.forEach(function (k) { _rtsRecalcPower(k); });
 
   /* THE BAKED GROUND BELONGS TO THIS MAP, and until now that held only by call order.
      _rtsBakeTerrain runs inside _rtsRInit and rtsOpen happens to call _rtsNewGame first, so
@@ -12716,7 +12828,7 @@ function _rtsMineTick(dt) {
     if (u.dead || u.type !== 'unit' || u.air || u.inside) continue;
     var hit = armed[_rtsIdx(_rtsTX(u.x), _rtsTX(u.z))];
     if (hit && (rtsUnitDef(u.def) || {}).sweeps) continue;      /* a Mine Sweeper never sets one off */
-    if (!hit || hit.side === u.side || hit.gone) continue;
+    if (!hit || !_rtsHostile(hit.side, u.side) || hit.gone) continue;
     /* A SEA MINE GOES OFF UNDER WHAT FLOATS - a hull, a hovercraft - and a land mine under what
        walks or drives, the hovercraft again. A tank crossing a flat the tide has dried, or a
        bridge, is not afloat over the mine under it; a hull is never over a land mine at all. */
@@ -12778,7 +12890,7 @@ function _rtsSweepTick(dt) {
     var u = sw[i], near = null, nd = 1e9, cleared = 0;
     for (k = 0; M && k < M.length; k++) {
       var m = M[k];
-      if (m.gone || m.side === u.side) continue;
+      if (m.gone || !_rtsHostile(m.side, u.side)) continue;
       var d = Math.hypot(_rtsWX(m.tx) - u.x, _rtsWX(m.tz) - u.z) / RTS_TILE;
       if (d <= RTS_SWEEP.see) (m.seen = m.seen || {})[u.side] = 1;
       if (!(m.seen && m.seen[u.side])) continue;
@@ -13500,7 +13612,7 @@ function _rtsBoltTarget(c) {
   var G = window._rtsG, best = null, bk = 1e9;
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.dead || e.inside || e.side === c.side || !e.side || e.hidden) continue;
+    if (e.dead || e.inside || !_rtsHostile(e.side, c.side) || e.hidden) continue;
     var d = Math.hypot(e.x - c.x, e.z - c.z);
     if (d > c.r) continue;
     var kind = e.type === 'struct' ? 'struct' : (rtsUnitDef(e.def) || {}).kind;
@@ -13584,7 +13696,7 @@ function _rtsSuperHint(sup) {
   return (typeof _rtsTouchUI === 'function' && _rtsTouchUI()) ? h.replace(/\bclick\b/g, 'tap') : h;
 }
 function _rtsSupersTick(dt) {
-  var G = window._rtsG, sides = ['player', 'enemy'], k;
+  var G = window._rtsG, sides = G.order, k;
   for (var s = 0; s < sides.length; s++) {
     var side = sides[s], S = G.sides[side];
     if (!S) continue;
@@ -13846,7 +13958,7 @@ function _rtsVisTick(dt) {
   G.vis.fill(0);
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
-    if (e.dead || e.side !== 'player') continue;
+    if (e.dead || !_rtsWithPlayer(e.side)) continue;
     var def = e.type === 'struct' ? rtsStructDef(e.def) : rtsUnitDef(e.def);
     if (!def) continue;
     /* Standing high is worth a wider disc - see RTS_ELEV_SIGHT. _rtsSightFrom clamps to
@@ -13874,10 +13986,10 @@ function _rtsVisible(tx, tz) {
    fxwake3d.js, hurt3d.js, tread3d.js): the player's always, the enemy's only while the entity
    itself is seen. The unit pass dissolved a jammed hull and those passes went on drawing round it,
    so a dust plume and a smoke column tracked the hidden column across the map. */
-function _rtsEffectsSeen(e) { return e.side === 'player' || _rtsEntSeen(e); }
+function _rtsEffectsSeen(e) { return _rtsWithPlayer(e.side) || _rtsEntSeen(e); }
 function _rtsEntSeen(e) {
   if (!e) return false;
-  if (e.side === 'player') return true;
+  if (_rtsWithPlayer(e.side)) return true;
   /* A SUBMERGED BOAT IS NOT SEEN, however well lit the water over it is. This sits ABOVE the
      muzzle-flash reveal below and below the "it is mine" line above, and both positions are
      deliberate: your own submarines stay on your screen (drawn awash - see the draw list), and
@@ -14316,7 +14428,7 @@ function _rtsKill(e) {
      number labelled "units destroyed" was also counting every enemy building, so the two
      halves of the same readout were not measuring the same kind of thing. A sold building is
      not a kill either, which the loss counter above says in its own comment. */
-  if (e.side === 'enemy' && e.type === 'unit' && !e.selling && e.hurtBy === 'player') G.stats.killed++;
+  if (_rtsHostile(e.side, 'player') && e.type === 'unit' && !e.selling && e.hurtBy === 'player') G.stats.killed++;
   var si = G.sel.indexOf(e); if (si >= 0) G.sel.splice(si, 1);
   /* SIDEBAR.CPP Recalc is only called when a FACTORY is destroyed - it is an exhaustive
      sweep and the comment is explicit that it should not run for every casualty. */
@@ -15265,7 +15377,7 @@ function _rtsAirPadFor(side, u) {
 }
 function _rtsDeliverUnit(side, key) {
   var G = window._rtsG, u = rtsUnitDef(key);
-  if (G.justBuilt) G.justBuilt[side].unit = key;   /* HouseClass::JustBuiltUnit */
+  if (G.justBuilt && G.justBuilt[side]) G.justBuilt[side].unit = key;   /* HouseClass::JustBuiltUnit */
   /* A ship comes out of its shipyard and INTO THE WATER, which is the one delivery that
      cannot use the generic scan-place: every cell it would pick is land. */
   if (u.sea) {
@@ -15383,7 +15495,7 @@ function _rtsOrderUnloadAt(t, x, z) {
    to pick which side to stand on, and that is only right once it is actually moving. */
 function _rtsOrderCapture(u, b) {
   if (!u || u.type !== 'unit' || !b || b.type !== 'struct') return false;
-  if (b.dead || b.selling || b.side === u.side || !rtsCapturable(b.def)) return false;
+  if (b.dead || b.selling || !_rtsHostile(b.side, u.side) || !rtsCapturable(b.def)) return false;
   u.order = 'capture'; u.target = b; u.hstate = null;
   u.path = null; u.goal = null; u.susp = null;
   return true;
@@ -15449,13 +15561,15 @@ function _rtsRangeTo(a, b) {
   if (b.type === 'struct') { var sd = rtsStructDef(b.def); d -= Math.min(sd.w, sd.h) * RTS_TILE * 0.45; }
   return Math.max(0, d);
 }
-function _rtsEnemyOf(side) { return side === 'player' ? 'enemy' : 'player'; }
+/* the one seat a side fights, where a single answer is wanted; hostility itself is _rtsHostile */
+function _rtsEnemyOf(side) { return _rtsAIFoe(side); }
 /* Base centres are needed once per candidate but cost a pass over every structure, so they
    are cached and refreshed on the visibility clock rather than recomputed per lookup. */
 function _rtsZoneCache() {
   var G = window._rtsG;
   if (!G.zc || G.t - G.zcT > 0.5) {
-    G.zc = { player:_rtsBaseCentre('player'), enemy:_rtsBaseCentre('enemy') };
+    G.zc = {};
+    G.order.forEach(function (k) { G.zc[k] = _rtsBaseCentre(k); });   /* every seat's base */
     G.zcT = G.t;
   }
   return G.zc;
@@ -15530,14 +15644,14 @@ function _rtsEvalObject(e, o, dist, w, force) {
 function _rtsCloakAI(e, dt, d) {
   if (!d || !d.cloak) return;
   if (e.decloak > 0) e.decloak -= dt;
-  var G = window._rtsG, foe = _rtsEnemyOf(e.side), found = 0;
+  var G = window._rtsG, found = 0;
   /* Bucketed on the widest detection radius in the roster rather than on RTS_SUB_DETECT: the
      radius that matters here belongs to the OBSERVER, not to the submarine, so a scan narrowed
      to the default would stop a Destroyer noticing anything from its own longer reach. */
   var list = _rtsSpNear(e.x, e.z, _rtsSpDetectMax()) || G.ents;
   for (var i = 0; i < list.length; i++) {
     var o = list[i];
-    if (o.dead || o.side !== foe || o.inside) continue;
+    if (o.dead || !_rtsHostile(o.side, e.side) || o.inside) continue;
     if (o.type === 'struct' && o.building) continue;
     var od = (o.type === 'struct' ? rtsStructDef(o.def) : rtsUnitDef(o.def)) || {};
     var r = od.detects || RTS_SUB_DETECT;
@@ -15571,7 +15685,7 @@ function _rtsGunEngages(w, o) {
   return _rtsWeaponReaches(w, o);
 }
 function _rtsFindTarget(e, range, w) {
-  var G = window._rtsG, foe = _rtsEnemyOf(e.side), best = null, bv = 0;
+  var G = window._rtsG, best = null, bv = 0;
   /* in fog nothing looks further (core/skyplay.js) - except at what a Spotter of ours sees, which
      is found at full reach (core/spotter.js); so the search spans the full reach, and the fog's
      cap is asked per candidate */
@@ -15586,7 +15700,7 @@ function _rtsFindTarget(e, range, w) {
   var gs = w ? null : _rtsGuns(e);
   for (var i = 0; i < list.length; i++) {
     var o = list[i];
-    if (o.dead || o.side !== foe || o.inside) continue;
+    if (o.dead || !_rtsHostile(o.side, e.side) || o.inside) continue;
     /* You cannot shoot what is under water. The same flag that hides a submarine from the
        player's screen hides it from the opponent's target acquisition - see _rtsCloakAI. */
     if (o.hidden) continue;
@@ -15716,7 +15830,7 @@ function _rtsFire(e, tgt, w) {
      a future order that parks an ally in `target` cannot quietly become gunfire. Nothing in the
      game fires on its own side on purpose: the Flame Tower's death blast does hurt friends, and
      it goes through _rtsDamage rather than through here. */
-  if (tgt && tgt.side === e.side) return;
+  if (tgt && !_rtsHostile(tgt.side, e.side)) return;
   if (!_rtsWeaponReaches(w, tgt)) return;
   if (w.carpet) return;                           /* a bomber's load goes in one run: core/bomber.js */
   /* AIRCRAFT.CPP spends a round per shot and the aircraft is out of the fight when the rack is
@@ -15744,7 +15858,7 @@ function _rtsFire(e, tgt, w) {
   var m = _rtsFireCoord(e, w);
   /* "If a projectile was fired from a unit that is hidden in the darkness, reveal that unit
      and a little area around it." The muzzle flash gives away the shooter. */
-  if (e.side !== 'player' && !_rtsVisible(_rtsTX(e.x), _rtsTX(e.z))) e.spot = RTS_MUZZLE_SPOT;
+  if (!_rtsWithPlayer(e.side) && !_rtsVisible(_rtsTX(e.x), _rtsTX(e.z))) e.spot = RTS_MUZZLE_SPOT;
   /* "A cloaked object that fires will decloak." It has to surface to shoot, and it stays up
      afterwards for RTS_SUB_SURFACE seconds - the window in which a submarine can be answered.
      Set at the one place every route to a shot passes through, so there is no way to fire from
@@ -15945,7 +16059,7 @@ function _rtsMission(e) {
 function _rtsCanRetaliate(tgt, from) {
   if (!from || !from.side) return false;                    /* no source, no retaliation */
   if (tgt.dead || tgt.type !== 'unit') return false;
-  if (from.side === tgt.side) return false;                 /* never against an ally */
+  if (!_rtsHostile(from.side, tgt.side)) return false;      /* never against an ally */
   if (!_rtsMission(tgt).retaliate) return false;            /* "If the mission precludes it" */
   var d = rtsUnitDef(tgt.def);
   if (!d || !d.weapon || d.carpets) return false;         /* a bomber flies on: core/bomber.js */
@@ -15991,8 +16105,8 @@ function _rtsDamage(tgt, dmg, from, floor) {
       if (!(tgt.type === 'unit' && (rtsUnitDef(tgt.def) || {}).kind === 'infantry')) return;
       tgt.hp = 0; tgt.hitT = 0.18;
       if (from.side) tgt.hurtBy = from.side;
-      if (from.side !== tgt.side) from.kills = (from.kills || 0) + 1;
-      if (from.side !== tgt.side) _rtsTrigNotify('attacked', tgt, null);
+      if (_rtsHostile(from.side, tgt.side)) from.kills = (from.kills || 0) + 1;
+      if (_rtsHostile(from.side, tgt.side)) _rtsTrigNotify('attacked', tgt, null);
       _rtsKill(tgt);
       return;
     }
@@ -16016,12 +16130,12 @@ function _rtsDamage(tgt, dmg, from, floor) {
     _rtsAttacked(tgt.side);
     _rtsBaseIsAttacked(tgt, from);
   }
-  if (from && from.side && from.side !== tgt.side) _rtsTrigNotify('attacked', tgt, null);
+  if (from && _rtsHostile(from.side, tgt.side)) _rtsTrigNotify('attacked', tgt, null);
   if (tgt.type === 'unit' && tgt.sqd != null) _rtsTeamTookDamage(tgt, from);
   if (_rtsCanRetaliate(tgt, from)) { tgt.order = 'attack'; tgt.target = from; }
   if (tgt.hp <= 0) {
     /* Crew.Made_A_Kill: something that has killed becomes a hotter target itself. */
-    if (from && from.side && from.side !== tgt.side) from.kills = (from.kills || 0) + 1;
+    if (from && _rtsHostile(from.side, tgt.side)) from.kills = (from.kills || 0) + 1;
     _rtsKill(tgt);
   }
   else if (tgt.type === 'unit' && rtsUnitDef(tgt.def).harvest && tgt.carry > 0
@@ -16572,7 +16686,7 @@ function _rtsUpdateUnit(e, dt) {
   /* ---- Thief: walk into an enemy refinery and leave with half their treasury ---- */
   if (d.steal) {
     var tb = e.target;
-    if (e.order === 'capture' && (!tb || tb.dead || tb.type !== 'struct' || tb.side === e.side
+    if (e.order === 'capture' && (!tb || tb.dead || tb.type !== 'struct' || !_rtsHostile(tb.side, e.side)
         || tb.def !== d.stealFrom)) { e.order = null; e.target = null; e.path = null; }
     else if (e.order === 'capture') {
       if (_rtsAtStruct(e, tb)) { _rtsSteal(e, tb); return; }
@@ -16595,7 +16709,7 @@ function _rtsUpdateUnit(e, dt) {
      order is special-cased, and everything else falls through to the normal engage logic. */
   if (d.demo && e.order === 'demo') {
     var db = e.target;
-    if (!db || db.dead || db.type !== 'struct' || db.side === e.side) { e.order = null; e.target = null; }
+    if (!db || db.dead || db.type !== 'struct' || !_rtsHostile(db.side, e.side)) { e.order = null; e.target = null; }
     else if (_rtsAtStruct(e, db)) { _rtsDemo(e, db); return; }
     else {
       /* A CONSUMED path is not a null path: e.path stays truthy with e.pi past its end,
@@ -16621,7 +16735,7 @@ function _rtsUpdateUnit(e, dt) {
        it is free to be sent somewhere else rather than spent on a structure that removes
        itself. Reachable by playing normally: the AI sells while your engineer is en route. */
     if (e.order === 'capture' && (!cb || cb.dead || cb.selling || cb.type !== 'struct'
-        || cb.side === e.side || !rtsCapturable(cb.def))) {
+        || !_rtsHostile(cb.side, e.side) || !rtsCapturable(cb.def))) {
       e.order = null; e.target = null; e.path = null;
     } else if (e.order === 'capture') {
       if (_rtsAtStruct(e, cb)) { _rtsCapture(e, cb); return; }
@@ -16708,7 +16822,7 @@ function _rtsUpdateUnit(e, dt) {
      Trivial with a rifle and an APC; a Battle Tank boarding an unarmed 400 hp landing craft is
      the same code with a cannon. Cleared LOCALLY, so the order keeps its target and only the
      gun forgets about it. */
-  if (tgt && tgt.side === e.side) tgt = null;
+  if (tgt && !_rtsHostile(tgt.side, e.side)) tgt = null;
   /* NOR IS ANYTHING NONE OF ITS GUNS CAN ENGAGE - an aircraft over a tank, the ground under a
      Flak Track. Every way a target arrives (an order, a team's pick, a retaliation) is checked
      where it arrives too; this is the one place they all pass through. */
@@ -16836,7 +16950,7 @@ function _rtsStandoff(e, dt) {
   var near = null, nd = keep;
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
-    if (o.dead || o.type !== 'unit' || o.side === e.side || o.inside) continue;
+    if (o.dead || o.type !== 'unit' || !_rtsHostile(o.side, e.side) || o.inside) continue;
     var od = rtsUnitDef(o.def);
     if (!od || !od.weapon) continue;
     var dd = Math.hypot(o.x - e.x, o.z - e.z);
@@ -16858,7 +16972,7 @@ function _rtsStandoff(e, dt) {
    original refuses to let HUMAN vehicles auto-crush - you have to drive over them yourself -
    which is why your own tanks never mow down the enemy infantry they are shooting at. */
 function _rtsOverrun(e) {
-  var G = window._rtsG, foe = _rtsEnemyOf(e.side);
+  var G = window._rtsG;
   /* Bucketed - see core/spatial.js. This ran for every crusher every tick over the whole
      entity list to find the handful of men within a cell and a half, and was the second
      biggest cost in the simulation behind target acquisition. The list is in entity order, so
@@ -16866,7 +16980,7 @@ function _rtsOverrun(e) {
   var list = _rtsSpNear(e.x, e.z, RTS_CRUSH_DIST) || G.ents;
   for (var i = 0; i < list.length; i++) {
     var o = list[i];
-    if (o.dead || o.type !== 'unit' || o.side === e.side) continue;
+    if (o.dead || o.type !== 'unit' || !_rtsHostile(o.side, e.side)) continue;
     /* A PASSENGER IS NOT UNDER YOUR TRACKS. Cargo is kept at its transport's coordinates, so
        without this a tank driving past an APC crushes the squad sealed inside it - the men are
        standing exactly where the APC is. Found by a landing craft losing its passenger in open
@@ -16911,7 +17025,7 @@ function _rtsUpdateStruct(e, dt) {
       /* HouseClass::JustBuiltStructure, which TEVENT_BUILD reads. It is a one-frame signal,
          cleared at the end of the trigger pass that could have seen it. */
       var _jb = window._rtsG.justBuilt;
-      if (_jb) _jb[e.side].struct = e.def; }
+      if (_jb && _jb[e.side]) _jb[e.side].struct = e.def; }
     return;
   }
   if (e.repair) _rtsRepairAI(e, dt);
@@ -16957,10 +17071,10 @@ function _rtsUpdateStruct(e, dt) {
    stop on friendlies as well would block every massed formation's line of fire, which is a
    different game. Splash still catches friendlies, as Explosion_Damage always did. */
 function _rtsProjHit(p) {
-  var G = window._rtsG, foe = _rtsEnemyOf(p.side), best = null, bd = 1e9;
+  var G = window._rtsG, best = null, bd = 1e9;
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
-    if (o.dead || o.side !== foe) continue;
+    if (o.dead || !_rtsHostile(o.side, p.side)) continue;
     /* and not a passenger: cargo rides at its transport's coordinates, so without this a shell
        aimed past an APC stops on a man sealed inside it. Third of the three places that walked
        G.ents comparing positions and forgot - see the header of core/transport.js. */
@@ -17661,7 +17775,7 @@ function _rtsAIWants(S) {
   for (i = 0; i < G.ents.length; i++) {
     e = G.ents[i];
     if (e.type !== 'struct' || e.dead || e.selling) continue;
-    if (e.side === _rtsAIFoe()) { theirs++; continue; }
+    if (_rtsHostile(e.side, _rtsAIOn)) { theirs++; continue; }
     have[e.def] = (have[e.def] || 0) + 1;
     /* `have` counts everything this side owns - a captured Refinery is a Refinery and the plan
        must not queue a replacement for it. `own` is a different question: how big is MY BASE,
@@ -17748,7 +17862,7 @@ function _rtsAIWantsVsAir(key, per) {
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (e.dead || e.type !== 'unit') continue;
-    if (e.side === _rtsAIFoe() && e.air) flyers++;
+    if (_rtsHostile(e.side, _rtsAIOn) && e.air) flyers++;
     else if (e.side === _rtsAIOn && e.def === key) have++;
   }
   return have < Math.ceil(flyers / per);
@@ -18191,7 +18305,7 @@ function _rtsAIWorthCapturing() {
     /* A cached target that has since died, been sold or already changed hands is not an
        answer, and waiting out the rest of the recheck on it would aim the leg at a corpse. */
     var c = G.ai.capTgt;
-    if (!c || c.dead || c.selling || c.side !== _rtsAIFoe()) { G.ai.capT = null; }
+    if (!c || c.dead || c.selling || !_rtsHostile(c.side, _rtsAIOn)) { G.ai.capT = null; }
     else return true;
   }
   G.ai.capT = G.t;
@@ -18312,6 +18426,7 @@ function _rtsBuildWaypoints(G) {
   W.ore = _rtsWayptSnap(ore ? ore.tx : fx, ore ? ore.tz : fz);
 
   G.waypt = W;
+  if (G.ai) G.ai.wayFoe = _rtsAIFoe();         /* rebuilt when this foe is out (core/aisupers.js) */
   return W;
 }
 function _rtsWayptPos(name) {
@@ -18363,7 +18478,7 @@ function _rtsTeamTarget(t, quarry, near) {
   var best = null, bv = 0, w = _rtsPickWeapon(lead, lead);
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
-    if (o.dead || o.side !== _rtsAIFoe()) continue;
+    if (o.dead || !_rtsHostile(o.side, _rtsAIOn)) continue;
     if (o.type === 'unit' && _rtsJamHides(o, _rtsAIOn, lead.x, lead.z)) continue;   /* jammed: core/jammer.js */
     if (!_rtsQuarryMatch(o, quarry)) continue;
     /* ATT_WAYPT is "clear out what is HERE", so candidates outside the waypoint's radius
@@ -19227,7 +19342,7 @@ function _rtsAIRaidPrey(u) {
   for (var pass = 0; pass < 2 && !best; pass++) {
     for (var i = 0; i < G.ents.length; i++) {
       var o = G.ents[i];
-      if (o.dead || o.side !== _rtsAIFoe() || o.inside) continue;
+      if (o.dead || !_rtsHostile(o.side, _rtsAIOn) || o.inside) continue;
       var hit = pass === 0 ? o.type === 'unit' && (rtsUnitDef(o.def) || {}).harvest : o.def === 'refinery';
       if (!hit) continue;
       var dd = Math.hypot(o.x - u.x, o.z - u.z);
@@ -19491,7 +19606,7 @@ function _rtsDroneTick() {
     if (busy && e.path && e.pi < e.path.length) { e.orbit = null; continue; }    /* on its way */
     if (e.orbitOn != null) {
       var t = G.byId[e.orbitOn];
-      if (!t || t.dead || t.inside || (t.side !== e.side && !_rtsShadowSeen(e, t))) e.orbitOn = null;
+      if (!t || t.dead || t.inside || (_rtsHostile(t.side, e.side) && !_rtsShadowSeen(e, t))) e.orbitOn = null;
       else if (!e.orbit || Math.hypot(t.x - e.orbit.x, t.z - e.orbit.z) > RTS_DRONE.follow * RTS_TILE) e.orbit = _rtsDroneCentre(t.x, t.z);
     }
     if (!e.orbit) e.orbit = _rtsDroneCentre(e.x, e.z);                              /* stopped: circle here */
@@ -19523,7 +19638,7 @@ function _rtsDroneOn(e, t) {
 /* Is the shadowed enemy still seen by the drone's side? The player's view is _rtsEntSeen
    (core/supers.js) - a diving submarine is not seen, however close the drone circles. The
    opponent never shadows anything (its drone follows its own team, below). */
-function _rtsShadowSeen(e, t) { return e.side !== _rtsAIFoe() || _rtsEntSeen(t); }
+function _rtsShadowSeen(e, t) { return !_rtsWithPlayer(e.side) || _rtsEntSeen(t); }
 
 /* Is the opponent fighting half-blind? */
 function _rtsAIHalfBlind() {
@@ -19832,7 +19947,7 @@ function _rtsSeaMineTick(dt) {
     /* sonar: the enemy's mines in the water within its reach are seen */
     if (d.detects && M) for (k = 0; k < M.length; k++) {
       var m = M[k];
-      if (m.side === u.side || !m.sea) continue;
+      if (!_rtsHostile(m.side, u.side) || !m.sea) continue;
       if (Math.hypot(_rtsWX(m.tx) - u.x, _rtsWX(m.tz) - u.z) <= d.detects) (m.seen = m.seen || {})[u.side] = 1;
     }
   }
@@ -20248,7 +20363,7 @@ function _rtsTeamDoMission(t, dt) {
          reported back; it never sets `dead`, and there is no event. So the .dead idiom every
          other leg completes on is not merely wrong here, it hangs: a captured building
          satisfies neither `!t.capt` nor `t.capt.dead`, forever. */
-      if (t.capt && (t.capt.dead || t.capt.selling || t.capt.side !== _rtsAIFoe())) {
+      if (t.capt && (t.capt.dead || t.capt.selling || !_rtsHostile(t.capt.side, _rtsAIOn))) {
         _rtsTeamAdvance(t); continue;
       }
       if (!t.capt) t.capt = (G.ai && G.ai.capTgt) || _rtsAICaptureTarget();
@@ -20321,7 +20436,7 @@ function _rtsTeamTookDamage(u, from) {
   var G = window._rtsG;
   if (u.sqd == null || !G.teams || !G.teams[u.sqd]) return;
   var t = G.teams[u.sqd];
-  if (!from || from.side !== _rtsAIFoe() || !t.moving) return;
+  if (!from || !_rtsHostile(from.side, _rtsAIOn) || !t.moving) return;
   /* IsSuicide: "Charge toward target ignoring distractions". Being shot at IS the
      distraction, so a suicide team never retargets onto whoever hit it. */
   if (t.type.suicide) return;
@@ -20452,6 +20567,8 @@ function _rtsUpdateAISeat(side, dt) { _rtsAIAs(side, function () { _rtsUpdateAIF
 function _rtsUpdateAIFor(dt) {
   var G = window._rtsG, S = G.sides[_rtsAIOn];
   if (S.lost) return;
+  /* the foe the waypoints lead to is out of the battle: lead them to the next (core/seats.js) */
+  if (S.ai.wayFoe && S.ai.wayFoe !== _rtsAIFoe()) G.waypt = null;
   _rtsTeamsTick(dt);
   _rtsEscortsTick(dt);          /* the spare army goes with the teams - core/escorts.js */
   _rtsAIMendTick(dt);           /* ...and the battered go home to the depot - core/aimend.js */
@@ -21023,9 +21140,9 @@ function _rtsTick(dt) {
   _rtsWxTick(dt);                                /* fog banks and thunderheads: core/wxsupers.js */
   _rtsPowerDamage(dt);
   /* Power_Output tracks hit points, so it has to be re-totalled before anything reads it. */
-  _rtsRecalcPower('player'); _rtsRecalcPower('enemy');
-  _rtsTickProduction('player', dt);
-  _rtsTickProduction('enemy', dt);
+  /* every seat in play, in seat order: the two that always play first, as they always ran */
+  for (i = 0; i < G.order.length; i++) _rtsRecalcPower(G.order[i]);
+  for (i = 0; i < G.order.length; i++) _rtsTickProduction(G.order[i], dt);
   _rtsUpdateAI(dt);
   _rtsTriggersTick(dt);
 
@@ -21076,15 +21193,23 @@ function _rtsTick(dt) {
 
   /* a mission keeps its own goals and calls its own result (core/campaign.js) */
   if (G.mission) { _rtsMissionTick(G, dt); return; }
-  /* win / lose: losing every structure ends it, the way it did in the originals */
-  var pAlive = 0, eAlive = 0;
+  /* win / lose: losing every structure ends it, the way it did in the originals - a SEAT is out
+     when its last building falls, and the battle when one team has no seat left. The player's
+     team still standing wins; the player's own base gone loses, whatever an ally still holds. */
+  var alive = {};
   for (i = 0; i < G.ents.length; i++) {
     e = G.ents[i];
     if (e.dead || e.type !== 'struct') continue;
-    if (e.side === 'player') pAlive++; else eAlive++;
+    alive[e.side] = 1;
   }
-  if (!pAlive) { G.over = 'lose'; G.sides.player.lost = true; }
-  else if (!eAlive) { G.over = 'win'; G.sides.enemy.lost = true; }
+  var foesUp = 0;
+  for (i = 0; i < G.order.length; i++) {
+    var k = G.order[i], S = G.sides[k];
+    if (!alive[k] && !S.lost && k !== 'player') S.lost = true;
+    if (!S.lost && _rtsHostile(k, 'player')) foesUp++;
+  }
+  if (!alive.player) { G.over = 'lose'; G.sides.player.lost = true; }
+  else if (!foesUp) G.over = 'win';
 }
 </script>
 <script>/* render/camera.js - the renderer's view: zoom, projection, and world <-> screen.
@@ -21195,7 +21320,7 @@ function _rtsRInit(cv) {
     zi: RTS_ZOOM_DEF,            /* index into RTS_ZOOMS */
     cell: RTS_ZOOMS[RTS_ZOOM_DEF],
     dist: 0,                     /* derived: world height visible, kept for the UI + minimap */
-    spr: _rtsSprites(),
+    spr: _rtsSpritesFor(window._rtsG && window._rtsG.order),   /* and any extra seat's colours */
     ghost: null, ghostKey: null,
     terrain: null
   };
@@ -26350,7 +26475,7 @@ var R3D_RING_LIFT = 0.5;     /* toward the eye, as the tread marks are (tread3d.
 var R3D_RING_UNIT = 1.25;    /* a unit's ring, as a multiple of its radius */
 
 /* The house's selection colour: the green and red the HUD always drew its brackets in. */
-var R3D_RING_COL = { player: [0.557, 0.941, 0.478], enemy: [1.0, 0.541, 0.478] };
+var R3D_RING_COL = { player: [0.557, 0.941, 0.478], enemy: [1.0, 0.541, 0.478], ally: [0.45, 0.8, 1.0], enemy2: [1.0, 0.72, 0.32] };
 /* A PARKED JAMMER'S COVER, ringed in the radar's blue round a selected one of the player's: the
    field hid units within RTS_JAM.r cells and nothing showed where that was, or that it was up,
    so a column could not be put inside it (core/jammer.js; the radar traces it too, ui/hud.js) */
@@ -29928,7 +30053,7 @@ function _r3dMuzzles(G) {
     var e = E[i];
     if (e.dead || !(e.fire > 0) || e.air) continue;
     if (e.x < vb.x0 || e.x > vb.x1 || e.z < vb.z0 || e.z > vb.z1) continue;
-    if (e.side !== 'player' && typeof _rtsEntSeen === 'function' && !_rtsEntSeen(e)) continue;
+    if (!_rtsWithPlayer(e.side) && typeof _rtsEntSeen === 'function' && !_rtsEntSeen(e)) continue;
     /* where the shot leaves, drawn at the barrel's own tip: the sim's coordinate is a little
        further out than the 3D barrel reaches, and a flash that far out floated off the gun */
     var m = _r3dMuzzleAt(e), s = _r3dMuzzleSize(e);
@@ -30752,6 +30877,10 @@ function rtsOpen(seed) {
   if (_home) { _rtsR.focus.x = _home.x; _rtsR.focus.z = _home.z; }
   /* a campaign mission is laid on the battle just made, and looks where it says (campaign.js) */
   if (!_load && typeof rtsCampLay === 'function') rtsCampLay(window._rtsG);
+  /* the top bar names an ally and a second foe when the setup brought them (rules/skirmish.js) */
+  var _vsP = document.querySelector('#rcgRts .rts-vs .p'), _vsE = document.querySelector('#rcgRts .rts-vs .e');
+  if (_vsP && window._rtsG.sides.ally) _vsP.textContent += ' + ally';
+  if (_vsE && window._rtsG.sides.enemy2) _vsE.textContent += ' ×2';
 
   window._rtsUI = { cat:'struct', place:null, drag:null, keys:{}, last:0, raf:0, dead:false,
     btns:{}, mouse:{ x:0, y:0, over:false }, miniDrag:false, credShown:0, avail:null,
@@ -32404,7 +32533,7 @@ function _rtsRadarOrder(mine, w, attackMove) {
   if (mapped) {
     for (i = 0; i < G.ents.length; i++) {
       var o = G.ents[i];
-      if (o.dead || o.inside || o.side === 'player') continue;
+      if (o.dead || o.inside || !_rtsHostile(o.side, 'player')) continue;
       if (o.type === 'struct') {
         var sd = rtsStructDef(o.def);
         if (tx >= o.tx && tx < o.tx + sd.w && tz >= o.tz && tz < o.tz + sd.h) { tgt = o; break; }
@@ -33113,7 +33242,7 @@ function _rtsRightClickNow(mx, my, hit0) {
        click still means "go there" instead of meaning nothing - and say why it is not more. */
     if (why) boardWhy = 'The ' + (rtsUnitDef(tgt.def) || {}).name + ' ' + why + '.';
   }
-  if (tgt && tgt.side === 'enemy') {
+  if (tgt && _rtsHostile(tgt.side, 'player')) {
     /* An engineer sent at an enemy BUILDING captures it rather than attacking it - it has no
        weapon, so an attack order would be a walk to the target followed by standing there. It
        still cannot capture a unit, so those fall through to the attack path and are ignored. */
@@ -33402,7 +33531,7 @@ function _rtsActionAt(mx, my) {
      building it can take, a thief at a Refinery, a loaded transport's drop. A Repair Truck over
      an enemy tank was offered the reticle and given a drive onto its guns. A drone over an enemy
      unit shadows it, which is a move, not an attack. */
-  if (tgt && tgt.side === 'enemy') {
+  if (tgt && _rtsHostile(tgt.side, 'player')) {
     var shadow = false, asked = {};
     for (i = 0; i < mine.length; i++) {
       var sd0 = rtsUnitDef(mine[i].def) || {};
@@ -33598,6 +33727,8 @@ function _rtsRadarLit() {
   var PS = G.sides.player;
   return PS.powerMade >= PS.powerUsed;
 }
+/* each seat's dot on the radar: the player blue, an ally green, the foes red and amber */
+var RTS_MINI_COL = { player: '#5ea8ff', ally: '#5fd88a', enemy: '#ff6a52', enemy2: '#ffae4a' };
 function _rtsDrawMini() {
   var G = window._rtsG, mini = document.getElementById('rtsMini');
   if (!mini) return;
@@ -33656,7 +33787,7 @@ function _rtsDrawMini() {
   for (i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (e.dead || !_rtsEntSeen(e)) continue;
-    g.fillStyle = e.side === 'player' ? '#5ea8ff' : '#ff6a52';
+    g.fillStyle = RTS_MINI_COL[e.side] || '#ff6a52';
     if (e.type === 'struct') {
       var d = rtsStructDef(e.def);
       var ico = (typeof _rtsRadarIcon === 'function') ? _rtsRadarIcon(e.def, e.side) : null;
@@ -34593,10 +34724,10 @@ function rtsSkirmishWant() {
 }
 /* One line for the button: what START BATTLE will make. */
 function rtsSkirmishLine(s) {
-  return RTS_SKIRMISH.size[s.size].name.toLowerCase() + ' map · ' + RTS_SKIRMISH.water[s.water].name.toLowerCase()
+  return RTS_SKIRMISH.foes[s.foes].name.toLowerCase() + ' · ' + RTS_SKIRMISH.size[s.size].name.toLowerCase() + ' map · ' + RTS_SKIRMISH.water[s.water].name.toLowerCase()
     + ' · ' + RTS_SKIRMISH.money[s.money].name + ' credits';
 }
-var RTS_SKIRMISH_ROWS = [['size', 'MAP'], ['water', 'WATER'], ['money', 'CREDITS']];
+var RTS_SKIRMISH_ROWS = [['foes', 'SIDES'], ['size', 'MAP'], ['water', 'WATER'], ['money', 'CREDITS']];
 function rtsSkirmishToggle() {
   var box = document.getElementById('rtsSkirmish');
   if (!box) return;

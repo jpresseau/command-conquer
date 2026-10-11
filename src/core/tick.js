@@ -23,9 +23,9 @@ function _rtsTick(dt) {
   _rtsWxTick(dt);                                /* fog banks and thunderheads: core/wxsupers.js */
   _rtsPowerDamage(dt);
   /* Power_Output tracks hit points, so it has to be re-totalled before anything reads it. */
-  _rtsRecalcPower('player'); _rtsRecalcPower('enemy');
-  _rtsTickProduction('player', dt);
-  _rtsTickProduction('enemy', dt);
+  /* every seat in play, in seat order: the two that always play first, as they always ran */
+  for (i = 0; i < G.order.length; i++) _rtsRecalcPower(G.order[i]);
+  for (i = 0; i < G.order.length; i++) _rtsTickProduction(G.order[i], dt);
   _rtsUpdateAI(dt);
   _rtsTriggersTick(dt);
 
@@ -76,13 +76,21 @@ function _rtsTick(dt) {
 
   /* a mission keeps its own goals and calls its own result (core/campaign.js) */
   if (G.mission) { _rtsMissionTick(G, dt); return; }
-  /* win / lose: losing every structure ends it, the way it did in the originals */
-  var pAlive = 0, eAlive = 0;
+  /* win / lose: losing every structure ends it, the way it did in the originals - a SEAT is out
+     when its last building falls, and the battle when one team has no seat left. The player's
+     team still standing wins; the player's own base gone loses, whatever an ally still holds. */
+  var alive = {};
   for (i = 0; i < G.ents.length; i++) {
     e = G.ents[i];
     if (e.dead || e.type !== 'struct') continue;
-    if (e.side === 'player') pAlive++; else eAlive++;
+    alive[e.side] = 1;
   }
-  if (!pAlive) { G.over = 'lose'; G.sides.player.lost = true; }
-  else if (!eAlive) { G.over = 'win'; G.sides.enemy.lost = true; }
+  var foesUp = 0;
+  for (i = 0; i < G.order.length; i++) {
+    var k = G.order[i], S = G.sides[k];
+    if (!alive[k] && !S.lost && k !== 'player') S.lost = true;
+    if (!S.lost && _rtsHostile(k, 'player')) foesUp++;
+  }
+  if (!alive.player) { G.over = 'lose'; G.sides.player.lost = true; }
+  else if (!foesUp) G.over = 'win';
 }

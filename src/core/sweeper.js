@@ -29,7 +29,7 @@ function _rtsSweepTick(dt) {
     var u = sw[i], near = null, nd = 1e9, cleared = 0;
     for (k = 0; M && k < M.length; k++) {
       var m = M[k];
-      if (m.gone || m.side === u.side) continue;
+      if (m.gone || !_rtsHostile(m.side, u.side)) continue;
       var d = Math.hypot(_rtsWX(m.tx) - u.x, _rtsWX(m.tz) - u.z) / RTS_TILE;
       if (d <= RTS_SWEEP.see) (m.seen = m.seen || {})[u.side] = 1;
       if (!(m.seen && m.seen[u.side])) continue;

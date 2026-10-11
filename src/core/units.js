@@ -72,7 +72,7 @@ function _rtsUpdateUnit(e, dt) {
   /* ---- Thief: walk into an enemy refinery and leave with half their treasury ---- */
   if (d.steal) {
     var tb = e.target;
-    if (e.order === 'capture' && (!tb || tb.dead || tb.type !== 'struct' || tb.side === e.side
+    if (e.order === 'capture' && (!tb || tb.dead || tb.type !== 'struct' || !_rtsHostile(tb.side, e.side)
         || tb.def !== d.stealFrom)) { e.order = null; e.target = null; e.path = null; }
     else if (e.order === 'capture') {
       if (_rtsAtStruct(e, tb)) { _rtsSteal(e, tb); return; }
@@ -95,7 +95,7 @@ function _rtsUpdateUnit(e, dt) {
      order is special-cased, and everything else falls through to the normal engage logic. */
   if (d.demo && e.order === 'demo') {
     var db = e.target;
-    if (!db || db.dead || db.type !== 'struct' || db.side === e.side) { e.order = null; e.target = null; }
+    if (!db || db.dead || db.type !== 'struct' || !_rtsHostile(db.side, e.side)) { e.order = null; e.target = null; }
     else if (_rtsAtStruct(e, db)) { _rtsDemo(e, db); return; }
     else {
       /* A CONSUMED path is not a null path: e.path stays truthy with e.pi past its end,
@@ -121,7 +121,7 @@ function _rtsUpdateUnit(e, dt) {
        it is free to be sent somewhere else rather than spent on a structure that removes
        itself. Reachable by playing normally: the AI sells while your engineer is en route. */
     if (e.order === 'capture' && (!cb || cb.dead || cb.selling || cb.type !== 'struct'
-        || cb.side === e.side || !rtsCapturable(cb.def))) {
+        || !_rtsHostile(cb.side, e.side) || !rtsCapturable(cb.def))) {
       e.order = null; e.target = null; e.path = null;
     } else if (e.order === 'capture') {
       if (_rtsAtStruct(e, cb)) { _rtsCapture(e, cb); return; }
@@ -208,7 +208,7 @@ function _rtsUpdateUnit(e, dt) {
      Trivial with a rifle and an APC; a Battle Tank boarding an unarmed 400 hp landing craft is
      the same code with a cannon. Cleared LOCALLY, so the order keeps its target and only the
      gun forgets about it. */
-  if (tgt && tgt.side === e.side) tgt = null;
+  if (tgt && !_rtsHostile(tgt.side, e.side)) tgt = null;
   /* NOR IS ANYTHING NONE OF ITS GUNS CAN ENGAGE - an aircraft over a tank, the ground under a
      Flak Track. Every way a target arrives (an order, a team's pick, a retaliation) is checked
      where it arrives too; this is the one place they all pass through. */
@@ -336,7 +336,7 @@ function _rtsStandoff(e, dt) {
   var near = null, nd = keep;
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
-    if (o.dead || o.type !== 'unit' || o.side === e.side || o.inside) continue;
+    if (o.dead || o.type !== 'unit' || !_rtsHostile(o.side, e.side) || o.inside) continue;
     var od = rtsUnitDef(o.def);
     if (!od || !od.weapon) continue;
     var dd = Math.hypot(o.x - e.x, o.z - e.z);
@@ -358,7 +358,7 @@ function _rtsStandoff(e, dt) {
    original refuses to let HUMAN vehicles auto-crush - you have to drive over them yourself -
    which is why your own tanks never mow down the enemy infantry they are shooting at. */
 function _rtsOverrun(e) {
-  var G = window._rtsG, foe = _rtsEnemyOf(e.side);
+  var G = window._rtsG;
   /* Bucketed - see core/spatial.js. This ran for every crusher every tick over the whole
      entity list to find the handful of men within a cell and a half, and was the second
      biggest cost in the simulation behind target acquisition. The list is in entity order, so
@@ -366,7 +366,7 @@ function _rtsOverrun(e) {
   var list = _rtsSpNear(e.x, e.z, RTS_CRUSH_DIST) || G.ents;
   for (var i = 0; i < list.length; i++) {
     var o = list[i];
-    if (o.dead || o.type !== 'unit' || o.side === e.side) continue;
+    if (o.dead || o.type !== 'unit' || !_rtsHostile(o.side, e.side)) continue;
     /* A PASSENGER IS NOT UNDER YOUR TRACKS. Cargo is kept at its transport's coordinates, so
        without this a tank driving past an APC crushes the squad sealed inside it - the men are
        standing exactly where the APC is. Found by a landing craft losing its passenger in open
@@ -411,7 +411,7 @@ function _rtsUpdateStruct(e, dt) {
       /* HouseClass::JustBuiltStructure, which TEVENT_BUILD reads. It is a one-frame signal,
          cleared at the end of the trigger pass that could have seen it. */
       var _jb = window._rtsG.justBuilt;
-      if (_jb) _jb[e.side].struct = e.def; }
+      if (_jb && _jb[e.side]) _jb[e.side].struct = e.def; }
     return;
   }
   if (e.repair) _rtsRepairAI(e, dt);
@@ -457,10 +457,10 @@ function _rtsUpdateStruct(e, dt) {
    stop on friendlies as well would block every massed formation's line of fire, which is a
    different game. Splash still catches friendlies, as Explosion_Damage always did. */
 function _rtsProjHit(p) {
-  var G = window._rtsG, foe = _rtsEnemyOf(p.side), best = null, bd = 1e9;
+  var G = window._rtsG, best = null, bd = 1e9;
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
-    if (o.dead || o.side !== foe) continue;
+    if (o.dead || !_rtsHostile(o.side, p.side)) continue;
     /* and not a passenger: cargo rides at its transport's coordinates, so without this a shell
        aimed past an APC stops on a man sealed inside it. Third of the three places that walked
        G.ents comparing positions and forgot - see the header of core/transport.js. */

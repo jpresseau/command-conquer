@@ -12,7 +12,7 @@ function _rtsAIWants(S) {
   for (i = 0; i < G.ents.length; i++) {
     e = G.ents[i];
     if (e.type !== 'struct' || e.dead || e.selling) continue;
-    if (e.side === _rtsAIFoe()) { theirs++; continue; }
+    if (_rtsHostile(e.side, _rtsAIOn)) { theirs++; continue; }
     have[e.def] = (have[e.def] || 0) + 1;
     /* `have` counts everything this side owns - a captured Refinery is a Refinery and the plan
        must not queue a replacement for it. `own` is a different question: how big is MY BASE,
@@ -99,7 +99,7 @@ function _rtsAIWantsVsAir(key, per) {
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
     if (e.dead || e.type !== 'unit') continue;
-    if (e.side === _rtsAIFoe() && e.air) flyers++;
+    if (_rtsHostile(e.side, _rtsAIOn) && e.air) flyers++;
     else if (e.side === _rtsAIOn && e.def === key) have++;
   }
   return have < Math.ceil(flyers / per);

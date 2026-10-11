@@ -18,7 +18,7 @@ var R3D_RING_LIFT = 0.5;     /* toward the eye, as the tread marks are (tread3d.
 var R3D_RING_UNIT = 1.25;    /* a unit's ring, as a multiple of its radius */
 
 /* The house's selection colour: the green and red the HUD always drew its brackets in. */
-var R3D_RING_COL = { player: [0.557, 0.941, 0.478], enemy: [1.0, 0.541, 0.478] };
+var R3D_RING_COL = { player: [0.557, 0.941, 0.478], enemy: [1.0, 0.541, 0.478], ally: [0.45, 0.8, 1.0], enemy2: [1.0, 0.72, 0.32] };
 /* A PARKED JAMMER'S COVER, ringed in the radar's blue round a selected one of the player's: the
    field hid units within RTS_JAM.r cells and nothing showed where that was, or that it was up,
    so a column could not be put inside it (core/jammer.js; the radar traces it too, ui/hud.js) */

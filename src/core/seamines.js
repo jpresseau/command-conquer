@@ -42,7 +42,7 @@ function _rtsSeaMineTick(dt) {
     /* sonar: the enemy's mines in the water within its reach are seen */
     if (d.detects && M) for (k = 0; k < M.length; k++) {
       var m = M[k];
-      if (m.side === u.side || !m.sea) continue;
+      if (!_rtsHostile(m.side, u.side) || !m.sea) continue;
       if (Math.hypot(_rtsWX(m.tx) - u.x, _rtsWX(m.tz) - u.z) <= d.detects) (m.seen = m.seen || {})[u.side] = 1;
     }
   }

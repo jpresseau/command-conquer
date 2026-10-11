@@ -26,10 +26,10 @@ function rtsSkirmishWant() {
 }
 /* One line for the button: what START BATTLE will make. */
 function rtsSkirmishLine(s) {
-  return RTS_SKIRMISH.size[s.size].name.toLowerCase() + ' map · ' + RTS_SKIRMISH.water[s.water].name.toLowerCase()
+  return RTS_SKIRMISH.foes[s.foes].name.toLowerCase() + ' · ' + RTS_SKIRMISH.size[s.size].name.toLowerCase() + ' map · ' + RTS_SKIRMISH.water[s.water].name.toLowerCase()
     + ' · ' + RTS_SKIRMISH.money[s.money].name + ' credits';
 }
-var RTS_SKIRMISH_ROWS = [['size', 'MAP'], ['water', 'WATER'], ['money', 'CREDITS']];
+var RTS_SKIRMISH_ROWS = [['foes', 'SIDES'], ['size', 'MAP'], ['water', 'WATER'], ['money', 'CREDITS']];
 function rtsSkirmishToggle() {
   var box = document.getElementById('rtsSkirmish');
   if (!box) return;

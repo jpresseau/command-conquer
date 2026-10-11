@@ -24,7 +24,9 @@ var RTS_N = 128;       /* DEFINES.H MAP_CELL_W. This was 112, chosen by eye with
    are is a choice made on the title screen. rtsArmyName answers it; see rtsHouseSide. */
 var RTS_SIDES = {
   player: { key:'player', color:0x4a8ff0, glow:0xa8d4ff },
-  enemy:  { key:'enemy',  color:0xe0503c, glow:0xffb49f }
+  enemy:  { key:'enemy',  color:0xe0503c, glow:0xffb49f },
+  ally:   { key:'ally',   color:0x4ad07a, glow:0xa8f0c0 },
+  enemy2: { key:'enemy2', color:0xf0a040, glow:0xffd49f }
 };
 /* "Compact" / "Dominion" for either house, following the army the player picked: the short,
    adjectival form - "Compact command", "the Dominion forces". rtsArmyTitle is the full name. */

@@ -40,8 +40,8 @@ function _rtsGenTerrain(G, rnd, starts) {
      because _clearStart bulldozes the real ones afterwards - but it meant every map carried
      two unexplained clearings, and the ore and terrain kept away from the wrong places. */
   function nearBase(x, z) {
-    return Math.hypot(x - starts.player.tx, z - starts.player.tz) < 15 ||
-           Math.hypot(x - starts.enemy.tx,  z - starts.enemy.tz)  < 15;
+    for (var k in starts) if (Math.hypot(x - starts[k].tx, z - starts[k].tz) < 15) return true;
+    return false;
   }
   function free(x, z) {
     return _rtsInB(x, z) && G.scrap[_rtsIdx(x, z)] <= 0 && !nearBase(x, z);
@@ -115,6 +115,13 @@ function _rtsGenTerrain(G, rnd, starts) {
   _rtsCarveRoad(G, _sp.tx, _sp.tz, _se.tx, _se.tz, rnd);      /* the main route, base to base */
   _rtsCarveRoad(G, _sp.tx, _sp.tz, _b1[0], _b1[1], rnd);      /* one branch out to each flank */
   _rtsCarveRoad(G, _se.tx, _se.tz, _b2[0], _b2[1], rnd);
+  /* an extra seat's base is cleared and joined by road to the seat it sides with (scenario.js) */
+  for (var _xk in starts) {
+    if (_xk === 'player' || _xk === 'enemy') continue;
+    var _xs = starts[_xk], _xn = starts[RTS_SEATS[_xk].near];
+    _clearStart(_xs);
+    _rtsCarveRoad(G, _xs.tx, _xs.tz, _xn.tx, _xn.tz, rnd);
+  }
 
   /* --- the inlet ---
      A COAST EACH, and one body of water rather than two ponds.
@@ -171,6 +178,7 @@ function _rtsGenTerrain(G, rnd, starts) {
          outside the base rather than in the middle of it. */
       if (Math.hypot(tx - _sp.tx, tz - _sp.tz) < 7.5) continue;
       if (Math.hypot(tx - _se.tx, tz - _se.tz) < 7.5) continue;
+      if (_rtsNearExtra(starts, tx, tz, 7.5)) continue;
       var _wob = nz(tx, tz, 11, seed + 31) * 5 - 2.5;
       var _sd = _segD(tx, tz, _ia, _ib) + _wob;
       if (_sd < SEA_R) set(tx, tz, RTS_T_WATER, true);
@@ -423,6 +431,11 @@ function _rtsGenTerrain(G, rnd, starts) {
 }
 
 /* A wandering 3-tile-wide track between two points. Clears obstacles as it goes. */
+/* Within r of an extra seat's start (scenario.js _rtsExtraStarts). */
+function _rtsNearExtra(starts, tx, tz, r) {
+  for (var k in starts) if (k !== 'player' && k !== 'enemy' && Math.hypot(tx - starts[k].tx, tz - starts[k].tz) < r) return true;
+  return false;
+}
 function _rtsCarveRoad(G, x0, z0, x1, z1, rnd, force) {
   var steps = Math.ceil(Math.hypot(x1 - x0, z1 - z0)) * 2;
   var sway = force ? 0 : (rnd() - 0.5) * 26;

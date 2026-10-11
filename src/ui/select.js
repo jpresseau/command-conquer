@@ -202,7 +202,7 @@ function _rtsRightClickNow(mx, my, hit0) {
        click still means "go there" instead of meaning nothing - and say why it is not more. */
     if (why) boardWhy = 'The ' + (rtsUnitDef(tgt.def) || {}).name + ' ' + why + '.';
   }
-  if (tgt && tgt.side === 'enemy') {
+  if (tgt && _rtsHostile(tgt.side, 'player')) {
     /* An engineer sent at an enemy BUILDING captures it rather than attacking it - it has no
        weapon, so an attack order would be a walk to the target followed by standing there. It
        still cannot capture a unit, so those fall through to the attack path and are ignored. */

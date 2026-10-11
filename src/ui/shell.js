@@ -127,6 +127,10 @@ function rtsOpen(seed) {
   if (_home) { _rtsR.focus.x = _home.x; _rtsR.focus.z = _home.z; }
   /* a campaign mission is laid on the battle just made, and looks where it says (campaign.js) */
   if (!_load && typeof rtsCampLay === 'function') rtsCampLay(window._rtsG);
+  /* the top bar names an ally and a second foe when the setup brought them (rules/skirmish.js) */
+  var _vsP = document.querySelector('#rcgRts .rts-vs .p'), _vsE = document.querySelector('#rcgRts .rts-vs .e');
+  if (_vsP && window._rtsG.sides.ally) _vsP.textContent += ' + ally';
+  if (_vsE && window._rtsG.sides.enemy2) _vsE.textContent += ' ×2';
 
   window._rtsUI = { cat:'struct', place:null, drag:null, keys:{}, last:0, raf:0, dead:false,
     btns:{}, mouse:{ x:0, y:0, over:false }, miniDrag:false, credShown:0, avail:null,
