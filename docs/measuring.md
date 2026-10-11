@@ -108,5 +108,23 @@ First findings, normal against normal (40 seeds, 80 battles):
   easy Dominion then left 35% of its army idle), and the stronger cannon put `e2e/pace`'s heavy-battle
   frame over its upload budget. A fix has to keep both, so the Dominion's mix wants a unit to take the
   buggy's place in the escort, not fewer buggies.
-- Submarines took 190k credits for almost no damage: the one lagoon rarely has a ship to hunt. That is
-  the AI's buying, not the unit, and the next thing to fix there.
+- Submarines took 190k credits for almost no damage: the one lagoon rarely has a ship to hunt.
+
+Second round, paired against a fresh baseline (20 seeds, 40 battles each; the Compact held 0.572):
+
+- **Re-weighting what the Dominion buys does not close the gap.** None of these moved the Compact's
+  share by more than about one standard error:
+  - Bulwark at weight 5 from 2,000 instead of 3 from 2,600: -0.015 ± 0.014. It bought 191 Bulwarks
+    instead of 64, and their return fell from 0.65 to 0.55 damage per credit.
+  - That, plus submarines bought only against hostile hulls (a `vsSea` gate shaped like `vsAir`):
+    -0.010 ± 0.014.
+  - That, plus Longshot weight 4 and dogs at half weight: 0.000 ± 0.027.
+- **The `vsSea` gate barely bites.** Subs fell from 95 to 76, because the Compact usually has a
+  gunboat afloat, and they return 0.02-0.04 damage per credit even with a target. It would also stop
+  the Wolfpack (two subs and a missile sub) forming on empty water. It was not shipped.
+- **So the Compact's edge is in how its units fight, not in what the Dominion buys.** Its Artillery
+  returns 1.47 damage per credit and its Wasp 1.32; the Dominion's best are the MiG at 1.14 and the
+  rifle at 0.97, and the same Battle Tank returns 0.95 for the Compact and 0.73 for the Dominion.
+  The next lever is unit strength (the Dominion's armour or the Compact's long guns), which changes
+  how the game plays for a human too, so it wants its own trial in the page as well as here.
+
