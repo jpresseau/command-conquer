@@ -125,6 +125,18 @@ Second round, paired against a fresh baseline (20 seeds, 40 battles each; the Co
 - **So the Compact's edge is in how its units fight, not in what the Dominion buys.** Its Artillery
   returns 1.47 damage per credit and its Wasp 1.32; the Dominion's best are the MiG at 1.14 and the
   rifle at 0.97, and the same Battle Tank returns 0.95 for the Compact and 0.73 for the Dominion.
-  The next lever is unit strength (the Dominion's armour or the Compact's long guns), which changes
-  how the game plays for a human too, so it wants its own trial in the page as well as here.
+- **Unit strength does not move it either, and that says more about the instrument than the units.**
+  Compact Artillery at 44 damage and 3.5 splash (from 52 and 5) with the Wasp at 45 (from 55):
+  -0.002 ± 0.017, though the Artillery's return fell from 1.47 to 0.91. Longshot reload 3.2 s and
+  splash 4 (from 4.2 and 3) with the Bulwark at 1000 hp: -0.002 ± 0.015, though the Longshot rose
+  from 0.76 to 0.92.
+- **The 12-minute share is decided by the map and the seat, not the army.** In seed 9003 whichever
+  army holds the opponent's seat ends with about 80% of the field; the swap cancels that, which is
+  why the per-seed spread is so wide. What is left of the Compact's mean comes mostly from the
+  battles that turn into a rout: its two outright wins ended at 0.99 and 0.97, and the median share
+  is 0.545. Eight battles split into parts ended level (52k of assets against 50k), with the same
+  income and spending on both sides.
+- **So self-play at this horizon cannot resolve a unit change.** To measure one, use the win rate
+  over battles played to the end, or a seat-fair map, and many more battles; the ledger's damage
+  per credit is the fast signal, but it does not carry through to who is ahead at 12 minutes.
 
