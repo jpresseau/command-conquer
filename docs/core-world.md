@@ -247,7 +247,13 @@ and offset in `core/terrain.js`; INLAND has none) and money (both sides' startin
     for sight and the player's own view is `_rtsWithPlayer`.
   - A computer seat's foe is the **nearest hostile seat by start** (`_rtsAIFoe`). When that foe is
     out, the brain's waypoints are rebuilt toward the next.
-  - An extra base goes beside its partner, on the ring, on the flank away from the inlet, with a
+  - **GROUND: MIRRORED** (`core/mirror.js`) reflects the player's half of the generated ground onto the
+  opponent's, across the line between the bases, after the terrain and before any base. A reflection
+  and not a half-turn, because a half-turn would cut the inlet into two ponds. With both seats the
+  computer's, the opponent's base is the reflection of the player's, slot by slot, footprint by
+  footprint; with a human the openings differ by design, so the opponent lays its own with `across`
+  flipped.
+- An extra base goes beside its partner, on the ring, on the flank away from the inlet, with a
     road to its partner and a home ore field. None of that rolls the RNG, so the default battle is
     unchanged.
   - Anything per seat loops over `G.order`. Production, power, supers and the base-centre cache

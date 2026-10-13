@@ -128,17 +128,20 @@ function _rtsScanPlace(tx, tz, fits, rnd) {
 /* Lay out a base in its own local frame: `along` points at the opponent, `across` to the
    side. The same table then produces the same arrangement whichever axis the start roll
    picked, instead of the layout only making sense on one diagonal. */
-function _rtsLayBase(start, foe, list, side) {
-  var G = window._rtsG;
+/* `flip` lays the base as the MIRROR of the one across from it rather than its half-turn: on the
+   seat-fair map (core/mirror.js) the opponent's side flips every `across`, so the two bases erase the
+   same ore and stand on the same ground. */
+function _rtsLayBase(start, foe, list, side, flip) {
+  var G = window._rtsG, placed = [];
   var dx = foe.tx - start.tx, dz = foe.tz - start.tz, L = Math.hypot(dx, dz) || 1;
   var ux = dx / L, uz = dz / L, px = -uz, pz = ux;
   for (var i = 0; i < list.length; i++) {
-    var kind = list[i][0], key = list[i][1], along = list[i][2], across = list[i][3];
+    var kind = list[i][0], key = list[i][1], along = list[i][2], across = flip ? -list[i][3] : list[i][3];
     var tx = Math.round(start.tx + ux * along + px * across);
     var tz = Math.round(start.tz + uz * along + pz * across);
     if (kind === 'unit') {
       var open = _rtsScanPlace(tx, tz, function (x, z) { return _rtsInB(x, z) && !_rtsBlocked(x, z); }, _rtsRnd);
-      if (open) _rtsSpawnUnit(side, key, _rtsWX(open.tx), _rtsWX(open.tz));
+      placed.push(open ? _rtsSpawnUnit(side, key, _rtsWX(open.tx), _rtsWX(open.tz)) : null);
       continue;
     }
     var d = rtsStructDef(key);
@@ -148,7 +151,8 @@ function _rtsLayBase(start, foe, list, side) {
       }
       return true;
     }, _rtsRnd);
-    if (spot) _rtsPlaceStruct(side, key, spot.tx, spot.tz, true);
+    placed.push(spot ? _rtsPlaceStruct(side, key, spot.tx, spot.tz, true) : null);
   }
+  return placed;
 }
 

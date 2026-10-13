@@ -140,3 +140,23 @@ Second round, paired against a fresh baseline (20 seeds, 40 battles each; the Co
   over battles played to the end, or a seat-fair map, and many more battles; the ledger's damage
   per credit is the fast signal, but it does not carry through to who is ahead at 12 minutes.
 
+### The seat-fair map (`--fair`, core/mirror.js)
+
+`--fair` plays every battle on the MIRRORED map: the player's half reflected across the line between
+the bases, and the opponent's base laid as the reflection of the player's. Same 20 seeds:
+
+| | random map | mirrored map |
+|---|---|---|
+| Compact's mean share | 0.572 ± 0.016 | **0.522 ± 0.030** |
+| gap between a seed's two seat-swapped battles | 0.314 | 0.186 |
+| spread of one battle (sd) | 0.201 | 0.186 |
+
+- **On fair ground the Compact's lead is within noise of even.** Most of the 0.57 was how each army
+  suited an uneven map, which the seat swap does not cancel.
+- **The seat matters 40% less.** What is left is the seat order (the player's seat ticks first)
+  amplified by a battle that snowballs.
+- **It does not make a measurement cheaper.** One battle is still that chaotic, and with the seat lean
+  gone there is nothing for the swap to cancel, so the error of the mean is set by the battle count:
+  about ±0.03 at 40 battles, ±0.01 at several hundred. Use `--fair` for a balance trial, and plan the
+  battle count for the effect being looked for.
+

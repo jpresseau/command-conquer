@@ -1,7 +1,10 @@
 /* SELF-PLAY: the computer against itself, many battles, and what each unit did in them.
 
      node tools/selfplay.js --seeds=30 [--from=9001] [--diff=normal] [--secs=720] [--jobs=3]
-                            [--out=selfplay-out.json] [--set=rules.js]
+                            [--out=selfplay-out.json] [--set=rules.js] [--fair]
+
+   --fair plays every battle on the seat-fair map (core/mirror.js): the player's half reflected onto
+   the opponent's, so neither seat starts on better ground.
 
    Every seed is played twice, the armies swapped between the seats, so a map's own lean and the
    seat each army starts in cancel out of the totals. Both seats open as the computer does and play
@@ -58,7 +61,7 @@ function battle(cfg) {
     if (m) { var R = row(side, key); R.built++; R.spent += g._rtsCostOf(side, g.rtsUnitDef(key)); }
     return m;
   };
-  g._rtsNewGame(cfg.seed, cfg.diff, { player: { ctl: 'ai', diff: cfg.diff } });
+  g._rtsNewGame(cfg.seed, cfg.diff, { player: { ctl: 'ai', diff: cfg.diff }, skirmish: cfg.fair ? { layout: 'mirror' } : null });
   var G = g._rtsG;
   armyOf.player = g.rtsHouseSide('player'); armyOf.enemy = g.rtsHouseSide('enemy');
   var dt = 1 / 60, steps = cfg.secs * 60, lastHit = 0;
@@ -84,7 +87,7 @@ var seeds = +A.seeds || 10, from = +A.from || 9001, diff = A.diff || 'normal', s
 var jobs = +A.jobs || Math.max(1, Math.min(3, os.cpus().length - 1)), out = A.out || 'selfplay-out.json';
 var todo = [];
 for (var s = 0; s < seeds; s++) ['allied', 'soviet'].forEach(function (army) {
-  todo.push({ seed: from + s, army: army, diff: diff, secs: secs, set: A.set ? path.resolve(A.set) : null });
+  todo.push({ seed: from + s, army: army, diff: diff, secs: secs, set: A.set ? path.resolve(A.set) : null, fair: !!A.fair });
 });
 var results = [], running = 0, t0 = Date.now(), total = todo.length;
 function next(w) {
