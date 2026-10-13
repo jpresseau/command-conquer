@@ -167,6 +167,8 @@ function _rtsNewGame(seed, diff, spec) {
     }
   }
   _rtsGenTerrain(G, rnd, G.starts);
+  var fair = !!RTS_SKIRMISH.layout[sk.layout].mirror;
+  if (fair) _rtsMirrorMap(G);                                     /* the seat-fair map: core/mirror.js */
 
   /* --- the two bases: player bottom-left, opponent top-right.
      Footprints are small (Command Yard 3x3) so a base is a cluster of compact structures
@@ -179,7 +181,7 @@ function _rtsNewGame(seed, diff, spec) {
      then it opens as the computer does - the human's opening is a yard and a power plant, which
      the opponent's brain was measured unable to grow into a base. */
   var pAI = !!(spec && spec.player && spec.player.ctl === 'ai');
-  _rtsLayBase(G.starts.player, G.starts.enemy, pAI ? _rtsAIOpening('player') : [
+  var pBase = _rtsLayBase(G.starts.player, G.starts.enemy, pAI ? _rtsAIOpening('player') : [
     ['struct','yard',    0,  0], ['struct','power',   1,  5],
     ['unit',  'rifle',   3, -3], ['unit',  'rifle',   4, -1], ['unit', 'buggy', 1, -4]
   ], 'player');
@@ -189,10 +191,13 @@ function _rtsNewGame(seed, diff, spec) {
      with Allied statistics, and the AI never sold or replaced them. Its build planner already
      filters on rtsBuildableBy and carries a comment about faction lists breaking exactly this
      way; the opening layout was the one that had not been told. */
-  _rtsLayBase(G.starts.enemy, G.starts.player, _rtsAIOpening('enemy'), 'enemy');
+  /* on the seat-fair map with both seats opening alike, the opponent's base is the player's reflected
+     (core/mirror.js); otherwise laid in its own frame, flipped on the seat-fair map */
+  if (fair && pAI) _rtsMirrorBase(G, pBase, _rtsAIOpening('enemy'), 'enemy', G.starts.enemy, G.starts.player);
+  else _rtsLayBase(G.starts.enemy, G.starts.player, _rtsAIOpening('enemy'), 'enemy', fair);
   if (pAI) _rtsSeatToAI('player', spec.player.diff || G.diff);
   extra.forEach(function (k) {
-    _rtsLayBase(G.starts[k], G.starts[_rtsAIFoe(k)], _rtsAIOpening(k), k);
+    _rtsLayBase(G.starts[k], G.starts[_rtsAIFoe(k)], _rtsAIOpening(k), k, fair && RTS_SEATS[k].team === 1);
   });
 
   /* Density LAST. Terrain generation and the two bases both erase ore, and a cell's level is

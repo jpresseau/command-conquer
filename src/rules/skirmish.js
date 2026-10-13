@@ -18,11 +18,14 @@ var RTS_SKIRMISH = {
   size:  { small: { name: 'SMALL', n: 96 }, standard: { name: 'STANDARD', n: 128 }, large: { name: 'LARGE', n: 160 } },
   water: { inland: { name: 'INLAND', r: 0, off: 0 }, coast: { name: 'COAST', r: 6.2, off: 16 }, lagoon: { name: 'LAGOON', r: 10, off: 20 } },
   money: { standard: { name: '3,000', credits: 3000 }, rich: { name: '6,000', credits: 6000 }, flush: { name: '10,000', credits: 10000 } },
+  /* RANDOM is the generated map as it always was; MIRRORED reflects the player's half onto the
+     opponent's so neither seat starts on better ground (core/mirror.js) */
+  layout: { random: { name: 'RANDOM' }, mirror: { name: 'MIRRORED', mirror: true } },
   /* who else is on the field: the computer seats beyond the one opponent (RTS_SEATS) */
   foes:  { one: { name: '1 FOE', extra: [] }, two: { name: '2 FOES', extra: ['enemy2'] },
            ally: { name: 'FOE + ALLY', extra: ['ally'] }, team: { name: '2 V 2', extra: ['ally', 'enemy2'] } }
 };
-var RTS_SKIRMISH_DEFAULT = { size: 'standard', water: 'coast', money: 'standard', foes: 'one' };
+var RTS_SKIRMISH_DEFAULT = { size: 'standard', water: 'coast', money: 'standard', foes: 'one', layout: 'random' };
 
 /* THE SEATS. A seat's team is fixed by its name, so an ally is always the player's army and on the
    player's team, and a second opponent is the first opponent's: everything that has to know whose

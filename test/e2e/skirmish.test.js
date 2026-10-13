@@ -1,9 +1,9 @@
 /* THE SKIRMISH SETUP, WITH REAL CLICKS (src/skirmish.js, title.js, ui/shell.js, rts.save.js):
 
-     THE PANEL      SKIRMISH SETUP opens four rows of choices; a click marks the choice, the
+     THE PANEL      SKIRMISH SETUP opens five rows of choices; a click marks the choice, the
                     button's line says what START BATTLE will make, and it is still chosen after
                     a reload
-     THE BATTLE     START BATTLE makes that battle: a 160-cell lagoon map, 10,000 credits a side,
+     THE BATTLE     START BATTLE makes that battle: a 160-cell mirrored lagoon map, 10,000 credits a side,
                     and the 3D view draws the ground at the player's base
      A SAVE         a battle saved on a large map loads onto a large map
      NOT A DAILY    the daily battle is the default map whatever is chosen here
@@ -39,19 +39,20 @@ function waitBattle(p) {
   var line0 = await p.evaluate(function () { return document.getElementById('rtsSkirmishNote').textContent; });
   await click(p, '#rtsSkirmishBtn');
   var rows = await p.evaluate(function () { return document.querySelectorAll('#rtsSkirmish .diff').length; });
-  S.ok('SKIRMISH SETUP opens four rows of choices, on the default', rows === 4 && line0 === '1 foe · standard map · coast · 3,000 credits', rows + ' rows; "' + line0 + '"');
-  var hit = [await click(p, '#rtsSkirmish [data-k=size] [data-v=large]'), await click(p, '#rtsSkirmish [data-k=water] [data-v=lagoon]'),
+  S.ok('SKIRMISH SETUP opens five rows of choices, on the default', rows === 5 && line0 === '1 foe · standard map · coast · 3,000 credits', rows + ' rows; "' + line0 + '"');
+  var hit = [await click(p, '#rtsSkirmish [data-k=size] [data-v=large]'), await click(p, '#rtsSkirmish [data-k=layout] [data-v=mirror]'),
+             await click(p, '#rtsSkirmish [data-k=water] [data-v=lagoon]'),
              await click(p, '#rtsSkirmish [data-k=money] [data-v=flush]')];
   var marked = await p.evaluate(function () {
     return { on: Array.prototype.map.call(document.querySelectorAll('#rtsSkirmish button.on'), function (b) { return b.getAttribute('data-v'); }),
              line: document.getElementById('rtsSkirmishNote').textContent };
   });
-  S.ok('a click marks the choice, and the button says what START BATTLE will make', hit.every(Boolean) && marked.on.join() === 'one,large,lagoon,flush' &&
-       marked.line === '1 foe · large map · lagoon · 10,000 credits', JSON.stringify(marked));
+  S.ok('a click marks the choice, and the button says what START BATTLE will make', hit.every(Boolean) && marked.on.join() === 'one,large,mirror,lagoon,flush' &&
+       marked.line === '1 foe · large mirrored map · lagoon · 10,000 credits', JSON.stringify(marked));
   await p.reload();
   await p.waitForFunction(function () { return typeof rtsSkirmishGet === 'function' && !!document.getElementById('rtsSkirmishNote').textContent; }, null, { timeout: 30000 }).catch(function () {});
   var kept = await p.evaluate(function () { return document.getElementById('rtsSkirmishNote').textContent; });
-  S.eq('...and it is still chosen after a reload', kept, '1 foe · large map · lagoon · 10,000 credits');
+  S.eq('...and it is still chosen after a reload', kept, '1 foe · large mirrored map · lagoon · 10,000 credits');
 
   /* ---------- the battle ---------- */
   await click(p, '#rtsGo');
@@ -61,7 +62,7 @@ function waitBattle(p) {
     _rtsR.focus.x = y.x; _rtsR.focus.z = y.z;
     return { N: RTS_N, len: G.terrain.length, sk: G.skirmish, cr: [G.sides.player.credits, G.sides.enemy.credits] };
   });
-  S.ok('START BATTLE makes that battle: a 160-cell lagoon map, 10,000 credits a side', b.N === 160 && b.len === 25600 && b.sk.water === 'lagoon' &&
+  S.ok('START BATTLE makes that battle: a 160-cell mirrored lagoon map, 10,000 credits a side', b.N === 160 && b.len === 25600 && b.sk.water === 'lagoon' && b.sk.layout === 'mirror' &&
        b.cr[0] >= 9000 && b.cr[1] >= 9000, JSON.stringify(b));
   /* the ground drawn at the base: render and read the canvas in one task (test/README.md) */
   await p.waitForFunction(function () { return window._rtsG && window._rtsG.t > 1; }, null, { timeout: 60000 }).catch(function () {});
@@ -118,6 +119,7 @@ function waitBattle(p) {
   await click(p, '#rtsSkirmishBtn');
   var picked = await click(p, '#rtsSkirmish [data-k=foes] [data-v=team]');
   await click(p, '#rtsSkirmish [data-k=size] [data-v=standard]');
+  await click(p, '#rtsSkirmish [data-k=layout] [data-v=random]');
   await click(p, '#rtsGo');
   await waitBattle(p);
   await p.waitForFunction(function () { return window._rtsG && window._rtsG.t > 1; }, null, { timeout: 60000 }).catch(function () {});

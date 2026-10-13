@@ -745,7 +745,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">25584f1 · 2026-10-11</div>
+  <div id="rtsBuild" title="build">c1c8c57 · 2026-10-13</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1028,11 +1028,14 @@ var RTS_SKIRMISH = {
   size:  { small: { name: 'SMALL', n: 96 }, standard: { name: 'STANDARD', n: 128 }, large: { name: 'LARGE', n: 160 } },
   water: { inland: { name: 'INLAND', r: 0, off: 0 }, coast: { name: 'COAST', r: 6.2, off: 16 }, lagoon: { name: 'LAGOON', r: 10, off: 20 } },
   money: { standard: { name: '3,000', credits: 3000 }, rich: { name: '6,000', credits: 6000 }, flush: { name: '10,000', credits: 10000 } },
+  /* RANDOM is the generated map as it always was; MIRRORED reflects the player's half onto the
+     opponent's so neither seat starts on better ground (core/mirror.js) */
+  layout: { random: { name: 'RANDOM' }, mirror: { name: 'MIRRORED', mirror: true } },
   /* who else is on the field: the computer seats beyond the one opponent (RTS_SEATS) */
   foes:  { one: { name: '1 FOE', extra: [] }, two: { name: '2 FOES', extra: ['enemy2'] },
            ally: { name: 'FOE + ALLY', extra: ['ally'] }, team: { name: '2 V 2', extra: ['ally', 'enemy2'] } }
 };
-var RTS_SKIRMISH_DEFAULT = { size: 'standard', water: 'coast', money: 'standard', foes: 'one' };
+var RTS_SKIRMISH_DEFAULT = { size: 'standard', water: 'coast', money: 'standard', foes: 'one', layout: 'random' };
 
 /* THE SEATS. A seat's team is fixed by its name, so an ally is always the player's army and on the
    player's team, and a second opponent is the first opponent's: everything that has to know whose
@@ -11825,6 +11828,72 @@ function _rtsCarveRoad(G, x0, z0, x1, z1, rnd, force) {
   }
 }
 </script>
+<script>/* core/mirror.js - the SEAT-FAIR map: the player's half of the generated ground, reflected onto the
+   opponent's. Part of rts.core, the simulation.
+
+   A generated map is fair only on average. Measured in self-play (docs/measuring.md): on one seed
+   whichever army held the opponent's seat ended with about 80% of the field, so the seat outweighed
+   everything a balance change could do. Reflected, every cell one seat sees, the other sees too -
+   ground, rock, forest, roads, height, water and ore.
+
+   REFLECTED ACROSS THE LINE HALFWAY BETWEEN THE BASES, not turned half a circle. The inlet runs down
+   one flank parallel to the line between the starts (core/terrain.js), so a reflection keeps it on
+   that flank as one body of water; a rotation would cut it in two and give each base a pond of its
+   own with no navy able to reach the other. The starts are opposite points of a ring round the
+   centre on one of four axes, so the reflection maps whole cells onto whole cells, and the
+   player's start onto the opponent's. An extra seat's start reflects onto its counterpart's: the
+   ally's onto the second foe's (scenario.js puts both on the same flank).
+
+   Runs after the terrain, before any base is laid; the rolls drawn before it are unchanged, so a
+   seed is the same map's left half either way. */
+/* The reflection: the axis from the player's start to the opponent's in -1/0/1 steps, and k = |axis|^2,
+   so a cell (x, z) maps to (x, z) - 2d*axis/k with d = ((x, z) - centre) . axis. Fractional cells
+   (a unit's position) reflect by the same rule. */
+function _rtsMirrorFrame(G) {
+  var p = G.starts.player, e = G.starts.enemy, ax = Math.sign(e.tx - p.tx), az = Math.sign(e.tz - p.tz);
+  return { c: RTS_N / 2, ax: ax, az: az, k: (ax && az) ? 2 : 1 };
+}
+function _rtsMirrorAt(F, x, z) {
+  var d = (x - F.c) * F.ax + (z - F.c) * F.az;
+  return { d: d, x: x - 2 * d * F.ax / F.k, z: z - 2 * d * F.az / F.k };
+}
+function _rtsMirrorMap(G) {
+  var N = RTS_N, F = _rtsMirrorFrame(G), c = F.c, ax = F.ax, az = F.az, k = F.k;
+  var A = [G.terrain, G.blocked, G.height, G.scrap, G.gems];
+  for (var z = 0; z < N; z++) for (var x = 0; x < N; x++) {
+    var d = (x - c) * ax + (z - c) * az;                             /* which side of the line, scaled */
+    if (d >= 0) continue;                                            /* the opponent's half is written, not read */
+    var rx = x - 2 * d * ax / k, rz = z - 2 * d * az / k;
+    if (!_rtsInB(rx, rz)) continue;
+    var from = _rtsIdx(x, z), to = _rtsIdx(rx, rz);
+    for (var i = 0; i < A.length; i++) A[i][to] = A[i][from];
+  }
+}
+
+/* THE OPPONENT'S BASE AS THE MIRROR OF THE ONE ALREADY LAID, slot by slot, when both seats open alike
+   (self-play): each building goes on the reflection of the player's footprint - not of its corner,
+   which is where the footprint is anchored, so a reflected corner would set it a cell or two off and
+   erase a different patch of ore - and each unit on the reflection of where the player's stood. The
+   opponent keeps its own army's keys (its own turret), which are the same size. A slot the player
+   could not fill, or whose reflection is taken, is laid the ordinary way. */
+function _rtsMirrorBase(G, placed, list, side, start, foe) {
+  var F = _rtsMirrorFrame(G), rest = [];
+  for (var i = 0; i < list.length; i++) {
+    var src = placed[i], key = list[i][1];
+    if (!src) { rest.push(list[i]); continue; }
+    if (list[i][0] === 'unit') {
+      var u = _rtsMirrorAt(F, src.x / RTS_TILE + RTS_N / 2 - 0.5, src.z / RTS_TILE + RTS_N / 2 - 0.5);
+      if (!_rtsSpawnUnit(side, key, _rtsWX(u.x), _rtsWX(u.z))) rest.push(list[i]);
+      continue;
+    }
+    var sd = rtsStructDef(src.def), a = _rtsMirrorAt(F, src.tx, src.tz), b = _rtsMirrorAt(F, src.tx + sd.w - 1, src.tz + sd.h - 1);
+    var tx = Math.min(a.x, b.x), tz = Math.min(a.z, b.z), kd = rtsStructDef(key), free = true;
+    for (var ox = 0; ox < kd.w; ox++) for (var oz = 0; oz < kd.h; oz++) if (!_rtsInB(tx + ox, tz + oz) || _rtsBlocked(tx + ox, tz + oz)) free = false;
+    if (free) _rtsPlaceStruct(side, key, tx, tz, true); else rest.push(list[i]);
+  }
+  if (rest.length) _rtsLayBase(start, foe, rest, side, true);
+}
+</script>
 <script>/* core/bridge.js - where the roads cross the water. Part of rts.core.
 
    The roads are carved before the sea, so the channel cuts every branch that runs out to its
@@ -12106,17 +12175,20 @@ function _rtsScanPlace(tx, tz, fits, rnd) {
 /* Lay out a base in its own local frame: `along` points at the opponent, `across` to the
    side. The same table then produces the same arrangement whichever axis the start roll
    picked, instead of the layout only making sense on one diagonal. */
-function _rtsLayBase(start, foe, list, side) {
-  var G = window._rtsG;
+/* `flip` lays the base as the MIRROR of the one across from it rather than its half-turn: on the
+   seat-fair map (core/mirror.js) the opponent's side flips every `across`, so the two bases erase the
+   same ore and stand on the same ground. */
+function _rtsLayBase(start, foe, list, side, flip) {
+  var G = window._rtsG, placed = [];
   var dx = foe.tx - start.tx, dz = foe.tz - start.tz, L = Math.hypot(dx, dz) || 1;
   var ux = dx / L, uz = dz / L, px = -uz, pz = ux;
   for (var i = 0; i < list.length; i++) {
-    var kind = list[i][0], key = list[i][1], along = list[i][2], across = list[i][3];
+    var kind = list[i][0], key = list[i][1], along = list[i][2], across = flip ? -list[i][3] : list[i][3];
     var tx = Math.round(start.tx + ux * along + px * across);
     var tz = Math.round(start.tz + uz * along + pz * across);
     if (kind === 'unit') {
       var open = _rtsScanPlace(tx, tz, function (x, z) { return _rtsInB(x, z) && !_rtsBlocked(x, z); }, _rtsRnd);
-      if (open) _rtsSpawnUnit(side, key, _rtsWX(open.tx), _rtsWX(open.tz));
+      placed.push(open ? _rtsSpawnUnit(side, key, _rtsWX(open.tx), _rtsWX(open.tz)) : null);
       continue;
     }
     var d = rtsStructDef(key);
@@ -12126,8 +12198,9 @@ function _rtsLayBase(start, foe, list, side) {
       }
       return true;
     }, _rtsRnd);
-    if (spot) _rtsPlaceStruct(side, key, spot.tx, spot.tz, true);
+    placed.push(spot ? _rtsPlaceStruct(side, key, spot.tx, spot.tz, true) : null);
   }
+  return placed;
 }
 
 </script>
@@ -12511,6 +12584,8 @@ function _rtsNewGame(seed, diff, spec) {
     }
   }
   _rtsGenTerrain(G, rnd, G.starts);
+  var fair = !!RTS_SKIRMISH.layout[sk.layout].mirror;
+  if (fair) _rtsMirrorMap(G);                                     /* the seat-fair map: core/mirror.js */
 
   /* --- the two bases: player bottom-left, opponent top-right.
      Footprints are small (Command Yard 3x3) so a base is a cluster of compact structures
@@ -12523,7 +12598,7 @@ function _rtsNewGame(seed, diff, spec) {
      then it opens as the computer does - the human's opening is a yard and a power plant, which
      the opponent's brain was measured unable to grow into a base. */
   var pAI = !!(spec && spec.player && spec.player.ctl === 'ai');
-  _rtsLayBase(G.starts.player, G.starts.enemy, pAI ? _rtsAIOpening('player') : [
+  var pBase = _rtsLayBase(G.starts.player, G.starts.enemy, pAI ? _rtsAIOpening('player') : [
     ['struct','yard',    0,  0], ['struct','power',   1,  5],
     ['unit',  'rifle',   3, -3], ['unit',  'rifle',   4, -1], ['unit', 'buggy', 1, -4]
   ], 'player');
@@ -12533,10 +12608,13 @@ function _rtsNewGame(seed, diff, spec) {
      with Allied statistics, and the AI never sold or replaced them. Its build planner already
      filters on rtsBuildableBy and carries a comment about faction lists breaking exactly this
      way; the opening layout was the one that had not been told. */
-  _rtsLayBase(G.starts.enemy, G.starts.player, _rtsAIOpening('enemy'), 'enemy');
+  /* on the seat-fair map with both seats opening alike, the opponent's base is the player's reflected
+     (core/mirror.js); otherwise laid in its own frame, flipped on the seat-fair map */
+  if (fair && pAI) _rtsMirrorBase(G, pBase, _rtsAIOpening('enemy'), 'enemy', G.starts.enemy, G.starts.player);
+  else _rtsLayBase(G.starts.enemy, G.starts.player, _rtsAIOpening('enemy'), 'enemy', fair);
   if (pAI) _rtsSeatToAI('player', spec.player.diff || G.diff);
   extra.forEach(function (k) {
-    _rtsLayBase(G.starts[k], G.starts[_rtsAIFoe(k)], _rtsAIOpening(k), k);
+    _rtsLayBase(G.starts[k], G.starts[_rtsAIFoe(k)], _rtsAIOpening(k), k, fair && RTS_SEATS[k].team === 1);
   });
 
   /* Density LAST. Terrain generation and the two bases both erase ore, and a cell's level is
@@ -34724,10 +34802,11 @@ function rtsSkirmishWant() {
 }
 /* One line for the button: what START BATTLE will make. */
 function rtsSkirmishLine(s) {
-  return RTS_SKIRMISH.foes[s.foes].name.toLowerCase() + ' · ' + RTS_SKIRMISH.size[s.size].name.toLowerCase() + ' map · ' + RTS_SKIRMISH.water[s.water].name.toLowerCase()
+  return RTS_SKIRMISH.foes[s.foes].name.toLowerCase() + ' · ' + RTS_SKIRMISH.size[s.size].name.toLowerCase()
+    + (RTS_SKIRMISH.layout[s.layout].mirror ? ' mirrored' : '') + ' map · ' + RTS_SKIRMISH.water[s.water].name.toLowerCase()
     + ' · ' + RTS_SKIRMISH.money[s.money].name + ' credits';
 }
-var RTS_SKIRMISH_ROWS = [['foes', 'SIDES'], ['size', 'MAP'], ['water', 'WATER'], ['money', 'CREDITS']];
+var RTS_SKIRMISH_ROWS = [['foes', 'SIDES'], ['size', 'MAP'], ['layout', 'GROUND'], ['water', 'WATER'], ['money', 'CREDITS']];
 function rtsSkirmishToggle() {
   var box = document.getElementById('rtsSkirmish');
   if (!box) return;
