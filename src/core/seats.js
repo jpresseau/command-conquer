@@ -21,10 +21,27 @@
    of G) never sees them: each brain is reachable by one path only, which the encoder needs. */
 var _rtsAIOn = 'enemy';
 
-/* The seat this one fights: the NEAREST seat in play on another team, by start - so with two foes
-   and an ally each brain takes the base across from its own. Two seats: the other one. */
+/* The seat this one fights: the seat ACROSS the map from it (RTS_SEATS faces) while that one is in
+   play and hostile - so in a 2 V 2 the player's side and the ally each take a base of their own
+   rather than both falling on the nearer - and after it, or in a free-for-all, the NEAREST hostile
+   seat by start. Two seats: the other one. */
 function _rtsAIFoe(side) {
   var G = window._rtsG, me = side || _rtsAIOn, S = G && G.sides && G.sides[me];
+  var f = !G.ffa && RTS_SEATS[me] && RTS_SEATS[me].faces, F = f && G.sides[f];
+  if (F && !F.lost && S && F.team !== S.team) return f;
+  /* A FREE-FOR-ALL IS A RING: each seat fights the next live seat clockwise round the map's centre,
+     so every side has one attacker rather than three falling on whoever is nearest */
+  if (G.ffa && S && G.starts && G.starts[me]) {
+    var c = RTS_N / 2, a0 = Math.atan2(G.starts[me].tz - c, G.starts[me].tx - c), ring = null, rb = 1e9;
+    for (var j = 0; j < G.order.length; j++) {
+      var kk = G.order[j], O2 = G.sides[kk], P2 = G.starts[kk];
+      if (kk === me || !O2 || O2.lost || O2.team === S.team || !P2) continue;
+      var da = Math.atan2(P2.tz - c, P2.tx - c) - a0;
+      while (da <= 0) da += Math.PI * 2;
+      if (da < rb) { rb = da; ring = kk; }
+    }
+    if (ring) return ring;
+  }
   if (S && G.order) {
     var best = null, bd = 1e9, P = G.starts && G.starts[me];
     for (var i = 0; i < G.order.length; i++) {

@@ -23,18 +23,23 @@ var RTS_SKIRMISH = {
   layout: { random: { name: 'RANDOM' }, mirror: { name: 'MIRRORED', mirror: true } },
   /* who else is on the field: the computer seats beyond the one opponent (RTS_SEATS) */
   foes:  { one: { name: '1 FOE', extra: [] }, two: { name: '2 FOES', extra: ['enemy2'] },
-           ally: { name: 'FOE + ALLY', extra: ['ally'] }, team: { name: '2 V 2', extra: ['ally', 'enemy2'] } }
+           ally: { name: 'FOE + ALLY', extra: ['ally'] }, team: { name: '2 V 2', extra: ['ally', 'enemy2'] },
+           /* every seat its own team, the bases spread round the ring (core/scenario.js) */
+           ffa3: { name: 'FFA 3', extra: ['enemy2'], ffa: true }, ffa4: { name: 'FFA 4', extra: ['enemy2', 'enemy3'], ffa: true } }
 };
 var RTS_SKIRMISH_DEFAULT = { size: 'standard', water: 'coast', money: 'standard', foes: 'one', layout: 'random' };
 
 /* THE SEATS. A seat's team is fixed by its name, so an ally is always the player's army and on the
    player's team, and a second opponent is the first opponent's: everything that has to know whose
    side a seat is on before a battle exists (the army it builds, the colours it is baked in) reads
-   it here. `near` is the seat an extra base is put beside. */
+   it here. `near` is the seat an extra base is put beside, `faces` the seat across the map that a
+   computer seat fights first (core/seats.js), and `mine` fields the player's army. In a FREE-FOR-ALL
+   every seat is its own team whatever this says (core/base.js). */
 var RTS_SEATS = {
-  player: { team: 0 }, enemy: { team: 1 },
-  ally:   { team: 0, near: 'player', name: 'Ally' },
-  enemy2: { team: 1, near: 'enemy',  name: 'Second foe' }
+  player: { team: 0, mine: true, faces: 'enemy' }, enemy: { team: 1, faces: 'player' },
+  ally:   { team: 0, mine: true, near: 'player', faces: 'enemy2', name: 'Ally' },
+  enemy2: { team: 1, near: 'enemy', faces: 'ally', name: 'Second foe' },
+  enemy3: { team: 3, mine: true, name: 'Third foe' }
 };
 
 /* A whole, valid choice from any partial or stale one: an unknown key falls back to the default. */

@@ -125,7 +125,8 @@ var RTS_PAL = {
     enemy:  ['#a83228', '#d04438', '#741e18', '#ec7663'],
     /* the extra seats (rules/skirmish.js): an ally in green, a second foe in amber */
     ally:   ['#2f8a4a', '#3fae5e', '#1e5a30', '#6fd08a'],
-    enemy2: ['#b0661c', '#dc8428', '#744010', '#f2ae62']
+    enemy2: ['#b0661c', '#dc8428', '#744010', '#f2ae62'],
+    enemy3: ['#6a3a9e', '#8a52c8', '#43246a', '#b48ae8']
   },
   /* Vehicle bodies are NOT the team colour, and this is taken straight off the reference art
      rather than guessed: in the sidebar cameos for both factions every tank, truck and jeep is
@@ -146,7 +147,8 @@ var RTS_PAL = {
     player: ['#7e8672', '#949c86', '#5a6151', '#a9b19a'],
     enemy:  ['#8a7d52', '#a09368', '#635939', '#b5a97c'],
     ally:   ['#7e8672', '#949c86', '#5a6151', '#a9b19a'],
-    enemy2: ['#8a7d52', '#a09368', '#635939', '#b5a97c']
+    enemy2: ['#8a7d52', '#a09368', '#635939', '#b5a97c'],
+    enemy3: ['#7e8672', '#949c86', '#5a6151', '#a9b19a']
   },
   /* Structures are NOT grey. In the reference each faction's buildings are strongly
      coloured - steel blue walls under maroon roofs on one side, red on the other - and that
@@ -166,7 +168,8 @@ var RTS_PAL = {
     player: { wall:'#7d8794', roof:'#3f6ea8', trim:'#c8d2dc', dark:'#2b3d52' },
     enemy:  { wall:'#8a8f94', roof:'#b8322a', trim:'#d8ccc8', dark:'#4a1f1a' },
     ally:   { wall:'#7d8794', roof:'#3a8a4a', trim:'#c8d2dc', dark:'#1f3d28' },
-    enemy2: { wall:'#8a8f94', roof:'#c47a22', trim:'#d8ccc8', dark:'#4a2e12' }
+    enemy2: { wall:'#8a8f94', roof:'#c47a22', trim:'#d8ccc8', dark:'#4a2e12' },
+    enemy3: { wall:'#7d8794', roof:'#6e3ea8', trim:'#c8d2dc', dark:'#2e1a48' }
   },
   /* Building MATERIALS, read off the structure cameos. A Red Alert base is not one colour: the
      power plants are red brick with brick chimneys, the Allied barracks are sand-coloured Nissen

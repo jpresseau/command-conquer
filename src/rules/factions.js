@@ -41,7 +41,7 @@ function rtsHouseSide(house) {
   var mine = rtsArmySide();
   /* a seat on the player's team fields the player's army (rules/skirmish.js RTS_SEATS) */
   var S = typeof RTS_SEATS !== 'undefined' && RTS_SEATS[house];
-  return (S ? S.team === 0 : house === 'player') ? mine : (mine === 'allied' ? 'soviet' : 'allied');
+  return (S ? !!S.mine : house === 'player') ? mine : (mine === 'allied' ? 'soviet' : 'allied');
 }
 
 /* Armour class per thing, used with a weapon's `verses` table above. */

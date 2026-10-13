@@ -125,12 +125,14 @@ function _rtsNewGame(seed, diff, spec) {
   G.sides.enemy.team = 1; G.sides.enemy.ctl = 'ai'; G.sides.enemy.ai = _rtsBrainNew();
   /* the extra computer seats the setup asks for - an ally, a second foe (rules/skirmish.js), each
      with its own brain and the battle's difficulty; ticked after the two that always play */
-  var extra = RTS_SKIRMISH.foes[sk.foes].extra;
+  var extra = RTS_SKIRMISH.foes[sk.foes].extra, ffa = !!RTS_SKIRMISH.foes[sk.foes].ffa;
   extra.forEach(function (k) {
     var S = G.sides[k] = _rtsSideNew(k);
     S.credits = G.sides.enemy.credits; S.team = RTS_SEATS[k].team;
     G.order.push(k);
   });
+  /* a free-for-all: every seat its own team (core/seats.js reads teams, never names) */
+  if (ffa) { G.ffa = true; G.order.forEach(function (k, i) { G.sides[k].team = i; }); }
   _rtsBrainLink(G);
   window._rtsG = G;
   extra.forEach(function (k) { _rtsSeatToAI(k, G.diff); });
@@ -154,7 +156,7 @@ function _rtsNewGame(seed, diff, spec) {
   /* The two starts are rolled BEFORE anything else is laid down, because the ore, the roads,
      the connectivity fill and the team waypoints are all expressed relative to them. */
   G.starts = _rtsPickStarts(rnd);
-  _rtsExtraStarts(G.starts, extra, G.seed);
+  G.startNear = _rtsExtraStarts(G.starts, extra, G.seed, ffa);
   var fields = _rtsOreFields(G.starts);
   for (var f = 0; f < fields.length; f++) {
     var cx = fields[f][0], cz = fields[f][1], rad = fields[f][2], isGem = fields[f][3];

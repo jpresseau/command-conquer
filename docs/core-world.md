@@ -245,8 +245,13 @@ and offset in `core/terrain.js`; INLAND has none) and money (both sides' startin
   `enemy2` on the opponent's (`RTS_SEATS`). The rules for any seat:
   - **Hostility is by team**, through `_rtsHostile(a, b)`, never "not mine". "Is it on my team"
     for sight and the player's own view is `_rtsWithPlayer`.
-  - A computer seat's foe is the **nearest hostile seat by start** (`_rtsAIFoe`). When that foe is
-    out, the brain's waypoints are rebuilt toward the next.
+  - A computer seat's foe is the seat **across the map** (`RTS_SEATS.faces`: player and enemy, ally
+    and second foe), then the nearest hostile seat left. In a **free-for-all** (FFA 3, FFA 4: every
+    seat its own team, `G.ffa`) it is the next live seat clockwise round the map, so every side has
+    one attacker. When the foe changes, the brain's waypoints are rebuilt toward the next.
+  - A free-for-all spreads its extra bases round the ring, furthest from every start taken, and roads
+    each to its nearest (`G.startNear`); one across the inlet is reached over the bridge laid there.
+  - Every computer seat but the player's own remembers where it hit mines, so its sweepers go.
   - **GROUND: MIRRORED** (`core/mirror.js`) reflects the player's half of the generated ground onto the
   opponent's, across the line between the bases, after the terrain and before any base. A reflection
   and not a half-turn, because a half-turn would cut the inlet into two ponds. With both seats the

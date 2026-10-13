@@ -43,23 +43,42 @@ function _rtsPickStarts(rnd) {
    to it, on the flank AWAY from the inlet - so the water is never between an ally and its partner
    and the land route between them stays whole. Rolls nothing: a battle with no extra seat draws
    exactly the numbers it always did. */
-function _rtsExtraStarts(S, extras, seed) {
-  if (!extras || !extras.length) return;
+/* A FREE-FOR-ALL spreads them instead: each extra seat takes the free point on the ring furthest
+   from every start already taken - SCENARIO.CPP's own rule for every house after the first - the
+   dry flank first on a tie. Returns, per extra seat, the seat whose start it is joined to by road
+   (core/terrain.js): its partner, or in a free-for-all the nearest. */
+function _rtsExtraStarts(S, extras, seed, ffa) {
+  var near = {};
+  if (!extras || !extras.length) return near;
   var p = S.player, e = S.enemy, mid = RTS_N / 2;
   var dx = e.tx - p.tx, dz = e.tz - p.tz, L = Math.hypot(dx, dz) || 1, px = -dz / L, pz = dx / L;
   var sg = ((seed >>> 3) & 1) ? 1 : -1;              /* the inlet's flank, as core/terrain.js rolls it */
+  function dry(c) { return ((c.tx - mid) * px + (c.tz - mid) * pz) * sg <= 0; }
   var cand = _rtsStartCandidates().filter(function (c) {
     for (var k in S) if (Math.hypot(c.tx - S[k].tx, c.tz - S[k].tz) < 4) return false;
-    return ((c.tx - mid) * px + (c.tz - mid) * pz) * sg <= 0;
+    return ffa || dry(c);
   });
   extras.forEach(function (k) {
-    var near = S[RTS_SEATS[k].near], best = -1, bd = 1e9;
+    var best = -1, bd = ffa ? -1 : 1e9;
     for (var i = 0; i < cand.length; i++) {
-      var d = Math.hypot(cand[i].tx - near.tx, cand[i].tz - near.tz);
-      if (d < bd) { bd = d; best = i; }
+      var d;
+      if (ffa) {
+        d = 1e9;
+        for (var t in S) d = Math.min(d, Math.hypot(cand[i].tx - S[t].tx, cand[i].tz - S[t].tz));
+        d += dry(cand[i]) ? 0.5 : 0;
+        if (d > bd) { bd = d; best = i; }
+      } else {
+        var n = S[RTS_SEATS[k].near];
+        d = Math.hypot(cand[i].tx - n.tx, cand[i].tz - n.tz);
+        if (d < bd) { bd = d; best = i; }
+      }
     }
-    if (best >= 0) S[k] = cand.splice(best, 1)[0];
+    if (best < 0) return;
+    var c = cand.splice(best, 1)[0], nk = RTS_SEATS[k].near, nd = 1e9;
+    if (ffa || !nk) for (var t2 in S) { var d2 = Math.hypot(c.tx - S[t2].tx, c.tz - S[t2].tz); if (d2 < nd) { nd = d2; nk = t2; } }
+    S[k] = c; near[k] = nk;
   });
+  return near;
 }
 /* The ore layout is expressed RELATIVE to the two starts rather than as fixed cells: a home
    field beside each base, matched pairs out along the line between them, and the gems in

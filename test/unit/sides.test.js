@@ -5,8 +5,11 @@
      WHERE          an extra base stands beside the seat it sides with, clear of water, on ground a
                     tank can drive from there to its partner's yard
      WHOSE ARMY     an ally fields the player's army, a second foe the first foe's
-     WHO FIGHTS     sides on one team are never hostile, sides on two always are; the computer's
-                    foe is the nearest hostile seat
+     WHO FIGHTS     sides on one team are never hostile, sides on two always are; a computer seat
+                    fights the seat across the map, then the nearest one left
+     FREE-FOR-ALL   three or four seats, each its own team, spread round the map, every base reached
+                    by land, and each fighting the next round the ring
+     MINES          every computer seat but the player's own learns where its units hit mines
      THE BRAINS     in three minutes of a 2 V 2 every seat has built on its opening, and nobody's
                     guns have hit a teammate
      A SAVE         a 2 V 2 saved and loaded comes back with its seats, brains and entities
@@ -32,7 +35,7 @@ function landPath(G, a, b) {
       var nx = x + d[0], nz = z + d[1], k = nx + nz * N;
       if (!g._rtsInB(nx, nz) || seen[k]) return;
       seen[k] = 1;
-      if (G.blocked[k] === 2 || G.terrain[k] === g.RTS_T_WATER) return;   /* buildings are passable here: we ask about the ground */
+      if (G.blocked[k] === 2) return;   /* ground a tank crosses: a bridge is water with no block (core/bridge.js); buildings pass here, we ask about the ground */
       q.push(k);
     });
   }
@@ -80,10 +83,48 @@ var H = g._rtsHostile;
 S.ok('one team is never hostile, two always are', !H('player', 'ally') && !H('enemy', 'enemy2') && H('player', 'enemy') && H('player', 'enemy2') && H('ally', 'enemy') && H('ally', 'enemy2') && !H('player', 'player') && !H('player', undefined), '');
 var G4 = g._rtsG, foeOf = {};
 G4.order.forEach(function (k) { foeOf[k] = g._rtsAIFoe(k); });
-S.ok('...and each seat\'s foe is the nearest hostile one', G4.order.every(function (k) {
-  var f = foeOf[k], d = Math.hypot(G4.starts[k].tx - G4.starts[f].tx, G4.starts[k].tz - G4.starts[f].tz);
-  return H(k, f) && G4.order.every(function (o) { return !H(k, o) || Math.hypot(G4.starts[k].tx - G4.starts[o].tx, G4.starts[k].tz - G4.starts[o].tz) >= d; });
-}), JSON.stringify(foeOf));
+S.ok('...and in a 2 V 2 each seat fights the seat across, so no base has two attackers', foeOf.player === 'enemy' && foeOf.enemy === 'player' &&
+     foeOf.ally === 'enemy2' && foeOf.enemy2 === 'ally', JSON.stringify(foeOf));
+G4.sides.enemy2.lost = true;
+var fb = g._rtsAIFoe('ally');
+S.ok('...and with that seat out, the nearest foe left', fb === 'enemy', 'ally now fights ' + fb);
+G4.sides.enemy2.lost = false;
+
+/* ---------------- a free-for-all ---------------- */
+[['ffa3', 3], ['ffa4', 4]].forEach(function (c) {
+  var G = make(c[0]), teams = {}, seen = {}, ring = {};
+  G.order.forEach(function (k) { teams[G.sides[k].team] = 1; ring[k] = g._rtsAIFoe(k); seen[ring[k]] = (seen[ring[k]] || 0) + 1; });
+  var spread = 1e9;
+  G.order.forEach(function (a) { G.order.forEach(function (b) { if (a < b) spread = Math.min(spread, Math.hypot(G.starts[a].tx - G.starts[b].tx, G.starts[a].tz - G.starts[b].tz)); }); });
+  var reach = G.order.every(function (k) { return landPath(G, G.starts.player, G.starts[k]); });
+  S.ok(c[0] + ': ' + c[1] + ' seats, every one its own team, spread round the map and joined by land', G.order.length === c[1] && Object.keys(teams).length === c[1] &&
+       spread > 55 && reach, JSON.stringify({ order: G.order, teams: Object.keys(teams).length, spread: spread.toFixed(0), reach: reach }));
+  S.ok('...each seat fights the next round the ring, so every seat has exactly one attacker', G.order.every(function (k) { return seen[k] === 1 && ring[k] !== k; }),
+       JSON.stringify(ring));
+});
+/* a free-for-all base on the inlet's far flank is reached on every water and size: round the inlet's
+   ends, or where a lagoon closes them, over the bridge core/bridge.js lays where its road meets the water */
+var cut = [];
+[7, 12345, 9003].forEach(function (seed) { [['lagoon', 'standard'], ['coast', 'small'], ['lagoon', 'small'], ['lagoon', 'large']].forEach(function (w) {
+  var G = make('ffa4', seed);
+  g._rtsNewGame(seed, 'normal', { skirmish: { foes: 'ffa4', water: w[0], size: w[1] } }); G = g._rtsG;
+  G.order.forEach(function (k) { if (!landPath(G, G.starts.player, G.starts[k])) cut.push(seed + '/' + w.join('/') + ':' + k); });
+}); });
+S.ok('...and on every water and size each free-for-all base is reached by land', !cut.length, cut.join(' ') || 'all reached');
+make('ffa4');
+S.ok('a third foe fields the player\'s army', g.rtsHouseSide('enemy3') === g.rtsHouseSide('player'), g.rtsHouseSide('enemy3'));
+
+/* ---------------- mines: every computer seat but the player's own learns ---------------- */
+var GM = make('team', 7, true), wx = g._rtsWX(GM.starts.enemy2.tx + 6), wz = g._rtsWX(GM.starts.enemy2.tz);
+var memo = {};
+['enemy2', 'player'].forEach(function (k) {
+  var u = g._rtsSpawnUnit(k, 'tank', wx, wz), foe = k === 'player' ? 'enemy' : 'ally';
+  GM.mines = GM.mines || [];
+  GM.mines.push({ side: foe, tx: g._rtsTX(u.x), tz: g._rtsTX(u.z), arm: 0, sea: false });
+  for (var t = 0; t < 30; t++) g._rtsTick(1 / 60);
+  memo[k] = g._rtsAIAs(k, function () { return (GM.mineHits || []).length; });
+});
+S.ok('a second foe\'s brain remembers where its tank hit a mine; the player\'s seat, played by the computer, keeps nothing', memo.enemy2 > 0 && memo.player === 0, JSON.stringify(memo));
 
 /* a gun picks a foe, never a teammate parked beside it: an ally's tank next to the player's and the
    second foe's, with nothing else in reach */
