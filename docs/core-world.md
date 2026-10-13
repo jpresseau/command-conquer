@@ -255,6 +255,11 @@ and offset in `core/terrain.js`; INLAND has none) and money (both sides' startin
   - A free-for-all spreads its extra bases round the ring, furthest from every start taken, and roads
     each to its nearest (`G.startNear`); one across the inlet is reached over the bridge laid there.
   - Every computer seat but the player's own remembers where it hit mines, so its sweepers go.
+  - **The player can order an ally** (`core/allycmd.js`, the 🤝 ALLY button in `ui/allymenu.js`):
+    ATTACK at the middle of the view for `RTS_ALLY_CMD.attackFor` seconds, DEFEND the player's base
+    until released, or FREE. The order lives on the ally's brain (`ai.cmd`), its teams are disbanded
+    when it is given, and while it stands the brain raises no team and sends no escort but builds as
+    ever.
   - **GROUND: MIRRORED** (`core/mirror.js`) reflects the player's half of the generated ground onto the
   opponent's, across the line between the bases, after the terrain and before any base. A reflection
   and not a half-turn, because a half-turn would cut the inlet into two ponds. With both seats the

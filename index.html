@@ -551,6 +551,13 @@
 #rcgRts .rts-goals span{display:block}
 #rcgRts .rts-goals .done{color:#7fd08a}
 #rcgRts .rts-goals .failed{color:#ff8a7a}
+/* orders to a computer ally (ui/allymenu.js) */
+#rcgRts .rts-ops button[hidden]{display:none}
+#rcgRts .rts-allymenu{display:flex;flex-direction:column;gap:3px;margin-top:3px}
+#rcgRts .rts-allymenu[hidden]{display:none}
+#rcgRts .rts-allymenu button{padding:6px 0;border:1px solid #2d5a3a;border-radius:3px;background:#13241a;color:#cfe8d6;
+  font:600 11px/1 inherit;letter-spacing:.4px;cursor:pointer}
+#rcgRts .rts-allymenu button:hover{background:#1b3324}
 </style>
 <style>
 /* --- standalone shell: the title screen this app boots into --- */
@@ -745,7 +752,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">27b7657 · 2026-10-13</div>
+  <div id="rtsBuild" title="build">524d9cd · 2026-10-13</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -19202,6 +19209,75 @@ function _rtsEscortRelease(u) {
   if (aim && !u.target) _rtsOrderMove(u, aim.x, aim.z, true);
 }
 </script>
+<script>/* core/allycmd.js - the player's orders to a computer ally (the `ally` seat, rules/skirmish.js).
+   Part of rts.core, the simulation.
+
+   Two orders and a release, kept on the ally's brain as plain data (G.sides.ally.ai.cmd) so a save
+   carries them:
+
+     ATTACK   its fighting army attack-moves to a point - the player's view, in the page - and
+              fights everything on the way, for RTS_ALLY_CMD.attackFor seconds, then the brain
+              goes back to its own plans
+     DEFEND   the same army attack-moves to the player's base and stays there until released
+     FREE     the order is dropped at once
+
+   While an order stands the brain still builds, harvests and spends, but raises no teams and
+   sends no escorts (core/aisupers.js): those would pull the same units back to its own war. The
+   teams it had are disbanded when the order is given, so their members answer it. */
+
+var RTS_ALLY_CMD = {
+  every: 3,          /* seconds between re-aims, as an escort's (core/escorts.js) */
+  attackFor: 120,    /* an attack order runs this long */
+  near: 4            /* cells: close enough to the point to stop walking and hold */
+};
+
+/* The order, from the player. kind 'attack' needs the point in world units; 'defend' and 'free'
+   take none. Returns false when there is no ally to give it to. */
+function _rtsAllyCommand(kind, x, z) {
+  var G = window._rtsG, S = G && G.sides && G.sides.ally;
+  if (!S || S.lost || S.ctl !== 'ai' || !S.ai) return false;
+  if (kind === 'free') { S.ai.cmd = null; _rtsSay('Ally: acting on its own again.'); return true; }
+  if (kind === 'defend') {
+    var c = _rtsBaseCentre('player');
+    if (!c) return false;
+    x = c.x; z = c.z;
+  } else if (kind !== 'attack' || typeof x !== 'number' || typeof z !== 'number') return false;
+  S.ai.cmd = { kind: kind, x: x, z: z, t0: G.t, next: 0 };
+  /* its teams are disbanded, so every fighter it has answers */
+  _rtsAIAs('ally', function () {
+    for (var id in (G.teams || {})) if (_rtsTeamMine(G.teams[id])) _rtsTeamDisband(G.teams[id]);
+  });
+  _rtsSay(kind === 'attack' ? 'Ally: moving to attack.' : 'Ally: falling back to defend your base.');
+  return true;
+}
+/* The ally's fighters: on the ground, armed, not a harvester, ship or support vehicle. */
+function _rtsAllyFighter(u) {
+  if (u.dead || u.side !== 'ally' || u.type !== 'unit' || u.air || u.inside) return false;
+  var d = rtsUnitDef(u.def);
+  return !!(d && d.weapon && !d.harvest && !d.sea && !_rtsSupportDriven(d));
+}
+/* Called from the ally's brain each tick (core/aisupers.js). True while an order stands, which is
+   what tells the brain to hold its teams and escorts. */
+function _rtsAllyCmdTick(dt) {
+  var G = window._rtsG, S = G.sides[_rtsAIOn], c = S && S.ai && S.ai.cmd;
+  if (!c) return false;
+  if (c.kind === 'attack' && G.t - c.t0 > RTS_ALLY_CMD.attackFor) { S.ai.cmd = null; return false; }
+  c.next -= dt;
+  if (c.next > 0) return true;
+  c.next = RTS_ALLY_CMD.every;
+  var n = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var u = G.ents[i];
+    if (!_rtsAllyFighter(u)) continue;
+    n++;
+    if (u.target && !u.target.dead && _rtsHostile(u.target.side, u.side)) continue;   /* busy fighting */
+    var ox = ((n % 5) - 2) * RTS_TILE * 1.2, oz = (((n / 5) | 0) % 5 - 2) * RTS_TILE * 1.2;   /* a frontage */
+    if (Math.hypot(u.x - c.x - ox, u.z - c.z - oz) < RTS_ALLY_CMD.near * RTS_TILE) continue;
+    _rtsOrderMove(u, c.x + ox, c.z + oz, true);
+  }
+  return true;
+}
+</script>
 <script>/* core/aimend.js - the opponent sends a battered vehicle home to be mended. Part of rts.core,
    the simulation.
 
@@ -20707,8 +20783,10 @@ function _rtsUpdateAIFor(dt) {
   if (S.lost) return;
   /* the foe the waypoints lead to is out of the battle: lead them to the next (core/seats.js) */
   if (S.ai.wayFoe && S.ai.wayFoe !== _rtsAIFoe()) G.waypt = null;
-  _rtsTeamsTick(dt);
-  _rtsEscortsTick(dt);          /* the spare army goes with the teams - core/escorts.js */
+  /* an ally under the player's order holds its own war while it stands (core/allycmd.js) */
+  var held = _rtsAIOn === 'ally' && _rtsAllyCmdTick(dt);
+  if (!held) _rtsTeamsTick(dt);
+  if (!held) _rtsEscortsTick(dt);   /* the spare army goes with the teams - core/escorts.js */
   _rtsAIMendTick(dt);           /* ...and the battered go home to the depot - core/aimend.js */
   _rtsAIMinesTick(dt);          /* ...and the layer mines the approach - core/aimines.js */
   _rtsAIHoverTick(dt);          /* ...and the Hovercraft raids by sea - core/aihover.js */
@@ -30966,6 +31044,13 @@ function rtsOpen(seed) {
     +       'title="Repair: click one of your buildings to patch it up for credits">🔧 REPAIR</button>'
     +     '<button type="button" data-mode="sell" onclick="rtsMode(\'sell\')" '
     +       'title="Sell: click one of your buildings to sell it back">💲 SELL</button>'
+    /* orders to a computer ally, in a battle that has one (ui/allymenu.js) */
+    +     '<button type="button" id="rtsAllyBtn" hidden onclick="rtsAllyMenu()" title="Give your ally an order">🤝 ALLY</button>'
+    +   '</div>'
+    +   '<div class="rts-allymenu" id="rtsAllyMenu" hidden>'
+    +     '<button type="button" onclick="rtsAllyOrder(\'attack\')" title="Your ally attacks where you are looking">⚔ ATTACK HERE</button>'
+    +     '<button type="button" onclick="rtsAllyOrder(\'defend\')" title="Your ally comes to hold your base">🛡 DEFEND ME</button>'
+    +     '<button type="button" onclick="rtsAllyOrder(\'free\')" title="Your ally goes back to its own plans">FREE</button>'
     +   '</div>'
     /* Empty until something can charge one. A row of permanently greyed-out superweapons is a
        list of things you cannot have; a row that appears when you build the silo is news. */
@@ -31018,6 +31103,8 @@ function rtsOpen(seed) {
   /* the top bar names an ally and a second foe when the setup brought them (rules/skirmish.js) */
   var _vsP = document.querySelector('#rcgRts .rts-vs .p'), _vsE = document.querySelector('#rcgRts .rts-vs .e');
   if (_vsP && window._rtsG.sides.ally) _vsP.textContent += ' + ally';
+  var _ab = document.getElementById('rtsAllyBtn');
+  if (_ab) _ab.hidden = !(window._rtsG.sides.ally && window._rtsG.sides.ally.ctl === 'ai');
   if (_vsE && window._rtsG.ffa) _vsE.textContent += ' · free-for-all ×' + (window._rtsG.order.length - 1);
   else if (_vsE && window._rtsG.sides.enemy2) _vsE.textContent += ' ×2';
 
@@ -32344,6 +32431,27 @@ function _rtsSuperClick(mx, my) {
   var cv = document.getElementById('rtsCv');
   if (cv) cv.style.cursor = '';
   return true;
+}
+</script>
+<script>/* ui/allymenu.js - the 🤝 ALLY button beside REPAIR and SELL, in a battle with a computer ally, and
+   its three orders (core/allycmd.js). Part of rts.ui.
+
+   ATTACK HERE sends the ally to the middle of the player's view rather than asking for a click: on
+   a phone a second tap on the map is a selection, and the view's centre is where the player is
+   already looking. */
+
+function rtsAllyMenu() {
+  var m = document.getElementById('rtsAllyMenu');
+  if (m) m.hidden = !m.hidden;
+}
+function rtsAllyOrder(kind) {
+  var R = window._rtsR, ok;
+  if (kind === 'attack') ok = !!R && _rtsAllyCommand('attack', R.focus.x, R.focus.z);
+  else ok = _rtsAllyCommand(kind);
+  if (!ok && typeof _rtsSfx === 'function') _rtsSfx('deny');
+  var m = document.getElementById('rtsAllyMenu');
+  if (m) m.hidden = true;
+  return ok;
 }
 </script>
 <script>/* ui/navigate.js - getting around the map with the mouse. Part of rts.ui.

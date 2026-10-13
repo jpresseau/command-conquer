@@ -540,3 +540,10 @@
 #rcgRts .rts-goals span{display:block}
 #rcgRts .rts-goals .done{color:#7fd08a}
 #rcgRts .rts-goals .failed{color:#ff8a7a}
+/* orders to a computer ally (ui/allymenu.js) */
+#rcgRts .rts-ops button[hidden]{display:none}
+#rcgRts .rts-allymenu{display:flex;flex-direction:column;gap:3px;margin-top:3px}
+#rcgRts .rts-allymenu[hidden]{display:none}
+#rcgRts .rts-allymenu button{padding:6px 0;border:1px solid #2d5a3a;border-radius:3px;background:#13241a;color:#cfe8d6;
+  font:600 11px/1 inherit;letter-spacing:.4px;cursor:pointer}
+#rcgRts .rts-allymenu button:hover{background:#1b3324}

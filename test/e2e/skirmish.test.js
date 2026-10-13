@@ -7,6 +7,8 @@
                     and the 3D view draws the ground at the player's base
      A SAVE         a battle saved on a large map loads onto a large map
      NOT A DAILY    the daily battle is the default map whatever is chosen here
+     ALLY ORDERS    in a 2 V 2 the 🤝 ALLY button opens its orders, and ATTACK HERE sends the ally
+                    to the middle of the view; with no ally there is no button
      FFA 4          four seats on four teams, named in the top bar, the third foe baked purple
      2 V 2          four seats, named in the top bar, baked in their own colours, and the ally's
                     base is in the player's sight */
@@ -35,6 +37,25 @@ function waitBattle(p) {
   var g = await openPage(browser, { width: 1100, height: 760 });
   var p = g.page;
   await p.evaluate(function () { try { localStorage.removeItem('bw.skirmish'); } catch (e) {} rtsSkirmishSync(); });
+  /* THE GROUND AT THE MIDDLE OF THE VIEW, rendered and read in one task (test/README.md). Read on the
+     first frame it was sometimes the shroud: the sight that clears it is rebuilt on its own 15 Hz
+     clock, so a frame drawn just after the loop stops can still be dark (measured 12.6 against 71
+     on the same seed). So sight is rebuilt first, and a few frames are tried before calling it dark. */
+  await p.addInitScript(function () {
+    window.litAtCentre = function () {
+      var best = 0;
+      for (var k = 0; k < 6 && best <= 25; k++) {
+        if (typeof _rtsVisTick === 'function') _rtsVisTick(1);
+        _rtsRFrame(1 / 60);
+        var cv = window._R3D.cv, c = document.createElement('canvas'); c.width = 64; c.height = 64;
+        var x = c.getContext('2d'); x.drawImage(cv, cv.width / 2 - 32, cv.height / 2 - 32, 64, 64, 0, 0, 64, 64);
+        var d = x.getImageData(0, 0, 64, 64).data, s = 0;
+        for (var i = 0; i < d.length; i += 4) s += d[i] + d[i + 1] + d[i + 2];
+        best = Math.max(best, s / (d.length / 4) / 3);
+      }
+      return best;
+    };
+  });
 
   /* ---------- the panel ---------- */
   var line0 = await p.evaluate(function () { return document.getElementById('rtsSkirmishNote').textContent; });
@@ -70,13 +91,7 @@ function waitBattle(p) {
   var lit = await p.evaluate(function () {
     var U = window._rtsUI;
     if (U) { U.dead = true; try { if (U.raf) cancelAnimationFrame(U.raf); } catch (e) {} }
-    _rtsRFrame(1 / 60);
-    var cv = window._R3D.cv;
-    var c = document.createElement('canvas'); c.width = 64; c.height = 64;
-    var x = c.getContext('2d'); x.drawImage(cv, cv.width / 2 - 32, cv.height / 2 - 32, 64, 64, 0, 0, 64, 64);
-    var d = x.getImageData(0, 0, 64, 64).data, s = 0;
-    for (var i = 0; i < d.length; i += 4) s += d[i] + d[i + 1] + d[i + 2];
-    return s / (d.length / 4) / 3;
+    return litAtCentre();
   });
   S.ok('...and the 3D view draws the ground at the player\'s base', lit > 25, 'mean ' + lit.toFixed(1) + ' of 255');
 
@@ -129,17 +144,24 @@ function waitBattle(p) {
     var U = window._rtsUI;
     if (U) { U.dead = true; try { if (U.raf) cancelAnimationFrame(U.raf); } catch (e) {} }
     if (y) { R.focus.x = y.x; R.focus.z = y.z; }
-    _rtsRFrame(1 / 60);
-    var cv = window._R3D.cv, c = document.createElement('canvas'); c.width = 64; c.height = 64;
-    var x = c.getContext('2d'); x.drawImage(cv, cv.width / 2 - 32, cv.height / 2 - 32, 64, 64, 0, 0, 64, 64);
-    var d = x.getImageData(0, 0, 64, 64).data, sum = 0;
-    for (var i = 0; i < d.length; i += 4) sum += d[i] + d[i + 1] + d[i + 2];
     return { order: G.order, vs: document.querySelector('#rcgRts .rts-vs').textContent,
-             baked: !!(R.spr && R.spr.bld.ally && R.spr.bld.enemy2 && R.spr.unit.ally.tank), lit: sum / (d.length / 4) / 3 };
+             baked: !!(R.spr && R.spr.bld.ally && R.spr.bld.enemy2 && R.spr.unit.ally.tank), lit: litAtCentre() };
   });
   S.ok('2 V 2 makes four seats, names them in the top bar, and has the ally and second foe\'s colours baked', picked && four.order.join() === 'player,enemy,ally,enemy2' &&
        /\+ ally/.test(four.vs) && /×2/.test(four.vs) && four.baked, JSON.stringify({ order: four.order, vs: four.vs, baked: four.baked }));
   S.ok('...and the 3D view draws the ally\'s base, which the player can see', four.lit > 25, 'mean ' + four.lit.toFixed(1) + ' of 255');
+
+  /* ---------- orders to the ally, with real clicks ---------- */
+  var shown = await p.evaluate(function () { var b = document.getElementById('rtsAllyBtn'); return !!b && !b.hidden && b.getBoundingClientRect().height > 20; });
+  await click(p, '#rtsAllyBtn');
+  var menuOpen = await p.evaluate(function () { var m = document.getElementById('rtsAllyMenu'); return !!m && !m.hidden; });
+  await click(p, '#rtsAllyMenu button');
+  var cmd = await p.evaluate(function () {
+    var c = window._rtsG.sides.ally.ai.cmd, R = window._rtsR;
+    return c ? { kind: c.kind, dx: Math.abs(c.x - R.focus.x), dz: Math.abs(c.z - R.focus.z), menu: document.getElementById('rtsAllyMenu').hidden } : null;
+  });
+  S.ok('in a battle with an ally, 🤝 ALLY opens its orders, and ATTACK HERE sends it where the player is looking', shown && menuOpen && !!cmd &&
+       cmd.kind === 'attack' && cmd.dx < 0.01 && cmd.dz < 0.01 && cmd.menu, JSON.stringify({ shown: shown, menuOpen: menuOpen, cmd: cmd }));
 
   /* ---------- a free-for-all of four ---------- */
   await p.evaluate(function () { rtsClose(); var b = document.getElementById('rtsSkirmish'); if (b) b.hidden = true; });
@@ -151,10 +173,10 @@ function waitBattle(p) {
     var G = window._rtsG, R = window._rtsR, teams = {};
     G.order.forEach(function (k) { teams[G.sides[k].team] = 1; });
     return { order: G.order, teams: Object.keys(teams).length, vs: document.querySelector('#rcgRts .rts-vs').textContent,
-             baked: !!(R.spr && R.spr.bld.enemy3 && R.spr.unit.enemy3.tank) };
+             baked: !!(R.spr && R.spr.bld.enemy3 && R.spr.unit.enemy3.tank), allyBtn: !document.getElementById('rtsAllyBtn').hidden };
   });
   S.ok('FFA 4 makes four seats on four teams, says so in the top bar, and bakes the third foe\'s colours', ffaPick && ffa.order.length === 4 && ffa.teams === 4 &&
-       /free-for-all ×3/.test(ffa.vs) && ffa.baked, JSON.stringify(ffa));
+       /free-for-all ×3/.test(ffa.vs) && ffa.baked && !ffa.allyBtn, JSON.stringify(ffa));
 
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
   await g.close();
