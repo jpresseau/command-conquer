@@ -7,6 +7,7 @@
                     and the 3D view draws the ground at the player's base
      A SAVE         a battle saved on a large map loads onto a large map
      NOT A DAILY    the daily battle is the default map whatever is chosen here
+     FFA 4          four seats on four teams, named in the top bar, the third foe baked purple
      2 V 2          four seats, named in the top bar, baked in their own colours, and the ally's
                     base is in the player's sight */
 
@@ -139,6 +140,21 @@ function waitBattle(p) {
   S.ok('2 V 2 makes four seats, names them in the top bar, and has the ally and second foe\'s colours baked', picked && four.order.join() === 'player,enemy,ally,enemy2' &&
        /\+ ally/.test(four.vs) && /×2/.test(four.vs) && four.baked, JSON.stringify({ order: four.order, vs: four.vs, baked: four.baked }));
   S.ok('...and the 3D view draws the ally\'s base, which the player can see', four.lit > 25, 'mean ' + four.lit.toFixed(1) + ' of 255');
+
+  /* ---------- a free-for-all of four ---------- */
+  await p.evaluate(function () { rtsClose(); var b = document.getElementById('rtsSkirmish'); if (b) b.hidden = true; });
+  await click(p, '#rtsSkirmishBtn');
+  var ffaPick = await click(p, '#rtsSkirmish [data-k=foes] [data-v=ffa4]');
+  await click(p, '#rtsGo');
+  await waitBattle(p);
+  var ffa = await p.evaluate(function () {
+    var G = window._rtsG, R = window._rtsR, teams = {};
+    G.order.forEach(function (k) { teams[G.sides[k].team] = 1; });
+    return { order: G.order, teams: Object.keys(teams).length, vs: document.querySelector('#rcgRts .rts-vs').textContent,
+             baked: !!(R.spr && R.spr.bld.enemy3 && R.spr.unit.enemy3.tank) };
+  });
+  S.ok('FFA 4 makes four seats on four teams, says so in the top bar, and bakes the third foe\'s colours', ffaPick && ffa.order.length === 4 && ffa.teams === 4 &&
+       /free-for-all ×3/.test(ffa.vs) && ffa.baked, JSON.stringify(ffa));
 
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
   await g.close();

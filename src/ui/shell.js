@@ -130,7 +130,8 @@ function rtsOpen(seed) {
   /* the top bar names an ally and a second foe when the setup brought them (rules/skirmish.js) */
   var _vsP = document.querySelector('#rcgRts .rts-vs .p'), _vsE = document.querySelector('#rcgRts .rts-vs .e');
   if (_vsP && window._rtsG.sides.ally) _vsP.textContent += ' + ally';
-  if (_vsE && window._rtsG.sides.enemy2) _vsE.textContent += ' ×2';
+  if (_vsE && window._rtsG.ffa) _vsE.textContent += ' · free-for-all ×' + (window._rtsG.order.length - 1);
+  else if (_vsE && window._rtsG.sides.enemy2) _vsE.textContent += ' ×2';
 
   window._rtsUI = { cat:'struct', place:null, drag:null, keys:{}, last:0, raf:0, dead:false,
     btns:{}, mouse:{ x:0, y:0, over:false }, miniDrag:false, credShown:0, avail:null,

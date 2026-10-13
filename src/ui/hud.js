@@ -351,7 +351,7 @@ function _rtsRadarLit() {
   return PS.powerMade >= PS.powerUsed;
 }
 /* each seat's dot on the radar: the player blue, an ally green, the foes red and amber */
-var RTS_MINI_COL = { player: '#5ea8ff', ally: '#5fd88a', enemy: '#ff6a52', enemy2: '#ffae4a' };
+var RTS_MINI_COL = { player: '#5ea8ff', ally: '#5fd88a', enemy: '#ff6a52', enemy2: '#ffae4a', enemy3: '#b88cff' };
 function _rtsDrawMini() {
   var G = window._rtsG, mini = document.getElementById('rtsMini');
   if (!mini) return;

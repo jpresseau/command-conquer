@@ -131,7 +131,7 @@ the same army, difficulty, tide and weather, all from the date alone. The end sc
 copy and post, and your best of the day is kept.
 
 **A skirmish setup.** SKIRMISH SETUP on the title screen picks who is on the field (one foe, two
-foes, a foe and a computer ally, or two against two), the map's size (96, 128 or 160 cells a side),
+foes, a foe and a computer ally, two against two, or a free-for-all of three or four), the map's size (96, 128 or 160 cells a side),
 whether the ground is RANDOM or MIRRORED (each side's half the reflection of the other's, so neither
 starts on better ground), how much water it has (INLAND, COAST or a wide LAGOON) and what every side starts with (3,000,
 6,000 or 10,000 credits). An ally fights in green on your army and shares its sight with you; a

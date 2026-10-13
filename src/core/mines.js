@@ -97,7 +97,9 @@ function _rtsMineTick(dt) {
     if (typeof _rtsSfx === 'function') _rtsSfx('boom', x, z);
     if (u.side === 'player') _rtsSay('Mine!');
     /* where a mine on land cost a side a unit - the opponent's sweeper goes there (core/sweeper.js) */
-    if (u.side === 'enemy' && !hit.sea) (G.mineHits = G.mineHits || []).push({ tx: hit.tx, tz: hit.tz });
+    /* the seat's own brain learns where (core/sweeper.js); any computer seat but the player's own,
+       which self-play hands to the computer and has never kept this */
+    if (u.side !== 'player' && _rtsSeatAI(u.side) && !hit.sea) _rtsAIAs(u.side, function () { (G.mineHits = G.mineHits || []).push({ tx: hit.tx, tz: hit.tz }); });
   }
   G.mines = G.mines.filter(function (m) { return !m.gone; });
 }

@@ -118,7 +118,7 @@ function _rtsGenTerrain(G, rnd, starts) {
   /* an extra seat's base is cleared and joined by road to the seat it sides with (scenario.js) */
   for (var _xk in starts) {
     if (_xk === 'player' || _xk === 'enemy') continue;
-    var _xs = starts[_xk], _xn = starts[RTS_SEATS[_xk].near];
+    var _xs = starts[_xk], _xn = starts[(G.startNear && G.startNear[_xk]) || RTS_SEATS[_xk].near];
     _clearStart(_xs);
     _rtsCarveRoad(G, _xs.tx, _xs.tz, _xn.tx, _xn.tz, rnd);
   }

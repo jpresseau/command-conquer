@@ -745,7 +745,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">c1c8c57 · 2026-10-13</div>
+  <div id="rtsBuild" title="build">a9b8704 · 2026-10-13</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -776,7 +776,8 @@ var RTS_SIDES = {
   player: { key:'player', color:0x4a8ff0, glow:0xa8d4ff },
   enemy:  { key:'enemy',  color:0xe0503c, glow:0xffb49f },
   ally:   { key:'ally',   color:0x4ad07a, glow:0xa8f0c0 },
-  enemy2: { key:'enemy2', color:0xf0a040, glow:0xffd49f }
+  enemy2: { key:'enemy2', color:0xf0a040, glow:0xffd49f },
+  enemy3: { key:'enemy3', color:0xa070e0, glow:0xd8c0ff }
 };
 /* "Compact" / "Dominion" for either house, following the army the player picked: the short,
    adjectival form - "Compact command", "the Dominion forces". rtsArmyTitle is the full name. */
@@ -1033,18 +1034,23 @@ var RTS_SKIRMISH = {
   layout: { random: { name: 'RANDOM' }, mirror: { name: 'MIRRORED', mirror: true } },
   /* who else is on the field: the computer seats beyond the one opponent (RTS_SEATS) */
   foes:  { one: { name: '1 FOE', extra: [] }, two: { name: '2 FOES', extra: ['enemy2'] },
-           ally: { name: 'FOE + ALLY', extra: ['ally'] }, team: { name: '2 V 2', extra: ['ally', 'enemy2'] } }
+           ally: { name: 'FOE + ALLY', extra: ['ally'] }, team: { name: '2 V 2', extra: ['ally', 'enemy2'] },
+           /* every seat its own team, the bases spread round the ring (core/scenario.js) */
+           ffa3: { name: 'FFA 3', extra: ['enemy2'], ffa: true }, ffa4: { name: 'FFA 4', extra: ['enemy2', 'enemy3'], ffa: true } }
 };
 var RTS_SKIRMISH_DEFAULT = { size: 'standard', water: 'coast', money: 'standard', foes: 'one', layout: 'random' };
 
 /* THE SEATS. A seat's team is fixed by its name, so an ally is always the player's army and on the
    player's team, and a second opponent is the first opponent's: everything that has to know whose
    side a seat is on before a battle exists (the army it builds, the colours it is baked in) reads
-   it here. `near` is the seat an extra base is put beside. */
+   it here. `near` is the seat an extra base is put beside, `faces` the seat across the map that a
+   computer seat fights first (core/seats.js), and `mine` fields the player's army. In a FREE-FOR-ALL
+   every seat is its own team whatever this says (core/base.js). */
 var RTS_SEATS = {
-  player: { team: 0 }, enemy: { team: 1 },
-  ally:   { team: 0, near: 'player', name: 'Ally' },
-  enemy2: { team: 1, near: 'enemy',  name: 'Second foe' }
+  player: { team: 0, mine: true, faces: 'enemy' }, enemy: { team: 1, faces: 'player' },
+  ally:   { team: 0, mine: true, near: 'player', faces: 'enemy2', name: 'Ally' },
+  enemy2: { team: 1, near: 'enemy', faces: 'ally', name: 'Second foe' },
+  enemy3: { team: 3, mine: true, name: 'Third foe' }
 };
 
 /* A whole, valid choice from any partial or stale one: an unknown key falls back to the default. */
@@ -2442,7 +2448,7 @@ function rtsHouseSide(house) {
   var mine = rtsArmySide();
   /* a seat on the player's team fields the player's army (rules/skirmish.js RTS_SEATS) */
   var S = typeof RTS_SEATS !== 'undefined' && RTS_SEATS[house];
-  return (S ? S.team === 0 : house === 'player') ? mine : (mine === 'allied' ? 'soviet' : 'allied');
+  return (S ? !!S.mine : house === 'player') ? mine : (mine === 'allied' ? 'soviet' : 'allied');
 }
 
 /* Armour class per thing, used with a weapon's `verses` table above. */
@@ -4337,7 +4343,8 @@ var RTS_PAL = {
     enemy:  ['#a83228', '#d04438', '#741e18', '#ec7663'],
     /* the extra seats (rules/skirmish.js): an ally in green, a second foe in amber */
     ally:   ['#2f8a4a', '#3fae5e', '#1e5a30', '#6fd08a'],
-    enemy2: ['#b0661c', '#dc8428', '#744010', '#f2ae62']
+    enemy2: ['#b0661c', '#dc8428', '#744010', '#f2ae62'],
+    enemy3: ['#6a3a9e', '#8a52c8', '#43246a', '#b48ae8']
   },
   /* Vehicle bodies are NOT the team colour, and this is taken straight off the reference art
      rather than guessed: in the sidebar cameos for both factions every tank, truck and jeep is
@@ -4358,7 +4365,8 @@ var RTS_PAL = {
     player: ['#7e8672', '#949c86', '#5a6151', '#a9b19a'],
     enemy:  ['#8a7d52', '#a09368', '#635939', '#b5a97c'],
     ally:   ['#7e8672', '#949c86', '#5a6151', '#a9b19a'],
-    enemy2: ['#8a7d52', '#a09368', '#635939', '#b5a97c']
+    enemy2: ['#8a7d52', '#a09368', '#635939', '#b5a97c'],
+    enemy3: ['#7e8672', '#949c86', '#5a6151', '#a9b19a']
   },
   /* Structures are NOT grey. In the reference each faction's buildings are strongly
      coloured - steel blue walls under maroon roofs on one side, red on the other - and that
@@ -4378,7 +4386,8 @@ var RTS_PAL = {
     player: { wall:'#7d8794', roof:'#3f6ea8', trim:'#c8d2dc', dark:'#2b3d52' },
     enemy:  { wall:'#8a8f94', roof:'#b8322a', trim:'#d8ccc8', dark:'#4a1f1a' },
     ally:   { wall:'#7d8794', roof:'#3a8a4a', trim:'#c8d2dc', dark:'#1f3d28' },
-    enemy2: { wall:'#8a8f94', roof:'#c47a22', trim:'#d8ccc8', dark:'#4a2e12' }
+    enemy2: { wall:'#8a8f94', roof:'#c47a22', trim:'#d8ccc8', dark:'#4a2e12' },
+    enemy3: { wall:'#7d8794', roof:'#6e3ea8', trim:'#c8d2dc', dark:'#2e1a48' }
   },
   /* Building MATERIALS, read off the structure cameos. A Red Alert base is not one colour: the
      power plants are red brick with brick chimneys, the Allied barracks are sand-coloured Nissen
@@ -11476,7 +11485,7 @@ function _rtsGenTerrain(G, rnd, starts) {
   /* an extra seat's base is cleared and joined by road to the seat it sides with (scenario.js) */
   for (var _xk in starts) {
     if (_xk === 'player' || _xk === 'enemy') continue;
-    var _xs = starts[_xk], _xn = starts[RTS_SEATS[_xk].near];
+    var _xs = starts[_xk], _xn = starts[(G.startNear && G.startNear[_xk]) || RTS_SEATS[_xk].near];
     _clearStart(_xs);
     _rtsCarveRoad(G, _xs.tx, _xs.tz, _xn.tx, _xn.tz, rnd);
   }
@@ -12090,23 +12099,42 @@ function _rtsPickStarts(rnd) {
    to it, on the flank AWAY from the inlet - so the water is never between an ally and its partner
    and the land route between them stays whole. Rolls nothing: a battle with no extra seat draws
    exactly the numbers it always did. */
-function _rtsExtraStarts(S, extras, seed) {
-  if (!extras || !extras.length) return;
+/* A FREE-FOR-ALL spreads them instead: each extra seat takes the free point on the ring furthest
+   from every start already taken - SCENARIO.CPP's own rule for every house after the first - the
+   dry flank first on a tie. Returns, per extra seat, the seat whose start it is joined to by road
+   (core/terrain.js): its partner, or in a free-for-all the nearest. */
+function _rtsExtraStarts(S, extras, seed, ffa) {
+  var near = {};
+  if (!extras || !extras.length) return near;
   var p = S.player, e = S.enemy, mid = RTS_N / 2;
   var dx = e.tx - p.tx, dz = e.tz - p.tz, L = Math.hypot(dx, dz) || 1, px = -dz / L, pz = dx / L;
   var sg = ((seed >>> 3) & 1) ? 1 : -1;              /* the inlet's flank, as core/terrain.js rolls it */
+  function dry(c) { return ((c.tx - mid) * px + (c.tz - mid) * pz) * sg <= 0; }
   var cand = _rtsStartCandidates().filter(function (c) {
     for (var k in S) if (Math.hypot(c.tx - S[k].tx, c.tz - S[k].tz) < 4) return false;
-    return ((c.tx - mid) * px + (c.tz - mid) * pz) * sg <= 0;
+    return ffa || dry(c);
   });
   extras.forEach(function (k) {
-    var near = S[RTS_SEATS[k].near], best = -1, bd = 1e9;
+    var best = -1, bd = ffa ? -1 : 1e9;
     for (var i = 0; i < cand.length; i++) {
-      var d = Math.hypot(cand[i].tx - near.tx, cand[i].tz - near.tz);
-      if (d < bd) { bd = d; best = i; }
+      var d;
+      if (ffa) {
+        d = 1e9;
+        for (var t in S) d = Math.min(d, Math.hypot(cand[i].tx - S[t].tx, cand[i].tz - S[t].tz));
+        d += dry(cand[i]) ? 0.5 : 0;
+        if (d > bd) { bd = d; best = i; }
+      } else {
+        var n = S[RTS_SEATS[k].near];
+        d = Math.hypot(cand[i].tx - n.tx, cand[i].tz - n.tz);
+        if (d < bd) { bd = d; best = i; }
+      }
     }
-    if (best >= 0) S[k] = cand.splice(best, 1)[0];
+    if (best < 0) return;
+    var c = cand.splice(best, 1)[0], nk = RTS_SEATS[k].near, nd = 1e9;
+    if (ffa || !nk) for (var t2 in S) { var d2 = Math.hypot(c.tx - S[t2].tx, c.tz - S[t2].tz); if (d2 < nd) { nd = d2; nk = t2; } }
+    S[k] = c; near[k] = nk;
   });
+  return near;
 }
 /* The ore layout is expressed RELATIVE to the two starts rather than as fixed cells: a home
    field beside each base, matched pairs out along the line between them, and the gems in
@@ -12227,10 +12255,27 @@ function _rtsLayBase(start, foe, list, side, flip) {
    of G) never sees them: each brain is reachable by one path only, which the encoder needs. */
 var _rtsAIOn = 'enemy';
 
-/* The seat this one fights: the NEAREST seat in play on another team, by start - so with two foes
-   and an ally each brain takes the base across from its own. Two seats: the other one. */
+/* The seat this one fights: the seat ACROSS the map from it (RTS_SEATS faces) while that one is in
+   play and hostile - so in a 2 V 2 the player's side and the ally each take a base of their own
+   rather than both falling on the nearer - and after it, or in a free-for-all, the NEAREST hostile
+   seat by start. Two seats: the other one. */
 function _rtsAIFoe(side) {
   var G = window._rtsG, me = side || _rtsAIOn, S = G && G.sides && G.sides[me];
+  var f = !G.ffa && RTS_SEATS[me] && RTS_SEATS[me].faces, F = f && G.sides[f];
+  if (F && !F.lost && S && F.team !== S.team) return f;
+  /* A FREE-FOR-ALL IS A RING: each seat fights the next live seat clockwise round the map's centre,
+     so every side has one attacker rather than three falling on whoever is nearest */
+  if (G.ffa && S && G.starts && G.starts[me]) {
+    var c = RTS_N / 2, a0 = Math.atan2(G.starts[me].tz - c, G.starts[me].tx - c), ring = null, rb = 1e9;
+    for (var j = 0; j < G.order.length; j++) {
+      var kk = G.order[j], O2 = G.sides[kk], P2 = G.starts[kk];
+      if (kk === me || !O2 || O2.lost || O2.team === S.team || !P2) continue;
+      var da = Math.atan2(P2.tz - c, P2.tx - c) - a0;
+      while (da <= 0) da += Math.PI * 2;
+      if (da < rb) { rb = da; ring = kk; }
+    }
+    if (ring) return ring;
+  }
   if (S && G.order) {
     var best = null, bd = 1e9, P = G.starts && G.starts[me];
     for (var i = 0; i < G.order.length; i++) {
@@ -12542,12 +12587,14 @@ function _rtsNewGame(seed, diff, spec) {
   G.sides.enemy.team = 1; G.sides.enemy.ctl = 'ai'; G.sides.enemy.ai = _rtsBrainNew();
   /* the extra computer seats the setup asks for - an ally, a second foe (rules/skirmish.js), each
      with its own brain and the battle's difficulty; ticked after the two that always play */
-  var extra = RTS_SKIRMISH.foes[sk.foes].extra;
+  var extra = RTS_SKIRMISH.foes[sk.foes].extra, ffa = !!RTS_SKIRMISH.foes[sk.foes].ffa;
   extra.forEach(function (k) {
     var S = G.sides[k] = _rtsSideNew(k);
     S.credits = G.sides.enemy.credits; S.team = RTS_SEATS[k].team;
     G.order.push(k);
   });
+  /* a free-for-all: every seat its own team (core/seats.js reads teams, never names) */
+  if (ffa) { G.ffa = true; G.order.forEach(function (k, i) { G.sides[k].team = i; }); }
   _rtsBrainLink(G);
   window._rtsG = G;
   extra.forEach(function (k) { _rtsSeatToAI(k, G.diff); });
@@ -12571,7 +12618,7 @@ function _rtsNewGame(seed, diff, spec) {
   /* The two starts are rolled BEFORE anything else is laid down, because the ore, the roads,
      the connectivity fill and the team waypoints are all expressed relative to them. */
   G.starts = _rtsPickStarts(rnd);
-  _rtsExtraStarts(G.starts, extra, G.seed);
+  G.startNear = _rtsExtraStarts(G.starts, extra, G.seed, ffa);
   var fields = _rtsOreFields(G.starts);
   for (var f = 0; f < fields.length; f++) {
     var cx = fields[f][0], cz = fields[f][1], rad = fields[f][2], isGem = fields[f][3];
@@ -12925,7 +12972,9 @@ function _rtsMineTick(dt) {
     if (typeof _rtsSfx === 'function') _rtsSfx('boom', x, z);
     if (u.side === 'player') _rtsSay('Mine!');
     /* where a mine on land cost a side a unit - the opponent's sweeper goes there (core/sweeper.js) */
-    if (u.side === 'enemy' && !hit.sea) (G.mineHits = G.mineHits || []).push({ tx: hit.tx, tz: hit.tz });
+    /* the seat's own brain learns where (core/sweeper.js); any computer seat but the player's own,
+       which self-play hands to the computer and has never kept this */
+    if (u.side !== 'player' && _rtsSeatAI(u.side) && !hit.sea) _rtsAIAs(u.side, function () { (G.mineHits = G.mineHits || []).push({ tx: hit.tx, tz: hit.tz }); });
   }
   G.mines = G.mines.filter(function (m) { return !m.gone; });
 }
@@ -26553,7 +26602,7 @@ var R3D_RING_LIFT = 0.5;     /* toward the eye, as the tread marks are (tread3d.
 var R3D_RING_UNIT = 1.25;    /* a unit's ring, as a multiple of its radius */
 
 /* The house's selection colour: the green and red the HUD always drew its brackets in. */
-var R3D_RING_COL = { player: [0.557, 0.941, 0.478], enemy: [1.0, 0.541, 0.478], ally: [0.45, 0.8, 1.0], enemy2: [1.0, 0.72, 0.32] };
+var R3D_RING_COL = { player: [0.557, 0.941, 0.478], enemy: [1.0, 0.541, 0.478], ally: [0.45, 0.8, 1.0], enemy2: [1.0, 0.72, 0.32], enemy3: [0.78, 0.55, 1.0] };
 /* A PARKED JAMMER'S COVER, ringed in the radar's blue round a selected one of the player's: the
    field hid units within RTS_JAM.r cells and nothing showed where that was, or that it was up,
    so a column could not be put inside it (core/jammer.js; the radar traces it too, ui/hud.js) */
@@ -30958,7 +31007,8 @@ function rtsOpen(seed) {
   /* the top bar names an ally and a second foe when the setup brought them (rules/skirmish.js) */
   var _vsP = document.querySelector('#rcgRts .rts-vs .p'), _vsE = document.querySelector('#rcgRts .rts-vs .e');
   if (_vsP && window._rtsG.sides.ally) _vsP.textContent += ' + ally';
-  if (_vsE && window._rtsG.sides.enemy2) _vsE.textContent += ' ×2';
+  if (_vsE && window._rtsG.ffa) _vsE.textContent += ' · free-for-all ×' + (window._rtsG.order.length - 1);
+  else if (_vsE && window._rtsG.sides.enemy2) _vsE.textContent += ' ×2';
 
   window._rtsUI = { cat:'struct', place:null, drag:null, keys:{}, last:0, raf:0, dead:false,
     btns:{}, mouse:{ x:0, y:0, over:false }, miniDrag:false, credShown:0, avail:null,
@@ -33806,7 +33856,7 @@ function _rtsRadarLit() {
   return PS.powerMade >= PS.powerUsed;
 }
 /* each seat's dot on the radar: the player blue, an ally green, the foes red and amber */
-var RTS_MINI_COL = { player: '#5ea8ff', ally: '#5fd88a', enemy: '#ff6a52', enemy2: '#ffae4a' };
+var RTS_MINI_COL = { player: '#5ea8ff', ally: '#5fd88a', enemy: '#ff6a52', enemy2: '#ffae4a', enemy3: '#b88cff' };
 function _rtsDrawMini() {
   var G = window._rtsG, mini = document.getElementById('rtsMini');
   if (!mini) return;
