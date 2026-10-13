@@ -227,7 +227,10 @@ and `src/campaign.js` is the title-screen list, the objectives and the end card.
 - **Each mission is tuned so the intended play wins and doing nothing loses.** `unit/campaign` and
   `unit/campaign-play` play both paths headless:
   - The fortress is lost without the fog: its guns outrange the strike group.
-  - The Channel's Sub Pen is hardened to 1800 hp, and is held only by building submarines.
+  - The Channel's Sub Pen is hardened to 1800 hp, and is held by a submarine every 40 s, not every 80.
+  - Armour by Air's island has a garrison of Battle Tanks the mission sends at a landing (its seat
+    has no brain, and a tank idles unless something is within its reach): one crane load of two
+    Bulwarks dies to it, two loads take the radar.
 
 ## The skirmish setup
 

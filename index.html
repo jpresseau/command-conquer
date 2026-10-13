@@ -745,7 +745,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">a9b8704 · 2026-10-13</div>
+  <div id="rtsBuild" title="build">27b7657 · 2026-10-13</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -3116,6 +3116,8 @@ var RTS_CAMPAIGN = [
       _rtsMBuild('enemy', 'turret', E.tx - 4, E.tz + 3); _rtsMBuild('enemy', 'pillbox', E.tx + 3, E.tz + 4);
       _rtsMBuild('enemy', 'turret', E.tx + 5, E.tz + 1); _rtsMBuild('enemy', 'turret', E.tx - 1, E.tz - 6);
       _rtsMUnits('enemy', 'rifle', E.tx - 3, E.tz - 3, 3, null);
+      /* a garrison that cannot touch a crane: two Bulwarks lose to it, four take the island */
+      _rtsMUnits('enemy', 'tank', E.tx + 1, E.tz - 2, 3, 'garrison');
       _rtsMBuild('player', 'yard', P.tx, P.tz);
       _rtsMBuild('player', 'power', P.tx + 4, P.tz - 4);
       _rtsMBuild('player', 'afld', P.tx - 5, P.tz + 3);
@@ -3126,6 +3128,15 @@ var RTS_CAMPAIGN = [
       M.ok = !!r;
     },
     check: function (G, M) {
+      /* the garrison answers a landing: the seat has no brain to send it (ctl 'none'), and a tank
+         idles unless something comes within its own reach */
+      var landed = _rtsMTagged(G, 'armour').filter(function (a) { return !a.inside && _rtsMNear(a, M.isle.tx, M.isle.tz, 12); });
+      if (landed.length) _rtsMTagged(G, 'garrison').forEach(function (u) {
+        if (u.target && !u.target.dead) return;
+        var best = null, bd = 1e9;
+        landed.forEach(function (a) { var d = Math.hypot(a.x - u.x, a.z - u.z); if (d < bd) { bd = d; best = a; } });
+        if (best) _rtsOrderAttack(u, best);
+      });
       if (!_rtsMTagged(G, 'target').length) { M.obj.radar = 'done'; return { over: 'win', why: 'The radar is down, and the island is yours.' }; }
       if (!_rtsMTagged(G, 'armour').length || (!_rtsMTagged(G, 'lift').length && !_rtsMTagged(G, 'armour').some(function (e) { return _rtsMNear(e, M.isle.tx, M.isle.tz, 9); }))) {
         M.obj.keep = 'failed'; return { over: 'lose', why: 'Nothing left can reach the island.' };
@@ -3168,7 +3179,7 @@ var RTS_CAMPAIGN = [
       while (M.next < M.waves.length && G.t >= M.waves[M.next]) {
         var n = M.next++, ships = [];
         ships = ships.concat(_rtsMUnits('enemy', 'gunboat', M.mouth.tx, M.mouth.tz, 1 + Math.ceil(n / 2), 'fleet'));
-        if (n >= 2) ships = ships.concat(_rtsMUnits('enemy', 'destroyer', M.mouth.tx, M.mouth.tz, 1, 'fleet'));
+        if (n >= 1) ships = ships.concat(_rtsMUnits('enemy', 'destroyer', M.mouth.tx, M.mouth.tz, Math.min(2, n), 'fleet'));
         if (n >= 4) ships = ships.concat(_rtsMUnits('enemy', 'cruiser', M.mouth.tx, M.mouth.tz, 1, 'fleet'));
         var pen = _rtsMTagged(G, 'pen')[0];
         ships.forEach(function (s) { if (pen) _rtsOrderAttack(s, pen); else _rtsOrderMove(s, _rtsWX(M.shore.tx), _rtsWX(M.shore.tz), true); });
