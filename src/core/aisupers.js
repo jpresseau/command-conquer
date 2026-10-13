@@ -80,8 +80,10 @@ function _rtsUpdateAIFor(dt) {
   if (S.lost) return;
   /* the foe the waypoints lead to is out of the battle: lead them to the next (core/seats.js) */
   if (S.ai.wayFoe && S.ai.wayFoe !== _rtsAIFoe()) G.waypt = null;
-  _rtsTeamsTick(dt);
-  _rtsEscortsTick(dt);          /* the spare army goes with the teams - core/escorts.js */
+  /* an ally under the player's order holds its own war while it stands (core/allycmd.js) */
+  var held = _rtsAIOn === 'ally' && _rtsAllyCmdTick(dt);
+  if (!held) _rtsTeamsTick(dt);
+  if (!held) _rtsEscortsTick(dt);   /* the spare army goes with the teams - core/escorts.js */
   _rtsAIMendTick(dt);           /* ...and the battered go home to the depot - core/aimend.js */
   _rtsAIMinesTick(dt);          /* ...and the layer mines the approach - core/aimines.js */
   _rtsAIHoverTick(dt);          /* ...and the Hovercraft raids by sea - core/aihover.js */

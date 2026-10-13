@@ -134,8 +134,9 @@ copy and post, and your best of the day is kept.
 foes, a foe and a computer ally, two against two, or a free-for-all of three or four), the map's size (96, 128 or 160 cells a side),
 whether the ground is RANDOM or MIRRORED (each side's half the reflection of the other's, so neither
 starts on better ground), how much water it has (INLAND, COAST or a wide LAGOON) and what every side starts with (3,000,
-6,000 or 10,000 credits). An ally fights in green on your army and shares its sight with you; a
-second foe fights in amber. The choice is kept between visits. The daily battle and the
+6,000 or 10,000 credits). An ally fights in green on your army and shares its sight with you, and the
+🤝 ALLY button beside REPAIR and SELL orders it to attack where you are looking, come and defend
+your base, or go back to its own plans. A second foe fights in amber, a third in purple. The choice is kept between visits. The daily battle and the
 campaign always use the standard map.
 
 **A campaign.** CAMPAIGN on the title screen opens four missions, each built on a generated map:

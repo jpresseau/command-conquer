@@ -78,6 +78,13 @@ function rtsOpen(seed) {
     +       'title="Repair: click one of your buildings to patch it up for credits">🔧 REPAIR</button>'
     +     '<button type="button" data-mode="sell" onclick="rtsMode(\'sell\')" '
     +       'title="Sell: click one of your buildings to sell it back">💲 SELL</button>'
+    /* orders to a computer ally, in a battle that has one (ui/allymenu.js) */
+    +     '<button type="button" id="rtsAllyBtn" hidden onclick="rtsAllyMenu()" title="Give your ally an order">🤝 ALLY</button>'
+    +   '</div>'
+    +   '<div class="rts-allymenu" id="rtsAllyMenu" hidden>'
+    +     '<button type="button" onclick="rtsAllyOrder(\'attack\')" title="Your ally attacks where you are looking">⚔ ATTACK HERE</button>'
+    +     '<button type="button" onclick="rtsAllyOrder(\'defend\')" title="Your ally comes to hold your base">🛡 DEFEND ME</button>'
+    +     '<button type="button" onclick="rtsAllyOrder(\'free\')" title="Your ally goes back to its own plans">FREE</button>'
     +   '</div>'
     /* Empty until something can charge one. A row of permanently greyed-out superweapons is a
        list of things you cannot have; a row that appears when you build the silo is news. */
@@ -130,6 +137,8 @@ function rtsOpen(seed) {
   /* the top bar names an ally and a second foe when the setup brought them (rules/skirmish.js) */
   var _vsP = document.querySelector('#rcgRts .rts-vs .p'), _vsE = document.querySelector('#rcgRts .rts-vs .e');
   if (_vsP && window._rtsG.sides.ally) _vsP.textContent += ' + ally';
+  var _ab = document.getElementById('rtsAllyBtn');
+  if (_ab) _ab.hidden = !(window._rtsG.sides.ally && window._rtsG.sides.ally.ctl === 'ai');
   if (_vsE && window._rtsG.ffa) _vsE.textContent += ' · free-for-all ×' + (window._rtsG.order.length - 1);
   else if (_vsE && window._rtsG.sides.enemy2) _vsE.textContent += ' ×2';
 
