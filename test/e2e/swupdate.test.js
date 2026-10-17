@@ -1,10 +1,10 @@
 /* The service worker, and whether a new deploy actually reaches the player.
 
-   sw.js makes one promise and it is a negative one: "Network-only ... it never caches page
-   content, so the game always loads the latest deploy ... a stale copy of a self-contained page
-   is far worse than a fast reload - a player who sees an old build has no way to tell."
+   sw.js makes two promises. ONLINE, the deploy that is up reaches the player - network first,
+   because a stale copy of a self-contained page is one a player cannot tell they are on. OFFLINE,
+   the last build that loaded opens anyway, so the game plays from the home screen with no signal.
 
-   That is the entire design, and nothing was checking it. It is also the single most dangerous
+   The first is the dangerous one to break. It is also the single most dangerous
    thing in the repo to get wrong, because the failure is self-concealing: a service worker that
    started serving cached content would pin every existing player to the build they happened to
    have when it shipped. They would not see the bug reports, they would not see the fixes, and
@@ -43,7 +43,7 @@ var MIMES = {
 
 /* The deploy, as the browser sees it. `stamp` is what the served index.html carries in its
    build div; `swExtra` is appended to sw.js so its bytes differ and the browser treats it as a
-   new worker; `dead` makes every request fail, which is how "no offline cache" is checked. */
+   new worker; `dead` makes every request fail with a 503, which is the deploy being down. */
 var deploy = { stamp: 'BUILD-ONE', swExtra: '', dead: false };
 var hits = {};
 
@@ -187,13 +187,21 @@ function stampOf(page) {
          assets.icons.map(function (i) { return i.src; }).join(', ') + ' all 200');
   }
 
-  /* ------------------------------------------------------------- it caches nothing ----
-     The stated design. A worker that opened a cache would not necessarily serve from it today,
-     but it is the thing that turns into stale content later, so the absence is worth asserting
-     directly rather than inferring from behaviour. */
-  var caches1 = await page.evaluate(function () { return caches.keys(); });
-  S.eq('the worker opens no caches at all', caches1.length, 0,
-       caches1.length ? caches1.join(', ') : 'no cache storage');
+  /* ------------------------------------------------------------- its own cache only ----
+     The offline copy lives in one cache under the app's own prefix, filled on install. Another
+     app on this origin keeps caches here too (HighWall's GLBs), so one is planted to prove the
+     worker never touches it. */
+  await page.waitForFunction(async function () {
+    var ks = await caches.keys(), c = ks.length && await caches.open(ks.filter(function (k) { return /^breachwater-offline-/.test(k); })[0] || ks[0]);
+    return !!(c && await c.match('index.html'));
+  }, null, { timeout: 15000 }).catch(function () {});
+  var caches1 = await page.evaluate(async function () {
+    await (await caches.open('highwall-assets')).put('planted', new Response('another app'));
+    return caches.keys();
+  });
+  var own1 = caches1.filter(function (k) { return /^breachwater-offline-/.test(k); });
+  S.ok('the worker keeps one cache of its own, holding the page, beside another app\'s', own1.length === 1 && caches1.indexOf('highwall-assets') >= 0,
+       caches1.join(', '));
 
   /* --------------------------------------------------- a new deploy reaches the player ----
      The assertion this spec exists for. Change what is deployed, reload, and the player must
@@ -215,7 +223,8 @@ function stampOf(page) {
   deploy.stamp = 'BUILD-THREE';
   await page.reload({ waitUntil: 'load' });
   S.eq('...and the deploy after that one too', await stampOf(page), 'BUILD-THREE');
-  S.eq('still no caches after three loads', (await page.evaluate(function () { return caches.keys(); })).length, 0);
+  S.eq('still one cache of its own after three loads', (await page.evaluate(function () { return caches.keys(); }))
+       .filter(function (k) { return /^breachwater-offline-/.test(k); }).length, 1);
 
   /* ------------------------------------------------------------- requests pass through ----
      The worker registers a fetch handler - that is what makes the app installable - but never
@@ -277,33 +286,41 @@ function stampOf(page) {
   S.eq('...and the page is still controlled afterwards', upd.stillControlled, true);
   S.eq('...by an activated worker', upd.state, 'activated');
 
-  /* the swap must not have quietly introduced a cache, and the page must still update */
-  S.eq('the new worker caches nothing either',
-       (await page.evaluate(function () { return caches.keys(); })).length, 0);
+  /* the swap kept one cache of its own and left the other app's alone, and the page still updates */
+  var caches2 = await page.evaluate(async function () {
+    var k = await caches.keys(), h = await caches.open('highwall-assets'), m = await h.match('planted');
+    return { keys: k, planted: m ? await m.text() : null };
+  });
+  S.ok('after the swap: one cache of its own, and the other app\'s cache untouched', caches2.keys.filter(function (k) { return /^breachwater-offline-/.test(k); }).length === 1 &&
+       caches2.planted === 'another app', JSON.stringify(caches2));
   deploy.stamp = 'BUILD-FOUR';
   await page.reload({ waitUntil: 'load' });
   S.eq('and a deploy after the worker swap still reaches the player', await stampOf(page), 'BUILD-FOUR');
 
-  /* ------------------------------------------------------ no offline cache, on purpose ----
-     The header calls this out as a deliberate trade: there is no offline mode, because a stale
-     self-contained page is worse than a failed load a player can see and retry. So with the
-     deploy down the app must FAIL, visibly. If this ever starts passing an old page back, the
-     "always loads the latest deploy" promise has already been broken - this is the same defect
-     as a stale build, caught from the other side. */
+  /* --------------------------------------------------------------- it opens offline ----
+     The point of the cache. With the deploy down (the host answering 503) and then with the
+     browser itself offline (a phone in flight mode), the last build that loaded opens - the
+     whole game, not a shell - and a battle starts. When the network is back, the next deploy
+     reaches the player on the first load, as it always did. */
   deploy.dead = true;
-  var offline = await page.goto(s.url, { waitUntil: 'load' }).then(function (r) {
-    return { status: r ? r.status() : null, err: null };
-  }, function (e) { return { status: null, err: String(e.message || e) }; });
-  var shell = await page.evaluate(function () {
-    return { home: !!document.getElementById('rtsHome'), body: document.body ? document.body.textContent.trim().slice(0, 60) : '' };
+  var down = await page.goto(s.url, { waitUntil: 'load' }).then(function () { return null; }, function (e) { return String(e.message || e); });
+  var downStamp = down ? null : await stampOf(page);
+  S.eq('with the deploy down, the last build that loaded opens', downStamp, 'BUILD-FOUR', down || '');
+  await ctx.setOffline(true);
+  var off = await page.goto(s.base, { waitUntil: 'load' }).then(function () { return null; }, function (e) { return String(e.message || e); });
+  var offline = off ? { err: off } : await page.evaluate(function () {
+    var d = document.getElementById('rtsBuild');
+    var ok = false;
+    try { rtsOpen(7); ok = !!(window._rtsG && document.getElementById('rcgRts')); } catch (e) { ok = String(e.message || e); }
+    return { stamp: d ? d.textContent.trim() : null, home: !!document.getElementById('rtsHome'), battle: ok };
   });
-  S.ok('with the deploy down the page does not load from a cache',
-       offline.status === 503 || !!offline.err,
-       offline.err ? ('navigation failed: ' + offline.err) : ('server answered ' + offline.status));
-  S.eq('...and no stale copy of the app is shown', shell.home, false);
+  S.ok('...and with no network at all, from the app\'s own start URL, the whole game opens and a battle starts', offline.stamp === 'BUILD-FOUR' &&
+       offline.home && offline.battle === true, JSON.stringify(offline));
+  await ctx.setOffline(false);
   deploy.dead = false;
+  deploy.stamp = 'BUILD-FIVE';
   await page.goto(s.url, { waitUntil: 'load' });
-  S.eq('...and the app comes back once the deploy is up', await stampOf(page), 'BUILD-FOUR');
+  S.eq('...and with the network back, the next deploy reaches the player on the first load', await stampOf(page), 'BUILD-FIVE');
 
   S.ok('the page logged no errors throughout', !errors.length,
        errors.slice(0, 3).join(' | ') || 'clean');

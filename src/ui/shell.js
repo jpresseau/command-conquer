@@ -202,20 +202,20 @@ function rtsQuitClick(byKey) {
    holding production. Amber rather than red: it is losing the battle, not losing the battle
    AND leaving.
 
-   WHAT IT ACTUALLY DOES, and it is deliberately more than location.reload(). sw.js is
-   network-only and never calls respondWith(), so a plain reload is already enough to pull a new
-   deploy - but two things can still leave a player looking at an old build, and neither is
-   visible from inside the page:
+   WHAT IT ACTUALLY DOES, and it is deliberately more than location.reload(). sw.js is network
+   first, so a plain reload already pulls a new deploy whenever there is a network - but a changed
+   sw.js is only re-checked by the browser on navigation, so update() asks now.
 
-     a previously-deployed service worker that DID cache, whose Cache Storage entries outlive
-     the worker that wrote them - so every cache is dropped, not just ours;
-     a changed sw.js, which the browser only re-checks on navigation - update() asks now.
+   IT NO LONGER EMPTIES CACHE STORAGE. It used to drop every cache, which on a site that serves
+   several apps from one origin meant every app's caches; and now that the worker keeps an offline
+   copy, it would throw that away too, and a Refresh pressed with no signal would leave nothing to
+   load. The worker retires its own old caches when it activates (sw.js).
 
-   Both are best-effort and neither may block the reload: a hung promise would leave the button
+   It is best-effort and may not block the reload: a hung promise would leave the button
    looking broken, which is the failure this button exists to avoid. Hence the backstop timer
    and the `fired` latch, so whichever finishes first reloads and the other does nothing. */
 var RTS_RELOAD_WINDOW = 5;
-var RTS_RELOAD_GIVEUP = 1500;      /* ms to wait on the caches before reloading anyway */
+var RTS_RELOAD_GIVEUP = 1500;      /* ms to wait on the worker update before reloading anyway */
 function rtsReloadClick() {
   var U = window._rtsUI, G = window._rtsG;
   if (!U) { _rtsReloadNow(); return; }
@@ -241,11 +241,6 @@ function _rtsReloadNow() {
     try { location.reload(); } catch (e) { try { location.href = location.href; } catch (e2) {} }
   }
   var jobs = [];
-  try {
-    if (window.caches && caches.keys) jobs.push(caches.keys().then(function (ks) {
-      return Promise.all(ks.map(function (k) { return caches.delete(k); }));
-    }));
-  } catch (e) {}
   try {
     if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations)
       jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {

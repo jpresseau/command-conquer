@@ -345,11 +345,12 @@ var CONTROLS = ['#rtsReloadBtn', '#rtsSaveBtn', '#rtsLoadBtn', '#rtsMute', '#rcg
      the caches and the service-worker registry are replaced with fakes that RECORD INTO
      sessionStorage - which survives the navigation the button then performs. Playwright waits
      for that navigation, and the markers are read back out of the reloaded page. If the button
-     stopped clearing caches, or stopped reloading at all, this fails. */
+     started clearing caches again (the offline copy, or another app's on this origin), stopped
+     asking the worker to update, or stopped reloading at all, this fails. */
   var rl = await open(SHAPES[2]);
   await rl.page.evaluate(function () {
     sessionStorage.clear();
-    /* Two stale caches to find, and a registration to update. defineProperty rather than plain
+    /* The game's offline copy and another app's cache to leave alone, and a registration to update. defineProperty rather than plain
        assignment: `caches` is a READ-ONLY attribute on window, so `window.caches = {...}` fails
        silently in a secure context and the real (empty) store is used - which is exactly how
        the first run of this block reported zero caches dropped and looked like a product bug. */
@@ -357,7 +358,7 @@ var CONTROLS = ['#rtsReloadBtn', '#rtsSaveBtn', '#rtsLoadBtn', '#rtsMute', '#rcg
       Object.defineProperty(window, 'caches', {
         configurable: true,
         value: {
-          keys: function () { return Promise.resolve(['stale-v1', 'stale-v2']); },
+          keys: function () { return Promise.resolve(['breachwater-offline-v1', 'highwall-assets']); },
           delete: function (k) {
             sessionStorage.setItem('killed:' + k, '1');
             return Promise.resolve(true);
@@ -418,11 +419,11 @@ var CONTROLS = ['#rtsReloadBtn', '#rtsSaveBtn', '#rtsLoadBtn', '#rtsMute', '#rcg
        empty cache store and calling it a pass. */
     S.ok('the fakes were installed, so this is measuring the button and not the browser',
          !marks.nocaches && !marks.nosw, (marks.nocaches || '') + ' ' + (marks.nosw || ''));
-    /* THE POINT OF THE BUTTON. sw.js is network-only today, but a service worker deployed
-       BEFORE it was may have left Cache Storage behind, and those entries outlive the worker
-       that wrote them - so EVERY cache is dropped, not just one this build recognises. */
-    S.eq('...having dropped every cache it found, not just its own',
-         marks.killed.join(','), 'killed:stale-v1,killed:stale-v2');
+    /* IT DROPS NO CACHE. It once dropped every cache on the origin, which is every app's on this
+       site; now the worker keeps an offline copy, and a Refresh pressed with no signal would have
+       left nothing to load. sw.js retires its own old caches when it activates. */
+    S.eq('...having left every cache alone - the offline copy and another app\'s',
+         marks.killed.join(','), '');
     S.eq('...and asked the service worker to re-check itself', marks.updated, '1');
   }
   await rl.ctx.close();
