@@ -25,6 +25,8 @@
   <div class="diff" id="rtsArmySide" hidden></div>
   <p class="diffnote" id="rtsVoxNote" hidden></p>
   <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE</button>
+  <!-- Shown only while the device is offline and the saved copy is what is playing: offline.js -->
+  <p class="diffnote" id="rtsOffline" hidden></p>
   <!-- Map size, water and credits for START BATTLE: skirmish.js -->
   <button type="button" class="go resume" id="rtsSkirmishBtn" onclick="rtsSkirmishToggle()">SKIRMISH SETUP<small id="rtsSkirmishNote"></small></button>
   <div id="rtsSkirmish" hidden></div>
@@ -268,6 +270,7 @@
 <script>//@@INC:daily.js@@</script>
 <script>//@@INC:campaign.js@@</script>
 <script>//@@INC:skirmish.js@@</script>
+<script>//@@INC:offline.js@@</script>
 <script>//@@INC:title.js@@</script>
 
 </body>

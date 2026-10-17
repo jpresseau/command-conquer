@@ -118,3 +118,13 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 #rtsSkirmish{display:flex;flex-direction:column;align-items:center;gap:6px}
 #rtsSkirmish[hidden]{display:none}
 #rtsSkirmish p.lbl{margin:4px 0 0;font-size:11px;letter-spacing:1.2px;opacity:.6}
+/* ROOM UNDER THE LAST ROW for the build stamp pinned bottom-right: with the setup or the mission list
+   open, the last row scrolled to the bottom sat under it (measured on a 430x932 phone: the 10,000
+   credits button covered) */
+#rtsTitleMenu{padding-bottom:28px}
+/* a finger, not a mouse: the campaign's PLAY was 27px tall */
+@media (hover: none) and (pointer: coarse){ #rtsCampList button{min-height:40px;padding:10px 22px} }
+/* ...AND ON A TOUCH SCREEN THE STAMP LETS A TAP THROUGH. It takes taps only so its text can be
+   selected with a mouse; on a phone it sits over the bottom-right of whatever row is at the screen's
+   foot, and a tap there landed on the stamp instead of the button (e2e/phoneui) */
+@media (hover: none) and (pointer: coarse){ #rtsBuild{pointer-events:none} }

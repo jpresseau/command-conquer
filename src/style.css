@@ -547,3 +547,16 @@
 #rcgRts .rts-allymenu button{padding:6px 0;border:1px solid #2d5a3a;border-radius:3px;background:#13241a;color:#cfe8d6;
   font:600 11px/1 inherit;letter-spacing:.4px;cursor:pointer}
 #rcgRts .rts-allymenu button:hover{background:#1b3324}
+/* a finger, not a mouse: the mission end card's buttons and the ally's orders were 29-31px tall */
+@media (hover: none) and (pointer: coarse){
+  #rcgRts .rts-over button{min-height:40px}
+  #rcgRts .rts-allymenu button{min-height:40px}
+}
+/* ON A NARROW SCREEN THE OBJECTIVES ARE A PILL, tapped open: written out in full they covered a fifth
+   of a portrait phone's battlefield and ran under the startup message (campaign.js rtsCampHud) */
+#rcgRts .rts-goals .pill{display:none;font-style:normal;font-weight:600}
+@media (max-width:600px){
+  #rcgRts .rts-goals{pointer-events:auto;cursor:pointer;max-width:calc(100vw - 90px)}
+  #rcgRts .rts-goals:not(.open) .pill{display:block}
+  #rcgRts .rts-goals:not(.open) b,#rcgRts .rts-goals:not(.open) span{display:none}
+}

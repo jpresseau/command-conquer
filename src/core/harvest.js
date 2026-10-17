@@ -54,6 +54,7 @@ function _rtsUpdateHarvester(e, dt, d) {
       if (!e.path) {
         e.noGo = e.noGo || {};
         e.noGo[_rtsIdx(e.htile.tx, e.htile.tz)] = G.t + RTS_HARV_NOGO;
+        _rtsHarvWriteOff(e);
         e.htile = null; e.noGain = 0; e.bestGap = undefined;
         return;
       }
@@ -120,7 +121,16 @@ function _rtsUpdateHarvester(e, dt, d) {
       }
     }
     e.rep = (e.rep || 0) - dt;
-    if (!e.path || e.rep <= 0) { e.goal = { x:dock.x, z:dock.z }; e.path = _rtsPathFor(e, dock.x, dock.z); e.pi = 0; e.rep = 1.5; if (!e.path) return; }
+    /* A FAILED PATH WAITS OUT THE TIMER like a stale one. `!e.path` used to re-ask on the very next
+       tick, so a dock the harvester cannot reach was a whole-map A* sixty times a second - measured
+       in a four-seat battle on the large map, 1,587 failed searches in twenty seconds from one
+       harvester, 16 ms of every tick. The stall above still moves it on to another face, then
+       another refinery. */
+    if (e.rep <= 0 || (!e.path && !e.dockFail)) {
+      e.goal = { x:dock.x, z:dock.z }; e.path = _rtsPathFor(e, dock.x, dock.z); e.pi = 0; e.rep = 1.5;
+      e.dockFail = !e.path;
+    }
+    if (!e.path) return;
     _rtsSteer(e, dt, d);
   } else if (e.hstate === 'unload') {
     if (!e.ref || e.ref.dead) { e.hstate = 'toRef'; return; }
@@ -214,4 +224,33 @@ function _rtsNearestRefinery(e) {
     if (d < bd) { bd = d; best = o; }
   }
   return best;
+}
+/* ...AND THE REST OF THAT FIELD WITH IT. Blacklisting the one tile was not enough: when a whole field
+   is out of reach (across the water, behind rock), the next tick took the next-nearest tile of the
+   same field, failed again, and so on through every tile of it - one whole-map A* each, sixty a
+   second. Measured in a four-seat battle on the large map: one harvester asked 1,587 times in
+   twenty seconds, every one failing, 16 ms of every tick. So a failed path floods once from the
+   harvester over the ground it moves on and writes off every ore tile that flood cannot reach, for
+   the same lapse as the tile itself. One search instead of hundreds. */
+function _rtsHarvWriteOff(e) {
+  var G = window._rtsG, N = RTS_N, dom = _rtsDomainOf(e), seen = new Uint8Array(N * N);
+  var sx = _rtsTX(e.x), sz = _rtsTX(e.z);
+  if (!_rtsInB(sx, sz)) return;
+  var q = [_rtsIdx(sx, sz)], h = 0;
+  seen[q[0]] = 1;
+  while (h < q.length) {
+    var c = q[h++], x = c % N, z = (c / N) | 0;
+    for (var k = 0; k < 4; k++) {
+      var nx = x + (k === 0 ? 1 : k === 1 ? -1 : 0), nz = z + (k === 2 ? 1 : k === 3 ? -1 : 0);
+      if (!_rtsInB(nx, nz)) continue;
+      var ni = nz * N + nx;
+      if (seen[ni]) continue;
+      seen[ni] = 1;
+      /* ore cells are where the walk ends, not obstacles: a field's edge is reached from outside */
+      if (_rtsBlocked(nx, nz, dom) && !(G.scrap[ni] > 0)) continue;
+      q.push(ni);
+    }
+  }
+  var until = G.t + RTS_HARV_NOGO;
+  for (var i = 0; i < N * N; i++) if (G.scrap[i] > 0 && !seen[i]) e.noGo[i] = until;
 }

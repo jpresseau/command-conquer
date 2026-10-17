@@ -160,3 +160,14 @@ the bases, and the opponent's base laid as the reflection of the player's. Same 
   about ±0.03 at 40 battles, ±0.01 at several hundred. Use `--fair` for a balance trial, and plan the
   battle count for the effect being looked for.
 
+
+## A failed path was asked again every tick
+
+Profiled headless with the computer on every seat: in an ordinary 1v1, 61% of a tick was the
+pathfinder, and 5 ms of every tick was two units chasing a yard walled in by its own base; in a
+four-seat battle on the large map one harvester that could not reach its refinery cost 16 ms of
+every tick. The cause was one pattern in three places (`!e.path` re-planning at once, so a FAILED
+plan was re-asked on the next tick, and a failed A* searches the whole map). A failed plan now
+waits out its timer, and a harvester that cannot reach the ore writes off every tile it cannot
+reach after one flood. A tick of the default 1v1 went from 8.0 ms to 2.9 ms, a 2 V 2 on the large
+map is 5.7 ms; `unit/pathfail` holds it and `unit/fingerprint` is unchanged.

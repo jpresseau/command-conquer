@@ -558,6 +558,19 @@
 #rcgRts .rts-allymenu button{padding:6px 0;border:1px solid #2d5a3a;border-radius:3px;background:#13241a;color:#cfe8d6;
   font:600 11px/1 inherit;letter-spacing:.4px;cursor:pointer}
 #rcgRts .rts-allymenu button:hover{background:#1b3324}
+/* a finger, not a mouse: the mission end card's buttons and the ally's orders were 29-31px tall */
+@media (hover: none) and (pointer: coarse){
+  #rcgRts .rts-over button{min-height:40px}
+  #rcgRts .rts-allymenu button{min-height:40px}
+}
+/* ON A NARROW SCREEN THE OBJECTIVES ARE A PILL, tapped open: written out in full they covered a fifth
+   of a portrait phone's battlefield and ran under the startup message (campaign.js rtsCampHud) */
+#rcgRts .rts-goals .pill{display:none;font-style:normal;font-weight:600}
+@media (max-width:600px){
+  #rcgRts .rts-goals{pointer-events:auto;cursor:pointer;max-width:calc(100vw - 90px)}
+  #rcgRts .rts-goals:not(.open) .pill{display:block}
+  #rcgRts .rts-goals:not(.open) b,#rcgRts .rts-goals:not(.open) span{display:none}
+}
 </style>
 <style>
 /* --- standalone shell: the title screen this app boots into --- */
@@ -679,6 +692,16 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 #rtsSkirmish{display:flex;flex-direction:column;align-items:center;gap:6px}
 #rtsSkirmish[hidden]{display:none}
 #rtsSkirmish p.lbl{margin:4px 0 0;font-size:11px;letter-spacing:1.2px;opacity:.6}
+/* ROOM UNDER THE LAST ROW for the build stamp pinned bottom-right: with the setup or the mission list
+   open, the last row scrolled to the bottom sat under it (measured on a 430x932 phone: the 10,000
+   credits button covered) */
+#rtsTitleMenu{padding-bottom:28px}
+/* a finger, not a mouse: the campaign's PLAY was 27px tall */
+@media (hover: none) and (pointer: coarse){ #rtsCampList button{min-height:40px;padding:10px 22px} }
+/* ...AND ON A TOUCH SCREEN THE STAMP LETS A TAP THROUGH. It takes taps only so its text can be
+   selected with a mouse; on a phone it sits over the bottom-right of whatever row is at the screen's
+   foot, and a tap there landed on the stamp instead of the button (e2e/phoneui) */
+@media (hover: none) and (pointer: coarse){ #rtsBuild{pointer-events:none} }
 </style>
 </head>
 <body>
@@ -694,6 +717,8 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   <div class="diff" id="rtsArmySide" hidden></div>
   <p class="diffnote" id="rtsVoxNote" hidden></p>
   <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE</button>
+  <!-- Shown only while the device is offline and the saved copy is what is playing: offline.js -->
+  <p class="diffnote" id="rtsOffline" hidden></p>
   <!-- Map size, water and credits for START BATTLE: skirmish.js -->
   <button type="button" class="go resume" id="rtsSkirmishBtn" onclick="rtsSkirmishToggle()">SKIRMISH SETUP<small id="rtsSkirmishNote"></small></button>
   <div id="rtsSkirmish" hidden></div>
@@ -752,7 +777,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">8122683 · 2026-10-17</div>
+  <div id="rtsBuild" title="build">1dc1d06 · 2026-10-17</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -17064,9 +17089,11 @@ function _rtsUpdateUnit(e, dt) {
          the steering at the bottom instead of standing still with a path it never walks. */
       if (e.order === 'attack' && !e.path) return;   /* in range: hold and keep firing */
     } else if (chasing && e.order === 'attack') {
-      /* close on the ordered target; repath now and then rather than every frame */
+      /* repath now and then; a FAILED path waits out the timer too (docs/measuring.md) */
       e.rep = (e.rep || 0) - dt;
-      if (!e.path || e.rep <= 0) { e.goal = { x:tgt.x, z:tgt.z }; e.path = _rtsPathFor(e, tgt.x, tgt.z); e.pi = 0; e.rep = 0.9; }
+      if (e.rep <= 0 || (!e.path && !e.chaseFail)) {
+        e.goal = { x:tgt.x, z:tgt.z }; e.path = _rtsPathFor(e, tgt.x, tgt.z); e.pi = 0; e.rep = 0.9; e.chaseFail = !e.path;
+      }
     }
   } else { e.turret = e.rot; }
 
@@ -17311,6 +17338,7 @@ function _rtsUpdateHarvester(e, dt, d) {
       if (!e.path) {
         e.noGo = e.noGo || {};
         e.noGo[_rtsIdx(e.htile.tx, e.htile.tz)] = G.t + RTS_HARV_NOGO;
+        _rtsHarvWriteOff(e);
         e.htile = null; e.noGain = 0; e.bestGap = undefined;
         return;
       }
@@ -17377,7 +17405,16 @@ function _rtsUpdateHarvester(e, dt, d) {
       }
     }
     e.rep = (e.rep || 0) - dt;
-    if (!e.path || e.rep <= 0) { e.goal = { x:dock.x, z:dock.z }; e.path = _rtsPathFor(e, dock.x, dock.z); e.pi = 0; e.rep = 1.5; if (!e.path) return; }
+    /* A FAILED PATH WAITS OUT THE TIMER like a stale one. `!e.path` used to re-ask on the very next
+       tick, so a dock the harvester cannot reach was a whole-map A* sixty times a second - measured
+       in a four-seat battle on the large map, 1,587 failed searches in twenty seconds from one
+       harvester, 16 ms of every tick. The stall above still moves it on to another face, then
+       another refinery. */
+    if (e.rep <= 0 || (!e.path && !e.dockFail)) {
+      e.goal = { x:dock.x, z:dock.z }; e.path = _rtsPathFor(e, dock.x, dock.z); e.pi = 0; e.rep = 1.5;
+      e.dockFail = !e.path;
+    }
+    if (!e.path) return;
     _rtsSteer(e, dt, d);
   } else if (e.hstate === 'unload') {
     if (!e.ref || e.ref.dead) { e.hstate = 'toRef'; return; }
@@ -17471,6 +17508,35 @@ function _rtsNearestRefinery(e) {
     if (d < bd) { bd = d; best = o; }
   }
   return best;
+}
+/* ...AND THE REST OF THAT FIELD WITH IT. Blacklisting the one tile was not enough: when a whole field
+   is out of reach (across the water, behind rock), the next tick took the next-nearest tile of the
+   same field, failed again, and so on through every tile of it - one whole-map A* each, sixty a
+   second. Measured in a four-seat battle on the large map: one harvester asked 1,587 times in
+   twenty seconds, every one failing, 16 ms of every tick. So a failed path floods once from the
+   harvester over the ground it moves on and writes off every ore tile that flood cannot reach, for
+   the same lapse as the tile itself. One search instead of hundreds. */
+function _rtsHarvWriteOff(e) {
+  var G = window._rtsG, N = RTS_N, dom = _rtsDomainOf(e), seen = new Uint8Array(N * N);
+  var sx = _rtsTX(e.x), sz = _rtsTX(e.z);
+  if (!_rtsInB(sx, sz)) return;
+  var q = [_rtsIdx(sx, sz)], h = 0;
+  seen[q[0]] = 1;
+  while (h < q.length) {
+    var c = q[h++], x = c % N, z = (c / N) | 0;
+    for (var k = 0; k < 4; k++) {
+      var nx = x + (k === 0 ? 1 : k === 1 ? -1 : 0), nz = z + (k === 2 ? 1 : k === 3 ? -1 : 0);
+      if (!_rtsInB(nx, nz)) continue;
+      var ni = nz * N + nx;
+      if (seen[ni]) continue;
+      seen[ni] = 1;
+      /* ore cells are where the walk ends, not obstacles: a field's edge is reached from outside */
+      if (_rtsBlocked(nx, nz, dom) && !(G.scrap[ni] > 0)) continue;
+      q.push(ni);
+    }
+  }
+  var until = G.t + RTS_HARV_NOGO;
+  for (var i = 0; i < N * N; i++) if (G.scrap[i] > 0 && !seen[i]) e.noGo[i] = until;
 }
 </script>
 <script>/* core/basezone.js - HOUSE.CPP Recalc_Center and Which_Zone, and everything that decides
@@ -34910,10 +34976,17 @@ function rtsCampHud(G) {
   var on = !!(G && G.mission);
   if (el.hidden === on) el.hidden = !on;
   if (!on) return;
-  var html = '<b>' + _rtsMissionOf(G.mission.id).name + '</b>' + _rtsMissionGoals(G).map(function (g) {
+  var goals = _rtsMissionGoals(G), name = _rtsMissionOf(G.mission.id).name;
+  /* the pill is what a narrow screen shows until it is tapped open (style.css) */
+  var html = '<i class="pill">' + name + ' · ' + goals.filter(function (g) { return g.done; }).length + '/' + goals.length + ' ▾</i>'
+    + '<b>' + name + '</b>' + goals.map(function (g) {
     return '<span class="' + (g.done ? 'done' : g.failed ? 'failed' : '') + '">' + (g.done ? '✓ ' : g.failed ? '✕ ' : '• ') + g.text + '</span>';
   }).join('');
   if (el.innerHTML !== html) el.innerHTML = html;
+  if (!el.onclick) el.onclick = function () { el.classList.toggle('open'); };
+  /* just under the top bar, which wraps taller on a phone than its 44px on a desktop */
+  var top = document.querySelector('#rcgRts .rts-top'), st = document.querySelector('#rcgRts .rts-stage');
+  if (top && st) { var y = Math.round(top.getBoundingClientRect().bottom - st.getBoundingClientRect().top + 4) + 'px'; if (el.style.top !== y) el.style.top = y; }
 }
 /* The end card for a mission, recording the best result once. */
 function rtsCampOverHTML(G) {
@@ -34994,6 +35067,28 @@ function rtsSkirmishSync() {
   }
 }
 </script>
+<script>/* offline.js - the title screen says when the game is the copy saved on this device.
+
+   sw.js serves the last build that loaded when there is no network (network first, an offline
+   copy behind it). That build may not be the latest, and nothing else on the screen says so, so
+   while the device is offline a line under the menu names the build being played and when it will
+   update. It follows the browser's own online/offline events, so it comes and goes as the signal
+   does. */
+function rtsOfflineNote() {
+  var n = document.getElementById('rtsOffline');
+  if (!n) return;
+  var off = typeof navigator !== 'undefined' && navigator.onLine === false;
+  if (n.hidden === off) n.hidden = !off;
+  if (!off) return;
+  var b = document.getElementById('rtsBuild'), build = b ? b.textContent.trim() : '';
+  n.textContent = 'Offline: playing the copy saved on this device' + (build ? ' (build ' + build + ')' : '')
+    + '. It updates the next time you open it with a connection.';
+}
+if (typeof window !== 'undefined' && window.addEventListener) {
+  window.addEventListener('online', rtsOfflineNote);
+  window.addEventListener('offline', rtsOfflineNote);
+}
+</script>
 <script>/* title.js - the standalone shell around the game: the title screen, the difficulty picker,
    the army picker, RESUME BATTLE, the install prompt, and the START button.
 
@@ -35039,6 +35134,7 @@ function rtsHome(){
   if (db) { db.disabled = false; db.innerHTML = 'DAILY BATTLE<small id="rtsDailyNote"></small>'; }
   if (typeof rtsDailyNote === 'function') rtsDailyNote();
   if (typeof rtsSkirmishSync === 'function') rtsSkirmishSync();   /* the setup's line (skirmish.js) */
+  if (typeof rtsOfflineNote === 'function') rtsOfflineNote();     /* the saved copy, offline (offline.js) */
   rtsBuildDiff();
   if (typeof rtsSkySync === 'function') rtsSkySync();     /* the conditions: render3d/sky3d.js */
   rtsShowResume();
@@ -35099,6 +35195,7 @@ rtsShowResume();
 rtsBuildArmyPick();
 if (typeof rtsDailyNote === 'function') rtsDailyNote();
 if (typeof rtsSkirmishSync === 'function') rtsSkirmishSync();
+if (typeof rtsOfflineNote === 'function') rtsOfflineNote();
 
 /* THE OLD ARCHIVE STORE, gone. Earlier versions could keep a player's own game archives in
    IndexedDB, 13 MB and up; that feature is removed, so a returning player gets the space back. */

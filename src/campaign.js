@@ -67,10 +67,17 @@ function rtsCampHud(G) {
   var on = !!(G && G.mission);
   if (el.hidden === on) el.hidden = !on;
   if (!on) return;
-  var html = '<b>' + _rtsMissionOf(G.mission.id).name + '</b>' + _rtsMissionGoals(G).map(function (g) {
+  var goals = _rtsMissionGoals(G), name = _rtsMissionOf(G.mission.id).name;
+  /* the pill is what a narrow screen shows until it is tapped open (style.css) */
+  var html = '<i class="pill">' + name + ' · ' + goals.filter(function (g) { return g.done; }).length + '/' + goals.length + ' ▾</i>'
+    + '<b>' + name + '</b>' + goals.map(function (g) {
     return '<span class="' + (g.done ? 'done' : g.failed ? 'failed' : '') + '">' + (g.done ? '✓ ' : g.failed ? '✕ ' : '• ') + g.text + '</span>';
   }).join('');
   if (el.innerHTML !== html) el.innerHTML = html;
+  if (!el.onclick) el.onclick = function () { el.classList.toggle('open'); };
+  /* just under the top bar, which wraps taller on a phone than its 44px on a desktop */
+  var top = document.querySelector('#rcgRts .rts-top'), st = document.querySelector('#rcgRts .rts-stage');
+  if (top && st) { var y = Math.round(top.getBoundingClientRect().bottom - st.getBoundingClientRect().top + 4) + 'px'; if (el.style.top !== y) el.style.top = y; }
 }
 /* The end card for a mission, recording the best result once. */
 function rtsCampOverHTML(G) {
