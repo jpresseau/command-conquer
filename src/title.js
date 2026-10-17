@@ -43,6 +43,7 @@ function rtsHome(){
   if (db) { db.disabled = false; db.innerHTML = 'DAILY BATTLE<small id="rtsDailyNote"></small>'; }
   if (typeof rtsDailyNote === 'function') rtsDailyNote();
   if (typeof rtsSkirmishSync === 'function') rtsSkirmishSync();   /* the setup's line (skirmish.js) */
+  if (typeof rtsOfflineNote === 'function') rtsOfflineNote();     /* the saved copy, offline (offline.js) */
   rtsBuildDiff();
   if (typeof rtsSkySync === 'function') rtsSkySync();     /* the conditions: render3d/sky3d.js */
   rtsShowResume();
@@ -103,6 +104,7 @@ rtsShowResume();
 rtsBuildArmyPick();
 if (typeof rtsDailyNote === 'function') rtsDailyNote();
 if (typeof rtsSkirmishSync === 'function') rtsSkirmishSync();
+if (typeof rtsOfflineNote === 'function') rtsOfflineNote();
 
 /* THE OLD ARCHIVE STORE, gone. Earlier versions could keep a player's own game archives in
    IndexedDB, 13 MB and up; that feature is removed, so a returning player gets the space back. */

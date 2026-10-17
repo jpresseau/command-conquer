@@ -305,9 +305,11 @@ function _rtsUpdateUnit(e, dt) {
          the steering at the bottom instead of standing still with a path it never walks. */
       if (e.order === 'attack' && !e.path) return;   /* in range: hold and keep firing */
     } else if (chasing && e.order === 'attack') {
-      /* close on the ordered target; repath now and then rather than every frame */
+      /* repath now and then; a FAILED path waits out the timer too (docs/measuring.md) */
       e.rep = (e.rep || 0) - dt;
-      if (!e.path || e.rep <= 0) { e.goal = { x:tgt.x, z:tgt.z }; e.path = _rtsPathFor(e, tgt.x, tgt.z); e.pi = 0; e.rep = 0.9; }
+      if (e.rep <= 0 || (!e.path && !e.chaseFail)) {
+        e.goal = { x:tgt.x, z:tgt.z }; e.path = _rtsPathFor(e, tgt.x, tgt.z); e.pi = 0; e.rep = 0.9; e.chaseFail = !e.path;
+      }
     }
   } else { e.turret = e.rot; }
 

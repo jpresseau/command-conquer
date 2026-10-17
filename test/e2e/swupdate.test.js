@@ -312,15 +312,20 @@ function stampOf(page) {
     var d = document.getElementById('rtsBuild');
     var ok = false;
     try { rtsOpen(7); ok = !!(window._rtsG && document.getElementById('rcgRts')); } catch (e) { ok = String(e.message || e); }
-    return { stamp: d ? d.textContent.trim() : null, home: !!document.getElementById('rtsHome'), battle: ok };
+    var note = document.getElementById('rtsOffline');
+    return { stamp: d ? d.textContent.trim() : null, home: !!document.getElementById('rtsHome'), battle: ok,
+             note: note && !note.hidden ? note.textContent : null };
   });
   S.ok('...and with no network at all, from the app\'s own start URL, the whole game opens and a battle starts', offline.stamp === 'BUILD-FOUR' &&
        offline.home && offline.battle === true, JSON.stringify(offline));
+  S.ok('...and the title screen says it is the saved copy, naming its build', !!offline.note && offline.note.indexOf('BUILD-FOUR') >= 0 && /offline/i.test(offline.note),
+       JSON.stringify(offline.note));
   await ctx.setOffline(false);
   deploy.dead = false;
   deploy.stamp = 'BUILD-FIVE';
   await page.goto(s.url, { waitUntil: 'load' });
   S.eq('...and with the network back, the next deploy reaches the player on the first load', await stampOf(page), 'BUILD-FIVE');
+  S.eq('...with no offline note', await page.evaluate(function () { var n = document.getElementById('rtsOffline'); return !!n && !n.hidden; }), false);
 
   S.ok('the page logged no errors throughout', !errors.length,
        errors.slice(0, 3).join(' | ') || 'clean');
