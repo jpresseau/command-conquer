@@ -144,9 +144,11 @@ starts on better ground), how much water it has (INLAND, COAST or a wide LAGOON)
 your base, or go back to its own plans. A second foe fights in amber, a third in purple. The choice is kept between visits. The daily battle and the
 campaign always use the standard map.
 
-**A campaign.** CAMPAIGN on the title screen opens four missions, each built on a generated map:
+**A campaign.** CAMPAIGN on the title screen opens eight missions, each built on a generated map:
 run a convoy over the flats at low water, blind a fortress with the Fog Bank, lift tanks onto an
-island with Sky Cranes, and hold a Sub Pen against a flotilla for eight minutes. Each has a briefing,
+island with Sky Cranes, hold a Sub Pen against a flotilla for eight minutes, hold an ally's flank,
+take a yard on the mirrored map, order your ally against one of two fortified bases, and in the
+finale break two live armies at once. Each has a briefing,
 objectives on the battlefield and an end card, and the missions you win are marked.
 
 ## Everything is generated in code

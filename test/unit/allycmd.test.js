@@ -6,6 +6,8 @@
      WHILE      the ally raises no team and sends no escort, so nothing pulls its units back
      FREE       drops the order at once; an attack order lapses by itself after attackFor
      A SAVE     carries the order (plain data on the brain)
+     HELD STILL a mission's ally at ctl 'none' thinks nothing of its own but still carries an order
+                out; a seat a human holds refuses one
      NO ALLY    a battle without one refuses the order */
 
 var { Suite } = require('../lib/assert.js');
@@ -57,6 +59,16 @@ S.ok('...and a save carries the order', !!(body.sides.ally.ai && body.sides.ally
 g._rtsAllyCommand('attack', ec.x, ec.z);
 play(g.RTS_ALLY_CMD.attackFor + 5);
 S.ok('an attack order lapses by itself after ' + g.RTS_ALLY_CMD.attackFor + ' s', !G.sides.ally.ai.cmd, JSON.stringify(G.sides.ally.ai.cmd));
+
+/* ---------------- held still ---------------- */
+G = battle(); ec = g._rtsBaseCentre('enemy');
+G.sides.ally.ctl = 'none';
+var stillOk = g._rtsAllyCommand('attack', ec.x, ec.z);
+play(70);
+var still = share(ec, 18);
+S.ok('HELD STILL: an ally at ctl \'none\' takes an attack order and carries it out', stillOk && still.of >= 10 && still.near >= still.of * 0.5, JSON.stringify(still));
+G.sides.ally.ctl = 'human';
+S.ok('...and a seat a human holds refuses one', g._rtsAllyCommand('defend') === false, G.sides.ally.ctl);
 
 /* ---------------- no ally ---------------- */
 g._rtsNewGame(7, 'normal');

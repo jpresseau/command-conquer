@@ -2,7 +2,8 @@
    and the first two missions played both ways.
 
      THE TABLE      every mission names a real army, difficulty and seed, a brief and goals
-     THE SETUP      laying a mission leaves the seats it does not want thinking at ctl 'none', and
+     THE SETUP      laying a mission leaves the seats it does not want thinking at ctl 'none' (all
+                    the enemy seats but an `awake` mission's, whose are left thinking), and
                     the battle is NOT over on its first tick - the skirmish rule (lose every
                     building) would end the base-less ones at once; the mission check replaces it
      LOW WATER      the convoy cannot be ordered over the strait at high water; ordered at low
@@ -18,21 +19,24 @@ var S = new Suite('campaign');
 
 /* ---------------- the table ---------------- */
 var o0 = mission('lowwater'), g0 = o0.g;
-S.eq('four missions', g0.RTS_CAMPAIGN.length, 4);
+S.eq('eight missions', g0.RTS_CAMPAIGN.length, 8);
 S.ok('each names a real army, difficulty and seed, a brief and its goals', g0.RTS_CAMPAIGN.every(function (m) {
   return g0.RTS_ARMY_SIDES.indexOf(m.army) >= 0 && !!g0.RTS_DIFF[m.diff] && m.seed > 0 && m.brief.length > 40 && m.goals.length >= 1;
 }), g0.RTS_CAMPAIGN.map(function (m) { return m.id + ':' + m.army + '/' + m.diff; }).join(' '));
-S.ok('...under distinct ids and seeds', new Set(g0.RTS_CAMPAIGN.map(function (m) { return m.id; })).size === 4 &&
-     new Set(g0.RTS_CAMPAIGN.map(function (m) { return m.seed; })).size === 4, '');
+S.ok('...under distinct ids and seeds', new Set(g0.RTS_CAMPAIGN.map(function (m) { return m.id; })).size === 8 &&
+     new Set(g0.RTS_CAMPAIGN.map(function (m) { return m.seed; })).size === 8, '');
 
 /* ---------------- the setup ---------------- */
 g0.RTS_CAMPAIGN.forEach(function (m) {
   var o = m.id === 'lowwater' ? o0 : mission(m.id);
   o.g._rtsTick(1 / 60);
   var goals = o.g._rtsMissionGoals(o.G);
-  S.ok(m.id + ': laid, the enemy seat not thinking, and not over on its first tick', !!o.M && o.G.sides.enemy.ctl === 'none' && !o.G.over && goals.length === m.goals.length &&
+  var foes = o.G.order.filter(function (k) { return o.g._rtsHostile('player', k); }),
+      ctl = foes.map(function (k) { return o.G.sides[k].ctl; });
+  S.ok(m.id + ': laid, its enemy seats ' + (m.awake ? 'thinking' : 'not thinking') + ', and not over on its first tick', !!o.M && foes.length >= 1 &&
+       ctl.every(function (c) { return c === (m.awake ? 'ai' : 'none'); }) && !o.G.over && goals.length === m.goals.length &&
        goals.every(function (x) { return typeof x.text === 'string' && x.text.length > 5 && !x.done && !x.failed; }),
-       JSON.stringify({ M: !!o.M, ctl: o.G.sides.enemy.ctl, over: o.G.over, goals: goals }));
+       JSON.stringify({ M: !!o.M, ctl: ctl, over: o.G.over, goals: goals }));
 });
 
 /* ---------------- low water ---------------- */

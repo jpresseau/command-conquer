@@ -24,7 +24,8 @@ var RTS_ALLY_CMD = {
    take none. Returns false when there is no ally to give it to. */
 function _rtsAllyCommand(kind, x, z) {
   var G = window._rtsG, S = G && G.sides && G.sides.ally;
-  if (!S || S.lost || S.ctl !== 'ai' || !S.ai) return false;
+  /* a seat the computer holds, thinking ('ai') or held still by a mission ('none') - never the human's */
+  if (!S || S.lost || S.ctl === 'human' || !S.ai) return false;
   if (kind === 'free') { S.ai.cmd = null; _rtsSay('Ally: acting on its own again.'); return true; }
   if (kind === 'defend') {
     var c = _rtsBaseCentre('player');

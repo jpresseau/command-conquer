@@ -21,7 +21,9 @@ function rtsSkirmishSet(k, v) {
 }
 /* What rtsOpen builds the battle with: the setup, unless this battle is a daily or a mission. */
 function rtsSkirmishWant() {
-  if (window._RTS_DAILY || window._RTS_MISSION) return null;
+  /* a mission names the battle it was written on (rules/campaign.js `skirmish`), a daily the default */
+  if (window._RTS_MISSION) { var mm = _rtsMissionOf(window._RTS_MISSION.id); return (mm && mm.skirmish) || null; }
+  if (window._RTS_DAILY) return null;
   return rtsSkirmishGet();
 }
 /* One line for the button: what START BATTLE will make. */

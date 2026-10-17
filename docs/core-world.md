@@ -210,8 +210,10 @@ number picked by eye.
 
 ## The campaign
 
-`rules/campaign.js` holds `RTS_CAMPAIGN`, the four missions. Each has a seed, an army, a
-difficulty, a brief, goals, a `setup(G, M)` and a `check(G, M, dt)`. `core/campaign.js` runs them,
+`rules/campaign.js` holds `RTS_CAMPAIGN` and its first four missions; `rules/campaign2.js` pushes
+the other four. Each has a seed, an army, a difficulty, a brief, goals, a `setup(G, M)` and a
+`check(G, M, dt)`. A mission may name the battle it is fought on (`skirmish`: the 2v2 seats, the
+mirrored map, a large map), which `rtsSkirmishWant` hands to `_rtsNewGame`. `core/campaign.js` runs them,
 and `src/campaign.js` is the title-screen list, the objectives and the end card.
 
 - **The setup runs on the battle `_rtsNewGame` has just made.** It clears what the mission does not
@@ -221,7 +223,9 @@ and `src/campaign.js` is the title-screen list, the objectives and the end card.
 - **The check replaces the skirmish rule.** `tick.js` hands a mission battle to
   `_rtsMissionTick` before the "lose every building" rule, which would end a base-less mission
   on its first tick. The check returns `{over, why}`, and the end card shows `why`.
-- **The enemy seat runs no brain** (ctl `'none'`, `core/seats.js`). Its guns still fire.
+- **The enemy seat runs no brain** (ctl `'none'`, `core/seats.js`). Its guns still fire. An
+  `awake` mission (Mirror Line, Breachwater) leaves its enemy seats thinking. An ally held at
+  `'none'` still carries out the player's ALLY orders (`core/aisupers.js`).
 - **`G.mission` is plain data.** The functions stay in the table and are looked up by id. A mission
   cannot be saved, because a resumed state would need its whole setup replayed under it.
 - **Each mission is tuned so the intended play wins and doing nothing loses.** `unit/campaign` and
@@ -231,6 +235,15 @@ and `src/campaign.js` is the title-screen list, the objectives and the end card.
   - Armour by Air's island has a garrison of Battle Tanks the mission sends at a landing (its seat
     has no brain, and a tank idles unless something is within its reach): one crane load of two
     Bulwarks dies to it, two loads take the radar.
+  - The second four (`unit/campaign2`, `unit/campaign3`), at their seeds:
+    - Two Fronts: idle, the ally's yard falls at 139 s; kept there and topped up, it holds to 420 s.
+    - Mirror Line: attacking and building wins at 231 s; idle loses.
+    - Order of Battle: the ally ordered at the second yard wins at 89 s; the player alone takes one and
+      runs out the 480 s. Left thinking, the ally built forty and took both alone, so it is held at
+      `'none'`.
+    - Breachwater: both enemies think, at easy - at normal they each reached 40 fighters by three
+      minutes and overran a player who attacked. Each yard is ringed with eight guns and four
+      guarded heavies; without the rings the ordered play won only at 593 s. Ordered, it wins at 362 s; alone, the second yard stands at 600 s; idle loses.
 
 ## The skirmish setup
 

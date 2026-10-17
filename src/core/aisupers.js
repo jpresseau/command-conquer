@@ -73,6 +73,10 @@ function _rtsUpdateAI(dt) {
   var G = window._rtsG;
   if (_rtsSeatAI('enemy')) _rtsAIAs('enemy', function () { _rtsUpdateAIFor(dt); });
   for (var i = 0; i < G.order.length; i++) if (G.order[i] !== 'enemy' && _rtsSeatAI(G.order[i])) _rtsUpdateAISeat(G.order[i], dt);
+  /* an ally a mission holds still (ctl 'none') thinks nothing of its own, but still carries out the
+     player's order (core/allycmd.js) */
+  var AL = G.sides.ally;
+  if (AL && AL.ctl === 'none' && AL.ai && AL.ai.cmd) _rtsAIAs('ally', function () { _rtsAllyCmdTick(dt); });
 }
 function _rtsUpdateAISeat(side, dt) { _rtsAIAs(side, function () { _rtsUpdateAIFor(dt); }); }
 function _rtsUpdateAIFor(dt) {

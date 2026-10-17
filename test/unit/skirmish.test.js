@@ -56,8 +56,11 @@ g.localStorage.setItem('bw.skirmish', JSON.stringify({ size: 'large', water: 'la
 var plain = g.rtsSkirmishWant();
 g.window._RTS_DAILY = { seed: 1 }; var daily = g.rtsSkirmishWant(); g.window._RTS_DAILY = null;
 g.window._RTS_MISSION = { id: 'lowwater' }; var miss = g.rtsSkirmishWant(); g.window._RTS_MISSION = null;
+g.window._RTS_MISSION = { id: 'breachwater' }; var own = g.rtsSkirmishWant(); g.window._RTS_MISSION = null;
 S.ok('a plain battle reads the stored setup; a daily and a mission ask for the default', plain && plain.size === 'large' && daily === null && miss === null,
      JSON.stringify({ plain: plain, daily: daily, miss: miss }));
+S.ok('...but a mission written on its own battle asks for that one, not the stored setup', !!own && own.foes === 'team' && own.size === 'large' && own.water === undefined,
+     JSON.stringify(own));
 var v128 = g._rtsSaveVersion(); make({ size: 'small' }); var v96 = g._rtsSaveVersion();
 var body = g._rtsSaveState(g._rtsG);
 S.ok('a save carries its setup, and its version does not move with the last battle\'s size', v128 === v96 && body.skirmish && body.skirmish.size === 'small',
