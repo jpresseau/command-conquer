@@ -1,17 +1,12 @@
-/* The service worker's contract, read off the file itself.
+/* The service worker's contract, read off the file itself: network first, with an offline copy.
 
-   e2e/swupdate proves the behaviour: a new deploy reaches the player, nothing is cached, an
-   updated worker takes over a page that is still open. It proves it for the requests it makes,
-   though, and that is the gap this closes. A worker that called respondWith for SOME requests -
-   only images, say, or only when the network is slow - would satisfy every assertion over there
-   and still be a caching worker, and the day it answered a stale one would be the day it pinned
-   every player to an old build.
-
-   sw.js states its contract in the first person: "We never call respondWith(), so every request
-   falls through to the network - no stale content." That is a claim about the SOURCE, not about
-   one request, so it is checked against the source. A static check earns its place here for
-   exactly the reason it usually does not: the property is universal, and no finite set of
-   requests can establish it.
+   e2e/swupdate proves the behaviour: a new deploy reaches the player online, the last good copy
+   opens offline, another app's cache survives. It proves it for the requests it makes, though,
+   and that is the gap this closes. A worker that answered SOME requests cache-first - only images,
+   say, or only when the network is slow - would satisfy every assertion over there and still be
+   the worker that one day pins a player to an old build; one that swept every cache on the
+   origin would pass there too and take another app's offline data with it. Those are properties
+   of the SOURCE, so they are checked against the source.
 
    The manifest gets the same treatment for the same reason. The app is deployed under a path
    (jpresseau.github.io/command-conquer/), so every URL in it has to be relative; an absolute one
@@ -32,14 +27,28 @@ var sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
    sw.js's own prose, explaining that it is never called. */
 var code = sw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
 
-/* ------------------------------------------------------------- the contract ---- */
-S.ok('the worker never calls respondWith - every request falls through to the network',
-     !/\brespondWith\b/.test(code),
-     /\brespondWith\b/.test(code) ? 'respondWith appears in sw.js' : 'no respondWith anywhere');
-S.ok('...and never opens a cache', !/\bcaches\b/.test(code),
-     /\bcaches\b/.test(code) ? 'the Cache API is referenced' : 'no reference to the Cache API');
-S.ok('...and stores nothing itself', !/\bindexedDB\b|\blocalStorage\b/.test(code),
-     'no storage APIs in the worker');
+/* ------------------------------------------------------------- the contract ----
+   NETWORK FIRST, WITH AN OFFLINE COPY. Online the deploy that is up must reach the player, so
+   every answer starts with fetch() and the cache is read only when that fails. The cache is the
+   app's own: Cache Storage is origin-wide and this origin serves other apps, so the worker may
+   name, open and sweep only caches under its own prefix. */
+var prefix = (/CACHE_PREFIX\s*=\s*'([^']+)'/.exec(code) || [])[1];
+S.ok('the worker has a cache prefix of its own', !!prefix && /^breachwater-/.test(prefix), String(prefix));
+var opened = code.match(/caches\.open\(([^)]*)\)/g) || [];
+S.ok('...and opens no cache but its own', opened.length > 0 && opened.every(function (o) { return /caches\.open\(CACHE\)/.test(o); }), opened.join(' '));
+S.ok('...and deletes only caches under that prefix that are not the current one',
+     /k\.indexOf\(CACHE_PREFIX\)\s*===\s*0\s*&&\s*k\s*!==\s*CACHE/.test(code) && (code.match(/caches\.delete/g) || []).length === 1, 'one delete, prefix-guarded');
+var handler = code.slice(code.indexOf("addEventListener('fetch'"));
+S.ok('...and answers from the network first, reading the cache only when that fails',
+     /respondWith\(fetch\(req\)/.test(handler) && handler.indexOf('.match(') > handler.indexOf('.catch('), 'fetch(req) first, match() inside the catch');
+S.ok('...treating a server error as a failure, so a broken deploy falls back to the last good copy',
+     /if \(!r\.ok\) throw/.test(handler), 'non-ok throws');
+S.ok('...and only for its own GET requests, inside its scope', /req\.method !== 'GET'/.test(handler) && /self\.registration\.scope/.test(handler), '');
+var shell = ((/SHELL\s*=\s*\[([^\]]*)\]/.exec(code) || [])[1] || '').split(',').map(function (x) { return x.trim().replace(/^'|'$/g, ''); });
+var missing = shell.filter(function (f) { return f !== './' && !fs.existsSync(path.join(ROOT, f)); });
+S.ok('everything it saves on install is a relative path that exists in the deploy', shell.length >= 5 && !missing.length &&
+     shell.every(function (f) { return !/^\/|^https?:/.test(f); }), missing.length ? 'missing ' + missing.join(', ') : shell.join(' '));
+S.ok('...and it stores nothing outside Cache Storage', !/\bindexedDB\b|\blocalStorage\b/.test(code), 'no storage APIs in the worker');
 
 /* A registered fetch handler is what makes the app install-eligible, so the handler has to be
    there even though it does nothing. Deleting it as dead code is the obvious mistake, and the

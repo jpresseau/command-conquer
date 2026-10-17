@@ -65,7 +65,7 @@ are genuinely modular:
 | `airspace` | aircraft keep their own distance and take turns on a pad, on the real simulation: a stack parts the same way every time, a swarm arrives apart, three on one pad land one at a time, two with two pads take one each; and an aircraft is built over its pad - a free one first - flies to the pad's rally point, and still arrives at the factory if every pad is bombed mid-build. `e2e/airpick` clicks and boxes helicopters where they are drawn |
 | `chinook` | the transport helicopter's verb: five riflemen walk aboard, are flown to ground no squad can walk to and are all put down there; it is boarded from the sand while hovering off a beach; unarmed, it never flies home to reload nor crashes without a pad; it sets down when idle over open ground (not over water, and a gunship never does) and lifts when sent; a rotor, not a jet, in the sound bed. `e2e/chinook` does the same with a box-select and two right-clicks in 3D |
 | `layout` | the source tree itself, whose two failure modes are both silent: a file in `src/` the skeleton does not include reads like live code and ships nothing, and an inline `<script>` in the skeleton is JavaScript that neither the syntax gate nor the duplicate-name check ever sees - 344 lines of the standalone shell sat in exactly that blind spot until it was lifted into `src/title.js`. Plus the 500-line cap that keeps each subsystem a directory of small files instead of drifting back into one large one |
-| `sw` | the service worker's contract as stated in its own source — never calls `respondWith`, never touches the Cache API, keeps the fetch handler that makes the app installable — plus a manifest whose every URL is relative, because the app is deployed under a path. A universal claim no finite set of requests can establish, which is the one case where reading the source beats driving it |
+| `sw` | the service worker's contract as stated in its own source — network first, reading its cache only when the network fails or errors; one cache under its own prefix, the only one it opens or sweeps (the origin serves other apps); everything it saves on install a relative path that exists; keeps the fetch handler that makes the app installable — plus a manifest whose every URL is relative, because the app is deployed under a path. A universal claim no finite set of requests can establish, which is the one case where reading the source beats driving it |
 
 `lib/sandbox.js` is what makes those possible. The game is browser globals concatenated
 by `build.py` — there is nothing to `import` — so those files are evaluated in a `vm` context
@@ -96,7 +96,10 @@ requests and whose **bytes can be changed while the browser is running** — the
 ask whether a new deploy reaches the player. It alters the deployed build stamp, reloads, and
 checks which build the player gets; it also serves the app from `/command-conquer/` rather than the
 origin root, because that is where it really lives, and at a root an absolute `/sw.js` and a
-relative `sw.js` behave identically right up until production.
+relative `sw.js` behave identically right up until production. It then takes the deploy down (503) and the
+browser offline, and checks the last build that loaded still opens and starts a battle, that
+another app's cache on the origin survives, and that the next deploy arrives once the network is
+back.
 
 `e2e/scenario` writes its own scenarios rather than testing only what ships. Both of the game's
 `and` triggers combine conditions that only become *more* true, so they would fire with or without

@@ -22,6 +22,11 @@ without going near a URL bar. Chrome and Edge on any platform; Safari does the s
 **File → Add to Dock**. The installed app and the tab share one browser profile, so a saved
 battle is there in both.
 
+**It plays offline, on a phone too.** On an iPhone, open the link in Safari, tap **Share → Add to
+Home Screen**, and open it once from the new icon while you have a signal. After that it opens
+with no connection at all. Online it always loads the latest build; offline it opens the last one
+that loaded, and saved battles and settings live on the device either way.
+
 ## Controls
 
 | Input | Action |
