@@ -1,4 +1,4 @@
-/* rules/campaign.js - the campaign: four missions on generated maps (core/campaign.js runs them).
+/* rules/campaign.js - the campaign: its first four missions on generated maps (rules/campaign2.js has the other four; core/campaign.js runs them).
 
    Each is a seed and the two armies, a briefing, its goals, a setup that lays the mission onto the
    battle the seed made, and a check, every tick, that keeps the goals and calls the result. A

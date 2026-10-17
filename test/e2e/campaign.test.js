@@ -1,6 +1,6 @@
 /* THE CAMPAIGN, WITH REAL CLICKS (src/campaign.js, title.js, ui/shell.js, ui/sidebar.js):
 
-     THE LIST       CAMPAIGN on the title opens the four missions with their briefs, and a real
+     THE LIST       CAMPAIGN on the title opens all the missions with their briefs, and a real
                     click on PLAY opens that mission: its seed, its army, its difficulty, laid
      IN BATTLE      the objectives sit on the battlefield and read the mission's goals; a mission
                     refuses to be saved
@@ -35,10 +35,10 @@ function centre(sel) {
   await p.mouse.click(at.x, at.y);
   var list = await p.evaluate(function () {
     var box = document.getElementById('rtsCampList');
-    return { open: !box.hidden && box.getBoundingClientRect().height > 50, n: box.querySelectorAll('.mission').length,
+    return { open: !box.hidden && box.getBoundingClientRect().height > 50, n: box.querySelectorAll('.mission').length, of: RTS_CAMPAIGN.length,
              text: box.textContent };
   });
-  S.ok('CAMPAIGN opens the four missions with their briefs', list.open && list.n === 4 && list.text.indexOf('Low Water') >= 0 && /tide/i.test(list.text), JSON.stringify({ open: list.open, n: list.n }));
+  S.ok('CAMPAIGN opens every mission with its brief', list.open && list.n === list.of && list.n >= 8 && list.text.indexOf('Low Water') >= 0 && /tide/i.test(list.text), JSON.stringify({ open: list.open, n: list.n }));
 
   /* ---------- play ---------- */
   await p.evaluate(function () { document.querySelector('#rtsCampList .mission button').scrollIntoView(); });

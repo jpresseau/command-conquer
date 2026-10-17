@@ -6,7 +6,7 @@ function mission(id) {
   var g = loadFast(['src/rules', 'src/core', 'src/sprites/props.js']);
   var m = g._rtsMissionOf(id);
   g.window._RTS_ARMY = m.army;
-  g._rtsNewGame(m.seed, m.diff);
+  g._rtsNewGame(m.seed, m.diff, { skirmish: m.skirmish || null });
   var G = g._rtsG, M = g._rtsMissionSetup(G, id);
   return { g: g, G: G, M: M, m: m };
 }

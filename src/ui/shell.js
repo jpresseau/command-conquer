@@ -138,7 +138,7 @@ function rtsOpen(seed) {
   var _vsP = document.querySelector('#rcgRts .rts-vs .p'), _vsE = document.querySelector('#rcgRts .rts-vs .e');
   if (_vsP && window._rtsG.sides.ally) _vsP.textContent += ' + ally';
   var _ab = document.getElementById('rtsAllyBtn');
-  if (_ab) _ab.hidden = !(window._rtsG.sides.ally && window._rtsG.sides.ally.ctl === 'ai');
+  if (_ab) _ab.hidden = !(window._rtsG.sides.ally && window._rtsG.sides.ally.ctl !== 'human');
   if (_vsE && window._rtsG.ffa) _vsE.textContent += ' · free-for-all ×' + (window._rtsG.order.length - 1);
   else if (_vsE && window._rtsG.sides.enemy2) _vsE.textContent += ' ×2';
 
