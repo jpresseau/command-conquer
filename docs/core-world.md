@@ -233,8 +233,12 @@ and `src/campaign.js` is the title-screen list, the objectives and the end card.
   at Veteran, won by a submarine every 30 s and a tank and rocket every 8 s. At Veteran Fog Bank
   and Order of Battle barely changed, Armour by Air's fixed four tanks lose, and against the two
   awake missions no scripted play held its base at Soldier, so those stop at their own level.
-- **`G.mission` is plain data.** The functions stay in the table and are looked up by id. A mission
-  cannot be saved, because a resumed state would need its whole setup replayed under it.
+- **`G.mission` is plain data.** The functions stay in the table and are looked up by id, so a
+  mission saves like any battle. The save's header carries `mission` (id and level); a resume
+  opens the battle on the save's own map, lays the state over it and does NOT run the setup again
+  (`ui/shell.js` skips `rtsCampLay` on a load), and `_rtsLoadArmy` hands the page the mission
+  while keeping the player's own army to put back. `unit/campaign-save` resumes four missions in a
+  fresh world and checks they play on byte-identical to the run that never stopped.
 - **Each mission is tuned so the intended play wins and doing nothing loses.** `unit/campaign` and
   `unit/campaign-play` play both paths headless:
   - The fortress is lost without the fog: its guns outrange the strike group.

@@ -3,14 +3,17 @@
      THE LIST       CAMPAIGN on the title opens all the missions with their briefs, and a real
                     click on PLAY opens that mission: its seed, its army, its difficulty, laid
      IN BATTLE      the objectives sit on the battlefield and read the mission's goals; a mission
-                    refuses to be saved
+                    saves, and its save says which mission it is
      THE END        a won mission's card says MISSION COMPLETE with the mission's own reason,
                     offers the next one, and keeps the result; Retry replays the same mission
      PUT BACK       back on the title the player has their own army and difficulty, and the list
                     marks the mission won
      A LEVEL        a mission that offers levels has a choice on its card, opening on its own; PLAY
                     at Veteran gives the Dominion Veteran and the ally the mission's own; the end
-                    card names the level, the record keeps it, and Next carries it on */
+                    card names the level, the record keeps it, and Next carries it on
+     RESUMED        saved mid-mission and quit, the title has the player's own army back and offers
+                    the mission by name and level; RESUME BATTLE brings it back as that mission, at
+                    that level, at the moment it was saved, not laid again; Retry keeps the level */
 
 var { chromium } = require('playwright');
 var { Suite } = require('../lib/assert.js');
@@ -62,7 +65,9 @@ function centre(sel) {
     return { shown: !el.hidden && r.width > 40 && r.height > 20, spans: el.querySelectorAll('span').length, text: el.textContent, saved: saved, msg: window._rtsG.msg };
   });
   S.ok('the objectives sit on the battlefield and read the mission\'s goals', hud.shown && hud.spans === 2 && /convoy/i.test(hud.text), JSON.stringify(hud));
-  S.ok('...and a mission refuses to be saved, and says so', hud.saved === false && /cannot be saved/.test(hud.msg || ''), JSON.stringify({ saved: hud.saved, msg: hud.msg }));
+  var sinfo = await p.evaluate(function () { var i = rtsSaveInfo(); return i && { mission: i.mission, desc: i.desc }; });
+  S.ok('...and a mission saves, and its save says which mission it is', hud.saved === true && !!sinfo && !!sinfo.mission && sinfo.mission.id === 'lowwater' &&
+       /^Low Water — Recruit/.test(sinfo.desc), JSON.stringify({ saved: hud.saved, msg: hud.msg, info: sinfo }));
 
   /* ---------- the end ---------- */
   var card = await p.evaluate(function () {
@@ -120,6 +125,33 @@ function centre(sel) {
   at = await p.evaluate(centre, '#rtsCampList .mission[data-id="twofronts"] button');
   if (at) await p.mouse.click(at.x, at.y);
   await p.waitForFunction(function () { var G = window._rtsG; return !!(G && G.mission && G.mission.id === 'twofronts' && document.getElementById('rcgRts')); }, null, { timeout: 60000 }).catch(function () {});
+  /* ---------- resumed ---------- */
+  var saved = await p.evaluate(function () {
+    var G = window._rtsG;
+    if (!G || !G.mission) return null;
+    for (var i = 0; i < 60 * 20; i++) _rtsTick(1 / 60);        /* a little way in: a save of the opening proves little */
+    var out = { ok: rtsSaveGame(), t: Math.round(G.t), units: G.ents.filter(function (e) { return !e.dead && e.side === 'enemy'; }).length };
+    rtsClose();
+    var r = document.getElementById('rtsResume');
+    out.army = rtsArmySide(); out.diff = window._RTS_DIFF; out.mission = window._RTS_MISSION;
+    out.resume = r && !r.hidden ? r.textContent : '';
+    return out;
+  });
+  S.ok('RESUMED: saved mid-mission and quit, the title has the player\'s own army back and offers the mission by name and level', !!saved && saved.ok &&
+       saved.army === before.army && saved.diff === before.diff && !saved.mission && /Two Fronts — Veteran/.test(saved.resume), JSON.stringify(saved));
+  await p.evaluate(function () { var r = document.getElementById('rtsResume'); if (r) r.scrollIntoView({ block: 'center' }); });
+  at = await p.evaluate(centre, '#rtsResume');
+  if (at) await p.mouse.click(at.x, at.y);
+  await p.waitForFunction(function () { var G = window._rtsG; return !!(G && G.mission && document.getElementById('rcgRts')); }, null, { timeout: 60000 }).catch(function () {});
+  var back = await p.evaluate(function () {
+    var G = window._rtsG;
+    return G && { id: G.mission && G.mission.id, lvl: G.mission && G.mission.lvl, t: Math.round(G.t), army: rtsArmySide(), page: window._RTS_MISSION && window._RTS_MISSION.id,
+      units: G.ents.filter(function (e) { return !e.dead && e.side === 'enemy'; }).length, goals: document.getElementById('rtsGoals').textContent };
+  });
+  S.ok('...and RESUME BATTLE brings it back as that mission, at that level, at the moment it was saved - not laid again', !!saved && !!back && back.id === 'twofronts' &&
+       back.lvl === 'hard' && back.page === 'twofronts' && back.army === 'allied' && Math.abs(back.t - saved.t) <= 1 && back.units === saved.units && /ally/i.test(back.goals),
+       JSON.stringify({ back: back, saved: saved && { t: saved.t, units: saved.units } }));
+
   var vet = await p.evaluate(function () {
     var G = window._rtsG;
     if (!G || !G.mission || G.mission.id !== 'twofronts') return null;
@@ -136,6 +168,19 @@ function centre(sel) {
        vet.ally === 'Soldier' && vet.diff === 'normal', JSON.stringify(vet));
   S.ok('...the end card names the level, the record keeps it, and Next carries it on', !!vet && /Two Fronts \(Veteran\)/.test(vet.card) && vet.stored === 'hard' &&
        /rtsCampNext\('mirror', 'hard'\)/.test(vet.next), JSON.stringify(vet && { card: vet.card.slice(0, 80), stored: vet.stored, next: vet.next }));
+  var retry = await p.evaluate(function () {
+    rtsRestart();
+    var until = Date.now() + 30000;
+    return new Promise(function (res) {
+      (function wait() {
+        var G = window._rtsG;
+        if (G && G.mission && !G.over && document.getElementById('rcgRts')) return res({ id: G.mission.id, lvl: G.mission.lvl, t: Math.round(G.t) });
+        if (Date.now() > until) return res(null);
+        setTimeout(wait, 100);
+      })();
+    });
+  });
+  S.ok('...and Retry replays it from the start at the same level', !!retry && retry.id === 'twofronts' && retry.lvl === 'hard' && retry.t < 5, JSON.stringify(retry));
   var listed = await p.evaluate(function () {
     rtsClose();
     var box = document.getElementById('rtsCampList'); box.hidden = true; rtsCampToggle();

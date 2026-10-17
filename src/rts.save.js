@@ -254,8 +254,6 @@ function rtsSaveStale() {
 function rtsSaveGame() {
   var G = window._rtsG;
   if (!G) return false;
-  /* a mission is not saved: its setup cannot be replayed under a resumed state (campaign.js) */
-  if (G.mission) { _rtsSay('A mission cannot be saved - retry it from the end card.'); return false; }
   /* SERIALISE FIRST, OUTSIDE THE TRY THAT OWNS THE CLEANUP. Both steps could throw and only one
      of them can leave a half-written pair behind, so they must not share a catch: a serialiser
      failure used to run the removeItem pair and DELETE THE SAVE ALREADY ON DISK - a save from
@@ -276,7 +274,13 @@ function rtsSaveGame() {
          for this battle only, its result on the end card - rather than an ordinary battle that
          wrote the day's army over the player's stored preference. */
       daily:window._RTS_DAILY || null,
-      desc:(window._RTS_DAILY ? 'Daily — ' : '') + (RTS_DIFF[G.diff] ? RTS_DIFF[G.diff].name : G.diff) + ' — '
+      /* A MISSION, if this is one (campaign.js): which, and at what level. Everything it remembers
+         is on G.mission and goes in with G; this is what the page around it needs - the battle is
+         resumed as that mission, not laid again, and the player's own army is put back after. */
+      mission:G.mission ? window._RTS_MISSION || { id:G.mission.id, lvl:G.mission.lvl } : null,
+      desc:(window._RTS_DAILY ? 'Daily — ' : '')
+        + (G.mission && _rtsMissionOf(G.mission.id) ? _rtsMissionOf(G.mission.id).name + ' — ' + RTS_DIFF[G.mission.lvl].name
+          : (RTS_DIFF[G.diff] ? RTS_DIFF[G.diff].name : G.diff)) + ' — '
         + mins + ':' + (secs < 10 ? '0' : '') + secs
         + ' — ' + G.ents.filter(function (e) { return !e.dead && e.side === 'player'; }).length + ' units and buildings' };
   } catch (e) {
@@ -408,7 +412,18 @@ function rtsLoadGame() {
    Dominion into a Compact player's stored preference, and resumed it as a plain match with no
    daily line on the end card. */
 function _rtsLoadArmy(info) {
+  /* an ordinary battle loaded from inside a mission is not that mission: hand the page back */
+  if (window._RTS_MISSION && !(info && info.mission) && typeof rtsCampEnd === 'function') rtsCampEnd();
   if (!info || !info.side) return;
+  /* A MISSION'S the same way as a daily's, kept for rtsCampEnd to put the player's own back */
+  if (info.mission) {
+    var m = typeof _rtsMissionOf === 'function' && _rtsMissionOf(info.mission.id);
+    if (!window._RTS_MISSION) window._RTS_CAMP_PREV = { diff: window._RTS_DIFF, army: typeof rtsArmySide === 'function' ? rtsArmySide() : window._RTS_ARMY };
+    window._RTS_MISSION = info.mission;
+    if (m) window._RTS_DIFF = m.diff;
+    window._RTS_ARMY = info.side;
+    return;
+  }
   if (info.daily) {
     if (!window._RTS_DAILY_PREV) window._RTS_DAILY_PREV = { diff: window._RTS_DIFF, army: typeof rtsArmySide === 'function' ? rtsArmySide() : window._RTS_ARMY };
     window._RTS_DAILY = info.daily;

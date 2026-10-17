@@ -459,7 +459,7 @@ function _rtsSyncSidebar(dt) {
 function rtsRestart() {
   var d = window._RTS_DAILY, prev = window._RTS_DAILY_PREV, mi = window._RTS_MISSION;
   rtsClose();
-  if (mi) { setTimeout(function () { rtsCampStart(mi.id); }, 60); return; }   /* retry the mission */
+  if (mi) { setTimeout(function () { rtsCampStart(mi.id, null, mi.lvl); }, 60); return; }   /* retry the mission, at its level */
   if (d) { window._RTS_DAILY = d; window._RTS_DAILY_PREV = prev; window._RTS_DIFF = d.diff; window._RTS_ARMY = d.army; }
   setTimeout(function () { rtsOpen(d ? d.seed : undefined); }, 60);
 }
