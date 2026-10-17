@@ -19,20 +19,29 @@ function rtsCampToggle() {
   if (!box.hidden) { box.hidden = true; return; }
   var done = rtsCampProgress();
   box.innerHTML = RTS_CAMPAIGN.map(function (m, i) {
-    var r = done[m.id];
+    var r = done[m.id], lv = _rtsMissionLevels(m);
+    /* one level is a name; more are a choice, opening on the one the mission was written at */
+    var pick = lv.length < 2 ? '' : '<select class="lvl" aria-label="Difficulty">' + lv.map(function (k) {
+      return '<option value="' + k + '"' + (k === m.diff ? ' selected' : '') + '>' + RTS_DIFF[k].name + (k === m.diff ? ' (as written)' : '') + '</option>';
+    }).join('') + '</select> ';
     return '<div class="mission' + (r && r.won ? ' won' : '') + '" data-id="' + m.id + '">'
-      + '<h3>' + (i + 1) + '. ' + m.name + (r && r.won ? ' <i>✓ ' + rtsDailyClock(r.secs) + '</i>' : '') + '</h3>'
+      + '<h3>' + (i + 1) + '. ' + m.name + (r && r.won ? ' <i>✓ ' + rtsDailyClock(r.secs) + ' ' + RTS_DIFF[r.lvl || m.diff].name + '</i>' : '') + '</h3>'
       + '<p class="s">' + rtsArmyTitle(m.army) + ' · ' + RTS_DIFF[m.diff].name + '</p>'
       + '<p>' + m.brief + '</p>'
-      + '<button type="button" onclick="rtsCampStart(\'' + m.id + '\', this)">PLAY</button></div>';
+      + '<div class="launch">' + pick + '<button type="button" onclick="rtsCampStart(\'' + m.id + '\', this)">PLAY</button></div></div>';
   }).join('');
   box.hidden = false;
 }
-function rtsCampStart(id, btn) {
+/* `lvl`: the level to play at - the card's choice when started from the list, the last mission's
+   on Next; the mission's own when it does not offer that one */
+function rtsCampStart(id, btn, lvl) {
   var m = _rtsMissionOf(id);
   if (!m) return;
+  var sel = btn && btn.parentNode && btn.parentNode.querySelector('select.lvl');
+  if (sel) lvl = sel.value;
+  if (_rtsMissionLevels(m).indexOf(lvl) < 0) lvl = m.diff;
   if (!window._RTS_MISSION) window._RTS_CAMP_PREV = { diff: window._RTS_DIFF, army: window._RTS_ARMY };
-  window._RTS_MISSION = { id: id, seed: m.seed };
+  window._RTS_MISSION = { id: id, seed: m.seed, lvl: lvl };
   window._RTS_DIFF = m.diff; window._RTS_ARMY = m.army;
   var err = document.getElementById('rtsErr');
   if (err) err.style.display = 'none';
@@ -49,7 +58,7 @@ function rtsCampStart(id, btn) {
 function rtsCampLay(G) {
   var mi = window._RTS_MISSION;
   if (!mi || !G) return null;
-  var M = _rtsMissionSetup(G, mi.id);
+  var M = _rtsMissionSetup(G, mi.id, mi.lvl);
   if (M && M.focus && window._rtsR) { _rtsR.focus.x = _rtsWX(M.focus.tx); _rtsR.focus.z = _rtsWX(M.focus.tz); }
   return M;
 }
@@ -84,18 +93,25 @@ function rtsCampOverHTML(G) {
   var M = G && G.mission;
   if (!M || !G.over) return '';
   var m = _rtsMissionOf(M.id), won = G.over === 'win', all = rtsCampProgress(), b = all[M.id];
-  var r = { won: won, secs: G.t, lost: G.stats.lostU, killed: G.stats.killed };
-  if (won && (!b || !b.won || r.secs < b.secs)) { all[M.id] = r; try { window.localStorage.setItem(RTS_CAMP_LS, JSON.stringify(all)); } catch (e) {} }
+  var r = { won: won, secs: G.t, lost: G.stats.lostU, killed: G.stats.killed, lvl: M.lvl || m.diff };
+  if (won && rtsCampBetter(r, b, m)) { all[M.id] = r; try { window.localStorage.setItem(RTS_CAMP_LS, JSON.stringify(all)); } catch (e) {} }
   var next = won && RTS_CAMPAIGN[RTS_CAMPAIGN.indexOf(m) + 1];
   return '<div class="card ' + G.over + '"><h2>' + (won ? 'MISSION COMPLETE' : 'MISSION FAILED') + '</h2>'
-    + '<p>' + m.name + ': ' + (M.why || '') + '</p>'
+    + '<p>' + m.name + ' (' + RTS_DIFF[M.lvl || m.diff].name + '): ' + (M.why || '') + '</p>'
     + '<p class="s">Time ' + rtsDailyClock(G.t) + ' · Enemy destroyed: ' + G.stats.killed + ' · Units lost: ' + G.stats.lostU + '</p>'
-    + (next ? '<button type="button" onclick="rtsCampNext(\'' + next.id + '\')">Next: ' + next.name + '</button> ' : '')
+    + (next ? '<button type="button" onclick="rtsCampNext(\'' + next.id + '\', \'' + (M.lvl || m.diff) + '\')">Next: ' + next.name + '</button> ' : '')
     + '<button type="button" onclick="rtsRestart()">Retry</button> '
     + '<button type="button" onclick="rtsCampMissions()">Missions</button> '
     + '<button type="button" onclick="rtsClose()">Quit</button></div>';
 }
-function rtsCampNext(id) { rtsClose(); setTimeout(function () { rtsCampStart(id); }, 60); }
+/* the best win: the harder level, then the faster time (a record from before levels is the
+   mission's own) */
+function rtsCampBetter(r, b, m) {
+  if (!b || !b.won) return true;
+  var k = Object.keys(RTS_DIFF), a = k.indexOf(r.lvl), o = k.indexOf(b.lvl || m.diff);
+  return a > o || (a === o && r.secs < b.secs);
+}
+function rtsCampNext(id, lvl) { rtsClose(); setTimeout(function () { rtsCampStart(id, null, lvl); }, 60); }
 function rtsCampMissions() {
   rtsClose();
   var box = document.getElementById('rtsCampList');

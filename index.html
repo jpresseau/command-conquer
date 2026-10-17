@@ -697,7 +697,9 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
    credits button covered) */
 #rtsTitleMenu{padding-bottom:28px}
 /* a finger, not a mouse: the campaign's PLAY was 27px tall */
-@media (hover: none) and (pointer: coarse){ #rtsCampList button{min-height:40px;padding:10px 22px} }
+#rtsCampList .launch{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#rtsCampList select.lvl{margin-top:4px;padding:5px 6px;font:12px/1 inherit;color:#fff;background:#1d2836;border:1px solid #3a4d63;border-radius:4px}
+@media (hover: none) and (pointer: coarse){ #rtsCampList button, #rtsCampList select.lvl{min-height:40px;padding:10px 22px} }
 /* ...AND ON A TOUCH SCREEN THE STAMP LETS A TAP THROUGH. It takes taps only so its text can be
    selected with a mouse; on a phone it sits over the bottom-right of whatever row is at the screen's
    foot, and a tap there landed on the stamp instead of the button (e2e/phoneui) */
@@ -777,7 +779,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">e38fe5a · 2026-10-17</div>
+  <div id="rtsBuild" title="build">7c488f7 · 2026-10-17</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -3040,7 +3042,9 @@ var RTS_TRIGGERS = [
 
    Each is a seed and the two armies, a briefing, its goals, a setup that lays the mission onto the
    battle the seed made, and a check, every tick, that keeps the goals and calls the result. A
-   mission's memory is plain data in M (G.mission); nothing here is kept on G but through it. */
+   mission's memory is plain data in M (G.mission); nothing here is kept on G but through it.
+   `diff` is the level it was written and tuned at; it can also be played at any easier one, and
+   up to `top` where a harder one was measured to bite and still be won (core/campaign.js). */
 
 /* across the water: the lagoon's long axis, and a shore cell either side of it */
 function _rtsCampAcross(G) {
@@ -3177,7 +3181,7 @@ var RTS_CAMPAIGN = [
       return null;
     } },
 
-  { id: 'channel', name: 'Hold the Channel', army: 'soviet', diff: 'normal', seed: 9004,
+  { id: 'channel', name: 'Hold the Channel', army: 'soviet', diff: 'normal', top: 'hard', seed: 9004,
     brief: 'A Compact flotilla is coming up the lagoon for your Sub Pen. Hold the shore for eight minutes, until the relief column arrives. Their ships come in on the high water; at low tide the flats strand them.',
     goals: [ { id: 'hold', text: function (G, M) { return 'Hold for eight minutes - ' + Math.max(0, Math.ceil((480 - G.t) / 60)) + ' to go'; } },
              { id: 'yard', text: 'Keep the Sub Pen on the shore standing' } ],
@@ -3252,7 +3256,7 @@ function _rtsCampRing(side, n) {
 }
 
 RTS_CAMPAIGN.push(
-  { id: 'twofronts', name: 'Two Fronts', army: 'allied', diff: 'normal', seed: 9005, skirmish: { foes: 'ally' },
+  { id: 'twofronts', name: 'Two Fronts', army: 'allied', diff: 'normal', top: 'hard', seed: 9005, skirmish: { foes: 'ally' },
     brief: 'Your ally holds the flank, and the Dominion has seen that it is the weaker of you. Its columns will march on the allied base, not yours. Your ally cannot hold alone: get your army there, and keep its Command Yard standing for seven minutes.',
     goals: [ { id: 'hold', text: function (G, M) { return "Keep your ally's Command Yard standing - " + Math.max(0, Math.ceil((420 - G.t) / 60)) + ' min to go'; } },
              { id: 'yard', text: 'Waves come from the Dominion base: meet them at your ally\'s' } ],
@@ -12587,12 +12591,22 @@ function _rtsMissionOf(id) {
   for (var i = 0; i < RTS_CAMPAIGN.length; i++) if (RTS_CAMPAIGN[i].id === id) return RTS_CAMPAIGN[i];
   return null;
 }
-/* Lay mission `id` onto the battle just made. */
-function _rtsMissionSetup(G, id) {
+/* The levels mission `m` can be played at: every RTS_DIFF rung from the lowest up to its `top`
+   (its own difficulty when it names none). A mission offers a rung above its own only where a
+   harder enemy was measured to bite and a stronger play still wins it (unit/campaign-levels). */
+function _rtsMissionLevels(m) {
+  var keys = Object.keys(RTS_DIFF), top = keys.indexOf(m.top || m.diff);
+  return keys.slice(0, Math.max(top, keys.indexOf(m.diff)) + 1);
+}
+/* Lay mission `id` onto the battle just made, at level `lvl` (one of its levels; its own when left
+   out or not offered). The level is the enemy's: every seat hostile to the player plays at it,
+   while the battle's own difficulty - and with it an ally's - stays the one it was written at. */
+function _rtsMissionSetup(G, id, lvl) {
   var m = _rtsMissionOf(id);
   if (!m) return null;
-  G.mission = { id: id, obj: {}, t0: G.t, over: null, why: '' };
+  G.mission = { id: id, obj: {}, t0: G.t, over: null, why: '', lvl: _rtsMissionLevels(m).indexOf(lvl) >= 0 ? lvl : m.diff };
   m.setup(G, G.mission);
+  G.order.forEach(function (k) { if (_rtsHostile('player', k)) G.sides[k].diff = G.mission.lvl; });
   _rtsRecalcPower('player'); _rtsRecalcPower('enemy');
   G.waypt = null;                       /* the waypoints are rebuilt on the ground the mission left */
   return G.mission;
@@ -35105,20 +35119,29 @@ function rtsCampToggle() {
   if (!box.hidden) { box.hidden = true; return; }
   var done = rtsCampProgress();
   box.innerHTML = RTS_CAMPAIGN.map(function (m, i) {
-    var r = done[m.id];
+    var r = done[m.id], lv = _rtsMissionLevels(m);
+    /* one level is a name; more are a choice, opening on the one the mission was written at */
+    var pick = lv.length < 2 ? '' : '<select class="lvl" aria-label="Difficulty">' + lv.map(function (k) {
+      return '<option value="' + k + '"' + (k === m.diff ? ' selected' : '') + '>' + RTS_DIFF[k].name + (k === m.diff ? ' (as written)' : '') + '</option>';
+    }).join('') + '</select> ';
     return '<div class="mission' + (r && r.won ? ' won' : '') + '" data-id="' + m.id + '">'
-      + '<h3>' + (i + 1) + '. ' + m.name + (r && r.won ? ' <i>✓ ' + rtsDailyClock(r.secs) + '</i>' : '') + '</h3>'
+      + '<h3>' + (i + 1) + '. ' + m.name + (r && r.won ? ' <i>✓ ' + rtsDailyClock(r.secs) + ' ' + RTS_DIFF[r.lvl || m.diff].name + '</i>' : '') + '</h3>'
       + '<p class="s">' + rtsArmyTitle(m.army) + ' · ' + RTS_DIFF[m.diff].name + '</p>'
       + '<p>' + m.brief + '</p>'
-      + '<button type="button" onclick="rtsCampStart(\'' + m.id + '\', this)">PLAY</button></div>';
+      + '<div class="launch">' + pick + '<button type="button" onclick="rtsCampStart(\'' + m.id + '\', this)">PLAY</button></div></div>';
   }).join('');
   box.hidden = false;
 }
-function rtsCampStart(id, btn) {
+/* `lvl`: the level to play at - the card's choice when started from the list, the last mission's
+   on Next; the mission's own when it does not offer that one */
+function rtsCampStart(id, btn, lvl) {
   var m = _rtsMissionOf(id);
   if (!m) return;
+  var sel = btn && btn.parentNode && btn.parentNode.querySelector('select.lvl');
+  if (sel) lvl = sel.value;
+  if (_rtsMissionLevels(m).indexOf(lvl) < 0) lvl = m.diff;
   if (!window._RTS_MISSION) window._RTS_CAMP_PREV = { diff: window._RTS_DIFF, army: window._RTS_ARMY };
-  window._RTS_MISSION = { id: id, seed: m.seed };
+  window._RTS_MISSION = { id: id, seed: m.seed, lvl: lvl };
   window._RTS_DIFF = m.diff; window._RTS_ARMY = m.army;
   var err = document.getElementById('rtsErr');
   if (err) err.style.display = 'none';
@@ -35135,7 +35158,7 @@ function rtsCampStart(id, btn) {
 function rtsCampLay(G) {
   var mi = window._RTS_MISSION;
   if (!mi || !G) return null;
-  var M = _rtsMissionSetup(G, mi.id);
+  var M = _rtsMissionSetup(G, mi.id, mi.lvl);
   if (M && M.focus && window._rtsR) { _rtsR.focus.x = _rtsWX(M.focus.tx); _rtsR.focus.z = _rtsWX(M.focus.tz); }
   return M;
 }
@@ -35170,18 +35193,25 @@ function rtsCampOverHTML(G) {
   var M = G && G.mission;
   if (!M || !G.over) return '';
   var m = _rtsMissionOf(M.id), won = G.over === 'win', all = rtsCampProgress(), b = all[M.id];
-  var r = { won: won, secs: G.t, lost: G.stats.lostU, killed: G.stats.killed };
-  if (won && (!b || !b.won || r.secs < b.secs)) { all[M.id] = r; try { window.localStorage.setItem(RTS_CAMP_LS, JSON.stringify(all)); } catch (e) {} }
+  var r = { won: won, secs: G.t, lost: G.stats.lostU, killed: G.stats.killed, lvl: M.lvl || m.diff };
+  if (won && rtsCampBetter(r, b, m)) { all[M.id] = r; try { window.localStorage.setItem(RTS_CAMP_LS, JSON.stringify(all)); } catch (e) {} }
   var next = won && RTS_CAMPAIGN[RTS_CAMPAIGN.indexOf(m) + 1];
   return '<div class="card ' + G.over + '"><h2>' + (won ? 'MISSION COMPLETE' : 'MISSION FAILED') + '</h2>'
-    + '<p>' + m.name + ': ' + (M.why || '') + '</p>'
+    + '<p>' + m.name + ' (' + RTS_DIFF[M.lvl || m.diff].name + '): ' + (M.why || '') + '</p>'
     + '<p class="s">Time ' + rtsDailyClock(G.t) + ' · Enemy destroyed: ' + G.stats.killed + ' · Units lost: ' + G.stats.lostU + '</p>'
-    + (next ? '<button type="button" onclick="rtsCampNext(\'' + next.id + '\')">Next: ' + next.name + '</button> ' : '')
+    + (next ? '<button type="button" onclick="rtsCampNext(\'' + next.id + '\', \'' + (M.lvl || m.diff) + '\')">Next: ' + next.name + '</button> ' : '')
     + '<button type="button" onclick="rtsRestart()">Retry</button> '
     + '<button type="button" onclick="rtsCampMissions()">Missions</button> '
     + '<button type="button" onclick="rtsClose()">Quit</button></div>';
 }
-function rtsCampNext(id) { rtsClose(); setTimeout(function () { rtsCampStart(id); }, 60); }
+/* the best win: the harder level, then the faster time (a record from before levels is the
+   mission's own) */
+function rtsCampBetter(r, b, m) {
+  if (!b || !b.won) return true;
+  var k = Object.keys(RTS_DIFF), a = k.indexOf(r.lvl), o = k.indexOf(b.lvl || m.diff);
+  return a > o || (a === o && r.secs < b.secs);
+}
+function rtsCampNext(id, lvl) { rtsClose(); setTimeout(function () { rtsCampStart(id, null, lvl); }, 60); }
 function rtsCampMissions() {
   rtsClose();
   var box = document.getElementById('rtsCampList');

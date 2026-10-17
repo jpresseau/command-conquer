@@ -7,7 +7,10 @@
      THE END        a won mission's card says MISSION COMPLETE with the mission's own reason,
                     offers the next one, and keeps the result; Retry replays the same mission
      PUT BACK       back on the title the player has their own army and difficulty, and the list
-                    marks the mission won */
+                    marks the mission won
+     A LEVEL        a mission that offers levels has a choice on its card, opening on its own; PLAY
+                    at Veteran gives the Dominion Veteran and the ally the mission's own; the end
+                    card names the level, the record keeps it, and Next carries it on */
 
 var { chromium } = require('playwright');
 var { Suite } = require('../lib/assert.js');
@@ -102,6 +105,44 @@ function centre(sel) {
   S.ok('back on the title the player has their own army and difficulty', home.title && home.army === before.army && home.diff === before.diff && !home.mission,
        JSON.stringify(home) + ' (theirs ' + JSON.stringify(before) + ')');
   S.eq('...and the list marks the mission won', home.won, 1);
+
+  /* ---------- a level ---------- */
+  var pick = await p.evaluate(function () {
+    var card = document.querySelector('#rtsCampList .mission[data-id="twofronts"]'), sel = card && card.querySelector('select.lvl');
+    var low = document.querySelector('#rtsCampList .mission[data-id="lowwater"] select.lvl');
+    if (!sel) return { sel: false, low: !!low };
+    var first = sel.value, opts = Array.prototype.map.call(sel.options, function (o) { return o.value; });
+    sel.value = 'hard'; sel.scrollIntoView();
+    return { sel: true, first: first, opts: opts, low: !!low };
+  });
+  S.ok('a mission that offers levels has a choice on its card, opening on its own; one that offers only its own has none',
+       pick.sel && pick.first === 'normal' && pick.opts.join() === 'easy,normal,hard' && !pick.low, JSON.stringify(pick));
+  at = await p.evaluate(centre, '#rtsCampList .mission[data-id="twofronts"] button');
+  if (at) await p.mouse.click(at.x, at.y);
+  await p.waitForFunction(function () { var G = window._rtsG; return !!(G && G.mission && G.mission.id === 'twofronts' && document.getElementById('rcgRts')); }, null, { timeout: 60000 }).catch(function () {});
+  var vet = await p.evaluate(function () {
+    var G = window._rtsG;
+    if (!G || !G.mission || G.mission.id !== 'twofronts') return null;
+    var seats = { lvl: G.mission.lvl, diff: G.diff, enemy: _rtsBias('enemy').name, ally: _rtsBias('ally').name };
+    if (window._rtsUI) window._rtsUI.dead = true;
+    G.t = 421; G.over = 'win'; G.mission.why = 'The flank held.';
+    _rtsSyncSidebar(0);
+    var o = document.getElementById('rtsOver'), nx = o.querySelector('button');
+    seats.card = o.textContent; seats.next = nx ? nx.getAttribute('onclick') : '';
+    seats.stored = (JSON.parse(localStorage.getItem('bw.campaign') || '{}').twofronts || {}).lvl;
+    return seats;
+  });
+  S.ok('PLAY at Veteran: the Dominion plays Veteran, the ally and the battle the mission\'s own', !!vet && vet.lvl === 'hard' && vet.enemy === 'Veteran' &&
+       vet.ally === 'Soldier' && vet.diff === 'normal', JSON.stringify(vet));
+  S.ok('...the end card names the level, the record keeps it, and Next carries it on', !!vet && /Two Fronts \(Veteran\)/.test(vet.card) && vet.stored === 'hard' &&
+       /rtsCampNext\('mirror', 'hard'\)/.test(vet.next), JSON.stringify(vet && { card: vet.card.slice(0, 80), stored: vet.stored, next: vet.next }));
+  var listed = await p.evaluate(function () {
+    rtsClose();
+    var box = document.getElementById('rtsCampList'); box.hidden = true; rtsCampToggle();
+    var h = box.querySelector('.mission[data-id="twofronts"] h3');
+    return h ? h.textContent : '';
+  });
+  S.ok('...and the list shows the win at Veteran', /✓ .* Veteran/.test(listed), listed);
 
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
   await g.close();

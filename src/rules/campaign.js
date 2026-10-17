@@ -2,7 +2,9 @@
 
    Each is a seed and the two armies, a briefing, its goals, a setup that lays the mission onto the
    battle the seed made, and a check, every tick, that keeps the goals and calls the result. A
-   mission's memory is plain data in M (G.mission); nothing here is kept on G but through it. */
+   mission's memory is plain data in M (G.mission); nothing here is kept on G but through it.
+   `diff` is the level it was written and tuned at; it can also be played at any easier one, and
+   up to `top` where a harder one was measured to bite and still be won (core/campaign.js). */
 
 /* across the water: the lagoon's long axis, and a shore cell either side of it */
 function _rtsCampAcross(G) {
@@ -139,7 +141,7 @@ var RTS_CAMPAIGN = [
       return null;
     } },
 
-  { id: 'channel', name: 'Hold the Channel', army: 'soviet', diff: 'normal', seed: 9004,
+  { id: 'channel', name: 'Hold the Channel', army: 'soviet', diff: 'normal', top: 'hard', seed: 9004,
     brief: 'A Compact flotilla is coming up the lagoon for your Sub Pen. Hold the shore for eight minutes, until the relief column arrives. Their ships come in on the high water; at low tide the flats strand them.',
     goals: [ { id: 'hold', text: function (G, M) { return 'Hold for eight minutes - ' + Math.max(0, Math.ceil((480 - G.t) / 60)) + ' to go'; } },
              { id: 'yard', text: 'Keep the Sub Pen on the shore standing' } ],

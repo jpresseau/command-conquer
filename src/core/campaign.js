@@ -15,12 +15,22 @@ function _rtsMissionOf(id) {
   for (var i = 0; i < RTS_CAMPAIGN.length; i++) if (RTS_CAMPAIGN[i].id === id) return RTS_CAMPAIGN[i];
   return null;
 }
-/* Lay mission `id` onto the battle just made. */
-function _rtsMissionSetup(G, id) {
+/* The levels mission `m` can be played at: every RTS_DIFF rung from the lowest up to its `top`
+   (its own difficulty when it names none). A mission offers a rung above its own only where a
+   harder enemy was measured to bite and a stronger play still wins it (unit/campaign-levels). */
+function _rtsMissionLevels(m) {
+  var keys = Object.keys(RTS_DIFF), top = keys.indexOf(m.top || m.diff);
+  return keys.slice(0, Math.max(top, keys.indexOf(m.diff)) + 1);
+}
+/* Lay mission `id` onto the battle just made, at level `lvl` (one of its levels; its own when left
+   out or not offered). The level is the enemy's: every seat hostile to the player plays at it,
+   while the battle's own difficulty - and with it an ally's - stays the one it was written at. */
+function _rtsMissionSetup(G, id, lvl) {
   var m = _rtsMissionOf(id);
   if (!m) return null;
-  G.mission = { id: id, obj: {}, t0: G.t, over: null, why: '' };
+  G.mission = { id: id, obj: {}, t0: G.t, over: null, why: '', lvl: _rtsMissionLevels(m).indexOf(lvl) >= 0 ? lvl : m.diff };
   m.setup(G, G.mission);
+  G.order.forEach(function (k) { if (_rtsHostile('player', k)) G.sides[k].diff = G.mission.lvl; });
   _rtsRecalcPower('player'); _rtsRecalcPower('enemy');
   G.waypt = null;                       /* the waypoints are rebuilt on the ground the mission left */
   return G.mission;

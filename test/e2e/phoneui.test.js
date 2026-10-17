@@ -43,8 +43,9 @@ function heights(sel) {
     S.ok(tag + ': every skirmish choice can be scrolled to and tapped, and nothing scrolls sideways', title.n >= 15 && !title.bad.length && !title.sideways,
          JSON.stringify(title));
 
-    var play = await p.evaluate(function (src) { rtsSkirmishToggle(); rtsCampToggle(); return { h: eval('(' + src + ')')('#rtsCampList button'), of: RTS_CAMPAIGN.length }; }, heights.toString());
+    var play = await p.evaluate(function (src) { rtsSkirmishToggle(); rtsCampToggle(); var f = eval('(' + src + ')'); return { h: f('#rtsCampList button'), sel: f('#rtsCampList select.lvl'), of: RTS_CAMPAIGN.length }; }, heights.toString());
     S.ok('...the campaign\'s PLAY buttons are a finger\'s height', play.h.length === play.of && play.h.every(function (h) { return h >= 40; }), play.h.join(',') + ' of ' + play.of);
+    S.ok('...and so are its level choices', play.sel.length >= 2 && play.sel.every(function (h) { return h >= 40; }), play.sel.join(','));
 
     await p.evaluate(function () { rtsCampToggle(); rtsCampStart('lowwater'); });
     await p.waitForFunction(function () { return window._rtsG && window._rtsG.mission && document.getElementById('rtsGoals'); }, null, { timeout: 60000 }).catch(function () {});
