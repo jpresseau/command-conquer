@@ -27,7 +27,7 @@ function _rtsCampRing(side, n) {
 }
 
 RTS_CAMPAIGN.push(
-  { id: 'twofronts', name: 'Two Fronts', army: 'allied', diff: 'normal', seed: 9005, skirmish: { foes: 'ally' },
+  { id: 'twofronts', name: 'Two Fronts', army: 'allied', diff: 'normal', top: 'hard', seed: 9005, skirmish: { foes: 'ally' },
     brief: 'Your ally holds the flank, and the Dominion has seen that it is the weaker of you. Its columns will march on the allied base, not yours. Your ally cannot hold alone: get your army there, and keep its Command Yard standing for seven minutes.',
     goals: [ { id: 'hold', text: function (G, M) { return "Keep your ally's Command Yard standing - " + Math.max(0, Math.ceil((420 - G.t) / 60)) + ' min to go'; } },
              { id: 'yard', text: 'Waves come from the Dominion base: meet them at your ally\'s' } ],

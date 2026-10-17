@@ -123,7 +123,9 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
    credits button covered) */
 #rtsTitleMenu{padding-bottom:28px}
 /* a finger, not a mouse: the campaign's PLAY was 27px tall */
-@media (hover: none) and (pointer: coarse){ #rtsCampList button{min-height:40px;padding:10px 22px} }
+#rtsCampList .launch{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#rtsCampList select.lvl{margin-top:4px;padding:5px 6px;font:12px/1 inherit;color:#fff;background:#1d2836;border:1px solid #3a4d63;border-radius:4px}
+@media (hover: none) and (pointer: coarse){ #rtsCampList button, #rtsCampList select.lvl{min-height:40px;padding:10px 22px} }
 /* ...AND ON A TOUCH SCREEN THE STAMP LETS A TAP THROUGH. It takes taps only so its text can be
    selected with a mouse; on a phone it sits over the bottom-right of whatever row is at the screen's
    foot, and a tap there landed on the stamp instead of the button (e2e/phoneui) */

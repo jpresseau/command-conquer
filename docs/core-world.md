@@ -226,6 +226,13 @@ and `src/campaign.js` is the title-screen list, the objectives and the end card.
 - **The enemy seat runs no brain** (ctl `'none'`, `core/seats.js`). Its guns still fire. An
   `awake` mission (Mirror Line, Breachwater) leaves its enemy seats thinking. An ally held at
   `'none'` still carries out the player's ALLY orders (`core/aisupers.js`).
+- **A mission is played at a level** (`G.mission.lvl`), chosen on its card: its own `diff`, any
+  easier rung, or up to its `top`. The level is every hostile seat's (`S.diff`, read by
+  `_rtsBias`); `G.diff`, and an ally's, stay the mission's own. A harder rung is offered only where
+  it was measured to bite and still be won (`unit/campaign-levels`): the Channel and Two Fronts
+  at Veteran, won by a submarine every 30 s and a tank and rocket every 8 s. At Veteran Fog Bank
+  and Order of Battle barely changed, Armour by Air's fixed four tanks lose, and against the two
+  awake missions no scripted play held its base at Soldier, so those stop at their own level.
 - **`G.mission` is plain data.** The functions stay in the table and are looked up by id. A mission
   cannot be saved, because a resumed state would need its whole setup replayed under it.
 - **Each mission is tuned so the intended play wins and doing nothing loses.** `unit/campaign` and
