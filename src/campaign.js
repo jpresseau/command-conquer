@@ -4,10 +4,11 @@
    The missions themselves are rules/campaign.js and core/campaign.js; this is only the page
    around them. Like a daily (daily.js), a mission borrows the army and difficulty it was
    written for and puts the player's own back when the battle ends (rtsHome), and nothing of it
-   is written over the stored preferences. A mission is not saved: its check lives in the rules
-   table by id, and a resumed half-mission would need its whole setup replayed under it. */
+   is written over the stored preferences. A mission saves like any battle: everything it
+   remembers is plain data on G.mission, and a resume (rts.save.js) is opened as that mission
+   rather than laid again. */
 
-var RTS_CAMP_LS = 'bw.campaign';        /* {<id>: {won, secs, lost, killed}} - the best of each */
+var RTS_CAMP_LS = 'bw.campaign';        /* {<id>: {won, secs, lost, killed, lvl}} - the best of each */
 
 function rtsCampProgress() {
   try { return JSON.parse(window.localStorage.getItem(RTS_CAMP_LS) || '{}') || {}; } catch (e) { return {}; }

@@ -4,7 +4,7 @@ var { loadFast } = require('./sandbox.js');
 /* A fresh world with mission `id` laid on it, exactly as rtsOpen + rtsCampLay make it, at level
    `lvl` (the mission's own when left out). */
 function mission(id, lvl) {
-  var g = loadFast(['src/rules', 'src/core', 'src/sprites/props.js']);
+  var g = loadFast(['src/rules', 'src/core', 'src/sprites/props.js', 'src/rts.save.js']);   /* rts.save: unit/campaign-save */
   var m = g._rtsMissionOf(id);
   g.window._RTS_ARMY = m.army;
   g._rtsNewGame(m.seed, m.diff, { skirmish: m.skirmish || null });
