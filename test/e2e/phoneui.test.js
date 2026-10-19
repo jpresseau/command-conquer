@@ -43,7 +43,11 @@ function heights(sel) {
     S.ok(tag + ': every skirmish choice can be scrolled to and tapped, and nothing scrolls sideways', title.n >= 15 && !title.bad.length && !title.sideways,
          JSON.stringify(title));
 
-    var play = await p.evaluate(function (src) { rtsSkirmishToggle(); rtsCampToggle(); var f = eval('(' + src + ')'); return { h: f('#rtsCampList button'), sel: f('#rtsCampList select.lvl'), of: RTS_CAMPAIGN.length }; }, heights.toString());
+    var play = await p.evaluate(function (src) {
+      /* every mission open, as a player who has won them all has it: a locked card has no PLAY (campaign.js) */
+      var done = {}; RTS_CAMPAIGN.forEach(function (m) { done[m.id] = { won: true, secs: 300, lost: 0, killed: 0, lvl: m.diff }; });
+      localStorage.setItem('bw.campaign', JSON.stringify(done));
+      rtsSkirmishToggle(); rtsCampToggle(); var f = eval('(' + src + ')'); return { h: f('#rtsCampList button'), sel: f('#rtsCampList select.lvl'), of: RTS_CAMPAIGN.length }; }, heights.toString());
     S.ok('...the campaign\'s PLAY buttons are a finger\'s height', play.h.length === play.of && play.h.every(function (h) { return h >= 40; }), play.h.join(',') + ' of ' + play.of);
     S.ok('...and so are its level choices', play.sel.length >= 2 && play.sel.every(function (h) { return h >= 40; }), play.sel.join(','));
 

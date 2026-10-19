@@ -149,7 +149,8 @@ run a convoy over the flats at low water, blind a fortress with the Fog Bank, li
 island with Sky Cranes, hold a Sub Pen against a flotilla for eight minutes, hold an ally's flank,
 take a yard on the mirrored map, order your ally against one of two fortified bases, and in the
 finale break two live armies at once. Each has a briefing,
-objectives on the battlefield and an end card, and the missions you win are marked. Most can be
+objectives on the battlefield and an end card, and the missions you win are marked. They are
+fought in order - each one opens when the one before it is won - with a line of story between. Most can be
 played easier than written, and the Channel and Two Fronts harder.
 
 ## Everything is generated in code
