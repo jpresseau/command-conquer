@@ -247,8 +247,18 @@ and `src/campaign.js` is the title-screen list, the objectives and the end card.
   `_rtsBias`); `G.diff`, and an ally's, stay the mission's own. A harder rung is offered only where
   it was measured to bite and still be won (`unit/campaign-levels`): the Channel and Two Fronts
   at Veteran, won by a submarine every 30 s and a tank and rocket every 8 s. At Veteran Fog Bank
-  and Order of Battle barely changed, Armour by Air's fixed four tanks lose, and against the two
-  awake missions no scripted play held its base at Soldier, so those stop at their own level.
+  and Order of Battle barely changed, and Armour by Air's fixed four tanks lose.
+- **Regular, the campaign rung** (`RTS_DIFF.regular`, `campaign: true`, so the skirmish picker
+  skips it): Soldier's brain - it builds, expands and repairs - with numbers halfway to Recruit's.
+  It exists because the awake missions showed the gap between the two: Recruit's opponent never
+  grew past about ten fighters and never came, Soldier's had forty by the third minute, and no
+  scripted player - not even one building a base (`builder` in `test/lib/plays.js`: a second
+  refinery, guns placed where the AI would place them, an army massed at home and attack-moved
+  in) - won either awake mission at Soldier. At Regular the builder wins **Breachwater** at 512 s
+  where the intended play loses at 445, so Breachwater offers it. **Mirror Line** does not: at
+  both Regular-like rungs tried (and with a siege of V2 launchers) the builder held its own base
+  to the clock but never broke the triple-strength yard its opponent kept repairing. The missions
+  written at Soldier offer Regular as one more easier choice, each still won there.
 - **`G.mission` is plain data.** The functions stay in the table and are looked up by id, so a
   mission saves like any battle. The save's header carries `mission` (id and level); a resume
   opens the battle on the save's own map, lays the state over it and does NOT run the setup again

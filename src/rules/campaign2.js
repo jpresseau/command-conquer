@@ -140,7 +140,7 @@ RTS_CAMPAIGN.push(
     } }
 ,
 
-  { id: 'breachwater', awake: true, name: 'Breachwater', army: 'allied', diff: 'easy', seed: 9008, skirmish: { foes: 'team', size: 'large' },
+  { id: 'breachwater', awake: true, name: 'Breachwater', army: 'allied', diff: 'easy', top: 'regular', seed: 9008, skirmish: { foes: 'team', size: 'large' },
     brief: 'Everything comes to this coast. Two Dominion armies hold it, both awake, both building, each yard ringed with guns. Your ally waits on your orders, as at the two bases. Break both Command Yards inside ten minutes: send your ally where you are not.',
     after: 'The coast is quiet. The war that began with a convoy on the flats at low water ends here, at Breachwater.',
     goals: [ { id: 'y1', text: 'Destroy the Dominion Command Yard across from you' },

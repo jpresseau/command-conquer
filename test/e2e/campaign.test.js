@@ -138,10 +138,13 @@ function centre(sel) {
     if (!sel) return { sel: false, low: !!low };
     var first = sel.value, opts = Array.prototype.map.call(sel.options, function (o) { return o.value; });
     sel.value = 'hard'; sel.scrollIntoView();
-    return { sel: true, first: first, opts: opts, low: !!low };
+    var skirmish = Array.prototype.map.call(document.querySelectorAll('#rtsDiff button'), function (b) { return b.getAttribute('data-d'); });
+    return { sel: true, first: first, opts: opts, low: !!low, skirmish: skirmish };
   });
   S.ok('a mission that offers levels has a choice on its card, opening on its own; one that offers only its own has none',
-       pick.sel && pick.first === 'normal' && pick.opts.join() === 'easy,normal,hard' && !pick.low, JSON.stringify(pick));
+       pick.sel && pick.first === 'normal' && pick.opts.join() === 'easy,regular,normal,hard' && !pick.low, JSON.stringify(pick));
+  S.ok('...and Regular, the campaign rung, is a mission\'s choice only: the skirmish picker has the other three', pick.skirmish && pick.skirmish.join() === 'easy,normal,hard',
+       JSON.stringify(pick.skirmish));
   at = await p.evaluate(centre, '#rtsCampList .mission[data-id="twofronts"] button');
   if (at) await p.mouse.click(at.x, at.y);
   await p.waitForFunction(function () { var G = window._rtsG; return !!(G && G.mission && G.mission.id === 'twofronts' && document.getElementById('rcgRts')); }, null, { timeout: 60000 }).catch(function () {});

@@ -95,6 +95,9 @@ units to its next attack because it needs a garrison.
 are what actually separate the difficulties: Recruit never expands its base, never repairs and
 never scatters. Measured over eight minutes against a passive player: Recruit fields 16 units
 from 8 buildings, Commando 64 from 19, and the first attack wave lands at 212 s / 152 s / 106 s.
+The campaign has a fourth rung, **Regular** (IQ 3, Soldier's abilities, numbers halfway to
+Recruit's), between the two it found too far apart; the skirmish picker does not offer it
+(docs/core-world.md, the campaign).
 
 ## Teams — from TEAM.CPP
 
