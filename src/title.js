@@ -78,6 +78,7 @@ function rtsBuildArmyPick(){
 }
 
 function rtsShowResume(){
+  if (typeof rtsShowContinue === 'function') rtsShowContinue();     /* and the autosave's CONTINUE */
   var r = document.getElementById('rtsResume');
   var n = document.getElementById('rtsResumeNote');
   if (!r) return;
@@ -101,6 +102,7 @@ function rtsShowResume(){
 rtsBuildDiff();
 if (typeof rtsSkySync === 'function') rtsSkySync();
 rtsShowResume();
+if (typeof _rtsAutoBind === 'function') _rtsAutoBind();     /* the autosave's two moments (autosave.js) */
 rtsBuildArmyPick();
 if (typeof rtsDailyNote === 'function') rtsDailyNote();
 if (typeof rtsSkirmishSync === 'function') rtsSkirmishSync();

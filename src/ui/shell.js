@@ -119,6 +119,7 @@ function rtsOpen(seed) {
      invariant, the save overwrites the state on top of it, and _rtsRInit then bakes the
      terrain the save actually carries rather than the one the seed would have produced. */
   var _load = window._RTS_PENDING_LOAD; window._RTS_PENDING_LOAD = null;
+  var _slot = window._RTS_PENDING_SLOT; window._RTS_PENDING_SLOT = null;
   _rtsNewGame(_load ? _load.seed : (seed || (((new Date()).getTime()) & 0xffff)),
               _load ? _load.diff : undefined,
               /* the map a save was made on, or the title's setup for a plain battle (skirmish.js) */
@@ -163,15 +164,18 @@ function rtsOpen(seed) {
     throw new Error('This game draws its battlefield in 3D, and this browser did not provide WebGL. ' +
                     'Try another browser, or turn on hardware acceleration.');
   }
+  /* this is the battle now: the last one's autosave goes, unless this IS it (autosave.js) */
+  if (_slot !== 'auto' && typeof _rtsAutoClear === 'function') _rtsAutoClear();
   if (_load) _rtsSay('Battle resumed.');
   else _rtsSay(rtsArmyName('player') + ' command online. Build a Refinery to start earning.');
   _rtsUI.last = (new Date()).getTime();
   _rtsLoop(true);        /* paint the first frame; see the note on _rtsLoop */
 }
 
-/* THE ✕ ASKS FIRST. It ends the match with no autosave and no second slot, and it sat four
-   pixels from the mute button a player presses casually - so the most destructive control on
-   the screen was the one most easily hit by accident, and it acted immediately.
+/* THE ✕ ASKS FIRST. It ends the match - kept now only as the autosave CONTINUE brings back
+   (autosave.js) - and it sat four pixels from the mute button a player presses casually, so the
+   most destructive control on the screen was the one most easily hit by accident, and it acted
+   immediately.
 
    Two presses rather than a browser confirm(): the game already teaches press-once-to-arm,
    press-again-to-commit for holding and cancelling production, and a modal dialog on a phone
@@ -183,12 +187,16 @@ function rtsQuitClick(byKey) {
   var U = window._rtsUI, G = window._rtsG;
   if (!U) { rtsClose(); return; }
   var now = G ? G.t : 0;
-  if (U.quitArm && now - U.quitArm < RTS_QUIT_WINDOW) { U.quitArm = 0; rtsClose(); return; }
+  if (U.quitArm && now - U.quitArm < RTS_QUIT_WINDOW) {
+    U.quitArm = 0;
+    if (typeof _rtsAutoSave === 'function') _rtsAutoSave();
+    rtsClose(); return;
+  }
   U.quitArm = now;
   var b = document.getElementById('rtsQuitBtn');
   if (b) b.classList.add('arm');
   if (typeof _rtsSfx === 'function') _rtsSfx('deny');
-  _rtsSay('Leave the battle? Press ' + (byKey ? 'Esc' : '✕') + ' again to confirm — this battle is not saved.',
+  _rtsSay('Leave the battle? Press ' + (byKey ? 'Esc' : '✕') + ' again to confirm — CONTINUE on the title brings it back.',
           RTS_QUIT_WINDOW);
   setTimeout(function () {
     var bb = document.getElementById('rtsQuitBtn');
@@ -196,8 +204,9 @@ function rtsQuitClick(byKey) {
     if (window._rtsUI) window._rtsUI.quitArm = 0;
   }, RTS_QUIT_WINDOW * 1000);
 }
-/* ⟳ RELOAD, AND IT ASKS FIRST FOR THE SAME REASON THE ✕ DOES. Reloading throws the running
-   battle away exactly as quitting does - there is no autosave - so it gets the same
+/* ⟳ RELOAD, AND IT ASKS FIRST FOR THE SAME REASON THE ✕ DOES. Reloading leaves the running
+   battle exactly as quitting does - kept only as the autosave, which the page writes as it goes
+   (pagehide, autosave.js; a call here as well was measured to change nothing) - so it gets the same
    press-once-to-arm, press-again-to-commit the game already teaches for quitting and for
    holding production. Amber rather than red: it is losing the battle, not losing the battle
    AND leaving.
@@ -225,7 +234,7 @@ function rtsReloadClick() {
   var b = document.getElementById('rtsReloadBtn');
   if (b) b.classList.add('arm');
   if (typeof _rtsSfx === 'function') _rtsSfx('deny');
-  _rtsSay('Reload for the latest build? Press ⟳ again to confirm — this battle is not saved.',
+  _rtsSay('Reload for the latest build? Press ⟳ again to confirm — the battle is autosaved first.',
           RTS_RELOAD_WINDOW);
   setTimeout(function () {
     var bb = document.getElementById('rtsReloadBtn');

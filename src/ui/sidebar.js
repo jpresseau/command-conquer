@@ -437,6 +437,7 @@ function _rtsSyncSidebar(dt) {
   }
 
   if (typeof rtsCampHud === 'function') rtsCampHud(G);     /* a mission's objectives (campaign.js) */
+  if (typeof _rtsAutoTick === 'function') _rtsAutoTick(G, U);   /* the autosave's minute, and its end */
   var msg = document.getElementById('rtsMsg');
   msg.textContent = G.msgT > 0 ? (G.msg || '') : '';
   msg.className = 'rts-msg' + (G.msgT > 0 ? ' on' : '');
