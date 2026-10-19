@@ -151,7 +151,7 @@ take a yard on the mirrored map, order your ally against one of two fortified ba
 finale break two live armies at once. Each has a briefing,
 objectives on the battlefield and an end card, and the missions you win are marked. They are
 fought in order - each one opens when the one before it is won - with a line of story between. Most can be
-played easier than written, and the Channel and Two Fronts harder.
+played easier than written, and the Channel, Two Fronts and the finale harder.
 
 ## Everything is generated in code
 

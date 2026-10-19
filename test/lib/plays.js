@@ -94,9 +94,51 @@ var plays = {
     });
   }
 };
+/* A PLAYER WHO BUILDS A BASE, for the awake missions: the AI's own placement for each building
+   the plan finishes (a second refinery first, then power and guns), units out of what is left
+   over the next building's price, an army held at home until it is `hold` strong with `guard`
+   kept back after, then attack-moved at `target()` and turned on it once there. Measured on
+   Breachwater at Regular: won at 512 s where the intended play loses at 445. */
+function builder(o, secs, target, hold, guard, each) {
+  var g = o.g, G = o.G, S = G.sides.player, side = g.rtsHouseSide('player');
+  var DEF = side === 'soviet' ? ['flametower', 'tesla'] : ['turret', 'pillbox'];
+  var plan = ['refinery', 'power', DEF[0], DEF[0], DEF[1], 'refinery', 'power', DEF[0], DEF[1], DEF[0]];
+  var UNITS = side === 'soviet' ? ['tank', 'v2rl', 'rifle'] : ['tank', 'rocket', 'rifle'];
+  var home = g._rtsHas('player', 'yard'), go = false;
+  function nextCost() { return plan.length && !S.q.struct && !S.ready ? g._rtsCostOf('player', g.rtsStructDef(plan[0])) : 0; }
+  return play(o, secs, function (i) {
+    /* placed, the slot is cleared by the caller - as the AI's own loop does (aisupers.js) */
+    if (S.ready && i % 30 === 0) { var k = S.ready; if (g._rtsAIAs('player', function () { return g._rtsAIPlace(k); })) { S.ready = null; S.readyPaid = null; } }
+    if (!S.ready && !S.q.struct && plan.length && i % 60 === 3) { var nx = plan[0]; if (g._rtsWhyLocked('player', nx)) plan.shift(); else if (g._rtsQueue('player', nx)) plan.shift(); }
+    if (i % 60 === 7) UNITS.forEach(function (u) {
+      var c = g._rtsQueueCat(u), cost = g._rtsCostOf('player', g.rtsUnitDef(u));
+      if (!S.q[c] && g.rtsMoney(S) - nextCost() >= cost) g._rtsQueue('player', u);
+    });
+    if (i % 600 !== 5) return;
+    var f = g._rtsCampFighters('player'), y = target();
+    if (!go && f.length >= hold) go = true;
+    if (go && f.length < guard + 2) go = false;                      /* spent: gather again */
+    f.sort(function (a, b) { return a.id - b.id; });
+    f.forEach(function (u, n) {
+      if (u.target && !u.target.dead) return;
+      if (go && y && n >= guard) { if (Math.hypot(u.x - y.x, u.z - y.z) > 8 * g.RTS_TILE) g._rtsOrderMove(u, y.x, y.z, true); else g._rtsOrderAttack(u, y); }
+      else if (home && !home.dead) g._rtsOrderMove(u, home.x + (u.id % 5 - 2) * 3, home.z + ((u.id / 5 | 0) % 3 - 1) * 3, true);
+    });
+    if (each) each(i);                                               /* on the army's ticks, after it */
+  });
+}
+
 /* The stronger plays that win a mission at the `top` above its own level, where the intended one
-   loses: a submarine every 30 s, not 40; a tank and a rocket every 8 s, not a tank every 15. */
+   loses: a submarine every 30 s, not 40; a tank and a rocket every 8 s, not a tank every 15; and
+   a base built and an army massed (builder, above). */
 var strong = {
+  breachwater: function (o) {
+    var g = o.g, G = o.G;
+    return builder(o, 610, function () { return g._rtsMTagged(G, 'y1')[0] || g._rtsMTagged(G, 'y2')[0]; }, 24, 6, function (i) {
+      var y2 = g._rtsMTagged(G, 'y2')[0] || g._rtsMTagged(G, 'y1')[0];
+      if (y2 && i % 6000 === 5) g._rtsAllyCommand('attack', y2.x, y2.z);
+    });
+  },
   channel: function (o) {
     return play(o, 490, function (i) { if (i % 1800 === 0) o.g._rtsQueue('player', 'sub'); });
   },

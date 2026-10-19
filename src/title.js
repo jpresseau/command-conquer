@@ -26,8 +26,8 @@ function rtsBuildDiff(){
   var wrap = document.getElementById('rtsDiff');
   if (!wrap || wrap.firstChild) return;
   var html = '';
-  for (var k in RTS_DIFF) html += '<button type="button" data-d="' + k + '" onclick="rtsSetDiff(\'' + k + '\')">'
-    + RTS_DIFF[k].name.toUpperCase() + '</button>';
+  for (var k in RTS_DIFF) if (!RTS_DIFF[k].campaign) html += '<button type="button" data-d="' + k + '" onclick="rtsSetDiff(\'' + k + '\')">'
+    + RTS_DIFF[k].name.toUpperCase() + '</button>';     /* a campaign rung is a mission's choice (balance.js) */
   wrap.innerHTML = html;
   rtsSetDiff(window._RTS_DIFF);
 }
