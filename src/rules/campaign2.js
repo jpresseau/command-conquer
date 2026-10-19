@@ -29,6 +29,7 @@ function _rtsCampRing(side, n) {
 RTS_CAMPAIGN.push(
   { id: 'twofronts', name: 'Two Fronts', army: 'allied', diff: 'normal', top: 'hard', seed: 9005, skirmish: { foes: 'ally' },
     brief: 'Your ally holds the flank, and the Dominion has seen that it is the weaker of you. Its columns will march on the allied base, not yours. Your ally cannot hold alone: get your army there, and keep its Command Yard standing for seven minutes.',
+    after: 'The flank held and the Dominion columns are spent. Where the armies meet now, each faces its own reflection across the line.',
     goals: [ { id: 'hold', text: function (G, M) { return "Keep your ally's Command Yard standing - " + Math.max(0, Math.ceil((420 - G.t) / 60)) + ' min to go'; } },
              { id: 'yard', text: 'Waves come from the Dominion base: meet them at your ally\'s' } ],
     setup: function (G, M) {
@@ -75,6 +76,7 @@ RTS_CAMPAIGN.push(
 
   { id: 'mirror', awake: true, name: 'Mirror Line', army: 'soviet', diff: 'easy', seed: 9006, skirmish: { layout: 'mirror' },
     brief: 'The ground here is the same on both sides of the line, down to the last tree: whatever you have, the Compact has its twin. What you have that it does not is a head start. Take its Command Yard inside ten minutes, before it builds up to meet you.',
+    after: 'The Compact yard on the line is rubble. The Dominion digs in at two bases and calls its reinforcements: eight minutes out.',
     goals: [ { id: 'yard', text: function (G, M) { return 'Destroy the Compact Command Yard - ' + Math.max(0, Math.ceil((600 - G.t) / 60)) + ' min left'; } },
              { id: 'keep', text: 'Keep your own Command Yard' } ],
     setup: function (G, M) {
@@ -104,6 +106,7 @@ RTS_CAMPAIGN.push(
 
   { id: 'orders', name: 'Order of Battle', army: 'allied', diff: 'normal', seed: 9007, skirmish: { foes: 'team' },
     brief: 'Two Dominion bases, one on each side of the line, and eight minutes before their reinforcements land. You cannot take both. Your ally can take one - if you tell it which. Use the ALLY button: send it at one base, and take the other yourself.',
+    after: 'Both bases are down, and the reinforcements came ashore all the same. Everything the Dominion has left is on one coast: Breachwater.',
     goals: [ { id: 'y1', text: 'Destroy the Dominion Command Yard across from you' },
              { id: 'y2', text: 'Destroy the second Dominion Command Yard - order your ally there (🤝 ALLY)' },
              { id: 'time', text: function (G, M) { return Math.max(0, Math.ceil((480 - G.t) / 60)) + ' min before their reinforcements land'; } } ],
@@ -139,6 +142,7 @@ RTS_CAMPAIGN.push(
 
   { id: 'breachwater', awake: true, name: 'Breachwater', army: 'allied', diff: 'easy', seed: 9008, skirmish: { foes: 'team', size: 'large' },
     brief: 'Everything comes to this coast. Two Dominion armies hold it, both awake, both building, each yard ringed with guns. Your ally waits on your orders, as at the two bases. Break both Command Yards inside ten minutes: send your ally where you are not.',
+    after: 'The coast is quiet. The war that began with a convoy on the flats at low water ends here, at Breachwater.',
     goals: [ { id: 'y1', text: 'Destroy the Dominion Command Yard across from you' },
              { id: 'y2', text: 'Destroy the second Dominion Command Yard' },
              { id: 'time', text: function (G, M) { return Math.max(0, Math.ceil((600 - G.t) / 60)) + ' min left'; } } ],

@@ -1,13 +1,14 @@
 /* THE CAMPAIGN, WITH REAL CLICKS (src/campaign.js, title.js, ui/shell.js, ui/sidebar.js):
 
-     THE LIST       CAMPAIGN on the title opens all the missions with their briefs, and a real
-                    click on PLAY opens that mission: its seed, its army, its difficulty, laid
+     THE LIST       CAMPAIGN on the title lists every mission, and to a new player only the first
+                    is open: the rest are locked, each saying which win opens it, and refuse to
+                    start; a real click on PLAY opens the first: its seed, army, difficulty, laid
      IN BATTLE      the objectives sit on the battlefield and read the mission's goals; a mission
                     saves, and its save says which mission it is
-     THE END        a won mission's card says MISSION COMPLETE with the mission's own reason,
-                    offers the next one, and keeps the result; Retry replays the same mission
+     THE END        a won mission's card says MISSION COMPLETE with the mission's own reason and
+                    its line of story, offers the next one, and keeps the result; Retry replays it
      PUT BACK       back on the title the player has their own army and difficulty, and the list
-                    marks the mission won
+                    marks the mission won and opens the next
      A LEVEL        a mission that offers levels has a choice on its card, opening on its own; PLAY
                     at Veteran gives the Dominion Veteran and the ally the mission's own; the end
                     card names the level, the record keeps it, and Next carries it on
@@ -40,11 +41,18 @@ function centre(sel) {
   var at = await p.evaluate(centre, '#rtsCampBtn');
   await p.mouse.click(at.x, at.y);
   var list = await p.evaluate(function () {
-    var box = document.getElementById('rtsCampList');
-    return { open: !box.hidden && box.getBoundingClientRect().height > 50, n: box.querySelectorAll('.mission').length, of: RTS_CAMPAIGN.length,
-             text: box.textContent };
+    var box = document.getElementById('rtsCampList'), cards = box.querySelectorAll('.mission');
+    var locked = box.querySelectorAll('.mission.locked');
+    var refused = (rtsCampStart('breachwater'), !!window._RTS_MISSION);
+    return { open: !box.hidden && box.getBoundingClientRect().height > 50, n: cards.length, of: RTS_CAMPAIGN.length, text: box.textContent,
+             locked: locked.length, play: box.querySelectorAll('.mission button').length, firstPlay: !!cards[0].querySelector('button'),
+             says: locked[0] ? locked[0].textContent : '', refused: refused, brief: cards[0].textContent.indexOf(RTS_CAMPAIGN[0].brief) >= 0 };
   });
-  S.ok('CAMPAIGN opens every mission with its brief', list.open && list.n === list.of && list.n >= 8 && list.text.indexOf('Low Water') >= 0 && /tide/i.test(list.text), JSON.stringify({ open: list.open, n: list.n }));
+  S.ok('CAMPAIGN lists every mission, the first with its brief', list.open && list.n === list.of && list.n >= 8 && list.text.indexOf('Low Water') >= 0 && list.brief,
+       JSON.stringify({ open: list.open, n: list.n, brief: list.brief }));
+  S.ok('...and to a new player only the first is open: the rest are locked, each saying which win opens it', list.locked === list.of - 1 && list.play === 1 && list.firstPlay &&
+       /Win Low Water to open it/.test(list.says), JSON.stringify({ locked: list.locked, play: list.play, says: list.says }));
+  S.ok('...and a locked mission refuses to start', list.refused === false, String(list.refused));
 
   /* ---------- play ---------- */
   await p.evaluate(function () { document.querySelector('#rtsCampList .mission button').scrollIntoView(); });
@@ -77,11 +85,13 @@ function centre(sel) {
     G.t = 140; G.over = 'win'; G.mission.why = 'The convoy is across, and the sea is closing behind it.';
     _rtsSyncSidebar(0);
     var o = document.getElementById('rtsOver');
+    var after = o.querySelector('p.after');
     return { text: o.textContent, btns: Array.prototype.map.call(o.querySelectorAll('button'), function (b) { return b.textContent; }),
-             stored: localStorage.getItem('bw.campaign'), next: RTS_CAMPAIGN[1].name };
+             stored: localStorage.getItem('bw.campaign'), next: RTS_CAMPAIGN[1].name, after: after ? after.textContent : '', want: RTS_CAMPAIGN[0].after };
   });
   S.ok('a won mission\'s card says so, with the mission\'s own reason, and offers the next', /MISSION COMPLETE/.test(card.text) && /convoy is across/.test(card.text) &&
        card.btns[0] === 'Next: ' + card.next && card.btns.indexOf('Retry') >= 0 && card.btns.indexOf('Missions') >= 0, JSON.stringify(card.btns));
+  S.ok('...and its line of story, on into the next', !!card.want && card.after === card.want, JSON.stringify(card.after));
   S.ok('...and keeps the result', !!card.stored && (JSON.parse(card.stored).lowwater || {}).won === true, card.stored);
 
   var again = await p.evaluate(function () {
@@ -104,14 +114,24 @@ function centre(sel) {
   var home = await p.evaluate(function () {
     rtsClose();
     rtsCampToggle(); if (document.getElementById('rtsCampList').hidden) rtsCampToggle();
+    var second = document.querySelector('#rtsCampList .mission[data-id="' + RTS_CAMPAIGN[1].id + '"]');
     return { army: rtsArmySide(), diff: window._RTS_DIFF, mission: window._RTS_MISSION, title: !document.getElementById('rtsHome').classList.contains('gone'),
-             won: document.querySelectorAll('#rtsCampList .mission.won').length };
+             won: document.querySelectorAll('#rtsCampList .mission.won').length, second: !!second && !second.classList.contains('locked') && !!second.querySelector('button'),
+             locked: document.querySelectorAll('#rtsCampList .mission.locked').length, of: RTS_CAMPAIGN.length };
   });
   S.ok('back on the title the player has their own army and difficulty', home.title && home.army === before.army && home.diff === before.diff && !home.mission,
        JSON.stringify(home) + ' (theirs ' + JSON.stringify(before) + ')');
   S.eq('...and the list marks the mission won', home.won, 1);
+  S.ok('...and opens the next one, and only that one', home.second && home.locked === home.of - 2, JSON.stringify({ second: home.second, locked: home.locked }));
 
   /* ---------- a level ---------- */
+  /* Two Fronts is the fifth: the four before it won, as a player who got this far has them */
+  await p.evaluate(function () {
+    var done = JSON.parse(localStorage.getItem('bw.campaign') || '{}');
+    RTS_CAMPAIGN.slice(0, 4).forEach(function (m) { done[m.id] = done[m.id] || { won: true, secs: 300, lost: 0, killed: 0, lvl: m.diff }; });
+    localStorage.setItem('bw.campaign', JSON.stringify(done));
+    var box = document.getElementById('rtsCampList'); box.hidden = true; rtsCampToggle();
+  });
   var pick = await p.evaluate(function () {
     var card = document.querySelector('#rtsCampList .mission[data-id="twofronts"]'), sel = card && card.querySelector('select.lvl');
     var low = document.querySelector('#rtsCampList .mission[data-id="lowwater"] select.lvl');

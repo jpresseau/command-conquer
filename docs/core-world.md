@@ -237,6 +237,11 @@ and `src/campaign.js` is the title-screen list, the objectives and the end card.
 - **The enemy seat runs no brain** (ctl `'none'`, `core/seats.js`). Its guns still fire. An
   `awake` mission (Mirror Line, Breachwater) leaves its enemy seats thinking. An ally held at
   `'none'` still carries out the player's ALLY orders (`core/aisupers.js`).
+- **The missions are fought in order.** `rtsCampOpen` (src/campaign.js) opens the first, any
+  mission already won, and the one after a win; a locked card shows only its name and which win
+  opens it, and `rtsCampStart` refuses it. Each mission's `after` is the line of story its win
+  card ends on, into the next - the campaign alternates armies, so the lines tell the coast's
+  war from both sides.
 - **A mission is played at a level** (`G.mission.lvl`), chosen on its card: its own `diff`, any
   easier rung, or up to its `top`. The level is every hostile seat's (`S.diff`, read by
   `_rtsBias`); `G.diff`, and an ally's, stay the mission's own. A harder rung is offered only where

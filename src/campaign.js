@@ -13,6 +13,12 @@ var RTS_CAMP_LS = 'bw.campaign';        /* {<id>: {won, secs, lost, killed, lvl}
 function rtsCampProgress() {
   try { return JSON.parse(window.localStorage.getItem(RTS_CAMP_LS) || '{}') || {}; } catch (e) { return {}; }
 }
+/* Mission i can be played: the first always, any already won, and the one after a mission won -
+   so the campaign is fought in order, and a mission once open stays open. */
+function rtsCampOpen(i, done) {
+  var m = RTS_CAMPAIGN[i], prev = RTS_CAMPAIGN[i - 1];
+  return !!m && (i === 0 || !!(done[m.id] && done[m.id].won) || !!(prev && done[prev.id] && done[prev.id].won));
+}
 /* The mission list, opened and closed under the CAMPAIGN button. */
 function rtsCampToggle() {
   var box = document.getElementById('rtsCampList');
@@ -21,6 +27,9 @@ function rtsCampToggle() {
   var done = rtsCampProgress();
   box.innerHTML = RTS_CAMPAIGN.map(function (m, i) {
     var r = done[m.id], lv = _rtsMissionLevels(m);
+    /* not yet: its name, and what opens it - the brief waits for the mission before it */
+    if (!rtsCampOpen(i, done)) return '<div class="mission locked" data-id="' + m.id + '"><h3>' + (i + 1) + '. ' + m.name + ' <i>🔒</i></h3>'
+      + '<p class="s">Win ' + RTS_CAMPAIGN[i - 1].name + ' to open it.</p></div>';
     /* one level is a name; more are a choice, opening on the one the mission was written at */
     var pick = lv.length < 2 ? '' : '<select class="lvl" aria-label="Difficulty">' + lv.map(function (k) {
       return '<option value="' + k + '"' + (k === m.diff ? ' selected' : '') + '>' + RTS_DIFF[k].name + (k === m.diff ? ' (as written)' : '') + '</option>';
@@ -37,7 +46,7 @@ function rtsCampToggle() {
    on Next; the mission's own when it does not offer that one */
 function rtsCampStart(id, btn, lvl) {
   var m = _rtsMissionOf(id);
-  if (!m) return;
+  if (!m || !rtsCampOpen(RTS_CAMPAIGN.indexOf(m), rtsCampProgress())) return;
   var sel = btn && btn.parentNode && btn.parentNode.querySelector('select.lvl');
   if (sel) lvl = sel.value;
   if (_rtsMissionLevels(m).indexOf(lvl) < 0) lvl = m.diff;
@@ -99,6 +108,7 @@ function rtsCampOverHTML(G) {
   var next = won && RTS_CAMPAIGN[RTS_CAMPAIGN.indexOf(m) + 1];
   return '<div class="card ' + G.over + '"><h2>' + (won ? 'MISSION COMPLETE' : 'MISSION FAILED') + '</h2>'
     + '<p>' + m.name + ' (' + RTS_DIFF[M.lvl || m.diff].name + '): ' + (M.why || '') + '</p>'
+    + (won && m.after ? '<p class="after">' + m.after + '</p>' : '')      /* the story, on to the next */
     + '<p class="s">Time ' + rtsDailyClock(G.t) + ' · Enemy destroyed: ' + G.stats.killed + ' · Units lost: ' + G.stats.lostU + '</p>'
     + (next ? '<button type="button" onclick="rtsCampNext(\'' + next.id + '\', \'' + (M.lvl || m.diff) + '\')">Next: ' + next.name + '</button> ' : '')
     + '<button type="button" onclick="rtsRestart()">Retry</button> '
