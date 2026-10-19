@@ -26,6 +26,15 @@ that asserts on milliseconds marks itself `@solo` in its opening comment and run
 end (`e2e/resolution`); anything else that fails only under load wants a wait on a condition, not a
 longer delay. `--list` shows the order a run will use.
 
+**Reproduce a "fails only under load" before believing it.** Four busy loops
+(`node -e 'for(;;){}'`) beside `--jobs=4` is the honest machine for it, with the old and the new spec
+copied side by side (`zz*.test.js`, never committed). Three such reports turned out to be three
+different things: a message written by the HUD a frame after the fault it reports (`e2e/crash`,
+waited on now); a sound read through 700 ms of a loop that pulses over 4 s or calls over 8
+(`e2e/ambience`, read over the whole loop now, after waiting for the fade); and not load at all -
+START BATTLE takes its seed, and the seed its sky, from the clock, so one battle in four opened
+dark (`e2e/skirmish`: 10.7 of 255 under a forced night, 85.9 with the read made under a day sky).
+
 Each spec is a plain node file that builds a `Suite`, makes assertions, and hands it to
 `lib/report.js`. There is no framework to register with and nothing to install — the repo has no
 package manager, and this does not add one. Playwright and node live in `/opt/node22`.

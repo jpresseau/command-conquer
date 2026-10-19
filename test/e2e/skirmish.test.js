@@ -41,9 +41,15 @@ function waitBattle(p) {
      first frame it was sometimes the shroud: the sight that clears it is rebuilt on its own 15 Hz
      clock, so a frame drawn just after the loop stops can still be dark (measured 12.6 against 71
      on the same seed). So sight is rebuilt first, and a few frames are tried before calling it dark. */
+  /* AND UNDER A DAY SKY. START BATTLE takes its seed from the clock, and the seed picks the sky:
+     about one battle in four opens at night, at dusk or in rain or fog, and this read 15 of 255 on
+     one of them - which had looked like a slow machine. The claim is that the ground is drawn, not
+     what the weather does to it, so the read is made under a forced day and the battle's own sky
+     put back after. */
   await p.addInitScript(function () {
     window.litAtCentre = function () {
-      var best = 0;
+      var best = 0, sky = window.RTS_SKY_FORCE;
+      window.RTS_SKY_FORCE = 'day';
       for (var k = 0; k < 6 && best <= 25; k++) {
         if (typeof _rtsVisTick === 'function') _rtsVisTick(1);
         _rtsRFrame(1 / 60);
@@ -53,6 +59,7 @@ function waitBattle(p) {
         for (var i = 0; i < d.length; i += 4) s += d[i] + d[i + 1] + d[i + 2];
         best = Math.max(best, s / (d.length / 4) / 3);
       }
+      window.RTS_SKY_FORCE = sky;
       return best;
     };
   });

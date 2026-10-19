@@ -131,7 +131,13 @@ function shotFn() {
     return true;
   });
   S.ok('a one-off fault is armed', once, '');
-  await g.page.waitForTimeout(1200);
+  /* WAIT ON THE MESSAGE, NOT ON A CLOCK. The fault is counted on the frame it happens, but the
+     line telling the player is written by the HUD on the frame after; a fixed 1.2 s held under
+     load, at the harness's second-long frames, ended between the two and read an empty line. */
+  await g.page.waitForFunction(function () {
+    var el = document.getElementById('rtsMsg');
+    return window._rtsUI && window._rtsUI.errs >= 1 && el && /ONE BAD FRAME/.test(el.textContent || '');
+  }, null, { timeout: 60000 }).catch(function () {});
   var one = await g.page.evaluate(shotFn);
   S.ok('one bad frame does not end the match', !one.simDead,
        'errs ' + one.errs + ', simDead ' + one.simDead);
@@ -145,7 +151,11 @@ function shotFn() {
   await g.page.evaluate(function () {
     window._rtsUpdateAI = function () { throw new Error('A DIFFERENT FAULT'); };
   });
-  await g.page.waitForTimeout(300);
+  /* ...and here the same: the next frame may be a second away */
+  await g.page.waitForFunction(function () {
+    var el = document.getElementById('rtsMsg'), U = window._rtsUI;
+    return U && (/A DIFFERENT FAULT/.test(U.lastErr || '') || (el && /A DIFFERENT FAULT/.test(el.textContent || '')));
+  }, null, { timeout: 60000 }).catch(function () {});
   var two = await g.page.evaluate(shotFn);
   S.ok('a later, different fault is reported rather than swallowed',
        /A DIFFERENT FAULT/.test(two.lastErr || '') || /A DIFFERENT FAULT/.test(two.msg || ''),
@@ -163,7 +173,9 @@ function shotFn() {
       return !x.dead && x.type === 'unit' && x.side === 'player'; })[0];
     u.def = 'notarealunitkey';
   });
-  await g.page.waitForFunction(function () { return window._rtsUI.drawDead; }, null, { timeout: 120000 }).catch(function () {});
+  /* sixty failing frames (RTS_LOOP_GIVEUP) before it gives up: a second on a phone, and more than
+     two minutes at an overloaded harness's frames - measured, with every core busy */
+  await g.page.waitForFunction(function () { return window._rtsUI.drawDead; }, null, { timeout: 300000 }).catch(function () {});
   var f1 = await g.page.evaluate(shotFn);
   await g.page.waitForTimeout(1000);
   var f2 = await g.page.evaluate(shotFn);
