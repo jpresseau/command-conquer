@@ -30,6 +30,8 @@
   <!-- Map size, water and credits for START BATTLE: skirmish.js -->
   <button type="button" class="go resume" id="rtsSkirmishBtn" onclick="rtsSkirmishToggle()">SKIRMISH SETUP<small id="rtsSkirmishNote"></small></button>
   <div id="rtsSkirmish" hidden></div>
+  <!-- The battle the game kept by itself, when it is newer than the player's own: autosave.js -->
+  <button type="button" class="go resume" id="rtsContinue" onclick="rtsContinue()" hidden>CONTINUE</button>
   <button type="button" class="go resume" id="rtsResume" onclick="rtsLoadGame()" hidden>RESUME BATTLE</button>
   <!-- One map a day, the same for everyone: daily.js -->
   <button type="button" class="go resume" id="rtsDaily" onclick="rtsDailyStart(this)">DAILY BATTLE<small id="rtsDailyNote"></small></button>
@@ -39,6 +41,7 @@
   <!-- Why a resume did not happen, and why one is not on offer. This screen has no message
        line, so without somewhere to put the reason the button simply did nothing. -->
   <p class="diffnote" id="rtsResumeNote" hidden></p>
+  <p class="diffnote" id="rtsAutoNote" hidden></p>
   <!-- Shown only when the browser says the app can be installed; see rtsInstallInit. -->
   <!-- Always present unless the app IS the installed app; see rtsInstallInit for why. -->
   <button type="button" class="go resume" id="rtsInstall" onclick="rtsInstall()">INSTALL<small>run it in its own window, off the desktop</small></button>
@@ -267,6 +270,7 @@
 <script>//@@INC:ui/hud.js@@</script>
 <script>//@@INC:ui/camera.js@@</script>
 <script>//@@INC:rts.save.js@@</script>
+<script>//@@INC:autosave.js@@</script>
 
 <script>//@@INC:daily.js@@</script>
 <script>//@@INC:campaign.js@@</script>

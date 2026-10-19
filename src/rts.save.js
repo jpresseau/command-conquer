@@ -33,6 +33,14 @@
 
 var RTS_SAVE_KEY  = 'rccmd.save1';
 var RTS_SAVE_INFO = 'rccmd.save1.info';
+/* THE SLOTS. The player's own save, and the autosave beside it (autosave.js): one format, one
+   writer and one reader, under keys of their own, each with the title button and the note that
+   speak for it. Nothing written to one slot ever touches the other's keys. */
+var RTS_SLOTS = {
+  save: { body: RTS_SAVE_KEY, info: RTS_SAVE_INFO, btn: 'rtsResume', note: 'rtsResumeNote' },
+  auto: { body: 'rccmd.auto1', info: 'rccmd.auto1.info', btn: 'rtsContinue', note: 'rtsAutoNote' }
+};
+function _rtsSlot(slot) { return RTS_SLOTS[slot] || RTS_SLOTS.save; }
 
 /* The version stamp. Built from the shape of everything that goes into a save, exactly as
    SAVEGAME_VERSION sums the sizeof()s: add a unit, change the map size, add a trigger, and
@@ -225,15 +233,15 @@ function _rtsApplyState(G, body) {
 
 /* ---------------------------------------------------------------------------- the interface */
 
-function rtsHasSave() {
-  try { return !!window.localStorage.getItem(RTS_SAVE_INFO); } catch (_e) { return false; }
+function rtsHasSave(slot) {
+  try { return !!window.localStorage.getItem(_rtsSlot(slot).info); } catch (_e) { return false; }
 }
 /* Get_Savefile_Info: read the header WITHOUT loading the game. RA puts the description at the
    front of the file for exactly this reason - the load menu must not have to parse a whole
    save to print one line. Here the header is a separate small record. */
-function rtsSaveInfo() {
+function rtsSaveInfo(slot) {
   try {
-    var raw = window.localStorage.getItem(RTS_SAVE_INFO);
+    var raw = window.localStorage.getItem(_rtsSlot(slot).info);
     if (!raw) return null;
     var info = JSON.parse(raw);
     if (info.v !== _rtsSaveVersion()) return null;   /* a save from different code is no save */
@@ -244,12 +252,67 @@ function rtsSaveInfo() {
    the same as for no save at all, and the title screen needs to tell the two apart: a battle
    that silently disappears from the menu after an update looks exactly like a battle that was
    never saved, and the player has no way to know which happened. */
-function rtsSaveStale() {
+function rtsSaveStale(slot) {
   try {
-    var raw = window.localStorage.getItem(RTS_SAVE_INFO);
+    var raw = window.localStorage.getItem(_rtsSlot(slot).info);
     if (!raw) return false;
     return JSON.parse(raw).v !== _rtsSaveVersion();
   } catch (_e) { return false; }
+}
+/* The header a save is filed under (Get_Savefile_Info's record), for `text`, the body of G. */
+function _rtsSaveHeader(G, text) {
+  var mins = Math.floor(G.t / 60), secs = Math.floor(G.t % 60);
+  return { v:_rtsSaveVersion(), hash:_rtsHash(text), bytes:text.length,
+    diff:G.diff, seed:G.seed, t:Math.round(G.t), when:(new Date()).getTime(),
+    /* WHICH ARMY. rtsHouseSide reads this out of localStorage rather than out of G, so the
+       faction is the one piece of a battle that lives outside the state being written. Left
+       unrecorded, resuming after switching sides loaded the base intact and then refused to
+       build from it: a standing Kennel that cannot make dogs. */
+    side:(typeof rtsArmySide === 'function') ? rtsArmySide() : null,
+    /* A DAILY, if this is one (daily.js): its spec, so a resume is still the daily - its army
+       for this battle only, its result on the end card - rather than an ordinary battle that
+       wrote the day's army over the player's stored preference. */
+    daily:window._RTS_DAILY || null,
+    /* A MISSION, if this is one (campaign.js): which, and at what level. Everything it remembers
+       is on G.mission and goes in with G; this is what the page around it needs - the battle is
+       resumed as that mission, not laid again, and the player's own army is put back after. */
+    mission:G.mission ? window._RTS_MISSION || { id:G.mission.id, lvl:G.mission.lvl } : null,
+    desc:(window._RTS_DAILY ? 'Daily — ' : '')
+      + (G.mission && _rtsMissionOf(G.mission.id) ? _rtsMissionOf(G.mission.id).name + ' — ' + RTS_DIFF[G.mission.lvl].name
+        : (RTS_DIFF[G.diff] ? RTS_DIFF[G.diff].name : G.diff)) + ' — '
+      + mins + ':' + (secs < 10 ? '0' : '') + secs
+      + ' — ' + G.ents.filter(function (e) { return !e.dead && e.side === 'player'; }).length + ' units and buildings' };
+}
+/* Write one slot: {ok, wroteBody, err}.
+   CLEAN UP WHAT THIS CALL WROTE, AND ONLY THAT. Serialisation is hoisted out of the caller's
+   storage try for exactly this reason, and the storage half once went on doing the thing that
+   describes: one try around both setItem calls, and a catch that removed both keys whatever had
+   actually happened.
+
+   The realistic failure is a full quota, and the body is the big write - 300KB of battle
+   against a header of a few hundred bytes - so it is the FIRST setItem that throws. Measured
+   with the quota exhausted: nothing was written, and then both keys were removed, destroying a
+   complete 315,744-character save from earlier in the session. The player is told "no room
+   left in storage", finds RESUME BATTLE gone from the title screen, and is never told that
+   saving DESTROYED the old battle rather than merely failing to replace it.
+
+   So: the body failing means nothing was written and the pair already on disk is intact and
+   consistent - touch nothing. A body written under a header that failed is the only genuinely
+   half-written outcome, and the only one worth clearing, because a new body under an old
+   header is a pair whose checksum cannot match. */
+function _rtsWriteSlot(slot, text, info) {
+  var K = _rtsSlot(slot), wroteBody = false;
+  try {
+    window.localStorage.setItem(K.body, text);
+    wroteBody = true;
+    window.localStorage.setItem(K.info, JSON.stringify(info));
+    return { ok: true, wroteBody: true, err: '' };
+  } catch (e) {
+    if (wroteBody) {
+      try { window.localStorage.removeItem(K.body); window.localStorage.removeItem(K.info); } catch (_x) {}
+    }
+    return { ok: false, wroteBody: wroteBody, err: (e && e.name) || 'Error' };
+  }
 }
 function rtsSaveGame() {
   var G = window._rtsG;
@@ -262,69 +325,29 @@ function rtsSaveGame() {
   var text, info;
   try {
     text = JSON.stringify(_rtsSaveState(G));
-    var mins = Math.floor(G.t / 60), secs = Math.floor(G.t % 60);
-    info = { v:_rtsSaveVersion(), hash:_rtsHash(text), bytes:text.length,
-      diff:G.diff, seed:G.seed, t:Math.round(G.t), when:(new Date()).getTime(),
-      /* WHICH ARMY. rtsHouseSide reads this out of localStorage rather than out of G, so the
-         faction is the one piece of a battle that lives outside the state being written. Left
-         unrecorded, resuming after switching sides loaded the base intact and then refused to
-         build from it: a standing Kennel that cannot make dogs. */
-      side:(typeof rtsArmySide === 'function') ? rtsArmySide() : null,
-      /* A DAILY, if this is one (daily.js): its spec, so a resume is still the daily - its army
-         for this battle only, its result on the end card - rather than an ordinary battle that
-         wrote the day's army over the player's stored preference. */
-      daily:window._RTS_DAILY || null,
-      /* A MISSION, if this is one (campaign.js): which, and at what level. Everything it remembers
-         is on G.mission and goes in with G; this is what the page around it needs - the battle is
-         resumed as that mission, not laid again, and the player's own army is put back after. */
-      mission:G.mission ? window._RTS_MISSION || { id:G.mission.id, lvl:G.mission.lvl } : null,
-      desc:(window._RTS_DAILY ? 'Daily — ' : '')
-        + (G.mission && _rtsMissionOf(G.mission.id) ? _rtsMissionOf(G.mission.id).name + ' — ' + RTS_DIFF[G.mission.lvl].name
-          : (RTS_DIFF[G.diff] ? RTS_DIFF[G.diff].name : G.diff)) + ' — '
-        + mins + ':' + (secs < 10 ? '0' : '') + secs
-        + ' — ' + G.ents.filter(function (e) { return !e.dead && e.side === 'player'; }).length + ' units and buildings' };
+    info = _rtsSaveHeader(G, text);
   } catch (e) {
     _rtsSay('Could not save: the battle could not be written down (' + (e && e.message ? e.message : e) + ').');
     if (typeof _rtsSfx === 'function') _rtsSfx('deny');
     return false;                                 /* nothing on disk has been touched */
   }
-  /* CLEAN UP WHAT THIS CALL WROTE, AND ONLY THAT. The paragraph above hoisted serialisation out
-     of the try for exactly this reason, and then the storage half went on doing the thing it
-     describes: one try around both setItem calls, and a catch that removed both keys whatever
-     had actually happened.
-
-     The realistic failure is a full quota, and the body is the big write - 300KB of battle
-     against a header of a few hundred bytes - so it is the FIRST setItem that throws. Measured
-     with the quota exhausted: nothing was written, and then both keys were removed, destroying
-     a complete 315,744-character save from earlier in the session. The player is told "no room
-     left in storage", finds RESUME BATTLE gone from the title screen, and is never told that
-     saving DESTROYED the old battle rather than merely failing to replace it.
-
-     So: the body failing means nothing was written and the pair already on disk is intact and
-     consistent - touch nothing. A body written under a header that failed is the only genuinely
-     half-written outcome, and the only one worth clearing, because a new body under an old
-     header is a pair whose checksum cannot match. */
-  var wroteBody = false;
-  try {
-    window.localStorage.setItem(RTS_SAVE_KEY, text);
-    wroteBody = true;
-    window.localStorage.setItem(RTS_SAVE_INFO, JSON.stringify(info));
+  var w = _rtsWriteSlot('save', text, info);
+  /* NO ROOM, AND THE AUTOSAVE IS WHAT FILLS IT: the player's own save is worth more than the copy
+     the game kept by itself, so the autosave makes way and the save is tried once more */
+  if (!w.ok && !w.wroteBody && w.err === 'QuotaExceededError' && typeof _rtsAutoClear === 'function' && _rtsAutoClear()) w = _rtsWriteSlot('save', text, info);
+  if (w.ok) {
     _rtsSay('Battle saved.');
     if (typeof _rtsSfx === 'function') _rtsSfx('click');
     return true;
-  } catch (e2) {
-    if (wroteBody) {
-      try { window.localStorage.removeItem(RTS_SAVE_KEY); window.localStorage.removeItem(RTS_SAVE_INFO); } catch (_x) {}
-    }
-    _rtsSay('Could not save: '
-      + (e2 && e2.name === 'QuotaExceededError' ? 'no room left in storage.' : 'storage unavailable.')
-      /* Worth saying out loud rather than leaving to be inferred: the point of the change is
-         that the older battle survives, and a player who has just been refused assumes the
-         worst unless told otherwise. */
-      + (wroteBody ? '' : ' Your previous save is untouched.'));
-    if (typeof _rtsSfx === 'function') _rtsSfx('deny');
-    return false;
   }
+  _rtsSay('Could not save: '
+    + (w.err === 'QuotaExceededError' ? 'no room left in storage.' : 'storage unavailable.')
+    /* Worth saying out loud rather than leaving to be inferred: the point of the change is that
+       the older battle survives, and a player who has just been refused assumes the worst
+       unless told otherwise. */
+    + (w.wroteBody ? '' : ' Your previous save is untouched.'));
+  if (typeof _rtsSfx === 'function') _rtsSfx('deny');
+  return false;
 }
 /* Verify everything before touching the running game - version, presence, checksum, parse -
    and only then tear the battle down. Load_Game's whole structure is this precaution. */
@@ -333,11 +356,11 @@ function rtsSaveGame() {
    whether RESUME BATTLE appears - so every failure below is the case where the index survived
    and the body did not, which is precisely when the button is on screen promising something it
    cannot deliver. Returning the reason costs nothing; the caller decides where to put it. */
-function _rtsReadSave() {
-  var info = rtsSaveInfo();
+function _rtsReadSave(slot) {
+  var info = rtsSaveInfo(slot);
   if (!info) return { body:null, why:'none', msg:'There is no saved battle to resume.' };
   var text;
-  try { text = window.localStorage.getItem(RTS_SAVE_KEY); }
+  try { text = window.localStorage.getItem(_rtsSlot(slot).body); }
   catch (_e) {
     return { body:null, why:'blocked',
       msg:'This browser will not let the game read its own storage, so the save cannot be '
@@ -373,23 +396,24 @@ function _rtsReadSave() {
    only explanation this function ever had was behind `if (window._rtsG)` and RESUME BATTLE is
    pressed from a screen where _rtsG is by definition null. The button did nothing, said
    nothing, and was indistinguishable from a broken button. */
-function _rtsLoadFailed(res) {
+function _rtsLoadFailed(res, slot) {
   if (window._rtsG) { _rtsSay(res.msg); return; }
-  var n = document.getElementById('rtsResumeNote');
+  var n = document.getElementById(_rtsSlot(slot).note);
   if (n) { n.hidden = false; n.textContent = res.msg; }
   /* The button has just been shown to be lying, so stop offering it for this visit. Nothing is
      deleted: a browser that is merely blocked right now may not be blocked next time, and
      throwing away the player's save on a failed READ is not ours to do. */
   if (res.why !== 'none') {
-    var r = document.getElementById('rtsResume');
+    var r = document.getElementById(_rtsSlot(slot).btn);
     if (r) r.hidden = true;
   }
 }
-function rtsLoadGame() {
-  var res = _rtsReadSave();
+/* `slot`: 'save', the player's own (the default), or 'auto' (autosave.js) */
+function rtsLoadGame(slot) {
+  var res = _rtsReadSave(slot);
   var body = res.body;
   if (!body) {
-    _rtsLoadFailed(res);
+    _rtsLoadFailed(res, slot);
     if (typeof _rtsSfx === 'function') _rtsSfx('deny');
     return false;
   }
@@ -402,6 +426,7 @@ function rtsLoadGame() {
   /* The load goes through the same door as starting a battle: close, open, and hand the state
      to rtsOpen so it lands after _rtsNewGame and before the renderer bakes the terrain. */
   window._RTS_PENDING_LOAD = body;
+  window._RTS_PENDING_SLOT = slot || 'save';      /* the autosave is kept only for its own resume */
   if (document.getElementById('rcgRts')) rtsClose();
   rtsOpen(body.seed);
   return true;
