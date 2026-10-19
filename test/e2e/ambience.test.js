@@ -74,12 +74,25 @@ function installProbe() {
     function hums() { return G.ents.filter(function (e) { return !e.dead && e.type === 'struct' && _rtsAudible(e.x, e.z); }).length; }
     for (var zi = R.zi; zi < RTS_ZOOMS.length; zi++) { R.zi = zi; _rtsApplyCam(); if (!hums()) break; }
     o.structsInView = hums();
+    /* the day over one whole birds loop (audio/loops.js, 8 s): they call now and then, and a 700 ms
+       window read anywhere from 0.0001 to 0.0027 by whether it caught a call - and the night is
+       compared to it */
     sky('day'); await window._amListen(900, tick);
-    o.day = await window._amListen(700, tick);
+    o.day = await window._amListen(8000, tick);
     sky('rain'); await window._amListen(1200, tick);
     o.rain = await window._amListen(700, tick);
-    sky('night'); await window._amListen(1800, tick);
-    o.night = await window._amListen(700, tick);
+    /* THE NIGHT, ONCE IT IS IN AND OVER A WHOLE LOOP. Its voices glide in on the audio clock once
+       the bed's next look at the sky asks for them, and that look rides on the 50 ms ticks a busy
+       machine runs late - so wait until the crickets are at the level the bed wants, not a fixed
+       1.8 s. And their loop pulses (audio/loops.js, 4 s), so a 700 ms window could land in a lull:
+       measured over the whole loop, the reading is the bed's and not the window's phase. */
+    sky('night'); await window._amListen(600, tick);
+    var nightWant = function () { var B = _rtsAmbNodes(); return B && B.last ? B.last.ins : 0; };
+    for (var t9 = Date.now(); Date.now() - t9 < 15000;) {
+      if (nightWant() > 0 && A.amb.v.crickets.g.gain.value >= nightWant() * 0.95) break;
+      await window._amListen(200, tick);
+    }
+    o.night = await window._amListen(4000, tick);
 
     /* ENGINES */
     sky('day'); await window._amListen(1500, tick);
@@ -114,6 +127,13 @@ function installProbe() {
     await settle();
     var dy = window._amListen(3200, tick); _rtsSfx('cannon', R.focus.x, R.focus.z); var dyM = await dy;
     sky('night'); await window._amListen(1800, tick); await settle();
+    /* ...and the echo IN before the shot: it glides to the night's level like the crickets do, on a
+       want the same late ticks refresh - fired early, a loaded run heard 16 blocks of tail by
+       night against 15 by day */
+    for (var t8 = Date.now(), B8 = _rtsAmbNodes(); Date.now() - t8 < 15000;) {
+      if (B8 && B8.last && B8.last.echo > 0 && B8.echo.g.gain.value >= B8.last.echo * 0.95) break;
+      await window._amListen(200, tick);
+    }
     A.amb.v.crickets.g.gain.value = 0; A.amb.v.crickets.g.gain.cancelScheduledValues(A.ctx.currentTime);   /* the crickets would drown the measure */
     var nt = window._amListen(3200); _rtsSfx('cannon', R.focus.x, R.focus.z); var ntM = await nt;
     o.echo = [tail(ntM), tail(dyM)];
