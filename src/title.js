@@ -47,6 +47,7 @@ function rtsHome(){
   rtsBuildDiff();
   if (typeof rtsSkySync === 'function') rtsSkySync();     /* the conditions: render3d/sky3d.js */
   rtsShowResume();
+  if (typeof rtsMapPreviewSoon === 'function') rtsMapPreviewSoon();   /* the next map (preview.js) */
 }
 /* Get_Savefile_Info's job: print what is in the save without loading it. The button only
    appears when there is a save this build can actually read - the version stamp does that
@@ -107,6 +108,7 @@ rtsBuildArmyPick();
 if (typeof rtsDailyNote === 'function') rtsDailyNote();
 if (typeof rtsSkirmishSync === 'function') rtsSkirmishSync();
 if (typeof rtsOfflineNote === 'function') rtsOfflineNote();
+if (typeof rtsMapPreviewSoon === 'function') rtsMapPreviewSoon();
 
 /* THE OLD ARCHIVE STORE, gone. Earlier versions could keep a player's own game archives in
    IndexedDB, 13 MB and up; that feature is removed, so a returning player gets the space back. */
@@ -224,7 +226,10 @@ function rtsStart(btn){
   setTimeout(function(){
     try {
       document.getElementById('rtsHome').classList.add('gone');
-      rtsOpen();
+      /* the seed the title showed; the next visit rolls another (preview.js) */
+      var seed = typeof rtsSeedNext === 'function' ? rtsSeedNext() : undefined;
+      window._RTS_SEED_NEXT = null;
+      rtsOpen(seed);
     } catch (e) {
       rtsHome();
       if (err) { err.style.display = 'block'; err.textContent = 'Could not start:\n' + ((e && e.message) || e); }

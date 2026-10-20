@@ -139,6 +139,10 @@ them beside your ore field, and goes home to do it again.
 the same army, difficulty, tide and weather, all from the date alone. The end screen gives you a line to
 copy and post, and your best of the day is kept.
 
+**The map before the battle.** Under START BATTLE the title shows the ground the next battle will
+be fought on - its terrain, ore and starting positions - and ↻ ANOTHER MAP rolls a different one.
+The map you see is the map you get.
+
 **A skirmish setup.** SKIRMISH SETUP on the title screen picks who is on the field (one foe, two
 foes, a foe and a computer ally, two against two, or a free-for-all of three or four), the map's size (96, 128 or 160 cells a side),
 whether the ground is RANDOM or MIRRORED (each side's half the reflection of the other's, so neither

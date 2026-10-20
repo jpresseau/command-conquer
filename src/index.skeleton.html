@@ -25,6 +25,9 @@
   <div class="diff" id="rtsArmySide" hidden></div>
   <p class="diffnote" id="rtsVoxNote" hidden></p>
   <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE</button>
+  <!-- The map that button will make, and another if not that one: preview.js -->
+  <div id="rtsPrev"><canvas id="rtsPrevCv" width="128" height="128" aria-label="The next battle's map"></canvas>
+    <div class="side"><span id="rtsPrevSeed">laying the map…</span><button type="button" id="rtsPrevRoll" onclick="rtsMapReroll()">↻ ANOTHER MAP</button></div></div>
   <!-- Shown only while the device is offline and the saved copy is what is playing: offline.js -->
   <p class="diffnote" id="rtsOffline" hidden></p>
   <!-- Map size, water and credits for START BATTLE: skirmish.js -->
@@ -280,6 +283,7 @@
 <script>//@@INC:daily.js@@</script>
 <script>//@@INC:campaign.js@@</script>
 <script>//@@INC:skirmish.js@@</script>
+<script>//@@INC:preview.js@@</script>
 <script>//@@INC:offline.js@@</script>
 <script>//@@INC:title.js@@</script>
 
