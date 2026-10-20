@@ -14,6 +14,17 @@ function sendAll(g, side, y, move) {
 }
 
 var plays = {
+  /* the trade: a refinery and a barracks where the AI would put them, three riflemen, then everyone at the post */
+  bootcamp: function (o) {
+    var g = o.g, G = o.G, S = G.sides.player, plan = ['refinery', 'barracks'], men = 0;
+    return play(o, 400, function (i) {
+      if (S.ready && i % 30 === 0) { var k = S.ready; if (g._rtsAIAs('player', function () { return g._rtsAIPlace(k); })) { S.ready = null; S.readyPaid = null; } }
+      if (!S.ready && !S.q.struct && plan.length && i % 60 === 3 && g._rtsQueue('player', plan[0])) plan.shift();
+      if (!plan.length && men < 3 && !S.q.infantry && i % 60 === 7 && g._rtsQueue('player', 'rifle')) men++;
+      var post = g._rtsMTagged(G, 'post')[0];
+      if (men >= 3 && !S.q.infantry && post && i % 600 === 5) g._rtsCampFighters('player').forEach(function (u) { if (!u.target || u.target.dead) g._rtsOrderAttack(u, post); });
+    });
+  },
   /* the convoy goes over at low water */
   lowwater: function (o) {
     var g = o.g, G = o.G, M = o.M, c = g._rtsMTagged(G, 'convoy');

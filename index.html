@@ -198,7 +198,8 @@
 #rcgRts .rts-over{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
   background:rgba(6,9,14,.72);z-index:5}
 #rcgRts .rts-over.on{display:flex}
-#rcgRts .rts-over .card{background:#161c25;border:1px solid #2f3d4e;border-radius:10px;padding:26px 34px;text-align:center;
+/* the card never outgrows the screen: a phone in portrait, a medal line, a story line and four buttons scroll inside it */
+#rcgRts .rts-over .card{background:#161c25;border:1px solid #2f3d4e;border-radius:10px;padding:26px 34px;text-align:center;max-height:calc(100% - 12px);overflow:auto;box-sizing:border-box;
   box-shadow:0 18px 60px rgba(0,0,0,.6)}
 #rcgRts .rts-over h2{margin:0 0 8px;font-size:30px;letter-spacing:4px}
 #rcgRts .rts-over .win h2{color:#7ce09a}
@@ -732,8 +733,8 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   <button type="button" class="go resume" id="rtsResume" onclick="rtsLoadGame()" hidden>RESUME BATTLE</button>
   <!-- One map a day, the same for everyone: daily.js -->
   <button type="button" class="go resume" id="rtsDaily" onclick="rtsDailyStart(this)">DAILY BATTLE<small id="rtsDailyNote"></small></button>
-  <!-- Eight authored missions: campaign.js -->
-  <button type="button" class="go resume" id="rtsCampBtn" onclick="rtsCampToggle()">CAMPAIGN<small>eight missions on the coast</small></button>
+  <!-- Nine authored missions: campaign.js -->
+  <button type="button" class="go resume" id="rtsCampBtn" onclick="rtsCampToggle()">CAMPAIGN<small>nine missions on the coast</small></button>
   <div id="rtsCampList" hidden></div>
   <!-- Why a resume did not happen, and why one is not on offer. This screen has no message
        line, so without somewhere to put the reason the button simply did nothing. -->
@@ -785,7 +786,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">d024a0a · 2026-10-20</div>
+  <div id="rtsBuild" title="build">6bf7313 · 2026-10-20</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -3050,7 +3051,7 @@ var RTS_TRIGGERS = [
     action2:['playSound', 'alert'] }
 ];
 </script>
-<script>/* rules/campaign.js - the campaign: its first four missions on generated maps (rules/campaign2.js has the other four; core/campaign.js runs them).
+<script>/* rules/campaign.js - the campaign: Boot Camp and the first four missions on generated maps (rules/campaign2.js has the other four; core/campaign.js runs them).
 
    Each is a seed and the two armies, a briefing, its goals, a setup that lays the mission onto the
    battle the seed made, and a check, every tick, that keeps the goals and calls the result. A
@@ -3088,6 +3089,36 @@ function _rtsCampLeft(G, side, keys) {
 }
 
 var RTS_CAMPAIGN = [
+  /* the one that teaches the trade: a base, an army, an attack, with nothing coming the other way */
+  { id: 'bootcamp', name: 'Boot Camp', army: 'allied', diff: 'easy', seed: 9000, par: 300,
+    brief: 'A quiet stretch of coast, a Command Yard and a handful of men: the place to learn the trade. Build an Ore Refinery to start earning, a Barracks to train with, raise three Riflemen, and take down the Dominion listening post across the way. Nothing here will come for you.',
+    after: 'The post is quiet and the trade is learnt. South of here the strait runs dry at low water, and a convoy is waiting on the ebb.',
+    goals: [ { id: 'ref', text: 'Build an Ore Refinery near your Command Yard (the Build tab) - it comes with a Harvester' },
+             { id: 'bar', text: 'Build a Barracks' },
+             { id: 'men', text: 'Train three Riflemen (the Infantry tab)' },
+             { id: 'post', text: 'Destroy the Dominion listening post - it is marked on the map' } ],
+    setup: function (G, M) {
+      var E = G.starts.enemy, P = G.starts.player;
+      G.sides.enemy.ctl = 'none';
+      _rtsMClear(G, 'enemy');
+      var post = _rtsMBuild('enemy', 'radar', E.tx, E.tz, 'post');
+      _rtsMBuild('enemy', 'power', E.tx + 3, E.tz + 2);
+      _rtsMUnits('enemy', 'rifle', E.tx - 2, E.tz + 3, 2, 'guard');
+      M.men0 = _rtsCampLeft(G, 'player', ['rifle']); M.menMost = M.men0;
+      if (post) _rtsCampReveal(G, post.tx, post.tz, 7);
+      M.focus = { tx: P.tx, tz: P.tz };
+    },
+    check: function (G, M) {
+      if (_rtsHas('player', 'refinery')) M.obj.ref = 'done';
+      if (_rtsHas('player', 'barracks')) M.obj.bar = 'done';
+      /* the most riflemen standing at once, so one lost after training still counts as trained */
+      M.menMost = Math.max(M.menMost || 0, _rtsCampLeft(G, 'player', ['rifle']));
+      if (M.menMost >= M.men0 + 3) M.obj.men = 'done';
+      if (!_rtsMTagged(G, 'post').length) M.obj.post = 'done';
+      if (M.obj.ref === 'done' && M.obj.bar === 'done' && M.obj.men === 'done' && M.obj.post === 'done') return { over: 'win', why: 'The post is down: you have a base, an army and the trade.' };
+      if (!_rtsHas('player', 'yard')) return { over: 'lose', why: 'Your Command Yard is gone.' };
+      return null;
+    } },
   { id: 'lowwater', name: 'Low Water', army: 'allied', diff: 'easy', seed: 9001, par: 150,
     brief: 'The strait between you and the Dominion shore is too deep to ford - except at low water, when the sea goes out and leaves the flats dry for a few minutes. Wait for the ebb, take the convoy across while the sand holds, and land it on the far shore before the flood comes back. The far side is lightly held.',
     after: 'The convoy is ashore. Behind the beach the Dominion holds a fortress on the headland, and the Compact\'s next push has to go through it.',

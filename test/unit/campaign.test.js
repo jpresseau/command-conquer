@@ -10,6 +10,8 @@
                     water it crosses and wins; left idle the tide runs out the clock and it loses
      FOG BANK       under the fog the strike group takes the yard; without it the fortress's ring
                     of guns outranges it and it is lost
+     BOOT CAMP      the base built and the men trained, the post standing is not a win; the post
+                    down, it is
    Sky Crane and the Channel are unit/campaign-play.test.js, so the two run side by side. */
 
 var { Suite } = require('../lib/assert.js');
@@ -19,12 +21,12 @@ var S = new Suite('campaign');
 
 /* ---------------- the table ---------------- */
 var o0 = mission('lowwater'), g0 = o0.g;
-S.eq('eight missions', g0.RTS_CAMPAIGN.length, 8);
+S.eq('nine missions', g0.RTS_CAMPAIGN.length, 9);
 S.ok('each names a real army, difficulty and seed, a brief and its goals', g0.RTS_CAMPAIGN.every(function (m) {
   return g0.RTS_ARMY_SIDES.indexOf(m.army) >= 0 && !!g0.RTS_DIFF[m.diff] && m.seed > 0 && m.brief.length > 40 && m.goals.length >= 1;
 }), g0.RTS_CAMPAIGN.map(function (m) { return m.id + ':' + m.army + '/' + m.diff; }).join(' '));
-S.ok('...under distinct ids and seeds', new Set(g0.RTS_CAMPAIGN.map(function (m) { return m.id; })).size === 8 &&
-     new Set(g0.RTS_CAMPAIGN.map(function (m) { return m.seed; })).size === 8, '');
+S.ok('...under distinct ids and seeds', new Set(g0.RTS_CAMPAIGN.map(function (m) { return m.id; })).size === 9 &&
+     new Set(g0.RTS_CAMPAIGN.map(function (m) { return m.seed; })).size === 9, '');
 
 /* ---------------- the setup ---------------- */
 g0.RTS_CAMPAIGN.forEach(function (m) {
@@ -38,6 +40,16 @@ g0.RTS_CAMPAIGN.forEach(function (m) {
        goals.every(function (x) { return typeof x.text === 'string' && x.text.length > 5 && !x.done && !x.failed; }),
        JSON.stringify({ M: !!o.M, ctl: ctl, over: o.G.over, goals: goals }));
 });
+
+/* ---------------- boot camp ---------------- */
+var ob = mission('bootcamp'), gb = ob.g, Gb = ob.G, Mb = ob.M, bc = gb._rtsMissionOf('bootcamp');
+gb._rtsTick(1 / 60);
+Mb.obj.ref = 'done'; Mb.obj.bar = 'done'; Mb.obj.men = 'done';
+var standing = bc.check(Gb, Mb), postUp = gb._rtsMTagged(Gb, 'post').length;
+gb._rtsMClear(Gb, 'enemy');                        /* the post and its guards, gone */
+var down = bc.check(Gb, Mb);
+S.ok('BOOT CAMP: the base built and the men trained, the post standing is not a win; the post down, it is', postUp === 1 && !standing && !!down && down.over === 'win' && /post is down/.test(down.why),
+     JSON.stringify({ postUp: postUp, standing: standing, down: down }));
 
 /* ---------------- low water ---------------- */
 var o = mission('lowwater'), g = o.g, G = o.G, M = o.M, c = g._rtsMTagged(G, 'convoy');

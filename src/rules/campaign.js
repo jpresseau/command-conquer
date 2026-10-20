@@ -1,4 +1,4 @@
-/* rules/campaign.js - the campaign: its first four missions on generated maps (rules/campaign2.js has the other four; core/campaign.js runs them).
+/* rules/campaign.js - the campaign: Boot Camp and the first four missions on generated maps (rules/campaign2.js has the other four; core/campaign.js runs them).
 
    Each is a seed and the two armies, a briefing, its goals, a setup that lays the mission onto the
    battle the seed made, and a check, every tick, that keeps the goals and calls the result. A
@@ -36,6 +36,36 @@ function _rtsCampLeft(G, side, keys) {
 }
 
 var RTS_CAMPAIGN = [
+  /* the one that teaches the trade: a base, an army, an attack, with nothing coming the other way */
+  { id: 'bootcamp', name: 'Boot Camp', army: 'allied', diff: 'easy', seed: 9000, par: 300,
+    brief: 'A quiet stretch of coast, a Command Yard and a handful of men: the place to learn the trade. Build an Ore Refinery to start earning, a Barracks to train with, raise three Riflemen, and take down the Dominion listening post across the way. Nothing here will come for you.',
+    after: 'The post is quiet and the trade is learnt. South of here the strait runs dry at low water, and a convoy is waiting on the ebb.',
+    goals: [ { id: 'ref', text: 'Build an Ore Refinery near your Command Yard (the Build tab) - it comes with a Harvester' },
+             { id: 'bar', text: 'Build a Barracks' },
+             { id: 'men', text: 'Train three Riflemen (the Infantry tab)' },
+             { id: 'post', text: 'Destroy the Dominion listening post - it is marked on the map' } ],
+    setup: function (G, M) {
+      var E = G.starts.enemy, P = G.starts.player;
+      G.sides.enemy.ctl = 'none';
+      _rtsMClear(G, 'enemy');
+      var post = _rtsMBuild('enemy', 'radar', E.tx, E.tz, 'post');
+      _rtsMBuild('enemy', 'power', E.tx + 3, E.tz + 2);
+      _rtsMUnits('enemy', 'rifle', E.tx - 2, E.tz + 3, 2, 'guard');
+      M.men0 = _rtsCampLeft(G, 'player', ['rifle']); M.menMost = M.men0;
+      if (post) _rtsCampReveal(G, post.tx, post.tz, 7);
+      M.focus = { tx: P.tx, tz: P.tz };
+    },
+    check: function (G, M) {
+      if (_rtsHas('player', 'refinery')) M.obj.ref = 'done';
+      if (_rtsHas('player', 'barracks')) M.obj.bar = 'done';
+      /* the most riflemen standing at once, so one lost after training still counts as trained */
+      M.menMost = Math.max(M.menMost || 0, _rtsCampLeft(G, 'player', ['rifle']));
+      if (M.menMost >= M.men0 + 3) M.obj.men = 'done';
+      if (!_rtsMTagged(G, 'post').length) M.obj.post = 'done';
+      if (M.obj.ref === 'done' && M.obj.bar === 'done' && M.obj.men === 'done' && M.obj.post === 'done') return { over: 'win', why: 'The post is down: you have a base, an army and the trade.' };
+      if (!_rtsHas('player', 'yard')) return { over: 'lose', why: 'Your Command Yard is gone.' };
+      return null;
+    } },
   { id: 'lowwater', name: 'Low Water', army: 'allied', diff: 'easy', seed: 9001, par: 150,
     brief: 'The strait between you and the Dominion shore is too deep to ford - except at low water, when the sea goes out and leaves the flats dry for a few minutes. Wait for the ebb, take the convoy across while the sand holds, and land it on the far shore before the flood comes back. The far side is lightly held.',
     after: 'The convoy is ashore. Behind the beach the Dominion holds a fortress on the headland, and the Compact\'s next push has to go through it.',
