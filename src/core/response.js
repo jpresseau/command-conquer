@@ -44,14 +44,16 @@ function _rtsScatter(e, fromX, fromZ) {
   e.path = [{ x:gx, z:gz }]; e.pi = 0; e.goal = { x:gx, z:gz };
 }
 
-function _rtsAttacked(side) {
+/* `at`: the building hit - where, for the radar's ring, the line's tap and Space (ui/go.js) */
+function _rtsAttacked(side, at) {
   var G = window._rtsG;
   if (_rtsSeatAI(side)) { G.sides[side].ai.lastHit = G.t; return; }   /* a computer seat's brain notes it; core/seats.js */
   var last = (G.playerHit == null) ? -999 : G.playerHit;
   if (G.t - last < RTS_ALERT_DELAY) return;      /* SpeakDelay - and do NOT restart the clock,
                                                     or a sustained attack never warns twice */
   G.playerHit = G.t;
-  _rtsSay('Your base is under attack!');
+  if (at) G.alert = { x: at.x, z: at.z, t: G.t };
+  _rtsSay('Your base is under attack!', 4, at ? { x: at.x, z: at.z } : null);
   if (typeof _rtsSfx === 'function') _rtsSfx('alert');
 }
 /* TECHNO.CPP Base_Is_Attacked. "This routine will pull units off of the field and send them

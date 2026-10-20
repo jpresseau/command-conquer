@@ -39,6 +39,7 @@ that loaded, and saved battles and settings live on the device either way.
 | `U` / UNLOAD | Put a transport's load down where it stands |
 | `S` | Hold position |
 | `P` | Pause · the paused screen sets the game speed (1×, 1.5×, 2×) |
+| `Space` | Look at the last attack on your base · tapping the message line goes where it is about |
 | `WASD` / arrows | Pan the camera (screen edges work too) |
 | Mouse wheel | Zoom |
 | `Esc` | Cancel a placement, repair, sell or an armed weapon · with nothing armed, leave the battle (press it twice) |

@@ -86,7 +86,7 @@ Keep them small: if a file passes ~500 lines it wants splitting along its own ba
 - `src/core/` — the simulation, and by far the largest subsystem. Deliberately renderer-free, so
   a whole battle can be stepped headlessly; removing the old 2D renderer cost it zero lines. `grid` (tiles, passability, A*, state), `terrain`, `base`, `crates`, `supers`,
   `entities`, `capture`, `transport`, `production`, `combat` (target + fire), `damage`, `move`,
-  `units`, `ai`, `teams`, `missions`, `aisupers`, `ore`, `triggers`, `tick`, and `spatial` — the
+  `units`, `ai`, `teams`, `missions`, `aisupers`, `ore`, `triggers`, `tick`, `idle` (what the player is not using), and `spatial` — the
   per-tick bucket index the target scan and the crush check run over instead of the whole entity
   list. It shortens a scan's candidate list and changes no candidate test, so the property that
   makes it safe is that the two agree; see `docs/core-combat.md` and `test/*/spatial`.
@@ -109,7 +109,7 @@ Keep them small: if a file passes ~500 lines it wants splitting along its own ba
   projection contract), `post` (screen picking, colour cycle), `frame` (the frame walk), `fx`,
   `detail` (the legacy ground's grain), `icons`. The battlefield is WebGL only: `_r3dStart`
   (`render3d/present3d.js`) or `rtsOpen` refuses the match with a reason (`e2e/webgl`).
-- `src/ui/` — `shell` (open/close/resize), `sidebar`, `input`, `select`, `hud`, `camera`, `pause` (P, game speed)
+- `src/ui/` — `shell` (open/close/resize), `sidebar`, `input`, `select`, `hud`, `camera`, `pause` (P, game speed), `go` (a tappable line, Space)
   (panning + the main loop), `navigate` (right-drag grabs the map; a still right-click
   orders on release but as pressed; wheel and pinch zoom toward the pointer, `+`/`-` about the
   centre; `e2e/navigate`, `e2e/navtouch`). Keep a ground point under the cursor with

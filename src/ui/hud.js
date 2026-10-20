@@ -421,6 +421,7 @@ function _rtsDrawMini() {
       g.fillRect(mx - 1.5, mz - 1.5, 3, 3);
     }
   }
+  _rtsDrawAlertRing(g, sc);                      /* the last attack on the base: ui/go.js */
   /* STATIC over an enemy Jammer's field (core/jammer.js): the radar cannot read it - where the
      radar reads at all. Under the unexplored shroud there is nothing to disturb, and a disc of
      static there marked the army the Jammer was hiding from across the map. */

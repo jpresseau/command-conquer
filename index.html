@@ -187,6 +187,7 @@
   opacity:0;transition:opacity .2s;pointer-events:none;
   white-space:normal;max-width:min(92%,560px);text-align:center}
 #rcgRts .rts-msg.on{opacity:1}
+#rcgRts .rts-msg.go{pointer-events:auto;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}   /* a tap goes there: ui/go.js */
 /* A PHONE'S LINE clears its taller strip (46px), and the HUD's banners take the same slot
    (ui/hud.js). This sat in the touch block above, where the plain rule after it won: the line
    was at 44 on every upright phone, 2 pixels under the strip. Held sideways, see below. */
@@ -770,6 +771,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
     <dt>0–9</dt><dd>teams — Ctrl assigns, plain selects, Shift adds, Alt selects and centres</dd>
     <dt>N / Shift+N</dt><dd>step to the next / previous unit and look at it</dd>
     <dt>Home</dt><dd>centre on the selection (or on your command yard)</dd>
+    <dt>Space</dt><dd>look at the last attack on your base — the message line goes where it is about when tapped, and selects what it names</dd>
 
     <dt class="hd">Ordering</dt>
     <dt>Right-click</dt><dd>context order — enemy: attack · ore: harvest · ground: move</dd>
@@ -798,7 +800,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">8ed5b69 · 2026-10-20</div>
+  <div id="rtsBuild" title="build">7530dbf · 2026-10-20</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -16373,14 +16375,16 @@ function _rtsScatter(e, fromX, fromZ) {
   e.path = [{ x:gx, z:gz }]; e.pi = 0; e.goal = { x:gx, z:gz };
 }
 
-function _rtsAttacked(side) {
+/* `at`: the building hit - where, for the radar's ring, the line's tap and Space (ui/go.js) */
+function _rtsAttacked(side, at) {
   var G = window._rtsG;
   if (_rtsSeatAI(side)) { G.sides[side].ai.lastHit = G.t; return; }   /* a computer seat's brain notes it; core/seats.js */
   var last = (G.playerHit == null) ? -999 : G.playerHit;
   if (G.t - last < RTS_ALERT_DELAY) return;      /* SpeakDelay - and do NOT restart the clock,
                                                     or a sustained attack never warns twice */
   G.playerHit = G.t;
-  _rtsSay('Your base is under attack!');
+  if (at) G.alert = { x: at.x, z: at.z, t: G.t };
+  _rtsSay('Your base is under attack!', 4, at ? { x: at.x, z: at.z } : null);
   if (typeof _rtsSfx === 'function') _rtsSfx('alert');
 }
 /* TECHNO.CPP Base_Is_Attacked. "This routine will pull units off of the field and send them
@@ -16563,7 +16567,7 @@ function _rtsDamage(tgt, dmg, from, floor) {
      ATTACKED state for a minute, which several unrelated AI decisions then read - and, for
      the player, raises the warning, rate-limited by SpeakDelay. */
   if (tgt.type === 'struct' && from && from.side && from.side !== tgt.side) {
-    _rtsAttacked(tgt.side);
+    _rtsAttacked(tgt.side, tgt);
     _rtsBaseIsAttacked(tgt, from);
   }
   if (from && _rtsHostile(from.side, tgt.side)) _rtsTrigNotify('attacked', tgt, null);
@@ -20354,7 +20358,7 @@ function _rtsBombsTick(dt) {
     for (var k = 0, said = {}; k < G.ents.length; k++) {
       var s = G.ents[k];
       if (s.dead || s.type !== 'struct' || s.side === b.side || Math.hypot(s.x - b.x, s.z - b.z) > rad) continue;
-      if (!said[s.side]) { said[s.side] = 1; _rtsAttacked(s.side); }
+      if (!said[s.side]) { said[s.side] = 1; _rtsAttacked(s.side, s); }
       if (bomber) _rtsBaseIsAttacked(s, bomber);
       _rtsTrigNotify('attacked', s, null);
     }
@@ -21193,7 +21197,8 @@ function _rtsUpdateAIFor(dt) {
    has been given up on, its countdown is driven by the very tick that stopped, so a message
    with an ordinary lifetime would either hang there by accident or vanish depending on where
    the throw landed. Saying "forever" explicitly is the honest version of both. */
-function _rtsSay(m, secs) { var G = window._rtsG; G.msg = m; G.msgT = secs || 4; }
+/* `at` {x, z} and `sel`, when the line is about somewhere: a tap on it goes there (ui/go.js) */
+function _rtsSay(m, secs, at, sel) { var G = window._rtsG; G.msg = m; G.msgT = secs || 4; G.msgAt = at || null; G.msgSel = sel || null; }
 
 /* Ore regrows into partly-mined tiles and slowly seeds empty neighbours, so a worked-out
    field recovers instead of leaving a dead map (RULES.CPP: IsTGrowth / IsTSpread). */
@@ -21696,6 +21701,7 @@ function _rtsTick(dt) {
   /* every seat in play, in seat order: the two that always play first, as they always ran */
   for (i = 0; i < G.order.length; i++) _rtsRecalcPower(G.order[i]);
   for (i = 0; i < G.order.length; i++) _rtsTickProduction(G.order[i], dt);
+  _rtsIdleTick(dt);                              /* what the player is not using: core/idle.js */
   _rtsUpdateAI(dt);
   _rtsTriggersTick(dt);
 
@@ -21763,6 +21769,77 @@ function _rtsTick(dt) {
   }
   if (!alive.player) { G.over = 'lose'; G.sides.player.lost = true; }
   else if (!foesUp) G.over = 'win';
+}
+</script>
+<script>/* core/idle.js - WHAT THE PLAYER IS NOT USING, said once: a harvester standing with no ore it can
+   reach, the ore gone altogether, a harvester full with no Refinery, a Vehicle Works or Barracks
+   with an empty line and the money to fill it. Each line carries where it is, so a tap on it looks
+   there and selects the thing (ui/go.js). Computer seats manage their own, and a battle that is
+   over says nothing. Rate-limited: one such line in RTS_IDLE_EVERY seconds, the same harvester
+   once in RTS_IDLE_AGAIN, a line once until it has been used. Part of rts.core; unit/idle plays
+   it headless. */
+
+var RTS_IDLE_HARV = 12;      /* seconds a harvester stands before it is said */
+var RTS_IDLE_LINE = 30;      /* seconds a line stands empty, with the money, before it is said */
+var RTS_IDLE_EVERY = 45;     /* seconds between two idle lines */
+var RTS_IDLE_AGAIN = 90;     /* seconds before the same harvester is said again */
+var RTS_IDLE_OPENING = 90;   /* seconds of battle before a line is ever said */
+var RTS_IDLE_RICH = 1000;    /* credits unspent, at least, before a line is said */
+var RTS_IDLE_LINES = { vehicle: 'factory', infantry: 'barracks' };   /* the line, by its building - named from rules/structures.js */
+
+function _rtsIdleSay(G, m, e) { G.idle.said = G.t; _rtsSay(m, 5, { x: e.x, z: e.z }, e); }
+function _rtsIdleTick(dt) {
+  var G = window._rtsG, S = G.sides.player;
+  if (!S || S.ctl !== 'human' || G.over) return;
+  var I = G.idle || (G.idle = { said: -999, line: {}, lineSaid: {}, gone: false });
+  var free = G.t - I.said >= RTS_IDLE_EVERY, i, e, anyOre = null;
+  for (i = 0; i < G.ents.length; i++) {
+    e = G.ents[i];
+    if (e.dead || e.side !== 'player' || e.type !== 'unit' || e.inside) continue;
+    var d = rtsUnitDef(e.def);
+    if (!d || !d.harvest) continue;
+    /* standing: nothing to go to (harvest.js leaves it in toField with no tile), or full with
+       nowhere to unload */
+    var noRef = e.hstate === 'toRef' && !e.path && !_rtsHas('player', 'refinery');
+    var standing = (e.hstate === 'toField' && !e.htile && !e.path) || noRef;
+    e.idleT = standing ? (e.idleT || 0) + dt : 0;
+    if (!standing || e.idleT < RTS_IDLE_HARV || !free) continue;
+    if (noRef) {
+      if (G.t - (e.idleSaid || -999) < RTS_IDLE_AGAIN) continue;
+      e.idleSaid = G.t; free = false;
+      _rtsIdleSay(G, 'A harvester is full, with no Refinery to unload at.', e);
+      continue;
+    }
+    if (anyOre === null) { anyOre = false; for (var k = 0; k < G.scrap.length; k++) if (G.scrap[k] > 0) { anyOre = true; break; } }
+    if (!anyOre) { if (!I.gone) { I.gone = true; _rtsIdleSay(G, 'The ore is gone: every field is mined out.', e); free = false; } continue; }
+    if (G.t - (e.idleSaid || -999) < RTS_IDLE_AGAIN) continue;
+    e.idleSaid = G.t; free = false;
+    _rtsIdleSay(G, 'A harvester is idle: it can reach no ore. Send it yourself.', e);
+  }
+  /* the lines: empty, with a maker standing and the money for its cheapest unit */
+  for (var cat in RTS_IDLE_LINES) {
+    if (S.q[cat]) { I.lineSaid[cat] = false; I.line[cat] = 0; continue; }
+    /* ...and real money, past the opening: a line empty at 0:30 with the starting credits is a
+       player building a base, not one who forgot; said when there is twice its cheapest unit's
+       price and at least 1000 lying unspent, after the first ninety seconds */
+    var mk = _rtsHas('player', RTS_IDLE_LINES[cat]), cheapest = mk ? _rtsIdleCheapest(cat) : null;
+    if (!mk || cheapest === null || G.t < RTS_IDLE_OPENING || rtsMoney(S) < Math.max(RTS_IDLE_RICH, 2 * cheapest)) { I.line[cat] = 0; continue; }
+    I.line[cat] = (I.line[cat] || 0) + dt;
+    if (I.line[cat] < RTS_IDLE_LINE || I.lineSaid[cat] || !free) continue;
+    I.lineSaid[cat] = true; free = false;
+    _rtsIdleSay(G, 'The ' + rtsStructDef(RTS_IDLE_LINES[cat]).name + ' is idle, with credits to spend.', mk);
+  }
+}
+/* the cheapest unit of `cat` the player can make now, or null */
+function _rtsIdleCheapest(cat) {
+  var best = null;
+  for (var i = 0; i < RTS_UNITS.length; i++) {
+    var u = RTS_UNITS[i];
+    if (u.kind !== cat || !_rtsCanProduce('player', u.key)) continue;
+    var c = _rtsCostOf('player', u);
+    if (best === null || c < best) best = c;
+  }
+  return best;
 }
 </script>
 <script>/* render/camera.js - the renderer's view: zoom, projection, and world <-> screen.
@@ -32623,7 +32700,8 @@ function _rtsSyncSidebar(dt) {
   if (typeof _rtsAutoTick === 'function') _rtsAutoTick(G, U);   /* the autosave's minute, and its end */
   var msg = document.getElementById('rtsMsg');
   msg.textContent = G.msgT > 0 ? (G.msg || '') : '';
-  msg.className = 'rts-msg' + (G.msgT > 0 ? ' on' : '');
+  msg.className = 'rts-msg' + (G.msgT > 0 ? ' on' : '') + (G.msgT > 0 && G.msgAt ? ' go' : '');   /* tappable: ui/go.js */
+  if (!msg.onclick) msg.onclick = function () { rtsMsgGo(); };
 
   if (G.over && !U.overShown) {
     U.overShown = true;
@@ -33546,6 +33624,7 @@ function _rtsKeyDown(e) {
   /* N walks the army, shift+N walks it backwards. */
   if (k === 'n' || k === 'N') { _rtsCycleObject(e.shiftKey ? -1 : 1); e.preventDefault(); }
   if (k === 'p' || k === 'P') { rtsPauseToggle(); e.preventDefault(); return; }   /* ui/pause.js */
+  if (k === ' ') { _rtsGoAlert(); e.preventDefault(); return; }       /* the last attack on the base: ui/go.js */
   /* U unloads every selected transport that is carrying anything - here and now, wherever it is
      standing. The loop is core/transport.js _rtsUnloadSelected, which the sidebar's UNLOAD button
      gives too (a phone has no U), and which says so when a craft in open water has nowhere to
@@ -33702,6 +33781,47 @@ function _rtsPauseHTML() {
     + '<p class="s">the battle waits; the camera does not</p>'
     + '<p class="speed">Speed ' + RTS_SPEEDS.map(function (v) { return '<button type="button" data-speed="' + v + '" onclick="rtsSpeedPick(' + v + ')">' + v + '×</button>'; }).join('') + '</p>'
     + '<button type="button" class="go" onclick="rtsPauseToggle(false)">RESUME</button></div></div>';
+}
+</script>
+<script>/* ui/go.js - GOING TO WHAT WAS SAID. The message line, tapped, looks at the place its line was
+   about and selects the thing it named (core/ore.js _rtsSay carries both, core/idle.js and
+   core/response.js give them); Space looks at the last attack on the player's base; the radar
+   rings that attack for RTS_ALERT_RING seconds (G.alert). Part of rts.ui, which owns the DOM. */
+
+var RTS_ALERT_RING = 8;
+
+/* Put (x, z) at the centre of what is on screen. The focus is not that centre - a tilted camera
+   looks a fifth of a half-height past it (render/camera.js _rtsViewSpan) - so the focus moves by
+   the gap between the point and the centre now, and the clamp keeps the view on the map. */
+function _rtsLookAt(x, z) {
+  var R = _rtsR, vs = _rtsViewSpan();
+  R.focus.x += x - vs.cx; R.focus.z += z - vs.cz;
+  _rtsClampFocus();
+}
+/* the message line's tap: true when it had somewhere to go */
+function rtsMsgGo() {
+  var G = window._rtsG;
+  if (!G || !G.msgAt || !(G.msgT > 0)) return false;
+  _rtsLookAt(G.msgAt.x, G.msgAt.z);
+  if (G.msgSel && !G.msgSel.dead) G.sel = [G.msgSel];
+  return true;
+}
+/* Space: the last attack on the base, however long ago */
+function _rtsGoAlert() {
+  var G = window._rtsG;
+  if (!G || !G.alert) return false;
+  _rtsLookAt(G.alert.x, G.alert.z);
+  return true;
+}
+/* on the radar (ui/hud.js _rtsDrawMini): a ring widening out of the spot, twice a second */
+function _rtsDrawAlertRing(g, sc) {
+  var G = window._rtsG, A = G && G.alert;
+  if (!A || G.t - A.t > RTS_ALERT_RING) return;
+  var ph = (G.t - A.t) % 1, cx = (A.x / RTS_TILE + RTS_N / 2) * sc, cz = (A.z / RTS_TILE + RTS_N / 2) * sc;
+  g.lineWidth = 2; g.strokeStyle = 'rgba(255,96,72,' + (1 - ph * 0.8).toFixed(2) + ')';
+  g.beginPath(); g.arc(cx, cz, 3 + ph * 9, 0, Math.PI * 2); g.stroke();
+  g.lineWidth = 1.5; g.strokeStyle = 'rgba(255,96,72,0.9)';
+  g.beginPath(); g.arc(cx, cz, 3, 0, Math.PI * 2); g.stroke();
 }
 </script>
 <script>/* ui/select.js - selection (band, double-click, hotkeys, cycling), right-click orders and
@@ -34464,6 +34584,7 @@ function _rtsDrawMini() {
       g.fillRect(mx - 1.5, mz - 1.5, 3, 3);
     }
   }
+  _rtsDrawAlertRing(g, sc);                      /* the last attack on the base: ui/go.js */
   /* STATIC over an enemy Jammer's field (core/jammer.js): the radar cannot read it - where the
      radar reads at all. Under the unexplored shroud there is nothing to disturb, and a disc of
      static there marked the army the Jammer was hiding from across the map. */

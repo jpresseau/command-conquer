@@ -42,7 +42,7 @@ function _rtsDamage(tgt, dmg, from, floor) {
      ATTACKED state for a minute, which several unrelated AI decisions then read - and, for
      the player, raises the warning, rate-limited by SpeakDelay. */
   if (tgt.type === 'struct' && from && from.side && from.side !== tgt.side) {
-    _rtsAttacked(tgt.side);
+    _rtsAttacked(tgt.side, tgt);
     _rtsBaseIsAttacked(tgt, from);
   }
   if (from && _rtsHostile(from.side, tgt.side)) _rtsTrigNotify('attacked', tgt, null);
