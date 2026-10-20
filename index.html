@@ -800,7 +800,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">7530dbf · 2026-10-20</div>
+  <div id="rtsBuild" title="build">094efc9 · 2026-10-20</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -2216,6 +2216,8 @@ var RTS_AI = {
   /* Check_Raise_Money / Check_Raise_Power / Check_Lower_Power thresholds. */
   brokeMoney:100,           /* below this, raising cash is urgent */
   desperateMoney:2000,      /* ...and worse if there is no income either */
+  oreGone:20,               /* ore cells left on the whole map under which the economy is over */
+  goneWave:20,              /* ...and seconds between waves from then on: everything goes */
   powerEmergencyGap:40,     /* deficit below which power is an emergency, not a preference */
   powerWaste:150,           /* surplus above which a power plant is dead money */
   /* AI_Raise_Money and AI_Raise_Power sell in a fixed order, least valuable first, each with
@@ -18499,8 +18501,17 @@ function _rtsAIStateTick(S) {
   G.ai.state = rtsMoney(S) < 25 ? RTS_STATE.BROKE : RTS_STATE.BUILDUP;
 }
 function _rtsAICanEarn() {
-  return !!(_rtsHas(_rtsAIOn, 'refinery') && _rtsAIHarvesters());
+  return !!(_rtsHas(_rtsAIOn, 'refinery') && _rtsAIHarvesters() && !_rtsOreGone());
 }
+/* THE ORE IS GONE: fewer than RTS_AI.oreGone cells of it left on the whole map (core/ore.js
+   _rtsOreLeft). Measured on a 2v2 large map, 220,000 ore at the start was none at fifteen
+   minutes, and every seat then sat on its army for the next fifteen: broke, "able to earn" by
+   the test above, its garrison held back for a future that was not coming. From here no seat
+   will be richer later, so a garrison guards nothing worth the men: waves come every
+   RTS_AI.goneWave seconds with nobody held back (core/missions.js _rtsAIAttack), the team
+   ceiling is the whole army (core/teams.js _rtsTeamCap), and an army no team type can crew
+   hunts as it is. The match ends one way or the other, which is the point. */
+function _rtsOreGone() { return _rtsOreLeft() < RTS_AI.oreGone; }
 function _rtsAIHarvesters() {
   var G = window._rtsG, n = 0;
   for (var i = 0; i < G.ents.length; i++) {
@@ -18553,7 +18564,8 @@ function _rtsAIUrgency(S) {
   u.fireSale = U.NONE;
   if (!attacked && _rtsCount(_rtsAIOn, 'struct') > 0 && !_rtsAIHasFactory()) u.fireSale = U.CRITICAL;
 
-  /* Check_Attack */
+  /* Check_Attack - and the ore gone, the next wave is at most goneWave seconds away (_rtsOreGone) */
+  if (_rtsOreGone()) G.ai.next = Math.min(G.ai.next, RTS_AI.goneWave);
   u.attack = U.NONE;
   if (G.t > 60 && G.ai.next <= 0) u.attack = attacked ? U.LOW : U.CRITICAL;
 
@@ -19320,6 +19332,10 @@ function _rtsTeamsTick(dt) {
     }
 
     var full = (total >= desired);
+    /* THE ORE IS GONE (core/ai.js _rtsOreGone): a team short of members goes as it is, the moment
+       it has a gun - the units it waits for will never be bought. Measured without this, a
+       stripped 2v2 left six half-crewed teams standing in each base, holding the cap. */
+    if (!full && total > 0 && _rtsOreGone() && _rtsTeamLeader(t)) full = true;
     if (full) t.hasBeen = true;
     /* A TEAM THAT NEVER FILLS IS WORSE THAN NO TEAM, and until now nothing ever wrote one off.
        Below full strength it does not march, so its script never runs; meanwhile it holds a
@@ -21013,6 +21029,15 @@ function _rtsAIAttack(urgency) {
   /* AttackInterval is deliberately randomised over a 4x spread in the original, so waves
      never arrive on a metronome you can set your watch by. */
   G.ai.next = RTS_WAVE_EVERY * _rtsBias(_rtsAIOn).build * (0.5 + _rtsRnd() * 1.5);
+  /* THE ORE IS GONE (core/ai.js _rtsOreGone): said once, to the player it is coming for, and from
+     then on every wave is _rtsTeamMaybeRaise's - the garrison too, and a hunt for the rest. */
+  if (_rtsOreGone()) {
+    if (!G.ai.goneSaid) {
+      G.ai.goneSaid = true;
+      if (_rtsHostile(_rtsAIOn, 'player')) _rtsSay('The ore is gone: ' + rtsArmyName(_rtsAIOn) + ' is coming with everything it has.');
+    }
+    return _rtsTeamMaybeRaise();
+  }
   if (!_rtsHas(_rtsAIFoe(), 'yard') && !_rtsHas(_rtsAIFoe(), 'refinery') && !_rtsHas(_rtsAIFoe(), 'power')) return false;
 
   /* Raise a TEAM rather than shoving a share of everything idle at the nearest building.
@@ -21035,6 +21060,29 @@ function _rtsAIAttack(urgency) {
   _rtsSay(rtsArmyName(_rtsAIOn) + ' ' + pick.name + ' team inbound!');
   if (typeof _rtsSfx === 'function') _rtsSfx('alert');
   return true;
+}
+/* THE ORE IS GONE (core/ai.js _rtsOreGone), every tick: ONE idle fighter on land attack-moves on
+   the foe's base - its yard, or what is left standing - a cell beside it, not on it (_rtsPathFor
+   hands back one waypoint at an unreachable goal, and a building's own cell is one). One a tick,
+   and whoever is left without an order is simply picked again on a later tick: an order can come
+   back empty - watched, a rifleman's first hunt order was dropped (no path from where he stood
+   that tick) and the same order held three seconds later - and sent once from the five-second
+   decision, five riflemen were still at home ninety seconds on. A team may still take a hunter. */
+function _rtsAIHuntTick() {
+  var G = window._rtsG, foe = _rtsAIFoe(), at = null, keys = ['yard', 'refinery', 'power', 'factory', 'barracks'];
+  for (var k = 0; k < keys.length && !at; k++) at = _rtsHas(foe, keys[k]);
+  if (!at) return false;
+  for (var i = 0; i < G.ents.length; i++) {
+    var u = G.ents[i], d;
+    if (u.dead || u.side !== _rtsAIOn || u.type !== 'unit' || u.sqd != null) continue;
+    d = rtsUnitDef(u.def);
+    if (d.harvest || (d.kind !== 'infantry' && d.kind !== 'vehicle') || !_rtsMission(u).recruitable) continue;
+    if (u.order === 'amove' || u.order === 'attack') continue;
+    var p = _rtsApproach(u, at);
+    _rtsOrderMove(u, p.x, p.z, true);
+    return u.order === 'amove';
+  }
+  return false;
 }
 
 </script>
@@ -21127,6 +21175,7 @@ function _rtsUpdateAIFor(dt) {
   /* an ally under the player's order holds its own war while it stands (core/allycmd.js) */
   var held = _rtsAIOn === 'ally' && _rtsAllyCmdTick(dt);
   if (!held) _rtsTeamsTick(dt);
+  if (!held && _rtsOreGone()) _rtsAIHuntTick();   /* ...and the ore gone, everyone goes - core/missions.js */
   if (!held) _rtsEscortsTick(dt);   /* the spare army goes with the teams - core/escorts.js */
   _rtsAIMendTick(dt);           /* ...and the battered go home to the depot - core/aimend.js */
   _rtsAIMinesTick(dt);          /* ...and the layer mines the approach - core/aimines.js */
@@ -21366,7 +21415,19 @@ function _rtsPowerDamage(dt) {
     }
   }
 }
-
+/* How many cells still hold ore or gems - the whole map, for every seat, counted once a tick.
+   Under RTS_AI.oreGone the economy is over for everyone: no harvester fills again and no
+   refinery pays, so the opponent stops holding a garrison back (core/ai.js _rtsOreGone). */
+var _RTS_ORE_LEFT = { g: null, t: -1, n: 0 };
+function _rtsOreLeft() {
+  var G = window._rtsG;
+  if (!G) return 0;
+  if (_RTS_ORE_LEFT.g === G && _RTS_ORE_LEFT.t === G.t) return _RTS_ORE_LEFT.n;
+  var n = 0;
+  for (var i = 0; i < G.scrap.length; i++) if (G.scrap[i] > 0) n++;
+  _RTS_ORE_LEFT.g = G; _RTS_ORE_LEFT.t = G.t; _RTS_ORE_LEFT.n = n;
+  return n;
+}
 </script>
 <script>/* core/triggers.js - TRIGGER.CPP: trigger instances, events and actions. Part of rts.core. */
 

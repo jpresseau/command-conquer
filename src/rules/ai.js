@@ -269,6 +269,8 @@ var RTS_AI = {
   /* Check_Raise_Money / Check_Raise_Power / Check_Lower_Power thresholds. */
   brokeMoney:100,           /* below this, raising cash is urgent */
   desperateMoney:2000,      /* ...and worse if there is no income either */
+  oreGone:20,               /* ore cells left on the whole map under which the economy is over */
+  goneWave:20,              /* ...and seconds between waves from then on: everything goes */
   powerEmergencyGap:40,     /* deficit below which power is an emergency, not a preference */
   powerWaste:150,           /* surplus above which a power plant is dead money */
   /* AI_Raise_Money and AI_Raise_Power sell in a fixed order, least valuable first, each with

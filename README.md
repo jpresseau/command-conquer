@@ -52,7 +52,9 @@ selection readout shows what the order needs: mines left, bombs loaded or loadin
 
 Build an **Ore Refinery** early — it ships with a free Harvester and it is the only thing that
 turns ore into credits. Everything needs **power**, and a browned-out base builds slowly and its
-turrets stop firing entirely. The tech tree is the classic shape:
+turrets stop firing entirely. The ore does not last: a worked-out map grows back only a trickle,
+and once it is gone the opponent comes with everything it has - so spend while it flows. The tech
+tree is the classic shape:
 
 ```
 Power Plant ──┬── Ore Refinery ─── War Factory ── vehicles + harvesters

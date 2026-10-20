@@ -397,3 +397,41 @@ than a lump of hit points:
 
 Repair and sell are sidebar *modes* (`_rtsUI.mode`), armed by a button and spent on the next
 click, competing with structure placement for that click — arming one cancels the others.
+
+## When the ore is gone (mine, not ported)
+
+The ore is finite. A harvester takes 190 a second and a tile holds about 200; growth puts 26 back
+on a sampled tile every two minutes (`core/ore.js`), which is Red Alert's rate against a harvest
+rate about seven times Red Alert's. Measured on a 2v2 large map with four computer seats: 220,000
+ore at the start, 81,000 at five minutes, 37,000 at ten, **none at fifteen** - and then nothing
+moved for the next fifteen. Every seat was broke, every harvester stood in `toField` with no tile
+to go to, and every army sat at home: `_rtsAICanEarn` said yes (a refinery and harvesters, never
+mind the map), so the desperation rungs never fired; the team ceiling was six, and all six were
+half-crewed teams waiting at full strength for men that would never be bought (one seat: 28
+fighters, 12 in six teams of 2/3/1/2/2/2, 16 idle; its ally: 36, 11 in teams, 25 idle).
+
+So the ore being gone is a state the brain knows (`_rtsOreGone`: fewer than `RTS_AI.oreGone` cells
+left on the whole map, counted once a tick by `_rtsOreLeft`), and in it:
+
+- **it cannot earn**, refinery or not, so `Check_Raise_Money` climbs to its selling rungs;
+- **the next wave is at most `RTS_AI.goneWave` seconds away**, and so is every one after;
+- a team short of members **goes as it is** the moment it has a gun (`_rtsTeamsTick`), rather
+  than wait to fill with men that will not be bought (without it, two or three teams of five to
+  eight men stood at home through the first ninety seconds);
+- **everyone idle hunts** (`_rtsAIHuntTick`, every tick): one idle fighter on land per tick is
+  sent to attack-move on a cell beside the foe's yard, or beside what is left standing - the
+  garrison a smart opponent keeps included. One a tick, and whoever is left without an order is
+  picked again on a later tick: an order can come back empty (watched, a rifleman's first hunt
+  order was dropped - no path from where he stood that tick - and the same order held three
+  seconds later), and sent once from the five-second decision, five riflemen were still at home
+  ninety seconds on. A hunter is still recruitable, so a team may take it on the way;
+- the player is told **once**, by a hostile seat: "The ore is gone: X is coming with everything
+  it has." An ally says nothing.
+
+Measured on the 1v1 that `unit/endgame` plays, both seats computer-played and the ore stripped at
+four minutes: with the ore the opponent's army grows (23 to 27 in ninety seconds) with four to six
+at home as a garrison; with it gone nobody is home inside ninety seconds and the army is spent in
+the fight - three left of twenty-three - because the other seat has gone all in too.
+
+The match then ends one way or the other, which is the point: a game with no economy left is a
+game that should be over. `unit/endgame` holds it.

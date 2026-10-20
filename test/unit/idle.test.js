@@ -93,7 +93,7 @@ S.ok('NOT THE RICH: nothing in the first ninety seconds, nor with the starting c
 G = fresh({ player: { ctl: 'ai', diff: 'normal' } });
 G.sides.player.credits = 9000; G.scrap.fill(0);
 run(130);
-S.ok('NOT A BRAIN: a computer seat in the player\'s chair gets no idle line', !G.idle && !/idle|ore is gone/.test(G.msg || ''), JSON.stringify({ idle: G.idle, msg: G.msg }));
+S.ok('NOT A BRAIN: a computer seat in the player\'s chair gets no idle line', !G.idle && !/is idle|every field is mined out/.test(G.msg || ''), JSON.stringify({ idle: G.idle, msg: G.msg }));
 
 /* ---------------- the attack ---------------- */
 G = fresh();
