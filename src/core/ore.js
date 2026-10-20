@@ -5,7 +5,8 @@
    has been given up on, its countdown is driven by the very tick that stopped, so a message
    with an ordinary lifetime would either hang there by accident or vanish depending on where
    the throw landed. Saying "forever" explicitly is the honest version of both. */
-function _rtsSay(m, secs) { var G = window._rtsG; G.msg = m; G.msgT = secs || 4; }
+/* `at` {x, z} and `sel`, when the line is about somewhere: a tap on it goes there (ui/go.js) */
+function _rtsSay(m, secs, at, sel) { var G = window._rtsG; G.msg = m; G.msgT = secs || 4; G.msgAt = at || null; G.msgSel = sel || null; }
 
 /* Ore regrows into partly-mined tiles and slowly seeds empty neighbours, so a worked-out
    field recovers instead of leaving a dead map (RULES.CPP: IsTGrowth / IsTSpread). */

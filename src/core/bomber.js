@@ -137,7 +137,7 @@ function _rtsBombsTick(dt) {
     for (var k = 0, said = {}; k < G.ents.length; k++) {
       var s = G.ents[k];
       if (s.dead || s.type !== 'struct' || s.side === b.side || Math.hypot(s.x - b.x, s.z - b.z) > rad) continue;
-      if (!said[s.side]) { said[s.side] = 1; _rtsAttacked(s.side); }
+      if (!said[s.side]) { said[s.side] = 1; _rtsAttacked(s.side, s); }
       if (bomber) _rtsBaseIsAttacked(s, bomber);
       _rtsTrigNotify('attacked', s, null);
     }

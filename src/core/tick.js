@@ -26,6 +26,7 @@ function _rtsTick(dt) {
   /* every seat in play, in seat order: the two that always play first, as they always ran */
   for (i = 0; i < G.order.length; i++) _rtsRecalcPower(G.order[i]);
   for (i = 0; i < G.order.length; i++) _rtsTickProduction(G.order[i], dt);
+  _rtsIdleTick(dt);                              /* what the player is not using: core/idle.js */
   _rtsUpdateAI(dt);
   _rtsTriggersTick(dt);
 

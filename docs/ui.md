@@ -200,6 +200,17 @@ own dt - the tick is tuned at one step size, and unit separation and the re-plan
 linear in it. The ⏸ reads the speed when it is not 1×. `unit/pause` holds the counting;
 `e2e/pause` drives the key, the screen and the loop.
 
+### A line you can go to (ui/go.js, core/idle.js)
+
+`_rtsSay` now carries a place and a thing (`G.msgAt`, `G.msgSel`); a line that has them is
+tappable (`.rts-msg.go`), and the tap looks there and selects the thing. "Your base is under
+attack!" carries the building hit (`core/response.js` records it as `G.alert`); Space looks there
+again at any time, and the radar rings the spot in red for eight seconds while the radar reads.
+`core/idle.js` says what stands unused - a harvester with no ore it can reach, the ore gone, a
+full harvester with no Refinery, a Vehicle Works or Barracks empty past the opening with real money
+unspent - one line in 45 s, the same harvester once in 90, a line once until it is used.
+`unit/idle` holds the rules; `e2e/alert` drives the tap, the key and the ring.
+
 ### One answer to "why can't I build this?"
 
 `Who_Can_Build_Me` is one question, and it had three implementations here: `_rtsCanQueue`

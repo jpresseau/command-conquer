@@ -440,7 +440,8 @@ function _rtsSyncSidebar(dt) {
   if (typeof _rtsAutoTick === 'function') _rtsAutoTick(G, U);   /* the autosave's minute, and its end */
   var msg = document.getElementById('rtsMsg');
   msg.textContent = G.msgT > 0 ? (G.msg || '') : '';
-  msg.className = 'rts-msg' + (G.msgT > 0 ? ' on' : '');
+  msg.className = 'rts-msg' + (G.msgT > 0 ? ' on' : '') + (G.msgT > 0 && G.msgAt ? ' go' : '');   /* tappable: ui/go.js */
+  if (!msg.onclick) msg.onclick = function () { rtsMsgGo(); };
 
   if (G.over && !U.overShown) {
     U.overShown = true;
