@@ -250,15 +250,19 @@ and `src/campaign.js` is the title-screen list, the objectives and the end card.
   and Order of Battle barely changed, and Armour by Air's fixed four tanks lose.
 - **Regular, the campaign rung** (`RTS_DIFF.regular`, `campaign: true`, so the skirmish picker
   skips it): Soldier's brain - it builds, expands and repairs - with numbers halfway to Recruit's.
-  It exists because the awake missions showed the gap between the two: Recruit's opponent never
-  grew past about ten fighters and never came, Soldier's had forty by the third minute, and no
-  scripted player - not even one building a base (`builder` in `test/lib/plays.js`: a second
-  refinery, guns placed where the AI would place them, an army massed at home and attack-moved
-  in) - won either awake mission at Soldier. At Regular the builder wins **Breachwater** at 512 s
-  where the intended play loses at 445, so Breachwater offers it. **Mirror Line** does not: at
-  both Regular-like rungs tried (and with a siege of V2 launchers) the builder held its own base
-  to the clock but never broke the triple-strength yard its opponent kept repairing. The missions
-  written at Soldier offer Regular as one more easier choice, each still won there.
+  Recruit's opponent never grew past about ten fighters and never came; Soldier's had forty by the
+  third minute. The missions written at Soldier offer Regular as one more easier choice, each
+  still won there.
+- **The awake missions go up to Soldier, for a player who starves the enemy.** A scripted player
+  building a real base (`builder` in `test/lib/plays.js`: a second refinery, guns where the AI
+  would put them, an army massed at home and attack-moved in) lost both at Soldier, and at Regular
+  held Mirror Line's base to the clock without breaking the yard: an opponent repairs while it has
+  money (`aisupers.js`: over half its 1000 reserve), and a repair heals a share of *maximum* hp,
+  so a triple-strength yard mends three times as fast. Add a raiding party hunting the harvesters
+  - six tanks from the second minute on Mirror Line, eight from the first on Breachwater, where
+  two economies have to be starved - and the yards break: Mirror Line won at 373 s at Regular and
+  425 s at Soldier, Breachwater at 406 s and 483 s, where the intended play loses at each. Both
+  offer Regular and Soldier (`top: 'normal'`); at Veteran the raiders' Mirror Line base fell.
 - **`G.mission` is plain data.** The functions stay in the table and are looked up by id, so a
   mission saves like any battle. The save's header carries `mission` (id and level); a resume
   opens the battle on the save's own map, lays the state over it and does NOT run the setup again
