@@ -38,6 +38,8 @@ var RTS_SAVE_INFO = 'rccmd.save1.info';
    speak for it. Nothing written to one slot ever touches the other's keys. */
 var RTS_SLOTS = {
   save: { body: RTS_SAVE_KEY, info: RTS_SAVE_INFO, btn: 'rtsResume', note: 'rtsResumeNote' },
+  save2: { body: 'rccmd.save2', info: 'rccmd.save2.info', btn: 'rtsResume', note: 'rtsResumeNote' },   /* ui/slots.js */
+  save3: { body: 'rccmd.save3', info: 'rccmd.save3.info', btn: 'rtsResume', note: 'rtsResumeNote' },
   auto: { body: 'rccmd.auto1', info: 'rccmd.auto1.info', btn: 'rtsContinue', note: 'rtsAutoNote' }
 };
 function _rtsSlot(slot) { return RTS_SLOTS[slot] || RTS_SLOTS.save; }
@@ -314,9 +316,11 @@ function _rtsWriteSlot(slot, text, info) {
     return { ok: false, wroteBody: wroteBody, err: (e && e.name) || 'Error' };
   }
 }
-function rtsSaveGame() {
+/* `slot`: one of the player's own (ui/slots.js); the active one when left out */
+function rtsSaveGame(slot) {
   var G = window._rtsG;
   if (!G) return false;
+  slot = slot || (typeof rtsSlotActive === 'function' ? rtsSlotActive() : 'save');
   /* SERIALISE FIRST, OUTSIDE THE TRY THAT OWNS THE CLEANUP. Both steps could throw and only one
      of them can leave a half-written pair behind, so they must not share a catch: a serialiser
      failure used to run the removeItem pair and DELETE THE SAVE ALREADY ON DISK - a save from
@@ -331,10 +335,10 @@ function rtsSaveGame() {
     if (typeof _rtsSfx === 'function') _rtsSfx('deny');
     return false;                                 /* nothing on disk has been touched */
   }
-  var w = _rtsWriteSlot('save', text, info);
+  var w = _rtsWriteSlot(slot, text, info);
   /* NO ROOM, AND THE AUTOSAVE IS WHAT FILLS IT: the player's own save is worth more than the copy
      the game kept by itself, so the autosave makes way and the save is tried once more */
-  if (!w.ok && !w.wroteBody && w.err === 'QuotaExceededError' && typeof _rtsAutoClear === 'function' && _rtsAutoClear()) w = _rtsWriteSlot('save', text, info);
+  if (!w.ok && !w.wroteBody && w.err === 'QuotaExceededError' && typeof _rtsAutoClear === 'function' && _rtsAutoClear()) w = _rtsWriteSlot(slot, text, info);
   if (w.ok) {
     _rtsSay('Battle saved.');
     if (typeof _rtsSfx === 'function') _rtsSfx('click');
@@ -427,6 +431,7 @@ function rtsLoadGame(slot) {
      to rtsOpen so it lands after _rtsNewGame and before the renderer bakes the terrain. */
   window._RTS_PENDING_LOAD = body;
   window._RTS_PENDING_SLOT = slot || 'save';      /* the autosave is kept only for its own resume */
+  if (slot && slot !== 'auto') window._RTS_SLOT = slot;   /* the next save goes back where this came from (ui/slots.js) */
   if (document.getElementById('rcgRts')) rtsClose();
   rtsOpen(body.seed);
   return true;

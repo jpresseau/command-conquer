@@ -217,6 +217,18 @@
 #rcgRts .rts-pause .speed button{margin:4px 3px;padding:7px 14px;border:1px solid #3a4d63;background:#1d2836;min-width:48px}
 #rcgRts .rts-pause .speed button.on{background:#2e6fd0;border-color:#2e6fd0}
 #rcgRts .rts-pause button.go{margin-top:10px;padding:10px 26px;border:0;background:#2e6fd0;font-weight:600}
+#rcgRts .rts-pause button.slotsbtn{display:block;margin:10px auto 0;padding:8px 18px;border:1px solid #3a4d63;background:#1d2836}
+/* the saved battles (ui/slots.js): three rows over the stage, the sound panel's look */
+#rcgRts .rts-slots{position:absolute;left:50%;top:60px;transform:translateX(-50%);z-index:6;min-width:min(440px,92vw);background:#161c25;border:1px solid #2f3d4e;border-radius:10px;padding:10px 12px 12px;box-shadow:0 18px 60px rgba(0,0,0,.6)}
+#rcgRts .rts-slots[hidden]{display:none}
+#rcgRts .rts-slots .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;letter-spacing:2px}
+#rcgRts .rts-slots .hd .x{background:none;border:0;color:#fff;font-size:16px;cursor:pointer;min-width:40px;min-height:40px}
+#rcgRts .rts-slots .slot{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid #243040}
+#rcgRts .rts-slots .slot .n{opacity:.5;width:14px}
+#rcgRts .rts-slots .slot .d{flex:1;font-size:12px;opacity:.85;min-width:0}
+#rcgRts .rts-slots .slot .d i{font-style:normal;color:#ffd98a}
+#rcgRts .rts-slots .slot button{min-height:40px;padding:6px 12px;border:0;border-radius:6px;color:#fff;background:#2e6fd0;font:600 12px/1 inherit;letter-spacing:.6px;cursor:pointer}
+#rcgRts .rts-slots .slot button.load{background:#3d6b45}
 /* the daily battle's result, a line to copy and post (daily.js) */
 #rcgRts .rts-over .daily{margin:6px 0 14px;padding:10px 12px;border:1px solid #34465c;border-radius:8px;background:#111821}
 #rcgRts .rts-over .daily .dline{font:600 13px/1.4 ui-monospace,Menlo,Consolas,monospace;opacity:1;user-select:all}

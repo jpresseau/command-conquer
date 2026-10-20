@@ -131,6 +131,8 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 #rtsPrev .side{display:flex;flex-direction:column;align-items:flex-start;gap:8px;min-width:0}
 #rtsPrev .side span{font-size:12px;opacity:.6}
 #rtsPrev .side button{padding:8px 14px;min-height:40px;font:600 12px/1 inherit;letter-spacing:.6px;color:#fff;background:#2e6fd0;border:0;border-radius:6px;cursor:pointer}
+#rtsSaves{display:flex;flex-direction:column;gap:8px;margin-top:-10px}
+#rtsSaves[hidden]{display:none}
 #rtsCampList select.lvl{margin-top:4px;padding:5px 6px;font:12px/1 inherit;color:#fff;background:#1d2836;border:1px solid #3a4d63;border-radius:4px}
 @media (hover: none) and (pointer: coarse){ #rtsCampList button, #rtsCampList select.lvl{min-height:40px;padding:10px 22px} }
 /* ...AND ON A TOUCH SCREEN THE STAMP LETS A TAP THROUGH. It takes taps only so its text can be

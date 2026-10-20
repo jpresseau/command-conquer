@@ -68,5 +68,6 @@ function _rtsPauseHTML() {
   return '<div class="rts-pause" id="rtsPause" hidden><div class="card"><h2>PAUSED</h2>'
     + '<p class="s">the battle waits; the camera does not</p>'
     + '<p class="speed">Speed ' + RTS_SPEEDS.map(function (v) { return '<button type="button" data-speed="' + v + '" onclick="rtsSpeedPick(' + v + ')">' + v + '×</button>'; }).join('') + '</p>'
+    + '<button type="button" class="slotsbtn" onclick="rtsSlotsPanel(true)">SAVED BATTLES</button>'   /* ui/slots.js, over this screen */
     + '<button type="button" class="go" onclick="rtsPauseToggle(false)">RESUME</button></div></div>';
 }
