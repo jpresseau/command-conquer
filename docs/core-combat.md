@@ -351,3 +351,16 @@ its host nor putting its fire out, and the shared non-square flame set.
 Regression: storage 34/34, save/load 31/31, verbs 26/26, mech 20/20. Ladder **296 / 220 /
 174 s** — identical to the run before this change, which matters because burning structures is
 new damage that did not exist.
+
+## Veterans (core/veterancy.js, mine)
+
+Red Alert had no veterancy; its sequel did, and the kill count this port already kept for
+`Crew.Made_A_Kill` made it a small step. `RTS_VET` (rules/balance.js) names the kills that make
+each rank - three, seven, twelve - and what a rank is worth: a tenth more damage dealt and a tenth
+less taken per chevron, applied in `_rtsDamage` after the house bias and the crate, and for the
+third rank a slow mend in the field (0.4% of hit points a second) while nothing is hitting it.
+Only units rank. Every seat's units are promoted alike, so the change is symmetric; the
+fingerprint fixture moved with it (first at 210-240 s, where the first unit of the recorded
+battles reached three kills), and self-play at the time of the change is in the commit. The
+player's promotions are said on the message line with the unit; the HUD draws the chevrons over
+the health bar. `unit/veterancy` holds the rule; `e2e/veterancy` reads the chevrons.

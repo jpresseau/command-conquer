@@ -86,7 +86,7 @@ Keep them small: if a file passes ~500 lines it wants splitting along its own ba
 - `src/core/` — the simulation, and by far the largest subsystem. Deliberately renderer-free, so
   a whole battle can be stepped headlessly; removing the old 2D renderer cost it zero lines. `grid` (tiles, passability, A*, state), `terrain`, `base`, `crates`, `supers`,
   `entities`, `capture`, `transport`, `production`, `combat` (target + fire), `damage`, `move`,
-  `units`, `ai`, `teams`, `missions`, `aisupers`, `ore`, `triggers`, `tick`, `idle` (what the player is not using), and `spatial` — the
+  `units`, `ai`, `teams`, `missions`, `aisupers`, `ore`, `triggers`, `tick`, `idle` (what the player is not using), `veterancy` (ranks by kills), and `spatial` — the
   per-tick bucket index the target scan and the crush check run over instead of the whole entity
   list. It shortens a scan's candidate list and changes no candidate test, so the property that
   makes it safe is that the two agree; see `docs/core-combat.md` and `test/*/spatial`.

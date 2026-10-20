@@ -814,7 +814,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">17cd05e · 2026-10-20</div>
+  <div id="rtsBuild" title="build">99e1390 · 2026-10-20</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1921,6 +1921,11 @@ var RTS_DIFF = {
             desc:'The enemy builds a real base, defends it and comes early.' }
 };
 var RTS_DIFF_DEFAULT = 'normal';
+/* VETERANS (core/veterancy.js): the kills that make each rank, what a rank adds to a hit and takes
+   off one taken, and the share of its hit points an elite mends a second while unhurt. Modest on
+   purpose: a rank is a tenth, so a three-chevron tank is a tank and three tenths, not a hero -
+   measured in self-play to move the two seats' win rates no further than the seeds already do. */
+var RTS_VET = { kills: [3, 7, 12], dmg: 0.10, armor: 0.10, heal: 0.004 };
 
 /* -------------------------------------------------------------------- IQ --
    RULES.CPP's IQ section is the part worth stealing: each AI behaviour has an IQ level at
@@ -16569,7 +16574,7 @@ function _rtsDamage(tgt, dmg, from, floor) {
       if (!(tgt.type === 'unit' && (rtsUnitDef(tgt.def) || {}).kind === 'infantry')) return;
       tgt.hp = 0; tgt.hitT = 0.18;
       if (from.side) tgt.hurtBy = from.side;
-      if (_rtsHostile(from.side, tgt.side)) from.kills = (from.kills || 0) + 1;
+      if (_rtsHostile(from.side, tgt.side)) { from.kills = (from.kills || 0) + 1; _rtsVetRank(from); }
       if (_rtsHostile(from.side, tgt.side)) _rtsTrigNotify('attacked', tgt, null);
       _rtsKill(tgt);
       return;
@@ -16578,6 +16583,7 @@ function _rtsDamage(tgt, dmg, from, floor) {
   if (tgt.prone) dmg *= RTS_PRONE_DAMAGE;
   dmg /= _rtsBias(tgt.side).armor;                 /* ArmorBias defends the whole house */
   dmg /= rtsCrateMult(tgt, 'armor');               /* ...and a crate defends one unit */
+  dmg = _rtsVetHit(dmg, from, tgt);                /* ...and a rank: the attacker's and the target's (core/veterancy.js) */
   /* Modify_Damage clamps last. The MinDamage floor is NOT unconditional - it applies to a
      direct hit and to the inner ring of a blast, so two units can never plink zeroes at each
      other, while the edge of an explosion is still allowed to do nothing at all. */
@@ -16599,7 +16605,7 @@ function _rtsDamage(tgt, dmg, from, floor) {
   if (_rtsCanRetaliate(tgt, from)) { tgt.order = 'attack'; tgt.target = from; }
   if (tgt.hp <= 0) {
     /* Crew.Made_A_Kill: something that has killed becomes a hotter target itself. */
-    if (from && _rtsHostile(from.side, tgt.side)) from.kills = (from.kills || 0) + 1;
+    if (from && _rtsHostile(from.side, tgt.side)) { from.kills = (from.kills || 0) + 1; _rtsVetRank(from); }
     _rtsKill(tgt);
   }
   else if (tgt.type === 'unit' && rtsUnitDef(tgt.def).harvest && tgt.carry > 0
@@ -16736,6 +16742,44 @@ function _rtsSplash(x, z, rad, dmg, side, spread, from) {
 
    so a helicopter whose pads have all been destroyed comes down. That is what stops air being
    a free permanent army and makes the pad a target worth defending. */
+</script>
+<script>/* core/veterancy.js - VETERANS: a unit that has made kills is promoted, and fights better for it.
+
+   Three ranks, by kills (RTS_VET.kills in rules/balance.js): each hits harder and takes less
+   (RTS_VET.dmg, RTS_VET.armor, applied in core/damage.js with the house's own bias), and the
+   third, elite, mends itself in the field when it is not being hit (RTS_VET.heal of its hit
+   points a second). Every seat's units are promoted alike - the kill count already existed
+   (Crew.Made_A_Kill, damage.js), so a veteran enemy tank was always a hotter target; now it is
+   also a harder one. Only units rank: a tower that has killed forty men is still a tower. A
+   promotion on the player's side is said, with the unit, so a tap on the line finds it; the
+   chevrons are ui/hud.js's, over the health bar. Part of rts.core; unit/veterancy plays it. */
+
+/* the rank `e` has earned; said and kept when it changes */
+function _rtsVetRank(e) {
+  if (!e || e.type !== 'unit') return 0;
+  var k = e.kills || 0, r = 0;
+  for (var i = 0; i < RTS_VET.kills.length; i++) if (k >= RTS_VET.kills[i]) r = i + 1;
+  if (r !== (e.rank || 0)) {
+    e.rank = r;
+    if (e.side === 'player' && !e.dead) _rtsSay((rtsUnitDef(e.def) || {}).name + (r >= RTS_VET.kills.length ? ' is elite' : ' promoted') + ' — ' + k + ' kills.', 3, { x: e.x, z: e.z }, e);
+  }
+  return r;
+}
+/* what a rank is worth: the attacker's on the damage, the target's against it */
+function _rtsVetHit(dmg, from, tgt) {
+  if (from && from.rank) dmg *= 1 + RTS_VET.dmg * from.rank;
+  if (tgt && tgt.rank) dmg /= 1 + RTS_VET.armor * tgt.rank;
+  return dmg;
+}
+/* elite units mend, a little a second, while nothing is hitting them */
+function _rtsVetTick(dt) {
+  var G = window._rtsG, top = RTS_VET.kills.length;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.type !== 'unit' || (e.rank || 0) < top || e.hp >= e.maxHp || e.hitT > 0) continue;
+    e.hp = Math.min(e.maxHp, e.hp + e.maxHp * RTS_VET.heal * dt);
+  }
+}
 </script>
 <script>/* core/move.js - getting there: aircraft, path requests, steering and unit separation.
    Part of rts.core, the simulation. */
@@ -21786,6 +21830,7 @@ function _rtsTick(dt) {
   for (i = 0; i < G.order.length; i++) _rtsRecalcPower(G.order[i]);
   for (i = 0; i < G.order.length; i++) _rtsTickProduction(G.order[i], dt);
   _rtsIdleTick(dt);                              /* what the player is not using: core/idle.js */
+  _rtsVetTick(dt);                               /* elite units mend: core/veterancy.js */
   _rtsUpdateAI(dt);
   _rtsTriggersTick(dt);
 
@@ -34283,6 +34328,12 @@ function _rtsDrawHud(dt) {
     g.fillRect(s.x - bw / 2 - 1, s.y - bh - 1, bw + 2, bh + 2);
     g.fillStyle = frac > 0.6 ? '#5fdc7a' : (frac > 0.3 ? '#e8c35a' : '#e3574a');
     g.fillRect(s.x - bw / 2, s.y - bh, bw * frac, bh);
+    /* the chevrons of a veteran (core/veterancy.js): one a rank, gold, over the bar's left end */
+    for (var rk = 0; rk < (e.rank || 0); rk++) {
+      var cx = s.x - bw / 2 + 3 * sc + rk * 6 * sc, cy = s.y - bh - 3 * sc;
+      g.fillStyle = '#0b0f14'; g.beginPath(); g.moveTo(cx - 3 * sc, cy); g.lineTo(cx, cy - 4.5 * sc); g.lineTo(cx + 3 * sc, cy); g.closePath(); g.fill();
+      g.fillStyle = '#ffd34a'; g.beginPath(); g.moveTo(cx - 2 * sc, cy - 0.5 * sc); g.lineTo(cx, cy - 3.5 * sc); g.lineTo(cx + 2 * sc, cy - 0.5 * sc); g.closePath(); g.fill();
+    }
     /* BUILDING.CPP toggles IsWrenchVisible on the repair timer - the wrench blinks on a
        building under repair so you can see at a glance where your credits are going. */
     if (e.repair && (typeof _rtsPulse !== 'function' || _rtsPulse() > 0.45)) _rtsDrawWrench(g, s.x, s.y - bh - 9 * sc);

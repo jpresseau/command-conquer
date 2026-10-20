@@ -86,6 +86,11 @@ var RTS_DIFF = {
             desc:'The enemy builds a real base, defends it and comes early.' }
 };
 var RTS_DIFF_DEFAULT = 'normal';
+/* VETERANS (core/veterancy.js): the kills that make each rank, what a rank adds to a hit and takes
+   off one taken, and the share of its hit points an elite mends a second while unhurt. Modest on
+   purpose: a rank is a tenth, so a three-chevron tank is a tank and three tenths, not a hero -
+   measured in self-play to move the two seats' win rates no further than the seeds already do. */
+var RTS_VET = { kills: [3, 7, 12], dmg: 0.10, armor: 0.10, heal: 0.004 };
 
 /* -------------------------------------------------------------------- IQ --
    RULES.CPP's IQ section is the part worth stealing: each AI behaviour has an IQ level at

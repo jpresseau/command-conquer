@@ -69,6 +69,10 @@ That is the classic build-speed curve (100, 75, 60, 50), and the enemy gets it t
 The enemy is doing the same thing on the other side of the map, and its first attack wave is on a
 timer. A player who does nothing is overrun in about four and a half minutes.
 
+**Veterans.** A unit that makes three kills is promoted, at seven again, and at twelve it is
+elite: each chevron is a tenth more damage dealt and a tenth less taken, and an elite unit mends
+itself in the field while nothing is hitting it. The enemy's veterans are promoted the same way.
+
 **The sea goes out and comes back.** Every six minutes the tide falls from high water to low and
 rises again. As it falls, the water within four cells of every shore dries into sand flats, and a
 strait you could not cross becomes a causeway, while a ship that sailed there cannot. When it

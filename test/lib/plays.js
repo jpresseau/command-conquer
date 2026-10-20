@@ -157,10 +157,12 @@ function builder(o, opt) {
    loses: a submarine every 30 s, not 40; a tank and a rocket every 8 s, not a tank every 15; and
    on the awake missions a base built, the foes starved and an army massed (builder, above). */
 var strong = {
-  /* six raiders from the second minute; the army goes at 22 */
+  /* six raiders, the army going at 22: from the first minute at Regular, the second at Soldier.
+     With veterancy one start time does not win both - from 120 s lost Regular on the clock, from
+     60 s lost Soldier - so the play is measured per level, as each level it offers must be won */
   mirror: function (o) {
     var g = o.g, G = o.G;
-    return builder(o, { secs: 620, target: function () { return g._rtsMTagged(G, 'target')[0]; }, hold: 22, raid: 6, from: 120 });
+    return builder(o, { secs: 620, target: function () { return g._rtsMTagged(G, 'target')[0]; }, hold: 22, raid: 6, from: o.M.lvl === 'regular' ? 60 : 120 });
   },
   /* two economies to starve, so eight raiders from the first minute; the army goes at 32 */
   breachwater: function (o) {
@@ -180,4 +182,4 @@ var strong = {
     });
   }
 };
-module.exports = { plays: plays, strong: strong, sendAll: sendAll };
+module.exports = { plays: plays, strong: strong, sendAll: sendAll, builder: builder };

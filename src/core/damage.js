@@ -20,7 +20,7 @@ function _rtsDamage(tgt, dmg, from, floor) {
       if (!(tgt.type === 'unit' && (rtsUnitDef(tgt.def) || {}).kind === 'infantry')) return;
       tgt.hp = 0; tgt.hitT = 0.18;
       if (from.side) tgt.hurtBy = from.side;
-      if (_rtsHostile(from.side, tgt.side)) from.kills = (from.kills || 0) + 1;
+      if (_rtsHostile(from.side, tgt.side)) { from.kills = (from.kills || 0) + 1; _rtsVetRank(from); }
       if (_rtsHostile(from.side, tgt.side)) _rtsTrigNotify('attacked', tgt, null);
       _rtsKill(tgt);
       return;
@@ -29,6 +29,7 @@ function _rtsDamage(tgt, dmg, from, floor) {
   if (tgt.prone) dmg *= RTS_PRONE_DAMAGE;
   dmg /= _rtsBias(tgt.side).armor;                 /* ArmorBias defends the whole house */
   dmg /= rtsCrateMult(tgt, 'armor');               /* ...and a crate defends one unit */
+  dmg = _rtsVetHit(dmg, from, tgt);                /* ...and a rank: the attacker's and the target's (core/veterancy.js) */
   /* Modify_Damage clamps last. The MinDamage floor is NOT unconditional - it applies to a
      direct hit and to the inner ring of a blast, so two units can never plink zeroes at each
      other, while the edge of an explosion is still allowed to do nothing at all. */
@@ -50,7 +51,7 @@ function _rtsDamage(tgt, dmg, from, floor) {
   if (_rtsCanRetaliate(tgt, from)) { tgt.order = 'attack'; tgt.target = from; }
   if (tgt.hp <= 0) {
     /* Crew.Made_A_Kill: something that has killed becomes a hotter target itself. */
-    if (from && _rtsHostile(from.side, tgt.side)) from.kills = (from.kills || 0) + 1;
+    if (from && _rtsHostile(from.side, tgt.side)) { from.kills = (from.kills || 0) + 1; _rtsVetRank(from); }
     _rtsKill(tgt);
   }
   else if (tgt.type === 'unit' && rtsUnitDef(tgt.def).harvest && tgt.carry > 0
