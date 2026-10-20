@@ -69,8 +69,8 @@ function rtsShowContinue() {
     _rtsAutoClear();
     if (n) { n.hidden = false; n.textContent = 'Your last battle was autosaved by an earlier version of the game and cannot be continued.'; }
   }
-  var a = rtsSaveInfo('auto');
-  b.hidden = !_rtsAutoNewer(a, rtsSaveInfo('save'));
+  var a = rtsSaveInfo('auto'), newest = typeof rtsSlotNewest === 'function' ? rtsSlotNewest() : 'save';
+  b.hidden = !_rtsAutoNewer(a, rtsSaveInfo(newest || 'save'));
   if (!b.hidden) b.innerHTML = 'CONTINUE<small>' + String(a.desc).replace(/[<&]/g, '') + ' · autosaved</small>';
 }
 function rtsContinue() { return rtsLoadGame('auto'); }

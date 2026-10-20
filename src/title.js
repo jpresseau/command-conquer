@@ -86,7 +86,10 @@ function rtsShowResume(){
   var n = document.getElementById('rtsResumeNote');
   if (!r) return;
   if (n) { n.hidden = true; n.textContent = ''; }
-  var info = (typeof rtsSaveInfo === 'function') ? rtsSaveInfo() : null;
+  /* the newest of the player's slots is RESUME BATTLE; the others are listed under it (ui/slots.js) */
+  var newest = typeof rtsSlotNewest === 'function' ? rtsSlotNewest() : null;
+  if (typeof rtsShowSlots === 'function') rtsShowSlots(newest);
+  var info = (typeof rtsSaveInfo === 'function') ? rtsSaveInfo(newest || 'save') : null;
   if (!info) {
     r.hidden = true;
     /* A save this build cannot read is still NEWS. Without this the button just quietly stops
@@ -100,6 +103,7 @@ function rtsShowResume(){
     return;
   }
   r.hidden = false;
+  r.onclick = function () { rtsLoadGame(newest || 'save'); };
   r.innerHTML = 'RESUME BATTLE<small>' + String(info.desc).replace(/[<&]/g, '') + '</small>';
 }
 rtsBuildDiff();

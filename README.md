@@ -43,6 +43,7 @@ that loaded, and saved battles and settings live on the device either way.
 | `WASD` / arrows | Pan the camera (screen edges work too) |
 | Mouse wheel | Zoom |
 | `Esc` | Cancel a placement, repair, sell or an armed weapon · with nothing armed, leave the battle (press it twice) |
+| `Ctrl+S` / 💾 | Save to the slot in use — three slots; 📂 resumes the one that holds a battle, or opens the list to choose and to save elsewhere |
 
 The first time a match selects a unit with an order of its own - a drone, a bomber, a layer, a
 transport - the message line says how to give it, in a phone's words on a phone, and the

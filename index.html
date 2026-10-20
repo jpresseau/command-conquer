@@ -228,6 +228,18 @@
 #rcgRts .rts-pause .speed button{margin:4px 3px;padding:7px 14px;border:1px solid #3a4d63;background:#1d2836;min-width:48px}
 #rcgRts .rts-pause .speed button.on{background:#2e6fd0;border-color:#2e6fd0}
 #rcgRts .rts-pause button.go{margin-top:10px;padding:10px 26px;border:0;background:#2e6fd0;font-weight:600}
+#rcgRts .rts-pause button.slotsbtn{display:block;margin:10px auto 0;padding:8px 18px;border:1px solid #3a4d63;background:#1d2836}
+/* the saved battles (ui/slots.js): three rows over the stage, the sound panel's look */
+#rcgRts .rts-slots{position:absolute;left:50%;top:60px;transform:translateX(-50%);z-index:6;min-width:min(440px,92vw);background:#161c25;border:1px solid #2f3d4e;border-radius:10px;padding:10px 12px 12px;box-shadow:0 18px 60px rgba(0,0,0,.6)}
+#rcgRts .rts-slots[hidden]{display:none}
+#rcgRts .rts-slots .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;letter-spacing:2px}
+#rcgRts .rts-slots .hd .x{background:none;border:0;color:#fff;font-size:16px;cursor:pointer;min-width:40px;min-height:40px}
+#rcgRts .rts-slots .slot{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid #243040}
+#rcgRts .rts-slots .slot .n{opacity:.5;width:14px}
+#rcgRts .rts-slots .slot .d{flex:1;font-size:12px;opacity:.85;min-width:0}
+#rcgRts .rts-slots .slot .d i{font-style:normal;color:#ffd98a}
+#rcgRts .rts-slots .slot button{min-height:40px;padding:6px 12px;border:0;border-radius:6px;color:#fff;background:#2e6fd0;font:600 12px/1 inherit;letter-spacing:.6px;cursor:pointer}
+#rcgRts .rts-slots .slot button.load{background:#3d6b45}
 /* the daily battle's result, a line to copy and post (daily.js) */
 #rcgRts .rts-over .daily{margin:6px 0 14px;padding:10px 12px;border:1px solid #34465c;border-radius:8px;background:#111821}
 #rcgRts .rts-over .daily .dline{font:600 13px/1.4 ui-monospace,Menlo,Consolas,monospace;opacity:1;user-select:all}
@@ -725,6 +737,8 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 #rtsPrev .side{display:flex;flex-direction:column;align-items:flex-start;gap:8px;min-width:0}
 #rtsPrev .side span{font-size:12px;opacity:.6}
 #rtsPrev .side button{padding:8px 14px;min-height:40px;font:600 12px/1 inherit;letter-spacing:.6px;color:#fff;background:#2e6fd0;border:0;border-radius:6px;cursor:pointer}
+#rtsSaves{display:flex;flex-direction:column;gap:8px;margin-top:-10px}
+#rtsSaves[hidden]{display:none}
 #rtsCampList select.lvl{margin-top:4px;padding:5px 6px;font:12px/1 inherit;color:#fff;background:#1d2836;border:1px solid #3a4d63;border-radius:4px}
 @media (hover: none) and (pointer: coarse){ #rtsCampList button, #rtsCampList select.lvl{min-height:40px;padding:10px 22px} }
 /* ...AND ON A TOUCH SCREEN THE STAMP LETS A TAP THROUGH. It takes taps only so its text can be
@@ -757,6 +771,8 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   <!-- The battle the game kept by itself, when it is newer than the player's own: autosave.js -->
   <button type="button" class="go resume" id="rtsContinue" onclick="rtsContinue()" hidden>CONTINUE</button>
   <button type="button" class="go resume" id="rtsResume" onclick="rtsLoadGame()" hidden>RESUME BATTLE</button>
+  <!-- The other filled slots, under the newest: ui/slots.js -->
+  <div id="rtsSaves" hidden></div>
   <!-- One map a day, the same for everyone: daily.js -->
   <button type="button" class="go resume" id="rtsDaily" onclick="rtsDailyStart(this)">DAILY BATTLE<small id="rtsDailyNote"></small></button>
   <!-- Nine authored missions: campaign.js -->
@@ -808,13 +824,13 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
     <dt>Middle-drag</dt><dd>3D: turn the camera (across) and lean it (up / down) — or Alt + right-drag; middle-click faces north again</dd>
     <dt>Q / E, PgUp / PgDn</dt><dd>3D: turn, lean; the compass on the battlefield turns you back to north</dd>
     <dt>P</dt><dd>pause — the battle waits, the camera does not; the paused screen sets the speed, 1×, 1.5× or 2×</dd>
-    <dt>Ctrl+S</dt><dd>save — resume it from this screen later</dd>
+    <dt>Ctrl+S</dt><dd>save to the slot in use — three slots; 📂 chooses among them when more than one holds a battle, and this screen resumes any</dd>
     <dt>Esc</dt><dd>cancel a placement, repair, sell or an armed weapon — with nothing armed, leave the battle (press it twice)</dd>
   </dl>
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">99e1390 · 2026-10-20</div>
+  <div id="rtsBuild" title="build">609681b · 2026-10-20</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -31559,7 +31575,7 @@ function rtsOpen(seed) {
     +       '<button type="button" class="rts-mute" id="rtsReloadBtn" title="Reload for the latest build" onclick="rtsReloadClick()">⟳</button>'
     +       '<button type="button" class="rts-mute" id="rtsPauseBtn" title="Pause (P)" onclick="rtsPauseToggle()">⏸</button>'
     +       '<button type="button" class="rts-mute" id="rtsSaveBtn" title="Save this battle (Ctrl+S)" onclick="rtsSaveGame()">💾</button>'
-    +       '<button type="button" class="rts-mute" id="rtsLoadBtn" title="Resume the saved battle" onclick="rtsLoadGame()">📂</button>'
+    +       '<button type="button" class="rts-mute" id="rtsLoadBtn" title="Resume a saved battle" onclick="rtsLoadClick()">📂</button>'
     +       '<button type="button" class="rts-mute" id="rtsMute" title="Sound on" aria-expanded="false" onclick="rtsSoundPanel()">🔊</button>'
     +       '<button type="button" class="rts-x" id="rtsQuitBtn" title="Leave the battle" onclick="rtsQuitClick()">✕</button>'
     +     '</span></div>'
@@ -32069,6 +32085,72 @@ function rtsSoundPanel(open) {
   if (!P.hidden) _rtsSoundPanelSync();
   var b = document.getElementById('rtsMute');
   if (b) b.setAttribute('aria-expanded', P.hidden ? 'false' : 'true');
+}
+</script>
+<script>/* ui/slots.js - SAVE SLOTS: three of the player's own beside the autosave (rts.save.js RTS_SLOTS).
+
+   One slot was one battle: saving a second threw the first away. Now there are three, and the
+   one in use is the ACTIVE slot (window._RTS_SLOT): 💾 and Ctrl+S save to it, as they always did
+   to the one; loading from a slot makes that slot active, so the next save goes back where the
+   battle came from. 📂 loads the active slot's battle when no other slot holds one, and opens
+   this panel to choose when one does. The panel lists the three with what each holds - SAVE HERE
+   on each, LOAD on the filled ones - and the title's RESUME BATTLE is the newest of them, with
+   the others listed under it. The autosave keeps to its own slot (autosave.js). */
+
+var RTS_MANUAL_SLOTS = ['save', 'save2', 'save3'];
+
+function rtsSlotActive() { return RTS_MANUAL_SLOTS.indexOf(window._RTS_SLOT) >= 0 ? window._RTS_SLOT : 'save'; }
+/* the newest of the player's own slots that this build can read, or null */
+function rtsSlotNewest() {
+  var best = null, when = -1;
+  RTS_MANUAL_SLOTS.forEach(function (k) { var i = rtsSaveInfo(k); if (i && (i.when || 0) > when) { when = i.when || 0; best = k; } });
+  return best;
+}
+function rtsSlotsFilled() { return RTS_MANUAL_SLOTS.filter(function (k) { return !!rtsSaveInfo(k); }); }
+/* 📂: straight to the one battle, or the choice when there is one to make */
+function rtsLoadClick() {
+  var filled = rtsSlotsFilled();
+  if (filled.length <= 1) return rtsLoadGame(filled[0] || rtsSlotActive());
+  rtsSlotsPanel(true);
+  return null;
+}
+function _rtsSlotsBuild() {
+  var root = document.getElementById('rcgRts') || document.body, P = document.createElement('div');
+  P.id = 'rtsSlots'; P.className = 'rts-slots'; P.hidden = true;
+  P.setAttribute('role', 'dialog'); P.setAttribute('aria-label', 'Saved battles');
+  root.appendChild(P);
+  return P;
+}
+function _rtsSlotsSync() {
+  var P = document.getElementById('rtsSlots');
+  if (!P) return;
+  var act = rtsSlotActive(), h = '<div class="hd"><b>SAVED BATTLES</b><button type="button" class="x" onclick="rtsSlotsPanel(false)" title="Close">✕</button></div>';
+  RTS_MANUAL_SLOTS.forEach(function (k, n) {
+    var i = rtsSaveInfo(k), stale = !i && rtsSaveStale(k);
+    h += '<div class="slot' + (k === act ? ' act' : '') + '" data-slot="' + k + '"><span class="n">' + (n + 1) + '</span>'
+      + '<span class="d">' + (i ? String(i.desc).replace(/[<&]/g, '') : stale ? 'a battle from an earlier build' : 'empty') + (k === act ? ' <i>· in use</i>' : '') + '</span>'
+      + '<button type="button" class="save" onclick="rtsSlotSave(\'' + k + '\')">SAVE HERE</button>'
+      + (i ? '<button type="button" class="load" onclick="rtsSlotLoad(\'' + k + '\')">LOAD</button>' : '') + '</div>';
+  });
+  P.innerHTML = h;
+}
+function rtsSlotsPanel(open) {
+  var P = document.getElementById('rtsSlots') || _rtsSlotsBuild();
+  P.hidden = open == null ? !P.hidden : !open;
+  if (!P.hidden) _rtsSlotsSync();
+}
+function rtsSlotSave(k) { window._RTS_SLOT = k; var ok = rtsSaveGame(k); _rtsSlotsSync(); return ok; }
+function rtsSlotLoad(k) { rtsSlotsPanel(false); return rtsLoadGame(k); }
+/* the title: the other filled slots under RESUME BATTLE (title.js rtsShowResume) */
+function rtsShowSlots(newest) {
+  var box = document.getElementById('rtsSaves');
+  if (!box) return;
+  var others = rtsSlotsFilled().filter(function (k) { return k !== newest; });
+  box.hidden = !others.length;
+  box.innerHTML = others.map(function (k) {
+    var i = rtsSaveInfo(k);
+    return '<button type="button" class="go resume" onclick="rtsLoadGame(\'' + k + '\')">RESUME<small>' + String(i.desc).replace(/[<&]/g, '') + ' · slot ' + (RTS_MANUAL_SLOTS.indexOf(k) + 1) + '</small></button>';
+  }).join('');
 }
 </script>
 <script>/* ui/touchcmd.js - the combat commands a phone had no way to give.
@@ -33909,6 +33991,7 @@ function _rtsPauseHTML() {
   return '<div class="rts-pause" id="rtsPause" hidden><div class="card"><h2>PAUSED</h2>'
     + '<p class="s">the battle waits; the camera does not</p>'
     + '<p class="speed">Speed ' + RTS_SPEEDS.map(function (v) { return '<button type="button" data-speed="' + v + '" onclick="rtsSpeedPick(' + v + ')">' + v + '×</button>'; }).join('') + '</p>'
+    + '<button type="button" class="slotsbtn" onclick="rtsSlotsPanel(true)">SAVED BATTLES</button>'   /* ui/slots.js, over this screen */
     + '<button type="button" class="go" onclick="rtsPauseToggle(false)">RESUME</button></div></div>';
 }
 </script>
@@ -35038,6 +35121,8 @@ var RTS_SAVE_INFO = 'rccmd.save1.info';
    speak for it. Nothing written to one slot ever touches the other's keys. */
 var RTS_SLOTS = {
   save: { body: RTS_SAVE_KEY, info: RTS_SAVE_INFO, btn: 'rtsResume', note: 'rtsResumeNote' },
+  save2: { body: 'rccmd.save2', info: 'rccmd.save2.info', btn: 'rtsResume', note: 'rtsResumeNote' },   /* ui/slots.js */
+  save3: { body: 'rccmd.save3', info: 'rccmd.save3.info', btn: 'rtsResume', note: 'rtsResumeNote' },
   auto: { body: 'rccmd.auto1', info: 'rccmd.auto1.info', btn: 'rtsContinue', note: 'rtsAutoNote' }
 };
 function _rtsSlot(slot) { return RTS_SLOTS[slot] || RTS_SLOTS.save; }
@@ -35314,9 +35399,11 @@ function _rtsWriteSlot(slot, text, info) {
     return { ok: false, wroteBody: wroteBody, err: (e && e.name) || 'Error' };
   }
 }
-function rtsSaveGame() {
+/* `slot`: one of the player's own (ui/slots.js); the active one when left out */
+function rtsSaveGame(slot) {
   var G = window._rtsG;
   if (!G) return false;
+  slot = slot || (typeof rtsSlotActive === 'function' ? rtsSlotActive() : 'save');
   /* SERIALISE FIRST, OUTSIDE THE TRY THAT OWNS THE CLEANUP. Both steps could throw and only one
      of them can leave a half-written pair behind, so they must not share a catch: a serialiser
      failure used to run the removeItem pair and DELETE THE SAVE ALREADY ON DISK - a save from
@@ -35331,10 +35418,10 @@ function rtsSaveGame() {
     if (typeof _rtsSfx === 'function') _rtsSfx('deny');
     return false;                                 /* nothing on disk has been touched */
   }
-  var w = _rtsWriteSlot('save', text, info);
+  var w = _rtsWriteSlot(slot, text, info);
   /* NO ROOM, AND THE AUTOSAVE IS WHAT FILLS IT: the player's own save is worth more than the copy
      the game kept by itself, so the autosave makes way and the save is tried once more */
-  if (!w.ok && !w.wroteBody && w.err === 'QuotaExceededError' && typeof _rtsAutoClear === 'function' && _rtsAutoClear()) w = _rtsWriteSlot('save', text, info);
+  if (!w.ok && !w.wroteBody && w.err === 'QuotaExceededError' && typeof _rtsAutoClear === 'function' && _rtsAutoClear()) w = _rtsWriteSlot(slot, text, info);
   if (w.ok) {
     _rtsSay('Battle saved.');
     if (typeof _rtsSfx === 'function') _rtsSfx('click');
@@ -35427,6 +35514,7 @@ function rtsLoadGame(slot) {
      to rtsOpen so it lands after _rtsNewGame and before the renderer bakes the terrain. */
   window._RTS_PENDING_LOAD = body;
   window._RTS_PENDING_SLOT = slot || 'save';      /* the autosave is kept only for its own resume */
+  if (slot && slot !== 'auto') window._RTS_SLOT = slot;   /* the next save goes back where this came from (ui/slots.js) */
   if (document.getElementById('rcgRts')) rtsClose();
   rtsOpen(body.seed);
   return true;
@@ -35530,8 +35618,8 @@ function rtsShowContinue() {
     _rtsAutoClear();
     if (n) { n.hidden = false; n.textContent = 'Your last battle was autosaved by an earlier version of the game and cannot be continued.'; }
   }
-  var a = rtsSaveInfo('auto');
-  b.hidden = !_rtsAutoNewer(a, rtsSaveInfo('save'));
+  var a = rtsSaveInfo('auto'), newest = typeof rtsSlotNewest === 'function' ? rtsSlotNewest() : 'save';
+  b.hidden = !_rtsAutoNewer(a, rtsSaveInfo(newest || 'save'));
   if (!b.hidden) b.innerHTML = 'CONTINUE<small>' + String(a.desc).replace(/[<&]/g, '') + ' · autosaved</small>';
 }
 function rtsContinue() { return rtsLoadGame('auto'); }
@@ -36069,7 +36157,10 @@ function rtsShowResume(){
   var n = document.getElementById('rtsResumeNote');
   if (!r) return;
   if (n) { n.hidden = true; n.textContent = ''; }
-  var info = (typeof rtsSaveInfo === 'function') ? rtsSaveInfo() : null;
+  /* the newest of the player's slots is RESUME BATTLE; the others are listed under it (ui/slots.js) */
+  var newest = typeof rtsSlotNewest === 'function' ? rtsSlotNewest() : null;
+  if (typeof rtsShowSlots === 'function') rtsShowSlots(newest);
+  var info = (typeof rtsSaveInfo === 'function') ? rtsSaveInfo(newest || 'save') : null;
   if (!info) {
     r.hidden = true;
     /* A save this build cannot read is still NEWS. Without this the button just quietly stops
@@ -36083,6 +36174,7 @@ function rtsShowResume(){
     return;
   }
   r.hidden = false;
+  r.onclick = function () { rtsLoadGame(newest || 'save'); };
   r.innerHTML = 'RESUME BATTLE<small>' + String(info.desc).replace(/[<&]/g, '') + '</small>';
 }
 rtsBuildDiff();

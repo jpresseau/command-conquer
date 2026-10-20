@@ -36,6 +36,8 @@
   <!-- The battle the game kept by itself, when it is newer than the player's own: autosave.js -->
   <button type="button" class="go resume" id="rtsContinue" onclick="rtsContinue()" hidden>CONTINUE</button>
   <button type="button" class="go resume" id="rtsResume" onclick="rtsLoadGame()" hidden>RESUME BATTLE</button>
+  <!-- The other filled slots, under the newest: ui/slots.js -->
+  <div id="rtsSaves" hidden></div>
   <!-- One map a day, the same for everyone: daily.js -->
   <button type="button" class="go resume" id="rtsDaily" onclick="rtsDailyStart(this)">DAILY BATTLE<small id="rtsDailyNote"></small></button>
   <!-- Nine authored missions: campaign.js -->
@@ -87,7 +89,7 @@
     <dt>Middle-drag</dt><dd>3D: turn the camera (across) and lean it (up / down) — or Alt + right-drag; middle-click faces north again</dd>
     <dt>Q / E, PgUp / PgDn</dt><dd>3D: turn, lean; the compass on the battlefield turns you back to north</dd>
     <dt>P</dt><dd>pause — the battle waits, the camera does not; the paused screen sets the speed, 1×, 1.5× or 2×</dd>
-    <dt>Ctrl+S</dt><dd>save — resume it from this screen later</dd>
+    <dt>Ctrl+S</dt><dd>save to the slot in use — three slots; 📂 chooses among them when more than one holds a battle, and this screen resumes any</dd>
     <dt>Esc</dt><dd>cancel a placement, repair, sell or an armed weapon — with nothing armed, leave the battle (press it twice)</dd>
   </dl>
   </details>
@@ -264,6 +266,7 @@
 <script>//@@INC:ui/shell.js@@</script>
 <script>//@@INC:ui/gfxstat.js@@</script>
 <script>//@@INC:ui/soundpanel.js@@</script>
+<script>//@@INC:ui/slots.js@@</script>
 <script>//@@INC:ui/touchcmd.js@@</script>
 <script>//@@INC:ui/selhint.js@@</script>
 <script>//@@INC:ui/sidebar.js@@</script>

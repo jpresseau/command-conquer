@@ -187,13 +187,21 @@ screen carrying the save's description. Loading is deliberately *not* on a key �
 current battle away and that deserves a click. The title button is `Get_Savefile_Info`: the header
 is a separate small localStorage record, so listing a save never parses its 300 KB body.
 
+**Three slots** (`src/ui/slots.js`, `RTS_SLOTS` save/save2/save3). One slot was one battle, and a
+second save threw the first away. 💾 and Ctrl+S write the slot *in use* (`window._RTS_SLOT`): slot 1
+until the player chooses another, and the slot a battle was loaded from after that, so a save goes
+back where the battle came from. 📂 loads the one filled slot straight, and with more than one
+opens the SAVED BATTLES panel: three rows, what each holds, the one in use marked, SAVE HERE on
+each and LOAD on the filled ones; the paused screen opens it too. The title's RESUME BATTLE is the newest slot by its own clock
+(`when`), the other filled slots listed under it; a slot from an earlier build counts as neither.
+
 **The autosave** (`src/autosave.js`) is a second slot in the same format, through the same writer
 and reader (`RTS_SLOTS` in `rts.save.js`), under keys of its own: a phone ends a backgrounded page
 without warning, and reloads one that drew too much with no event at all. It is written every
 `RTS_AUTO_EVERY` (60) seconds of battle by the HUD tick, the moment the page is hidden
 (`visibilitychange`, `pagehide`), and on a confirmed ✕ or ⟳ - so neither prompt says "this battle
-is not saved" any more. **CONTINUE** on the title loads it when it is newer than the player's own
-save. A battle that ends clears it, and so does opening any battle but the autosave itself. It
+is not saved" any more. **CONTINUE** on the title loads it when it is newer than the newest of the player's own
+slots. A battle that ends clears it, and so does opening any battle but the autosave itself. It
 never touches the player's save; when storage is full it is the autosave that goes, and the
 player's save is written in its place. One write measured 12-20 ms and 450-730 KB on a desktop
 six minutes into a 1v1 and a four-sided large map.
