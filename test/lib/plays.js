@@ -96,17 +96,21 @@ var plays = {
 };
 /* A PLAYER WHO BUILDS A BASE, for the awake missions: the AI's own placement for each building
    the plan finishes (a second refinery first, then power and guns), units out of what is left
-   over the next building's price, an army held at home until it is `hold` strong with `guard`
-   kept back after, then attack-moved at `target()` and turned on it once there. Measured on
-   Breachwater at Regular: won at 512 s where the intended play loses at 445. */
-function builder(o, secs, target, hold, guard, each) {
+   over the next building's price, and an army held at home until it is `hold` strong (`guard` of
+   it kept back), then attack-moved at `target()` and turned on it once there. And from `from`
+   seconds a RAIDING PARTY - its first `raid` tanks - hunting the foes' harvesters: an opponent
+   repairs only while it has money (aisupers.js, over half its 1000 reserve), so a starved one
+   stops mending its yard. Without the raid the builder held Mirror Line's base at Regular but never
+   broke the yard; with it, it wins both awake missions at Regular and at Soldier. */
+function builder(o, opt) {
   var g = o.g, G = o.G, S = G.sides.player, side = g.rtsHouseSide('player');
   var DEF = side === 'soviet' ? ['flametower', 'tesla'] : ['turret', 'pillbox'];
   var plan = ['refinery', 'power', DEF[0], DEF[0], DEF[1], 'refinery', 'power', DEF[0], DEF[1], DEF[0]];
   var UNITS = side === 'soviet' ? ['tank', 'v2rl', 'rifle'] : ['tank', 'rocket', 'rifle'];
-  var home = g._rtsHas('player', 'yard'), go = false;
+  var home = g._rtsHas('player', 'yard'), go = false, raiders = [], guard = opt.guard || 4;
   function nextCost() { return plan.length && !S.q.struct && !S.ready ? g._rtsCostOf('player', g.rtsStructDef(plan[0])) : 0; }
-  return play(o, secs, function (i) {
+  function harvs() { return G.ents.filter(function (e) { return !e.dead && g._rtsHostile('player', e.side) && e.type === 'unit' && g.rtsUnitDef(e.def).harvest; }); }
+  return play(o, opt.secs, function (i) {
     /* placed, the slot is cleared by the caller - as the AI's own loop does (aisupers.js) */
     if (S.ready && i % 30 === 0) { var k = S.ready; if (g._rtsAIAs('player', function () { return g._rtsAIPlace(k); })) { S.ready = null; S.readyPaid = null; } }
     if (!S.ready && !S.q.struct && plan.length && i % 60 === 3) { var nx = plan[0]; if (g._rtsWhyLocked('player', nx)) plan.shift(); else if (g._rtsQueue('player', nx)) plan.shift(); }
@@ -115,29 +119,43 @@ function builder(o, secs, target, hold, guard, each) {
       if (!S.q[c] && g.rtsMoney(S) - nextCost() >= cost) g._rtsQueue('player', u);
     });
     if (i % 600 !== 5) return;
-    var f = g._rtsCampFighters('player'), y = target();
-    if (!go && f.length >= hold) go = true;
-    if (go && f.length < guard + 2) go = false;                      /* spent: gather again */
-    f.sort(function (a, b) { return a.id - b.id; });
-    f.forEach(function (u, n) {
+    var f = g._rtsCampFighters('player'), y = opt.target();
+    raiders = raiders.filter(function (u) { return !u.dead; });
+    if (opt.raid && G.t >= opt.from) f.forEach(function (u) { if (raiders.length < opt.raid && u.def === 'tank' && raiders.indexOf(u) < 0) raiders.push(u); });
+    var hv = raiders.length ? harvs() : [];
+    raiders.forEach(function (u) {
+      if (u.target && !u.target.dead && hv.indexOf(u.target) >= 0) return;
+      var best = null, bd = 1e9;
+      hv.forEach(function (h) { var d = Math.hypot(h.x - u.x, h.z - u.z); if (d < bd) { bd = d; best = h; } });
+      if (best) g._rtsOrderAttack(u, best);
+    });
+    var army = f.filter(function (u) { return raiders.indexOf(u) < 0; });
+    if (!go && army.length >= opt.hold) go = true;
+    if (go && army.length < guard + 2) go = false;                    /* spent: gather again */
+    army.sort(function (a, b) { return a.id - b.id; });
+    army.forEach(function (u, n) {
       if (u.target && !u.target.dead) return;
       if (go && y && n >= guard) { if (Math.hypot(u.x - y.x, u.z - y.z) > 8 * g.RTS_TILE) g._rtsOrderMove(u, y.x, y.z, true); else g._rtsOrderAttack(u, y); }
       else if (home && !home.dead) g._rtsOrderMove(u, home.x + (u.id % 5 - 2) * 3, home.z + ((u.id / 5 | 0) % 3 - 1) * 3, true);
     });
-    if (each) each(i);                                               /* on the army's ticks, after it */
+    if (opt.each) opt.each(i);                                       /* on the army's ticks, after it */
   });
 }
 
 /* The stronger plays that win a mission at the `top` above its own level, where the intended one
    loses: a submarine every 30 s, not 40; a tank and a rocket every 8 s, not a tank every 15; and
-   a base built and an army massed (builder, above). */
+   on the awake missions a base built, the foes starved and an army massed (builder, above). */
 var strong = {
+  /* six raiders from the second minute; the army goes at 22 */
+  mirror: function (o) {
+    var g = o.g, G = o.G;
+    return builder(o, { secs: 620, target: function () { return g._rtsMTagged(G, 'target')[0]; }, hold: 22, raid: 6, from: 120 });
+  },
+  /* two economies to starve, so eight raiders from the first minute; the army goes at 32 */
   breachwater: function (o) {
     var g = o.g, G = o.G;
-    return builder(o, 610, function () { return g._rtsMTagged(G, 'y1')[0] || g._rtsMTagged(G, 'y2')[0]; }, 24, 6, function (i) {
-      var y2 = g._rtsMTagged(G, 'y2')[0] || g._rtsMTagged(G, 'y1')[0];
-      if (y2 && i % 6000 === 5) g._rtsAllyCommand('attack', y2.x, y2.z);
-    });
+    return builder(o, { secs: 620, target: function () { return g._rtsMTagged(G, 'y1')[0] || g._rtsMTagged(G, 'y2')[0]; }, hold: 32, raid: 8, from: 60,
+      each: function (i) { var y2 = g._rtsMTagged(G, 'y2')[0] || g._rtsMTagged(G, 'y1')[0]; if (y2 && i % 6000 === 5) g._rtsAllyCommand('attack', y2.x, y2.z); } });
   },
   channel: function (o) {
     return play(o, 490, function (i) { if (i % 1800 === 0) o.g._rtsQueue('player', 'sub'); });

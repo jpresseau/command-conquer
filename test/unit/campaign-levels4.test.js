@@ -1,2 +1,2 @@
-/* THE CAMPAIGN AT EVERY LEVEL, part 4 of 4 (test/lib/levels.js has the whole story). */
-require('../lib/report.js')(require('../lib/levels.js')(3, 4));
+/* THE CAMPAIGN AT EVERY LEVEL, part 4 of 5 (test/lib/levels.js has the whole story). */
+require('../lib/report.js')(require('../lib/levels.js')(3, 5));
