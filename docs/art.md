@@ -139,14 +139,17 @@ Sprite memory 0.8 MB → 2.2 MB (the extra is transparent margin; the renderer d
 centred, so margin is invisible and free at draw time). Frame time 1.38 ms → 1.32 ms across 30
 frames on a populated field — unchanged. No simulation code is touched.
 
-### Still open on the art
+### What stayed open on the sprites, and why it no longer matters
 
-Not done yet, in the order they are worth doing: the shading ramp is narrow and the whole player
-palette sits in one mid-tone navy band, where the reference separates a bright top, a mid front, a
-near-black side and a hard dark outline; there is no yaw on structures, so an axis-aligned box
-shows top and front only and never a third face (`rts.r3d.js` documents this and says form should
-come from cylinders, chamfers and sloped roofs — the buildings mostly still don't); and the
-per-building silhouette work (refinery dock ramp, factory chevron apron) is untouched.
+Three things were next for the baked sprites, in the order they were worth doing: the shading
+ramp was narrow and the whole player palette sat in one mid-tone navy band, where the reference
+separates a bright top, a mid front, a near-black side and a hard dark outline; there was no yaw
+on structures, so an axis-aligned box showed top and front only and never a third face; and the
+per-building silhouette work (refinery dock ramp, factory chevron apron) was untouched. None of
+it was done, and none of it is owed any more: the battlefield is drawn in 3D (`src/render3d/`,
+where buildings have a third face and lit forms of their own), and the baker's unit and building
+sheets survive only as the sidebar's cameos (`src/render/icons.js`), where a shading ramp does not
+show at cameo size.
 
 ## The units, and the first piece of real reference art
 

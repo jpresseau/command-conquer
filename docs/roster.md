@@ -318,7 +318,7 @@ How a mine behaves (`core/mines.js`):
 - A side sees only its own mines: a dark disc ringed in its house colour on the overlay,
   blinking until armed.
 
-The opponent does not build one yet: where to mine is a plan, like the engineer's capture.
+The opponent builds one too, to mine the approach to its base (`core/aimines.js`, and below).
 
 ### Verified
 
@@ -378,8 +378,8 @@ It is the third movement domain, `'hover'` (`core/grid.js`):
 - It wakes over water and leaves no treads anywhere.
 
 On seed 4242 the gap a tank drives 407 units round is a straight 32 for the hovercraft, and a
-squad of five boards on one bank and is put down on the other. The opponent does not build it:
-a landing is a plan.
+squad of five boards on one bank and is put down on the other. The opponent builds it too, for a
+raid off the water: *The opponent uses the new vehicles*, below (`core/aihover.js`).
 
 ### Verified
 
