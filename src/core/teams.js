@@ -401,6 +401,10 @@ function _rtsTeamsTick(dt) {
     }
 
     var full = (total >= desired);
+    /* THE ORE IS GONE (core/ai.js _rtsOreGone): a team short of members goes as it is, the moment
+       it has a gun - the units it waits for will never be bought. Measured without this, a
+       stripped 2v2 left six half-crewed teams standing in each base, holding the cap. */
+    if (!full && total > 0 && _rtsOreGone() && _rtsTeamLeader(t)) full = true;
     if (full) t.hasBeen = true;
     /* A TEAM THAT NEVER FILLS IS WORSE THAN NO TEAM, and until now nothing ever wrote one off.
        Below full strength it does not march, so its script never runs; meanwhile it holds a

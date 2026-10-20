@@ -344,6 +344,15 @@ function _rtsAIAttack(urgency) {
   /* AttackInterval is deliberately randomised over a 4x spread in the original, so waves
      never arrive on a metronome you can set your watch by. */
   G.ai.next = RTS_WAVE_EVERY * _rtsBias(_rtsAIOn).build * (0.5 + _rtsRnd() * 1.5);
+  /* THE ORE IS GONE (core/ai.js _rtsOreGone): said once, to the player it is coming for, and from
+     then on every wave is _rtsTeamMaybeRaise's - the garrison too, and a hunt for the rest. */
+  if (_rtsOreGone()) {
+    if (!G.ai.goneSaid) {
+      G.ai.goneSaid = true;
+      if (_rtsHostile(_rtsAIOn, 'player')) _rtsSay('The ore is gone: ' + rtsArmyName(_rtsAIOn) + ' is coming with everything it has.');
+    }
+    return _rtsTeamMaybeRaise();
+  }
   if (!_rtsHas(_rtsAIFoe(), 'yard') && !_rtsHas(_rtsAIFoe(), 'refinery') && !_rtsHas(_rtsAIFoe(), 'power')) return false;
 
   /* Raise a TEAM rather than shoving a share of everything idle at the nearest building.
@@ -366,5 +375,28 @@ function _rtsAIAttack(urgency) {
   _rtsSay(rtsArmyName(_rtsAIOn) + ' ' + pick.name + ' team inbound!');
   if (typeof _rtsSfx === 'function') _rtsSfx('alert');
   return true;
+}
+/* THE ORE IS GONE (core/ai.js _rtsOreGone), every tick: ONE idle fighter on land attack-moves on
+   the foe's base - its yard, or what is left standing - a cell beside it, not on it (_rtsPathFor
+   hands back one waypoint at an unreachable goal, and a building's own cell is one). One a tick,
+   and whoever is left without an order is simply picked again on a later tick: an order can come
+   back empty - watched, a rifleman's first hunt order was dropped (no path from where he stood
+   that tick) and the same order held three seconds later - and sent once from the five-second
+   decision, five riflemen were still at home ninety seconds on. A team may still take a hunter. */
+function _rtsAIHuntTick() {
+  var G = window._rtsG, foe = _rtsAIFoe(), at = null, keys = ['yard', 'refinery', 'power', 'factory', 'barracks'];
+  for (var k = 0; k < keys.length && !at; k++) at = _rtsHas(foe, keys[k]);
+  if (!at) return false;
+  for (var i = 0; i < G.ents.length; i++) {
+    var u = G.ents[i], d;
+    if (u.dead || u.side !== _rtsAIOn || u.type !== 'unit' || u.sqd != null) continue;
+    d = rtsUnitDef(u.def);
+    if (d.harvest || (d.kind !== 'infantry' && d.kind !== 'vehicle') || !_rtsMission(u).recruitable) continue;
+    if (u.order === 'amove' || u.order === 'attack') continue;
+    var p = _rtsApproach(u, at);
+    _rtsOrderMove(u, p.x, p.z, true);
+    return u.order === 'amove';
+  }
+  return false;
 }
 

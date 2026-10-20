@@ -245,6 +245,9 @@ same impossible route every tick or every second for the rest of the match. The 
 search is bounded to `RTS_AI_HOVER.near` rings (`_rtsLandingSpot(h, rings)`), since it would
 take no beach further out.
 
+**When the ore is gone** the opponent stops keeping a garrison and comes with everything it has:
+`docs/core-economy.md`, *When the ore is gone*.
+
 ## The opponent's production ceiling
 
 **MINE, not a port, and a fix for a measured defect.** By five minutes on hard the opponent

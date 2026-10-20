@@ -174,4 +174,16 @@ function _rtsPowerDamage(dt) {
     }
   }
 }
-
+/* How many cells still hold ore or gems - the whole map, for every seat, counted once a tick.
+   Under RTS_AI.oreGone the economy is over for everyone: no harvester fills again and no
+   refinery pays, so the opponent stops holding a garrison back (core/ai.js _rtsOreGone). */
+var _RTS_ORE_LEFT = { g: null, t: -1, n: 0 };
+function _rtsOreLeft() {
+  var G = window._rtsG;
+  if (!G) return 0;
+  if (_RTS_ORE_LEFT.g === G && _RTS_ORE_LEFT.t === G.t) return _RTS_ORE_LEFT.n;
+  var n = 0;
+  for (var i = 0; i < G.scrap.length; i++) if (G.scrap[i] > 0) n++;
+  _RTS_ORE_LEFT.g = G; _RTS_ORE_LEFT.t = G.t; _RTS_ORE_LEFT.n = n;
+  return n;
+}

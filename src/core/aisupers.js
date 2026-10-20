@@ -87,6 +87,7 @@ function _rtsUpdateAIFor(dt) {
   /* an ally under the player's order holds its own war while it stands (core/allycmd.js) */
   var held = _rtsAIOn === 'ally' && _rtsAllyCmdTick(dt);
   if (!held) _rtsTeamsTick(dt);
+  if (!held && _rtsOreGone()) _rtsAIHuntTick();   /* ...and the ore gone, everyone goes - core/missions.js */
   if (!held) _rtsEscortsTick(dt);   /* the spare army goes with the teams - core/escorts.js */
   _rtsAIMendTick(dt);           /* ...and the battered go home to the depot - core/aimend.js */
   _rtsAIMinesTick(dt);          /* ...and the layer mines the approach - core/aimines.js */

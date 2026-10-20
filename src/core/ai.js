@@ -255,8 +255,17 @@ function _rtsAIStateTick(S) {
   G.ai.state = rtsMoney(S) < 25 ? RTS_STATE.BROKE : RTS_STATE.BUILDUP;
 }
 function _rtsAICanEarn() {
-  return !!(_rtsHas(_rtsAIOn, 'refinery') && _rtsAIHarvesters());
+  return !!(_rtsHas(_rtsAIOn, 'refinery') && _rtsAIHarvesters() && !_rtsOreGone());
 }
+/* THE ORE IS GONE: fewer than RTS_AI.oreGone cells of it left on the whole map (core/ore.js
+   _rtsOreLeft). Measured on a 2v2 large map, 220,000 ore at the start was none at fifteen
+   minutes, and every seat then sat on its army for the next fifteen: broke, "able to earn" by
+   the test above, its garrison held back for a future that was not coming. From here no seat
+   will be richer later, so a garrison guards nothing worth the men: waves come every
+   RTS_AI.goneWave seconds with nobody held back (core/missions.js _rtsAIAttack), the team
+   ceiling is the whole army (core/teams.js _rtsTeamCap), and an army no team type can crew
+   hunts as it is. The match ends one way or the other, which is the point. */
+function _rtsOreGone() { return _rtsOreLeft() < RTS_AI.oreGone; }
 function _rtsAIHarvesters() {
   var G = window._rtsG, n = 0;
   for (var i = 0; i < G.ents.length; i++) {
@@ -309,7 +318,8 @@ function _rtsAIUrgency(S) {
   u.fireSale = U.NONE;
   if (!attacked && _rtsCount(_rtsAIOn, 'struct') > 0 && !_rtsAIHasFactory()) u.fireSale = U.CRITICAL;
 
-  /* Check_Attack */
+  /* Check_Attack - and the ore gone, the next wave is at most goneWave seconds away (_rtsOreGone) */
+  if (_rtsOreGone()) G.ai.next = Math.min(G.ai.next, RTS_AI.goneWave);
   u.attack = U.NONE;
   if (G.t > 60 && G.ai.next <= 0) u.attack = attacked ? U.LOW : U.CRITICAL;
 
