@@ -149,7 +149,9 @@ function _rtsLoop(prime) {
 
        Split, the sim can die without taking the picture with it, and the sentence explaining
        what happened reaches the screen because the code that paints it still runs. */
-    if (dt > 0 && prime !== true && !U.simDead) {
+    /* ...and how many: the game speed's ticks, none while paused (ui/pause.js) */
+    var nTicks = (dt > 0 && prime !== true && !U.simDead) ? _rtsSpeedTicks(U, rtsSpeedGet()) : 0;
+    for (var ti = 0; ti < nTicks && !U.simDead; ti++) {
       try {
         _rtsTick(dt);
         U.tickErrs = 0;

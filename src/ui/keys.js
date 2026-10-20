@@ -42,6 +42,7 @@ function _rtsKeyDown(e) {
   if ((k === 's' || k === 'S') && (e.ctrlKey || e.metaKey)) { rtsSaveGame(); e.preventDefault(); return; }
   /* N walks the army, shift+N walks it backwards. */
   if (k === 'n' || k === 'N') { _rtsCycleObject(e.shiftKey ? -1 : 1); e.preventDefault(); }
+  if (k === 'p' || k === 'P') { rtsPauseToggle(); e.preventDefault(); return; }   /* ui/pause.js */
   /* U unloads every selected transport that is carrying anything - here and now, wherever it is
      standing. The loop is core/transport.js _rtsUnloadSelected, which the sidebar's UNLOAD button
      gives too (a phone has no U), and which says so when a craft in open water has nowhere to

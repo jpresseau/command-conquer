@@ -44,7 +44,7 @@ var SHAPES = [
    buried, overflowing the bar, under 40px for a finger, pushing the page sideways - runs over
    this list at all eight shapes. A fifth control on a 360px bar is exactly the case the flex
    group was built for, and this is where that claim gets tested rather than asserted. */
-var CONTROLS = ['#rtsReloadBtn', '#rtsSaveBtn', '#rtsLoadBtn', '#rtsMute', '#rcgRts .rts-x'];
+var CONTROLS = ['#rtsReloadBtn', '#rtsPauseBtn', '#rtsSaveBtn', '#rtsLoadBtn', '#rtsMute', '#rcgRts .rts-x'];
 
 (async function () {
   var srv = await serve();

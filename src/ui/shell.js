@@ -48,6 +48,7 @@ function rtsOpen(seed) {
        visible, and keeps it as far as the group allows from the ✕, which is the control it
        would be worst to confuse it with: both end the match, and only one of them is meant to. */
     +       '<button type="button" class="rts-mute" id="rtsReloadBtn" title="Reload for the latest build" onclick="rtsReloadClick()">⟳</button>'
+    +       '<button type="button" class="rts-mute" id="rtsPauseBtn" title="Pause (P)" onclick="rtsPauseToggle()">⏸</button>'
     +       '<button type="button" class="rts-mute" id="rtsSaveBtn" title="Save this battle (Ctrl+S)" onclick="rtsSaveGame()">💾</button>'
     +       '<button type="button" class="rts-mute" id="rtsLoadBtn" title="Resume the saved battle" onclick="rtsLoadGame()">📂</button>'
     +       '<button type="button" class="rts-mute" id="rtsMute" title="Sound on" aria-expanded="false" onclick="rtsSoundPanel()">🔊</button>'
@@ -62,6 +63,7 @@ function rtsOpen(seed) {
     /* the 3D camera's compass: its needle points north, and a tap turns the view back to it */
     +   '<button type="button" id="rtsCompass" title="Face north (middle-click)" onclick="_rtsOrbitReset()" style="display:none"><i>N</i></button>'
     +   '<div class="rts-msg" id="rtsMsg"></div>'
+    +   _rtsPauseHTML()                                       /* the paused screen: ui/pause.js */
     +   '<div class="rts-goals" id="rtsGoals" hidden></div>'
     +   '<div class="rts-over" id="rtsOver"></div>'
     + '</div>'
@@ -150,6 +152,7 @@ function rtsOpen(seed) {
   if (dl) { dl.textContent = dd.name; dl.title = 'Difficulty: ' + dd.name + ' (IQ ' + dd.iq + '/' + RTS_IQ.max + ') — ' + dd.desc; }
   _rtsSyncTabs();
   _rtsBuildList();
+  _rtsPauseSync();                                           /* the ⏸ shows the speed it plays at */
   _rtsBindInput();
   document.addEventListener('keydown', _rtsKeyDown, true);
   document.addEventListener('keyup', _rtsKeyUp, true);
