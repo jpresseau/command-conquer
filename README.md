@@ -58,12 +58,12 @@ and once it is gone the opponent comes with everything it has - so spend while i
 tree is the classic shape:
 
 ```
-Power Plant ──┬── Ore Refinery ─── War Factory ── vehicles + harvesters
+Power Plant ──┬── Ore Refinery ─── Vehicle Works ── vehicles + harvesters
               └── Barracks ──┬── infantry
                              └── Gun Turret
 ```
 
-A second **War Factory** makes vehicles come out faster — still one queue, but it runs at 1.33×,
+A second **Vehicle Works** makes vehicles come out faster — still one queue, but it runs at 1.33×,
 and a third and fourth take it to 1.67× and 2×. A second **Barracks** does the same for infantry.
 That is the classic build-speed curve (100, 75, 60, 50), and the enemy gets it too.
 

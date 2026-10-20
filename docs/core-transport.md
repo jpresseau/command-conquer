@@ -223,13 +223,16 @@ boxes, so a diagonal "bar" is a box that is long in both axes — a square.** Fo
 into a solid diamond. Two crossed bars along x and z are genuine thin bars, and the fuselage and
 tail read through the gaps.
 
-### What is not done
+### What was left for later
 
-**The AI does not build helipads or helicopters.** Air is player-only for now. Teaching
-`_rtsAIWants` a new branch of the tech tree is a separate change with its own ladder run, and
-bolting it on untested would be exactly the kind of thing the rest of this file argues against.
+**At the time the AI built no helipads or helicopters**, and air was player-only: teaching
+`_rtsAIWants` a new branch of the tech tree was a separate change with its own ladder run, and
+bolting it on untested would have been exactly the kind of thing the rest of this file argues
+against. It has since been made (`src/rules/ai.js`): `helipad` and `afld` are in the base plan,
+and the team mix has an `air` line - Attack Helis, MiGs and Yaks - bought only from a high bank, so
+a poor opponent still buys tanks rather than an aircraft that dies with no pad to return to.
 
 ### Measuring
 
-Ladder unchanged at **329 / 246 / 214** — as expected, since the AI does not field aircraft. The
+Ladder unchanged at **329 / 246 / 214** — as expected, since the AI did not field aircraft then. The
 flight suite is 13 assertions; `clip.js` is 1248 frames; the save suite is 31 and still green.
