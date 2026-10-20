@@ -211,6 +211,17 @@
 #rcgRts .rts-over button{margin:4px;padding:8px 18px;border:0;border-radius:6px;background:#2e6fd0;color:#fff;
   font-weight:600;cursor:pointer}
 #rcgRts .rts-over button:hover{background:#3d84ee}
+/* the paused screen (ui/pause.js): the end card's look, the battle dimmed behind it */
+#rcgRts .rts-pause{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(6,9,14,.6);z-index:5}
+#rcgRts .rts-pause[hidden]{display:none}
+#rcgRts .rts-pause .card{background:#161c25;border:1px solid #2f3d4e;border-radius:10px;padding:22px 30px;text-align:center;box-shadow:0 18px 60px rgba(0,0,0,.6)}
+#rcgRts .rts-pause h2{margin:0 0 6px;font-size:26px;letter-spacing:4px;color:#ffd98a}
+#rcgRts .rts-pause p{margin:4px 0;opacity:.85}
+#rcgRts .rts-pause p.s{font-size:12px;opacity:.6;margin-bottom:10px}
+#rcgRts .rts-pause button{min-height:40px;border-radius:6px;color:#fff;cursor:pointer}
+#rcgRts .rts-pause .speed button{margin:4px 3px;padding:7px 14px;border:1px solid #3a4d63;background:#1d2836;min-width:48px}
+#rcgRts .rts-pause .speed button.on{background:#2e6fd0;border-color:#2e6fd0}
+#rcgRts .rts-pause button.go{margin-top:10px;padding:10px 26px;border:0;background:#2e6fd0;font-weight:600}
 /* the daily battle's result, a line to copy and post (daily.js) */
 #rcgRts .rts-over .daily{margin:6px 0 14px;padding:10px 12px;border:1px solid #34465c;border-radius:8px;background:#111821}
 #rcgRts .rts-over .daily .dline{font:600 13px/1.4 ui-monospace,Menlo,Consolas,monospace;opacity:1;user-select:all}
@@ -780,13 +791,14 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
     <dt>+ / −</dt><dd>zoom in / out; hold to keep going</dd>
     <dt>Middle-drag</dt><dd>3D: turn the camera (across) and lean it (up / down) — or Alt + right-drag; middle-click faces north again</dd>
     <dt>Q / E, PgUp / PgDn</dt><dd>3D: turn, lean; the compass on the battlefield turns you back to north</dd>
+    <dt>P</dt><dd>pause — the battle waits, the camera does not; the paused screen sets the speed, 1×, 1.5× or 2×</dd>
     <dt>Ctrl+S</dt><dd>save — resume it from this screen later</dd>
     <dt>Esc</dt><dd>cancel a placement, repair, sell or an armed weapon — with nothing armed, leave the battle (press it twice)</dd>
   </dl>
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">6bf7313 · 2026-10-20</div>
+  <div id="rtsBuild" title="build">8ed5b69 · 2026-10-20</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -31339,6 +31351,7 @@ function rtsOpen(seed) {
        visible, and keeps it as far as the group allows from the ✕, which is the control it
        would be worst to confuse it with: both end the match, and only one of them is meant to. */
     +       '<button type="button" class="rts-mute" id="rtsReloadBtn" title="Reload for the latest build" onclick="rtsReloadClick()">⟳</button>'
+    +       '<button type="button" class="rts-mute" id="rtsPauseBtn" title="Pause (P)" onclick="rtsPauseToggle()">⏸</button>'
     +       '<button type="button" class="rts-mute" id="rtsSaveBtn" title="Save this battle (Ctrl+S)" onclick="rtsSaveGame()">💾</button>'
     +       '<button type="button" class="rts-mute" id="rtsLoadBtn" title="Resume the saved battle" onclick="rtsLoadGame()">📂</button>'
     +       '<button type="button" class="rts-mute" id="rtsMute" title="Sound on" aria-expanded="false" onclick="rtsSoundPanel()">🔊</button>'
@@ -31353,6 +31366,7 @@ function rtsOpen(seed) {
     /* the 3D camera's compass: its needle points north, and a tap turns the view back to it */
     +   '<button type="button" id="rtsCompass" title="Face north (middle-click)" onclick="_rtsOrbitReset()" style="display:none"><i>N</i></button>'
     +   '<div class="rts-msg" id="rtsMsg"></div>'
+    +   _rtsPauseHTML()                                       /* the paused screen: ui/pause.js */
     +   '<div class="rts-goals" id="rtsGoals" hidden></div>'
     +   '<div class="rts-over" id="rtsOver"></div>'
     + '</div>'
@@ -31441,6 +31455,7 @@ function rtsOpen(seed) {
   if (dl) { dl.textContent = dd.name; dl.title = 'Difficulty: ' + dd.name + ' (IQ ' + dd.iq + '/' + RTS_IQ.max + ') — ' + dd.desc; }
   _rtsSyncTabs();
   _rtsBuildList();
+  _rtsPauseSync();                                           /* the ⏸ shows the speed it plays at */
   _rtsBindInput();
   document.addEventListener('keydown', _rtsKeyDown, true);
   document.addEventListener('keyup', _rtsKeyUp, true);
@@ -33530,6 +33545,7 @@ function _rtsKeyDown(e) {
   if ((k === 's' || k === 'S') && (e.ctrlKey || e.metaKey)) { rtsSaveGame(); e.preventDefault(); return; }
   /* N walks the army, shift+N walks it backwards. */
   if (k === 'n' || k === 'N') { _rtsCycleObject(e.shiftKey ? -1 : 1); e.preventDefault(); }
+  if (k === 'p' || k === 'P') { rtsPauseToggle(); e.preventDefault(); return; }   /* ui/pause.js */
   /* U unloads every selected transport that is carrying anything - here and now, wherever it is
      standing. The loop is core/transport.js _rtsUnloadSelected, which the sidebar's UNLOAD button
      gives too (a phone has no U), and which says so when a craft in open water has nowhere to
@@ -33613,6 +33629,79 @@ function _rtsKeyUp(e) {
   U.keys[(e.key || '').toLowerCase()] = false;
   _rtsZoomKeyUp(e, U);
   if (e.key === 'a' || e.key === 'A') U.attackMove = false;
+}
+</script>
+<script>/* ui/pause.js - PAUSE, and the GAME SPEED. Part of rts.ui, which owns the DOM.
+
+   PAUSE stops the simulation and nothing else: the loop keeps drawing, so the camera still pans,
+   zooms and turns, the radar and the readouts stay live, and a player can look round a frozen
+   battle. P or the ⏸ in the top bar; the paused screen's RESUME, or P again, goes on. The flag is
+   on the UI state (U.paused), never on G, so a save never carries it and a load never opens
+   paused. A battle that is over cannot be paused: its end card is already up. Pausing writes the
+   autosave, because on a phone a paused battle is usually one about to be left.
+
+   SPEED runs the simulation more than once a frame - 1x one tick, 2x two, 1.5x three every two
+   frames - with each tick given the frame's own dt (ui/camera.js, _rtsSpeedTicks). A bigger dt
+   would have been simpler and wrong: the tick is tuned at one step size, and a few things in it
+   (unit separation, the pathfinder's re-plan timers) are not linear in it. Kept in localStorage,
+   so it is the player's and not the battle's; the opponent plays at the same speed, so it
+   changes how long a battle takes and nothing about who wins it. */
+
+var RTS_SPEED_LS = 'bw.speed';
+var RTS_SPEEDS = [1, 1.5, 2];
+
+function rtsSpeedGet() {
+  if (window._RTS_SPEED) return window._RTS_SPEED;
+  var v = 1;
+  try { v = +window.localStorage.getItem(RTS_SPEED_LS) || 1; } catch (e) { v = 1; }
+  return (window._RTS_SPEED = RTS_SPEEDS.indexOf(v) >= 0 ? v : 1);
+}
+/* one of RTS_SPEEDS, or false and nothing changes */
+function rtsSpeedSet(v) {
+  v = +v;
+  if (RTS_SPEEDS.indexOf(v) < 0) return false;
+  window._RTS_SPEED = v;
+  try { window.localStorage.setItem(RTS_SPEED_LS, String(v)); } catch (e) {}
+  return true;
+}
+/* How many simulation ticks this frame runs: the speed's whole part, and its fraction carried
+   over on the UI state until it makes another. Paused, none - and nothing accumulates, so the
+   first frame after a pause is an ordinary one, not a catch-up. */
+function _rtsSpeedTicks(U, speed) {
+  if (!U || U.paused) return 0;
+  U.speedAcc = (U.speedAcc || 0) + (speed || 1);
+  var n = Math.floor(U.speedAcc + 1e-9);
+  U.speedAcc -= n;
+  return n;
+}
+function rtsPauseToggle(on) {
+  var U = window._rtsUI, G = window._rtsG;
+  if (!U || !G || G.over) return false;
+  U.paused = on === undefined ? !U.paused : !!on;
+  if (U.paused && typeof _rtsAutoSave === 'function') _rtsAutoSave();
+  _rtsPauseSync();
+  if (typeof _rtsSfx === 'function') _rtsSfx('click');
+  return U.paused;
+}
+function rtsSpeedPick(v) { if (rtsSpeedSet(v)) _rtsPauseSync(); }
+/* the screen, the button and the speed choice, from the state */
+function _rtsPauseSync() {
+  var U = window._rtsUI, o = document.getElementById('rtsPause'), b = document.getElementById('rtsPauseBtn');
+  if (!o) return;
+  var on = !!(U && U.paused), sp = rtsSpeedGet();
+  if (o.hidden === on) o.hidden = !on;
+  if (b) {
+    var txt = on ? '▶' : (sp === 1 ? '⏸' : sp + '×');
+    if (b.textContent !== txt) b.textContent = txt;
+    b.title = on ? 'Resume (P)' : 'Pause (P)' + (sp === 1 ? '' : ' — playing at ' + sp + '×');
+  }
+  [].forEach.call(o.querySelectorAll('button[data-speed]'), function (x) { x.className = +x.getAttribute('data-speed') === sp ? 'on' : ''; });
+}
+function _rtsPauseHTML() {
+  return '<div class="rts-pause" id="rtsPause" hidden><div class="card"><h2>PAUSED</h2>'
+    + '<p class="s">the battle waits; the camera does not</p>'
+    + '<p class="speed">Speed ' + RTS_SPEEDS.map(function (v) { return '<button type="button" data-speed="' + v + '" onclick="rtsSpeedPick(' + v + ')">' + v + '×</button>'; }).join('') + '</p>'
+    + '<button type="button" class="go" onclick="rtsPauseToggle(false)">RESUME</button></div></div>';
 }
 </script>
 <script>/* ui/select.js - selection (band, double-click, hotkeys, cycling), right-click orders and
@@ -34571,7 +34660,9 @@ function _rtsLoop(prime) {
 
        Split, the sim can die without taking the picture with it, and the sentence explaining
        what happened reaches the screen because the code that paints it still runs. */
-    if (dt > 0 && prime !== true && !U.simDead) {
+    /* ...and how many: the game speed's ticks, none while paused (ui/pause.js) */
+    var nTicks = (dt > 0 && prime !== true && !U.simDead) ? _rtsSpeedTicks(U, rtsSpeedGet()) : 0;
+    for (var ti = 0; ti < nTicks && !U.simDead; ti++) {
       try {
         _rtsTick(dt);
         U.tickErrs = 0;

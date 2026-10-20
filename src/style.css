@@ -200,6 +200,17 @@
 #rcgRts .rts-over button{margin:4px;padding:8px 18px;border:0;border-radius:6px;background:#2e6fd0;color:#fff;
   font-weight:600;cursor:pointer}
 #rcgRts .rts-over button:hover{background:#3d84ee}
+/* the paused screen (ui/pause.js): the end card's look, the battle dimmed behind it */
+#rcgRts .rts-pause{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(6,9,14,.6);z-index:5}
+#rcgRts .rts-pause[hidden]{display:none}
+#rcgRts .rts-pause .card{background:#161c25;border:1px solid #2f3d4e;border-radius:10px;padding:22px 30px;text-align:center;box-shadow:0 18px 60px rgba(0,0,0,.6)}
+#rcgRts .rts-pause h2{margin:0 0 6px;font-size:26px;letter-spacing:4px;color:#ffd98a}
+#rcgRts .rts-pause p{margin:4px 0;opacity:.85}
+#rcgRts .rts-pause p.s{font-size:12px;opacity:.6;margin-bottom:10px}
+#rcgRts .rts-pause button{min-height:40px;border-radius:6px;color:#fff;cursor:pointer}
+#rcgRts .rts-pause .speed button{margin:4px 3px;padding:7px 14px;border:1px solid #3a4d63;background:#1d2836;min-width:48px}
+#rcgRts .rts-pause .speed button.on{background:#2e6fd0;border-color:#2e6fd0}
+#rcgRts .rts-pause button.go{margin-top:10px;padding:10px 26px;border:0;background:#2e6fd0;font-weight:600}
 /* the daily battle's result, a line to copy and post (daily.js) */
 #rcgRts .rts-over .daily{margin:6px 0 14px;padding:10px 12px;border:1px solid #34465c;border-radius:8px;background:#111821}
 #rcgRts .rts-over .daily .dline{font:600 13px/1.4 ui-monospace,Menlo,Consolas,monospace;opacity:1;user-select:all}

@@ -38,6 +38,7 @@ that loaded, and saved battles and settings live on the device either way.
 | `D` / the sidebar's button | Deploy: the Mobile Yard sets down, a layer lays a mine, the Bridge Layer spans the gap (the button says which) |
 | `U` / UNLOAD | Put a transport's load down where it stands |
 | `S` | Hold position |
+| `P` | Pause · the paused screen sets the game speed (1×, 1.5×, 2×) |
 | `WASD` / arrows | Pan the camera (screen edges work too) |
 | Mouse wheel | Zoom |
 | `Esc` | Cancel a placement, repair, sell or an armed weapon · with nothing armed, leave the battle (press it twice) |

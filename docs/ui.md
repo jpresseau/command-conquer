@@ -188,6 +188,18 @@ Escape with nothing armed now asks first, as the ✕ does (`rtsQuitClick(true)`)
 once with no save, so a second Escape pressed to be sure a placement was gone threw the battle
 away; `e2e/input` presses it twice.
 
+### Pause, and the game speed (ui/pause.js)
+
+P, or ⏸ in the top bar, stops the simulation and nothing else: the loop keeps drawing, so the
+camera pans, zooms and turns over a frozen battle, and the radar and readouts stay live. The flag
+is `U.paused`, on the UI state and never on G, so a save never carries it. Pausing writes the
+autosave, since on a phone a paused battle is usually one about to be left. The paused screen
+holds the speed, 1×, 1.5× or 2×, kept in localStorage as the player's own: the loop runs that
+many ticks a frame (`_rtsSpeedTicks`, the fraction carried frame to frame), each at the frame's
+own dt - the tick is tuned at one step size, and unit separation and the re-plan timers are not
+linear in it. The ⏸ reads the speed when it is not 1×. `unit/pause` holds the counting;
+`e2e/pause` drives the key, the screen and the loop.
+
 ### One answer to "why can't I build this?"
 
 `Who_Can_Build_Me` is one question, and it had three implementations here: `_rtsCanQueue`
