@@ -51,7 +51,7 @@ function centre(sel) {
   S.ok('CAMPAIGN lists every mission, the first with its brief', list.open && list.n === list.of && list.n >= 8 && list.text.indexOf('Low Water') >= 0 && list.brief,
        JSON.stringify({ open: list.open, n: list.n, brief: list.brief }));
   S.ok('...and to a new player only the first is open: the rest are locked, each saying which win opens it', list.locked === list.of - 1 && list.play === 1 && list.firstPlay &&
-       /Win Low Water to open it/.test(list.says), JSON.stringify({ locked: list.locked, play: list.play, says: list.says }));
+       /Win Boot Camp to open it/.test(list.says), JSON.stringify({ locked: list.locked, play: list.play, says: list.says }));
   S.ok('...and a locked mission refuses to start', list.refused === false, String(list.refused));
 
   /* ---------- play ---------- */
@@ -63,7 +63,7 @@ function centre(sel) {
     var G = window._rtsG, m = RTS_CAMPAIGN[0];
     return G ? { seed: G.seed, army: rtsArmySide(), diff: G.diff, id: G.mission && G.mission.id, want: { seed: m.seed, army: m.army, diff: m.diff } } : null;
   });
-  S.ok('a real click on PLAY opens the mission: its seed, army and difficulty, laid', !!inside && inside.id === 'lowwater' && inside.seed === inside.want.seed &&
+  S.ok('a real click on PLAY opens the mission: its seed, army and difficulty, laid', !!inside && inside.id === 'bootcamp' && inside.seed === inside.want.seed &&
        inside.army === inside.want.army && inside.diff === inside.want.diff, JSON.stringify(inside));
 
   var hud = await p.evaluate(function () {
@@ -72,28 +72,28 @@ function centre(sel) {
     var saved = rtsSaveGame();
     return { shown: !el.hidden && r.width > 40 && r.height > 20, spans: el.querySelectorAll('span').length, text: el.textContent, saved: saved, msg: window._rtsG.msg };
   });
-  S.ok('the objectives sit on the battlefield and read the mission\'s goals', hud.shown && hud.spans === 2 && /convoy/i.test(hud.text), JSON.stringify(hud));
-  var sinfo = await p.evaluate(function () { var i = rtsSaveInfo(); return i && { mission: i.mission, desc: i.desc }; });
-  S.ok('...and a mission saves, and its save says which mission it is', hud.saved === true && !!sinfo && !!sinfo.mission && sinfo.mission.id === 'lowwater' &&
-       /^Low Water — Recruit/.test(sinfo.desc), JSON.stringify({ saved: hud.saved, msg: hud.msg, info: sinfo }));
+  S.ok('the objectives sit on the battlefield and read the mission\'s goals', hud.shown && hud.spans === 4 && /Refinery/.test(hud.text), JSON.stringify(hud));
+  var sinfo = await p.evaluate(function () { var i = rtsSaveInfo(); return i && { mission: i.mission, desc: i.desc, first: { id: RTS_CAMPAIGN[0].id, name: RTS_CAMPAIGN[0].name } }; });
+  S.ok('...and a mission saves, and its save says which mission it is', hud.saved === true && !!sinfo && !!sinfo.mission && sinfo.mission.id === sinfo.first.id &&
+       sinfo.desc.indexOf(sinfo.first.name + ' — Recruit') === 0, JSON.stringify({ saved: hud.saved, msg: hud.msg, info: sinfo }));
 
   /* ---------- the end ---------- */
   var card = await p.evaluate(function () {
     var G = window._rtsG;
     if (!G || !G.mission) return { text: '', btns: [], stored: null, next: '' };   /* fail on the assertion, not a throw */
     if (window._rtsUI) window._rtsUI.dead = true;
-    G.t = 140; G.over = 'win'; G.mission.why = 'The convoy is across, and the sea is closing behind it.';
+    G.t = 140; G.over = 'win'; G.mission.why = 'The post is down: you have a base, an army and the trade.';
     _rtsSyncSidebar(0);
     var o = document.getElementById('rtsOver');
     var after = o.querySelector('p.after');
     return { text: o.textContent, btns: Array.prototype.map.call(o.querySelectorAll('button'), function (b) { return b.textContent; }),
-             stored: localStorage.getItem('bw.campaign'), next: RTS_CAMPAIGN[1].name, after: after ? after.textContent : '', want: RTS_CAMPAIGN[0].after };
+             stored: localStorage.getItem('bw.campaign'), first: RTS_CAMPAIGN[0].id, next: RTS_CAMPAIGN[1].name, after: after ? after.textContent : '', want: RTS_CAMPAIGN[0].after };
   });
-  S.ok('a won mission\'s card says so, with the mission\'s own reason, and offers the next', /MISSION COMPLETE/.test(card.text) && /convoy is across/.test(card.text) &&
+  S.ok('a won mission\'s card says so, with the mission\'s own reason, and offers the next', /MISSION COMPLETE/.test(card.text) && /post is down/.test(card.text) &&
        card.btns[0] === 'Next: ' + card.next && card.btns.indexOf('Retry') >= 0 && card.btns.indexOf('Missions') >= 0, JSON.stringify(card.btns));
   S.ok('...and its medal: gold, won at its one level inside its par', /🥇 Gold/.test(card.text), (/🥇 Gold|🥈 Silver|🥉 Bronze/.exec(card.text) || [''])[0]);
   S.ok('...and its line of story, on into the next', !!card.want && card.after === card.want, JSON.stringify(card.after));
-  S.ok('...and keeps the result', !!card.stored && (JSON.parse(card.stored).lowwater || {}).won === true, card.stored);
+  S.ok('...and keeps the result, under the first mission\'s id', !!card.stored && !!card.first && (JSON.parse(card.stored)[card.first] || {}).won === true, JSON.stringify({ first: card.first, stored: card.stored }));
 
   var again = await p.evaluate(function () {
     rtsRestart();
@@ -109,7 +109,7 @@ function centre(sel) {
       })();
     });
   });
-  S.ok('Retry replays the same mission', !!again && again.id === 'lowwater' && again.army === 'allied', JSON.stringify(again));
+  S.ok('Retry replays the same mission', !!again && again.id === 'bootcamp' && again.army === 'allied', JSON.stringify(again));
 
   /* ---------- put back ---------- */
   var home = await p.evaluate(function () {
@@ -126,10 +126,10 @@ function centre(sel) {
   S.ok('...and opens the next one, and only that one', home.second && home.locked === home.of - 2, JSON.stringify({ second: home.second, locked: home.locked }));
 
   /* ---------- a level ---------- */
-  /* Two Fronts is the fifth: the four before it won, as a player who got this far has them */
+  /* Two Fronts is the sixth: the five before it won, as a player who got this far has them */
   await p.evaluate(function () {
     var done = JSON.parse(localStorage.getItem('bw.campaign') || '{}');
-    RTS_CAMPAIGN.slice(0, 4).forEach(function (m) { done[m.id] = done[m.id] || { won: true, secs: 300, lost: 0, killed: 0, lvl: m.diff }; });
+    RTS_CAMPAIGN.slice(0, 5).forEach(function (m) { done[m.id] = done[m.id] || { won: true, secs: 300, lost: 0, killed: 0, lvl: m.diff }; });
     localStorage.setItem('bw.campaign', JSON.stringify(done));
     var box = document.getElementById('rtsCampList'); box.hidden = true; rtsCampToggle();
   });

@@ -187,7 +187,8 @@
 #rcgRts .rts-over{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
   background:rgba(6,9,14,.72);z-index:5}
 #rcgRts .rts-over.on{display:flex}
-#rcgRts .rts-over .card{background:#161c25;border:1px solid #2f3d4e;border-radius:10px;padding:26px 34px;text-align:center;
+/* the card never outgrows the screen: a phone in portrait, a medal line, a story line and four buttons scroll inside it */
+#rcgRts .rts-over .card{background:#161c25;border:1px solid #2f3d4e;border-radius:10px;padding:26px 34px;text-align:center;max-height:calc(100% - 12px);overflow:auto;box-sizing:border-box;
   box-shadow:0 18px 60px rgba(0,0,0,.6)}
 #rcgRts .rts-over h2{margin:0 0 8px;font-size:30px;letter-spacing:4px}
 #rcgRts .rts-over .win h2{color:#7ce09a}

@@ -221,8 +221,10 @@ number picked by eye.
 
 ## The campaign
 
-`rules/campaign.js` holds `RTS_CAMPAIGN` and its first four missions; `rules/campaign2.js` pushes
-the other four. Each has a seed, an army, a difficulty, a brief, goals, a `setup(G, M)` and a
+`rules/campaign.js` holds `RTS_CAMPAIGN`, Boot Camp and the first four missions; `rules/campaign2.js`
+pushes the other four. Boot Camp teaches the trade - a Refinery, a Barracks, three Riflemen, a
+listening post to take down, nothing coming the other way - and its goals carry the sidebar's
+tab names, since the title's controls list says nothing about building. Each has a seed, an army, a difficulty, a brief, goals, a `setup(G, M)` and a
 `check(G, M, dt)`. A mission may name the battle it is fought on (`skirmish`: the 2v2 seats, the
 mirrored map, a large map), which `rtsSkirmishWant` hands to `_rtsNewGame`. `core/campaign.js` runs them,
 and `src/campaign.js` is the title-screen list, the objectives and the end card.
