@@ -51,6 +51,8 @@ module.exports = function (part, of) {
     var m = c.m, lv = g0._rtsMissionLevels(m), own = keys.indexOf(m.diff), top = keys.indexOf(m.top || m.diff);
     if (c.kind === 'rule') {
       S.ok(m.id + ': offers its own level, every easier one, and up to its top', lv.join() === keys.slice(0, Math.max(own, top) + 1).join(), lv.join());
+      /* a mission with no level above its own: gold is the intended play inside the par */
+      if (top === own && m.par) { var rp = plays[m.id](mission(m.id)); S.ok('...and its intended play, at its own level, is inside the gold par of ' + m.par + ' s', rp.over === 'win' && rp.t <= m.par, rp.t + ' s'); }
       /* the seats, at the furthest level from its own it offers */
       var far = lv[lv.length - 1] !== m.diff ? lv[lv.length - 1] : lv[0], o = mission(m.id, far), G = o.G;
       var foes = G.order.filter(function (k) { return o.g._rtsHostile('player', k); }), friends = G.order.filter(function (k) { return k !== 'player' && !o.g._rtsHostile('player', k); });
@@ -67,6 +69,8 @@ module.exports = function (part, of) {
     } else {
       var ri = plays[m.id](mission(m.id, c.k)), rs = strong[m.id] && strong[m.id](mission(m.id, c.k));
       S.ok(m.id + ' at ' + c.k + ': the intended play loses, and the stronger one wins', ri.over === 'lose' && !!rs && rs.over === 'win', JSON.stringify({ intended: ri, strong: rs }));
+      /* gold is this win: at the top level, inside the par, where there is one */
+      if (c.k === lv[lv.length - 1] && m.par && rs) S.ok('...inside the gold par of ' + m.par + ' s', rs.over === 'win' && rs.t <= m.par, rs.t + ' s');
     }
   });
   return S;

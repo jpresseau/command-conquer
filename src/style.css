@@ -194,6 +194,7 @@
 #rcgRts .rts-over .lose h2{color:#ff7a68}
 #rcgRts .rts-over p{margin:4px 0;opacity:.85}
 #rcgRts .rts-over p.s{font-size:12px;opacity:.6;margin-bottom:16px}
+#rcgRts .rts-over p.medal{font-size:14px;color:#ffd98a}
 #rcgRts .rts-over p.after{max-width:420px;margin:8px auto;font-style:italic;font-size:13px;line-height:1.45}
 #rcgRts .rts-over button{margin:4px;padding:8px 18px;border:0;border-radius:6px;background:#2e6fd0;color:#fff;
   font-weight:600;cursor:pointer}

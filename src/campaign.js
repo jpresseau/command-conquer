@@ -9,6 +9,7 @@
    rather than laid again. */
 
 var RTS_CAMP_LS = 'bw.campaign';        /* {<id>: {won, secs, lost, killed, lvl}} - the best of each */
+var RTS_MEDALS = ['', '🥉', '🥈', '🥇'];  /* by _rtsMissionMedal (core/campaign.js) */
 
 function rtsCampProgress() {
   try { return JSON.parse(window.localStorage.getItem(RTS_CAMP_LS) || '{}') || {}; } catch (e) { return {}; }
@@ -35,8 +36,8 @@ function rtsCampToggle() {
       return '<option value="' + k + '"' + (k === m.diff ? ' selected' : '') + '>' + RTS_DIFF[k].name + (k === m.diff ? ' (as written)' : '') + '</option>';
     }).join('') + '</select> ';
     return '<div class="mission' + (r && r.won ? ' won' : '') + '" data-id="' + m.id + '">'
-      + '<h3>' + (i + 1) + '. ' + m.name + (r && r.won ? ' <i>✓ ' + rtsDailyClock(r.secs) + ' ' + RTS_DIFF[r.lvl || m.diff].name + '</i>' : '') + '</h3>'
-      + '<p class="s">' + rtsArmyTitle(m.army) + ' · ' + RTS_DIFF[m.diff].name + '</p>'
+      + '<h3>' + (i + 1) + '. ' + m.name + (r && r.won ? ' <i>' + RTS_MEDALS[_rtsMissionMedal(m, r)] + ' ' + rtsDailyClock(r.secs) + ' ' + RTS_DIFF[r.lvl || m.diff].name + '</i>' : '') + '</h3>'
+      + '<p class="s">' + rtsArmyTitle(m.army) + ' · ' + RTS_DIFF[m.diff].name + (_rtsMissionMedal(m, r) < 3 ? ' · ' + _rtsMissionGold(m) : '') + '</p>'
       + '<p>' + m.brief + '</p>'
       + '<div class="launch">' + pick + '<button type="button" onclick="rtsCampStart(\'' + m.id + '\', this)">PLAY</button></div></div>';
   }).join('');
@@ -105,9 +106,11 @@ function rtsCampOverHTML(G) {
   var m = _rtsMissionOf(M.id), won = G.over === 'win', all = rtsCampProgress(), b = all[M.id];
   var r = { won: won, secs: G.t, lost: G.stats.lostU, killed: G.stats.killed, lvl: M.lvl || m.diff };
   if (won && rtsCampBetter(r, b, m)) { all[M.id] = r; try { window.localStorage.setItem(RTS_CAMP_LS, JSON.stringify(all)); } catch (e) {} }
+  var medal = won ? _rtsMissionMedal(m, r) : 0;              /* this win's own, not the best's */
   var next = won && RTS_CAMPAIGN[RTS_CAMPAIGN.indexOf(m) + 1];
   return '<div class="card ' + G.over + '"><h2>' + (won ? 'MISSION COMPLETE' : 'MISSION FAILED') + '</h2>'
     + '<p>' + m.name + ' (' + RTS_DIFF[M.lvl || m.diff].name + '): ' + (M.why || '') + '</p>'
+    + (won ? '<p class="medal">' + RTS_MEDALS[medal] + ' ' + ['', 'Bronze', 'Silver', 'Gold'][medal] + (medal < 3 ? ' — ' + _rtsMissionGold(m) : '') + '</p>' : '')
     + (won && m.after ? '<p class="after">' + m.after + '</p>' : '')      /* the story, on to the next */
     + '<p class="s">Time ' + rtsDailyClock(G.t) + ' · Enemy destroyed: ' + G.stats.killed + ' · Units lost: ' + G.stats.lostU + '</p>'
     + (next ? '<button type="button" onclick="rtsCampNext(\'' + next.id + '\', \'' + (M.lvl || m.diff) + '\')">Next: ' + next.name + '</button> ' : '')
@@ -119,6 +122,8 @@ function rtsCampOverHTML(G) {
    mission's own) */
 function rtsCampBetter(r, b, m) {
   if (!b || !b.won) return true;
+  /* the harder level, then the faster time - which is the higher medal first by itself, since a
+     medal follows from the level and the par (core/campaign.js _rtsMissionMedal) */
   var k = Object.keys(RTS_DIFF), a = k.indexOf(r.lvl), o = k.indexOf(b.lvl || m.diff);
   return a > o || (a === o && r.secs < b.secs);
 }

@@ -74,7 +74,7 @@ RTS_CAMPAIGN.push(
     } }
 ,
 
-  { id: 'mirror', awake: true, name: 'Mirror Line', army: 'soviet', diff: 'easy', top: 'normal', seed: 9006, skirmish: { layout: 'mirror' },
+  { id: 'mirror', awake: true, name: 'Mirror Line', army: 'soviet', diff: 'easy', top: 'normal', seed: 9006, par: 480, skirmish: { layout: 'mirror' },
     brief: 'The ground here is the same on both sides of the line, down to the last tree: whatever you have, the Compact has its twin. What you have that it does not is a head start. Take its Command Yard inside ten minutes, before it builds up to meet you. Its yard mends while the Compact can pay for it: find its harvesters.',
     after: 'The Compact yard on the line is rubble. The Dominion digs in at two bases and calls its reinforcements: eight minutes out.',
     goals: [ { id: 'yard', text: function (G, M) { return 'Destroy the Compact Command Yard - ' + Math.max(0, Math.ceil((600 - G.t) / 60)) + ' min left'; } },
@@ -104,7 +104,7 @@ RTS_CAMPAIGN.push(
     } }
 ,
 
-  { id: 'orders', name: 'Order of Battle', army: 'allied', diff: 'normal', seed: 9007, skirmish: { foes: 'team' },
+  { id: 'orders', name: 'Order of Battle', army: 'allied', diff: 'normal', seed: 9007, par: 150, skirmish: { foes: 'team' },
     brief: 'Two Dominion bases, one on each side of the line, and eight minutes before their reinforcements land. You cannot take both. Your ally can take one - if you tell it which. Use the ALLY button: send it at one base, and take the other yourself.',
     after: 'Both bases are down, and the reinforcements came ashore all the same. Everything the Dominion has left is on one coast: Breachwater.',
     goals: [ { id: 'y1', text: 'Destroy the Dominion Command Yard across from you' },
@@ -140,7 +140,7 @@ RTS_CAMPAIGN.push(
     } }
 ,
 
-  { id: 'breachwater', awake: true, name: 'Breachwater', army: 'allied', diff: 'easy', top: 'normal', seed: 9008, skirmish: { foes: 'team', size: 'large' },
+  { id: 'breachwater', awake: true, name: 'Breachwater', army: 'allied', diff: 'easy', top: 'normal', seed: 9008, par: 540, skirmish: { foes: 'team', size: 'large' },
     brief: 'Everything comes to this coast. Two Dominion armies hold it, both awake, both building, each yard ringed with guns. Your ally waits on your orders, as at the two bases. Break both Command Yards inside ten minutes: send your ally where you are not. An army that cannot pay cannot mend its yard - hunt their harvesters early.',
     after: 'The coast is quiet. The war that began with a convoy on the flats at low water ends here, at Breachwater.',
     goals: [ { id: 'y1', text: 'Destroy the Dominion Command Yard across from you' },
