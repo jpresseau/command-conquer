@@ -318,8 +318,7 @@ How a mine behaves (`core/mines.js`):
 - A side sees only its own mines: a dark disc ringed in its house colour on the overlay,
   blinking until armed.
 
-The opponent builds one too, to mine the approach to its own base: *The opponent uses the new
-vehicles*, below (`core/aimines.js`).
+The opponent builds one too, to mine the approach to its base (`core/aimines.js`, and below).
 
 ### Verified
 
