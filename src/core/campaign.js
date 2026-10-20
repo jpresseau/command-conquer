@@ -22,6 +22,21 @@ function _rtsMissionLevels(m) {
   var keys = Object.keys(RTS_DIFF), top = keys.indexOf(m.top || m.diff);
   return keys.slice(0, Math.max(top, keys.indexOf(m.diff)) + 1);
 }
+/* The medal a record earns on mission `m`: 0 none, 1 bronze (won), 2 silver (won at the level it
+   was written at, or above), 3 gold (won at the top level it offers, inside its par where it has
+   one). A record from before levels (no `lvl`) was won at the written level. */
+function _rtsMissionMedal(m, r) {
+  if (!r || !r.won) return 0;
+  var keys = Object.keys(RTS_DIFF), lv = keys.indexOf(r.lvl || m.diff), top = keys.indexOf(_rtsMissionLevels(m).slice(-1)[0]);
+  if (lv < keys.indexOf(m.diff)) return 1;
+  if (lv >= top && (!m.par || r.secs <= m.par)) return 3;
+  return 2;
+}
+/* what gold asks, in the player's words */
+function _rtsMissionGold(m) {
+  var top = _rtsMissionLevels(m).slice(-1)[0];
+  return 'Gold: ' + RTS_DIFF[top].name + (m.par ? ' inside ' + Math.floor(m.par / 60) + ':' + (m.par % 60 < 10 ? '0' : '') + (m.par % 60) : '');
+}
 /* Lay mission `id` onto the battle just made, at level `lvl` (one of its levels; its own when left
    out or not offered). The level is the enemy's: every seat hostile to the player plays at it,
    while the battle's own difficulty - and with it an ally's - stays the one it was written at. */

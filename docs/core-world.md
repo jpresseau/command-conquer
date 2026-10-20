@@ -263,6 +263,12 @@ and `src/campaign.js` is the title-screen list, the objectives and the end card.
   two economies have to be starved - and the yards break: Mirror Line won at 373 s at Regular and
   425 s at Soldier, Breachwater at 406 s and 483 s, where the intended play loses at each. Both
   offer Regular and Soldier (`top: 'normal'`); at Veteran the raiders' Mirror Line base fell.
+- **Medals** (`_rtsMissionMedal`, core/campaign.js): bronze for a win, silver at the written level
+  or above, gold at the top level offered and inside the mission's `par` where it has one (the
+  races: Low Water 2:30, Fog Bank 2:30, Armour by Air 3:20, Mirror Line 8:00, Order of Battle
+  2:30, Breachwater 9:00; the hold missions have none). `unit/campaign-levels` holds every par
+  from both ends: the play that wins at the top level finishes inside it. The best record kept is
+  the higher medal first, so a gold over par beats a faster silver.
 - **`G.mission` is plain data.** The functions stay in the table and are looked up by id, so a
   mission saves like any battle. The save's header carries `mission` (id and level); a resume
   opens the battle on the save's own map, lays the state over it and does NOT run the setup again

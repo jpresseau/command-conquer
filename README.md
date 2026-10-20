@@ -152,6 +152,8 @@ finale break two live armies at once. Each has a briefing,
 objectives on the battlefield and an end card, and the missions you win are marked. They are
 fought in order - each one opens when the one before it is won - with a line of story between. Most can be
 played easier than written, and four harder: the Channel, Two Fronts, Mirror Line and the finale.
+A win earns bronze, silver or gold: silver at the level the mission was written at, gold at the
+hardest level it offers - inside its par, where the mission is a race.
 
 ## Everything is generated in code
 

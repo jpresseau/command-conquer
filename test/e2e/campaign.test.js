@@ -91,6 +91,7 @@ function centre(sel) {
   });
   S.ok('a won mission\'s card says so, with the mission\'s own reason, and offers the next', /MISSION COMPLETE/.test(card.text) && /convoy is across/.test(card.text) &&
        card.btns[0] === 'Next: ' + card.next && card.btns.indexOf('Retry') >= 0 && card.btns.indexOf('Missions') >= 0, JSON.stringify(card.btns));
+  S.ok('...and its medal: gold, won at its one level inside its par', /🥇 Gold/.test(card.text), (/🥇 Gold|🥈 Silver|🥉 Bronze/.exec(card.text) || [''])[0]);
   S.ok('...and its line of story, on into the next', !!card.want && card.after === card.want, JSON.stringify(card.after));
   S.ok('...and keeps the result', !!card.stored && (JSON.parse(card.stored).lowwater || {}).won === true, card.stored);
 
@@ -210,7 +211,7 @@ function centre(sel) {
     var h = box.querySelector('.mission[data-id="twofronts"] h3');
     return h ? h.textContent : '';
   });
-  S.ok('...and the list shows the win at Veteran', /✓ .* Veteran/.test(listed), listed);
+  S.ok('...and the list shows the win at Veteran, a gold - the top level it offers, with no par to meet', /🥇 .* Veteran/.test(listed), listed);
 
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
   await g.close();

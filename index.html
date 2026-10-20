@@ -205,6 +205,7 @@
 #rcgRts .rts-over .lose h2{color:#ff7a68}
 #rcgRts .rts-over p{margin:4px 0;opacity:.85}
 #rcgRts .rts-over p.s{font-size:12px;opacity:.6;margin-bottom:16px}
+#rcgRts .rts-over p.medal{font-size:14px;color:#ffd98a}
 #rcgRts .rts-over p.after{max-width:420px;margin:8px auto;font-style:italic;font-size:13px;line-height:1.45}
 #rcgRts .rts-over button{margin:4px;padding:8px 18px;border:0;border-radius:6px;background:#2e6fd0;color:#fff;
   font-weight:600;cursor:pointer}
@@ -784,7 +785,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">5048d5a · 2026-10-20</div>
+  <div id="rtsBuild" title="build">d024a0a · 2026-10-20</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -3055,7 +3056,8 @@ var RTS_TRIGGERS = [
    battle the seed made, and a check, every tick, that keeps the goals and calls the result. A
    mission's memory is plain data in M (G.mission); nothing here is kept on G but through it.
    `after` is the line of story its win card ends on, into the next; the list opens each mission
-   once the one before it is won (campaign.js rtsCampOpen). `diff` is the level it was written and tuned at; it can also be played at any easier one, and
+   once the one before it is won (campaign.js rtsCampOpen). `par` is the time, in seconds, a gold medal asks of a race
+   (campaign.js rtsCampMedal); a hold mission has none. `diff` is the level it was written and tuned at; it can also be played at any easier one, and
    up to `top` where a harder one was measured to bite and still be won (core/campaign.js). */
 
 /* across the water: the lagoon's long axis, and a shore cell either side of it */
@@ -3086,7 +3088,7 @@ function _rtsCampLeft(G, side, keys) {
 }
 
 var RTS_CAMPAIGN = [
-  { id: 'lowwater', name: 'Low Water', army: 'allied', diff: 'easy', seed: 9001,
+  { id: 'lowwater', name: 'Low Water', army: 'allied', diff: 'easy', seed: 9001, par: 150,
     brief: 'The strait between you and the Dominion shore is too deep to ford - except at low water, when the sea goes out and leaves the flats dry for a few minutes. Wait for the ebb, take the convoy across while the sand holds, and land it on the far shore before the flood comes back. The far side is lightly held.',
     after: 'The convoy is ashore. Behind the beach the Dominion holds a fortress on the headland, and the Compact\'s next push has to go through it.',
     goals: [ { id: 'cross', text: 'Get two convoy APCs to the far shore (marked) before the flood: the flats are dry from about 2:10 to 3:50' },
@@ -3118,7 +3120,7 @@ var RTS_CAMPAIGN = [
       return null;
     } },
 
-  { id: 'fogbank', name: 'Blind the Fortress', army: 'allied', diff: 'normal', seed: 9002,
+  { id: 'fogbank', name: 'Blind the Fortress', army: 'allied', diff: 'normal', seed: 9002, par: 150,
     brief: 'The Dominion command yard sits behind a ring of guns no column survives in clear air. Your Mist Tower is charged: lay a Fog Bank over the fortress and its towers see three cells and no more. Go in under it and destroy the command yard.',
     after: 'The headland is open. The Dominion answers across the water: it means to take the island radar that watches the whole strait.',
     goals: [ { id: 'yard', text: 'Destroy the Dominion Command Yard' },
@@ -3150,7 +3152,7 @@ var RTS_CAMPAIGN = [
       return null;
     } },
 
-  { id: 'skycrane', name: 'Armour by Air', army: 'soviet', diff: 'normal', seed: 9003,
+  { id: 'skycrane', name: 'Armour by Air', army: 'soviet', diff: 'normal', seed: 9003, par: 200,
     brief: 'The Compact has put its radar on an island no bridge reaches and no tide uncovers. Your Sky Cranes can lift one tank at a time: carry the armour over the water and take the radar down inside six minutes.',
     after: 'The radar is down and the strait is dark - but a Compact flotilla is already moving up the lagoon, for the Dominion\'s Sub Pen.',
     goals: [ { id: 'radar', text: 'Destroy the Compact radar on the island' },
@@ -3319,7 +3321,7 @@ RTS_CAMPAIGN.push(
     } }
 ,
 
-  { id: 'mirror', awake: true, name: 'Mirror Line', army: 'soviet', diff: 'easy', top: 'normal', seed: 9006, skirmish: { layout: 'mirror' },
+  { id: 'mirror', awake: true, name: 'Mirror Line', army: 'soviet', diff: 'easy', top: 'normal', seed: 9006, par: 480, skirmish: { layout: 'mirror' },
     brief: 'The ground here is the same on both sides of the line, down to the last tree: whatever you have, the Compact has its twin. What you have that it does not is a head start. Take its Command Yard inside ten minutes, before it builds up to meet you. Its yard mends while the Compact can pay for it: find its harvesters.',
     after: 'The Compact yard on the line is rubble. The Dominion digs in at two bases and calls its reinforcements: eight minutes out.',
     goals: [ { id: 'yard', text: function (G, M) { return 'Destroy the Compact Command Yard - ' + Math.max(0, Math.ceil((600 - G.t) / 60)) + ' min left'; } },
@@ -3349,7 +3351,7 @@ RTS_CAMPAIGN.push(
     } }
 ,
 
-  { id: 'orders', name: 'Order of Battle', army: 'allied', diff: 'normal', seed: 9007, skirmish: { foes: 'team' },
+  { id: 'orders', name: 'Order of Battle', army: 'allied', diff: 'normal', seed: 9007, par: 150, skirmish: { foes: 'team' },
     brief: 'Two Dominion bases, one on each side of the line, and eight minutes before their reinforcements land. You cannot take both. Your ally can take one - if you tell it which. Use the ALLY button: send it at one base, and take the other yourself.',
     after: 'Both bases are down, and the reinforcements came ashore all the same. Everything the Dominion has left is on one coast: Breachwater.',
     goals: [ { id: 'y1', text: 'Destroy the Dominion Command Yard across from you' },
@@ -3385,7 +3387,7 @@ RTS_CAMPAIGN.push(
     } }
 ,
 
-  { id: 'breachwater', awake: true, name: 'Breachwater', army: 'allied', diff: 'easy', top: 'normal', seed: 9008, skirmish: { foes: 'team', size: 'large' },
+  { id: 'breachwater', awake: true, name: 'Breachwater', army: 'allied', diff: 'easy', top: 'normal', seed: 9008, par: 540, skirmish: { foes: 'team', size: 'large' },
     brief: 'Everything comes to this coast. Two Dominion armies hold it, both awake, both building, each yard ringed with guns. Your ally waits on your orders, as at the two bases. Break both Command Yards inside ten minutes: send your ally where you are not. An army that cannot pay cannot mend its yard - hunt their harvesters early.',
     after: 'The coast is quiet. The war that began with a convoy on the flats at low water ends here, at Breachwater.',
     goals: [ { id: 'y1', text: 'Destroy the Dominion Command Yard across from you' },
@@ -12617,6 +12619,21 @@ function _rtsMissionOf(id) {
 function _rtsMissionLevels(m) {
   var keys = Object.keys(RTS_DIFF), top = keys.indexOf(m.top || m.diff);
   return keys.slice(0, Math.max(top, keys.indexOf(m.diff)) + 1);
+}
+/* The medal a record earns on mission `m`: 0 none, 1 bronze (won), 2 silver (won at the level it
+   was written at, or above), 3 gold (won at the top level it offers, inside its par where it has
+   one). A record from before levels (no `lvl`) was won at the written level. */
+function _rtsMissionMedal(m, r) {
+  if (!r || !r.won) return 0;
+  var keys = Object.keys(RTS_DIFF), lv = keys.indexOf(r.lvl || m.diff), top = keys.indexOf(_rtsMissionLevels(m).slice(-1)[0]);
+  if (lv < keys.indexOf(m.diff)) return 1;
+  if (lv >= top && (!m.par || r.secs <= m.par)) return 3;
+  return 2;
+}
+/* what gold asks, in the player's words */
+function _rtsMissionGold(m) {
+  var top = _rtsMissionLevels(m).slice(-1)[0];
+  return 'Gold: ' + RTS_DIFF[top].name + (m.par ? ' inside ' + Math.floor(m.par / 60) + ':' + (m.par % 60 < 10 ? '0' : '') + (m.par % 60) : '');
 }
 /* Lay mission `id` onto the battle just made, at level `lvl` (one of its levels; its own when left
    out or not offered). The level is the enemy's: every seat hostile to the player plays at it,
@@ -35266,6 +35283,7 @@ function rtsDailyNote() {
    rather than laid again. */
 
 var RTS_CAMP_LS = 'bw.campaign';        /* {<id>: {won, secs, lost, killed, lvl}} - the best of each */
+var RTS_MEDALS = ['', '🥉', '🥈', '🥇'];  /* by _rtsMissionMedal (core/campaign.js) */
 
 function rtsCampProgress() {
   try { return JSON.parse(window.localStorage.getItem(RTS_CAMP_LS) || '{}') || {}; } catch (e) { return {}; }
@@ -35292,8 +35310,8 @@ function rtsCampToggle() {
       return '<option value="' + k + '"' + (k === m.diff ? ' selected' : '') + '>' + RTS_DIFF[k].name + (k === m.diff ? ' (as written)' : '') + '</option>';
     }).join('') + '</select> ';
     return '<div class="mission' + (r && r.won ? ' won' : '') + '" data-id="' + m.id + '">'
-      + '<h3>' + (i + 1) + '. ' + m.name + (r && r.won ? ' <i>✓ ' + rtsDailyClock(r.secs) + ' ' + RTS_DIFF[r.lvl || m.diff].name + '</i>' : '') + '</h3>'
-      + '<p class="s">' + rtsArmyTitle(m.army) + ' · ' + RTS_DIFF[m.diff].name + '</p>'
+      + '<h3>' + (i + 1) + '. ' + m.name + (r && r.won ? ' <i>' + RTS_MEDALS[_rtsMissionMedal(m, r)] + ' ' + rtsDailyClock(r.secs) + ' ' + RTS_DIFF[r.lvl || m.diff].name + '</i>' : '') + '</h3>'
+      + '<p class="s">' + rtsArmyTitle(m.army) + ' · ' + RTS_DIFF[m.diff].name + (_rtsMissionMedal(m, r) < 3 ? ' · ' + _rtsMissionGold(m) : '') + '</p>'
       + '<p>' + m.brief + '</p>'
       + '<div class="launch">' + pick + '<button type="button" onclick="rtsCampStart(\'' + m.id + '\', this)">PLAY</button></div></div>';
   }).join('');
@@ -35362,9 +35380,11 @@ function rtsCampOverHTML(G) {
   var m = _rtsMissionOf(M.id), won = G.over === 'win', all = rtsCampProgress(), b = all[M.id];
   var r = { won: won, secs: G.t, lost: G.stats.lostU, killed: G.stats.killed, lvl: M.lvl || m.diff };
   if (won && rtsCampBetter(r, b, m)) { all[M.id] = r; try { window.localStorage.setItem(RTS_CAMP_LS, JSON.stringify(all)); } catch (e) {} }
+  var medal = won ? _rtsMissionMedal(m, r) : 0;              /* this win's own, not the best's */
   var next = won && RTS_CAMPAIGN[RTS_CAMPAIGN.indexOf(m) + 1];
   return '<div class="card ' + G.over + '"><h2>' + (won ? 'MISSION COMPLETE' : 'MISSION FAILED') + '</h2>'
     + '<p>' + m.name + ' (' + RTS_DIFF[M.lvl || m.diff].name + '): ' + (M.why || '') + '</p>'
+    + (won ? '<p class="medal">' + RTS_MEDALS[medal] + ' ' + ['', 'Bronze', 'Silver', 'Gold'][medal] + (medal < 3 ? ' — ' + _rtsMissionGold(m) : '') + '</p>' : '')
     + (won && m.after ? '<p class="after">' + m.after + '</p>' : '')      /* the story, on to the next */
     + '<p class="s">Time ' + rtsDailyClock(G.t) + ' · Enemy destroyed: ' + G.stats.killed + ' · Units lost: ' + G.stats.lostU + '</p>'
     + (next ? '<button type="button" onclick="rtsCampNext(\'' + next.id + '\', \'' + (M.lvl || m.diff) + '\')">Next: ' + next.name + '</button> ' : '')
@@ -35376,6 +35396,8 @@ function rtsCampOverHTML(G) {
    mission's own) */
 function rtsCampBetter(r, b, m) {
   if (!b || !b.won) return true;
+  /* the harder level, then the faster time - which is the higher medal first by itself, since a
+     medal follows from the level and the par (core/campaign.js _rtsMissionMedal) */
   var k = Object.keys(RTS_DIFF), a = k.indexOf(r.lvl), o = k.indexOf(b.lvl || m.diff);
   return a > o || (a === o && r.secs < b.secs);
 }

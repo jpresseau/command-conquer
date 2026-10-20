@@ -4,7 +4,8 @@
    battle the seed made, and a check, every tick, that keeps the goals and calls the result. A
    mission's memory is plain data in M (G.mission); nothing here is kept on G but through it.
    `after` is the line of story its win card ends on, into the next; the list opens each mission
-   once the one before it is won (campaign.js rtsCampOpen). `diff` is the level it was written and tuned at; it can also be played at any easier one, and
+   once the one before it is won (campaign.js rtsCampOpen). `par` is the time, in seconds, a gold medal asks of a race
+   (campaign.js rtsCampMedal); a hold mission has none. `diff` is the level it was written and tuned at; it can also be played at any easier one, and
    up to `top` where a harder one was measured to bite and still be won (core/campaign.js). */
 
 /* across the water: the lagoon's long axis, and a shore cell either side of it */
@@ -35,7 +36,7 @@ function _rtsCampLeft(G, side, keys) {
 }
 
 var RTS_CAMPAIGN = [
-  { id: 'lowwater', name: 'Low Water', army: 'allied', diff: 'easy', seed: 9001,
+  { id: 'lowwater', name: 'Low Water', army: 'allied', diff: 'easy', seed: 9001, par: 150,
     brief: 'The strait between you and the Dominion shore is too deep to ford - except at low water, when the sea goes out and leaves the flats dry for a few minutes. Wait for the ebb, take the convoy across while the sand holds, and land it on the far shore before the flood comes back. The far side is lightly held.',
     after: 'The convoy is ashore. Behind the beach the Dominion holds a fortress on the headland, and the Compact\'s next push has to go through it.',
     goals: [ { id: 'cross', text: 'Get two convoy APCs to the far shore (marked) before the flood: the flats are dry from about 2:10 to 3:50' },
@@ -67,7 +68,7 @@ var RTS_CAMPAIGN = [
       return null;
     } },
 
-  { id: 'fogbank', name: 'Blind the Fortress', army: 'allied', diff: 'normal', seed: 9002,
+  { id: 'fogbank', name: 'Blind the Fortress', army: 'allied', diff: 'normal', seed: 9002, par: 150,
     brief: 'The Dominion command yard sits behind a ring of guns no column survives in clear air. Your Mist Tower is charged: lay a Fog Bank over the fortress and its towers see three cells and no more. Go in under it and destroy the command yard.',
     after: 'The headland is open. The Dominion answers across the water: it means to take the island radar that watches the whole strait.',
     goals: [ { id: 'yard', text: 'Destroy the Dominion Command Yard' },
@@ -99,7 +100,7 @@ var RTS_CAMPAIGN = [
       return null;
     } },
 
-  { id: 'skycrane', name: 'Armour by Air', army: 'soviet', diff: 'normal', seed: 9003,
+  { id: 'skycrane', name: 'Armour by Air', army: 'soviet', diff: 'normal', seed: 9003, par: 200,
     brief: 'The Compact has put its radar on an island no bridge reaches and no tide uncovers. Your Sky Cranes can lift one tank at a time: carry the armour over the water and take the radar down inside six minutes.',
     after: 'The radar is down and the strait is dark - but a Compact flotilla is already moving up the lagoon, for the Dominion\'s Sub Pen.',
     goals: [ { id: 'radar', text: 'Destroy the Compact radar on the island' },
