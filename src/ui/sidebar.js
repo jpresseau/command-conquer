@@ -451,7 +451,7 @@ function _rtsSyncSidebar(dt) {
     else o.innerHTML = '<div class="card ' + G.over + '"><h2>' + (G.over === 'win' ? 'VICTORY' : 'DEFEATED') + '</h2>'
       + '<p>' + (G.over === 'win' ? 'The ' + rtsArmyName('enemy') + ' forces have been wiped off the map.'
                           : rtsArmyName('player') + ' command has fallen.') + '</p>'
-      + '<p class="s">Enemy units destroyed: ' + G.stats.killed + ' · Units lost: ' + G.stats.lostU + '</p>'
+      + rtsDebriefHTML(G, rtsRecordAdd(G))                      /* the debrief, and the record it joined (record.js) */
       + (typeof rtsDailyOverHTML === 'function' ? rtsDailyOverHTML(G) : '')
       + '<button type="button" onclick="rtsRestart()">Play again</button> '
       + '<button type="button" onclick="rtsClose()">Quit</button></div>';

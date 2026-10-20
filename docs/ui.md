@@ -211,6 +211,15 @@ full harvester with no Refinery, a Vehicle Works or Barracks empty past the open
 unspent - one line in 45 s, the same harvester once in 90, a line once until it is used.
 `unit/idle` holds the rules; `e2e/alert` drives the tap, the key and the ring.
 
+### The debrief and the record (record.js)
+
+The end card's two numbers became a table: time, credits mined, units built and lost, enemy units
+destroyed, buildings destroyed and lost - counted into `G.stats` where each thing happens
+(`core/capture.js`, `production.js`, `harvest.js`), so a save carries them. A plain battle's end
+is added to the record at its difficulty (`bw.record`: wins, losses, fastest win), which START
+BATTLE shows for the difficulty set and follows the picker; a daily and a mission keep their own.
+`unit/record` holds the counts and the rule; `e2e/record` reads the card and the title.
+
 ### One answer to "why can't I build this?"
 
 `Who_Can_Build_Me` is one question, and it had three implementations here: `_rtsCanQueue`

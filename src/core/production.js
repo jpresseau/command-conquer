@@ -375,7 +375,13 @@ function _rtsAirPadFor(side, u) {
   }
   return best;
 }
+/* ...and counted, for the debrief (record.js): the player's units built */
 function _rtsDeliverUnit(side, key) {
+  var u = _rtsDeliverUnitAt(side, key), G = window._rtsG;
+  if (u && side === 'player') G.stats.built = (G.stats.built || 0) + 1;
+  return u;
+}
+function _rtsDeliverUnitAt(side, key) {
   var G = window._rtsG, u = rtsUnitDef(key);
   if (G.justBuilt && G.justBuilt[side]) G.justBuilt[side].unit = key;   /* HouseClass::JustBuiltUnit */
   /* A ship comes out of its shipyard and INTO THE WATER, which is the one delivery that

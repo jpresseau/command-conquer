@@ -218,6 +218,7 @@ function _rtsKill(e) {
   if (typeof _rtsSfx === 'function')
     _rtsSfx(e.selling ? 'place' : (e.type === 'struct' ? 'boom' : 'pop'), e.x, e.z);
   if (e.side === 'player' && e.type === 'unit') G.stats.lostU++;
+  if (e.side === 'player' && e.type === 'struct' && !e.selling) G.stats.lostB = (G.stats.lostB || 0) + 1;
   /* HouseClass::UnitsLost / BuildingsLost, which TEVENT's N*_DESTROYED events read. A sold
      building is not a loss - only something that was actually destroyed counts. */
   if (G.lost && G.lost[e.side] && !e.selling) {
@@ -240,6 +241,7 @@ function _rtsKill(e) {
      halves of the same readout were not measuring the same kind of thing. A sold building is
      not a kill either, which the loss counter above says in its own comment. */
   if (_rtsHostile(e.side, 'player') && e.type === 'unit' && !e.selling && e.hurtBy === 'player') G.stats.killed++;
+  if (_rtsHostile(e.side, 'player') && e.type === 'struct' && !e.selling && e.hurtBy === 'player') G.stats.killedB = (G.stats.killedB || 0) + 1;
   var si = G.sel.indexOf(e); if (si >= 0) G.sel.splice(si, 1);
   /* SIDEBAR.CPP Recalc is only called when a FACTORY is destroyed - it is an exhaustive
      sweep and the comment is explicit that it should not run for every casualty. */

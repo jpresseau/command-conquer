@@ -130,7 +130,7 @@ Keep them small: if a file passes ~500 lines it wants splitting along its own ba
 - `src/rts.audio.js` + `src/audio/` — all sound, synthesized, no sampled assets: effects are recipes rendered to a bank of takes, played through `audio/mix.js` (pan, room, voice cap; `heard`/`vol` held by `unit/sfx`); music is `score.js` (two songs, three intensities, pure) played by the `music.js` sampler on `instruments.js` (`unit/music`, `e2e/music`); the bed is `audio/loops.js` turned by `_rtsAmbWant` (`unit/worldsound`); levels are `rtsVolSet`, the panel `ui/soundpanel.js`.
   `src/rts.save.js` saves and resumes a battle; `src/autosave.js` keeps a second slot by itself (CONTINUE).
 - `src/daily.js` — the DAILY BATTLE: seed, army and difficulty from the UTC date; borrows the
-  player's choices for the match and `rtsHome` puts them back; the end card's copyable line.
+  player's choices for the match and `rtsHome` puts them back; the end card's copyable line. `src/record.js`: the end card's debrief rows, and the skirmish record by difficulty on START BATTLE.
 - `src/title.js` — the standalone shell: title screen, difficulty and army pickers, RESUME
   BATTLE, install prompt, START. Loads last, after everything it calls. `src/preview.js` draws the next map under START BATTLE, ↻ for another.
 - `src/index.skeleton.html` — the page shell and the include manifest, no JavaScript of its own;
