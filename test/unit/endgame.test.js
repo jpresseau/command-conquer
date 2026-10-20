@@ -58,7 +58,8 @@ B._rtsSay = function (m) { if (saidAt == null && /ore is gone/.test(String(m))) 
 /* the teams standing still with a gun, every five seconds of the ninety: the ore gone, none should */
 function waiting(g) { var G = g._rtsG; return Object.keys(G.teams || {}).map(function (id) { return G.teams[id]; }).filter(function (t) { return t.type && g._rtsAIAs('enemy', function () { return g._rtsTeamMine(t); }) && !t.moving && g._rtsTeamLeader(t); }).length; }
 var waitA = [], waitB = [];
-for (var w5 = 0; w5 < HOLD; w5 += 5) { run(A, 5); run(B, 5); run(C, 5); waitA.push(waiting(A)); waitB.push(waiting(B)); }
+var c10 = null;
+for (var w5 = 0; w5 < HOLD; w5 += 5) { run(A, 5); run(B, 5); run(C, 5); waitA.push(waiting(A)); waitB.push(waiting(B)); if (w5 === 5) c10 = army(C); }
 var a1 = army(A), b1 = army(B), c1 = army(C);
 /* both seats are computer-played, so both go: the measure is that nobody stays home and the army is
    spent in the fight - with ore it grows over the same ninety seconds */
@@ -68,7 +69,9 @@ S.ok('EVERYTHING: with ore the opponent keeps a garrison at home and its army gr
    regroup for them - at any of the eighteen looks; with the ore, teams wait to fill */
 S.ok('...its teams go as they are - at no look in the ninety seconds does one with a gun stand waiting, where with the ore some do', Math.max.apply(null, waitB) === 0 && Math.max.apply(null, waitA) >= 1,
      JSON.stringify({ gone: waitB.join(' '), ore: waitA.join(' ') }));
-S.ok('...and with no team type its army can crew, the whole of it hunts instead - nobody is left at home', c1.total >= 3 && c1.team === 0 && c1.home === 0 && c1.hunt + c1.away >= c1.total - 1, JSON.stringify(c1));
+/* ten seconds in: the hunt is one unit a tick, so the whole army has its order long before then -
+   and looked at later, a hunting army may be spent already */
+S.ok('...and with no team type its army can crew, everyone outside the teams it had hunts instead - ten seconds on nobody is left at home', c10.total >= 8 && c10.hunt >= 4 && c10.home === 0 && c10.team + c10.hunt + c10.away >= c10.total - 1, JSON.stringify({ at10: c10, at90: c1 }));
 S.ok('...the word comes inside thirty seconds of the ore going, not at the next wave', saidAt != null && saidAt - T0 <= 30 && nextA > 30, JSON.stringify({ saidAt: saidAt, nextWaveWas: Math.round(nextA) }));
 run(A, REACH - HOLD); run(B, REACH - HOLD);
 var a2 = army(A), b2 = army(B);

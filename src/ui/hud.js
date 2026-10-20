@@ -36,6 +36,12 @@ function _rtsDrawHud(dt) {
     g.fillRect(s.x - bw / 2 - 1, s.y - bh - 1, bw + 2, bh + 2);
     g.fillStyle = frac > 0.6 ? '#5fdc7a' : (frac > 0.3 ? '#e8c35a' : '#e3574a');
     g.fillRect(s.x - bw / 2, s.y - bh, bw * frac, bh);
+    /* the chevrons of a veteran (core/veterancy.js): one a rank, gold, over the bar's left end */
+    for (var rk = 0; rk < (e.rank || 0); rk++) {
+      var cx = s.x - bw / 2 + 3 * sc + rk * 6 * sc, cy = s.y - bh - 3 * sc;
+      g.fillStyle = '#0b0f14'; g.beginPath(); g.moveTo(cx - 3 * sc, cy); g.lineTo(cx, cy - 4.5 * sc); g.lineTo(cx + 3 * sc, cy); g.closePath(); g.fill();
+      g.fillStyle = '#ffd34a'; g.beginPath(); g.moveTo(cx - 2 * sc, cy - 0.5 * sc); g.lineTo(cx, cy - 3.5 * sc); g.lineTo(cx + 2 * sc, cy - 0.5 * sc); g.closePath(); g.fill();
+    }
     /* BUILDING.CPP toggles IsWrenchVisible on the repair timer - the wrench blinks on a
        building under repair so you can see at a glance where your credits are going. */
     if (e.repair && (typeof _rtsPulse !== 'function' || _rtsPulse() > 0.45)) _rtsDrawWrench(g, s.x, s.y - bh - 9 * sc);

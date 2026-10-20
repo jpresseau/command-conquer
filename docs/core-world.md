@@ -265,6 +265,9 @@ and `src/campaign.js` is the title-screen list, the objectives and the end card.
   two economies have to be starved - and the yards break: Mirror Line won at 373 s at Regular and
   425 s at Soldier, Breachwater at 406 s and 483 s, where the intended play loses at each. Both
   offer Regular and Soldier (`top: 'normal'`); at Veteran the raiders' Mirror Line base fell.
+  Veterancy (`core/veterancy.js`) moved Mirror Line: from the second minute the raid lost Regular
+  on the clock, from the first it lost Soldier, and no single start won both, so its stronger play
+  raids from 60 s at Regular (won at 251 s) and from 120 s at Soldier (439 s, inside the par).
 - **Medals** (`_rtsMissionMedal`, core/campaign.js): bronze for a win, silver at the written level
   or above, gold at the top level offered and inside the mission's `par` where it has one (the
   races: Low Water 2:30, Fog Bank 2:30, Armour by Air 3:20, Mirror Line 8:00, Order of Battle
