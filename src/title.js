@@ -16,6 +16,7 @@ window._RTS_DIFF = window._RTS_DIFF || RTS_DIFF_DEFAULT;
 function rtsSetDiff(k){
   if (!RTS_DIFF[k]) return;
   window._RTS_DIFF = k;
+  if (typeof rtsRecordNote === 'function') rtsRecordNote();       /* the record follows the difficulty (record.js) */
   var wrap = document.getElementById('rtsDiff');
   if (!wrap) return;
   var bs = wrap.getElementsByTagName('button');
@@ -35,13 +36,14 @@ function rtsHome(){
   var h = document.getElementById('rtsHome');
   if (h) h.classList.remove('gone');
   var b = document.getElementById('rtsGo');
-  if (b) { b.disabled = false; b.textContent = 'START BATTLE'; }
+  if (b) { b.disabled = false; b.innerHTML = 'START BATTLE<small id="rtsRecordNote"></small>'; }   /* the record's line is refilled below (record.js) */
   /* a daily battle borrowed the army and difficulty: put the player's own back (daily.js) */
   if (typeof rtsDailyEnd === 'function') rtsDailyEnd();
   if (typeof rtsCampEnd === 'function') rtsCampEnd();      /* and so did a mission (campaign.js) */
   var db = document.getElementById('rtsDaily');
   if (db) { db.disabled = false; db.innerHTML = 'DAILY BATTLE<small id="rtsDailyNote"></small>'; }
   if (typeof rtsDailyNote === 'function') rtsDailyNote();
+  if (typeof rtsRecordNote === 'function') rtsRecordNote();       /* the record at this difficulty (record.js) */
   if (typeof rtsSkirmishSync === 'function') rtsSkirmishSync();   /* the setup's line (skirmish.js) */
   if (typeof rtsOfflineNote === 'function') rtsOfflineNote();     /* the saved copy, offline (offline.js) */
   rtsBuildDiff();
@@ -106,6 +108,7 @@ rtsShowResume();
 if (typeof _rtsAutoBind === 'function') _rtsAutoBind();     /* the autosave's two moments (autosave.js) */
 rtsBuildArmyPick();
 if (typeof rtsDailyNote === 'function') rtsDailyNote();
+if (typeof rtsRecordNote === 'function') rtsRecordNote();
 if (typeof rtsSkirmishSync === 'function') rtsSkirmishSync();
 if (typeof rtsOfflineNote === 'function') rtsOfflineNote();
 if (typeof rtsMapPreviewSoon === 'function') rtsMapPreviewSoon();

@@ -24,7 +24,7 @@
   <div class="diff" id="rtsSky"></div>
   <div class="diff" id="rtsArmySide" hidden></div>
   <p class="diffnote" id="rtsVoxNote" hidden></p>
-  <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE</button>
+  <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE<small id="rtsRecordNote"></small></button>
   <!-- The map that button will make, and another if not that one: preview.js -->
   <div id="rtsPrev"><canvas id="rtsPrevCv" width="128" height="128" aria-label="The next battle's map"></canvas>
     <div class="side"><span id="rtsPrevSeed">laying the map…</span><button type="button" id="rtsPrevRoll" onclick="rtsMapReroll()">↻ ANOTHER MAP</button></div></div>
@@ -281,6 +281,7 @@
 <script>//@@INC:autosave.js@@</script>
 
 <script>//@@INC:daily.js@@</script>
+<script>//@@INC:record.js@@</script>
 <script>//@@INC:campaign.js@@</script>
 <script>//@@INC:skirmish.js@@</script>
 <script>//@@INC:preview.js@@</script>

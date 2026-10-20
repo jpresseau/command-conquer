@@ -116,7 +116,7 @@ function _rtsNewGame(seed, diff, spec) {
     rnd:null,                              /* seeded on first use; see _rtsRnd */
     order:['player', 'enemy'],             /* the seats, in tick order; core/seats.js */
     teams:{}, teamSeq:0,
-    stats:{ killed:0, lostU:0 },
+    stats:{ killed:0, lostU:0, killedB:0, lostB:0, built:0, mined:0 },   /* the debrief's counts: record.js */
     skirmish:sk
   };
   G.sides.player.credits = G.sides.enemy.credits = RTS_SKIRMISH.money[sk.money].credits;

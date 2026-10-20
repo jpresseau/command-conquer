@@ -22,8 +22,11 @@ var { openPage } = require('../lib/game.js');
 
 var S = new Suite('campaign');
 
+/* scrolled into view first: the title is taller than the window (the map preview, the record line) */
 function centre(sel) {
-  var b = document.querySelector(sel), r = b && b.getBoundingClientRect();
+  var b = document.querySelector(sel);
+  if (b) b.scrollIntoView({ block: 'center' });
+  var r = b && b.getBoundingClientRect();
   return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
 }
 

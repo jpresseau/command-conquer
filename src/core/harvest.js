@@ -141,6 +141,7 @@ function _rtsUpdateHarvester(e, dt, d) {
        into the STORE, so it is the one the Storage cap can refuse. */
     var lost = _rtsHarvested(G.sides[e.side], pay);
     if (lost > 0 && e.side === 'player') _rtsSiloWarn(G.sides[e.side]);
+    if (e.side === 'player') G.stats.mined = (G.stats.mined || 0) + Math.max(0, pay - lost);   /* the debrief's "credits mined" (record.js) */
     if (e.carry <= 0.5) { e.carry = 0; e.carryVal = 0; e.hstate = 'toField'; }
   }
 }

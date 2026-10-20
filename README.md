@@ -135,6 +135,10 @@ Tender behind them: the subs hold the channel while the Monitor goes in over the
 harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands
 them beside your ore field, and goes home to do it again.
 
+**A debrief, and a record.** A battle's end card says how long it took, what the ore paid, what
+was built, lost and destroyed; START BATTLE on the title carries your record at the difficulty you
+have set - wins, losses and the fastest win.
+
 **A daily battle.** DAILY BATTLE on the title screen gives everyone the same map that day, with
 the same army, difficulty, tide and weather, all from the date alone. The end screen gives you a line to
 copy and post, and your best of the day is kept.

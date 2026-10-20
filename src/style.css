@@ -197,6 +197,11 @@
 #rcgRts .rts-over p{margin:4px 0;opacity:.85}
 #rcgRts .rts-over p.s{font-size:12px;opacity:.6;margin-bottom:16px}
 #rcgRts .rts-over p.medal{font-size:14px;color:#ffd98a}
+/* the debrief (record.js): two columns, the record under it */
+#rcgRts .rts-over table.debrief{margin:8px auto 10px;border-collapse:collapse;font-size:12.5px}
+#rcgRts .rts-over table.debrief td{padding:2px 10px;text-align:left;opacity:.85}
+#rcgRts .rts-over table.debrief td+td{text-align:right;font-weight:600;opacity:1}
+#rcgRts .rts-over p.rec{margin:0 0 14px;color:#ffd98a;opacity:.9}
 #rcgRts .rts-over p.after{max-width:420px;margin:8px auto;font-style:italic;font-size:13px;line-height:1.45}
 #rcgRts .rts-over button{margin:4px;padding:8px 18px;border:0;border-radius:6px;background:#2e6fd0;color:#fff;
   font-weight:600;cursor:pointer}
