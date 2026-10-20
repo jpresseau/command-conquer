@@ -49,6 +49,7 @@ function rtsSkirmishToggle() {
 function rtsSkirmishSync() {
   var s = rtsSkirmishGet(), n = document.getElementById('rtsSkirmishNote');
   if (n) n.textContent = rtsSkirmishLine(s);
+  if (typeof rtsMapPreviewSoon === 'function') rtsMapPreviewSoon();   /* a different battle: draw it (preview.js) */
   var rows = document.querySelectorAll('#rtsSkirmish .diff');
   for (var i = 0; i < rows.length; i++) {
     var k = rows[i].getAttribute('data-k'), bs = rows[i].getElementsByTagName('button');
