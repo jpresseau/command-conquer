@@ -153,8 +153,54 @@ function builder(o, opt) {
   });
 }
 
+/* ARMOUR BY AIR, PLAYED HARDER: `buy` more Sky Cranes from the airfield first (1300 each, of the
+   3000 the mission starts with), then as many lifts as it takes, every load to the island's dry
+   cell furthest outside its guns' reach, not the near shore under them; ashore, the tanks fight
+   together - `aim` 'guns' taking the garrison when it comes, then the nearest gun, then the radar,
+   'radar' going straight at it. */
+function craneDrop(o, opt) {
+  var g = o.g, G = o.G, M = o.M, S = G.sides.player, arm = g._rtsMTagged(G, 'armour'), P = G.starts.player;
+  function guns() { return G.ents.filter(function (e) { return !e.dead && e.side === 'enemy' && e.type === 'struct' && g.rtsStructDef(e.def).weapon; }); }
+  function cranes() { return G.ents.filter(function (e) { return !e.dead && e.side === 'player' && e.def === 'skycrane'; }); }
+  function ashore() { return arm.filter(function (a) { return !a.dead && !a.inside && g._rtsMNear(a, M.isle.tx, M.isle.tz, 12); }); }
+  var lz = null, clear = -1e9;
+  for (var dz = -8; dz <= 8; dz++) for (var dx = -8; dx <= 8; dx++) {
+    var X = M.isle.tx + dx, Z = M.isle.tz + dz;
+    if (Math.hypot(dx, dz) > 8 || g._rtsBlocked(X, Z, 'land')) continue;
+    var c = Math.min.apply(null, guns().map(function (e) { return Math.hypot(e.x - g._rtsWX(X), e.z - g._rtsWX(Z)) - g.RTS_WEAPONS[g.rtsStructDef(e.def).weapon].range; }));
+    if (c > clear) { clear = c; lz = { x: g._rtsWX(X), z: g._rtsWX(Z) }; }
+  }
+  function fight(i) {
+    var side = ashore(), t = g._rtsMTagged(G, 'target')[0], cx = 0, cz = 0;
+    if (i % 60 || !side.length) return;
+    side.forEach(function (a) { cx += a.x / side.length; cz += a.z / side.length; });
+    function near(l) { var b = null, d = 1e9; l.forEach(function (e) { var k = Math.hypot(e.x - cx, e.z - cz); if (k < d) { d = k; b = e; } }); return b; }
+    var gar = near(g._rtsMTagged(G, 'garrison')), gun = near(guns());
+    var goal = opt.aim === 'radar' ? t : (gar && Math.hypot(gar.x - cx, gar.z - cz) < 30 ? gar : gun || t);
+    side.forEach(function (a) { if (goal && a.target !== goal) g._rtsOrderAttack(a, goal); });
+  }
+  g._rtsTick(1 / 60);
+  for (var i = 0, bought = 0; i < 60 * 120 && cranes().length < 2 + opt.buy; i++) {
+    if (i % 30 === 0 && bought < opt.buy && !S.q[g._rtsQueueCat('skycrane')] && g._rtsQueue('player', 'skycrane')) bought++;
+    g._rtsTick(1 / 60);
+  }
+  for (var n = 0; n < 4 && !G.over; n++) {
+    var left = arm.filter(function (a) { return !a.dead && !a.inside && !g._rtsMNear(a, M.isle.tx, M.isle.tz, 9); }), cs = cranes();
+    if (!left.length) break;
+    cs.forEach(function (l, k) { if (left[k]) g._rtsBoard(left[k], l); });
+    play(o, 15, fight);
+    cs.forEach(function (l, k) { g._rtsOrderMove(l, lz.x + (k % 2) * 6 - 3, lz.z + (k >> 1) * 6 - 3, true); });
+    play(o, 30, fight);
+    cs.forEach(function (l) { g._rtsUnload(l, true); });
+    play(o, 5, fight);
+    cs.forEach(function (l) { g._rtsOrderMove(l, g._rtsWX(P.tx), g._rtsWX(P.tz), true); });
+    play(o, 25, fight);
+  }
+  return play(o, 360, fight);
+}
+
 /* The stronger plays that win a mission at the `top` above its own level, where the intended one
-   loses: a submarine every 30 s, not 40; a tank and a rocket every 8 s, not a tank every 15; and
+   loses: on Armour by Air two more cranes and one lift; a submarine every 30 s, not 40; a tank and a rocket every 8 s, not a tank every 15; and
    on the awake missions a base built, the foes starved and an army massed (builder, above). */
 var strong = {
   /* six raiders, the army going at 22: from the first minute at Regular, the second at Soldier.
@@ -170,6 +216,8 @@ var strong = {
     return builder(o, { secs: 620, target: function () { return g._rtsMTagged(G, 'y1')[0] || g._rtsMTagged(G, 'y2')[0]; }, hold: 32, raid: 8, from: 60,
       each: function (i) { var y2 = g._rtsMTagged(G, 'y2')[0] || g._rtsMTagged(G, 'y1')[0]; if (y2 && i % 6000 === 5) g._rtsAllyCommand('attack', y2.x, y2.z); } });
   },
+  /* two more cranes, all four tanks in one lift, ashore out of the guns' reach */
+  skycrane: function (o) { return craneDrop(o, { buy: 2, aim: 'guns' }); },
   channel: function (o) {
     return play(o, 490, function (i) { if (i % 1800 === 0) o.g._rtsQueue('player', 'sub'); });
   },
@@ -182,4 +230,4 @@ var strong = {
     });
   }
 };
-module.exports = { plays: plays, strong: strong, sendAll: sendAll, builder: builder };
+module.exports = { plays: plays, strong: strong, sendAll: sendAll, builder: builder, craneDrop: craneDrop };

@@ -130,7 +130,7 @@ var RTS_CAMPAIGN = [
       return null;
     } },
 
-  { id: 'skycrane', name: 'Armour by Air', army: 'soviet', diff: 'normal', seed: 9003, par: 200,
+  { id: 'skycrane', name: 'Armour by Air', army: 'soviet', diff: 'normal', top: 'hard', seed: 9003, par: 200,
     brief: 'The Compact has put its radar on an island no bridge reaches and no tide uncovers. Your Sky Cranes can lift one tank at a time: carry the armour over the water and take the radar down inside six minutes.',
     after: 'The radar is down and the strait is dark - but a Compact flotilla is already moving up the lagoon, for the Dominion\'s Sub Pen.',
     goals: [ { id: 'radar', text: 'Destroy the Compact radar on the island' },
