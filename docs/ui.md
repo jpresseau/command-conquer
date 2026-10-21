@@ -212,6 +212,16 @@ dashed line through each stop, amber for attack-move legs. Shift is read on the 
 release (`ui/input.js`); a touch screen has no Shift, so on a phone orders are given one at a time.
 `unit/waypoints` holds the walking; `e2e/waypoints` gives the clicks.
 
+### Repeat (ui/repeat.js, core/production.js)
+
+↻ REPEAT sits with REPAIR and SELL and applies to the unit tab in view: `S.rep[cat]`, on the side,
+so a save carries it. When a repeating line finishes its last copy it starts the same unit again,
+priced and paid like any job, so a broke side's line waits for money as a queued one does. It is
+the line's, not the unit's: queue something else on a repeating line and that is what repeats.
+It stops when the line can no longer build the unit (`_rtsCanQueue`: the barracks gone, a cap
+reached). The Build tab has none, since a building waits for its placement. The tile being
+repeated wears ↻. `unit/repeat` holds the rule; `e2e/repeat` clicks the button and a tile.
+
 ### A line you can go to (ui/go.js, core/idle.js)
 
 `_rtsSay` now carries a place and a thing (`G.msgAt`, `G.msgSel`); a line that has them is

@@ -290,6 +290,9 @@
   animation:rtsPwrPulse 1s ease-in-out infinite}
 #rcgRts .rts-ops button[data-mode="sell"].on{background:#9c6a1c;border-color:#ffcf6a;color:#fff;
   animation:rtsPwrPulse 1s ease-in-out infinite}
+/* repeat (ui/repeat.js): on is the move-order green, and the tile it repeats wears ↻ */
+#rcgRts .rts-ops button#rtsRepeatBtn.on{background:#2f6a3e;border-color:#8ef07a;color:#fff}
+#rcgRts .rts-tile .rep{position:absolute;left:3px;top:2px;font-size:13px;color:#8ef07a;text-shadow:0 0 3px #000;pointer-events:none}
 
 /* superweapons: the charge is the button's own background, filling left to right, so the state
    is readable without a separate gauge to find. The row collapses to nothing when empty - a

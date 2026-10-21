@@ -311,6 +311,11 @@ function _rtsTickProduction(side, dt) {
       /* PROMOTE THE NEXT COPY, priced and timed afresh - see _rtsJob. A struct line never
          stacks (there is one placement cursor), so this only ever runs for units. */
       S.q[cat] = q.n > 0 ? _rtsJob(side, q.key, q.n - 1) : null;
+      /* REPEAT (ui/repeat.js): a line set to repeat starts the same unit again when its last copy
+         is done, for as long as it may be built (_rtsCanQueue - which also refuses a second
+         building while one waits to be placed, so the Build line never repeats) - priced and
+         paid as any job, so a broke side's line waits for money as a queued one does */
+      if (!S.q[cat] && S.rep && S.rep[cat] && _rtsCanQueue(side, q.key)) S.q[cat] = _rtsJob(side, q.key, 0);
       /* PurchasePrice: what was ACTUALLY paid follows the building, so a refund later is not
          computed from a sticker price the buyer never paid. It matters because CostBias is
          real - an opponent on `hard` pays 0.8x - and refunding half of full price handed it a

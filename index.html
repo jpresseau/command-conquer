@@ -301,6 +301,9 @@
   animation:rtsPwrPulse 1s ease-in-out infinite}
 #rcgRts .rts-ops button[data-mode="sell"].on{background:#9c6a1c;border-color:#ffcf6a;color:#fff;
   animation:rtsPwrPulse 1s ease-in-out infinite}
+/* repeat (ui/repeat.js): on is the move-order green, and the tile it repeats wears ↻ */
+#rcgRts .rts-ops button#rtsRepeatBtn.on{background:#2f6a3e;border-color:#8ef07a;color:#fff}
+#rcgRts .rts-tile .rep{position:absolute;left:3px;top:2px;font-size:13px;color:#8ef07a;text-shadow:0 0 3px #000;pointer-events:none}
 
 /* superweapons: the charge is the button's own background, filling left to right, so the state
    is readable without a separate gauge to find. The row collapses to nothing when empty - a
@@ -831,7 +834,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">14da720 · 2026-10-21</div>
+  <div id="rtsBuild" title="build">eb7a81f · 2026-10-21</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -15789,6 +15792,11 @@ function _rtsTickProduction(side, dt) {
       /* PROMOTE THE NEXT COPY, priced and timed afresh - see _rtsJob. A struct line never
          stacks (there is one placement cursor), so this only ever runs for units. */
       S.q[cat] = q.n > 0 ? _rtsJob(side, q.key, q.n - 1) : null;
+      /* REPEAT (ui/repeat.js): a line set to repeat starts the same unit again when its last copy
+         is done, for as long as it may be built (_rtsCanQueue - which also refuses a second
+         building while one waits to be placed, so the Build line never repeats) - priced and
+         paid as any job, so a broke side's line waits for money as a queued one does */
+      if (!S.q[cat] && S.rep && S.rep[cat] && _rtsCanQueue(side, q.key)) S.q[cat] = _rtsJob(side, q.key, 0);
       /* PurchasePrice: what was ACTUALLY paid follows the building, so a refund later is not
          computed from a sticker price the buyer never paid. It matters because CostBias is
          real - an opponent on `hard` pays 0.8x - and refunding half of full price handed it a
@@ -31620,6 +31628,8 @@ function rtsOpen(seed) {
     +       'title="Repair: click one of your buildings to patch it up for credits">🔧 REPAIR</button>'
     +     '<button type="button" data-mode="sell" onclick="rtsMode(\'sell\')" '
     +       'title="Sell: click one of your buildings to sell it back">💲 SELL</button>'
+    /* the line of the tab in view builds its unit again and again (ui/repeat.js) */
+    +     '<button type="button" id="rtsRepeatBtn" hidden onclick="rtsRepeatToggle()" title="Repeat: this line builds its unit again each time one is done">↻ REPEAT</button>'
     /* orders to a computer ally, in a battle that has one (ui/allymenu.js) */
     +     '<button type="button" id="rtsAllyBtn" hidden onclick="rtsAllyMenu()" title="Give your ally an order">🤝 ALLY</button>'
     +   '</div>'
@@ -32810,6 +32820,7 @@ function _rtsSyncSidebar(dt) {
   document.querySelector('#rcgRts .rts-pwr').title =
     'Power  ' + S.powerUsed + ' drawn / ' + S.powerMade + ' supplied' + (pf < 0.999 ? '  — LOW POWER' : '');
 
+  _rtsRepeatSync();                                /* ↻ REPEAT for the tab in view: ui/repeat.js */
   for (var key in U.btns) {
     var b = U.btns[key], def = rtsStructDef(key) || rtsUnitDef(key);
     var cat = _rtsQueueCat(key), q = S.q[cat];
@@ -33101,6 +33112,46 @@ function rtsAllyOrder(kind) {
   var m = document.getElementById('rtsAllyMenu');
   if (m) m.hidden = true;
   return ok;
+}
+</script>
+<script>/* ui/repeat.js - REPEAT: a unit line that keeps building. Part of rts.ui, which owns the DOM.
+
+   A long battle is a long run of clicks on the same tank. ↻ REPEAT, beside REPAIR and SELL, sets
+   the line of the tab in view (S.rep[cat]) to start its unit again each time the last copy is
+   done (core/production.js); the tile being repeated wears ↻. It is the line's, not the unit's:
+   queue something else on a repeating line and that is what repeats next. Cancelling the job
+   stops the line until something is queued again. The Build tab has no repeat - a building
+   waits for its placement. Kept on the side, so a save carries it. */
+function rtsRepeatToggle(cat) {
+  var G = window._rtsG, U = window._rtsUI;
+  if (!G || !U) return false;
+  cat = cat || U.cat;
+  if (!cat || cat === 'struct') return false;
+  var S = G.sides.player;
+  S.rep = S.rep || {};
+  S.rep[cat] = !S.rep[cat];
+  if (!S.rep[cat]) delete S.rep[cat];
+  var name = (RTS_TABS.filter(function (t) { return t[0] === cat; })[0] || [cat, cat])[1];
+  _rtsSay(S.rep && S.rep[cat] ? name + ' repeat on - the line builds its unit again when one is done.' : name + ' repeat off.');
+  if (typeof _rtsSfx === 'function') _rtsSfx('click');
+  _rtsRepeatSync();
+  return !!(S.rep && S.rep[cat]);
+}
+/* the button for the tab in view, and the ↻ on the tile being repeated */
+function _rtsRepeatSync() {
+  var G = window._rtsG, U = window._rtsUI, b = document.getElementById('rtsRepeatBtn');
+  if (!G || !U || !b) return;
+  var S = G.sides.player, cat = U.cat, on = !!(S.rep && S.rep[cat]);
+  var hide = !cat || cat === 'struct';
+  if (b.hidden !== hide) b.hidden = hide;
+  var cls = on ? 'on' : '';
+  if (b.className !== cls) b.className = cls;
+  var q = S.q[cat], key = on && q ? q.key : null;
+  for (var k in (U.btns || {})) {
+    var t = U.btns[k], mark = t.querySelector('.rep');
+    if (k === key && !mark) { mark = document.createElement('span'); mark.className = 'rep'; mark.textContent = '↻'; t.appendChild(mark); }
+    else if (k !== key && mark) mark.remove();
+  }
 }
 </script>
 <script>/* ui/navigate.js - getting around the map with the mouse. Part of rts.ui.

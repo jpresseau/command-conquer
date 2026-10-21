@@ -80,6 +80,8 @@ function rtsOpen(seed) {
     +       'title="Repair: click one of your buildings to patch it up for credits">🔧 REPAIR</button>'
     +     '<button type="button" data-mode="sell" onclick="rtsMode(\'sell\')" '
     +       'title="Sell: click one of your buildings to sell it back">💲 SELL</button>'
+    /* the line of the tab in view builds its unit again and again (ui/repeat.js) */
+    +     '<button type="button" id="rtsRepeatBtn" hidden onclick="rtsRepeatToggle()" title="Repeat: this line builds its unit again each time one is done">↻ REPEAT</button>'
     /* orders to a computer ally, in a battle that has one (ui/allymenu.js) */
     +     '<button type="button" id="rtsAllyBtn" hidden onclick="rtsAllyMenu()" title="Give your ally an order">🤝 ALLY</button>'
     +   '</div>'
