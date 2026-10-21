@@ -103,7 +103,7 @@ function _rtsBindInput() {
     if (e.button === 1 || e.button === 2) {
       var gb = U.grab && U.grab.button === e.button ? _rtsGrabEnd() : null;
       /* a right press that never dragged is the order it always was, as it was pressed */
-      if (gb && gb.button === 2 && !gb.moved) _rtsGrabClick(gb);
+      if (gb && gb.button === 2 && !gb.moved) { U.queue = !!e.shiftKey; try { _rtsGrabClick(gb); } finally { U.queue = false; } }   /* Shift queues it: ui/select.js */
       else if (gb && gb.button === 1 && !gb.moved && gb.orbit) _rtsOrbitReset();   /* middle-click */
       if (e.button === 2) U.drag = null;
       return;
@@ -172,6 +172,7 @@ function _rtsBindInput() {
     }
     if (!mine.length) return false;
     var w = miniWorld(e);
+    for (i = 0; i < mine.length; i++) mine[i].wq = null;          /* a new order: the queued stops go (core/orders.js) */
     if (!_rtsRadarOrder(mine, w, !!U.attackMove)) return false;
     if (typeof _rtsSfx === 'function') _rtsSfx('order');
     return true;
