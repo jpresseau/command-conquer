@@ -139,6 +139,7 @@ function rtsOpen(seed) {
   if (_home) { _rtsR.focus.x = _home.x; _rtsR.focus.z = _home.z; }
   /* a campaign mission is laid on the battle just made, and looks where it says (campaign.js) */
   if (!_load && typeof rtsCampLay === 'function') rtsCampLay(window._rtsG);
+  if (!_load && typeof rtsSurvivalLay === 'function') rtsSurvivalLay(window._rtsG);   /* or a survival: survival.js */
   /* the top bar names an ally and a second foe when the setup brought them (rules/skirmish.js) */
   var _vsP = document.querySelector('#rcgRts .rts-vs .p'), _vsE = document.querySelector('#rcgRts .rts-vs .e');
   if (_vsP && window._rtsG.sides.ally) _vsP.textContent += ' + ally';

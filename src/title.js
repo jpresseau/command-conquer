@@ -17,6 +17,7 @@ function rtsSetDiff(k){
   if (!RTS_DIFF[k]) return;
   window._RTS_DIFF = k;
   if (typeof rtsRecordNote === 'function') rtsRecordNote();       /* the record follows the difficulty (record.js) */
+  if (typeof rtsSurvivalNote === 'function') rtsSurvivalNote();   /* and so does the best survival (survival.js) */
   var wrap = document.getElementById('rtsDiff');
   if (!wrap) return;
   var bs = wrap.getElementsByTagName('button');
@@ -40,6 +41,10 @@ function rtsHome(){
   /* a daily battle borrowed the army and difficulty: put the player's own back (daily.js) */
   if (typeof rtsDailyEnd === 'function') rtsDailyEnd();
   if (typeof rtsCampEnd === 'function') rtsCampEnd();      /* and so did a mission (campaign.js) */
+  if (typeof rtsSurvivalEnd === 'function') rtsSurvivalEnd();   /* and a survival is over (survival.js) */
+  var sb = document.getElementById('rtsSurvival');
+  if (sb) { sb.disabled = false; sb.innerHTML = 'SURVIVAL<small id="rtsSurvivalNote"></small>'; }
+  if (typeof rtsSurvivalNote === 'function') rtsSurvivalNote();
   var db = document.getElementById('rtsDaily');
   if (db) { db.disabled = false; db.innerHTML = 'DAILY BATTLE<small id="rtsDailyNote"></small>'; }
   if (typeof rtsDailyNote === 'function') rtsDailyNote();
@@ -112,6 +117,7 @@ rtsShowResume();
 if (typeof _rtsAutoBind === 'function') _rtsAutoBind();     /* the autosave's two moments (autosave.js) */
 rtsBuildArmyPick();
 if (typeof rtsDailyNote === 'function') rtsDailyNote();
+if (typeof rtsSurvivalNote === 'function') rtsSurvivalNote();
 if (typeof rtsRecordNote === 'function') rtsRecordNote();
 if (typeof rtsSkirmishSync === 'function') rtsSkirmishSync();
 if (typeof rtsOfflineNote === 'function') rtsOfflineNote();
