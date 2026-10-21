@@ -10,7 +10,11 @@
                   kept; with guns round it the same base is still standing at ten minutes, seven waves in
      DIFFICULTY   an easy wave is smaller than a hard one
      A SAVE       a survival saved mid-run and resumed in a fresh world goes on: the count kept, the
-                  next wave on time */
+                  next wave on time
+     THE BOUNTY   every unit of a wave carries its number; while one of it stands nothing is paid,
+                  and when the last falls the player is paid that wave's bounty within
+                  RTS_SURV.look seconds, once; a later wave pays more, a harder battle more; and a
+                  save carries both the wave still owed and the tags, so the resumed run pays it */
 
 var { Suite } = require('../lib/assert.js');
 var { loadFast } = require('../lib/sandbox.js');
@@ -83,5 +87,40 @@ S.ok('A SAVE: resumed in a fresh world it is still a survival, the count kept', 
      JSON.stringify(RG.survival));
 run(r, next + 1);
 S.ok('...and the next wave comes on time', RG.survival.wave === 2, JSON.stringify(RG.survival));
+
+/* ---------------- the bounty ---------------- */
+function waveUnits(g, n) { return g._rtsG.ents.filter(function (e) { return !e.dead && e.side === 'enemy' && e.type === 'unit' && e.tag === 'w' + n; }); }
+function credits(g) { return g._rtsG.sides.player.credits; }
+var b = world(), BG = b._rtsG, BV = BG.survival;
+for (var bt = 0; bt < 60 * (b.RTS_SURV.first + 1) && BV.wave === 0; bt++) b._rtsTick(1 / 60);
+var mine = waveUnits(b, 1), all = foes(b);
+S.ok('THE BOUNTY: every unit of the first wave carries its number, and the wave is owed', mine.length >= 3 && mine.length === all.length && BV.open.join() === '1' && BV.paid === 0,
+     JSON.stringify({ tagged: mine.length, foes: all.length, open: BV.open }));
+/* all but one of it gone: nothing is paid while that one stands */
+mine.slice(1).forEach(function (e) { e.hp = 0; b._rtsKill(e); });
+var c0 = credits(b);
+run(b, b.RTS_SURV.look * 2);
+S.ok('...while one of it stands, nothing is paid', BV.open.join() === '1' && BV.paid === 0 && credits(b) <= c0, JSON.stringify({ open: BV.open, paid: BV.paid, credits: [c0, credits(b)] }));
+var c1 = credits(b), owe = b._rtsSurvivalBounty(BG, 1);
+if (mine[0]) { mine[0].hp = 0; b._rtsKill(mine[0]); }
+run(b, b.RTS_SURV.look + 0.1);
+var c2 = credits(b);
+run(b, b.RTS_SURV.look * 3);
+S.ok('...the last of it down, the player is paid that wave\'s bounty within ' + b.RTS_SURV.look + ' s, and once', owe >= 100 && c2 - c1 === owe && credits(b) === c2 && BV.paid === owe && BV.open.length === 0 &&
+     /Wave 1 wiped out - \+\d+ credits/.test(BG.msg || ''), JSON.stringify({ owe: owe, got: c2 - c1, after: credits(b) - c2, paid: BV.paid, msg: BG.msg }));
+var bw = [1, 3, 6].map(function (n) { return b._rtsSurvivalBounty(BG, n); }), be = world('easy'), bh = world('hard');
+S.ok('...a later wave pays more, and a harder battle more for the same wave', bw[0] < bw[1] && bw[1] < bw[2] && be._rtsSurvivalBounty(be._rtsG, 3) < bh._rtsSurvivalBounty(bh._rtsG, 3) &&
+     bw.every(function (v) { return v % 50 === 0; }), JSON.stringify({ normal: bw, easy3: be._rtsSurvivalBounty(be._rtsG, 3), hard3: bh._rtsSurvivalBounty(bh._rtsG, 3) }));
+/* saved with a wave owed, resumed, the rest of it killed: the resumed run pays */
+var q = world(), QG = q._rtsG;
+for (var qt = 0; qt < 60 * (q.RTS_SURV.first + 1) && QG.survival.wave === 0; qt++) q._rtsTick(1 / 60);
+var qbody = JSON.parse(JSON.stringify(q._rtsSaveState(QG)));
+var q2 = loadFast(['src/rules', 'src/core', 'src/sprites/props.js', 'src/rts.save.js']);
+q2._rtsNewGame(qbody.seed, qbody.diff); q2.window._rtsUI = {}; q2._rtsApplyState(q2._rtsG, qbody);
+var Q2 = q2._rtsG, qleft = waveUnits(q2, 1), qc = credits(q2);
+qleft.forEach(function (e) { e.hp = 0; q2._rtsKill(e); });
+run(q2, q2.RTS_SURV.look + 0.1);
+S.ok('...and a save carries the wave owed and its tags: resumed, the rest of it killed, the run pays', qleft.length >= 3 && Q2.survival.open.length === 0 && credits(q2) - qc === q2._rtsSurvivalBounty(Q2, 1),
+     JSON.stringify({ tagged: qleft.length, open: Q2.survival.open, got: credits(q2) - qc }));
 
 require('../lib/report.js')(S);
