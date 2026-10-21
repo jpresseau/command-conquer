@@ -253,6 +253,24 @@ is added to the record at its difficulty (`bw.record`: wins, losses, fastest win
 BATTLE shows for the difficulty set and follows the picker; a daily and a mission keep their own.
 `unit/record` holds the counts and the rule; `e2e/record` reads the card and the title.
 
+### Replays (replay.js, core/replay.js, core/commands.js)
+
+The simulation is deterministic, so a replay is the setup, the length of every tick and the
+interface's calls: a character a tick (the live step is whole milliseconds, capped at 100) and a
+line an order - 1.4 KB for a ten-second battle. Every simulation function the interface calls is
+wrapped: logged while recording when called from outside a tick and from no other recorded call,
+refused while a replay plays. `unit/replay` holds the list from both ends - each of the 113
+simulation functions called from outside src/core and src/rules is a command or named in
+`RTS_REPLAY_PURE` - and src/ui may not write orders by hand: the waypoints, a bomber's held aim, a
+demolition, a harvester sent home, the placed building and the repeat were writes until
+core/commands.js named them, and each would have let a replay go its own way. Measured, headless:
+a 200 s battle of 9303 uneven ticks replays to the same wide fingerprint, and with one order taken
+out does not; Order of Battle won with the ally's orders, and a survival through six waves and 900
+credits of bounty, the same. `e2e/replay` plays a battle by real input, quits, watches it at 8x
+from the title and gets the recording's hash back; a survival overrun is watched from its own card.
+A replay saves nothing, clears no autosave and writes no record or best; it borrows the recorded
+army and gives the player's back on the title.
+
 ### Colours for a colour-blind eye (ui/cvd.js)
 
 The seats are known by colour alone, and the standard five - blue, green, red, amber, violet -

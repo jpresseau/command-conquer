@@ -96,6 +96,12 @@ come close, so fog is the day to walk up on a fortified line. In the rain the sh
 clock, and while one is at full strength every armed aircraft is grounded on its pad until it
 passes. A battle keeps the sky it started under, and a save keeps it too.
 
+**Replays.** Every battle you start is recorded. When it ends, or when you leave it, **▶ Watch
+replay** on the end card, or **WATCH REPLAY** on the title, plays it back: your orders and the
+enemy's moves exactly as they happened, at 1×, 2×, 4× or 8×, with the camera free. It says at the
+end whether it played out as fought - a replay from an older version of the game can go its own
+way. Only the last battle is kept, and a replay never touches your saves or records.
+
 **Colour-blind colours.** The title's **COLOUR-BLIND** button swaps the armies to a palette a red-green
 or blue-yellow colour-blind eye can tell apart: you stay blue, an ally is sky blue, and the foes
 are orange, yellow and pink, each at its own brightness.

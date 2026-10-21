@@ -595,3 +595,9 @@
   #rcgRts .rts-goals:not(.open) .pill{display:block}
   #rcgRts .rts-goals:not(.open) b,#rcgRts .rts-goals:not(.open) span{display:none}
 }
+/* a replay's bar (replay.js): what is playing, how far in, how fast */
+#rcgRts .rts-replaybar{position:absolute;left:50%;transform:translateX(-50%);top:48px;display:flex;align-items:center;gap:8px;
+  padding:4px 6px 4px 12px;border-radius:6px;background:rgba(10,14,20,.82);color:#e8eef6;font:600 12px/1 ui-monospace,monospace;z-index:6}
+#rcgRts .rts-replaybar b{color:#ffd76a;letter-spacing:.5px}
+#rcgRts .rts-replaybar button{min-width:44px;min-height:32px;border:1px solid #3a4a60;border-radius:5px;background:#18222f;color:#fff;font:inherit;cursor:pointer}
+@media (pointer:coarse){#rcgRts .rts-replaybar button{min-height:40px}}

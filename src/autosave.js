@@ -22,7 +22,7 @@ var RTS_AUTO_EVERY = 60;      /* seconds of battle between autosaves */
    once that they are not. */
 function _rtsAutoSave() {
   var G = window._rtsG, U = window._rtsUI;
-  if (!G || G.over) return false;
+  if (!G || G.over || (U && U.replay)) return false;          /* a replay is not a battle to keep (replay.js) */
   if (U && U.autoT === G.t && rtsSaveInfo('auto')) return true;      /* nothing has moved since */
   var text, info;
   try { text = JSON.stringify(_rtsSaveState(G)); info = _rtsSaveHeader(G, text); }
@@ -48,7 +48,7 @@ function _rtsAutoClear() {
    write is written again; one that is over is cleared, once. The count starts where the battle
    opened, so a continued battle is not written again the moment it is back. */
 function _rtsAutoTick(G, U) {
-  if (!G || !U) return;
+  if (!G || !U || U.replay) return;
   if (G.over) { if (!U.autoGone) { U.autoGone = true; _rtsAutoClear(); } return; }
   if (U.autoT === undefined) U.autoT = G.t;
   if (G.t - U.autoT >= RTS_AUTO_EVERY) _rtsAutoSave();

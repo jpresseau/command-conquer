@@ -606,6 +606,12 @@
   #rcgRts .rts-goals:not(.open) .pill{display:block}
   #rcgRts .rts-goals:not(.open) b,#rcgRts .rts-goals:not(.open) span{display:none}
 }
+/* a replay's bar (replay.js): what is playing, how far in, how fast */
+#rcgRts .rts-replaybar{position:absolute;left:50%;transform:translateX(-50%);top:48px;display:flex;align-items:center;gap:8px;
+  padding:4px 6px 4px 12px;border-radius:6px;background:rgba(10,14,20,.82);color:#e8eef6;font:600 12px/1 ui-monospace,monospace;z-index:6}
+#rcgRts .rts-replaybar b{color:#ffd76a;letter-spacing:.5px}
+#rcgRts .rts-replaybar button{min-width:44px;min-height:32px;border:1px solid #3a4a60;border-radius:5px;background:#18222f;color:#fff;font:inherit;cursor:pointer}
+@media (pointer:coarse){#rcgRts .rts-replaybar button{min-height:40px}}
 </style>
 <style>
 /* --- standalone shell: the title screen this app boots into --- */
@@ -781,6 +787,8 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   <button type="button" class="go resume" id="rtsDaily" onclick="rtsDailyStart(this)">DAILY BATTLE<small id="rtsDailyNote"></small></button>
   <!-- No enemy base, only waves, each bigger than the last: survival.js -->
   <button type="button" class="go resume" id="rtsSurvival" onclick="rtsSurvivalStart(this)">SURVIVAL<small id="rtsSurvivalNote"></small></button>
+  <!-- The last battle, played again from its recording: replay.js -->
+  <button type="button" class="go resume" id="rtsReplay" onclick="rtsReplayWatch(this)" hidden>WATCH REPLAY<small id="rtsReplayNote"></small></button>
   <!-- Nine authored missions: campaign.js -->
   <button type="button" class="go resume" id="rtsCampBtn" onclick="rtsCampToggle()">CAMPAIGN<small>nine missions on the coast</small></button>
   <div id="rtsCampList" hidden></div>
@@ -838,7 +846,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">c4d7bd3 · 2026-10-21</div>
+  <div id="rtsBuild" title="build">efc44ea · 2026-10-21</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -16059,6 +16067,35 @@ function _rtsWayNext(e) {
   return !!e.order;
 }
 </script>
+<script>/* core/commands.js - the player's orders that were writes straight from the interface. Part of
+   rts.core.
+
+   A REPLAY (core/replay.js) records every call the interface makes into the simulation, and plays
+   them back on the same ticks. A field the interface sets by hand is not a call, so it was not on
+   the record: the queued stops (u.wq), the bomber's held aim (u.bombNext), a harvester sent to a
+   refinery, the building waiting for its place (S.ready) and a line's repeat (S.rep) were each a
+   way for a replay to go its own way. They are named calls here, and test/unit/replay holds the
+   interface to it: none of src/ui writes a unit's or a side's orders directly. */
+
+/* the stops a unit had queued, gone - a new order given without Shift (core/orders.js _rtsWayNext) */
+function _rtsWayClear(u) { if (u) u.wq = null; }
+/* one more stop after the ones it has, attack-moving there or not */
+function _rtsWayAdd(u, x, z, am) { if (u) (u.wq = u.wq || []).push({ x: x, z: z, am: !!am }); }
+/* the target a bomber was keeping for when it is loaded, given up for a new order (core/bomber.js) */
+function _rtsBombClear(u) { if (u) u.bombNext = null; }
+/* a demolition charge carried to an enemy building (the Commando's: ui/select.js) */
+function _rtsOrderDemo(u, b) { if (u) { u.order = 'demo'; u.target = b; u.path = null; u.goal = null; u.susp = null; } }
+/* a harvester right-clicked onto its own refinery: back to unload, whatever it was doing */
+function _rtsOrderToRefinery(u) { if (u) { u.order = 'harvest'; u.hstate = 'toRef'; u.path = null; } }
+/* the finished building put down, or given up: nothing waits for a place */
+function _rtsReadyClear(side) { var S = window._rtsG.sides[side]; S.ready = null; S.readyPaid = null; }
+/* a unit line's repeat (ui/repeat.js), on or off */
+function _rtsRepeatSet(side, cat, on) {
+  var S = window._rtsG.sides[side];
+  S.rep = S.rep || {};
+  if (on) S.rep[cat] = true; else delete S.rep[cat];
+}
+</script>
 <script>/* core/combat.js - choosing a target and shooting at it: threat evaluation, weapon pick,
    firing, fear and retaliation. Part of rts.core, the simulation. */
 
@@ -22114,6 +22151,193 @@ function _rtsIdleCheapest(cat) {
     if (best === null || c < best) best = c;
   }
   return best;
+}
+</script>
+<script>/* core/replay.js - RECORDING A BATTLE, AND PLAYING IT BACK. Part of rts.core; the title's button,
+   the end card's and the replay's own bar are replay.js.
+
+   The simulation is deterministic - the same start, the same ticks of the same lengths and the
+   same orders on the same ticks make the same battle, to the bit (unit/campaign-save resumes four
+   missions on that) - so a replay is small: the setup (replay.js keeps it in the header), the
+   length of every tick, and every call the interface made into the simulation, each with the
+   number of ticks run before it. The live loop's step is the difference of two Date readings in
+   whole milliseconds, capped at 100 (ui/camera.js), so a tick is one character in `dts`; a tick
+   of any other length - a spec's 1/60 - goes in `odd` by its number.
+
+   THE CALLS. RTS_REPLAY_CMDS names every simulation function the interface calls that changes the
+   battle. Each is wrapped, once (_rtsRecInstall), so that a call from outside a tick and from no
+   other recorded call is logged while recording, refused while a replay plays - the player
+   watches; the replay's own calls go through - and passes untouched the rest of the time. Calls
+   inside a tick are the simulation's own and are never logged. test/unit/replay holds the list
+   from both ends: every simulation function the interface calls is here or in RTS_REPLAY_PURE,
+   which says why it need not be (it reads, it sets up the battle, or it only writes the message
+   line), and src/ui writes no unit's or side's orders by hand (core/commands.js).
+
+   A "...Selected" call acts on the selection, so its record carries the selection's ids, and a
+   replay selects them before making it. An entity in an argument is recorded by id and found by
+   id again; the ids are dealt in the same order in both runs, being part of the battle. */
+var RTS_REPLAY_CMDS = [
+  '_rtsOrderMove', '_rtsOrderAttack', '_rtsOrderBoard', '_rtsOrderCapture', '_rtsOrderHarvest',
+  '_rtsOrderUnloadAt', '_rtsLandAt', '_rtsDroneOn', '_rtsBomberSend', '_rtsSetRally',
+  '_rtsPlaceStruct', '_rtsQueue', '_rtsCancel', '_rtsSuspend', '_rtsResume', '_rtsSell',
+  '_rtsToggleRepair', '_rtsSuperFire', '_rtsAllyCommand', '_rtsHoldSelected', '_rtsDeploySelected',
+  '_rtsUnloadSelected', '_rtsKill',
+  /* core/commands.js: what used to be written by hand */
+  '_rtsWayClear', '_rtsWayAdd', '_rtsBombClear', '_rtsOrderDemo', '_rtsOrderToRefinery', '_rtsReadyClear', '_rtsRepeatSet'
+];
+var RTS_REPLAY_PURE = {
+  read: ['_rtsAground', '_rtsAirHeld', '_rtsBias', '_rtsBlocked', '_rtsBoardReachable', '_rtsBoardWhyNot',
+    '_rtsBridgeAt', '_rtsCanBoard', '_rtsCanDeploy', '_rtsCanEngage', '_rtsCanPlace', '_rtsCanProduce',
+    '_rtsCanRally', '_rtsCanUnload', '_rtsCargoCount', '_rtsDomainOf', '_rtsElev', '_rtsEntSeen', '_rtsHas',
+    '_rtsHostile', '_rtsHullReaches', '_rtsIdx', '_rtsInB', '_rtsIsBridgeCell', '_rtsIsTransport', '_rtsJamUp',
+    '_rtsJammed', '_rtsMinesLeft', '_rtsMissionGoals', '_rtsMissionGold', '_rtsMissionLevels',
+    '_rtsMissionMedal', '_rtsMissionOf', '_rtsPowerFactor', '_rtsQueueCat', '_rtsRadarStaticShown',
+    '_rtsSkirmishOf', '_rtsStormGrounds', '_rtsSuperDefOf', '_rtsSuperHint', '_rtsSuperProgress',
+    '_rtsSuperReady', '_rtsSuperSources', '_rtsSurvivalBounty', '_rtsTX', '_rtsTideAny', '_rtsTideLine',
+    '_rtsWX', '_rtsWhyLocked', 'rtsArmyName', 'rtsArmyTitle', 'rtsBuildableBy', 'rtsCapacity', 'rtsCapturable',
+    'rtsHouseSide', 'rtsMoney', 'rtsStructDef', 'rtsUnitDef', 'rtsArmySide', '_rtsReplayHash',
+    /* the picture's: heights, sight and where a gun points (src/render, src/render3d) */
+    '_rtsAirLift', '_rtsVisible', '_rtsMineShown', '_rtsBridgeDeckY', '_rtsMuzzleAngle', '_rtsFireCoord',
+    '_rtsWithPlayer', '_rtsStandY', '_rtsEffectsSeen', '_rtsElevNormal', '_rtsTileElev'],
+  /* the battle's setup, before a recording starts, or a save's, which is not recorded */
+  setup: ['_rtsNewGame', '_rtsMissionSetup', '_rtsSurvivalSetup', '_rtsRecalcPower', '_rtsRngMake', 'rtsSetArmySide',
+    '_rtsRecStart', '_rtsRecStop', '_rtsReplayBegin', '_rtsReplayStep'],
+  /* the message line, which nothing in the simulation reads */
+  say: ['_rtsSay'],
+  /* the loop itself: recorded as the ticks */
+  loop: ['_rtsTick']
+};
+var _rtsRec = null;
+
+function _rtsRecInstall() {
+  if (_rtsRecInstall.done) return;
+  _rtsRecInstall.done = true;
+  var realTick = window._rtsTick;
+  window._rtsTick = function (dt) {
+    var R = _rtsRec;
+    if (!R) return realTick(dt);
+    if (R.mode === 'rec') {
+      var ms = Math.round(dt * 1000);
+      if (ms >= 1 && ms <= 100 && ms / 1000 === dt) R.dts += String.fromCharCode(48 + ms);
+      else { R.dts += '/'; R.odd[R.n] = dt; }
+    }
+    R.inTick++;
+    try { return realTick(dt); } finally { R.inTick--; R.n++; }
+  };
+  RTS_REPLAY_CMDS.forEach(function (name) {
+    var real = window[name];
+    if (typeof real !== 'function') return;
+    window[name] = function () {
+      var R = _rtsRec;
+      if (!R || R.inTick || R.depth) return real.apply(this, arguments);
+      if (R.mode === 'play' && !R.applying) { _rtsReplayRefuse(R); return false; }
+      if (R.mode === 'rec') R.cmds.push(_rtsRecCall(R, name, arguments));
+      R.depth++;
+      try { return real.apply(this, arguments); } finally { R.depth--; }
+    };
+  });
+}
+/* an order given by hand during a replay: refused, and said so - once in a while, not per unit */
+function _rtsReplayRefuse(R) {
+  var G = window._rtsG;
+  R.refused = (R.refused || 0) + 1;
+  if (G && !(R.saidT > G.t - 2)) { R.saidT = G.t; _rtsSay('A replay plays itself - watch, or ✕ to leave it.', 3); }
+}
+/* an argument as the record keeps it: an entity by its id, undefined and the non-finite numbers
+   spelled out, since JSON has neither */
+function _rtsRecEnc(v) {
+  if (v === undefined) return { '~': 'u' };
+  if (typeof v === 'number' && !isFinite(v)) return { '~': String(v) };
+  if (!v || typeof v !== 'object') return v;
+  if (v.id !== undefined && (v.type === 'unit' || v.type === 'struct')) return { '@': v.id };
+  if (Array.isArray(v)) return v.map(_rtsRecEnc);
+  var o = {};
+  for (var k in v) o[k] = _rtsRecEnc(v[k]);
+  return o;
+}
+function _rtsRecEnt(G, id) {
+  for (var i = 0; i < G.ents.length; i++) if (G.ents[i].id === id) return G.ents[i];
+  return { id: id, dead: true, hp: 0 };          /* gone by then in the recording too */
+}
+function _rtsRecDec(G, v) {
+  if (!v || typeof v !== 'object') return v;
+  if (Array.isArray(v)) return v.map(function (x) { return _rtsRecDec(G, x); });
+  if (v['~'] !== undefined) return v['~'] === 'u' ? undefined : Number(v['~']);
+  if (v['@'] !== undefined) return _rtsRecEnt(G, v['@']);
+  var o = {};
+  for (var k in v) o[k] = _rtsRecDec(G, v[k]);
+  return o;
+}
+function _rtsRecCall(R, name, args) {
+  var c = { k: R.n, f: name, a: Array.prototype.map.call(args, _rtsRecEnc) }, G = window._rtsG;
+  if (/Selected$/.test(name) && G && G.sel) c.s = G.sel.map(function (e) { return e.id; });
+  return c;
+}
+
+/* Start recording the battle just laid, under `head` (replay.js: what lays it again). */
+function _rtsRecStart(head) {
+  _rtsRecInstall();
+  _rtsRec = { mode: 'rec', head: head, dts: '', odd: {}, cmds: [], n: 0, inTick: 0, depth: 0 };
+  return _rtsRec;
+}
+/* ...and stop: the replay, with how the battle stood at its end, to check a playback against */
+function _rtsRecStop() {
+  var R = _rtsRec, G = window._rtsG;
+  if (!R || R.mode !== 'rec') return null;
+  _rtsRec = null;
+  return { v: 1, head: R.head, dts: R.dts, odd: R.odd, cmds: R.cmds,
+           end: { n: R.n, t: G ? G.t : 0, over: (G && G.over) || null, hash: G ? _rtsReplayHash(G) : '' } };
+}
+
+/* Play `rec` on the battle its header has just laid again. */
+function _rtsReplayBegin(rec) {
+  _rtsRecInstall();
+  _rtsRec = { mode: 'play', rec: rec, n: 0, ci: 0, inTick: 0, depth: 0, applying: 0, acc: 0, done: false };
+  return _rtsRec;
+}
+function _rtsReplayDt(rec, i) {
+  var c = rec.dts.charCodeAt(i);
+  return c === 47 ? rec.odd[i] : (c - 48) / 1000;
+}
+/* the calls made before tick R.n, made again */
+function _rtsReplayCalls(R) {
+  var G = window._rtsG, cmds = R.rec.cmds;
+  while (R.ci < cmds.length && cmds[R.ci].k <= R.n) {
+    var c = cmds[R.ci++];
+    if (c.s) G.sel = c.s.map(function (id) { return _rtsRecEnt(G, id); }).filter(function (e) { return !e.dead; });
+    R.applying++;
+    try { window[c.f].apply(null, c.a.map(function (x) { return _rtsRecDec(G, x); })); }
+    finally { R.applying--; }
+  }
+}
+/* `secs` of the recording's own time, at most `cap` ticks: the calls and ticks that fit. Returns
+   how many ticks ran; R.done once the last has. */
+function _rtsReplayStep(R, secs, cap) {
+  var rec = R.rec, len = rec.dts.length, ran = 0;
+  R.acc += secs;
+  while (R.n < len && ran < cap) {
+    var dt = _rtsReplayDt(rec, R.n);
+    if (R.acc < dt) break;
+    _rtsReplayCalls(R);
+    R.acc -= dt;
+    window._rtsTick(dt);
+    ran++;
+  }
+  if (R.n >= len) { _rtsReplayCalls(R); R.done = true; }
+  if (ran >= cap) R.acc = Math.min(R.acc, 0.25);          /* a slow machine falls behind, not into a spiral */
+  return ran;
+}
+
+/* How a battle stands, to the bit: every entity's place and health, every side's purse, the clock -
+   what a replay that went the recording's way ends on, and one that went its own does not. */
+function _rtsReplayHash(G) {
+  var h = 0x811c9dc5;
+  function add(s) { s = String(s); for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } }
+  add(G.t); add(G.over || '');
+  G.order.forEach(function (k) { var S = G.sides[k]; add(k + ':' + S.credits + ':' + S.ore + ':' + !!S.lost); });
+  G.ents.filter(function (e) { return !e.dead; }).sort(function (a, b) { return a.id - b.id; })
+    .forEach(function (e) { add(e.id + e.def + e.side + ':' + e.x + ':' + e.z + ':' + e.hp); });
+  return ('00000000' + h.toString(16)).slice(-8);
 }
 </script>
 <script>/* render/camera.js - the renderer's view: zoom, projection, and world <-> screen.
@@ -31778,10 +32002,12 @@ function rtsOpen(seed) {
      terrain the save actually carries rather than the one the seed would have produced. */
   var _load = window._RTS_PENDING_LOAD; window._RTS_PENDING_LOAD = null;
   var _slot = window._RTS_PENDING_SLOT; window._RTS_PENDING_SLOT = null;
-  _rtsNewGame(_load ? _load.seed : (seed || (((new Date()).getTime()) & 0xffff)),
-              _load ? _load.diff : undefined,
+  /* a replay lays the battle its recording was made on (replay.js) */
+  var _rp = !_load && window._RTS_REPLAY_PLAY, _sk = _load ? _load.skirmish : _rp ? _rp.head.skirmish : (typeof rtsSkirmishWant === 'function' ? rtsSkirmishWant() : null);
+  _rtsNewGame(_load ? _load.seed : _rp ? _rp.head.seed : (seed || (((new Date()).getTime()) & 0xffff)),
+              _load ? _load.diff : _rp ? _rp.head.diff : undefined,
               /* the map a save was made on, or the title's setup for a plain battle (skirmish.js) */
-              { skirmish: _load ? _load.skirmish : (typeof rtsSkirmishWant === 'function' ? rtsSkirmishWant() : null) });
+              { skirmish: _sk });
   if (_load) _rtsApplyState(window._rtsG, _load);
   var cv = document.getElementById('rtsCv');
   _rtsResizeCanvases();
@@ -31825,7 +32051,9 @@ function rtsOpen(seed) {
                     'Try another browser, or turn on hardware acceleration.');
   }
   /* this is the battle now: the last one's autosave goes, unless this IS it (autosave.js) */
-  if (_slot !== 'auto' && typeof _rtsAutoClear === 'function') _rtsAutoClear();
+  if (_slot !== 'auto' && !_rp && typeof _rtsAutoClear === 'function') _rtsAutoClear();
+  /* recorded from its first tick - or, laid for a replay, played (replay.js) */
+  if (typeof rtsReplayOpened === 'function') rtsReplayOpened(window._rtsG, !!_load, _sk);
   if (_load) _rtsSay('Battle resumed.');
   else _rtsSay(rtsArmyName('player') + ' command online. Build a Refinery to start earning.');
   _rtsUI.last = (new Date()).getTime();
@@ -31924,6 +32152,7 @@ function _rtsReloadNow() {
 function rtsClose() {
   var d = document.getElementById('rcgRts');
   if (!d) return;
+  if (typeof rtsReplayClosing === 'function') rtsReplayClosing();   /* the recording kept, a replay stopped */
   var U = window._rtsUI;
   if (U) { U.dead = true; try { if (U.raf) cancelAnimationFrame(U.raf); } catch (_a) {} }
   document.removeEventListener('keydown', _rtsKeyDown, true);
@@ -33062,7 +33291,8 @@ function _rtsSyncSidebar(dt) {
   msg.className = 'rts-msg' + (G.msgT > 0 ? ' on' : '') + (G.msgT > 0 && G.msgAt ? ' go' : '');   /* tappable: ui/go.js */
   if (!msg.onclick) msg.onclick = function () { rtsMsgGo(); };
 
-  if (G.over && !U.overShown) {
+  /* a replay's card is its own, once the recording has run out (replay.js rtsReplayFrame) */
+  if (G.over && !U.overShown && !U.replay) {
     U.overShown = true;
     var o = document.getElementById('rtsOver');
     o.className = 'rts-over on';
@@ -33075,6 +33305,7 @@ function _rtsSyncSidebar(dt) {
       + (typeof rtsDailyOverHTML === 'function' ? rtsDailyOverHTML(G) : '')
       + '<button type="button" onclick="rtsRestart()">Play again</button> '
       + '<button type="button" onclick="rtsClose()">Quit</button></div>';
+    if (typeof rtsReplayOverButton === 'function') rtsReplayOverButton(o);   /* ▶ Watch replay: replay.js */
   }
 }
 /* Play again: a daily replays the day's battle, with its army and difficulty kept (daily.js). */
@@ -33252,9 +33483,7 @@ function rtsRepeatToggle(cat) {
   cat = cat || U.cat;
   if (!cat || cat === 'struct') return false;
   var S = G.sides.player;
-  S.rep = S.rep || {};
-  S.rep[cat] = !S.rep[cat];
-  if (!S.rep[cat]) delete S.rep[cat];
+  _rtsRepeatSet('player', cat, !(S.rep && S.rep[cat]));     /* core/commands.js */
   var name = (RTS_TABS.filter(function (t) { return t[0] === cat; })[0] || [cat, cat])[1];
   _rtsSay(S.rep && S.rep[cat] ? name + ' repeat on - the line builds its unit again when one is done.' : name + ' repeat off.');
   if (typeof _rtsSfx === 'function') _rtsSfx('click');
@@ -33613,7 +33842,7 @@ function _rtsRadarOrder(mine, w, attackMove) {
   }
   /* the same keeping as a right-click's (ui/select.js): a held aircraft's order waits, a bomber is
      sent, a landing with no route puts the load down where the craft stands */
-  for (i = 0; i < mine.length; i++) mine[i].bombNext = null;
+  for (i = 0; i < mine.length; i++) _rtsBombClear(mine[i]);     /* core/commands.js */
   _rtsKeepHeld(mine, true);
   if (tgt) {
     var drops = 0;
@@ -33759,7 +33988,7 @@ function _rtsBindInput() {
     }
     if (!mine.length) return false;
     var w = miniWorld(e);
-    for (i = 0; i < mine.length; i++) mine[i].wq = null;          /* a new order: the queued stops go (core/orders.js) */
+    for (i = 0; i < mine.length; i++) _rtsWayClear(mine[i]);      /* a new order: the queued stops go (core/commands.js) */
     if (!_rtsRadarOrder(mine, w, !!U.attackMove)) return false;
     if (typeof _rtsSfx === 'function') _rtsSfx('order');
     return true;
@@ -34444,7 +34673,7 @@ function _rtsRightClickNow(mx, my, hit0) {
   for (i = 0; i < G.sel.length; i++) if (G.sel[i].side === 'player' && G.sel[i].type === 'unit') mine.push(G.sel[i]);
   /* a new order replaces one a bomber was keeping for when it is loaded (core/bomber.js) - and,
      given without Shift, the stops a unit had queued (core/orders.js _rtsWayNext) */
-  for (i = 0; i < mine.length; i++) { mine[i].bombNext = null; if (!queue) mine[i].wq = null; }
+  for (i = 0; i < mine.length; i++) { _rtsBombClear(mine[i]); if (!queue) _rtsWayClear(mine[i]); }
   var queued = 0;
   var boardWhy = null;                      /* why nobody got into the transport clicked, if so */
   /* A SELECTED PRODUCTION BUILDING TAKES THE ORDER AS A RALLY POINT. This used to be the line
@@ -34516,12 +34745,9 @@ function _rtsRightClickNow(mx, my, hit0) {
       }
       /* The capture order goes through _rtsOrderCapture rather than being written out here, so
          the player's engineer and the opponent's walk in on identical terms - there is one
-         definition of what the order is. `demo` has no second caller and stays inline. */
+         definition of what the order is. `demo` is a call too, so a replay has it (core/commands.js). */
       if (job === 'capture' && _rtsOrderCapture(mu, tgt)) { special++; capped++; }
-      else if (job === 'demo') {
-        mu.order = job; mu.target = tgt; mu.path = null; mu.goal = null; mu.susp = null;
-        special++;
-      }
+      else if (job === 'demo') { _rtsOrderDemo(mu, tgt); special++; }
       /* A LOADED, UNARMED TRANSPORT sent at the enemy is being told where to put its load down -
          the Paradrop Plane's drop zone, the Sky Crane's landing, a craft's beach - not to attack
          it with a gun it does not have. Through _rtsOrderAttack that became a plain move, and
@@ -34586,12 +34812,12 @@ function _rtsRightClickNow(mx, my, hit0) {
       else if (land === 'here') { here++; u.landedT = G.t; } else nowhere++;
       continue;
     }
-    if (ud.harvest && tgt && tgt.side === 'player' && tgt.def === 'refinery') { u.order = 'harvest'; u.hstate = 'toRef'; u.path = null; continue; }
+    if (ud.harvest && tgt && tgt.side === 'player' && tgt.def === 'refinery') { _rtsOrderToRefinery(u); continue; }
     /* SHIFT + RIGHT-CLICK ON GROUND: one more stop after the ones it has, for a unit already on
        its way; a unit standing still just goes */
     var wx = hit.x + spread[i].x, wz = hit.z + spread[i].z;
     if (queue && !tgt && (u.order === 'move' || u.order === 'amove') && u.goal) {
-      (u.wq = u.wq || []).push({ x: wx, z: wz, am: !!U.attackMove }); queued++;
+      _rtsWayAdd(u, wx, wz, !!U.attackMove); queued++;
       continue;
     }
     _rtsOrderMove(u, wx, wz, !!U.attackMove);
@@ -34635,7 +34861,7 @@ function _rtsTryPlace(mx, my) {
   if (!_rtsCanPlace('player', U.place, tx, tz)) { _rtsSay('Cannot build there — needs clear ground near your base.'); return; }
   _rtsPlaceStruct('player', U.place, tx, tz, false, G.sides.player.readyPaid);
   if (typeof _rtsSfx === 'function') _rtsSfx('place');
-  G.sides.player.ready = null; G.sides.player.readyPaid = null;
+  _rtsReadyClear('player');
   U.place = null; _rtsGhostHide();
 }
 
@@ -35356,7 +35582,12 @@ function _rtsLoop(prime) {
        Split, the sim can die without taking the picture with it, and the sentence explaining
        what happened reaches the screen because the code that paints it still runs. */
     /* ...and how many: the game speed's ticks, none while paused (ui/pause.js) */
-    var nTicks = (dt > 0 && prime !== true && !U.simDead) ? _rtsSpeedTicks(U, rtsSpeedGet()) : 0;
+    var nTicks = (dt > 0 && prime !== true && !U.simDead && !U.replay) ? _rtsSpeedTicks(U, rtsSpeedGet()) : 0;
+    /* a replay's ticks are the recording's, at its own speed (replay.js) */
+    if (U.replay && dt > 0 && prime !== true && !U.simDead && !U.paused) {
+      try { rtsReplayFrame(U, dt); }
+      catch (err) { _rtsLoopErr(U, err, 'tick'); U.simDead = true; _rtsCrash('The replay has stopped: ' + _rtsErrText(err) + '  —  return to the title.'); }
+    }
     for (var ti = 0; ti < nTicks && !U.simDead; ti++) {
       try {
         _rtsTick(dt);
@@ -35759,6 +35990,7 @@ function _rtsWriteSlot(slot, text, info) {
 function rtsSaveGame(slot) {
   var G = window._rtsG;
   if (!G) return false;
+  if (window._rtsUI && window._rtsUI.replay) { _rtsSay('A replay is not saved - it is kept as the last battle.'); return false; }   /* replay.js */
   slot = slot || (typeof rtsSlotActive === 'function' ? rtsSlotActive() : 'save');
   /* SERIALISE FIRST, OUTSIDE THE TRY THAT OWNS THE CLEANUP. Both steps could throw and only one
      of them can leave a half-written pair behind, so they must not share a catch: a serialiser
@@ -35927,7 +36159,7 @@ var RTS_AUTO_EVERY = 60;      /* seconds of battle between autosaves */
    once that they are not. */
 function _rtsAutoSave() {
   var G = window._rtsG, U = window._rtsUI;
-  if (!G || G.over) return false;
+  if (!G || G.over || (U && U.replay)) return false;          /* a replay is not a battle to keep (replay.js) */
   if (U && U.autoT === G.t && rtsSaveInfo('auto')) return true;      /* nothing has moved since */
   var text, info;
   try { text = JSON.stringify(_rtsSaveState(G)); info = _rtsSaveHeader(G, text); }
@@ -35953,7 +36185,7 @@ function _rtsAutoClear() {
    write is written again; one that is over is cleared, once. The count starts where the battle
    opened, so a continued battle is not written again the moment it is back. */
 function _rtsAutoTick(G, U) {
-  if (!G || !U) return;
+  if (!G || !U || U.replay) return;
   if (G.over) { if (!U.autoGone) { U.autoGone = true; _rtsAutoClear(); } return; }
   if (U.autoT === undefined) U.autoT = G.t;
   if (G.t - U.autoT >= RTS_AUTO_EVERY) _rtsAutoSave();
@@ -36159,6 +36391,175 @@ function rtsSurvivalOverHTML(G) {
     + rtsDebriefHTML(G, null)
     + '<button type="button" onclick="rtsRestart()">Play again</button> '
     + '<button type="button" onclick="rtsClose()">Quit</button></div>';
+}
+</script>
+<script>/* replay.js - THE LAST BATTLE, WATCHED AGAIN: what starts a recording, where it is kept, the title's
+   WATCH REPLAY, the end card's, and the replay's own bar. The recording and the playback are
+   core/replay.js.
+
+   Every battle started fresh is recorded from its first tick (rtsReplayOpened, called by rtsOpen);
+   one resumed from a save is not, since its start is the save. The recording stops when the
+   battle is decided, or left, and the last one is kept (bw.replay, a few tens of KB for ten
+   minutes: a character a tick and the orders). WATCH REPLAY lays the battle again from the header
+   - the seed, difficulty, army, map setup, mission and level, survival, and the sky, which is
+   fixed before the first tick - and plays it at 1x, 2x, 4x or 8x. The camera is the watcher's;
+   the orders are the recording's, and one given by hand is refused (core/replay.js). A replay
+   writes nothing back: no save, no autosave, no record, no medal. At the end the battle's hash is
+   checked against the one recorded, so a replay that went its own way - a recording from an older
+   build - says so rather than showing a different battle as the one that was fought. */
+var RTS_REPLAY_LS = 'bw.replay';
+var RTS_REPLAY_SPEEDS = [1, 2, 4, 8];
+
+function rtsReplayGet() {
+  try { var r = JSON.parse(window.localStorage.getItem(RTS_REPLAY_LS) || 'null'); return r && r.v === 1 && r.head && typeof r.dts === 'string' ? r : null; }
+  catch (e) { return null; }
+}
+function _rtsReplayBuild() { var b = document.getElementById('rtsBuild'); return b ? b.textContent.trim() : ''; }
+/* what the battle was, in a line: the title's note and the bar's */
+function rtsReplayLine(r) {
+  if (!r) return '';
+  var h = r.head, what = h.mission && typeof _rtsMissionOf === 'function' && _rtsMissionOf(h.mission.id) ? _rtsMissionOf(h.mission.id).name
+    : h.survival ? 'Survival' : h.daily ? 'Daily battle' : 'Battle';
+  var lvl = RTS_DIFF[(h.mission && h.mission.lvl) || h.diff];
+  var end = r.end && r.end.over === 'win' ? 'won' : r.end && r.end.over === 'lose' ? 'lost' : 'left';
+  return what + ' · ' + (lvl ? lvl.name : h.diff) + ' · ' + end + ' at ' + rtsDailyClock(r.end ? r.end.t : 0);
+}
+
+/* rtsOpen, on the battle it has just laid: play the replay that asked for it, or record this one */
+function rtsReplayOpened(G, loaded, skirmish) {
+  var P = window._RTS_REPLAY_PLAY;
+  if (P) {
+    window._RTS_REPLAY_PLAY = null;
+    G.sky = P.head.sky || G.sky;
+    _rtsReplayBegin(P);
+    window._rtsUI.replay = { speed: 1, rec: P, said: 0, shown: false };
+    _rtsReplayBar();
+    return;
+  }
+  _rtsRec = null;
+  if (loaded) return;
+  if (!G.sky && typeof _rtsSkyName === 'function') G.sky = _rtsSkyName(G);   /* fixed now, so the header has it */
+  _rtsRecStart({ seed: G.seed, diff: G.diff, army: rtsArmySide(), skirmish: skirmish || null,
+    mission: G.mission ? { id: G.mission.id, lvl: G.mission.lvl } : null, survival: !!G.survival,
+    daily: window._RTS_DAILY ? (window._RTS_DAILY.date || true) : null, sky: G.sky || null, build: _rtsReplayBuild() });
+}
+/* the recording, kept: when the battle is decided, or left */
+function rtsReplayKeep() {
+  var r = _rtsRecStop();
+  if (!r || !r.dts.length) return null;
+  try { window.localStorage.setItem(RTS_REPLAY_LS, JSON.stringify(r)); } catch (e) { return null; }
+  return r;
+}
+/* rtsClose: a recording still running is kept; a replay playing just stops */
+function rtsReplayClosing() {
+  if (_rtsRec && _rtsRec.mode === 'rec') rtsReplayKeep();
+  _rtsRec = null;
+}
+/* rtsHome: the army and difficulty the replay borrowed go back */
+function rtsReplayEnd() {
+  var p = window._RTS_REPLAY_PREV;
+  window._RTS_REPLAY_PREV = null;
+  if (p) { window._RTS_ARMY = p.army; window._RTS_DIFF = p.diff; }
+  rtsReplayNote();
+}
+
+/* WATCH REPLAY: the battle laid again from the header, played from the recording */
+function rtsReplayWatch(btn) {
+  var r = rtsReplayGet(), err = document.getElementById('rtsErr');
+  if (!r) return false;
+  if (document.getElementById('rcgRts')) rtsClose();
+  if (typeof rtsCampEnd === 'function') rtsCampEnd();
+  if (typeof rtsDailyEnd === 'function') rtsDailyEnd();
+  if (typeof rtsSurvivalEnd === 'function') rtsSurvivalEnd();
+  var h = r.head;
+  window._RTS_REPLAY_PREV = { army: window._RTS_ARMY, diff: window._RTS_DIFF };
+  window._RTS_ARMY = h.army; window._RTS_DIFF = h.diff;
+  if (btn) btn.disabled = true;
+  setTimeout(function () {
+    window._RTS_MISSION = h.mission ? { id: h.mission.id, seed: h.seed, lvl: h.mission.lvl } : null;
+    window._RTS_SURVIVAL = !!h.survival;
+    window._RTS_REPLAY_PLAY = r;
+    try { rtsOpen(h.seed); }
+    catch (e) {
+      window._RTS_REPLAY_PLAY = null; rtsReplayEnd(); rtsHome();
+      if (err) { err.style.display = 'block'; err.textContent = 'Could not play the replay:\n' + ((e && e.message) || e); }
+    }
+    /* laid: what laid it is not this battle's to keep (rtsRestart, the title) */
+    window._RTS_MISSION = null; window._RTS_SURVIVAL = false;
+    if (btn) btn.disabled = false;
+  }, 30);
+  return true;
+}
+
+/* the replay's bar: what is playing, how far in, and how fast */
+function _rtsReplayBar() {
+  var st = document.querySelector('#rcgRts .rts-stage');
+  if (!st || document.getElementById('rtsReplayBar')) return;
+  var b = document.createElement('div');
+  b.id = 'rtsReplayBar'; b.className = 'rts-replaybar';
+  b.innerHTML = '<b>▶ REPLAY</b><span id="rtsReplayClock"></span>'
+    + '<button type="button" id="rtsReplaySpeed" onclick="rtsReplaySpeed()" title="Play faster">1×</button>';
+  st.appendChild(b);
+  _rtsReplaySync();
+}
+function rtsReplaySpeed(v) {
+  var U = window._rtsUI;
+  if (!U || !U.replay) return 0;
+  var i = RTS_REPLAY_SPEEDS.indexOf(U.replay.speed);
+  U.replay.speed = v || RTS_REPLAY_SPEEDS[(i + 1) % RTS_REPLAY_SPEEDS.length];
+  _rtsReplaySync();
+  return U.replay.speed;
+}
+function _rtsReplaySync() {
+  var U = window._rtsUI, G = window._rtsG, R = _rtsRec;
+  if (!U || !U.replay || !G) return;
+  var c = document.getElementById('rtsReplayClock'), s = document.getElementById('rtsReplaySpeed');
+  var txt = ' ' + rtsDailyClock(G.t) + ' / ' + rtsDailyClock(U.replay.rec.end ? U.replay.rec.end.t : 0) + ' ';
+  if (c && c.textContent !== txt) c.textContent = txt;
+  if (s && s.textContent !== U.replay.speed + '×') s.textContent = U.replay.speed + '×';
+}
+/* the loop's, in place of its ticks (ui/camera.js): the recording's time, at the replay's speed */
+function rtsReplayFrame(U, dt) {
+  var R = _rtsRec, G = window._rtsG;
+  if (!R || R.mode !== 'play' || !G) return;
+  if (!R.done) _rtsReplayStep(R, dt * U.replay.speed, Math.ceil(8 * U.replay.speed));
+  _rtsReplaySync();
+  if (R.done && !U.replay.shown) _rtsReplayCard(G);
+}
+/* did it play out as fought: its end against the recording's */
+function _rtsReplayTrue(G, rec) { return !!(rec.end && rec.end.hash === _rtsReplayHash(G)); }
+/* the end card, in place of the battle's own (ui/sidebar.js shows none in a replay), once the
+   recording has run out - a battle decided goes on a few ticks to the frame's end, and those are
+   in the recording too. Nothing is recorded: no record, no medal, no best. */
+function rtsReplayOverHTML(G) {
+  var U = window._rtsUI, rec = U.replay.rec, same = _rtsReplayTrue(G, rec);
+  U.replay.shown = true;
+  return '<div class="card ' + (G.over || 'win') + '"><h2>' + (G.over === 'win' ? 'VICTORY' : G.over === 'lose' ? 'DEFEATED' : 'REPLAY OVER') + '</h2>'
+    + '<p>' + rtsReplayLine(rec) + '</p>'
+    + '<p class="rec" id="rtsReplayVerdict">' + (same ? 'It played out as it was fought.'
+      : 'This replay was recorded on ' + (rec.head.build && rec.head.build !== _rtsReplayBuild() ? 'another version of the game (' + rec.head.build + ')' : 'a game that has changed since') + ', and from somewhere it went its own way.') + '</p>'
+    + '<button type="button" onclick="rtsReplayWatch()">Watch again</button> '
+    + '<button type="button" onclick="rtsClose()">Quit</button></div>';
+}
+function _rtsReplayCard(G) {
+  var o = document.getElementById('rtsOver');
+  if (!o) return;
+  o.className = 'rts-over on';
+  o.innerHTML = rtsReplayOverHTML(G);
+}
+/* the battle's end card gets its WATCH REPLAY, the recording kept as it stood at the end */
+function rtsReplayOverButton(o) {
+  var r = rtsReplayKeep(), card = o && o.querySelector('.card');
+  if (!r || !card) return;
+  card.insertAdjacentHTML('beforeend', ' <button type="button" id="rtsReplayGo" onclick="rtsReplayWatch()">▶ Watch replay</button>');
+}
+/* the title's button and its line */
+function rtsReplayNote() {
+  var b = document.getElementById('rtsReplay'), n = document.getElementById('rtsReplayNote'), r = rtsReplayGet();
+  if (!b) return;
+  b.hidden = !r;
+  b.disabled = false;
+  if (n) n.textContent = r ? rtsReplayLine(r) : '';
 }
 </script>
 <script>/* record.js - THE DEBRIEF, and THE RECORD: what a plain battle's end card says beyond who won, and
@@ -36538,6 +36939,7 @@ function rtsHome(){
   if (typeof rtsDailyEnd === 'function') rtsDailyEnd();
   if (typeof rtsCampEnd === 'function') rtsCampEnd();      /* and so did a mission (campaign.js) */
   if (typeof rtsSurvivalEnd === 'function') rtsSurvivalEnd();   /* and a survival is over (survival.js) */
+  if (typeof rtsReplayEnd === 'function') rtsReplayEnd();       /* and a replay's borrowed army goes back (replay.js) */
   var sb = document.getElementById('rtsSurvival');
   if (sb) { sb.disabled = false; sb.innerHTML = 'SURVIVAL<small id="rtsSurvivalNote"></small>'; }
   if (typeof rtsSurvivalNote === 'function') rtsSurvivalNote();
@@ -36612,6 +37014,7 @@ rtsBuildDiff();
 if (typeof rtsSkySync === 'function') rtsSkySync();
 if (typeof rtsCvdSync === 'function') rtsCvdSync();
 rtsShowResume();
+if (typeof rtsReplayNote === 'function') rtsReplayNote();
 if (typeof _rtsAutoBind === 'function') _rtsAutoBind();     /* the autosave's two moments (autosave.js) */
 rtsBuildArmyPick();
 if (typeof rtsDailyNote === 'function') rtsDailyNote();

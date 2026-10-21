@@ -124,10 +124,12 @@ function rtsOpen(seed) {
      terrain the save actually carries rather than the one the seed would have produced. */
   var _load = window._RTS_PENDING_LOAD; window._RTS_PENDING_LOAD = null;
   var _slot = window._RTS_PENDING_SLOT; window._RTS_PENDING_SLOT = null;
-  _rtsNewGame(_load ? _load.seed : (seed || (((new Date()).getTime()) & 0xffff)),
-              _load ? _load.diff : undefined,
+  /* a replay lays the battle its recording was made on (replay.js) */
+  var _rp = !_load && window._RTS_REPLAY_PLAY, _sk = _load ? _load.skirmish : _rp ? _rp.head.skirmish : (typeof rtsSkirmishWant === 'function' ? rtsSkirmishWant() : null);
+  _rtsNewGame(_load ? _load.seed : _rp ? _rp.head.seed : (seed || (((new Date()).getTime()) & 0xffff)),
+              _load ? _load.diff : _rp ? _rp.head.diff : undefined,
               /* the map a save was made on, or the title's setup for a plain battle (skirmish.js) */
-              { skirmish: _load ? _load.skirmish : (typeof rtsSkirmishWant === 'function' ? rtsSkirmishWant() : null) });
+              { skirmish: _sk });
   if (_load) _rtsApplyState(window._rtsG, _load);
   var cv = document.getElementById('rtsCv');
   _rtsResizeCanvases();
@@ -171,7 +173,9 @@ function rtsOpen(seed) {
                     'Try another browser, or turn on hardware acceleration.');
   }
   /* this is the battle now: the last one's autosave goes, unless this IS it (autosave.js) */
-  if (_slot !== 'auto' && typeof _rtsAutoClear === 'function') _rtsAutoClear();
+  if (_slot !== 'auto' && !_rp && typeof _rtsAutoClear === 'function') _rtsAutoClear();
+  /* recorded from its first tick - or, laid for a replay, played (replay.js) */
+  if (typeof rtsReplayOpened === 'function') rtsReplayOpened(window._rtsG, !!_load, _sk);
   if (_load) _rtsSay('Battle resumed.');
   else _rtsSay(rtsArmyName('player') + ' command online. Build a Refinery to start earning.');
   _rtsUI.last = (new Date()).getTime();
@@ -270,6 +274,7 @@ function _rtsReloadNow() {
 function rtsClose() {
   var d = document.getElementById('rcgRts');
   if (!d) return;
+  if (typeof rtsReplayClosing === 'function') rtsReplayClosing();   /* the recording kept, a replay stopped */
   var U = window._rtsUI;
   if (U) { U.dead = true; try { if (U.raf) cancelAnimationFrame(U.raf); } catch (_a) {} }
   document.removeEventListener('keydown', _rtsKeyDown, true);

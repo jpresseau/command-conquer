@@ -42,6 +42,7 @@ function rtsHome(){
   if (typeof rtsDailyEnd === 'function') rtsDailyEnd();
   if (typeof rtsCampEnd === 'function') rtsCampEnd();      /* and so did a mission (campaign.js) */
   if (typeof rtsSurvivalEnd === 'function') rtsSurvivalEnd();   /* and a survival is over (survival.js) */
+  if (typeof rtsReplayEnd === 'function') rtsReplayEnd();       /* and a replay's borrowed army goes back (replay.js) */
   var sb = document.getElementById('rtsSurvival');
   if (sb) { sb.disabled = false; sb.innerHTML = 'SURVIVAL<small id="rtsSurvivalNote"></small>'; }
   if (typeof rtsSurvivalNote === 'function') rtsSurvivalNote();
@@ -116,6 +117,7 @@ rtsBuildDiff();
 if (typeof rtsSkySync === 'function') rtsSkySync();
 if (typeof rtsCvdSync === 'function') rtsCvdSync();
 rtsShowResume();
+if (typeof rtsReplayNote === 'function') rtsReplayNote();
 if (typeof _rtsAutoBind === 'function') _rtsAutoBind();     /* the autosave's two moments (autosave.js) */
 rtsBuildArmyPick();
 if (typeof rtsDailyNote === 'function') rtsDailyNote();

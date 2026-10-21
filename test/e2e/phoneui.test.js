@@ -70,9 +70,10 @@ function heights(sel) {
     var card = await p.evaluate(function (src) {
       var G = window._rtsG; G.over = 'win'; G.mission.why = 'The convoy is across, and the sea is closing behind it.'; _rtsSyncSidebar(0);
       var c = document.querySelector('#rtsOver .card').getBoundingClientRect();
-      return { fits: c.top >= 0 && c.bottom <= innerHeight, h: eval('(' + src + ')')('#rtsOver button') };
+      return { fits: c.top >= 0 && c.bottom <= innerHeight, h: eval('(' + src + ')')('#rtsOver button'), watch: !!document.getElementById('rtsReplayGo') };
     }, heights.toString());
-    S.ok('...the end card fits, and its buttons are a finger\'s height', card.fits && card.h.length === 4 && card.h.every(function (h) { return h >= 40; }), JSON.stringify(card));
+    /* Next, Retry, Missions, Quit and ▶ Watch replay (replay.js) */
+    S.ok('...the end card fits, and its five buttons, WATCH REPLAY among them, are a finger\'s height', card.fits && card.h.length === 5 && card.watch && card.h.every(function (h) { return h >= 40; }), JSON.stringify(card));
 
     await p.evaluate(function () { rtsClose(); localStorage.setItem('bw.skirmish', JSON.stringify({ foes: 'ally' })); rtsOpen(7); });
     await p.waitForFunction(function () { return window._rtsG && window._rtsG.sides.ally && document.getElementById('rtsAllyBtn'); }, null, { timeout: 60000 }).catch(function () {});
