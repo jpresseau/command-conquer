@@ -320,6 +320,7 @@ function _rtsWriteSlot(slot, text, info) {
 function rtsSaveGame(slot) {
   var G = window._rtsG;
   if (!G) return false;
+  if (window._rtsUI && window._rtsUI.replay) { _rtsSay('A replay is not saved - it is kept as the last battle.'); return false; }   /* replay.js */
   slot = slot || (typeof rtsSlotActive === 'function' ? rtsSlotActive() : 'save');
   /* SERIALISE FIRST, OUTSIDE THE TRY THAT OWNS THE CLEANUP. Both steps could throw and only one
      of them can leave a half-written pair behind, so they must not share a catch: a serialiser

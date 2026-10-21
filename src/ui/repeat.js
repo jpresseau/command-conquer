@@ -12,9 +12,7 @@ function rtsRepeatToggle(cat) {
   cat = cat || U.cat;
   if (!cat || cat === 'struct') return false;
   var S = G.sides.player;
-  S.rep = S.rep || {};
-  S.rep[cat] = !S.rep[cat];
-  if (!S.rep[cat]) delete S.rep[cat];
+  _rtsRepeatSet('player', cat, !(S.rep && S.rep[cat]));     /* core/commands.js */
   var name = (RTS_TABS.filter(function (t) { return t[0] === cat; })[0] || [cat, cat])[1];
   _rtsSay(S.rep && S.rep[cat] ? name + ' repeat on - the line builds its unit again when one is done.' : name + ' repeat off.');
   if (typeof _rtsSfx === 'function') _rtsSfx('click');

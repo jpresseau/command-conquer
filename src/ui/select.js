@@ -150,7 +150,7 @@ function _rtsRightClickNow(mx, my, hit0) {
   for (i = 0; i < G.sel.length; i++) if (G.sel[i].side === 'player' && G.sel[i].type === 'unit') mine.push(G.sel[i]);
   /* a new order replaces one a bomber was keeping for when it is loaded (core/bomber.js) - and,
      given without Shift, the stops a unit had queued (core/orders.js _rtsWayNext) */
-  for (i = 0; i < mine.length; i++) { mine[i].bombNext = null; if (!queue) mine[i].wq = null; }
+  for (i = 0; i < mine.length; i++) { _rtsBombClear(mine[i]); if (!queue) _rtsWayClear(mine[i]); }
   var queued = 0;
   var boardWhy = null;                      /* why nobody got into the transport clicked, if so */
   /* A SELECTED PRODUCTION BUILDING TAKES THE ORDER AS A RALLY POINT. This used to be the line
@@ -222,12 +222,9 @@ function _rtsRightClickNow(mx, my, hit0) {
       }
       /* The capture order goes through _rtsOrderCapture rather than being written out here, so
          the player's engineer and the opponent's walk in on identical terms - there is one
-         definition of what the order is. `demo` has no second caller and stays inline. */
+         definition of what the order is. `demo` is a call too, so a replay has it (core/commands.js). */
       if (job === 'capture' && _rtsOrderCapture(mu, tgt)) { special++; capped++; }
-      else if (job === 'demo') {
-        mu.order = job; mu.target = tgt; mu.path = null; mu.goal = null; mu.susp = null;
-        special++;
-      }
+      else if (job === 'demo') { _rtsOrderDemo(mu, tgt); special++; }
       /* A LOADED, UNARMED TRANSPORT sent at the enemy is being told where to put its load down -
          the Paradrop Plane's drop zone, the Sky Crane's landing, a craft's beach - not to attack
          it with a gun it does not have. Through _rtsOrderAttack that became a plain move, and
@@ -292,12 +289,12 @@ function _rtsRightClickNow(mx, my, hit0) {
       else if (land === 'here') { here++; u.landedT = G.t; } else nowhere++;
       continue;
     }
-    if (ud.harvest && tgt && tgt.side === 'player' && tgt.def === 'refinery') { u.order = 'harvest'; u.hstate = 'toRef'; u.path = null; continue; }
+    if (ud.harvest && tgt && tgt.side === 'player' && tgt.def === 'refinery') { _rtsOrderToRefinery(u); continue; }
     /* SHIFT + RIGHT-CLICK ON GROUND: one more stop after the ones it has, for a unit already on
        its way; a unit standing still just goes */
     var wx = hit.x + spread[i].x, wz = hit.z + spread[i].z;
     if (queue && !tgt && (u.order === 'move' || u.order === 'amove') && u.goal) {
-      (u.wq = u.wq || []).push({ x: wx, z: wz, am: !!U.attackMove }); queued++;
+      _rtsWayAdd(u, wx, wz, !!U.attackMove); queued++;
       continue;
     }
     _rtsOrderMove(u, wx, wz, !!U.attackMove);
@@ -341,7 +338,7 @@ function _rtsTryPlace(mx, my) {
   if (!_rtsCanPlace('player', U.place, tx, tz)) { _rtsSay('Cannot build there — needs clear ground near your base.'); return; }
   _rtsPlaceStruct('player', U.place, tx, tz, false, G.sides.player.readyPaid);
   if (typeof _rtsSfx === 'function') _rtsSfx('place');
-  G.sides.player.ready = null; G.sides.player.readyPaid = null;
+  _rtsReadyClear('player');
   U.place = null; _rtsGhostHide();
 }
 

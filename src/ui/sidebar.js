@@ -444,7 +444,8 @@ function _rtsSyncSidebar(dt) {
   msg.className = 'rts-msg' + (G.msgT > 0 ? ' on' : '') + (G.msgT > 0 && G.msgAt ? ' go' : '');   /* tappable: ui/go.js */
   if (!msg.onclick) msg.onclick = function () { rtsMsgGo(); };
 
-  if (G.over && !U.overShown) {
+  /* a replay's card is its own, once the recording has run out (replay.js rtsReplayFrame) */
+  if (G.over && !U.overShown && !U.replay) {
     U.overShown = true;
     var o = document.getElementById('rtsOver');
     o.className = 'rts-over on';
@@ -457,6 +458,7 @@ function _rtsSyncSidebar(dt) {
       + (typeof rtsDailyOverHTML === 'function' ? rtsDailyOverHTML(G) : '')
       + '<button type="button" onclick="rtsRestart()">Play again</button> '
       + '<button type="button" onclick="rtsClose()">Quit</button></div>';
+    if (typeof rtsReplayOverButton === 'function') rtsReplayOverButton(o);   /* ▶ Watch replay: replay.js */
   }
 }
 /* Play again: a daily replays the day's battle, with its army and difficulty kept (daily.js). */

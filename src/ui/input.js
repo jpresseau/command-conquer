@@ -26,7 +26,7 @@ function _rtsRadarOrder(mine, w, attackMove) {
   }
   /* the same keeping as a right-click's (ui/select.js): a held aircraft's order waits, a bomber is
      sent, a landing with no route puts the load down where the craft stands */
-  for (i = 0; i < mine.length; i++) mine[i].bombNext = null;
+  for (i = 0; i < mine.length; i++) _rtsBombClear(mine[i]);     /* core/commands.js */
   _rtsKeepHeld(mine, true);
   if (tgt) {
     var drops = 0;
@@ -172,7 +172,7 @@ function _rtsBindInput() {
     }
     if (!mine.length) return false;
     var w = miniWorld(e);
-    for (i = 0; i < mine.length; i++) mine[i].wq = null;          /* a new order: the queued stops go (core/orders.js) */
+    for (i = 0; i < mine.length; i++) _rtsWayClear(mine[i]);      /* a new order: the queued stops go (core/commands.js) */
     if (!_rtsRadarOrder(mine, w, !!U.attackMove)) return false;
     if (typeof _rtsSfx === 'function') _rtsSfx('order');
     return true;
