@@ -253,6 +253,19 @@ is added to the record at its difficulty (`bw.record`: wins, losses, fastest win
 BATTLE shows for the difficulty set and follows the picker; a daily and a mission keep their own.
 `unit/record` holds the counts and the rule; `e2e/record` reads the card and the title.
 
+### Colours for a colour-blind eye (ui/cvd.js)
+
+The seats are known by colour alone, and the standard five - blue, green, red, amber, violet -
+are not five to a colour-blind eye: under simulated deuteranopia the player's blue and the third
+foe's violet came 2.9 apart in CIELAB on the radar and 4.1 on a unit's trim. The title's COLOUR-BLIND
+button swaps every seat but the player's to Okabe and Ito's set, friends cool and foes warm at
+different lightnesses (an ally sky blue; the foes vermilion, yellow and reddish purple), and
+the closest pair on any surface under any of the three colour blindnesses is then 18. It
+rewrites the tables the drawing already reads (`RTS_PAL.team` and the roofs, `RTS_MINI_COL`,
+`RTS_SIDES`, `R3D_RING_COL`) and drops the mesh cache; it is offered on the title because a
+battle bakes its 2D sheet as it opens, and baking it again under a battle cost 11 s here.
+`unit/cvd` holds the distances from both ends; `e2e/cvd` renders the enemy yard and the radar.
+
 ### One answer to "why can't I build this?"
 
 `Who_Can_Build_Me` is one question, and it had three implementations here: `_rtsCanQueue`
