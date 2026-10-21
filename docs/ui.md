@@ -209,7 +209,8 @@ and a stop with no route is dropped for the one after. Any order given without S
 right-click, a radar order - clears the list, and so does hold. With A held the stop is an
 attack-move. While the unit is selected the HUD draws its route, as a rally point is drawn: a
 dashed line through each stop, amber for attack-move legs. Shift is read on the right button's
-release (`ui/input.js`); a touch screen has no Shift, so on a phone orders are given one at a time.
+release (`ui/input.js`); on a touch screen the command bar's QUEUE latches it instead (`U.queueLatch`,
+`ui/touchcmd.js`), lit until tapped off as A-MOVE is.
 `unit/waypoints` holds the walking; `e2e/waypoints` gives the clicks.
 
 ### Repeat (ui/repeat.js, core/production.js)
@@ -229,7 +230,8 @@ harvester, not on hold (hold is an order given on purpose) - and looks at the fi
 while those are still the selection it looks at the next, round and round; the list is taken
 fresh on every press, so a unit given an order since drops out. With nobody idle it says so and
 leaves the selection alone. "Looks at" means into view and toward the centre: zoomed out near
-the map's edge the camera may not pass the edge, so it cannot always centre. `e2e/idlesel`.
+the map's edge the camera may not pass the edge, so it cannot always centre. On a phone the command bar's
+IDLE does the same. `e2e/idlesel`; `e2e/phonecmds` taps QUEUE and IDLE.
 
 ### A line you can go to (ui/go.js, core/idle.js)
 

@@ -47,6 +47,8 @@ function _rtsTouchCmdSync() {
   var U = window._rtsUI, G = window._rtsG;
   var am = document.getElementById('rtsTAmove');
   if (am) am.className = (U && U.attackMove) ? 'on' : '';
+  var qb = document.getElementById('rtsTQueue');
+  if (qb) qb.className = (U && U.queueLatch) ? 'on' : '';
   var tb = document.getElementById('rtsTTeams');
   if (tb) tb.className = _RTS_TCMD.teams ? 'on' : '';
   var row = document.getElementById('rtsTNums');
@@ -111,6 +113,19 @@ function _rtsTouchCmdInit() {
       _rtsSay('Nothing selected to hold.');
       if (typeof _rtsSfx === 'function') _rtsSfx('deny');
     }
+  }));
+  /* QUEUE: the phone's Shift. Lit, an order on open ground adds a stop after the ones a unit
+     already has (ui/select.js, core/orders.js) - latched like A-MOVE, for the same reason */
+  row1.appendChild(mk('rtsTQueue', 'QUEUE', 'Orders add a stop after the ones a unit has', function () {
+    var U = window._rtsUI;
+    U.queueLatch = !U.queueLatch;
+    _rtsSay(U.queueLatch ? 'Queue: each order adds a stop.' : 'Queue off.');
+    if (typeof _rtsSfx === 'function') _rtsSfx('click');
+    _rtsTouchCmdSync();
+  }));
+  /* IDLE: the phone's I (ui/idlesel.js) - the idle army, and the next of it on each tap */
+  row1.appendChild(mk('rtsTIdle', 'IDLE', 'Select the idle army; tap again for the next', function () {
+    if (typeof rtsSelectIdle === 'function') rtsSelectIdle();
   }));
   row1.appendChild(mk('rtsTTeams', 'TEAMS', 'Show the team groups', function () {
     _RTS_TCMD.teams = !_RTS_TCMD.teams;
