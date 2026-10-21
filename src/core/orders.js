@@ -22,7 +22,7 @@ function _rtsHoldSelected() {
     var u = G.sel[i];
     if (!u || u.dead || u.side !== 'player' || u.type !== 'unit') continue;
     if ((rtsUnitDef(u.def) || {}).harvest) continue;
-    u.order = 'hold'; u.path = null; u.goal = null; u.susp = null; u.bombNext = null; u.airNext = null; held++;   /* and an aircraft's waiting order: core/move.js, core/bomber.js */
+    u.order = 'hold'; u.path = null; u.goal = null; u.susp = null; u.wq = null; u.bombNext = null; u.airNext = null; held++;   /* and an aircraft's waiting order: core/move.js, core/bomber.js */
   }
   return held;
 }
@@ -121,3 +121,17 @@ var _RTS_NOBIAS = { name:'Player', iq:5, fire:1, speed:1, armor:1, rof:1, cost:1
    than replacing it. `_rtsBias` answers for a whole side and is difficulty; this answers for
    one object and is what it has found lying around. A unit with no bonuses costs one property
    lookup, which is why this is a plain function rather than a merged object built per call. */
+/* QUEUED ORDERS (ui/select.js, Shift + right-click): `e.wq` is the stops still to come, each
+   {x, z, am}. A move or attack-move that arrives takes the next (core/units.js); one that has no
+   route to it is dropped and the one after is tried, so a bad stop does not strand the rest.
+   Any order given without Shift clears the list, as does hold. A plain array of plain points,
+   so a save carries it as it is. */
+function _rtsWayNext(e) {
+  while (e.wq && e.wq.length) {
+    var w = e.wq.shift();
+    _rtsOrderMove(e, w.x, w.z, !!w.am);
+    if (e.order) break;
+  }
+  if (e.wq && !e.wq.length) e.wq = null;
+  return !!e.order;
+}

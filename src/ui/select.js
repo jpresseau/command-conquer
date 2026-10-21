@@ -147,8 +147,10 @@ function _rtsRightClickNow(mx, my, hit0) {
   if (!hit) return;
   var mine = [], i;
   for (i = 0; i < G.sel.length; i++) if (G.sel[i].side === 'player' && G.sel[i].type === 'unit') mine.push(G.sel[i]);
-  /* a new order replaces one a bomber was keeping for when it is loaded (core/bomber.js) */
-  for (i = 0; i < mine.length; i++) mine[i].bombNext = null;
+  /* a new order replaces one a bomber was keeping for when it is loaded (core/bomber.js) - and,
+     given without Shift, the stops a unit had queued (core/orders.js _rtsWayNext) */
+  for (i = 0; i < mine.length; i++) { mine[i].bombNext = null; if (!U.queue) mine[i].wq = null; }
+  var queued = 0;
   var boardWhy = null;                      /* why nobody got into the transport clicked, if so */
   /* A SELECTED PRODUCTION BUILDING TAKES THE ORDER AS A RALLY POINT. This used to be the line
      that returned: `mine` holds units only, so with a war factory selected the right-click -
@@ -290,12 +292,20 @@ function _rtsRightClickNow(mx, my, hit0) {
       continue;
     }
     if (ud.harvest && tgt && tgt.side === 'player' && tgt.def === 'refinery') { u.order = 'harvest'; u.hstate = 'toRef'; u.path = null; continue; }
-    _rtsOrderMove(u, hit.x + spread[i].x, hit.z + spread[i].z, !!U.attackMove);
+    /* SHIFT + RIGHT-CLICK ON GROUND: one more stop after the ones it has, for a unit already on
+       its way; a unit standing still just goes */
+    var wx = hit.x + spread[i].x, wz = hit.z + spread[i].z;
+    if (U.queue && !tgt && (u.order === 'move' || u.order === 'amove') && u.goal) {
+      (u.wq = u.wq || []).push({ x: wx, z: wz, am: !!U.attackMove }); queued++;
+      continue;
+    }
+    _rtsOrderMove(u, wx, wz, !!U.attackMove);
   }
   /* the ping is the order given, as the cursor was: a harvest only when something harvests - a
      tank sent onto scrap pinged the harvester's colour - and an attack-move the cursor's amber */
   _rtsFlash(hit.x, hit.z, reaped ? 'harvest' : (struck || waits) ? 'attack' : U.attackMove ? 'amove' : 'move');
-  if (landed) _rtsSay(landed === 1 ? 'Making for the shore.' : landed + ' transports making for the shore.');
+  if (queued) _rtsSay(queued === 1 ? 'Stop added.' : 'Stop added for ' + queued + ' units.');
+  else if (landed) _rtsSay(landed === 1 ? 'Making for the shore.' : landed + ' transports making for the shore.');
   else if (dropped) _rtsSay(dropped === 1 ? 'Taking them in.' : dropped + ' aircraft taking them in.');   /* not 'Skylifts': a Dominion player has none */
   else if (boardWhy) _rtsSay(boardWhy);
   else if (here) _rtsSay('No way to that shore - putting them down here.');

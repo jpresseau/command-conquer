@@ -23,6 +23,7 @@ function _rtsDrawHud(dt) {
     var top = (e.type === 'struct') ? rtsStructDef(e.def).h * 0.9 + 5 : 3.4;
     var s = _rtsWorldToScreen(e.x, top, e.z);
     if (s.behind || s.x < -60 || s.x > W + 60 || s.y < -40 || s.y > H + 40) continue;
+    if (selected && e.wq) _rtsDrawWayline(g, e);         /* its queued stops: ui/wayline.js */
     /* SIZED BY THE PROJECTION, NOT BY A LITERAL. _rtsWorldToScreen returns the scale to draw
        at as well as the point to draw at, and this pass read the point and ignored the scale -
        so a health bar was the same 46 pixels wide wherever the unit was, while the unit under

@@ -35,6 +35,7 @@ that loaded, and saved battles and settings live on the device either way.
 | Left-click | Select one unit or building |
 | Right-click | Context order — enemy: attack · ore: harvest · ground: move |
 | `A` + right-click | Attack-move (engage anything on the way) · with Heavy Bombers: carpet that spot |
+| `Shift` + right-click | Queue another stop after the ones a unit has (drawn while selected) · with `A`, an attack-move stop |
 | `D` / the sidebar's button | Deploy: the Mobile Yard sets down, a layer lays a mine, the Bridge Layer spans the gap (the button says which) |
 | `U` / UNLOAD | Put a transport's load down where it stands |
 | `S` | Hold position |

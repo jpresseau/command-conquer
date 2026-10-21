@@ -313,7 +313,7 @@ function _rtsUpdateUnit(e, dt) {
     }
   } else { e.turret = e.rot; }
 
-  if (e.path) { _rtsSteer(e, dt, d); if (!e.path && (e.order === 'move' || e.order === 'amove')) e.order = null; }
+  if (e.path) { _rtsSteer(e, dt, d); if (!e.path && (e.order === 'move' || e.order === 'amove')) { e.order = null; if (e.wq) _rtsWayNext(e); } }
 }
 /* GIVE GROUND RATHER THAN TRADE - the movement half of RTS_STANDOFF_KEEP, and see that constant
    for why it exists at all. Reached only from the in-range branch above, so it can never delay an

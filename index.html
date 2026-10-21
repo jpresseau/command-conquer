@@ -805,6 +805,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
 
     <dt class="hd">Ordering</dt>
     <dt>Right-click</dt><dd>context order — enemy: attack · ore: harvest · ground: move</dd>
+    <dt>Shift + right-click</dt><dd>one more stop after the ones a unit already has — with A, an attack-move stop</dd>
     <dt>A + right-click</dt><dd>attack-move (engage anything on the way) — with Heavy Bombers, on bare ground: carpet that spot</dd>
     <dt>S</dt><dd>hold position — fire from where you stand, never chase</dd>
     <dt>Right-click radar</dt><dd>order the selection across the map without scrolling</dd>
@@ -830,7 +831,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">ddf8fb3 · 2026-10-20</div>
+  <div id="rtsBuild" title="build">14da720 · 2026-10-21</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -15932,7 +15933,7 @@ function _rtsHoldSelected() {
     var u = G.sel[i];
     if (!u || u.dead || u.side !== 'player' || u.type !== 'unit') continue;
     if ((rtsUnitDef(u.def) || {}).harvest) continue;
-    u.order = 'hold'; u.path = null; u.goal = null; u.susp = null; u.bombNext = null; u.airNext = null; held++;   /* and an aircraft's waiting order: core/move.js, core/bomber.js */
+    u.order = 'hold'; u.path = null; u.goal = null; u.susp = null; u.wq = null; u.bombNext = null; u.airNext = null; held++;   /* and an aircraft's waiting order: core/move.js, core/bomber.js */
   }
   return held;
 }
@@ -16031,6 +16032,20 @@ var _RTS_NOBIAS = { name:'Player', iq:5, fire:1, speed:1, armor:1, rof:1, cost:1
    than replacing it. `_rtsBias` answers for a whole side and is difficulty; this answers for
    one object and is what it has found lying around. A unit with no bonuses costs one property
    lookup, which is why this is a plain function rather than a merged object built per call. */
+/* QUEUED ORDERS (ui/select.js, Shift + right-click): `e.wq` is the stops still to come, each
+   {x, z, am}. A move or attack-move that arrives takes the next (core/units.js); one that has no
+   route to it is dropped and the one after is tried, so a bad stop does not strand the rest.
+   Any order given without Shift clears the list, as does hold. A plain array of plain points,
+   so a save carries it as it is. */
+function _rtsWayNext(e) {
+  while (e.wq && e.wq.length) {
+    var w = e.wq.shift();
+    _rtsOrderMove(e, w.x, w.z, !!w.am);
+    if (e.order) break;
+  }
+  if (e.wq && !e.wq.length) e.wq = null;
+  return !!e.order;
+}
 </script>
 <script>/* core/combat.js - choosing a target and shooting at it: threat evaluation, weapon pick,
    firing, fear and retaliation. Part of rts.core, the simulation. */
@@ -17451,7 +17466,7 @@ function _rtsUpdateUnit(e, dt) {
     }
   } else { e.turret = e.rot; }
 
-  if (e.path) { _rtsSteer(e, dt, d); if (!e.path && (e.order === 'move' || e.order === 'amove')) e.order = null; }
+  if (e.path) { _rtsSteer(e, dt, d); if (!e.path && (e.order === 'move' || e.order === 'amove')) { e.order = null; if (e.wq) _rtsWayNext(e); } }
 }
 /* GIVE GROUND RATHER THAN TRADE - the movement half of RTS_STANDOFF_KEEP, and see that constant
    for why it exists at all. Reached only from the in-range branch above, so it can never delay an
@@ -33500,7 +33515,7 @@ function _rtsBindInput() {
     if (e.button === 1 || e.button === 2) {
       var gb = U.grab && U.grab.button === e.button ? _rtsGrabEnd() : null;
       /* a right press that never dragged is the order it always was, as it was pressed */
-      if (gb && gb.button === 2 && !gb.moved) _rtsGrabClick(gb);
+      if (gb && gb.button === 2 && !gb.moved) { U.queue = !!e.shiftKey; try { _rtsGrabClick(gb); } finally { U.queue = false; } }   /* Shift queues it: ui/select.js */
       else if (gb && gb.button === 1 && !gb.moved && gb.orbit) _rtsOrbitReset();   /* middle-click */
       if (e.button === 2) U.drag = null;
       return;
@@ -33569,6 +33584,7 @@ function _rtsBindInput() {
     }
     if (!mine.length) return false;
     var w = miniWorld(e);
+    for (i = 0; i < mine.length; i++) mine[i].wq = null;          /* a new order: the queued stops go (core/orders.js) */
     if (!_rtsRadarOrder(mine, w, !!U.attackMove)) return false;
     if (typeof _rtsSfx === 'function') _rtsSfx('order');
     return true;
@@ -34036,6 +34052,35 @@ function _rtsDrawAlertRing(g, sc) {
   g.beginPath(); g.arc(cx, cz, 3, 0, Math.PI * 2); g.stroke();
 }
 </script>
+<script>/* ui/wayline.js - the stops a selected unit has queued (Shift + right-click; core/orders.js
+   _rtsWayNext), drawn on the HUD as the rally point is: a dashed line from the unit to where it is
+   going now, on through each stop, and a dot at each. Amber where the leg is an attack-move, the
+   move's green where it is not. Only for selected units, so a queued army is not a permanent
+   web across the map. */
+function _rtsDrawWayline(g, e) {
+  if (!e.wq || !e.wq.length) return 0;
+  var pts = [{ x: e.x, z: e.z, am: e.order === 'amove' }];
+  if (e.goal) pts.push({ x: e.goal.x, z: e.goal.z, am: e.order === 'amove' });
+  for (var i = 0; i < e.wq.length; i++) pts.push(e.wq[i]);
+  var sp = pts.map(function (p) { return _rtsWorldToScreen(p.x, _rtsElev(p.x, p.z), p.z); }), drawn = 0;
+  g.save();
+  g.lineWidth = 1.5; g.setLineDash([5, 4]);
+  for (i = 1; i < sp.length; i++) {
+    if (sp[i].behind || sp[i - 1].behind) continue;
+    g.strokeStyle = pts[i].am ? 'rgba(255,190,80,0.6)' : 'rgba(142,240,122,0.55)';
+    g.beginPath(); g.moveTo(sp[i - 1].x, sp[i - 1].y); g.lineTo(sp[i].x, sp[i].y); g.stroke();
+    drawn++;
+  }
+  g.setLineDash([]);
+  for (i = 2; i < sp.length; i++) {
+    if (sp[i].behind) continue;
+    g.fillStyle = 'rgba(0,0,0,0.7)'; g.beginPath(); g.arc(sp[i].x, sp[i].y, 4, 0, Math.PI * 2); g.fill();
+    g.fillStyle = pts[i].am ? '#ffbe50' : '#8ef07a'; g.beginPath(); g.arc(sp[i].x, sp[i].y, 2.5, 0, Math.PI * 2); g.fill();
+  }
+  g.restore();
+  return drawn;
+}
+</script>
 <script>/* ui/select.js - selection (band, double-click, hotkeys, cycling), right-click orders and
    placement. Part of rts.ui, which owns the DOM. */
 
@@ -34185,8 +34230,10 @@ function _rtsRightClickNow(mx, my, hit0) {
   if (!hit) return;
   var mine = [], i;
   for (i = 0; i < G.sel.length; i++) if (G.sel[i].side === 'player' && G.sel[i].type === 'unit') mine.push(G.sel[i]);
-  /* a new order replaces one a bomber was keeping for when it is loaded (core/bomber.js) */
-  for (i = 0; i < mine.length; i++) mine[i].bombNext = null;
+  /* a new order replaces one a bomber was keeping for when it is loaded (core/bomber.js) - and,
+     given without Shift, the stops a unit had queued (core/orders.js _rtsWayNext) */
+  for (i = 0; i < mine.length; i++) { mine[i].bombNext = null; if (!U.queue) mine[i].wq = null; }
+  var queued = 0;
   var boardWhy = null;                      /* why nobody got into the transport clicked, if so */
   /* A SELECTED PRODUCTION BUILDING TAKES THE ORDER AS A RALLY POINT. This used to be the line
      that returned: `mine` holds units only, so with a war factory selected the right-click -
@@ -34328,12 +34375,20 @@ function _rtsRightClickNow(mx, my, hit0) {
       continue;
     }
     if (ud.harvest && tgt && tgt.side === 'player' && tgt.def === 'refinery') { u.order = 'harvest'; u.hstate = 'toRef'; u.path = null; continue; }
-    _rtsOrderMove(u, hit.x + spread[i].x, hit.z + spread[i].z, !!U.attackMove);
+    /* SHIFT + RIGHT-CLICK ON GROUND: one more stop after the ones it has, for a unit already on
+       its way; a unit standing still just goes */
+    var wx = hit.x + spread[i].x, wz = hit.z + spread[i].z;
+    if (U.queue && !tgt && (u.order === 'move' || u.order === 'amove') && u.goal) {
+      (u.wq = u.wq || []).push({ x: wx, z: wz, am: !!U.attackMove }); queued++;
+      continue;
+    }
+    _rtsOrderMove(u, wx, wz, !!U.attackMove);
   }
   /* the ping is the order given, as the cursor was: a harvest only when something harvests - a
      tank sent onto scrap pinged the harvester's colour - and an attack-move the cursor's amber */
   _rtsFlash(hit.x, hit.z, reaped ? 'harvest' : (struck || waits) ? 'attack' : U.attackMove ? 'amove' : 'move');
-  if (landed) _rtsSay(landed === 1 ? 'Making for the shore.' : landed + ' transports making for the shore.');
+  if (queued) _rtsSay(queued === 1 ? 'Stop added.' : 'Stop added for ' + queued + ' units.');
+  else if (landed) _rtsSay(landed === 1 ? 'Making for the shore.' : landed + ' transports making for the shore.');
   else if (dropped) _rtsSay(dropped === 1 ? 'Taking them in.' : dropped + ' aircraft taking them in.');   /* not 'Skylifts': a Dominion player has none */
   else if (boardWhy) _rtsSay(boardWhy);
   else if (here) _rtsSay('No way to that shore - putting them down here.');
@@ -34398,6 +34453,7 @@ function _rtsDrawHud(dt) {
     var top = (e.type === 'struct') ? rtsStructDef(e.def).h * 0.9 + 5 : 3.4;
     var s = _rtsWorldToScreen(e.x, top, e.z);
     if (s.behind || s.x < -60 || s.x > W + 60 || s.y < -40 || s.y > H + 40) continue;
+    if (selected && e.wq) _rtsDrawWayline(g, e);         /* its queued stops: ui/wayline.js */
     /* SIZED BY THE PROJECTION, NOT BY A LITERAL. _rtsWorldToScreen returns the scale to draw
        at as well as the point to draw at, and this pass read the point and ignored the scale -
        so a health bar was the same 46 pixels wide wherever the unit was, while the unit under

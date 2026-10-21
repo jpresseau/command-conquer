@@ -200,6 +200,18 @@ own dt - the tick is tuned at one step size, and unit separation and the re-plan
 linear in it. The ⏸ reads the speed when it is not 1×. `unit/pause` holds the counting;
 `e2e/pause` drives the key, the screen and the loop.
 
+### Queued orders (core/orders.js, ui/select.js, ui/wayline.js)
+
+Shift + right-click on open ground, with units that are already moving, adds a stop after the
+ones each has (`e.wq`, plain `{x, z, am}` points, so a save carries them); a unit standing still
+just goes. A move or attack-move that arrives takes the next (`_rtsWayNext`, from the unit tick),
+and a stop with no route is dropped for the one after. Any order given without Shift - a
+right-click, a radar order - clears the list, and so does hold. With A held the stop is an
+attack-move. While the unit is selected the HUD draws its route, as a rally point is drawn: a
+dashed line through each stop, amber for attack-move legs. Shift is read on the right button's
+release (`ui/input.js`); a touch screen has no Shift, so on a phone orders are given one at a time.
+`unit/waypoints` holds the walking; `e2e/waypoints` gives the clicks.
+
 ### A line you can go to (ui/go.js, core/idle.js)
 
 `_rtsSay` now carries a place and a thing (`G.msgAt`, `G.msgSel`); a line that has them is
