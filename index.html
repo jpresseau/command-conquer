@@ -837,7 +837,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">88cc3c9 · 2026-10-21</div>
+  <div id="rtsBuild" title="build">25d7b84 · 2026-10-21</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -3241,7 +3241,7 @@ var RTS_CAMPAIGN = [
       return null;
     } },
 
-  { id: 'skycrane', name: 'Armour by Air', army: 'soviet', diff: 'normal', seed: 9003, par: 200,
+  { id: 'skycrane', name: 'Armour by Air', army: 'soviet', diff: 'normal', top: 'hard', seed: 9003, par: 200,
     brief: 'The Compact has put its radar on an island no bridge reaches and no tide uncovers. Your Sky Cranes can lift one tank at a time: carry the armour over the water and take the radar down inside six minutes.',
     after: 'The radar is down and the strait is dark - but a Compact flotilla is already moving up the lagoon, for the Dominion\'s Sub Pen.',
     goals: [ { id: 'radar', text: 'Destroy the Compact radar on the island' },

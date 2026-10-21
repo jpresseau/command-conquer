@@ -2,13 +2,17 @@
 
      ARMOUR BY AIR  the island is cut off: a tank ordered onto it is refused; one crane load of two
                     tanks loses to the garrison, two loads take the radar; lose the cranes and every
-                    tank still on the mainland and the mission is lost
+                    tank still on the mainland and the mission is lost. At Veteran the stronger
+                    play (test/lib/plays.js craneDrop) lands clear of the guns, which wins; buys two
+                    more cranes and lifts all four at once, which wins inside the gold par; and
+                    leaves the radar till last, without which the four lose
      THE CHANNEL    left alone, the flotilla sinks the Sub Pen; a player who keeps building
                     submarines at it (one every 40 s) holds the channel to the relief column, and
                     one every 80 s does not */
 
 var { Suite } = require('../lib/assert.js');
 var { mission, play } = require('../lib/mission.js');
+var { craneDrop } = require('../lib/plays.js');
 
 var S = new Suite('campaign-play');
 
@@ -49,6 +53,12 @@ o2.g._rtsTick(1 / 60);
 o2.g._rtsMTagged(o2.G, 'lift').forEach(function (l) { o2.g._rtsKillQuiet(l); l.dead = true; });
 var r2 = play(o2, 2);
 S.ok('...and with the cranes gone and every tank on the mainland it is lost', r2.over === 'lose', JSON.stringify(r2));
+var vs = craneDrop(mission('skycrane', 'hard'), { buy: 2, aim: 'guns' }), v2 = craneDrop(mission('skycrane', 'hard'), { buy: 0, aim: 'guns' });
+var vr = craneDrop(mission('skycrane', 'hard'), { buy: 2, aim: 'radar' });
+var vn = lift(mission('skycrane', 'hard'), 2);
+S.ok('...at Veteran the two loads landed under the guns lose; landed clear of them, the two cranes win, but past the gold par; four tanks lifted at once win inside it; and the four lose going straight at the radar',
+     vn.r.over === 'lose' && v2.over === 'win' && v2.t > o.m.par && vs.over === 'win' && vs.t <= o.m.par && vr.over === 'lose',
+     JSON.stringify({ near: vn.r, two: v2, four: vs, radar: vr, par: o.m.par }));
 
 /* ---------------- the channel ---------------- */
 var oi = mission('channel'), ri = play(oi, 480);

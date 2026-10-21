@@ -185,7 +185,8 @@ take a yard on the mirrored map, order your ally against one of two fortified ba
 finale break two live armies at once. Each has a briefing,
 objectives on the battlefield and an end card, and the missions you win are marked. They are
 fought in order - each one opens when the one before it is won - with a line of story between. Most can be
-played easier than written, and four harder: the Channel, Two Fronts, Mirror Line and the finale.
+played easier than written, and five harder: Armour by Air, the Channel, Two Fronts, Mirror Line
+and the finale. At Veteran, Armour by Air's gold asks for more cranes than it gives you.
 A win earns bronze, silver or gold: silver at the level the mission was written at, gold at the
 hardest level it offers - inside its par, where the mission is a race.
 

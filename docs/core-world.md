@@ -256,8 +256,17 @@ and `src/campaign.js` is the title-screen list, the objectives and the end card.
   easier rung, or up to its `top`. The level is every hostile seat's (`S.diff`, read by
   `_rtsBias`); `G.diff`, and an ally's, stay the mission's own. A harder rung is offered only where
   it was measured to bite and still be won (`unit/campaign-levels`): the Channel and Two Fronts
-  at Veteran, won by a submarine every 30 s and a tank and rocket every 8 s. At Veteran Fog Bank
-  and Order of Battle barely changed, and Armour by Air's fixed four tanks lose.
+  at Veteran, won by a submarine every 30 s and a tank and rocket every 8 s, and Armour by Air,
+  where the two loads land under the guns and lose: landed on the dry cell furthest outside the
+  guns' reach, taking the garrison, then the guns, then the radar, the two cranes win at 290 s,
+  and two more cranes from the airfield, all four tanks in one lift, win at 116 s, inside the
+  par (straight at the radar, the four lose).
+  Three stay at their own level, with nothing a harder level could ask of a stronger play:
+  Low Water's convoy is ashore five seconds after it sets out, past six powered turrets added at
+  the landing; Fog Bank's play (the fog on the yard, everyone at it) is the only one that wins at
+  all - the guards first, or forming up first, loses even at Veteran - and a tougher yard only
+  slows it; and Order of Battle's split stays fastest whatever the guards, rings or yard
+  strength, while its two bases left awake at Veteran had over a hundred fighters by 300 s.
 - **Regular, the campaign rung** (`RTS_DIFF.regular`, `campaign: true`, so the skirmish picker
   skips it): Soldier's brain - it builds, expands and repairs - with numbers halfway to Recruit's.
   Recruit's opponent never grew past about ten fighters and never came; Soldier's had forty by the
@@ -294,7 +303,8 @@ and `src/campaign.js` is the title-screen list, the objectives and the end card.
   - The Channel's Sub Pen is hardened to 1800 hp, and is held by a submarine every 40 s, not every 80.
   - Armour by Air's island has a garrison of Battle Tanks the mission sends at a landing (its seat
     has no brain, and a tank idles unless something is within its reach): one crane load of two
-    Bulwarks dies to it, two loads take the radar.
+    Bulwarks dies to it, two loads take the radar. At Veteran they lose; landed clear of the guns
+    they win, slowly, and four tanks in one lift (two cranes bought) win inside the par.
   - The second four (`unit/campaign2`, `unit/campaign3`), at their seeds:
     - Two Fronts: idle, the ally's yard falls at 139 s; kept there and topped up, it holds to 420 s.
     - Mirror Line: attacking and building wins at 231 s; idle loses.

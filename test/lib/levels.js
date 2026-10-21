@@ -42,8 +42,8 @@ module.exports = function (part, of) {
   /* held from the other end: the harder levels are the ones measured (docs/core-world.md) - a
      `top` dropped or added without a stronger play here changes this */
   var harder = all.filter(function (m) { return keys.indexOf(m.top || m.diff) > keys.indexOf(m.diff); }).map(function (m) { return m.id + ':' + m.top; });
-  S.ok('a harder level is offered exactly where, and as far as, one was measured to be won: the Channel and Two Fronts to Veteran, Mirror Line and Breachwater to Soldier',
-       harder.join() === 'channel:hard,twofronts:hard,mirror:normal,breachwater:normal' && harder.every(function (x) { return !!strong[x.split(':')[0]]; }), harder.join());
+  S.ok('a harder level is offered exactly where, and as far as, one was measured to be won: Armour by Air, the Channel and Two Fronts to Veteran, Mirror Line and Breachwater to Soldier',
+       harder.join() === 'skycrane:hard,channel:hard,twofronts:hard,mirror:normal,breachwater:normal' && harder.every(function (x) { return !!strong[x.split(':')[0]]; }), harder.join());
   S.ok('this part has checks to make, and every check is in some part', mine.length >= 3 && list.length >= 20,
        mine.length + ' of ' + list.length + ': ' + mine.map(function (c) { return c.m.id + (c.k ? '@' + c.k : ''); }).join(' '));
 
