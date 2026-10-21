@@ -222,6 +222,15 @@ It stops when the line can no longer build the unit (`_rtsCanQueue`: the barrack
 reached). The Build tab has none, since a building waits for its placement. The tile being
 repeated wears ↻. `unit/repeat` holds the rule; `e2e/repeat` clicks the button and a tile.
 
+### I, the idle army (ui/idlesel.js)
+
+I selects every fighter of yours that is idle - no order, no path, nothing in its sights, not a
+harvester, not on hold (hold is an order given on purpose) - and looks at the first. Pressed again
+while those are still the selection it looks at the next, round and round; the list is taken
+fresh on every press, so a unit given an order since drops out. With nobody idle it says so and
+leaves the selection alone. "Looks at" means into view and toward the centre: zoomed out near
+the map's edge the camera may not pass the edge, so it cannot always centre. `e2e/idlesel`.
+
 ### A line you can go to (ui/go.js, core/idle.js)
 
 `_rtsSay` now carries a place and a thing (`G.msgAt`, `G.msgSel`); a line that has them is

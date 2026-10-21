@@ -33,15 +33,22 @@ that loaded, and saved battles and settings live on the device either way.
 | --- | --- |
 | Left-drag | Select your units |
 | Left-click | Select one unit or building |
+| Double-click | Select every unit of that type on screen |
+| `Ctrl+A` | Select your whole army |
+| `0`–`9` | Teams: `Ctrl` assigns the selection, the key selects, `Shift` adds, `Alt` selects and centres |
+| `I` | Select every idle unit and look at one · again for the next |
+| `N` / `Shift+N` | Step to the next / previous unit and look at it |
+| `Home` | Centre on the selection, or on your Command Yard |
 | Right-click | Context order — enemy: attack · ore: harvest · ground: move |
 | `A` + right-click | Attack-move (engage anything on the way) · with Heavy Bombers: carpet that spot |
 | `Shift` + right-click | Queue another stop after the ones a unit has (drawn while selected) · with `A`, an attack-move stop |
 | `D` / the sidebar's button | Deploy: the Mobile Yard sets down, a layer lays a mine, the Bridge Layer spans the gap (the button says which) |
 | `U` / UNLOAD | Put a transport's load down where it stands |
 | `S` | Hold position |
+| `Delete` | Scuttle the selected units |
 | `P` | Pause · the paused screen sets the game speed (1×, 1.5×, 2×) |
 | `Space` | Look at the last attack on your base · tapping the message line goes where it is about |
-| `WASD` / arrows | Pan the camera (screen edges work too) |
+| Arrow keys | Pan the camera (screen edges, the radar and a right-drag work too) |
 | Mouse wheel | Zoom |
 | `Esc` | Cancel a placement, repair, sell or an armed weapon · with nothing armed, leave the battle (press it twice) |
 | `Ctrl+S` / 💾 | Save to the slot in use — three slots; 📂 resumes the one that holds a battle, or opens the list to choose and to save elsewhere |
