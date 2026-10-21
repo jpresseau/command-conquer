@@ -166,8 +166,9 @@ copy and post, and your best of the day is kept.
 enemy's corner, every seventy seconds after the first two minutes - each one bigger than the last,
 infantry and buggies at first and heavy armour later, and bigger again at Veteran. There is no
 winning: the card says how many waves you held and for how long, and the title keeps your best at
-each difficulty. Left alone a base falls in the third wave; a ring of guns and an army hold far
-longer.
+each difficulty. Wipe a wave out and it pays a bounty - a quarter of what it cost - and the panel
+top left counts down to the next. Left alone a base falls in the third wave; a ring of guns and
+an army hold far longer.
 
 **The map before the battle.** Under START BATTLE the title shows the ground the next battle will
 be fought on - its terrain, ore and starting positions - and ↻ ANOTHER MAP rolls a different one.

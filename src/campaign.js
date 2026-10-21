@@ -80,16 +80,18 @@ function rtsCampEnd() {
   if (!p) return;
   window._RTS_DIFF = p.diff; window._RTS_ARMY = p.army;
 }
-/* The objectives, top left of the battlefield, kept in step by the HUD tick. */
+/* The objectives, top left of the battlefield, kept in step by the HUD tick - a mission's, or a
+   survival's run (survival.js rtsSurvivalPanel). */
 function rtsCampHud(G) {
   var el = document.getElementById('rtsGoals');
   if (!el) return;
-  var on = !!(G && G.mission);
+  var sv = G && !G.mission && G.survival && typeof rtsSurvivalPanel === 'function' ? rtsSurvivalPanel(G) : null;
+  var on = !!(G && G.mission) || !!sv;
   if (el.hidden === on) el.hidden = !on;
   if (!on) return;
-  var goals = _rtsMissionGoals(G), name = _rtsMissionOf(G.mission.id).name;
+  var goals = sv ? sv.goals : _rtsMissionGoals(G), name = sv ? sv.name : _rtsMissionOf(G.mission.id).name;
   /* the pill is what a narrow screen shows until it is tapped open (style.css) */
-  var html = '<i class="pill">' + name + ' · ' + goals.filter(function (g) { return g.done; }).length + '/' + goals.length + ' ▾</i>'
+  var html = '<i class="pill">' + (sv ? sv.pill : name + ' · ' + goals.filter(function (g) { return g.done; }).length + '/' + goals.length) + ' ▾</i>'
     + '<b>' + name + '</b>' + goals.map(function (g) {
     return '<span class="' + (g.done ? 'done' : g.failed ? 'failed' : '') + '">' + (g.done ? '✓ ' : g.failed ? '✕ ' : '• ') + g.text + '</span>';
   }).join('');

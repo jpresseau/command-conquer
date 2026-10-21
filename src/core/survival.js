@@ -11,24 +11,33 @@
    when the player's last building falls - there is no winning, only how long and how many
    waves - and G.survival keeps the count, which a save carries.
 
+   A BOUNTY for every wave wiped out: RTS_SURV.bounty of what the wave cost, rounded to fifty
+   credits, paid when the last of it falls. Each wave's units are tagged with its number ('w3'),
+   so the count survives a save. Without it a survival is a fixed purse against a growing tide,
+   and what the player kills earns them nothing - the one thing a wave-defence game pays for.
+
    The roster is a list here on purpose: these are the fighters a wave is made of, not a rule
    about the game, and a support unit (a sweeper, a layer, a transport) in a wave would stand at
    the edge doing nothing. */
-var RTS_SURV = { first: 120, every: 70, budget: 700, grow: 450, tier0: 200, tier: 140, cap: 40, look: 2,
+var RTS_SURV = { first: 120, every: 70, budget: 700, grow: 450, tier0: 200, tier: 140, cap: 40, look: 2, bounty: 0.25,
   mult: { easy: 0.6, regular: 0.8, normal: 1, hard: 1.35 } };
 var RTS_SURV_ROSTER = ['rifle', 'rocket', 'grenadier', 'flame', 'dog', 'buggy', 'light', 'tank', 'arty', 'v2rl', 'heavy'];
 
 function _rtsSurvivalSetup(G) {
   G.sides.enemy.ctl = 'none';
   _rtsMClear(G, 'enemy');
-  G.survival = { wave: 0, next: RTS_SURV.first, look: 0, secs: 0, spawned: 0 };
+  G.survival = { wave: 0, next: RTS_SURV.first, look: 0, secs: 0, spawned: 0, open: [], paid: 0 };
   return G.survival;
 }
+/* what wave n may spend, at this battle's difficulty */
+function _rtsSurvivalBudget(G, n) { return (RTS_SURV.budget + RTS_SURV.grow * (n - 1)) * (RTS_SURV.mult[G.diff] || 1); }
+/* and what wiping it out pays */
+function _rtsSurvivalBounty(G, n) { return Math.round(_rtsSurvivalBudget(G, n) * RTS_SURV.bounty / 50) * 50; }
 /* what wave n is made of: keys, in the order they come */
 function _rtsSurvivalWave(G, n) {
   var side = rtsHouseSide('enemy'), cap = RTS_SURV.tier0 + RTS_SURV.tier * n;
   var pool = RTS_SURV_ROSTER.map(rtsUnitDef).filter(function (d) { return d && rtsBuildableBy(d, side) && d.cost <= cap; });
-  var budget = (RTS_SURV.budget + RTS_SURV.grow * (n - 1)) * (RTS_SURV.mult[G.diff] || 1), out = [];
+  var budget = _rtsSurvivalBudget(G, n), out = [];
   if (!pool.length) return out;
   var cheapest = Math.min.apply(null, pool.map(function (d) { return d.cost; }));
   while (budget >= cheapest && out.length < RTS_SURV.cap) {
@@ -64,7 +73,8 @@ function _rtsSurvivalTick(G, dt) {
   if (V.next <= 0) {
     V.wave++; V.next = RTS_SURV.every;
     var keys = _rtsSurvivalWave(G, V.wave), st = G.starts.enemy, made = [];
-    for (i = 0; i < keys.length; i++) made = made.concat(_rtsMUnits('enemy', keys[i], st.tx + (i % 5) - 2, st.tz + ((i / 5) | 0) - 2, 1, 'wave'));
+    for (i = 0; i < keys.length; i++) made = made.concat(_rtsMUnits('enemy', keys[i], st.tx + (i % 5) - 2, st.tz + ((i / 5) | 0) - 2, 1, 'w' + V.wave));
+    if (made.length) (V.open = V.open || []).push(V.wave);
     for (i = 0; i < made.length; i++) _rtsSurvivalSend(made[i]);
     V.spawned += made.length;
     _rtsSay('Wave ' + V.wave + ' inbound - ' + made.length + ' units.', 4);
@@ -73,6 +83,15 @@ function _rtsSurvivalTick(G, dt) {
   V.look -= dt;
   if (V.look > 0) return;
   V.look = RTS_SURV.look;
+  /* a wave with none of it left standing pays its bounty, once */
+  for (i = 0; V.open && i < V.open.length; i++) {
+    var n = V.open[i];
+    if (_rtsMTagged(G, 'w' + n).length) continue;
+    var b = _rtsSurvivalBounty(G, n);
+    _rtsGrant(G.sides.player, b); V.paid = (V.paid || 0) + b;
+    V.open.splice(i--, 1);
+    _rtsSay('Wave ' + n + ' wiped out - +' + b + ' credits.', 4);
+  }
   for (i = 0; i < G.ents.length; i++) {
     e = G.ents[i];
     if (e.dead || e.side !== 'enemy' || e.type !== 'unit' || e.order || e.path || (e.target && !e.target.dead)) continue;

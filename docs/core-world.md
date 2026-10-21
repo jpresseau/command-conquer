@@ -328,9 +328,19 @@ beside it), and anything standing idle looks again every two seconds. The player
 falling is the end, with the waves and seconds kept on `G.survival`, which a save carries; the
 best at each difficulty is `bw.survival`.
 
-Measured at Soldier, seed 7: a base left alone falls in the third wave, at 4:25; an army built
-from one barracks holds nine waves, a ring of five turrets and five pillboxes ten, and both
-together thirteen (16:10). `unit/survival` holds the rules; `e2e/survival` plays it from the title.
+A wave wiped out pays a bounty, `RTS_SURV.bounty` (a quarter) of its budget rounded to fifty
+credits - 200 for the first at Soldier, 400 for the third, 750 for the sixth - once its last unit
+falls. Each wave's units carry its number as their tag (`w3`), and `G.survival.open` the waves
+still owed, so a save keeps both. The objectives panel (campaign.js `rtsCampHud`, from
+`rtsSurvivalPanel`) carries the run: the wave on the field and how many of it, the countdown to
+the next, and the bounty for the oldest wave still standing; the end card adds what was earned.
+
+Measured at Soldier, seed 7: a base left alone falls in the third wave, at 4:30; an army built
+from one barracks holds eight or nine waves, a ring of five turrets and five pillboxes ten, and
+both together thirteen (16:15). With and without the bounty the same: it paid the army 1150 and
+both 3450, and a scripted player that queues the same two squads whatever it holds has nowhere to
+put it - the bounty is the player's to spend. `unit/survival` holds the rules; `e2e/survival`
+plays it from the title.
 
 ## The skirmish setup
 

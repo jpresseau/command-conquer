@@ -437,7 +437,7 @@ function _rtsSyncSidebar(dt) {
     if (dl2.textContent !== dTxt) dl2.textContent = dTxt;
   }
 
-  if (typeof rtsCampHud === 'function') rtsCampHud(G);     /* a mission's objectives (campaign.js) */
+  if (typeof rtsCampHud === 'function') rtsCampHud(G);     /* a mission's objectives, or a survival's run (campaign.js) */
   if (typeof _rtsAutoTick === 'function') _rtsAutoTick(G, U);   /* the autosave's minute, and its end */
   var msg = document.getElementById('rtsMsg');
   msg.textContent = G.msgT > 0 ? (G.msg || '') : '';
