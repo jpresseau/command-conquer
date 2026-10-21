@@ -96,6 +96,10 @@ come close, so fog is the day to walk up on a fortified line. In the rain the sh
 clock, and while one is at full strength every armed aircraft is grounded on its pad until it
 passes. A battle keeps the sky it started under, and a save keeps it too.
 
+**Colour-blind colours.** The title's **COLOUR-BLIND** button swaps the armies to a palette a red-green
+or blue-yellow colour-blind eye can tell apart: you stay blue, an ally is sky blue, and the foes
+are orange, yellow and pink, each at its own brightness.
+
 **Call the weather down.** Each army has a third superweapon. The Compact's Mist Tower lays a fog
 bank anywhere on the map for two minutes: nothing in it sees, or is seen, past three cells, so it
 hides an advance or blinds a fortified line to one. The Dominion's Storm Spire breaks a

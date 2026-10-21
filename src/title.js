@@ -53,6 +53,7 @@ function rtsHome(){
   if (typeof rtsOfflineNote === 'function') rtsOfflineNote();     /* the saved copy, offline (offline.js) */
   rtsBuildDiff();
   if (typeof rtsSkySync === 'function') rtsSkySync();     /* the conditions: render3d/sky3d.js */
+  if (typeof rtsCvdSync === 'function') rtsCvdSync();     /* the seats' colours: ui/cvd.js */
   rtsShowResume();
   if (typeof rtsMapPreviewSoon === 'function') rtsMapPreviewSoon();   /* the next map (preview.js) */
 }
@@ -113,6 +114,7 @@ function rtsShowResume(){
 }
 rtsBuildDiff();
 if (typeof rtsSkySync === 'function') rtsSkySync();
+if (typeof rtsCvdSync === 'function') rtsCvdSync();
 rtsShowResume();
 if (typeof _rtsAutoBind === 'function') _rtsAutoBind();     /* the autosave's two moments (autosave.js) */
 rtsBuildArmyPick();

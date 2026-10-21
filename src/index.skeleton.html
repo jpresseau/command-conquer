@@ -21,7 +21,8 @@
   <div id="rtsTitleMenu">
   <div class="diff" id="rtsDiff"></div>
   <p class="diffnote" id="rtsDiffNote"></p>
-  <div class="diff" id="rtsSky"></div>
+  <!-- the sky and the seats' colours share a row: a row of its own put START BATTLE under the fold on a small phone (e2e/title) -->
+  <div class="diff" id="rtsLook"><span id="rtsSky"></span><span id="rtsCvd"></span></div>
   <div class="diff" id="rtsArmySide" hidden></div>
   <p class="diffnote" id="rtsVoxNote" hidden></p>
   <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE<small id="rtsRecordNote"></small></button>
@@ -288,6 +289,7 @@
 <script>//@@INC:ui/idlesel.js@@</script>
 <script>//@@INC:ui/select.js@@</script>
 <script>//@@INC:ui/hud.js@@</script>
+<script>//@@INC:ui/cvd.js@@</script>
 <script>//@@INC:ui/camera.js@@</script>
 <script>//@@INC:rts.save.js@@</script>
 <script>//@@INC:autosave.js@@</script>
