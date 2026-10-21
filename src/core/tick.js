@@ -78,6 +78,7 @@ function _rtsTick(dt) {
 
   /* a mission keeps its own goals and calls its own result (core/campaign.js) */
   if (G.mission) { _rtsMissionTick(G, dt); return; }
+  if (G.survival) { _rtsSurvivalTick(G, dt); return; }      /* waves until the base falls: core/survival.js */
   /* win / lose: losing every structure ends it, the way it did in the originals - a SEAT is out
      when its last building falls, and the battle when one team has no seat left. The player's
      team still standing wins; the player's own base gone loses, whatever an ally still holds. */

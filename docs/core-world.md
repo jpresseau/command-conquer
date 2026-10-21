@@ -305,6 +305,23 @@ and `src/campaign.js` is the title-screen list, the objectives and the end card.
       minutes and overran a player who attacked. Each yard is ringed with eight guns and four
       guarded heavies; without the rings the ordered play won only at 593 s. Ordered, it wins at 362 s; alone, the second yard stands at 600 s; idle loses.
 
+## Survival (mine, not ported)
+
+`core/survival.js` lays it on a plain battle (`_rtsSurvivalSetup`, from `survival.js` when the
+title's SURVIVAL started it): the opponent's seat is cleared and thinks nothing, and `G.survival`
+takes the end rule's place in the tick (`core/tick.js`), as a mission does. A wave comes every
+`RTS_SURV.every` seconds after `RTS_SURV.first`, from the opponent's start: a budget that grows by
+`RTS_SURV.grow` a wave, scaled by the difficulty (`RTS_SURV.mult`), spent at random on the
+opponent's own fighters from a fixed roster, nothing dearer than `tier0 + tier × wave` - so infantry
+and buggies first, the Bulwark later. A wave attack-moves on the player's nearest building (a cell
+beside it), and anything standing idle looks again every two seconds. The player's last building
+falling is the end, with the waves and seconds kept on `G.survival`, which a save carries; the
+best at each difficulty is `bw.survival`.
+
+Measured at Soldier, seed 7: a base left alone falls in the third wave, at 4:25; an army built
+from one barracks holds nine waves, a ring of five turrets and five pillboxes ten, and both
+together thirteen (16:10). `unit/survival` holds the rules; `e2e/survival` plays it from the title.
+
 ## The skirmish setup
 
 `rules/skirmish.js` holds the options: size (`RTS_N` of 96, 128 or 160), water (the inlet's radius

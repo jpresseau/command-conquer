@@ -449,6 +449,7 @@ function _rtsSyncSidebar(dt) {
     var o = document.getElementById('rtsOver');
     o.className = 'rts-over on';
     if (G.mission && typeof rtsCampOverHTML === 'function') o.innerHTML = rtsCampOverHTML(G);
+    else if (G.survival && typeof rtsSurvivalOverHTML === 'function') o.innerHTML = rtsSurvivalOverHTML(G);   /* survival.js */
     else o.innerHTML = '<div class="card ' + G.over + '"><h2>' + (G.over === 'win' ? 'VICTORY' : 'DEFEATED') + '</h2>'
       + '<p>' + (G.over === 'win' ? 'The ' + rtsArmyName('enemy') + ' forces have been wiped off the map.'
                           : rtsArmyName('player') + ' command has fallen.') + '</p>'
@@ -460,8 +461,9 @@ function _rtsSyncSidebar(dt) {
 }
 /* Play again: a daily replays the day's battle, with its army and difficulty kept (daily.js). */
 function rtsRestart() {
-  var d = window._RTS_DAILY, prev = window._RTS_DAILY_PREV, mi = window._RTS_MISSION;
+  var d = window._RTS_DAILY, prev = window._RTS_DAILY_PREV, mi = window._RTS_MISSION, sv = window._RTS_SURVIVAL;
   rtsClose();
+  if (sv) window._RTS_SURVIVAL = true;                        /* another survival (survival.js) */
   if (mi) { setTimeout(function () { rtsCampStart(mi.id, null, mi.lvl); }, 60); return; }   /* retry the mission, at its level */
   if (d) { window._RTS_DAILY = d; window._RTS_DAILY_PREV = prev; window._RTS_DIFF = d.diff; window._RTS_ARMY = d.army; }
   setTimeout(function () { rtsOpen(d ? d.seed : undefined); }, 60);

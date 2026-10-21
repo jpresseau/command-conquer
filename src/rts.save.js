@@ -279,7 +279,7 @@ function _rtsSaveHeader(G, text) {
        is on G.mission and goes in with G; this is what the page around it needs - the battle is
        resumed as that mission, not laid again, and the player's own army is put back after. */
     mission:G.mission ? window._RTS_MISSION || { id:G.mission.id, lvl:G.mission.lvl } : null,
-    desc:(window._RTS_DAILY ? 'Daily — ' : '')
+    desc:(window._RTS_DAILY ? 'Daily — ' : '') + (G.survival ? 'Survival, wave ' + G.survival.wave + ' — ' : '')
       + (G.mission && _rtsMissionOf(G.mission.id) ? _rtsMissionOf(G.mission.id).name + ' — ' + RTS_DIFF[G.mission.lvl].name
         : (RTS_DIFF[G.diff] ? RTS_DIFF[G.diff].name : G.diff)) + ' — '
       + mins + ':' + (secs < 10 ? '0' : '') + secs

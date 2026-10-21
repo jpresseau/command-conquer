@@ -158,6 +158,13 @@ have set - wins, losses and the fastest win.
 the same army, difficulty, tide and weather, all from the date alone. The end screen gives you a line to
 copy and post, and your best of the day is kept.
 
+**Survival.** SURVIVAL on the title takes the enemy base away and sends waves instead, from the
+enemy's corner, every seventy seconds after the first two minutes - each one bigger than the last,
+infantry and buggies at first and heavy armour later, and bigger again at Veteran. There is no
+winning: the card says how many waves you held and for how long, and the title keeps your best at
+each difficulty. Left alone a base falls in the third wave; a ring of guns and an army hold far
+longer.
+
 **The map before the battle.** Under START BATTLE the title shows the ground the next battle will
 be fought on - its terrain, ore and starting positions - and ↻ ANOTHER MAP rolls a different one.
 The map you see is the map you get.

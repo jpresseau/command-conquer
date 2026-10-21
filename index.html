@@ -778,6 +778,8 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   <div id="rtsSaves" hidden></div>
   <!-- One map a day, the same for everyone: daily.js -->
   <button type="button" class="go resume" id="rtsDaily" onclick="rtsDailyStart(this)">DAILY BATTLE<small id="rtsDailyNote"></small></button>
+  <!-- No enemy base, only waves, each bigger than the last: survival.js -->
+  <button type="button" class="go resume" id="rtsSurvival" onclick="rtsSurvivalStart(this)">SURVIVAL<small id="rtsSurvivalNote"></small></button>
   <!-- Nine authored missions: campaign.js -->
   <button type="button" class="go resume" id="rtsCampBtn" onclick="rtsCampToggle()">CAMPAIGN<small>nine missions on the coast</small></button>
   <div id="rtsCampList" hidden></div>
@@ -835,7 +837,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">414543d · 2026-10-21</div>
+  <div id="rtsBuild" title="build">e4cefdc · 2026-10-21</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -21921,6 +21923,7 @@ function _rtsTick(dt) {
 
   /* a mission keeps its own goals and calls its own result (core/campaign.js) */
   if (G.mission) { _rtsMissionTick(G, dt); return; }
+  if (G.survival) { _rtsSurvivalTick(G, dt); return; }      /* waves until the base falls: core/survival.js */
   /* win / lose: losing every structure ends it, the way it did in the originals - a SEAT is out
      when its last building falls, and the battle when one team has no seat left. The player's
      team still standing wins; the player's own base gone loses, whatever an ally still holds. */
@@ -21938,6 +21941,88 @@ function _rtsTick(dt) {
   }
   if (!alive.player) { G.over = 'lose'; G.sides.player.lost = true; }
   else if (!foesUp) G.over = 'win';
+}
+</script>
+<script>/* core/survival.js - SURVIVAL: no enemy base, only waves, each bigger than the last, until yours
+   falls. Part of rts.core; unit/survival plays it.
+
+   The opponent's seat thinks nothing (ctl 'none') and owns nothing to begin with. From its corner
+   of the map comes a wave every RTS_SURV.every seconds, the first after RTS_SURV.first: a budget
+   of credits (RTS_SURV.budget, growing by RTS_SURV.grow a wave, scaled by the difficulty) spent
+   at random on the opponent's own fighters that the wave can afford - nothing dearer than
+   RTS_SURV.tier0 + RTS_SURV.tier a wave, so the first waves are infantry and buggies and the
+   heavy armour comes later. A wave attack-moves on the player's nearest building; whatever is
+   left standing about looks for the next one every RTS_SURV.look seconds. The battle is lost
+   when the player's last building falls - there is no winning, only how long and how many
+   waves - and G.survival keeps the count, which a save carries.
+
+   The roster is a list here on purpose: these are the fighters a wave is made of, not a rule
+   about the game, and a support unit (a sweeper, a layer, a transport) in a wave would stand at
+   the edge doing nothing. */
+var RTS_SURV = { first: 120, every: 70, budget: 700, grow: 450, tier0: 200, tier: 140, cap: 40, look: 2,
+  mult: { easy: 0.6, regular: 0.8, normal: 1, hard: 1.35 } };
+var RTS_SURV_ROSTER = ['rifle', 'rocket', 'grenadier', 'flame', 'dog', 'buggy', 'light', 'tank', 'arty', 'v2rl', 'heavy'];
+
+function _rtsSurvivalSetup(G) {
+  G.sides.enemy.ctl = 'none';
+  _rtsMClear(G, 'enemy');
+  G.survival = { wave: 0, next: RTS_SURV.first, look: 0, secs: 0, spawned: 0 };
+  return G.survival;
+}
+/* what wave n is made of: keys, in the order they come */
+function _rtsSurvivalWave(G, n) {
+  var side = rtsHouseSide('enemy'), cap = RTS_SURV.tier0 + RTS_SURV.tier * n;
+  var pool = RTS_SURV_ROSTER.map(rtsUnitDef).filter(function (d) { return d && rtsBuildableBy(d, side) && d.cost <= cap; });
+  var budget = (RTS_SURV.budget + RTS_SURV.grow * (n - 1)) * (RTS_SURV.mult[G.diff] || 1), out = [];
+  if (!pool.length) return out;
+  var cheapest = Math.min.apply(null, pool.map(function (d) { return d.cost; }));
+  while (budget >= cheapest && out.length < RTS_SURV.cap) {
+    var can = pool.filter(function (d) { return d.cost <= budget; }), d = can[Math.floor(_rtsRnd() * can.length)];
+    out.push(d.key); budget -= d.cost;
+  }
+  return out;
+}
+/* the player's building nearest (x, z) */
+function _rtsSurvivalPrey(x, z) {
+  var G = window._rtsG, best = null, bd = 1e18;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.dead || e.side !== 'player' || e.type !== 'struct') continue;
+    var d = (e.x - x) * (e.x - x) + (e.z - z) * (e.z - z);
+    if (d < bd) { bd = d; best = e; }
+  }
+  return best;
+}
+function _rtsSurvivalSend(u) {
+  var p = _rtsSurvivalPrey(u.x, u.z);
+  if (!p) return false;
+  var a = _rtsApproach(u, p);
+  _rtsOrderMove(u, a.x, a.z, true);
+  return true;
+}
+/* every tick, in place of the end rule (core/tick.js) */
+function _rtsSurvivalTick(G, dt) {
+  var V = G.survival, i, e;
+  if (G.over) return;
+  if (!_rtsSurvivalPrey(0, 0)) { V.secs = Math.round(G.t); G.over = 'lose'; G.sides.player.lost = true; return; }
+  V.next -= dt;
+  if (V.next <= 0) {
+    V.wave++; V.next = RTS_SURV.every;
+    var keys = _rtsSurvivalWave(G, V.wave), st = G.starts.enemy, made = [];
+    for (i = 0; i < keys.length; i++) made = made.concat(_rtsMUnits('enemy', keys[i], st.tx + (i % 5) - 2, st.tz + ((i / 5) | 0) - 2, 1, 'wave'));
+    for (i = 0; i < made.length; i++) _rtsSurvivalSend(made[i]);
+    V.spawned += made.length;
+    _rtsSay('Wave ' + V.wave + ' inbound - ' + made.length + ' units.', 4);
+    if (typeof _rtsSfx === 'function') _rtsSfx('alert');
+  }
+  V.look -= dt;
+  if (V.look > 0) return;
+  V.look = RTS_SURV.look;
+  for (i = 0; i < G.ents.length; i++) {
+    e = G.ents[i];
+    if (e.dead || e.side !== 'enemy' || e.type !== 'unit' || e.order || e.path || (e.target && !e.target.dead)) continue;
+    _rtsSurvivalSend(e);
+  }
 }
 </script>
 <script>/* core/idle.js - WHAT THE PLAYER IS NOT USING, said once: a harvester standing with no ore it can
@@ -31688,6 +31773,7 @@ function rtsOpen(seed) {
   if (_home) { _rtsR.focus.x = _home.x; _rtsR.focus.z = _home.z; }
   /* a campaign mission is laid on the battle just made, and looks where it says (campaign.js) */
   if (!_load && typeof rtsCampLay === 'function') rtsCampLay(window._rtsG);
+  if (!_load && typeof rtsSurvivalLay === 'function') rtsSurvivalLay(window._rtsG);   /* or a survival: survival.js */
   /* the top bar names an ally and a second foe when the setup brought them (rules/skirmish.js) */
   var _vsP = document.querySelector('#rcgRts .rts-vs .p'), _vsE = document.querySelector('#rcgRts .rts-vs .e');
   if (_vsP && window._rtsG.sides.ally) _vsP.textContent += ' + ally';
@@ -32946,6 +33032,7 @@ function _rtsSyncSidebar(dt) {
     var o = document.getElementById('rtsOver');
     o.className = 'rts-over on';
     if (G.mission && typeof rtsCampOverHTML === 'function') o.innerHTML = rtsCampOverHTML(G);
+    else if (G.survival && typeof rtsSurvivalOverHTML === 'function') o.innerHTML = rtsSurvivalOverHTML(G);   /* survival.js */
     else o.innerHTML = '<div class="card ' + G.over + '"><h2>' + (G.over === 'win' ? 'VICTORY' : 'DEFEATED') + '</h2>'
       + '<p>' + (G.over === 'win' ? 'The ' + rtsArmyName('enemy') + ' forces have been wiped off the map.'
                           : rtsArmyName('player') + ' command has fallen.') + '</p>'
@@ -32957,8 +33044,9 @@ function _rtsSyncSidebar(dt) {
 }
 /* Play again: a daily replays the day's battle, with its army and difficulty kept (daily.js). */
 function rtsRestart() {
-  var d = window._RTS_DAILY, prev = window._RTS_DAILY_PREV, mi = window._RTS_MISSION;
+  var d = window._RTS_DAILY, prev = window._RTS_DAILY_PREV, mi = window._RTS_MISSION, sv = window._RTS_SURVIVAL;
   rtsClose();
+  if (sv) window._RTS_SURVIVAL = true;                        /* another survival (survival.js) */
   if (mi) { setTimeout(function () { rtsCampStart(mi.id, null, mi.lvl); }, 60); return; }   /* retry the mission, at its level */
   if (d) { window._RTS_DAILY = d; window._RTS_DAILY_PREV = prev; window._RTS_DIFF = d.diff; window._RTS_ARMY = d.army; }
   setTimeout(function () { rtsOpen(d ? d.seed : undefined); }, 60);
@@ -35506,7 +35594,7 @@ function _rtsSaveHeader(G, text) {
        is on G.mission and goes in with G; this is what the page around it needs - the battle is
        resumed as that mission, not laid again, and the player's own army is put back after. */
     mission:G.mission ? window._RTS_MISSION || { id:G.mission.id, lvl:G.mission.lvl } : null,
-    desc:(window._RTS_DAILY ? 'Daily — ' : '')
+    desc:(window._RTS_DAILY ? 'Daily — ' : '') + (G.survival ? 'Survival, wave ' + G.survival.wave + ' — ' : '')
       + (G.mission && _rtsMissionOf(G.mission.id) ? _rtsMissionOf(G.mission.id).name + ' — ' + RTS_DIFF[G.mission.lvl].name
         : (RTS_DIFF[G.diff] ? RTS_DIFF[G.diff].name : G.diff)) + ' — '
       + mins + ':' + (secs < 10 ? '0' : '') + secs
@@ -35882,6 +35970,58 @@ function rtsDailyNote() {
     + (best ? ' Your best: ' + (best.won ? 'victory in ' : 'held out ') + rtsDailyClock(best.secs) + '.' : '');
 }
 </script>
+<script>/* survival.js - SURVIVAL on the title: the button, the battle it lays, the end card and the best
+   run. The waves themselves are core/survival.js.
+
+   SURVIVAL is a plain battle on the player's difficulty and army with the opponent's base taken
+   away and waves sent instead (rtsSurvivalLay, called by rtsOpen on the battle it has just made).
+   The end card says how many waves were held and for how long, and the best at that difficulty
+   is kept (bw.survival) and shown under the button. A save resumes it as a survival, since the
+   count is on G; Play again lays another. */
+var RTS_SURV_LS = 'bw.survival';
+
+function rtsSurvivalGet() {
+  try { var r = JSON.parse(window.localStorage.getItem(RTS_SURV_LS) || '{}'); return r && typeof r === 'object' ? r : {}; }
+  catch (e) { return {}; }
+}
+/* a run at this difficulty that held more waves - or as many, for longer - is the best */
+function rtsSurvivalAdd(G) {
+  if (!G || !G.survival || !G.over) return null;
+  var all = rtsSurvivalGet(), b = all[G.diff], run = { waves: G.survival.wave, secs: G.survival.secs || Math.round(G.t) };
+  var better = !b || run.waves > b.waves || (run.waves === b.waves && run.secs > b.secs);
+  if (better) { all[G.diff] = run; try { window.localStorage.setItem(RTS_SURV_LS, JSON.stringify(all)); } catch (e) {} }
+  return { run: run, best: better ? run : b, isBest: better };
+}
+function rtsSurvivalLine(r) { return r ? r.waves + (r.waves === 1 ? ' wave' : ' waves') + ', ' + rtsDailyClock(r.secs) : ''; }
+function rtsSurvivalNote() {
+  var n = document.getElementById('rtsSurvivalNote');
+  if (!n) return;
+  var b = rtsSurvivalGet()[window._RTS_DIFF || RTS_DIFF_DEFAULT];
+  n.textContent = b ? 'best: ' + rtsSurvivalLine(b) : 'waves until your base falls';
+}
+function rtsSurvivalStart(btn) {
+  if (typeof rtsCampEnd === 'function') rtsCampEnd();
+  if (typeof rtsDailyEnd === 'function') rtsDailyEnd();
+  window._RTS_SURVIVAL = true;
+  rtsStart(btn);
+}
+/* rtsOpen: the battle it has just made becomes a survival, when that is what was asked */
+function rtsSurvivalLay(G) {
+  if (!window._RTS_SURVIVAL || !G) return null;
+  return _rtsSurvivalSetup(G);
+}
+function rtsSurvivalEnd() { window._RTS_SURVIVAL = false; }
+function rtsSurvivalOverHTML(G) {
+  var r = rtsSurvivalAdd(G);
+  return '<div class="card lose"><h2>OVERRUN</h2>'
+    + '<p>' + rtsArmyName('player') + ' command has fallen.</p>'
+    + '<p class="medal">Held ' + rtsSurvivalLine(r && r.run) + '</p>'
+    + '<p class="rec">' + (r && r.isBest ? 'Your best at ' + RTS_DIFF[G.diff].name + '.' : 'Best at ' + RTS_DIFF[G.diff].name + ': ' + rtsSurvivalLine(r && r.best)) + '</p>'
+    + rtsDebriefHTML(G, null)
+    + '<button type="button" onclick="rtsRestart()">Play again</button> '
+    + '<button type="button" onclick="rtsClose()">Quit</button></div>';
+}
+</script>
 <script>/* record.js - THE DEBRIEF, and THE RECORD: what a plain battle's end card says beyond who won, and
    what the title keeps of it.
 
@@ -36232,6 +36372,7 @@ function rtsSetDiff(k){
   if (!RTS_DIFF[k]) return;
   window._RTS_DIFF = k;
   if (typeof rtsRecordNote === 'function') rtsRecordNote();       /* the record follows the difficulty (record.js) */
+  if (typeof rtsSurvivalNote === 'function') rtsSurvivalNote();   /* and so does the best survival (survival.js) */
   var wrap = document.getElementById('rtsDiff');
   if (!wrap) return;
   var bs = wrap.getElementsByTagName('button');
@@ -36255,6 +36396,10 @@ function rtsHome(){
   /* a daily battle borrowed the army and difficulty: put the player's own back (daily.js) */
   if (typeof rtsDailyEnd === 'function') rtsDailyEnd();
   if (typeof rtsCampEnd === 'function') rtsCampEnd();      /* and so did a mission (campaign.js) */
+  if (typeof rtsSurvivalEnd === 'function') rtsSurvivalEnd();   /* and a survival is over (survival.js) */
+  var sb = document.getElementById('rtsSurvival');
+  if (sb) { sb.disabled = false; sb.innerHTML = 'SURVIVAL<small id="rtsSurvivalNote"></small>'; }
+  if (typeof rtsSurvivalNote === 'function') rtsSurvivalNote();
   var db = document.getElementById('rtsDaily');
   if (db) { db.disabled = false; db.innerHTML = 'DAILY BATTLE<small id="rtsDailyNote"></small>'; }
   if (typeof rtsDailyNote === 'function') rtsDailyNote();
@@ -36327,6 +36472,7 @@ rtsShowResume();
 if (typeof _rtsAutoBind === 'function') _rtsAutoBind();     /* the autosave's two moments (autosave.js) */
 rtsBuildArmyPick();
 if (typeof rtsDailyNote === 'function') rtsDailyNote();
+if (typeof rtsSurvivalNote === 'function') rtsSurvivalNote();
 if (typeof rtsRecordNote === 'function') rtsRecordNote();
 if (typeof rtsSkirmishSync === 'function') rtsSkirmishSync();
 if (typeof rtsOfflineNote === 'function') rtsOfflineNote();
