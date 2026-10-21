@@ -803,6 +803,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
     <dt>Ctrl+A</dt><dd>select your whole army</dd>
     <dt>0–9</dt><dd>teams — Ctrl assigns, plain selects, Shift adds, Alt selects and centres</dd>
     <dt>N / Shift+N</dt><dd>step to the next / previous unit and look at it</dd>
+    <dt>I</dt><dd>select every idle unit and look at one — again for the next</dd>
     <dt>Home</dt><dd>centre on the selection (or on your command yard)</dd>
     <dt>Space</dt><dd>look at the last attack on your base — the message line goes where it is about when tapped, and selects what it names</dd>
 
@@ -834,7 +835,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">eb7a81f · 2026-10-21</div>
+  <div id="rtsBuild" title="build">414543d · 2026-10-21</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -33902,6 +33903,7 @@ function _rtsKeyDown(e) {
   /* N walks the army, shift+N walks it backwards. */
   if (k === 'n' || k === 'N') { _rtsCycleObject(e.shiftKey ? -1 : 1); e.preventDefault(); }
   if (k === 'p' || k === 'P') { rtsPauseToggle(); e.preventDefault(); return; }   /* ui/pause.js */
+  if ((k === 'i' || k === 'I') && !e.ctrlKey && !e.metaKey) { rtsSelectIdle(); e.preventDefault(); return; }   /* the idle army: ui/idlesel.js */
   if (k === ' ') { _rtsGoAlert(); e.preventDefault(); return; }       /* the last attack on the base: ui/go.js */
   /* U unloads every selected transport that is carrying anything - here and now, wherever it is
      standing. The loop is core/transport.js _rtsUnloadSelected, which the sidebar's UNLOAD button
@@ -34130,6 +34132,41 @@ function _rtsDrawWayline(g, e) {
   }
   g.restore();
   return drawn;
+}
+</script>
+<script>/* ui/idlesel.js - I: the army standing about. Part of rts.ui, which owns the DOM.
+
+   A battle leaves men behind: the squad that won its fight and stands there, the tank that
+   arrived. I selects every idle fighter of yours - no order, no path, nothing in its sights, not
+   a harvester, not held on purpose - and looks at the first; pressed again while those are still
+   the selection, it looks at the next, round and round. Fresh each press, so a unit that has been
+   given an order since is no longer in the list. */
+function _rtsIdleArmy() {
+  var G = window._rtsG, out = [];
+  if (!G) return out;
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i], d;
+    if (!_rtsIsArmy(e) || e.order || e.path || (e.target && !e.target.dead)) continue;
+    d = rtsUnitDef(e.def);
+    if (!d || d.harvest) continue;
+    out.push(e);
+  }
+  return out;
+}
+function rtsSelectIdle() {
+  var G = window._rtsG, U = window._rtsUI;
+  if (!G || !U) return 0;
+  var list = _rtsIdleArmy();
+  if (!list.length) { _rtsSay('No idle units.'); if (typeof _rtsSfx === 'function') _rtsSfx('deny'); return 0; }
+  var same = G.sel.length === list.length && list.every(function (e) { return G.sel.indexOf(e) >= 0; });
+  U.idleAt = same ? ((U.idleAt || 0) + 1) % list.length : 0;
+  if (!same) { G.sel.length = 0; for (var i = 0; i < list.length; i++) G.sel.push(list[i]); }
+  var at = list[U.idleAt];
+  _rtsLookAt(at.x, at.z);
+  _rtsSay(list.length === 1 ? 'One idle unit: ' + rtsUnitDef(at.def).name + '.'
+    : list.length + ' idle units - ' + rtsUnitDef(at.def).name + ' (' + (U.idleAt + 1) + ' of ' + list.length + '). I again for the next.');
+  if (typeof _rtsSfx === 'function') _rtsSfx('select');
+  return list.length;
 }
 </script>
 <script>/* ui/select.js - selection (band, double-click, hotkeys, cycling), right-click orders and
