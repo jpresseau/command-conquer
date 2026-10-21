@@ -141,6 +141,7 @@ function _rtsKeepHeld(sel0, clear) {
 }
 function _rtsRightClickNow(mx, my, hit0) {
   var G = window._rtsG, U = window._rtsUI;
+  var queue = !!(U.queue || U.queueLatch);      /* Shift held, or a phone's QUEUE lit (ui/touchcmd.js) */
   if (U.place) { U.place = null; _rtsGhostHide(); return; }
   var hit = hit0 !== undefined ? hit0 : _rtsPickAt(mx, my);
   if (hit && hit.ent && hit.ent.dead) hit = { ent: null, x: hit.x, z: hit.z };
@@ -149,7 +150,7 @@ function _rtsRightClickNow(mx, my, hit0) {
   for (i = 0; i < G.sel.length; i++) if (G.sel[i].side === 'player' && G.sel[i].type === 'unit') mine.push(G.sel[i]);
   /* a new order replaces one a bomber was keeping for when it is loaded (core/bomber.js) - and,
      given without Shift, the stops a unit had queued (core/orders.js _rtsWayNext) */
-  for (i = 0; i < mine.length; i++) { mine[i].bombNext = null; if (!U.queue) mine[i].wq = null; }
+  for (i = 0; i < mine.length; i++) { mine[i].bombNext = null; if (!queue) mine[i].wq = null; }
   var queued = 0;
   var boardWhy = null;                      /* why nobody got into the transport clicked, if so */
   /* A SELECTED PRODUCTION BUILDING TAKES THE ORDER AS A RALLY POINT. This used to be the line
@@ -295,7 +296,7 @@ function _rtsRightClickNow(mx, my, hit0) {
     /* SHIFT + RIGHT-CLICK ON GROUND: one more stop after the ones it has, for a unit already on
        its way; a unit standing still just goes */
     var wx = hit.x + spread[i].x, wz = hit.z + spread[i].z;
-    if (U.queue && !tgt && (u.order === 'move' || u.order === 'amove') && u.goal) {
+    if (queue && !tgt && (u.order === 'move' || u.order === 'amove') && u.goal) {
       (u.wq = u.wq || []).push({ x: wx, z: wz, am: !!U.attackMove }); queued++;
       continue;
     }

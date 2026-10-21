@@ -36,12 +36,12 @@ that loaded, and saved battles and settings live on the device either way.
 | Double-click | Select every unit of that type on screen |
 | `Ctrl+A` | Select your whole army |
 | `0`–`9` | Teams: `Ctrl` assigns the selection, the key selects, `Shift` adds, `Alt` selects and centres |
-| `I` | Select every idle unit and look at one · again for the next |
+| `I` | Select every idle unit and look at one · again for the next · on a phone, IDLE |
 | `N` / `Shift+N` | Step to the next / previous unit and look at it |
 | `Home` | Centre on the selection, or on your Command Yard |
 | Right-click | Context order — enemy: attack · ore: harvest · ground: move |
 | `A` + right-click | Attack-move (engage anything on the way) · with Heavy Bombers: carpet that spot |
-| `Shift` + right-click | Queue another stop after the ones a unit has (drawn while selected) · with `A`, an attack-move stop |
+| `Shift` + right-click | Queue another stop after the ones a unit has (drawn while selected) · with `A`, an attack-move stop · on a phone, light QUEUE |
 | `D` / the sidebar's button | Deploy: the Mobile Yard sets down, a layer lays a mine, the Bridge Layer spans the gap (the button says which) |
 | `U` / UNLOAD | Put a transport's load down where it stands |
 | `S` | Hold position |
