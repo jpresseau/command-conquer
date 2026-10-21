@@ -324,6 +324,7 @@ function _rtsSyncSidebar(dt) {
   document.querySelector('#rcgRts .rts-pwr').title =
     'Power  ' + S.powerUsed + ' drawn / ' + S.powerMade + ' supplied' + (pf < 0.999 ? '  — LOW POWER' : '');
 
+  _rtsRepeatSync();                                /* ↻ REPEAT for the tab in view: ui/repeat.js */
   for (var key in U.btns) {
     var b = U.btns[key], def = rtsStructDef(key) || rtsUnitDef(key);
     var cat = _rtsQueueCat(key), q = S.q[cat];

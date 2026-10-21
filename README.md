@@ -66,7 +66,9 @@ Power Plant ──┬── Ore Refinery ─── Vehicle Works ── vehicles
 
 A second **Vehicle Works** makes vehicles come out faster — still one queue, but it runs at 1.33×,
 and a third and fourth take it to 1.67× and 2×. A second **Barracks** does the same for infantry.
-That is the classic build-speed curve (100, 75, 60, 50), and the enemy gets it too.
+That is the classic build-speed curve (100, 75, 60, 50), and the enemy gets it too. **↻ REPEAT**,
+beside REPAIR and SELL, keeps the line of the tab in view building its unit again each time one is
+done, until you turn it off or the line can no longer build it.
 
 The enemy is doing the same thing on the other side of the map, and its first attack wave is on a
 timer. A player who does nothing is overrun in about four and a half minutes.

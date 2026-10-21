@@ -109,7 +109,7 @@ Keep them small: if a file passes ~500 lines it wants splitting along its own ba
   projection contract), `post` (screen picking, colour cycle), `frame` (the frame walk), `fx`,
   `detail` (the legacy ground's grain), `icons`. The battlefield is WebGL only: `_r3dStart`
   (`render3d/present3d.js`) or `rtsOpen` refuses the match with a reason (`e2e/webgl`).
-- `src/ui/` — `shell` (open/close/resize), `sidebar`, `input`, `select`, `hud`, `camera`, `pause` (P, game speed), `go` (a tappable line, Space), `wayline` (queued stops)
+- `src/ui/` — `shell` (open/close/resize), `sidebar`, `input`, `select`, `hud`, `camera`, `pause` (P, game speed), `go` (a tappable line, Space), `wayline` (queued stops), `repeat` (a line that keeps building)
   (panning + the main loop), `navigate` (right-drag grabs the map; a still right-click
   orders on release but as pressed; wheel and pinch zoom toward the pointer, `+`/`-` about the
   centre; `e2e/navigate`, `e2e/navtouch`). Keep a ground point under the cursor with
