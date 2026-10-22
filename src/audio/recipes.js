@@ -77,6 +77,17 @@ var RTS_SFX_WAR = {
     return _dspSat(o, 1.5);
   } },
 
+  /* a lens beam: a glassy snap, a bright tone falling through the shot, and a ring of crystal
+     after it - nothing of a gun in it, no report and no pressure, because nothing burns */
+  beam: { cat: 'gun', len: 0.9, takes: 4, peak: 0.85, heard: -17, vol: 0.84, fn: function (sr, rng) {
+    var o = new Float32Array(Math.round(0.9 * sr)), J = function (x, k) { return _dspJit(rng, x, k || 0.06); };
+    _dspLayerNoise(o, sr, rng, { dur: 0.03, amp: 0.5, a: 0.0005, tau: J(0.006), type: 'hp', f0: 3000 });
+    _dspLayerTone(o, sr, { dur: 0.35, amp: 0.5, a: 0.004, tau: J(0.11), shape: 'saw', f0: J(2600), f1: J(700), type: 'lp', c0: 5200, c1: 1800 });
+    _dspLayerTone(o, sr, { dur: 0.3, amp: 0.35, a: 0.002, tau: J(0.09), f0: J(1300), f1: J(420) });
+    _dspLayerModal(o, sr, { at: 0.02, dur: 0.85, amp: 0.12, modes: [{ f: J(3700), t60: 0.5, a: 1 }, { f: J(5550), t60: 0.35, a: 0.6 }, { f: J(2470), t60: 0.6, a: 0.5 }] });
+    return _dspSat(o, 1.3);
+  } },
+
   /* a shell landing on ground: a thud, a spray of dirt, the grit pattering down after */
   hit: { cat: 'boom', len: 0.9, takes: 5, peak: 0.85, heard: -19, vol: 1.08, fn: function (sr, rng) {
     var o = new Float32Array(Math.round(0.9 * sr)), J = function (x, k) { return _dspJit(rng, x, k || 0.1); };

@@ -863,7 +863,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">175baff · 2026-10-22</div>
+  <div id="rtsBuild" title="build">c411f38 · 2026-10-22</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1009,6 +1009,13 @@ var RTS_STRUCTS = [
     needs:['radar'], weapon:'teslazap', side:'soviet', needsPower:true,
     armour:'concrete',
     desc:'Devastating, and dead the moment your power browns out. Dominion.' },
+  /* The Compact's answer to the Arc Tower, and the opposite bargain: weaker alone and cheaper
+     to run, and far stronger built in a cluster, because each idle tower relays its beam into
+     the one that fires (core/lens.js). Like the Arc Tower it is dark without power. */
+  { key:'prism',    name:'Lens Tower',   w:1, h:2, cost:1200, build:18, hp:450,  power:-75, sight:20,
+    needs:['radar'], weapon:'lensbeam', side:'allied', needsPower:true,
+    armour:'concrete',
+    desc:'Fires a light beam. Every idle Lens Tower nearby adds its beam to the shot, so build them together. Dead without power. Compact.' },
   /* ------------------------------------------------------------------ naval --
      Both armies get a shipyard and they are the same building with different names and
      different hulls coming out of it, which is what RA does too: the Naval Yard and the Sub
@@ -1235,6 +1242,13 @@ var RTS_UNITS = [
     needs:['lab'],
     side:'soviet', armour:'heavy',
     desc:'The heaviest hull on the field. Slow, expensive, and very hard to stop.' },
+  /* The Lens Tower's beam on tracks (core/lens.js). It outranges a Battle Tank and its beam
+     forks onto the enemies around whatever it hits, so it breaks up crowds and buildings; it is
+     paper-thin, so it wants something in front of it. */
+  { key:'prismtank',name:'Lens Tank',     kind:'vehicle',  cost:1200, build:16, hp:240,  speed:8,   turn:1.6,r:2.0, sight:20, weapon:'lenssplit',
+    needs:['lab'],
+    side:'allied', armour:'light',
+    desc:'Long-range beam that forks onto the enemies around its target. Thin armour: keep it behind your tanks.' },
   { key:'flame',    name:'Flame Squad',   kind:'infantry', cost:300,  build:5,  hp:75,   speed:6,   turn:6,  r:1.1, sight:12, weapon:'flame',
     needs:['lab'],
     side:'soviet', armour:'none',
@@ -1659,6 +1673,15 @@ var RTS_WEAPONS = {
      a Tesla hit is a Tesla hit whether it lands on a rifleman or a Mammoth. */
   teslazap:   { dmg:200, range:17, cool:2.6, shot:'tracer', speed:0, splash:0, wall:true,
                 verses:{ none:1, wood:1, light:1, heavy:1, concrete:1 } },
+  /* THE LENS BEAM (core/lens.js). A Lens Tower alone hits a little over half as hard as an Arc
+     Tower; what it has instead is its neighbours. Every idle tower in reach pours its own beam
+     into the one that fires, so a cluster of them is one very large shot - and a lone tower,
+     or a cluster busy with several targets, is ordinary. `relay` is the tower's, `split` the
+     tank's: its beam strikes and then forks onto the enemies standing round its target. */
+  lensbeam:   { dmg:110, range:19, cool:3.0, shot:'beam', speed:0, splash:0, wall:true, relay:true,
+                verses:{ none:1, wood:1, light:1, heavy:0.9, concrete:0.6 } },
+  lenssplit:  { dmg:75, range:22, cool:3.2, shot:'beam', speed:0, splash:0, wall:true, wood:true, split:true,
+                verses:{ none:0.8, wood:1.2, light:1.0, heavy:0.8, concrete:1.1 } },
   /* Naval guns. Long reach is the point of a ship - it is the only thing in the game that can
      hit a base without being able to be walked up to. */
   navalgun:   { dmg:30, range:24, cool:1.6, shot:'shell', speed:60, splash:2.0, wall:true, wood:true,
@@ -2121,7 +2144,7 @@ var RTS_AI = {
      Not turret's 0.24/6. A Coil is 1500 credits and -100 power against a Gun Turret's 500 and
      -20, so six of them is 9000 credits and 600 power - it is the premium piece, not the line
      defence, and the flame tower is what fills the wall. */
-          tesla:0.10,
+          tesla:0.10, prism:0.10,              /* the Compact's premium tower, the Arc Tower's pair */
           helipad:0.06, afld:0.06, aagun:0.10,
   /* One shipyard. A second buys nothing but a second production line for a domain
      the opponent uses to raid a coast, and the ratio has to stay small or a map
@@ -2135,7 +2158,7 @@ var RTS_AI = {
      production lines to spend it down, so a low ceiling turns the storage cap into a straight
      nerf and hands the player about 16 extra seconds of life. RA has no silo limit at all. */
           apower:2,    kennel:1,    silo:14,   pillbox:4,     flametower:3,     turret:6,     rocketpit:4,
-          tesla:3,
+          tesla:3,     prism:3,
           helipad:2,   afld:2,      aagun:3,
           navalyard:1, subpen:1,
   /* One each. A second silo would not charge a second missile - the timer is per house - so
@@ -2176,7 +2199,7 @@ var RTS_AI = {
      turrets it stands next to. */
   buildOrder:['refinery', 'barracks', 'silo', 'factory', 'radar', 'apower', 'depot', 'lab', 'kennel',
               'helipad', 'afld', 'navalyard', 'subpen',
-              'pillbox', 'flametower', 'turret', 'rocketpit', 'tesla', 'aagun',
+              'pillbox', 'flametower', 'turret', 'rocketpit', 'tesla', 'prism', 'aagun',
               'mslo', 'iron', 'pdox', 'gps', 'mist', 'spire'],
 
   /* WHICH RUNG EACH BUILDING BELONGS TO. The order above says what to build first; this says
@@ -2218,7 +2241,8 @@ var RTS_AI = {
               { key:'light', at:1100, w:3 }, { key:'buggy', at:900,  w:2 },
               /* `vsAir`: bought only against aircraft, one for every vsAir the player flies
                  (core/ai.js). A gun that cannot hit the ground is dead weight on a ground war. */
-              { key:'flaktrack', at:1200, w:4, vsAir:2 } ],
+              { key:'flaktrack', at:1200, w:4, vsAir:2 },
+              { key:'prismtank', at:2200, w:2 } ],
     /* No Mine Layer here: it is bought outside the weighted roll (core/aimines.js
        _rtsAISupport), because an entry in this pool moves every roll after it - measured, the
        Soviet opponent stopped reaching its Arc Tower in e2e/basedef and the raiders thinned out
@@ -7174,7 +7198,7 @@ function _sprBuildingModel(key, side) {
             pipe:pipe, ladder:ladder, rail:rail, steps:steps, drum:drum,
             crates:crates, floodlight:floodlight, plant:plant,
             sandbags:sandbags, ammo:ammo };
-  _sprBldBase(X, key) || _sprBldTech(X, key) || _sprBldWar(X, key) || _sprBldSuper(X, key);
+  _sprBldBase(X, key) || _sprBldTech(X, key) || _sprBldWar(X, key) || _sprBldSuper(X, key) || _sprBldLens(X, key);
   return m;
 }
 function _sprBuildingClean(key, side) {
@@ -7212,7 +7236,7 @@ function _sprBuildingClean(key, side) {
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
   dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46,
-  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:53, drone:26, bomber:56
+  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:53, drone:26, bomber:56, prismtank:36
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -7350,7 +7374,7 @@ function _sprUnitModel(key, side, prone, part) {
      model line reads the same as it did when this was one function. */
   var X = { m:m, TM:TM, VH:VH, S:S, DK:DK, O:O, C:C, GN:GN,
             d:d, prone:prone, part:part, side:side, tracks:tracks };
-  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key) || _sprUnitHulls(X, key))) {
+  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key) || _sprUnitHulls(X, key) || _sprUnitLens(X, key))) {
     _r3Box(m, 0, 0, -5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 0, 5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 2.5, 0, 15, 4, 8, TM[0], TM[1]);
@@ -8636,6 +8660,67 @@ function _sprUnitHulls(X, key) {
   return true;
 }
 </script>
+<script>/* sprites/lens.js - the Lens Tower and the Lens Tank (core/lens.js). Part of rts.sprites.
+
+   Both are built round the same thing, a cut crystal lens, so the tank reads at a glance as the
+   tower's beam on tracks. The Compact's buildings are pale concrete and whitewash; the lens is
+   the one part of either that is not, and it is the part the eye should go to. */
+var RTS_LENS_GLASS = ['#9fd8f2', '#6fb4dc', '#e6fbff'];
+
+/* THE LENS TOWER, one cell by two like the Arc Tower it answers, and the same height class -
+   so the two armies' premium defences read as a pair, a copper coil against a white pylon. A
+   hexagonal plinth, a tapering shaft with four fins up it, a collar, and the lens: one tall
+   crystal ringed by six small mirrors leaning out, which are what the relays aim at. */
+function _sprBldLens(X, key) {
+  if (key !== 'prism') return false;
+  var m = X.m, W = X.W, D = X.D, C = X.C, S = X.S, B = X.B, WH = X.WH, DK = X.DK, LG = RTS_LENS_GLASS, i, a;
+  _r3Box(m, 0, 0, 0, W - 4, 3, D - 6, C[2], C[0]);                         /* footing */
+  _r3Cyl(m, 0, 3, 0, 9, 4, WH[2], WH[0], 6);                                /* plinth */
+  _r3Cyl(m, 0, 7, 0, 8, 1.6, B.roof, B.roof, 6);                            /* team band */
+  _r3Cone(m, 0, 8.6, 0, 6, 3.2, 20, WH[1], 16);                             /* the shaft */
+  for (i = 0; i < 4; i++) {                                                 /* fins */
+    a = i * Math.PI / 2 + Math.PI / 4;
+    _r3Box(m, Math.cos(a) * 5.2, 8.6, Math.sin(a) * 5.2, 1.4, 14, 1.4, WH[0], WH[3]);
+  }
+  _r3Cyl(m, 0, 28.6, 0, 5, 1.6, S[1], S[3], 16);                            /* collar */
+  _r3Crystal(m, 0, 30, 0, 4.2, 12, 0, 0, LG, 6, 0.35, 7);                   /* the lens */
+  for (i = 0; i < 6; i++) {                                                 /* the ring of mirrors */
+    a = i / 6 * Math.PI * 2;
+    _r3Crystal(m, Math.cos(a) * 6, 29.4, Math.sin(a) * 6, 1.2, 5, Math.cos(a) * 0.5, Math.sin(a) * 0.5, LG, 5, 0.4, i + 1);
+  }
+  /* the plant at its foot: a power cabinet with a lit panel, and the cable run to it */
+  _r3Box(m, 0, 3, D / 2 - 7, 8, 5, 5, S[1], S[0]);
+  _r3Box(m, 0, 5, D / 2 - 4.4, 5, 2, 0.6, LG[0], LG[2]);
+  _r3Box(m, 0, 1.6, D / 4 - 3, 2.6, 0.7, D / 2 - 6, DK[1], DK[0]);
+  _r3Box(m, 0, 3, -D / 2 + 7, 7, 3, 6, C[1], C[0]);                         /* a step down to the pad */
+  return true;
+}
+
+/* THE LENS TANK. A light hull on four road wheels, and on the turret a yoke holding the lens
+   leant forward along the gun line with a mirror dish behind it. No barrel at all: the one tank
+   in the game without one, which is the fastest way to say it does not fire shells. */
+function _sprUnitLens(X, key) {
+  if (key !== 'prismtank') return false;
+  var m = X.m, VH = X.VH, TM = X.TM, S = X.S, DK = X.DK, part = X.part, LG = RTS_LENS_GLASS;
+  if (part !== 'turret') {
+    X.tracks(15, 5.0, 4, 1.9);
+    _r3Slab(m, 0, 2.8, 0, 13.5, 2.8, 8.4, 1.0, VH[0], VH[1]);
+    _r3Hip(m, -0.6, 5.6, 0, 12.5, 1.4, 8.4, 2.0, VH[3]);                    /* deck */
+    _r3Box(m, 6.0, 2.8, 0, 2.4, 2.6, 7.4, VH[1], VH[3]);                     /* glacis */
+    _r3Box(m, -6.0, 5.8, 0, 2.2, 1.0, 5.6, DK[1], DK[2]);                    /* engine grille */
+    _r3Box(m, 7.2, 4.4, -2.9, 0.9, 1.0, 1.4, LG[0], LG[2]);                  /* lamps */
+    _r3Box(m, 7.2, 4.4, 2.9, 0.9, 1.0, 1.4, LG[0], LG[2]);
+  }
+  if (part !== 'hull') {
+    _r3Cyl(m, -0.5, 6.4, 0, 3.6, 1.6, VH[1], TM[1], 16);                    /* turret ring, team roof */
+    _r3Box(m, -0.5, 8.0, -2.5, 1.6, 4.2, 0.9, S[1], S[3]);                   /* the yoke */
+    _r3Box(m, -0.5, 8.0, 2.5, 1.6, 4.2, 0.9, S[1], S[3]);
+    _r3Wheel(m, -2.6, 10.0, 0, 2.2, 0.7, 'x', S[2], S[3], 20);               /* the mirror dish */
+    _r3Crystal(m, 0.4, 7.8, 0, 2.6, 9, 1.4, 0, LG, 6, 0.4, 3);               /* the lens, leant forward */
+  }
+  return true;
+}
+</script>
 <script>/* sprites/props.js - unit scaling and fit, pads, corpses, scorch, craters, fire, crates and
    the effect sheet. Part of rts.sprites, the sprite baker. */
 
@@ -8698,7 +8783,7 @@ function _sprUnit(key, side, prone, part) {
    drawn at each place RTS_TURRET_AT names (sprites/unit-airsea.js), turned to the unit's aim.
    The ships' models once ignored the part and built the whole ship for both, so a destroyer
    shelling a target abeam was drawn twice, the second hull swung across the first. */
-var RTS_TURRETED = { tank:1, light:1, heavy:1, destroyer:1, gunboat:1, cruiser:1, flaktrack:1, monitor:1 };
+var RTS_TURRETED = { tank:1, light:1, heavy:1, destroyer:1, gunboat:1, cruiser:1, flaktrack:1, monitor:1, prismtank:1 };
 
 /* The concrete apron a structure stands on. In the reference every building sits on a pale
    irregular pad noticeably larger than itself - it is what stops a base looking like
@@ -9397,6 +9482,17 @@ var RTS_SFX_WAR = {
     _dspLayerNoise(o, sr, rng, { at: 0.18, dur: 0.9, amp: 0.6, a: 0.05, tau: J(0.3), color: 'pink', type: 'bp', f0: 2600, f1: J(700), q: 1.1 });
     _dspLayerTone(o, sr, { at: 0.02, dur: 0.7, amp: 0.14, a: 0.04, tau: 0.25, shape: 'saw', f0: J(85), f1: J(150), type: 'lp', c0: 1400, c1: 900 });
     return _dspSat(o, 1.5);
+  } },
+
+  /* a lens beam: a glassy snap, a bright tone falling through the shot, and a ring of crystal
+     after it - nothing of a gun in it, no report and no pressure, because nothing burns */
+  beam: { cat: 'gun', len: 0.9, takes: 4, peak: 0.85, heard: -17, vol: 0.84, fn: function (sr, rng) {
+    var o = new Float32Array(Math.round(0.9 * sr)), J = function (x, k) { return _dspJit(rng, x, k || 0.06); };
+    _dspLayerNoise(o, sr, rng, { dur: 0.03, amp: 0.5, a: 0.0005, tau: J(0.006), type: 'hp', f0: 3000 });
+    _dspLayerTone(o, sr, { dur: 0.35, amp: 0.5, a: 0.004, tau: J(0.11), shape: 'saw', f0: J(2600), f1: J(700), type: 'lp', c0: 5200, c1: 1800 });
+    _dspLayerTone(o, sr, { dur: 0.3, amp: 0.35, a: 0.002, tau: J(0.09), f0: J(1300), f1: J(420) });
+    _dspLayerModal(o, sr, { at: 0.02, dur: 0.85, amp: 0.12, modes: [{ f: J(3700), t60: 0.5, a: 1 }, { f: J(5550), t60: 0.35, a: 0.6 }, { f: J(2470), t60: 0.6, a: 0.5 }] });
+    return _dspSat(o, 1.3);
   } },
 
   /* a shell landing on ground: a thud, a spray of dirt, the grit pattering down after */
@@ -16431,12 +16527,16 @@ function _rtsFire(e, tgt, w) {
      Set at the one place every route to a shot passes through, so there is no way to fire from
      under water. */
   if ((rtsUnitDef(e.def) || {}).cloak) e.decloak = RTS_SUB_SURFACE;
-  if (typeof _rtsSfx === 'function') _rtsSfx(w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
+  if (typeof _rtsSfx === 'function') _rtsSfx(w.shot === 'beam' ? 'beam' : w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
     : (w.shot === 'missile' ? 'rocket' : (e.type === 'struct' ? 'turretgun' : 'cannon')), e.x, e.z);
-  var dmg = w.dmg * rtsVerses(w, tgt) * bias.fire * rtsCrateMult(e, 'fire');
+  /* a Lens Tower's idle neighbours pour their beams into this one (core/lens.js) */
+  var raw = w.dmg * bias.fire * rtsCrateMult(e, 'fire') * (w.relay && e.type === 'struct' ? _rtsLensRelay(e, w) : 1);
+  var dmg = raw * rtsVerses(w, tgt);
   if (w.speed <= 0) {
     _rtsDamage(tgt, dmg, e);
-    G.fx.push({ kind:'tracer', x:m.x, y:1.3, z:m.z, x2:tgt.x, y2:1.3, z2:tgt.z, t:0 });
+    if (w.shot === 'beam') G.fx.push(_rtsLensBeamFx(e, tgt));
+    else G.fx.push({ kind:'tracer', x:m.x, y:1.3, z:m.z, x2:tgt.x, y2:1.3, z2:tgt.z, t:0 });
+    if (w.split) _rtsLensFork(e, tgt, w, raw);      /* and a Lens Tank's forks onto its neighbours */
     _rtsCombatAnim(dmg, tgt.x, tgt.z, 0.5, tgt);
   } else {
     /* Fire_Direction: the shot leaves ALONG THE BARREL. Can_Fire only insists the barrel is
@@ -20848,6 +20948,86 @@ function _rtsAIEbb(ty) {
   }
   for (k in need) if (need[k] > 0) return false;
   return true;
+}
+</script>
+<script>/* core/lens.js - THE LENS BEAM: towers that pool their shots, and a tank whose shot forks.
+
+   A Lens Tower that fires gathers the idle towers around it. Any Lens Tower of the same side,
+   finished, with its own gun ready (`cool` run out), within RTS_LENS.relay cells of the firing
+   tower OR of a tower already gathered, relays into it: so a line of towers passes the light
+   down the line, and the firing tower's beam grows by RTS_LENS.add of itself per relay, up to
+   RTS_LENS.max of them. Every relay then waits a full reload, which is the price - a cluster
+   spends all of itself on one target, and a cluster facing several targets at once is only as
+   strong as its towers one at a time. Power is already settled by then: _rtsFire refuses an
+   unpowered tower before it gets here, and power is the side's, so its relays have it too.
+
+   A Lens Tank's beam strikes its target and then forks onto up to RTS_LENS.forks of the enemies
+   standing within RTS_LENS.fork cells of it, nearest first, each taking RTS_LENS.share of the
+   shot through its own armour. Never a friend, never the target twice, never what the beam
+   cannot reach (an aircraft, a submarine under water), and never someone inside a transport.
+
+   Both draw `beam` effects (render3d/fxemit3d.js): relay to relay to the firing tower, and
+   target to each fork. */
+var RTS_LENS = { relay: 8, max: 6, add: 0.5, fork: 3, forks: 4, share: 0.5,
+                 towerY: 5.0, tankY: 1.7 };          /* where the lens sits, above the ground (sprites/lens.js) */
+
+/* The shot itself, from the lens: a tower's crown or a tank's turret, to the target. */
+function _rtsLensBeamFx(e, tgt) {
+  var st = e.type === 'struct';
+  return { kind: 'beam', x: e.x, y: st ? RTS_LENS.towerY : RTS_LENS.tankY, z: e.z, x2: tgt.x, y2: 1.3, z2: tgt.z, t: 0, lens: st ? 1.3 : 1 };
+}
+
+/* The towers that relay into `e`'s shot, each as { o, to }: the tower and the one it passes its
+   light to. Kept in a local list rather than on the entities, which a save writes out whole. */
+function _rtsLensRelays(e) {
+  var G = window._rtsG, out = [], from = [e], took = [], i, j, o, R = RTS_LENS.relay * RTS_TILE;
+  for (i = 0; i < from.length && out.length < RTS_LENS.max; i++) {
+    for (j = 0; j < G.ents.length && out.length < RTS_LENS.max; j++) {
+      o = G.ents[j];
+      if (o === e || o.dead || o.type !== 'struct' || o.def !== e.def || o.side !== e.side) continue;
+      if (o.building > 0 || o.cool > 0 || took.indexOf(o) >= 0) continue;
+      if (Math.hypot(o.x - from[i].x, o.z - from[i].z) > R) continue;
+      took.push(o); from.push(o);
+      out.push({ o: o, to: from[i] });
+    }
+  }
+  return out;
+}
+/* Gather the relays for one shot: they spend their reload and draw their beams, and the shot's
+   damage multiplier comes back. */
+function _rtsLensRelay(e, w) {
+  var G = window._rtsG, rs = _rtsLensRelays(e), bias = _rtsBias(e.side);
+  for (var i = 0; i < rs.length; i++) {
+    var r = rs[i].o, to = rs[i].to;
+    r.cool = w.cool * bias.rof;
+    r.fire = 0.09;
+    G.fx.push({ kind: 'beam', x: r.x, y: RTS_LENS.towerY, z: r.z, x2: to.x, y2: RTS_LENS.towerY, z2: to.z, t: 0, lens: 1 });
+  }
+  return 1 + RTS_LENS.add * rs.length;
+}
+/* The enemies a forking beam goes on to from `tgt`, nearest first. */
+function _rtsLensForks(e, tgt, w) {
+  var G = window._rtsG, R = RTS_LENS.fork * RTS_TILE, near = _rtsSpNear(tgt.x, tgt.z, R) || G.ents, c = [];
+  for (var i = 0; i < near.length; i++) {
+    var o = near[i];
+    if (o === tgt || o.dead || o.inside || o.hidden || o.air || o.def === 'wall') continue;
+    if (!_rtsHostile(o.side, e.side) || !_rtsWeaponReaches(w, o)) continue;
+    if (o.type === 'unit' && (rtsUnitDef(o.def) || {}).kind === 'air') continue;
+    var d = Math.hypot(o.x - tgt.x, o.z - tgt.z);
+    if (d <= R) c.push({ o: o, d: d, i: i });
+  }
+  c.sort(function (a, b) { return a.d - b.d || a.i - b.i; });
+  return c.slice(0, RTS_LENS.forks).map(function (k) { return k.o; });
+}
+/* `raw` is the shot before the target's armour: each fork takes its share through its own. */
+function _rtsLensFork(e, tgt, w, raw) {
+  var G = window._rtsG, fs = _rtsLensForks(e, tgt, w);
+  for (var i = 0; i < fs.length; i++) {
+    var o = fs[i];
+    G.fx.push({ kind: 'beam', x: tgt.x, y: 1.3, z: tgt.z, x2: o.x, y2: 1.3, z2: o.z, t: 0, lens: 0.6 });
+    _rtsDamage(o, raw * RTS_LENS.share * rtsVerses(w, o), e);
+  }
+  return fs.length;
 }
 </script>
 <script>/* core/missions.js - the team mission list (TEAMTYPE.CPP): the script a team runs.
@@ -26945,7 +27125,7 @@ function _r3dFxShaded() {
    asks this, so the two sides cannot disagree about who draws what. */
 function _r3dFxOwns(kind) {
   if (kind === 'fire') return false;
-  if (kind === 'tracer' || kind === 'debris') return _r3dFxShaded();
+  if (kind === 'tracer' || kind === 'beam' || kind === 'debris') return _r3dFxShaded();
   return true;
 }
 
@@ -27207,6 +27387,19 @@ function _r3dFxTracer(V, f) {
   if (f.t < 0.035) _r3dFxBill(V.M, V, f.x, y0, f.z, 0.55, 0.55, 0.6, R3D_FXT_FLASH, 0, 0, 0.9, 0, R3D_FX_SPARKC);
 }
 
+/* A LENS BEAM (core/lens.js): unlike a tracer the whole line IS the shot, so it is drawn end to
+   end - a hot core inside a wide soft glow, gone in R3D_FX_BEAM_T - with a flash where it lands.
+   `lens` scales it: a relay or a fork is drawn thinner than the shot itself. */
+var R3D_FX_LENS = [0.80, 1.12, 1.45], R3D_FX_BEAM_T = 0.35;
+function _r3dFxBeam(V, f) {
+  if (f.t > R3D_FX_BEAM_T) return;
+  var y0 = V.ground(f.x, f.z) + (f.y || 1.3), y1 = V.ground(f.x2, f.z2) + (f.y2 || 1.3);
+  var k = f.lens || 1, op = 1 - f.t / R3D_FX_BEAM_T;
+  _r3dFxStreak(V.M, V, f.x, y0, f.z, f.x2, y1, f.z2, 1.1 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.35 * op, 0, R3D_FX_LENS);
+  _r3dFxStreak(V.M, V, f.x, y0, f.z, f.x2, y1, f.z2, 0.32 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.95 * op, 0, R3D_FX_ROUND);
+  _r3dFxBill(V.M, V, f.x2, y1, f.z2, 1.1 * k, 1.1 * k, 0.6, R3D_FXT_FLASH, 0, 0, 0.9 * op, 0, R3D_FX_LENS);
+}
+
 /* A CHUNK thrown off a dying building: dark, glowing for its first moments, with a wisp of smoke
    behind it along its flight. Its seed is its size, which is random per chunk and never changes. */
 function _r3dFxDebris(V, f) {
@@ -27285,6 +27478,7 @@ function _r3dFxEmit(G, V) {
     var f = G.fx[i];
     if (f.t < 0 || !_r3dFxOwns(f.kind)) continue;
     if (f.kind === 'tracer') { _r3dFxTracer(V, f); continue; }
+    if (f.kind === 'beam') { _r3dFxBeam(V, f); continue; }
     if (f.kind === 'debris') { _r3dFxDebris(V, f); continue; }
     var def = A[f.kind];
     if (!def) continue;
@@ -31227,6 +31421,7 @@ function _r3dRecoil(e, n) {
 function _r3dMuzzleSize(e) {
   var d = e.type === 'unit' ? rtsUnitDef(e.def) : rtsStructDef(e.def), w = d ? RTS_WEAPONS[d.weapon] : null;
   if (!w) return 0.6;
+  if (w.shot === 'beam') return 0;               /* a lens has no flash: the beam draws its own light (fxemit3d.js) */
   return w.shot === 'tracer' ? (w.dmg > 7 ? 0.55 : 0.4) : w.shot === 'missile' ? 0.9 : 1.2;
 }
 /* WHERE THE FLASH IS, on the ground plan: the shot's own coordinate (core/combat.js _rtsFireCoord)
@@ -31259,6 +31454,7 @@ function _r3dMuzzles(G) {
     /* where the shot leaves, drawn at the barrel's own tip: the sim's coordinate is a little
        further out than the 3D barrel reaches, and a flash that far out floated off the gun */
     var m = _r3dMuzzleAt(e), s = _r3dMuzzleSize(e);
+    if (!s) continue;
     var y = (e.type === 'unit' ? _rtsStandY(e.x, e.z) : _rtsElev(e.x, e.z)) + (e.type === 'struct' ? 1.8 : 1.15);
     out.push([m.x, y, m.z, s, Math.min(1, e.fire / 0.09), e]);
   }
@@ -31747,7 +31943,7 @@ function _rtsDrawFx(g, G, S, TSscale, cell) {
       g.drawImage(ff, Math.round(fp.x - fw / 2), Math.round(fp.y - fh * 0.8), fw, fh);
       continue;
     }
-    if (f.kind === 'tracer') {
+    if (f.kind === 'tracer' || f.kind === 'beam') {         /* a lens beam: the shaded pass draws it whole */
       /* A ROUND IN FLIGHT, NOT A BEAM. This drew the whole muzzle-to-target line at 90%
          opacity for its entire life, which at the top zoom is a hard cream stroke running the
          width of the battlefield - it read as a scratch on the screen rather than as gunfire,

@@ -55,6 +55,13 @@ var RTS_UNITS = [
     needs:['lab'],
     side:'soviet', armour:'heavy',
     desc:'The heaviest hull on the field. Slow, expensive, and very hard to stop.' },
+  /* The Lens Tower's beam on tracks (core/lens.js). It outranges a Battle Tank and its beam
+     forks onto the enemies around whatever it hits, so it breaks up crowds and buildings; it is
+     paper-thin, so it wants something in front of it. */
+  { key:'prismtank',name:'Lens Tank',     kind:'vehicle',  cost:1200, build:16, hp:240,  speed:8,   turn:1.6,r:2.0, sight:20, weapon:'lenssplit',
+    needs:['lab'],
+    side:'allied', armour:'light',
+    desc:'Long-range beam that forks onto the enemies around its target. Thin armour: keep it behind your tanks.' },
   { key:'flame',    name:'Flame Squad',   kind:'infantry', cost:300,  build:5,  hp:75,   speed:6,   turn:6,  r:1.1, sight:12, weapon:'flame',
     needs:['lab'],
     side:'soviet', armour:'none',

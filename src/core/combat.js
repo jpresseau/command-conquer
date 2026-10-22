@@ -313,12 +313,16 @@ function _rtsFire(e, tgt, w) {
      Set at the one place every route to a shot passes through, so there is no way to fire from
      under water. */
   if ((rtsUnitDef(e.def) || {}).cloak) e.decloak = RTS_SUB_SURFACE;
-  if (typeof _rtsSfx === 'function') _rtsSfx(w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
+  if (typeof _rtsSfx === 'function') _rtsSfx(w.shot === 'beam' ? 'beam' : w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
     : (w.shot === 'missile' ? 'rocket' : (e.type === 'struct' ? 'turretgun' : 'cannon')), e.x, e.z);
-  var dmg = w.dmg * rtsVerses(w, tgt) * bias.fire * rtsCrateMult(e, 'fire');
+  /* a Lens Tower's idle neighbours pour their beams into this one (core/lens.js) */
+  var raw = w.dmg * bias.fire * rtsCrateMult(e, 'fire') * (w.relay && e.type === 'struct' ? _rtsLensRelay(e, w) : 1);
+  var dmg = raw * rtsVerses(w, tgt);
   if (w.speed <= 0) {
     _rtsDamage(tgt, dmg, e);
-    G.fx.push({ kind:'tracer', x:m.x, y:1.3, z:m.z, x2:tgt.x, y2:1.3, z2:tgt.z, t:0 });
+    if (w.shot === 'beam') G.fx.push(_rtsLensBeamFx(e, tgt));
+    else G.fx.push({ kind:'tracer', x:m.x, y:1.3, z:m.z, x2:tgt.x, y2:1.3, z2:tgt.z, t:0 });
+    if (w.split) _rtsLensFork(e, tgt, w, raw);      /* and a Lens Tank's forks onto its neighbours */
     _rtsCombatAnim(dmg, tgt.x, tgt.z, 0.5, tgt);
   } else {
     /* Fire_Direction: the shot leaves ALONG THE BARREL. Can_Fire only insists the barrel is

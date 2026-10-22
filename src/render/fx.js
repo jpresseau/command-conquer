@@ -120,7 +120,7 @@ function _rtsDrawFx(g, G, S, TSscale, cell) {
       g.drawImage(ff, Math.round(fp.x - fw / 2), Math.round(fp.y - fh * 0.8), fw, fh);
       continue;
     }
-    if (f.kind === 'tracer') {
+    if (f.kind === 'tracer' || f.kind === 'beam') {         /* a lens beam: the shaded pass draws it whole */
       /* A ROUND IN FLIGHT, NOT A BEAM. This drew the whole muzzle-to-target line at 90%
          opacity for its entire life, which at the top zoom is a hard cream stroke running the
          width of the battlefield - it read as a scratch on the screen rather than as gunfire,
