@@ -120,6 +120,15 @@ function _r3dSoldierMan(m, key, mx, mz, pose, lead, K) {
     armTo(1, cx + 1.2, cy - 0.8, mz + 1.4, cx + 2.4, cy - 0.5, mz + 1.3);
     _r3Box(m, cx + 3.0, cy - 0.65, mz - 1.3, 1.4, 0.5, 0.35, kit.prop, DK[3]);    /* pistols */
     _r3Box(m, cx + 3.0, cy - 0.65, mz + 1.3, 1.4, 0.5, 0.35, kit.prop, DK[3]);
+  } else if (key === 'arctroop') {
+    /* the arc gun held low in both hands, and the coil on his back standing above the helmet */
+    armTo(-1, cx + 0.7, cy - 1.5, mz - 1.5, cx + 1.4, cy - 1.0, mz - 0.7);
+    armTo(1, cx + 1.6, cy - 1.3, mz + 1.0, cx + 2.4, cy - 1.0, mz - 0.2);
+    _r3dLimb(m, cx + 0.6, cy - 0.8, mz - 0.6, cx + 4.0, cy - 1.0, mz - 0.2, 0.62, 0.5, 12, kit.prop);
+    _r3dBall(m, cx + 4.2, cy - 1.0, mz - 0.2, 0.45, '#3fb6e8', 10, 6);
+    _r3Cyl(m, mx - 1.8, hipY + 0.6, mz, 0.75, 4.6, kit.prop, '#e8c08a', 16);
+    for (var cw = 0; cw < 4; cw++) _r3Cyl(m, mx - 1.8, hipY + 1.4 + cw * 0.9, mz, 0.95, 0.35, '#8a5426', '#b87333', 16);
+    _r3Cyl(m, mx - 1.8, hipY + 5.2, mz, 1.1, 0.5, kit.prop, '#3fb6e8', 16);
   } else if (key === 'grenadier') {
     armTo(-1, cx - 1.0, cy + 0.4, mz - 1.5, cx - 1.6, cy + 1.5, mz - 1.3);           /* cocked */
     armTo(1, cx + 1.1, cy - 1.0, mz + 1.3, cx + 1.9, cy - 0.6, mz + 0.6);

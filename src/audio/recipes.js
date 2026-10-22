@@ -88,7 +88,16 @@ var RTS_SFX_WAR = {
     return _dspSat(o, 1.3);
   } },
 
-  /* a shell landing on ground: a thud, a spray of dirt, the grit pattering down after */
+  /* an arc: a crackle of hard sparks over a buzzing saw at mains hum, and the snap at the end */
+  zap: { cat: 'gun', len: 0.8, takes: 4, peak: 0.85, heard: -17, vol: 0.92, fn: function (sr, rng) {
+    var o = new Float32Array(Math.round(0.8 * sr)), J = function (x, k) { return _dspJit(rng, x, k || 0.08); };
+    _dspLayerCrackle(o, sr, rng, { dur: 0.45, amp: 0.8, a: 0.002, tau: J(0.14), rate: J(900), type: 'hp', f0: 1500 });
+    _dspLayerTone(o, sr, { dur: 0.4, amp: 0.45, a: 0.004, tau: J(0.12), shape: 'saw', f0: J(110), f1: J(95), type: 'bp', c0: 900, c1: 2400, q: 1.2 });
+    _dspLayerNoise(o, sr, rng, { at: 0.005, dur: 0.05, amp: 0.7, a: 0.0005, tau: J(0.01), type: 'hp', f0: 2500 });
+    _dspLayerNoise(o, sr, rng, { at: 0.02, dur: 0.6, amp: 0.25, a: 0.01, tau: J(0.2), color: 'pink', type: 'bp', f0: J(3200), f1: J(1200), q: 1.4 });
+    return _dspSat(o, 1.8);
+  } },
+
   hit: { cat: 'boom', len: 0.9, takes: 5, peak: 0.85, heard: -19, vol: 1.08, fn: function (sr, rng) {
     var o = new Float32Array(Math.round(0.9 * sr)), J = function (x, k) { return _dspJit(rng, x, k || 0.1); };
     _dspLayerTone(o, sr, { dur: 0.3, amp: 0.8, a: 0.001, tau: J(0.08), f0: J(95), f1: 40 });

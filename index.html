@@ -863,7 +863,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">c411f38 · 2026-10-22</div>
+  <div id="rtsBuild" title="build">381a045 · 2026-10-22</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1006,7 +1006,7 @@ var RTS_STRUCTS = [
      rather than an inconvenience. Priced and armed from RULES.INI: 1500, 200 damage, and a
      draw of 100 which is more than any other defence asks for. */
   { key:'tesla',    name:'Arc Tower',    w:1, h:2, cost:1500, build:20, hp:400,  power:-100, sight:20,
-    needs:['radar'], weapon:'teslazap', side:'soviet', needsPower:true,
+    needs:['radar'], weapon:'teslazap', side:'soviet', needsPower:true, chargedBy:'arctroop',
     armour:'concrete',
     desc:'Devastating, and dead the moment your power browns out. Dominion.' },
   /* The Compact's answer to the Arc Tower, and the opposite bargain: weaker alone and cheaper
@@ -1221,6 +1221,14 @@ var RTS_UNITS = [
     side:'soviet', armour:'none',
     crawl:true, fraidy:true,
     desc:'Lobbed charges. Clears infantry and cracks buildings; hopeless against a moving tank.' },
+  /* THE ARC TROOPER (core/arc.js). Heavy infantry with a short arc gun, as good against a tank as
+     against a man - and standing beside an Arc Tower it charges it: the tower fires through a
+     brownout, and harder for each trooper (up to RTS_ARC.max). So a Dominion base that is short
+     of power can still hold its line, if it spends men on it. */
+  { key:'arctroop', name:'Arc Trooper',   kind:'infantry', cost:500,  build:8,  hp:130,  speed:5,   turn:6,  r:1.1, sight:14, weapon:'arcgun',
+    needs:['radar'],
+    side:'soviet', armour:'light',
+    desc:'Short-range arc gun that stops tanks as well as men. Stand it by an Arc Tower to charge it: the tower fires without power, and harder.' },
   { key:'light',    name:'Light Tank',    kind:'vehicle',  cost:700,  build:9,  hp:280,  speed:12,  turn:2.6,r:1.8, sight:18, weapon:'cannon',
     side:'allied', armour:'light',
     desc:'Cheap armour. Faster than a Battle Tank and half the price, with a third of the hull.' },
@@ -1249,6 +1257,11 @@ var RTS_UNITS = [
     needs:['lab'],
     side:'allied', armour:'light',
     desc:'Long-range beam that forks onto the enemies around its target. Thin armour: keep it behind your tanks.' },
+  /* The Arc Tower on tracks: a short bolt that jumps on to two more enemies beside its target. */
+  { key:'arctank',  name:'Arc Tank',      kind:'vehicle',  cost:1000, build:13, hp:380,  speed:9.5, turn:2.0,r:2.0, sight:16, weapon:'arcbolt',
+    needs:['radar'],
+    side:'soviet', armour:'heavy',
+    desc:'A short-range arc that jumps from its target to two more beside it. Shreds a crowd of infantry or light vehicles.' },
   { key:'flame',    name:'Flame Squad',   kind:'infantry', cost:300,  build:5,  hp:75,   speed:6,   turn:6,  r:1.1, sight:12, weapon:'flame',
     needs:['lab'],
     side:'soviet', armour:'none',
@@ -1671,7 +1684,7 @@ var RTS_WEAPONS = {
   /* The Flame Squad's weapon on a fixed mount: a little more reach and a lot more of it. */
   /* The coil's bolt. Enormous damage, slow, and it ignores armour class the way RA's does -
      a Tesla hit is a Tesla hit whether it lands on a rifleman or a Mammoth. */
-  teslazap:   { dmg:200, range:17, cool:2.6, shot:'tracer', speed:0, splash:0, wall:true,
+  teslazap:   { dmg:200, range:17, cool:2.6, shot:'arc', speed:0, splash:0, wall:true,
                 verses:{ none:1, wood:1, light:1, heavy:1, concrete:1 } },
   /* THE LENS BEAM (core/lens.js). A Lens Tower alone hits a little over half as hard as an Arc
      Tower; what it has instead is its neighbours. Every idle tower in reach pours its own beam
@@ -1682,6 +1695,13 @@ var RTS_WEAPONS = {
                 verses:{ none:1, wood:1, light:1, heavy:0.9, concrete:0.6 } },
   lenssplit:  { dmg:75, range:22, cool:3.2, shot:'beam', speed:0, splash:0, wall:true, wood:true, split:true,
                 verses:{ none:0.8, wood:1.2, light:1.0, heavy:0.8, concrete:1.1 } },
+  /* THE ARC (core/arc.js), the Arc Tower's bolt in smaller hands. Short, and good against
+     everything that moves; poor against a building. The tank's arc jumps on to the enemies
+     beside its target, as a lens beam forks, but to fewer of them and further down the share. */
+  arcgun:     { dmg:30, range:9, cool:1.3, shot:'arc', speed:0, splash:0,
+                verses:{ none:1.0, wood:0.5, light:1.2, heavy:1.0, concrete:0.4 } },
+  arcbolt:    { dmg:55, range:13, cool:1.8, shot:'arc', speed:0, splash:0, split:{ n:2, cells:2.5, share:0.6 },
+                verses:{ none:1.1, wood:0.5, light:1.2, heavy:1.0, concrete:0.4 } },
   /* Naval guns. Long reach is the point of a ship - it is the only thing in the game that can
      hit a base without being able to be walked up to. */
   navalgun:   { dmg:30, range:24, cool:1.6, shot:'shell', speed:60, splash:2.0, wall:true, wood:true,
@@ -2242,7 +2262,8 @@ var RTS_AI = {
               /* `vsAir`: bought only against aircraft, one for every vsAir the player flies
                  (core/ai.js). A gun that cannot hit the ground is dead weight on a ground war. */
               { key:'flaktrack', at:1200, w:4, vsAir:2 },
-              { key:'prismtank', at:2200, w:2 } ],
+              { key:'prismtank', at:2200, w:2 },
+              { key:'arctank', at:1700, w:3 } ],
     /* No Mine Layer here: it is bought outside the weighted roll (core/aimines.js
        _rtsAISupport), because an entry in this pool moves every roll after it - measured, the
        Soviet opponent stopped reaching its Arc Tower in e2e/basedef and the raiders thinned out
@@ -2296,7 +2317,8 @@ var RTS_AI = {
            { key:'flakship', at:1600, w:4, vsAir:2 } ],
     infantry:[ { key:'flame', at:1200, w:2 }, { key:'grenadier', at:900, w:2 },
                { key:'rocket', at:500, w:3 }, { key:'dog', at:400, w:2 },
-               { key:'rifle', at:250, w:2 }, { key:'engineer', at:2200, w:2 } ],
+               { key:'rifle', at:250, w:2 }, { key:'engineer', at:2200, w:2 },
+               { key:'arctroop', at:1000, w:2 } ],
     /* AIRCRAFT, once there is a pad to fly from - _rtsCanQueue gates on `needs`, so these are
        inert until one exists and there is no separate check to keep in step. Both armies again;
        the Attack Heli was buildable by the player from the day it shipped and the opponent never
@@ -7236,7 +7258,7 @@ function _sprBuildingClean(key, side) {
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
   dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46,
-  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:53, drone:26, bomber:56, prismtank:36
+  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:53, drone:26, bomber:56, prismtank:36, arctank:38
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -7256,7 +7278,9 @@ var RTS_INF_KIT = {
   engineer:  { body:['#c99a1e','#e8bc3c'], top:'#f5d565', prop:'#2a2a26' },
   medic:     { body:['#cfcfc4','#eaeae0'], top:'#ffffff', prop:'#c8302a' },
   thief:     { body:['#22252b','#31363e'], top:'#17191d', prop:'#4b5360' },
-  tanya:     { body:['#c4bca4','#e0d8bc'], top:'#a8452a', prop:'#2b3038' }
+  tanya:     { body:['#c4bca4','#e0d8bc'], top:'#a8452a', prop:'#2b3038' },
+  /* heavy dark plate, a copper coil, and the one electric blue on any helmet (core/arc.js) */
+  arctroop:  { body:['#3a4250','#4a5464'], top:'#3fb6e8', prop:'#b87333' }
 };
 
 /* HOW FAR ROUND THE RUNNING GEAR HAS TURNED, 0 to 1 - set by the 3D renderer for the length of
@@ -7374,7 +7398,7 @@ function _sprUnitModel(key, side, prone, part) {
      model line reads the same as it did when this was one function. */
   var X = { m:m, TM:TM, VH:VH, S:S, DK:DK, O:O, C:C, GN:GN,
             d:d, prone:prone, part:part, side:side, tracks:tracks };
-  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key) || _sprUnitHulls(X, key) || _sprUnitLens(X, key))) {
+  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key) || _sprUnitHulls(X, key) || _sprUnitLens(X, key) || _sprUnitArc(X, key))) {
     _r3Box(m, 0, 0, -5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 0, 5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 2.5, 0, 15, 4, 8, TM[0], TM[1]);
@@ -7537,6 +7561,11 @@ function _sprUnitGround(X, key) {
       } else if (key === 'tanya') {
         _r3Box(m, mx + 2.3, 4.4, mz - 1.0, 2.8, 0.9, 0.9, kit.prop, DK[3]); /* pistols */
         _r3Box(m, mx + 2.3, 4.4, mz + 1.0, 2.8, 0.9, 0.9, kit.prop, DK[3]);
+      } else if (key === 'arctroop') {
+        /* A coil on the back standing above the helmet, and a stubby arc gun: copper both. */
+        _r3Cyl(m, mx - 2.2, 3.4, mz, 1.0, 5.4, kit.prop, '#e8c08a', 12);
+        _r3Cyl(m, mx - 2.2, 8.8, mz, 1.5, 0.7, kit.prop, '#3fb6e8', 12);
+        _r3Box(m, mx + 2.4, 4.2, mz - 0.5, 4.2, 1.6, 1.6, kit.prop, DK[3]);
       } else if (key === 'grenadier') {
         /* Arm cocked back with a charge in it - a rearward line where the rifleman's is
            forward, so a mixed squad is not a smear. */
@@ -8721,6 +8750,36 @@ function _sprUnitLens(X, key) {
   return true;
 }
 </script>
+<script>/* sprites/arc.js - the Arc Tank (core/arc.js). Part of rts.sprites.
+
+   The Arc Tower's copper on tracks: a squat Dominion hull, and on the turret two short coils
+   side by side with their sparks lit, in place of a gun. Copper and a blue spark are the arc's
+   colours on every model that carries one - the tower, the trooper's backpack, this. */
+var RTS_ARC_SPARK = '#3fb6e8';
+
+function _sprUnitArc(X, key) {
+  if (key !== 'arctank') return false;
+  var m = X.m, VH = X.VH, TM = X.TM, S = X.S, DK = X.DK, part = X.part, CU = RTS_PAL.mat.copper, s, k;
+  if (part !== 'turret') {
+    X.tracks(16, 5.4, 4, 2.0);
+    _r3Slab(m, 0, 2.9, 0, 14.8, 3.0, 9.0, 1.0, VH[0], VH[1]);
+    _r3Hip(m, -0.8, 5.9, 0, 13.6, 1.5, 9.0, 2.2, VH[3]);                     /* deck */
+    _r3Box(m, 6.4, 2.9, 0, 2.6, 2.8, 8.0, VH[1], VH[3]);                     /* glacis */
+    _r3Box(m, -6.4, 6.0, -2.4, 2.4, 1.6, 2.6, CU[2], CU[0]);                 /* the generator */
+    _r3Box(m, -6.4, 6.0, 2.4, 2.4, 1.6, 2.6, CU[2], CU[0]);
+  }
+  if (part !== 'hull') {
+    _r3Slab(m, -0.4, 7.0, 0, 7.2, 2.4, 7.0, 0.8, VH[1], TM[1]);             /* turret, team roof */
+    for (s = -1; s <= 1; s += 2) {                                           /* two coils */
+      _r3Cyl(m, 0.8, 9.4, s * 2.0, 1.1, 6.2, S[1], S[3], 16);
+      for (k = 0; k < 6; k++) _r3Cyl(m, 0.8, 9.8 + k * 0.95, s * 2.0, 1.75 - k * 0.08, 0.5, CU[k & 1 ? 1 : 0], CU[2], 16);
+      _r3Cyl(m, 0.8, 15.6, s * 2.0, 1.4, 1.1, RTS_ARC_SPARK, '#e8f6ff', 16); /* the spark */
+    }
+    _r3Box(m, 3.6, 7.4, 0, 1.6, 1.4, 4.6, DK[1], DK[3]);                      /* the emitter bar */
+  }
+  return true;
+}
+</script>
 <script>/* sprites/props.js - unit scaling and fit, pads, corpses, scorch, craters, fire, crates and
    the effect sheet. Part of rts.sprites, the sprite baker. */
 
@@ -8783,7 +8842,7 @@ function _sprUnit(key, side, prone, part) {
    drawn at each place RTS_TURRET_AT names (sprites/unit-airsea.js), turned to the unit's aim.
    The ships' models once ignored the part and built the whole ship for both, so a destroyer
    shelling a target abeam was drawn twice, the second hull swung across the first. */
-var RTS_TURRETED = { tank:1, light:1, heavy:1, destroyer:1, gunboat:1, cruiser:1, flaktrack:1, monitor:1, prismtank:1 };
+var RTS_TURRETED = { tank:1, light:1, heavy:1, destroyer:1, gunboat:1, cruiser:1, flaktrack:1, monitor:1, prismtank:1, arctank:1 };
 
 /* The concrete apron a structure stands on. In the reference every building sits on a pale
    irregular pad noticeably larger than itself - it is what stops a base looking like
@@ -9495,7 +9554,16 @@ var RTS_SFX_WAR = {
     return _dspSat(o, 1.3);
   } },
 
-  /* a shell landing on ground: a thud, a spray of dirt, the grit pattering down after */
+  /* an arc: a crackle of hard sparks over a buzzing saw at mains hum, and the snap at the end */
+  zap: { cat: 'gun', len: 0.8, takes: 4, peak: 0.85, heard: -17, vol: 0.92, fn: function (sr, rng) {
+    var o = new Float32Array(Math.round(0.8 * sr)), J = function (x, k) { return _dspJit(rng, x, k || 0.08); };
+    _dspLayerCrackle(o, sr, rng, { dur: 0.45, amp: 0.8, a: 0.002, tau: J(0.14), rate: J(900), type: 'hp', f0: 1500 });
+    _dspLayerTone(o, sr, { dur: 0.4, amp: 0.45, a: 0.004, tau: J(0.12), shape: 'saw', f0: J(110), f1: J(95), type: 'bp', c0: 900, c1: 2400, q: 1.2 });
+    _dspLayerNoise(o, sr, rng, { at: 0.005, dur: 0.05, amp: 0.7, a: 0.0005, tau: J(0.01), type: 'hp', f0: 2500 });
+    _dspLayerNoise(o, sr, rng, { at: 0.02, dur: 0.6, amp: 0.25, a: 0.01, tau: J(0.2), color: 'pink', type: 'bp', f0: J(3200), f1: J(1200), q: 1.4 });
+    return _dspSat(o, 1.8);
+  } },
+
   hit: { cat: 'boom', len: 0.9, takes: 5, peak: 0.85, heard: -19, vol: 1.08, fn: function (sr, rng) {
     var o = new Float32Array(Math.round(0.9 * sr)), J = function (x, k) { return _dspJit(rng, x, k || 0.1); };
     _dspLayerTone(o, sr, { dur: 0.3, amp: 0.8, a: 0.001, tau: J(0.08), f0: J(95), f1: 40 });
@@ -16486,7 +16554,7 @@ function _rtsFire(e, tgt, w) {
      them forgetting would be a silent balance bug. */
   if (e.type === 'struct') {
     var _sd = rtsStructDef(e.def);
-    if (_sd && _sd.needsPower && _rtsPowerFactor(e.side) < 0.999) return;
+    if (_sd && _sd.needsPower && _rtsPowerFactor(e.side) < 0.999 && !_rtsArcChargers(e).length) return;   /* unless charged: core/arc.js */
   }
   /* AND NEVER AT YOUR OWN SIDE. Deliberately a second guard - _rtsUpdateUnit already refuses to
      AIM at a friendly - because this is the one place every route to a shot passes through, so
@@ -16527,14 +16595,15 @@ function _rtsFire(e, tgt, w) {
      Set at the one place every route to a shot passes through, so there is no way to fire from
      under water. */
   if ((rtsUnitDef(e.def) || {}).cloak) e.decloak = RTS_SUB_SURFACE;
-  if (typeof _rtsSfx === 'function') _rtsSfx(w.shot === 'beam' ? 'beam' : w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
+  if (typeof _rtsSfx === 'function') _rtsSfx(w.shot === 'beam' ? 'beam' : w.shot === 'arc' ? 'zap' : w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
     : (w.shot === 'missile' ? 'rocket' : (e.type === 'struct' ? 'turretgun' : 'cannon')), e.x, e.z);
   /* a Lens Tower's idle neighbours pour their beams into this one (core/lens.js) */
-  var raw = w.dmg * bias.fire * rtsCrateMult(e, 'fire') * (w.relay && e.type === 'struct' ? _rtsLensRelay(e, w) : 1);
+  var raw = w.dmg * bias.fire * rtsCrateMult(e, 'fire') * (w.relay && e.type === 'struct' ? _rtsLensRelay(e, w) : 1)
+          * _rtsArcCharge(e);                     /* ...and an Arc Tower's troopers charge it (core/arc.js) */
   var dmg = raw * rtsVerses(w, tgt);
   if (w.speed <= 0) {
     _rtsDamage(tgt, dmg, e);
-    if (w.shot === 'beam') G.fx.push(_rtsLensBeamFx(e, tgt));
+    if (w.shot === 'beam' || w.shot === 'arc') G.fx.push(_rtsLensBeamFx(e, tgt, w));
     else G.fx.push({ kind:'tracer', x:m.x, y:1.3, z:m.z, x2:tgt.x, y2:1.3, z2:tgt.z, t:0 });
     if (w.split) _rtsLensFork(e, tgt, w, raw);      /* and a Lens Tank's forks onto its neighbours */
     _rtsCombatAnim(dmg, tgt.x, tgt.z, 0.5, tgt);
@@ -20963,7 +21032,8 @@ function _rtsAIEbb(ty) {
 
    A Lens Tank's beam strikes its target and then forks onto up to RTS_LENS.forks of the enemies
    standing within RTS_LENS.fork cells of it, nearest first, each taking RTS_LENS.share of the
-   shot through its own armour. Never a friend, never the target twice, never what the beam
+   shot through its own armour. A weapon may carry its own numbers, `split:{ n, cells, share }` -
+   the Arc Tank's bolt does (core/arc.js). Never a friend, never the target twice, never what the beam
    cannot reach (an aircraft, a submarine under water), and never someone inside a transport.
 
    Both draw `beam` effects (render3d/fxemit3d.js): relay to relay to the firing tower, and
@@ -20971,10 +21041,16 @@ function _rtsAIEbb(ty) {
 var RTS_LENS = { relay: 8, max: 6, add: 0.5, fork: 3, forks: 4, share: 0.5,
                  towerY: 5.0, tankY: 1.7 };          /* where the lens sits, above the ground (sprites/lens.js) */
 
-/* The shot itself, from the lens: a tower's crown or a tank's turret, to the target. */
-function _rtsLensBeamFx(e, tgt) {
-  var st = e.type === 'struct';
-  return { kind: 'beam', x: e.x, y: st ? RTS_LENS.towerY : RTS_LENS.tankY, z: e.z, x2: tgt.x, y2: 1.3, z2: tgt.z, t: 0, lens: st ? 1.3 : 1 };
+/* The shot itself, from the lens or the coil - a tower's crown or a tank's turret - to the
+   target. An arc (`shot:'arc'`, core/arc.js) is the same effect drawn as lightning. */
+function _rtsLensBeamFx(e, tgt, w) {
+  var st = e.type === 'struct', arc = w && w.shot === 'arc' ? 1 : 0;
+  var y = st ? (arc ? RTS_ARC.towerY : RTS_LENS.towerY) : (arc ? RTS_ARC.unitY : RTS_LENS.tankY);
+  return { kind: 'beam', x: e.x, y: y, z: e.z, x2: tgt.x, y2: 1.3, z2: tgt.z, t: 0, lens: st ? 1.3 : 1, arc: arc };
+}
+/* How a weapon forks: its own `split` table, or the Lens Tank's when it says only `split:true`. */
+function _rtsLensSplit(w) {
+  return typeof w.split === 'object' ? w.split : { n: RTS_LENS.forks, cells: RTS_LENS.fork, share: RTS_LENS.share };
 }
 
 /* The towers that relay into `e`'s shot, each as { o, to }: the tower and the one it passes its
@@ -21007,7 +21083,7 @@ function _rtsLensRelay(e, w) {
 }
 /* The enemies a forking beam goes on to from `tgt`, nearest first. */
 function _rtsLensForks(e, tgt, w) {
-  var G = window._rtsG, R = RTS_LENS.fork * RTS_TILE, near = _rtsSpNear(tgt.x, tgt.z, R) || G.ents, c = [];
+  var G = window._rtsG, sp = _rtsLensSplit(w), R = sp.cells * RTS_TILE, near = _rtsSpNear(tgt.x, tgt.z, R) || G.ents, c = [];
   for (var i = 0; i < near.length; i++) {
     var o = near[i];
     if (o === tgt || o.dead || o.inside || o.hidden || o.air || o.def === 'wall') continue;
@@ -21017,17 +21093,54 @@ function _rtsLensForks(e, tgt, w) {
     if (d <= R) c.push({ o: o, d: d, i: i });
   }
   c.sort(function (a, b) { return a.d - b.d || a.i - b.i; });
-  return c.slice(0, RTS_LENS.forks).map(function (k) { return k.o; });
+  return c.slice(0, sp.n).map(function (k) { return k.o; });
 }
 /* `raw` is the shot before the target's armour: each fork takes its share through its own. */
 function _rtsLensFork(e, tgt, w, raw) {
-  var G = window._rtsG, fs = _rtsLensForks(e, tgt, w);
+  var G = window._rtsG, fs = _rtsLensForks(e, tgt, w), sp = _rtsLensSplit(w), arc = w.shot === 'arc' ? 1 : 0;
   for (var i = 0; i < fs.length; i++) {
     var o = fs[i];
-    G.fx.push({ kind: 'beam', x: tgt.x, y: 1.3, z: tgt.z, x2: o.x, y2: 1.3, z2: o.z, t: 0, lens: 0.6 });
-    _rtsDamage(o, raw * RTS_LENS.share * rtsVerses(w, o), e);
+    G.fx.push({ kind: 'beam', x: tgt.x, y: 1.3, z: tgt.z, x2: o.x, y2: 1.3, z2: o.z, t: 0, lens: 0.6, arc: arc });
+    _rtsDamage(o, raw * sp.share * rtsVerses(w, o), e);
   }
   return fs.length;
+}
+</script>
+<script>/* core/arc.js - THE ARC: troopers that charge an Arc Tower, and the arc weapons' numbers.
+
+   An Arc Tower (`chargedBy:'arctroop'` on its rules) is CHARGED by every Arc Trooper of its side
+   standing within RTS_ARC.charge cells of it - on foot, not inside a transport - up to
+   RTS_ARC.max of them. A charged tower fires through a brownout, which an uncharged one never
+   does (core/combat.js _rtsFire), and each charger adds RTS_ARC.boost of a shot. Each time it
+   fires, an arc is drawn from each charger up to the coil, so the player can see who is doing it.
+
+   The Arc Tank's bolt jumps on to the enemies beside its target the way a Lens Tank's beam forks
+   (core/lens.js), with its own `split` numbers on the weapon. Both arc weapons draw `beam`
+   effects marked `arc`, which render3d/fxemit3d.js draws as lightning, and sound as `zap`. */
+var RTS_ARC = { charge: 3, max: 3, boost: 0.25, towerY: 6.0, unitY: 1.4 };
+
+/* The troopers charging `e`, nearest first: none for anything that is not charged by them. */
+function _rtsArcChargers(e) {
+  var d = e && e.type === 'struct' ? rtsStructDef(e.def) : null;
+  if (!d || !d.chargedBy) return [];
+  var G = window._rtsG, R = RTS_ARC.charge * RTS_TILE, near = _rtsSpNear(e.x, e.z, R) || G.ents, c = [];
+  for (var i = 0; i < near.length; i++) {
+    var o = near[i];
+    if (o.type !== 'unit' || o.dead || o.inside || o.def !== d.chargedBy || o.side !== e.side) continue;
+    var dd = Math.hypot(o.x - e.x, o.z - e.z);
+    if (dd <= R) c.push({ o: o, d: dd, i: i });
+  }
+  c.sort(function (a, b) { return a.d - b.d || a.i - b.i; });
+  return c.slice(0, RTS_ARC.max).map(function (k) { return k.o; });
+}
+/* The shot's multiplier from its chargers, drawing an arc from each up to the coil. */
+function _rtsArcCharge(e) {
+  var cs = _rtsArcChargers(e);
+  if (!cs.length) return 1;
+  var G = window._rtsG;
+  for (var i = 0; i < cs.length; i++)
+    G.fx.push({ kind: 'beam', x: cs[i].x, y: RTS_ARC.unitY, z: cs[i].z, x2: e.x, y2: RTS_ARC.towerY, z2: e.z, t: 0, lens: 0.6, arc: 1 });
+  return 1 + RTS_ARC.boost * cs.length;
 }
 </script>
 <script>/* core/missions.js - the team mission list (TEAMTYPE.CPP): the script a team runs.
@@ -27395,9 +27508,27 @@ function _r3dFxBeam(V, f) {
   if (f.t > R3D_FX_BEAM_T) return;
   var y0 = V.ground(f.x, f.z) + (f.y || 1.3), y1 = V.ground(f.x2, f.z2) + (f.y2 || 1.3);
   var k = f.lens || 1, op = 1 - f.t / R3D_FX_BEAM_T;
+  if (f.arc) { _r3dFxArc(V, f, y0, y1, k, op); return; }
   _r3dFxStreak(V.M, V, f.x, y0, f.z, f.x2, y1, f.z2, 1.1 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.35 * op, 0, R3D_FX_LENS);
   _r3dFxStreak(V.M, V, f.x, y0, f.z, f.x2, y1, f.z2, 0.32 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.95 * op, 0, R3D_FX_ROUND);
   _r3dFxBill(V.M, V, f.x2, y1, f.z2, 1.1 * k, 1.1 * k, 0.6, R3D_FXT_FLASH, 0, 0, 0.9 * op, 0, R3D_FX_LENS);
+}
+
+/* AN ARC (core/arc.js) is the same line broken into R3D_FX_ARC_N jagged legs that jump about as
+   it lives - re-thrown every R3D_FX_ARC_HOP s from its own seed, so it crackles rather than
+   sliding - violet-blue round a white core, with a flash where it lands. */
+var R3D_FX_ARCC = [0.85, 0.80, 1.60], R3D_FX_ARC_N = 7, R3D_FX_ARC_HOP = 0.05;
+function _r3dFxArc(V, f, y0, y1, k, op) {
+  var dx = f.x2 - f.x, dz = f.z2 - f.z, len = Math.hypot(dx, dz) || 1, nx = -dz / len, nz = dx / len;
+  var seed = _r3dFxSeed(f) + Math.floor(f.t / R3D_FX_ARC_HOP) * 131, px = f.x, py = y0, pz = f.z;
+  for (var i = 1; i <= R3D_FX_ARC_N; i++) {
+    var u = i / R3D_FX_ARC_N, j = i === R3D_FX_ARC_N ? 0 : (_r3dFxH(seed + i, 7.1) - 0.5) * Math.min(2.4, len * 0.18);
+    var qx = f.x + dx * u + nx * j, qy = y0 + (y1 - y0) * u + j * 0.4, qz = f.z + dz * u + nz * j;
+    _r3dFxStreak(V.M, V, px, py, pz, qx, qy, qz, 0.9 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.4 * op, 0, R3D_FX_ARCC);
+    _r3dFxStreak(V.M, V, px, py, pz, qx, qy, qz, 0.26 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.95 * op, 0, R3D_FX_FOAM);
+    px = qx; py = qy; pz = qz;
+  }
+  _r3dFxBill(V.M, V, f.x2, y1, f.z2, 1.0 * k, 1.0 * k, 0.6, R3D_FXT_FLASH, 0, 0, 0.9 * op, 0, R3D_FX_ARCC);
 }
 
 /* A CHUNK thrown off a dying building: dark, glowing for its first moments, with a wisp of smoke
@@ -29602,6 +29733,15 @@ function _r3dSoldierMan(m, key, mx, mz, pose, lead, K) {
     armTo(1, cx + 1.2, cy - 0.8, mz + 1.4, cx + 2.4, cy - 0.5, mz + 1.3);
     _r3Box(m, cx + 3.0, cy - 0.65, mz - 1.3, 1.4, 0.5, 0.35, kit.prop, DK[3]);    /* pistols */
     _r3Box(m, cx + 3.0, cy - 0.65, mz + 1.3, 1.4, 0.5, 0.35, kit.prop, DK[3]);
+  } else if (key === 'arctroop') {
+    /* the arc gun held low in both hands, and the coil on his back standing above the helmet */
+    armTo(-1, cx + 0.7, cy - 1.5, mz - 1.5, cx + 1.4, cy - 1.0, mz - 0.7);
+    armTo(1, cx + 1.6, cy - 1.3, mz + 1.0, cx + 2.4, cy - 1.0, mz - 0.2);
+    _r3dLimb(m, cx + 0.6, cy - 0.8, mz - 0.6, cx + 4.0, cy - 1.0, mz - 0.2, 0.62, 0.5, 12, kit.prop);
+    _r3dBall(m, cx + 4.2, cy - 1.0, mz - 0.2, 0.45, '#3fb6e8', 10, 6);
+    _r3Cyl(m, mx - 1.8, hipY + 0.6, mz, 0.75, 4.6, kit.prop, '#e8c08a', 16);
+    for (var cw = 0; cw < 4; cw++) _r3Cyl(m, mx - 1.8, hipY + 1.4 + cw * 0.9, mz, 0.95, 0.35, '#8a5426', '#b87333', 16);
+    _r3Cyl(m, mx - 1.8, hipY + 5.2, mz, 1.1, 0.5, kit.prop, '#3fb6e8', 16);
   } else if (key === 'grenadier') {
     armTo(-1, cx - 1.0, cy + 0.4, mz - 1.5, cx - 1.6, cy + 1.5, mz - 1.3);           /* cocked */
     armTo(1, cx + 1.1, cy - 1.0, mz + 1.3, cx + 1.9, cy - 0.6, mz + 0.6);
@@ -31421,7 +31561,7 @@ function _r3dRecoil(e, n) {
 function _r3dMuzzleSize(e) {
   var d = e.type === 'unit' ? rtsUnitDef(e.def) : rtsStructDef(e.def), w = d ? RTS_WEAPONS[d.weapon] : null;
   if (!w) return 0.6;
-  if (w.shot === 'beam') return 0;               /* a lens has no flash: the beam draws its own light (fxemit3d.js) */
+  if (w.shot === 'beam' || w.shot === 'arc') return 0;               /* a lens has no flash: the beam draws its own light (fxemit3d.js) */
   return w.shot === 'tracer' ? (w.dmg > 7 ? 0.55 : 0.4) : w.shot === 'missile' ? 0.9 : 1.2;
 }
 /* WHERE THE FLASH IS, on the ground plan: the shot's own coordinate (core/combat.js _rtsFireCoord)

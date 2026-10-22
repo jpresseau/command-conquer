@@ -162,6 +162,10 @@ Tender behind them: the subs hold the channel while the Monitor goes in over the
 Lens Tower near it pours its own beam into the shot, so a cluster of them hits like one enormous
 gun. Its Lens Tank carries the same beam, which forks onto the enemies around whatever it hits.
 
+**Charge the coil.** The Dominion's Arc Troopers carry a short arc gun that stops a tank as well as
+a man. Stand them beside an Arc Tower and they charge it: it fires even when your power is down,
+and harder for each trooper. The Arc Tank's bolt jumps from its target to two more beside it.
+
 **The enemy uses its whole garage.** It mines the approach to its own base, and once you have a
 harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands
 them beside your ore field, and goes home to do it again.
