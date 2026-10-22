@@ -113,6 +113,7 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
      only the flier adds to it. */
   var y = (e.air || d2.sea ? _rtsElev(e.x, e.z) : _rtsStandY(e.x, e.z)) + (e.air ? _rtsAirLift(e) * RTS_AIR_ALT_K : 0);   /* render/camera.js */
   if (e.chute > 0) y += e.chute / RTS_PARA.fall * R3D_CHUTE_H;     /* coming down under a canopy: core/paradrop.js */
+  y -= _r3dSwimSink(G, e, d2);                                       /* a Frogman swimming: blast3d.js */
   /* A MARCHING SOLDIER BOBS. The bob is what is left of the old suggestion of a march, much
      smaller now that he walks (a stride pose by his own gait, soldier3d.js), in step with the
      stride. Prone, he crawls instead (crawl3d.js). Vehicles do not bob; tracks do not walk. */

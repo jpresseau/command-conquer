@@ -390,6 +390,7 @@ function _rtsSyncSidebar(dt) {
       txt += ' · ' + Math.floor(e.carry) + ' load (' + Math.floor(e.carryVal || 0) + ' credits)';
     if (e.type === 'unit' && e.side === 'player') txt += _rtsUnitStateTxt(e);   /* mines left, bombs, aboard: ui/selhint.js */
     else if (e.type === 'unit' && e.mind) txt += ' · held by a Mentalist';           /* one of the player's, taken: core/mind.js */
+    if (e.bomb) txt += ' · a charge on it: ' + Math.ceil(e.bomb.t) + ' s';            /* core/blast.js */
     if (_rtsGarrisonable(e)) txt += ' · ' + (e.side === 'civ' ? 'empty, ' + _rtsGarrisonCap(e) + ' squads can hold it' : _rtsCargoCount(e) + '/' + _rtsGarrisonCap(e) + ' squads inside');
   } else {
     var counts = {}, i;

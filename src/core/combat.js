@@ -199,6 +199,7 @@ function _rtsPickWeapon(e, tgt) {
     var v = mod * 1000;
     if (dist <= _rtsElevReach(e, tgt, w.range)) v *= 2;
     if (!mod) v = 0;                                  /* FIRE_CANT */
+    if (!_rtsWeaponReaches(w, tgt)) v = 0;            /* a limpet for a hull, not a man: core/blast.js */
     if (v > bv) { bv = v; best = w; }
   }
   return best;
@@ -256,6 +257,7 @@ function _rtsFireCoord(e, w) {
    price instead of being a strictly better hull. */
 function _rtsWeaponReaches(w, tgt) {
   if (w && w.mind) return !_rtsMindproof(tgt);   /* a Mentalist reaches only a unit it can take: core/mind.js */
+  if (w && w.plant) return _rtsPlantable(w, tgt);   /* a charge goes on what it can go on: core/blast.js */
   if (!w || !w.seaOnly) return true;
   if (!tgt) return false;
   if (tgt.type === 'struct') return false;
@@ -315,7 +317,7 @@ function _rtsFire(e, tgt, w) {
      Set at the one place every route to a shot passes through, so there is no way to fire from
      under water. */
   if ((rtsUnitDef(e.def) || {}).cloak) e.decloak = RTS_SUB_SURFACE;
-  if (typeof _rtsSfx === 'function') _rtsSfx(w.shot === 'beam' ? 'beam' : w.shot === 'arc' ? 'zap' : w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
+  if (typeof _rtsSfx === 'function' && !w.plant && !w.self) _rtsSfx(w.shot === 'beam' ? 'beam' : w.shot === 'arc' ? 'zap' : w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
     : (w.shot === 'missile' ? 'rocket' : (e.type === 'struct' ? 'turretgun' : 'cannon')), e.x, e.z);
   if (w.mind) {                                    /* no damage: the unit changes side (core/mind.js) */
     if (_rtsMindTake(e, tgt)) { var mb = _rtsLensBeamFx(e, tgt, w); mb.mind = 1; G.fx.push(mb); }
@@ -329,6 +331,8 @@ function _rtsFire(e, tgt, w) {
   var raw = w.dmg * bias.fire * rtsCrateMult(e, 'fire') * (w.relay && e.type === 'struct' ? _rtsLensRelay(e, w) : 1)
           * _rtsArcCharge(e)                      /* ...and an Arc Tower's troopers charge it (core/arc.js) */
           * (e.dug ? RTS_DIG.fire : 1);           /* ...and a squad dug in hits harder (core/dig.js) */
+  if (w.plant) { _rtsPlant(e, tgt, w, raw); return; }   /* a charge left on it, no damage yet: core/blast.js */
+  if (w.self) { _rtsBlastGo(e); _rtsKill(e); return; } /* the carrier is the bomb */
   var dmg = raw * rtsVerses(w, tgt);
   if (w.speed <= 0) {
     _rtsDamage(tgt, dmg, e);

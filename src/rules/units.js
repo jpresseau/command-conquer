@@ -98,6 +98,30 @@ var RTS_UNITS = [
     needs:['lab'], veil:true,
     side:'allied', armour:'light',
     desc:'Hidden while it stands still and holds its fire: to the enemy it looks like a tree. Firing or moving gives it away.' },
+  /* EXPLOSIVES (core/blast.js). THE SAPPER plants a timed charge on whatever it reaches - a tank,
+     a building, a ship at the quay - and walks away; it goes off on its fuse. */
+  { key:'sapper',   name:'Sapper',        kind:'infantry', cost:600,  build:8,  hp:100,  speed:6.5, turn:6,  r:1.1, sight:14, weapon:'satchel',
+    needs:['radar'],
+    side:'soviet', armour:'none',
+    crawl:true, fraidy:false,
+    desc:'Plants a timed charge on anything it can reach - tank, building or ship - and walks away before it goes off.' },
+  /* THE ZEALOT runs in and is the bomb; killed on the way, it goes off where it falls */
+  { key:'zealot',   name:'Zealot',        kind:'infantry', cost:300,  build:5,  hp:70,   speed:7.5, turn:6,  r:1.1, sight:12, weapon:'zealblast',
+    needs:['barracks'], blasts:true,
+    side:'soviet', armour:'none',
+    crawl:false, fraidy:false,
+    desc:'Runs at the enemy and detonates. Shot on the way, it goes off where it falls - keep it clear of your own lines.' },
+  /* THE WRECKER: the same on wheels, and far bigger */
+  { key:'wrecker',  name:'Wrecker',       kind:'vehicle',  cost:1500, build:14, hp:320,  speed:11,  turn:2.2,r:2.0, sight:14, weapon:'wreckblast',
+    needs:['factory', 'radar'], blasts:true,
+    side:'soviet', armour:'light',
+    desc:'A lorry full of explosive. Drive it into a base and it takes the buildings round it with it; destroyed on the way, it still goes off.' },
+  /* THE FROGMAN swims as well as he walks, and puts a limpet charge on ships and buildings */
+  { key:'frogman',  name:'Frogman',       kind:'infantry', cost:1000, build:12, hp:120,  speed:6.5, turn:6,  r:1.1, sight:16, weapon:'frogmg', weapon2:'limpet',
+    needs:['lab'], hover:true, swims:true,
+    side:'allied', armour:'none',
+    crawl:true, fraidy:false,
+    desc:'Swims as well as he walks. A machine pistol for infantry, and a limpet charge for ships and buildings.' },
   /* The Arc Tower on tracks: a short bolt that jumps on to two more enemies beside its target. */
   { key:'arctank',  name:'Arc Tank',      kind:'vehicle',  cost:1000, build:13, hp:380,  speed:9.5, turn:2.0,r:2.0, sight:16, weapon:'arcbolt',
     needs:['radar'],

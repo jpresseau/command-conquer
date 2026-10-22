@@ -150,6 +150,14 @@ function _sprUnitGround(X, key) {
       } else if (key === 'tanya') {
         _r3Box(m, mx + 2.3, 4.4, mz - 1.0, 2.8, 0.9, 0.9, kit.prop, DK[3]); /* pistols */
         _r3Box(m, mx + 2.3, 4.4, mz + 1.0, 2.8, 0.9, 0.9, kit.prop, DK[3]);
+      } else if (key === 'sapper') {
+        _r3Box(m, mx + 2.0, 2.4, mz - 1.6, 2.0, 1.6, 1.2, kit.prop, DK[3]);        /* a satchel each side */
+        _r3Box(m, mx + 2.0, 2.4, mz + 1.6, 2.0, 1.6, 1.2, kit.prop, DK[3]);
+      } else if (key === 'zealot') {
+        _r3Box(m, mx, 4.6, mz, 3.4, 1.4, 3.4, kit.prop, DK[3]);                    /* the vest of charges */
+      } else if (key === 'frogman') {
+        _r3Cyl(m, mx - 2.0, 3.6, mz, 1.4, 0.9, kit.prop, '#fff07a', 14);           /* the limpet on his back */
+        _r3Box(m, mx + 2.3, 4.4, mz - 1.0, 2.4, 0.8, 0.8, kit.prop, DK[3]);
       } else if (key === 'rifttroop') {
         _r3Cyl(m, mx - 2.0, 3.6, mz, 1.6, 0.6, kit.prop, '#f2fdff', 14);       /* the rift ring on his back */
         _r3Box(m, mx + 2.6, 4.4, mz - 0.5, 4.6, 1.3, 1.3, kit.prop, DK[3]);
