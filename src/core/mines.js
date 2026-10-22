@@ -61,7 +61,7 @@ function _rtsLayMine(e, atx, atz) {
   return true;
 }
 /* What a side may see: its own mines, and those a Mine Sweeper of its has found (core/sweeper.js). */
-function _rtsMineShown(m, side) { side = side || 'player'; return m.side === side || !!(m.seen && m.seen[side]); }
+function _rtsMineShown(m, side) { side = side || 'player'; return m.side === side || !!(m.seen && m.seen[side]) || (typeof _rtsRevealed === 'function' && _rtsRevealed()); }
 
 function _rtsMineTick(dt) {
   var G = window._rtsG;

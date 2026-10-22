@@ -64,7 +64,7 @@ function _r3dTexture(gl, old, mag) {
    some of its inputs is stale for the rest - e2e/ore3d changes RTS_ORE_TEX_A to render a frame
    without the stain and got the cached one back. */
 function _r3dFogHash(G) {
-  var h = (2166136261 ^ Math.round(RTS_FOG_DIM * 1e6)) >>> 0, m = G.mapped, v = G.vis, n = RTS_N * RTS_N;
+  var h = (2166136261 ^ Math.round(RTS_FOG_DIM * 1e6) ^ (_rtsRevealed() ? 0x5a5a : 0)) >>> 0, m = G.mapped, v = G.vis, n = RTS_N * RTS_N;
   for (var i = 0; i < n; i++) {
     h = (h ^ (m[i] | (v[i] << 1))) >>> 0;
     h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
@@ -77,9 +77,9 @@ function _r3dFog(G) {
   if (R3.fogTex && R3.fogHash === fh && R3.fogFor === G) return;
   R3.fogHash = fh; R3.fogFor = G;
   if (!R3.fogPx || R3.fogPx.length !== N * N * 4) R3.fogPx = new Uint8Array(N * N * 4);
-  var d = R3.fogPx;
+  var d = R3.fogPx, all = _rtsRevealed();              /* a replay's 👁 lifts the shroud: core/replay.js */
   for (var i = 0; i < N * N; i++) {
-    var a = G.mapped[i] ? (G.vis[i] ? 0 : Math.round(255 * RTS_FOG_DIM)) : 255;
+    var a = all ? 0 : G.mapped[i] ? (G.vis[i] ? 0 : Math.round(255 * RTS_FOG_DIM)) : 255;
     d[i * 4] = 4; d[i * 4 + 1] = 6; d[i * 4 + 2] = 9; d[i * 4 + 3] = a;
   }
   /* straight from the bytes, not through the canvas: a canvas upload is a copy out of the 2D

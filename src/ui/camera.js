@@ -152,7 +152,7 @@ function _rtsLoop(prime) {
     /* ...and how many: the game speed's ticks, none while paused (ui/pause.js) */
     var nTicks = (dt > 0 && prime !== true && !U.simDead && !U.replay) ? _rtsSpeedTicks(U, rtsSpeedGet()) : 0;
     /* a replay's ticks are the recording's, at its own speed (replay.js) */
-    if (U.replay && dt > 0 && prime !== true && !U.simDead && !U.paused) {
+    if (U.replay && dt > 0 && prime !== true && !U.simDead) {        /* paused, it only jumps */
       try { rtsReplayFrame(U, dt); }
       catch (err) { _rtsLoopErr(U, err, 'tick'); U.simDead = true; _rtsCrash('The replay has stopped: ' + _rtsErrText(err) + '  —  return to the title.'); }
     }

@@ -11,7 +11,13 @@
    the orders are the recording's, and one given by hand is refused (core/replay.js). A replay
    writes nothing back: no save, no autosave, no record, no medal. At the end the battle's hash is
    checked against the one recorded, so a replay that went its own way - a recording from an older
-   build - says so rather than showing a different battle as the one that was fought. */
+   build - says so rather than showing a different battle as the one that was fought.
+
+   The bar's timeline jumps: forward by playing every tick between as fast as they run, back by
+   laying the battle again and coming forward to the moment (core/replay.js _rtsReplayTo), with
+   the speed and the 👁 kept. 👁 lifts the fog for the watcher (core/replay.js _rtsRevealed). The
+   kept replays, the files and the title's list are replays.js. A replay may come from a file, so
+   anything it says that reaches the page is escaped (_rtsReplayEsc). */
 var RTS_REPLAY_LS = 'bw.replay';
 var RTS_REPLAY_SPEEDS = [1, 2, 4, 8];
 
@@ -19,6 +25,7 @@ function rtsReplayGet() {
   try { var r = JSON.parse(window.localStorage.getItem(RTS_REPLAY_LS) || 'null'); return r && r.v === 1 && r.head && typeof r.dts === 'string' ? r : null; }
   catch (e) { return null; }
 }
+function _rtsReplayEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
 function _rtsReplayBuild() { var b = document.getElementById('rtsBuild'); return b ? b.textContent.trim() : ''; }
 /* what the battle was, in a line: the title's note and the bar's */
 function rtsReplayLine(r) {
@@ -27,17 +34,19 @@ function rtsReplayLine(r) {
     : h.survival ? 'Survival' : h.daily ? 'Daily battle' : 'Battle';
   var lvl = RTS_DIFF[(h.mission && h.mission.lvl) || h.diff];
   var end = r.end && r.end.over === 'win' ? 'won' : r.end && r.end.over === 'lose' ? 'lost' : 'left';
-  return what + ' · ' + (lvl ? lvl.name : h.diff) + ' · ' + end + ' at ' + rtsDailyClock(r.end ? r.end.t : 0);
+  return what + ' · ' + (lvl ? lvl.name : String(h.diff)) + ' · ' + end + ' at ' + rtsDailyClock(r.end ? r.end.t : 0);
 }
 
 /* rtsOpen, on the battle it has just laid: play the replay that asked for it, or record this one */
 function rtsReplayOpened(G, loaded, skirmish) {
   var P = window._RTS_REPLAY_PLAY;
   if (P) {
-    window._RTS_REPLAY_PLAY = null;
+    var o = window._RTS_REPLAY_OPTS || {};
+    window._RTS_REPLAY_PLAY = null; window._RTS_REPLAY_OPTS = null;
     G.sky = P.head.sky || G.sky;
-    _rtsReplayBegin(P);
-    window._rtsUI.replay = { speed: 1, rec: P, said: 0, shown: false };
+    _rtsReplayBegin(P).reveal = !!o.reveal;
+    window._rtsUI.replay = { speed: o.speed || 1, rec: P, said: 0, shown: false, times: _rtsReplayTimes(P), seekTo: o.seek || null };
+    window._RTS_REPLAY_LAST = P;                      /* Watch again, Keep: the card's, after the battle is gone */
     _rtsReplayBar();
     return;
   }
@@ -68,9 +77,10 @@ function rtsReplayEnd() {
   rtsReplayNote();
 }
 
-/* WATCH REPLAY: the battle laid again from the header, played from the recording */
-function rtsReplayWatch(btn) {
-  var r = rtsReplayGet(), err = document.getElementById('rtsErr');
+/* WATCH: the battle laid again from the header, played from the recording - the last one's, or `rec`
+   (a kept one, a file's); `opts` { seek, speed, reveal } carry a jump back across the laying again */
+function rtsReplayWatch(btn, rec, opts) {
+  var r = rec || rtsReplayGet(), err = document.getElementById('rtsErr');
   if (!r) return false;
   if (document.getElementById('rcgRts')) rtsClose();
   if (typeof rtsCampEnd === 'function') rtsCampEnd();
@@ -83,7 +93,7 @@ function rtsReplayWatch(btn) {
   setTimeout(function () {
     window._RTS_MISSION = h.mission ? { id: h.mission.id, seed: h.seed, lvl: h.mission.lvl } : null;
     window._RTS_SURVIVAL = !!h.survival;
-    window._RTS_REPLAY_PLAY = r;
+    window._RTS_REPLAY_PLAY = r; window._RTS_REPLAY_OPTS = opts || null;
     try { rtsOpen(h.seed); }
     catch (e) {
       window._RTS_REPLAY_PLAY = null; rtsReplayEnd(); rtsHome();
@@ -102,10 +112,34 @@ function _rtsReplayBar() {
   if (!st || document.getElementById('rtsReplayBar')) return;
   var b = document.createElement('div');
   b.id = 'rtsReplayBar'; b.className = 'rts-replaybar';
+  var U = window._rtsUI, len = U.replay.rec.dts.length;
   b.innerHTML = '<b>▶ REPLAY</b><span id="rtsReplayClock"></span>'
-    + '<button type="button" id="rtsReplaySpeed" onclick="rtsReplaySpeed()" title="Play faster">1×</button>';
+    + '<input type="range" id="rtsReplayPos" min="0" max="' + len + '" step="1" value="0" aria-label="Jump to a moment">'
+    + '<button type="button" id="rtsReplaySpeed" onclick="rtsReplaySpeed()" title="Play faster">1×</button>'
+    + '<button type="button" id="rtsReplayEye" onclick="rtsReplayReveal()" aria-pressed="false" title="Show the whole map">👁</button>';
   st.appendChild(b);
+  var pos = document.getElementById('rtsReplayPos');
+  pos.addEventListener('input', function () { U.replay.drag = +pos.value; _rtsReplaySync(); });
+  pos.addEventListener('change', function () { var n = +pos.value; U.replay.drag = null; rtsReplaySeek(n); });
   _rtsReplaySync();
+}
+/* 👁: the whole map, for the watcher - on, off (false), or turned over (nothing) */
+function rtsReplayReveal(on) {
+  var R = _rtsRec, b = document.getElementById('rtsReplayEye');
+  if (!R || R.mode !== 'play') return false;
+  R.reveal = on === undefined ? !R.reveal : !!on;
+  if (b) { b.setAttribute('aria-pressed', R.reveal ? 'true' : 'false'); b.classList.toggle('on', R.reveal); }
+  if (window._rtsG) window._rtsG.visDirty = 1;
+  return R.reveal;
+}
+/* the timeline's jump to tick n: forward by playing on (rtsReplayFrame, a slice a frame), back by
+   laying the battle again and coming forward to it */
+function rtsReplaySeek(n) {
+  var U = window._rtsUI, R = _rtsRec;
+  if (!U || !U.replay || !R || R.mode !== 'play') return false;
+  n = Math.max(0, Math.min(R.rec.dts.length, n | 0));
+  if (n >= R.n) { U.replay.seekTo = n; return true; }
+  return rtsReplayWatch(null, U.replay.rec, { seek: n, speed: U.replay.speed, reveal: R.reveal });
 }
 function rtsReplaySpeed(v) {
   var U = window._rtsUI;
@@ -119,15 +153,24 @@ function _rtsReplaySync() {
   var U = window._rtsUI, G = window._rtsG, R = _rtsRec;
   if (!U || !U.replay || !G) return;
   var c = document.getElementById('rtsReplayClock'), s = document.getElementById('rtsReplaySpeed');
-  var txt = ' ' + rtsDailyClock(G.t) + ' / ' + rtsDailyClock(U.replay.rec.end ? U.replay.rec.end.t : 0) + ' ';
+  var T = U.replay.times, at = U.replay.drag != null ? T[U.replay.drag] : G.t, end = T[T.length - 1];
+  var txt = U.replay.seekTo != null && R ? ' finding ' + rtsDailyClock(T[U.replay.seekTo]) + '… ' : ' ' + rtsDailyClock(at) + ' / ' + rtsDailyClock(end) + ' ';
   if (c && c.textContent !== txt) c.textContent = txt;
   if (s && s.textContent !== U.replay.speed + '×') s.textContent = U.replay.speed + '×';
+  var pos = document.getElementById('rtsReplayPos');
+  if (pos && U.replay.drag == null && R && +pos.value !== R.n) pos.value = R.n;
 }
 /* the loop's, in place of its ticks (ui/camera.js): the recording's time, at the replay's speed */
 function rtsReplayFrame(U, dt) {
   var R = _rtsRec, G = window._rtsG;
   if (!R || R.mode !== 'play' || !G) return;
-  if (!R.done) _rtsReplayStep(R, dt * U.replay.speed, Math.ceil(8 * U.replay.speed));
+  /* a jump forward: as much of the way as fits in a frame's slice, paused or not - half the time a
+     frame takes here, at least 30 ms and at most 400, so where drawing is slow the jump is not */
+  if (U.replay.seekTo != null) {
+    var pc = window.performance || Date, t0 = pc.now(), slice = Math.max(30, Math.min(400, ((U.prof && U.prof.gap) || 0) * 0.5));
+    while (R.n < U.replay.seekTo && !R.done && pc.now() - t0 < slice) _rtsReplayTo(R, Math.min(U.replay.seekTo, R.n + 20));
+    if (R.n >= U.replay.seekTo || R.done) { U.replay.seekTo = null; U.replay.landed = { n: R.n, t: G.t }; }   /* where it came down */
+  } else if (!R.done && !U.paused) _rtsReplayStep(R, dt * U.replay.speed, Math.ceil(8 * U.replay.speed));
   _rtsReplaySync();
   if (R.done && !U.replay.shown) _rtsReplayCard(G);
 }
@@ -139,11 +182,13 @@ function _rtsReplayTrue(G, rec) { return !!(rec.end && rec.end.hash === _rtsRepl
 function rtsReplayOverHTML(G) {
   var U = window._rtsUI, rec = U.replay.rec, same = _rtsReplayTrue(G, rec);
   U.replay.shown = true;
+  var kept = typeof rtsReplayKept === 'function' && rtsReplayKept(rec);
   return '<div class="card ' + (G.over || 'win') + '"><h2>' + (G.over === 'win' ? 'VICTORY' : G.over === 'lose' ? 'DEFEATED' : 'REPLAY OVER') + '</h2>'
-    + '<p>' + rtsReplayLine(rec) + '</p>'
+    + '<p>' + _rtsReplayEsc(rtsReplayLine(rec)) + '</p>'
     + '<p class="rec" id="rtsReplayVerdict">' + (same ? 'It played out as it was fought.'
-      : 'This replay was recorded on ' + (rec.head.build && rec.head.build !== _rtsReplayBuild() ? 'another version of the game (' + rec.head.build + ')' : 'a game that has changed since') + ', and from somewhere it went its own way.') + '</p>'
-    + '<button type="button" onclick="rtsReplayWatch()">Watch again</button> '
+      : 'This replay was recorded on ' + (rec.head.build && rec.head.build !== _rtsReplayBuild() ? 'another version of the game (' + _rtsReplayEsc(rec.head.build) + ')' : 'a game that has changed since') + ', and from somewhere it went its own way.') + '</p>'
+    + '<button type="button" onclick="rtsReplayWatch(null, window._RTS_REPLAY_LAST)">Watch again</button> '
+    + (kept ? '' : '<button type="button" id="rtsReplayKeepBtn" onclick="rtsReplayStore(window._RTS_REPLAY_LAST, this)">★ Keep</button> ')
     + '<button type="button" onclick="rtsClose()">Quit</button></div>';
 }
 function _rtsReplayCard(G) {
@@ -157,12 +202,4 @@ function rtsReplayOverButton(o) {
   var r = rtsReplayKeep(), card = o && o.querySelector('.card');
   if (!r || !card) return;
   card.insertAdjacentHTML('beforeend', ' <button type="button" id="rtsReplayGo" onclick="rtsReplayWatch()">▶ Watch replay</button>');
-}
-/* the title's button and its line */
-function rtsReplayNote() {
-  var b = document.getElementById('rtsReplay'), n = document.getElementById('rtsReplayNote'), r = rtsReplayGet();
-  if (!b) return;
-  b.hidden = !r;
-  b.disabled = false;
-  if (n) n.textContent = r ? rtsReplayLine(r) : '';
 }

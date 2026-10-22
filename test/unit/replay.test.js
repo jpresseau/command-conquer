@@ -9,6 +9,12 @@
                    (test/lib/fingerprint.js) and the record's own hash both
      ONE CALL      the same record with one call taken out does not: the calls are what it plays
      HANDS OFF     while a replay plays, a call from outside it is refused and changes nothing
+     REVEALED      the watcher's 👁 shows what the player could not see, outside the ticks only: a
+                   replay watched revealed ends where the battle did, and a recording is never revealed
+     A JUMP        on to a tick exactly, on the timeline's clock, and on from there to the same end
+     A FILE'S      a recording that is not one - an order that is not a command, a tick no frame takes,
+                   a battle this game has not - fails the check, and an order that is not a command,
+                   got past it, is skipped
      A MISSION     Order of Battle won by its intended play, ally orders and all, and a survival with
      A SURVIVAL    a base built and riflemen on repeat, each replay to the same end
      THE LIST      every simulation function anything outside src/core and src/rules calls is a
@@ -36,7 +42,7 @@ var STEPS = [16, 17, 17, 16, 33, 16, 17, 50, 16, 17];
 
 /* ---------------- the record ---------------- */
 var g = world(), G = g._rtsG, made = [];
-g._rtsRecStart({ seed: 7, diff: 'normal' });
+g._rtsRecStart({ seed: 7, diff: 'normal', army: g.rtsArmySide(), skirmish: null, mission: null, survival: false, daily: null, sky: null });   /* as replay.js writes it */
 function call(name) { var a = Array.prototype.slice.call(arguments, 1); made.push(name); return g[name].apply(null, a); }
 var mine = function () { return G.ents.filter(function (e) { return !e.dead && e.side === 'player' && e.type === 'unit' && !g.rtsUnitDef(e.def).harvest; }); };
 var y = g._rtsHas('player', 'yard'), ticks = 0;
@@ -98,6 +104,62 @@ var hu = h._rtsG.ents.filter(function (e) { return !e.dead && e.side === 'player
 var got = hu && h._rtsOrderMove(hu, hu.x + 40, hu.z, false);
 S.ok('HANDS OFF: while a replay plays, a call from outside it is refused and changes nothing', !!hu && got === false && hu.order === was && HR.refused === 1,
      JSON.stringify({ got: got, order: [was, hu && hu.order], refused: HR.refused }));
+
+/* ---------------- the watcher's 👁 ---------------- */
+/* revealed for the whole of a replay, it ends where the battle did: the simulation never saw it */
+var V = world(), VR = V._rtsReplayBegin(rec), VG = V._rtsG, es = VG.starts.enemy;
+VR.reveal = true;
+V._rtsReplayTo(VR, 600);
+var seenOn = V._rtsVisible(es.tx, es.tz) && V._rtsEntSeen(V._rtsHas('enemy', 'yard'));
+VR.reveal = false;
+var seenOff = V._rtsVisible(es.tx, es.tz);
+VR.reveal = true;
+/* asked from inside the battle - a tick's own work, and a recorded order made again - it is not revealed */
+var inTick = [], inCall = [], skyTick = V._rtsSkyPlayTick, move = V._rtsOrderMove;
+V._rtsSkyPlayTick = function () { inTick.push(V._rtsRevealed()); return skyTick.apply(this, arguments); };
+V._rtsOrderMove = function () { inCall.push(V._rtsRevealed()); return move.apply(this, arguments); };
+while (!VR.done) V._rtsReplayStep(VR, 0.05, 50);
+V._rtsSkyPlayTick = skyTick; V._rtsOrderMove = move;
+var recR = g._rtsRecStart({}); recR.reveal = true;
+var recSees = g._rtsRevealed();
+g._rtsRecStop();
+S.ok('REVEALED: 👁 shows the enemy\'s far corner and yard outside the ticks and not when off, never reveals a recording, and a replay watched revealed throughout ends where the battle did, to the bit',
+     seenOn && !seenOff && !recSees && V._rtsReplayHash(VG) === rec.end.hash && fingerprint(V) === fpA, JSON.stringify({ on: seenOn, off: seenOff, rec: recSees, hash: [V._rtsReplayHash(VG), rec.end.hash] }));
+S.ok('...and it is never revealed to the battle itself: not to a tick\'s own work, nor to a recorded order made again',
+     inTick.length > 1000 && inTick.indexOf(true) < 0 && inCall.length > 5 && inCall.indexOf(true) < 0, JSON.stringify({ ticks: inTick.length, revealedInTick: inTick.filter(Boolean).length, calls: inCall.length, revealedInCall: inCall.filter(Boolean).length }));
+
+/* ---------------- a jump ---------------- */
+var J = world(), JR = J._rtsReplayBegin(rec), half = Math.floor(rec.dts.length / 2), T = J._rtsReplayTimes(rec);
+J._rtsReplayTo(JR, half);
+var at = { n: JR.n, t: J._rtsG.t, want: T[half] };
+while (!JR.done) J._rtsReplayStep(JR, 0.05, 50);
+S.ok('A JUMP: on to the middle tick exactly, its clock the timeline\'s, and from there to the same end, to the bit; the timeline ends on the battle\'s clock',
+     at.n === half && at.t === at.want && J._rtsReplayHash(J._rtsG) === rec.end.hash && T[rec.dts.length] === rec.end.t, JSON.stringify({ at: at, end: [T[rec.dts.length], rec.end.t] }));
+
+/* ---------------- a file's ---------------- */
+function bad(change) { var r = JSON.parse(JSON.stringify(rec)); change(r); return g._rtsReplayValid(r); }
+var why = {
+  good: g._rtsReplayValid(rec),
+  call: bad(function (r) { r.cmds.push({ k: 3, f: 'rtsClose', a: [] }); }),
+  name: bad(function (r) { r.cmds[0].f = 'localStorage'; }),
+  tick: bad(function (r) { r.dts = r.dts.slice(0, 10) + '0' + r.dts.slice(11);   /* a 0 ms step: none the live loop takes */ }),
+  odd: bad(function (r) { r.odd = {}; }),
+  diff: bad(function (r) { r.head.diff = 'insane'; }),
+  army: bad(function (r) { r.head.army = '<img>'; }),
+  head: bad(function (r) { delete r.head; }),
+  mission: bad(function (r) { r.head.mission = { id: 'nowhere' }; }),
+  junk: g._rtsReplayValid('{}'), none: g._rtsReplayValid(null)
+};
+S.ok('A FILE\'S: a recording passes the check, and one calling anything but a command, with a tick no live frame takes, a dropped odd tick, or a difficulty, army, mission or head this game has not, does not',
+     why.good === '' && Object.keys(why).filter(function (k) { return k !== 'good'; }).every(function (k) { return why[k]; }), JSON.stringify(why));
+/* and got past the check anyway, the call is skipped, never made */
+var smug = JSON.parse(JSON.stringify(rec)), Z = world();
+Z.window.__called = 0; Z.window.__trap = function () { Z.window.__called++; };
+smug.cmds.unshift({ k: 0, f: '__trap', a: [] });
+var ZR = Z._rtsReplayBegin(smug);
+while (!ZR.done) Z._rtsReplayStep(ZR, 0.05, 50);
+S.ok('...and a call that is not a command, got past the check, is skipped: never made, and the replay ends where the battle did', Z.window.__called === 0 && ZR.bad === 1 && Z._rtsReplayHash(Z._rtsG) === rec.end.hash,
+     JSON.stringify({ called: Z.window.__called, bad: ZR.bad }));
 
 /* ---------------- a mission and a survival ---------------- */
 /* each recorded as played, through the same calls a player makes (test/lib/plays.js), and played

@@ -44,7 +44,8 @@
   <!-- No enemy base, only waves, each bigger than the last: survival.js -->
   <button type="button" class="go resume" id="rtsSurvival" onclick="rtsSurvivalStart(this)">SURVIVAL<small id="rtsSurvivalNote"></small></button>
   <!-- The last battle, played again from its recording: replay.js -->
-  <button type="button" class="go resume" id="rtsReplay" onclick="rtsReplayWatch(this)" hidden>WATCH REPLAY<small id="rtsReplayNote"></small></button>
+  <button type="button" class="go resume" id="rtsReplay" onclick="rtsReplaysToggle()">REPLAYS<small id="rtsReplayNote"></small></button>
+  <div id="rtsReplays" hidden></div>
   <!-- Nine authored missions: campaign.js -->
   <button type="button" class="go resume" id="rtsCampBtn" onclick="rtsCampToggle()">CAMPAIGN<small>nine missions on the coast</small></button>
   <div id="rtsCampList" hidden></div>
@@ -301,6 +302,7 @@
 <script>//@@INC:daily.js@@</script>
 <script>//@@INC:survival.js@@</script>
 <script>//@@INC:replay.js@@</script>
+<script>//@@INC:replays.js@@</script>
 <script>//@@INC:record.js@@</script>
 <script>//@@INC:campaign.js@@</script>
 <script>//@@INC:skirmish.js@@</script>

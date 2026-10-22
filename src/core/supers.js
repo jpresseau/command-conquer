@@ -320,11 +320,13 @@ function _rtsVisTick(dt) {
 }
 function _rtsSeen(tx, tz) {
   var G = window._rtsG;
+  if (typeof _rtsRevealed === 'function' && _rtsRevealed()) return true;     /* a replay's 👁: core/replay.js */
   if (!G.mapped || !_rtsInB(tx, tz)) return true;
   return !!G.mapped[_rtsIdx(tx, tz)];
 }
 function _rtsVisible(tx, tz) {
   var G = window._rtsG;
+  if (typeof _rtsRevealed === 'function' && _rtsRevealed()) return true;
   if (!G.vis || !_rtsInB(tx, tz)) return true;
   return !!G.vis[_rtsIdx(tx, tz)];
 }
@@ -338,6 +340,7 @@ function _rtsVisible(tx, tz) {
 function _rtsEffectsSeen(e) { return _rtsWithPlayer(e.side) || _rtsEntSeen(e); }
 function _rtsEntSeen(e) {
   if (!e) return false;
+  if (typeof _rtsRevealed === 'function' && _rtsRevealed()) return true;
   if (_rtsWithPlayer(e.side)) return true;
   /* A SUBMERGED BOAT IS NOT SEEN, however well lit the water over it is. This sits ABOVE the
      muzzle-flash reveal below and below the "it is mine" line above, and both positions are

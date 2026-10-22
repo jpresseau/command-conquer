@@ -40,13 +40,14 @@ var RTS_REPLAY_PURE = {
     '_rtsSkirmishOf', '_rtsStormGrounds', '_rtsSuperDefOf', '_rtsSuperHint', '_rtsSuperProgress',
     '_rtsSuperReady', '_rtsSuperSources', '_rtsSurvivalBounty', '_rtsTX', '_rtsTideAny', '_rtsTideLine',
     '_rtsWX', '_rtsWhyLocked', 'rtsArmyName', 'rtsArmyTitle', 'rtsBuildableBy', 'rtsCapacity', 'rtsCapturable',
-    'rtsHouseSide', 'rtsMoney', 'rtsStructDef', 'rtsUnitDef', 'rtsArmySide', '_rtsReplayHash',
+    'rtsHouseSide', 'rtsMoney', 'rtsStructDef', 'rtsUnitDef', 'rtsArmySide', '_rtsReplayHash', '_rtsRevealed', '_rtsReplayValid',
+    '_rtsReplayTimes',
     /* the picture's: heights, sight and where a gun points (src/render, src/render3d) */
     '_rtsAirLift', '_rtsVisible', '_rtsMineShown', '_rtsBridgeDeckY', '_rtsMuzzleAngle', '_rtsFireCoord',
     '_rtsWithPlayer', '_rtsStandY', '_rtsEffectsSeen', '_rtsElevNormal', '_rtsTileElev'],
   /* the battle's setup, before a recording starts, or a save's, which is not recorded */
   setup: ['_rtsNewGame', '_rtsMissionSetup', '_rtsSurvivalSetup', '_rtsRecalcPower', '_rtsRngMake', 'rtsSetArmySide',
-    '_rtsRecStart', '_rtsRecStop', '_rtsReplayBegin', '_rtsReplayStep'],
+    '_rtsRecStart', '_rtsRecStop', '_rtsReplayBegin', '_rtsReplayStep', '_rtsReplayTo'],
   /* the message line, which nothing in the simulation reads */
   say: ['_rtsSay'],
   /* the loop itself: recorded as the ticks */
@@ -149,6 +150,9 @@ function _rtsReplayCalls(R) {
   var G = window._rtsG, cmds = R.rec.cmds;
   while (R.ci < cmds.length && cmds[R.ci].k <= R.n) {
     var c = cmds[R.ci++];
+    /* ONLY A COMMAND: a replay can come from a file (replay.js), and a name the record should
+       not hold - any other function on the page - is skipped, never called */
+    if (RTS_REPLAY_CMDS.indexOf(c.f) < 0 || typeof window[c.f] !== 'function') { R.bad = (R.bad || 0) + 1; continue; }
     if (c.s) G.sel = c.s.map(function (id) { return _rtsRecEnt(G, id); }).filter(function (e) { return !e.dead; });
     R.applying++;
     try { window[c.f].apply(null, c.a.map(function (x) { return _rtsRecDec(G, x); })); }
@@ -183,4 +187,54 @@ function _rtsReplayHash(G) {
   G.ents.filter(function (e) { return !e.dead; }).sort(function (a, b) { return a.id - b.id; })
     .forEach(function (e) { add(e.id + e.def + e.side + ':' + e.x + ':' + e.z + ':' + e.hp); });
   return ('00000000' + h.toString(16)).slice(-8);
+}
+
+/* SEEKING: on to tick n (or the end), every call and tick between, as fast as they run - the
+   timeline's jump forward (replay.js; a jump back lays the battle again and comes forward). */
+function _rtsReplayTo(R, n) {
+  var rec = R.rec, len = rec.dts.length, ran = 0;
+  while (R.n < n && R.n < len) {
+    _rtsReplayCalls(R);
+    window._rtsTick(_rtsReplayDt(rec, R.n));
+    ran++;
+  }
+  if (R.n >= len) { _rtsReplayCalls(R); R.done = true; }
+  R.acc = 0;
+  return ran;
+}
+/* the battle's clock after each tick, for the timeline: times[i] is the time i ticks in */
+function _rtsReplayTimes(rec) {
+  var len = rec.dts.length, out = new Float64Array(len + 1);
+  for (var i = 0; i < len; i++) out[i + 1] = out[i] + _rtsReplayDt(rec, i);
+  return out;
+}
+
+/* THE MAP REVEALED, for a replay's watcher (replay.js's 👁): every visibility test says seen - but
+   only while the picture is drawn. Inside a tick, and while a recorded call is made again, the
+   simulation asks the same questions (a gun's muzzle flash, a trigger, the jammer) and must get
+   the answers the battle got, or the replay goes its own way; a recording is never revealed. */
+function _rtsRevealed() { var R = _rtsRec; return !!(R && R.mode === 'play' && R.reveal && !R.inTick && !R.applying); }
+
+/* A REPLAY FROM A FILE IS UNTRUSTED: the reason it cannot be played, or '' - its shape, the
+   battle it names, every tick a step the live loop could have taken, every call a command */
+function _rtsReplayValid(r) {
+  if (!r || typeof r !== 'object' || r.v !== 1) return 'not a Breachwater replay';
+  var h = r.head;
+  if (!h || typeof h !== 'object' || typeof h.seed !== 'number' || !isFinite(h.seed)) return 'it has no battle to lay';
+  if (!RTS_DIFF[h.diff]) return 'its difficulty is not one this game has';
+  if (RTS_ARMY_SIDES.indexOf(h.army) < 0) return 'its army is not one this game has';
+  if (h.mission && (typeof h.mission !== 'object' || !_rtsMissionOf(h.mission.id))) return 'its mission is not one this game has';
+  if (h.skirmish != null && typeof h.skirmish !== 'object') return 'its map setup is not one this game has';
+  if (h.sky != null && typeof h.sky !== 'string') return 'its sky is not one this game has';
+  if (typeof r.dts !== 'string' || !r.dts.length || !/^[\x2f\x31-\x94]*$/.test(r.dts)) return 'its ticks are not a battle\'s';
+  if (!r.odd || typeof r.odd !== 'object') return 'its ticks are not a battle\'s';
+  for (var k in r.odd) if (r.dts.charCodeAt(+k) !== 47 || typeof r.odd[k] !== 'number' || !(r.odd[k] > 0 && r.odd[k] <= 1)) return 'its ticks are not a battle\'s';
+  for (var i = 0; i < r.dts.length; i++) if (r.dts.charCodeAt(i) === 47 && !(i in r.odd)) return 'its ticks are not a battle\'s';
+  if (!Array.isArray(r.cmds)) return 'it has no orders';
+  for (i = 0; i < r.cmds.length; i++) {
+    var c = r.cmds[i];
+    if (!c || typeof c.k !== 'number' || !Array.isArray(c.a) || RTS_REPLAY_CMDS.indexOf(c.f) < 0) return 'it gives an order this game does not take';
+    if (c.s != null && !Array.isArray(c.s)) return 'it gives an order this game does not take';
+  }
+  return '';
 }
