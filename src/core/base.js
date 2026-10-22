@@ -202,6 +202,8 @@ function _rtsNewGame(seed, diff, spec) {
     _rtsLayBase(G.starts[k], G.starts[_rtsAIFoe(k)], _rtsAIOpening(k), k, fair && RTS_SEATS[k].team === 1);
   });
 
+  _rtsLayTowns(G);            /* the setup's towns, if it asked for any: core/garrison.js */
+
   /* Density LAST. Terrain generation and the two bases both erase ore, and a cell's level is
      a function of how many neighbours still have some - so running the adjust before those
      passes bakes in counts that no longer describe the field. */

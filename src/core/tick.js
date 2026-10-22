@@ -38,6 +38,7 @@ function _rtsTick(dt) {
     if (e.inside) continue;                      /* riding in a transport - see _rtsAboard */
     if (e.type === 'unit') _rtsUpdateUnit(e, dt); else _rtsUpdateStruct(e, dt);
   }
+  if (G.sides.civ) _rtsGarrisonTick(dt);        /* squads firing out of the town's houses: core/garrison.js */
   _rtsSeparate(dt);
   _rtsAirSpread(dt);                             /* aircraft keep their own distance: core/airspace.js */
   _rtsUpdateProj(dt);
@@ -85,7 +86,7 @@ function _rtsTick(dt) {
   var alive = {};
   for (i = 0; i < G.ents.length; i++) {
     e = G.ents[i];
-    if (e.dead || e.type !== 'struct') continue;
+    if (e.dead || e.type !== 'struct' || rtsStructDef(e.def).civ) continue;   /* a garrisoned house keeps no one alive */
     alive[e.side] = 1;
   }
   var foesUp = 0;

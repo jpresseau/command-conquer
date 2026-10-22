@@ -62,8 +62,8 @@ a section below with its numbers.
 | 1, `prismtank` | Prism Tank | Compact | Lens Tank | a beam that splits onto the targets around the one it hits |
 | 2, `arctroop` | Tesla Trooper | Dominion | Arc Trooper | infantry that charges an Arc Tower to fire through a brownout |
 | 2, `arctank` | Tesla Tank | Dominion | Arc Tank | short-range arc that chains |
-| 3 | GI (deployed) | Compact | Rifle Squad dig-in | deploys into a sandbagged position: more range and armour, cannot move |
-| 3 | civilian buildings | map | Garrison | infantry occupy a building and fire out of it |
+| 3, `rifle` dig | GI (deployed) | Compact | Rifle Squad dig-in | deploys into a sandbagged position: more range and armour, cannot move |
+| 3, `cottage` `flats` `hall` | civilian buildings | map | Garrison | infantry occupy a building and fire out of it |
 | 4 | Yuri | Dominion | Mentalist | takes control of one enemy unit |
 | 4 | Psychic Sensor | Dominion | Echo Sensor | shows enemy orders inside its radius |
 | 4 | Robot Tank / Robot Control Center | Compact | Drone Tank / Relay Hub | crewless, so it cannot be taken over; stops when the hub is down |
@@ -139,3 +139,31 @@ where it used to be a machine-gun tracer. An arc is the beam effect broken into 
 legs, re-thrown every 0.05 s so it crackles, and none of the three has a muzzle flash. The
 opponent's infantry mix buys Arc Troopers from 1000 credits and its vehicle mix Arc Tanks from
 1700. `unit/arc` holds the rules and `e2e/arc` the picture.
+
+## Batch 3: towns, garrisons and digging in (`core/garrison.js`, `core/dig.js`, `sprites/town.js`, `render3d/dig3d.js`)
+
+**Towns** are a skirmish setup option, TOWNS (`town` in `rules/skirmish.js`), off by default, so a
+daily, a mission and every recorded battle are the battle they were. With it on, two towns stand
+in the contested ground on a standard map (scaled with the map's size), each a few of the town's
+buildings: a **Cottage** (`cottage`, 2x2, holds 3 squads), an **Apartment Block** (`flats`,
+2x3, holds 5) and a **Town Hall** (`hall`, 3x3, holds 6, one per battle). None stands within 22
+cells of a start. They are laid from their own random stream after the bases, so the terrain,
+the ore and the bases are exactly the map without them. They belong to the `civ` seat, which has
+team -1, no brain and no turn, and is hostile to nobody.
+
+**Garrisons.** Right-click a house with infantry selected (a squad with a gun, not a dog) and up
+to its number of squads go in through the transport's own order. The house takes their side: its
+roof wears their colour, the enemy can shoot it, and each squad inside fires from it with its own
+weapon, out to its range plus 2 cells. UNLOAD walks them out, a house that falls spills them,
+and fire clears it: a weapon marked `clears` (flame, grenades, the Flame Tower) that hits a held
+house burns every squad inside for half the hit. When the last squad leaves, the house is the
+town's again. A held house is never sold, repaired, captured or rebuilt, and keeps no side alive.
+The opponent sends its idle squads, two or more, into the nearest house within 34 cells of its
+start, every 8 s.
+
+**Digging in** (the GI's deploy): DEPLOY on a Compact Rifle Squad (`dig:'allied'`) says DIG IN.
+The squad crouches behind a ring of sandbags; it cannot move, takes half of every hit, hits 1.4x
+as hard and reloads in three quarters of the time. DEPLOY again, any move order, or a board
+order climbs it out.
+
+`unit/garrison` (24), `unit/dig` (12) and `e2e/garrison` (15) hold it.

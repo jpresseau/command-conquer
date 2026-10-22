@@ -30,9 +30,9 @@ function rtsSkirmishWant() {
 function rtsSkirmishLine(s) {
   return RTS_SKIRMISH.foes[s.foes].name.toLowerCase() + ' · ' + RTS_SKIRMISH.size[s.size].name.toLowerCase()
     + (RTS_SKIRMISH.layout[s.layout].mirror ? ' mirrored' : '') + ' map · ' + RTS_SKIRMISH.water[s.water].name.toLowerCase()
-    + ' · ' + RTS_SKIRMISH.money[s.money].name + ' credits';
+    + (RTS_SKIRMISH.town[s.town].n ? ' · towns' : '') + ' · ' + RTS_SKIRMISH.money[s.money].name + ' credits';
 }
-var RTS_SKIRMISH_ROWS = [['foes', 'SIDES'], ['size', 'MAP'], ['layout', 'GROUND'], ['water', 'WATER'], ['money', 'CREDITS']];
+var RTS_SKIRMISH_ROWS = [['foes', 'SIDES'], ['size', 'MAP'], ['layout', 'GROUND'], ['water', 'WATER'], ['town', 'TOWNS'], ['money', 'CREDITS']];
 function rtsSkirmishToggle() {
   var box = document.getElementById('rtsSkirmish');
   if (!box) return;

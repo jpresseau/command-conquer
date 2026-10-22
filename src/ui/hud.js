@@ -174,7 +174,8 @@ function _rtsActionAt(mx, my) {
     return shadow ? 'move' : 'no';
   }
   /* your own transport with something selected that can get in: the board cursor */
-  if (tgt && tgt.side === 'player' && tgt.type === 'unit' && !tgt.dead && _rtsIsTransport(tgt)) {
+  if (tgt && !tgt.dead && (tgt.side === 'player' && tgt.type === 'unit' && _rtsIsTransport(tgt)
+                           || _rtsGarrisonable(tgt) && (tgt.side === 'civ' || tgt.side === 'player'))) {
     for (i = 0; i < mine.length; i++) if (mine[i] !== tgt && _rtsCanBoard(mine[i], tgt)) return _rtsBoardReachable(tgt) ? 'board' : 'no';
   }
   var tx = _rtsTX(hit.x), tz = _rtsTX(hit.z);

@@ -166,6 +166,13 @@ gun. Its Lens Tank carries the same beam, which forks onto the enemies around wh
 a man. Stand them beside an Arc Tower and they charge it: it fires even when your power is down,
 and harder for each trooper. The Arc Tank's bolt jumps from its target to two more beside it.
 
+**Hold the town.** Turn on TOWNS in the skirmish setup and the middle of the map has houses,
+flats and a town hall. Right-click one with infantry selected and they garrison it: the building
+fires their guns out of its windows, further than they could shoot on foot, until it falls or
+flame and grenades burn them out. The enemy garrisons the town nearest its base too. And a
+Compact rifle squad can DIG IN behind sandbags: it holds its ground, takes half the damage and
+hits harder.
+
 **The enemy uses its whole garage.** It mines the approach to its own base, and once you have a
 harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands
 them beside your ore field, and goes home to do it again.

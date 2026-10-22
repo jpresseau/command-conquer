@@ -301,6 +301,7 @@ function _rtsFire(e, tgt, w) {
   } else {
     e.cool = w.cool * bias.rof * rtsCrateMult(e, 'rof'); e.second = true;  /* ROFBias: higher = slower reload */
   }
+  if (e.dug) e.cool *= RTS_DIG.rof;
   e.fire = 0.09;
   e.firedT = window._rtsG.t;                      /* a shot gives a jammed unit away: core/jammer.js */
   e.recoil = RTS_RECOIL_TIME;                     /* Recoil_Adjust */
@@ -317,7 +318,8 @@ function _rtsFire(e, tgt, w) {
     : (w.shot === 'missile' ? 'rocket' : (e.type === 'struct' ? 'turretgun' : 'cannon')), e.x, e.z);
   /* a Lens Tower's idle neighbours pour their beams into this one (core/lens.js) */
   var raw = w.dmg * bias.fire * rtsCrateMult(e, 'fire') * (w.relay && e.type === 'struct' ? _rtsLensRelay(e, w) : 1)
-          * _rtsArcCharge(e);                     /* ...and an Arc Tower's troopers charge it (core/arc.js) */
+          * _rtsArcCharge(e)                      /* ...and an Arc Tower's troopers charge it (core/arc.js) */
+          * (e.dug ? RTS_DIG.fire : 1);           /* ...and a squad dug in hits harder (core/dig.js) */
   var dmg = raw * rtsVerses(w, tgt);
   if (w.speed <= 0) {
     _rtsDamage(tgt, dmg, e);

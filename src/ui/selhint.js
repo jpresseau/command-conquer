@@ -144,6 +144,7 @@ function _rtsUnitStateTxt(e) {
     else if (e.order === 'orbit') out += ' · circling';
   }
   if (d.carries) { var n = _rtsCargoCount(e); if (n) out += ' · ' + n + ' aboard'; }
+  if (e.dug) out += ' · dug in';
   if (d.sea && _rtsAground(e)) out += ' · aground until the flood';
   if (d.jams) {
     if (_rtsJamUp(e)) {
@@ -161,7 +162,7 @@ function _rtsDeployLabel(sel) {
   var w = null;
   for (var i = 0; i < sel.length; i++) {
     if (!_rtsCanDeploy(sel[i])) continue;
-    var d = rtsUnitDef(sel[i].def), x = d.mines ? 'LAY MINE' : d.bridge ? 'BRIDGE' : 'DEPLOY';
+    var d = rtsUnitDef(sel[i].def), x = d.mines ? 'LAY MINE' : d.bridge ? 'BRIDGE' : d.dig ? (sel[i].dug ? 'CLIMB OUT' : 'DIG IN') : 'DEPLOY';
     if (w && w !== x) return 'DEPLOY';
     w = x;
   }

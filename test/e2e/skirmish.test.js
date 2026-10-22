@@ -1,6 +1,6 @@
 /* THE SKIRMISH SETUP, WITH REAL CLICKS (src/skirmish.js, title.js, ui/shell.js, rts.save.js):
 
-     THE PANEL      SKIRMISH SETUP opens five rows of choices; a click marks the choice, the
+     THE PANEL      SKIRMISH SETUP opens six rows of choices; a click marks the choice, the
                     button's line says what START BATTLE will make, and it is still chosen after
                     a reload
      THE BATTLE     START BATTLE makes that battle: a 160-cell mirrored lagoon map, 10,000 credits a side,
@@ -68,7 +68,7 @@ function waitBattle(p) {
   var line0 = await p.evaluate(function () { return document.getElementById('rtsSkirmishNote').textContent; });
   await click(p, '#rtsSkirmishBtn');
   var rows = await p.evaluate(function () { return document.querySelectorAll('#rtsSkirmish .diff').length; });
-  S.ok('SKIRMISH SETUP opens five rows of choices, on the default', rows === 5 && line0 === '1 foe · standard map · coast · 3,000 credits', rows + ' rows; "' + line0 + '"');
+  S.ok('SKIRMISH SETUP opens six rows of choices, on the default', rows === 6 && line0 === '1 foe · standard map · coast · 3,000 credits', rows + ' rows; "' + line0 + '"');
   var hit = [await click(p, '#rtsSkirmish [data-k=size] [data-v=large]'), await click(p, '#rtsSkirmish [data-k=layout] [data-v=mirror]'),
              await click(p, '#rtsSkirmish [data-k=water] [data-v=lagoon]'),
              await click(p, '#rtsSkirmish [data-k=money] [data-v=flush]')];
@@ -76,7 +76,7 @@ function waitBattle(p) {
     return { on: Array.prototype.map.call(document.querySelectorAll('#rtsSkirmish button.on'), function (b) { return b.getAttribute('data-v'); }),
              line: document.getElementById('rtsSkirmishNote').textContent };
   });
-  S.ok('a click marks the choice, and the button says what START BATTLE will make', hit.every(Boolean) && marked.on.join() === 'one,large,mirror,lagoon,flush' &&
+  S.ok('a click marks the choice, and the button says what START BATTLE will make', hit.every(Boolean) && marked.on.join() === 'one,large,mirror,lagoon,none,flush' &&
        marked.line === '1 foe · large mirrored map · lagoon · 10,000 credits', JSON.stringify(marked));
   await p.reload();
   await p.waitForFunction(function () { return typeof rtsSkirmishGet === 'function' && !!document.getElementById('rtsSkirmishNote').textContent; }, null, { timeout: 30000 }).catch(function () {});

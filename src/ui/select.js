@@ -183,7 +183,7 @@ function _rtsRightClickNow(mx, my, hit0) {
      `move`, the squad walked to 0.75 tiles away and stood there, and the APC carried 0 of its 5
      for the rest of the match. Calling _rtsOrderBoard by hand in the same match loaded it
      immediately - the transport worked, the one route to it did not. */
-  if (tgt && tgt.type === 'unit' && !tgt.dead && _rtsIsTransport(tgt)) {
+  if (tgt && !tgt.dead && (tgt.type === 'unit' ? _rtsIsTransport(tgt) : _rtsGarrisonable(tgt) && (tgt.side === 'civ' || tgt.side === 'player'))) {
     var got = 0, rest = [], why = null, reach = _rtsBoardReachable(tgt);
     for (i = 0; i < mine.length; i++) {
       var bu = mine[i];
@@ -197,13 +197,14 @@ function _rtsRightClickNow(mx, my, hit0) {
       for (i = 0; i < rest.length; i++)
         if (rest[i] !== tgt) _rtsOrderMove(rest[i], tgt.x + bsp[i].x, tgt.z + bsp[i].z, false);
       _rtsFlash(tgt.x, tgt.z, 'harvest');
-      _rtsSay(got === 1 ? 'Loading up.' : got + ' units loading up.');
+      _rtsSay(tgt.type === 'struct' ? (got === 1 ? 'Garrisoning the ' : got + ' squads garrisoning the ') + rtsStructDef(tgt.def).name + '.'
+                                    : got === 1 ? 'Loading up.' : got + ' units loading up.');
       if (typeof _rtsSfx === 'function') _rtsSfx('order');
       return;
     }
     /* Nobody could board - a full hold, or a group of tanks at an APC. Fall through, so the
        click still means "go there" instead of meaning nothing - and say why it is not more. */
-    if (why) boardWhy = 'The ' + (rtsUnitDef(tgt.def) || {}).name + ' ' + why + '.';
+    if (why) boardWhy = 'The ' + (tgt.type === 'struct' ? rtsStructDef(tgt.def) : rtsUnitDef(tgt.def) || {}).name + ' ' + why + '.';
   }
   if (tgt && _rtsHostile(tgt.side, 'player')) {
     /* An engineer sent at an enemy BUILDING captures it rather than attacking it - it has no

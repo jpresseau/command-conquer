@@ -28,6 +28,7 @@ function _rtsHoldSelected() {
 }
 function _rtsOrderMove(e, x, z, attackMove) {
   if (e.type !== 'unit') return;
+  if (e.dug) e.dug = 0;                         /* a move climbs out of the sandbags first: core/dig.js */
   e.order = attackMove ? 'amove' : 'move';
   e.target = null; e.hstate = null;
   e.goal = { x:x, z:z };                       /* remembered so a blocked repath keeps aiming here */
@@ -39,7 +40,7 @@ function _rtsOrderMove(e, x, z, attackMove) {
    boards when it arrives, which is handled in the move completion below. */
 function _rtsOrderBoard(inf, t) {
   if (!_rtsCanBoard(inf, t)) return false;
-  inf.order = 'board'; inf.target = t; inf.hstate = null;
+  inf.order = 'board'; inf.target = t; inf.hstate = null; inf.dug = 0;   /* out of the sandbags: core/dig.js */
   inf.goal = { x:t.x, z:t.z };
   inf.path = _rtsPathFor(inf, t.x, t.z); inf.pi = 0;
   return true;

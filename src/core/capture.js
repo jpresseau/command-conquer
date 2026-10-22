@@ -306,7 +306,7 @@ function _rtsDropDebris(e) {
    blinking wrench), not a one-shot: it eats credits a step at a time and gives up on its
    own when the money runs out. */
 function _rtsToggleRepair(e) {
-  if (!e || e.dead || e.type !== 'struct' || e.building || e.selling) return false;
+  if (!e || e.dead || e.type !== 'struct' || e.building || e.selling || rtsStructDef(e.def).civ) return false;
   if (e.hp >= e.maxHp && !e.repair) return false;
   e.repair = e.repair ? 0 : 1; e.rtimer = 0;
   return true;
@@ -338,6 +338,7 @@ function _rtsSell(e) {
   var G = window._rtsG;
   if (!e || e.dead || e.type !== 'struct' || e.selling) return false;
   if (e.def === 'yard') return false;           /* selling the Command Yard is suicide, not a sale */
+  if (rtsStructDef(e.def).civ) return false;    /* nor is a town's house yours to sell (core/garrison.js) */
   e.selling = 1; e.repair = 0; e.building = 1; e.bprog = 1;
   /* Refund_Money against the PurchasePrice the object carries, not against the sticker
      price. `paid` is absent only on a save written before this existed. */

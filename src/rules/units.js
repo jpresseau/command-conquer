@@ -10,6 +10,7 @@ var RTS_UNITS = [
   { key:'rifle',    name:'Rifle Squad',   kind:'infantry', cost:100,  build:3,  hp:60,   speed:7,   turn:6,  r:1.1, sight:16, weapon:'rifle',
     armour:'none',
     crawl:true, fraidy:true,
+    dig:'allied',                   /* the Compact's dig in behind sandbags: core/dig.js */
     desc:'Cheap infantry. Good against other infantry.' },
   { key:'rocket',   name:'Rocket Squad',  kind:'infantry', cost:300,  build:6,  hp:50,   speed:6,   turn:6,  r:1.1, sight:18, weapon:'rocket',
     armour:'none',

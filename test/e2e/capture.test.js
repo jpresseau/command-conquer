@@ -12,7 +12,7 @@
      THE DECISION - is there a building worth taking? A gate that says yes to everything is the
      engineer-in-the-mix mistake with extra steps, and one that says yes to an UNCAPTURABLE
      building is worse: the order is dropped at the wall and the engineer stands there. Asserted
-     against the six that cannot be captured, against the cost table that ranks a Construction
+     against the ones that cannot be captured, against the cost table that ranks a Construction
      Yard at zero, and against guns on the approach.
 
      THE MANOEUVRE - given the team, does it walk in and take the building? Driven from a team
@@ -114,8 +114,9 @@ var S = new Suite('capture');
   S.ok('...and not reinforcing, because the engineer dies on SUCCESS',
        !decide.reinforce, 'reinforce:false');
 
-  S.eq('eight buildings cannot be captured at all', decide.uncapturable.join(','),
-       'gps,iron,mist,mslo,pdox,silo,spire,wall');
+  /* ...and the town's three houses, which infantry garrison instead (core/garrison.js) */
+  S.eq('eleven buildings cannot be captured at all', decide.uncapturable.join(','),
+       'cottage,flats,gps,hall,iron,mist,mslo,pdox,silo,spire,wall');
   S.eq('the Construction Yard costs nothing, so price cannot rank it', decide.yardCost, 0);
   S.ok('...and is scored on what it does instead', decide.yardWorth > decide.refWorth,
        'yard ' + decide.yardWorth + ' vs refinery ' + decide.refWorth);

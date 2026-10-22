@@ -262,6 +262,21 @@ var RTS_STRUCTS = [
     needs:['lab'], side:'soviet', armour:'concrete', capturable:false,
     super:{ key:'thunder', name:'Thunderhead', charge:270, target:'cell', icon:'⛈',
             hint:'Thunderhead ready — click where the storm should break.' },
-    desc:'Breaks a thunderstorm anywhere on the map for a minute. Lightning strikes the enemy under it, and no armed aircraft flies in it, yours included.' }
+    desc:'Breaks a thunderstorm anywhere on the map for a minute. Lightning strikes the enemy under it, and no armed aircraft flies in it, yours included.' },
+  /* ---------------------------------------------------------------- the town --
+     CIVILIAN BUILDINGS (core/garrison.js), laid by the skirmish setup's TOWNS option and owned by
+     the `civ` side, which nobody builds for and nobody fights. Infantry can GARRISON one: up to
+     `garrison` squads go inside, the building takes their side, and they fire out of it with
+     their own weapons and further than they could on foot. `civ` keeps it out of everything a
+     base is: it is never sold, repaired, captured, rebuilt or counted as keeping a side alive. */
+  { key:'cottage',  name:'Cottage',       w:2, h:2, cost:0, build:1, hp:500,  power:0, sight:8,
+    side:'civ', civ:true, garrison:3, armour:'wood', capturable:false,
+    desc:'A house. Up to three infantry squads can garrison it and fire from the windows.' },
+  { key:'flats',    name:'Apartment Block', w:2, h:3, cost:0, build:1, hp:800, power:0, sight:10,
+    side:'civ', civ:true, garrison:5, armour:'concrete', capturable:false,
+    desc:'A block of flats. Up to five infantry squads can garrison it.' },
+  { key:'hall',     name:'Town Hall',     w:3, h:3, cost:0, build:1, hp:1000, power:0, sight:10,
+    side:'civ', civ:true, garrison:6, armour:'concrete', capturable:false,
+    desc:'The town hall: the strongest building in town. Up to six infantry squads can garrison it.' }
 ];
 

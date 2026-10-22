@@ -863,7 +863,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">381a045 · 2026-10-22</div>
+  <div id="rtsBuild" title="build">54dafc5 · 2026-10-22</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1130,7 +1130,22 @@ var RTS_STRUCTS = [
     needs:['lab'], side:'soviet', armour:'concrete', capturable:false,
     super:{ key:'thunder', name:'Thunderhead', charge:270, target:'cell', icon:'⛈',
             hint:'Thunderhead ready — click where the storm should break.' },
-    desc:'Breaks a thunderstorm anywhere on the map for a minute. Lightning strikes the enemy under it, and no armed aircraft flies in it, yours included.' }
+    desc:'Breaks a thunderstorm anywhere on the map for a minute. Lightning strikes the enemy under it, and no armed aircraft flies in it, yours included.' },
+  /* ---------------------------------------------------------------- the town --
+     CIVILIAN BUILDINGS (core/garrison.js), laid by the skirmish setup's TOWNS option and owned by
+     the `civ` side, which nobody builds for and nobody fights. Infantry can GARRISON one: up to
+     `garrison` squads go inside, the building takes their side, and they fire out of it with
+     their own weapons and further than they could on foot. `civ` keeps it out of everything a
+     base is: it is never sold, repaired, captured, rebuilt or counted as keeping a side alive. */
+  { key:'cottage',  name:'Cottage',       w:2, h:2, cost:0, build:1, hp:500,  power:0, sight:8,
+    side:'civ', civ:true, garrison:3, armour:'wood', capturable:false,
+    desc:'A house. Up to three infantry squads can garrison it and fire from the windows.' },
+  { key:'flats',    name:'Apartment Block', w:2, h:3, cost:0, build:1, hp:800, power:0, sight:10,
+    side:'civ', civ:true, garrison:5, armour:'concrete', capturable:false,
+    desc:'A block of flats. Up to five infantry squads can garrison it.' },
+  { key:'hall',     name:'Town Hall',     w:3, h:3, cost:0, build:1, hp:1000, power:0, sight:10,
+    side:'civ', civ:true, garrison:6, armour:'concrete', capturable:false,
+    desc:'The town hall: the strongest building in town. Up to six infantry squads can garrison it.' }
 ];
 
 </script>
@@ -1157,13 +1172,16 @@ var RTS_SKIRMISH = {
   /* RANDOM is the generated map as it always was; MIRRORED reflects the player's half onto the
      opponent's so neither seat starts on better ground (core/mirror.js) */
   layout: { random: { name: 'RANDOM' }, mirror: { name: 'MIRRORED', mirror: true } },
+  /* civilian towns in the contested ground between the bases, whose buildings infantry can
+     garrison (core/garrison.js); `n` towns on a standard map, scaled with its size */
+  town:  { none: { name: 'NONE', n: 0 }, towns: { name: 'TOWNS', n: 2 } },
   /* who else is on the field: the computer seats beyond the one opponent (RTS_SEATS) */
   foes:  { one: { name: '1 FOE', extra: [] }, two: { name: '2 FOES', extra: ['enemy2'] },
            ally: { name: 'FOE + ALLY', extra: ['ally'] }, team: { name: '2 V 2', extra: ['ally', 'enemy2'] },
            /* every seat its own team, the bases spread round the ring (core/scenario.js) */
            ffa3: { name: 'FFA 3', extra: ['enemy2'], ffa: true }, ffa4: { name: 'FFA 4', extra: ['enemy2', 'enemy3'], ffa: true } }
 };
-var RTS_SKIRMISH_DEFAULT = { size: 'standard', water: 'coast', money: 'standard', foes: 'one', layout: 'random' };
+var RTS_SKIRMISH_DEFAULT = { size: 'standard', water: 'coast', money: 'standard', foes: 'one', layout: 'random', town: 'none' };
 
 /* THE SEATS. A seat's team is fixed by its name, so an ally is always the player's army and on the
    player's team, and a second opponent is the first opponent's: everything that has to know whose
@@ -1197,6 +1215,7 @@ var RTS_UNITS = [
   { key:'rifle',    name:'Rifle Squad',   kind:'infantry', cost:100,  build:3,  hp:60,   speed:7,   turn:6,  r:1.1, sight:16, weapon:'rifle',
     armour:'none',
     crawl:true, fraidy:true,
+    dig:'allied',                   /* the Compact's dig in behind sandbags: core/dig.js */
     desc:'Cheap infantry. Good against other infantry.' },
   { key:'rocket',   name:'Rocket Squad',  kind:'infantry', cost:300,  build:6,  hp:50,   speed:6,   turn:6,  r:1.1, sight:18, weapon:'rocket',
     armour:'none',
@@ -1596,7 +1615,7 @@ var RTS_WEAPONS = {
   turretgun:  { dmg:22, range:22, cool:0.9,  shot:'shell',   speed:70, splash:1, wall:true,
                 verses:{ none:1.0,  wood:0.70, light:1.00, heavy:0.80, concrete:0.50 } },
   /* Grenades arc: murder on anything that stays still, near-useless against a moving vehicle. */
-  grenade:    { dmg:26, range:14, cool:1.9,  shot:'shell',   speed:26, splash:3.4, wall:true, wood:true,
+  grenade:    { clears:true, dmg:26, range:14, cool:1.9,  shot:'shell',   speed:26, splash:3.4, wall:true, wood:true,
                 verses:{ none:1.0,  wood:1.30, light:0.45, heavy:0.25, concrete:0.95 } },
   /* Artillery has the longest reach in the game on the thinnest chassis. */
   howitzer:   { dmg:52, range:34, cool:3.4,  shot:'shell',   speed:44, splash:5.0, wall:true, wood:true,
@@ -1679,7 +1698,7 @@ var RTS_WEAPONS = {
                 verses:{ none:1.6,  wood:0.15, light:0.20, heavy:0.05, concrete:0.08 } },
   /* Flame: very short reach, no travel time, and it does not care what it is burning. Wood
      burns; concrete does not, which is why a flame squad is not the answer to a wall. */
-  flame:      { dmg:30, range:9,  cool:0.65, shot:'tracer',  speed:0,  splash:2.6, wood:true,
+  flame:      { clears:true, dmg:30, range:9,  cool:0.65, shot:'tracer',  speed:0,  splash:2.6, wood:true,
                 verses:{ none:1.3,  wood:1.70, light:0.70, heavy:0.50, concrete:1.20 } },
   /* The Flame Squad's weapon on a fixed mount: a little more reach and a lot more of it. */
   /* The coil's bolt. Enormous damage, slow, and it ignores armour class the way RA's does -
@@ -1744,7 +1763,7 @@ var RTS_WEAPONS = {
      against concrete. Artillery clears a position; the V2 takes a building down. */
   v2rocket:   { dmg:60, range:34, cool:4.2, shot:'missile', speed:34, splash:3.0, wall:true, wood:true,
                 verses:{ none:0.55, wood:1.35, light:0.95, heavy:0.85, concrete:1.25 } },
-  towerflame: { dmg:34, range:13, cool:0.75, shot:'tracer',  speed:0,  splash:3.0, wood:true,
+  towerflame: { clears:true, dmg:34, range:13, cool:0.75, shot:'tracer',  speed:0,  splash:3.0, wood:true,
                 verses:{ none:1.3,  wood:1.25, light:0.80, heavy:0.60, concrete:0.90 } }
 };
 
@@ -4746,7 +4765,9 @@ var RTS_PAL = {
     /* the extra seats (rules/skirmish.js): an ally in green, a second foe in amber */
     ally:   ['#2f8a4a', '#3fae5e', '#1e5a30', '#6fd08a'],
     enemy2: ['#b0661c', '#dc8428', '#744010', '#f2ae62'],
-    enemy3: ['#6a3a9e', '#8a52c8', '#43246a', '#b48ae8']
+    enemy3: ['#6a3a9e', '#8a52c8', '#43246a', '#b48ae8'],
+    /* the town's (core/garrison.js): weathered stone, nobody's colour */
+    civ:    ['#8a8478', '#a39d90', '#5e594f', '#c4bdae']
   },
   /* Vehicle bodies are NOT the team colour, and this is taken straight off the reference art
      rather than guessed: in the sidebar cameos for both factions every tank, truck and jeep is
@@ -4789,7 +4810,8 @@ var RTS_PAL = {
     enemy:  { wall:'#8a8f94', roof:'#b8322a', trim:'#d8ccc8', dark:'#4a1f1a' },
     ally:   { wall:'#7d8794', roof:'#3a8a4a', trim:'#c8d2dc', dark:'#1f3d28' },
     enemy2: { wall:'#8a8f94', roof:'#c47a22', trim:'#d8ccc8', dark:'#4a2e12' },
-    enemy3: { wall:'#7d8794', roof:'#6e3ea8', trim:'#c8d2dc', dark:'#2e1a48' }
+    enemy3: { wall:'#7d8794', roof:'#6e3ea8', trim:'#c8d2dc', dark:'#2e1a48' },
+    civ:    { wall:'#b9ad98', roof:'#8c4a32', trim:'#e6dccb', dark:'#4a3a2e' }
   },
   /* Building MATERIALS, read off the structure cameos. A Red Alert base is not one colour: the
      power plants are red brick with brick chimneys, the Allied barracks are sand-coloured Nissen
@@ -7220,7 +7242,7 @@ function _sprBuildingModel(key, side) {
             pipe:pipe, ladder:ladder, rail:rail, steps:steps, drum:drum,
             crates:crates, floodlight:floodlight, plant:plant,
             sandbags:sandbags, ammo:ammo };
-  _sprBldBase(X, key) || _sprBldTech(X, key) || _sprBldWar(X, key) || _sprBldSuper(X, key) || _sprBldLens(X, key);
+  _sprBldBase(X, key) || _sprBldTech(X, key) || _sprBldWar(X, key) || _sprBldSuper(X, key) || _sprBldLens(X, key) || _sprBldTown(X, key);
   return m;
 }
 function _sprBuildingClean(key, side) {
@@ -8778,6 +8800,59 @@ function _sprUnitArc(X, key) {
     _r3Box(m, 3.6, 7.4, 0, 1.6, 1.4, 4.6, DK[1], DK[3]);                      /* the emitter bar */
   }
   return true;
+}
+</script>
+<script>/* sprites/town.js - the town's buildings (core/garrison.js): a cottage, a block of flats and the
+   town hall. Part of rts.sprites.
+
+   They are built from RTS_PAL.bld[side] like every building, and their side is the town's until
+   a squad goes in - so the ROOF takes the colour of whoever holds the house, which is how a
+   player reads a town at a glance: brown tiles are nobody's, blue are yours. Everything else is
+   the town's own: whitewash and brick, glazed windows, a chimney, a clock. */
+function _sprBldTown(X, key) {
+  var m = X.m, W = X.W, D = X.D, C = X.C, S = X.S, B = X.B, K = X.K, WH = X.WH, DK = X.DK, i;
+  if (key === 'cottage') {
+    _r3Box(m, 0, 0, 0, W - 6, 2, D - 6, C[2], C[0]);                          /* the plinth */
+    _r3Box(m, 0, 2, 0, W - 12, 12, D - 14, WH[1], WH[3]);                      /* whitewashed walls */
+    X.winRow(D / 2 - 7, 6, 0, 2, 14, 4, 4.5);
+    X.winRow(-(D / 2 - 7), 6, 0, 2, 14, 4, 4.5);
+    X.winSide(W / 2 - 6, 6, 0, 2, 12, 4, 4.5);
+    X.winSide(-(W / 2 - 6), 6, 0, 2, 12, 4, 4.5);
+    _r3Box(m, 6, 2, D / 2 - 6.6, 4.5, 7.5, 1.5, DK[1], DK[2]);                /* the door */
+    _r3Gable(m, 0, 14, 0, W - 9, 9, D - 11, B.roof);                          /* tiled roof, the holder's colour */
+    _r3Box(m, -W / 4, 16, -D / 6, 3.4, 10, 3.4, K[0], K[1]);                   /* chimney */
+    _r3Box(m, -W / 4, 26, -D / 6, 4.2, 1.2, 4.2, K[2], K[1]);
+    _r3Box(m, W / 2 - 5, 2, -D / 2 + 6, 2.4, 3.4, 8, X.OL[1], X.OL[0]);        /* a woodpile */
+    return true;
+  }
+  if (key === 'flats') {
+    _r3Box(m, 0, 0, 0, W - 4, 2, D - 4, C[2], C[0]);
+    _r3Box(m, 0, 2, 0, W - 10, 30, D - 10, K[0], K[1]);                        /* four storeys of brick */
+    for (i = 0; i < 4; i++) X.facade(5 + i * 7, 4, (W - 10) / 2, (D - 10) / 2);
+    for (i = 1; i < 4; i++) _r3Box(m, 0, 2 + i * 7.2, 0, W - 8.6, 0.8, D - 8.6, B.trim, B.trim);   /* floor bands */
+    _r3Box(m, 0, 32, 0, W - 8, 1.6, D - 8, B.dark, B.roof);                    /* the roof, the holder's colour */
+    _r3Cyl(m, W / 5, 33.6, -D / 5, 3.2, 6, S[1], S[3], 16);                    /* water tank */
+    X.hatch(-W / 5, 33.6, D / 5, 4, 4);
+    _r3Box(m, 0, 2, D / 2 - 4.6, 6, 7, 1.2, DK[1], DK[2]);                    /* the entrance */
+    _r3Box(m, 0, 9.2, D / 2 - 3.6, 9, 0.8, 3.4, B.trim, B.trim);               /* its canopy */
+    return true;
+  }
+  if (key === 'hall') {
+    _r3Box(m, 0, 0, 0, W - 4, 3, D - 4, C[1], C[0]);                          /* the terrace */
+    _r3Box(m, 0, 3, -4, W - 14, 20, D - 22, X.P[0], X.P[1]);                   /* pale stone */
+    X.facade(8, 6, (W - 14) / 2, (D - 22) / 2);
+    for (i = 0; i < 6; i++) _r3Cyl(m, (i - 2.5) * ((W - 18) / 5), 3, D / 2 - 12, 1.6, 17, WH[3], WH[1], 16);   /* the portico's columns */
+    _r3Box(m, 0, 20, D / 2 - 12, W - 14, 3, 8, X.P[1], X.P[0]);                /* entablature */
+    _r3Gable(m, 0, 23, D / 2 - 12, W - 14, 6, 8, B.roof);                      /* pediment, the holder's colour */
+    _r3Box(m, 0, 23, -4, W - 14, 1.6, D - 22, B.dark, B.roof);
+    _r3Box(m, 0, 24.6, -6, 10, 18, 10, X.P[0], X.P[1]);                        /* the clock tower */
+    _r3Cyl(m, 0, 32, -0.6, 3.2, 1, WH[3], WH[3], 24);                          /* the clock face */
+    _r3Box(m, 0, 42.6, -6, 11.4, 1.4, 11.4, B.trim, B.trim);
+    _r3Gable(m, 0, 44, -6, 10, 7, 10, B.roof);
+    X.steps(0, 2.2, D / 2 - 6, 18);
+    return true;
+  }
+  return false;
 }
 </script>
 <script>/* sprites/props.js - unit scaling and fit, pads, corpses, scorch, craters, fire, crates and
@@ -12814,7 +12889,7 @@ function _rtsAIFoe(side) {
 function _rtsHostile(a, b) {
   if (a === b || !a || !b) return false;
   var S = window._rtsG.sides, A = S[a], B = S[b];
-  return !!(A && B) && A.team !== B.team;
+  return !!(A && B) && A.team !== B.team && A.team >= 0 && B.team >= 0;   /* the town's (-1) fights nobody */
 }
 /* On the human's team: what the player sees by, and never shoots at. */
 function _rtsWithPlayer(side) {
@@ -13208,6 +13283,8 @@ function _rtsNewGame(seed, diff, spec) {
   extra.forEach(function (k) {
     _rtsLayBase(G.starts[k], G.starts[_rtsAIFoe(k)], _rtsAIOpening(k), k, fair && RTS_SEATS[k].team === 1);
   });
+
+  _rtsLayTowns(G);            /* the setup's towns, if it asked for any: core/garrison.js */
 
   /* Density LAST. Terrain generation and the two bases both erase ore, and a cell's level is
      a function of how many neighbours still have some - so running the adjust before those
@@ -15170,7 +15247,7 @@ function _rtsDropDebris(e) {
    blinking wrench), not a one-shot: it eats credits a step at a time and gives up on its
    own when the money runs out. */
 function _rtsToggleRepair(e) {
-  if (!e || e.dead || e.type !== 'struct' || e.building || e.selling) return false;
+  if (!e || e.dead || e.type !== 'struct' || e.building || e.selling || rtsStructDef(e.def).civ) return false;
   if (e.hp >= e.maxHp && !e.repair) return false;
   e.repair = e.repair ? 0 : 1; e.rtimer = 0;
   return true;
@@ -15202,6 +15279,7 @@ function _rtsSell(e) {
   var G = window._rtsG;
   if (!e || e.dead || e.type !== 'struct' || e.selling) return false;
   if (e.def === 'yard') return false;           /* selling the Command Yard is suicide, not a sale */
+  if (rtsStructDef(e.def).civ) return false;    /* nor is a town's house yours to sell (core/garrison.js) */
   e.selling = 1; e.repair = 0; e.building = 1; e.bprog = 1;
   /* Refund_Money against the PurchasePrice the object carries, not against the sticker
      price. `paid` is absent only on a save written before this existed. */
@@ -15258,6 +15336,7 @@ function _rtsIsTransport(e) {
 function _rtsTakes(t) { return (rtsUnitDef(t.def) || {}).takes || ['infantry']; }
 function _rtsCanBoard(inf, t) {
   if (!inf || !t || inf.dead || t.dead || inf === t) return false;
+  if (t.type === 'struct') return _rtsCanGarrison(inf, t);          /* a town's house: core/garrison.js */
   if (inf.side !== t.side || inf.inside) return false;
   var pd = rtsUnitDef(inf.def) || {};
   /* Nothing that swims or flies gets into a boat. */
@@ -15286,6 +15365,7 @@ function _rtsLandAt(t, x, z) {
 function _rtsBoardWhyNot(inf, t) {
   if (_rtsCanBoard(inf, t) || !inf || !t || inf === t) return null;
   var pd = rtsUnitDef(inf.def) || {}, td = rtsUnitDef(t.def) || {};
+  if (t.type === 'struct') return t.side !== 'civ' && t.side !== inf.side ? null : _rtsCargoCount(t) >= _rtsGarrisonCap(t) ? 'is full' : 'cannot be held by that';
   if (pd.sea || pd.air || inf.side !== t.side) return null;
   if (_rtsIsTransport(inf)) return 'cannot carry another transport';
   var takes = _rtsTakes(t);
@@ -15313,6 +15393,7 @@ function _rtsBoard(inf, t) {
   if (!t.cargo) t.cargo = [];
   t.cargo.push(inf);
   inf.inside = t; inf.order = null; inf.target = null; inf.path = null; inf.prone = 0;
+  if (t.type === 'struct') _rtsGarrisonTake(t, inf);
   var si = G.sel.indexOf(inf); if (si >= 0) G.sel.splice(si, 1);
   return true;
 }
@@ -15375,6 +15456,7 @@ function _rtsUnload(t, force) {
     n++;
   }
   t.cargo = held;
+  if (t.type === 'struct') _rtsGarrisonFree(t);   /* emptied: the town's again */
   return n;
 }
 /* UnitClass::Death, the transport half of the branch.
@@ -15425,6 +15507,7 @@ function _rtsDeploy(e) {
   var d = rtsUnitDef(e.def);
   if (d && d.mines) return _rtsLayMine(e);          /* the Mine Layer's deploy lays one: core/mines.js */
   if (d && d.bridge) return _rtsLayBridge(e);       /* the Bridge Layer's becomes a span: core/bridgelayer.js */
+  if (d && d.dig) return _rtsDigToggle(e);          /* a Compact rifle squad digs in: core/dig.js */
   if (!d || !d.deploy) return false;
   var sd = rtsStructDef(d.deploy);
   if (!sd) return false;
@@ -15465,7 +15548,7 @@ function _rtsDeploySelected() {
    show itself, and the order asks so it can skip everything else in a mixed selection. */
 function _rtsCanDeploy(e) {
   var d = e && rtsUnitDef(e.def) || {};
-  return !!(e && !e.dead && e.side === 'player' && e.type === 'unit' && (d.deploy || d.mines || d.bridge));
+  return !!(e && !e.dead && e.side === 'player' && e.type === 'unit' && (d.deploy || d.mines || d.bridge || _rtsCanDig(e)));
 }
 
 /* UNLOAD, here and now, for every selected transport that is carrying anything - the U key and
@@ -15487,7 +15570,7 @@ function _rtsUnloadSelected() {
 }
 /* one of the player's transports with something aboard: the button shows itself for these */
 function _rtsCanUnload(e) {
-  return !!(e && !e.dead && e.side === 'player' && e.type === 'unit' && _rtsCargoCount(e));
+  return !!(e && !e.dead && e.side === 'player' && (e.type === 'unit' || _rtsGarrisonable(e)) && _rtsCargoCount(e));
 }
 
 /* Removing the vehicle without the wreck, the explosion or the kill credit - it was not
@@ -16143,6 +16226,7 @@ function _rtsHoldSelected() {
 }
 function _rtsOrderMove(e, x, z, attackMove) {
   if (e.type !== 'unit') return;
+  if (e.dug) e.dug = 0;                         /* a move climbs out of the sandbags first: core/dig.js */
   e.order = attackMove ? 'amove' : 'move';
   e.target = null; e.hstate = null;
   e.goal = { x:x, z:z };                       /* remembered so a blocked repath keeps aiming here */
@@ -16154,7 +16238,7 @@ function _rtsOrderMove(e, x, z, attackMove) {
    boards when it arrives, which is handled in the move completion below. */
 function _rtsOrderBoard(inf, t) {
   if (!_rtsCanBoard(inf, t)) return false;
-  inf.order = 'board'; inf.target = t; inf.hstate = null;
+  inf.order = 'board'; inf.target = t; inf.hstate = null; inf.dug = 0;   /* out of the sandbags: core/dig.js */
   inf.goal = { x:t.x, z:t.z };
   inf.path = _rtsPathFor(inf, t.x, t.z); inf.pi = 0;
   return true;
@@ -16583,6 +16667,7 @@ function _rtsFire(e, tgt, w) {
   } else {
     e.cool = w.cool * bias.rof * rtsCrateMult(e, 'rof'); e.second = true;  /* ROFBias: higher = slower reload */
   }
+  if (e.dug) e.cool *= RTS_DIG.rof;
   e.fire = 0.09;
   e.firedT = window._rtsG.t;                      /* a shot gives a jammed unit away: core/jammer.js */
   e.recoil = RTS_RECOIL_TIME;                     /* Recoil_Adjust */
@@ -16599,7 +16684,8 @@ function _rtsFire(e, tgt, w) {
     : (w.shot === 'missile' ? 'rocket' : (e.type === 'struct' ? 'turretgun' : 'cannon')), e.x, e.z);
   /* a Lens Tower's idle neighbours pour their beams into this one (core/lens.js) */
   var raw = w.dmg * bias.fire * rtsCrateMult(e, 'fire') * (w.relay && e.type === 'struct' ? _rtsLensRelay(e, w) : 1)
-          * _rtsArcCharge(e);                     /* ...and an Arc Tower's troopers charge it (core/arc.js) */
+          * _rtsArcCharge(e)                      /* ...and an Arc Tower's troopers charge it (core/arc.js) */
+          * (e.dug ? RTS_DIG.fire : 1);           /* ...and a squad dug in hits harder (core/dig.js) */
   var dmg = raw * rtsVerses(w, tgt);
   if (w.speed <= 0) {
     _rtsDamage(tgt, dmg, e);
@@ -16825,6 +16911,7 @@ function _rtsCanRetaliate(tgt, from) {
 
 function _rtsDamage(tgt, dmg, from, floor) {
   if (!tgt || tgt.dead) return;
+  if (tgt.cargo && tgt.type === 'struct') _rtsGarrisonHit(tgt, dmg, from);   /* fire clears a held house: core/garrison.js */
   /* The Iron Curtain, enforced HERE rather than at the call sites. Every route to hurting
      something funnels through this function - shells, splash, fire, the dog rule below, a
      script - so one check covers all of them, and a route added later cannot forget it. */
@@ -16850,6 +16937,7 @@ function _rtsDamage(tgt, dmg, from, floor) {
     }
   }
   if (tgt.prone) dmg *= RTS_PRONE_DAMAGE;
+  if (tgt.dug) dmg *= RTS_DIG.armor;              /* behind sandbags: core/dig.js */
   dmg /= _rtsBias(tgt.side).armor;                 /* ArmorBias defends the whole house */
   dmg /= rtsCrateMult(tgt, 'armor');               /* ...and a crate defends one unit */
   dmg = _rtsVetHit(dmg, from, tgt);                /* ...and a rank: the attacker's and the target's (core/veterancy.js) */
@@ -17574,7 +17662,7 @@ function _rtsUpdateUnit(e, dt) {
     /* And a HOVERCRAFT afloat the same: it floats as the craft does, and a squad sent aboard one
        three cells out stood on the shore in order 'board' for good with the APC's reach. */
     var tdef = rtsUnitDef(tr && tr.def || '') || {};
-    var breach = (tdef.sea || tdef.air || tdef.hover) ? RTS_TILE * 3.0 : RTS_TILE * 1.6;
+    var breach = _rtsBoardReach(tr, tdef);         /* and a house's from its walls: core/garrison.js */
     if (!tr || tr.dead || !_rtsCanBoard(e, tr)) { e.order = null; e.target = null; e.path = null; }
     else if (_rtsRangeTo(e, tr) <= breach) { _rtsBoard(e, tr); return; }
     else {
@@ -17695,7 +17783,7 @@ function _rtsUpdateUnit(e, dt) {
          has just cleared it - while letting a hull that decided to back off fall through to
          the steering at the bottom instead of standing still with a path it never walks. */
       if (e.order === 'attack' && !e.path) return;   /* in range: hold and keep firing */
-    } else if (chasing && e.order === 'attack') {
+    } else if (chasing && e.order === 'attack' && !e.dug) {      /* dug in, it holds: core/dig.js */
       /* repath now and then; a FAILED path waits out the timer too (docs/measuring.md) */
       e.rep = (e.rep || 0) - dt;
       if (e.rep <= 0 || (!e.path && !e.chaseFail)) {
@@ -17704,6 +17792,7 @@ function _rtsUpdateUnit(e, dt) {
     }
   } else { e.turret = e.rot; }
 
+  if (e.dug) e.path = null;                      /* dug in, it does not walk: core/dig.js */
   if (e.path) { _rtsSteer(e, dt, d); if (!e.path && (e.order === 'move' || e.order === 'amove')) { e.order = null; if (e.wq) _rtsWayNext(e); } }
 }
 /* GIVE GROUND RATHER THAN TRADE - the movement half of RTS_STANDOFF_KEEP, and see that constant
@@ -21143,6 +21232,226 @@ function _rtsArcCharge(e) {
   return 1 + RTS_ARC.boost * cs.length;
 }
 </script>
+<script>/* core/garrison.js - TOWNS AND GARRISONS: the civilian buildings in the middle of the map, and
+   the infantry that hold them.
+
+   THE TOWN. The skirmish setup's TOWNS option (rules/skirmish.js) lays RTS_SKIRMISH.town[].n towns
+   on a standard map, more on a large one and fewer on a small, out in the contested ground between
+   the bases and never within RTS_GARRISON.clear of anyone's start. Each is a few civilian
+   buildings (rules/structures.js, `civ:true`) owned by the `civ` seat: a seat with no brain, no
+   turn and team -1, which core/seats.js makes hostile to nobody - so an empty house is shot at
+   by no one and shoots at no one. A town is drawn from its own random stream, after the bases,
+   so the map round it is the map it would have been without it. Its buildings are placed here
+   rather than through _rtsPlaceStruct, which would cost them, power them and make them a node
+   in a base plan for the opponent to rebuild.
+
+   THE GARRISON. Infantry with a gun (not a dog) can be ordered into a civilian building that is
+   empty or already held by their side, up to its `garrison` squads, through the transport's own
+   order (core/transport.js _rtsCanBoard and _rtsBoard ask here about a building). The building
+   then TAKES THEIR SIDE: the enemy can shoot it, and it fires - each squad inside with its own
+   weapon, from the building, out to its range plus RTS_GARRISON.reach cells. The men inside are
+   out of the war otherwise: nothing targets them, and splash passes over them, as in a transport.
+
+   Three ways out. UNLOAD walks them out (the transport's). The building falling spills them, as
+   a wreck spills an APC's squad (core/capture.js _rtsKill). And fire clears it: a weapon marked
+   `clears` - flame, grenades - that hits a held building hurts every squad inside by
+   RTS_GARRISON.burn of the hit. When the last squad is gone the building is the town's again. */
+var RTS_GARRISON = { reach: 2, burn: 0.5, clear: 22, gap: 1, spread: 8, search: 24, think: 8, home: 34 };
+
+/* The town's seat: created the first time a battle has a town, and never in one without. */
+function _rtsCivSeat(G) {
+  if (!G.sides.civ) {
+    var S = G.sides.civ = _rtsSideNew('civ');
+    S.team = -1; S.ctl = 'none'; S.credits = 0;
+  }
+  return G.sides.civ;
+}
+function _rtsGarrisonable(t) { return !!(t && t.type === 'struct' && !t.dead && ((rtsStructDef(t.def) || {}).garrison || 0) > 0); }
+function _rtsGarrisonCap(t) { return (rtsStructDef(t.def) || {}).garrison || 0; }
+/* Can this squad go into that building now? */
+function _rtsCanGarrison(inf, t) {
+  if (!inf || inf.dead || inf.inside || inf.type !== 'unit' || !_rtsGarrisonable(t)) return false;
+  var d = rtsUnitDef(inf.def) || {}, w = RTS_WEAPONS[d.weapon];
+  if (d.kind !== 'infantry' || !w || w.maul) return false;
+  if (t.side !== 'civ' && t.side !== inf.side) return false;
+  return _rtsCargoCount(t) < _rtsGarrisonCap(t);
+}
+/* How close a boarder has to be to be aboard (core/units.js): a hull's breach, or a house's walls,
+   which are its door all the way round. */
+function _rtsBoardReach(tr, tdef) {
+  if (tr && tr.type === 'struct') { var bd = rtsStructDef(tr.def) || { w: 1, h: 1 }; return RTS_TILE * (Math.max(bd.w, bd.h) / 2 + 1.4); }
+  return (tdef.sea || tdef.air || tdef.hover) ? RTS_TILE * 3.0 : RTS_TILE * 1.6;
+}
+/* A squad has gone in (core/transport.js _rtsBoard): the building is its side's now. */
+function _rtsGarrisonTake(t, inf) {
+  t.side = inf.side;
+  inf.x = t.x; inf.z = t.z; inf.cool = 0;
+}
+/* Nobody left inside: the town's again. */
+function _rtsGarrisonFree(t) {
+  if (_rtsGarrisonable(t) && !_rtsCargoCount(t) && t.side !== 'civ') { t.side = 'civ'; t.target = null; t.repair = 0; }
+}
+
+/* ------------------------------------------------------------------ firing out ---- */
+/* What a squad inside `t` shoots at: the nearest enemy unit in reach, else the nearest building. */
+function _rtsGarrisonTarget(t, w) {
+  var G = window._rtsG, d = rtsStructDef(t.def);
+  var R = w.range + (RTS_GARRISON.reach + Math.max(d.w, d.h) / 2) * RTS_TILE;
+  var near = _rtsSpNear(t.x, t.z, R) || G.ents, bu = null, bud = 1e9, bs = null, bsd = 1e9;
+  for (var i = 0; i < near.length; i++) {
+    var o = near[i];
+    if (o.dead || o.inside || o.hidden || !_rtsHostile(o.side, t.side)) continue;
+    if (o.air && !w.aa) continue;
+    if (!_rtsWeaponReaches(w, o)) continue;
+    var dd = Math.hypot(o.x - t.x, o.z - t.z);
+    if (dd > R) continue;
+    if (o.type === 'unit') { if (dd < bud) { bud = dd; bu = o; } }
+    else if (dd < bsd) { bsd = dd; bs = o; }
+  }
+  return bu || bs;
+}
+function _rtsGarrisonTick(dt) {
+  var G = window._rtsG;
+  G.garT = (G.garT || 0) + dt;
+  if (G.garT >= RTS_GARRISON.think) { G.garT = 0; G.order.forEach(function (k) { if (_rtsSeatAI(k)) _rtsAIGarrison(k); }); }
+  for (var i = 0; i < G.ents.length; i++) {
+    var t = G.ents[i];
+    if (t.type !== 'struct' || t.dead || !t.cargo || !_rtsGarrisonable(t)) continue;
+    t.cargo = t.cargo.filter(function (u) { if (u.dead) u.inside = null; return !u.dead; });
+    if (!t.cargo.length) { _rtsGarrisonFree(t); continue; }
+    for (var k = 0; k < t.cargo.length; k++) {
+      var u = t.cargo[k], w = RTS_WEAPONS[(rtsUnitDef(u.def) || {}).weapon];
+      /* their own clocks: a squad inside a building is skipped by the unit update (core/tick.js) */
+      u.x = t.x; u.z = t.z;
+      if (u.fire > 0) u.fire = Math.max(0, u.fire - dt);
+      if (u.recoil > 0) u.recoil = Math.max(0, u.recoil - dt);
+      if (u.cool > 0) { u.cool -= dt; continue; }
+      if (!w) continue;
+      var tgt = _rtsGarrisonTarget(t, w);
+      if (!tgt) continue;
+      u.turret = Math.atan2(tgt.z - t.z, tgt.x - t.x);
+      _rtsFire(u, tgt, w);
+    }
+  }
+}
+/* THE OPPONENT HOLDS THE TOWN NEAREST HOME. Every RTS_GARRISON.think seconds each computer seat
+   looks for the nearest house within RTS_GARRISON.home cells of its start that is empty or already
+   its own and not full, and sends its idle infantry into it - squads that belong to no team and
+   have no order, two at least, so it never strips a team or empties a base of its last man. */
+function _rtsAIGarrison(side) {
+  var G = window._rtsG, home = G.starts && G.starts[side];
+  if (!home) return 0;
+  var best = null, bd = 1e9, idle = [];
+  for (var i = 0; i < G.ents.length; i++) {
+    var o = G.ents[i];
+    if (o.type === 'struct') {
+      if (!_rtsGarrisonable(o) || (o.side !== 'civ' && o.side !== side) || _rtsCargoCount(o) >= _rtsGarrisonCap(o)) continue;
+      var dd = Math.hypot(o.tx - home.tx, o.tz - home.tz);
+      if (dd <= RTS_GARRISON.home && dd < bd) { bd = dd; best = o; }
+    } else if (o.side === side && !o.dead && !o.inside && !o.order && (o.team == null || o.team < 0)) idle.push(o);
+  }
+  if (!best) return 0;
+  idle = idle.filter(function (u) { return _rtsCanGarrison(u, best); });
+  if (idle.length < 2) return 0;
+  var room = _rtsGarrisonCap(best) - _rtsCargoCount(best), sent = 0;
+  for (var k = 0; k < idle.length && sent < room; k++) if (_rtsOrderBoard(idle[k], best)) sent++;
+  return sent;
+}
+/* A held building hit by something that `clears` it: the squads inside are burnt too. */
+function _rtsGarrisonHit(t, dmg, from) {
+  if (!t || t.type !== 'struct' || !t.cargo || !t.cargo.length || !from || from.type !== 'unit') return;
+  var w = RTS_WEAPONS[(rtsUnitDef(from.def) || {}).weapon];
+  if (!w || !w.clears) return;
+  t.cargo.slice().forEach(function (u) { if (!u.dead) _rtsDamage(u, dmg * RTS_GARRISON.burn, from); });
+}
+
+/* ------------------------------------------------------------------ the towns ---- */
+function _rtsPlaceCiv(key, tx, tz) {
+  var G = window._rtsG, d = rtsStructDef(key);
+  var e = { id:G.nextId++, type:'struct', side:'civ', def:key, tx:tx, tz:tz,
+    x:_rtsWX(tx) + (d.w - 1) * RTS_TILE / 2, z:_rtsWX(tz) + (d.h - 1) * RTS_TILE / 2,
+    hp:d.hp, maxHp:d.hp, rot:0, cool:0, target:null, building:0, bprog:1, dead:false, mesh:null, paid:0, opened:1 };
+  G.ents.push(e); G.byId[e.id] = e; _rtsSpAdd(e);
+  _rtsFootprint(e, true);
+  _rtsFlushForPlacement(e);
+  return e;
+}
+/* the footprint and a cell of street round it: open land, no ore, no water, nothing standing */
+function _rtsTownFits(key, tx, tz) {
+  var G = window._rtsG, d = rtsStructDef(key), m = RTS_GARRISON.gap;
+  for (var ax = tx - m; ax < tx + d.w + m; ax++) for (var az = tz - m; az < tz + d.h + m; az++) {
+    if (!_rtsInB(ax, az)) return false;
+    var i = _rtsIdx(ax, az);
+    if (G.blocked[i] !== 0 || G.scrap[i] > 0 || G.terrain[i] === RTS_T_WATER) return false;
+  }
+  return true;
+}
+/* Lay the towns the setup asked for. Returns the buildings laid. */
+function _rtsLayTowns(G) {
+  var sk = G.skirmish || {}, T = RTS_SKIRMISH.town && RTS_SKIRMISH.town[sk.town];
+  var n = T ? Math.round(T.n * RTS_N / RTS_N_DEFAULT) : 0, out = [];
+  if (!n || !G.starts || !G.starts.player || !G.starts.enemy) return out;
+  _rtsCivSeat(G);
+  var rnd = _rtsRngMake((G.seed * 7 + 1771) >>> 0), P = G.starts.player, E = G.starts.enemy;
+  var ax = E.tx - P.tx, az = E.tz - P.tz, L = Math.hypot(ax, az) || 1, nx = -az / L, nz = ax / L;
+  var starts = Object.keys(G.starts).map(function (k) { return G.starts[k]; }).filter(Boolean);
+  function clearOfStarts(tx, tz) {
+    return !starts.some(function (s) { return Math.hypot(tx - s.tx, tz - s.tz) < RTS_GARRISON.clear; });
+  }
+  /* the first cell, ring by ring out from (cx, cz), where `key` fits clear of every start */
+  function spot(key, cx, cz, rmax) {
+    for (var r = 0; r <= rmax; r++) {
+      var ring = [];
+      for (var dx = -r; dx <= r; dx++) for (var dz = -r; dz <= r; dz++) if (Math.max(Math.abs(dx), Math.abs(dz)) === r) ring.push([cx + dx, cz + dz]);
+      /* the ring in a rolled order, so a town does not always grow the same way round */
+      var k0 = (rnd() * ring.length) | 0;
+      for (var j = 0; j < ring.length; j++) {
+        var c = ring[(j + k0) % ring.length];
+        if (clearOfStarts(c[0], c[1]) && _rtsTownFits(key, c[0], c[1])) return c;
+      }
+    }
+    return null;
+  }
+  for (var i = 0; i < n; i++) {
+    var f = (i + 1) / (n + 1), side = (i % 2 ? -1 : 1) * RTS_N * 0.16;
+    var cx = Math.round(P.tx + ax * f + nx * side + (rnd() - 0.5) * 8);
+    var cz = Math.round(P.tz + az * f + nz * side + (rnd() - 0.5) * 8);
+    var keys = i === 0 ? ['hall', 'flats', 'cottage', 'cottage'] : ['flats', 'cottage', 'cottage'];
+    /* the town's centre: where its biggest building stands, found out to RTS_GARRISON.search */
+    var c0 = spot(keys[0], cx, cz, RTS_GARRISON.search);
+    if (!c0) continue;
+    out.push(_rtsPlaceCiv(keys[0], c0[0], c0[1]));
+    for (var q = 1; q < keys.length; q++) {
+      var c = spot(keys[q], c0[0], c0[1], RTS_GARRISON.spread);
+      if (c) out.push(_rtsPlaceCiv(keys[q], c[0], c[1]));
+    }
+  }
+  return out;
+}
+</script>
+<script>/* core/dig.js - DIGGING IN: the Compact's Rifle Squad deploys behind sandbags.
+
+   DEPLOY (D, or the sidebar's button) on a Compact Rifle Squad - the rules say which army, `dig`
+   on the unit - digs it in where it stands, and DEPLOY again climbs out. Dug in, it cannot move
+   (core/units.js does not steer it or chase), takes RTS_DIG.armor of every hit, and its gun hits
+   RTS_DIG.fire as hard and reloads in RTS_DIG.rof of the time - the squad that holds a line
+   rather than the one that takes it. Any move order climbs it out first, so a player who forgot
+   is never left with a squad that will not go (core/orders.js). render3d/dig3d.js draws the
+   sandbags, and the men crouched behind them. */
+var RTS_DIG = { armor: 0.5, fire: 1.4, rof: 0.75 };
+
+function _rtsCanDig(e) {
+  var d = e && e.type === 'unit' && rtsUnitDef(e.def);
+  return !!(d && d.dig && !e.dead && !e.inside && rtsHouseSide(e.side) === d.dig);
+}
+function _rtsDigToggle(e) {
+  if (!_rtsCanDig(e)) return false;
+  e.dug = e.dug ? 0 : 1;
+  e.order = null; e.path = null; e.goal = null; e.wq = null;
+  if (e.side === 'player' && typeof _rtsSfx === 'function') _rtsSfx('place', e.x, e.z);
+  return true;
+}
+</script>
 <script>/* core/missions.js - the team mission list (TEAMTYPE.CPP): the script a team runs.
    Part of rts.core, the simulation. */
 
@@ -22234,6 +22543,7 @@ function _rtsTick(dt) {
     if (e.inside) continue;                      /* riding in a transport - see _rtsAboard */
     if (e.type === 'unit') _rtsUpdateUnit(e, dt); else _rtsUpdateStruct(e, dt);
   }
+  if (G.sides.civ) _rtsGarrisonTick(dt);        /* squads firing out of the town's houses: core/garrison.js */
   _rtsSeparate(dt);
   _rtsAirSpread(dt);                             /* aircraft keep their own distance: core/airspace.js */
   _rtsUpdateProj(dt);
@@ -22281,7 +22591,7 @@ function _rtsTick(dt) {
   var alive = {};
   for (i = 0; i < G.ents.length; i++) {
     e = G.ents[i];
-    if (e.dead || e.type !== 'struct') continue;
+    if (e.dead || e.type !== 'struct' || rtsStructDef(e.def).civ) continue;   /* a garrisoned house keeps no one alive */
     alive[e.side] = 1;
   }
   var foesUp = 0;
@@ -22501,7 +22811,7 @@ var RTS_REPLAY_CMDS = [
 var RTS_REPLAY_PURE = {
   read: ['_rtsAground', '_rtsAirHeld', '_rtsBias', '_rtsBlocked', '_rtsBoardReachable', '_rtsBoardWhyNot',
     '_rtsBridgeAt', '_rtsCanBoard', '_rtsCanDeploy', '_rtsCanEngage', '_rtsCanPlace', '_rtsCanProduce',
-    '_rtsCanRally', '_rtsCanUnload', '_rtsCargoCount', '_rtsDomainOf', '_rtsElev', '_rtsEntSeen', '_rtsHas',
+    '_rtsCanRally', '_rtsCanUnload', '_rtsCargoCount', '_rtsDomainOf', '_rtsElev', '_rtsEntSeen', '_rtsGarrisonable', '_rtsGarrisonCap', '_rtsHas',
     '_rtsHostile', '_rtsHullReaches', '_rtsIdx', '_rtsInB', '_rtsIsBridgeCell', '_rtsIsTransport', '_rtsJamUp',
     '_rtsJammed', '_rtsMinesLeft', '_rtsMissionGoals', '_rtsMissionGold', '_rtsMissionLevels',
     '_rtsMissionMedal', '_rtsMissionOf', '_rtsPowerFactor', '_rtsQueueCat', '_rtsRadarStaticShown',
@@ -30025,8 +30335,9 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
   if (e.air) { mo.n = rk.n; _r3dAirTrail(mo, e, y, t); }
   var hd = _r3dFadeDim(_r3dHurtDim(e, R3), fade);   /* scorched as it is damaged (hurt3d.js), fading (shroud3d.js) */
   var roll = d2.kind === 'vehicle' && !d2.sea && !e.air ? _r3dRollPhase(R3, e.def, mo.d) : 0;
-  drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : (rotor ? 'body' : null), e.prone, pose, roll, lod),
+  drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : (rotor ? 'body' : null), e.prone || e.dug, pose, roll, lod),
          e.x + rk.hx, y, e.z + rk.hz, -e.rot, ART2W, hd, 1, rk.n);
+  if (e.dug && !R3.digOff) drawIn(C, _r3dDigRing(R3), e.x, y, e.z, -e.rot, ART2W, hd, 1, rk.n);   /* behind sandbags: dig3d.js */
   if (turret) {
     /* the one turret part, on each of its mounts: a tank's one at the origin, a gun ship's fore
        and aft (RTS_TURRET_AT, sprites/unit-airsea.js), all turned to the aim */
@@ -30072,6 +30383,24 @@ function _r3dRotorHubs(e, spin) {
   for (var i = 0; i < RS.length; i++)
     out.push({ x: e.x + Math.cos(e.rot) * RS[i] * sc, z: e.z + Math.sin(e.rot) * RS[i] * sc, a: -e.rot - (i % 2 ? -spin : spin) });
   return out;
+}
+</script>
+<script>/* render3d/dig3d.js - a squad dug in (core/dig.js): a ring of sandbags round it, two courses high
+   and staggered, with a gap at the back to climb out by, and the men crouched behind it (unit3d.js
+   draws them prone). One mesh for every dug-in squad, built the first time one is seen. */
+var R3D_DIG = { n: 14, r: 10, gap: 2, bag: ['#8a7a55', '#a8966a'] };
+function _r3dDigRing(R3) {
+  if (R3.mesh.digRing !== undefined) return R3.mesh.digRing;
+  var m = [], D = R3D_DIG;
+  for (var row = 0; row < 2; row++) for (var i = 0; i < D.n; i++) {
+    var k = (i + D.n / 2) % D.n;
+    if (k < D.gap) continue;                                   /* the way out, behind */
+    var a = (i + row * 0.5) / D.n * Math.PI * 2;
+    _r3Box(m, Math.cos(a) * D.r, row * 1.9, Math.sin(a) * D.r, 3.8, 2.0, 3.8, D.bag[0], D.bag[1]);
+  }
+  var mesh = m.length ? _r3dBuildMesh(R3.gl, m) : null;
+  if (mesh) mesh.weather = 0.5;
+  return (R3.mesh.digRing = mesh);
 }
 </script>
 <script>/* render3d/air3d.js - aircraft that fly like aircraft. Part of rts.render3d.
@@ -33280,6 +33609,7 @@ function _rtsUnitStateTxt(e) {
     else if (e.order === 'orbit') out += ' · circling';
   }
   if (d.carries) { var n = _rtsCargoCount(e); if (n) out += ' · ' + n + ' aboard'; }
+  if (e.dug) out += ' · dug in';
   if (d.sea && _rtsAground(e)) out += ' · aground until the flood';
   if (d.jams) {
     if (_rtsJamUp(e)) {
@@ -33297,7 +33627,7 @@ function _rtsDeployLabel(sel) {
   var w = null;
   for (var i = 0; i < sel.length; i++) {
     if (!_rtsCanDeploy(sel[i])) continue;
-    var d = rtsUnitDef(sel[i].def), x = d.mines ? 'LAY MINE' : d.bridge ? 'BRIDGE' : 'DEPLOY';
+    var d = rtsUnitDef(sel[i].def), x = d.mines ? 'LAY MINE' : d.bridge ? 'BRIDGE' : d.dig ? (sel[i].dug ? 'CLIMB OUT' : 'DIG IN') : 'DEPLOY';
     if (w && w !== x) return 'DEPLOY';
     w = x;
   }
@@ -33695,6 +34025,7 @@ function _rtsSyncSidebar(dt) {
     if (e.type === 'unit' && rtsUnitDef(e.def).harvest)
       txt += ' · ' + Math.floor(e.carry) + ' load (' + Math.floor(e.carryVal || 0) + ' credits)';
     if (e.type === 'unit' && e.side === 'player') txt += _rtsUnitStateTxt(e);   /* mines left, bombs, aboard: ui/selhint.js */
+    if (_rtsGarrisonable(e)) txt += ' · ' + (e.side === 'civ' ? 'empty, ' + _rtsGarrisonCap(e) + ' squads can hold it' : _rtsCargoCount(e) + '/' + _rtsGarrisonCap(e) + ' squads inside');
   } else {
     var counts = {}, i;
     for (i = 0; i < sel.length; i++) { var n = (rtsUnitDef(sel[i].def) || rtsStructDef(sel[i].def)).name; counts[n] = (counts[n] || 0) + 1; }
@@ -35165,7 +35496,7 @@ function _rtsRightClickNow(mx, my, hit0) {
      `move`, the squad walked to 0.75 tiles away and stood there, and the APC carried 0 of its 5
      for the rest of the match. Calling _rtsOrderBoard by hand in the same match loaded it
      immediately - the transport worked, the one route to it did not. */
-  if (tgt && tgt.type === 'unit' && !tgt.dead && _rtsIsTransport(tgt)) {
+  if (tgt && !tgt.dead && (tgt.type === 'unit' ? _rtsIsTransport(tgt) : _rtsGarrisonable(tgt) && (tgt.side === 'civ' || tgt.side === 'player'))) {
     var got = 0, rest = [], why = null, reach = _rtsBoardReachable(tgt);
     for (i = 0; i < mine.length; i++) {
       var bu = mine[i];
@@ -35179,13 +35510,14 @@ function _rtsRightClickNow(mx, my, hit0) {
       for (i = 0; i < rest.length; i++)
         if (rest[i] !== tgt) _rtsOrderMove(rest[i], tgt.x + bsp[i].x, tgt.z + bsp[i].z, false);
       _rtsFlash(tgt.x, tgt.z, 'harvest');
-      _rtsSay(got === 1 ? 'Loading up.' : got + ' units loading up.');
+      _rtsSay(tgt.type === 'struct' ? (got === 1 ? 'Garrisoning the ' : got + ' squads garrisoning the ') + rtsStructDef(tgt.def).name + '.'
+                                    : got === 1 ? 'Loading up.' : got + ' units loading up.');
       if (typeof _rtsSfx === 'function') _rtsSfx('order');
       return;
     }
     /* Nobody could board - a full hold, or a group of tanks at an APC. Fall through, so the
        click still means "go there" instead of meaning nothing - and say why it is not more. */
-    if (why) boardWhy = 'The ' + (rtsUnitDef(tgt.def) || {}).name + ' ' + why + '.';
+    if (why) boardWhy = 'The ' + (tgt.type === 'struct' ? rtsStructDef(tgt.def) : rtsUnitDef(tgt.def) || {}).name + ' ' + why + '.';
   }
   if (tgt && _rtsHostile(tgt.side, 'player')) {
     /* An engineer sent at an enemy BUILDING captures it rather than attacking it - it has no
@@ -35501,7 +35833,8 @@ function _rtsActionAt(mx, my) {
     return shadow ? 'move' : 'no';
   }
   /* your own transport with something selected that can get in: the board cursor */
-  if (tgt && tgt.side === 'player' && tgt.type === 'unit' && !tgt.dead && _rtsIsTransport(tgt)) {
+  if (tgt && !tgt.dead && (tgt.side === 'player' && tgt.type === 'unit' && _rtsIsTransport(tgt)
+                           || _rtsGarrisonable(tgt) && (tgt.side === 'civ' || tgt.side === 'player'))) {
     for (i = 0; i < mine.length; i++) if (mine[i] !== tgt && _rtsCanBoard(mine[i], tgt)) return _rtsBoardReachable(tgt) ? 'board' : 'no';
   }
   var tx = _rtsTX(hit.x), tz = _rtsTX(hit.z);
@@ -37393,9 +37726,9 @@ function rtsSkirmishWant() {
 function rtsSkirmishLine(s) {
   return RTS_SKIRMISH.foes[s.foes].name.toLowerCase() + ' · ' + RTS_SKIRMISH.size[s.size].name.toLowerCase()
     + (RTS_SKIRMISH.layout[s.layout].mirror ? ' mirrored' : '') + ' map · ' + RTS_SKIRMISH.water[s.water].name.toLowerCase()
-    + ' · ' + RTS_SKIRMISH.money[s.money].name + ' credits';
+    + (RTS_SKIRMISH.town[s.town].n ? ' · towns' : '') + ' · ' + RTS_SKIRMISH.money[s.money].name + ' credits';
 }
-var RTS_SKIRMISH_ROWS = [['foes', 'SIDES'], ['size', 'MAP'], ['layout', 'GROUND'], ['water', 'WATER'], ['money', 'CREDITS']];
+var RTS_SKIRMISH_ROWS = [['foes', 'SIDES'], ['size', 'MAP'], ['layout', 'GROUND'], ['water', 'WATER'], ['town', 'TOWNS'], ['money', 'CREDITS']];
 function rtsSkirmishToggle() {
   var box = document.getElementById('rtsSkirmish');
   if (!box) return;

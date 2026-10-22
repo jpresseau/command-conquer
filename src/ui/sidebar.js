@@ -389,6 +389,7 @@ function _rtsSyncSidebar(dt) {
     if (e.type === 'unit' && rtsUnitDef(e.def).harvest)
       txt += ' · ' + Math.floor(e.carry) + ' load (' + Math.floor(e.carryVal || 0) + ' credits)';
     if (e.type === 'unit' && e.side === 'player') txt += _rtsUnitStateTxt(e);   /* mines left, bombs, aboard: ui/selhint.js */
+    if (_rtsGarrisonable(e)) txt += ' · ' + (e.side === 'civ' ? 'empty, ' + _rtsGarrisonCap(e) + ' squads can hold it' : _rtsCargoCount(e) + '/' + _rtsGarrisonCap(e) + ' squads inside');
   } else {
     var counts = {}, i;
     for (i = 0; i < sel.length; i++) { var n = (rtsUnitDef(sel[i].def) || rtsStructDef(sel[i].def)).name; counts[n] = (counts[n] || 0) + 1; }
