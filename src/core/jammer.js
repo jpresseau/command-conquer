@@ -38,8 +38,10 @@ function _rtsJamTick(dt) {
 /* Is `o` inside a field of its own side's, and quiet? */
 function _rtsJammed(o) {
   var G = window._rtsG, L = G && G.jam && G.jam[o.side];
-  if (!L || !L.length || o.type !== 'unit') return false;
+  if (o.type !== 'unit') return false;
   if (o.firedT != null && G.t - o.firedT < RTS_JAM.fired) return false;
+  if (_rtsVeiled(o)) return true;                 /* a Veil Tank hides itself the same way: core/rift.js */
+  if (!L || !L.length) return false;
   for (var i = 0; i < L.length; i++) if (Math.hypot(o.x - L[i].x, o.z - L[i].z) <= L[i].r) return true;
   return false;
 }

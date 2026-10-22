@@ -107,7 +107,7 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
   var d2 = rtsUnitDef(e.def), pose = 0, mo = _r3dUnitMotion(R3, e, t);
   /* OUT OF SIGHT, OUT OF THE PICTURE - dissolving as it goes (shroud3d.js) */
   var fade = _r3dSeenFade(R3, e, mo, t);
-  if (fade <= 0) return;
+  if (fade <= 0) { if (_rtsVeiled(e)) _r3dVeilDraw(C, e, R3, drawIn); return; }   /* a Veil Tank unseen is a tree: veil3d.js */
   /* THE GROUND UNDER IT, not zero. An aircraft's altitude is measured from the ground it
      is over as well - it flies at a height, not at a level - so both take the terrain and
      only the flier adds to it. */

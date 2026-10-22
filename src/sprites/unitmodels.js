@@ -16,7 +16,7 @@
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
   dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46,
-  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:53, drone:26, bomber:56, prismtank:36, arctank:38, dronetank:34
+  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:53, drone:26, bomber:56, prismtank:36, arctank:38, dronetank:34, veiltank:35, riftharv:44
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -41,7 +41,9 @@ var RTS_INF_KIT = {
   arctroop:  { body:['#3a4250','#4a5464'], top:'#3fb6e8', prop:'#b87333' },
   /* a long violet coat, bareheaded under a violet skullcap, and a band of light round the temples
      (core/mind.js) */
-  mentalist: { body:['#4a2e66','#6a4490'], top:'#c27bf2', prop:'#e6d0ff' }
+  mentalist: { body:['#4a2e66','#6a4490'], top:'#c27bf2', prop:'#e6d0ff' },
+  /* white armour, a cyan crown, and the rift ring on his back (core/rift.js) */
+  rifttroop: { body:['#cfd8de','#e8eff3'], top:'#2fd4d0', prop:'#bfefff' }
 };
 
 /* HOW FAR ROUND THE RUNNING GEAR HAS TURNED, 0 to 1 - set by the 3D renderer for the length of
@@ -159,7 +161,7 @@ function _sprUnitModel(key, side, prone, part) {
      model line reads the same as it did when this was one function. */
   var X = { m:m, TM:TM, VH:VH, S:S, DK:DK, O:O, C:C, GN:GN,
             d:d, prone:prone, part:part, side:side, tracks:tracks };
-  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key) || _sprUnitHulls(X, key) || _sprUnitLens(X, key) || _sprUnitArc(X, key) || _sprUnitMind(X, key))) {
+  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key) || _sprUnitHulls(X, key) || _sprUnitLens(X, key) || _sprUnitArc(X, key) || _sprUnitMind(X, key) || _sprUnitRift(X, key))) {
     _r3Box(m, 0, 0, -5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 0, 5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 2.5, 0, 15, 4, 8, TM[0], TM[1]);
