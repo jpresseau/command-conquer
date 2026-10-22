@@ -263,6 +263,16 @@ var RTS_STRUCTS = [
     super:{ key:'thunder', name:'Thunderhead', charge:270, target:'cell', icon:'⛈',
             hint:'Thunderhead ready — click where the storm should break.' },
     desc:'Breaks a thunderstorm anywhere on the map for a minute. Lightning strikes the enemy under it, and no armed aircraft flies in it, yours included.' },
+  /* THE ECHO SENSOR (core/mind.js): a listening post that finds what hides - a submerged boat or
+     a jammed unit - within `detects`, the Destroyer's sonar on land and further. */
+  { key:'echo',     name:'Echo Sensor',   w:2, h:2, cost:1000, build:16, hp:500,  power:-60, sight:22,
+    needs:['radar'], side:'soviet', armour:'concrete', detects:RTS_TILE * 16,
+    desc:'Finds hidden units nearby: submerged submarines and jammed vehicles show up within its reach. Dominion.' },
+  /* THE RELAY HUB: what the Drone Tanks are run from. Lose it, or its power, and every one of them
+     stops where it is (core/mind.js). */
+  { key:'relayhub', name:'Relay Hub',     w:2, h:2, cost:600,  build:12, hp:500,  power:-50, sight:14,
+    needs:['factory'], side:'allied', armour:'concrete', needsPower:true,
+    desc:'Runs your Drone Tanks. Without a powered Relay Hub they stop dead. Compact.' },
   /* ---------------------------------------------------------------- the town --
      CIVILIAN BUILDINGS (core/garrison.js), laid by the skirmish setup's TOWNS option and owned by
      the `civ` side, which nobody builds for and nobody fights. Infantry can GARRISON one: up to

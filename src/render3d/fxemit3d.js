@@ -298,15 +298,16 @@ function _r3dFxTracer(V, f) {
 /* A LENS BEAM (core/lens.js): unlike a tracer the whole line IS the shot, so it is drawn end to
    end - a hot core inside a wide soft glow, gone in R3D_FX_BEAM_T - with a flash where it lands.
    `lens` scales it: a relay or a fork is drawn thinner than the shot itself. */
-var R3D_FX_LENS = [0.80, 1.12, 1.45], R3D_FX_BEAM_T = 0.35;
+var R3D_FX_LENS = [0.80, 1.12, 1.45], R3D_FX_BEAM_T = 0.35, R3D_FX_MIND = [1.20, 0.40, 1.80], R3D_FX_MINDC = [1.00, 0.55, 1.55];
 function _r3dFxBeam(V, f) {
   if (f.t > R3D_FX_BEAM_T) return;
   var y0 = V.ground(f.x, f.z) + (f.y || 1.3), y1 = V.ground(f.x2, f.z2) + (f.y2 || 1.3);
   var k = f.lens || 1, op = 1 - f.t / R3D_FX_BEAM_T;
   if (f.arc) { _r3dFxArc(V, f, y0, y1, k, op); return; }
-  _r3dFxStreak(V.M, V, f.x, y0, f.z, f.x2, y1, f.z2, 1.1 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.35 * op, 0, R3D_FX_LENS);
-  _r3dFxStreak(V.M, V, f.x, y0, f.z, f.x2, y1, f.z2, 0.32 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.95 * op, 0, R3D_FX_ROUND);
-  _r3dFxBill(V.M, V, f.x2, y1, f.z2, 1.1 * k, 1.1 * k, 0.6, R3D_FXT_FLASH, 0, 0, 0.9 * op, 0, R3D_FX_LENS);
+  var tint = f.mind ? R3D_FX_MIND : R3D_FX_LENS;   /* a Mentalist's link is violet (core/mind.js) */
+  _r3dFxStreak(V.M, V, f.x, y0, f.z, f.x2, y1, f.z2, 1.1 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.35 * op, 0, tint);
+  _r3dFxStreak(V.M, V, f.x, y0, f.z, f.x2, y1, f.z2, 0.32 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.95 * op, 0, f.mind ? R3D_FX_MINDC : R3D_FX_ROUND);
+  _r3dFxBill(V.M, V, f.x2, y1, f.z2, 1.1 * k, 1.1 * k, 0.6, R3D_FXT_FLASH, 0, 0, 0.9 * op, 0, tint);
 }
 
 /* AN ARC (core/arc.js) is the same line broken into R3D_FX_ARC_N jagged legs that jump about as

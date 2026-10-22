@@ -863,7 +863,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">54dafc5 · 2026-10-22</div>
+  <div id="rtsBuild" title="build">8b52847 · 2026-10-22</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1131,6 +1131,16 @@ var RTS_STRUCTS = [
     super:{ key:'thunder', name:'Thunderhead', charge:270, target:'cell', icon:'⛈',
             hint:'Thunderhead ready — click where the storm should break.' },
     desc:'Breaks a thunderstorm anywhere on the map for a minute. Lightning strikes the enemy under it, and no armed aircraft flies in it, yours included.' },
+  /* THE ECHO SENSOR (core/mind.js): a listening post that finds what hides - a submerged boat or
+     a jammed unit - within `detects`, the Destroyer's sonar on land and further. */
+  { key:'echo',     name:'Echo Sensor',   w:2, h:2, cost:1000, build:16, hp:500,  power:-60, sight:22,
+    needs:['radar'], side:'soviet', armour:'concrete', detects:RTS_TILE * 16,
+    desc:'Finds hidden units nearby: submerged submarines and jammed vehicles show up within its reach. Dominion.' },
+  /* THE RELAY HUB: what the Drone Tanks are run from. Lose it, or its power, and every one of them
+     stops where it is (core/mind.js). */
+  { key:'relayhub', name:'Relay Hub',     w:2, h:2, cost:600,  build:12, hp:500,  power:-50, sight:14,
+    needs:['factory'], side:'allied', armour:'concrete', needsPower:true,
+    desc:'Runs your Drone Tanks. Without a powered Relay Hub they stop dead. Compact.' },
   /* ---------------------------------------------------------------- the town --
      CIVILIAN BUILDINGS (core/garrison.js), laid by the skirmish setup's TOWNS option and owned by
      the `civ` side, which nobody builds for and nobody fights. Infantry can GARRISON one: up to
@@ -1276,6 +1286,18 @@ var RTS_UNITS = [
     needs:['lab'],
     side:'allied', armour:'light',
     desc:'Long-range beam that forks onto the enemies around its target. Thin armour: keep it behind your tanks.' },
+  /* THE MENTALIST (core/mind.js): takes one enemy unit for its own side, and keeps it while it
+     lives. A second it takes frees the first. Nothing it takes is a building or flies. */
+  { key:'mentalist',name:'Mentalist',     kind:'infantry', cost:1200, build:14, hp:120,  speed:5,   turn:6,  r:1.1, sight:16, weapon:'mindlink',
+    needs:['lab'],
+    side:'soviet', armour:'none', mindproof:true,
+    desc:'Takes control of an enemy unit, which fights for you until the Mentalist dies or takes another. Cannot take buildings, aircraft or Drone Tanks.' },
+  /* THE DRONE TANK: crewless, so nothing can take it over (core/mind.js), and it hovers, so it
+     crosses water - but it is run from a Relay Hub, and without a powered one it stops dead. */
+  { key:'dronetank',name:'Drone Tank',    kind:'vehicle',  cost:900,  build:12, hp:340,  speed:12,  turn:2.4,r:1.9, sight:16, weapon:'dronegun',
+    needs:['relayhub'], hover:true, mindproof:true, hub:'relayhub',
+    side:'allied', armour:'heavy',
+    desc:'Fast, hovers over water, and cannot be mind-controlled. Runs only while you have a powered Relay Hub.' },
   /* The Arc Tower on tracks: a short bolt that jumps on to two more enemies beside its target. */
   { key:'arctank',  name:'Arc Tank',      kind:'vehicle',  cost:1000, build:13, hp:380,  speed:9.5, turn:2.0,r:2.0, sight:16, weapon:'arcbolt',
     needs:['radar'],
@@ -1717,6 +1739,13 @@ var RTS_WEAPONS = {
   /* THE ARC (core/arc.js), the Arc Tower's bolt in smaller hands. Short, and good against
      everything that moves; poor against a building. The tank's arc jumps on to the enemies
      beside its target, as a lens beam forks, but to fewer of them and further down the share. */
+  /* THE MENTALIST'S LINK (core/mind.js): no damage at all. It takes the unit it reaches, and
+     only a unit - never a building, an aircraft, another Mentalist or a crewless Drone Tank. */
+  mindlink:   { dmg:0, range:13, cool:3.5, shot:'beam', speed:0, splash:0, mind:true,
+                verses:{ none:1, wood:1, light:1, heavy:1, concrete:1 } },
+  /* the Drone Tank's quick gun: light, fast-firing, for a fast hull */
+  dronegun:   { dmg:26, range:16, cool:1.1, shot:'shell', speed:64, splash:1.6, wall:true,
+                verses:{ none:0.8, wood:0.9, light:1.1, heavy:0.9, concrete:0.7 } },
   arcgun:     { dmg:30, range:9, cool:1.3, shot:'arc', speed:0, splash:0,
                 verses:{ none:1.0, wood:0.5, light:1.2, heavy:1.0, concrete:0.4 } },
   arcbolt:    { dmg:55, range:13, cool:1.8, shot:'arc', speed:0, splash:0, split:{ n:2, cells:2.5, share:0.6 },
@@ -2183,7 +2212,7 @@ var RTS_AI = {
      Not turret's 0.24/6. A Coil is 1500 credits and -100 power against a Gun Turret's 500 and
      -20, so six of them is 9000 credits and 600 power - it is the premium piece, not the line
      defence, and the flame tower is what fills the wall. */
-          tesla:0.10, prism:0.10,              /* the Compact's premium tower, the Arc Tower's pair */
+          tesla:0.10, prism:0.10, relayhub:0.05, echo:0.04,              /* the Compact's premium tower, the Arc Tower's pair */
           helipad:0.06, afld:0.06, aagun:0.10,
   /* One shipyard. A second buys nothing but a second production line for a domain
      the opponent uses to raid a coast, and the ratio has to stay small or a map
@@ -2197,7 +2226,7 @@ var RTS_AI = {
      production lines to spend it down, so a low ceiling turns the storage cap into a straight
      nerf and hands the player about 16 extra seconds of life. RA has no silo limit at all. */
           apower:2,    kennel:1,    silo:14,   pillbox:4,     flametower:3,     turret:6,     rocketpit:4,
-          tesla:3,     prism:3,
+          tesla:3,     prism:3,     relayhub:1, echo:1,
           helipad:2,   afld:2,      aagun:3,
           navalyard:1, subpen:1,
   /* One each. A second silo would not charge a second missile - the timer is per house - so
@@ -2239,6 +2268,8 @@ var RTS_AI = {
   buildOrder:['refinery', 'barracks', 'silo', 'factory', 'radar', 'apower', 'depot', 'lab', 'kennel',
               'helipad', 'afld', 'navalyard', 'subpen',
               'pillbox', 'flametower', 'turret', 'rocketpit', 'tesla', 'prism', 'aagun',
+              /* the hub and the sensor after the defences: before them they cost the base its Arc Tower (e2e/basedef) */
+              'relayhub', 'echo',
               'mslo', 'iron', 'pdox', 'gps', 'mist', 'spire'],
 
   /* WHICH RUNG EACH BUILDING BELONGS TO. The order above says what to build first; this says
@@ -2282,7 +2313,7 @@ var RTS_AI = {
                  (core/ai.js). A gun that cannot hit the ground is dead weight on a ground war. */
               { key:'flaktrack', at:1200, w:4, vsAir:2 },
               { key:'prismtank', at:2200, w:2 },
-              { key:'arctank', at:1700, w:3 } ],
+              { key:'arctank', at:1700, w:3 }, { key:'dronetank', at:1500, w:3 } ],
     /* No Mine Layer here: it is bought outside the weighted roll (core/aimines.js
        _rtsAISupport), because an entry in this pool moves every roll after it - measured, the
        Soviet opponent stopped reaching its Arc Tower in e2e/basedef and the raiders thinned out
@@ -2337,7 +2368,7 @@ var RTS_AI = {
     infantry:[ { key:'flame', at:1200, w:2 }, { key:'grenadier', at:900, w:2 },
                { key:'rocket', at:500, w:3 }, { key:'dog', at:400, w:2 },
                { key:'rifle', at:250, w:2 }, { key:'engineer', at:2200, w:2 },
-               { key:'arctroop', at:1000, w:2 } ],
+               { key:'arctroop', at:1000, w:2 }, { key:'mentalist', at:2000, w:1 } ],
     /* AIRCRAFT, once there is a pad to fly from - _rtsCanQueue gates on `needs`, so these are
        inert until one exists and there is no separate check to keep in step. Both armies again;
        the Attack Heli was buildable by the player from the day it shipped and the opponent never
@@ -7242,7 +7273,7 @@ function _sprBuildingModel(key, side) {
             pipe:pipe, ladder:ladder, rail:rail, steps:steps, drum:drum,
             crates:crates, floodlight:floodlight, plant:plant,
             sandbags:sandbags, ammo:ammo };
-  _sprBldBase(X, key) || _sprBldTech(X, key) || _sprBldWar(X, key) || _sprBldSuper(X, key) || _sprBldLens(X, key) || _sprBldTown(X, key);
+  _sprBldBase(X, key) || _sprBldTech(X, key) || _sprBldWar(X, key) || _sprBldSuper(X, key) || _sprBldLens(X, key) || _sprBldTown(X, key) || _sprBldMind(X, key);
   return m;
 }
 function _sprBuildingClean(key, side) {
@@ -7280,7 +7311,7 @@ function _sprBuildingClean(key, side) {
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
   dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46,
-  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:53, drone:26, bomber:56, prismtank:36, arctank:38
+  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:53, drone:26, bomber:56, prismtank:36, arctank:38, dronetank:34
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -7302,7 +7333,10 @@ var RTS_INF_KIT = {
   thief:     { body:['#22252b','#31363e'], top:'#17191d', prop:'#4b5360' },
   tanya:     { body:['#c4bca4','#e0d8bc'], top:'#a8452a', prop:'#2b3038' },
   /* heavy dark plate, a copper coil, and the one electric blue on any helmet (core/arc.js) */
-  arctroop:  { body:['#3a4250','#4a5464'], top:'#3fb6e8', prop:'#b87333' }
+  arctroop:  { body:['#3a4250','#4a5464'], top:'#3fb6e8', prop:'#b87333' },
+  /* a long violet coat, bareheaded under a violet skullcap, and a band of light round the temples
+     (core/mind.js) */
+  mentalist: { body:['#4a2e66','#6a4490'], top:'#c27bf2', prop:'#e6d0ff' }
 };
 
 /* HOW FAR ROUND THE RUNNING GEAR HAS TURNED, 0 to 1 - set by the 3D renderer for the length of
@@ -7420,7 +7454,7 @@ function _sprUnitModel(key, side, prone, part) {
      model line reads the same as it did when this was one function. */
   var X = { m:m, TM:TM, VH:VH, S:S, DK:DK, O:O, C:C, GN:GN,
             d:d, prone:prone, part:part, side:side, tracks:tracks };
-  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key) || _sprUnitHulls(X, key) || _sprUnitLens(X, key) || _sprUnitArc(X, key))) {
+  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key) || _sprUnitHulls(X, key) || _sprUnitLens(X, key) || _sprUnitArc(X, key) || _sprUnitMind(X, key))) {
     _r3Box(m, 0, 0, -5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 0, 5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 2.5, 0, 15, 4, 8, TM[0], TM[1]);
@@ -7583,6 +7617,8 @@ function _sprUnitGround(X, key) {
       } else if (key === 'tanya') {
         _r3Box(m, mx + 2.3, 4.4, mz - 1.0, 2.8, 0.9, 0.9, kit.prop, DK[3]); /* pistols */
         _r3Box(m, mx + 2.3, 4.4, mz + 1.0, 2.8, 0.9, 0.9, kit.prop, DK[3]);
+      } else if (key === 'mentalist') {
+        _r3Box(m, mx - 0.3, 6.6, mz, 2.6, 0.5, 2.6, kit.prop, kit.prop);        /* the band round his temples */
       } else if (key === 'arctroop') {
         /* A coil on the back standing above the helmet, and a stubby arc gun: copper both. */
         _r3Cyl(m, mx - 2.2, 3.4, mz, 1.0, 5.4, kit.prop, '#e8c08a', 12);
@@ -8855,6 +8891,61 @@ function _sprBldTown(X, key) {
   return false;
 }
 </script>
+<script>/* sprites/mind.js - the Drone Tank, the Relay Hub and the Echo Sensor (core/mind.js). Part of
+   rts.sprites. The Mentalist himself is an infantry kit (sprites/unitmodels.js RTS_INF_KIT).
+
+   The Drone Tank has no crew, so it has no hatch, no periscope and no driver's slit: a sealed
+   wedge on four hover pads with one sensor eye where a cupola would be. The Relay Hub is the dish
+   it listens to; the Echo Sensor a dome ringed with listening masts. Violet is the mind's colour
+   (the Mentalist's link), and only the Dominion's sensor wears it. */
+var RTS_MIND_EYE = ['#7fe0ff', '#e6fbff'], RTS_MIND_VIOLET = ['#8a4fc0', '#b48ae8'];
+
+function _sprUnitMind(X, key) {
+  if (key !== 'dronetank') return false;
+  var m = X.m, VH = X.VH, TM = X.TM, S = X.S, DK = X.DK, part = X.part, s, k;
+  if (part !== 'turret') {
+    for (s = -1; s <= 1; s += 2) for (k = -1; k <= 1; k += 2)                 /* four hover pads */
+      _r3Cyl(m, k * 4.6, 0.6, s * 3.6, 2.2, 1.6, DK[1], DK[2], 18);
+    _r3Slab(m, 0, 2.0, 0, 14, 2.6, 8.6, 1.0, VH[0], VH[1]);
+    _r3Hip(m, 0.4, 4.6, 0, 12.4, 2.4, 8.0, 3.0, VH[3]);                      /* the sealed wedge */
+    _r3Box(m, -6.2, 3.2, 0, 1.6, 1.4, 6.4, DK[1], DK[2]);                    /* exhaust vents */
+  }
+  if (part !== 'hull') {
+    _r3Slab(m, -0.6, 7.0, 0, 6.4, 2.0, 5.6, 0.8, VH[1], TM[1]);             /* low turret, team roof */
+    _r3Box(m, 5.2, 7.6, 0, 6.8, 0.9, 0.9, DK[1], DK[3]);                     /* the gun, thin and quick */
+    _r3Cyl(m, -1.6, 9.0, 1.6, 0.8, 0.9, RTS_MIND_EYE[0], RTS_MIND_EYE[1], 16);   /* the sensor eye */
+  }
+  return true;
+}
+function _sprBldMind(X, key) {
+  var m = X.m, W = X.W, D = X.D, C = X.C, S = X.S, B = X.B, DK = X.DK, WH = X.WH, i, a;
+  if (key === 'relayhub') {
+    _r3Box(m, 0, 0, 0, W - 6, 3, D - 6, C[2], C[0]);
+    _r3Box(m, -4, 3, 4, W - 22, 9, D - 22, WH[1], WH[3]);                    /* the equipment hall */
+    X.facade(5, 3, (W - 22) / 2, (D - 22) / 2);
+    _r3Box(m, -4, 12, 4, W - 20, 1.2, D - 20, B.roof, B.roof);
+    _r3Cyl(m, 8, 3, -8, 2, 12, S[1], S[3], 16);                              /* the mast */
+    _r3Cone(m, 8, 15, -8, 9, 3, 3, S[3], 24);                                /* the dish */
+    _r3Cyl(m, 8, 18, -8, 0.7, 4, S[2], RTS_MIND_EYE[0], 12);                 /* its feed */
+    for (i = 0; i < 3; i++) X.vent(-12 + i * 5, 12, -6, 2, 2);
+    return true;
+  }
+  if (key === 'echo') {
+    _r3Box(m, 0, 0, 0, W - 6, 3, D - 6, C[2], C[0]);
+    _r3Cyl(m, 0, 3, 0, 13, 5, C[1], C[0], 24);                               /* the drum */
+    _r3Cone(m, 0, 8, 0, 12, 3, 9, RTS_MIND_VIOLET[0], 24);                   /* the dome */
+    _r3Cyl(m, 0, 16.5, 0, 2.4, 1.4, RTS_MIND_VIOLET[1], RTS_MIND_EYE[1], 16);
+    for (i = 0; i < 6; i++) {                                                /* the ring of listening masts */
+      a = i / 6 * Math.PI * 2;
+      _r3Box(m, Math.cos(a) * 15, 3, Math.sin(a) * 15, 0.8, 14, 0.8, S[3], S[2]);
+      _r3Box(m, Math.cos(a) * 15, 17, Math.sin(a) * 15, 2.6, 0.8, 0.8, S[1], RTS_MIND_VIOLET[1]);
+    }
+    _r3Cyl(m, 0, 8.5, 0, 13.5, 0.8, B.roof, B.roof, 24);                     /* team band */
+    return true;
+  }
+  return false;
+}
+</script>
 <script>/* sprites/props.js - unit scaling and fit, pads, corpses, scorch, craters, fire, crates and
    the effect sheet. Part of rts.sprites, the sprite baker. */
 
@@ -8917,7 +9008,7 @@ function _sprUnit(key, side, prone, part) {
    drawn at each place RTS_TURRET_AT names (sprites/unit-airsea.js), turned to the unit's aim.
    The ships' models once ignored the part and built the whole ship for both, so a destroyer
    shelling a target abeam was drawn twice, the second hull swung across the first. */
-var RTS_TURRETED = { tank:1, light:1, heavy:1, destroyer:1, gunboat:1, cruiser:1, flaktrack:1, monitor:1, prismtank:1, arctank:1 };
+var RTS_TURRETED = { tank:1, light:1, heavy:1, destroyer:1, gunboat:1, cruiser:1, flaktrack:1, monitor:1, prismtank:1, arctank:1, dronetank:1 };
 
 /* The concrete apron a structure stands on. In the reference every building sits on a pale
    irregular pad noticeably larger than itself - it is what stops a base looking like
@@ -13923,11 +14014,11 @@ function _rtsJammed(o) {
 function _rtsJamHides(o, side, x, z) {
   if (!_rtsJammed(o)) return false;
   if (Math.hypot(o.x - x, o.z - z) <= RTS_JAM.close * RTS_TILE) return false;
-  return !_rtsSpotted(o, side);
+  return !_rtsSpotted(o, side) && !_rtsSensed(o, side);   /* an Echo Sensor finds it: core/mind.js */
 }
 /* ...from every eye `side` has: hidden unless something of it stands close, or a Spotter sees it. */
 function _rtsJamHidden(o, side) {
-  if (!_rtsJammed(o) || _rtsSpotted(o, side)) return false;
+  if (!_rtsJammed(o) || _rtsSpotted(o, side) || _rtsSensed(o, side)) return false;
   var G = window._rtsG, r = RTS_JAM.close * RTS_TILE;
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];
@@ -16621,6 +16712,7 @@ function _rtsFireCoord(e, w) {
    anything on land. That single restriction is what makes the Missile Sub worth twice the
    price instead of being a strictly better hull. */
 function _rtsWeaponReaches(w, tgt) {
+  if (w && w.mind) return !_rtsMindproof(tgt);   /* a Mentalist reaches only a unit it can take: core/mind.js */
   if (!w || !w.seaOnly) return true;
   if (!tgt) return false;
   if (tgt.type === 'struct') return false;
@@ -16682,6 +16774,10 @@ function _rtsFire(e, tgt, w) {
   if ((rtsUnitDef(e.def) || {}).cloak) e.decloak = RTS_SUB_SURFACE;
   if (typeof _rtsSfx === 'function') _rtsSfx(w.shot === 'beam' ? 'beam' : w.shot === 'arc' ? 'zap' : w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
     : (w.shot === 'missile' ? 'rocket' : (e.type === 'struct' ? 'turretgun' : 'cannon')), e.x, e.z);
+  if (w.mind) {                                    /* no damage: the unit changes side (core/mind.js) */
+    if (_rtsMindTake(e, tgt)) { var mb = _rtsLensBeamFx(e, tgt, w); mb.mind = 1; G.fx.push(mb); }
+    return;
+  }
   /* a Lens Tower's idle neighbours pour their beams into this one (core/lens.js) */
   var raw = w.dmg * bias.fire * rtsCrateMult(e, 'fire') * (w.relay && e.type === 'struct' ? _rtsLensRelay(e, w) : 1)
           * _rtsArcCharge(e)                      /* ...and an Arc Tower's troopers charge it (core/arc.js) */
@@ -17976,7 +18072,6 @@ function _rtsUpdateProj(dt) {
     }
   }
 }
-
 </script>
 <script>/* core/harvest.js - the harvester economy: the mine/deliver loop, finding the next ore cell,
    and finding a refinery to unload at. Part of rts.core, the simulation.
@@ -21452,6 +21547,102 @@ function _rtsDigToggle(e) {
   return true;
 }
 </script>
+<script>/* core/mind.js - MIND CONTROL, the crewless tank that is proof against it, and the sensor that
+   finds what hides.
+
+   THE MENTALIST. Its weapon (`mind` on rules/weapons.js `mindlink`) does no damage: the unit it
+   reaches CHANGES SIDE. Only a unit - never a building - and never one that flies or is
+   `mindproof` (another Mentalist, a Drone Tank); _rtsWeaponReaches says so, so it is never even
+   aimed at one. The taken unit drops whatever it was doing, leaves its old side's team, leaves the
+   old side's selection, and its passengers come with it. It is held while the Mentalist lives:
+   when the Mentalist dies, or takes another, it goes back to the side it came from. What it
+   carries for that is plain data on the unit (`mind:{ by, was }`), so a save keeps it.
+
+   THE DRONE TANK has `hub:'relayhub'`: while its side has no finished Relay Hub with full power,
+   every Drone Tank is OFFLINE - it stops where it stands and holds its fire (`e.offline`, read by
+   core/units.js through _rtsOffline) - and comes back the moment a hub is up again.
+
+   THE ECHO SENSOR's `detects` is the Destroyer's sonar on land (core/combat.js _rtsCloakAI finds a
+   submerged boat with it already), and here it also unmasks a jammed unit (core/jammer.js). */
+var RTS_MIND = { col: [1.25, 0.55, 1.6] };
+
+function _rtsMindproof(o) {
+  if (!o || o.type !== 'unit' || o.air) return true;
+  return !!(rtsUnitDef(o.def) || {}).mindproof;
+}
+/* `e` reaches `tgt`: take it, freeing whatever it held before. */
+function _rtsMindTake(e, tgt) {
+  var G = window._rtsG;
+  if (!tgt || tgt.dead || _rtsMindproof(tgt) || !_rtsHostile(tgt.side, e.side)) return false;
+  var old = e.thrall != null && G.byId[e.thrall];
+  if (old && old !== tgt) _rtsMindFree(old);
+  var was = tgt.mind ? tgt.mind.was : tgt.side;           /* taken from a taker: home is still home */
+  if (tgt.mind) { var prev = G.byId[tgt.mind.by]; if (prev) prev.thrall = null; }
+  _rtsMindSwitch(tgt, e.side);
+  tgt.mind = { by: e.id, was: was };
+  e.thrall = tgt.id;
+  G.minds = (G.minds || 0) + 1;
+  return true;
+}
+/* Back to the side it came from. */
+function _rtsMindFree(u) {
+  if (!u || !u.mind) return;
+  var was = u.mind.was, G = window._rtsG, by = G.byId[u.mind.by];
+  if (by && by.thrall === u.id) by.thrall = null;
+  u.mind = null;
+  if (!u.dead) _rtsMindSwitch(u, was);
+}
+function _rtsMindSwitch(u, side) {
+  var G = window._rtsG;
+  u.side = side; u.order = null; u.target = null; u.path = null; u.goal = null; u.wq = null;
+  if (u.sqd != null && G.teams[u.sqd]) _rtsTeamRemove(G.teams[u.sqd], u);
+  var si = G.sel.indexOf(u); if (si >= 0 && side !== 'player') G.sel.splice(si, 1);
+  (u.cargo || []).forEach(function (p) { if (!p.dead) { p.side = side; p.order = null; p.target = null; } });
+}
+/* Each tick, while anything is held: a holder that has died lets go. */
+function _rtsMindTick() {
+  var G = window._rtsG;
+  if (!G.minds) return;
+  var held = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var u = G.ents[i];
+    if (!u.mind) continue;
+    var by = G.byId[u.mind.by];
+    if (u.dead) { if (by && by.thrall === u.id) by.thrall = null; u.mind = null; continue; }
+    if (!by || by.dead || by.thrall !== u.id) { _rtsMindFree(u); continue; }
+    held++;
+  }
+  G.minds = held;
+}
+
+/* ------------------------------------------------------------------ the hub ---- */
+/* Has `side` a finished Relay Hub with full power? Asked once per side per tick. */
+function _rtsHubUp(side, key) {
+  var G = window._rtsG, c = G.hubUp || (G.hubUp = {}), k = side + ':' + key;
+  if (c.t === G.t && k in c) return c[k];
+  if (c.t !== G.t) { G.hubUp = c = { t: G.t }; }
+  return (c[k] = !!_rtsHas(side, key) && _rtsPowerFactor(side) >= 0.999);
+}
+/* A Drone Tank whose hub is down: core/units.js stops it and holds its fire. */
+function _rtsOffline(e) {
+  var d = rtsUnitDef(e.def);
+  e.offline = d && d.hub && !_rtsHubUp(e.side, d.hub) ? 1 : 0;
+  return !!e.offline;
+}
+
+/* --------------------------------------------------------------- the sensor ---- */
+/* Is jammed unit `o` found by one of `side`'s sensors? */
+function _rtsSensed(o, side) {
+  var G = window._rtsG;
+  for (var i = 0; i < G.ents.length; i++) {
+    var s = G.ents[i];
+    if (s.type !== 'struct' || s.dead || s.building || s.side !== side) continue;
+    var r = (rtsStructDef(s.def) || {}).detects;
+    if (r && Math.hypot(o.x - s.x, o.z - s.z) <= r) return true;
+  }
+  return false;
+}
+</script>
 <script>/* core/missions.js - the team mission list (TEAMTYPE.CPP): the script a team runs.
    Part of rts.core, the simulation. */
 
@@ -22541,9 +22732,11 @@ function _rtsTick(dt) {
     e = G.ents[i];
     if (e.dead) continue;
     if (e.inside) continue;                      /* riding in a transport - see _rtsAboard */
-    if (e.type === 'unit') _rtsUpdateUnit(e, dt); else _rtsUpdateStruct(e, dt);
+    if (e.type === 'unit') { if (!_rtsOffline(e)) _rtsUpdateUnit(e, dt); else e.path = null; }   /* a Drone Tank's hub down: core/mind.js */
+    else _rtsUpdateStruct(e, dt);
   }
   if (G.sides.civ) _rtsGarrisonTick(dt);        /* squads firing out of the town's houses: core/garrison.js */
+  _rtsMindTick();                                /* a Mentalist that has died lets go: core/mind.js */
   _rtsSeparate(dt);
   _rtsAirSpread(dt);                             /* aircraft keep their own distance: core/airspace.js */
   _rtsUpdateProj(dt);
@@ -27813,15 +28006,16 @@ function _r3dFxTracer(V, f) {
 /* A LENS BEAM (core/lens.js): unlike a tracer the whole line IS the shot, so it is drawn end to
    end - a hot core inside a wide soft glow, gone in R3D_FX_BEAM_T - with a flash where it lands.
    `lens` scales it: a relay or a fork is drawn thinner than the shot itself. */
-var R3D_FX_LENS = [0.80, 1.12, 1.45], R3D_FX_BEAM_T = 0.35;
+var R3D_FX_LENS = [0.80, 1.12, 1.45], R3D_FX_BEAM_T = 0.35, R3D_FX_MIND = [1.20, 0.40, 1.80], R3D_FX_MINDC = [1.00, 0.55, 1.55];
 function _r3dFxBeam(V, f) {
   if (f.t > R3D_FX_BEAM_T) return;
   var y0 = V.ground(f.x, f.z) + (f.y || 1.3), y1 = V.ground(f.x2, f.z2) + (f.y2 || 1.3);
   var k = f.lens || 1, op = 1 - f.t / R3D_FX_BEAM_T;
   if (f.arc) { _r3dFxArc(V, f, y0, y1, k, op); return; }
-  _r3dFxStreak(V.M, V, f.x, y0, f.z, f.x2, y1, f.z2, 1.1 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.35 * op, 0, R3D_FX_LENS);
-  _r3dFxStreak(V.M, V, f.x, y0, f.z, f.x2, y1, f.z2, 0.32 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.95 * op, 0, R3D_FX_ROUND);
-  _r3dFxBill(V.M, V, f.x2, y1, f.z2, 1.1 * k, 1.1 * k, 0.6, R3D_FXT_FLASH, 0, 0, 0.9 * op, 0, R3D_FX_LENS);
+  var tint = f.mind ? R3D_FX_MIND : R3D_FX_LENS;   /* a Mentalist's link is violet (core/mind.js) */
+  _r3dFxStreak(V.M, V, f.x, y0, f.z, f.x2, y1, f.z2, 1.1 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.35 * op, 0, tint);
+  _r3dFxStreak(V.M, V, f.x, y0, f.z, f.x2, y1, f.z2, 0.32 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.95 * op, 0, f.mind ? R3D_FX_MINDC : R3D_FX_ROUND);
+  _r3dFxBill(V.M, V, f.x2, y1, f.z2, 1.1 * k, 1.1 * k, 0.6, R3D_FXT_FLASH, 0, 0, 0.9 * op, 0, tint);
 }
 
 /* AN ARC (core/arc.js) is the same line broken into R3D_FX_ARC_N jagged legs that jump about as
@@ -30043,6 +30237,11 @@ function _r3dSoldierMan(m, key, mx, mz, pose, lead, K) {
     armTo(1, cx + 1.2, cy - 0.8, mz + 1.4, cx + 2.4, cy - 0.5, mz + 1.3);
     _r3Box(m, cx + 3.0, cy - 0.65, mz - 1.3, 1.4, 0.5, 0.35, kit.prop, DK[3]);    /* pistols */
     _r3Box(m, cx + 3.0, cy - 0.65, mz + 1.3, 1.4, 0.5, 0.35, kit.prop, DK[3]);
+  } else if (key === 'mentalist') {
+    /* hands to the temples: the band of light round his head, and nothing in his hands */
+    armTo(-1, cx + 0.4, cy - 0.2, mz - 1.4, cx + 0.3, cy + 1.0, mz - 0.9);
+    armTo(1, cx + 0.4, cy - 0.2, mz + 1.4, cx + 0.3, cy + 1.0, mz + 0.9);
+    _r3Cyl(m, cx, cy + 1.05, mz, 1.05, 0.3, kit.prop, kit.prop, 20);
   } else if (key === 'arctroop') {
     /* the arc gun held low in both hands, and the coil on his back standing above the helmet */
     armTo(-1, cx + 0.7, cy - 1.5, mz - 1.5, cx + 1.4, cy - 1.0, mz - 0.7);
@@ -33610,6 +33809,10 @@ function _rtsUnitStateTxt(e) {
   }
   if (d.carries) { var n = _rtsCargoCount(e); if (n) out += ' · ' + n + ' aboard'; }
   if (e.dug) out += ' · dug in';
+  if (e.offline) out += ' · offline: no powered Relay Hub';                      /* core/mind.js */
+  if (e.mind) out += ' · held by a Mentalist';
+  var th = e.thrall != null && window._rtsG.byId[e.thrall];
+  if (th && !th.dead) out += ' · holding a ' + (rtsUnitDef(th.def) || {}).name;
   if (d.sea && _rtsAground(e)) out += ' · aground until the flood';
   if (d.jams) {
     if (_rtsJamUp(e)) {
@@ -34025,6 +34228,7 @@ function _rtsSyncSidebar(dt) {
     if (e.type === 'unit' && rtsUnitDef(e.def).harvest)
       txt += ' · ' + Math.floor(e.carry) + ' load (' + Math.floor(e.carryVal || 0) + ' credits)';
     if (e.type === 'unit' && e.side === 'player') txt += _rtsUnitStateTxt(e);   /* mines left, bombs, aboard: ui/selhint.js */
+    else if (e.type === 'unit' && e.mind) txt += ' · held by a Mentalist';           /* one of the player's, taken: core/mind.js */
     if (_rtsGarrisonable(e)) txt += ' · ' + (e.side === 'civ' ? 'empty, ' + _rtsGarrisonCap(e) + ' squads can hold it' : _rtsCargoCount(e) + '/' + _rtsGarrisonCap(e) + ' squads inside');
   } else {
     var counts = {}, i;

@@ -145,6 +145,10 @@ function _rtsUnitStateTxt(e) {
   }
   if (d.carries) { var n = _rtsCargoCount(e); if (n) out += ' · ' + n + ' aboard'; }
   if (e.dug) out += ' · dug in';
+  if (e.offline) out += ' · offline: no powered Relay Hub';                      /* core/mind.js */
+  if (e.mind) out += ' · held by a Mentalist';
+  var th = e.thrall != null && window._rtsG.byId[e.thrall];
+  if (th && !th.dead) out += ' · holding a ' + (rtsUnitDef(th.def) || {}).name;
   if (d.sea && _rtsAground(e)) out += ' · aground until the flood';
   if (d.jams) {
     if (_rtsJamUp(e)) {

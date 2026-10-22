@@ -47,11 +47,11 @@ function _rtsJammed(o) {
 function _rtsJamHides(o, side, x, z) {
   if (!_rtsJammed(o)) return false;
   if (Math.hypot(o.x - x, o.z - z) <= RTS_JAM.close * RTS_TILE) return false;
-  return !_rtsSpotted(o, side);
+  return !_rtsSpotted(o, side) && !_rtsSensed(o, side);   /* an Echo Sensor finds it: core/mind.js */
 }
 /* ...from every eye `side` has: hidden unless something of it stands close, or a Spotter sees it. */
 function _rtsJamHidden(o, side) {
-  if (!_rtsJammed(o) || _rtsSpotted(o, side)) return false;
+  if (!_rtsJammed(o) || _rtsSpotted(o, side) || _rtsSensed(o, side)) return false;
   var G = window._rtsG, r = RTS_JAM.close * RTS_TILE;
   for (var i = 0; i < G.ents.length; i++) {
     var e = G.ents[i];

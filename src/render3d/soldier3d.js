@@ -120,6 +120,11 @@ function _r3dSoldierMan(m, key, mx, mz, pose, lead, K) {
     armTo(1, cx + 1.2, cy - 0.8, mz + 1.4, cx + 2.4, cy - 0.5, mz + 1.3);
     _r3Box(m, cx + 3.0, cy - 0.65, mz - 1.3, 1.4, 0.5, 0.35, kit.prop, DK[3]);    /* pistols */
     _r3Box(m, cx + 3.0, cy - 0.65, mz + 1.3, 1.4, 0.5, 0.35, kit.prop, DK[3]);
+  } else if (key === 'mentalist') {
+    /* hands to the temples: the band of light round his head, and nothing in his hands */
+    armTo(-1, cx + 0.4, cy - 0.2, mz - 1.4, cx + 0.3, cy + 1.0, mz - 0.9);
+    armTo(1, cx + 0.4, cy - 0.2, mz + 1.4, cx + 0.3, cy + 1.0, mz + 0.9);
+    _r3Cyl(m, cx, cy + 1.05, mz, 1.05, 0.3, kit.prop, kit.prop, 20);
   } else if (key === 'arctroop') {
     /* the arc gun held low in both hands, and the coil on his back standing above the helmet */
     armTo(-1, cx + 0.7, cy - 1.5, mz - 1.5, cx + 1.4, cy - 1.0, mz - 0.7);
