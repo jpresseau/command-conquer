@@ -60,7 +60,7 @@ function _sprUnit(key, side, prone, part) {
    drawn at each place RTS_TURRET_AT names (sprites/unit-airsea.js), turned to the unit's aim.
    The ships' models once ignored the part and built the whole ship for both, so a destroyer
    shelling a target abeam was drawn twice, the second hull swung across the first. */
-var RTS_TURRETED = { tank:1, light:1, heavy:1, destroyer:1, gunboat:1, cruiser:1, flaktrack:1, monitor:1, prismtank:1 };
+var RTS_TURRETED = { tank:1, light:1, heavy:1, destroyer:1, gunboat:1, cruiser:1, flaktrack:1, monitor:1, prismtank:1, arctank:1 };
 
 /* The concrete apron a structure stands on. In the reference every building sits on a pale
    irregular pad noticeably larger than itself - it is what stops a base looking like

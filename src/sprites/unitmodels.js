@@ -16,7 +16,7 @@
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
   dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46,
-  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:53, drone:26, bomber:56, prismtank:36
+  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:53, drone:26, bomber:56, prismtank:36, arctank:38
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -36,7 +36,9 @@ var RTS_INF_KIT = {
   engineer:  { body:['#c99a1e','#e8bc3c'], top:'#f5d565', prop:'#2a2a26' },
   medic:     { body:['#cfcfc4','#eaeae0'], top:'#ffffff', prop:'#c8302a' },
   thief:     { body:['#22252b','#31363e'], top:'#17191d', prop:'#4b5360' },
-  tanya:     { body:['#c4bca4','#e0d8bc'], top:'#a8452a', prop:'#2b3038' }
+  tanya:     { body:['#c4bca4','#e0d8bc'], top:'#a8452a', prop:'#2b3038' },
+  /* heavy dark plate, a copper coil, and the one electric blue on any helmet (core/arc.js) */
+  arctroop:  { body:['#3a4250','#4a5464'], top:'#3fb6e8', prop:'#b87333' }
 };
 
 /* HOW FAR ROUND THE RUNNING GEAR HAS TURNED, 0 to 1 - set by the 3D renderer for the length of
@@ -154,7 +156,7 @@ function _sprUnitModel(key, side, prone, part) {
      model line reads the same as it did when this was one function. */
   var X = { m:m, TM:TM, VH:VH, S:S, DK:DK, O:O, C:C, GN:GN,
             d:d, prone:prone, part:part, side:side, tracks:tracks };
-  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key) || _sprUnitHulls(X, key) || _sprUnitLens(X, key))) {
+  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key) || _sprUnitHulls(X, key) || _sprUnitLens(X, key) || _sprUnitArc(X, key))) {
     _r3Box(m, 0, 0, -5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 0, 5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 2.5, 0, 15, 4, 8, TM[0], TM[1]);

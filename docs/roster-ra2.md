@@ -60,8 +60,8 @@ a section below with its numbers.
 |---|---|---|---|---|
 | 1, `prism` | Prism Tower | Compact | Lens Tower | a beam that relays through neighbouring towers into one stronger shot |
 | 1, `prismtank` | Prism Tank | Compact | Lens Tank | a beam that splits onto the targets around the one it hits |
-| 2 | Tesla Trooper | Dominion | Arc Trooper | infantry that charges an Arc Tower to fire through a brownout |
-| 2 | Tesla Tank | Dominion | Arc Tank | short-range arc that chains |
+| 2, `arctroop` | Tesla Trooper | Dominion | Arc Trooper | infantry that charges an Arc Tower to fire through a brownout |
+| 2, `arctank` | Tesla Tank | Dominion | Arc Tank | short-range arc that chains |
 | 3 | GI (deployed) | Compact | Rifle Squad dig-in | deploys into a sandbagged position: more range and armour, cannot move |
 | 3 | civilian buildings | map | Garrison | infantry occupy a building and fire out of it |
 | 4 | Yuri | Dominion | Mentalist | takes control of one enemy unit |
@@ -118,3 +118,24 @@ Both draw a `beam` effect, a hot core inside a soft glow gone in 0.35 s, and nei
 flash. The beam has its own sound (`beam` in `audio/recipes.js`). The opponent builds Lens Towers
 as the Compact's premium defence (ratio 0.10, at most 3, beside the Arc Tower in the plan) and
 buys the Lens Tank from 2200 credits. `unit/lens` holds the rules, `e2e/lens` the picture.
+
+## Batch 2: the Arc (`core/arc.js`, `sprites/arc.js`)
+
+**Arc Trooper** (`arctroop`, Dominion infantry, 500, needs a Radar Post, 130 hp, light armour):
+`arcgun`, 30 damage at range 9, a shot every 1.3 s, as good against a tank (1.0) as against a man.
+Standing within 3 cells of one of its side's Arc Towers, on foot, it **charges** the tower: a
+charged tower fires through a brownout, which an uncharged one never does, and each trooper adds
+a quarter of a shot, up to 3 of them. Each charged shot draws an arc from every charging trooper
+up to the coil. The Arc Tower's rules name what charges it (`chargedBy:'arctroop'`), so the Lens
+Tower is not charged by them.
+
+**Arc Tank** (`arctank`, Dominion, 1000, needs a Radar Post, 380 hp, heavy armour): `arcbolt`,
+55 damage at range 13. The bolt jumps from its target to the 2 nearest enemies within 2.5 cells,
+each taking 60% through its own armour. It uses the Lens Tank's fork with its own numbers
+(`split:{ n, cells, share }` on the weapon).
+
+The Arc Tower's own bolt is drawn and heard as an arc now too (`shot:'arc'`, the `zap` sound),
+where it used to be a machine-gun tracer. An arc is the beam effect broken into seven jagged
+legs, re-thrown every 0.05 s so it crackles, and none of the three has a muzzle flash. The
+opponent's infantry mix buys Arc Troopers from 1000 credits and its vehicle mix Arc Tanks from
+1700. `unit/arc` holds the rules and `e2e/arc` the picture.

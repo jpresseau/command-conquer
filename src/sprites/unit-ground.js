@@ -150,6 +150,11 @@ function _sprUnitGround(X, key) {
       } else if (key === 'tanya') {
         _r3Box(m, mx + 2.3, 4.4, mz - 1.0, 2.8, 0.9, 0.9, kit.prop, DK[3]); /* pistols */
         _r3Box(m, mx + 2.3, 4.4, mz + 1.0, 2.8, 0.9, 0.9, kit.prop, DK[3]);
+      } else if (key === 'arctroop') {
+        /* A coil on the back standing above the helmet, and a stubby arc gun: copper both. */
+        _r3Cyl(m, mx - 2.2, 3.4, mz, 1.0, 5.4, kit.prop, '#e8c08a', 12);
+        _r3Cyl(m, mx - 2.2, 8.8, mz, 1.5, 0.7, kit.prop, '#3fb6e8', 12);
+        _r3Box(m, mx + 2.4, 4.2, mz - 0.5, 4.2, 1.6, 1.6, kit.prop, DK[3]);
       } else if (key === 'grenadier') {
         /* Arm cocked back with a charge in it - a rearward line where the rifleman's is
            forward, so a mixed squad is not a smear. */

@@ -272,7 +272,7 @@ function _rtsFire(e, tgt, w) {
      them forgetting would be a silent balance bug. */
   if (e.type === 'struct') {
     var _sd = rtsStructDef(e.def);
-    if (_sd && _sd.needsPower && _rtsPowerFactor(e.side) < 0.999) return;
+    if (_sd && _sd.needsPower && _rtsPowerFactor(e.side) < 0.999 && !_rtsArcChargers(e).length) return;   /* unless charged: core/arc.js */
   }
   /* AND NEVER AT YOUR OWN SIDE. Deliberately a second guard - _rtsUpdateUnit already refuses to
      AIM at a friendly - because this is the one place every route to a shot passes through, so
@@ -313,14 +313,15 @@ function _rtsFire(e, tgt, w) {
      Set at the one place every route to a shot passes through, so there is no way to fire from
      under water. */
   if ((rtsUnitDef(e.def) || {}).cloak) e.decloak = RTS_SUB_SURFACE;
-  if (typeof _rtsSfx === 'function') _rtsSfx(w.shot === 'beam' ? 'beam' : w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
+  if (typeof _rtsSfx === 'function') _rtsSfx(w.shot === 'beam' ? 'beam' : w.shot === 'arc' ? 'zap' : w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
     : (w.shot === 'missile' ? 'rocket' : (e.type === 'struct' ? 'turretgun' : 'cannon')), e.x, e.z);
   /* a Lens Tower's idle neighbours pour their beams into this one (core/lens.js) */
-  var raw = w.dmg * bias.fire * rtsCrateMult(e, 'fire') * (w.relay && e.type === 'struct' ? _rtsLensRelay(e, w) : 1);
+  var raw = w.dmg * bias.fire * rtsCrateMult(e, 'fire') * (w.relay && e.type === 'struct' ? _rtsLensRelay(e, w) : 1)
+          * _rtsArcCharge(e);                     /* ...and an Arc Tower's troopers charge it (core/arc.js) */
   var dmg = raw * rtsVerses(w, tgt);
   if (w.speed <= 0) {
     _rtsDamage(tgt, dmg, e);
-    if (w.shot === 'beam') G.fx.push(_rtsLensBeamFx(e, tgt));
+    if (w.shot === 'beam' || w.shot === 'arc') G.fx.push(_rtsLensBeamFx(e, tgt, w));
     else G.fx.push({ kind:'tracer', x:m.x, y:1.3, z:m.z, x2:tgt.x, y2:1.3, z2:tgt.z, t:0 });
     if (w.split) _rtsLensFork(e, tgt, w, raw);      /* and a Lens Tank's forks onto its neighbours */
     _rtsCombatAnim(dmg, tgt.x, tgt.z, 0.5, tgt);

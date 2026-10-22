@@ -127,7 +127,7 @@ var RTS_WEAPONS = {
   /* The Flame Squad's weapon on a fixed mount: a little more reach and a lot more of it. */
   /* The coil's bolt. Enormous damage, slow, and it ignores armour class the way RA's does -
      a Tesla hit is a Tesla hit whether it lands on a rifleman or a Mammoth. */
-  teslazap:   { dmg:200, range:17, cool:2.6, shot:'tracer', speed:0, splash:0, wall:true,
+  teslazap:   { dmg:200, range:17, cool:2.6, shot:'arc', speed:0, splash:0, wall:true,
                 verses:{ none:1, wood:1, light:1, heavy:1, concrete:1 } },
   /* THE LENS BEAM (core/lens.js). A Lens Tower alone hits a little over half as hard as an Arc
      Tower; what it has instead is its neighbours. Every idle tower in reach pours its own beam
@@ -138,6 +138,13 @@ var RTS_WEAPONS = {
                 verses:{ none:1, wood:1, light:1, heavy:0.9, concrete:0.6 } },
   lenssplit:  { dmg:75, range:22, cool:3.2, shot:'beam', speed:0, splash:0, wall:true, wood:true, split:true,
                 verses:{ none:0.8, wood:1.2, light:1.0, heavy:0.8, concrete:1.1 } },
+  /* THE ARC (core/arc.js), the Arc Tower's bolt in smaller hands. Short, and good against
+     everything that moves; poor against a building. The tank's arc jumps on to the enemies
+     beside its target, as a lens beam forks, but to fewer of them and further down the share. */
+  arcgun:     { dmg:30, range:9, cool:1.3, shot:'arc', speed:0, splash:0,
+                verses:{ none:1.0, wood:0.5, light:1.2, heavy:1.0, concrete:0.4 } },
+  arcbolt:    { dmg:55, range:13, cool:1.8, shot:'arc', speed:0, splash:0, split:{ n:2, cells:2.5, share:0.6 },
+                verses:{ none:1.1, wood:0.5, light:1.2, heavy:1.0, concrete:0.4 } },
   /* Naval guns. Long reach is the point of a ship - it is the only thing in the game that can
      hit a base without being able to be walked up to. */
   navalgun:   { dmg:30, range:24, cool:1.6, shot:'shell', speed:60, splash:2.0, wall:true, wood:true,

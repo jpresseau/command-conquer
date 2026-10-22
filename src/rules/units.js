@@ -34,6 +34,14 @@ var RTS_UNITS = [
     side:'soviet', armour:'none',
     crawl:true, fraidy:true,
     desc:'Lobbed charges. Clears infantry and cracks buildings; hopeless against a moving tank.' },
+  /* THE ARC TROOPER (core/arc.js). Heavy infantry with a short arc gun, as good against a tank as
+     against a man - and standing beside an Arc Tower it charges it: the tower fires through a
+     brownout, and harder for each trooper (up to RTS_ARC.max). So a Dominion base that is short
+     of power can still hold its line, if it spends men on it. */
+  { key:'arctroop', name:'Arc Trooper',   kind:'infantry', cost:500,  build:8,  hp:130,  speed:5,   turn:6,  r:1.1, sight:14, weapon:'arcgun',
+    needs:['radar'],
+    side:'soviet', armour:'light',
+    desc:'Short-range arc gun that stops tanks as well as men. Stand it by an Arc Tower to charge it: the tower fires without power, and harder.' },
   { key:'light',    name:'Light Tank',    kind:'vehicle',  cost:700,  build:9,  hp:280,  speed:12,  turn:2.6,r:1.8, sight:18, weapon:'cannon',
     side:'allied', armour:'light',
     desc:'Cheap armour. Faster than a Battle Tank and half the price, with a third of the hull.' },
@@ -62,6 +70,11 @@ var RTS_UNITS = [
     needs:['lab'],
     side:'allied', armour:'light',
     desc:'Long-range beam that forks onto the enemies around its target. Thin armour: keep it behind your tanks.' },
+  /* The Arc Tower on tracks: a short bolt that jumps on to two more enemies beside its target. */
+  { key:'arctank',  name:'Arc Tank',      kind:'vehicle',  cost:1000, build:13, hp:380,  speed:9.5, turn:2.0,r:2.0, sight:16, weapon:'arcbolt',
+    needs:['radar'],
+    side:'soviet', armour:'heavy',
+    desc:'A short-range arc that jumps from its target to two more beside it. Shreds a crowd of infantry or light vehicles.' },
   { key:'flame',    name:'Flame Squad',   kind:'infantry', cost:300,  build:5,  hp:75,   speed:6,   turn:6,  r:1.1, sight:12, weapon:'flame',
     needs:['lab'],
     side:'soviet', armour:'none',

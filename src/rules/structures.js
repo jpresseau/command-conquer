@@ -138,7 +138,7 @@ var RTS_STRUCTS = [
      rather than an inconvenience. Priced and armed from RULES.INI: 1500, 200 damage, and a
      draw of 100 which is more than any other defence asks for. */
   { key:'tesla',    name:'Arc Tower',    w:1, h:2, cost:1500, build:20, hp:400,  power:-100, sight:20,
-    needs:['radar'], weapon:'teslazap', side:'soviet', needsPower:true,
+    needs:['radar'], weapon:'teslazap', side:'soviet', needsPower:true, chargedBy:'arctroop',
     armour:'concrete',
     desc:'Devastating, and dead the moment your power browns out. Dominion.' },
   /* The Compact's answer to the Arc Tower, and the opposite bargain: weaker alone and cheaper

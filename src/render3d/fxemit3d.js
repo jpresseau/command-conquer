@@ -303,9 +303,27 @@ function _r3dFxBeam(V, f) {
   if (f.t > R3D_FX_BEAM_T) return;
   var y0 = V.ground(f.x, f.z) + (f.y || 1.3), y1 = V.ground(f.x2, f.z2) + (f.y2 || 1.3);
   var k = f.lens || 1, op = 1 - f.t / R3D_FX_BEAM_T;
+  if (f.arc) { _r3dFxArc(V, f, y0, y1, k, op); return; }
   _r3dFxStreak(V.M, V, f.x, y0, f.z, f.x2, y1, f.z2, 1.1 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.35 * op, 0, R3D_FX_LENS);
   _r3dFxStreak(V.M, V, f.x, y0, f.z, f.x2, y1, f.z2, 0.32 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.95 * op, 0, R3D_FX_ROUND);
   _r3dFxBill(V.M, V, f.x2, y1, f.z2, 1.1 * k, 1.1 * k, 0.6, R3D_FXT_FLASH, 0, 0, 0.9 * op, 0, R3D_FX_LENS);
+}
+
+/* AN ARC (core/arc.js) is the same line broken into R3D_FX_ARC_N jagged legs that jump about as
+   it lives - re-thrown every R3D_FX_ARC_HOP s from its own seed, so it crackles rather than
+   sliding - violet-blue round a white core, with a flash where it lands. */
+var R3D_FX_ARCC = [0.85, 0.80, 1.60], R3D_FX_ARC_N = 7, R3D_FX_ARC_HOP = 0.05;
+function _r3dFxArc(V, f, y0, y1, k, op) {
+  var dx = f.x2 - f.x, dz = f.z2 - f.z, len = Math.hypot(dx, dz) || 1, nx = -dz / len, nz = dx / len;
+  var seed = _r3dFxSeed(f) + Math.floor(f.t / R3D_FX_ARC_HOP) * 131, px = f.x, py = y0, pz = f.z;
+  for (var i = 1; i <= R3D_FX_ARC_N; i++) {
+    var u = i / R3D_FX_ARC_N, j = i === R3D_FX_ARC_N ? 0 : (_r3dFxH(seed + i, 7.1) - 0.5) * Math.min(2.4, len * 0.18);
+    var qx = f.x + dx * u + nx * j, qy = y0 + (y1 - y0) * u + j * 0.4, qz = f.z + dz * u + nz * j;
+    _r3dFxStreak(V.M, V, px, py, pz, qx, qy, qz, 0.9 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.4 * op, 0, R3D_FX_ARCC);
+    _r3dFxStreak(V.M, V, px, py, pz, qx, qy, qz, 0.26 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.95 * op, 0, R3D_FX_FOAM);
+    px = qx; py = qy; pz = qz;
+  }
+  _r3dFxBill(V.M, V, f.x2, y1, f.z2, 1.0 * k, 1.0 * k, 0.6, R3D_FXT_FLASH, 0, 0, 0.9 * op, 0, R3D_FX_ARCC);
 }
 
 /* A CHUNK thrown off a dying building: dark, glowing for its first moments, with a wisp of smoke
