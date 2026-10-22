@@ -83,6 +83,21 @@ var RTS_UNITS = [
     needs:['relayhub'], hover:true, mindproof:true, hub:'relayhub',
     side:'allied', armour:'heavy',
     desc:'Fast, hovers over water, and cannot be mind-controlled. Runs only while you have a powered Relay Hub.' },
+  /* THE RIFT TROOPER (core/rift.js): jumps instead of walking, and erases what it shoots. */
+  { key:'rifttroop',name:'Rift Trooper',  kind:'infantry', cost:1500, build:14, hp:120,  speed:5,   turn:6,  r:1.1, sight:16, weapon:'riftgun',
+    needs:['lab'], rift:true,
+    side:'allied', armour:'none',
+    desc:'Jumps to wherever it is sent instead of walking. Its gun freezes its target out of time and erases it - unless the shooting stops first.' },
+  /* THE RIFT HARVESTER: mines like a harvester and jumps home full (core/rift.js) */
+  { key:'riftharv', name:'Rift Harvester',kind:'vehicle',  cost:1800, build:16, hp:600,  speed:7.5, turn:1.6,r:2.2, sight:14, weapon:null,
+    needs:['lab'], harvest:true, capacity:980, rift:true,
+    side:'allied', armour:'heavy',
+    desc:'A harvester that jumps home to the refinery when it is full, instead of driving. Compact.' },
+  /* THE VEIL TANK (core/rift.js): standing still, it is a tree to the enemy */
+  { key:'veiltank', name:'Veil Tank',     kind:'vehicle',  cost:1100, build:14, hp:300,  speed:10,  turn:2.0,r:2.0, sight:18, weapon:'veilgun',
+    needs:['lab'], veil:true,
+    side:'allied', armour:'light',
+    desc:'Hidden while it stands still and holds its fire: to the enemy it looks like a tree. Firing or moving gives it away.' },
   /* The Arc Tower on tracks: a short bolt that jumps on to two more enemies beside its target. */
   { key:'arctank',  name:'Arc Tank',      kind:'vehicle',  cost:1000, build:13, hp:380,  speed:9.5, turn:2.0,r:2.0, sight:16, weapon:'arcbolt',
     needs:['radar'],

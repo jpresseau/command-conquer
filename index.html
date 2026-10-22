@@ -863,7 +863,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">8b52847 · 2026-10-22</div>
+  <div id="rtsBuild" title="build">f5f63f4 · 2026-10-22</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1298,6 +1298,21 @@ var RTS_UNITS = [
     needs:['relayhub'], hover:true, mindproof:true, hub:'relayhub',
     side:'allied', armour:'heavy',
     desc:'Fast, hovers over water, and cannot be mind-controlled. Runs only while you have a powered Relay Hub.' },
+  /* THE RIFT TROOPER (core/rift.js): jumps instead of walking, and erases what it shoots. */
+  { key:'rifttroop',name:'Rift Trooper',  kind:'infantry', cost:1500, build:14, hp:120,  speed:5,   turn:6,  r:1.1, sight:16, weapon:'riftgun',
+    needs:['lab'], rift:true,
+    side:'allied', armour:'none',
+    desc:'Jumps to wherever it is sent instead of walking. Its gun freezes its target out of time and erases it - unless the shooting stops first.' },
+  /* THE RIFT HARVESTER: mines like a harvester and jumps home full (core/rift.js) */
+  { key:'riftharv', name:'Rift Harvester',kind:'vehicle',  cost:1800, build:16, hp:600,  speed:7.5, turn:1.6,r:2.2, sight:14, weapon:null,
+    needs:['lab'], harvest:true, capacity:980, rift:true,
+    side:'allied', armour:'heavy',
+    desc:'A harvester that jumps home to the refinery when it is full, instead of driving. Compact.' },
+  /* THE VEIL TANK (core/rift.js): standing still, it is a tree to the enemy */
+  { key:'veiltank', name:'Veil Tank',     kind:'vehicle',  cost:1100, build:14, hp:300,  speed:10,  turn:2.0,r:2.0, sight:18, weapon:'veilgun',
+    needs:['lab'], veil:true,
+    side:'allied', armour:'light',
+    desc:'Hidden while it stands still and holds its fire: to the enemy it looks like a tree. Firing or moving gives it away.' },
   /* The Arc Tower on tracks: a short bolt that jumps on to two more enemies beside its target. */
   { key:'arctank',  name:'Arc Tank',      kind:'vehicle',  cost:1000, build:13, hp:380,  speed:9.5, turn:2.0,r:2.0, sight:16, weapon:'arcbolt',
     needs:['radar'],
@@ -1746,6 +1761,13 @@ var RTS_WEAPONS = {
   /* the Drone Tank's quick gun: light, fast-firing, for a fast hull */
   dronegun:   { dmg:26, range:16, cool:1.1, shot:'shell', speed:64, splash:1.6, wall:true,
                 verses:{ none:0.8, wood:0.9, light:1.1, heavy:0.9, concrete:0.7 } },
+  /* THE RIFT TROOPER'S GUN (core/rift.js): no damage - each shot pushes the target `dmg` further
+     out of time, and when the push passes its hit points it is gone. Slow to work, sure when it does. */
+  riftgun:    { dmg:60, range:12, cool:1.0, shot:'beam', speed:0, splash:0, erase:true,
+                verses:{ none:1, wood:1, light:1, heavy:1, concrete:1 } },
+  /* the Veil Tank's gun: a heavy, slow shot - it fires from hiding and gives itself away doing it */
+  veilgun:    { dmg:85, range:17, cool:2.6, shot:'shell', speed:62, splash:2.2, wall:true, wood:true,
+                verses:{ none:0.7, wood:1.0, light:1.2, heavy:1.0, concrete:0.8 } },
   arcgun:     { dmg:30, range:9, cool:1.3, shot:'arc', speed:0, splash:0,
                 verses:{ none:1.0, wood:0.5, light:1.2, heavy:1.0, concrete:0.4 } },
   arcbolt:    { dmg:55, range:13, cool:1.8, shot:'arc', speed:0, splash:0, split:{ n:2, cells:2.5, share:0.6 },
@@ -2313,7 +2335,7 @@ var RTS_AI = {
                  (core/ai.js). A gun that cannot hit the ground is dead weight on a ground war. */
               { key:'flaktrack', at:1200, w:4, vsAir:2 },
               { key:'prismtank', at:2200, w:2 },
-              { key:'arctank', at:1700, w:3 }, { key:'dronetank', at:1500, w:3 } ],
+              { key:'arctank', at:1700, w:3 }, { key:'dronetank', at:1500, w:3 }, { key:'veiltank', at:1800, w:2 } ],
     /* No Mine Layer here: it is bought outside the weighted roll (core/aimines.js
        _rtsAISupport), because an entry in this pool moves every roll after it - measured, the
        Soviet opponent stopped reaching its Arc Tower in e2e/basedef and the raiders thinned out
@@ -2368,7 +2390,7 @@ var RTS_AI = {
     infantry:[ { key:'flame', at:1200, w:2 }, { key:'grenadier', at:900, w:2 },
                { key:'rocket', at:500, w:3 }, { key:'dog', at:400, w:2 },
                { key:'rifle', at:250, w:2 }, { key:'engineer', at:2200, w:2 },
-               { key:'arctroop', at:1000, w:2 }, { key:'mentalist', at:2000, w:1 } ],
+               { key:'arctroop', at:1000, w:2 }, { key:'mentalist', at:2000, w:1 }, { key:'rifttroop', at:2200, w:1 } ],
     /* AIRCRAFT, once there is a pad to fly from - _rtsCanQueue gates on `needs`, so these are
        inert until one exists and there is no separate check to keep in step. Both armies again;
        the Attack Heli was buildable by the player from the day it shipped and the opponent never
@@ -7311,7 +7333,7 @@ function _sprBuildingClean(key, side) {
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
   dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46,
-  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:53, drone:26, bomber:56, prismtank:36, arctank:38, dronetank:34
+  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:53, drone:26, bomber:56, prismtank:36, arctank:38, dronetank:34, veiltank:35, riftharv:44
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -7336,7 +7358,9 @@ var RTS_INF_KIT = {
   arctroop:  { body:['#3a4250','#4a5464'], top:'#3fb6e8', prop:'#b87333' },
   /* a long violet coat, bareheaded under a violet skullcap, and a band of light round the temples
      (core/mind.js) */
-  mentalist: { body:['#4a2e66','#6a4490'], top:'#c27bf2', prop:'#e6d0ff' }
+  mentalist: { body:['#4a2e66','#6a4490'], top:'#c27bf2', prop:'#e6d0ff' },
+  /* white armour, a cyan crown, and the rift ring on his back (core/rift.js) */
+  rifttroop: { body:['#cfd8de','#e8eff3'], top:'#2fd4d0', prop:'#bfefff' }
 };
 
 /* HOW FAR ROUND THE RUNNING GEAR HAS TURNED, 0 to 1 - set by the 3D renderer for the length of
@@ -7454,7 +7478,7 @@ function _sprUnitModel(key, side, prone, part) {
      model line reads the same as it did when this was one function. */
   var X = { m:m, TM:TM, VH:VH, S:S, DK:DK, O:O, C:C, GN:GN,
             d:d, prone:prone, part:part, side:side, tracks:tracks };
-  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key) || _sprUnitHulls(X, key) || _sprUnitLens(X, key) || _sprUnitArc(X, key) || _sprUnitMind(X, key))) {
+  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key) || _sprUnitHulls(X, key) || _sprUnitLens(X, key) || _sprUnitArc(X, key) || _sprUnitMind(X, key) || _sprUnitRift(X, key))) {
     _r3Box(m, 0, 0, -5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 0, 5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 2.5, 0, 15, 4, 8, TM[0], TM[1]);
@@ -7617,6 +7641,9 @@ function _sprUnitGround(X, key) {
       } else if (key === 'tanya') {
         _r3Box(m, mx + 2.3, 4.4, mz - 1.0, 2.8, 0.9, 0.9, kit.prop, DK[3]); /* pistols */
         _r3Box(m, mx + 2.3, 4.4, mz + 1.0, 2.8, 0.9, 0.9, kit.prop, DK[3]);
+      } else if (key === 'rifttroop') {
+        _r3Cyl(m, mx - 2.0, 3.6, mz, 1.6, 0.6, kit.prop, '#f2fdff', 14);       /* the rift ring on his back */
+        _r3Box(m, mx + 2.6, 4.4, mz - 0.5, 4.6, 1.3, 1.3, kit.prop, DK[3]);
       } else if (key === 'mentalist') {
         _r3Box(m, mx - 0.3, 6.6, mz, 2.6, 0.5, 2.6, kit.prop, kit.prop);        /* the band round his temples */
       } else if (key === 'arctroop') {
@@ -8946,6 +8973,47 @@ function _sprBldMind(X, key) {
   return false;
 }
 </script>
+<script>/* sprites/rift.js - the Veil Tank and the Rift Harvester (core/rift.js). Part of rts.sprites. The
+   Rift Trooper is an infantry kit (sprites/unitmodels.js RTS_INF_KIT).
+
+   The rift's colour is a cold white with a cyan heart, the colour of the Rift Gate's own light, and
+   each carries a ring of it: the harvester round its hopper, the trooper on his back. The Veil
+   Tank is the odd one out - its trick is to be seen as something else, so it carries the
+   projector that does it, a dome of lenses on a low turret, and nothing bright at all. */
+var RTS_RIFT_GLOW = ['#bfefff', '#f2fdff'];
+
+function _sprUnitRift(X, key) {
+  var m = X.m, VH = X.VH, TM = X.TM, S = X.S, DK = X.DK, part = X.part, i, a;
+  if (key === 'veiltank') {
+    if (part !== 'turret') {
+      X.tracks(15, 5.0, 4, 1.9);
+      _r3Slab(m, 0, 2.8, 0, 13.6, 2.4, 8.4, 1.0, VH[0], VH[1]);
+      _r3Hip(m, -0.4, 5.2, 0, 12.6, 1.4, 8.2, 2.6, VH[3]);
+    }
+    if (part !== 'hull') {
+      _r3Slab(m, -0.6, 6.4, 0, 6.6, 1.8, 6.0, 0.8, VH[1], TM[1]);
+      _r3Box(m, 5.6, 7.0, 0, 8.0, 1.1, 1.1, DK[1], DK[3]);                  /* the gun */
+      _r3Cone(m, -1.4, 8.2, 0, 2.6, 1.2, 2.2, S[2], 18);                    /* the projector dome */
+      for (i = 0; i < 6; i++) {
+        a = i / 6 * Math.PI * 2;
+        _r3Cyl(m, -1.4 + Math.cos(a) * 1.7, 8.6, Math.sin(a) * 1.7, 0.45, 0.5, '#5b7a5a', '#8fb08a', 10);   /* its lenses, leaf-green */
+      }
+    }
+    return true;
+  }
+  if (key === 'riftharv') {
+    X.tracks(18, 5.6, 5, 2.1);
+    _r3Slab(m, 1.0, 2.9, 0, 15, 3.4, 10, 1.2, VH[0], VH[1]);
+    _r3Box(m, 6.6, 6.3, 0, 4.6, 3.6, 7.6, VH[1], VH[3]);                     /* the cab */
+    _r3Box(m, 8.9, 7.4, 0, 0.6, 1.6, 5.8, RTS_PAL.glass, RTS_PAL.glass);
+    _r3Box(m, -2.6, 6.3, 0, 8.8, 4.2, 9.0, TM[0], TM[1]);                     /* the hopper, team colour */
+    _r3Cyl(m, -2.6, 10.5, 0, 4.4, 0.9, RTS_RIFT_GLOW[0], RTS_RIFT_GLOW[1], 24);   /* the rift ring round it */
+    _r3Cyl(m, -2.6, 10.5, 0, 3.4, 1.0, DK[1], DK[2], 24);
+    return true;
+  }
+  return false;
+}
+</script>
 <script>/* sprites/props.js - unit scaling and fit, pads, corpses, scorch, craters, fire, crates and
    the effect sheet. Part of rts.sprites, the sprite baker. */
 
@@ -9008,7 +9076,7 @@ function _sprUnit(key, side, prone, part) {
    drawn at each place RTS_TURRET_AT names (sprites/unit-airsea.js), turned to the unit's aim.
    The ships' models once ignored the part and built the whole ship for both, so a destroyer
    shelling a target abeam was drawn twice, the second hull swung across the first. */
-var RTS_TURRETED = { tank:1, light:1, heavy:1, destroyer:1, gunboat:1, cruiser:1, flaktrack:1, monitor:1, prismtank:1, arctank:1, dronetank:1 };
+var RTS_TURRETED = { tank:1, light:1, heavy:1, destroyer:1, gunboat:1, cruiser:1, flaktrack:1, monitor:1, prismtank:1, arctank:1, dronetank:1, veiltank:1 };
 
 /* The concrete apron a structure stands on. In the reference every building sits on a pale
    irregular pad noticeably larger than itself - it is what stops a base looking like
@@ -14005,8 +14073,10 @@ function _rtsJamTick(dt) {
 /* Is `o` inside a field of its own side's, and quiet? */
 function _rtsJammed(o) {
   var G = window._rtsG, L = G && G.jam && G.jam[o.side];
-  if (!L || !L.length || o.type !== 'unit') return false;
+  if (o.type !== 'unit') return false;
   if (o.firedT != null && G.t - o.firedT < RTS_JAM.fired) return false;
+  if (_rtsVeiled(o)) return true;                 /* a Veil Tank hides itself the same way: core/rift.js */
+  if (!L || !L.length) return false;
   for (var i = 0; i < L.length; i++) if (Math.hypot(o.x - L[i].x, o.z - L[i].z) <= L[i].r) return true;
   return false;
 }
@@ -16318,6 +16388,7 @@ function _rtsHoldSelected() {
 function _rtsOrderMove(e, x, z, attackMove) {
   if (e.type !== 'unit') return;
   if (e.dug) e.dug = 0;                         /* a move climbs out of the sandbags first: core/dig.js */
+  if (e.jump || _rtsRiftJump(e, x, z)) return;   /* a Rift Trooper jumps there instead: core/rift.js */
   e.order = attackMove ? 'amove' : 'move';
   e.target = null; e.hstate = null;
   e.goal = { x:x, z:z };                       /* remembered so a blocked repath keeps aiming here */
@@ -16778,6 +16849,10 @@ function _rtsFire(e, tgt, w) {
     if (_rtsMindTake(e, tgt)) { var mb = _rtsLensBeamFx(e, tgt, w); mb.mind = 1; G.fx.push(mb); }
     return;
   }
+  if (w.erase) {                                   /* no damage either: out of time (core/rift.js) */
+    _rtsErase(e, tgt, w); var rb = _rtsLensBeamFx(e, tgt, w); rb.rift = 1; G.fx.push(rb);
+    return;
+  }
   /* a Lens Tower's idle neighbours pour their beams into this one (core/lens.js) */
   var raw = w.dmg * bias.fire * rtsCrateMult(e, 'fire') * (w.relay && e.type === 'struct' ? _rtsLensRelay(e, w) : 1)
           * _rtsArcCharge(e)                      /* ...and an Arc Tower's troopers charge it (core/arc.js) */
@@ -17006,7 +17081,7 @@ function _rtsCanRetaliate(tgt, from) {
 <script>/* core/damage.js - what a hit does: damage, armour, fire and splash. Part of rts.core. */
 
 function _rtsDamage(tgt, dmg, from, floor) {
-  if (!tgt || tgt.dead) return;
+  if (!tgt || tgt.dead || tgt.erase > 0) return;  /* out of time, nothing reaches it: core/rift.js */
   if (tgt.cargo && tgt.type === 'struct') _rtsGarrisonHit(tgt, dmg, from);   /* fire clears a held house: core/garrison.js */
   /* The Iron Curtain, enforced HERE rather than at the call sites. Every route to hurting
      something funnels through this function - shells, splash, fire, the dog rule below, a
@@ -18151,6 +18226,7 @@ function _rtsUpdateHarvester(e, dt, d) {
        wherever the crowd stops, and they pile up on whichever side they arrived from.
        `dockGoal` overrides it once the south face has been shown to be unusable - see below. */
     var dock = e.dockGoal || _rtsDockCoord(ref);
+    if (_rtsRiftHome(e, ref, dock, dt)) return;   /* a Rift Harvester jumps home: core/rift.js */
     /* Arrive at the dock, but unload from anywhere alongside the building: four harvesters
        converging on one point shove each other back out of a strict dock radius, and the one
        at the back of the queue never finishes its trip. The dock is the destination, not a
@@ -21643,6 +21719,103 @@ function _rtsSensed(o, side) {
   return false;
 }
 </script>
+<script>/* core/rift.js - THE RIFT: the Compact's units that step outside of time, and the tank that hides
+   in plain sight.
+
+   THE RIFT TROOPER (`rift:true` on the unit) does not walk. A move order charges a jump for
+   RTS_RIFT.charge seconds, standing still, and then it is THERE - on the open cell nearest the
+   spot. It cannot be ordered again until it lands. Its gun (`erase` on rules/weapons.js
+   `riftgun`) does no damage: each shot pushes its target further out of time. While a target is
+   being erased it is frozen - it does not move, fire or build - and nothing else can hurt it;
+   when the push passes its hit points it is gone, with no wreck. Let the shooting lapse for
+   RTS_RIFT.lapse seconds and it comes back, whole.
+
+   THE RIFT HARVESTER (`rift:true` with `harvest`) mines like any harvester, and when its hopper is
+   full it jumps home to its refinery's dock after RTS_RIFT.home seconds instead of driving there
+   (core/harvest.js asks _rtsRiftHome).
+
+   THE VEIL TANK (`veil:true`) is hidden once it has stood still for RTS_RIFT.park seconds without
+   firing: the jammer's own rules then apply to it alone (core/jammer.js _rtsJammed), so it is
+   found the way a jammed unit is - by something of the enemy's standing close, a Spotter, or an
+   Echo Sensor - and to an enemy who has not found it, it is drawn as a tree (render3d/veil3d.js). */
+var RTS_RIFT = { charge: 1.2, lapse: 2.5, home: 1.5, park: 2 };
+
+/* ------------------------------------------------------------------ jumping ---- */
+/* A move order for a unit that jumps: charge, and land at (x, z). True if it took the order. */
+function _rtsRiftJump(e, x, z) {
+  var d = rtsUnitDef(e.def);
+  if (!d || !d.rift || d.harvest || e.inside) return false;
+  var c = _rtsNearestOpen(_rtsTX(x), _rtsTX(z), 6, _rtsDomainOf(e));
+  if (!c) return false;
+  e.jump = { x: _rtsWX(c[0]), z: _rtsWX(c[1]), t: RTS_RIFT.charge };
+  e.order = 'jump'; e.path = null; e.target = null;
+  return true;
+}
+/* Each tick, for a unit charging a jump: true while it is busy charging (core/tick.js). */
+function _rtsRiftBusy(e, dt) {
+  if (!e.jump) return false;
+  e.jump.t -= dt;
+  if (e.jump.t > 0) return true;
+  var G = window._rtsG, j = e.jump;
+  G.fx.push({ kind: 'pop', x: e.x, y: 1, z: e.z, t: 0, big: 0.6 });
+  e.x = j.x; e.z = j.z; e.jump = null; e.order = null;
+  G.fx.push({ kind: 'pop', x: e.x, y: 1, z: e.z, t: 0, big: 0.6 });
+  return false;
+}
+/* The Rift Harvester, full, going home: charge, then land at the dock. True while it is doing so. */
+function _rtsRiftHome(e, ref, dock, dt) {
+  if (!(rtsUnitDef(e.def) || {}).rift) return false;
+  e.homeT = (e.homeT || 0) + dt;
+  e.path = null;
+  if (e.homeT < RTS_RIFT.home) return true;
+  var c = _rtsNearestOpen(_rtsTX(dock.x), _rtsTX(dock.z), 4, _rtsDomainOf(e));
+  e.homeT = 0;
+  if (!c) return false;
+  var G = window._rtsG;
+  G.fx.push({ kind: 'pop', x: e.x, y: 1, z: e.z, t: 0, big: 0.9 });
+  e.x = _rtsWX(c[0]); e.z = _rtsWX(c[1]);
+  G.fx.push({ kind: 'pop', x: e.x, y: 1, z: e.z, t: 0, big: 0.9 });
+  e.hstate = 'unload'; e.ref = ref; _rtsDockReset(e);
+  return true;
+}
+
+/* ------------------------------------------------------------------ erasing ---- */
+/* A shot from an erasing gun: push the target further out of time. */
+function _rtsErase(e, tgt, w) {
+  var G = window._rtsG;
+  if (!tgt || tgt.dead) return;
+  tgt.erase = (tgt.erase || 0) + w.dmg;
+  tgt.eraseT = G.t; tgt.eraseBy = e.id;
+  if (tgt.type === 'unit') { tgt.path = null; tgt.order = null; tgt.target = null; }
+  if (tgt.erase >= tgt.hp) {
+    if (_rtsHostile(e.side, tgt.side)) e.kills = (e.kills || 0) + 1;
+    tgt.hurtBy = e.side;
+    _rtsKillQuiet(tgt);
+  }
+}
+/* Each tick, for something being erased: true while it is frozen (core/tick.js). Lapsed, it is back. */
+function _rtsErased(e) {
+  if (!(e.erase > 0)) return false;
+  if (window._rtsG.t - e.eraseT > RTS_RIFT.lapse) { e.erase = 0; e.eraseBy = null; return false; }
+  return true;
+}
+
+/* ------------------------------------------------------------------- the veil ---- */
+function _rtsVeilTick(dt) {
+  var G = window._rtsG;
+  for (var i = 0; i < G.ents.length; i++) {
+    var u = G.ents[i];
+    if (u.type !== 'unit' || u.dead || !(rtsUnitDef(u.def) || {}).veil) continue;
+    var still = !(u.path && u.pi < u.path.length) && !(u.firedT != null && G.t - u.firedT < RTS_RIFT.park);
+    u.veilT = still ? (u.veilT || 0) + dt : 0;
+  }
+}
+/* A shot gives it away at once, not at the next tick: the shot is what sets firedT (core/combat.js). */
+function _rtsVeiled(o) {
+  if (!o || o.dead || o.type !== 'unit' || !(o.veilT >= RTS_RIFT.park) || !(rtsUnitDef(o.def) || {}).veil) return false;
+  return !(o.firedT != null && window._rtsG.t - o.firedT < RTS_RIFT.park);
+}
+</script>
 <script>/* core/missions.js - the team mission list (TEAMTYPE.CPP): the script a team runs.
    Part of rts.core, the simulation. */
 
@@ -22732,11 +22905,13 @@ function _rtsTick(dt) {
     e = G.ents[i];
     if (e.dead) continue;
     if (e.inside) continue;                      /* riding in a transport - see _rtsAboard */
-    if (e.type === 'unit') { if (!_rtsOffline(e)) _rtsUpdateUnit(e, dt); else e.path = null; }   /* a Drone Tank's hub down: core/mind.js */
+    if (_rtsErased(e)) continue;                 /* frozen, out of time: core/rift.js */
+    if (e.type === 'unit') { if (_rtsRiftBusy(e, dt)) continue; if (!_rtsOffline(e)) _rtsUpdateUnit(e, dt); else e.path = null; }   /* a jump charging; a Drone Tank's hub down: core/rift.js, core/mind.js */
     else _rtsUpdateStruct(e, dt);
   }
   if (G.sides.civ) _rtsGarrisonTick(dt);        /* squads firing out of the town's houses: core/garrison.js */
   _rtsMindTick();                                /* a Mentalist that has died lets go: core/mind.js */
+  _rtsVeilTick(dt);                              /* a Veil Tank standing still: core/rift.js */
   _rtsSeparate(dt);
   _rtsAirSpread(dt);                             /* aircraft keep their own distance: core/airspace.js */
   _rtsUpdateProj(dt);
@@ -23015,6 +23190,7 @@ var RTS_REPLAY_PURE = {
     '_rtsReplayTimes',
     /* the picture's: heights, sight and where a gun points (src/render, src/render3d) */
     '_rtsAirLift', '_rtsVisible', '_rtsMineShown', '_rtsBridgeDeckY', '_rtsMuzzleAngle', '_rtsFireCoord',
+    '_rtsSeen', '_rtsVeiled',                    /* a Veil Tank drawn as a tree: render3d/veil3d.js */
     '_rtsWithPlayer', '_rtsStandY', '_rtsEffectsSeen', '_rtsElevNormal', '_rtsTileElev'],
   /* the battle's setup, before a recording starts, or a save's, which is not recorded */
   setup: ['_rtsNewGame', '_rtsMissionSetup', '_rtsSurvivalSetup', '_rtsRecalcPower', '_rtsRngMake', 'rtsSetArmySide',
@@ -28012,7 +28188,7 @@ function _r3dFxBeam(V, f) {
   var y0 = V.ground(f.x, f.z) + (f.y || 1.3), y1 = V.ground(f.x2, f.z2) + (f.y2 || 1.3);
   var k = f.lens || 1, op = 1 - f.t / R3D_FX_BEAM_T;
   if (f.arc) { _r3dFxArc(V, f, y0, y1, k, op); return; }
-  var tint = f.mind ? R3D_FX_MIND : R3D_FX_LENS;   /* a Mentalist's link is violet (core/mind.js) */
+  var tint = f.mind ? R3D_FX_MIND : f.rift ? R3D_FX_FOAM : R3D_FX_LENS;   /* a Rift Trooper's is white */   /* a Mentalist's link is violet (core/mind.js) */
   _r3dFxStreak(V.M, V, f.x, y0, f.z, f.x2, y1, f.z2, 1.1 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.35 * op, 0, tint);
   _r3dFxStreak(V.M, V, f.x, y0, f.z, f.x2, y1, f.z2, 0.32 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.95 * op, 0, f.mind ? R3D_FX_MINDC : R3D_FX_ROUND);
   _r3dFxBill(V.M, V, f.x2, y1, f.z2, 1.1 * k, 1.1 * k, 0.6, R3D_FXT_FLASH, 0, 0, 0.9 * op, 0, tint);
@@ -30237,6 +30413,13 @@ function _r3dSoldierMan(m, key, mx, mz, pose, lead, K) {
     armTo(1, cx + 1.2, cy - 0.8, mz + 1.4, cx + 2.4, cy - 0.5, mz + 1.3);
     _r3Box(m, cx + 3.0, cy - 0.65, mz - 1.3, 1.4, 0.5, 0.35, kit.prop, DK[3]);    /* pistols */
     _r3Box(m, cx + 3.0, cy - 0.65, mz + 1.3, 1.4, 0.5, 0.35, kit.prop, DK[3]);
+  } else if (key === 'rifttroop') {
+    /* the rift gun held across him, and the ring standing up on his back */
+    armTo(-1, cx + 0.7, cy - 1.5, mz - 1.5, cx + 1.3, cy - 0.9, mz - 0.7);
+    armTo(1, cx + 1.8, cy - 1.2, mz + 1.0, cx + 2.6, cy - 0.9, mz - 0.3);
+    _r3dLimb(m, cx + 0.5, cy - 0.7, mz - 0.6, cx + 4.2, cy - 0.9, mz - 0.2, 0.5, 0.4, 12, kit.prop);
+    _r3dBall(m, cx + 4.4, cy - 0.9, mz - 0.2, 0.42, '#f2fdff', 10, 6);
+    _r3Cyl(m, mx - 1.9, hipY + 2.4, mz, 1.5, 0.45, kit.prop, '#f2fdff', 20);
   } else if (key === 'mentalist') {
     /* hands to the temples: the band of light round his head, and nothing in his hands */
     armTo(-1, cx + 0.4, cy - 0.2, mz - 1.4, cx + 0.3, cy + 1.0, mz - 0.9);
@@ -30493,7 +30676,7 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
   var d2 = rtsUnitDef(e.def), pose = 0, mo = _r3dUnitMotion(R3, e, t);
   /* OUT OF SIGHT, OUT OF THE PICTURE - dissolving as it goes (shroud3d.js) */
   var fade = _r3dSeenFade(R3, e, mo, t);
-  if (fade <= 0) return;
+  if (fade <= 0) { if (_rtsVeiled(e)) _r3dVeilDraw(C, e, R3, drawIn); return; }   /* a Veil Tank unseen is a tree: veil3d.js */
   /* THE GROUND UNDER IT, not zero. An aircraft's altitude is measured from the ground it
      is over as well - it flies at a height, not at a level - so both take the terrain and
      only the flier adds to it. */
@@ -30600,6 +30783,24 @@ function _r3dDigRing(R3) {
   var mesh = m.length ? _r3dBuildMesh(R3.gl, m) : null;
   if (mesh) mesh.weather = 0.5;
   return (R3.mesh.digRing = mesh);
+}
+</script>
+<script>/* render3d/veil3d.js - a Veil Tank the enemy has not found (core/rift.js) is drawn as one of the
+   map's own trees, standing where the tank stands: the same tree the forest draws (forest3d.js
+   _r3dTree), one mesh for every Veil Tank, built the first time one is hidden. R3.veilOff draws
+   nothing in its place, for a spec's A/B. */
+function _r3dVeilTree(R3) {
+  if (R3.mesh.veilTree !== undefined) return R3.mesh.veilTree;
+  var m = [];
+  _r3dTree(m, 0, 0, 17, 23, 0);
+  var mesh = m.length ? _r3dBuildMesh(R3.gl, m) : null;
+  if (mesh) mesh.weather = 0.5;
+  return (R3.mesh.veilTree = mesh);
+}
+function _r3dVeilDraw(C, e, R3, drawIn) {
+  if (R3.veilOff) return;
+  if (typeof _rtsSeen === 'function' && !_rtsSeen(_rtsTX(e.x), _rtsTX(e.z))) return;   /* not even a tree under the shroud */
+  drawIn(C, _r3dVeilTree(R3), e.x, _rtsElev(e.x, e.z), e.z, 0, 1, 0, 1);
 }
 </script>
 <script>/* render3d/air3d.js - aircraft that fly like aircraft. Part of rts.render3d.

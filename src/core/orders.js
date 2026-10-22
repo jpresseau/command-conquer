@@ -29,6 +29,7 @@ function _rtsHoldSelected() {
 function _rtsOrderMove(e, x, z, attackMove) {
   if (e.type !== 'unit') return;
   if (e.dug) e.dug = 0;                         /* a move climbs out of the sandbags first: core/dig.js */
+  if (e.jump || _rtsRiftJump(e, x, z)) return;   /* a Rift Trooper jumps there instead: core/rift.js */
   e.order = attackMove ? 'amove' : 'move';
   e.target = null; e.hstate = null;
   e.goal = { x:x, z:z };                       /* remembered so a blocked repath keeps aiming here */

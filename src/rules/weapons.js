@@ -148,6 +148,13 @@ var RTS_WEAPONS = {
   /* the Drone Tank's quick gun: light, fast-firing, for a fast hull */
   dronegun:   { dmg:26, range:16, cool:1.1, shot:'shell', speed:64, splash:1.6, wall:true,
                 verses:{ none:0.8, wood:0.9, light:1.1, heavy:0.9, concrete:0.7 } },
+  /* THE RIFT TROOPER'S GUN (core/rift.js): no damage - each shot pushes the target `dmg` further
+     out of time, and when the push passes its hit points it is gone. Slow to work, sure when it does. */
+  riftgun:    { dmg:60, range:12, cool:1.0, shot:'beam', speed:0, splash:0, erase:true,
+                verses:{ none:1, wood:1, light:1, heavy:1, concrete:1 } },
+  /* the Veil Tank's gun: a heavy, slow shot - it fires from hiding and gives itself away doing it */
+  veilgun:    { dmg:85, range:17, cool:2.6, shot:'shell', speed:62, splash:2.2, wall:true, wood:true,
+                verses:{ none:0.7, wood:1.0, light:1.2, heavy:1.0, concrete:0.8 } },
   arcgun:     { dmg:30, range:9, cool:1.3, shot:'arc', speed:0, splash:0,
                 verses:{ none:1.0, wood:0.5, light:1.2, heavy:1.0, concrete:0.4 } },
   arcbolt:    { dmg:55, range:13, cool:1.8, shot:'arc', speed:0, splash:0, split:{ n:2, cells:2.5, share:0.6 },

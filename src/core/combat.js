@@ -321,6 +321,10 @@ function _rtsFire(e, tgt, w) {
     if (_rtsMindTake(e, tgt)) { var mb = _rtsLensBeamFx(e, tgt, w); mb.mind = 1; G.fx.push(mb); }
     return;
   }
+  if (w.erase) {                                   /* no damage either: out of time (core/rift.js) */
+    _rtsErase(e, tgt, w); var rb = _rtsLensBeamFx(e, tgt, w); rb.rift = 1; G.fx.push(rb);
+    return;
+  }
   /* a Lens Tower's idle neighbours pour their beams into this one (core/lens.js) */
   var raw = w.dmg * bias.fire * rtsCrateMult(e, 'fire') * (w.relay && e.type === 'struct' ? _rtsLensRelay(e, w) : 1)
           * _rtsArcCharge(e)                      /* ...and an Arc Tower's troopers charge it (core/arc.js) */

@@ -207,7 +207,7 @@ var RTS_AI = {
                  (core/ai.js). A gun that cannot hit the ground is dead weight on a ground war. */
               { key:'flaktrack', at:1200, w:4, vsAir:2 },
               { key:'prismtank', at:2200, w:2 },
-              { key:'arctank', at:1700, w:3 }, { key:'dronetank', at:1500, w:3 } ],
+              { key:'arctank', at:1700, w:3 }, { key:'dronetank', at:1500, w:3 }, { key:'veiltank', at:1800, w:2 } ],
     /* No Mine Layer here: it is bought outside the weighted roll (core/aimines.js
        _rtsAISupport), because an entry in this pool moves every roll after it - measured, the
        Soviet opponent stopped reaching its Arc Tower in e2e/basedef and the raiders thinned out
@@ -262,7 +262,7 @@ var RTS_AI = {
     infantry:[ { key:'flame', at:1200, w:2 }, { key:'grenadier', at:900, w:2 },
                { key:'rocket', at:500, w:3 }, { key:'dog', at:400, w:2 },
                { key:'rifle', at:250, w:2 }, { key:'engineer', at:2200, w:2 },
-               { key:'arctroop', at:1000, w:2 }, { key:'mentalist', at:2000, w:1 } ],
+               { key:'arctroop', at:1000, w:2 }, { key:'mentalist', at:2000, w:1 }, { key:'rifttroop', at:2200, w:1 } ],
     /* AIRCRAFT, once there is a pad to fly from - _rtsCanQueue gates on `needs`, so these are
        inert until one exists and there is no separate check to keep in step. Both armies again;
        the Attack Heli was buildable by the player from the day it shipped and the opponent never

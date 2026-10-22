@@ -120,6 +120,13 @@ function _r3dSoldierMan(m, key, mx, mz, pose, lead, K) {
     armTo(1, cx + 1.2, cy - 0.8, mz + 1.4, cx + 2.4, cy - 0.5, mz + 1.3);
     _r3Box(m, cx + 3.0, cy - 0.65, mz - 1.3, 1.4, 0.5, 0.35, kit.prop, DK[3]);    /* pistols */
     _r3Box(m, cx + 3.0, cy - 0.65, mz + 1.3, 1.4, 0.5, 0.35, kit.prop, DK[3]);
+  } else if (key === 'rifttroop') {
+    /* the rift gun held across him, and the ring standing up on his back */
+    armTo(-1, cx + 0.7, cy - 1.5, mz - 1.5, cx + 1.3, cy - 0.9, mz - 0.7);
+    armTo(1, cx + 1.8, cy - 1.2, mz + 1.0, cx + 2.6, cy - 0.9, mz - 0.3);
+    _r3dLimb(m, cx + 0.5, cy - 0.7, mz - 0.6, cx + 4.2, cy - 0.9, mz - 0.2, 0.5, 0.4, 12, kit.prop);
+    _r3dBall(m, cx + 4.4, cy - 0.9, mz - 0.2, 0.42, '#f2fdff', 10, 6);
+    _r3Cyl(m, mx - 1.9, hipY + 2.4, mz, 1.5, 0.45, kit.prop, '#f2fdff', 20);
   } else if (key === 'mentalist') {
     /* hands to the temples: the band of light round his head, and nothing in his hands */
     armTo(-1, cx + 0.4, cy - 0.2, mz - 1.4, cx + 0.3, cy + 1.0, mz - 0.9);

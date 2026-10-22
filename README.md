@@ -178,6 +178,11 @@ the Dominion until the Mentalist dies or takes another. The Compact's answer is 
 crewless, so nothing can take it, and it hovers over water, but it stops dead without a powered
 Relay Hub. The Dominion's Echo Sensor finds submarines and jammed vehicles near it.
 
+**Out of time.** The Compact's Rift Trooper jumps wherever it is sent instead of walking, and its
+gun freezes a target out of time until it is erased, unless the shooting stops first. The Rift
+Harvester jumps home with a full load. The Veil Tank, standing still, looks like a tree to an
+enemy that has not found it.
+
 **The enemy uses its whole garage.** It mines the approach to its own base, and once you have a
 harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands
 them beside your ore field, and goes home to do it again.

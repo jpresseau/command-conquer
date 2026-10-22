@@ -1,7 +1,7 @@
 /* core/damage.js - what a hit does: damage, armour, fire and splash. Part of rts.core. */
 
 function _rtsDamage(tgt, dmg, from, floor) {
-  if (!tgt || tgt.dead) return;
+  if (!tgt || tgt.dead || tgt.erase > 0) return;  /* out of time, nothing reaches it: core/rift.js */
   if (tgt.cargo && tgt.type === 'struct') _rtsGarrisonHit(tgt, dmg, from);   /* fire clears a held house: core/garrison.js */
   /* The Iron Curtain, enforced HERE rather than at the call sites. Every route to hurting
      something funnels through this function - shells, splash, fire, the dog rule below, a

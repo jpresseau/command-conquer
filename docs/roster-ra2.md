@@ -67,9 +67,9 @@ a section below with its numbers.
 | 4, `mentalist` | Yuri | Dominion | Mentalist | takes control of one enemy unit |
 | 4, `echo` | Psychic Sensor | Dominion | Echo Sensor | finds hidden units inside its radius |
 | 4, `dronetank` `relayhub` | Robot Tank / Robot Control Center | Compact | Drone Tank / Relay Hub | crewless, so it cannot be taken over; stops when the hub is down |
-| 5 | Mirage Tank | Compact | Veil Tank | looks like a tree while it stands still |
-| 5 | Chrono Legionnaire | Compact | Rift Trooper | jumps instead of walking; its shot takes a target out of time |
-| 5 | Chrono Miner | Compact | Rift Harvester | jumps home with a full load |
+| 5, `veiltank` | Mirage Tank | Compact | Veil Tank | looks like a tree while it stands still |
+| 5, `rifttroop` | Chrono Legionnaire | Compact | Rift Trooper | jumps instead of walking; its shot takes a target out of time |
+| 5, `riftharv` | Chrono Miner | Compact | Rift Harvester | jumps home with a full load |
 | 6 | Crazy Ivan | Dominion | Sapper | plants timed charges on anything |
 | 6 | Terrorist | Dominion | Zealot | runs in and detonates |
 | 6 | Demolition Truck | Dominion | Wrecker | a rolling bomb |
@@ -190,3 +190,26 @@ and unmasks a jammed unit (`core/jammer.js`).
 
 The opponent builds a hub and a sensor after its defences, and buys Mentalists from 2000 credits
 and Drone Tanks from 1500. `unit/mind` (20) and `e2e/mind` (8) hold it.
+
+## Batch 5: the Rift (`core/rift.js`, `sprites/rift.js`, `render3d/veil3d.js`)
+
+**Rift Trooper** (`rifttroop`, Compact infantry, 1500, after a Research Lab, 120 hp): it does not
+walk. A move order charges a jump for 1.2 s where it stands, and then it is on the open cell
+nearest the spot, having crossed no ground; it takes no new order while it charges. Its `riftgun`
+(range 12, every 1 s) does no damage. Each shot pushes the target 60 further out of time: frozen,
+it does not move or fire, and nothing else can hurt it. When the push passes its hit points it is
+gone, with no wreck. Let the shooting lapse for 2.5 s and it comes back, whole. The beam is drawn
+pale blue-white.
+
+**Rift Harvester** (`riftharv`, Compact, 1800, after a Research Lab, 600 hp, heavy armour, holds
+980): it mines like any harvester, and when its hopper is full it jumps to its refinery's dock
+after 1.5 s instead of driving there (`core/harvest.js` asks `_rtsRiftHome`).
+
+**Veil Tank** (`veiltank`, Compact, 1100, after a Research Lab, 300 hp): once it has stood still
+for 2 s without firing, the jammer's own rules apply to it alone (`core/jammer.js` `_rtsJammed`).
+It is not targeted from range, and is found by an enemy standing close, a Spotter or an Echo
+Sensor. To an enemy who has not found it, it is drawn as a tree. Moving or firing gives it away.
+Its `veilgun` is a heavy, slow shell (85 damage at range 17, every 2.6 s).
+
+The opponent buys Rift Troopers from 2200 credits and Veil Tanks from 1800. `unit/rift` (20) and
+`e2e/rift` (8) hold it.

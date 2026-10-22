@@ -76,6 +76,7 @@ function _rtsUpdateHarvester(e, dt, d) {
        wherever the crowd stops, and they pile up on whichever side they arrived from.
        `dockGoal` overrides it once the south face has been shown to be unusable - see below. */
     var dock = e.dockGoal || _rtsDockCoord(ref);
+    if (_rtsRiftHome(e, ref, dock, dt)) return;   /* a Rift Harvester jumps home: core/rift.js */
     /* Arrive at the dock, but unload from anywhere alongside the building: four harvesters
        converging on one point shove each other back out of a strict dock radius, and the one
        at the back of the queue never finishes its trip. The dock is the destination, not a
