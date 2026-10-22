@@ -60,7 +60,7 @@ function _rtsAIFoe(side) {
 function _rtsHostile(a, b) {
   if (a === b || !a || !b) return false;
   var S = window._rtsG.sides, A = S[a], B = S[b];
-  return !!(A && B) && A.team !== B.team;
+  return !!(A && B) && A.team !== B.team && A.team >= 0 && B.team >= 0;   /* the town's (-1) fights nobody */
 }
 /* On the human's team: what the player sees by, and never shoots at. */
 function _rtsWithPlayer(side) {

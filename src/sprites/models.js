@@ -336,7 +336,7 @@ function _sprBuildingModel(key, side) {
             pipe:pipe, ladder:ladder, rail:rail, steps:steps, drum:drum,
             crates:crates, floodlight:floodlight, plant:plant,
             sandbags:sandbags, ammo:ammo };
-  _sprBldBase(X, key) || _sprBldTech(X, key) || _sprBldWar(X, key) || _sprBldSuper(X, key) || _sprBldLens(X, key);
+  _sprBldBase(X, key) || _sprBldTech(X, key) || _sprBldWar(X, key) || _sprBldSuper(X, key) || _sprBldLens(X, key) || _sprBldTown(X, key);
   return m;
 }
 function _sprBuildingClean(key, side) {

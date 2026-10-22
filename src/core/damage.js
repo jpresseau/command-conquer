@@ -2,6 +2,7 @@
 
 function _rtsDamage(tgt, dmg, from, floor) {
   if (!tgt || tgt.dead) return;
+  if (tgt.cargo && tgt.type === 'struct') _rtsGarrisonHit(tgt, dmg, from);   /* fire clears a held house: core/garrison.js */
   /* The Iron Curtain, enforced HERE rather than at the call sites. Every route to hurting
      something funnels through this function - shells, splash, fire, the dog rule below, a
      script - so one check covers all of them, and a route added later cannot forget it. */
@@ -27,6 +28,7 @@ function _rtsDamage(tgt, dmg, from, floor) {
     }
   }
   if (tgt.prone) dmg *= RTS_PRONE_DAMAGE;
+  if (tgt.dug) dmg *= RTS_DIG.armor;              /* behind sandbags: core/dig.js */
   dmg /= _rtsBias(tgt.side).armor;                 /* ArmorBias defends the whole house */
   dmg /= rtsCrateMult(tgt, 'armor');               /* ...and a crate defends one unit */
   dmg = _rtsVetHit(dmg, from, tgt);                /* ...and a rank: the attacker's and the target's (core/veterancy.js) */

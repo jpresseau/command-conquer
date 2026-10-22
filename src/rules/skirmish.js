@@ -21,13 +21,16 @@ var RTS_SKIRMISH = {
   /* RANDOM is the generated map as it always was; MIRRORED reflects the player's half onto the
      opponent's so neither seat starts on better ground (core/mirror.js) */
   layout: { random: { name: 'RANDOM' }, mirror: { name: 'MIRRORED', mirror: true } },
+  /* civilian towns in the contested ground between the bases, whose buildings infantry can
+     garrison (core/garrison.js); `n` towns on a standard map, scaled with its size */
+  town:  { none: { name: 'NONE', n: 0 }, towns: { name: 'TOWNS', n: 2 } },
   /* who else is on the field: the computer seats beyond the one opponent (RTS_SEATS) */
   foes:  { one: { name: '1 FOE', extra: [] }, two: { name: '2 FOES', extra: ['enemy2'] },
            ally: { name: 'FOE + ALLY', extra: ['ally'] }, team: { name: '2 V 2', extra: ['ally', 'enemy2'] },
            /* every seat its own team, the bases spread round the ring (core/scenario.js) */
            ffa3: { name: 'FFA 3', extra: ['enemy2'], ffa: true }, ffa4: { name: 'FFA 4', extra: ['enemy2', 'enemy3'], ffa: true } }
 };
-var RTS_SKIRMISH_DEFAULT = { size: 'standard', water: 'coast', money: 'standard', foes: 'one', layout: 'random' };
+var RTS_SKIRMISH_DEFAULT = { size: 'standard', water: 'coast', money: 'standard', foes: 'one', layout: 'random', town: 'none' };
 
 /* THE SEATS. A seat's team is fixed by its name, so an ally is always the player's army and on the
    player's team, and a second opponent is the first opponent's: everything that has to know whose

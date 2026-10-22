@@ -183,7 +183,7 @@ function _rtsUpdateUnit(e, dt) {
     /* And a HOVERCRAFT afloat the same: it floats as the craft does, and a squad sent aboard one
        three cells out stood on the shore in order 'board' for good with the APC's reach. */
     var tdef = rtsUnitDef(tr && tr.def || '') || {};
-    var breach = (tdef.sea || tdef.air || tdef.hover) ? RTS_TILE * 3.0 : RTS_TILE * 1.6;
+    var breach = _rtsBoardReach(tr, tdef);         /* and a house's from its walls: core/garrison.js */
     if (!tr || tr.dead || !_rtsCanBoard(e, tr)) { e.order = null; e.target = null; e.path = null; }
     else if (_rtsRangeTo(e, tr) <= breach) { _rtsBoard(e, tr); return; }
     else {
@@ -304,7 +304,7 @@ function _rtsUpdateUnit(e, dt) {
          has just cleared it - while letting a hull that decided to back off fall through to
          the steering at the bottom instead of standing still with a path it never walks. */
       if (e.order === 'attack' && !e.path) return;   /* in range: hold and keep firing */
-    } else if (chasing && e.order === 'attack') {
+    } else if (chasing && e.order === 'attack' && !e.dug) {      /* dug in, it holds: core/dig.js */
       /* repath now and then; a FAILED path waits out the timer too (docs/measuring.md) */
       e.rep = (e.rep || 0) - dt;
       if (e.rep <= 0 || (!e.path && !e.chaseFail)) {
@@ -313,6 +313,7 @@ function _rtsUpdateUnit(e, dt) {
     }
   } else { e.turret = e.rot; }
 
+  if (e.dug) e.path = null;                      /* dug in, it does not walk: core/dig.js */
   if (e.path) { _rtsSteer(e, dt, d); if (!e.path && (e.order === 'move' || e.order === 'amove')) { e.order = null; if (e.wq) _rtsWayNext(e); } }
 }
 /* GIVE GROUND RATHER THAN TRADE - the movement half of RTS_STANDOFF_KEEP, and see that constant

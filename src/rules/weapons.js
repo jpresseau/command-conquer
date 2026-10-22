@@ -39,7 +39,7 @@ var RTS_WEAPONS = {
   turretgun:  { dmg:22, range:22, cool:0.9,  shot:'shell',   speed:70, splash:1, wall:true,
                 verses:{ none:1.0,  wood:0.70, light:1.00, heavy:0.80, concrete:0.50 } },
   /* Grenades arc: murder on anything that stays still, near-useless against a moving vehicle. */
-  grenade:    { dmg:26, range:14, cool:1.9,  shot:'shell',   speed:26, splash:3.4, wall:true, wood:true,
+  grenade:    { clears:true, dmg:26, range:14, cool:1.9,  shot:'shell',   speed:26, splash:3.4, wall:true, wood:true,
                 verses:{ none:1.0,  wood:1.30, light:0.45, heavy:0.25, concrete:0.95 } },
   /* Artillery has the longest reach in the game on the thinnest chassis. */
   howitzer:   { dmg:52, range:34, cool:3.4,  shot:'shell',   speed:44, splash:5.0, wall:true, wood:true,
@@ -122,7 +122,7 @@ var RTS_WEAPONS = {
                 verses:{ none:1.6,  wood:0.15, light:0.20, heavy:0.05, concrete:0.08 } },
   /* Flame: very short reach, no travel time, and it does not care what it is burning. Wood
      burns; concrete does not, which is why a flame squad is not the answer to a wall. */
-  flame:      { dmg:30, range:9,  cool:0.65, shot:'tracer',  speed:0,  splash:2.6, wood:true,
+  flame:      { clears:true, dmg:30, range:9,  cool:0.65, shot:'tracer',  speed:0,  splash:2.6, wood:true,
                 verses:{ none:1.3,  wood:1.70, light:0.70, heavy:0.50, concrete:1.20 } },
   /* The Flame Squad's weapon on a fixed mount: a little more reach and a lot more of it. */
   /* The coil's bolt. Enormous damage, slow, and it ignores armour class the way RA's does -
@@ -187,7 +187,7 @@ var RTS_WEAPONS = {
      against concrete. Artillery clears a position; the V2 takes a building down. */
   v2rocket:   { dmg:60, range:34, cool:4.2, shot:'missile', speed:34, splash:3.0, wall:true, wood:true,
                 verses:{ none:0.55, wood:1.35, light:0.95, heavy:0.85, concrete:1.25 } },
-  towerflame: { dmg:34, range:13, cool:0.75, shot:'tracer',  speed:0,  splash:3.0, wood:true,
+  towerflame: { clears:true, dmg:34, range:13, cool:0.75, shot:'tracer',  speed:0,  splash:3.0, wood:true,
                 verses:{ none:1.3,  wood:1.25, light:0.80, heavy:0.60, concrete:0.90 } }
 };
 

@@ -33,6 +33,7 @@ function _rtsIsTransport(e) {
 function _rtsTakes(t) { return (rtsUnitDef(t.def) || {}).takes || ['infantry']; }
 function _rtsCanBoard(inf, t) {
   if (!inf || !t || inf.dead || t.dead || inf === t) return false;
+  if (t.type === 'struct') return _rtsCanGarrison(inf, t);          /* a town's house: core/garrison.js */
   if (inf.side !== t.side || inf.inside) return false;
   var pd = rtsUnitDef(inf.def) || {};
   /* Nothing that swims or flies gets into a boat. */
@@ -61,6 +62,7 @@ function _rtsLandAt(t, x, z) {
 function _rtsBoardWhyNot(inf, t) {
   if (_rtsCanBoard(inf, t) || !inf || !t || inf === t) return null;
   var pd = rtsUnitDef(inf.def) || {}, td = rtsUnitDef(t.def) || {};
+  if (t.type === 'struct') return t.side !== 'civ' && t.side !== inf.side ? null : _rtsCargoCount(t) >= _rtsGarrisonCap(t) ? 'is full' : 'cannot be held by that';
   if (pd.sea || pd.air || inf.side !== t.side) return null;
   if (_rtsIsTransport(inf)) return 'cannot carry another transport';
   var takes = _rtsTakes(t);
@@ -88,6 +90,7 @@ function _rtsBoard(inf, t) {
   if (!t.cargo) t.cargo = [];
   t.cargo.push(inf);
   inf.inside = t; inf.order = null; inf.target = null; inf.path = null; inf.prone = 0;
+  if (t.type === 'struct') _rtsGarrisonTake(t, inf);
   var si = G.sel.indexOf(inf); if (si >= 0) G.sel.splice(si, 1);
   return true;
 }
@@ -150,6 +153,7 @@ function _rtsUnload(t, force) {
     n++;
   }
   t.cargo = held;
+  if (t.type === 'struct') _rtsGarrisonFree(t);   /* emptied: the town's again */
   return n;
 }
 /* UnitClass::Death, the transport half of the branch.
@@ -200,6 +204,7 @@ function _rtsDeploy(e) {
   var d = rtsUnitDef(e.def);
   if (d && d.mines) return _rtsLayMine(e);          /* the Mine Layer's deploy lays one: core/mines.js */
   if (d && d.bridge) return _rtsLayBridge(e);       /* the Bridge Layer's becomes a span: core/bridgelayer.js */
+  if (d && d.dig) return _rtsDigToggle(e);          /* a Compact rifle squad digs in: core/dig.js */
   if (!d || !d.deploy) return false;
   var sd = rtsStructDef(d.deploy);
   if (!sd) return false;
@@ -240,7 +245,7 @@ function _rtsDeploySelected() {
    show itself, and the order asks so it can skip everything else in a mixed selection. */
 function _rtsCanDeploy(e) {
   var d = e && rtsUnitDef(e.def) || {};
-  return !!(e && !e.dead && e.side === 'player' && e.type === 'unit' && (d.deploy || d.mines || d.bridge));
+  return !!(e && !e.dead && e.side === 'player' && e.type === 'unit' && (d.deploy || d.mines || d.bridge || _rtsCanDig(e)));
 }
 
 /* UNLOAD, here and now, for every selected transport that is carrying anything - the U key and
@@ -262,7 +267,7 @@ function _rtsUnloadSelected() {
 }
 /* one of the player's transports with something aboard: the button shows itself for these */
 function _rtsCanUnload(e) {
-  return !!(e && !e.dead && e.side === 'player' && e.type === 'unit' && _rtsCargoCount(e));
+  return !!(e && !e.dead && e.side === 'player' && (e.type === 'unit' || _rtsGarrisonable(e)) && _rtsCargoCount(e));
 }
 
 /* Removing the vehicle without the wreck, the explosion or the kill credit - it was not

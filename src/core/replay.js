@@ -33,7 +33,7 @@ var RTS_REPLAY_CMDS = [
 var RTS_REPLAY_PURE = {
   read: ['_rtsAground', '_rtsAirHeld', '_rtsBias', '_rtsBlocked', '_rtsBoardReachable', '_rtsBoardWhyNot',
     '_rtsBridgeAt', '_rtsCanBoard', '_rtsCanDeploy', '_rtsCanEngage', '_rtsCanPlace', '_rtsCanProduce',
-    '_rtsCanRally', '_rtsCanUnload', '_rtsCargoCount', '_rtsDomainOf', '_rtsElev', '_rtsEntSeen', '_rtsHas',
+    '_rtsCanRally', '_rtsCanUnload', '_rtsCargoCount', '_rtsDomainOf', '_rtsElev', '_rtsEntSeen', '_rtsGarrisonable', '_rtsGarrisonCap', '_rtsHas',
     '_rtsHostile', '_rtsHullReaches', '_rtsIdx', '_rtsInB', '_rtsIsBridgeCell', '_rtsIsTransport', '_rtsJamUp',
     '_rtsJammed', '_rtsMinesLeft', '_rtsMissionGoals', '_rtsMissionGold', '_rtsMissionLevels',
     '_rtsMissionMedal', '_rtsMissionOf', '_rtsPowerFactor', '_rtsQueueCat', '_rtsRadarStaticShown',
