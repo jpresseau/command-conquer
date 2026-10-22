@@ -188,24 +188,29 @@ S.note(UNITS.length + ' units, ' + STRUCTS.length + ' structures, ' +
      you deploy an MCV into it - so it is the one thing exempt from the cost and time floors. */
   var FREE = { yard: 1 };
   var bad = [];
-  UNITS.concat(STRUCTS).forEach(function (d) {
+  /* ...and a town's houses (`civ`) are never bought at all: they are laid on the map at the start
+     (core/garrison.js), so they have no price and no build time, and the floors do not apply */
+  var BUY = STRUCTS.filter(function (s) { return !s.civ; });
+  UNITS.concat(BUY).forEach(function (d) {
     if (!FREE[d.key] && !(d.cost > 0)) bad.push(d.key + ' costs ' + d.cost);
     if (!(d.hp > 0)) bad.push(d.key + ' has ' + d.hp + ' hp');
     if (!FREE[d.key] && d.build !== undefined && !(d.build > 0)) bad.push(d.key + ' builds in ' + d.build);
     if (!d.name) bad.push(d.key + ' has no display name');
   });
   S.eq('the Command Yard is still the only free, instant building',
-       STRUCTS.filter(function (s) { return !(s.cost > 0); }).map(function (s) { return s.key; }).join(','),
+       BUY.filter(function (s) { return !(s.cost > 0); }).map(function (s) { return s.key; }).join(','),
        'yard');
   S.ok('every buildable thing has a name, a positive cost, hp and build time', !bad.length,
        bad.join('; ') || 'all sane');
 
   var sides = {};
   UNITS.concat(STRUCTS).forEach(function (d) { if (d.side) sides[d.side] = (sides[d.side] || 0) + 1; });
-  var odd = Object.keys(sides).filter(function (s) { return s !== 'allied' && s !== 'soviet'; });
+  /* the town's `civ` seat is the one other, and only on a town's houses */
+  var odd = Object.keys(sides).filter(function (s) { return s !== 'allied' && s !== 'soviet' && s !== 'civ'; });
+  STRUCTS.forEach(function (d) { if (d.side === 'civ' && !d.civ) odd.push(d.key + ' is civ but not a town house'); });
   S.ok('faction tags are only allied or soviet', !odd.length, odd.join(', ') ||
        (sides.allied + ' allied, ' + sides.soviet + ' soviet, ' +
-        (UNITS.length + STRUCTS.length - sides.allied - sides.soviet) + ' shared'));
+        (sides.civ || 0) + ' town, ' + (UNITS.length + STRUCTS.length - sides.allied - sides.soviet - (sides.civ || 0)) + ' shared'));
 
   /* Both sides need a comparable set of basics, or one of them cannot play. */
   ['allied', 'soviet'].forEach(function (side) {

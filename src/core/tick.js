@@ -36,9 +36,11 @@ function _rtsTick(dt) {
     e = G.ents[i];
     if (e.dead) continue;
     if (e.inside) continue;                      /* riding in a transport - see _rtsAboard */
-    if (e.type === 'unit') _rtsUpdateUnit(e, dt); else _rtsUpdateStruct(e, dt);
+    if (e.type === 'unit') { if (!_rtsOffline(e)) _rtsUpdateUnit(e, dt); else e.path = null; }   /* a Drone Tank's hub down: core/mind.js */
+    else _rtsUpdateStruct(e, dt);
   }
   if (G.sides.civ) _rtsGarrisonTick(dt);        /* squads firing out of the town's houses: core/garrison.js */
+  _rtsMindTick();                                /* a Mentalist that has died lets go: core/mind.js */
   _rtsSeparate(dt);
   _rtsAirSpread(dt);                             /* aircraft keep their own distance: core/airspace.js */
   _rtsUpdateProj(dt);

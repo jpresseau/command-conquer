@@ -71,6 +71,18 @@ var RTS_UNITS = [
     needs:['lab'],
     side:'allied', armour:'light',
     desc:'Long-range beam that forks onto the enemies around its target. Thin armour: keep it behind your tanks.' },
+  /* THE MENTALIST (core/mind.js): takes one enemy unit for its own side, and keeps it while it
+     lives. A second it takes frees the first. Nothing it takes is a building or flies. */
+  { key:'mentalist',name:'Mentalist',     kind:'infantry', cost:1200, build:14, hp:120,  speed:5,   turn:6,  r:1.1, sight:16, weapon:'mindlink',
+    needs:['lab'],
+    side:'soviet', armour:'none', mindproof:true,
+    desc:'Takes control of an enemy unit, which fights for you until the Mentalist dies or takes another. Cannot take buildings, aircraft or Drone Tanks.' },
+  /* THE DRONE TANK: crewless, so nothing can take it over (core/mind.js), and it hovers, so it
+     crosses water - but it is run from a Relay Hub, and without a powered one it stops dead. */
+  { key:'dronetank',name:'Drone Tank',    kind:'vehicle',  cost:900,  build:12, hp:340,  speed:12,  turn:2.4,r:1.9, sight:16, weapon:'dronegun',
+    needs:['relayhub'], hover:true, mindproof:true, hub:'relayhub',
+    side:'allied', armour:'heavy',
+    desc:'Fast, hovers over water, and cannot be mind-controlled. Runs only while you have a powered Relay Hub.' },
   /* The Arc Tower on tracks: a short bolt that jumps on to two more enemies beside its target. */
   { key:'arctank',  name:'Arc Tank',      kind:'vehicle',  cost:1000, build:13, hp:380,  speed:9.5, turn:2.0,r:2.0, sight:16, weapon:'arcbolt',
     needs:['radar'],

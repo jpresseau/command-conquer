@@ -141,6 +141,13 @@ var RTS_WEAPONS = {
   /* THE ARC (core/arc.js), the Arc Tower's bolt in smaller hands. Short, and good against
      everything that moves; poor against a building. The tank's arc jumps on to the enemies
      beside its target, as a lens beam forks, but to fewer of them and further down the share. */
+  /* THE MENTALIST'S LINK (core/mind.js): no damage at all. It takes the unit it reaches, and
+     only a unit - never a building, an aircraft, another Mentalist or a crewless Drone Tank. */
+  mindlink:   { dmg:0, range:13, cool:3.5, shot:'beam', speed:0, splash:0, mind:true,
+                verses:{ none:1, wood:1, light:1, heavy:1, concrete:1 } },
+  /* the Drone Tank's quick gun: light, fast-firing, for a fast hull */
+  dronegun:   { dmg:26, range:16, cool:1.1, shot:'shell', speed:64, splash:1.6, wall:true,
+                verses:{ none:0.8, wood:0.9, light:1.1, heavy:0.9, concrete:0.7 } },
   arcgun:     { dmg:30, range:9, cool:1.3, shot:'arc', speed:0, splash:0,
                 verses:{ none:1.0, wood:0.5, light:1.2, heavy:1.0, concrete:0.4 } },
   arcbolt:    { dmg:55, range:13, cool:1.8, shot:'arc', speed:0, splash:0, split:{ n:2, cells:2.5, share:0.6 },

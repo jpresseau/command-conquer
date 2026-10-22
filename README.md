@@ -173,6 +173,11 @@ flame and grenades burn them out. The enemy garrisons the town nearest its base 
 Compact rifle squad can DIG IN behind sandbags: it holds its ground, takes half the damage and
 hits harder.
 
+**Take their tanks.** The Dominion's Mentalist takes over one enemy unit, which then fights for
+the Dominion until the Mentalist dies or takes another. The Compact's answer is the Drone Tank:
+crewless, so nothing can take it, and it hovers over water, but it stops dead without a powered
+Relay Hub. The Dominion's Echo Sensor finds submarines and jammed vehicles near it.
+
 **The enemy uses its whole garage.** It mines the approach to its own base, and once you have a
 harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands
 them beside your ore field, and goes home to do it again.

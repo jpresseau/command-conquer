@@ -64,9 +64,9 @@ a section below with its numbers.
 | 2, `arctank` | Tesla Tank | Dominion | Arc Tank | short-range arc that chains |
 | 3, `rifle` dig | GI (deployed) | Compact | Rifle Squad dig-in | deploys into a sandbagged position: more range and armour, cannot move |
 | 3, `cottage` `flats` `hall` | civilian buildings | map | Garrison | infantry occupy a building and fire out of it |
-| 4 | Yuri | Dominion | Mentalist | takes control of one enemy unit |
-| 4 | Psychic Sensor | Dominion | Echo Sensor | shows enemy orders inside its radius |
-| 4 | Robot Tank / Robot Control Center | Compact | Drone Tank / Relay Hub | crewless, so it cannot be taken over; stops when the hub is down |
+| 4, `mentalist` | Yuri | Dominion | Mentalist | takes control of one enemy unit |
+| 4, `echo` | Psychic Sensor | Dominion | Echo Sensor | finds hidden units inside its radius |
+| 4, `dronetank` `relayhub` | Robot Tank / Robot Control Center | Compact | Drone Tank / Relay Hub | crewless, so it cannot be taken over; stops when the hub is down |
 | 5 | Mirage Tank | Compact | Veil Tank | looks like a tree while it stands still |
 | 5 | Chrono Legionnaire | Compact | Rift Trooper | jumps instead of walking; its shot takes a target out of time |
 | 5 | Chrono Miner | Compact | Rift Harvester | jumps home with a full load |
@@ -167,3 +167,26 @@ as hard and reloads in three quarters of the time. DEPLOY again, any move order,
 order climbs it out.
 
 `unit/garrison` (24), `unit/dig` (12) and `e2e/garrison` (15) hold it.
+
+## Batch 4: mind control (`core/mind.js`, `sprites/mind.js`)
+
+**Mentalist** (`mentalist`, Dominion infantry, 1200, after a Research Lab, 120 hp): its
+`mindlink` does no damage. The unit it reaches, at range 13 every 3.5 s, changes side: it drops
+its order, leaves its old team and the old side's selection, and its passengers come with it. A
+Mentalist holds one unit at a time, so taking a second frees the first, and when the Mentalist
+dies what it held goes home. It never takes a building, an aircraft, another Mentalist or a
+Drone Tank (`mindproof`). `_rtsWeaponReaches` says so, so it is never aimed at one. The hold is
+plain data on the unit (`mind:{ by, was }`), so a save keeps it. The link is drawn violet.
+
+**Drone Tank** (`dronetank`, Compact, 900, after a Relay Hub, 340 hp, heavy armour): fast, hovers
+over water like a Hovercraft, and is `mindproof`. Its gun does 26 damage at range 16. It runs
+from a **Relay Hub** (`relayhub`, Compact, 2x2, 600, -50 power, after a Vehicle Works). While its
+side has no finished hub with full power, every Drone Tank is offline: it stops and holds its
+fire, and its readout says so.
+
+**Echo Sensor** (`echo`, Dominion, 2x2, 1000, -60 power, after a Radar Post): `detects` 16 cells,
+the Destroyer's sonar on land. It finds a submerged boat (through `_rtsCloakAI`, as sonar does)
+and unmasks a jammed unit (`core/jammer.js`).
+
+The opponent builds a hub and a sensor after its defences, and buys Mentalists from 2000 credits
+and Drone Tanks from 1500. `unit/mind` (20) and `e2e/mind` (8) hold it.

@@ -497,4 +497,3 @@ function _rtsUpdateProj(dt) {
     }
   }
 }
-
