@@ -601,3 +601,6 @@
 #rcgRts .rts-replaybar b{color:#ffd76a;letter-spacing:.5px}
 #rcgRts .rts-replaybar button{min-width:44px;min-height:32px;border:1px solid #3a4a60;border-radius:5px;background:#18222f;color:#fff;font:inherit;cursor:pointer}
 @media (pointer:coarse){#rcgRts .rts-replaybar button{min-height:40px}}
+#rcgRts .rts-replaybar input[type=range]{width:min(220px,28vw);accent-color:#ffd76a}
+#rcgRts .rts-replaybar button.on{background:#7a6420;border-color:#ffd76a}
+@media (max-width:520px){#rcgRts .rts-replaybar{gap:5px;padding-left:8px}#rcgRts .rts-replaybar b{display:none}}

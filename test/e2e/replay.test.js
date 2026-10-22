@@ -3,9 +3,9 @@
      THE BATTLE   a battle on the Dominion's side, played by real input under the live loop and its
                   real frame times - a drag-select, a right-click order, a Shift + right-click stop,
                   a building queued from its tile and REPEAT pressed on a unit line - then left by ✕
-     KEPT         the recording is kept: every one of those orders in it, every tick, and the title
-                  offers WATCH REPLAY with a line saying what the battle was
-     WATCHED      with the title's army changed, WATCH REPLAY plays the battle as it was laid - the
+     KEPT         the recording is kept: every one of those orders in it, every tick, and the title's
+                  REPLAYS lists it to watch, with a line saying what the battle was
+     WATCHED      with the title's army changed, its WATCH plays the battle as it was laid - the
                   Dominion's side - at 8x by its own button, and ends saying it played out as it was
                   fought; its end matches the recording's to the bit
      HANDS OFF    a right-click order during it, the replay held still, is refused and says so
@@ -70,8 +70,10 @@ var S = new Suite('replay');
   await p.waitForFunction(function () { return !document.getElementById('rcgRts'); }, null, { timeout: 120000 });
   var kept = await p.evaluate(function () {
     var r = rtsReplayGet(), b = document.getElementById('rtsReplay');
+    rtsReplaysToggle();
+    var row = document.querySelector('#rtsReplays .rp-row[data-id="last"] .go');
     return r && { cmds: r.cmds.map(function (c) { return c.f; }), ticks: r.dts.length, odd: Object.keys(r.odd).length, steps: r.dts.split('').filter(function (c, i, a) { return a.indexOf(c) === i; }).map(function (c) { return c.charCodeAt(0) - 48; }),
-      end: r.end, head: r.head, shown: b && !b.hidden, note: document.getElementById('rtsReplayNote').textContent, size: localStorage.getItem('bw.replay').length };
+      end: r.end, head: r.head, shown: !!b && !b.hidden && !!row, note: document.getElementById('rtsReplayNote').textContent, size: localStorage.getItem('bw.replay').length };
   });
   S.ok('...played by real input: the army selected, sent, a stop added, a plant queued and the infantry line repeating', mid.sel === set.n && mid.rep && mid.q, JSON.stringify(mid));
   /* every tick a live frame's, a whole number of milliseconds (here they are all the 100 ms cap:
@@ -79,7 +81,7 @@ var S = new Suite('replay');
   S.ok('KEPT: the recording has every order given - the move, the stop, the queued plant, the repeat - and every tick, each a live frame\'s',
        !!kept && ['_rtsOrderMove', '_rtsWayAdd', '_rtsQueue', '_rtsRepeatSet'].every(function (n) { return kept.cmds.indexOf(n) >= 0; }) && kept.ticks > 100 && kept.odd === 0 && kept.head.army === 'soviet' && kept.end.t >= ran.t - 1,
        JSON.stringify(kept && { cmds: kept.cmds.join(' '), ticks: kept.ticks, steps: kept.steps, odd: kept.odd, end: kept.end, size: kept.size }));
-  S.ok('...and the title offers WATCH REPLAY, saying what the battle was', !!kept && kept.shown && /Battle · Soldier · left at 0:\d\d/.test(kept.note), kept && kept.note);
+  S.ok('...and the title\'s REPLAYS lists it to WATCH, saying what the battle was', !!kept && kept.shown && /last: Battle · Soldier · left at 0:\d\d/.test(kept.note), kept && kept.note);
   /* nothing to watch without the button: what follows would only wait on a click that cannot land */
   if (!(kept && kept.shown)) { await g.close(); await browser.close(); require('../lib/report.js')(S); return; }
 
@@ -87,7 +89,7 @@ var S = new Suite('replay');
   /* an autosave of the player's own, which opening a replay must not clear as a new battle does */
   var before = await p.evaluate(function () { rtsSetArmySide('allied'); _rtsSkySetWant('fog'); rtsSkirmishSet('money', 'rich'); localStorage.setItem('rccmd.auto1', 'KEEP'); localStorage.setItem('rccmd.auto1.info', 'KEEP');
     return { record: localStorage.getItem('bw.record'), auto: localStorage.getItem('rccmd.auto1') + localStorage.getItem('rccmd.auto1.info') }; });
-  var w = await p.evaluate(function () { var b = document.getElementById('rtsReplay'); b.scrollIntoView({ block: 'center' }); var r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  var w = await p.evaluate(function () { var b = document.querySelector('#rtsReplays .rp-row[data-id="last"] .go'); b.scrollIntoView({ block: 'center' }); var r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
   await p.mouse.click(w.x, w.y);
   await p.waitForFunction(function () { return !!(window._rtsUI && window._rtsUI.replay && document.getElementById('rtsReplaySpeed')); }, null, { timeout: 120000 });
   for (var k = 0; k < 3; k++) await clickEl(rectOf, '#rtsReplaySpeed');

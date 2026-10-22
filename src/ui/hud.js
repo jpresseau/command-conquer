@@ -353,6 +353,7 @@ function _rtsDrawWrench(g, x, y) {
    to order - is gated on this one answer, so they can never disagree. */
 function _rtsRadarLit() {
   var G = window._rtsG;
+  if (_rtsRevealed()) return true;                   /* a replay watched with 👁 shows the whole battle: core/replay.js */
   if (!G || !_rtsHas('player', 'radar')) return false;
   var PS = G.sides.player;
   return PS.powerMade >= PS.powerUsed;
@@ -404,7 +405,7 @@ function _rtsDrawMini() {
   for (var tz = 0; tz < RTS_N; tz++) for (var tx = 0; tx < RTS_N; tx++) {
     var idx = _rtsIdx(tx, tz);
     /* the radar shows what you have explored, and nothing else */
-    if (G.mapped && !G.mapped[idx]) { g.fillStyle = '#0a0d12'; g.fillRect(tx * sc, tz * sc, sc, sc); continue; }
+    if (G.mapped && !G.mapped[idx] && !_rtsRevealed()) { g.fillStyle = '#0a0d12'; g.fillRect(tx * sc, tz * sc, sc, sc); continue; }
     if (G.scrap[idx] > 0) g.fillStyle = G.gems[idx] ? '#9b7ae8' : '#c9a03a';
     else {
       var tk = G.terrain ? G.terrain[idx] : 0;

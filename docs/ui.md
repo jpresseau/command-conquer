@@ -271,6 +271,18 @@ from the title and gets the recording's hash back; a survival overrun is watched
 A replay saves nothing, clears no autosave and writes no record or best; it borrows the recorded
 army and gives the player's back on the title.
 
+The bar's timeline jumps: forward by playing the ticks between as fast as they run (30 ms of a
+frame at a time - half the frame's own time where drawing is slow, up to 400 ms - `_rtsReplayTo`), back by laying the battle again and coming forward, the speed
+and 👁 kept; a jump comes down on its tick exactly, on the timeline's clock. 👁 makes every
+visibility test say seen - the shroud, the units, the radar without a Radar Post - but only while
+the picture is drawn (`_rtsRevealed`): inside a tick, and while a recorded call is made again, the
+simulation gets the battle's answers, so a replay watched revealed ends on the same hash.
+REPLAYS on the title (replays.js) lists the last battle and up to six kept copies, each to watch
+or save as a JSON file; OPEN A REPLAY FILE plays one. A file is untrusted: `_rtsReplayValid`
+checks its shape, the battle it names, every tick and every call before it is used, a replay
+skips any call that is not a command even past that, and what it says reaches the page escaped -
+`e2e/replays` plays a file naming its build as markup and finds the name shown as text.
+
 ### Colours for a colour-blind eye (ui/cvd.js)
 
 The seats are known by colour alone, and the standard five - blue, green, red, amber, violet -
