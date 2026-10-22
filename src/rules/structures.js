@@ -141,6 +141,13 @@ var RTS_STRUCTS = [
     needs:['radar'], weapon:'teslazap', side:'soviet', needsPower:true,
     armour:'concrete',
     desc:'Devastating, and dead the moment your power browns out. Dominion.' },
+  /* The Compact's answer to the Arc Tower, and the opposite bargain: weaker alone and cheaper
+     to run, and far stronger built in a cluster, because each idle tower relays its beam into
+     the one that fires (core/lens.js). Like the Arc Tower it is dark without power. */
+  { key:'prism',    name:'Lens Tower',   w:1, h:2, cost:1200, build:18, hp:450,  power:-75, sight:20,
+    needs:['radar'], weapon:'lensbeam', side:'allied', needsPower:true,
+    armour:'concrete',
+    desc:'Fires a light beam. Every idle Lens Tower nearby adds its beam to the shot, so build them together. Dead without power. Compact.' },
   /* ------------------------------------------------------------------ naval --
      Both armies get a shipyard and they are the same building with different names and
      different hulls coming out of it, which is what RA does too: the Naval Yard and the Sub

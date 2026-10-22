@@ -106,7 +106,7 @@ var RTS_AI = {
      Not turret's 0.24/6. A Coil is 1500 credits and -100 power against a Gun Turret's 500 and
      -20, so six of them is 9000 credits and 600 power - it is the premium piece, not the line
      defence, and the flame tower is what fills the wall. */
-          tesla:0.10,
+          tesla:0.10, prism:0.10,              /* the Compact's premium tower, the Arc Tower's pair */
           helipad:0.06, afld:0.06, aagun:0.10,
   /* One shipyard. A second buys nothing but a second production line for a domain
      the opponent uses to raid a coast, and the ratio has to stay small or a map
@@ -120,7 +120,7 @@ var RTS_AI = {
      production lines to spend it down, so a low ceiling turns the storage cap into a straight
      nerf and hands the player about 16 extra seconds of life. RA has no silo limit at all. */
           apower:2,    kennel:1,    silo:14,   pillbox:4,     flametower:3,     turret:6,     rocketpit:4,
-          tesla:3,
+          tesla:3,     prism:3,
           helipad:2,   afld:2,      aagun:3,
           navalyard:1, subpen:1,
   /* One each. A second silo would not charge a second missile - the timer is per house - so
@@ -161,7 +161,7 @@ var RTS_AI = {
      turrets it stands next to. */
   buildOrder:['refinery', 'barracks', 'silo', 'factory', 'radar', 'apower', 'depot', 'lab', 'kennel',
               'helipad', 'afld', 'navalyard', 'subpen',
-              'pillbox', 'flametower', 'turret', 'rocketpit', 'tesla', 'aagun',
+              'pillbox', 'flametower', 'turret', 'rocketpit', 'tesla', 'prism', 'aagun',
               'mslo', 'iron', 'pdox', 'gps', 'mist', 'spire'],
 
   /* WHICH RUNG EACH BUILDING BELONGS TO. The order above says what to build first; this says
@@ -203,7 +203,8 @@ var RTS_AI = {
               { key:'light', at:1100, w:3 }, { key:'buggy', at:900,  w:2 },
               /* `vsAir`: bought only against aircraft, one for every vsAir the player flies
                  (core/ai.js). A gun that cannot hit the ground is dead weight on a ground war. */
-              { key:'flaktrack', at:1200, w:4, vsAir:2 } ],
+              { key:'flaktrack', at:1200, w:4, vsAir:2 },
+              { key:'prismtank', at:2200, w:2 } ],
     /* No Mine Layer here: it is bought outside the weighted roll (core/aimines.js
        _rtsAISupport), because an entry in this pool moves every roll after it - measured, the
        Soviet opponent stopped reaching its Arc Tower in e2e/basedef and the raiders thinned out

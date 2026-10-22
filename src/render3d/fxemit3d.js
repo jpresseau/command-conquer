@@ -33,7 +33,7 @@ function _r3dFxShaded() {
    asks this, so the two sides cannot disagree about who draws what. */
 function _r3dFxOwns(kind) {
   if (kind === 'fire') return false;
-  if (kind === 'tracer' || kind === 'debris') return _r3dFxShaded();
+  if (kind === 'tracer' || kind === 'beam' || kind === 'debris') return _r3dFxShaded();
   return true;
 }
 
@@ -295,6 +295,19 @@ function _r3dFxTracer(V, f) {
   if (f.t < 0.035) _r3dFxBill(V.M, V, f.x, y0, f.z, 0.55, 0.55, 0.6, R3D_FXT_FLASH, 0, 0, 0.9, 0, R3D_FX_SPARKC);
 }
 
+/* A LENS BEAM (core/lens.js): unlike a tracer the whole line IS the shot, so it is drawn end to
+   end - a hot core inside a wide soft glow, gone in R3D_FX_BEAM_T - with a flash where it lands.
+   `lens` scales it: a relay or a fork is drawn thinner than the shot itself. */
+var R3D_FX_LENS = [0.80, 1.12, 1.45], R3D_FX_BEAM_T = 0.35;
+function _r3dFxBeam(V, f) {
+  if (f.t > R3D_FX_BEAM_T) return;
+  var y0 = V.ground(f.x, f.z) + (f.y || 1.3), y1 = V.ground(f.x2, f.z2) + (f.y2 || 1.3);
+  var k = f.lens || 1, op = 1 - f.t / R3D_FX_BEAM_T;
+  _r3dFxStreak(V.M, V, f.x, y0, f.z, f.x2, y1, f.z2, 1.1 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.35 * op, 0, R3D_FX_LENS);
+  _r3dFxStreak(V.M, V, f.x, y0, f.z, f.x2, y1, f.z2, 0.32 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.95 * op, 0, R3D_FX_ROUND);
+  _r3dFxBill(V.M, V, f.x2, y1, f.z2, 1.1 * k, 1.1 * k, 0.6, R3D_FXT_FLASH, 0, 0, 0.9 * op, 0, R3D_FX_LENS);
+}
+
 /* A CHUNK thrown off a dying building: dark, glowing for its first moments, with a wisp of smoke
    behind it along its flight. Its seed is its size, which is random per chunk and never changes. */
 function _r3dFxDebris(V, f) {
@@ -373,6 +386,7 @@ function _r3dFxEmit(G, V) {
     var f = G.fx[i];
     if (f.t < 0 || !_r3dFxOwns(f.kind)) continue;
     if (f.kind === 'tracer') { _r3dFxTracer(V, f); continue; }
+    if (f.kind === 'beam') { _r3dFxBeam(V, f); continue; }
     if (f.kind === 'debris') { _r3dFxDebris(V, f); continue; }
     var def = A[f.kind];
     if (!def) continue;

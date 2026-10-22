@@ -129,6 +129,15 @@ var RTS_WEAPONS = {
      a Tesla hit is a Tesla hit whether it lands on a rifleman or a Mammoth. */
   teslazap:   { dmg:200, range:17, cool:2.6, shot:'tracer', speed:0, splash:0, wall:true,
                 verses:{ none:1, wood:1, light:1, heavy:1, concrete:1 } },
+  /* THE LENS BEAM (core/lens.js). A Lens Tower alone hits a little over half as hard as an Arc
+     Tower; what it has instead is its neighbours. Every idle tower in reach pours its own beam
+     into the one that fires, so a cluster of them is one very large shot - and a lone tower,
+     or a cluster busy with several targets, is ordinary. `relay` is the tower's, `split` the
+     tank's: its beam strikes and then forks onto the enemies standing round its target. */
+  lensbeam:   { dmg:110, range:19, cool:3.0, shot:'beam', speed:0, splash:0, wall:true, relay:true,
+                verses:{ none:1, wood:1, light:1, heavy:0.9, concrete:0.6 } },
+  lenssplit:  { dmg:75, range:22, cool:3.2, shot:'beam', speed:0, splash:0, wall:true, wood:true, split:true,
+                verses:{ none:0.8, wood:1.2, light:1.0, heavy:0.8, concrete:1.1 } },
   /* Naval guns. Long reach is the point of a ship - it is the only thing in the game that can
      hit a base without being able to be walked up to. */
   navalgun:   { dmg:30, range:24, cool:1.6, shot:'shell', speed:60, splash:2.0, wall:true, wood:true,

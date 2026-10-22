@@ -158,6 +158,10 @@ under it.
 flood, and as the tide starts to fall it sends the Monitor out with two submarines and the Repair
 Tender behind them: the subs hold the channel while the Monitor goes in over the flats.
 
+**Build Lens Towers together.** The Compact's Lens Tower fires a beam of light, and every idle
+Lens Tower near it pours its own beam into the shot, so a cluster of them hits like one enormous
+gun. Its Lens Tank carries the same beam, which forks onto the enemies around whatever it hits.
+
 **The enemy uses its whole garage.** It mines the approach to its own base, and once you have a
 harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands
 them beside your ore field, and goes home to do it again.

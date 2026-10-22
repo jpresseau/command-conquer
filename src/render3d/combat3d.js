@@ -43,6 +43,7 @@ function _r3dRecoil(e, n) {
 function _r3dMuzzleSize(e) {
   var d = e.type === 'unit' ? rtsUnitDef(e.def) : rtsStructDef(e.def), w = d ? RTS_WEAPONS[d.weapon] : null;
   if (!w) return 0.6;
+  if (w.shot === 'beam') return 0;               /* a lens has no flash: the beam draws its own light (fxemit3d.js) */
   return w.shot === 'tracer' ? (w.dmg > 7 ? 0.55 : 0.4) : w.shot === 'missile' ? 0.9 : 1.2;
 }
 /* WHERE THE FLASH IS, on the ground plan: the shot's own coordinate (core/combat.js _rtsFireCoord)
@@ -75,6 +76,7 @@ function _r3dMuzzles(G) {
     /* where the shot leaves, drawn at the barrel's own tip: the sim's coordinate is a little
        further out than the 3D barrel reaches, and a flash that far out floated off the gun */
     var m = _r3dMuzzleAt(e), s = _r3dMuzzleSize(e);
+    if (!s) continue;
     var y = (e.type === 'unit' ? _rtsStandY(e.x, e.z) : _rtsElev(e.x, e.z)) + (e.type === 'struct' ? 1.8 : 1.15);
     out.push([m.x, y, m.z, s, Math.min(1, e.fire / 0.09), e]);
   }
