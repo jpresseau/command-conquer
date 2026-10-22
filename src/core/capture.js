@@ -115,6 +115,7 @@ function _rtsKill(e) {
   var G = window._rtsG;
   if (e.dead) return;
   e.dead = true;
+  if (e.bomb) _rtsBlastHostDied(e);              /* a charge on it goes off where it fell: core/blast.js */
   /* the passengers walk away from it - or go down with it, if there is no shore to walk to */
   if (e.cargo && e.cargo.length) _rtsSpillCargo(e);
   if (e.type === 'struct') { _rtsFootprint(e, false); _rtsRecalcPower(e.side); }
@@ -163,6 +164,7 @@ function _rtsKill(e) {
   } else {
     G.fx.push({ kind:'pop', x:e.x, y:1, z:e.z, t:0, big:1 });
     var ud = rtsUnitDef(e.def);
+    if (ud.blasts) _rtsBlastGo(e);                /* carrying the explosive, it goes off: core/blast.js */
     if (ud.kind === 'infantry') {
       _rtsAddCorpse(G, { x:e.x, z:e.z, v:(e.id * 5) % 3 });
     } else {

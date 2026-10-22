@@ -183,6 +183,10 @@ gun freezes a target out of time until it is erased, unless the shooting stops f
 Harvester jumps home with a full load. The Veil Tank, standing still, looks like a tree to an
 enemy that has not found it.
 
+**Explosives.** The Dominion's Sapper plants a timed charge on anything it reaches, blinking as
+the fuse runs down; its Zealot and its Wrecker lorry are the bomb, and go off even when they are
+shot down on the way in. The Compact's Frogman swims, and puts limpets on ships and buildings.
+
 **The enemy uses its whole garage.** It mines the approach to its own base, and once you have a
 harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands
 them beside your ore field, and goes home to do it again.

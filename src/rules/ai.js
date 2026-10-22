@@ -262,7 +262,12 @@ var RTS_AI = {
     infantry:[ { key:'flame', at:1200, w:2 }, { key:'grenadier', at:900, w:2 },
                { key:'rocket', at:500, w:3 }, { key:'dog', at:400, w:2 },
                { key:'rifle', at:250, w:2 }, { key:'engineer', at:2200, w:2 },
-               { key:'arctroop', at:1000, w:2 }, { key:'mentalist', at:2000, w:1 }, { key:'rifttroop', at:2200, w:1 } ],
+               { key:'arctroop', at:1000, w:2 }, { key:'mentalist', at:2000, w:1 }, { key:'rifttroop', at:2200, w:1 }
+               /* NOT the explosives (core/blast.js): a Zealot or a Wrecker kills its own side's men round it,
+                  and an opponent that buys them without knowing where to send them only moves its own
+                  battle about - bought even from 2000 credits they moved unit/endgame, unit/aitactics and
+                  unit/allycmd. Its use of them is docs/roster-ra2.md's batch 12. */
+               ],
     /* AIRCRAFT, once there is a pad to fly from - _rtsCanQueue gates on `needs`, so these are
        inert until one exists and there is no separate check to keep in step. Both armies again;
        the Attack Heli was buildable by the player from the day it shipped and the opponent never

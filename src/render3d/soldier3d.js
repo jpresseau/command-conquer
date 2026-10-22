@@ -120,6 +120,23 @@ function _r3dSoldierMan(m, key, mx, mz, pose, lead, K) {
     armTo(1, cx + 1.2, cy - 0.8, mz + 1.4, cx + 2.4, cy - 0.5, mz + 1.3);
     _r3Box(m, cx + 3.0, cy - 0.65, mz - 1.3, 1.4, 0.5, 0.35, kit.prop, DK[3]);    /* pistols */
     _r3Box(m, cx + 3.0, cy - 0.65, mz + 1.3, 1.4, 0.5, 0.35, kit.prop, DK[3]);
+  } else if (key === 'sapper') {
+    /* a satchel charge in each hand, red, swinging at his sides */
+    armTo(-1, cx + 0.4 + arm, cy - 1.5, mz - 1.5, cx + 0.6 + arm, cy - 2.7, mz - 1.6);
+    armTo(1, cx - 0.2 - arm, cy - 1.5, mz + 1.5, cx - 0.1 - arm, cy - 2.7, mz + 1.6);
+    _r3Box(m, cx + 0.6 + arm, cy - 3.9, mz - 1.6, 1.6, 1.4, 1.0, kit.prop, '#e8532c');
+    _r3Box(m, cx - 0.1 - arm, cy - 3.9, mz + 1.6, 1.6, 1.4, 1.0, kit.prop, '#e8532c');
+  } else if (key === 'zealot') {
+    /* the vest of charges, a row of red sticks round his chest, and a trigger held up in one hand */
+    armTo(-1, cx + 0.5 + arm, cy - 1.5, mz - 1.5, cx + 1.0 + arm, cy - 2.5, mz - 1.5);
+    armTo(1, cx + 0.6, cy - 0.6, mz + 1.4, cx + 0.9, cy + 1.2, mz + 1.2);
+    for (var zs = 0; zs < 6; zs++) _r3Cyl(m, cx + Math.cos(zs * 1.05) * 1.25, cy - 1.6, mz + Math.sin(zs * 1.05) * 1.25, 0.32, 1.6, kit.prop, '#e8532c', 16);
+  } else if (key === 'frogman') {
+    /* the machine pistol, and the yellow limpet on his back */
+    armTo(-1, cx + 1.2, cy - 0.8, mz - 1.4, cx + 2.4, cy - 0.5, mz - 1.0);
+    armTo(1, cx + 1.2, cy - 0.8, mz + 1.4, cx + 2.4, cy - 0.5, mz + 0.4);
+    _r3Box(m, cx + 3.0, cy - 0.6, mz - 0.3, 1.8, 0.6, 0.4, DK[3], DK[2]);
+    _r3Cyl(m, mx - 1.9, hipY + 2.2, mz, 1.3, 0.8, kit.prop, '#fff07a', 20);
   } else if (key === 'rifttroop') {
     /* the rift gun held across him, and the ring standing up on his back */
     armTo(-1, cx + 0.7, cy - 1.5, mz - 1.5, cx + 1.3, cy - 0.9, mz - 0.7);

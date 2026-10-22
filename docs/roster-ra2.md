@@ -70,10 +70,10 @@ a section below with its numbers.
 | 5, `veiltank` | Mirage Tank | Compact | Veil Tank | looks like a tree while it stands still |
 | 5, `rifttroop` | Chrono Legionnaire | Compact | Rift Trooper | jumps instead of walking; its shot takes a target out of time |
 | 5, `riftharv` | Chrono Miner | Compact | Rift Harvester | jumps home with a full load |
-| 6 | Crazy Ivan | Dominion | Sapper | plants timed charges on anything |
-| 6 | Terrorist | Dominion | Zealot | runs in and detonates |
-| 6 | Demolition Truck | Dominion | Wrecker | a rolling bomb |
-| 6 | Navy SEAL | Compact | Frogman | swims, and charges ships and buildings |
+| 6, `sapper` | Crazy Ivan | Dominion | Sapper | plants timed charges on anything |
+| 6, `zealot` | Terrorist | Dominion | Zealot | runs in and detonates |
+| 6, `wrecker` | Demolition Truck | Dominion | Wrecker | a rolling bomb |
+| 6, `frogman` | Navy SEAL | Compact | Frogman | swims, and charges ships and buildings |
 | 7 | Desolator | Dominion | Blight Trooper | a radiation gun, and a deployed poison field |
 | 7 | Nuclear Reactor meltdown | Dominion | Fusion Plant | a fusion plant that dies irradiates the ground |
 | 8 | Kirov Airship | Dominion | Leviathan | a slow, armoured bomber airship |
@@ -213,3 +213,33 @@ Its `veilgun` is a heavy, slow shell (85 damage at range 17, every 2.6 s).
 
 The opponent buys Rift Troopers from 2200 credits and Veil Tanks from 1800. `unit/rift` (20) and
 `e2e/rift` (8) hold it.
+
+## Batch 6: explosives (`core/blast.js`, `sprites/blast.js`, `render3d/blast3d.js`)
+
+**Sapper** (`sapper`, Dominion infantry, 600, after a Radar Post, 100 hp): its `satchel` does no
+damage when it lands. It leaves a charge on the target (`e.bomb`, plain data, so a save keeps
+it), on anything on the ground: a tank, a building or a ship at the quay. The charge goes off
+after 5 s for 560 to the target and half that to everything within 1.6 cells, whoever's it is.
+A target carries one charge at a time, so `_rtsWeaponReaches` says a charged one is not worth
+another and the Sapper moves on. If the target is destroyed first, the charge goes off where it
+fell. A charge blinks a red light over what it is on, faster as the fuse runs down, and a
+selected unit's readout counts it down.
+
+**Zealot** (`zealot`, Dominion infantry, 300, after a Barracks, 70 hp) and **Wrecker** (`wrecker`,
+Dominion, 1500, after a Vehicle Works and a Radar Post, 320 hp, a lorry of drums): each one's
+shot is the explosion. The Zealot's is 260 within 2 cells and the Wrecker's 900 within 3.5. The
+blast falls off evenly to the edge, measured to a building's edge, and hurts friend and foe
+alike. The carrier goes with it, and since it carries the explosive, killing it sets it off where
+it falls (`core/capture.js` `_rtsKill`). It goes off once only, and no crew climbs out of a
+Wrecker.
+
+**Frogman** (`frogman`, Compact infantry, 1000, after a Research Lab, 120 hp): he moves through
+the hovercraft's domain, so he swims as well as he walks, and is drawn to the chest in the water.
+His machine pistol is for men. His `limpet` goes only on a ship or a building, for 600 after
+3 s. `_rtsPickWeapon` now scores a weapon that cannot reach the target as nothing, so he answers
+infantry with the pistol and a ship with the limpet.
+
+The opponent does not buy any of the four. A Zealot or a Wrecker kills its own side's men round
+it, so an opponent that buys them without a plan for where to send them only shuffles its own
+battle: bought even from 2000 credits, they moved `unit/endgame`, `unit/aitactics` and
+`unit/allycmd`. The opponent's use of them is batch 12. `unit/blast` (22) and `e2e/blast` (10) hold it.

@@ -394,6 +394,7 @@ function _r3dFxEmit(G, V) {
   var A = RTS_ANIMS, i;
   _r3dFxProj(G, V);
   _r3dFxBombs(G, V);
+  if (typeof _r3dFxCharges === 'function') _r3dFxCharges(G, V); /* charges blinking - blast3d.js */
   if (typeof _r3dFxWakes === 'function') _r3dFxWakes(G, V);     /* dust and wakes - fxwake3d.js */
   if (typeof _r3dFxAlive === 'function') _r3dFxAlive(G, V);     /* stacks, beacons - alive3d.js */
   if (typeof _r3dFxSky === 'function') _r3dFxSky(G, V);         /* lamps, rain, fog - skyfx3d.js */

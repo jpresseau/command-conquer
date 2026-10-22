@@ -43,6 +43,7 @@ function _rtsTick(dt) {
   if (G.sides.civ) _rtsGarrisonTick(dt);        /* squads firing out of the town's houses: core/garrison.js */
   _rtsMindTick();                                /* a Mentalist that has died lets go: core/mind.js */
   _rtsVeilTick(dt);                              /* a Veil Tank standing still: core/rift.js */
+  _rtsBlastTick(dt);                             /* charges on their fuses: core/blast.js */
   _rtsSeparate(dt);
   _rtsAirSpread(dt);                             /* aircraft keep their own distance: core/airspace.js */
   _rtsUpdateProj(dt);

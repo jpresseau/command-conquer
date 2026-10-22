@@ -155,6 +155,21 @@ var RTS_WEAPONS = {
   /* the Veil Tank's gun: a heavy, slow shot - it fires from hiding and gives itself away doing it */
   veilgun:    { dmg:85, range:17, cool:2.6, shot:'shell', speed:62, splash:2.2, wall:true, wood:true,
                 verses:{ none:0.7, wood:1.0, light:1.2, heavy:1.0, concrete:0.8 } },
+  /* EXPLOSIVES (core/blast.js). `plant` is a charge left on the target, going off after `fuse`
+     seconds for `dmg` to it and half that to everything within `rad`; `on` limits what it can be
+     put on. `self` is a weapon that is its carrier: it goes off where it stands, for `dmg` round
+     it within `rad`, and the carrier with it. */
+  satchel:    { dmg:560, range:3, cool:2.5, shot:'plant', speed:0, splash:0, plant:{ fuse:5, rad:RTS_TILE * 1.6 },
+                verses:{ none:1.0, wood:1.0, light:1.0, heavy:1.0, concrete:1.0 } },
+  limpet:     { dmg:600, range:3, cool:3, shot:'plant', speed:0, splash:0, plant:{ fuse:3, rad:RTS_TILE * 1.2, on:'hull' },
+                verses:{ none:0, wood:1.0, light:1.0, heavy:1.0, concrete:1.0 } },
+  zealblast:  { dmg:260, range:2.5, cool:1, shot:'self', speed:0, splash:0, self:{ rad:RTS_TILE * 2 },
+                verses:{ none:1.0, wood:1.0, light:1.0, heavy:1.0, concrete:1.0 } },
+  wreckblast: { dmg:900, range:3, cool:1, shot:'self', speed:0, splash:0, self:{ rad:RTS_TILE * 3.5 },
+                verses:{ none:1.0, wood:1.0, light:1.0, heavy:1.0, concrete:1.0 } },
+  /* the Frogman's machine pistol: for men, not for hulls */
+  frogmg:     { dmg:10, range:13, cool:0.35, shot:'tracer', speed:0, splash:0,
+                verses:{ none:1.0, wood:0.15, light:0.20, heavy:0.08, concrete:0.05 } },
   arcgun:     { dmg:30, range:9, cool:1.3, shot:'arc', speed:0, splash:0,
                 verses:{ none:1.0, wood:0.5, light:1.2, heavy:1.0, concrete:0.4 } },
   arcbolt:    { dmg:55, range:13, cool:1.8, shot:'arc', speed:0, splash:0, split:{ n:2, cells:2.5, share:0.6 },

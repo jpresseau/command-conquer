@@ -863,7 +863,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">f5f63f4 · 2026-10-22</div>
+  <div id="rtsBuild" title="build">8e52405 · 2026-10-22</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1313,6 +1313,30 @@ var RTS_UNITS = [
     needs:['lab'], veil:true,
     side:'allied', armour:'light',
     desc:'Hidden while it stands still and holds its fire: to the enemy it looks like a tree. Firing or moving gives it away.' },
+  /* EXPLOSIVES (core/blast.js). THE SAPPER plants a timed charge on whatever it reaches - a tank,
+     a building, a ship at the quay - and walks away; it goes off on its fuse. */
+  { key:'sapper',   name:'Sapper',        kind:'infantry', cost:600,  build:8,  hp:100,  speed:6.5, turn:6,  r:1.1, sight:14, weapon:'satchel',
+    needs:['radar'],
+    side:'soviet', armour:'none',
+    crawl:true, fraidy:false,
+    desc:'Plants a timed charge on anything it can reach - tank, building or ship - and walks away before it goes off.' },
+  /* THE ZEALOT runs in and is the bomb; killed on the way, it goes off where it falls */
+  { key:'zealot',   name:'Zealot',        kind:'infantry', cost:300,  build:5,  hp:70,   speed:7.5, turn:6,  r:1.1, sight:12, weapon:'zealblast',
+    needs:['barracks'], blasts:true,
+    side:'soviet', armour:'none',
+    crawl:false, fraidy:false,
+    desc:'Runs at the enemy and detonates. Shot on the way, it goes off where it falls - keep it clear of your own lines.' },
+  /* THE WRECKER: the same on wheels, and far bigger */
+  { key:'wrecker',  name:'Wrecker',       kind:'vehicle',  cost:1500, build:14, hp:320,  speed:11,  turn:2.2,r:2.0, sight:14, weapon:'wreckblast',
+    needs:['factory', 'radar'], blasts:true,
+    side:'soviet', armour:'light',
+    desc:'A lorry full of explosive. Drive it into a base and it takes the buildings round it with it; destroyed on the way, it still goes off.' },
+  /* THE FROGMAN swims as well as he walks, and puts a limpet charge on ships and buildings */
+  { key:'frogman',  name:'Frogman',       kind:'infantry', cost:1000, build:12, hp:120,  speed:6.5, turn:6,  r:1.1, sight:16, weapon:'frogmg', weapon2:'limpet',
+    needs:['lab'], hover:true, swims:true,
+    side:'allied', armour:'none',
+    crawl:true, fraidy:false,
+    desc:'Swims as well as he walks. A machine pistol for infantry, and a limpet charge for ships and buildings.' },
   /* The Arc Tower on tracks: a short bolt that jumps on to two more enemies beside its target. */
   { key:'arctank',  name:'Arc Tank',      kind:'vehicle',  cost:1000, build:13, hp:380,  speed:9.5, turn:2.0,r:2.0, sight:16, weapon:'arcbolt',
     needs:['radar'],
@@ -1768,6 +1792,21 @@ var RTS_WEAPONS = {
   /* the Veil Tank's gun: a heavy, slow shot - it fires from hiding and gives itself away doing it */
   veilgun:    { dmg:85, range:17, cool:2.6, shot:'shell', speed:62, splash:2.2, wall:true, wood:true,
                 verses:{ none:0.7, wood:1.0, light:1.2, heavy:1.0, concrete:0.8 } },
+  /* EXPLOSIVES (core/blast.js). `plant` is a charge left on the target, going off after `fuse`
+     seconds for `dmg` to it and half that to everything within `rad`; `on` limits what it can be
+     put on. `self` is a weapon that is its carrier: it goes off where it stands, for `dmg` round
+     it within `rad`, and the carrier with it. */
+  satchel:    { dmg:560, range:3, cool:2.5, shot:'plant', speed:0, splash:0, plant:{ fuse:5, rad:RTS_TILE * 1.6 },
+                verses:{ none:1.0, wood:1.0, light:1.0, heavy:1.0, concrete:1.0 } },
+  limpet:     { dmg:600, range:3, cool:3, shot:'plant', speed:0, splash:0, plant:{ fuse:3, rad:RTS_TILE * 1.2, on:'hull' },
+                verses:{ none:0, wood:1.0, light:1.0, heavy:1.0, concrete:1.0 } },
+  zealblast:  { dmg:260, range:2.5, cool:1, shot:'self', speed:0, splash:0, self:{ rad:RTS_TILE * 2 },
+                verses:{ none:1.0, wood:1.0, light:1.0, heavy:1.0, concrete:1.0 } },
+  wreckblast: { dmg:900, range:3, cool:1, shot:'self', speed:0, splash:0, self:{ rad:RTS_TILE * 3.5 },
+                verses:{ none:1.0, wood:1.0, light:1.0, heavy:1.0, concrete:1.0 } },
+  /* the Frogman's machine pistol: for men, not for hulls */
+  frogmg:     { dmg:10, range:13, cool:0.35, shot:'tracer', speed:0, splash:0,
+                verses:{ none:1.0, wood:0.15, light:0.20, heavy:0.08, concrete:0.05 } },
   arcgun:     { dmg:30, range:9, cool:1.3, shot:'arc', speed:0, splash:0,
                 verses:{ none:1.0, wood:0.5, light:1.2, heavy:1.0, concrete:0.4 } },
   arcbolt:    { dmg:55, range:13, cool:1.8, shot:'arc', speed:0, splash:0, split:{ n:2, cells:2.5, share:0.6 },
@@ -2390,7 +2429,12 @@ var RTS_AI = {
     infantry:[ { key:'flame', at:1200, w:2 }, { key:'grenadier', at:900, w:2 },
                { key:'rocket', at:500, w:3 }, { key:'dog', at:400, w:2 },
                { key:'rifle', at:250, w:2 }, { key:'engineer', at:2200, w:2 },
-               { key:'arctroop', at:1000, w:2 }, { key:'mentalist', at:2000, w:1 }, { key:'rifttroop', at:2200, w:1 } ],
+               { key:'arctroop', at:1000, w:2 }, { key:'mentalist', at:2000, w:1 }, { key:'rifttroop', at:2200, w:1 }
+               /* NOT the explosives (core/blast.js): a Zealot or a Wrecker kills its own side's men round it,
+                  and an opponent that buys them without knowing where to send them only moves its own
+                  battle about - bought even from 2000 credits they moved unit/endgame, unit/aitactics and
+                  unit/allycmd. Its use of them is docs/roster-ra2.md's batch 12. */
+               ],
     /* AIRCRAFT, once there is a pad to fly from - _rtsCanQueue gates on `needs`, so these are
        inert until one exists and there is no separate check to keep in step. Both armies again;
        the Attack Heli was buildable by the player from the day it shipped and the opponent never
@@ -7333,7 +7377,7 @@ function _sprBuildingClean(key, side) {
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
   dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46,
-  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:53, drone:26, bomber:56, prismtank:36, arctank:38, dronetank:34, veiltank:35, riftharv:44
+  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:53, drone:26, bomber:56, prismtank:36, arctank:38, dronetank:34, veiltank:35, riftharv:44, wrecker:40
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -7360,7 +7404,13 @@ var RTS_INF_KIT = {
      (core/mind.js) */
   mentalist: { body:['#4a2e66','#6a4490'], top:'#c27bf2', prop:'#e6d0ff' },
   /* white armour, a cyan crown, and the rift ring on his back (core/rift.js) */
-  rifttroop: { body:['#cfd8de','#e8eff3'], top:'#2fd4d0', prop:'#bfefff' }
+  rifttroop: { body:['#cfd8de','#e8eff3'], top:'#2fd4d0', prop:'#bfefff' },
+  /* EXPLOSIVES (core/blast.js): the Sapper in a long brown coat and fur hat, a satchel charge in
+     each hand; the Zealot in a pale headcloth over a dusty tunic and a vest of charges; the
+     Frogman in a black wetsuit and blue hood, with the limpet on his back */
+  sapper:    { body:['#5a4632','#74593e'], top:'#6a4a2a', prop:'#c8302a' },
+  zealot:    { body:['#a89a7c','#c4b694'], top:'#b0b0a8', prop:'#c8302a' },
+  frogman:   { body:['#1c2026','#2a3038'], top:'#1a4a8a', prop:'#e8c21c' }
 };
 
 /* HOW FAR ROUND THE RUNNING GEAR HAS TURNED, 0 to 1 - set by the 3D renderer for the length of
@@ -7478,7 +7528,7 @@ function _sprUnitModel(key, side, prone, part) {
      model line reads the same as it did when this was one function. */
   var X = { m:m, TM:TM, VH:VH, S:S, DK:DK, O:O, C:C, GN:GN,
             d:d, prone:prone, part:part, side:side, tracks:tracks };
-  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key) || _sprUnitHulls(X, key) || _sprUnitLens(X, key) || _sprUnitArc(X, key) || _sprUnitMind(X, key) || _sprUnitRift(X, key))) {
+  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key) || _sprUnitHulls(X, key) || _sprUnitLens(X, key) || _sprUnitArc(X, key) || _sprUnitMind(X, key) || _sprUnitRift(X, key) || _sprUnitBlast(X, key))) {
     _r3Box(m, 0, 0, -5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 0, 5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 2.5, 0, 15, 4, 8, TM[0], TM[1]);
@@ -7641,6 +7691,14 @@ function _sprUnitGround(X, key) {
       } else if (key === 'tanya') {
         _r3Box(m, mx + 2.3, 4.4, mz - 1.0, 2.8, 0.9, 0.9, kit.prop, DK[3]); /* pistols */
         _r3Box(m, mx + 2.3, 4.4, mz + 1.0, 2.8, 0.9, 0.9, kit.prop, DK[3]);
+      } else if (key === 'sapper') {
+        _r3Box(m, mx + 2.0, 2.4, mz - 1.6, 2.0, 1.6, 1.2, kit.prop, DK[3]);        /* a satchel each side */
+        _r3Box(m, mx + 2.0, 2.4, mz + 1.6, 2.0, 1.6, 1.2, kit.prop, DK[3]);
+      } else if (key === 'zealot') {
+        _r3Box(m, mx, 4.6, mz, 3.4, 1.4, 3.4, kit.prop, DK[3]);                    /* the vest of charges */
+      } else if (key === 'frogman') {
+        _r3Cyl(m, mx - 2.0, 3.6, mz, 1.4, 0.9, kit.prop, '#fff07a', 14);           /* the limpet on his back */
+        _r3Box(m, mx + 2.3, 4.4, mz - 1.0, 2.4, 0.8, 0.8, kit.prop, DK[3]);
       } else if (key === 'rifttroop') {
         _r3Cyl(m, mx - 2.0, 3.6, mz, 1.6, 0.6, kit.prop, '#f2fdff', 14);       /* the rift ring on his back */
         _r3Box(m, mx + 2.6, 4.4, mz - 0.5, 4.6, 1.3, 1.3, kit.prop, DK[3]);
@@ -9012,6 +9070,39 @@ function _sprUnitRift(X, key) {
     return true;
   }
   return false;
+}
+</script>
+<script>/* sprites/blast.js - the Wrecker (core/blast.js). Part of rts.sprites. The Sapper, the Zealot and
+   the Frogman are infantry kits (sprites/unitmodels.js RTS_INF_KIT).
+
+   The Wrecker is a plain flat-bed lorry - nothing on it says "armour" - with its load lashed down
+   behind the cab: rows of drums under hazard stripes, and a red lamp on the cab roof. */
+var RTS_BLAST_DRUM = ['#7a3a22', '#9c4c2c'], RTS_BLAST_STRIPE = ['#e8c21c', '#1f1f1f'];
+
+function _sprUnitBlast(X, key) {
+  var m = X.m, VH = X.VH, TM = X.TM, S = X.S, DK = X.DK, i;
+  if (key !== 'wrecker') return false;
+  for (i = 0; i < 6; i++) {
+    var wx = [6.2, -2.2, -6.0][i >> 1], wz = (i % 2) ? 5.0 : -5.0;
+    _r3Wheel(m, wx, 2.5, wz, 2.5, 2.6, 'z', DK[0], DK[1], 22);
+    _r3Wheel(m, wx, 2.5, wz, 1.1, 2.9, 'z', S[2], S[1], 16);
+    if (!_SPR_ROLL_LEN) { _SPR_ROLL_LEN = 2.5 * Math.PI * 2 / 5; _SPR_ROLL_KIND = 'wheel'; }
+    for (var tn = 0; tn < 5; tn++) {                                         /* the wheel nuts, turning as it rolls */
+      var ta = (tn - (_SPR_ROLL || 0)) / 5 * Math.PI * 2;
+      _r3Box(m, wx + Math.cos(ta) * 0.8, 2.5 + Math.sin(ta) * 0.8, wz, 0.4, 0.4, 3.1, S[3], S[2]);
+    }
+  }
+  _r3Box(m, 0, 2.3, 0, 18.0, 1.3, 8.0, DK[1], DK[2]);                         /* chassis */
+  _r3Slab(m, 6.4, 3.4, 0, 4.8, 4.6, 8.2, 0.8, VH[0], VH[1]);                   /* the cab, cab-over */
+  _r3Box(m, 8.9, 5.8, 0, 0.5, 1.8, 6.6, RTS_PAL.glass, RTS_PAL.glass);
+  _r3Box(m, 6.4, 8.1, 0, 4.4, 0.4, 7.6, TM[0], TM[1]);                         /* team colour on the cab roof */
+  _r3Cyl(m, 6.4, 8.7, 0, 0.6, 0.9, '#e8321c', '#ff6a4a', 16);                 /* the red lamp */
+  _r3Box(m, -2.6, 3.3, 0, 11.6, 0.6, 8.2, S[1], S[2]);                         /* the bed */
+  for (var r = 0; r < 3; r++) for (var c = 0; c < 3; c++)                      /* the drums, nine of them */
+    _r3Cyl(m, -6.6 + r * 3.6, 5.2, -2.7 + c * 2.7, 1.25, 3.2, RTS_BLAST_DRUM[0], RTS_BLAST_DRUM[1], 16);
+  for (i = 0; i < 5; i++)                                                      /* the hazard band round them */
+    _r3Box(m, -7.8 + i * 2.6, 7.2, 0, 1.3, 0.35, 8.4, RTS_BLAST_STRIPE[i % 2], RTS_BLAST_STRIPE[i % 2]);
+  return true;
 }
 </script>
 <script>/* sprites/props.js - unit scaling and fit, pads, corpses, scorch, craters, fire, crates and
@@ -15217,6 +15308,7 @@ function _rtsKill(e) {
   var G = window._rtsG;
   if (e.dead) return;
   e.dead = true;
+  if (e.bomb) _rtsBlastHostDied(e);              /* a charge on it goes off where it fell: core/blast.js */
   /* the passengers walk away from it - or go down with it, if there is no shore to walk to */
   if (e.cargo && e.cargo.length) _rtsSpillCargo(e);
   if (e.type === 'struct') { _rtsFootprint(e, false); _rtsRecalcPower(e.side); }
@@ -15265,6 +15357,7 @@ function _rtsKill(e) {
   } else {
     G.fx.push({ kind:'pop', x:e.x, y:1, z:e.z, t:0, big:1 });
     var ud = rtsUnitDef(e.def);
+    if (ud.blasts) _rtsBlastGo(e);                /* carrying the explosive, it goes off: core/blast.js */
     if (ud.kind === 'infantry') {
       _rtsAddCorpse(G, { x:e.x, z:e.z, v:(e.id * 5) % 3 });
     } else {
@@ -16727,6 +16820,7 @@ function _rtsPickWeapon(e, tgt) {
     var v = mod * 1000;
     if (dist <= _rtsElevReach(e, tgt, w.range)) v *= 2;
     if (!mod) v = 0;                                  /* FIRE_CANT */
+    if (!_rtsWeaponReaches(w, tgt)) v = 0;            /* a limpet for a hull, not a man: core/blast.js */
     if (v > bv) { bv = v; best = w; }
   }
   return best;
@@ -16784,6 +16878,7 @@ function _rtsFireCoord(e, w) {
    price instead of being a strictly better hull. */
 function _rtsWeaponReaches(w, tgt) {
   if (w && w.mind) return !_rtsMindproof(tgt);   /* a Mentalist reaches only a unit it can take: core/mind.js */
+  if (w && w.plant) return _rtsPlantable(w, tgt);   /* a charge goes on what it can go on: core/blast.js */
   if (!w || !w.seaOnly) return true;
   if (!tgt) return false;
   if (tgt.type === 'struct') return false;
@@ -16843,7 +16938,7 @@ function _rtsFire(e, tgt, w) {
      Set at the one place every route to a shot passes through, so there is no way to fire from
      under water. */
   if ((rtsUnitDef(e.def) || {}).cloak) e.decloak = RTS_SUB_SURFACE;
-  if (typeof _rtsSfx === 'function') _rtsSfx(w.shot === 'beam' ? 'beam' : w.shot === 'arc' ? 'zap' : w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
+  if (typeof _rtsSfx === 'function' && !w.plant && !w.self) _rtsSfx(w.shot === 'beam' ? 'beam' : w.shot === 'arc' ? 'zap' : w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
     : (w.shot === 'missile' ? 'rocket' : (e.type === 'struct' ? 'turretgun' : 'cannon')), e.x, e.z);
   if (w.mind) {                                    /* no damage: the unit changes side (core/mind.js) */
     if (_rtsMindTake(e, tgt)) { var mb = _rtsLensBeamFx(e, tgt, w); mb.mind = 1; G.fx.push(mb); }
@@ -16857,6 +16952,8 @@ function _rtsFire(e, tgt, w) {
   var raw = w.dmg * bias.fire * rtsCrateMult(e, 'fire') * (w.relay && e.type === 'struct' ? _rtsLensRelay(e, w) : 1)
           * _rtsArcCharge(e)                      /* ...and an Arc Tower's troopers charge it (core/arc.js) */
           * (e.dug ? RTS_DIG.fire : 1);           /* ...and a squad dug in hits harder (core/dig.js) */
+  if (w.plant) { _rtsPlant(e, tgt, w, raw); return; }   /* a charge left on it, no damage yet: core/blast.js */
+  if (w.self) { _rtsBlastGo(e); _rtsKill(e); return; } /* the carrier is the bomb */
   var dmg = raw * rtsVerses(w, tgt);
   if (w.speed <= 0) {
     _rtsDamage(tgt, dmg, e);
@@ -21816,6 +21913,99 @@ function _rtsVeiled(o) {
   return !(o.firedT != null && window._rtsG.t - o.firedT < RTS_RIFT.park);
 }
 </script>
+<script>/* core/blast.js - EXPLOSIVES: the charge left on a target, and the unit that is its own bomb.
+
+   A PLANTED CHARGE (`plant` on rules/weapons.js `satchel` and `limpet`). The shot does no damage:
+   it leaves a charge on the target (`e.bomb`, plain data, so a save keeps it) that goes off after
+   its fuse - its whole `dmg` to the target, through the target's armour, and half of it to
+   everything within `rad`, whoever's it is. A target carries one charge at a time, so
+   _rtsWeaponReaches says a charged one is not worth another and the planter moves on. If the
+   target dies first the charge goes off where it fell. The Sapper's goes on anything on the
+   ground; the Frogman's limpet (`on:'hull'`) only on a ship or a building.
+
+   A UNIT THAT IS THE BOMB (`self` on `zealblast` and `wreckblast`, `blasts` on the unit). Its shot
+   is the explosion: `dmg` round it within `rad`, friend and foe alike, and the carrier is gone
+   with it. And because it is carrying the explosive, killing it sets it off too, where it falls
+   (core/capture.js _rtsKill). */
+var RTS_BLAST = { share: 0.5, shake: 0.35 };
+
+/* Can `w`'s charge go on `tgt`? Not on one already charged, and a limpet only on a hull. */
+function _rtsPlantable(w, tgt) {
+  if (!tgt || tgt.dead || tgt.bomb || tgt.air) return false;
+  if (w.plant.on !== 'hull') return true;
+  return tgt.type === 'struct' || !!(rtsUnitDef(tgt.def) || {}).sea;
+}
+function _rtsPlant(e, tgt, w, raw) {
+  if (!_rtsPlantable(w, tgt)) return false;
+  var G = window._rtsG;
+  tgt.bomb = { t: w.plant.fuse, fuse: w.plant.fuse, dmg: raw * rtsVerses(w, tgt), rad: w.plant.rad, side: e.side, by: e.id };
+  G.bombsLive = (G.bombsLive || 0) + 1;
+  return true;
+}
+
+/* THE BLAST ITSELF: `dmg` at the heart, falling off evenly to nothing at `rad` - measured to a
+   building's edge, as a gun's range is - to everything on the ground but `skip`, whoever's it is.
+   Not core/damage.js _rtsSplash, whose steps fall away within a cell: a satchel or a lorry of
+   explosive is meant to take the building it is against, and what stands beside it. */
+function _rtsBlastRing(x, z, dmg, rad, side, skip) {
+  var G = window._rtsG, at = { x: x, z: z };
+  for (var i = 0; i < G.ents.length; i++) {
+    var o = G.ents[i];
+    if (o === skip || o.dead || o.inside || o.air) continue;
+    var d = _rtsRangeTo(at, o);
+    if (d >= rad) continue;
+    o.hurtBy = side;
+    _rtsDamage(o, dmg * (1 - d / rad), null);
+  }
+}
+function _rtsBlastFx(x, z, rad) {
+  var G = window._rtsG;
+  G.fx.push({ kind: 'boom', x: x, y: 1, z: z, t: 0, big: Math.max(1.4, rad / RTS_TILE * 1.3) });
+  G.shake = Math.min(1, (G.shake || 0) + RTS_BLAST.shake * rad / (RTS_TILE * 2));
+  if (typeof _rtsSfx === 'function') _rtsSfx('boom', x, z);
+}
+/* A planted charge goes off: all of it to its host, `share` of it round it. */
+function _rtsBlastAt(x, z, dmg, rad, side, host) {
+  if (host && !host.dead) { host.hurtBy = side; _rtsDamage(host, dmg, null); }
+  _rtsBlastRing(x, z, dmg * RTS_BLAST.share, rad, side, host);
+  _rtsBlastFx(x, z, rad);
+}
+/* Each tick, while a charge is ticking anywhere. */
+function _rtsBlastTick(dt) {
+  var G = window._rtsG;
+  if (!G.bombsLive) return;
+  var live = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var o = G.ents[i], b = o.bomb;
+    if (!b) continue;
+    if (o.dead) { o.bomb = null; continue; }      /* gone some quiet way (core/rift.js): it goes with it */
+    b.t -= dt;
+    if (b.t > 0) { live++; continue; }
+    o.bomb = null;
+    _rtsBlastAt(o.x, o.z, b.dmg, b.rad, b.side, o);
+  }
+  G.bombsLive = live;
+}
+/* Its host destroyed before the fuse ran out, the charge goes off where it fell (core/capture.js
+   _rtsKill) - at once, before the wreck is swept off the map. */
+function _rtsBlastHostDied(o) {
+  var b = o.bomb;
+  o.bomb = null;
+  _rtsBlastAt(o.x, o.z, b.dmg, b.rad, b.side, null);
+}
+
+/* The carrier goes off: from its own shot (core/combat.js) or from being killed (core/capture.js).
+   Once only - a Zealot killed by another Zealot's blast does not go off twice. */
+function _rtsBlastGo(e) {
+  var w = RTS_WEAPONS[(rtsUnitDef(e.def) || {}).weapon];
+  if (e.blasted || !w || !w.self) return;
+  e.blasted = 1;
+  e.crushed = true;                               /* nothing left of it, and nobody climbs out */
+  var raw = w.dmg * _rtsBias(e.side).fire * rtsCrateMult(e, 'fire');
+  _rtsBlastRing(e.x, e.z, raw, w.self.rad, e.side, e);
+  _rtsBlastFx(e.x, e.z, w.self.rad);
+}
+</script>
 <script>/* core/missions.js - the team mission list (TEAMTYPE.CPP): the script a team runs.
    Part of rts.core, the simulation. */
 
@@ -22912,6 +23102,7 @@ function _rtsTick(dt) {
   if (G.sides.civ) _rtsGarrisonTick(dt);        /* squads firing out of the town's houses: core/garrison.js */
   _rtsMindTick();                                /* a Mentalist that has died lets go: core/mind.js */
   _rtsVeilTick(dt);                              /* a Veil Tank standing still: core/rift.js */
+  _rtsBlastTick(dt);                             /* charges on their fuses: core/blast.js */
   _rtsSeparate(dt);
   _rtsAirSpread(dt);                             /* aircraft keep their own distance: core/airspace.js */
   _rtsUpdateProj(dt);
@@ -28278,6 +28469,7 @@ function _r3dFxEmit(G, V) {
   var A = RTS_ANIMS, i;
   _r3dFxProj(G, V);
   _r3dFxBombs(G, V);
+  if (typeof _r3dFxCharges === 'function') _r3dFxCharges(G, V); /* charges blinking - blast3d.js */
   if (typeof _r3dFxWakes === 'function') _r3dFxWakes(G, V);     /* dust and wakes - fxwake3d.js */
   if (typeof _r3dFxAlive === 'function') _r3dFxAlive(G, V);     /* stacks, beacons - alive3d.js */
   if (typeof _r3dFxSky === 'function') _r3dFxSky(G, V);         /* lamps, rain, fog - skyfx3d.js */
@@ -30413,6 +30605,23 @@ function _r3dSoldierMan(m, key, mx, mz, pose, lead, K) {
     armTo(1, cx + 1.2, cy - 0.8, mz + 1.4, cx + 2.4, cy - 0.5, mz + 1.3);
     _r3Box(m, cx + 3.0, cy - 0.65, mz - 1.3, 1.4, 0.5, 0.35, kit.prop, DK[3]);    /* pistols */
     _r3Box(m, cx + 3.0, cy - 0.65, mz + 1.3, 1.4, 0.5, 0.35, kit.prop, DK[3]);
+  } else if (key === 'sapper') {
+    /* a satchel charge in each hand, red, swinging at his sides */
+    armTo(-1, cx + 0.4 + arm, cy - 1.5, mz - 1.5, cx + 0.6 + arm, cy - 2.7, mz - 1.6);
+    armTo(1, cx - 0.2 - arm, cy - 1.5, mz + 1.5, cx - 0.1 - arm, cy - 2.7, mz + 1.6);
+    _r3Box(m, cx + 0.6 + arm, cy - 3.9, mz - 1.6, 1.6, 1.4, 1.0, kit.prop, '#e8532c');
+    _r3Box(m, cx - 0.1 - arm, cy - 3.9, mz + 1.6, 1.6, 1.4, 1.0, kit.prop, '#e8532c');
+  } else if (key === 'zealot') {
+    /* the vest of charges, a row of red sticks round his chest, and a trigger held up in one hand */
+    armTo(-1, cx + 0.5 + arm, cy - 1.5, mz - 1.5, cx + 1.0 + arm, cy - 2.5, mz - 1.5);
+    armTo(1, cx + 0.6, cy - 0.6, mz + 1.4, cx + 0.9, cy + 1.2, mz + 1.2);
+    for (var zs = 0; zs < 6; zs++) _r3Cyl(m, cx + Math.cos(zs * 1.05) * 1.25, cy - 1.6, mz + Math.sin(zs * 1.05) * 1.25, 0.32, 1.6, kit.prop, '#e8532c', 16);
+  } else if (key === 'frogman') {
+    /* the machine pistol, and the yellow limpet on his back */
+    armTo(-1, cx + 1.2, cy - 0.8, mz - 1.4, cx + 2.4, cy - 0.5, mz - 1.0);
+    armTo(1, cx + 1.2, cy - 0.8, mz + 1.4, cx + 2.4, cy - 0.5, mz + 0.4);
+    _r3Box(m, cx + 3.0, cy - 0.6, mz - 0.3, 1.8, 0.6, 0.4, DK[3], DK[2]);
+    _r3Cyl(m, mx - 1.9, hipY + 2.2, mz, 1.3, 0.8, kit.prop, '#fff07a', 20);
   } else if (key === 'rifttroop') {
     /* the rift gun held across him, and the ring standing up on his back */
     armTo(-1, cx + 0.7, cy - 1.5, mz - 1.5, cx + 1.3, cy - 0.9, mz - 0.7);
@@ -30682,6 +30891,7 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
      only the flier adds to it. */
   var y = (e.air || d2.sea ? _rtsElev(e.x, e.z) : _rtsStandY(e.x, e.z)) + (e.air ? _rtsAirLift(e) * RTS_AIR_ALT_K : 0);   /* render/camera.js */
   if (e.chute > 0) y += e.chute / RTS_PARA.fall * R3D_CHUTE_H;     /* coming down under a canopy: core/paradrop.js */
+  y -= _r3dSwimSink(G, e, d2);                                       /* a Frogman swimming: blast3d.js */
   /* A MARCHING SOLDIER BOBS. The bob is what is left of the old suggestion of a march, much
      smaller now that he walks (a stride pose by his own gait, soldier3d.js), in step with the
      stride. Prone, he crawls instead (crawl3d.js). Vehicles do not bob; tracks do not walk. */
@@ -30802,6 +31012,34 @@ function _r3dVeilDraw(C, e, R3, drawIn) {
   if (typeof _rtsSeen === 'function' && !_rtsSeen(_rtsTX(e.x), _rtsTX(e.z))) return;   /* not even a tree under the shroud */
   drawIn(C, _r3dVeilTree(R3), e.x, _rtsElev(e.x, e.z), e.z, 0, 1, 0, 1);
 }
+</script>
+<script>/* render3d/blast3d.js - explosives on the page (core/blast.js).
+
+   A CHARGE ON SOMETHING blinks: a red light on top of it, quicker as the fuse runs down - twice a
+   second when it is set, ten times in its last second - so a player who sees one on a tank of
+   theirs knows how long they have. Drawn into the emission batch with the fire (fxemit3d.js), on
+   whatever it is on and wherever the player can see. R3.chargeOff draws none, for a spec's A/B.
+
+   A FROGMAN IN THE WATER swims: he is drawn R3D_SWIM_SINK lower, to the chest in it, and the water
+   sheet hides the rest (unit3d.js). */
+var R3D_CHARGE = { col: [1.6, 0.18, 0.12], size: 0.9, slow: 2, fast: 10 };
+var R3D_SWIM_SINK = 0.8;           /* measured: half of him under, the rest above (e2e/blast) */
+
+function _r3dFxCharges(G, V) {
+  var R3 = window._R3D;
+  if (!G.bombsLive || (R3 && R3.chargeOff)) return;
+  var vis = typeof _rtsVisible === 'function';
+  for (var i = 0; i < G.ents.length; i++) {
+    var o = G.ents[i], b = o.bomb;
+    if (!b || o.dead || (vis && !_rtsVisible(_rtsTX(o.x), _rtsTX(o.z)))) continue;
+    var left = Math.max(0, b.t) / (b.fuse || 1), hz = R3D_CHARGE.fast + (R3D_CHARGE.slow - R3D_CHARGE.fast) * left;
+    if (((V.t || 0) * hz) % 1 > 0.5) continue;                          /* the light's off half of each blink */
+    var h = o.type === 'struct' ? 6 : (rtsUnitDef(o.def) || {}).kind === 'infantry' ? 3.4 : 5;
+    _r3dFxBill(V.M, V, o.x, V.ground(o.x, o.z) + h, o.z, R3D_CHARGE.size, R3D_CHARGE.size, 0.6, R3D_FXT_FLASH, 0, 0, 1, 0, R3D_CHARGE.col);
+  }
+}
+/* How far down a unit is drawn for swimming: a Frogman over water. */
+function _r3dSwimSink(G, e, d) { return d.swims && _r3dWetAt(G, e.x, e.z) ? R3D_SWIM_SINK : 0; }
 </script>
 <script>/* render3d/air3d.js - aircraft that fly like aircraft. Part of rts.render3d.
 
@@ -34430,6 +34668,7 @@ function _rtsSyncSidebar(dt) {
       txt += ' · ' + Math.floor(e.carry) + ' load (' + Math.floor(e.carryVal || 0) + ' credits)';
     if (e.type === 'unit' && e.side === 'player') txt += _rtsUnitStateTxt(e);   /* mines left, bombs, aboard: ui/selhint.js */
     else if (e.type === 'unit' && e.mind) txt += ' · held by a Mentalist';           /* one of the player's, taken: core/mind.js */
+    if (e.bomb) txt += ' · a charge on it: ' + Math.ceil(e.bomb.t) + ' s';            /* core/blast.js */
     if (_rtsGarrisonable(e)) txt += ' · ' + (e.side === 'civ' ? 'empty, ' + _rtsGarrisonCap(e) + ' squads can hold it' : _rtsCargoCount(e) + '/' + _rtsGarrisonCap(e) + ' squads inside');
   } else {
     var counts = {}, i;
