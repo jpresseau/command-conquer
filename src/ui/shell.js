@@ -159,6 +159,7 @@ function rtsOpen(seed) {
   _rtsBuildList();
   _rtsPauseSync();                                           /* the ⏸ shows the speed it plays at */
   _rtsBindInput();
+  _rtsTapBind(d);                                            /* a tap presses a button without waiting on a click (ui/tap.js) */
   document.addEventListener('keydown', _rtsKeyDown, true);
   document.addEventListener('keyup', _rtsKeyUp, true);
   window.addEventListener('resize', _rtsOnResize);

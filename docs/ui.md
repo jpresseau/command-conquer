@@ -213,6 +213,17 @@ release (`ui/input.js`); on a touch screen the command bar's QUEUE latches it in
 `ui/touchcmd.js`), lit until tapped off as A-MOVE is.
 `unit/waypoints` holds the walking; `e2e/waypoints` gives the clicks.
 
+### A tap presses a button (ui/tap.js)
+
+Every button in the battle acts on `click`, and an iPhone does not always follow a tap with one:
+Safari withholds it when it judges that the tap only hovered, and this page changes something
+every frame. Reported as a Vehicles tab that did nothing. One listener on the battle's root
+presses the button on `touchend` instead, when the finger lifts on the button it went down on and
+has not slid more than `RTS_TAP_SLOP` px, and cancels the touchend so the browser does not press
+it a second time. A button that cancels its own touchend (a held build tile, the GFX button after
+a hold) is left alone, and the touch bar stops the event first. `e2e/tap` drops every trusted
+click, as Safari did, and taps every tab, REPAIR and a tile.
+
 ### Repeat (ui/repeat.js, core/production.js)
 
 ↻ REPEAT sits with REPAIR and SELL and applies to the unit tab in view: `S.rep[cat]`, on the side,
