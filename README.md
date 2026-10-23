@@ -200,6 +200,10 @@ which can do nothing while it is crushed. Its Sea Hornet flak boat shoots down a
 Bombard missile battleship outranges every other hull. The Compact's Sonar Dolphin hears what
 hides below and drives it off.
 
+**The economy.** The Compact's Assay Plant makes every load pay a quarter more. The Dominion's
+Foundry makes its vehicles a quarter cheaper and quicker, its Clone Vats turn out every soldier
+twice, and its War Harvester shoots back while it mines.
+
 **The enemy uses its whole garage.** It mines the approach to its own base, and once you have a
 harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands
 them beside your ore field, and goes home to do it again.

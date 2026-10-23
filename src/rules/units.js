@@ -98,6 +98,12 @@ var RTS_UNITS = [
     needs:['lab'], veil:true,
     side:'allied', armour:'light',
     desc:'Hidden while it stands still and holds its fire: to the enemy it looks like a tree. Firing or moving gives it away.' },
+  /* THE WAR HARVESTER (core/econ.js): the Dominion's harvester carries a gun, and turns it on the
+     men who come for it without leaving its work. */
+  { key:'warharv',  name:'War Harvester', kind:'vehicle',  cost:1600, build:16, hp:1000, speed:6.5, turn:1.5,r:2.3, sight:16, weapon:'warmg',
+    needs:['refinery'], harvest:true, capacity:980,
+    side:'soviet', armour:'heavy',
+    desc:'A harvester with a gun: it keeps mining while it shoots the infantry that come for it. Tougher and slower than the ordinary one.' },
   /* THE JETPACK TROOPER (core/aloft.js): infantry that flies - over walls, water and cliffs - and
      only anti-air can touch it. Never goes home to reload. */
   { key:'jetpack',  name:'Jetpack Trooper', kind:'infantry', cost:600, build:9, hp:90,   speed:9,   turn:6,  r:1.1, sight:18, weapon:'jetgun',

@@ -42,6 +42,7 @@ var RTS_REPLAY_PURE = {
     '_rtsWX', '_rtsWhyLocked', 'rtsArmyName', 'rtsArmyTitle', 'rtsBuildableBy', 'rtsCapacity', 'rtsCapturable',
     'rtsHouseSide', 'rtsMoney', 'rtsStructDef', 'rtsUnitDef', 'rtsArmySide', '_rtsReplayHash', '_rtsRevealed', '_rtsReplayValid',
     '_rtsReplayTimes',
+    '_rtsCostOf',                               /* a sidebar tile's price as it stands now: ui/sidebar.js */
     /* the picture's: heights, sight and where a gun points (src/render, src/render3d) */
     '_rtsAirLift', '_rtsVisible', '_rtsMineShown', '_rtsBridgeDeckY', '_rtsMuzzleAngle', '_rtsFireCoord',
     '_rtsSeen', '_rtsVeiled',                    /* a Veil Tank drawn as a tree: render3d/veil3d.js */
