@@ -122,6 +122,14 @@ var RTS_UNITS = [
     side:'allied', armour:'none',
     crawl:true, fraidy:false,
     desc:'Swims as well as he walks. A machine pistol for infantry, and a limpet charge for ships and buildings.' },
+  /* RADIATION (core/rad.js). THE BLIGHT TROOPER's gun leaves a pool of radiation where it hits;
+     DEPLOYED, it stands still and the ground round it burns - infantry worst, vehicles less,
+     its own side's men as much as the enemy's. It is proof against radiation itself. */
+  { key:'blight',   name:'Blight Trooper', kind:'infantry', cost:600, build:9,  hp:140,  speed:5,   turn:6,  r:1.1, sight:14, weapon:'blightgun',
+    needs:['lab'], dig:'soviet', irradiates:true, radproof:true,
+    side:'soviet', armour:'light',
+    crawl:false, fraidy:false,
+    desc:'Its ray leaves the ground poisoned where it hits. DEPLOY and it irradiates everything round it - keep your own men clear.' },
   /* The Arc Tower on tracks: a short bolt that jumps on to two more enemies beside its target. */
   { key:'arctank',  name:'Arc Tank',      kind:'vehicle',  cost:1000, build:13, hp:380,  speed:9.5, turn:2.0,r:2.0, sight:16, weapon:'arcbolt',
     needs:['radar'],

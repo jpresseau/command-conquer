@@ -304,7 +304,8 @@ function _r3dFxBeam(V, f) {
   var y0 = V.ground(f.x, f.z) + (f.y || 1.3), y1 = V.ground(f.x2, f.z2) + (f.y2 || 1.3);
   var k = f.lens || 1, op = 1 - f.t / R3D_FX_BEAM_T;
   if (f.arc) { _r3dFxArc(V, f, y0, y1, k, op); return; }
-  var tint = f.mind ? R3D_FX_MIND : f.rift ? R3D_FX_FOAM : R3D_FX_LENS;   /* a Rift Trooper's is white */   /* a Mentalist's link is violet (core/mind.js) */
+  /* a Mentalist's link is violet (core/mind.js), a Rift Trooper's white (core/rift.js), a Blight Trooper's green (rad3d.js) */
+  var tint = f.mind ? R3D_FX_MIND : f.rift ? R3D_FX_FOAM : f.rad ? R3D_RAD.ray : R3D_FX_LENS;
   _r3dFxStreak(V.M, V, f.x, y0, f.z, f.x2, y1, f.z2, 1.1 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.35 * op, 0, tint);
   _r3dFxStreak(V.M, V, f.x, y0, f.z, f.x2, y1, f.z2, 0.32 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.95 * op, 0, f.mind ? R3D_FX_MINDC : R3D_FX_ROUND);
   _r3dFxBill(V.M, V, f.x2, y1, f.z2, 1.1 * k, 1.1 * k, 0.6, R3D_FXT_FLASH, 0, 0, 0.9 * op, 0, tint);
@@ -395,6 +396,7 @@ function _r3dFxEmit(G, V) {
   _r3dFxProj(G, V);
   _r3dFxBombs(G, V);
   if (typeof _r3dFxCharges === 'function') _r3dFxCharges(G, V); /* charges blinking - blast3d.js */
+  if (typeof _r3dFxRad === 'function') _r3dFxRad(G, V);         /* poisoned ground - rad3d.js */
   if (typeof _r3dFxWakes === 'function') _r3dFxWakes(G, V);     /* dust and wakes - fxwake3d.js */
   if (typeof _r3dFxAlive === 'function') _r3dFxAlive(G, V);     /* stacks, beacons - alive3d.js */
   if (typeof _r3dFxSky === 'function') _r3dFxSky(G, V);         /* lamps, rain, fog - skyfx3d.js */

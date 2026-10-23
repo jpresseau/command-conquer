@@ -336,7 +336,8 @@ function _rtsFire(e, tgt, w) {
   var dmg = raw * rtsVerses(w, tgt);
   if (w.speed <= 0) {
     _rtsDamage(tgt, dmg, e);
-    if (w.shot === 'beam' || w.shot === 'arc') G.fx.push(_rtsLensBeamFx(e, tgt, w));
+    if (w.shot === 'beam' || w.shot === 'arc') { var bf = _rtsLensBeamFx(e, tgt, w); if (w.rad) bf.rad = 1; G.fx.push(bf); }
+    if (w.rad) _rtsRadPool(tgt.x, tgt.z, w.rad, e.side);   /* a Blight Trooper's poisons the ground: core/rad.js */
     else G.fx.push({ kind:'tracer', x:m.x, y:1.3, z:m.z, x2:tgt.x, y2:1.3, z2:tgt.z, t:0 });
     if (w.split) _rtsLensFork(e, tgt, w, raw);      /* and a Lens Tank's forks onto its neighbours */
     _rtsCombatAnim(dmg, tgt.x, tgt.z, 0.5, tgt);

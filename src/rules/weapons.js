@@ -170,6 +170,9 @@ var RTS_WEAPONS = {
   /* the Frogman's machine pistol: for men, not for hulls */
   frogmg:     { dmg:10, range:13, cool:0.35, shot:'tracer', speed:0, splash:0,
                 verses:{ none:1.0, wood:0.15, light:0.20, heavy:0.08, concrete:0.05 } },
+  /* the Blight Trooper's ray (core/rad.js): `rad` is the pool it leaves where it hits */
+  blightgun:  { dmg:45, range:11, cool:1.6, shot:'beam', speed:0, splash:0, rad:{ r:RTS_TILE * 1.3, life:5, dps:14 },
+                verses:{ none:1.0, wood:0.3, light:0.6, heavy:0.35, concrete:0.15 } },
   arcgun:     { dmg:30, range:9, cool:1.3, shot:'arc', speed:0, splash:0,
                 verses:{ none:1.0, wood:0.5, light:1.2, heavy:1.0, concrete:0.4 } },
   arcbolt:    { dmg:55, range:13, cool:1.8, shot:'arc', speed:0, splash:0, split:{ n:2, cells:2.5, share:0.6 },
