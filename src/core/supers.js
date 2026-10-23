@@ -102,6 +102,7 @@ function _rtsSuperFire(side, key, tx, tz, sel) {
   else if (key === 'gps')         ok = _rtsFireGps(side);
   else if (key === 'fogbank')     ok = _rtsFireFogBank(side, tx, tz);     /* core/wxsupers.js */
   else if (key === 'thunder')     ok = _rtsFireThunder(side, tx, tz);
+  else if (key === 'paradrop')    ok = _rtsFireParadrop(side, tx, tz);   /* the Airstrip's: core/tech.js */
   if (!ok) return false;
   var st = G.sides[side].supers[key];
   st.t = 0; st.ready = false; st.said = false;

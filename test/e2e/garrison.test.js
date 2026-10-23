@@ -34,7 +34,8 @@ var S = new Suite('garrison');
     var note = (document.getElementById('rtsSkirmishNote') || {}).textContent || '';
     return { row: !!row, n: row ? row.querySelectorAll('button').length : 0, on: btn ? btn.className : '', note: note };
   });
-  S.ok('the skirmish setup has a TOWNS row with two choices', setup.row && setup.n === 2, JSON.stringify(setup));
+  /* NONE, TOWNS, and TOWNS + TECH (core/tech.js) */
+S.ok('the skirmish setup has a TOWNS row with three choices', setup.row && setup.n === 3, JSON.stringify(setup));
   S.ok('...and picking TOWNS says so on the button', setup.on === 'on' && /towns/.test(setup.note), setup.note);
 
   await g.start(7, 1, { freeze: true });

@@ -863,7 +863,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">6d52b22 · 2026-10-23</div>
+  <div id="rtsBuild" title="build">5626a6f · 2026-10-23</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1173,7 +1173,24 @@ var RTS_STRUCTS = [
     desc:'A block of flats. Up to five infantry squads can garrison it.' },
   { key:'hall',     name:'Town Hall',     w:3, h:3, cost:0, build:1, hp:1000, power:0, sight:10,
     side:'civ', civ:true, garrison:6, armour:'concrete', capturable:false,
-    desc:'The town hall: the strongest building in town. Up to six infantry squads can garrison it.' }
+    desc:'The town hall: the strongest building in town. Up to six infantry squads can garrison it.' },
+  /* ---------------------------------------------------------------- tech --
+     TECH BUILDINGS (core/tech.js), laid by the setup's TOWNS + TECH and owned by nobody until an
+     Engineer takes one: then it works for whoever holds it. */
+  { key:'derrick',  name:'Oil Derrick',   w:2, h:2, cost:0, build:1, hp:500, power:0, sight:8,
+    side:'civ', civ:true, tech:'oil', armour:'wood',
+    desc:'Captured, it pays its owner a steady trickle of credits.' },
+  { key:'hospital', name:'Field Hospital', w:2, h:2, cost:0, build:1, hp:600, power:0, sight:10,
+    side:'civ', civ:true, tech:'heal', armour:'concrete',
+    desc:'Captured, it heals its owner\'s infantry near it.' },
+  { key:'mshop',    name:'Machine Shop',  w:2, h:2, cost:0, build:1, hp:600, power:0, sight:10,
+    side:'civ', civ:true, tech:'fix', armour:'concrete',
+    desc:'Captured, it repairs its owner\'s vehicles near it.' },
+  { key:'airstrip', name:'Airstrip',      w:3, h:2, cost:0, build:1, hp:700, power:0, sight:12,
+    side:'civ', civ:true, tech:'drop', armour:'concrete',
+    super:{ key:'paradrop', name:'Paratroopers', charge:150, target:'cell', icon:'⛑',
+            desc:'A plane drops four rifle squads wherever you choose.' },
+    desc:'Captured, it calls in a drop of paratroopers wherever its owner chooses.' }
 ];
 
 </script>
@@ -1202,7 +1219,9 @@ var RTS_SKIRMISH = {
   layout: { random: { name: 'RANDOM' }, mirror: { name: 'MIRRORED', mirror: true } },
   /* civilian towns in the contested ground between the bases, whose buildings infantry can
      garrison (core/garrison.js); `n` towns on a standard map, scaled with its size */
-  town:  { none: { name: 'NONE', n: 0 }, towns: { name: 'TOWNS', n: 2 } },
+  town:  { none: { name: 'NONE', n: 0 }, towns: { name: 'TOWNS', n: 2 },
+           /* ...and the tech buildings an Engineer captures, between the bases (core/tech.js) */
+           tech: { name: 'TOWNS + TECH', n: 2, tech: true } },
   /* who else is on the field: the computer seats beyond the one opponent (RTS_SEATS) */
   foes:  { one: { name: '1 FOE', extra: [] }, two: { name: '2 FOES', extra: ['enemy2'] },
            ally: { name: 'FOE + ALLY', extra: ['ally'] }, team: { name: '2 V 2', extra: ['ally', 'enemy2'] },
@@ -7454,7 +7473,7 @@ function _sprBuildingModel(key, side) {
             pipe:pipe, ladder:ladder, rail:rail, steps:steps, drum:drum,
             crates:crates, floodlight:floodlight, plant:plant,
             sandbags:sandbags, ammo:ammo };
-  _sprBldBase(X, key) || _sprBldTech(X, key) || _sprBldWar(X, key) || _sprBldSuper(X, key) || _sprBldLens(X, key) || _sprBldTown(X, key) || _sprBldMind(X, key) || _sprBldRad(X, key) || _sprBldEcon(X, key);
+  _sprBldBase(X, key) || _sprBldTech(X, key) || _sprBldWar(X, key) || _sprBldSuper(X, key) || _sprBldLens(X, key) || _sprBldTown(X, key) || _sprBldMind(X, key) || _sprBldRad(X, key) || _sprBldEcon(X, key) || _sprBldCivTech(X, key);
   return m;
 }
 function _sprBuildingClean(key, side) {
@@ -9464,6 +9483,62 @@ function _sprBldEcon(X, key) {
       _r3Cyl(m, vx, 9, vz, 3.8, 3, RTS_ECON_GLOW[0], RTS_ECON_GLOW[1], 20);
       _r3Cyl(m, vx, 12, vz, 4.0, 0.6, B.roof, B.roof, 20);
     }
+    return true;
+  }
+  return false;
+}
+</script>
+<script>/* sprites/tech.js - the tech buildings (core/tech.js). Part of rts.sprites.
+
+   Civilian work, not military: an oil derrick's lattice tower over its pump and tank; a field
+   hospital's white tents round a red cross; a machine shop's open-fronted shed with a crane arm; an
+   airstrip's runway with a hangar and a windsock. Their roofs take the holder's colour once one is
+   taken (B.roof), as every building's does. */
+function _sprBldCivTech(X, key) {
+  var m = X.m, W = X.W, D = X.D, C = X.C, S = X.S, B = X.B, WH = X.WH, DK = X.DK, i;
+  if (key === 'derrick') {
+    _r3Box(m, 0, 0, 0, W - 6, 2, D - 6, C[2], C[0]);
+    for (i = 0; i < 4; i++) {                                              /* the lattice tower */
+      var lx = (i % 2 ? 1 : -1) * 3, lz = (i < 2 ? 1 : -1) * 3;
+      _r3Box(m, -4 + lx * 0.6, 2, -2 + lz * 0.6, 0.6, 18, 0.6, S[1], S[3]);
+    }
+    for (i = 0; i < 4; i++) _r3Box(m, -4, 4 + i * 4, -2, 4.4 - i * 0.6, 0.4, 4.4 - i * 0.6, S[2], S[3]);
+    _r3Box(m, 5, 2, 4, 6, 3, 2, DK[1], DK[2]);                              /* the pump */
+    _r3Box(m, 7.4, 5.4, 4, 6, 0.8, 0.8, DK[0], DK[1]);                       /* its beam */
+    _r3Cyl(m, 6, 2, -6, 4, 6, S[1], B.roof, 20);                             /* the tank, roof in the holder's colour */
+    return true;
+  }
+  if (key === 'hospital') {
+    _r3Box(m, 0, 0, 0, W - 6, 2, D - 6, C[2], C[0]);
+    for (i = 0; i < 2; i++) {                                               /* two ward tents */
+      var tz = -6 + i * 12;
+      _r3Box(m, 0, 2, tz, W - 14, 4, 7, '#e8e6dc', '#f6f4ea');
+      _r3Box(m, 0, 6, tz, W - 14, 1.2, 5, '#dcdad0', B.roof);
+    }
+    _r3Box(m, 0, 8.6, 0, 8, 0.4, 2.4, '#c8302a', '#e04a3a');                 /* the red cross, on top */
+    _r3Box(m, 0, 8.6, 0, 2.4, 0.4, 8, '#c8302a', '#e04a3a');
+    return true;
+  }
+  if (key === 'mshop') {
+    _r3Box(m, 0, 0, 0, W - 6, 2, D - 6, C[2], C[0]);
+    _r3Box(m, -4, 2, 0, W - 18, 8, D - 10, WH[1], WH[3]);                    /* the shed */
+    _r3Box(m, -4, 10, 0, W - 16, 1, D - 8, B.roof, B.roof);
+    _r3Box(m, W / 2 - 10, 2, 0, 1.2, 1.2, D - 12, DK[0], DK[1]);             /* the open front's inspection pit */
+    _r3Box(m, 8, 2, -8, 1, 13, 1, S[1], S[3]);                               /* the crane post */
+    _r3Box(m, 8, 15, -4, 1, 1, 9, S[1], S[3]);                               /* ...and its arm */
+    _r3Box(m, 8, 11, 0, 0.3, 4, 0.3, DK[2], DK[3]);                          /* the hook's line */
+    X.facade(3, 2, (W - 18) / 2, (D - 10) / 2);                              /* the shed's windows */
+    for (i = 0; i < 3; i++) _r3Cyl(m, -W / 2 + 6 + i * 2.6, 2, D / 2 - 6, 1.1, 3, '#7a2a1e', '#9a3a2a', 16);   /* oil drums */
+    for (i = 0; i < 3; i++) _r3Cyl(m, W / 2 - 6, 2 + i * 1.3, D / 2 - 6, 1.8, 1.2, DK[0], DK[1], 16);   /* a stack of tyres */
+    return true;
+  }
+  if (key === 'airstrip') {
+    _r3Box(m, 0, 0, 0, W - 4, 1.2, D - 4, '#4a4e54', '#5a5e64');            /* the runway */
+    for (i = 0; i < 6; i++) _r3Box(m, -W / 2 + 8 + i * (W - 16) / 5, 1.3, 0, 3, 0.1, 0.8, '#e8e6dc', '#f6f4ea');
+    _r3Box(m, -W / 2 + 12, 1.2, -D / 2 + 9, 14, 8, 10, WH[1], WH[3]);        /* the hangar */
+    _r3Box(m, -W / 2 + 12, 9.2, -D / 2 + 9, 15, 1.2, 11, B.roof, B.roof);
+    _r3Box(m, W / 2 - 6, 1.2, -D / 2 + 6, 0.5, 8, 0.5, S[1], S[3]);          /* the windsock's mast */
+    _r3Box(m, W / 2 - 4.6, 8.4, -D / 2 + 6, 2.8, 1.0, 1.0, '#ff8a3a', '#f6f4ea');
     return true;
   }
   return false;
@@ -15118,6 +15193,7 @@ function _rtsSuperFire(side, key, tx, tz, sel) {
   else if (key === 'gps')         ok = _rtsFireGps(side);
   else if (key === 'fogbank')     ok = _rtsFireFogBank(side, tx, tz);     /* core/wxsupers.js */
   else if (key === 'thunder')     ok = _rtsFireThunder(side, tx, tz);
+  else if (key === 'paradrop')    ok = _rtsFireParadrop(side, tx, tz);   /* the Airstrip's: core/tech.js */
   if (!ok) return false;
   var st = G.sides[side].supers[key];
   st.t = 0; st.ready = false; st.said = false;
@@ -16890,7 +16966,7 @@ function _rtsOrderUnloadAt(t, x, z) {
    to pick which side to stand on, and that is only right once it is actually moving. */
 function _rtsOrderCapture(u, b) {
   if (!u || u.type !== 'unit' || !b || b.type !== 'struct') return false;
-  if (b.dead || b.selling || !_rtsHostile(b.side, u.side) || !rtsCapturable(b.def)) return false;
+  if (b.dead || b.selling || !_rtsClaimable(b, u.side) || !rtsCapturable(b.def)) return false;   /* core/tech.js */
   u.order = 'capture'; u.target = b; u.hstate = null;
   u.path = null; u.goal = null; u.susp = null;
   return true;
@@ -18242,7 +18318,7 @@ function _rtsUpdateUnit(e, dt) {
        it is free to be sent somewhere else rather than spent on a structure that removes
        itself. Reachable by playing normally: the AI sells while your engineer is en route. */
     if (e.order === 'capture' && (!cb || cb.dead || cb.selling || cb.type !== 'struct'
-        || !_rtsHostile(cb.side, e.side) || !rtsCapturable(cb.def))) {
+        || !_rtsClaimable(cb, e.side) || !rtsCapturable(cb.def))) {   /* a tech building no one holds too: core/tech.js */
       e.order = null; e.target = null; e.path = null;
     } else if (e.order === 'capture') {
       if (_rtsAtStruct(e, cb)) { _rtsCapture(e, cb); return; }
@@ -22072,6 +22148,7 @@ function _rtsLayTowns(G) {
       if (c) out.push(_rtsPlaceCiv(keys[q], c[0], c[1]));
     }
   }
+  if (T.tech) out = out.concat(_rtsLayTech(G, spot));   /* ...and the tech between them: core/tech.js */
   return out;
 }
 </script>
@@ -22607,6 +22684,87 @@ function _rtsHarvGuns(e, d) {
   var t = held && !held.dead && _rtsHostile(held.side, e.side) && _rtsRangeTo(e, held) <= w.range ? held : _rtsFindTarget(e, w.range, w);
   e.hgun = t ? t.id : null;
   if (t) _rtsFire(e, t, w);
+}
+</script>
+<script>/* core/tech.js - TECH BUILDINGS: the prizes between the bases.
+
+   The setup's TOWNS + TECH lays an Oil Derrick, a Field Hospital, a Machine Shop and an Airstrip in
+   the contested ground (_rtsLayTech, from core/garrison.js _rtsLayTowns). They belong to the `civ`
+   seat, which fights nobody, until an Engineer takes one (`tech` on the building makes it fair game
+   for an Engineer though it is no one's enemy: _rtsClaimable). Then it works for whoever holds it:
+
+     THE DERRICK   RTS_TECH.oil.pay credits every RTS_TECH.oil.every seconds
+     THE HOSPITAL  heals its owner's infantry within RTS_TECH.heal.r, RTS_TECH.heal.hps a second
+     THE SHOP      repairs its owner's vehicles within RTS_TECH.fix.r, RTS_TECH.fix.hps a second
+     THE AIRSTRIP  a superweapon, Paratroopers (core/supers.js): a plane with RTS_TECH.drop.n rifle
+                   squads aboard flies from it to the cell chosen, and they jump (core/paradrop.js)
+
+   An Engineer can take it back again from whoever holds it, as it can any building. */
+var RTS_TECH = {
+  oil: { every: 10, pay: 75 },
+  heal: { r: RTS_TILE * 6, hps: 6 },
+  fix: { r: RTS_TILE * 6, hps: 8 },
+  drop: { n: 4 }
+};
+
+/* Can `side` send an Engineer at `b`? An enemy's building, or a tech building no one holds. */
+function _rtsClaimable(b, side) {
+  if (!b || b.type !== 'struct') return false;
+  return _rtsHostile(b.side, side) || (b.side === 'civ' && !!(rtsStructDef(b.def) || {}).tech);
+}
+function _rtsTechTick(dt) {
+  var G = window._rtsG;
+  G.techAcc = (G.techAcc || 0) + dt;
+  if (G.techAcc < 0.5) return;
+  var step = G.techAcc; G.techAcc = 0;
+  for (var i = 0; i < G.ents.length; i++) {
+    var b = G.ents[i];
+    if (b.type !== 'struct' || b.dead || b.side === 'civ') continue;
+    var t = (rtsStructDef(b.def) || {}).tech;
+    if (!t) continue;
+    if (t === 'oil') {
+      b.oilT = (b.oilT || 0) + step;
+      if (b.oilT >= RTS_TECH.oil.every) { b.oilT -= RTS_TECH.oil.every; G.sides[b.side].credits += RTS_TECH.oil.pay; }
+    } else if (t === 'heal' || t === 'fix') {
+      var A = RTS_TECH[t], kind = t === 'heal' ? 'infantry' : 'vehicle';
+      for (var j = 0; j < G.ents.length; j++) {
+        var u = G.ents[j];
+        if (u.type !== 'unit' || u.dead || u.side !== b.side || u.hp >= u.maxHp || u.inside) continue;
+        if ((rtsUnitDef(u.def) || {}).kind !== kind || Math.hypot(u.x - b.x, u.z - b.z) > A.r) continue;
+        u.hp = Math.min(u.maxHp, u.hp + A.hps * step);
+      }
+    }
+  }
+}
+/* THE AIRSTRIP'S PARATROOPERS: a plane from the strip, four squads aboard, sent to drop at (tx, tz). */
+function _rtsFireParadrop(side, tx, tz) {
+  var G = window._rtsG, strip = null;
+  for (var i = 0; i < G.ents.length && !strip; i++) {
+    var b = G.ents[i];
+    if (b.type === 'struct' && !b.dead && b.side === side && (rtsStructDef(b.def) || {}).tech === 'drop') strip = b;
+  }
+  if (!strip || !_rtsInB(tx, tz)) return false;
+  var plane = _rtsSpawnUnit(side, 'paraplane', strip.x, strip.z);
+  if (!plane) return false;
+  for (var k = 0; k < RTS_TECH.drop.n; k++) {
+    var man = _rtsSpawnUnit(side, 'rifle', strip.x, strip.z);
+    if (man) _rtsBoard(man, plane);
+  }
+  _rtsOrderUnloadAt(plane, _rtsWX(tx), _rtsWX(tz));
+  return true;
+}
+
+/* ------------------------------------------------------------------ laying ---- */
+/* The setup's tech: one of each, spread across the contested ground between the first two bases. */
+function _rtsLayTech(G, spot) {
+  var keys = ['derrick', 'hospital', 'mshop', 'airstrip'], out = [], P = G.starts.player, E = G.starts.enemy;
+  var ax = E.tx - P.tx, az = E.tz - P.tz, L = Math.hypot(ax, az) || 1, nx = -az / L, nz = ax / L;
+  for (var i = 0; i < keys.length; i++) {
+    var side = (i % 2 ? -1 : 1) * RTS_N * (0.08 + 0.1 * (i >> 1)), f = 0.5;
+    var c = spot(keys[i], Math.round(P.tx + ax * f + nx * side), Math.round(P.tz + az * f + nz * side), RTS_GARRISON.search);
+    if (c) out.push(_rtsPlaceCiv(keys[i], c[0], c[1]));
+  }
+  return out;
 }
 </script>
 <script>/* core/missions.js - the team mission list (TEAMTYPE.CPP): the script a team runs.
@@ -23708,6 +23866,7 @@ function _rtsTick(dt) {
   _rtsBlastTick(dt);                             /* charges on their fuses: core/blast.js */
   _rtsRadTick(dt);                               /* poisoned ground: core/rad.js */
   _rtsDeepTick(dt);                              /* Krakens crushing what they hold: core/deep.js */
+  _rtsTechTick(dt);                              /* captured tech buildings at work: core/tech.js */
   _rtsSeparate(dt);
   _rtsAirSpread(dt);                             /* aircraft keep their own distance: core/airspace.js */
   _rtsUpdateProj(dt);
@@ -23989,6 +24148,7 @@ var RTS_REPLAY_PURE = {
     '_rtsAirLift', '_rtsVisible', '_rtsMineShown', '_rtsBridgeDeckY', '_rtsMuzzleAngle', '_rtsFireCoord',
     '_rtsSeen', '_rtsVeiled',                    /* a Veil Tank drawn as a tree: render3d/veil3d.js */
     '_rtsRadSources',                           /* poisoned ground drawn glowing: render3d/rad3d.js */
+    '_rtsClaimable',                            /* an Engineer sent at a tech building: ui/select.js, core/tech.js */
     '_rtsWithPlayer', '_rtsStandY', '_rtsEffectsSeen', '_rtsElevNormal', '_rtsTileElev'],
   /* the battle's setup, before a recording starts, or a save's, which is not recorded */
   setup: ['_rtsNewGame', '_rtsMissionSetup', '_rtsSurvivalSetup', '_rtsRecalcPower', '_rtsRngMake', 'rtsSetArmySide',
@@ -36809,6 +36969,18 @@ function _rtsRightClickNow(mx, my, hit0) {
     /* Nobody could board - a full hold, or a group of tanks at an APC. Fall through, so the
        click still means "go there" instead of meaning nothing - and say why it is not more. */
     if (why) boardWhy = 'The ' + (tgt.type === 'struct' ? rtsStructDef(tgt.def) : rtsUnitDef(tgt.def) || {}).name + ' ' + why + '.';
+  }
+  /* A TECH BUILDING NO ONE HOLDS (core/tech.js) is no one's enemy, so the attack path below never
+     sees it: an Engineer sent at it takes it, and anyone else just goes there */
+  if (tgt && tgt.side === 'civ' && _rtsClaimable(tgt, 'player')) {
+    var took = 0;
+    for (i = 0; i < mine.length; i++) if (rtsUnitDef(mine[i].def).capture && _rtsOrderCapture(mine[i], tgt)) took++;
+    if (took) {
+      _rtsFlash(tgt.x, tgt.z, 'harvest');
+      _rtsSay(took === 1 ? 'Moving in.' : took + ' engineers moving in.');
+      if (typeof _rtsSfx === 'function') _rtsSfx('order');
+      return;
+    }
   }
   if (tgt && _rtsHostile(tgt.side, 'player')) {
     /* An engineer sent at an enemy BUILDING captures it rather than attacking it - it has no

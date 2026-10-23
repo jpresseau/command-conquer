@@ -192,5 +192,6 @@ function _rtsLayTowns(G) {
       if (c) out.push(_rtsPlaceCiv(keys[q], c[0], c[1]));
     }
   }
+  if (T.tech) out = out.concat(_rtsLayTech(G, spot));   /* ...and the tech between them: core/tech.js */
   return out;
 }

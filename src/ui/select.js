@@ -206,6 +206,18 @@ function _rtsRightClickNow(mx, my, hit0) {
        click still means "go there" instead of meaning nothing - and say why it is not more. */
     if (why) boardWhy = 'The ' + (tgt.type === 'struct' ? rtsStructDef(tgt.def) : rtsUnitDef(tgt.def) || {}).name + ' ' + why + '.';
   }
+  /* A TECH BUILDING NO ONE HOLDS (core/tech.js) is no one's enemy, so the attack path below never
+     sees it: an Engineer sent at it takes it, and anyone else just goes there */
+  if (tgt && tgt.side === 'civ' && _rtsClaimable(tgt, 'player')) {
+    var took = 0;
+    for (i = 0; i < mine.length; i++) if (rtsUnitDef(mine[i].def).capture && _rtsOrderCapture(mine[i], tgt)) took++;
+    if (took) {
+      _rtsFlash(tgt.x, tgt.z, 'harvest');
+      _rtsSay(took === 1 ? 'Moving in.' : took + ' engineers moving in.');
+      if (typeof _rtsSfx === 'function') _rtsSfx('order');
+      return;
+    }
+  }
   if (tgt && _rtsHostile(tgt.side, 'player')) {
     /* An engineer sent at an enemy BUILDING captures it rather than attacking it - it has no
        weapon, so an attack order would be a walk to the target followed by standing there. It

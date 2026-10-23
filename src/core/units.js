@@ -121,7 +121,7 @@ function _rtsUpdateUnit(e, dt) {
        it is free to be sent somewhere else rather than spent on a structure that removes
        itself. Reachable by playing normally: the AI sells while your engineer is en route. */
     if (e.order === 'capture' && (!cb || cb.dead || cb.selling || cb.type !== 'struct'
-        || !_rtsHostile(cb.side, e.side) || !rtsCapturable(cb.def))) {
+        || !_rtsClaimable(cb, e.side) || !rtsCapturable(cb.def))) {   /* a tech building no one holds too: core/tech.js */
       e.order = null; e.target = null; e.path = null;
     } else if (e.order === 'capture') {
       if (_rtsAtStruct(e, cb)) { _rtsCapture(e, cb); return; }
