@@ -155,6 +155,19 @@ var RTS_WEAPONS = {
   /* the Veil Tank's gun: a heavy, slow shot - it fires from hiding and gives itself away doing it */
   veilgun:    { dmg:85, range:17, cool:2.6, shot:'shell', speed:62, splash:2.2, wall:true, wood:true,
                 verses:{ none:0.7, wood:1.0, light:1.2, heavy:1.0, concrete:0.8 } },
+  /* THE SKY (core/aloft.js). `drop`: bombs that fall from where the aircraft is, bursting after
+     `fall` seconds for `dmg` within `rad` cells - whoever is under them. `launch`: the shot is a
+     drone of that key sent at the target. */
+  levbomb:    { dmg:200, range:3, cool:2.2, shot:'bomb', speed:0, splash:0, drop:{ rad:2.2, fall:1.0 }, wall:true,
+                verses:{ none:1.0, wood:1.0, light:1.0, heavy:1.0, concrete:1.0 } },
+  eaglebomb:  { dmg:130, range:13, cool:1.2, shot:'missile', speed:38, splash:2.6, wall:true, wood:true,
+                verses:{ none:0.5, wood:1.2, light:1.1, heavy:1.0, concrete:1.25 } },
+  hornets:    { dmg:0, range:34, cool:2.0, shot:'launch', speed:0, splash:0, launch:'hornet',
+                verses:{ none:1.0, wood:1.0, light:1.0, heavy:1.0, concrete:1.0 } },
+  hornetgun:  { dmg:20, range:8, cool:0.9, shot:'missile', speed:40, splash:1, wall:true,
+                verses:{ none:0.8, wood:1.0, light:1.1, heavy:0.9, concrete:0.8 } },
+  jetgun:     { dmg:11, range:12, cool:0.45, shot:'tracer', speed:0, splash:0,
+                verses:{ none:1.0, wood:0.3, light:0.45, heavy:0.15, concrete:0.15 } },
   /* EXPLOSIVES (core/blast.js). `plant` is a charge left on the target, going off after `fuse`
      seconds for `dmg` to it and half that to everything within `rad`; `on` limits what it can be
      put on. `self` is a weapon that is its carrier: it goes off where it stands, for `dmg` round

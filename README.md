@@ -191,6 +191,10 @@ shot down on the way in. The Compact's Frogman swims, and puts limpets on ships 
 deployed, the ground round it burns, its own side's men included. Its Fission Reactor gives twice
 a Fusion Plant's power, and destroyed, it melts down and poisons its own base.
 
+**Aloft.** The Dominion's Leviathan is a slow armoured airship that drops bombs on whatever it
+floats over and never needs to land. The Compact flies Jetpack Troopers over walls and water,
+strikes with the fast Falcon jet, and sails a Carrier that launches its own drones.
+
 **The enemy uses its whole garage.** It mines the approach to its own base, and once you have a
 harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands
 them beside your ore field, and goes home to do it again.

@@ -17,7 +17,10 @@ var RTS_AIR_PARTS = {
      (render3d/unit3d.js). The Chinook's two are the same rotor, so one mesh is drawn twice. */
   tran: { rotor: true, rotors: [8.4, -8.4] },
   mig:  { burner: [-9.6, 4.4, 0], tips: 9.6, trail: true },
-  yak:  { prop: [8.4, 4.1, 0, 5.4], tips: 10.6 }
+  yak:  { prop: [8.4, 4.1, 0, 5.4], tips: 10.6 },
+  /* the Falcon burns as the Kestrel does; the Leviathan's two pods turn props (sprites/aloft.js) */
+  falcon: { burner: [-9.4, 3.4, 0], tips: 11, trail: true },
+  leviathan: { prop: [-0.6, 6.0, -9.4, 2.8], props: [[-0.6, 6.0, -9.4, 2.8], [-0.6, 6.0, 9.4, 2.8]] }
 };
 /* WHERE A GUN SHIP'S TURRETS TURN, in model units before _sprUnitScale: the surface ships' hull
    lengths, and the mounts along them - one forward on a gunboat, fore and aft on the big two.

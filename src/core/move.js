@@ -20,7 +20,7 @@ function _rtsRearmPad(e) {
    given. The player's order is kept (e.airNext, ui/select.js) and given again by _rtsAirResume
    at the first tick it is free; a bomber keeps its own (core/bomber.js e.bombNext). */
 function _rtsAirHeld(e, d) {
-  return !!(e.air && ((d.weapon && !(e.ammo > 0)) || e.rearming > 0 || _rtsStormGrounds(e, d)));
+  return !!(e.air && ((d.weapon && !d.endless && !(e.ammo > 0)) || e.rearming > 0 || _rtsStormGrounds(e, d)));
 }
 function _rtsAirResume(e) {
   var n = e.airNext;
@@ -32,6 +32,7 @@ function _rtsAirResume(e) {
 }
 function _rtsAirTick(e, dt, d) {
   if (!e.air) return false;
+  if (d.spawned && _rtsHornetTick(e, dt)) return true;   /* a Carrier's drone goes home to it: core/aloft.js */
   /* topping up on the pad */
   if (e.rearming > 0) {
     e.rearming -= dt;
@@ -43,7 +44,7 @@ function _rtsAirTick(e, dt, d) {
      moment the last pad fell. */
   /* A STORM GROUNDS IT TOO (core/skyplay.js): home to the pad as though the rack were empty, and
      it sits there, topping up, until the storm passes - or, with no pad left, it rides it out. */
-  if ((e.ammo > 0 || !d.weapon) && !_rtsStormGrounds(e, d)) return false;
+  if ((e.ammo > 0 || !d.weapon || d.endless) && !_rtsStormGrounds(e, d)) return false;   /* endless: core/aloft.js */
   var pad = _rtsRearmPad(e);
   if (!pad && e.ammo > 0) return false;
   if (!pad) {

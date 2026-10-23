@@ -128,9 +128,11 @@ function _rtsBombsTick(dt) {
     /* `from` is the bomber: a splash spares its source, and the bomber turning for home hangs
        over the tail of its own line as the last bombs burst. The difficulty's FirepowerBias
        applies, as it does to every shot (combat.js). */
-    var bomber = G.byId[b.from], dmg = RTS_BOMB.dmg * _rtsBias(b.side).fire, rad = RTS_BOMB.rad * RTS_TILE;
+    /* a Leviathan's bomb carries its own weight and reach (core/aloft.js) */
+    var bomber = G.byId[b.from], dmg = b.dmg != null ? b.dmg : RTS_BOMB.dmg * _rtsBias(b.side).fire, rad = (b.rad || RTS_BOMB.rad) * RTS_TILE;
     if (bomber && bomber.dead) bomber = null;
-    _rtsSplash(b.x, b.z, rad, dmg, b.side, 1, bomber);
+    /* a Leviathan's falls off evenly to its edge, as a charge's does (core/aloft.js, core/blast.js) */
+    if (b.dmg != null) _rtsBlastRing(b.x, b.z, dmg, rad, b.side, bomber); else _rtsSplash(b.x, b.z, rad, dmg, b.side, 1, bomber);
     /* A BURST IS AN ATTACK. A splash attributes itself to nobody (see _rtsSplash), so a carpet
        across a base raised no "base under attack", woke no defence and tripped no trigger. The
        buildings under it are told, as a shell would tell them. */

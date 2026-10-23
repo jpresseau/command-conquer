@@ -374,7 +374,7 @@ function _rtsOverrun(e) {
        without this a tank driving past an APC crushes the squad sealed inside it - the men are
        standing exactly where the APC is. Found by a landing craft losing its passenger in open
        water with nothing near it but the opponent's armour on the far bank. */
-    if (o.inside) continue;
+    if (o.inside || o.air) continue;            /* nor a Jetpack Trooper over them: core/aloft.js */
     if (rtsUnitDef(o.def).kind !== 'infantry') continue;
     var d = Math.hypot(o.x - e.x, o.z - e.z);
     if (d > RTS_CRUSH_DIST) continue;

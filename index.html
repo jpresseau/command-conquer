@@ -863,7 +863,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">f39410b · 2026-10-22</div>
+  <div id="rtsBuild" title="build">a6d63e9 · 2026-10-23</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1319,6 +1319,13 @@ var RTS_UNITS = [
     needs:['lab'], veil:true,
     side:'allied', armour:'light',
     desc:'Hidden while it stands still and holds its fire: to the enemy it looks like a tree. Firing or moving gives it away.' },
+  /* THE JETPACK TROOPER (core/aloft.js): infantry that flies - over walls, water and cliffs - and
+     only anti-air can touch it. Never goes home to reload. */
+  { key:'jetpack',  name:'Jetpack Trooper', kind:'infantry', cost:600, build:9, hp:90,   speed:9,   turn:6,  r:1.1, sight:18, weapon:'jetgun',
+    needs:['radar'], air:true, alt:7, endless:true,
+    side:'allied', armour:'none',
+    crawl:false, fraidy:false,
+    desc:'Flies over walls, water and cliffs. Only anti-air can hit it. Good against infantry, poor against armour.' },
   /* EXPLOSIVES (core/blast.js). THE SAPPER plants a timed charge on whatever it reaches - a tank,
      a building, a ship at the quay - and walks away; it goes off on its fuse. */
   { key:'sapper',   name:'Sapper',        kind:'infantry', cost:600,  build:8,  hp:100,  speed:6.5, turn:6,  r:1.1, sight:14, weapon:'satchel',
@@ -1471,6 +1478,25 @@ var RTS_UNITS = [
     needs:['airpad'], air:true, ammo:1, rearm:12, alt:20, carpets:true,
     armour:'light',
     desc:'Lays a line of eight bombs across what you send it at, then flies home to reload. Its bombs hurt your own units too.' },
+  /* THE SKY (core/aloft.js). `endless` is an aircraft that never goes home to reload: it carries
+     what it fires for as long as it flies.
+     THE LEVIATHAN: an armoured airship, slow as a walking man, that drops its bombs straight down
+     on whatever it floats over. Built at an Airfield, and it needs nothing from one after. */
+  { key:'leviathan',name:'Leviathan',     kind:'air',      cost:2000, build:24, hp:1500, speed:5,   turn:1.0,r:3.4, sight:18, weapon:'levbomb',
+    needs:['afld', 'lab'], air:true, alt:14, endless:true,
+    side:'soviet', armour:'heavy',
+    desc:'A slow, armoured airship. Its bombs fall on whatever it floats over, and it never needs to land. Only anti-air stops it.' },
+  /* THE FALCON: the Compact's strike jet - faster and tougher than the Kestrel, two heavy bombs */
+  { key:'falcon',   name:'Falcon',        kind:'air',      cost:1600, build:18, hp:260,  speed:34,  turn:4.2,r:1.6, sight:22, weapon:'eaglebomb',
+    needs:['helipad', 'radar'], air:true, ammo:2, rearm:7, alt:16,
+    side:'allied', armour:'light',
+    desc:'A fast strike jet. Two heavy bombs that crack buildings and armour, then home to reload.' },
+  /* THE HORNET: a Carrier's drone. Never built - launched (`spawned`), and home to its Carrier when
+     its rack is empty or its target gone; with no Carrier it falls out of the sky. */
+  { key:'hornet',   name:'Hornet',        kind:'air',      cost:100,  build:1,  hp:50,   speed:30,  turn:5.0,r:1.0, sight:14, weapon:'hornetgun',
+    needs:['navalyard'], air:true, ammo:4, alt:10, spawned:true,
+    side:'allied', armour:'light',
+    desc:'A Carrier\'s drone.' },
   /* FLAK TRACK. The verb is ESCORT: the armour column takes its anti-aircraft cover with it.
      Until this, everything that could shoot down an aircraft either stood still (the AA Gun,
      the Rocket Turret) or was a squad on foot (rockets), so a gunship could pick apart a tank
@@ -1584,6 +1610,12 @@ var RTS_UNITS = [
     weapon:'cruisergun', needs:['navalyard', 'lab'], sea:true, side:'allied',
     armour:'heavy',
     desc:'Outranges everything afloat and flattens a shoreline. Blind to submarines — never sail one alone.' },
+  /* THE CARRIER (core/aloft.js): no gun of its own. It launches Hornets - up to three in the air at
+     a time - at anything in its long reach, and they come back to it to rearm. */
+  { key:'carrier',  name:'Carrier',      kind:'ship',     cost:2000, build:26, hp:900,  speed:7,   turn:0.9,r:3.2, sight:26,
+    weapon:'hornets', needs:['navalyard', 'lab'], sea:true, side:'allied',
+    armour:'heavy',
+    desc:'Launches its own drones at anything in a long reach, three at a time. Helpless if they are shot down - escort it.' },
   /* `cloak` is Cloakable, from the stat block. It submerges, and it has to surface to fire -
      see RTS_SUB_SURFACE and _rtsCloakAI. */
   { key:'sub',      name:'Submarine',    kind:'ship',     cost:950,  build:13, hp:500,  speed:10,  turn:1.3,r:2.0, sight:18,
@@ -1806,6 +1838,19 @@ var RTS_WEAPONS = {
   /* the Veil Tank's gun: a heavy, slow shot - it fires from hiding and gives itself away doing it */
   veilgun:    { dmg:85, range:17, cool:2.6, shot:'shell', speed:62, splash:2.2, wall:true, wood:true,
                 verses:{ none:0.7, wood:1.0, light:1.2, heavy:1.0, concrete:0.8 } },
+  /* THE SKY (core/aloft.js). `drop`: bombs that fall from where the aircraft is, bursting after
+     `fall` seconds for `dmg` within `rad` cells - whoever is under them. `launch`: the shot is a
+     drone of that key sent at the target. */
+  levbomb:    { dmg:200, range:3, cool:2.2, shot:'bomb', speed:0, splash:0, drop:{ rad:2.2, fall:1.0 }, wall:true,
+                verses:{ none:1.0, wood:1.0, light:1.0, heavy:1.0, concrete:1.0 } },
+  eaglebomb:  { dmg:130, range:13, cool:1.2, shot:'missile', speed:38, splash:2.6, wall:true, wood:true,
+                verses:{ none:0.5, wood:1.2, light:1.1, heavy:1.0, concrete:1.25 } },
+  hornets:    { dmg:0, range:34, cool:2.0, shot:'launch', speed:0, splash:0, launch:'hornet',
+                verses:{ none:1.0, wood:1.0, light:1.0, heavy:1.0, concrete:1.0 } },
+  hornetgun:  { dmg:20, range:8, cool:0.9, shot:'missile', speed:40, splash:1, wall:true,
+                verses:{ none:0.8, wood:1.0, light:1.1, heavy:0.9, concrete:0.8 } },
+  jetgun:     { dmg:11, range:12, cool:0.45, shot:'tracer', speed:0, splash:0,
+                verses:{ none:1.0, wood:0.3, light:0.45, heavy:0.15, concrete:0.15 } },
   /* EXPLOSIVES (core/blast.js). `plant` is a charge left on the target, going off after `fuse`
      seconds for `dmg` to it and half that to everything within `rad`; `on` limits what it can be
      put on. `self` is a weapon that is its carrier: it goes off where it stands, for `dmg` round
@@ -7394,7 +7439,8 @@ function _sprBuildingClean(key, side) {
 var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
   dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46,
-  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:53, drone:26, bomber:56, prismtank:36, arctank:38, dronetank:34, veiltank:35, riftharv:44, wrecker:40
+  flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:53, drone:26, bomber:56, prismtank:36, arctank:38, dronetank:34, veiltank:35, riftharv:44, wrecker:40,
+  leviathan:66, falcon:40, hornet:20
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -7430,7 +7476,9 @@ var RTS_INF_KIT = {
   frogman:   { body:['#1c2026','#2a3038'], top:'#1a4a8a', prop:'#e8c21c' },
   /* a yellow hazmat suit, an olive gas-mask hood, and the green canister of the ray on his back
      (core/rad.js) */
-  blight:    { body:['#b8a632','#d4c24a'], top:'#5a7a2a', prop:'#7fe04a' }
+  blight:    { body:['#b8a632','#d4c24a'], top:'#5a7a2a', prop:'#7fe04a' },
+  /* a grey flight suit, a crimson flying helmet, and the jetpack on his back (core/aloft.js) */
+  jetpack:   { body:['#6a7078','#868c94'], top:'#e02a5a', prop:'#c8ccd2' }
 };
 
 /* HOW FAR ROUND THE RUNNING GEAR HAS TURNED, 0 to 1 - set by the 3D renderer for the length of
@@ -7548,7 +7596,7 @@ function _sprUnitModel(key, side, prone, part) {
      model line reads the same as it did when this was one function. */
   var X = { m:m, TM:TM, VH:VH, S:S, DK:DK, O:O, C:C, GN:GN,
             d:d, prone:prone, part:part, side:side, tracks:tracks };
-  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key) || _sprUnitHulls(X, key) || _sprUnitLens(X, key) || _sprUnitArc(X, key) || _sprUnitMind(X, key) || _sprUnitRift(X, key) || _sprUnitBlast(X, key))) {
+  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key) || _sprUnitHulls(X, key) || _sprUnitLens(X, key) || _sprUnitArc(X, key) || _sprUnitMind(X, key) || _sprUnitRift(X, key) || _sprUnitBlast(X, key) || _sprUnitAloft(X, key))) {
     _r3Box(m, 0, 0, -5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 0, 5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 2.5, 0, 15, 4, 8, TM[0], TM[1]);
@@ -7722,6 +7770,9 @@ function _sprUnitGround(X, key) {
       } else if (key === 'blight') {
         _r3Cyl(m, mx - 2.0, 3.0, mz, 1.1, 3.4, kit.prop, '#c8ff8a', 14);           /* the canister on his back */
         _r3Box(m, mx + 2.6, 4.2, mz - 0.4, 4.2, 1.2, 1.2, kit.prop, DK[3]);
+      } else if (key === 'jetpack') {
+        _r3Box(m, mx - 2.0, 4.0, mz, 1.6, 3.6, 3.2, kit.prop, DK[3]);              /* the jetpack */
+        _r3Box(m, mx + 2.4, 4.4, mz - 0.6, 3.6, 0.9, 0.9, kit.prop, DK[3]);
       } else if (key === 'rifttroop') {
         _r3Cyl(m, mx - 2.0, 3.6, mz, 1.6, 0.6, kit.prop, '#f2fdff', 14);       /* the rift ring on his back */
         _r3Box(m, mx + 2.6, 4.4, mz - 0.5, 4.6, 1.3, 1.3, kit.prop, DK[3]);
@@ -7968,7 +8019,10 @@ var RTS_AIR_PARTS = {
      (render3d/unit3d.js). The Chinook's two are the same rotor, so one mesh is drawn twice. */
   tran: { rotor: true, rotors: [8.4, -8.4] },
   mig:  { burner: [-9.6, 4.4, 0], tips: 9.6, trail: true },
-  yak:  { prop: [8.4, 4.1, 0, 5.4], tips: 10.6 }
+  yak:  { prop: [8.4, 4.1, 0, 5.4], tips: 10.6 },
+  /* the Falcon burns as the Kestrel does; the Leviathan's two pods turn props (sprites/aloft.js) */
+  falcon: { burner: [-9.4, 3.4, 0], tips: 11, trail: true },
+  leviathan: { prop: [-0.6, 6.0, -9.4, 2.8], props: [[-0.6, 6.0, -9.4, 2.8], [-0.6, 6.0, 9.4, 2.8]] }
 };
 /* WHERE A GUN SHIP'S TURRETS TURN, in model units before _sprUnitScale: the surface ships' hull
    lengths, and the mounts along them - one forward on a gunboat, fore and aft on the big two.
@@ -9153,6 +9207,84 @@ function _sprBldRad(X, key) {
     _r3Cyl(m, tx, 27, tz, 5.4, 0.4, S[3], S[3], 24);                        /* the dark mouth */
   }
   return true;
+}
+</script>
+<script>/* sprites/aloft.js - the Leviathan, the Falcon, the Hornet and the Carrier (core/aloft.js). Part
+   of rts.sprites. The Jetpack Trooper is an infantry kit (sprites/unitmodels.js RTS_INF_KIT).
+
+   The Leviathan is an envelope - a long body of slices along its length, fattest a little ahead
+   of the middle - with a gondola slung under it, cruciform fins at the tail and an engine pod
+   each side whose propellers turn (RTS_AIR_PARTS, sprites/unit-airsea.js). The Falcon is a delta:
+   one broad swept wing, where the Kestrel's is a straight bar. The Hornet is four arms and a body,
+   small enough to read as a drone beside a jet. The Carrier is the widest, flattest hull afloat:
+   a deck, an island to one side, and two Hornets parked on it. */
+var RTS_ALOFT_ENV = ['#7a7f86', '#9aa0a8'];
+
+function _sprUnitAloft(X, key) {
+  var m = X.m, VH = X.VH, TM = X.TM, S = X.S, DK = X.DK, GN = X.GN, part = X.part, i, x;
+  if (key === 'leviathan') {
+    for (i = 0; i < 16; i++) {                                         /* the envelope */
+      x = -15 + i * 2 + 1;
+      var u = (x + 1.5) / 16.5, r = 7.4 * Math.sqrt(Math.max(0.04, 1 - u * u));
+      _r3Wheel(m, x, 10, 0, r, 2.05, 'x', i === 5 || i === 10 ? TM[1] : RTS_ALOFT_ENV[0], RTS_ALOFT_ENV[1], 20);
+    }
+    _r3Box(m, 1.5, 2.6, 0, 9.0, 2.6, 3.6, DK[1], DK[2]);                 /* the gondola */
+    _r3Box(m, 5.6, 2.8, 0, 0.6, 1.4, 2.8, RTS_PAL.glass, RTS_PAL.glass);
+    _r3Box(m, 1.5, 4.4, 0, 6.0, 1.4, 1.2, DK[0], DK[1]);                 /* its hanger */
+    _r3Box(m, -14.2, 10, 0, 4.4, 9.0, 0.7, VH[1], VH[3]);                /* the fins */
+    _r3Box(m, -14.2, 10, 0, 4.4, 0.7, 9.0, VH[1], VH[3]);
+    for (var sd = -1; sd <= 1; sd += 2) {                                /* the engine pods */
+      _r3Box(m, -3.0, 6.0, sd * 7.6, 1.2, 0.8, 3.0, DK[1], DK[2]);
+      _r3Wheel(m, -3.0, 6.0, sd * 9.4, 1.3, 4.0, 'x', S[1], S[2], 16);
+      if (part !== 'body') _r3Box(m, -0.6, 6.0, sd * 9.4, 0.3, 5.6, 0.6, DK[1], DK[2]);   /* the props, for the sprite */
+    }
+    _r3Box(m, 1.5, 1.0, 0, 3.0, 0.8, 2.0, GN[1], GN[3]);                 /* the bomb bay */
+    return true;
+  }
+  if (key === 'falcon') {
+    _r3Box(m, -1.0, 3.0, 0, 7.0, 1.2, 18.0, VH[0], VH[1]);               /* the delta, broad at the root */
+    _r3Box(m, -2.4, 3.0, 0, 4.4, 1.2, 22.0, VH[1], VH[3]);               /* ...and swept to the tips */
+    _r3Box(m, 2.2, 3.0, 0, 3.0, 1.2, 10.0, VH[0], VH[1]);
+    _r3Box(m, 0, 3.4, 0, 18.0, 3.6, 3.8, VH[0], VH[1]);                  /* fuselage */
+    _r3Box(m, 8.6, 3.6, 0, 4.4, 2.4, 2.4, VH[1], VH[3]);                 /* the needle nose */
+    _r3Box(m, 2.6, 5.8, 0, 4.4, 1.6, 2.6, RTS_PAL.glass, RTS_PAL.glass); /* canopy */
+    _r3Box(m, -7.4, 6.0, -1.6, 3.0, 4.0, 0.8, VH[1], VH[3]);             /* twin fins */
+    _r3Box(m, -7.4, 6.0, 1.6, 3.0, 4.0, 0.8, VH[1], VH[3]);
+    _r3Box(m, -1.0, 1.9, 0, 8.0, 1.0, 3.6, TM[1], TM[3]);                /* team stripe */
+    _r3Cyl(m, -9.4, 3.4, 0, 1.6, 1.4, DK[1], DK[3], 12);                 /* exhaust */
+    _r3Box(m, 0.4, 1.8, -4.4, 4.0, 1.4, 1.4, GN[1], GN[3]);              /* the two bombs */
+    _r3Box(m, 0.4, 1.8, 4.4, 4.0, 1.4, 1.4, GN[1], GN[3]);
+    return true;
+  }
+  if (key === 'hornet') {
+    _r3Box(m, 0, 3, 0, 5.0, 1.8, 2.2, TM[0], TM[1]);                     /* the body */
+    for (i = 0; i < 4; i++) {
+      var a = (i + 0.5) / 4 * Math.PI * 2, ax = Math.cos(a) * 3.4, az = Math.sin(a) * 3.4;
+      _r3Box(m, ax / 2, 3.2, az / 2, Math.abs(ax) + 0.6, 0.5, Math.abs(az) + 0.6, DK[1], DK[2]);
+      _r3Cyl(m, ax, 3.5, az, 1.5, 0.3, S[1], S[2], 16);                  /* a rotor ring at each arm */
+    }
+    _r3Box(m, 1.4, 2.0, 0, 2.0, 0.6, 0.6, GN[1], GN[3]);                 /* the launcher */
+    return true;
+  }
+  if (key === 'carrier') {
+    var L = 40, Wd = 12;
+    _r3Slab(m, 0, 0.6, 0, L, 3.6, Wd, 1.4, VH[0], VH[1]);                /* hull */
+    _r3Box(m, L * 0.42, 0.9, 0, L * 0.18, 3.0, Wd * 0.6, VH[1], VH[3]);  /* bow */
+    _r3Box(m, 0, 4.4, 0, L * 0.96, 0.6, Wd * 1.1, DK[1], DK[2]);         /* the flight deck */
+    for (i = 0; i < 6; i++) _r3Box(m, -L * 0.4 + i * L * 0.16, 4.8, 0, L * 0.06, 0.1, 0.6, S[3], S[3]);   /* the centre line */
+    _r3Box(m, -L * 0.05, 7.4, Wd * 0.45, L * 0.18, 5.4, 2.8, VH[2], VH[0]);   /* the island */
+    _r3Box(m, -L * 0.05, 10.4, Wd * 0.45, L * 0.12, 0.8, 3.0, TM[1], TM[3]);
+    _r3Box(m, -L * 0.08, 12.2, Wd * 0.45, 0.6, 3.0, 0.6, S[1], S[0]);    /* mast */
+    _r3Box(m, -L * 0.0, 7.6, Wd * 0.45 - 1.5, 2.4, 1.2, 0.2, RTS_PAL.glass, RTS_PAL.glass);
+    for (i = 0; i < 2; i++) {                                            /* two Hornets parked aft */
+      var px = -L * 0.3 + i * 6;
+      _r3Box(m, px, 5.6, -2.5, 4.0, 1.4, 1.8, VH[1], VH[3]);
+      _r3Box(m, px, 5.8, -2.5, 4.6, 0.4, 4.6, DK[1], DK[2]);
+      _r3Box(m, px, 6.4, -2.5, 1.0, 0.2, 1.8, TM[1], TM[3]);              /* a team stripe on each */
+    }
+    return true;
+  }
+  return false;
 }
 </script>
 <script>/* sprites/props.js - unit scaling and fit, pads, corpses, scorch, craters, fire, crates and
@@ -16069,7 +16201,7 @@ function _rtsAvailable(side, def) {
 /* --------------------------------------------------------- production */
 function _rtsQueueCat(key) {
   var s = rtsStructDef(key); if (s) return 'struct';
-  var u = rtsUnitDef(key); return u ? u.kind : null;
+  var u = rtsUnitDef(key); return u && !u.spawned ? u.kind : null;   /* a Carrier's drone is launched, never built: core/aloft.js */
 }
 /* What to CALL a prerequisite when telling the player they are missing it. `needs` names a
    capability rather than a building (see _rtsProvides), so the name cannot simply be looked up
@@ -16960,7 +17092,7 @@ function _rtsFire(e, tgt, w) {
   /* AIRCRAFT.CPP spends a round per shot and the aircraft is out of the fight when the rack is
      empty. Decremented here rather than in the aircraft's own update so that every route to a
      shot - ordered, acquired, retaliating - pays for it. */
-  if (e.air && e.ammo != null) {
+  if (e.air && e.ammo != null && !_rtsEndless(rtsUnitDef(e.def))) {   /* endless: core/aloft.js */
     if (e.ammo <= 0) return;
     e.ammo--;
   }
@@ -16989,7 +17121,7 @@ function _rtsFire(e, tgt, w) {
      Set at the one place every route to a shot passes through, so there is no way to fire from
      under water. */
   if ((rtsUnitDef(e.def) || {}).cloak) e.decloak = RTS_SUB_SURFACE;
-  if (typeof _rtsSfx === 'function' && !w.plant && !w.self) _rtsSfx(w.shot === 'beam' ? 'beam' : w.shot === 'arc' ? 'zap' : w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
+  if (typeof _rtsSfx === 'function' && !w.plant && !w.self && !w.drop && !w.launch) _rtsSfx(w.shot === 'beam' ? 'beam' : w.shot === 'arc' ? 'zap' : w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
     : (w.shot === 'missile' ? 'rocket' : (e.type === 'struct' ? 'turretgun' : 'cannon')), e.x, e.z);
   if (w.mind) {                                    /* no damage: the unit changes side (core/mind.js) */
     if (_rtsMindTake(e, tgt)) { var mb = _rtsLensBeamFx(e, tgt, w); mb.mind = 1; G.fx.push(mb); }
@@ -17003,6 +17135,8 @@ function _rtsFire(e, tgt, w) {
   var raw = w.dmg * bias.fire * rtsCrateMult(e, 'fire') * (w.relay && e.type === 'struct' ? _rtsLensRelay(e, w) : 1)
           * _rtsArcCharge(e)                      /* ...and an Arc Tower's troopers charge it (core/arc.js) */
           * (e.dug ? RTS_DIG.fire : 1);           /* ...and a squad dug in hits harder (core/dig.js) */
+  if (w.drop) { _rtsSkyDrop(e, w, raw); return; }       /* bombs down from the airship: core/aloft.js */
+  if (w.launch) { _rtsLaunch(e, tgt, w); return; }     /* a Carrier's drone away */
   if (w.plant) { _rtsPlant(e, tgt, w, raw); return; }   /* a charge left on it, no damage yet: core/blast.js */
   if (w.self) { _rtsBlastGo(e); _rtsKill(e); return; } /* the carrier is the bomb */
   var dmg = raw * rtsVerses(w, tgt);
@@ -17480,7 +17614,7 @@ function _rtsRearmPad(e) {
    given. The player's order is kept (e.airNext, ui/select.js) and given again by _rtsAirResume
    at the first tick it is free; a bomber keeps its own (core/bomber.js e.bombNext). */
 function _rtsAirHeld(e, d) {
-  return !!(e.air && ((d.weapon && !(e.ammo > 0)) || e.rearming > 0 || _rtsStormGrounds(e, d)));
+  return !!(e.air && ((d.weapon && !d.endless && !(e.ammo > 0)) || e.rearming > 0 || _rtsStormGrounds(e, d)));
 }
 function _rtsAirResume(e) {
   var n = e.airNext;
@@ -17492,6 +17626,7 @@ function _rtsAirResume(e) {
 }
 function _rtsAirTick(e, dt, d) {
   if (!e.air) return false;
+  if (d.spawned && _rtsHornetTick(e, dt)) return true;   /* a Carrier's drone goes home to it: core/aloft.js */
   /* topping up on the pad */
   if (e.rearming > 0) {
     e.rearming -= dt;
@@ -17503,7 +17638,7 @@ function _rtsAirTick(e, dt, d) {
      moment the last pad fell. */
   /* A STORM GROUNDS IT TOO (core/skyplay.js): home to the pad as though the rack were empty, and
      it sits there, topping up, until the storm passes - or, with no pad left, it rides it out. */
-  if ((e.ammo > 0 || !d.weapon) && !_rtsStormGrounds(e, d)) return false;
+  if ((e.ammo > 0 || !d.weapon || d.endless) && !_rtsStormGrounds(e, d)) return false;   /* endless: core/aloft.js */
   var pad = _rtsRearmPad(e);
   if (!pad && e.ammo > 0) return false;
   if (!pad) {
@@ -18173,7 +18308,7 @@ function _rtsOverrun(e) {
        without this a tank driving past an APC crushes the squad sealed inside it - the men are
        standing exactly where the APC is. Found by a landing craft losing its passenger in open
        water with nothing near it but the opponent's armour on the far bank. */
-    if (o.inside) continue;
+    if (o.inside || o.air) continue;            /* nor a Jetpack Trooper over them: core/aloft.js */
     if (rtsUnitDef(o.def).kind !== 'infantry') continue;
     var d = Math.hypot(o.x - e.x, o.z - e.z);
     if (d > RTS_CRUSH_DIST) continue;
@@ -21110,9 +21245,11 @@ function _rtsBombsTick(dt) {
     /* `from` is the bomber: a splash spares its source, and the bomber turning for home hangs
        over the tail of its own line as the last bombs burst. The difficulty's FirepowerBias
        applies, as it does to every shot (combat.js). */
-    var bomber = G.byId[b.from], dmg = RTS_BOMB.dmg * _rtsBias(b.side).fire, rad = RTS_BOMB.rad * RTS_TILE;
+    /* a Leviathan's bomb carries its own weight and reach (core/aloft.js) */
+    var bomber = G.byId[b.from], dmg = b.dmg != null ? b.dmg : RTS_BOMB.dmg * _rtsBias(b.side).fire, rad = (b.rad || RTS_BOMB.rad) * RTS_TILE;
     if (bomber && bomber.dead) bomber = null;
-    _rtsSplash(b.x, b.z, rad, dmg, b.side, 1, bomber);
+    /* a Leviathan's falls off evenly to its edge, as a charge's does (core/aloft.js, core/blast.js) */
+    if (b.dmg != null) _rtsBlastRing(b.x, b.z, dmg, rad, b.side, bomber); else _rtsSplash(b.x, b.z, rad, dmg, b.side, 1, bomber);
     /* A BURST IS AN ATTACK. A splash attributes itself to nobody (see _rtsSplash), so a carpet
        across a base raised no "base under attack", woke no defence and tripped no trigger. The
        buildings under it are told, as a shell would tell them. */
@@ -22136,6 +22273,64 @@ function _rtsRadWhose(o, src) {
   var best = null, bd = 1e9;
   for (var i = 0; i < src.length; i++) { var d = Math.hypot(o.x - src[i].x, o.z - src[i].z); if (d < src[i].r && d < bd) { bd = d; best = src[i].side; } }
   return best;
+}
+</script>
+<script>/* core/aloft.js - ALOFT: the airship, the drones and the aircraft that never reload.
+
+   ENDLESS (`endless` on the unit): an aircraft that carries what it fires for as long as it flies -
+   the Leviathan, the Jetpack Trooper. core/move.js never sends one home to a pad, and core/combat.js
+   never counts its rounds, so it neither runs dry nor crashes for want of a pad.
+
+   THE DROP (`drop` on rules/weapons.js `levbomb`): the Leviathan's bombs fall from where it is,
+   onto whatever is under it, through the Heavy Bomber's own falling bombs (core/bomber.js
+   G.bombs) with the weapon's own damage and reach. Its range is short, so it has to float over
+   what it means to hit.
+
+   THE CARRIER (`launch` on `hornets`): its shot is a Hornet - a drone - launched at the target, up
+   to RTS_ALOFT.hornets in the air at once. A Hornet fights as any aircraft does until its rack is
+   empty or its target gone, then flies home and lands on its Carrier, which counts it back in.
+   With no Carrier to go home to, it falls out of the sky. Hornets are never built (`spawned`:
+   core/production.js will not queue one, ui/sidebar.js does not show one). */
+var RTS_ALOFT = { hornets: 3, dock: RTS_TILE * 1.8 };
+
+function _rtsEndless(d) { return !!(d && d.endless); }
+
+/* The Leviathan's bomb: down from where it is. */
+function _rtsSkyDrop(e, w, raw) {
+  var G = window._rtsG;
+  (G.bombs || (G.bombs = [])).push({ x: e.x, z: e.z, y: e.alt || 14, t: w.drop.fall, side: e.side, from: e.id, dmg: raw, rad: w.drop.rad });
+}
+
+/* ------------------------------------------------------------------ hornets ---- */
+function _rtsHornetsOf(c) {
+  var G = window._rtsG, n = 0;
+  for (var i = 0; i < G.ents.length; i++) { var o = G.ents[i]; if (!o.dead && o.mother === c.id) n++; }
+  return n;
+}
+/* The Carrier's shot: a Hornet away at `tgt`, if it has one to spare. */
+function _rtsLaunch(e, tgt, w) {
+  if (!tgt || tgt.dead || _rtsHornetsOf(e) >= RTS_ALOFT.hornets) return false;
+  var h = _rtsSpawnUnit(e.side, w.launch, e.x, e.z);
+  if (!h) return false;
+  h.mother = e.id;
+  _rtsOrderAttack(h, tgt);
+  if (typeof _rtsSfx === 'function') _rtsSfx('rocket', e.x, e.z);
+  return true;
+}
+/* A Hornet's tick, ahead of the aircraft's (core/move.js _rtsAirTick): true while it is going home,
+   false to leave it to fight. */
+function _rtsHornetTick(e, dt) {
+  var G = window._rtsG, c = G.byId[e.mother];
+  if (!c || c.dead) { _rtsDamage(e, e.hp + 1, null, false); return true; }   /* nowhere to land */
+  var busy = e.ammo > 0 && e.target && !e.target.dead;
+  if (busy) return false;
+  e.target = null; e.order = 'home';
+  var d = Math.hypot(c.x - e.x, c.z - e.z);
+  if (d <= RTS_ALOFT.dock) { _rtsKillQuiet(e); return true; }                 /* aboard, and counted back in */
+  if (!e.goal || Math.hypot(c.x - e.goal.x, c.z - e.goal.z) > RTS_TILE) {
+    e.goal = { x: c.x, z: c.z }; e.path = _rtsPathFor(e, c.x, c.z); e.pi = 0;
+  }
+  return true;
 }
 </script>
 <script>/* core/missions.js - the team mission list (TEAMTYPE.CPP): the script a team runs.
@@ -30765,6 +30960,13 @@ function _r3dSoldierMan(m, key, mx, mz, pose, lead, K) {
     _r3dLimb(m, cx + 0.8, cy - 1.0, mz - 0.2, cx + 4.0, cy - 1.2, mz - 0.2, 0.45, 0.35, 12, DK[2]);
     _r3dBall(m, cx + 4.2, cy - 1.2, mz - 0.2, 0.4, kit.prop, 10, 6);
     _r3Cyl(m, mx - 2.0, hipY + 0.8, mz, 1.0, 3.2, kit.prop, '#c8ff8a', 16);
+  } else if (key === 'jetpack') {
+    /* the carbine held forward, and the two thrusters on his back, nozzles down */
+    armTo(-1, cx + 1.2, cy - 0.8, mz - 1.4, cx + 2.4, cy - 0.5, mz - 1.0);
+    armTo(1, cx + 1.2, cy - 0.8, mz + 1.4, cx + 2.4, cy - 0.5, mz + 0.4);
+    _r3Box(m, cx + 3.0, cy - 0.6, mz - 0.3, 2.4, 0.6, 0.5, DK[3], DK[2]);
+    _r3Cyl(m, mx - 2.0, hipY + 0.6, mz - 0.9, 0.75, 3.6, kit.prop, '#ffd28a', 16);
+    _r3Cyl(m, mx - 2.0, hipY + 0.6, mz + 0.9, 0.75, 3.6, kit.prop, '#ffd28a', 16);
   } else if (key === 'rifttroop') {
     /* the rift gun held across him, and the ring standing up on his back */
     armTo(-1, cx + 0.7, cy - 1.5, mz - 1.5, cx + 1.3, cy - 0.9, mz - 0.7);
@@ -32694,7 +32896,7 @@ function _r3dRecoil(e, n) {
 function _r3dMuzzleSize(e) {
   var d = e.type === 'unit' ? rtsUnitDef(e.def) : rtsStructDef(e.def), w = d ? RTS_WEAPONS[d.weapon] : null;
   if (!w) return 0.6;
-  if (w.shot === 'beam' || w.shot === 'arc') return 0;               /* a lens has no flash: the beam draws its own light (fxemit3d.js) */
+  if (w.shot === 'beam' || w.shot === 'arc' || w.shot === 'bomb' || w.shot === 'launch') return 0;               /* a lens has no flash: the beam draws its own light (fxemit3d.js) */
   return w.shot === 'tracer' ? (w.dmg > 7 ? 0.55 : 0.4) : w.shot === 'missile' ? 0.9 : 1.2;
 }
 /* WHERE THE FLASH IS, on the ground plan: the shot's own coordinate (core/combat.js _rtsFireCoord)
@@ -34563,7 +34765,7 @@ function _rtsCatItems(cat) {
     }
   } else {
     for (i = 0; i < RTS_UNITS.length; i++) {
-      if (RTS_UNITS[i].kind !== cat) continue;
+      if (RTS_UNITS[i].kind !== cat || RTS_UNITS[i].spawned) continue;   /* a Carrier's drone: core/aloft.js */
       if (!rtsBuildableBy(RTS_UNITS[i], side)) continue;
       out.push(RTS_UNITS[i]);
     }

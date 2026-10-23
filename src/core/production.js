@@ -4,7 +4,7 @@
 /* --------------------------------------------------------- production */
 function _rtsQueueCat(key) {
   var s = rtsStructDef(key); if (s) return 'struct';
-  var u = rtsUnitDef(key); return u ? u.kind : null;
+  var u = rtsUnitDef(key); return u && !u.spawned ? u.kind : null;   /* a Carrier's drone is launched, never built: core/aloft.js */
 }
 /* What to CALL a prerequisite when telling the player they are missing it. `needs` names a
    capability rather than a building (see _rtsProvides), so the name cannot simply be looked up
