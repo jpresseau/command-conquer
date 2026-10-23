@@ -204,6 +204,7 @@ function _rtsSeparate(dt) {
        separation step shoved it back out to about six world units every time it closed, so it
        hovered just off the apron with an empty rack forever. */
     if (e.air) continue;
+    if (e.grip != null || e.gripBy != null) continue;   /* a Kraken and what it holds are locked together: core/deep.js */
     /* Ships crowd only with ships. A gunboat and a tank can never occupy the same cell - one
        is on water and the other cannot be - so putting them in one bucket makes them shove
        each other through a shoreline they should not be able to cross. Same shape of mistake

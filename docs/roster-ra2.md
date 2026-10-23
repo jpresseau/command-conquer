@@ -80,10 +80,10 @@ a section below with its numbers.
 | 8, `jetpack` | Rocketeer | Compact | Jetpack Trooper | flying infantry |
 | 8, `falcon` | Black Eagle | Compact | Falcon | a faster, tougher strike jet |
 | 8, `carrier` `hornet` | Aircraft Carrier | Compact | Carrier | launches its own drones at range |
-| 9 | Dolphin | Compact | Sonar Dolphin | a fast trained sea animal that hunts subs and squids |
-| 9 | Giant Squid | Dominion | Kraken | grabs and crushes a ship |
-| 9 | Sea Scorpion | Dominion | Sea Hornet | an anti-air and anti-infantry boat |
-| 9 | Dreadnought | Dominion | Bombard | a missile battleship, long-range shore bombardment |
+| 9, `dolphin` | Dolphin | Compact | Sonar Dolphin | a fast trained sea animal that hunts subs and squids |
+| 9, `kraken` | Giant Squid | Dominion | Kraken | grabs and crushes a ship |
+| 9, `seahornet` | Sea Scorpion | Dominion | Sea Hornet | an anti-air and anti-infantry boat |
+| 9, `bombard` | Dreadnought | Dominion | Bombard | a missile battleship, long-range shore bombardment |
 | 10 | War Miner (armed) | Dominion | War Harvester | a harvester with a gun |
 | 10 | Ore Purifier | Compact | Assay Plant | each load pays more |
 | 10 | Industrial Plant | Dominion | Foundry | vehicles cost less and build faster |
@@ -299,3 +299,25 @@ The opponent does not buy any of them. It has no team that flies a Leviathan or 
 a Carrier, so it would buy them and leave them at home (`unit/aiplan`). Jetpack Troopers in its
 infantry ran Mirror Line past its gold par (491 s against 480). Its use of them is batch 12.
 `unit/aloft` (21) and `e2e/aloft` (6) hold it.
+
+## Batch 9: the deep (`core/deep.js`, `sprites/deep.js`)
+
+**Kraken** (`kraken`, Dominion, 1000, after a shipyard and a Research Lab, 500 hp): it runs
+submerged as a submarine does (`cloak`). Its `tentacles` (range 2.5) take hold of a ship
+(`e.grip` and the ship's `e.gripBy`, plain data, so a save keeps them). It surfaces, and the ship
+does nothing while it is held (`core/tick.js` skips it). It cannot move or fire, and is crushed
+for 55 a second through its armour. The two are locked together: the crowd's shove
+(`core/move.js` `_rtsSeparate`) does not part them. The Kraken lets go when the ship is gone,
+when the Kraken dies, or when they drift apart. It never takes hold of anything ashore.
+
+**Sonar Dolphin** (`dolphin`, Compact, 600, after a shipyard and a Radar Post, 200 hp, fast): it
+hears submerged boats and Krakens within 8 cells (`detects`, the Destroyer's sonar), and its sonic
+burst (45, range 9, an arc) reaches anything afloat or below.
+
+**Sea Hornet** (`seahornet`, Dominion, 700, after a shipyard, 350 hp): a fast flak boat whose
+`scorpflak` reaches aircraft and infantry ashore. **Bombard** (`bombard`, Dominion, 2200, after
+a shipyard and a Research Lab, 1300 hp): a missile battleship with two 150 missiles at range 40,
+beyond the Cruiser's 38.
+
+The opponent does not buy them yet; that is batch 12. `unit/deep` (15) and `e2e/deep` (6) hold
+it.

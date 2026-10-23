@@ -317,7 +317,7 @@ function _rtsFire(e, tgt, w) {
      Set at the one place every route to a shot passes through, so there is no way to fire from
      under water. */
   if ((rtsUnitDef(e.def) || {}).cloak) e.decloak = RTS_SUB_SURFACE;
-  if (typeof _rtsSfx === 'function' && !w.plant && !w.self && !w.drop && !w.launch) _rtsSfx(w.shot === 'beam' ? 'beam' : w.shot === 'arc' ? 'zap' : w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
+  if (typeof _rtsSfx === 'function' && !w.plant && !w.self && !w.drop && !w.launch && !w.grip) _rtsSfx(w.shot === 'beam' ? 'beam' : w.shot === 'arc' ? 'zap' : w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
     : (w.shot === 'missile' ? 'rocket' : (e.type === 'struct' ? 'turretgun' : 'cannon')), e.x, e.z);
   if (w.mind) {                                    /* no damage: the unit changes side (core/mind.js) */
     if (_rtsMindTake(e, tgt)) { var mb = _rtsLensBeamFx(e, tgt, w); mb.mind = 1; G.fx.push(mb); }
@@ -331,6 +331,7 @@ function _rtsFire(e, tgt, w) {
   var raw = w.dmg * bias.fire * rtsCrateMult(e, 'fire') * (w.relay && e.type === 'struct' ? _rtsLensRelay(e, w) : 1)
           * _rtsArcCharge(e)                      /* ...and an Arc Tower's troopers charge it (core/arc.js) */
           * (e.dug ? RTS_DIG.fire : 1);           /* ...and a squad dug in hits harder (core/dig.js) */
+  if (w.grip) { _rtsGrip(e, tgt); return; }            /* a Kraken takes hold: core/deep.js */
   if (w.drop) { _rtsSkyDrop(e, w, raw); return; }       /* bombs down from the airship: core/aloft.js */
   if (w.launch) { _rtsLaunch(e, tgt, w); return; }     /* a Carrier's drone away */
   if (w.plant) { _rtsPlant(e, tgt, w, raw); return; }   /* a charge left on it, no damage yet: core/blast.js */

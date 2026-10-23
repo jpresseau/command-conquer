@@ -155,6 +155,16 @@ var RTS_WEAPONS = {
   /* the Veil Tank's gun: a heavy, slow shot - it fires from hiding and gives itself away doing it */
   veilgun:    { dmg:85, range:17, cool:2.6, shot:'shell', speed:62, splash:2.2, wall:true, wood:true,
                 verses:{ none:0.7, wood:1.0, light:1.2, heavy:1.0, concrete:0.8 } },
+  /* THE DEEP (core/deep.js). `grip` takes hold of a ship and crushes it, `dps` a second, while
+     neither moves. */
+  sonic:      { dmg:45, range:9, cool:1.4, shot:'arc', speed:0, splash:0, seaOnly:true,
+                verses:{ none:1.0, wood:1.0, light:1.2, heavy:0.9, concrete:0.5 } },
+  tentacles:  { dmg:0, range:2.5, cool:1.0, shot:'grip', speed:0, splash:0, seaOnly:true, grip:{ dps:55 },
+                verses:{ none:1.0, wood:1.0, light:1.0, heavy:1.0, concrete:1.0 } },
+  scorpflak:  { dmg:16, range:16, cool:0.45, burst:2, shot:'tracer', speed:0, splash:1.2, aa:true,
+                verses:{ none:1.3, wood:0.4, light:0.6, heavy:0.3, concrete:0.2 } },
+  bombmissile:{ dmg:150, range:40, cool:5.0, burst:2, shot:'missile', speed:24, splash:3.6, wall:true, wood:true,
+                verses:{ none:0.7, wood:1.2, light:1.0, heavy:1.0, concrete:1.3 } },
   /* THE SKY (core/aloft.js). `drop`: bombs that fall from where the aircraft is, bursting after
      `fall` seconds for `dmg` within `rad` cells - whoever is under them. `launch`: the shot is a
      drone of that key sent at the target. */

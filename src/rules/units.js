@@ -395,6 +395,28 @@ var RTS_UNITS = [
     weapon:'hornets', needs:['navalyard', 'lab'], sea:true, side:'allied',
     armour:'heavy',
     desc:'Launches its own drones at anything in a long reach, three at a time. Helpless if they are shot down - escort it.' },
+  /* THE DEEP (core/deep.js). THE SONAR DOLPHIN: quick, cheap, and it hears what is under the
+     water - a sonar of its own - and a sonic burst for anything afloat or below. */
+  { key:'dolphin',  name:'Sonar Dolphin', kind:'ship',     cost:600,  build:9,  hp:200,  speed:17,  turn:3.0,r:1.6, sight:20,
+    weapon:'sonic', needs:['shipyard', 'radar'], sea:true, side:'allied',
+    detects:RTS_TILE * 8, armour:'light',
+    desc:'Fast and cheap. Hears submarines and Krakens near it, and drives them off with a sonic burst.' },
+  /* THE KRAKEN: runs submerged, and surfaces to take hold of a ship - which can do nothing while it
+     is held, and is crushed. */
+  { key:'kraken',   name:'Kraken',        kind:'ship',     cost:1000, build:14, hp:500,  speed:11,  turn:2.0,r:2.0, sight:16,
+    weapon:'tentacles', needs:['shipyard', 'lab'], sea:true, side:'soviet', cloak:true,
+    armour:'light',
+    desc:'Runs unseen below the water, and surfaces to seize a ship: held, it cannot move or fire, and is crushed.' },
+  /* THE SEA HORNET: a fast boat with a flak gun that shoots up as well as across */
+  { key:'seahornet',name:'Sea Hornet',    kind:'ship',     cost:700,  build:9,  hp:350,  speed:15,  turn:2.2,r:1.8, sight:22,
+    weapon:'scorpflak', needs:['shipyard'], sea:true, side:'soviet',
+    armour:'light',
+    desc:'A fast flak boat: shoots down aircraft, and cuts up infantry on the shore.' },
+  /* THE BOMBARD: a missile battleship, the Dominion's answer to the Cruiser - further, and slower */
+  { key:'bombard',  name:'Bombard',       kind:'ship',     cost:2200, build:24, hp:1300, speed:7,   turn:0.9,r:3.0, sight:26,
+    weapon:'bombmissile', needs:['shipyard', 'lab'], sea:true, side:'soviet',
+    armour:'heavy',
+    desc:'A missile battleship: flattens a shoreline from further out than anything ashore can answer. Slow, and blind to what is under it.' },
   /* `cloak` is Cloakable, from the stat block. It submerges, and it has to surface to fire -
      see RTS_SUB_SURFACE and _rtsCloakAI. */
   { key:'sub',      name:'Submarine',    kind:'ship',     cost:950,  build:13, hp:500,  speed:10,  turn:1.3,r:2.0, sight:18,

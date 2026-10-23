@@ -36,7 +36,7 @@ function _rtsTick(dt) {
     e = G.ents[i];
     if (e.dead) continue;
     if (e.inside) continue;                      /* riding in a transport - see _rtsAboard */
-    if (_rtsErased(e)) continue;                 /* frozen, out of time: core/rift.js */
+    if (_rtsErased(e) || _rtsGripped(e)) continue;   /* frozen, out of time: core/rift.js; held by a Kraken: core/deep.js */
     if (e.type === 'unit') { if (_rtsRiftBusy(e, dt)) continue; if (!_rtsOffline(e)) _rtsUpdateUnit(e, dt); else e.path = null; }   /* a jump charging; a Drone Tank's hub down: core/rift.js, core/mind.js */
     else _rtsUpdateStruct(e, dt);
   }
@@ -45,6 +45,7 @@ function _rtsTick(dt) {
   _rtsVeilTick(dt);                              /* a Veil Tank standing still: core/rift.js */
   _rtsBlastTick(dt);                             /* charges on their fuses: core/blast.js */
   _rtsRadTick(dt);                               /* poisoned ground: core/rad.js */
+  _rtsDeepTick(dt);                              /* Krakens crushing what they hold: core/deep.js */
   _rtsSeparate(dt);
   _rtsAirSpread(dt);                             /* aircraft keep their own distance: core/airspace.js */
   _rtsUpdateProj(dt);
