@@ -92,12 +92,12 @@ a section below with its numbers.
 | 10, `hospital` | Tech Hospital | map | Field Hospital | captured, heals its owner's infantry near it |
 | 10, `mshop` | Tech Machine Shop | map | Machine Shop | captured, repairs its owner's vehicles near it |
 | 10, `airstrip` | Tech Airfield | map | Airstrip | captured, a Paratroopers superweapon |
-| 11 | Sniper | Compact | Marksman | kills infantry from beyond their range |
-| 11 | Tank Destroyer | Compact | Tank Hunter | a cannon that only hurts armour |
+| 11, `marksman` | Sniper | Compact | Marksman | kills infantry from beyond their range |
+| 11, `hunter` | Tank Destroyer | Compact | Tank Hunter | a cannon that only hurts armour |
 | 11 | IFV | Compact | Multi-role Carrier | its weapon is whoever rides in it |
-| 11 | Flak Trooper | Dominion | Flak Trooper | infantry anti-air |
+| 11, `flakman` | Flak Trooper | Dominion | Flak Trooper | infantry anti-air |
 | 11 | Boris | Dominion | Marshal | calls air strikes on a lased target |
-| 11 | Grand Cannon | Compact | Long Gun | a huge, far-reaching base cannon |
+| 11, `longgun` | Grand Cannon | Compact | Long Gun | a huge, far-reaching base cannon |
 | 11 | Terror Drone | Dominion | Leech Drone | climbs inside a vehicle and eats it from within |
 | 11 | Wall gates | both | Gate | a wall section your own units open |
 | 12 | — | both | AI use and balance | the opponent uses each batch, measured in self-play |
@@ -368,3 +368,27 @@ owner, and an Engineer can take it back as it can any building:
 
 The opponent's Engineers do not go after them yet; that is batch 12. `unit/tech` (14) and
 `e2e/tech` (9) hold it.
+
+## Batch 11a: soldiers of the line (`rules/roster11.js`, `sprites/roster11.js`)
+
+Four weapons with a narrow job each, and nothing new in the simulation: they are rules, models and
+kit. `rules/units.js` is at the 500-line cap, so they join `RTS_UNITS`, `RTS_STRUCTS` and
+`RTS_WEAPONS` from `rules/roster11.js`, as `rules/campaign2.js` does the campaign's.
+
+- **Marksman** (`marksman`, Compact, 600, after a Radar Post): `marksgun`, 120 damage at range 30
+  every 3 s. One shot kills a rifleman from twice a rifle's reach (15). Its `heavy` is 0, which the
+  game reads as anti-personnel only, so at a vehicle or a building it does the floor of 1.
+- **Tank Hunter** (`hunter`, Compact, 900, after a Radar Post): no turret, a long gun in the hull.
+  `huntgun` does 1.3 of 70 to heavy armour and 0.1 to a man, so it beats a Battle Tank one to one
+  and can barely hurt infantry.
+- **Flak Trooper** (`flakman`, Dominion, 300): `flakgun` has `aa` without `aaOnly`, so it finds
+  aircraft by itself and fights soldiers too.
+- **Long Gun** (`longgun`, Compact, 2x2, 2000, after a Radar Post): `longgun`, 110 at range 29, the
+  farthest-reaching base defence (the Rocket Turret's is 26), against the Battle Tank's 18. It stops
+  short of the Destroyer's 30 and the Dominion's siege guns' 34: `e2e/navair` holds that a Destroyer
+  outreaches the shore, and `unit/rules` that each army can outrange the other's defences. Like the
+  Lens Tower it does not fire without full power.
+
+The opponent does not buy or build them yet; that is batch 12. `unit/roster11` (18) and
+`e2e/roster11` (6) hold it. Batch 11b is the rest of batch 11: the Multi-role Carrier, the Marshal,
+the Leech Drone and the Gate.

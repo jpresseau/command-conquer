@@ -161,6 +161,12 @@ function _sprUnitGround(X, key) {
       } else if (key === 'blight') {
         _r3Cyl(m, mx - 2.0, 3.0, mz, 1.1, 3.4, kit.prop, '#c8ff8a', 14);           /* the canister on his back */
         _r3Box(m, mx + 2.6, 4.2, mz - 0.4, 4.2, 1.2, 1.2, kit.prop, DK[3]);
+      } else if (key === 'marksman') {
+        _r3Box(m, mx + 3.4, 4.4, mz - 0.4, 7.0, 0.8, 0.8, kit.prop, DK[3]);              /* the long rifle */
+        _r3Box(m, mx + 1.6, 5.2, mz - 0.4, 1.6, 0.6, 0.6, DK[2], DK[3]);                /* its scope */
+      } else if (key === 'flakman') {
+        _r3Box(m, mx + 1.4, 6.2, mz - 0.8, 6.0, 1.0, 1.0, kit.prop, DK[3]);              /* twin barrels on his shoulder */
+        _r3Box(m, mx + 1.4, 6.2, mz + 0.6, 6.0, 1.0, 1.0, kit.prop, DK[3]);
       } else if (key === 'jetpack') {
         _r3Box(m, mx - 2.0, 4.0, mz, 1.6, 3.6, 3.2, kit.prop, DK[3]);              /* the jetpack */
         _r3Box(m, mx + 2.4, 4.4, mz - 0.6, 3.6, 0.9, 0.9, kit.prop, DK[3]);
