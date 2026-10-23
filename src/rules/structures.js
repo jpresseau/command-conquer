@@ -273,6 +273,12 @@ var RTS_STRUCTS = [
   { key:'relayhub', name:'Relay Hub',     w:2, h:2, cost:600,  build:12, hp:500,  power:-50, sight:14,
     needs:['factory'], side:'allied', armour:'concrete', needsPower:true,
     desc:'Runs your Drone Tanks. Without a powered Relay Hub they stop dead. Compact.' },
+  /* THE FISSION REACTOR: twice a Fusion Plant's power for twice its price - and destroyed, it
+     melts down: a blast, and the ground round it poisoned for most of a minute (core/rad.js). */
+  { key:'reactor',  name:'Fission Reactor', w:3, h:3, cost:1000, build:16, hp:900,  power:400, sight:10,
+    needs:['lab'], provides:['power'], side:'soviet', armour:'concrete',
+    deathBlast:{ dmg:200, radius:RTS_TILE * 4 }, meltdown:{ r:RTS_TILE * 7, life:40, dps:22 },
+    desc:'400 power. Destroyed, it melts down: a blast, and the ground round it poisoned for most of a minute. Dominion.' },
   /* ---------------------------------------------------------------- the town --
      CIVILIAN BUILDINGS (core/garrison.js), laid by the skirmish setup's TOWNS option and owned by
      the `civ` side, which nobody builds for and nobody fights. Infantry can GARRISON one: up to

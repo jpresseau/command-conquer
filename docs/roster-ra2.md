@@ -74,8 +74,8 @@ a section below with its numbers.
 | 6, `zealot` | Terrorist | Dominion | Zealot | runs in and detonates |
 | 6, `wrecker` | Demolition Truck | Dominion | Wrecker | a rolling bomb |
 | 6, `frogman` | Navy SEAL | Compact | Frogman | swims, and charges ships and buildings |
-| 7 | Desolator | Dominion | Blight Trooper | a radiation gun, and a deployed poison field |
-| 7 | Nuclear Reactor meltdown | Dominion | Fusion Plant | a fusion plant that dies irradiates the ground |
+| 7, `blight` | Desolator | Dominion | Blight Trooper | a radiation gun, and a deployed poison field |
+| 7, `reactor` | Nuclear Reactor | Dominion | Fission Reactor | 400 power, and destroyed, it melts down and irradiates the ground |
 | 8 | Kirov Airship | Dominion | Leviathan | a slow, armoured bomber airship |
 | 8 | Rocketeer | Compact | Jetpack Trooper | flying infantry |
 | 8 | Black Eagle | Compact | Falcon | a faster, tougher strike jet |
@@ -243,3 +243,27 @@ The opponent does not buy any of the four. A Zealot or a Wrecker kills its own s
 it, so an opponent that buys them without a plan for where to send them only shuffles its own
 battle: bought even from 2000 credits, they moved `unit/endgame`, `unit/aitactics` and
 `unit/allycmd`. The opponent's use of them is batch 12. `unit/blast` (22) and `e2e/blast` (10) hold it.
+
+## Batch 7: radiation (`core/rad.js`, `sprites/rad.js`, `render3d/rad3d.js`)
+
+A **pool** of radiation (`G.rads`, plain data, so a save keeps it) is a circle of poisoned ground
+that fades to nothing over its life. Every 0.5 s, everything on the ground inside one is hurt by
+its strength, falling off to half at the edge. Infantry take all of it, vehicles and ships 0.3 of
+it, and buildings and aircraft none, friend and foe alike, except a `radproof` unit. Pools close
+together that one side made merge into one, made stronger and longer, so a Blight Trooper firing
+at one spot does not lay a hundred. Poisoned ground glows green, breathing slowly.
+
+**Blight Trooper** (`blight`, Dominion infantry, 600, after a Research Lab, 140 hp, radproof): its
+green ray (45 at range 11, every 1.6 s, made for infantry) leaves a pool of 1.3 cells for 5 s
+where it hits. DEPLOY (the button says IRRADIATE, then STOP) stands it still through the dig-in
+order, and the ground within 3 cells of it burns at 26 a second for as long as it stands. Any
+move order stops it.
+
+**Fission Reactor** (`reactor`, Dominion, 3x3, 1000, after a Research Lab, 900 hp): 400 power,
+twice a Fusion Plant's for twice its price. Destroyed, it blasts what is round it (200 within
+4 cells) and melts down: a pool of 7 cells at 22 a second, fading over 40 s. A reactor that is
+sold does neither.
+
+The opponent builds a reactor late in its plan. It does not buy the Blight Trooper, whose
+deployed ground burns its own side as well: that is batch 12, with the explosives.
+`unit/rad` (17) and `e2e/rad` (12) hold it.

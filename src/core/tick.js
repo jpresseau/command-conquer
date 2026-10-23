@@ -44,6 +44,7 @@ function _rtsTick(dt) {
   _rtsMindTick();                                /* a Mentalist that has died lets go: core/mind.js */
   _rtsVeilTick(dt);                              /* a Veil Tank standing still: core/rift.js */
   _rtsBlastTick(dt);                             /* charges on their fuses: core/blast.js */
+  _rtsRadTick(dt);                               /* poisoned ground: core/rad.js */
   _rtsSeparate(dt);
   _rtsAirSpread(dt);                             /* aircraft keep their own distance: core/airspace.js */
   _rtsUpdateProj(dt);

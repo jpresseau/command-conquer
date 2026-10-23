@@ -187,6 +187,10 @@ enemy that has not found it.
 the fuse runs down; its Zealot and its Wrecker lorry are the bomb, and go off even when they are
 shot down on the way in. The Compact's Frogman swims, and puts limpets on ships and buildings.
 
+**Radiation.** The Dominion's Blight Trooper leaves poisoned ground where its ray hits, and
+deployed, the ground round it burns, its own side's men included. Its Fission Reactor gives twice
+a Fusion Plant's power, and destroyed, it melts down and poisons its own base.
+
 **The enemy uses its whole garage.** It mines the approach to its own base, and once you have a
 harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands
 them beside your ore field, and goes home to do it again.

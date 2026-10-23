@@ -49,7 +49,10 @@ var RTS_INF_KIT = {
      Frogman in a black wetsuit and blue hood, with the limpet on his back */
   sapper:    { body:['#5a4632','#74593e'], top:'#6a4a2a', prop:'#c8302a' },
   zealot:    { body:['#a89a7c','#c4b694'], top:'#b0b0a8', prop:'#c8302a' },
-  frogman:   { body:['#1c2026','#2a3038'], top:'#1a4a8a', prop:'#e8c21c' }
+  frogman:   { body:['#1c2026','#2a3038'], top:'#1a4a8a', prop:'#e8c21c' },
+  /* a yellow hazmat suit, an olive gas-mask hood, and the green canister of the ray on his back
+     (core/rad.js) */
+  blight:    { body:['#b8a632','#d4c24a'], top:'#5a7a2a', prop:'#7fe04a' }
 };
 
 /* HOW FAR ROUND THE RUNNING GEAR HAS TURNED, 0 to 1 - set by the 3D renderer for the length of

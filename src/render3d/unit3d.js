@@ -151,7 +151,7 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
   var roll = d2.kind === 'vehicle' && !d2.sea && !e.air ? _r3dRollPhase(R3, e.def, mo.d) : 0;
   drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : (rotor ? 'body' : null), e.prone || e.dug, pose, roll, lod),
          e.x + rk.hx, y, e.z + rk.hz, -e.rot, ART2W, hd, 1, rk.n);
-  if (e.dug && !R3.digOff) drawIn(C, _r3dDigRing(R3), e.x, y, e.z, -e.rot, ART2W, hd, 1, rk.n);   /* behind sandbags: dig3d.js */
+  if (e.dug && !R3.digOff && !d2.irradiates) drawIn(C, _r3dDigRing(R3), e.x, y, e.z, -e.rot, ART2W, hd, 1, rk.n);   /* behind sandbags: dig3d.js */
   if (turret) {
     /* the one turret part, on each of its mounts: a tank's one at the origin, a gun ship's fore
        and aft (RTS_TURRET_AT, sprites/unit-airsea.js), all turned to the aim */

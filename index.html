@@ -863,7 +863,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">8e52405 · 2026-10-22</div>
+  <div id="rtsBuild" title="build">f39410b · 2026-10-22</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1141,6 +1141,12 @@ var RTS_STRUCTS = [
   { key:'relayhub', name:'Relay Hub',     w:2, h:2, cost:600,  build:12, hp:500,  power:-50, sight:14,
     needs:['factory'], side:'allied', armour:'concrete', needsPower:true,
     desc:'Runs your Drone Tanks. Without a powered Relay Hub they stop dead. Compact.' },
+  /* THE FISSION REACTOR: twice a Fusion Plant's power for twice its price - and destroyed, it
+     melts down: a blast, and the ground round it poisoned for most of a minute (core/rad.js). */
+  { key:'reactor',  name:'Fission Reactor', w:3, h:3, cost:1000, build:16, hp:900,  power:400, sight:10,
+    needs:['lab'], provides:['power'], side:'soviet', armour:'concrete',
+    deathBlast:{ dmg:200, radius:RTS_TILE * 4 }, meltdown:{ r:RTS_TILE * 7, life:40, dps:22 },
+    desc:'400 power. Destroyed, it melts down: a blast, and the ground round it poisoned for most of a minute. Dominion.' },
   /* ---------------------------------------------------------------- the town --
      CIVILIAN BUILDINGS (core/garrison.js), laid by the skirmish setup's TOWNS option and owned by
      the `civ` side, which nobody builds for and nobody fights. Infantry can GARRISON one: up to
@@ -1337,6 +1343,14 @@ var RTS_UNITS = [
     side:'allied', armour:'none',
     crawl:true, fraidy:false,
     desc:'Swims as well as he walks. A machine pistol for infantry, and a limpet charge for ships and buildings.' },
+  /* RADIATION (core/rad.js). THE BLIGHT TROOPER's gun leaves a pool of radiation where it hits;
+     DEPLOYED, it stands still and the ground round it burns - infantry worst, vehicles less,
+     its own side's men as much as the enemy's. It is proof against radiation itself. */
+  { key:'blight',   name:'Blight Trooper', kind:'infantry', cost:600, build:9,  hp:140,  speed:5,   turn:6,  r:1.1, sight:14, weapon:'blightgun',
+    needs:['lab'], dig:'soviet', irradiates:true, radproof:true,
+    side:'soviet', armour:'light',
+    crawl:false, fraidy:false,
+    desc:'Its ray leaves the ground poisoned where it hits. DEPLOY and it irradiates everything round it - keep your own men clear.' },
   /* The Arc Tower on tracks: a short bolt that jumps on to two more enemies beside its target. */
   { key:'arctank',  name:'Arc Tank',      kind:'vehicle',  cost:1000, build:13, hp:380,  speed:9.5, turn:2.0,r:2.0, sight:16, weapon:'arcbolt',
     needs:['radar'],
@@ -1807,6 +1821,9 @@ var RTS_WEAPONS = {
   /* the Frogman's machine pistol: for men, not for hulls */
   frogmg:     { dmg:10, range:13, cool:0.35, shot:'tracer', speed:0, splash:0,
                 verses:{ none:1.0, wood:0.15, light:0.20, heavy:0.08, concrete:0.05 } },
+  /* the Blight Trooper's ray (core/rad.js): `rad` is the pool it leaves where it hits */
+  blightgun:  { dmg:45, range:11, cool:1.6, shot:'beam', speed:0, splash:0, rad:{ r:RTS_TILE * 1.3, life:5, dps:14 },
+                verses:{ none:1.0, wood:0.3, light:0.6, heavy:0.35, concrete:0.15 } },
   arcgun:     { dmg:30, range:9, cool:1.3, shot:'arc', speed:0, splash:0,
                 verses:{ none:1.0, wood:0.5, light:1.2, heavy:1.0, concrete:0.4 } },
   arcbolt:    { dmg:55, range:13, cool:1.8, shot:'arc', speed:0, splash:0, split:{ n:2, cells:2.5, share:0.6 },
@@ -2273,7 +2290,7 @@ var RTS_AI = {
      Not turret's 0.24/6. A Coil is 1500 credits and -100 power against a Gun Turret's 500 and
      -20, so six of them is 9000 credits and 600 power - it is the premium piece, not the line
      defence, and the flame tower is what fills the wall. */
-          tesla:0.10, prism:0.10, relayhub:0.05, echo:0.04,              /* the Compact's premium tower, the Arc Tower's pair */
+          tesla:0.10, prism:0.10, relayhub:0.05, echo:0.04, reactor:0.06,              /* the Compact's premium tower, the Arc Tower's pair */
           helipad:0.06, afld:0.06, aagun:0.10,
   /* One shipyard. A second buys nothing but a second production line for a domain
      the opponent uses to raid a coast, and the ratio has to stay small or a map
@@ -2287,7 +2304,7 @@ var RTS_AI = {
      production lines to spend it down, so a low ceiling turns the storage cap into a straight
      nerf and hands the player about 16 extra seconds of life. RA has no silo limit at all. */
           apower:2,    kennel:1,    silo:14,   pillbox:4,     flametower:3,     turret:6,     rocketpit:4,
-          tesla:3,     prism:3,     relayhub:1, echo:1,
+          tesla:3,     prism:3,     relayhub:1, echo:1, reactor:1,
           helipad:2,   afld:2,      aagun:3,
           navalyard:1, subpen:1,
   /* One each. A second silo would not charge a second missile - the timer is per house - so
@@ -2330,7 +2347,7 @@ var RTS_AI = {
               'helipad', 'afld', 'navalyard', 'subpen',
               'pillbox', 'flametower', 'turret', 'rocketpit', 'tesla', 'prism', 'aagun',
               /* the hub and the sensor after the defences: before them they cost the base its Arc Tower (e2e/basedef) */
-              'relayhub', 'echo',
+              'relayhub', 'echo', 'reactor',
               'mslo', 'iron', 'pdox', 'gps', 'mist', 'spire'],
 
   /* WHICH RUNG EACH BUILDING BELONGS TO. The order above says what to build first; this says
@@ -7339,7 +7356,7 @@ function _sprBuildingModel(key, side) {
             pipe:pipe, ladder:ladder, rail:rail, steps:steps, drum:drum,
             crates:crates, floodlight:floodlight, plant:plant,
             sandbags:sandbags, ammo:ammo };
-  _sprBldBase(X, key) || _sprBldTech(X, key) || _sprBldWar(X, key) || _sprBldSuper(X, key) || _sprBldLens(X, key) || _sprBldTown(X, key) || _sprBldMind(X, key);
+  _sprBldBase(X, key) || _sprBldTech(X, key) || _sprBldWar(X, key) || _sprBldSuper(X, key) || _sprBldLens(X, key) || _sprBldTown(X, key) || _sprBldMind(X, key) || _sprBldRad(X, key);
   return m;
 }
 function _sprBuildingClean(key, side) {
@@ -7410,7 +7427,10 @@ var RTS_INF_KIT = {
      Frogman in a black wetsuit and blue hood, with the limpet on his back */
   sapper:    { body:['#5a4632','#74593e'], top:'#6a4a2a', prop:'#c8302a' },
   zealot:    { body:['#a89a7c','#c4b694'], top:'#b0b0a8', prop:'#c8302a' },
-  frogman:   { body:['#1c2026','#2a3038'], top:'#1a4a8a', prop:'#e8c21c' }
+  frogman:   { body:['#1c2026','#2a3038'], top:'#1a4a8a', prop:'#e8c21c' },
+  /* a yellow hazmat suit, an olive gas-mask hood, and the green canister of the ray on his back
+     (core/rad.js) */
+  blight:    { body:['#b8a632','#d4c24a'], top:'#5a7a2a', prop:'#7fe04a' }
 };
 
 /* HOW FAR ROUND THE RUNNING GEAR HAS TURNED, 0 to 1 - set by the 3D renderer for the length of
@@ -7699,6 +7719,9 @@ function _sprUnitGround(X, key) {
       } else if (key === 'frogman') {
         _r3Cyl(m, mx - 2.0, 3.6, mz, 1.4, 0.9, kit.prop, '#fff07a', 14);           /* the limpet on his back */
         _r3Box(m, mx + 2.3, 4.4, mz - 1.0, 2.4, 0.8, 0.8, kit.prop, DK[3]);
+      } else if (key === 'blight') {
+        _r3Cyl(m, mx - 2.0, 3.0, mz, 1.1, 3.4, kit.prop, '#c8ff8a', 14);           /* the canister on his back */
+        _r3Box(m, mx + 2.6, 4.2, mz - 0.4, 4.2, 1.2, 1.2, kit.prop, DK[3]);
       } else if (key === 'rifttroop') {
         _r3Cyl(m, mx - 2.0, 3.6, mz, 1.6, 0.6, kit.prop, '#f2fdff', 14);       /* the rift ring on his back */
         _r3Box(m, mx + 2.6, 4.4, mz - 0.5, 4.6, 1.3, 1.3, kit.prop, DK[3]);
@@ -9102,6 +9125,33 @@ function _sprUnitBlast(X, key) {
     _r3Cyl(m, -6.6 + r * 3.6, 5.2, -2.7 + c * 2.7, 1.25, 3.2, RTS_BLAST_DRUM[0], RTS_BLAST_DRUM[1], 16);
   for (i = 0; i < 5; i++)                                                      /* the hazard band round them */
     _r3Box(m, -7.8 + i * 2.6, 7.2, 0, 1.3, 0.35, 8.4, RTS_BLAST_STRIPE[i % 2], RTS_BLAST_STRIPE[i % 2]);
+  return true;
+}
+</script>
+<script>/* sprites/rad.js - the Fission Reactor (core/rad.js). Part of rts.sprites. The Blight Trooper is
+   an infantry kit (sprites/unitmodels.js RTS_INF_KIT).
+
+   A squat containment drum on a concrete apron, two cooling towers waisted in the middle beside
+   it, and the core showing green through a ring of ports round the drum's top - the one thing on
+   the building that says what is inside it. */
+var RTS_RAD_GLOW = ['#7fe04a', '#c8ff8a'];
+
+function _sprBldRad(X, key) {
+  var m = X.m, W = X.W, D = X.D, C = X.C, S = X.S, B = X.B, i, a;
+  if (key !== 'reactor') return false;
+  _r3Box(m, 0, 0, 0, W - 6, 3, D - 6, C[2], C[0]);                          /* the apron */
+  _r3Cyl(m, -7, 3, 0, 14, 12, C[1], C[0], 28);                             /* the containment drum */
+  _r3Cone(m, -7, 15, 0, 14, 4, 8, C[0], 28);                                /* its dome */
+  for (i = 0; i < 8; i++) {                                                 /* the ports, the core showing */
+    a = i / 8 * Math.PI * 2;
+    _r3Box(m, -7 + Math.cos(a) * 13.6, 11, Math.sin(a) * 13.6, 2.2, 2.2, 2.2, RTS_RAD_GLOW[0], RTS_RAD_GLOW[1]);
+  }
+  _r3Cyl(m, -7, 14.6, 0, 14.3, 0.9, B.roof, B.roof, 28);                    /* team band */
+  for (var t = 0; t < 2; t++) {                                             /* the cooling towers, waisted */
+    var tx = 15, tz = -11 + t * 22, rr = [7.5, 6.6, 5.6, 5.0, 5.2, 5.9];
+    for (var k = 0; k < rr.length; k++) _r3Cyl(m, tx, 3 + k * 4, tz, rr[k], 4, S[1], S[2], 24);
+    _r3Cyl(m, tx, 27, tz, 5.4, 0.4, S[3], S[3], 24);                        /* the dark mouth */
+  }
   return true;
 }
 </script>
@@ -15320,6 +15370,7 @@ function _rtsKill(e) {
   else if (e.type === 'struct') {
     /* Losing a building is announced; losing one of THEIRS is not. */
     var sd = rtsStructDef(e.def);
+    if (sd.meltdown) _rtsRadPool(e.x, e.z, sd.meltdown, e.side);   /* a reactor melts down: core/rad.js */
     /* "Since there are volatile fuels used in the Flame Tower, it damages nearby units and
        structures if destroyed." Friendly fire included - that is the whole drawback, and it is
        why you do not build a row of them through the middle of your own base. */
@@ -16957,7 +17008,8 @@ function _rtsFire(e, tgt, w) {
   var dmg = raw * rtsVerses(w, tgt);
   if (w.speed <= 0) {
     _rtsDamage(tgt, dmg, e);
-    if (w.shot === 'beam' || w.shot === 'arc') G.fx.push(_rtsLensBeamFx(e, tgt, w));
+    if (w.shot === 'beam' || w.shot === 'arc') { var bf = _rtsLensBeamFx(e, tgt, w); if (w.rad) bf.rad = 1; G.fx.push(bf); }
+    if (w.rad) _rtsRadPool(tgt.x, tgt.z, w.rad, e.side);   /* a Blight Trooper's poisons the ground: core/rad.js */
     else G.fx.push({ kind:'tracer', x:m.x, y:1.3, z:m.z, x2:tgt.x, y2:1.3, z2:tgt.z, t:0 });
     if (w.split) _rtsLensFork(e, tgt, w, raw);      /* and a Lens Tank's forks onto its neighbours */
     _rtsCombatAnim(dmg, tgt.x, tgt.z, 0.5, tgt);
@@ -22006,6 +22058,86 @@ function _rtsBlastGo(e) {
   _rtsBlastFx(e.x, e.z, w.self.rad);
 }
 </script>
+<script>/* core/rad.js - RADIATION: ground that burns whoever stands on it.
+
+   A POOL (G.rads, plain data, so a save keeps it) is a circle of poisoned ground that fades to
+   nothing over its life. Every RTS_RAD.step seconds everything on the ground inside one is hurt
+   by its strength, falling off from the middle to the edge: infantry fully, vehicles and ships by
+   RTS_RAD.hull of it, buildings and aircraft not at all, and friend and foe alike - except
+   whatever is `radproof`. Pools close together of one side's making are one pool, made stronger
+   and longer, so a Blight Trooper firing at one spot does not lay a hundred.
+
+   Where they come from: the Blight Trooper's ray leaves one where it hits (`rad` on
+   rules/weapons.js `blightgun`, core/combat.js); a DEPLOYED Blight Trooper (`irradiates`, deployed
+   through core/dig.js like a dug-in squad) is a pool of RTS_RAD.aura round itself for as long as
+   it stands; and a Fission Reactor destroyed (`meltdown`, core/capture.js _rtsKill) leaves the
+   biggest of all. render3d/rad3d.js draws them as glowing green ground. */
+var RTS_RAD = { step: 0.5, hull: 0.3, merge: 0.6, aura: { r: RTS_TILE * 3, dps: 26 } };
+
+function _rtsRadPool(x, z, spec, side) {
+  var G = window._rtsG, P = G.rads || (G.rads = []);
+  for (var i = 0; i < P.length; i++) {
+    var p = P[i];
+    if (p.side === side && Math.hypot(p.x - x, p.z - z) < p.r * RTS_RAD.merge) {
+      p.t = Math.max(p.t, spec.life); p.life = Math.max(p.life, spec.life);
+      p.dps = Math.max(p.dps, spec.dps); p.r = Math.max(p.r, spec.r);
+      return p;
+    }
+  }
+  var np = { x: x, z: z, r: spec.r, t: spec.life, life: spec.life, dps: spec.dps, side: side };
+  P.push(np);
+  return np;
+}
+/* A deployed Blight Trooper: core/dig.js's `dug`, on a unit that irradiates. */
+function _rtsIrradiating(e) { return !!(e && !e.dead && e.dug && !e.inside && (rtsUnitDef(e.def) || {}).irradiates); }
+/* Everything burning now: the pools at their strength for the life they have left, and each
+   deployed Blight Trooper as a pool of its own. */
+function _rtsRadSources() {
+  var G = window._rtsG, out = [], P = G.rads || [], i;
+  for (i = 0; i < P.length; i++) out.push({ x: P[i].x, z: P[i].z, r: P[i].r, dps: P[i].dps * P[i].t / P[i].life, side: P[i].side });
+  for (i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i];
+    if (e.type === 'unit' && _rtsIrradiating(e)) out.push({ x: e.x, z: e.z, r: RTS_RAD.aura.r, dps: RTS_RAD.aura.dps, side: e.side });
+  }
+  return out;
+}
+/* How hard the ground at (x, z) burns, per second, for infantry. */
+function _rtsRadAt(x, z, src) {
+  src = src || _rtsRadSources();
+  var s = 0;
+  for (var i = 0; i < src.length; i++) {
+    var d = Math.hypot(x - src[i].x, z - src[i].z);
+    if (d < src[i].r) s += src[i].dps * (1 - 0.5 * d / src[i].r);
+  }
+  return s;
+}
+function _rtsRadTick(dt) {
+  var G = window._rtsG;
+  G.radAcc = (G.radAcc || 0) + dt;
+  if (G.radAcc < RTS_RAD.step) return;
+  var step = G.radAcc; G.radAcc = 0;
+  var src = _rtsRadSources();
+  if (!src.length) return;
+  for (var i = 0; i < G.ents.length; i++) {
+    var o = G.ents[i];
+    if (o.type !== 'unit' || o.dead || o.inside || o.air) continue;
+    var d = rtsUnitDef(o.def) || {};
+    if (d.radproof) continue;
+    var burn = _rtsRadAt(o.x, o.z, src);
+    if (!(burn > 0)) continue;
+    o.hurtBy = _rtsRadWhose(o, src);
+    _rtsDamage(o, burn * step * (d.kind === 'infantry' ? 1 : RTS_RAD.hull), null);
+  }
+  var P = G.rads || [];
+  for (var k = P.length - 1; k >= 0; k--) { P[k].t -= step; if (P[k].t <= 0) P.splice(k, 1); }
+}
+/* whose poison it is, for the scoreboard: the nearest source over `o` */
+function _rtsRadWhose(o, src) {
+  var best = null, bd = 1e9;
+  for (var i = 0; i < src.length; i++) { var d = Math.hypot(o.x - src[i].x, o.z - src[i].z); if (d < src[i].r && d < bd) { bd = d; best = src[i].side; } }
+  return best;
+}
+</script>
 <script>/* core/missions.js - the team mission list (TEAMTYPE.CPP): the script a team runs.
    Part of rts.core, the simulation. */
 
@@ -23103,6 +23235,7 @@ function _rtsTick(dt) {
   _rtsMindTick();                                /* a Mentalist that has died lets go: core/mind.js */
   _rtsVeilTick(dt);                              /* a Veil Tank standing still: core/rift.js */
   _rtsBlastTick(dt);                             /* charges on their fuses: core/blast.js */
+  _rtsRadTick(dt);                               /* poisoned ground: core/rad.js */
   _rtsSeparate(dt);
   _rtsAirSpread(dt);                             /* aircraft keep their own distance: core/airspace.js */
   _rtsUpdateProj(dt);
@@ -23382,6 +23515,7 @@ var RTS_REPLAY_PURE = {
     /* the picture's: heights, sight and where a gun points (src/render, src/render3d) */
     '_rtsAirLift', '_rtsVisible', '_rtsMineShown', '_rtsBridgeDeckY', '_rtsMuzzleAngle', '_rtsFireCoord',
     '_rtsSeen', '_rtsVeiled',                    /* a Veil Tank drawn as a tree: render3d/veil3d.js */
+    '_rtsRadSources',                           /* poisoned ground drawn glowing: render3d/rad3d.js */
     '_rtsWithPlayer', '_rtsStandY', '_rtsEffectsSeen', '_rtsElevNormal', '_rtsTileElev'],
   /* the battle's setup, before a recording starts, or a save's, which is not recorded */
   setup: ['_rtsNewGame', '_rtsMissionSetup', '_rtsSurvivalSetup', '_rtsRecalcPower', '_rtsRngMake', 'rtsSetArmySide',
@@ -28379,7 +28513,8 @@ function _r3dFxBeam(V, f) {
   var y0 = V.ground(f.x, f.z) + (f.y || 1.3), y1 = V.ground(f.x2, f.z2) + (f.y2 || 1.3);
   var k = f.lens || 1, op = 1 - f.t / R3D_FX_BEAM_T;
   if (f.arc) { _r3dFxArc(V, f, y0, y1, k, op); return; }
-  var tint = f.mind ? R3D_FX_MIND : f.rift ? R3D_FX_FOAM : R3D_FX_LENS;   /* a Rift Trooper's is white */   /* a Mentalist's link is violet (core/mind.js) */
+  /* a Mentalist's link is violet (core/mind.js), a Rift Trooper's white (core/rift.js), a Blight Trooper's green (rad3d.js) */
+  var tint = f.mind ? R3D_FX_MIND : f.rift ? R3D_FX_FOAM : f.rad ? R3D_RAD.ray : R3D_FX_LENS;
   _r3dFxStreak(V.M, V, f.x, y0, f.z, f.x2, y1, f.z2, 1.1 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.35 * op, 0, tint);
   _r3dFxStreak(V.M, V, f.x, y0, f.z, f.x2, y1, f.z2, 0.32 * k, 0.6, R3D_FXT_STREAK, 0, 0, 0.95 * op, 0, f.mind ? R3D_FX_MINDC : R3D_FX_ROUND);
   _r3dFxBill(V.M, V, f.x2, y1, f.z2, 1.1 * k, 1.1 * k, 0.6, R3D_FXT_FLASH, 0, 0, 0.9 * op, 0, tint);
@@ -28470,6 +28605,7 @@ function _r3dFxEmit(G, V) {
   _r3dFxProj(G, V);
   _r3dFxBombs(G, V);
   if (typeof _r3dFxCharges === 'function') _r3dFxCharges(G, V); /* charges blinking - blast3d.js */
+  if (typeof _r3dFxRad === 'function') _r3dFxRad(G, V);         /* poisoned ground - rad3d.js */
   if (typeof _r3dFxWakes === 'function') _r3dFxWakes(G, V);     /* dust and wakes - fxwake3d.js */
   if (typeof _r3dFxAlive === 'function') _r3dFxAlive(G, V);     /* stacks, beacons - alive3d.js */
   if (typeof _r3dFxSky === 'function') _r3dFxSky(G, V);         /* lamps, rain, fog - skyfx3d.js */
@@ -30622,6 +30758,13 @@ function _r3dSoldierMan(m, key, mx, mz, pose, lead, K) {
     armTo(1, cx + 1.2, cy - 0.8, mz + 1.4, cx + 2.4, cy - 0.5, mz + 0.4);
     _r3Box(m, cx + 3.0, cy - 0.6, mz - 0.3, 1.8, 0.6, 0.4, DK[3], DK[2]);
     _r3Cyl(m, mx - 1.9, hipY + 2.2, mz, 1.3, 0.8, kit.prop, '#fff07a', 20);
+  } else if (key === 'blight') {
+    /* the ray held low in both hands, its hose back to the canister on his back */
+    armTo(-1, cx + 0.8, cy - 1.4, mz - 1.4, cx + 1.6, cy - 1.0, mz - 0.6);
+    armTo(1, cx + 0.8, cy - 1.4, mz + 1.4, cx + 2.2, cy - 1.1, mz + 0.2);
+    _r3dLimb(m, cx + 0.8, cy - 1.0, mz - 0.2, cx + 4.0, cy - 1.2, mz - 0.2, 0.45, 0.35, 12, DK[2]);
+    _r3dBall(m, cx + 4.2, cy - 1.2, mz - 0.2, 0.4, kit.prop, 10, 6);
+    _r3Cyl(m, mx - 2.0, hipY + 0.8, mz, 1.0, 3.2, kit.prop, '#c8ff8a', 16);
   } else if (key === 'rifttroop') {
     /* the rift gun held across him, and the ring standing up on his back */
     armTo(-1, cx + 0.7, cy - 1.5, mz - 1.5, cx + 1.3, cy - 0.9, mz - 0.7);
@@ -30929,7 +31072,7 @@ function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
   var roll = d2.kind === 'vehicle' && !d2.sea && !e.air ? _r3dRollPhase(R3, e.def, mo.d) : 0;
   drawIn(C, _r3dMesh('u', e.def, e.side, turret ? 'hull' : (rotor ? 'body' : null), e.prone || e.dug, pose, roll, lod),
          e.x + rk.hx, y, e.z + rk.hz, -e.rot, ART2W, hd, 1, rk.n);
-  if (e.dug && !R3.digOff) drawIn(C, _r3dDigRing(R3), e.x, y, e.z, -e.rot, ART2W, hd, 1, rk.n);   /* behind sandbags: dig3d.js */
+  if (e.dug && !R3.digOff && !d2.irradiates) drawIn(C, _r3dDigRing(R3), e.x, y, e.z, -e.rot, ART2W, hd, 1, rk.n);   /* behind sandbags: dig3d.js */
   if (turret) {
     /* the one turret part, on each of its mounts: a tank's one at the origin, a gun ship's fore
        and aft (RTS_TURRET_AT, sprites/unit-airsea.js), all turned to the aim */
@@ -31040,6 +31183,29 @@ function _r3dFxCharges(G, V) {
 }
 /* How far down a unit is drawn for swimming: a Frogman over water. */
 function _r3dSwimSink(G, e, d) { return d.swims && _r3dWetAt(G, e.x, e.z) ? R3D_SWIM_SINK : 0; }
+</script>
+<script>/* render3d/rad3d.js - radiation on the page (core/rad.js).
+
+   Poisoned ground glows: a green light lying on the terrain over each pool and round each deployed
+   Blight Trooper, breathing slowly, as bright as the pool is strong and dimming as it fades.
+   Drawn into the light batch with the glare of fires (fxemit3d.js), wherever the player can see.
+   R3.radOff draws none, for a spec's A/B. The ray itself is the Lens Tower's beam in green
+   (fxemit3d.js _r3dFxBeam, `rad` on the effect). */
+var R3D_RAD = { col: [0.55, 1.45, 0.30], ray: [0.70, 1.60, 0.35], op: 0.55, breathe: 0.25, hz: 0.6 };
+
+function _r3dFxRad(G, V) {
+  var R3 = window._R3D;
+  if (R3 && R3.radOff) return;
+  var src = _rtsRadSources();
+  if (!src.length) return;
+  var vis = typeof _rtsVisible === 'function';
+  for (var i = 0; i < src.length; i++) {
+    var p = src[i];
+    if (vis && !_rtsVisible(_rtsTX(p.x), _rtsTX(p.z))) continue;
+    var k = Math.min(1, p.dps / RTS_RAD.aura.dps) * (1 - R3D_RAD.breathe + R3D_RAD.breathe * Math.sin(((V.t || 0) * R3D_RAD.hz + i * 0.37) * Math.PI * 2));
+    _r3dFxDecal(V.L, V, p.x, p.z, p.r, 4, 0.6, R3D_FXT_LIGHT, 0, i + 1, R3D_RAD.op * k * V.gnd, R3D_RAD.col);
+  }
+}
 </script>
 <script>/* render3d/air3d.js - aircraft that fly like aircraft. Part of rts.render3d.
 
@@ -34247,7 +34413,7 @@ function _rtsUnitStateTxt(e) {
     else if (e.order === 'orbit') out += ' · circling';
   }
   if (d.carries) { var n = _rtsCargoCount(e); if (n) out += ' · ' + n + ' aboard'; }
-  if (e.dug) out += ' · dug in';
+  if (e.dug) out += d.irradiates ? ' · irradiating' : ' · dug in';   /* core/rad.js */
   if (e.offline) out += ' · offline: no powered Relay Hub';                      /* core/mind.js */
   if (e.mind) out += ' · held by a Mentalist';
   var th = e.thrall != null && window._rtsG.byId[e.thrall];
@@ -34269,7 +34435,7 @@ function _rtsDeployLabel(sel) {
   var w = null;
   for (var i = 0; i < sel.length; i++) {
     if (!_rtsCanDeploy(sel[i])) continue;
-    var d = rtsUnitDef(sel[i].def), x = d.mines ? 'LAY MINE' : d.bridge ? 'BRIDGE' : d.dig ? (sel[i].dug ? 'CLIMB OUT' : 'DIG IN') : 'DEPLOY';
+    var d = rtsUnitDef(sel[i].def), x = d.mines ? 'LAY MINE' : d.bridge ? 'BRIDGE' : d.irradiates ? (sel[i].dug ? 'STOP' : 'IRRADIATE') : d.dig ? (sel[i].dug ? 'CLIMB OUT' : 'DIG IN') : 'DEPLOY';
     if (w && w !== x) return 'DEPLOY';
     w = x;
   }

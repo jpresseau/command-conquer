@@ -127,6 +127,7 @@ function _rtsKill(e) {
   else if (e.type === 'struct') {
     /* Losing a building is announced; losing one of THEIRS is not. */
     var sd = rtsStructDef(e.def);
+    if (sd.meltdown) _rtsRadPool(e.x, e.z, sd.meltdown, e.side);   /* a reactor melts down: core/rad.js */
     /* "Since there are volatile fuels used in the Flame Tower, it damages nearby units and
        structures if destroyed." Friendly fire included - that is the whole drawback, and it is
        why you do not build a row of them through the middle of your own base. */
