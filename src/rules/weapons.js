@@ -155,6 +155,9 @@ var RTS_WEAPONS = {
   /* the Veil Tank's gun: a heavy, slow shot - it fires from hiding and gives itself away doing it */
   veilgun:    { dmg:85, range:17, cool:2.6, shot:'shell', speed:62, splash:2.2, wall:true, wood:true,
                 verses:{ none:0.7, wood:1.0, light:1.2, heavy:1.0, concrete:0.8 } },
+  /* the War Harvester's gun: for men, not for armour (core/econ.js) */
+  warmg:      { dmg:11, range:14, cool:0.4, shot:'tracer', speed:0, splash:0,
+                verses:{ none:1.0, wood:0.3, light:0.45, heavy:0.15, concrete:0.15 } },
   /* THE DEEP (core/deep.js). `grip` takes hold of a ship and crushes it, `dps` a second, while
      neither moves. */
   sonic:      { dmg:45, range:9, cool:1.4, shot:'arc', speed:0, splash:0, seaOnly:true,

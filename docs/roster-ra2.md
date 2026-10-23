@@ -84,10 +84,10 @@ a section below with its numbers.
 | 9, `kraken` | Giant Squid | Dominion | Kraken | grabs and crushes a ship |
 | 9, `seahornet` | Sea Scorpion | Dominion | Sea Hornet | an anti-air and anti-infantry boat |
 | 9, `bombard` | Dreadnought | Dominion | Bombard | a missile battleship, long-range shore bombardment |
-| 10 | War Miner (armed) | Dominion | War Harvester | a harvester with a gun |
-| 10 | Ore Purifier | Compact | Assay Plant | each load pays more |
-| 10 | Industrial Plant | Dominion | Foundry | vehicles cost less and build faster |
-| 10 | Cloning Vats | Dominion | Clone Vats | every infantry trained comes out twice |
+| 10, `warharv` | War Miner (armed) | Dominion | War Harvester | a harvester with a gun |
+| 10, `assay` | Ore Purifier | Compact | Assay Plant | each load pays more |
+| 10, `foundry` | Industrial Plant | Dominion | Foundry | vehicles cost less and build faster |
+| 10, `vats` | Cloning Vats | Dominion | Clone Vats | every infantry trained comes out twice |
 | 10 | Tech buildings | map | Oil Derrick, Field Hospital, Machine Shop, Airstrip | captured by an Engineer for income, healing, repair, paratroopers |
 | 11 | Sniper | Compact | Marksman | kills infantry from beyond their range |
 | 11 | Tank Destroyer | Compact | Tank Hunter | a cannon that only hurts armour |
@@ -321,3 +321,27 @@ beyond the Cruiser's 38.
 
 The opponent does not buy them yet; that is batch 12. `unit/deep` (15) and `e2e/deep` (6) hold
 it.
+
+## Batch 10a: the economy (`core/econ.js`, `sprites/econ.js`)
+
+Each of these works while it stands and is finished, power or no power, as a refinery does. One is
+enough; a second adds nothing.
+
+**Assay Plant** (`assay`, Compact, 2x2, 1800, after a refinery and a Radar Post): every load a
+refinery takes pays a quarter more (`core/harvest.js`, at the unload). **Foundry** (`foundry`,
+Dominion, 3x2, 2000, after a Vehicle Works and a Radar Post): a vehicle costs and builds in three
+quarters of its price and time (`core/production.js` `_rtsCostOf`, `_rtsBuildTimeOf`). The
+sidebar's tiles now show the price as it is at that moment, so they show the discount too.
+**Clone Vats** (`vats`, Dominion, 2x2, 2500, after a Barracks and a Research Lab): every soldier
+the barracks trains comes out twice, the second for nothing (`_rtsDeliverUnit`).
+
+**War Harvester** (`warharv`, Dominion, 1600, after a refinery, 1000 hp, heavy armour): it mines
+like any harvester and turns its anti-infantry gun on anything in reach as it goes, without
+leaving its work. Its aim is its own (`e.hgun`), not `e.target`, which the game reads as an order
+to go and fight.
+
+A Jetpack Trooper is now trained at the barracks. Batch 8 let it come out of an air pad, because
+`core/production.js` sent everything with `air` to one.
+
+The opponent neither builds nor buys them yet; that is batch 12. `unit/econ` (12) and `e2e/econ`
+(4) hold it. Batch 10b is the tech buildings an Engineer captures.

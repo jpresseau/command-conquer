@@ -273,6 +273,18 @@ var RTS_STRUCTS = [
   { key:'relayhub', name:'Relay Hub',     w:2, h:2, cost:600,  build:12, hp:500,  power:-50, sight:14,
     needs:['factory'], side:'allied', armour:'concrete', needsPower:true,
     desc:'Runs your Drone Tanks. Without a powered Relay Hub they stop dead. Compact.' },
+  /* THE ECONOMY (core/econ.js). THE ASSAY PLANT: every load a refinery takes pays a quarter more. */
+  { key:'assay',    name:'Assay Plant',   w:2, h:2, cost:1800, build:16, hp:600,  power:-50, sight:10,
+    needs:['refinery', 'radar'], side:'allied', armour:'concrete',
+    desc:'Every load your harvesters bring in pays a quarter more. One is enough. Compact.' },
+  /* THE FOUNDRY: vehicles a quarter cheaper and a quarter quicker to build */
+  { key:'foundry',  name:'Foundry',       w:3, h:2, cost:2000, build:18, hp:800,  power:-80, sight:10,
+    needs:['factory', 'radar'], side:'soviet', armour:'concrete',
+    desc:'Your vehicles cost a quarter less and build a quarter faster. One is enough. Dominion.' },
+  /* THE CLONE VATS: every soldier trained comes out twice */
+  { key:'vats',     name:'Clone Vats',    w:2, h:2, cost:2500, build:20, hp:600,  power:-100, sight:10,
+    needs:['barracks', 'lab'], side:'soviet', armour:'concrete',
+    desc:'Every soldier your barracks trains comes out twice. Dominion.' },
   /* THE FISSION REACTOR: twice a Fusion Plant's power for twice its price - and destroyed, it
      melts down: a blast, and the ground round it poisoned for most of a minute (core/rad.js). */
   { key:'reactor',  name:'Fission Reactor', w:3, h:3, cost:1000, build:16, hp:900,  power:400, sight:10,

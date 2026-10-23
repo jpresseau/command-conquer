@@ -7,6 +7,7 @@
 
 function _rtsUpdateHarvester(e, dt, d) {
   var G = window._rtsG;
+  if (d.weapon) _rtsHarvGuns(e, d);               /* a War Harvester shoots as it works: core/econ.js */
   if (!e.hstate) { if (e.order !== 'move') _rtsOrderHarvest(e, null, null); }
   if (e.order === 'move' && e.path) { _rtsSteer(e, dt, d); if (!e.path) e.order = null; return; }
 
@@ -140,6 +141,7 @@ function _rtsUpdateHarvester(e, dt, d) {
     e.carry -= give; e.carryVal = Math.max(0, e.carryVal - pay);
     /* Harvested_Money, not a credit deposit: this is the one income in the game that goes
        into the STORE, so it is the one the Storage cap can refuse. */
+    pay *= _rtsOreBonus(e.side);                 /* the Assay Plant: core/econ.js */
     var lost = _rtsHarvested(G.sides[e.side], pay);
     if (lost > 0 && e.side === 'player') _rtsSiloWarn(G.sides[e.side]);
     if (e.side === 'player') G.stats.mined = (G.stats.mined || 0) + Math.max(0, pay - lost);   /* the debrief's "credits mined" (record.js) */

@@ -338,9 +338,10 @@ function _rtsSyncSidebar(dt) {
       b.dataset.why = why || '';
       b.title = b.dataset.base + (why ? '\n\n' + why : '');
     }
-    var cls = 'rts-tile';
+    var cls = 'rts-tile', cost = _rtsCostOf('player', def), ct = b.querySelector('.ct');
+    if (ct && ct.textContent !== String(cost)) ct.textContent = cost;   /* what it costs now: a Foundry's (core/econ.js) */
     if (!avail) cls += ' locked';
-    else if (rtsMoney(S) < def.cost && !(q && q.key === key)) cls += ' poor';
+    else if (rtsMoney(S) < cost && !(q && q.key === key)) cls += ' poor';
     if (cat === 'struct' && S.ready === key) {
       cls += ' ready'; pct.textContent = 'READY'; wipe.style.background = 'none';
     } else if (q && q.key === key) {

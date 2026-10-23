@@ -384,6 +384,8 @@ function _rtsAirPadFor(side, u) {
 function _rtsDeliverUnit(side, key) {
   var u = _rtsDeliverUnitAt(side, key), G = window._rtsG;
   if (u && side === 'player') G.stats.built = (G.stats.built || 0) + 1;
+  /* the Clone Vats: a second soldier out of the door, for nothing (core/econ.js) */
+  if (u && _rtsCloned(side, key) && _rtsDeliverUnitAt(side, key) && side === 'player') G.stats.built++;
   return u;
 }
 function _rtsDeliverUnitAt(side, key) {
@@ -401,7 +403,7 @@ function _rtsDeliverUnitAt(side, key) {
   }
   /* AN AIRCRAFT IS BUILT ON ITS PAD. It used to come out of the war factory's door like a tank,
      across the base from the helipad that made it, and had to fly home before it could rearm. */
-  var pad = u.air ? _rtsAirPadFor(side, u) : null;
+  var pad = u.air && u.kind === 'air' ? _rtsAirPadFor(side, u) : null;   /* a Jetpack Trooper comes out of the barracks */
   if (pad) {
     var a = _rtsSpawnUnit(side, key, pad.x, pad.z);
     if (a) _rtsRallyOut(a, pad);
@@ -432,6 +434,7 @@ function _rtsBias(side) {
    a weak opponent is missing nameable abilities rather than just doing less damage. */
 function _rtsIQAt(level) { return _rtsBias(_rtsAIOn).iq >= level; }
 /* CostBias / BuildSpeedBias, applied wherever a price or a build time is read. */
-function _rtsCostOf(side, def) { return Math.round(def.cost * _rtsBias(side).cost); }
-function _rtsBuildTimeOf(side, def) { return Math.max(0.1, def.build * _rtsBias(side).build); }
+/* ...and the Foundry, for a vehicle (core/econ.js) */
+function _rtsCostOf(side, def) { return Math.round(def.cost * _rtsBias(side).cost * _rtsFoundryK(side, def)); }
+function _rtsBuildTimeOf(side, def) { return Math.max(0.1, def.build * _rtsBias(side).build * _rtsFoundryK(side, def)); }
 

@@ -863,7 +863,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">54cfeb6 · 2026-10-23</div>
+  <div id="rtsBuild" title="build">6d52b22 · 2026-10-23</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1141,6 +1141,18 @@ var RTS_STRUCTS = [
   { key:'relayhub', name:'Relay Hub',     w:2, h:2, cost:600,  build:12, hp:500,  power:-50, sight:14,
     needs:['factory'], side:'allied', armour:'concrete', needsPower:true,
     desc:'Runs your Drone Tanks. Without a powered Relay Hub they stop dead. Compact.' },
+  /* THE ECONOMY (core/econ.js). THE ASSAY PLANT: every load a refinery takes pays a quarter more. */
+  { key:'assay',    name:'Assay Plant',   w:2, h:2, cost:1800, build:16, hp:600,  power:-50, sight:10,
+    needs:['refinery', 'radar'], side:'allied', armour:'concrete',
+    desc:'Every load your harvesters bring in pays a quarter more. One is enough. Compact.' },
+  /* THE FOUNDRY: vehicles a quarter cheaper and a quarter quicker to build */
+  { key:'foundry',  name:'Foundry',       w:3, h:2, cost:2000, build:18, hp:800,  power:-80, sight:10,
+    needs:['factory', 'radar'], side:'soviet', armour:'concrete',
+    desc:'Your vehicles cost a quarter less and build a quarter faster. One is enough. Dominion.' },
+  /* THE CLONE VATS: every soldier trained comes out twice */
+  { key:'vats',     name:'Clone Vats',    w:2, h:2, cost:2500, build:20, hp:600,  power:-100, sight:10,
+    needs:['barracks', 'lab'], side:'soviet', armour:'concrete',
+    desc:'Every soldier your barracks trains comes out twice. Dominion.' },
   /* THE FISSION REACTOR: twice a Fusion Plant's power for twice its price - and destroyed, it
      melts down: a blast, and the ground round it poisoned for most of a minute (core/rad.js). */
   { key:'reactor',  name:'Fission Reactor', w:3, h:3, cost:1000, build:16, hp:900,  power:400, sight:10,
@@ -1319,6 +1331,12 @@ var RTS_UNITS = [
     needs:['lab'], veil:true,
     side:'allied', armour:'light',
     desc:'Hidden while it stands still and holds its fire: to the enemy it looks like a tree. Firing or moving gives it away.' },
+  /* THE WAR HARVESTER (core/econ.js): the Dominion's harvester carries a gun, and turns it on the
+     men who come for it without leaving its work. */
+  { key:'warharv',  name:'War Harvester', kind:'vehicle',  cost:1600, build:16, hp:1000, speed:6.5, turn:1.5,r:2.3, sight:16, weapon:'warmg',
+    needs:['refinery'], harvest:true, capacity:980,
+    side:'soviet', armour:'heavy',
+    desc:'A harvester with a gun: it keeps mining while it shoots the infantry that come for it. Tougher and slower than the ordinary one.' },
   /* THE JETPACK TROOPER (core/aloft.js): infantry that flies - over walls, water and cliffs - and
      only anti-air can touch it. Never goes home to reload. */
   { key:'jetpack',  name:'Jetpack Trooper', kind:'infantry', cost:600, build:9, hp:90,   speed:9,   turn:6,  r:1.1, sight:18, weapon:'jetgun',
@@ -1860,6 +1878,9 @@ var RTS_WEAPONS = {
   /* the Veil Tank's gun: a heavy, slow shot - it fires from hiding and gives itself away doing it */
   veilgun:    { dmg:85, range:17, cool:2.6, shot:'shell', speed:62, splash:2.2, wall:true, wood:true,
                 verses:{ none:0.7, wood:1.0, light:1.2, heavy:1.0, concrete:0.8 } },
+  /* the War Harvester's gun: for men, not for armour (core/econ.js) */
+  warmg:      { dmg:11, range:14, cool:0.4, shot:'tracer', speed:0, splash:0,
+                verses:{ none:1.0, wood:0.3, light:0.45, heavy:0.15, concrete:0.15 } },
   /* THE DEEP (core/deep.js). `grip` takes hold of a ship and crushes it, `dps` a second, while
      neither moves. */
   sonic:      { dmg:45, range:9, cool:1.4, shot:'arc', speed:0, splash:0, seaOnly:true,
@@ -7433,7 +7454,7 @@ function _sprBuildingModel(key, side) {
             pipe:pipe, ladder:ladder, rail:rail, steps:steps, drum:drum,
             crates:crates, floodlight:floodlight, plant:plant,
             sandbags:sandbags, ammo:ammo };
-  _sprBldBase(X, key) || _sprBldTech(X, key) || _sprBldWar(X, key) || _sprBldSuper(X, key) || _sprBldLens(X, key) || _sprBldTown(X, key) || _sprBldMind(X, key) || _sprBldRad(X, key);
+  _sprBldBase(X, key) || _sprBldTech(X, key) || _sprBldWar(X, key) || _sprBldSuper(X, key) || _sprBldLens(X, key) || _sprBldTown(X, key) || _sprBldMind(X, key) || _sprBldRad(X, key) || _sprBldEcon(X, key);
   return m;
 }
 function _sprBuildingClean(key, side) {
@@ -7472,7 +7493,7 @@ var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
   dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46,
   flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:53, drone:26, bomber:56, prismtank:36, arctank:38, dronetank:34, veiltank:35, riftharv:44, wrecker:40,
-  leviathan:66, falcon:40, hornet:20
+  leviathan:66, falcon:40, hornet:20, warharv:44
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -7628,7 +7649,7 @@ function _sprUnitModel(key, side, prone, part) {
      model line reads the same as it did when this was one function. */
   var X = { m:m, TM:TM, VH:VH, S:S, DK:DK, O:O, C:C, GN:GN,
             d:d, prone:prone, part:part, side:side, tracks:tracks };
-  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key) || _sprUnitHulls(X, key) || _sprUnitLens(X, key) || _sprUnitArc(X, key) || _sprUnitMind(X, key) || _sprUnitRift(X, key) || _sprUnitBlast(X, key) || _sprUnitAloft(X, key) || _sprUnitDeep(X, key))) {
+  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key) || _sprUnitHulls(X, key) || _sprUnitLens(X, key) || _sprUnitArc(X, key) || _sprUnitMind(X, key) || _sprUnitRift(X, key) || _sprUnitBlast(X, key) || _sprUnitAloft(X, key) || _sprUnitDeep(X, key) || _sprUnitEcon(X, key))) {
     _r3Box(m, 0, 0, -5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 0, 5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 2.5, 0, 15, 4, 8, TM[0], TM[1]);
@@ -9386,6 +9407,63 @@ function _sprUnitDeep(X, key) {
       _r3Box(m, L * 0.12 + cx * 2.6, 3.8, (cz - 0.5) * 3.0, 2.2, 1.0, 2.4, DK[0], GN[2]);
     for (var lz = -1; lz <= 1; lz += 2)                                 /* two launchers, raised, aft */
       _r3Box(m, -L * 0.36, 5.0, lz * 2.6, 6.0, 1.4, 1.6, GN[0], GN[2]);
+    return true;
+  }
+  return false;
+}
+</script>
+<script>/* sprites/econ.js - the War Harvester, the Assay Plant, the Foundry and the Clone Vats
+   (core/econ.js). Part of rts.sprites.
+
+   The War Harvester is the harvester's hopper and cab with a gun on the cab roof. The Assay Plant
+   is a low hall feeding two tall assay columns by a covered belt; the Foundry a long casting shed
+   under three chimneys with a gantry over its yard; the Clone Vats a row of glass-domed tanks lit
+   green from inside. */
+var RTS_ECON_GLOW = ['#6fe08a', '#c8ffd2'];
+
+function _sprUnitEcon(X, key) {
+  var m = X.m, VH = X.VH, TM = X.TM, S = X.S, DK = X.DK, GN = X.GN;
+  if (key !== 'warharv') return false;
+  X.tracks(18, 5.6, 5, 2.1);
+  _r3Slab(m, 1.0, 2.9, 0, 15, 3.4, 10, 1.2, VH[0], VH[1]);
+  _r3Box(m, 6.6, 6.3, 0, 4.6, 3.6, 7.6, VH[1], VH[3]);                    /* the cab */
+  _r3Box(m, 8.9, 7.4, 0, 0.6, 1.6, 5.8, RTS_PAL.glass, RTS_PAL.glass);
+  _r3Box(m, -2.6, 6.3, 0, 8.8, 4.2, 9.0, VH[2], VH[0]);                   /* the hopper */
+  _r3Box(m, -2.6, 8.5, 0, 9.0, 0.4, 9.2, TM[1], TM[3]);                   /* its rim, team colour */
+  _r3Cyl(m, 6.4, 8.2, 0, 1.6, 1.0, DK[1], DK[2], 16);                     /* the gun mount on the cab */
+  _r3Box(m, 8.6, 8.9, 0, 4.4, 0.7, 0.7, GN[0], GN[2]);                    /* the gun */
+  for (var p = -1; p <= 1; p += 2) _r3Box(m, 2.0, 4.6, p * 5.2, 9.0, 1.4, 0.6, DK[1], DK[2]);   /* armour skirts */
+  return true;
+}
+function _sprBldEcon(X, key) {
+  var m = X.m, W = X.W, D = X.D, C = X.C, S = X.S, B = X.B, WH = X.WH, DK = X.DK, i;
+  if (key === 'assay') {
+    _r3Box(m, 0, 0, 0, W - 6, 3, D - 6, C[2], C[0]);
+    _r3Box(m, -5, 3, 4, W - 22, 7, D - 22, WH[1], WH[3]);                 /* the hall */
+    X.facade(4, 2, (W - 22) / 2, (D - 22) / 2);
+    _r3Box(m, -5, 10, 4, W - 20, 1.0, D - 20, B.roof, B.roof);
+    for (i = 0; i < 2; i++) _r3Cyl(m, 9, 3, -9 + i * 9, 3.0, 15, S[1], S[2], 20);   /* the assay columns */
+    _r3Box(m, 4, 11, -4.5, 10, 1.6, 2.0, S[2], S[3]);                     /* the covered belt to them */
+    return true;
+  }
+  if (key === 'foundry') {
+    _r3Box(m, 0, 0, 0, W - 6, 3, D - 6, C[2], C[0]);
+    _r3Box(m, -4, 3, 0, W - 18, 9, D - 14, WH[1], WH[3]);                 /* the casting shed */
+    X.facade(6, 2, (W - 18) / 2, (D - 14) / 2);
+    _r3Box(m, -4, 12, 0, W - 16, 1.2, D - 12, B.roof, B.roof);
+    for (i = 0; i < 3; i++) _r3Cyl(m, -14 + i * 9, 13, -4, 1.6, 10, DK[1], DK[0], 16);   /* three chimneys */
+    _r3Box(m, W / 2 - 8, 3, 0, 1.0, 12, 1.0, S[1], S[3]);                 /* the gantry over the yard */
+    _r3Box(m, W / 2 - 8, 15, 0, 1.0, 1.0, D - 12, S[1], S[3]);
+    return true;
+  }
+  if (key === 'vats') {
+    _r3Box(m, 0, 0, 0, W - 6, 3, D - 6, C[2], C[0]);
+    for (i = 0; i < 4; i++) {                                              /* the vats, lit from inside */
+      var vx = -7 + (i % 2) * 14, vz = -7 + ((i / 2) | 0) * 14;
+      _r3Cyl(m, vx, 3, vz, 4.4, 6, S[1], S[2], 20);
+      _r3Cyl(m, vx, 9, vz, 3.8, 3, RTS_ECON_GLOW[0], RTS_ECON_GLOW[1], 20);
+      _r3Cyl(m, vx, 12, vz, 4.0, 0.6, B.roof, B.roof, 20);
+    }
     return true;
   }
   return false;
@@ -16685,6 +16763,8 @@ function _rtsAirPadFor(side, u) {
 function _rtsDeliverUnit(side, key) {
   var u = _rtsDeliverUnitAt(side, key), G = window._rtsG;
   if (u && side === 'player') G.stats.built = (G.stats.built || 0) + 1;
+  /* the Clone Vats: a second soldier out of the door, for nothing (core/econ.js) */
+  if (u && _rtsCloned(side, key) && _rtsDeliverUnitAt(side, key) && side === 'player') G.stats.built++;
   return u;
 }
 function _rtsDeliverUnitAt(side, key) {
@@ -16702,7 +16782,7 @@ function _rtsDeliverUnitAt(side, key) {
   }
   /* AN AIRCRAFT IS BUILT ON ITS PAD. It used to come out of the war factory's door like a tank,
      across the base from the helipad that made it, and had to fly home before it could rearm. */
-  var pad = u.air ? _rtsAirPadFor(side, u) : null;
+  var pad = u.air && u.kind === 'air' ? _rtsAirPadFor(side, u) : null;   /* a Jetpack Trooper comes out of the barracks */
   if (pad) {
     var a = _rtsSpawnUnit(side, key, pad.x, pad.z);
     if (a) _rtsRallyOut(a, pad);
@@ -16733,8 +16813,9 @@ function _rtsBias(side) {
    a weak opponent is missing nameable abilities rather than just doing less damage. */
 function _rtsIQAt(level) { return _rtsBias(_rtsAIOn).iq >= level; }
 /* CostBias / BuildSpeedBias, applied wherever a price or a build time is read. */
-function _rtsCostOf(side, def) { return Math.round(def.cost * _rtsBias(side).cost); }
-function _rtsBuildTimeOf(side, def) { return Math.max(0.1, def.build * _rtsBias(side).build); }
+/* ...and the Foundry, for a vehicle (core/econ.js) */
+function _rtsCostOf(side, def) { return Math.round(def.cost * _rtsBias(side).cost * _rtsFoundryK(side, def)); }
+function _rtsBuildTimeOf(side, def) { return Math.max(0.1, def.build * _rtsBias(side).build * _rtsFoundryK(side, def)); }
 
 </script>
 <script>/* core/orders.js - what a unit is told to do: move, hold, board, unload, capture, attack,
@@ -18547,6 +18628,7 @@ function _rtsUpdateProj(dt) {
 
 function _rtsUpdateHarvester(e, dt, d) {
   var G = window._rtsG;
+  if (d.weapon) _rtsHarvGuns(e, d);               /* a War Harvester shoots as it works: core/econ.js */
   if (!e.hstate) { if (e.order !== 'move') _rtsOrderHarvest(e, null, null); }
   if (e.order === 'move' && e.path) { _rtsSteer(e, dt, d); if (!e.path) e.order = null; return; }
 
@@ -18680,6 +18762,7 @@ function _rtsUpdateHarvester(e, dt, d) {
     e.carry -= give; e.carryVal = Math.max(0, e.carryVal - pay);
     /* Harvested_Money, not a credit deposit: this is the one income in the game that goes
        into the STORE, so it is the one the Storage cap can refuse. */
+    pay *= _rtsOreBonus(e.side);                 /* the Assay Plant: core/econ.js */
     var lost = _rtsHarvested(G.sides[e.side], pay);
     if (lost > 0 && e.side === 'player') _rtsSiloWarn(G.sides[e.side]);
     if (e.side === 'player') G.stats.mined = (G.stats.mined || 0) + Math.max(0, pay - lost);   /* the debrief's "credits mined" (record.js) */
@@ -22489,6 +22572,43 @@ function _rtsDeepTick(dt) {
   }
 }
 </script>
+<script>/* core/econ.js - THE ECONOMY: the buildings that make money go further, and the harvester that
+   fights for it.
+
+   Each of these works while it stands and is finished (_rtsHas counts nothing still going up) -
+   power or no power, as a refinery does - and one is enough: a second adds nothing.
+
+   THE ASSAY PLANT (`assay`): every load a refinery takes pays RTS_ECON.assay as much
+   (core/harvest.js, at the unload). THE FOUNDRY (`foundry`): a vehicle costs and builds in
+   RTS_ECON.foundry of its price and time (core/production.js _rtsCostOf, _rtsBuildTimeOf - so the
+   sidebar's price says so too). THE CLONE VATS (`vats`): every soldier the barracks trains comes
+   out twice (core/production.js _rtsDeliverUnit), the second for nothing.
+
+   THE WAR HARVESTER (`harvest` with a weapon): it mines like any harvester, and turns its gun on
+   anything in reach as it goes, without leaving its work (core/harvest.js asks _rtsHarvGuns). */
+var RTS_ECON = { assay: 1.25, foundry: 0.75 };
+
+/* what a load's worth pays at `side`'s refineries */
+function _rtsOreBonus(side) { return _rtsHas(side, 'assay') ? RTS_ECON.assay : 1; }
+/* a vehicle's price and time at `side`, the Foundry counted */
+function _rtsFoundryK(side, def) { return def && def.kind === 'vehicle' && _rtsHas(side, 'foundry') ? RTS_ECON.foundry : 1; }
+/* a soldier out of the barracks: one more for nothing, with the Clone Vats standing */
+function _rtsCloned(side, key) {
+  var d = rtsUnitDef(key);
+  return !!(d && d.kind === 'infantry' && !d.air && _rtsHas(side, 'vats'));
+}
+/* the War Harvester's gun, on whatever comes in reach while it works */
+function _rtsHarvGuns(e, d) {
+  var w = d.weapon && RTS_WEAPONS[d.weapon];
+  if (!w || e.cool > 0) return;
+  /* its own aim (e.hgun, an id), not e.target: a harvester's orders are its work, and the rest of
+     the game reads a target as an order to go and fight */
+  var G = window._rtsG, held = e.hgun != null && G.byId[e.hgun];
+  var t = held && !held.dead && _rtsHostile(held.side, e.side) && _rtsRangeTo(e, held) <= w.range ? held : _rtsFindTarget(e, w.range, w);
+  e.hgun = t ? t.id : null;
+  if (t) _rtsFire(e, t, w);
+}
+</script>
 <script>/* core/missions.js - the team mission list (TEAMTYPE.CPP): the script a team runs.
    Part of rts.core, the simulation. */
 
@@ -23864,6 +23984,7 @@ var RTS_REPLAY_PURE = {
     '_rtsWX', '_rtsWhyLocked', 'rtsArmyName', 'rtsArmyTitle', 'rtsBuildableBy', 'rtsCapacity', 'rtsCapturable',
     'rtsHouseSide', 'rtsMoney', 'rtsStructDef', 'rtsUnitDef', 'rtsArmySide', '_rtsReplayHash', '_rtsRevealed', '_rtsReplayValid',
     '_rtsReplayTimes',
+    '_rtsCostOf',                               /* a sidebar tile's price as it stands now: ui/sidebar.js */
     /* the picture's: heights, sight and where a gun points (src/render, src/render3d) */
     '_rtsAirLift', '_rtsVisible', '_rtsMineShown', '_rtsBridgeDeckY', '_rtsMuzzleAngle', '_rtsFireCoord',
     '_rtsSeen', '_rtsVeiled',                    /* a Veil Tank drawn as a tree: render3d/veil3d.js */
@@ -35141,9 +35262,10 @@ function _rtsSyncSidebar(dt) {
       b.dataset.why = why || '';
       b.title = b.dataset.base + (why ? '\n\n' + why : '');
     }
-    var cls = 'rts-tile';
+    var cls = 'rts-tile', cost = _rtsCostOf('player', def), ct = b.querySelector('.ct');
+    if (ct && ct.textContent !== String(cost)) ct.textContent = cost;   /* what it costs now: a Foundry's (core/econ.js) */
     if (!avail) cls += ' locked';
-    else if (rtsMoney(S) < def.cost && !(q && q.key === key)) cls += ' poor';
+    else if (rtsMoney(S) < cost && !(q && q.key === key)) cls += ' poor';
     if (cat === 'struct' && S.ready === key) {
       cls += ' ready'; pct.textContent = 'READY'; wipe.style.background = 'none';
     } else if (q && q.key === key) {
