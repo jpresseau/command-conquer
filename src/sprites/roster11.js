@@ -1,0 +1,43 @@
+/* sprites/roster11.js - the Tank Hunter and the Long Gun (rules/roster11.js). Part of
+   rts.sprites. The Marksman and the Flak Trooper are soldiers, drawn with the others in
+   sprites/unit-ground.js and render3d/soldier3d.js, told apart by their kit (sprites/unitmodels.js).
+
+   The Tank Hunter has no turret: a low casemate on tracks, its long gun set in the glacis, so it
+   turns its whole hull to shoot, and a squat hull reads as a hunter beside the turreted tanks.
+   The Long Gun is one enormous barrel on a ring mount, laid along its pad over a sunken
+   emplacement, with ammunition hoists at the back. */
+function _sprUnitR11(X, key) {
+  var m = X.m, VH = X.VH, TM = X.TM, S = X.S, DK = X.DK, GN = X.GN, s;
+  if (key !== 'hunter') return false;
+  X.tracks(17, 5.6, 5, 2.0);
+  _r3Slab(m, 0, 2.9, 0, 15.6, 2.6, 9.4, 1.0, VH[0], VH[1]);                /* the hull */
+  _r3Hip(m, -1.4, 5.5, 0, 11.6, 2.2, 8.4, 2.6, VH[2]);                      /* the casemate, sloped */
+  _r3Box(m, -2.4, 7.6, 0, 5.6, 0.4, 5.2, TM[1], TM[3]);                     /* its roof hatch, team colour */
+  _r3Cyl(m, 4.2, 5.4, 0, 1.5, 1.6, DK[1], DK[2], 16);                       /* the mantlet */
+  _r3Wheel(m, 10.0, 5.4, 0, 0.75, 11.6, 'x', GN[0], GN[2], 16);              /* the long gun */
+  _r3Wheel(m, 15.6, 5.4, 0, 1.05, 1.6, 'x', DK[0], DK[2], 16);              /* its muzzle brake */
+  for (s = -1; s <= 1; s += 2) _r3Box(m, 0.4, 4.4, s * 5.0, 12.0, 1.4, 0.5, DK[1], DK[2]);   /* side skirts */
+  _r3Box(m, -7.4, 4.6, 0, 1.6, 1.2, 6.0, S[1], S[3]);                       /* the engine deck */
+  return true;
+}
+function _sprBldR11(X, key) {
+  var m = X.m, W = X.W, D = X.D, C = X.C, S = X.S, B = X.B, DK = X.DK, GN = RTS_PAL.gun, i;
+  if (key !== 'longgun') return false;
+  _r3Box(m, 0, 0, 0, W - 4, 2, D - 4, C[2], C[0]);                          /* the emplacement */
+  for (i = 0; i < 12; i++) {                                                 /* a ring of sandbags round the mount */
+    var sa = i / 12 * Math.PI * 2;
+    _r3Box(m, Math.cos(sa) * 17, 2, Math.sin(sa) * 17, 4.2, 2.4, 4.2, C[3], C[1]);
+  }
+  _r3Cyl(m, 0, 2, 0, 14, 3, S[1], S[2], 28);                                /* the ring mount */
+  _r3Cyl(m, 0, 5, 0, 12.6, 1.0, B.roof, B.roof, 28);                        /* team band */
+  _r3Slab(m, -3, 6, 0, 17, 8, 15, 1.8, DK[0], DK[1]);                       /* the gun house, armoured */
+  _r3Hip(m, -3, 14, 0, 16, 2.2, 14, 3.0, DK[1]);
+  _r3Box(m, -3, 16.4, 0, 6, 0.6, 15.4, B.roof, B.roof);                     /* a team stripe over the roof */
+  _r3Cyl(m, 6.2, 9.2, 0, 3.6, 4.2, DK[1], DK[2], 20);                        /* the mantlet */
+  for (i = 0; i < 6; i++)                                                    /* the barrel, stepping down and rising */
+    _r3Wheel(m, 9.6 + i * 4.4, 11.2 + i * 0.7, 0, 2.9 - i * 0.22, 4.5, 'x', GN[i & 1 ? 1 : 0], GN[2], 20);
+  _r3Wheel(m, 36.4, 15.6, 0, 2.6, 2.2, 'x', DK[0], DK[2], 20);              /* the muzzle brake */
+  for (i = 0; i < 2; i++) _r3Box(m, -W / 2 + 6, 2, -6 + i * 12, 4, 12, 4, S[2], S[3]);   /* ammunition hoists */
+  _r3Box(m, -W / 2 + 6, 14, 0, 4.4, 1.2, 16, S[1], S[3]);
+  return true;
+}

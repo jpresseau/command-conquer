@@ -17,7 +17,7 @@ var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
   dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46,
   flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:53, drone:26, bomber:56, prismtank:36, arctank:38, dronetank:34, veiltank:35, riftharv:44, wrecker:40,
-  leviathan:66, falcon:40, hornet:20, warharv:44
+  leviathan:66, falcon:40, hornet:20, warharv:44, hunter:38
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -55,7 +55,12 @@ var RTS_INF_KIT = {
      (core/rad.js) */
   blight:    { body:['#b8a632','#d4c24a'], top:'#5a7a2a', prop:'#7fe04a' },
   /* a grey flight suit, a crimson flying helmet, and the jetpack on his back (core/aloft.js) */
-  jetpack:   { body:['#6a7078','#868c94'], top:'#e02a5a', prop:'#c8ccd2' }
+  jetpack:   { body:['#6a7078','#868c94'], top:'#e02a5a', prop:'#c8ccd2' },
+  /* BATCH 11a (rules/roster11.js): the Marksman in a ghillie of green rags under a green bush
+     hat, his long rifle dark; the Flak Trooper in field grey under a steel-blue helmet, a grey
+     twin-barrelled flak gun on his shoulder */
+  marksman:  { body:['#4a5a3a','#5e7048'], top:'#2a7a5a', prop:'#2b3038' },
+  flakman:   { body:['#5a5048','#746a5e'], top:'#4a8aaa', prop:'#8a8f96' }
 };
 
 /* HOW FAR ROUND THE RUNNING GEAR HAS TURNED, 0 to 1 - set by the 3D renderer for the length of
@@ -173,7 +178,7 @@ function _sprUnitModel(key, side, prone, part) {
      model line reads the same as it did when this was one function. */
   var X = { m:m, TM:TM, VH:VH, S:S, DK:DK, O:O, C:C, GN:GN,
             d:d, prone:prone, part:part, side:side, tracks:tracks };
-  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key) || _sprUnitHulls(X, key) || _sprUnitLens(X, key) || _sprUnitArc(X, key) || _sprUnitMind(X, key) || _sprUnitRift(X, key) || _sprUnitBlast(X, key) || _sprUnitAloft(X, key) || _sprUnitDeep(X, key) || _sprUnitEcon(X, key))) {
+  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key) || _sprUnitHulls(X, key) || _sprUnitLens(X, key) || _sprUnitArc(X, key) || _sprUnitMind(X, key) || _sprUnitRift(X, key) || _sprUnitBlast(X, key) || _sprUnitAloft(X, key) || _sprUnitDeep(X, key) || _sprUnitEcon(X, key) || _sprUnitR11(X, key))) {
     _r3Box(m, 0, 0, -5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 0, 5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 2.5, 0, 15, 4, 8, TM[0], TM[1]);

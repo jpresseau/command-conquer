@@ -209,6 +209,10 @@ a Machine Shop and an Airstrip stand between the bases. Send an Engineer into on
 the derrick pays, the hospital heals your soldiers, the shop mends your vehicles, and the airstrip
 drops paratroopers wherever you choose.
 
+**Soldiers of the line.** The Compact's Marksman kills a soldier with one shot from twice a rifle's
+reach, its Tank Hunter is a hull-mounted gun that only hurts armour, and its Long Gun outranges
+every other base defence. The Dominion's Flak Trooper brings down aircraft on foot.
+
 **The enemy uses its whole garage.** It mines the approach to its own base, and once you have a
 harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands
 them beside your ore field, and goes home to do it again.

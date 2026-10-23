@@ -144,6 +144,19 @@ function _r3dSoldierMan(m, key, mx, mz, pose, lead, K) {
     _r3dLimb(m, cx + 0.8, cy - 1.0, mz - 0.2, cx + 4.0, cy - 1.2, mz - 0.2, 0.45, 0.35, 12, DK[2]);
     _r3dBall(m, cx + 4.2, cy - 1.2, mz - 0.2, 0.4, kit.prop, 10, 6);
     _r3Cyl(m, mx - 2.0, hipY + 0.8, mz, 1.0, 3.2, kit.prop, '#c8ff8a', 16);
+  } else if (key === 'marksman') {
+    /* the long rifle held to the shoulder, its scope on top */
+    armTo(-1, cx + 1.2, cy - 0.8, mz - 1.4, cx + 2.4, cy - 0.5, mz - 0.6);
+    armTo(1, cx + 1.2, cy - 0.8, mz + 1.4, cx + 3.4, cy - 0.6, mz - 0.1);
+    _r3Box(m, cx + 3.6, cy - 0.55, mz - 0.3, 6.4, 0.45, 0.4, kit.prop, DK[2]);
+    _r3dLimb(m, cx + 2.0, cy - 0.05, mz - 0.3, cx + 3.6, cy - 0.05, mz - 0.3, 0.28, 0.28, 12, DK[3]);
+  } else if (key === 'flakman') {
+    /* the flak gun on his right shoulder, two barrels up and forward, a hand on its grip */
+    armTo(-1, cx + 1.0, cy - 0.6, mz - 1.4, cx + 1.6, cy + 0.2, mz - 1.3);
+    armTo(1, cx + 1.0, cy - 0.8, mz + 1.4, cx + 2.0, cy - 0.6, mz + 0.6);
+    _r3Box(m, cx + 0.6, cy + 0.7, mz - 1.3, 2.4, 1.2, 1.2, kit.prop, DK[2]);
+    _r3dLimb(m, cx + 1.6, cy + 0.9, mz - 1.65, cx + 4.6, cy + 1.6, mz - 1.65, 0.3, 0.26, 12, kit.prop);
+    _r3dLimb(m, cx + 1.6, cy + 0.9, mz - 0.95, cx + 4.6, cy + 1.6, mz - 0.95, 0.3, 0.26, 12, kit.prop);
   } else if (key === 'jetpack') {
     /* the carbine held forward, and the two thrusters on his back, nozzles down */
     armTo(-1, cx + 1.2, cy - 0.8, mz - 1.4, cx + 2.4, cy - 0.5, mz - 1.0);
