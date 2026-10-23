@@ -186,7 +186,7 @@ function _rtsFindTarget(e, range, w) {
 function _rtsGuns(e) {
   var d = (e.type === 'struct') ? rtsStructDef(e.def) : rtsUnitDef(e.def);
   var out = [];
-  if (d && d.weapon) out.push(RTS_WEAPONS[d.weapon]);
+  if (d && d.weapon) out.push(RTS_WEAPONS[d.ifv ? _rtsIfvGun(e, d) : d.weapon]);   /* a carrier fires its passenger's: core/ifv.js */
   if (d && d.weapon2) out.push(RTS_WEAPONS[d.weapon2]);
   return out;
 }
@@ -200,6 +200,7 @@ function _rtsPickWeapon(e, tgt) {
     if (dist <= _rtsElevReach(e, tgt, w.range)) v *= 2;
     if (!mod) v = 0;                                  /* FIRE_CANT */
     if (!_rtsWeaponReaches(w, tgt)) v = 0;            /* a limpet for a hull, not a man: core/blast.js */
+    if (w.lase && e.laseT > window._rtsG.t) v = 0;    /* a strike called, the next not yet: core/marshal.js */
     if (v > bv) { bv = v; best = w; }
   }
   return best;
@@ -258,6 +259,8 @@ function _rtsFireCoord(e, w) {
 function _rtsWeaponReaches(w, tgt) {
   if (w && w.mind) return !_rtsMindproof(tgt);   /* a Mentalist reaches only a unit it can take: core/mind.js */
   if (w && w.plant) return _rtsPlantable(w, tgt);   /* a charge goes on what it can go on: core/blast.js */
+  if (w && w.latch) return _rtsLatchable(tgt);      /* a Leech Drone into a vehicle: core/leech.js */
+  if (w && w.lase) return !!tgt && !tgt.air;        /* a Marshal's mark is on the ground: core/marshal.js */
   if (!w || !w.seaOnly) return true;
   if (!tgt) return false;
   if (tgt.type === 'struct') return false;
@@ -317,7 +320,7 @@ function _rtsFire(e, tgt, w) {
      Set at the one place every route to a shot passes through, so there is no way to fire from
      under water. */
   if ((rtsUnitDef(e.def) || {}).cloak) e.decloak = RTS_SUB_SURFACE;
-  if (typeof _rtsSfx === 'function' && !w.plant && !w.self && !w.drop && !w.launch && !w.grip) _rtsSfx(w.shot === 'beam' ? 'beam' : w.shot === 'arc' ? 'zap' : w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
+  if (typeof _rtsSfx === 'function' && !w.plant && !w.self && !w.drop && !w.launch && !w.grip && !w.latch) _rtsSfx(w.shot === 'beam' ? 'beam' : w.shot === 'arc' ? 'zap' : w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
     : (w.shot === 'missile' ? 'rocket' : (e.type === 'struct' ? 'turretgun' : 'cannon')), e.x, e.z);
   if (w.mind) {                                    /* no damage: the unit changes side (core/mind.js) */
     if (_rtsMindTake(e, tgt)) { var mb = _rtsLensBeamFx(e, tgt, w); mb.mind = 1; G.fx.push(mb); }
@@ -332,6 +335,8 @@ function _rtsFire(e, tgt, w) {
           * _rtsArcCharge(e)                      /* ...and an Arc Tower's troopers charge it (core/arc.js) */
           * (e.dug ? RTS_DIG.fire : 1);           /* ...and a squad dug in hits harder (core/dig.js) */
   if (w.grip) { _rtsGrip(e, tgt); return; }            /* a Kraken takes hold: core/deep.js */
+  if (w.lase) { _rtsLase(e, tgt, w); return; }         /* a Marshal calls the jets: core/marshal.js */
+  if (w.latch) { _rtsLatch(e, tgt, w); return; }       /* a Leech Drone climbs in: core/leech.js */
   if (w.drop) { _rtsSkyDrop(e, w, raw); return; }       /* bombs down from the airship: core/aloft.js */
   if (w.launch) { _rtsLaunch(e, tgt, w); return; }     /* a Carrier's drone away */
   if (w.plant) { _rtsPlant(e, tgt, w, raw); return; }   /* a charge left on it, no damage yet: core/blast.js */

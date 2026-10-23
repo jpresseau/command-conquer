@@ -94,12 +94,12 @@ a section below with its numbers.
 | 10, `airstrip` | Tech Airfield | map | Airstrip | captured, a Paratroopers superweapon |
 | 11, `marksman` | Sniper | Compact | Marksman | kills infantry from beyond their range |
 | 11, `hunter` | Tank Destroyer | Compact | Tank Hunter | a cannon that only hurts armour |
-| 11 | IFV | Compact | Multi-role Carrier | its weapon is whoever rides in it |
+| 11, `ifv` | IFV | Compact | Multi-role Carrier | its weapon is whoever rides in it |
 | 11, `flakman` | Flak Trooper | Dominion | Flak Trooper | infantry anti-air |
-| 11 | Boris | Dominion | Marshal | calls air strikes on a lased target |
+| 11, `marshal` | Boris | Dominion | Marshal | calls air strikes on a lased target |
 | 11, `longgun` | Grand Cannon | Compact | Long Gun | a huge, far-reaching base cannon |
-| 11 | Terror Drone | Dominion | Leech Drone | climbs inside a vehicle and eats it from within |
-| 11 | Wall gates | both | Gate | a wall section your own units open |
+| 11, `leech` | Terror Drone | Dominion | Leech Drone | climbs inside a vehicle and eats it from within |
+| 11, `gate` | Wall gates | both | Gate | a wall section your own units open |
 | 12 | — | both | AI use and balance | the opponent uses each batch, measured in self-play |
 
 ## Batch 1: the Lens (`core/lens.js`, `sprites/lens.js`)
@@ -392,3 +392,34 @@ kit. `rules/units.js` is at the 500-line cap, so they join `RTS_UNITS`, `RTS_STR
 The opponent does not buy or build them yet; that is batch 12. `unit/roster11` (18) and
 `e2e/roster11` (6) hold it. Batch 11b is the rest of batch 11: the Multi-role Carrier, the Marshal,
 the Leech Drone and the Gate.
+
+## Batch 11b: the carrier, the marshal, the leech and the gate (`core/ifv.js`, `core/marshal.js`, `core/leech.js`, `core/gate.js`)
+
+- **Multi-role Carrier** (`ifv`, Compact, 700): carries one soldier, and its gun is his.
+  `_rtsGuns` (`core/combat.js`) asks `_rtsIfvGun` for the weapon the passenger's key names in the
+  unit's `ifv` table: a Rocket Squad gives it `rocket`, a Marksman `marksgun`, a Flak Trooper
+  `flakgun`, any other soldier with a gun `mg`. Empty, or carrying a soldier with no gun, it fires
+  its own `ifvmissile`, which reaches aircraft. An Engineer aboard also mends its side's vehicles
+  within 3 cells (10 hp a second), and a Field Medic its soldiers (6).
+- **Marshal** (`marshal`, Dominion, 1500, after a Research Lab, one at a time): a rifle for men,
+  and `lase` for a building or a vehicle. The lase is a red beam, and `strike.jets` (2) Strike
+  Jets (`strikejet`, never built) come in from the map's edge behind him, each laying 3 bombs of
+  140 across the mark (the Heavy Bomber's falling bombs, `core/bomber.js`), and fly on to the far
+  edge, where they are gone. The air clamp (`core/airspace.js`) keeps an aircraft on the map, so a
+  jet is removed when it reaches the edge rather than when it leaves. A jet follows its mark until
+  its first bomb is away. He can call one strike every 24 s, on a recharge of its own (`e.laseT`)
+  so his rifle is not held up by it, and calls it himself at an enemy building in reach.
+- **Leech Drone** (`leech`, Dominion, 500): its bite climbs inside an enemy vehicle (`inside`, as a
+  passenger is, so nothing can shoot it and it is not drawn) and eats it, 22 a second through any
+  armour, until it dies; then the drone climbs out and hunts again. A vehicle carries one. A Repair
+  Truck of the host's side with the host in its reach, or a Repair Bay, gets it out, and it dies.
+  A save keeps it latched.
+- **Gate** (`gate`, both armies, 150, after a Barracks): a wall section. Its cell is blocked as any
+  building's is, but `_rtsBlocked` (`core/grid.js`) lets through the side whose unit is moving:
+  `core/tick.js` names that side in `_rtsGateSide` while it updates the unit, and so do the path
+  request (`core/move.js` `_rtsPathFor`) and the push apart (`_rtsSeparate`). Anything else asking
+  (a building being placed, the opponent's planner) finds it shut. It stands open, in the picture,
+  while one of its own is beside it.
+
+The opponent does not buy or build them yet; that is batch 12. `unit/roster11b` (24) and
+`e2e/roster11b` (6) hold it.

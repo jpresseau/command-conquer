@@ -144,6 +144,12 @@ function _r3dSoldierMan(m, key, mx, mz, pose, lead, K) {
     _r3dLimb(m, cx + 0.8, cy - 1.0, mz - 0.2, cx + 4.0, cy - 1.2, mz - 0.2, 0.45, 0.35, 12, DK[2]);
     _r3dBall(m, cx + 4.2, cy - 1.2, mz - 0.2, 0.4, kit.prop, 10, 6);
     _r3Cyl(m, mx - 2.0, hipY + 0.8, mz, 1.0, 3.2, kit.prop, '#c8ff8a', 16);
+  } else if (key === 'marshal') {
+    /* the rifle held across him, the red designator on top of it */
+    armTo(-1, cx + 1.2, cy - 0.8, mz - 1.4, cx + 2.4, cy - 0.5, mz - 0.6);
+    armTo(1, cx + 1.2, cy - 0.8, mz + 1.4, cx + 3.0, cy - 0.6, mz - 0.1);
+    _r3Box(m, cx + 3.2, cy - 0.55, mz - 0.3, 4.4, 0.5, 0.45, DK[2], DK[3]);
+    _r3Box(m, cx + 2.6, cy - 0.05, mz - 0.3, 1.2, 0.5, 0.5, kit.prop, kit.prop);
   } else if (key === 'marksman') {
     /* the long rifle held to the shoulder, its scope on top */
     armTo(-1, cx + 1.2, cy - 0.8, mz - 1.4, cx + 2.4, cy - 0.5, mz - 0.6);

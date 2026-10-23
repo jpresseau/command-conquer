@@ -17,7 +17,7 @@ var RTS_UNIT_SPAN = {
   rifle:22, rocket:23, grenadier:22, flame:23, engineer:22, medic:22, thief:22, tanya:20,
   dog:17, buggy:30, light:33, tank:39, arty:41, heavy:47, harvester:43, mcv:46, apc:34, heli:40, tran:46,
   flaktrack:34, minelayer:37, bridgelayer:42, hovercraft:40, sweeper:38, spotter:30, repairtruck:38, jammer:37, skycrane:46, paraplane:53, drone:26, bomber:56, prismtank:36, arctank:38, dronetank:34, veiltank:35, riftharv:44, wrecker:40,
-  leviathan:66, falcon:40, hornet:20, warharv:44, hunter:38
+  leviathan:66, falcon:40, hornet:20, warharv:44, hunter:38, ifv:34, strikejet:42, leech:16
 };
 
 /* Eight of the fifteen units are infantry, and at one cell tall their SILHOUETTES cannot be
@@ -60,7 +60,10 @@ var RTS_INF_KIT = {
      hat, his long rifle dark; the Flak Trooper in field grey under a steel-blue helmet, a grey
      twin-barrelled flak gun on his shoulder */
   marksman:  { body:['#4a5a3a','#5e7048'], top:'#2a7a5a', prop:'#2b3038' },
-  flakman:   { body:['#5a5048','#746a5e'], top:'#4a8aaa', prop:'#8a8f96' }
+  flakman:   { body:['#5a5048','#746a5e'], top:'#4a8aaa', prop:'#8a8f96' },
+  /* 11b: the Marshal in a long brown greatcoat under a dark red officer's cap, a red designator
+     on his rifle (core/marshal.js) */
+  marshal:   { body:['#4a3a2e','#64503e'], top:'#7a1a1a', prop:'#e8302a' }
 };
 
 /* HOW FAR ROUND THE RUNNING GEAR HAS TURNED, 0 to 1 - set by the 3D renderer for the length of

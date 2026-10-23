@@ -161,6 +161,9 @@ function _sprUnitGround(X, key) {
       } else if (key === 'blight') {
         _r3Cyl(m, mx - 2.0, 3.0, mz, 1.1, 3.4, kit.prop, '#c8ff8a', 14);           /* the canister on his back */
         _r3Box(m, mx + 2.6, 4.2, mz - 0.4, 4.2, 1.2, 1.2, kit.prop, DK[3]);
+      } else if (key === 'marshal') {
+        _r3Box(m, mx + 2.6, 4.4, mz - 0.4, 4.4, 0.9, 0.9, DK[2], DK[3]);                /* his rifle */
+        _r3Box(m, mx + 1.6, 5.2, mz - 0.4, 1.4, 0.7, 0.7, kit.prop, kit.prop);          /* the designator on it */
       } else if (key === 'marksman') {
         _r3Box(m, mx + 3.4, 4.4, mz - 0.4, 7.0, 0.8, 0.8, kit.prop, DK[3]);              /* the long rifle */
         _r3Box(m, mx + 1.6, 5.2, mz - 0.4, 1.6, 0.6, 0.6, DK[2], DK[3]);                /* its scope */

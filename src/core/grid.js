@@ -140,6 +140,8 @@ function _rtsBlocked(tx, tz, dom) {
   if (dom === 'shallow') return G.terrain[i] !== RTS_T_WATER || G.blocked[i] === 1;
   /* 'hover' is both: open water as a ship has it, and everything a land unit may cross. A
      structure, a shipyard's water, rock and trees still stop it. */
+  /* a gate is open to the side whose unit is moving (core/gate.js) */
+  if (_rtsGateSide && G.blocked[i] === 1 && _rtsGateLets(i)) return false;
   if (dom === 'hover') return G.terrain[i] === RTS_T_WATER ? G.blocked[i] === 1 : G.blocked[i] !== 0;
   return G.blocked[i] !== 0 && dry !== 1;
 }
