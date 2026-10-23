@@ -76,10 +76,10 @@ a section below with its numbers.
 | 6, `frogman` | Navy SEAL | Compact | Frogman | swims, and charges ships and buildings |
 | 7, `blight` | Desolator | Dominion | Blight Trooper | a radiation gun, and a deployed poison field |
 | 7, `reactor` | Nuclear Reactor | Dominion | Fission Reactor | 400 power, and destroyed, it melts down and irradiates the ground |
-| 8 | Kirov Airship | Dominion | Leviathan | a slow, armoured bomber airship |
-| 8 | Rocketeer | Compact | Jetpack Trooper | flying infantry |
-| 8 | Black Eagle | Compact | Falcon | a faster, tougher strike jet |
-| 8 | Aircraft Carrier | Compact | Carrier | launches its own drones at range |
+| 8, `leviathan` | Kirov Airship | Dominion | Leviathan | a slow, armoured bomber airship |
+| 8, `jetpack` | Rocketeer | Compact | Jetpack Trooper | flying infantry |
+| 8, `falcon` | Black Eagle | Compact | Falcon | a faster, tougher strike jet |
+| 8, `carrier` `hornet` | Aircraft Carrier | Compact | Carrier | launches its own drones at range |
 | 9 | Dolphin | Compact | Sonar Dolphin | a fast trained sea animal that hunts subs and squids |
 | 9 | Giant Squid | Dominion | Kraken | grabs and crushes a ship |
 | 9 | Sea Scorpion | Dominion | Sea Hornet | an anti-air and anti-infantry boat |
@@ -267,3 +267,35 @@ sold does neither.
 The opponent builds a reactor late in its plan. It does not buy the Blight Trooper, whose
 deployed ground burns its own side as well: that is batch 12, with the explosives.
 `unit/rad` (17) and `e2e/rad` (12) hold it.
+
+## Batch 8: aloft (`core/aloft.js`, `sprites/aloft.js`)
+
+**Endless** aircraft (`endless`) carry what they fire for as long as they fly: `core/move.js`
+never sends one home to a pad, and `core/combat.js` never counts its rounds, so it neither runs
+dry nor crashes for want of a pad.
+
+**Leviathan** (`leviathan`, Dominion, 2000, after an Airfield and a Research Lab, 1500 hp, heavy
+armour, speed 5, endless): an armoured airship. Its `levbomb` (range 3, every 2.2 s) drops a bomb
+from where it is, through the Heavy Bomber's falling bombs (`G.bombs`). The bomb bursts after 1 s
+for 200, falling off evenly to nothing at 2.2 cells, on everything under it, whoever's it is.
+Two engine pods turn their props.
+
+**Falcon** (`falcon`, Compact, 1600, after a Helipad and a Radar Post, 260 hp, speed 34): a delta
+strike jet with two heavy bombs (130, splash 2.6, best against buildings), then home to a pad,
+leaving a contrail.
+
+**Jetpack Trooper** (`jetpack`, Compact infantry, 600, after a Radar Post, 90 hp, endless): it
+flies at altitude 7, straight over water, walls and cliffs. Only anti-air can hit it, and a tank
+cannot run it down (`core/units.js` `_rtsOverrun` skips anything in the air).
+
+**Carrier** (`carrier`, Compact ship, 2000, after a Naval Yard and a Research Lab, 900 hp): no
+gun of its own. Its `hornets` (range 34, every 2 s) launches a **Hornet** (`hornet`) at the
+target, with up to 3 in the air at once. A Hornet is a drone with 4 missiles. With its rack
+empty or its target gone, it flies home and lands on its Carrier, which counts it back in. With
+no Carrier, it falls out of the sky. A Hornet is never built (`spawned`): `core/production.js`
+will not queue one and `ui/sidebar.js` does not show one.
+
+The opponent does not buy any of them. It has no team that flies a Leviathan or a Falcon or sails
+a Carrier, so it would buy them and leave them at home (`unit/aiplan`). Jetpack Troopers in its
+infantry ran Mirror Line past its gold par (491 s against 480). Its use of them is batch 12.
+`unit/aloft` (21) and `e2e/aloft` (6) hold it.

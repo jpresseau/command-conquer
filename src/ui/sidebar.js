@@ -119,7 +119,7 @@ function _rtsCatItems(cat) {
     }
   } else {
     for (i = 0; i < RTS_UNITS.length; i++) {
-      if (RTS_UNITS[i].kind !== cat) continue;
+      if (RTS_UNITS[i].kind !== cat || RTS_UNITS[i].spawned) continue;   /* a Carrier's drone: core/aloft.js */
       if (!rtsBuildableBy(RTS_UNITS[i], side)) continue;
       out.push(RTS_UNITS[i]);
     }

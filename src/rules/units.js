@@ -98,6 +98,13 @@ var RTS_UNITS = [
     needs:['lab'], veil:true,
     side:'allied', armour:'light',
     desc:'Hidden while it stands still and holds its fire: to the enemy it looks like a tree. Firing or moving gives it away.' },
+  /* THE JETPACK TROOPER (core/aloft.js): infantry that flies - over walls, water and cliffs - and
+     only anti-air can touch it. Never goes home to reload. */
+  { key:'jetpack',  name:'Jetpack Trooper', kind:'infantry', cost:600, build:9, hp:90,   speed:9,   turn:6,  r:1.1, sight:18, weapon:'jetgun',
+    needs:['radar'], air:true, alt:7, endless:true,
+    side:'allied', armour:'none',
+    crawl:false, fraidy:false,
+    desc:'Flies over walls, water and cliffs. Only anti-air can hit it. Good against infantry, poor against armour.' },
   /* EXPLOSIVES (core/blast.js). THE SAPPER plants a timed charge on whatever it reaches - a tank,
      a building, a ship at the quay - and walks away; it goes off on its fuse. */
   { key:'sapper',   name:'Sapper',        kind:'infantry', cost:600,  build:8,  hp:100,  speed:6.5, turn:6,  r:1.1, sight:14, weapon:'satchel',
@@ -250,6 +257,25 @@ var RTS_UNITS = [
     needs:['airpad'], air:true, ammo:1, rearm:12, alt:20, carpets:true,
     armour:'light',
     desc:'Lays a line of eight bombs across what you send it at, then flies home to reload. Its bombs hurt your own units too.' },
+  /* THE SKY (core/aloft.js). `endless` is an aircraft that never goes home to reload: it carries
+     what it fires for as long as it flies.
+     THE LEVIATHAN: an armoured airship, slow as a walking man, that drops its bombs straight down
+     on whatever it floats over. Built at an Airfield, and it needs nothing from one after. */
+  { key:'leviathan',name:'Leviathan',     kind:'air',      cost:2000, build:24, hp:1500, speed:5,   turn:1.0,r:3.4, sight:18, weapon:'levbomb',
+    needs:['afld', 'lab'], air:true, alt:14, endless:true,
+    side:'soviet', armour:'heavy',
+    desc:'A slow, armoured airship. Its bombs fall on whatever it floats over, and it never needs to land. Only anti-air stops it.' },
+  /* THE FALCON: the Compact's strike jet - faster and tougher than the Kestrel, two heavy bombs */
+  { key:'falcon',   name:'Falcon',        kind:'air',      cost:1600, build:18, hp:260,  speed:34,  turn:4.2,r:1.6, sight:22, weapon:'eaglebomb',
+    needs:['helipad', 'radar'], air:true, ammo:2, rearm:7, alt:16,
+    side:'allied', armour:'light',
+    desc:'A fast strike jet. Two heavy bombs that crack buildings and armour, then home to reload.' },
+  /* THE HORNET: a Carrier's drone. Never built - launched (`spawned`), and home to its Carrier when
+     its rack is empty or its target gone; with no Carrier it falls out of the sky. */
+  { key:'hornet',   name:'Hornet',        kind:'air',      cost:100,  build:1,  hp:50,   speed:30,  turn:5.0,r:1.0, sight:14, weapon:'hornetgun',
+    needs:['navalyard'], air:true, ammo:4, alt:10, spawned:true,
+    side:'allied', armour:'light',
+    desc:'A Carrier\'s drone.' },
   /* FLAK TRACK. The verb is ESCORT: the armour column takes its anti-aircraft cover with it.
      Until this, everything that could shoot down an aircraft either stood still (the AA Gun,
      the Rocket Turret) or was a squad on foot (rockets), so a gunship could pick apart a tank
@@ -363,6 +389,12 @@ var RTS_UNITS = [
     weapon:'cruisergun', needs:['navalyard', 'lab'], sea:true, side:'allied',
     armour:'heavy',
     desc:'Outranges everything afloat and flattens a shoreline. Blind to submarines — never sail one alone.' },
+  /* THE CARRIER (core/aloft.js): no gun of its own. It launches Hornets - up to three in the air at
+     a time - at anything in its long reach, and they come back to it to rearm. */
+  { key:'carrier',  name:'Carrier',      kind:'ship',     cost:2000, build:26, hp:900,  speed:7,   turn:0.9,r:3.2, sight:26,
+    weapon:'hornets', needs:['navalyard', 'lab'], sea:true, side:'allied',
+    armour:'heavy',
+    desc:'Launches its own drones at anything in a long reach, three at a time. Helpless if they are shot down - escort it.' },
   /* `cloak` is Cloakable, from the stat block. It submerges, and it has to surface to fire -
      see RTS_SUB_SURFACE and _rtsCloakAI. */
   { key:'sub',      name:'Submarine',    kind:'ship',     cost:950,  build:13, hp:500,  speed:10,  turn:1.3,r:2.0, sight:18,

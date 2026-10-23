@@ -144,6 +144,13 @@ function _r3dSoldierMan(m, key, mx, mz, pose, lead, K) {
     _r3dLimb(m, cx + 0.8, cy - 1.0, mz - 0.2, cx + 4.0, cy - 1.2, mz - 0.2, 0.45, 0.35, 12, DK[2]);
     _r3dBall(m, cx + 4.2, cy - 1.2, mz - 0.2, 0.4, kit.prop, 10, 6);
     _r3Cyl(m, mx - 2.0, hipY + 0.8, mz, 1.0, 3.2, kit.prop, '#c8ff8a', 16);
+  } else if (key === 'jetpack') {
+    /* the carbine held forward, and the two thrusters on his back, nozzles down */
+    armTo(-1, cx + 1.2, cy - 0.8, mz - 1.4, cx + 2.4, cy - 0.5, mz - 1.0);
+    armTo(1, cx + 1.2, cy - 0.8, mz + 1.4, cx + 2.4, cy - 0.5, mz + 0.4);
+    _r3Box(m, cx + 3.0, cy - 0.6, mz - 0.3, 2.4, 0.6, 0.5, DK[3], DK[2]);
+    _r3Cyl(m, mx - 2.0, hipY + 0.6, mz - 0.9, 0.75, 3.6, kit.prop, '#ffd28a', 16);
+    _r3Cyl(m, mx - 2.0, hipY + 0.6, mz + 0.9, 0.75, 3.6, kit.prop, '#ffd28a', 16);
   } else if (key === 'rifttroop') {
     /* the rift gun held across him, and the ring standing up on his back */
     armTo(-1, cx + 0.7, cy - 1.5, mz - 1.5, cx + 1.3, cy - 0.9, mz - 0.7);
