@@ -20,11 +20,12 @@
    phone tip names a key or a right button. */
 
 /* most particular first: a Paradrop Plane `carries` too, but its tip is the drop's */
-var RTS_VERB_ORDER = ['carpets', 'orbits', 'slings', 'paradrops', 'hover', 'bridge', 'mines', 'sweeps', 'jams', 'spots',
+var RTS_VERB_ORDER = ['strikes', 'carpets', 'orbits', 'slings', 'paradrops', 'hover', 'bridge', 'mines', 'sweeps', 'jams', 'spots',
   'heals', 'deploy', 'escorts', 'shallow', 'harvest', 'capture', 'steal', 'demo', 'carries'];
 
 /* d: the unit's rules. desk/touch: the tip, without the unit's name (the caller puts it first). */
 var RTS_VERB_TIPS = {
+  strikes: { desk: function () { return 'called in by a Marshal: it flies over, bombs what he marked, and is gone off the map.'; } },
   carpets: { desk: function () { return 'right-click a target to carpet it, or A + right-click the ground to carpet that spot.'; },
              touch: function () { return 'hold on a target to carpet it, or tap AMOVE and hold on the ground to carpet that spot.'; } },
   orbits: { desk: function () { return 'right-click a place and it circles there; right-click a unit and it shadows it.'; },

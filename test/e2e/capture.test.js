@@ -115,8 +115,9 @@ var S = new Suite('capture');
        !decide.reinforce, 'reinforce:false');
 
   /* ...and the town's three houses, which infantry garrison instead (core/garrison.js) */
-  S.eq('eleven buildings cannot be captured at all', decide.uncapturable.join(','),
-       'cottage,flats,gps,hall,iron,mist,mslo,pdox,silo,spire,wall');
+  /* ...and the Gate, a section of wall (core/gate.js) */
+  S.eq('twelve buildings cannot be captured at all', decide.uncapturable.join(','),
+       'cottage,flats,gate,gps,hall,iron,mist,mslo,pdox,silo,spire,wall');
   S.eq('the Construction Yard costs nothing, so price cannot rank it', decide.yardCost, 0);
   S.ok('...and is scored on what it does instead', decide.yardWorth > decide.refWorth,
        'yard ' + decide.yardWorth + ' vs refinery ' + decide.refWorth);

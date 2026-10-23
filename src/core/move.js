@@ -79,7 +79,7 @@ function _rtsPathFor(e, gx, gz) {
   if (e && e.air) return [{ x:gx, z:gz }];
   /* A ship asks the same pathfinder a different question - see _rtsBlocked. Routed through
      here for the same reason the aircraft case is: no call site should have to know. */
-  return _rtsPath(e.x, e.z, gx, gz, _rtsDomainOf(e));
+  return _rtsAsSide(e.side, function () { return _rtsPath(e.x, e.z, gx, gz, _rtsDomainOf(e)); });   /* its gates open: core/gate.js */
 }
 
 /* --------------------------------------------------------- unit update */
@@ -245,8 +245,10 @@ function _rtsSeparate(dt) {
            beach. Two ships crowding each other could walk one of them ashore with no order
            given, and once ashore the same test kept it "escaping" and it never came back. */
         var domA = _rtsDomainOf(a);
+        _rtsGateSide = a.side;                             /* its own gate is open ground to it: core/gate.js */
         if (_rtsBlocked(_rtsTX(a.x), _rtsTX(a.z), domA) ||
             !_rtsBlocked(_rtsTX(ax), _rtsTX(az), domA)) { a.x = ax; a.z = az; }
+        _rtsGateSide = null;
       }
     }
   }

@@ -37,7 +37,8 @@ function _rtsTick(dt) {
     if (e.dead) continue;
     if (e.inside) continue;                      /* riding in a transport - see _rtsAboard */
     if (_rtsErased(e) || _rtsGripped(e)) continue;   /* frozen, out of time: core/rift.js; held by a Kraken: core/deep.js */
-    if (e.type === 'unit') { if (_rtsRiftBusy(e, dt)) continue; if (!_rtsOffline(e)) _rtsUpdateUnit(e, dt); else e.path = null; }   /* a jump charging; a Drone Tank's hub down: core/rift.js, core/mind.js */
+    if (e.type === 'unit' && e.strike) { _rtsJetTick(e, dt); continue; }   /* a Marshal's jet: core/marshal.js */
+    if (e.type === 'unit') { if (_rtsRiftBusy(e, dt)) continue; _rtsGateSide = e.side; if (!_rtsOffline(e)) _rtsUpdateUnit(e, dt); else e.path = null; _rtsGateSide = null; }   /* its own gates open: core/gate.js */   /* a jump charging; a Drone Tank's hub down: core/rift.js, core/mind.js */
     else _rtsUpdateStruct(e, dt);
   }
   if (G.sides.civ) _rtsGarrisonTick(dt);        /* squads firing out of the town's houses: core/garrison.js */
@@ -47,6 +48,9 @@ function _rtsTick(dt) {
   _rtsRadTick(dt);                               /* poisoned ground: core/rad.js */
   _rtsDeepTick(dt);                              /* Krakens crushing what they hold: core/deep.js */
   _rtsTechTick(dt);                              /* captured tech buildings at work: core/tech.js */
+  _rtsIfvTick(dt);                               /* a carrier's engineer or medic at work: core/ifv.js */
+  _rtsLeechTick(dt);                             /* Leech Drones eating their hosts: core/leech.js */
+  _rtsGateTick(dt);                              /* gates open for their own: core/gate.js */
   _rtsSeparate(dt);
   _rtsAirSpread(dt);                             /* aircraft keep their own distance: core/airspace.js */
   _rtsUpdateProj(dt);
