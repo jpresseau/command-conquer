@@ -204,6 +204,11 @@ hides below and drives it off.
 Foundry makes its vehicles a quarter cheaper and quicker, its Clone Vats turn out every soldier
 twice, and its War Harvester shoots back while it mines.
 
+**Tech buildings.** Pick TOWNS + TECH in the skirmish setup and an Oil Derrick, a Field Hospital,
+a Machine Shop and an Airstrip stand between the bases. Send an Engineer into one and it is yours:
+the derrick pays, the hospital heals your soldiers, the shop mends your vehicles, and the airstrip
+drops paratroopers wherever you choose.
+
 **The enemy uses its whole garage.** It mines the approach to its own base, and once you have a
 harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands
 them beside your ore field, and goes home to do it again.

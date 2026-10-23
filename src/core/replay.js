@@ -47,6 +47,7 @@ var RTS_REPLAY_PURE = {
     '_rtsAirLift', '_rtsVisible', '_rtsMineShown', '_rtsBridgeDeckY', '_rtsMuzzleAngle', '_rtsFireCoord',
     '_rtsSeen', '_rtsVeiled',                    /* a Veil Tank drawn as a tree: render3d/veil3d.js */
     '_rtsRadSources',                           /* poisoned ground drawn glowing: render3d/rad3d.js */
+    '_rtsClaimable',                            /* an Engineer sent at a tech building: ui/select.js, core/tech.js */
     '_rtsWithPlayer', '_rtsStandY', '_rtsEffectsSeen', '_rtsElevNormal', '_rtsTileElev'],
   /* the battle's setup, before a recording starts, or a save's, which is not recorded */
   setup: ['_rtsNewGame', '_rtsMissionSetup', '_rtsSurvivalSetup', '_rtsRecalcPower', '_rtsRngMake', 'rtsSetArmySide',

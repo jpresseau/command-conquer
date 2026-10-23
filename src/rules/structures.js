@@ -305,6 +305,23 @@ var RTS_STRUCTS = [
     desc:'A block of flats. Up to five infantry squads can garrison it.' },
   { key:'hall',     name:'Town Hall',     w:3, h:3, cost:0, build:1, hp:1000, power:0, sight:10,
     side:'civ', civ:true, garrison:6, armour:'concrete', capturable:false,
-    desc:'The town hall: the strongest building in town. Up to six infantry squads can garrison it.' }
+    desc:'The town hall: the strongest building in town. Up to six infantry squads can garrison it.' },
+  /* ---------------------------------------------------------------- tech --
+     TECH BUILDINGS (core/tech.js), laid by the setup's TOWNS + TECH and owned by nobody until an
+     Engineer takes one: then it works for whoever holds it. */
+  { key:'derrick',  name:'Oil Derrick',   w:2, h:2, cost:0, build:1, hp:500, power:0, sight:8,
+    side:'civ', civ:true, tech:'oil', armour:'wood',
+    desc:'Captured, it pays its owner a steady trickle of credits.' },
+  { key:'hospital', name:'Field Hospital', w:2, h:2, cost:0, build:1, hp:600, power:0, sight:10,
+    side:'civ', civ:true, tech:'heal', armour:'concrete',
+    desc:'Captured, it heals its owner\'s infantry near it.' },
+  { key:'mshop',    name:'Machine Shop',  w:2, h:2, cost:0, build:1, hp:600, power:0, sight:10,
+    side:'civ', civ:true, tech:'fix', armour:'concrete',
+    desc:'Captured, it repairs its owner\'s vehicles near it.' },
+  { key:'airstrip', name:'Airstrip',      w:3, h:2, cost:0, build:1, hp:700, power:0, sight:12,
+    side:'civ', civ:true, tech:'drop', armour:'concrete',
+    super:{ key:'paradrop', name:'Paratroopers', charge:150, target:'cell', icon:'⛑',
+            desc:'A plane drops four rifle squads wherever you choose.' },
+    desc:'Captured, it calls in a drop of paratroopers wherever its owner chooses.' }
 ];
 

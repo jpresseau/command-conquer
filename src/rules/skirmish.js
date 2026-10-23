@@ -23,7 +23,9 @@ var RTS_SKIRMISH = {
   layout: { random: { name: 'RANDOM' }, mirror: { name: 'MIRRORED', mirror: true } },
   /* civilian towns in the contested ground between the bases, whose buildings infantry can
      garrison (core/garrison.js); `n` towns on a standard map, scaled with its size */
-  town:  { none: { name: 'NONE', n: 0 }, towns: { name: 'TOWNS', n: 2 } },
+  town:  { none: { name: 'NONE', n: 0 }, towns: { name: 'TOWNS', n: 2 },
+           /* ...and the tech buildings an Engineer captures, between the bases (core/tech.js) */
+           tech: { name: 'TOWNS + TECH', n: 2, tech: true } },
   /* who else is on the field: the computer seats beyond the one opponent (RTS_SEATS) */
   foes:  { one: { name: '1 FOE', extra: [] }, two: { name: '2 FOES', extra: ['enemy2'] },
            ally: { name: 'FOE + ALLY', extra: ['ally'] }, team: { name: '2 V 2', extra: ['ally', 'enemy2'] },

@@ -88,7 +88,10 @@ a section below with its numbers.
 | 10, `assay` | Ore Purifier | Compact | Assay Plant | each load pays more |
 | 10, `foundry` | Industrial Plant | Dominion | Foundry | vehicles cost less and build faster |
 | 10, `vats` | Cloning Vats | Dominion | Clone Vats | every infantry trained comes out twice |
-| 10 | Tech buildings | map | Oil Derrick, Field Hospital, Machine Shop, Airstrip | captured by an Engineer for income, healing, repair, paratroopers |
+| 10, `derrick` | Tech Oil Derrick | map | Oil Derrick | captured, 75 credits every 10 s |
+| 10, `hospital` | Tech Hospital | map | Field Hospital | captured, heals its owner's infantry near it |
+| 10, `mshop` | Tech Machine Shop | map | Machine Shop | captured, repairs its owner's vehicles near it |
+| 10, `airstrip` | Tech Airfield | map | Airstrip | captured, a Paratroopers superweapon |
 | 11 | Sniper | Compact | Marksman | kills infantry from beyond their range |
 | 11 | Tank Destroyer | Compact | Tank Hunter | a cannon that only hurts armour |
 | 11 | IFV | Compact | Multi-role Carrier | its weapon is whoever rides in it |
@@ -344,4 +347,24 @@ A Jetpack Trooper is now trained at the barracks. Batch 8 let it come out of an 
 `core/production.js` sent everything with `air` to one.
 
 The opponent neither builds nor buys them yet; that is batch 12. `unit/econ` (12) and `e2e/econ`
-(4) hold it. Batch 10b is the tech buildings an Engineer captures.
+(4) hold it.
+
+## Batch 10b: tech buildings (`core/tech.js`, `sprites/tech.js`)
+
+The skirmish setup's town choice has a third answer, TOWNS + TECH: the towns, and between the first
+two bases an Oil Derrick, a Field Hospital, a Machine Shop and an Airstrip (`_rtsLayTech`, from
+`core/garrison.js` `_rtsLayTowns`). They belong to the town's `civ` seat, which fights nobody, so
+they are no one's enemy; `tech` on the building is what lets an Engineer be sent at one anyway
+(`_rtsClaimable`, read by `core/orders.js` `_rtsOrderCapture`, `core/units.js` and the right-click
+in `ui/select.js`). A rifleman right-clicked on one only goes there. Once taken it works for its
+owner, and an Engineer can take it back as it can any building:
+
+- **Oil Derrick** (`derrick`): 75 credits every 10 s (`RTS_TECH.oil`).
+- **Field Hospital** (`hospital`): heals its owner's infantry within 6 cells, 6 hp a second.
+- **Machine Shop** (`mshop`): repairs its owner's vehicles within 6 cells, 8 hp a second.
+- **Airstrip** (`airstrip`, 3x2): a superweapon, Paratroopers, charging in 150 s. A Paradrop Plane
+  takes off from the strip with four riflemen aboard and drops them on the cell chosen
+  (`_rtsFireParadrop`, `core/paradrop.js`).
+
+The opponent's Engineers do not go after them yet; that is batch 12. `unit/tech` (14) and
+`e2e/tech` (9) hold it.

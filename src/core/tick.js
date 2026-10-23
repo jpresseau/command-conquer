@@ -46,6 +46,7 @@ function _rtsTick(dt) {
   _rtsBlastTick(dt);                             /* charges on their fuses: core/blast.js */
   _rtsRadTick(dt);                               /* poisoned ground: core/rad.js */
   _rtsDeepTick(dt);                              /* Krakens crushing what they hold: core/deep.js */
+  _rtsTechTick(dt);                              /* captured tech buildings at work: core/tech.js */
   _rtsSeparate(dt);
   _rtsAirSpread(dt);                             /* aircraft keep their own distance: core/airspace.js */
   _rtsUpdateProj(dt);
