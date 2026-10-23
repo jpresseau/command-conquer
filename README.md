@@ -195,6 +195,11 @@ a Fusion Plant's power, and destroyed, it melts down and poisons its own base.
 floats over and never needs to land. The Compact flies Jetpack Troopers over walls and water,
 strikes with the fast Falcon jet, and sails a Carrier that launches its own drones.
 
+**The deep.** The Dominion's Kraken runs unseen under the water and surfaces to seize a ship,
+which can do nothing while it is crushed. Its Sea Hornet flak boat shoots down aircraft, and its
+Bombard missile battleship outranges every other hull. The Compact's Sonar Dolphin hears what
+hides below and drives it off.
+
 **The enemy uses its whole garage.** It mines the approach to its own base, and once you have a
 harvester working near the water it sends a Hovercraft down the coast with a squad aboard, lands
 them beside your ore field, and goes home to do it again.

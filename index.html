@@ -863,7 +863,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">a6d63e9 · 2026-10-23</div>
+  <div id="rtsBuild" title="build">54cfeb6 · 2026-10-23</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1616,6 +1616,28 @@ var RTS_UNITS = [
     weapon:'hornets', needs:['navalyard', 'lab'], sea:true, side:'allied',
     armour:'heavy',
     desc:'Launches its own drones at anything in a long reach, three at a time. Helpless if they are shot down - escort it.' },
+  /* THE DEEP (core/deep.js). THE SONAR DOLPHIN: quick, cheap, and it hears what is under the
+     water - a sonar of its own - and a sonic burst for anything afloat or below. */
+  { key:'dolphin',  name:'Sonar Dolphin', kind:'ship',     cost:600,  build:9,  hp:200,  speed:17,  turn:3.0,r:1.6, sight:20,
+    weapon:'sonic', needs:['shipyard', 'radar'], sea:true, side:'allied',
+    detects:RTS_TILE * 8, armour:'light',
+    desc:'Fast and cheap. Hears submarines and Krakens near it, and drives them off with a sonic burst.' },
+  /* THE KRAKEN: runs submerged, and surfaces to take hold of a ship - which can do nothing while it
+     is held, and is crushed. */
+  { key:'kraken',   name:'Kraken',        kind:'ship',     cost:1000, build:14, hp:500,  speed:11,  turn:2.0,r:2.0, sight:16,
+    weapon:'tentacles', needs:['shipyard', 'lab'], sea:true, side:'soviet', cloak:true,
+    armour:'light',
+    desc:'Runs unseen below the water, and surfaces to seize a ship: held, it cannot move or fire, and is crushed.' },
+  /* THE SEA HORNET: a fast boat with a flak gun that shoots up as well as across */
+  { key:'seahornet',name:'Sea Hornet',    kind:'ship',     cost:700,  build:9,  hp:350,  speed:15,  turn:2.2,r:1.8, sight:22,
+    weapon:'scorpflak', needs:['shipyard'], sea:true, side:'soviet',
+    armour:'light',
+    desc:'A fast flak boat: shoots down aircraft, and cuts up infantry on the shore.' },
+  /* THE BOMBARD: a missile battleship, the Dominion's answer to the Cruiser - further, and slower */
+  { key:'bombard',  name:'Bombard',       kind:'ship',     cost:2200, build:24, hp:1300, speed:7,   turn:0.9,r:3.0, sight:26,
+    weapon:'bombmissile', needs:['shipyard', 'lab'], sea:true, side:'soviet',
+    armour:'heavy',
+    desc:'A missile battleship: flattens a shoreline from further out than anything ashore can answer. Slow, and blind to what is under it.' },
   /* `cloak` is Cloakable, from the stat block. It submerges, and it has to surface to fire -
      see RTS_SUB_SURFACE and _rtsCloakAI. */
   { key:'sub',      name:'Submarine',    kind:'ship',     cost:950,  build:13, hp:500,  speed:10,  turn:1.3,r:2.0, sight:18,
@@ -1838,6 +1860,16 @@ var RTS_WEAPONS = {
   /* the Veil Tank's gun: a heavy, slow shot - it fires from hiding and gives itself away doing it */
   veilgun:    { dmg:85, range:17, cool:2.6, shot:'shell', speed:62, splash:2.2, wall:true, wood:true,
                 verses:{ none:0.7, wood:1.0, light:1.2, heavy:1.0, concrete:0.8 } },
+  /* THE DEEP (core/deep.js). `grip` takes hold of a ship and crushes it, `dps` a second, while
+     neither moves. */
+  sonic:      { dmg:45, range:9, cool:1.4, shot:'arc', speed:0, splash:0, seaOnly:true,
+                verses:{ none:1.0, wood:1.0, light:1.2, heavy:0.9, concrete:0.5 } },
+  tentacles:  { dmg:0, range:2.5, cool:1.0, shot:'grip', speed:0, splash:0, seaOnly:true, grip:{ dps:55 },
+                verses:{ none:1.0, wood:1.0, light:1.0, heavy:1.0, concrete:1.0 } },
+  scorpflak:  { dmg:16, range:16, cool:0.45, burst:2, shot:'tracer', speed:0, splash:1.2, aa:true,
+                verses:{ none:1.3, wood:0.4, light:0.6, heavy:0.3, concrete:0.2 } },
+  bombmissile:{ dmg:150, range:40, cool:5.0, burst:2, shot:'missile', speed:24, splash:3.6, wall:true, wood:true,
+                verses:{ none:0.7, wood:1.2, light:1.0, heavy:1.0, concrete:1.3 } },
   /* THE SKY (core/aloft.js). `drop`: bombs that fall from where the aircraft is, bursting after
      `fall` seconds for `dmg` within `rad` cells - whoever is under them. `launch`: the shot is a
      drone of that key sent at the target. */
@@ -7596,7 +7628,7 @@ function _sprUnitModel(key, side, prone, part) {
      model line reads the same as it did when this was one function. */
   var X = { m:m, TM:TM, VH:VH, S:S, DK:DK, O:O, C:C, GN:GN,
             d:d, prone:prone, part:part, side:side, tracks:tracks };
-  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key) || _sprUnitHulls(X, key) || _sprUnitLens(X, key) || _sprUnitArc(X, key) || _sprUnitMind(X, key) || _sprUnitRift(X, key) || _sprUnitBlast(X, key) || _sprUnitAloft(X, key))) {
+  if (!(_sprUnitGround(X, key) || _sprUnitAirSea(X, key) || _sprUnitSpecial(X, key) || _sprUnitWings(X, key) || _sprUnitHulls(X, key) || _sprUnitLens(X, key) || _sprUnitArc(X, key) || _sprUnitMind(X, key) || _sprUnitRift(X, key) || _sprUnitBlast(X, key) || _sprUnitAloft(X, key) || _sprUnitDeep(X, key))) {
     _r3Box(m, 0, 0, -5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 0, 5, 15, 3.5, 4, DK[0], DK[1]);
     _r3Box(m, 0, 2.5, 0, 15, 4, 8, TM[0], TM[1]);
@@ -9282,6 +9314,78 @@ function _sprUnitAloft(X, key) {
       _r3Box(m, px, 5.8, -2.5, 4.6, 0.4, 4.6, DK[1], DK[2]);
       _r3Box(m, px, 6.4, -2.5, 1.0, 0.2, 1.8, TM[1], TM[3]);              /* a team stripe on each */
     }
+    return true;
+  }
+  return false;
+}
+</script>
+<script>/* sprites/deep.js - the Sonar Dolphin, the Kraken, the Sea Hornet and the Bombard (core/deep.js).
+   Part of rts.sprites.
+
+   The Dolphin and the Kraken are animals, so they carry no team colour on a hull - a collar band
+   says whose they are. The Dolphin is a long grey body of slices, a dorsal fin and a flat tail; the
+   Kraken a purple mantle with eight arms spread on the water round it. The Sea Hornet is a small,
+   fast hull with a twin flak mount forward; the Bombard the longest hull afloat after the Carrier,
+   its deck a block of missile cells. */
+var RTS_DEEP_SKIN = { dolphin: ['#7d8a96', '#a9b6c2'], kraken: ['#5a2e6a', '#8a4a9a'] };
+
+function _sprUnitDeep(X, key) {
+  var m = X.m, VH = X.VH, TM = X.TM, S = X.S, DK = X.DK, GN = X.GN, i, a;
+  if (key === 'dolphin') {
+    var C = RTS_DEEP_SKIN.dolphin;
+    for (i = 0; i < 10; i++) {                                         /* the body */
+      var x = -9 + i * 2, u = (x - 1) / 10, r = 2.4 * Math.sqrt(Math.max(0.05, 1 - u * u));
+      _r3Wheel(m, x, 1.6, 0, r, 2.05, 'x', C[i % 2 ? 1 : 0], C[1], 18);
+    }
+    _r3Box(m, 0.5, 4.2, 0, 3.0, 2.2, 0.5, C[0], C[1]);                  /* the dorsal fin */
+    _r3Box(m, -10.4, 1.6, 0, 1.4, 0.4, 6.0, C[0], C[1]);                /* the flukes */
+    _r3Box(m, 9.8, 1.4, 0, 2.4, 0.9, 1.0, C[1], C[1]);                  /* the beak */
+    _r3Wheel(m, 4.0, 1.6, 0, 2.3, 0.6, 'x', TM[1], TM[3], 18);          /* the collar: whose it is */
+    return true;
+  }
+  if (key === 'kraken') {
+    var K = RTS_DEEP_SKIN.kraken;
+    _r3Cyl(m, 0, 0.4, 0, 3.8, 2.2, K[0], K[1], 24);                     /* the mantle */
+    _r3Cone(m, 0, 2.6, 0, 3.8, 1.2, 3.4, K[1], 24);
+    for (i = 0; i < 8; i++) {                                          /* eight arms, spread */
+      a = i / 8 * Math.PI * 2;
+      for (var s = 0; s < 3; s++) {
+        var rr = 4.2 + s * 2.4, w = 1.1 - s * 0.3;
+        _r3Box(m, Math.cos(a + s * 0.15) * rr, 0.6, Math.sin(a + s * 0.15) * rr, w * 2, 0.6, w * 2, K[0], K[1]);
+      }
+    }
+    _r3Cyl(m, 0, 2.6, 0, 3.9, 0.5, TM[1], TM[3], 24);                   /* the collar: whose it is */
+    _r3Box(m, 3.2, 2.2, -1.2, 0.6, 0.6, 0.6, '#f2e85a', '#f2e85a');      /* the eyes */
+    _r3Box(m, 3.2, 2.2, 1.2, 0.6, 0.6, 0.6, '#f2e85a', '#f2e85a');
+    return true;
+  }
+  if (key === 'seahornet') {
+    _r3Slab(m, 0, 0.6, 0, 16, 2.8, 6.0, 1.2, VH[0], VH[1]);             /* hull */
+    _r3Box(m, 6.6, 0.9, 0, 3.4, 2.2, 3.4, VH[1], VH[3]);                /* bow */
+    _r3Box(m, -2.0, 3.6, 0, 5.0, 2.4, 4.0, VH[2], VH[0]);               /* wheelhouse */
+    _r3Box(m, -2.0, 5.0, 0, 3.6, 0.6, 3.0, TM[1], TM[3]);
+    _r3Cyl(m, 3.4, 3.2, 0, 1.6, 1.4, DK[1], DK[2], 16);                 /* the flak mount */
+    _r3Box(m, 5.6, 4.6, -0.6, 4.2, 0.5, 0.5, GN[0], GN[2]);             /* twin barrels, raised */
+    _r3Box(m, 5.6, 4.6, 0.6, 4.2, 0.5, 0.5, GN[0], GN[2]);
+    _r3Box(m, -3.0, 7.4, 0, 0.5, 3.6, 0.5, S[1], S[0]);                  /* the mast */
+    _r3Box(m, -3.0, 9.0, 0, 0.4, 0.4, 3.2, S[2], S[3]);                  /* its radar bar */
+    for (var rl = -1; rl <= 1; rl += 2) {
+      _r3Box(m, 0, 2.6, rl * 2.9, 12, 0.6, 0.25, S[2], S[3]);            /* the rails */
+      _r3Cyl(m, -6.0, 2.4, rl * 2.2, 0.8, 0.9, '#e8e2d0', '#ff8a3a', 12); /* the life rafts */
+    }
+    return true;
+  }
+  if (key === 'bombard') {
+    var L = 36, Wd = 11;
+    _r3Slab(m, 0, 0.6, 0, L, 3.8, Wd, 1.4, VH[0], VH[1]);               /* hull */
+    _r3Box(m, L * 0.42, 0.9, 0, L * 0.18, 3.2, Wd * 0.55, VH[1], VH[3]); /* bow */
+    _r3Box(m, -L * 0.12, 4.6, 0, L * 0.26, 4.0, Wd * 0.6, VH[2], VH[0]); /* the bridge */
+    _r3Box(m, -L * 0.12, 7.2, 0, L * 0.16, 1.2, Wd * 0.4, TM[1], TM[3]);
+    _r3Cyl(m, -L * 0.24, 7.0, 0, 1.6, 4.0, DK[1], DK[0], 16);           /* funnel */
+    for (var cx = 0; cx < 3; cx++) for (var cz = 0; cz < 2; cz++)       /* the missile cells, forward */
+      _r3Box(m, L * 0.12 + cx * 2.6, 3.8, (cz - 0.5) * 3.0, 2.2, 1.0, 2.4, DK[0], GN[2]);
+    for (var lz = -1; lz <= 1; lz += 2)                                 /* two launchers, raised, aft */
+      _r3Box(m, -L * 0.36, 5.0, lz * 2.6, 6.0, 1.4, 1.6, GN[0], GN[2]);
     return true;
   }
   return false;
@@ -17121,7 +17225,7 @@ function _rtsFire(e, tgt, w) {
      Set at the one place every route to a shot passes through, so there is no way to fire from
      under water. */
   if ((rtsUnitDef(e.def) || {}).cloak) e.decloak = RTS_SUB_SURFACE;
-  if (typeof _rtsSfx === 'function' && !w.plant && !w.self && !w.drop && !w.launch) _rtsSfx(w.shot === 'beam' ? 'beam' : w.shot === 'arc' ? 'zap' : w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
+  if (typeof _rtsSfx === 'function' && !w.plant && !w.self && !w.drop && !w.launch && !w.grip) _rtsSfx(w.shot === 'beam' ? 'beam' : w.shot === 'arc' ? 'zap' : w.shot === 'tracer' ? (w.dmg > 7 ? 'mg' : 'rifle')
     : (w.shot === 'missile' ? 'rocket' : (e.type === 'struct' ? 'turretgun' : 'cannon')), e.x, e.z);
   if (w.mind) {                                    /* no damage: the unit changes side (core/mind.js) */
     if (_rtsMindTake(e, tgt)) { var mb = _rtsLensBeamFx(e, tgt, w); mb.mind = 1; G.fx.push(mb); }
@@ -17135,6 +17239,7 @@ function _rtsFire(e, tgt, w) {
   var raw = w.dmg * bias.fire * rtsCrateMult(e, 'fire') * (w.relay && e.type === 'struct' ? _rtsLensRelay(e, w) : 1)
           * _rtsArcCharge(e)                      /* ...and an Arc Tower's troopers charge it (core/arc.js) */
           * (e.dug ? RTS_DIG.fire : 1);           /* ...and a squad dug in hits harder (core/dig.js) */
+  if (w.grip) { _rtsGrip(e, tgt); return; }            /* a Kraken takes hold: core/deep.js */
   if (w.drop) { _rtsSkyDrop(e, w, raw); return; }       /* bombs down from the airship: core/aloft.js */
   if (w.launch) { _rtsLaunch(e, tgt, w); return; }     /* a Carrier's drone away */
   if (w.plant) { _rtsPlant(e, tgt, w, raw); return; }   /* a charge left on it, no damage yet: core/blast.js */
@@ -17798,6 +17903,7 @@ function _rtsSeparate(dt) {
        separation step shoved it back out to about six world units every time it closed, so it
        hovered just off the apron with an empty rack forever. */
     if (e.air) continue;
+    if (e.grip != null || e.gripBy != null) continue;   /* a Kraken and what it holds are locked together: core/deep.js */
     /* Ships crowd only with ships. A gunboat and a tank can never occupy the same cell - one
        is on water and the other cannot be - so putting them in one bucket makes them shove
        each other through a shoreline they should not be able to cross. Same shape of mistake
@@ -22333,6 +22439,56 @@ function _rtsHornetTick(e, dt) {
   return true;
 }
 </script>
+<script>/* core/deep.js - THE DEEP: what lives under the water, and the ships that hunt it.
+
+   THE KRAKEN (`grip` on rules/weapons.js `tentacles`) runs submerged, as a submarine does (`cloak`,
+   core/combat.js _rtsCloakAI). Its shot is taking hold: it surfaces and seizes the ship (e.grip,
+   the held ship's id; the ship's e.gripBy, the Kraken's - plain data, so a save keeps both). While
+   it holds on, the ship does nothing - it does not move, or fire, or anything else (core/tick.js
+   skips it) - and is crushed, `dps` a second through its armour; the Kraken stays surfaced, where
+   it can be shot. It lets go when the ship is gone, when it dies, or when they drift apart.
+
+   THE SONAR DOLPHIN hears what is under the water near it (`detects`, as the Destroyer's sonar does)
+   and its sonic burst reaches anything afloat or below (`seaOnly`). The Sea Hornet's flak and the
+   Bombard's missiles are ordinary weapons (rules/weapons.js `scorpflak`, `bombmissile`). */
+var RTS_DEEP = { slack: RTS_TILE * 1.2 };
+
+function _rtsGrip(e, tgt) {
+  if (!tgt || tgt.dead || tgt.type !== 'unit' || !(rtsUnitDef(tgt.def) || {}).sea) return false;
+  var G = window._rtsG, old = e.grip != null && G.byId[e.grip];
+  if (old && old !== tgt) old.gripBy = null;
+  e.grip = tgt.id; tgt.gripBy = e.id;
+  e.path = null; e.goal = null;
+  e.gripAt = { x: e.x, z: e.z, tx: tgt.x, tz: tgt.z };   /* where the two are locked together */
+  return true;
+}
+/* Is `e` held? (core/tick.js: if so it does nothing this tick) */
+function _rtsGripped(e) {
+  if (e.gripBy == null) return false;
+  var k = window._rtsG.byId[e.gripBy];
+  if (!k || k.dead || k.grip !== e.id) { e.gripBy = null; return false; }
+  return true;
+}
+function _rtsDeepTick(dt) {
+  var G = window._rtsG;
+  for (var i = 0; i < G.ents.length; i++) {
+    var k = G.ents[i];
+    if (k.grip == null) continue;
+    var t = G.byId[k.grip], w = RTS_WEAPONS[(rtsUnitDef(k.def) || {}).weapon];
+    if (k.dead || !t || t.dead || !w || !w.grip || Math.hypot(t.x - k.x, t.z - k.z) > w.range + RTS_DEEP.slack + (t.r || 0)) {
+      if (t && t.gripBy === k.id) t.gripBy = null;
+      k.grip = null; k.gripAt = null;
+      continue;
+    }
+    k.decloak = RTS_SUB_SURFACE;                   /* holding on, it stays up where it can be shot */
+    k.path = null;
+    /* locked together: the crowd's shove (core/move.js _rtsSeparate) does not part them */
+    if (k.gripAt) { k.x = k.gripAt.x; k.z = k.gripAt.z; t.x = k.gripAt.tx; t.z = k.gripAt.tz; }
+    t.hurtBy = k.side;
+    _rtsDamage(t, w.grip.dps * dt * _rtsBias(k.side).fire, k);   /* crushed to death, it is swept off and the grip goes with it next tick */
+  }
+}
+</script>
 <script>/* core/missions.js - the team mission list (TEAMTYPE.CPP): the script a team runs.
    Part of rts.core, the simulation. */
 
@@ -23422,7 +23578,7 @@ function _rtsTick(dt) {
     e = G.ents[i];
     if (e.dead) continue;
     if (e.inside) continue;                      /* riding in a transport - see _rtsAboard */
-    if (_rtsErased(e)) continue;                 /* frozen, out of time: core/rift.js */
+    if (_rtsErased(e) || _rtsGripped(e)) continue;   /* frozen, out of time: core/rift.js; held by a Kraken: core/deep.js */
     if (e.type === 'unit') { if (_rtsRiftBusy(e, dt)) continue; if (!_rtsOffline(e)) _rtsUpdateUnit(e, dt); else e.path = null; }   /* a jump charging; a Drone Tank's hub down: core/rift.js, core/mind.js */
     else _rtsUpdateStruct(e, dt);
   }
@@ -23431,6 +23587,7 @@ function _rtsTick(dt) {
   _rtsVeilTick(dt);                              /* a Veil Tank standing still: core/rift.js */
   _rtsBlastTick(dt);                             /* charges on their fuses: core/blast.js */
   _rtsRadTick(dt);                               /* poisoned ground: core/rad.js */
+  _rtsDeepTick(dt);                              /* Krakens crushing what they hold: core/deep.js */
   _rtsSeparate(dt);
   _rtsAirSpread(dt);                             /* aircraft keep their own distance: core/airspace.js */
   _rtsUpdateProj(dt);
@@ -32896,7 +33053,7 @@ function _r3dRecoil(e, n) {
 function _r3dMuzzleSize(e) {
   var d = e.type === 'unit' ? rtsUnitDef(e.def) : rtsStructDef(e.def), w = d ? RTS_WEAPONS[d.weapon] : null;
   if (!w) return 0.6;
-  if (w.shot === 'beam' || w.shot === 'arc' || w.shot === 'bomb' || w.shot === 'launch') return 0;               /* a lens has no flash: the beam draws its own light (fxemit3d.js) */
+  if (w.shot === 'beam' || w.shot === 'arc' || w.shot === 'bomb' || w.shot === 'launch' || w.shot === 'grip') return 0;               /* a lens has no flash: the beam draws its own light (fxemit3d.js) */
   return w.shot === 'tracer' ? (w.dmg > 7 ? 0.55 : 0.4) : w.shot === 'missile' ? 0.9 : 1.2;
 }
 /* WHERE THE FLASH IS, on the ground plan: the shot's own coordinate (core/combat.js _rtsFireCoord)

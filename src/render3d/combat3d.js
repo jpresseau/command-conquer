@@ -43,7 +43,7 @@ function _r3dRecoil(e, n) {
 function _r3dMuzzleSize(e) {
   var d = e.type === 'unit' ? rtsUnitDef(e.def) : rtsStructDef(e.def), w = d ? RTS_WEAPONS[d.weapon] : null;
   if (!w) return 0.6;
-  if (w.shot === 'beam' || w.shot === 'arc' || w.shot === 'bomb' || w.shot === 'launch') return 0;               /* a lens has no flash: the beam draws its own light (fxemit3d.js) */
+  if (w.shot === 'beam' || w.shot === 'arc' || w.shot === 'bomb' || w.shot === 'launch' || w.shot === 'grip') return 0;               /* a lens has no flash: the beam draws its own light (fxemit3d.js) */
   return w.shot === 'tracer' ? (w.dmg > 7 ? 0.55 : 0.4) : w.shot === 'missile' ? 0.9 : 1.2;
 }
 /* WHERE THE FLASH IS, on the ground plan: the shot's own coordinate (core/combat.js _rtsFireCoord)
