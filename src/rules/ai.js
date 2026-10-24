@@ -107,6 +107,7 @@ var RTS_AI = {
      -20, so six of them is 9000 credits and 600 power - it is the premium piece, not the line
      defence, and the flame tower is what fills the wall. */
           tesla:0.10, prism:0.10, relayhub:0.05, echo:0.04, reactor:0.06,              /* the Compact's premium tower, the Arc Tower's pair */
+          assay:0.04, foundry:0.04, vats:0.04, longgun:0.06,
           helipad:0.06, afld:0.06, aagun:0.10,
   /* One shipyard. A second buys nothing but a second production line for a domain
      the opponent uses to raid a coast, and the ratio has to stay small or a map
@@ -121,6 +122,7 @@ var RTS_AI = {
      nerf and hands the player about 16 extra seconds of life. RA has no silo limit at all. */
           apower:2,    kennel:1,    silo:14,   pillbox:4,     flametower:3,     turret:6,     rocketpit:4,
           tesla:3,     prism:3,     relayhub:1, echo:1, reactor:1,
+          assay:1,     foundry:1,   vats:1,     longgun:2,
           helipad:2,   afld:2,      aagun:3,
           navalyard:1, subpen:1,
   /* One each. A second silo would not charge a second missile - the timer is per house - so
@@ -159,9 +161,13 @@ var RTS_AI = {
      buys an airfield before a war factory has no army to protect it, and one that buys it after
      four turrets never gets there at all. The AA gun goes IN the defensive tail, beside the
      turrets it stands next to. */
+  /* batch 12a: the Assay Plant, Foundry and Clone Vats after the premium towers. Straight after the
+     lab they bring the seats closest to even in self-play, but they cost the Dominion its Arc Tower
+     (e2e/basedef), as the hub and the sensor did; here a match of eighteen minutes does not yet reach
+     them (docs/roster-ra2.md). The Long Gun is among the defences. */
   buildOrder:['refinery', 'barracks', 'silo', 'factory', 'radar', 'apower', 'depot', 'lab', 'kennel',
               'helipad', 'afld', 'navalyard', 'subpen',
-              'pillbox', 'flametower', 'turret', 'rocketpit', 'tesla', 'prism', 'aagun',
+              'pillbox', 'flametower', 'turret', 'rocketpit', 'longgun', 'tesla', 'prism', 'assay', 'foundry', 'vats', 'aagun',
               /* the hub and the sensor after the defences: before them they cost the base its Arc Tower (e2e/basedef) */
               'relayhub', 'echo', 'reactor',
               'mslo', 'iron', 'pdox', 'gps', 'mist', 'spire'],
@@ -207,7 +213,9 @@ var RTS_AI = {
                  (core/ai.js). A gun that cannot hit the ground is dead weight on a ground war. */
               { key:'flaktrack', at:1200, w:4, vsAir:2 },
               { key:'prismtank', at:2200, w:2 },
-              { key:'arctank', at:1700, w:3 }, { key:'dronetank', at:1500, w:3 }, { key:'veiltank', at:1800, w:2 } ],
+              { key:'arctank', at:1700, w:3 }, { key:'dronetank', at:1500, w:3 }, { key:'veiltank', at:1800, w:2 },
+              /* batch 12a, measured in self-play (docs/roster-ra2.md): 0.83 and 0.89 value dealt a credit */
+              { key:'hunter', at:1700, w:2 }, { key:'ifv', at:1400, w:2 } ],
     /* No Mine Layer here: it is bought outside the weighted roll (core/aimines.js
        _rtsAISupport), because an entry in this pool moves every roll after it - measured, the
        Soviet opponent stopped reaching its Arc Tower in e2e/basedef and the raiders thinned out
@@ -262,7 +270,9 @@ var RTS_AI = {
     infantry:[ { key:'flame', at:1200, w:2 }, { key:'grenadier', at:900, w:2 },
                { key:'rocket', at:500, w:3 }, { key:'dog', at:400, w:2 },
                { key:'rifle', at:250, w:2 }, { key:'engineer', at:2200, w:2 },
-               { key:'arctroop', at:1000, w:2 }, { key:'mentalist', at:2000, w:1 }, { key:'rifttroop', at:2200, w:1 }
+               { key:'arctroop', at:1000, w:2 }, { key:'mentalist', at:2000, w:1 }, { key:'rifttroop', at:2200, w:1 },
+               /* batch 12a: the Marksman, and the Flak Trooper only against aircraft, as the Flak Track */
+               { key:'marksman', at:1200, w:1 }, { key:'flakman', at:600, w:3, vsAir:2 }
                /* NOT the explosives (core/blast.js): a Zealot or a Wrecker kills its own side's men round it,
                   and an opponent that buys them without knowing where to send them only moves its own
                   battle about - bought even from 2000 credits they moved unit/endgame, unit/aitactics and

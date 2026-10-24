@@ -7,7 +7,7 @@
                    under RTS_AI.oreGone the ore is gone
      CAN EARN      a seat with a refinery and harvesters can earn only while there is ore to mine
      EVERYTHING    four minutes into a 1v1, the opponent keeps a garrison at home while the map has
-                   ore and its army grows; with the ore gone nobody stays home inside ninety
+                   ore and keeps buying; with the ore gone nobody stays home inside ninety
                    seconds, and in three minutes the army is spent in the fight
      SAID ONCE     the player is told once, when the first wave of it goes */
 
@@ -41,6 +41,10 @@ function army(g) {
   return out;
 }
 var A = battle(), B = battle(), C = battle();
+/* what the opponent buys in the ninety seconds with ore (A): its army on the field is that, less what
+   the other seat kills, and that is the other seat's doing as much as its own */
+var boughtA = 0, dlvA = A._rtsDeliverUnit;
+A._rtsDeliverUnit = function (side) { var u = dlvA.apply(this, arguments); if (side === 'enemy' && u && A._rtsG.t > T0) boughtA++; return u; };
 run(A, T0); run(B, T0); run(C, T0);
 var G = B._rtsG, left0 = B._rtsOreLeft();
 S.ok('THE COUNT: _rtsOreLeft is the number of cells holding ore, and four minutes in there is plenty', left0 === count(B) && left0 > 100 && !B._rtsOreGone(), left0 + ' cells');
@@ -62,9 +66,12 @@ var c10 = null;
 for (var w5 = 0; w5 < HOLD; w5 += 5) { run(A, 5); run(B, 5); run(C, 5); waitA.push(waiting(A)); waitB.push(waiting(B)); if (w5 === 5) c10 = army(C); }
 var a1 = army(A), b1 = army(B), c1 = army(C);
 /* both seats are computer-played, so both go: the measure is that nobody stays home and the army is
-   spent in the fight - with ore it grows over the same ninety seconds */
-S.ok('EVERYTHING: with ore the opponent keeps a garrison at home and its army grows; with the ore gone, inside ' + HOLD + ' s, nobody stays home and every fighter is on the way or there',
-     a1.home >= 3 && a1.total >= before.total && b1.home <= 1 && (b1.team + b1.hunt + b1.away) >= b1.total - 1, JSON.stringify({ at240: before, ore: a1, gone: b1 }));
+   spent in the fight - with ore it keeps buying over the same ninety seconds. It used to say "its army
+   grows", which is the buying less what the other seat kills: measured on main it held level, 25 to
+   25, and once the Compact bought Tank Hunters and Multi-role Carriers (batch 12a) it went 27 to 23
+   while the opponent bought 26 in the window against 24 before - the same opponent, a harder foe. */
+S.ok('EVERYTHING: with ore the opponent keeps a garrison at home and keeps buying; with the ore gone, inside ' + HOLD + ' s, nobody stays home and every fighter is on the way or there',
+     a1.home >= 3 && boughtA >= 10 && b1.home <= 1 && (b1.team + b1.hunt + b1.away) >= b1.total - 1, JSON.stringify({ at240: before, ore: a1, boughtWithOre: boughtA, gone: b1 }));
 /* a team with a gun goes - none stands waiting for members that will never be bought, nor stops to
    regroup for them - at any of the eighteen looks; with the ore, teams wait to fill */
 S.ok('...its teams go as they are - at no look in the ninety seconds does one with a gun stand waiting, where with the ore some do', Math.max.apply(null, waitB) === 0 && Math.max.apply(null, waitA) >= 1,

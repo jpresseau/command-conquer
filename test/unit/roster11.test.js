@@ -10,7 +10,7 @@
      FLAK TROOPER finds a helicopter by itself and brings it down, and fights a rifleman too
      LONG GUN     dark, it does not fire; lit, it shells a tank standing beyond the tank's own
                   reach, and the tank cannot answer
-     THE OPPONENT does not buy or build them yet: batch 12 */
+     THE OPPONENT buys and builds them (batch 12a), the Flak Trooper only against aircraft */
 
 var { Suite } = require('../lib/assert.js');
 var { loadFast } = require('../lib/sandbox.js');
@@ -138,7 +138,8 @@ if (L) {
 /* -------------------------------------------------------------- opponent ---- */
 var A = g.RTS_AI, mixed = [];
 for (var c in A.mix) (A.mix[c] || []).forEach(function (m) { mixed.push(m.key); });
-S.ok('the opponent does not buy or build them yet: batch 12',
-     ['marksman', 'hunter', 'flakman'].every(function (k) { return mixed.indexOf(k) < 0; }) && A.buildOrder.indexOf('longgun') < 0, '');
+var flak = (A.mix.infantry || []).filter(function (m) { return m.key === 'flakman'; })[0];
+S.ok('the opponent buys the Marksman and the Tank Hunter, the Flak Trooper only against aircraft, and builds the Long Gun (batch 12a)',
+     ['marksman', 'hunter'].every(function (k) { return mixed.indexOf(k) >= 0; }) && !!flak && flak.vsAir > 0 && A.buildOrder.indexOf('longgun') >= 0, '');
 
 require('../lib/report.js')(S);
