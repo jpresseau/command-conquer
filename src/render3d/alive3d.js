@@ -83,6 +83,7 @@ function _r3dRubbleTick(G, R3) {
 
 /* The antennas and the ruins, handed to `draw(mesh, x, y, z, rot, dim, sy)`. */
 function _r3dAliveDraw(G, R3, draw) {
+  _r3dGateDraw(G, R3, draw);                     /* a gate's barrier is the gate, not decoration: render3d/gate3d.js */
   if (R3.aliveAmt === 0) { R3.rubbleN = 0; return; }
   var A2W = RTS_TILE / RTS_TS, t = G.t || 0, i;
   for (i = 0; i < G.ents.length; i++) {

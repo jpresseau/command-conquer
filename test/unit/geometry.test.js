@@ -202,6 +202,25 @@ function bounds(faces) {
   S.ok('...and so does every structure', bMin >= 200,
        bN + ' structures average ' + Math.round(bTot / bN) + ' triangles; leanest is ' +
        bName + ' at ' + bMin + ' (they averaged 1,182 before this)');
+  /* ...and each structure is its own model, not the bare base every building gets before the model
+     chain (sprites/models.js): a key no arm of the chain owns still builds, and is still drawn,
+     so a picture test cannot tell it from the real thing (the Long Gun's model was taken out
+     once and e2e/roster11 passed). The base is measured on a building no arm owns, of every
+     footprint a real one has. */
+  var bare = {}, unowned = [];
+  g.RTS_STRUCTS.forEach(function (b) {
+    var k = b.w + 'x' + b.h;
+    if (bare[k] != null) return;
+    g.RTS_STRUCTS.push({ key: '__bare', name: 'bare', w: b.w, h: b.h, cost: 1, build: 1, hp: 1, power: 0, sight: 1, armour: 'wood' });
+    try { bare[k] = tris(g._sprBuildingModel('__bare', 'player')); } finally { g.RTS_STRUCTS.pop(); }
+  });
+  g.RTS_STRUCTS.forEach(function (b) {
+    var f = null;
+    try { f = g._sprBuildingModel(b.key, 'player'); } catch (e) { return; }
+    if (!f || tris(f) <= bare[b.w + 'x' + b.h] + 40) unowned.push(b.key);
+  });
+  S.ok('...and each one is its own model, well past the bare base a building with no model gets', !unowned.length && Object.keys(bare).length >= 3,
+       unowned.join(', ') || 'all ' + g.RTS_STRUCTS.length + ' (bare bases: ' + JSON.stringify(bare) + ')');
   S.note('the roster totals ' + (uTot + bTot) + ' triangles, against 53,528 before — built once ' +
          'per model and instanced thereafter, so this is upload cost, not per-frame cost');
 })();

@@ -3,6 +3,7 @@
      DRAWN        the Multi-role Carrier, the Leech Drone, the Marshal, a Strike Jet and the Gate are
                   drawn: the picture round each differs with it hidden (R3.hideId for a unit; a
                   building gone for a frame), and a square nine cells off does not
+     THE GATE     opens: its barrier sinks out of the picture, and shut again it is back
      THE LASE     a Marshal's mark is a beam on the screen, and it is red
    The loop frozen, the staging asserted first. */
 
@@ -63,6 +64,19 @@ var S = new Suite('roster11b');
     out.placed = !!gt;
     if (gt) { gt.building = 0; out.drawn.gate = drawn(gt); }
 
+    /* ---- the gate opening: its barrier sinks (render3d/gate3d.js), eased over game time ---- */
+    if (gt) {
+      var gy = _rtsElev(gt.x, gt.z) + 2, ox = gt.x + T * 9, oz = gt.z + T * 5, oy = _rtsElev(ox, oz);
+      gt.open = 0; look(gt.x, gt.z); frame(); G.t += 2; frame();
+      var shutPx = grab(gt.x, gy, gt.z, 21), shutC = grab(ox, oy, oz, 21);
+      gt.open = 1; G.t += 2; frame();
+      var openPx = grab(gt.x, gy, gt.z, 21), openC = grab(ox, oy, oz, 21);
+      out.lift = (window._R3D.gateLift || {})[gt.id] ? +window._R3D.gateLift[gt.id].v.toFixed(2) : null;
+      out.opened = differ(shutPx, openPx); out.openCtl = differ(shutC, openC, 20);
+      gt.open = 0; G.t += 2; frame();
+      out.reshut = differ(shutPx, grab(gt.x, gy, gt.z, 21));
+    }
+
     /* ---- the lase: a Marshal's mark on an enemy building ---- */
     var pw = null;
     for (r = 0; r < 14 && !pw; r++) for (a = 0; a < 8 && !pw; a++)
@@ -89,6 +103,10 @@ var S = new Suite('roster11b');
   S.ok('the staging: a Gate placed', o.placed, '');
   S.ok('the Multi-role Carrier, the Leech Drone, the Marshal, a Strike Jet and the Gate are drawn', ['ifv', 'leech', 'marshal', 'strikejet', 'gate'].every(function (k) { return o.drawn[k] > 20; }), JSON.stringify(o.drawn));
   S.eq('...and nowhere else (control squares nine cells off)', o.ctl, 0);
+  S.ok('THE GATE OPENS: with one of its own beside it, its barrier sinks and the picture changes', o.lift > 0.95 && o.opened > 20, 'lift ' + o.lift + ', ' + o.opened + ' px');
+  S.eq('...nowhere else', o.openCtl, 0);
+  /* against the opening's own size: game time moves the world's ambient motion a little too */
+  S.ok('...and shut again, it is as it was', o.reshut * 10 < o.opened, o.reshut + ' px against the ' + o.opened + ' it opened by');
   S.ok('THE LASE: a Marshal\'s mark is a beam on the screen', o.beam && o.beamPx > 8, o.beamPx + ' px');
   S.ok('...and it is red', o.beamRGB && o.beamRGB[0] > 1.5 * Math.max(o.beamRGB[1], o.beamRGB[2], 1), JSON.stringify(o.beamRGB));
   var errs = g.errors.filter(function (e) { return !/ServiceWorker/.test(e); });
