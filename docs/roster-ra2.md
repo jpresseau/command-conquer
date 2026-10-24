@@ -366,7 +366,7 @@ owner, and an Engineer can take it back as it can any building:
   takes off from the strip with four riflemen aboard and drops them on the cell chosen
   (`_rtsFireParadrop`, `core/paradrop.js`).
 
-The opponent's Engineers do not go after them yet; that is batch 12. `unit/tech` (14) and
+The opponent's Engineers go after them too: batch 12b, below. `unit/tech` (16) and
 `e2e/tech` (9) hold it.
 
 ## Batch 11a: soldiers of the line (`rules/roster11.js`, `sprites/roster11.js`)
@@ -435,9 +435,11 @@ self-play (`tools/selfplay.js`, eight seeds each way, twelve minutes).
   towers. Straight after the Research Lab they brought the seats closest to even (below), but there
   they cost the Dominion its Arc Tower in `e2e/basedef`, as the Relay Hub and the Echo Sensor did
   before them; after the towers, the opponent keeps adding defences to its ratios and a match of
-  eighteen minutes does not reach them yet. Building them earlier without costing the base its
-  defences wants a rule of its own (a rich house buying its economy out of turn), and is left for
-  later in batch 12.
+  eighteen minutes does not reach them yet. A rule letting a rich house (2,500 credits in the bank)
+  buy them out of turn was tried and measured, and not kept: it built them by five minutes, but
+  cost the Dominion its Arc Tower in `e2e/basedef` again, broke `unit/endgame`'s three-minute
+  look, and left the seats where they were (the Compact's share 0.604). Money the opponent
+  banks is money its defences and army need sooner.
 - **Bought:** the Tank Hunter and the Multi-role Carrier (empty: it fires its own missiles), the
   Marksman, and the Flak Trooper only while the player flies (`vsAir`, as the Flak Track).
 
@@ -456,3 +458,18 @@ what the other seat kills, and with the Compact's new units it went 27 to 23 whi
 bought 26 (24 before). It now asserts the buying. The rest of batch 12 is the units that need a plan:
 the explosives, the Blight Trooper, the aircraft, the deep, Engineers at tech buildings, and the
 Marshal, the Leech Drone, loading the Carrier and the Gate.
+
+## Batch 12b: the opponent takes the tech buildings (`core/capturead.js`, `core/missions.js`)
+
+The opponent's capture search (`_rtsAICaptureTarget`) looks at a tech building no one holds as well
+as at the player's buildings, through the same rule the player's Engineers use (`_rtsClaimable`).
+A tech building costs nothing, so its worth is its own (`RTS_CAP_TECH_WORTH`: the Derrick and the
+Airstrip 2,000, the hospital and the shop 1,200), discounted by the walk as any capture is. The
+Snatch team's capture leg ends on the target being claimable no longer, rather than on its not
+being hostile, which a tech building no one holds never is. Its escort is ordered onto the prize
+as before, and only walks there: `_rtsFire` shoots nothing that is not hostile.
+
+Measured on three seeds, both seats played by the computer, TOWNS + TECH, twelve minutes: the
+Derrick was taken by 240 s on all three and the Airstrip by 290 to 465 s; on main nobody took
+either. `unit/tech` (16) holds it.
+

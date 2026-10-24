@@ -10,7 +10,8 @@
      THE HOSPITAL heals its owner's infantry near it, not a tank, not the enemy's
      THE SHOP     repairs its owner's vehicles near it, not a man
      THE AIRSTRIP gives its owner Paratroopers: four rifle squads in a plane, sent to the cell chosen
-     NO ONE'S     held by no one, none of them works for anybody */
+     NO ONE'S     held by no one, none of them works for anybody
+     THE OPPONENT sends its Engineers for them, and its escort does not shoot the prize (batch 12b) */
 
 var { Suite } = require('../lib/assert.js');
 var { loadFast } = require('../lib/sandbox.js');
@@ -93,5 +94,21 @@ var ok = g._rtsSuperFire('player', 'paradrop', tx, tz);
 var plane = G.ents.filter(function (e) { return !e.dead && e.def === 'paraplane' && e.side === 'player'; })[0];
 S.ok('...a plane with four rifle squads aboard, sent to the cell chosen', ok && !!plane && (plane.cargo || []).length === 4 && plane.order !== null,
      plane ? (plane.cargo || []).length + ' aboard, order ' + plane.order : 'no plane');
+
+/* ---------------------------------------------------------------- the opponent ---- */
+/* batch 12b: the opponent's Engineers go for them too (core/capturead.js) - both seats played by the
+   computer, a TOWNS + TECH battle on seed 7: measured, the Derrick is the opponent's at 235 s, and
+   on main nobody's in twelve minutes. Its escort is ordered onto the prize too, and does not shoot
+   it: core/combat.js _rtsFire fires at nothing that is not hostile. */
+g.RTS_CRATE_MAX = 0; g.window._RTS_ARMY = 'allied';
+g._rtsNewGame(7, 'normal', { player: { ctl: 'ai', diff: 'normal' }, skirmish: { town: 'tech' } });
+G = g._rtsG;
+var heldBy = null;
+for (var tt = 0; tt < 330 * 30 && !G.over && !heldBy; tt++) {
+  g._rtsTick(1 / 30);
+  if (tt % 30 === 0) G.ents.forEach(function (e) { if (!heldBy && e.type === 'struct' && !e.dead && (g.rtsStructDef(e.def) || {}).tech && e.side === 'enemy') heldBy = e; });
+}
+S.ok('THE OPPONENT sends its Engineers for them: one is the opponent\'s inside five and a half minutes', !!heldBy, heldBy ? heldBy.def + ' at ' + Math.round(G.t) + ' s' : 'none taken');
+S.ok('...and its escort did not shoot it on the way in', !!heldBy && heldBy.hp >= heldBy.maxHp * 0.9, heldBy ? Math.round(heldBy.hp) + '/' + heldBy.maxHp : '');
 
 require('../lib/report.js')(S);

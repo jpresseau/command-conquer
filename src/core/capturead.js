@@ -26,6 +26,7 @@ function _rtsCaptureWorth(b) {
   if (!d) return 0;
   var w = d.cost || 0;
   if (b.def === 'yard') w = RTS_CAP_YARD_WORTH;
+  if (d.tech) w = RTS_CAP_TECH_WORTH[d.tech] || 0;     /* a tech building: core/tech.js */
   /* A building that produces is worth more than its price says, because taking it takes the
      line as well as the shell - and the previous owner cannot replace what it can no longer
      build. Same reasoning the `factories` quarry is built on. */
@@ -67,7 +68,10 @@ function _rtsAICaptureTarget() {
   if (!home) return null;
   for (var i = 0; i < G.ents.length; i++) {
     var b = G.ents[i];
-    if (b.dead || b.side !== _rtsAIFoe() || b.type !== 'struct') continue;
+    if (b.dead || b.type !== 'struct') continue;
+    /* the player's buildings - and a tech building no one holds yet, which is no one's enemy
+       but anyone's to take (core/tech.js _rtsClaimable) */
+    if (b.side !== _rtsAIFoe() && !(b.side === 'civ' && _rtsClaimable(b, _rtsAIOn))) continue;
     if (b.selling || b.building) continue;
     if (!rtsCapturable(b.def)) continue;
     var worth = _rtsCaptureWorth(b);
@@ -107,7 +111,7 @@ function _rtsAIWorthCapturing() {
     /* A cached target that has since died, been sold or already changed hands is not an
        answer, and waiting out the rest of the recheck on it would aim the leg at a corpse. */
     var c = G.ai.capTgt;
-    if (!c || c.dead || c.selling || !_rtsHostile(c.side, _rtsAIOn)) { G.ai.capT = null; }
+    if (!c || c.dead || c.selling || !_rtsClaimable(c, _rtsAIOn)) { G.ai.capT = null; }
     else return true;
   }
   G.ai.capT = G.t;

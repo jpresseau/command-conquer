@@ -57,6 +57,10 @@ var RTS_BASE_SPAN = 2.5;
    terms of the decision _rtsAIWorthCapturing makes; see core/capturead.js for what each means. */
 var RTS_CAP_YARD_WORTH = 2500;   /* the Construction Yard's `cost` is 0 - see _rtsCaptureWorth */
 var RTS_CAP_FACTORY_MULT = 1.5;  /* taking a producer takes the line, not just the shell */
+/* A tech building no one holds (core/tech.js) costs nothing either, and is worth what it does: the
+   Oil Derrick pays 75 every ten seconds, past an engineer's price in a little over a minute; the
+   Airstrip is a superweapon; the hospital and the shop work for whoever holds them (batch 12b) */
+var RTS_CAP_TECH_WORTH = { oil: 2000, drop: 2000, heal: 1200, fix: 1200 };
 /* Below this, the building is worth less than the engineer plus the walk. An engineer is 500,
    so a Power Plant at 300 is a straight loss and a Barracks at 400 is not worth a unit and two
    minutes; a Refinery at 2000 or a War Factory at 1600 plainly is. */
