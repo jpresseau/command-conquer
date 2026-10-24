@@ -94,6 +94,8 @@ S.ok('THE JETPACK is trained at the barracks, not on a pad', !!jp && Math.hypot(
 
 /* ------------------------------------------------------------- opponent ---- */
 var A = g.RTS_AI, inMix = function (k) { return Object.keys(A.mix).some(function (c) { return A.mix[c].some(function (m) { return m.key === k; }); }); };
-S.ok('the opponent neither builds nor buys them: that is batch 12', !inMix('warharv') && ['assay', 'foundry', 'vats'].every(function (k) { return A.buildOrder.indexOf(k) < 0; }), '');
+/* batch 12a: the three buildings, one each; the War Harvester is a harvester the opponent buys by its own rule */
+S.ok('the opponent builds the Assay Plant, the Foundry and the Clone Vats, one of each, and does not buy the War Harvester yet',
+     !inMix('warharv') && ['assay', 'foundry', 'vats'].every(function (k) { return A.buildOrder.indexOf(k) >= 0 && A.limit[k] === 1 && A.ratio[k] > 0; }), '');
 
 require('../lib/report.js')(S);

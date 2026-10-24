@@ -424,3 +424,35 @@ the Leech Drone and the Gate.
 
 The opponent does not buy or build them yet; that is batch 12. `unit/roster11b` (24) and
 `e2e/roster11b` (9) hold it.
+
+## Batch 12a: the opponent uses the safe additions (`rules/ai.js`)
+
+The first part of batch 12: the opponent builds and buys what needs no plan of its own, measured in
+self-play (`tools/selfplay.js`, eight seeds each way, twelve minutes).
+
+- **Built:** the Long Gun, among the defences after the rocket pit (by eighteen minutes the Compact
+  stands two), and the Assay Plant, the Foundry and the Clone Vats, one of each, after the premium
+  towers. Straight after the Research Lab they brought the seats closest to even (below), but there
+  they cost the Dominion its Arc Tower in `e2e/basedef`, as the Relay Hub and the Echo Sensor did
+  before them; after the towers, the opponent keeps adding defences to its ratios and a match of
+  eighteen minutes does not reach them yet. Building them earlier without costing the base its
+  defences wants a rule of its own (a rich house buying its economy out of turn), and is left for
+  later in batch 12.
+- **Bought:** the Tank Hunter and the Multi-role Carrier (empty: it fires its own missiles), the
+  Marksman, and the Flak Trooper only while the player flies (`vsAir`, as the Flak Track).
+
+Measured against the same seeds before it, as shipped: the Tank Hunter dealt 0.93 of its price in
+damage, the Carrier 0.81, the Flak Trooper 1.29 and the Marksman 0.53, against the Battle Tank's
+1.02, and the Compact's share of everything standing at the horizon went from 0.60 to 0.59. With the
+economy straight after the lab that share fell to 0.53 - the Dominion's Foundry and Clone Vats are
+worth more the earlier they stand - which is the case for the rule above.
+
+Left out, measured: the new ships (the Sea Hornet, the Dolphin and the Kraken were bought and dealt
+nothing, as most hulls do on these maps) and the Falcon (0.32 of its price, and the opponent has no
+team type that flies one: `unit/aiplan`).
+
+`unit/endgame` said the opponent's army "grows" in ninety seconds with ore; that is its buying less
+what the other seat kills, and with the Compact's new units it went 27 to 23 while the opponent
+bought 26 (24 before). It now asserts the buying. The rest of batch 12 is the units that need a plan:
+the explosives, the Blight Trooper, the aircraft, the deep, Engineers at tech buildings, and the
+Marshal, the Leech Drone, loading the Carrier and the Gate.
