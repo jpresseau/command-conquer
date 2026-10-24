@@ -422,54 +422,10 @@ the Leech Drone and the Gate.
   it, its barrier sinks into the ground: the barrier is its own mesh (`render3d/gate3d.js`), drawn
   over the building as the radar's antenna is, and eased over game time.
 
-The opponent does not buy or build them yet; that is batch 12. `unit/roster11b` (24) and
-`e2e/roster11b` (9) hold it.
+The opponent buys the Marshal (batch 12c), and not the Carrier's crew, the Leech Drone or the Gate.
+`unit/roster11b` (24) and `e2e/roster11b` (9) hold it.
 
-## Batch 12a: the opponent uses the safe additions (`rules/ai.js`)
+## Batch 12: the opponent uses the new roster
 
-The first part of batch 12: the opponent builds and buys what needs no plan of its own, measured in
-self-play (`tools/selfplay.js`, eight seeds each way, twelve minutes).
-
-- **Built:** the Long Gun, among the defences after the rocket pit (by eighteen minutes the Compact
-  stands two), and the Assay Plant, the Foundry and the Clone Vats, one of each, after the premium
-  towers. Straight after the Research Lab they brought the seats closest to even (below), but there
-  they cost the Dominion its Arc Tower in `e2e/basedef`, as the Relay Hub and the Echo Sensor did
-  before them; after the towers, the opponent keeps adding defences to its ratios and a match of
-  eighteen minutes does not reach them yet. A rule letting a rich house (2,500 credits in the bank)
-  buy them out of turn was tried and measured, and not kept: it built them by five minutes, but
-  cost the Dominion its Arc Tower in `e2e/basedef` again, broke `unit/endgame`'s three-minute
-  look, and left the seats where they were (the Compact's share 0.604). Money the opponent
-  banks is money its defences and army need sooner.
-- **Bought:** the Tank Hunter and the Multi-role Carrier (empty: it fires its own missiles), the
-  Marksman, and the Flak Trooper only while the player flies (`vsAir`, as the Flak Track).
-
-Measured against the same seeds before it, as shipped: the Tank Hunter dealt 0.93 of its price in
-damage, the Carrier 0.81, the Flak Trooper 1.29 and the Marksman 0.53, against the Battle Tank's
-1.02, and the Compact's share of everything standing at the horizon went from 0.60 to 0.59. With the
-economy straight after the lab that share fell to 0.53 - the Dominion's Foundry and Clone Vats are
-worth more the earlier they stand - which is the case for the rule above.
-
-Left out, measured: the new ships (the Sea Hornet, the Dolphin and the Kraken were bought and dealt
-nothing, as most hulls do on these maps) and the Falcon (0.32 of its price, and the opponent has no
-team type that flies one: `unit/aiplan`).
-
-`unit/endgame` said the opponent's army "grows" in ninety seconds with ore; that is its buying less
-what the other seat kills, and with the Compact's new units it went 27 to 23 while the opponent
-bought 26 (24 before). It now asserts the buying. The rest of batch 12 is the units that need a plan:
-the explosives, the Blight Trooper, the aircraft, the deep, Engineers at tech buildings, and the
-Marshal, the Leech Drone, loading the Carrier and the Gate.
-
-## Batch 12b: the opponent takes the tech buildings (`core/capturead.js`, `core/missions.js`)
-
-The opponent's capture search (`_rtsAICaptureTarget`) looks at a tech building no one holds as well
-as at the player's buildings, through the same rule the player's Engineers use (`_rtsClaimable`).
-A tech building costs nothing, so its worth is its own (`RTS_CAP_TECH_WORTH`: the Derrick and the
-Airstrip 2,000, the hospital and the shop 1,200), discounted by the walk as any capture is. The
-Snatch team's capture leg ends on the target being claimable no longer, rather than on its not
-being hostile, which a tech building no one holds never is. Its escort is ordered onto the prize
-as before, and only walks there: `_rtsFire` shoots nothing that is not hostile.
-
-Measured on three seeds, both seats played by the computer, TOWNS + TECH, twelve minutes: the
-Derrick was taken by 240 s on all three and the Airstrip by 290 to 465 s; on main nobody took
-either. `unit/tech` (16) holds it.
-
+Its own file, `docs/roster-ra2-12.md`: what the opponent was given (12a, the safe additions; 12b, the
+tech buildings; 12c, the Marshal), what was measured and not kept, and why.

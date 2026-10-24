@@ -129,7 +129,17 @@ function _rtsTeamDoMission(t, dt) {
         if (o === t || !_rtsTeamMine(o) || !o.hasBeen || !L || !o.members.length) continue;
         for (var k = (o.cur | 0); k < L.length; k++) if (L[k][0] === 'sync') { if (k > (o.cur | 0)) waitFor++; break; }
       }
-      if (!waitFor || G.t - t.syncAt > RTS_SYNC_WAIT) { t.syncAt = null; t.synced = G.t; _rtsTeamAdvance(t); continue; }
+      if (!waitFor || G.t - t.syncAt > RTS_SYNC_WAIT) {
+        /* ...and a partner already waiting at its own sync goes in on this same tick. Left to
+           notice on its own next update, it went a tick late whenever it had been updated
+           earlier in the tick than the team that arrived last (unit/aitactics). */
+        for (oid in G.teams) {
+          o = G.teams[oid]; L = o.type.missions;
+          if (o === t || !_rtsTeamMine(o) || !L || !L[o.cur | 0] || L[o.cur | 0][0] !== 'sync' || o.syncAt == null) continue;
+          o.syncAt = null; o.synced = G.t; _rtsTeamAdvance(o);
+        }
+        t.syncAt = null; t.synced = G.t; _rtsTeamAdvance(t); continue;
+      }
       var sw = _rtsWayptPos(arg);
       _rtsTeamOrderAll(t, function (mm, idx) {
         if (mm.target && !mm.target.dead) return;                  /* shoot what comes */

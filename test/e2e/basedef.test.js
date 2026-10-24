@@ -74,8 +74,12 @@ var SECS = 480, CAP = 900;
       window.RTS_ESCORT_OFF = true;
       _rtsNewGame(9001, 'hard');
       var G = window._rtsG, wanted = {};
-      /* the Soviet half runs on past SECS until the coil is asked for, to CAP at the most */
-      for (var t = 0; t < CAP * 60 && (t < SECS * 60 || (vs === 'soviet' && !wanted.tesla)); t++) {
+      /* the Soviet half runs on past SECS until the coil is asked for, to CAP at the most. The
+         SOVIET OPPONENT's half: `vs` is the player's army, and keyed on it this ran the Allied
+         opponent on to CAP and stopped the Soviet one at SECS - batch 12c's plan asked for its
+         coil at 508 s and the spec, stopping at 480, said it never would. */
+      var sovOpp = rtsHouseSide('enemy') === 'soviet';
+      for (var t = 0; t < CAP * 60 && (t < SECS * 60 || (sovOpp && !wanted.tesla)); t++) {
         _rtsTick(1 / 60);
         if (G.over) break;
         /* The player does nothing but refuse to die. An idle player who dies at 170s never

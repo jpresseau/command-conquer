@@ -41,8 +41,21 @@ function battle(cfg) {
     return L[k] || (L[k] = { army: armyOf[side], def: def, built: 0, spent: 0, dealt: 0, taken: 0, killed: 0, lost: 0 });
   }
   function price(e) { var d = e.type === 'struct' ? g.rtsStructDef(e.def) : g.rtsUnitDef(e.def); return d ? d.cost : 0; }
+  /* A burst damages with no `from` (core/damage.js _rtsSplash keeps a blast nobody's kill on
+     purpose), so the ledger notes who set it off for the length of the call: a shell's splash is
+     its shooter's, a bomb's blast ring its bomber's (the bomber is the ring's `skip`, on the
+     ring's own side; a planted charge's skip is its victim, so it stays nobody's). A Strike Jet
+     is bought by no one: its bombs are the Marshal's who called it. */
+  var src = null;
+  function by(fn, who) {
+    var f = g[fn];
+    g[fn] = function () { var s0 = src; src = who(arguments) || src; try { return f.apply(this, arguments); } finally { src = s0; } };
+  }
+  by('_rtsSplash', function (a) { return a[6]; });
+  by('_rtsBlastRing', function (a) { return a[5] && a[5].side === a[4] ? a[5] : null; });
   var dmg = g._rtsDamage;
   g._rtsDamage = function (tgt, n, from, floor) {
+    var who = from || src;            /* not written back to `from`: the game must not see it */
     var hp0 = tgt && !tgt.dead ? tgt.hp : 0, r = dmg.apply(this, arguments);
     if (!tgt || hp0 <= 0) return r;
     var lostHp = hp0 - Math.max(0, tgt.dead ? 0 : tgt.hp);
@@ -50,8 +63,8 @@ function battle(cfg) {
     var v = lostHp * price(tgt) / tgt.maxHp;
     row(tgt.side, tgt.def).taken += v;
     if (tgt.dead) row(tgt.side, tgt.def).lost++;
-    if (from && from.def && from.side && from.side !== tgt.side) {
-      var f = row(from.side, from.def); f.dealt += v; if (tgt.dead) f.killed++;
+    if (who && who.def && who.side && who.side !== tgt.side) {
+      var f = row(who.side, who.def === 'strikejet' ? 'marshal' : who.def); f.dealt += v; if (tgt.dead) f.killed++;
     }
     return r;
   };
