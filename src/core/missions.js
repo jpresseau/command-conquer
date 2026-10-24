@@ -245,7 +245,7 @@ function _rtsTeamDoMission(t, dt) {
          reported back; it never sets `dead`, and there is no event. So the .dead idiom every
          other leg completes on is not merely wrong here, it hangs: a captured building
          satisfies neither `!t.capt` nor `t.capt.dead`, forever. */
-      if (t.capt && (t.capt.dead || t.capt.selling || !_rtsHostile(t.capt.side, _rtsAIOn))) {
+      if (t.capt && (t.capt.dead || t.capt.selling || !_rtsClaimable(t.capt, _rtsAIOn))) {   /* taken, or a tech building no one holds: core/tech.js */
         _rtsTeamAdvance(t); continue;
       }
       if (!t.capt) t.capt = (G.ai && G.ai.capTgt) || _rtsAICaptureTarget();
@@ -262,7 +262,7 @@ function _rtsTeamDoMission(t, dt) {
              itself when there is no route, so re-issuing unconditionally would be one A* per
              engineer per frame against a building it cannot reach. */
           if (mm.order !== 'capture' || mm.target !== t.capt) _rtsOrderCapture(mm, t.capt);
-        } else if (mm.order !== 'attack' || mm.target !== t.capt) _rtsOrderAttack(mm, t.capt);
+        } else if (mm.order !== 'attack' || mm.target !== t.capt) _rtsOrderAttack(mm, t.capt);   /* at a tech building no one holds it only walks there: _rtsFire shoots nothing that is not hostile */
       });
       /* No engineer left: it died on the way, or it arrived and was spent. Either way this
          leg is over and the escort should be fighting rather than standing at a wall. */

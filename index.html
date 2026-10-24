@@ -863,7 +863,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">8497316 · 2026-10-24</div>
+  <div id="rtsBuild" title="build">3a44d58 · 2026-10-24</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -2451,6 +2451,10 @@ var RTS_BASE_SPAN = 2.5;
    terms of the decision _rtsAIWorthCapturing makes; see core/capturead.js for what each means. */
 var RTS_CAP_YARD_WORTH = 2500;   /* the Construction Yard's `cost` is 0 - see _rtsCaptureWorth */
 var RTS_CAP_FACTORY_MULT = 1.5;  /* taking a producer takes the line, not just the shell */
+/* A tech building no one holds (core/tech.js) costs nothing either, and is worth what it does: the
+   Oil Derrick pays 75 every ten seconds, past an engineer's price in a little over a minute; the
+   Airstrip is a superweapon; the hospital and the shop work for whoever holds them (batch 12b) */
+var RTS_CAP_TECH_WORTH = { oil: 2000, drop: 2000, heal: 1200, fix: 1200 };
 /* Below this, the building is worth less than the engineer plus the walk. An engineer is 500,
    so a Power Plant at 300 is a straight loss and a Barracks at 400 is not worth a unit and two
    minutes; a Refinery at 2000 or a War Factory at 1600 plainly is. */
@@ -20105,6 +20109,7 @@ function _rtsCaptureWorth(b) {
   if (!d) return 0;
   var w = d.cost || 0;
   if (b.def === 'yard') w = RTS_CAP_YARD_WORTH;
+  if (d.tech) w = RTS_CAP_TECH_WORTH[d.tech] || 0;     /* a tech building: core/tech.js */
   /* A building that produces is worth more than its price says, because taking it takes the
      line as well as the shell - and the previous owner cannot replace what it can no longer
      build. Same reasoning the `factories` quarry is built on. */
@@ -20146,7 +20151,10 @@ function _rtsAICaptureTarget() {
   if (!home) return null;
   for (var i = 0; i < G.ents.length; i++) {
     var b = G.ents[i];
-    if (b.dead || b.side !== _rtsAIFoe() || b.type !== 'struct') continue;
+    if (b.dead || b.type !== 'struct') continue;
+    /* the player's buildings - and a tech building no one holds yet, which is no one's enemy
+       but anyone's to take (core/tech.js _rtsClaimable) */
+    if (b.side !== _rtsAIFoe() && !(b.side === 'civ' && _rtsClaimable(b, _rtsAIOn))) continue;
     if (b.selling || b.building) continue;
     if (!rtsCapturable(b.def)) continue;
     var worth = _rtsCaptureWorth(b);
@@ -20186,7 +20194,7 @@ function _rtsAIWorthCapturing() {
     /* A cached target that has since died, been sold or already changed hands is not an
        answer, and waiting out the rest of the recheck on it would aim the leg at a corpse. */
     var c = G.ai.capTgt;
-    if (!c || c.dead || c.selling || !_rtsHostile(c.side, _rtsAIOn)) { G.ai.capT = null; }
+    if (!c || c.dead || c.selling || !_rtsClaimable(c, _rtsAIOn)) { G.ai.capT = null; }
     else return true;
   }
   G.ai.capT = G.t;
@@ -23473,7 +23481,7 @@ function _rtsTeamDoMission(t, dt) {
          reported back; it never sets `dead`, and there is no event. So the .dead idiom every
          other leg completes on is not merely wrong here, it hangs: a captured building
          satisfies neither `!t.capt` nor `t.capt.dead`, forever. */
-      if (t.capt && (t.capt.dead || t.capt.selling || !_rtsHostile(t.capt.side, _rtsAIOn))) {
+      if (t.capt && (t.capt.dead || t.capt.selling || !_rtsClaimable(t.capt, _rtsAIOn))) {   /* taken, or a tech building no one holds: core/tech.js */
         _rtsTeamAdvance(t); continue;
       }
       if (!t.capt) t.capt = (G.ai && G.ai.capTgt) || _rtsAICaptureTarget();
@@ -23490,7 +23498,7 @@ function _rtsTeamDoMission(t, dt) {
              itself when there is no route, so re-issuing unconditionally would be one A* per
              engineer per frame against a building it cannot reach. */
           if (mm.order !== 'capture' || mm.target !== t.capt) _rtsOrderCapture(mm, t.capt);
-        } else if (mm.order !== 'attack' || mm.target !== t.capt) _rtsOrderAttack(mm, t.capt);
+        } else if (mm.order !== 'attack' || mm.target !== t.capt) _rtsOrderAttack(mm, t.capt);   /* at a tech building no one holds it only walks there: _rtsFire shoots nothing that is not hostile */
       });
       /* No engineer left: it died on the way, or it arrived and was spent. Either way this
          leg is over and the escort should be fighting rather than standing at a wall. */
