@@ -87,6 +87,6 @@ Object.assign(RTS_WEAPONS, {
   lase:       { dmg:0, range:18, cool:24, shot:'beam', speed:0, splash:0, lase:true,
                 strike:{ jets:2, bombs:3, dmg:140, rad:1.6 },
                 verses:{ none:0, wood:1, light:1, heavy:1, concrete:1 } },
-  leechbite:  { dmg:0, range:2.5, cool:0.5, shot:'tracer', speed:0, splash:0, latch:{ dps:22 },
+  leechbite:  { dmg:0, range:4.0, cool:0.5, shot:'tracer', speed:0, splash:0, latch:{ dps:22 },
                 verses:{ none:0, wood:0, light:1, heavy:1, concrete:0 } }
 });

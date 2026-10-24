@@ -863,7 +863,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">3a44d58 · 2026-10-24</div>
+  <div id="rtsBuild" title="build">c44396e · 2026-10-24</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -2155,7 +2155,7 @@ Object.assign(RTS_WEAPONS, {
   lase:       { dmg:0, range:18, cool:24, shot:'beam', speed:0, splash:0, lase:true,
                 strike:{ jets:2, bombs:3, dmg:140, rad:1.6 },
                 verses:{ none:0, wood:1, light:1, heavy:1, concrete:1 } },
-  leechbite:  { dmg:0, range:2.5, cool:0.5, shot:'tracer', speed:0, splash:0, latch:{ dps:22 },
+  leechbite:  { dmg:0, range:4.0, cool:0.5, shot:'tracer', speed:0, splash:0, latch:{ dps:22 },
                 verses:{ none:0, wood:0, light:1, heavy:1, concrete:0 } }
 });
 </script>
@@ -2562,7 +2562,7 @@ var RTS_AI = {
   /* batch 12a: the Assay Plant, Foundry and Clone Vats after the premium towers. Straight after the
      lab they bring the seats closest to even in self-play, but they cost the Dominion its Arc Tower
      (e2e/basedef), as the hub and the sensor did; here a match of eighteen minutes does not yet reach
-     them (docs/roster-ra2.md). The Long Gun is among the defences. */
+     them (docs/roster-ra2-12.md). The Long Gun is among the defences. */
   buildOrder:['refinery', 'barracks', 'silo', 'factory', 'radar', 'apower', 'depot', 'lab', 'kennel',
               'helipad', 'afld', 'navalyard', 'subpen',
               'pillbox', 'flametower', 'turret', 'rocketpit', 'longgun', 'tesla', 'prism', 'assay', 'foundry', 'vats', 'aagun',
@@ -2612,8 +2612,10 @@ var RTS_AI = {
               { key:'flaktrack', at:1200, w:4, vsAir:2 },
               { key:'prismtank', at:2200, w:2 },
               { key:'arctank', at:1700, w:3 }, { key:'dronetank', at:1500, w:3 }, { key:'veiltank', at:1800, w:2 },
-              /* batch 12a, measured in self-play (docs/roster-ra2.md): 0.83 and 0.89 value dealt a credit */
+              /* batch 12a, measured in self-play (docs/roster-ra2-12.md): 0.83 and 0.89 value dealt a credit */
               { key:'hunter', at:1700, w:2 }, { key:'ifv', at:1400, w:2 } ],
+              /* NOT the Leech Drone: bought from 1300 it ran ahead of the army into the defences, 139
+                 bought for 0.11 of their price back, and the Dominion's share fell 0.045 (batch 12c) */
     /* No Mine Layer here: it is bought outside the weighted roll (core/aimines.js
        _rtsAISupport), because an entry in this pool moves every roll after it - measured, the
        Soviet opponent stopped reaching its Arc Tower in e2e/basedef and the raiders thinned out
@@ -2670,11 +2672,13 @@ var RTS_AI = {
                { key:'rifle', at:250, w:2 }, { key:'engineer', at:2200, w:2 },
                { key:'arctroop', at:1000, w:2 }, { key:'mentalist', at:2000, w:1 }, { key:'rifttroop', at:2200, w:1 },
                /* batch 12a: the Marksman, and the Flak Trooper only against aircraft, as the Flak Track */
-               { key:'marksman', at:1200, w:1 }, { key:'flakman', at:600, w:3, vsAir:2 }
+               { key:'marksman', at:1200, w:1 }, { key:'flakman', at:600, w:3, vsAir:2 },
+               /* batch 12c: the Marshal, rich (he is one at a time); his strikes are his own idea */
+               { key:'marshal', at:2600, w:1 }
                /* NOT the explosives (core/blast.js): a Zealot or a Wrecker kills its own side's men round it,
                   and an opponent that buys them without knowing where to send them only moves its own
                   battle about - bought even from 2000 credits they moved unit/endgame, unit/aitactics and
-                  unit/allycmd. Its use of them is docs/roster-ra2.md's batch 12. */
+                  unit/allycmd. Its use of them: docs/roster-ra2-12.md. */
                ],
     /* AIRCRAFT, once there is a pad to fly from - _rtsCanQueue gates on `needs`, so these are
        inert until one exists and there is no separate check to keep in step. Both armies again;
@@ -19800,7 +19804,16 @@ function _rtsAIUnits(S) {
       if (fd && !fd.harvest && !fd.sea && fd.weapon) fighters++;
     }
   }
+  /* ONE SURPLUS BUYS ONE THING. The caller asks once whether the bank is over _rtsAISpare, and a
+     job is paid as it builds (core/production.js), so the bank has not moved when the next line
+     is asked: a pass bought for all four lines out of a surplus of one credit. Wanting a refinery
+     (spare 2600 on hard), the Dominion opponent in e2e/basedef reached 2601 and bought a
+     submarine, a MiG and a V3 at once, again and again, for two minutes - the ratchet of
+     _rtsAISpare's note, through the other lines - and its plan never reached the Tesla Coil.
+     So each line counts what the lines before it committed in this pass. */
+  var committed = 0;
   for (var cat in RTS_AI.mix) {
+    if (rtsMoney(S) - committed <= _rtsAISpare(S)) break;
     if (armyCap != null && fighters >= armyCap && (cat === 'infantry' || cat === 'vehicle')) continue;
     /* AS MANY AIRCRAFT AS THERE ARE PLACES TO PUT THEM. Measured over a 900-second match on
        hard: the opponent reached an Airfield at 257s and finished with THIRTY-FOUR aircraft,
@@ -19861,7 +19874,10 @@ function _rtsAIUnits(S) {
     var roll = _rtsRnd() * total;
     for (i = 0; i < pool.length; i++) {
       roll -= pool[i].w;
-      if (roll <= 0 || i === pool.length - 1) { _rtsQueue(_rtsAIOn, pool[i].key); break; }
+      if (roll <= 0 || i === pool.length - 1) {
+        if (_rtsQueue(_rtsAIOn, pool[i].key)) committed += _rtsCostOf(_rtsAIOn, rtsUnitDef(pool[i].key));
+        break;
+      }
     }
   }
 }
@@ -23365,7 +23381,17 @@ function _rtsTeamDoMission(t, dt) {
         if (o === t || !_rtsTeamMine(o) || !o.hasBeen || !L || !o.members.length) continue;
         for (var k = (o.cur | 0); k < L.length; k++) if (L[k][0] === 'sync') { if (k > (o.cur | 0)) waitFor++; break; }
       }
-      if (!waitFor || G.t - t.syncAt > RTS_SYNC_WAIT) { t.syncAt = null; t.synced = G.t; _rtsTeamAdvance(t); continue; }
+      if (!waitFor || G.t - t.syncAt > RTS_SYNC_WAIT) {
+        /* ...and a partner already waiting at its own sync goes in on this same tick. Left to
+           notice on its own next update, it went a tick late whenever it had been updated
+           earlier in the tick than the team that arrived last (unit/aitactics). */
+        for (oid in G.teams) {
+          o = G.teams[oid]; L = o.type.missions;
+          if (o === t || !_rtsTeamMine(o) || !L || !L[o.cur | 0] || L[o.cur | 0][0] !== 'sync' || o.syncAt == null) continue;
+          o.syncAt = null; o.synced = G.t; _rtsTeamAdvance(o);
+        }
+        t.syncAt = null; t.synced = G.t; _rtsTeamAdvance(t); continue;
+      }
       var sw = _rtsWayptPos(arg);
       _rtsTeamOrderAll(t, function (mm, idx) {
         if (mm.target && !mm.target.dead) return;                  /* shoot what comes */

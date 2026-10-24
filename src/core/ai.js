@@ -162,7 +162,16 @@ function _rtsAIUnits(S) {
       if (fd && !fd.harvest && !fd.sea && fd.weapon) fighters++;
     }
   }
+  /* ONE SURPLUS BUYS ONE THING. The caller asks once whether the bank is over _rtsAISpare, and a
+     job is paid as it builds (core/production.js), so the bank has not moved when the next line
+     is asked: a pass bought for all four lines out of a surplus of one credit. Wanting a refinery
+     (spare 2600 on hard), the Dominion opponent in e2e/basedef reached 2601 and bought a
+     submarine, a MiG and a V3 at once, again and again, for two minutes - the ratchet of
+     _rtsAISpare's note, through the other lines - and its plan never reached the Tesla Coil.
+     So each line counts what the lines before it committed in this pass. */
+  var committed = 0;
   for (var cat in RTS_AI.mix) {
+    if (rtsMoney(S) - committed <= _rtsAISpare(S)) break;
     if (armyCap != null && fighters >= armyCap && (cat === 'infantry' || cat === 'vehicle')) continue;
     /* AS MANY AIRCRAFT AS THERE ARE PLACES TO PUT THEM. Measured over a 900-second match on
        hard: the opponent reached an Airfield at 257s and finished with THIRTY-FOUR aircraft,
@@ -223,7 +232,10 @@ function _rtsAIUnits(S) {
     var roll = _rtsRnd() * total;
     for (i = 0; i < pool.length; i++) {
       roll -= pool[i].w;
-      if (roll <= 0 || i === pool.length - 1) { _rtsQueue(_rtsAIOn, pool[i].key); break; }
+      if (roll <= 0 || i === pool.length - 1) {
+        if (_rtsQueue(_rtsAIOn, pool[i].key)) committed += _rtsCostOf(_rtsAIOn, rtsUnitDef(pool[i].key));
+        break;
+      }
     }
   }
 }

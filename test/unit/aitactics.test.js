@@ -53,6 +53,17 @@ g._rtsTeamDoMission(front, 0.5); g._rtsTeamDoMission(flank, 0.5);
 S.ok('...and once the flank is in place both go in on the same tick', front.cur > syncIndex(front) && flank.cur > syncIndex(flank) && front.synced === flank.synced,
      'front at ' + front.cur + ', flank at ' + flank.cur);
 
+/* ...whichever is updated first in the tick: the front, waiting, is updated while the flank is
+   still a leg short; the flank then arrives and goes in, and takes the front with it on that tick */
+G = fresh();
+var waitF = team(G, 'Assault', 'tank', 3, 0, 0), lateF = team(G, 'Sappers', 'rocket', 3, 40, 40);
+waitF.cur = syncIndex(waitF); lateF.cur = syncIndex(lateF) - 1;
+G.t += 0.5; g._rtsTeamDoMission(waitF, 0.5);
+var heldF = waitF.cur === syncIndex(waitF);
+lateF.cur = syncIndex(lateF); g._rtsTeamDoMission(lateF, 0.5);
+S.ok('...even when the one waiting was updated first in the tick', heldF && lateF.synced === G.t && waitF.synced === G.t && waitF.cur > syncIndex(waitF),
+     'held ' + heldF + '; front ' + waitF.synced + ' at ' + waitF.cur + ', flank ' + lateF.synced);
+
 G = fresh();
 var lone = team(G, 'Assault', 'tank', 3, 0, 0);
 lone.cur = syncIndex(lone);

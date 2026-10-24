@@ -86,7 +86,9 @@ The computer against itself (`core/seats.js`), headless through `loadFast`: ever
 armies swapped between seats, both at the same difficulty, crates off, clear day, 1/60 s ticks, 12
 minutes. Three workers run 80 battles in about an hour. A ledger kept beside the game (it draws no
 random number and writes no saved field) values damage at the victim's price per hit point, so every
-shot that landed counts. `--set=file.js` applies rule changes in the game's context before each battle,
+shot that landed counts. A splash and a bomb's blast count for whoever set them off, and a Marshal's
+air strike for him; before batch 12c they counted for nobody, which understated every unit with
+splash and showed the Marshal dealing almost nothing. `--set=file.js` applies rule changes in the game's context before each battle,
 so a change is measured paired against the same seeds.
 
 Almost no battle ends inside 12 minutes (77 of 80), so the outcome is each army's SHARE of everything

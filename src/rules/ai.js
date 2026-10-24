@@ -168,7 +168,7 @@ var RTS_AI = {
   /* batch 12a: the Assay Plant, Foundry and Clone Vats after the premium towers. Straight after the
      lab they bring the seats closest to even in self-play, but they cost the Dominion its Arc Tower
      (e2e/basedef), as the hub and the sensor did; here a match of eighteen minutes does not yet reach
-     them (docs/roster-ra2.md). The Long Gun is among the defences. */
+     them (docs/roster-ra2-12.md). The Long Gun is among the defences. */
   buildOrder:['refinery', 'barracks', 'silo', 'factory', 'radar', 'apower', 'depot', 'lab', 'kennel',
               'helipad', 'afld', 'navalyard', 'subpen',
               'pillbox', 'flametower', 'turret', 'rocketpit', 'longgun', 'tesla', 'prism', 'assay', 'foundry', 'vats', 'aagun',
@@ -218,8 +218,10 @@ var RTS_AI = {
               { key:'flaktrack', at:1200, w:4, vsAir:2 },
               { key:'prismtank', at:2200, w:2 },
               { key:'arctank', at:1700, w:3 }, { key:'dronetank', at:1500, w:3 }, { key:'veiltank', at:1800, w:2 },
-              /* batch 12a, measured in self-play (docs/roster-ra2.md): 0.83 and 0.89 value dealt a credit */
+              /* batch 12a, measured in self-play (docs/roster-ra2-12.md): 0.83 and 0.89 value dealt a credit */
               { key:'hunter', at:1700, w:2 }, { key:'ifv', at:1400, w:2 } ],
+              /* NOT the Leech Drone: bought from 1300 it ran ahead of the army into the defences, 139
+                 bought for 0.11 of their price back, and the Dominion's share fell 0.045 (batch 12c) */
     /* No Mine Layer here: it is bought outside the weighted roll (core/aimines.js
        _rtsAISupport), because an entry in this pool moves every roll after it - measured, the
        Soviet opponent stopped reaching its Arc Tower in e2e/basedef and the raiders thinned out
@@ -276,11 +278,13 @@ var RTS_AI = {
                { key:'rifle', at:250, w:2 }, { key:'engineer', at:2200, w:2 },
                { key:'arctroop', at:1000, w:2 }, { key:'mentalist', at:2000, w:1 }, { key:'rifttroop', at:2200, w:1 },
                /* batch 12a: the Marksman, and the Flak Trooper only against aircraft, as the Flak Track */
-               { key:'marksman', at:1200, w:1 }, { key:'flakman', at:600, w:3, vsAir:2 }
+               { key:'marksman', at:1200, w:1 }, { key:'flakman', at:600, w:3, vsAir:2 },
+               /* batch 12c: the Marshal, rich (he is one at a time); his strikes are his own idea */
+               { key:'marshal', at:2600, w:1 }
                /* NOT the explosives (core/blast.js): a Zealot or a Wrecker kills its own side's men round it,
                   and an opponent that buys them without knowing where to send them only moves its own
                   battle about - bought even from 2000 credits they moved unit/endgame, unit/aitactics and
-                  unit/allycmd. Its use of them is docs/roster-ra2.md's batch 12. */
+                  unit/allycmd. Its use of them: docs/roster-ra2-12.md. */
                ],
     /* AIRCRAFT, once there is a pad to fly from - _rtsCanQueue gates on `needs`, so these are
        inert until one exists and there is no separate check to keep in step. Both armies again;

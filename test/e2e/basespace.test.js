@@ -150,8 +150,12 @@ var H = 300;
   }
   var share = idle ? door / idle : 0, shareB = idleB ? doorB / idleB : 0;
 
+  /* At least five each, not the eighteen to twenty first measured: how many men walk into the
+     pocket before the match is sampled moves with the opponent's shopping (batch 12c's spending
+     fix took the Allied one from 10 to 9), and what this proves is that the measure sees a pocket
+     at all - against 0 cells and 0 men with the check on. */
   S.ok('the check can see the fault: seed 9004 as it was walls in its own barracks',
-       before[0].trapped >= 10 && before[1].trapped >= 10 && before[0].sealed > 0 && before[1].sealed > 0,
+       before[0].trapped >= 5 && before[1].trapped >= 5 && before[0].sealed > 0 && before[1].sealed > 0,
        'allied ' + before[0].sealed + ' cells / ' + before[0].trapped + ' units, soviet ' +
        before[1].sealed + ' / ' + before[1].trapped);
   S.ok('every opponent built a dense base, which is where this happens', minStructs >= 14,

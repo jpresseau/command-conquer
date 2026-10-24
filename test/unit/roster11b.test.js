@@ -11,7 +11,8 @@
                    Repair Truck of the tank's side gets it out, and it dies
      THE GATE      shut to everyone but its own side; a walled pen with a gate in it lets its own
                    men in and keeps the enemy's out; it stands open while one of its own is by it
-     SAVED         a latched drone stays latched across a save */
+     SAVED         a latched drone stays latched across a save
+     THE OPPONENT  buys the Marshal when rich, and not the Leech Drone (batch 12c) */
 
 var { Suite } = require('../lib/assert.js');
 var { loadFast } = require('../lib/sandbox.js');
@@ -114,6 +115,24 @@ S.ok('...not into a man', !g._rtsWeaponReaches(g.RTS_WEAPONS.leechbite, man), ''
 step(30);
 S.ok('...the tank dead, it climbs out alive', et.dead && !lc.dead && !lc.inside && !lc.latch, 'tank ' + (et.dead ? 'dead' : et.hp.toFixed(0)) + ', drone ' + (lc.dead ? 'dead' : 'alive'));
 
+/* ITS BITE REACHES PAST A HULL. Range is centre to centre (core/combat.js _rtsRangeTo), and a
+   drone pressed against a vehicle stands at the two radii apart: at 2.5 it reached no vehicle in
+   the game (the smallest is 1.6 across), so a drone sent at a tank stopped against its side and
+   sat there being shot. Held from both ends: the reach against the largest hull, and a drone
+   given nothing but an enemy tank three tiles off getting inside it by itself, quickly (at 2.5 it
+   did squeeze in against a tank held still, after 9 s of being shot; at 4 it is in in under one). */
+var big = g.RTS_UNITS.filter(function (u) { return u.kind === 'vehicle'; })
+  .reduce(function (m, u) { return u.r > m.r ? u : m; }, { r: 0 });
+S.ok('...its bite reaches past the largest hull it can be pressed against',
+     g.RTS_WEAPONS.leechbite.range > g.rtsUnitDef('leech').r + big.r,
+     'reach ' + g.RTS_WEAPONS.leechbite.range + ', ' + big.key + ' ' + big.r + ' + drone ' + g.rtsUnitDef('leech').r);
+fresh('soviet');
+var lc5 = at('player', 'leech', -1.5, 0), et5 = at('enemy', 'tank', 1.5, 0);
+still = [et5];
+for (var w5 = 0; w5 < 3 * 30 && !lc5.latch; w5++) step(1 / 30);
+S.ok('...and left to itself, it drives at a tank three tiles off and is inside within three seconds',
+     !!lc5.latch && lc5.inside === et5, lc5.latch ? 'in after ' + (w5 / 30).toFixed(1) + ' s' : 'outside, ' + g._rtsRangeTo(lc5, et5).toFixed(1) + ' from it');
+
 fresh('soviet');
 var lc4 = at('player', 'leech', 0, 0), et4 = at('enemy', 'tank', 0.5, 0);
 still = [et4];
@@ -141,6 +160,35 @@ var body = JSON.parse(JSON.stringify(g._rtsSaveState(G)));
 g._rtsNewGame(7, 'normal'); g._rtsApplyState(g._rtsG, body); G = g._rtsG;
 var L3 = G.byId[lc3.id], H3 = G.byId[et3.id];
 S.ok('SAVED: a latched drone stays latched across a save', !!(L3 && H3 && L3.latch && L3.inside === H3 && H3.leeched === L3.id), '');
+
+/* ------------------------------------------------------------ the opponent ---- */
+/* Batch 12c: the Dominion opponent, rich and with a Research Lab, buys a Marshal; his strikes are
+   his own (above). It does not buy the Leech Drone (rules/ai.js says why). Held as an A/B in one
+   sandbox: with the Marshal's entry taken out of the mix, the same game buys none. */
+function opponentBuys(secs) {
+  fresh('allied');
+  var y = g._rtsHas('enemy', 'yard'), lab = null, got = [], dlv = g._rtsDeliverUnit;
+  for (var r = 3; r < 12 && !lab; r++) for (var dz = -r; dz <= r && !lab; dz++) for (var dx = -r; dx <= r && !lab; dx++)
+    lab = g._rtsPlaceStruct('enemy', 'lab', y.tx + dx, y.tz + dz, false);
+  if (lab) lab.building = 0;
+  g._rtsDeliverUnit = function (side, key) { var m = dlv.apply(this, arguments); if (side === 'enemy' && m) got.push(key); return m; };
+  for (var t = 0; t < secs * 30 && !G.over && got.indexOf('marshal') < 0; t++) {
+    if (t % 300 === 0) G.sides.enemy.credits = Math.max(G.sides.enemy.credits, 6000);
+    g._rtsTick(1 / 30);
+  }
+  g._rtsDeliverUnit = dlv;
+  return { lab: !!lab, got: got, t: Math.round(G.t) };
+}
+var mixInf = g.RTS_AI.mix.infantry, buys = opponentBuys(240);
+S.ok('THE OPPONENT, rich and with a Research Lab, buys a Marshal', buys.lab && buys.got.indexOf('marshal') >= 0,
+     (buys.lab ? '' : 'no lab placed; ') + buys.got.length + ' bought by ' + buys.t + ' s: ' + buys.got.join(' '));
+g.RTS_AI.mix.infantry = mixInf.filter(function (m) { return m.key !== 'marshal'; });
+var none = opponentBuys(buys.t + 30);
+g.RTS_AI.mix.infantry = mixInf;
+S.ok('...and without his entry in its mix, the same game buys none', none.lab && none.got.length >= 3 && none.got.indexOf('marshal') < 0,
+     none.got.length + ' bought by ' + none.t + ' s');
+S.ok('...and it does not buy the Leech Drone', !Object.keys(g.RTS_AI.mix).some(function (c) {
+  return g.RTS_AI.mix[c].some(function (m) { return m.key === 'leech'; }); }), '');
 
 /* ----------------------------------------------------------------- the gate ---- */
 fresh();
