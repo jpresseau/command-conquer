@@ -418,8 +418,9 @@ the Leech Drone and the Gate.
   building's is, but `_rtsBlocked` (`core/grid.js`) lets through the side whose unit is moving:
   `core/tick.js` names that side in `_rtsGateSide` while it updates the unit, and so do the path
   request (`core/move.js` `_rtsPathFor`) and the push apart (`_rtsSeparate`). Anything else asking
-  (a building being placed, the opponent's planner) finds it shut. It stands open, in the picture,
-  while one of its own is beside it.
+  (a building being placed, the opponent's planner) finds it shut. While one of its own is beside
+  it, its barrier sinks into the ground: the barrier is its own mesh (`render3d/gate3d.js`), drawn
+  over the building as the radar's antenna is, and eased over game time.
 
 The opponent does not buy or build them yet; that is batch 12. `unit/roster11b` (24) and
-`e2e/roster11b` (6) hold it.
+`e2e/roster11b` (9) hold it.

@@ -87,8 +87,8 @@ function _sprBldR11(X, key) {
       _r3Box(m, 0, 0, i * (D / 2 - 2.6), W - 6, 9, 4.2, C[1], C[0]);
       _r3Box(m, 0, 9, i * (D / 2 - 2.6), W - 5, 1.0, 5.0, B.roof, B.roof);   /* capped in team colour */
     }
-    _r3Box(m, 0, 0.6, 0, 4.0, 6.4, D - 10, S[1], S[2]);                       /* the steel barrier */
-    for (i = 0; i < 3; i++) _r3Box(m, 0, 1.6 + i * 2.0, 0, 4.4, 0.5, D - 10, DK[1], DK[2]);
+    /* the barrier between them is its own mesh, so it can sink when the gate opens (render3d/gate3d.js) */
+    for (i = -1; i <= 1; i += 2) _r3Box(m, 0, 0.4, i * (D / 2 - 5.2), 5.0, 7.6, 1.0, DK[1], DK[2]);   /* the slots it runs in */
     _r3Box(m, 0, 0, 0, W - 2, 0.4, D - 2, C[2], C[3]);                        /* the sill */
     return true;
   }
