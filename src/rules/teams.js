@@ -141,6 +141,14 @@ var RTS_TEAM_TYPES = [
   { name:'Strafe',   priority:3, reinforce:false, quarry:'anything', members:{ yak:1 },
     max:1, only:true, autocreate:true, suicide:false,
     missions:[ ['attack','anything'], ['loop',0] ] },
+  /* Batch 12d: the Falcon's two heavy bombs and the Leviathan's are for buildings
+     (docs/roster-ra2-12.md). One plane each, for the reasons above. */
+  { name:'Raid',     priority:3, reinforce:false, quarry:'buildings', members:{ falcon:1 },
+    max:1, only:true, autocreate:true, suicide:false,
+    missions:[ ['attack','buildings'], ['loop',0] ] },
+  { name:'Zeppelin', priority:3, reinforce:false, quarry:'buildings', members:{ leviathan:1 },
+    max:1, only:true, autocreate:true, suicide:false,
+    missions:[ ['attack','buildings'], ['loop',0] ] },
   /* --- and at sea. One per army, because a team only marches at FULL STRENGTH and a house
      can only build its own side's hulls: a single mixed type listing all four would leave a
      Soviet flotilla waiting forever for a Gunboat it cannot build. `sea` is the waypoint,

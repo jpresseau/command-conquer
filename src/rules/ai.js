@@ -292,7 +292,9 @@ var RTS_AI = {
        once bought one, because this table had no `air` line at all. The bank thresholds are high
        so a poor AI still buys tanks: an aircraft that dies with no pad to return to is the most
        expensive way to lose 1400 credits in this game. */
-    air:[ { key:'heli', at:2400, w:3 }, { key:'mig', at:2600, w:3 }, { key:'yak', at:1800, w:2 } ]
+    air:[ { key:'heli', at:2400, w:3 }, { key:'mig', at:2600, w:3 }, { key:'yak', at:1800, w:2 },
+          /* batch 12d, each flown by a team of its own (rules/teams.js Raid, Zeppelin) */
+          { key:'falcon', at:2400, w:2 }, { key:'leviathan', at:3000, w:2 } ]
   },
   /* Check_Raise_Money / Check_Raise_Power / Check_Lower_Power thresholds. */
   brokeMoney:100,           /* below this, raising cash is urgent */

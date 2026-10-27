@@ -14,7 +14,7 @@
      THE CARRIER  its shot is a Hornet sent at the target - three in the air at most; a Hornet out
                   of rounds goes home and lands, and is counted back in; the Carrier sunk, its
                   Hornets fall
-     THE OPPONENT does not buy them: that is batch 12 */
+     THE OPPONENT buys the Falcon and the Leviathan and flies each at buildings (batch 12d) */
 
 var { Suite } = require('../lib/assert.js');
 var { loadFast } = require('../lib/sandbox.js');
@@ -72,6 +72,20 @@ S.ok('...and bursts under it: the tank below is hurt', h.tk - tk.hp > 100, 'took
 S.ok('...its own side\'s men below too', own.hp < h.own, own.hp + '/' + h.own);
 S.eq('...and nothing four cells off', off.hp, h.off);
 
+/* ...AND IT GETS OVER WHAT IT IS SENT AT. A building's range is to its edge, and at a reach of 3
+   the airship hovered 3 outside the edge and every bomb burst off the building at two-thirds
+   strength: a Refinery bombed for a minute stood at 700 of 950, repaired as fast as it was hit.
+   Sent at one from ten tiles off, the first bomb now bursts over it, nearly whole. */
+fresh('soviet');
+var ref = g._rtsHas('enemy', 'refinery'), lv3 = g._rtsSpawnUnit('player', 'leviathan', ref.x - 10 * T, ref.z);
+g._rtsOrderAttack(lv3, ref);
+var burst = 0, dmg0 = g._rtsDamage;
+g._rtsDamage = function (tgt, n) { if (tgt === ref && !burst) burst = n; return dmg0.apply(this, arguments); };
+for (var w3 = 0; w3 < 30 * 30 && !burst; w3++) g._rtsTick(1 / 30);
+g._rtsDamage = dmg0;
+S.ok('...and sent at a building, it floats over it: the first bomb bursts on it at nearly full weight',
+     burst >= 0.85 * W('levbomb').dmg, (burst ? burst.toFixed(0) + ' of ' + W('levbomb').dmg : 'no bomb on it') + ' after ' + (w3 / 30).toFixed(1) + ' s');
+
 /* ---------------------------------------------------------------- the falcon ---- */
 fresh();
 var yd = g._rtsHas('player', 'yard'), pad = g._rtsPlaceStruct('player', 'helipad', yd.tx + 5, yd.tz + 5, true);
@@ -124,8 +138,40 @@ S.ok('a Hornet out of rounds goes home and lands - and is counted back in', !!hn
 
 /* ------------------------------------------------------------- opponent ---- */
 var A = g.RTS_AI, inMix = function (k) { return Object.keys(A.mix).some(function (c) { return A.mix[c].some(function (m) { return m.key === k; }); }); };
-/* not yet: it has no team that flies a Leviathan, a Falcon or a Carrier (unit/aiplan), and Jetpack
-   Troopers in its infantry ran a mission past its par (unit/campaign-levels4) - batch 12 */
-S.ok('the opponent does not buy them', !['leviathan', 'falcon', 'jetpack', 'carrier', 'hornet'].some(inMix), '');
+/* Batch 12d: the Falcon and the Leviathan, each flown by a one-plane team; not the Jetpack Trooper
+   (in its infantry it ran a mission past its par, unit/campaign-levels4) or the Carrier */
+var flies = function (k) { return g.RTS_TEAM_TYPES.some(function (t) { return t.members[k] && Object.keys(t.members).length === 1; }); };
+S.ok('THE OPPONENT buys the Falcon and the Leviathan, and a team of one flies each',
+     ['falcon', 'leviathan'].every(function (k) { return inMix(k) && flies(k); }), '');
+S.ok('...not the Jetpack Trooper, the Carrier or a Hornet', !['jetpack', 'carrier', 'hornet'].some(inMix), '');
+/* ...and in a match: rich, with an Airfield and a Research Lab, the Dominion opponent buys a
+   Leviathan and its team sends it at the player's base. An A/B in one sandbox: without the
+   Zeppelin team the same airship stays at home. */
+function zeppelin(secs) {
+  fresh('allied');
+  var y = g._rtsHas('enemy', 'yard'), put = 0;
+  ['afld', 'lab'].forEach(function (k) {
+    var b = null;
+    for (var r = 3; r < 14 && !b; r++) for (var dz = -r; dz <= r && !b; dz++) for (var dx = -r; dx <= r && !b; dx++)
+      b = g._rtsPlaceStruct('enemy', k, y.tx + dx, y.tz + dz, false);
+    if (b) { b.building = 0; put++; }
+  });
+  g._rtsRecalcPower('enemy');
+  var lev = null, sent = null;
+  for (var t = 0; t < secs * 30 && !G.over && !sent; t++) {
+    if (t % 300 === 0) G.sides.enemy.credits = Math.max(G.sides.enemy.credits, 8000);
+    g._rtsTick(1 / 30);
+    if (!lev) lev = G.ents.filter(function (o) { return !o.dead && o.side === 'enemy' && o.def === 'leviathan'; })[0] || null;
+    if (lev && lev.target && lev.target.side === 'player' && lev.target.type === 'struct') sent = lev.target.def;
+  }
+  return { put: put, lev: !!lev, sent: sent, t: Math.round(G.t) };
+}
+var zp = zeppelin(300);
+S.ok('...and in a match, rich with an Airfield and a Lab, it buys a Leviathan and sends it at the player\'s base',
+     zp.put === 2 && zp.lev && !!zp.sent, (zp.put === 2 ? '' : 'placed ' + zp.put + ' of 2; ') + (zp.lev ? 'bought' : 'none bought') + ', ' + (zp.sent ? 'sent at a ' + zp.sent : 'not sent') + ' by ' + zp.t + ' s');
+var TT = g.RTS_TEAM_TYPES, zi = TT.findIndex(function (t) { return t.name === 'Zeppelin'; }), zt = TT.splice(zi, 1)[0];
+var zn = zeppelin(zp.t + 30);
+TT.splice(zi, 0, zt);
+S.ok('...and without the Zeppelin team, the same airship stays at home', zn.lev && !zn.sent, (zn.lev ? 'bought' : 'none bought') + ', ' + (zn.sent ? 'sent at a ' + zn.sent : 'not sent') + ' by ' + zn.t + ' s');
 
 require('../lib/report.js')(S);

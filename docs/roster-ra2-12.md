@@ -29,8 +29,8 @@ economy straight after the lab that share fell to 0.53 - the Dominion's Foundry 
 worth more the earlier they stand - which is the case for the rule above.
 
 Left out, measured: the new ships (the Sea Hornet, the Dolphin and the Kraken were bought and dealt
-nothing, as most hulls do on these maps) and the Falcon (0.32 of its price, and the opponent has no
-team type that flies one: `unit/aiplan`).
+nothing, as most hulls do on these maps) and, until batch 12d below, the Falcon (0.32 of its price,
+with no team type to fly one: `unit/aiplan`).
 
 `unit/endgame` said the opponent's army "grows" in ninety seconds with ore; that is its buying less
 what the other seat kills, and with the Compact's new units it went 27 to 23 while the opponent
@@ -103,4 +103,37 @@ battles without it:
   house. `e2e/basespace`'s before-picture asked for ten men walled in on seed 9004 with the check
   off, and the Allied opponent now walls in nine (and the Soviet nineteen): it asks for five, which
   is still a pocket the measure sees, against none with the check on.
+
+## Batch 12d: the Falcon and the Leviathan (`rules/ai.js`, `rules/teams.js`, `rules/weapons.js`)
+
+Each is flown by a team of one aimed at buildings, `Raid` and `Zeppelin`, for the reasons the
+other one-plane teams give in `rules/teams.js`: a team marches only at full strength, and planes
+are capped at one a pad. Bought from 2400 (Falcon) and 3000 (Leviathan), weight 2.
+
+- **The Leviathan hovered beside what it bombed.** A building's range is to its edge, and its bomb
+  falls from where it is: at a reach of 3 every burst landed off the building at two-thirds strength,
+  and a Refinery it bombed for a minute stood at 700 of 950, repaired as fast as it was hit, until the
+  defences brought the airship down. Its reach is now 1: it floats over the building, and the same
+  Refinery is gone in 40 s. `unit/aloft` holds the first bomb's weight (179 of 200; 133 at reach 3).
+- Measured on the 16 battles, each change paired against them alone:
+
+  | change | share for its army | its value | |
+  |---|---|---|---|
+  | Leviathan, reach 3 | +0.035 ± 0.018 | 1.59, 9 bought | |
+  | Leviathan, reach 1 | +0.023 ± 0.018 | 1.07, 7 bought | |
+  | Falcon from 2400, weight 2 | -0.020 ± 0.016 | 2.62, 17 bought | Helis 42 to 30 |
+  | Falcon from 3200, weight 1 | -0.020 ± 0.017 | 5.23, 2 bought | the same shift with 2 Falcons |
+  | both, as shipped | Dominion +0.020 ± 0.022 | Falcon 2.31 (17); Leviathan 0.00 (3) | |
+
+  The Falcon takes pad slots from the Heli, which is cheaper and returns about as much (2.86), but
+  the second row says the -0.02 is what any change to the rolls does to these battles: two Falcons
+  in sixteen matches moved it just as far. So it is kept, as neutral to the Compact and the best
+  value in its air force.
+- **The Leviathan's value is lumpy.** Speed 5 and 1500 hp: in most battles it is shot down on its way
+  in (1993 of 2000 taken) before it drops much, and one battle in sixteen (seed 9002) carries most of
+  what it deals, 13,000 to 20,000. It did not make the Dominion worse in any run, so it flies; an
+  escort for it would be the next thing to measure.
+- `unit/aloft` holds the rest: each is in the mix with a team of one; a rich Dominion opponent with
+  an Airfield and a Lab buys a Leviathan and its team sends it at the player's base, and without the
+  Zeppelin team the same airship stays home. Not the Carrier or the Jetpack Trooper.
 
