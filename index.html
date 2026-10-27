@@ -863,7 +863,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">c44396e · 2026-10-24</div>
+  <div id="rtsBuild" title="build">848479a · 2026-10-26</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1912,8 +1912,9 @@ var RTS_WEAPONS = {
                 verses:{ none:0.7, wood:1.2, light:1.0, heavy:1.0, concrete:1.3 } },
   /* THE SKY (core/aloft.js). `drop`: bombs that fall from where the aircraft is, bursting after
      `fall` seconds for `dmg` within `rad` cells - whoever is under them. `launch`: the shot is a
-     drone of that key sent at the target. */
-  levbomb:    { dmg:200, range:3, cool:2.2, shot:'bomb', speed:0, splash:0, drop:{ rad:2.2, fall:1.0 }, wall:true,
+     drone of that key sent at the target. levbomb's reach is 1 because a building's range is to
+     its edge: at 3 the airship hovered beside what it bombed, every burst two-thirds spent. */
+  levbomb:    { dmg:200, range:1, cool:2.2, shot:'bomb', speed:0, splash:0, drop:{ rad:2.2, fall:1.0 }, wall:true,
                 verses:{ none:1.0, wood:1.0, light:1.0, heavy:1.0, concrete:1.0 } },
   eaglebomb:  { dmg:130, range:13, cool:1.2, shot:'missile', speed:38, splash:2.6, wall:true, wood:true,
                 verses:{ none:0.5, wood:1.2, light:1.1, heavy:1.0, concrete:1.25 } },
@@ -2686,7 +2687,9 @@ var RTS_AI = {
        once bought one, because this table had no `air` line at all. The bank thresholds are high
        so a poor AI still buys tanks: an aircraft that dies with no pad to return to is the most
        expensive way to lose 1400 credits in this game. */
-    air:[ { key:'heli', at:2400, w:3 }, { key:'mig', at:2600, w:3 }, { key:'yak', at:1800, w:2 } ]
+    air:[ { key:'heli', at:2400, w:3 }, { key:'mig', at:2600, w:3 }, { key:'yak', at:1800, w:2 },
+          /* batch 12d, each flown by a team of its own (rules/teams.js Raid, Zeppelin) */
+          { key:'falcon', at:2400, w:2 }, { key:'leviathan', at:3000, w:2 } ]
   },
   /* Check_Raise_Money / Check_Raise_Power / Check_Lower_Power thresholds. */
   brokeMoney:100,           /* below this, raising cash is urgent */
@@ -3235,6 +3238,14 @@ var RTS_TEAM_TYPES = [
   { name:'Strafe',   priority:3, reinforce:false, quarry:'anything', members:{ yak:1 },
     max:1, only:true, autocreate:true, suicide:false,
     missions:[ ['attack','anything'], ['loop',0] ] },
+  /* Batch 12d: the Falcon's two heavy bombs and the Leviathan's are for buildings
+     (docs/roster-ra2-12.md). One plane each, for the reasons above. */
+  { name:'Raid',     priority:3, reinforce:false, quarry:'buildings', members:{ falcon:1 },
+    max:1, only:true, autocreate:true, suicide:false,
+    missions:[ ['attack','buildings'], ['loop',0] ] },
+  { name:'Zeppelin', priority:3, reinforce:false, quarry:'buildings', members:{ leviathan:1 },
+    max:1, only:true, autocreate:true, suicide:false,
+    missions:[ ['attack','buildings'], ['loop',0] ] },
   /* --- and at sea. One per army, because a team only marches at FULL STRENGTH and a house
      can only build its own side's hulls: a single mixed type listing all four would leave a
      Soviet flotilla waiting forever for a Gunboat it cannot build. `sea` is the waypoint,

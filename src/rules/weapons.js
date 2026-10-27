@@ -170,8 +170,9 @@ var RTS_WEAPONS = {
                 verses:{ none:0.7, wood:1.2, light:1.0, heavy:1.0, concrete:1.3 } },
   /* THE SKY (core/aloft.js). `drop`: bombs that fall from where the aircraft is, bursting after
      `fall` seconds for `dmg` within `rad` cells - whoever is under them. `launch`: the shot is a
-     drone of that key sent at the target. */
-  levbomb:    { dmg:200, range:3, cool:2.2, shot:'bomb', speed:0, splash:0, drop:{ rad:2.2, fall:1.0 }, wall:true,
+     drone of that key sent at the target. levbomb's reach is 1 because a building's range is to
+     its edge: at 3 the airship hovered beside what it bombed, every burst two-thirds spent. */
+  levbomb:    { dmg:200, range:1, cool:2.2, shot:'bomb', speed:0, splash:0, drop:{ rad:2.2, fall:1.0 }, wall:true,
                 verses:{ none:1.0, wood:1.0, light:1.0, heavy:1.0, concrete:1.0 } },
   eaglebomb:  { dmg:130, range:13, cool:1.2, shot:'missile', speed:38, splash:2.6, wall:true, wood:true,
                 verses:{ none:0.5, wood:1.2, light:1.1, heavy:1.0, concrete:1.25 } },

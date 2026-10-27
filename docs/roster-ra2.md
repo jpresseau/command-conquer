@@ -278,7 +278,7 @@ never sends one home to a pad, and `core/combat.js` never counts its rounds, so 
 dry nor crashes for want of a pad.
 
 **Leviathan** (`leviathan`, Dominion, 2000, after an Airfield and a Research Lab, 1500 hp, heavy
-armour, speed 5, endless): an armoured airship. Its `levbomb` (range 3, every 2.2 s) drops a bomb
+armour, speed 5, endless): an armoured airship. Its `levbomb` (range 1 to a building's edge, so it floats over one, every 2.2 s) drops a bomb
 from where it is, through the Heavy Bomber's falling bombs (`G.bombs`). The bomb bursts after 1 s
 for 200, falling off evenly to nothing at 2.2 cells, on everything under it, whoever's it is.
 Two engine pods turn their props.
@@ -298,9 +298,9 @@ empty or its target gone, it flies home and lands on its Carrier, which counts i
 no Carrier, it falls out of the sky. A Hornet is never built (`spawned`): `core/production.js`
 will not queue one and `ui/sidebar.js` does not show one.
 
-The opponent does not buy any of them. It has no team that flies a Leviathan or a Falcon or sails
-a Carrier, so it would buy them and leave them at home (`unit/aiplan`). Jetpack Troopers in its
-infantry ran Mirror Line past its gold par (491 s against 480). Its use of them is batch 12.
+The opponent flies the Falcon and the Leviathan, each in a team of its own (batch 12d,
+`docs/roster-ra2-12.md`). Not the Carrier, and not the Jetpack Trooper: in its infantry it ran Mirror
+Line past its gold par (491 s against 480).
 `unit/aloft` (21) and `e2e/aloft` (6) hold it.
 
 ## Batch 9: the deep (`core/deep.js`, `sprites/deep.js`)
