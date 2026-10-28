@@ -101,6 +101,54 @@ S.ok('THE BOMBARD outranges the Cruiser', W('bombmissile').range > W(U('cruiser'
 
 /* ------------------------------------------------------------- opponent ---- */
 var A = g.RTS_AI, inMix = function (k) { return Object.keys(A.mix).some(function (c) { return A.mix[c].some(function (m) { return m.key === k; }); }); };
-S.ok('the opponent does not buy them', !['dolphin', 'kraken', 'seahornet', 'bombard'].some(inMix), '');
+S.ok('the opponent does not buy the Dolphin, the Kraken or the Sea Hornet (bought, they dealt nothing: batch 12a)', !['dolphin', 'kraken', 'seahornet'].some(inMix), '');
+/* BATCH 12e: the Bombard, sailed with a submarine by Battle Group (rules/teams.js). In one
+   sandbox: the buy loop rolls it, the team is a candidate while the opponent can build its hulls
+   and not once its Lab is gone, and raised, it sails the Bombard at the player's buildings. */
+var BG = g.RTS_TEAM_TYPES.filter(function (t) { return t.name === 'Battle Group'; })[0];
+S.ok('THE OPPONENT buys the Bombard, and Battle Group sails it with a submarine', inMix('bombard') && !!BG && BG.members.bombard === 1 && BG.members.sub === 1,
+     BG ? JSON.stringify(BG.members) : 'no Battle Group');
+fresh('allied');
+var ey = g._rtsHas('enemy', 'yard'), pen = null, lab = null;
+function placeNear(k) {
+  for (var r = 3; r < 40; r++) for (var dz = -r; dz <= r; dz++) for (var dx = -r; dx <= r; dx++) {
+    if (Math.max(Math.abs(dx), Math.abs(dz)) !== r || !g._rtsCanPlace('enemy', k, ey.tx + dx, ey.tz + dz, true)) continue;
+    var b = g._rtsPlaceStruct('enemy', k, ey.tx + dx, ey.tz + dz, true); b.building = 0; return b;
+  }
+  return null;
+}
+pen = placeNear('subpen'); lab = placeNear('lab'); g._rtsRecalcPower('enemy');
+for (var hv = 0; hv < 3; hv++) g._rtsSpawnUnit('enemy', 'harvester', ey.x + hv * 4, ey.z + 30);
+var E = G.sides.enemy, rolled = 0;
+for (var rb = 0; rb < 300; rb++) { E.q = {}; E.credits = 1e6; E.ore = 0; g._rtsAIUnits(E); if (E.q.ship && E.q.ship.key === 'bombard') rolled++; }
+E.q = {};
+S.ok('...rich, with a pen and a Lab, the buy loop rolls a Bombard', !!pen && !!lab && rolled > 0, (pen && lab ? '' : 'placed: pen ' + !!pen + ', lab ' + !!lab + '; ') + rolled + ' of 300 rolls');
+var water = null;
+for (var wk = 0; wk < 600 && !water && pen; wk++) {
+  var wa = wk * 0.7, wr = 2 + wk * 0.05, wx = pen.tx + Math.round(Math.cos(wa) * wr), wz = pen.tz + Math.round(Math.sin(wa) * wr);
+  if (!g._rtsBlocked(wx, wz, 'sea') && !g._rtsBlocked(wx + 1, wz, 'sea')) water = [wx, wz];
+}
+function offeredTeams() {
+  var keep = g._rtsRnd, names = {};
+  for (var r = 0; r < 1; r += 0.02) { g._rtsRnd = (function (v) { return function () { return v; }; })(r); var p = g._rtsAIAs('enemy', function () { return g._rtsSuggestTeam(40); }); if (p) names[p.name] = 1; }
+  g._rtsRnd = keep;
+  return names;
+}
+G.ai.wave = 1;
+var withIt = offeredTeams();
+g._rtsKill(lab); g._rtsRecalcPower('enemy');
+var without = offeredTeams();
+S.ok('...Battle Group is offered while the opponent can build a Bombard, and not once its Lab is gone', !!withIt['Battle Group'] && !without['Battle Group'],
+     'with: ' + Object.keys(withIt).join('/') + '; without: ' + Object.keys(without).join('/'));
+var sbm = g._rtsSpawnUnit('enemy', 'sub', g._rtsWX(water[0] + 1), g._rtsWX(water[1]));
+var bbm = g._rtsSpawnUnit('enemy', 'bombard', g._rtsWX(water[0]), g._rtsWX(water[1]));
+var bgt = g._rtsAIAs('enemy', function () { return g._rtsTeamMake(BG); }), shot = null;
+for (var bt = 0; bt < 240 * 30 && !shot; bt++) {
+  G.ents.forEach(function (e) { if (e.side === 'player' && !e.dead) e.hp = e.maxHp; });
+  g._rtsTick(1 / 30);
+  if (bbm.target && bbm.target.side === 'player' && bbm.target.type === 'struct') shot = bbm.target.def;
+}
+S.ok('...and raised, it sails the Bombard at the player\'s buildings', !!shot && bgt.members.indexOf(bbm) >= 0,
+     (shot ? 'at a ' + shot : 'no target') + ' after ' + Math.round(bt / 30) + ' s, ' + (bgt.members.indexOf(bbm) >= 0 ? 'in the team' : 'not in the team'));
 
 require('../lib/report.js')(S);

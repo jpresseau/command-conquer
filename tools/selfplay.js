@@ -45,8 +45,9 @@ function battle(cfg) {
      purpose), so the ledger notes who set it off for the length of the call: a shell's splash is
      its shooter's, a bomb's blast ring its bomber's (the bomber is the ring's `skip`, on the
      ring's own side; a planted charge's skip is its victim, so it stays nobody's). A Strike Jet
-     is bought by no one: its bombs are the Marshal's who called it. */
-  var src = null;
+     and a Hornet are bought by no one: a jet's bombs are the Marshal's who called it, a Hornet's
+     missiles the Carrier's that launched it. */
+  var src = null, BY = { strikejet: 'marshal', hornet: 'carrier' };
   function by(fn, who) {
     var f = g[fn];
     g[fn] = function () { var s0 = src; src = who(arguments) || src; try { return f.apply(this, arguments); } finally { src = s0; } };
@@ -64,7 +65,7 @@ function battle(cfg) {
     row(tgt.side, tgt.def).taken += v;
     if (tgt.dead) row(tgt.side, tgt.def).lost++;
     if (who && who.def && who.side && who.side !== tgt.side) {
-      var f = row(who.side, who.def === 'strikejet' ? 'marshal' : who.def); f.dealt += v; if (tgt.dead) f.killed++;
+      var f = row(who.side, BY[who.def] || who.def); f.dealt += v; if (tgt.dead) f.killed++;
     }
     return r;
   };
