@@ -137,3 +137,22 @@ are capped at one a pad. Bought from 2400 (Falcon) and 3000 (Leviathan), weight 
   an Airfield and a Lab buys a Leviathan and its team sends it at the player's base, and without the
   Zeppelin team the same airship stays home. Not the Carrier or the Jetpack Trooper.
 
+## Batch 12e: the Bombard, and not the Carrier (`rules/ai.js`, `rules/teams.js`)
+
+Each sailed as a siege pair, as the Cruiser is: the Bombard with a submarine (`Battle Group`), the
+Carrier with a Destroyer. Bought from 3200, weight 2. Measured on the 16 battles against a baseline
+of batch 12d:
+
+- **Both:** 3 bought in sixteen battles - the fleet cap keeps a house to a few hulls, and the ship
+  line rolls among five. The Bombard dealt 15,000 (3.41 of its price); the one Carrier launched 29
+  Hornets, all shot down, for 34 damage. The Compact's share fell 0.034 ± 0.011, almost all of it in
+  battles where neither was bought: the rolls, not the ships.
+- **The Bombard alone:** 2 bought, 1.66 of its price, the Dominion's share +0.018 ± 0.006. Kept.
+- **Not the Carrier:** its Hornets fly into the air defence round a base and die there. A Carrier that
+  held them back for ships, or a Hornet that turned for home when hit, would be the thing to try.
+- The ledger now credits a Hornet's missiles to its Carrier, as it credits a Strike Jet's bombs to
+  its Marshal (`tools/selfplay.js`).
+- `unit/deep` holds it, in one sandbox: the buy loop rolls a Bombard with a pen and a Lab (74 of 300);
+  Battle Group is a candidate while the opponent can build it and not once its Lab is gone; raised,
+  it sails the Bombard at the player's buildings (a Construction Yard, 50 s on).
+

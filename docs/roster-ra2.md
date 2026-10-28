@@ -322,8 +322,8 @@ burst (45, range 9, an arc) reaches anything afloat or below.
 a shipyard and a Research Lab, 1300 hp): a missile battleship with two 150 missiles at range 40,
 beyond the Cruiser's 38.
 
-The opponent does not buy them yet; that is batch 12. `unit/deep` (15) and `e2e/deep` (6) hold
-it.
+The opponent sails the Bombard with a submarine (batch 12e); the Sea Hornet, the Dolphin and the
+Kraken it does not buy (`docs/roster-ra2-12.md`). `unit/deep` (15) and `e2e/deep` (6) hold it.
 
 ## Batch 10a: the economy (`core/econ.js`, `sprites/econ.js`)
 
