@@ -131,7 +131,10 @@ function _r3Box(out, x, y, z, w, h, d, col, topCol) {
     _r3F(out, [[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]], col);           /* left */
     return;
   }
-  if (_R3_DETAIL > 1) { _r3RoundBox(out, x0, x1, y0, y1, z0, z1, b, col, topCol); return; }
+  if (_R3_DETAIL > 1) {
+    if (_r3Rod(out, x, y, z, w, h, d, col, topCol)) return;
+    _r3RoundBox(out, x0, x1, y0, y1, z0, z1, b, col, topCol); return;
+  }
   var ax0 = x0 + b, ax1 = x1 - b, az0 = z0 + b, az1 = z1 - b, yw = y1 - b;
   /* the four walls, each pulled in by the bevel along the edges it meets */
   _r3F(out, [[ax0, y0, z1], [ax1, y0, z1], [ax1, yw, z1], [ax0, yw, z1]], col);         /* front */
@@ -254,6 +257,34 @@ function _r3Cyl(out, x, y, z, r, h, col, topCol, seg) {
   }
   top.reverse();
   _r3F(out, top, topCol || col);
+}
+/* A ROD IS ROUND. Every gun barrel, pipe, aerial, rail and mast in the models is a long box with a
+   square end - a barrel drawn as a plank - because the box was the one primitive the models were
+   written in. In the 3D view's richer build (_R3_DETAIL > 1) a box whose two short sides are
+   alike and whose long side is at least R3_ROD_LEN times them is a cylinder along that long side,
+   the same size: a barrel is a tube and an aerial a wire. The sprites and the plain far-off models
+   build at detail 1 and keep their boxes. True when it drew the rod. */
+var R3_ROD_LEN = 3, R3_ROD_SQ = 0.3;
+/* ...and at least this thick. A wheel's nuts, a railing's bars, a radar's bar are a few pixels
+   across at the closest zoom, too thin for roundness to show - and every rod is one more way the
+   full model differs from the plain one the middle zoom swaps in (e2e/gpuwork). */
+var R3_ROD_MIN = 0.5;
+/* Set while a builder lays parts that only LOOK like rods by their proportions: a track's links
+   are plates and a sprocket's teeth are teeth (sprites/unitmodels.js tracks). Rounded, they looked
+   no different at any zoom, and the 80 of them on a tank were most of what set its full model
+   apart from the plain one. A rod costs about what the rounded box it replaces does. */
+var _R3_ROD_OFF = false;
+function _r3Rod(out, x, y, z, w, h, d, col, topCol) {
+  if (_R3_ROD_OFF) return false;
+  var dims = [w, h, d], L = Math.max(w, h, d), ax = dims.indexOf(L);
+  var s1 = ax === 0 ? h : w, s2 = ax === 2 ? h : d;
+  if (ax === 1) { s1 = w; s2 = d; }
+  var sm = Math.max(s1, s2);
+  if (!(L >= sm * R3_ROD_LEN) || Math.abs(s1 - s2) > sm * R3_ROD_SQ || sm < R3_ROD_MIN) return false;
+  var r = (s1 + s2) / 4;
+  if (ax === 1) _r3Cyl(out, x, y, z, r, h, col, topCol || col, 16);
+  else _r3Wheel(out, x, y + h / 2, z, r, L, ax === 0 ? 'x' : 'z', col, topCol || col, 16);
+  return true;
 }
 /* A cone / tapered drum - used for tree canopies and turret housings. */
 function _r3Cone(out, x, y, z, r0, r1, h, col, seg) {
