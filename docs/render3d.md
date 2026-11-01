@@ -1,7 +1,7 @@
-# The 3D picture — the land past the edge, the light on a model, and the black lids
+# The 3D picture — the land past the edge, the light on a model, the black lids, a lost GPU
 
-Three changes to how the battlefield is drawn, made together and measured together. Each has a
-spec that holds it and a kill switch that is its before-picture.
+Changes to how the battlefield is drawn, and to keeping it drawn. Each has a spec that holds it
+and a kill switch that is its before-picture.
 
 ## The land runs on past the map's edge (`render3d/apron3d.js`)
 
@@ -67,3 +67,29 @@ The ramp lit a model with one sun and one floor. Three terms on top of it, each 
   meant to lift (a power plant brightened 24.7 inside against 7.1 at its outline).
 - `e2e/modellight`: the fill brightens the building and adds less at night; steel lifts its dark
   third and not its paint; the contact shade darkens its foot and next to nothing above.
+
+## A phone takes the GPU away (`render3d/lost3d.js`)
+
+Reported from an iPhone: turned from landscape to portrait, the game stopped working - the sidebar
+went on, the battlefield was the stage's flat grey. Turning a phone reallocates every full-screen
+buffer at the new shape, which is when a phone reclaims GPU memory: the WebGL context is lost. A
+lost context draws nothing and every call on it is a silent no-op, so nothing threw and the clock
+ran on. A browser hands a lost context back only to a page that cancels `webglcontextlost`, and
+nothing here did, so it never came back.
+
+- **The loss is cancelled** (`_r3dWatchLoss`, once per canvas, from `_r3dInit`), which is what
+  asks for the context back.
+- **While it is lost nothing touches it**: `_r3dFrame` returns at once (`_r3dLostTick`), and the
+  model warm-up waits (`pace3d.js`). A program built on a lost context fails to link and throws,
+  and sixty failing frames in a row stop the loop for good (`RTS_LOOP_GIVEUP`, `ui/camera.js`).
+- **It comes back from nothing.** On `webglcontextrestored` the view starts again on the same
+  canvas; if the browser has said nothing after `R3D_LOST_WAIT` (1.5 s), on a fresh canvas
+  swapped into the old one's slot, retried with a doubling wait while that fails. Starting from
+  nothing is safe because every GPU object hangs off `window._R3D` and is built lazily on first
+  use. The camera, the tier and AUTO's state, the resolution step and the sun are carried across
+  (`R3D_LOST_KEEP`).
+- **The GFX readout counts it**: `GPU lost N, back N` at the end of its second line, so a phone's
+  report says whether this is what happened.
+- `RTS_LOSS_OFF` is the before-picture: the restored context stays lost and the battlefield reads
+  back blank. `e2e/ctxlost` turns a phone and drives both recoveries; each draws the picture from
+  before the loss, sample for sample.
