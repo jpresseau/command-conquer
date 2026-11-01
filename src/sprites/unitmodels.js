@@ -110,6 +110,7 @@ function _sprUnitModel(key, side, prone, part) {
      the track itself as LINKS rather than as a smooth belt. All of it is here, and it costs
      nothing per frame - a model's buffers are built once and instanced (render3d/inst3d.js). */
   function tracks(len, zoff, wheels, rad, wheeled) {
+    var rodWas = _R3_ROD_OFF; _R3_ROD_OFF = true;     /* plates, teeth and nuts, not rods: r3d/primitives.js */
     for (var s = -1; s <= 1; s += 2) {
       var z = s * zoff, k, wx, ta;
       var span = len - rad * 2.4, step = span / Math.max(1, wheels - 1);
@@ -174,6 +175,7 @@ function _sprUnitModel(key, side, prone, part) {
       _r3Box(m, -len / 2 + rad * 0.7, rad * 2.3, z, rad * 1.1, 1.0, rad * 1.9, VH[1], VH[2]);
       _r3Box(m, len / 2 - rad * 0.7, rad * 2.3, z, rad * 1.1, 1.0, rad * 1.9, VH[1], VH[2]);
     }
+    _R3_ROD_OFF = rodWas;
   }
 
   /* The chain is five files now - see sprites/unit-*.js. Each arm returns false for a key it

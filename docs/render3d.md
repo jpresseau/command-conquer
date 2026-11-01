@@ -1,4 +1,4 @@
-# The 3D picture — the land past the edge, the light on a model, the black lids, a lost GPU
+# The 3D picture — the land past the edge, the light on a model, black lids, round rods, a lost GPU
 
 Changes to how the battlefield is drawn, and to keeping it drawn. Each has a spec that holds it
 and a kill switch that is its before-picture.
@@ -42,10 +42,11 @@ richer than the sprites (`_r3DetailHigh`): every box's chamfer becomes a rounded
 line - two ends of a corner arc and the straight run between. So the cap got a zero normal, the
 shader normalised it into NaN, and every rounded box at the high and medium tiers had a black lid:
 barrel tops, fenders, hull plates, roof parts, on every unit and building - 8,628 faces across the
-roster. A tank read as a khaki box ringed in black. The normal is now Newell's sum over all the
+roster when it was found. A tank read as a khaki box ringed in black. The normal is now Newell's sum over all the
 polygon's edges, exact for a planar polygon and never zero while it has area. Every mesh in the
 3D view goes through this builder (the world batch, ore, farms, bridges, the base dressing too).
-`unit/lids` holds it from both ends: the old way finds the 8,628, the new one none.
+`unit/lids` holds it from both ends: the old way still finds thousands (7,192 once the rods below
+replaced some of those boxes), the new one none.
 
 ## The light on a model (`render3d/light3d.js` `_shade`, `meshfs3d.js`)
 
@@ -62,11 +63,34 @@ The ramp lit a model with one sun and one floor. Three terms on top of it, each 
 - **Seated** (`R3.gaoAmt`): the lowest hand-span of a placed unit or building is darkened, in its
   own and the earth's shade. Only for what is placed: `uGAO` is set in `flushBatch` and cleared
   after, so the world batch is untouched.
-- **A rim light was tried and taken out.** Fresnel on these faceted models is not an outline: a
-  wall turned side-on to the view takes it across its whole face, so it flattened the form it was
-  meant to lift (a power plant brightened 24.7 inside against 7.1 at its outline).
+- **A rim light was tried and taken out, twice.** Fresnel on these faceted models is not an
+  outline: a wall turned side-on to the view takes it across its whole face, so it flattened the
+  form it was meant to lift (a power plant brightened 24.7 inside against 7.1 at its outline).
+  Tried again on units only, it lifted a tank by 42 levels and read as haze: the olive went pale
+  and the dark treads blue-grey. At this camera's height there is little silhouette to catch.
 - `e2e/modellight`: the fill brightens the building and adds less at night; steel lifts its dark
   third and not its paint; the contact shade darkens its foot and next to nothing above.
+
+## A rod is round (`r3d/primitives.js` `_r3Rod`)
+
+Every gun barrel, aerial, pipe, mast, railing and piling in the models was a long box with a square
+end - a barrel drawn as a plank - because the box was the one primitive the models were written in.
+In the 3D view's richer build (`_R3_DETAIL > 1`) a box whose long side is at least `R3_ROD_LEN` (3)
+times its short sides, whose short sides are within `R3_ROD_SQ` (30%) of each other, and which is at
+least `R3_ROD_MIN` (half a unit) thick, is a 16-sided cylinder along the long side, as long as the
+box and as wide as its short sides' mean. A rod costs about what the rounded box it replaces did.
+`unit/rods` counts 925 in 104 models: barrels, aerials, posts, chimney stacks, roof pipes, dock
+pilings. The sprites and the plain far-off models build at detail 1 and keep the box.
+
+- **What only looks like a rod stays a box.** A track's links are plates and a sprocket's teeth
+  are teeth: `tracks()` (`sprites/unitmodels.js`) lays them with `_R3_ROD_OFF` set. Rounded, the 80
+  on a tank looked no different at any zoom. A wheel's nuts and a railing's bars are under
+  `R3_ROD_MIN`: a few pixels across, too thin for roundness to show.
+- **Every rod is a difference from the plain model** that the middle zoom swaps in. `e2e/gpuwork`
+  holds that swap under a quarter of the units' pixels; with every rod round it went over (774 of
+  3,094), and with the exclusions it is 763, against 717 before.
+- Judged by eye at the closest zoom, A against B (`R3_ROD_LEN = 1e9` with the mesh cache dropped):
+  the Heavy tank's twin barrels and aerial are tubes, a power plant's roof fins a bank of pipes.
 
 ## A phone takes the GPU away (`render3d/lost3d.js`)
 
