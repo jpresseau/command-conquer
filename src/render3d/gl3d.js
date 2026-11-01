@@ -275,6 +275,7 @@ function _r3dInit() {
      unoccluded. */
   try { R3.shadowReady = _r3dShadowInit(R3); } catch (e) { R3.shadowReady = false; }
   try { R3.postReady = _r3dPostInit(R3); } catch (e) { R3.postReady = false; }
+  _r3dWatchLoss(R3);                    /* a phone may take the context away: render3d/lost3d.js */
   window._R3D = R3;
   return R3;
 }

@@ -40,7 +40,7 @@ function _r3dPaceEnd(js) {
   var R3 = window._R3D;
   if (!R3 || !R3.on) return;
   R3.meshBudget = undefined;
-  if (js < R3D_WARM_QUICK) _r3dWarm(R3, R3D_WARM_BUDGET);
+  if (js < R3D_WARM_QUICK && !R3.lost) _r3dWarm(R3, R3D_WARM_BUDGET);   /* not into a lost context: lost3d.js */
 }
 
 /* May an optional model be built now? Spends from the frame's budget when it is; a spec's frame

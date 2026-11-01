@@ -100,7 +100,7 @@ function _rtsGfxPhases() {
   s += '  ui ' + f(p.ui) + '  wait ' + f(Math.max(0, (p.gap || 0) - busy)) + 'ms';
   var w = typeof _r3dQualityWant === 'function' ? _r3dQualityWant() : 'auto', A = R3 && R3.qAuto;
   s += '   ' + (R3 && R3.q ? R3.q.name : '-') + (w === 'auto' ? ' auto' + (A && A.locked ? ' (held)' : '') : ' pinned');
-  return s;
+  return s + _r3dLossText();            /* a context the phone took away, and whether it came back */
 }
 /* The button: AUTO -> HIGH -> MEDIUM -> LOW -> AUTO (render3d/quality3d.js). */
 function rtsGfxQualityCycle() {

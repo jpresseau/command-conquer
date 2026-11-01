@@ -12,6 +12,7 @@
    Ground, then every entity, then the fog over the lot - the same order the 2D painter uses,
    with the depth buffer replacing the painter's sort for everything solid. */
 function _r3dFrame(G) {
+  if (_r3dLostTick(window._R3D)) return;     /* the GPU took the context: render3d/lost3d.js */
   var R3 = window._R3D, gl = R3.gl, R = _rtsR;
   /* Resolved HERE and not beside the entity walk that uses it: the sun's pass runs a hundred
      lines earlier and sets the constant placement attributes through this, and a `var`
