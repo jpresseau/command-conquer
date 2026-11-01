@@ -863,7 +863,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">e5f9765 · 2026-10-27</div>
+  <div id="rtsBuild" title="build">fc9b1da · 2026-11-01</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -25911,6 +25911,8 @@ var R3D_HALF = (function () {
    blue-grey; a scalar multiply drags it toward black and takes the sky out of every shadow. */
 var R3D_MESH_LIGHT =
   'uniform vec3 uHalf;' +          /* the specular's half-vector, per frame: cam3d.js */
+  'uniform vec3 uView;' +          /* ...and the way to the eye, for steel's reflection (meshfs3d.js) */
+  'uniform vec3 uLightK;' +        /* how much fill and steel (x, z): 1 unless a spec says (cam3d.js) */
   /* THE HOUR (sky3d.js): how much darker than day the lit and the shaded sides are, so a program
      whose uniforms were never set draws day; and how wet everything is, with the clock */
   'uniform vec3 uDarkL; uniform vec3 uDarkS; uniform vec3 uWet;' +
@@ -25941,7 +25943,16 @@ var R3D_MESH_LIGHT =
   '  float v = min(' + R3_AMB.toFixed(4) + ' + ' + R3_DIF.toFixed(4) +
       ' * lam + sky + 0.16 * sp * (1.0 + 2.5 * uWet.x), 1.10);' +   /* wet: a sheen on everything */
   '  float vs = min(' + R3_AMB.toFixed(4) + ' + sky, 1.10);' +
-  '  return mix(_ramp(col, vs) * (vec3(1.0) - uDarkS), _ramp(col, v) * (vec3(1.0) - uDarkL), _shadowAt());' +
+  '  float sh = _shadowAt();' +
+  '  vec3 r = mix(_ramp(col, vs) * (vec3(1.0) - uDarkS), _ramp(col, v) * (vec3(1.0) - uDarkL), sh);' +
+  /* THE FILL: light from the whole sky and the ground, not one sun and a floor. A face turned up
+     takes the sky's light, a touch cool, a face turned down the bounce off the earth, a touch
+     warm - so a hull's flank and a wall's underside are lit by where they face instead of all
+     going the one grey of the ramp's floor. NEARLY NEUTRAL: a cast of a dozen levels of blue on
+     every upward face read as a blue world, and took grey stone out of e2e/rock's grey family.
+     Scaled by the hour's shade, so night does not glow. */
+  '  r += col * mix(vec3(0.100, 0.085, 0.065), vec3(0.075, 0.085, 0.100), n.y * 0.5 + 0.5) * (vec3(1.0) - uDarkS) * uLightK.x;' +
+  '  return r;' +
   '}';
 </script>
 <script>/* render3d/cloud3d.js - clouds passing over the battlefield. Part of rts.render3d.
@@ -26407,7 +26418,8 @@ function _r3dShadowCopy(gl, C) {
      HIGH     everything, at the device's own resolution
      MEDIUM   no occlusion pass, no heat haze, no cloud shade; the buffer at most 2 device px a CSS px
      LOW      no shadow pass, no post stack at all (occlusion, bloom, heat, edge filter, grade), no
-              silhouettes, no firelight; 1.5 px a CSS px; the coarser meshes (r3d/curves.js)
+              silhouettes, no firelight, no land past the map's edge (apron3d.js: the horizon's
+              colour instead); 1.5 px a CSS px; the coarser meshes (r3d/curves.js)
      AUTO     starts HIGH and steps down while the frame is slow - and KEEPS a step only if it
               paid. A phone held at 30 by its own power saving is slow whatever this draws, and a
               controller that stepped down on frame time alone would take it to LOW for nothing.
@@ -26420,9 +26432,9 @@ function _r3dShadowCopy(gl, C) {
    frame times of its own. */
 
 var R3D_TIERS = [
-  { name: 'HIGH',   scale: 4,   shadow: 1, post: 1, ao: 1, heat: 1, clouds: 1, sil: 1, lights: 1, detail: 1 },
-  { name: 'MEDIUM', scale: 2,   shadow: 1, post: 1, ao: 0, heat: 0, clouds: 0, sil: 1, lights: 1, detail: 1 },
-  { name: 'LOW',    scale: 1.5, shadow: 0, post: 0, ao: 0, heat: 0, clouds: 0, sil: 0, lights: 0, detail: 0 }
+  { name: 'HIGH',   scale: 4,   shadow: 1, post: 1, ao: 1, heat: 1, clouds: 1, sil: 1, lights: 1, detail: 1, apron: 1 },
+  { name: 'MEDIUM', scale: 2,   shadow: 1, post: 1, ao: 0, heat: 0, clouds: 0, sil: 1, lights: 1, detail: 1, apron: 1 },
+  { name: 'LOW',    scale: 1.5, shadow: 0, post: 0, ao: 0, heat: 0, clouds: 0, sil: 0, lights: 0, detail: 0, apron: 0 }
 ];
 var RTS_GFXQ_LS = 'rtsGfxQ';            /* 'auto' (or unset), 'high', 'medium', 'low' */
 var R3D_Q_WINDOW = 2500;                /* ms of frames AUTO judges at a time */
@@ -26661,6 +26673,12 @@ function _r3dCamU(gl, P) {
   gl.uniform2f(gl.getUniformLocation(P, 'uYaw'), R3.cy, R3.sy);
   var h = R3.half || R3D_HALF;
   gl.uniform3f(gl.getUniformLocation(P, 'uHalf'), h[0], h[1], h[2]);
+  /* the way to the eye, for steel's reflection (meshfs3d.js): the baker's viewer turned with the
+     yaw, as the half-vector is - worked out here, every time, so a camera never turned has one */
+  var vh = R3_VIEW[2], vv = R3_VIEW[1], vm = Math.hypot(vh, vv) || 1, sy = R3.sy || 0, cy = R3.cy === undefined ? 1 : R3.cy;
+  gl.uniform3f(gl.getUniformLocation(P, 'uView'), -sy * vh / vm, vv / vm, cy * vh / vm);
+  gl.uniform3f(gl.getUniformLocation(P, 'uLightK'), R3.fillAmt === undefined ? 1 : R3.fillAmt, 0,
+               R3.metalAmt === undefined ? 1 : R3.metalAmt);
   if (typeof _r3dSkyU === 'function') _r3dSkyU(gl, P);     /* the hour and the weather: sky3d.js */
 }
 
@@ -27159,6 +27177,7 @@ var R3D_MESH_FS =
   /* NORMALISED HERE, NOT IN THE VERTEX SHADER. A varying is interpolated linearly, and the
      linear blend of two unit vectors is shorter than one - which is exactly the case on the
      curves this is for, and would read as a dark seam down the middle of every one. */
+  'uniform float uGAO;' +               /* the contact shade: set for placed things only */
   'uniform vec4 uSil;' +                /* a unit seen through what hides it - sil3d.js */
   'uniform vec4 uHaze;' +               /* rgb, amount: sky3d.js */
   'uniform float uSnow;' +              /* the SNOW sky: on every roof, and the shore frozen */
@@ -27167,6 +27186,25 @@ var R3D_MESH_FS =
   /* vCol.w: 0 whole, 1 rising, 2 a burnt-out husk (husk3d.js), 3 + damage scorched (hurt3d.js) */
   '  vec3 tint = _tint(vCol.w, vec3(vWxz.x, vHY.y, vWxz.y), vCol.rgb);' +
   '  vec3 c = _shade(normalize(vN), vCol.rgb) * tint; float a = uA;' +
+  /* SEATED ON THE GROUND: the lowest hand-span of a unit or a building is in the shade of itself
+     and of the earth round it - only for what is placed (uGAO, scene3d.js), not the world batch */
+  '  if (uGAO > 0.0) {' +
+  '    c *= mix(0.70, 1.0, smoothstep(0.0, 0.8, vHY.x));' +
+  /* STEEL. The dark, unsaturated parts of a model - tracks, road wheels, barrels, guns, hatches -
+     are the palette's `dark`, which the ramp takes to near black: on a tank they read as holes
+     in it. Steel is not dark; it reflects. Such a surface takes the sky or the ground in the
+     direction it faces the eye, and a broader, brighter sun highlight than paint - so a track is
+     grey-blue steel catching the light, not a void. Placed models only, and by the hour. */
+  '    float lu = dot(vCol.rgb, vec3(0.30, 0.59, 0.11));' +
+  '    float sa = max(max(vCol.r, vCol.g), vCol.b) - min(min(vCol.r, vCol.g), vCol.b);' +
+  '    float met = (1.0 - smoothstep(0.26, 0.42, lu)) * (1.0 - smoothstep(0.05, 0.14, sa)) * uLightK.z;' +
+  '    if (met > 0.0 && dot(uView, uView) > 0.5) {' +
+  '      vec3 nn = normalize(vN), rv = reflect(-uView, nn);' +
+  '      vec3 env = mix(vec3(0.20, 0.17, 0.13), vec3(0.50, 0.58, 0.68), clamp(rv.y * 0.5 + 0.5, 0.0, 1.0));' +
+  '      float ms = pow(max(dot(nn, uHalf), 0.0), 24.0) * _shadowAt();' +
+  '      c += met * (env * 0.30 + vec3(1.0, 0.97, 0.9) * ms * 0.6) * (vec3(1.0) - uDarkL) * tint;' +
+  '    }' +
+  '  }' +
   '  if (uWeather > 0.0) c = _weather(c, normalize(vN), vec3(vWxz.x, vHY.y, vWxz.y));' +
   /* snow settles on whatever faces up - roofs, hulls, canopies - and not on the sea */
   '  if (uSnow > 0.0 && uSea.x < 0.5) {' +
@@ -28232,6 +28270,10 @@ var R3D_MAT_GLSL =
   'uniform float uSnow;' +                                 /* the SNOW sky: sky3d.js */
   'uniform sampler2D uOreT;' +                             /* the ore field: colour, richness in .a */
   'uniform float uTileInv;' +
+  /* the apron past the map's edge (apron3d.js) reflects the land and not what was built on it:
+     no paving, concrete or track, no road paint, no scars */
+  'uniform float uApr;' +
+  'float _aprK(float k){ return (uApr > 0.5 && ((k > 3.5 && k < 4.5) || k > 5.5)) ? 0.0 : k; }' +
   /* the noise, and the border's wander, are render3d/noise3d.js's - shared with the sea */
   R3D_NOISE_GLSL +
   R3D_ROAD_GLSL +                                          /* the roads' paint: road3d.js */
@@ -28340,6 +28382,7 @@ var R3D_MAT_GLSL =
   '  vec4 d = texture2D(uMap, (i0 + vec2(1.5, 1.5)) * uMat.y);' +
   '  float ka = floor(a.r * 255.0 / 16.0 + 0.5), kb = floor(b.r * 255.0 / 16.0 + 0.5);' +
   '  float kc = floor(c.r * 255.0 / 16.0 + 0.5), kd = floor(d.r * 255.0 / 16.0 + 0.5);' +
+  '  ka = _aprK(ka); kb = _aprK(kb); kc = _aprK(kc); kd = _aprK(kd);' +
   /* THE NOISE, ONCE. Every material is a few mixes of the same handful of noises, so they are
      evaluated here, once for the pixel, and the corners' materials are arithmetic on them. Per
      material, a pixel on a border paid for up to four materials' noise - and the harness's
@@ -28396,14 +28439,15 @@ var R3D_MAT_GLSL =
   '    grad *= 1.0 - cov * 0.7;' +
   '  }' +
   /* THE ROAD, painted down its own line over the cells' dirt shoulder; flat where it is laid */
-  '  grad *= 1.0 - _road(w, col.rgb, N, M, det);' +
+  '  if (uApr < 0.5) grad *= 1.0 - _road(w, col.rgb, N, M, det);' +
   /* SCARS: scorch blends like the ground does; a crater is drawn round its own cell's centre */
-  '  float sc = dot(wt, vec4(a.g, b.g, c.g, d.g));' +
+  '  float sc = uApr > 0.5 ? 0.0 : dot(wt, vec4(a.g, b.g, c.g, d.g));' +
   '  if (sc > 0.002) {' +
   '    float burn = sc * smoothstep(0.35, 0.65, _fbm(w * 0.6 + vec2(4.0, 9.0)) + sc * 0.4);' +
   '    col.rgb = mix(col.rgb, vec3(0.13, 0.11, 0.09), clamp(burn, 0.0, 0.85));' +
   '  }' +
   '  vec2 cr = i0 + vec2(0.5); float crat = 0.0;' +
+  '  if (uApr > 0.5) { a.b = 0.0; b.b = 0.0; c.b = 0.0; d.b = 0.0; }' +
   '  if (a.b > 0.5) crat = max(crat, 1.0 - length(cc - cr + vec2(0.5)) * 2.2);' +
   '  if (b.b > 0.5) crat = max(crat, 1.0 - length(cc - cr - vec2(0.5, -0.5)) * 2.2);' +
   '  if (c.b > 0.5) crat = max(crat, 1.0 - length(cc - cr - vec2(-0.5, 0.5)) * 2.2);' +
@@ -28415,7 +28459,7 @@ var R3D_MAT_GLSL =
      grains, breaking up at its edge by noise and thinning as the field is worked. */
   '  vec4 ore = texture2D(uOreT, (w * uTileInv + uMat.z + 0.5) * uMat.y);' +
   '  oreM = 0.0;' +
-  '  if (ore.a > 0.004) {' +
+  '  if (ore.a > 0.004 && uApr < 0.5) {' +
   /* coverage follows what is LEFT, steeply: a full cell is soil, a worked-out one is the ground
      it lay on again (e2e/ore3d: the map has to say where the ore still is) */
   '    float om = smoothstep(0.30, 0.72, ore.a * 1.25 + (_fbm(w * 0.45 + vec2(2.0, 5.0)) - 0.5) * 0.55);' +
@@ -28517,7 +28561,9 @@ function _r3dGroundMap(gl, R3, G) {
    path it never takes. Built on first use and allowed to fail on its own, so a device that
    cannot compile it draws the baked ground rather than no 3D at all. */
 function _r3dMatFS() {
-  return 'precision highp float; varying vec2 vT; varying float vShade; varying vec2 vW; varying float vY;' +
+  return 'precision highp float; varying vec2 vT; varying float vShade; varying vec2 vW; varying float vY; varying float vO;' +
+    /* the apron (apron3d.js): the horizon it fades to and over what distance, and the sea mask */
+    'uniform vec4 uHz; uniform vec2 uHzF; uniform sampler2D uSeaA; uniform float uSeaOn;' +
     R3D_MAT_GLSL +
     R3D_SHADOW_GLSL + R3D_PLIGHT_GLSL +
     /* the hour and the weather (sky3d.js): darker than day by uDarkL/uDarkS - unset, day */
@@ -28544,8 +28590,17 @@ function _r3dMatFS() {
     '    }' +
     '  }' +
     /* the lamps, the headlights and the fires, when the lamps are on (fxlight3d.js) */
-    '  if (uGndL > 0.0) lit += _plight(c.rgb, vec3(0.0, 1.0, 0.0), vec3(vW.x, vY + 0.05, vW.y)) * uGndL;' +
+    '  if (uGndL > 0.0 && uApr < 0.5) lit += _plight(c.rgb, vec3(0.0, 1.0, 0.0), vec3(vW.x, vY + 0.05, vW.y)) * uGndL;' +
+    /* the apron's sea: the ground under the mirrored water is the seabed, and the sea itself
+       is a mesh that does not reach out here - so it is painted, deep and still, from the mask */
+    '  if (uSeaOn > 0.5) {' +
+    '    float wm = texture2D(uSeaA, (vW * uTileInv + uMat.z + 0.5) * uMat.y).r;' +
+    '    vec3 sea = vec3(0.07, 0.21, 0.37) * mix(vec3(0.62, 0.66, 0.74) * (vec3(1.0) - uDarkS), vec3(1.0) - uDarkL, 0.8);' +
+    '    sea *= 0.92 + 0.16 * _vn(vW * 0.05);' +
+    '    lit = mix(lit, sea, smoothstep(0.46, 0.62, wm));' +
+    '  }' +
     '  lit = mix(lit, uHaze.rgb, uHaze.a);' +
+    '  if (uHz.a > 0.0) lit = mix(lit, uHz.rgb, smoothstep(uHzF.x, uHzF.y, vO));' +
     '  gl_FragColor = vec4(lit, 1.0);' +
     '}';
 }
@@ -28834,12 +28889,15 @@ var R3D_TEX_VS =
   'attribute vec3 aP; attribute vec2 aT; attribute vec3 aN;' +
   'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' + R3D_CAM_GLSL +
   R3D_SHADOW_VGLSL +
-  'varying vec2 vT; varying float vShade; varying vec2 vW; varying float vY;' +
+  'varying vec2 vT; varying float vShade; varying vec2 vW; varying float vY; varying float vO;' +
   'uniform vec3 uSunD;' +                 /* the sun's move from the baker's: sky3d.js */
+  'uniform vec2 uMir;' +                  /* the apron past the map's edge (on, half-width): apron3d.js */
   'void main(){' +
   '  vT = aT; vY = aP.y;' +
-  /* the world position under this fragment, for the grain below - see R3D_TEX_FS */
-  '  vW = aP.xz;' +
+  /* the world position under this fragment, for the grain below - see R3D_TEX_FS; on the apron,
+     the map's point it mirrors, and how far outside the map it lies */
+  '  vW = aP.xz; vO = 0.0;' +
+  '  if (uMir.x > 0.5) { vW = sign(aP.xz) * (uMir.y - abs(uMir.y - abs(aP.xz))); vO = max(abs(aP.x), abs(aP.z)) - uMir.y; }' +
   /* HOW MUCH LIGHT THIS PATCH OF GROUND TAKES, RELATIVE TO FLAT. The terrain texture is the
      2D renderer's baked canvas and already carries its own lighting for a level surface, so
      shading it again with the full lambert would light it twice. What the relief needs is the
@@ -29102,6 +29160,141 @@ function _r3dGrainSet(gl, R3, P) {
   gl.activeTexture(gl.TEXTURE0);
   gl.uniform2f(uG, RTS_DETAIL_ALPHA, px / RTS_DETAIL_TILE);
   return mag;
+}
+</script>
+<script>/* render3d/apron3d.js - THE LAND PAST THE MAP'S EDGE. Part of rts.render3d.
+
+   The ground is the visible patch, clamped to the map (ground3d.js _r3dGroundMesh), and past
+   the edge was the clear colour: a near-black band across the top of every frame, two-fifths
+   of the screen at the widest zoom, with the map ending on a ruled line under it. A battle on
+   a table, not in a country.
+
+   THE MAP, MIRRORED. The apron is ground drawn past every edge, and what it draws is the map
+   reflected across that edge: its height, its slope and its materials read at the mirrored
+   point. A reflection is continuous at the line it reflects in, so there is no seam - the
+   grass, the hills and the shore run straight on out of the map - and it needs no second
+   terrain, only the one the match already has. Nothing stands on it: no trees, buildings or
+   units are mirrored, only the ground - and only the land: no paving, road, track, scar or ore
+   (uApr in terrain3d.js), so no ghost of the base or of a field nobody can reach - and it fades
+   into the horizon (R3D_APRON_FADE) so the reflection is never close enough to read as one.
+
+   NOT ON THE LOW TIER (quality3d.js `apron`): it is the ground's whole material shader over up to
+   two-fifths of the screen. There the distance is the horizon's colour, which is still not black.
+
+   THE SHROUD IS MIRRORED WITH IT. Unexplored ground past the edge is as dark as the
+   unexplored ground it reflects, so the apron never shows what lies under the shroud.
+
+   THE SEA. Water is a mesh of its own over the water cells (wave3d.js), so the mirrored sea
+   is painted here instead: deep water read from the sea mask at the mirrored point, a flat
+   blue fading with the rest. Far and hazed, that is all it has to be.
+
+   BEYOND THE APRON is the clear colour, which is the horizon's (_r3dHorizon), so the land runs
+   into haze and the haze into the distance, with no line between them. */
+var R3D_APRON = 1.0;            /* how far out the apron runs, in map half-widths */
+var R3D_APRON_FADE = [0.04, 0.85];   /* fade to the horizon from/to, in half-widths outside the map */
+var R3D_HORIZON_DAY = [0.70, 0.78, 0.86];
+
+/* The horizon's colour under the sky this frame: the day's, lit as the sky lights the land,
+   and drawn toward the sky's own haze as far as that haze is thick. */
+function _r3dHorizon(G) {
+  var S = (typeof _rtsSkyNow === 'function' && _rtsSkyNow(G)) || { L: [1, 1, 1], haze: [0, 0, 0, 0] };
+  var L = S.L || [1, 1, 1], hz = S.haze || [0, 0, 0, 0], k = Math.min(1, (hz[3] || 0) * 2.5), out = [];
+  for (var i = 0; i < 3; i++) out.push(R3D_HORIZON_DAY[i] * Math.min(1, L[i]) * (1 - k) + hz[i] * k);
+  return out;
+}
+
+/* The mirror across the map's edges, EXT the half-width - continuous at the line. */
+function _r3dMir(v, EXT) { var a = Math.abs(v); return (v < 0 ? -1 : 1) * (EXT - Math.abs(EXT - a)); }
+
+/* The apron's mesh over the visible patch: everything in view out to R3D_APRON past the map,
+   less the map itself. Cut on the tile grid, as the ground is and for the same two reasons -
+   a surface that does not crawl, and triangles small enough that linear depth holds (see the
+   note in scene3d.js) - and coarser by whole cells as the view widens. */
+function _r3dApronMesh(R3, gl, vb, EXT) {
+  var A = EXT * (1 + R3D_APRON), T = RTS_TILE;
+  var GM = T * 2 + RTS_ELEV_MAX * R3.sp / R3.cp;
+  var x0 = Math.max(-A, vb.x0 - GM), x1 = Math.min(A, vb.x1 + GM), z0 = Math.max(-A, vb.z0 - GM), z1 = Math.min(A, vb.z1 + GM);
+  var key = null, Gm = window._rtsG;
+  if (x1 <= x0 || z1 <= z0 || (x0 >= -EXT && x1 <= EXT && z0 >= -EXT && z1 <= EXT)) { R3.apronVerts = 0; R3.apronKey = null; return; }
+  var step = T;
+  while ((x1 - x0) / step * ((z1 - z0) / step) > 3600 && step < T * 16) step *= 2;
+  x0 = Math.floor(x0 / step) * step; z0 = Math.floor(z0 / step) * step;
+  key = x0 + ',' + x1 + ',' + z0 + ',' + z1 + ',' + step;
+  if (R3.apronKey === key && R3.apronFor === Gm && R3.apronH === (Gm && Gm.height)) return;
+  R3.apronKey = key; R3.apronFor = Gm; R3.apronH = Gm && Gm.height;
+  var nx = Math.ceil((x1 - x0) / step), nz = Math.ceil((z1 - z0) / step), need = nx * nz * 18;
+  if (!R3.apronBuf) { R3.apronBuf = gl.createBuffer(); R3.apronNB = gl.createBuffer(); R3.apronUV = gl.createBuffer(); }
+  if (!R3.apronP || R3.apronP.length < need) {
+    R3.apronP = new Float32Array(need); R3.apronN = new Float32Array(need); R3.apronT = new Float32Array(need / 3 * 2);
+  }
+  var q = R3.apronP, nb = R3.apronN, t = R3.apronT, k = 0, kt = 0;
+  function v(x, z) {
+    var mx = _r3dMir(x, EXT), mz = _r3dMir(z, EXT), n = _rtsElevNormal(mx, mz);
+    q[k] = x; q[k + 1] = _rtsElev(mx, mz); q[k + 2] = z;
+    nb[k] = Math.abs(x) > EXT ? -n[0] : n[0]; nb[k + 1] = n[1]; nb[k + 2] = Math.abs(z) > EXT ? -n[2] : n[2];
+    k += 3;
+    t[kt] = (mx + EXT) / (2 * EXT); t[kt + 1] = (mz + EXT) / (2 * EXT); kt += 2;
+  }
+  for (var j = 0; j < nz; j++) {
+    var az = z0 + j * step, bz = Math.min(z1, az + step);
+    for (var i = 0; i < nx; i++) {
+      var ax = x0 + i * step, bx = Math.min(x1, ax + step);
+      /* a quad wholly inside the map is the ground's, not the apron's */
+      if (ax >= -EXT && bx <= EXT && az >= -EXT && bz <= EXT) continue;
+      v(ax, az); v(bx, az); v(bx, bz);
+      v(ax, az); v(bx, bz); v(ax, bz);
+    }
+  }
+  R3.apronVerts = k / 3;
+  gl.bindBuffer(gl.ARRAY_BUFFER, R3.apronBuf); gl.bufferData(gl.ARRAY_BUFFER, q.subarray(0, k), gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, R3.apronNB); gl.bufferData(gl.ARRAY_BUFFER, nb.subarray(0, k), gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, R3.apronUV); gl.bufferData(gl.ARRAY_BUFFER, t.subarray(0, kt), gl.DYNAMIC_DRAW);
+}
+
+/* The apron onto program P's attributes, as _r3dGroundBind puts the ground there. */
+function _r3dApronBind(gl, R3, P) {
+  var at = [['aP', R3.apronBuf, 3], ['aN', R3.apronNB, 3], ['aT', R3.apronUV, 2]];
+  for (var i = 0; i < at.length; i++) {
+    var a = gl.getAttribLocation(P, at[i][0]);
+    if (a < 0) continue;
+    gl.bindBuffer(gl.ARRAY_BUFFER, at[i][1]);
+    gl.enableVertexAttribArray(a);
+    gl.vertexAttribPointer(a, at[i][2], gl.FLOAT, false, 0, 0);
+  }
+}
+
+/* Drawn straight after the ground, through the ground's own program (still bound): the
+   materials read at the mirrored point (uMir), the sea painted from its mask, and the whole of
+   it fading to the horizon with its distance outside the map. Only on the materials ground -
+   the legacy baked picture has nothing to mirror. */
+function _r3dApronDraw(gl, R3, G) {
+  if (!R3.apronVerts || !R3.matOn || window.RTS_APRON_OFF || !_r3dQ('apron')) return;
+  var P = R3.matP, EXT = RTS_N * RTS_TILE / 2, hz = _r3dHorizon(G);
+  gl.uniform2f(gl.getUniformLocation(P, 'uMir'), 1, EXT);
+  gl.uniform1f(gl.getUniformLocation(P, 'uApr'), 1);
+  gl.uniform4f(gl.getUniformLocation(P, 'uHz'), hz[0], hz[1], hz[2], 1);
+  gl.uniform2f(gl.getUniformLocation(P, 'uHzF'), R3D_APRON_FADE[0] * EXT, R3D_APRON_FADE[1] * EXT);
+  if (R3.seaMaskTex) {
+    /* unit 6, the mesh program's own for the mask: 7 is the roads' (road3d.js), and the sea on
+       it made the road paint the whole apron */
+    gl.activeTexture(gl.TEXTURE0 + 6); gl.bindTexture(gl.TEXTURE_2D, R3.seaMaskTex); gl.activeTexture(gl.TEXTURE0);
+    gl.uniform1i(gl.getUniformLocation(P, 'uSeaA'), 6);
+    gl.uniform1f(gl.getUniformLocation(P, 'uSeaOn'), 1);
+  }
+  _r3dApronBind(gl, R3, P);
+  gl.drawArrays(gl.TRIANGLES, 0, R3.apronVerts);
+  gl.uniform2f(gl.getUniformLocation(P, 'uMir'), 0, EXT);
+  gl.uniform1f(gl.getUniformLocation(P, 'uApr'), 0);
+  gl.uniform4f(gl.getUniformLocation(P, 'uHz'), 0, 0, 0, 0);
+  gl.uniform1f(gl.getUniformLocation(P, 'uSeaOn'), 0);
+}
+
+/* ...and in the shroud's pass, with the shroud's program bound and its texture on: the apron's
+   texture coordinates are the mirrored ones, so it is dark where what it reflects is. */
+function _r3dApronFog(gl, R3) {
+  if (!R3.apronVerts || !R3.matOn || window.RTS_APRON_OFF || !_r3dQ('apron')) return;
+  _r3dApronBind(gl, R3, R3.texP);
+  gl.drawArrays(gl.TRIANGLES, 0, R3.apronVerts);
 }
 </script>
 <script>/* render3d/upload3d.js - what the 3D mode sends the GPU each frame, and how little. Part of
@@ -30903,15 +31096,28 @@ function _r3dFxDraw(G, cam, invD) {
    entities of a few dozen types, so the geometry cost is paid once at first sight of a type
    and the per-frame cost is uniform uploads. */
 
+function _r3dFaceNormal(v) {
+  var nx = 0, ny = 0, nz = 0;
+  for (var e = 0; e < v.length; e++) {
+    var p0 = v[e], p1 = v[(e + 1) % v.length];
+    nx += (p0[1] - p1[1]) * (p0[2] + p1[2]);
+    ny += (p0[2] - p1[2]) * (p0[0] + p1[0]);
+    nz += (p0[0] - p1[0]) * (p0[1] + p1[1]);
+  }
+  return [nx, ny, nz];
+}
 function _r3dBuildMesh(gl, faces) {
   var pos = [], nrm = [], col = [], fi;
   for (fi = 0; fi < faces.length; fi++) {
     var f = faces[fi], v = f.v;
     var r = f.c[0] / 255, gc = f.c[1] / 255, b = f.c[2] / 255;
-    /* face normal from the first three vertices - the primitives emit planar faces */
-    var ax = v[1][0] - v[0][0], ay = v[1][1] - v[0][1], az = v[1][2] - v[0][2];
-    var bx = v[2][0] - v[0][0], by = v[2][1] - v[0][1], bz = v[2][2] - v[0][2];
-    var nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+    /* THE FACE'S NORMAL FROM ALL ITS CORNERS (Newell's method), not from the first three. It was
+       the first three, and a rounded box's cap (r3d/curves.js _r3RoundBox) starts with three
+       points in a line - two ends of a corner arc and the straight run between - so the cap of
+       every rounded box got a zero normal, which the shader normalised into NaN: every barrel,
+       fender and hull plate drawn at the high and medium tiers had a black lid. The sum over all
+       the edges is exact for a planar polygon and cannot vanish while the polygon has area. */
+    var fn = _r3dFaceNormal(v), nx = fn[0], ny = fn[1], nz = fn[2];
     /* UNLESS THE FACE CAME WITH ITS OWN. A cylinder, cone or vault emits one normal per corner
        (see _r3Cyl in r3d/primitives.js), which is what turns a ring of flat strips into a
        curve once the fragment stage interpolates them. Everything else - every box, slab,
@@ -31097,6 +31303,7 @@ function _r3dFrame(G) {
     return { P: P,
       uA: gl.getUniformLocation(P, 'uA'),
       uWave: gl.getUniformLocation(P, 'uWave'), uW: gl.getUniformLocation(P, 'uWeather'),
+      uGAO: gl.getUniformLocation(P, 'uGAO'),
       aP: gl.getAttribLocation(P, 'aP'), aN: gl.getAttribLocation(P, 'aN'),
       aC: gl.getAttribLocation(P, 'aC'),
       /* placement, per instance now rather than per draw - render3d/inst3d.js */
@@ -31155,6 +31362,7 @@ function _r3dFrame(G) {
      slope - is built by _r3dGroundMesh in render3d/ground3d.js, beside the textures draped
      over it. It moved there when the relief work took this file over the line limit. */
   _r3dGroundMesh(R3, gl, vb, EXT);
+  _r3dApronMesh(R3, gl, vb, EXT);                   /* and the land past its edge: apron3d.js */
 
 
   /* THE WORLD IS BUILT BEFORE THE SUN LOOKS AT IT. _r3dWorldTick used to run in the middle of
@@ -31200,13 +31408,15 @@ function _r3dFrame(G) {
      to the canvas exactly as it did before. */
   _r3dMark(R3, 'shadow'); var post = R3.postReady && _r3dQ('post') && _r3dPostBegin(R3);
 
-  gl.clearColor(0.016, 0.024, 0.035, 1);
+  var hzc = _r3dHorizon(G);                         /* past the apron, the horizon: apron3d.js */
+  gl.clearColor(hzc[0], hzc[1], hzc[2], 1);
   gl.enable(gl.DEPTH_TEST);
   gl.disable(gl.BLEND);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
   /* --- ground: the materials, or the baked picture (render3d/terrain3d.js) --- */
   _r3dGroundDraw(gl, R3, G, cam, invD);
+  _r3dApronDraw(gl, R3, G);
 
   /* --- the ore stain, straight onto the ground it lies on ---
      The depth TEST is off for this, which also turns depth writing off: at this point the
@@ -31344,6 +31554,7 @@ function _r3dFrame(G) {
      and depth-tested. See the note at the top of inst3d.js before adding anything blended. */
   function flushBatch(C) {
     var B = BATCH, i, j, buf = I.on ? _r3dInstPack(gl, R3, B) : null;   /* one upload: inst3d.js */
+    if (C.uGAO) gl.uniform1f(C.uGAO, R3.gaoAmt === undefined ? 1 : R3.gaoAmt);   /* seated: meshfs3d.js */
     for (i = 0; i < B.order.length; i++) {
       var b = B.order[i];
       if (!b.n) continue;
@@ -31368,6 +31579,7 @@ function _r3dFrame(G) {
        buffer that is no longer bound to it. */
     _r3dInstConst(gl, I, C, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0);
     if (C.uW) gl.uniform1f(C.uW, 0);                 /* nothing drawn after has been built */
+    if (C.uGAO) gl.uniform1f(C.uGAO, 0);
   }
   function draw(mesh, x, y2, zz, rot, scale, dim, sy, nrm) {
     drawIn(MC, mesh, x, y2, zz, rot, scale, dim, sy, nrm);
@@ -31506,6 +31718,7 @@ function _r3dFrame(G) {
   var uFog = gl.getUniformLocation(R3.texP, 'uFog');                  /* drifting: shroud3d.js */
   gl.uniform3f(uFog, R3.shroudOff ? 0 : 1, G.t || 0, 1 / RTS_N);
   gl.drawArrays(gl.TRIANGLES, 0, R3.groundVerts);
+  _r3dApronFog(gl, R3);
   gl.uniform3f(uFog, 0, 0, 0);
   gl.disable(gl.BLEND); _r3dMark(R3, 'post');
 }

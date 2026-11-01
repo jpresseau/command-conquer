@@ -37,6 +37,10 @@ var R3D_MAT_GLSL =
   'uniform float uSnow;' +                                 /* the SNOW sky: sky3d.js */
   'uniform sampler2D uOreT;' +                             /* the ore field: colour, richness in .a */
   'uniform float uTileInv;' +
+  /* the apron past the map's edge (apron3d.js) reflects the land and not what was built on it:
+     no paving, concrete or track, no road paint, no scars */
+  'uniform float uApr;' +
+  'float _aprK(float k){ return (uApr > 0.5 && ((k > 3.5 && k < 4.5) || k > 5.5)) ? 0.0 : k; }' +
   /* the noise, and the border's wander, are render3d/noise3d.js's - shared with the sea */
   R3D_NOISE_GLSL +
   R3D_ROAD_GLSL +                                          /* the roads' paint: road3d.js */
@@ -145,6 +149,7 @@ var R3D_MAT_GLSL =
   '  vec4 d = texture2D(uMap, (i0 + vec2(1.5, 1.5)) * uMat.y);' +
   '  float ka = floor(a.r * 255.0 / 16.0 + 0.5), kb = floor(b.r * 255.0 / 16.0 + 0.5);' +
   '  float kc = floor(c.r * 255.0 / 16.0 + 0.5), kd = floor(d.r * 255.0 / 16.0 + 0.5);' +
+  '  ka = _aprK(ka); kb = _aprK(kb); kc = _aprK(kc); kd = _aprK(kd);' +
   /* THE NOISE, ONCE. Every material is a few mixes of the same handful of noises, so they are
      evaluated here, once for the pixel, and the corners' materials are arithmetic on them. Per
      material, a pixel on a border paid for up to four materials' noise - and the harness's
@@ -201,14 +206,15 @@ var R3D_MAT_GLSL =
   '    grad *= 1.0 - cov * 0.7;' +
   '  }' +
   /* THE ROAD, painted down its own line over the cells' dirt shoulder; flat where it is laid */
-  '  grad *= 1.0 - _road(w, col.rgb, N, M, det);' +
+  '  if (uApr < 0.5) grad *= 1.0 - _road(w, col.rgb, N, M, det);' +
   /* SCARS: scorch blends like the ground does; a crater is drawn round its own cell's centre */
-  '  float sc = dot(wt, vec4(a.g, b.g, c.g, d.g));' +
+  '  float sc = uApr > 0.5 ? 0.0 : dot(wt, vec4(a.g, b.g, c.g, d.g));' +
   '  if (sc > 0.002) {' +
   '    float burn = sc * smoothstep(0.35, 0.65, _fbm(w * 0.6 + vec2(4.0, 9.0)) + sc * 0.4);' +
   '    col.rgb = mix(col.rgb, vec3(0.13, 0.11, 0.09), clamp(burn, 0.0, 0.85));' +
   '  }' +
   '  vec2 cr = i0 + vec2(0.5); float crat = 0.0;' +
+  '  if (uApr > 0.5) { a.b = 0.0; b.b = 0.0; c.b = 0.0; d.b = 0.0; }' +
   '  if (a.b > 0.5) crat = max(crat, 1.0 - length(cc - cr + vec2(0.5)) * 2.2);' +
   '  if (b.b > 0.5) crat = max(crat, 1.0 - length(cc - cr - vec2(0.5, -0.5)) * 2.2);' +
   '  if (c.b > 0.5) crat = max(crat, 1.0 - length(cc - cr - vec2(-0.5, 0.5)) * 2.2);' +
@@ -220,7 +226,7 @@ var R3D_MAT_GLSL =
      grains, breaking up at its edge by noise and thinning as the field is worked. */
   '  vec4 ore = texture2D(uOreT, (w * uTileInv + uMat.z + 0.5) * uMat.y);' +
   '  oreM = 0.0;' +
-  '  if (ore.a > 0.004) {' +
+  '  if (ore.a > 0.004 && uApr < 0.5) {' +
   /* coverage follows what is LEFT, steeply: a full cell is soil, a worked-out one is the ground
      it lay on again (e2e/ore3d: the map has to say where the ore still is) */
   '    float om = smoothstep(0.30, 0.72, ore.a * 1.25 + (_fbm(w * 0.45 + vec2(2.0, 5.0)) - 0.5) * 0.55);' +
@@ -322,7 +328,9 @@ function _r3dGroundMap(gl, R3, G) {
    path it never takes. Built on first use and allowed to fail on its own, so a device that
    cannot compile it draws the baked ground rather than no 3D at all. */
 function _r3dMatFS() {
-  return 'precision highp float; varying vec2 vT; varying float vShade; varying vec2 vW; varying float vY;' +
+  return 'precision highp float; varying vec2 vT; varying float vShade; varying vec2 vW; varying float vY; varying float vO;' +
+    /* the apron (apron3d.js): the horizon it fades to and over what distance, and the sea mask */
+    'uniform vec4 uHz; uniform vec2 uHzF; uniform sampler2D uSeaA; uniform float uSeaOn;' +
     R3D_MAT_GLSL +
     R3D_SHADOW_GLSL + R3D_PLIGHT_GLSL +
     /* the hour and the weather (sky3d.js): darker than day by uDarkL/uDarkS - unset, day */
@@ -349,8 +357,17 @@ function _r3dMatFS() {
     '    }' +
     '  }' +
     /* the lamps, the headlights and the fires, when the lamps are on (fxlight3d.js) */
-    '  if (uGndL > 0.0) lit += _plight(c.rgb, vec3(0.0, 1.0, 0.0), vec3(vW.x, vY + 0.05, vW.y)) * uGndL;' +
+    '  if (uGndL > 0.0 && uApr < 0.5) lit += _plight(c.rgb, vec3(0.0, 1.0, 0.0), vec3(vW.x, vY + 0.05, vW.y)) * uGndL;' +
+    /* the apron's sea: the ground under the mirrored water is the seabed, and the sea itself
+       is a mesh that does not reach out here - so it is painted, deep and still, from the mask */
+    '  if (uSeaOn > 0.5) {' +
+    '    float wm = texture2D(uSeaA, (vW * uTileInv + uMat.z + 0.5) * uMat.y).r;' +
+    '    vec3 sea = vec3(0.07, 0.21, 0.37) * mix(vec3(0.62, 0.66, 0.74) * (vec3(1.0) - uDarkS), vec3(1.0) - uDarkL, 0.8);' +
+    '    sea *= 0.92 + 0.16 * _vn(vW * 0.05);' +
+    '    lit = mix(lit, sea, smoothstep(0.46, 0.62, wm));' +
+    '  }' +
     '  lit = mix(lit, uHaze.rgb, uHaze.a);' +
+    '  if (uHz.a > 0.0) lit = mix(lit, uHz.rgb, smoothstep(uHzF.x, uHzF.y, vO));' +
     '  gl_FragColor = vec4(lit, 1.0);' +
     '}';
 }

@@ -58,6 +58,8 @@ var R3D_HALF = (function () {
    blue-grey; a scalar multiply drags it toward black and takes the sky out of every shadow. */
 var R3D_MESH_LIGHT =
   'uniform vec3 uHalf;' +          /* the specular's half-vector, per frame: cam3d.js */
+  'uniform vec3 uView;' +          /* ...and the way to the eye, for steel's reflection (meshfs3d.js) */
+  'uniform vec3 uLightK;' +        /* how much fill and steel (x, z): 1 unless a spec says (cam3d.js) */
   /* THE HOUR (sky3d.js): how much darker than day the lit and the shaded sides are, so a program
      whose uniforms were never set draws day; and how wet everything is, with the clock */
   'uniform vec3 uDarkL; uniform vec3 uDarkS; uniform vec3 uWet;' +
@@ -88,5 +90,14 @@ var R3D_MESH_LIGHT =
   '  float v = min(' + R3_AMB.toFixed(4) + ' + ' + R3_DIF.toFixed(4) +
       ' * lam + sky + 0.16 * sp * (1.0 + 2.5 * uWet.x), 1.10);' +   /* wet: a sheen on everything */
   '  float vs = min(' + R3_AMB.toFixed(4) + ' + sky, 1.10);' +
-  '  return mix(_ramp(col, vs) * (vec3(1.0) - uDarkS), _ramp(col, v) * (vec3(1.0) - uDarkL), _shadowAt());' +
+  '  float sh = _shadowAt();' +
+  '  vec3 r = mix(_ramp(col, vs) * (vec3(1.0) - uDarkS), _ramp(col, v) * (vec3(1.0) - uDarkL), sh);' +
+  /* THE FILL: light from the whole sky and the ground, not one sun and a floor. A face turned up
+     takes the sky's light, a touch cool, a face turned down the bounce off the earth, a touch
+     warm - so a hull's flank and a wall's underside are lit by where they face instead of all
+     going the one grey of the ramp's floor. NEARLY NEUTRAL: a cast of a dozen levels of blue on
+     every upward face read as a blue world, and took grey stone out of e2e/rock's grey family.
+     Scaled by the hour's shade, so night does not glow. */
+  '  r += col * mix(vec3(0.100, 0.085, 0.065), vec3(0.075, 0.085, 0.100), n.y * 0.5 + 0.5) * (vec3(1.0) - uDarkS) * uLightK.x;' +
+  '  return r;' +
   '}';
