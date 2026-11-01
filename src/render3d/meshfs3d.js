@@ -36,6 +36,7 @@ var R3D_MESH_FS =
   /* NORMALISED HERE, NOT IN THE VERTEX SHADER. A varying is interpolated linearly, and the
      linear blend of two unit vectors is shorter than one - which is exactly the case on the
      curves this is for, and would read as a dark seam down the middle of every one. */
+  'uniform float uGAO;' +               /* the contact shade: set for placed things only */
   'uniform vec4 uSil;' +                /* a unit seen through what hides it - sil3d.js */
   'uniform vec4 uHaze;' +               /* rgb, amount: sky3d.js */
   'uniform float uSnow;' +              /* the SNOW sky: on every roof, and the shore frozen */
@@ -44,6 +45,25 @@ var R3D_MESH_FS =
   /* vCol.w: 0 whole, 1 rising, 2 a burnt-out husk (husk3d.js), 3 + damage scorched (hurt3d.js) */
   '  vec3 tint = _tint(vCol.w, vec3(vWxz.x, vHY.y, vWxz.y), vCol.rgb);' +
   '  vec3 c = _shade(normalize(vN), vCol.rgb) * tint; float a = uA;' +
+  /* SEATED ON THE GROUND: the lowest hand-span of a unit or a building is in the shade of itself
+     and of the earth round it - only for what is placed (uGAO, scene3d.js), not the world batch */
+  '  if (uGAO > 0.0) {' +
+  '    c *= mix(0.70, 1.0, smoothstep(0.0, 0.8, vHY.x));' +
+  /* STEEL. The dark, unsaturated parts of a model - tracks, road wheels, barrels, guns, hatches -
+     are the palette's `dark`, which the ramp takes to near black: on a tank they read as holes
+     in it. Steel is not dark; it reflects. Such a surface takes the sky or the ground in the
+     direction it faces the eye, and a broader, brighter sun highlight than paint - so a track is
+     grey-blue steel catching the light, not a void. Placed models only, and by the hour. */
+  '    float lu = dot(vCol.rgb, vec3(0.30, 0.59, 0.11));' +
+  '    float sa = max(max(vCol.r, vCol.g), vCol.b) - min(min(vCol.r, vCol.g), vCol.b);' +
+  '    float met = (1.0 - smoothstep(0.26, 0.42, lu)) * (1.0 - smoothstep(0.05, 0.14, sa)) * uLightK.z;' +
+  '    if (met > 0.0 && dot(uView, uView) > 0.5) {' +
+  '      vec3 nn = normalize(vN), rv = reflect(-uView, nn);' +
+  '      vec3 env = mix(vec3(0.20, 0.17, 0.13), vec3(0.50, 0.58, 0.68), clamp(rv.y * 0.5 + 0.5, 0.0, 1.0));' +
+  '      float ms = pow(max(dot(nn, uHalf), 0.0), 24.0) * _shadowAt();' +
+  '      c += met * (env * 0.30 + vec3(1.0, 0.97, 0.9) * ms * 0.6) * (vec3(1.0) - uDarkL) * tint;' +
+  '    }' +
+  '  }' +
   '  if (uWeather > 0.0) c = _weather(c, normalize(vN), vec3(vWxz.x, vHY.y, vWxz.y));' +
   /* snow settles on whatever faces up - roofs, hulls, canopies - and not on the sea */
   '  if (uSnow > 0.0 && uSea.x < 0.5) {' +

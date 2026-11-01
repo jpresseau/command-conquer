@@ -188,12 +188,15 @@ var R3D_TEX_VS =
   'attribute vec3 aP; attribute vec2 aT; attribute vec3 aN;' +
   'uniform vec4 uCam; uniform vec2 uTilt; uniform float uInvD;' + R3D_CAM_GLSL +
   R3D_SHADOW_VGLSL +
-  'varying vec2 vT; varying float vShade; varying vec2 vW; varying float vY;' +
+  'varying vec2 vT; varying float vShade; varying vec2 vW; varying float vY; varying float vO;' +
   'uniform vec3 uSunD;' +                 /* the sun's move from the baker's: sky3d.js */
+  'uniform vec2 uMir;' +                  /* the apron past the map's edge (on, half-width): apron3d.js */
   'void main(){' +
   '  vT = aT; vY = aP.y;' +
-  /* the world position under this fragment, for the grain below - see R3D_TEX_FS */
-  '  vW = aP.xz;' +
+  /* the world position under this fragment, for the grain below - see R3D_TEX_FS; on the apron,
+     the map's point it mirrors, and how far outside the map it lies */
+  '  vW = aP.xz; vO = 0.0;' +
+  '  if (uMir.x > 0.5) { vW = sign(aP.xz) * (uMir.y - abs(uMir.y - abs(aP.xz))); vO = max(abs(aP.x), abs(aP.z)) - uMir.y; }' +
   /* HOW MUCH LIGHT THIS PATCH OF GROUND TAKES, RELATIVE TO FLAT. The terrain texture is the
      2D renderer's baked canvas and already carries its own lighting for a level surface, so
      shading it again with the full lambert would light it twice. What the relief needs is the

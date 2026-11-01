@@ -50,6 +50,7 @@ function _r3dFrame(G) {
     return { P: P,
       uA: gl.getUniformLocation(P, 'uA'),
       uWave: gl.getUniformLocation(P, 'uWave'), uW: gl.getUniformLocation(P, 'uWeather'),
+      uGAO: gl.getUniformLocation(P, 'uGAO'),
       aP: gl.getAttribLocation(P, 'aP'), aN: gl.getAttribLocation(P, 'aN'),
       aC: gl.getAttribLocation(P, 'aC'),
       /* placement, per instance now rather than per draw - render3d/inst3d.js */
@@ -108,6 +109,7 @@ function _r3dFrame(G) {
      slope - is built by _r3dGroundMesh in render3d/ground3d.js, beside the textures draped
      over it. It moved there when the relief work took this file over the line limit. */
   _r3dGroundMesh(R3, gl, vb, EXT);
+  _r3dApronMesh(R3, gl, vb, EXT);                   /* and the land past its edge: apron3d.js */
 
 
   /* THE WORLD IS BUILT BEFORE THE SUN LOOKS AT IT. _r3dWorldTick used to run in the middle of
@@ -153,13 +155,15 @@ function _r3dFrame(G) {
      to the canvas exactly as it did before. */
   _r3dMark(R3, 'shadow'); var post = R3.postReady && _r3dQ('post') && _r3dPostBegin(R3);
 
-  gl.clearColor(0.016, 0.024, 0.035, 1);
+  var hzc = _r3dHorizon(G);                         /* past the apron, the horizon: apron3d.js */
+  gl.clearColor(hzc[0], hzc[1], hzc[2], 1);
   gl.enable(gl.DEPTH_TEST);
   gl.disable(gl.BLEND);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
   /* --- ground: the materials, or the baked picture (render3d/terrain3d.js) --- */
   _r3dGroundDraw(gl, R3, G, cam, invD);
+  _r3dApronDraw(gl, R3, G);
 
   /* --- the ore stain, straight onto the ground it lies on ---
      The depth TEST is off for this, which also turns depth writing off: at this point the
@@ -297,6 +301,7 @@ function _r3dFrame(G) {
      and depth-tested. See the note at the top of inst3d.js before adding anything blended. */
   function flushBatch(C) {
     var B = BATCH, i, j, buf = I.on ? _r3dInstPack(gl, R3, B) : null;   /* one upload: inst3d.js */
+    if (C.uGAO) gl.uniform1f(C.uGAO, R3.gaoAmt === undefined ? 1 : R3.gaoAmt);   /* seated: meshfs3d.js */
     for (i = 0; i < B.order.length; i++) {
       var b = B.order[i];
       if (!b.n) continue;
@@ -321,6 +326,7 @@ function _r3dFrame(G) {
        buffer that is no longer bound to it. */
     _r3dInstConst(gl, I, C, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0);
     if (C.uW) gl.uniform1f(C.uW, 0);                 /* nothing drawn after has been built */
+    if (C.uGAO) gl.uniform1f(C.uGAO, 0);
   }
   function draw(mesh, x, y2, zz, rot, scale, dim, sy, nrm) {
     drawIn(MC, mesh, x, y2, zz, rot, scale, dim, sy, nrm);
@@ -459,6 +465,7 @@ function _r3dFrame(G) {
   var uFog = gl.getUniformLocation(R3.texP, 'uFog');                  /* drifting: shroud3d.js */
   gl.uniform3f(uFog, R3.shroudOff ? 0 : 1, G.t || 0, 1 / RTS_N);
   gl.drawArrays(gl.TRIANGLES, 0, R3.groundVerts);
+  _r3dApronFog(gl, R3);
   gl.uniform3f(uFog, 0, 0, 0);
   gl.disable(gl.BLEND); _r3dMark(R3, 'post');
 }

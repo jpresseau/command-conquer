@@ -7,7 +7,8 @@
      HIGH     everything, at the device's own resolution
      MEDIUM   no occlusion pass, no heat haze, no cloud shade; the buffer at most 2 device px a CSS px
      LOW      no shadow pass, no post stack at all (occlusion, bloom, heat, edge filter, grade), no
-              silhouettes, no firelight; 1.5 px a CSS px; the coarser meshes (r3d/curves.js)
+              silhouettes, no firelight, no land past the map's edge (apron3d.js: the horizon's
+              colour instead); 1.5 px a CSS px; the coarser meshes (r3d/curves.js)
      AUTO     starts HIGH and steps down while the frame is slow - and KEEPS a step only if it
               paid. A phone held at 30 by its own power saving is slow whatever this draws, and a
               controller that stepped down on frame time alone would take it to LOW for nothing.
@@ -20,9 +21,9 @@
    frame times of its own. */
 
 var R3D_TIERS = [
-  { name: 'HIGH',   scale: 4,   shadow: 1, post: 1, ao: 1, heat: 1, clouds: 1, sil: 1, lights: 1, detail: 1 },
-  { name: 'MEDIUM', scale: 2,   shadow: 1, post: 1, ao: 0, heat: 0, clouds: 0, sil: 1, lights: 1, detail: 1 },
-  { name: 'LOW',    scale: 1.5, shadow: 0, post: 0, ao: 0, heat: 0, clouds: 0, sil: 0, lights: 0, detail: 0 }
+  { name: 'HIGH',   scale: 4,   shadow: 1, post: 1, ao: 1, heat: 1, clouds: 1, sil: 1, lights: 1, detail: 1, apron: 1 },
+  { name: 'MEDIUM', scale: 2,   shadow: 1, post: 1, ao: 0, heat: 0, clouds: 0, sil: 1, lights: 1, detail: 1, apron: 1 },
+  { name: 'LOW',    scale: 1.5, shadow: 0, post: 0, ao: 0, heat: 0, clouds: 0, sil: 0, lights: 0, detail: 0, apron: 0 }
 ];
 var RTS_GFXQ_LS = 'rtsGfxQ';            /* 'auto' (or unset), 'high', 'medium', 'low' */
 var R3D_Q_WINDOW = 2500;                /* ms of frames AUTO judges at a time */

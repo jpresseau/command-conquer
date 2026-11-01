@@ -224,8 +224,7 @@ breaking it shipped once.
   after everything with a surface, depth test GREATER, pulled `R3D_SIL_BIAS` toward the eye so a
   unit never shows through its own hull, flat in its house's colour. ONLY units with a building,
   tree, rock or rising ground just in front of them (`_r3dSilCover`): the whole army a third time
-  took the entities past their budget (`e2e/instanced`). `R3.silAmt`, `R3.silAll`.
-  `e2e/silhouette`.
+  took the entities past their budget (`e2e/instanced`). `R3.silAmt`, `R3.silAll`. `e2e/silhouette`.
 - **The map moves a little on its own.** Surf rolls in to every shore (the sea's shader, `uSurf`,
   broken along its length at FIXED places, as over a bar), and the wind sways what is green in
   the world batch (`uSway`, set for the world loop and reset after it). `R3.surfAmt`,
@@ -260,6 +259,9 @@ breaking it shipped once.
 - **Roads are painted down `G.roads`** (centrelines kept by `_rtsCarveRoad`) from a baked distance
   field (`render3d/road3d.js`). The cells stay the dirt-track material, which is the shoulder; a
   loaded map has no `G.roads` and keeps its tracks. `R3.roadAmt`.
+- **Past the map's edge the land runs on, mirrored** (`render3d/apron3d.js`); **models take a fill,
+  steel and a contact shade** (`light3d.js`, `meshfs3d.js`); **a face's normal is over all its
+  corners** (`mesh3d.js` `_r3dFaceNormal`: from three it drew every rounded cap black). `docs/render3d.md`.
 - **The sky** (`render3d/sky3d.js`): day, dusk, night, rain or fog; the title's SKY button, or AUTO
   from the seed. Shaders take `uDarkL`/`uDarkS` as darkness against day, so an unset program draws
   day and day is unchanged. Every program gets them through `_r3dCamU`. Lamps and headlights are
@@ -287,8 +289,7 @@ breaking it shipped once.
   names the rotor, propeller, burner and wingtips; air3d.js banks and pitches aircraft off the
   motion record's turn rate and speed, turns props (part `prop<k>`) and lays contrails.
   `R3.airOff/trailOff`; `unit/air`, `e2e/air`. Ships ride `_r3dSwellAt` (wave3d.js). A prone
-  squad crawls (`crawl3d.js`). Kill switches `R3.rollOff/rotorOff/swellOff`. `unit/motion`,
-  `e2e/motion`.
+  squad crawls (`crawl3d.js`). Kill switches `R3.rollOff/rotorOff/swellOff`. `unit/motion`, `e2e/motion`.
 - **Damage you can see** (`render3d/hurt3d.js`): soot spreads below `R3D_SCORCH_FROM` and the
   windows (faces in `RTS_PAL.glass`) blow out past `R3D_GLASS_OUT`, in the mesh program's `_tint`
   (weather3d.js; the dim value carries 3 + damage). Below yellow the thing smokes, below red it
@@ -322,8 +323,7 @@ breaking it shipped once.
 - **The bases are working** (`render3d/alive3d.js`): the radar's antenna turns, the stacks
   smoke, beacons blink, and a destroyed building slumps into a charred ruin that stands for
   `R3D_RUBBLE_LIFE`. The renderer must SEE it dead during its wreck time (`R3.rubble`), so a
-  spec that kills one draws frames as the sim runs. A sold building leaves none.
-  `R3.aliveAmt`. `e2e/alive`.
+  spec that kills one draws frames as the sim runs. A sold building leaves none. `R3.aliveAmt`. `e2e/alive`.
 - **The harness's SwiftShader runs every branch of a shader.** A per-pixel `if` saves a GPU the
   untaken side and SwiftShader nothing, so eight per-kind material branches evaluated at four
   corners cost the harness their full sum: a frame went 1.1s -> 2.3s and real clicks and
@@ -384,7 +384,7 @@ done. Read the one that covers what you are changing; you do not need to read th
 | `docs/core-world.md` | shroud, start positions, triggers, saving a battle |
 | `docs/roster.md`, `docs/roster-air-sea.md`, `docs/roster-ra2.md`, `docs/roster-ra2-12.md` | the units and structures beyond the opening set, the rule each was held to, the map of Red Alert 2's roster by batch, and the opponent's use of it (batch 12) |
 | `docs/ui.md` | selection, the sidebar, radar orders, and the 15 Hz animation cadence |
-| `docs/art.md` | why the art read flat, read dark and read blue — and what the measurements said |
+| `docs/art.md`, `docs/render3d.md` | why the art read flat, read dark and read blue — and what the measurements said; the land past the map's edge, the light on a model and the black lids |
 | `docs/measuring.md` | the ladder, and how it has been misread |
 
 Two habits run through all of them and are worth stating once here:

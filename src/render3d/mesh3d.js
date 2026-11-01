@@ -11,15 +11,28 @@
    entities of a few dozen types, so the geometry cost is paid once at first sight of a type
    and the per-frame cost is uniform uploads. */
 
+function _r3dFaceNormal(v) {
+  var nx = 0, ny = 0, nz = 0;
+  for (var e = 0; e < v.length; e++) {
+    var p0 = v[e], p1 = v[(e + 1) % v.length];
+    nx += (p0[1] - p1[1]) * (p0[2] + p1[2]);
+    ny += (p0[2] - p1[2]) * (p0[0] + p1[0]);
+    nz += (p0[0] - p1[0]) * (p0[1] + p1[1]);
+  }
+  return [nx, ny, nz];
+}
 function _r3dBuildMesh(gl, faces) {
   var pos = [], nrm = [], col = [], fi;
   for (fi = 0; fi < faces.length; fi++) {
     var f = faces[fi], v = f.v;
     var r = f.c[0] / 255, gc = f.c[1] / 255, b = f.c[2] / 255;
-    /* face normal from the first three vertices - the primitives emit planar faces */
-    var ax = v[1][0] - v[0][0], ay = v[1][1] - v[0][1], az = v[1][2] - v[0][2];
-    var bx = v[2][0] - v[0][0], by = v[2][1] - v[0][1], bz = v[2][2] - v[0][2];
-    var nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+    /* THE FACE'S NORMAL FROM ALL ITS CORNERS (Newell's method), not from the first three. It was
+       the first three, and a rounded box's cap (r3d/curves.js _r3RoundBox) starts with three
+       points in a line - two ends of a corner arc and the straight run between - so the cap of
+       every rounded box got a zero normal, which the shader normalised into NaN: every barrel,
+       fender and hull plate drawn at the high and medium tiers had a black lid. The sum over all
+       the edges is exact for a planar polygon and cannot vanish while the polygon has area. */
+    var fn = _r3dFaceNormal(v), nx = fn[0], ny = fn[1], nz = fn[2];
     /* UNLESS THE FACE CAME WITH ITS OWN. A cylinder, cone or vault emits one normal per corner
        (see _r3Cyl in r3d/primitives.js), which is what turns a ring of flat strips into a
        curve once the fragment stage interpolates them. Everything else - every box, slab,
