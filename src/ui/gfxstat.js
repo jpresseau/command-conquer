@@ -83,7 +83,7 @@ function _rtsGfxFrame() {
     /* so the geometry half of the ask is visible too, rather than being a silent consequence
        of a control that reads as being about resolution */
     '   mesh ' + (typeof _r3dDetailLevel === 'function' ? _r3dDetailLevel() : '-') + 'x' +
-    '\n' + _rtsGfxPhases();
+    '\n' + _rtsGfxPhases() + _rtsTapLine();      /* and what became of the last tap on a button: ui/tap.js */
 }
 /* WHERE THE FRAME WENT, the second line: the loop's own halves (ui/camera.js) - the simulation,
    the drawing, the HUD and sidebar - with the 3D frame's phases inside the drawing
