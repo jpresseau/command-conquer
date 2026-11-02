@@ -224,6 +224,17 @@ it a second time. A button that cancels its own touchend (a held build tile, the
 a hold) is left alone, and the touch bar stops the event first. `e2e/tap` drops every trusted
 click, as Safari did, and taps every tab, REPAIR and a tile.
 
+**Only a finger that lands during the tap makes it a gesture.** The listener used to ask for
+exactly one touch on the glass, and on the installed iPhone app the build buttons went dead after
+the phone was turned and stayed dead until a relaunch: a touch already on the glass - a palm on the
+edge, a thumb resting as the phone turned, a touch iOS stranded across the rotation - refused every
+tap after it (the battlefield counts only the touches that began on it, so it went on). Now another
+finger lifting does not cancel the tap, a second finger landing during it still does (a pinch),
+the slide is judged against where the finger went down, and a tap whose touchend never came is
+dropped after `RTS_TAP_STALE`. The GFX readout's last line says what became of the last tap on a
+button and how many touches were on the glass. `RTS_TAP_STRICT` is the old rule; `e2e/tapglass`
+turns a phone both ways and taps a tile with a finger held on the credits.
+
 ### Repeat (ui/repeat.js, core/production.js)
 
 ↻ REPEAT sits with REPAIR and SELL and applies to the unit tab in view: `S.rep[cat]`, on the side,
