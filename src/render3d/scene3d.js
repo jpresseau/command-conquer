@@ -353,10 +353,11 @@ function _r3dFrame(G) {
     /* the ridges' rock is stone (stone3d.js): the world's own batches, not what follows them;
        not on the low tier, which keeps the plain models too */
     var uSt = gl.getUniformLocation(MC.P, 'uStone');
-    gl.uniform2f(uSt, R3.stoneAmt === 0 || !_r3dQ('detail') ? 0 : 1, _rtsZoom() * (R3.scale || 1));
+    var detailQ = _r3dQ('detail');                   /* ...and its canopies leaves (leaf3d.js), each on a switch of its own */
+    gl.uniform3f(uSt, R3.stoneAmt === 0 || !detailQ ? 0 : 1, _rtsZoom() * (R3.scale || 1), R3.leafAmt === 0 || !detailQ ? 0 : 1);
     for (var wb = 0; wb < batches.length; wb++) {
       var bm = batches[wb];
-      if (wb === R3.world.length) gl.uniform2f(uSt, 0, 0);
+      if (wb === R3.world.length) gl.uniform3f(uSt, 0, 0, 0);
       if (!bm || !bm.verts) continue;
       if (bm.x1 !== undefined &&
           (bm.x1 < cb.x0 || bm.x0 > cb.x1 || bm.z1 < cb.z0 || bm.z0 > cb.z1)) continue;
@@ -368,7 +369,7 @@ function _r3dFrame(G) {
       gl.enableVertexAttribArray(aC); gl.vertexAttribPointer(aC, 3, gl.UNSIGNED_BYTE, true, 0, 0);
       gl.drawArrays(gl.TRIANGLES, 0, bm.verts);
     }
-    gl.uniform2f(uSw, 0, 0); gl.uniform2f(uSt, 0, 0);
+    gl.uniform2f(uSw, 0, 0); gl.uniform3f(uSt, 0, 0, 0);
   }
 
   /* The sea used to be drawn HERE, after the world batch. It is drawn before both now - see

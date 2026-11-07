@@ -1,4 +1,4 @@
-# The 3D picture — the land past the edge, the light on a model, black lids, round rods, lit windows, panels, a vehicle's fireball, shallow water, stone, a lost GPU
+# The 3D picture — the land past the edge, the light on a model, black lids, round rods, lit windows, panels, a vehicle's fireball, shallow water, stone, leaves, a lost GPU
 
 Changes to how the battlefield is drawn, and to keeping it drawn. Each has a spec that holds it
 and a kill switch that is its before-picture.
@@ -202,6 +202,25 @@ because nothing on a face said stone. Now a rock face of the world batch takes:
   magenta: at 24 px a unit 227k of 284k rock pixels change; neighbours differ by 2.25 where they
   differed by 1.49; twice as rough in the sun, 1.18 times in the shade; red over blue -11.4 where it
   was -23.1; 928 pixels of lichen; the yard, the widest zoom and the low tier untouched.
+
+## A canopy is leaves (`render3d/leaf3d.js`)
+
+The trees are facets (`forest3d.js`), each one flat green: from the camera at a phone's zoom a wood
+read as painted card beside grass textured to the blade. A green face of the world batch - needles,
+leaves, the grass's tufts - now takes the stone's treatment in green:
+
+- **A leafy relief** (`_leafN`): two octaves of gradient noise tilt the normal before it is lit, so
+  the light breaks up across a facet into the dapple of a mass of leaves - in the sun far more than
+  in the shade.
+- **Clumps**, lighter and darker by a noise a little over a cluster across, and **sunlit tips**, the
+  lightest of them a warmer yellow-green.
+- **Found by colour**: green over red and blue by 0.03 to 0.08, which the bark, the rock and the ore
+  are not. The world's own batches only and not on the low tier (the stone's switch, `uStone`),
+  faded as the stone is.
+- `R3.leafAmt = 0` is the before-picture. `e2e/leaves`, the canopy marked by rebuilding the needles
+  and leaves in magenta: at 24 px a unit neighbours differ by 3.14 where they differed by 2.04,
+  twice as rough in the sun and 1.08 times in the shade; 28 of 168k pixels that are not green
+  change; the widest zoom and the low tier untouched.
 
 ## A phone takes the GPU away (`render3d/lost3d.js`)
 
