@@ -31,7 +31,7 @@ var R3D_MESH_FS =
   'uniform vec2 uWave;' +               /* the swell's own clock, shared with the vertex stage */
   'uniform float uRip;' +               /* the chop's strength: R3.rippleAmt, 1 unless a spec says */
   'uniform float uSurf;' +              /* the surf rolling in: R3.surfAmt, 1 unless a spec says */
-  R3D_NOISE_GLSL + R3D_WEATHER_GLSL + R3D_PANEL_GLSL + R3D_SHELF_GLSL + R3D_STONE_GLSL + R3D_PLIGHT_GLSL +
+  R3D_NOISE_GLSL + R3D_WEATHER_GLSL + R3D_PANEL_GLSL + R3D_SHELF_GLSL + R3D_STONE_GLSL + R3D_LEAF_GLSL + R3D_PLIGHT_GLSL +
   R3D_SHADOW_GLSL + R3D_MESH_LIGHT +
   /* NORMALISED HERE, NOT IN THE VERTEX SHADER. A varying is interpolated linearly, and the
      linear blend of two unit vectors is shorter than one - which is exactly the case on the
@@ -47,7 +47,8 @@ var R3D_MESH_FS =
   '  vec3 tint = _tint(vCol.w, vec3(vWxz.x, vHY.y, vWxz.y), vCol.rgb);' +
   /* rock is stone: its relief tilts the normal before it is lit - stone3d.js */
   '  vec3 sp3 = vec3(vWxz.x, vHY.y, vWxz.y); float sk = uStone.x > 0.0 ? _stoneK(vCol.rgb) : 0.0;' +
-  '  vec3 nn = sk > 0.0 ? _stoneN(normalize(vN), sp3, sk) : normalize(vN);' +
+  '  float lk = uStone.z > 0.0 ? _leafK(vCol.rgb) : 0.0;' +      /* ...and a canopy leaves: leaf3d.js */
+  '  vec3 nn = sk > 0.0 ? _stoneN(normalize(vN), sp3, sk) : lk > 0.0 ? _leafN(normalize(vN), sp3, lk) : normalize(vN);' +
   '  vec3 c = _shade(nn, vCol.rgb) * tint; float a = uA;' +
   /* SEATED ON THE GROUND: the lowest hand-span of a unit or a building is in the shade of itself
      and of the earth round it - only for what is placed (uGAO, scene3d.js), not the world batch */
@@ -73,6 +74,7 @@ var R3D_MESH_FS =
   '  if (uBld > 0.0 && distance(vCol.rgb, vec3(0.561, 0.737, 0.831)) > 0.07) c = _panels(c, normalize(vN));' +
   /* ...and rock of stone: stone3d.js */
   '  if (sk > 0.0) c = _stone(c, nn, sp3, sk);' +
+  '  if (lk > 0.0) c = _leaf(c, nn, sp3, lk);' +
   /* snow settles on whatever faces up - roofs, hulls, canopies - and not on the sea */
   '  if (uSnow > 0.0 && uSea.x < 0.5) {' +
   '    float up = smoothstep(0.55, 0.85, normalize(vN).y) * uSnow;' +

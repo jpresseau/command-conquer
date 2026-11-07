@@ -23,13 +23,13 @@ var R3D_STONE_FADE = [4.0, 9.0];     /* device pixels a world unit: whole from t
 var R3D_STONE_SAT = 0.14;            /* rock is greyer than this; bark and leaves are not */
 var R3D_STONE_BUMP = 0.42;           /* how far the relief tilts a face's normal */
 
-/* uStone is (on, device pixels a world unit). _stoneK is how much of a face is stone: its own
-   colour al grey enough, the view near enough, the world batch's. _stoneN roughens its normal -
-   gradient noise on the face's own plane, stretched along the height so the relief runs with
-   the beds - which is what the light reads first. _stone then colours it: c is the face as lit
-   with that normal, n the normal, p its world position (x, height, z). */
+/* uStone is (stone on, device pixels a world unit, leaves on: leaf3d.js). _stoneK is how much of
+   a face is stone: its own colour al grey enough, the view near enough, the world batch's.
+   _stoneN roughens its normal - gradient noise on the face's own plane, stretched along the height
+   so the relief runs with the beds - which is what the light reads first. _stone then colours it:
+   c is the face as lit with that normal, n the normal, p its world position (x, height, z). */
 var R3D_STONE_GLSL =
-  'uniform vec2 uStone;' +
+  'uniform vec3 uStone;' +   /* stone on, device px a world unit, leaves on (leaf3d.js) */
   'float _stoneK(vec3 al){' +
   '  float mx = max(max(al.r, al.g), al.b), sat = (mx - min(min(al.r, al.g), al.b)) / max(mx, 0.01);' +
   '  return uStone.x * smoothstep(' + R3D_STONE_FADE[0].toFixed(1) + ', ' + R3D_STONE_FADE[1].toFixed(1) + ', uStone.y) *' +
