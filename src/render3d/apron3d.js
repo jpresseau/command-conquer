@@ -115,7 +115,7 @@ function _r3dApronDraw(gl, R3, G) {
        it made the road paint the whole apron */
     gl.activeTexture(gl.TEXTURE0 + 6); gl.bindTexture(gl.TEXTURE_2D, R3.seaMaskTex); gl.activeTexture(gl.TEXTURE0);
     gl.uniform1i(gl.getUniformLocation(P, 'uSeaA'), 6);
-    gl.uniform1f(gl.getUniformLocation(P, 'uSeaOn'), 1);
+    gl.uniform1f(gl.getUniformLocation(P, 'uSeaOn'), R3.shelfAmt === 0 ? 1 : 2);   /* 2: with the shallows, shelf3d.js */
   }
   _r3dApronBind(gl, R3, P);
   gl.drawArrays(gl.TRIANGLES, 0, R3.apronVerts);

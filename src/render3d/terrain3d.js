@@ -331,7 +331,7 @@ function _r3dMatFS() {
   return 'precision highp float; varying vec2 vT; varying float vShade; varying vec2 vW; varying float vY; varying float vO;' +
     /* the apron (apron3d.js): the horizon it fades to and over what distance, and the sea mask */
     'uniform vec4 uHz; uniform vec2 uHzF; uniform sampler2D uSeaA; uniform float uSeaOn;' +
-    R3D_MAT_GLSL +
+    R3D_MAT_GLSL + R3D_SHELF_K_GLSL +
     R3D_SHADOW_GLSL + R3D_PLIGHT_GLSL +
     /* the hour and the weather (sky3d.js): darker than day by uDarkL/uDarkS - unset, day */
     'uniform vec3 uDarkL; uniform vec3 uDarkS; uniform vec4 uHaze; uniform vec3 uWet; uniform float uGndL; uniform vec3 uSunD;' +
@@ -361,9 +361,9 @@ function _r3dMatFS() {
     /* the apron's sea: the ground under the mirrored water is the seabed, and the sea itself
        is a mesh that does not reach out here - so it is painted, deep and still, from the mask */
     '  if (uSeaOn > 0.5) {' +
-    '    float wm = texture2D(uSeaA, (vW * uTileInv + uMat.z + 0.5) * uMat.y).r;' +
+    '    vec2 ms = texture2D(uSeaA, (vW * uTileInv + uMat.z + 0.5) * uMat.y).rg; float wm = ms.r;' +
     '    vec3 sea = vec3(0.07, 0.21, 0.37) * mix(vec3(0.62, 0.66, 0.74) * (vec3(1.0) - uDarkS), vec3(1.0) - uDarkL, 0.8);' +
-    '    sea *= 0.92 + 0.16 * _vn(vW * 0.05);' +
+    '    sea *= (0.92 + 0.16 * _vn(vW * 0.05)) * mix(vec3(1.0), vec3(' + R3D_SHELF_TINT.map(function (k) { return k.toFixed(3); }).join(', ') + '), _shelfK(ms.g) * (uSeaOn - 1.0));' +   /* shallow: shelf3d.js */
     '    lit = mix(lit, sea, smoothstep(0.46, 0.62, wm));' +
     '  }' +
     '  lit = mix(lit, uHaze.rgb, uHaze.a);' +
@@ -462,6 +462,7 @@ function _r3dSeaSet(gl, R3, P, on) {
   /* R3.rippleAmt takes the chop out and leaves the swell, so e2e/sea can still see the swell */
   gl.uniform1f(gl.getUniformLocation(P, 'uRip'), R3.rippleAmt === undefined ? 1 : R3.rippleAmt);
   gl.uniform1f(gl.getUniformLocation(P, 'uSurf'), R3.surfAmt === undefined ? 1 : R3.surfAmt);
+  gl.uniform2f(gl.getUniformLocation(P, 'uShelf'), R3.shelfAmt === 0 ? 0 : 1, R3.causticAmt === 0 ? 0 : _rtsZoom() * (R3.scale || 1));   /* shelf3d.js */
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 }

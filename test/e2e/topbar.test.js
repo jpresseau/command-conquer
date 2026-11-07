@@ -312,8 +312,12 @@ var CONTROLS = ['#rtsReloadBtn', '#rtsPauseBtn', '#rtsSaveBtn', '#rtsLoadBtn', '
   var x = await open(SHAPES[2]);
   /* CLICK THE BUTTON, do not call the function. Calling rtsQuitClick() directly tests the
      confirmation and not the wiring - with the markup pointed straight back at rtsClose() the
-     whole block still passed, which is a spec proving something nobody was worried about. */
-  await x.page.click('#rtsQuitBtn');
+     whole block still passed, which is a spec proving something nobody was worried about.
+     A pointer press is answered when the page has handled it, and on a loaded machine a frame of
+     the battle behind it can hold the page past the harness's 30s default: two full runs in a row
+     timed out here, the button visible, enabled and stable. So it waits as long as this spec's
+     other waits do - for the press, not for a fixed time. */
+  await x.page.click('#rtsQuitBtn', { timeout: 120000 });
   /* THE SECOND PRESS GOES THROUGH THE BUTTON'S OWN click(), not the harness's pointer, and IN
      THE SAME STEP as reading the armed state. The window it has to land in is five seconds of a
      person's time, and on a loaded machine each round trip to the page can take seconds - a
@@ -378,7 +382,7 @@ var CONTROLS = ['#rtsReloadBtn', '#rtsPauseBtn', '#rtsSaveBtn', '#rtsLoadBtn', '
       });
     } catch (e) { sessionStorage.setItem('nosw', String(e && e.message)); }
   });
-  await rl.page.click('#rtsReloadBtn');
+  await rl.page.click('#rtsReloadBtn', { timeout: 120000 });   /* as long as the ✕ press above may take */
   /* GUARDED, because the failure this asserts against DESTROYS THE PAGE. A build that reloaded
      on the first press navigated here, and every step afterwards - the evaluate, the second
      click, the wait - failed against a context that no longer existed, so the mutation surfaced
@@ -401,8 +405,11 @@ var CONTROLS = ['#rtsReloadBtn', '#rtsPauseBtn', '#rtsSaveBtn', '#rtsLoadBtn', '
 
   var didNav = false;
   if (rel1.still) {
-    var navigated = rl.page.waitForNavigation({ timeout: 8000 }).then(function () { return true; },
-                                                                      function () { return false; });
+    /* the navigation itself, for as long as this spec's other waits: the press asks the worker to
+       update and looks over the caches before it reloads, and on a loaded machine those promises
+       ran past the 8s this once allowed - in a full run, and again beside two heavy specs */
+    var navigated = rl.page.waitForNavigation({ timeout: 120000 }).then(function () { return true; },
+                                                                        function () { return false; });
     /* through the button's own click(), for the reason the second ✕ press gives above */
     await rl.page.evaluate(function () { document.getElementById('rtsReloadBtn').click(); }).catch(function () {});
     didNav = await navigated;

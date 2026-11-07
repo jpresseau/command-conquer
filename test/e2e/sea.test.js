@@ -83,8 +83,9 @@ var S = new Suite('sea');
     o.on = !!(R3 && R3.on);
     if (!o.on) return o;
     /* the sea's own tones, not the light passing over it: cloud shadows (cloud3d.js) lay a
-       gradient of their own across a still sheet, and the surf (gl3d.js) lines the shore */
-    R3.cloudAmt = 0; R3.surfAmt = 0;
+       gradient of their own across a still sheet, and the surf (gl3d.js) lines the shore - as the
+       shallows (shelf3d.js) shade the sea for a few cells out from it, e2e/shallows' to measure */
+    R3.cloudAmt = 0; R3.surfAmt = 0; R3.shelfAmt = 0;
 
     /* the most open water on the map */
     var best = null, bs = 0;

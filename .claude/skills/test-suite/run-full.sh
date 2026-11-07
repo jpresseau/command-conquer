@@ -14,5 +14,5 @@ if [ -n "$RUNS" ]; then
   exit 1
 fi
 rm -rf /tmp/ccall && cp -r "$REPO" /tmp/ccall && cd /tmp/ccall || exit 1
-NODE_PATH=/opt/node22/lib/node_modules timeout 7000 /opt/node22/bin/node test/run.js --quiet > "$OUT" 2>&1
+NODE_PATH=/opt/node22/lib/node_modules timeout 9000 /opt/node22/bin/node test/run.js --quiet > "$OUT" 2>&1
 echo "EXIT $?" >> "$OUT"

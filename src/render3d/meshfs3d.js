@@ -31,7 +31,7 @@ var R3D_MESH_FS =
   'uniform vec2 uWave;' +               /* the swell's own clock, shared with the vertex stage */
   'uniform float uRip;' +               /* the chop's strength: R3.rippleAmt, 1 unless a spec says */
   'uniform float uSurf;' +              /* the surf rolling in: R3.surfAmt, 1 unless a spec says */
-  R3D_NOISE_GLSL + R3D_WEATHER_GLSL + R3D_PANEL_GLSL + R3D_PLIGHT_GLSL +
+  R3D_NOISE_GLSL + R3D_WEATHER_GLSL + R3D_PANEL_GLSL + R3D_SHELF_GLSL + R3D_PLIGHT_GLSL +
   R3D_SHADOW_GLSL + R3D_MESH_LIGHT +
   /* NORMALISED HERE, NOT IN THE VERTEX SHADER. A varying is interpolated linearly, and the
      linear blend of two unit vectors is shorter than one - which is exactly the case on the
@@ -75,7 +75,7 @@ var R3D_MESH_FS =
   '  }' +
   '  if (uSea.x > 0.5) {' +
   '    vec2 cc = vWxz * uSea.w + uSea.z + _gwarp(vWxz);' +
-  '    float wm = texture2D(uSeaM, (cc + 0.5) * uSea.y).r;' +
+  '    vec2 ms = texture2D(uSeaM, (cc + 0.5) * uSea.y).rg; float wm = ms.r;' +
   '    if (wm < 0.46) discard;' +
   /* RIPPLES AND GLINTS. The swell (wave3d.js) is geometry - metres long, and smooth. What makes
      water read as water up close is the fine chop on top of it: two layers of noise drifting
@@ -89,9 +89,12 @@ var R3D_MESH_FS =
   '    float rz = _vn(p1 + vec2(0.0, 0.07)) + _vn(p2 + vec2(0.0, 0.07)) * 0.6 - r0;' +
   '    vec3 np = normalize(normalize(vN) + vec3(-rx, 0.0, -rz) * 5.0 * uRip);' +
   '    c = _shade(np, vCol.rgb) * tint;' +
+  '    vec3 day = vec3(1.0) - uDarkL;' +            /* the hour dims the glint, the foam and the surf */
+  /* shallow over the shelf, deep out past it, and the caustics on the sand - shelf3d.js */
+  '    float sh = _shelfK(ms.g);' +
+  '    c = _shelf(c, vWxz, sh, t, day);' +
   '    float gl = max(dot(np, uHalf), 0.0);' +
   '    gl = pow(gl, 48.0) * _shadowAt();' +
-  '    vec3 day = vec3(1.0) - uDarkL;' +            /* the hour dims the glint, the foam and the surf */
   '    c += vec3(1.0, 0.96, 0.86) * day * gl * 1.1;' +
   '    float edge = 1.0 - smoothstep(0.46, 0.66, wm);' +
   '    float fo = edge * edge * smoothstep(0.3, 0.7, _vn(vWxz * 1.6 + vec2(t * 0.2, 0.0)));' +
@@ -106,8 +109,12 @@ var R3D_MESH_FS =
   '    float roll = smoothstep(0.0, 0.05, wv) * (1.0 - smoothstep(0.05, 0.4, wv)) * (1.0 - sd) * (0.35 + 0.65 * brk);' +
   '    c = mix(c, vec3(0.93, 0.96, 0.95) * day, clamp(roll * 0.75 * uSurf, 0.0, 0.75));' +
   '    a = uA * mix(0.45, 1.0, smoothstep(0.46, 0.74, wm));' +
-  /* in the cold the shallows freeze: ice, from the shore a cell out, opaque */
-  '    if (uSnow > 0.0) { float ice = (1.0 - smoothstep(0.5, 0.82, wm)) * uSnow; c = mix(c, vec3(0.80, 0.87, 0.92) * day, ice * 0.9); a = mix(a, uA, ice); }' +
+  /* in the cold the shallows freeze: ice from the shore most of a cell out - by the distance out
+     (shelf3d.js), with a ragged edge - opaque, and not quite one white */
+  '    if (uSnow > 0.0) {' +
+  '      float ice = (1.0 - smoothstep(0.25, 0.95, _shoreD(ms.g) + (_vn(vWxz * 0.7) - 0.5) * 0.4)) * uSnow;' +
+  '      c = mix(c, vec3(0.80, 0.87, 0.92) * day * (0.94 + 0.08 * _vn(vWxz * 1.7)), ice * 0.9); a = mix(a, uA, ice);' +
+  '    }' +
   '  }' +
   /* what is burning near it lights it - render3d/fxlight3d.js */
   '  c += _plight(vCol.rgb * tint, normalize(vN), vec3(vWxz.x, vHY.y, vWxz.y));' +

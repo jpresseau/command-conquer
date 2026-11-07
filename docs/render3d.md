@@ -1,4 +1,4 @@
-# The 3D picture — the land past the edge, the light on a model, black lids, round rods, lit windows, panels, a vehicle's fireball, a lost GPU
+# The 3D picture — the land past the edge, the light on a model, black lids, round rods, lit windows, panels, a vehicle's fireball, shallow water, a lost GPU
 
 Changes to how the battlefield is drawn, and to keeping it drawn. Each has a spec that holds it
 and a kill switch that is its before-picture.
@@ -147,6 +147,38 @@ there was a grey haze with sparks in it. Only a building's death, a `boom`, read
 - **Not old news**: a fire met already burning (a loaded game, a replay seek) only burns.
 - The pop stays, and with it the sound (`_rtsKill` plays `pop` itself) and the music's heat.
 - `R3.wreckAmt = 0` is the before-picture. `e2e/wreckfx`.
+
+## The sea is shallow at its shore (`render3d/shelf3d.js`)
+
+The sea was one deep blue from the foam line out. The shore's own look - foam, a turquoise line, the
+seabed through thin water - lived inside the first fifth of a cell, because the only measure of the
+coast the sea had was its mask: one texel a cell, read bilinear, so it runs from land to open water
+in a single cell. A beach went from sand to the deep in a hand's breadth.
+
+- **The mask carries the distance out.** Its green channel is how far each water cell lies from the
+  nearest land, in cells (`_r3dShoreDist`: a two-pass chamfer, 1 along and root 2 across, capped at
+  `R3D_SHELF_CAP`, 6), written with the mask (`world3d.js`) - so on a new map and whenever the tide
+  turns, and the shallows walk out with the water. Off the map is not land: a sea that runs off the
+  edge is open there. Within three cells the chamfer is never short and at most 0.18 of a cell long
+  (`unit/shoredist`).
+- **The water is coloured by it**, read at the same warped point the coast is cut at: the deep's
+  colour turned toward turquoise and lifted, by `R3D_SHELF_TINT` (a ratio, so the swell's tone and
+  the hour carry on through it), weighed 1 at the waterline and 0 from `R3D_SHELF_W` (2.6) cells
+  out, falling as a square.
+- **The caustics**: a net of thin bright lines drifting over the sand - two value noises drifting
+  against each other, lit where they meet - strongest a little off the beach. Faded by the device
+  pixels a world unit (`R3D_SHELF_FADE`, whole from 12): a phone's views always have them, a 1x
+  laptop's widest zoom has none.
+- **The apron's painted sea** (`terrain3d.js`) reads the same channel, so a shore reflected past the
+  edge is shallow too.
+- **Under snow the shore freezes by the same distance** (`_shoreD`): ice most of a cell out from the
+  waterline, with a ragged edge, where it was the first third of a cell from the mask.
+- `e2e/sea` counts the swell's and the chop's tones with the shallows off, as it does the clouds and
+  the surf: on a still sheet the shelf's gradient is 1,400 tones of its own.
+- `R3.shelfAmt = 0` is the before-picture; `R3.causticAmt = 0` takes the caustics alone out.
+  `e2e/shallows`: a cell out the sea is +49 greener and +34 brighter; two out +7.5; four out, the
+  land and the deep under the caustics untouched; under snow a cell out is ice (saturation 0.23
+  against the open sea's 0.62, and 0.55 with the old third-of-a-cell ice).
 
 ## A phone takes the GPU away (`render3d/lost3d.js`)
 

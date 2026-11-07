@@ -356,10 +356,13 @@ function _r3dWaterBuild(G) { return _r3SegBulk(function () {
    are cut out of the sheet and the ground under them shows - the coast walks out and back. */
 function _r3dSeaMask(G) {
   var R3 = window._R3D, gl = R3.gl, N = RTS_N, dry = G.tideDry;
-  var wm = new Uint8Array(N * N * 4);
-  for (var mi = 0; mi < N * N; mi++) {
-    var wv = G.terrain[mi] === RTS_T_WATER && !(dry && dry[mi]) ? 255 : 0;
-    wm[mi * 4] = wv; wm[mi * 4 + 1] = wv; wm[mi * 4 + 2] = wv; wm[mi * 4 + 3] = 255;
+  var wm = new Uint8Array(N * N * 4), wet = new Uint8Array(N * N), mi;
+  for (mi = 0; mi < N * N; mi++) wet[mi] = G.terrain[mi] === RTS_T_WATER && !(dry && dry[mi]) ? 1 : 0;
+  /* green: how far out from the land, for the shallows - shelf3d.js */
+  var sd = _r3dShoreDist(N, wet, R3D_SHELF_CAP);
+  for (mi = 0; mi < N * N; mi++) {
+    var wv = wet[mi] ? 255 : 0;
+    wm[mi * 4] = wv; wm[mi * 4 + 1] = Math.round(sd[mi] / R3D_SHELF_CAP * 255); wm[mi * 4 + 2] = wv; wm[mi * 4 + 3] = 255;
   }
   R3.seaMaskRev = G.tideRev || 0;
   R3.seaMaskTex = R3.seaMaskTex || gl.createTexture();
