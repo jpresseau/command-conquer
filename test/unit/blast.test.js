@@ -16,7 +16,10 @@
                   its own side's men beside it are hurt too
      KILLED, IT GOES OFF  a Zealot shot dead goes off where it falls; a Wrecker, further; and once only
      NOTHING LEFT  no crew climbs out of a Wrecker that has gone off
-     THE OPPONENT does not buy them: that waits for a plan for where to send them (batch 12) */
+     AS CLOSE AS IT CAN GET  a Wrecker sent at the long end of a War Factory - where its reach of 3,
+                  measured to the circle of the building's short side, stops 4.4 short with the
+                  lorry against the wall - goes off once it has stopped (core/blast.js _rtsBombReach)
+     THE OPPONENT does not buy them: a plan for the Wrecker was measured and not kept (batch 12f) */
 
 var { Suite } = require('../lib/assert.js');
 var { loadFast } = require('../lib/sandbox.js');
@@ -156,9 +159,49 @@ var once = v0 - vic.hp, z4b = z4.blasted;
 g._rtsBlastGo(z4);
 S.ok('...and once only: the second Zealot, set off by the first, does not go off again', z4.dead && z4b === 1 && vic.hp === v0 - once, 'took ' + once.toFixed(0) + ', then ' + (v0 - vic.hp).toFixed(0));
 
+/* --------------------------------------------------- as close as it can get ---- */
+fresh();
+/* a War Factory of the opponent's hemmed in by its power plants on three sides, and the player's
+   Wrecker against the open end of its long side - where the lorry, pressed to the wall, measures
+   more than its reach, and has nowhere nearer to go */
+var wfx = null;
+for (var j = 0; j < 400 && !wfx; j++) {
+  var ctx = g._rtsTX(M.x) + (j % 20) - 10, ctz = g._rtsTX(M.z) + ((j / 20) | 0) - 10, ok = true;
+  [[0, 0, 'factory'], [0, -2, 'power'], [2, -2, 'power'], [0, 2, 'power'], [2, 2, 'power'], [-2, 0, 'power']].forEach(function (c) {
+    if (ok && !g._rtsCanPlace('enemy', c[2], ctx + c[0], ctz + c[1], true)) ok = false; });
+  for (var cx2 = 3; cx2 <= 6 && ok; cx2++) for (var cz2 = 0; cz2 <= 1; cz2++) if (g._rtsBlocked(ctx + cx2, ctz + cz2, null)) ok = false;
+  if (!ok) continue;
+  wfx = g._rtsPlaceStruct('enemy', 'factory', ctx, ctz, true);
+  [[0, -2], [2, -2], [0, 2], [2, 2], [-2, 0]].forEach(function (c) { g._rtsPlaceStruct('enemy', 'power', ctx + c[0], ctz + c[1], true); });
+}
+var sdw = g.rtsStructDef('factory'), half = sdw.w / 2 * T;
+var wk2 = g._rtsSpawnUnit('player', 'wrecker', wfx.x + half + g.rtsUnitDef('wrecker').r, wfx.z);
+var far0 = g._rtsRangeTo(wk2, wfx), wf0 = wfx.hp;
+g._rtsOrderAttack(wk2, wfx);
+for (var q2 = 0; q2 < 10 * 30 && !wk2.dead; q2++) { wfx.cool = 99; g._rtsTick(1 / 30); }
+S.ok('AS CLOSE AS IT CAN GET: a Wrecker against the end of a hemmed-in War Factory, short of its reach, goes off once stopped',
+     sdw.w > sdw.h && far0 > W('wreckblast').range && wk2.dead && wfx.hp < wf0,
+     'reach ' + W('wreckblast').range + ', range to the wall\'s circle ' + far0.toFixed(1) + '; ' + (wk2.dead ? 'gone off, the factory ' + Math.max(0, wfx.hp).toFixed(0) + '/' + wf0 : 'still there'));
+
+/* ...and only once it has stopped: in the open, inside half its blast but short of its reach, it
+   drives on up to the wall first */
+fresh();
+var pw = null;
+for (var j2 = 0; j2 < 400 && !pw; j2++) {
+  var px2 = g._rtsTX(M.x) + (j2 % 20) - 10, pz2 = g._rtsTX(M.z) + ((j2 / 20) | 0) - 10;
+  if (g._rtsCanPlace('enemy', 'power', px2, pz2, true) && g._rtsCanPlace('enemy', 'power', px2 + 3, pz2, true)) pw = g._rtsPlaceStruct('enemy', 'power', px2, pz2, true);
+}
+var wk3 = g._rtsSpawnUnit('player', 'wrecker', pw.x + g.rtsStructDef('power').w / 2 * T + 6.5, pw.z);
+var r30 = g._rtsRangeTo(wk3, pw), rLast = r30;
+g._rtsOrderAttack(wk3, pw);
+for (var q3 = 0; q3 < 10 * 30 && !wk3.dead; q3++) { rLast = g._rtsRangeTo(wk3, pw); g._rtsTick(1 / 30); }
+S.ok('...and only once it has stopped: in the open it drives up to its reach before it goes off',
+     r30 > W('wreckblast').range && r30 < W('wreckblast').self.rad / 2 && wk3.dead && rLast <= W('wreckblast').range + 0.5,
+     'sent from ' + r30.toFixed(1) + ', gone off at ' + rLast.toFixed(1) + ' (reach ' + W('wreckblast').range + ')');
+
 /* ------------------------------------------------------------- opponent ---- */
 var A = g.RTS_AI;
-/* not until it has a plan for them: see the comment on RTS_AI.mix.infantry, and batch 12 */
+/* not until it has a plan for them that pays: see the comment on RTS_AI.mix.infantry, and batch 12 */
 S.ok('the opponent does not buy the explosives', !['sapper', 'zealot', 'frogman', 'wrecker'].some(function (k) {
        return Object.keys(A.mix).some(function (c) { return A.mix[c].some(function (m) { return m.key === k; }); }); }), '');
 

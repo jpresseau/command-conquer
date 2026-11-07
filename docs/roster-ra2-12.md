@@ -156,3 +156,30 @@ of batch 12d:
   Battle Group is a candidate while the opponent can build it and not once its Lab is gone; raised,
   it sails the Bombard at the player's buildings (a Construction Yard, 50 s on).
 
+
+## Batch 12f: the Wrecker, measured and not kept (`core/blast.js`)
+
+The explosives were the last units the opponent had no plan for. Rolled in the mix with a team that
+sent them at buildings, the four paid back almost nothing: the Wrecker 0.90 of its price in damage,
+the Zealot 0.28, the Frogman 0.03 and the Sapper none. So the Wrecker, the one that came close, was
+given a plan of its own and measured on the 16 battles against a fresh baseline (the Dominion held
+0.461 of the field):
+
+- **The plan:** bought outside the roll, one at a time, when the player had a knot of buildings that
+  a blast where the lorry would stop beside it would take at least twice the lorry's price from;
+  driven there with a move order - sent to attack, it went off on the first harvester that crossed
+  its path - and set on the target only on arrival. **62 bought for 93,000, 0.87 of their price back,
+  and the Dominion's share fell to 0.419 (-0.042 ± 0.028, paired).** Most were shot on the way in,
+  and the money had been buying tanks that return 1.5.
+- **Choosier** - a knot worth three lorries, less for every gun over it, and two minutes' rest
+  between lorries: **not one bought in sixteen battles**, the share as it was.
+
+So the opponent still buys none of the explosives. What the plan found on the way is kept:
+
+- **A Wrecker hemmed in short of its target never went off.** Its reach is 3, measured to a
+  building's edge, and that edge is a circle the size of the building's short side
+  (`core/combat.js` `_rtsRangeTo`): against the end of a War Factory's long side, pressed to the
+  wall, it measured 4.4, and in a packed base - the player's own Wrecker as much as any - it sat
+  there. Now a carrier that is the bomb, stopped with nowhere nearer to go and the target it was
+  sent at inside half its own blast, goes off (`_rtsBombReach`); in the open it still drives up to
+  its reach first. `unit/blast` holds both.

@@ -234,7 +234,8 @@ shot is the explosion. The Zealot's is 260 within 2 cells and the Wrecker's 900 
 blast falls off evenly to the edge, measured to a building's edge, and hurts friend and foe
 alike. The carrier goes with it, and since it carries the explosive, killing it sets it off where
 it falls (`core/capture.js` `_rtsKill`). It goes off once only, and no crew climbs out of a
-Wrecker.
+Wrecker. Stopped as close as it can get with its target inside half its blast, it goes off there
+(`core/blast.js` `_rtsBombReach`, batch 12f).
 
 **Frogman** (`frogman`, Compact infantry, 1000, after a Research Lab, 120 hp): he moves through
 the hovercraft's domain, so he swims as well as he walks, and is drawn to the chest in the water.

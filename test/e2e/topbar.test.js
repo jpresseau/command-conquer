@@ -387,8 +387,10 @@ var CONTROLS = ['#rtsReloadBtn', '#rtsPauseBtn', '#rtsSaveBtn', '#rtsLoadBtn', '
      is: the button disarms five seconds after it is armed, and on a loaded machine the round trips
      between a read and a separate press took longer than that - the second press then armed it
      again instead of reloading, and the navigation never came (in two full runs and once beside
-     two heavy specs, the last time with two minutes for it to come in). It is put on the page's
-     next turn, so the reload it starts cannot tear down the step that reports the first press.
+     two heavy specs, the last time with two minutes for it to come in). Pressed IN this step, not on
+     the page's next turn: put there, the disarm - already overdue when the read ran - went first
+     (a third full run). The reload it starts is a promise away (the worker's update, stubbed below)
+     and cannot tear down the step that reports the first press.
 
      GUARDED, because the failure this asserts against DESTROYS THE PAGE. A build that reloaded
      on the first press navigated here, and every step afterwards - the evaluate, the second
@@ -409,7 +411,7 @@ var CONTROLS = ['#rtsReloadBtn', '#rtsPauseBtn', '#rtsSaveBtn', '#rtsLoadBtn', '
                 /* and NOT the quit button's red - two questions, two colours */
                 red: /rts-x/.test((b || {}).className || '') };
       /* through the button's own click(), for the reason the second ✕ press gives above */
-      if (o.still && b) setTimeout(function () { b.click(); }, 0);
+      if (o.still && b) b.click();
       return o;
     });
   } catch (e) { rel1 = { still: false, msg: 'the page navigated: ' + (e && e.message), armed: false, red: false }; }

@@ -256,7 +256,7 @@ function _rtsUpdateUnit(e, dt) {
        an assault lose fifty tanks while killing one defender. */
     var shootAt = null, chasing = false;
     if (tgt) {
-      if (_rtsRangeTo(e, tgt) <= _rtsElevReach(e, tgt, _rtsReach(e))) shootAt = tgt;
+      if (_rtsRangeTo(e, tgt) <= _rtsElevReach(e, tgt, _rtsBombReach(e, tgt, _rtsReach(e)))) shootAt = tgt;   /* core/blast.js */
       else { chasing = true; shootAt = _rtsFindTarget(e, _rtsReach(e)); }
     }
     if (shootAt) {
@@ -277,7 +277,7 @@ function _rtsUpdateUnit(e, dt) {
       /* NoMovingFire (UDATA.CPP): some hulls cannot fire on the move. Rather than simply
          withholding the shot - which would leave artillery trundling past its target forever -
          a unit in range STOPS, and fires on the tick after it has halted. */
-      var inRange = _rtsRangeTo(e, shootAt) <= _rtsElevReach(e, shootAt, fw.range);
+      var inRange = _rtsRangeTo(e, shootAt) <= _rtsElevReach(e, shootAt, _rtsBombReach(e, shootAt, fw.range));
       /* SHOOT AND SCOOT. NoMovingFire stops a hull so it can fire, and _rtsStandoff walks it
          backwards - left alone the two fight each other every tick and the stop always wins,
          so a standoff unit would acquire at its full reach (good) and then never actually give
