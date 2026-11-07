@@ -220,6 +220,7 @@ function _r3dSkyU(gl, P) {
      explosion's glare on the ground alone (fxemit3d.js), and still is */
   gl.uniform1f(gl.getUniformLocation(P, 'uGndL'), S.night > 0 ? 1 : 0);
   gl.uniform1f(gl.getUniformLocation(P, 'uSnow'), S.snow || 0);
+  gl.uniform1f(gl.getUniformLocation(P, 'uNightK'), S.night || 0);     /* the windows come on: meshfs3d.js */
   var sun = (R3 && R3.sun) || R3_LIGHT;
   gl.uniform3f(gl.getUniformLocation(P, 'uSunD'), sun[0] - R3_LIGHT[0], sun[1] - R3_LIGHT[1], sun[2] - R3_LIGHT[2]);
 }

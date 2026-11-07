@@ -50,8 +50,8 @@ function _r3dCamU(gl, P) {
      yaw, as the half-vector is - worked out here, every time, so a camera never turned has one */
   var vh = R3_VIEW[2], vv = R3_VIEW[1], vm = Math.hypot(vh, vv) || 1, sy = R3.sy || 0, cy = R3.cy === undefined ? 1 : R3.cy;
   gl.uniform3f(gl.getUniformLocation(P, 'uView'), -sy * vh / vm, vv / vm, cy * vh / vm);
-  gl.uniform3f(gl.getUniformLocation(P, 'uLightK'), R3.fillAmt === undefined ? 1 : R3.fillAmt, 0,
-               R3.metalAmt === undefined ? 1 : R3.metalAmt);
+  gl.uniform3f(gl.getUniformLocation(P, 'uLightK'), R3.fillAmt === undefined ? 1 : R3.fillAmt,
+               R3.winAmt === undefined ? 1 : R3.winAmt, R3.metalAmt === undefined ? 1 : R3.metalAmt);
   if (typeof _r3dSkyU === 'function') _r3dSkyU(gl, P);     /* the hour and the weather: sky3d.js */
 }
 

@@ -51,7 +51,7 @@ function _r3dFrame(G) {
     return { P: P,
       uA: gl.getUniformLocation(P, 'uA'),
       uWave: gl.getUniformLocation(P, 'uWave'), uW: gl.getUniformLocation(P, 'uWeather'),
-      uGAO: gl.getUniformLocation(P, 'uGAO'),
+      uGAO: gl.getUniformLocation(P, 'uGAO'), uBld: gl.getUniformLocation(P, 'uBld'),
       aP: gl.getAttribLocation(P, 'aP'), aN: gl.getAttribLocation(P, 'aN'),
       aC: gl.getAttribLocation(P, 'aC'),
       /* placement, per instance now rather than per draw - render3d/inst3d.js */
@@ -308,6 +308,7 @@ function _r3dFrame(G) {
       if (!b.n) continue;
       bindMesh(C, b.mesh);
       if (C.uW) gl.uniform1f(C.uW, (b.mesh.weather || 0) * WEAR);
+      if (C.uBld) gl.uniform1f(C.uBld, b.mesh.weather === 1 ? 1 : 0);   /* a building's windows light: meshfs3d.js */
       if (I.on) {
         _r3dInstBind(gl, I, C, buf, b.at);
         I.draw(gl.TRIANGLES, 0, b.mesh.verts, b.n);
@@ -328,6 +329,7 @@ function _r3dFrame(G) {
     _r3dInstConst(gl, I, C, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0);
     if (C.uW) gl.uniform1f(C.uW, 0);                 /* nothing drawn after has been built */
     if (C.uGAO) gl.uniform1f(C.uGAO, 0);
+    if (C.uBld) gl.uniform1f(C.uBld, 0);
   }
   function draw(mesh, x, y2, zz, rot, scale, dim, sy, nrm) {
     drawIn(MC, mesh, x, y2, zz, rot, scale, dim, sy, nrm);

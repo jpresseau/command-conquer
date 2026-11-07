@@ -1,4 +1,4 @@
-# The 3D picture — the land past the edge, the light on a model, black lids, round rods, a lost GPU
+# The 3D picture — the land past the edge, the light on a model, black lids, round rods, lit windows, a lost GPU
 
 Changes to how the battlefield is drawn, and to keeping it drawn. Each has a spec that holds it
 and a kill switch that is its before-picture.
@@ -91,6 +91,23 @@ pilings. The sprites and the plain far-off models build at detail 1 and keep the
   3,094), and with the exclusions it is 763, against 717 before.
 - Judged by eye at the closest zoom, A against B (`R3_ROD_LEN = 1e9` with the mesh cache dropped):
   the Heavy tank's twin barrels and aerial are tubes, a power plant's roof fins a bank of pipes.
+
+## Lit windows at night (`render3d/meshfs3d.js`)
+
+At night a base was a field of dark boxes with lamps over the doors: the glass of every building -
+the palette's glass, found the way `_tint` finds it - read as dull blue-grey, with nobody home. 26 of
+the 44 buildings have glass, 2-16% of their surface, every base building among them.
+
+- **By the hour's night.** `uNightK` is the sky's `night` (sky3d.js): 1 at night, half at dusk, a
+  little in rain, fog, snow and sand, and it passes with the day in the cycle. By it a building's
+  glass shows a warm room behind it. By day nothing changes.
+- **Rooms, not windows.** The brightness drifts across a building with a slow noise rather than
+  switching window by window: a window is a face the program cannot tell from its neighbour, and a
+  cell of its own cut windows in half.
+- **Only lived-in buildings.** `uBld` is set per batch for a building's meshes (`flushBatch`), so a
+  vehicle's windscreen stays dark; nothing lights while a building rises, in a husk, or once a fire
+  has blown its glass out (`R3D_GLASS_OUT`, hurt3d.js).
+- `R3.winAmt` (`uLightK.y`) is the before-picture. `e2e/winlight`, a Research Lab up close.
 
 ## A phone takes the GPU away (`render3d/lost3d.js`)
 
