@@ -863,7 +863,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">7c8cbcd · 2026-11-07</div>
+  <div id="rtsBuild" title="build">6d6b3a6 · 2026-11-07</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -25658,6 +25658,96 @@ var R3D_PANEL_GLSL =
   '  if (n.y > 0.92) return c * _pgrid(vMd.xz, vec2(' + R3D_ROOF_P.toFixed(2) + '), 41.0, 0.06, 0.12);' +
   '  return c; }';
 </script>
+<script>/* render3d/shelf3d.js - the sea is shallow at its shore. Part of rts.render3d.
+
+   The sea was one deep blue from the foam line out. The shore had a look of its own - foam, a
+   turquoise line and the seabed through thin water (meshfs3d.js) - but all of it lived inside the
+   first fifth of a cell, because the only measure of the coast the sea had was its mask: one
+   texel a cell, read bilinear, which runs from land to open water in a single cell. A beach went
+   from sand to the deep in a hand's breadth, where real water lightens over the sand for a long
+   way out: turquoise at the beach, green-blue over the shelf, blue only where it is deep.
+
+   So the mask carries a second number: in its green channel, how far each water cell lies from
+   the nearest land, in cells (an 8-way chamfer, capped at R3D_SHELF_CAP). Read bilinear at the
+   same warped point the coast is cut at, half a cell less is the distance from the waterline,
+   and that is the depth the sea is coloured by: turned toward turquoise and lifted out to
+   R3D_SHELF_W cells, a little more of the seabed showing through it, and on the sand the
+   caustics - the light the chop focuses, a net of bright lines drifting over the bottom. The
+   net is fine, so it fades out as the view draws back (R3D_SHELF_FADE device pixels a world
+   unit), where it would only shimmer.
+
+   The tide rebuilds the mask (world3d.js), so the shallows walk out with the water and back. The
+   apron's painted sea (terrain3d.js) reads the same channel, so a shore that runs off the map is
+   shallow on both sides of the edge. R3.shelfAmt = 0 is the before-picture; R3.causticAmt = 0
+   takes the caustics alone out. */
+
+var R3D_SHELF_CAP = 6;               /* cells: the reach of the distance field; past it, the open sea */
+var R3D_SHELF_W = 2.6;               /* cells out from the waterline that the shallows reach */
+/* the shallows' colour as a share of the deep's, per channel: the deep blue (bake.js #2b4c6b)
+   turned to a light turquoise at the beach. A ratio rather than a colour, so the swell's tone
+   (wave3d.js) and the hour's light carry on through it */
+var R3D_SHELF_TINT = [1.30, 1.80, 1.30];
+var R3D_SHELF_FADE = [6.0, 12.0];    /* device pixels a world unit: the caustics fade in over these */
+
+/* How far each cell of `wet` (1 water, 0 land, N x N) lies from the nearest land cell, centre to
+   centre, in cells, up to `cap`: the two-pass chamfer (1 along, root 2 across). Off the map is
+   not land - a sea that runs off the edge is open there, as the apron draws it. */
+function _r3dShoreDist(N, wet, cap) {
+  var D = new Float32Array(N * N), R2 = Math.SQRT2, x, z, i, v;
+  for (i = 0; i < N * N; i++) D[i] = wet[i] ? cap : 0;
+  for (z = 0; z < N; z++) for (x = 0; x < N; x++) {
+    i = z * N + x; v = D[i];
+    if (!v) continue;
+    if (x > 0) v = Math.min(v, D[i - 1] + 1);
+    if (z > 0) {
+      v = Math.min(v, D[i - N] + 1);
+      if (x > 0) v = Math.min(v, D[i - N - 1] + R2);
+      if (x < N - 1) v = Math.min(v, D[i - N + 1] + R2);
+    }
+    D[i] = v;
+  }
+  for (z = N - 1; z >= 0; z--) for (x = N - 1; x >= 0; x--) {
+    i = z * N + x; v = D[i];
+    if (!v) continue;
+    if (x < N - 1) v = Math.min(v, D[i + 1] + 1);
+    if (z < N - 1) {
+      v = Math.min(v, D[i + N] + 1);
+      if (x < N - 1) v = Math.min(v, D[i + N + 1] + R2);
+      if (x > 0) v = Math.min(v, D[i + N - 1] + R2);
+    }
+    D[i] = v;
+  }
+  return D;
+}
+
+/* From the mask's green channel: _shoreD, how many cells out from the waterline (half a cell less
+   than from the land's centre); _shelfK, the shallows' weight - 1 at the waterline, 0 from
+   R3D_SHELF_W cells out. Both programs that draw the sea read them - the mesh program, which
+   freezes its shore from _shoreD under snow, and the apron's paint. */
+var R3D_SHELF_K_GLSL =
+  'float _shoreD(float g){ return max(g * ' + R3D_SHELF_CAP.toFixed(1) + ' - 0.5, 0.0); }' +
+  'float _shelfK(float g){' +
+  '  float k = 1.0 - smoothstep(0.0, ' + R3D_SHELF_W.toFixed(2) + ', _shoreD(g)); return k * k; }';
+
+/* The sea's colour over its depth, and the caustics on the sand: for the mesh program's water
+   (meshfs3d.js). uShelf is (on, device pixels a world unit - 0 without the caustics), set with
+   the water draw (terrain3d.js _r3dSeaSet). c is the water as shaded, w the world position, sh
+   _shelfK, t the clock, day the hour's light. */
+var R3D_SHELF_GLSL = R3D_SHELF_K_GLSL +
+  'uniform vec2 uShelf;' +
+  'vec3 _shelf(vec3 c, vec2 w, float sh, float t, vec3 day){' +
+  '  sh *= uShelf.x;' +
+  '  if (sh <= 0.0) return c;' +
+  '  c *= mix(vec3(1.0), vec3(' + R3D_SHELF_TINT.map(function (k) { return k.toFixed(3); }).join(', ') + '), sh);' +
+  '  float cf = smoothstep(' + R3D_SHELF_FADE[0].toFixed(1) + ', ' + R3D_SHELF_FADE[1].toFixed(1) + ', uShelf.y) * sh * (1.0 - 0.55 * sh);' +
+  '  if (cf > 0.0) {' +
+  '    vec2 p = w * 0.62;' +
+  '    float n1 = _vn(p + vec2(t * 0.29, t * 0.17)), n2 = _vn(p * 1.31 + vec2(7.3 - t * 0.21, 3.1 + t * 0.26));' +
+  '    float ca = 1.0 - smoothstep(0.0, 0.085, abs(n1 - n2));' +
+  '    c += vec3(0.80, 0.95, 0.90) * day * ca * cf * 0.22;' +
+  '  }' +
+  '  return c; }';
+</script>
 <script>/* render3d/fxlight3d.js - explosions and fires LIGHT what stands near them. Part of rts.render3d.
 
    The glare an explosion throws on the ground (fxemit3d.js) lit the ground and nothing standing on
@@ -27258,7 +27348,7 @@ var R3D_MESH_FS =
   'uniform vec2 uWave;' +               /* the swell's own clock, shared with the vertex stage */
   'uniform float uRip;' +               /* the chop's strength: R3.rippleAmt, 1 unless a spec says */
   'uniform float uSurf;' +              /* the surf rolling in: R3.surfAmt, 1 unless a spec says */
-  R3D_NOISE_GLSL + R3D_WEATHER_GLSL + R3D_PANEL_GLSL + R3D_PLIGHT_GLSL +
+  R3D_NOISE_GLSL + R3D_WEATHER_GLSL + R3D_PANEL_GLSL + R3D_SHELF_GLSL + R3D_PLIGHT_GLSL +
   R3D_SHADOW_GLSL + R3D_MESH_LIGHT +
   /* NORMALISED HERE, NOT IN THE VERTEX SHADER. A varying is interpolated linearly, and the
      linear blend of two unit vectors is shorter than one - which is exactly the case on the
@@ -27302,7 +27392,7 @@ var R3D_MESH_FS =
   '  }' +
   '  if (uSea.x > 0.5) {' +
   '    vec2 cc = vWxz * uSea.w + uSea.z + _gwarp(vWxz);' +
-  '    float wm = texture2D(uSeaM, (cc + 0.5) * uSea.y).r;' +
+  '    vec2 ms = texture2D(uSeaM, (cc + 0.5) * uSea.y).rg; float wm = ms.r;' +
   '    if (wm < 0.46) discard;' +
   /* RIPPLES AND GLINTS. The swell (wave3d.js) is geometry - metres long, and smooth. What makes
      water read as water up close is the fine chop on top of it: two layers of noise drifting
@@ -27316,9 +27406,12 @@ var R3D_MESH_FS =
   '    float rz = _vn(p1 + vec2(0.0, 0.07)) + _vn(p2 + vec2(0.0, 0.07)) * 0.6 - r0;' +
   '    vec3 np = normalize(normalize(vN) + vec3(-rx, 0.0, -rz) * 5.0 * uRip);' +
   '    c = _shade(np, vCol.rgb) * tint;' +
+  '    vec3 day = vec3(1.0) - uDarkL;' +            /* the hour dims the glint, the foam and the surf */
+  /* shallow over the shelf, deep out past it, and the caustics on the sand - shelf3d.js */
+  '    float sh = _shelfK(ms.g);' +
+  '    c = _shelf(c, vWxz, sh, t, day);' +
   '    float gl = max(dot(np, uHalf), 0.0);' +
   '    gl = pow(gl, 48.0) * _shadowAt();' +
-  '    vec3 day = vec3(1.0) - uDarkL;' +            /* the hour dims the glint, the foam and the surf */
   '    c += vec3(1.0, 0.96, 0.86) * day * gl * 1.1;' +
   '    float edge = 1.0 - smoothstep(0.46, 0.66, wm);' +
   '    float fo = edge * edge * smoothstep(0.3, 0.7, _vn(vWxz * 1.6 + vec2(t * 0.2, 0.0)));' +
@@ -27333,8 +27426,12 @@ var R3D_MESH_FS =
   '    float roll = smoothstep(0.0, 0.05, wv) * (1.0 - smoothstep(0.05, 0.4, wv)) * (1.0 - sd) * (0.35 + 0.65 * brk);' +
   '    c = mix(c, vec3(0.93, 0.96, 0.95) * day, clamp(roll * 0.75 * uSurf, 0.0, 0.75));' +
   '    a = uA * mix(0.45, 1.0, smoothstep(0.46, 0.74, wm));' +
-  /* in the cold the shallows freeze: ice, from the shore a cell out, opaque */
-  '    if (uSnow > 0.0) { float ice = (1.0 - smoothstep(0.5, 0.82, wm)) * uSnow; c = mix(c, vec3(0.80, 0.87, 0.92) * day, ice * 0.9); a = mix(a, uA, ice); }' +
+  /* in the cold the shallows freeze: ice from the shore most of a cell out - by the distance out
+     (shelf3d.js), with a ragged edge - opaque, and not quite one white */
+  '    if (uSnow > 0.0) {' +
+  '      float ice = (1.0 - smoothstep(0.25, 0.95, _shoreD(ms.g) + (_vn(vWxz * 0.7) - 0.5) * 0.4)) * uSnow;' +
+  '      c = mix(c, vec3(0.80, 0.87, 0.92) * day * (0.94 + 0.08 * _vn(vWxz * 1.7)), ice * 0.9); a = mix(a, uA, ice);' +
+  '    }' +
   '  }' +
   /* what is burning near it lights it - render3d/fxlight3d.js */
   '  c += _plight(vCol.rgb * tint, normalize(vN), vec3(vWxz.x, vHY.y, vWxz.y));' +
@@ -28778,7 +28875,7 @@ function _r3dMatFS() {
   return 'precision highp float; varying vec2 vT; varying float vShade; varying vec2 vW; varying float vY; varying float vO;' +
     /* the apron (apron3d.js): the horizon it fades to and over what distance, and the sea mask */
     'uniform vec4 uHz; uniform vec2 uHzF; uniform sampler2D uSeaA; uniform float uSeaOn;' +
-    R3D_MAT_GLSL +
+    R3D_MAT_GLSL + R3D_SHELF_K_GLSL +
     R3D_SHADOW_GLSL + R3D_PLIGHT_GLSL +
     /* the hour and the weather (sky3d.js): darker than day by uDarkL/uDarkS - unset, day */
     'uniform vec3 uDarkL; uniform vec3 uDarkS; uniform vec4 uHaze; uniform vec3 uWet; uniform float uGndL; uniform vec3 uSunD;' +
@@ -28808,9 +28905,9 @@ function _r3dMatFS() {
     /* the apron's sea: the ground under the mirrored water is the seabed, and the sea itself
        is a mesh that does not reach out here - so it is painted, deep and still, from the mask */
     '  if (uSeaOn > 0.5) {' +
-    '    float wm = texture2D(uSeaA, (vW * uTileInv + uMat.z + 0.5) * uMat.y).r;' +
+    '    vec2 ms = texture2D(uSeaA, (vW * uTileInv + uMat.z + 0.5) * uMat.y).rg; float wm = ms.r;' +
     '    vec3 sea = vec3(0.07, 0.21, 0.37) * mix(vec3(0.62, 0.66, 0.74) * (vec3(1.0) - uDarkS), vec3(1.0) - uDarkL, 0.8);' +
-    '    sea *= 0.92 + 0.16 * _vn(vW * 0.05);' +
+    '    sea *= (0.92 + 0.16 * _vn(vW * 0.05)) * mix(vec3(1.0), vec3(' + R3D_SHELF_TINT.map(function (k) { return k.toFixed(3); }).join(', ') + '), _shelfK(ms.g) * (uSeaOn - 1.0));' +   /* shallow: shelf3d.js */
     '    lit = mix(lit, sea, smoothstep(0.46, 0.62, wm));' +
     '  }' +
     '  lit = mix(lit, uHaze.rgb, uHaze.a);' +
@@ -28909,6 +29006,7 @@ function _r3dSeaSet(gl, R3, P, on) {
   /* R3.rippleAmt takes the chop out and leaves the swell, so e2e/sea can still see the swell */
   gl.uniform1f(gl.getUniformLocation(P, 'uRip'), R3.rippleAmt === undefined ? 1 : R3.rippleAmt);
   gl.uniform1f(gl.getUniformLocation(P, 'uSurf'), R3.surfAmt === undefined ? 1 : R3.surfAmt);
+  gl.uniform2f(gl.getUniformLocation(P, 'uShelf'), R3.shelfAmt === 0 ? 0 : 1, R3.causticAmt === 0 ? 0 : _rtsZoom() * (R3.scale || 1));   /* shelf3d.js */
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 }
@@ -29493,7 +29591,7 @@ function _r3dApronDraw(gl, R3, G) {
        it made the road paint the whole apron */
     gl.activeTexture(gl.TEXTURE0 + 6); gl.bindTexture(gl.TEXTURE_2D, R3.seaMaskTex); gl.activeTexture(gl.TEXTURE0);
     gl.uniform1i(gl.getUniformLocation(P, 'uSeaA'), 6);
-    gl.uniform1f(gl.getUniformLocation(P, 'uSeaOn'), 1);
+    gl.uniform1f(gl.getUniformLocation(P, 'uSeaOn'), R3.shelfAmt === 0 ? 1 : 2);   /* 2: with the shallows, shelf3d.js */
   }
   _r3dApronBind(gl, R3, P);
   gl.drawArrays(gl.TRIANGLES, 0, R3.apronVerts);
@@ -33388,10 +33486,13 @@ function _r3dWaterBuild(G) { return _r3SegBulk(function () {
    are cut out of the sheet and the ground under them shows - the coast walks out and back. */
 function _r3dSeaMask(G) {
   var R3 = window._R3D, gl = R3.gl, N = RTS_N, dry = G.tideDry;
-  var wm = new Uint8Array(N * N * 4);
-  for (var mi = 0; mi < N * N; mi++) {
-    var wv = G.terrain[mi] === RTS_T_WATER && !(dry && dry[mi]) ? 255 : 0;
-    wm[mi * 4] = wv; wm[mi * 4 + 1] = wv; wm[mi * 4 + 2] = wv; wm[mi * 4 + 3] = 255;
+  var wm = new Uint8Array(N * N * 4), wet = new Uint8Array(N * N), mi;
+  for (mi = 0; mi < N * N; mi++) wet[mi] = G.terrain[mi] === RTS_T_WATER && !(dry && dry[mi]) ? 1 : 0;
+  /* green: how far out from the land, for the shallows - shelf3d.js */
+  var sd = _r3dShoreDist(N, wet, R3D_SHELF_CAP);
+  for (mi = 0; mi < N * N; mi++) {
+    var wv = wet[mi] ? 255 : 0;
+    wm[mi * 4] = wv; wm[mi * 4 + 1] = Math.round(sd[mi] / R3D_SHELF_CAP * 255); wm[mi * 4 + 2] = wv; wm[mi * 4 + 3] = 255;
   }
   R3.seaMaskRev = G.tideRev || 0;
   R3.seaMaskTex = R3.seaMaskTex || gl.createTexture();

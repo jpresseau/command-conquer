@@ -32,7 +32,9 @@ bash .claude/skills/test-suite/run-full.sh /tmp/claude-.../scratchpad/sNN.out   
 - It refuses to start while another run is alive. That is the point of it.
 - It runs in `/tmp/ccall`, a copy, because `run.js` rebuilds the pages: never run a suite in the tree
   you are editing.
-- About 35 minutes. Wait for the background notification; never `sleep` to poll.
+- About 105 minutes for 290 specs (6,000-6,300 s with nothing else running), under a 9,000 s cap.
+  Anything else run beside it - mutants, other specs, renders - slows every spec in it: one such
+  run took 7,374 s. Wait for the background notification; never `sleep` to poll.
 - Read the result with `sed -n '/^=====/,$p' <out>`.
 
 ## Stopping a run
