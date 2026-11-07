@@ -1,4 +1,4 @@
-# The 3D picture — the land past the edge, the light on a model, black lids, round rods, lit windows, a lost GPU
+# The 3D picture — the land past the edge, the light on a model, black lids, round rods, lit windows, panels, a lost GPU
 
 Changes to how the battlefield is drawn, and to keeping it drawn. Each has a spec that holds it
 and a kill switch that is its before-picture.
@@ -108,6 +108,27 @@ the 44 buildings have glass, 2-16% of their surface, every base building among t
   vehicle's windscreen stays dark; nothing lights while a building rises, in a husk, or once a fire
   has blown its glass out (`R3D_GLASS_OUT`, hurt3d.js).
 - `R3.winAmt` (`uLightK.y`) is the before-picture. `e2e/winlight`, a Research Lab up close.
+
+## A building is built of panels (`render3d/panel3d.js`)
+
+Seen from above at a phone's zoom, a building's roof and walls were each one flat colour: the
+weathering is fine noise and fades as the view draws back, so what was left was painted card. Now a
+building's flat walls are divided into panels (2 by 1.6 world units) and its roofs into sheets (2.4
+square), each a shade lighter or darker than the next (±4% on a wall, ±3% on a roof) with a faint
+seam between.
+
+- **In the building's own frame** (`vMd`, the model-space position at world size, from the vertex
+  stage), so the panels line up with its corners and centre lines wherever it stands.
+- **Only faces square to it**: an upright wall facing along x or z, or a roof. A curve, a dome, a
+  bevel and a sloped roof are left as they were. Not glass (that is lit windows'), and not
+  anything but a building (`uBld`).
+- **Faded by the pixels a panel spans** (`uPxW`, device pixels a world unit, set in `_r3dCamU`):
+  whole from 12 px, gone below 7 (`R3D_PANEL_FADE`). A phone opens at 24 px a world unit and goes no
+  wider than 12, so its panels are always whole; a 1x laptop's widest zoom (3) has none, where a
+  seam would be a pixel and shimmer as the view moves.
+- A seam only darkens, so a panelled building averages a little darker (4 levels on a Research Lab
+  up close); the tone is even either way.
+- `R3.panelAmt = 0` is the before-picture. `e2e/panels`.
 
 ## A phone takes the GPU away (`render3d/lost3d.js`)
 

@@ -31,7 +31,7 @@ var R3D_MESH_FS =
   'uniform vec2 uWave;' +               /* the swell's own clock, shared with the vertex stage */
   'uniform float uRip;' +               /* the chop's strength: R3.rippleAmt, 1 unless a spec says */
   'uniform float uSurf;' +              /* the surf rolling in: R3.surfAmt, 1 unless a spec says */
-  R3D_NOISE_GLSL + R3D_WEATHER_GLSL + R3D_PLIGHT_GLSL +
+  R3D_NOISE_GLSL + R3D_WEATHER_GLSL + R3D_PANEL_GLSL + R3D_PLIGHT_GLSL +
   R3D_SHADOW_GLSL + R3D_MESH_LIGHT +
   /* NORMALISED HERE, NOT IN THE VERTEX SHADER. A varying is interpolated linearly, and the
      linear blend of two unit vectors is shorter than one - which is exactly the case on the
@@ -66,6 +66,8 @@ var R3D_MESH_FS =
   '    }' +
   '  }' +
   '  if (uWeather > 0.0) c = _weather(c, normalize(vN), vec3(vWxz.x, vHY.y, vWxz.y));' +
+  /* a building is built of panels, not glass: panel3d.js */
+  '  if (uBld > 0.0 && distance(vCol.rgb, vec3(0.561, 0.737, 0.831)) > 0.07) c = _panels(c, normalize(vN));' +
   /* snow settles on whatever faces up - roofs, hulls, canopies - and not on the sea */
   '  if (uSnow > 0.0 && uSea.x < 0.5) {' +
   '    float up = smoothstep(0.55, 0.85, normalize(vN).y) * uSnow;' +

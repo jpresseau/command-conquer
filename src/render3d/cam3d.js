@@ -52,6 +52,8 @@ function _r3dCamU(gl, P) {
   gl.uniform3f(gl.getUniformLocation(P, 'uView'), -sy * vh / vm, vv / vm, cy * vh / vm);
   gl.uniform3f(gl.getUniformLocation(P, 'uLightK'), R3.fillAmt === undefined ? 1 : R3.fillAmt,
                R3.winAmt === undefined ? 1 : R3.winAmt, R3.metalAmt === undefined ? 1 : R3.metalAmt);
+  /* device pixels a world unit, for the panels' fade (panel3d.js); R3.panelAmt 0 turns them off */
+  gl.uniform1f(gl.getUniformLocation(P, 'uPxW'), R3.panelAmt === 0 ? 0 : _rtsZoom() * (R3.scale || 1));
   if (typeof _r3dSkyU === 'function') _r3dSkyU(gl, P);     /* the hour and the weather: sky3d.js */
 }
 
