@@ -174,10 +174,11 @@ var R3D_MESH_VS =
   'uniform vec2 uSway;' +       /* the wind in the world batch: reach, clock - 0 elsewhere */
   R3D_SHADOW_VGLSL +
   R3D_LEAN_GLSL +
-  'varying vec3 vN; varying vec4 vCol; varying vec2 vWxz; varying vec2 vHY;' +
+  'varying vec3 vN; varying vec4 vCol; varying vec2 vWxz; varying vec2 vHY; varying vec3 vMd;' +
   'void main(){' +
   R3D_INST_UNPACK +
   '  vec3 p = vec3(aP.x * uScale, aP.y * uScale * uScaleY, aP.z * uScale);' +
+  '  vMd = p;' +                      /* the model's own frame, at world size: panel3d.js */
   /* YAW FIRST, THEN LEAN. The yaw is about the model's own up, which is what "facing" means;
      the lean then takes that up to the ground's. Doing it the other way round would turn the
      model about the hill's normal instead of its own axis, so a tank on a slope would face
