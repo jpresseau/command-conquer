@@ -204,14 +204,21 @@ var S = new Suite('input');
   /* Escape with nothing armed leaves the battle, and ASKS FIRST, as the ✕ does: it quit at once,
      with no save, so a second Escape pressed to be sure a placement was gone threw the battle away */
   await g.page.keyboard.press('Escape');
-  await g.page.waitForTimeout(200);
-  var esc3 = await g.page.evaluate(function () { return { alive: !!document.getElementById('rcgRts'), msg: window._rtsG && window._rtsG.msg }; });
+  /* THE SECOND ESCAPE IN THE SAME STEP AS THE READ, as e2e/topbar's second presses are: the arm
+     lasts five seconds, and on a loaded machine the read and a separate key press were further
+     apart than that - the second Escape armed it again instead of leaving (once, in a full run).
+     The first is a real key; the second goes to the same listener (ui/shell.js, keydown). */
+  var esc3 = await g.page.evaluate(function () {
+    var o = { alive: !!document.getElementById('rcgRts'), msg: window._rtsG && window._rtsG.msg };
+    if (o.alive) {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      o.gone = !document.getElementById('rcgRts');
+    }
+    return o;
+  });
   S.ok('Escape with nothing armed asks first: the battle stays, and the line says how to leave',
        esc3.alive && /Leave the battle\? Press Esc again/.test(esc3.msg || ''), JSON.stringify(esc3));
-  await g.page.keyboard.press('Escape');
-  await g.page.waitForTimeout(200);
-  S.ok('...and a second Escape leaves it',
-       await g.page.evaluate(function () { return !document.getElementById('rcgRts'); }));
+  S.ok('...and a second Escape leaves it', !!esc3.gone);
 
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
   await g.close();

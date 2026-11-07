@@ -286,7 +286,9 @@ var RTS_AI = {
                /* NOT the explosives (core/blast.js): a Zealot or a Wrecker kills its own side's men round it,
                   and an opponent that buys them without knowing where to send them only moves its own
                   battle about - bought even from 2000 credits they moved unit/endgame, unit/aitactics and
-                  unit/allycmd. Its use of them: docs/roster-ra2-12.md. */
+                  unit/allycmd. A Wrecker driven at the player's richest knot, outside the roll, was
+                  measured too (batch 12f) and not kept: most were shot on the way in, and the money
+                  had bought better. docs/roster-ra2-12.md. */
                ],
     /* AIRCRAFT, once there is a pad to fly from - _rtsCanQueue gates on `needs`, so these are
        inert until one exists and there is no separate check to keep in step. Both armies again;

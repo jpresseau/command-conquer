@@ -49,6 +49,17 @@ function _rtsBlastFx(x, z, rad) {
   G.shake = Math.min(1, (G.shake || 0) + RTS_BLAST.shake * rad / (RTS_TILE * 2));
   if (typeof _rtsSfx === 'function') _rtsSfx('boom', x, z);
 }
+/* A CARRIER THAT IS THE BOMB GOES OFF AS CLOSE AS IT CAN GET. Its reach is measured to a building's
+   edge as a gun's is, and that edge is a circle the size of the building's short side (core/combat.js
+   _rtsRangeTo): at the long end of a building a Wrecker pressed against the wall still measured 4.4
+   against its reach of 3, and in a packed base it sat there and never went off. Stopped - nowhere
+   nearer to go - with the target it was sent at inside half its own blast, it reaches. `r` is the
+   reach asked about otherwise. */
+function _rtsBombReach(e, t, r) {
+  var w = e.type === 'unit' && RTS_WEAPONS[(rtsUnitDef(e.def) || {}).weapon];
+  if (!w || !w.self || e.path || !t || t !== e.target) return r;
+  return _rtsRangeTo(e, t) <= w.self.rad * 0.5 ? Math.max(r, w.self.rad * 0.5) : r;
+}
 /* A planted charge goes off: all of it to its host, `share` of it round it. */
 function _rtsBlastAt(x, z, dmg, rad, side, host) {
   if (host && !host.dead) { host.hurtBy = side; _rtsDamage(host, dmg, null); }
