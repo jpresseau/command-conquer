@@ -863,7 +863,7 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </details>
   <div id="rtsErr"></div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">6d6b3a6 · 2026-11-07</div>
+  <div id="rtsBuild" title="build">6af7038 · 2026-11-07</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -25748,6 +25748,71 @@ var R3D_SHELF_GLSL = R3D_SHELF_K_GLSL +
   '  }' +
   '  return c; }';
 </script>
+<script>/* render3d/stone3d.js - rock is stone. Part of rts.render3d.
+
+   The ridges are turned, tapered slabs and split crystals (world3d.js), each face one flat grey.
+   Seen up close at a phone's zoom they read as grey prisms - ice, or concrete - because nothing
+   on a face said stone: no bedding, no grain, no weather. Stone shows how it was laid down and
+   what has grown on it since, so a rock face here takes:
+
+   - BEDDING: bands along its height, lighter and darker by turns, with a fine dark line where one
+     layer meets the next. Tilted a little and differently from ridge to ridge, as strata lie, and
+     on the walls rather than the tops.
+   - GRAIN: a mottle of two noises at two scales, so a face is never one flat tone.
+   - WARM AND COLD: iron stains and grey by a slow noise across the ridge, where every slab was a
+     cool grey and a ridge was blue-violet in the sky's fill.
+   - LICHEN on what faces up: olive patches on the tops and ledges.
+
+   Only the world batch's rock (uStone, scene3d.js - not the ore, the dressing or the scenery,
+   and not on the low tier), found by its colour: rock is the palette's greys (world3d.js R3D_ROCK, saturation under a
+   tenth), where bark and leaves are browns and greens at four tenths and more. Faded by the
+   device pixels a world unit (R3D_STONE_FADE), so a view drawn back is not a shimmer of lines.
+   R3.stoneAmt = 0 is the before-picture. */
+
+var R3D_STONE_FADE = [4.0, 9.0];     /* device pixels a world unit: whole from the second */
+var R3D_STONE_SAT = 0.14;            /* rock is greyer than this; bark and leaves are not */
+var R3D_STONE_BUMP = 0.42;           /* how far the relief tilts a face's normal */
+
+/* uStone is (on, device pixels a world unit). _stoneK is how much of a face is stone: its own
+   colour al grey enough, the view near enough, the world batch's. _stoneN roughens its normal -
+   gradient noise on the face's own plane, stretched along the height so the relief runs with
+   the beds - which is what the light reads first. _stone then colours it: c is the face as lit
+   with that normal, n the normal, p its world position (x, height, z). */
+var R3D_STONE_GLSL =
+  'uniform vec2 uStone;' +
+  'float _stoneK(vec3 al){' +
+  '  float mx = max(max(al.r, al.g), al.b), sat = (mx - min(min(al.r, al.g), al.b)) / max(mx, 0.01);' +
+  '  return uStone.x * smoothstep(' + R3D_STONE_FADE[0].toFixed(1) + ', ' + R3D_STONE_FADE[1].toFixed(1) + ', uStone.y) *' +
+  '         (1.0 - smoothstep(' + (R3D_STONE_SAT * 0.7).toFixed(3) + ', ' + R3D_STONE_SAT.toFixed(3) + ', sat)); }' +
+  'vec3 _stoneN(vec3 n, vec3 p, float k){' +
+  '  vec3 a = abs(n); vec2 q; vec3 g1, g2;' +
+  '  if (a.y > 0.6) q = p.xz; else if (a.x > a.z) q = vec2(p.z, p.y * 1.6); else q = vec2(p.x, p.y * 1.6);' +
+  '  g1 = _gnd(q * 2.1); g2 = _gnd(q * 5.6 + 11.0);' +
+  '  vec2 gr = g1.yz + g2.yz * 0.45;' +
+  '  vec3 t = a.y > 0.6 ? vec3(gr.x, 0.0, gr.y) : (a.x > a.z ? vec3(0.0, gr.y, gr.x) : vec3(gr.x, gr.y, 0.0));' +
+  '  return normalize(n - t * ' + R3D_STONE_BUMP.toFixed(2) + ' * k); }' +
+  'vec3 _stone(vec3 c, vec3 n, vec3 p, float k){' +
+  '  vec3 s = c;' +
+  /* warm and cold, across the ridge */
+  '  float wc = smoothstep(0.30, 0.75, _vn(p.xz * 0.09 + p.y * 0.04 + 31.0));' +
+  '  s *= mix(vec3(0.93, 0.97, 1.04), vec3(1.10, 1.00, 0.84), wc);' +
+  /* bedding: a band's height tilted by a slow noise, so strata dip and differ ridge to ridge */
+  '  float wall = 1.0 - smoothstep(0.55, 0.85, abs(n.y));' +
+  '  float dip = (_vn(p.xz * 0.045 + 7.0) - 0.5) * 0.25;' +
+  '  float sy = p.y * 1.35 + dot(p.xz, vec2(dip, -0.6 * dip)) + _vn(p.xz * 0.35) * 0.5;' +
+  '  float band = _vn(vec2(sy, dot(p.xz, vec2(0.04, 0.03))));' +
+  /* a seam between two beds, at only some of them, and faint */
+  '  float fl = fract(sy * 0.5), seam = step(0.62, _h2(vec2(floor(sy * 0.5), 3.7)));' +
+  '  float line = seam * (1.0 - smoothstep(0.01, 0.05, min(fl, 1.0 - fl)));' +
+  '  s *= mix(1.0, (0.88 + 0.24 * band) * (1.0 - 0.16 * line), wall);' +
+  /* grain */
+  '  float g = _vn(p.xz * 1.9 + p.y * 1.3) * 0.6 + _vn(p.zx * 5.3 - p.y * 3.7) * 0.4;' +
+  '  s *= 0.90 + 0.20 * g;' +
+  /* lichen on what faces up */
+  '  float li = smoothstep(0.42, 0.78, n.y) * smoothstep(0.40, 0.62, _vn(p.xz * 0.8 + 3.0) * 0.7 + _vn(p.xz * 2.7) * 0.3);' +
+  '  s = mix(s, s * vec3(0.80, 0.98, 0.58), li * 0.75);' +
+  '  return mix(c, s, k); }';
+</script>
 <script>/* render3d/fxlight3d.js - explosions and fires LIGHT what stands near them. Part of rts.render3d.
 
    The glare an explosion throws on the ground (fxemit3d.js) lit the ground and nothing standing on
@@ -27348,7 +27413,7 @@ var R3D_MESH_FS =
   'uniform vec2 uWave;' +               /* the swell's own clock, shared with the vertex stage */
   'uniform float uRip;' +               /* the chop's strength: R3.rippleAmt, 1 unless a spec says */
   'uniform float uSurf;' +              /* the surf rolling in: R3.surfAmt, 1 unless a spec says */
-  R3D_NOISE_GLSL + R3D_WEATHER_GLSL + R3D_PANEL_GLSL + R3D_SHELF_GLSL + R3D_PLIGHT_GLSL +
+  R3D_NOISE_GLSL + R3D_WEATHER_GLSL + R3D_PANEL_GLSL + R3D_SHELF_GLSL + R3D_STONE_GLSL + R3D_PLIGHT_GLSL +
   R3D_SHADOW_GLSL + R3D_MESH_LIGHT +
   /* NORMALISED HERE, NOT IN THE VERTEX SHADER. A varying is interpolated linearly, and the
      linear blend of two unit vectors is shorter than one - which is exactly the case on the
@@ -27362,7 +27427,10 @@ var R3D_MESH_FS =
   '  if (uSil.a > 0.0) { gl_FragColor = uSil; return; }' +
   /* vCol.w: 0 whole, 1 rising, 2 a burnt-out husk (husk3d.js), 3 + damage scorched (hurt3d.js) */
   '  vec3 tint = _tint(vCol.w, vec3(vWxz.x, vHY.y, vWxz.y), vCol.rgb);' +
-  '  vec3 c = _shade(normalize(vN), vCol.rgb) * tint; float a = uA;' +
+  /* rock is stone: its relief tilts the normal before it is lit - stone3d.js */
+  '  vec3 sp3 = vec3(vWxz.x, vHY.y, vWxz.y); float sk = uStone.x > 0.0 ? _stoneK(vCol.rgb) : 0.0;' +
+  '  vec3 nn = sk > 0.0 ? _stoneN(normalize(vN), sp3, sk) : normalize(vN);' +
+  '  vec3 c = _shade(nn, vCol.rgb) * tint; float a = uA;' +
   /* SEATED ON THE GROUND: the lowest hand-span of a unit or a building is in the shade of itself
      and of the earth round it - only for what is placed (uGAO, scene3d.js), not the world batch */
   '  if (uGAO > 0.0) {' +
@@ -27385,6 +27453,8 @@ var R3D_MESH_FS =
   '  if (uWeather > 0.0) c = _weather(c, normalize(vN), vec3(vWxz.x, vHY.y, vWxz.y));' +
   /* a building is built of panels, not glass: panel3d.js */
   '  if (uBld > 0.0 && distance(vCol.rgb, vec3(0.561, 0.737, 0.831)) > 0.07) c = _panels(c, normalize(vN));' +
+  /* ...and rock of stone: stone3d.js */
+  '  if (sk > 0.0) c = _stone(c, nn, sp3, sk);' +
   /* snow settles on whatever faces up - roofs, hulls, canopies - and not on the sea */
   '  if (uSnow > 0.0 && uSea.x < 0.5) {' +
   '    float up = smoothstep(0.55, 0.85, normalize(vN).y) * uSnow;' +
@@ -31963,8 +32033,13 @@ function _r3dFrame(G) {
     gl.uniform2f(uSw, R3D_SWAY * (R3.swayAmt === undefined ? 1 : R3.swayAmt), G.t || 0);
     var lift = R3D_WORLD_YMAX * R3.sp / R3.cp, cb = _r3dBoundsNear(vb, lift, 4);
     var batches = R3.world.concat(R3.ore || [], _r3dDressBatches(R3), _r3dSceneryBatches(R3));
+    /* the ridges' rock is stone (stone3d.js): the world's own batches, not what follows them;
+       not on the low tier, which keeps the plain models too */
+    var uSt = gl.getUniformLocation(MC.P, 'uStone');
+    gl.uniform2f(uSt, R3.stoneAmt === 0 || !_r3dQ('detail') ? 0 : 1, _rtsZoom() * (R3.scale || 1));
     for (var wb = 0; wb < batches.length; wb++) {
       var bm = batches[wb];
+      if (wb === R3.world.length) gl.uniform2f(uSt, 0, 0);
       if (!bm || !bm.verts) continue;
       if (bm.x1 !== undefined &&
           (bm.x1 < cb.x0 || bm.x0 > cb.x1 || bm.z1 < cb.z0 || bm.z0 > cb.z1)) continue;
@@ -31976,7 +32051,7 @@ function _r3dFrame(G) {
       gl.enableVertexAttribArray(aC); gl.vertexAttribPointer(aC, 3, gl.UNSIGNED_BYTE, true, 0, 0);
       gl.drawArrays(gl.TRIANGLES, 0, bm.verts);
     }
-    gl.uniform2f(uSw, 0, 0);
+    gl.uniform2f(uSw, 0, 0); gl.uniform2f(uSt, 0, 0);
   }
 
   /* The sea used to be drawn HERE, after the world batch. It is drawn before both now - see

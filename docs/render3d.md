@@ -1,4 +1,4 @@
-# The 3D picture — the land past the edge, the light on a model, black lids, round rods, lit windows, panels, a vehicle's fireball, shallow water, a lost GPU
+# The 3D picture — the land past the edge, the light on a model, black lids, round rods, lit windows, panels, a vehicle's fireball, shallow water, stone, a lost GPU
 
 Changes to how the battlefield is drawn, and to keeping it drawn. Each has a spec that holds it
 and a kill switch that is its before-picture.
@@ -179,6 +179,29 @@ in a single cell. A beach went from sand to the deep in a hand's breadth.
   `e2e/shallows`: a cell out the sea is +49 greener and +34 brighter; two out +7.5; four out, the
   land and the deep under the caustics untouched; under snow a cell out is ice (saturation 0.23
   against the open sea's 0.62, and 0.55 with the old third-of-a-cell ice).
+
+## Rock is stone (`render3d/stone3d.js`)
+
+The ridges are turned, tapered slabs and split crystals (`world3d.js`), each face one flat grey. Up
+close at a phone's zoom they read as grey prisms - ice, or concrete, blue-violet in the sky's fill -
+because nothing on a face said stone. Now a rock face of the world batch takes:
+
+- **Relief** (`_stoneN`): gradient noise on the face's own plane, stretched along the height so it
+  runs with the beds, tilts the normal before the face is lit (`R3D_STONE_BUMP`) - so it shows where
+  the sun reaches, as relief does.
+- **Bedding**: bands along the height, dipping a little and differently from ridge to ridge, and a
+  faint seam at some of the bed boundaries - on the walls, not the tops.
+- **Grain**: two noises at two scales. **Warm and cold**: iron stains and grey by a slow noise
+  across the ridge. **Lichen**: olive patches on what faces up.
+- **Only rock**: the world's own batches (`uStone`, `scene3d.js`), not the ore, the dressing or the
+  scenery, and found by colour - rock is the palette's greys (saturation under 0.14), where bark
+  and leaves are browns and greens at 0.4 and more. Not on the low tier.
+- **Faded by the device pixels a world unit** (`R3D_STONE_FADE`, whole from 9): a phone's views
+  always have it, a 1x laptop's widest zoom none.
+- `R3.stoneAmt = 0` is the before-picture. `e2e/stone`, the rock marked by rebuilding it in
+  magenta: at 24 px a unit 227k of 284k rock pixels change; neighbours differ by 2.25 where they
+  differed by 1.49; twice as rough in the sun, 1.18 times in the shade; red over blue -11.4 where it
+  was -23.1; 928 pixels of lichen; the yard, the widest zoom and the low tier untouched.
 
 ## A phone takes the GPU away (`render3d/lost3d.js`)
 

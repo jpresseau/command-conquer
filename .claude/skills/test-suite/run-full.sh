@@ -15,4 +15,8 @@ if [ -n "$RUNS" ]; then
 fi
 rm -rf /tmp/ccall && cp -r "$REPO" /tmp/ccall && cd /tmp/ccall || exit 1
 NODE_PATH=/opt/node22/lib/node_modules timeout 9000 /opt/node22/bin/node test/run.js --quiet > "$OUT" 2>&1
-echo "EXIT $?" >> "$OUT"
+CODE=$?
+# The times this run took, back to the tree the next copy is made from: run.js starts the longest
+# specs first from them, and left in the copy they went with it, so most specs ran in name order.
+cp test/.last-run.json "$REPO/test/.last-run.json" 2>/dev/null
+echo "EXIT $CODE" >> "$OUT"

@@ -350,8 +350,13 @@ function _r3dFrame(G) {
     gl.uniform2f(uSw, R3D_SWAY * (R3.swayAmt === undefined ? 1 : R3.swayAmt), G.t || 0);
     var lift = R3D_WORLD_YMAX * R3.sp / R3.cp, cb = _r3dBoundsNear(vb, lift, 4);
     var batches = R3.world.concat(R3.ore || [], _r3dDressBatches(R3), _r3dSceneryBatches(R3));
+    /* the ridges' rock is stone (stone3d.js): the world's own batches, not what follows them;
+       not on the low tier, which keeps the plain models too */
+    var uSt = gl.getUniformLocation(MC.P, 'uStone');
+    gl.uniform2f(uSt, R3.stoneAmt === 0 || !_r3dQ('detail') ? 0 : 1, _rtsZoom() * (R3.scale || 1));
     for (var wb = 0; wb < batches.length; wb++) {
       var bm = batches[wb];
+      if (wb === R3.world.length) gl.uniform2f(uSt, 0, 0);
       if (!bm || !bm.verts) continue;
       if (bm.x1 !== undefined &&
           (bm.x1 < cb.x0 || bm.x0 > cb.x1 || bm.z1 < cb.z0 || bm.z0 > cb.z1)) continue;
@@ -363,7 +368,7 @@ function _r3dFrame(G) {
       gl.enableVertexAttribArray(aC); gl.vertexAttribPointer(aC, 3, gl.UNSIGNED_BYTE, true, 0, 0);
       gl.drawArrays(gl.TRIANGLES, 0, bm.verts);
     }
-    gl.uniform2f(uSw, 0, 0);
+    gl.uniform2f(uSw, 0, 0); gl.uniform2f(uSt, 0, 0);
   }
 
   /* The sea used to be drawn HERE, after the world batch. It is drawn before both now - see

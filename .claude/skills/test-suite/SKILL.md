@@ -29,12 +29,20 @@ eval $N test/run.js --list e2e                     # the order a run would use, 
 bash .claude/skills/test-suite/run-full.sh /tmp/claude-.../scratchpad/sNN.out    # with run_in_background
 ```
 
+A background command here is stopped at two hours, with everything it started, and a full run can
+take that long: one was cut off with only the `@solo` spec at the end left to run. When it may, start
+it on its own instead and watch its file for `EXIT` (a Monitor on `tail -F`, re-armed as each expires):
+
+```bash
+setsid nohup bash .claude/skills/test-suite/run-full.sh /tmp/claude-.../scratchpad/sNN.out >/dev/null 2>&1 &
+```
+
 - It refuses to start while another run is alive. That is the point of it.
 - It runs in `/tmp/ccall`, a copy, because `run.js` rebuilds the pages: never run a suite in the tree
   you are editing.
-- About 105 minutes for 290 specs (6,000-6,300 s with nothing else running), under a 9,000 s cap.
-  Anything else run beside it - mutants, other specs, renders - slows every spec in it: one such
-  run took 7,374 s. Wait for the background notification; never `sleep` to poll.
+- 105 to 120 minutes for 290 specs with nothing else running (6,300-7,200 s: about the sum of the
+  specs' own times over three), under a 9,000 s cap. Anything run beside it - mutants, other specs,
+  renders - slows every spec in it. Wait for the notification; never `sleep` to poll.
 - Read the result with `sed -n '/^=====/,$p' <out>`.
 
 ## Stopping a run

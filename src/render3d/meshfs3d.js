@@ -31,7 +31,7 @@ var R3D_MESH_FS =
   'uniform vec2 uWave;' +               /* the swell's own clock, shared with the vertex stage */
   'uniform float uRip;' +               /* the chop's strength: R3.rippleAmt, 1 unless a spec says */
   'uniform float uSurf;' +              /* the surf rolling in: R3.surfAmt, 1 unless a spec says */
-  R3D_NOISE_GLSL + R3D_WEATHER_GLSL + R3D_PANEL_GLSL + R3D_SHELF_GLSL + R3D_PLIGHT_GLSL +
+  R3D_NOISE_GLSL + R3D_WEATHER_GLSL + R3D_PANEL_GLSL + R3D_SHELF_GLSL + R3D_STONE_GLSL + R3D_PLIGHT_GLSL +
   R3D_SHADOW_GLSL + R3D_MESH_LIGHT +
   /* NORMALISED HERE, NOT IN THE VERTEX SHADER. A varying is interpolated linearly, and the
      linear blend of two unit vectors is shorter than one - which is exactly the case on the
@@ -45,7 +45,10 @@ var R3D_MESH_FS =
   '  if (uSil.a > 0.0) { gl_FragColor = uSil; return; }' +
   /* vCol.w: 0 whole, 1 rising, 2 a burnt-out husk (husk3d.js), 3 + damage scorched (hurt3d.js) */
   '  vec3 tint = _tint(vCol.w, vec3(vWxz.x, vHY.y, vWxz.y), vCol.rgb);' +
-  '  vec3 c = _shade(normalize(vN), vCol.rgb) * tint; float a = uA;' +
+  /* rock is stone: its relief tilts the normal before it is lit - stone3d.js */
+  '  vec3 sp3 = vec3(vWxz.x, vHY.y, vWxz.y); float sk = uStone.x > 0.0 ? _stoneK(vCol.rgb) : 0.0;' +
+  '  vec3 nn = sk > 0.0 ? _stoneN(normalize(vN), sp3, sk) : normalize(vN);' +
+  '  vec3 c = _shade(nn, vCol.rgb) * tint; float a = uA;' +
   /* SEATED ON THE GROUND: the lowest hand-span of a unit or a building is in the shade of itself
      and of the earth round it - only for what is placed (uGAO, scene3d.js), not the world batch */
   '  if (uGAO > 0.0) {' +
@@ -68,6 +71,8 @@ var R3D_MESH_FS =
   '  if (uWeather > 0.0) c = _weather(c, normalize(vN), vec3(vWxz.x, vHY.y, vWxz.y));' +
   /* a building is built of panels, not glass: panel3d.js */
   '  if (uBld > 0.0 && distance(vCol.rgb, vec3(0.561, 0.737, 0.831)) > 0.07) c = _panels(c, normalize(vN));' +
+  /* ...and rock of stone: stone3d.js */
+  '  if (sk > 0.0) c = _stone(c, nn, sp3, sk);' +
   /* snow settles on whatever faces up - roofs, hulls, canopies - and not on the sea */
   '  if (uSnow > 0.0 && uSea.x < 0.5) {' +
   '    float up = smoothstep(0.55, 0.85, normalize(vN).y) * uSnow;' +

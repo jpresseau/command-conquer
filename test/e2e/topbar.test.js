@@ -383,19 +383,34 @@ var CONTROLS = ['#rtsReloadBtn', '#rtsPauseBtn', '#rtsSaveBtn', '#rtsLoadBtn', '
     } catch (e) { sessionStorage.setItem('nosw', String(e && e.message)); }
   });
   await rl.page.click('#rtsReloadBtn', { timeout: 120000 });   /* as long as the ✕ press above may take */
-  /* GUARDED, because the failure this asserts against DESTROYS THE PAGE. A build that reloaded
+  /* THE SECOND PRESS IS MADE IN THE SAME STEP AS READING THE FIRST, for the reason the ✕ block's
+     is: the button disarms five seconds after it is armed, and on a loaded machine the round trips
+     between a read and a separate press took longer than that - the second press then armed it
+     again instead of reloading, and the navigation never came (in two full runs and once beside
+     two heavy specs, the last time with two minutes for it to come in). It is put on the page's
+     next turn, so the reload it starts cannot tear down the step that reports the first press.
+
+     GUARDED, because the failure this asserts against DESTROYS THE PAGE. A build that reloaded
      on the first press navigated here, and every step afterwards - the evaluate, the second
      click, the wait - failed against a context that no longer existed, so the mutation surfaced
      as a TimeoutError and a stack trace instead of as the one assertion that describes it.
      A thrown spec is still a red spec, but it does not say what went wrong. */
+  /* the press asks the worker to update before it reloads, which on a loaded machine is slow: the
+     navigation is waited for as long as this spec's other waits */
+  var navigated = rl.page.waitForNavigation({ timeout: 120000 }).then(function () { return true; },
+                                                                      function () { return false; });
   var rel1;
   try {
     rel1 = await rl.page.evaluate(function () {
-      return { still: !!document.getElementById('rcgRts'),
-               msg: window._rtsG ? window._rtsG.msg : '',
-               armed: /arm/.test((document.getElementById('rtsReloadBtn') || {}).className || ''),
-               /* and NOT the quit button's red - two questions, two colours */
-               red: /rts-x/.test((document.getElementById('rtsReloadBtn') || {}).className || '') };
+      var b = document.getElementById('rtsReloadBtn');
+      var o = { still: !!document.getElementById('rcgRts'),
+                msg: window._rtsG ? window._rtsG.msg : '',
+                armed: /arm/.test((b || {}).className || ''),
+                /* and NOT the quit button's red - two questions, two colours */
+                red: /rts-x/.test((b || {}).className || '') };
+      /* through the button's own click(), for the reason the second ✕ press gives above */
+      if (o.still && b) setTimeout(function () { b.click(); }, 0);
+      return o;
     });
   } catch (e) { rel1 = { still: false, msg: 'the page navigated: ' + (e && e.message), armed: false, red: false }; }
   S.ok('one press on ⟳ does not reload', rel1.still, rel1.still ? '' : rel1.msg);
@@ -405,13 +420,6 @@ var CONTROLS = ['#rtsReloadBtn', '#rtsPauseBtn', '#rtsSaveBtn', '#rtsLoadBtn', '
 
   var didNav = false;
   if (rel1.still) {
-    /* the navigation itself, for as long as this spec's other waits: the press asks the worker to
-       update and looks over the caches before it reloads, and on a loaded machine those promises
-       ran past the 8s this once allowed - in a full run, and again beside two heavy specs */
-    var navigated = rl.page.waitForNavigation({ timeout: 120000 }).then(function () { return true; },
-                                                                        function () { return false; });
-    /* through the button's own click(), for the reason the second ✕ press gives above */
-    await rl.page.evaluate(function () { document.getElementById('rtsReloadBtn').click(); }).catch(function () {});
     didNav = await navigated;
     S.ok('a second press really does reload the page', didNav, String(didNav));
   }
