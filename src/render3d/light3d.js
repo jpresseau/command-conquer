@@ -59,7 +59,7 @@ var R3D_HALF = (function () {
 var R3D_MESH_LIGHT =
   'uniform vec3 uHalf;' +          /* the specular's half-vector, per frame: cam3d.js */
   'uniform vec3 uView;' +          /* ...and the way to the eye, for steel's reflection (meshfs3d.js) */
-  'uniform vec3 uLightK;' +        /* how much fill and steel (x, z): 1 unless a spec says (cam3d.js) */
+  'uniform vec3 uLightK;' +        /* how much fill, lit windows and steel (x, y, z): 1 unless a spec says (cam3d.js) */
   /* THE HOUR (sky3d.js): how much darker than day the lit and the shaded sides are, so a program
      whose uniforms were never set draws day; and how wet everything is, with the clock */
   'uniform vec3 uDarkL; uniform vec3 uDarkS; uniform vec3 uWet;' +

@@ -40,6 +40,7 @@ var R3D_MESH_FS =
   'uniform vec4 uSil;' +                /* a unit seen through what hides it - sil3d.js */
   'uniform vec4 uHaze;' +               /* rgb, amount: sky3d.js */
   'uniform float uSnow;' +              /* the SNOW sky: on every roof, and the shore frozen */
+  'uniform float uBld; uniform float uNightK;' +   /* a building, and how far into the night: lit windows */
   'void main(){' +
   '  if (uSil.a > 0.0) { gl_FragColor = uSil; return; }' +
   /* vCol.w: 0 whole, 1 rising, 2 a burnt-out husk (husk3d.js), 3 + damage scorched (hurt3d.js) */
@@ -108,6 +109,24 @@ var R3D_MESH_FS =
   '  }' +
   /* what is burning near it lights it - render3d/fxlight3d.js */
   '  c += _plight(vCol.rgb * tint, normalize(vN), vec3(vWxz.x, vHY.y, vWxz.y));' +
+  /* LIT WINDOWS. At night a base was a field of dark boxes with lamps over the doors: the glass of
+     every building - the palette's glass, as _tint finds it - read as dull blue-grey with nobody
+     home. By the hour's night (1 at night, half at dusk, a little in rain and fog) a building's
+     glass shows a warm room behind it. Brightness drifts across a building with a slow noise
+     rather than switching window by window: a window is a face this program cannot tell from its
+     neighbour, and a cell of its own cut windows in half. Never a vehicle's (uBld), a building
+     rising or burnt out, or glass a fire has blown out (hurt3d.js). */
+  '  if (uBld > 0.0 && uNightK > 0.0) {' +
+  '    float gw = 1.0 - smoothstep(0.03, 0.07, distance(vCol.rgb, vec3(0.561, 0.737, 0.831)));' +
+  '    float ws = vCol.w - floor(vCol.w * 0.1 + 0.001) * 10.0;' +
+  '    float whole = max(step(ws, 0.5), step(2.5, ws) * step(ws - 3.0, ' + R3D_GLASS_OUT.toFixed(2) + '));' +
+  '    if (gw * whole > 0.0) {' +
+  '      vec3 wp = vec3(vWxz.x, vHY.y, vWxz.y);' +
+  '      float rm = _vn(wp.xz * 0.45 + vec2(wp.y * 0.37, wp.y * 0.21));' +
+  '      vec3 warm = mix(vec3(1.0, 0.78, 0.50), vec3(1.0, 0.90, 0.74), _vn(wp.zx * 0.31 + 4.0));' +
+  '      c = mix(c, warm * mix(0.55, 1.05, rm), gw * whole * uNightK * uLightK.y * 0.92);' +
+  '    }' +
+  '  }' +
   /* the haze the weather and the hour lay over everything - sky3d.js */
   '  c = mix(c, uHaze.rgb, uHaze.a);' +
   '  gl_FragColor = vec4(c, a); }';
