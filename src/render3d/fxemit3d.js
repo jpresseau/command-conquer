@@ -404,6 +404,7 @@ function _r3dFxEmit(G, V) {
   if (typeof _r3dFxMuzzle === 'function') _r3dFxMuzzle(G, V);   /* guns going off - combat3d.js */
   if (typeof _r3dFxAir === 'function') _r3dFxAir(G, V);         /* contrails, afterburners - air3d.js */
   if (typeof _r3dFxHurt === 'function') _r3dFxHurt(G, V);       /* the smoke of the damaged - hurt3d.js */
+  if (typeof _r3dFxWrecks === 'function') _r3dFxWrecks(G, V);   /* a vehicle's fireball - wreckfx3d.js */
   for (i = 0; i < G.fx.length; i++) {
     var f = G.fx[i];
     if (f.t < 0 || !_r3dFxOwns(f.kind)) continue;

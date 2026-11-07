@@ -1,4 +1,4 @@
-# The 3D picture — the land past the edge, the light on a model, black lids, round rods, lit windows, panels, a lost GPU
+# The 3D picture — the land past the edge, the light on a model, black lids, round rods, lit windows, panels, a vehicle's fireball, a lost GPU
 
 Changes to how the battlefield is drawn, and to keeping it drawn. Each has a spec that holds it
 and a kill switch that is its before-picture.
@@ -129,6 +129,24 @@ seam between.
 - A seam only darkens, so a panelled building averages a little darker (4 levels on a Research Lab
   up close); the tone is even either way.
 - `R3.panelAmt = 0` is the before-picture. `e2e/panels`.
+
+## A vehicle goes up in a fireball (`render3d/wreckfx3d.js`)
+
+Every unit died in the same `pop` (`core/capture.js`), a soldier and a Heavy Tank alike: a quick
+fireball whose record lives 0.4 s, so its billows were gone in 0.19 - 0.15 s after a tank died
+there was a grey haze with sparks in it. Only a building's death, a `boom`, read as an explosion.
+
+- **Not a rule.** A `boom` record would have done it and moved the game: its crater eats the ore
+  it lands in, and a scorch's look is drawn from the fx count. So the fireball is the renderer's
+  alone. A vehicle that burns where it died leaves the fire record carrying its husk (`husk3d.js`);
+  met in its first `R3D_WRECK_NEW` (0.3 s), that record is given a fireball - `_r3dFxBall`, the
+  building's, with a life of 1 - aged from the death. The birth is kept in a WeakMap beside the
+  record, never on it: the record is game state, and saved.
+- **By the vehicle**: `R3D_WRECK_BIG`, from the radius the fire's base was set from - a Buggy
+  1.06, a Heavy Tank 1.42, under a two-wide building's 2 and over the pop's 0.7.
+- **Not old news**: a fire met already burning (a loaded game, a replay seek) only burns.
+- The pop stays, and with it the sound (`_rtsKill` plays `pop` itself) and the music's heat.
+- `R3.wreckAmt = 0` is the before-picture. `e2e/wreckfx`.
 
 ## A phone takes the GPU away (`render3d/lost3d.js`)
 
