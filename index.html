@@ -978,7 +978,7 @@ html,body{margin:0;padding:0;height:100%;background:#05080e;overflow:hidden}
   <div id="rtsErr"></div>
   </div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">7da8286 · 2026-11-08</div>
+  <div id="rtsBuild" title="build">faf9b71 · 2026-11-08</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -10950,10 +10950,11 @@ var RTS_SFX_UI = {
    oscillators, filters and envelopes the old effects built and threw away for every one.
 
    TAKES. Each effect has a few, each from its own seed, and a shot plays one at random - never
-   the one just played - so twelve rifles are twelve slightly different cracks. The first take of
-   anything is rendered the moment it is first asked for, so nothing is ever silent; the rest are
+   the one just played - so twelve rifles are twelve slightly different cracks. Every effect's
+   first take is rendered on the title screen, before the battle (_rtsBankEarly, below); one still
+   missing when it is first asked for is rendered then, so nothing is ever silent; the rest are
    rendered out of spare time (_rtsBankIdle), a few milliseconds at a slice, every effect's first
-   take before any effect's second. Measured: the whole bank, every take, is about 230 ms of
+   take before any effect's second and the battle's sounds before the rest. Measured: the whole bank, every take, is about 230 ms of
    rendering on a desktop, a building's collapse 15 ms of it and a rifle 2. */
 
 var RTS_BANK_SLICE = 8;          /* ms of rendering per idle slice */
@@ -10961,13 +10962,15 @@ var RTS_BANK_SLICE = 8;          /* ms of rendering per idle slice */
 function _rtsBank(A) {
   return A.bank || (A.bank = { take: {}, last: {}, q: null, built: 0, idle: false });
 }
-/* one take, built now if it is not already */
-function _rtsBankBuf(A, name, take) {
+/* one take, built now if it is not already - from the title's early render when it has one */
+function _rtsBankBuf(A, name, take, now) {
   var B = _rtsBank(A), k = name + '#' + take;
   if (B.take[k]) return B.take[k];
-  var x = _rtsSfxRender(name, take, A.ctx.sampleRate);
+  var E = _rtsBankEarlyQ, x = E.x[k], sr = RTS_BANK_EARLY_SR;
+  if (x) delete E.x[k];
+  else { if (now) E.live++; sr = A.ctx.sampleRate; x = _rtsSfxRender(name, take, sr); }
   if (!x) return null;
-  var buf = A.ctx.createBuffer(1, x.length, A.ctx.sampleRate);
+  var buf = A.ctx.createBuffer(1, x.length, sr);
   buf.getChannelData(0).set(x);
   B.take[k] = buf; B.built++;
   return buf;
@@ -10978,15 +10981,18 @@ function _rtsBankPick(A, name) {
   if (!R) return null;
   var B = _rtsBank(A), have = [], t;
   for (t = 0; t < R.takes; t++) if (B.take[name + '#' + t]) have.push(t);
-  if (!have.length) { if (!_rtsBankBuf(A, name, 0)) return null; have = [0]; }
+  if (!have.length) { if (!_rtsBankBuf(A, name, 0, true)) return null; have = [0]; }
   var pick = have[Math.floor(Math.random() * have.length)];
   if (have.length > 1 && pick === B.last[name]) pick = have[(have.indexOf(pick) + 1) % have.length];
   B.last[name] = pick;
   return B.take[name + '#' + pick];
 }
-/* What is left to render, the first take of everything ahead of anyone's second. */
+/* What is left to render, the first take of everything ahead of anyone's second - and THE
+   BATTLE'S SOUNDS FIRST: the ones heard often enough to have a gap of their own (_RTS_SFX_GAP,
+   rts.audio.js), the guns and the blasts, ahead of the interface's and the rare ones. */
 function _rtsBankQueue() {
-  var names = rtsSfxNames(), q = [], most = 0, t;
+  var names = rtsSfxNames(), q = [], most = 0, t, gap = typeof _RTS_SFX_GAP === 'object' ? _RTS_SFX_GAP : {};
+  names = names.filter(function (n) { return gap[n]; }).concat(names.filter(function (n) { return !gap[n]; }));
   names.forEach(function (n) { most = Math.max(most, _rtsSfxRecipe(n).takes); });
   for (t = 0; t < most; t++) names.forEach(function (n) { if (t < _rtsSfxRecipe(n).takes) q.push([n, t]); });
   return q;
@@ -11011,6 +11017,41 @@ function _rtsBankIdle(A) {
   (function slice() {
     if (_rtsBankWarm(A, RTS_BANK_SLICE) > 0) later(slice);
     else B.idle = false;
+  })();
+}
+
+/* BEFORE THE BATTLE. The bank used to start filling when a battle opened - that is when the
+   sound is unlocked - and only out of idle time, which a phone in a battle hardly has. So the
+   first minutes of a game rendered each new sound the moment it was first heard, on the frame
+   that wanted it: measured on a desktop, the first cannon 41 ms, the first kill 25 ms, several
+   times that on a phone, and a big fight is where the new sounds come all at once.
+
+   A take is plain arithmetic and needs no AudioContext, only a rate, so the title screen - which
+   is idle while the player chooses - renders every effect's first take, the battle's first, at
+   RTS_BANK_EARLY_SR. _rtsBankBuf wraps one in a buffer at that rate when it is wanted, and the
+   context resamples it as it does any other buffer. `live` counts the takes a play still had to
+   wait for (`now`, from _rtsBankPick), for e2e/sfxearly. RTS_BANK_EARLY = false is the before-picture. */
+var RTS_BANK_EARLY = true;
+var RTS_BANK_EARLY_SR = 48000;
+var _rtsBankEarlyQ = { x: {}, q: null, on: false, live: 0 };
+function _rtsBankEarlyWarm(ms) {
+  var E = _rtsBankEarlyQ, t0 = Date.now();
+  if (!E.q) E.q = _rtsBankQueue().filter(function (w) { return w[1] === 0; });
+  while (E.q.length && Date.now() - t0 < ms) {
+    var w = E.q.shift(), k = w[0] + '#0';
+    if (window._rtsA && _rtsBank(window._rtsA).take[k]) continue;
+    try { var x = _rtsSfxRender(w[0], 0, RTS_BANK_EARLY_SR); if (x) E.x[k] = x; } catch (_e) {}
+  }
+  return E.q.length;
+}
+function _rtsBankEarly() {
+  var E = _rtsBankEarlyQ;
+  if (!RTS_BANK_EARLY || E.on) return;
+  E.on = true;
+  var later = window.requestIdleCallback ? function (f) { window.requestIdleCallback(f, { timeout: 500 }); }
+                                         : function (f) { setTimeout(f, 40); };
+  (function slice() {
+    if (_rtsBankEarlyWarm(RTS_BANK_SLICE) > 0) later(slice);
   })();
 }
 </script>
@@ -30356,6 +30397,33 @@ function _r3dFxOrder(V) {
   ord.sort(function (a, b) { return M.key[a] - M.key[b]; });
   return _r3dFxPack(M, ord, V, 'out');
 }
+/* THE QUADS THAT GIVE OFF LIGHT, for the bloom's emitter pass, which drew every quad again at
+   full resolution - each puff of a burning base's smoke shaded a second time only for the
+   shader to find it emitted nothing and discard it. These are the types that can (fxglsl3d.js
+   sets `em`), and a blob only once its heat can light the fire ramp: its h is at most heat *
+   1.35 and its glow is zero up to 0.12. So the pass draws exactly the pixels it drew before.
+   AN INDEX INTO THE MAIN BATCH'S UPLOAD, not an upload of their own: six 16-bit corners a quad
+   against the 224 bytes of its vertices, which a heavy battle's frame would otherwise send twice
+   (e2e/pace holds the frame's upload). Additive, so their order is the main batch's and does not
+   matter. `all` (R3.fxGlowAll) is the before-picture: every quad, as it was. */
+var R3D_FX_HEAT_EMITS = 0.12 / 1.35;
+function _r3dFxGives(a, q) {
+  var t = a[q + 6];
+  return t === 2 || t === 3 || t === 7 || t === 8 || t === 11 || (t === 1 && a[q + 10] > R3D_FX_HEAT_EMITS);
+}
+function _r3dFxGlowSet(V, all) {
+  var M = V.M, ord = V.ord, n = Math.min(M.n, R3D_FX_IDX_MAX), ix = V.idxE;
+  if (!ix || ix.length < n * 6) ix = V.idxE = new Uint16Array(Math.max(n, 64) * 12);
+  var e = 0;
+  for (var j = 0; j < n; j++) {
+    if (!all && !_r3dFxGives(M.a, ord[j] * R3D_FX_QUAD)) continue;
+    var v = j * 4, o = e * 6;
+    ix[o] = v; ix[o + 1] = v + 1; ix[o + 2] = v + 2; ix[o + 3] = v; ix[o + 4] = v + 2; ix[o + 5] = v + 3;
+    e++;
+  }
+  V.nE = e;
+  return ix.subarray(0, e * 6);
+}
 /* FOUR CORNERS A QUAD GO UP, NOT SIX. Every emitter lays a quad as two triangles, corners
    0 1 2 and 0 2 5, so its fourth and fifth vertices are its first and third again - a third of
    every upload repeated, and the effects' upload is the biggest a frame makes (a megabyte in a
@@ -31777,7 +31845,7 @@ function _r3dFxDraw(G, cam, invD) {
     if (R3.fx2Fail) return _r3dFxDrawSprites(G, cam, invD);
     try {
       R3.fx2P = _r3dProgram(gl, R3D_FX2_VS, R3D_FX2_FS);
-      R3.fx2BufM = gl.createBuffer(); R3.fx2BufL = gl.createBuffer();
+      R3.fx2BufM = gl.createBuffer(); R3.fx2BufL = gl.createBuffer(); R3.fx2IdxE = gl.createBuffer();
       R3.fxV = _r3dFxView();
     } catch (e) { R3.fx2P = null; R3.fx2Fail = 1; return _r3dFxDrawSprites(G, cam, invD); }
     if (!R3.fx2P) { R3.fx2Fail = 1; return _r3dFxDrawSprites(G, cam, invD); }
@@ -31785,8 +31853,8 @@ function _r3dFxDraw(G, cam, invD) {
   var P = R3.fx2P, emit = !!R3.fxEmitPass;
   V = R3.fxV;
 
-  /* BUILT ONCE A FRAME, by the world pass. The bloom's emitter pass draws the same quads again,
-     so it reuses the upload rather than walking G.fx twice. */
+  /* BUILT ONCE A FRAME, by the world pass. The bloom's emitter pass draws the ones of them that
+     give off light again, through an index made here, rather than walking G.fx twice. */
   if (!emit) {
     V.sp = R3.sp; V.cp = R3.cp; V.cy = R3.cy; V.sy = R3.sy; V.t = G.t || 0; V.M.n = 0; V.L.n = 0; V.M.lit = 0;
     V.gnd = R3.fxGroundAmt === undefined ? 1 : R3.fxGroundAmt;
@@ -31797,6 +31865,9 @@ function _r3dFxDraw(G, cam, invD) {
     gl.bufferData(gl.ARRAY_BUFFER, _r3dFxOrder(V), gl.DYNAMIC_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, R3.fx2BufL);
     gl.bufferData(gl.ARRAY_BUFFER, _r3dFxPack(V.L, null, V, 'outL'), gl.DYNAMIC_DRAW);
+    /* and the ones that give off light, for the emitter pass (fxemit3d.js, _r3dFxGlowSet) */
+    V.nE = 0;
+    if (V.M.lit) { gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, R3.fx2IdxE); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, _r3dFxGlowSet(V, R3.fxGlowAll), gl.DYNAMIC_DRAW); }
   }
   if (emit ? !V.M.lit : (!V.M.n && !V.L.n)) { if (!emit) R3.fxDrawn = 0; return 0; }
 
@@ -31834,7 +31905,12 @@ function _r3dFxDraw(G, cam, invD) {
     gl.blendFunc(gl.DST_COLOR, gl.ONE);
     quads(V.L.n);
   }
-  if (V.M.n) {
+  if (emit) {
+    if (V.nE) {
+      bind(R3.fx2BufM); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, R3.fx2IdxE); gl.drawElements(gl.TRIANGLES, V.nE * 6, gl.UNSIGNED_SHORT, 0);
+    }
+  } else if (V.M.n) {
     bind(R3.fx2BufM);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     quads(V.M.n);
@@ -41452,6 +41528,8 @@ document.addEventListener('keydown', function(e){
   if (a && a !== document.body && /^(BUTTON|INPUT|A|LABEL|SELECT|TEXTAREA|SUMMARY)$/.test(a.tagName)) return;
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); rtsStart(document.getElementById('rtsGo')); }
 });
+/* the battle's sounds, rendered while the player chooses (audio/bank.js) */
+if (typeof _rtsBankEarly === 'function') _rtsBankEarly();
 if ('serviceWorker' in navigator) {
   try { navigator.serviceWorker.register('sw.js', { scope: './' }); } catch (e) {}
 }

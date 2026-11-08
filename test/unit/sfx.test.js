@@ -21,6 +21,13 @@ var A = require('../lib/sound.js');
 
 var S = new Suite('sfx');
 var g = load(['src/audio']);
+/* the table of the battle's frequent sounds lives with the mixer (rts.audio.js), which needs a
+   page; its one declaration is read from the source rather than copied here */
+(function () {
+  var src = require('fs').readFileSync(require('path').join(__dirname, '../../src/rts.audio.js'), 'utf8');
+  var m = /var _RTS_SFX_GAP = \{[^}]*\};/.exec(src);
+  if (m) require('vm').runInContext(m[0], require('vm').isContext(g) ? g : require('vm').createContext(g));
+})();
 var SR = 44100;
 
 /* ---- THE TOOLS ---- */
@@ -125,5 +132,11 @@ var q = g._rtsBankQueue(), firsts = q.filter(function (e) { return e[1] === 0; }
 names.forEach(function (n) { want += g._rtsSfxRecipe(n).takes; });
 S.ok('the bank queues every take, every effect\'s first ahead of any second', q.length === want && firsts === names.length &&
      q.slice(0, names.length).every(function (e) { return e[1] === 0; }), q.length + ' takes, first ' + firsts);
+
+/* the battle's sounds first (audio/bank.js): the title renders them ahead of a fight */
+var gapN = g._RTS_SFX_GAP ? Object.keys(g._RTS_SFX_GAP) : [];
+S.ok('the battle\'s frequent sounds lead the queue', gapN.length > 5 &&
+     q.slice(0, gapN.length).every(function (e) { return gapN.indexOf(e[0]) >= 0 && e[1] === 0; }),
+     gapN.length + ' frequent: ' + q.slice(0, gapN.length).map(function (e) { return e[0]; }).join(' '));
 
 require('../lib/report.js')(S);
