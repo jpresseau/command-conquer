@@ -196,7 +196,7 @@ function _r3dFxDraw(G, cam, invD) {
     if (R3.fx2Fail) return _r3dFxDrawSprites(G, cam, invD);
     try {
       R3.fx2P = _r3dProgram(gl, R3D_FX2_VS, R3D_FX2_FS);
-      R3.fx2BufM = gl.createBuffer(); R3.fx2BufL = gl.createBuffer();
+      R3.fx2BufM = gl.createBuffer(); R3.fx2BufL = gl.createBuffer(); R3.fx2IdxE = gl.createBuffer();
       R3.fxV = _r3dFxView();
     } catch (e) { R3.fx2P = null; R3.fx2Fail = 1; return _r3dFxDrawSprites(G, cam, invD); }
     if (!R3.fx2P) { R3.fx2Fail = 1; return _r3dFxDrawSprites(G, cam, invD); }
@@ -204,8 +204,8 @@ function _r3dFxDraw(G, cam, invD) {
   var P = R3.fx2P, emit = !!R3.fxEmitPass;
   V = R3.fxV;
 
-  /* BUILT ONCE A FRAME, by the world pass. The bloom's emitter pass draws the same quads again,
-     so it reuses the upload rather than walking G.fx twice. */
+  /* BUILT ONCE A FRAME, by the world pass. The bloom's emitter pass draws the ones of them that
+     give off light again, through an index made here, rather than walking G.fx twice. */
   if (!emit) {
     V.sp = R3.sp; V.cp = R3.cp; V.cy = R3.cy; V.sy = R3.sy; V.t = G.t || 0; V.M.n = 0; V.L.n = 0; V.M.lit = 0;
     V.gnd = R3.fxGroundAmt === undefined ? 1 : R3.fxGroundAmt;
@@ -216,6 +216,9 @@ function _r3dFxDraw(G, cam, invD) {
     gl.bufferData(gl.ARRAY_BUFFER, _r3dFxOrder(V), gl.DYNAMIC_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, R3.fx2BufL);
     gl.bufferData(gl.ARRAY_BUFFER, _r3dFxPack(V.L, null, V, 'outL'), gl.DYNAMIC_DRAW);
+    /* and the ones that give off light, for the emitter pass (fxemit3d.js, _r3dFxGlowSet) */
+    V.nE = 0;
+    if (V.M.lit) { gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, R3.fx2IdxE); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, _r3dFxGlowSet(V, R3.fxGlowAll), gl.DYNAMIC_DRAW); }
   }
   if (emit ? !V.M.lit : (!V.M.n && !V.L.n)) { if (!emit) R3.fxDrawn = 0; return 0; }
 
@@ -253,7 +256,12 @@ function _r3dFxDraw(G, cam, invD) {
     gl.blendFunc(gl.DST_COLOR, gl.ONE);
     quads(V.L.n);
   }
-  if (V.M.n) {
+  if (emit) {
+    if (V.nE) {
+      bind(R3.fx2BufM); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, R3.fx2IdxE); gl.drawElements(gl.TRIANGLES, V.nE * 6, gl.UNSIGNED_SHORT, 0);
+    }
+  } else if (V.M.n) {
     bind(R3.fx2BufM);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     quads(V.M.n);

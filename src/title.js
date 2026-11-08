@@ -271,6 +271,8 @@ document.addEventListener('keydown', function(e){
   if (a && a !== document.body && /^(BUTTON|INPUT|A|LABEL|SELECT|TEXTAREA|SUMMARY)$/.test(a.tagName)) return;
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); rtsStart(document.getElementById('rtsGo')); }
 });
+/* the battle's sounds, rendered while the player chooses (audio/bank.js) */
+if (typeof _rtsBankEarly === 'function') _rtsBankEarly();
 if ('serviceWorker' in navigator) {
   try { navigator.serviceWorker.register('sw.js', { scope: './' }); } catch (e) {}
 }

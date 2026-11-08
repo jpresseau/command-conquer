@@ -83,6 +83,33 @@ function _r3dFxOrder(V) {
   ord.sort(function (a, b) { return M.key[a] - M.key[b]; });
   return _r3dFxPack(M, ord, V, 'out');
 }
+/* THE QUADS THAT GIVE OFF LIGHT, for the bloom's emitter pass, which drew every quad again at
+   full resolution - each puff of a burning base's smoke shaded a second time only for the
+   shader to find it emitted nothing and discard it. These are the types that can (fxglsl3d.js
+   sets `em`), and a blob only once its heat can light the fire ramp: its h is at most heat *
+   1.35 and its glow is zero up to 0.12. So the pass draws exactly the pixels it drew before.
+   AN INDEX INTO THE MAIN BATCH'S UPLOAD, not an upload of their own: six 16-bit corners a quad
+   against the 224 bytes of its vertices, which a heavy battle's frame would otherwise send twice
+   (e2e/pace holds the frame's upload). Additive, so their order is the main batch's and does not
+   matter. `all` (R3.fxGlowAll) is the before-picture: every quad, as it was. */
+var R3D_FX_HEAT_EMITS = 0.12 / 1.35;
+function _r3dFxGives(a, q) {
+  var t = a[q + 6];
+  return t === 2 || t === 3 || t === 7 || t === 8 || t === 11 || (t === 1 && a[q + 10] > R3D_FX_HEAT_EMITS);
+}
+function _r3dFxGlowSet(V, all) {
+  var M = V.M, ord = V.ord, n = Math.min(M.n, R3D_FX_IDX_MAX), ix = V.idxE;
+  if (!ix || ix.length < n * 6) ix = V.idxE = new Uint16Array(Math.max(n, 64) * 12);
+  var e = 0;
+  for (var j = 0; j < n; j++) {
+    if (!all && !_r3dFxGives(M.a, ord[j] * R3D_FX_QUAD)) continue;
+    var v = j * 4, o = e * 6;
+    ix[o] = v; ix[o + 1] = v + 1; ix[o + 2] = v + 2; ix[o + 3] = v; ix[o + 4] = v + 2; ix[o + 5] = v + 3;
+    e++;
+  }
+  V.nE = e;
+  return ix.subarray(0, e * 6);
+}
 /* FOUR CORNERS A QUAD GO UP, NOT SIX. Every emitter lays a quad as two triangles, corners
    0 1 2 and 0 2 5, so its fourth and fifth vertices are its first and third again - a third of
    every upload repeated, and the effects' upload is the biggest a frame makes (a megabyte in a
