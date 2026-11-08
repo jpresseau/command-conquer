@@ -44,6 +44,7 @@ var R3D_MAT_GLSL =
   /* the noise, and the border's wander, are render3d/noise3d.js's - shared with the sea */
   R3D_NOISE_GLSL +
   R3D_ROAD_GLSL +                                          /* the roads' paint: road3d.js */
+  R3D_SCAR_GLSL +                                          /* scorch and craters: scar3d.js */
   /* ---- the materials. Each returns colour (sRGB, 0..1) and a height in .a ---- */
   /* ROUND GRAINS: one per lattice cell, at a random spot, only in some cells. Thresholding value
      noise instead gives blobs that snap to the noise's own grid and read as dashes. Returns
@@ -207,19 +208,9 @@ var R3D_MAT_GLSL =
   '  }' +
   /* THE ROAD, painted down its own line over the cells' dirt shoulder; flat where it is laid */
   '  if (uApr < 0.5) grad *= 1.0 - _road(w, col.rgb, N, M, det);' +
-  /* SCARS: scorch blends like the ground does; a crater is drawn round its own cell's centre */
-  '  float sc = uApr > 0.5 ? 0.0 : dot(wt, vec4(a.g, b.g, c.g, d.g));' +
-  '  if (sc > 0.002) {' +
-  '    float burn = sc * smoothstep(0.35, 0.65, _fbm(w * 0.6 + vec2(4.0, 9.0)) + sc * 0.4);' +
-  '    col.rgb = mix(col.rgb, vec3(0.13, 0.11, 0.09), clamp(burn, 0.0, 0.85));' +
-  '  }' +
-  '  vec2 cr = i0 + vec2(0.5); float crat = 0.0;' +
-  '  if (uApr > 0.5) { a.b = 0.0; b.b = 0.0; c.b = 0.0; d.b = 0.0; }' +
-  '  if (a.b > 0.5) crat = max(crat, 1.0 - length(cc - cr + vec2(0.5)) * 2.2);' +
-  '  if (b.b > 0.5) crat = max(crat, 1.0 - length(cc - cr - vec2(0.5, -0.5)) * 2.2);' +
-  '  if (c.b > 0.5) crat = max(crat, 1.0 - length(cc - cr - vec2(-0.5, 0.5)) * 2.2);' +
-  '  if (d.b > 0.5) crat = max(crat, 1.0 - length(cc - cr - vec2(0.5)) * 2.2);' +
-  '  col.rgb *= 1.0 - smoothstep(0.0, 0.5, crat) * 0.55;' +
+  /* SCARS - a scorch, a crater - each a mark of its own in its cell: scar3d.js */
+  '  float crat = 0.0;' +
+  '  if (uApr < 0.5) col.rgb = _scars(col.rgb, cc, i0, wt, a, b, c, d, w, det, grad, crat);' +
   /* ORE SOIL. The field is read from the ore texture - one texel per cell, LINEAR, its colour
      the mineral's and its alpha how much is left (_r3dOreTex) - and laid INTO the ground rather
      than over it: a rich soil in the mineral's colour, darker in its veins, flecked with bright
@@ -437,6 +428,8 @@ function _r3dMatSet(gl, R3, P, G) {
   gl.uniform1i(gl.getUniformLocation(P, 'uOreT'), 5);
   gl.activeTexture(gl.TEXTURE0);
   gl.uniform1f(gl.getUniformLocation(P, 'uTileInv'), 1 / RTS_TILE);
+  var ss = _r3dScarSun();                          /* scar3d.js: on (0 the old blotches), and the sun's way */
+  gl.uniform3f(gl.getUniformLocation(P, 'uScar'), R3.scarAmt === 0 ? 0 : 1, ss[0], ss[1]);
   _r3dRoadSet(gl, R3, P, G);
   _r3dFxLightPut(gl, R3, P);                       /* the night's lamps reach the ground: sky3d.js */
   gl.uniform4f(u, 1, 1 / RTS_N, RTS_N / 2 - 0.5, Math.min(1, px / R3D_MAT_DETAIL_PX));

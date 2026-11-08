@@ -1,4 +1,4 @@
-# The 3D picture — the land past the edge, the light on a model, black lids, round rods, lit windows, panels, a vehicle's fireball, shallow water, stone, leaves, a lost GPU
+# The 3D picture — the land past the edge, the light on a model, black lids, round rods, lit windows, panels, a vehicle's fireball, shallow water, stone, leaves, battle scars, a lost GPU
 
 Changes to how the battlefield is drawn, and to keeping it drawn. Each has a spec that holds it
 and a kill switch that is its before-picture.
@@ -221,6 +221,25 @@ leaves, the grass's tufts - now takes the stone's treatment in green:
   and leaves in magenta: at 24 px a unit neighbours differ by 3.14 where they differed by 2.04,
   twice as rough in the sun and 1.08 times in the shade; 28 of 168k pixels that are not green
   change; the widest zoom and the low tier untouched.
+
+## Battle scars (`render3d/scar3d.js`)
+
+A shell that hits scorches its cell, and a big blast or a razed building craters it: a flag a cell,
+kept in the save, that the 2D view draws as one of six scorch sprites or its crater. The 3D ground
+drew a scorch as the whole cell gone near-black - four world units across - and a crater as a darker
+disc, so from a phone's zoom a firefight left ink spilt over the grass. Now a scarred cell carries a
+mark of its own, somewhere in the cell and the size of the blast:
+
+- **A scorch**: a charred core flecked with ash and paler at its heart, ragged and thrown out in
+  streaks, with a ring of grass singed brown round it (sooted, not browned, on paving and snow).
+- **A crater**: raw soil in a bowl, lit as one - its slope tilts the ground's normal, and the rim on
+  the sun's side shades the floor below it - with a raised lip and soil thrown out past it.
+- Worked out in the cells' own unwarped space, from the four cells round the pixel; not on the apron.
+- `R3.scarAmt = 0` is the before-picture. `e2e/scars`, two scorches and two craters on open grass at
+  24 px a unit: the char covers 2304 pixels where the blotch darkened 4782; 1014 pixels of singed
+  grass where there were none; nothing changes more than a cell and a quarter from a mark, nor
+  anywhere with no scar; a crater is two thirds bare earth (none before) and its halves differ in
+  light by 20 to 24, against 3 to 8.
 
 ## A phone takes the GPU away (`render3d/lost3d.js`)
 

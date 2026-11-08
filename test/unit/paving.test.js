@@ -12,7 +12,7 @@ var { Suite } = require('../lib/assert.js');
 var { load } = require('../lib/sandbox.js');
 
 var S = new Suite('paving');
-var g = load(['src/rules', 'src/core', 'src/render3d/noise3d.js', 'src/render3d/road3d.js', 'src/render3d/terrain3d.js']);
+var g = load(['src/rules', 'src/core', 'src/render3d/noise3d.js', 'src/render3d/road3d.js', 'src/render3d/scar3d.js', 'src/render3d/terrain3d.js']);
 var N = g.RTS_N;
 
 function world(fill) {
