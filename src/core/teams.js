@@ -37,7 +37,7 @@ function _rtsTeamTarget(t, quarry, near) {
   var G = window._rtsG, lead = _rtsTeamLeader(t);
   if (!lead) return null;
   if (quarry == null) quarry = t.type.quarry;
-  var best = null, bv = 0, w = _rtsPickWeapon(lead, lead);
+  var best = null, bv = 0, w = _rtsPickWeapon(lead, lead), fly = RTS_FLAK.teams && quarry === 'buildings' && t.members.some(_rtsFlies);
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
     if (o.dead || !_rtsHostile(o.side, _rtsAIOn)) continue;
@@ -54,6 +54,8 @@ function _rtsTeamTarget(t, quarry, near) {
        for whichever harvester was nearest - often the one working beside the player's tanks -
        and died on the escort. Every armed thing of the player's guarding it cuts its worth. */
     if (quarry === 'harvester' && v > 0) v /= 1 + _rtsGuardsNear(o, RTS_RAID_GUARD_R);
+    /* ...and what flies at buildings, or a Carrier's Hornets, goes where the flak is not (core/aloft.js) */
+    if (fly && v > 0) v /= 1 + _rtsFlakOver(lead.side, o.x, o.z);
     if (v > bv) { bv = v; best = o; }
   }
   /* "If no target could be found, then the mission advances" - so a quarry that no longer

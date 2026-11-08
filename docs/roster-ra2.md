@@ -299,10 +299,11 @@ empty or its target gone, it flies home and lands on its Carrier, which counts i
 no Carrier, it falls out of the sky. A Hornet is never built (`spawned`): `core/production.js`
 will not queue one and `ui/sidebar.js` does not show one.
 
-The opponent flies the Falcon and the Leviathan, each in a team of its own (batch 12d,
-`docs/roster-ra2-12.md`). Not the Carrier, and not the Jetpack Trooper: in its infantry it ran Mirror
-Line past its gold par (491 s against 480).
-`unit/aloft` (21) and `e2e/aloft` (6) hold it.
+The opponent flies the Falcon and the Leviathan, each in a team of its own (batch 12d), and sails
+the Carrier with a Destroyer, its Hornets sent where the flak is not (batch 12g,
+`docs/roster-ra2-12.md`). Not the Jetpack Trooper: in its infantry it ran Mirror Line past its gold
+par (491 s against 480).
+`unit/aloft` (37) and `e2e/aloft` (6) hold it.
 
 ## Batch 9: the deep (`core/deep.js`, `sprites/deep.js`)
 
@@ -423,7 +424,8 @@ the Leech Drone and the Gate.
   it, its barrier sinks into the ground: the barrier is its own mesh (`render3d/gate3d.js`), drawn
   over the building as the radar's antenna is, and eased over game time.
 
-The opponent buys the Marshal (batch 12c), and not the Carrier's crew, the Leech Drone or the Gate.
+The opponent buys the Marshal (batch 12c), and not the Carrier's crew, the Leech Drone or the Gate:
+it builds no walls for a gate to stand in (batch 12g).
 `unit/roster11b` (24) and `e2e/roster11b` (9) hold it.
 
 ## Batch 12: the opponent uses the new roster

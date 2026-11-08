@@ -193,6 +193,12 @@ var RTS_TEAM_TYPES = [
     members:{ bombard:1, sub:1 },
     max:1, autocreate:true, suicide:false,
     missions:[ ['patrol','sea'], ['attack','buildings'], ['tarcom',0] ] },
+  /* Batch 12g: the Compact's Carrier, with a Destroyer to keep submarines off it. Its Hornets go
+     where the player's anti-air does not reach, and so does the team (core/aloft.js). */
+  { name:'Strike Group', priority:3, reinforce:false, quarry:'buildings',
+    members:{ carrier:1, destroyer:1 },
+    max:1, autocreate:true, suicide:false,
+    missions:[ ['patrol','sea'], ['attack','buildings'], ['tarcom',0] ] },
   /* THE LOW-WATER BOMBARDMENT: the Dominion's River Monitor, escorted. `tide:true` is the gate,
      the same shape as Landing's `crossing` - _rtsAIEbb (core/monitor.js) says yes only on the
      falling tide with the flats drying, AND only when a Monitor and two subs are afloat and

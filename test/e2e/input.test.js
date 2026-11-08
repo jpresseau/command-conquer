@@ -203,17 +203,17 @@ var S = new Suite('input');
 
   /* Escape with nothing armed leaves the battle, and ASKS FIRST, as the ✕ does: it quit at once,
      with no save, so a second Escape pressed to be sure a placement was gone threw the battle away */
-  await g.page.keyboard.press('Escape');
-  /* THE SECOND ESCAPE IN THE SAME STEP AS THE READ, as e2e/topbar's second presses are: the arm
-     lasts five seconds, and on a loaded machine the read and a separate key press were further
-     apart than that - the second Escape armed it again instead of leaving (once, in a full run).
-     The first is a real key; the second goes to the same listener (ui/shell.js, keydown). */
+  /* BOTH ESCAPES IN ONE STEP. The arm lasts five seconds of the wall clock (a timer disarms it,
+     ui/shell.js rtsQuitClick), and on a loaded machine a real key press and the next step were
+     further apart than that: the second Escape armed it again instead of leaving - once with the
+     second press a step of its own, and once more in a full run with it already in the step that
+     read the first. Both go to the listener a real key reaches (keydown on the document); a real
+     Escape is pressed above, for the placement and the weapon. */
   var esc3 = await g.page.evaluate(function () {
+    function esc() { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); }
+    esc();
     var o = { alive: !!document.getElementById('rcgRts'), msg: window._rtsG && window._rtsG.msg };
-    if (o.alive) {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
-      o.gone = !document.getElementById('rcgRts');
-    }
+    if (o.alive) { esc(); o.gone = !document.getElementById('rcgRts'); }
     return o;
   });
   S.ok('Escape with nothing armed asks first: the battle stays, and the line says how to leave',

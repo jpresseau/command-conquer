@@ -14,7 +14,14 @@
      THE CARRIER  its shot is a Hornet sent at the target - three in the air at most; a Hornet out
                   of rounds goes home and lands, and is counted back in; the Carrier sunk, its
                   Hornets fall
-     THE OPPONENT buys the Falcon and the Leviathan and flies each at buildings (batch 12d) */
+     THE FLAK     a gun that shoots at aircraft covers what is in its reach, against the side it
+                  shoots at, once it is built (batch 12g)
+     THE AIM      the opponent's Carrier sends its Hornets at what no flak covers, or holds them; a
+                  player's Carrier sends them where it is told
+     TEAMS        a team that flies at buildings turns from one a Flak Track guards (RTS_FLAK.teams,
+                  A/B); one sent at anything else does not
+     THE OPPONENT buys the Falcon and the Leviathan and flies each at buildings (batch 12d), and
+                  sails the Carrier with a Destroyer (batch 12g) */
 
 var { Suite } = require('../lib/assert.js');
 var { loadFast } = require('../lib/sandbox.js');
@@ -136,14 +143,92 @@ if (hn) hn.ammo = 0;
 step(8, function () { tc.cool = 99; cv2.cool = 99; });
 S.ok('a Hornet out of rounds goes home and lands - and is counted back in', !!hn && hn.dead && g._rtsHornetsOf(cv2) === 0 && !cv2.dead, 'hornet ' + (!hn ? 'never launched' : hn.dead ? 'aboard' : 'still out') + ', ' + g._rtsHornetsOf(cv2) + ' out');
 
+/* ---------------------------------------------------- where the flak is not ---- */
+/* Batch 12g: a gun that shoots at aircraft covers what is in its reach; the opponent's Carrier
+   sends its Hornets where none does, and a team that flies values a target less for each. */
+fresh();
+var ec = g._rtsSpawnUnit('enemy', 'carrier', g._rtsWX(sea[0]), g._rtsWX(sea[1]));
+var cov = g._rtsSpawnUnit('player', 'tank', ec.x + 6 * T, ec.z);            /* in reach, under the flak */
+var ft = g._rtsSpawnUnit('player', 'flaktrack', ec.x + 6 * T, ec.z + 3 * T);
+var bare = g._rtsSpawnUnit('player', 'tank', ec.x, ec.z - 7 * T);           /* in reach, and none over it */
+var rf = g._rtsSpawnUnit('player', 'rifle', bare.x + 3 * T, bare.z);
+/* past the Flak Track's own reach by half the margin: where a Hornet that came for it would hang */
+var edge = g._rtsSpawnUnit('player', 'tank', ft.x + W('trackflak').range + g.RTS_FLAK.margin / 2, ft.z);
+var F = function (side, o) { return g._rtsFlakOver(side, o.x, o.z); };
+S.ok('THE FLAK: a Flak Track covers the tank beside it, and not the tank out of its reach - nor does a rifle',
+     F('enemy', cov) === 1 && F('enemy', bare) === 0, F('enemy', cov) + ' and ' + F('enemy', bare));
+S.ok('...and a little past its reach, where what came for that tank would hang to fire', F('enemy', edge) === 1 && g.RTS_FLAK.margin > 0,
+     F('enemy', edge) + ' at ' + Math.round(Math.hypot(edge.x - ft.x, edge.z - ft.z)) + ', reach ' + W('trackflak').range);
+S.ok('...it covers it against the side it shoots at, not its own', F('player', cov) === 0, String(F('player', cov)));
+var yd = g._rtsHas('player', 'yard'), ag = null;
+for (var r2 = 3; r2 < 12 && !ag; r2++) for (var d2 = -r2; d2 <= r2 && !ag; d2++) {
+  if (g._rtsCanPlace('player', 'aagun', yd.tx + r2, yd.tz + d2, true)) ag = g._rtsPlaceStruct('player', 'aagun', yd.tx + r2, yd.tz + d2, false);
+}
+var agB = ag ? F('enemy', ag) : -1;
+if (ag) ag.building = 0;
+S.ok('...an AA Gun covers its ground once it is built, and not while it is going up', !!ag && agB === 0 && F('enemy', ag) === 1,
+     ag ? agB + ' while building, ' + F('enemy', ag) + ' built' : 'not placed');
+var hsE = function () { return G.ents.filter(function (o) { return !o.dead && o.mother === ec.id; }); };
+var aimed = function (h) { return !h ? 'none launched' : 'at the ' + (h.target === bare ? 'bare tank' : h.target === cov ? 'covered tank' : h.target.def); };
+fire(ec, cov, W('hornets'));
+S.ok('THE AIM: the opponent\'s Carrier sent at the tank under the flak sends its Hornet at the one in reach that is not',
+     hsE().length === 1 && hsE()[0].target === bare, aimed(hsE()[0]));
+hsE().forEach(function (h) { g._rtsKillQuiet(h); });
+bare.dead = true; rf.dead = true;
+fire(ec, cov, W('hornets'));
+S.eq('...and with nothing in reach that the flak does not cover, it holds them', hsE().length, 0);
+var pc = g._rtsSpawnUnit('player', 'carrier', ec.x, ec.z), et = g._rtsSpawnUnit('enemy', 'tank', pc.x + 6 * T, pc.z);
+g._rtsSpawnUnit('enemy', 'flaktrack', pc.x + 6 * T, pc.z + 3 * T);
+fire(pc, et, W('hornets'));
+var hp1 = G.ents.filter(function (o) { return !o.dead && o.mother === pc.id; });
+S.ok('...where a player\'s Carrier sends them where it is told, flak or none', F('player', et) === 1 && hp1.length === 1 && hp1[0].target === et,
+     F('player', et) + ' over it, ' + hp1.length + ' launched');
+/* A team that flies: two of the player's power plants the same distance off, a Falcon's Raid choosing
+   between them, then a Flak Track beside the one it chose - an A/B in one sandbox through RTS_FLAK.teams */
+fresh();
+var mx = g._rtsTX(M.x), mz = g._rtsTX(M.z), pp = [], r3 = 0;
+for (var k3 = 0; k3 < 25 * 11 && pp.length < 2; k3++) {      /* rows out from the middle, then wider apart */
+  var dz3 = (k3 % 25 >> 1) * (k3 % 2 ? -1 : 1), rr3 = 5 + ((k3 / 25) | 0), z3 = mz + dz3;
+  if (g._rtsCanPlace('player', 'power', mx - rr3, z3, true) && g._rtsCanPlace('player', 'power', mx + rr3, z3, true)) {
+    pp = [g._rtsPlaceStruct('player', 'power', mx - rr3, z3, true), g._rtsPlaceStruct('player', 'power', mx + rr3, z3, true)];
+    r3 = rr3;
+  }
+}
+var fc = pp.length === 2 ? g._rtsSpawnUnit('enemy', 'falcon', (pp[0].x + pp[1].x) / 2, pp[0].z) : null;
+var raid = { type: { quarry: 'buildings' }, members: [fc] }, near = fc && { x: fc.x, z: fc.z, r: (r3 + 2) * T };   /* the two, and no more */
+var pick0 = pp.length === 2 ? g._rtsTeamTarget(raid, 'buildings', near) : null;
+var guard = pick0 ? g._rtsSpawnUnit('player', 'flaktrack', pick0.x, pick0.z + 2 * T) : null;
+var pick1 = guard ? g._rtsTeamTarget(raid, 'buildings', near) : null;
+g.RTS_FLAK.teams = false;
+var pick2 = guard ? g._rtsTeamTarget(raid, 'buildings', near) : null;
+g.RTS_FLAK.teams = true;
+/* the rule is for a team sent at buildings (Raid, Zeppelin, Strike Group): the same Falcon sent at
+   power plants by name weighs no flak - so a quarry other than 'buildings' does not either */
+var pick3 = guard ? g._rtsTeamTarget(raid, 'power', near) : null;
+/* ...and a Strike Group: its Carrier does not fly, but what it launches does */
+var sg = guard ? { type: { quarry: 'buildings' }, members: [g._rtsSpawnUnit('enemy', 'carrier', fc.x, fc.z)] } : null;
+var pick4 = sg ? g._rtsTeamTarget(sg, 'buildings', near) : null;
+S.ok('TEAMS: a Falcon\'s Raid turns from the power plant a Flak Track now guards to the other one',
+     pp.length === 2 && pp.indexOf(pick0) >= 0 && !!pick1 && pick1 !== pick0 && pp.indexOf(pick1) >= 0,
+     pp.length < 2 ? 'placed ' + pp.length + ' plants' : 'first ' + (pick0 ? pp.indexOf(pick0) : 'none') + ', then ' + (pick1 ? pp.indexOf(pick1) : 'none'));
+S.ok('...and without RTS_FLAK.teams it stays on the guarded one', !!pick2 && pick2 === pick0, pick2 === pick0 ? 'stayed' : 'turned');
+S.ok('...as it does sent at power plants by name: only a team sent at buildings weighs the flak', !!pick3 && pick3 === pick0,
+     !pick3 ? 'nothing chosen' : pick3 === pick0 ? 'stayed' : 'turned');
+S.ok('...and a Carrier\'s Strike Group turns from it as the Raid does: what it launches flies', !!pick4 && pick4 === pick1,
+     !pick4 ? 'nothing chosen' : pick4 === pick1 ? 'turned' : 'stayed');
+
 /* ------------------------------------------------------------- opponent ---- */
 var A = g.RTS_AI, inMix = function (k) { return Object.keys(A.mix).some(function (c) { return A.mix[c].some(function (m) { return m.key === k; }); }); };
 /* Batch 12d: the Falcon and the Leviathan, each flown by a one-plane team; not the Jetpack Trooper
-   (in its infantry it ran a mission past its par, unit/campaign-levels4) or the Carrier */
+   (in its infantry it ran a mission past its par, unit/campaign-levels4); the Carrier from 12g */
 var flies = function (k) { return g.RTS_TEAM_TYPES.some(function (t) { return t.members[k] && Object.keys(t.members).length === 1; }); };
 S.ok('THE OPPONENT buys the Falcon and the Leviathan, and a team of one flies each',
      ['falcon', 'leviathan'].every(function (k) { return inMix(k) && flies(k); }), '');
-S.ok('...not the Jetpack Trooper, the Carrier or a Hornet', !['jetpack', 'carrier', 'hornet'].some(inMix), '');
+var sails = g.RTS_TEAM_TYPES.filter(function (t) { return t.members.carrier; });
+S.ok('...the Carrier too (batch 12g), and Strike Group sails it with a Destroyer',
+     inMix('carrier') && sails.length === 1 && sails[0].name === 'Strike Group' && sails[0].members.destroyer === 1,
+     (inMix('carrier') ? 'in the mix; ' : 'not in the mix; ') + (sails.map(function (t) { return t.name; }).join(', ') || 'no team'));
+S.ok('...not the Jetpack Trooper or a Hornet', !['jetpack', 'hornet'].some(inMix), '');
 /* ...and in a match: rich, with an Airfield and a Research Lab, the Dominion opponent buys a
    Leviathan and its team sends it at the player's base. An A/B in one sandbox: without the
    Zeppelin team the same airship stays at home. */
