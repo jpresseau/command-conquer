@@ -617,206 +617,320 @@
 @media (max-width:520px){#rcgRts .rts-replaybar{gap:5px;padding-left:8px}#rcgRts .rts-replaybar b{display:none}}
 </style>
 <style>
-/* --- standalone shell: the title screen this app boots into --- */
-html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
-#rtsHome{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  /* `safe` is load-bearing, not a nicety. A centred flex column whose content is taller than
-     the box overflows in BOTH directions, and the overflow off the TOP cannot be scrolled to -
-     the scroll origin is the container's top edge, which the content already started above. So
-     the title and the difficulty picker were unreachable at every viewport size,
-     and on a phone you landed with START BATTLE already half cut off. `safe center` centres
-     while it fits and pins to the start when it does not, which is what was meant all along.
-     Browsers too old to parse it drop this line and keep the plain `center` above. */
-  justify-content:safe center;
-  gap:22px;padding:24px;box-sizing:border-box;overflow:auto;
-  background:radial-gradient(ellipse at 50% 35%,#1d2a3a 0%,#111722 55%,#0b0f16 100%);
-  font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#dfe8f2;text-align:center}
+/* --- the title screen: the coast at dusk behind (title-bg.js), and over it the brand, a card for the
+   battle, a column of the other ways to play, and a foot for the look and the install ---
+
+   LAID OUT AS A MENU, NOT A STACK. It was one centred column of every control the game had, each a
+   different width: the choice that matters (whose army, how hard, START) read no louder than the
+   install button. Now the battle is a card of its own with START as its one bright thing, the
+   other modes are a list beside it (below it on a phone), and the settings sit at the foot. */
+html,body{margin:0;padding:0;height:100%;background:#05080e;overflow:hidden}
+#rtsHome{position:fixed;inset:0;z-index:10;overflow:auto;-webkit-overflow-scrolling:touch;background:#05080e;
+  font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#e7edf5;
+  --tx:#e7edf5;--mut:#9cadc1;--gold:#ffd27a;--gold2:#f0a63a;--line:rgba(160,190,230,.16);
+  --panel:rgba(8,13,22,.76);--compact:#5aaeff;--dominion:#ff7d45}
 #rtsHome.gone{display:none}
-#rtsHome h1{margin:0;font-size:clamp(26px,8vw,62px);font-weight:800;letter-spacing:clamp(3px,1.6vw,14px);
-  color:#ffcf6a;text-shadow:0 0 34px rgba(255,207,106,.28)}
-/* The series name sits ABOVE the title, small - which is the actual branding hierarchy and
-   also keeps the big element the one the layout tests measure. */
-#rtsHome .eyebrow{margin:0 0 -14px;font-size:clamp(11px,2vw,14px);letter-spacing:clamp(3px,1.2vw,7px);
-  text-transform:uppercase;color:#cfa445;opacity:.9;font-weight:700}
-/* THE MENU IS A COLUMN, with the spacing as the column's own gap. As a plain block its buttons
-   flowed inline like words, and the negative margins tuned against #rtsHome's gap pulled each
-   note up into the buttons above it - on a phone, a sentence printed straight through them. */
-#rtsTitleMenu{display:flex;flex-direction:column;align-items:center;gap:14px;width:100%}
-#rtsHome .sub{margin:-12px 0 0;font-size:clamp(12px,2.2vw,15px);letter-spacing:3px;opacity:.62;text-transform:uppercase}
-#rtsHome .go{padding:14px 46px;border:0;border-radius:8px;background:#2e6fd0;color:#fff;font-size:17px;font-weight:700;
-  letter-spacing:1.5px;cursor:pointer;box-shadow:0 10px 34px rgba(46,111,208,.36);transition:transform .12s,background .12s}
-#rtsHome .go:hover{background:#3d84ee;transform:translateY(-1px)}
-#rtsHome .go:disabled{background:#3a4658;box-shadow:none;cursor:progress;transform:none}
-#rtsHome .go.resume{padding:11px 34px;font-size:14px;background:#1d2735;border:1px solid #2b3a4d;
-  box-shadow:none;font-weight:600}
-#rtsHome .go.resume:hover{background:#26344a}
-#rtsHome .go.resume small{display:block;font-size:11px;letter-spacing:.4px;opacity:.6;font-weight:400;margin-top:3px}
-/* The tile chrome is on the <details>; the two-column grid moved onto the <dl> inside it, because
-   a grid container laid out `summary` as a grid item too and put the word "Controls" in the
-   key column beside the first shortcut. */
-#rtsHome .keys{width:min(100%,520px);box-sizing:border-box;text-align:left;
-  font-size:12.5px;background:rgba(255,255,255,.035);border:1px solid #263447;border-radius:9px;padding:16px 20px}
-#rtsHome .keys > dl{display:grid;grid-template-columns:auto 1fr;gap:7px 16px;margin:14px 0 0}
-#rtsHome .keys summary{cursor:pointer;list-style:none;color:#ffcf6a;font-size:11px;letter-spacing:2px;
-  text-transform:uppercase;opacity:.8;user-select:none;display:flex;align-items:center;gap:8px}
-#rtsHome .keys summary::-webkit-details-marker{display:none}   /* Safari draws its own triangle */
-/* The marker is drawn rather than left to the UA so it can point the same way in both browsers
-   and sit on the baseline of 11px caps rather than above it. */
-#rtsHome .keys summary::before{content:'';width:0;height:0;flex:0 0 auto;
-  border-left:5px solid currentColor;border-top:4px solid transparent;border-bottom:4px solid transparent;
-  transition:transform .15s ease}
-#rtsHome .keys[open] summary::before{transform:rotate(90deg)}
-#rtsHome .keys summary:hover{opacity:1}
-#rtsHome .keys summary:focus-visible{outline:1px solid #8fd0ff;outline-offset:3px;border-radius:3px}
-/* closed, the tile is one line and the 16px bottom padding reads as a gap under nothing */
-#rtsHome .keys:not([open]){padding-bottom:14px}
-#rtsHome .keys dt{color:#8fd0ff;font-weight:600;white-space:nowrap}
-#rtsHome .keys dd{margin:0;opacity:.78}
-/* a group heading spans both columns; the first one must not push off the padding */
-#rtsHome .keys dt.hd{grid-column:1/-1;margin-top:9px;color:#ffcf6a;font-size:11px;letter-spacing:2px;
-  text-transform:uppercase;opacity:.75;border-top:1px solid #223044;padding-top:9px}
-#rtsHome .keys dt.hd:first-child{margin-top:0;border-top:0;padding-top:0}
-#rtsHome .diff{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
-#rtsHome .diff button{padding:9px 20px;border:1px solid #2b3a4d;border-radius:7px;background:#141c27;
-  color:#9db0c6;font:inherit;font-weight:700;letter-spacing:1px;cursor:pointer;transition:background .12s,border-color .12s}
-#rtsHome .diff button:hover{background:#1d2735}
-#rtsHome .diff button.on{background:#2e6fd0;border-color:#6fb0ff;color:#fff}
-/* THREE ON ONE ROW. The difficulty picker is a choice between three things, and it only reads
-   as one when they sit side by side - at 20px of side padding the third dropped onto a row of
-   its own on every phone measured, which makes COMMANDO look like a separate control rather
-   than the far end of a scale. The padding is what gives, not the type. */
-@media (max-width:520px){
-  #rtsHome .diff button{padding:9px 11px;letter-spacing:.5px}
-  #rtsHome .diff{gap:6px}
-}
-/* Below ~400px the three still did not fit, and the next thing to give is the page gutter
-   rather than the buttons: 24px a side on a 360px handset is 13% of the screen spent on margin,
-   and taking it back is worth 20px to every row on the screen, not just this one. */
-@media (max-width:420px){ #rtsHome{padding:24px 12px} }
-/* No negative pull: the column above supplies the spacing. `min-height` keeps the line's box
-   reserved so the layout does not jump when a note changes length. */
-#rtsHome .diffnote{margin:0;font-size:12.5px;opacity:.62;min-height:1.4em}
-/* The build mark. Pinned to the window rather than placed in the flow, because with artwork
-   loaded the flow is inside the plate's red panel and this belongs to the page, not the game.
-   Faint until you look for it, and selectable so it can be quoted back. */
-/* It is pinned over a page that scrolls under it, so on a narrow screen it lands on top of
-   whichever paragraph happens to be there - on a phone that is the middle of the artwork card's
-   prose, two greys on top of each other and neither readable. It carries its own small plate so
-   it sits ON the page rather than IN it, at any size. */
-#rtsBuild{position:fixed;right:8px;bottom:6px;z-index:11;font-size:10px;letter-spacing:.5px;
-  color:#7f8a99;opacity:.62;pointer-events:auto;user-select:text;font-variant-numeric:tabular-nums;
-  padding:3px 7px;border-radius:5px;background:rgba(11,15,22,.82);backdrop-filter:blur(2px)}
-#rtsBuild:hover{opacity:.9}
-#rtsErr{display:none;max-width:520px;padding:12px 16px;border:1px solid #7d3b34;border-radius:8px;
-  background:#251513;color:#ffb4a6;font-size:12.5px;text-align:left;white-space:pre-wrap}
-/* A phone held sideways has ~390px of height and the shell wants ~550px before it reaches the
-   button. Rather than let START BATTLE fall below the fold, spend the flavour: the briefing
-   prose is a paragraph you read once, while the difficulty picker and the button are what the
-   screen is FOR. Everything cut here is still one rotation away. */
-@media (max-height:520px){
-  #rtsHome{gap:10px;padding:12px}
-  #rtsHome h1{font-size:clamp(24px,4.2vw,34px);letter-spacing:clamp(4px,1.2vw,8px)}
-  #rtsHome .eyebrow{margin:0 0 -8px;font-size:10px;letter-spacing:3px}
-  #rtsHome .sub{margin:-6px 0 0;font-size:11px;letter-spacing:2px}
-  #rtsTitleMenu{gap:9px}
-  #rtsHome .go{padding:13px 34px;font-size:15px}
-}
-/* the campaign's mission list (campaign.js) */
-#rtsCampList{width:min(460px,92vw);display:flex;flex-direction:column;gap:8px;text-align:left}
-#rtsCampList[hidden]{display:none}
-#rtsCampList .mission{padding:10px 12px;border:1px solid #2b3a4d;border-radius:8px;background:#141c27}
-#rtsCampList .mission.won{border-color:#3d6b45}
-#rtsCampList .mission.locked{opacity:.55}
-#rtsCampList h3{margin:0 0 2px;font-size:14px;letter-spacing:.6px}
-#rtsCampList h3 i{font-style:normal;color:#7fd08a;font-weight:400;font-size:12px}
-#rtsCampList p{margin:4px 0;font-size:12px;line-height:1.45;opacity:.85}
-#rtsCampList p.s{opacity:.55;margin:0}
-#rtsCampList button{margin-top:4px;padding:6px 18px;font:600 12px/1 inherit;letter-spacing:.6px;color:#fff;
-  background:#2c4a6e;border:0;border-radius:5px;cursor:pointer}
-/* the skirmish setup (skirmish.js) */
-#rtsSkirmish{display:flex;flex-direction:column;align-items:center;gap:6px}
+/* `hidden` means hidden: a row given display:block below would otherwise show CONTINUE with nothing kept */
+#rtsHome [hidden]{display:none !important}
+#rtsHomeBg{position:fixed;inset:0;width:100%;height:100%;display:block;z-index:0;pointer-events:none}
+/* `safe` is load-bearing, not a nicety: a centred column taller than its box overflows in both
+   directions, and the overflow off the TOP cannot be scrolled to. `safe center` centres while it
+   fits and pins to the start when it does not. */
+#rtsHome .home{position:relative;z-index:1;box-sizing:border-box;min-height:100%;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;justify-content:safe center;gap:22px;
+  padding:max(22px,env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) max(40px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left))}
+
+/* ---- the brand ---- */
+#rtsHome .brand{text-align:center}
+#rtsHome .eyebrow{display:flex;align-items:center;justify-content:center;gap:12px;margin:0 0 8px;font-size:12px;
+  letter-spacing:.42em;text-transform:uppercase;color:#d8ac58;font-weight:700}
+#rtsHome .eyebrow::before,#rtsHome .eyebrow::after{content:'';width:40px;height:1px;background:linear-gradient(90deg,transparent,#d8ac58)}
+#rtsHome .eyebrow::after{transform:scaleX(-1)}
+#rtsHome h1{margin:0;font-size:clamp(34px,8.2vw,78px);line-height:1;font-weight:900;letter-spacing:.16em;padding-left:.16em;
+  color:#ffd27a;background:linear-gradient(180deg,#fff3cf 0%,#ffd27a 46%,#e2902c 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 4px 22px rgba(255,166,60,.32))}
+#rtsHome .sub{margin:10px 0 0;font-size:12px;letter-spacing:.5em;padding-left:.5em;text-transform:uppercase;color:var(--mut)}
+
+/* ---- the menu: the battle beside the other modes, the foot under both ---- */
+#rtsTitleMenu{width:min(1060px,100%);display:grid;gap:18px;align-items:start;
+  grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);grid-template-areas:"battle modes" "foot foot"}
+#rtsHome .battle{grid-area:battle}
+#rtsHome .modes{grid-area:modes}
+#rtsHome .foot{grid-area:foot}
+#rtsHome .panel{box-sizing:border-box;display:flex;flex-direction:column;gap:12px;padding:18px;text-align:left;
+  background:var(--panel);border:1px solid var(--line);border-radius:16px;
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  box-shadow:0 22px 60px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.05)}
+#rtsHome .panel-h,#rtsHome .modes::before{margin:0;display:flex;align-items:center;gap:12px;font-size:11px;font-weight:800;
+  letter-spacing:.32em;text-transform:uppercase;color:var(--gold)}
+#rtsHome .panel-h::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,rgba(255,210,122,.4),transparent)}
+#rtsHome .modes::before{content:'More ways to play';padding-bottom:2px;border-bottom:1px solid rgba(255,210,122,.18)}
+/* No negative pull: the panel's gap supplies the spacing. `min-height` keeps a note's line reserved
+   so the card does not jump when it changes length. */
+#rtsHome .diffnote{margin:-4px 0 0;font-size:12.5px;line-height:1.45;color:var(--mut);min-height:1.45em}
+#rtsHome .diffnote.notice{margin:0;padding:8px 10px;border-left:2px solid var(--gold2);background:rgba(240,166,58,.08);border-radius:4px;min-height:0}
+
+/* ---- whose army: a card each, with its emblem ---- */
+#rtsHome .army{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+#rtsHome .army[hidden]{display:none}
+#rtsHome .army button{position:relative;display:flex;flex-direction:column;justify-content:center;gap:3px;min-height:78px;
+  padding:12px 12px 12px 64px;box-sizing:border-box;text-align:left;cursor:pointer;color:var(--tx);font:inherit;
+  border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.03);transition:background .15s,border-color .15s,box-shadow .15s}
+#rtsHome .army button[data-v=allied]{--fc:var(--compact);--fg:rgba(90,174,255,.16)}
+#rtsHome .army button[data-v=soviet]{--fc:var(--dominion);--fg:rgba(255,125,69,.16)}
+#rtsHome .army .emb{position:absolute;left:14px;top:50%;width:38px;height:38px;margin-top:-19px;background:var(--fc);opacity:.55;
+  -webkit-mask:var(--em) center/contain no-repeat;mask:var(--em) center/contain no-repeat;transition:opacity .15s}
+/* the Compact's compass star; the Dominion's basalt hexagon with its flame */
+#rtsHome .army button[data-v=allied] .emb{--em:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='20' fill='none' stroke='%23000' stroke-width='3'/%3E%3Cpath d='M24 4l5 15 15 5-15 5-5 15-5-15-15-5 15-5z'/%3E%3C/svg%3E")}
+#rtsHome .army button[data-v=soviet] .emb{--em:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath d='M24 3l18 10.5v21L24 45 6 34.5v-21z' fill='none' stroke='%23000' stroke-width='3'/%3E%3Cpath d='M24 11c2 6 9 9 9 17a9 9 0 0 1-18 0c0-4 2-6 4-8 0 3 1 5 3 5 0-6-1-9 2-14z'/%3E%3C/svg%3E")}
+#rtsHome .army b{font-size:15px;font-weight:900;letter-spacing:.14em}
+#rtsHome .army i{font-style:normal;font-size:12px;color:var(--mut);line-height:1.3}
+#rtsHome .army button:hover{background:rgba(255,255,255,.06)}
+#rtsHome .army button.on{border-color:var(--fc);background:linear-gradient(135deg,var(--fg),rgba(255,255,255,.02));
+  box-shadow:0 0 0 1px var(--fc) inset,0 10px 28px var(--fg)}
+#rtsHome .army button.on .emb{opacity:1}
+#rtsHome .army button.on b{color:var(--fc)}
+
+/* ---- how hard: one scale of three, side by side ---- */
+#rtsHome #rtsDiff{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:11px;overflow:hidden;background:rgba(255,255,255,.03)}
+#rtsHome #rtsDiff button{min-height:46px;padding:0 6px;border:0;border-right:1px solid var(--line);background:transparent;color:var(--mut);
+  font:inherit;font-size:12.5px;font-weight:800;letter-spacing:.14em;cursor:pointer;transition:background .15s,color .15s}
+#rtsHome #rtsDiff button:last-child{border-right:0}
+#rtsHome #rtsDiff button:hover{background:rgba(255,255,255,.05);color:var(--tx)}
+#rtsHome #rtsDiff button.on{background:rgba(255,210,122,.14);color:var(--gold);box-shadow:inset 0 -3px 0 var(--gold)}
+
+/* ---- START: the one bright thing on the screen ---- */
+#rtsHome #rtsGo{width:100%;min-height:60px;padding:10px 16px;border:0;border-radius:12px;cursor:pointer;
+  background:linear-gradient(180deg,#ffdc8e 0%,#f6b54a 55%,#e7962c 100%);color:#1c1306;
+  font:inherit;font-size:19px;font-weight:900;letter-spacing:.24em;text-indent:.24em;
+  box-shadow:0 12px 32px rgba(240,166,58,.34),inset 0 1px 0 rgba(255,255,255,.65),inset 0 -2px 0 rgba(120,60,0,.25);
+  transition:transform .12s,filter .12s}
+#rtsHome #rtsGo small{display:block;text-indent:0;margin-top:2px;font-size:11.5px;font-weight:700;letter-spacing:.04em;opacity:.72}
+#rtsHome #rtsGo small:empty{display:none}
+#rtsHome #rtsGo:hover{filter:brightness(1.06);transform:translateY(-1px)}
+#rtsHome #rtsGo:active{transform:translateY(1px)}
+#rtsHome #rtsGo:disabled{background:#3a4658;color:#cfd8e3;box-shadow:none;cursor:progress;transform:none;filter:none}
+
+/* ---- the map it will make (preview.js) ---- */
+#rtsPrev{display:flex;align-items:center;gap:12px;padding:8px;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;background:rgba(0,0,0,.2)}
+#rtsPrev canvas{width:64px;height:64px;flex:none;border-radius:7px;border:1px solid var(--line);image-rendering:pixelated}
+#rtsPrev .side{flex:1;min-width:0;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+#rtsPrev .side span{font-size:12.5px;color:var(--mut)}
+#rtsPrev .side button{min-height:42px;padding:0 14px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.05);
+  color:var(--tx);font:inherit;font-size:12px;font-weight:800;letter-spacing:.08em;cursor:pointer}
+#rtsPrev .side button:hover{border-color:rgba(255,210,122,.45)}
+
+/* ---- the rows: setup, continue, the modes, install - an icon, a name, what it holds now ---- */
+#rtsHome .go.resume{position:relative;display:block;width:100%;box-sizing:border-box;min-height:58px;margin:0;
+  padding:10px 38px 10px 60px;text-align:left;cursor:pointer;color:var(--tx);font:inherit;font-size:13.5px;font-weight:800;letter-spacing:.14em;
+  border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.035);transition:background .15s,border-color .15s}
+#rtsHome .go.resume small{display:block;margin-top:2px;font-size:12px;font-weight:500;letter-spacing:.01em;color:var(--mut);white-space:normal}
+#rtsHome .go.resume::before{content:'';position:absolute;left:18px;top:50%;width:24px;height:24px;margin-top:-12px;background:var(--gold);
+  -webkit-mask:var(--ic) center/contain no-repeat;mask:var(--ic) center/contain no-repeat}
+#rtsHome .go.resume::after{content:'';position:absolute;right:18px;top:50%;width:7px;height:7px;margin-top:-4px;
+  border-right:2px solid var(--mut);border-top:2px solid var(--mut);transform:rotate(45deg);opacity:.55}
+#rtsHome .go.resume:hover{background:rgba(255,255,255,.07);border-color:rgba(255,210,122,.42)}
+#rtsHome .go.resume:disabled{opacity:.6;cursor:progress}
+/* what is there to go back to, first and warm */
+#rtsHome .go.resume.keep,#rtsSaves .go.resume{border-color:rgba(255,210,122,.45);background:linear-gradient(135deg,rgba(255,210,122,.14),rgba(255,210,122,.03))}
+#rtsHome .go.resume{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 4l12 8-12 8z'/%3E%3C/svg%3E")}
+#rtsHome #rtsCampBtn{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 21V4h11l-2 4 2 4H5'/%3E%3C/svg%3E")}
+#rtsHome #rtsDaily{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='5' width='18' height='16' rx='2'/%3E%3Cpath d='M3 10h18M8 3v4M16 3v4'/%3E%3C/svg%3E")}
+#rtsHome #rtsSurvival{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z'/%3E%3C/svg%3E")}
+#rtsHome #rtsReplay{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 12a9 9 0 1 0 3-6.7'/%3E%3Cpath d='M3 4v5h5M10 9l5 3-5 3z'/%3E%3C/svg%3E")}
+#rtsHome #rtsSkirmishBtn{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1'/%3E%3Ccircle cx='15' cy='6' r='2'/%3E%3Ccircle cx='9' cy='12' r='2'/%3E%3Ccircle cx='17' cy='18' r='2'/%3E%3C/svg%3E")}
+#rtsHome #rtsInstall{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3v12M7 10l5 5 5-5M5 21h14'/%3E%3C/svg%3E")}
+#rtsHome .go.resume.set{min-height:52px;background:rgba(0,0,0,.18)}
+
+/* ---- the foot: the look of every battle, and the app in a window of its own ---- */
+#rtsHome .foot{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+#rtsHome .look{display:flex;flex-wrap:wrap;gap:8px}
+#rtsHome .diff{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+#rtsHome .look button,#rtsHome #rtsSkirmish .diff button{min-height:44px;padding:0 16px;border:1px solid var(--line);border-radius:10px;
+  background:var(--panel);color:var(--mut);font:inherit;font-size:12px;font-weight:800;letter-spacing:.12em;cursor:pointer;
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);transition:background .15s,color .15s,border-color .15s}
+#rtsHome .look button:hover,#rtsHome #rtsSkirmish .diff button:hover{color:var(--tx);border-color:rgba(255,210,122,.42)}
+#rtsHome #rtsSkirmish .diff button.on{background:rgba(255,210,122,.14);border-color:var(--gold);color:var(--gold)}
+#rtsHome .foot .inst{flex:1 1 280px;width:auto;max-width:440px;margin-left:auto;background:var(--panel);
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+#rtsHome .foot #rtsInstallNote{flex:1 1 100%;text-align:right;margin:0}
+
+/* ---- what opens under a row: the setup, the missions, the replays, the other saves ---- */
+#rtsSkirmish{display:flex;flex-direction:column;gap:6px;padding:4px 2px 2px}
 #rtsSkirmish[hidden]{display:none}
-#rtsSkirmish p.lbl{margin:4px 0 0;font-size:11px;letter-spacing:1.2px;opacity:.6}
-/* ROOM UNDER THE LAST ROW for the build stamp pinned bottom-right: with the setup or the mission list
-   open, the last row scrolled to the bottom sat under it (measured on a 430x932 phone: the 10,000
-   credits button covered) */
-#rtsTitleMenu{padding-bottom:28px}
-/* a finger, not a mouse: the campaign's PLAY was 27px tall */
-#rtsCampList .launch{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-/* the next map (preview.js): the thumbnail, its seed and ↻ */
-#rtsPrev{display:flex;align-items:center;gap:14px;margin-top:-10px;padding:10px 12px;border:1px solid #2b3a4d;border-radius:8px;background:#141c27;width:min(460px,92vw);box-sizing:border-box}
-#rtsPrev canvas{width:112px;height:112px;image-rendering:pixelated;border-radius:4px;border:1px solid #2b3a4d;flex:none}
-#rtsPrev .side{display:flex;flex-direction:column;align-items:flex-start;gap:8px;min-width:0}
-#rtsPrev .side span{font-size:12px;opacity:.6}
-#rtsPrev .side button{padding:8px 14px;min-height:40px;font:600 12px/1 inherit;letter-spacing:.6px;color:#fff;background:#2e6fd0;border:0;border-radius:6px;cursor:pointer}
-#rtsSaves{display:flex;flex-direction:column;gap:8px;margin-top:-10px}
+#rtsSkirmish p.lbl{margin:6px 0 0;font-size:10.5px;font-weight:800;letter-spacing:.28em;color:var(--gold);opacity:.8}
+#rtsSkirmish .diff{justify-content:flex-start}
+#rtsSaves{display:flex;flex-direction:column;gap:8px}
 #rtsSaves[hidden]{display:none}
-#rtsCampList select.lvl{margin-top:4px;padding:5px 6px;font:12px/1 inherit;color:#fff;background:#1d2836;border:1px solid #3a4d63;border-radius:4px}
-@media (hover: none) and (pointer: coarse){ #rtsCampList button, #rtsCampList select.lvl{min-height:40px;padding:10px 22px} }
-/* ...AND ON A TOUCH SCREEN THE STAMP LETS A TAP THROUGH. It takes taps only so its text can be
-   selected with a mouse; on a phone it sits over the bottom-right of whatever row is at the screen's
-   foot, and a tap there landed on the stamp instead of the button (e2e/phoneui) */
-@media (hover: none) and (pointer: coarse){ #rtsBuild{pointer-events:none} }
-/* the replays (replays.js): the last battle, the kept ones, and a file */
-#rtsReplays{width:min(460px,92vw);display:flex;flex-direction:column;gap:8px;text-align:left}
-#rtsReplays[hidden]{display:none}
-#rtsReplays .rp-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 10px;border:1px solid #2b3a4d;border-radius:8px;background:#141c27}
-#rtsReplays .rp-row p{flex:1 1 100%;margin:0;font-size:12px;line-height:1.4}
-#rtsReplays .rp-row p b{display:block;font-size:13px;letter-spacing:.5px}
-#rtsReplays .rp-row p span{opacity:.8}
-#rtsReplays .rp-row button,#rtsReplays .rp-file{min-height:40px;padding:6px 12px;border:1px solid #3a4a60;border-radius:6px;background:#18222f;color:#e8eef6;font:600 12px/1 inherit;cursor:pointer}
-#rtsReplays .rp-row button.go{background:#2e6fd0;border-color:#6fb0ff;color:#fff}
+#rtsCampList,#rtsReplays{display:flex;flex-direction:column;gap:8px;text-align:left}
+#rtsCampList[hidden],#rtsReplays[hidden]{display:none}
+#rtsCampList .mission{padding:12px 14px;border:1px solid var(--line);border-radius:11px;background:rgba(0,0,0,.22)}
+#rtsCampList .mission.won{border-color:rgba(127,208,138,.5)}
+#rtsCampList .mission.locked{opacity:.5}
+#rtsCampList h3{margin:0 0 2px;font-size:14px;letter-spacing:.06em}
+#rtsCampList h3 i{font-style:normal;color:#7fd08a;font-weight:500;font-size:12px}
+#rtsCampList p{margin:4px 0;font-size:12.5px;line-height:1.45;color:#c7d3e0}
+#rtsCampList p.s{color:var(--mut);margin:0}
+#rtsCampList .launch{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#rtsCampList button{min-height:40px;margin-top:4px;padding:0 20px;border:0;border-radius:9px;cursor:pointer;
+  background:linear-gradient(180deg,#ffdc8e,#efa33a);color:#1c1306;font:inherit;font-size:12px;font-weight:900;letter-spacing:.12em}
+#rtsCampList select.lvl{min-height:40px;margin-top:4px;padding:0 8px;font:inherit;font-size:12.5px;color:var(--tx);
+  background:#111a27;border:1px solid var(--line);border-radius:9px}
+#rtsReplays .rp-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;background:rgba(0,0,0,.22)}
+#rtsReplays .rp-row p{flex:1 1 100%;margin:0;font-size:12.5px;line-height:1.4}
+#rtsReplays .rp-row p b{display:block;font-size:13px;letter-spacing:.06em}
+#rtsReplays .rp-row p span{color:var(--mut)}
+#rtsReplays .rp-row button,#rtsReplays .rp-file{min-height:40px;padding:0 14px;border:1px solid var(--line);border-radius:9px;
+  background:rgba(255,255,255,.05);color:var(--tx);font:inherit;font-size:12px;font-weight:800;letter-spacing:.06em;cursor:pointer}
+#rtsReplays .rp-row button.go{background:linear-gradient(180deg,#ffdc8e,#efa33a);border-color:transparent;color:#1c1306}
 #rtsReplays .rp-row button.del{margin-left:auto}
 #rtsReplays .rp-file{display:flex;align-items:center;justify-content:center;text-align:center}
 #rtsReplays .rp-file input{position:absolute;width:1px;height:1px;opacity:0}
-#rtsReplays .none{margin:0;font-size:12px;opacity:.8}
+#rtsReplays .none{margin:0;font-size:12.5px;color:var(--mut)}
+
+/* ---- the controls, under it all ---- */
+/* The tile chrome is on the <details>; the two-column grid is on the <dl> inside it, because a grid
+   container laid out `summary` as a grid item too and put "Controls" in the key column. */
+#rtsHome .keys{width:min(1060px,100%);box-sizing:border-box;text-align:left;font-size:12.5px;
+  background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 18px;
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+#rtsHome .keys > dl{display:grid;grid-template-columns:auto 1fr;gap:7px 16px;margin:14px 0 2px}
+#rtsHome .keys summary{cursor:pointer;list-style:none;color:var(--gold);font-size:11px;font-weight:800;letter-spacing:.32em;
+  text-transform:uppercase;user-select:none;display:flex;align-items:center;gap:10px;min-height:20px}
+#rtsHome .keys summary::-webkit-details-marker{display:none}   /* Safari draws its own triangle */
+#rtsHome .keys summary::before{content:'';width:0;height:0;flex:0 0 auto;border-left:5px solid currentColor;
+  border-top:4px solid transparent;border-bottom:4px solid transparent;transition:transform .15s ease}
+#rtsHome .keys[open] summary::before{transform:rotate(90deg)}
+#rtsHome .keys summary:focus-visible{outline:1px solid #8fd0ff;outline-offset:3px;border-radius:3px}
+#rtsHome .keys dt{color:#8fd0ff;font-weight:700;white-space:nowrap}
+#rtsHome .keys dd{margin:0;color:#c3cfdc}
+#rtsHome .keys dt.hd{grid-column:1/-1;margin-top:9px;color:var(--gold);font-size:10.5px;letter-spacing:.28em;
+  text-transform:uppercase;opacity:.85;border-top:1px solid var(--line);padding-top:10px}
+#rtsHome .keys dt.hd:first-child{margin-top:0;border-top:0;padding-top:0}
+#rtsHome button:focus-visible{outline:2px solid #8fd0ff;outline-offset:2px}
+
+/* The build mark, pinned to the window over a page that scrolls under it: it carries its own small
+   plate so it sits ON the page rather than IN whatever paragraph is under it. */
+#rtsBuild{position:fixed;right:8px;bottom:6px;z-index:11;font-size:10px;letter-spacing:.5px;color:#7f8a99;opacity:.7;
+  pointer-events:auto;user-select:text;font-variant-numeric:tabular-nums;padding:3px 7px;border-radius:5px;
+  background:rgba(5,8,14,.85);backdrop-filter:blur(2px)}
+#rtsBuild:hover{opacity:.95}
+#rtsErr{display:none;width:min(1060px,100%);box-sizing:border-box;padding:12px 16px;border:1px solid #7d3b34;border-radius:10px;
+  background:#251513;color:#ffb4a6;font-size:12.5px;text-align:left;white-space:pre-wrap}
+
+/* ---- a phone held upright, a small tablet: one column, the battle first ---- */
+@media (max-width:760px){
+  #rtsTitleMenu{grid-template-columns:minmax(0,1fr);grid-template-areas:"battle" "modes" "foot";width:min(560px,100%);gap:14px}
+  #rtsHome .keys{width:min(560px,100%)}
+  #rtsHome .home{gap:16px}
+  #rtsHome .foot .inst{margin-left:0;max-width:none}
+  #rtsHome .foot #rtsInstallNote{text-align:left}
+}
+@media (max-width:520px){
+  #rtsHome .home{padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right));padding-top:max(16px,env(safe-area-inset-top))}
+  #rtsHome .panel{padding:14px;gap:10px;border-radius:14px}
+  #rtsHome .eyebrow{font-size:10.5px;letter-spacing:.34em;margin-bottom:6px}
+  #rtsHome .eyebrow::before,#rtsHome .eyebrow::after{width:22px}
+  #rtsHome h1{letter-spacing:.12em;padding-left:.12em}
+  #rtsHome .sub{font-size:10.5px;letter-spacing:.38em;margin-top:8px}
+  /* the army cards stand their emblem in the corner, so the name has the width */
+  #rtsHome .army button{padding:12px 44px 12px 12px;min-height:74px}
+  #rtsHome .army .emb{left:auto;right:10px;top:12px;margin-top:0;width:28px;height:28px}
+  #rtsHome .army b{font-size:14px;letter-spacing:.1em}
+  #rtsHome #rtsDiff button{letter-spacing:.06em;font-size:12px}
+  #rtsHome #rtsGo{font-size:17px;letter-spacing:.2em;text-indent:.2em}
+  #rtsHome .go.resume{padding-left:54px}
+  #rtsHome .go.resume::before{left:15px}
+}
+/* ---- a phone held sideways: about 390px of height. The brand and the modes on the left, the battle
+   card on the right, so START is on the screen without scrolling ---- */
+@media (max-height:520px) and (min-width:600px){
+  #rtsHome .home{display:grid;grid-template-columns:minmax(0,.92fr) minmax(0,1.08fr);
+    grid-template-areas:"brand battle" "modes battle" "foot foot" "keys keys" "err err";
+    align-items:start;align-content:start;gap:12px 14px;width:min(1060px,100%);margin:0 auto;padding-top:max(12px,env(safe-area-inset-top))}
+  #rtsTitleMenu{display:contents}
+  #rtsHome .brand{grid-area:brand;text-align:left;padding:4px 2px 0}
+  #rtsHome .eyebrow{justify-content:flex-start;font-size:10px;margin-bottom:4px}
+  #rtsHome .eyebrow::before{display:none}
+  #rtsHome h1{font-size:clamp(24px,3.7vw,36px);letter-spacing:.1em;padding-left:0}
+  #rtsHome .sub{display:none}
+  #rtsHome .keys{grid-area:keys;width:100%}
+  #rtsErr{grid-area:err}
+  #rtsHome .panel{padding:12px;gap:9px}
+  #rtsHome .army button{min-height:62px}
+  #rtsHome #rtsGo{min-height:54px}
+  #rtsHome .go.resume{min-height:52px}
+}
+@media (hover:none) and (pointer:coarse){
+  /* a finger, not a mouse */
+  #rtsCampList button,#rtsCampList select.lvl{min-height:44px}
+  /* ...and the build stamp lets a tap through: it takes taps only so its text can be selected
+     with a mouse, and on a phone it sat over the row at the screen's foot (e2e/phoneui) */
+  #rtsBuild{pointer-events:none}
+}
+@media (prefers-reduced-motion:reduce){ #rtsHome *{transition:none !important} }
 </style>
 </head>
 <body>
 
 <div id="rtsHome">
-  <p class="eyebrow">A war for the coast</p>
-  <h1>BREACHWATER</h1>
-  <p class="sub">Real-Time Strategy</p>
+  <!-- The coast at dusk behind it all, drawn while the title is shown: title-bg.js -->
+  <canvas id="rtsHomeBg" aria-hidden="true"></canvas>
+  <div class="home">
+  <header class="brand">
+    <p class="eyebrow">A war for the coast</p>
+    <h1>BREACHWATER</h1>
+    <p class="sub">Real-Time Strategy</p>
+  </header>
   <div id="rtsTitleMenu">
-  <div class="diff" id="rtsDiff"></div>
-  <p class="diffnote" id="rtsDiffNote"></p>
-  <!-- the sky and the seats' colours share a row: a row of its own put START BATTLE under the fold on a small phone (e2e/title) -->
-  <div class="diff" id="rtsLook"><span id="rtsSky"></span><span id="rtsCvd"></span></div>
-  <div class="diff" id="rtsArmySide" hidden></div>
-  <p class="diffnote" id="rtsVoxNote" hidden></p>
-  <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE<small id="rtsRecordNote"></small></button>
-  <!-- The map that button will make, and another if not that one: preview.js -->
-  <div id="rtsPrev"><canvas id="rtsPrevCv" width="128" height="128" aria-label="The next battle's map"></canvas>
-    <div class="side"><span id="rtsPrevSeed">laying the map…</span><button type="button" id="rtsPrevRoll" onclick="rtsMapReroll()">↻ ANOTHER MAP</button></div></div>
-  <!-- Shown only while the device is offline and the saved copy is what is playing: offline.js -->
-  <p class="diffnote" id="rtsOffline" hidden></p>
-  <!-- Map size, water and credits for START BATTLE: skirmish.js -->
-  <button type="button" class="go resume" id="rtsSkirmishBtn" onclick="rtsSkirmishToggle()">SKIRMISH SETUP<small id="rtsSkirmishNote"></small></button>
-  <div id="rtsSkirmish" hidden></div>
-  <!-- The battle the game kept by itself, when it is newer than the player's own: autosave.js -->
-  <button type="button" class="go resume" id="rtsContinue" onclick="rtsContinue()" hidden>CONTINUE</button>
-  <button type="button" class="go resume" id="rtsResume" onclick="rtsLoadGame()" hidden>RESUME BATTLE</button>
-  <!-- The other filled slots, under the newest: ui/slots.js -->
-  <div id="rtsSaves" hidden></div>
-  <!-- One map a day, the same for everyone: daily.js -->
-  <button type="button" class="go resume" id="rtsDaily" onclick="rtsDailyStart(this)">DAILY BATTLE<small id="rtsDailyNote"></small></button>
-  <!-- No enemy base, only waves, each bigger than the last: survival.js -->
-  <button type="button" class="go resume" id="rtsSurvival" onclick="rtsSurvivalStart(this)">SURVIVAL<small id="rtsSurvivalNote"></small></button>
-  <!-- The last battle, played again from its recording: replay.js -->
-  <button type="button" class="go resume" id="rtsReplay" onclick="rtsReplaysToggle()">REPLAYS<small id="rtsReplayNote"></small></button>
-  <div id="rtsReplays" hidden></div>
-  <!-- Nine authored missions: campaign.js -->
-  <button type="button" class="go resume" id="rtsCampBtn" onclick="rtsCampToggle()">CAMPAIGN<small>nine missions on the coast</small></button>
-  <div id="rtsCampList" hidden></div>
-  <!-- Why a resume did not happen, and why one is not on offer. This screen has no message
-       line, so without somewhere to put the reason the button simply did nothing. -->
-  <p class="diffnote" id="rtsResumeNote" hidden></p>
-  <p class="diffnote" id="rtsAutoNote" hidden></p>
-  <!-- Shown only when the browser says the app can be installed; see rtsInstallInit. -->
-  <!-- Always present unless the app IS the installed app; see rtsInstallInit for why. -->
-  <button type="button" class="go resume" id="rtsInstall" onclick="rtsInstall()">INSTALL<small>run it in its own window, off the desktop</small></button>
-  <p class="diffnote" id="rtsInstallNote" hidden></p>
+  <!-- THE BATTLE: whose army, how hard, START - then the map it makes and how it is set up -->
+  <section class="panel battle" aria-labelledby="rtsBattleH">
+    <h2 class="panel-h" id="rtsBattleH">New battle</h2>
+    <div class="army" id="rtsArmySide" hidden></div>
+    <p class="diffnote" id="rtsVoxNote" hidden></p>
+    <div class="diff" id="rtsDiff"></div>
+    <p class="diffnote" id="rtsDiffNote"></p>
+    <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE<small id="rtsRecordNote"></small></button>
+    <!-- The map that button will make, and another if not that one: preview.js -->
+    <div id="rtsPrev"><canvas id="rtsPrevCv" width="128" height="128" aria-label="The next battle's map"></canvas>
+      <div class="side"><span id="rtsPrevSeed">laying the map…</span><button type="button" id="rtsPrevRoll" onclick="rtsMapReroll()">↻ ANOTHER MAP</button></div></div>
+    <!-- Map size, water and credits for START BATTLE: skirmish.js -->
+    <button type="button" class="go resume set" id="rtsSkirmishBtn" onclick="rtsSkirmishToggle()">SKIRMISH SETUP<small id="rtsSkirmishNote"></small></button>
+    <div id="rtsSkirmish" hidden></div>
+    <!-- Shown only while the device is offline and the saved copy is what is playing: offline.js -->
+    <p class="diffnote" id="rtsOffline" hidden></p>
+  </section>
+  <!-- EVERY OTHER WAY TO PLAY, each with what it holds now -->
+  <nav class="panel modes" aria-label="More ways to play">
+    <!-- The battle the game kept by itself, when it is newer than the player's own: autosave.js -->
+    <button type="button" class="go resume mode keep" id="rtsContinue" onclick="rtsContinue()" hidden>CONTINUE</button>
+    <button type="button" class="go resume mode keep" id="rtsResume" onclick="rtsLoadGame()" hidden>RESUME BATTLE</button>
+    <!-- The other filled slots, under the newest: ui/slots.js -->
+    <div id="rtsSaves" hidden></div>
+    <!-- Why a resume did not happen, and why one is not on offer. This screen has no message
+         line, so without somewhere to put the reason the button simply did nothing. -->
+    <p class="diffnote notice" id="rtsResumeNote" hidden></p>
+    <p class="diffnote notice" id="rtsAutoNote" hidden></p>
+    <!-- Nine authored missions: campaign.js -->
+    <button type="button" class="go resume mode" id="rtsCampBtn" onclick="rtsCampToggle()">CAMPAIGN<small>nine missions on the coast</small></button>
+    <div id="rtsCampList" hidden></div>
+    <!-- One map a day, the same for everyone: daily.js -->
+    <button type="button" class="go resume mode" id="rtsDaily" onclick="rtsDailyStart(this)">DAILY BATTLE<small id="rtsDailyNote"></small></button>
+    <!-- No enemy base, only waves, each bigger than the last: survival.js -->
+    <button type="button" class="go resume mode" id="rtsSurvival" onclick="rtsSurvivalStart(this)">SURVIVAL<small id="rtsSurvivalNote"></small></button>
+    <!-- The last battle, played again from its recording: replay.js -->
+    <button type="button" class="go resume mode" id="rtsReplay" onclick="rtsReplaysToggle()">REPLAYS<small id="rtsReplayNote"></small></button>
+    <div id="rtsReplays" hidden></div>
+  </nav>
+  <!-- The look of every battle, and the app in a window of its own -->
+  <div class="foot">
+    <!-- the sky and the seats' colours share a row (e2e/title) -->
+    <div class="diff look" id="rtsLook"><span id="rtsSky"></span><span id="rtsCvd"></span></div>
+    <!-- Always present unless the app IS the installed app; see rtsInstallInit for why. -->
+    <button type="button" class="go resume mode inst" id="rtsInstall" onclick="rtsInstall()">INSTALL<small>run it in its own window, off the desktop</small></button>
+    <p class="diffnote" id="rtsInstallNote" hidden></p>
+  </div>
   </div>
   <!-- <details>, not a hand-rolled toggle: it collapses with no script, it is keyboard-operable
        and screen-reader-labelled for free, and Ctrl+F still finds the text inside a closed one in
@@ -862,8 +976,9 @@ html,body{margin:0;padding:0;height:100%;background:#0d1117;overflow:hidden}
   </dl>
   </details>
   <div id="rtsErr"></div>
+  </div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">ab3f471 · 2026-11-08</div>
+  <div id="rtsBuild" title="build">7da8286 · 2026-11-08</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -40810,6 +40925,260 @@ if (typeof window !== 'undefined' && window.addEventListener) {
   window.addEventListener('offline', rtsOfflineNote);
 }
 </script>
+<script>/* title-bg.js - the coast at dusk behind the title screen.
+
+   The title was a dark gradient with a column of buttons on it: nothing on the screen said what
+   the game is. Behind it now is the war for the coast - a dusk sky over the sea, a headland with a
+   lighthouse whose beam sweeps the water, a fort on the far point, a warship crossing the horizon,
+   and now and then the flash of a gun far down the shore.
+
+   CHEAP, AND ONLY WHILE IT IS SEEN. Everything that does not move (the sky, the sun, the land and
+   the fort, the vignette) is painted once into offscreen layers when the size changes; a frame
+   draws those, and only the clouds, the glints on the water, the beam, the ship and the flashes are
+   worked out per frame - at 30 frames a second, at no more than 1.5 device pixels a pixel. The loop
+   stops the moment the title is hidden (a battle opened: #rtsHome.gone) or the tab is, and starts
+   again when the title comes back. With reduced motion asked for it draws one frame and stops. */
+
+var RTS_HOME_BG = { fps: 30, dpr: 1.5, horizon: 0.58 };
+var _rtsHomeBg = null;
+
+/* a small seeded random, so the coast is the same coast every visit */
+function _rtsHomeBgRnd(seed) {
+  var s = seed >>> 0;
+  return function () { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
+}
+function _rtsHomeBgLayer(w, h) {
+  var c = document.createElement('canvas'); c.width = Math.max(1, w); c.height = Math.max(1, h);
+  return c;
+}
+/* the land's edge against the sky: a ragged line from x0 to x1, its height at each step */
+function _rtsHomeBgRidge(ctx, rnd, x0, x1, base, lift, step, rough) {
+  ctx.beginPath(); ctx.moveTo(x0, base + 2);
+  var y = base - lift * 0.5;
+  for (var x = x0; x <= x1 + step; x += step) {
+    var u = (x - x0) / Math.max(1, x1 - x0);
+    var want = base - lift * Math.sin(Math.min(1, Math.max(0, u)) * Math.PI) * (0.75 + 0.25 * Math.sin(u * 7.1));
+    y += (want - y) * 0.35 + (rnd() - 0.5) * rough;
+    ctx.lineTo(Math.min(x, x1), y);
+  }
+  ctx.lineTo(x1, base + 2); ctx.closePath(); ctx.fill();
+}
+
+/* a headland's near shore, from where its ridge meets the sea (x0, y0) down to the foot of the
+   screen at x1, ragged; side -1 fills toward the left edge, 1 toward the right */
+function _rtsHomeBgShore(ctx, rnd, x0, y0, x1, y1, side) {
+  var edge = side < 0 ? -4 : ctx.canvas.width + 4, n = 24;
+  ctx.beginPath(); ctx.moveTo(edge, y0 - 2); ctx.lineTo(x0, y0 - 2);
+  for (var i = 1; i <= n; i++) {
+    var u = i / n, e = u * u;
+    ctx.lineTo(x0 + (x1 - x0) * e + (rnd() - 0.5) * (y1 - y0) * 0.02, y0 + (y1 - y0) * u);
+  }
+  ctx.lineTo(edge, y1 + 4); ctx.closePath(); ctx.fill();
+}
+
+/* The still layers, for a w x h canvas (device pixels). */
+function _rtsHomeBgBuild(B) {
+  var w = B.w, h = B.h, hz = Math.round(h * RTS_HOME_BG.horizon), rnd = _rtsHomeBgRnd(1934);
+  var sky = _rtsHomeBgLayer(w, h), c = sky.getContext('2d');
+  /* the sky, deep blue overhead to the warm band at the sea's edge */
+  var g = c.createLinearGradient(0, 0, 0, hz);
+  g.addColorStop(0, '#060a13'); g.addColorStop(0.42, '#0f1d31'); g.addColorStop(0.72, '#2a2c46');
+  g.addColorStop(0.9, '#8a4a3a'); g.addColorStop(1, '#e09656');
+  c.fillStyle = g; c.fillRect(0, 0, w, hz + 1);
+  /* stars, only where the sky is dark */
+  for (var i = 0; i < 90; i++) {
+    var sx = rnd() * w, sy = rnd() * hz * 0.5, a = 0.15 + rnd() * 0.5;
+    c.fillStyle = 'rgba(220,232,255,' + a.toFixed(2) + ')';
+    c.fillRect(sx, sy, rnd() < 0.15 ? 2 : 1, 1);
+  }
+  /* the sun, low, a little right of centre, and its glow along the horizon */
+  B.sunX = w * 0.62; B.sunY = hz - h * 0.018; B.hz = hz;
+  var glow = c.createRadialGradient(B.sunX, B.sunY, 0, B.sunX, B.sunY, h * 0.55);
+  glow.addColorStop(0, 'rgba(255,196,120,0.55)'); glow.addColorStop(0.18, 'rgba(240,140,80,0.22)');
+  glow.addColorStop(1, 'rgba(240,140,80,0)');
+  c.fillStyle = glow; c.fillRect(0, 0, w, hz + 1);
+  c.fillStyle = '#ffd59a'; c.beginPath(); c.arc(B.sunX, B.sunY, Math.max(6, h * 0.028), Math.PI, 0); c.fill();
+  /* the far shore along the horizon, blue with distance */
+  c.fillStyle = '#26283c';
+  _rtsHomeBgRidge(c, rnd, w * 0.22, w * 0.56, hz, h * 0.035, Math.max(4, w / 160), h * 0.004);
+  c.fillStyle = '#1f2235';
+  _rtsHomeBgRidge(c, rnd, w * 0.7, w * 0.92, hz, h * 0.025, Math.max(4, w / 160), h * 0.003);
+  /* the sea: lit near the horizon, dark at the foot of the screen */
+  var sg = c.createLinearGradient(0, hz, 0, h);
+  sg.addColorStop(0, '#5a4a52'); sg.addColorStop(0.08, '#253246'); sg.addColorStop(0.5, '#111b2a'); sg.addColorStop(1, '#070b12');
+  c.fillStyle = sg; c.fillRect(0, hz, w, h - hz);
+  /* the sun's road on the water: a warm column under it, widening and fading as it comes near */
+  for (var ry = hz; ry < h; ry += 2) {
+    var f = (ry - hz) / (h - hz), half = w * (0.012 + f * 0.09), ra = 0.32 * Math.pow(1 - f, 1.6);
+    var rg = c.createLinearGradient(B.sunX - half, 0, B.sunX + half, 0);
+    rg.addColorStop(0, 'rgba(255,170,100,0)'); rg.addColorStop(0.5, 'rgba(255,170,100,' + ra.toFixed(3) + ')'); rg.addColorStop(1, 'rgba(255,170,100,0)');
+    c.fillStyle = rg; c.fillRect(B.sunX - half, ry, half * 2, 2);
+  }
+  B.sky = sky;
+
+  /* THE LAND in front: a headland on the left with its lighthouse, a point on the right with a fort */
+  var land = _rtsHomeBgLayer(w, h), l = land.getContext('2d');
+  l.fillStyle = '#0a0f18';
+  _rtsHomeBgRidge(l, rnd, -w * 0.05, w * 0.3, hz + h * 0.02, h * 0.2, Math.max(4, w / 110), h * 0.012);
+  /* its shore runs away from us toward the foot of the screen, so the sea widens as it comes near */
+  _rtsHomeBgShore(l, rnd, w * 0.3, hz + h * 0.02, w * 0.06, h, -1);
+  /* the lighthouse at the headland's tip */
+  var lx = w * 0.235, lb = hz + h * 0.012, lh = Math.max(26, h * 0.12), lw = Math.max(5, h * 0.016);
+  l.beginPath(); l.moveTo(lx - lw, lb); l.lineTo(lx - lw * 0.62, lb - lh); l.lineTo(lx + lw * 0.62, lb - lh); l.lineTo(lx + lw, lb); l.fill();
+  l.fillRect(lx - lw * 0.9, lb - lh - lw * 1.2, lw * 1.8, lw * 1.3);
+  B.lampX = lx; B.lampY = lb - lh - lw * 0.55; B.lampR = lw * 0.7;
+  /* the point on the right, and the fort on it: a blockhouse, a tower and a mast */
+  l.fillStyle = '#0b1019';
+  _rtsHomeBgRidge(l, rnd, w * 0.74, w * 1.05, hz + h * 0.015, h * 0.11, Math.max(4, w / 110), h * 0.008);
+  _rtsHomeBgShore(l, rnd, w * 0.74, hz + h * 0.015, w * 0.93, h, 1);
+  var fx = w * 0.84, fb = hz - h * 0.05, u = Math.max(4, h * 0.012);
+  l.fillRect(fx - u * 6, fb - u * 3, u * 12, u * 4);
+  l.fillRect(fx - u * 2, fb - u * 8, u * 3.2, u * 6);
+  l.fillRect(fx + u * 3.5, fb - u * 5, u * 2.2, u * 3);
+  l.fillRect(fx + u * 7, fb - u * 12, u * 0.5, u * 10);
+  l.fillRect(fx + u * 5.6, fb - u * 11.5, u * 3.3, u * 0.5);
+  B.fortX = fx; B.fortY = fb - u * 8;
+  /* the shore's lights along the fort, small and warm */
+  l.fillStyle = 'rgba(255,190,110,0.9)';
+  for (var k = 0; k < 6; k++) l.fillRect(fx - u * 5 + k * u * 2, fb - u * 1.6, Math.max(1, u * 0.35), Math.max(1, u * 0.35));
+  B.land = land;
+
+  /* the vignette over everything, so the menu reads against it */
+  var vig = _rtsHomeBgLayer(w, h), v = vig.getContext('2d');
+  var vg = v.createRadialGradient(w / 2, h * 0.45, Math.min(w, h) * 0.2, w / 2, h * 0.5, Math.max(w, h) * 0.75);
+  vg.addColorStop(0, 'rgba(4,7,12,0)'); vg.addColorStop(1, 'rgba(4,7,12,0.72)');
+  v.fillStyle = vg; v.fillRect(0, 0, w, h);
+  B.vig = vig;
+
+  /* the clouds: soft bands, twice the screen wide, drifting */
+  var cl = _rtsHomeBgLayer(w * 2, Math.round(h * 0.5)), q = cl.getContext('2d');
+  for (var n = 0; n < 26; n++) {
+    var cx = rnd() * w * 2, cy = h * (0.08 + rnd() * 0.36), rx = w * (0.08 + rnd() * 0.16), ry = h * (0.012 + rnd() * 0.02);
+    var cg = q.createRadialGradient(cx, cy, 0, cx, cy, rx);
+    var warm = cy > h * 0.3;
+    cg.addColorStop(0, warm ? 'rgba(170,96,92,0.32)' : 'rgba(70,84,118,0.30)');
+    cg.addColorStop(1, 'rgba(70,84,118,0)');
+    q.save(); q.translate(cx, cy); q.scale(1, ry / rx); q.translate(-cx, -cy);
+    q.fillStyle = cg; q.beginPath(); q.arc(cx, cy, rx, 0, Math.PI * 2); q.fill(); q.restore();
+  }
+  B.clouds = cl;
+
+  /* the glints on the water: fixed places, each with its own beat */
+  B.glints = [];
+  for (var m = 0; m < 170; m++) {
+    var gy = hz + Math.pow(rnd(), 1.6) * (h - hz);
+    B.glints.push({ x: rnd() * w, y: gy, len: (2 + rnd() * 10) * (0.4 + (gy - hz) / (h - hz)) * (w / 900),
+                    ph: rnd() * 6.283, sp: 0.6 + rnd() * 1.6 });
+  }
+  B.shots = [];
+}
+
+/* One frame at time t (seconds). */
+function _rtsHomeBgFrame(B, t) {
+  var c = B.ctx, w = B.w, h = B.h, hz = B.hz;
+  c.globalCompositeOperation = 'source-over';
+  c.drawImage(B.sky, 0, 0);
+  /* clouds drift right to left, a screen every few minutes */
+  var off = (t * w * 0.006) % w;
+  c.globalAlpha = 0.9; c.drawImage(B.clouds, -off, 0); c.drawImage(B.clouds, w * 2 - off, 0); c.globalAlpha = 1;
+  /* the warship on the horizon, crossing in about two minutes */
+  var sx = ((t * w / 140) % (w * 1.3)) - w * 0.15, su = Math.max(3, h * 0.008);
+  c.fillStyle = '#161a28';
+  c.beginPath(); c.moveTo(sx - su * 7, hz); c.lineTo(sx - su * 6, hz - su * 1.2); c.lineTo(sx + su * 6.5, hz - su * 1.2); c.lineTo(sx + su * 7.5, hz); c.fill();
+  c.fillRect(sx - su * 2, hz - su * 2.6, su * 4, su * 1.5); c.fillRect(sx - su * 0.4, hz - su * 4, su * 0.8, su * 1.6);
+  /* the glints: warm in the sun's road, cool elsewhere */
+  c.globalCompositeOperation = 'lighter';
+  for (var i = 0; i < B.glints.length; i++) {
+    var g = B.glints[i], a = Math.sin(t * g.sp + g.ph);
+    if (a < 0.35) continue;
+    var road = Math.max(0, 1 - Math.abs(g.x - B.sunX) / (w * 0.05 + (g.y - hz) * 0.5));
+    var k = (a - 0.35) / 0.65 * (0.25 + road * 0.75);
+    c.fillStyle = road > 0.1 ? 'rgba(255,190,120,' + (k * 0.9).toFixed(3) + ')' : 'rgba(150,180,220,' + (k * 0.35).toFixed(3) + ')';
+    c.fillRect(g.x, g.y, g.len, Math.max(1, h / 700));
+  }
+  /* now and then a gun far down the shore: a flash, and its echo on the water */
+  if (!B.next || t > B.next) {
+    var rnd = Math.random;
+    B.shots.push({ x: w * (0.26 + rnd() * 0.28), t: t });
+    B.next = t + 2.5 + rnd() * 5;
+  }
+  B.shots = B.shots.filter(function (s) { return t - s.t < 0.9; });
+  B.shots.forEach(function (s) {
+    var age = (t - s.t) / 0.9, r = h * (0.02 + age * 0.03), a = (1 - age) * (1 - age);
+    var fg = c.createRadialGradient(s.x, hz - h * 0.01, 0, s.x, hz - h * 0.01, r);
+    fg.addColorStop(0, 'rgba(255,214,150,' + (0.85 * a).toFixed(3) + ')'); fg.addColorStop(1, 'rgba(255,140,60,0)');
+    c.fillStyle = fg; c.fillRect(s.x - r, hz - h * 0.01 - r, r * 2, r * 2);
+  });
+  c.globalCompositeOperation = 'source-over';
+  c.drawImage(B.land, 0, 0);
+  /* the lighthouse: its beam turning - long across the water as it swings toward the sea, gone
+     behind the headland on the far side of its turn - and its lamp flaring as it faces us */
+  c.globalCompositeOperation = 'lighter';
+  var ph = t * 0.55, reach = Math.cos(ph), face = Math.max(0, Math.sin(ph));
+  if (reach > 0.02) {
+    var len = w * 0.55 * reach, half = h * 0.012 + len * 0.035, a0 = 0.22 * Math.sqrt(reach);
+    var bg = c.createLinearGradient(B.lampX, 0, B.lampX + len, 0);
+    bg.addColorStop(0, 'rgba(255,236,190,' + a0.toFixed(3) + ')'); bg.addColorStop(1, 'rgba(255,236,190,0)');
+    c.fillStyle = bg;
+    c.beginPath(); c.moveTo(B.lampX, B.lampY - B.lampR * 0.5);
+    c.lineTo(B.lampX + len, B.lampY - half + h * 0.004); c.lineTo(B.lampX + len, B.lampY + half + h * 0.012);
+    c.lineTo(B.lampX, B.lampY + B.lampR * 0.5); c.closePath(); c.fill();
+  }
+  var lr = B.lampR * (3 + face * face * 5);
+  var lg = c.createRadialGradient(B.lampX, B.lampY, 0, B.lampX, B.lampY, lr);
+  lg.addColorStop(0, 'rgba(255,240,200,0.95)'); lg.addColorStop(1, 'rgba(255,220,150,0)');
+  c.fillStyle = lg; c.fillRect(B.lampX - lr, B.lampY - lr, lr * 2, lr * 2);
+  /* the fort's beacon, blinking */
+  if (Math.sin(t * 2.2) > 0.6) {
+    c.fillStyle = 'rgba(255,90,70,0.95)'; c.fillRect(B.fortX + h * 0.084, B.fortY - h * 0.05, Math.max(2, h * 0.005), Math.max(2, h * 0.005));
+  }
+  c.globalCompositeOperation = 'source-over';
+  c.drawImage(B.vig, 0, 0);
+}
+
+function _rtsHomeBgSize(B) {
+  var cv = B.cv, d = Math.min(window.devicePixelRatio || 1, RTS_HOME_BG.dpr);
+  var w = Math.max(1, Math.round(cv.clientWidth * d)), h = Math.max(1, Math.round(cv.clientHeight * d));
+  if (w === B.w && h === B.h) return;
+  cv.width = w; cv.height = h; B.w = w; B.h = h;
+  _rtsHomeBgBuild(B);
+}
+function _rtsHomeBgShown() {
+  var home = document.getElementById('rtsHome');
+  return !!home && !home.classList.contains('gone') && !document.hidden;
+}
+function _rtsHomeBgTick(now) {
+  var B = _rtsHomeBg;
+  B.raf = 0;
+  if (!_rtsHomeBgShown()) return;                  /* a battle, or the tab hidden: stop */
+  if (!B.t0) B.t0 = now;
+  if (now - (B.last || 0) >= 1000 / RTS_HOME_BG.fps - 1) {
+    B.last = now; B.frames = (B.frames || 0) + 1;
+    _rtsHomeBgSize(B);
+    _rtsHomeBgFrame(B, (now - B.t0) / 1000);
+  }
+  B.raf = requestAnimationFrame(_rtsHomeBgTick);
+}
+/* Start (or keep) the backdrop going: on boot, and whenever the title comes back. */
+function rtsHomeBgStart() {
+  var cv = document.getElementById('rtsHomeBg');
+  if (!cv || !cv.getContext) return;
+  if (!_rtsHomeBg) _rtsHomeBg = { cv: cv, ctx: cv.getContext('2d'), w: 0, h: 0, raf: 0, frames: 0 };
+  var B = _rtsHomeBg;
+  if (!B.ctx) return;
+  var still = false;
+  try { still = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+  if (still) { _rtsHomeBgSize(B); _rtsHomeBgFrame(B, 12); B.frames++; return; }
+  if (!B.raf && _rtsHomeBgShown()) B.raf = requestAnimationFrame(_rtsHomeBgTick);
+}
+(function () {
+  rtsHomeBgStart();
+  var home = document.getElementById('rtsHome');
+  /* the title coming back (rtsHome removes .gone) restarts it; so does the tab coming back */
+  if (home && window.MutationObserver) new MutationObserver(rtsHomeBgStart).observe(home, { attributes: true, attributeFilter: ['class'] });
+  document.addEventListener('visibilitychange', rtsHomeBgStart);
+})();
+</script>
 <script>/* title.js - the standalone shell around the game: the title screen, the difficulty picker,
    the army picker, RESUME BATTLE, the install prompt, and the START button.
 
@@ -40883,8 +41252,11 @@ function rtsBuildArmyPick(){
   if (!wrap || typeof rtsArmySide !== 'function') return;
   wrap.hidden = note.hidden = false;
   if (!wrap.firstChild) {
-    wrap.innerHTML = '<button type="button" data-v="allied">COMPACT</button>' +
-                     '<button type="button" data-v="soviet">DOMINION</button>';
+    /* a card each: its emblem (title.css draws it), its name and its manner of war */
+    wrap.innerHTML = '<button type="button" data-v="allied"><span class="emb" aria-hidden="true"></span>' +
+                     '<b>COMPACT</b><i>guns, armour and air</i></button>' +
+                     '<button type="button" data-v="soviet"><span class="emb" aria-hidden="true"></span>' +
+                     '<b>DOMINION</b><i>fire, arcs and dogs</i></button>';
     [].forEach.call(wrap.getElementsByTagName('button'), function (b) {
       b.onclick = function () { rtsSetArmySide(b.getAttribute('data-v')); rtsBuildArmyPick(); };
     });
@@ -40892,6 +41264,7 @@ function rtsBuildArmyPick(){
   var cur = rtsArmySide();
   [].forEach.call(wrap.getElementsByTagName('button'), function (b) {
     b.className = (b.getAttribute('data-v') === cur) ? 'on' : '';
+    b.setAttribute('aria-pressed', b.getAttribute('data-v') === cur ? 'true' : 'false');
   });
   note.textContent = (cur === 'soviet'
     ? 'The Basalt Dominion: Flame Towers, Arc Towers, war dogs, Bulwark tanks.'
