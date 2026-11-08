@@ -20,7 +20,8 @@
    viewports so the next tuning of a margin cannot quietly reintroduce it at one of them.
 
    Geometry only. What the buttons DO is covered elsewhere; what is asserted here is that a
-   player can see and hit them. */
+   player can see and hit them - and that the coast drawn behind them (title-bg.js) runs only
+   while the title is up. */
 
 var { chromium } = require('playwright');
 var { Suite } = require('../lib/assert.js');
@@ -91,11 +92,15 @@ var PARTS = ['#rtsDiff', '#rtsDiffNote', '#rtsSky', '#rtsCvd', '#rtsArmySide', '
           return e.getClientRects().length && e.getBoundingClientRect().height < 40;
         }).map(function (e) { return e.id || e.className; });
 
+      /* What is hidden is not drawn: a row's own display rule once beat the attribute, and CONTINUE
+         and RESUME BATTLE showed with nothing kept */
+      var shown = [].slice.call(document.querySelectorAll('#rtsHome [hidden]'))
+        .filter(function (e) { return e.getClientRects().length; }).map(function (e) { return e.id || e.className; });
       var go = box('#rtsGo'), inst = box('#rtsInstall');
       var stamp = document.getElementById('rtsBuild');
       var sc = stamp ? getComputedStyle(stamp) : null;
       return {
-        over: over, rows: Object.keys(rows).length, buttons: dbs.length, wide: wide, small: small,
+        over: over, shown: shown, rows: Object.keys(rows).length, buttons: dbs.length, wide: wide, small: small,
         goAboveInstall: !!(go && inst) && go.bot <= inst.top + 0.5,
         goOnScreen: !!go && go.bot <= vh + 0.5 && go.top >= -0.5,
         docH: document.documentElement.scrollWidth,
@@ -107,6 +112,7 @@ var PARTS = ['#rtsDiff', '#rtsDiffNote', '#rtsSky', '#rtsCvd', '#rtsArmySide', '
     await g.page.screenshot({ path: '/tmp/spl/title-' + sz.w + 'x' + sz.h + '.png' });
     S.ok(sz.name + ' ' + sz.w + 'x' + sz.h + ': nothing in the menu overlaps anything else',
          !r.over.length, r.over.join('; ') || 'clear');
+    S.ok('...nothing hidden is drawn', !r.shown.length, r.shown.join(', ') || 'none');
     S.ok('...the three difficulty buttons are on one row', r.rows === 1 && r.buttons === 3,
          r.buttons + ' buttons on ' + r.rows + ' row(s)');
     S.ok('...START BATTLE comes before INSTALL, not after it', r.goAboveInstall, '');
@@ -126,6 +132,34 @@ var PARTS = ['#rtsDiff', '#rtsDiffNote', '#rtsSky', '#rtsCvd', '#rtsArmySide', '
        results.every(function (r) {
          return r.stampBg && r.stampBg !== 'transparent' && !/rgba\(0, 0, 0, 0\)/.test(r.stampBg);
        }), results[0].stampBg);
+
+  /* THE COAST BEHIND IT (title-bg.js): drawn while the title is up, and not one frame while a
+     battle is - the title is hidden then, and a canvas animating under the 3D view would be paid
+     for in every frame of the battle. Hiding #rtsHome is what opening a battle does to it. */
+  var gc = await openPage(browser, { width: 1280, height: 800 });
+  var coast = await gc.page.evaluate(async function () {
+    function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+    var B = window._rtsHomeBg, cv = document.getElementById('rtsHomeBg'), o = {};
+    if (!B || !cv) return { missing: true };
+    await wait(1200);
+    var f0 = B.frames; await wait(1200); o.up = B.frames - f0;
+    var x = document.createElement('canvas'); x.width = 64; x.height = 40;
+    var c = x.getContext('2d'); c.drawImage(cv, 0, 0, 64, 40);
+    var d = c.getImageData(0, 0, 64, 40).data, lit = 0, warm = 0;
+    for (var i = 0; i < d.length; i += 4) { if (d[i] + d[i + 1] + d[i + 2] > 90) lit++; if (d[i] > d[i + 2] + 40) warm++; }
+    o.lit = lit; o.warm = warm; o.px = d.length / 4;
+    document.getElementById('rtsHome').classList.add('gone');
+    await wait(300); var f1 = B.frames; await wait(1500); o.hidden = B.frames - f1;
+    document.getElementById('rtsHome').classList.remove('gone');
+    await wait(300); var f2 = B.frames; await wait(1200); o.back = B.frames - f2;
+    return o;
+  });
+  S.ok('THE COAST: the backdrop is drawn while the title is up - a dusk, not a blank', !coast.missing && coast.up >= 5 && coast.lit > 40 && coast.warm > 20,
+       coast.missing ? 'no backdrop' : coast.up + ' frames in 1.2 s; ' + coast.lit + ' lit and ' + coast.warm + ' warm of ' + coast.px + ' samples');
+  S.ok('...and not one frame while the title is hidden, as it is in a battle', coast.hidden === 0, coast.hidden + ' frames in 1.5 s');
+  S.ok('...and drawn again when the title comes back', coast.back >= 5, coast.back + ' frames in 1.2 s');
+  S.ok('...with no page errors', !gc.errors.length, gc.errors.slice(0, 2).join(' | ') || 'clean');
+  await gc.close();
 
   await browser.close();
   require('../lib/report.js')(S);

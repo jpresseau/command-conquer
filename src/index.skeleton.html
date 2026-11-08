@@ -15,48 +15,62 @@
 <body>
 
 <div id="rtsHome">
-  <p class="eyebrow">A war for the coast</p>
-  <h1>BREACHWATER</h1>
-  <p class="sub">Real-Time Strategy</p>
+  <!-- The coast at dusk behind it all, drawn while the title is shown: title-bg.js -->
+  <canvas id="rtsHomeBg" aria-hidden="true"></canvas>
+  <div class="home">
+  <header class="brand">
+    <p class="eyebrow">A war for the coast</p>
+    <h1>BREACHWATER</h1>
+    <p class="sub">Real-Time Strategy</p>
+  </header>
   <div id="rtsTitleMenu">
-  <div class="diff" id="rtsDiff"></div>
-  <p class="diffnote" id="rtsDiffNote"></p>
-  <!-- the sky and the seats' colours share a row: a row of its own put START BATTLE under the fold on a small phone (e2e/title) -->
-  <div class="diff" id="rtsLook"><span id="rtsSky"></span><span id="rtsCvd"></span></div>
-  <div class="diff" id="rtsArmySide" hidden></div>
-  <p class="diffnote" id="rtsVoxNote" hidden></p>
-  <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE<small id="rtsRecordNote"></small></button>
-  <!-- The map that button will make, and another if not that one: preview.js -->
-  <div id="rtsPrev"><canvas id="rtsPrevCv" width="128" height="128" aria-label="The next battle's map"></canvas>
-    <div class="side"><span id="rtsPrevSeed">laying the map…</span><button type="button" id="rtsPrevRoll" onclick="rtsMapReroll()">↻ ANOTHER MAP</button></div></div>
-  <!-- Shown only while the device is offline and the saved copy is what is playing: offline.js -->
-  <p class="diffnote" id="rtsOffline" hidden></p>
-  <!-- Map size, water and credits for START BATTLE: skirmish.js -->
-  <button type="button" class="go resume" id="rtsSkirmishBtn" onclick="rtsSkirmishToggle()">SKIRMISH SETUP<small id="rtsSkirmishNote"></small></button>
-  <div id="rtsSkirmish" hidden></div>
-  <!-- The battle the game kept by itself, when it is newer than the player's own: autosave.js -->
-  <button type="button" class="go resume" id="rtsContinue" onclick="rtsContinue()" hidden>CONTINUE</button>
-  <button type="button" class="go resume" id="rtsResume" onclick="rtsLoadGame()" hidden>RESUME BATTLE</button>
-  <!-- The other filled slots, under the newest: ui/slots.js -->
-  <div id="rtsSaves" hidden></div>
-  <!-- One map a day, the same for everyone: daily.js -->
-  <button type="button" class="go resume" id="rtsDaily" onclick="rtsDailyStart(this)">DAILY BATTLE<small id="rtsDailyNote"></small></button>
-  <!-- No enemy base, only waves, each bigger than the last: survival.js -->
-  <button type="button" class="go resume" id="rtsSurvival" onclick="rtsSurvivalStart(this)">SURVIVAL<small id="rtsSurvivalNote"></small></button>
-  <!-- The last battle, played again from its recording: replay.js -->
-  <button type="button" class="go resume" id="rtsReplay" onclick="rtsReplaysToggle()">REPLAYS<small id="rtsReplayNote"></small></button>
-  <div id="rtsReplays" hidden></div>
-  <!-- Nine authored missions: campaign.js -->
-  <button type="button" class="go resume" id="rtsCampBtn" onclick="rtsCampToggle()">CAMPAIGN<small>nine missions on the coast</small></button>
-  <div id="rtsCampList" hidden></div>
-  <!-- Why a resume did not happen, and why one is not on offer. This screen has no message
-       line, so without somewhere to put the reason the button simply did nothing. -->
-  <p class="diffnote" id="rtsResumeNote" hidden></p>
-  <p class="diffnote" id="rtsAutoNote" hidden></p>
-  <!-- Shown only when the browser says the app can be installed; see rtsInstallInit. -->
-  <!-- Always present unless the app IS the installed app; see rtsInstallInit for why. -->
-  <button type="button" class="go resume" id="rtsInstall" onclick="rtsInstall()">INSTALL<small>run it in its own window, off the desktop</small></button>
-  <p class="diffnote" id="rtsInstallNote" hidden></p>
+  <!-- THE BATTLE: whose army, how hard, START - then the map it makes and how it is set up -->
+  <section class="panel battle" aria-labelledby="rtsBattleH">
+    <h2 class="panel-h" id="rtsBattleH">New battle</h2>
+    <div class="army" id="rtsArmySide" hidden></div>
+    <p class="diffnote" id="rtsVoxNote" hidden></p>
+    <div class="diff" id="rtsDiff"></div>
+    <p class="diffnote" id="rtsDiffNote"></p>
+    <button type="button" class="go" id="rtsGo" onclick="rtsStart(this)">START BATTLE<small id="rtsRecordNote"></small></button>
+    <!-- The map that button will make, and another if not that one: preview.js -->
+    <div id="rtsPrev"><canvas id="rtsPrevCv" width="128" height="128" aria-label="The next battle's map"></canvas>
+      <div class="side"><span id="rtsPrevSeed">laying the map…</span><button type="button" id="rtsPrevRoll" onclick="rtsMapReroll()">↻ ANOTHER MAP</button></div></div>
+    <!-- Map size, water and credits for START BATTLE: skirmish.js -->
+    <button type="button" class="go resume set" id="rtsSkirmishBtn" onclick="rtsSkirmishToggle()">SKIRMISH SETUP<small id="rtsSkirmishNote"></small></button>
+    <div id="rtsSkirmish" hidden></div>
+    <!-- Shown only while the device is offline and the saved copy is what is playing: offline.js -->
+    <p class="diffnote" id="rtsOffline" hidden></p>
+  </section>
+  <!-- EVERY OTHER WAY TO PLAY, each with what it holds now -->
+  <nav class="panel modes" aria-label="More ways to play">
+    <!-- The battle the game kept by itself, when it is newer than the player's own: autosave.js -->
+    <button type="button" class="go resume mode keep" id="rtsContinue" onclick="rtsContinue()" hidden>CONTINUE</button>
+    <button type="button" class="go resume mode keep" id="rtsResume" onclick="rtsLoadGame()" hidden>RESUME BATTLE</button>
+    <!-- The other filled slots, under the newest: ui/slots.js -->
+    <div id="rtsSaves" hidden></div>
+    <!-- Why a resume did not happen, and why one is not on offer. This screen has no message
+         line, so without somewhere to put the reason the button simply did nothing. -->
+    <p class="diffnote notice" id="rtsResumeNote" hidden></p>
+    <p class="diffnote notice" id="rtsAutoNote" hidden></p>
+    <!-- Nine authored missions: campaign.js -->
+    <button type="button" class="go resume mode" id="rtsCampBtn" onclick="rtsCampToggle()">CAMPAIGN<small>nine missions on the coast</small></button>
+    <div id="rtsCampList" hidden></div>
+    <!-- One map a day, the same for everyone: daily.js -->
+    <button type="button" class="go resume mode" id="rtsDaily" onclick="rtsDailyStart(this)">DAILY BATTLE<small id="rtsDailyNote"></small></button>
+    <!-- No enemy base, only waves, each bigger than the last: survival.js -->
+    <button type="button" class="go resume mode" id="rtsSurvival" onclick="rtsSurvivalStart(this)">SURVIVAL<small id="rtsSurvivalNote"></small></button>
+    <!-- The last battle, played again from its recording: replay.js -->
+    <button type="button" class="go resume mode" id="rtsReplay" onclick="rtsReplaysToggle()">REPLAYS<small id="rtsReplayNote"></small></button>
+    <div id="rtsReplays" hidden></div>
+  </nav>
+  <!-- The look of every battle, and the app in a window of its own -->
+  <div class="foot">
+    <!-- the sky and the seats' colours share a row (e2e/title) -->
+    <div class="diff look" id="rtsLook"><span id="rtsSky"></span><span id="rtsCvd"></span></div>
+    <!-- Always present unless the app IS the installed app; see rtsInstallInit for why. -->
+    <button type="button" class="go resume mode inst" id="rtsInstall" onclick="rtsInstall()">INSTALL<small>run it in its own window, off the desktop</small></button>
+    <p class="diffnote" id="rtsInstallNote" hidden></p>
+  </div>
   </div>
   <!-- <details>, not a hand-rolled toggle: it collapses with no script, it is keyboard-operable
        and screen-reader-labelled for free, and Ctrl+F still finds the text inside a closed one in
@@ -102,6 +116,7 @@
   </dl>
   </details>
   <div id="rtsErr"></div>
+  </div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
   <div id="rtsBuild" title="build">@@BUILD@@</div>
 </div>
@@ -351,6 +366,7 @@
 <script>//@@INC:skirmish.js@@</script>
 <script>//@@INC:preview.js@@</script>
 <script>//@@INC:offline.js@@</script>
+<script>//@@INC:title-bg.js@@</script>
 <script>//@@INC:title.js@@</script>
 
 </body>

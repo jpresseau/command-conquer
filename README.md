@@ -302,6 +302,7 @@ so a new file is one `//@@INC:` line and the order is for readability, not corre
 | `src/render/` | The camera, and the overlay canvas over the 3D world. Reads the sim, never writes it. |
 | `src/ui/` | Sidebar, radar, HUD overlay, input, main loop |
 | `src/title.js` | Title screen, difficulty and army pickers, START |
+| `src/title-bg.js` | The coast at dusk behind the title screen, drawn only while it is shown |
 | `src/index.skeleton.html` | The page shell and the include manifest - no JavaScript of its own |
 
 `CLAUDE.md` is the working guide — build, tests, layout and the presentation rules that are

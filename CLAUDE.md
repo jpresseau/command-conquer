@@ -132,7 +132,7 @@ Keep them small: if a file passes ~500 lines it wants splitting along its own ba
 - `src/daily.js` — the DAILY BATTLE: seed, army and difficulty from the UTC date; borrows the
   player's choices for the match and `rtsHome` puts them back; the end card's copyable line. `src/record.js`: the end card's debrief rows, and the skirmish record by difficulty on START BATTLE. `src/survival.js`: SURVIVAL on the title (waves: `core/survival.js`).
 - `src/title.js` — the standalone shell: title screen, difficulty and army pickers, RESUME
-  BATTLE, install prompt, START. Loads last, after everything it calls. `src/preview.js` draws the next map under START BATTLE, ↻ for another.
+  BATTLE, install prompt, START. Loads last, after everything it calls. `src/preview.js` draws the next map under START BATTLE, ↻ for another. `src/title-bg.js`: the coast at dusk behind it, drawn only while `#rtsHome` is shown; `src/title.css`: its layout.
 - `src/index.skeleton.html` — the page shell and the include manifest, no JavaScript of its own;
   `src/style.css`.
 

@@ -71,8 +71,11 @@ function rtsBuildArmyPick(){
   if (!wrap || typeof rtsArmySide !== 'function') return;
   wrap.hidden = note.hidden = false;
   if (!wrap.firstChild) {
-    wrap.innerHTML = '<button type="button" data-v="allied">COMPACT</button>' +
-                     '<button type="button" data-v="soviet">DOMINION</button>';
+    /* a card each: its emblem (title.css draws it), its name and its manner of war */
+    wrap.innerHTML = '<button type="button" data-v="allied"><span class="emb" aria-hidden="true"></span>' +
+                     '<b>COMPACT</b><i>guns, armour and air</i></button>' +
+                     '<button type="button" data-v="soviet"><span class="emb" aria-hidden="true"></span>' +
+                     '<b>DOMINION</b><i>fire, arcs and dogs</i></button>';
     [].forEach.call(wrap.getElementsByTagName('button'), function (b) {
       b.onclick = function () { rtsSetArmySide(b.getAttribute('data-v')); rtsBuildArmyPick(); };
     });
@@ -80,6 +83,7 @@ function rtsBuildArmyPick(){
   var cur = rtsArmySide();
   [].forEach.call(wrap.getElementsByTagName('button'), function (b) {
     b.className = (b.getAttribute('data-v') === cur) ? 'on' : '';
+    b.setAttribute('aria-pressed', b.getAttribute('data-v') === cur ? 'true' : 'false');
   });
   note.textContent = (cur === 'soviet'
     ? 'The Basalt Dominion: Flame Towers, Arc Towers, war dogs, Bulwark tanks.'
