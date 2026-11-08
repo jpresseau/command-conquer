@@ -30,9 +30,12 @@ function _rtsHornetsOf(c) {
   for (var i = 0; i < G.ents.length; i++) { var o = G.ents[i]; if (!o.dead && o.mother === c.id) n++; }
   return n;
 }
-/* The Carrier's shot: a Hornet away at `tgt`, if it has one to spare. */
+/* The Carrier's shot: a Hornet away at `tgt`, if it has one to spare - the opponent's where the
+   flak is not (below). */
 function _rtsLaunch(e, tgt, w) {
   if (!tgt || tgt.dead || _rtsHornetsOf(e) >= RTS_ALOFT.hornets) return false;
+  tgt = _rtsLaunchAim(e, tgt, w);
+  if (!tgt) return false;
   var h = _rtsSpawnUnit(e.side, w.launch, e.x, e.z);
   if (!h) return false;
   h.mother = e.id;
@@ -54,4 +57,61 @@ function _rtsHornetTick(e, dt) {
     e.goal = { x: c.x, z: c.z }; e.path = _rtsPathFor(e, c.x, c.z); e.pi = 0;
   }
   return true;
+}
+
+/* -------------------------------------------------------------------- flak ---- */
+/* WHERE THE FLAK IS NOT (batch 12g). Sent at the player's base, the opponent's Carrier launched
+   its Hornets into the anti-air round it, and every one was shot down on the way in: 29 for 34
+   damage in sixteen battles. A Hornet costs nothing - the next goes up as soon as one is lost -
+   so what was lost was the sortie, and the fault was the aim. _rtsFlakOver counts the guns that
+   can shoot at aircraft, hostile to `side`, whose reach takes in a point (x, z) - by each gun's
+   own reach, and a margin for the aircraft that has to hang there to fire or to drop. A gun
+   still being built covers nothing, nor one dead for want of power. `teams`: a team sent at
+   buildings that flies, or has a Carrier in it - a Falcon's Raid, the Leviathan's Zeppelin, a
+   Strike Group - values a building less for every such gun over it (core/teams.js
+   _rtsTeamTarget), as a raid values a harvester less for every gun guarding it. Not a team that
+   hunts whatever it finds: what it hunts moves in and out of cover, and measured on those - the
+   MiGs and Yaks - the rule cost the Dominion (docs/roster-ra2-12.md). */
+var RTS_FLAK = { margin: RTS_TILE * 2, teams: true };
+/* ...a team member that flies, or launches what does */
+function _rtsFlies(m) {
+  var d = !m.dead && rtsUnitDef(m.def);
+  return !!(d && (d.air || (RTS_WEAPONS[d.weapon] || {}).launch));
+}
+function _rtsFlakReach(g) {
+  var ws = _rtsGuns(g), r = 0;
+  for (var k = 0; k < ws.length; k++) if (ws[k] && ws[k].aa && ws[k].range > r) r = ws[k].range;
+  return r;
+}
+function _rtsFlakOver(side, x, z) {
+  var G = window._rtsG, n = 0, far = 0, k;
+  for (k in RTS_WEAPONS) if (RTS_WEAPONS[k].aa && RTS_WEAPONS[k].range > far) far = RTS_WEAPONS[k].range;
+  var list = _rtsSpNear(x, z, far + RTS_FLAK.margin) || G.ents;
+  for (var i = 0; i < list.length; i++) {
+    var g = list[i];
+    if (g.dead || g.inside || g.building || !_rtsHostile(g.side, side)) continue;
+    var r = _rtsFlakReach(g);
+    if (!r) continue;
+    var sd = g.type === 'struct' && rtsStructDef(g.def);
+    if (sd && sd.needsPower && _rtsPowerFactor(g.side) < 0.999) continue;
+    r += RTS_FLAK.margin;
+    if ((g.x - x) * (g.x - x) + (g.z - z) * (g.z - z) <= r * r) n++;
+  }
+  return n;
+}
+/* The opponent's Carrier sends its Hornets at what it was sent at if no flak covers it, and
+   otherwise at the most worth having in its reach that none covers - a harvester on the ore, a
+   hull, a building on the shore - or holds them. A player's Carrier does as it is told. */
+function _rtsLaunchAim(e, tgt, w) {
+  if (!_rtsSeatAI(e.side) || !_rtsFlakOver(e.side, tgt.x, tgt.z)) return tgt;
+  var G = window._rtsG, best = null, bv = 0, list = _rtsSpNear(e.x, e.z, w.range) || G.ents;
+  for (var i = 0; i < list.length; i++) {
+    var o = list[i];
+    if (o.dead || o.inside || o.hidden || !_rtsHostile(o.side, e.side) || !_rtsGunEngages(w, o)) continue;
+    var d = _rtsRangeTo(e, o);
+    if (d > w.range || _rtsFlakOver(e.side, o.x, o.z)) continue;
+    var v = _rtsEvalObject(e, o, d, w, true);
+    if (v > bv) { bv = v; best = o; }
+  }
+  return best;
 }

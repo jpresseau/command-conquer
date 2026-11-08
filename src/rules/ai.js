@@ -274,7 +274,10 @@ var RTS_AI = {
            /* against aircraft only, as the Flak Track is: core/flakship.js */
            { key:'flakship', at:1600, w:4, vsAir:2 },
            /* batch 12e: the Dominion's siege hull, sailed by Battle Group (rules/teams.js) */
-           { key:'bombard', at:3200, w:2 } ],
+           { key:'bombard', at:3200, w:2 },
+           /* batch 12g: the Compact's Carrier, sailed by Strike Group, its Hornets sent where the
+              flak is not (core/aloft.js) */
+           { key:'carrier', at:3200, w:2 } ],
     infantry:[ { key:'flame', at:1200, w:2 }, { key:'grenadier', at:900, w:2 },
                { key:'rocket', at:500, w:3 }, { key:'dog', at:400, w:2 },
                { key:'rifle', at:250, w:2 }, { key:'engineer', at:2200, w:2 },

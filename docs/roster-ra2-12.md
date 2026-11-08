@@ -183,3 +183,47 @@ So the opponent still buys none of the explosives. What the plan found on the wa
   there. Now a carrier that is the bomb, stopped with nowhere nearer to go and the target it was
   sent at inside half its own blast, goes off (`_rtsBombReach`); in the open it still drives up to
   its reach first. `unit/blast` holds both.
+
+## Batch 12g: the Carrier, where the flak is not (`core/aloft.js`, `core/teams.js`)
+
+Batch 12e left the Carrier out because its Hornets flew into the anti-air round the player's base and
+died there: 29 launched in sixteen battles, all shot down, for 34 damage. A Hornet costs nothing - the
+Carrier launches the next as soon as one is lost - so what was lost was the sortie, and the fault was
+the aim. A Hornet that turned for home when hit would only have saved a drone that was free anyway.
+
+- **The flak** (`_rtsFlakOver`): how many guns that can shoot at aircraft, hostile to a side, reach a
+  point - each by its own reach, and two cells more for what has to hang there to fire or to drop. A
+  gun still going up covers nothing.
+- **The aim** (`_rtsLaunchAim`): the opponent's Carrier sends its Hornets at what it was sent at if no
+  flak covers it, else at the most worth having in its reach that none covers, and otherwise holds
+  them. A player's Carrier does as it is told.
+- **The teams** (`RTS_FLAK.teams`): a team sent at buildings that flies, or has a Carrier in it - a
+  Falcon's Raid, the Leviathan's Zeppelin, a Strike Group - values a building less for every such gun
+  over it, as a raid values a harvester less for every gun guarding it.
+- **Strike Group** sails the Carrier with a Destroyer, bought from 3200, weight 2, as the Bombard is.
+
+Measured on the 16 battles, paired seed by seed, against a fresh baseline - the same battles as
+batch 12f's to the last unit, the Dominion holding 0.461 of the field:
+
+- **The Carrier alone, in the mix and aimed:** bought once, 531 s into a 720 s battle. Its Destroyer
+  joined it at 671 s, and at the coast it held its Hornets nine times over a Rocket Turret that two
+  guns covered. The Compact's share moved -0.011 ± 0.010, in fifteen battles that bought no Carrier:
+  a new line in the mix moves the rolls.
+- **Every flying team weighing the flak**, the ones that hunt whatever they find as well (the
+  Helicopter's Sortie, the MiG's Intercept, the Yak's Strafe): on the Compact's side alone it moved
+  the Compact +0.030 ± 0.015, but on the Dominion's side alone it moved the Dominion -0.015 ± 0.009.
+  What a MiG or a Yak hunts moves in and out of cover. Not kept.
+- **Only a team sent at buildings, as shipped:** on the Compact's side alone +0.009 ± 0.005; on the
+  Dominion's alone -0.002 ± 0.002, neutral; on both, the Compact +0.011 ± 0.005 against the Carrier
+  alone. The Falcon returned 2.81 to 3.11 of its price, against 2.58. The batch as a whole against
+  the baseline: +0.001 ± 0.011.
+
+So the Carrier sails, neutral at worst: in a twelve-minute battle it comes too late to matter, and
+what it does now is hold its Hornets where 12e threw them away.
+
+**The Gate** stays out: the opponent builds no walls, so there is no wall for a gate to stand in.
+
+`unit/aloft` holds it: the flak (its reach and the margin past it, its own side, a gun going up), the
+aim (round the flak, holding, a player's Carrier as told), the teams (a Raid turns from a guarded
+building, not without `RTS_FLAK.teams` and not sent at anything but buildings; a Strike Group as the
+Raid) and the mix.
