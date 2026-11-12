@@ -180,6 +180,26 @@ in a single cell. A beach went from sand to the deep in a hand's breadth.
   land and the deep under the caustics untouched; under snow a cell out is ice (saturation 0.23
   against the open sea's 0.62, and 0.55 with the old third-of-a-cell ice).
 
+## What a phone's zoom got wrong (`e2e/looks`)
+
+Found by rendering the game at a phone's size and looking; each is an A/B through its own switch.
+
+- **A cell's geometry is raised to its ground once a corner** (`_r3dLiftFrom`, `world3d.js`). A
+  slab's faces share their corner points and the lift walked the faces, so on high ground a rock's
+  top was raised three or four times and its foot twice: at a height of five a ridge stood as
+  pillars four buildings tall, floating. `R3.liftShared` is the before-picture.
+- **Sandbags** (`_r3dBagCell`). The map's old emplacements (`RTS_T_WALL`) block, and the 3D mode
+  drew only the ground under them, as pale concrete: now a wall of bags three courses high,
+  turned toward the neighbours that carry the chain on, standing on trodden earth. `R3.bagOff`.
+- **Infantry are drawn larger the further out the camera is** (`_r3dInfScale`, `unit3d.js`): at
+  their own size from 48 px a cell in, up to 1.9 times at 16. Only the drawing: reach, room and
+  the ground they stand on are the simulation's. `R3.infScaleOff`.
+- **A health bar is the width of its unit** (`_rtsBarSize`, `ui/hud.js`): 10 to 26 px by 3, where
+  every unit's was 26 by 4, and paler while the unit is unhurt.
+- **Night is moonlit** (`R3D_SKIES.night`): a third lighter at least, still the darkest sky.
+- **Roads are roads** (`R3D_ROAD_HALF`, `road3d.js`): 2.35 world units from the centre line to
+  the kerb where it was 3.05, and a worn grey where it was near-black.
+
 ## Rock is stone (`render3d/stone3d.js`)
 
 The ridges are turned, tapered slabs and split crystals (`world3d.js`), each face one flat grey. Up

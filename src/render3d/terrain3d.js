@@ -117,12 +117,6 @@ var R3D_MAT_GLSL =
   '  vec3 c = mix(vec3(0.20, 0.27, 0.11), vec3(0.31, 0.36, 0.16), N.y);' +
   '  c = mix(c, vec3(0.45, 0.33, 0.17), smoothstep(0.62, 0.8, N.w) * 0.55 * det);' +   /* leaf litter */
   '  return vec4(c, N.y * 0.5 + N.w * 0.3 * det); }' +
-  'vec4 _concrete(vec2 w, vec4 M, float det){' +
-  '  vec2 f = fract(w * 0.5);' +
-  '  float j = 1.0 - smoothstep(0.02, 0.04, min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y)));' +
-  '  vec3 c = vec3(0.62, 0.61, 0.57) * (0.92 + 0.1 * M.x);' +
-  '  c = mix(c, vec3(0.45, 0.44, 0.41), j * det);' +
-  '  return vec4(c, (1.0 - j) * 0.3 * det); }' +
   /* kind codes are RTS_T_*: grass 0, tree 1, rock 2, water 3, road 4, sand 5, wall 6 - and one
      of the ground map's own, 7: PAVED, laid round the buildings - see _r3dGroundMap */
   'vec4 _mat(float k, vec2 w, vec4 N, vec4 M, vec3 v, float det){' +
@@ -132,7 +126,7 @@ var R3D_MAT_GLSL =
   '  if (k < 3.5) return _sand(N, M, det) * vec4(0.62, 0.66, 0.66, 1.0);' +   /* seabed, under the sea */
   '  if (k < 4.5) return _track(N, M, det);' +
   '  if (k < 5.5) return _sand(N, M, det);' +
-  '  if (k < 6.5) return _concrete(w, M, det);' +
+  '  if (k < 6.5) return _track(N, M, det);' +                                  /* trodden earth under the sandbags: world3d.js */
   '  return _paving(N, M, v, det); }' +
   /* ---- the ground at one world position ---- */
   /* kdom: the kind that won the blend here, which the bump then differences - asked of the SAME

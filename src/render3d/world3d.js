@@ -179,11 +179,46 @@ function _r3dRockCell(out, tx, tz) {
    is about a third of the range, that is under a unit of error at the corners and invisible.
 
    The cost is one pass over the cell's own vertices, which is the same order as emitting them. */
+/* SANDBAGS. The map lays short dog-legged chains of old emplacement (core/terrain.js, RTS_T_WALL)
+   and they block: the 2D bake stamps a sandbag sprite on each cell, and the 3D mode drew
+   nothing - only the ground under them, as a slab of pale concrete in the middle of a meadow.
+   An obstacle a tank drove round with nothing there to drive round. Each cell is a wall of
+   bags three courses high, the courses staggered, run toward whichever neighbours carry the
+   chain on - so a dog-leg turns its corner and an end stops short of its cell's edge. */
+var R3D_BAG = ['#a89663', '#bcaa78', '#7d6e47'], R3D_BAG_LEN = 1.0, R3D_BAG_H = 0.52;
+function _r3dBagRun(out, x0, z0, x1, z1, seed) {
+  var L = Math.hypot(x1 - x0, z1 - z0), ang = Math.atan2(z1 - z0, x1 - x0), ux = (x1 - x0) / L, uz = (z1 - z0) / L;
+  var n = Math.max(1, Math.round(L / R3D_BAG_LEN)), step = L / n;
+  for (var row = 0; row < 3; row++) {
+    for (var i = 0; i < n - (row % 2); i++) {
+      var t = (i + 0.5 + (row % 2) * 0.5) * step, j = (_sprHash(seed + i, row, 811) - 0.5) * 0.14;
+      _r3dSlab(out, x0 + ux * t - uz * j, row * R3D_BAG_H * 0.94, z0 + uz * t + ux * j, step * 0.97, 1.3 - row * 0.14, R3D_BAG_H, ang, 0.8, 0, 0,
+               R3D_BAG[row === 2 ? 1 : (row ? 0 : 2)], R3D_BAG[1]);
+    }
+  }
+}
+function _r3dBagCell(out, G, tx, tz) {
+  function wall(x, z) { return _rtsInB(x, z) && G.terrain[_rtsIdx(x, z)] === RTS_T_WALL; }
+  var wx = _rtsWX(tx), wz = _rtsWX(tz), h = RTS_TILE / 2, e = 0.7, seed = tx * 131 + tz * 17;
+  var E = wall(tx + 1, tz), W = wall(tx - 1, tz), S = wall(tx, tz + 1), N = wall(tx, tz - 1), alone = !(E || W || N || S);
+  if (E || W || alone) _r3dBagRun(out, wx - (W ? h : (alone ? h * 0.8 : e)), wz, wx + (E ? h : (alone ? h * 0.8 : e)), wz, seed);
+  if (N || S) _r3dBagRun(out, wx, wz - (N ? h : e), wx, wz + (S ? h : e), seed + 7);
+}
+/* A CELL'S GEOMETRY RAISED TO ITS GROUND - EACH CORNER ONCE. The faces of a slab share their
+   corner points (_r3dSlab hands the same arrays to the top and to two sides), and this walked the
+   faces: a top corner was raised three times and a bottom one twice. So on high ground every
+   rock stood stretched and floating - at a height of five, its foot five above the hill and its
+   top fifteen - which is what made a ridge on a plateau a wall of pillars four buildings tall.
+   R3.liftShared is the before-picture. */
 function _r3dLiftFrom(out, from, dy) {
   if (!dy) return;
+  var R3 = window._R3D, seen = R3 && R3.liftShared ? null : new Set();
   for (var i = from; i < out.length; i++) {
     var v = out[i].v;
-    for (var j = 0; j < v.length; j++) v[j][1] += dy;
+    for (var j = 0; j < v.length; j++) {
+      if (seen) { if (seen.has(v[j])) continue; seen.add(v[j]); }
+      v[j][1] += dy;
+    }
   }
 }
 
@@ -241,6 +276,8 @@ function _r3dWorldBuild(G) { return _r3SegBulk(function () {
             }
           } else if (k === RTS_T_ROCK) {
             _r3dRockCell(faces, tx, tz);
+          } else if (k === RTS_T_WALL) {
+            if (!R3.bagOff) _r3dBagCell(faces, G, tx, tz);       /* R3.bagOff: the before-picture */
           } else if (k === RTS_T_GRASS) {
             /* Sparse tufts, and only where a hash says so - covering every grass cell would
                be the ground-cover padding the graphics rules forbid; a scatter at this

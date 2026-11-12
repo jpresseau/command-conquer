@@ -109,7 +109,12 @@ var S = new Suite('fxbillboard');
     var high = drawnPx(frame([{ kind: 'boom', x: wf.x, y: 8, z: wf.z + 9, t: 0.18, big: 1.0 }]));
     R3.fxGroundAmt = 1; R3.plightAmt = undefined;
     o.rosePx = high.top - low.top;
-    o.expectRise = +(8 * R3.sp * _rtsZoom()).toFixed(1);
+    /* ...by the projection's own account of those two points (render/camera.js), which is a second
+       implementation of the camera: 8 * sin(tilt) * zoom is the rise under an orthographic camera,
+       and this one magnifies what is near - it read 72.4 where the blast rose 78, a pixel inside
+       the tolerance, until a lighter road moved the crown's edge by one */
+    var pLo = _rtsWorldToScreen(wf.x, 0, wf.z + 9), pHi = _rtsWorldToScreen(wf.x, 8, wf.z + 9);
+    o.expectRise = +((pLo.y - pHi.y) * (R.dpr || 1)).toFixed(1);
 
     /* ---------- 4. the quad projects to the size the sizing rule asks for ----------
        Run the shader's own arithmetic in JS against the 2D path's number, at one projection,
@@ -193,7 +198,7 @@ var S = new Suite('fxbillboard');
     S.ok('an explosion happens at the height it happened at',
          Math.abs(out.rosePx - out.expectRise) < 6,
          'raising a blast 8 world units moves its crown ' + out.rosePx + 'px up the screen, against ' +
-         out.expectRise + 'px of tilt and zoom - anchored through the ground, as the 2D path ' +
+         out.expectRise + 'px by the projection - anchored through the ground, as the 2D path ' +
          'does, it does not move at all');
 
     /* Both paths size through _rtsFxSize; this is that agreement, at one projection. */

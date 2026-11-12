@@ -203,6 +203,9 @@ html,body{margin:0;padding:0;height:100%;background:#05080e;overflow:hidden}
 
 /* ---- a phone held upright, a small tablet: one column, the battle first ---- */
 @media (max-width:760px){
+  /* one column scrolls, and a stamp pinned to the window sat over whatever row was under it -
+     over the Daily Battle's words. On a phone it is the page's last line instead. */
+  #rtsBuild{position:static;align-self:center;text-align:center;margin:6px 0 2px;background:none;backdrop-filter:none}
   #rtsTitleMenu{grid-template-columns:minmax(0,1fr);grid-template-areas:"battle" "modes" "foot";width:min(560px,100%);gap:14px}
   #rtsHome .keys{width:min(560px,100%)}
   #rtsHome .home{gap:16px}

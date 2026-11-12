@@ -135,7 +135,8 @@ var S = new Suite('sky');
     R3.bankAmt = 0; var F1 = shot('fog'); R3.bankAmt = 1;
     o.bankSeen = diff(F0, F1);
     /* WHAT AN EFFECT REFLECTS takes the hour: the same pale banks laid over the night lift the
-       frame far less than they lift the fog's daylight */
+       frame less than they lift the fog's daylight - three quarters of it, now the night is light
+       enough to be read on a phone (sky3d.js); under half while it was darker */
     function lift(a, b) { var s2 = 0, n = 0; for (var k = 0; k < a.length; k += 16) { s2 += Math.abs((a[k] - b[k]) * 0.3 + (a[k + 1] - b[k + 1]) * 0.59 + (a[k + 2] - b[k + 2]) * 0.11); n++; } return s2 / n; }
     R3D_SKIES.night.banks = 1; R3.lampAmt = 0;
     var B1 = shot('night'); R3.bankAmt = 0; var B0 = shot('night'); R3.bankAmt = 1;
@@ -215,8 +216,8 @@ var S = new Suite('sky');
     S.ok('the rain is in the picture: hundreds of streaks, each a pixel or two', out.rainN > 150 && out.rainSeen > 0.001,
          out.rainN + ' streaks, ' + (out.rainSeen * 100).toFixed(2) + '% of the frame');
     S.ok('...and the ground is wet: darker than the same sky dry', out.wet[0] < out.wet[1] - 3, out.wet[0] + ' wet, ' + out.wet[1] + ' dry');
-    S.ok('an effect takes the hour too: the same banks lift the night less than half as much as the fog\'s day',
-         out.bankLift[0] > 2 && out.bankLift[1] < out.bankLift[0] * 0.5, out.bankLift[1] + ' by night, ' + out.bankLift[0] + ' in the fog');
+    S.ok('an effect takes the hour too: the same banks lift the night less than they lift the fog\'s day',
+         out.bankLift[0] > 2 && out.bankLift[1] < out.bankLift[0] * 0.85, out.bankLift[1] + ' by night, ' + out.bankLift[0] + ' in the fog');
     S.ok('lightning lights the rain for its instant', out.lightning[0] > out.lightning[1] * 1.15, out.lightning[0] + ' at the strike, ' + out.lightning[1] + ' a second before');
     S.ok('the fog banks are in the picture', out.bankSeen > 0.02, (out.bankSeen * 100).toFixed(2) + '% of the frame');
     S.ok('...and the haze takes the contrast out', out.fog.sd < out.day.sd * 0.85, 'spread ' + out.fog.sd + ' against ' + out.day.sd);

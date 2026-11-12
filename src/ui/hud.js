@@ -20,7 +20,7 @@ function _rtsDrawHud(dt) {
     var selected = G.sel.indexOf(e) >= 0;
     var hurt = e.hp < e.maxHp - 0.5;
     if (!selected && !hurt) continue;
-    var top = (e.type === 'struct') ? rtsStructDef(e.def).h * 0.9 + 5 : 3.4;
+    var top = (e.type === 'struct') ? rtsStructDef(e.def).h * 0.9 + 5 : (rtsUnitDef(e.def).kind === 'infantry' ? 2.6 : 3.4);   /* a soldier's bar sits over a soldier */
     var s = _rtsWorldToScreen(e.x, top, e.z);
     if (s.behind || s.x < -60 || s.x > W + 60 || s.y < -40 || s.y > H + 40) continue;
     if (selected && e.wq) _rtsDrawWayline(g, e);         /* its queued stops: ui/wayline.js */
@@ -31,12 +31,14 @@ function _rtsDrawHud(dt) {
        cameras, and it is exactly the kind of thing that stays invisible until a perspective
        camera makes every bar on screen the wrong size at once. */
     var sc = s.scale || 1;
-    var bw = (e.type === 'struct' ? 46 : 26) * sc, bh = 4 * sc;
+    var bz = _rtsBarSize(e, sc, e.type === 'unit' ? _rtsPxPerUnit(e) : 0), bw = bz.w, bh = bz.h;
     var frac = Math.max(0, e.hp / e.maxHp);
+    g.globalAlpha = bz.a;
     g.fillStyle = 'rgba(0,0,0,0.55)';
     g.fillRect(s.x - bw / 2 - 1, s.y - bh - 1, bw + 2, bh + 2);
     g.fillStyle = frac > 0.6 ? '#5fdc7a' : (frac > 0.3 ? '#e8c35a' : '#e3574a');
     g.fillRect(s.x - bw / 2, s.y - bh, bw * frac, bh);
+    g.globalAlpha = 1;
     /* the chevrons of a veteran (core/veterancy.js): one a rank, gold, over the bar's left end */
     for (var rk = 0; rk < (e.rank || 0); rk++) {
       var cx = s.x - bw / 2 + 3 * sc + rk * 6 * sc, cy = s.y - bh - 3 * sc;
@@ -236,6 +238,15 @@ function _rtsPingCol(kind) {
 /* What the placement banner says. A phone has no Esc key and no hover: it places by dragging
    the ghost and letting go (ui/input.js), and cancels by holding the building's button
    (ui/sidebar.js) - the banner told it to click and press Esc. */
+/* A HEALTH BAR THE SIZE OF WHAT IT IS OVER. Every unit's was 26 px by 4: wider than a tank at
+   the default zoom and five times a rifle squad, so a selected group was a wall of green bars
+   with the units lost under it. A unit's is as wide as the unit is drawn (`ppu`: pixels a world
+   unit there), between 10 and 26 px, 3 px high - and paler while it is unhurt, when the bar has
+   nothing to say the ring has not. A building's is as it was. */
+function _rtsBarSize(e, sc, ppu) {
+  if (e.type !== 'unit') return { w: 46 * sc, h: 4 * sc, a: 1 };
+  return { w: Math.max(10, Math.min(26, (e.r || 1) * 2 * ppu)) * sc, h: 3 * sc, a: e.hp < e.maxHp - 0.5 ? 1 : 0.6 };
+}
 function _rtsPlaceHint(name, touch) {
   return touch ? 'Drag to place ' + name + '  ·  hold its button to cancel'
                : 'Click to place ' + name + '  ·  Esc to cancel';
