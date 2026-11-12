@@ -34,7 +34,6 @@ var RTS_SIDES = {
 var RTS_ARMY_NAMES = { allied: ['Compact', 'Meridian Compact'], soviet: ['Dominion', 'Basalt Dominion'] };
 function rtsArmyName(house) { return RTS_ARMY_NAMES[rtsHouseSide(house) === 'soviet' ? 'soviet' : 'allied'][0]; }
 function rtsArmyTitle(side) { return RTS_ARMY_NAMES[side === 'soviet' ? 'soviet' : 'allied'][1]; }
-function rtsArmyTag(house)  { return rtsHouseSide(house) === 'soviet' ? 'SOV' : 'ALD'; }
 
 /* ---------------------------------------------------------------- structures --
    The 3D model for each key is built by _rtsBuild() in rts.buildings.js.

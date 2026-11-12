@@ -299,16 +299,6 @@ function _sprEll(g, cx, cy, rx, ry, col) {
     g.fillRect(Math.round(cx - w), Math.round(cy + dy), Math.max(1, Math.round(w * 2)), 1);
   }
 }
-/* An upright cylinder: elliptical cap, body shaded left-lit to right-dark, dark base. */
-function _sprCyl(g, cx, topY, rx, bodyH, tones) {
-  var ry = Math.max(2, Math.round(rx * 0.42));
-  _sprRect(g, cx - rx, topY, rx * 2, bodyH, tones[0]);
-  _sprRect(g, cx - rx, topY, Math.max(1, Math.round(rx * 0.5)), bodyH, tones[1]);   /* lit left */
-  _sprRect(g, cx + rx - Math.max(1, Math.round(rx * 0.45)), topY, Math.max(1, Math.round(rx * 0.45)), bodyH, tones[2]);
-  _sprEll(g, cx, topY, rx, ry, tones[1]);                                            /* cap */
-  _sprEll(g, cx, topY - 1, rx - 1, ry - 1, tones[3] || tones[1]);
-  _sprRect(g, cx - rx, topY + bodyH - 2, rx * 2, 2, tones[2]);                        /* base shadow */
-}
 
 /* Hard 1px outline traced around whatever silhouette is already on the canvas. Stroking
    rectangles cannot do this once a building is made of overlapping parts - the internal

@@ -92,7 +92,11 @@ def check_collisions(sources):
     seen, dupes = {}, []
     pat = re.compile(r'^(?:function|var|const|let)\s+([A-Za-z_$][\w$]*)', re.M)
     for rel in sources:
-        for name in sorted(set(pat.findall(read(os.path.join(SRC, rel))))):
+        found = pat.findall(read(os.path.join(SRC, rel)))
+        # ...and twice in ONE file: the later copy wins just as silently (RTS_UNLOAD_REACH was)
+        for name in sorted(set(n for n in found if found.count(n) > 1)):
+            dupes.append('%s: defined twice in %s' % (name, rel))
+        for name in sorted(set(found)):
             if name in seen:
                 dupes.append('%s: defined in both %s and %s' % (name, seen[name], rel))
             else:

@@ -335,9 +335,15 @@ function _rtsRepairAI(e, dt) {
   _rtsSpend(S, cost);
   e.hp = Math.min(e.maxHp, e.hp + e.maxHp * RTS_REPAIR_STEP);
 }
-/* Sell_Back: half the RAW price back straight away - see rtsRawCost, which subtracts the free
-   unit the building shipped with - then the building deconstructs (the build-up animation
-   played backwards) and its crew walks out. */
+/* Sell_Back: half the RAW price back straight away, then the building deconstructs (the
+   build-up animation played backwards) and its crew walks out.
+
+   BDATA.CPP's Raw_Cost(): a building's price MINUS the free unit it ships with -
+     if (Type == STRUCT_REFINERY) cost -= UnitTypeClass::As_Reference(UNIT_HARVESTER).Cost;
+   It stops exactly one exploit: refund half of a price that INCLUDES a free harvester and you
+   are paid for a harvester you keep - sell a refinery, rebuild it, repeat. It needed the
+   refinery priced the way the original prices it: RA's PROC is 2000 with the 1400 harvester
+   costed INTO that, so raw cost is 600 and the refund 300. Taken here, off what was PAID. */
 function _rtsSell(e) {
   var G = window._rtsG;
   if (!e || e.dead || e.type !== 'struct' || e.selling) return false;

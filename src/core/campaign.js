@@ -100,7 +100,6 @@ function _rtsMBuild(side, key, tx, tz, tag) {
 }
 function _rtsMTagged(G, tag) { return G.ents.filter(function (e) { return !e.dead && e.tag === tag; }); }
 function _rtsMNear(e, tx, tz, r) { return Math.hypot(e.x - _rtsWX(tx), e.z - _rtsWX(tz)) <= r * RTS_TILE; }
-function _rtsMAlive(G, side, type) { return G.ents.filter(function (e) { return !e.dead && e.side === side && (!type || e.type === type); }).length; }
 /* the water: its cells and their centre */
 function _rtsMWater(G) {
   var n = 0, sx = 0, sz = 0, cells = [];

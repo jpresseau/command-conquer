@@ -15,7 +15,6 @@
 
    THE ECHO SENSOR's `detects` is the Destroyer's sonar on land (core/combat.js _rtsCloakAI finds a
    submerged boat with it already), and here it also unmasks a jammed unit (core/jammer.js). */
-var RTS_MIND = { col: [1.25, 0.55, 1.6] };
 
 function _rtsMindproof(o) {
   if (!o || o.type !== 'unit' || o.air) return true;

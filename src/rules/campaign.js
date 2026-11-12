@@ -8,26 +8,6 @@
    (campaign.js rtsCampMedal); a hold mission has none. `diff` is the level it was written and tuned at; it can also be played at any easier one, and
    up to `top` where a harder one was measured to bite and still be won (core/campaign.js). */
 
-/* across the water: the lagoon's long axis, and a shore cell either side of it */
-function _rtsCampAcross(G) {
-  var W = _rtsMWater(G), sxx = 0, szz = 0, sxz = 0;
-  W.cells.forEach(function (i) { var dx = (i % RTS_N) - W.tx, dz = ((i / RTS_N) | 0) - W.tz; sxx += dx * dx; szz += dz * dz; sxz += dx * dz; });
-  var ang = 0.5 * Math.atan2(2 * sxz, sxx - szz), nx = -Math.sin(ang), nz = Math.cos(ang);   /* normal to the long axis */
-  function shore(sgn) {
-    for (var d = 2; d < 40; d++) {
-      var x = Math.round(W.tx + nx * d * sgn), z = Math.round(W.tz + nz * d * sgn);
-      if (_rtsInB(x, z) && G.terrain[_rtsIdx(x, z)] !== RTS_T_WATER && !_rtsBlocked(x, z, null)) {
-        var c = _rtsNearestOpen(Math.round(x + nx * 4 * sgn), Math.round(z + nz * 4 * sgn), 6, null);
-        return c ? { tx: c[0], tz: c[1] } : { tx: x, tz: z };
-      }
-    }
-    return null;
-  }
-  var a = shore(1), b = shore(-1), P = G.starts.player;
-  /* the convoy starts on the shore nearer the player's corner */
-  if (a && b && Math.hypot(b.tx - P.tx, b.tz - P.tz) < Math.hypot(a.tx - P.tx, a.tz - P.tz)) { var t = a; a = b; b = t; }
-  return { from: a, to: b, water: W };
-}
 function _rtsCampReveal(G, tx, tz, r) {
   for (var z = tz - r; z <= tz + r; z++) for (var x = tx - r; x <= tx + r; x++) if (_rtsInB(x, z) && Math.hypot(x - tx, z - tz) <= r) G.mapped[_rtsIdx(x, z)] = 1;
 }

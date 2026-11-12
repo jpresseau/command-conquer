@@ -20,7 +20,6 @@
 
    Both were found by a landing craft that kept losing its cargo in open water with nothing near
    it, and both are much older than the craft: they have been true of the APC all along. */
-function _rtsAboard(e) { return !!(e && e.inside); }
 function _rtsCargoCount(t) { return t && t.cargo ? t.cargo.length : 0; }
 /* "Is this thing a transport?" as one predicate rather than as `carries` read at four call
    sites. Max_Passengers > 0 is the whole test in UNIT.CPP too. */
@@ -94,13 +93,6 @@ function _rtsBoard(inf, t) {
   var si = G.sel.indexOf(inf); if (si >= 0) G.sel.splice(si, 1);
   return true;
 }
-/* How far from the hull a passenger may be set down, in tiles. THREE, and the number is the
-   rule rather than a tolerance: at five, a landing craft sitting in the middle of a five-tile
-   channel found the bank three cells away and put a Battle Tank on it - the tank crossed twelve
-   world units of open water on foot. The craft has to nose in. Small enough that "bring it
-   closer to shore" is a real instruction, large enough that a beach with a cliff a cell behind
-   it still works. */
-var RTS_UNLOAD_REACH = 3;
 /* Where one passenger can be set down.
 
    THE SPOT IS CHOSEN IN THE PASSENGER'S OWN DOMAIN, not the transport's, and that is the whole

@@ -292,6 +292,7 @@ function rtsClose() {
      unit acknowledgement for an order nobody gave. */
   if (U && U.clearHold) { try { U.clearHold(); } catch (_c) {} U.clearHold = null; }
   if (typeof _rtsMusicStop === 'function') _rtsMusicStop();
+  if (typeof _rtsAmbQuiet === 'function') _rtsAmbQuiet();   /* and the bed with it: rts.ambience.js */
   _rtsRDispose();
   if (typeof _RTS_RICON !== 'undefined') _RTS_RICON = null;
   window._rtsUI = null; window._rtsG = null;

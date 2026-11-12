@@ -979,7 +979,7 @@ html,body{margin:0;padding:0;height:100%;background:#05080e;overflow:hidden}
   <div id="rtsErr"></div>
   </div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">957140e · 2026-11-12</div>
+  <div id="rtsBuild" title="build">305a368 · 2026-11-12</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1018,7 +1018,6 @@ var RTS_SIDES = {
 var RTS_ARMY_NAMES = { allied: ['Compact', 'Meridian Compact'], soviet: ['Dominion', 'Basalt Dominion'] };
 function rtsArmyName(house) { return RTS_ARMY_NAMES[rtsHouseSide(house) === 'soviet' ? 'soviet' : 'allied'][0]; }
 function rtsArmyTitle(side) { return RTS_ARMY_NAMES[side === 'soviet' ? 'soviet' : 'allied'][1]; }
-function rtsArmyTag(house)  { return rtsHouseSide(house) === 'soviet' ? 'SOV' : 'ALD'; }
 
 /* ---------------------------------------------------------------- structures --
    The 3D model for each key is built by _rtsBuild() in rts.buildings.js.
@@ -2351,23 +2350,6 @@ var RTS_REPAIR_RATE = 0.75;     /* seconds between repair steps (Rule.RepairRate
 var RTS_REPAIR_STEP = 0.05;     /* fraction of max hp restored per step (Rule.RepairStep) */
 var RTS_REPAIR_PCT = 0.25;      /* Rule.RepairPercent = 1/4 */
 var RTS_REFUND_PCT = 0.5;       /* Rule.RefundPercent: sell gives back half */
-/* BDATA.CPP's Raw_Cost(): a building's price MINUS the free unit it ships with.
-     if (Type == STRUCT_REFINERY) cost -= UnitTypeClass::As_Reference(UNIT_HARVESTER).Cost;
-   It exists to stop exactly one exploit, and refusing to port it left that exploit open here:
-   refund half of a price that INCLUDES a free harvester and you are being paid for a harvester
-   you keep. Sell a refinery, rebuild it, repeat - a money printer with an extra harvester
-   falling out of it each cycle.
-
-   Porting it needed the refinery priced the way the original prices it. RA's PROC is 2000 with
-   the 1400 harvester costed INTO that; ours was 1400 for the building with the harvester on
-   top, so raw cost came out at zero and the guard measured as a no-op. At 2000 the arithmetic
-   is the original's: raw cost 600, refund 300. */
-function rtsRawCost(key) {
-  var d = rtsStructDef(key);
-  if (!d) return 0;
-  var free = d.freeUnit ? rtsUnitDef(d.freeUnit) : null;
-  return Math.max(0, d.cost - (free ? free.cost : 0));
-}
 var RTS_SURVIVOR_FRACTION = 0.5;/* Rule.SurvivorFraction, used by How_Many_Survivors */
 var RTS_SURVIVOR_ODDS = 0.5;    /* Drop_Debris only rolls some of them out of a wreck */
 var RTS_DECON_TIME = 0.35;      /* Mission_Deconstruction: build-up run backwards, this x build */
@@ -2998,8 +2980,6 @@ var RTS_NERVOUS_BIAS = 2;
 /* The distance falloff is LINEAR in cells - note the original has the squared version right
    there, commented out, and ships the linear one. */
 var RTS_THREAT_SCALE = 32000;
-/* Threat_Range for area guard: twice the weapon range, clamped. 0x0A00 leptons = 10 cells. */
-var RTS_THREAT_MAX_CELLS = 10;
 /* Base_Is_Attacked: how many defenders may be recalled at once, and how long before the same
    attacker can trigger another recall (BaseDefenseDelay, in seconds). */
 var RTS_DEFENDERS = 6;
@@ -3698,26 +3678,6 @@ var RTS_TRIGGERS = [
    (campaign.js rtsCampMedal); a hold mission has none. `diff` is the level it was written and tuned at; it can also be played at any easier one, and
    up to `top` where a harder one was measured to bite and still be won (core/campaign.js). */
 
-/* across the water: the lagoon's long axis, and a shore cell either side of it */
-function _rtsCampAcross(G) {
-  var W = _rtsMWater(G), sxx = 0, szz = 0, sxz = 0;
-  W.cells.forEach(function (i) { var dx = (i % RTS_N) - W.tx, dz = ((i / RTS_N) | 0) - W.tz; sxx += dx * dx; szz += dz * dz; sxz += dx * dz; });
-  var ang = 0.5 * Math.atan2(2 * sxz, sxx - szz), nx = -Math.sin(ang), nz = Math.cos(ang);   /* normal to the long axis */
-  function shore(sgn) {
-    for (var d = 2; d < 40; d++) {
-      var x = Math.round(W.tx + nx * d * sgn), z = Math.round(W.tz + nz * d * sgn);
-      if (_rtsInB(x, z) && G.terrain[_rtsIdx(x, z)] !== RTS_T_WATER && !_rtsBlocked(x, z, null)) {
-        var c = _rtsNearestOpen(Math.round(x + nx * 4 * sgn), Math.round(z + nz * 4 * sgn), 6, null);
-        return c ? { tx: c[0], tz: c[1] } : { tx: x, tz: z };
-      }
-    }
-    return null;
-  }
-  var a = shore(1), b = shore(-1), P = G.starts.player;
-  /* the convoy starts on the shore nearer the player's corner */
-  if (a && b && Math.hypot(b.tx - P.tx, b.tz - P.tz) < Math.hypot(a.tx - P.tx, a.tz - P.tz)) { var t = a; a = b; b = t; }
-  return { from: a, to: b, water: W };
-}
 function _rtsCampReveal(G, tx, tz, r) {
   for (var z = tz - r; z <= tz + r; z++) for (var x = tx - r; x <= tx + r; x++) if (_rtsInB(x, z) && Math.hypot(x - tx, z - tz) <= r) G.mapped[_rtsIdx(x, z)] = 1;
 }
@@ -5456,16 +5416,6 @@ function _sprEll(g, cx, cy, rx, ry, col) {
     var w = Math.sqrt(k) * rx;
     g.fillRect(Math.round(cx - w), Math.round(cy + dy), Math.max(1, Math.round(w * 2)), 1);
   }
-}
-/* An upright cylinder: elliptical cap, body shaded left-lit to right-dark, dark base. */
-function _sprCyl(g, cx, topY, rx, bodyH, tones) {
-  var ry = Math.max(2, Math.round(rx * 0.42));
-  _sprRect(g, cx - rx, topY, rx * 2, bodyH, tones[0]);
-  _sprRect(g, cx - rx, topY, Math.max(1, Math.round(rx * 0.5)), bodyH, tones[1]);   /* lit left */
-  _sprRect(g, cx + rx - Math.max(1, Math.round(rx * 0.45)), topY, Math.max(1, Math.round(rx * 0.45)), bodyH, tones[2]);
-  _sprEll(g, cx, topY, rx, ry, tones[1]);                                            /* cap */
-  _sprEll(g, cx, topY - 1, rx - 1, ry - 1, tones[3] || tones[1]);
-  _sprRect(g, cx - rx, topY + bodyH - 2, rx * 2, 2, tones[2]);                        /* base shadow */
 }
 
 /* Hard 1px outline traced around whatever silhouette is already on the canvas. Stroking
@@ -12120,6 +12070,17 @@ function _rtsAmbWant(G) {
 var RTS_AMB_OF = { rain: 'rain', wind: 'wind', sand: 'sand', ins: 'crickets', birds: 'birds', tracks: 'tracks',
   wheels: 'wheels', rotor: 'rotor', jet: 'jet', boat: 'boat', bridge: 'bridge', hum: 'hum', build: 'build' };
 
+/* THE BATTLE LEFT: every loop down. _rtsAmbTick is the only thing that turns them, and it stops
+   with the battle - so the rain, the crickets, the engines and the hum of the last battle played
+   on over the title at whatever they were last set to, until the next battle retuned them. */
+function _rtsAmbQuiet() {
+  var A = _rtsA, B = A && A.amb;
+  if (!B) return;
+  var t = A.ctx.currentTime;
+  for (var k in B.v) { try { B.v[k].g.gain.setTargetAtTime(0, t, 0.08); } catch (_e) {} }
+  if (B.echo && B.echo.g) { try { B.echo.g.gain.setTargetAtTime(0, t, 0.08); } catch (_e2) {} }
+  B.t = 0;
+}
 /* A few times a second, from the main loop (ui/camera.js). */
 function _rtsAmbTick(dt) {
   var A = _rtsA, G = window._rtsG;
@@ -14205,7 +14166,6 @@ function _rtsMBuild(side, key, tx, tz, tag) {
 }
 function _rtsMTagged(G, tag) { return G.ents.filter(function (e) { return !e.dead && e.tag === tag; }); }
 function _rtsMNear(e, tx, tz, r) { return Math.hypot(e.x - _rtsWX(tx), e.z - _rtsWX(tz)) <= r * RTS_TILE; }
-function _rtsMAlive(G, side, type) { return G.ents.filter(function (e) { return !e.dead && e.side === side && (!type || e.type === type); }).length; }
 /* the water: its cells and their centre */
 function _rtsMWater(G) {
   var n = 0, sx = 0, sz = 0, cells = [];
@@ -16432,9 +16392,15 @@ function _rtsRepairAI(e, dt) {
   _rtsSpend(S, cost);
   e.hp = Math.min(e.maxHp, e.hp + e.maxHp * RTS_REPAIR_STEP);
 }
-/* Sell_Back: half the RAW price back straight away - see rtsRawCost, which subtracts the free
-   unit the building shipped with - then the building deconstructs (the build-up animation
-   played backwards) and its crew walks out. */
+/* Sell_Back: half the RAW price back straight away, then the building deconstructs (the
+   build-up animation played backwards) and its crew walks out.
+
+   BDATA.CPP's Raw_Cost(): a building's price MINUS the free unit it ships with -
+     if (Type == STRUCT_REFINERY) cost -= UnitTypeClass::As_Reference(UNIT_HARVESTER).Cost;
+   It stops exactly one exploit: refund half of a price that INCLUDES a free harvester and you
+   are paid for a harvester you keep - sell a refinery, rebuild it, repeat. It needed the
+   refinery priced the way the original prices it: RA's PROC is 2000 with the 1400 harvester
+   costed INTO that, so raw cost is 600 and the refund 300. Taken here, off what was PAID. */
 function _rtsSell(e) {
   var G = window._rtsG;
   if (!e || e.dead || e.type !== 'struct' || e.selling) return false;
@@ -16483,7 +16449,6 @@ function _rtsSell(e) {
 
    Both were found by a landing craft that kept losing its cargo in open water with nothing near
    it, and both are much older than the craft: they have been true of the APC all along. */
-function _rtsAboard(e) { return !!(e && e.inside); }
 function _rtsCargoCount(t) { return t && t.cargo ? t.cargo.length : 0; }
 /* "Is this thing a transport?" as one predicate rather than as `carries` read at four call
    sites. Max_Passengers > 0 is the whole test in UNIT.CPP too. */
@@ -16557,13 +16522,6 @@ function _rtsBoard(inf, t) {
   var si = G.sel.indexOf(inf); if (si >= 0) G.sel.splice(si, 1);
   return true;
 }
-/* How far from the hull a passenger may be set down, in tiles. THREE, and the number is the
-   rule rather than a tolerance: at five, a landing craft sitting in the middle of a five-tile
-   channel found the bank three cells away and put a Battle Tank on it - the tank crossed twelve
-   world units of open water on foot. The craft has to nose in. Small enough that "bring it
-   closer to shore" is a real instruction, large enough that a beach with a cliff a cell behind
-   it still works. */
-var RTS_UNLOAD_REACH = 3;
 /* Where one passenger can be set down.
 
    THE SPOT IS CHOSEN IN THE PASSENGER'S OWN DOMAIN, not the transport's, and that is the whole
@@ -17740,14 +17698,6 @@ function _rtsReach(e) {
   var ws = _rtsGuns(e), r = 0;
   for (var i = 0; i < ws.length; i++) if (ws[i].range > r) r = ws[i].range;
   return r;
-}
-/* Threat_Range: 0 means "use weapon range", 1 means area guard - twice the weapon range,
-   clamped. Every sight radius in this game is already inside the clamp, so it never binds
-   here; it is kept because the clamp is the rule, not the current unit table. */
-function _rtsThreatRange(e, control, w) {
-  var reach = w ? w.range : 0;
-  if (control === 0) return reach;
-  return Math.min(reach * 2, RTS_THREAT_MAX_CELLS * RTS_TILE);
 }
 /* TURRET.CPP Fire_Direction / Fire_Coord. A shot leaves the MUZZLE, and the muzzle is on
    whichever facing actually carries the weapon: the turret's for a turreted vehicle, the
@@ -22722,7 +22672,6 @@ function _rtsDigToggle(e) {
 
    THE ECHO SENSOR's `detects` is the Destroyer's sonar on land (core/combat.js _rtsCloakAI finds a
    submerged boat with it already), and here it also unmasks a jammed unit (core/jammer.js). */
-var RTS_MIND = { col: [1.25, 0.55, 1.6] };
 
 function _rtsMindproof(o) {
   if (!o || o.type !== 'unit' || o.air) return true;
@@ -24682,7 +24631,7 @@ function _rtsTick(dt) {
   for (i = 0; i < G.ents.length; i++) {
     e = G.ents[i];
     if (e.dead) continue;
-    if (e.inside) continue;                      /* riding in a transport - see _rtsAboard */
+    if (e.inside) continue;                      /* riding in a transport: core/transport.js */
     if (_rtsErased(e) || _rtsGripped(e)) continue;   /* frozen, out of time: core/rift.js; held by a Kraken: core/deep.js */
     if (e.type === 'unit' && e.strike) { _rtsJetTick(e, dt); continue; }   /* a Marshal's jet: core/marshal.js */
     if (e.type === 'unit') { if (_rtsRiftBusy(e, dt)) continue; _rtsGateSide = e.side; if (!_rtsOffline(e)) _rtsUpdateUnit(e, dt); else e.path = null; _rtsGateSide = null; }   /* its own gates open: core/gate.js */   /* a jump charging; a Drone Tank's hub down: core/rift.js, core/mind.js */
@@ -36050,6 +35999,7 @@ function rtsClose() {
      unit acknowledgement for an order nobody gave. */
   if (U && U.clearHold) { try { U.clearHold(); } catch (_c) {} U.clearHold = null; }
   if (typeof _rtsMusicStop === 'function') _rtsMusicStop();
+  if (typeof _rtsAmbQuiet === 'function') _rtsAmbQuiet();   /* and the bed with it: rts.ambience.js */
   _rtsRDispose();
   if (typeof _RTS_RICON !== 'undefined') _RTS_RICON = null;
   window._rtsUI = null; window._rtsG = null;
@@ -36156,14 +36106,6 @@ function rtsGfxSet(n) {
      They rebuild on first sight, which is the same cost as entering 3D. */
   if (R3) R3.mesh = {};
   _rtsGfxSync();
-}
-/* auto -> 1 -> 2 -> 3 -> 4 -> auto, skipping anything above the device's own dpr, which would
-   be a buffer larger than the screen can show. */
-function rtsGfxCycle() {
-  var R = window._rtsR, dpr = (R && R.dpr) || 1, cur = _rtsGfxWant();
-  var n = cur ? cur + 1 : 1;
-  if (n > dpr) n = null;
-  rtsGfxSet(n);
 }
 
 /* The readout. Frame time as a MEDIAN over the last second rather than a mean: one long frame
@@ -39830,6 +39772,17 @@ function _rtsCode(v, ents, statics, seen, path) {
   if (ArrayBuffer.isView(v)) return { __ta:v.constructor.name, d:_rtsB64(v) };
   if (statics.has(v)) return { __s:statics.get(v) };
   if (ents.has(v)) return { __e:v.id };
+  /* A DEAD ENTITY NO LONGER IN THE LIST - reaped, but still some shell's target or a team's
+     quarry. It is not in `ents`, so it was walked as a plain object, body and all; and two tanks
+     that killed each other point at each other, so the walk came round and threw "reference
+     cycle" - the save refused, and the autosave retried ten times a second until the shell
+     landed. What is read of the dead is that it is dead, and whose it was (a shell still in
+     flight credits its shooter's side): a tombstone carries its plain fields and no references. */
+  if (v.dead === true && typeof v.id === 'number' && (v.type === 'unit' || v.type === 'struct')) {
+    var tomb = {};
+    for (var tk in v) { var tv = v[tk]; if (typeof tv === 'number' || typeof tv === 'string' || typeof tv === 'boolean') tomb[tk] = tv; }
+    return { __x:tomb };
+  }
   if (seen.indexOf(v) >= 0) throw new Error('save: reference cycle at ' + path);
   seen.push(v);
   var out, i, k;
@@ -39854,6 +39807,7 @@ function _rtsDecode(v, byId) {
   if (v.__ta) return _rtsUnB64(v.d, v.__ta);
   if (v.__s) return _rtsStaticByTok(v.__s);
   if (v.__e !== undefined) return byId[v.__e] || null;
+  if (v.__x !== undefined) return v.__x;                              /* a tombstone: see _rtsCode */
   var out, i, k;
   if (Array.isArray(v)) {
     out = [];
@@ -39959,9 +39913,6 @@ function _rtsApplyState(G, body) {
 
 /* ---------------------------------------------------------------------------- the interface */
 
-function rtsHasSave(slot) {
-  try { return !!window.localStorage.getItem(_rtsSlot(slot).info); } catch (_e) { return false; }
-}
 /* Get_Savefile_Info: read the header WITHOUT loading the game. RA puts the description at the
    front of the file for exactly this reason - the load menu must not have to parse a whole
    save to print one line. Here the header is a separate small record. */
@@ -39984,6 +39935,10 @@ function rtsSaveStale(slot) {
     if (!raw) return false;
     return JSON.parse(raw).v !== _rtsSaveVersion();
   } catch (_e) { return false; }
+}
+/* ...any of them, the autosave among the slots: the title's note asked only about the first */
+function rtsAnySaveStale() {
+  return Object.keys(RTS_SLOTS).some(function (k) { return rtsSaveStale(k); });
 }
 /* The header a save is filed under (Get_Savefile_Info's record), for `text`, the body of G. */
 function _rtsSaveHeader(G, text) {
@@ -40045,6 +40000,9 @@ function rtsSaveGame(slot) {
   var G = window._rtsG;
   if (!G) return false;
   if (window._rtsUI && window._rtsUI.replay) { _rtsSay('A replay is not saved - it is kept as the last battle.'); return false; }   /* replay.js */
+  /* A DECIDED BATTLE IS NOT SAVED (the autosave already refused): resumed, its end card came up
+     again and counted the win or the loss in the record a second time, and a third */
+  if (G.over) { _rtsSay('The battle is over - there is nothing to save.'); return false; }
   slot = slot || (typeof rtsSlotActive === 'function' ? rtsSlotActive() : 'save');
   /* SERIALISE FIRST, OUTSIDE THE TRY THAT OWNS THE CLEANUP. Both steps could throw and only one
      of them can leave a half-written pair behind, so they must not share a catch: a serialiser
@@ -40146,18 +40104,27 @@ function rtsLoadGame(slot) {
     if (typeof _rtsSfx === 'function') _rtsSfx('deny');
     return false;
   }
+  /* The load goes through the same door as starting a battle: close, open, and hand the state
+     to rtsOpen so it lands after _rtsNewGame and before the renderer bakes the terrain.
+     THE CLOSE COMES FIRST, BEFORE THE ARMY IS PUT BACK. Closing a battle goes home (rtsHome),
+     and going home ends a mission, a daily and a survival: it hands the player's own army and
+     difficulty back and forgets which mission this was. With the army set first, a mission's or a
+     daily's save loaded with the button INSIDE a battle had all of that undone a line later -
+     the Dominion's base resumed with the Compact's roster, the opponent's army flipped, and the
+     end card and Retry took it for a plain skirmish. From the title it was right, which is the
+     only way it had been tried. */
+  if (document.getElementById('rcgRts')) rtsClose();
   /* Put the army back before anything reads it. rtsHouseSide answers out of the live preference
      rather than out of G, so resuming a Soviet battle while the title screen says ALLIED used to
      load the Soviet base and then hand you the Allied roster - a Kennel standing in your base
      that cannot build a dog. Saves written before this field existed have no `side`, and are
      left exactly as they were rather than being guessed at. */
   _rtsLoadArmy(res.info);
-  /* The load goes through the same door as starting a battle: close, open, and hand the state
-     to rtsOpen so it lands after _rtsNewGame and before the renderer bakes the terrain. */
+  /* ...and a survival is one again: Play again on its end card starts the next run, not a skirmish */
+  window._RTS_SURVIVAL = !!body.survival;
   window._RTS_PENDING_LOAD = body;
   window._RTS_PENDING_SLOT = slot || 'save';      /* the autosave is kept only for its own resume */
   if (slot && slot !== 'auto') window._RTS_SLOT = slot;   /* the next save goes back where this came from (ui/slots.js) */
-  if (document.getElementById('rcgRts')) rtsClose();
   rtsOpen(body.seed);
   return true;
 }
@@ -41028,7 +40995,6 @@ function rtsSkirmishSync() {
    moment the picture is drawn, because half the page reads _rtsG to mean "a battle is live" -
    the message line, the loaders, the volume knob. Nothing else of it is kept. */
 
-var RTS_PREV_PX = 160;
 
 function rtsSeedRoll() { return (window._RTS_SEED_NEXT = 1 + (((new Date()).getTime() ^ (Math.random() * 65536)) & 0xfffe)); }
 function rtsSeedNext() { return window._RTS_SEED_NEXT || rtsSeedRoll(); }
@@ -41466,10 +41432,12 @@ function rtsShowResume(){
     /* A save this build cannot read is still NEWS. Without this the button just quietly stops
        appearing after an update, which reads as the game having lost the battle rather than as
        the save format having moved on - and the player cannot tell the difference. */
-    if (n && typeof rtsSaveStale === 'function' && rtsSaveStale()) {
+    /* ANY slot, the autosave among them: it asked only about the first, so saves kept in the
+       second or third vanished after an update with nothing said */
+    if (n && typeof rtsAnySaveStale === 'function' && rtsAnySaveStale()) {
       n.hidden = false;
       n.textContent = 'Your saved battle was made by an earlier version of the game and cannot '
-                    + 'be resumed. Starting a new battle will replace it.';
+                    + 'be resumed. The next save will take its place.';
     }
     return;
   }
