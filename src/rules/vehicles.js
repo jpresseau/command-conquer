@@ -46,8 +46,6 @@ var RTS_NERVOUS_BIAS = 2;
 /* The distance falloff is LINEAR in cells - note the original has the squared version right
    there, commented out, and ships the linear one. */
 var RTS_THREAT_SCALE = 32000;
-/* Threat_Range for area guard: twice the weapon range, clamped. 0x0A00 leptons = 10 cells. */
-var RTS_THREAT_MAX_CELLS = 10;
 /* Base_Is_Attacked: how many defenders may be recalled at once, and how long before the same
    attacker can trigger another recall (BaseDefenseDelay, in seconds). */
 var RTS_DEFENDERS = 6;

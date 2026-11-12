@@ -106,6 +106,17 @@ function _rtsCode(v, ents, statics, seen, path) {
   if (ArrayBuffer.isView(v)) return { __ta:v.constructor.name, d:_rtsB64(v) };
   if (statics.has(v)) return { __s:statics.get(v) };
   if (ents.has(v)) return { __e:v.id };
+  /* A DEAD ENTITY NO LONGER IN THE LIST - reaped, but still some shell's target or a team's
+     quarry. It is not in `ents`, so it was walked as a plain object, body and all; and two tanks
+     that killed each other point at each other, so the walk came round and threw "reference
+     cycle" - the save refused, and the autosave retried ten times a second until the shell
+     landed. What is read of the dead is that it is dead, and whose it was (a shell still in
+     flight credits its shooter's side): a tombstone carries its plain fields and no references. */
+  if (v.dead === true && typeof v.id === 'number' && (v.type === 'unit' || v.type === 'struct')) {
+    var tomb = {};
+    for (var tk in v) { var tv = v[tk]; if (typeof tv === 'number' || typeof tv === 'string' || typeof tv === 'boolean') tomb[tk] = tv; }
+    return { __x:tomb };
+  }
   if (seen.indexOf(v) >= 0) throw new Error('save: reference cycle at ' + path);
   seen.push(v);
   var out, i, k;
@@ -130,6 +141,7 @@ function _rtsDecode(v, byId) {
   if (v.__ta) return _rtsUnB64(v.d, v.__ta);
   if (v.__s) return _rtsStaticByTok(v.__s);
   if (v.__e !== undefined) return byId[v.__e] || null;
+  if (v.__x !== undefined) return v.__x;                              /* a tombstone: see _rtsCode */
   var out, i, k;
   if (Array.isArray(v)) {
     out = [];
@@ -235,9 +247,6 @@ function _rtsApplyState(G, body) {
 
 /* ---------------------------------------------------------------------------- the interface */
 
-function rtsHasSave(slot) {
-  try { return !!window.localStorage.getItem(_rtsSlot(slot).info); } catch (_e) { return false; }
-}
 /* Get_Savefile_Info: read the header WITHOUT loading the game. RA puts the description at the
    front of the file for exactly this reason - the load menu must not have to parse a whole
    save to print one line. Here the header is a separate small record. */
@@ -260,6 +269,10 @@ function rtsSaveStale(slot) {
     if (!raw) return false;
     return JSON.parse(raw).v !== _rtsSaveVersion();
   } catch (_e) { return false; }
+}
+/* ...any of them, the autosave among the slots: the title's note asked only about the first */
+function rtsAnySaveStale() {
+  return Object.keys(RTS_SLOTS).some(function (k) { return rtsSaveStale(k); });
 }
 /* The header a save is filed under (Get_Savefile_Info's record), for `text`, the body of G. */
 function _rtsSaveHeader(G, text) {
@@ -321,6 +334,9 @@ function rtsSaveGame(slot) {
   var G = window._rtsG;
   if (!G) return false;
   if (window._rtsUI && window._rtsUI.replay) { _rtsSay('A replay is not saved - it is kept as the last battle.'); return false; }   /* replay.js */
+  /* A DECIDED BATTLE IS NOT SAVED (the autosave already refused): resumed, its end card came up
+     again and counted the win or the loss in the record a second time, and a third */
+  if (G.over) { _rtsSay('The battle is over - there is nothing to save.'); return false; }
   slot = slot || (typeof rtsSlotActive === 'function' ? rtsSlotActive() : 'save');
   /* SERIALISE FIRST, OUTSIDE THE TRY THAT OWNS THE CLEANUP. Both steps could throw and only one
      of them can leave a half-written pair behind, so they must not share a catch: a serialiser
@@ -422,18 +438,27 @@ function rtsLoadGame(slot) {
     if (typeof _rtsSfx === 'function') _rtsSfx('deny');
     return false;
   }
+  /* The load goes through the same door as starting a battle: close, open, and hand the state
+     to rtsOpen so it lands after _rtsNewGame and before the renderer bakes the terrain.
+     THE CLOSE COMES FIRST, BEFORE THE ARMY IS PUT BACK. Closing a battle goes home (rtsHome),
+     and going home ends a mission, a daily and a survival: it hands the player's own army and
+     difficulty back and forgets which mission this was. With the army set first, a mission's or a
+     daily's save loaded with the button INSIDE a battle had all of that undone a line later -
+     the Dominion's base resumed with the Compact's roster, the opponent's army flipped, and the
+     end card and Retry took it for a plain skirmish. From the title it was right, which is the
+     only way it had been tried. */
+  if (document.getElementById('rcgRts')) rtsClose();
   /* Put the army back before anything reads it. rtsHouseSide answers out of the live preference
      rather than out of G, so resuming a Soviet battle while the title screen says ALLIED used to
      load the Soviet base and then hand you the Allied roster - a Kennel standing in your base
      that cannot build a dog. Saves written before this field existed have no `side`, and are
      left exactly as they were rather than being guessed at. */
   _rtsLoadArmy(res.info);
-  /* The load goes through the same door as starting a battle: close, open, and hand the state
-     to rtsOpen so it lands after _rtsNewGame and before the renderer bakes the terrain. */
+  /* ...and a survival is one again: Play again on its end card starts the next run, not a skirmish */
+  window._RTS_SURVIVAL = !!body.survival;
   window._RTS_PENDING_LOAD = body;
   window._RTS_PENDING_SLOT = slot || 'save';      /* the autosave is kept only for its own resume */
   if (slot && slot !== 'auto') window._RTS_SLOT = slot;   /* the next save goes back where this came from (ui/slots.js) */
-  if (document.getElementById('rcgRts')) rtsClose();
   rtsOpen(body.seed);
   return true;
 }

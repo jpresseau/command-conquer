@@ -211,14 +211,6 @@ function _rtsReach(e) {
   for (var i = 0; i < ws.length; i++) if (ws[i].range > r) r = ws[i].range;
   return r;
 }
-/* Threat_Range: 0 means "use weapon range", 1 means area guard - twice the weapon range,
-   clamped. Every sight radius in this game is already inside the clamp, so it never binds
-   here; it is kept because the clamp is the rule, not the current unit table. */
-function _rtsThreatRange(e, control, w) {
-  var reach = w ? w.range : 0;
-  if (control === 0) return reach;
-  return Math.min(reach * 2, RTS_THREAT_MAX_CELLS * RTS_TILE);
-}
 /* TURRET.CPP Fire_Direction / Fire_Coord. A shot leaves the MUZZLE, and the muzzle is on
    whichever facing actually carries the weapon: the turret's for a turreted vehicle, the
    hull's for everything else. Spawning shots at the object's centre is what makes a tank

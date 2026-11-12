@@ -158,6 +158,17 @@ function _rtsAmbWant(G) {
 var RTS_AMB_OF = { rain: 'rain', wind: 'wind', sand: 'sand', ins: 'crickets', birds: 'birds', tracks: 'tracks',
   wheels: 'wheels', rotor: 'rotor', jet: 'jet', boat: 'boat', bridge: 'bridge', hum: 'hum', build: 'build' };
 
+/* THE BATTLE LEFT: every loop down. _rtsAmbTick is the only thing that turns them, and it stops
+   with the battle - so the rain, the crickets, the engines and the hum of the last battle played
+   on over the title at whatever they were last set to, until the next battle retuned them. */
+function _rtsAmbQuiet() {
+  var A = _rtsA, B = A && A.amb;
+  if (!B) return;
+  var t = A.ctx.currentTime;
+  for (var k in B.v) { try { B.v[k].g.gain.setTargetAtTime(0, t, 0.08); } catch (_e) {} }
+  if (B.echo && B.echo.g) { try { B.echo.g.gain.setTargetAtTime(0, t, 0.08); } catch (_e2) {} }
+  B.t = 0;
+}
 /* A few times a second, from the main loop (ui/camera.js). */
 function _rtsAmbTick(dt) {
   var A = _rtsA, G = window._rtsG;

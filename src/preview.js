@@ -12,7 +12,6 @@
    moment the picture is drawn, because half the page reads _rtsG to mean "a battle is live" -
    the message line, the loaders, the volume knob. Nothing else of it is kept. */
 
-var RTS_PREV_PX = 160;
 
 function rtsSeedRoll() { return (window._RTS_SEED_NEXT = 1 + (((new Date()).getTime() ^ (Math.random() * 65536)) & 0xfffe)); }
 function rtsSeedNext() { return window._RTS_SEED_NEXT || rtsSeedRoll(); }

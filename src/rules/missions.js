@@ -73,23 +73,6 @@ var RTS_REPAIR_RATE = 0.75;     /* seconds between repair steps (Rule.RepairRate
 var RTS_REPAIR_STEP = 0.05;     /* fraction of max hp restored per step (Rule.RepairStep) */
 var RTS_REPAIR_PCT = 0.25;      /* Rule.RepairPercent = 1/4 */
 var RTS_REFUND_PCT = 0.5;       /* Rule.RefundPercent: sell gives back half */
-/* BDATA.CPP's Raw_Cost(): a building's price MINUS the free unit it ships with.
-     if (Type == STRUCT_REFINERY) cost -= UnitTypeClass::As_Reference(UNIT_HARVESTER).Cost;
-   It exists to stop exactly one exploit, and refusing to port it left that exploit open here:
-   refund half of a price that INCLUDES a free harvester and you are being paid for a harvester
-   you keep. Sell a refinery, rebuild it, repeat - a money printer with an extra harvester
-   falling out of it each cycle.
-
-   Porting it needed the refinery priced the way the original prices it. RA's PROC is 2000 with
-   the 1400 harvester costed INTO that; ours was 1400 for the building with the harvester on
-   top, so raw cost came out at zero and the guard measured as a no-op. At 2000 the arithmetic
-   is the original's: raw cost 600, refund 300. */
-function rtsRawCost(key) {
-  var d = rtsStructDef(key);
-  if (!d) return 0;
-  var free = d.freeUnit ? rtsUnitDef(d.freeUnit) : null;
-  return Math.max(0, d.cost - (free ? free.cost : 0));
-}
 var RTS_SURVIVOR_FRACTION = 0.5;/* Rule.SurvivorFraction, used by How_Many_Survivors */
 var RTS_SURVIVOR_ODDS = 0.5;    /* Drop_Debris only rolls some of them out of a wreck */
 var RTS_DECON_TIME = 0.35;      /* Mission_Deconstruction: build-up run backwards, this x build */

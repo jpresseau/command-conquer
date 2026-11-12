@@ -35,7 +35,7 @@ function _rtsTick(dt) {
   for (i = 0; i < G.ents.length; i++) {
     e = G.ents[i];
     if (e.dead) continue;
-    if (e.inside) continue;                      /* riding in a transport - see _rtsAboard */
+    if (e.inside) continue;                      /* riding in a transport: core/transport.js */
     if (_rtsErased(e) || _rtsGripped(e)) continue;   /* frozen, out of time: core/rift.js; held by a Kraken: core/deep.js */
     if (e.type === 'unit' && e.strike) { _rtsJetTick(e, dt); continue; }   /* a Marshal's jet: core/marshal.js */
     if (e.type === 'unit') { if (_rtsRiftBusy(e, dt)) continue; _rtsGateSide = e.side; if (!_rtsOffline(e)) _rtsUpdateUnit(e, dt); else e.path = null; _rtsGateSide = null; }   /* its own gates open: core/gate.js */   /* a jump charging; a Drone Tank's hub down: core/rift.js, core/mind.js */

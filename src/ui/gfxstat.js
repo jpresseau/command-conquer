@@ -40,14 +40,6 @@ function rtsGfxSet(n) {
   if (R3) R3.mesh = {};
   _rtsGfxSync();
 }
-/* auto -> 1 -> 2 -> 3 -> 4 -> auto, skipping anything above the device's own dpr, which would
-   be a buffer larger than the screen can show. */
-function rtsGfxCycle() {
-  var R = window._rtsR, dpr = (R && R.dpr) || 1, cur = _rtsGfxWant();
-  var n = cur ? cur + 1 : 1;
-  if (n > dpr) n = null;
-  rtsGfxSet(n);
-}
 
 /* The readout. Frame time as a MEDIAN over the last second rather than a mean: one long frame
    from a garbage collection or a texture upload drags a mean around and tells the reader

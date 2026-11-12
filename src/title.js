@@ -106,10 +106,12 @@ function rtsShowResume(){
     /* A save this build cannot read is still NEWS. Without this the button just quietly stops
        appearing after an update, which reads as the game having lost the battle rather than as
        the save format having moved on - and the player cannot tell the difference. */
-    if (n && typeof rtsSaveStale === 'function' && rtsSaveStale()) {
+    /* ANY slot, the autosave among them: it asked only about the first, so saves kept in the
+       second or third vanished after an update with nothing said */
+    if (n && typeof rtsAnySaveStale === 'function' && rtsAnySaveStale()) {
       n.hidden = false;
       n.textContent = 'Your saved battle was made by an earlier version of the game and cannot '
-                    + 'be resumed. Starting a new battle will replace it.';
+                    + 'be resumed. The next save will take its place.';
     }
     return;
   }
