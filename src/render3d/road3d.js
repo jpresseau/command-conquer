@@ -24,6 +24,7 @@
 var R3D_ROAD_TEXEL = 2;          /* world units a texel */
 var R3D_ROAD_RANGE = 8;          /* world units the field reaches either side of a road */
 var R3D_ROAD_DASH = 9;           /* world units from one dash to the next */
+var R3D_ROAD_HALF = 2.35;        /* world units from the centre line to the kerb (it was 3.05) */
 
 function _r3dRoadField(G) {
   var N = RTS_N, T = RTS_TILE, S = Math.ceil(N * T / R3D_ROAD_TEXEL), d = new Float32Array(S * S);
@@ -109,19 +110,23 @@ var R3D_ROAD_GLSL =
   '  vec4 rd = texture2D(uRoadT, (w * uTileInv + uMat.z + 0.5) * uMat.y);' +
   '  if (rd.a < 0.01) return 0.0;' +
   '  float da = rd.r * ' + R3D_ROAD_RANGE.toFixed(1) + ', ds = (rd.g - 0.5) * 4.0;' +
-  '  float asph = 1.0 - smoothstep(3.05, 3.2, da);' +
-  '  float kerb = smoothstep(3.05, 3.15, da) * (1.0 - smoothstep(3.55, 3.65, da));' +
+  /* A ROAD, NOT A RUNWAY. The carriageway was 6.2 world units across - a cell and a half, as
+     wide as the Vehicle Works beside it - and near-black, the darkest thing on the map: three of
+     them leave every base, and from a phone's zoom they were the picture, with a dark-tracked
+     tank lost on them. R3D_ROAD_HALF across and a worn grey, a tank and a half wide. */
+  '  float asph = 1.0 - smoothstep(' + R3D_ROAD_HALF.toFixed(2) + ', ' + (R3D_ROAD_HALF + 0.15).toFixed(2) + ', da);' +
+  '  float kerb = smoothstep(' + R3D_ROAD_HALF.toFixed(2) + ', ' + (R3D_ROAD_HALF + 0.1).toFixed(2) + ', da) * (1.0 - smoothstep(' + (R3D_ROAD_HALF + 0.45).toFixed(2) + ', ' + (R3D_ROAD_HALF + 0.55).toFixed(2) + ', da));' +
   /* the carriageway: dark aggregate flecked with its own stone, worn paler down the wheel
      tracks either side of the middle, mended darker in patches */
-  '  vec3 ac = mix(vec3(0.25, 0.25, 0.24), vec3(0.33, 0.33, 0.31), N.x) * (0.95 + 0.1 * M.x);' +
+  '  vec3 ac = mix(vec3(0.34, 0.335, 0.32), vec3(0.42, 0.415, 0.395), N.x) * (0.95 + 0.1 * M.x);' +
   '  ac = mix(ac, vec3(0.5, 0.49, 0.46), M.z * 0.22 * det);' +
-  '  ac *= 1.0 + 0.07 * (1.0 - smoothstep(0.4, 0.9, abs(da - 1.6)));' +
-  '  ac = mix(ac, vec3(0.2, 0.2, 0.2), smoothstep(0.66, 0.71, N.y) * 0.55);' +
+  '  ac *= 1.0 + 0.07 * (1.0 - smoothstep(0.3, 0.7, abs(da - ' + (R3D_ROAD_HALF * 0.52).toFixed(2) + ')));' +
+  '  ac = mix(ac, vec3(0.27, 0.27, 0.265), smoothstep(0.66, 0.71, N.y) * 0.55);' +
   /* the centre line: dashes, a third of a unit wide */
   '  float dash = (1.0 - smoothstep(0.12, 0.2, abs(ds))) * (1.0 - smoothstep(0.6, 1.0, da)) * smoothstep(0.1, 0.3, rd.b - 0.45) * smoothstep(0.8, 0.97, rd.a);' +
   '  ac = mix(ac, vec3(0.86, 0.83, 0.70), dash * 0.9);' +
   '  col = mix(col, ac, asph);' +
   '  col = mix(col, vec3(0.70, 0.68, 0.62) * (0.92 + 0.12 * M.x), kerb);' +
   /* a sliver of shadow where the kerb steps down to the shoulder */
-  '  col *= 1.0 - 0.25 * smoothstep(3.6, 3.7, da) * (1.0 - smoothstep(3.7, 4.1, da));' +
+  '  col *= 1.0 - 0.25 * smoothstep(' + (R3D_ROAD_HALF + 0.5).toFixed(2) + ', ' + (R3D_ROAD_HALF + 0.6).toFixed(2) + ', da) * (1.0 - smoothstep(' + (R3D_ROAD_HALF + 0.6).toFixed(2) + ', ' + (R3D_ROAD_HALF + 1.0).toFixed(2) + ', da));' +
   '  return asph; }';

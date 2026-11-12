@@ -101,10 +101,21 @@ function _r3dLodMid(R3) {
   return !R3.lodOff && typeof _rtsZoom === 'function' && _rtsZoom() * RTS_TILE * (R3.scale || 1) < R3D_LOD_MID_CELL;
 }
 
+/* A SOLDIER IS DRAWN LARGER THE FURTHER OUT THE CAMERA IS. At a soldier's true scale a rifle
+   squad at the default zoom was two figures five pixels tall on a phone - found only by the
+   ring round it - beside a tank that reads at twenty. So infantry alone are drawn up to
+   R3D_INF_FAR times their size as the view pulls back, and at their own size from
+   R3D_INF_NEAR pixels a cell in, where a figure is big enough to be looked at. The ground they
+   stand on, their reach and the room they take are the simulation's and do not change. */
+var R3D_INF_FAR = 1.9, R3D_INF_NEAR = 48, R3D_INF_SPAN = 32;
+function _r3dInfScale(cell) {
+  return 1 + (R3D_INF_FAR - 1) * Math.max(0, Math.min(1, (R3D_INF_NEAR - cell) / R3D_INF_SPAN));
+}
 function _r3dPaintUnit(C, e, G, R3, drawIn, ART2W, lod) {
   var R = _rtsR, t = G.t || 0;
   var turret = R.spr.turret && R.spr.turret[e.side] && R.spr.turret[e.side][e.def];
   var d2 = rtsUnitDef(e.def), pose = 0, mo = _r3dUnitMotion(R3, e, t);
+  if (d2.kind === 'infantry' && !R3.infScaleOff) ART2W *= _r3dInfScale(R.cell);   /* R3.infScaleOff: the before-picture */
   /* OUT OF SIGHT, OUT OF THE PICTURE - dissolving as it goes (shroud3d.js) */
   var fade = _r3dSeenFade(R3, e, mo, t);
   if (fade <= 0) { if (_rtsVeiled(e)) _r3dVeilDraw(C, e, R3, drawIn); return; }   /* a Veil Tank unseen is a tree: veil3d.js */

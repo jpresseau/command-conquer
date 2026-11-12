@@ -21,12 +21,16 @@
    THE WEATHER. Rain falls as streaks round the view, ringing where it lands, and the ground
    goes wet: darker, with puddles that hold the sky. Fog drifts across the ground in banks. */
 
+/* NIGHT IS MOONLIT, NOT BLACK. At L 0.24/0.29/0.46 the top half of a phone's frame was
+   near-black: a tank could not be told from the grass, a rifle squad not at all. It is a game
+   to be played at night, so the moon is up - still blue, still the darkest sky, its lamps and
+   fires still the brightest things in it. */
 var R3D_SKIES = {
   /* L, S: the lit and shaded sides' colour against day; haze: rgb, amount; night: how far the
      lamps are on; wet; rain; banks: fog banks */
   day:   { L: [1, 1, 1],          S: [1, 1, 1],          haze: [0, 0, 0, 0],             night: 0,    wet: 0, rain: 0, banks: 0 },
   dusk:  { L: [1.04, 0.74, 0.52], S: [0.56, 0.50, 0.66], haze: [0.92, 0.58, 0.40, 0.10], night: 0.5,  wet: 0, rain: 0, banks: 0 },
-  night: { L: [0.24, 0.29, 0.46], S: [0.15, 0.18, 0.31], haze: [0.04, 0.06, 0.12, 0.10], night: 1,    wet: 0, rain: 0, banks: 0 },
+  night: { L: [0.40, 0.46, 0.66], S: [0.27, 0.31, 0.48], haze: [0.04, 0.06, 0.12, 0.10], night: 1,    wet: 0, rain: 0, banks: 0 },
   rain:  { L: [0.64, 0.68, 0.74], S: [0.57, 0.61, 0.69], haze: [0.52, 0.57, 0.63, 0.20], night: 0.35, wet: 1, rain: 1, banks: 0 },
   fog:   { L: [0.86, 0.88, 0.91], S: [0.75, 0.78, 0.83], haze: [0.76, 0.79, 0.82, 0.32], night: 0.15, wet: 0, rain: 0, banks: 1 },
   /* bright, and cold in the shade: the ground white, snow on every roof, the shore frozen */

@@ -104,7 +104,7 @@ var PARTS = ['#rtsDiff', '#rtsDiffNote', '#rtsSky', '#rtsCvd', '#rtsArmySide', '
         goAboveInstall: !!(go && inst) && go.bot <= inst.top + 0.5,
         goOnScreen: !!go && go.bot <= vh + 0.5 && go.top >= -0.5,
         docH: document.documentElement.scrollWidth,
-        stampBg: sc ? sc.backgroundColor : null
+        stampBg: sc ? sc.backgroundColor : null, stampPos: sc ? sc.position : null
       };
     }, [PARTS, sz.w, sz.h]);
     r.name = sz.name; r.w = sz.w; r.h = sz.h;
@@ -125,13 +125,16 @@ var PARTS = ['#rtsDiff', '#rtsDiffNote', '#rtsSky', '#rtsCvd', '#rtsArmySide', '
     await g.close();
   }
 
-  /* The build mark is pinned to the window over a page that scrolls under it, so on a narrow
-     screen it lands in the middle of the artwork card's prose. It needs its own backing or it
-     is two greys on top of each other. */
-  S.ok('the build stamp has a background to sit on',
-       results.every(function (r) {
-         return r.stampBg && r.stampBg !== 'transparent' && !/rgba\(0, 0, 0, 0\)/.test(r.stampBg);
-       }), results[0].stampBg);
+  /* The build mark pinned to the window lies over whatever scrolls under it, so there it needs
+     its own backing or it is two greys on top of each other. On one column (a phone held
+     upright) it is not pinned at all: it sits in the flow at the page's end, over nothing
+     (e2e/looks holds where). */
+  var bare = results.filter(function (r) {
+    return r.stampPos === 'fixed' && (!r.stampBg || r.stampBg === 'transparent' || /rgba\(0, 0, 0, 0\)/.test(r.stampBg));
+  });
+  S.ok('the build stamp has a background to sit on wherever it is pinned over the page',
+       !bare.length && results.some(function (r) { return r.stampPos === 'fixed'; }) && results.some(function (r) { return r.stampPos === 'static'; }),
+       results.map(function (r) { return r.stampPos + ' ' + r.stampBg; }).join(' | '));
 
   /* THE COAST BEHIND IT (title-bg.js): drawn while the title is up, and not one frame while a
      battle is - the title is hidden then, and a canvas animating under the 3D view would be paid

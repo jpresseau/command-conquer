@@ -153,7 +153,9 @@ var S = new Suite('stone');
     S.ok('THE RIDGE: rock in view, a good part of the frame', out.rock > out.frame * 0.15,
          out.rock + ' of ' + out.frame + ' pixels, at ' + out.pxw + ' device px a unit');
     S.ok('STONE: most of the rock changes', out.changed > out.rock * 0.5, out.changed + ' of ' + out.rock);
-    S.ok('TEXTURE: rougher - neighbouring pixels differ by more', out.edge[0] > out.edge[1] * 1.5,
+    /* 1.3: 1.42 measured since rock on a hill stopped being stretched up it (world3d.js
+       _r3dLiftFrom) - the stretch's long plain faces were the smooth side of this; over 1.5 before */
+    S.ok('TEXTURE: rougher - neighbouring pixels differ by more', out.edge[0] > out.edge[1] * 1.3,
          out.edge[0] + ' against ' + out.edge[1] + ' between neighbours, on average');
     S.ok('THE RELIEF: the sun finds it - rougher in the sun than in the shade',
          out.sun[0] > 5000 && out.shade[0] > 5000 && out.sun[1] > out.shade[1] * 1.3,
