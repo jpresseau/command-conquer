@@ -333,6 +333,34 @@ var RTS_SUSPEND_DELAY = 40;      /* Rule.SuspendDelay, seconds before a suspende
    regroup, and the radius inside which a new recruit counts as having joined up. */
 var RTS_STRAY = 9 * RTS_TILE;
 
-function rtsStructDef(k) { for (var i=0;i<RTS_STRUCTS.length;i++) if (RTS_STRUCTS[i].key===k) return RTS_STRUCTS[i]; return null; }
-function rtsUnitDef(k)   { for (var i=0;i<RTS_UNITS.length;i++)   if (RTS_UNITS[i].key===k)   return RTS_UNITS[i];   return null; }
+/* A KEY TO ITS ROW. These were a walk of the table comparing strings - 74 units and 44 structures
+   - from 323 call sites, several a unit a tick: about an eighth of a battle's simulation. The
+   index is built from the table as it stands and trusted only as far as it can be checked: a hit
+   is the table's own row at that index, read now, and returned only if its key is still the one
+   asked for; the tables grow at load (rules/roster11.js) and a spec may change one, so a table
+   whose length has moved, or a row that no longer answers to its key, is walked as before and
+   the index rebuilt. The first row with a key wins, as the walk had it.
+
+   What it cannot see is a NEW key appearing with the length unchanged - a row swapped for
+   another in place, or renamed. Nothing in the game does either; whatever does calls
+   _rtsDefReset. A stale index never answers with the wrong row: only with none. */
+var _RTS_DEF_IX = { s: null, u: null };
+function _rtsDefReset() { _RTS_DEF_IX.s = null; _RTS_DEF_IX.u = null; }
+function _rtsDefIndex(arr) {
+  var m = new Map();
+  for (var i = 0; i < arr.length; i++) if (!m.has(arr[i].key)) m.set(arr[i].key, i);
+  return { arr: arr, n: arr.length, m: m };
+}
+function _rtsDefIn(arr, slot, k) {
+  var X = _RTS_DEF_IX[slot];
+  if (!X || X.arr !== arr || X.n !== arr.length) X = _RTS_DEF_IX[slot] = _rtsDefIndex(arr);
+  var i = X.m.get(k);
+  if (i === undefined) return null;
+  if (arr[i] && arr[i].key === k) return arr[i];
+  _RTS_DEF_IX[slot] = null;                              /* a row was changed under the index: walk, and build it again next time */
+  for (i = 0; i < arr.length; i++) if (arr[i].key === k) return arr[i];
+  return null;
+}
+function rtsStructDef(k) { return _rtsDefIn(RTS_STRUCTS, 's', k); }
+function rtsUnitDef(k)   { return _rtsDefIn(RTS_UNITS, 'u', k); }
 

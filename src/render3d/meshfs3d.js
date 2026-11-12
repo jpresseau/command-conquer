@@ -124,7 +124,7 @@ var R3D_MESH_FS =
   '    }' +
   '  }' +
   /* what is burning near it lights it - render3d/fxlight3d.js */
-  '  c += _plight(vCol.rgb * tint, normalize(vN), vec3(vWxz.x, vHY.y, vWxz.y));' +
+  '  if (uPLn > 0.5) c += _plight(vCol.rgb * tint, normalize(vN), vec3(vWxz.x, vHY.y, vWxz.y));' +
   /* LIT WINDOWS. At night a base was a field of dark boxes with lamps over the doors: the glass of
      every building - the palette's glass, as _tint finds it - read as dull blue-grey with nobody
      home. By the hour's night (1 at night, half at dusk, a little in rain and fog) a building's

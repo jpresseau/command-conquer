@@ -10,7 +10,8 @@
      THE UPLOADS    a frame of a heavy battle sends its effects as four corners a quad, and its
                     instances in a handful of uploads, not one a mesh - and draws them all
      THE PIXELS     in AUTO, slow frames waiting on the GPU shrink the buffer a step, and the
-                    frame still draws; quick ones bring it back to full */
+                    frame still draws; the step is held while it pays, and quick frames bring
+                    it back to full after */
 
 var { chromium } = require('playwright');
 var { Suite } = require('../lib/assert.js');
@@ -80,6 +81,9 @@ var S = new Suite('pace');
     _rtsRFrame(0);
     o.dyn = { w0: w0, w1: R3.cv.width, dyn: R3.dyn, err: gl.getError() };
     for (var t2 = t; t2 < t + R3D_DYN_WINDOW * 8; t2 += 10) _r3dDynFeed(10, 4, t2);
+    o.dyn.held = R3.dyn;
+    /* a step that paid is held R3D_DYN_HOLD before the one above is tried: the frames are quick BECAUSE of it */
+    for (; t2 < t + R3D_DYN_HOLD + R3D_DYN_WINDOW * (R3D_DYN_UP + 4); t2 += 10) _r3dDynFeed(10, 4, t2);
     _rtsRFrame(0);
     o.dyn.back = R3.cv.width; o.dyn.dynBack = R3.dyn;
     try { window.localStorage.setItem('rtsGfxQ', 'high'); } catch (e) {}
@@ -100,7 +104,8 @@ var S = new Suite('pace');
   S.ok('...in a handful of uploads, not one a mesh', f.buf <= 8, f.buf + ' uploads a frame');
   S.ok('in AUTO, slow frames waiting on the GPU shrink the buffer a step', out.dyn.dyn === 0.85 && Math.abs(out.dyn.w1 - Math.round(out.dyn.w0 * 0.85)) <= 1 && out.dyn.err === 0,
        out.dyn.w0 + ' -> ' + out.dyn.w1 + ' px across');
-  S.ok('...and quick ones bring it back to full', out.dyn.dynBack === 1 && out.dyn.back === out.dyn.w0, out.dyn.back + ' px');
+  S.eq('...which eight quick seconds do not undo: the step that paid is held', out.dyn.held, 0.85);
+  S.ok('...and quick frames bring it back to full once it has been', out.dyn.dynBack === 1 && out.dyn.back === out.dyn.w0, out.dyn.back + ' px');
   S.eq('no draw is refused', out.glErr, 0);
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
 

@@ -8,7 +8,7 @@
    furthest short of. Base size tracks the human's building count plus BaseSizeAdd, so the
    opponent grows in response to how you are actually playing. */
 function _rtsAIWants(S) {
-  var G = window._rtsG, have = {}, i, e, theirs = 0, own = 0;
+  var G = window._rtsG, have = {}, i, e, theirs = 0, own = 0, home = {};   /* home: each side's centre, found once */
   for (i = 0; i < G.ents.length; i++) {
     e = G.ents[i];
     if (e.type !== 'struct' || e.dead || e.selling) continue;
@@ -25,7 +25,8 @@ function _rtsAIWants(S) {
        base-defence seed: after the opponent took a Command Yard, its plan never asked for a
        Tesla Coil again, not late but never, still unwanted at 600 seconds. An outpost inside
        the enemy's base does not mean this house needs another power plant at home. */
-    if (_rtsInBase(e.side, e.x, e.z)) own++;
+    if (!(e.side in home)) home[e.side] = _rtsHomeCentre(e.side);
+    if (_rtsInBaseOf(home[e.side], e.x, e.z)) own++;
   }
   /* count what is already on the way, or the AI queues four refineries in a row */
   if (S.q.struct) have[S.q.struct.key] = (have[S.q.struct.key] || 0) + 1;

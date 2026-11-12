@@ -75,6 +75,23 @@ var S = new Suite('fxlight');
     o.cooled = gain(near);
     o.lights = R3.plights;
 
+    /* THE LOOP IS ASKED ONLY WHEN SOMETHING IS LIT (uPLn). With nothing alight the picture is
+       the same whether a surface asks or not - the before-picture switch asks always - and the
+       count the program is given is the number of lights there are */
+    function whole(gate) {
+      R3.plGateOff = gate; R3.plightAmt = 1; _rtsRFrame(0);
+      var b = new Uint8Array(CW * CH * 4); gl.readPixels(0, 0, CW, CH, gl.RGBA, gl.UNSIGNED_BYTE, b);
+      return { b: b, n: gl.getUniform(R3.meshP, gl.getUniformLocation(R3.meshP, 'uPLn')), lights: R3.plights };
+    }
+    function bytes(A, B) { var n = 0; for (var q = 0; q < A.length; q++) if (A[q] !== B[q]) n++; return n; }
+    G.fx.length = 0;
+    var dark = whole(false), darkAsked = whole(true);
+    o.gate = { none: dark.n, lightsNone: dark.lights, asked: darkAsked.n, same: bytes(dark.b, darkAsked.b), slots: R3D_PLIGHTS };
+    G.fx.push({ kind: 'boom', x: wf.x, y: 1, z: front + 5, t: 0.05, big: 1.5 });
+    var lit = whole(false), litAsked = whole(true);
+    o.gate.lit = lit.n; o.gate.lights = lit.lights; o.gate.litSame = bytes(lit.b, litAsked.b); o.gate.seen = bytes(lit.b, dark.b);
+    R3.plGateOff = false; G.fx.length = 0;
+
     gl.getError();
     window.RTS_POST_ON = true;
     wall({ kind: 'firebig', x: wf.x, y: 1, z: wf.z, t: 0.3, big: 2.2, att: wf.id, loops: 4 }, 1);
@@ -99,6 +116,12 @@ var S = new Suite('fxlight');
        'the wall gains ' + f.r + '/' + f.g + '/' + f.b);
   S.ok('...and as the fireball cools, so does its light', sum(c) < sum(n) * 0.25,
        'the wall gains ' + sum(c).toFixed(2) + ' levels in all at 0.7s against ' + sum(n).toFixed(2) + ' at once');
+  var GT = out.gate;
+  S.ok('with nothing alight the mesh program is told so: no lights, none to ask about', GT.none === 0 && GT.lightsNone === 0, JSON.stringify(GT));
+  S.ok('...the before-picture asks always', GT.asked === GT.slots, GT.asked + ' of ' + GT.slots);
+  S.eq('...and the frame is the same, byte for byte, asked or not', GT.same, 0);
+  S.ok('a blast lit, it is told how many, and the wall is lit', GT.lit >= 1 && GT.lit === GT.lights && GT.seen > 1000, GT.lit + ' lights, ' + GT.seen + ' bytes of the frame changed');
+  S.eq('...the same frame as asking always', GT.litSame, 0);
   S.eq('no draw is refused with a building burning and the post buffer on', out.glErr, 0);
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
 

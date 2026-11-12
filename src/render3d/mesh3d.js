@@ -21,65 +21,69 @@ function _r3dFaceNormal(v) {
   }
   return [nx, ny, nz];
 }
+/* TWO PASSES, STRAIGHT INTO TYPED ARRAYS. This built three plain arrays three values at a push,
+   with a temporary array a triangle and another a face, and then copied them into typed ones -
+   and it is on the path of every stall the renderer has: an ore chunk rebuilt as a harvester
+   bites, a model first seen, the base's dressing when a building falls. Counted first and
+   filled in place it is about a third of the time (an ore chunk 8.6 ms to 2.4, a model 4.4 to
+   1.4), and uploads the same bytes: unit/meshbuild holds it to the old builder, byte for byte. */
 function _r3dBuildMesh(gl, faces) {
-  var pos = [], nrm = [], col = [], fi;
+  var fi, nv = 0;
+  for (fi = 0; fi < faces.length; fi++) { var vn = faces[fi].v.length; if (vn > 2) nv += (vn - 2) * 3; }
+  var pos = new Float32Array(nv * 3), nrm8 = new Int8Array(nv * 3), col8 = new Uint8Array(nv * 3), o = 0, top = 0;
   for (fi = 0; fi < faces.length; fi++) {
-    var f = faces[fi], v = f.v;
-    var r = f.c[0] / 255, gc = f.c[1] / 255, b = f.c[2] / 255;
+    var f = faces[fi], v = f.v, n = v.length;           /* under three corners the fan below is empty */
+    var cr = Math.round(f.c[0] / 255 * 255), cg = Math.round(f.c[1] / 255 * 255), cb = Math.round(f.c[2] / 255 * 255);
     /* THE FACE'S NORMAL FROM ALL ITS CORNERS (Newell's method), not from the first three. It was
        the first three, and a rounded box's cap (r3d/curves.js _r3RoundBox) starts with three
        points in a line - two ends of a corner arc and the straight run between - so the cap of
        every rounded box got a zero normal, which the shader normalised into NaN: every barrel,
        fender and hull plate drawn at the high and medium tiers had a black lid. The sum over all
        the edges is exact for a planar polygon and cannot vanish while the polygon has area. */
-    var fn = _r3dFaceNormal(v), nx = fn[0], ny = fn[1], nz = fn[2];
+    var fnv = f.n, nx = 0, ny = 0, nz = 0, nl, e;
+    if (!fnv) {
+      for (e = 0; e < n; e++) {
+        var p0 = v[e], p1 = v[e + 1 === n ? 0 : e + 1];
+        nx += (p0[1] - p1[1]) * (p0[2] + p1[2]);
+        ny += (p0[2] - p1[2]) * (p0[0] + p1[0]);
+        nz += (p0[0] - p1[0]) * (p0[1] + p1[1]);
+      }
+      /* Normals pack to bytes, and Int8 cannot carry the unnormalised sums the emitter produces:
+         normalised here; the shader normalises anyway, so nothing downstream changes. */
+      nl = Math.hypot(nx, ny, nz) || 1;
+      nx = Math.round(nx / nl * 127); ny = Math.round(ny / nl * 127); nz = Math.round(nz / nl * 127);
+    }
     /* UNLESS THE FACE CAME WITH ITS OWN. A cylinder, cone or vault emits one normal per corner
        (see _r3Cyl in r3d/primitives.js), which is what turns a ring of flat strips into a
        curve once the fragment stage interpolates them. Everything else - every box, slab,
        gable and cap - has no such field and is flat, which is what it should be. */
-    var fnv = f.n;
-    for (var k = 2; k < v.length; k++) {
-      var idx = [0, k - 1, k];
+    for (var k = 2; k < n; k++) {
       for (var t = 0; t < 3; t++) {
-        var vi = idx[t], p = v[vi];
-        pos.push(p[0], p[1], p[2]);
-        if (fnv) nrm.push(fnv[vi][0], fnv[vi][1], fnv[vi][2]);
-        else nrm.push(nx, ny, nz);
-        col.push(r, gc, b);
+        var vi = t === 0 ? 0 : (t === 1 ? k - 1 : k), p = v[vi];
+        pos[o] = p[0]; pos[o + 1] = p[1]; pos[o + 2] = p[2];
+        if (p[1] > top) top = p[1];
+        if (fnv) {
+          var q = fnv[vi]; nl = Math.hypot(q[0], q[1], q[2]) || 1;
+          nrm8[o] = Math.round(q[0] / nl * 127); nrm8[o + 1] = Math.round(q[1] / nl * 127); nrm8[o + 2] = Math.round(q[2] / nl * 127);
+        } else { nrm8[o] = nx; nrm8[o + 1] = ny; nrm8[o + 2] = nz; }
+        col8[o] = cr; col8[o + 1] = cg; col8[o + 2] = cb;
+        o += 3;
       }
     }
   }
-  /* Positions stay float; normals and colours pack to bytes. At this system's scale - the
-     world batches alone are several hundred thousand triangles - attribute width is the real
-     budget: floats everywhere is 36 bytes a vertex and packing the two attributes that never
-     needed the precision brings it to 18, which is the difference between a phone keeping the
-     3D mode and dropping the tab. Normals are normalised here because Int8 cannot carry the
-     unnormalised cross products the emitter produces; the shader normalises anyway, so
-     nothing downstream changes. */
-  function fbuf(a) {
+  /* Positions stay float; normals and colours are bytes. At this system's scale - the world
+     batches alone are several hundred thousand triangles - attribute width is the real budget:
+     floats everywhere is 36 bytes a vertex and packing the two attributes that never needed the
+     precision brings it to 18, which is the difference between a phone keeping the 3D mode and
+     dropping the tab. */
+  function buf(a) {
     var b2 = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, b2);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(a), gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, a, gl.STATIC_DRAW);
     return b2;
   }
-  var nrm8 = new Int8Array(nrm.length), col8 = new Uint8Array(col.length);
-  for (var ni = 0; ni < nrm.length; ni += 3) {
-    var nl = Math.hypot(nrm[ni], nrm[ni + 1], nrm[ni + 2]) || 1;
-    nrm8[ni] = Math.round(nrm[ni] / nl * 127);
-    nrm8[ni + 1] = Math.round(nrm[ni + 1] / nl * 127);
-    nrm8[ni + 2] = Math.round(nrm[ni + 2] / nl * 127);
-  }
-  for (var ci = 0; ci < col.length; ci++) col8[ci] = Math.round(col[ci] * 255);
-  function bbuf(a) {
-    var b3 = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, b3);
-    gl.bufferData(gl.ARRAY_BUFFER, a, gl.STATIC_DRAW);
-    return b3;
-  }
-  /* its top, in model units: where a fire on its roof stands (render3d/fxemit3d.js) */
-  var top = 0;
-  for (fi = 1; fi < pos.length; fi += 3) if (pos[fi] > top) top = pos[fi];
-  return { p: fbuf(pos), n: bbuf(nrm8), c: bbuf(col8), verts: pos.length / 3, top: top };
+  /* `top`: its top, in model units - where a fire on its roof stands (render3d/fxemit3d.js) */
+  return { p: buf(pos), n: buf(nrm8), c: buf(col8), verts: nv, top: top };
 }
 
 /* The cache key carries everything that changes the geometry or its colours: type, side,

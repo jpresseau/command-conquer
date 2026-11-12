@@ -55,11 +55,18 @@ function _r3dWarm(R3, ms) {
   var G = window._rtsG, R = window._rtsR;
   if (!G || !R || !R.spr) return;
   if (!R3.warmQ || R3.warmFor !== G) {
-    var sides = {}, defs = {}, q = [];
-    G.ents.forEach(function (e) { if (e.side) sides[e.side] = 1; });
-    RTS_UNITS.forEach(function (u) { defs[u.key] = 1; });
+    /* WHAT EACH SIDE CAN FIELD, not every unit there is: its own army's roster, and whatever of
+       another's already stands on the map in its colours. It warmed every unit type for every
+       side - 376 models, 46 MB of vertex buffers and half a second of frames, most of them for
+       units neither army in the match can build. One it did not warm is built on first sight,
+       as any was before there was a warm-up. R3.warmAll is the before-picture. */
+    var sides = {}, here = {}, q = [];
+    G.ents.forEach(function (e) { if (e.side) { sides[e.side] = 1; if (e.type === 'unit' && !e.dead) here[e.side + ':' + e.def] = 1; } });
     Object.keys(sides).forEach(function (sd) {
-      Object.keys(defs).forEach(function (def) {
+      var army = rtsHouseSide(sd);
+      RTS_UNITS.forEach(function (u) {
+        var def = u.key;
+        if (!R3.warmAll && !here[sd + ':' + def] && !(G.order && G.order.indexOf(sd) >= 0 && rtsBuildableBy(u, army))) return;
         var tur = R.spr.turret && R.spr.turret[sd] && R.spr.turret[sd][def], AP = RTS_AIR_PARTS[def];
         if (tur) { q.push(['u', def, sd, 'hull']); q.push(['u', def, sd, 'turret']); }
         else if (AP && AP.rotor) { q.push(['u', def, sd, 'body']); q.push(['u', def, sd, 'rotor']); }
@@ -80,7 +87,27 @@ function _r3dWarm(R3, ms) {
 }
 
 /* THE PIXELS, fed by the live loop: `dt` the ms since the last frame, `js` the ms the last frame
-   spent in script. */
+   spent in script.
+
+   A DESCENT IS A TRIAL, AND SO IS A STEP BACK UP. This stepped down whenever a window was slow
+   and the wait was not script, and up only under R3D_DYN_FAST - and both halves were wrong on a
+   phone, found by feeding it a phone's frame times:
+     - held at 30 by its own power saving (every frame 33 ms, 5 of script), the wait reads as the
+       GPU's: it went to 0.6 in seven seconds - a third of the pixels, three buffers remade - and
+       stayed, for no frame gained
+     - on a 60 Hz screen a frame is never under 16.7 ms, so 14.5 was never seen: one heavy spell
+       and the picture stayed at 0.6 to the end of the match, the tiers held down with it
+   So a descent remembers the frame time it started from and the step it left. A window that
+   beats that by R3D_Q_GAIN keeps the step it is on; one that does not goes a step lower, since a
+   display's frame times come in whole refreshes and one step may not reach the next; and at the
+   last step with nothing gained it goes back where it began and waits, twice as long each time
+   it is wrong (R3D_DYN_HOLD). And "fast" is measured against the quickest window the display has
+   shown (D.floor), not a constant: R3D_DYN_UP windows at that pace try a step up, which is
+   undone - and waited out the same way - if the next window is slow again. */
+var R3D_DYN_HOLD = 20000;        /* ms a descent that gained nothing waits before another; doubled each time, to R3D_DYN_HOLD_MAX */
+var R3D_DYN_HOLD_MAX = 320000;
+var R3D_DYN_UP = 3;              /* windows at the display's own pace before a step up is tried */
+var R3D_DYN_NEAR = 1.15;         /* within this of the quickest window seen is "at the display's pace" */
 function _r3dDynFeed(dt, js, now) {
   var R3 = window._R3D;
   if (!R3 || !R3.on || _r3dQualityWant() !== 'auto' || !(dt > 0) || dt > 250) return;
@@ -92,18 +119,43 @@ function _r3dDynFeed(dt, js, now) {
   var s = D.s.slice().sort(function (a, b) { return a - b; }), j = D.j.slice().sort(function (a, b) { return a - b; });
   var med = s[s.length >> 1], mj = j[j.length >> 1];
   D.s.length = 0; D.j.length = 0; D.t0 = now;
-  var gpu = med - mj > med * R3D_DYN_GPU;
+  var gpu = med - mj > med * R3D_DYN_GPU, slow = med > R3D_DYN_SLOW && gpu, last = R3D_DYN_STEPS.length - 1;
   R3.dynBound = med > R3D_DYN_SLOW ? (gpu ? 'gpu' : 'js') : null;
-  var i = R3D_DYN_STEPS.indexOf(R3.dyn);
+  if (!(D.floor <= med)) D.floor = med;                  /* the quickest window this display has shown */
+  var i = R3D_DYN_STEPS.indexOf(R3.dyn), T = D.trial;
   if (i < 0) i = 0;
-  if (med > R3D_DYN_SLOW && gpu && i < R3D_DYN_STEPS.length - 1) i++;
-  else if (med < R3D_DYN_FAST && i > 0) i--;
-  else return;
-  R3.dyn = R3D_DYN_STEPS[i];                 /* the next frame sizes its buffer by it (_r3dResize) */
+  function set(k) { R3.dyn = R3D_DYN_STEPS[k]; }          /* the next frame sizes its buffer by it (_r3dResize) */
+  if (R3.dynLegacy) {                                     /* the before-picture: down while slow, up only under a constant */
+    if (slow && i < last) set(i + 1); else if (med < R3D_DYN_FAST && i > 0) set(i - 1);
+    return;
+  }
+  if (T && T.down) {
+    /* it paid: this step stays - and the step above is not tried at once, since the frames are quick only because of it */
+    if (med < T.base * R3D_Q_GAIN) { D.trial = null; D.wait = 0; D.upHold = now + (D.upWait || R3D_DYN_HOLD); }
+    else if (i < last) set(i + 1);                                            /* not yet: one more may reach the next refresh */
+    else { set(T.from); D.trial = null; D.wait = Math.min(R3D_DYN_HOLD_MAX, (D.wait || R3D_DYN_HOLD / 2) * 2); D.hold = now + D.wait; }
+    D.fast = 0;
+    return;
+  }
+  if (T && T.up) {
+    D.trial = null; D.fast = 0;
+    if (slow) { set(T.from); D.upWait = Math.min(R3D_DYN_HOLD_MAX, (D.upWait || R3D_DYN_HOLD / 2) * 2); D.upHold = now + D.upWait; }
+    else D.upWait = 0;
+    return;
+  }
+  if (slow && i < last && !(now < D.hold)) { D.trial = { down: true, from: i, base: med }; D.fast = 0; set(i + 1); return; }
+  var quick = med < R3D_DYN_FAST || med <= D.floor * R3D_DYN_NEAR;
+  if (quick && !slow && i > 0 && !(now < D.upHold)) {
+    D.fast = (D.fast || 0) + 1;
+    if (D.fast >= R3D_DYN_UP) { D.trial = { up: true, from: i }; D.fast = 0; set(i - 1); }
+  } else D.fast = 0;
 }
 /* Has the resolution a step left to give? While it has, a slow GPU-bound frame is its business
    and not the tiers'. */
-function _r3dDynRoom() {
-  var R3 = window._R3D;
+function _r3dDynRoom(now) {
+  var R3 = window._R3D, D = R3 && R3.dynA;
+  /* ...not while it is waiting out a descent that gained nothing: then fewer pixels are not the
+     answer, and the tiers may try theirs. `now`: the feed's clock (the live loop's) */
+  if (D && D.hold > (now === undefined ? _r3dNow() : now) && !D.trial) return false;
   return !!(R3 && R3.dyn !== undefined && R3.dynBound === 'gpu' && R3.dyn > R3D_DYN_STEPS[R3D_DYN_STEPS.length - 1]);
 }
