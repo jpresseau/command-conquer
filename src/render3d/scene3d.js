@@ -186,6 +186,8 @@ function _r3dFrame(G) {
 
   /* --- the marks vehicles have left in it, before anything stands on it (tread3d.js) --- */
   _r3dTreadDraw(gl, R3, G, cam, invD);
+  /* --- the shade under every unit that stands on it (footing3d.js) --- */
+  _r3dFootDraw(gl, R3, G, cam, invD, R3.entCullOff ? null : _r3dBoundsNear(vb, 0, 6));
   /* --- and what is selected, ringed on the ground under it (ring3d.js) --- */
   _r3dRingDraw(gl, R3, G, cam, invD);
 

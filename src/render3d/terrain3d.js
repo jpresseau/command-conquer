@@ -77,10 +77,21 @@ var R3D_MAT_GLSL =
        M.x  weathering            value, 0.7 units   dirt, concrete, a stone's face
        M.y  wind ripples          sin, bent          sand
        M.z  pebbles               grains, 2.4 a unit dirt, gravel on a track   ---- */
+  /* GRASS IS A MEADOW, NOT A CARPET. It is most of the picture, and it was one loud yellow-green
+     with a ripple a unit across cut into every part of it - the busiest thing on the screen, under
+     the units a player has to find. Three greens over the broad drift now, lush to sun-dried, the
+     clumps a soft mottle and the blades a grain that is only there close to; its relief (below)
+     is a tenth of what it was. R3.grassLegacy (uMeadow 0) is the before-picture. */
+  'uniform float uMeadow;' +
   'vec4 _grass(vec4 N, vec4 M, float det){' +
-  '  vec3 c = mix(vec3(0.33, 0.45, 0.17), vec3(0.50, 0.58, 0.24), smoothstep(0.30, 0.72, N.x));' +
-  '  c *= 0.86 + 0.26 * N.z;' +
-  '  c *= 1.0 + (N.w - 0.5) * 0.22 * det;' +                /* blades, faded with distance */
+  '  vec3 c0 = mix(vec3(0.33, 0.45, 0.17), vec3(0.50, 0.58, 0.24), smoothstep(0.30, 0.72, N.x));' +
+  '  c0 *= 0.86 + 0.26 * N.z;' +
+  '  c0 *= 1.0 + (N.w - 0.5) * 0.22 * det;' +
+  '  vec3 c = mix(vec3(0.275, 0.405, 0.160), vec3(0.405, 0.520, 0.210), smoothstep(0.22, 0.78, N.x));' +
+  '  c = mix(c, vec3(0.53, 0.56, 0.28), smoothstep(0.50, 0.26, N.y) * 0.42);' +   /* sun-dried drifts */
+  '  c *= 0.94 + 0.07 * N.z + 0.06 * M.x;' +                /* clumps: a mottle, not a ripple */
+  '  c *= 1.0 + (N.w - 0.5) * 0.13 * det;' +                /* blades, faded with distance */
+  '  c = mix(c0, c, uMeadow);' +
   /* bare patches: the ground showing through, soft-edged */
   '  c = mix(c, vec3(0.55, 0.47, 0.31) * (0.9 + 0.2 * N.z), smoothstep(0.60, 0.70, N.y) * 0.85);' +
   '  return vec4(c, N.z * 0.6 + N.w * 0.25 * det); }' +
@@ -180,7 +191,7 @@ var R3D_MAT_GLSL =
   '  grad = vec2(0.0);' +
   '  if (kdom < 2.5) {' +
   '    vec3 d1 = _gnd(w * 0.85), d2 = _gnd(w * 4.2 + vec2(3.1, 7.7));' +
-  '    if (kdom < 0.5) { grad = d1.yz * 0.51 + d2.yz * 0.75 * det; }' +
+  '    if (kdom < 0.5) { grad = d1.yz * mix(0.51, 0.10, uMeadow) + d2.yz * mix(0.75, 0.34, uMeadow) * det; }' +
   '    else if (kdom < 1.5) { grad = d1.yz * 0.15 + d2.yz * 0.78 * det; }' +
   '    else { float x = 1.0 - abs(d1.x * 2.0 - 1.0), t = clamp((x - 0.86) / 0.12, 0.0, 1.0);' +
   '      grad = d1.yz * 0.2 + 50.0 * t * (1.0 - t) * sign(d1.x * 2.0 - 1.0) * d1.yz * 0.85; }' +
@@ -422,6 +433,7 @@ function _r3dMatSet(gl, R3, P, G) {
   gl.uniform1i(gl.getUniformLocation(P, 'uOreT'), 5);
   gl.activeTexture(gl.TEXTURE0);
   gl.uniform1f(gl.getUniformLocation(P, 'uTileInv'), 1 / RTS_TILE);
+  gl.uniform1f(gl.getUniformLocation(P, 'uMeadow'), R3.grassLegacy ? 0 : 1);   /* the grass before it was a meadow */
   var ss = _r3dScarSun();                          /* scar3d.js: on (0 the old blotches), and the sun's way */
   gl.uniform3f(gl.getUniformLocation(P, 'uScar'), R3.scarAmt === 0 ? 0 : 1, ss[0], ss[1]);
   _r3dRoadSet(gl, R3, P, G);

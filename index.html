@@ -990,7 +990,7 @@ html,body{margin:0;padding:0;height:100%;background:#05080e;overflow:hidden}
   <div id="rtsErr"></div>
   </div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">b4cba60 · 2026-11-12</div>
+  <div id="rtsBuild" title="build">d91e0b8 · 2026-11-12</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -27017,9 +27017,9 @@ function _r3dShadowCopy(gl, C) {
    frame times of its own. */
 
 var R3D_TIERS = [
-  { name: 'HIGH',   scale: 4,   shadow: 1, post: 1, ao: 1, heat: 1, clouds: 1, sil: 1, lights: 1, detail: 1, apron: 1 },
-  { name: 'MEDIUM', scale: 2,   shadow: 1, post: 1, ao: 0, heat: 0, clouds: 0, sil: 1, lights: 1, detail: 1, apron: 1 },
-  { name: 'LOW',    scale: 1.5, shadow: 0, post: 0, ao: 0, heat: 0, clouds: 0, sil: 0, lights: 0, detail: 0, apron: 0 }
+  { name: 'HIGH',   scale: 4,   shadow: 1, post: 1, ao: 1, heat: 1, clouds: 1, ink: 1, sil: 1, lights: 1, detail: 1, apron: 1 },
+  { name: 'MEDIUM', scale: 2,   shadow: 1, post: 1, ao: 0, heat: 0, clouds: 0, ink: 1, sil: 1, lights: 1, detail: 1, apron: 1 },
+  { name: 'LOW',    scale: 1.5, shadow: 0, post: 0, ao: 0, heat: 0, clouds: 0, ink: 0, sil: 0, lights: 0, detail: 0, apron: 0 }
 ];
 var RTS_GFXQ_LS = 'rtsGfxQ';            /* 'auto' (or unset), 'high', 'medium', 'low' */
 var R3D_Q_WINDOW = 2500;                /* ms of frames AUTO judges at a time */
@@ -28588,6 +28588,36 @@ function _r3dHeatSet(gl, R3, P, on) {
    darkening straight down the channels takes the sky back out of every corner the AO found. */
 /* how sharp a break in depth, in world units, counts as a geometric edge for the edge filter */
 var R3D_AA_EDGE = 0.25;
+/* THE INK: a thing's own rim, darkened where it stands in front of something further off. The
+   units are the smallest things in the picture and the ones a player has to find, and at a
+   phone's zoom a hull is a dozen pixels whose edge the ground's colour runs straight into. The
+   depth buffer knows where every silhouette is - its second difference across a pixel is zero on
+   any plane and jumps at an edge, the same test the edge filter below makes - and SIGNED it
+   knows which side of the edge the pixel is on: positive where this pixel is the nearer one. So
+   only the thing's own outermost pixels are darkened, never the ground beside it: no halo, and
+   a wire or a blade of grass a pixel wide is not given a dotted shadow (it was, both sides
+   inked). From R3D_INK_EDGE[0] world units of break, full by [1]: a tuft of grass is under it
+   (world3d.js keeps a tuft short for this - they stood as tall as a tank's hull), a turret, a
+   rifleman, a trunk and a wall are over it. A low hull's own edge is not: its shade grounds it. The taps are R3D_INK_PX CSS pixels apart
+   whatever the buffer's resolution, so the line is the same weight on every screen. Not under
+   what glows: a fireball in front of a wall is light, and has no rim - read off the bloom, which
+   IS the glow, not off the pixel's own brightness (tried: most of a fireball is under 0.7 before
+   its bloom is added, and that guard let nearly all the ink through). R3.inkAmt takes it out. */
+var R3D_INK = 0.34;
+var R3D_INK_EDGE = [0.35, 0.9];
+var R3D_INK_PX = 0.8;
+/* ...and lighter from far off. The line is a pixel whatever the zoom, so the further out the
+   camera the more of each thing is its rim: at the widest view a wood was a black mass. Full at
+   the default zoom's cell and nearer, down to R3D_INK_FAR of it by a cell of R3D_INK_CELLS[0]. */
+var R3D_INK_CELLS = [10, 24];
+var R3D_INK_FAR = 0.3;
+/* how far apart the taps are, in the buffer's texels: never closer than neighbours */
+function _r3dInkTap(R3) { return Math.max(1, R3D_INK_PX * (R3.scale || 1)); }
+function _r3dInkAmt(R3, cell) {
+  var a = R3.inkAmt === undefined ? R3D_INK : R3.inkAmt;
+  var k = (cell - R3D_INK_CELLS[0]) / (R3D_INK_CELLS[1] - R3D_INK_CELLS[0]);
+  return a * (R3D_INK_FAR + (1 - R3D_INK_FAR) * Math.max(0, Math.min(1, k)));
+}
 var R3D_AO_RESOLVE_FS =
   'precision highp float; varying vec2 vT;' +
   'uniform sampler2D uScene; uniform sampler2D uAO; uniform float uAOAmt;' +
@@ -28611,6 +28641,14 @@ var R3D_AO_RESOLVE_FS =
   '  c = mix(c, c * c * (3.0 - 2.0 * c), 0.32);' +
   '  return mix(c, vec3(0.83, 0.86, 0.87), smoothstep(0.55, 1.0, uv.y) * 0.22); }' +
   'float _lum(vec3 c){ return dot(c, vec3(0.299, 0.587, 0.114)); }' +
+  'uniform sampler2D uDepthR;' +
+  'uniform vec2 uInk;' +             /* how much, and how far apart its taps are in texels */
+  'float _ink(vec2 uv){' +
+  '  vec2 o = uTexel * uInk.y; float z0 = texture2D(uDepthR, uv).r;' +
+  '  float sx = texture2D(uDepthR, uv + vec2(o.x, 0.0)).r + texture2D(uDepthR, uv - vec2(o.x, 0.0)).r - 2.0 * z0;' +
+  '  float sy = texture2D(uDepthR, uv + vec2(0.0, o.y)).r + texture2D(uDepthR, uv - vec2(0.0, o.y)).r - 2.0 * z0;' +
+  '  return smoothstep(' + (R3D_INK_EDGE[0] / (2 * R3D_DEPTH_RANGE)).toExponential(3) + ', ' +
+       (R3D_INK_EDGE[1] / (2 * R3D_DEPTH_RANGE)).toExponential(3) + ', max(sx, sy)); }' +
   /* ONLY WHERE THERE IS GEOMETRY'S EDGE. FXAA reads colour, so it cannot tell a silhouette
      from detail painted on a surface - and the ground is detail now (render3d/terrain3d.js):
      cobble seams, pebbles, blades. Left alone it smeared all of it, 3.1 levels of contrast gone
@@ -28618,7 +28656,6 @@ var R3D_AO_RESOLVE_FS =
      edges, so this does the same: the depth buffer's SECOND difference across the pixel is
      near zero on any plane or gentle slope at every zoom and jumps at a silhouette, and below
      R3D_AA_EDGE the pixel is left exactly as it was. */
-  'uniform sampler2D uDepthR;' +
   'vec3 _fxaa(vec2 uv){' +
   '  vec3 mC = texture2D(uScene, uv).rgb;' +
   '  float z0 = texture2D(uDepthR, uv).r;' +
@@ -28652,7 +28689,9 @@ var R3D_AO_RESOLVE_FS =
   '  vec3 lit = c * mix(vec3(' + R3D_AO_FLOOR[0].toFixed(3) + ', ' +
        R3D_AO_FLOOR[1].toFixed(3) + ', ' + R3D_AO_FLOOR[2].toFixed(3) +
        '), vec3(1.0), ao);' +
-  '  lit += texture2D(uBloom, vT).rgb * uBloomAmt;' +
+  '  vec3 glow = texture2D(uBloom, vT).rgb * uBloomAmt;' +
+  '  if (uInk.x > 0.0) lit *= 1.0 - uInk.x * _ink(hv) * (1.0 - smoothstep(0.03, 0.20, _lum(glow)));' +
+  '  lit += glow;' +
   '  lit = mix(lit, _grade(lit, vT), uGrade);' +
   '  gl_FragColor = vec4(lit, 1.0);' +
   '}';
@@ -28679,6 +28718,7 @@ function _r3dResolve(R3) {
   var postOn = typeof RTS_POST_ON === 'undefined' || RTS_POST_ON;
   gl.uniform1f(gl.getUniformLocation(R3.aoResolveP, 'uGrade'),
                postOn ? (R3.gradeAmt === undefined ? 1 : R3.gradeAmt) : 0);
+  gl.uniform2f(gl.getUniformLocation(R3.aoResolveP, 'uInk'), postOn && _r3dQ('ink') ? _r3dInkAmt(R3, _rtsR.cell) : 0, _r3dInkTap(R3));
   _r3dHeatSet(gl, R3, R3.aoResolveP, postOn && _r3dQ('heat'));
   /* The glow. R3.bloomOn is set by _r3dBloomPass for this frame only; with nothing burning the
      amount is zero and the sampler still needs a bound texture, so it gets the AO one - a
@@ -29202,10 +29242,21 @@ var R3D_MAT_GLSL =
        M.x  weathering            value, 0.7 units   dirt, concrete, a stone's face
        M.y  wind ripples          sin, bent          sand
        M.z  pebbles               grains, 2.4 a unit dirt, gravel on a track   ---- */
+  /* GRASS IS A MEADOW, NOT A CARPET. It is most of the picture, and it was one loud yellow-green
+     with a ripple a unit across cut into every part of it - the busiest thing on the screen, under
+     the units a player has to find. Three greens over the broad drift now, lush to sun-dried, the
+     clumps a soft mottle and the blades a grain that is only there close to; its relief (below)
+     is a tenth of what it was. R3.grassLegacy (uMeadow 0) is the before-picture. */
+  'uniform float uMeadow;' +
   'vec4 _grass(vec4 N, vec4 M, float det){' +
-  '  vec3 c = mix(vec3(0.33, 0.45, 0.17), vec3(0.50, 0.58, 0.24), smoothstep(0.30, 0.72, N.x));' +
-  '  c *= 0.86 + 0.26 * N.z;' +
-  '  c *= 1.0 + (N.w - 0.5) * 0.22 * det;' +                /* blades, faded with distance */
+  '  vec3 c0 = mix(vec3(0.33, 0.45, 0.17), vec3(0.50, 0.58, 0.24), smoothstep(0.30, 0.72, N.x));' +
+  '  c0 *= 0.86 + 0.26 * N.z;' +
+  '  c0 *= 1.0 + (N.w - 0.5) * 0.22 * det;' +
+  '  vec3 c = mix(vec3(0.275, 0.405, 0.160), vec3(0.405, 0.520, 0.210), smoothstep(0.22, 0.78, N.x));' +
+  '  c = mix(c, vec3(0.53, 0.56, 0.28), smoothstep(0.50, 0.26, N.y) * 0.42);' +   /* sun-dried drifts */
+  '  c *= 0.94 + 0.07 * N.z + 0.06 * M.x;' +                /* clumps: a mottle, not a ripple */
+  '  c *= 1.0 + (N.w - 0.5) * 0.13 * det;' +                /* blades, faded with distance */
+  '  c = mix(c0, c, uMeadow);' +
   /* bare patches: the ground showing through, soft-edged */
   '  c = mix(c, vec3(0.55, 0.47, 0.31) * (0.9 + 0.2 * N.z), smoothstep(0.60, 0.70, N.y) * 0.85);' +
   '  return vec4(c, N.z * 0.6 + N.w * 0.25 * det); }' +
@@ -29305,7 +29356,7 @@ var R3D_MAT_GLSL =
   '  grad = vec2(0.0);' +
   '  if (kdom < 2.5) {' +
   '    vec3 d1 = _gnd(w * 0.85), d2 = _gnd(w * 4.2 + vec2(3.1, 7.7));' +
-  '    if (kdom < 0.5) { grad = d1.yz * 0.51 + d2.yz * 0.75 * det; }' +
+  '    if (kdom < 0.5) { grad = d1.yz * mix(0.51, 0.10, uMeadow) + d2.yz * mix(0.75, 0.34, uMeadow) * det; }' +
   '    else if (kdom < 1.5) { grad = d1.yz * 0.15 + d2.yz * 0.78 * det; }' +
   '    else { float x = 1.0 - abs(d1.x * 2.0 - 1.0), t = clamp((x - 0.86) / 0.12, 0.0, 1.0);' +
   '      grad = d1.yz * 0.2 + 50.0 * t * (1.0 - t) * sign(d1.x * 2.0 - 1.0) * d1.yz * 0.85; }' +
@@ -29547,6 +29598,7 @@ function _r3dMatSet(gl, R3, P, G) {
   gl.uniform1i(gl.getUniformLocation(P, 'uOreT'), 5);
   gl.activeTexture(gl.TEXTURE0);
   gl.uniform1f(gl.getUniformLocation(P, 'uTileInv'), 1 / RTS_TILE);
+  gl.uniform1f(gl.getUniformLocation(P, 'uMeadow'), R3.grassLegacy ? 0 : 1);   /* the grass before it was a meadow */
   var ss = _r3dScarSun();                          /* scar3d.js: on (0 the old blotches), and the sun's way */
   gl.uniform3f(gl.getUniformLocation(P, 'uScar'), R3.scarAmt === 0 ? 0 : 1, ss[0], ss[1]);
   _r3dRoadSet(gl, R3, P, G);
@@ -31376,6 +31428,129 @@ function _r3dRingDraw(gl, R3, G, cam, invD) {
   return n;
 }
 </script>
+<script>/* render3d/footing3d.js - every unit stands in its own shade. Part of rts.render3d.
+
+   The sun's shadow map (shadow3d.js) shades the map: a wood its floor, a ridge the grass, a
+   building its yard. A texel of it is a quarter of a cell, though, and a tank is half a cell
+   across, a rifleman a tenth - so the things a player has to FIND were the one kind of thing on
+   the map with nothing under them, olive hulls laid on green grass like stickers. The occlusion
+   pass (post3d.js) cannot do it either: at the zoom a phone plays at a unit is a dozen pixels of
+   a half-resolution buffer.
+
+   So each unit on the ground has the shade under its own hull drawn for it: a soft dark
+   ellipse, the hull's length along its heading and its width across, densest in the middle and
+   gone by the edge, in the cool blue-grey the scene's shade is. Drawn straight after the ground
+   and the tread marks and before the selection's ring, so a ring lies over it and the unit
+   stands on both. It is not a cast shadow and does not pretend to be one - it is the contact,
+   the dark a thing has where it meets the ground, which is what puts it ON the ground.
+
+   NOT under what flies (its shadow is the sun's, far from it), what floats (the sea is drawn
+   over the seabed this would lie on), what is crossing a bridge (the deck is), or what the
+   player cannot see. R3.footAmt (0 to 1) takes it out and leaves the rest, as R3.selAmt does
+   the rings. */
+
+var R3D_FOOT_F = 11;                     /* the ring's own vertex: x y z, local x z, half-size x z, alpha, r g b */
+var R3D_FOOT_A = 0.5;                    /* how dark at the centre, by day */
+var R3D_FOOT_COL = [0.035, 0.05, 0.10];  /* the scene's shade is blue-grey, not black: light3d.js */
+var R3D_FOOT_LONG = 1.2;                 /* a hull's half-length, as a multiple of its radius... */
+var R3D_FOOT_WIDE = 0.92;                /* ...and its half-width */
+var R3D_FOOT_INF = 0.75;                 /* a soldier's: round, and smaller than the circle he is picked by */
+
+function _r3dFootFS() {
+  return 'precision highp float; varying vec4 vL; varying vec4 vK;' +
+    'uniform float uAmt;' +
+    'void main(){' +
+    '  float d = length(vL.xy / vL.zw);' +
+    '  float a = 1.0 - smoothstep(0.30, 1.0, d);' +
+    '  gl_FragColor = vec4(vK.yzw, a * a * vK.x * uAmt);' +
+    '}';
+}
+
+/* Does this unit stand on ground the shade can be drawn on? */
+function _r3dFootOn(e, d) {
+  if (!d || e.dead || e.inside || e.air || d.sea || e.chute > 0) return false;
+  if (typeof _rtsEntSeen === 'function' && !_rtsEntSeen(e)) return false;
+  var k = _rtsInB(_rtsTX(e.x), _rtsTX(e.z)) ? window._rtsG.terrain[_rtsIdx(_rtsTX(e.x), _rtsTX(e.z))] : -1;
+  if (k === RTS_T_WATER) return false;                                  /* wading, swimming, an amphibian afloat */
+  return !(_rtsStandY(e.x, e.z) > _rtsElev(e.x, e.z) + 0.01);           /* on a bridge's deck */
+}
+
+/* One unit's shade, into a at o: a quad turned to its heading, each corner on the ground. */
+function _r3dFootQuad(a, o, e, hl, hw, alpha) {
+  var c = Math.cos(e.rot || 0), s = Math.sin(e.rot || 0), ml = hl * 1.04, mw = hw * 1.04;
+  var P = [[-1, -1], [1, -1], [1, 1], [-1, -1], [1, 1], [-1, 1]];
+  for (var i = 0; i < 6; i++) {
+    var ll = P[i][0] * ml, lw = P[i][1] * mw, x = e.x + c * ll - s * lw, z = e.z + s * ll + c * lw;
+    a[o] = x; a[o + 1] = _rtsElev(x, z) + 0.04; a[o + 2] = z;
+    a[o + 3] = ll; a[o + 4] = lw; a[o + 5] = hl; a[o + 6] = hw;
+    a[o + 7] = alpha; a[o + 8] = R3D_FOOT_COL[0]; a[o + 9] = R3D_FOOT_COL[1]; a[o + 10] = R3D_FOOT_COL[2];
+    o += R3D_FOOT_F;
+  }
+}
+
+/* The shade of every unit on the ground inside `view` (world x0 x1 z0 z1; none = all), into
+   R3.footA; how many. */
+function _r3dFootBuild(G, R3, view) {
+  var n = 0, E = G.ents, inf = R3.infScaleOff ? 1 : _r3dInfScale(_rtsR.cell);
+  for (var i = 0; i < E.length; i++) {
+    var e = E[i];
+    if (e.type !== 'unit' || e.dead) continue;
+    if (view && (e.x < view.x0 || e.x > view.x1 || e.z < view.z0 || e.z > view.z1)) continue;
+    var d = rtsUnitDef(e.def);
+    if (!_r3dFootOn(e, d)) continue;
+    if (!R3.footA || R3.footA.length < (n + 1) * 6 * R3D_FOOT_F) {
+      var big = new Float32Array(Math.max(64, (n + 1) * 2) * 6 * R3D_FOOT_F);
+      if (R3.footA) big.set(R3.footA);
+      R3.footA = big;
+    }
+    var r = d.r || 1.2, foot = d.kind === 'infantry';
+    _r3dFootQuad(R3.footA, n * 6 * R3D_FOOT_F, e, foot ? r * R3D_FOOT_INF * inf : r * R3D_FOOT_LONG,
+                 foot ? r * R3D_FOOT_INF * inf : r * R3D_FOOT_WIDE, foot ? 0.8 : 1);
+    n++;
+  }
+  return n;
+}
+
+function _r3dFootDraw(gl, R3, G, cam, invD, view) {
+  var amt = R3.footAmt === undefined ? 1 : R3.footAmt;
+  R3.foots = 0;
+  if (!(amt > 0) || R3.footFail) return 0;
+  var n = _r3dFootBuild(G, R3, view);
+  if (!n) return 0;
+  if (!R3.footP) {
+    try { R3.footP = _r3dProgram(gl, _r3dRingVS(), _r3dFootFS()); } catch (e) { R3.footP = null; }
+    if (!R3.footP) { R3.footFail = 1; return 0; }
+    R3.footBuf = gl.createBuffer();
+  }
+  var P = R3.footP, i, night = (R3.sky && R3.sky.night) || 0;
+  gl.bindBuffer(gl.ARRAY_BUFFER, R3.footBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, R3.footA.subarray(0, n * 6 * R3D_FOOT_F), gl.DYNAMIC_DRAW);
+  gl.useProgram(P);
+  gl.uniform4fv(gl.getUniformLocation(P, 'uCam'), cam);
+  _r3dCamU(gl, P);
+  gl.uniform1f(gl.getUniformLocation(P, 'uInvD'), invD);
+  /* by night the whole map is in shade, and a unit's own is most of the way to it already */
+  gl.uniform1f(gl.getUniformLocation(P, 'uAmt'), Math.min(1, amt) * R3D_FOOT_A * (1 - 0.45 * night));
+  var at = [['aP', 3, 0], ['aL', 4, 12], ['aK', 4, 28]], loc = [];
+  for (i = 0; i < at.length; i++) {
+    loc.push(gl.getAttribLocation(P, at[i][0]));
+    if (loc[i] < 0) continue;
+    gl.enableVertexAttribArray(loc[i]);
+    if (R3.inst && R3.inst.on) R3.inst.divisor(loc[i], 0);
+    gl.vertexAttribPointer(loc[i], at[i][1], gl.FLOAT, false, R3D_FOOT_F * 4, at[i][2]);
+  }
+  gl.enable(gl.DEPTH_TEST);
+  gl.depthMask(false);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.drawArrays(gl.TRIANGLES, 0, n * 6);
+  gl.disable(gl.BLEND);
+  gl.depthMask(true);
+  for (i = 0; i < loc.length; i++) if (loc[i] >= 0) gl.disableVertexAttribArray(loc[i]);
+  R3.foots = n;
+  return n;
+}
+</script>
 <script>/* render3d/husk3d.js - what is left of a vehicle. Part of rts.render3d.
 
    A tank that died went out in a pop and was gone from the next frame: the fire that burns where
@@ -32407,6 +32582,8 @@ function _r3dFrame(G) {
 
   /* --- the marks vehicles have left in it, before anything stands on it (tread3d.js) --- */
   _r3dTreadDraw(gl, R3, G, cam, invD);
+  /* --- the shade under every unit that stands on it (footing3d.js) --- */
+  _r3dFootDraw(gl, R3, G, cam, invD, R3.entCullOff ? null : _r3dBoundsNear(vb, 0, 6));
   /* --- and what is selected, ringed on the ground under it (ring3d.js) --- */
   _r3dRingDraw(gl, R3, G, cam, invD);
 
@@ -33818,6 +33995,11 @@ function _r3dFxAir(G, V) {
 var R3D_CHUNK = 32;            /* cells per chunk side; 128-cell map -> 4x4 chunks */
 var R3D_TUFTS_PER_CELL = 3;
 var R3D_TUFT_ODDS = 0.62;      /* share of grass cells that carry tufts at all */
+/* A tuft is the meadow's own green standing up out of it, and short: dark bottle-green spikes
+   as tall as a tank's hull were the second loudest thing on the grass after its ripple, and the
+   ink (resolve3d.js) outlines whatever stands R3D_INK_EDGE[0] clear of the ground behind it. */
+var R3D_TUFT_H = [0.22, 0.24];
+var R3D_TUFT_COLS = [['#5f8240', '#4e7034'], ['#587a3a', '#6f9049']];
 var R3D_WORLD_YMAX = 14;       /* tallest world geometry; the cull margin hangs on it */
 var R3D_SWAY = 0.09;           /* world units the wind moves a canopy or a tuft (R3D_MESH_VS) */
 
@@ -34048,10 +34230,10 @@ function _r3dWorldBuild(G) { return _r3SegBulk(function () {
               for (var tf = 0; tf < R3D_TUFTS_PER_CELL; tf++) {
                 var fx = wx + (_sprHash(tx * 31 + tf, tz, 367) - 0.5) * RTS_TILE;
                 var fz = wz + (_sprHash(tz * 31 + tf, tx, 373) - 0.5) * RTS_TILE;
-                var fh = 0.5 + _sprHash(tx * 31 + tf, tz, 379) * 0.7;
+                var fh = R3D_TUFT_H[0] + _sprHash(tx * 31 + tf, tz, 379) * R3D_TUFT_H[1];
                 /* blades, not a cone - a cone on a map of conifers is a sapling; r3d/tuft.js */
                 _r3Tuft(faces, fx, 0, fz, fh,
-                        (tf & 1) ? ['#56773f', '#739450'] : ['#62844a', '#4f7040'],
+                        R3D_TUFT_COLS[tf & 1],
                         (tx * 131 + tz) * 3 + tf);
               }
             }

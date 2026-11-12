@@ -230,10 +230,10 @@ breaking it shipped once.
   the world batch (`uSway`, set for the world loop and reset after it). `R3.surfAmt`,
   `R3.swayAmt`. To watch foam over time, hold the swell (`R3D_WAVE_AMP`) and the chop still and
   recover the foam's own mix: the water under it changes colour with the swell. `e2e/ambient`.
-- **In 3D a selection is a ring on the ground** (`render3d/ring3d.js`), not Red Alert's corner
-  brackets: a band round a unit, a rounded box round a building's footprint, drawn after the
-  treads and before the entities so a unit stands in its ring. `R3.selAmt`. `e2e/selring`. A check's expected
-  number must be the test's own: reading `R3D_RING_UNIT` back let a ring drawn anywhere pass.
+- **In 3D a selection is a ring on the ground** (`render3d/ring3d.js`), not corner brackets, drawn
+  after the treads and before the entities. `R3.selAmt`. `e2e/selring`. A check's expected number must be
+  the test's own: reading `R3D_RING_UNIT` back let a ring drawn anywhere pass. Under it **every unit's own
+  shade** (`footing3d.js`), and **an inked rim** (`resolve3d.js` `_ink`) on a calm meadow: `e2e/grounded`, docs/render3d.md.
 - **The air shimmers over what burns** (`render3d/heat3d.js`, read by the composite): a column of
   heat over each of the strongest effect lights that sends one (the sixth element of
   `_r3dFxLightOf`), where the scene is read a couple of pixels off. Part of the light pass

@@ -261,6 +261,33 @@ mark of its own, somewhere in the cell and the size of the blast:
   anywhere with no scar; a crater is two thirds bare earth (none before) and its halves differ in
   light by 20 to 24, against 3 to 8.
 
+## The picture units are found in (`terrain3d.js` `_grass`, `footing3d.js`, `resolve3d.js` `_ink`)
+
+Grass is most of the screen and the units are the smallest things on it. Three changes, each with
+its own switch and held by `e2e/grounded` and `unit/footing`:
+
+- **The meadow.** `_grass` was one loud yellow-green with a ripple a world unit across in both its
+  colour and its relief. It is three greens over the broad drift now (lush, the field's own,
+  sun-dried where the patch noise runs low), the clumps a soft mottle, the blades a grain that
+  fades with distance, and a relief a fifth of what it was. `uMeadow` mixes old to new, so
+  `R3.grassLegacy` is the before-picture **on the same frame**. Bare patches and the material's
+  height (which decides who wins at a border) are unchanged, so borders did not move. Tufts
+  (`R3D_TUFT_COLS`, `R3D_TUFT_H` in `world3d.js`) are the meadow's own green and shorter: dark
+  spikes read as specks from far off, and pale ones do too.
+- **The shade under a unit.** The sun's shadow map has a quarter-cell texel and the occlusion
+  pass is half resolution, so a hull had nothing under it. `footing3d.js` draws a soft dark
+  ellipse under every unit on the ground, turned to its heading, straight after the tread marks
+  and before the selection ring. Not for what flies, floats, wades, rides inside something or
+  stands on a bridge's deck (`_r3dFootOn`); lighter by night. `R3.footAmt`.
+- **The ink.** The resolve pass darkens a thing's own rim where the depth buffer's **signed**
+  second difference says this pixel is the nearer side of a break. Signed is the point: unsigned
+  inks both sides, which halos every unit and gives each wire and blade of grass a dotted shadow.
+  From `R3D_INK_EDGE[0]` world units of break; lighter from far off (`_r3dInkAmt`, a line is a
+  pixel at every zoom, so far out a wood was a black mass); taps a fixed distance apart on the
+  screen (`_r3dInkTap`); not under what glows, read off the bloom (a guard on the pixel's own
+  brightness let nearly all of it through: a fireball is dim before its bloom is added). A quality-table entry (`ink`), off on LOW.
+  `R3.inkAmt`.
+
 ## The stalls (`mesh3d.js`, `ore3d.js`, `pace3d.js`)
 
 A big fight was slow in stalls, not in its steady frame: measured, the frame's own script is

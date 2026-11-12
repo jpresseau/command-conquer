@@ -26,6 +26,36 @@
    darkening straight down the channels takes the sky back out of every corner the AO found. */
 /* how sharp a break in depth, in world units, counts as a geometric edge for the edge filter */
 var R3D_AA_EDGE = 0.25;
+/* THE INK: a thing's own rim, darkened where it stands in front of something further off. The
+   units are the smallest things in the picture and the ones a player has to find, and at a
+   phone's zoom a hull is a dozen pixels whose edge the ground's colour runs straight into. The
+   depth buffer knows where every silhouette is - its second difference across a pixel is zero on
+   any plane and jumps at an edge, the same test the edge filter below makes - and SIGNED it
+   knows which side of the edge the pixel is on: positive where this pixel is the nearer one. So
+   only the thing's own outermost pixels are darkened, never the ground beside it: no halo, and
+   a wire or a blade of grass a pixel wide is not given a dotted shadow (it was, both sides
+   inked). From R3D_INK_EDGE[0] world units of break, full by [1]: a tuft of grass is under it
+   (world3d.js keeps a tuft short for this - they stood as tall as a tank's hull), a turret, a
+   rifleman, a trunk and a wall are over it. A low hull's own edge is not: its shade grounds it. The taps are R3D_INK_PX CSS pixels apart
+   whatever the buffer's resolution, so the line is the same weight on every screen. Not under
+   what glows: a fireball in front of a wall is light, and has no rim - read off the bloom, which
+   IS the glow, not off the pixel's own brightness (tried: most of a fireball is under 0.7 before
+   its bloom is added, and that guard let nearly all the ink through). R3.inkAmt takes it out. */
+var R3D_INK = 0.34;
+var R3D_INK_EDGE = [0.35, 0.9];
+var R3D_INK_PX = 0.8;
+/* ...and lighter from far off. The line is a pixel whatever the zoom, so the further out the
+   camera the more of each thing is its rim: at the widest view a wood was a black mass. Full at
+   the default zoom's cell and nearer, down to R3D_INK_FAR of it by a cell of R3D_INK_CELLS[0]. */
+var R3D_INK_CELLS = [10, 24];
+var R3D_INK_FAR = 0.3;
+/* how far apart the taps are, in the buffer's texels: never closer than neighbours */
+function _r3dInkTap(R3) { return Math.max(1, R3D_INK_PX * (R3.scale || 1)); }
+function _r3dInkAmt(R3, cell) {
+  var a = R3.inkAmt === undefined ? R3D_INK : R3.inkAmt;
+  var k = (cell - R3D_INK_CELLS[0]) / (R3D_INK_CELLS[1] - R3D_INK_CELLS[0]);
+  return a * (R3D_INK_FAR + (1 - R3D_INK_FAR) * Math.max(0, Math.min(1, k)));
+}
 var R3D_AO_RESOLVE_FS =
   'precision highp float; varying vec2 vT;' +
   'uniform sampler2D uScene; uniform sampler2D uAO; uniform float uAOAmt;' +
@@ -49,6 +79,14 @@ var R3D_AO_RESOLVE_FS =
   '  c = mix(c, c * c * (3.0 - 2.0 * c), 0.32);' +
   '  return mix(c, vec3(0.83, 0.86, 0.87), smoothstep(0.55, 1.0, uv.y) * 0.22); }' +
   'float _lum(vec3 c){ return dot(c, vec3(0.299, 0.587, 0.114)); }' +
+  'uniform sampler2D uDepthR;' +
+  'uniform vec2 uInk;' +             /* how much, and how far apart its taps are in texels */
+  'float _ink(vec2 uv){' +
+  '  vec2 o = uTexel * uInk.y; float z0 = texture2D(uDepthR, uv).r;' +
+  '  float sx = texture2D(uDepthR, uv + vec2(o.x, 0.0)).r + texture2D(uDepthR, uv - vec2(o.x, 0.0)).r - 2.0 * z0;' +
+  '  float sy = texture2D(uDepthR, uv + vec2(0.0, o.y)).r + texture2D(uDepthR, uv - vec2(0.0, o.y)).r - 2.0 * z0;' +
+  '  return smoothstep(' + (R3D_INK_EDGE[0] / (2 * R3D_DEPTH_RANGE)).toExponential(3) + ', ' +
+       (R3D_INK_EDGE[1] / (2 * R3D_DEPTH_RANGE)).toExponential(3) + ', max(sx, sy)); }' +
   /* ONLY WHERE THERE IS GEOMETRY'S EDGE. FXAA reads colour, so it cannot tell a silhouette
      from detail painted on a surface - and the ground is detail now (render3d/terrain3d.js):
      cobble seams, pebbles, blades. Left alone it smeared all of it, 3.1 levels of contrast gone
@@ -56,7 +94,6 @@ var R3D_AO_RESOLVE_FS =
      edges, so this does the same: the depth buffer's SECOND difference across the pixel is
      near zero on any plane or gentle slope at every zoom and jumps at a silhouette, and below
      R3D_AA_EDGE the pixel is left exactly as it was. */
-  'uniform sampler2D uDepthR;' +
   'vec3 _fxaa(vec2 uv){' +
   '  vec3 mC = texture2D(uScene, uv).rgb;' +
   '  float z0 = texture2D(uDepthR, uv).r;' +
@@ -90,7 +127,9 @@ var R3D_AO_RESOLVE_FS =
   '  vec3 lit = c * mix(vec3(' + R3D_AO_FLOOR[0].toFixed(3) + ', ' +
        R3D_AO_FLOOR[1].toFixed(3) + ', ' + R3D_AO_FLOOR[2].toFixed(3) +
        '), vec3(1.0), ao);' +
-  '  lit += texture2D(uBloom, vT).rgb * uBloomAmt;' +
+  '  vec3 glow = texture2D(uBloom, vT).rgb * uBloomAmt;' +
+  '  if (uInk.x > 0.0) lit *= 1.0 - uInk.x * _ink(hv) * (1.0 - smoothstep(0.03, 0.20, _lum(glow)));' +
+  '  lit += glow;' +
   '  lit = mix(lit, _grade(lit, vT), uGrade);' +
   '  gl_FragColor = vec4(lit, 1.0);' +
   '}';
@@ -117,6 +156,7 @@ function _r3dResolve(R3) {
   var postOn = typeof RTS_POST_ON === 'undefined' || RTS_POST_ON;
   gl.uniform1f(gl.getUniformLocation(R3.aoResolveP, 'uGrade'),
                postOn ? (R3.gradeAmt === undefined ? 1 : R3.gradeAmt) : 0);
+  gl.uniform2f(gl.getUniformLocation(R3.aoResolveP, 'uInk'), postOn && _r3dQ('ink') ? _r3dInkAmt(R3, _rtsR.cell) : 0, _r3dInkTap(R3));
   _r3dHeatSet(gl, R3, R3.aoResolveP, postOn && _r3dQ('heat'));
   /* The glow. R3.bloomOn is set by _r3dBloomPass for this frame only; with nothing burning the
      amount is zero and the sampler still needs a bound texture, so it gets the AO one - a

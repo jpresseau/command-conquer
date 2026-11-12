@@ -123,7 +123,9 @@ var S = new Suite('perspective');
        shroud's soft edge was weighed by whatever the ground under it looks like - the textured
        material ground put the near cell at exactly the 2.5px limit, the grade at 3.15, with the
        camera unchanged. Counted, it reads 1.3. */
-    R3.gradeAmt = 0;
+    /* ...and on the ground and with the rims it was measured with: which pixels of the marker's
+       soft edge pass the count's threshold follows the colour under them - the meadow read 2.57 */
+    R3.gradeAmt = 0; R3.grassLegacy = true; R3.inkAmt = 0;
     function shot() {
       _rtsRFrame(1 / 60);
       var b = new Uint8Array(CW * CH * 4);
@@ -195,7 +197,7 @@ var S = new Suite('perspective');
     o.bareShare = +(bare / tot * 100).toFixed(2);
     o.sampled = tot;
 
-    R3.gradeAmt = undefined;
+    R3.gradeAmt = undefined; R3.grassLegacy = false; R3.inkAmt = undefined;
     return o;
   });
 
