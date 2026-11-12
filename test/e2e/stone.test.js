@@ -66,6 +66,7 @@ var S = new Suite('stone');
     R.focus.x = _rtsWX(best[0]); R.focus.z = _rtsWX(best[1]);
     R.zi = 3; _rtsApplyCam();
     o.pxw = _rtsZoom() * (R3.scale || 1);
+    R3.inkAmt = 0;               /* a rim inked on every block is the same either way and thins the ratio: e2e/grounded's */
 
     /* THE ROCK, MARKED: the world rebuilt once with every rock colour magenta */
     var keepR = R3D_ROCK.slice(), keepT = R3D_ROCK_TOP.slice();

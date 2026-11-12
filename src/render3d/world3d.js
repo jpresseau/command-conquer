@@ -63,6 +63,11 @@
 var R3D_CHUNK = 32;            /* cells per chunk side; 128-cell map -> 4x4 chunks */
 var R3D_TUFTS_PER_CELL = 3;
 var R3D_TUFT_ODDS = 0.62;      /* share of grass cells that carry tufts at all */
+/* A tuft is the meadow's own green standing up out of it, and short: dark bottle-green spikes
+   as tall as a tank's hull were the second loudest thing on the grass after its ripple, and the
+   ink (resolve3d.js) outlines whatever stands R3D_INK_EDGE[0] clear of the ground behind it. */
+var R3D_TUFT_H = [0.22, 0.24];
+var R3D_TUFT_COLS = [['#5f8240', '#4e7034'], ['#587a3a', '#6f9049']];
 var R3D_WORLD_YMAX = 14;       /* tallest world geometry; the cull margin hangs on it */
 var R3D_SWAY = 0.09;           /* world units the wind moves a canopy or a tuft (R3D_MESH_VS) */
 
@@ -293,10 +298,10 @@ function _r3dWorldBuild(G) { return _r3SegBulk(function () {
               for (var tf = 0; tf < R3D_TUFTS_PER_CELL; tf++) {
                 var fx = wx + (_sprHash(tx * 31 + tf, tz, 367) - 0.5) * RTS_TILE;
                 var fz = wz + (_sprHash(tz * 31 + tf, tx, 373) - 0.5) * RTS_TILE;
-                var fh = 0.5 + _sprHash(tx * 31 + tf, tz, 379) * 0.7;
+                var fh = R3D_TUFT_H[0] + _sprHash(tx * 31 + tf, tz, 379) * R3D_TUFT_H[1];
                 /* blades, not a cone - a cone on a map of conifers is a sapling; r3d/tuft.js */
                 _r3Tuft(faces, fx, 0, fz, fh,
-                        (tf & 1) ? ['#56773f', '#739450'] : ['#62844a', '#4f7040'],
+                        R3D_TUFT_COLS[tf & 1],
                         (tx * 131 + tz) * 3 + tf);
               }
             }

@@ -67,6 +67,7 @@ var S = new Suite('leaves');
     R.focus.x = _rtsWX(best[0]); R.focus.z = _rtsWX(best[1]);
     R.zi = 3; _rtsApplyCam();
     o.pxw = _rtsZoom() * (R3.scale || 1);
+    R3.inkAmt = 0;               /* a rim inked on every crown is the same either way and thins the ratio: e2e/grounded's */
 
     /* THE CANOPY, MARKED: the world rebuilt once with every needle and leaf magenta */
     var keepN = R3D_NEEDLE.slice(), keepL = R3D_LEAF.slice();

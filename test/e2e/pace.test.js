@@ -52,7 +52,7 @@ var S = new Suite('pace');
     reset();
     for (i = 0; i < 8; i++) { G.corpses.push({ x: cx + i * 2, z: cz, v: i }); _rtsTick(1 / 30); _rtsRFrame(1 / 30); }
     o.matOn = R3.matOn; o.matTerrain = up.texB > 3000 * 3000 ? up.tex : 0;
-    o.frame = { fxQ: R3.fxV ? R3.fxV.M.n + R3.fxV.L.n : 0, buf: up.buf / 8, bufB: up.bufB / 8, fxDrawn: R3.fxDrawn };
+    o.frame = { fxQ: R3.fxV ? R3.fxV.M.n + R3.fxV.L.n : 0, buf: up.buf / 8, bufB: up.bufB / 8, fxDrawn: R3.fxDrawn, foots: R3.foots, footB: R3.foots * 6 * R3D_FOOT_F * 4 };
     /* ...and on the baked ground: a scorch, the frame it is stamped */
     window.RTS_GROUND_LEGACY = true;
     _rtsRFrame(0);
@@ -100,7 +100,9 @@ var S = new Suite('pace');
   S.ok('on the baked ground a scorch reaches the picture the frame after it is stamped', sc.changed > 30, sc.changed + ' pixels');
   S.ok('...sent as a rectangle the size of the stamp, not the canvas', sc.fullTex === 0 && sc.sub >= 1 && sc.subB < 64 * 64 * 4, sc.sub + ' rectangles, ' + sc.subB + ' bytes; ' + sc.fullTex + ' whole-canvas uploads');
   var f = out.frame;
-  S.ok('a frame of a heavy battle draws its effects, sending four corners a quad', f.fxQ > 100 && f.bufB < f.fxQ * 4 * 14 * 4 * 1.1 + 40000, f.fxQ + ' quads, ' + Math.round(f.bufB / 1024) + ' KB sent a frame');
+  /* ...and each unit's shade as one quad of its own (footing3d.js), counted here so the bound stays the effects' */
+  S.ok('a frame of a heavy battle draws its effects, sending four corners a quad', f.fxQ > 100 && f.foots > 20 && f.bufB < f.fxQ * 4 * 14 * 4 * 1.1 + f.footB + 40000,
+       f.fxQ + ' quads, ' + Math.round(f.bufB / 1024) + ' KB sent a frame, ' + Math.round(f.footB / 1024) + ' KB of it the shade under ' + f.foots + ' units');
   S.ok('...in a handful of uploads, not one a mesh', f.buf <= 8, f.buf + ' uploads a frame');
   S.ok('in AUTO, slow frames waiting on the GPU shrink the buffer a step', out.dyn.dyn === 0.85 && Math.abs(out.dyn.w1 - Math.round(out.dyn.w0 * 0.85)) <= 1 && out.dyn.err === 0,
        out.dyn.w0 + ' -> ' + out.dyn.w1 + ' px across');

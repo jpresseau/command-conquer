@@ -21,9 +21,9 @@
    frame times of its own. */
 
 var R3D_TIERS = [
-  { name: 'HIGH',   scale: 4,   shadow: 1, post: 1, ao: 1, heat: 1, clouds: 1, sil: 1, lights: 1, detail: 1, apron: 1 },
-  { name: 'MEDIUM', scale: 2,   shadow: 1, post: 1, ao: 0, heat: 0, clouds: 0, sil: 1, lights: 1, detail: 1, apron: 1 },
-  { name: 'LOW',    scale: 1.5, shadow: 0, post: 0, ao: 0, heat: 0, clouds: 0, sil: 0, lights: 0, detail: 0, apron: 0 }
+  { name: 'HIGH',   scale: 4,   shadow: 1, post: 1, ao: 1, heat: 1, clouds: 1, ink: 1, sil: 1, lights: 1, detail: 1, apron: 1 },
+  { name: 'MEDIUM', scale: 2,   shadow: 1, post: 1, ao: 0, heat: 0, clouds: 0, ink: 1, sil: 1, lights: 1, detail: 1, apron: 1 },
+  { name: 'LOW',    scale: 1.5, shadow: 0, post: 0, ao: 0, heat: 0, clouds: 0, ink: 0, sil: 0, lights: 0, detail: 0, apron: 0 }
 ];
 var RTS_GFXQ_LS = 'rtsGfxQ';            /* 'auto' (or unset), 'high', 'medium', 'low' */
 var R3D_Q_WINDOW = 2500;                /* ms of frames AUTO judges at a time */
