@@ -439,8 +439,8 @@ function _rtsUpdateStruct(e, dt) {
   if (e.cool > 0) e.cool -= dt;
   if (e.fire > 0) e.fire -= dt;
   if (e.recoil > 0) e.recoil -= dt;
-  /* a browned-out base loses its defences - power actually matters */
-  if (_rtsPowerFactor(e.side) < 0.999) return;
+  /* a browned-out base loses its defences - power actually matters; a tower its troopers charge fires on (core/arc.js) */
+  if (_rtsPowerFactor(e.side) < 0.999 && !_rtsArcChargers(e).length) return;
   /* The drop test has to ask with the SAME reach the acquire did. A turret on high ground can
      acquire past w.range; if this line still dropped at w.range it would let go of that target
      and immediately re-acquire it every tick, and a gun that re-acquires every tick is a gun

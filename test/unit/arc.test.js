@@ -87,6 +87,30 @@ var t2 = unit('player', 'arctroop', -1, 1);
 var lit = shot(A, tgt, 'teslazap');
 S.ok('BROWNED OUT BUT CHARGED, IT FIRES', lit.dmg > 0, lit.dmg.toFixed(1) + ' damage');
 S.near('...at the charged strength', lit.dmg / alone.dmg, 1 + g.RTS_ARC.boost, 0.01);
+/* THROUGH THE TOWER'S OWN UPDATE, which is how a tower fires in a battle: its blackout return
+   came before it aimed, so the exception above - asked only in _rtsFire - was never reached */
+function stands(e, tgt, secs) {
+  tgt.hp = tgt.maxHp; tgt.dead = false; e.cool = 0; e.target = null;
+  for (var i = 0; i < secs * 30; i++) { power(e.side, false); g._rtsSpBuild(); g._rtsUpdateStruct(e, 1 / 30); }
+  return tgt.maxHp - tgt.hp;
+}
+var litRun = stands(A, tgt, 3);
+S.ok('...and in a battle: dark and charged, the tower aims and fires by itself', litRun > 0, litRun.toFixed(1) + ' damage in 3 s');
+t2.dead = true;
+var darkRun = stands(A, tgt, 3);
+S.eq('...dark and uncharged, it does not', darkRun, 0);
+/* and the blackout still takes every other defence, charged or not: one _rtsFire does not refuse.
+   A turret's shell lands later, so what is asked is whether it FIRED: its cooldown, set by a shot */
+var plain = g.RTS_STRUCTS.filter(function (d) { return d.weapon && !d.needsPower && !d.chargedBy && !g.RTS_WEAPONS[d.weapon].aaOnly && g.rtsVerses(g.RTS_WEAPONS[d.weapon], tgt) > 0; })[0];
+var PT = struct('player', plain.key, 0, 2), t3 = unit('player', 'arctroop', 1, 3);
+function fired(e, on) {
+  tgt.hp = tgt.maxHp; tgt.dead = false; e.cool = 0; e.target = null; var n = 0;
+  for (var i = 0; i < 90; i++) { power(e.side, on); g._rtsSpBuild(); g._rtsUpdateStruct(e, 1 / 30); if (e.cool > 0) n++; }
+  return n;
+}
+S.eq('a dark ' + plain.name + ' beside a trooper stays dark', fired(PT, false), 0);
+S.ok('...and powered it fires (population)', fired(PT, true) > 0, 'cooling for ' + fired(PT, true) + ' of 90 ticks');
+PT.dead = true; t3.dead = true;
 DARK = false;
 
 /* --------------------------------------------------------- only the coil ---- */

@@ -127,6 +127,10 @@ function _rtsTouchCmdInit() {
   row1.appendChild(mk('rtsTIdle', 'IDLE', 'Select the idle army; tap again for the next', function () {
     if (typeof rtsSelectIdle === 'function') rtsSelectIdle();
   }));
+  /* ARMY: every fighter in view, then the whole army (ui/idlesel.js) - the phone has no box to drag */
+  row1.appendChild(mk('rtsTArmy', 'ARMY', 'Select every fighter in view; tap again for the whole army', function () {
+    if (typeof rtsSelectArmy === 'function') rtsSelectArmy();
+  }));
   row1.appendChild(mk('rtsTTeams', 'TEAMS', 'Show the team groups', function () {
     _RTS_TCMD.teams = !_RTS_TCMD.teams;
     if (typeof _rtsSfx === 'function') _rtsSfx('click');
@@ -145,7 +149,10 @@ function _rtsTouchCmdInit() {
       nums.appendChild(mk('rtsTTeam' + team, String(team + 1),
         'Tap: select team ' + (team + 1) + '   Hold: assign the selection to it',
         function () {
+          /* a second tap on a team that is already the selection looks at it: Alt+digit's */
+          var G = window._rtsG, was = G.sel.slice();
           _rtsHandleTeam(team, 0);
+          if (G.sel.length && G.sel.length === was.length && G.sel.every(function (e) { return was.indexOf(e) >= 0; })) _rtsCenterOnSel();
           if (typeof _rtsSfx === 'function') _rtsSfx('click');
         },
         function () {

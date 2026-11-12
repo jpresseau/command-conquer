@@ -177,6 +177,7 @@
   white-space:normal;max-width:min(92%,560px);text-align:center}
 #rcgRts .rts-msg.on{opacity:1}
 #rcgRts .rts-msg.go{pointer-events:auto;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}   /* a tap goes there: ui/go.js */
+#rcgRts .rts-msg.alert{border-color:rgba(255,110,84,.65);color:#ffab98}   /* quiet, the last alert: ui/go.js */
 /* A PHONE'S LINE clears its taller strip (46px), and the HUD's banners take the same slot
    (ui/hud.js). This sat in the touch block above, where the plain rule after it won: the line
    was at 44 on every upright phone, 2 pixels under the strip. Held sideways, see below. */

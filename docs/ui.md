@@ -266,6 +266,23 @@ full harvester with no Refinery, a Vehicle Works or Barracks empty past the open
 unspent - one line in 45 s, the same harvester once in 90, a line once until it is used.
 `unit/idle` holds the rules; `e2e/alert` drives the tap, the key and the ring.
 
+**The player's own, hit and lost** (`core/response.js`). A harvester shot says "Harvester under
+attack!" on a clock of its own; any other unit of the player's hit while it was NOT sent to fight
+(its order neither attack nor attack-move) says "Our forces are under attack!" on a third; a
+building destroyed is named ("Ore Refinery lost.") and so is a harvester - not a wall, a sale or a
+tank in a fight. Each marks `G.alert`. `unit/alerts`.
+
+**The last alert stays within reach** (`_rtsMsgShown`). The game has one line and the next thing
+said replaces it, tap and all; so while nothing is being said the line offers the last alert for
+`RTS_ALERT_KEEP` (30 s) - "Last alert - tap to look" (Space, with a keyboard) - except while a
+placement, REPAIR, SELL or a superweapon is armed, whose banner has that slot.
+
+**ARMY, SELL and the team digits on a phone** (`ui/idlesel.js`, `ui/sidebar.js`, `ui/touchcmd.js`).
+ARMY selects every fighter in view, and pressed again the whole army - the only way a phone picks
+a mixed group, since a drag pans. On touch a press of SELL sells one building and disarms, and
+REPAIR or SELL armed puts a banner on the field (`_rtsModeHint`); a mouse keeps the mode and its
+crosshair. A second tap on a team's digit looks at the team. `e2e/touchplay`.
+
 ### The debrief and the record (record.js)
 
 The end card's two numbers became a table: time, credits mined, units built and lost, enemy units

@@ -82,7 +82,8 @@ function _rtsModeClick(mx, my) {
     /* the figure _rtsSell actually granted, not the sticker price - see _rtsSell for what the
        sticker price was hiding and by how much */
     var back = _rtsSell(e);
-    if (back !== false) _rtsSay('Sold — ' + back + ' credits back.');
+    /* ONE SALE A PRESS ON TOUCH: there is no cursor to say SELL is still armed (ui/go.js) */
+    if (back !== false) { if (_rtsTouchUI()) rtsMode('sell'); _rtsSay('Sold — ' + back + ' credits back.'); }
     else { if (typeof _rtsSfx === 'function') _rtsSfx('deny');
       _rtsSay(e.def === 'yard' ? 'The Command Yard cannot be sold.' : 'Cannot sell that.'); }
   } else {
@@ -444,8 +445,9 @@ function _rtsSyncSidebar(dt) {
   if (typeof rtsCampHud === 'function') rtsCampHud(G);     /* a mission's objectives, or a survival's run (campaign.js) */
   if (typeof _rtsAutoTick === 'function') _rtsAutoTick(G, U);   /* the autosave's minute, and its end */
   var msg = document.getElementById('rtsMsg');
-  msg.textContent = G.msgT > 0 ? (G.msg || '') : '';
-  msg.className = 'rts-msg' + (G.msgT > 0 ? ' on' : '') + (G.msgT > 0 && G.msgAt ? ' go' : '');   /* tappable: ui/go.js */
+  var shown = _rtsMsgShown(G, _rtsTouchUI(), !!(U.place || U.mode || U.superArm));   /* the line, or quiet, the last alert: ui/go.js */
+  if (msg.textContent !== shown.text) msg.textContent = shown.text;
+  msg.className = 'rts-msg' + (shown.text ? ' on' : '') + (shown.go ? ' go' : '') + (shown.alert ? ' alert' : '');
   if (!msg.onclick) msg.onclick = function () { rtsMsgGo(); };
 
   /* a replay's card is its own, once the recording has run out (replay.js rtsReplayFrame) */

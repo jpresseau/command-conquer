@@ -11,7 +11,10 @@
    effects marked `arc`, which render3d/fxemit3d.js draws as lightning, and sound as `zap`. */
 var RTS_ARC = { charge: 3, max: 3, boost: 0.25, towerY: 6.0, unitY: 1.4 };
 
-/* The troopers charging `e`, nearest first: none for anything that is not charged by them. */
+/* The troopers charging `e`, nearest first: none for anything that is not charged by them.
+   Asked in two places, and both have to ask: _rtsFire, the one place every shot passes, and the
+   structure's own update (core/units.js), whose blackout return comes before it ever aims - with
+   the exception only in _rtsFire, a charged tower in a blackout never reached it and stood dark. */
 function _rtsArcChargers(e) {
   var d = e && e.type === 'struct' ? rtsStructDef(e.def) : null;
   if (!d || !d.chargedBy) return [];

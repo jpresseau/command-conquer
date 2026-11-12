@@ -86,7 +86,7 @@ var RTS_STRUCTS = [
   { key:'lab',      name:'Research Lab',  w:2, h:2, cost:1500, build:22, hp:600,  power:-200, sight:14,
     needs:['radar', 'factory'],
     armour:'wood',
-    desc:'Unlocks Artillery and the Heavy Tank. Draws as much power as two plants.' },
+    desc:'Unlocks the heaviest units and the superweapons. Draws as much power as two plants.' },
   { key:'rocketpit',name:'Rocket Turret', w:1, h:1, cost:800,  build:14, hp:480,  power:-30,  sight:22,
     needs:['factory'], weapon:'turretrocket',
     side:'soviet', armour:'concrete',
