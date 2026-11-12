@@ -296,6 +296,7 @@ function _rtsWatchNewOptions() {
 function _rtsSyncSidebar(dt) {
   var G = window._rtsG, U = window._rtsUI, S = G.sides.player;
   _rtsWatchNewOptions();
+  _rtsTabsPaint(S);                                          /* each line's state on its tab: ui/repeat.js */
 
   /* Credits roll toward the true value instead of snapping - the classic counter tick. */
   var target = Math.floor(rtsMoney(S));

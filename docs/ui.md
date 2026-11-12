@@ -335,6 +335,18 @@ rewrites the tables the drawing already reads (`RTS_PAL.team` and the roofs, `RT
 battle bakes its 2D sheet as it opens, and baking it again under a battle cost 11 s here.
 `unit/cvd` holds the distances from both ends; `e2e/cvd` renders the enemy yard and the radar.
 
+### Why it cannot go there, and what each line is doing
+
+`_rtsPlaceWhyNot` (`core/entities.js`) is the placement rule and its reason in one walk -
+`_rtsCanPlace` is "no reason" - so a refusal says which it was: off the map, on water, on
+something built, on trees or rock, on the ore, a Shipyard away from the shore, too far from the
+base (`RTS_PLACE_WHY`). One line used to stand for all of them. `unit/placewhy`.
+
+Each sidebar tab carries its line's state (`_rtsTabState`, `ui/repeat.js`): a bar along its foot as
+the line builds, amber on hold, and gold and pulsing while a finished building waits to be
+placed - which was drawn only on the tile, on the tab in view. A finished building also says so
+("Power Plant ready - place it from the Build tab."). `e2e/buildsay`.
+
 ### One answer to "why can't I build this?"
 
 `Who_Can_Build_Me` is one question, and it had three implementations here: `_rtsCanQueue`

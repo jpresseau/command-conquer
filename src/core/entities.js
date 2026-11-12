@@ -29,25 +29,31 @@ function _rtsFlushForPlacement(e) {
     if (cell) { u.x = _rtsWX(cell[0]); u.z = _rtsWX(cell[1]); u.path = null; }
   }
 }
-function _rtsCanPlace(side, key, tx, tz, anywhere) {
+function _rtsCanPlace(side, key, tx, tz, anywhere) { return !_rtsPlaceWhyNot(side, key, tx, tz, anywhere); }
+/* WHY NOT, as a word - null when it may be built there. The rule and its reason are one walk, so
+   they cannot disagree: "Cannot build there - needs clear ground near your base" was said for
+   six different causes, and a player dragging a Shipyard along a beach, or a Refinery onto the
+   ore it is for, was told to look for clear ground. The sentences are RTS_PLACE_WHY's. */
+function _rtsPlaceWhyNot(side, key, tx, tz, anywhere) {
   var G = window._rtsG, d = rtsStructDef(key);
-  if (!d) return false;
+  if (!d) return 'unknown';
   for (var ax = tx; ax < tx + d.w; ax++) for (var az = tz; az < tz + d.h; az++) {
-    if (!_rtsInB(ax, az)) return false;
-    if (G.blocked[_rtsIdx(ax, az)] !== 0) return false;
-    if (G.scrap[_rtsIdx(ax, az)] > 0) return false;
-    if (G.terrain[_rtsIdx(ax, az)] === RTS_T_WATER) return false;   /* a bridge is open, and is water */
+    if (!_rtsInB(ax, az)) return 'off';
+    var ci = _rtsIdx(ax, az);
+    if (G.terrain[ci] === RTS_T_WATER) return 'water';             /* the sea, and a bridge: open, and water */
+    if (G.blocked[ci] !== 0) return G.blocked[ci] === 1 ? 'built' : 'ground';
+    if (G.scrap[ci] > 0) return 'ore';
   }
   /* A shipyard must reach the water. Checked here rather than only at build time so the
      placement ghost turns red as you drag it inland, which is the only way a player finds out
      the rule exists. Applies even to `anywhere`: an MCV deploy does not make the sea move. */
-  if (d.shore && !_rtsShoreOk(key, tx, tz)) return false;
+  if (d.shore && !_rtsShoreOk(key, tx, tz)) return 'shore';
   /* Must be within build radius of one of your own structures (classic base-creep rule).
      `anywhere` skips it: BuildingTypeClass::Legal_Placement, which is what an MCV deploy is
      checked against, tests terrain and occupancy only. A vehicle whose entire purpose is to
      found a base somewhere you have nothing cannot be held to a rule about being near
      something you own. */
-  if (anywhere) return true;
+  if (anywhere) return null;
   var cx = tx + d.w / 2, cz = tz + d.h / 2, near = false;
   for (var i = 0; i < G.ents.length; i++) {
     var o = G.ents[i];
@@ -55,7 +61,22 @@ function _rtsCanPlace(side, key, tx, tz, anywhere) {
     var od = rtsStructDef(o.def);
     if (Math.hypot(cx - (o.tx + od.w / 2), cz - (o.tz + od.h / 2)) <= RTS_BUILD_RADIUS) { near = true; break; }
   }
-  return near;
+  return near ? null : 'far';
+}
+var RTS_PLACE_WHY = {
+  off: 'Cannot build there - that is off the map.',
+  water: 'Cannot build on water.',
+  built: 'Cannot build there - something already stands there.',
+  ground: 'Cannot build there - trees, rock or sandbags are in the way.',
+  ore: 'Cannot build on the ore - build beside the field.',
+  shore: 'It must touch the water - place it on the shore.',
+  far: 'Too far from your base - build next to a building you own.',
+  unknown: 'Cannot build that.'
+};
+function _rtsPlaceWhyText(why, key) {
+  var d = rtsStructDef(key);
+  if (why === 'shore' && d) return 'The ' + d.name + ' must touch the water - place it on the shore.';
+  return RTS_PLACE_WHY[why] || RTS_PLACE_WHY.unknown;
 }
 /* A shipyard has to touch water, and it is the only structure whose placement asks about the
    terrain rather than about free space. Checked on the ring OUTSIDE the footprint, not inside

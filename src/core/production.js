@@ -323,6 +323,8 @@ function _rtsTickProduction(side, dt) {
       if (cat === 'struct') { S.ready = q.key; S.readyPaid = q.paid; }
       else _rtsDeliverUnit(side, q.key);
       if (side === 'player' && typeof _rtsSfx === 'function') _rtsSfx(cat === 'struct' ? 'ready' : 'unitready');
+      /* ...and in words: the tile says READY only on the Build tab, which may not be the one in view */
+      if (side === 'player' && cat === 'struct' && !_rtsSeatAI(side)) _rtsSay(rtsStructDef(q.key).name + ' ready - place it from the Build tab.');
     }
   }
 }
