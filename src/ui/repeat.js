@@ -35,3 +35,23 @@ function _rtsRepeatSync() {
     else if (k !== key && mark) mark.remove();
   }
 }
+
+/* WHAT EACH LINE IS DOING, ON ITS TAB. The sidebar shows one line at a time, and READY, the
+   percentage and HOLD were drawn only on the tile - on the tab in view. A finished building
+   waited unplaced, unseen, while the player was on Vehicles; nothing showed that the Barracks
+   stood idle. Each tab carries its line's state now: `ready` (a building waits to be placed),
+   `hold`, `busy` with how far along (--p, the bar along its foot), or nothing. */
+function _rtsTabState(S, cat) {
+  if (cat === 'struct' && S.ready) return { st: 'ready', p: 100 };
+  var q = S.q && S.q[cat];
+  if (!q) return { st: '', p: 0 };
+  return { st: q.hold ? 'hold' : 'busy', p: Math.max(0, Math.min(100, Math.floor((q.prog || 0) * 100))) };
+}
+function _rtsTabsPaint(S) {
+  var ts = document.querySelectorAll('#rcgRts .rts-tabs button');
+  for (var i = 0; i < ts.length; i++) {
+    var t = _rtsTabState(S, ts[i].getAttribute('data-cat')), p = t.p + '%';
+    if ((ts[i].getAttribute('data-st') || '') !== t.st) ts[i].setAttribute('data-st', t.st);
+    if (ts[i].style.getPropertyValue('--p') !== p) ts[i].style.setProperty('--p', p);
+  }
+}

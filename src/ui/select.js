@@ -348,7 +348,8 @@ function _rtsTryPlace(mx, my) {
   if (!p) return;
   var def = rtsStructDef(U.place);
   var tx = _rtsTX(p.x) - ((def.w / 2) | 0), tz = _rtsTX(p.z) - ((def.h / 2) | 0);
-  if (!_rtsCanPlace('player', U.place, tx, tz)) { _rtsSay('Cannot build there — needs clear ground near your base.'); return; }
+  var why = _rtsPlaceWhyNot('player', U.place, tx, tz);      /* the reason it is, not one line for six (core/entities.js) */
+  if (why) { _rtsSay(_rtsPlaceWhyText(why, U.place)); if (typeof _rtsSfx === 'function') _rtsSfx('deny'); return; }
   _rtsPlaceStruct('player', U.place, tx, tz, false, G.sides.player.readyPaid);
   if (typeof _rtsSfx === 'function') _rtsSfx('place');
   _rtsReadyClear('player');

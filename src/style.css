@@ -281,6 +281,14 @@
   color:#9db0c6;font-size:10.5px;font-weight:700;letter-spacing:.5px;cursor:pointer}
 #rcgRts .rts-tabs button.on{background:#2e6fd0;border-color:#4a8ff0;color:#fff}
 #rcgRts .rts-tabs button:hover:not(.on){background:#1c2634}
+/* each line's state on its tab (ui/repeat.js): a bar along the foot as it builds, amber on hold,
+   and gold, pulsing, while a finished building waits to be placed */
+#rcgRts .rts-tabs button[data-st="busy"],#rcgRts .rts-tabs button[data-st="hold"]{
+  background-image:linear-gradient(#6fb0ff,#6fb0ff);background-repeat:no-repeat;background-position:left bottom;background-size:var(--p,0%) 3px}
+#rcgRts .rts-tabs button[data-st="hold"]{background-image:linear-gradient(#e8c35a,#e8c35a)}
+#rcgRts .rts-tabs button[data-st="ready"]{border-color:#ffcf6a;color:#ffe2a0;animation:rtsTabReady 0.9s ease-in-out infinite alternate}
+@keyframes rtsTabReady{from{box-shadow:inset 0 0 0 0 rgba(255,207,106,0)}to{box-shadow:inset 0 0 0 2px rgba(255,207,106,.85)}}
+@media (prefers-reduced-motion:reduce){ #rcgRts .rts-tabs button[data-st="ready"]{animation:none;box-shadow:inset 0 0 0 2px rgba(255,207,106,.85)} }
 
 /* repair / sell cursors - armed one blinks, the way the sidebar buttons did */
 #rcgRts .rts-ops{display:flex;gap:3px}
