@@ -283,7 +283,8 @@ function boom(t, big) { return { kind: 'boom', x: 10, y: 1, z: 20, t: t, big: bi
        'fireball ' + fresh[5].toFixed(2) + ', fire ' + g._r3dFxLightOf(fire, V)[5].toFixed(2) + ', hit ' + (hit && hit[5]));
 
   var pos, col, P = 'prog', gl = { getUniformLocation: function (p, n) { return n; },
-    uniform4fv: function (n, a) { pos = Array.prototype.slice.call(a); }, uniform3fv: function (n, a) { col = Array.prototype.slice.call(a); } };
+    uniform4fv: function (n, a) { pos = Array.prototype.slice.call(a); }, uniform3fv: function (n, a) { col = Array.prototype.slice.call(a); },
+    uniform1f: function (n, v) { if (n === 'uPLn') lit = v; } }, lit = -1;
   var R3 = {}, G = { t: 0, fx: [boom(0.6, 1), boom(0.02, 1.6), boom(0.3, 1.6), { kind: 'smoke', x: 0, y: 1, z: 20, t: 0.3, big: 1, loops: 3 }] };
   G.fx[1].x = 30; G.fx[2].x = -30;
   g._r3dFxLightSet(gl, R3, G, P);
@@ -293,6 +294,12 @@ function boom(t, big) { return { kind: 'boom', x: 10, y: 1, z: 20, t: t, big: bi
        'slot 4: reach ' + pos[15] + ', y ' + pos[13]);
   S.ok('...and the haze is handed the same lights, strongest first', R3.plList && R3.plList.length === 3 && R3.plList[0][0] === 30,
        (R3.plList || []).length + ' in the list, the first at x ' + (R3.plList && R3.plList[0][0]));
+  S.eq('...and the shader is told how many are lit, so a surface asks only when one is', lit, 3);
+  R3.plGateOff = true; g._r3dFxLightPut(gl, R3, P);
+  S.eq('...every slot with the gate off, the before-picture', lit, g.R3D_PLIGHTS);
+  R3.plGateOff = false;
+  g._r3dFxLightSet(gl, R3, { t: 0, fx: [] }, P);
+  S.eq('...and none with nothing alight', lit, 0);
   R3.plightAmt = 0; g._r3dFxLightSet(gl, R3, G, P);
   S.ok('R3.plightAmt 0 puts every light out', col.every(function (v) { return v === 0; }), col.slice(0, 3).join(','));
 })();

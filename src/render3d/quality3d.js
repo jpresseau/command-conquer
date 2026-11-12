@@ -86,7 +86,7 @@ function _r3dQualityFeed(dt, now) {
   if (A.locked) return;
   /* the resolution goes first (pace3d.js): a tier steps down once it can go no lower, and up only
      once it is back at full */
-  if (med > R3D_Q_SLOW && lvl < R3D_TIERS.length - 1 && !_r3dDynRoom()) {
+  if (med > R3D_Q_SLOW && lvl < R3D_TIERS.length - 1 && !_r3dDynRoom(now)) {
     A.trial = { from: lvl, base: med, down: true }; A.fast = 0;
     _r3dQualityApply(lvl + 1);
   } else if (med < R3D_Q_FAST && lvl > 0 && !(R3.dyn < 1)) {

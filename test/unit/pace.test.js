@@ -106,31 +106,107 @@ var rolled = g._r3dMesh('u', 'tank', 'player', 'hull', false, 0, 2);
 S.ok('with budget left the roll is built, and paid for', rolled !== base && !!R6.mesh['u:tank:player:hull:0:0:r2'] && R6.meshBudget < 5);
 R6.meshBudget = undefined;
 S.ok('a spec\'s frame - no budget at all - builds everything', g._r3dMesh('u', 'tank', 'player', 'hull', false, 0, 3) !== base);
+/* THE WARM-UP: what each side can field. The player's army here is the Compact, the opponent's the
+   Dominion; one unit of the Dominion's stands on the map in the player's colours */
+var mineOnly = g.RTS_UNITS.filter(function (u) { return u.side === 'allied' && !g.RTS_AIR_PARTS[u.key]; })[0];
+var theirsOnly = g.RTS_UNITS.filter(function (u) { return u.side === 'soviet' && !g.RTS_AIR_PARTS[u.key]; });
+var both = g.RTS_UNITS.filter(function (u) { return !u.side && !g.RTS_AIR_PARTS[u.key] && u.key !== 'tank'; })[0];
+var taken = theirsOnly[0], notTaken = theirsOnly[1];
+S.ok('each army has units of its own, and there are units both field (population)', !!mineOnly && !!taken && !!notTaken && !!both && g.rtsHouseSide('player') === 'allied',
+     [mineOnly && mineOnly.key, taken && taken.key, notTaken && notTaken.key, both && both.key].join(' '));
+var yw = g._rtsHas('player', 'yard');
+g._rtsSpawnUnit('player', taken.key, yw.x + 12, yw.z + 12);
 var R7 = g.window._R3D = { mesh: {}, gl: {}, on: true };
 g._rtsR = g.window._rtsR = { spr: { turret: { player: { tank: 1 }, enemy: { tank: 1 } } } };
 g._r3dWarm(R7, 1e9);
 var warmed = Object.keys(R7.mesh);
-S.ok('spare time warms the base model of every unit type, every side in the match, in the parts it is drawn in',
-     warmed.indexOf('u:tank:player:hull:0:0') >= 0 && warmed.indexOf('u:tank:enemy:turret:0:0') >= 0 && warmed.indexOf('u:heli:enemy:rotor:0:0') >= 0 &&
-     warmed.indexOf('u:yak:player:prop0:0:0') >= 0 && warmed.indexOf('u:rifle:enemy::0:0') >= 0 && warmed.every(function (k2) { return !/:r\d|:[1-9]$/.test(k2); }),
+function has(k2) { return warmed.indexOf(k2) >= 0; }
+S.ok('spare time warms the base model of what each side can field, in the parts it is drawn in',
+     has('u:tank:player:hull:0:0') && has('u:tank:enemy:turret:0:0') && has('u:' + mineOnly.key + ':player::0:0') && has('u:' + notTaken.key + ':enemy::0:0') &&
+     has('u:' + both.key + ':player::0:0') && has('u:' + both.key + ':enemy::0:0') && warmed.every(function (k2) { return !/:r\d|:[1-9]$/.test(k2); }),
      warmed.length + ' models');
+S.ok('...not the other army\'s units in a side\'s colours', !has('u:' + mineOnly.key + ':enemy::0:0') && !has('u:' + notTaken.key + ':player::0:0'), '');
+S.ok('...but one of theirs that stands on the map in ours, yes', has('u:' + taken.key + ':player::0:0'), taken.key);
+var R7all = g.window._R3D = { mesh: {}, gl: {}, on: true, warmAll: true };
+g._r3dWarm(R7all, 1e9);
+var allN = Object.keys(R7all.mesh).length;
+S.ok('...about half of what it built when it warmed every unit for every side', warmed.length < allN * 0.7 && allN > 200, warmed.length + ' against ' + allN);
+g.window._R3D = R7;
 
 /* ---- THE PIXELS ---- */
 var store = { rtsGfxQ: undefined };
 g.window.localStorage = { getItem: function (k2) { return store[k2] === undefined ? null : store[k2]; }, setItem: function (k2, v) { store[k2] = v; }, removeItem: function (k2) { delete store[k2]; } };
 var R8 = g.window._R3D = { on: true }, seen = [];
-function run(ms, js, from, dur) { for (var t = from; t < from + dur; t += ms) { g._r3dDynFeed(ms, js, t); if (seen[seen.length - 1] !== R8.dyn) seen.push(R8.dyn); } return from + dur; }
+/* frames fed as the live loop feeds them: `ms` a number, or what a frame takes at a resolution */
+function run(ms, js, from, dur) {
+  for (var t = from; t < from + dur;) {
+    var d = typeof ms === 'function' ? ms(g.window._R3D.dyn === undefined ? 1 : g.window._R3D.dyn) : ms;
+    g._r3dDynFeed(d, js, t);
+    if (seen[seen.length - 1] !== g.window._R3D.dyn) seen.push(g.window._R3D.dyn);
+    t += d;
+  }
+  return from + dur;
+}
+var STEPS = g.R3D_DYN_STEPS, FLOOR = STEPS[STEPS.length - 1], W = g.R3D_DYN_WINDOW;
 var t = run(16, 5, 0, g.R3D_Q_SETTLE + 100);
 S.eq('settling, it draws at full resolution', R8.dyn, 1);
-t = run(40, 6, t, g.R3D_DYN_WINDOW * 1.5);
-S.ok('slow frames waiting on the GPU take it down a step', R8.dyn === g.R3D_DYN_STEPS[1], 'at ' + R8.dyn);
-t = run(40, 6, t, g.R3D_DYN_WINDOW * 10);
-S.ok('...a step at a time, to the floor and no further', R8.dyn === g.R3D_DYN_STEPS[g.R3D_DYN_STEPS.length - 1] && JSON.stringify(seen) === JSON.stringify(g.R3D_DYN_STEPS),
-     'through ' + seen.join(', '));
-t = run(10, 4, t, g.R3D_DYN_WINDOW * 10);
-S.eq('quick frames bring it back', R8.dyn, 1);
-t = run(40, 36, t, g.R3D_DYN_WINDOW * 4);
+t = run(40, 6, t, W * 1.5);
+S.ok('slow frames waiting on the GPU take it down a step', R8.dyn === STEPS[1], 'at ' + R8.dyn);
+/* ...and fewer pixels gained nothing: the frames are 40 ms at every resolution */
+t = run(40, 6, t, W * 10);
+S.ok('A DESCENT THAT GAINS NOTHING IS UNDONE: a step at a time to the floor, and back where it began',
+     R8.dyn === 1 && JSON.stringify(seen) === JSON.stringify(STEPS.concat([1])), 'through ' + seen.join(', '));
+var n0 = seen.length;
+t = run(40, 6, t, g.R3D_DYN_HOLD - W * 12);
+S.eq('...and it waits before it tries again', seen.length, n0);
+t = run(40, 6, t, W * 14);
+S.ok('...then tries once more, and is undone once more', seen.length === n0 + STEPS.length && R8.dyn === 1, 'through ' + seen.slice(n0).join(', '));
+var n1 = seen.length;
+t = run(40, 6, t, g.R3D_DYN_HOLD * 1.5);
+S.eq('...and waits twice as long the second time', seen.length, n1);
+t = run(40, 36, t, W * 4);
 S.eq('slow frames held by their own script are not the pixels\' fault', R8.dyn, 1);
+
+/* A PHONE HELD AT 30 BY ITS POWER SAVING: every frame 33.3 ms whatever is drawn, 5 of it script */
+R8 = g.window._R3D = { on: true }; seen = [];
+t = run(33.3, 5, 0, g.R3D_Q_SETTLE + 60000);
+var changes30 = seen.length - 1;
+S.ok('HELD AT 30: after a minute it draws at full resolution, having tried at most twice', R8.dyn === 1 && changes30 <= STEPS.length * 2, changes30 + ' buffer sizes: ' + seen.join(', '));
+R8 = g.window._R3D = { on: true, dynLegacy: true }; seen = [];
+run(33.3, 5, 0, g.R3D_Q_SETTLE + 60000);
+S.eq('...where it went to the floor and stayed (the before-picture)', R8.dyn, FLOOR);
+
+/* A 60 Hz PHONE: a frame is one refresh or two. Heavy, it takes two until the third step. */
+function heavy(dyn) { return dyn <= STEPS[2] ? 16.7 : 33.3; }
+function easy() { return 16.7; }
+R8 = g.window._R3D = { on: true }; seen = [];
+t = run(easy, 5, 0, g.R3D_Q_SETTLE + W * 3);
+t = run(heavy, 5, t, 8000);
+S.ok('60 Hz, A HEAVY SPELL: one step does not reach the next refresh, so it takes the second - and keeps it, since that paid',
+     R8.dyn === STEPS[2] && JSON.stringify(seen) === JSON.stringify(STEPS.slice(0, 3)), 'through ' + seen.join(', '));
+t = run(easy, 5, t, 30000);
+S.ok('...AND WHEN IT IS OVER THE PICTURE COMES BACK: a frame is never under 16.7 ms there, and it climbs all the same', R8.dyn === 1, 'at ' + R8.dyn + ' through ' + seen.join(', '));
+R8 = g.window._R3D = { on: true, dynLegacy: true }; seen = [];
+t = run(easy, 5, 0, g.R3D_Q_SETTLE + W * 3); t = run(heavy, 5, t, 8000); run(easy, 5, t, 120000);
+S.ok('...where it stayed down to the end of the match (the before-picture)', R8.dyn < 1, 'at ' + R8.dyn);
+/* and while the spell lasts it does not flap: a step up that is slow again is undone and waited out */
+R8 = g.window._R3D = { on: true }; seen = [];
+t = run(easy, 5, 0, g.R3D_Q_SETTLE + W * 3);
+var ups = [], was8 = 1, t8 = t;
+for (; t8 < t + 300000;) { g._r3dDynFeed(heavy(R8.dyn), 5, t8); if (R8.dyn > was8) ups.push(Math.round((t8 - t) / 1000)); was8 = R8.dyn; t8 += heavy(R8.dyn); }
+var gaps = ups.slice(1).map(function (u, k) { return u - ups[k]; });
+S.ok('a spell five minutes long: it holds the step that paid, and tries the one above a few times',
+     R8.dyn === STEPS[2] && ups.length >= 3 && ups.length <= 5, 'tried at ' + ups.join(', ') + ' s');
+S.ok('...each try undone at once and waited out twice as long as the last', gaps.length >= 2 && gaps.every(function (gp, k) { return k === 0 || gp > gaps[k - 1] * 1.6; }),
+     'gaps of ' + gaps.join(', ') + ' s');
+/* 120 Hz: the old constant still means fast */
+R8 = g.window._R3D = { on: true }; seen = [];
+t = run(function (d) { return d < 1 ? 8.3 : 25; }, 4, 0, g.R3D_Q_SETTLE + W * 4);
+S.ok('a step that pays at once is kept', R8.dyn === STEPS[1], 'at ' + R8.dyn);
+t = run(8.3, 4, t, W * 6);
+S.eq('...the step above is not tried at once: the frames are quick only because of it', R8.dyn, STEPS[1]);
+t = run(8.3, 4, t, g.R3D_DYN_HOLD);
+S.eq('...and quick frames bring it back', R8.dyn, 1);
 store.rtsGfxQ = 'high';
 var R9 = g.window._R3D = { on: true };
 run(40, 6, 0, g.R3D_Q_SETTLE + g.R3D_DYN_WINDOW * 6);
@@ -145,5 +221,12 @@ S.ok('a tier steps down only once the resolution can go no lower', lv.filter(fun
 R10.dyn = g.R3D_DYN_STEPS[g.R3D_DYN_STEPS.length - 1];
 for (tt = g.R3D_Q_SETTLE + g.R3D_Q_WINDOW * 3; tt < g.R3D_Q_SETTLE + g.R3D_Q_WINDOW * 6; tt += 40) g._r3dQualityFeed(40, tt);
 S.ok('...and then it does', lv.some(function (l) { return l > 0; }), JSON.stringify(lv));
+/* ...or once the resolution has been tried and gained nothing: it is back at full, waiting */
+var R11 = g.window._R3D = { on: true, q: null, dyn: 1, dynBound: 'gpu', dynA: { hold: 1e9, s: [], j: [], t0: 0 } }, lv2 = [];
+g._r3dQualityApply = function (l) { R11.qLevel = l; lv2.push(l); };
+S.ok('the resolution waiting out a descent that gained nothing has no step to give', g._r3dDynRoom(5000) === false && (R11.dynA.hold = 0, g._r3dDynRoom(5000)) === true, '');
+R11.dynA.hold = 1e9;
+for (tt = 0; tt < g.R3D_Q_SETTLE + g.R3D_Q_WINDOW * 3; tt += 40) g._r3dQualityFeed(40, tt);
+S.ok('...so the tiers try theirs', lv2.some(function (l) { return l > 0; }), JSON.stringify(lv2));
 
 require('../lib/report.js')(S);

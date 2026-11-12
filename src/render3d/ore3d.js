@@ -9,11 +9,15 @@
    standing UP out of the deposit, which is the whole reason to draw ore in 3D at all. Their
    shape lives in r3d/crystal.js.
 
-   CHUNKED, LIKE THE REST OF THE WORLD. This batch used to be one buffer over the whole map,
-   rebuilt from scratch whenever the map's total ore moved - which, with a harvester working,
-   is every poll. It is split on the world's own R3D_CHUNK grid now, and each chunk keeps the
-   sum it was built from: a harvester working one field rebuilds the one chunk it is working,
-   not sixteen. And since each chunk carries a world AABB, the frame culls it with the forest
+   CHUNKED, AND FINER THAN THE REST OF THE WORLD. This batch used to be one buffer over the whole
+   map, rebuilt from scratch whenever the map's total ore moved - which, with a harvester
+   working, is every poll. Then it was split on the world's own 32-cell grid, each chunk keeping
+   the sum it was built from - and a harvester's every bite rebuilt a thousand cells of crystals
+   for the one that changed: measured over an ordinary six-minute match, 374 rebuilds of 60-80
+   thousand vertices each, 10 ms at the median, 23 at the ninetieth and 262 at the worst, on the
+   frame that happened to check - the stall that came every half second while a field was
+   worked. On R3D_ORE_CHUNK cells a side, a bite rebuilds a sixteenth of that.
+   And since each chunk carries a world AABB, the frame culls it with the forest
    (scene3d.js) instead of drawing every crystal on the map at every zoom. Those two together
    are what let a crystal carry three times the geometry the old cone did.
 
@@ -29,11 +33,12 @@
    R3.oreBuilds  chunk builds since the page loaded - a counter, so a spec can tell a rebuild of
                one chunk from a rebuild of the map */
 
+var R3D_ORE_CHUNK = 8;        /* cells per ore chunk side: a 128-cell map is 16 x 16 of them, most with no ore */
 function _r3dOreSums(G) {
-  var N = RTS_N, C = Math.ceil(N / R3D_CHUNK), out = new Float64Array(C * C);
+  var N = RTS_N, C = Math.ceil(N / R3D_ORE_CHUNK), out = new Float64Array(C * C);
   for (var tz = 0; tz < N; tz++) {
-    var row = (tz / R3D_CHUNK | 0) * C;
-    for (var tx = 0; tx < N; tx++) out[row + (tx / R3D_CHUNK | 0)] += G.scrap[tz * N + tx];
+    var row = (tz / R3D_ORE_CHUNK | 0) * C;
+    for (var tx = 0; tx < N; tx++) out[row + (tx / R3D_ORE_CHUNK | 0)] += G.scrap[tz * N + tx];
   }
   return out;
 }
@@ -41,10 +46,10 @@ function _r3dOreSums(G) {
 /* One chunk's crystals, or null if it has none. BULK GEOMETRY, so the model segment floor is
    lifted for the duration - see _r3SegBulk in r3d/primitives.js. */
 function _r3dOreChunk(G, k) { return _r3SegBulk(function () {
-  var R3 = window._R3D, gl = R3.gl, N = RTS_N, C = Math.ceil(N / R3D_CHUNK);
+  var R3 = window._R3D, gl = R3.gl, N = RTS_N, C = Math.ceil(N / R3D_ORE_CHUNK);
   var cz = k / C | 0, cx = k % C, half = RTS_TILE / 2;
-  var z0 = cz * R3D_CHUNK, z1 = Math.min(N, z0 + R3D_CHUNK);
-  var x0 = cx * R3D_CHUNK, x1 = Math.min(N, x0 + R3D_CHUNK);
+  var z0 = cz * R3D_ORE_CHUNK, z1 = Math.min(N, z0 + R3D_ORE_CHUNK);
+  var x0 = cx * R3D_ORE_CHUNK, x1 = Math.min(N, x0 + R3D_ORE_CHUNK);
   var cap = RTS_SCRAP_TILE * (typeof RTS_ORE_RICHNESS === 'number' ? RTS_ORE_RICHNESS : 1);
   var faces = [];
   for (var tz = z0; tz < z1; tz++) {

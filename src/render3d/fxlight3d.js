@@ -14,7 +14,7 @@ var R3D_PLIGHTS = 6;            /* four were enough for the fires; the night's l
 var R3D_PLIGHT_WARM = [1.0, 0.58, 0.24];
 
 var R3D_PLIGHT_GLSL =
-  'uniform vec4 uPL[' + R3D_PLIGHTS + ']; uniform vec3 uPC[' + R3D_PLIGHTS + '];' +
+  'uniform vec4 uPL[' + R3D_PLIGHTS + ']; uniform vec3 uPC[' + R3D_PLIGHTS + ']; uniform float uPLn;' +
   'vec3 _plight(vec3 alb, vec3 n, vec3 wp){' +
   '  vec3 acc = vec3(0.0);' +
   '  for (int i = 0; i < ' + R3D_PLIGHTS + '; i++) {' +
@@ -79,4 +79,8 @@ function _r3dFxLightPut(gl, R3, P) {
   if (!R3.plPos) return;
   gl.uniform4fv(gl.getUniformLocation(P, 'uPL'), R3.plPos);
   gl.uniform3fv(gl.getUniformLocation(P, 'uPC'), R3.plCol);
+  /* HOW MANY THERE ARE, so a surface asks only when one is lit. The loop is as long as the slots
+     whatever is burning, and it ran on every pixel of every model with nothing alight - which
+     is most frames of most battles. R3.plGateOff is the before-picture: always asked. */
+  gl.uniform1f(gl.getUniformLocation(P, 'uPLn'), R3.plGateOff ? R3D_PLIGHTS : (R3.plights || 0));
 }

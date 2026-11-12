@@ -183,9 +183,11 @@ var S = new Suite('ore3d');
     o.chunks = R3.ore.length;
     o.oreChunks = R3.ore.filter(Boolean).length;
     o.bounded = R3.ore.filter(function (m) { return m && m.x1 > m.x0 && m.z1 > m.z0; }).length;
-    var C = Math.ceil(RTS_N / R3D_CHUNK);
-    var k0 = (best[1] / R3D_CHUNK | 0) * C + (best[0] / R3D_CHUNK | 0);
+    var C = Math.ceil(RTS_N / R3D_ORE_CHUNK);
+    var k0 = (best[1] / R3D_ORE_CHUNK | 0) * C + (best[0] / R3D_ORE_CHUNK | 0);
+    o.oreVerts = R3.oreTris * 3; o.chunkSide = R3D_ORE_CHUNK;
     var before6 = R3.ore.slice(), vBefore = R3.ore[k0] ? R3.ore[k0].verts : 0;
+    o.biteVerts = vBefore;
     var builds0 = R3.oreBuilds;
     var wi = _rtsIdx(best[0], best[1]), wKeep = G.scrap[wi];
     G.scrap[wi] = 0;
@@ -267,6 +269,12 @@ var S = new Suite('ore3d');
        out.oreChunks + ' of ' + out.chunks + ' chunks carry crystals');
   S.eq('...each with a box the frame can cull it by', out.bounded, out.oreChunks);
   S.eq('working one cell rebuilds exactly one chunk', out.rebuilt, 1);
+  /* ...a small one: a bite rebuilt a 32-cell block of the field, 60-80 thousand vertices, on the
+     frame that checked - a stall every half second while a harvester worked. The cell worked
+     here is the middle of the map's biggest field, so its block is full: 64 cells of crystals,
+     27.7 thousand vertices, the most a bite can be */
+  S.ok('...a small one: an eighth of the world\'s chunk a side, a small share of the map\'s crystals', out.chunkSide <= 8 && out.biteVerts > 0 && out.biteVerts < out.oreVerts / 6 && out.biteVerts < 30000,
+       out.biteVerts + ' vertices rebuilt of ' + out.oreVerts + ', chunks ' + out.chunkSide + ' cells a side');
   S.ok('...the one the cell is in, which lost that cell\'s crystals', out.lostVerts > 0,
        out.lostVerts + ' vertices fewer');
   S.ok('...and leaves every other chunk\'s buffers alone', out.othersKept, String(out.othersKept));

@@ -107,13 +107,16 @@ function _rtsElev(x, z) {
   var fx = x / RTS_TILE + RTS_N / 2 - 0.5, fz = z / RTS_TILE + RTS_N / 2 - 0.5;
   var x0 = Math.floor(fx), z0 = Math.floor(fz);
   var ax = fx - x0, az = fz - z0;
-  function at(a, b) {
-    if (a < 0) a = 0; else if (a > RTS_N - 1) a = RTS_N - 1;
-    if (b < 0) b = 0; else if (b > RTS_N - 1) b = RTS_N - 1;
-    return G.height[b * RTS_N + a];
-  }
-  var h = (at(x0, z0) * (1 - ax) + at(x0 + 1, z0) * ax) * (1 - az) +
-          (at(x0, z0 + 1) * (1 - ax) + at(x0 + 1, z0 + 1) * ax) * az;
+  /* the four heights round the point, each coordinate held to the map - written out, not asked
+     of an inner function: that was a closure made on every call, and this is called a thousand
+     times a tick and twice that a frame (a fifth of everything a frame left for the collector) */
+  var H = G.height, N = RTS_N, M = N - 1, x1 = x0 + 1, z1 = z0 + 1;
+  if (x0 < 0) x0 = 0; else if (x0 > M) x0 = M;
+  if (x1 < 0) x1 = 0; else if (x1 > M) x1 = M;
+  if (z0 < 0) z0 = 0; else if (z0 > M) z0 = M;
+  if (z1 < 0) z1 = 0; else if (z1 > M) z1 = M;
+  var h = (H[z0 * N + x0] * (1 - ax) + H[z0 * N + x1] * ax) * (1 - az) +
+          (H[z1 * N + x0] * (1 - ax) + H[z1 * N + x1] * ax) * az;
   return h / 255 * RTS_ELEV_MAX;
 }
 function _rtsTX(x)  { return Math.floor(x / RTS_TILE + RTS_N / 2); }        /* world -> tile */

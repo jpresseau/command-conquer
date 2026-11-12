@@ -97,8 +97,12 @@ function _rtsBaseMean(side, from, lim) {
 }
 /* Is this point part of that side's base? The question every "my base is being attacked"
    reaction should have been asking and none of them were - see _rtsBaseIsAttacked. */
-function _rtsInBase(side, x, z) {
-  var c = _rtsHomeCentre(side);
+function _rtsInBase(side, x, z) { return _rtsInBaseOf(_rtsHomeCentre(side), x, z); }
+/* ...with the centre already in hand. Finding it is a walk of every building against every
+   other (_rtsBaseSeed), and a caller asking about EACH of a side's buildings in turn paid that
+   once a building: the opponent's five-second think (core/ai.js _rtsAIWants) was 9.6 ms with 56
+   structures standing, of which 0.36 was the thinking - a stall on a five-second beat. */
+function _rtsInBaseOf(c, x, z) {
   if (!c) return false;
   return Math.hypot(x - c.x, z - c.z) <= c.r * RTS_BASE_SPAN;
 }

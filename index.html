@@ -990,7 +990,7 @@ html,body{margin:0;padding:0;height:100%;background:#05080e;overflow:hidden}
   <div id="rtsErr"></div>
   </div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">7205fe2 · 2026-11-12</div>
+  <div id="rtsBuild" title="build">b4cba60 · 2026-11-12</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -3544,8 +3544,36 @@ var RTS_SUSPEND_DELAY = 40;      /* Rule.SuspendDelay, seconds before a suspende
    regroup, and the radius inside which a new recruit counts as having joined up. */
 var RTS_STRAY = 9 * RTS_TILE;
 
-function rtsStructDef(k) { for (var i=0;i<RTS_STRUCTS.length;i++) if (RTS_STRUCTS[i].key===k) return RTS_STRUCTS[i]; return null; }
-function rtsUnitDef(k)   { for (var i=0;i<RTS_UNITS.length;i++)   if (RTS_UNITS[i].key===k)   return RTS_UNITS[i];   return null; }
+/* A KEY TO ITS ROW. These were a walk of the table comparing strings - 74 units and 44 structures
+   - from 323 call sites, several a unit a tick: about an eighth of a battle's simulation. The
+   index is built from the table as it stands and trusted only as far as it can be checked: a hit
+   is the table's own row at that index, read now, and returned only if its key is still the one
+   asked for; the tables grow at load (rules/roster11.js) and a spec may change one, so a table
+   whose length has moved, or a row that no longer answers to its key, is walked as before and
+   the index rebuilt. The first row with a key wins, as the walk had it.
+
+   What it cannot see is a NEW key appearing with the length unchanged - a row swapped for
+   another in place, or renamed. Nothing in the game does either; whatever does calls
+   _rtsDefReset. A stale index never answers with the wrong row: only with none. */
+var _RTS_DEF_IX = { s: null, u: null };
+function _rtsDefReset() { _RTS_DEF_IX.s = null; _RTS_DEF_IX.u = null; }
+function _rtsDefIndex(arr) {
+  var m = new Map();
+  for (var i = 0; i < arr.length; i++) if (!m.has(arr[i].key)) m.set(arr[i].key, i);
+  return { arr: arr, n: arr.length, m: m };
+}
+function _rtsDefIn(arr, slot, k) {
+  var X = _RTS_DEF_IX[slot];
+  if (!X || X.arr !== arr || X.n !== arr.length) X = _RTS_DEF_IX[slot] = _rtsDefIndex(arr);
+  var i = X.m.get(k);
+  if (i === undefined) return null;
+  if (arr[i] && arr[i].key === k) return arr[i];
+  _RTS_DEF_IX[slot] = null;                              /* a row was changed under the index: walk, and build it again next time */
+  for (i = 0; i < arr.length; i++) if (arr[i].key === k) return arr[i];
+  return null;
+}
+function rtsStructDef(k) { return _rtsDefIn(RTS_STRUCTS, 's', k); }
+function rtsUnitDef(k)   { return _rtsDefIn(RTS_UNITS, 'u', k); }
 
 </script>
 <script>/* rules/triggers.js - TRIGGER/TEVENT/TACTION.CPP: the event and action tables, and the
@@ -12227,13 +12255,16 @@ function _rtsElev(x, z) {
   var fx = x / RTS_TILE + RTS_N / 2 - 0.5, fz = z / RTS_TILE + RTS_N / 2 - 0.5;
   var x0 = Math.floor(fx), z0 = Math.floor(fz);
   var ax = fx - x0, az = fz - z0;
-  function at(a, b) {
-    if (a < 0) a = 0; else if (a > RTS_N - 1) a = RTS_N - 1;
-    if (b < 0) b = 0; else if (b > RTS_N - 1) b = RTS_N - 1;
-    return G.height[b * RTS_N + a];
-  }
-  var h = (at(x0, z0) * (1 - ax) + at(x0 + 1, z0) * ax) * (1 - az) +
-          (at(x0, z0 + 1) * (1 - ax) + at(x0 + 1, z0 + 1) * ax) * az;
+  /* the four heights round the point, each coordinate held to the map - written out, not asked
+     of an inner function: that was a closure made on every call, and this is called a thousand
+     times a tick and twice that a frame (a fifth of everything a frame left for the collector) */
+  var H = G.height, N = RTS_N, M = N - 1, x1 = x0 + 1, z1 = z0 + 1;
+  if (x0 < 0) x0 = 0; else if (x0 > M) x0 = M;
+  if (x1 < 0) x1 = 0; else if (x1 > M) x1 = M;
+  if (z0 < 0) z0 = 0; else if (z0 > M) z0 = M;
+  if (z1 < 0) z1 = 0; else if (z1 > M) z1 = M;
+  var h = (H[z0 * N + x0] * (1 - ax) + H[z0 * N + x1] * ax) * (1 - az) +
+          (H[z1 * N + x0] * (1 - ax) + H[z1 * N + x1] * ax) * az;
   return h / 255 * RTS_ELEV_MAX;
 }
 function _rtsTX(x)  { return Math.floor(x / RTS_TILE + RTS_N / 2); }        /* world -> tile */
@@ -19548,8 +19579,12 @@ function _rtsBaseMean(side, from, lim) {
 }
 /* Is this point part of that side's base? The question every "my base is being attacked"
    reaction should have been asking and none of them were - see _rtsBaseIsAttacked. */
-function _rtsInBase(side, x, z) {
-  var c = _rtsHomeCentre(side);
+function _rtsInBase(side, x, z) { return _rtsInBaseOf(_rtsHomeCentre(side), x, z); }
+/* ...with the centre already in hand. Finding it is a walk of every building against every
+   other (_rtsBaseSeed), and a caller asking about EACH of a side's buildings in turn paid that
+   once a building: the opponent's five-second think (core/ai.js _rtsAIWants) was 9.6 ms with 56
+   structures standing, of which 0.36 was the thinking - a stall on a five-second beat. */
+function _rtsInBaseOf(c, x, z) {
   if (!c) return false;
   return Math.hypot(x - c.x, z - c.z) <= c.r * RTS_BASE_SPAN;
 }
@@ -19892,7 +19927,7 @@ function _rtsAIMusterOut(u, src) {
    furthest short of. Base size tracks the human's building count plus BaseSizeAdd, so the
    opponent grows in response to how you are actually playing. */
 function _rtsAIWants(S) {
-  var G = window._rtsG, have = {}, i, e, theirs = 0, own = 0;
+  var G = window._rtsG, have = {}, i, e, theirs = 0, own = 0, home = {};   /* home: each side's centre, found once */
   for (i = 0; i < G.ents.length; i++) {
     e = G.ents[i];
     if (e.type !== 'struct' || e.dead || e.selling) continue;
@@ -19909,7 +19944,8 @@ function _rtsAIWants(S) {
        base-defence seed: after the opponent took a Command Yard, its plan never asked for a
        Tesla Coil again, not late but never, still unwanted at 600 seconds. An outpost inside
        the enemy's base does not mean this house needs another power plant at home. */
-    if (_rtsInBase(e.side, e.x, e.z)) own++;
+    if (!(e.side in home)) home[e.side] = _rtsHomeCentre(e.side);
+    if (_rtsInBaseOf(home[e.side], e.x, e.z)) own++;
   }
   /* count what is already on the way, or the AI queues four refineries in a row */
   if (S.q.struct) have[S.q.struct.key] = (have[S.q.struct.key] || 0) + 1;
@@ -26137,7 +26173,7 @@ var R3D_PLIGHTS = 6;            /* four were enough for the fires; the night's l
 var R3D_PLIGHT_WARM = [1.0, 0.58, 0.24];
 
 var R3D_PLIGHT_GLSL =
-  'uniform vec4 uPL[' + R3D_PLIGHTS + ']; uniform vec3 uPC[' + R3D_PLIGHTS + '];' +
+  'uniform vec4 uPL[' + R3D_PLIGHTS + ']; uniform vec3 uPC[' + R3D_PLIGHTS + ']; uniform float uPLn;' +
   'vec3 _plight(vec3 alb, vec3 n, vec3 wp){' +
   '  vec3 acc = vec3(0.0);' +
   '  for (int i = 0; i < ' + R3D_PLIGHTS + '; i++) {' +
@@ -26202,6 +26238,10 @@ function _r3dFxLightPut(gl, R3, P) {
   if (!R3.plPos) return;
   gl.uniform4fv(gl.getUniformLocation(P, 'uPL'), R3.plPos);
   gl.uniform3fv(gl.getUniformLocation(P, 'uPC'), R3.plCol);
+  /* HOW MANY THERE ARE, so a surface asks only when one is lit. The loop is as long as the slots
+     whatever is burning, and it ran on every pixel of every model with nothing alight - which
+     is most frames of most battles. R3.plGateOff is the before-picture: always asked. */
+  gl.uniform1f(gl.getUniformLocation(P, 'uPLn'), R3.plGateOff ? R3D_PLIGHTS : (R3.plights || 0));
 }
 </script>
 <script>/* render3d/wave3d.js - the sea's swell, in one place. Part of rts.render3d.
@@ -27042,7 +27082,7 @@ function _r3dQualityFeed(dt, now) {
   if (A.locked) return;
   /* the resolution goes first (pace3d.js): a tier steps down once it can go no lower, and up only
      once it is back at full */
-  if (med > R3D_Q_SLOW && lvl < R3D_TIERS.length - 1 && !_r3dDynRoom()) {
+  if (med > R3D_Q_SLOW && lvl < R3D_TIERS.length - 1 && !_r3dDynRoom(now)) {
     A.trial = { from: lvl, base: med, down: true }; A.fast = 0;
     _r3dQualityApply(lvl + 1);
   } else if (med < R3D_Q_FAST && lvl > 0 && !(R3.dyn < 1)) {
@@ -27117,11 +27157,18 @@ function _r3dWarm(R3, ms) {
   var G = window._rtsG, R = window._rtsR;
   if (!G || !R || !R.spr) return;
   if (!R3.warmQ || R3.warmFor !== G) {
-    var sides = {}, defs = {}, q = [];
-    G.ents.forEach(function (e) { if (e.side) sides[e.side] = 1; });
-    RTS_UNITS.forEach(function (u) { defs[u.key] = 1; });
+    /* WHAT EACH SIDE CAN FIELD, not every unit there is: its own army's roster, and whatever of
+       another's already stands on the map in its colours. It warmed every unit type for every
+       side - 376 models, 46 MB of vertex buffers and half a second of frames, most of them for
+       units neither army in the match can build. One it did not warm is built on first sight,
+       as any was before there was a warm-up. R3.warmAll is the before-picture. */
+    var sides = {}, here = {}, q = [];
+    G.ents.forEach(function (e) { if (e.side) { sides[e.side] = 1; if (e.type === 'unit' && !e.dead) here[e.side + ':' + e.def] = 1; } });
     Object.keys(sides).forEach(function (sd) {
-      Object.keys(defs).forEach(function (def) {
+      var army = rtsHouseSide(sd);
+      RTS_UNITS.forEach(function (u) {
+        var def = u.key;
+        if (!R3.warmAll && !here[sd + ':' + def] && !(G.order && G.order.indexOf(sd) >= 0 && rtsBuildableBy(u, army))) return;
         var tur = R.spr.turret && R.spr.turret[sd] && R.spr.turret[sd][def], AP = RTS_AIR_PARTS[def];
         if (tur) { q.push(['u', def, sd, 'hull']); q.push(['u', def, sd, 'turret']); }
         else if (AP && AP.rotor) { q.push(['u', def, sd, 'body']); q.push(['u', def, sd, 'rotor']); }
@@ -27142,7 +27189,27 @@ function _r3dWarm(R3, ms) {
 }
 
 /* THE PIXELS, fed by the live loop: `dt` the ms since the last frame, `js` the ms the last frame
-   spent in script. */
+   spent in script.
+
+   A DESCENT IS A TRIAL, AND SO IS A STEP BACK UP. This stepped down whenever a window was slow
+   and the wait was not script, and up only under R3D_DYN_FAST - and both halves were wrong on a
+   phone, found by feeding it a phone's frame times:
+     - held at 30 by its own power saving (every frame 33 ms, 5 of script), the wait reads as the
+       GPU's: it went to 0.6 in seven seconds - a third of the pixels, three buffers remade - and
+       stayed, for no frame gained
+     - on a 60 Hz screen a frame is never under 16.7 ms, so 14.5 was never seen: one heavy spell
+       and the picture stayed at 0.6 to the end of the match, the tiers held down with it
+   So a descent remembers the frame time it started from and the step it left. A window that
+   beats that by R3D_Q_GAIN keeps the step it is on; one that does not goes a step lower, since a
+   display's frame times come in whole refreshes and one step may not reach the next; and at the
+   last step with nothing gained it goes back where it began and waits, twice as long each time
+   it is wrong (R3D_DYN_HOLD). And "fast" is measured against the quickest window the display has
+   shown (D.floor), not a constant: R3D_DYN_UP windows at that pace try a step up, which is
+   undone - and waited out the same way - if the next window is slow again. */
+var R3D_DYN_HOLD = 20000;        /* ms a descent that gained nothing waits before another; doubled each time, to R3D_DYN_HOLD_MAX */
+var R3D_DYN_HOLD_MAX = 320000;
+var R3D_DYN_UP = 3;              /* windows at the display's own pace before a step up is tried */
+var R3D_DYN_NEAR = 1.15;         /* within this of the quickest window seen is "at the display's pace" */
 function _r3dDynFeed(dt, js, now) {
   var R3 = window._R3D;
   if (!R3 || !R3.on || _r3dQualityWant() !== 'auto' || !(dt > 0) || dt > 250) return;
@@ -27154,19 +27221,44 @@ function _r3dDynFeed(dt, js, now) {
   var s = D.s.slice().sort(function (a, b) { return a - b; }), j = D.j.slice().sort(function (a, b) { return a - b; });
   var med = s[s.length >> 1], mj = j[j.length >> 1];
   D.s.length = 0; D.j.length = 0; D.t0 = now;
-  var gpu = med - mj > med * R3D_DYN_GPU;
+  var gpu = med - mj > med * R3D_DYN_GPU, slow = med > R3D_DYN_SLOW && gpu, last = R3D_DYN_STEPS.length - 1;
   R3.dynBound = med > R3D_DYN_SLOW ? (gpu ? 'gpu' : 'js') : null;
-  var i = R3D_DYN_STEPS.indexOf(R3.dyn);
+  if (!(D.floor <= med)) D.floor = med;                  /* the quickest window this display has shown */
+  var i = R3D_DYN_STEPS.indexOf(R3.dyn), T = D.trial;
   if (i < 0) i = 0;
-  if (med > R3D_DYN_SLOW && gpu && i < R3D_DYN_STEPS.length - 1) i++;
-  else if (med < R3D_DYN_FAST && i > 0) i--;
-  else return;
-  R3.dyn = R3D_DYN_STEPS[i];                 /* the next frame sizes its buffer by it (_r3dResize) */
+  function set(k) { R3.dyn = R3D_DYN_STEPS[k]; }          /* the next frame sizes its buffer by it (_r3dResize) */
+  if (R3.dynLegacy) {                                     /* the before-picture: down while slow, up only under a constant */
+    if (slow && i < last) set(i + 1); else if (med < R3D_DYN_FAST && i > 0) set(i - 1);
+    return;
+  }
+  if (T && T.down) {
+    /* it paid: this step stays - and the step above is not tried at once, since the frames are quick only because of it */
+    if (med < T.base * R3D_Q_GAIN) { D.trial = null; D.wait = 0; D.upHold = now + (D.upWait || R3D_DYN_HOLD); }
+    else if (i < last) set(i + 1);                                            /* not yet: one more may reach the next refresh */
+    else { set(T.from); D.trial = null; D.wait = Math.min(R3D_DYN_HOLD_MAX, (D.wait || R3D_DYN_HOLD / 2) * 2); D.hold = now + D.wait; }
+    D.fast = 0;
+    return;
+  }
+  if (T && T.up) {
+    D.trial = null; D.fast = 0;
+    if (slow) { set(T.from); D.upWait = Math.min(R3D_DYN_HOLD_MAX, (D.upWait || R3D_DYN_HOLD / 2) * 2); D.upHold = now + D.upWait; }
+    else D.upWait = 0;
+    return;
+  }
+  if (slow && i < last && !(now < D.hold)) { D.trial = { down: true, from: i, base: med }; D.fast = 0; set(i + 1); return; }
+  var quick = med < R3D_DYN_FAST || med <= D.floor * R3D_DYN_NEAR;
+  if (quick && !slow && i > 0 && !(now < D.upHold)) {
+    D.fast = (D.fast || 0) + 1;
+    if (D.fast >= R3D_DYN_UP) { D.trial = { up: true, from: i }; D.fast = 0; set(i - 1); }
+  } else D.fast = 0;
 }
 /* Has the resolution a step left to give? While it has, a slow GPU-bound frame is its business
    and not the tiers'. */
-function _r3dDynRoom() {
-  var R3 = window._R3D;
+function _r3dDynRoom(now) {
+  var R3 = window._R3D, D = R3 && R3.dynA;
+  /* ...not while it is waiting out a descent that gained nothing: then fewer pixels are not the
+     answer, and the tiers may try theirs. `now`: the feed's clock (the live loop's) */
+  if (D && D.hold > (now === undefined ? _r3dNow() : now) && !D.trial) return false;
   return !!(R3 && R3.dyn !== undefined && R3.dynBound === 'gpu' && R3.dyn > R3D_DYN_STEPS[R3D_DYN_STEPS.length - 1]);
 }
 </script>
@@ -27814,7 +27906,7 @@ var R3D_MESH_FS =
   '    }' +
   '  }' +
   /* what is burning near it lights it - render3d/fxlight3d.js */
-  '  c += _plight(vCol.rgb * tint, normalize(vN), vec3(vWxz.x, vHY.y, vWxz.y));' +
+  '  if (uPLn > 0.5) c += _plight(vCol.rgb * tint, normalize(vN), vec3(vWxz.x, vHY.y, vWxz.y));' +
   /* LIT WINDOWS. At night a base was a field of dark boxes with lamps over the doors: the glass of
      every building - the palette's glass, as _tint finds it - read as dull blue-grey with nobody
      home. By the hour's night (1 at night, half at dusk, a little in rain and fog) a building's
@@ -30459,7 +30551,8 @@ function _r3dFxPack(B, ord, V, key) {
   if (!out || out.length < n * Q4) out = V[key] = new Float32Array(Math.max(n, 64) * 2 * Q4);
   for (var i = 0; i < n; i++) {
     var q = (ord ? ord[i] : i) * R3D_FX_QUAD;
-    for (var c = 0; c < 4; c++) out.set(B.a.subarray(q + R3D_FX_CORNER4[c] * S, q + (R3D_FX_CORNER4[c] + 1) * S), i * Q4 + c * S);
+    /* copied float by float: a subarray a corner was four views made and thrown away a quad a frame */
+    for (var c = 0; c < 4; c++) { var src = q + R3D_FX_CORNER4[c] * S, dst = i * Q4 + c * S; for (var w = 0; w < S; w++) out[dst + w] = B.a[src + w]; }
   }
   return out.subarray(0, n * Q4);
 }
@@ -31977,65 +32070,69 @@ function _r3dFaceNormal(v) {
   }
   return [nx, ny, nz];
 }
+/* TWO PASSES, STRAIGHT INTO TYPED ARRAYS. This built three plain arrays three values at a push,
+   with a temporary array a triangle and another a face, and then copied them into typed ones -
+   and it is on the path of every stall the renderer has: an ore chunk rebuilt as a harvester
+   bites, a model first seen, the base's dressing when a building falls. Counted first and
+   filled in place it is about a third of the time (an ore chunk 8.6 ms to 2.4, a model 4.4 to
+   1.4), and uploads the same bytes: unit/meshbuild holds it to the old builder, byte for byte. */
 function _r3dBuildMesh(gl, faces) {
-  var pos = [], nrm = [], col = [], fi;
+  var fi, nv = 0;
+  for (fi = 0; fi < faces.length; fi++) { var vn = faces[fi].v.length; if (vn > 2) nv += (vn - 2) * 3; }
+  var pos = new Float32Array(nv * 3), nrm8 = new Int8Array(nv * 3), col8 = new Uint8Array(nv * 3), o = 0, top = 0;
   for (fi = 0; fi < faces.length; fi++) {
-    var f = faces[fi], v = f.v;
-    var r = f.c[0] / 255, gc = f.c[1] / 255, b = f.c[2] / 255;
+    var f = faces[fi], v = f.v, n = v.length;           /* under three corners the fan below is empty */
+    var cr = Math.round(f.c[0] / 255 * 255), cg = Math.round(f.c[1] / 255 * 255), cb = Math.round(f.c[2] / 255 * 255);
     /* THE FACE'S NORMAL FROM ALL ITS CORNERS (Newell's method), not from the first three. It was
        the first three, and a rounded box's cap (r3d/curves.js _r3RoundBox) starts with three
        points in a line - two ends of a corner arc and the straight run between - so the cap of
        every rounded box got a zero normal, which the shader normalised into NaN: every barrel,
        fender and hull plate drawn at the high and medium tiers had a black lid. The sum over all
        the edges is exact for a planar polygon and cannot vanish while the polygon has area. */
-    var fn = _r3dFaceNormal(v), nx = fn[0], ny = fn[1], nz = fn[2];
+    var fnv = f.n, nx = 0, ny = 0, nz = 0, nl, e;
+    if (!fnv) {
+      for (e = 0; e < n; e++) {
+        var p0 = v[e], p1 = v[e + 1 === n ? 0 : e + 1];
+        nx += (p0[1] - p1[1]) * (p0[2] + p1[2]);
+        ny += (p0[2] - p1[2]) * (p0[0] + p1[0]);
+        nz += (p0[0] - p1[0]) * (p0[1] + p1[1]);
+      }
+      /* Normals pack to bytes, and Int8 cannot carry the unnormalised sums the emitter produces:
+         normalised here; the shader normalises anyway, so nothing downstream changes. */
+      nl = Math.hypot(nx, ny, nz) || 1;
+      nx = Math.round(nx / nl * 127); ny = Math.round(ny / nl * 127); nz = Math.round(nz / nl * 127);
+    }
     /* UNLESS THE FACE CAME WITH ITS OWN. A cylinder, cone or vault emits one normal per corner
        (see _r3Cyl in r3d/primitives.js), which is what turns a ring of flat strips into a
        curve once the fragment stage interpolates them. Everything else - every box, slab,
        gable and cap - has no such field and is flat, which is what it should be. */
-    var fnv = f.n;
-    for (var k = 2; k < v.length; k++) {
-      var idx = [0, k - 1, k];
+    for (var k = 2; k < n; k++) {
       for (var t = 0; t < 3; t++) {
-        var vi = idx[t], p = v[vi];
-        pos.push(p[0], p[1], p[2]);
-        if (fnv) nrm.push(fnv[vi][0], fnv[vi][1], fnv[vi][2]);
-        else nrm.push(nx, ny, nz);
-        col.push(r, gc, b);
+        var vi = t === 0 ? 0 : (t === 1 ? k - 1 : k), p = v[vi];
+        pos[o] = p[0]; pos[o + 1] = p[1]; pos[o + 2] = p[2];
+        if (p[1] > top) top = p[1];
+        if (fnv) {
+          var q = fnv[vi]; nl = Math.hypot(q[0], q[1], q[2]) || 1;
+          nrm8[o] = Math.round(q[0] / nl * 127); nrm8[o + 1] = Math.round(q[1] / nl * 127); nrm8[o + 2] = Math.round(q[2] / nl * 127);
+        } else { nrm8[o] = nx; nrm8[o + 1] = ny; nrm8[o + 2] = nz; }
+        col8[o] = cr; col8[o + 1] = cg; col8[o + 2] = cb;
+        o += 3;
       }
     }
   }
-  /* Positions stay float; normals and colours pack to bytes. At this system's scale - the
-     world batches alone are several hundred thousand triangles - attribute width is the real
-     budget: floats everywhere is 36 bytes a vertex and packing the two attributes that never
-     needed the precision brings it to 18, which is the difference between a phone keeping the
-     3D mode and dropping the tab. Normals are normalised here because Int8 cannot carry the
-     unnormalised cross products the emitter produces; the shader normalises anyway, so
-     nothing downstream changes. */
-  function fbuf(a) {
+  /* Positions stay float; normals and colours are bytes. At this system's scale - the world
+     batches alone are several hundred thousand triangles - attribute width is the real budget:
+     floats everywhere is 36 bytes a vertex and packing the two attributes that never needed the
+     precision brings it to 18, which is the difference between a phone keeping the 3D mode and
+     dropping the tab. */
+  function buf(a) {
     var b2 = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, b2);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(a), gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, a, gl.STATIC_DRAW);
     return b2;
   }
-  var nrm8 = new Int8Array(nrm.length), col8 = new Uint8Array(col.length);
-  for (var ni = 0; ni < nrm.length; ni += 3) {
-    var nl = Math.hypot(nrm[ni], nrm[ni + 1], nrm[ni + 2]) || 1;
-    nrm8[ni] = Math.round(nrm[ni] / nl * 127);
-    nrm8[ni + 1] = Math.round(nrm[ni + 1] / nl * 127);
-    nrm8[ni + 2] = Math.round(nrm[ni + 2] / nl * 127);
-  }
-  for (var ci = 0; ci < col.length; ci++) col8[ci] = Math.round(col[ci] * 255);
-  function bbuf(a) {
-    var b3 = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, b3);
-    gl.bufferData(gl.ARRAY_BUFFER, a, gl.STATIC_DRAW);
-    return b3;
-  }
-  /* its top, in model units: where a fire on its roof stands (render3d/fxemit3d.js) */
-  var top = 0;
-  for (fi = 1; fi < pos.length; fi += 3) if (pos[fi] > top) top = pos[fi];
-  return { p: fbuf(pos), n: bbuf(nrm8), c: bbuf(col8), verts: pos.length / 3, top: top };
+  /* `top`: its top, in model units - where a fire on its roof stands (render3d/fxemit3d.js) */
+  return { p: buf(pos), n: buf(nrm8), c: buf(col8), verts: nv, top: top };
 }
 
 /* The cache key carries everything that changes the geometry or its colours: type, side,
@@ -35129,11 +35226,15 @@ function _r3dMuzzleLights(G) {
    standing UP out of the deposit, which is the whole reason to draw ore in 3D at all. Their
    shape lives in r3d/crystal.js.
 
-   CHUNKED, LIKE THE REST OF THE WORLD. This batch used to be one buffer over the whole map,
-   rebuilt from scratch whenever the map's total ore moved - which, with a harvester working,
-   is every poll. It is split on the world's own R3D_CHUNK grid now, and each chunk keeps the
-   sum it was built from: a harvester working one field rebuilds the one chunk it is working,
-   not sixteen. And since each chunk carries a world AABB, the frame culls it with the forest
+   CHUNKED, AND FINER THAN THE REST OF THE WORLD. This batch used to be one buffer over the whole
+   map, rebuilt from scratch whenever the map's total ore moved - which, with a harvester
+   working, is every poll. Then it was split on the world's own 32-cell grid, each chunk keeping
+   the sum it was built from - and a harvester's every bite rebuilt a thousand cells of crystals
+   for the one that changed: measured over an ordinary six-minute match, 374 rebuilds of 60-80
+   thousand vertices each, 10 ms at the median, 23 at the ninetieth and 262 at the worst, on the
+   frame that happened to check - the stall that came every half second while a field was
+   worked. On R3D_ORE_CHUNK cells a side, a bite rebuilds a sixteenth of that.
+   And since each chunk carries a world AABB, the frame culls it with the forest
    (scene3d.js) instead of drawing every crystal on the map at every zoom. Those two together
    are what let a crystal carry three times the geometry the old cone did.
 
@@ -35149,11 +35250,12 @@ function _r3dMuzzleLights(G) {
    R3.oreBuilds  chunk builds since the page loaded - a counter, so a spec can tell a rebuild of
                one chunk from a rebuild of the map */
 
+var R3D_ORE_CHUNK = 8;        /* cells per ore chunk side: a 128-cell map is 16 x 16 of them, most with no ore */
 function _r3dOreSums(G) {
-  var N = RTS_N, C = Math.ceil(N / R3D_CHUNK), out = new Float64Array(C * C);
+  var N = RTS_N, C = Math.ceil(N / R3D_ORE_CHUNK), out = new Float64Array(C * C);
   for (var tz = 0; tz < N; tz++) {
-    var row = (tz / R3D_CHUNK | 0) * C;
-    for (var tx = 0; tx < N; tx++) out[row + (tx / R3D_CHUNK | 0)] += G.scrap[tz * N + tx];
+    var row = (tz / R3D_ORE_CHUNK | 0) * C;
+    for (var tx = 0; tx < N; tx++) out[row + (tx / R3D_ORE_CHUNK | 0)] += G.scrap[tz * N + tx];
   }
   return out;
 }
@@ -35161,10 +35263,10 @@ function _r3dOreSums(G) {
 /* One chunk's crystals, or null if it has none. BULK GEOMETRY, so the model segment floor is
    lifted for the duration - see _r3SegBulk in r3d/primitives.js. */
 function _r3dOreChunk(G, k) { return _r3SegBulk(function () {
-  var R3 = window._R3D, gl = R3.gl, N = RTS_N, C = Math.ceil(N / R3D_CHUNK);
+  var R3 = window._R3D, gl = R3.gl, N = RTS_N, C = Math.ceil(N / R3D_ORE_CHUNK);
   var cz = k / C | 0, cx = k % C, half = RTS_TILE / 2;
-  var z0 = cz * R3D_CHUNK, z1 = Math.min(N, z0 + R3D_CHUNK);
-  var x0 = cx * R3D_CHUNK, x1 = Math.min(N, x0 + R3D_CHUNK);
+  var z0 = cz * R3D_ORE_CHUNK, z1 = Math.min(N, z0 + R3D_ORE_CHUNK);
+  var x0 = cx * R3D_ORE_CHUNK, x1 = Math.min(N, x0 + R3D_ORE_CHUNK);
   var cap = RTS_SCRAP_TILE * (typeof RTS_ORE_RICHNESS === 'number' ? RTS_ORE_RICHNESS : 1);
   var faces = [];
   for (var tz = z0; tz < z1; tz++) {

@@ -261,6 +261,31 @@ mark of its own, somewhere in the cell and the size of the blast:
   anywhere with no scar; a crater is two thirds bare earth (none before) and its halves differ in
   light by 20 to 24, against 3 to 8.
 
+## The stalls (`mesh3d.js`, `ore3d.js`, `pace3d.js`)
+
+A big fight was slow in stalls, not in its steady frame: measured, the frame's own script is
+3 ms and a tick under 4, and what a player felt were single frames of 10 to 260 ms.
+
+- **The mesh builder fills typed arrays in place** (`_r3dBuildMesh`): counted first, no array a
+  triangle - a third of the time, the same bytes (`unit/meshbuild` keeps the old builder and
+  compares 532 models and five ore fields byte for byte). It is on the path of every stall below.
+- **Ore is chunked eight cells a side** (`R3D_ORE_CHUNK`), not on the world's thirty-two: a
+  harvester's bite rebuilt a thousand cells of crystals for the one that changed - 374 rebuilds
+  in a six-minute match, 10 ms at the median and 262 at the worst. `e2e/ore3d` bounds a bite.
+- **The warm-up builds what each side can field** (`_r3dWarm`): its army's roster and whatever
+  stands on the map in its colours, where it built every unit for every side (376 models, 46 MB).
+  `R3.warmAll` is the before-picture.
+- **The fire-light loop is asked only when something is lit** (`uPLn`, `fxlight3d.js`): it ran on
+  every pixel of every model with nothing alight. `R3.plGateOff`; `e2e/fxlight` holds the frame
+  identical either way.
+- **AUTO's resolution is a trial** (`_r3dDynFeed`). A descent remembers the frame time it began
+  at: a window that beats it by `R3D_Q_GAIN` keeps its step, one that does not goes a step lower
+  (a display's frames come in whole refreshes), and at the last step with nothing gained it goes
+  back and waits, twice as long each time. "Fast" is the quickest window the display has shown,
+  not 14.5 ms - which a 60 Hz screen never shows, so one heavy spell left the picture at 0.6 for
+  the rest of the match, and a phone held at 30 by its power saving went to 0.6 for nothing.
+  `unit/pace` feeds it those phones' frame times; `R3.dynLegacy` is the before-picture.
+
 ## A phone takes the GPU away (`render3d/lost3d.js`)
 
 Reported from an iPhone: turned from landscape to portrait, the game stopped working - the sidebar

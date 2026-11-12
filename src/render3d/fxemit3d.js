@@ -120,7 +120,8 @@ function _r3dFxPack(B, ord, V, key) {
   if (!out || out.length < n * Q4) out = V[key] = new Float32Array(Math.max(n, 64) * 2 * Q4);
   for (var i = 0; i < n; i++) {
     var q = (ord ? ord[i] : i) * R3D_FX_QUAD;
-    for (var c = 0; c < 4; c++) out.set(B.a.subarray(q + R3D_FX_CORNER4[c] * S, q + (R3D_FX_CORNER4[c] + 1) * S), i * Q4 + c * S);
+    /* copied float by float: a subarray a corner was four views made and thrown away a quad a frame */
+    for (var c = 0; c < 4; c++) { var src = q + R3D_FX_CORNER4[c] * S, dst = i * Q4 + c * S; for (var w = 0; w < S; w++) out[dst + w] = B.a[src + w]; }
   }
   return out.subarray(0, n * Q4);
 }
