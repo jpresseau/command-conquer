@@ -220,6 +220,7 @@ function _rtsKill(e) {
   }
   if (typeof _rtsSfx === 'function')
     _rtsSfx(e.selling ? 'place' : (e.type === 'struct' ? 'boom' : 'pop'), e.x, e.z);
+  _rtsLossSay(e);                                 /* a building or a harvester lost is said: core/response.js */
   if (e.side === 'player' && e.type === 'unit') G.stats.lostU++;
   if (e.side === 'player' && e.type === 'struct' && !e.selling) G.stats.lostB = (G.stats.lostB || 0) + 1;
   /* HouseClass::UnitsLost / BuildingsLost, which TEVENT's N*_DESTROYED events read. A sold

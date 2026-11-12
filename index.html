@@ -188,6 +188,7 @@
   white-space:normal;max-width:min(92%,560px);text-align:center}
 #rcgRts .rts-msg.on{opacity:1}
 #rcgRts .rts-msg.go{pointer-events:auto;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}   /* a tap goes there: ui/go.js */
+#rcgRts .rts-msg.alert{border-color:rgba(255,110,84,.65);color:#ffab98}   /* quiet, the last alert: ui/go.js */
 /* A PHONE'S LINE clears its taller strip (46px), and the HUD's banners take the same slot
    (ui/hud.js). This sat in the touch block above, where the plain rule after it won: the line
    was at 44 on every upright phone, 2 pixels under the strip. Held sideways, see below. */
@@ -978,7 +979,7 @@ html,body{margin:0;padding:0;height:100%;background:#05080e;overflow:hidden}
   <div id="rtsErr"></div>
   </div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">faf9b71 · 2026-11-08</div>
+  <div id="rtsBuild" title="build">957140e · 2026-11-12</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -1069,7 +1070,7 @@ var RTS_STRUCTS = [
   { key:'lab',      name:'Research Lab',  w:2, h:2, cost:1500, build:22, hp:600,  power:-200, sight:14,
     needs:['radar', 'factory'],
     armour:'wood',
-    desc:'Unlocks Artillery and the Heavy Tank. Draws as much power as two plants.' },
+    desc:'Unlocks the heaviest units and the superweapons. Draws as much power as two plants.' },
   { key:'rocketpit',name:'Rocket Turret', w:1, h:1, cost:800,  build:14, hp:480,  power:-30,  sight:22,
     needs:['factory'], weapon:'turretrocket',
     side:'soviet', armour:'concrete',
@@ -3672,7 +3673,7 @@ var RTS_MESSAGE_DELAY = 25;
 var RTS_TRIGGERS = [
   { name:'lowpower', house:'player', persist:'persistent', control:'only',
     event1:['lowPower', 'player'],
-    action1:['text', 'LOW POWER - production is slowed'] },
+    action1:['text', 'LOW POWER - defences and radar are offline, production slowed. Build a Power Plant.'] },
   { name:'firstref', house:'player', persist:'volatile', control:'only',
     event1:['build', 'refinery'],
     action1:['text', 'Refinery online. Harvester dispatched.'] },
@@ -16316,6 +16317,7 @@ function _rtsKill(e) {
   }
   if (typeof _rtsSfx === 'function')
     _rtsSfx(e.selling ? 'place' : (e.type === 'struct' ? 'boom' : 'pop'), e.x, e.z);
+  _rtsLossSay(e);                                 /* a building or a harvester lost is said: core/response.js */
   if (e.side === 'player' && e.type === 'unit') G.stats.lostU++;
   if (e.side === 'player' && e.type === 'struct' && !e.selling) G.stats.lostB = (G.stats.lostB || 0) + 1;
   /* HouseClass::UnitsLost / BuildingsLost, which TEVENT's N*_DESTROYED events read. A sold
@@ -17955,6 +17957,41 @@ function _rtsAttacked(side, at) {
   _rtsSay('Your base is under attack!', 4, at ? { x: at.x, z: at.z } : null);
   if (typeof _rtsSfx === 'function') _rtsSfx('alert');
 }
+/* A UNIT OF THE PLAYER'S HIT, and it used to say nothing: only a building raised the warning, so
+   three buggies could shoot a harvester for the forty seconds it takes to kill one, across the
+   map, in silence - and the opponent has a team whose whole job that is (rules/teams.js, Raiders).
+   A harvester says so on a clock of its own. Any other unit says so when it was NOT sent to
+   fight: one the player ordered to attack is expected to be shot at, and a line every 25 seconds
+   of the player's own assault would be noise. Both mark the spot as the base's warning does
+   (G.alert: the radar's ring, the line's tap, Space - ui/go.js). */
+function _rtsUnitAttacked(tgt) {
+  var G = window._rtsG;
+  if (!G.sides[tgt.side] || _rtsSeatAI(tgt.side) || tgt.side !== 'player') return;
+  var d = rtsUnitDef(tgt.def), harv = !!(d && d.harvest), key = harv ? 'harvHit' : 'unitHit';
+  if (!harv && (tgt.order === 'attack' || tgt.order === 'amove')) return;
+  var last = (G[key] == null) ? -999 : G[key];
+  if (G.t - last < RTS_ALERT_DELAY) return;
+  G[key] = G.t;
+  G.alert = { x: tgt.x, z: tgt.z, t: G.t };
+  _rtsSay(harv ? 'Harvester under attack!' : 'Our forces are under attack!', 4, { x: tgt.x, z: tgt.z }, harv ? tgt : null);
+  if (typeof _rtsSfx === 'function') _rtsSfx('alert');
+}
+/* ...AND WHAT WAS LOST: a building by its name, a harvester - the losses that change what the
+   player can do next. Not every unit: an army in a fight loses one every few seconds. */
+function _rtsLossSay(e) {
+  var G = window._rtsG;
+  if (e.side !== 'player' || _rtsSeatAI(e.side) || G.over) return;
+  var at = { x: e.x, z: e.z };
+  if (e.type === 'struct') {
+    var sd = rtsStructDef(e.def);
+    if (!sd || sd.wall || e.selling) return;
+    G.alert = { x: e.x, z: e.z, t: G.t };
+    _rtsSay(sd.name + ' lost.', 4, at);
+  } else if ((rtsUnitDef(e.def) || {}).harvest) {
+    G.alert = { x: e.x, z: e.z, t: G.t };
+    _rtsSay('Harvester lost.', 4, at);
+  }
+}
 /* TECHNO.CPP Base_Is_Attacked. "This routine will pull units off of the field and send them
    back to defend the base. This routine will make taking an enemy base much more difficult."
    It is exactly that: raid a defended base and its army comes home.
@@ -18141,6 +18178,8 @@ function _rtsDamage(tgt, dmg, from, floor) {
     _rtsAttacked(tgt.side, tgt);
     _rtsBaseIsAttacked(tgt, from);
   }
+  /* ...and a unit of the player's, hit when it was not sent to fight (core/response.js) */
+  else if (tgt.type === 'unit' && from && from.side && _rtsHostile(from.side, tgt.side)) _rtsUnitAttacked(tgt);
   if (from && _rtsHostile(from.side, tgt.side)) _rtsTrigNotify('attacked', tgt, null);
   if (tgt.type === 'unit' && tgt.sqd != null) _rtsTeamTookDamage(tgt, from);
   if (_rtsCanRetaliate(tgt, from)) { tgt.order = 'attack'; tgt.target = from; }
@@ -19106,8 +19145,8 @@ function _rtsUpdateStruct(e, dt) {
   if (e.cool > 0) e.cool -= dt;
   if (e.fire > 0) e.fire -= dt;
   if (e.recoil > 0) e.recoil -= dt;
-  /* a browned-out base loses its defences - power actually matters */
-  if (_rtsPowerFactor(e.side) < 0.999) return;
+  /* a browned-out base loses its defences - power actually matters; a tower its troopers charge fires on (core/arc.js) */
+  if (_rtsPowerFactor(e.side) < 0.999 && !_rtsArcChargers(e).length) return;
   /* The drop test has to ask with the SAME reach the acquire did. A turret on high ground can
      acquire past w.range; if this line still dropped at w.range it would let go of that target
      and immediately re-acquire it every tick, and a gun that re-acquires every tick is a gun
@@ -22418,7 +22457,10 @@ function _rtsLensFork(e, tgt, w, raw) {
    effects marked `arc`, which render3d/fxemit3d.js draws as lightning, and sound as `zap`. */
 var RTS_ARC = { charge: 3, max: 3, boost: 0.25, towerY: 6.0, unitY: 1.4 };
 
-/* The troopers charging `e`, nearest first: none for anything that is not charged by them. */
+/* The troopers charging `e`, nearest first: none for anything that is not charged by them.
+   Asked in two places, and both have to ask: _rtsFire, the one place every shot passes, and the
+   structure's own update (core/units.js), whose blackout return comes before it ever aims - with
+   the exception only in _rtsFire, a charged tower in a blackout never reached it and stood dark. */
 function _rtsArcChargers(e) {
   var d = e && e.type === 'struct' ? rtsStructDef(e.def) : null;
   if (!d || !d.chargedBy) return [];
@@ -36482,6 +36524,10 @@ function _rtsTouchCmdInit() {
   row1.appendChild(mk('rtsTIdle', 'IDLE', 'Select the idle army; tap again for the next', function () {
     if (typeof rtsSelectIdle === 'function') rtsSelectIdle();
   }));
+  /* ARMY: every fighter in view, then the whole army (ui/idlesel.js) - the phone has no box to drag */
+  row1.appendChild(mk('rtsTArmy', 'ARMY', 'Select every fighter in view; tap again for the whole army', function () {
+    if (typeof rtsSelectArmy === 'function') rtsSelectArmy();
+  }));
   row1.appendChild(mk('rtsTTeams', 'TEAMS', 'Show the team groups', function () {
     _RTS_TCMD.teams = !_RTS_TCMD.teams;
     if (typeof _rtsSfx === 'function') _rtsSfx('click');
@@ -36500,7 +36546,10 @@ function _rtsTouchCmdInit() {
       nums.appendChild(mk('rtsTTeam' + team, String(team + 1),
         'Tap: select team ' + (team + 1) + '   Hold: assign the selection to it',
         function () {
+          /* a second tap on a team that is already the selection looks at it: Alt+digit's */
+          var G = window._rtsG, was = G.sel.slice();
           _rtsHandleTeam(team, 0);
+          if (G.sel.length && G.sel.length === was.length && G.sel.every(function (e) { return was.indexOf(e) >= 0; })) _rtsCenterOnSel();
           if (typeof _rtsSfx === 'function') _rtsSfx('click');
         },
         function () {
@@ -36861,7 +36910,8 @@ function _rtsModeClick(mx, my) {
     /* the figure _rtsSell actually granted, not the sticker price - see _rtsSell for what the
        sticker price was hiding and by how much */
     var back = _rtsSell(e);
-    if (back !== false) _rtsSay('Sold — ' + back + ' credits back.');
+    /* ONE SALE A PRESS ON TOUCH: there is no cursor to say SELL is still armed (ui/go.js) */
+    if (back !== false) { if (_rtsTouchUI()) rtsMode('sell'); _rtsSay('Sold — ' + back + ' credits back.'); }
     else { if (typeof _rtsSfx === 'function') _rtsSfx('deny');
       _rtsSay(e.def === 'yard' ? 'The Command Yard cannot be sold.' : 'Cannot sell that.'); }
   } else {
@@ -37223,8 +37273,9 @@ function _rtsSyncSidebar(dt) {
   if (typeof rtsCampHud === 'function') rtsCampHud(G);     /* a mission's objectives, or a survival's run (campaign.js) */
   if (typeof _rtsAutoTick === 'function') _rtsAutoTick(G, U);   /* the autosave's minute, and its end */
   var msg = document.getElementById('rtsMsg');
-  msg.textContent = G.msgT > 0 ? (G.msg || '') : '';
-  msg.className = 'rts-msg' + (G.msgT > 0 ? ' on' : '') + (G.msgT > 0 && G.msgAt ? ' go' : '');   /* tappable: ui/go.js */
+  var shown = _rtsMsgShown(G, _rtsTouchUI(), !!(U.place || U.mode || U.superArm));   /* the line, or quiet, the last alert: ui/go.js */
+  if (msg.textContent !== shown.text) msg.textContent = shown.text;
+  msg.className = 'rts-msg' + (shown.text ? ' on' : '') + (shown.go ? ' go' : '') + (shown.alert ? ' alert' : '');
   if (!msg.onclick) msg.onclick = function () { rtsMsgGo(); };
 
   /* a replay's card is its own, once the recording has run out (replay.js rtsReplayFrame) */
@@ -38263,7 +38314,7 @@ function _rtsHandleTeam(team, action) {
      vanished from the sidebar with no message and no sound, which reads as the game dropping
      the selection rather than as an empty team slot. */
   if (!n) {
-    _rtsSay('Team ' + ((team + 1) % 10) + ' is empty — Ctrl+' + ((team + 1) % 10) + ' assigns one.');
+    _rtsSay('Team ' + ((team + 1) % 10) + ' is empty — ' + (typeof _rtsTouchUI === 'function' && _rtsTouchUI() ? 'hold the digit to assign the selection.' : 'Ctrl+' + ((team + 1) % 10) + ' assigns one.'));
     if (typeof _rtsSfx === 'function') _rtsSfx('deny');
     return;
   }
@@ -38358,6 +38409,27 @@ function _rtsPauseHTML() {
    rings that attack for RTS_ALERT_RING seconds (G.alert). Part of rts.ui, which owns the DOM. */
 
 var RTS_ALERT_RING = 8;
+var RTS_ALERT_KEEP = 30;         /* seconds the quiet message line still offers the last alert */
+
+/* WHAT THE MESSAGE LINE SHOWS. The game has one line, and the next thing said replaces it: "Your
+   base is under attack!" lasted until a building finished, and its tap went with it - on a phone,
+   which has no Space, that was the only way to the attack. So while nothing is being said the
+   line keeps offering the last alert, for RTS_ALERT_KEEP seconds: tap it (or Space) to look. Not
+   while something is armed (`busy`): a placement's or a mode's banner has the same slot. */
+function _rtsMsgShown(G, touch, busy) {
+  if (G.msgT > 0) return { text: G.msg || '', go: !!G.msgAt, alert: false };
+  var A = G.alert, age = A ? G.t - A.t : -1;
+  if (A && !busy && !G.over && age >= 0 && age <= RTS_ALERT_KEEP) return { text: '\u26a0 Last alert \u2014 ' + (touch ? 'tap' : 'Space') + ' to look', go: true, alert: true };
+  return { text: '', go: false, alert: false };
+}
+/* REPAIR and SELL are modes: the next tap on a building is theirs. A mouse has the crosshair to
+   say so; a phone had only the lit button, down in the bar - and SELL stayed armed after a sale,
+   so the next tap on a building, meant to select it, sold it. The banner says the mode is on. */
+function _rtsModeHint(mode, touch) {
+  var off = touch ? 'tap ' + (mode === 'sell' ? 'SELL' : 'REPAIR') + ' to cancel' : 'Esc to cancel';
+  return (mode === 'sell' ? (touch ? 'SELL: tap a building to sell it' : 'SELL: click a building to sell it')
+                          : (touch ? 'REPAIR: tap a damaged building' : 'REPAIR: click a damaged building')) + '  \u00b7  ' + off;
+}
 
 /* Put (x, z) at the centre of what is on screen. The focus is not that centre - a tilted camera
    looks a fifth of a half-height past it (render/camera.js _rtsViewSpan) - so the focus moves by
@@ -38370,7 +38442,9 @@ function _rtsLookAt(x, z) {
 /* the message line's tap: true when it had somewhere to go */
 function rtsMsgGo() {
   var G = window._rtsG;
-  if (!G || !G.msgAt || !(G.msgT > 0)) return false;
+  if (!G) return false;
+  if (!(G.msgT > 0)) return _rtsMsgShown(G, false, false).alert ? _rtsGoAlert() : false;   /* the quiet line's last alert */
+  if (!G.msgAt) return false;
   _rtsLookAt(G.msgAt.x, G.msgAt.z);
   if (G.msgSel && !G.msgSel.dead) G.sel = [G.msgSel];
   return true;
@@ -38452,7 +38526,35 @@ function rtsSelectIdle() {
   var at = list[U.idleAt];
   _rtsLookAt(at.x, at.z);
   _rtsSay(list.length === 1 ? 'One idle unit: ' + rtsUnitDef(at.def).name + '.'
-    : list.length + ' idle units - ' + rtsUnitDef(at.def).name + ' (' + (U.idleAt + 1) + ' of ' + list.length + '). I again for the next.');
+    : list.length + ' idle units - ' + rtsUnitDef(at.def).name + ' (' + (U.idleAt + 1) + ' of ' + list.length + '). ' + (typeof _rtsTouchUI === 'function' && _rtsTouchUI() ? 'IDLE' : 'I') + ' again for the next.');
+  if (typeof _rtsSfx === 'function') _rtsSfx('select');
+  return list.length;
+}
+
+/* ARMY (ui/touchcmd.js): THE FIGHTERS IN VIEW, AND THE PHONE'S ONLY WAY TO PICK A MIXED GROUP.
+   A tap selects one unit and a double-tap its kind; a drag pans; the box a mouse draws does not
+   exist on touch. So tanks, rocket squads and a flak track on the same street could not be
+   selected together at all - and a team can only be made from a selection. This selects every
+   fighter of yours on screen (not a harvester); pressed again while those are the selection, or
+   with none in view, the whole army, as Ctrl+A does. */
+function _rtsFighters(seen) {
+  var G = window._rtsG, out = [];
+  for (var i = 0; i < G.ents.length; i++) {
+    var e = G.ents[i], d = _rtsIsArmy(e) ? rtsUnitDef(e.def) : null;
+    if (d && !d.harvest && (!seen || _rtsOnScreen(e))) out.push(e);
+  }
+  return out;
+}
+function rtsSelectArmy() {
+  var G = window._rtsG;
+  if (!G) return 0;
+  var seen = _rtsFighters(true);
+  var same = seen.length > 0 && G.sel.length === seen.length && seen.every(function (e) { return G.sel.indexOf(e) >= 0; });
+  var list = (!seen.length || same) ? _rtsFighters(false) : seen, whole = list !== seen;
+  if (!list.length) { _rtsSay('No army to select.'); if (typeof _rtsSfx === 'function') _rtsSfx('deny'); return 0; }
+  G.sel.length = 0;
+  for (var i = 0; i < list.length; i++) G.sel.push(list[i]);
+  _rtsSay(list.length + (list.length === 1 ? ' unit' : ' units') + (whole ? ' - the whole army.' : ' in view. ARMY again for the whole army.'));
   if (typeof _rtsSfx === 'function') _rtsSfx('select');
   return list.length;
 }
@@ -38920,6 +39022,7 @@ function _rtsDrawHud(dt) {
      the line is quiet (_rtsBannerTop) */
   var quiet = !(G.msgT > 0);
   if (U.place && quiet) _rtsBanner(g, W, _rtsPlaceHint(rtsStructDef(U.place).name, typeof _rtsTouchUI === 'function' && _rtsTouchUI()), _rtsBannerTop());
+  if (U.mode && quiet) _rtsBanner(g, W, _rtsModeHint(U.mode, _rtsTouchUI()), _rtsBannerTop());   /* REPAIR or SELL armed: ui/go.js */
   /* AN ARMED SUPERWEAPON gets the banner placement has, and its cursor traces the ground it will
      cover (_rtsDrawCursor 'super'): the cursor showed the selection's right-click order instead -
      a no-entry over water, where the click laid the fog - and nothing showed the area */

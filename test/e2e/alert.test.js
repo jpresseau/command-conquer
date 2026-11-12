@@ -3,6 +3,7 @@
      THE LINE     a base under attack: the message line is tappable, and a real click on it looks
                   at the building that was hit
      SPACE        looks there again from anywhere, after the line has gone
+                  - where a line says so for a while, and then nothing
      THE RADAR    rings the spot in red for a while, with a Radar Post up
      IDLE         the ore gone, the line names a harvester and a tap selects it */
 
@@ -39,7 +40,17 @@ var S = new Suite('alert');
   await p.evaluate(function () { var G = window._rtsG, e = _rtsHas('enemy', 'yard'); _rtsR.focus.x = e.x; _rtsR.focus.z = e.z; _rtsClampFocus(); G.msgT = 0; _rtsSyncSidebar(0); });
   await p.keyboard.press(' ');
   var sp = await p.evaluate(function (a) { eval(a[0]); return looking(a[1]); }, [looking.toString(), hit.yard]);
-  S.ok('SPACE: looks there again from anywhere, after the line has gone', sp.inView && sp.off < 10 && !/\bgo\b/.test(sp.line), JSON.stringify(sp));
+  S.ok('SPACE: looks there again from anywhere, after the line has gone', sp.inView && sp.off < 10, JSON.stringify(sp));
+  /* what takes the line's place says the alert can still be looked at, for RTS_ALERT_KEEP seconds (ui/go.js) */
+  var kept = await p.evaluate(function () {
+    var G = window._rtsG, m = document.getElementById('rtsMsg'), o = { cls: m.className, text: m.textContent }, t = G.alert.t;
+    G.alert.t = G.t - RTS_ALERT_KEEP - 1; _rtsSyncSidebar(0);
+    o.after = m.className; o.afterText = m.textContent;
+    G.alert.t = t; _rtsSyncSidebar(0);
+    return o;
+  });
+  S.ok('...where a line says the last alert can still be looked at, with Space', /\balert\b/.test(kept.cls) && /\bgo\b/.test(kept.cls) && /Last alert/.test(kept.text) && /Space/.test(kept.text), JSON.stringify([kept.cls, kept.text]));
+  S.ok('...for a while, and then the line is empty', !/\bgo\b/.test(kept.after) && !kept.afterText, JSON.stringify([kept.after, kept.afterText]));
 
   /* ---------- the radar ---------- */
   var ring = await p.evaluate(function () {

@@ -115,7 +115,7 @@ function _rtsHandleTeam(team, action) {
      vanished from the sidebar with no message and no sound, which reads as the game dropping
      the selection rather than as an empty team slot. */
   if (!n) {
-    _rtsSay('Team ' + ((team + 1) % 10) + ' is empty — Ctrl+' + ((team + 1) % 10) + ' assigns one.');
+    _rtsSay('Team ' + ((team + 1) % 10) + ' is empty — ' + (typeof _rtsTouchUI === 'function' && _rtsTouchUI() ? 'hold the digit to assign the selection.' : 'Ctrl+' + ((team + 1) % 10) + ' assigns one.'));
     if (typeof _rtsSfx === 'function') _rtsSfx('deny');
     return;
   }

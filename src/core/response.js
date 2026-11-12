@@ -56,6 +56,41 @@ function _rtsAttacked(side, at) {
   _rtsSay('Your base is under attack!', 4, at ? { x: at.x, z: at.z } : null);
   if (typeof _rtsSfx === 'function') _rtsSfx('alert');
 }
+/* A UNIT OF THE PLAYER'S HIT, and it used to say nothing: only a building raised the warning, so
+   three buggies could shoot a harvester for the forty seconds it takes to kill one, across the
+   map, in silence - and the opponent has a team whose whole job that is (rules/teams.js, Raiders).
+   A harvester says so on a clock of its own. Any other unit says so when it was NOT sent to
+   fight: one the player ordered to attack is expected to be shot at, and a line every 25 seconds
+   of the player's own assault would be noise. Both mark the spot as the base's warning does
+   (G.alert: the radar's ring, the line's tap, Space - ui/go.js). */
+function _rtsUnitAttacked(tgt) {
+  var G = window._rtsG;
+  if (!G.sides[tgt.side] || _rtsSeatAI(tgt.side) || tgt.side !== 'player') return;
+  var d = rtsUnitDef(tgt.def), harv = !!(d && d.harvest), key = harv ? 'harvHit' : 'unitHit';
+  if (!harv && (tgt.order === 'attack' || tgt.order === 'amove')) return;
+  var last = (G[key] == null) ? -999 : G[key];
+  if (G.t - last < RTS_ALERT_DELAY) return;
+  G[key] = G.t;
+  G.alert = { x: tgt.x, z: tgt.z, t: G.t };
+  _rtsSay(harv ? 'Harvester under attack!' : 'Our forces are under attack!', 4, { x: tgt.x, z: tgt.z }, harv ? tgt : null);
+  if (typeof _rtsSfx === 'function') _rtsSfx('alert');
+}
+/* ...AND WHAT WAS LOST: a building by its name, a harvester - the losses that change what the
+   player can do next. Not every unit: an army in a fight loses one every few seconds. */
+function _rtsLossSay(e) {
+  var G = window._rtsG;
+  if (e.side !== 'player' || _rtsSeatAI(e.side) || G.over) return;
+  var at = { x: e.x, z: e.z };
+  if (e.type === 'struct') {
+    var sd = rtsStructDef(e.def);
+    if (!sd || sd.wall || e.selling) return;
+    G.alert = { x: e.x, z: e.z, t: G.t };
+    _rtsSay(sd.name + ' lost.', 4, at);
+  } else if ((rtsUnitDef(e.def) || {}).harvest) {
+    G.alert = { x: e.x, z: e.z, t: G.t };
+    _rtsSay('Harvester lost.', 4, at);
+  }
+}
 /* TECHNO.CPP Base_Is_Attacked. "This routine will pull units off of the field and send them
    back to defend the base. This routine will make taking an enemy base much more difficult."
    It is exactly that: raid a defended base and its army comes home.

@@ -48,6 +48,8 @@ function _rtsDamage(tgt, dmg, from, floor) {
     _rtsAttacked(tgt.side, tgt);
     _rtsBaseIsAttacked(tgt, from);
   }
+  /* ...and a unit of the player's, hit when it was not sent to fight (core/response.js) */
+  else if (tgt.type === 'unit' && from && from.side && _rtsHostile(from.side, tgt.side)) _rtsUnitAttacked(tgt);
   if (from && _rtsHostile(from.side, tgt.side)) _rtsTrigNotify('attacked', tgt, null);
   if (tgt.type === 'unit' && tgt.sqd != null) _rtsTeamTookDamage(tgt, from);
   if (_rtsCanRetaliate(tgt, from)) { tgt.order = 'attack'; tgt.target = from; }

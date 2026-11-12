@@ -103,6 +103,7 @@ function _rtsDrawHud(dt) {
      the line is quiet (_rtsBannerTop) */
   var quiet = !(G.msgT > 0);
   if (U.place && quiet) _rtsBanner(g, W, _rtsPlaceHint(rtsStructDef(U.place).name, typeof _rtsTouchUI === 'function' && _rtsTouchUI()), _rtsBannerTop());
+  if (U.mode && quiet) _rtsBanner(g, W, _rtsModeHint(U.mode, _rtsTouchUI()), _rtsBannerTop());   /* REPAIR or SELL armed: ui/go.js */
   /* AN ARMED SUPERWEAPON gets the banner placement has, and its cursor traces the ground it will
      cover (_rtsDrawCursor 'super'): the cursor showed the selection's right-click order instead -
      a no-entry over water, where the click laid the fog - and nothing showed the area */

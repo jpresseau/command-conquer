@@ -114,7 +114,7 @@ var RTS_MESSAGE_DELAY = 25;
 var RTS_TRIGGERS = [
   { name:'lowpower', house:'player', persist:'persistent', control:'only',
     event1:['lowPower', 'player'],
-    action1:['text', 'LOW POWER - production is slowed'] },
+    action1:['text', 'LOW POWER - defences and radar are offline, production slowed. Build a Power Plant.'] },
   { name:'firstref', house:'player', persist:'volatile', control:'only',
     event1:['build', 'refinery'],
     action1:['text', 'Refinery online. Harvester dispatched.'] },
