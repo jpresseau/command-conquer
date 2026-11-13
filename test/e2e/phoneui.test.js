@@ -6,7 +6,8 @@
      THE LIST       the campaign's PLAY buttons are a finger's height (40px)
      OBJECTIVES     in portrait they are a pill just under the top bar, opened by a tap; in
                     landscape they are written out, also clear of the top bar
-     THE END CARD   fits on screen, and its buttons are a finger's height
+     THE END CARD   fits on screen, and its buttons are a finger's height; the compass is under it
+                    and under the pause screen, as the top bar is, where it stood over both
      THE ALLY       the ally's orders are a finger's height
 
    Measured before: PLAY 27px, the end card's buttons 31px, the ally's 29px, the objectives a 245x100
@@ -67,6 +68,19 @@ function heights(sel) {
                          goals.open[1] > goals.closed[1] * 2, JSON.stringify(goals));
     else S.ok('...in landscape the objectives are written out, clear of the top bar', goals.clear && goals.closed[1] > 60, JSON.stringify(goals));
 
+    /* the compass is the battlefield's, under the pause screen and the end card as the top bar is */
+    var cmp = await p.evaluate(function () {
+      var c = document.getElementById('rtsCompass');
+      if (!c || !c.getClientRects().length) return { shown: false };
+      var r = c.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      var at = function () { var h = document.elementFromPoint(x, y); return h ? (h.closest('#rtsCompass') ? 'compass' : h.closest('.rts-pause') ? 'pause' : h.closest('#rtsOver') ? 'card' : h.id || h.className || h.tagName) : 'none'; };
+      var o = { shown: true, play: at() };
+      rtsPauseToggle(true); o.paused = at(); rtsPauseToggle(false);
+      o.x = x; o.y = y;
+      return o;
+    });
+    S.ok('...the compass is on top in play, and under the pause screen', cmp.shown && cmp.play === 'compass' && cmp.paused === 'pause', JSON.stringify(cmp));
+
     var card = await p.evaluate(function (src) {
       var G = window._rtsG; G.over = 'win'; G.mission.why = 'The convoy is across, and the sea is closing behind it.'; _rtsSyncSidebar(0);
       var c = document.querySelector('#rtsOver .card').getBoundingClientRect();
@@ -74,6 +88,8 @@ function heights(sel) {
     }, heights.toString());
     /* Next, Retry, Missions, Quit and ▶ Watch replay (replay.js) */
     S.ok('...the end card fits, and its five buttons, WATCH REPLAY among them, are a finger\'s height', card.fits && card.h.length === 5 && card.watch && card.h.every(function (h) { return h >= 40; }), JSON.stringify(card));
+    var underCard = await p.evaluate(function (a) { var h = document.elementFromPoint(a.x, a.y); return h ? (h.closest('#rtsCompass') ? 'compass' : h.closest('#rtsOver') ? 'card' : h.id || h.className || h.tagName) : 'none'; }, cmp);
+    S.eq('...and under the end card, which it stood over', underCard, 'card');
 
     await p.evaluate(function () { rtsClose(); localStorage.setItem('bw.skirmish', JSON.stringify({ foes: 'ally' })); rtsOpen(7); });
     await p.waitForFunction(function () { return window._rtsG && window._rtsG.sides.ally && document.getElementById('rtsAllyBtn'); }, null, { timeout: 60000 }).catch(function () {});
