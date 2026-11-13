@@ -41,6 +41,7 @@ var R3D_MAT_GLSL =
   'uniform float uSnow;' +                                 /* the SNOW sky: sky3d.js */
   'uniform sampler2D uOreT;' +                             /* the ore field: colour, richness in .a */
   'uniform float uTileInv;' +
+  'uniform float uNear;' +                                /* how close the camera is: _r3dNear */
   /* the apron past the map's edge (apron3d.js) reflects the land and not what was built on it:
      no paving, concrete or track, no road paint, no scars */
   'uniform float uApr;' +
@@ -87,7 +88,6 @@ var R3D_MAT_GLSL =
      clumps a soft mottle and the blades a grain that is only there close to; its relief (below)
      is a tenth of what it was. R3.grassLegacy (uMeadow 0) is the before-picture. */
   'uniform float uMeadow;' +
-  'uniform float uNear;' +
   'vec4 _grass(vec2 w, vec4 N, vec4 M, float det){' +
   '  vec3 c0 = mix(vec3(0.33, 0.45, 0.17), vec3(0.50, 0.58, 0.24), smoothstep(0.30, 0.72, N.x));' +
   '  c0 *= 0.86 + 0.26 * N.z;' +
@@ -115,9 +115,16 @@ var R3D_MAT_GLSL =
   '  c = mix(c, vec3(0.64, 0.58, 0.47), M.z * 0.45 * det);' +
   '  c *= 0.93 + 0.14 * M.x;' +
   '  return vec4(c, N.x * 0.5 + M.z * 0.5 * det); }' +
-  'vec4 _sand(vec4 N, vec4 M, float det){' +
+  'vec4 _sand(vec2 w, vec4 N, vec4 M, float det){' +
   '  vec3 c = mix(vec3(0.74, 0.64, 0.44), vec3(0.86, 0.77, 0.56), N.x);' +
   '  c *= 1.0 + M.y * 0.045 * det;' +                       /* wind ripples, bent by noise */
+  /* close to, sand is grains: coarse and fine, and a darker fleck here and there (uNear, as the
+     blades of grass) - it was a smooth sheet with ripples drawn on it */
+  '  if (uNear > 0.0) {' +
+  '    float gr = _vn(w * 21.0) * 0.6 + _vn(w * 8.3 + 4.0) * 0.4 - 0.5;' +
+  '    c *= 1.0 + gr * 0.16 * uNear;' +
+  '    c *= 1.0 - smoothstep(0.80, 0.92, _vn(w * 13.0 + 9.0)) * 0.12 * uNear;' +
+  '  }' +
   '  return vec4(c, (M.y * 0.5 + 0.5) * 0.35 * det + N.x * 0.2); }' +
   /* worn: where the paving is thin the stones are missing and the sand shows through */
   'vec4 _paving(vec4 N, vec4 M, vec3 v, float det){' +
@@ -149,9 +156,9 @@ var R3D_MAT_GLSL =
   '  if (k < 0.5) return _grass(w, N, M, det);' +
   '  if (k < 1.5) return _forest(N, M, det);' +
   '  if (k < 2.5) return _rockg(N, M, det);' +
-  '  if (k < 3.5) return _sand(N, M, det) * vec4(0.62, 0.66, 0.66, 1.0);' +   /* seabed, under the sea */
+  '  if (k < 3.5) return _sand(w, N, M, det) * vec4(0.62, 0.66, 0.66, 1.0);' +   /* seabed, under the sea */
   '  if (k < 4.5) return _track(N, M, det);' +
-  '  if (k < 5.5) return _sand(N, M, det);' +
+  '  if (k < 5.5) return _sand(w, N, M, det);' +
   '  if (k < 6.5) return _track(N, M, det);' +                                  /* trodden earth under the sandbags: world3d.js */
   '  return _paving(N, M, v, det); }' +
   /* ---- the ground at one world position ---- */

@@ -3,7 +3,8 @@
    Each an A/B on one frozen frame, through its own switch:
 
      BLADES     at the nearest zoom open grass is finer than without them (R3.bladesOff); at the
-                widest they are not drawn at all - the frame is the same to the byte
+                widest they are not drawn at all - the frame is the same to the byte; sand has
+                its grains the same way
      TUFTS      on open grass with no unit on it the sun's pass changes nothing: with the tufts
                 cast as they were (R3.tuftCast) there are dark smudges beside them
      AFLOAT     a ship at anchor has water drawn round it (R3.afloatAmt) - foam lighter than the
@@ -11,7 +12,7 @@
                 has none
      CAMEOS     a tank's picture fills its plate, where the sprite's own margin left it a third
                 (window.RTS_ICON_WHOLE); a building's, which had no margin, is as it was; the
-                plate behind it is clear
+                plate behind it is clear; a tile's name stands under its picture
      THE BAR    Save, Load and Sound each show a drawn picture of their own in place of an emoji,
                 and keep the glyph as their text; muted, the speaker is the crossed one; REPAIR
                 and SELL carry a drawn mark; the graphics button is one of the bar's */
@@ -73,6 +74,14 @@ var S = new Suite('closeup');
     R3.bladesOff = true; var fOff = pic();
     R3.bladesOff = false; var fOn = pic();
     o.bladesFar = { diff: differ(fOff, fOn, fOn.w >> 1, fOn.h >> 1), near: _r3dNear(_rtsZoom() * (R3.scale || 1)) };
+
+    /* sand, the same way: its grains */
+    var sand = most(RTS_T_SAND, 1);
+    o.sandShare = sand.share;
+    look(sand.at, ZMAX);
+    R3.bladesOff = true; var sOff = pic();
+    R3.bladesOff = false; var sOn = pic();
+    o.sand = { off: step(sOff, 40, 28), on: step(sOn, 40, 28) };
 
     /* ---------------- TUFTS ---------------- */
     look(grass.at, ZMAX - 1);
@@ -139,6 +148,8 @@ var S = new Suite('closeup');
     if (A) { var on = mask(m, '::before'); rtsMuteToggle(); o.off = { cls: m.className, text: m.textContent, mask: mask(m, '::before') !== on && /^url\("data:image\/svg/.test(mask(m, '::before')) };
       rtsMuteToggle(); o.onCls = m.className; }
     o.ops = [].map.call(document.querySelectorAll('#rcgRts .rts-ops button[data-mode]'), function (b) { var i = b.querySelector('.ic'); return { text: b.textContent.trim(), ic: !!i, mask: i ? mask(i).slice(0, 40) : '', w: i ? i.getBoundingClientRect().width : 0 }; });
+    var t = document.querySelector('#rtsList .rts-tile'), ir = t.querySelector('.ico').getBoundingClientRect(), nr = t.querySelector('.nm').getBoundingClientRect(), cr = t.querySelector('.ct').getBoundingClientRect(), tr = t.getBoundingClientRect();
+    o.tile = { pic: ir.bottom - tr.top, name: nr.top - tr.top, cost: cr.bottom - tr.top, h: tr.height };
     var gb = document.getElementById('rtsGfxBtn'), gc = gb ? getComputedStyle(gb) : null;
     o.gfx = gb ? { bg: gc.backgroundColor, col: gc.color, radius: gc.borderRadius } : null;
     return o;
@@ -174,6 +185,10 @@ var S = new Suite('closeup');
     S.ok('a building\'s had no margin and is as it was', Math.abs(C.power.fill - C.powerWas.fill) < 0.02 && C.power.fill > 0.7, f2(C.power.fill) + ' and ' + f2(C.powerWas.fill));
     S.ok('the plate behind a picture is clear', C.tank.clear > 0.3, f2(C.tank.clear) + ' of it clear');
   }
+  S.ok('there is a patch of sand to look at', out.sandShare > 0.8, f2(out.sandShare));
+  S.ok('close to, sand is grains', out.sand.on > out.sand.off * 1.5, f2(out.sand.on) + ' levels between neighbours, ' + f2(out.sand.off) + ' without them');
+  S.ok('a tile\'s name and price stand under its picture, not over it', bar.tile.name >= bar.tile.pic - 0.5 && bar.tile.cost <= bar.tile.h + 0.5 && bar.tile.pic > bar.tile.h * 0.5,
+       'the picture ends at ' + bar.tile.pic.toFixed(1) + ' px, the name starts at ' + bar.tile.name.toFixed(1) + ', of ' + bar.tile.h.toFixed(1));
   /* the bar */
   ['save', 'load', 'mute'].forEach(function (k) {
     var b = bar[k];
