@@ -44,7 +44,7 @@ function _sprUnitHulls(X, key) {
     _r3Box(m, Lm * 0.40, 0.9, 0, Lm * 0.20, 2.4, Wm * 0.55, VH[1], VH[3]); /* bow */
     _r3Box(m, Lm * 0.20, 3.8, 0, Lm * 0.22, 3.0, Wm * 0.70, VH[2], VH[0]); /* wheelhouse */
     _r3Box(m, Lm * 0.30, 4.4, 0, 0.5, 1.2, Wm * 0.56, RTS_PAL.glass, RTS_PAL.glass);   /* its windows */
-    _r3Box(m, Lm * 0.20, 5.5, 0, Lm * 0.16, 0.5, Wm * 0.50, TM[1], TM[3]);  /* team roof */
+    _r3Box(m, Lm * 0.20, 6.8, 0, Lm * 0.16, 0.5, Wm * 0.50, TM[1], TM[3]);  /* team roof, on the wheelhouse */
     _r3Box(m, Lm * 0.14, 6.6, 0, 0.5, 2.6, 0.5, S[1], S[0]);             /* mast */
     for (var rw = -1; rw <= 1; rw += 2) {                                 /* the mine rails and their mines */
       _r3Box(m, -Lm * 0.18, 2.5, rw * 1.6, Lm * 0.52, 0.3, 0.4, S[2], S[1]);
@@ -64,7 +64,7 @@ function _sprUnitHulls(X, key) {
     _r3Box(m, Lt * 0.40, 0.9, 0, Lt * 0.20, 2.6, Wt * 0.55, VH[1], VH[3]); /* bow */
     _r3Box(m, -Lt * 0.30, 4.2, 0, Lt * 0.24, 3.6, Wt * 0.72, VH[2], VH[0]); /* deckhouse aft */
     _r3Box(m, -Lt * 0.20, 5.0, 0, 0.5, 1.4, Wt * 0.58, RTS_PAL.glass, RTS_PAL.glass);   /* its bridge glass */
-    _r3Box(m, -Lt * 0.30, 6.3, 0, Lt * 0.18, 0.6, Wt * 0.56, TM[1], TM[3]);   /* team roof */
+    _r3Box(m, -Lt * 0.30, 7.8, 0, Lt * 0.18, 0.6, Wt * 0.56, TM[1], TM[3]);   /* team roof, on the deckhouse */
     _r3Cyl(m, -Lt * 0.38, 7.4, 0, 1.0, 2.6, DK[1], DK[0], 16);          /* stack */
     /* the gantry: two legs either side of the well deck and the beam across them */
     for (var gl = -1; gl <= 1; gl += 2) _r3Box(m, Lt * 0.06, 6.0, gl * Wt * 0.44, 0.8, 7.6, 0.8, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);

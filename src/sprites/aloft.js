@@ -62,14 +62,14 @@ function _sprUnitAloft(X, key) {
     _r3Box(m, 0, 4.4, 0, L * 0.96, 0.6, Wd * 1.1, DK[1], DK[2]);         /* the flight deck */
     for (i = 0; i < 6; i++) _r3Box(m, -L * 0.4 + i * L * 0.16, 4.8, 0, L * 0.06, 0.1, 0.6, S[3], S[3]);   /* the centre line */
     _r3Box(m, -L * 0.05, 7.4, Wd * 0.45, L * 0.18, 5.4, 2.8, VH[2], VH[0]);   /* the island */
-    _r3Box(m, -L * 0.05, 10.4, Wd * 0.45, L * 0.12, 0.8, 3.0, TM[1], TM[3]);
+    _r3Box(m, -L * 0.05, 12.8, Wd * 0.45, L * 0.12, 0.8, 3.0, TM[1], TM[3]);   /* team cap, on the island */
     _r3Box(m, -L * 0.08, 12.2, Wd * 0.45, 0.6, 3.0, 0.6, S[1], S[0]);    /* mast */
     _r3Box(m, -L * 0.0, 7.6, Wd * 0.45 - 1.5, 2.4, 1.2, 0.2, RTS_PAL.glass, RTS_PAL.glass);
     for (i = 0; i < 2; i++) {                                            /* two Hornets parked aft */
       var px = -L * 0.3 + i * 6;
       _r3Box(m, px, 5.6, -2.5, 4.0, 1.4, 1.8, VH[1], VH[3]);
       _r3Box(m, px, 5.8, -2.5, 4.6, 0.4, 4.6, DK[1], DK[2]);
-      _r3Box(m, px, 6.4, -2.5, 1.0, 0.2, 1.8, TM[1], TM[3]);              /* a team stripe on each */
+      _r3Box(m, px, 7.0, -2.5, 1.0, 0.2, 1.8, TM[1], TM[3]);              /* a team stripe on each, on top */
     }
     return true;
   }

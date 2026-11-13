@@ -33,7 +33,7 @@ function _sprUnitR11(X, key) {
     if (part !== 'hull') {
       _r3Slab(m, 0.6, 6.6, 0, 5.6, 1.8, 5.2, 0.6, VH[1], TM[1]);              /* turret, team roof */
       /* built about the pivot (unit/turrets): the box sits square on top, the coax on the centre line */
-      _r3Box(m, 0.2, 8.4, 0, 4.4, 1.8, 2.8, S[1], S[3]);                       /* the twin missile box */
+      _r3Box(m, 0.2, 8.4, 0, 4.4, 1.8, 2.8, S[1], TM[1]);                      /* the twin missile box, over the team roof: its top is whose */
       for (i = 0; i < 2; i++) _r3Cyl(m, 2.5, 8.8, -0.7 + i * 1.4, 0.5, 0.4, '#e8532c', '#ff9a5a', 12);
       _r3Box(m, 4.6, 7.2, 0, 3.6, 0.6, 0.6, GN[0], GN[2]);                     /* the coax */
     }

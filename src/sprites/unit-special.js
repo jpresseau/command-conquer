@@ -269,6 +269,8 @@ function _sprUnitSpecial(X, key) {
       }
     }
     _r3Box(m, 11.4, 10.6, 0, 1.6, 3.4, 8.0, DK[1], DK[2]);        /* the hinge, at the bow */
+    /* the team roof is the cab's, under the bridge: whose it is goes on the bridge's top plate */
+    _r3Box(m, 7.6, 12.5, 0, 2.4, 0.2, 7.2, TM[2], TM[1]);
     /* the launching arm, pitched up from the bow to the bridge */
     n0 = m.length;
     _r3Box(m, 9.0, 6.6, -3.0, 5.6, 1.2, 1.2, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);

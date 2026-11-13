@@ -305,7 +305,7 @@ function _sprUnitGround(X, key) {
        the back are the second signal and never move. */
     tracks(16, 5.4, 5, 2.1);
     _r3Slab(m, -1, 2.9, 0, 14.5, 2.6, 9.0, 1.0, VH[0], VH[1]);     /* squat chassis */
-    _r3Box(m, -6.6, 2.9, 0, 3.4, 2.4, 8.0, VH[2], TM[1]);          /* engine deck - team cap */
+    _r3Box(m, -6.6, 5.5, 0, 3.4, 0.8, 7.0, VH[2], TM[1]);          /* engine deck - team cap, on the chassis */
     _r3Slab(m, 0.5, 5.5, 0, 6.6, 3.4, 6.6, 1.0, GN[2], GN[1]);     /* pedestal / trunnion */
     _r3Box(m, 4.5, 8.0, 0, 19.0, 2.8, 2.8, GN[1], GN[3]);          /* the tube - pale, long */
     _r3Box(m, 15.4, 7.9, 0, 3.0, 3.0, 3.0, GN[0], GN[3]);          /* muzzle */

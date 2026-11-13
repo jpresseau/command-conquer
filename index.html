@@ -1015,7 +1015,7 @@ html,body{margin:0;padding:0;height:100%;background:#05080e;overflow:hidden}
   <div id="rtsErr"></div>
   </div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">288797e · 2026-11-13</div>
+  <div id="rtsBuild" title="build">cc1793f · 2026-11-13</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -7987,6 +7987,7 @@ function _sprUnitModel(key, side, prone, part) {
     _r3Box(m, 4, 6, 0, 8, 1.4, 1.4, DK[1], DK[3]);
   }
 
+  _sprHouseMarks(m, key, TM, part);            /* the house colour where the camera sees it: sprites/marks.js */
   var sc = _sprUnitScale(key);
   return sc === 1 ? m : _r3Scale(m, sc);
 }
@@ -8298,7 +8299,7 @@ function _sprUnitGround(X, key) {
        the back are the second signal and never move. */
     tracks(16, 5.4, 5, 2.1);
     _r3Slab(m, -1, 2.9, 0, 14.5, 2.6, 9.0, 1.0, VH[0], VH[1]);     /* squat chassis */
-    _r3Box(m, -6.6, 2.9, 0, 3.4, 2.4, 8.0, VH[2], TM[1]);          /* engine deck - team cap */
+    _r3Box(m, -6.6, 5.5, 0, 3.4, 0.8, 7.0, VH[2], TM[1]);          /* engine deck - team cap, on the chassis */
     _r3Slab(m, 0.5, 5.5, 0, 6.6, 3.4, 6.6, 1.0, GN[2], GN[1]);     /* pedestal / trunnion */
     _r3Box(m, 4.5, 8.0, 0, 19.0, 2.8, 2.8, GN[1], GN[3]);          /* the tube - pale, long */
     _r3Box(m, 15.4, 7.9, 0, 3.0, 3.0, 3.0, GN[0], GN[3]);          /* muzzle */
@@ -9029,6 +9030,8 @@ function _sprUnitSpecial(X, key) {
       }
     }
     _r3Box(m, 11.4, 10.6, 0, 1.6, 3.4, 8.0, DK[1], DK[2]);        /* the hinge, at the bow */
+    /* the team roof is the cab's, under the bridge: whose it is goes on the bridge's top plate */
+    _r3Box(m, 7.6, 12.5, 0, 2.4, 0.2, 7.2, TM[2], TM[1]);
     /* the launching arm, pitched up from the bow to the bridge */
     n0 = m.length;
     _r3Box(m, 9.0, 6.6, -3.0, 5.6, 1.2, 1.2, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);
@@ -9109,7 +9112,7 @@ function _sprUnitWings(X, key) {
     _r3Box(m, 12.9, 6.6, 0, 0.6, 2.6, 3.8, RTS_PAL.glass, RTS_PAL.glass);   /* windscreen */
     _r3Box(m, 8.6, 6.8, 0, 0.5, 1.4, 4.6, RTS_PAL.glass, RTS_PAL.glass);    /* the rear-facing winch window */
     _r3Box(m, 0, 10.8, 0, 7.0, 1.2, 4.4, VH[2], VH[1]);            /* engine deck */
-    _r3Box(m, 0, 10.9, 0, 5.0, 0.4, 4.6, TM[1], TM[3]);            /* team band on it */
+    _r3Box(m, 0, 12.0, 0, 5.0, 0.4, 4.6, TM[1], TM[3]);            /* team band on it, on top */
     _r3Cyl(m, -2.6, 10.9, -2.6, 0.8, 1.2, DK[1], DK[3], 16);       /* exhausts */
     _r3Cyl(m, -2.6, 10.9, 2.6, 0.8, 1.2, DK[1], DK[3], 16);
     _r3Box(m, -12.4, 8.6, 0, 3.0, 4.6, 0.6, VH[1], VH[2]);         /* the tail fin */
@@ -9157,7 +9160,7 @@ function _sprUnitWings(X, key) {
     _r3Cyl(m, 4.6, 0.6, 0, 0.9, 1.2, DK[1], DK[2], 18);            /* the sensor turret */
     _r3Wheel(m, 5.4, 1.1, 0, 0.55, 0.3, 'x', RTS_PAL.glass, RTS_PAL.lit, 18);   /* its lens */
     _r3Box(m, 0.8, 3.4, 0, 2.0, 0.3, 18.0, VH[1], VH[2]);          /* the long thin wing */
-    _r3Box(m, 0.8, 3.6, 0, 1.4, 0.2, 4.0, TM[1], TM[3]);           /* team band on it */
+    _r3Box(m, 0.8, 3.7, 0, 1.4, 0.2, 4.0, TM[1], TM[3]);           /* team band on it, on top */
     for (var tb = -1; tb <= 1; tb += 2) {                           /* the twin booms and their fins */
       _r3Box(m, -4.6, 2.6, tb * 2.6, 8.0, 0.5, 0.5, S[2], S[1]);
       _r3Box(m, -8.2, 3.0, tb * 2.6, 1.2, 2.0, 0.3, VH[1], VH[2]);
@@ -9245,7 +9248,7 @@ function _sprUnitHulls(X, key) {
     _r3Box(m, Lm * 0.40, 0.9, 0, Lm * 0.20, 2.4, Wm * 0.55, VH[1], VH[3]); /* bow */
     _r3Box(m, Lm * 0.20, 3.8, 0, Lm * 0.22, 3.0, Wm * 0.70, VH[2], VH[0]); /* wheelhouse */
     _r3Box(m, Lm * 0.30, 4.4, 0, 0.5, 1.2, Wm * 0.56, RTS_PAL.glass, RTS_PAL.glass);   /* its windows */
-    _r3Box(m, Lm * 0.20, 5.5, 0, Lm * 0.16, 0.5, Wm * 0.50, TM[1], TM[3]);  /* team roof */
+    _r3Box(m, Lm * 0.20, 6.8, 0, Lm * 0.16, 0.5, Wm * 0.50, TM[1], TM[3]);  /* team roof, on the wheelhouse */
     _r3Box(m, Lm * 0.14, 6.6, 0, 0.5, 2.6, 0.5, S[1], S[0]);             /* mast */
     for (var rw = -1; rw <= 1; rw += 2) {                                 /* the mine rails and their mines */
       _r3Box(m, -Lm * 0.18, 2.5, rw * 1.6, Lm * 0.52, 0.3, 0.4, S[2], S[1]);
@@ -9265,7 +9268,7 @@ function _sprUnitHulls(X, key) {
     _r3Box(m, Lt * 0.40, 0.9, 0, Lt * 0.20, 2.6, Wt * 0.55, VH[1], VH[3]); /* bow */
     _r3Box(m, -Lt * 0.30, 4.2, 0, Lt * 0.24, 3.6, Wt * 0.72, VH[2], VH[0]); /* deckhouse aft */
     _r3Box(m, -Lt * 0.20, 5.0, 0, 0.5, 1.4, Wt * 0.58, RTS_PAL.glass, RTS_PAL.glass);   /* its bridge glass */
-    _r3Box(m, -Lt * 0.30, 6.3, 0, Lt * 0.18, 0.6, Wt * 0.56, TM[1], TM[3]);   /* team roof */
+    _r3Box(m, -Lt * 0.30, 7.8, 0, Lt * 0.18, 0.6, Wt * 0.56, TM[1], TM[3]);   /* team roof, on the deckhouse */
     _r3Cyl(m, -Lt * 0.38, 7.4, 0, 1.0, 2.6, DK[1], DK[0], 16);          /* stack */
     /* the gantry: two legs either side of the well deck and the beam across them */
     for (var gl = -1; gl <= 1; gl += 2) _r3Box(m, Lt * 0.06, 6.0, gl * Wt * 0.44, 0.8, 7.6, 0.8, RTS_PAL.hazard[0], RTS_PAL.hazard[1]);
@@ -9300,6 +9303,56 @@ function _sprUnitHulls(X, key) {
     for (var rl = -1; rl <= 1; rl += 2) _r3Box(m, -Lo * 0.05, 1.6, rl * Wo * 0.47, Lo * 0.80, 0.4, 0.3, DK[0], DK[0]);   /* rubbing strakes */
   } else return false;
   return true;
+}
+</script>
+<script>/* sprites/marks.js - a unit's house colour where the camera can see it.
+
+   Every unit carries its owner's colour on one small part (the cap, the band, the roof: see the
+   note on RTS_PAL.veh in sprites/bake.js for why it is small), and that part has to face the
+   camera, which looks DOWN. The four jets (keys mig, yak, strikejet, falcon) carried theirs as a
+   stripe under the fuselage, beneath the wing - the one place a camera above them never sees - so
+   a Kestrel, a Shrike, a Strike Jet or a Falcon showed next to none of its owner's colour: 7 to 41
+   pixels at the close zoom (e2e/housecol). They wear roundels now, on the top of each wing, the
+   way aircraft have been marked since there were aircraft to mark: the house's colour on a light
+   ring, a disc that reads at any zoom and from any heading. So do the Recon Drone and the Heavy
+   Bomber, whose bands sat in the middle of the wing, under the fuselage.
+
+   Each entry is a list of roundel pairs, mirrored across the centre line: [x, y, |z|, r] in the
+   model's own units - x along it, y the top of the wing it sits on, |z| out from the centre, r
+   its radius. Built into the model, so the cameo, the 2D sprite and the 3D mode all show it.
+   window.RTS_MARKS_OFF is the before-picture (drop the 3D mode's model cache, R3.mesh, to see it). */
+var RTS_MARKS = {
+  mig:       [[0.6, 4.3, 6.4, 1.8]],
+  yak:       [[0.0, 4.4, 7.2, 2.0]],
+  strikejet: [[-1.2, 4.1, 5.4, 1.7]],
+  falcon:    [[-1.6, 4.2, 6.0, 1.8]],
+  drone:     [[0.8, 3.7, 5.6, 0.95]],
+  bomber:    [[3.0, 4.9, 9.2, 1.6]]
+};
+var RTS_MARK_RING = '#e6e3d8';                    /* the light ring round the house's colour */
+
+/* A disc painted on what is under it: ONE face, lying flat at height y and facing up. Not a
+   cylinder - a cylinder's sides are two dozen faces with no area the camera sees, and a model
+   that is a fifth team-coloured faces is what e2e/r3dsprites reads as the generic fallback. */
+function _sprMarkDisc(m, x, y, z, r, col, seg) {
+  var v = [];
+  for (var i = 0; i < seg; i++) { var a = i / seg * Math.PI * 2; v.push([x + Math.cos(a) * r, y, z + Math.sin(a) * r]); }
+  _r3F(m, v.reverse(), col);
+}
+/* The roundels for `key` into m, unless this part of the model is one that turns on its own. */
+function _sprHouseMarks(m, key, TM, part) {
+  var L = RTS_MARKS[key];
+  if (!L || window.RTS_MARKS_OFF || (part && part !== 'body' && part !== 'hull')) return 0;
+  var n = 0;
+  for (var i = 0; i < L.length; i++) {
+    var w = L[i];
+    for (var s = -1; s <= 1; s += 2) {
+      _sprMarkDisc(m, w[0], w[1] + 0.04, s * w[2], w[3], RTS_MARK_RING, 24);              /* the ring */
+      _sprMarkDisc(m, w[0], w[1] + 0.08, s * w[2], w[3] * 0.64, TM[1], 24);               /* the house */
+      n++;
+    }
+  }
+  return n;
 }
 </script>
 <script>/* sprites/lens.js - the Lens Tower and the Lens Tank (core/lens.js). Part of rts.sprites.
@@ -9521,6 +9574,7 @@ function _sprUnitRift(X, key) {
     if (part !== 'hull') {
       _r3Slab(m, -0.6, 6.4, 0, 6.6, 1.8, 6.0, 0.8, VH[1], TM[1]);
       _r3Box(m, 5.6, 7.0, 0, 8.0, 1.1, 1.1, DK[1], DK[3]);                  /* the gun */
+      _r3Cyl(m, -1.4, 8.2, 0, 2.95, 0.22, TM[2], TM[1], 24);               /* a team ring round its foot: the dome covers the roof */
       _r3Cone(m, -1.4, 8.2, 0, 2.6, 1.2, 2.2, S[2], 18);                    /* the projector dome */
       for (i = 0; i < 6; i++) {
         a = i / 6 * Math.PI * 2;
@@ -9666,14 +9720,14 @@ function _sprUnitAloft(X, key) {
     _r3Box(m, 0, 4.4, 0, L * 0.96, 0.6, Wd * 1.1, DK[1], DK[2]);         /* the flight deck */
     for (i = 0; i < 6; i++) _r3Box(m, -L * 0.4 + i * L * 0.16, 4.8, 0, L * 0.06, 0.1, 0.6, S[3], S[3]);   /* the centre line */
     _r3Box(m, -L * 0.05, 7.4, Wd * 0.45, L * 0.18, 5.4, 2.8, VH[2], VH[0]);   /* the island */
-    _r3Box(m, -L * 0.05, 10.4, Wd * 0.45, L * 0.12, 0.8, 3.0, TM[1], TM[3]);
+    _r3Box(m, -L * 0.05, 12.8, Wd * 0.45, L * 0.12, 0.8, 3.0, TM[1], TM[3]);   /* team cap, on the island */
     _r3Box(m, -L * 0.08, 12.2, Wd * 0.45, 0.6, 3.0, 0.6, S[1], S[0]);    /* mast */
     _r3Box(m, -L * 0.0, 7.6, Wd * 0.45 - 1.5, 2.4, 1.2, 0.2, RTS_PAL.glass, RTS_PAL.glass);
     for (i = 0; i < 2; i++) {                                            /* two Hornets parked aft */
       var px = -L * 0.3 + i * 6;
       _r3Box(m, px, 5.6, -2.5, 4.0, 1.4, 1.8, VH[1], VH[3]);
       _r3Box(m, px, 5.8, -2.5, 4.6, 0.4, 4.6, DK[1], DK[2]);
-      _r3Box(m, px, 6.4, -2.5, 1.0, 0.2, 1.8, TM[1], TM[3]);              /* a team stripe on each */
+      _r3Box(m, px, 7.0, -2.5, 1.0, 0.2, 1.8, TM[1], TM[3]);              /* a team stripe on each, on top */
     }
     return true;
   }
@@ -9701,7 +9755,7 @@ function _sprUnitDeep(X, key) {
     _r3Box(m, 0.5, 4.2, 0, 3.0, 2.2, 0.5, C[0], C[1]);                  /* the dorsal fin */
     _r3Box(m, -10.4, 1.6, 0, 1.4, 0.4, 6.0, C[0], C[1]);                /* the flukes */
     _r3Box(m, 9.8, 1.4, 0, 2.4, 0.9, 1.0, C[1], C[1]);                  /* the beak */
-    _r3Wheel(m, 4.0, 1.6, 0, 2.3, 0.6, 'x', TM[1], TM[3], 18);          /* the collar: whose it is */
+    _r3Wheel(m, 4.0, 1.6, 0, 2.7, 0.8, 'x', TM[1], TM[3], 18);          /* the collar: whose it is, proud of the body */
     return true;
   }
   if (key === 'kraken') {
@@ -9724,7 +9778,7 @@ function _sprUnitDeep(X, key) {
     _r3Slab(m, 0, 0.6, 0, 16, 2.8, 6.0, 1.2, VH[0], VH[1]);             /* hull */
     _r3Box(m, 6.6, 0.9, 0, 3.4, 2.2, 3.4, VH[1], VH[3]);                /* bow */
     _r3Box(m, -2.0, 3.6, 0, 5.0, 2.4, 4.0, VH[2], VH[0]);               /* wheelhouse */
-    _r3Box(m, -2.0, 5.0, 0, 3.6, 0.6, 3.0, TM[1], TM[3]);
+    _r3Box(m, -2.0, 6.0, 0, 3.6, 0.6, 3.0, TM[1], TM[3]);              /* team roof, on the wheelhouse */
     _r3Cyl(m, 3.4, 3.2, 0, 1.6, 1.4, DK[1], DK[2], 16);                 /* the flak mount */
     _r3Box(m, 5.6, 4.6, -0.6, 4.2, 0.5, 0.5, GN[0], GN[2]);             /* twin barrels, raised */
     _r3Box(m, 5.6, 4.6, 0.6, 4.2, 0.5, 0.5, GN[0], GN[2]);
@@ -9741,7 +9795,7 @@ function _sprUnitDeep(X, key) {
     _r3Slab(m, 0, 0.6, 0, L, 3.8, Wd, 1.4, VH[0], VH[1]);               /* hull */
     _r3Box(m, L * 0.42, 0.9, 0, L * 0.18, 3.2, Wd * 0.55, VH[1], VH[3]); /* bow */
     _r3Box(m, -L * 0.12, 4.6, 0, L * 0.26, 4.0, Wd * 0.6, VH[2], VH[0]); /* the bridge */
-    _r3Box(m, -L * 0.12, 7.2, 0, L * 0.16, 1.2, Wd * 0.4, TM[1], TM[3]);
+    _r3Box(m, -L * 0.12, 8.6, 0, L * 0.16, 1.2, Wd * 0.4, TM[1], TM[3]); /* team cap, on the bridge */
     _r3Cyl(m, -L * 0.24, 7.0, 0, 1.6, 4.0, DK[1], DK[0], 16);           /* funnel */
     for (var cx = 0; cx < 3; cx++) for (var cz = 0; cz < 2; cz++)       /* the missile cells, forward */
       _r3Box(m, L * 0.12 + cx * 2.6, 3.8, (cz - 0.5) * 3.0, 2.2, 1.0, 2.4, DK[0], GN[2]);
@@ -9900,7 +9954,7 @@ function _sprUnitR11(X, key) {
     if (part !== 'hull') {
       _r3Slab(m, 0.6, 6.6, 0, 5.6, 1.8, 5.2, 0.6, VH[1], TM[1]);              /* turret, team roof */
       /* built about the pivot (unit/turrets): the box sits square on top, the coax on the centre line */
-      _r3Box(m, 0.2, 8.4, 0, 4.4, 1.8, 2.8, S[1], S[3]);                       /* the twin missile box */
+      _r3Box(m, 0.2, 8.4, 0, 4.4, 1.8, 2.8, S[1], TM[1]);                      /* the twin missile box, over the team roof: its top is whose */
       for (i = 0; i < 2; i++) _r3Cyl(m, 2.5, 8.8, -0.7 + i * 1.4, 0.5, 0.4, '#e8532c', '#ff9a5a', 12);
       _r3Box(m, 4.6, 7.2, 0, 3.6, 0.6, 0.6, GN[0], GN[2]);                     /* the coax */
     }

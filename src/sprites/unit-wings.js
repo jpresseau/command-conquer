@@ -37,7 +37,7 @@ function _sprUnitWings(X, key) {
     _r3Box(m, 12.9, 6.6, 0, 0.6, 2.6, 3.8, RTS_PAL.glass, RTS_PAL.glass);   /* windscreen */
     _r3Box(m, 8.6, 6.8, 0, 0.5, 1.4, 4.6, RTS_PAL.glass, RTS_PAL.glass);    /* the rear-facing winch window */
     _r3Box(m, 0, 10.8, 0, 7.0, 1.2, 4.4, VH[2], VH[1]);            /* engine deck */
-    _r3Box(m, 0, 10.9, 0, 5.0, 0.4, 4.6, TM[1], TM[3]);            /* team band on it */
+    _r3Box(m, 0, 12.0, 0, 5.0, 0.4, 4.6, TM[1], TM[3]);            /* team band on it, on top */
     _r3Cyl(m, -2.6, 10.9, -2.6, 0.8, 1.2, DK[1], DK[3], 16);       /* exhausts */
     _r3Cyl(m, -2.6, 10.9, 2.6, 0.8, 1.2, DK[1], DK[3], 16);
     _r3Box(m, -12.4, 8.6, 0, 3.0, 4.6, 0.6, VH[1], VH[2]);         /* the tail fin */
@@ -85,7 +85,7 @@ function _sprUnitWings(X, key) {
     _r3Cyl(m, 4.6, 0.6, 0, 0.9, 1.2, DK[1], DK[2], 18);            /* the sensor turret */
     _r3Wheel(m, 5.4, 1.1, 0, 0.55, 0.3, 'x', RTS_PAL.glass, RTS_PAL.lit, 18);   /* its lens */
     _r3Box(m, 0.8, 3.4, 0, 2.0, 0.3, 18.0, VH[1], VH[2]);          /* the long thin wing */
-    _r3Box(m, 0.8, 3.6, 0, 1.4, 0.2, 4.0, TM[1], TM[3]);           /* team band on it */
+    _r3Box(m, 0.8, 3.7, 0, 1.4, 0.2, 4.0, TM[1], TM[3]);           /* team band on it, on top */
     for (var tb = -1; tb <= 1; tb += 2) {                           /* the twin booms and their fins */
       _r3Box(m, -4.6, 2.6, tb * 2.6, 8.0, 0.5, 0.5, S[2], S[1]);
       _r3Box(m, -8.2, 3.0, tb * 2.6, 1.2, 2.0, 0.3, VH[1], VH[2]);
