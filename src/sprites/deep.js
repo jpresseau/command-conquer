@@ -19,7 +19,7 @@ function _sprUnitDeep(X, key) {
     _r3Box(m, 0.5, 4.2, 0, 3.0, 2.2, 0.5, C[0], C[1]);                  /* the dorsal fin */
     _r3Box(m, -10.4, 1.6, 0, 1.4, 0.4, 6.0, C[0], C[1]);                /* the flukes */
     _r3Box(m, 9.8, 1.4, 0, 2.4, 0.9, 1.0, C[1], C[1]);                  /* the beak */
-    _r3Wheel(m, 4.0, 1.6, 0, 2.3, 0.6, 'x', TM[1], TM[3], 18);          /* the collar: whose it is */
+    _r3Wheel(m, 4.0, 1.6, 0, 2.7, 0.8, 'x', TM[1], TM[3], 18);          /* the collar: whose it is, proud of the body */
     return true;
   }
   if (key === 'kraken') {
@@ -42,7 +42,7 @@ function _sprUnitDeep(X, key) {
     _r3Slab(m, 0, 0.6, 0, 16, 2.8, 6.0, 1.2, VH[0], VH[1]);             /* hull */
     _r3Box(m, 6.6, 0.9, 0, 3.4, 2.2, 3.4, VH[1], VH[3]);                /* bow */
     _r3Box(m, -2.0, 3.6, 0, 5.0, 2.4, 4.0, VH[2], VH[0]);               /* wheelhouse */
-    _r3Box(m, -2.0, 5.0, 0, 3.6, 0.6, 3.0, TM[1], TM[3]);
+    _r3Box(m, -2.0, 6.0, 0, 3.6, 0.6, 3.0, TM[1], TM[3]);              /* team roof, on the wheelhouse */
     _r3Cyl(m, 3.4, 3.2, 0, 1.6, 1.4, DK[1], DK[2], 16);                 /* the flak mount */
     _r3Box(m, 5.6, 4.6, -0.6, 4.2, 0.5, 0.5, GN[0], GN[2]);             /* twin barrels, raised */
     _r3Box(m, 5.6, 4.6, 0.6, 4.2, 0.5, 0.5, GN[0], GN[2]);
@@ -59,7 +59,7 @@ function _sprUnitDeep(X, key) {
     _r3Slab(m, 0, 0.6, 0, L, 3.8, Wd, 1.4, VH[0], VH[1]);               /* hull */
     _r3Box(m, L * 0.42, 0.9, 0, L * 0.18, 3.2, Wd * 0.55, VH[1], VH[3]); /* bow */
     _r3Box(m, -L * 0.12, 4.6, 0, L * 0.26, 4.0, Wd * 0.6, VH[2], VH[0]); /* the bridge */
-    _r3Box(m, -L * 0.12, 7.2, 0, L * 0.16, 1.2, Wd * 0.4, TM[1], TM[3]);
+    _r3Box(m, -L * 0.12, 8.6, 0, L * 0.16, 1.2, Wd * 0.4, TM[1], TM[3]); /* team cap, on the bridge */
     _r3Cyl(m, -L * 0.24, 7.0, 0, 1.6, 4.0, DK[1], DK[0], 16);           /* funnel */
     for (var cx = 0; cx < 3; cx++) for (var cz = 0; cz < 2; cz++)       /* the missile cells, forward */
       _r3Box(m, L * 0.12 + cx * 2.6, 3.8, (cz - 0.5) * 3.0, 2.2, 1.0, 2.4, DK[0], GN[2]);

@@ -190,6 +190,7 @@ function _sprUnitModel(key, side, prone, part) {
     _r3Box(m, 4, 6, 0, 8, 1.4, 1.4, DK[1], DK[3]);
   }
 
+  _sprHouseMarks(m, key, TM, part);            /* the house colour where the camera sees it: sprites/marks.js */
   var sc = _sprUnitScale(key);
   return sc === 1 ? m : _r3Scale(m, sc);
 }

@@ -18,6 +18,7 @@ function _sprUnitRift(X, key) {
     if (part !== 'hull') {
       _r3Slab(m, -0.6, 6.4, 0, 6.6, 1.8, 6.0, 0.8, VH[1], TM[1]);
       _r3Box(m, 5.6, 7.0, 0, 8.0, 1.1, 1.1, DK[1], DK[3]);                  /* the gun */
+      _r3Cyl(m, -1.4, 8.2, 0, 2.95, 0.22, TM[2], TM[1], 24);               /* a team ring round its foot: the dome covers the roof */
       _r3Cone(m, -1.4, 8.2, 0, 2.6, 1.2, 2.2, S[2], 18);                    /* the projector dome */
       for (i = 0; i < 6; i++) {
         a = i / 6 * Math.PI * 2;

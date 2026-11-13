@@ -172,6 +172,15 @@ the tank still came out 36% blue pixels, because under a camera that looks down 
 of the sprite. On a structure that is the point; on a vehicle it buries the khaki. Turret cap only:
 tank 18%, light 9%, artillery 7%.
 
+**The small part has to face the camera** (`e2e/housecol`). Measured on the 3D frame, one unit at
+a time at the close zoom, drawn in blue and again with the house colour swapped for the ally's
+green (the body is the same colour for both, so what changes is exactly the house colour the
+camera sees): five units showed none and nine next to none. The part was there in every one, and
+in the wrong place - inside the deckhouse, island, bridge or chassis it was meant to sit on, under
+a folded bridge or a projector dome, or under the fuselage of a jet the camera only ever sees from
+above. The jets, the drone and the bomber wear roundels on top of their wings (`sprites/marks.js`).
+The spec holds every unit to 12 pixels and 1% of what it covers.
+
 **`RTS_PAL.steel` is a blue grey**, and it was tinting every gun. An artillery piece measured 45%
 blue pixels with a hull carrying no team colour at all. Gun tubes now use `RTS_PAL.gun`, a neutral
 warm gunmetal.
