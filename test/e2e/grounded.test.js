@@ -77,6 +77,7 @@ var S = new Suite('grounded');
 
     /* ---------------- THE MEADOW ---------------- */
     R3.inkAmt = 0; R3.footAmt = 0;
+    R3.bladesOff = true;             /* the blades close to are fine contrast put back on purpose: e2e/closeup's */
     look(grass, ZI);
     var c0 = at(grass);
     R3.grassLegacy = true; var mOld = pic();
@@ -87,6 +88,7 @@ var S = new Suite('grounded');
     R3.grassLegacy = true; var sOld = pic();
     R3.grassLegacy = false; var sNew = pic();
     o.sandBox = box(sNew, cs, 30, 20); o.sandDiff = differ(sOld, sNew, cs, 30, 20);
+    R3.bladesOff = false;
 
     /* ---------------- THE SHADE ---------------- */
     look(grass, ZI);

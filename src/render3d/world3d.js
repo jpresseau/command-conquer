@@ -247,7 +247,7 @@ function _r3dWorldBuild(G) { return _r3SegBulk(function () {
 
   for (var cz = 0; cz < C; cz++) {
     for (var cx = 0; cx < C; cx++) {
-      var faces = [];
+      var faces = [], low = [];                    /* low: what stands too small to throw a shadow */
       var z0 = cz * R3D_CHUNK, z1 = Math.min(N, z0 + R3D_CHUNK);
       var x0 = cx * R3D_CHUNK, x1 = Math.min(N, x0 + R3D_CHUNK);
 
@@ -260,7 +260,7 @@ function _r3dWorldBuild(G) { return _r3SegBulk(function () {
              jitter anyway. This one chooses how many trees stand on a forest cell and whether a
              grass cell carries tufts at all - the two decisions that are the WALK's to make. */
           var h1 = _sprHash(tx, tz, 331);
-          var _lift0 = faces.length, _liftY = _rtsTileElev(tx, tz);
+          var _lift0 = faces.length, _low0 = low.length, _liftY = _rtsTileElev(tx, tz);
 
           var _scn = R3.scnPlanFor === G && R3.scnPlan ? R3.scnPlan.claim[_rtsIdx(tx, tz)] : 0;   /* scenery3d.js */
           if (k === RTS_T_TREE && _scn !== 1) {
@@ -300,18 +300,25 @@ function _r3dWorldBuild(G) { return _r3SegBulk(function () {
                 var fz = wz + (_sprHash(tz * 31 + tf, tx, 373) - 0.5) * RTS_TILE;
                 var fh = R3D_TUFT_H[0] + _sprHash(tx * 31 + tf, tz, 379) * R3D_TUFT_H[1];
                 /* blades, not a cone - a cone on a map of conifers is a sapling; r3d/tuft.js */
-                _r3Tuft(faces, fx, 0, fz, fh,
+                _r3Tuft(low, fx, 0, fz, fh,
                         R3D_TUFT_COLS[tf & 1],
                         (tx * 131 + tz) * 3 + tf);
               }
             }
           }
-          _r3dLiftFrom(faces, _lift0, _liftY);
+          if (k === RTS_T_GRASS) _r3dLiftFrom(low, _low0, _liftY); else _r3dLiftFrom(faces, _lift0, _liftY);
         }
       }
 
-      if (!faces.length) continue;
-      var m = _r3dBuildMesh(gl, faces);
+      if (!faces.length && !low.length) continue;
+      /* A TUFT THROWS NO SHADOW. The sun's map has a texel a world unit across and a tuft is a
+         third of one, so each threw a dark smudge three times its own size, beside it - a meadow
+         of them read as dirt. They go LAST in the chunk and the sun's pass draws the chunk up to
+         them (m.cast, scene3d.js). R3.tuftCast is the before-picture. */
+      var cast = 0, fi;
+      for (fi = 0; fi < faces.length; fi++) if (faces[fi].v.length > 2) cast += (faces[fi].v.length - 2) * 3;
+      var m = _r3dBuildMesh(gl, faces.concat(low));
+      m.cast = cast;
       /* the chunk's world AABB, for the per-frame cull in scene3d.js */
       m.x0 = _rtsWX(x0) - half; m.x1 = _rtsWX(x1 - 1) + half;
       m.z0 = _rtsWX(z0) - half; m.z1 = _rtsWX(z1 - 1) + half;

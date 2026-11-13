@@ -288,6 +288,28 @@ its own switch and held by `e2e/grounded` and `unit/footing`:
   brightness let nearly all of it through: a fireball is dim before its bloom is added). A quality-table entry (`ink`), off on LOW.
   `R3.inkAmt`.
 
+## Close to (`terrain3d.js` blades, `world3d.js` `m.cast`, `afloat3d.js`, `render/icons.js`)
+
+From a survey of every part of the game rendered at each zoom. Held by `e2e/closeup`.
+
+- **Grass is blades at the nearest zooms.** The meadow's finest noise is a quarter of a world
+  unit, a dozen pixels at the nearest zoom, so the ground a unit stands on was a blur. Two sets
+  of long thin strokes, crossing, turned off the grid and bent by the clump noise, come in from
+  `R3D_NEAR_PX[0]` device pixels a world unit (`_r3dNear`, `uNear`) and are not drawn at all
+  further out. `R3.bladesOff`.
+- **A tuft throws no shadow.** The sun's map has a texel a world unit across and a tuft is a
+  third of one, so each threw a smudge three times its size. Tufts go last in a chunk's mesh and
+  the sun's pass draws the chunk up to `m.cast`. `R3.tuftCast` is the before-picture; the kept
+  shadow map (`shadowcache3d.js`) has to be off to A/B it.
+- **A ship sits in the water** (`afloat3d.js`): foam along the hull and the hull's shade inside
+  it, one quad a ship through the shade pass's sender (`_r3dFootSend`), drawn straight after the
+  sea. Not for a boat under the surface. `R3.afloatAmt`.
+- **A cameo is its picture, not its canvas** (`_rtsIconBox`): a unit's sprite is baked on a
+  square big enough to turn in, so a tank was a third of its tile. The plate behind it is clear;
+  the tile paints the background. `window.RTS_ICON_WHOLE`.
+- **The bar's pictures are drawn** (`style.css`): Save, Load and Sound keep their glyph as text
+  and show a mask in the bar's colour; `#rtsMute.off` is the crossed speaker.
+
 ## The stalls (`mesh3d.js`, `ore3d.js`, `pace3d.js`)
 
 A big fight was slow in stalls, not in its steady frame: measured, the frame's own script is

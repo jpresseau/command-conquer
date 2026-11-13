@@ -32,6 +32,10 @@
    finest patterns (blades, pebbles, mortar) fade out rather than shimmer. */
 var R3D_MAT_DETAIL_PX = 18;
 
+/* ...and how near "close to" is: the blades of grass come in from R3D_NEAR_PX[0] device pixels a
+   world unit and are whole by [1] */
+var R3D_NEAR_PX = [9, 20];
+function _r3dNear(px) { return Math.max(0, Math.min(1, (px - R3D_NEAR_PX[0]) / (R3D_NEAR_PX[1] - R3D_NEAR_PX[0]))); }
 var R3D_MAT_GLSL =
   'uniform sampler2D uMap; uniform vec4 uMat;' +          /* on, 1/N, N/2 - 0.5, detail */
   'uniform float uSnow;' +                                 /* the SNOW sky: sky3d.js */
@@ -83,7 +87,8 @@ var R3D_MAT_GLSL =
      clumps a soft mottle and the blades a grain that is only there close to; its relief (below)
      is a tenth of what it was. R3.grassLegacy (uMeadow 0) is the before-picture. */
   'uniform float uMeadow;' +
-  'vec4 _grass(vec4 N, vec4 M, float det){' +
+  'uniform float uNear;' +
+  'vec4 _grass(vec2 w, vec4 N, vec4 M, float det){' +
   '  vec3 c0 = mix(vec3(0.33, 0.45, 0.17), vec3(0.50, 0.58, 0.24), smoothstep(0.30, 0.72, N.x));' +
   '  c0 *= 0.86 + 0.26 * N.z;' +
   '  c0 *= 1.0 + (N.w - 0.5) * 0.22 * det;' +
@@ -91,6 +96,16 @@ var R3D_MAT_GLSL =
   '  c = mix(c, vec3(0.53, 0.56, 0.28), smoothstep(0.50, 0.26, N.y) * 0.42);' +   /* sun-dried drifts */
   '  c *= 0.94 + 0.07 * N.z + 0.06 * M.x;' +                /* clumps: a mottle, not a ripple */
   '  c *= 1.0 + (N.w - 0.5) * 0.13 * det;' +                /* blades, faded with distance */
+  /* CLOSE TO, GRASS IS BLADES. The finest noise the meadow had is a quarter of a world unit, and
+     at the nearest zoom that is a dozen pixels: the ground a unit stands on was a soft blur. Two
+     sets of strokes, long and thin and crossing, turned off the grid, come in as the camera does
+     (uNear) and are gone by the default zoom, where they would only shimmer. */
+  '  if (uNear > 0.0) {' +
+  '    vec2 q = vec2(w.x * 0.8 - w.y * 0.6, w.x * 0.6 + w.y * 0.8) + (vec2(N.z, M.x) - 0.5) * 0.9;' +
+  '    float bl = _vn(vec2(q.x * 13.0, q.y * 2.4)) * 0.55 + _vn(vec2(q.x * 3.1 + 5.0, q.y * 15.0 + 3.0)) * 0.45 - 0.5;' +
+  '    c *= 1.0 + bl * 0.34 * uNear;' +
+  '    c += vec3(0.035, 0.045, 0.0) * max(bl, 0.0) * uNear;' +
+  '  }' +
   '  c = mix(c0, c, uMeadow);' +
   /* bare patches: the ground showing through, soft-edged */
   '  c = mix(c, vec3(0.55, 0.47, 0.31) * (0.9 + 0.2 * N.z), smoothstep(0.60, 0.70, N.y) * 0.85);' +
@@ -131,7 +146,7 @@ var R3D_MAT_GLSL =
   /* kind codes are RTS_T_*: grass 0, tree 1, rock 2, water 3, road 4, sand 5, wall 6 - and one
      of the ground map's own, 7: PAVED, laid round the buildings - see _r3dGroundMap */
   'vec4 _mat(float k, vec2 w, vec4 N, vec4 M, vec3 v, float det){' +
-  '  if (k < 0.5) return _grass(N, M, det);' +
+  '  if (k < 0.5) return _grass(w, N, M, det);' +
   '  if (k < 1.5) return _forest(N, M, det);' +
   '  if (k < 2.5) return _rockg(N, M, det);' +
   '  if (k < 3.5) return _sand(N, M, det) * vec4(0.62, 0.66, 0.66, 1.0);' +   /* seabed, under the sea */
@@ -433,6 +448,7 @@ function _r3dMatSet(gl, R3, P, G) {
   gl.uniform1i(gl.getUniformLocation(P, 'uOreT'), 5);
   gl.activeTexture(gl.TEXTURE0);
   gl.uniform1f(gl.getUniformLocation(P, 'uTileInv'), 1 / RTS_TILE);
+  gl.uniform1f(gl.getUniformLocation(P, 'uNear'), R3.grassLegacy || R3.bladesOff ? 0 : _r3dNear(px));   /* R3.bladesOff: without them */
   gl.uniform1f(gl.getUniformLocation(P, 'uMeadow'), R3.grassLegacy ? 0 : 1);   /* the grass before it was a meadow */
   var ss = _r3dScarSun();                          /* scar3d.js: on (0 the old blotches), and the sun's way */
   gl.uniform3f(gl.getUniformLocation(P, 'uScar'), R3.scarAmt === 0 ? 0 : 1, ss[0], ss[1]);

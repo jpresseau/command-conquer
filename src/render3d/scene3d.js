@@ -138,7 +138,7 @@ function _r3dFrame(G) {
               (sm.x1 < R3.sunC[0] - R3.sunSpan || sm.x0 > R3.sunC[0] + R3.sunSpan ||
                sm.z1 < R3.sunC[2] - R3.sunSpan || sm.z0 > R3.sunC[2] + R3.sunSpan)) continue;
           bindMesh(SC, sm);
-          gl.drawArrays(gl.TRIANGLES, 0, sm.verts);
+          gl.drawArrays(gl.TRIANGLES, 0, sm.cast !== undefined && !R3.tuftCast ? sm.cast : sm.verts);   /* not its tufts: world3d.js */
         }
       }
     }, function (P) {
@@ -245,6 +245,8 @@ function _r3dFrame(G) {
     _r3dSeaSet(gl, R3, R3.meshP, false);
     gl.uniform2f(uWave, 0, 0);
   }
+  /* --- the water round every ship afloat, before the ships (afloat3d.js) --- */
+  if (_r3dAfloatDraw(gl, R3, G, cam, invD, R3.entCullOff ? null : _r3dBoundsNear(vb, 0, 8))) gl.useProgram(R3.meshP);
 
   /* THE SAME WALK FEEDS TWO PROGRAMS. Everything drawn in the main pass has to be drawn again
      from the sun, or its shadow is missing; and it has to be drawn the SAME WAY, or its shadow

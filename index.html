@@ -624,6 +624,31 @@
 #rcgRts .rts-replaybar input[type=range]{width:min(220px,28vw);accent-color:#ffd76a}
 #rcgRts .rts-replaybar button.on{background:#7a6420;border-color:#ffd76a}
 @media (max-width:520px){#rcgRts .rts-replaybar{gap:5px;padding-left:8px}#rcgRts .rts-replaybar b{display:none}}
+
+/* THE BUTTONS' PICTURES ARE DRAWN, NOT FOUND IN A FONT. Save, Load and Sound were a floppy, a
+   folder and a speaker out of whatever emoji the machine carries: full colour on a phone, grey
+   on Windows, a box on a system without them - three styles in a row of five buttons, none of
+   them the game's. Each button keeps its glyph as its text (a screen reader and the specs read
+   it) and shows a mask of its own in the bar's colour instead. REPAIR and SELL carry theirs as
+   an element beside the word. */
+#rcgRts #rtsSaveBtn,#rcgRts #rtsLoadBtn,#rcgRts #rtsMute{font-size:0;position:relative}
+#rcgRts #rtsSaveBtn::before,#rcgRts #rtsLoadBtn::before,#rcgRts #rtsMute::before,#rcgRts .rts-ops .ic{
+  content:'';display:block;background:currentColor;
+  -webkit-mask:var(--ic) center/contain no-repeat;mask:var(--ic) center/contain no-repeat}
+#rcgRts #rtsSaveBtn::before,#rcgRts #rtsLoadBtn::before,#rcgRts #rtsMute::before{position:absolute;left:19%;top:19%;width:62%;height:62%}
+#rcgRts #rtsSaveBtn{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M4 3h12.5L20 6.5V21H4zM8 4.8h6.5v4H8zM7.5 13.3h9v5.4h-9z'/%3E%3C/svg%3E")}
+#rcgRts #rtsLoadBtn{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M2.5 6.5h6.2l2 2.2h10.8V19H2.5z'/%3E%3C/svg%3E")}
+#rcgRts #rtsMute{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3.5 9.2h3.8L12.5 5v14l-5.2-4.2H3.5z'/%3E%3Cpath d='M15.5 8.6a4.8 4.8 0 0 1 0 6.8M18 6a8.4 8.4 0 0 1 0 12' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round'/%3E%3C/svg%3E")}
+#rcgRts #rtsMute.off{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3.5 9.2h3.8L12.5 5v14l-5.2-4.2H3.5z'/%3E%3Cpath d='M15.8 9.2l5 5.6M20.8 9.2l-5 5.6' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");color:#ffb0a0}
+#rcgRts .rts-ops .ic{display:inline-block;width:1.05em;height:1.05em;vertical-align:-0.16em;margin-right:.35em}
+#rcgRts .rts-ops .ic-wrench{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20.6 7.1l-3.3 3.3-3.2-.5-.5-3.2 3.3-3.3a5.2 5.2 0 0 0-6.6 6.6L3.4 16.9a2.1 2.1 0 0 0 3 3l6.9-6.9a5.2 5.2 0 0 0 7.3-5.9z'/%3E%3C/svg%3E");color:#8fd3a6}
+#rcgRts .rts-ops .ic-coin{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M12 2.5a9.5 9.5 0 1 0 0 19a9.5 9.5 0 0 0 0-19zM12 5.4a6.6 6.6 0 1 1 0 13.2a6.6 6.6 0 0 1 0-13.2z'/%3E%3Cpath d='M12 7.6l3.6 4.4L12 16.4L8.4 12z'/%3E%3C/svg%3E");color:#f0c75a}
+#rcgRts .rts-ops button.on .ic{color:#fff}
+/* the graphics tier's button is one of the bar's, not the browser's own */
+#rcgRts .rts-btns #rtsGfxBtn{height:24px;padding:0 8px;border:1px solid rgba(255,255,255,.22);border-radius:5px;
+  background:rgba(255,255,255,.08);color:#cfd8e3;cursor:pointer;pointer-events:auto;line-height:1;white-space:nowrap}
+#rcgRts .rts-btns #rtsGfxBtn:hover{background:rgba(255,255,255,.18)}
+@media (hover: none) and (pointer: coarse){ #rcgRts .rts-btns #rtsGfxBtn{height:40px;padding:0 10px;border-radius:7px} }
 </style>
 <style>
 /* --- the title screen: the coast at dusk behind (title-bg.js), and over it the brand, a card for the
@@ -990,7 +1015,7 @@ html,body{margin:0;padding:0;height:100%;background:#05080e;overflow:hidden}
   <div id="rtsErr"></div>
   </div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">d91e0b8 · 2026-11-12</div>
+  <div id="rtsBuild" title="build">a7e0927 · 2026-11-13</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -11876,7 +11901,7 @@ function rtsMuteToggle() {
   A.muted = !A.muted;
   A.master.gain.setTargetAtTime(A.muted ? 0 : 0.9, A.ctx.currentTime, 0.02);
   var b = document.getElementById('rtsMute');
-  if (b) { b.textContent = A.muted ? '🔇' : '🔊'; b.title = A.muted ? 'Sound off' : 'Sound on'; }
+  if (b) { b.textContent = A.muted ? '🔇' : '🔊'; b.title = A.muted ? 'Sound off' : 'Sound on'; b.classList.toggle('off', !!A.muted); }   /* .off: the drawn speaker, crossed (style.css) */
 }
 
 /* Only play things the player can actually see - a battle on the far side of the map should
@@ -29197,6 +29222,10 @@ var R3D_SCAR_GLSL =
    finest patterns (blades, pebbles, mortar) fade out rather than shimmer. */
 var R3D_MAT_DETAIL_PX = 18;
 
+/* ...and how near "close to" is: the blades of grass come in from R3D_NEAR_PX[0] device pixels a
+   world unit and are whole by [1] */
+var R3D_NEAR_PX = [9, 20];
+function _r3dNear(px) { return Math.max(0, Math.min(1, (px - R3D_NEAR_PX[0]) / (R3D_NEAR_PX[1] - R3D_NEAR_PX[0]))); }
 var R3D_MAT_GLSL =
   'uniform sampler2D uMap; uniform vec4 uMat;' +          /* on, 1/N, N/2 - 0.5, detail */
   'uniform float uSnow;' +                                 /* the SNOW sky: sky3d.js */
@@ -29248,7 +29277,8 @@ var R3D_MAT_GLSL =
      clumps a soft mottle and the blades a grain that is only there close to; its relief (below)
      is a tenth of what it was. R3.grassLegacy (uMeadow 0) is the before-picture. */
   'uniform float uMeadow;' +
-  'vec4 _grass(vec4 N, vec4 M, float det){' +
+  'uniform float uNear;' +
+  'vec4 _grass(vec2 w, vec4 N, vec4 M, float det){' +
   '  vec3 c0 = mix(vec3(0.33, 0.45, 0.17), vec3(0.50, 0.58, 0.24), smoothstep(0.30, 0.72, N.x));' +
   '  c0 *= 0.86 + 0.26 * N.z;' +
   '  c0 *= 1.0 + (N.w - 0.5) * 0.22 * det;' +
@@ -29256,6 +29286,16 @@ var R3D_MAT_GLSL =
   '  c = mix(c, vec3(0.53, 0.56, 0.28), smoothstep(0.50, 0.26, N.y) * 0.42);' +   /* sun-dried drifts */
   '  c *= 0.94 + 0.07 * N.z + 0.06 * M.x;' +                /* clumps: a mottle, not a ripple */
   '  c *= 1.0 + (N.w - 0.5) * 0.13 * det;' +                /* blades, faded with distance */
+  /* CLOSE TO, GRASS IS BLADES. The finest noise the meadow had is a quarter of a world unit, and
+     at the nearest zoom that is a dozen pixels: the ground a unit stands on was a soft blur. Two
+     sets of strokes, long and thin and crossing, turned off the grid, come in as the camera does
+     (uNear) and are gone by the default zoom, where they would only shimmer. */
+  '  if (uNear > 0.0) {' +
+  '    vec2 q = vec2(w.x * 0.8 - w.y * 0.6, w.x * 0.6 + w.y * 0.8) + (vec2(N.z, M.x) - 0.5) * 0.9;' +
+  '    float bl = _vn(vec2(q.x * 13.0, q.y * 2.4)) * 0.55 + _vn(vec2(q.x * 3.1 + 5.0, q.y * 15.0 + 3.0)) * 0.45 - 0.5;' +
+  '    c *= 1.0 + bl * 0.34 * uNear;' +
+  '    c += vec3(0.035, 0.045, 0.0) * max(bl, 0.0) * uNear;' +
+  '  }' +
   '  c = mix(c0, c, uMeadow);' +
   /* bare patches: the ground showing through, soft-edged */
   '  c = mix(c, vec3(0.55, 0.47, 0.31) * (0.9 + 0.2 * N.z), smoothstep(0.60, 0.70, N.y) * 0.85);' +
@@ -29296,7 +29336,7 @@ var R3D_MAT_GLSL =
   /* kind codes are RTS_T_*: grass 0, tree 1, rock 2, water 3, road 4, sand 5, wall 6 - and one
      of the ground map's own, 7: PAVED, laid round the buildings - see _r3dGroundMap */
   'vec4 _mat(float k, vec2 w, vec4 N, vec4 M, vec3 v, float det){' +
-  '  if (k < 0.5) return _grass(N, M, det);' +
+  '  if (k < 0.5) return _grass(w, N, M, det);' +
   '  if (k < 1.5) return _forest(N, M, det);' +
   '  if (k < 2.5) return _rockg(N, M, det);' +
   '  if (k < 3.5) return _sand(N, M, det) * vec4(0.62, 0.66, 0.66, 1.0);' +   /* seabed, under the sea */
@@ -29598,6 +29638,7 @@ function _r3dMatSet(gl, R3, P, G) {
   gl.uniform1i(gl.getUniformLocation(P, 'uOreT'), 5);
   gl.activeTexture(gl.TEXTURE0);
   gl.uniform1f(gl.getUniformLocation(P, 'uTileInv'), 1 / RTS_TILE);
+  gl.uniform1f(gl.getUniformLocation(P, 'uNear'), R3.grassLegacy || R3.bladesOff ? 0 : _r3dNear(px));   /* R3.bladesOff: without them */
   gl.uniform1f(gl.getUniformLocation(P, 'uMeadow'), R3.grassLegacy ? 0 : 1);   /* the grass before it was a meadow */
   var ss = _r3dScarSun();                          /* scar3d.js: on (0 the old blotches), and the sun's way */
   gl.uniform3f(gl.getUniformLocation(P, 'uScar'), R3.scarAmt === 0 ? 0 : 1, ss[0], ss[1]);
@@ -31511,26 +31552,17 @@ function _r3dFootBuild(G, R3, view) {
   return n;
 }
 
-function _r3dFootDraw(gl, R3, G, cam, invD, view) {
-  var amt = R3.footAmt === undefined ? 1 : R3.footAmt;
-  R3.foots = 0;
-  if (!(amt > 0) || R3.footFail) return 0;
-  var n = _r3dFootBuild(G, R3, view);
-  if (!n) return 0;
-  if (!R3.footP) {
-    try { R3.footP = _r3dProgram(gl, _r3dRingVS(), _r3dFootFS()); } catch (e) { R3.footP = null; }
-    if (!R3.footP) { R3.footFail = 1; return 0; }
-    R3.footBuf = gl.createBuffer();
-  }
-  var P = R3.footP, i, night = (R3.sky && R3.sky.night) || 0;
+/* n quads of A through program P, laid on what is under them: blended, tested against the depth
+   there and not written to it. The shade's own pass, and the waterline's (afloat3d.js). */
+function _r3dFootSend(gl, R3, P, A, n, cam, invD, amt) {
+  var i;
   gl.bindBuffer(gl.ARRAY_BUFFER, R3.footBuf);
-  gl.bufferData(gl.ARRAY_BUFFER, R3.footA.subarray(0, n * 6 * R3D_FOOT_F), gl.DYNAMIC_DRAW);
+  gl.bufferData(gl.ARRAY_BUFFER, A.subarray(0, n * 6 * R3D_FOOT_F), gl.DYNAMIC_DRAW);
   gl.useProgram(P);
   gl.uniform4fv(gl.getUniformLocation(P, 'uCam'), cam);
   _r3dCamU(gl, P);
   gl.uniform1f(gl.getUniformLocation(P, 'uInvD'), invD);
-  /* by night the whole map is in shade, and a unit's own is most of the way to it already */
-  gl.uniform1f(gl.getUniformLocation(P, 'uAmt'), Math.min(1, amt) * R3D_FOOT_A * (1 - 0.45 * night));
+  gl.uniform1f(gl.getUniformLocation(P, 'uAmt'), amt);
   var at = [['aP', 3, 0], ['aL', 4, 12], ['aK', 4, 28]], loc = [];
   for (i = 0; i < at.length; i++) {
     loc.push(gl.getAttribLocation(P, at[i][0]));
@@ -31547,7 +31579,99 @@ function _r3dFootDraw(gl, R3, G, cam, invD, view) {
   gl.disable(gl.BLEND);
   gl.depthMask(true);
   for (i = 0; i < loc.length; i++) if (loc[i] >= 0) gl.disableVertexAttribArray(loc[i]);
+}
+
+function _r3dFootDraw(gl, R3, G, cam, invD, view) {
+  var amt = R3.footAmt === undefined ? 1 : R3.footAmt;
+  R3.foots = 0;
+  if (!(amt > 0) || R3.footFail) return 0;
+  var n = _r3dFootBuild(G, R3, view);
+  if (!n) return 0;
+  if (!R3.footP) {
+    try { R3.footP = _r3dProgram(gl, _r3dRingVS(), _r3dFootFS()); } catch (e) { R3.footP = null; }
+    if (!R3.footP) { R3.footFail = 1; return 0; }
+    R3.footBuf = gl.createBuffer();
+  }
+  /* by night the whole map is in shade, and a unit's own is most of the way to it already */
+  var P = R3.footP, night = (R3.sky && R3.sky.night) || 0;
+  _r3dFootSend(gl, R3, P, R3.footA, n, cam, invD, Math.min(1, amt) * R3D_FOOT_A * (1 - 0.45 * night));
   R3.foots = n;
+  return n;
+}
+</script>
+<script>/* render3d/afloat3d.js - a ship sits IN the water. Part of rts.render3d.
+
+   A hull was laid on the sea the way a tank was laid on the grass before its shade
+   (footing3d.js): nothing where the two meet. At rest a ship had no waterline at all - the wake
+   (fxwake3d.js) is what a MOVING hull leaves - so a fleet at anchor read as models on a blue
+   sheet. Each ship afloat has the water round it drawn for it: a ring of foam along the hull,
+   broken by the swell's clock, and the hull's own shade in the water inside it. One quad a ship,
+   the hull's length along its heading, through the shade's pass - drawn straight after the sea
+   and before the ships, so the hull stands in it.
+
+   Not for a boat under the surface, or one the player cannot see. R3.afloatAmt takes it out. */
+
+var R3D_AFLOAT_LONG = 1.30;      /* a hull's half-length as a multiple of its radius... */
+var R3D_AFLOAT_WIDE = 0.72;      /* ...and its half-beam, with the foam outside it */
+var R3D_AFLOAT_FOAM = [0.86, 0.93, 0.95];
+
+function _r3dAfloatFS() {
+  return 'precision highp float; varying vec4 vL; varying vec4 vK;' +
+    'uniform float uAmt; uniform float uT;' +
+    'void main(){' +
+    '  vec2 q = vL.xy / vL.zw; float d = length(q), an = atan(q.y, q.x);' +
+    /* the foam: a band along the hull, thicker and thinner round it, breathing with the swell */
+    '  float br = 0.5 + 0.5 * sin(an * 9.0 + uT * 1.3 + vK.x * 40.0) * sin(an * 4.0 - uT * 0.7);' +
+    '  float ring = smoothstep(0.50, 0.80, d) * (1.0 - smoothstep(0.80, 1.0, d)) * (0.16 + 0.34 * br * br);' +
+    '  float shade = (1.0 - smoothstep(0.25, 0.80, d)) * 0.30;' +
+    '  float a = max(ring, shade);' +
+    '  vec3 c = mix(vec3(0.02, 0.07, 0.13), vK.yzw, step(shade, ring));' +
+    '  gl_FragColor = vec4(c, a * uAmt);' +
+    '}';
+}
+
+/* Is this ship on the surface, where the player can see it? */
+function _r3dAfloatOn(e, d) {
+  if (!d || !d.sea || e.dead || e.inside || e.air || e.hidden) return false;
+  return typeof _rtsEntSeen !== 'function' || _rtsEntSeen(e);
+}
+
+function _r3dAfloatBuild(G, R3, view) {
+  var n = 0, E = G.ents;
+  for (var i = 0; i < E.length; i++) {
+    var e = E[i];
+    if (e.type !== 'unit' || e.dead) continue;
+    if (view && (e.x < view.x0 || e.x > view.x1 || e.z < view.z0 || e.z > view.z1)) continue;
+    var d = rtsUnitDef(e.def);
+    if (!_r3dAfloatOn(e, d)) continue;
+    if (!R3.afloatA || R3.afloatA.length < (n + 1) * 6 * R3D_FOOT_F) {
+      var big = new Float32Array(Math.max(32, (n + 1) * 2) * 6 * R3D_FOOT_F);
+      if (R3.afloatA) big.set(R3.afloatA);
+      R3.afloatA = big;
+    }
+    var r = d.r || 2, o = n * 6 * R3D_FOOT_F;
+    _r3dFootQuad(R3.afloatA, o, e, r * R3D_AFLOAT_LONG, r * R3D_AFLOAT_WIDE, (e.id % 97) / 97);
+    for (var v = 0; v < 6; v++) for (var c = 0; c < 3; c++) R3.afloatA[o + v * R3D_FOOT_F + 8 + c] = R3D_AFLOAT_FOAM[c];
+    n++;
+  }
+  return n;
+}
+
+function _r3dAfloatDraw(gl, R3, G, cam, invD, view) {
+  var amt = R3.afloatAmt === undefined ? 1 : R3.afloatAmt;
+  R3.afloats = 0;
+  if (!(amt > 0) || R3.afloatFail) return 0;
+  var n = _r3dAfloatBuild(G, R3, view);
+  if (!n) return 0;
+  if (!R3.afloatP) {
+    try { R3.afloatP = _r3dProgram(gl, _r3dRingVS(), _r3dAfloatFS()); } catch (e) { R3.afloatP = null; }
+    if (!R3.afloatP) { R3.afloatFail = 1; return 0; }
+  }
+  if (!R3.footBuf) R3.footBuf = gl.createBuffer();
+  gl.useProgram(R3.afloatP);
+  gl.uniform1f(gl.getUniformLocation(R3.afloatP, 'uT'), G.t || 0);
+  _r3dFootSend(gl, R3, R3.afloatP, R3.afloatA, n, cam, invD, Math.min(1, amt) * (1 - 0.4 * ((R3.sky && R3.sky.night) || 0)));
+  R3.afloats = n;
   return n;
 }
 </script>
@@ -32534,7 +32658,7 @@ function _r3dFrame(G) {
               (sm.x1 < R3.sunC[0] - R3.sunSpan || sm.x0 > R3.sunC[0] + R3.sunSpan ||
                sm.z1 < R3.sunC[2] - R3.sunSpan || sm.z0 > R3.sunC[2] + R3.sunSpan)) continue;
           bindMesh(SC, sm);
-          gl.drawArrays(gl.TRIANGLES, 0, sm.verts);
+          gl.drawArrays(gl.TRIANGLES, 0, sm.cast !== undefined && !R3.tuftCast ? sm.cast : sm.verts);   /* not its tufts: world3d.js */
         }
       }
     }, function (P) {
@@ -32641,6 +32765,8 @@ function _r3dFrame(G) {
     _r3dSeaSet(gl, R3, R3.meshP, false);
     gl.uniform2f(uWave, 0, 0);
   }
+  /* --- the water round every ship afloat, before the ships (afloat3d.js) --- */
+  if (_r3dAfloatDraw(gl, R3, G, cam, invD, R3.entCullOff ? null : _r3dBoundsNear(vb, 0, 8))) gl.useProgram(R3.meshP);
 
   /* THE SAME WALK FEEDS TWO PROGRAMS. Everything drawn in the main pass has to be drawn again
      from the sun, or its shadow is missing; and it has to be drawn the SAME WAY, or its shadow
@@ -34179,7 +34305,7 @@ function _r3dWorldBuild(G) { return _r3SegBulk(function () {
 
   for (var cz = 0; cz < C; cz++) {
     for (var cx = 0; cx < C; cx++) {
-      var faces = [];
+      var faces = [], low = [];                    /* low: what stands too small to throw a shadow */
       var z0 = cz * R3D_CHUNK, z1 = Math.min(N, z0 + R3D_CHUNK);
       var x0 = cx * R3D_CHUNK, x1 = Math.min(N, x0 + R3D_CHUNK);
 
@@ -34192,7 +34318,7 @@ function _r3dWorldBuild(G) { return _r3SegBulk(function () {
              jitter anyway. This one chooses how many trees stand on a forest cell and whether a
              grass cell carries tufts at all - the two decisions that are the WALK's to make. */
           var h1 = _sprHash(tx, tz, 331);
-          var _lift0 = faces.length, _liftY = _rtsTileElev(tx, tz);
+          var _lift0 = faces.length, _low0 = low.length, _liftY = _rtsTileElev(tx, tz);
 
           var _scn = R3.scnPlanFor === G && R3.scnPlan ? R3.scnPlan.claim[_rtsIdx(tx, tz)] : 0;   /* scenery3d.js */
           if (k === RTS_T_TREE && _scn !== 1) {
@@ -34232,18 +34358,25 @@ function _r3dWorldBuild(G) { return _r3SegBulk(function () {
                 var fz = wz + (_sprHash(tz * 31 + tf, tx, 373) - 0.5) * RTS_TILE;
                 var fh = R3D_TUFT_H[0] + _sprHash(tx * 31 + tf, tz, 379) * R3D_TUFT_H[1];
                 /* blades, not a cone - a cone on a map of conifers is a sapling; r3d/tuft.js */
-                _r3Tuft(faces, fx, 0, fz, fh,
+                _r3Tuft(low, fx, 0, fz, fh,
                         R3D_TUFT_COLS[tf & 1],
                         (tx * 131 + tz) * 3 + tf);
               }
             }
           }
-          _r3dLiftFrom(faces, _lift0, _liftY);
+          if (k === RTS_T_GRASS) _r3dLiftFrom(low, _low0, _liftY); else _r3dLiftFrom(faces, _lift0, _liftY);
         }
       }
 
-      if (!faces.length) continue;
-      var m = _r3dBuildMesh(gl, faces);
+      if (!faces.length && !low.length) continue;
+      /* A TUFT THROWS NO SHADOW. The sun's map has a texel a world unit across and a tuft is a
+         third of one, so each threw a dark smudge three times its own size, beside it - a meadow
+         of them read as dirt. They go LAST in the chunk and the sun's pass draws the chunk up to
+         them (m.cast, scene3d.js). R3.tuftCast is the before-picture. */
+      var cast = 0, fi;
+      for (fi = 0; fi < faces.length; fi++) if (faces[fi].v.length > 2) cast += (faces[fi].v.length - 2) * 3;
+      var m = _r3dBuildMesh(gl, faces.concat(low));
+      m.cast = cast;
       /* the chunk's world AABB, for the per-frame cull in scene3d.js */
       m.x0 = _rtsWX(x0) - half; m.x1 = _rtsWX(x1 - 1) + half;
       m.z0 = _rtsWX(z0) - half; m.z1 = _rtsWX(z1 - 1) + half;
@@ -36037,6 +36170,18 @@ function _rtsIconPlate(S, side) {
   return Math.max(160, Math.ceil((big + 16) / 16) * 16);
 }
 
+/* Where a sprite's picture is on its canvas: the box of what is not clear. The whole canvas if it
+   cannot be read, or holds nothing. window.RTS_ICON_WHOLE is the before-picture. */
+function _rtsIconBox(src) {
+  var W = src.width, H = src.height, whole = { x: 0, y: 0, w: W, h: H }, d;
+  if (window.RTS_ICON_WHOLE) return whole;
+  try { d = src.getContext('2d').getImageData(0, 0, W, H).data; } catch (e) { return whole; }
+  var x0 = W, x1 = -1, y0 = H, y1 = -1;
+  for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) if (d[(y * W + x) * 4 + 3] > 20) {
+    if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+  }
+  return x1 < 0 ? whole : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+}
 function _rtsMakeIcons(side) {
   var S = _rtsSprites(), out = {}, i;
   function plate(src, pad) {
@@ -36057,17 +36202,19 @@ function _rtsMakeIcons(side) {
        under 1 no matter what RTS_PS becomes. */
     var n = _rtsIconPlate(S, side), t = _sprMake(n, n), g = t.g;
     g.imageSmoothingEnabled = false;
-    var grd = g.createLinearGradient(0, 0, 0, n);
-    grd.addColorStop(0, '#2b3a4c'); grd.addColorStop(1, '#131b25');
-    g.fillStyle = grd; g.fillRect(0, 0, n, n);
+    /* clear, not a plate of its own: the square stood as a lighter box in a tile wider than it
+       is. The tile paints what is behind the picture (style.css .rts-tile .ico) */
     var m = n - (pad || 8) * 2;
     /* Whole-number scaling only. A pixel-art sprite enlarged by 1.7 gives some source pixels two
        screen pixels and others one, which reads as a wobble along every straight edge; clamping
        to an integer keeps them uniform. Below 1 there is nothing to clamp to. */
-    var sc = Math.min(m / src.width, m / src.height);
+    /* ...of the PICTURE, not its canvas. A unit's sprite is baked on a square big enough to turn
+       in, so a tank was 31 by 41 pixels of an 82-pixel square and a rifle squad 15 by 31 of 48:
+       scaled by the square, a cameo was two thirds margin and the unit a third of its tile. */
+    var b = _rtsIconBox(src), sc = Math.min(m / b.w, m / b.h);
     sc = sc >= 1 ? Math.floor(sc) : sc;
-    var w = Math.round(src.width * sc), h = Math.round(src.height * sc);
-    g.drawImage(src, Math.round((n - w) / 2), Math.round((n - h) / 2), w, h);
+    var w = Math.round(b.w * sc), h = Math.round(b.h * sc);
+    g.drawImage(src, b.x, b.y, b.w, b.h, Math.round((n - w) / 2), Math.round((n - h) / 2), w, h);
     return t.c.toDataURL('image/png');
   }
   for (i = 0; i < RTS_STRUCTS.length; i++) out[RTS_STRUCTS[i].key] = plate(S.bld[side][RTS_STRUCTS[i].key].c, 6);
@@ -36154,9 +36301,9 @@ function rtsOpen(seed) {
     +   '<div class="rts-tabs">' + _rtsTabButtons() + '</div>'
     +   '<div class="rts-ops">'
     +     '<button type="button" data-mode="repair" onclick="rtsMode(\'repair\')" '
-    +       'title="Repair: click one of your buildings to patch it up for credits">🔧 REPAIR</button>'
+    +       'title="Repair: click one of your buildings to patch it up for credits"><i class="ic ic-wrench"></i>REPAIR</button>'
     +     '<button type="button" data-mode="sell" onclick="rtsMode(\'sell\')" '
-    +       'title="Sell: click one of your buildings to sell it back">💲 SELL</button>'
+    +       'title="Sell: click one of your buildings to sell it back"><i class="ic ic-coin"></i>SELL</button>'
     /* the line of the tab in view builds its unit again and again (ui/repeat.js) */
     +     '<button type="button" id="rtsRepeatBtn" hidden onclick="rtsRepeatToggle()" title="Repeat: this line builds its unit again each time one is done">↻ REPEAT</button>'
     /* orders to a computer ally, in a battle that has one (ui/allymenu.js) */

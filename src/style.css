@@ -613,3 +613,28 @@
 #rcgRts .rts-replaybar input[type=range]{width:min(220px,28vw);accent-color:#ffd76a}
 #rcgRts .rts-replaybar button.on{background:#7a6420;border-color:#ffd76a}
 @media (max-width:520px){#rcgRts .rts-replaybar{gap:5px;padding-left:8px}#rcgRts .rts-replaybar b{display:none}}
+
+/* THE BUTTONS' PICTURES ARE DRAWN, NOT FOUND IN A FONT. Save, Load and Sound were a floppy, a
+   folder and a speaker out of whatever emoji the machine carries: full colour on a phone, grey
+   on Windows, a box on a system without them - three styles in a row of five buttons, none of
+   them the game's. Each button keeps its glyph as its text (a screen reader and the specs read
+   it) and shows a mask of its own in the bar's colour instead. REPAIR and SELL carry theirs as
+   an element beside the word. */
+#rcgRts #rtsSaveBtn,#rcgRts #rtsLoadBtn,#rcgRts #rtsMute{font-size:0;position:relative}
+#rcgRts #rtsSaveBtn::before,#rcgRts #rtsLoadBtn::before,#rcgRts #rtsMute::before,#rcgRts .rts-ops .ic{
+  content:'';display:block;background:currentColor;
+  -webkit-mask:var(--ic) center/contain no-repeat;mask:var(--ic) center/contain no-repeat}
+#rcgRts #rtsSaveBtn::before,#rcgRts #rtsLoadBtn::before,#rcgRts #rtsMute::before{position:absolute;left:19%;top:19%;width:62%;height:62%}
+#rcgRts #rtsSaveBtn{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M4 3h12.5L20 6.5V21H4zM8 4.8h6.5v4H8zM7.5 13.3h9v5.4h-9z'/%3E%3C/svg%3E")}
+#rcgRts #rtsLoadBtn{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M2.5 6.5h6.2l2 2.2h10.8V19H2.5z'/%3E%3C/svg%3E")}
+#rcgRts #rtsMute{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3.5 9.2h3.8L12.5 5v14l-5.2-4.2H3.5z'/%3E%3Cpath d='M15.5 8.6a4.8 4.8 0 0 1 0 6.8M18 6a8.4 8.4 0 0 1 0 12' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round'/%3E%3C/svg%3E")}
+#rcgRts #rtsMute.off{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3.5 9.2h3.8L12.5 5v14l-5.2-4.2H3.5z'/%3E%3Cpath d='M15.8 9.2l5 5.6M20.8 9.2l-5 5.6' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");color:#ffb0a0}
+#rcgRts .rts-ops .ic{display:inline-block;width:1.05em;height:1.05em;vertical-align:-0.16em;margin-right:.35em}
+#rcgRts .rts-ops .ic-wrench{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20.6 7.1l-3.3 3.3-3.2-.5-.5-3.2 3.3-3.3a5.2 5.2 0 0 0-6.6 6.6L3.4 16.9a2.1 2.1 0 0 0 3 3l6.9-6.9a5.2 5.2 0 0 0 7.3-5.9z'/%3E%3C/svg%3E");color:#8fd3a6}
+#rcgRts .rts-ops .ic-coin{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M12 2.5a9.5 9.5 0 1 0 0 19a9.5 9.5 0 0 0 0-19zM12 5.4a6.6 6.6 0 1 1 0 13.2a6.6 6.6 0 0 1 0-13.2z'/%3E%3Cpath d='M12 7.6l3.6 4.4L12 16.4L8.4 12z'/%3E%3C/svg%3E");color:#f0c75a}
+#rcgRts .rts-ops button.on .ic{color:#fff}
+/* the graphics tier's button is one of the bar's, not the browser's own */
+#rcgRts .rts-btns #rtsGfxBtn{height:24px;padding:0 8px;border:1px solid rgba(255,255,255,.22);border-radius:5px;
+  background:rgba(255,255,255,.08);color:#cfd8e3;cursor:pointer;pointer-events:auto;line-height:1;white-space:nowrap}
+#rcgRts .rts-btns #rtsGfxBtn:hover{background:rgba(255,255,255,.18)}
+@media (hover: none) and (pointer: coarse){ #rcgRts .rts-btns #rtsGfxBtn{height:40px;padding:0 10px;border-radius:7px} }

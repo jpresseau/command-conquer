@@ -89,7 +89,7 @@ function rtsMuteToggle() {
   A.muted = !A.muted;
   A.master.gain.setTargetAtTime(A.muted ? 0 : 0.9, A.ctx.currentTime, 0.02);
   var b = document.getElementById('rtsMute');
-  if (b) { b.textContent = A.muted ? '🔇' : '🔊'; b.title = A.muted ? 'Sound off' : 'Sound on'; }
+  if (b) { b.textContent = A.muted ? '🔇' : '🔊'; b.title = A.muted ? 'Sound off' : 'Sound on'; b.classList.toggle('off', !!A.muted); }   /* .off: the drawn speaker, crossed (style.css) */
 }
 
 /* Only play things the player can actually see - a battle on the far side of the map should

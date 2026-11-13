@@ -114,6 +114,18 @@ function _rtsIconPlate(S, side) {
   return Math.max(160, Math.ceil((big + 16) / 16) * 16);
 }
 
+/* Where a sprite's picture is on its canvas: the box of what is not clear. The whole canvas if it
+   cannot be read, or holds nothing. window.RTS_ICON_WHOLE is the before-picture. */
+function _rtsIconBox(src) {
+  var W = src.width, H = src.height, whole = { x: 0, y: 0, w: W, h: H }, d;
+  if (window.RTS_ICON_WHOLE) return whole;
+  try { d = src.getContext('2d').getImageData(0, 0, W, H).data; } catch (e) { return whole; }
+  var x0 = W, x1 = -1, y0 = H, y1 = -1;
+  for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) if (d[(y * W + x) * 4 + 3] > 20) {
+    if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+  }
+  return x1 < 0 ? whole : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+}
 function _rtsMakeIcons(side) {
   var S = _rtsSprites(), out = {}, i;
   function plate(src, pad) {
@@ -134,17 +146,19 @@ function _rtsMakeIcons(side) {
        under 1 no matter what RTS_PS becomes. */
     var n = _rtsIconPlate(S, side), t = _sprMake(n, n), g = t.g;
     g.imageSmoothingEnabled = false;
-    var grd = g.createLinearGradient(0, 0, 0, n);
-    grd.addColorStop(0, '#2b3a4c'); grd.addColorStop(1, '#131b25');
-    g.fillStyle = grd; g.fillRect(0, 0, n, n);
+    /* clear, not a plate of its own: the square stood as a lighter box in a tile wider than it
+       is. The tile paints what is behind the picture (style.css .rts-tile .ico) */
     var m = n - (pad || 8) * 2;
     /* Whole-number scaling only. A pixel-art sprite enlarged by 1.7 gives some source pixels two
        screen pixels and others one, which reads as a wobble along every straight edge; clamping
        to an integer keeps them uniform. Below 1 there is nothing to clamp to. */
-    var sc = Math.min(m / src.width, m / src.height);
+    /* ...of the PICTURE, not its canvas. A unit's sprite is baked on a square big enough to turn
+       in, so a tank was 31 by 41 pixels of an 82-pixel square and a rifle squad 15 by 31 of 48:
+       scaled by the square, a cameo was two thirds margin and the unit a third of its tile. */
+    var b = _rtsIconBox(src), sc = Math.min(m / b.w, m / b.h);
     sc = sc >= 1 ? Math.floor(sc) : sc;
-    var w = Math.round(src.width * sc), h = Math.round(src.height * sc);
-    g.drawImage(src, Math.round((n - w) / 2), Math.round((n - h) / 2), w, h);
+    var w = Math.round(b.w * sc), h = Math.round(b.h * sc);
+    g.drawImage(src, b.x, b.y, b.w, b.h, Math.round((n - w) / 2), Math.round((n - h) / 2), w, h);
     return t.c.toDataURL('image/png');
   }
   for (i = 0; i < RTS_STRUCTS.length; i++) out[RTS_STRUCTS[i].key] = plate(S.bld[side][RTS_STRUCTS[i].key].c, 6);
