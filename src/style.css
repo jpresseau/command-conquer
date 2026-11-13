@@ -394,10 +394,10 @@
    browser is downscaling - and nearest-neighbour downscaling drops whole rows of pixels, which
    is worse than the smooth one. The sharpness comes from building the plate at 160 with
    whole-number scaling, not from fighting the browser at the last step. */
-#rcgRts .rts-tile .ico{position:absolute;left:0;right:0;top:0;width:100%;height:76%;object-fit:contain;
+#rcgRts .rts-tile .ico{position:absolute;left:0;right:0;top:0;width:100%;height:63%;object-fit:contain;
   display:block;background:radial-gradient(ellipse at 50% 42%,#2b3a4c 0%,#131b25 72%)}
 #rcgRts .rts-tile .ico.noimg{background:#1a2431}
-#rcgRts .rts-tile .wipe{position:absolute;left:0;right:0;top:0;height:76%;pointer-events:none;display:block}
+#rcgRts .rts-tile .wipe{position:absolute;left:0;right:0;top:0;height:63%;pointer-events:none;display:block}
 #rcgRts .rts-tile .pct{position:absolute;left:0;right:0;top:30%;text-align:center;pointer-events:none;
   font:800 13px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#fff;
   text-shadow:0 1px 4px #000,0 0 10px rgba(0,0,0,.9);letter-spacing:.5px}
