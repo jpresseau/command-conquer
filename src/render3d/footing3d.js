@@ -81,26 +81,17 @@ function _r3dFootBuild(G, R3, view) {
   return n;
 }
 
-function _r3dFootDraw(gl, R3, G, cam, invD, view) {
-  var amt = R3.footAmt === undefined ? 1 : R3.footAmt;
-  R3.foots = 0;
-  if (!(amt > 0) || R3.footFail) return 0;
-  var n = _r3dFootBuild(G, R3, view);
-  if (!n) return 0;
-  if (!R3.footP) {
-    try { R3.footP = _r3dProgram(gl, _r3dRingVS(), _r3dFootFS()); } catch (e) { R3.footP = null; }
-    if (!R3.footP) { R3.footFail = 1; return 0; }
-    R3.footBuf = gl.createBuffer();
-  }
-  var P = R3.footP, i, night = (R3.sky && R3.sky.night) || 0;
+/* n quads of A through program P, laid on what is under them: blended, tested against the depth
+   there and not written to it. The shade's own pass, and the waterline's (afloat3d.js). */
+function _r3dFootSend(gl, R3, P, A, n, cam, invD, amt) {
+  var i;
   gl.bindBuffer(gl.ARRAY_BUFFER, R3.footBuf);
-  gl.bufferData(gl.ARRAY_BUFFER, R3.footA.subarray(0, n * 6 * R3D_FOOT_F), gl.DYNAMIC_DRAW);
+  gl.bufferData(gl.ARRAY_BUFFER, A.subarray(0, n * 6 * R3D_FOOT_F), gl.DYNAMIC_DRAW);
   gl.useProgram(P);
   gl.uniform4fv(gl.getUniformLocation(P, 'uCam'), cam);
   _r3dCamU(gl, P);
   gl.uniform1f(gl.getUniformLocation(P, 'uInvD'), invD);
-  /* by night the whole map is in shade, and a unit's own is most of the way to it already */
-  gl.uniform1f(gl.getUniformLocation(P, 'uAmt'), Math.min(1, amt) * R3D_FOOT_A * (1 - 0.45 * night));
+  gl.uniform1f(gl.getUniformLocation(P, 'uAmt'), amt);
   var at = [['aP', 3, 0], ['aL', 4, 12], ['aK', 4, 28]], loc = [];
   for (i = 0; i < at.length; i++) {
     loc.push(gl.getAttribLocation(P, at[i][0]));
@@ -117,6 +108,22 @@ function _r3dFootDraw(gl, R3, G, cam, invD, view) {
   gl.disable(gl.BLEND);
   gl.depthMask(true);
   for (i = 0; i < loc.length; i++) if (loc[i] >= 0) gl.disableVertexAttribArray(loc[i]);
+}
+
+function _r3dFootDraw(gl, R3, G, cam, invD, view) {
+  var amt = R3.footAmt === undefined ? 1 : R3.footAmt;
+  R3.foots = 0;
+  if (!(amt > 0) || R3.footFail) return 0;
+  var n = _r3dFootBuild(G, R3, view);
+  if (!n) return 0;
+  if (!R3.footP) {
+    try { R3.footP = _r3dProgram(gl, _r3dRingVS(), _r3dFootFS()); } catch (e) { R3.footP = null; }
+    if (!R3.footP) { R3.footFail = 1; return 0; }
+    R3.footBuf = gl.createBuffer();
+  }
+  /* by night the whole map is in shade, and a unit's own is most of the way to it already */
+  var P = R3.footP, night = (R3.sky && R3.sky.night) || 0;
+  _r3dFootSend(gl, R3, P, R3.footA, n, cam, invD, Math.min(1, amt) * R3D_FOOT_A * (1 - 0.45 * night));
   R3.foots = n;
   return n;
 }
