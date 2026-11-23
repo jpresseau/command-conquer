@@ -30,23 +30,38 @@ self.addEventListener('activate', function (e) {
       .map(function (k) { return caches.delete(k); }));
   }).then(function () { return self.clients.claim(); }));
 });
+/* A NETWORK THAT DOES NOT ANSWER IS NOT WAITED ON FOREVER. A fetch on a weak mobile signal can
+   hang far longer than one that fails, and the offline copy was read only when the fetch FAILED -
+   so the app sat on a blank screen with a good copy in hand. After NET_WAIT the saved copy is
+   served if there is one; the fetch carries on, and when it lands it refreshes the saved copy for
+   the next launch. Online and answering within NET_WAIT, the deploy that is up is what loads. */
+var NET_WAIT = 4000;
 self.addEventListener('fetch', function (e) {
   var req = e.request;
   if (req.method !== 'GET' || req.url.indexOf(self.registration.scope) !== 0) return;
   var page = req.mode === 'navigate';
-  e.respondWith(fetch(req).then(function (r) {
+  var net = fetch(req).then(function (r) {
     if (!r.ok) throw new Error('status ' + r.status);
     /* keep the copy current: the page under its own name, so any start URL finds it offline */
     var copy = r.clone();
     caches.open(CACHE).then(function (c) { return c.put(page ? 'index.html' : req, copy); }).catch(function () {});
     return r;
-  }).catch(function (err) {
+  });
+  function saved() {
     return caches.open(CACHE).then(function (c) {
       return c.match(page ? 'index.html' : req, { ignoreSearch: true }).then(function (hit) {
-        if (hit) return hit;
-        if (page) return c.match('./');
-        throw err;
+        return hit || (page ? c.match('./') : null);
       });
-    }).then(function (hit) { if (hit) return hit; throw err; });
+    });
+  }
+  e.respondWith(new Promise(function (res, rej) {
+    var done = false;
+    function give(r) { if (!done && r) { done = true; res(r); } }
+    var t = setTimeout(function () { saved().then(give, function () {}); }, NET_WAIT);
+    net.then(function (r) { clearTimeout(t); give(r); }, function (err) {
+      clearTimeout(t);
+      saved().then(function (hit) { if (hit) give(hit); else if (!done) { done = true; rej(err); } },
+                   function () { if (!done) { done = true; rej(err); } });
+    });
   }));
 });

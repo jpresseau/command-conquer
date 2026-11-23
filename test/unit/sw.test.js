@@ -19,6 +19,7 @@ var path = require('path');
 var { Suite } = require('../lib/assert.js');
 
 var S = new Suite('sw');
+var vm = require('vm');
 var ROOT = path.resolve(__dirname, '..', '..');
 var sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
 
@@ -39,8 +40,9 @@ S.ok('...and opens no cache but its own', opened.length > 0 && opened.every(func
 S.ok('...and deletes only caches under that prefix that are not the current one',
      /k\.indexOf\(CACHE_PREFIX\)\s*===\s*0\s*&&\s*k\s*!==\s*CACHE/.test(code) && (code.match(/caches\.delete/g) || []).length === 1, 'one delete, prefix-guarded');
 var handler = code.slice(code.indexOf("addEventListener('fetch'"));
-S.ok('...and answers from the network first, reading the cache only when that fails',
-     /respondWith\(fetch\(req\)/.test(handler) && handler.indexOf('.match(') > handler.indexOf('.catch('), 'fetch(req) first, match() inside the catch');
+S.ok('...and asks the network first, reading the cache only when that fails or does not answer in NET_WAIT',
+     /var net = fetch\(req\)/.test(handler) && handler.indexOf('fetch(req)') < handler.indexOf('.match(') &&
+     /setTimeout\(function \(\) \{ saved\(\)/.test(handler) && /NET_WAIT = \d+/.test(code), 'fetch(req) first, saved() on failure or after NET_WAIT');
 S.ok('...treating a server error as a failure, so a broken deploy falls back to the last good copy',
      /if \(!r\.ok\) throw/.test(handler), 'non-ok throws');
 S.ok('...and only for its own GET requests, inside its scope', /req\.method !== 'GET'/.test(handler) && /self\.registration\.scope/.test(handler), '');
@@ -126,4 +128,36 @@ if (m) {
        scope ? "scope: '" + scope[2] + "'" : 'no scope given');
 }
 
-require('../lib/report.js')(S);
+/* ------------------------------------------------------------- the behaviour ----
+   The worker run in a sandbox with a network that never answers, one that answers, and one that
+   fails, and a saved copy - the clock is the test's, so NET_WAIT passes when the test says. */
+function runSw(netMode) {
+  var timers = [], handlers = {}, store = { 'index.html': 'SAVED' }, out = { served: null, failed: null };
+  var cacheApi = { open: function () { return Promise.resolve({ match: function (k) { return Promise.resolve(store[typeof k === 'string' ? k : 'x'] || null); }, put: function (k, v) { store[k] = v; return Promise.resolve(); } }); }, keys: function () { return Promise.resolve([]); } };
+  var ctx = { self: { addEventListener: function (n, f) { handlers[n] = f; }, registration: { scope: 'https://h/a/' }, skipWaiting: function () {}, clients: { claim: function () {} } },
+    caches: cacheApi, Request: function (u) { this.url = u; }, Promise: Promise, Error: Error,
+    setTimeout: function (f, ms) { timers.push({ f: f, ms: ms }); return timers.length; }, clearTimeout: function (i) { if (timers[i - 1]) timers[i - 1].f = null; },
+    fetch: function () {
+      if (netMode === 'hang') return new Promise(function () {});
+      if (netMode === 'fail') return Promise.reject(new Error('offline'));
+      return Promise.resolve({ ok: true, body: 'NETWORK', clone: function () { return 'NETWORK'; } });
+    } };
+  vm.runInNewContext(sw, ctx);
+  handlers.fetch({ request: { method: 'GET', url: 'https://h/a/', mode: 'navigate' }, respondWith: function (p) {
+    p.then(function (r) { out.served = r && (r.body || r); }, function (e) { out.failed = String(e); });
+  } });
+  out.timers = timers;
+  return out;
+}
+function tick() { return new Promise(function (r) { setImmediate(r); }); }
+(async function () {
+  var a = runSw('hang'); await tick();
+  S.ok('a network that does not answer: nothing served before NET_WAIT (population)', a.served === null && a.timers.length === 1 && a.timers[0].ms >= 2000 && a.timers[0].ms <= 6000, JSON.stringify({ s: a.served, t: a.timers.map(function (t) { return t.ms; }) }));
+  a.timers[0].f(); await tick(); await tick();
+  S.ok('...and after it the saved copy is served', a.served === 'SAVED', String(a.served));
+  var b = runSw('ok'); await tick(); await tick();
+  S.ok('a network that answers: its page is served, not the saved copy', b.served === 'NETWORK', String(b.served));
+  var c = runSw('fail'); await tick(); await tick(); await tick();
+  S.ok('a network that fails: the saved copy at once, without waiting', c.served === 'SAVED', String(c.served));
+  require('../lib/report.js')(S);
+})();
