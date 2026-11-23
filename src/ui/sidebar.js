@@ -229,6 +229,7 @@ function _rtsItemClick(key) {
     else _rtsSay('That line is full.');
     return;
   }
+  if (_rtsReadyFirst(S, key)) return;
   if (_rtsQueue('player', key)) {
     /* VOX_TRAINING for infantry, VOX_BUILDING for everything else - or, the first of its kind on
        a phone, what it is: a phone cannot show the tile's title (ui/selhint.js) */
@@ -249,6 +250,24 @@ function _rtsItemClick(key) {
     else if (S.ready) _rtsSay('Place the finished building first.');
     else _rtsSay('Cannot build that right now.');
   }
+}
+/* A FINISHED BUILDING IN THE WAY. A Vehicle Works that is built but not yet placed does not
+   count as one, so every vehicle stayed locked and the tile said "Build a Vehicle Works first" -
+   to a player who had just built it (a phone report). And any other building tapped while one
+   waits said only "Place the finished building first", not how. When the waiting building is
+   what this tile needs (its factory, a prerequisite) or the tap is another building, the tap
+   picks the waiting one up for placing and says where to put it. */
+function _rtsReadyFirst(S, key) {
+  var r = S.ready, U = window._rtsUI;
+  if (!r || !U) return false;
+  var cat = _rtsQueueCat(key), def = rtsStructDef(key) || rtsUnitDef(key);
+  var maker = { infantry: 'barracks', vehicle: 'factory' }[cat];
+  var why = _rtsWhyLocked('player', key), fixes = r === maker || !!(def && def.needs && def.needs.indexOf(r) >= 0);
+  if (cat === 'struct' ? (why && !fixes) : !(why && fixes)) return false;
+  if (U.superArm) _rtsSuperDisarm();
+  U.place = r; _rtsGhostShow(r);
+  _rtsSay('Your ' + rtsStructDef(r).name + ' is ready — tap the map where it goes.');
+  return true;
 }
 /* RIGHTPRESS on a cameo. First press suspends, second abandons and refunds. */
 function _rtsItemCancel(key) {
