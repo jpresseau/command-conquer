@@ -90,7 +90,7 @@ function rtsReplayWatch(btn, rec, opts) {
   window._RTS_REPLAY_PREV = { army: window._RTS_ARMY, diff: window._RTS_DIFF };
   window._RTS_ARMY = h.army; window._RTS_DIFF = h.diff;
   if (btn) btn.disabled = true;
-  setTimeout(function () {
+  _rtsOpenSoon(function () {
     window._RTS_MISSION = h.mission ? { id: h.mission.id, seed: h.seed, lvl: h.mission.lvl } : null;
     window._RTS_SURVIVAL = !!h.survival;
     window._RTS_REPLAY_PLAY = r; window._RTS_REPLAY_OPTS = opts || null;
@@ -102,7 +102,7 @@ function rtsReplayWatch(btn, rec, opts) {
     /* laid: what laid it is not this battle's to keep (rtsRestart, the title) */
     window._RTS_MISSION = null; window._RTS_SURVIVAL = false;
     if (btn) btn.disabled = false;
-  }, 30);
+  });
   return true;
 }
 

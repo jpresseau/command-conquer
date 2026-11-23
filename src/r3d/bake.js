@@ -20,11 +20,15 @@ function _r3BakeFootprint(faces, footW, footD) {
     }
     faces = sq;
   }
-  var b = _r3Bounds(faces);
-  var head = Math.max(0, Math.ceil(-(b.y0 + footD / 2)));
-  var W = footW, H = footD + head;
+  var head = _r3FootHead(faces, footD, 1), W = footW, H = footD + head;
   var c = _r3Render(faces, W, H, footW / 2, head + footD / 2);
   return { c: c, head: head };
+}
+/* How far a model stands above its footprint, in canvas pixels: the canvas is footD + this tall.
+   Read without rasterising, so a cameo's plate can be sized before anything is baked. */
+function _r3FootHead(faces, footD, k) {
+  var b = _r3Bounds(faces);                    /* k: the squash still to apply (1: already applied) */
+  return Math.max(0, Math.ceil(-(b.y0 * (k == null ? R3_STRUCT_SQUASH : k) + footD / 2)));
 }
 /* Render a model centred in a square - used for units, which are not grid-aligned. */
 function _r3BakeCentred(faces, size) {

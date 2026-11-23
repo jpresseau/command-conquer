@@ -33,24 +33,35 @@ function _sprUnitFit(key, side) {
 function _sprFacingsFor(d) { return d.kind === 'infantry' ? 8 : 32; }
 function _sprFacings(key) { return _sprFacingsFor(rtsUnitDef(key)); }
 
+/* A unit's facings, each BAKED ON FIRST READ. The battlefield is WebGL, and what still reads these
+   is the cameo (one facing of the player's units) and a few tests; baking every facing of every
+   unit for every side up front had grown, with the models' detail, to 15 s of a battle's start
+   on a desktop and over a minute on a phone (a phone report: "DEPLOYING..." looked frozen). The
+   array is a real one of N entries; reading entry f bakes that facing once and keeps it. */
 function _sprUnit(key, side, prone, part) {
-  var m = _sprUnitModel(key, side, prone, part), size = _sprUnitFit(key, side);
-  var frames = [], N = _sprFacings(key);
-  /* Same RTS_PS scale-up the structures get - see sprites/bake.js. Applied AFTER the yaw so
-     every facing is scaled identically, and the fit square grows with it so the measurement
-     _r3FitSize made at 1x still holds: it is the worst case over 32 facings, and scaling is
-     uniform, so nothing that fitted before can clip now. A unit is where the extra pixels pay
-     best - an infantryman is about ten art pixels tall, and at that size a rifle is one. */
-  for (var f = 0; f < N; f++) {
-    var ym = _r3Yaw(m, -f / N * Math.PI * 2);
-    var cv = _r3BakeCentred(RTS_PS === 1 ? ym : _r3Scale(ym, RTS_PS), size * RTS_PS);
-    _sprEdge(cv);
-    /* the turret is drawn ON the hull, so it must not cast a second ground shadow */
-    var done = (part === 'turret') ? cv : _sprShadow(cv, 1 * RTS_PS, 2 * RTS_PS);
-    done.ps = RTS_PS;
-    frames.push(done);
-  }
+  var frames = new Array(_sprFacings(key)), N = frames.length, m = null, size = 0;
+  for (var f = 0; f < N; f++) (function (f) {
+    Object.defineProperty(frames, f, { configurable: true, enumerable: true, get: function () {
+      if (!m) { m = _sprUnitModel(key, side, prone, part); size = _sprUnitFit(key, side); }
+      var v = _sprUnitFacing(m, size, f, N, part);
+      Object.defineProperty(frames, f, { value: v, writable: true, configurable: true, enumerable: true });
+      return v;
+    } });
+  })(f);
   return frames;
+}
+/* One facing. Same RTS_PS scale-up the structures get - see sprites/bake.js. Applied AFTER the yaw
+   so every facing is scaled identically, and the fit square grows with it so the measurement
+   _r3FitSize made at 1x still holds: it is the worst case over 32 facings, and scaling is
+   uniform, so nothing that fitted before can clip now. */
+function _sprUnitFacing(m, size, f, N, part) {
+  var ym = _r3Yaw(m, -f / N * Math.PI * 2);
+  var cv = _r3BakeCentred(RTS_PS === 1 ? ym : _r3Scale(ym, RTS_PS), size * RTS_PS);
+  _sprEdge(cv);
+  /* the turret is drawn ON the hull, so it must not cast a second ground shadow */
+  var done = (part === 'turret') ? cv : _sprShadow(cv, 1 * RTS_PS, 2 * RTS_PS);
+  done.ps = RTS_PS;
+  return done;
 }
 /* Which units carry a separately-rotating turret. Artillery is deliberately NOT on this list:
    a howitzer traverses on its chassis, and a fixed forward tube is what makes it read as

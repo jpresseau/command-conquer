@@ -169,7 +169,7 @@ function centre(sel) {
   await p.evaluate(function () { var r = document.getElementById('rtsResume'); if (r) r.scrollIntoView({ block: 'center' }); });
   at = await p.evaluate(centre, '#rtsResume');
   if (at) await p.mouse.click(at.x, at.y);
-  await p.waitForFunction(function () { var G = window._rtsG; return !!(G && G.mission && document.getElementById('rcgRts')); }, null, { timeout: 60000 }).catch(function () {});
+  await p.waitForFunction(function () { var G = window._rtsG, L = document.getElementById('rtsLoad'); return !!(G && G.mission && document.getElementById('rcgRts')) && !(L && !L.hidden); }, null, { timeout: 60000 }).catch(function () {});
   var back = await p.evaluate(function () {
     var G = window._rtsG;
     return G && { id: G.mission && G.mission.id, lvl: G.mission && G.mission.lvl, t: Math.round(G.t), army: rtsArmySide(), page: window._RTS_MISSION && window._RTS_MISSION.id,
