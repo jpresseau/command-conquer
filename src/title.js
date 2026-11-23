@@ -131,6 +131,7 @@ if (typeof rtsSurvivalNote === 'function') rtsSurvivalNote();
 if (typeof rtsRecordNote === 'function') rtsRecordNote();
 if (typeof rtsSkirmishSync === 'function') rtsSkirmishSync();
 if (typeof rtsOfflineNote === 'function') rtsOfflineNote();
+if (typeof _rtsUpdateBind === 'function') _rtsUpdateBind();   /* a newer build up? (update.js) */
 if (typeof rtsMapPreviewSoon === 'function') rtsMapPreviewSoon();
 
 /* THE OLD ARCHIVE STORE, gone. Earlier versions could keep a player's own game archives in

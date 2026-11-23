@@ -118,7 +118,8 @@ def main():
     page = re.sub(r'(?:/\*|//)@@(?:INC|CSS):([\w./-]+)@@(?:\*/)?',
                   lambda m: read(os.path.join(SRC, m.group(1))), page)
 
-    page = page.replace('@@BUILD@@', build_stamp())
+    stamp = build_stamp()
+    page = page.replace('@@BUILD@@', stamp)
 
     left = re.findall(r'@@[A-Z]+[^@]*@@', page)
     if left:
@@ -136,6 +137,11 @@ def main():
 
     with open(os.path.join(ROOT, 'index.html'), 'w', encoding='utf-8') as f:
         f.write(page)
+    # The same stamp on its own, a few bytes the title fetches to learn whether a newer build is
+    # up than the one it is running (src/update.js). Written by the same build as the page, so the
+    # two cannot disagree about which build this is.
+    with open(os.path.join(ROOT, 'build.txt'), 'w', encoding='utf-8') as f:
+        f.write(stamp + '\n')
     print('built index.html: %d lines, %.2f MB' % (page.count(chr(10)) + 1, len(page) / 1048576.0))
 
 
