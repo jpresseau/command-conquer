@@ -55,6 +55,7 @@ function rtsMapPreview() {
   cv.width = N; cv.height = N;
   c.putImageData(new ImageData(px, N, N), 0, 0);
   if (lbl) lbl.textContent = 'map ' + seed + ' · ' + N + ' cells';
+  if (typeof _rtsGroundWarm === 'function') _rtsGroundWarm(G);   /* its ground, while the player chooses */
   return { seed: seed, n: N, order: G.order.slice() };
 }
 function rtsMapReroll() { rtsSeedRoll(); return rtsMapPreview(); }

@@ -125,6 +125,8 @@ async function openPage(browser, opts) {
     start: async function (seed, seconds, opts) {
       await page.evaluate(function (a) {
         rtsOpen(a[0]);
+        /* the build tiles' pictures, which the page fills in a task at a time (ui/cameofill.js) */
+        if (typeof _rtsIconsNow === 'function') _rtsIconsNow();
         for (var i = 0; i < 60 * a[1]; i++) _rtsTick(1 / 60);
         /* Frozen HERE, in the same step that started the match, and not afterwards: the settle
            below is 200ms of wall-clock during which the loop is free to tick, and that window

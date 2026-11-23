@@ -21,6 +21,13 @@ var S = new Suite('startcost');
   var g = await openPage(browser, { width: 1100, height: 760, dpr: 1 });
   var p = g.page;
 
+  /* ---- the ground, baked on the title ---- */
+  await p.waitForFunction(function () { return !!(_rtsGround && _rtsGround.cv); }, null, { timeout: 120000 }).catch(function () {});
+  var warm = await p.evaluate(function () {
+    var j = _rtsGround; window.__warmCv = j && j.cv;
+    return { done: !!(j && j.cv), key: j ? j.key : '' };
+  });
+
   /* ---- the cover, on a real START ---- */
   var at = await p.evaluate(function () {
     document.getElementById('rtsGo').click();
@@ -29,6 +36,9 @@ var S = new Suite('startcost');
              anim: i ? getComputedStyle(i).animationName : '' };
   });
   await p.waitForFunction(function () { return !!window._rtsUI; }, null, { timeout: 120000 });
+  var tiles0 = await p.evaluate(function () { return { tiles: document.querySelectorAll('#rtsList .rts-tile').length, imgs: document.querySelectorAll('#rtsList .rts-tile img.ico').length }; });
+  await p.waitForFunction(function () { return !document.querySelector('#rtsList .rts-tile .ico.noimg'); }, null, { timeout: 120000 }).catch(function () {});
+  var tiles1 = await p.evaluate(function () { var im = document.querySelectorAll('#rtsList .rts-tile img.ico'), ok = 0; for (var i = 0; i < im.length; i++) if (/^data:image\/png/.test(im[i].src)) ok++; return { tiles: document.querySelectorAll('#rtsList .rts-tile').length, imgs: ok }; });
   await p.waitForFunction(function () { var L = document.getElementById('rtsLoad'); return L && L.hidden; }, null, { timeout: 30000 }).catch(function () {});
   var after = await p.evaluate(function () { var L = document.getElementById('rtsLoad'); return { hidden: !!(L && L.hidden), display: L ? getComputedStyle(L).display : '' }; });
 
@@ -52,6 +62,12 @@ var S = new Suite('startcost');
     for (k = 0; k < RTS_STRUCTS.length; k++) { var s = Sp.bld.player[RTS_STRUCTS[k].key].c; big = Math.max(big, s.width, s.height); }
     for (k = 0; k < RTS_UNITS.length; k++) { var u = Sp.unit.player[RTS_UNITS[k].key][6]; big = Math.max(big, u.width, u.height); }
     o.plate = _rtsIconPlate(Sp, 'player'); o.plateBaked = Math.max(160, Math.ceil((big + 16) / 16) * 16);
+    /* the ground the battle took is the title's, and the same pixels a fresh bake makes */
+    o.took = !!window.__warmCv && _rtsR.terrain === window.__warmCv;
+    var fresh = _rtsBakeTerrain(window._rtsG), A = _rtsR.terrain.getContext('2d').getImageData(0, 0, fresh.width, fresh.height).data,
+        B2 = fresh.getContext('2d').getImageData(0, 0, fresh.width, fresh.height).data, gd = 0;
+    for (var gi = 0; gi < A.length; gi += 4) if (A[gi] !== B2[gi] || A[gi + 1] !== B2[gi + 1] || A[gi + 2] !== B2[gi + 2]) gd++;
+    o.groundDiff = { n: gd, w: fresh.width, same: fresh.width === _rtsR.terrain.width };
     var ic = window._rtsUI.icons;
     o.iconLazy = !baked(ic, 'cruiser'); var url = ic.cruiser; o.iconMade = baked(ic, 'cruiser') && /^data:image\/png/.test(url);
     return o;
@@ -67,6 +83,11 @@ var S = new Suite('startcost');
   S.ok('...and it is the same picture the old bake made', out.same.w && out.same.diff === 0 && out.same.ink > 50, JSON.stringify(out.same));
   S.ok('THE PLATE: sized from bounds, it is the size the baked sprites need', out.plate === out.plateBaked, out.plate + ' against ' + out.plateBaked);
   S.ok('a cameo off the tab in view is not made until read, then is a picture', out.iconLazy && out.iconMade, JSON.stringify({ lazy: out.iconLazy, made: out.iconMade }));
+  S.ok('GROUND: the title baked the next battle\'s ground while it waited', warm.done && !!warm.key, JSON.stringify(warm));
+  S.ok('...the battle took it rather than baking again', out.took, String(out.took));
+  S.ok('...and it is the same pixels a fresh bake of that map makes', out.groundDiff.same && out.groundDiff.n === 0 && out.groundDiff.w > 1000, JSON.stringify(out.groundDiff));
+  S.ok('TILES: the build list is drawn at once, its pictures not yet made', tiles0.tiles >= 6 && tiles0.imgs < tiles0.tiles, JSON.stringify(tiles0));
+  S.ok('...and every tile has its picture soon after', tiles1.tiles === tiles0.tiles && tiles1.imgs === tiles1.tiles, JSON.stringify(tiles1));
   S.ok('no page errors', !g.errors.length, g.errors.join(' | ') || 'none');
 
   await g.close();

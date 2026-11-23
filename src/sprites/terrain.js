@@ -9,7 +9,15 @@
    (112 cells x 24px = 2688 square) using continuous noise, so patches are organic blobs
    that ignore cell boundaries entirely. The renderer then draws the visible window with
    one drawImage per frame, which is also far cheaper than two thousand tile blits. */
+/* The ground's bake, run to the end in one go. _rtsBakeTerrainSteps is the same bake in steps, so
+   the title can make the next battle's ground a few rows a task while the player chooses
+   (render/groundwarm.js) and the battle's start finds it done. */
 function _rtsBakeTerrain(G) {
+  var it = _rtsBakeTerrainSteps(G), r;
+  do r = it.next(); while (!r.done);
+  return r.value;
+}
+function* _rtsBakeTerrainSteps(G) {
   var N = RTS_N, S = N * RTS_TS, seed = (G.seed || 1) | 0;
   var t = _sprMake(S, S), g = t.g;
   var img = g.createImageData(S, S), d = img.data;
@@ -78,6 +86,7 @@ function _rtsBakeTerrain(G) {
   var fleckRow = new Float32Array(S), gx2;
 
   for (var by = 0; by < S; by += B) {
+    if ((by & 3) === 3) yield;                       /* a step: four rows */
     leftN = 0;
     if ((by & 1) === 0) {
       for (gx2 = 0; gx2 < S; gx2 += 2) fleckRow[gx2] = _sprHash(gx2 >> 1, by >> 1, seed + 31);
@@ -148,6 +157,7 @@ function _rtsBakeTerrain(G) {
   }
   var authored = null;
   g.putImageData(img, 0, 0);
+  yield;
 
   /* Scatter that crosses cell lines: tufts, pebbles and bushes placed in world pixels.
 

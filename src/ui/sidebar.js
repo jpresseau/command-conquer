@@ -66,7 +66,6 @@ function rtsMode(m) {
   else if (U.mode === 'sell') _rtsSay('Sell: click a building to sell it back.');
 }
 
-
 /* Returns true when the click was consumed by the armed mode. */
 function _rtsModeClick(mx, my) {
   var U = window._rtsUI;
@@ -132,13 +131,14 @@ function _rtsCatItems(cat) {
 function _rtsBuildList() {
   var U = window._rtsUI, list = document.getElementById('rtsList');
   if (!list) return;
-  list.innerHTML = ''; U.btns = {};
+  list.innerHTML = ''; U.btns = {}; U.iconWant = [];
   var items = _rtsCatItems(U.cat);
   for (var i = 0; i < items.length; i++) {
     (function (def) {
       var b = document.createElement('button');
       b.type = 'button'; b.className = 'rts-tile';
-      var ico = U.icons && U.icons[def.key];
+      var ico = U.icons && _rtsIconMade(U.icons, def.key) ? U.icons[def.key] : null;
+      if (!ico && U.icons && def.key in U.icons) U.iconWant.push(def.key);   /* made later: ui/cameofill.js */
       b.innerHTML = (ico ? '<img class="ico" alt="" src="' + ico + '">' : '<span class="ico noimg"></span>')
         + '<i class="wipe"></i>'
         + '<span class="pct"></span>'
@@ -186,6 +186,7 @@ function _rtsBuildList() {
       U.btns[def.key] = b;
     })(items[i]);
   }
+  _rtsIconFill();
 }
 function _rtsItemClick(key) {
   var G = window._rtsG, U = window._rtsUI, S = G.sides.player;
