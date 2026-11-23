@@ -110,7 +110,8 @@ function _rtsRInit(cv) {
     ghost: null, ghostKey: null,
     terrain: null
   };
-  _rtsR.terrain = _rtsBakeTerrain(window._rtsG);
+  /* the title may have baked this map's ground already (render/groundwarm.js) */
+  _rtsR.terrain = (typeof _rtsGroundTake === 'function' && _rtsGroundTake(window._rtsG)) || _rtsBakeTerrain(window._rtsG);
   _rtsApplyCam();
   return _rtsR;
 }
