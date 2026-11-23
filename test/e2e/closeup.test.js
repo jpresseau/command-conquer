@@ -130,7 +130,8 @@ var S = new Suite('closeup');
       });
     }
     var now = _rtsMakeIcons('player');
-    window.RTS_ICON_WHOLE = true; var was = _rtsMakeIcons('player'); window.RTS_ICON_WHOLE = false;
+    /* cameos are made on first read, so the before-picture is read while its switch is on */
+    window.RTS_ICON_WHOLE = true; var w0 = _rtsMakeIcons('player'), was = { tank: w0.tank, power: w0.power }; window.RTS_ICON_WHOLE = false;
     o.cameo = { tank: await box(now.tank), tankWas: await box(was.tank), rifle: await box(now.rifle), power: await box(now.power), powerWas: await box(was.power) };
     var tile = document.querySelector('#rtsList .rts-tile .ico');
     o.tileImg = !!(tile && tile.tagName === 'IMG' && tile.naturalWidth > 0);

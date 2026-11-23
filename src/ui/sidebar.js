@@ -494,5 +494,5 @@ function rtsRestart() {
   if (sv) window._RTS_SURVIVAL = true;                        /* another survival (survival.js) */
   if (mi) { setTimeout(function () { rtsCampStart(mi.id, null, mi.lvl); }, 60); return; }   /* retry the mission, at its level */
   if (d) { window._RTS_DAILY = d; window._RTS_DAILY_PREV = prev; window._RTS_DIFF = d.diff; window._RTS_ARMY = d.army; }
-  setTimeout(function () { rtsOpen(d ? d.seed : undefined); }, 60);
+  _rtsOpenSoon(function () { rtsOpen(d ? d.seed : undefined); });
 }

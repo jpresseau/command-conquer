@@ -57,13 +57,13 @@ function rtsCampStart(id, btn, lvl) {
   var err = document.getElementById('rtsErr');
   if (err) err.style.display = 'none';
   if (btn) { btn.disabled = true; btn.textContent = 'DEPLOYING…'; }
-  setTimeout(function () {
+  _rtsOpenSoon(function () {
     try { rtsOpen(m.seed); }
     catch (e) {
       rtsCampEnd(); rtsHome();
       if (err) { err.style.display = 'block'; err.textContent = 'Could not start:\n' + ((e && e.message) || e); }
     }
-  }, 30);
+  });
 }
 /* Called by rtsOpen on the battle it has just made: lay the mission and look at it. */
 function rtsCampLay(G) {

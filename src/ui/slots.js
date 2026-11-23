@@ -60,6 +60,6 @@ function rtsShowSlots(newest) {
   box.hidden = !others.length;
   box.innerHTML = others.map(function (k) {
     var i = rtsSaveInfo(k);
-    return '<button type="button" class="go resume" onclick="rtsLoadGame(\'' + k + '\')">RESUME<small>' + String(i.desc).replace(/[<&]/g, '') + ' · slot ' + (RTS_MANUAL_SLOTS.indexOf(k) + 1) + '</small></button>';
+    return '<button type="button" class="go resume" onclick="_rtsOpenSoon(function(){rtsLoadGame(\'' + k + '\')})">RESUME<small>' + String(i.desc).replace(/[<&]/g, '') + ' · slot ' + (RTS_MANUAL_SLOTS.indexOf(k) + 1) + '</small></button>';
   }).join('');
 }

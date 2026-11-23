@@ -31,7 +31,15 @@ function _rtsSprites() {
    title screen pays nothing for seats a battle may never use. */
 function _sprBakeSide(S, side) {
   S.bld[side] = {}; S.unit[side] = {};
-  RTS_STRUCTS.forEach(function (d) { S.bld[side][d.key] = _sprBuilding(d.key, side); });
+  /* each building baked on first read: the radar's blip and the cameo read them (props.js _sprUnit) */
+  RTS_STRUCTS.forEach(function (d) {
+    var o = S.bld[side];
+    Object.defineProperty(o, d.key, { configurable: true, enumerable: true, get: function () {
+      var v = _sprBuilding(d.key, side);
+      Object.defineProperty(o, d.key, { value: v, writable: true, configurable: true, enumerable: true });
+      return v;
+    } });
+  });
   S.hull = S.hull || {}; S.turret = S.turret || {};
   S.hull[side] = {}; S.turret[side] = {};
   RTS_UNITS.forEach(function (d) {

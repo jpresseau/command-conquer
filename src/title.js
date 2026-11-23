@@ -116,7 +116,7 @@ function rtsShowResume(){
     return;
   }
   r.hidden = false;
-  r.onclick = function () { rtsLoadGame(newest || 'save'); };
+  r.onclick = function () { _rtsOpenSoon(function () { rtsLoadGame(newest || 'save'); }); };
   r.innerHTML = 'RESUME BATTLE<small>' + String(info.desc).replace(/[<&]/g, '') + '</small>';
 }
 rtsBuildDiff();
@@ -241,12 +241,31 @@ function rtsInstall() {
 }
 rtsInstallInit();
 
+/* THE WAIT FOR A BATTLE, SHOWN. Opening one is a few seconds of synchronous work on a phone (the
+   ground's bake, the first frame's shaders), and the page cannot paint while it runs - so the
+   button's "DEPLOYING..." was the last thing drawn, and a player waited on a screen that looked
+   frozen (a phone report). This puts up a cover with a moving bar FIRST, waits until it has been
+   painted (a frame, then a task), then runs `fn`. The bar is a CSS transform animation, which the
+   browser's compositor runs on its own while script is busy, so it keeps moving through the work.
+   The cover goes when `fn` returns or throws. */
+function _rtsOpenSoon(fn) {
+  var c = document.getElementById('rtsLoad');
+  if (!c) {
+    c = document.createElement('div'); c.id = 'rtsLoad';
+    c.innerHTML = '<p>DEPLOYING…</p><div class="bar"><i></i></div>';
+    document.body.appendChild(c);
+  }
+  c.hidden = false;
+  function run() { try { fn(); } finally { c.hidden = true; } }
+  if (window.requestAnimationFrame) window.requestAnimationFrame(function () { setTimeout(run, 0); });
+  else setTimeout(run, 30);
+}
 function rtsStart(btn){
   var err = document.getElementById('rtsErr');
   if (err) err.style.display = 'none';
   if (btn) { btn.disabled = true; btn.textContent = 'DEPLOYING…'; }
   /* let the button repaint before the (synchronous) first-run building construction */
-  setTimeout(function(){
+  _rtsOpenSoon(function(){
     try {
       document.getElementById('rtsHome').classList.add('gone');
       /* the seed the title showed; the next visit rolls another (preview.js) */
@@ -257,7 +276,7 @@ function rtsStart(btn){
       rtsHome();
       if (err) { err.style.display = 'block'; err.textContent = 'Could not start:\n' + ((e && e.message) || e); }
     }
-  }, 30);
+  });
 }
 /* Enter/Space on the title screen starts a battle - unless the player is ON a control, in which
    case Enter and Space are that control's own activation and belong to it.

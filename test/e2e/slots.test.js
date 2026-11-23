@@ -137,9 +137,11 @@ var LIB = [tickFor, freeze, slotT, panel, under, click, title].map(String).join(
     rtsHome();
     var b = title();
     click('#rtsSaves button');
-    freeze();
-    return { gone: !document.getElementById('rtsSlots'), a: a, d: d, auto: auto && auto.t, b: b, back: window._rtsG && { t: Math.round(window._rtsG.t), slot: window._RTS_SLOT } };
+    return { gone: !document.getElementById('rtsSlots'), a: a, d: d, auto: auto && auto.t, b: b };
   }, LIB);
+  /* a click opens the battle under the loading cover, a frame later (title.js _rtsOpenSoon) */
+  await p.waitForFunction(function () { var L = document.getElementById('rtsLoad'); return !!document.getElementById('rcgRts') && !(L && !L.hidden); }, null, { timeout: 60000 }).catch(function () {});
+  four.back = await p.evaluate(function (lib) { eval(lib); freeze(); return window._rtsG && { t: Math.round(window._rtsG.t), slot: window._RTS_SLOT }; }, LIB);
   var tA = one.t1 + 2, d = four.d || {};
   S.ok('THE TITLE: after ✕ RESUME BATTLE is the newest slot, slot 1, and slot 2 is listed under it', four.gone && four.a.resume && !!d.save && d.save !== d.save2 && four.a.resumeText.indexOf(d.save) >= 0 && four.a.box &&
        four.a.others.length === 1 && four.a.others[0].indexOf(d.save2) >= 0 && /slot 2/.test(four.a.others[0]), JSON.stringify({ a: four.a, d: d }));

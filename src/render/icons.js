@@ -102,17 +102,20 @@ function _rtsRDispose() {
    a pixel whenever a model's silhouette changes, and floored at the old 160 so a hypothetical
    small-sprite set cannot shrink the cameos. */
 function _rtsIconPlate(S, side) {
-  var big = 0, i, c;
+  /* The largest sprite's canvas, worked out from the models' bounds WITHOUT baking them: the
+     sprites are baked on first read (sprites/props.js _sprUnit), and reading all of them here
+     cost a battle's start two seconds. e2e/cameo holds these sizes to the baked canvases. */
+  if (_RTS_PLATE[side]) return _RTS_PLATE[side];
+  var big = 0, i, d;
   for (i = 0; i < RTS_STRUCTS.length; i++) {
-    c = S.bld[side][RTS_STRUCTS[i].key];
-    if (c && c.c) big = Math.max(big, c.c.width, c.c.height);
+    d = RTS_STRUCTS[i];
+    var m = _sprBuildingModel(d.key, side), D = d.h * RTS_TS * RTS_PS;
+    big = Math.max(big, d.w * RTS_TS * RTS_PS, D + _r3FootHead(RTS_PS === 1 ? m : _r3Scale(m, RTS_PS), D));
   }
-  for (i = 0; i < RTS_UNITS.length; i++) {
-    c = S.unit[side][RTS_UNITS[i].key];
-    if (c && c[6]) big = Math.max(big, c[6].width, c[6].height);
-  }
-  return Math.max(160, Math.ceil((big + 16) / 16) * 16);
+  for (i = 0; i < RTS_UNITS.length; i++) big = Math.max(big, _sprUnitFit(RTS_UNITS[i].key, side) * RTS_PS);
+  return (_RTS_PLATE[side] = Math.max(160, Math.ceil((big + 16) / 16) * 16));
 }
+var _RTS_PLATE = {};
 
 /* Where a sprite's picture is on its canvas: the box of what is not clear. The whole canvas if it
    cannot be read, or holds nothing. window.RTS_ICON_WHOLE is the before-picture. */
@@ -161,7 +164,15 @@ function _rtsMakeIcons(side) {
     g.drawImage(src, b.x, b.y, b.w, b.h, Math.round((n - w) / 2), Math.round((n - h) / 2), w, h);
     return t.c.toDataURL('image/png');
   }
-  for (i = 0; i < RTS_STRUCTS.length; i++) out[RTS_STRUCTS[i].key] = plate(S.bld[side][RTS_STRUCTS[i].key].c, 6);
-  for (i = 0; i < RTS_UNITS.length; i++) out[RTS_UNITS[i].key] = plate(S.unit[side][RTS_UNITS[i].key][6], 14);
+  /* each cameo made on first read: the sidebar shows one tab's at a time */
+  function lazy(key, make) {
+    Object.defineProperty(out, key, { configurable: true, enumerable: true, get: function () {
+      var v = make();
+      Object.defineProperty(out, key, { value: v, writable: true, configurable: true, enumerable: true });
+      return v;
+    } });
+  }
+  RTS_STRUCTS.forEach(function (d) { lazy(d.key, function () { return plate(S.bld[side][d.key].c, 6); }); });
+  RTS_UNITS.forEach(function (d) { lazy(d.key, function () { return plate(S.unit[side][d.key][6], 14); }); });
   return out;
 }

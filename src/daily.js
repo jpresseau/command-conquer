@@ -29,7 +29,7 @@ function rtsDailyStart(btn) {
   var err = document.getElementById('rtsErr');
   if (err) err.style.display = 'none';
   if (btn) { btn.disabled = true; btn.textContent = 'DEPLOYING…'; }
-  setTimeout(function () {
+  _rtsOpenSoon(function () {
     try {
       document.getElementById('rtsHome').classList.add('gone');
       rtsOpen(d.seed);
@@ -37,7 +37,7 @@ function rtsDailyStart(btn) {
       rtsDailyEnd(); rtsHome();
       if (err) { err.style.display = 'block'; err.textContent = 'Could not start:\n' + ((e && e.message) || e); }
     }
-  }, 30);
+  });
 }
 /* The battle is over and the player is back on the title: their own army and difficulty again. */
 function rtsDailyEnd() {

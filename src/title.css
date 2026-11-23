@@ -255,3 +255,13 @@ html,body{margin:0;padding:0;height:100%;background:#05080e;overflow:hidden}
   #rtsBuild{pointer-events:none}
 }
 @media (prefers-reduced-motion:reduce){ #rtsHome *{transition:none !important} }
+
+/* the cover while a battle is being made (title.js _rtsOpenSoon): the bar's stripe is a transform
+   animation, so it keeps moving while the page's script is busy */
+#rtsLoad{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(10,14,20,.88);color:#e8e4d8;font:700 15px/1.2 system-ui,sans-serif;letter-spacing:.18em}
+#rtsLoad[hidden]{display:none}
+#rtsLoad p{margin:0}
+#rtsLoad .bar{width:min(60vw,280px);height:6px;border-radius:3px;background:#263041;overflow:hidden}
+#rtsLoad .bar i{display:block;width:40%;height:100%;border-radius:3px;background:#e0a050;animation:rtsLoadRun 1.1s ease-in-out infinite;will-change:transform}
+@keyframes rtsLoadRun{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
+@media (prefers-reduced-motion:reduce){#rtsLoad .bar i{animation-duration:3s}}
