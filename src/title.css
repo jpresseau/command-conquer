@@ -265,3 +265,4 @@ html,body{margin:0;padding:0;height:100%;background:#05080e;overflow:hidden}
 #rtsLoad .bar i{display:block;width:40%;height:100%;border-radius:3px;background:#e0a050;animation:rtsLoadRun 1.1s ease-in-out infinite;will-change:transform}
 @keyframes rtsLoadRun{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
 @media (prefers-reduced-motion:reduce){#rtsLoad .bar i{animation-duration:3s}}
+#rtsUpdate .upd{margin-left:6px;padding:4px 10px;border:1px solid #e0a050;border-radius:5px;background:rgba(224,160,80,.15);color:#f0c890;font:700 12px/1.2 system-ui,sans-serif;letter-spacing:.08em;cursor:pointer;touch-action:manipulation}

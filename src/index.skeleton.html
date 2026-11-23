@@ -40,6 +40,8 @@
     <div id="rtsSkirmish" hidden></div>
     <!-- Shown only while the device is offline and the saved copy is what is playing: offline.js -->
     <p class="diffnote" id="rtsOffline" hidden></p>
+    <!-- A newer build is up than this one: update.js -->
+    <p class="diffnote notice" id="rtsUpdate" hidden>A new version of the game is ready. <button type="button" class="upd" onclick="rtsUpdateNow()">UPDATE NOW</button></p>
   </section>
   <!-- EVERY OTHER WAY TO PLAY, each with what it holds now -->
   <nav class="panel modes" aria-label="More ways to play">
@@ -369,6 +371,7 @@
 <script>//@@INC:skirmish.js@@</script>
 <script>//@@INC:preview.js@@</script>
 <script>//@@INC:offline.js@@</script>
+<script>//@@INC:update.js@@</script>
 <script>//@@INC:title-bg.js@@</script>
 <script>//@@INC:title.js@@</script>
 

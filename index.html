@@ -919,6 +919,7 @@ html,body{margin:0;padding:0;height:100%;background:#05080e;overflow:hidden}
 #rtsLoad .bar i{display:block;width:40%;height:100%;border-radius:3px;background:#e0a050;animation:rtsLoadRun 1.1s ease-in-out infinite;will-change:transform}
 @keyframes rtsLoadRun{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
 @media (prefers-reduced-motion:reduce){#rtsLoad .bar i{animation-duration:3s}}
+#rtsUpdate .upd{margin-left:6px;padding:4px 10px;border:1px solid #e0a050;border-radius:5px;background:rgba(224,160,80,.15);color:#f0c890;font:700 12px/1.2 system-ui,sans-serif;letter-spacing:.08em;cursor:pointer;touch-action:manipulation}
 </style>
 </head>
 <body>
@@ -949,6 +950,8 @@ html,body{margin:0;padding:0;height:100%;background:#05080e;overflow:hidden}
     <div id="rtsSkirmish" hidden></div>
     <!-- Shown only while the device is offline and the saved copy is what is playing: offline.js -->
     <p class="diffnote" id="rtsOffline" hidden></p>
+    <!-- A newer build is up than this one: update.js -->
+    <p class="diffnote notice" id="rtsUpdate" hidden>A new version of the game is ready. <button type="button" class="upd" onclick="rtsUpdateNow()">UPDATE NOW</button></p>
   </section>
   <!-- EVERY OTHER WAY TO PLAY, each with what it holds now -->
   <nav class="panel modes" aria-label="More ways to play">
@@ -1027,7 +1030,7 @@ html,body{margin:0;padding:0;height:100%;background:#05080e;overflow:hidden}
   <div id="rtsErr"></div>
   </div>
   <!-- Which build this is. Stamped by build.py; see build_stamp() there for why it exists. -->
-  <div id="rtsBuild" title="build">34378a9 · 2026-11-23</div>
+  <div id="rtsBuild" title="build">35b7c81 · 2026-11-23</div>
 </div>
 
 <script>/* rules/structures.js - RTS_STRUCTS: every building, its cost, power and prerequisites.
@@ -41746,6 +41749,40 @@ if (typeof window !== 'undefined' && window.addEventListener) {
   window.addEventListener('offline', rtsOfflineNote);
 }
 </script>
+<script>/* update.js - the title says when a newer build is up than the one running.
+
+   sw.js gives the network's copy when it answers, so a player who opens the game gets the deploy
+   that is up - but one who keeps it open, or comes back to it from the background, keeps the build
+   they loaded, and nothing said a newer one existed: the only ways to find out were the ⟳ button
+   and reading the build stamp. build.py writes the stamp to build.txt beside the page; the title
+   fetches it (past the HTTP cache) when it opens, when the app comes back to the front, and every
+   RTS_UPDATE_EVERY while it is shown, and if it names another build puts up a line with an UPDATE
+   NOW button. Only on the title: the line lives inside #rtsHome, so a battle is never interrupted,
+   and nothing reloads by itself. */
+var RTS_UPDATE_EVERY = 10 * 60 * 1000;
+function _rtsBuildHere() { var b = document.getElementById('rtsBuild'); return b ? b.textContent.trim() : ''; }
+function rtsUpdateCheck() {
+  if (!window.fetch || navigator.onLine === false) return Promise.resolve(null);
+  return fetch('build.txt', { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : null; }).then(function (t) {
+    t = (t || '').trim();
+    var here = _rtsBuildHere(), newer = !!(t && here && t !== here && t.length < 80 && !/</.test(t));
+    var n = document.getElementById('rtsUpdate');
+    if (n) n.hidden = !newer;
+    return newer;
+  }).catch(function () { return null; });
+}
+function rtsUpdateNow() {
+  if (typeof _rtsReloadNow === 'function') _rtsReloadNow(); else location.reload();
+}
+function _rtsUpdateBind() {
+  if (window._RTS_UPDATE_BOUND) return;
+  window._RTS_UPDATE_BOUND = true;
+  function onTitle() { var h = document.getElementById('rtsHome'); return h && !h.classList.contains('gone') && document.visibilityState !== 'hidden'; }
+  setTimeout(function () { if (onTitle()) rtsUpdateCheck(); }, 3000);
+  setInterval(function () { if (onTitle()) rtsUpdateCheck(); }, RTS_UPDATE_EVERY);
+  document.addEventListener('visibilitychange', function () { if (onTitle()) rtsUpdateCheck(); });
+}
+</script>
 <script>/* title-bg.js - the coast at dusk behind the title screen.
 
    The title was a dark gradient with a column of buttons on it: nothing on the screen said what
@@ -42133,6 +42170,7 @@ if (typeof rtsSurvivalNote === 'function') rtsSurvivalNote();
 if (typeof rtsRecordNote === 'function') rtsRecordNote();
 if (typeof rtsSkirmishSync === 'function') rtsSkirmishSync();
 if (typeof rtsOfflineNote === 'function') rtsOfflineNote();
+if (typeof _rtsUpdateBind === 'function') _rtsUpdateBind();   /* a newer build up? (update.js) */
 if (typeof rtsMapPreviewSoon === 'function') rtsMapPreviewSoon();
 
 /* THE OLD ARCHIVE STORE, gone. Earlier versions could keep a player's own game archives in
